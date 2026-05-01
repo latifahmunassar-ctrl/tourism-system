@@ -1,293 +1,7 @@
 <!DOCTYPE html>
+
 <html lang="ar" dir="rtl">
 <head>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.13/html-to-image.min.js" integrity="sha512-iZ2ORl595Wx6miw+GuadDet4WQbdSWS3JLMoNfY8cRGoEFy6oT3G9IbcrBeL6AfkgpA51ETt/faX6yLV+/gFJg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <script>
-      (function() {
-        const originalConsole = window.console;
-        window.console = {
-          log: (...args) => {
-            originalConsole.log(...args);
-            window.parent.postMessage({ type: 'console', message: args.join(' ') }, '*');
-          },
-          error: (...args) => {
-            originalConsole.error(...args);
-            window.parent.postMessage({ type: 'console', message: 'Error: ' + args.join(' ') }, '*');
-          },
-          warn: (...args) => {
-            originalConsole.warn(...args);
-            window.parent.postMessage({ type: 'console', message: 'Warning: ' + args.join(' ') }, '*');
-          }
-        };
-
-        let requestId = 0;
-        let callbacksMap = new Map();
-        let streamControllers = new Map();
-        
-        window.claude = {
-          complete: (prompt) => {
-            return new Promise((resolve, reject) => {
-              const id = requestId++;
-              callbacksMap.set(id, { resolve, reject });
-              window.parent.postMessage({ type: 'claudeComplete', id, prompt }, '*');
-            });
-          }
-        };
-
-        window.storage = {
-          get: (key, shared = false) => {
-            return new Promise((resolve, reject) => {
-              const id = requestId++;
-              callbacksMap.set(id, { resolve, reject });
-              window.parent.postMessage({ type: 'storageGet', id, key, shared }, '*');
-            });
-          },
-          set: (key, value, shared = false) => {
-            return new Promise((resolve, reject) => {
-              const id = requestId++;
-              callbacksMap.set(id, { resolve, reject });
-              window.parent.postMessage({ type: 'storageSet', id, key, value, shared }, '*');
-            });
-          },
-          delete: (key, shared = false) => {
-            return new Promise((resolve, reject) => {
-              const id = requestId++;
-              callbacksMap.set(id, { resolve, reject });
-              window.parent.postMessage({ type: 'storageDelete', id, key, shared }, '*');
-            });
-          },
-          list: (prefix, shared = false) => {
-            return new Promise((resolve, reject) => {
-              const id = requestId++;
-              callbacksMap.set(id, { resolve, reject });
-              window.parent.postMessage({ type: 'storageList', id, prefix, shared }, '*');
-            });
-          }
-        };
-
-        let pendingBlobs = new Map();
-        URL.createObjectURL = (blob) => {
-          // Store the blob and create an ID and URL for it
-          const blobId = `blob-${Date.now()}-${Math.random()}`;
-          pendingBlobs.set(blobId, blob);
-          return `blob-request://${blobId}`;
-        };
-
-        URL.revokeObjectURL = (url) => {
-          // Remove the blob from our store
-          const blobId = url.replace("blob-request://", "");
-          pendingBlobs.delete(blobId);
-        };
-
-        const getBlobFromURL = (url) => {
-          const blobId = url.replace("blob-request://", "");
-          return pendingBlobs.get(blobId);
-        };
-
-        // Override global fetch with streaming support
-        window.fetch = (url, init = {}) => {
-          return new Promise((resolve, reject) => {
-            const id = requestId++;
-            const channelId = `fetch-${id}-${Date.now()}`;
-            
-            callbacksMap.set(id, { 
-              resolve: (response) => {
-                // Create a ReadableStream for the response body
-                const stream = new ReadableStream({
-                  start(controller) {
-                    streamControllers.set(channelId, controller);
-                  },
-                  cancel() {
-                    streamControllers.delete(channelId);
-                  }
-                });
-                
-                // Create and return the Response with the stream
-                resolve(new Response(stream, {
-                  status: response.status,
-                  statusText: response.statusText,
-                  headers: response.headers
-                }));
-              },
-              reject,
-              channelId
-            });
-            
-            window.parent.postMessage({
-              type: 'proxyFetch',
-              id,
-              url,
-              init,
-              channelId
-            }, '*');
-          });
-        };
-
-        window.addEventListener('message', async (event) => {
-          if (event.data.type === 'takeScreenshot') {
-            const rootElement = document.getElementById('artifacts-component-root-html');
-            if (!rootElement) {
-              window.parent.postMessage({
-                type: 'screenshotError',
-                error: new Error('Root element not found'),
-              }, '*');
-            }
-            const screenshot = await htmlToImage.toPng(rootElement, {
-              imagePlaceholder:
-                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUGFdjePDgwX8ACOQDoNsk0PMAAAAASUVORK5CYII=",
-            });
-            window.parent.postMessage({
-              type: 'screenshotData',
-              data: screenshot,
-            }, '*');
-          } else if (event.data.type === 'claudeComplete') {
-            const callback = callbacksMap.get(event.data.id);
-            if (event.data.error) {
-              callback.reject(new Error(event.data.error));
-            } else {
-              callback.resolve(event.data.completion);
-            }
-            callbacksMap.delete(event.data.id);
-          } else if (event.data.type === 'proxyFetchResponse') {
-            const callback = callbacksMap.get(event.data.id);
-            if (event.data.error) {
-              callback.reject(new Error(event.data.error));
-              callbacksMap.delete(event.data.id);
-            } else {
-              // Initial response with headers, status, etc.
-              callback.resolve({
-                status: event.data.status,
-                statusText: event.data.statusText,
-                headers: event.data.headers
-              });
-              // Don't delete the callback yet if streaming
-              if (!event.data.body) {
-                callbacksMap.delete(event.data.id);
-              }
-            }
-          } else if (event.data.type === 'proxyFetchStream') {
-            // Handle streaming data chunks
-            const controller = streamControllers.get(event.data.channelId);
-            if (controller) {
-              if (event.data.error) {
-                controller.error(new Error(event.data.error));
-                streamControllers.delete(event.data.channelId);
-              } else if (event.data.done) {
-                controller.close();
-                streamControllers.delete(event.data.channelId);
-                // Clean up the callback
-                const callback = Array.from(callbacksMap.entries()).find(
-                  ([_, value]) => value.channelId === event.data.channelId
-                );
-                if (callback) {
-                  callbacksMap.delete(callback[0]);
-                }
-              } else if (event.data.chunk) {
-                controller.enqueue(new Uint8Array(event.data.chunk));
-              }
-            }
-          } else if (event.data.type === 'storageGet') {
-            const callback = callbacksMap.get(event.data.id);
-            if (event.data.error) {
-              callback.reject(new Error(event.data.error));
-            } else {
-              callback.resolve(event.data.result);
-            }
-            callbacksMap.delete(event.data.id);
-          } else if (event.data.type === 'storageSet') {
-            const callback = callbacksMap.get(event.data.id);
-            if (event.data.error) {
-              callback.reject(new Error(event.data.error));
-            } else {
-              callback.resolve(event.data.result);
-            }
-            callbacksMap.delete(event.data.id);
-          } else if (event.data.type === 'storageDelete') {
-            const callback = callbacksMap.get(event.data.id);
-            if (event.data.error) {
-              callback.reject(new Error(event.data.error));
-            } else {
-              callback.resolve(event.data.result);
-            }
-            callbacksMap.delete(event.data.id);
-          } else if (event.data.type === 'storageList') {
-            const callback = callbacksMap.get(event.data.id);
-            if (event.data.error) {
-              callback.reject(new Error(event.data.error));
-            } else {
-              callback.resolve(event.data.result);
-            }
-            callbacksMap.delete(event.data.id);
-          }
-        });
-
-        window.addEventListener('click', (event) => {
-          const isEl = event.target instanceof HTMLElement;
-          if (!isEl) return;
-    
-          // find ancestor links
-          const linkEl = event.target.closest("a");
-          if (!linkEl || !linkEl.href) return;
-    
-          event.preventDefault();
-          event.stopImmediatePropagation();
-    
-          if (linkEl.href.startsWith("blob-request:")) {
-            const blob = getBlobFromURL(linkEl.href);
-            if (!blob) return;
-            void blob.arrayBuffer().then((data) => {
-              window.parent.postMessage({
-                type: "downloadFile",
-                filename: linkEl.download,
-                data,
-                mimeType: blob.type || "application/octet-stream",
-              });
-            });
-          } else if (linkEl.href.startsWith("data:")) {
-            const [header, base64Data] = linkEl.href.split(",");
-            const mimeMatch = header.match(/data:([^;]+)/);
-            const mimeType = mimeMatch ? mimeMatch[1] : "application/octet-stream";
-            const binaryString = atob(base64Data);
-            const data = Uint8Array.from(binaryString, (c) =>
-              c.charCodeAt(0),
-            ).buffer;
-            window.parent.postMessage({
-              type: "downloadFile",
-              filename: linkEl.download,
-              data,
-              mimeType,
-            });
-          } else {
-            let linkUrl;
-            try {
-              linkUrl = new URL(linkEl.href);
-            } catch (error) {
-              return;
-            }
-    
-            if (linkUrl.hostname === window.location.hostname) return;
-      
-            window.parent.postMessage({
-              type: 'openExternal',
-              href: linkEl.href,
-            }, '*');
-          }
-      });
-
-        const originalOpen = window.open;
-        window.open = function (url) {
-          window.parent.postMessage({
-            type: "openExternal",
-            href: url,
-          }, "*");
-        };
-
-        window.addEventListener('error', (event) => {
-          window.parent.postMessage({ type: 'console', message: 'Uncaught Error: ' + event.message }, '*');
-        });
-      })();
-    </script>
-  
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>نظام البرامج السياحية</title>
@@ -295,38 +9,38 @@
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 :root {
-  --bg:#0F1923; --s1:#162030; --s2:#1C2B3A; --s3:#243347;
-  --border:rgba(255,255,255,0.07);
-  --gold:#D4A843; --gold2:#F0C96A;
-  --teal:#2A9D8F; --text:#E8EDF2; --muted:rgba(232,237,242,0.42);
-  --r:12px;
+--bg:#0F1923; --s1:#162030; --s2:#1C2B3A; --s3:#243347;
+--border:rgba(255,255,255,0.07);
+--gold:#D4A843; --gold2:#F0C96A;
+--teal:#2A9D8F; --text:#E8EDF2; --muted:rgba(232,237,242,0.42);
+--r:12px;
 }
 body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
 
 /* TOP BAR */
 .topbar {
-  background:var(--s1); border-bottom:1px solid var(--border);
-  padding:12px 20px; display:flex; align-items:center; justify-content:space-between;
-  flex-shrink:0; z-index:10;
+background:var(–s1); border-bottom:1px solid var(–border);
+padding:12px 20px; display:flex; align-items:center; justify-content:space-between;
+flex-shrink:0; z-index:10;
 }
 .brand { display:flex; align-items:center; gap:10px; }
 .brand-icon {
-  width:34px; height:34px;
-  background:linear-gradient(135deg,var(--gold),var(--gold2));
-  border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:17px;
+width:34px; height:34px;
+background:linear-gradient(135deg,var(–gold),var(–gold2));
+border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:17px;
 }
 .brand-name { font-size:15px; font-weight:800; }
-.brand-sub { font-size:10px; color:var(--muted); }
+.brand-sub { font-size:10px; color:var(–muted); }
 .user-pill {
-  background:var(--s2); border:1px solid var(--border); border-radius:20px;
-  padding:5px 12px 5px 7px; display:flex; align-items:center; gap:7px;
-  font-size:12px; color:var(--muted);
+background:var(–s2); border:1px solid var(–border); border-radius:20px;
+padding:5px 12px 5px 7px; display:flex; align-items:center; gap:7px;
+font-size:12px; color:var(–muted);
 }
 .avatar {
-  width:24px; height:24px; border-radius:50%;
-  background:linear-gradient(135deg,var(--teal),#1a7a70);
-  display:flex; align-items:center; justify-content:center;
-  font-size:11px; font-weight:800; color:#fff;
+width:24px; height:24px; border-radius:50%;
+background:linear-gradient(135deg,var(–teal),#1a7a70);
+display:flex; align-items:center; justify-content:center;
+font-size:11px; font-weight:800; color:#fff;
 }
 
 /* LAYOUT */
@@ -334,29 +48,29 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 
 /* CHAT PANEL */
 .chat-panel {
-  display:flex; flex-direction:column;
-  width:420px; flex-shrink:0;
-  border-left:1px solid var(--border);
-  background:var(--s1);
+display:flex; flex-direction:column;
+width:420px; flex-shrink:0;
+border-left:1px solid var(–border);
+background:var(–s1);
 }
 
 .chat-header {
-  padding:14px 18px; border-bottom:1px solid var(--border);
-  display:flex; align-items:center; gap:8px;
+padding:14px 18px; border-bottom:1px solid var(–border);
+display:flex; align-items:center; gap:8px;
 }
-.chat-header-title { font-size:13px; font-weight:800; color:var(--text); }
+.chat-header-title { font-size:13px; font-weight:800; color:var(–text); }
 .status-dot {
-  width:7px; height:7px; border-radius:50%;
-  background:#4ade80; box-shadow:0 0 6px #4ade80;
-  animation: pulse2 2s ease-in-out infinite;
+width:7px; height:7px; border-radius:50%;
+background:#4ade80; box-shadow:0 0 6px #4ade80;
+animation: pulse2 2s ease-in-out infinite;
 }
 @keyframes pulse2 { 0%,100%{opacity:1} 50%{opacity:0.5} }
 
 /* MESSAGES */
 .messages {
-  flex:1; overflow-y:auto; padding:16px;
-  display:flex; flex-direction:column; gap:12px;
-  scroll-behavior:smooth;
+flex:1; overflow-y:auto; padding:16px;
+display:flex; flex-direction:column; gap:12px;
+scroll-behavior:smooth;
 }
 .messages::-webkit-scrollbar { width:4px; }
 .messages::-webkit-scrollbar-track { background:transparent; }
@@ -368,208 +82,208 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .msg.user { flex-direction:row-reverse; }
 
 .msg-avatar {
-  width:30px; height:30px; border-radius:50%; flex-shrink:0;
-  display:flex; align-items:center; justify-content:center; font-size:13px;
-  margin-top:2px;
+width:30px; height:30px; border-radius:50%; flex-shrink:0;
+display:flex; align-items:center; justify-content:center; font-size:13px;
+margin-top:2px;
 }
-.msg.sys .msg-avatar { background:var(--s3); border:1px solid var(--border); }
-.msg.user .msg-avatar { background:linear-gradient(135deg,var(--gold),var(--gold2)); font-size:11px; font-weight:800; color:#0F1923; }
+.msg.sys .msg-avatar { background:var(–s3); border:1px solid var(–border); }
+.msg.user .msg-avatar { background:linear-gradient(135deg,var(–gold),var(–gold2)); font-size:11px; font-weight:800; color:#0F1923; }
 
 .msg-bubble {
-  max-width:82%; padding:11px 14px;
-  border-radius:var(--r); font-size:13px; line-height:1.65;
+max-width:82%; padding:11px 14px;
+border-radius:var(–r); font-size:13px; line-height:1.65;
 }
 .msg.sys .msg-bubble {
-  background:var(--s2); border:1px solid var(--border);
-  border-top-right-radius:4px; color:var(--text);
+background:var(–s2); border:1px solid var(–border);
+border-top-right-radius:4px; color:var(–text);
 }
 .msg.user .msg-bubble {
-  background:linear-gradient(135deg,rgba(212,168,67,0.18),rgba(212,168,67,0.1));
-  border:1px solid rgba(212,168,67,0.25);
-  border-top-left-radius:4px; color:var(--text); text-align:right;
+background:linear-gradient(135deg,rgba(212,168,67,0.18),rgba(212,168,67,0.1));
+border:1px solid rgba(212,168,67,0.25);
+border-top-left-radius:4px; color:var(–text); text-align:right;
 }
 
-.msg-time { font-size:10px; color:var(--muted); margin-top:4px; }
+.msg-time { font-size:10px; color:var(–muted); margin-top:4px; }
 .msg.user .msg-time { text-align:left; }
 
 /* QUICK CHIPS */
 .quick-chips {
-  padding:10px 16px; display:flex; gap:7px; flex-wrap:wrap;
-  border-top:1px solid var(--border);
+padding:10px 16px; display:flex; gap:7px; flex-wrap:wrap;
+border-top:1px solid var(–border);
 }
 .qchip {
-  padding:5px 12px; border-radius:16px; font-size:11px; font-weight:700;
-  border:1px solid var(--border); background:transparent;
-  color:var(--muted); cursor:pointer; font-family:'Tajawal',sans-serif;
-  transition:all 0.2s; white-space:nowrap;
+padding:5px 12px; border-radius:16px; font-size:11px; font-weight:700;
+border:1px solid var(–border); background:transparent;
+color:var(–muted); cursor:pointer; font-family:‘Tajawal’,sans-serif;
+transition:all 0.2s; white-space:nowrap;
 }
-.qchip:hover { border-color:var(--gold); color:var(--gold); background:rgba(212,168,67,0.07); }
+.qchip:hover { border-color:var(–gold); color:var(–gold); background:rgba(212,168,67,0.07); }
 
 /* INPUT */
 .chat-input-wrap {
-  padding:12px 16px; border-top:1px solid var(--border);
-  display:flex; gap:8px; align-items:flex-end;
+padding:12px 16px; border-top:1px solid var(–border);
+display:flex; gap:8px; align-items:flex-end;
 }
 .chat-input {
-  flex:1; background:var(--s2); border:1px solid var(--border);
-  border-radius:10px; padding:10px 14px;
-  font-family:'Tajawal',sans-serif; font-size:13px; color:var(--text);
-  outline:none; resize:none; max-height:100px; min-height:42px;
-  transition:border-color 0.2s;
-  line-height:1.5;
+flex:1; background:var(–s2); border:1px solid var(–border);
+border-radius:10px; padding:10px 14px;
+font-family:‘Tajawal’,sans-serif; font-size:13px; color:var(–text);
+outline:none; resize:none; max-height:100px; min-height:42px;
+transition:border-color 0.2s;
+line-height:1.5;
 }
 .chat-input:focus { border-color:rgba(212,168,67,0.4); }
-.chat-input::placeholder { color:var(--muted); }
+.chat-input::placeholder { color:var(–muted); }
 .send-btn {
-  width:42px; height:42px; border-radius:10px; border:none; flex-shrink:0;
-  background:linear-gradient(135deg,var(--gold),var(--gold2));
-  cursor:pointer; display:flex; align-items:center; justify-content:center;
-  font-size:16px; transition:all 0.2s;
+width:42px; height:42px; border-radius:10px; border:none; flex-shrink:0;
+background:linear-gradient(135deg,var(–gold),var(–gold2));
+cursor:pointer; display:flex; align-items:center; justify-content:center;
+font-size:16px; transition:all 0.2s;
 }
 .send-btn:hover { transform:scale(1.05); box-shadow:0 4px 14px rgba(212,168,67,0.35); }
 .send-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
 
 /* OUTPUT PANEL */
 .output-panel {
-  flex:1; display:flex; flex-direction:column; overflow:hidden;
-  background:var(--bg);
+flex:1; display:flex; flex-direction:column; overflow:hidden;
+background:var(–bg);
 }
 
 .output-header {
-  padding:14px 20px; border-bottom:1px solid var(--border);
-  display:flex; align-items:center; justify-content:space-between;
-  flex-shrink:0;
+padding:14px 20px; border-bottom:1px solid var(–border);
+display:flex; align-items:center; justify-content:space-between;
+flex-shrink:0;
 }
-.output-header-title { font-size:13px; font-weight:800; color:var(--text); }
+.output-header-title { font-size:13px; font-weight:800; color:var(–text); }
 
 .export-btns { display:flex; gap:8px; }
 .ebtn {
-  padding:7px 14px; border-radius:8px; font-family:'Tajawal',sans-serif;
-  font-size:12px; font-weight:700; cursor:pointer; border:none;
-  display:flex; align-items:center; gap:5px; transition:all 0.2s;
+padding:7px 14px; border-radius:8px; font-family:‘Tajawal’,sans-serif;
+font-size:12px; font-weight:700; cursor:pointer; border:none;
+display:flex; align-items:center; gap:5px; transition:all 0.2s;
 }
 .ebtn-print {
-  background:var(--s2); color:var(--muted); border:1px solid var(--border);
+background:var(–s2); color:var(–muted); border:1px solid var(–border);
 }
-.ebtn-print:hover { color:var(--text); border-color:rgba(255,255,255,0.2); }
+.ebtn-print:hover { color:var(–text); border-color:rgba(255,255,255,0.2); }
 .ebtn-copy {
-  background:var(--s2); color:var(--muted); border:1px solid var(--border);
+background:var(–s2); color:var(–muted); border:1px solid var(–border);
 }
-.ebtn-copy:hover { color:var(--text); border-color:rgba(255,255,255,0.2); }
+.ebtn-copy:hover { color:var(–text); border-color:rgba(255,255,255,0.2); }
 .ebtn-pdf {
-  background:linear-gradient(135deg,var(--gold),var(--gold2));
-  color:#0F1923; font-weight:800;
+background:linear-gradient(135deg,var(–gold),var(–gold2));
+color:#0F1923; font-weight:800;
 }
 .ebtn-pdf:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgba(212,168,67,0.3); }
 
 /* QUOTE CARD */
 .quote-wrap {
-  flex:1; overflow-y:auto; padding:20px;
+flex:1; overflow-y:auto; padding:20px;
 }
 .quote-wrap::-webkit-scrollbar { width:4px; }
 .quote-wrap::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.08); border-radius:2px; }
 
 /* EMPTY OUTPUT */
 .empty-output {
-  flex:1; display:flex; flex-direction:column;
-  align-items:center; justify-content:center;
-  gap:14px; opacity:0.35; padding:40px;
+flex:1; display:flex; flex-direction:column;
+align-items:center; justify-content:center;
+gap:14px; opacity:0.35; padding:40px;
 }
 .empty-output-icon { font-size:56px; }
 .empty-output-title { font-size:16px; font-weight:700; }
-.empty-output-sub { font-size:12px; color:var(--muted); text-align:center; line-height:1.6; }
+.empty-output-sub { font-size:12px; color:var(–muted); text-align:center; line-height:1.6; }
 
 /* QUOTE DOCUMENT */
 #quoteDoc {
-  display:none;
-  background:var(--s1); border:1px solid var(--border);
-  border-radius:16px; overflow:hidden;
-  animation:fadeUp 0.4s ease both;
+display:none;
+background:var(–s1); border:1px solid var(–border);
+border-radius:16px; overflow:hidden;
+animation:fadeUp 0.4s ease both;
 }
 #quoteDoc.show { display:block; }
 @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:none} }
 
 .quote-top {
-  background:linear-gradient(135deg,#1B2D42,#243347);
-  padding:24px 26px;
-  border-bottom:1px solid var(--border);
-  display:flex; align-items:flex-start; justify-content:space-between; gap:16px;
+background:linear-gradient(135deg,#1B2D42,#243347);
+padding:24px 26px;
+border-bottom:1px solid var(–border);
+display:flex; align-items:flex-start; justify-content:space-between; gap:16px;
 }
 .quote-dest { font-size:22px; font-weight:900; color:#fff; }
-.quote-meta { font-size:12px; color:var(--muted); margin-top:4px; }
+.quote-meta { font-size:12px; color:var(–muted); margin-top:4px; }
 .quote-tags { display:flex; gap:7px; margin-top:10px; flex-wrap:wrap; }
 .qtag {
-  padding:3px 11px; border-radius:16px; font-size:11px; font-weight:700;
-  background:rgba(212,168,67,0.12); color:var(--gold2);
-  border:1px solid rgba(212,168,67,0.25);
+padding:3px 11px; border-radius:16px; font-size:11px; font-weight:700;
+background:rgba(212,168,67,0.12); color:var(–gold2);
+border:1px solid rgba(212,168,67,0.25);
 }
 .qtag-teal {
-  background:rgba(42,157,143,0.12); color:#5EC8BC;
-  border:1px solid rgba(42,157,143,0.25);
+background:rgba(42,157,143,0.12); color:#5EC8BC;
+border:1px solid rgba(42,157,143,0.25);
 }
 .quote-price-box { text-align:center; flex-shrink:0; }
-.quote-price { font-size:30px; font-weight:900; color:var(--gold2); line-height:1; }
-.quote-price-label { font-size:10px; color:var(--muted); margin-top:3px; }
+.quote-price { font-size:30px; font-weight:900; color:var(–gold2); line-height:1; }
+.quote-price-label { font-size:10px; color:var(–muted); margin-top:3px; }
 
 .quote-body { padding:20px 26px; }
 .quote-section-label {
-  font-size:10px; font-weight:800; letter-spacing:2px;
-  color:var(--gold); text-transform:uppercase;
-  margin-bottom:10px; margin-top:18px;
-  display:flex; align-items:center; gap:8px;
+font-size:10px; font-weight:800; letter-spacing:2px;
+color:var(–gold); text-transform:uppercase;
+margin-bottom:10px; margin-top:18px;
+display:flex; align-items:center; gap:8px;
 }
 .quote-section-label::after {
-  content:''; flex:1; height:1px;
-  background:linear-gradient(90deg,rgba(212,168,67,0.3),transparent);
+content:’’; flex:1; height:1px;
+background:linear-gradient(90deg,rgba(212,168,67,0.3),transparent);
 }
 
 .day-row {
-  background:var(--s2); border:1px solid var(--border);
-  border-radius:10px; padding:13px 16px;
-  margin-bottom:8px;
+background:var(–s2); border:1px solid var(–border);
+border-radius:10px; padding:13px 16px;
+margin-bottom:8px;
 }
 .day-title { font-size:13px; font-weight:800; color:#fff; margin-bottom:6px; }
 .day-acts { display:flex; flex-direction:column; gap:5px; }
 .day-act {
-  display:flex; align-items:center; gap:8px;
-  font-size:12px; color:var(--muted);
+display:flex; align-items:center; gap:8px;
+font-size:12px; color:var(–muted);
 }
-.act-dot { width:5px; height:5px; border-radius:50%; background:var(--gold); flex-shrink:0; }
+.act-dot { width:5px; height:5px; border-radius:50%; background:var(–gold); flex-shrink:0; }
 .act-type-badge {
-  margin-right:auto; font-size:10px; font-weight:700;
-  padding:2px 8px; border-radius:8px;
+margin-right:auto; font-size:10px; font-weight:700;
+padding:2px 8px; border-radius:8px;
 }
-.type-tour { background:rgba(212,168,67,0.15); color:var(--gold2); }
+.type-tour { background:rgba(212,168,67,0.15); color:var(–gold2); }
 .type-transfer { background:rgba(42,157,143,0.15); color:#5EC8BC; }
 .type-nature { background:rgba(99,202,115,0.15); color:#86efac; }
 .type-sea { background:rgba(96,165,250,0.15); color:#93c5fd; }
 
 .cost-summary {
-  background:var(--s2); border:1px solid rgba(212,168,67,0.2);
-  border-radius:10px; padding:16px 18px; margin-top:8px;
+background:var(–s2); border:1px solid rgba(212,168,67,0.2);
+border-radius:10px; padding:16px 18px; margin-top:8px;
 }
 .cost-row-q {
-  display:flex; justify-content:space-between; align-items:center;
-  padding:7px 0; border-bottom:1px solid var(--border);
-  font-size:12px;
+display:flex; justify-content:space-between; align-items:center;
+padding:7px 0; border-bottom:1px solid var(–border);
+font-size:12px;
 }
 .cost-row-q:last-child { border-bottom:none; }
-.cost-row-q .clabel { color:var(--muted); }
+.cost-row-q .clabel { color:var(–muted); }
 .cost-row-q .cval { font-weight:700; }
 .cost-total-q {
-  display:flex; justify-content:space-between; align-items:center;
-  background:linear-gradient(90deg,rgba(212,168,67,0.12),rgba(212,168,67,0.04));
-  border:1px solid rgba(212,168,67,0.25); border-radius:8px;
-  padding:12px 16px; margin-top:10px;
+display:flex; justify-content:space-between; align-items:center;
+background:linear-gradient(90deg,rgba(212,168,67,0.12),rgba(212,168,67,0.04));
+border:1px solid rgba(212,168,67,0.25); border-radius:8px;
+padding:12px 16px; margin-top:10px;
 }
-.cost-total-q .tlabel { font-size:14px; font-weight:800; color:var(--gold2); }
-.cost-total-q .tval { font-size:22px; font-weight:900; color:var(--gold2); }
+.cost-total-q .tlabel { font-size:14px; font-weight:800; color:var(–gold2); }
+.cost-total-q .tval { font-size:22px; font-weight:900; color:var(–gold2); }
 
 /* TYPING INDICATOR */
 .typing { display:flex; gap:4px; align-items:center; padding:3px 0; }
 .typing span {
-  width:6px; height:6px; border-radius:50%;
-  background:var(--muted); animation:bounce 1.2s ease-in-out infinite;
+width:6px; height:6px; border-radius:50%;
+background:var(–muted); animation:bounce 1.2s ease-in-out infinite;
 }
 .typing span:nth-child(2) { animation-delay:.2s; }
 .typing span:nth-child(3) { animation-delay:.4s; }
@@ -577,118 +291,129 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 
 /* PRINT STYLES */
 @media print {
-  .chat-panel, .topbar, .output-header { display:none !important; }
-  .output-panel { display:block !important; }
-  .quote-wrap { padding:0; }
-  #quoteDoc { border:none; border-radius:0; }
-  body { background:#fff; color:#000; }
-  .quote-top { background:#f5f0e8 !important; }
-  .quote-dest { color:#000 !important; }
-  .day-row { background:#f9f9f9 !important; border-color:#ddd !important; }
-  .cost-summary { background:#f9f9f9 !important; }
+.chat-panel, .topbar, .output-header { display:none !important; }
+.output-panel { display:block !important; }
+.quote-wrap { padding:0; }
+#quoteDoc { border:none; border-radius:0; }
+body { background:#fff; color:#000; }
+.quote-top { background:#f5f0e8 !important; }
+.quote-dest { color:#000 !important; }
+.day-row { background:#f9f9f9 !important; border-color:#ddd !important; }
+.cost-summary { background:#f9f9f9 !important; }
 }
 
 @media (max-width:768px) {
-  .layout { flex-direction:column; }
-  .chat-panel { width:100%; height:55vh; border-left:none; border-bottom:1px solid var(--border); }
-  .output-panel { height:45vh; }
+.layout { flex-direction:column; }
+.chat-panel { width:100%; height:55vh; border-left:none; border-bottom:1px solid var(–border); }
+.output-panel { height:45vh; }
 }
 </style>
+
 </head>
-<body id="artifacts-component-root-html">
+<body>
 
 <!-- TOPBAR -->
+
 <div class="topbar">
-  <div class="brand">
-    <div class="brand-icon">✈</div>
-    <div>
-      <div class="brand-name">نظام البرامج السياحية</div>
-      <div class="brand-sub">لوحة الموظفين الداخلية</div>
-    </div>
-  </div>
-  <div class="user-pill">
-    <div class="avatar">م</div>
-    موظف المبيعات
-  </div>
+<div class="brand">
+<div class="brand-icon">✈</div>
+<div>
+<div class="brand-name">نظام البرامج السياحية</div>
+<div class="brand-sub">لوحة الموظفين الداخلية</div>
+</div>
+</div>
+<div class="user-pill">
+<div class="avatar">م</div>
+موظف المبيعات
+</div>
 </div>
 
 <!-- LAYOUT -->
+
 <div class="layout">
 
-  <!-- CHAT PANEL -->
-  <div class="chat-panel">
-    <div class="chat-header">
-      <div class="status-dot"></div>
-      <div class="chat-header-title">المساعد السياحي</div>
-    </div>
+<!-- CHAT PANEL -->
 
-    <div class="messages" id="messages">
-      <div class="msg sys">
-        <div class="msg-avatar">🗺</div>
-        <div>
-          <div class="msg-bubble">
-            مرحباً! أنا مساعدك في بناء البرامج السياحية.<br><br>
-            أخبرني بتفاصيل العميل مثلاً:<br>
-            <strong>"اسطنبول 5 ليالي، مايو، زوجين وطفلين، ميزانية متوسطة"</strong><br><br>
-            أو اضغط على أحد الاقتراحات أدناه للبدء السريع.
-          </div>
-          <div class="msg-time">الآن</div>
-        </div>
-      </div>
-    </div>
+<div class="chat-panel">
+<div class="chat-header">
+<div class="status-dot"></div>
+<div class="chat-header-title">المساعد السياحي</div>
+</div>
 
-    <!-- QUICK CHIPS -->
-    <div class="quick-chips" id="quickChips">
-      <button class="qchip" onclick="quickSend('اسطنبول 4 ليالي مايو زوجين فندق 4 نجوم')">🇹🇷 اسطنبول سريع</button>
-      <button class="qchip" onclick="quickSend('اسطنبول 6 ليالي مع رحلة بورصة وجولات طبيعية')">⛰️ مع بورصة</button>
-      <button class="qchip" onclick="quickSend('برنامج اقتصادي اسطنبول 3 ليالي')">💰 اقتصادي</button>
-      <button class="qchip" onclick="quickSend('برنامج فاخر اسطنبول 7 ليالي فندق 5 نجوم')">✨ فاخر</button>
-    </div>
+```
+<div class="messages" id="messages">
+<div class="msg sys">
+<div class="msg-avatar">🗺</div>
+<div>
+<div class="msg-bubble">
+مرحباً! أنا مساعدك في بناء البرامج السياحية.<br><br>
+أخبرني بتفاصيل العميل مثلاً:<br>
+<strong>"اسطنبول 5 ليالي، مايو، زوجين وطفلين، ميزانية متوسطة"</strong><br><br>
+أو اضغط على أحد الاقتراحات أدناه للبدء السريع.
+</div>
+<div class="msg-time">الآن</div>
+</div>
+</div>
+</div>
 
-    <!-- INPUT -->
-    <div class="chat-input-wrap">
-      <textarea class="chat-input" id="chatInput" placeholder="اكتب تفاصيل العميل هنا..." rows="1"
-        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-      <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
-    </div>
-  </div>
+<!-- QUICK CHIPS -->
+<div class="quick-chips" id="quickChips">
+<button class="qchip" onclick="quickSend('اسطنبول 4 ليالي مايو زوجين فندق 4 نجوم')">🇹🇷 اسطنبول سريع</button>
+<button class="qchip" onclick="quickSend('اسطنبول 6 ليالي مع رحلة بورصة وجولات طبيعية')">⛰️ مع بورصة</button>
+<button class="qchip" onclick="quickSend('برنامج اقتصادي اسطنبول 3 ليالي')">💰 اقتصادي</button>
+<button class="qchip" onclick="quickSend('برنامج فاخر اسطنبول 7 ليالي فندق 5 نجوم')">✨ فاخر</button>
+</div>
 
-  <!-- OUTPUT PANEL -->
-  <div class="output-panel">
-    <div class="output-header">
-      <div class="output-header-title">📄 عميلة العميل</div>
-      <div class="export-btns">
-        <button class="ebtn ebtn-copy" onclick="copyQuote()" id="copyBtn" style="display:none">📋 نسخ</button>
-        <button class="ebtn ebtn-print" onclick="window.print()" id="printBtn" style="display:none">🖨️ طباعة</button>
-        <button class="ebtn ebtn-pdf" onclick="window.print()" id="pdfBtn" style="display:none">⬇️ تصدير PDF</button>
-      </div>
-    </div>
+<!-- INPUT -->
+<div class="chat-input-wrap">
+<textarea class="chat-input" id="chatInput" placeholder="اكتب تفاصيل العميل هنا..." rows="1"
+onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+<button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
+</div>
+```
 
-    <div class="quote-wrap">
-      <!-- EMPTY -->
-      <div class="empty-output" id="emptyOutput">
-        <div class="empty-output-icon">📋</div>
-        <div class="empty-output-title">العميلة ستظهر هنا</div>
-        <div class="empty-output-sub">ابدأ محادثة مع المساعد<br>وستُنشأ العميلة تلقائياً وجاهزة للتصدير</div>
-      </div>
+</div>
 
-      <!-- QUOTE DOCUMENT -->
-      <div id="quoteDoc">
-        <div class="quote-top">
-          <div>
-            <div class="quote-dest" id="qDest">—</div>
-            <div class="quote-meta" id="qMeta">—</div>
-            <div class="quote-tags" id="qTags"></div>
-          </div>
-          <div class="quote-price-box">
-            <div class="quote-price" id="qPrice">—</div>
-            <div class="quote-price-label">ريال / شخص</div>
-          </div>
-        </div>
-        <div class="quote-body" id="qBody"></div>
-      </div>
-    </div>
-  </div>
+<!-- OUTPUT PANEL -->
+
+<div class="output-panel">
+<div class="output-header">
+<div class="output-header-title">📄 عميلة العميل</div>
+<div class="export-btns">
+<button class="ebtn ebtn-copy" onclick="copyQuote()" id="copyBtn" style="display:none">📋 نسخ</button>
+<button class="ebtn ebtn-print" onclick="window.print()" id="printBtn" style="display:none">🖨️ طباعة</button>
+<button class="ebtn ebtn-pdf" onclick="window.print()" id="pdfBtn" style="display:none">⬇️ تصدير PDF</button>
+</div>
+</div>
+
+```
+<div class="quote-wrap">
+<!-- EMPTY -->
+<div class="empty-output" id="emptyOutput">
+<div class="empty-output-icon">📋</div>
+<div class="empty-output-title">العميلة ستظهر هنا</div>
+<div class="empty-output-sub">ابدأ محادثة مع المساعد<br>وستُنشأ العميلة تلقائياً وجاهزة للتصدير</div>
+</div>
+
+<!-- QUOTE DOCUMENT -->
+<div id="quoteDoc">
+<div class="quote-top">
+<div>
+<div class="quote-dest" id="qDest">—</div>
+<div class="quote-meta" id="qMeta">—</div>
+<div class="quote-tags" id="qTags"></div>
+</div>
+<div class="quote-price-box">
+<div class="quote-price" id="qPrice">—</div>
+<div class="quote-price-label">ريال / شخص</div>
+</div>
+</div>
+<div class="quote-body" id="qBody"></div>
+</div>
+</div>
+```
+
+</div>
 
 </div>
 
@@ -753,242 +478,247 @@ CHAT:[ردك المختصر الودي للموظف باللهجة السعود�
 
 // ─── SEND MESSAGE ──────────────────────────────────────────────
 async function sendMessage() {
-  const input = document.getElementById('chatInput');
-  const text = input.value.trim();
-  if (!text || isLoading) return;
+const input = document.getElementById('chatInput');
+const text = input.value.trim();
+if (!text || isLoading) return;
 
-  addMessage('user', text);
-  input.value = '';
-  input.style.height = 'auto';
-  history.push({ role: 'user', content: text });
+addMessage('user', text);
+input.value = '';
+input.style.height = 'auto';
+history.push({ role: 'user', content: text });
 
-  // Hide quick chips after first message
-  document.getElementById('quickChips').style.display = 'none';
+// Hide quick chips after first message
+document.getElementById('quickChips').style.display = 'none';
 
-  isLoading = true;
-  document.getElementById('sendBtn').disabled = true;
+isLoading = true;
+document.getElementById('sendBtn').disabled = true;
 
-  // Typing indicator
-  const typingId = addTyping();
+// Typing indicator
+const typingId = addTyping();
 
-  try {
-    const res = await fetch('https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/Tourism-AI', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        system: SYSTEM,
-        messages: history
-      })
-    });
+try {
+const res = await fetch('https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/Tourism-AI', {
+method: 'POST',
+headers: {
+'Content-Type': 'application/json',
+'Authorization': 'Bearer sb_publishable_RafN5HDdlaugODgPs1nr4A_09SUTu0-',
+'apikey': 'sb_publishable_RafN5HDdlaugODgPs1nr4A_09SUTu0-'
+},
+body: JSON.stringify({
+model: 'claude-sonnet-4-20250514',
+max_tokens: 1000,
+system: SYSTEM,
+messages: history
+})
+});
 
-    const data = await res.json();
-    const raw = data.content?.[0]?.text || '';
-    lastRawText = raw;
+const data = await res.json();
+const raw = data.content?.[0]?.text || '';
+lastRawText = raw;
 
-    removeTyping(typingId);
-    history.push({ role: 'assistant', content: raw });
+removeTyping(typingId);
+history.push({ role: 'assistant', content: raw });
 
-    // Extract CHAT part for message
-    const chatMatch = raw.match(/CHAT:(.+)/s);
-    const chatMsg = chatMatch ? chatMatch[1].trim() : 'تم بناء البرنامج!';
-    addMessage('sys', chatMsg);
+// Extract CHAT part for message
+const chatMatch = raw.match(/CHAT:(.+)/s);
+const chatMsg = chatMatch ? chatMatch[1].trim() : 'تم بناء البرنامج!';
+addMessage('sys', chatMsg);
 
-    // Build quote if PROGRAM exists
-    if (raw.includes('PROGRAM:')) {
-      buildQuote(raw);
-    }
+// Build quote if PROGRAM exists
+if (raw.includes('PROGRAM:')) {
+buildQuote(raw);
+}
 
-  } catch (e) {
-    removeTyping(typingId);
-    addMessage('sys', 'حدث خطأ في الاتصال، حاول مرة ثانية.');
-  }
+} catch (e) {
+removeTyping(typingId);
+addMessage('sys', 'حدث خطأ في الاتصال، حاول مرة ثانية.');
+}
 
-  isLoading = false;
-  document.getElementById('sendBtn').disabled = false;
+isLoading = false;
+document.getElementById('sendBtn').disabled = false;
 }
 
 function quickSend(text) {
-  document.getElementById('chatInput').value = text;
-  sendMessage();
+document.getElementById('chatInput').value = text;
+sendMessage();
 }
 
 // ─── BUILD QUOTE ───────────────────────────────────────────────
 function buildQuote(raw) {
-  // Parse fields
-  const get = (key) => {
-    const m = raw.match(new RegExp(key + ':(.+)'));
-    return m ? m[1].trim() : '';
-  };
+// Parse fields
+const get = (key) => {
+const m = raw.match(new RegExp(key + ':(.+)'));
+return m ? m[1].trim() : '';
+};
 
-  const dest = get('DEST');
-  const meta = get('META');
-  const hotel = get('HOTEL');
-  const tags = get('TAG').split(',').map(t => t.trim()).filter(Boolean);
-  const price = get('PRICE');
+const dest = get('DEST');
+const meta = get('META');
+const hotel = get('HOTEL');
+const tags = get('TAG').split(',').map(t => t.trim()).filter(Boolean);
+const price = get('PRICE');
 
-  // Parse program days
-  const programMatch = raw.match(/PROGRAM:([\s\S]+?)(?:COSTS:|$)/);
-  const programText = programMatch ? programMatch[1].trim() : '';
+// Parse program days
+const programMatch = raw.match(/PROGRAM:([\s\S]+?)(?:COSTS:|$)/);
+const programText = programMatch ? programMatch[1].trim() : '';
 
-  // Parse costs
-  const costsMatch = raw.match(/COSTS:([\s\S]+?)(?:CHAT:|$)/);
-  const costsText = costsMatch ? costsMatch[1].trim() : '';
-  const totalMatch = costsText.match(/TOTAL:(.+?) ريال/);
-  const totalGroupMatch = costsText.match(/TOTAL_GROUP:(.+)/);
+// Parse costs
+const costsMatch = raw.match(/COSTS:([\s\S]+?)(?:CHAT:|$)/);
+const costsText = costsMatch ? costsMatch[1].trim() : '';
+const totalMatch = costsText.match(/TOTAL:(.+?) ريال/);
+const totalGroupMatch = costsText.match(/TOTAL_GROUP:(.+)/);
 
-  // Set header
-  document.getElementById('qDest').textContent = `برنامج ${dest} السياحي`;
-  document.getElementById('qMeta').textContent = `${hotel.split('|')[0]?.trim()} • ${meta}`;
-  document.getElementById('qPrice').textContent = price ? price.replace(' ريال','') : '—';
+// Set header
+document.getElementById('qDest').textContent = `برنامج ${dest} السياحي`;
+document.getElementById('qMeta').textContent = `${hotel.split('|')[0]?.trim()} • ${meta}`;
+document.getElementById('qPrice').textContent = price ? price.replace(' ريال','') : '—';
 
-  // Tags
-  const tagsEl = document.getElementById('qTags');
-  tagsEl.innerHTML = tags.map((t,i) =>
-    `<span class="qtag${i===1?' qtag-teal':''}">${t}</span>`
-  ).join('');
+// Tags
+const tagsEl = document.getElementById('qTags');
+tagsEl.innerHTML = tags.map((t,i) =>
+`<span class="qtag${i===1?' qtag-teal':''}">${t}</span>`
+).join('');
 
-  // Build body
-  const bodyEl = document.getElementById('qBody');
-  let html = '';
+// Build body
+const bodyEl = document.getElementById('qBody');
+let html = '';
 
-  // Hotel section
-  const hotelParts = hotel.split('|');
-  html += `<div class="quote-section-label">🏨 الفندق</div>`;
-  html += `<div class="day-row">
-    <div class="day-title">${hotelParts[0]?.trim() || ''} ${hotelParts[1]?.trim() || ''}</div>
-    <div class="day-acts">
-      <div class="day-act"><span class="act-dot"></span>${hotelParts[2]?.trim() || ''} — إفطار يومي مشمول <span class="act-type-badge type-tour">إقامة</span></div>
-    </div>
-  </div>`;
+// Hotel section
+const hotelParts = hotel.split('|');
+html += `<div class="quote-section-label">🏨 الفندق</div>`;
+html += `<div class="day-row">
+<div class="day-title">${hotelParts[0]?.trim() || ''} ${hotelParts[1]?.trim() || ''}</div>
+<div class="day-acts">
+<div class="day-act"><span class="act-dot"></span>${hotelParts[2]?.trim() || ''} — إفطار يومي مشمول <span class="act-type-badge type-tour">إقامة</span></div>
+</div>
+</div>`;
 
-  // Program days
-  html += `<div class="quote-section-label">🗓️ البرنامج اليومي</div>`;
-  const days = programText.split(/\n(?=اليوم)/g).filter(d => d.trim());
-  days.forEach(day => {
-    const lines = day.trim().split('\n');
-    const titleLine = lines[0];
-    const dayTitle = titleLine.replace(/^اليوم \d+ \|?\s*/, '').trim();
-    const dayNum = titleLine.match(/اليوم (\d+)/)?.[1] || '';
-    const acts = lines.slice(1).filter(l => l.trim().startsWith('-'));
+// Program days
+html += `<div class="quote-section-label">🗓️ البرنامج اليومي</div>`;
+const days = programText.split(/\n(?=اليوم)/g).filter(d => d.trim());
+days.forEach(day => {
+const lines = day.trim().split('\n');
+const titleLine = lines[0];
+const dayTitle = titleLine.replace(/^اليوم \d+ \|?\s*/, '').trim();
+const dayNum = titleLine.match(/اليوم (\d+)/)?.[1] || '';
+const acts = lines.slice(1).filter(l => l.trim().startsWith('-'));
 
-    html += `<div class="day-row">
-      <div class="day-title">اليوم ${dayNum} — ${dayTitle}</div>
-      <div class="day-acts">`;
+html += `<div class="day-row">
+<div class="day-title">اليوم ${dayNum} — ${dayTitle}</div>
+<div class="day-acts">`;
 
-    acts.forEach(act => {
-      const parts = act.replace(/^-\s*/, '').split('|');
-      const actName = parts[0]?.trim() || '';
-      const actPrice = parts[1]?.trim() || '';
-      const actType = parts[2]?.trim() || '';
-      const typeClass = actType.includes('ثقافية') ? 'type-tour'
-        : actType.includes('طبيعية') ? 'type-nature'
-        : actType.includes('بحرية') ? 'type-sea'
-        : 'type-transfer';
-      html += `<div class="day-act">
-        <span class="act-dot"></span>
-        ${actName} — ${actPrice}
-        <span class="act-type-badge ${typeClass}">${actType}</span>
-      </div>`;
-    });
+acts.forEach(act => {
+const parts = act.replace(/^-\s*/, '').split('|');
+const actName = parts[0]?.trim() || '';
+const actPrice = parts[1]?.trim() || '';
+const actType = parts[2]?.trim() || '';
+const typeClass = actType.includes('ثقافية') ? 'type-tour'
+: actType.includes('طبيعية') ? 'type-nature'
+: actType.includes('بحرية') ? 'type-sea'
+: 'type-transfer';
+html += `<div class="day-act">
+<span class="act-dot"></span>
+${actName} — ${actPrice}
+<span class="act-type-badge ${typeClass}">${actType}</span>
+</div>`;
+});
 
-    html += `</div></div>`;
-  });
+html += `</div></div>`;
+});
 
-  // Costs
-  html += `<div class="quote-section-label">💰 التكاليف</div>`;
-  html += `<div class="cost-summary">`;
-  const costLines = costsText.split('\n').filter(l => l.includes('|') && !l.startsWith('TOTAL'));
-  costLines.forEach(line => {
-    const [label, val] = line.split('|');
-    if (label && val) {
-      html += `<div class="cost-row-q">
-        <span class="clabel">${label.replace(/^-\s*/,'').trim()}</span>
-        <span class="cval">${val.trim()}</span>
-      </div>`;
-    }
-  });
-  html += `<div class="cost-total-q">
-    <span class="tlabel">💎 الإجمالي للشخص</span>
-    <span class="tval">${price} ريال</span>
-  </div>`;
-  if (totalGroupMatch) {
-    html += `<div class="cost-row-q" style="margin-top:8px;border-top:1px solid var(--border);padding-top:10px">
-      <span class="clabel" style="color:var(--text);font-weight:700">إجمالي المجموعة</span>
-      <span class="cval" style="color:var(--gold2)">${totalGroupMatch[1].trim()}</span>
-    </div>`;
-  }
-  html += `</div>`;
+// Costs
+html += `<div class="quote-section-label">💰 التكاليف</div>`;
+html += `<div class="cost-summary">`;
+const costLines = costsText.split('\n').filter(l => l.includes('|') && !l.startsWith('TOTAL'));
+costLines.forEach(line => {
+const [label, val] = line.split('|');
+if (label && val) {
+html += `<div class="cost-row-q">
+<span class="clabel">${label.replace(/^-\s*/,'').trim()}</span>
+<span class="cval">${val.trim()}</span>
+</div>`;
+}
+});
+html += `<div class="cost-total-q">
+<span class="tlabel">💎 الإجمالي للشخص</span>
+<span class="tval">${price} ريال</span>
+</div>`;
+if (totalGroupMatch) {
+html += `<div class="cost-row-q" style="margin-top:8px;border-top:1px solid var(--border);padding-top:10px">
+<span class="clabel" style="color:var(--text);font-weight:700">إجمالي المجموعة</span>
+<span class="cval" style="color:var(--gold2)">${totalGroupMatch[1].trim()}</span>
+</div>`;
+}
+html += `</div>`;
 
-  bodyEl.innerHTML = html;
+bodyEl.innerHTML = html;
 
-  // Show doc + export buttons
-  document.getElementById('emptyOutput').style.display = 'none';
-  document.getElementById('quoteDoc').classList.add('show');
-  ['copyBtn','printBtn','pdfBtn'].forEach(id => document.getElementById(id).style.display = 'flex');
+// Show doc + export buttons
+document.getElementById('emptyOutput').style.display = 'none';
+document.getElementById('quoteDoc').classList.add('show');
+['copyBtn','printBtn','pdfBtn'].forEach(id => document.getElementById(id).style.display = 'flex');
 }
 
 // ─── CHAT HELPERS ──────────────────────────────────────────────
 function addMessage(type, text) {
-  const msgs = document.getElementById('messages');
-  const div = document.createElement('div');
-  div.className = `msg ${type}`;
-  const now = new Date().toLocaleTimeString('ar', {hour:'2-digit',minute:'2-digit'});
-  const avatar = type === 'sys' ? '🗺' : 'م';
-  div.innerHTML = `
-    <div class="msg-avatar">${avatar}</div>
-    <div>
-      <div class="msg-bubble">${text.replace(/\n/g,'<br>')}</div>
-      <div class="msg-time">${now}</div>
-    </div>`;
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
+const msgs = document.getElementById('messages');
+const div = document.createElement('div');
+div.className = `msg ${type}`;
+const now = new Date().toLocaleTimeString('ar', {hour:'2-digit',minute:'2-digit'});
+const avatar = type === 'sys' ? '🗺' : 'م';
+div.innerHTML = `
+<div class="msg-avatar">${avatar}</div>
+<div>
+<div class="msg-bubble">${text.replace(/\n/g,'<br>')}</div>
+<div class="msg-time">${now}</div>
+</div>`;
+msgs.appendChild(div);
+msgs.scrollTop = msgs.scrollHeight;
 }
 
 function addTyping() {
-  const msgs = document.getElementById('messages');
-  const div = document.createElement('div');
-  div.className = 'msg sys';
-  const id = 'typing_' + Date.now();
-  div.id = id;
-  div.innerHTML = `
-    <div class="msg-avatar">🗺</div>
-    <div>
-      <div class="msg-bubble">
-        <div class="typing"><span></span><span></span><span></span></div>
-      </div>
-    </div>`;
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
-  return id;
+const msgs = document.getElementById('messages');
+const div = document.createElement('div');
+div.className = 'msg sys';
+const id = 'typing_' + Date.now();
+div.id = id;
+div.innerHTML = `
+<div class="msg-avatar">🗺</div>
+<div>
+<div class="msg-bubble">
+<div class="typing"><span></span><span></span><span></span></div>
+</div>
+</div>`;
+msgs.appendChild(div);
+msgs.scrollTop = msgs.scrollHeight;
+return id;
 }
 
 function removeTyping(id) {
-  const el = document.getElementById(id);
-  if (el) el.remove();
+const el = document.getElementById(id);
+if (el) el.remove();
 }
 
 function handleKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 }
 
 function autoResize(el) {
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+el.style.height = 'auto';
+el.style.height = Math.min(el.scrollHeight, 100) + 'px';
 }
 
 function copyQuote() {
-  const body = document.getElementById('qBody').innerText;
-  const dest = document.getElementById('qDest').innerText;
-  const price = document.getElementById('qPrice').innerText;
-  const full = `${dest}\n${document.getElementById('qMeta').innerText}\n\n${body}\n\nالإجمالي للشخص: ${price} ريال`;
-  navigator.clipboard.writeText(full).then(() => {
-    const btn = document.getElementById('copyBtn');
-    btn.textContent = '✅ تم النسخ';
-    setTimeout(() => btn.textContent = '📋 نسخ', 2000);
-  });
+const body = document.getElementById('qBody').innerText;
+const dest = document.getElementById('qDest').innerText;
+const price = document.getElementById('qPrice').innerText;
+const full = `${dest}\n${document.getElementById('qMeta').innerText}\n\n${body}\n\nالإجمالي للشخص: ${price} ريال`;
+navigator.clipboard.writeText(full).then(() => {
+const btn = document.getElementById('copyBtn');
+btn.textContent = '✅ تم النسخ';
+setTimeout(() => btn.textContent = '📋 نسخ', 2000);
+});
 }
 </script>
+
 </body>
 </html>
