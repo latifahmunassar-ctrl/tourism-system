@@ -642,7 +642,47 @@ if (el2) el2.textContent = newPrice.toLocaleString() + ' ريال';
 if (el3) el3.textContent = newGroup.toLocaleString() + ' ريال لـ ' + persons + ' أشخاص';
 }
 
-function exportPDF(withLogo) {
+async function exportPDF(withLogo) {
+const btns = document.getElementById('exportBtns');
+btns.style.display = 'none';
+
+// Show loading
+addMessage('sys', '⏳ جاري توليد الـ PDF...');
+
+try {
+const res = await fetch('https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/Tourism-AI', {
+method: 'POST',
+headers: {
+'Content-Type': 'application/json',
+'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mb3R2YWNzemxtcnF4emZqbXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2MjI5NTYsImV4cCI6MjA5MzE5ODk1Nn0.1nQmxW63BFZSK-cn4fzh8tYM7a2JO10AQ0RGQ5bcdYo',
+'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mb3R2YWNzemxtcnF4emZqbXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2MjI5NTYsImV4cCI6MjA5MzE5ODk1Nn0.1nQmxW63BFZSK-cn4fzh8tYM7a2JO10AQ0RGQ5bcdYo'
+},
+body: JSON.stringify({
+messages: history,
+generate_pdf: true
+})
+});
+
+const data = await res.json();
+const pdfBase64 = withLogo ? data.pdf_with_logo : data.pdf_without_logo;
+
+if (pdfBase64) {
+// Download PDF
+const link = document.createElement('a');
+link.href = 'data:application/pdf;base64,' + pdfBase64;
+link.download = withLogo ? 'برنامج_مع_شعار.pdf' : 'برنامج_بدون_شعار.pdf';
+link.click();
+addMessage('sys', '✅ تم توليد الـ PDF بنجاح!');
+} else {
+addMessage('sys', '❌ حدث خطأ في توليد الـ PDF');
+}
+
+} catch(e) {
+addMessage('sys', '❌ خطأ: ' + e.message);
+}
+
+btns.style.display = 'flex';
+}
 const ids = ['qFlightSection','qProgramSection','qSimSection','qSummarySection'];
 const logo = document.getElementById('qLogoBar');
 const price = document.getElementById('qPriceBlock');
