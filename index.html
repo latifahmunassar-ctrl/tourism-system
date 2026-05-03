@@ -254,7 +254,7 @@ body { background:#fff !important; }
 <div class="chat-input-wrap">
 <textarea class="chat-input" id="chatInput" placeholder="اكتب تفاصيل العميل هنا..." rows="1"
 onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-<button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
+<button class="send-btn" id="sendBtn">➤</button>
 </div>
 </div>
 
@@ -288,6 +288,10 @@ onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
 const history = [];
 let isLoading = false;
 let currentData = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+document.getElementById('sendBtn').addEventListener('click', sendMessage);
+});
 
 const SYSTEM = `أنت مساعد ذكي متخصص في بناء البرامج السياحية الاحترافية. تعمل بذكاء واحترافية عالية.
 
@@ -329,6 +333,7 @@ TOTAL_PER_PERSON:[الإجمالي للشخص] ريال
 TOTAL_GROUP:[الإجمالي للمجموعة] ريال لـ [عدد] أشخاص
 
 CHAT:[ردك المختصر الودي للموظف باللهجة السعودية، جملتين فقط، لا تذكر أي تقنية]`;
+
 chatInput');
 quickChips').style.display = 'none';
 
@@ -408,36 +413,8 @@ hotelsHTML += `
 <div class="q-hotel-item">
 <div class="q-hotel-img"><img src="${hotelImages[i % hotelImages.length]}" onerror="this.style.display='none'" alt=""></div>
 <div class="q-hotel-details">
-<div class="q-hotel-name">${p[0] || ''} ${p[1] ? '- ' + p[1] : ''}</div>
-<div class="q-hotel-stars">${'★'.repeat(starsNum)} ${p[2] || ''}</div>
-<div class="q-hotel-tags">
-${p[3] ? `<span class="q-htag q-htag-room">🛏️ ${p[3]}</span>` : ''}
-${p[4] ? `<span class="q-htag q-htag-price">💰 ${p[4]}</span>` : ''}
-${p[5] ? `<span class="q-htag q-htag-nights">📅 ${p[5]}</span>` : ''}
-${p[6] ? `<span class="q-htag q-htag-meal">🍳 ${p[6]}</span>` : ''}
-</div>
-</div>
-</div>`;
-});
-
-// FLIGHTS HTML
-let flightsHTML = '';
-let flightTotal = 0;
-flightsLines.forEach(line => {
-const p = line.split('|').map(x => x.trim());
-const total = parseInt(p[4]) || 0;
-flightTotal += total;
-flightsHTML += `
-<div class="q-flight-row">
-<div>
-<div class="q-flight-route">✈️ ${p[0] || ''}</div>
-<div class="q-flight-type">${p[1] || ''} • ${p[2] || ''} × ${p[3] || ''}</div>
-</div>
-<div class="q-flight-price">${p[4] || ''}</div>
-</div>`;
-});
-if (flightsHTML) {
-flightsHTML += `<div class="q-flight-total"><span>إجمالي الطيران</span><span>${flightTotal.toLocaleString()} ريال</span></div>`;
+repeat(starsNum)} ${p[2] || ''}</div>
+إجمالي الطيران</span><span>${flightTotal.toLocaleString()} ريال</span></div>`;
 }
 
 // PROGRAM HTML
@@ -577,58 +554,14 @@ document.getElementById('emptyOutput').style.display = 'none';
 document.getElementById('exportBtns').style.display = 'flex';
 
 document.getElementById('profitInput').oninput = updatePrice;
-}
-
-function updatePrice() {
-if (!currentData) return;
-const profit = parseInt(document.getElementById('profitInput').value) || 0;
-const baseStr = (currentData.totalPerPerson || '').replace(/[^\d]/g, '');
-const base = parseInt(baseStr) || 0;
-const newPrice = base + profit;
-const personsMatch = (currentData.totalGroup || '').match(/لـ (\d+) أشخاص/);
-const persons = parseInt(personsMatch?.[1]) || 1;
-const newGroup = newPrice * persons;
-
-const el1 = document.getElementById('qPriceNum');
+getElementById('profitInput').value) || 0;
+qPriceNum');
 const el2 = document.getElementById('qTotalVal');
 const el3 = document.getElementById('qGroupVal');
-if (el1) el1.textContent = newPrice.toLocaleString();
-if (el2) el2.textContent = newPrice.toLocaleString() + ' ريال';
-if (el3) el3.textContent = newGroup.toLocaleString() + ' ريال لـ ' + persons + ' أشخاص';
-}
-
-function exportPDF(withLogo) {
-const ids = ['qFlightSection','qProgramSection','qSimSection','qSummarySection'];
+qProgramSection','qSimSection','qSummarySection'];
 const logo = document.getElementById('qLogoBar');
 const price = document.getElementById('qPriceBlock');
 const btns = document.getElementById('exportBtns');
-
-// Hide export buttons
-btns.style.display = 'none';
-
-if (withLogo) {
-// مع شعار + مع سعر إجمالي فقط (بدون تفاصيل)
-if (logo) logo.style.display = 'flex';
-if (price) price.style.display = 'flex';
-ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
-} else {
-// بدون شعار + بدون سعر
-if (logo) logo.style.display = 'none';
-if (price) price.style.display = 'none';
-ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
-}
-
-setTimeout(() => {
-window.print();
-setTimeout(() => {
-if (logo) logo.style.display = 'flex';
-if (price) price.style.display = 'flex';
-ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'block'; });
-btns.style.display = 'flex';
-}, 1500);
-}, 300);
-}
-
 function addMessage(type, text) {
 const msgs = document.getElementById('messages');
 const div = document.createElement('div');
