@@ -417,12 +417,8 @@ html += `
 ${summaryHTML}
 </div>
 <div class="group-card">
-<span class="group-label">👥 الإجمالي للمجموعة (${persons} أشخاص)</span>
+<span class="group-label">💰 الإجمالي (${persons} أشخاص)</span>
 <span class="group-val" id="totalGroupEl">${totalGroup.toLocaleString()} ريال</span>
-</div>
-<div class="total-card">
-<span class="total-label">💎 الإجمالي للشخص الواحد</span>
-<span class="total-val" id="totalPersonEl">${totalPerson.toLocaleString()} ريال</span>
 </div>`;
 
 document.getElementById('reviewPanel').innerHTML = html;
@@ -434,21 +430,18 @@ function updateProfit() {
 if (!parsedData) return;
 const profit = parseInt(document.getElementById('profitInput').value)||0;
 const persons = parsedData.persons || 1;
-const newPerson = basePrice + profit;            // ربح يُضاف لسعر الشخص
-const newGroup  = newPerson * persons;           // إجمالي المجموعة = الشخص × العدد
-const el1=document.getElementById('totalPersonEl');
-const el2=document.getElementById('totalGroupEl');
-if(el1) el1.textContent = newPerson.toLocaleString()+' ريال';
-if(el2) el2.textContent = newGroup.toLocaleString()+' ريال';
+// الربح يُضاف إلى إجمالي المجموعة مباشرةً
+const newGroup = (basePrice * persons) + profit;
+const el = document.getElementById('totalGroupEl');
+if(el) el.textContent = newGroup.toLocaleString()+' ريال';
 }
 
 function buildPDF(withLogo) {
 if (!parsedData) return;
 const profit=parseInt(document.getElementById('profitInput').value)||0;
-const finalPrice=basePrice+profit;
 const {dest,meta,dateFrom,dateTo,client,clientCode,hotelsLines,flightsLines,transfersLines,toursLines,simText,persons}=parsedData;
-
-const finalGroupPrice = finalPrice * persons;
+// السعر النهائي الإجمالي = أصل (شخص × عدد) + ربح
+const finalGroupPrice = (basePrice * persons) + profit;
 
 // Extract cities from hotels
 const cities = [...new Set(hotelsLines.map(l => l.split('|')[1]?.trim()).filter(Boolean))];
@@ -460,7 +453,7 @@ const duration = metaParts[0] || '';
 const nights = metaParts[1] || '';
 
 const logoHTML=withLogo?`<div class="pdf-logo-box"><div><div class="pdf-logo-ar">مجموعة العز الدولية للسفر والسياحة</div><div class="pdf-logo-en">Alezz International Group Travel & Tours</div></div><div class="pdf-logo-badge">A.I. ✈ T.T</div></div>`:'';
-const priceHTML=withLogo?`<div class="pdf-price-box"><div><div class="pdf-price-label">السعر الإجمالي للمجموعة (${persons} أشخاص)</div><div style="font-size:11px;color:#555;margin-top:2px;">${finalPrice.toLocaleString()} ريال × ${persons} أشخاص</div></div><div class="pdf-price-val">${finalGroupPrice.toLocaleString()} ريال</div></div>`:'';
+const priceHTML=withLogo?`<div class="pdf-price-box"><div class="pdf-price-label">💰 السعر الإجمالي (${persons} أشخاص)</div><div class="pdf-price-val">${finalGroupPrice.toLocaleString()} ريال</div></div>`:'';
 
 // Calculate start date for each day
 function getDayDate(dayNum) {
