@@ -18,3 +18,8 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Logo source files (embedded as base64 in index.html)
+logo.pdf
+logo*.png
+logo*.jpg
