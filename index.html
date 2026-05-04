@@ -420,7 +420,7 @@ ${summaryHTML}
 </div>
 <div class="group-card">
 <span class="group-label">👥 إجمالي المجموعة (${persons} أشخاص)</span>
-<span class="group-val" id="totalGroupEl">${(totalPerson*persons).toLocaleString()} ريال</span>
+<span class="group-val" id="totalGroupEl">${totalPerson.toLocaleString()} ريال</span>
 </div>`;
 
 document.getElementById('reviewPanel').innerHTML = html;
@@ -435,7 +435,7 @@ const newTotal = basePrice + profit;
 const el1=document.getElementById('totalPersonEl');
 const el2=document.getElementById('totalGroupEl');
 if(el1) el1.textContent = newTotal.toLocaleString()+' ريال';
-if(el2) el2.textContent = (newTotal*parsedData.persons).toLocaleString()+' ريال';
+if(el2) el2.textContent = newTotal.toLocaleString()+' ريال';
 }
 
 function buildPDF(withLogo) {
@@ -444,7 +444,7 @@ const profit=parseInt(document.getElementById('profitInput').value)||0;
 const finalPrice=basePrice+profit;
 const {dest,meta,dateFrom,dateTo,client,clientCode,hotelsLines,flightsLines,transfersLines,toursLines,simText,persons}=parsedData;
 
-const finalGroupPrice = finalPrice * persons;
+const finalGroupPrice = finalPrice;
 
 // Extract cities from hotels
 const cities = [...new Set(hotelsLines.map(l => l.split('|')[1]?.trim()).filter(Boolean))];
