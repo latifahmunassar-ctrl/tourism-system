@@ -321,6 +321,8 @@ const totalGroupLine = getLine(raw, 'TOTAL_GROUP');
 const totalPerson = parseInt(totalPersonStr.replace(/[^\d]/g,'')) || 0;
 const personsMatch = totalGroupLine.match(/(\d+)\s*اشخاص/);
 const persons = parseInt(personsMatch?.[1]) || 2;
+// إجمالي المجموعة = الرقم الأوّل في سطر TOTAL_GROUP (قبل الـ |)، أو احسبه إذا غير موجود
+const totalGroup = parseInt((totalGroupLine.split('|')[0]||'').replace(/[^\d]/g,'')) || (totalPerson * persons);
 
 basePrice = totalPerson;
 const hotelsLines = parseSection(raw, 'HOTELS');
@@ -414,13 +416,13 @@ html += `
 <div style="font-size:13px;font-weight:800;margin-bottom:12px;">💰 ملخص التكاليف</div>
 ${summaryHTML}
 </div>
-<div class="total-card">
-<span class="total-label">💎 الإجمالي للشخص</span>
-<span class="total-val" id="totalPersonEl">${totalPerson.toLocaleString()} ريال</span>
-</div>
 <div class="group-card">
-<span class="group-label">👥 إجمالي المجموعة (${persons} أشخاص)</span>
-<span class="group-val" id="totalGroupEl">${totalPerson.toLocaleString()} ريال</span>
+<span class="group-label">👥 الإجمالي للمجموعة (${persons} أشخاص)</span>
+<span class="group-val" id="totalGroupEl">${totalGroup.toLocaleString()} ريال</span>
+</div>
+<div class="total-card">
+<span class="total-label">💎 الإجمالي للشخص الواحد</span>
+<span class="total-val" id="totalPersonEl">${totalPerson.toLocaleString()} ريال</span>
 </div>`;
 
 document.getElementById('reviewPanel').innerHTML = html;
@@ -431,11 +433,13 @@ document.getElementById('exportBtns').style.display = 'flex';
 function updateProfit() {
 if (!parsedData) return;
 const profit = parseInt(document.getElementById('profitInput').value)||0;
-const newTotal = basePrice + profit;
+const persons = parsedData.persons || 1;
+const newPerson = basePrice + profit;            // ربح يُضاف لسعر الشخص
+const newGroup  = newPerson * persons;           // إجمالي المجموعة = الشخص × العدد
 const el1=document.getElementById('totalPersonEl');
 const el2=document.getElementById('totalGroupEl');
-if(el1) el1.textContent = newTotal.toLocaleString()+' ريال';
-if(el2) el2.textContent = newTotal.toLocaleString()+' ريال';
+if(el1) el1.textContent = newPerson.toLocaleString()+' ريال';
+if(el2) el2.textContent = newGroup.toLocaleString()+' ريال';
 }
 
 function buildPDF(withLogo) {
@@ -444,7 +448,7 @@ const profit=parseInt(document.getElementById('profitInput').value)||0;
 const finalPrice=basePrice+profit;
 const {dest,meta,dateFrom,dateTo,client,clientCode,hotelsLines,flightsLines,transfersLines,toursLines,simText,persons}=parsedData;
 
-const finalGroupPrice = finalPrice;
+const finalGroupPrice = finalPrice * persons;
 
 // Extract cities from hotels
 const cities = [...new Set(hotelsLines.map(l => l.split('|')[1]?.trim()).filter(Boolean))];
