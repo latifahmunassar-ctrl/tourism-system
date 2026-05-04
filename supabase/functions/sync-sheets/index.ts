@@ -118,90 +118,85 @@ function parsePrice(raw: string): number {
 }
 
 // ── استخراج الفنادق من صفوف التبويبة ─────────────────────────────────────
+//
+// نعتمد على *أسماء الأعمدة* في صف الـ header، لا على مواقعها — لأن ترتيب
+// الأعمدة يختلف بين تبويبات الوجهات (تركيا، روسيا، إندونيسيا...).
+// نبحث عن أوّل صف يحتوي على "hotel" + "city" + "star" كخلايا مفردة،
+// ثم نبني خريطة { name → colIndex } للحقول التي نحتاجها.
+
+const HEADER_ALIASES: Record<string, RegExp> = {
+  name:       /^(hotel|hotels|hotel\s*name|الفندق|اسم\s*الفندق)$/i,
+  city:       /^(city|المدينة|المدينه)$/i,
+  stars:      /^(star|stars|rating|نجوم|تصنيف)$/i,
+  room:       /^(room|room\s*type|الغرفة|نوع\s*الغرفة)$/i,
+  rate:       /^(rate|price|nightly|night\s*rate|سعر|السعر|تكلفة|التكلفة)$/i,
+  currency:   /^(currency|عملة|العملة)$/i,
+  occupancy:  /^(occupancy|capacity|pax|اشغال|الإشغال|اشخاص|الأشخاص|استيعاب)$/i,
+  include:    /^(include|includes|breakfast|meals|شامل|يشمل|الإفطار)$/i,
+};
+
+function findHotelHeader(rows: string[][]): { rowIdx: number; cols: Record<string, number> } | null {
+  for (let i = 0; i < rows.length; i++) {
+    const cells = rows[i].map(x => (x || "").trim());
+    const map: Record<string, number> = {};
+    for (let j = 0; j < cells.length; j++) {
+      const cell = cells[j];
+      if (!cell) continue;
+      for (const [field, pattern] of Object.entries(HEADER_ALIASES)) {
+        if (map[field] === undefined && pattern.test(cell)) {
+          map[field] = j;
+        }
+      }
+    }
+    // Header row must have at least name + city + stars + rate
+    if (map.name !== undefined && map.city !== undefined && map.stars !== undefined && map.rate !== undefined) {
+      return { rowIdx: i, cols: map };
+    }
+  }
+  return null;
+}
+
 function extractHotels(rows: string[][], destination: string, debug?: { rejects: string[] }): object[] {
   const hotels: object[] = [];
   const reject = (i: number, reason: string, row: string[]) =>
-    debug?.rejects.push(`[${destination} row ${i}] ${reason} | raw: ${JSON.stringify(row.slice(0, 11))}`);
+    debug?.rejects.push(`[${destination} row ${i}] ${reason} | raw: ${JSON.stringify(row.slice(0, 15))}`);
 
-  // مرحلة 1: dump أيّ صف فيه كلمة "hotel" أو "city" لتشخيص المكان
-  if (debug) {
-    for (let i = 0; i < rows.length; i++) {
-      const joined = rows[i].join(" | ").toLowerCase();
-      if (/\bhotel\b/.test(joined) || /\bcity\b/.test(joined)) {
-        debug.rejects.push(`[${destination} row ${i}] CONTAINS hotel/city → ${JSON.stringify(rows[i].slice(0, 12))}`);
-      }
-    }
-  }
-
-  // مرحلة 2: ابحث عن header مرن — أيّ صف يحتوي على "hotel" و"city" في أيّ خليّة
-  let startIdx = -1;
-  let headerOffset = 0; // إزاحة العمود الذي يبدأ منه الفندق (إذا الـ Hotel ليس في col A)
-  for (let i = 0; i < rows.length; i++) {
-    const cells = rows[i].map(x => (x || "").trim().toLowerCase());
-    const hotelCol = cells.findIndex(c => c === "hotel" || c === "hotels" || c === "hotel name");
-    const cityCol  = cells.findIndex(c => c === "city");
-    if (hotelCol !== -1 && cityCol === hotelCol + 1) {
-      startIdx = i + 1;
-      headerOffset = hotelCol;
-      debug?.rejects.push(`[${destination}] hotels header found at row ${i}, col ${hotelCol}, scanning from row ${startIdx}`);
-      break;
-    }
-  }
-  if (startIdx === -1) {
-    debug?.rejects.push(`[${destination}] no hotels header found`);
+  const header = findHotelHeader(rows);
+  if (!header) {
+    debug?.rejects.push(`[${destination}] no hotel header found (need cells: hotel + city + star + rate)`);
     return hotels;
   }
-  // إذا الـ header بدأ من عمود غير 0، نزحنا الصفوف لاحقاً
+  debug?.rejects.push(`[${destination}] header at row ${header.rowIdx}, columns: ${JSON.stringify(header.cols)}`);
 
-  for (let i = startIdx; i < rows.length; i++) {
-    // نقتطع الصف من بداية أعمدة الفنادق (بحسب headerOffset)
-    const row = rows[i].slice(headerOffset);
-    if (row.length < 7) { reject(i, `too few cols (${row.length})`, row); continue; }
+  const get = (row: string[], field: string): string => {
+    const idx = header.cols[field];
+    if (idx === undefined) return "";
+    const val = row[idx];
+    return (val ?? "").toString().trim();
+  };
 
-    const c = row.map(x => (x || "").trim());
-    const hotelName = c[0];
-    const city      = c[1];
-    const starsRaw  = c[2];
-    const roomType  = c[3];
+  for (let i = header.rowIdx + 1; i < rows.length; i++) {
+    const row = rows[i].map(x => (x || "").trim());
 
-    if (!hotelName || !city) { reject(i, `missing name or city (name='${hotelName}', city='${city}')`, row); continue; }
+    const hotelName  = get(row, "name");
+    const city       = get(row, "city");
+    const starsRaw   = get(row, "stars");
+    const roomType   = get(row, "room");
+    const priceStr   = get(row, "rate");
+    const includeStr = get(row, "include");
+    const currencyStr = get(row, "currency");
+    const occupancyStr = get(row, "occupancy");
 
-    const nameLower = hotelName.toLowerCase();
-    if (HOTEL_HEADER_KEYWORDS.some(k => nameLower === k)) { reject(i, `header row (name='${hotelName}')`, row); continue; }
+    if (!hotelName || !city) { reject(i, `missing name or city`, row); continue; }
+    // تجاهل صفوف الرأس المتكرّرة (نفس كلمات الـ header)
+    if (HEADER_ALIASES.name.test(hotelName)) { reject(i, `header row repeat`, row); continue; }
     if (/^\d+$/.test(hotelName)) { reject(i, `name is just a number`, row); continue; }
 
     const stars = parseInt(starsRaw);
     if (isNaN(stars) || stars < 1 || stars > 5) { reject(i, `invalid stars '${starsRaw}'`, row); continue; }
 
-    // اكتشاف وجود عمود Note:
-    // إذا c[4] يبدو تاريخاً (dd-mm-yyyy أو mm/dd/yyyy) → لا يوجد Note
-    // وإلا → يوجد Note في c[4]
-    const col4 = c[4] || "";
-    const isDate = /^\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}$/.test(col4);
-    const isNumber = !isNaN(parseFloat(col4)) && col4 !== "";
-    const hasNote = col4 !== "" && !isDate && !isNumber;
-
-    let priceStr: string;
-    let includeStr: string;
-    let currencyStr: string;
-    let occupancyStr: string;
-
-    if (hasNote) {
-      // [0]Hotel [1]City [2]Stars [3]Room [4]Note [5]From [6]To [7]Rate [8]Include [9]Currency [10]Occupancy
-      priceStr     = c[7]  || "";
-      includeStr   = c[8]  || "";
-      currencyStr  = c[9]  || "SAR";
-      occupancyStr = c[10] || "";
-    } else {
-      // [0]Hotel [1]City [2]Stars [3]Room [4]From [5]To [6]Rate [7]Include [8]Currency [9]Occupancy
-      priceStr     = c[6] || "";
-      includeStr   = c[7] || "";
-      currencyStr  = c[8] || "SAR";
-      occupancyStr = c[9] || "";
-    }
-
     const price = parsePrice(priceStr);
-    if (isNaN(price) || price <= 0) { reject(i, `invalid price '${priceStr}' (hasNote=${hasNote})`, row); continue; }
+    if (isNaN(price) || price <= 0) { reject(i, `invalid price '${priceStr}'`, row); continue; }
 
     hotels.push({
       name:               hotelName,
@@ -210,7 +205,7 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
       price_per_night:    price,
       room_type:          roomType || "",
       includes_breakfast: /breakfast|إفطار/i.test(includeStr),
-      currency:           cleanCurrency(currencyStr),
+      currency:           cleanCurrency(currencyStr || "SAR"),
       occupancy:          occupancyStr,
       last_synced_at:     new Date().toISOString(),
     });
