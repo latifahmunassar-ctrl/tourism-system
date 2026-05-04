@@ -39,10 +39,13 @@ async function buildDataContext(supabase: ReturnType<typeof createClient>): Prom
   }
 
   if (tours && tours.length > 0) {
-    context += "\n🗺️ الجولات والانتقالات:\n";
+    context += "\n🗺️ الجولات والانتقالات (لاحظ variants — السعر يختلف حسب الفئة/الشهر):\n";
     for (const t of tours) {
-      const desc = t.description ? ` (${t.description})` : "";
-      context += `- ${t.name}${desc} | ${t.price} ${t.currency} | ${t.type}\n`;
+      const variants = Array.isArray(t.variants) && t.variants.length > 0
+        ? t.variants.map((v: { label: string; price: number; currency?: string }) =>
+            `${v.label}=${v.price} ${v.currency || t.currency}`).join(" | ")
+        : `${t.price} ${t.currency}`;
+      context += `- ${t.name} [${t.type}] → ${variants}\n`;
     }
   }
 
@@ -72,6 +75,19 @@ function buildSystemPrompt(dataContext: string, frontendFormat: string): string 
 
 🚫 ممنوع منعاً باتاً اختراع أيّ فندق أو جولة أو سعر غير موجود في "البيانات المتاحة في النظام" أدناه. استخدم فقط الأسماء والأسعار المذكورة حرفياً. إذا لم تجد البيانات لوجهة معيّنة، أجب بـ:
   CHAT:عذراً، ما عندنا بيانات لهذه الوجهة حالياً. تواصل مع الإدارة لإضافتها.
+
+🎫 قاعدة أسعار الجولات والانتقالات (مهمّة جداً):
+كل جولة في القائمة لها variants متعدّدة على شكل [label=السعر]. اختر الـ variant الصحيح حسب طلب الموظف:
+  • إذا كان الـ label فيه نطاق أشخاص (مثل "1-3 Pax", "4-9 Pax", "Pax 7-13"): اختر الـ variant الذي يستوعب عدد الأشخاص المطلوب.
+    - مثال: مجموعة 5 أشخاص → اختر "4-9 Pax" (وليس "1-3").
+  • إذا كان الـ label فيه شهر (مثل "may month", "june month"): اختر الـ variant الذي يطابق شهر السفر المطلوب.
+    - مثال: تاريخ يونيو 2026 → اختر "june month".
+  • إذا فيه أكثر من نوع variant (شهر + pax)، طبّق الاثنين معاً.
+  • السعر في الـ variant بحسب الـ label:
+    - إذا الـ label فيه نطاق "Pax" (مثل "1-3 Pax"): السعر للمجموعة كاملة ضمن النطاق — لا تضرب في عدد الأشخاص.
+    - إذا الـ label "Per Pax" أو "per person": السعر للشخص الواحد — اضرب في عدد الأشخاص.
+    - إذا الـ label شهر فقط (مثل "may month"): اعتبر السعر للمجموعة كاملة افتراضياً.
+  • للعرض "Per Person" في الإجمالي: اقسم إجمالي البرنامج كلّه على عدد الأشخاص.
 
 💰 قاعدة حساب سعر الفندق (مهمّة جداً):
 سعر الليلة (Rate) في الجدول هو **السعر الإجمالي للغرفة كاملةً للإشغال المذكور أمامها في عمود Occupancy**.
