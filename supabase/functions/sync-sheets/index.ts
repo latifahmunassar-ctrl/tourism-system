@@ -118,11 +118,45 @@ function parsePrice(raw: string): number {
 }
 
 // ── استخراج الفنادق من صفوف التبويبة ─────────────────────────────────────
-function extractHotels(rows: string[][], destination: string): object[] {
+function extractHotels(rows: string[][], destination: string, debug?: { rejects: string[] }): object[] {
   const hotels: object[] = [];
+  const reject = (i: number, reason: string, row: string[]) =>
+    debug?.rejects.push(`[${destination} row ${i}] ${reason} | raw: ${JSON.stringify(row.slice(0, 11))}`);
 
-  for (const row of rows) {
-    if (row.length < 7) continue;
+  // مرحلة 1: dump أيّ صف فيه كلمة "hotel" أو "city" لتشخيص المكان
+  if (debug) {
+    for (let i = 0; i < rows.length; i++) {
+      const joined = rows[i].join(" | ").toLowerCase();
+      if (/\bhotel\b/.test(joined) || /\bcity\b/.test(joined)) {
+        debug.rejects.push(`[${destination} row ${i}] CONTAINS hotel/city → ${JSON.stringify(rows[i].slice(0, 12))}`);
+      }
+    }
+  }
+
+  // مرحلة 2: ابحث عن header مرن — أيّ صف يحتوي على "hotel" و"city" في أيّ خليّة
+  let startIdx = -1;
+  let headerOffset = 0; // إزاحة العمود الذي يبدأ منه الفندق (إذا الـ Hotel ليس في col A)
+  for (let i = 0; i < rows.length; i++) {
+    const cells = rows[i].map(x => (x || "").trim().toLowerCase());
+    const hotelCol = cells.findIndex(c => c === "hotel" || c === "hotels" || c === "hotel name");
+    const cityCol  = cells.findIndex(c => c === "city");
+    if (hotelCol !== -1 && cityCol === hotelCol + 1) {
+      startIdx = i + 1;
+      headerOffset = hotelCol;
+      debug?.rejects.push(`[${destination}] hotels header found at row ${i}, col ${hotelCol}, scanning from row ${startIdx}`);
+      break;
+    }
+  }
+  if (startIdx === -1) {
+    debug?.rejects.push(`[${destination}] no hotels header found`);
+    return hotels;
+  }
+  // إذا الـ header بدأ من عمود غير 0، نزحنا الصفوف لاحقاً
+
+  for (let i = startIdx; i < rows.length; i++) {
+    // نقتطع الصف من بداية أعمدة الفنادق (بحسب headerOffset)
+    const row = rows[i].slice(headerOffset);
+    if (row.length < 7) { reject(i, `too few cols (${row.length})`, row); continue; }
 
     const c = row.map(x => (x || "").trim());
     const hotelName = c[0];
@@ -130,16 +164,14 @@ function extractHotels(rows: string[][], destination: string): object[] {
     const starsRaw  = c[2];
     const roomType  = c[3];
 
-    if (!hotelName || !city) continue;
+    if (!hotelName || !city) { reject(i, `missing name or city (name='${hotelName}', city='${city}')`, row); continue; }
 
-    // تجاهل صفوف الرأس فقط (الاسم = كلمة header بالضبط، لا مجرد يحتوي عليها)
-    // هذا يسمح بأسماء فنادق مثل "Hotel Le Mirage" أو "Park Hotel"
     const nameLower = hotelName.toLowerCase();
-    if (HOTEL_HEADER_KEYWORDS.some(k => nameLower === k)) continue;
-    if (/^\d+$/.test(hotelName)) continue; // رقم تسلسلي فقط
+    if (HOTEL_HEADER_KEYWORDS.some(k => nameLower === k)) { reject(i, `header row (name='${hotelName}')`, row); continue; }
+    if (/^\d+$/.test(hotelName)) { reject(i, `name is just a number`, row); continue; }
 
     const stars = parseInt(starsRaw);
-    if (isNaN(stars) || stars < 1 || stars > 5) continue;
+    if (isNaN(stars) || stars < 1 || stars > 5) { reject(i, `invalid stars '${starsRaw}'`, row); continue; }
 
     // اكتشاف وجود عمود Note:
     // إذا c[4] يبدو تاريخاً (dd-mm-yyyy أو mm/dd/yyyy) → لا يوجد Note
@@ -152,21 +184,24 @@ function extractHotels(rows: string[][], destination: string): object[] {
     let priceStr: string;
     let includeStr: string;
     let currencyStr: string;
+    let occupancyStr: string;
 
     if (hasNote) {
-      // [0]Hotel [1]City [2]Stars [3]Room [4]Note [5]From [6]To [7]Rate [8]Include [9]Currency
-      priceStr   = c[7] || "";
-      includeStr = c[8] || "";
-      currencyStr = c[9] || "SAR";
+      // [0]Hotel [1]City [2]Stars [3]Room [4]Note [5]From [6]To [7]Rate [8]Include [9]Currency [10]Occupancy
+      priceStr     = c[7]  || "";
+      includeStr   = c[8]  || "";
+      currencyStr  = c[9]  || "SAR";
+      occupancyStr = c[10] || "";
     } else {
-      // [0]Hotel [1]City [2]Stars [3]Room [4]From [5]To [6]Rate [7]Include [8]Currency
-      priceStr   = c[6] || "";
-      includeStr = c[7] || "";
-      currencyStr = c[8] || "SAR";
+      // [0]Hotel [1]City [2]Stars [3]Room [4]From [5]To [6]Rate [7]Include [8]Currency [9]Occupancy
+      priceStr     = c[6] || "";
+      includeStr   = c[7] || "";
+      currencyStr  = c[8] || "SAR";
+      occupancyStr = c[9] || "";
     }
 
     const price = parsePrice(priceStr);
-    if (isNaN(price) || price <= 0) continue;
+    if (isNaN(price) || price <= 0) { reject(i, `invalid price '${priceStr}' (hasNote=${hasNote})`, row); continue; }
 
     hotels.push({
       name:               hotelName,
@@ -176,6 +211,7 @@ function extractHotels(rows: string[][], destination: string): object[] {
       room_type:          roomType || "",
       includes_breakfast: /breakfast|إفطار/i.test(includeStr),
       currency:           cleanCurrency(currencyStr),
+      occupancy:          occupancyStr,
       last_synced_at:     new Date().toISOString(),
     });
   }
@@ -284,6 +320,9 @@ Deno.serve(async (req) => {
 
   const startTime = Date.now();
   const details: Record<string, { hotels: number; tours: number; error?: string }> = {};
+  const debugInfo = new URL(req.url).searchParams.get("debug") === "1"
+    ? { rejects: [] as string[] }
+    : undefined;
 
   try {
     const serviceAccount = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
@@ -295,15 +334,23 @@ Deno.serve(async (req) => {
 
     for (const tab of DESTINATION_TABS) {
       try {
-        const rows = await readSheetRange(token, spreadsheetId, `${tab}!A1:M500`);
+        const rows = await readSheetRange(token, spreadsheetId, `${tab}!A1:V500`);
 
-        const hotels = extractHotels(rows, tab);
+        const hotels = extractHotels(rows, tab, debugInfo);
         const tours  = extractTours(rows, tab);
 
         if (hotels.length > 0) {
+          // إزالة التكرارات داخل نفس الـ batch (Postgres يرفض ON CONFLICT لنفس المفتاح مرّتين)
+          const dedupedMap = new Map<string, object>();
+          for (const h of hotels as Array<{ name: string; room_type: string; occupancy: string }>) {
+            const key = `${h.name}|${h.room_type}|${h.occupancy}`;
+            dedupedMap.set(key, h); // الأخير يفوز
+          }
+          const dedupedHotels = Array.from(dedupedMap.values());
+
           const { error } = await supabase
             .from("hotels")
-            .upsert(hotels, { onConflict: "name,room_type" });
+            .upsert(dedupedHotels, { onConflict: "name,room_type,occupancy" });
           if (error) throw new Error(`فنادق: ${error.message}`);
         }
 
@@ -333,7 +380,7 @@ Deno.serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ success: true, hotels: totalHotels, tours: totalTours, details, duration_ms: duration }),
+      JSON.stringify({ success: true, hotels: totalHotels, tours: totalTours, details, duration_ms: duration, debug: debugInfo?.rejects }),
       { headers: CORS_HEADERS }
     );
 
