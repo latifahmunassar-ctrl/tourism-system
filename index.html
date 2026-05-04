@@ -146,10 +146,11 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .pdf-policy { background:#f0f5ff; border-right:6px solid #1a3a8f; padding:18px 22px; margin-bottom:14px; font-size:18px; font-weight:700; color:#0d1f4a; line-height:2; border-radius:0 12px 12px 0; }
 .pdf-footer { background:#cc1111; color:#fff; padding:22px 40px; text-align:center; font-size:18px; font-weight:900; letter-spacing:1.5px; }
 
+@page { size: A4; margin: 0; }
 @media print {
 
 - { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
-body { background:#fff !important; overflow:visible !important; height:auto !important; display:block !important; }
+html, body { margin:0 !important; padding:0 !important; background:#fff !important; overflow:visible !important; height:auto !important; display:block !important; }
 .topbar, .layout { display:none !important; }
 #pdfContent { display:block !important; }
 .pdf-page-break { page-break-before:always; }
