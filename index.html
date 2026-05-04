@@ -9,12 +9,12 @@
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 :root {
-  --bg:#0F1923; --s1:#162030; --s2:#1C2B3A; --s3:#243347;
-  --border:rgba(255,255,255,0.07);
-  --gold:#D4A843; --gold2:#F0C96A;
-  --teal:#2A9D8F; --text:#E8EDF2; --muted:rgba(232,237,242,0.42);
-  --r:12px;
-  --blue1:#1a3a8f; --blue2:#0d2060; --blue3:#2952c4;
+--bg:#0F1923; --s1:#162030; --s2:#1C2B3A; --s3:#243347;
+--border:rgba(255,255,255,0.07);
+--gold:#D4A843; --gold2:#F0C96A;
+--teal:#2A9D8F; --text:#E8EDF2; --muted:rgba(232,237,242,0.42);
+--r:12px;
+--blue1:#1a3a8f; --blue2:#0d2060; --blue3:#2952c4;
 }
 body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
 .topbar { background:var(--s1); border-bottom:1px solid var(--border); padding:12px 20px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; z-index:10; }
@@ -76,157 +76,173 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .typing span:nth-child(2) { animation-delay:.2s; }
 .typing span:nth-child(3) { animation-delay:.4s; }
 @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
-#quoteDoc { display:none; border-radius:16px; overflow:hidden; animation:fadeUp 0.4s ease both; font-family:'Tajawal',sans-serif; background:#fff; }
+
+/* ===== PDF DESIGN ===== */
+#quoteDoc { display:none; font-family:‘Tajawal’,sans-serif; }
 #quoteDoc.show { display:block; }
-@keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:none} }
-.q-grid { display:grid; grid-template-columns:1fr 1fr; min-height:420px; }
-.q-left { background:#fff; display:flex; flex-direction:column; }
-.q-left-header { background:var(--blue1); color:#fff; font-size:13px; font-weight:800; padding:12px 16px; text-align:center; }
-.q-hotel-item { display:grid; grid-template-columns:90px 1fr; border-bottom:1px solid #eef0f8; }
-.q-hotel-img img { width:90px; height:95px; object-fit:cover; display:block; }
-.q-hotel-details { padding:8px 10px; }
-.q-hotel-name { font-size:11px; font-weight:800; color:var(--blue1); margin-bottom:2px; }
-.q-hotel-stars { font-size:11px; color:#f6ad55; margin-bottom:3px; }
-.q-hotel-tags { display:flex; flex-wrap:wrap; gap:3px; margin-top:3px; }
-.q-htag { font-size:9px; font-weight:700; padding:2px 6px; border-radius:6px; }
-.q-htag-room { background:#e8f0ff; color:#1a3a8f; }
-.q-htag-meal { background:#e8fff0; color:#007733; }
-.q-htag-nights { background:#f5e8ff; color:#6600aa; }
-.q-htag-price { background:#fff3e0; color:#cc6600; }
-.q-right { background:linear-gradient(160deg,#1e4db7 0%,#0d2060 100%); display:flex; flex-direction:column; }
-.q-logo-bar { background:#fff; padding:9px 14px; display:flex; align-items:center; justify-content:space-between; }
-.q-logo-ar { font-size:9px; font-weight:800; color:#cc1111; }
-.q-logo-en { font-size:8px; color:#888; }
-.q-logo-badge { background:linear-gradient(135deg,var(--blue1),var(--blue3)); color:#fff; font-size:9px; font-weight:800; padding:3px 10px; border-radius:12px; }
-.q-dest-block { padding:18px 18px 10px; }
-.q-dest-name { font-size:38px; font-weight:900; color:#fff; line-height:1; text-shadow:0 3px 20px rgba(0,0,0,0.5); }
-.q-dest-sub { font-size:11px; color:rgba(255,255,255,0.5); margin-top:3px; }
-.q-divider { height:1px; background:rgba(255,255,255,0.12); margin:0 18px; }
-.q-client-block { padding:10px 18px; }
-.q-block-label { font-size:9px; color:rgba(255,255,255,0.4); letter-spacing:2px; text-transform:uppercase; margin-bottom:6px; }
-.q-info-row { display:flex; align-items:center; gap:6px; font-size:11px; color:rgba(255,255,255,0.8); margin-bottom:3px; }
-.q-dot { width:4px; height:4px; border-radius:50%; background:#5b9eff; flex-shrink:0; }
-.q-price-block { margin:8px 18px; background:linear-gradient(135deg,#2255cc,#3b6de8); border-radius:12px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; border:1px solid rgba(255,255,255,0.2); }
-.q-price-num { font-size:30px; font-weight:900; color:#fff; }
-.q-price-currency { font-size:11px; color:rgba(255,255,255,0.65); }
-.q-price-per { font-size:10px; color:rgba(255,255,255,0.65); text-align:center; line-height:1.5; }
-.q-features { padding:6px 18px 14px; display:flex; flex-direction:column; gap:6px; flex:1; }
-.q-feat-row { background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:7px 12px; display:flex; align-items:center; justify-content:space-between; }
-.q-feat-text { font-size:11px; font-weight:700; color:#fff; }
-.q-feat-icon { width:26px; height:26px; border-radius:50%; background:rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; font-size:13px; }
-.q-footer { background:#cc1111; padding:10px 18px; text-align:center; font-size:11px; font-weight:700; color:#fff; grid-column:1 / -1; }
-.q-section-title { font-size:11px; font-weight:800; color:var(--blue1); letter-spacing:2px; text-transform:uppercase; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
-.q-section-title::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,rgba(26,58,143,0.3),transparent); }
-.q-flight-section { background:#f0f5ff; padding:16px 20px; border-top:3px solid var(--blue1); }
-.q-flight-row { background:#fff; border:1px solid #d0deff; border-radius:8px; padding:10px 14px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; }
-.q-flight-route { font-size:12px; font-weight:700; color:var(--blue1); }
-.q-flight-type { font-size:10px; color:#888; margin-top:2px; }
-.q-flight-price { font-size:12px; font-weight:800; color:var(--blue3); }
-.q-flight-total { background:var(--blue1); color:#fff; border-radius:8px; padding:8px 14px; margin-top:6px; display:flex; justify-content:space-between; font-size:12px; font-weight:800; }
-.q-program-section { background:#f7f9ff; padding:16px 20px; border-top:2px solid #e0e8ff; }
-.q-day-row { background:#fff; border:1px solid #e0e8ff; border-radius:8px; padding:10px 14px; margin-bottom:6px; }
-.q-day-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
-.q-day-title { font-size:12px; font-weight:800; color:var(--blue1); }
-.q-day-total { font-size:11px; font-weight:800; color:var(--blue3); background:#e8f0ff; padding:2px 8px; border-radius:6px; }
-.q-day-act { display:flex; align-items:center; gap:7px; font-size:11px; color:#555; margin-bottom:3px; }
-.q-act-dot { width:4px; height:4px; border-radius:50%; background:var(--blue3); flex-shrink:0; }
-.q-act-name { flex:1; }
-.q-act-price { font-weight:700; color:var(--blue1); font-size:11px; white-space:nowrap; }
-.q-act-badge { font-size:9px; font-weight:700; padding:1px 7px; border-radius:6px; }
+
+/* Page 1 - Cover */
+.pdf-page { width:100%; margin-bottom:20px; border-radius:12px; overflow:hidden; position:relative; }
+.cover-page { background:linear-gradient(135deg, #1a6fd4 0%, #0d4ea6 40%, #1a3a8f 100%); min-height:600px; padding:30px; display:grid; grid-template-columns:1fr 1fr; gap:20px; position:relative; overflow:hidden; }
+.cover-page::before { content:’’; position:absolute; top:-50px; right:-50px; width:300px; height:300px; background:rgba(255,255,255,0.05); border-radius:50%; }
+.cover-logo-box { background:#fff; border-radius:16px; padding:16px 20px; display:inline-flex; align-items:center; gap:12px; margin-bottom:20px; width:fit-content; }
+.cover-logo-text { font-size:11px; font-weight:800; color:#cc1111; line-height:1.4; }
+.cover-logo-en { font-size:9px; color:#888; }
+.cover-badge { background:linear-gradient(135deg,#1a3a8f,#2952c4); color:#fff; font-size:10px; font-weight:800; padding:4px 12px; border-radius:12px; }
+.cover-title { font-size:60px; font-weight:900; color:#fff; line-height:1; margin:10px 0; text-shadow:0 4px 20px rgba(0,0,0,0.3); }
+.cover-dates { font-size:18px; font-weight:700; color:rgba(255,255,255,0.9); margin-bottom:20px; line-height:1.6; }
+.cover-field-box { background:rgba(255,255,255,0.95); border-radius:12px; padding:12px 20px; margin-bottom:10px; display:flex; align-items:center; gap:10px; }
+.cover-field-label { font-size:13px; font-weight:700; color:#1a3a8f; }
+.cover-field-value { font-size:13px; color:#333; }
+.cover-right { display:flex; flex-direction:column; justify-content:center; gap:10px; }
+.cover-days-box { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); border-radius:12px; padding:16px; color:#fff; }
+.cover-days-label { font-size:11px; color:rgba(255,255,255,0.7); margin-bottom:8px; letter-spacing:2px; text-transform:uppercase; }
+.cover-days-value { font-size:14px; font-weight:700; line-height:1.8; }
+.cover-price-box { background:rgba(255,255,255,0.95); border-radius:16px; padding:16px 20px; display:flex; align-items:center; justify-content:space-between; }
+.cover-price-label { font-size:13px; font-weight:800; color:#1a3a8f; }
+.cover-price-value { font-size:32px; font-weight:900; color:#1a3a8f; }
+.cover-images { display:grid; grid-template-rows:1fr 1fr 1fr; gap:8px; }
+.cover-img { border-radius:12px; overflow:hidden; }
+.cover-img img { width:100%; height:90px; object-fit:cover; display:block; }
+.cover-left { display:flex; flex-direction:column; }
+
+/* Page 2 - Hotels & Flights */
+.hotels-page { background:#fff; padding:0; }
+.hotels-page-header { background:linear-gradient(135deg,#1a3a8f,#2952c4); color:#fff; padding:16px 24px; font-size:16px; font-weight:800; }
+.hotels-table { width:100%; border-collapse:collapse; }
+.hotels-table th { background:#e8f0ff; color:#1a3a8f; font-size:12px; font-weight:800; padding:10px 14px; text-align:right; border:1px solid #d0deff; }
+.hotels-table td { font-size:12px; padding:10px 14px; border:1px solid #eef0f8; color:#333; }
+.hotels-table tr:nth-child(even) td { background:#f7f9ff; }
+.flights-section { padding:20px 24px; border-top:3px solid #1a3a8f; background:#f0f5ff; }
+.section-title { font-size:14px; font-weight:800; color:#1a3a8f; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.section-title::after { content:’’; flex:1; height:2px; background:linear-gradient(90deg,#1a3a8f,transparent); }
+.flight-row { background:#fff; border:1px solid #d0deff; border-radius:8px; padding:12px 16px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
+.flight-route { font-size:13px; font-weight:800; color:#1a3a8f; }
+.flight-detail { font-size:11px; color:#888; margin-top:2px; }
+.flight-price { font-size:13px; font-weight:800; color:#2952c4; }
+.flight-total-row { background:#1a3a8f; color:#fff; border-radius:8px; padding:10px 16px; display:flex; justify-content:space-between; font-size:13px; font-weight:800; margin-top:4px; }
+
+/* Pages 3+ - Daily Program */
+.program-page { background:#fff; }
+.program-page-header { background:linear-gradient(135deg,#1a3a8f,#2952c4); color:#fff; padding:16px 24px; font-size:15px; font-weight:800; display:flex; align-items:center; gap:8px; }
+.program-content { padding:20px 24px; }
+.day-block { background:#f7f9ff; border:1px solid #e0e8ff; border-radius:10px; padding:14px 18px; margin-bottom:12px; }
+.day-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:2px solid #e0e8ff; }
+.day-title { font-size:14px; font-weight:800; color:#1a3a8f; }
+.day-total-badge { background:linear-gradient(135deg,#1a3a8f,#2952c4); color:#fff; font-size:11px; font-weight:800; padding:3px 10px; border-radius:8px; }
+.day-act-row { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px dashed #e0e8ff; }
+.day-act-row:last-child { border-bottom:none; }
+.act-dot { width:6px; height:6px; border-radius:50%; background:#2952c4; flex-shrink:0; }
+.act-name { flex:1; font-size:12px; color:#333; font-weight:500; }
+.act-price { font-size:12px; font-weight:800; color:#1a3a8f; white-space:nowrap; }
+.act-type { font-size:10px; font-weight:700; padding:2px 8px; border-radius:6px; white-space:nowrap; }
 .type-tour { background:rgba(212,168,67,0.15); color:#b07800; }
 .type-transfer { background:rgba(42,157,143,0.15); color:#006655; }
 .type-nature { background:rgba(99,202,115,0.15); color:#1a7a30; }
 .type-sea { background:rgba(96,165,250,0.15); color:#0055aa; }
-.q-sim-section { background:#fff; padding:12px 20px; border-top:1px solid #e0e8ff; }
-.q-sim-row { display:flex; justify-content:space-between; align-items:center; background:#f0f5ff; border:1px solid #d0deff; border-radius:8px; padding:10px 14px; }
-.q-sim-text { font-size:12px; font-weight:700; color:var(--blue1); }
-.q-sim-price { font-size:12px; font-weight:800; color:var(--blue3); }
-.q-summary-section { background:#f7f9ff; padding:16px 20px; border-top:2px solid #e0e8ff; }
-.q-summary-row { display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-bottom:1px solid #eef0f8; font-size:12px; }
-.q-summary-row:last-child { border-bottom:none; }
-.q-summary-label { color:#666; }
-.q-summary-val { font-weight:700; color:var(--blue1); }
-.q-total-row { display:flex; justify-content:space-between; align-items:center; background:linear-gradient(135deg,var(--blue1),var(--blue3)); border-radius:10px; padding:12px 16px; margin-top:10px; }
-.q-total-label { font-size:13px; font-weight:800; color:#fff; }
-.q-total-val { font-size:20px; font-weight:900; color:#fff; }
-.q-group-row { display:flex; justify-content:space-between; align-items:center; background:#e8f0ff; border-radius:8px; padding:10px 14px; margin-top:8px; }
-.q-group-label { font-size:12px; font-weight:700; color:var(--blue1); }
-.q-group-val { font-size:15px; font-weight:900; color:var(--blue3); }
+
+/* Summary Page */
+.summary-page { background:#fff; padding:0; }
+.summary-content { padding:20px 24px; }
+.summary-row { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eef0f8; font-size:13px; }
+.summary-label { color:#666; }
+.summary-val { font-weight:800; color:#1a3a8f; }
+.total-box { background:linear-gradient(135deg,#1a3a8f,#2952c4); border-radius:12px; padding:16px 20px; margin-top:16px; display:flex; justify-content:space-between; align-items:center; }
+.total-label { font-size:15px; font-weight:800; color:#fff; }
+.total-val { font-size:28px; font-weight:900; color:#fff; }
+.group-box { background:#e8f0ff; border-radius:10px; padding:12px 16px; margin-top:10px; display:flex; justify-content:space-between; align-items:center; }
+.group-label { font-size:13px; font-weight:700; color:#1a3a8f; }
+.group-val { font-size:18px; font-weight:900; color:#2952c4; }
+
+/* Policy Page */
+.policy-page { background:#fff; }
+.policy-header { background:#cc1111; color:#fff; padding:14px 24px; font-size:15px; font-weight:800; }
+.policy-content { padding:20px 24px; font-size:12px; line-height:2; color:#333; }
+.policy-item { display:flex; gap:8px; margin-bottom:8px; }
+.policy-dot { color:#1a3a8f; font-weight:800; flex-shrink:0; margin-top:2px; }
+
+/* Print styles */
 @media print {
-  body { background:#fff !important; }
-  .chat-panel, .topbar, .output-header { display:none !important; }
-  .output-panel { display:block !important; overflow:visible !important; }
-  .quote-wrap { padding:0 !important; overflow:visible !important; }
-  #quoteDoc { border-radius:0 !important; }
+body { background:#fff !important; overflow:visible !important; height:auto !important; }
+.chat-panel, .topbar, .output-header { display:none !important; }
+.output-panel { display:block !important; overflow:visible !important; height:auto !important; }
+.layout { display:block !important; height:auto !important; overflow:visible !important; }
+.quote-wrap { padding:0 !important; overflow:visible !important; height:auto !important; }
+.pdf-page { margin-bottom:0 !important; border-radius:0 !important; page-break-after:always; }
+.pdf-page:last-child { page-break-after:auto; }
+#quoteDoc { display:block !important; }
+.empty-output { display:none !important; }
 }
+
 @media (max-width:768px) {
-  .layout { flex-direction:column; }
-  .chat-panel { width:100%; height:55vh; border-left:none; border-bottom:1px solid var(--border); }
-  .output-panel { height:45vh; }
+.layout { flex-direction:column; }
+.chat-panel { width:100%; height:55vh; border-left:none; border-bottom:1px solid var(–border); }
+.output-panel { height:45vh; }
 }
 </style>
+
 </head>
 <body>
 <div class="topbar">
-  <div class="brand">
-    <div class="brand-icon">✈</div>
-    <div>
-      <div class="brand-name">نظام البرامج السياحية</div>
-      <div class="brand-sub">لوحة الموظفين الداخلية</div>
-    </div>
-  </div>
-  <div class="user-pill"><div class="avatar">م</div>موظف المبيعات</div>
+<div class="brand">
+<div class="brand-icon">✈</div>
+<div>
+<div class="brand-name">نظام البرامج السياحية</div>
+<div class="brand-sub">لوحة الموظفين الداخلية</div>
+</div>
+</div>
+<div class="user-pill"><div class="avatar">م</div>موظف المبيعات</div>
 </div>
 
 <div class="layout">
-  <div class="chat-panel">
-    <div class="chat-header">
-      <div class="status-dot"></div>
-      <div class="chat-header-title">المساعد السياحي</div>
-    </div>
-    <div class="messages" id="messages">
-      <div class="msg sys">
-        <div class="msg-avatar">🗺</div>
-        <div>
-          <div class="msg-bubble">مرحباً! أنا مساعدك في بناء البرامج السياحية.<br><br>أخبرني بتفاصيل العميل بحرية، مثلاً:<br><strong>"ماليزيا 10 أيام، كوالالمبور ولنكاوي وبينين، زوجين، فنادق 5 نجوم"</strong><br><br>وسأبني البرنامج الكامل مع التسعيرة!</div>
-          <div class="msg-time">الآن</div>
-        </div>
-      </div>
-    </div>
-    <div class="quick-chips" id="quickChips">
-      <button class="qchip" onclick="quickSend('اسطنبول 5 ليالي مايو زوجين فندق 4 نجوم مع جولات وانتقالات')">🇹🇷 اسطنبول</button>
-      <button class="qchip" onclick="quickSend('ماليزيا 10 أيام كوالالمبور ولنكاوي وبينين زوجين فنادق 5 نجوم')">🇲🇾 ماليزيا</button>
-      <button class="qchip" onclick="quickSend('دبي 4 ليالي عائلة 4 أشخاص فندق 5 نجوم مع جولات')">🇦🇪 دبي</button>
-      <button class="qchip" onclick="quickSend('باريس 6 ليالي زوجين فندق 4 نجوم مع جولات وطيران')">🇫🇷 باريس</button>
-    </div>
-    <div class="chat-input-wrap">
-      <textarea class="chat-input" id="chatInput" placeholder="اكتب تفاصيل العميل هنا..." rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-      <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
-    </div>
-  </div>
+<div class="output-panel">
+<div class="output-header">
+<div class="output-header-title">📄 عرض البرنامج السياحي</div>
+<div class="export-btns" id="exportBtns" style="display:none">
+<div class="profit-wrap">
+<span class="profit-label">هامش الربح/شخص:</span>
+<input class="profit-input" id="profitInput" type="number" placeholder="0" value="0" oninput="updatePrice()">
+<span class="profit-label">ريال</span>
+</div>
+<button class="ebtn ebtn-pdf" onclick="exportPDF(true)">⬇️ PDF مع شعار وسعر</button>
+<button class="ebtn ebtn-nologo" onclick="exportPDF(false)">📄 PDF بدون شعار وسعر</button>
+</div>
+</div>
+<div class="quote-wrap">
+<div class="empty-output" id="emptyOutput">
+<div class="empty-output-icon">📋</div>
+<div class="empty-output-title">البرنامج سيظهر هنا</div>
+<div class="empty-output-sub">ابدأ محادثة مع المساعد<br>وسيُنشأ البرنامج الكامل مع التسعيرة التفصيلية</div>
+</div>
+<div id="quoteDoc"></div>
+</div>
+</div>
 
-  <div class="output-panel">
-    <div class="output-header">
-      <div class="output-header-title">📄 عرض البرنامج السياحي</div>
-      <div class="export-btns" id="exportBtns" style="display:none">
-        <div class="profit-wrap">
-          <span class="profit-label">هامش الربح/شخص:</span>
-          <input class="profit-input" id="profitInput" type="number" placeholder="0" value="0" oninput="updatePrice()">
-          <span class="profit-label">ريال</span>
-        </div>
-        <button class="ebtn ebtn-pdf" onclick="exportPDF(true)">⬇️ PDF مع شعار وسعر</button>
-        <button class="ebtn ebtn-nologo" onclick="exportPDF(false)">📄 PDF بدون شعار وسعر</button>
-      </div>
-    </div>
-    <div class="quote-wrap">
-      <div class="empty-output" id="emptyOutput">
-        <div class="empty-output-icon">📋</div>
-        <div class="empty-output-title">البرنامج سيظهر هنا</div>
-        <div class="empty-output-sub">ابدأ محادثة مع المساعد<br>وسيُنشأ البرنامج الكامل مع التسعيرة التفصيلية</div>
-      </div>
-      <div id="quoteDoc"></div>
-    </div>
-  </div>
+<div class="chat-panel">
+<div class="chat-header">
+<div class="status-dot"></div>
+<div class="chat-header-title">المساعد السياحي</div>
+</div>
+<div class="messages" id="messages">
+<div class="msg sys">
+<div class="msg-avatar">🗺</div>
+<div>
+<div class="msg-bubble">مرحباً! أنا مساعدك في بناء البرامج السياحية.<br><br>أخبرني بتفاصيل العميل بحرية، مثلاً:<br><strong>"ماليزيا 10 أيام، كوالالمبور ولنكاوي وبينين، زوجين، فنادق 5 نجوم"</strong><br><br>وسأبني البرنامج الكامل مع التسعيرة!</div>
+<div class="msg-time">الآن</div>
+</div>
+</div>
+</div>
+<div class="quick-chips" id="quickChips">
+<button class="qchip" onclick="quickSend('اسطنبول 5 ليالي مايو زوجين فندق 4 نجوم مع جولات وانتقالات')">🇹🇷 اسطنبول</button>
+<button class="qchip" onclick="quickSend('ماليزيا 10 أيام كوالالمبور ولنكاوي وبينين زوجين فنادق 5 نجوم')">🇲🇾 ماليزيا</button>
+<button class="qchip" onclick="quickSend('دبي 4 ليالي عائلة 4 أشخاص فندق 5 نجوم مع جولات')">🇦🇪 دبي</button>
+<button class="qchip" onclick="quickSend('باريس 6 ليالي زوجين فندق 4 نجوم مع جولات وطيران')">🇫🇷 باريس</button>
+</div>
+<div class="chat-input-wrap">
+<textarea class="chat-input" id="chatInput" placeholder="اكتب تفاصيل العميل هنا..." rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+<button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
+</div>
+</div>
 </div>
 
 <script>
@@ -249,6 +265,10 @@ const SYSTEM = `انت مساعد ذكي متخصص في بناء البرامج
 
 DEST:[اسم الوجهة]
 META:[عدد الايام] ايام | [عدد الليالي] ليالي | [الشهر] | [عدد الافراد] اشخاص
+DATE_FROM:[تاريخ البداية مثل 19 مايو 2026]
+DATE_TO:[تاريخ النهاية مثل 25 مايو 2026]
+CLIENT:[اسم العميل او وصف مثل زوجين]
+CLIENT_CODE:[كود عشوائي مثل ALZ-2026-001]
 
 HOTELS:
 [اسم الفندق] | [المنطقة] | [النجوم] نجوم | [نوع الغرفة] | [السعر/ليلة] ريال/ليلة | [عدد الليالي] ليالي | [ما يشمل]
@@ -274,317 +294,360 @@ TOTAL_GROUP:[الاجمالي للمجموعة] ريال لـ [عدد] اشخا�
 CHAT:[ردك المختصر الودي للموظف باللهجة السعودية، جملتين فقط]`;
 
 async function sendMessage() {
-  const input = document.getElementById('chatInput');
-  const text = input.value.trim();
-  if (!text || isLoading) return;
+const input = document.getElementById('chatInput');
+const text = input.value.trim();
+if (!text || isLoading) return;
 
-  addMessage('user', text);
-  input.value = '';
-  input.style.height = 'auto';
-  history.push({ role: 'user', content: text });
-  document.getElementById('quickChips').style.display = 'none';
+addMessage('user', text);
+input.value = '';
+input.style.height = 'auto';
+history.push({ role: 'user', content: text });
+document.getElementById('quickChips').style.display = 'none';
 
-  isLoading = true;
-  document.getElementById('sendBtn').disabled = true;
-  const typingId = addTyping();
+isLoading = true;
+document.getElementById('sendBtn').disabled = true;
+const typingId = addTyping();
 
-  try {
-    const res = await fetch(SUPABASE_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + SUPABASE_KEY,
-        'apikey': SUPABASE_KEY
-      },
-      body: JSON.stringify({ max_tokens: 4000, messages: history })
-    });
+try {
+const res = await fetch(SUPABASE_URL, {
+method: 'POST',
+headers: {
+'Content-Type': 'application/json',
+'Authorization': 'Bearer ' + SUPABASE_KEY,
+'apikey': SUPABASE_KEY
+},
+body: JSON.stringify({ messages: history, system: SYSTEM, max_tokens: 4000 })
+});
 
-    const data = await res.json();
-    const raw = data.content?.[0]?.text || '';
-    removeTyping(typingId);
-    history.push({ role: 'assistant', content: raw });
+const data = await res.json();
+const raw = data.content?.[0]?.text || '';
+removeTyping(typingId);
+history.push({ role: 'assistant', content: raw });
 
-    const chatMatch = raw.match(/CHAT:([\s\S]+?)$/m);
-    const chatMsg = chatMatch ? chatMatch[1].trim() : 'تم بناء البرنامج!';
-    addMessage('sys', chatMsg);
+const chatMatch = raw.match(/CHAT:([\s\S]+?)$/m);
+const chatMsg = chatMatch ? chatMatch[1].trim() : 'تم بناء البرنامج!';
+addMessage('sys', chatMsg);
 
-    if (raw.includes('PROGRAM:')) buildQuote(raw);
+if (raw.includes('PROGRAM:')) buildQuote(raw);
 
-  } catch (e) {
-    removeTyping(typingId);
-    addMessage('sys', 'حدث خطأ في الاتصال، حاول مرة ثانية.');
-  }
+} catch (e) {
+removeTyping(typingId);
+addMessage('sys', 'حدث خطأ في الاتصال، حاول مرة ثانية.');
+}
 
-  isLoading = false;
-  document.getElementById('sendBtn').disabled = false;
+isLoading = false;
+document.getElementById('sendBtn').disabled = false;
 }
 
 function quickSend(text) {
-  document.getElementById('chatInput').value = text;
-  sendMessage();
+document.getElementById('chatInput').value = text;
+sendMessage();
+}
+
+function getLine(raw, key) {
+const m = raw.match(new RegExp(key + ':(.+)'));
+return m ? m[1].trim() : '';
 }
 
 function buildQuote(raw) {
-  const getLine = (key) => {
-    const m = raw.match(new RegExp(key + ':(.+)'));
-    return m ? m[1].trim() : '';
-  };
+const dest = getLine(raw, 'DEST');
+const meta = getLine(raw, 'META');
+const dateFrom = getLine(raw, 'DATE_FROM') || 'تاريخ البداية';
+const dateTo = getLine(raw, 'DATE_TO') || 'تاريخ النهاية';
+const client = getLine(raw, 'CLIENT') || '';
+const clientCode = getLine(raw, 'CLIENT_CODE') || '';
+const totalPerPerson = getLine(raw, 'TOTAL_PER_PERSON');
+const totalGroup = getLine(raw, 'TOTAL_GROUP');
 
-  const dest = getLine('DEST');
-  const meta = getLine('META');
-  const totalPerPerson = getLine('TOTAL_PER_PERSON');
-  const totalGroup = getLine('TOTAL_GROUP');
+const hotelsMatch = raw.match(/HOTELS:([\s\S]+?)(?:FLIGHTS:|PROGRAM:)/);
+const hotelsLines = hotelsMatch ? hotelsMatch[1].trim().split('\n').filter(l => l.includes('|')) : [];
 
-  const hotelsMatch = raw.match(/HOTELS:([\s\S]+?)(?:FLIGHTS:|PROGRAM:)/);
-  const hotelsLines = hotelsMatch ? hotelsMatch[1].trim().split('\n').filter(l => l.includes('|')) : [];
+const flightsMatch = raw.match(/FLIGHTS:([\s\S]+?)(?:PROGRAM:)/);
+const flightsLines = flightsMatch ? flightsMatch[1].trim().split('\n').filter(l => l.includes('|')) : [];
 
-  const flightsMatch = raw.match(/FLIGHTS:([\s\S]+?)(?:PROGRAM:)/);
-  const flightsLines = flightsMatch ? flightsMatch[1].trim().split('\n').filter(l => l.includes('|')) : [];
+const programMatch = raw.match(/PROGRAM:([\s\S]+?)(?:SIM:|SUMMARY:)/);
+const programText = programMatch ? programMatch[1].trim() : '';
 
-  const programMatch = raw.match(/PROGRAM:([\s\S]+?)(?:SIM:|SUMMARY:)/);
-  const programText = programMatch ? programMatch[1].trim() : '';
+const simMatch = raw.match(/SIM:(.+)/);
+const simText = simMatch ? simMatch[1].trim() : '';
 
-  const simMatch = raw.match(/SIM:(.+)/);
-  const simText = simMatch ? simMatch[1].trim() : '';
+const summaryMatch = raw.match(/SUMMARY:([\s\S]+?)(?:CHAT:|$)/);
+const summaryText = summaryMatch ? summaryMatch[1].trim() : '';
 
-  const summaryMatch = raw.match(/SUMMARY:([\s\S]+?)(?:CHAT:|$)/);
-  const summaryText = summaryMatch ? summaryMatch[1].trim() : '';
+currentData = { dest, meta, dateFrom, dateTo, client, clientCode, totalPerPerson, totalGroup };
 
-  currentData = { dest, meta, totalPerPerson, totalGroup };
+// ===== PAGE 1: COVER =====
+const coverHTML = `
+<div class="pdf-page" id="coverPage">
+<div class="cover-page">
+<div class="cover-left">
+<div class="cover-logo-box" id="logoBox">
+<div>
+<div class="cover-logo-text">مجموعة العز الدولية للسفر والسياحة</div>
+<div class="cover-logo-en">Alezz International Group Travel & Tours</div>
+</div>
+<div class="cover-badge">A.I. ✈ T.T</div>
+</div>
+<div class="cover-title">رحلة<br>سياحية</div>
+<div class="cover-dates" id="coverDates">
+الفترة من ${dateFrom}<br>حتى ${dateTo}
+</div>
+<div class="cover-field-box">
+<span class="cover-field-label">طلب :</span>
+<span class="cover-field-value">${client}</span>
+</div>
+<div class="cover-field-box">
+<span class="cover-field-label">كود العميل :</span>
+<span class="cover-field-value">${clientCode}</span>
+</div>
+<div style="margin-top:10px; font-size:13px; color:rgba(255,255,255,0.7);">توزيع الايام</div>
+<div style="background:rgba(255,255,255,0.1); border-radius:10px; padding:12px; margin-top:6px; color:#fff; font-size:12px; line-height:1.8;">
+${meta.split('|').map(p => `• ${p.trim()}`).join('<br>')}
+</div>
+</div>
+<div class="cover-right">
+<div class="cover-price-box" id="priceBox">
+<div class="cover-price-label">السعر الاجمالي</div>
+<div class="cover-price-value" id="coverPrice">${totalPerPerson}</div>
+</div>
+<div class="cover-images">
+<div class="cover-img"><img src="https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=300&h=90&fit=crop" alt=""></div>
+<div class="cover-img"><img src="https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=300&h=90&fit=crop" alt=""></div>
+<div class="cover-img"><img src="https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=300&h=90&fit=crop" alt=""></div>
+</div>
+</div>
+</div>
+</div>`;
 
-  const hotelImages = [
-    'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=100&h=95&fit=crop',
-    'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=100&h=95&fit=crop',
-    'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=100&h=95&fit=crop',
-    'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=100&h=95&fit=crop',
-  ];
+// ===== PAGE 2: HOTELS & FLIGHTS =====
+let hotelsRowsHTML = '';
+hotelsLines.forEach(line => {
+const p = line.split('|').map(x => x.trim());
+hotelsRowsHTML += `<tr>
+<td>${p[1]||''}</td>
+<td>${p[0]||''}</td>
+<td>${p[3]||''}</td>
+<td>${p[2]||''}</td>
+<td>${p[6]||''}</td>
+</tr>`;
+});
 
-  let hotelsHTML = '';
-  hotelsLines.forEach((line, i) => {
-    const p = line.split('|').map(x => x.trim());
-    const starsNum = parseInt(p[2]) || 4;
-    hotelsHTML += `<div class="q-hotel-item">
-      <div class="q-hotel-img"><img src="${hotelImages[i % hotelImages.length]}" alt=""></div>
-      <div class="q-hotel-details">
-        <div class="q-hotel-name">${p[0]||''} ${p[1]?'- '+p[1]:''}</div>
-        <div class="q-hotel-stars">${'★'.repeat(starsNum)} ${p[2]||''}</div>
-        <div class="q-hotel-tags">
-          ${p[3]?`<span class="q-htag q-htag-room">🛏️ ${p[3]}</span>`:''}
-          ${p[4]?`<span class="q-htag q-htag-price">💰 ${p[4]}</span>`:''}
-          ${p[5]?`<span class="q-htag q-htag-nights">📅 ${p[5]}</span>`:''}
-          ${p[6]?`<span class="q-htag q-htag-meal">🍳 ${p[6]}</span>`:''}
-        </div>
-      </div>
-    </div>`;
-  });
+let flightsHTML = '';
+let flightTotal = 0;
+flightsLines.forEach(line => {
+const p = line.split('|').map(x => x.trim());
+const total = parseInt((p[4]||'').replace(/[^\d]/g,'')) || 0;
+flightTotal += total;
+flightsHTML += `<div class="flight-row">
+<div>
+<div class="flight-route">✈️ ${p[0]||''}</div>
+<div class="flight-detail">${p[1]||''} • ${p[2]||''} × ${p[3]||''}</div>
+</div>
+<div class="flight-price">${p[4]||''}</div>
+</div>`;
+});
 
-  let flightsHTML = '';
-  let flightTotal = 0;
-  flightsLines.forEach(line => {
-    const p = line.split('|').map(x => x.trim());
-    const total = parseInt((p[4]||'').replace(/[^\d]/g,'')) || 0;
-    flightTotal += total;
-    flightsHTML += `<div class="q-flight-row">
-      <div>
-        <div class="q-flight-route">✈️ ${p[0]||''}</div>
-        <div class="q-flight-type">${p[1]||''} • ${p[2]||''} × ${p[3]||''}</div>
-      </div>
-      <div class="q-flight-price">${p[4]||''}</div>
-    </div>`;
-  });
-  if (flightsHTML) {
-    flightsHTML += `<div class="q-flight-total"><span>اجمالي الطيران</span><span>${flightTotal.toLocaleString()} ريال</span></div>`;
-  }
+const hotelsPageHTML = `
+<div class="pdf-page">
+<div class="hotels-page">
+<div class="hotels-page-header">🏨 الفنادق والسكن</div>
+<table class="hotels-table">
+<thead>
+<tr>
+<th>المدينة</th>
+<th>اسم الفندق</th>
+<th>نوع الغرفة</th>
+<th>النجوم</th>
+<th>يشمل</th>
+</tr>
+</thead>
+<tbody>${hotelsRowsHTML}</tbody>
+</table>
+${flightsHTML ? `<div class="flights-section">
+<div class="section-title">✈️ الطيران</div>
+${flightsHTML}
+<div class="flight-total-row"><span>اجمالي الطيران</span><span>${flightTotal.toLocaleString()} ريال</span></div>
+</div>` : ''}
+</div>
+</div>`;
 
-  const days = programText.split(/\n(?=اليوم)/g).filter(d => d.trim());
-  let daysHTML = '';
-  days.forEach(day => {
-    const lines = day.trim().split('\n');
-    const titleLine = lines[0];
-    const titleParts = titleLine.split('|');
-    const dayNum = titleLine.match(/اليوم (\d+)/)?.[1] || '';
-    const dayTitle = titleParts[1]?.trim() || '';
-    const dayTotal = titleParts[2]?.trim() || '';
-    const acts = lines.slice(1).filter(l => l.trim().startsWith('-'));
-    daysHTML += `<div class="q-day-row">
-      <div class="q-day-header">
-        <div class="q-day-title">اليوم ${dayNum} — ${dayTitle}</div>
-        ${dayTotal?`<div class="q-day-total">${dayTotal}</div>`:''}
-      </div>`;
-    acts.forEach(act => {
-      const p = act.replace(/^-\s*/,'').split('|');
-      const name = p[0]?.trim()||'';
-      const price = p[1]?.trim()||'';
-      const type = p[2]?.trim()||'';
-      const typeClass = type.includes('ثقافية')?'type-tour':type.includes('طبيعية')?'type-nature':type.includes('بحرية')?'type-sea':'type-transfer';
-      daysHTML += `<div class="q-day-act">
-        <span class="q-act-dot"></span>
-        <span class="q-act-name">${name}</span>
-        <span class="q-act-price">${price}</span>
-        <span class="q-act-badge ${typeClass}">${type}</span>
-      </div>`;
-    });
-    daysHTML += `</div>`;
-  });
+// ===== PROGRAM PAGES =====
+const days = programText.split(/\n(?=اليوم)/g).filter(d => d.trim());
+let programHTML = '';
+const daysPerPage = 4;
+for (let i = 0; i < days.length; i += daysPerPage) {
+const chunk = days.slice(i, i + daysPerPage);
+let daysHTML = '';
+chunk.forEach(day => {
+const lines = day.trim().split('\n');
+const titleLine = lines[0];
+const titleParts = titleLine.split('|');
+const dayNum = titleLine.match(/اليوم (\d+)/)?.[1] || '';
+const dayTitle = titleParts[1]?.trim() || '';
+const dayTotal = titleParts[2]?.trim() || '';
+const acts = lines.slice(1).filter(l => l.trim().startsWith('-'));
+daysHTML += `<div class="day-block">
+<div class="day-header">
+<div class="day-title">📅 اليوم ${dayNum} — ${dayTitle}</div>
+${dayTotal ? `<div class="day-total-badge">${dayTotal}</div>` : ''}
+</div>`;
+acts.forEach(act => {
+const p = act.replace(/^-\s*/, '').split('|');
+const name = p[0]?.trim() || '';
+const price = p[1]?.trim() || '';
+const type = p[2]?.trim() || '';
+const typeClass = type.includes('ثقافية') ? 'type-tour' : type.includes('طبيعية') ? 'type-nature' : type.includes('بحرية') ? 'type-sea' : 'type-transfer';
+daysHTML += `<div class="day-act-row">
+<span class="act-dot"></span>
+<span class="act-name">${name}</span>
+<span class="act-price">${price}</span>
+<span class="act-type ${typeClass}">${type}</span>
+</div>`;
+});
+daysHTML += `</div>`;
+});
+programHTML += `<div class="pdf-page">
+<div class="program-page">
+<div class="program-page-header">🗓️ البرنامج اليومي والتسعيرة التفصيلية</div>
+<div class="program-content">${daysHTML}</div>
+</div>
+</div>`;
+}
 
-  let summaryHTML = '';
-  const summaryLines = summaryText.split('\n').filter(l => l.includes('|') && !l.startsWith('TOTAL'));
-  summaryLines.forEach(line => {
-    const parts = line.split('|');
-    if (parts[0] && parts[1]) {
-      summaryHTML += `<div class="q-summary-row">
-        <span class="q-summary-label">${parts[0].trim()}</span>
-        <span class="q-summary-val">${parts[1].trim()}</span>
-      </div>`;
-    }
-  });
+// ===== SUMMARY PAGE =====
+const summaryLines = summaryText.split('\n').filter(l => l.includes('|') && !l.startsWith('TOTAL'));
+let summaryRowsHTML = '';
+summaryLines.forEach(line => {
+const parts = line.split('|');
+if (parts[0] && parts[1]) {
+summaryRowsHTML += `<div class="summary-row">
+<span class="summary-label">${parts[0].trim()}</span>
+<span class="summary-val">${parts[1].trim()}</span>
+</div>`;
+}
+});
+if (simText) {
+summaryRowsHTML += `<div class="summary-row">
+<span class="summary-label">📶 شريحة الانترنت</span>
+<span class="summary-val">${simText}</span>
+</div>`;
+}
 
-  const featItems = [
-    { icon:'🏨', text:`${hotelsLines.length>1?hotelsLines.length+' فنادق':'فندق مميز'}` },
-    { icon:'✈️', text:flightsLines.length>0?'رحلات جوية مشمولة':'بدون طيران' },
-    { icon:'🗺️', text:'جولات سياحية يومية' },
-    { icon:'🚗', text:'انتقالات ذهاب وعودة' },
-  ];
-  const featHTML = featItems.map(f => `<div class="q-feat-row"><div class="q-feat-text">${f.text}</div><div class="q-feat-icon">${f.icon}</div></div>`).join('');
-  const metaParts = meta.split('|').map(p => p.trim());
+const summaryPageHTML = `
+<div class="pdf-page">
+<div class="summary-page">
+<div class="program-page-header">💰 ملخص التكاليف الكاملة</div>
+<div class="summary-content">
+${summaryRowsHTML}
+<div class="total-box">
+<span class="total-label">💎 الاجمالي للشخص</span>
+<span class="total-val" id="summaryTotal">${totalPerPerson}</span>
+</div>
+${totalGroup ? `<div class="group-box">
+<span class="group-label">👥 اجمالي المجموعة</span>
+<span class="group-val" id="summaryGroup">${totalGroup}</span>
+</div>` : ''}
+</div>
+</div>
+</div>`;
 
-  const html = `
-  <div class="q-grid">
-    <div class="q-left">
-      <div class="q-left-header">🏨 فنادق الرحلة - ترتيب السكن</div>
-      ${hotelsHTML}
-    </div>
-    <div class="q-right">
-      <div class="q-logo-bar" id="qLogoBar">
-        <div>
-          <div class="q-logo-ar">مجموعة العز الدولية للسفر والسياحة</div>
-          <div class="q-logo-en">Alezz International Group Travel & Tours</div>
-        </div>
-        <div class="q-logo-badge">A.I. ✈ T.T</div>
-      </div>
-      <div class="q-dest-block">
-        <div class="q-dest-name">${dest}</div>
-        <div class="q-dest-sub">برنامج سياحي متكامل</div>
-      </div>
-      <div class="q-divider"></div>
-      <div class="q-client-block">
-        <div class="q-block-label">تفاصيل الرحلة</div>
-        ${metaParts.map(p=>`<div class="q-info-row"><span class="q-dot"></span>${p}</div>`).join('')}
-      </div>
-      <div class="q-price-block" id="qPriceBlock">
-        <div>
-          <div class="q-price-num" id="qPriceNum">${totalPerPerson.replace(' ريال','')}</div>
-          <div class="q-price-currency">ريال سعودي</div>
-        </div>
-        <div class="q-price-per">للفرد<br>الواحد</div>
-      </div>
-      <div class="q-features">${featHTML}</div>
-    </div>
-    <div class="q-footer">شامل الانتقالات ذهاب وعودة • مجموعة العز الدولية للسفر والسياحة</div>
-  </div>
-  ${flightsHTML?`<div class="q-flight-section" id="qFlightSection"><div class="q-section-title">✈️ تفاصيل الطيران</div>${flightsHTML}</div>`:''}
-  <div class="q-program-section" id="qProgramSection">
-    <div class="q-section-title">🗓️ البرنامج اليومي والتسعيرة التفصيلية</div>
-    ${daysHTML}
-  </div>
-  ${simText?`<div class="q-sim-section" id="qSimSection"><div class="q-section-title">📶 شريحة الانترنت</div><div class="q-sim-row"><div class="q-sim-text">📶 شريحة انترنت</div><div class="q-sim-price">${simText}</div></div></div>`:''}
-  <div class="q-summary-section" id="qSummarySection">
-    <div class="q-section-title">💰 ملخص التكاليف الكاملة</div>
-    ${summaryHTML}
-    <div class="q-total-row">
-      <span class="q-total-label">💎 الاجمالي للشخص</span>
-      <span class="q-total-val" id="qTotalVal">${totalPerPerson}</span>
-    </div>
-    ${totalGroup?`<div class="q-group-row"><span class="q-group-label">👥 اجمالي المجموعة</span><span class="q-group-val" id="qGroupVal">${totalGroup}</span></div>`:''}
-  </div>`;
+// ===== POLICY PAGE =====
+const policyHTML = `
+<div class="pdf-page">
+<div class="policy-page">
+<div class="policy-header">سياسة عامة</div>
+<div class="policy-content">
+<div class="policy-item"><span class="policy-dot">•</span><span>الفنادق والمنتجعات للغرفة الواحدة شاملة وجبة الإفطار لشخصين + طفل تحت 5 سنوات. تسجيل الدخول للفنادق 2:00 ظهراً والتسجيل الخروج الساعة 12:00 ظهراً</span></div>
+<div class="policy-item"><span class="policy-dot">•</span><span>الوزن المسموح به للطيران الداخلي 20 كيلو إلا إذا تم الاتفاق معنا مسبقاً على زيادة</span></div>
+<div class="policy-item"><span class="policy-dot">•</span><span>يحتسب لكل شخص حقيبة سفر واحدة بوزن 20 كجم بالإضافة إلى حقيبة يد. وفي حال تجاوز عدد الحقائب هذا الحد، يتم توفير سيارة أكبر برسوم إضافية</span></div>
+<div class="policy-item"><span class="policy-dot">•</span><span>السيارات المقدمة في هذا البرنامج حديثة، نظيفة ومكيفة، وتتناسب مع عدد الأفراد المذكورين</span></div>
+<div class="policy-item"><span class="policy-dot">•</span><span>يحق للعميل اختيار المناطق السياحية بشرط أن تكون بحدود المنطقة المقيم بها، ولا تشمل تذاكر دخول الأماكن السياحية</span></div>
+<div class="policy-item"><span class="policy-dot">•</span><span>تأكد أن موظفين الفنادق والسائقين وجميع الطاقم يعملون على راحتك. فليكن صدرك واسع لهم وابتسامتك بلسم لهم</span></div>
+<div class="policy-item"><span class="policy-dot">•</span><span>تاكد من إظهار الاحترام لعادات وأديان البلد ومعاملات الناس كما تحب أن تعامل، دون استصغار أو إهانة لأحد</span></div>
+</div>
+</div>
+</div>`;
 
-  document.getElementById('quoteDoc').innerHTML = html;
-  document.getElementById('quoteDoc').classList.add('show');
-  document.getElementById('emptyOutput').style.display = 'none';
-  document.getElementById('exportBtns').style.display = 'flex';
+document.getElementById('quoteDoc').innerHTML = coverHTML + hotelsPageHTML + programHTML + summaryPageHTML + policyHTML;
+document.getElementById('quoteDoc').classList.add('show');
+document.getElementById('emptyOutput').style.display = 'none';
+document.getElementById('exportBtns').style.display = 'flex';
 }
 
 function updatePrice() {
-  if (!currentData) return;
-  const profit = parseInt(document.getElementById('profitInput').value) || 0;
-  const base = parseInt((currentData.totalPerPerson||'').replace(/[^\d]/g,'')) || 0;
-  const newPrice = base + profit;
-  const personsMatch = (currentData.totalGroup||'').match(/لـ (\d+) اشخاص/);
-  const persons = parseInt(personsMatch?.[1]) || 1;
-  const newGroup = newPrice * persons;
-  const el1 = document.getElementById('qPriceNum');
-  const el2 = document.getElementById('qTotalVal');
-  const el3 = document.getElementById('qGroupVal');
-  if (el1) el1.textContent = newPrice.toLocaleString();
-  if (el2) el2.textContent = newPrice.toLocaleString() + ' ريال';
-  if (el3) el3.textContent = newGroup.toLocaleString() + ' ريال لـ ' + persons + ' اشخاص';
+if (!currentData) return;
+const profit = parseInt(document.getElementById('profitInput').value) || 0;
+const base = parseInt((currentData.totalPerPerson || '').replace(/[^\d]/g, '')) || 0;
+const newPrice = base + profit;
+const personsMatch = (currentData.totalGroup || '').match(/لـ (\d+) اشخاص/);
+const persons = parseInt(personsMatch?.[1]) || 1;
+const newGroup = newPrice * persons;
+const el1 = document.getElementById('coverPrice');
+const el2 = document.getElementById('summaryTotal');
+const el3 = document.getElementById('summaryGroup');
+if (el1) el1.textContent = newPrice.toLocaleString() + ' ريال';
+if (el2) el2.textContent = newPrice.toLocaleString() + ' ريال';
+if (el3) el3.textContent = newGroup.toLocaleString() + ' ريال لـ ' + persons + ' اشخاص';
 }
 
 function exportPDF(withLogo) {
-  const ids = ['qFlightSection','qProgramSection','qSimSection','qSummarySection'];
-  const logo = document.getElementById('qLogoBar');
-  const price = document.getElementById('qPriceBlock');
-  const btns = document.getElementById('exportBtns');
-  btns.style.display = 'none';
-  if (withLogo) {
-    if (logo) logo.style.display = 'flex';
-    if (price) price.style.display = 'flex';
-    ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
-  } else {
-    if (logo) logo.style.display = 'none';
-    if (price) price.style.display = 'none';
-    ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
-  }
-  setTimeout(() => {
-    window.print();
-    setTimeout(() => {
-      if (logo) logo.style.display = 'flex';
-      if (price) price.style.display = 'flex';
-      ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'block'; });
-      btns.style.display = 'flex';
-    }, 1500);
-  }, 300);
+const logo = document.getElementById('logoBox');
+const price = document.getElementById('priceBox');
+const btns = document.getElementById('exportBtns');
+btns.style.display = 'none';
+if (!withLogo) {
+if (logo) logo.style.display = 'none';
+if (price) price.style.display = 'none';
+}
+setTimeout(() => {
+window.print();
+setTimeout(() => {
+if (logo) logo.style.display = '';
+if (price) price.style.display = '';
+btns.style.display = 'flex';
+}, 1500);
+}, 300);
 }
 
 function addMessage(type, text) {
-  const msgs = document.getElementById('messages');
-  const div = document.createElement('div');
-  div.className = `msg ${type}`;
-  const now = new Date().toLocaleTimeString('ar', {hour:'2-digit',minute:'2-digit'});
-  div.innerHTML = `
-    <div class="msg-avatar">${type==='sys'?'🗺':'م'}</div>
-    <div>
-      <div class="msg-bubble">${text.replace(/\n/g,'<br>')}</div>
-      <div class="msg-time">${now}</div>
-    </div>`;
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
+const msgs = document.getElementById('messages');
+const div = document.createElement('div');
+div.className = `msg ${type}`;
+const now = new Date().toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' });
+div.innerHTML = `
+<div class="msg-avatar">${type === 'sys' ? '🗺' : 'م'}</div>
+<div>
+<div class="msg-bubble">${text.replace(/\n/g, '<br>')}</div>
+<div class="msg-time">${now}</div>
+</div>`;
+msgs.appendChild(div);
+msgs.scrollTop = msgs.scrollHeight;
 }
 
 function addTyping() {
-  const msgs = document.getElementById('messages');
-  const div = document.createElement('div');
-  div.className = 'msg sys';
-  const id = 'typing_' + Date.now();
-  div.id = id;
-  div.innerHTML = `<div class="msg-avatar">🗺</div><div><div class="msg-bubble"><div class="typing"><span></span><span></span><span></span></div></div></div>`;
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
-  return id;
+const msgs = document.getElementById('messages');
+const div = document.createElement('div');
+div.className = 'msg sys';
+const id = 'typing_' + Date.now();
+div.id = id;
+div.innerHTML = `<div class="msg-avatar">🗺</div><div><div class="msg-bubble"><div class="typing"><span></span><span></span><span></span></div></div></div>`;
+msgs.appendChild(div);
+msgs.scrollTop = msgs.scrollHeight;
+return id;
 }
 
 function removeTyping(id) {
-  const el = document.getElementById(id);
-  if (el) el.remove();
+const el = document.getElementById(id);
+if (el) el.remove();
 }
 
 function handleKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 }
 
 function autoResize(el) {
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+el.style.height = 'auto';
+el.style.height = Math.min(el.scrollHeight, 100) + 'px';
 }
 </script>
 
