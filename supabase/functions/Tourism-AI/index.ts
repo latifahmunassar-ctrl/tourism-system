@@ -30,11 +30,21 @@ async function buildDataContext(supabase: ReturnType<typeof createClient>): Prom
   let context = "البيانات المتاحة في النظام:\n\n";
 
   if (hotels && hotels.length > 0) {
-    context += "🏨 الفنادق (لاحظ عمود Occupancy لكل غرفة):\n";
+    // نُجمّع الفنادق حسب الوجهة (الجزء بعد " - " في location، مثل "Kuta - indonesia")
+    // لتسهيل الفحص الشامل على النموذج وتجنّب التسرّع في الرفض.
+    const byDest: Record<string, typeof hotels> = {};
     for (const h of hotels) {
-      const breakfast = h.includes_breakfast ? " | إفطار مشمول" : "";
-      const occupancy = h.occupancy ? ` | Occupancy: ${h.occupancy}` : "";
-      context += `- ${h.name} | ${h.stars} نجوم | ${h.location} | ${h.price_per_night} ${h.currency}/ليلة | ${h.room_type}${breakfast}${occupancy}\n`;
+      const dest = (String(h.location).split(" - ").pop() || "غير محدّد").trim();
+      (byDest[dest] ||= []).push(h);
+    }
+    context += "🏨 الفنادق (مُجمَّعة حسب الوجهة — افحص الوجهة كاملةً قبل أيّ قرار رفض):\n";
+    for (const [dest, list] of Object.entries(byDest)) {
+      context += `\n── ${dest} (${list.length} غرفة) ──\n`;
+      for (const h of list) {
+        const breakfast = h.includes_breakfast ? " | إفطار مشمول" : "";
+        const occupancy = h.occupancy ? ` | Occupancy: ${h.occupancy}` : "";
+        context += `- ${h.name} | ${h.stars}★ | ${h.location} | ${h.price_per_night} ${h.currency}/ليلة | ${h.room_type}${breakfast}${occupancy}\n`;
+      }
     }
   }
 
@@ -128,6 +138,20 @@ function buildSystemPrompt(dataContext: string, frontendFormat: string): string 
   5. ⚠️ ضمن نفس الفندق إذا فيه أكثر من Occupancy مناسب، اختر **الأقل سعراً**.
   6. إذا لا يوجد في كل فنادق الوجهة أيّ غرفة كافية، أجب بـ:
      CHAT:[اشرح أنّ ما عندنا فندق يستوعب العدد، اذكر أكبر Occupancy متاح، واسأل الموظف عن البديل].
+
+⚠️ قاعدة منع التسرّع في الرفض (مهمّة جداً جداً):
+قبل أن تقول لأيّ موظف "ما عندنا غرفة تستوعب N أشخاص" أو ما يعادلها، **يجب** أن تكون قد فحصت **كل صف فندق** في قسم الوجهة المُجمَّع بين فواصل ── ── في البيانات أعلاه. تنبّه:
+  • التنسيقات تختلف: "2 adults", "Family Room", "Triple" (=3), "Quad" (=4), "6 PAX" (=6), "Suite for 5", "4+2 child", إلخ.
+  • "Family Room" بدون رقم: غالباً تستوعب 4، اعتبرها مرشّحة لطلبات ≤4.
+  • Occupancy بصيغة "X adults + Y child": إجمالي السعة = X + Y.
+  • قد يكون عند نفس الفندق عدّة صفوف بـ Occupancies مختلفة — افحص كلّها.
+
+❌ ممنوع الرفض المبني على فحص جزئي أو تخمين.
+
+🔇 قاعدة الصمت في التفكير (مهمّة):
+كل عمليّة الفحص والتحليل **داخلية فقط** — لا تُخرجها للموظف. الإخراج يبدأ مباشرةً بـ "DEST:" (إذا بنيتَ برنامجاً) أو بـ "CHAT:" (إذا سألتَ أو رفضتَ). بدون أيّ مقدّمات، أعذار، تفكير بصوت عالٍ، أو شرح للخطوات. كل CHAT يجب أن يكون جملة أو جملتين فقط.
+
+✅ في حالة الرفض، CHAT يكون مختصراً ويذكر أكبر Occupancy رأيتَه فعلاً (مثل: "أكبر غرفة عندنا في بالي تستوعب 4، تبغى غرفتين أو وجهة بديلة؟").
   7. السعر النهائي = Rate المذكور أمام تلك الـ Occupancy المختارة × عدد الليالي. لا تخلط أسعار من Occupancies أخرى.`;
 
   return `${questionRule}
