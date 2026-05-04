@@ -112,21 +112,26 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 
 /* PDF */
 #pdfContent { display:none; }
-.pdf-cover { background:linear-gradient(150deg,#1565d8 0%,#0d47a1 40%,#0a2f6e 100%); color:#fff; padding:50px 40px; min-height:100vh; font-family:‘Tajawal’,sans-serif; position:relative; overflow:hidden; }
+.pdf-cover { background:linear-gradient(150deg,#1565d8 0%,#0d47a1 40%,#0a2f6e 100%); color:#fff; padding:32px 36px; min-height:100vh; font-family:‘Tajawal’,sans-serif; position:relative; overflow:hidden; }
 .pdf-cover::before { content:’’; position:absolute; top:-100px; left:-100px; width:400px; height:400px; background:rgba(255,255,255,0.04); border-radius:50%; }
 .pdf-cover::after { content:’’; position:absolute; bottom:-80px; right:-80px; width:300px; height:300px; background:rgba(255,255,255,0.04); border-radius:50%; }
-.pdf-logo-box { background:#fff; border-radius:14px; padding:18px 24px; display:inline-flex; align-items:center; justify-content:center; margin-bottom:30px; box-shadow:0 6px 20px rgba(0,0,0,0.18); }
-.pdf-logo-img { max-width:280px; max-height:140px; height:auto; width:auto; display:block; }
-.pdf-title { font-size:80px; font-weight:900; line-height:1; margin:16px 0; text-shadow:0 4px 30px rgba(0,0,0,0.4); letter-spacing:-2px; }
-.pdf-dates { font-size:22px; font-weight:700; margin-bottom:20px; opacity:0.95; line-height:1.8; }
-.pdf-field { background:rgba(255,255,255,0.95); border-radius:12px; padding:14px 20px; margin-bottom:10px; display:flex; gap:12px; align-items:center; }
-.pdf-field-label { font-size:15px; font-weight:800; color:#1a3a8f; white-space:nowrap; }
-.pdf-field-value { font-size:15px; color:#333; font-weight:600; }
+.pdf-logo-box { background:#fff; border-radius:14px; padding:14px 20px; display:inline-flex; align-items:center; justify-content:center; margin-bottom:18px; box-shadow:0 6px 20px rgba(0,0,0,0.18); }
+.pdf-logo-img { max-width:240px; max-height:120px; height:auto; width:auto; display:block; }
+.pdf-title { font-size:36px; font-weight:900; line-height:1.1; margin:8px 0 4px; text-shadow:0 3px 18px rgba(0,0,0,0.3); letter-spacing:-1px; }
+.pdf-dest-name { font-size:46px; font-weight:900; line-height:1.15; margin:0 0 8px; text-shadow:0 4px 24px rgba(0,0,0,0.35); letter-spacing:-1.5px; }
+.pdf-cities { font-size:14px; color:rgba(255,255,255,0.8); margin-bottom:16px; font-weight:700; }
+.pdf-date-price-row { display:flex; justify-content:space-between; align-items:stretch; gap:18px; margin-bottom:14px; }
+.pdf-dates-card { background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.28); border-radius:14px; padding:14px 20px; flex:0 0 auto; min-width:200px; }
+.pdf-dates-label { font-size:11px; color:rgba(255,255,255,0.65); letter-spacing:2px; margin-bottom:6px; text-transform:uppercase; font-weight:700; }
+.pdf-dates { font-size:17px; font-weight:800; line-height:1.7; }
+.pdf-price-box { background:#fff; border-radius:14px; padding:14px 22px; flex:1; display:flex; flex-direction:column; justify-content:center; box-shadow:0 4px 20px rgba(0,0,0,0.18); }
+.pdf-price-label { font-size:13px; font-weight:800; color:#1a3a8f; margin-bottom:4px; }
+.pdf-price-val { font-size:36px; font-weight:900; color:#1a3a8f; line-height:1; }
+.pdf-field { background:rgba(255,255,255,0.95); border-radius:12px; padding:12px 18px; margin-bottom:8px; display:flex; gap:12px; align-items:center; }
+.pdf-field-label { font-size:14px; font-weight:800; color:#1a3a8f; white-space:nowrap; }
+.pdf-field-value { font-size:14px; color:#333; font-weight:600; }
 .pdf-days-box { background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25); border-radius:12px; padding:16px; margin-top:16px; }
 .pdf-days-label { font-size:12px; color:rgba(255,255,255,0.6); letter-spacing:3px; margin-bottom:10px; text-transform:uppercase; }
-.pdf-price-box { background:#fff; border-radius:16px; padding:18px 24px; margin-top:20px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 4px 20px rgba(0,0,0,0.15); }
-.pdf-price-label { font-size:16px; font-weight:800; color:#1a3a8f; }
-.pdf-price-val { font-size:42px; font-weight:900; color:#1a3a8f; }
 .pdf-page-break { page-break-before:always; }
 .pdf-section { padding:40px; font-family:‘Tajawal’,sans-serif; background:#fff; }
 .pdf-section-title { font-size:22px; font-weight:900; color:#1a3a8f; border-bottom:4px solid #1a3a8f; padding-bottom:10px; margin-bottom:20px; }
@@ -452,7 +457,6 @@ const duration = metaParts[0] || '';
 const nights = metaParts[1] || '';
 
 const logoHTML=withLogo?`<div class="pdf-logo-box"><img class="pdf-logo-img" src="${LOGO_IMG}" alt="مجموعة العز الدولية للسفر والسياحة"/></div>`:'';
-const priceHTML=withLogo?`<div class="pdf-price-box"><div class="pdf-price-label">💰 السعر الإجمالي (${persons} أشخاص)</div><div class="pdf-price-val">${finalGroupPrice.toLocaleString()} ريال</div></div>`:'';
 
 // Calculate start date for each day
 function getDayDate(dayNum) {
@@ -513,16 +517,18 @@ if (currentDay !== 0) itineraryHTML += '</div></div>';
 document.getElementById('pdfContent').innerHTML=`
 <div class="pdf-cover">
 ${logoHTML}
-<div class="pdf-title">رحلة<br>سياحية</div>
-<div style="font-size:22px;font-weight:800;color:rgba(255,255,255,0.9);margin-bottom:6px;">${dest}</div>
-${citiesText ? `<div style="font-size:13px;color:rgba(255,255,255,0.7);margin-bottom:16px;">📍 ${citiesText}</div>` : ''}
-<div class="pdf-dates">من ${dateFrom}<br>إلى ${dateTo}</div>
-<div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:10px 14px;margin-bottom:14px;color:#fff;font-size:13px;">
+<div class="pdf-title">رحلة سياحية</div>
+<div class="pdf-dest-name">${dest}</div>
+${citiesText ? `<div class="pdf-cities">📍 ${citiesText}</div>` : ''}
+<div class="pdf-date-price-row">
+${withLogo ? `<div class="pdf-price-box"><div class="pdf-price-label">💰 السعر الإجمالي (${persons} أشخاص)</div><div class="pdf-price-val">${finalGroupPrice.toLocaleString()} ريال</div></div>` : ''}
+<div class="pdf-dates-card"><div class="pdf-dates-label">📅 التاريخ</div><div class="pdf-dates">من ${dateFrom}<br>إلى ${dateTo}</div></div>
+</div>
+<div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:10px 14px;margin-bottom:10px;color:#fff;font-size:13px;font-weight:700;">
 ⏱️ ${duration} | ${nights} | ${metaParts[3]||''}
 </div>
 <div class="pdf-field"><span class="pdf-field-label">العميل :</span><span class="pdf-field-value">${client}</span></div>
 <div class="pdf-field"><span class="pdf-field-label">كود العميل :</span><span class="pdf-field-value">${clientCode}</span></div>
-${priceHTML}
 </div>
 <div class="pdf-page-break"></div>
 <div class="pdf-section">
