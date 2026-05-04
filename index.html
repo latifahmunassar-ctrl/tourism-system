@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>نظام البرامج السياحية</title>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 :root {
@@ -585,7 +586,39 @@ ${itineraryHTML}
 </div>`;
 }
 
-function exportPDF(withLogo) { buildPDF(withLogo); setTimeout(()=>{ window.print(); }, 300); }
+function exportPDF(withLogo) {
+buildPDF(withLogo);
+setTimeout(() => {
+  const el = document.getElementById('pdfContent');
+  // نُظهر المحتوى مؤقّتاً ليُعالجه html2pdf، ثم نخفيه
+  const prevDisplay = el.style.display;
+  el.style.display = 'block';
+  el.style.position = 'fixed';
+  el.style.top = '0';
+  el.style.left = '0';
+  el.style.zIndex = '-9999';
+  el.style.width = '210mm';
+  const dest = (parsedData?.dest || 'قائمة-عرض-سعر').replace(/[^؀-ۿa-zA-Z0-9\-_]/g, '-');
+  const filename = `عرض-سعر-${dest}-${new Date().toISOString().slice(0,10)}.pdf`;
+  html2pdf().set({
+    margin: 0,
+    filename,
+    image: { type: 'jpeg', quality: 0.96 },
+    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', letterRendering: true },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+    pagebreak: { mode: ['css', 'legacy'], before: '.pdf-page-break' }
+  }).from(el).save().then(() => {
+    el.style.display = prevDisplay;
+    el.style.position = '';
+    el.style.zIndex = '';
+    el.style.width = '';
+  }).catch(err => {
+    console.error('PDF generation failed:', err);
+    el.style.display = prevDisplay;
+    alert('حدث خطأ في توليد الـ PDF. حاول مرة ثانية.');
+  });
+}, 200);
+}
 
 function addMessage(type, text) {
 const msgs=document.getElementById('messages');
