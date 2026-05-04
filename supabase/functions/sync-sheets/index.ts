@@ -215,74 +215,96 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
 }
 
 // ── استخراج الجولات من صفوف التبويبة ─────────────────────────────────────
-type TourSection = "Turky" | "vietnam" | "indonesia" | null;
+//
+// منطق header-based: نبحث عن صف يحتوي على عناوين أعمدة سعر مثل
+// "1-3 Pax", "4-9 Pax", "may month", "june month", "pax 1-3"...
+// عمود الاسم هو أيسر عمود سعر (أو يسبقه)، وعمود العملة إن وُجد بعدها.
+// كل صف بيانات يُنتج tour واحدة فيها variants متعدّدة.
 
-function extractTours(rows: string[][], destination: string): object[] {
+const PRICE_TIER_RE = /(\d+\s*-\s*\d+\s*pax|pax\s*\d+(\s*-\s*\d+)?|(jan|feb|mar|apr|may|jun(e)?|jul(y)?|aug|sep|oct|nov|dec)\w*\s*month|month|tour\s*fees?)/i;
+const CURRENCY_RE   = /^(currency|عملة|العملة)$/i;
+
+interface TourHeader {
+  rowIdx:    number;
+  nameCol:   number;
+  priceCols: { col: number; label: string }[];
+  currencyCol?: number;
+}
+
+function findTourHeader(rows: string[][]): TourHeader | null {
+  for (let i = 0; i < rows.length; i++) {
+    const cells = rows[i].map(x => (x || "").trim());
+    const priceCols: { col: number; label: string }[] = [];
+    let currencyCol: number | undefined;
+    for (let j = 0; j < cells.length; j++) {
+      const cell = cells[j];
+      if (!cell) continue;
+      if (CURRENCY_RE.test(cell) && currencyCol === undefined) {
+        currencyCol = j;
+      } else if (PRICE_TIER_RE.test(cell)) {
+        priceCols.push({ col: j, label: cell });
+      }
+    }
+    // نحتاج عمود سعر واحد على الأقل لاعتبار هذا header الجولات
+    if (priceCols.length >= 1) {
+      // عمود الاسم: العمود الأيسر مباشرةً قبل أوّل عمود سعر
+      const firstPriceCol = priceCols[0].col;
+      const nameCol = firstPriceCol > 0 ? firstPriceCol - 1 : 0;
+      return { rowIdx: i, nameCol, priceCols, currencyCol };
+    }
+  }
+  return null;
+}
+
+function extractTours(rows: string[][], destination: string, debug?: { rejects: string[] }): object[] {
   const tours: object[] = [];
-  let section: TourSection = null;
-  const seen = new Set<string>(); // تجنب التكرار داخل نفس التبويبة
+  const seen = new Set<string>();
 
-  for (const row of rows) {
-    const c   = row.map(x => (x || "").trim());
-    const txt = c.join(" ").toLowerCase();
+  const header = findTourHeader(rows);
+  if (!header) {
+    debug?.rejects.push(`[${destination}] no tour header found`);
+    return tours;
+  }
+  debug?.rejects.push(
+    `[${destination}] tour header at row ${header.rowIdx}: name=col${header.nameCol}, ` +
+    `prices=[${header.priceCols.map(p => `col${p.col}('${p.label}')`).join(",")}], ` +
+    `currency=${header.currencyCol ?? "default"}`
+  );
 
-    // ── اكتشاف بداية قسم الجولات ──────────────────────────────────────
-    if (/may\s*month|june\s*month/.test(txt)) {
-      section = "Turky";
-      continue;
-    }
-    if (/pax\s*1-3|1-3\s*pax/.test(txt)) {
-      section = "vietnam";
-      continue;
-    }
-    if (/tour\s*fees|1-4\s*pax|pax\s*1-4/.test(txt)) {
-      section = "indonesia";
-      continue;
-    }
+  for (let i = header.rowIdx + 1; i < rows.length; i++) {
+    const row  = rows[i].map(x => (x || "").trim());
+    const name = row[header.nameCol] || "";
+    if (!name) continue;
+    // تخطّي صفوف تبدو كرؤوس أقسام أخرى
+    if (/^hotel(s)?$/i.test(name)) break; // وصلنا قسم الفنادق
+    if (PRICE_TIER_RE.test(name)) continue; // header آخر متكرّر
 
-    // إعادة الضبط عند رأس قسم الفنادق
-    if (/^hotel$/i.test(c[0])) {
-      section = null;
-      continue;
-    }
+    const variants = header.priceCols
+      .map(({ col, label }) => {
+        const p = parsePrice(row[col] || "");
+        if (isNaN(p) || p <= 0) return null;
+        return { label, price: p };
+      })
+      .filter((v): v is { label: string; price: number } => v !== null);
 
-    if (!section) continue;
+    if (variants.length === 0) continue;
 
-    let name     = "";
-    let price    = 0;
-    let currency = "SAR";
+    const currency = cleanCurrency(
+      (header.currencyCol !== undefined ? row[header.currencyCol] : "") || "SAR"
+    );
 
-    if (section === "Turky") {
-      // col0=اسم | col1=سعر مايو | col2=سعر يونيو | col3=عملة
-      name     = c[0];
-      price    = parsePrice(c[1]);
-      currency = cleanCurrency(c[3]);
-
-    } else if (section === "vietnam") {
-      // col0=اسم النشاط | col1=رقم اليوم | col2=سعر للفرد
-      name     = c[0];
-      price    = parsePrice(c[2]);
-      currency = "SAR";
-
-    } else if (section === "indonesia") {
-      // col0=اسم مختصر | col1=فارغ | col2=اسم كامل | col3=سعر 1-4 | col6=عملة
-      name     = c[2] || c[0];
-      price    = parsePrice(c[3]);
-      currency = cleanCurrency(c[6]);
-    }
-
-    if (!name || isNaN(price) || price <= 0) continue;
-
-    const key = `${name}|${price}`;
+    // تجنّب التكرار: إذا نفس الاسم وُجد بنفس variants
+    const key = `${name}|${variants.map(v => `${v.label}:${v.price}`).join(",")}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
     tours.push({
       name,
       type:           destination,
-      price,
+      price:          variants[0].price, // legacy: أوّل سعر كافتراضي
       currency,
       description:    name,
+      variants:       variants.map(v => ({ ...v, currency })),
       last_synced_at: new Date().toISOString(),
     });
   }
@@ -332,7 +354,7 @@ Deno.serve(async (req) => {
         const rows = await readSheetRange(token, spreadsheetId, `${tab}!A1:V500`);
 
         const hotels = extractHotels(rows, tab, debugInfo);
-        const tours  = extractTours(rows, tab);
+        const tours  = extractTours(rows, tab, debugInfo);
 
         if (hotels.length > 0) {
           // إزالة التكرارات داخل نفس الـ batch (Postgres يرفض ON CONFLICT لنفس المفتاح مرّتين)
