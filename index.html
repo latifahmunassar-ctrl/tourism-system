@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
@@ -78,13 +77,13 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
 
 /* ===== PDF DESIGN ===== */
-#quoteDoc { display:none; font-family:‘Tajawal’,sans-serif; }
+#quoteDoc { display:none; font-family:'Tajawal',sans-serif; }
 #quoteDoc.show { display:block; }
 
 /* Page 1 - Cover */
 .pdf-page { width:100%; margin-bottom:20px; border-radius:12px; overflow:hidden; position:relative; }
 .cover-page { background:linear-gradient(135deg, #1a6fd4 0%, #0d4ea6 40%, #1a3a8f 100%); min-height:600px; padding:30px; display:grid; grid-template-columns:1fr 1fr; gap:20px; position:relative; overflow:hidden; }
-.cover-page::before { content:’’; position:absolute; top:-50px; right:-50px; width:300px; height:300px; background:rgba(255,255,255,0.05); border-radius:50%; }
+.cover-page::before { content:''; position:absolute; top:-50px; right:-50px; width:300px; height:300px; background:rgba(255,255,255,0.05); border-radius:50%; }
 .cover-logo-box { background:#fff; border-radius:16px; padding:16px 20px; display:inline-flex; align-items:center; gap:12px; margin-bottom:20px; width:fit-content; }
 .cover-logo-text { font-size:11px; font-weight:800; color:#cc1111; line-height:1.4; }
 .cover-logo-en { font-size:9px; color:#888; }
@@ -115,7 +114,7 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .hotels-table tr:nth-child(even) td { background:#f7f9ff; }
 .flights-section { padding:20px 24px; border-top:3px solid #1a3a8f; background:#f0f5ff; }
 .section-title { font-size:14px; font-weight:800; color:#1a3a8f; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
-.section-title::after { content:’’; flex:1; height:2px; background:linear-gradient(90deg,#1a3a8f,transparent); }
+.section-title::after { content:''; flex:1; height:2px; background:linear-gradient(90deg,#1a3a8f,transparent); }
 .flight-row { background:#fff; border:1px solid #d0deff; border-radius:8px; padding:12px 16px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
 .flight-route { font-size:13px; font-weight:800; color:#1a3a8f; }
 .flight-detail { font-size:11px; color:#888; margin-top:2px; }
@@ -175,12 +174,20 @@ body { background:#fff !important; overflow:visible !important; height:auto !imp
 }
 
 @media (max-width:768px) {
-.layout { flex-direction:column; }
-.chat-panel { width:100%; height:55vh; border-left:none; border-bottom:1px solid var(–border); }
-.output-panel { height:45vh; }
+.layout { flex-direction:column-reverse; }
+.chat-panel { width:100%; height:60vh; border-left:none; border-top:1px solid var(--border); flex-shrink:0; }
+.output-panel { height:40vh; }
+.topbar { padding:8px 14px; }
+.brand-name { font-size:13px; }
+.brand-sub { display:none; }
+.export-btns { flex-wrap:wrap; gap:6px; }
+.profit-wrap { width:100%; justify-content:center; }
+.ebtn { font-size:11px; padding:6px 10px; }
+.cover-page { grid-template-columns:1fr; }
+.cover-right { display:none; }
+
 }
 </style>
-
 </head>
 <body>
 <div class="topbar">
@@ -650,6 +657,5 @@ el.style.height = 'auto';
 el.style.height = Math.min(el.scrollHeight, 100) + 'px';
 }
 </script>
-
 </body>
 </html>
