@@ -12,11 +12,10 @@
 --border:rgba(255,255,255,0.07);
 --gold:#D4A843; --gold2:#F0C96A;
 --teal:#2A9D8F; --text:#E8EDF2; --muted:rgba(232,237,242,0.42);
---r:12px;
---blue1:#1a3a8f; --blue2:#0d2060; --blue3:#2952c4;
+--r:12px; --blue1:#1a3a8f; --blue3:#2952c4;
 }
 body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
-.topbar { background:var(--s1); border-bottom:1px solid var(--border); padding:12px 20px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; z-index:10; }
+.topbar { background:var(--s1); border-bottom:1px solid var(--border); padding:12px 20px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
 .brand { display:flex; align-items:center; gap:10px; }
 .brand-icon { width:34px; height:34px; background:linear-gradient(135deg,var(--gold),var(--gold2)); border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:17px; }
 .brand-name { font-size:15px; font-weight:800; }
@@ -24,10 +23,10 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .user-pill { background:var(--s2); border:1px solid var(--border); border-radius:20px; padding:5px 12px 5px 7px; display:flex; align-items:center; gap:7px; font-size:12px; color:var(--muted); }
 .avatar { width:24px; height:24px; border-radius:50%; background:linear-gradient(135deg,var(--teal),#1a7a70); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; color:#fff; }
 .layout { display:flex; flex:1; overflow:hidden; }
-.chat-panel { display:flex; flex-direction:column; width:420px; flex-shrink:0; border-left:1px solid var(--border); background:var(--s1); }
+.chat-panel { display:flex; flex-direction:column; width:380px; flex-shrink:0; border-left:1px solid var(--border); background:var(--s1); }
 .chat-header { padding:14px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; }
-.chat-header-title { font-size:13px; font-weight:800; color:var(--text); }
-.status-dot { width:7px; height:7px; border-radius:50%; background:#4ade80; box-shadow:0 0 6px #4ade80; animation:pulse2 2s ease-in-out infinite; }
+.chat-header-title { font-size:13px; font-weight:800; }
+.status-dot { width:7px; height:7px; border-radius:50%; background:#4ade80; box-shadow:0 0 6px #4ade80; animation:pulse2 2s infinite; }
 @keyframes pulse2 { 0%,100%{opacity:1} 50%{opacity:0.5} }
 .messages { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px; scroll-behavior:smooth; }
 .messages::-webkit-scrollbar { width:4px; }
@@ -38,9 +37,9 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .msg-avatar { width:30px; height:30px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:13px; margin-top:2px; }
 .msg.sys .msg-avatar { background:var(--s3); border:1px solid var(--border); }
 .msg.user .msg-avatar { background:linear-gradient(135deg,var(--gold),var(--gold2)); font-size:11px; font-weight:800; color:#0F1923; }
-.msg-bubble { max-width:82%; padding:11px 14px; border-radius:var(--r); font-size:13px; line-height:1.65; }
-.msg.sys .msg-bubble { background:var(--s2); border:1px solid var(--border); border-top-right-radius:4px; color:var(--text); }
-.msg.user .msg-bubble { background:linear-gradient(135deg,rgba(212,168,67,0.18),rgba(212,168,67,0.1)); border:1px solid rgba(212,168,67,0.25); border-top-left-radius:4px; color:var(--text); text-align:right; }
+.msg-bubble { max-width:85%; padding:11px 14px; border-radius:var(--r); font-size:13px; line-height:1.65; }
+.msg.sys .msg-bubble { background:var(--s2); border:1px solid var(--border); border-top-right-radius:4px; }
+.msg.user .msg-bubble { background:linear-gradient(135deg,rgba(212,168,67,0.18),rgba(212,168,67,0.1)); border:1px solid rgba(212,168,67,0.25); border-top-left-radius:4px; text-align:right; }
 .msg-time { font-size:10px; color:var(--muted); margin-top:4px; }
 .msg.user .msg-time { text-align:left; }
 .quick-chips { padding:10px 16px; display:flex; gap:7px; flex-wrap:wrap; border-top:1px solid var(--border); }
@@ -51,141 +50,104 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .chat-input:focus { border-color:rgba(212,168,67,0.4); }
 .chat-input::placeholder { color:var(--muted); }
 .send-btn { width:42px; height:42px; border-radius:10px; border:none; flex-shrink:0; background:linear-gradient(135deg,var(--gold),var(--gold2)); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; transition:all 0.2s; }
-.send-btn:hover { transform:scale(1.05); box-shadow:0 4px 14px rgba(212,168,67,0.35); }
+.send-btn:hover { transform:scale(1.05); }
 .send-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
-.output-panel { flex:1; display:flex; flex-direction:column; overflow:hidden; background:var(--bg); }
-.output-header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
-.output-header-title { font-size:13px; font-weight:800; color:var(--text); }
-.export-btns { display:flex; gap:8px; align-items:center; }
-.profit-wrap { display:flex; align-items:center; gap:6px; background:var(--s2); border:1px solid var(--border); border-radius:8px; padding:5px 10px; }
-.profit-input { width:70px; background:transparent; border:none; color:var(--gold); font-family:'Tajawal',sans-serif; font-size:13px; font-weight:700; outline:none; text-align:center; }
-.profit-label { font-size:10px; color:var(--muted); }
-.ebtn { padding:7px 14px; border-radius:8px; font-family:'Tajawal',sans-serif; font-size:12px; font-weight:700; cursor:pointer; border:none; display:flex; align-items:center; gap:5px; transition:all 0.2s; }
-.ebtn-pdf { background:linear-gradient(135deg,var(--gold),var(--gold2)); color:#0F1923; font-weight:800; }
-.ebtn-pdf:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgba(212,168,67,0.3); }
-.ebtn-nologo { background:var(--s2); color:var(--muted); border:1px solid var(--border); }
-.ebtn-nologo:hover { color:var(--text); border-color:rgba(255,255,255,0.2); }
-.quote-wrap { flex:1; overflow-y:auto; padding:20px; }
-.empty-output { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; opacity:0.35; padding:40px; }
-.empty-output-icon { font-size:56px; }
-.empty-output-title { font-size:16px; font-weight:700; }
-.empty-output-sub { font-size:12px; color:var(--muted); text-align:center; line-height:1.6; }
 .typing { display:flex; gap:4px; align-items:center; padding:3px 0; }
 .typing span { width:6px; height:6px; border-radius:50%; background:var(--muted); animation:bounce 1.2s ease-in-out infinite; }
 .typing span:nth-child(2) { animation-delay:.2s; }
 .typing span:nth-child(3) { animation-delay:.4s; }
 @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+.output-panel { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.output-header { padding:12px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; background:var(--s1); }
+.output-header-title { font-size:13px; font-weight:800; }
+.export-btns { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.profit-wrap { display:flex; align-items:center; gap:6px; background:var(--s2); border:1px solid var(--border); border-radius:8px; padding:5px 10px; }
+.profit-input { width:80px; background:transparent; border:none; color:var(--gold); font-family:'Tajawal',sans-serif; font-size:13px; font-weight:700; outline:none; text-align:center; }
+.profit-label { font-size:10px; color:var(--muted); }
+.ebtn { padding:7px 14px; border-radius:8px; font-family:'Tajawal',sans-serif; font-size:12px; font-weight:700; cursor:pointer; border:none; display:flex; align-items:center; gap:5px; transition:all 0.2s; }
+.ebtn-pdf { background:linear-gradient(135deg,var(--gold),var(--gold2)); color:#0F1923; font-weight:800; }
+.ebtn-pdf:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgba(212,168,67,0.3); }
+.ebtn-nologo { background:var(--s2); color:var(--muted); border:1px solid var(--border); }
+.ebtn-nologo:hover { color:var(--text); }
+.quote-wrap { flex:1; overflow-y:auto; padding:20px; }
+.empty-output { height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; opacity:0.35; }
+.empty-output-icon { font-size:56px; }
+.empty-output-title { font-size:16px; font-weight:700; }
+.empty-output-sub { font-size:12px; color:var(--muted); text-align:center; line-height:1.6; }
 
-/* ===== PDF DESIGN ===== */
-#quoteDoc { display:none; font-family:'Tajawal',sans-serif; }
-#quoteDoc.show { display:block; }
+/* REVIEW TABLES */
+.review-header { background:linear-gradient(135deg,var(--s2),var(--s3)); border:1px solid var(--border); border-radius:14px; padding:16px 20px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:flex-start; }
+.review-dest { font-size:20px; font-weight:900; color:var(--gold); }
+.review-meta { font-size:12px; color:var(--muted); margin-top:4px; line-height:1.6; }
+.section-card { background:var(--s2); border:1px solid var(--border); border-radius:12px; margin-bottom:14px; overflow:hidden; }
+.section-card-header { padding:12px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); }
+.section-card-title { font-size:13px; font-weight:800; display:flex; align-items:center; gap:8px; }
+.section-total { font-size:13px; font-weight:800; color:var(--gold); }
+.pricing-table { width:100%; border-collapse:collapse; }
+.pricing-table th { background:rgba(255,255,255,0.04); font-size:11px; font-weight:700; color:var(--muted); padding:8px 12px; text-align:right; border-bottom:1px solid var(--border); }
+.pricing-table td { font-size:12px; padding:9px 12px; border-bottom:1px solid rgba(255,255,255,0.04); color:var(--text); }
+.pricing-table tr:last-child td { border-bottom:none; }
+.pricing-table tr:hover td { background:rgba(255,255,255,0.02); }
+.price-cell { font-weight:800; color:var(--gold); white-space:nowrap; }
+.type-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:6px; white-space:nowrap; }
+.badge-hotel { background:rgba(42,157,143,0.2); color:#2A9D8F; }
+.badge-flight { background:rgba(96,165,250,0.2); color:#60a5fa; }
+.badge-pickup { background:rgba(212,168,67,0.2); color:var(--gold); }
+.badge-drop { background:rgba(239,68,68,0.2); color:#f87171; }
+.badge-tour { background:rgba(167,139,250,0.2); color:#a78bfa; }
+.badge-nature { background:rgba(52,211,153,0.2); color:#34d399; }
+.badge-sea { background:rgba(56,189,248,0.2); color:#38bdf8; }
+.summary-card { background:var(--s2); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:14px; }
+.summary-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05); font-size:13px; }
+.summary-row:last-child { border-bottom:none; }
+.summary-label { color:var(--muted); }
+.summary-val { font-weight:700; }
+.total-card { background:linear-gradient(135deg,var(--blue1),var(--blue3)); border-radius:12px; padding:16px 20px; display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.total-label { font-size:14px; font-weight:800; color:#fff; }
+.total-val { font-size:24px; font-weight:900; color:#fff; }
+.group-card { background:var(--s3); border:1px solid var(--border); border-radius:10px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+.group-label { font-size:13px; color:var(--muted); }
+.group-val { font-size:18px; font-weight:900; color:var(--gold); }
 
-/* Page 1 - Cover */
-.pdf-page { width:100%; margin-bottom:20px; border-radius:12px; overflow:hidden; position:relative; }
-.cover-page { background:linear-gradient(135deg, #1a6fd4 0%, #0d4ea6 40%, #1a3a8f 100%); min-height:600px; padding:30px; display:grid; grid-template-columns:1fr 1fr; gap:20px; position:relative; overflow:hidden; }
-.cover-page::before { content:''; position:absolute; top:-50px; right:-50px; width:300px; height:300px; background:rgba(255,255,255,0.05); border-radius:50%; }
-.cover-logo-box { background:#fff; border-radius:16px; padding:16px 20px; display:inline-flex; align-items:center; gap:12px; margin-bottom:20px; width:fit-content; }
-.cover-logo-text { font-size:11px; font-weight:800; color:#cc1111; line-height:1.4; }
-.cover-logo-en { font-size:9px; color:#888; }
-.cover-badge { background:linear-gradient(135deg,#1a3a8f,#2952c4); color:#fff; font-size:10px; font-weight:800; padding:4px 12px; border-radius:12px; }
-.cover-title { font-size:60px; font-weight:900; color:#fff; line-height:1; margin:10px 0; text-shadow:0 4px 20px rgba(0,0,0,0.3); }
-.cover-dates { font-size:18px; font-weight:700; color:rgba(255,255,255,0.9); margin-bottom:20px; line-height:1.6; }
-.cover-field-box { background:rgba(255,255,255,0.95); border-radius:12px; padding:12px 20px; margin-bottom:10px; display:flex; align-items:center; gap:10px; }
-.cover-field-label { font-size:13px; font-weight:700; color:#1a3a8f; }
-.cover-field-value { font-size:13px; color:#333; }
-.cover-right { display:flex; flex-direction:column; justify-content:center; gap:10px; }
-.cover-days-box { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); border-radius:12px; padding:16px; color:#fff; }
-.cover-days-label { font-size:11px; color:rgba(255,255,255,0.7); margin-bottom:8px; letter-spacing:2px; text-transform:uppercase; }
-.cover-days-value { font-size:14px; font-weight:700; line-height:1.8; }
-.cover-price-box { background:rgba(255,255,255,0.95); border-radius:16px; padding:16px 20px; display:flex; align-items:center; justify-content:space-between; }
-.cover-price-label { font-size:13px; font-weight:800; color:#1a3a8f; }
-.cover-price-value { font-size:32px; font-weight:900; color:#1a3a8f; }
-.cover-images { display:grid; grid-template-rows:1fr 1fr 1fr; gap:8px; }
-.cover-img { border-radius:12px; overflow:hidden; }
-.cover-img img { width:100%; height:90px; object-fit:cover; display:block; }
-.cover-left { display:flex; flex-direction:column; }
+/* PDF */
+#pdfContent { display:none; }
+.pdf-cover { background:linear-gradient(135deg,#1a6fd4,#0d2060); color:#fff; padding:40px; min-height:100vh; font-family:'Tajawal',sans-serif; }
+.pdf-logo-box { background:#fff; border-radius:12px; padding:12px 16px; display:inline-flex; align-items:center; gap:10px; margin-bottom:30px; }
+.pdf-logo-ar { font-size:11px; font-weight:800; color:#cc1111; }
+.pdf-logo-en { font-size:9px; color:#888; }
+.pdf-logo-badge { background:linear-gradient(135deg,#1a3a8f,#2952c4); color:#fff; font-size:9px; font-weight:800; padding:3px 10px; border-radius:10px; }
+.pdf-title { font-size:70px; font-weight:900; line-height:1; margin:20px 0; text-shadow:0 4px 20px rgba(0,0,0,0.3); }
+.pdf-dates { font-size:20px; font-weight:700; margin-bottom:30px; opacity:0.9; line-height:1.6; }
+.pdf-field { background:rgba(255,255,255,0.9); border-radius:10px; padding:12px 18px; margin-bottom:10px; display:flex; gap:10px; }
+.pdf-field-label { font-size:13px; font-weight:800; color:#1a3a8f; }
+.pdf-field-value { font-size:13px; color:#333; }
+.pdf-days-box { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); border-radius:10px; padding:14px; margin-top:16px; }
+.pdf-days-label { font-size:11px; color:rgba(255,255,255,0.6); letter-spacing:2px; margin-bottom:8px; }
+.pdf-price-box { background:rgba(255,255,255,0.95); border-radius:14px; padding:16px 20px; margin-top:20px; display:flex; justify-content:space-between; align-items:center; }
+.pdf-price-label { font-size:14px; font-weight:800; color:#1a3a8f; }
+.pdf-price-val { font-size:36px; font-weight:900; color:#1a3a8f; }
+.pdf-page-break { page-break-before:always; }
+.pdf-section { padding:30px; font-family:'Tajawal',sans-serif; background:#fff; }
+.pdf-section-title { font-size:18px; font-weight:800; color:#1a3a8f; border-bottom:3px solid #1a3a8f; padding-bottom:8px; margin-bottom:16px; }
+.pdf-services-list { list-style:none; }
+.pdf-services-list li { padding:10px 0; border-bottom:1px solid #eee; font-size:13px; color:#333; display:flex; align-items:center; gap:10px; line-height:1.5; }
+.pdf-services-list li:last-child { border-bottom:none; }
+.pdf-service-icon { width:28px; height:28px; border-radius:50%; background:#e8f0ff; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+.pdf-policy { background:#f7f9ff; border-right:4px solid #1a3a8f; padding:12px 16px; margin-bottom:8px; font-size:12px; color:#333; line-height:1.8; border-radius:0 8px 8px 0; }
+.pdf-footer { background:#cc1111; color:#fff; padding:14px 30px; text-align:center; font-size:12px; font-weight:700; }
 
-/* Page 2 - Hotels & Flights */
-.hotels-page { background:#fff; padding:0; }
-.hotels-page-header { background:linear-gradient(135deg,#1a3a8f,#2952c4); color:#fff; padding:16px 24px; font-size:16px; font-weight:800; }
-.hotels-table { width:100%; border-collapse:collapse; }
-.hotels-table th { background:#e8f0ff; color:#1a3a8f; font-size:12px; font-weight:800; padding:10px 14px; text-align:right; border:1px solid #d0deff; }
-.hotels-table td { font-size:12px; padding:10px 14px; border:1px solid #eef0f8; color:#333; }
-.hotels-table tr:nth-child(even) td { background:#f7f9ff; }
-.flights-section { padding:20px 24px; border-top:3px solid #1a3a8f; background:#f0f5ff; }
-.section-title { font-size:14px; font-weight:800; color:#1a3a8f; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
-.section-title::after { content:''; flex:1; height:2px; background:linear-gradient(90deg,#1a3a8f,transparent); }
-.flight-row { background:#fff; border:1px solid #d0deff; border-radius:8px; padding:12px 16px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
-.flight-route { font-size:13px; font-weight:800; color:#1a3a8f; }
-.flight-detail { font-size:11px; color:#888; margin-top:2px; }
-.flight-price { font-size:13px; font-weight:800; color:#2952c4; }
-.flight-total-row { background:#1a3a8f; color:#fff; border-radius:8px; padding:10px 16px; display:flex; justify-content:space-between; font-size:13px; font-weight:800; margin-top:4px; }
-
-/* Pages 3+ - Daily Program */
-.program-page { background:#fff; }
-.program-page-header { background:linear-gradient(135deg,#1a3a8f,#2952c4); color:#fff; padding:16px 24px; font-size:15px; font-weight:800; display:flex; align-items:center; gap:8px; }
-.program-content { padding:20px 24px; }
-.day-block { background:#f7f9ff; border:1px solid #e0e8ff; border-radius:10px; padding:14px 18px; margin-bottom:12px; }
-.day-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:2px solid #e0e8ff; }
-.day-title { font-size:14px; font-weight:800; color:#1a3a8f; }
-.day-total-badge { background:linear-gradient(135deg,#1a3a8f,#2952c4); color:#fff; font-size:11px; font-weight:800; padding:3px 10px; border-radius:8px; }
-.day-act-row { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px dashed #e0e8ff; }
-.day-act-row:last-child { border-bottom:none; }
-.act-dot { width:6px; height:6px; border-radius:50%; background:#2952c4; flex-shrink:0; }
-.act-name { flex:1; font-size:12px; color:#333; font-weight:500; }
-.act-price { font-size:12px; font-weight:800; color:#1a3a8f; white-space:nowrap; }
-.act-type { font-size:10px; font-weight:700; padding:2px 8px; border-radius:6px; white-space:nowrap; }
-.type-tour { background:rgba(212,168,67,0.15); color:#b07800; }
-.type-transfer { background:rgba(42,157,143,0.15); color:#006655; }
-.type-nature { background:rgba(99,202,115,0.15); color:#1a7a30; }
-.type-sea { background:rgba(96,165,250,0.15); color:#0055aa; }
-
-/* Summary Page */
-.summary-page { background:#fff; padding:0; }
-.summary-content { padding:20px 24px; }
-.summary-row { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eef0f8; font-size:13px; }
-.summary-label { color:#666; }
-.summary-val { font-weight:800; color:#1a3a8f; }
-.total-box { background:linear-gradient(135deg,#1a3a8f,#2952c4); border-radius:12px; padding:16px 20px; margin-top:16px; display:flex; justify-content:space-between; align-items:center; }
-.total-label { font-size:15px; font-weight:800; color:#fff; }
-.total-val { font-size:28px; font-weight:900; color:#fff; }
-.group-box { background:#e8f0ff; border-radius:10px; padding:12px 16px; margin-top:10px; display:flex; justify-content:space-between; align-items:center; }
-.group-label { font-size:13px; font-weight:700; color:#1a3a8f; }
-.group-val { font-size:18px; font-weight:900; color:#2952c4; }
-
-/* Policy Page */
-.policy-page { background:#fff; }
-.policy-header { background:#cc1111; color:#fff; padding:14px 24px; font-size:15px; font-weight:800; }
-.policy-content { padding:20px 24px; font-size:12px; line-height:2; color:#333; }
-.policy-item { display:flex; gap:8px; margin-bottom:8px; }
-.policy-dot { color:#1a3a8f; font-weight:800; flex-shrink:0; margin-top:2px; }
-
-/* Print styles */
 @media print {
-body { background:#fff !important; overflow:visible !important; height:auto !important; }
-.chat-panel, .topbar, .output-header { display:none !important; }
-.output-panel { display:block !important; overflow:visible !important; height:auto !important; }
-.layout { display:block !important; height:auto !important; overflow:visible !important; }
-.quote-wrap { padding:0 !important; overflow:visible !important; height:auto !important; }
-.pdf-page { margin-bottom:0 !important; border-radius:0 !important; page-break-after:always; }
-.pdf-page:last-child { page-break-after:auto; }
-#quoteDoc { display:block !important; }
-.empty-output { display:none !important; }
+* { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+body { background:#fff !important; overflow:visible !important; height:auto !important; display:block !important; }
+.topbar, .layout { display:none !important; }
+#pdfContent { display:block !important; }
+.pdf-page-break { page-break-before:always; }
 }
-
 @media (max-width:768px) {
 .layout { flex-direction:column-reverse; }
-.chat-panel { width:100%; height:60vh; border-left:none; border-top:1px solid var(--border); flex-shrink:0; }
-.output-panel { height:40vh; }
-.topbar { padding:8px 14px; }
-.brand-name { font-size:13px; }
+.chat-panel { width:100%; height:55vh; border-left:none; border-top:1px solid var(--border); }
+.output-panel { height:45vh; }
 .brand-sub { display:none; }
-.export-btns { flex-wrap:wrap; gap:6px; }
-.profit-wrap { width:100%; justify-content:center; }
-.ebtn { font-size:11px; padding:6px 10px; }
-.cover-page { grid-template-columns:1fr; }
-.cover-right { display:none; }
-
 }
 </style>
 </head>
@@ -204,11 +166,11 @@ body { background:#fff !important; overflow:visible !important; height:auto !imp
 <div class="layout">
 <div class="output-panel">
 <div class="output-header">
-<div class="output-header-title">📄 عرض البرنامج السياحي</div>
+<div class="output-header-title">📊 تفاصيل التسعيرة — للمراجعة الداخلية</div>
 <div class="export-btns" id="exportBtns" style="display:none">
 <div class="profit-wrap">
-<span class="profit-label">هامش الربح/شخص:</span>
-<input class="profit-input" id="profitInput" type="number" placeholder="0" value="0" oninput="updatePrice()">
+<span class="profit-label">هامش الربح/شخص</span>
+<input class="profit-input" id="profitInput" type="number" placeholder="0" value="0" oninput="updateProfit()">
 <span class="profit-label">ريال</span>
 </div>
 <button class="ebtn ebtn-pdf" onclick="exportPDF(true)">⬇️ PDF مع شعار وسعر</button>
@@ -218,10 +180,10 @@ body { background:#fff !important; overflow:visible !important; height:auto !imp
 <div class="quote-wrap">
 <div class="empty-output" id="emptyOutput">
 <div class="empty-output-icon">📋</div>
-<div class="empty-output-title">البرنامج سيظهر هنا</div>
-<div class="empty-output-sub">ابدأ محادثة مع المساعد<br>وسيُنشأ البرنامج الكامل مع التسعيرة التفصيلية</div>
+<div class="empty-output-title">التسعيرة ستظهر هنا</div>
+<div class="empty-output-sub">اكتب تفاصيل العميل في الشات<br>وستظهر التسعيرة الكاملة للمراجعة</div>
 </div>
-<div id="quoteDoc"></div>
+<div id="reviewPanel"></div>
 </div>
 </div>
 
@@ -234,16 +196,15 @@ body { background:#fff !important; overflow:visible !important; height:auto !imp
 <div class="msg sys">
 <div class="msg-avatar">🗺</div>
 <div>
-<div class="msg-bubble">مرحباً! أنا مساعدك في بناء البرامج السياحية.<br><br>أخبرني بتفاصيل العميل بحرية، مثلاً:<br><strong>"ماليزيا 10 أيام، كوالالمبور ولنكاوي وبينين، زوجين، فنادق 5 نجوم"</strong><br><br>وسأبني البرنامج الكامل مع التسعيرة!</div>
+<div class="msg-bubble">مرحباً! أخبرني بتفاصيل العميل وسأبني التسعيرة الكاملة للمراجعة.<br><br>مثال: <strong>"ماليزيا 10 أيام، 3 كوالالمبور 3 لنكاوي 3 بينين، زوجين، فنادق 5 نجوم"</strong></div>
 <div class="msg-time">الآن</div>
 </div>
 </div>
 </div>
 <div class="quick-chips" id="quickChips">
 <button class="qchip" onclick="quickSend('اسطنبول 5 ليالي مايو زوجين فندق 4 نجوم مع جولات وانتقالات')">🇹🇷 اسطنبول</button>
-<button class="qchip" onclick="quickSend('ماليزيا 10 أيام كوالالمبور ولنكاوي وبينين زوجين فنادق 5 نجوم')">🇲🇾 ماليزيا</button>
+<button class="qchip" onclick="quickSend('ماليزيا 10 أيام 3 كوالالمبور 3 لنكاوي 3 بينين زوجين فنادق 5 نجوم')">🇲🇾 ماليزيا</button>
 <button class="qchip" onclick="quickSend('دبي 4 ليالي عائلة 4 أشخاص فندق 5 نجوم مع جولات')">🇦🇪 دبي</button>
-<button class="qchip" onclick="quickSend('باريس 6 ليالي زوجين فندق 4 نجوم مع جولات وطيران')">🇫🇷 باريس</button>
 </div>
 <div class="chat-input-wrap">
 <textarea class="chat-input" id="chatInput" placeholder="اكتب تفاصيل العميل هنا..." rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
@@ -252,42 +213,40 @@ body { background:#fff !important; overflow:visible !important; height:auto !imp
 </div>
 </div>
 
+<div id="pdfContent"></div>
+
 <script>
 const SUPABASE_URL = 'https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/Tourism-AI';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mb3R2YWNzemxtcnF4emZqbXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2MjI5NTYsImV4cCI6MjA5MzE5ODk1Nn0.1nQmxW63BFZSK-cn4fzh8tYM7a2JO10AQ0RGQ5bcdYo';
 
 const history = [];
 let isLoading = false;
-let currentData = null;
+let parsedData = null;
+let basePrice = 0;
 
-const SYSTEM = `انت مساعد ذكي متخصص في بناء البرامج السياحية الاحترافية. تعمل بذكاء واحترافية عالية.
-
-قواعد مهمة:
-1. حلل طلب الموظف واستخرج كل التفاصيل بحرية كاملة.
-2. اذا لم يحدد الموظف توزيع الايام بين المناطق، اسأله اولا.
-3. اذا كان البرنامج يتضمن اكثر من منطقة، اضف طيران داخلي بين المدن تلقائيا.
-4. احسب مجموع كل يوم بدقة.
-
-اجب بهذا التنسيق الدقيق فقط:
+const SYSTEM = `انت مساعد متخصص في بناء البرامج السياحية. يجب ان يكون ردك بهذا التنسيق الدقيق فقط بدون اي رموز او تزيين:
 
 DEST:[اسم الوجهة]
 META:[عدد الايام] ايام | [عدد الليالي] ليالي | [الشهر] | [عدد الافراد] اشخاص
 DATE_FROM:[تاريخ البداية مثل 19 مايو 2026]
 DATE_TO:[تاريخ النهاية مثل 25 مايو 2026]
-CLIENT:[اسم العميل او وصف مثل زوجين]
-CLIENT_CODE:[كود عشوائي مثل ALZ-2026-001]
+CLIENT:[وصف العميل مثل زوجين]
+CLIENT_CODE:ALZ-2026-001
 
 HOTELS:
-[اسم الفندق] | [المنطقة] | [النجوم] نجوم | [نوع الغرفة] | [السعر/ليلة] ريال/ليلة | [عدد الليالي] ليالي | [ما يشمل]
+[اسم الفندق] | [المنطقة] | [النجوم] نجوم | [نوع الغرفة] | [السعر] ريال/ليلة | [عدد الليالي] ليالي | [ما يشمل]
 
 FLIGHTS:
-[مدينة] - [مدينة] | [ذهاب/عودة/داخلي] | [السعر/شخص] ريال/شخص | [عدد الاشخاص] اشخاص | [الاجمالي] ريال
+[مدينة من] - [مدينة الى] | [ذهاب/عودة/داخلي] | [السعر/شخص] ريال/شخص | [عدد الاشخاص] اشخاص | [الاجمالي] ريال
 
-PROGRAM:
-اليوم 1 | [عنوان] | [مجموع اليوم] ريال
-- [النشاط] | [السعر] ريال | [انتقال/ثقافية/طبيعية/بحرية]
+TRANSFERS:
+اليوم [رقم] | [وصف مثل استقبال من مطار كوالالمبور] | Pickup | [السعر] ريال
+اليوم [رقم] | [وصف مثل توديع فندق كوالالمبور للمطار] | Drop | [السعر] ريال
 
-SIM:[السعر/شريحة] ريال x [عدد] اشخاص = [الاجمالي] ريال
+TOURS:
+اليوم [رقم] | [اسم الجولة] | [ثقافية/طبيعية/بحرية] | [السعر] ريال
+
+SIM:[السعر] ريال x [عدد] اشخاص = [الاجمالي] ريال
 
 SUMMARY:
 الفنادق | [الاجمالي] ريال
@@ -295,367 +254,259 @@ SUMMARY:
 الانتقالات | [الاجمالي] ريال
 الجولات السياحية | [الاجمالي] ريال
 شريحة الانترنت | [الاجمالي] ريال
-TOTAL_PER_PERSON:[الاجمالي للشخص] ريال
-TOTAL_GROUP:[الاجمالي للمجموعة] ريال لـ [عدد] اشخاص
+TOTAL_PER_PERSON:[رقم فقط]
+TOTAL_GROUP:[رقم فقط] | [عدد] اشخاص
 
-CHAT:[ردك المختصر الودي للموظف باللهجة السعودية، جملتين فقط]`;
+CHAT:[جملتين ودية للموظف باللهجة السعودية]`;
 
 async function sendMessage() {
 const input = document.getElementById('chatInput');
 const text = input.value.trim();
 if (!text || isLoading) return;
-
 addMessage('user', text);
 input.value = '';
 input.style.height = 'auto';
 history.push({ role: 'user', content: text });
 document.getElementById('quickChips').style.display = 'none';
-
 isLoading = true;
 document.getElementById('sendBtn').disabled = true;
 const typingId = addTyping();
-
 try {
 const res = await fetch(SUPABASE_URL, {
 method: 'POST',
-headers: {
-'Content-Type': 'application/json',
-'Authorization': 'Bearer ' + SUPABASE_KEY,
-'apikey': SUPABASE_KEY
-},
+headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SUPABASE_KEY, 'apikey': SUPABASE_KEY },
 body: JSON.stringify({ messages: history, system: SYSTEM, max_tokens: 4000 })
 });
-
 const data = await res.json();
 const raw = data.content?.[0]?.text || '';
 removeTyping(typingId);
 history.push({ role: 'assistant', content: raw });
-
 const chatMatch = raw.match(/CHAT:([\s\S]+?)$/m);
-const chatMsg = chatMatch ? chatMatch[1].trim() : 'تم بناء البرنامج!';
-addMessage('sys', chatMsg);
-
-if (raw.includes('PROGRAM:')) buildQuote(raw);
-
+addMessage('sys', chatMatch ? chatMatch[1].trim() : 'تم بناء البرنامج!');
+if (raw.includes('DEST:')) buildReview(raw);
 } catch (e) {
 removeTyping(typingId);
 addMessage('sys', 'حدث خطأ في الاتصال، حاول مرة ثانية.');
 }
-
 isLoading = false;
 document.getElementById('sendBtn').disabled = false;
 }
 
-function quickSend(text) {
-document.getElementById('chatInput').value = text;
-sendMessage();
-}
+function quickSend(t) { document.getElementById('chatInput').value = t; sendMessage(); }
 
 function getLine(raw, key) {
 const m = raw.match(new RegExp(key + ':(.+)'));
 return m ? m[1].trim() : '';
 }
 
-function buildQuote(raw) {
+function parseSection(raw, tag) {
+const m = raw.match(new RegExp(tag + ':([\\s\\S]+?)(?=\\n(?:DEST|META|DATE_FROM|DATE_TO|CLIENT|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|SUMMARY|CHAT):)'));
+return m ? m[1].trim().split('\n').filter(l => l.includes('|')) : [];
+}
+
+function buildReview(raw) {
 const dest = getLine(raw, 'DEST');
 const meta = getLine(raw, 'META');
-const dateFrom = getLine(raw, 'DATE_FROM') || 'تاريخ البداية';
-const dateTo = getLine(raw, 'DATE_TO') || 'تاريخ النهاية';
-const client = getLine(raw, 'CLIENT') || '';
-const clientCode = getLine(raw, 'CLIENT_CODE') || '';
-const totalPerPerson = getLine(raw, 'TOTAL_PER_PERSON');
-const totalGroup = getLine(raw, 'TOTAL_GROUP');
+const dateFrom = getLine(raw, 'DATE_FROM');
+const dateTo = getLine(raw, 'DATE_TO');
+const client = getLine(raw, 'CLIENT');
+const clientCode = getLine(raw, 'CLIENT_CODE');
+const totalPersonStr = getLine(raw, 'TOTAL_PER_PERSON');
+const totalGroupLine = getLine(raw, 'TOTAL_GROUP');
+const totalPerson = parseInt(totalPersonStr.replace(/[^\d]/g,'')) || 0;
+const personsMatch = totalGroupLine.match(/(\d+)\s*اشخاص/);
+const persons = parseInt(personsMatch?.[1]) || 2;
 
-const hotelsMatch = raw.match(/HOTELS:([\s\S]+?)(?:FLIGHTS:|PROGRAM:)/);
-const hotelsLines = hotelsMatch ? hotelsMatch[1].trim().split('\n').filter(l => l.includes('|')) : [];
-
-const flightsMatch = raw.match(/FLIGHTS:([\s\S]+?)(?:PROGRAM:)/);
-const flightsLines = flightsMatch ? flightsMatch[1].trim().split('\n').filter(l => l.includes('|')) : [];
-
-const programMatch = raw.match(/PROGRAM:([\s\S]+?)(?:SIM:|SUMMARY:)/);
-const programText = programMatch ? programMatch[1].trim() : '';
+basePrice = totalPerson;
+const hotelsLines = parseSection(raw, 'HOTELS');
+const flightsLines = parseSection(raw, 'FLIGHTS');
+const transfersLines = parseSection(raw, 'TRANSFERS');
+const toursLines = parseSection(raw, 'TOURS');
 
 const simMatch = raw.match(/SIM:(.+)/);
 const simText = simMatch ? simMatch[1].trim() : '';
 
-const summaryMatch = raw.match(/SUMMARY:([\s\S]+?)(?:CHAT:|$)/);
-const summaryText = summaryMatch ? summaryMatch[1].trim() : '';
+const summaryMatch = raw.match(/SUMMARY:([\s\S]+?)(?=\nCHAT:|$)/);
+const summaryLines = summaryMatch ? summaryMatch[1].trim().split('\n').filter(l => l.includes('|') && !l.startsWith('TOTAL')) : [];
 
-currentData = { dest, meta, dateFrom, dateTo, client, clientCode, totalPerPerson, totalGroup };
+// Totals
+let hotelsTotal = hotelsLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s+(parseInt((p[4]||'').replace(/[^\d]/g,''))||0)*(parseInt((p[5]||'').replace(/[^\d]/g,''))||0); }, 0);
+let flightsTotal = flightsLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s+(parseInt((p[4]||'').replace(/[^\d]/g,''))||0); }, 0);
+let transfersTotal = transfersLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s+(parseInt((p[3]||'').replace(/[^\d]/g,''))||0); }, 0);
+let toursTotal = toursLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s+(parseInt((p[3]||'').replace(/[^\d]/g,''))||0); }, 0);
 
-// ===== PAGE 1: COVER =====
-const coverHTML = `
-<div class="pdf-page" id="coverPage">
-<div class="cover-page">
-<div class="cover-left">
-<div class="cover-logo-box" id="logoBox">
+parsedData = { dest, meta, dateFrom, dateTo, client, clientCode, hotelsLines, flightsLines, transfersLines, toursLines, simText, summaryLines, totalPerson, persons };
+
+let html = `
+<div class="review-header">
 <div>
-<div class="cover-logo-text">مجموعة العز الدولية للسفر والسياحة</div>
-<div class="cover-logo-en">Alezz International Group Travel & Tours</div>
-</div>
-<div class="cover-badge">A.I. ✈ T.T</div>
-</div>
-<div class="cover-title">رحلة<br>سياحية</div>
-<div class="cover-dates" id="coverDates">
-الفترة من ${dateFrom}<br>حتى ${dateTo}
-</div>
-<div class="cover-field-box">
-<span class="cover-field-label">طلب :</span>
-<span class="cover-field-value">${client}</span>
-</div>
-<div class="cover-field-box">
-<span class="cover-field-label">كود العميل :</span>
-<span class="cover-field-value">${clientCode}</span>
-</div>
-<div style="margin-top:10px; font-size:13px; color:rgba(255,255,255,0.7);">توزيع الايام</div>
-<div style="background:rgba(255,255,255,0.1); border-radius:10px; padding:12px; margin-top:6px; color:#fff; font-size:12px; line-height:1.8;">
-${meta.split('|').map(p => `• ${p.trim()}`).join('<br>')}
-</div>
-</div>
-<div class="cover-right">
-<div class="cover-price-box" id="priceBox">
-<div class="cover-price-label">السعر الاجمالي</div>
-<div class="cover-price-value" id="coverPrice">${totalPerPerson}</div>
-</div>
-<div class="cover-images">
-<div class="cover-img"><img src="https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=300&h=90&fit=crop" alt=""></div>
-<div class="cover-img"><img src="https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=300&h=90&fit=crop" alt=""></div>
-<div class="cover-img"><img src="https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=300&h=90&fit=crop" alt=""></div>
-</div>
-</div>
+<div class="review-dest">✈️ ${dest}</div>
+<div class="review-meta">${meta}<br>${dateFrom} ← ${dateTo} | ${client} | ${clientCode}</div>
 </div>
 </div>`;
 
-// ===== PAGE 2: HOTELS & FLIGHTS =====
-let hotelsRowsHTML = '';
-hotelsLines.forEach(line => {
-const p = line.split('|').map(x => x.trim());
-hotelsRowsHTML += `<tr>
-<td>${p[1]||''}</td>
-<td>${p[0]||''}</td>
-<td>${p[3]||''}</td>
-<td>${p[2]||''}</td>
-<td>${p[6]||''}</td>
-</tr>`;
-});
-
-let flightsHTML = '';
-let flightTotal = 0;
-flightsLines.forEach(line => {
-const p = line.split('|').map(x => x.trim());
-const total = parseInt((p[4]||'').replace(/[^\d]/g,'')) || 0;
-flightTotal += total;
-flightsHTML += `<div class="flight-row">
-<div>
-<div class="flight-route">✈️ ${p[0]||''}</div>
-<div class="flight-detail">${p[1]||''} • ${p[2]||''} × ${p[3]||''}</div>
-</div>
-<div class="flight-price">${p[4]||''}</div>
-</div>`;
-});
-
-const hotelsPageHTML = `
-<div class="pdf-page">
-<div class="hotels-page">
-<div class="hotels-page-header">🏨 الفنادق والسكن</div>
-<table class="hotels-table">
-<thead>
-<tr>
-<th>المدينة</th>
-<th>اسم الفندق</th>
-<th>نوع الغرفة</th>
-<th>النجوم</th>
-<th>يشمل</th>
-</tr>
-</thead>
-<tbody>${hotelsRowsHTML}</tbody>
-</table>
-${flightsHTML ? `<div class="flights-section">
-<div class="section-title">✈️ الطيران</div>
-${flightsHTML}
-<div class="flight-total-row"><span>اجمالي الطيران</span><span>${flightTotal.toLocaleString()} ريال</span></div>
-</div>` : ''}
-</div>
-</div>`;
-
-// ===== PROGRAM PAGES =====
-const days = programText.split(/\n(?=اليوم)/g).filter(d => d.trim());
-let programHTML = '';
-const daysPerPage = 4;
-for (let i = 0; i < days.length; i += daysPerPage) {
-const chunk = days.slice(i, i + daysPerPage);
-let daysHTML = '';
-chunk.forEach(day => {
-const lines = day.trim().split('\n');
-const titleLine = lines[0];
-const titleParts = titleLine.split('|');
-const dayNum = titleLine.match(/اليوم (\d+)/)?.[1] || '';
-const dayTitle = titleParts[1]?.trim() || '';
-const dayTotal = titleParts[2]?.trim() || '';
-const acts = lines.slice(1).filter(l => l.trim().startsWith('-'));
-daysHTML += `<div class="day-block">
-<div class="day-header">
-<div class="day-title">📅 اليوم ${dayNum} — ${dayTitle}</div>
-${dayTotal ? `<div class="day-total-badge">${dayTotal}</div>` : ''}
-</div>`;
-acts.forEach(act => {
-const p = act.replace(/^-\s*/, '').split('|');
-const name = p[0]?.trim() || '';
-const price = p[1]?.trim() || '';
-const type = p[2]?.trim() || '';
-const typeClass = type.includes('ثقافية') ? 'type-tour' : type.includes('طبيعية') ? 'type-nature' : type.includes('بحرية') ? 'type-sea' : 'type-transfer';
-daysHTML += `<div class="day-act-row">
-<span class="act-dot"></span>
-<span class="act-name">${name}</span>
-<span class="act-price">${price}</span>
-<span class="act-type ${typeClass}">${type}</span>
-</div>`;
-});
-daysHTML += `</div>`;
-});
-programHTML += `<div class="pdf-page">
-<div class="program-page">
-<div class="program-page-header">🗓️ البرنامج اليومي والتسعيرة التفصيلية</div>
-<div class="program-content">${daysHTML}</div>
-</div>
-</div>`;
+if (hotelsLines.length) {
+html += `<div class="section-card">
+<div class="section-card-header"><div class="section-card-title">🏨 الفنادق</div><div class="section-total">${hotelsTotal.toLocaleString()} ريال</div></div>
+<table class="pricing-table">
+<thead><tr><th>المدينة</th><th>الفندق</th><th>النجوم</th><th>الغرفة</th><th>السعر/ليلة</th><th>الليالي</th><th>الإجمالي</th></tr></thead>
+<tbody>${hotelsLines.map(l => {
+const p=l.split('|').map(x=>x.trim());
+const price=parseInt((p[4]||'').replace(/[^\d]/g,''))||0;
+const nights=parseInt((p[5]||'').replace(/[^\d]/g,''))||0;
+return `<tr><td>${p[1]||''}</td><td><strong>${p[0]||''}</strong></td><td>${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${price.toLocaleString()} ريال</td><td>${nights} ليالي</td><td class="price-cell">${(price*nights).toLocaleString()} ريال</td></tr>`;
+}).join('')}</tbody>
+</table></div>`;
 }
 
-// ===== SUMMARY PAGE =====
-const summaryLines = summaryText.split('\n').filter(l => l.includes('|') && !l.startsWith('TOTAL'));
-let summaryRowsHTML = '';
-summaryLines.forEach(line => {
-const parts = line.split('|');
-if (parts[0] && parts[1]) {
-summaryRowsHTML += `<div class="summary-row">
-<span class="summary-label">${parts[0].trim()}</span>
-<span class="summary-val">${parts[1].trim()}</span>
-</div>`;
-}
-});
-if (simText) {
-summaryRowsHTML += `<div class="summary-row">
-<span class="summary-label">📶 شريحة الانترنت</span>
-<span class="summary-val">${simText}</span>
-</div>`;
+if (flightsLines.length) {
+html += `<div class="section-card">
+<div class="section-card-header"><div class="section-card-title">✈️ الطيران</div><div class="section-total">${flightsTotal.toLocaleString()} ريال</div></div>
+<table class="pricing-table">
+<thead><tr><th>الرحلة</th><th>النوع</th><th>السعر/شخص</th><th>الأشخاص</th><th>الإجمالي</th></tr></thead>
+<tbody>${flightsLines.map(l => {
+const p=l.split('|').map(x=>x.trim());
+const tc=p[1]==='داخلي'?'badge-pickup':'badge-flight';
+return `<tr><td><strong>${p[0]||''}</strong></td><td><span class="type-badge ${tc}">${p[1]||''}</span></td><td class="price-cell">${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${p[4]||''}</td></tr>`;
+}).join('')}</tbody>
+</table></div>`;
 }
 
-const summaryPageHTML = `
-<div class="pdf-page">
-<div class="summary-page">
-<div class="program-page-header">💰 ملخص التكاليف الكاملة</div>
-<div class="summary-content">
-${summaryRowsHTML}
-<div class="total-box">
-<span class="total-label">💎 الاجمالي للشخص</span>
-<span class="total-val" id="summaryTotal">${totalPerPerson}</span>
+if (transfersLines.length) {
+html += `<div class="section-card">
+<div class="section-card-header"><div class="section-card-title">🚗 الانتقالات</div><div class="section-total">${transfersTotal.toLocaleString()} ريال</div></div>
+<table class="pricing-table">
+<thead><tr><th>اليوم</th><th>التفاصيل</th><th>النوع</th><th>السعر</th></tr></thead>
+<tbody>${transfersLines.map(l => {
+const p=l.split('|').map(x=>x.trim());
+const isPickup=(p[2]||'').toLowerCase().includes('pickup');
+const tc=isPickup?'badge-pickup':'badge-drop';
+const tl=isPickup?'🚗 Pickup':'🚖 Drop';
+return `<tr><td>${p[0]||''}</td><td>${p[1]||''}</td><td><span class="type-badge ${tc}">${tl}</span></td><td class="price-cell">${p[3]||''}</td></tr>`;
+}).join('')}</tbody>
+</table></div>`;
+}
+
+if (toursLines.length) {
+html += `<div class="section-card">
+<div class="section-card-header"><div class="section-card-title">🗺️ الجولات السياحية</div><div class="section-total">${toursTotal.toLocaleString()} ريال</div></div>
+<table class="pricing-table">
+<thead><tr><th>اليوم</th><th>الجولة</th><th>النوع</th><th>السعر</th></tr></thead>
+<tbody>${toursLines.map(l => {
+const p=l.split('|').map(x=>x.trim());
+const tcMap={'ثقافية':'badge-tour','طبيعية':'badge-nature','بحرية':'badge-sea'};
+const tc=tcMap[p[2]]||'badge-tour';
+return `<tr><td>${p[0]||''}</td><td><strong>${p[1]||''}</strong></td><td><span class="type-badge ${tc}">${p[2]||''}</span></td><td class="price-cell">${p[3]||''}</td></tr>`;
+}).join('')}</tbody>
+</table></div>`;
+}
+
+let summaryHTML = summaryLines.map(l => { const p=l.split('|').map(x=>x.trim()); return `<div class="summary-row"><span class="summary-label">${p[0]||''}</span><span class="summary-val">${p[1]||''}</span></div>`; }).join('');
+if (simText) summaryHTML += `<div class="summary-row"><span class="summary-label">📶 شريحة الانترنت</span><span class="summary-val">${simText}</span></div>`;
+
+html += `
+<div class="summary-card">
+<div style="font-size:13px;font-weight:800;margin-bottom:12px;">💰 ملخص التكاليف</div>
+${summaryHTML}
 </div>
-${totalGroup ? `<div class="group-box">
-<span class="group-label">👥 اجمالي المجموعة</span>
-<span class="group-val" id="summaryGroup">${totalGroup}</span>
-</div>` : ''}
+<div class="total-card">
+<span class="total-label">💎 الإجمالي للشخص</span>
+<span class="total-val" id="totalPersonEl">${totalPerson.toLocaleString()} ريال</span>
 </div>
-</div>
+<div class="group-card">
+<span class="group-label">👥 إجمالي المجموعة (${persons} أشخاص)</span>
+<span class="group-val" id="totalGroupEl">${(totalPerson*persons).toLocaleString()} ريال</span>
 </div>`;
 
-// ===== POLICY PAGE =====
-const policyHTML = `
-<div class="pdf-page">
-<div class="policy-page">
-<div class="policy-header">سياسة عامة</div>
-<div class="policy-content">
-<div class="policy-item"><span class="policy-dot">•</span><span>الفنادق والمنتجعات للغرفة الواحدة شاملة وجبة الإفطار لشخصين + طفل تحت 5 سنوات. تسجيل الدخول للفنادق 2:00 ظهراً والتسجيل الخروج الساعة 12:00 ظهراً</span></div>
-<div class="policy-item"><span class="policy-dot">•</span><span>الوزن المسموح به للطيران الداخلي 20 كيلو إلا إذا تم الاتفاق معنا مسبقاً على زيادة</span></div>
-<div class="policy-item"><span class="policy-dot">•</span><span>يحتسب لكل شخص حقيبة سفر واحدة بوزن 20 كجم بالإضافة إلى حقيبة يد. وفي حال تجاوز عدد الحقائب هذا الحد، يتم توفير سيارة أكبر برسوم إضافية</span></div>
-<div class="policy-item"><span class="policy-dot">•</span><span>السيارات المقدمة في هذا البرنامج حديثة، نظيفة ومكيفة، وتتناسب مع عدد الأفراد المذكورين</span></div>
-<div class="policy-item"><span class="policy-dot">•</span><span>يحق للعميل اختيار المناطق السياحية بشرط أن تكون بحدود المنطقة المقيم بها، ولا تشمل تذاكر دخول الأماكن السياحية</span></div>
-<div class="policy-item"><span class="policy-dot">•</span><span>تأكد أن موظفين الفنادق والسائقين وجميع الطاقم يعملون على راحتك. فليكن صدرك واسع لهم وابتسامتك بلسم لهم</span></div>
-<div class="policy-item"><span class="policy-dot">•</span><span>تاكد من إظهار الاحترام لعادات وأديان البلد ومعاملات الناس كما تحب أن تعامل، دون استصغار أو إهانة لأحد</span></div>
-</div>
-</div>
-</div>`;
-
-document.getElementById('quoteDoc').innerHTML = coverHTML + hotelsPageHTML + programHTML + summaryPageHTML + policyHTML;
-document.getElementById('quoteDoc').classList.add('show');
+document.getElementById('reviewPanel').innerHTML = html;
 document.getElementById('emptyOutput').style.display = 'none';
 document.getElementById('exportBtns').style.display = 'flex';
 }
 
-function updatePrice() {
-if (!currentData) return;
-const profit = parseInt(document.getElementById('profitInput').value) || 0;
-const base = parseInt((currentData.totalPerPerson || '').replace(/[^\d]/g, '')) || 0;
-const newPrice = base + profit;
-const personsMatch = (currentData.totalGroup || '').match(/لـ (\d+) اشخاص/);
-const persons = parseInt(personsMatch?.[1]) || 1;
-const newGroup = newPrice * persons;
-const el1 = document.getElementById('coverPrice');
-const el2 = document.getElementById('summaryTotal');
-const el3 = document.getElementById('summaryGroup');
-if (el1) el1.textContent = newPrice.toLocaleString() + ' ريال';
-if (el2) el2.textContent = newPrice.toLocaleString() + ' ريال';
-if (el3) el3.textContent = newGroup.toLocaleString() + ' ريال لـ ' + persons + ' اشخاص';
+function updateProfit() {
+if (!parsedData) return;
+const profit = parseInt(document.getElementById('profitInput').value)||0;
+const newTotal = basePrice + profit;
+const el1=document.getElementById('totalPersonEl');
+const el2=document.getElementById('totalGroupEl');
+if(el1) el1.textContent = newTotal.toLocaleString()+' ريال';
+if(el2) el2.textContent = (newTotal*parsedData.persons).toLocaleString()+' ريال';
 }
 
-function exportPDF(withLogo) {
-const logo = document.getElementById('logoBox');
-const price = document.getElementById('priceBox');
-const btns = document.getElementById('exportBtns');
-btns.style.display = 'none';
-if (!withLogo) {
-if (logo) logo.style.display = 'none';
-if (price) price.style.display = 'none';
+function buildPDF(withLogo) {
+if (!parsedData) return;
+const profit=parseInt(document.getElementById('profitInput').value)||0;
+const finalPrice=basePrice+profit;
+const {dest,meta,dateFrom,dateTo,client,clientCode,hotelsLines,flightsLines,transfersLines,toursLines,simText,persons}=parsedData;
+
+let servicesList='';
+hotelsLines.forEach(l=>{ const p=l.split('|').map(x=>x.trim()); servicesList+=`<li><div class="pdf-service-icon">🏨</div><span>${p[0]||''} - ${p[1]||''} | ${p[5]||''} | ${p[6]||''}</span></li>`; });
+flightsLines.forEach(l=>{ const p=l.split('|').map(x=>x.trim()); servicesList+=`<li><div class="pdf-service-icon">✈️</div><span>طيران ${p[0]||''} (${p[1]||''})</span></li>`; });
+const pickups=transfersLines.filter(l=>l.toLowerCase().includes('pickup')).length;
+const drops=transfersLines.filter(l=>l.toLowerCase().includes('drop')).length;
+if(pickups>0) servicesList+=`<li><div class="pdf-service-icon">🚗</div><span>استقبال من المطار (${pickups})</span></li>`;
+if(drops>0) servicesList+=`<li><div class="pdf-service-icon">🚖</div><span>توديع للمطار (${drops})</span></li>`;
+toursLines.forEach(l=>{ const p=l.split('|').map(x=>x.trim()); servicesList+=`<li><div class="pdf-service-icon">🗺️</div><span>${p[1]||''} - ${p[2]||''}</span></li>`; });
+if(simText) servicesList+=`<li><div class="pdf-service-icon">📶</div><span>شريحة انترنت</span></li>`;
+
+const logoHTML=withLogo?`<div class="pdf-logo-box"><div><div class="pdf-logo-ar">مجموعة العز الدولية للسفر والسياحة</div><div class="pdf-logo-en">Alezz International Group Travel & Tours</div></div><div class="pdf-logo-badge">A.I. ✈ T.T</div></div>`:'';
+const priceHTML=withLogo?`<div class="pdf-price-box"><div class="pdf-price-label">السعر الإجمالي للشخص</div><div class="pdf-price-val">${finalPrice.toLocaleString()} ريال</div></div>`:'';
+
+document.getElementById('pdfContent').innerHTML=`
+<div class="pdf-cover">
+${logoHTML}
+<div class="pdf-title">رحلة<br>سياحية</div>
+<div class="pdf-dates">الفترة من ${dateFrom}<br>حتى ${dateTo}</div>
+<div class="pdf-field"><span class="pdf-field-label">طلب :</span><span class="pdf-field-value">${client}</span></div>
+<div class="pdf-field"><span class="pdf-field-label">كود العميل :</span><span class="pdf-field-value">${clientCode}</span></div>
+<div class="pdf-days-box"><div class="pdf-days-label">توزيع الأيام</div><div style="color:#fff;font-size:13px;line-height:2;">${meta.split('|').map(p=>`• ${p.trim()}`).join('<br>')}</div></div>
+${priceHTML}
+</div>
+<div class="pdf-page-break"></div>
+<div class="pdf-section">
+<div class="pdf-section-title">🌟 الخدمات المشمولة في البرنامج</div>
+<ul class="pdf-services-list">${servicesList}</ul>
+</div>
+<div class="pdf-page-break"></div>
+<div class="pdf-section">
+<div class="pdf-section-title">📋 السياسة العامة</div>
+<div class="pdf-policy">الفنادق والمنتجعات للغرفة الواحدة شاملة وجبة الإفطار لشخصين + طفل تحت 5 سنوات. تسجيل الدخول 2:00 ظهراً والخروج 12:00 ظهراً</div>
+<div class="pdf-policy">الوزن المسموح به للطيران الداخلي 20 كيلو إلا إذا تم الاتفاق معنا مسبقاً على زيادة</div>
+<div class="pdf-policy">يحتسب لكل شخص حقيبة سفر واحدة بوزن 20 كجم بالإضافة إلى حقيبة يد. وفي حال تجاوز الحد يتم توفير سيارة أكبر برسوم إضافية</div>
+<div class="pdf-policy">السيارات المقدمة حديثة، نظيفة ومكيفة، وتتناسب مع عدد الأفراد المذكورين</div>
+<div class="pdf-policy">يحق للعميل اختيار المناطق السياحية بشرط أن تكون بحدود المنطقة المقيم بها، ولا تشمل تذاكر دخول الأماكن السياحية</div>
+<div class="pdf-policy">تأكد من إظهار الاحترام لعادات وأديان البلد ومعاملات الناس كما تحب أن تعامل، دون استصغار أو إهانة لأحد</div>
+</div>
+<div class="pdf-footer">شامل الانتقالات ذهاباً وإياباً • مجموعة العز الدولية للسفر والسياحة</div>`;
 }
-setTimeout(() => {
-window.print();
-setTimeout(() => {
-if (logo) logo.style.display = '';
-if (price) price.style.display = '';
-btns.style.display = 'flex';
-}, 1500);
-}, 300);
-}
+
+function exportPDF(withLogo) { buildPDF(withLogo); setTimeout(()=>{ window.print(); }, 300); }
 
 function addMessage(type, text) {
-const msgs = document.getElementById('messages');
-const div = document.createElement('div');
-div.className = `msg ${type}`;
-const now = new Date().toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' });
-div.innerHTML = `
-<div class="msg-avatar">${type === 'sys' ? '🗺' : 'م'}</div>
-<div>
-<div class="msg-bubble">${text.replace(/\n/g, '<br>')}</div>
-<div class="msg-time">${now}</div>
-</div>`;
+const msgs=document.getElementById('messages');
+const div=document.createElement('div');
+div.className=`msg ${type}`;
+const now=new Date().toLocaleTimeString('ar',{hour:'2-digit',minute:'2-digit'});
+div.innerHTML=`<div class="msg-avatar">${type==='sys'?'🗺':'م'}</div><div><div class="msg-bubble">${text.replace(/\n/g,'<br>')}</div><div class="msg-time">${now}</div></div>`;
 msgs.appendChild(div);
-msgs.scrollTop = msgs.scrollHeight;
+msgs.scrollTop=msgs.scrollHeight;
 }
 
 function addTyping() {
-const msgs = document.getElementById('messages');
-const div = document.createElement('div');
-div.className = 'msg sys';
-const id = 'typing_' + Date.now();
-div.id = id;
-div.innerHTML = `<div class="msg-avatar">🗺</div><div><div class="msg-bubble"><div class="typing"><span></span><span></span><span></span></div></div></div>`;
+const msgs=document.getElementById('messages');
+const div=document.createElement('div');
+div.className='msg sys';
+const id='typing_'+Date.now();
+div.id=id;
+div.innerHTML=`<div class="msg-avatar">🗺</div><div><div class="msg-bubble"><div class="typing"><span></span><span></span><span></span></div></div></div>`;
 msgs.appendChild(div);
-msgs.scrollTop = msgs.scrollHeight;
+msgs.scrollTop=msgs.scrollHeight;
 return id;
 }
 
-function removeTyping(id) {
-const el = document.getElementById(id);
-if (el) el.remove();
-}
-
-function handleKey(e) {
-if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-}
-
-function autoResize(el) {
-el.style.height = 'auto';
-el.style.height = Math.min(el.scrollHeight, 100) + 'px';
-}
+function removeTyping(id) { const el=document.getElementById(id); if(el) el.remove(); }
+function handleKey(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} }
+function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,100)+'px'; }
 </script>
 </body>
 </html>
