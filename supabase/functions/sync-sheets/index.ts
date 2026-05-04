@@ -132,9 +132,10 @@ function extractHotels(rows: string[][], destination: string): object[] {
 
     if (!hotelName || !city) continue;
 
-    // تجاهل صفوف الرأس وصفوف المعلومات
+    // تجاهل صفوف الرأس فقط (الاسم = كلمة header بالضبط، لا مجرد يحتوي عليها)
+    // هذا يسمح بأسماء فنادق مثل "Hotel Le Mirage" أو "Park Hotel"
     const nameLower = hotelName.toLowerCase();
-    if (HOTEL_HEADER_KEYWORDS.some(k => nameLower.includes(k))) continue;
+    if (HOTEL_HEADER_KEYWORDS.some(k => nameLower === k)) continue;
     if (/^\d+$/.test(hotelName)) continue; // رقم تسلسلي فقط
 
     const stars = parseInt(starsRaw);
