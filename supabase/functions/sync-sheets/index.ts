@@ -312,6 +312,65 @@ function extractTours(rows: string[][], destination: string, debug?: { rejects: 
   return tours;
 }
 
+// ── استخراج الطيران من صفوف التبويبة ──────────────────────────────────────
+//
+// نبحث عن header يحتوي عمودين متجاورين بعنوان "from"/"to" (مع كلمة flight)
+// + عمود قريب لسعر الشخص (price per pax / price/pax / per pax).
+// السعر دائماً للشخص الواحد ويُضرب في عدد الأشخاص لاحقاً في Tourism-AI.
+function extractFlights(rows: string[][], destination: string, debug?: { rejects: string[] }): object[] {
+  const flights: object[] = [];
+
+  // Find header row
+  let header: { fromCol: number; toCol: number; priceCol: number } | null = null;
+  for (let i = 0; i < rows.length; i++) {
+    const cells = rows[i].map(x => (x || "").trim().toLowerCase());
+    let fromCol = -1, toCol = -1, priceCol = -1;
+    for (let j = 0; j < cells.length; j++) {
+      const c = cells[j];
+      if (!c) continue;
+      if (fromCol === -1 && /^flight\s*from$|^from\s*flight$|^من$/i.test(c)) fromCol = j;
+      else if (toCol === -1 && /^flight\s*to$|^to\s*flight$|^الى$|^إلى$/i.test(c)) toCol = j;
+      else if (priceCol === -1 && /price.*pax|pax.*price|per\s*pax|سعر.*شخص|شخص.*سعر/i.test(c)) priceCol = j;
+    }
+    if (fromCol !== -1 && toCol !== -1 && priceCol !== -1) {
+      header = { fromCol, toCol, priceCol };
+      debug?.rejects.push(`[${destination}] flight header at row ${i}: from=col${fromCol}, to=col${toCol}, price=col${priceCol}`);
+      break;
+    }
+  }
+  if (!header) {
+    debug?.rejects.push(`[${destination}] no flight header found`);
+    return flights;
+  }
+
+  const seen = new Set<string>();
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const from = (row[header.fromCol] || "").trim();
+    const to   = (row[header.toCol]   || "").trim();
+    const priceStr = (row[header.priceCol] || "").trim();
+    if (!from || !to || !priceStr) continue;
+    if (/^flight/i.test(from) || /^flight/i.test(to)) continue; // skip header repeats
+
+    const price = parsePrice(priceStr);
+    if (isNaN(price) || price <= 0) continue;
+
+    const key = `${from}|${to}`.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    flights.push({
+      from_city:      from,
+      to_city:        to,
+      price_per_pax:  price,
+      currency:       "SAR",
+      destination,
+      last_synced_at: new Date().toISOString(),
+    });
+  }
+  return flights;
+}
+
 // ── Handler ────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
@@ -340,21 +399,40 @@ Deno.serve(async (req) => {
   const debugInfo = new URL(req.url).searchParams.get("debug") === "1"
     ? { rejects: [] as string[] }
     : undefined;
+  const dumpTab = new URL(req.url).searchParams.get("dump");
 
   try {
     const serviceAccount = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
     const spreadsheetId  = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
     const token          = await getGoogleAccessToken(serviceAccount);
 
-    let totalHotels = 0;
-    let totalTours  = 0;
+    let totalHotels  = 0;
+    let totalTours   = 0;
+    let totalFlights = 0;
 
     for (const tab of DESTINATION_TABS) {
       try {
-        const rows = await readSheetRange(token, spreadsheetId, `${tab}!A1:V500`);
+        const rows = await readSheetRange(token, spreadsheetId, `${tab}!A1:Z500`);
 
-        const hotels = extractHotels(rows, tab, debugInfo);
-        const tours  = extractTours(rows, tab, debugInfo);
+        // Optional dump for diagnostic
+        if (dumpTab && tab.toLowerCase() === dumpTab.toLowerCase() && debugInfo) {
+          rows.forEach((r, i) => {
+            const nonEmpty = r.some(c => (c || '').trim());
+            if (nonEmpty) debugInfo.rejects.push(`[${tab} DUMP row ${i}] ${JSON.stringify(r.slice(0, 26))}`);
+          });
+        }
+
+        const hotels  = extractHotels(rows, tab, debugInfo);
+        const tours   = extractTours(rows, tab, debugInfo);
+        const flights = extractFlights(rows, tab, debugInfo);
+
+        if (flights.length > 0) {
+          const dedup = Array.from(
+            new Map(flights.map((f: any) => [`${f.from_city}|${f.to_city}`, f])).values()
+          );
+          const { error } = await supabase.from("flights").upsert(dedup, { onConflict: "from_city,to_city,destination" });
+          if (error) throw new Error(`طيران: ${error.message}`);
+        }
 
         if (hotels.length > 0) {
           // إزالة التكرارات داخل نفس الـ batch (Postgres يرفض ON CONFLICT لنفس المفتاح مرّتين)
@@ -378,12 +456,13 @@ Deno.serve(async (req) => {
           if (error) throw new Error(`جولات: ${error.message}`);
         }
 
-        details[tab] = { hotels: hotels.length, tours: tours.length };
-        totalHotels += hotels.length;
-        totalTours  += tours.length;
+        details[tab] = { hotels: hotels.length, tours: tours.length, flights: flights.length };
+        totalHotels  += hotels.length;
+        totalTours   += tours.length;
+        totalFlights += flights.length;
 
       } catch (tabError) {
-        details[tab] = { hotels: 0, tours: 0, error: tabError.message };
+        details[tab] = { hotels: 0, tours: 0, flights: 0, error: tabError.message };
       }
     }
 
@@ -397,7 +476,7 @@ Deno.serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ success: true, hotels: totalHotels, tours: totalTours, details, duration_ms: duration, debug: debugInfo?.rejects }),
+      JSON.stringify({ success: true, hotels: totalHotels, tours: totalTours, flights: totalFlights, details, duration_ms: duration, debug: debugInfo?.rejects }),
       { headers: CORS_HEADERS }
     );
 

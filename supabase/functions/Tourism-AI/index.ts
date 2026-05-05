@@ -18,9 +18,10 @@ const CORS_HEADERS = {
 
 // ── بناء سياق البيانات من قاعدة البيانات ──────────────────────────────────
 async function buildDataContext(supabase: ReturnType<typeof createClient>): Promise<string> {
-  const [{ data: hotels }, { data: tours }] = await Promise.all([
+  const [{ data: hotels }, { data: tours }, { data: flights }] = await Promise.all([
     supabase.from("hotels").select("*").order("stars", { ascending: false }).order("price_per_night"),
     supabase.from("tours").select("*").order("price"),
+    supabase.from("flights").select("*"),
   ]);
 
   if ((!hotels || hotels.length === 0) && (!tours || tours.length === 0)) {
@@ -44,6 +45,18 @@ async function buildDataContext(supabase: ReturnType<typeof createClient>): Prom
         const breakfast = h.includes_breakfast ? " | إفطار مشمول" : "";
         const occupancy = h.occupancy ? ` | Occupancy: ${h.occupancy}` : "";
         context += `- ${h.name} | ${h.stars}★ | ${h.location} | ${h.price_per_night} ${h.currency}/ليلة | ${h.room_type}${breakfast}${occupancy}\n`;
+      }
+    }
+  }
+
+  if (flights && flights.length > 0) {
+    const byDest: Record<string, typeof flights> = {};
+    for (const f of flights) (byDest[f.destination] ||= []).push(f);
+    context += "\n✈️ الطيران (السعر للشخص الواحد — يُضرب في عدد الأشخاص):\n";
+    for (const [dest, list] of Object.entries(byDest)) {
+      context += `── ${dest} ──\n`;
+      for (const f of list) {
+        context += `- ${f.from_city} → ${f.to_city} | ${f.price_per_pax} ${f.currency}/شخص\n`;
       }
     }
   }
@@ -105,6 +118,18 @@ function buildSystemPrompt(dataContext: string, frontendFormat: string): string 
   • إذا كان الـ label فيه شهر (مثل "may month", "june month"): اختر الـ variant الذي يطابق شهر السفر المطلوب.
     - مثال: تاريخ يونيو 2026 → اختر "june month".
   • إذا فيه أكثر من نوع variant (شهر + pax)، طبّق الاثنين معاً.
+
+✈️ قاعدة الطيران (مهمّة جداً):
+عند بناء **برنامج كامل**، أضِف الطيران تلقائياً ضمن قسم FLIGHTS بدون أن يطلب الموظف:
+  1. **رحلة دولية ذهاب**: من بلد العميل (السعودية افتراضياً، ابدأ من Riyadh أو Jeddah إذا غير محدّد) → أوّل مدينة في الوجهة.
+  2. **رحلات داخلية بين المدن** المُختارة في البرنامج (مثلاً Bali → Jakarta لو البرنامج يشمل المدينتين).
+  3. **رحلة دولية عودة**: من آخر مدينة في الوجهة → بلد العميل.
+  4. السعر في "الطيران" المتاح في البيانات هو **للشخص الواحد**. الإجمالي = السعر/شخص × عدد الأشخاص (شامل الأطفال إذا ذُكر عمرهم ≥ 2).
+  5. صياغة سطر FLIGHTS: <مدينة من> - <مدينة الى> | <ذهاب/عودة/داخلي> | <السعر/شخص> ريال/شخص | <عدد الأشخاص> أشخاص | <الإجمالي> ريال
+  6. إذا الموظف طلب لاحقاً **إلغاء وجهة طيران معيّنة** (مثلاً: "العميل حاجز طيرانه بنفسه" أو "ألغِ الذهاب"): احذف ذلك السطر فقط من قسم FLIGHTS وأعد الحساب.
+  7. إذا لم تتوفّر بيانات طيران مطابقة لمسار معيّن في الجدول: استخدم سطر تنبيه:
+     <مدينة من> - <مدينة الى> | <ذهاب/عودة/داخلي> | يحدّد لاحقاً | <عدد الأشخاص> أشخاص | -
+     ولا تخترع سعراً.
 
 💵 قاعدة الحساب الذهبية:
 أيّ سعر يظهر في الشيت هو **الإجمالي المناسب تماماً للعدد/الإشغال المذكور بجانبه**. القاعدة العامّة: لا تضرب في عدد الأشخاص.
