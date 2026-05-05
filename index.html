@@ -117,10 +117,10 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .pdf-cover::after { content:’’; position:absolute; bottom:-80px; right:-80px; width:300px; height:300px; background:rgba(255,255,255,0.04); border-radius:50%; }
 .pdf-logo-box { background:#fff; border-radius:14px; padding:14px 20px; display:inline-flex; align-items:center; justify-content:center; margin-bottom:18px; box-shadow:0 6px 20px rgba(0,0,0,0.18); }
 .pdf-logo-img { max-width:240px; max-height:120px; height:auto; width:auto; display:block; }
-.pdf-cover-airplane { position:absolute; top:24px; left:24px; width:310px; opacity:0.95; pointer-events:none; z-index:2; }
+.pdf-cover-airplane { position:absolute; top:24px; left:24px; width:380px; opacity:0.97; pointer-events:none; z-index:2; }
 .pdf-cover-suitcase { display:block; margin:14px auto 0; max-width:300px; max-height:240px; width:auto; height:auto; }
 .pdf-disclaimer { background:rgba(255,235,59,0.96); color:#5d3a00; padding:14px 22px; border-radius:12px; margin-top:18px; text-align:center; font-size:18px; font-weight:900; line-height:1.45; box-shadow:0 4px 16px rgba(0,0,0,0.2); border:2px solid #ffc107; }
-.pdf-filler-img { display:block; margin:24px auto; max-width:420px; max-height:340px; width:auto; height:auto; page-break-inside:avoid; }
+.pdf-filler-img { display:block; margin:24px auto; max-width:600px; max-height:600px; width:90%; height:auto; page-break-inside:avoid; }
 .pdf-title { font-size:36px; font-weight:900; line-height:1.1; margin:8px 0 4px; text-shadow:0 3px 18px rgba(0,0,0,0.3); letter-spacing:-1px; }
 .pdf-dest-name { font-size:46px; font-weight:900; line-height:1.15; margin:0 0 8px; text-shadow:0 4px 24px rgba(0,0,0,0.35); letter-spacing:-1.5px; }
 .pdf-cities { font-size:14px; color:rgba(255,255,255,0.8); margin-bottom:16px; font-weight:700; }
@@ -524,7 +524,7 @@ if (currentDay !== 0) itineraryHTML += '</div></div>';
 
 document.getElementById('pdfContent').innerHTML=`
 <div class="pdf-cover">
-<img class="pdf-cover-airplane" src="${AIRPLANE_IMG}" alt=""/>
+<img class="pdf-cover-airplane" src="${FILLER_IMG}" alt=""/>
 ${logoHTML}
 <div class="pdf-title">رحلة سياحية</div>
 <div class="pdf-dest-name">${dest}</div>
@@ -581,7 +581,7 @@ ${itineraryHTML}
 <div class="pdf-policy">السيارات المقدمة حديثة، نظيفة ومكيفة، وتتناسب مع عدد الأفراد المذكورين</div>
 <div class="pdf-policy">يحق للعميل اختيار المناطق السياحية بشرط أن تكون بحدود المنطقة المقيم بها، ولا تشمل تذاكر دخول الأماكن السياحية</div>
 <div class="pdf-policy">تأكد من إظهار الاحترام لعادات وأديان البلد ومعاملات الناس كما تحب أن تعامل، دون استصغار أو إهانة لأحد</div>
-<img class="pdf-filler-img" src="${FILLER_IMG}" alt=""/>
+<img class="pdf-filler-img" src="${AIRPLANE_IMG}" alt=""/>
 </div>`;
 }
 
