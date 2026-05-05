@@ -232,7 +232,10 @@ interface TourHeader {
 }
 
 function findTourHeader(rows: string[][]): TourHeader | null {
-  for (let i = 0; i < rows.length; i++) {
+  // ابحث في أوّل 5 صفوف. اختر الصف صاحب أكبر عدد أعمدة أسعار
+  // (يفضّل صفوف pax tiers مثل "1-3 Pax" و"4-9 Pax" على عناوين عامّة مثل "Tour Fees").
+  const candidates: { i: number; priceCols: { col: number; label: string }[]; currencyCol?: number }[] = [];
+  for (let i = 0; i < Math.min(5, rows.length); i++) {
     const cells = rows[i].map(x => (x || "").trim());
     const priceCols: { col: number; label: string }[] = [];
     let currencyCol: number | undefined;
@@ -245,12 +248,31 @@ function findTourHeader(rows: string[][]): TourHeader | null {
         priceCols.push({ col: j, label: cell });
       }
     }
-    // نحتاج عمود سعر واحد على الأقل لاعتبار هذا header الجولات
-    if (priceCols.length >= 1) {
-      // عمود الاسم: العمود الأيسر مباشرةً قبل أوّل عمود سعر
+    if (priceCols.length >= 1) candidates.push({ i, priceCols, currencyCol });
+  }
+  // رتّب: الأكثر أعمدة أسعار أولاً
+  candidates.sort((a, b) => b.priceCols.length - a.priceCols.length);
+
+  for (const cand of candidates) {
+    const { i, priceCols, currencyCol } = cand;
+    {
       const firstPriceCol = priceCols[0].col;
-      const nameCol = firstPriceCol > 0 ? firstPriceCol - 1 : 0;
-      return { rowIdx: i, nameCol, priceCols, currencyCol };
+      // عمود الاسم: لكل عمود < firstPriceCol، احسب كم صف يحوي نصّاً غير رقمي.
+      // العمود الأكثر "نصّاً عربي/أحرف" هو عمود الاسم.
+      // (يتجاوز عناوين زائدة مثل "per pax" وأعمدة الأسعار الإضافية مثل "100").
+      const sample = Math.min(rows.length - i - 1, 25);
+      let bestCol = 0, bestScore = -1;
+      for (let c = 0; c < firstPriceCol; c++) {
+        let textCount = 0;
+        for (let r = i + 1; r < i + 1 + sample; r++) {
+          const v = (rows[r]?.[c] || "").trim();
+          if (!v) continue;
+          // نصّ غير رقمي = يحوي حرفاً عربياً أو لاتينياً (وليس رقماً فقط)
+          if (/[؀-ۿa-zA-Z]/.test(v)) textCount++;
+        }
+        if (textCount > bestScore) { bestScore = textCount; bestCol = c; }
+      }
+      return { rowIdx: i, nameCol: bestCol, priceCols, currencyCol };
     }
   }
   return null;
