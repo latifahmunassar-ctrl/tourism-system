@@ -320,21 +320,40 @@ function extractTours(rows: string[][], destination: string, debug?: { rejects: 
 function extractFlights(rows: string[][], destination: string, debug?: { rejects: string[] }): object[] {
   const flights: object[] = [];
 
-  // Find header row
+  // Find a row containing flight column labels.
+  // قد تظهر "From"/"To" مرّتين في نفس الصف (مرّة لتواريخ الفنادق ومرّة للطيران)،
+  // لذلك نجمع كل المرشّحين ثم نختار الثلاثيّة المتقاربة بالأعمدة.
+  const FROM_RE  = /^(flight\s*)?from$|^من$/i;
+  const TO_RE    = /^(flight\s*)?to$|^الى$|^إلى$/i;
+  const PRICE_RE = /(^|\s)(price\s*)?per\s*pax|^pax\s*price$|سعر\s*الشخص|سعر\s*للشخص/i;
+
   let header: { fromCol: number; toCol: number; priceCol: number } | null = null;
   for (let i = 0; i < rows.length; i++) {
     const cells = rows[i].map(x => (x || "").trim().toLowerCase());
-    let fromCol = -1, toCol = -1, priceCol = -1;
+    const froms: number[]  = [];
+    const tos: number[]    = [];
+    const prices: number[] = [];
     for (let j = 0; j < cells.length; j++) {
-      const c = cells[j];
-      if (!c) continue;
-      if (fromCol === -1 && /^flight\s*from$|^from\s*flight$|^من$/i.test(c)) fromCol = j;
-      else if (toCol === -1 && /^flight\s*to$|^to\s*flight$|^الى$|^إلى$/i.test(c)) toCol = j;
-      else if (priceCol === -1 && /price.*pax|pax.*price|per\s*pax|سعر.*شخص|شخص.*سعر/i.test(c)) priceCol = j;
+      if (!cells[j]) continue;
+      if (FROM_RE.test(cells[j]))  froms.push(j);
+      if (TO_RE.test(cells[j]))    tos.push(j);
+      if (PRICE_RE.test(cells[j])) prices.push(j);
     }
-    if (fromCol !== -1 && toCol !== -1 && priceCol !== -1) {
-      header = { fromCol, toCol, priceCol };
-      debug?.rejects.push(`[${destination}] flight header at row ${i}: from=col${fromCol}, to=col${toCol}, price=col${priceCol}`);
+    // اختر ثلاثيّة (from, to, price) كلّها متقاربة (within 4 cols)
+    for (const f of froms) {
+      for (const t of tos) {
+        if (t <= f || t - f > 2) continue;
+        for (const p of prices) {
+          if (p <= t || p - t > 3) continue;
+          header = { fromCol: f, toCol: t, priceCol: p };
+          break;
+        }
+        if (header) break;
+      }
+      if (header) break;
+    }
+    if (header) {
+      debug?.rejects.push(`[${destination}] flight header at row ${i}: from=col${header.fromCol}, to=col${header.toCol}, price=col${header.priceCol}`);
       break;
     }
   }
