@@ -6,7 +6,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>نظام البرامج السياحية</title>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 :root {
@@ -113,15 +112,15 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 
 /* PDF */
 #pdfContent { display:none; }
-.pdf-cover { background:linear-gradient(150deg,#1565d8 0%,#0d47a1 40%,#0a2f6e 100%); color:#fff; padding:32px 36px; min-height:100vh; font-family:‘Tajawal’,sans-serif; position:relative; overflow:hidden; }
+.pdf-cover { background:linear-gradient(150deg,#1565d8 0%,#0d47a1 40%,#0a2f6e 100%); color:#fff; padding:28px 32px; height:297mm; box-sizing:border-box; font-family:‘Tajawal’,sans-serif; position:relative; overflow:hidden; page-break-after:always; }
 .pdf-cover::before { content:’’; position:absolute; top:-100px; left:-100px; width:400px; height:400px; background:rgba(255,255,255,0.04); border-radius:50%; }
 .pdf-cover::after { content:’’; position:absolute; bottom:-80px; right:-80px; width:300px; height:300px; background:rgba(255,255,255,0.04); border-radius:50%; }
 .pdf-logo-box { background:#fff; border-radius:14px; padding:14px 20px; display:inline-flex; align-items:center; justify-content:center; margin-bottom:18px; box-shadow:0 6px 20px rgba(0,0,0,0.18); }
 .pdf-logo-img { max-width:240px; max-height:120px; height:auto; width:auto; display:block; }
 .pdf-cover-airplane { position:absolute; top:24px; left:24px; width:310px; opacity:0.95; pointer-events:none; z-index:2; }
-.pdf-cover-suitcase { display:block; margin:18px auto 0; max-width:380px; width:85%; height:auto; }
+.pdf-cover-suitcase { display:block; margin:14px auto 0; max-width:300px; max-height:240px; width:auto; height:auto; }
 .pdf-disclaimer { background:rgba(255,235,59,0.96); color:#5d3a00; padding:14px 22px; border-radius:12px; margin-top:18px; text-align:center; font-size:18px; font-weight:900; line-height:1.45; box-shadow:0 4px 16px rgba(0,0,0,0.2); border:2px solid #ffc107; }
-.pdf-filler-img { display:block; margin:30px auto; max-width:560px; width:90%; height:auto; }
+.pdf-filler-img { display:block; margin:24px auto; max-width:420px; max-height:340px; width:auto; height:auto; page-break-inside:avoid; }
 .pdf-title { font-size:36px; font-weight:900; line-height:1.1; margin:8px 0 4px; text-shadow:0 3px 18px rgba(0,0,0,0.3); letter-spacing:-1px; }
 .pdf-dest-name { font-size:46px; font-weight:900; line-height:1.15; margin:0 0 8px; text-shadow:0 4px 24px rgba(0,0,0,0.35); letter-spacing:-1.5px; }
 .pdf-cities { font-size:14px; color:rgba(255,255,255,0.8); margin-bottom:16px; font-weight:700; }
@@ -332,7 +331,7 @@ const clientCode = getLine(raw, 'CLIENT_CODE');
 const totalPersonStr = getLine(raw, 'TOTAL_PER_PERSON');
 const totalGroupLine = getLine(raw, 'TOTAL_GROUP');
 const totalPerson = parseInt(totalPersonStr.replace(/[^\d]/g,'')) || 0;
-const personsMatch = totalGroupLine.match(/(\d+)\s*اشخاص/);
+const personsMatch = totalGroupLine.match(/(\d+)\s*[أا]شخاص/);
 const persons = parseInt(personsMatch?.[1]) || 2;
 // إجمالي المجموعة = الرقم الأوّل في سطر TOTAL_GROUP (قبل الـ |)، أو احسبه إذا غير موجود
 const totalGroup = parseInt((totalGroupLine.split('|')[0]||'').replace(/[^\d]/g,'')) || (totalPerson * persons);
@@ -586,39 +585,7 @@ ${itineraryHTML}
 </div>`;
 }
 
-function exportPDF(withLogo) {
-buildPDF(withLogo);
-setTimeout(() => {
-  const el = document.getElementById('pdfContent');
-  // نُظهر المحتوى مؤقّتاً ليُعالجه html2pdf، ثم نخفيه
-  const prevDisplay = el.style.display;
-  el.style.display = 'block';
-  el.style.position = 'fixed';
-  el.style.top = '0';
-  el.style.left = '0';
-  el.style.zIndex = '-9999';
-  el.style.width = '210mm';
-  const dest = (parsedData?.dest || 'قائمة-عرض-سعر').replace(/[^؀-ۿa-zA-Z0-9\-_]/g, '-');
-  const filename = `عرض-سعر-${dest}-${new Date().toISOString().slice(0,10)}.pdf`;
-  html2pdf().set({
-    margin: 0,
-    filename,
-    image: { type: 'jpeg', quality: 0.96 },
-    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', letterRendering: true },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
-    pagebreak: { mode: ['css', 'legacy'], before: '.pdf-page-break' }
-  }).from(el).save().then(() => {
-    el.style.display = prevDisplay;
-    el.style.position = '';
-    el.style.zIndex = '';
-    el.style.width = '';
-  }).catch(err => {
-    console.error('PDF generation failed:', err);
-    el.style.display = prevDisplay;
-    alert('حدث خطأ في توليد الـ PDF. حاول مرة ثانية.');
-  });
-}, 200);
-}
+function exportPDF(withLogo) { buildPDF(withLogo); setTimeout(()=>{ window.print(); }, 300); }
 
 function addMessage(type, text) {
 const msgs=document.getElementById('messages');
