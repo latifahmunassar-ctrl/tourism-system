@@ -42,9 +42,9 @@ async function buildDataContext(supabase: ReturnType<typeof createClient>): Prom
     for (const [dest, list] of Object.entries(byDest)) {
       context += `\n── ${dest} (${list.length} غرفة) ──\n`;
       for (const h of list) {
-        const breakfast = h.includes_breakfast ? " | إفطار مشمول" : "";
+        const meals = h.meals ? ` | ما يشمل: ${h.meals}` : (h.includes_breakfast ? " | إفطار مشمول" : "");
         const occupancy = h.occupancy ? ` | Occupancy: ${h.occupancy}` : "";
-        context += `- ${h.name} | ${h.stars}★ | ${h.location} | ${h.price_per_night} ${h.currency}/ليلة | ${h.room_type}${breakfast}${occupancy}\n`;
+        context += `- ${h.name} | ${h.stars}★ | ${h.location} | ${h.price_per_night} ${h.currency}/ليلة | ${h.room_type}${meals}${occupancy}\n`;
       }
     }
   }
@@ -243,6 +243,17 @@ function buildSystemPrompt(dataContext: string, frontendFormat: string): string 
     - مثال: تذكرة قطار 200 SAR لـ 4 أشخاص → 200×4 = 800.
     - مثال: تذكرة طيران 1500 SAR/شخص لـ 4 أشخاص → 1500×4 = 6000.
   • للعرض "Per Person" في الإجمالي: اقسم إجمالي البرنامج كلّه على عدد الأشخاص.
+
+🍽️ تفاصيل الوجبات في الفنادق (إلزامي):
+لكل فندق في "البيانات المتاحة" حقل "ما يشمل" يصف الوجبات المشمولة:
+  - "إفطار مشمول" / "بدون وجبات" / "إفطار + غداء" / "إفطار + عشاء" / "نصف إقامة" / "جميع الوجبات (شامل)"
+
+عند كتابة سطر الفندق في قسم HOTELS، يجب أن تذكر "ما يشمل" حرفياً كما هو موجود في البيانات في الخانة الأخيرة:
+  مثال 1: Mercure Trabzon | طرابزون | 5 نجوم | Family Room | 700 ريال/ليلة | 3 ليالي | إفطار + غداء
+  مثال 2: Hotel Bosnia | سراييفو | 4 نجوم | Double | 280 ريال/ليلة | 3 ليالي | جميع الوجبات (شامل)
+  مثال 3: Hilton Istanbul | اسطنبول | 5 نجوم | King | 600 ريال/ليلة | 4 ليالي | بدون وجبات
+
+❌ ممنوع كتابة "إفطار مشمول" دائماً افتراضياً. اقرأ "ما يشمل" من البيانات وانقل المحتوى الفعلي بدقّة.
 
 🛏️ مطابقة الغرفة بعمود Occupancy (مهمّة جداً جداً):
 كل غرفة في قائمة الفنادق لها حقل "Occupancy" يصف من تستوعبهم (مثال: "2 adults", "2 adults + 2 child", "4 adults").

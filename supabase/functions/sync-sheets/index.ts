@@ -198,13 +198,27 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
     const price = parsePrice(priceStr);
     if (isNaN(price) || price <= 0) { reject(i, `invalid price '${priceStr}'`, row); continue; }
 
+    // ترجمة النص الإنجليزي لما يشمل الفندق إلى وصف عربي مختصر
+    const mealsRaw = (includeStr || "").trim();
+    const ml = mealsRaw.toLowerCase();
+    let mealsAr = "";
+    if (!mealsRaw) mealsAr = "";
+    else if (/all\s*inclusive|all\s*meals|full\s*board|جميع\s*الوجبات/i.test(mealsRaw)) mealsAr = "جميع الوجبات (شامل)";
+    else if (/half\s*board|نصف\s*إقامة/i.test(mealsRaw)) mealsAr = "إفطار + عشاء (نصف إقامة)";
+    else if (/(break\s*fast|breakfast|إفطار).*(lunch|غداء)|(lunch|غداء).*(break\s*fast|breakfast|إفطار)/i.test(mealsRaw)) mealsAr = "إفطار + غداء";
+    else if (/(break\s*fast|breakfast|إفطار).*(dinner|عشاء)|(dinner|عشاء).*(break\s*fast|breakfast|إفطار)/i.test(mealsRaw)) mealsAr = "إفطار + عشاء";
+    else if (/no\s*break\s*fast|no\s*breakfast|بدون\s*إفطار/i.test(mealsRaw)) mealsAr = "بدون وجبات";
+    else if (/break\s*fast|breakfast|إفطار/i.test(mealsRaw)) mealsAr = "إفطار مشمول";
+    else mealsAr = mealsRaw; // fallback to raw text
+
     hotels.push({
       name:               hotelName,
       stars,
       location:           `${city} - ${destination}`,
       price_per_night:    price,
       room_type:          roomType || "",
-      includes_breakfast: /breakfast|إفطار/i.test(includeStr),
+      includes_breakfast: /break\s*fast|breakfast|إفطار/i.test(mealsRaw) && !/no\s*break\s*fast|no\s*breakfast|بدون\s*إفطار/i.test(mealsRaw),
+      meals:              mealsAr,
       currency:           cleanCurrency(currencyStr || "SAR"),
       occupancy:          occupancyStr,
       last_synced_at:     new Date().toISOString(),
