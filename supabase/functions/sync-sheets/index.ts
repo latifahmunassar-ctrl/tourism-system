@@ -235,7 +235,7 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
 // عمود الاسم هو أيسر عمود سعر (أو يسبقه)، وعمود العملة إن وُجد بعدها.
 // كل صف بيانات يُنتج tour واحدة فيها variants متعدّدة.
 
-const PRICE_TIER_RE = /(\d+\s*-\s*\d+\s*pax|pax\s*\d+(\s*-\s*\d+)?|(jan|feb|mar|apr|may|jun(e)?|jul(y)?|aug|sep|oct|nov|dec)\w*\s*month|month|tour\s*fees?)/i;
+const PRICE_TIER_RE = /(\d+\s*-\s*\d+\s*pax|pax\s*\d+(\s*-\s*\d+)?|per\s*pax|(jan|feb|mar|apr|may|jun(e)?|jul(y)?|aug|sep|oct|nov|dec)\w*\s*month|month|tour\s*fees?)/i;
 const CURRENCY_RE   = /^(currency|عملة|العملة)$/i;
 
 interface TourHeader {
@@ -268,7 +268,14 @@ function findTourHeader(rows: string[][]): TourHeader | null {
   candidates.sort((a, b) => b.priceCols.length - a.priceCols.length);
 
   for (const cand of candidates) {
-    const { i, priceCols, currencyCol } = cand;
+    let { i, priceCols, currencyCol } = cand;
+    // قصّر priceCols على المتقاربة (نطاق 7 أعمدة من أوّل عمود سعر)
+    // لتجنّب التقاط أعمدة أخرى مثل "Price per pax" للطيران (تكون بعد ~20 عمود).
+    const firstPriceCol0 = priceCols[0].col;
+    priceCols = priceCols.filter(p => p.col - firstPriceCol0 <= 7);
+    if (currencyCol !== undefined && (currencyCol - firstPriceCol0 > 10 || currencyCol < firstPriceCol0)) {
+      currencyCol = undefined;
+    }
     {
       const firstPriceCol = priceCols[0].col;
       // عمود الاسم: لكل عمود < firstPriceCol، احسب كم صف يحوي نصّاً غير رقمي.
@@ -505,9 +512,15 @@ Deno.serve(async (req) => {
         }
 
         if (tours.length > 0) {
+          // dedup by (name, type) — last wins
+          const dedupMap = new Map<string, object>();
+          for (const t of tours as Array<{ name: string; type: string }>) {
+            dedupMap.set(`${t.name}|${t.type}`, t);
+          }
+          const dedupedTours = Array.from(dedupMap.values());
           const { error } = await supabase
             .from("tours")
-            .upsert(tours, { onConflict: "name,type" });
+            .upsert(dedupedTours, { onConflict: "name,type" });
           if (error) throw new Error(`جولات: ${error.message}`);
         }
 
