@@ -525,16 +525,21 @@ Deno.serve(async (req) => {
           if (error) throw new Error(`فنادق: ${error.message}`);
         }
 
-        if (tours.length > 0) {
-          // dedup by (name, type) — last wins
-          const dedupMap = new Map<string, object>();
-          for (const t of tours as Array<{ name: string; type: string }>) {
-            dedupMap.set(`${t.name}|${t.type}`, t);
-          }
-          const dedupedTours = Array.from(dedupMap.values());
+        // dedup by (name, type) — last wins
+        const dedupMap = new Map<string, object>();
+        for (const t of tours as Array<{ name: string; type: string }>) {
+          dedupMap.set(`${t.name}|${t.type}`, t);
+        }
+        const dedupedTours = Array.from(dedupMap.values());
+
+        // FULL REPLACE: delete all tours for this destination first,
+        // then insert fresh ones. This way removed/changed rows in
+        // the sheet are reflected (no stale variants).
+        await supabase.from("tours").delete().eq("type", tab);
+        if (dedupedTours.length > 0) {
           const { error } = await supabase
             .from("tours")
-            .upsert(dedupedTours, { onConflict: "name,type" });
+            .insert(dedupedTours);
           if (error) throw new Error(`جولات: ${error.message}`);
         }
 
