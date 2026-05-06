@@ -87,11 +87,13 @@ async function buildDataContext(supabase: ReturnType<typeof createClient>): Prom
       [/باندونج|باندونغ|bandung/i,                       "Bandung"],
       [/بونشاك|puncak/i,                                 "Puncak"],
       // Turkey
-      [/أوزنجول|أوزونغول|uzungol|سلطان مراد|حيدر نبي|هامسيكوي|ايدر|ayder/i, "Trabzon"],
-      [/طرابزون|trabzon/i,                                "Trabzon"],
+      [/ريزا|rize|اشلاي|فرتتنه/i,                        "Rize"],
+      [/أوزنجول|أوزونغول|uzungol|اوزنجول/i,              "Uzungol"],
+      [/ايدر|ayder/i,                                    "Ayder"],
+      [/سلطان مراد|حيدر نبي|هامسيكوي|بيشك دوزو|بوزتبه|طرابزون|trabzon/i, "Trabzon"],
       [/بورصة|bursa/i,                                   "Bursa"],
       [/سابانجا|sapanca|معشوقية|maşukiye/i,              "Sapanca"],
-      [/اسطنبول|istanbul|آيا صوفيا|البازار|تقسيم|taksim/i, "Istanbul"],
+      [/اسطنبول|istanbul|آيا صوفيا|البازار|تقسيم|taksim|اورتاكوي|اميرجان|اولوس بار|الاميرات|الفيالاند|فينيسيا/i, "Istanbul"],
       // Russia
       [/موسكو|moscow/i,                                  "Moscow"],
       [/سانت بطرسبرغ|saint petersburg|st\.?\s*petersburg/i, "St Petersburg"],
