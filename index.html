@@ -354,14 +354,13 @@ TRANSFERS:
 TOURS:
 اليوم [رقم] | [اسم الجولة] | [ثقافية/طبيعية/بحرية] | [السعر] ريال
 
-SIM:[السعر] ريال x [عدد] اشخاص = [الاجمالي] ريال
+SIM:[عدد الشرائح فقط، مثل: 4]
 
 SUMMARY:
 الفنادق | [الاجمالي] ريال
 الطيران | [الاجمالي] ريال
 الانتقالات | [الاجمالي] ريال
 الجولات السياحية | [الاجمالي] ريال
-شريحة الانترنت | [الاجمالي] ريال
 TOTAL_PER_PERSON:[رقم فقط]
 TOTAL_GROUP:[رقم فقط] | [عدد] اشخاص
 
@@ -518,7 +517,8 @@ return `<tr><td>${p[0]||''}</td><td><strong>${p[1]||''}</strong></td><td><span c
 }
 
 let summaryHTML = summaryLines.map(l => { const p=l.split('|').map(x=>x.trim()); return `<div class="summary-row"><span class="summary-label">${p[0]||''}</span><span class="summary-val">${p[1]||''}</span></div>`; }).join('');
-if (simText) summaryHTML += `<div class="summary-row"><span class="summary-label">📶 شريحة الانترنت</span><span class="summary-val">${simText}</span></div>`;
+const simCount = (simText.match(/\d+/) || [''])[0];
+if (simCount) summaryHTML += `<div class="summary-row"><span class="summary-label">📶 شرائح الهاتف</span><span class="summary-val">${simCount} شريحة</span></div>`;
 
 html += `
 <div class="summary-card">
@@ -549,6 +549,7 @@ function buildPDF(withLogo) {
 if (!parsedData) return;
 const profit=parseInt(document.getElementById('profitInput').value)||0;
 const {dest,meta,dateFrom,dateTo,client,clientCode,hotelsLines,flightsLines,transfersLines,toursLines,simText,persons}=parsedData;
+const simCount = (simText.match(/\d+/) || [''])[0];
 // السعر النهائي الإجمالي = أصل (شخص × عدد) + ربح
 const finalGroupPrice = (basePrice * persons) + profit;
 
@@ -664,7 +665,7 @@ ${flightsLines.map(l=>{ const p=l.split('|').map(x=>x.trim()); return `
 <div style="font-size:18px;font-weight:700;color:#444;">${p[1]||''}</div>
 </div>
 </div>`; }).join('')}` : ''}
-${simText?`<div style="border:1.5px solid #d0deff;border-radius:10px;padding:14px 18px;margin-top:10px;display:flex;align-items:center;gap:14px;"><span style="font-size:28px;">📶</span><div style="font-size:20px;font-weight:800;color:#1a3a8f;">شريحة انترنت مشمولة</div></div>`:''}
+${simCount?`<div style="border:1.5px solid #d0deff;border-radius:10px;padding:14px 18px;margin-top:10px;display:flex;align-items:center;gap:14px;"><span style="font-size:28px;">📶</span><div style="font-size:20px;font-weight:800;color:#1a3a8f;">عدد شرائح الهاتف المضافة: ${simCount}</div></div>`:''}
 </div>` : ''}
 ${itineraryHTML.trim() ? `<div class="pdf-page-break"></div>
 <div class="pdf-section">
