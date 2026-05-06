@@ -563,17 +563,18 @@ const nights = metaParts[1] || '';
 
 const logoHTML=withLogo?`<div class="pdf-logo-box"><img class="pdf-logo-img" src="${LOGO_IMG}" alt="مجموعة العز الدولية للسفر والسياحة"/></div>`:'';
 
-// Calculate start date for each day
+// Calculate start date for each day (Gregorian only — never Hijri)
 function getDayDate(dayNum) {
 try {
 const months = {'يناير':0,'فبراير':1,'مارس':2,'أبريل':3,'مايو':4,'يونيو':5,'يوليو':6,'أغسطس':7,'سبتمبر':8,'أكتوبر':9,'نوفمبر':10,'ديسمبر':11};
+const monthNames = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 const parts = dateFrom.split(' ');
 const day = parseInt(parts[0]);
 const month = months[parts[1]] ?? 4;
 const year = parseInt(parts[2]) || 2026;
 const start = new Date(year, month, day);
 start.setDate(start.getDate() + dayNum - 1);
-return start.toLocaleDateString('ar-SA', {day:'numeric', month:'long', year:'numeric'});
+return `${start.getDate()} ${monthNames[start.getMonth()]} ${start.getFullYear()}`;
 } catch(e) { return ''; }
 }
 
