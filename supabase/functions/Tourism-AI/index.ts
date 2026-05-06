@@ -62,13 +62,94 @@ async function buildDataContext(supabase: ReturnType<typeof createClient>): Prom
   }
 
   if (tours && tours.length > 0) {
-    context += "\n🗺️ الجولات والانتقالات (لاحظ variants — السعر يختلف حسب الفئة/الشهر):\n";
+    // Classify each tour: is it a real tour or a transfer/pickup?
+    // Then for tours, infer the city so we can group by it.
+    const TRANSFER_PREFIXES = ["استقبال", "التوجه", "العوده", "العودة", "الانتقال", "توديع", "العود ", "ذهاب من", "الذهاب من المطار"];
+    const isTransferLine = (name: string) => {
+      const n = (name || "").trim();
+      return TRANSFER_PREFIXES.some(p => n.startsWith(p));
+    };
+
+    // City inference per tour name (most specific match wins)
+    // Order matters: longer/more specific keys first.
+    const CITY_RULES: Array<[RegExp, string]> = [
+      // Vietnam — special case: Ninh Binh tours are sold from Hanoi hotels
+      [/نينه\s*بينه|ninh\s*binh/i,                       "Ha Noi"],
+      [/هانوي|ha\s*noi|hanoi/i,                          "Ha Noi"],
+      [/سابا|sapa|كات كات|لاو تشاي|تا فان|فانسيبان|فينسيا/i, "Sapa"],
+      [/هالونج|ha\s*long|halong/i,                       "Ha Long"],
+      [/دانانج|da\s*nang|danang|ba\s*na|ماي خي/i,        "Da Nang"],
+      [/فوكوك|phu\s*quoc|فوكوك/i,                        "Phu Quoc"],
+      [/هوتشي|ho\s*chi|saigon|سايغون/i,                  "Ho Chi Minh"],
+      // Indonesia
+      [/بالي|bali|اوبود|كوتا|سمينياك|أوبود|ubud|kuta/i,  "Bali"],
+      [/جاكرتا|jakarta/i,                                "Jakarta"],
+      [/باندونج|باندونغ|bandung/i,                       "Bandung"],
+      [/بونشاك|puncak/i,                                 "Puncak"],
+      // Turkey
+      [/أوزنجول|أوزونغول|uzungol|سلطان مراد|حيدر نبي|هامسيكوي|ايدر|ayder/i, "Trabzon"],
+      [/طرابزون|trabzon/i,                                "Trabzon"],
+      [/بورصة|bursa/i,                                   "Bursa"],
+      [/سابانجا|sapanca|معشوقية|maşukiye/i,              "Sapanca"],
+      [/اسطنبول|istanbul|آيا صوفيا|البازار|تقسيم|taksim/i, "Istanbul"],
+      // Russia
+      [/موسكو|moscow/i,                                  "Moscow"],
+      [/سانت بطرسبرغ|saint petersburg|st\.?\s*petersburg/i, "St Petersburg"],
+      [/سوتشي|sochi/i,                                   "Sochi"],
+      // Bosnia
+      [/سراييفو|sarajevo/i,                              "Sarajevo"],
+      [/موستار|mostar/i,                                 "Mostar"],
+      [/بيهاتش|bihać|bihac/i,                            "Bihać"],
+    ];
+    const inferCity = (name: string): string => {
+      for (const [re, city] of CITY_RULES) {
+        if (re.test(name)) return city;
+      }
+      return "غير محدّد";
+    };
+
+    // Split into transfers vs tours per destination
+    const transfersByDest: Record<string, typeof tours> = {};
+    const toursByDestCity: Record<string, Record<string, typeof tours>> = {};
     for (const t of tours) {
-      const variants = Array.isArray(t.variants) && t.variants.length > 0
+      const dest = t.type || "غير محدّد";
+      if (isTransferLine(t.name)) {
+        (transfersByDest[dest] ||= []).push(t);
+      } else {
+        const city = inferCity(t.name);
+        (toursByDestCity[dest] ||= {});
+        (toursByDestCity[dest][city] ||= []).push(t);
+      }
+    }
+
+    const fmtVariants = (t: typeof tours[number]) =>
+      Array.isArray(t.variants) && t.variants.length > 0
         ? t.variants.map((v: { label: string; price: number; currency?: string }) =>
             `${v.label}=${v.price} ${v.currency || t.currency}`).join(" | ")
         : `${t.price} ${t.currency}`;
-      context += `- ${t.name} [${t.type}] → ${variants}\n`;
+
+    if (Object.keys(toursByDestCity).length > 0) {
+      context += "\n🗺️ الجولات السياحية (مُجمَّعة حسب الوجهة ثم المدينة — كل جولة تُستخدم فقط في يوم إقامة بمدينتها المُعنونة هنا):\n";
+      for (const [dest, byCity] of Object.entries(toursByDestCity)) {
+        context += `\n══ ${dest} ══\n`;
+        for (const [city, list] of Object.entries(byCity)) {
+          context += `\n  ▸ جولات مدينة ${city} (${list.length} جولة فريدة):\n`;
+          for (const t of list) {
+            context += `    - ${t.name} [${t.type}] → ${fmtVariants(t)}\n`;
+          }
+        }
+      }
+      context += "\n⚠️ كل جولة أعلاه مُسعَّرة لمدينتها فقط. ممنوع نقلها لمدينة أخرى مهما كان السبب.\n";
+    }
+
+    if (Object.keys(transfersByDest).length > 0) {
+      context += "\n🚗 الانتقالات والاستقبالات (تُختار حسب يوم الانتقال، لا تظهر في قسم TOURS أبداً):\n";
+      for (const [dest, list] of Object.entries(transfersByDest)) {
+        context += `\n── ${dest} ──\n`;
+        for (const t of list) {
+          context += `- ${t.name} → ${fmtVariants(t)}\n`;
+        }
+      }
     }
   }
 
@@ -246,10 +327,21 @@ function buildSystemPrompt(dataContext: string, frontendFormat: string): string 
      - كل يوم يحوي فقط جولات من نفس المدينة؟
      - لا توجد أيّ جولة مرتبطة بمدينة مختلفة؟
 
-🔍 كيف تعرف مدينة الجولة؟
-  1. اسم الجولة يذكر اسم المدينة صراحة (مثل "في مدينه سابا" / "في هانوي" / "في بالي" / "في اسطنبول").
-  2. اسم الجولة يذكر معلماً معروفاً (مثل "كات كات/لاو تشاي/تا فان" = سابا، "نينه بينه" = منطقة هانوي، "Ba Na Hills/شاطئ ماي خي" = دانانج، "بورصة" = بورصة وليس اسطنبول، "أوزنجول" = طرابزون، "آيا صوفيا/البازار" = اسطنبول).
-  3. الانتقالات: يوم الانتقال فقط، وليس في أيام الإقامة.
+🔍 كيف تعرف مدينة الجولة؟ (مهمّ جداً — اقرأها مرّتين):
+
+✅ **المصدر الأوّل والوحيد القاطع**: العنوان "▸ جولات مدينة [اسم]" في قسم البيانات أدناه.
+   - كل جولة مدرجة تحت عنوان مدينة محدّد، وهذا العنوان هو **الحقيقة المطلقة** عن مدينة الجولة.
+   - لا تستنتج، لا تخمّن، لا تجتهد — اقرأ العنوان فقط.
+   - مثال: لو جولة "نينه بينه" مدرجة تحت "▸ جولات مدينة Ha Noi" → مدينتها هانوي قطعياً، حتى لو الاسم يذكر معلماً آخر.
+
+🚫 الأخطاء الشائعة في فهم المدينة (احذرها):
+   - "نينه بينه" تبدو كمدينة مستقلّة، لكنها فعلياً Day Trip من هانوي → مدينتها = Ha Noi.
+   - "Ba Na Hills" / "ماي خي" → معالم في دانانج → مدينتها = Da Nang.
+   - "كات كات / لاو تشاي / تا فان / فانسيبان" → معالم في سابا → مدينتها = Sapa.
+   - "بورصة" / "سابانجا" → مدن منفصلة، ليست اسطنبول، رغم أنها day trips منها.
+   - "أوزنجول / سلطان مراد / حيدر نبي / هامسيكوي / ايدر" → معالم/مدن في طرابزون.
+
+⛔ قاعدة قاطعة: لو جولة مدرجة تحت عنوان مدينة X في البيانات أدناه، فهي **لا يمكن** أن تظهر في يوم إقامة بمدينة Y. حتى لو فيك إغراء "الجولة قريبة من المدينة الثانية" — ممنوع.
 
 ✅ مثال صحيح:
    - اليوم في دانانج → جولة Ba Na Hills، جولة شاطئ ماي خي
