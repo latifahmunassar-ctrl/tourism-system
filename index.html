@@ -649,7 +649,8 @@ ${hotelsLines.map(l=>{ const p=l.split('|').map(x=>x.trim()); return `
 <span>📍 المدينة: ${p[1]||''}</span>
 <span>⭐ النجوم: ${p[2]||''}</span>
 <span>🛏️ الغرفة: ${p[3]||''}</span>
-<span>📅 المدة: ${p[5]||''}</span>
+<span>💰 السعر/ليلة: ${p[4]||''}</span>
+<span style="grid-column:1/-1;">📅 الإقامة: ${p[5]||''}</span>
 <span style="grid-column:1/-1;">✅ يشمل: ${p[6]||''}</span>
 </div>
 </div>`; }).join('')}` : ''}
