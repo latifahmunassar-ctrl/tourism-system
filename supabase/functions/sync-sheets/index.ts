@@ -179,7 +179,7 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
     const row = rows[i].map(x => (x || "").trim());
 
     const hotelName  = get(row, "name");
-    const city       = get(row, "city");
+    let city         = get(row, "city");
     const starsRaw   = get(row, "stars");
     const roomType   = get(row, "room");
     const priceStr   = get(row, "rate");
@@ -187,7 +187,26 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
     const currencyStr = get(row, "currency");
     const occupancyStr = get(row, "occupancy");
 
-    if (!hotelName || !city) { reject(i, `missing name or city`, row); continue; }
+    if (!hotelName) { reject(i, `missing name`, row); continue; }
+
+    // Fallback: if city empty, try to infer from hotel name (e.g. "Lady Hill Sapa Resort" → "Sapa")
+    if (!city) {
+      const KNOWN_CITIES = [
+        "Sapa","Hanoi","Ha Noi","Halong","Ha Long","Da Nang","Danang","Hue","Hoi An",
+        "Phu Quoc","Ho Chi Minh","Saigon","Nha Trang",
+        "Bali","Jakarta","Bandung","Puncak","Ubud","Kuta","Seminyak","Jimbaran","Nusa Dua",
+        "Istanbul","Trabzon","Uzungol","Bursa","Riza","Ayder","Şişli","Taksim","Sisli",
+        "Moscow","St Petersburg","Saint Petersburg","Sochi",
+        "Sarajevo","Mostar","Bihać","Bihac",
+      ];
+      for (const c of KNOWN_CITIES) {
+        if (new RegExp(`\\b${c}\\b`, "i").test(hotelName)) {
+          city = c;
+          break;
+        }
+      }
+    }
+    if (!city) { reject(i, `missing city (couldn't infer from name '${hotelName}')`, row); continue; }
     // تجاهل صفوف الرأس المتكرّرة (نفس كلمات الـ header)
     if (HEADER_ALIASES.name.test(hotelName)) { reject(i, `header row repeat`, row); continue; }
     if (/^\d+$/.test(hotelName)) { reject(i, `name is just a number`, row); continue; }
@@ -510,18 +529,18 @@ Deno.serve(async (req) => {
           if (error) throw new Error(`طيران: ${error.message}`);
         }
 
-        if (hotels.length > 0) {
-          // إزالة التكرارات داخل نفس الـ batch (Postgres يرفض ON CONFLICT لنفس المفتاح مرّتين)
-          const dedupedMap = new Map<string, object>();
-          for (const h of hotels as Array<{ name: string; room_type: string; occupancy: string }>) {
-            const key = `${h.name}|${h.room_type}|${h.occupancy}`;
-            dedupedMap.set(key, h); // الأخير يفوز
-          }
-          const dedupedHotels = Array.from(dedupedMap.values());
+        // dedup داخل batch + full-replace per destination (يحذف القديم ويُعيد المحدّث)
+        const dedupedMap = new Map<string, object>();
+        for (const h of hotels as Array<{ name: string; room_type: string; occupancy: string; location: string }>) {
+          const key = `${h.name}|${h.room_type}|${h.occupancy}`;
+          dedupedMap.set(key, h);
+        }
+        const dedupedHotels = Array.from(dedupedMap.values());
 
-          const { error } = await supabase
-            .from("hotels")
-            .upsert(dedupedHotels, { onConflict: "name,room_type,occupancy" });
+        // full-replace: delete by destination suffix in location field
+        await supabase.from("hotels").delete().like("location", `% - ${tab}`);
+        if (dedupedHotels.length > 0) {
+          const { error } = await supabase.from("hotels").insert(dedupedHotels);
           if (error) throw new Error(`فنادق: ${error.message}`);
         }
 
