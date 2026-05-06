@@ -322,8 +322,15 @@ function extractTours(rows: string[][], destination: string, debug?: { rejects: 
     if (/^hotel(s)?$/i.test(name)) break; // وصلنا قسم الفنادق
     if (PRICE_TIER_RE.test(name)) continue; // header آخر متكرّر
 
+    // العمود "sharing car per pax" يحوي رقم اليوم (1،2،3...) للسطور العاديّة،
+    // ويحوي السعر الفعلي للشخص فقط للسطور المشتركة. لذا نتجاهله إلا إذا
+    // اسم السطر فيه كلمة مشتركة/shared/ليموزين.
+    const isSharedRow = /مشترك|shared|ليموزين/i.test(name);
+
     const variants = header.priceCols
       .map(({ col, label }) => {
+        const isPerPaxLabel = /per\s*pax/i.test(label);
+        if (isPerPaxLabel && !isSharedRow) return null; // skip per-pax for non-shared rows
         const p = parsePrice(row[col] || "");
         if (isNaN(p) || p <= 0) return null;
         return { label, price: p };
@@ -455,6 +462,13 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
+
+  // ?dump_tours=DEST → return all tours for that destination as JSON (debug only)
+  const dumpToursDest = new URL(req.url).searchParams.get("dump_tours");
+  if (dumpToursDest) {
+    const { data } = await supabase.from("tours").select("name,price,variants").eq("type", dumpToursDest);
+    return new Response(JSON.stringify(data, null, 2), { headers: CORS_HEADERS });
+  }
 
   const startTime = Date.now();
   const details: Record<string, { hotels: number; tours: number; error?: string }> = {};
