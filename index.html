@@ -442,8 +442,14 @@ const summaryLines = summaryMatch ? summaryMatch[1].trim().split('\n').filter(l 
 // Totals
 let hotelsTotal = hotelsLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s+(parseInt((p[4]||'').replace(/[^\d]/g,''))||0)*(parseInt((p[5]||'').replace(/[^\d]/g,''))||0); }, 0);
 let flightsTotal = flightsLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s+(parseInt((p[4]||'').replace(/[^\d]/g,''))||0); }, 0);
-let transfersTotal = transfersLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s+(parseInt((p[3]||'').replace(/[^\d]/g,''))||0); }, 0);
-let toursTotal = toursLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s+(parseInt((p[3]||'').replace(/[^\d]/g,''))||0); }, 0);
+// Helper: extract the FINAL total from a price cell. Supports "X × N = Y ريال" (uses Y) or plain "Y ريال" (uses Y).
+const parseLineTotal = (s) => {
+  const eq = (s||'').match(/=\s*([\d,]+)/);
+  if (eq) return parseInt(eq[1].replace(/[^\d]/g,''))||0;
+  return parseInt((s||'').replace(/[^\d]/g,''))||0;
+};
+let transfersTotal = transfersLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
+let toursTotal = toursLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
 
 parsedData = { dest, meta, dateFrom, dateTo, client, clientCode, hotelsLines, flightsLines, transfersLines, toursLines, simText, summaryLines, totalPerson, persons };
 
