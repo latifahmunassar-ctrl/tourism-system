@@ -547,13 +547,13 @@ Deno.serve(async (req) => {
         // Google Sheets requires single-quotes around tab names that contain
         // spaces or other special chars (e.g. 'Malaysia '!A1:Z500).
         const quotedTab = /[\s'"]/.test(tabRaw) ? `'${tabRaw.replace(/'/g, "''")}'` : tabRaw;
-        const rows = await readSheetRange(token, spreadsheetId, `${quotedTab}!A1:Z500`);
+        const rows = await readSheetRange(token, spreadsheetId, `${quotedTab}!A1:AZ500`);
 
-        // Optional dump for diagnostic
+        // Optional dump for diagnostic — show ALL columns so we can see flight cols if present
         if (dumpTab && tab.toLowerCase() === dumpTab.toLowerCase() && debugInfo) {
           rows.forEach((r, i) => {
             const nonEmpty = r.some(c => (c || '').trim());
-            if (nonEmpty) debugInfo.rejects.push(`[${tab} DUMP row ${i}] ${JSON.stringify(r.slice(0, 26))}`);
+            if (nonEmpty) debugInfo.rejects.push(`[${tab} DUMP row ${i}] ${JSON.stringify(r)}`);
           });
         }
 
