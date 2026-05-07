@@ -126,11 +126,13 @@ async function buildDataContext(supabase: ReturnType<typeof createClient>): Prom
       [/بتايا|باتايا|pattaya/i,                          "Pattaya"],
       [/كوسموي|كوه\s*ساموي|كو\s*ساموي|koh\s*samui|kohsamui|samui/i, "Koh Samui"],
       // Malaysia
-      [/كوالالمبور|كوالا\s*لمبور|kuala\s*lumpur|kualalumpur|\bKL\b/i, "Kuala Lumpur"],
+      // Selangor first — أكثر تخصيصاً (Sunway و مدينة الألعاب السنوية ومعامل العسل
+      // كلها في Selangor، وليست في KL رغم القرب الجغرافي)
+      [/سيلانجور|سيلانغور|selangor|sunway|السنویة|السنوية|مدینة الالعاب|مدينة الألعاب|معامل العسل|معامل القهوة|معامل الشكلاته|معامل الشكلاتة|معامل الجلود|petaling|بيتالينج|دامانسارا|damansara|monk kiara|مونت كيارا|شاه عالم|شاه علم|shah alam/i, "Selangor"],
+      [/كوالالمبور|كوالا\s*لمبور|kuala\s*lumpur|kualalumpur|\bKL\b|البرجين|منارة كوالالمبور|petronas|بترونس/i, "Kuala Lumpur"],
       [/لانكاوي|langkawi/i,                              "Langkawi"],
       [/بينانج|بينانغ|بنانغ|penang/i,                    "Penang"],
-      [/كاميرون|cameron|هايلاند|highlands/i,              "Cameron Highlands"],
-      [/سيلانجور|سيلانغور|selangor/i,                    "Selangor"],
+      [/كاميرون|cameron|هايلاند|highlands|مرتفعات الكامیرون|مرتفعات الكاميرون|جبال الشاي/i, "Cameron Highlands"],
     ];
     const inferCity = (name: string): string => {
       for (const [re, city] of CITY_RULES) {
