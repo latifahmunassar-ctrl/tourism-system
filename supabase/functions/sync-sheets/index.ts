@@ -26,7 +26,7 @@ const CORS_HEADERS = {
   "Content-Type": "application/json",
 };
 
-const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand ", "Malaysia "];
+const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia"];
 
 const HOTEL_HEADER_KEYWORDS = [
   "hotel", "city", "star", "room", "rate", "include",
@@ -199,7 +199,7 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
         "Moscow","St Petersburg","Saint Petersburg","Sochi",
         "Sarajevo","Mostar","Bihać","Bihac",
         "Bangkok","Krabi","Phuket","Chiang Mai","ChiangMai","Pattaya","Koh Samui","KohSamui","Samui",
-        "Kuala Lumpur","KualaLumpur","KL","Langkawi","Penang","Cameron Highlands","Cameron","Highlands",
+        "Kuala Lumpur","KualaLumpur","KL","Langkawi","Penang","Cameron Highlands","Cameron","Highlands","Selangor",
       ];
       for (const c of KNOWN_CITIES) {
         if (new RegExp(`\\b${c}\\b`, "i").test(hotelName)) {
@@ -530,7 +530,10 @@ Deno.serve(async (req) => {
       // the sheet, tab (trimmed) for storage and grouping.
       const tab = tabRaw.trim();
       try {
-        const rows = await readSheetRange(token, spreadsheetId, `${tabRaw}!A1:Z500`);
+        // Google Sheets requires single-quotes around tab names that contain
+        // spaces or other special chars (e.g. 'Malaysia '!A1:Z500).
+        const quotedTab = /[\s'"]/.test(tabRaw) ? `'${tabRaw.replace(/'/g, "''")}'` : tabRaw;
+        const rows = await readSheetRange(token, spreadsheetId, `${quotedTab}!A1:Z500`);
 
         // Optional dump for diagnostic
         if (dumpTab && tab.toLowerCase() === dumpTab.toLowerCase() && debugInfo) {

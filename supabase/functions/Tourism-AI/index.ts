@@ -31,22 +31,30 @@ async function buildDataContext(supabase: ReturnType<typeof createClient>): Prom
   let context = "البيانات المتاحة في النظام:\n\n";
 
   if (hotels && hotels.length > 0) {
-    // نُجمّع الفنادق حسب الوجهة (الجزء بعد " - " في location، مثل "Kuta - indonesia")
-    // لتسهيل الفحص الشامل على النموذج وتجنّب التسرّع في الرفض.
-    const byDest: Record<string, typeof hotels> = {};
+    // نُجمّع الفنادق حسب الوجهة ثم حسب المدينة (الجزء قبل " - " في location).
+    // عرض المدينة كعنوان قاطع لمنع النموذج من اختلاق فندق مدينة لمدينة أخرى.
+    const byDestCity: Record<string, Record<string, typeof hotels>> = {};
     for (const h of hotels) {
-      const dest = (String(h.location).split(" - ").pop() || "غير محدّد").trim();
-      (byDest[dest] ||= []).push(h);
+      const parts = String(h.location).split(" - ");
+      const dest = (parts.pop() || "غير محدّد").trim();
+      const city = (parts.join(" - ") || "غير محدّد").trim();
+      (byDestCity[dest] ||= {});
+      (byDestCity[dest][city] ||= []).push(h);
     }
-    context += "🏨 الفنادق (مُجمَّعة حسب الوجهة — افحص الوجهة كاملةً قبل أيّ قرار رفض):\n";
-    for (const [dest, list] of Object.entries(byDest)) {
-      context += `\n── ${dest} (${list.length} غرفة) ──\n`;
-      for (const h of list) {
-        const meals = h.meals ? ` | ما يشمل: ${h.meals}` : (h.includes_breakfast ? " | إفطار مشمول" : "");
-        const occupancy = h.occupancy ? ` | Occupancy: ${h.occupancy}` : "";
-        context += `- ${h.name} | ${h.stars}★ | ${h.location} | ${h.price_per_night} ${h.currency}/ليلة | ${h.room_type}${meals}${occupancy}\n`;
+    context += "🏨 الفنادق (مُجمَّعة حسب الوجهة ثم المدينة — كل فندق يُستخدم فقط لإقامة في مدينته المعنونة هنا):\n";
+    for (const [dest, byCity] of Object.entries(byDestCity)) {
+      const totalRooms = Object.values(byCity).reduce((s, l) => s + l.length, 0);
+      context += `\n══ ${dest} (${totalRooms} غرفة) ══\n`;
+      for (const [city, list] of Object.entries(byCity)) {
+        context += `\n  ▸ فنادق مدينة ${city} (${list.length} غرفة):\n`;
+        for (const h of list) {
+          const meals = h.meals ? ` | ما يشمل: ${h.meals}` : (h.includes_breakfast ? " | إفطار مشمول" : "");
+          const occupancy = h.occupancy ? ` | Occupancy: ${h.occupancy}` : "";
+          context += `    - ${h.name} | ${h.stars}★ | ${h.price_per_night} ${h.currency}/ليلة | ${h.room_type}${meals}${occupancy}\n`;
+        }
       }
     }
+    context += "\n⚠️ كل فندق أعلاه مُسعَّر لمدينته فقط. ❌ ممنوع نقله لمدينة أخرى — لو الموظف يبغى فندق في كاميرون هايلاند، استخدم فقط فنادق مدينة Cameron Highlands، وليس Kuala Lumpur أو غيرها.\n";
   }
 
   if (flights && flights.length > 0) {
@@ -114,6 +122,7 @@ async function buildDataContext(supabase: ReturnType<typeof createClient>): Prom
       [/لانكاوي|langkawi/i,                              "Langkawi"],
       [/بينانج|بينانغ|بنانغ|penang/i,                    "Penang"],
       [/كاميرون|cameron|هايلاند|highlands/i,              "Cameron Highlands"],
+      [/سيلانجور|سيلانغور|selangor/i,                    "Selangor"],
     ];
     const inferCity = (name: string): string => {
       for (const [re, city] of CITY_RULES) {
@@ -341,6 +350,15 @@ function buildSystemPrompt(dataContext: string, frontendFormat: string): string 
      - كل يوم يحوي فقط جولات من نفس المدينة؟
      - لا توجد أيّ جولة مرتبطة بمدينة مختلفة؟
 
+9) قاعدة الفنادق ضمن المدينة المختارة فقط (HOTEL-CITY LOCK):
+   - عند اختيار الفندق لمدينة معيّنة، استخدم **فقط** الفنادق المُدرجة تحت "── [اسم المدينة] - [اسم الوجهة] ──" في قسم 🏨 الفنادق.
+   - مثال: العميل اختار كاميرون هايلاند → استخدم فقط فنادق "Cameron Highlands - Malaysia" أو ما يحوي "Cameron Highlands" في الـ location.
+   - ❌ ممنوع منعاً باتاً اقتراح فندق من كوالالمبور لإقامة في كاميرون هايلاند.
+   - ❌ ممنوع منعاً باتاً اقتراح فندق من بينانج لإقامة في لانكاوي.
+   - إذا لا يوجد فنادق متاحة في المدينة المطلوبة:
+     - أبلغ الموظف صراحة: "ما عندنا فنادق في [المدينة] في النظام. تبغى تختار مدينة ثانية؟"
+     - لا تقترح بديلاً من مدينة مجاورة.
+
 🔍 كيف تعرف مدينة الجولة؟ (مهمّ جداً — اقرأها مرّتين):
 
 ✅ **المصدر الأوّل والوحيد القاطع**: العنوان "▸ جولات مدينة [اسم]" في قسم البيانات أدناه.
@@ -566,6 +584,23 @@ function buildSystemPrompt(dataContext: string, frontendFormat: string): string 
   6. إذا الموظف طلب لاحقاً **إلغاء وجهة طيران معيّنة** (مثلاً: "العميل حاجز طيرانه بنفسه"): احذف ذلك السطر فقط من قسم FLIGHTS وأعد الحساب.
   7. **لا تُضِف "رحلة دولية" تلقائياً** (مثل من السعودية للوجهة) إلا إذا كانت موجودة في جدول الطيران أو طلبها الموظف صراحةً.
   8. إذا قسم FLIGHTS فارغ تماماً (لا توجد بيانات طيران للوجهة)، اترك القسم فارغاً ولا تكتب أيّ سطور تخمينية.
+
+🇲🇾 قاعدة الانتقال الداخلي بين مدن ماليزيا — مهمّة جداً:
+   - تبويبة Malaysia **لا تحوي قسم طيران منفصل**. التنقل الداخلي بين المدن
+     (KL ↔ Penang, KL ↔ Langkawi, KL ↔ Cameron Highlands, KL ↔ Selangor، إلخ)
+     مدمج في صفوف TRANSFERS كأسطر "حضور السائق للتوجة الى المطار..." أو
+     "يتم توصیلكم المطار للتوجه الى جزیرة..." أو "توديع من المطار الدولي في X
+     واستقبال في مطار Y".
+   - هذه الأسطر تشمل: drop للمطار في مدينة المغادرة + pickup من مطار مدينة الوصول.
+     يُغطّي الانتقال الكامل بين المدينتين.
+   - أسعارها بالـ Pax tiers (مثل: Pax 1-4=100، Pax 5=150، Pax 6-8=250).
+     اختر الـ tier المناسب لعدد الأشخاص — ❌ لا تضرب في عدد الأشخاص (السعر
+     للمجموعة كاملةً ضمن الـ tier).
+   - في يوم الانتقال بين مدينتين ماليزيتين، أَدرج هذا السطر في TRANSFERS
+     (لا تكتبه في FLIGHTS لأنه ليس تذكرة طيران منفصلة).
+   - لا تُكرّر سطر transfer لنفس الانتقال مرّتين.
+   - لا تخترع رحلة طيران ماليزية لو ما عندنا تذكرة منفصلة في النظام — اعتمد
+     على صف الـ TRANSFERS الذي يحوي airport handoff.
 
 💵 قاعدة الحساب الذهبية:
 أيّ سعر يظهر في الشيت هو **الإجمالي المناسب تماماً للعدد/الإشغال المذكور بجانبه**. القاعدة العامّة: لا تضرب في عدد الأشخاص.
