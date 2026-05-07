@@ -26,7 +26,7 @@ const CORS_HEADERS = {
   "Content-Type": "application/json",
 };
 
-const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia"];
+const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand ", "Malaysia "];
 
 const HOTEL_HEADER_KEYWORDS = [
   "hotel", "city", "star", "room", "rate", "include",
@@ -198,6 +198,8 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
         "Istanbul","Trabzon","Uzungol","Bursa","Riza","Ayder","Şişli","Taksim","Sisli",
         "Moscow","St Petersburg","Saint Petersburg","Sochi",
         "Sarajevo","Mostar","Bihać","Bihac",
+        "Bangkok","Krabi","Phuket","Chiang Mai","ChiangMai","Pattaya","Koh Samui","KohSamui","Samui",
+        "Kuala Lumpur","KualaLumpur","KL","Langkawi","Penang","Cameron Highlands","Cameron","Highlands",
       ];
       for (const c of KNOWN_CITIES) {
         if (new RegExp(`\\b${c}\\b`, "i").test(hotelName)) {
@@ -489,6 +491,23 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify(data, null, 2), { headers: CORS_HEADERS });
   }
 
+  // ?list_tabs=1 → return all tab names in the Google Spreadsheet (debug)
+  if (new URL(req.url).searchParams.get("list_tabs") === "1") {
+    try {
+      const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
+      const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
+      const tk = await getGoogleAccessToken(sa);
+      const meta = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${ssid}?fields=sheets.properties.title`,
+        { headers: { Authorization: `Bearer ${tk}` } }
+      ).then(r => r.json());
+      const tabs = (meta.sheets || []).map((s: { properties: { title: string } }) => s.properties.title);
+      return new Response(JSON.stringify({ tabs, count: tabs.length }, null, 2), { headers: CORS_HEADERS });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: CORS_HEADERS });
+    }
+  }
+
   const startTime = Date.now();
   const details: Record<string, { hotels: number; tours: number; error?: string }> = {};
   const debugInfo = new URL(req.url).searchParams.get("debug") === "1"
@@ -505,9 +524,13 @@ Deno.serve(async (req) => {
     let totalTours   = 0;
     let totalFlights = 0;
 
-    for (const tab of DESTINATION_TABS) {
+    for (const tabRaw of DESTINATION_TABS) {
+      // Tab in sheet may have trailing/leading whitespace (e.g. "thailand "),
+      // but we want clean identifiers in DB ("thailand"). Use tabRaw to read
+      // the sheet, tab (trimmed) for storage and grouping.
+      const tab = tabRaw.trim();
       try {
-        const rows = await readSheetRange(token, spreadsheetId, `${tab}!A1:Z500`);
+        const rows = await readSheetRange(token, spreadsheetId, `${tabRaw}!A1:Z500`);
 
         // Optional dump for diagnostic
         if (dumpTab && tab.toLowerCase() === dumpTab.toLowerCase() && debugInfo) {
