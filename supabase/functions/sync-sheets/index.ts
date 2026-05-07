@@ -366,8 +366,10 @@ function extractTours(rows: string[][], destination: string, debug?: { rejects: 
       .map(({ col, label }) => {
         const isPerPaxLabel = /per\s*pax/i.test(label);
         if (isPerPaxLabel && !isSharedRow) return null; // skip per-pax for non-shared rows
-        const p = parsePrice(row[col] || "");
-        if (isNaN(p) || p <= 0) return null;
+        const raw = (row[col] || "").trim();
+        if (!raw) return null;
+        const p = parsePrice(raw);
+        if (isNaN(p) || p < 0) return null;  // accept 0 (free tours/days)
         return { label, price: p };
       })
       .filter((v): v is { label: string; price: number } => v !== null);
