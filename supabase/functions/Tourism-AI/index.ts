@@ -102,6 +102,18 @@ async function buildDataContext(supabase: ReturnType<typeof createClient>): Prom
       [/سراييفو|sarajevo/i,                              "Sarajevo"],
       [/موستار|mostar/i,                                 "Mostar"],
       [/بيهاتش|bihać|bihac/i,                            "Bihać"],
+      // Thailand
+      [/بانكوك|bangkok/i,                                "Bangkok"],
+      [/كرابي|krabi/i,                                   "Krabi"],
+      [/بوكيت|phuket|بوكت/i,                             "Phuket"],
+      [/شانغماي|شيانغ\s*ماي|شانج\s*ماي|chiang\s*mai|chiangmai/i, "Chiang Mai"],
+      [/بتايا|باتايا|pattaya/i,                          "Pattaya"],
+      [/كوسموي|كوه\s*ساموي|كو\s*ساموي|koh\s*samui|kohsamui|samui/i, "Koh Samui"],
+      // Malaysia
+      [/كوالالمبور|كوالا\s*لمبور|kuala\s*lumpur|kualalumpur|\bKL\b/i, "Kuala Lumpur"],
+      [/لانكاوي|langkawi/i,                              "Langkawi"],
+      [/بينانج|بينانغ|بنانغ|penang/i,                    "Penang"],
+      [/كاميرون|cameron|هايلاند|highlands/i,              "Cameron Highlands"],
     ];
     const inferCity = (name: string): string => {
       for (const [re, city] of CITY_RULES) {
