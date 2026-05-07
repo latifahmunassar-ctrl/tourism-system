@@ -138,18 +138,32 @@ const HEADER_ALIASES: Record<string, RegExp> = {
 function findHotelHeader(rows: string[][]): { rowIdx: number; cols: Record<string, number> } | null {
   for (let i = 0; i < rows.length; i++) {
     const cells = rows[i].map(x => (x || "").trim());
-    const map: Record<string, number> = {};
+    // Step 1: find the Hotel name column first.
+    let nameCol = -1;
     for (let j = 0; j < cells.length; j++) {
+      if (cells[j] && HEADER_ALIASES.name.test(cells[j])) {
+        nameCol = j;
+        break;
+      }
+    }
+    if (nameCol < 0) continue;
+
+    // Step 2: find every other field starting AT or AFTER nameCol — this prevents
+    // tour-side columns (e.g. col 1 "المدينة" for tour city) from being mistaken
+    // for the hotel block fields when the same alias appears twice in the row.
+    const map: Record<string, number> = { name: nameCol };
+    for (let j = nameCol; j < cells.length; j++) {
       const cell = cells[j];
       if (!cell) continue;
       for (const [field, pattern] of Object.entries(HEADER_ALIASES)) {
+        if (field === "name") continue;
         if (map[field] === undefined && pattern.test(cell)) {
           map[field] = j;
         }
       }
     }
     // Header row must have at least name + city + stars + rate
-    if (map.name !== undefined && map.city !== undefined && map.stars !== undefined && map.rate !== undefined) {
+    if (map.city !== undefined && map.stars !== undefined && map.rate !== undefined) {
       return { rowIdx: i, cols: map };
     }
   }
