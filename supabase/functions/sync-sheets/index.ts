@@ -131,7 +131,7 @@ const HEADER_ALIASES: Record<string, RegExp> = {
   room:       /^(room|room\s*type|الغرفة|نوع\s*الغرفة)$/i,
   rate:       /^(rate|price|nightly|night\s*rate|سعر|السعر|تكلفة|التكلفة)$/i,
   currency:   /^(currency|عملة|العملة)$/i,
-  occupancy:  /^(occupancy|capacity|pax|اشغال|الإشغال|اشخاص|الأشخاص|استيعاب)$/i,
+  occupancy:  /^(occupancy|capacity|pax|اشغال|الإشغال|اشخاص|الأشخاص|استيعاب|تتسع|يتسع|سعة|تسع)$/i,
   include:    /^(include|includes|breakfast|meals|شامل|يشمل|الإفطار)$/i,
 };
 
