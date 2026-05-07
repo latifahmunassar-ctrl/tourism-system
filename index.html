@@ -595,21 +595,40 @@ allActivities.push({ day: dayNum, icon: iconMap[p[2]]||'🗺️', text: p[1]||''
 });
 allActivities.sort((a,b) => a.day - b.day);
 
-let itineraryHTML = '';
-let currentDay = 0;
+// Determine total days from META ("X أيام") OR from the highest day in activities
+const daysFromMeta = parseInt((metaParts[0] || '').replace(/[^\d]/g,'')) || 0;
+const maxActDay = allActivities.reduce((m, a) => Math.max(m, a.day), 0);
+const totalDays = Math.max(daysFromMeta, maxActDay);
+
+// Group activities by day
+const byDay = {};
 allActivities.forEach(act => {
-if (act.day !== currentDay) {
-if (currentDay !== 0) itineraryHTML += '</div>';
-const dayDate = getDayDate(act.day);
+  if (!byDay[act.day]) byDay[act.day] = [];
+  byDay[act.day].push(act);
+});
+
+let itineraryHTML = '';
+for (let d = 1; d <= totalDays; d++) {
+const dayDate = getDayDate(d);
 itineraryHTML += `
 <div style="margin-bottom:20px;">
 <div style="background:linear-gradient(135deg,#1a3a8f,#2952c4);color:#fff;padding:18px 24px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center;">
-<span style="font-weight:900;font-size:28px;">اليوم ${act.day}</span>
+<span style="font-weight:900;font-size:28px;">اليوم ${d}</span>
 <span style="font-size:18px;opacity:0.95;font-weight:800;">${dayDate}</span>
 </div>
 <div style="border:2px solid #d0deff;border-top:none;border-radius:0 0 10px 10px;padding:16px 20px;">`;
-currentDay = act.day;
-}
+const dayActs = byDay[d] || [];
+if (dayActs.length === 0) {
+itineraryHTML += `
+<div style="display:flex;align-items:center;gap:16px;padding:14px 0;">
+<span style="font-size:34px;">🏨</span>
+<div style="flex:1;">
+<span style="font-size:24px;font-weight:900;color:#0d1f4a;line-height:1.5;">يوم حر — استرخاء في الفندق</span>
+</div>
+<span style="font-size:16px;font-weight:800;padding:7px 14px;border-radius:8px;background:#fef3c7;color:#92400e;white-space:nowrap;">يوم حر</span>
+</div>`;
+} else {
+dayActs.forEach(act => {
 itineraryHTML += `
 <div style="display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid #f0f5ff;">
 <span style="font-size:34px;">${act.icon}</span>
@@ -619,7 +638,9 @@ itineraryHTML += `
 <span style="font-size:16px;font-weight:800;padding:7px 14px;border-radius:8px;background:#e8f0ff;color:#1a3a8f;white-space:nowrap;">${act.badge}</span>
 </div>`;
 });
-if (currentDay !== 0) itineraryHTML += '</div></div>';
+}
+itineraryHTML += `</div></div>`;
+}
 
 document.getElementById('pdfContent').innerHTML=`
 <div class="pdf-cover">
