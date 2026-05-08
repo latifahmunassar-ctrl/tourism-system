@@ -829,7 +829,7 @@ ${(hotelsLines.length || flightsLines.length || simText) ? `
 <div class="pdf-page-break"></div>
 <div class="pdf-section">
 ${hotelsLines.length ? `<div class="pdf-section-title">🏨 الفنادق</div>
-${hotelsLines.map(l=>{ const { p, nightly, nights, totalLine } = hotelLineTotals(l); return `
+${hotelsLines.map(l=>{ const { p, nightly, nights, totalLine } = hotelLineTotals(l); const stayText = showDetailed ? String(p[5]||'') : String(p[5]||'').replace(/\(.*?\)/g,'').replace(/[\d,]+\s*ريال(?:\s*\/\s*ليلة)?/g,'').trim(); return `
 <div style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;">
 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;">
   <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:12px;line-height:1.3;">🏨 ${p[0]||''}</div>
@@ -839,7 +839,7 @@ ${hotelsLines.map(l=>{ const { p, nightly, nights, totalLine } = hotelLineTotals
 <span>📍 المدينة: ${p[1]||''}</span>
 <span>⭐ النجوم: ${p[2]||''}</span>
 <span>🛏️ الغرفة: ${p[3]||''}</span>
-<span>📅 الإقامة: ${p[5]||''}</span>
+<span>📅 الإقامة: ${stayText}</span>
 ${showDetailed ? `<span>💵 تفصيل السعر: ${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي = ${totalLine.toLocaleString()} ريال</span>` : ``}
 <span style="grid-column:1/-1;">✅ يشمل: ${p[6]||''}</span>
 </div>
