@@ -491,6 +491,12 @@ const totalGroupLine = getLine(raw, 'TOTAL_GROUP');
 const totalPerson = parseInt(totalPersonStr.replace(/[^\d]/g,'')) || 0;
 const personsMatch = totalGroupLine.match(/(\d+)\s*[أا]شخاص/);
 const persons = parseInt(personsMatch?.[1]) || 2;
+// أطفال/رضّع (اختياري) — لا تُحتسب في تسعير الطيران كبالغين
+const kidsMatch = (meta + ' ' + client + ' ' + totalGroupLine).match(/(\d+)\s*(?:طفل|أطفال)/);
+const infantsMatch = (meta + ' ' + client + ' ' + totalGroupLine).match(/(\d+)\s*(?:رضيع|رضّع)/);
+const kids = parseInt(kidsMatch?.[1] || '0') || 0;
+const infants = parseInt(infantsMatch?.[1] || '0') || 0;
+const adults = Math.max(0, persons - kids - infants);
 // إجمالي المجموعة = الرقم الأوّل في سطر TOTAL_GROUP (قبل الـ |)، أو احسبه إذا غير موجود
 const totalGroup = parseInt((totalGroupLine.split('|')[0]||'').replace(/[^\d]/g,'')) || (totalPerson * persons);
 
@@ -509,7 +515,16 @@ const summaryLines = summaryMatch ? summaryMatch[1].trim().split('\n').filter(l 
 
 // Totals
 let hotelsTotal = hotelsLines.reduce((s, l) => s + (hotelLineTotals(l).totalLine || 0), 0);
-let flightsTotal = flightsLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s+(parseInt((p[4]||'').replace(/[^\d]/g,''))||0); }, 0);
+const parseMoney = (s) => parseInt(String(s||'').replace(/[^\d]/g,'')) || 0;
+const parseCount = (s) => parseInt(String(s||'').replace(/[^\d]/g,'')) || 0;
+let flightsTotal = flightsLines.reduce((s,l) => {
+  const p=l.split('|').map(x=>x.trim());
+  const per = parseMoney(p[2]);
+  const lineCount = parseCount(p[3]) || adults || persons;
+  const pax = (lineCount === persons && (kids + infants) > 0) ? adults : lineCount;
+  const total = per * pax;
+  return s + (total || parseMoney(p[4]));
+}, 0);
 // Helper: extract the FINAL total from a price cell. Supports "X × N = Y ريال" (uses Y) or plain "Y ريال" (uses Y).
 const parseLineTotal = (s) => {
   const eq = (s||'').match(/=\s*([\d,]+)/);
@@ -519,7 +534,7 @@ const parseLineTotal = (s) => {
 let transfersTotal = transfersLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
 let toursTotal = toursLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
 
-parsedData = { dest, meta, dateFrom, dateTo, client, clientCode, hotelsLines, flightsLines, transfersLines, toursLines, simText, summaryLines, totalPerson, persons };
+parsedData = { dest, meta, dateFrom, dateTo, client, clientCode, hotelsLines, flightsLines, transfersLines, toursLines, simText, summaryLines, totalPerson, persons, kids, infants, adults };
 
 let html = `
 <div class="review-header">
@@ -549,7 +564,11 @@ html += `<div class="section-card">
 <tbody>${flightsLines.map(l => {
 const p=l.split('|').map(x=>x.trim());
 const tc=p[1]==='داخلي'?'badge-pickup':'badge-flight';
-return `<tr><td><strong>${p[0]||''}</strong></td><td><span class="type-badge ${tc}">${p[1]||''}</span></td><td class="price-cell">${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${p[4]||''}</td></tr>`;
+const per = parseMoney(p[2]);
+const lineCount = parseCount(p[3]) || adults || persons;
+const pax = (lineCount === persons && (kids + infants) > 0) ? adults : lineCount;
+const total = per * pax;
+return `<tr><td><strong>${p[0]||''}</strong></td><td><span class="type-badge ${tc}">${p[1]||''}</span></td><td class="price-cell">${p[2]||''}</td><td>${pax} بالغ</td><td class="price-cell">${(total||parseMoney(p[4])).toLocaleString()} ريال</td></tr>`;
 }).join('')}</tbody>
 </table></div>`;
 }
@@ -685,7 +704,7 @@ async function searchByCode() {
 function buildPDF(mode) {
 if (!parsedData) return;
 const profit=parseInt(document.getElementById('profitInput').value)||0;
-const {dest,meta,dateFrom,dateTo,client,clientCode,hotelsLines,flightsLines,transfersLines,toursLines,simText,persons}=parsedData;
+const {dest,meta,dateFrom,dateTo,client,clientCode,hotelsLines,flightsLines,transfersLines,toursLines,simText,persons,kids,infants,adults}=parsedData;
 const simCount = (simText.match(/\d+/) || [''])[0];
 const systemCode = (lastSavedCode || '').trim();
 // السعر النهائي الإجمالي = السعر الأساسي للمجموعة + الربح (إجمالي)
@@ -703,7 +722,16 @@ const parseLineTotal = (s) => {
   return parseInt((s||'').replace(/[^\d]/g,''))||0;
 };
 const hotelsTotal = hotelsLines.reduce((s, l) => s + (hotelLineTotals(l).totalLine || 0), 0);
-const flightsTotal = flightsLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + (parseInt((p[4]||'').replace(/[^\d]/g,''))||0); }, 0);
+const parseMoney = (s) => parseInt(String(s||'').replace(/[^\d]/g,'')) || 0;
+const parseCount = (s) => parseInt(String(s||'').replace(/[^\d]/g,'')) || 0;
+const flightsTotal = flightsLines.reduce((s,l) => {
+  const p=l.split('|').map(x=>x.trim());
+  const per = parseMoney(p[2]);
+  const lineCount = parseCount(p[3]) || adults || persons;
+  const pax = (lineCount === persons && (kids + infants) > 0) ? adults : lineCount;
+  const total = per * pax;
+  return s + (total || parseMoney(p[4]));
+}, 0);
 const transfersTotal = transfersLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
 const toursTotal = toursLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
 
@@ -852,7 +880,8 @@ ${flightsLines.map(l=>{ const p=l.split('|').map(x=>x.trim()); return `
 <div style="flex:1;">
 <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:6px;line-height:1.3;">${p[0]||''}</div>
 <div style="font-size:18px;font-weight:700;color:#444;">${p[1]||''}</div>
-${showDetailed ? `<div style="margin-top:6px;font-size:16px;font-weight:800;color:#0d1f4a;">${p[2]||''} | ${p[3]||''} | الإجمالي: ${p[4]||''}</div>` : ``}
+<div style="margin-top:6px;font-size:15px;font-weight:800;color:#0d1f4a;">📅 التاريخ: ${/عودة/.test(p[1]||'') ? (dateFrom + ' ↔ ' + dateTo) : (/ذهاب/.test(p[1]||'') ? dateFrom : (dateFrom + ' → ' + dateTo))}</div>
+${showDetailed ? (()=>{ const per = parseMoney(p[2]); const lineCount=parseCount(p[3])||adults||persons; const pax=(lineCount===persons && (kids+infants)>0)?adults:lineCount; const total=per*pax; return `<div style="margin-top:6px;font-size:16px;font-weight:800;color:#0d1f4a;">${per.toLocaleString()} ريال/بالغ | ${pax} بالغ | الإجمالي: ${(total||parseMoney(p[4])).toLocaleString()} ريال</div>`; })() : ``}
 </div>
 </div>`; }).join('')}` : ''}
 ${simCount?`<div style="border:1.5px solid #d0deff;border-radius:10px;padding:14px 18px;margin-top:10px;display:flex;align-items:center;gap:14px;"><span style="font-size:28px;">📶</span><div style="font-size:20px;font-weight:800;color:#1a3a8f;">عدد شرائح الهاتف المضافة: ${simCount}</div></div>`:''}
