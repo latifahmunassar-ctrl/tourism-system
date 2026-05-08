@@ -358,7 +358,14 @@ let basePrice = 0;
 let lastProgramRaw = '';
 let lastSavedCode = '';
 
-const SYSTEM = `انت مساعد متخصص في بناء البرامج السياحية. يجب ان يكون ردك بهذا التنسيق الدقيق فقط بدون اي رموز او تزيين:
+const SYSTEM = `انت مساعد متخصص في بناء البرامج السياحية. مهم جداً: أي أرقام إجماليات يجب أن تكون محسوبة بدقة من تفاصيل الشيت نفسها، ولا تكتب أي إجمالي إلا بعد التحقق:
+- إجمالي الفنادق = مجموع (سعر/ليلة × عدد الليالي) لكل فندق.
+- إجمالي الطيران = السعر/شخص × عدد البالغين (ولا تُحسب الرُضّع/الأطفال كبالغين إذا ذُكروا).
+- إجمالي النقل والجولات = مجموع الأسعار في الأسطر.
+- إجمالي المجموعة (TOTAL_GROUP) = الفنادق + الطيران + النقل + الجولات (بدون الربح).
+لا تخمّن الأرقام ولا تعطي إجمالي غير متطابق.
+
+يجب ان يكون ردك بهذا التنسيق الدقيق فقط بدون اي رموز او تزيين:
 
 DEST:[اسم الوجهة]
 META:[عدد الايام] ايام | [عدد الليالي] ليالي | [الشهر] | [عدد الافراد] اشخاص
@@ -502,11 +509,8 @@ const infantsMatch = (meta + ' ' + client + ' ' + totalGroupLine).match(/(\d+)\s
 const kids = parseInt(kidsMatch?.[1] || '0') || 0;
 const infants = parseInt(infantsMatch?.[1] || '0') || 0;
 const adults = Math.max(0, persons - kids - infants);
-// إجمالي المجموعة = الرقم الأوّل في سطر TOTAL_GROUP (قبل الـ |)، أو احسبه إذا غير موجود
-const totalGroup = parseInt((totalGroupLine.split('|')[0]||'').replace(/[^\d]/g,'')) || (totalPerson * persons);
-
-// السعر الأساسي في النظام = إجمالي المجموعة (TOTAL_GROUP)، وليس للشخص
-basePrice = totalGroup;
+// إجمالي المجموعة من النص (قد يخطئ النموذج) — سنقارنه مع حسابنا الفعلي
+const totalGroupFromText = parseInt((totalGroupLine.split('|')[0]||'').replace(/[^\d]/g,'')) || 0;
 const hotelsLines = parseSection(raw, 'HOTELS');
 const flightsLines = parseSection(raw, 'FLIGHTS');
 const transfersLines = parseSection(raw, 'TRANSFERS');
@@ -538,6 +542,19 @@ const parseLineTotal = (s) => {
 };
 let transfersTotal = transfersLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
 let toursTotal = toursLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
+
+// ✅ الحساب المعتمد: من تفاصيل الشيت نفسها (فنادق + طيران + نقل + جولات)
+const computedGroup = Math.max(0, hotelsTotal + flightsTotal + transfersTotal + toursTotal);
+basePrice = computedGroup || totalGroupFromText || (totalPerson * persons);
+
+// تحقّق صارم قبل اعتماد الرقم
+if (totalGroupFromText && computedGroup) {
+  const diff = Math.abs(totalGroupFromText - computedGroup);
+  const pct = diff / Math.max(1, computedGroup);
+  if (pct >= 0.02) {
+    addMessage('sys', `تنبيه: إجمالي المجموعة المكتوب (${totalGroupFromText.toLocaleString()} ريال) لا يطابق الحساب الفعلي من التفاصيل (${computedGroup.toLocaleString()} ريال). تم اعتماد الحساب الفعلي.`);
+  }
+}
 
 parsedData = { dest, meta, dateFrom, dateTo, client, clientCode, hotelsLines, flightsLines, transfersLines, toursLines, simText, summaryLines, totalPerson, persons, kids, infants, adults };
 
@@ -618,7 +635,7 @@ ${summaryHTML}
 </div>
 <div class="group-card">
 <span class="group-label">💰 الإجمالي (${persons} أشخاص)</span>
-<span class="group-val" id="totalGroupEl">${totalGroup.toLocaleString()} ريال</span>
+<span class="group-val" id="totalGroupEl">${basePrice.toLocaleString()} ريال</span>
 </div>`;
 
 document.getElementById('reviewPanel').innerHTML = html;
