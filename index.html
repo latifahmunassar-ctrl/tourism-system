@@ -113,6 +113,10 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 
 /* PDF */
 #pdfContent { display:none; }
+.pdf-print-code { position:fixed; left:18mm; right:18mm; bottom:12mm; z-index:9999; display:flex; justify-content:space-between; align-items:center; gap:12px; background:rgba(13,31,74,0.9); color:#fff; border:1px solid rgba(255,255,255,0.25); border-radius:12px; padding:10px 14px; font-family:‘Tajawal’,sans-serif; }
+.pdf-print-code .pc-title { font-size:12px; font-weight:900; letter-spacing:0.3px; }
+.pdf-print-code .pc-val { font-size:12px; font-weight:900; letter-spacing:0.8px; direction:ltr; unicode-bidi:plaintext; }
+.pdf-print-code .pc-hint { font-size:10px; font-weight:700; opacity:0.9; }
 .pdf-cover { background:linear-gradient(150deg,#1565d8 0%,#0d47a1 40%,#0a2f6e 100%); color:#fff; padding:28px 32px; height:294mm; max-height:294mm; box-sizing:border-box; font-family:‘Tajawal’,sans-serif; position:relative; overflow:hidden; page-break-after:avoid; }
 .pdf-cover::before { content:’’; position:absolute; top:-100px; left:-100px; width:400px; height:400px; background:rgba(255,255,255,0.04); border-radius:50%; }
 .pdf-cover::after { content:’’; position:absolute; bottom:-80px; right:-80px; width:300px; height:300px; background:rgba(255,255,255,0.04); border-radius:50%; }
@@ -154,6 +158,7 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 html, body { margin:0 !important; padding:0 !important; background:#fff !important; overflow:visible !important; height:auto !important; display:block !important; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; text-rendering:geometricPrecision; }
 .topbar, .layout, .login-overlay { display:none !important; }
 #pdfContent { display:block !important; }
+.pdf-print-code { display:flex !important; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
 .pdf-page-break { page-break-before:always; }
 img { image-rendering:-webkit-optimize-contrast; }
 .pdf-cover, .pdf-section { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
@@ -672,6 +677,7 @@ if (!parsedData) return;
 const profit=parseInt(document.getElementById('profitInput').value)||0;
 const {dest,meta,dateFrom,dateTo,client,clientCode,hotelsLines,flightsLines,transfersLines,toursLines,simText,persons}=parsedData;
 const simCount = (simText.match(/\d+/) || [''])[0];
+const systemCode = (lastSavedCode || '').trim();
 // السعر النهائي الإجمالي = السعر الأساسي للمجموعة + الربح (إجمالي)
 const profitTotal = profit;
 const baseGroupPrice = basePrice;
@@ -781,6 +787,13 @@ itineraryHTML += `</div></div>`;
 }
 
 document.getElementById('pdfContent').innerHTML=`
+<div class="pdf-print-code">
+  <div>
+    <div class="pc-title">كود الاسترجاع (للبحث لاحقاً)</div>
+    <div class="pc-hint">استخدميه في خانة الاسترجاع داخل النظام</div>
+  </div>
+  <div class="pc-val">${systemCode || '—'}</div>
+</div>
 <div class="pdf-cover">
 <img class="pdf-cover-airplane" src="${FILLER_IMG}" alt=""/>
 ${logoHTML}
@@ -795,6 +808,7 @@ ${showTotalPrice ? `<div class="pdf-price-box"><div class="pdf-price-label">💰
 ⏱️ ${duration} | ${nights} | ${metaParts[3]||''}
 </div>
 <div class="pdf-field"><span class="pdf-field-label">العميل :</span><span class="pdf-field-value">${client}</span></div>
+<div class="pdf-field"><span class="pdf-field-label">كود الاسترجاع (النظام) :</span><span class="pdf-field-value" style="font-weight:900;letter-spacing:1px;direction:ltr;unicode-bidi:plaintext;">${systemCode || '—'}</span></div>
 <div class="pdf-field"><span class="pdf-field-label">كود العميل :</span><span class="pdf-field-value">${clientCode}</span></div>
 ${showDetailed ? `
 <div style="margin-top:14px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.28);border-radius:14px;padding:14px 16px;color:#fff;">
