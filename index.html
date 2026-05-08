@@ -720,6 +720,11 @@ const showLogo = mode === 'client' || mode === 'detailed';
 const showTotalPrice = mode === 'client' || mode === 'detailed';
 const showDetailed = mode === 'detailed';
 
+// تُحتسب لاحقاً بعد تجهيز تواريخ الفنادق
+let hotelStays = [];
+let lastCheckoutByCity = {};
+let allCheckoutDatesInOrder = [];
+
 // Totals (for detailed PDF calculations)
 const parseLineTotal = (s) => {
   const eq = (s||'').match(/=\s*([\d,]+)/);
@@ -759,9 +764,6 @@ function buildLastCheckoutByCity() {
   });
   return map;
 }
-
-const lastCheckoutByCity = buildLastCheckoutByCity();
-const allCheckoutDatesInOrder = hotelStays.map(s => s?.checkOutText).filter(Boolean);
 
 function renderFlightDateLabel(p0, p1, internalSeqIdx) {
   const kind = String(p1 || '').trim();
@@ -858,7 +860,7 @@ return formatArabicDate(addDays(start, dayNum - 1));
 
 // Hotel check-in/out dates (sequential from DATE_FROM)
 const tripStart = parseArabicDate(dateFrom);
-const hotelStays = [];
+hotelStays = [];
 if (tripStart) {
   let cursor = new Date(tripStart.getTime());
   hotelsLines.forEach((l, idx) => {
@@ -873,6 +875,9 @@ if (tripStart) {
     cursor = new Date(checkOut.getTime());
   });
 }
+
+lastCheckoutByCity = buildLastCheckoutByCity();
+allCheckoutDatesInOrder = hotelStays.map(s => s?.checkOutText).filter(Boolean);
 
 function extractDayNumber(text) {
   const t = String(text||'');
