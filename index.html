@@ -113,10 +113,7 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 
 /* PDF */
 #pdfContent { display:none; }
-.pdf-print-code { position:fixed; left:18mm; right:18mm; bottom:12mm; z-index:9999; display:flex; justify-content:space-between; align-items:center; gap:12px; background:rgba(13,31,74,0.9); color:#fff; border:1px solid rgba(255,255,255,0.25); border-radius:12px; padding:10px 14px; font-family:‘Tajawal’,sans-serif; }
-.pdf-print-code .pc-title { font-size:12px; font-weight:900; letter-spacing:0.3px; }
-.pdf-print-code .pc-val { font-size:12px; font-weight:900; letter-spacing:0.8px; direction:ltr; unicode-bidi:plaintext; }
-.pdf-print-code .pc-hint { font-size:10px; font-weight:700; opacity:0.9; }
+/* removed per-page fixed Package Code bar */
 .pdf-cover { background:linear-gradient(150deg,#1565d8 0%,#0d47a1 40%,#0a2f6e 100%); color:#fff; padding:28px 32px; height:294mm; max-height:294mm; box-sizing:border-box; font-family:‘Tajawal’,sans-serif; position:relative; overflow:hidden; page-break-after:avoid; }
 .pdf-cover::before { content:’’; position:absolute; top:-100px; left:-100px; width:400px; height:400px; background:rgba(255,255,255,0.04); border-radius:50%; }
 .pdf-cover::after { content:’’; position:absolute; bottom:-80px; right:-80px; width:300px; height:300px; background:rgba(255,255,255,0.04); border-radius:50%; }
@@ -148,7 +145,10 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .pdf-services-list li { padding:12px 0; border-bottom:1px solid #eef0f8; font-size:14px; color:#333; display:flex; align-items:flex-start; gap:12px; line-height:1.6; }
 .pdf-services-list li:last-child { border-bottom:none; }
 .pdf-service-icon { width:32px; height:32px; border-radius:50%; background:#e8f0ff; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; margin-top:2px; }
-.pdf-policy { background:#f0f5ff; border-right:6px solid #1a3a8f; padding:18px 22px; margin-bottom:14px; font-size:18px; font-weight:700; color:#0d1f4a; line-height:2; border-radius:0 12px 12px 0; }
+.pdf-policy { background:linear-gradient(135deg,#eff6ff,#ffffff); border:2px solid #bcd7ff; border-radius:14px; padding:18px 20px; margin-bottom:18px; }
+.pdf-policy-title { font-size:20px; font-weight:900; color:#1a3a8f; margin:0 0 10px; display:flex; align-items:center; gap:10px; }
+.pdf-policy-list { margin:0; padding:0 18px; color:#0d1f4a; font-weight:800; font-size:16px; line-height:1.95; }
+.pdf-policy-list li { margin:8px 0; }
 .pdf-excludes { background:linear-gradient(135deg,#fff7ed,#ffffff); border:2px solid #ffd7b5; border-radius:14px; padding:18px 20px; margin-bottom:18px; }
 .pdf-excludes-title { font-size:20px; font-weight:900; color:#b45309; margin:0 0 10px; display:flex; align-items:center; gap:10px; }
 .pdf-excludes-sub { font-size:14px; font-weight:800; color:#7c2d12; opacity:0.9; margin:0 0 12px; }
@@ -163,7 +163,6 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 html, body { margin:0 !important; padding:0 !important; background:#fff !important; overflow:visible !important; height:auto !important; display:block !important; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; text-rendering:geometricPrecision; }
 .topbar, .layout, .login-overlay { display:none !important; }
 #pdfContent { display:block !important; }
-.pdf-print-code { display:flex !important; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
 .pdf-page-break { page-break-before:always; }
 img { image-rendering:-webkit-optimize-contrast; }
 .pdf-cover, .pdf-section { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
@@ -798,13 +797,6 @@ itineraryHTML += `</div></div>`;
 }
 
 document.getElementById('pdfContent').innerHTML=`
-<div class="pdf-print-code">
-  <div>
-    <div class="pc-title">Package Code</div>
-    <div class="pc-hint">استخدميه في خانة الاسترجاع داخل النظام</div>
-  </div>
-  <div class="pc-val">${systemCode || '—'}</div>
-</div>
 <div class="pdf-cover">
 <img class="pdf-cover-airplane" src="${FILLER_IMG}" alt=""/>
 ${logoHTML}
@@ -922,12 +914,17 @@ ${itineraryHTML}
   </ul>
 </div>
 <div class="pdf-section-title">📋 السياسة العامة</div>
-<div class="pdf-policy">الفنادق والمنتجعات للغرفة الواحدة شاملة وجبة الإفطار لشخصين + طفل تحت 5 سنوات. تسجيل الدخول 2:00 ظهراً والخروج 12:00 ظهراً</div>
-<div class="pdf-policy">الوزن المسموح به للطيران الداخلي 20 كيلو إلا إذا تم الاتفاق معنا مسبقاً على زيادة</div>
-<div class="pdf-policy">يحتسب لكل شخص حقيبة سفر واحدة بوزن 20 كجم بالإضافة إلى حقيبة يد. وفي حال تجاوز الحد يتم توفير سيارة أكبر برسوم إضافية</div>
-<div class="pdf-policy">السيارات المقدمة حديثة، نظيفة ومكيفة، وتتناسب مع عدد الأفراد المذكورين</div>
-<div class="pdf-policy">يحق للعميل اختيار المناطق السياحية بشرط أن تكون بحدود المنطقة المقيم بها، ولا تشمل تذاكر دخول الأماكن السياحية</div>
-<div class="pdf-policy">تأكد من إظهار الاحترام لعادات وأديان البلد ومعاملات الناس كما تحب أن تعامل، دون استصغار أو إهانة لأحد</div>
+<div class="pdf-policy">
+  <div class="pdf-policy-title">📌 السياسة العامة</div>
+  <ul class="pdf-policy-list">
+    <li>🏨 الفنادق والمنتجعات للغرفة الواحدة شاملة وجبة الإفطار لشخصين + طفل تحت 5 سنوات. تسجيل الدخول 2:00 ظهراً والخروج 12:00 ظهراً.</li>
+    <li>🧳 الوزن المسموح به للطيران الداخلي 20 كيلو إلا إذا تم الاتفاق معنا مسبقاً على زيادة.</li>
+    <li>🧾 يُحتسب لكل شخص حقيبة سفر واحدة بوزن 20 كجم بالإضافة إلى حقيبة يد. وفي حال تجاوز الحد يتم توفير سيارة أكبر برسوم إضافية.</li>
+    <li>🚗 السيارات المقدمة حديثة، نظيفة ومكيفة، وتتناسب مع عدد الأفراد المذكورين.</li>
+    <li>🗺️ يحق للعميل اختيار المناطق السياحية بشرط أن تكون بحدود المنطقة المقيم بها، ولا تشمل تذاكر دخول الأماكن السياحية.</li>
+    <li>🤝 تأكد من إظهار الاحترام لعادات وأديان البلد ومعاملات الناس كما تحب أن تعامل، دون استصغار أو إهانة لأحد.</li>
+  </ul>
+</div>
 ${showDetailed ? `
 <div style="margin-top:18px;padding:16px 18px;border:2px dashed #d0deff;border-radius:12px;">
   <div style="font-weight:900;color:#1a3a8f;font-size:18px;margin-bottom:10px;">➕ خدمات إضافية (حسب الطلب)</div>
