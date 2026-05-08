@@ -747,18 +747,59 @@ const nights = metaParts[1] || '';
 const logoHTML=showLogo?`<div class="pdf-logo-box"><img class="pdf-logo-img" src="${LOGO_IMG}" alt="مجموعة العز الدولية للسفر والسياحة"/></div>`:'';
 
 // Calculate start date for each day (Gregorian only — never Hijri)
+function parseArabicDate(s) {
+try {
+  const months = {'يناير':0,'فبراير':1,'مارس':2,'أبريل':3,'مايو':4,'يونيو':5,'يوليو':6,'أغسطس':7,'سبتمبر':8,'أكتوبر':9,'نوفمبر':10,'ديسمبر':11};
+  const parts = String(s||'').trim().split(' ');
+  const day = parseInt(parts[0]);
+  const month = months[parts[1]] ?? 0;
+  const year = parseInt(parts[2]) || new Date().getFullYear();
+  if (!day || day < 1 || day > 31) return null;
+  return new Date(year, month, day);
+} catch(e) { return null; }
+}
+function formatArabicDate(d) {
+  try {
+    const monthNames = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+    return `${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+  } catch(e) { return ''; }
+}
+function addDays(base, n) {
+  const d = new Date(base.getTime());
+  d.setDate(d.getDate() + n);
+  return d;
+}
 function getDayDate(dayNum) {
 try {
-const months = {'يناير':0,'فبراير':1,'مارس':2,'أبريل':3,'مايو':4,'يونيو':5,'يوليو':6,'أغسطس':7,'سبتمبر':8,'أكتوبر':9,'نوفمبر':10,'ديسمبر':11};
-const monthNames = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-const parts = dateFrom.split(' ');
-const day = parseInt(parts[0]);
-const month = months[parts[1]] ?? 4;
-const year = parseInt(parts[2]) || 2026;
-const start = new Date(year, month, day);
-start.setDate(start.getDate() + dayNum - 1);
-return `${start.getDate()} ${monthNames[start.getMonth()]} ${start.getFullYear()}`;
+const start = parseArabicDate(dateFrom);
+if (!start) return '';
+return formatArabicDate(addDays(start, dayNum - 1));
 } catch(e) { return ''; }
+}
+
+// Hotel check-in/out dates (sequential from DATE_FROM)
+const tripStart = parseArabicDate(dateFrom);
+const hotelStays = [];
+if (tripStart) {
+  let cursor = new Date(tripStart.getTime());
+  hotelsLines.forEach((l, idx) => {
+    const { nights } = hotelLineTotals(l);
+    const n = (nights && nights > 0) ? nights : 0;
+    const checkIn = new Date(cursor.getTime());
+    const checkOut = addDays(checkIn, n);
+    hotelStays[idx] = {
+      checkInText: formatArabicDate(checkIn),
+      checkOutText: n ? formatArabicDate(checkOut) : '',
+    };
+    cursor = new Date(checkOut.getTime());
+  });
+}
+
+function extractDayNumber(text) {
+  const t = String(text||'');
+  const m = t.match(/(?:اليوم)\s*(\d{1,2})/);
+  const n = m ? parseInt(m[1],10) : 0;
+  return (n>=1 && n<=31) ? n : 0;
 }
 
 // Build itinerary by day
@@ -857,7 +898,7 @@ ${(hotelsLines.length || flightsLines.length || simText) ? `
 <div class="pdf-page-break"></div>
 <div class="pdf-section">
 ${hotelsLines.length ? `<div class="pdf-section-title">🏨 الفنادق</div>
-${hotelsLines.map(l=>{ const { p, nightly, nights, totalLine } = hotelLineTotals(l); const stayText = showDetailed ? String(p[5]||'') : String(p[5]||'').replace(/\(.*?\)/g,'').replace(/[\d,]+\s*ريال(?:\s*\/\s*ليلة)?/g,'').trim(); return `
+${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine } = hotelLineTotals(l); const stayText = showDetailed ? String(p[5]||'') : String(p[5]||'').replace(/\(.*?\)/g,'').replace(/[\d,]+\s*ريال(?:\s*\/\s*ليلة)?/g,'').trim(); const sd = hotelStays[idx] || {}; return `
 <div style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;">
 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;">
   <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:12px;line-height:1.3;">🏨 ${p[0]||''}</div>
@@ -868,6 +909,7 @@ ${hotelsLines.map(l=>{ const { p, nightly, nights, totalLine } = hotelLineTotals
 <span>⭐ النجوم: ${p[2]||''}</span>
 <span>🛏️ الغرفة: ${p[3]||''}</span>
 <span>📅 الإقامة: ${stayText}</span>
+${(sd.checkInText && sd.checkOutText) ? `<span>🟢 الدخول: ${sd.checkInText} | 🔴 الخروج: ${sd.checkOutText}</span>` : (sd.checkInText ? `<span>🟢 الدخول: ${sd.checkInText}</span>` : ``)}
 ${showDetailed ? `<span>💵 تفصيل السعر: ${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي = ${totalLine.toLocaleString()} ريال</span>` : ``}
 <span style="grid-column:1/-1;">✅ يشمل: ${p[6]||''}</span>
 </div>
@@ -880,7 +922,13 @@ ${flightsLines.map(l=>{ const p=l.split('|').map(x=>x.trim()); return `
 <div style="flex:1;">
 <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:6px;line-height:1.3;">${p[0]||''}</div>
 <div style="font-size:18px;font-weight:700;color:#444;">${p[1]||''}</div>
-<div style="margin-top:6px;font-size:15px;font-weight:800;color:#0d1f4a;">📅 التاريخ: ${/عودة/.test(p[1]||'') ? (dateFrom + ' ↔ ' + dateTo) : (/ذهاب/.test(p[1]||'') ? dateFrom : (dateFrom + ' → ' + dateTo))}</div>
+${(() => {
+  const kind = String(p[1]||'');
+  const dayNum = extractDayNumber(p[0]) || extractDayNumber(p[1]);
+  const d = dayNum ? getDayDate(dayNum) : (kind === 'داخلي' ? getDayDate(2) : dateFrom);
+  const label = kind === 'عودة' ? '📅 الذهاب: ' + dateFrom + ' | العودة: ' + dateTo : ('📅 التاريخ: ' + d);
+  return `<div style="margin-top:6px;font-size:15px;font-weight:800;color:#0d1f4a;">${label}</div>`;
+})()}
 ${showDetailed ? (()=>{ const per = parseMoney(p[2]); const lineCount=parseCount(p[3])||adults||persons; const pax=(lineCount===persons && (kids+infants)>0)?adults:lineCount; const total=per*pax; return `<div style="margin-top:6px;font-size:16px;font-weight:800;color:#0d1f4a;">${per.toLocaleString()} ريال/بالغ | ${pax} بالغ | الإجمالي: ${(total||parseMoney(p[4])).toLocaleString()} ريال</div>`; })() : ``}
 </div>
 </div>`; }).join('')}` : ''}
