@@ -732,6 +732,49 @@ const flightsTotal = flightsLines.reduce((s,l) => {
   const total = per * pax;
   return s + (total || parseMoney(p[4]));
 }, 0);
+
+function renderFlightDateLabel(p0, p1, internalSeqIdx) {
+  const kind = String(p1 || '').trim();
+  const dayNum = extractDayNumber(p0) || extractDayNumber(p1);
+  if (kind.includes('عودة')) return `📅 الذهاب: ${dateFrom} | العودة: ${dateTo}`;
+  if (kind.includes('ذهاب')) return `📅 التاريخ: ${dateFrom}`;
+  if (dayNum) return `📅 التاريخ: ${getDayDate(dayNum)}`;
+  if (kind.includes('داخلي')) {
+    const inferred = (hotelStays.map(s => s?.checkOutText).filter(Boolean)[internalSeqIdx]) || getDayDate(2) || dateFrom;
+    return `📅 التاريخ: ${inferred}`;
+  }
+  return `📅 التاريخ: ${dateFrom}`;
+}
+
+function renderFlightsPDF() {
+  if (!flightsLines.length) return '';
+  let internalIdx = 0;
+  return `
+<div class="pdf-section-title" style="margin-top:${hotelsLines.length ? 24 : 0}px;">✈️ الطيران</div>
+${flightsLines.map(l => {
+  const p = l.split('|').map(x => x.trim());
+  const kind = String(p[1] || '');
+  const dateLabel = kind.includes('داخلي') ? renderFlightDateLabel(p[0], p[1], internalIdx++) : renderFlightDateLabel(p[0], p[1], 0);
+  const detailedLine = showDetailed ? (() => {
+    const per = parseMoney(p[2]);
+    const lineCount = parseCount(p[3]) || adults || persons;
+    const pax = (lineCount === persons && (kids + infants) > 0) ? adults : lineCount;
+    const total = per * pax;
+    return `<div style="margin-top:6px;font-size:16px;font-weight:800;color:#0d1f4a;">${per.toLocaleString()} ريال/بالغ | ${pax} بالغ | الإجمالي: ${(total || parseMoney(p[4])).toLocaleString()} ريال</div>`;
+  })() : '';
+  return `
+<div style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;display:flex;align-items:center;gap:14px;">
+  <span style="font-size:30px;">✈️</span>
+  <div style="flex:1;">
+    <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:6px;line-height:1.3;">${p[0]||''}</div>
+    <div style="font-size:18px;font-weight:700;color:#444;">${p[1]||''}</div>
+    <div style="margin-top:6px;font-size:15px;font-weight:800;color:#0d1f4a;">${dateLabel}</div>
+    ${detailedLine}
+  </div>
+</div>`;
+}).join('')}
+`;
+}
 const transfersTotal = transfersLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
 const toursTotal = toursLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
 
@@ -915,29 +958,7 @@ ${showDetailed ? `<span>💵 تفصيل السعر: ${nightly.toLocaleString()} 
 </div>
 </div>`; }).join('')}` : ''}
 
-${flightsLines.length ? `<div class="pdf-section-title" style="margin-top:${hotelsLines.length?24:0}px;">✈️ الطيران</div>
-${(() => { let internalIdx = 0; const moveDates = hotelStays.map(s => s?.checkOutText).filter(Boolean); return flightsLines.map(l=>{ const p=l.split('|').map(x=>x.trim()); return `
-<div style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;display:flex;align-items:center;gap:14px;">
-<span style="font-size:30px;">✈️</span>
-<div style="flex:1;">
-<div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:6px;line-height:1.3;">${p[0]||''}</div>
-<div style="font-size:18px;font-weight:700;color:#444;">${p[1]||''}</div>
-${(() => {
-  const kind = String(p[1]||'').trim();
-  const dayNum = extractDayNumber(p[0]) || extractDayNumber(p[1]);
-  if (kind.includes('عودة')) return `<div style="margin-top:6px;font-size:15px;font-weight:800;color:#0d1f4a;">📅 الذهاب: ${dateFrom} | العودة: ${dateTo}</div>`;
-  if (kind.includes('ذهاب')) return `<div style="margin-top:6px;font-size:15px;font-weight:800;color:#0d1f4a;">📅 التاريخ: ${dateFrom}</div>`;
-  if (dayNum) return `<div style="margin-top:6px;font-size:15px;font-weight:800;color:#0d1f4a;">📅 التاريخ: ${getDayDate(dayNum)}</div>`;
-  if (kind === 'داخلي' || kind.includes('داخلي')) {
-    const inferred = moveDates[internalIdx++] || getDayDate(2) || dateFrom;
-    return `<div style="margin-top:6px;font-size:15px;font-weight:800;color:#0d1f4a;">📅 التاريخ: ${inferred}</div>`;
-  }
-  return `<div style="margin-top:6px;font-size:15px;font-weight:800;color:#0d1f4a;">📅 التاريخ: ${dateFrom}</div>`;
-})()}
-${showDetailed ? (()=>{ const per = parseMoney(p[2]); const lineCount=parseCount(p[3])||adults||persons; const pax=(lineCount===persons && (kids+infants)>0)?adults:lineCount; const total=per*pax; return `<div style="margin-top:6px;font-size:16px;font-weight:800;color:#0d1f4a;">${per.toLocaleString()} ريال/بالغ | ${pax} بالغ | الإجمالي: ${(total||parseMoney(p[4])).toLocaleString()} ريال</div>`; })() : ``}
-</div>
-</div>`; }).join('')}` : ''}
-`; }).join(''); })()}` : ''}
+${renderFlightsPDF()}
 ${simCount?`<div style="border:1.5px solid #d0deff;border-radius:10px;padding:14px 18px;margin-top:10px;display:flex;align-items:center;gap:14px;"><span style="font-size:28px;">📶</span><div style="font-size:20px;font-weight:800;color:#1a3a8f;">عدد شرائح الهاتف المضافة: ${simCount}</div></div>`:''}
 </div>` : ''}
 ${showDetailed ? `
