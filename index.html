@@ -378,7 +378,10 @@ HOTELS:
 [اسم الفندق] | [المنطقة] | [النجوم] نجوم | [نوع الغرفة] | [السعر] ريال/ليلة | [عدد الليالي] ليالي | [ما يشمل]
 
 FLIGHTS:
-[مدينة من] - [مدينة الى] | [ذهاب/عودة/داخلي] | [السعر/شخص] ريال/شخص | [عدد الاشخاص] اشخاص | [الاجمالي] ريال
+التسجيل في حقل الرحلة الأول: نفس أسماء عمود [المنطقة] في HOTELS حرفيًا (مع «يوم X:» إن رغبت بإجبار اليوم).
+الداخلي: [مدينة انطلاق مطابقة لفندق تلك المدينة] - [مدينة وصول] | داخلي | ...
+مثال سلسلة: سيلانجور وليلتان ثم لانكاوي وليالٍ ثم كوالالمبور — تاريخ إقلاع الطيران الداخلي من سيلانجور = تاريخ خروج آخر فندق سجّل لسيلانجور، وللانكاوي = خروج آخر فندق لانكاوي.
+[مدينة من أو يوم X: مدينة من - مدينة الى] | [ذهاب/عودة/داخلي] | [السعر/شخص] ريال/شخص | [عدد الاشخاص] اشخاص | [الاجمالي] ريال
 
 TRANSFERS:
 اليوم [رقم] | [وصف مثل استقبال من مطار كوالالمبور] | Pickup | [السعر] ريال
@@ -779,13 +782,23 @@ const flightsTotal = flightsLines.reduce((s,l) => {
   return s + (total || parseMoney(p[4]));
 }, 0);
 
+/** توحيد اسم المطابقة مع عمود «المدينة» في HOTELS — مع أرقام عربية وهمزات */
 function normalizeCityName(s) {
-  return String(s || '').trim().toLowerCase();
+  let t = arabicDigitsToLatin(String(s || '').trim()).toLowerCase();
+  t = t.replace(/[أإآٱ]/g, 'ا').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي').replace(/ى/g, 'ي');
+  t = t.replace(/\s+/g, ' ').trim();
+  return t;
 }
 
+/**
+ * حقول الطيران الأولى قد تحتوي (اختياري) «اليوم 3:» ثم مسار مدن.
+ * المعتمد: تاريخ الطيران الداخلي = تاريخ الخروج من آخر إقامة فندقية مدينة الانطلاق
+ * (بحسب سلسلة DATE_FROM ثم عدد الليالي لكل فندق)، مثال ٢+٣+٢ أيام بين مدن مختلفة بعد ١٠ مايو.
+ */
 function extractRouteCities(routeText) {
-  const t = String(routeText || '').trim();
-  const parts = t.split('-').map(x => x.trim()).filter(Boolean);
+  let t = arabicDigitsToLatin(String(routeText || '').trim());
+  t = t.replace(/^اليوم\s*\d{1,2}\s*[:\.\-]?\s*/u, '');
+  const parts = t.split(/\s*-\s*/).map(x => normalizeCityName(x)).filter(Boolean);
   if (parts.length >= 2) return { from: parts[0], to: parts[1] };
   return { from: '', to: '' };
 }
@@ -801,6 +814,17 @@ function buildLastCheckoutByCity() {
   return map;
 }
 
+/** يطابق نام انطلاق الطيران الداخلي مع المدن المسجلة في الفنادق (يشمل تطابقًا جزئيًا). */
+function lookupCheckoutByCity(depNorm) {
+  if (!depNorm) return '';
+  if (lastCheckoutByCity[depNorm]) return lastCheckoutByCity[depNorm];
+  for (const k of Object.keys(lastCheckoutByCity)) {
+    if (k.length < 2 || depNorm.length < 2) continue;
+    if (depNorm.includes(k) || k.includes(depNorm)) return lastCheckoutByCity[k];
+  }
+  return '';
+}
+
 function renderFlightDateLabel(p0, p1, internalSeqIdx) {
   const kind = String(p1 || '').trim();
   const dayNum = extractDayNumber(p0) || extractDayNumber(p1);
@@ -809,9 +833,8 @@ function renderFlightDateLabel(p0, p1, internalSeqIdx) {
   if (dayNum) return `📅 التاريخ: ${getDayDate(dayNum)}`;
   if (kind.includes('داخلي')) {
     const { from } = extractRouteCities(p0);
-    const depCity = normalizeCityName(from);
     const inferred =
-      (depCity && lastCheckoutByCity[depCity]) ||
+      lookupCheckoutByCity(from) ||
       allCheckoutDatesInOrder[internalSeqIdx] ||
       getDayDate(2) ||
       dateFrom;
@@ -894,6 +917,10 @@ return formatArabicDate(addDays(start, dayNum - 1));
 } catch(e) { return ''; }
 }
 
+/*
+ * تواريخ الفنادق: من DATE_FROM، كل فندق الدخول = المؤشّر الحالي، الخروج = الدخول + عدد الليالي، ثم يتحرك المؤشّر إلى يوم الخروج.
+ * الطيران الداخلي يُؤرّخ بـ «تاريخ خروج آخر فندق لمدينة الانطلاق» إن وُجدت في المسار ومطابقة لـ HOTELS؛ وإلا بالتسلسل؛ وإلا «اليوم X» إن ذُكر.
+ */
 // Hotel check-in/out dates (sequential from DATE_FROM)
 const tripStart = parseArabicDate(dateFrom);
 hotelStays = [];
