@@ -149,6 +149,11 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .pdf-services-list li:last-child { border-bottom:none; }
 .pdf-service-icon { width:32px; height:32px; border-radius:50%; background:#e8f0ff; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; margin-top:2px; }
 .pdf-policy { background:#f0f5ff; border-right:6px solid #1a3a8f; padding:18px 22px; margin-bottom:14px; font-size:18px; font-weight:700; color:#0d1f4a; line-height:2; border-radius:0 12px 12px 0; }
+.pdf-excludes { background:linear-gradient(135deg,#fff7ed,#ffffff); border:2px solid #ffd7b5; border-radius:14px; padding:18px 20px; margin-bottom:18px; }
+.pdf-excludes-title { font-size:20px; font-weight:900; color:#b45309; margin:0 0 10px; display:flex; align-items:center; gap:10px; }
+.pdf-excludes-sub { font-size:14px; font-weight:800; color:#7c2d12; opacity:0.9; margin:0 0 12px; }
+.pdf-excludes-list { margin:0; padding:0 18px; color:#0d1f4a; font-weight:800; font-size:16px; line-height:1.95; }
+.pdf-excludes-list li { margin:8px 0; }
 .pdf-footer { background:#cc1111; color:#fff; padding:22px 40px; text-align:center; font-size:18px; font-weight:900; letter-spacing:1.5px; }
 
 @page { size: A4; margin: 0; }
@@ -903,6 +908,19 @@ ${itineraryHTML}
 </div>` : ''}
 <div class="pdf-page-break"></div>
 <div class="pdf-section">
+<div class="pdf-excludes">
+  <div class="pdf-excludes-title">🚫 البرنامج لا يشمل</div>
+  <div class="pdf-excludes-sub">يرجى الاطلاع على البنود التالية</div>
+  <ul class="pdf-excludes-list">
+    <li>💳 المصاريف الشخصية.</li>
+    <li>🎟️ تذاكر دخول الأماكن السياحية والفعاليات.</li>
+    <li>🛡️ تأمين السفر.</li>
+    <li>🍽️ الوجبات غير المذكورة في البرنامج.</li>
+    <li>🛂 التأشيرات إن وجدت.</li>
+    <li>➕ أي رسوم أو خدمات إضافية غير مذكورة ضمن تفاصيل البرنامج.</li>
+    <li>🏨 ضريبة السائح (Tourism Tax) التي تتطلب بعض الفنادق أو المدن دفعها مباشرة من قبل السائح عند الوصول أو تسجيل الدخول.</li>
+  </ul>
+</div>
 <div class="pdf-section-title">📋 السياسة العامة</div>
 <div class="pdf-policy">الفنادق والمنتجعات للغرفة الواحدة شاملة وجبة الإفطار لشخصين + طفل تحت 5 سنوات. تسجيل الدخول 2:00 ظهراً والخروج 12:00 ظهراً</div>
 <div class="pdf-policy">الوزن المسموح به للطيران الداخلي 20 كيلو إلا إذا تم الاتفاق معنا مسبقاً على زيادة</div>
