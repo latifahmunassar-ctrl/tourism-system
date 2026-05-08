@@ -1091,8 +1091,17 @@ async function exportPDF(mode) {
     addMessage('sys', 'لم يتم توليد Package Code لأن الحفظ فشل. راجعي رسالة الخطأ السابقة ثم أعيدي التصدير.');
     return;
   }
-  buildPDF(mode);
-  setTimeout(()=>{ window.print(); }, 300);
+  try {
+    buildPDF(mode);
+  } catch (e) {
+    addMessage('sys', 'فشل تجهيز ملف PDF: ' + String((e && e.message) ? e.message : e));
+    return;
+  }
+  try {
+    setTimeout(()=>{ window.print(); }, 300);
+  } catch (e) {
+    addMessage('sys', 'فشل فتح نافذة الطباعة: ' + String((e && e.message) ? e.message : e));
+  }
 }
 
 function addMessage(type, text) {
