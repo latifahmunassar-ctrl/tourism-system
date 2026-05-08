@@ -212,7 +212,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div class="output-header-title">📊 تفاصيل التسعيرة — للمراجعة الداخلية</div>
 <div class="export-btns" id="exportBtns" style="display:none">
 <div class="profit-wrap">
-<span class="profit-label">هامش الربح/شخص</span>
+<span class="profit-label">هامش الربح (إجمالي)</span>
 <input class="profit-input" id="profitInput" type="number" placeholder="0" value="0" oninput="updateProfit()">
 <span class="profit-label">ريال</span>
 </div>
@@ -439,7 +439,8 @@ const persons = parseInt(personsMatch?.[1]) || 2;
 // إجمالي المجموعة = الرقم الأوّل في سطر TOTAL_GROUP (قبل الـ |)، أو احسبه إذا غير موجود
 const totalGroup = parseInt((totalGroupLine.split('|')[0]||'').replace(/[^\d]/g,'')) || (totalPerson * persons);
 
-basePrice = totalPerson;
+// السعر الأساسي في النظام = إجمالي المجموعة (TOTAL_GROUP)، وليس للشخص
+basePrice = totalGroup;
 const hotelsLines = parseSection(raw, 'HOTELS');
 const flightsLines = parseSection(raw, 'FLIGHTS');
 const transfersLines = parseSection(raw, 'TRANSFERS');
@@ -551,9 +552,8 @@ document.getElementById('exportBtns').style.display = 'flex';
 function updateProfit() {
 if (!parsedData) return;
 const profit = parseInt(document.getElementById('profitInput').value)||0;
-const persons = parsedData.persons || 1;
-// الربح يُضاف إلى إجمالي المجموعة مباشرةً
-const newGroup = (basePrice * persons) + profit;
+// الربح المُدخل هو إجمالي يُضاف على سعر المجموعة مباشرةً
+const newGroup = basePrice + profit;
 const el = document.getElementById('totalGroupEl');
 if(el) el.textContent = newGroup.toLocaleString()+' ريال';
 }
@@ -616,11 +616,24 @@ if (!parsedData) return;
 const profit=parseInt(document.getElementById('profitInput').value)||0;
 const {dest,meta,dateFrom,dateTo,client,clientCode,hotelsLines,flightsLines,transfersLines,toursLines,simText,persons}=parsedData;
 const simCount = (simText.match(/\d+/) || [''])[0];
-// السعر النهائي الإجمالي = أصل (شخص × عدد) + ربح
-const finalGroupPrice = (basePrice * persons) + profit;
+// السعر النهائي الإجمالي = السعر الأساسي للمجموعة + الربح (إجمالي)
+const profitTotal = profit;
+const baseGroupPrice = basePrice;
+const finalGroupPrice = baseGroupPrice + profitTotal;
 const showLogo = mode === 'client' || mode === 'detailed';
 const showTotalPrice = mode === 'client' || mode === 'detailed';
 const showDetailed = mode === 'detailed';
+
+// Totals (for detailed PDF calculations)
+const parseLineTotal = (s) => {
+  const eq = (s||'').match(/=\s*([\d,]+)/);
+  if (eq) return parseInt(eq[1].replace(/[^\d]/g,''))||0;
+  return parseInt((s||'').replace(/[^\d]/g,''))||0;
+};
+const hotelsTotal = hotelsLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); const price=parseInt((p[4]||'').replace(/[^\d]/g,''))||0; const nights=parseInt((p[5]||'').replace(/[^\d]/g,''))||0; return s + (price*nights); }, 0);
+const flightsTotal = flightsLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + (parseInt((p[4]||'').replace(/[^\d]/g,''))||0); }, 0);
+const transfersTotal = transfersLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
+const toursTotal = toursLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
 
 // Extract cities from hotels
 const cities = [...new Set(hotelsLines.map(l => l.split('|')[1]?.trim()).filter(Boolean))];
@@ -727,6 +740,15 @@ ${showTotalPrice ? `<div class="pdf-price-box"><div class="pdf-price-label">💰
 </div>
 <div class="pdf-field"><span class="pdf-field-label">العميل :</span><span class="pdf-field-value">${client}</span></div>
 <div class="pdf-field"><span class="pdf-field-label">كود العميل :</span><span class="pdf-field-value">${clientCode}</span></div>
+${showDetailed ? `
+<div style="margin-top:14px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.28);border-radius:14px;padding:14px 16px;color:#fff;">
+  <div style="font-weight:900;letter-spacing:0.5px;margin-bottom:10px;">🧮 ملخص الحساب (تفصيلي)</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-weight:800;line-height:1.7;font-size:14px;">
+    <div>الإجمالي الأساسي: <span style="font-weight:900;">${baseGroupPrice.toLocaleString()} ريال</span></div>
+    <div>إجمالي الربح: <span style="font-weight:900;">${profitTotal.toLocaleString()} ريال</span></div>
+    <div>الإجمالي بعد الربح: <span style="font-weight:900;">${finalGroupPrice.toLocaleString()} ريال</span></div>
+  </div>
+</div>` : ``}
 <div class="pdf-disclaimer">⚠️ هذا عرض سعر ولا يعني بالضرورة توفّر الغرف لحظتها</div>
 <img class="pdf-cover-suitcase" src="${SUITCASE_IMG}" alt=""/>
 </div>
@@ -762,10 +784,29 @@ ${showDetailed ? `<div style="margin-top:6px;font-size:16px;font-weight:800;colo
 </div>`; }).join('')}` : ''}
 ${simCount?`<div style="border:1.5px solid #d0deff;border-radius:10px;padding:14px 18px;margin-top:10px;display:flex;align-items:center;gap:14px;"><span style="font-size:28px;">📶</span><div style="font-size:20px;font-weight:800;color:#1a3a8f;">عدد شرائح الهاتف المضافة: ${simCount}</div></div>`:''}
 </div>` : ''}
-${(showDetailed && (transfersLines.length || toursLines.length)) ? `
+${showDetailed ? `
+<div style="margin-top:18px;border:2px solid #d0deff;border-radius:12px;padding:14px 16px;">
+  <div style="font-weight:900;color:#1a3a8f;font-size:18px;margin-bottom:10px;">📌 إجماليات الخدمات (قبل الربح)</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-weight:900;color:#0d1f4a;font-size:16px;line-height:1.8;">
+    <div>🏨 الفنادق: ${hotelsTotal.toLocaleString()} ريال</div>
+    <div>✈️ الطيران: ${flightsTotal.toLocaleString()} ريال</div>
+    <div>🚗 الانتقالات: ${transfersTotal.toLocaleString()} ريال</div>
+    <div>🗺️ الجولات: ${toursTotal.toLocaleString()} ريال</div>
+  </div>
+</div>` : ``}
+${(showDetailed && (hotelsLines.length || transfersLines.length || toursLines.length)) ? `
 <div class="pdf-page-break"></div>
 <div class="pdf-section">
   <div class="pdf-section-title">💼 تفصيل الخدمات</div>
+  ${hotelsLines.length ? `<div style="font-weight:900;color:#1a3a8f;font-size:18px;margin:8px 0 14px;">🏨 الفنادق</div>
+  ${hotelsLines.map(l=>{ const p=l.split('|').map(x=>x.trim()); const price=parseInt((p[4]||'').replace(/[^\\d]/g,''))||0; const nights=parseInt((p[5]||'').replace(/[^\\d]/g,''))||0; const total=(price*nights)||0; return `
+    <div style="border:1px solid #eef0f8;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;gap:12px;">
+      <div style="font-weight:800;color:#0d1f4a;font-size:16px;line-height:1.6;">
+        ${p[1]||''} | ${p[0]||''} <span style="opacity:0.8">(${p[2]||''} نجوم)</span><br>
+        <span style="opacity:0.85;">${p[3]||''}</span> — <span style="opacity:0.85;">${price.toLocaleString()} ريال/ليلة × ${nights} ليالي</span>
+      </div>
+      <div style="font-weight:900;color:#0d1f4a;white-space:nowrap;">${total.toLocaleString()} ريال</div>
+    </div>`; }).join('')}` : ''}
   ${transfersLines.length ? `<div style="font-weight:900;color:#1a3a8f;font-size:18px;margin:8px 0 14px;">🚗 الانتقالات</div>
   ${transfersLines.map(l=>{ const p=l.split('|').map(x=>x.trim()); return `
     <div style="border:1px solid #eef0f8;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;gap:12px;">
@@ -812,8 +853,7 @@ ${showDetailed ? `
 async function exportPDF(mode) {
   if (!parsedData) return;
   const profit=parseInt(document.getElementById('profitInput').value)||0;
-  const persons = parsedData.persons || 1;
-  const finalGroupPrice = (basePrice * persons) + profit;
+  const finalGroupPrice = basePrice + profit;
   await saveCurrentProgramOnce(mode, finalGroupPrice);
   buildPDF(mode);
   setTimeout(()=>{ window.print(); }, 300);
