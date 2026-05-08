@@ -622,7 +622,10 @@ async function saveCurrentProgramOnce(pdfVariant, finalGroupPrice) {
         persons: parsedData.persons || 1
       })
     });
-    const data = await res.json();
+    const data = await res.json().catch(async () => {
+      const t = await res.text().catch(() => '');
+      return { ok: false, error: t || 'تعذّر قراءة استجابة السيرفر' };
+    });
     if (res.ok && data.ok && data.code) {
       lastSavedCode = data.code;
       const pill = document.getElementById('savedCodePill');
@@ -635,7 +638,10 @@ async function saveCurrentProgramOnce(pdfVariant, finalGroupPrice) {
       if (inp) inp.value = lastSavedCode;
       return lastSavedCode;
     }
-  } catch (e) {}
+    addMessage('sys', (data && data.error) ? ('فشل حفظ البرنامج: ' + String(data.error)) : ('فشل حفظ البرنامج (HTTP ' + res.status + ')'));
+  } catch (e) {
+    addMessage('sys', 'فشل حفظ البرنامج: ' + String((e && e.message) ? e.message : e));
+  }
   return '';
 }
 
