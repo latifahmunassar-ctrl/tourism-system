@@ -420,6 +420,49 @@ const m = raw.match(new RegExp(tag + ':([\\s\\S]+?)(?=\\n(?:DEST|META|DATE_FROM|
 return m ? m[1].trim().split('\n').filter(l => l.includes('|')) : [];
 }
 
+// ── حقول HOTELS: سعر/ليلة + «N ليالي» ثم تواريخ — لا تُدمَج أرقام التاريخ مع عدد الليالي
+function arabicDigitsToLatin(str) {
+  const map = { '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9' };
+  return String(str || '').replace(/[٠-٩]/g, ch => map[ch] || ch);
+}
+function parseHotelNights(seg) {
+  const s0 = arabicDigitsToLatin(String(seg || '').trim());
+  if (/^\s*(?:ليلتين)\b/ui.test(s0)) return 2;
+  const beforeParen = s0.split(/\s*\(/)[0]?.trim() || s0;
+  let m = beforeParen.match(/^(\d{1,3})\s*(?:ليال)/u);
+  if (!m) m = beforeParen.match(/\b(\d{1,3})\s*(?:ليال)/u);
+  const n = m ? parseInt(m[1], 10) : 0;
+  return n >= 1 && n <= 365 ? n : 0;
+}
+function parseHotelPerNightRate(seg) {
+  const s0 = arabicDigitsToLatin(String(seg || '').trim()).replace(/\s+/g, ' ').trim();
+  if (!s0) return 0;
+  let m = s0.match(/([\d,]+(?:\.\d+)?)\s*(?:ريال|SAR)?\s*\/\s*ليال(?:ة|ى)?/iu);
+  if (m) {
+    const v = Math.round(parseFloat(String(m[1]).replace(/,/g, '')) || 0);
+    if (v > 0) return Math.min(v, 99999999);
+  }
+  m = s0.match(/([\d,]+(?:\.\d+)?)\s*(?:ريال|SAR)/iu);
+  if (m) {
+    const v = Math.round(parseFloat(String(m[1]).replace(/,/g, '')) || 0);
+    if (v > 0) return Math.min(v, 99999999);
+  }
+  const first = (s0.match(/\d(?:[\d,.]*\d)?/)?.[0] || '').replace(/,/g, '');
+  const cand = parseInt(first, 10);
+  return cand > 0 && cand <= 99999999 ? cand : 0;
+}
+function hotelLineTotals(line) {
+  const p = line.split('|').map(x => String(x ?? '').trim());
+  const nightly = parseHotelPerNightRate(p[4]);
+  let nights = parseHotelNights(p[5]);
+  let totalLine = nightly * nights;
+  if (!(totalLine > 0)) {
+    const g = String(p[4]).match(/=\s*([\d,]+)\s*(?:ريال|SAR)/iu);
+    if (g) totalLine = parseInt(String(g[1]).replace(/[^\d]/g, ''), 10) || 0;
+  }
+  return { p, nightly, nights, totalLine };
+}
+
 function buildReview(raw) {
 lastProgramRaw = raw || '';
 lastSavedCode = '';
@@ -453,7 +496,7 @@ const summaryMatch = raw.match(/SUMMARY:([\s\S]+?)(?=\nCHAT:|$)/);
 const summaryLines = summaryMatch ? summaryMatch[1].trim().split('\n').filter(l => l.includes('|') && !l.startsWith('TOTAL')) : [];
 
 // Totals
-let hotelsTotal = hotelsLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s+(parseInt((p[4]||'').replace(/[^\d]/g,''))||0)*(parseInt((p[5]||'').replace(/[^\d]/g,''))||0); }, 0);
+let hotelsTotal = hotelsLines.reduce((s, l) => s + (hotelLineTotals(l).totalLine || 0), 0);
 let flightsTotal = flightsLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s+(parseInt((p[4]||'').replace(/[^\d]/g,''))||0); }, 0);
 // Helper: extract the FINAL total from a price cell. Supports "X × N = Y ريال" (uses Y) or plain "Y ريال" (uses Y).
 const parseLineTotal = (s) => {
@@ -480,10 +523,8 @@ html += `<div class="section-card">
 <table class="pricing-table">
 <thead><tr><th>المدينة</th><th>الفندق</th><th>النجوم</th><th>الغرفة</th><th>السعر/ليلة</th><th>الليالي</th><th>الإجمالي</th></tr></thead>
 <tbody>${hotelsLines.map(l => {
-const p=l.split('|').map(x=>x.trim());
-const price=parseInt((p[4]||'').replace(/[^\d]/g,''))||0;
-const nights=parseInt((p[5]||'').replace(/[^\d]/g,''))||0;
-return `<tr><td>${p[1]||''}</td><td><strong>${p[0]||''}</strong></td><td>${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${price.toLocaleString()} ريال</td><td>${nights} ليالي</td><td class="price-cell">${(price*nights).toLocaleString()} ريال</td></tr>`;
+const { p, nightly, nights, totalLine } = hotelLineTotals(l);
+return `<tr><td>${p[1]||''}</td><td><strong>${p[0]||''}</strong></td><td>${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td><td class="price-cell">${totalLine.toLocaleString()} ريال</td></tr>`;
 }).join('')}</tbody>
 </table></div>`;
 }
@@ -630,7 +671,7 @@ const parseLineTotal = (s) => {
   if (eq) return parseInt(eq[1].replace(/[^\d]/g,''))||0;
   return parseInt((s||'').replace(/[^\d]/g,''))||0;
 };
-const hotelsTotal = hotelsLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); const price=parseInt((p[4]||'').replace(/[^\d]/g,''))||0; const nights=parseInt((p[5]||'').replace(/[^\d]/g,''))||0; return s + (price*nights); }, 0);
+const hotelsTotal = hotelsLines.reduce((s, l) => s + (hotelLineTotals(l).totalLine || 0), 0);
 const flightsTotal = flightsLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + (parseInt((p[4]||'').replace(/[^\d]/g,''))||0); }, 0);
 const transfersTotal = transfersLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
 const toursTotal = toursLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
@@ -756,18 +797,18 @@ ${(hotelsLines.length || flightsLines.length || simText) ? `
 <div class="pdf-page-break"></div>
 <div class="pdf-section">
 ${hotelsLines.length ? `<div class="pdf-section-title">🏨 الفنادق</div>
-${hotelsLines.map(l=>{ const p=l.split('|').map(x=>x.trim()); return `
+${hotelsLines.map(l=>{ const { p, nightly, nights, totalLine } = hotelLineTotals(l); return `
 <div style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;">
 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;">
   <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:12px;line-height:1.3;">🏨 ${p[0]||''}</div>
-  ${showDetailed ? `<div style="font-weight:900;color:#0d1f4a;font-size:18px;white-space:nowrap;">${((parseInt((p[4]||'').replace(/[^\\d]/g,''))||0) * (parseInt((p[5]||'').replace(/[^\\d]/g,''))||0)).toLocaleString()} ريال</div>` : ``}
+  ${showDetailed ? `<div style="font-weight:900;color:#0d1f4a;font-size:18px;white-space:nowrap;">${totalLine.toLocaleString()} ريال</div>` : ``}
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:20px;font-weight:800;color:#0d1f4a;line-height:1.5;">
 <span>📍 المدينة: ${p[1]||''}</span>
 <span>⭐ النجوم: ${p[2]||''}</span>
 <span>🛏️ الغرفة: ${p[3]||''}</span>
 <span>📅 الإقامة: ${p[5]||''}</span>
-${showDetailed ? `<span>💵 السعر/ليلة: ${(parseInt((p[4]||'').replace(/[^\\d]/g,''))||0).toLocaleString()} ريال</span>` : ``}
+${showDetailed ? `<span>💵 تفصيل السعر: ${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي = ${totalLine.toLocaleString()} ريال</span>` : ``}
 <span style="grid-column:1/-1;">✅ يشمل: ${p[6]||''}</span>
 </div>
 </div>`; }).join('')}` : ''}
@@ -799,13 +840,13 @@ ${(showDetailed && (hotelsLines.length || transfersLines.length || toursLines.le
 <div class="pdf-section">
   <div class="pdf-section-title">💼 تفصيل الخدمات</div>
   ${hotelsLines.length ? `<div style="font-weight:900;color:#1a3a8f;font-size:18px;margin:8px 0 14px;">🏨 الفنادق</div>
-  ${hotelsLines.map(l=>{ const p=l.split('|').map(x=>x.trim()); const price=parseInt((p[4]||'').replace(/[^\\d]/g,''))||0; const nights=parseInt((p[5]||'').replace(/[^\\d]/g,''))||0; const total=(price*nights)||0; return `
+  ${hotelsLines.map(l=>{ const { p, nightly, nights, totalLine } = hotelLineTotals(l); return `
     <div style="border:1px solid #eef0f8;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;gap:12px;">
       <div style="font-weight:800;color:#0d1f4a;font-size:16px;line-height:1.6;">
-        ${p[1]||''} | ${p[0]||''} <span style="opacity:0.8">(${p[2]||''} نجوم)</span><br>
-        <span style="opacity:0.85;">${p[3]||''}</span> — <span style="opacity:0.85;">${price.toLocaleString()} ريال/ليلة × ${nights} ليالي</span>
+        ${p[1]||''} | ${p[0]||''} <span style="opacity:0.8">(${p[2]||''})</span><br>
+        <span style="opacity:0.85;">${p[3]||''}</span> — <span style="opacity:0.85;">${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي = ${totalLine.toLocaleString()} ريال</span>
       </div>
-      <div style="font-weight:900;color:#0d1f4a;white-space:nowrap;">${total.toLocaleString()} ريال</div>
+      <div style="font-weight:900;color:#0d1f4a;white-space:nowrap;">${totalLine.toLocaleString()} ريال</div>
     </div>`; }).join('')}` : ''}
   ${transfersLines.length ? `<div style="font-weight:900;color:#1a3a8f;font-size:18px;margin:8px 0 14px;">🚗 الانتقالات</div>
   ${transfersLines.map(l=>{ const p=l.split('|').map(x=>x.trim()); return `
