@@ -789,7 +789,7 @@ itineraryHTML += `</div></div>`;
 document.getElementById('pdfContent').innerHTML=`
 <div class="pdf-print-code">
   <div>
-    <div class="pc-title">كود الاسترجاع (للبحث لاحقاً)</div>
+    <div class="pc-title">Package Code</div>
     <div class="pc-hint">استخدميه في خانة الاسترجاع داخل النظام</div>
   </div>
   <div class="pc-val">${systemCode || '—'}</div>
@@ -808,8 +808,8 @@ ${showTotalPrice ? `<div class="pdf-price-box"><div class="pdf-price-label">💰
 ⏱️ ${duration} | ${nights} | ${metaParts[3]||''}
 </div>
 <div class="pdf-field"><span class="pdf-field-label">العميل :</span><span class="pdf-field-value">${client}</span></div>
-<div class="pdf-field"><span class="pdf-field-label">كود الاسترجاع (النظام) :</span><span class="pdf-field-value" style="font-weight:900;letter-spacing:1px;direction:ltr;unicode-bidi:plaintext;">${systemCode || '—'}</span></div>
 <div class="pdf-field"><span class="pdf-field-label">كود العميل :</span><span class="pdf-field-value">${clientCode}</span></div>
+<div class="pdf-field"><span class="pdf-field-label">Package Code</span><span class="pdf-field-value" style="font-weight:900;letter-spacing:1px;direction:ltr;unicode-bidi:plaintext;">${systemCode || '—'}</span></div>
 ${showDetailed ? `
 <div style="margin-top:14px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.28);border-radius:14px;padding:14px 16px;color:#fff;">
   <div style="font-weight:900;letter-spacing:0.5px;margin-bottom:10px;">🧮 ملخص الحساب (تفصيلي)</div>
@@ -924,7 +924,11 @@ async function exportPDF(mode) {
   if (!parsedData) return;
   const profit=parseInt(document.getElementById('profitInput').value)||0;
   const finalGroupPrice = basePrice + profit;
-  await saveCurrentProgramOnce(mode, finalGroupPrice);
+  const saved = await saveCurrentProgramOnce(mode, finalGroupPrice);
+  if (!saved) {
+    addMessage('sys', 'فشل حفظ البرنامج (لم يتم توليد Package Code). تأكدي من اتصال الإنترنت/سوبابيس ثم أعيدي التصدير.');
+    return;
+  }
   buildPDF(mode);
   setTimeout(()=>{ window.print(); }, 300);
 }
