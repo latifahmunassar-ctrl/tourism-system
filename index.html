@@ -932,7 +932,8 @@ async function exportPDF(mode) {
   const finalGroupPrice = basePrice + profit;
   const saved = await saveCurrentProgramOnce(mode, finalGroupPrice);
   if (!saved) {
-    addMessage('sys', 'فشل حفظ البرنامج (لم يتم توليد Package Code). تأكدي من اتصال الإنترنت/سوبابيس ثم أعيدي التصدير.');
+    // saveCurrentProgramOnce يعرض سبب الفشل من السيرفر
+    addMessage('sys', 'لم يتم توليد Package Code لأن الحفظ فشل. راجعي رسالة الخطأ السابقة ثم أعيدي التصدير.');
     return;
   }
   buildPDF(mode);
