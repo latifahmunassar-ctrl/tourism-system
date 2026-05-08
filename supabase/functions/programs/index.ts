@@ -23,6 +23,16 @@ function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: CORS_HEADERS });
 }
 
+function sanitizeCodeQuery(code: string): string {
+  return String(code ?? "").trim();
+}
+
+/** يطابق عمود CLIENT_CODE في نص البرنامج (مثل ALZ-2026-001) */
+function extractClientCodeFromRaw(raw: string): string {
+  const m = String(raw).match(/^\s*CLIENT_CODE:\s*(.+)$/im);
+  return m ? String(m[1]).trim() : "";
+}
+
 function inferPrefix(destinationRaw: string): string {
   const d = (destinationRaw || "").trim().toLowerCase();
   const map: Array<[RegExp, string]> = [
@@ -50,18 +60,52 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
 
     if (req.method === "GET") {
-      const code = (url.searchParams.get("code") || "").trim();
+      const code = sanitizeCodeQuery(url.searchParams.get("code") || "");
       if (!code) return json(400, { error: "code مطلوب" });
+      const safeLike = code.replace(/[%_\\]/g, "");
 
-      const { data, error } = await supabase
+      const fields =
+        "code,client_code,destination,raw,pdf_variant,total_group,persons,created_at";
+
+      const bySystem = await supabase
         .from("programs")
-        .select("code,destination,raw,pdf_variant,total_group,persons,created_at")
+        .select(fields)
         .eq("code", code)
         .maybeSingle();
 
-      if (error) return json(500, { error: error.message });
-      if (!data) return json(404, { error: "البرنامج غير موجود" });
-      return json(200, { ok: true, program: data });
+      if (bySystem.error) return json(500, { error: bySystem.error.message });
+      if (bySystem.data) return json(200, { ok: true, program: bySystem.data });
+
+      if (safeLike.length > 0) {
+        const byClient = await supabase
+          .from("programs")
+          .select(fields)
+          .not("client_code", "is", null)
+          .ilike("client_code", safeLike)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (byClient.error) return json(500, { error: byClient.error.message });
+        if (byClient.data) return json(200, { ok: true, program: byClient.data });
+
+        // احتياط للسجلات القديمة قبل إضافة العمود: البحث داخل RAW
+        const { data: byRaw, error: rawErr } = await supabase
+          .from("programs")
+          .select(fields)
+          .ilike("raw", `%CLIENT_CODE:${safeLike}%`)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (rawErr) return json(500, { error: rawErr.message });
+        if (byRaw) return json(200, { ok: true, program: byRaw });
+      }
+
+      return json(404, {
+        error:
+          "البرنامج غير محفوظ أو الكود مختلف. احفظيه أولًا بتصدير PDF، أو ابحثي بكود النظام (مثل MY-2026-001). لاستخدام كود العميل (CLIENT_CODE مثل ALZ-2026-001) تأكدي أنّ البرنامج حُفظ بعد هذا التحديث أو أنّ السطر CLIENT_CODE موجود في النص المحفوظ.",
+      });
     }
 
     if (req.method === "POST") {
@@ -84,8 +128,11 @@ Deno.serve(async (req) => {
       const code = String(codeData || "").trim();
       if (!code) return json(500, { error: "فشل توليد الكود" });
 
+      const clientCode = extractClientCodeFromRaw(raw) || null;
+
       const { error: insErr } = await supabase.from("programs").insert({
         code,
+        client_code: clientCode,
         destination,
         raw,
         pdf_variant: pdfVariant,
@@ -94,7 +141,7 @@ Deno.serve(async (req) => {
       });
 
       if (insErr) return json(500, { error: insErr.message });
-      return json(200, { ok: true, code });
+      return json(200, { ok: true, code, client_code: clientCode });
     }
 
     return json(405, { error: "Method not allowed" });

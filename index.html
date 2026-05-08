@@ -59,7 +59,8 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .typing span:nth-child(3) { animation-delay:.4s; }
 @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
 .output-panel { flex:1; display:flex; flex-direction:column; overflow:hidden; }
-.output-header { padding:12px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; background:var(--s1); }
+.output-header { padding:12px 20px; border-bottom:1px solid var(--border); display:flex; flex-direction:column; align-items:stretch; gap:10px; flex-shrink:0; background:var(--s1); }
+.output-header-top { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
 .output-header-title { font-size:13px; font-weight:800; }
 .export-btns { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .profit-wrap { display:flex; align-items:center; gap:6px; background:var(--s2); border:1px solid var(--border); border-radius:8px; padding:5px 10px; }
@@ -209,17 +210,19 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div class="layout">
 <div class="output-panel">
 <div class="output-header">
+<div class="output-header-top">
 <div class="output-header-title">📊 تفاصيل التسعيرة — للمراجعة الداخلية</div>
+<div id="retrieveBar" class="export-btns" style="display:flex;">
+<input id="programCodeInput" class="profit-input" style="width:220px;min-width:0" placeholder="كود النظام (MY-2026-001) أو عميل (ALZ-2026-001)" autocomplete="off" onkeydown="handleRetrieveKey(event)">
+<button type="button" class="ebtn ebtn-nologo" onclick="searchByCode()">🔎 استرجاع</button>
+<span id="savedCodePill" style="display:none;background:#0b3d91;color:#fff;padding:8px 12px;border-radius:999px;font-weight:900;font-size:12px;">CODE: —</span>
+</div>
+</div>
 <div class="export-btns" id="exportBtns" style="display:none">
 <div class="profit-wrap">
 <span class="profit-label">هامش الربح (إجمالي)</span>
 <input class="profit-input" id="profitInput" type="number" placeholder="0" value="0" oninput="updateProfit()">
 <span class="profit-label">ريال</span>
-</div>
-<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-  <input id="programCodeInput" class="profit-input" style="width:190px" placeholder="ابحث بكود البرنامج (VN-2026-001)">
-  <button class="ebtn ebtn-nologo" onclick="searchByCode()">🔎 استرجاع</button>
-  <span id="savedCodePill" style="display:none;background:#0b3d91;color:#fff;padding:8px 12px;border-radius:999px;font-weight:900;font-size:12px;">CODE: —</span>
 </div>
 <button class="ebtn ebtn-pdf" onclick="exportPDF('client')">📄 للعميل (لوغو + إجمالي)</button>
 <button class="ebtn ebtn-nologo" onclick="exportPDF('no_price')">📄 بدون سعر (بدون لوغو)</button>
@@ -618,13 +621,21 @@ async function saveCurrentProgramOnce(pdfVariant, finalGroupPrice) {
     if (res.ok && data.ok && data.code) {
       lastSavedCode = data.code;
       const pill = document.getElementById('savedCodePill');
-      if (pill) { pill.textContent = 'CODE: ' + lastSavedCode; pill.style.display = 'inline-flex'; }
+      const ccSave = data.client_code ? String(data.client_code).trim() : '';
+      if (pill) {
+        pill.textContent = ccSave ? ('نظام: ' + lastSavedCode + ' | عميل: ' + ccSave) : ('CODE: ' + lastSavedCode);
+        pill.style.display = 'inline-flex';
+      }
       const inp = document.getElementById('programCodeInput');
       if (inp) inp.value = lastSavedCode;
       return lastSavedCode;
     }
   } catch (e) {}
   return '';
+}
+
+function handleRetrieveKey(e) {
+  if (e.key === 'Enter') { e.preventDefault(); searchByCode(); }
 }
 
 async function searchByCode() {
@@ -636,16 +647,20 @@ async function searchByCode() {
       method: 'GET',
       headers: { 'Authorization': 'Bearer ' + SUPABASE_KEY, 'apikey': SUPABASE_KEY }
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (res.ok && data.ok && data.program?.raw) {
       buildReview(data.program.raw);
       lastSavedCode = data.program.code || code;
       const pill = document.getElementById('savedCodePill');
-      if (pill) { pill.textContent = 'CODE: ' + lastSavedCode; pill.style.display = 'inline-flex'; }
-      if (input) input.value = lastSavedCode;
-      addMessage('sys', 'تم استرجاع البرنامج وعرضه للمراجعة.');
+      const cc = data.program.client_code ? String(data.program.client_code).trim() : '';
+      if (pill) {
+        pill.textContent = cc ? ('نظام: ' + lastSavedCode + ' | عميل: ' + cc) : ('CODE: ' + lastSavedCode);
+        pill.style.display = 'inline-flex';
+      }
+      if (input) input.value = code;
+      addMessage('sys', 'تم الاسترجاع وعرض البرنامج للمراجعة.');
     } else {
-      addMessage('sys', data.error || 'تعذّر الاسترجاع.');
+      addMessage('sys', (data && data.error) ? String(data.error) : ('تعذّر الاسترجاع (HTTP ' + res.status + ')'));
     }
   } catch (e) {
     addMessage('sys', 'تعذّر الاتصال للاسترجاع.');
