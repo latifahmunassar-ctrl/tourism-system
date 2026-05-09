@@ -361,15 +361,16 @@ let lastSavedCode = '';
 const SYSTEM = `انت مساعد متخصص في بناء البرامج السياحية. مهم جداً: أي أرقام إجماليات يجب أن تكون محسوبة بدقة من تفاصيل الشيت نفسها، ولا تكتب أي إجمالي إلا بعد التحقق:
 - إجمالي الفنادق = مجموع (سعر/ليلة × عدد الليالي) لكل فندق.
 - إجمالي الطيران = السعر/شخص × عدد البالغين (ولا تُحسب الرُضّع/الأطفال كبالغين إذا ذُكروا).
-- إجمالي النقل والجولات = مجموع الأسعار في الأسطر.
+- إجمالي النقل والجولات = مجموع الأسطر حسب أسعار الشيت لعدد المسافرين في META تمامًا (بدون أسعار لفئة Pax أقل أو أكبر عن العدد الفعلي).
 - إجمالي شرائح الاتصال = عدد الشرائح في SIM × 50 ريال (سعر الشيت لكل شريحة/لكل شخص — يُطبّق على جميع الوجهات).
 - إجمالي المجموعة (TOTAL_GROUP) = الفنادق + الطيران + النقل + الجولات + شرائح الاتصال إن وُجدت (بدون الربح).
 لا تخمّن الأرقام ولا تعطي إجمالي غير متطابق.
 
 قواعد صارمة:
 - كل فندق في HOTELS يجب أن يظهر بسطر مستقل ويُحسب سعره (سعر/ليلة × الليالي) ويُضاف للإجمالي — لا تُسقط فندقاً مطلوباً في البرنامج.
-- إذا طُلب سرير إضافي: أضف قسم EXTRA_BED_CITIES (يمكن أن يمتد لأكثر من سطر). إما مدينة=عدد لكل مدينة، أو اكتب ALL أو الكل لتطبيق عدد أسرة إضافية على كل فندق 4★ أو 5★ (مثال: ALL=1).
+- إذا طُلب سرير إضافي: أضف قسم EXTRA_BED_CITIES (يمكن أن يمتد لأكثر من سطر). إما مدينة=عدد لكل مدينة، أو ALL=1 (أو الكل) لكل فنادق 4★ و5★ في البرنامج، أو على مستوى الدولة لتعميم القاعدة (مثال فيتنام: فيتنام=1 أو Vietnam=1 أو VN=1 — نفس الأثر لكل فنادق 4★ و5★ داخل فيتنام؛ وكذلك Malaysia=1، Thailand=1، Turkey=1، Indonesia=1 حسب الوجهة).
 - يوم توديع Drop للمطار للعودة إلى الديار/الوطن = نهاية البرنامج: لا تضع جولات في ذلك اليوم ولا بعده. إذا استمر البرنامج في وجهة أخرى: يوم استقبال Pickup من مطار الوجهة الجديدة ثم جولات من اليوم التالي فقط في تلك المنطقة — ممنوع جولات لمنطقة أخرى بين التوديع والاستقبال الجديد.
+- النقل TRANSFERS والجولات TOURS: أسعار الشيت لفئة عدد الركاب Pax يجب أن تطابق **عدد مسافري الMETA** تمامًا (مثلاً مجموعة 5 → صف Pax 5 أو 4-9 حسب عمود الشيت؛ ممنوع سعر «1-3 أشخاص» لمجموعة 5). اُكتب السطر بصيغة الستة حقول مثل FLIGHTS (سعر | عدد الأشخاص | الإجمالي).
 
 يجب ان يكون ردك بهذا التنسيق الدقيق فقط بدون اي رموز او تزيين:
 
@@ -384,7 +385,7 @@ HOTELS:
 [اسم الفندق] | [المنطقة] | [النجوم] نجوم | [نوع الغرفة] | [السعر] ريال/ليلة | [عدد الليالي] ليالي | [ما يشمل]
 
 EXTRA_BED_CITIES:
-عند طلب سرير إضافي — ألزم هذا السطر: مدينة=عدد لكل مدينة (يمكن عدة أسطر حتى FLIGHTS:). أو ALL=1 لكل فنادق 4★ و5★. مثال: سيلانجور=1, لانكاوي=2
+عند طلب سرير إضافي — مدينة=عدد، أو دولة=عدد (فيتنام=1 / Vietnam=1 / VN=1 لكل فنادق 4★ و5★ في تلك الوجهة)، أو ALL=1 لكل البرنامج. تجنب نسخ «مثال: سيلانجور…» فقط دون صيغة =عدد لوجهتك.
 
 FLIGHTS:
 التسجيل في حقل الرحلة الأول: نفس أسماء عمود [المنطقة] في HOTELS حرفيًا (مع «يوم X:» إن رغبت بإجبار اليوم).
@@ -393,11 +394,12 @@ FLIGHTS:
 [مدينة من أو يوم X: مدينة من - مدينة الى] | [ذهاب/عودة/داخلي] | [السعر/شخص] ريال/شخص | [عدد الاشخاص] اشخاص | [الاجمالي] ريال
 
 TRANSFERS:
-اليوم [رقم] | [وصف مثل استقبال من مطار كوالالمبور] | Pickup | [السعر] ريال
-اليوم [رقم] | [وصف مثل توديع فندق كوالالمبور للمطار] | Drop | [السعر] ريال
+اليوم [رقم] | [الوصف] | Pickup أو Drop | [السعر/شخص ريال/شخص] أو [سعر لفئة مجموعة المسافرين من الشيت] | [عدد الاشخاص] يجب أن يساوي عدد مسافري META | [الاجمالي] ريال
+(أو الشكل القديم بأربعة حقول: اليوم | الوصف | النوع | الإجمالي فقط.)
 
 TOURS:
-اليوم [رقم] | [اسم الجولة] | [ثقافية/طبيعية/بحرية] | [السعر] ريال
+اليوم [رقم] | [اسم الجولة] | [ثقافية/طبيعية/بحرية] | [السعر/شخص أو سعر مجموعة الشيت لفئة عدد مسافريك] | [عدد الاشخاص]=عدد META | [الاجمالي] ريال
+(كل جولة أو نقل السعر المعروض لفئة Pax في الشيت هو لنفس عدد المسافرين في META — لا تختار عمود Pax أقل/أكبر.)
 
 SIM:[عدد الشرائح فقط، مثل: 4] (إن وُجد: التكلفة دائماً عدد الشرائح × 50 ريال لأي وجهة)
 
@@ -459,28 +461,178 @@ const SIM_CARD_UNIT_PRICE_SAR = 50;
 
 /** يقرأ محتوى EXTRA_BED_CITIES حتى أول ترويسة قسم لاحقة (النموذج أحياناً يضع المدن في السطر التالي). */
 function extractExtraBedCitiesBody(raw) {
+  const destHint = String(getLine(raw, 'DEST') || '').trim();
   const m = raw.match(new RegExp('EXTRA_BED_CITIES:([\\s\\S]*?)(?=\\n(?:' + DOC_SECTION_HEAD_RE + '):)', 'm'));
-  if (m) return m[1].trim().replace(/\s*\n\s*/g, ' ').trim();
-  return String(getLine(raw, 'EXTRA_BED_CITIES') || '').trim();
+  if (m) return sanitizeExtraBedCitiesPayload(m[1], destHint);
+  return sanitizeExtraBedCitiesPayload(String(getLine(raw, 'EXTRA_BED_CITIES') || ''), destHint);
+}
+
+function extraBedLooksLikeMalaysiaSampleCities(txt) {
+  return /سيلانجور|كوالالمبور|لانكاوي|بينانج|penang|langkawi|\bkuala\b|malaysia\b|ماليزيا/i.test(String(txt || ''));
+}
+
+/** يزيل جمل الشرح المنقولة من القالب؛ لا يعتمد ذيل «مثال: سيلانجور» لبرنامج فيتنام. */
+function sanitizeExtraBedCitiesPayload(s, destRaw) {
+  let t = String(s || '').replace(/\s*\n\s*/g, ' ').trim();
+  t = t.replace(/^عند\s+طلب\s+سرير\s*إضافي[\s—\-–:]+/iu, '').trim();
+  const mi = t.search(/\bمثال\s*[:：]/iu);
+  if (mi !== -1) {
+    const tail = t.slice(mi).replace(/^\s*مثال\s*[:：]\s*/iu, '').trim();
+    const vnDest = destMatchesExtraBedCountryMarker(destRaw || '', '__country_vn__');
+    const mySample = extraBedLooksLikeMalaysiaSampleCities(tail);
+    if (vnDest && mySample) {
+      t = t.slice(0, mi).trim();
+    } else if (extraBedChunkLooksLikeAssignments(t.slice(0, mi)) === false && tail.length >= 3) {
+      return tail;
+    }
+  }
+  return t.trim();
+}
+
+function extraBedChunkLooksLikeAssignments(s) {
+  return /[=:]\s*\d{1,2}\b/.test(String(s || ''));
+}
+
+/** هل توجد مهام حقيقية city= عدد أو دولة= عدد أو ALL=n (يشمل Hanoi=1، Ho Chi Minh=1…) */
+function extraBedLineHasAssignments(s) {
+  const t = String(s || '').trim();
+  if (/(?:^|[\s,؛;،])(?:all|\*|الكل|جميع)\s*=\s*\d{1,2}\b/i.test(t)) return true;
+  const chunks = t.split(/[,،|;]+/).map(x => x.trim()).filter(Boolean);
+  for (const c of chunks) {
+    const m = c.match(/^(.+?)\s*[=:]\s*(\d{1,2})$/);
+    if (m && String(m[1]).trim().length >= 2) return true;
+  }
+  return false;
 }
 
 /** إن وُجدت بيانات فعلية في EXTRA_BED_CITIES نستخدمها؛ وإلا إن وُجد طلب سرير في النص نفترض ALL=ك (فنادق 4★ و5★). */
 function mergeExtraBedCitiesInference(raw, explicitBody) {
-  const rawEx = String(explicitBody || '').trim();
-  const hasPayload = /(?:^|[\s,،])(?:all|\*|الكل|جميع)\s*=\s*\d{1,2}\b|[\w\u0600-\u06FF\u0750-\u077F]{2,}\s*[=:]\s*\d{1,2}\b/iu.test(rawEx);
+  const rawEx = sanitizeExtraBedCitiesPayload(explicitBody, String(getLine(raw, 'DEST') || '').trim());
   let ex = '';
-  if (hasPayload) ex = rawEx.replace(/\s+/g, ' ').trim();
+  if (extraBedLineHasAssignments(rawEx)) ex = rawEx.replace(/\s+/g, ' ').trim();
   if (ex) return ex;
   const blob = arabicDigitsToLatin(String(raw || ''));
-  const wantsBed = /(سرير\s*اضافي|سرير\s*إضافي|سريران?\s*إضافيان?|سريرين?\s*إضافي|\bاضافي\s+سرير\b|\bextrabed\b|extra\s*bed|sofa\s*bed|سوفابيد|سوبر\s*كينج\s*\+)/iu.test(blob);
+  const wantsBed = /(سرير\s*اضافي|سرير\s*إضافي|سريران?\s*إضافيان?|سريرين?\s*إضافي|\bاضافي\s+سرير\b|\bextrabed\b|\bextra\s*-?\s*bed\b|sofa\s*bed|\brollaway\b|day\s*bed|\bسرير\b.*\bاضاف|سوفابيد|سوبر\s*كينج\s*\+|\bMurphy\b)/iu.test(blob);
   if (!wantsBed) return '';
-  const n = blob.match(/(\d{1,2})\s*(?:سرير\s*إضافي|أسرة\s*إضافية)/iu);
+  const n = blob.match(/(\d{1,2})\s*(?:سرير\s*إضافي|أسرة\s*إضافية|extra\s*bed)/iu);
   const k = n ? Math.max(1, Math.min(10, parseInt(n[1], 10) || 1)) : 1;
   return `ALL=${k}`;
 }
 
-function extraBedLineHasAssignments(s) {
-  return /(?:^|[\s,،])(?:all|\*|الكل|جميع)\s*=\s*\d{1,2}\b|[\w\u0600-\u06FF\u0750-\u077F]{2,}\s*[=:]\s*\d{1,2}\b/iu.test(String(s || '').trim());
+/** تقليل اختلاف أسماء المدن (عربي/لاتيني) لمطابقة EXTRA_BED */
+function normCityKeyForExtraBed(s) {
+  return String(s || '').trim().toLowerCase().replace(/[أإآٱ]/g,'ا').replace(/ؤ/g,'و').replace(/ئ/g,'ي').replace(/ى/g,'ي').replace(/\s+/g, ' ').trim();
+}
+
+function normExtraBedCityKey(s) {
+  let t = arabicDigitsToLatin(String(s || '').trim());
+  t = normCityKeyForExtraBed(t);
+  try {
+    t = t.normalize('NFD').replace(/\p{M}/gu, '');
+  } catch (e) { /* older engines */ }
+  return t.replace(/đ/gi, 'd').replace(/\s*-\s*/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function extraBedCityComparable(s) {
+  return normExtraBedCityKey(s).replace(/\s+/g, '');
+}
+
+/** هل عنوان الوجهة يصدِّق عمودًا للسرير لمستوى دولة كاملة */
+function destMatchesExtraBedCountryMarker(destRaw, marker) {
+  const blob = (normExtraBedCityKey(destRaw) + '|' + normCityKeyForExtraBed(destRaw)).toLowerCase();
+  switch (marker) {
+    case '__country_vn__':
+      return /فیتنام|فيتنام|ڤیتنام|viet\s*nam|vietnam|^vn\b|هانوي|هانوى|\bhanoi\b|دانانغ|\bda\s*nang\b|\bdanang\b|ها\s*لون[sق]|halong|\bnha\s*trang\b|هو\s*شي\s*مين[hه]|\bho\s*chi\s*minh\b|hue|هوي|سابا|\bsapa\b|فو\s*كو[kق]|\bphu\s*quoc\b/i.test(blob);
+    case '__country_my__':
+      return /ماليزيا|malaysia|\bKL\b|\bKLIA\b|كوالالمبور|langkawi|لانكاوي|penang|بينانج|sabah|sarawak|johor|cameron/i.test(blob);
+    case '__country_tr__':
+      return /تركيا|turkey|turkiye|istanbul|اسطنبول|trabzon|طرابزون|bursa|بورصة|cappadocia|kapadok/i.test(blob);
+    case '__country_th__':
+      return /تايلاند|thailand|\bPhuket\b|بوكيت|بانكوك|\bBangkok\b|كرابي|\bKrabi\b|chiang|ساموي/i.test(blob);
+    case '__country_id__':
+      return /اندونيسيا|indonesia|\bBali\b|بالي|jakarta|جاكرتا|lombok|يوجيا|batur/i.test(blob);
+    default:
+      return false;
+  }
+}
+
+/** ربط عنوان في EXTRA بمفتاح دولة أو اسم مدينة */
+function classifyExtraBedLocality(labRaw) {
+  const xl = normExtraBedCityKey(labRaw);
+  const xns = xl.replace(/\s+/g, '');
+  if (/^(فیتنام|فيتنام|ڤیتنام|vietnam|viet\-nam|vietnam)$/i.test(xns)) return '__country_vn__';
+  if (/^(vn)$/i.test(xns)) return '__country_vn__';
+  if (/^(ماليزيا|malaysia)$/i.test(xns)) return '__country_my__';
+  if (/^(تركيا|turkey|turkiye)$/i.test(xns) || /^tr$/i.test(xns)) return '__country_tr__';
+  if (/^(تايلاند|thailand)$/i.test(xns) || /^th$/i.test(xns)) return '__country_th__';
+  if (/^(اندونيسيا|indonesia)$/i.test(xns)) return '__country_id__';
+  const ar = normCityKeyForExtraBed(labRaw);
+  return { lat: xl, ar: ar };
+}
+
+function parseExtraBedCitiesLine(line) {
+  const map = {};
+  const rawFull = String(line || '').trim();
+  if (!rawFull) return map;
+  const compact = rawFull.replace(/\s+/g, '');
+  if (/^(all|\*|الكل|جميع)(=\d{1,2})?$/iu.test(compact)) {
+    const mm = compact.match(/=(\d{1,2})$/i);
+    map.__all__ = Math.max(0, Math.min(10, parseInt(mm?.[1] || '1', 10) || 1));
+    return map;
+  }
+  const parts = rawFull.replace(/\s+/g, ' ').trim().split(/[,|]/).map(x => x.trim()).filter(Boolean);
+  for (const part of parts) {
+    const mm = part.match(/^(.+?)\s*[=:]\s*(\d{1,2})$/);
+    if (mm) {
+      const lab = mm[1].trim();
+      const v = Math.max(0, Math.min(10, parseInt(mm[2], 10) || 0));
+      if (!v) continue;
+      const ck = classifyExtraBedLocality(lab);
+      if (typeof ck === 'string') {
+        map[ck] = Math.max(map[ck] || 0, v);
+      } else {
+        map[ck.lat] = v;
+        if (ck.ar !== ck.lat) map[ck.ar] = v;
+      }
+    } else {
+      const ar = normCityKeyForExtraBed(part);
+      const lat = normExtraBedCityKey(part);
+      map[ar] = 1;
+      if (lat !== ar) map[lat] = 1;
+    }
+  }
+  return map;
+}
+
+function extraBedCountForHotelLine(extraBedMap, cityRaw, stars, destRaw) {
+  if (!(stars >= 4 && stars <= 5)) return 0;
+  if (extraBedMap.__all__ !== undefined) return extraBedMap.__all__;
+
+  const hLat = normExtraBedCityKey(cityRaw);
+  const hAr = normCityKeyForExtraBed(cityRaw);
+  const hComp = extraBedCityComparable(cityRaw);
+
+  const countryMarkers = ['__country_vn__', '__country_my__', '__country_tr__', '__country_th__', '__country_id__'];
+  for (const mk of countryMarkers) {
+    if (extraBedMap[mk] !== undefined && destMatchesExtraBedCountryMarker(destRaw, mk))
+      return extraBedMap[mk];
+  }
+
+  if (hLat && extraBedMap[hLat] !== undefined) return extraBedMap[hLat];
+  if (hAr && extraBedMap[hAr] !== undefined) return extraBedMap[hAr];
+
+  for (const kk of Object.keys(extraBedMap)) {
+    if (kk.startsWith('__country_')) continue;
+    const kComp = kk.replace(/\s+/g, '');
+    if (
+      (hComp && kComp && (hComp.includes(kComp) || kComp.includes(hComp))) ||
+      (hLat && (hLat.includes(kk) || kk.includes(hLat))) ||
+      (hAr && (hAr.includes(kk) || kk.includes(hAr)))
+    ) {
+      return extraBedMap[kk] || 0;
+    }
+  }
+  return 0;
 }
 
 function parseTransferDayNum(cell) {
@@ -559,6 +711,102 @@ function arabicDigitsToLatin(str) {
   const map = { '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9' };
   return String(str || '').replace(/[٠-٩]/g, ch => map[ch] || ch);
 }
+
+/** مبلغ من خلية سعر (عربي/لاتيني، دعم = X ريال) */
+function parseMoneyCellArabic(seg) {
+  const t = arabicDigitsToLatin(String(seg ?? '').trim());
+  const eq = t.match(/=\s*([\d,]+(?:\.\d+)?)/);
+  if (eq) return Math.round(parseFloat(eq[1].replace(/,/g, '')) || 0);
+  const m = t.match(/([\d,]+(?:\.\d+)?)\s*(?:ريال|SAR)/i);
+  if (m) return Math.round(parseFloat(m[1].replace(/,/g, '')) || 0);
+  const d = t.replace(/[^\d]/g, '');
+  return d ? Math.min(999999999, parseInt(d, 10) || 0) : 0;
+}
+
+/** عدد أشخاص لسطر يُحسب فيه السعر ×عدد (منطق الطيران: أطفال/رضّع مع محدد «أشخاص» = البالغين فقط) */
+function billingPaxForServiceLine(declaredCount, persons, adults, kids, infants) {
+  const d = declaredCount > 0 ? declaredCount : persons;
+  return (d === persons && (kids + infants) > 0) ? adults : d;
+}
+
+/**
+ * جولات وانتقالات: دعم الشكل القديم (عمود واحد إجمالي) أو 6 أعمدة مثل الطيران.
+ * يُلزم عدد المسافرين المعتمد = META عند التضارب؛ تفضيل «/شخص» × العدد؛ سعر المجموعة حسب الشيت عند غياب الدلالة.
+ */
+function computeTransferTourLineTotal(parts, meta, tagLabel) {
+  const persons = Math.max(1, meta.persons || 1);
+  const adults = meta.adults != null ? meta.adults : persons;
+  const kids = meta.kids || 0;
+  const infants = meta.infants || 0;
+  const warns = [];
+  const p = parts.map(x => String(x ?? '').trim());
+  const approxEq = (a, b, rel = 0.02) => {
+    const m = Math.max(Math.abs(a), Math.abs(b), 1);
+    return Math.abs(a - b) <= Math.max(2, m * rel);
+  };
+
+  const legacyOnly = () => {
+    let t = parseMoneyCellArabic(p[3] || '');
+    if (!(t > 0)) {
+      const q = arabicDigitsToLatin(String(p[3] || '').trim());
+      const eq = q.match(/=\s*([\d,]+)/);
+      if (eq) t = parseInt(eq[1].replace(/[^\d]/g, ''), 10) || 0;
+      else {
+        const nm = q.match(/(\d(?:[\d,]*\d)?)/g);
+        if (nm && nm.length) t = parseInt(nm[nm.length - 1].replace(/[^\d]/g, ''), 10) || 0;
+      }
+    }
+    if (!(t > 0)) warns.push(`${tagLabel}: لم يُفسَر سعر السطر — تأكد من الإجمالي أو صيغة 6 أعمدة (سعر | أشخاص | إجمالي).`);
+    return { total: t, warns };
+  };
+
+  if (p.length <= 4) return legacyOnly();
+
+  const declaredRaw = parseInt(arabicDigitsToLatin(String(p[4] || '')).replace(/[^\d]/g, ''), 10) || 0;
+  if (declaredRaw > 0 && declaredRaw !== persons) {
+    warns.push(`${tagLabel} صارم: عمود «عدد الأشخاص» في السطر (${declaredRaw}) لا يطابق مسافري البرنامج في META (${persons}) — يُعاد الحساب بعدد البرنامج فقط.`);
+  }
+  const countForLine = declaredRaw > 0 && declaredRaw !== persons ? persons : (declaredRaw > 0 ? declaredRaw : persons);
+  const billingPax = billingPaxForServiceLine(countForLine, persons, adults, kids, infants);
+
+  const unit = parseMoneyCellArabic(p[3] || '');
+  const explicitTotal = p.length >= 6 ? parseMoneyCellArabic(p[5] || '') : 0;
+
+  const px3 = arabicDigitsToLatin(String(p[3] || '')).toLowerCase();
+  const multiplyIntent = /\b(per\s*pax|\/\s*شخص|\b\/شخص\b|ريال\s*\/\s*شخص|\bsharing\b|\bبالشخص\b|\bللشخص\b|\bلكل\s+شخص\b)\b/i.test(px3);
+
+  const groupLumpHint = /\b(مجموعة|مجموعه|pax\s*\d+\s*-\s*\d+|private\s*(?:transfer|car)|سيارة\s*خاصة|نساف\b|tier\b)\b/i.test(px3);
+
+  let total = 0;
+
+  if (multiplyIntent && unit > 0) {
+    total = Math.round(unit * billingPax);
+    if (explicitTotal > 0 && !approxEq(explicitTotal, total))
+      warns.push(`${tagLabel}: الإجمالي المكتوب (${explicitTotal}) لا يطابق (${unit}×${billingPax}=${total}) — اُعتمد الحساب من السعر/شخص وعدد المسافرين.`);
+  } else if (!multiplyIntent && groupLumpHint && unit > 0) {
+    total = explicitTotal > 0 ? explicitTotal : unit;
+  } else if (explicitTotal > 0 && unit > 0 && approxEq(unit, explicitTotal)) {
+    total = explicitTotal;
+  } else if (explicitTotal > 0 && unit > 0 && declaredRaw > 0 && approxEq(explicitTotal, unit * declaredRaw)) {
+    total = Math.round(unit * billingPax);
+    if (!approxEq(total, explicitTotal))
+      warns.push(`${tagLabel}: أُعيد احتساب الإجمالي (${total} ريال) ليطابق السعر/شخص × عدد مسافري البرنامج بدل المبلغ المكتوب (${explicitTotal}).`);
+  } else if (explicitTotal > 0) {
+    total = explicitTotal;
+    if (unit > 0 && !multiplyIntent && billingPax > 1 && !approxEq(explicitTotal, unit) && !groupLumpHint)
+      warns.push(`${tagLabel}: راجع أن سعر الشيت لنطاق Pax مناسب لـ ${persons} مسافر (لا تستخدم فئة أقل/أعلى).`);
+  } else if (unit > 0 && explicitTotal <= 0) {
+    if (multiplyIntent) total = Math.round(unit * billingPax);
+    else total = unit;
+  } else {
+    const leg = legacyOnly();
+    warns.push(...leg.warns.filter(Boolean));
+    total = leg.total;
+  }
+
+  return { total: Math.max(0, Math.round(total)), warns };
+}
+
 function parseHotelNights(seg) {
   const s0 = arabicDigitsToLatin(String(seg || '').trim());
   if (/^\s*(?:ليلتين)\b/ui.test(s0)) return 2;
@@ -694,50 +942,12 @@ const simText = simMatch ? simMatch[1].trim() : '';
 const summaryMatch = raw.match(/SUMMARY:([\s\S]+?)(?=\nCHAT:|$)/);
 const summaryLines = summaryMatch ? summaryMatch[1].trim().split('\n').filter(l => l.includes('|') && !l.startsWith('TOTAL')) : [];
 
-// Extra bed cities parsing (employee-controlled)
-function normCityKey(s) {
-  return String(s || '').trim().toLowerCase().replace(/[أإآٱ]/g,'ا').replace(/ؤ/g,'و').replace(/ئ/g,'ي').replace(/ى/g,'ي').replace(/\s+/g,' ').trim();
-}
-function parseExtraBedCities(line) {
-  const map = {};
-  const rawFull = String(line || '').trim();
-  if (!rawFull) return map;
-  const compact = rawFull.replace(/\s+/g, '');
-  if (/^(all|\*|الكل|جميع)(=\d{1,2})?$/iu.test(compact)) {
-    const mm = compact.match(/=(\d{1,2})$/i);
-    map.__all__ = Math.max(0, Math.min(10, parseInt(mm?.[1] || '1', 10) || 1));
-    return map;
-  }
-  const rawSp = rawFull.replace(/\s+/g, ' ').trim();
-  const parts = rawSp.split(/[,|]/).map(x => x.trim()).filter(Boolean);
-  for (const part of parts) {
-    const m = part.match(/(.+?)(?:\s*[=:]\s*|\s+)(\d{1,2})$/);
-    if (m) map[normCityKey(m[1])] = Math.max(0, Math.min(10, parseInt(m[2],10) || 0));
-    else map[normCityKey(part)] = 1;
-  }
-  return map;
-}
-const extraBedByCity = parseExtraBedCities(extraBedCitiesLine);
-function extraBedCountForHotelCity(cityRaw, stars) {
-  if (extraBedByCity.__all__ !== undefined) {
-    const c = extraBedByCity.__all__;
-    if (stars >= 4 && stars <= 5) return c;
-    return 0;
-  }
-  const k = normCityKey(cityRaw);
-  if (!k) return 0;
-  if (extraBedByCity[k] !== undefined) return extraBedByCity[k];
-  for (const kk of Object.keys(extraBedByCity)) {
-    if (kk === '__all__') continue;
-    if (k.includes(kk) || kk.includes(k)) return extraBedByCity[kk] || 0;
-  }
-  return 0;
-}
+const extraBedByCity = parseExtraBedCitiesLine(extraBedCitiesLine);
 
 // Totals
 let hotelsTotal = hotelsLines.reduce((s, l) => {
   const t = hotelLineTotals(l);
-  const extraCount = extraBedCountForHotelCity(t.p?.[1], t.stars);
+  const extraCount = extraBedCountForHotelLine(extraBedByCity, t.p?.[1], t.stars, dest);
   const extraTotal = extraCount > 0 ? (t.extraBedPricePerNight * (t.nights || 0) * extraCount) : 0;
   return s + (t.totalLine || 0) + extraTotal;
 }, 0);
@@ -749,8 +959,8 @@ for (let hi = 0; hi < hotelsLines.length; hi++) {
 }
 const simCountNum = parseInt((arabicDigitsToLatin(String(simText || '')).match(/\d+/) || ['0'])[0].replace(/[^\d]/g, '')) || 0;
 const simTotal = simCountNum * SIM_CARD_UNIT_PRICE_SAR;
-const parseMoney = (s) => parseInt(String(s||'').replace(/[^\d]/g,'')) || 0;
-const parseCount = (s) => parseInt(String(s||'').replace(/[^\d]/g,'')) || 0;
+const parseMoney = (s) => parseMoneyCellArabic(s || '');
+const parseCount = (s) => parseInt(arabicDigitsToLatin(String(s || '')).replace(/[^\d]/g, ''), 10) || 0;
 let flightsTotal = flightsLines.reduce((s,l) => {
   const p=l.split('|').map(x=>x.trim());
   const per = parseMoney(p[2]);
@@ -759,14 +969,21 @@ let flightsTotal = flightsLines.reduce((s,l) => {
   const total = per * pax;
   return s + (total || parseMoney(p[4]));
 }, 0);
-// Helper: extract the FINAL total from a price cell. Supports "X × N = Y ريال" (uses Y) or plain "Y ريال" (uses Y).
-const parseLineTotal = (s) => {
-  const eq = (s||'').match(/=\s*([\d,]+)/);
-  if (eq) return parseInt(eq[1].replace(/[^\d]/g,''))||0;
-  return parseInt((s||'').replace(/[^\d]/g,''))||0;
-};
-let transfersTotal = transfersLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
-let toursTotal = toursLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
+const xferTourMeta = { persons, adults, kids, infants };
+let transfersTotal = 0;
+for (const l of transfersLines) {
+  const parts = l.split('|').map(x => String(x ?? '').trim());
+  const r = computeTransferTourLineTotal(parts, xferTourMeta, '🚗 انتقال');
+  transfersTotal += r.total;
+  for (const w of r.warns) addMessage('sys', w);
+}
+let toursTotal = 0;
+for (const l of toursLines) {
+  const parts = l.split('|').map(x => String(x ?? '').trim());
+  const r = computeTransferTourLineTotal(parts, xferTourMeta, '🗺️ جولة');
+  toursTotal += r.total;
+  for (const w of r.warns) addMessage('sys', w);
+}
 
 // ✅ الحساب المعتمد: من تفاصيل الشيت (فنادق + طيران + نقل + جولات + شرائح اتصال × 50)
 const computedGroup = Math.max(0, hotelsTotal + flightsTotal + transfersTotal + toursTotal + simTotal);
@@ -798,7 +1015,7 @@ html += `<div class="section-card">
 <thead><tr><th>المدينة</th><th>الفندق</th><th>النجوم</th><th>الغرفة</th><th>السعر/ليلة</th><th>الليالي</th><th>الإجمالي</th><th>Extra Bed</th></tr></thead>
 <tbody>${hotelsLines.map(l => {
 const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l);
-const extraCount = extraBedCountForHotelCity(p?.[1], stars);
+const extraCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest);
 const extraTotal = extraCount > 0 ? (extraBedPricePerNight * (nights||0) * extraCount) : 0;
 const bedTxt = extraCount ? (`${extraCount} × ${extraTotal.toLocaleString()} ريال`) : '—';
 return `<tr><td>${p[1]||''}</td><td><strong>${p[0]||''}${extraCount ? ' + Extra bed / Sofa Bed' : ''}</strong></td><td>${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td><td class="price-cell">${(totalLine + (extraTotal||0)).toLocaleString()} ريال</td><td>${bedTxt}</td></tr>`;
@@ -827,13 +1044,15 @@ if (transfersLines.length) {
 html += `<div class="section-card">
 <div class="section-card-header"><div class="section-card-title">🚗 الانتقالات</div><div class="section-total">${transfersTotal.toLocaleString()} ريال</div></div>
 <table class="pricing-table">
-<thead><tr><th>اليوم</th><th>التفاصيل</th><th>النوع</th><th>السعر</th></tr></thead>
+<thead><tr><th>اليوم</th><th>التفاصيل</th><th>النوع</th><th>سعر الشيت</th><th>المسافرون</th><th>المُعتمد حساباً</th></tr></thead>
 <tbody>${transfersLines.map(l => {
 const p=l.split('|').map(x=>x.trim());
 const isPickup=(p[2]||'').toLowerCase().includes('pickup');
 const tc=isPickup?'badge-pickup':'badge-drop';
 const tl=isPickup?'🚗 Pickup':'🚖 Drop';
-return `<tr><td>${p[0]||''}</td><td>${p[1]||''}</td><td><span class="type-badge ${tc}">${tl}</span></td><td class="price-cell">${p[3]||''}</td></tr>`;
+const { total: lineTT } = computeTransferTourLineTotal(p, xferTourMeta, '🚗 انتقال');
+const paxCell = (p.length >= 5 && p[4]) ? p[4] : `${persons} (META)`;
+return `<tr><td>${p[0]||''}</td><td>${p[1]||''}</td><td><span class="type-badge ${tc}">${tl}</span></td><td class="price-cell">${p[3]||''}</td><td>${paxCell}</td><td class="price-cell">${lineTT.toLocaleString()} ريال</td></tr>`;
 }).join('')}</tbody>
 </table></div>`;
 }
@@ -842,12 +1061,14 @@ if (toursLines.length) {
 html += `<div class="section-card">
 <div class="section-card-header"><div class="section-card-title">🗺️ الجولات السياحية</div><div class="section-total">${toursTotal.toLocaleString()} ريال</div></div>
 <table class="pricing-table">
-<thead><tr><th>اليوم</th><th>الجولة</th><th>النوع</th><th>السعر</th></tr></thead>
+<thead><tr><th>اليوم</th><th>الجولة</th><th>النوع</th><th>سعر الشيت</th><th>المسافرون</th><th>المُعتمد حساباً</th></tr></thead>
 <tbody>${toursLines.map(l => {
 const p=l.split('|').map(x=>x.trim());
 const tcMap={'ثقافية':'badge-tour','طبيعية':'badge-nature','بحرية':'badge-sea'};
 const tc=tcMap[p[2]]||'badge-tour';
-return `<tr><td>${p[0]||''}</td><td><strong>${p[1]||''}</strong></td><td><span class="type-badge ${tc}">${p[2]||''}</span></td><td class="price-cell">${p[3]||''}</td></tr>`;
+const { total: tourLineT } = computeTransferTourLineTotal(p, xferTourMeta, '🗺️ جولة');
+const paxCell = (p.length >= 5 && p[4]) ? p[4] : `${persons} (META)`;
+return `<tr><td>${p[0]||''}</td><td><strong>${p[1]||''}</strong></td><td><span class="type-badge ${tc}">${p[2]||''}</span></td><td class="price-cell">${p[3]||''}</td><td>${paxCell}</td><td class="price-cell">${tourLineT.toLocaleString()} ريال</td></tr>`;
 }).join('')}</tbody>
 </table></div>`;
 }
@@ -1013,60 +1234,17 @@ let hotelStays = [];
 let lastCheckoutByCity = {};
 let allCheckoutDatesInOrder = [];
 
-// Extra bed cities parsing (employee-controlled)
-function normCityKey(s) {
-  return String(s || '').trim().toLowerCase().replace(/[أإآٱ]/g,'ا').replace(/ؤ/g,'و').replace(/ئ/g,'ي').replace(/ى/g,'ي').replace(/\s+/g,' ').trim();
-}
-function parseExtraBedCities(line) {
-  const map = {};
-  const rawFull = String(line || '').trim();
-  if (!rawFull) return map;
-  const compact = rawFull.replace(/\s+/g, '');
-  if (/^(all|\*|الكل|جميع)(=\d{1,2})?$/iu.test(compact)) {
-    const mm = compact.match(/=(\d{1,2})$/i);
-    map.__all__ = Math.max(0, Math.min(10, parseInt(mm?.[1] || '1', 10) || 1));
-    return map;
-  }
-  const rawSp = rawFull.replace(/\s+/g, ' ').trim();
-  const parts = rawSp.split(/[,|]/).map(x => x.trim()).filter(Boolean);
-  for (const part of parts) {
-    const m = part.match(/(.+?)(?:\s*[=:]\s*|\s+)(\d{1,2})$/);
-    if (m) map[normCityKey(m[1])] = Math.max(0, Math.min(10, parseInt(m[2],10) || 0));
-    else map[normCityKey(part)] = 1;
-  }
-  return map;
-}
-const extraBedByCity = parseExtraBedCities(extraBedCitiesLine);
-function extraBedCountForHotelCity(cityRaw, stars) {
-  if (extraBedByCity.__all__ !== undefined) {
-    const c = extraBedByCity.__all__;
-    if (stars >= 4 && stars <= 5) return c;
-    return 0;
-  }
-  const k = normCityKey(cityRaw);
-  if (!k) return 0;
-  if (extraBedByCity[k] !== undefined) return extraBedByCity[k];
-  for (const kk of Object.keys(extraBedByCity)) {
-    if (kk === '__all__') continue;
-    if (k.includes(kk) || kk.includes(k)) return extraBedByCity[kk] || 0;
-  }
-  return 0;
-}
+const extraBedByCity = parseExtraBedCitiesLine(extraBedCitiesLine);
 
 // Totals (for detailed PDF calculations)
-const parseLineTotal = (s) => {
-  const eq = (s||'').match(/=\s*([\d,]+)/);
-  if (eq) return parseInt(eq[1].replace(/[^\d]/g,''))||0;
-  return parseInt((s||'').replace(/[^\d]/g,''))||0;
-};
 const hotelsTotal = hotelsLines.reduce((s, l) => {
   const t = hotelLineTotals(l);
-  const extraCount = extraBedCountForHotelCity(t.p?.[1], t.stars);
+  const extraCount = extraBedCountForHotelLine(extraBedByCity, t.p?.[1], t.stars, dest);
   const extraTotal = extraCount > 0 ? (t.extraBedPricePerNight * (t.nights || 0) * extraCount) : 0;
   return s + (t.totalLine || 0) + extraTotal;
 }, 0);
-const parseMoney = (s) => parseInt(String(s||'').replace(/[^\d]/g,'')) || 0;
-const parseCount = (s) => parseInt(String(s||'').replace(/[^\d]/g,'')) || 0;
+const parseMoney = (s) => parseMoneyCellArabic(s || '');
+const parseCount = (s) => parseInt(arabicDigitsToLatin(String(s || '')).replace(/[^\d]/g, ''), 10) || 0;
 const flightsTotal = flightsLines.reduce((s,l) => {
   const p=l.split('|').map(x=>x.trim());
   const per = parseMoney(p[2]);
@@ -1086,9 +1264,9 @@ function normalizeCityName(s) {
 }
 
 /**
- * حقول الطيران الأولى قد تحتوي (اختياري) «اليوم 3:» ثم مسار مدن.
- * المعتمد: تاريخ الطيران الداخلي = تاريخ الخروج من آخر إقامة فندقية مدينة الانطلاق
- * (بحسب سلسلة DATE_FROM ثم عدد الليالي لكل فندق)، مثال ٢+٣+٢ أيام بين مدن مختلفة بعد ١٠ مايو.
+ * حقل الطيران الأولى قد يحوي (اختياري) «اليوم N:» ثم مسار «من – إلى».
+ * الطيران الداخلي دون «اليوم»: يُعرَض يوم استقبال المطار لمدينة الوصول من جدول الانتقالات إن وُجد،
+ * مع ربط بالترتيب ورحلات «داخلي»؛ وإلا خروج آخر فندق في مدينة الانطلاق / التسلسل / التاريخ الافتراضي.
  */
 function extractRouteCities(routeText) {
   let t = arabicDigitsToLatin(String(routeText || '').trim());
@@ -1120,55 +1298,17 @@ function lookupCheckoutByCity(depNorm) {
   return '';
 }
 
-function renderFlightDateLabel(p0, p1, internalSeqIdx) {
-  const kind = String(p1 || '').trim();
-  const dayNum = extractDayNumber(p0) || extractDayNumber(p1);
-  if (kind.includes('عودة')) return `📅 الذهاب: ${dateFrom} | العودة: ${dateTo}`;
-  if (kind.includes('ذهاب')) return `📅 التاريخ: ${dateFrom}`;
-  if (dayNum) return `📅 التاريخ: ${getDayDate(dayNum)}`;
-  if (kind.includes('داخلي')) {
-    const { from } = extractRouteCities(p0);
-    const inferred =
-      lookupCheckoutByCity(from) ||
-      allCheckoutDatesInOrder[internalSeqIdx] ||
-      getDayDate(2) ||
-      dateFrom;
-    return `📅 التاريخ: ${inferred}`;
-  }
-  return `📅 التاريخ: ${dateFrom}`;
+const xferTourMetaPdf = { persons, adults: adults || persons, kids: kids || 0, infants: infants || 0 };
+let transfersTotal = 0;
+for (const l of transfersLines) {
+  const parts = l.split('|').map(x => String(x ?? '').trim());
+  transfersTotal += computeTransferTourLineTotal(parts, xferTourMetaPdf, 'انتقال').total;
 }
-
-function renderFlightsPDF() {
-  if (!flightsLines.length) return '';
-  let internalIdx = 0;
-  return `
-<div class="pdf-section-title" style="margin-top:${hotelsLines.length ? 24 : 0}px;">✈️ الطيران</div>
-${flightsLines.map(l => {
-  const p = l.split('|').map(x => x.trim());
-  const kind = String(p[1] || '');
-  const dateLabel = kind.includes('داخلي') ? renderFlightDateLabel(p[0], p[1], internalIdx++) : renderFlightDateLabel(p[0], p[1], 0);
-  const detailedLine = showDetailed ? (() => {
-    const per = parseMoney(p[2]);
-    const lineCount = parseCount(p[3]) || adults || persons;
-    const pax = (lineCount === persons && (kids + infants) > 0) ? adults : lineCount;
-    const total = per * pax;
-    return `<div style="margin-top:6px;font-size:16px;font-weight:800;color:#0d1f4a;">${per.toLocaleString()} ريال/بالغ | ${pax} بالغ | الإجمالي: ${(total || parseMoney(p[4])).toLocaleString()} ريال</div>`;
-  })() : '';
-  return `
-<div style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;display:flex;align-items:center;gap:14px;">
-  <span style="font-size:30px;">✈️</span>
-  <div style="flex:1;">
-    <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:6px;line-height:1.3;">${safeText(p[0]||'')}</div>
-    <div style="font-size:18px;font-weight:700;color:#444;">${safeText(p[1]||'')}</div>
-    <div style="margin-top:6px;font-size:15px;font-weight:800;color:#0d1f4a;">${dateLabel}</div>
-    ${detailedLine}
-  </div>
-</div>`;
-}).join('')}
-`;
+let toursTotal = 0;
+for (const l of toursLines) {
+  const parts = l.split('|').map(x => String(x ?? '').trim());
+  toursTotal += computeTransferTourLineTotal(parts, xferTourMetaPdf, 'جولة').total;
 }
-const transfersTotal = transfersLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
-const toursTotal = toursLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
 
 // Extract cities from hotels
 const cities = [...new Set(hotelsLines.map(l => l.split('|')[1]?.trim()).filter(Boolean))];
@@ -1214,7 +1354,7 @@ return formatArabicDate(addDays(start, dayNum - 1));
 
 /*
  * تواريخ الفنادق: من DATE_FROM، كل فندق الدخول = المؤشّر الحالي، الخروج = الدخول + عدد الليالي، ثم يتحرك المؤشّر إلى يوم الخروج.
- * الطيران الداخلي يُؤرّخ بـ «تاريخ خروج آخر فندق لمدينة الانطلاق» إن وُجدت في المسار ومطابقة لـ HOTELS؛ وإلا بالتسلسل؛ وإلا «اليوم X» إن ذُكر.
+ * الطيران الداخلي إن لم يُذكر له «اليوم»: يُفضَّل تاريخ اليوم الموضَّح في سطر انتقالات «استقبال من مطار» المطابق لمدينة الوصول في المسار، مع احترام ترتيب رحلات «داخلي» واستهلاك كل سطر مطار مرّة واحدة؛ وإلا تاريخ خروج آخر فندق من مدينة الانطلاق؛ ثم تواريخ الخروج بالترتيب؛ ثم اليوم المحسوب.
  */
 // Hotel check-in/out dates (sequential from DATE_FROM)
 const tripStart = parseArabicDate(dateFrom);
@@ -1242,6 +1382,127 @@ function extractDayNumber(text) {
   const m = t.match(/(?:اليوم)\s*(\d{1,2})/);
   const n = m ? parseInt(m[1],10) : 0;
   return (n>=1 && n<=31) ? n : 0;
+}
+
+function flightToMatchesPickupCity(flightToNorm, pickCityHit, pickBlob) {
+  const t = String(flightToNorm || '').trim();
+  if (!t) return false;
+  if (pickCityHit) {
+    const ph = String(pickCityHit).trim();
+    if (t === ph) return true;
+    const ca = t.replace(/\s+/g, '');
+    const cb = ph.replace(/\s+/g, '');
+    if (ca.includes(cb) || cb.includes(ca)) return true;
+  }
+  const b = String(pickBlob || '').trim();
+  if (b && (b.includes(t) || t.includes(b))) return true;
+  return false;
+}
+
+function buildAirportPickupDateQueue(transfersLines, hotelsLines, getDayDateFn) {
+  const hotelCitySeq = hotelsLines.map(l => {
+    const p = l.split('|').map(x => String(x ?? '').trim());
+    return normalizeCityName(p[1] || '');
+  }).filter(Boolean);
+  const ranked = [...new Set(hotelCitySeq)].sort((a, b) => b.length - a.length);
+  const out = [];
+  transfersLines.forEach((line, fileIdx) => {
+    const p = line.split('|').map(x => String(x ?? '').trim());
+    if (!String(p[2] || '').toLowerCase().includes('pickup')) return;
+    const det = String(p[1] || '');
+    if (!/مطار|airport/i.test(arabicDigitsToLatin(det))) return;
+    const dn = parseTransferDayNum(p[0]);
+    if (!dn) return;
+    const blob = normalizeCityName(det);
+    let cityHit = '';
+    let score = 0;
+    for (const c of ranked) {
+      if (!c || c.length < 2) continue;
+      if ((blob.includes(c) || c.includes(blob)) && c.length >= score) {
+        cityHit = c;
+        score = c.length;
+      }
+    }
+    out.push({ dayNum: dn, fileIdx, dateStr: getDayDateFn(dn), cityHit, blob, used: false });
+  });
+  out.sort((a, b) => (a.dayNum - b.dayNum) || (a.fileIdx - b.fileIdx));
+  return out;
+}
+
+const airportPickupDateQueue = buildAirportPickupDateQueue(transfersLines, hotelsLines, getDayDate);
+
+function consumePickupDateForInternalFlight(queue, flightToRaw, seqIndex) {
+  if (!queue || !queue.length) return '';
+  const fn = normalizeCityName(String(flightToRaw || '').trim()).replace(/^to\s*[:\s]*/, '');
+  if (fn) {
+    const idxByDest = queue.findIndex(e => !e.used && flightToMatchesPickupCity(fn, e.cityHit || '', e.blob));
+    if (idxByDest >= 0) {
+      queue[idxByDest].used = true;
+      return queue[idxByDest].dateStr || '';
+    }
+  }
+  const u = queue.filter(e => !e.used);
+  if (seqIndex >= 0 && seqIndex < u.length) {
+    const e = u[seqIndex];
+    const i = queue.indexOf(e);
+    queue[i].used = true;
+    return queue[i].dateStr || '';
+  }
+  return '';
+}
+
+function renderFlightDateLabel(p0, p1, internalSeqIdx) {
+  const kind = String(p1 || '').trim();
+  const dayNum = extractDayNumber(p0) || extractDayNumber(p1);
+  if (kind.includes('عودة')) return `📅 الذهاب: ${dateFrom} | العودة: ${dateTo}`;
+  if (kind.includes('ذهاب')) return `📅 التاريخ: ${dateFrom}`;
+  if (dayNum) return `📅 التاريخ: ${getDayDate(dayNum)}`;
+  if (kind.includes('داخلي')) {
+    const route = extractRouteCities(p0);
+    const pickupDate = consumePickupDateForInternalFlight(airportPickupDateQueue, route.to, internalSeqIdx);
+    if (pickupDate) {
+      const lbl = route.to ? String(route.to).trim() : 'الوجهة';
+      return `📅 تاريخ الإقلاع (يطابق استقبال مطار ${lbl}): ${pickupDate}`;
+    }
+    const { from } = route;
+    const inferred =
+      lookupCheckoutByCity(from) ||
+      allCheckoutDatesInOrder[internalSeqIdx] ||
+      getDayDate(2) ||
+      dateFrom;
+    return `📅 التاريخ: ${inferred}`;
+  }
+  return `📅 التاريخ: ${dateFrom}`;
+}
+
+function renderFlightsPDF() {
+  if (!flightsLines.length) return '';
+  let internalIdx = 0;
+  return `
+<div class="pdf-section-title" style="margin-top:${hotelsLines.length ? 24 : 0}px;">✈️ الطيران</div>
+${flightsLines.map(l => {
+  const p = l.split('|').map(x => x.trim());
+  const kind = String(p[1] || '');
+  const dateLabel = kind.includes('داخلي') ? renderFlightDateLabel(p[0], p[1], internalIdx++) : renderFlightDateLabel(p[0], p[1], 0);
+  const detailedLine = showDetailed ? (() => {
+    const per = parseMoney(p[2]);
+    const lineCount = parseCount(p[3]) || adults || persons;
+    const pax = (lineCount === persons && (kids + infants) > 0) ? adults : lineCount;
+    const total = per * pax;
+    return `<div style="margin-top:6px;font-size:16px;font-weight:800;color:#0d1f4a;">${per.toLocaleString()} ريال/بالغ | ${pax} بالغ | الإجمالي: ${(total || parseMoney(p[4])).toLocaleString()} ريال</div>`;
+  })() : '';
+  return `
+<div style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;display:flex;align-items:center;gap:14px;">
+  <span style="font-size:30px;">✈️</span>
+  <div style="flex:1;">
+    <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:6px;line-height:1.3;">${safeText(p[0]||'')}</div>
+    <div style="font-size:18px;font-weight:700;color:#444;">${safeText(p[1]||'')}</div>
+    <div style="margin-top:6px;font-size:15px;font-weight:800;color:#0d1f4a;">${dateLabel}</div>
+    ${detailedLine}
+  </div>
+</div>`;
+}).join('')}
+`;
 }
 
 // Build itinerary by day
@@ -1344,7 +1605,7 @@ ${(hotelsLines.length || flightsLines.length || simText) ? `
 <div class="pdf-page-break"></div>
 <div class="pdf-section">
 ${hotelsLines.length ? `<div class="pdf-section-title">🏨 الفنادق</div>
-${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l); const extraBedCount = extraBedCountForHotelCity(p?.[1], stars); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; return `
+${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l); const extraBedCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; return `
 <div style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;">
 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;">
   <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:12px;line-height:1.3;">🏨 ${safeText(p[0]||'')}${extraBedCount ? ' + Extra bed / Sofa Bed' : ''}</div>
@@ -1387,7 +1648,7 @@ ${(showDetailed && (hotelsLines.length || transfersLines.length || toursLines.le
 <div class="pdf-section">
   <div class="pdf-section-title">💼 تفصيل الخدمات</div>
   ${hotelsLines.length ? `<div style="font-weight:900;color:#1a3a8f;font-size:18px;margin:8px 0 14px;">🏨 الفنادق</div>
-  ${hotelsLines.map(l=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l); const extraBedCount = extraBedCountForHotelCity(p?.[1], stars); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const lineGrand = (totalLine || 0) + (extraBedTotal || 0); return `
+  ${hotelsLines.map(l=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l); const extraBedCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const lineGrand = (totalLine || 0) + (extraBedTotal || 0); return `
     <div style="border:1px solid #eef0f8;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;gap:12px;">
       <div style="font-weight:800;color:#0d1f4a;font-size:16px;line-height:1.6;">
         ${p[1]||''} | ${p[0]||''}${extraBedCount ? ' + Extra bed' : ''} <span style="opacity:0.8">(${p[2]||''})</span><br>
@@ -1396,16 +1657,16 @@ ${(showDetailed && (hotelsLines.length || transfersLines.length || toursLines.le
       <div style="font-weight:900;color:#0d1f4a;white-space:nowrap;">${lineGrand.toLocaleString()} ريال</div>
     </div>`; }).join('')}` : ''}
   ${transfersLines.length ? `<div style="font-weight:900;color:#1a3a8f;font-size:18px;margin:8px 0 14px;">🚗 الانتقالات</div>
-  ${transfersLines.map(l=>{ const p=l.split('|').map(x=>x.trim()); return `
+  ${transfersLines.map(l=>{ const p=l.split('|').map(x=>String(x??'').trim()); const ln = computeTransferTourLineTotal(p, xferTourMetaPdf, 'انتقال').total; return `
     <div style="border:1px solid #eef0f8;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;gap:12px;">
-      <div style="font-weight:800;color:#0d1f4a;font-size:16px;line-height:1.6;">${p[0]||''} | ${p[1]||''} <span style="opacity:0.8">(${p[2]||''})</span></div>
-      <div style="font-weight:900;color:#0d1f4a;white-space:nowrap;">${p[3]||''}</div>
+      <div style="font-weight:800;color:#0d1f4a;font-size:16px;line-height:1.6;">${p[0]||''} | ${p[1]||''} <span style="opacity:0.8">(${p[2]||''})</span>${p.length>=5?`<br/><span style="opacity:0.85;font-size:14px;">شيت: ${p[3]||''} · مسافرون: ${p[4]||persons}${p.length>=6?` · مكتوب: ${p[5]||''}`:''}</span>`:''}</div>
+      <div style="font-weight:900;color:#0d1f4a;white-space:nowrap;">${ln.toLocaleString()} ريال</div>
     </div>`; }).join('')}` : ''}
   ${toursLines.length ? `<div style="font-weight:900;color:#1a3a8f;font-size:18px;margin:18px 0 14px;">🗺️ الجولات السياحية</div>
-  ${toursLines.map(l=>{ const p=l.split('|').map(x=>x.trim()); return `
+  ${toursLines.map(l=>{ const p=l.split('|').map(x=>String(x??'').trim()); const ln = computeTransferTourLineTotal(p, xferTourMetaPdf, 'جولة').total; return `
     <div style="border:1px solid #eef0f8;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;gap:12px;">
-      <div style="font-weight:800;color:#0d1f4a;font-size:16px;line-height:1.6;">${p[0]||''} | ${p[1]||''} <span style="opacity:0.8">(${p[2]||''})</span></div>
-      <div style="font-weight:900;color:#0d1f4a;white-space:nowrap;">${p[3]||''}</div>
+      <div style="font-weight:800;color:#0d1f4a;font-size:16px;line-height:1.6;">${p[0]||''} | ${p[1]||''} <span style="opacity:0.8">(${p[2]||''})</span>${p.length>=5?`<br/><span style="opacity:0.85;font-size:14px;">شيت: ${p[3]||''} · مسافرون: ${p[4]||persons}${p.length>=6?` · مكتوب: ${p[5]||''}`:''}</span>`:''}</div>
+      <div style="font-weight:900;color:#0d1f4a;white-space:nowrap;">${ln.toLocaleString()} ريال</div>
     </div>`; }).join('')}` : ''}
 </div>` : ''}
 ${itineraryHTML.trim() ? `<div class="pdf-page-break"></div>
