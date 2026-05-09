@@ -362,7 +362,8 @@ const SYSTEM = `انت مساعد متخصص في بناء البرامج الس
 - إجمالي الفنادق = مجموع (سعر/ليلة × عدد الليالي) لكل فندق.
 - إجمالي الطيران = السعر/شخص × عدد البالغين (ولا تُحسب الرُضّع/الأطفال كبالغين إذا ذُكروا).
 - إجمالي النقل والجولات = مجموع الأسعار في الأسطر.
-- إجمالي المجموعة (TOTAL_GROUP) = الفنادق + الطيران + النقل + الجولات (بدون الربح).
+- إجمالي شرائح الاتصال = عدد الشرائح في SIM × 50 ريال (سعر الشيت لكل شريحة/لكل شخص — يُطبّق على جميع الوجهات).
+- إجمالي المجموعة (TOTAL_GROUP) = الفنادق + الطيران + النقل + الجولات + شرائح الاتصال إن وُجدت (بدون الربح).
 لا تخمّن الأرقام ولا تعطي إجمالي غير متطابق.
 
 قواعد صارمة:
@@ -398,13 +399,14 @@ TRANSFERS:
 TOURS:
 اليوم [رقم] | [اسم الجولة] | [ثقافية/طبيعية/بحرية] | [السعر] ريال
 
-SIM:[عدد الشرائح فقط، مثل: 4]
+SIM:[عدد الشرائح فقط، مثل: 4] (إن وُجد: التكلفة دائماً عدد الشرائح × 50 ريال لأي وجهة)
 
 SUMMARY:
 الفنادق | [الاجمالي] ريال
 الطيران | [الاجمالي] ريال
 الانتقالات | [الاجمالي] ريال
 الجولات السياحية | [الاجمالي] ريال
+شرائح الاتصال | [عدد الشرائح × 50] ريال (أو احذف السطر إن لم يُذكر SIM)
 TOTAL_PER_PERSON:[رقم فقط]
 TOTAL_GROUP:[رقم فقط] | [عدد] اشخاص
 
@@ -451,6 +453,9 @@ return m ? m[1].trim() : '';
 }
 
 const DOC_SECTION_HEAD_RE = 'DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|SUMMARY|CHAT';
+
+/** تسعيرة شريحة الاتصال من الشيت (Sim card) — موحّدة لكل الوجهات: 50 ريال لكل شريحة (Per Pax في الشيت). */
+const SIM_CARD_UNIT_PRICE_SAR = 50;
 
 /** يقرأ محتوى EXTRA_BED_CITIES حتى أول ترويسة قسم لاحقة (النموذج أحياناً يضع المدن في السطر التالي). */
 function extractExtraBedCitiesBody(raw) {
@@ -742,15 +747,8 @@ for (let hi = 0; hi < hotelsLines.length; hi++) {
     addMessage('sys', `تنبيه صارم: سطر فندق رقم ${hi + 1} أصبح مساهمته صفرًا في الإجمالي لأن السعر أو الليالي لم تُفسَّر؛ أصلح عمود السعر/ليلة والليالي وفق HOTELS بحيث لا يُسقط احتساب أي فندق مطلوب.`);
   }
 }
-// SIM Card pricing (from sheet): Vietnam = 50 SAR per pax
-function simPricePerPaxByDest(destRaw) {
-  const d = String(destRaw || '').trim().toLowerCase();
-  if (/فيتنام|vietnam/i.test(d)) return 50;
-  return 0;
-}
-const simCountNum = parseInt((simText.match(/\d+/) || ['0'])[0].replace(/[^\d]/g,'')) || 0;
-const simPerPax = simPricePerPaxByDest(dest);
-const simTotal = simCountNum * simPerPax;
+const simCountNum = parseInt((arabicDigitsToLatin(String(simText || '')).match(/\d+/) || ['0'])[0].replace(/[^\d]/g, '')) || 0;
+const simTotal = simCountNum * SIM_CARD_UNIT_PRICE_SAR;
 const parseMoney = (s) => parseInt(String(s||'').replace(/[^\d]/g,'')) || 0;
 const parseCount = (s) => parseInt(String(s||'').replace(/[^\d]/g,'')) || 0;
 let flightsTotal = flightsLines.reduce((s,l) => {
@@ -770,7 +768,7 @@ const parseLineTotal = (s) => {
 let transfersTotal = transfersLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
 let toursTotal = toursLines.reduce((s,l) => { const p=l.split('|').map(x=>x.trim()); return s + parseLineTotal(p[3]); }, 0);
 
-// ✅ الحساب المعتمد: من تفاصيل الشيت نفسها (فنادق + طيران + نقل + جولات)
+// ✅ الحساب المعتمد: من تفاصيل الشيت (فنادق + طيران + نقل + جولات + شرائح اتصال × 50)
 const computedGroup = Math.max(0, hotelsTotal + flightsTotal + transfersTotal + toursTotal + simTotal);
 basePrice = computedGroup || totalGroupFromText || (totalPerson * persons);
 
@@ -854,6 +852,15 @@ return `<tr><td>${p[0]||''}</td><td><strong>${p[1]||''}</strong></td><td><span c
 </table></div>`;
 }
 
+if (simCountNum) {
+html += `<div class="section-card">
+<div class="section-card-header"><div class="section-card-title">📶 شرائح الاتصال</div><div class="section-total">${simTotal.toLocaleString()} ريال</div></div>
+<table class="pricing-table">
+<thead><tr><th>الكمية</th><th>تسعيرة الشيت</th><th>الإجمالي</th></tr></thead>
+<tbody><tr><td>${simCountNum} شريحة</td><td class="price-cell">${SIM_CARD_UNIT_PRICE_SAR.toLocaleString()} ريال × شريحة (كل الوجهات)</td><td class="price-cell">${simTotal.toLocaleString()} ريال</td></tr></tbody>
+</table></div>`;
+}
+
 // صارم: ملخص التكاليف يُبنى من نفس الحسابات أعلاه حتى لا يختلف عن إجمالي الجداول
 const costMap = {
   'الفنادق': hotelsTotal,
@@ -872,7 +879,6 @@ let summaryHTML = Object.entries(costMap)
 summaryHTML += remainingSummary
   .map(l => { const p=l.split('|').map(x=>x.trim()); return `<div class="summary-row"><span class="summary-label">${p[0]||''}</span><span class="summary-val">${p[1]||''}</span></div>`; })
   .join('');
-if (simCountNum) summaryHTML += `<div class="summary-row"><span class="summary-label">📶 عدد الشرائح</span><span class="summary-val">${simCountNum} شريحة</span></div>`;
 
 html += `
 <div class="summary-card">
@@ -973,7 +979,7 @@ function buildPDF(mode) {
 if (!parsedData) return;
 const profit=parseInt(document.getElementById('profitInput').value)||0;
 const {dest,meta,dateFrom,dateTo,client,clientCode,extraBedCitiesLine,hotelsLines,flightsLines,transfersLines,toursLines,simText,persons,kids,infants,adults}=parsedData;
-const simCountNum = parseInt((String(simText||'').match(/\d+/) || ['0'])[0].replace(/[^\d]/g,'')) || 0;
+const simCountNum = parseInt((arabicDigitsToLatin(String(simText || '')).match(/\d+/) || ['0'])[0].replace(/[^\d]/g, '')) || 0;
 const systemCode = (lastSavedCode || '').trim();
 // السعر النهائي الإجمالي = السعر الأساسي للمجموعة + الربح (إجمالي)
 const profitTotal = profit;
@@ -1069,8 +1075,7 @@ const flightsTotal = flightsLines.reduce((s,l) => {
   const total = per * pax;
   return s + (total || parseMoney(p[4]));
 }, 0);
-const simPerPax = (/فيتنام|vietnam/i.test(String(dest||''))) ? 50 : 0;
-const simTotal = simCountNum * simPerPax;
+const simTotal = simCountNum * SIM_CARD_UNIT_PRICE_SAR;
 
 /** توحيد اسم المطابقة مع عمود «المدينة» في HOTELS — مع أرقام عربية وهمزات */
 function normalizeCityName(s) {
