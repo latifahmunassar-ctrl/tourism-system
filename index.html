@@ -156,7 +156,7 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .pdf-excludes-sub { font-size:14px; font-weight:800; color:#7c2d12; opacity:0.9; margin:0 0 12px; }
 .pdf-excludes-list { margin:0; padding:0 18px; color:#0d1f4a; font-weight:800; font-size:16px; line-height:1.95; }
 .pdf-excludes-list li { margin:8px 0; }
-.pdf-footer { background:#cc1111; color:#fff; padding:22px 40px; text-align:center; font-size:18px; font-weight:900; letter-spacing:1.5px; }
+/* footer removed (no hosting info in PDF) */
 
 @page { size: A4; margin: 0 0 40px 0; }
 @media print {
@@ -627,7 +627,23 @@ return `<tr><td>${p[0]||''}</td><td><strong>${p[1]||''}</strong></td><td><span c
 </table></div>`;
 }
 
-let summaryHTML = summaryLines.map(l => { const p=l.split('|').map(x=>x.trim()); return `<div class="summary-row"><span class="summary-label">${p[0]||''}</span><span class="summary-val">${p[1]||''}</span></div>`; }).join('');
+// صارم: ملخص التكاليف يُبنى من نفس الحسابات أعلاه حتى لا يختلف عن إجمالي الجداول
+const costMap = {
+  'الفنادق': hotelsTotal,
+  'الطيران': flightsTotal,
+  'الانتقالات': transfersTotal,
+  'الجولات السياحية': toursTotal,
+};
+const remainingSummary = summaryLines.filter(l => {
+  const k = (l.split('|')[0] || '').trim();
+  return !(k in costMap);
+});
+let summaryHTML = Object.entries(costMap)
+  .map(([k, v]) => `<div class="summary-row"><span class="summary-label">${k}</span><span class="summary-val">${(v||0).toLocaleString()} ريال</span></div>`)
+  .join('');
+summaryHTML += remainingSummary
+  .map(l => { const p=l.split('|').map(x=>x.trim()); return `<div class="summary-row"><span class="summary-label">${p[0]||''}</span><span class="summary-val">${p[1]||''}</span></div>`; })
+  .join('');
 const simCount = (simText.match(/\d+/) || [''])[0];
 if (simCount) summaryHTML += `<div class="summary-row"><span class="summary-label">📶 شرائح الهاتف</span><span class="summary-val">${simCount} شريحة</span></div>`;
 
