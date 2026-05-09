@@ -1268,15 +1268,49 @@ function normalizeCityName(s) {
 }
 
 /**
- * حقل الطيران الأولى قد يحوي (اختياري) «اليوم N:» ثم مسار «من – إلى».
- * الطيران الداخلي دون «اليوم»: يُعرَض يوم استقبال المطار لمدينة الوصول من جدول الانتقالات إن وُجد،
- * مع ربط بالترتيب ورحلات «داخلي»؛ وإلا خروج آخر فندق في مدينة الانطلاق / التسلسل / التاريخ الافتراضي.
+ * مفتاح منطقة ثابت لربط أسماء عربية/إنجليزية/متغيرة (خصوصاً فيتنام) مع عمود المدينة في HOTELS.
+ */
+function canonicalRegionKey(s) {
+  const n = normalizeCityName(s);
+  if (!n) return '';
+  const rules = [
+    [/phu\s*quoc|phuquoc|فو\s*كوك|فوكوك|فوقوك|fuko|fuku/i, 'phu_quoc'],
+    [/hoi\s*an|hoian|هوي\s*ان|ھوا\s*ان|هاي\s*ان/i, 'da_nang'],
+    [/da\s*nang|danang|دانانغ|دانانج|دانه\s*نج|dana|my\s*khe|ماي\s*خي|ba\s*na|بانا/i, 'da_nang'],
+    [/ha\s*long|halong|ها\s*لونج|هالونج|هالونغ|ها\s*لونغ|haiphong|هاي\s*فونج|hai\s*phong/i, 'ha_long'],
+    [/ninh\s*binh|ninhbinh|نينه\s*بينه|نينه\s*بين|trang\s*an/i, 'ninh_binh'],
+    [/lao\s*cai|laocai|لاوس\s*كاي|لاو\s*كاي|sapa|سابا|cat\s*cat|كات\s*كات/i, 'sapa'],
+    [/ho\s*chi|saigon|هوتشي|هوشي\s*منه|سايغون|hochi|ميه\s*كونغ/i, 'ho_chi_minh'],
+    [/ha\s*noi|hanoi|هانوي|هانوي|(?:(?<=\s)|^)hn(?=\s|$)/i, 'hanoi'],
+  ];
+  for (const [re, key] of rules) {
+    if (re.test(n)) return key;
+  }
+  return n.replace(/\s+/g, '_').slice(0, 80);
+}
+
+function regionMatchKeys(a, b) {
+  const ka = canonicalRegionKey(a);
+  const kb = canonicalRegionKey(b);
+  if (!ka || !kb) return false;
+  if (ka === kb) return true;
+  if (ka.includes(kb) || kb.includes(ka)) return true;
+  const na = normalizeCityName(a);
+  const nb = normalizeCityName(b);
+  if (na.length >= 2 && nb.length >= 2 && (na.includes(nb) || nb.includes(na))) return true;
+  return false;
+}
+
+/**
+ * حقل الطيران الأولى قد يحوي (اختياري) «اليوم N:» أو «يوم N:» ثم مسار المدن.
+ * الطيران الداخلي بلا يوم صريح: التاريخ من **جدول الإقامة** (تاريخ الدخول لأول ليلة في مدينة الوصول) — المصدر الجذري الموثوق.
  */
 function extractRouteCities(routeText) {
   let t = arabicDigitsToLatin(String(routeText || '').trim());
-  t = t.replace(/^اليوم\s*\d{1,2}\s*[:\.\-]?\s*/u, '');
-  const parts = t.split(/\s*-\s*/).map(x => normalizeCityName(x)).filter(Boolean);
-  if (parts.length >= 2) return { from: parts[0], to: parts[1] };
+  t = t.replace(/^((?:ال)?يوم|اليوم)\s*\d{1,2}\s*[:\.\-]?\s*/iu, '');
+  const SPLIT = /\s*(?:-|–|—|−|→|←)\s*|\s+(?:إلى|الى|to)\s+/i;
+  const parts = t.split(SPLIT).map(x => normalizeCityName(x)).filter(Boolean);
+  if (parts.length >= 2) return { from: parts[0], to: parts[parts.length - 1] };
   return { from: '', to: '' };
 }
 
@@ -1357,8 +1391,9 @@ return formatArabicDate(addDays(start, dayNum - 1));
 }
 
 /*
- * تواريخ الفنادق: من DATE_FROM، كل فندق الدخول = المؤشّر الحالي، الخروج = الدخول + عدد الليالي، ثم يتحرك المؤشّر إلى يوم الخروج.
- * الطيران الداخلي إن لم يُذكر له «اليوم»: يُفضَّل تاريخ اليوم الموضَّح في سطر انتقالات «استقبال من مطار» المطابق لمدينة الوصول في المسار، مع احترام ترتيب رحلات «داخلي» واستهلاك كل سطر مطار مرّة واحدة؛ وإلا تاريخ خروج آخر فندق من مدينة الانطلاق؛ ثم تواريخ الخروج بالترتيب؛ ثم اليوم المحسوب.
+ * تواريخ الفنادق: من DATE_FROM، كل فندق الدخول = المؤشّر الحالي، الخروج = الدخول + عدد الليالي.
+ * الطيران الداخلي بلا «يوم» في الحقل: تاريخ الإقلاع المعروض = **تاريخ الدخول لأول إقامة في مدينة الوصول** (نفس سلسلة الفنادق)، مع مطابقة أسماء عبر canonicalRegionKey؛
+ * إن فشلت المطابقة يُستخدم استقبال مطار يطابق المدينة (بدون تخمين بالترتيب فقط).
  */
 // Hotel check-in/out dates (sequential from DATE_FROM)
 const tripStart = parseArabicDate(dateFrom);
@@ -1383,25 +1418,16 @@ allCheckoutDatesInOrder = hotelStays.map(s => s?.checkOutText).filter(Boolean);
 
 function extractDayNumber(text) {
   const t = String(text || '').trim();
-  const m =
-    t.match(/\b(?:ال)?يوم\s*[:\.]?\s*(\d{1,2})\b/i) ||
-    t.match(/\b(?:اليوم)\s*[:\.]?\s*(\d{1,2})\b/);
-  const n = m ? parseInt(m[1], 10) : 0;
+  let m = t.match(/^((?:ال)?يوم|اليوم)\s*[:\.]?\s*(\d{1,2})/i);
+  if (!m) m = t.match(/(?:^|[\s|])((?:ال)?يوم|اليوم)\s*[:\.]?\s*(\d{1,2})/i);
+  const n = m && m[2] ? parseInt(m[2], 10) : 0;
   return n >= 1 && n <= 99 ? n : 0;
 }
 
-function flightToMatchesPickupCity(flightToNorm, pickCityHit, pickBlob) {
-  const t = String(flightToNorm || '').trim();
-  if (!t) return false;
-  if (pickCityHit) {
-    const ph = String(pickCityHit).trim();
-    if (t === ph) return true;
-    const ca = t.replace(/\s+/g, '');
-    const cb = ph.replace(/\s+/g, '');
-    if (ca.includes(cb) || cb.includes(ca)) return true;
-  }
-  const b = String(pickBlob || '').trim();
-  if (b && (b.includes(t) || t.includes(b))) return true;
+function pickupEntryMatchesDestination(destinationRaw, entry) {
+  if (!destinationRaw || !entry) return false;
+  if (regionMatchKeys(entry.cityHit || '', destinationRaw)) return true;
+  if (regionMatchKeys(entry.blob || '', destinationRaw)) return true;
   return false;
 }
 
@@ -1437,36 +1463,22 @@ function buildAirportPickupDateQueue(transfersLines, hotelsLines, getDayDateFn) 
 
 const airportPickupDateQueue = buildAirportPickupDateQueue(transfersLines, hotelsLines, getDayDate);
 
-function consumePickupDateForInternalFlight(queue, flightToRaw, seqIndex) {
-  if (!queue || !queue.length) return '';
-  const fn = normalizeCityName(String(flightToRaw || '').trim()).replace(/^to\s*[:\s]*/, '');
-  if (fn) {
-    const idxByDest = queue.findIndex(e => !e.used && flightToMatchesPickupCity(fn, e.cityHit || '', e.blob));
-    if (idxByDest >= 0) {
-      queue[idxByDest].used = true;
-      return queue[idxByDest].dateStr || '';
-    }
-  }
-  const u = queue.filter(e => !e.used);
-  if (seqIndex >= 0 && seqIndex < u.length) {
-    const e = u[seqIndex];
-    const i = queue.indexOf(e);
-    queue[i].used = true;
-    return queue[i].dateStr || '';
-  }
-  return '';
+/** استقبال مطار فقط عند تطابق صريح بالمدينة — لا ربط بالترتيب فقط (كان يسبب تطابق خاطئ مع استقبال مدينة أخرى). */
+function consumePickupDateForInternalFlight(queue, flightToRaw) {
+  if (!queue || !queue.length || !String(flightToRaw || '').trim()) return '';
+  const idxByDest = queue.findIndex(e => !e.used && pickupEntryMatchesDestination(flightToRaw, e));
+  if (idxByDest < 0) return '';
+  queue[idxByDest].used = true;
+  return queue[idxByDest].dateStr || '';
 }
 
-/** تاريخ الدخول لأولّ فندق يطابق مدينة الوصول؛ nth0 بحسب عدد المرّات السابقة لطيران «داخلي» لنفس الوجهة (تكرار مدينة ثانية مثل هانوي). */
+/** تاريخ الدخول = يوم وصول المسافر لتلك المنطقة (أول ليلة فندق) — مصدر الحقيقة الزمنية من DATE_FROM + سلسلة الليالي. */
 function nthHotelCityCheckInDate(destinationRaw, nth0based) {
-  const toN = normalizeCityName(destinationRaw || '');
-  if (!toN) return '';
+  if (!String(destinationRaw || '').trim()) return '';
   const hitIdx = [];
   hotelsLines.forEach((line, i) => {
     const p = line.split('|').map(x => String(x ?? '').trim());
-    const c = normalizeCityName(p[1] || '');
-    if (!c || c.length < 2) return;
-    if (c === toN || c.includes(toN) || toN.includes(c)) hitIdx.push(i);
+    if (regionMatchKeys(p[1] || '', destinationRaw)) hitIdx.push(i);
   });
   if (!hitIdx.length) return '';
   const k = nth0based < hitIdx.length ? nth0based : hitIdx.length - 1;
@@ -1482,15 +1494,15 @@ function renderFlightDateLabel(p0, p1, internalSeqIdx, destOccIdx) {
   if (dayNum) return `📅 التاريخ: ${getDayDate(dayNum)}`;
   if (kind.includes('داخلي')) {
     const route = extractRouteCities(p0);
-    const pickupDate = consumePickupDateForInternalFlight(airportPickupDateQueue, route.to, internalSeqIdx);
+    const itineraryDate = nthHotelCityCheckInDate(route.to, destOccIdx);
+    if (itineraryDate) {
+      const lbl = route.to ? String(route.to).trim() : 'الوجهة';
+      return `📅 تاريخ الإقلاع (يوم الوصول — من إقامة الفنادق لـ ${lbl}): ${itineraryDate}`;
+    }
+    const pickupDate = consumePickupDateForInternalFlight(airportPickupDateQueue, route.to);
     if (pickupDate) {
       const lbl = route.to ? String(route.to).trim() : 'الوجهة';
-      return `📅 تاريخ الإقلاع (يطابق استقبال مطار ${lbl}): ${pickupDate}`;
-    }
-    const fallbackCheckIn = nthHotelCityCheckInDate(route.to, destOccIdx);
-    if (fallbackCheckIn) {
-      const lbl = route.to ? String(route.to).trim() : 'الوجهة';
-      return `📅 تاريخ الإقلاع (يوافق أوّل إقامة مسجَّلة للوجهة ${lbl}): ${fallbackCheckIn}`;
+      return `📅 تاريخ الإقلاع (استقبال مطار ${lbl} حسب الانتقالات): ${pickupDate}`;
     }
     const { from } = route;
     const inferred =
