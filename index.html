@@ -388,9 +388,13 @@ EXTRA_BED_CITIES:
 عند طلب سرير إضافي — مدينة=عدد، أو دولة=عدد (فيتنام=1 / Vietnam=1 / VN=1 لكل فنادق 4★ و5★ في تلك الوجهة)، أو ALL=1 لكل البرنامج. تجنب نسخ «مثال: سيلانجور…» فقط دون صيغة =عدد لوجهتك.
 
 FLIGHTS:
-التسجيل في حقل الرحلة الأول: نفس أسماء عمود [المنطقة] في HOTELS حرفيًا (مع «يوم X:» إن رغبت بإجبار اليوم).
-الداخلي: [مدينة انطلاق مطابقة لفندق تلك المدينة] - [مدينة وصول] | داخلي | ...
-مثال سلسلة: سيلانجور وليلتان ثم لانكاوي وليالٍ ثم كوالالمبور — تاريخ إقلاع الطيران الداخلي من سيلانجور = تاريخ خروج آخر فندق سجّل لسيلانجور، وللانكاوي = خروج آخر فندق لانكاوي.
+التسجيل في حقل الرحلة الأول: نفس أسماء عمود [المنطقة] في HOTELS حرفيًا؛ يمكنك إضافة «اليوم X:» أو «يوم X:» قبل المسار ليتطابق عرض الطيران الداخلي في PDF مع جدول الأيام.
+قاعدة عرض الطيران «داخلي» في الواجهة والـPDF (لا تخلط بينها وبين حقول النقل بالسيارة):
+ • التاريخ الموثوق الظاهر = **يوم وصولكم لمدينة الوجهة عبر الطائرة**.
+ • ذلك يُطابق زمناً أسطر انتقالات **Pickup + استقبال من مطار** لنفس مدينة الوصول عندما تحترم تسلسل المناطق وفق جدول HOTELS (هانوي → هالونج → دانانج → …) حتى لا يختلط مطار بمطار أو مدينة جارّة.
+ • اجعل **اليوم X** لسطر استقبال ذلك المطار **نفس رقم اليوم الذي تغادر فيه بالطائرة لتلك الوجهة من المدينة السابقة** (اليوم الأول في META = اليوم الموافق لـ DATE_FROM).
+ • إن لم تذكر اليوم بالنص أو تعثّرت المطابقة، يعتمد النظام على **تاريخ دخول أول إقامة فندقيّة اسمها تطابق «مدينة الوصول» بعد التسلسل المنطقي**؛ لذلك احرص أن تكون أسماء المدائن في HOTELS وفق واقع ترتيب البرنامج.
+مثال: هانوي + هالونج نزولاً دانانج: رحلة داخلي «هانوي - دانانج» يكون يوم إقلاعها نفس اليوم الذي فيه استقPickup من مطار دانانج.
 [مدينة من أو يوم X: مدينة من - مدينة الى] | [ذهاب/عودة/داخلي] | [السعر/شخص] ريال/شخص | [عدد الاشخاص] اشخاص | [الاجمالي] ريال
 
 TRANSFERS:
@@ -1378,10 +1382,12 @@ lastCheckoutByCity = buildLastCheckoutByCity();
 allCheckoutDatesInOrder = hotelStays.map(s => s?.checkOutText).filter(Boolean);
 
 function extractDayNumber(text) {
-  const t = String(text||'');
-  const m = t.match(/(?:اليوم)\s*(\d{1,2})/);
-  const n = m ? parseInt(m[1],10) : 0;
-  return (n>=1 && n<=31) ? n : 0;
+  const t = String(text || '').trim();
+  const m =
+    t.match(/\b(?:ال)?يوم\s*[:\.]?\s*(\d{1,2})\b/i) ||
+    t.match(/\b(?:اليوم)\s*[:\.]?\s*(\d{1,2})\b/);
+  const n = m ? parseInt(m[1], 10) : 0;
+  return n >= 1 && n <= 99 ? n : 0;
 }
 
 function flightToMatchesPickupCity(flightToNorm, pickCityHit, pickBlob) {
@@ -1451,7 +1457,24 @@ function consumePickupDateForInternalFlight(queue, flightToRaw, seqIndex) {
   return '';
 }
 
-function renderFlightDateLabel(p0, p1, internalSeqIdx) {
+/** تاريخ الدخول لأولّ فندق يطابق مدينة الوصول؛ nth0 بحسب عدد المرّات السابقة لطيران «داخلي» لنفس الوجهة (تكرار مدينة ثانية مثل هانوي). */
+function nthHotelCityCheckInDate(destinationRaw, nth0based) {
+  const toN = normalizeCityName(destinationRaw || '');
+  if (!toN) return '';
+  const hitIdx = [];
+  hotelsLines.forEach((line, i) => {
+    const p = line.split('|').map(x => String(x ?? '').trim());
+    const c = normalizeCityName(p[1] || '');
+    if (!c || c.length < 2) return;
+    if (c === toN || c.includes(toN) || toN.includes(c)) hitIdx.push(i);
+  });
+  if (!hitIdx.length) return '';
+  const k = nth0based < hitIdx.length ? nth0based : hitIdx.length - 1;
+  const idx = hitIdx[k];
+  return hotelStays[idx]?.checkInText || '';
+}
+
+function renderFlightDateLabel(p0, p1, internalSeqIdx, destOccIdx) {
   const kind = String(p1 || '').trim();
   const dayNum = extractDayNumber(p0) || extractDayNumber(p1);
   if (kind.includes('عودة')) return `📅 الذهاب: ${dateFrom} | العودة: ${dateTo}`;
@@ -1463,6 +1486,11 @@ function renderFlightDateLabel(p0, p1, internalSeqIdx) {
     if (pickupDate) {
       const lbl = route.to ? String(route.to).trim() : 'الوجهة';
       return `📅 تاريخ الإقلاع (يطابق استقبال مطار ${lbl}): ${pickupDate}`;
+    }
+    const fallbackCheckIn = nthHotelCityCheckInDate(route.to, destOccIdx);
+    if (fallbackCheckIn) {
+      const lbl = route.to ? String(route.to).trim() : 'الوجهة';
+      return `📅 تاريخ الإقلاع (يوافق أوّل إقامة مسجَّلة للوجهة ${lbl}): ${fallbackCheckIn}`;
     }
     const { from } = route;
     const inferred =
@@ -1478,12 +1506,21 @@ function renderFlightDateLabel(p0, p1, internalSeqIdx) {
 function renderFlightsPDF() {
   if (!flightsLines.length) return '';
   let internalIdx = 0;
+  const destPickupOcc = {};
   return `
 <div class="pdf-section-title" style="margin-top:${hotelsLines.length ? 24 : 0}px;">✈️ الطيران</div>
 ${flightsLines.map(l => {
   const p = l.split('|').map(x => x.trim());
   const kind = String(p[1] || '');
-  const dateLabel = kind.includes('داخلي') ? renderFlightDateLabel(p[0], p[1], internalIdx++) : renderFlightDateLabel(p[0], p[1], 0);
+  let destOccIdx = 0;
+  let dateLabel = '';
+  if (kind.includes('داخلي')) {
+    const r = extractRouteCities(p[0]);
+    const tk = normalizeCityName(r.to) || '_';
+    destOccIdx = destPickupOcc[tk] || 0;
+    destPickupOcc[tk] = destOccIdx + 1;
+    dateLabel = renderFlightDateLabel(p[0], p[1], internalIdx++, destOccIdx);
+  } else dateLabel = renderFlightDateLabel(p[0], p[1], 0, 0);
   const detailedLine = showDetailed ? (() => {
     const per = parseMoney(p[2]);
     const lineCount = parseCount(p[3]) || adults || persons;
