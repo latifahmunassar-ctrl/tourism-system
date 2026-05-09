@@ -377,6 +377,9 @@ CLIENT_CODE:ALZ-2026-001
 HOTELS:
 [اسم الفندق] | [المنطقة] | [النجوم] نجوم | [نوع الغرفة] | [السعر] ريال/ليلة | [عدد الليالي] ليالي | [ما يشمل]
 
+EXTRA_BED_CITIES:
+اختياري — يحدده الموظف: المدن التي تحتاج سرير إضافي، بصيغة: مدينة=عدد, مدينة=عدد (مثال: سيلانجور=1, لانكاوي=2)
+
 FLIGHTS:
 التسجيل في حقل الرحلة الأول: نفس أسماء عمود [المنطقة] في HOTELS حرفيًا (مع «يوم X:» إن رغبت بإجبار اليوم).
 الداخلي: [مدينة انطلاق مطابقة لفندق تلك المدينة] - [مدينة وصول] | داخلي | ...
@@ -443,7 +446,7 @@ return m ? m[1].trim() : '';
 }
 
 function parseSection(raw, tag) {
-const m = raw.match(new RegExp(tag + ':([\\s\\S]+?)(?=\\n(?:DEST|META|DATE_FROM|DATE_TO|CLIENT|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|SUMMARY|CHAT):)'));
+const m = raw.match(new RegExp(tag + ':([\\s\\S]+?)(?=\\n(?:DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|SUMMARY|CHAT):)'));
 return m ? m[1].trim().split('\n').filter(l => l.includes('|')) : [];
 }
 
@@ -490,13 +493,7 @@ function hotelLineTotals(line) {
   // Extra bed / Sofa Bed pricing per night (from your sheet)
   const stars = parseInt(String(p[2] || '').replace(/[^\d]/g, ''), 10) || 0;
   const extraBedPricePerNight = stars >= 5 ? 120 : (stars === 4 ? 100 : 0);
-  const extraBedCount = (() => {
-    const hay = `${p[0]} ${p[3]} ${p[6]}`.toLowerCase();
-    if (!/(extra\s*bed|exra\s*bed|sofa\s*bed|سرير\s*اضافي|سرير\s*إضافي)/i.test(hay)) return 0;
-    const m = arabicDigitsToLatin(hay).match(/(\d{1,2})\s*(?:extra\s*bed|exra\s*bed|sofa\s*bed|سرير)/i);
-    const n = m ? parseInt(m[1], 10) : 1;
-    return (n >= 1 && n <= 10) ? n : 1;
-  })();
+  const extraBedCount = 0; // يُحدد لاحقاً حسب المدن التي يختارها الموظف
   const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * nights * extraBedCount) : 0;
   return { p, nightly, nights, totalLine, stars, extraBedCount, extraBedPricePerNight, extraBedTotal };
 }
@@ -512,6 +509,7 @@ const dateFrom = getLine(raw, 'DATE_FROM');
 const dateTo = getLine(raw, 'DATE_TO');
 const client = getLine(raw, 'CLIENT');
 const clientCode = getLine(raw, 'CLIENT_CODE');
+const extraBedCitiesLine = getLine(raw, 'EXTRA_BED_CITIES');
 const totalPersonStr = getLine(raw, 'TOTAL_PER_PERSON');
 const totalGroupLine = getLine(raw, 'TOTAL_GROUP');
 const totalPerson = parseInt(totalPersonStr.replace(/[^\d]/g,'')) || 0;
@@ -536,10 +534,40 @@ const simText = simMatch ? simMatch[1].trim() : '';
 const summaryMatch = raw.match(/SUMMARY:([\s\S]+?)(?=\nCHAT:|$)/);
 const summaryLines = summaryMatch ? summaryMatch[1].trim().split('\n').filter(l => l.includes('|') && !l.startsWith('TOTAL')) : [];
 
+// Extra bed cities parsing (employee-controlled)
+function normCityKey(s) {
+  return String(s || '').trim().toLowerCase().replace(/[أإآٱ]/g,'ا').replace(/ؤ/g,'و').replace(/ئ/g,'ي').replace(/ى/g,'ي').replace(/\s+/g,' ').trim();
+}
+function parseExtraBedCities(line) {
+  const map = {};
+  const raw = String(line || '').trim();
+  if (!raw) return map;
+  const parts = raw.split(/[,|]/).map(x => x.trim()).filter(Boolean);
+  for (const part of parts) {
+    const m = part.match(/(.+?)(?:\s*[=:]\s*|\s+)(\d{1,2})$/);
+    if (m) map[normCityKey(m[1])] = Math.max(0, Math.min(10, parseInt(m[2],10) || 0));
+    else map[normCityKey(part)] = 1;
+  }
+  return map;
+}
+const extraBedByCity = parseExtraBedCities(extraBedCitiesLine);
+function extraBedCountForHotelCity(cityRaw) {
+  const k = normCityKey(cityRaw);
+  if (!k) return 0;
+  if (extraBedByCity[k] !== undefined) return extraBedByCity[k];
+  // تطابق جزئي بسيط (مثلاً "كوالا لمبور" vs "كوالالمبور")
+  for (const kk of Object.keys(extraBedByCity)) {
+    if (k.includes(kk) || kk.includes(k)) return extraBedByCity[kk] || 0;
+  }
+  return 0;
+}
+
 // Totals
 let hotelsTotal = hotelsLines.reduce((s, l) => {
   const t = hotelLineTotals(l);
-  return s + (t.totalLine || 0) + (t.extraBedTotal || 0);
+  const extraCount = extraBedCountForHotelCity(t.p?.[1]);
+  const extraTotal = extraCount > 0 ? (t.extraBedPricePerNight * (t.nights || 0) * extraCount) : 0;
+  return s + (t.totalLine || 0) + extraTotal;
 }, 0);
 // SIM Card pricing (from sheet): Vietnam = 50 SAR per pax
 function simPricePerPaxByDest(destRaw) {
@@ -582,7 +610,7 @@ if (totalGroupFromText && computedGroup) {
   }
 }
 
-parsedData = { dest, meta, dateFrom, dateTo, client, clientCode, hotelsLines, flightsLines, transfersLines, toursLines, simText, summaryLines, totalPerson, persons, kids, infants, adults };
+parsedData = { dest, meta, dateFrom, dateTo, client, clientCode, extraBedCitiesLine, hotelsLines, flightsLines, transfersLines, toursLines, simText, summaryLines, totalPerson, persons, kids, infants, adults };
 
 let html = `
 <div class="review-header">
@@ -598,9 +626,11 @@ html += `<div class="section-card">
 <table class="pricing-table">
 <thead><tr><th>المدينة</th><th>الفندق</th><th>النجوم</th><th>الغرفة</th><th>السعر/ليلة</th><th>الليالي</th><th>الإجمالي</th><th>Extra Bed</th></tr></thead>
 <tbody>${hotelsLines.map(l => {
-const { p, nightly, nights, totalLine, extraBedCount, extraBedTotal } = hotelLineTotals(l);
-const bedTxt = extraBedCount ? (`${extraBedCount} × ${extraBedTotal.toLocaleString()} ريال`) : '—';
-return `<tr><td>${p[1]||''}</td><td><strong>${p[0]||''}${extraBedCount ? ' + Extra bed / Sofa Bed' : ''}</strong></td><td>${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td><td class="price-cell">${(totalLine + (extraBedTotal||0)).toLocaleString()} ريال</td><td>${bedTxt}</td></tr>`;
+const { p, nightly, nights, totalLine, extraBedPricePerNight } = hotelLineTotals(l);
+const extraCount = extraBedCountForHotelCity(p?.[1]);
+const extraTotal = extraCount > 0 ? (extraBedPricePerNight * (nights||0) * extraCount) : 0;
+const bedTxt = extraCount ? (`${extraCount} × ${extraTotal.toLocaleString()} ريال`) : '—';
+return `<tr><td>${p[1]||''}</td><td><strong>${p[0]||''}${extraCount ? ' + Extra bed / Sofa Bed' : ''}</strong></td><td>${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td><td class="price-cell">${(totalLine + (extraTotal||0)).toLocaleString()} ريال</td><td>${bedTxt}</td></tr>`;
 }).join('')}</tbody>
 </table></div>`;
 }
@@ -769,7 +799,7 @@ async function searchByCode() {
 function buildPDF(mode) {
 if (!parsedData) return;
 const profit=parseInt(document.getElementById('profitInput').value)||0;
-const {dest,meta,dateFrom,dateTo,client,clientCode,hotelsLines,flightsLines,transfersLines,toursLines,simText,persons,kids,infants,adults}=parsedData;
+const {dest,meta,dateFrom,dateTo,client,clientCode,extraBedCitiesLine,hotelsLines,flightsLines,transfersLines,toursLines,simText,persons,kids,infants,adults}=parsedData;
 const simCountNum = parseInt((String(simText||'').match(/\d+/) || ['0'])[0].replace(/[^\d]/g,'')) || 0;
 const systemCode = (lastSavedCode || '').trim();
 // السعر النهائي الإجمالي = السعر الأساسي للمجموعة + الربح (إجمالي)
@@ -804,6 +834,33 @@ let hotelStays = [];
 let lastCheckoutByCity = {};
 let allCheckoutDatesInOrder = [];
 
+// Extra bed cities parsing (employee-controlled)
+function normCityKey(s) {
+  return String(s || '').trim().toLowerCase().replace(/[أإآٱ]/g,'ا').replace(/ؤ/g,'و').replace(/ئ/g,'ي').replace(/ى/g,'ي').replace(/\s+/g,' ').trim();
+}
+function parseExtraBedCities(line) {
+  const map = {};
+  const raw = String(line || '').trim();
+  if (!raw) return map;
+  const parts = raw.split(/[,|]/).map(x => x.trim()).filter(Boolean);
+  for (const part of parts) {
+    const m = part.match(/(.+?)(?:\s*[=:]\s*|\s+)(\d{1,2})$/);
+    if (m) map[normCityKey(m[1])] = Math.max(0, Math.min(10, parseInt(m[2],10) || 0));
+    else map[normCityKey(part)] = 1;
+  }
+  return map;
+}
+const extraBedByCity = parseExtraBedCities(extraBedCitiesLine);
+function extraBedCountForHotelCity(cityRaw) {
+  const k = normCityKey(cityRaw);
+  if (!k) return 0;
+  if (extraBedByCity[k] !== undefined) return extraBedByCity[k];
+  for (const kk of Object.keys(extraBedByCity)) {
+    if (k.includes(kk) || kk.includes(k)) return extraBedByCity[kk] || 0;
+  }
+  return 0;
+}
+
 // Totals (for detailed PDF calculations)
 const parseLineTotal = (s) => {
   const eq = (s||'').match(/=\s*([\d,]+)/);
@@ -812,7 +869,9 @@ const parseLineTotal = (s) => {
 };
 const hotelsTotal = hotelsLines.reduce((s, l) => {
   const t = hotelLineTotals(l);
-  return s + (t.totalLine || 0) + (t.extraBedTotal || 0);
+  const extraCount = extraBedCountForHotelCity(t.p?.[1]);
+  const extraTotal = extraCount > 0 ? (t.extraBedPricePerNight * (t.nights || 0) * extraCount) : 0;
+  return s + (t.totalLine || 0) + extraTotal;
 }, 0);
 const parseMoney = (s) => parseInt(String(s||'').replace(/[^\d]/g,'')) || 0;
 const parseCount = (s) => parseInt(String(s||'').replace(/[^\d]/g,'')) || 0;
@@ -1092,7 +1151,7 @@ ${(hotelsLines.length || flightsLines.length || simText) ? `
 <div class="pdf-page-break"></div>
 <div class="pdf-section">
 ${hotelsLines.length ? `<div class="pdf-section-title">🏨 الفنادق</div>
-${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedCount, extraBedPricePerNight, extraBedTotal } = hotelLineTotals(l); const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; return `
+${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight } = hotelLineTotals(l); const extraBedCount = extraBedCountForHotelCity(p?.[1]); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; return `
 <div style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;">
 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;">
   <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:12px;line-height:1.3;">🏨 ${safeText(p[0]||'')}${extraBedCount ? ' + Extra bed / Sofa Bed' : ''}</div>
