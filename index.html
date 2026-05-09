@@ -487,7 +487,18 @@ function hotelLineTotals(line) {
     const g = String(p[4]).match(/=\s*([\d,]+)\s*(?:ريال|SAR)/iu);
     if (g) totalLine = parseInt(String(g[1]).replace(/[^\d]/g, ''), 10) || 0;
   }
-  return { p, nightly, nights, totalLine };
+  // Extra bed / Sofa Bed pricing per night (from your sheet)
+  const stars = parseInt(String(p[2] || '').replace(/[^\d]/g, ''), 10) || 0;
+  const extraBedPricePerNight = stars >= 5 ? 120 : (stars === 4 ? 100 : 0);
+  const extraBedCount = (() => {
+    const hay = `${p[0]} ${p[3]} ${p[6]}`.toLowerCase();
+    if (!/(extra\s*bed|exra\s*bed|sofa\s*bed|سرير\s*اضافي|سرير\s*إضافي)/i.test(hay)) return 0;
+    const m = arabicDigitsToLatin(hay).match(/(\d{1,2})\s*(?:extra\s*bed|exra\s*bed|sofa\s*bed|سرير)/i);
+    const n = m ? parseInt(m[1], 10) : 1;
+    return (n >= 1 && n <= 10) ? n : 1;
+  })();
+  const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * nights * extraBedCount) : 0;
+  return { p, nightly, nights, totalLine, stars, extraBedCount, extraBedPricePerNight, extraBedTotal };
 }
 
 function buildReview(raw) {
@@ -526,7 +537,10 @@ const summaryMatch = raw.match(/SUMMARY:([\s\S]+?)(?=\nCHAT:|$)/);
 const summaryLines = summaryMatch ? summaryMatch[1].trim().split('\n').filter(l => l.includes('|') && !l.startsWith('TOTAL')) : [];
 
 // Totals
-let hotelsTotal = hotelsLines.reduce((s, l) => s + (hotelLineTotals(l).totalLine || 0), 0);
+let hotelsTotal = hotelsLines.reduce((s, l) => {
+  const t = hotelLineTotals(l);
+  return s + (t.totalLine || 0) + (t.extraBedTotal || 0);
+}, 0);
 // SIM Card pricing (from sheet): Vietnam = 50 SAR per pax
 function simPricePerPaxByDest(destRaw) {
   const d = String(destRaw || '').trim().toLowerCase();
@@ -582,10 +596,11 @@ if (hotelsLines.length) {
 html += `<div class="section-card">
 <div class="section-card-header"><div class="section-card-title">🏨 الفنادق</div><div class="section-total">${hotelsTotal.toLocaleString()} ريال</div></div>
 <table class="pricing-table">
-<thead><tr><th>المدينة</th><th>الفندق</th><th>النجوم</th><th>الغرفة</th><th>السعر/ليلة</th><th>الليالي</th><th>الإجمالي</th></tr></thead>
+<thead><tr><th>المدينة</th><th>الفندق</th><th>النجوم</th><th>الغرفة</th><th>السعر/ليلة</th><th>الليالي</th><th>الإجمالي</th><th>Extra Bed</th></tr></thead>
 <tbody>${hotelsLines.map(l => {
-const { p, nightly, nights, totalLine } = hotelLineTotals(l);
-return `<tr><td>${p[1]||''}</td><td><strong>${p[0]||''}</strong></td><td>${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td><td class="price-cell">${totalLine.toLocaleString()} ريال</td></tr>`;
+const { p, nightly, nights, totalLine, extraBedCount, extraBedTotal } = hotelLineTotals(l);
+const bedTxt = extraBedCount ? (`${extraBedCount} × ${extraBedTotal.toLocaleString()} ريال`) : '—';
+return `<tr><td>${p[1]||''}</td><td><strong>${p[0]||''}${extraBedCount ? ' + Extra bed / Sofa Bed' : ''}</strong></td><td>${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td><td class="price-cell">${(totalLine + (extraBedTotal||0)).toLocaleString()} ريال</td><td>${bedTxt}</td></tr>`;
 }).join('')}</tbody>
 </table></div>`;
 }
@@ -795,7 +810,10 @@ const parseLineTotal = (s) => {
   if (eq) return parseInt(eq[1].replace(/[^\d]/g,''))||0;
   return parseInt((s||'').replace(/[^\d]/g,''))||0;
 };
-const hotelsTotal = hotelsLines.reduce((s, l) => s + (hotelLineTotals(l).totalLine || 0), 0);
+const hotelsTotal = hotelsLines.reduce((s, l) => {
+  const t = hotelLineTotals(l);
+  return s + (t.totalLine || 0) + (t.extraBedTotal || 0);
+}, 0);
 const parseMoney = (s) => parseInt(String(s||'').replace(/[^\d]/g,'')) || 0;
 const parseCount = (s) => parseInt(String(s||'').replace(/[^\d]/g,'')) || 0;
 const flightsTotal = flightsLines.reduce((s,l) => {
@@ -1074,11 +1092,11 @@ ${(hotelsLines.length || flightsLines.length || simText) ? `
 <div class="pdf-page-break"></div>
 <div class="pdf-section">
 ${hotelsLines.length ? `<div class="pdf-section-title">🏨 الفنادق</div>
-${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine } = hotelLineTotals(l); const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; return `
+${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedCount, extraBedPricePerNight, extraBedTotal } = hotelLineTotals(l); const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; return `
 <div style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;">
 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;">
-  <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:12px;line-height:1.3;">🏨 ${safeText(p[0]||'')}</div>
-  ${showDetailed ? `<div style="font-weight:900;color:#0d1f4a;font-size:18px;white-space:nowrap;">${totalLine.toLocaleString()} ريال</div>` : ``}
+  <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:12px;line-height:1.3;">🏨 ${safeText(p[0]||'')}${extraBedCount ? ' + Extra bed / Sofa Bed' : ''}</div>
+  ${showDetailed ? `<div style="font-weight:900;color:#0d1f4a;font-size:18px;white-space:nowrap;">${(totalLine + (extraBedTotal||0)).toLocaleString()} ريال</div>` : ``}
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:20px;font-weight:800;color:#0d1f4a;line-height:1.5;">
 <span>📍 المدينة: ${safeText(p[1]||'')}</span>
@@ -1086,6 +1104,7 @@ ${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine } = hotelLin
 <span>🛏️ الغرفة: ${safeText(p[3]||'')}</span>
 <span>📅 الإقامة: ${stayText}</span>
 ${(sd.checkInText && sd.checkOutText) ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText} | 🔴 الخروج: ${sd.checkOutText}</span>` : (sd.checkInText ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText}</span>` : ``)}
+${showDetailed && extraBedCount ? `<span>🛋️ Extra bed / Sofa Bed: ${extraBedPricePerNight} ريال/ليلة × ${nights||'—'} ليالي × ${extraBedCount} = ${(extraBedTotal||0).toLocaleString()} ريال</span>` : ``}
 ${showDetailed ? `<span>💵 تفصيل السعر: ${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي = ${totalLine.toLocaleString()} ريال</span>` : ``}
 <span style="grid-column:1/-1;">✅ يشمل: ${safeText(p[6]||'')}</span>
 </div>
