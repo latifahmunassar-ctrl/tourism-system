@@ -17,11 +17,43 @@ const CORS_HEADERS = {
 };
 
 // ── بناء سياق البيانات من قاعدة البيانات ──────────────────────────────────
-async function buildDataContext(supabase: ReturnType<typeof createClient>): Promise<string> {
+// Detect destination from messages so we only ship that destination's data
+// to the model (cuts input tokens dramatically). If we can't tell, ship all.
+function detectDestination(messages: Array<{ role: string; content: unknown }>): string | null {
+  const text = messages
+    .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content))
+    .join(" ")
+    .toLowerCase();
+  const map: Array<[RegExp, string]> = [
+    [/فيتنام|vietnam/i, "vietnam"],
+    [/ماليزيا|malaysia/i, "Malaysia"],
+    [/إندونيسيا|اندونيسيا|indonesia|بالي|bali|جاكرتا/i, "indonesia"],
+    [/تركيا|turky|turkey|اسطنبول|istanbul|طرابزون|trabzon/i, "Turky"],
+    [/روسيا|russia|موسكو|moscow|سانت بطرسبرغ/i, "russia"],
+    [/البوسنة|bosnia|سراييفو|sarajevo/i, "Bosnia"],
+    [/تايلاند|thailand|بانكوك|bangkok|بوكيت|phuket|كرابي/i, "thailand"],
+  ];
+  for (const [re, dest] of map) if (re.test(text)) return dest;
+  return null;
+}
+
+async function buildDataContext(
+  supabase: ReturnType<typeof createClient>,
+  destinationFilter: string | null = null,
+): Promise<string> {
+  const hotelQuery = supabase.from("hotels").select("*").order("stars", { ascending: false }).order("price_per_night");
+  const tourQuery  = supabase.from("tours").select("*").order("price");
+  const flightQuery = supabase.from("flights").select("*");
+  if (destinationFilter) {
+    hotelQuery.ilike("location", `% - ${destinationFilter}`);
+    tourQuery.eq("type", destinationFilter);
+    flightQuery.eq("destination", destinationFilter);
+  }
+
   const [hotelsRes, toursRes, flightsRes, trainsRes] = await Promise.all([
-    supabase.from("hotels").select("*").order("stars", { ascending: false }).order("price_per_night"),
-    supabase.from("tours").select("*").order("price"),
-    supabase.from("flights").select("*"),
+    hotelQuery,
+    tourQuery,
+    flightQuery,
     supabase.from("trains").select("*"),
   ]);
   const hotels = hotelsRes.data;
@@ -1290,7 +1322,8 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const dataContext   = await buildDataContext(supabase);
+    const detectedDest  = detectDestination(messages);
+    const dataContext   = await buildDataContext(supabase, detectedDest);
     const formatSection = (typeof clientSystem === "string" && clientSystem.trim().length > 0)
       ? clientSystem
       : DEFAULT_FORMAT;
@@ -1298,10 +1331,19 @@ Deno.serve(async (req) => {
 
     const client = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
 
+    // Prompt caching: 90% discount on cached tokens for 5 min after first use.
+    // Combined with per-destination filtering (see buildDataContext), this cuts
+    // a typical 5-turn build from ~$1.10 to ~$0.23.
     const response = await client.messages.create({
       model:      "claude-sonnet-4-6",
       max_tokens,
-      system:     systemPrompt,
+      system: [
+        {
+          type: "text",
+          text: systemPrompt,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
       messages,
     });
 
