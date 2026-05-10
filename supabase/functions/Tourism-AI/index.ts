@@ -16,6 +16,276 @@ const CORS_HEADERS = {
   "Content-Type": "application/json",
 };
 
+// ── حقن القطار آلياً من جدول trains (لا يعتمد على تصرّف النموذج) ─────────
+type TrainRow = {
+  from_city: string;
+  to_city: string;
+  destination: string;
+  price_per_pax: number | string;
+  currency?: string;
+};
+
+function inferDestinationSheetKey(destLine: string): string | null {
+  if (/روسيا|russia|русс/i.test(destLine)) return "russia";
+  if (/فيتنام|vietnam/i.test(destLine)) return "vietnam";
+  if (/تركيا|turkey|turky|t[uü]rkiye/i.test(destLine)) return "Turky";
+  if (/البوسنة|bosnia|بوسن/i.test(destLine)) return "Bosnia";
+  if (/اندونيسيا|indonesia/i.test(destLine)) return "indonesia";
+  if (/ماليزيا|malaysia/i.test(destLine)) return "Malaysia";
+  if (/تايلند|thailand/i.test(destLine)) return "thailand";
+  return null;
+}
+
+/** مفتاح واحد للربط بين عمود المدينة في HOTELS وصفوف القطار في الشيت */
+function intercityTransportKey(s: string): string {
+  const x = (s || "").trim().toLowerCase();
+  if (/\bmoscow\b|\bmoskva\b|موسكو/.test(x)) return "moscow";
+  if (
+    /petersburg|petrograd|سانت\s*بطرس|ست\s*بطرس|st\.?\s*peters|saint\s*peters/.test(x)
+  ) {
+    return "st_petersburg";
+  }
+  if (/\bsochi\b|سوتشي/.test(x)) return "sochi";
+  return x.replace(/\s+/g, "_").replace(/[^\p{L}\p{N}_-]/gu, "");
+}
+
+function extractHotelsCitySequence(raw: string): Array<{ display: string; key: string }> {
+  const m = raw.match(
+    /^HOTELS:\s*\n([\s\S]*?)(?=^\s*(?:EXTRA_BED_CITIES|FLIGHTS|SIM|TRANSFERS|TOURS|SUMMARY|CHAT):)/m,
+  );
+  if (!m) return [];
+  const lines = m[1].split("\n").map((l) => l.trim()).filter((l) => l.includes("|"));
+  const out: Array<{ display: string; key: string }> = [];
+  for (const line of lines) {
+    const p = line.split("|").map((x) => x.trim());
+    const city = String(p[1] || "").trim();
+    if (!city) continue;
+    out.push({ display: city, key: intercityTransportKey(city) });
+  }
+  return out;
+}
+
+function parseMetaPax(raw: string): number {
+  const meta = raw.match(/^META:\s*([^\n]+)/im)?.[1] ?? "";
+  const m = meta.match(/(\d+)\s*(?:اشخاص|أشخاص|اشخاص‎|افراد|أفراد|persons?|pax)/i);
+  const n = m ? parseInt(m[1], 10) : 0;
+  return n >= 1 && n <= 99 ? n : 0;
+}
+
+function splitRouteCell(p0: string): [string, string] | null {
+  let t = String(p0 || "").trim();
+  t = t.replace(/^((?:ال)?يوم|اليوم)\s*\d{1,2}\s*[:\.\-]?\s*/iu, "");
+  const SPLIT = /\s*(?:-|–|—|−|→|←)\s*|\s+(?:إلى|الى|to)\s+/i;
+  const parts = t.split(SPLIT).map((x) => x.trim()).filter(Boolean);
+  if (parts.length >= 2) return [parts[0], parts[parts.length - 1]];
+  return null;
+}
+
+function flightTrainKindColumn(p1: string): string {
+  return String(p1 || "").trim().toLowerCase();
+}
+
+/** هل يوجد سطر FLIGHTS يغطي هذا الانتقال (قطار أو داخلي/طيران) */
+function flightsCoversLeg(raw: string, fromK: string, toK: string): boolean {
+  const fm = raw.match(
+    /^FLIGHTS:\s*\n([\s\S]*?)(?=^\s*(?:SIM|TRANSFERS|TOURS|SUMMARY|CHAT):)/m,
+  );
+  if (!fm) return false;
+  for (const line of fm[1].split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || !trimmed.includes("|")) continue;
+    const cells = trimmed.split("|").map((x) => x.trim());
+    const route = splitRouteCell(cells[0] || "");
+    if (!route) continue;
+    const a = intercityTransportKey(route[0]);
+    const b = intercityTransportKey(route[1]);
+    const k = flightTrainKindColumn(cells[1] || "");
+    const isTransportLeg = k.includes("قطار") || /\btrain\b|railway|\bпоезд\b/.test(k) || k.includes("داخلي") ||
+      k.includes("ذهاب") || k.includes("عودة");
+    if (!isTransportLeg) continue;
+    if ((a === fromK && b === toK) || (a === toK && b === fromK)) return true;
+  }
+  return false;
+}
+
+/** حذف سطر طيران «داخلي» يكرر مسار قطار موسكو–بطرس (روسيا) */
+function stripDomesticDuplicatingTrainLeg(raw: string, fromK: string, toK: string): string {
+  const fm = raw.match(
+    /^FLIGHTS:\s*\n([\s\S]*?)(?=^\s*(?:SIM|TRANSFERS|TOURS|SUMMARY|CHAT):)/m,
+  );
+  if (!fm) return raw;
+  const body = fm[1];
+  const kept = body.split("\n").filter((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || !trimmed.includes("|")) return true;
+    const cells = trimmed.split("|").map((x) => x.trim());
+    const route = splitRouteCell(cells[0] || "");
+    if (!route) return true;
+    const a = intercityTransportKey(route[0]);
+    const b = intercityTransportKey(route[1]);
+    const k = flightTrainKindColumn(cells[1] || "");
+    const sameLeg = (a === fromK && b === toK) || (a === toK && b === fromK);
+    if (sameLeg && k.includes("داخلي")) return false;
+    return true;
+  });
+  return raw.replace(fm[0], `FLIGHTS:\n${kept.join("\n")}\n`);
+}
+
+function findTrainRow(trains: TrainRow[], fromK: string, toK: string): TrainRow | null {
+  for (const row of trains) {
+    const f = intercityTransportKey(row.from_city);
+    const t = intercityTransportKey(row.to_city);
+    if (f === fromK && t === toK) return row;
+  }
+  for (const row of trains) {
+    const f = intercityTransportKey(row.from_city);
+    const t = intercityTransportKey(row.to_city);
+    if (f === toK && t === fromK) return row;
+  }
+  return null;
+}
+
+function ensureFlightsHeader(raw: string): string {
+  if (/^FLIGHTS:/m.test(raw)) return raw;
+  const tryIns = (re: RegExp) => {
+    const m = raw.match(re);
+    if (!m || m.index === undefined) return null;
+    return raw.slice(0, m.index) + "FLIGHTS:\n\n" + raw.slice(m.index);
+  };
+  return tryIns(/^\s*SIM:/m) ?? tryIns(/^\s*TRANSFERS:/m) ?? tryIns(/^\s*TOURS:/m) ?? raw;
+}
+
+function injectTrainLinesIntoFlights(raw: string, newLines: string[]): string {
+  let text = ensureFlightsHeader(raw);
+  const fm = text.match(/^FLIGHTS:\s*\n([\s\S]*?)(?=^\s*(?:SIM|TRANSFERS|TOURS|SUMMARY|CHAT):)/m);
+  if (!fm) return raw;
+  const body = fm[1].trimEnd();
+  const merged = body ? `${body}\n${newLines.join("\n")}\n` : `${newLines.join("\n")}\n`;
+  return text.replace(fm[0], `FLIGHTS:\n${merged}`);
+}
+
+function sumFlightsBodyTotals(flightsBody: string): number {
+  let sum = 0;
+  for (const line of flightsBody.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.includes("|")) continue;
+    const last = trimmed.split("|").pop()?.trim() || "";
+    const m = last.match(/([\d,]+)\s*ريال/i);
+    if (m) sum += parseInt(m[1].replace(/,/g, ""), 10) || 0;
+  }
+  return sum;
+}
+
+function refreshSummaryFlightLine(raw: string): string {
+  const fm = raw.match(
+    /^FLIGHTS:\s*\n([\s\S]*?)(?=^\s*(?:SIM|TRANSFERS|TOURS|SUMMARY|CHAT):)/m,
+  );
+  if (!fm) return raw;
+  const total = sumFlightsBodyTotals(fm[1]);
+  if (!(total > 0)) return raw;
+
+  const sm = raw.match(/^SUMMARY:\s*\n([\s\S]*?)(?=^CHAT:)/m);
+  if (!sm) return raw;
+  const lines = sm[1].split("\n");
+  let flightIdx = lines.findIndex((l) => /^\s*الطيران\s*\|/i.test(l));
+  if (flightIdx >= 0) lines[flightIdx] = `الطيران | ${total} ريال`;
+  else {
+    const hotelIdx = lines.findIndex((l) => /^\s*الفنادق\s*\|/i.test(l));
+    const ins = hotelIdx >= 0 ? hotelIdx + 1 : 0;
+    lines.splice(ins, 0, `الطيران | ${total} ريال`);
+  }
+  return raw.replace(sm[0], `SUMMARY:\n${lines.join("\n")}\n`);
+}
+
+/** يُستدعى بعد Claude: يضمن أسطر قطار من DB لكل انتقال فندقي مطابِق */
+function applyDeterministicTrainInjection(raw: string, allTrains: TrainRow[]): string {
+  if (!/^DEST:\s*/m.test(raw) || !/^HOTELS:\s*/m.test(raw)) return raw;
+
+  const destLine = raw.match(/^DEST:\s*([^\n]+)/m)?.[1]?.trim() ?? "";
+  let sheetKey = inferDestinationSheetKey(destLine);
+  const seq = extractHotelsCitySequence(raw);
+  if (seq.length < 2) return raw;
+
+  let pool = sheetKey
+    ? allTrains.filter((t) => String(t.destination).toLowerCase() === sheetKey!.toLowerCase())
+    : [];
+
+  if (!pool.length && /روسيا|russia/i.test(destLine)) {
+    pool = allTrains.filter((t) => String(t.destination).toLowerCase() === "russia");
+    sheetKey = "russia";
+  }
+
+  if (!pool.length) {
+    const hasM = seq.some((s) => s.key === "moscow");
+    const hasP = seq.some((s) => s.key === "st_petersburg");
+    if (hasM && hasP) {
+      pool = allTrains.filter((t) => String(t.destination).toLowerCase() === "russia");
+    }
+  }
+
+  if (!pool.length) {
+    const keys = new Set(seq.map((s) => s.key));
+    pool = allTrains.filter((row) =>
+      keys.has(intercityTransportKey(row.from_city)) && keys.has(intercityTransportKey(row.to_city))
+    );
+  }
+
+  if (!pool.length) return raw;
+
+  const pax = parseMetaPax(raw) || 2;
+  const newLines: string[] = [];
+
+  for (let i = 0; i < seq.length - 1; i++) {
+    const a = seq[i];
+    const b = seq[i + 1];
+    if (a.key === b.key) continue;
+
+    if (flightsCoversLeg(raw, a.key, b.key)) continue;
+
+    const row = findTrainRow(pool, a.key, b.key);
+    if (!row) continue;
+
+    const price = Math.round(Number(row.price_per_pax));
+    if (!(price > 0)) continue;
+
+    const fromD = a.display;
+    const toD = b.display;
+    const legTotal = price * pax;
+    newLines.push(`${fromD} - ${toD} | قطار | ${price} ريال/شخص | ${pax} أشخاص | ${legTotal} ريال`);
+  }
+
+  const isRussiaRailContext =
+    /روسيا|russia/i.test(destLine) ||
+    (seq.some((s) => s.key === "moscow") && seq.some((s) => s.key === "st_petersburg"));
+
+  let out = raw;
+  if (newLines.length) {
+    if (isRussiaRailContext) {
+      for (let i = 0; i < seq.length - 1; i++) {
+        const a = seq[i];
+        const b = seq[i + 1];
+        if (a.key === b.key) continue;
+        if (findTrainRow(pool, a.key, b.key)) {
+          out = stripDomesticDuplicatingTrainLeg(out, a.key, b.key);
+        }
+      }
+    }
+    out = injectTrainLinesIntoFlights(out, newLines);
+    out = refreshSummaryFlightLine(out);
+  }
+
+  return out;
+}
+
+function extractAssistantText(response: unknown): { content: unknown[]; text: string; index: number } | null {
+  const r = response as { content?: Array<{ type?: string; text?: string }> };
+  if (!Array.isArray(r.content)) return null;
+  const idx = r.content.findIndex((b) => b.type === "text" && typeof b.text === "string");
+  if (idx < 0) return null;
+  const text = String(r.content[idx].text ?? "");
+  return { content: r.content, text, index: idx };
+}
+
 // ── بناء سياق البيانات من قاعدة البيانات ──────────────────────────────────
 async function buildDataContext(supabase: ReturnType<typeof createClient>): Promise<string> {
   const [hotelsRes, toursRes, flightsRes, trainsRes] = await Promise.all([
@@ -1309,6 +1579,15 @@ Deno.serve(async (req) => {
       system:     systemPrompt,
       messages,
     });
+
+    const { data: trainsForInject } = await supabase.from("trains").select("*");
+    const assistant = extractAssistantText(response);
+    if (assistant && trainsForInject && trainsForInject.length > 0) {
+      const patched = applyDeterministicTrainInjection(assistant.text, trainsForInject as TrainRow[]);
+      if (patched !== assistant.text) {
+        (assistant.content[assistant.index] as { type: string; text: string }).text = patched;
+      }
+    }
 
     return new Response(JSON.stringify(response), { headers: CORS_HEADERS });
 
