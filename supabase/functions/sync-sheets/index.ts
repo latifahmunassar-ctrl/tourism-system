@@ -477,6 +477,87 @@ function extractFlights(rows: string[][], destination: string, debug?: { rejects
   return flights;
 }
 
+// ── استخراج القطار من صفوف التبويبة ───────────────────────────────────────
+// يبحث عن صف عنوان يحتوي كلمة مفتاحية (قطار / train / railway / …) ثم أعمدة
+// From / To + سعر للشخص — نفس منطق الطيران لكن منفصل حتى لا يختلط بلوك الطيران.
+const TRAIN_HEADER_HINT = /قطار|train|railway|\brail\b|سابسان|sapsan|bullet\s*train|قطارات/i;
+
+function extractTrains(rows: string[][], destination: string, debug?: { rejects: string[] }): object[] {
+  const trains: object[] = [];
+  const FROM_RE = /^(flight\s*)?from$|^train\s*from$|^قطار\s*من$|^من$/i;
+  const TO_RE = /^(flight\s*)?to$|^train\s*to$|^قطار\s*(?:الى|إلى)$|^الى$|^إلى$/i;
+  const PRICE_RE = /(^|\s)(price\s*)?per\s*pax|^pax\s*price$|سعر\s*الشخص|سعر\s*للشخص/i;
+
+  let header: { rowIdx: number; fromCol: number; toCol: number; priceCol: number } | null = null;
+
+  for (let i = 0; i < rows.length; i++) {
+    const rawCells = rows[i].map(x => (x ?? "").toString().trim());
+    if (!TRAIN_HEADER_HINT.test(rawCells.join(" | "))) continue;
+
+    const cells = rawCells.map(x => x.toLowerCase());
+    const froms: number[] = [];
+    const tos: number[] = [];
+    const prices: number[] = [];
+    for (let j = 0; j < cells.length; j++) {
+      if (!cells[j]) continue;
+      if (FROM_RE.test(cells[j])) froms.push(j);
+      if (TO_RE.test(cells[j])) tos.push(j);
+      if (PRICE_RE.test(cells[j])) prices.push(j);
+    }
+    for (const f of froms) {
+      for (const t of tos) {
+        if (t <= f || t - f > 2) continue;
+        for (const p of prices) {
+          if (p <= t || p - t > 3) continue;
+          header = { rowIdx: i, fromCol: f, toCol: t, priceCol: p };
+          break;
+        }
+        if (header) break;
+      }
+      if (header) break;
+    }
+    if (header) {
+      debug?.rejects.push(
+        `[${destination}] train header at row ${header.rowIdx}: from=col${header.fromCol}, to=col${header.toCol}, price=col${header.priceCol}`,
+      );
+      break;
+    }
+  }
+
+  if (!header) {
+    debug?.rejects.push(`[${destination}] no train header found`);
+    return trains;
+  }
+
+  const seen = new Set<string>();
+  for (let i = header.rowIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+    const from = (row[header.fromCol] || "").trim();
+    const to = (row[header.toCol] || "").trim();
+    const priceStr = (row[header.priceCol] || "").trim();
+    if (!from || !to || !priceStr) continue;
+    if (/^flight|^train|^قطار/i.test(from) || /^flight|^train|^قطار/i.test(to)) continue;
+
+    const price = parsePrice(priceStr);
+    if (isNaN(price) || price <= 0) continue;
+
+    const key = `${from}|${to}`.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    trains.push({
+      from_city: from,
+      to_city: to,
+      price_per_pax: price,
+      currency: "SAR",
+      destination,
+      last_synced_at: new Date().toISOString(),
+    });
+  }
+
+  return trains;
+}
+
 // ── Handler ────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
@@ -525,7 +606,7 @@ Deno.serve(async (req) => {
   }
 
   const startTime = Date.now();
-  const details: Record<string, { hotels: number; tours: number; error?: string }> = {};
+  const details: Record<string, { hotels: number; tours: number; flights: number; trains: number; error?: string }> = {};
   const debugInfo = new URL(req.url).searchParams.get("debug") === "1"
     ? { rejects: [] as string[] }
     : undefined;
@@ -539,6 +620,7 @@ Deno.serve(async (req) => {
     let totalHotels  = 0;
     let totalTours   = 0;
     let totalFlights = 0;
+    let totalTrains  = 0;
 
     for (const tabRaw of DESTINATION_TABS) {
       // Tab in sheet may have trailing/leading whitespace (e.g. "thailand "),
@@ -562,6 +644,7 @@ Deno.serve(async (req) => {
         const hotels  = extractHotels(rows, tab, debugInfo);
         const tours   = extractTours(rows, tab, debugInfo);
         const flights = extractFlights(rows, tab, debugInfo);
+        const trains  = extractTrains(rows, tab, debugInfo);
 
         if (flights.length > 0) {
           const dedup = Array.from(
@@ -569,6 +652,16 @@ Deno.serve(async (req) => {
           );
           const { error } = await supabase.from("flights").upsert(dedup, { onConflict: "from_city,to_city,destination" });
           if (error) throw new Error(`طيران: ${error.message}`);
+        }
+
+        if (trains.length > 0) {
+          const dedupT = Array.from(
+            new Map(trains.map((t: any) => [`${t.from_city}|${t.to_city}`, t])).values()
+          );
+          const { error: trainErr } = await supabase
+            .from("trains")
+            .upsert(dedupT, { onConflict: "from_city,to_city,destination" });
+          if (trainErr) throw new Error(`قطار: ${trainErr.message}`);
         }
 
         // dedup داخل batch + full-replace per destination (يحذف القديم ويُعيد المحدّث)
@@ -604,13 +697,14 @@ Deno.serve(async (req) => {
           if (error) throw new Error(`جولات: ${error.message}`);
         }
 
-        details[tab] = { hotels: hotels.length, tours: tours.length, flights: flights.length };
+        details[tab] = { hotels: hotels.length, tours: tours.length, flights: flights.length, trains: trains.length };
         totalHotels  += hotels.length;
         totalTours   += tours.length;
         totalFlights += flights.length;
+        totalTrains  += trains.length;
 
       } catch (tabError) {
-        details[tab] = { hotels: 0, tours: 0, flights: 0, error: tabError.message };
+        details[tab] = { hotels: 0, tours: 0, flights: 0, trains: 0, error: tabError.message };
       }
     }
 
@@ -624,7 +718,16 @@ Deno.serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ success: true, hotels: totalHotels, tours: totalTours, flights: totalFlights, details, duration_ms: duration, debug: debugInfo?.rejects }),
+      JSON.stringify({
+        success: true,
+        hotels: totalHotels,
+        tours: totalTours,
+        flights: totalFlights,
+        trains: totalTrains,
+        details,
+        duration_ms: duration,
+        debug: debugInfo?.rejects,
+      }),
       { headers: CORS_HEADERS }
     );
 
