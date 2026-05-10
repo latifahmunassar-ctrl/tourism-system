@@ -383,6 +383,7 @@ const SYSTEM = `انت مساعد متخصص في بناء البرامج الس
 
 قواعد صارمة:
 - كل فندق في HOTELS يجب أن يظهر بسطر مستقل ويُحسب سعره (سعر/ليلة × الليالي) ويُضاف للإجمالي — لا تُسقط فندقاً مطلوباً في البرنامج.
+🔴 **إجمال الفنادق صارماً:** إن وُجدت **N** أسطر في HOTELS فمجموع إقاماتك = مجموع هذه **الN** أسطر بالكامل؛ ممنوع استثناء **الفندق الأخير** أو أي سطر وسط القائمة عن المجموع أو عن سطر `الفنادق | …` في SUMMARY. تأكَّد عددياً قبل الإرسال. (استخدم صياغة عدد الليالي واضحة: **«N ليالي»** بالعربي، أو إن كتبت إنجليزية فبالشكل **`N nights`** حتى لا تُفسَّر خاطئاً؛ إندونيسيا وباقي الوجهات تحت هذه القاعدة.)
 - **إشغال الفندق والعدد (كل الوجهات — إلزامي):** عدد مسافري META = عدد البالغين A ما لم يُفرّق بين بالغين وأطفال. لكل مدينة في البرنامج يجب أن يكون كل سطر HOTELS من غرفة Occupancy حيث **adults_count = A بالضبط** (لا غرفة 4 adults + طفال تعتبر 6 بالغين، ولا غرفة أصغر، ولا «أقرب أو أرخص» بإشغال مخالف). ❌ ممنوع أي DEST أو HOTELS إن لم تُوجَد غرفة مطابقة في تلك المدينة في البيانات. ✅ أخرج **CHAT: فقط**: الفندق لهذا العدد ما يتوفر في [المدينة]؛ الأعداد المتوفّرة بالغين من الشيت؛ حاب تختار فندق أو مدينة أو عدد مختلف؟ — لا تخترع فندقاً ولا تكمّل البرنامج قبل رد الموظف.
 - فيتنام: إذا طُلب صراحةً غرف لـ 6 كبار (إشغال Occupancy = 6 adults) أو فنادق 5 نجوم في مدينة/منطقة معيّنة ولم يوجد في الشيت ما يطابق ذلك في تلك المنطقة → لا تضع أي فندق بديل تلقائياً؛ أخرج CHAT فقط (نفس قاعدة الإشغال أعلاه).
 - إذا طُلب سرير إضافي: أضف قسم EXTRA_BED_CITIES (يمكن أن يمتد لأكثر من سطر). إما مدينة=عدد لكل مدينة، أو ALL=1 (أو الكل) لكل فنادق 4★ و5★ في البرنامج، أو على مستوى الدولة لتعميم القاعدة (مثال فيتنام: فيتنام=1 أو Vietnam=1 أو VN=1 — نفس الأثر لكل فنادق 4★ و5★ داخل فيتنام؛ وكذلك Malaysia=1، Thailand=1، Turkey=1، Indonesia=1 حسب الوجهة).
@@ -853,13 +854,15 @@ function parseHotelNights(seg) {
   const beforeParen = s0.split(/\s*\(/)[0]?.trim() || s0;
   let m = beforeParen.match(/^(\d{1,3})\s*(?:ليال)/u);
   if (!m) m = beforeParen.match(/\b(\d{1,3})\s*(?:ليال)/u);
+  if (!m) m = beforeParen.match(/\b(\d{1,3})\s*nights?\b/i);
+  if (!m) m = beforeParen.match(/\b(\d{1,3})\s*(?:hari\s*)?malam\b/i);
   const n = m ? parseInt(m[1], 10) : 0;
   return n >= 1 && n <= 365 ? n : 0;
 }
 function parseHotelPerNightRate(seg) {
   const s0 = arabicDigitsToLatin(String(seg || '').trim()).replace(/\s+/g, ' ').trim();
   if (!s0) return 0;
-  let m = s0.match(/([\d,]+(?:\.\d+)?)\s*(?:ريال|SAR)?\s*\/\s*ليال(?:ة|ى)?/iu);
+  let m = s0.match(/([\d,]+(?:\.\d+)?)\s*(?:ريال|SAR)?\s*\/\s*(?:ليال(?:ة|ى)?|night|nights)\b/iu);
   if (m) {
     const v = Math.round(parseFloat(String(m[1]).replace(/,/g, '')) || 0);
     if (v > 0) return Math.min(v, 99999999);
@@ -892,7 +895,9 @@ function hotelLineTotals(line) {
     const whole = arabicDigitsToLatin(line);
     if (/\b(?:ليلتين)\b/ui.test(whole)) nights = 2;
     else {
-      const m = whole.match(/\b(\d{1,3})\s*(?:ليال(?:ي|ى)?|ليل(?:ة|تى)?)\b/ui);
+      let m = whole.match(/\b(\d{1,3})\s*(?:ليال(?:ي|ى)?|ليل(?:ة|تى)?)\b/ui);
+      if (!m) m = whole.match(/\b(\d{1,3})\s*nights?\b/i);
+      if (!m) m = whole.match(/\b(\d{1,3})\s*(?:hari\s*)?malam\b/i);
       if (m) {
         const nn = parseInt(m[1], 10);
         if (nn >= 1 && nn <= 365) nights = nn;
@@ -914,7 +919,9 @@ function hotelLineTotals(line) {
     const g = wholeLine.match(/=\s*([\d,]+)\s*(?:ريال|SAR)/iu);
     if (g) totalLine = parseInt(String(g[1]).replace(/[^\d]/g, ''), 10) || 0;
     if (!(totalLine > 0)) {
-      const mul = wholeLine.match(/([\d,]+)\s*(?:ريال|SAR)?\s*[×x\*]\s*(\d{1,3})\s*(?:ليال(?:ي|ى)?|ليل(?:ة|ى)?)?/iu);
+      const mul = wholeLine.match(
+        /([\d,]+)\s*(?:ريال|SAR)?\s*[×x\*]\s*(\d{1,3})\s*(?:ليال(?:ي|ى)?|ليل(?:ة|ى)?|nights?|hari\s*malam)?/iu,
+      );
       if (mul) {
         const a = parseInt(String(mul[1]).replace(/[^\d]/g, ''), 10);
         const b = parseInt(mul[2], 10);
