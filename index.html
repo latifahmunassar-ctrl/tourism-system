@@ -733,6 +733,24 @@ function arabicDigitsToLatin(str) {
   return String(str || '').replace(/[٠-٩]/g, ch => map[ch] || ch);
 }
 
+/** عمود نوع الرحلة في FLIGHTS: قطار أم طيران — عربي / إنجليزي شائع في الشيت / روسي. */
+function isTrainTransportKind(kindRaw) {
+  const raw = String(kindRaw ?? '').normalize('NFC').trim();
+  if (!raw) return false;
+  const lowLat = arabicDigitsToLatin(raw).toLowerCase().replace(/\s+/g, ' ');
+  if (/قطار/u.test(raw)) return true;
+  if (
+    /\b(tren|train|trains|intercity\s+train|night\s+train|sleeper\s+train|high[\s\-]*speed\s+train|travel\s+by\s+train|by\s+train|train\s+ticket|railjets?|sapsan|railway(?:\s|$)|railroads?|rail\s+travel|metro\s*rail\b)\b/i.test(
+      lowLat,
+    )
+  )
+    return true;
+  if (/^rail([\s\-/]+|$)/i.test(lowLat.trim()) || /(^|[\s,])rail([\s,/]|$)/i.test(lowLat)) return true;
+  if (/поезд|Сапсан|сапсан|локомотив|ж\/д\b|рэйл|железн/i.test(raw)) return true;
+
+  return false;
+}
+
 /** مبلغ من خلية سعر (عربي/لاتيني، دعم = X ريال) */
 function parseMoneyCellArabic(seg) {
   const t = arabicDigitsToLatin(String(seg ?? '').trim());
@@ -1045,7 +1063,7 @@ return `<tr><td>${p[1]||''}</td><td><strong>${p[0]||''}${extraCount ? ' + Extra 
 }
 
 if (flightsLines.length) {
-const flightSectionTitle = flightsLines.some(l => String(l.split('|')[1] || '').includes('قطار'))
+const flightSectionTitle = flightsLines.some(l => isTrainTransportKind(l.split('|')[1] || ''))
   ? '✈️ الطيران والقطار'
   : '✈️ الطيران';
 html += `<div class="section-card">
@@ -1055,7 +1073,7 @@ html += `<div class="section-card">
 <tbody>${flightsLines.map(l => {
 const p=l.split('|').map(x=>x.trim());
 const k1 = String(p[1] || '');
-const tc = k1.includes('قطار') ? 'badge-train' : (k1.includes('داخلي') ? 'badge-pickup' : 'badge-flight');
+const tc = isTrainTransportKind(k1) ? 'badge-train' : (k1.includes('داخلي') ? 'badge-pickup' : 'badge-flight');
 const per = parseMoney(p[2]);
 const lineCount = parseCount(p[3]) || adults || persons;
 const pax = (lineCount === persons && (kids + infants) > 0) ? adults : lineCount;
@@ -1316,7 +1334,7 @@ function canonicalRegionKey(s) {
 /** تذكرة بين مدن (طيران داخلي أو قطار): سعر/شخص × العدد ونفس منطق تاريخ الوصول في PDF. */
 function isIntercityPricedTicket(kind) {
   const k = String(kind || '').trim().toLowerCase();
-  return k.includes('داخلي') || k.includes('قطار');
+  return k.includes('داخلي') || isTrainTransportKind(kind);
 }
 
 function regionMatchKeys(a, b) {
@@ -1553,7 +1571,7 @@ function renderFlightsPDF() {
   if (!flightsLines.length) return '';
   let internalIdx = 0;
   const destPickupOcc = {};
-  const pdfFlightTitle = flightsLines.some(l => String(l.split('|')[1] || '').includes('قطار'))
+  const pdfFlightTitle = flightsLines.some(l => isTrainTransportKind(l.split('|')[1] || ''))
     ? '✈️ الطيران والقطار'
     : '✈️ الطيران';
   return `
@@ -1577,7 +1595,7 @@ ${flightsLines.map(l => {
     const total = per * pax;
     return `<div style="margin-top:6px;font-size:16px;font-weight:800;color:#0d1f4a;">${per.toLocaleString()} ريال/بالغ | ${pax} بالغ | الإجمالي: ${(total || parseMoney(p[4])).toLocaleString()} ريال</div>`;
   })() : '';
-  const isTrainPdfRow = String(kind || '').trim().toLowerCase().includes('قطار');
+  const isTrainPdfRow = isTrainTransportKind(kind);
   const pdfRowTransportIconHtml = isTrainPdfRow
     ? `<img src="${String(TRAIN_PDF_IMG)
         .replace(/&/g, '&amp;')
