@@ -290,6 +290,8 @@ const FILLER_IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA34AAAQ4CAYAAA
 const SUPABASE_URL = 'https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/Tourism-AI';
 const AUTH_URL = 'https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/auth-check';
 const PROGRAMS_URL = 'https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/programs';
+/** مطابقة أسطر الفنادق مع عمود Occupancy في DB (المزامَن من الشيت) */
+const HOTELS_LOOKUP_URL = 'https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/hotels-lookup';
 
 // ─── LOGIN ─────────────────────────────────────────────────
 const AUTH_KEY = 'tourism_auth_v1';
@@ -465,7 +467,7 @@ removeTyping(typingId);
 history.push({ role: 'assistant', content: raw });
 const chatMatch = raw.match(/CHAT:([\s\S]+?)$/m);
 addMessage('sys', chatMatch ? chatMatch[1].trim() : 'تم بناء البرنامج!');
-if (raw.includes('DEST:')) buildReview(raw);
+if (raw.includes('DEST:')) await buildReview(raw);
 } catch (e) {
 removeTyping(typingId);
 addMessage('sys', 'حدث خطأ في الاتصال، حاول مرة ثانية.');
@@ -942,7 +944,47 @@ function hotelLineTotals(line) {
   return { p, nightly, nights, totalLine, stars, extraBedCount, extraBedPricePerNight, extraBedTotal, occupancyFromSheet };
 }
 
-function buildReview(raw) {
+function escHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** جلب إشغال الغرفة من قاعدة الفنادق (مصدرها الشيت بعد المزامنة). */
+async function fetchHotelOccupanciesFromDb(destLine, hotelsLines) {
+  const out = {};
+  if (!hotelsLines?.length) return out;
+  try {
+    const hotels = hotelsLines.map((l, i) => {
+      const { p, nightly, stars } = hotelLineTotals(l);
+      return {
+        index: i,
+        name: String(p[0] || '').trim(),
+        city: String(p[1] || '').trim(),
+        stars: stars || 0,
+        roomType: String(p[3] || '').trim(),
+        nightly: nightly || 0,
+      };
+    });
+    const res = await fetch(HOTELS_LOOKUP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + SUPABASE_KEY, apikey: SUPABASE_KEY },
+      body: JSON.stringify({ destination: String(destLine || '').trim(), hotels }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok || !Array.isArray(data.results)) return out;
+    for (const r of data.results) {
+      if (r && typeof r.index === 'number' && r.occupancy) out[r.index] = String(r.occupancy).trim();
+    }
+    return out;
+  } catch (_) {
+    return out;
+  }
+}
+
+async function buildReview(raw) {
 lastProgramRaw = raw || '';
 lastSavedCode = '';
 const pill = document.getElementById('savedCodePill');
@@ -972,6 +1014,8 @@ const adults = Math.max(0, persons - kids - infants);
 // إجمالي المجموعة من النص (قد يخطئ النموذج) — سنقارنه مع حسابنا الفعلي
 const totalGroupFromText = parseInt((totalGroupLine.split('|')[0]||'').replace(/[^\d]/g,'')) || 0;
 const hotelsLines = parseHotelLinesFromRaw(raw);
+/** فهرس سطر الفندق → نص Occupancy من DB (شيت) */
+const occByIndex = hotelsLines.length ? await fetchHotelOccupanciesFromDb(dest, hotelsLines) : {};
 const flightsLines = parseSection(raw, 'FLIGHTS');
 let transfersLines = parseSection(raw, 'TRANSFERS');
 let toursLines = parseSection(raw, 'TOURS');
@@ -1009,10 +1053,10 @@ for (let hi = 0; hi < hotelsLines.length; hi++) {
   const hl = hotelLineTotals(hotelsLines[hi]);
   if (!(hl.totalLine > 0)) {
     addMessage('sys', `تنبيه صارم: سطر فندق رقم ${hi + 1} أصبح مساهمته صفرًا في الإجمالي لأن السعر أو الليالي لم تُفسَّر؛ أصلح عمود السعر/ليلة والليالي وفق HOTELS بحيث لا يُسقط احتساب أي فندق مطلوب.`);
-  } else if (!hl.occupancyFromSheet) hotelsMissingOcc.push(hi + 1);
+  } else if (!occByIndex[hi] && !hl.occupancyFromSheet) hotelsMissingOcc.push(hi + 1);
 }
 if (hotelsMissingOcc.length) {
-  addMessage('sys', `تنبيه: أسطر فندق بلا عمود إشغال الشيت (العمود الثامن بعد «ما يشمل»): ${hotelsMissingOcc.join(', ')}. يُفضّل نسخ Occupancy حرفياً من الشيت لمراجعة الموظّف.`);
+  addMessage('sys', `تنبيه: أسطر فندق ${hotelsMissingOcc.join(', ')} بدون إشغال من قاعدة الشيت ولا من العمود الثامن في HOTELS — أضف عمود Occupancy أو تأكد أنّ دالة hotels-lookup منشورة.`);
 }
 const simCountNum = parseInt((arabicDigitsToLatin(String(simText || '')).match(/\d+/) || ['0'])[0].replace(/[^\d]/g, '')) || 0;
 const simTotal = simCountNum * SIM_CARD_UNIT_PRICE_SAR;
@@ -1055,7 +1099,12 @@ if (totalGroupFromText && computedGroup) {
   }
 }
 
-parsedData = { dest, meta, dateFrom, dateTo, client, clientCode, extraBedCitiesLine, hotelsLines, flightsLines, transfersLines, toursLines, simText, summaryLines, totalPerson, persons, kids, infants, adults };
+const hotelOccupancyResolved = hotelsLines.map((l, i) => {
+  const prog = hotelLineTotals(l).occupancyFromSheet;
+  return (occByIndex[i] || prog || '').trim();
+});
+
+parsedData = { dest, meta, dateFrom, dateTo, client, clientCode, extraBedCitiesLine, hotelsLines, flightsLines, transfersLines, toursLines, simText, summaryLines, totalPerson, persons, kids, infants, adults, hotelOccupancyResolved };
 
 let html = `
 <div class="review-header">
@@ -1069,13 +1118,16 @@ if (hotelsLines.length) {
 html += `<div class="section-card">
 <div class="section-card-header"><div class="section-card-title">🏨 الفنادق</div><div class="section-total">${hotelsTotal.toLocaleString()} ريال</div></div>
 <table class="pricing-table">
-<thead><tr><th>المدينة</th><th>الفندق</th><th>النجوم</th><th>الغرفة</th><th>السعر/ليلة</th><th>الليالي</th><th>سعة الغرفة (من الشيت)</th><th>الإجمالي</th><th>Extra Bed</th></tr></thead>
-<tbody>${hotelsLines.map(l => {
+<thead><tr><th>المدينة</th><th>الفندق</th><th>النجوم</th><th>الغرفة</th><th>السعر/ليلة</th><th>الليالي</th><th>الغرفة بالسعر المعروض تتسع — من الشيت</th><th>الإجمالي</th><th>Extra Bed</th></tr></thead>
+<tbody>${hotelsLines.map((l, rowIdx) => {
 const { p, nightly, nights, totalLine, extraBedPricePerNight, stars, occupancyFromSheet } = hotelLineTotals(l);
 const extraCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest);
 const extraTotal = extraCount > 0 ? (extraBedPricePerNight * (nights||0) * extraCount) : 0;
 const bedTxt = extraCount ? (`${extraCount} × ${extraTotal.toLocaleString()} ريال`) : '—';
-const occCell = occupancyFromSheet ? occupancyFromSheet : '—';
+const fromDb = occByIndex[rowIdx];
+const merged = (fromDb || occupancyFromSheet || '').trim();
+const srcLine = fromDb ? '<span style="display:block;font-size:10px;font-weight:700;opacity:.72;margin-top:3px;">مزامنة الشيت (قاعدة البيانات)</span>' : (occupancyFromSheet ? '<span style="display:block;font-size:10px;opacity:.72;margin-top:3px;">من نص البرنامج — يُفضّل مطابقة الشيت</span>' : '');
+const occCell = merged ? (`<div>${escHtml(merged)}</div>${srcLine}`) : '—';
 return `<tr><td>${p[1]||''}</td><td><strong>${p[0]||''}${extraCount ? ' + Extra bed / Sofa Bed' : ''}</strong></td><td>${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td><td>${occCell}</td><td class="price-cell">${(totalLine + (extraTotal||0)).toLocaleString()} ريال</td><td>${bedTxt}</td></tr>`;
 }).join('')}</tbody>
 </table></div>`;
@@ -1240,7 +1292,7 @@ async function searchByCode() {
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.ok && data.program?.raw) {
-      buildReview(data.program.raw);
+      await buildReview(data.program.raw);
       lastSavedCode = data.program.code || code;
       const pill = document.getElementById('savedCodePill');
       const cc = data.program.client_code ? String(data.program.client_code).trim() : '';
@@ -1261,7 +1313,7 @@ async function searchByCode() {
 function buildPDF(mode) {
 if (!parsedData) return;
 const profit=parseInt(document.getElementById('profitInput').value)||0;
-const {dest,meta,dateFrom,dateTo,client,clientCode,extraBedCitiesLine,hotelsLines,flightsLines,transfersLines,toursLines,simText,persons,kids,infants,adults}=parsedData;
+const {dest,meta,dateFrom,dateTo,client,clientCode,extraBedCitiesLine,hotelsLines,flightsLines,transfersLines,toursLines,simText,persons,kids,infants,adults,hotelOccupancyResolved=[]}=parsedData;
 const simCountNum = parseInt((arabicDigitsToLatin(String(simText || '')).match(/\d+/) || ['0'])[0].replace(/[^\d]/g, '')) || 0;
 const systemCode = (lastSavedCode || '').trim();
 // السعر النهائي الإجمالي = السعر الأساسي للمجموعة + الربح (إجمالي)
@@ -1734,7 +1786,7 @@ ${(hotelsLines.length || flightsLines.length || simText) ? `
 <div class="pdf-page-break"></div>
 <div class="pdf-section">
 ${hotelsLines.length ? `<div class="pdf-section-title">🏨 الفنادق</div>
-${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars, occupancyFromSheet } = hotelLineTotals(l); const extraBedCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; const occPdf = occupancyFromSheet ? safeText(occupancyFromSheet) : ''; return `
+${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars, occupancyFromSheet } = hotelLineTotals(l); const extraBedCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; const occRaw = (hotelOccupancyResolved[idx] || occupancyFromSheet || '').trim(); const occPdf = occRaw ? safeText(occRaw) : ''; return `
 <div style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;">
 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;">
   <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:12px;line-height:1.3;">🏨 ${safeText(p[0]||'')}${extraBedCount ? ' + Extra bed / Sofa Bed' : ''}</div>
@@ -1745,7 +1797,7 @@ ${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPri
 <span>⭐ النجوم: ${safeText(p[2]||'')}</span>
 <span>🛏️ الغرفة: ${safeText(p[3]||'')}</span>
 <span>📅 الإقامة: ${stayText}</span>
-${occPdf ? `<span style="grid-column:1/-1;font-size:17px;line-height:1.45;">👥 الغرفة (من الشيت، للمراجعة): ${occPdf}</span>` : ``}
+${occPdf ? `<span style="grid-column:1/-1;font-size:17px;line-height:1.45;">👥 الغرفة بالسعر المعروض تتسع — من الشيت (قاعدة البيانات): ${occPdf}</span>` : ``}
 ${(sd.checkInText && sd.checkOutText) ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText} | 🔴 الخروج: ${sd.checkOutText}</span>` : (sd.checkInText ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText}</span>` : ``)}
 ${showDetailed && extraBedCount ? `<span>🛋️ Extra bed / Sofa Bed: ${extraBedPricePerNight} ريال/ليلة × ${nights||'—'} ليالي × ${extraBedCount} = ${(extraBedTotal||0).toLocaleString()} ريال</span>` : ``}
 ${showDetailed ? `<span>💵 تفصيل السعر: ${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي = ${totalLine.toLocaleString()} ريال</span>` : ``}
@@ -1778,7 +1830,7 @@ ${(showDetailed && (hotelsLines.length || transfersLines.length || toursLines.le
 <div class="pdf-section">
   <div class="pdf-section-title">💼 تفصيل الخدمات</div>
   ${hotelsLines.length ? `<div style="font-weight:900;color:#1a3a8f;font-size:18px;margin:8px 0 14px;">🏨 الفنادق</div>
-  ${hotelsLines.map(l=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars, occupancyFromSheet } = hotelLineTotals(l); const extraBedCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const lineGrand = (totalLine || 0) + (extraBedTotal || 0); const occD = occupancyFromSheet ? `<br/><span style="opacity:0.85;font-size:14px;">إشغال الشيت (مراجعة): ${occupancyFromSheet}</span>` : ''; return `
+  ${hotelsLines.map((l, hix)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars, occupancyFromSheet } = hotelLineTotals(l); const extraBedCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const lineGrand = (totalLine || 0) + (extraBedTotal || 0); const occLine = (hotelOccupancyResolved[hix] || occupancyFromSheet || '').trim(); const occD = occLine ? `<br/><span style="opacity:0.85;font-size:14px;">تتسع — من الشيت: ${safeText(occLine)}</span>` : ''; return `
     <div style="border:1px solid #eef0f8;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;gap:12px;">
       <div style="font-weight:800;color:#0d1f4a;font-size:16px;line-height:1.6;">
         ${p[1]||''} | ${p[0]||''}${extraBedCount ? ' + Extra bed' : ''} <span style="opacity:0.8">(${p[2]||''})</span><br>
