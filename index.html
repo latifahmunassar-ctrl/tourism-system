@@ -385,6 +385,10 @@ const SYSTEM = `انت مساعد متخصص في بناء البرامج الس
 - كل فندق في HOTELS يجب أن يظهر بسطر مستقل ويُحسب سعره (سعر/ليلة × الليالي) ويُضاف للإجمالي — لا تُسقط فندقاً مطلوباً في البرنامج.
 🔴 **إجمال الفنادق صارماً:** إن وُجدت **N** أسطر في HOTELS فمجموع إقاماتك = مجموع هذه **الN** أسطر بالكامل؛ ممنوع استثناء **الفندق الأخير** أو أي سطر وسط القائمة عن المجموع أو عن سطر `الفنادق | …` في SUMMARY. تأكَّد عددياً قبل الإرسال. (استخدم صياغة عدد الليالي واضحة: **«N ليالي»** بالعربي، أو إن كتبت إنجليزية فبالشكل **`N nights`** حتى لا تُفسَّر خاطئاً؛ إندونيسيا وباقي الوجهات تحت هذه القاعدة.)
 - **إشغال الفندق والعدد (كل الوجهات — إلزامي):** عدد مسافري META = عدد البالغين A ما لم يُفرّق بين بالغين وأطفال. لكل مدينة في البرنامج يجب أن يكون كل سطر HOTELS من غرفة Occupancy حيث **adults_count = A بالضبط** (لا غرفة 4 adults + طفال تعتبر 6 بالغين، ولا غرفة أصغر، ولا «أقرب أو أرخص» بإشغال مخالف). ❌ ممنوع أي DEST أو HOTELS إن لم تُوجَد غرفة مطابقة في تلك المدينة في البيانات. ✅ أخرج **CHAT: فقط**: الفندق لهذا العدد ما يتوفر في [المدينة]؛ الأعداد المتوفّرة بالغين من الشيت؛ حاب تختار فندق أو مدينة أو عدد مختلف؟ — لا تخترع فندقاً ولا تكمّل البرنامج قبل رد الموظف.
+- **إندونيسيا (وجميع الوجهات عند «اقترح فنادق»):** إذا طلب الموظف اقتراحاً تلقائياً و**لا** توجد في شيت تلك المدينة غرفة بـ ⭐Adults=A — ❌ **ممنوع** اقتراح غرفة لعدد أقل من البالغين (مثال: 3 كبار ولا يوجد إلا غرف لشخصين → لا تضع فندق Adults=2). أخرج **CHAT: فقط** كما أعلاه. لا تبرّر بـ «الأرخص» أو «تقريباً».
+- **عمود إشغال الشيت في HOTELS:** بعد [ما يشمل] أضف **عموداً ثامناً** ينسخ حقل **Occupancy** من نفس صف الفندق في البيانات **حرفياً كما في الشيت** (للمراجعة؛ الواجهة تعرضه كسعة الغرفة من الشيت). لا تختصر؛ تجنّب رمز | داخل النص (استبدله بـ / إن لزم).
+- **إندونيسيا (وجميع الوجهات عند «اقترح فنادق»):** إذا طلب الموظف اقتراحاً تلقائياً و**لا** توجد في شيت تلك المدينة غرفة بـ ⭐Adults=A — ❌ **ممنوع** اقتراح غرفة لعدد أقل من البالغين (مثال: 3 كبار ولا يوجد إلا غرف لشخصين → لا تضع فندق Adults=2). أخرج **CHAT: فقط** كما في قاعدة الإشغال أعلاه. لا تبرّر بـ «الأرخص» أو «تقريباً».
+- **عمود إشغال الشيت في HOTELS:** بعد [ما يشمل] أضف **عموداً ثامناً** ينسخ حقل **Occupancy** من نفس صف الفندق في البيانات **حرفياً كما في الشيت** (للمراجعة؛ الواجهة تعرضه كسعة الغرفة من الشيت). لا تختصر؛ تجنّب رمز | داخل النص (استبدله بـ / إن لزم).
 - فيتنام: إذا طُلب صراحةً غرف لـ 6 كبار (إشغال Occupancy = 6 adults) أو فنادق 5 نجوم في مدينة/منطقة معيّنة ولم يوجد في الشيت ما يطابق ذلك في تلك المنطقة → لا تضع أي فندق بديل تلقائياً؛ أخرج CHAT فقط (نفس قاعدة الإشغال أعلاه).
 - إذا طُلب سرير إضافي: أضف قسم EXTRA_BED_CITIES (يمكن أن يمتد لأكثر من سطر). إما مدينة=عدد لكل مدينة، أو ALL=1 (أو الكل) لكل فنادق 4★ و5★ في البرنامج، أو على مستوى الدولة لتعميم القاعدة (مثال فيتنام: فيتنام=1 أو Vietnam=1 أو VN=1 — نفس الأثر لكل فنادق 4★ و5★ داخل فيتنام؛ وكذلك Malaysia=1، Thailand=1، Turkey=1، Indonesia=1 حسب الوجهة).
 - يوم توديع Drop للمطار للعودة إلى الديار/الوطن = نهاية البرنامج: لا تضع جولات في ذلك اليوم ولا بعده. إذا استمر البرنامج في وجهة أخرى: يوم استقبال Pickup من مطار الوجهة الجديدة ثم جولات من اليوم التالي فقط في تلك المنطقة — ممنوع جولات لمنطقة أخرى بين التوديع والاستقبال الجديد.
@@ -400,7 +404,7 @@ CLIENT:[وصف العميل مثل زوجين]
 CLIENT_CODE:ALZ-2026-001
 
 HOTELS:
-[اسم الفندق] | [المنطقة] | [النجوم] نجوم | [نوع الغرفة] | [السعر] ريال/ليلة | [عدد الليالي] ليالي | [ما يشمل]
+[اسم الفندق] | [المنطقة] | [النجوم] نجوم | [نوع الغرفة] | [السعر] ريال/ليلة | [عدد الليالي] ليالي | [ما يشمل] | [Occupancy من الشيت حرفياً — بدون تقصير]
 
 EXTRA_BED_CITIES:
 عند طلب سرير إضافي — مدينة=عدد، أو دولة=عدد (فيتنام=1 / Vietnam=1 / VN=1 لكل فنادق 4★ و5★ في تلك الوجهة)، أو ALL=1 لكل البرنامج. تجنب نسخ «مثال: سيلانجور…» فقط دون صيغة =عدد لوجهتك.
@@ -933,7 +937,9 @@ function hotelLineTotals(line) {
   const extraBedPricePerNight = stars >= 5 ? 120 : (stars === 4 ? 100 : 0);
   const extraBedCount = 0;
   const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * nights * extraBedCount) : 0;
-  return { p, nightly, nights, totalLine, stars, extraBedCount, extraBedPricePerNight, extraBedTotal };
+  /** عمود Occupancy من الشيت (ثامن عمود)، يُعرض للموظف كما هو دون تأثير على الحساب */
+  const occupancyFromSheet = p.length >= 8 ? String(p[7] || '').trim() : '';
+  return { p, nightly, nights, totalLine, stars, extraBedCount, extraBedPricePerNight, extraBedTotal, occupancyFromSheet };
 }
 
 function buildReview(raw) {
@@ -998,11 +1004,15 @@ let hotelsTotal = hotelsLines.reduce((s, l) => {
   const extraTotal = extraCount > 0 ? (t.extraBedPricePerNight * (t.nights || 0) * extraCount) : 0;
   return s + (t.totalLine || 0) + extraTotal;
 }, 0);
+const hotelsMissingOcc = [];
 for (let hi = 0; hi < hotelsLines.length; hi++) {
   const hl = hotelLineTotals(hotelsLines[hi]);
   if (!(hl.totalLine > 0)) {
     addMessage('sys', `تنبيه صارم: سطر فندق رقم ${hi + 1} أصبح مساهمته صفرًا في الإجمالي لأن السعر أو الليالي لم تُفسَّر؛ أصلح عمود السعر/ليلة والليالي وفق HOTELS بحيث لا يُسقط احتساب أي فندق مطلوب.`);
-  }
+  } else if (!hl.occupancyFromSheet) hotelsMissingOcc.push(hi + 1);
+}
+if (hotelsMissingOcc.length) {
+  addMessage('sys', `تنبيه: أسطر فندق بلا عمود إشغال الشيت (العمود الثامن بعد «ما يشمل»): ${hotelsMissingOcc.join(', ')}. يُفضّل نسخ Occupancy حرفياً من الشيت لمراجعة الموظّف.`);
 }
 const simCountNum = parseInt((arabicDigitsToLatin(String(simText || '')).match(/\d+/) || ['0'])[0].replace(/[^\d]/g, '')) || 0;
 const simTotal = simCountNum * SIM_CARD_UNIT_PRICE_SAR;
@@ -1059,13 +1069,14 @@ if (hotelsLines.length) {
 html += `<div class="section-card">
 <div class="section-card-header"><div class="section-card-title">🏨 الفنادق</div><div class="section-total">${hotelsTotal.toLocaleString()} ريال</div></div>
 <table class="pricing-table">
-<thead><tr><th>المدينة</th><th>الفندق</th><th>النجوم</th><th>الغرفة</th><th>السعر/ليلة</th><th>الليالي</th><th>الإجمالي</th><th>Extra Bed</th></tr></thead>
+<thead><tr><th>المدينة</th><th>الفندق</th><th>النجوم</th><th>الغرفة</th><th>السعر/ليلة</th><th>الليالي</th><th>سعة الغرفة (من الشيت)</th><th>الإجمالي</th><th>Extra Bed</th></tr></thead>
 <tbody>${hotelsLines.map(l => {
-const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l);
+const { p, nightly, nights, totalLine, extraBedPricePerNight, stars, occupancyFromSheet } = hotelLineTotals(l);
 const extraCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest);
 const extraTotal = extraCount > 0 ? (extraBedPricePerNight * (nights||0) * extraCount) : 0;
 const bedTxt = extraCount ? (`${extraCount} × ${extraTotal.toLocaleString()} ريال`) : '—';
-return `<tr><td>${p[1]||''}</td><td><strong>${p[0]||''}${extraCount ? ' + Extra bed / Sofa Bed' : ''}</strong></td><td>${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td><td class="price-cell">${(totalLine + (extraTotal||0)).toLocaleString()} ريال</td><td>${bedTxt}</td></tr>`;
+const occCell = occupancyFromSheet ? occupancyFromSheet : '—';
+return `<tr><td>${p[1]||''}</td><td><strong>${p[0]||''}${extraCount ? ' + Extra bed / Sofa Bed' : ''}</strong></td><td>${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td><td>${occCell}</td><td class="price-cell">${(totalLine + (extraTotal||0)).toLocaleString()} ريال</td><td>${bedTxt}</td></tr>`;
 }).join('')}</tbody>
 </table></div>`;
 }
@@ -1723,7 +1734,7 @@ ${(hotelsLines.length || flightsLines.length || simText) ? `
 <div class="pdf-page-break"></div>
 <div class="pdf-section">
 ${hotelsLines.length ? `<div class="pdf-section-title">🏨 الفنادق</div>
-${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l); const extraBedCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; return `
+${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars, occupancyFromSheet } = hotelLineTotals(l); const extraBedCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; const occPdf = occupancyFromSheet ? safeText(occupancyFromSheet) : ''; return `
 <div style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;">
 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;">
   <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:12px;line-height:1.3;">🏨 ${safeText(p[0]||'')}${extraBedCount ? ' + Extra bed / Sofa Bed' : ''}</div>
@@ -1734,6 +1745,7 @@ ${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPri
 <span>⭐ النجوم: ${safeText(p[2]||'')}</span>
 <span>🛏️ الغرفة: ${safeText(p[3]||'')}</span>
 <span>📅 الإقامة: ${stayText}</span>
+${occPdf ? `<span style="grid-column:1/-1;font-size:17px;line-height:1.45;">👥 الغرفة (من الشيت، للمراجعة): ${occPdf}</span>` : ``}
 ${(sd.checkInText && sd.checkOutText) ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText} | 🔴 الخروج: ${sd.checkOutText}</span>` : (sd.checkInText ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText}</span>` : ``)}
 ${showDetailed && extraBedCount ? `<span>🛋️ Extra bed / Sofa Bed: ${extraBedPricePerNight} ريال/ليلة × ${nights||'—'} ليالي × ${extraBedCount} = ${(extraBedTotal||0).toLocaleString()} ريال</span>` : ``}
 ${showDetailed ? `<span>💵 تفصيل السعر: ${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي = ${totalLine.toLocaleString()} ريال</span>` : ``}
@@ -1766,11 +1778,11 @@ ${(showDetailed && (hotelsLines.length || transfersLines.length || toursLines.le
 <div class="pdf-section">
   <div class="pdf-section-title">💼 تفصيل الخدمات</div>
   ${hotelsLines.length ? `<div style="font-weight:900;color:#1a3a8f;font-size:18px;margin:8px 0 14px;">🏨 الفنادق</div>
-  ${hotelsLines.map(l=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l); const extraBedCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const lineGrand = (totalLine || 0) + (extraBedTotal || 0); return `
+  ${hotelsLines.map(l=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars, occupancyFromSheet } = hotelLineTotals(l); const extraBedCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const lineGrand = (totalLine || 0) + (extraBedTotal || 0); const occD = occupancyFromSheet ? `<br/><span style="opacity:0.85;font-size:14px;">إشغال الشيت (مراجعة): ${occupancyFromSheet}</span>` : ''; return `
     <div style="border:1px solid #eef0f8;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;gap:12px;">
       <div style="font-weight:800;color:#0d1f4a;font-size:16px;line-height:1.6;">
         ${p[1]||''} | ${p[0]||''}${extraBedCount ? ' + Extra bed' : ''} <span style="opacity:0.8">(${p[2]||''})</span><br>
-        <span style="opacity:0.85;">${p[3]||''}</span> — <span style="opacity:0.85;">${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي = ${totalLine.toLocaleString()} ريال${extraBedCount ? (` + سرير إضافي ${(extraBedTotal||0).toLocaleString()} ريال`) : ''}</span>
+        <span style="opacity:0.85;">${p[3]||''}</span> — <span style="opacity:0.85;">${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي = ${totalLine.toLocaleString()} ريال${extraBedCount ? (` + سرير إضافي ${(extraBedTotal||0).toLocaleString()} ريال`) : ''}</span>${occD}
       </div>
       <div style="font-weight:900;color:#0d1f4a;white-space:nowrap;">${lineGrand.toLocaleString()} ريال</div>
     </div>`; }).join('')}` : ''}
