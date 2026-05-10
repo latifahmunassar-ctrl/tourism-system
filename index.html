@@ -83,13 +83,23 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .review-header { background:linear-gradient(135deg,var(–s2),var(–s3)); border:1px solid var(–border); border-radius:14px; padding:16px 20px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:flex-start; }
 .review-dest { font-size:20px; font-weight:900; color:var(–gold); }
 .review-meta { font-size:12px; color:var(–muted); margin-top:4px; line-height:1.6; }
-.section-card { background:var(–s2); border:1px solid var(–border); border-radius:12px; margin-bottom:14px; overflow:hidden; }
-.section-card-header { padding:12px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(–border); }
+.section-card { background:var(–s2); border:1px solid var(–border); border-radius:12px; margin-bottom:14px; overflow:visible; }
+.section-card-header {
+  padding:12px 16px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border-bottom:1px solid var(–border);
+  border-radius:12px 12px 0 0;
+}
 .section-card-title { font-size:13px; font-weight:800; display:flex; align-items:center; gap:8px; }
 .section-total { font-size:13px; font-weight:800; color:var(–gold); }
 .pricing-table { width:100%; border-collapse:collapse; }
 .pricing-table th { background:rgba(255,255,255,0.04); font-size:11px; font-weight:700; color:var(–muted); padding:8px 12px; text-align:right; border-bottom:1px solid var(–border); }
 .pricing-table td { font-size:12px; padding:9px 12px; border-bottom:1px solid rgba(255,255,255,0.04); color:var(–text); }
+/** جداول الفنادق أعمدة كثيرة — بدون scroll يقطعها overflow:hidden على البطاقة */
+.table-x-scroll { width:100%; overflow-x:auto; overflow-y:visible; -webkit-overflow-scrolling:touch; margin:0; }
+.hotels-pricing-table { min-width:1020px; }
 .pricing-table tr:last-child td { border-bottom:none; }
 .pricing-table tr:hover td { background:rgba(255,255,255,0.02); }
 .price-cell { font-weight:800; color:var(–gold); white-space:nowrap; }
@@ -1115,10 +1125,14 @@ let html = `
 </div>`;
 
 if (hotelsLines.length) {
+const metaReqHotelPax = (kids + infants) > 0
+  ? `<strong>${adults}</strong> بالغ<span style="display:block;font-size:10px;font-weight:600;opacity:.76;margin-top:5px;line-height:1.35;">META: ${kids} طفل · ${infants} رضيع · إجمالي ${persons}</span>`
+  : `<strong>${adults}</strong> بالغ`;
 html += `<div class="section-card">
 <div class="section-card-header"><div class="section-card-title">🏨 الفنادق</div><div class="section-total">${hotelsTotal.toLocaleString()} ريال</div></div>
-<table class="pricing-table">
-<thead><tr><th>المدينة</th><th>الفندق</th><th>النجوم</th><th>الغرفة</th><th>السعر/ليلة</th><th>الليالي</th><th>الغرفة بالسعر المعروض تتسع — من الشيت</th><th>الإجمالي</th><th>Extra Bed</th></tr></thead>
+<div class="table-x-scroll">
+<table class="pricing-table hotels-pricing-table">
+<thead><tr><th>المدينة</th><th>الفندق</th><th>النجوم</th><th>الغرفة</th><th>عدد الأشخاص للغرفة<br/><span style="opacity:.75;font-weight:700">(المطلوب META)</span></th><th>السعر/ليلة</th><th>الليالي</th><th>سعة الغرفة بالسعر المعروض<br/><span style="opacity:.75;font-weight:700">(من الشيت)</span></th><th>الإجمالي</th><th>Extra Bed</th></tr></thead>
 <tbody>${hotelsLines.map((l, rowIdx) => {
 const { p, nightly, nights, totalLine, extraBedPricePerNight, stars, occupancyFromSheet } = hotelLineTotals(l);
 const extraCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest);
@@ -1127,10 +1141,11 @@ const bedTxt = extraCount ? (`${extraCount} × ${extraTotal.toLocaleString()} ر
 const fromDb = occByIndex[rowIdx];
 const merged = (fromDb || occupancyFromSheet || '').trim();
 const srcLine = fromDb ? '<span style="display:block;font-size:10px;font-weight:700;opacity:.72;margin-top:3px;">مزامنة الشيت (قاعدة البيانات)</span>' : (occupancyFromSheet ? '<span style="display:block;font-size:10px;opacity:.72;margin-top:3px;">من نص البرنامج — يُفضّل مطابقة الشيت</span>' : '');
-const occCell = merged ? (`<div>${escHtml(merged)}</div>${srcLine}`) : '—';
-return `<tr><td>${p[1]||''}</td><td><strong>${p[0]||''}${extraCount ? ' + Extra bed / Sofa Bed' : ''}</strong></td><td>${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td><td>${occCell}</td><td class="price-cell">${(totalLine + (extraTotal||0)).toLocaleString()} ريال</td><td>${bedTxt}</td></tr>`;
+const occCell = merged ? (`<div>${escHtml(merged)}</div>${srcLine}`) : '<span style="opacity:.82;font-size:11px;line-height:1.45">— لا بيانات بعد: انشر دالة hotels-lookup على Supabase، أو أضف عمود Occupancy (الثامن) في HOTELS</span>';
+return `<tr><td>${p[1]||''}</td><td><strong>${p[0]||''}${extraCount ? ' + Extra bed / Sofa Bed' : ''}</strong></td><td>${p[2]||''}</td><td>${p[3]||''}</td><td>${metaReqHotelPax}</td><td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td><td>${occCell}</td><td class="price-cell">${(totalLine + (extraTotal||0)).toLocaleString()} ريال</td><td>${bedTxt}</td></tr>`;
 }).join('')}</tbody>
-</table></div>`;
+</table>
+</div></div>`;
 }
 
 if (flightsLines.length) {
