@@ -18,11 +18,16 @@ const CORS_HEADERS = {
 
 // ── بناء سياق البيانات من قاعدة البيانات ──────────────────────────────────
 async function buildDataContext(supabase: ReturnType<typeof createClient>): Promise<string> {
-  const [{ data: hotels }, { data: tours }, { data: flights }] = await Promise.all([
+  const [hotelsRes, toursRes, flightsRes, trainsRes] = await Promise.all([
     supabase.from("hotels").select("*").order("stars", { ascending: false }).order("price_per_night"),
     supabase.from("tours").select("*").order("price"),
     supabase.from("flights").select("*"),
+    supabase.from("trains").select("*"),
   ]);
+  const hotels = hotelsRes.data;
+  const tours = toursRes.data;
+  const flights = flightsRes.data;
+  const trains = trainsRes.error ? [] : (trainsRes.data ?? []);
 
   if ((!hotels || hotels.length === 0) && (!tours || tours.length === 0)) {
     return "⚠️ لا تتوفر بيانات حالياً. يرجى تشغيل المزامنة مع Google Sheets أولاً.";
@@ -71,6 +76,18 @@ async function buildDataContext(supabase: ReturnType<typeof createClient>): Prom
       context += `── ${dest} ──\n`;
       for (const f of list) {
         context += `- ${f.from_city} → ${f.to_city} | ${f.price_per_pax} ${f.currency}/شخص\n`;
+      }
+    }
+  }
+
+  if (trains && trains.length > 0) {
+    const byDestT: Record<string, typeof trains> = {};
+    for (const t of trains) (byDestT[t.destination] ||= []).push(t);
+    context += "\n🚆 القطار بين المدن (السعر للشخص الواحد — يُضرب في عدد الأشخاص؛ **سجّله في قسم FLIGHTS** بنفس صيغة الطيران لكن النوع = **قطار**):\n";
+    for (const [dest, list] of Object.entries(byDestT)) {
+      context += `── ${dest} ──\n`;
+      for (const t of list) {
+        context += `- ${t.from_city} → ${t.to_city} | ${t.price_per_pax} ${t.currency}/شخص\n`;
       }
     }
   }
@@ -367,6 +384,11 @@ function buildSystemPrompt(dataContext: string, frontendFormat: string): string 
   • إذا اختار نوعاً **غير متاح** → **توقّف فوراً ولا تبنِ البرنامج**. أجب فقط بـ:
     CHAT:عذراً، ما عندنا في النظام انتقال [النوع المُختار] لـ[سابا/هالونج] حالياً. المتاح فقط بسيارة [النوع الآخر]. تبغى أكمل بـ[النوع المتاح]؟
   • إذا اختار صراحةً في الطلب الأوّل (مثل "بسيارة مشتركة") لا تكرّر السؤال.
+
+🏨 فيتنام — فنادق 6 كبار أو 5 نجوم غير متوفرة في المدينة/المنطقة (NO AUTO HOTEL):
+  إذا DEST فيتنام والموظف طلب صراحة **غرف لـ 6 كبار** (Adults=6 بالضبط في Occupancy) أو **فنادق 5 نجوم** في مدينة/منطقة معيّنة، ولم يوجد في بيانات تلك المدينة أي فندق يحقّق المطلوب:
+  • ❌ ممنوع وضع أي فندق بديل تلقائياً (لا 4★ بدل 5★، ولا غرفة أقل إشغالاً، ولا فندق من مدينة أخرى لتعبئة البرنامج).
+  • ✅ أخرج CHAT: فقط (بدون DEST/HOTELS/…): أبلغ أنه لا يوجد فندق يناسب العدد أو الفئة في تلك المنطقة، واسأل الموظف إن كان يريد اختيار فندق آخر أو تعديل النجوم/العدد/المدينة.
 
 🛑🛑 ممنوع منعاً باتاً مطلقاً اختراع سطر/سعر لنوع غير موجود في الجدول. مثلاً:
   ❌ لا تكتب "التوجه لهالونج بسيارة مشتركة | 100 × 4 = 400 ريال" إذا لم يوجد سطر بكلمة "مشتركة" لهالونج في البيانات.
@@ -700,6 +722,11 @@ function buildSystemPrompt(dataContext: string, frontendFormat: string): string 
   6. إذا الموظف طلب لاحقاً **إلغاء وجهة طيران معيّنة** (مثلاً: "العميل حاجز طيرانه بنفسه"): احذف ذلك السطر فقط من قسم FLIGHTS وأعد الحساب.
   7. **لا تُضِف "رحلة دولية" تلقائياً** (مثل من السعودية للوجهة) إلا إذا كانت موجودة في جدول الطيران أو طلبها الموظف صراحةً.
   8. إذا قسم FLIGHTS فارغ تماماً (لا توجد بيانات طيران للوجهة)، اترك القسم فارغاً ولا تكتب أيّ سطور تخمينية.
+  8.5. 🚆 **القطار:** إذا ظهر قسم «🚆 القطار» في البيانات أعلاه لوجهة البرنامج (مثل روسيا موسكو↔سانت بطرسبرغ) والبرنامج يتضمّن تنقّلاً قطارياً بين مدينتين **موجودتين في ذلك القسم**، فأَضِف سطراً في **FLIGHTS** بهذا الشكل حرفياً:
+       `<مدينة من> - <مدينة إلى> | قطار | <السعر/شخص من الجدول أعلاه> ريال/شخص | <عدد META> أشخاص | <السعر×العدد> ريال`
+       • السعر **حصراً** من جدول القطار في البيانات — ❌ لا تخترع ولا تستنتج من الطيران.
+       • الإجمالي = السعر/شخص × عدد الأشخاص (نفس قاعدة تذاكر الطيران الداخلي).
+       • لا تضع تذكرة قطار في TRANSFERS؛ TRANSFERS للتوصيل الأرضي فقط.
   9. 🇻🇳 فيتنام وأي برنامج بعدة مدن عبر مطارات: **يوم طيران «داخلي» الموثّق للموظف يجب أن يطابق يوم وصول المسافر لمدينة الوصول**؛ تقويمياً هو **نفس يوم سطر TRANSFERS من نوع Pickup الاستقبال من مطار لتلك المدينة** (ولا تخلط بين مطارين أو مدينتين متجاورتين).
        • لكل تنقّل جوي A → B: سطر FLIGHTS + سطر Pickup يذكر مطار **B**؛ **اليوم N** في السطرين موحَّد ومطابق لتسلسل HOTELS وMETA (اليوم 1 = DATE_FROM).
        • عند الإمكان أضف **`اليوم N:`** قبل مسار الطيران في سطر «داخلي» كي يقرأه الـPDF بوضوح؛ وإذا فشلت أي مطابقة يُستند النظام أيضاً إلى تاريخ **أوّل إقامة فندقية** بعمود المدينة نفسه وترتيب الأسطر.
