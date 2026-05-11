@@ -812,10 +812,13 @@ function computeTransferTourLineTotal(parts, meta, tagLabel) {
 
 function parseHotelNights(seg) {
   const s0 = arabicDigitsToLatin(String(seg || '').trim());
-  if (/^\s*(?:ليلتين)\b/ui.test(s0)) return 2;
+  // "ليلتين" alone = 2 nights (dual form, no leading number)
+  if (/(?:^|\s)ليلتين\b/ui.test(s0)) return 2;
   const beforeParen = s0.split(/\s*\(/)[0]?.trim() || s0;
-  let m = beforeParen.match(/^(\d{1,3})\s*(?:ليال)/u);
-  if (!m) m = beforeParen.match(/\b(\d{1,3})\s*(?:ليال)/u);
+  // Match digit + space + (ليالي/ليال/ليلة/ليلة etc). Includes singular "ليلة" form
+  // which the previous pattern missed — that's why a 1-night stay was scored as 0.
+  let m = beforeParen.match(/(?:^|\s)(\d{1,3})\s*(?:ليال[ىي]?|ليل[ةتى]|ليلتين)/u);
+  if (!m) m = s0.match(/(?:^|\s)(\d{1,3})\s*(?:ليال[ىي]?|ليل[ةتى]|ليلتين)/u);
   const n = m ? parseInt(m[1], 10) : 0;
   return n >= 1 && n <= 365 ? n : 0;
 }
