@@ -117,7 +117,7 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 /* PDF */
 #pdfContent { display:none; }
 /* removed per-page fixed Package Code bar */
-.pdf-cover { background:linear-gradient(150deg,#1565d8 0%,#0d47a1 40%,#0a2f6e 100%); color:#fff; padding:28px 32px; height:280mm; max-height:280mm; box-sizing:border-box; font-family:‘Tajawal’,sans-serif; position:relative; overflow:hidden; page-break-after:avoid; page-break-inside:avoid; }
+.pdf-cover { background:linear-gradient(150deg,#1565d8 0%,#0d47a1 40%,#0a2f6e 100%); color:#fff; padding:28px 32px; height:280mm; max-height:280mm; box-sizing:border-box; font-family:‘Tajawal’,sans-serif; position:relative; overflow:hidden; page-break-inside:avoid; break-inside:avoid; }
 .pdf-cover::before { content:’’; position:absolute; top:-100px; left:-100px; width:400px; height:400px; background:rgba(255,255,255,0.04); border-radius:50%; }
 .pdf-cover::after { content:’’; position:absolute; bottom:-80px; right:-80px; width:300px; height:300px; background:rgba(255,255,255,0.04); border-radius:50%; }
 .pdf-logo-box { background:#fff; border-radius:14px; padding:14px 20px; display:inline-flex; align-items:center; justify-content:center; margin-bottom:18px; box-shadow:0 6px 20px rgba(0,0,0,0.18); }
@@ -1664,8 +1664,7 @@ ${mode === 'no_price'
 <img class="pdf-cover-suitcase" src="${SUITCASE_IMG}" alt=""/>
 </div>
 ${(hotelsLines.length || flightsLines.length || simText) ? `
-<div class="pdf-page-break"></div>
-<div class="pdf-section">
+<div class="pdf-section" style="page-break-before:always;">
 ${hotelsLines.length ? `<div class="pdf-section-title">🏨 الفنادق</div>
 ${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l); const extraBedCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; return `
 <div style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;">
