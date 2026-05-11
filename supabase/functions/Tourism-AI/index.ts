@@ -1363,12 +1363,12 @@ Deno.serve(async (req) => {
 
     const client = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
 
-    // Switched to Haiku 4.5 — 3× cheaper than Sonnet across the board.
-    // 5-turn build cost drops from ~$0.37 to ~$0.12 (200 builds/mo: $74 → $24).
-    // Trial period: monitor quality; if rule-following drops noticeably, revert
-    // to "claude-sonnet-4-6".
+    // Reverted to Sonnet 4.6 after Haiku failed Adults-exact-match
+    // (gave 2-pax rooms for a 6-pax request). Sonnet costs ~3× more but
+    // strictly follows the 1500+ lines of business rules. Cache + per-
+    // destination filter still keep the typical build to ~$0.37.
     const response = await client.messages.create({
-      model:      "claude-haiku-4-5",
+      model:      "claude-sonnet-4-6",
       max_tokens,
       system: [
         {
