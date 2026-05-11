@@ -512,18 +512,14 @@ function extraBedLineHasAssignments(s) {
   return false;
 }
 
-/** إن وُجدت بيانات فعلية في EXTRA_BED_CITIES نستخدمها؛ وإلا إن وُجد طلب سرير في النص نفترض ALL=ك (فنادق 4★ و5★). */
+/** السرير الإضافي يُستخدَم فقط إذا الـ AI كتب EXTRA_BED_CITIES صراحة.
+ *  ❌ لا نستنتج تلقائياً من كلمات في الإخراج (مثل "SOFA BED" في اسم الغرفة)
+ *     لأنّ ذلك كان يُفعّل سرير إضافي بالخطأ لكل فنادق 4★ و5★.
+ *  لو الموظف يبغى سرير إضافي، الـ AI سيضع EXTRA_BED_CITIES بناءً على طلبه. */
 function mergeExtraBedCitiesInference(raw, explicitBody) {
   const rawEx = sanitizeExtraBedCitiesPayload(explicitBody, String(getLine(raw, 'DEST') || '').trim());
-  let ex = '';
-  if (extraBedLineHasAssignments(rawEx)) ex = rawEx.replace(/\s+/g, ' ').trim();
-  if (ex) return ex;
-  const blob = arabicDigitsToLatin(String(raw || ''));
-  const wantsBed = /(سرير\s*اضافي|سرير\s*إضافي|سريران?\s*إضافيان?|سريرين?\s*إضافي|\bاضافي\s+سرير\b|\bextrabed\b|\bextra\s*-?\s*bed\b|sofa\s*bed|\brollaway\b|day\s*bed|\bسرير\b.*\bاضاف|سوفابيد|سوبر\s*كينج\s*\+|\bMurphy\b)/iu.test(blob);
-  if (!wantsBed) return '';
-  const n = blob.match(/(\d{1,2})\s*(?:سرير\s*إضافي|أسرة\s*إضافية|extra\s*bed)/iu);
-  const k = n ? Math.max(1, Math.min(10, parseInt(n[1], 10) || 1)) : 1;
-  return `ALL=${k}`;
+  if (extraBedLineHasAssignments(rawEx)) return rawEx.replace(/\s+/g, ' ').trim();
+  return '';
 }
 
 /** تقليل اختلاف أسماء المدن (عربي/لاتيني) لمطابقة EXTRA_BED */
