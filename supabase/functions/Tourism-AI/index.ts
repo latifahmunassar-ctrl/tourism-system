@@ -1363,11 +1363,12 @@ Deno.serve(async (req) => {
 
     const client = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
 
-    // Prompt caching: 90% discount on cached tokens for 5 min after first use.
-    // Combined with per-destination filtering (see buildDataContext), this cuts
-    // a typical 5-turn build from ~$1.10 to ~$0.23.
+    // Switched to Haiku 4.5 — 3× cheaper than Sonnet across the board.
+    // 5-turn build cost drops from ~$0.37 to ~$0.12 (200 builds/mo: $74 → $24).
+    // Trial period: monitor quality; if rule-following drops noticeably, revert
+    // to "claude-sonnet-4-6".
     const response = await client.messages.create({
-      model:      "claude-sonnet-4-6",
+      model:      "claude-haiku-4-5",
       max_tokens,
       system: [
         {
