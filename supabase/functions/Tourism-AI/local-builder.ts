@@ -4,7 +4,7 @@
 // Replaces Claude for standard build requests.
 // ─────────────────────────────────────────────────────────────────────────
 
-import type { CityDef, TripRequest } from "./local-parser.ts";
+import type { CityDef, TourModification, TripRequest } from "./local-parser.ts";
 
 type Sb = {
   from: (table: string) => {
@@ -225,6 +225,65 @@ function tourBelongsToCity(tour: TourRow, cityDefs: CityDef[], canonicalCity: st
 }
 
 /**
+ * Normalize Arabic text for fuzzy matching: strip tashkeel, fold alif/ya/ta-marbuta
+ * variants, collapse whitespace. Lets us match "المنجروف" → "المانجروف", etc.
+ */
+function normalizeArabic(s: string): string {
+  return (s || "")
+    .replace(/[ً-ٰٟ]/g, "")
+    .replace(/[إأآا]/g, "ا")
+    .replace(/[ةه]/g, "ه")
+    .replace(/[يى]/g, "ي")
+    .replace(/[ؤئ]/g, "ا")
+    .replace(/[\s ]+/g, " ")
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Find the best-matching tour by keyword overlap with the user-typed query.
+ * - Returns null if no tour shares any 2+ char keyword.
+ * - When `cityFilter` is given, only tours in that city are considered.
+ * - Score = sum of matched keyword lengths (longer match = stronger signal).
+ *   Ties broken by cheaper price first.
+ */
+function findTourByKeywords(
+  query: string,
+  tours: TourRow[],
+  cityFilter?: { cityDefs: CityDef[]; canonicalCity: string },
+): TourRow | null {
+  const qNorm = normalizeArabic(query);
+  const qWords = qNorm.split(/\s+/).filter(w => w.length >= 2);
+  if (qWords.length === 0) return null;
+
+  const pool = cityFilter
+    ? tours.filter(t => tourBelongsToCity(t, cityFilter.cityDefs, cityFilter.canonicalCity))
+    : tours;
+
+  let best: { tour: TourRow; score: number } | null = null;
+  for (const t of pool) {
+    const nNorm = normalizeArabic(t.name);
+    let score = 0;
+    for (const q of qWords) {
+      if (nNorm.includes(q)) score += q.length;
+    }
+    if (score === 0) continue;
+    if (!best || score > best.score || (score === best.score && (t.price || 0) < (best.tour.price || 0))) {
+      best = { tour: t, score };
+    }
+  }
+  return best ? best.tour : null;
+}
+
+/** Return the canonical city this tour belongs to, or null if none match. */
+function getTourCity(tour: TourRow, cityDefs: CityDef[]): string | null {
+  for (const c of cityDefs) {
+    if (c.pattern.test(tour.name)) return c.canonical;
+  }
+  return null;
+}
+
+/**
  * Pick tours for a city: prefer FREE tours (price=0) first, then cheapest paid
  * tours — but evaluate "cheapest" using the variant matching the actual pax
  * count, NOT the default first-variant price. So a 6-pax group sorts tours
@@ -239,6 +298,14 @@ export function pickToursForCity(
   canonicalCity: string,
   nightsInCity: number,
   paxCount: number,
+  options?: {
+    /** Tours to pin in front of the auto-selected list (e.g. swap targets) */
+    pinnedTours?: TourRow[];
+    /** Tour names to exclude entirely (matched case-insensitively, trimmed) */
+    excludeNames?: Set<string>;
+    /** Number of stay-days to leave EMPTY (free day) — shrinks selected list */
+    freeDayCount?: number;
+  },
 ): { selected: TourRow[]; available: number; deficit: number } {
   // Filter: real tours (not transfer rows) belonging to this city
   const TRANSFER_PREFIXES = [
@@ -255,7 +322,18 @@ export function pickToursForCity(
     return TRANSFER_PREFIXES.some(p => n.startsWith(p));
   };
 
-  const cityTours = allTours.filter(t => !isTransfer(t.name) && tourBelongsToCity(t, cityDefs, canonicalCity));
+  const exclude = options?.excludeNames || new Set<string>();
+  const pinned = options?.pinnedTours || [];
+  const freeDayCount = options?.freeDayCount || 0;
+  const pinnedNames = new Set(pinned.map(t => t.name.trim().toLowerCase()));
+  const isExcluded = (name: string) => exclude.has(name.trim().toLowerCase());
+
+  const cityTours = allTours.filter(t =>
+    !isTransfer(t.name)
+    && tourBelongsToCity(t, cityDefs, canonicalCity)
+    && !isExcluded(t.name)
+    && !pinnedNames.has(t.name.trim().toLowerCase()),
+  );
 
   // Sort by the PAX-MATCHING variant price (cheapest first), then name.
   // Tours always private → isShared = false.
@@ -266,11 +344,16 @@ export function pickToursForCity(
     return a.name.localeCompare(b.name);
   });
 
-  const selected = cityTours.slice(0, nightsInCity);
+  // Reserve slots for pinned tours, leave freeDayCount slots empty, fill rest
+  // with cheapest-first auto picks. `available` counts only the auto pool —
+  // pinned tours are guaranteed to fit, so they're not part of the deficit.
+  const remainingSlots = Math.max(0, nightsInCity - pinned.length - freeDayCount);
+  const auto = cityTours.slice(0, remainingSlots);
+  const selected = [...pinned, ...auto];
   return {
     selected,
-    available: cityTours.length,
-    deficit: Math.max(0, nightsInCity - cityTours.length),
+    available: cityTours.length + pinned.length,
+    deficit: Math.max(0, remainingSlots - auto.length),
   };
 }
 
@@ -841,8 +924,13 @@ export function formatProgram(data: ProgramData): string {
 // PIPELINE — high-level builder that selects, arranges, formats
 // ─────────────────────────────────────────────────────────────────────────
 
+/** Describes a tour modification that was actually applied to the program. */
+export type AppliedModification =
+  | { kind: "remove"; tourName: string; city: string }
+  | { kind: "swap"; fromName: string; toName: string; city: string };
+
 export type BuildResult =
-  | { ok: true; program: string }
+  | { ok: true; program: string; appliedModifications: AppliedModification[] }
   | { ok: false; chatMessage: string };
 
 /** True when the request has all info needed to build a complete program */
@@ -910,7 +998,54 @@ export async function buildLocalProgram(
     hotelsList.push({ city: stay.city, hotel, nights: stay.nights, rangeFrom, rangeTo });
   }
 
-  // 2. Pick tours for each city's stay days. STAY days only —
+  // 2. Resolve follow-up tour modifications (remove / swap) against the
+  //    catalog BEFORE picking tours, so the per-city loop can honor them.
+  //    Any unresolvable modification (tour not found, city mismatch) aborts
+  //    the build with a clear CHAT message — better than silently building
+  //    the wrong program.
+  type CityMod = {
+    pinnedTours: TourRow[];
+    excludeNames: Set<string>;
+    freeDayCount: number;
+  };
+  const perCityMods = new Map<string, CityMod>();
+  const appliedModifications: AppliedModification[] = [];
+  const ensureCityMod = (city: string): CityMod => {
+    let m = perCityMods.get(city);
+    if (!m) { m = { pinnedTours: [], excludeNames: new Set(), freeDayCount: 0 }; perCityMods.set(city, m); }
+    return m;
+  };
+  for (const mod of request.tourModifications) {
+    const fromQuery = mod.kind === "swap" ? mod.from : mod.name;
+    const fromTour = findTourByKeywords(fromQuery, allTours);
+    if (!fromTour) {
+      return { ok: false, chatMessage: `ما لقيت جولة باسم "${fromQuery}" في النظام. تأكد من الاسم أو راجع الشيت.` };
+    }
+    const fromCity = getTourCity(fromTour, cityDefs);
+    if (!fromCity) {
+      return { ok: false, chatMessage: `الجولة "${fromTour.name.trim()}" مو مربوطة بمدينة معروفة في وجهة ${request.destination}.` };
+    }
+    if (!request.cities.includes(fromCity)) {
+      return { ok: false, chatMessage: `الجولة "${fromTour.name.trim()}" في ${fromCity}، لكن ${fromCity} مو ضمن البرنامج. ما يصير نحذف جولة من مدينة مو في البرنامج.` };
+    }
+    const cm = ensureCityMod(fromCity);
+    cm.excludeNames.add(fromTour.name.trim().toLowerCase());
+
+    if (mod.kind === "remove") {
+      cm.freeDayCount += 1;
+      appliedModifications.push({ kind: "remove", tourName: fromTour.name.trim(), city: fromCity });
+    } else {
+      // Swap: find the replacement tour, must be in the SAME city as the removed one
+      const toTour = findTourByKeywords(mod.to, allTours, { cityDefs, canonicalCity: fromCity });
+      if (!toTour) {
+        return { ok: false, chatMessage: `ما لقيت جولة "${mod.to}" في مدينة ${fromCity}. اختر بديل من جولات هالمدينة فقط.` };
+      }
+      cm.pinnedTours.push(toTour);
+      appliedModifications.push({ kind: "swap", fromName: fromTour.name.trim(), toName: toTour.name.trim(), city: fromCity });
+    }
+  }
+
+  // 3. Pick tours for each city's stay days. STAY days only —
   // never on arrival, transit, or departure days (per business rule).
   const selectedTours: SelectedTour[] = [];
   const tourMessages: string[] = [];
@@ -922,7 +1057,15 @@ export async function buildLocalProgram(
     const cityStayDays = days.filter(d => d.city === city && d.type === "stay");
     const stayDayNumbers = cityStayDays.map(d => d.number);
     if (stayDayNumbers.length === 0) continue;
-    const { selected, available, deficit } = pickToursForCity(allTours, cityDefs, city, stayDayNumbers.length, request.adults || 2);
+    const cityMod = perCityMods.get(city);
+    const { selected, available, deficit } = pickToursForCity(
+      allTours, cityDefs, city, stayDayNumbers.length, request.adults || 2,
+      cityMod ? {
+        pinnedTours: cityMod.pinnedTours,
+        excludeNames: cityMod.excludeNames,
+        freeDayCount: cityMod.freeDayCount,
+      } : undefined,
+    );
     selected.forEach((tour, i) => {
       selectedTours.push({ day: stayDayNumbers[i], city, tour });
     });
@@ -1073,7 +1216,7 @@ export async function buildLocalProgram(
     program = program.replace(/^CHAT:.*$/m,
       `CHAT:${tourMessages.join(" | ")} حابب تكرّر جولة معيّنة؟ بلّغني الرقم.`);
   }
-  return { ok: true, program };
+  return { ok: true, program, appliedModifications };
 }
 
 function cityMatchesFlight(canonicalCity: string, flightCity: string): boolean {

@@ -6,6 +6,17 @@
 
 export type CityStay = { city: string; nights: number };
 
+/**
+ * A follow-up modification to a built program's tour list.
+ *   - `remove`: drop the matching tour, leave a free day
+ *   - `swap`:   replace `from` with `to` (both resolved against the catalog)
+ * Multiple modifications in one message are NOT supported in v1 — only the
+ * latest/most-specific match wins.
+ */
+export type TourModification =
+  | { kind: "remove"; name: string }
+  | { kind: "swap"; from: string; to: string };
+
 export type TripRequest = {
   /** "vietnam" / "Malaysia" / etc. — same canonical names as DEST_CITIES keys */
   destination: string | null;
@@ -41,6 +52,13 @@ export type TripRequest = {
   year: number | null;
   /** ISO date YYYY-MM-DD if a specific start date was given */
   startDate: string | null;
+  /**
+   * Follow-up edits to the previously built program's tour list. Parsed from
+   * the LATEST user message only (so a removal from a prior turn doesn't
+   * re-fire on every rebuild). Names are raw fragments — the builder resolves
+   * them against the catalog using fuzzy keyword matching.
+   */
+  tourModifications: TourModification[];
 };
 
 export type CityDef = { canonical: string; pattern: RegExp };
@@ -423,6 +441,71 @@ function parseNightsByCity(text: string, cityDefs: CityDef[]): Record<string, nu
  * Master parser. Walks through all messages and extracts the trip request.
  * Caller passes the cityDefs table for the detected destination.
  */
+/**
+ * Parse tour-modification follow-ups from the LATEST user message only.
+ *
+ * Recognized intents:
+ *   - "غير/بدّل/استبدل جولة X بجولة Y"   → swap
+ *   - "غير/بدّل جولة X بيوم حر"           → remove (day becomes free)
+ *   - "احذف/شيل/ألغ جولة X"               → remove
+ *
+ * Returns an empty array if no modification is detected. The X/Y values are
+ * RAW fragments — the builder resolves them via fuzzy keyword matching
+ * against the catalog (handles "المنجروف" → "المانجروف", etc.).
+ */
+function parseTourModifications(lastUserMsg: string): TourModification[] {
+  const text = lastUserMsg.trim();
+  if (!text) return [];
+
+  // Verbs that can introduce a swap or a free-day replacement
+  const SWAP_VERB = "(?:بد[ّ]?ل[يىه]?|غي[ّ]?ر[يى]?|اغير|استبدل|حول|change|swap|replace)";
+  // Verbs that introduce a pure removal (free day, no replacement)
+  const REMOVE_VERB = "(?:احذف|شيل|ألغ[يى]?|الغ[يى]?|[أا]زل|remove|delete|cancel)";
+  // The X/Y separator between "جولة X" and the replacement
+  const TO_PREP = "(?:ب[ـ]?|ل[ـ]?|إلى|الى|مع)";
+  // Free-day target phrases (Y side of a swap-with-free-day)
+  const FREE_DAY = "(?:يوم\\s*حر|يوم\\s*راح[ةه]|يوم\\s*استرخاء|بدون\\s*جول[ةه]|فاضي)";
+
+  // (1) Swap to free day: "غير جولة X بيوم حر"
+  const freeDaySwapRe = new RegExp(
+    `${SWAP_VERB}\\s+(?:ال)?جول[ةه]\\s+(.+?)\\s+${TO_PREP}\\s*${FREE_DAY}`,
+    "iu",
+  );
+  const fdSwap = text.match(freeDaySwapRe);
+  if (fdSwap) return [{ kind: "remove", name: fdSwap[1].trim() }];
+
+  // (2) Swap to another tour: "غير جولة X بجولة Y"
+  // Second "جولة" is required to anchor where Y begins — otherwise we'd
+  // accidentally swallow "ب" + city/word into the Y fragment.
+  const tourSwapRe = new RegExp(
+    `${SWAP_VERB}\\s+(?:ال)?جول[ةه]\\s+(.+?)\\s+${TO_PREP}\\s*(?:ال)?جول[ةه]\\s+(.+?)(?=\\s*(?:$|[\\.,،\\n]))`,
+    "iu",
+  );
+  const sw = text.match(tourSwapRe);
+  if (sw) return [{ kind: "swap", from: sw[1].trim(), to: sw[2].trim() }];
+
+  // (3) Pure removal: "احذف جولة X"
+  const removeRe = new RegExp(
+    `${REMOVE_VERB}\\s+(?:ال)?جول[ةه]\\s+(.+?)(?=\\s*(?:$|[\\.,،\\n]))`,
+    "iu",
+  );
+  const rm = text.match(removeRe);
+  if (rm) return [{ kind: "remove", name: rm[1].trim() }];
+
+  return [];
+}
+
+/** Latest user message in the conversation, or "" if none. */
+function getLastUserMessage(messages: Array<{ role: string; content: unknown }>): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role === "user") {
+      return typeof m.content === "string" ? m.content : JSON.stringify(m.content);
+    }
+  }
+  return "";
+}
+
 export function parseTripRequest(
   messages: Array<{ role: string; content: unknown }>,
   cityDefs: CityDef[],
@@ -458,5 +541,6 @@ export function parseTripRequest(
     month: monthInfo.month,
     year: monthInfo.year,
     startDate: parseStartDate(text),
+    tourModifications: parseTourModifications(getLastUserMessage(messages)),
   };
 }

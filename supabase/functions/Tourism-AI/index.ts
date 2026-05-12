@@ -2079,13 +2079,13 @@ Deno.serve(async (req) => {
     // a targeted message instead of being routed to Claude or to the lite
     // "tell me your trip" template.
     {
-      const isTweakOnly = /^(?:\s*(?:غير|غيّر|اجعل|خل[يى]?|بدل|حول|ابي|ابغى|اريد|أريد|أبي|أبغى|اعمل|اضف|أضف|ضيف|زود|احذف|الغ[يى]?|شيل|ت?غي[يّ]?ر)\s+)?(?:(?:ال)?(?:سياره|سيارة|سيارات|تنقل|التنقل|نقل|cars?|transport|مشتركه|مشتركة|خاصه|خاصة)|(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim|esim|سيم)|(?:سرير|أسر[ةه]|اسر[ةه]|سراير|سرايا|extra\s*-?\s*bed))/iu.test(lastUserMsg.trim());
+      const isTweakOnly = /^(?:\s*(?:غير|غيّر|اجعل|خل[يى]?|بدل|حول|ابي|ابغى|اريد|أريد|أبي|أبغى|اعمل|اضف|أضف|ضيف|زود|احذف|الغ[يى]?|شيل|ت?غي[يّ]?ر|استبدل|اغير|[أا]زل)\s+)?(?:(?:ال)?(?:سياره|سيارة|سيارات|تنقل|التنقل|نقل|cars?|transport|مشتركه|مشتركة|خاصه|خاصة)|(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim|esim|سيم)|(?:سرير|أسر[ةه]|اسر[ةه]|سراير|سرايا|extra\s*-?\s*bed)|(?:ال)?جول[ةه]|tour)/iu.test(lastUserMsg.trim());
       if (isTweakOnly && !lastAssistantProgram && !detectedDest) {
         return new Response(JSON.stringify({
           id: "tweak-without-program",
           model: "local",
           role: "assistant",
-          content: [{ type: "text", text: "CHAT:محتاج برنامج محفوظ في المحادثة عشان أعدّله. أرسل تفاصيل الرحلة كاملة (الوجهة + الأيام + التوزيع + الأشخاص) أوّلاً، وبعدها قدر أعدّل السيارة/الشرائح/السرير الإضافي." }],
+          content: [{ type: "text", text: "CHAT:محتاج برنامج محفوظ في المحادثة عشان أعدّله. أرسل تفاصيل الرحلة كاملة (الوجهة + الأيام + التوزيع + الأشخاص) أوّلاً، وبعدها قدر أعدّل السيارة/الشرائح/السرير الإضافي/الجولات." }],
           usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
         }), { headers: CORS_HEADERS });
       }
@@ -2124,13 +2124,13 @@ Deno.serve(async (req) => {
         // bed but we have no built program AND insufficient trip details to
         // (re)build. Otherwise the generic "tell me your cities" question
         // is confusing — they're not asking to start over.
-        const isTweakOnly = /^(?:\s*(?:غير|غيّر|اجعل|خل[يى]?|بدل|حول|ابي|ابغى|اريد|أريد|أبي|أبغى|اعمل|اضف|أضف|ضيف|زود|احذف|الغ[يى]?|شيل|ت?غي[يّ]?ر)\s+)?(?:(?:ال)?(?:سياره|سيارة|سيارات|تنقل|التنقل|نقل|cars?|transport|مشتركه|مشتركة|خاصه|خاصة)|(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim|esim|سيم)|(?:سرير|أسر[ةه]|اسر[ةه]|سراير|سرايا|extra\s*-?\s*bed))/iu.test(lastUserMsg.trim());
+        const isTweakOnly = /^(?:\s*(?:غير|غيّر|اجعل|خل[يى]?|بدل|حول|ابي|ابغى|اريد|أريد|أبي|أبغى|اعمل|اضف|أضف|ضيف|زود|احذف|الغ[يى]?|شيل|ت?غي[يّ]?ر|استبدل|اغير|[أا]زل)\s+)?(?:(?:ال)?(?:سياره|سيارة|سيارات|تنقل|التنقل|نقل|cars?|transport|مشتركه|مشتركة|خاصه|خاصة)|(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim|esim|سيم)|(?:سرير|أسر[ةه]|اسر[ةه]|سراير|سرايا|extra\s*-?\s*bed)|(?:ال)?جول[ةه]|tour)/iu.test(lastUserMsg.trim());
         if (isTweakOnly && !lastAssistantProgram) {
           return new Response(JSON.stringify({
             id: "tweak-without-program",
             model: "local-engine",
             role: "assistant",
-            content: [{ type: "text", text: "CHAT:محتاج برنامج محفوظ في المحادثة عشان أعدّله. أرسل تفاصيل الرحلة كاملة (الوجهة + الأيام + التوزيع + الأشخاص) أوّلاً، وبعدها قدر أعدّل السيارة/الشرائح/السرير الإضافي." }],
+            content: [{ type: "text", text: "CHAT:محتاج برنامج محفوظ في المحادثة عشان أعدّله. أرسل تفاصيل الرحلة كاملة (الوجهة + الأيام + التوزيع + الأشخاص) أوّلاً، وبعدها قدر أعدّل السيارة/الشرائح/السرير الإضافي/الجولات." }],
             usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
           }), { headers: CORS_HEADERS });
         }
@@ -2187,6 +2187,22 @@ Deno.serve(async (req) => {
               const newTotal = newTotalMatch ? newTotalMatch[1] : "?";
               const ackChat = `CHAT:تم تغيير السيارة إلى ${newType}. الإجمالي الجديد: ${newTotal} ريال.`;
               programText = result.program.replace(/^CHAT:.*$/m, ackChat);
+              if (!/^CHAT:/m.test(programText)) programText += `\n\n${ackChat}`;
+            }
+            // If tour modifications were applied (swap / remove → free day),
+            // surface what changed in the CHAT line so the employee sees the
+            // edit took effect. Otherwise the program looks like a silent
+            // rebuild and "ما رد علي" confusion repeats.
+            if (result.appliedModifications.length > 0 && lastAssistantProgram) {
+              const newTotalMatch = result.program.match(/TOTAL_GROUP:([\d,]+)/);
+              const newTotal = newTotalMatch ? newTotalMatch[1] : "?";
+              const parts = result.appliedModifications.map(m =>
+                m.kind === "swap"
+                  ? `استبدلت جولة "${m.fromName}" بـ "${m.toName}"`
+                  : `حذفت جولة "${m.tourName}" (اليوم صار حر)`,
+              );
+              const ackChat = `CHAT:${parts.join("، ")}. الإجمالي الجديد: ${newTotal} ريال.`;
+              programText = programText.replace(/^CHAT:.*$/m, ackChat);
               if (!/^CHAT:/m.test(programText)) programText += `\n\n${ackChat}`;
             }
             return new Response(JSON.stringify({
