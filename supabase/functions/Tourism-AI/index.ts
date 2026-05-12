@@ -154,6 +154,22 @@ function detectCitiesFromMessage(
  * { ok: false, message: "..." } with a short Arabic error to send back in CHAT.
  */
 /** Convert Arabic-Indic and Eastern-Arabic-Indic digits to ASCII 0-9. */
+function normalizeNightWords(s: string): string {
+  let t = s;
+  t = t.replace(/ليلت(?:ين|ان)/gu, "2 ليال");
+  const map: Array<[string, number]> = [
+    ["عشر[ةه]?", 10], ["تسع[ةه]?", 9], ["ثمان(?:ية|يه)?", 8],
+    ["سبع[ةه]?", 7], ["ست[ةه]?", 6], ["خمس[ةه]?", 5],
+    ["[أا]ربع[ةه]?", 4], ["ثلاث[ةه]?|تلات[ةه]?", 3],
+    ["[إا]ثن[يا][نه]", 2], ["واحد[ةه]?|وحد[ةه]?", 1],
+  ];
+  for (const [w, n] of map) {
+    const re = new RegExp(`(${w})\\s+(?:ليال[يى]?|ليل[ةتهى]?|night)`, "giu");
+    t = t.replace(re, `${n} ليال`);
+  }
+  return t;
+}
+
 function arabicDigitsToLatin(s: string): string {
   return s
     .replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)))
@@ -181,12 +197,33 @@ function validateNightsDistribution(
   const userText = userMessageTexts
     .filter(t => { const k = normalizeForDedup(t); if (dedupSeen.has(k)) return false; dedupSeen.add(k); return true; })
     .join("\n");
-  const text = arabicDigitsToLatin(userText);
+  const text = normalizeNightWords(arabicDigitsToLatin(userText));
 
-  // Extract target nights = days - 1 from any "N يوم" / "N أيام" mention.
+  // Extract target nights from any "N يوم/أيام" mention OR a date range
+  // ("من تاريخ 11 يوليو إلى 22 يوليو" → 12 days = 11 nights).
+  let targetNights = 0;
   const daysMatch = text.match(/(\d{1,2})\s*(?:يوم|أيام|ايام|days?)/i);
-  if (!daysMatch) return { ok: true }; // no day count → can't validate
-  const targetNights = parseInt(daysMatch[1], 10) - 1;
+  if (daysMatch) {
+    targetNights = parseInt(daysMatch[1], 10) - 1;
+  } else {
+    const rangeMonth: Record<string, number> = {
+      "يناير":1,"فبراير":2,"مارس":3,"أبريل":4,"ابريل":4,"مايو":5,"يونيو":6,
+      "يوليو":7,"أغسطس":8,"اغسطس":8,"سبتمبر":9,"أكتوبر":10,"اكتوبر":10,
+      "نوفمبر":11,"ديسمبر":12,
+    };
+    const r = text.match(/من\s+(?:تاريخ\s+|يوم\s+)?(\d{1,2})\s+([؀-ۿ]+)\s+(?:إلى|الى|إلي|الي|ل)\s+(?:تاريخ\s+|يوم\s+)?(\d{1,2})\s+([؀-ۿ]+)/iu);
+    if (r) {
+      const d1 = parseInt(r[1], 10), d2 = parseInt(r[3], 10);
+      const m1 = rangeMonth[r[2]] || 0, m2 = rangeMonth[r[4]] || 0;
+      if (m1 && m2) {
+        const y = new Date().getFullYear();
+        const start = new Date(y, m1 - 1, d1);
+        const end = new Date(y, m2 - 1, d2);
+        const days = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+        if (days > 0 && days <= 60) targetNights = days - 1;
+      }
+    }
+  }
   if (!(targetNights > 0)) return { ok: true };
 
   // For each detected city, sum ALL occurrences of "N <city>" or "<city> N"

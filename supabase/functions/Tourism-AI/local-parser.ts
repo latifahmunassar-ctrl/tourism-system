@@ -52,6 +52,35 @@ function arabicDigitsToLatin(s: string): string {
     .replace(/[۰-۹]/g, c => String("۰۱۲۳۴۵۶۷۸۹".indexOf(c)));
 }
 
+/**
+ * Convert spelled-out night counts to digit form so the existing per-city
+ * regex catches them. Saudi/colloquial Arabic frequently writes:
+ *   "هانوي ليلتين"          (dual: 2 nights)
+ *   "ثلاث ليال هانوي"        (number-word + plural noun)
+ *   "هانوي ثلاث ليالي"
+ * We normalize all of these to "<digit> ليال" before the night-counter
+ * regex runs. Affects validateNightsDistribution, parseNightsByCity, and
+ * parseCityStaysOrdered uniformly.
+ */
+function normalizeNightWords(s: string): string {
+  let t = s;
+  // Dual forms: ليلتين / ليلتان → "2 ليال"
+  t = t.replace(/ليلت(?:ين|ان)/gu, "2 ليال");
+  // <numword> + nightWord → "<digit> ليال"
+  // Order matters — longer words first so "عشر" doesn't eat into "عشرة".
+  const map: Array<[string, number]> = [
+    ["عشر[ةه]?", 10], ["تسع[ةه]?", 9], ["ثمان(?:ية|يه)?", 8],
+    ["سبع[ةه]?", 7], ["ست[ةه]?", 6], ["خمس[ةه]?", 5],
+    ["[أا]ربع[ةه]?", 4], ["ثلاث[ةه]?|تلات[ةه]?", 3],
+    ["[إا]ثن[يا][نه]", 2], ["واحد[ةه]?|وحد[ةه]?", 1],
+  ];
+  for (const [w, n] of map) {
+    const re = new RegExp(`(${w})\\s+(?:ليال[يى]?|ليل[ةتهى]?|night)`, "giu");
+    t = t.replace(re, `${n} ليال`);
+  }
+  return t;
+}
+
 /** Glue all messages into one searchable blob. */
 function joinMessages(messages: Array<{ role: string; content: unknown }>): string {
   // Skip assistant turns (their text contains unrelated numbers — prices,
@@ -115,8 +144,30 @@ function parseCities(text: string, cityDefs: CityDef[]): string[] {
 
 function parseDays(text: string): number | null {
   const t = arabicDigitsToLatin(text);
+  // Direct: "11 يوم" / "12 أيام" / "10 days"
   const m = t.match(/(\d{1,2})\s*(?:يوم|أيام|ايام|days?)/i);
-  return m ? parseInt(m[1], 10) : null;
+  if (m) return parseInt(m[1], 10);
+  // Date range: "من 11 يوليو إلى 22 يوليو" → 12 days (inclusive of both ends)
+  const rangeMonth: Record<string, number> = {
+    "يناير":1,"فبراير":2,"مارس":3,"أبريل":4,"ابريل":4,"مايو":5,"يونيو":6,
+    "يوليو":7,"أغسطس":8,"اغسطس":8,"سبتمبر":9,"أكتوبر":10,"اكتوبر":10,
+    "نوفمبر":11,"ديسمبر":12,
+  };
+  // Allow optional "تاريخ" / "يوم" filler before each date — common phrasing
+  // is "من تاريخ 11 يوليو إلى تاريخ 22 يوليو" or "من يوم 11 الى 22 يوليو".
+  const r = t.match(/من\s+(?:تاريخ\s+|يوم\s+)?(\d{1,2})\s+([؀-ۿ]+)\s+(?:إلى|الى|إلي|الي|ل)\s+(?:تاريخ\s+|يوم\s+)?(\d{1,2})\s+([؀-ۿ]+)/iu);
+  if (r) {
+    const d1 = parseInt(r[1], 10), d2 = parseInt(r[3], 10);
+    const m1 = rangeMonth[r[2]] || 0, m2 = rangeMonth[r[4]] || 0;
+    if (m1 && m2) {
+      const y = new Date().getFullYear();
+      const start = new Date(y, m1 - 1, d1);
+      const end = new Date(y, m2 - 1, d2);
+      const days = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+      if (days > 0 && days <= 60) return days;
+    }
+  }
+  return null;
 }
 
 function parseAdults(text: string): number | null {
@@ -276,7 +327,7 @@ function parseStartDate(text: string): string | null {
  * Preserves the ORDER the employee wrote, INCLUDING duplicates.
  */
 function parseCityStaysOrdered(text: string, cityDefs: CityDef[]): CityStay[] {
-  const t = arabicDigitsToLatin(text);
+  const t = normalizeNightWords(arabicDigitsToLatin(text));
   // Build a single combined regex matching either "N city" or "city N",
   // capturing the city name + number. Use named-group alternation by
   // running per-city regex and merging results sorted by position.
@@ -306,7 +357,7 @@ function parseCityStaysOrdered(text: string, cityDefs: CityDef[]): CityStay[] {
 }
 
 function parseNightsByCity(text: string, cityDefs: CityDef[]): Record<string, number> {
-  const t = arabicDigitsToLatin(text);
+  const t = normalizeNightWords(arabicDigitsToLatin(text));
   const result: Record<string, number> = {};
   for (const { canonical, pattern } of cityDefs) {
     const cityPat = pattern.source;
