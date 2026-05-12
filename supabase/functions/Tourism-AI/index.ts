@@ -32,14 +32,18 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content))
     .join(" ")
     .toLowerCase();
+  // Each pattern is broad on purpose — Saudi/colloquial spelling often drops
+  // the trailing alif ("مليزيا" / "ماليزى") or uses a city as the only proper
+  // noun. Listing major cities + dialect variants prevents false negatives
+  // that would route the request to Claude unnecessarily.
   const map: Array<[RegExp, string]> = [
-    [/فيتنام|vietnam/i, "vietnam"],
-    [/ماليزيا|malaysia/i, "Malaysia"],
-    [/إندونيسيا|اندونيسيا|indonesia|بالي|bali|جاكرتا/i, "indonesia"],
-    [/تركيا|turky|turkey|اسطنبول|istanbul|طرابزون|trabzon/i, "Turky"],
-    [/روسيا|russia|موسكو|moscow|سانت بطرسبرغ/i, "russia"],
-    [/البوسنة|bosnia|سراييفو|sarajevo/i, "Bosnia"],
-    [/تايلاند|thailand|بانكوك|bangkok|بوكيت|phuket|كرابي/i, "thailand"],
+    [/فيتنام|ڤيتنام|فيتنامي|vietnam|hanoi|هانوي|halong|هالونج|danang|دانانج|sapa|سابا|phu\s*quoc|فوكوك/i, "vietnam"],
+    [/ماليزيا|مليزيا|ماليزى|malaysia|kuala\s*lumpur|كوالا|كوالالمبور|langkawi|لانكاوي|penang|بينانج|cameron|كاميرون|selangor|سيلانجور|sunway/i, "Malaysia"],
+    [/إندونيسيا|اندونيسيا|اندونيسي|indonesia|بالي|bali|جاكرتا|jakarta|باندونغ|bandung|puncak|بونشاك/i, "indonesia"],
+    [/تركيا|تركى|turky|turkey|اسطنبول|istanbul|طرابزون|trabzon|أوزنجول|اوزنجول|uzungol|بورصة|bursa|ايدر|ayder|سابانجا|sapanca/i, "Turky"],
+    [/روسيا|russia|موسكو|moscow|سانت\s*بطرسبرغ|saint\s*petersburg|سوتشي|sochi/i, "russia"],
+    [/البوسنة|البوسنه|bosnia|سراييفو|sarajevo|موستار|mostar|بيهاتش|bihać|bihac/i, "Bosnia"],
+    [/تايلاند|تايلند|thailand|بانكوك|bangkok|بوكيت|بوكت|phuket|كرابي|krabi|شيانغ|chiang|باتايا|بتايا|pattaya|ساموي|samui/i, "thailand"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;
@@ -2083,8 +2087,19 @@ Deno.serve(async (req) => {
             usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
           }), { headers: CORS_HEADERS });
         } catch (e) {
-          // Fall through to Claude on any unexpected error — safer
-          console.error("[local-engine] error, falling back to Claude:", (e as Error).message);
+          // Don't silently fall through to Claude — that would charge the
+          // user without them knowing. Instead, surface the error locally so
+          // they can fix it (or ask explicitly to use Claude). Logging lets
+          // us debug repeat issues from the Supabase function logs.
+          const errMsg = (e as Error).message || String(e);
+          console.error("[local-engine] crashed for dest=" + detectedDest + ":", errMsg);
+          return new Response(JSON.stringify({
+            id: "local-engine-error",
+            model: "local-engine",
+            role: "assistant",
+            content: [{ type: "text", text: "CHAT:تعذّر بناء البرنامج محلياً (" + errMsg + "). يرجى المحاولة مرة أخرى أو إعادة صياغة الطلب." }],
+            usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+          }), { headers: CORS_HEADERS });
         }
       }
     }
