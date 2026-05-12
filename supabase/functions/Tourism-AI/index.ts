@@ -278,36 +278,103 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
   // "اضافي/إضافي/اضافه/إضافية/زيادة/زياده/extra"
   const hasExtraIntent = /(?:[إأا]?ضاف[يىه]?[هة]?|زياد[هة]|extra)/iu;
 
+  // Helper: find every canonical city mentioned in `text` (no early break,
+  // so multi-city requests like "احذف السرير في هانوي ودانانج" both register).
+  const allCityDefs: Array<{ canonical: string; pattern: RegExp }> = [];
+  for (const dest of Object.keys(DEST_CITIES)) {
+    for (const c of DEST_CITIES[dest]) allCityDefs.push({ canonical: c.canonical, pattern: c.pattern });
+  }
+  const detectCitiesInText = (text: string): string[] => {
+    const found: string[] = [];
+    for (const c of allCityDefs) {
+      if (new RegExp(c.pattern.source, "i").test(text) && !found.includes(c.canonical)) {
+        found.push(c.canonical);
+      }
+    }
+    return found;
+  };
+
+  // Helper: parse the existing EXTRA_BED_CITIES line into a structured scope.
+  type BedScope = { mode: "all" | "list" | "none"; cities: string[] };
+  const readBedScope = (text: string): BedScope => {
+    const m = text.match(/^EXTRA_BED_CITIES:(.+)$/m);
+    if (!m) return { mode: "none", cities: [] };
+    const value = m[1].trim();
+    if (/\bALL\s*=/i.test(value)) return { mode: "all", cities: [] };
+    const cities: string[] = [];
+    for (const part of value.split(/[,،;]/)) {
+      const p = part.trim();
+      if (!p) continue;
+      const eqIdx = p.indexOf("=");
+      const name = (eqIdx >= 0 ? p.slice(0, eqIdx) : p).trim();
+      if (name) cities.push(name);
+    }
+    return { mode: "list", cities };
+  };
+
+  // Helper: list all canonical cities that actually appear in the program's
+  // HOTELS section (used when expanding ALL=1 before subtracting a city).
+  const getProgramCities = (text: string): string[] => {
+    const startIdx = text.indexOf("HOTELS:");
+    if (startIdx < 0) return [];
+    const rest = text.slice(startIdx + "HOTELS:".length);
+    const nextSection = rest.match(/\n[A-Z_]+:/);
+    const endIdx = nextSection ? startIdx + "HOTELS:".length + nextSection.index! : text.length;
+    return detectCitiesInText(text.slice(startIdx, endIdx));
+  };
+
+  const formatBedScope = (cities: string[]): string => cities.map(c => `${c}=1`).join(", ");
+
   // ── Pattern 1: REMOVE extra bed ──────────────────────────────────────
-  // "احذف السرير الإضافي" / "شيل السرير" / "بدون سرير إضافي" / "remove extra bed"
-  if (
-    (/(?:^|\s)(احذف|شيل|ألغ[يى]?|الغ[يى]?|بدون|من\s*غير|بد[ييى]?\s*بدون|remove|cancel|no)\b/iu.test(msg)
-      && isBedKeyword.test(msg))
-    || /no\s*extra\s*bed|cancel\s*extra\s*bed/i.test(msg)
-  ) {
-    let patched = removeSectionLine(prevProgram, "EXTRA_BED_CITIES");
-    patched = replaceChat(patched, noteHeader.replace("التعديل", "حذف السرير الإضافي"));
+  // "احذف السرير الإضافي" → wipe all
+  // "احذف السرير في هانوي" → subtract just Hanoi (expanding ALL=1 first
+  // to the cities present in HOTELS so the rest are preserved)
+  const removeVerb = /(?:^|\s)(احذف|شيل|ألغ[يى]?|الغ[يى]?|بدون|من\s*غير|بد[ييى]?\s*بدون|remove|cancel|no)/iu;
+  const removeBedHit = (removeVerb.test(msg) && isBedKeyword.test(msg))
+    || /no\s*extra\s*bed|cancel\s*extra\s*bed/i.test(msg);
+  if (removeBedHit) {
+    const requestedCities = detectCitiesInText(msg);
+    const existing = readBedScope(prevProgram);
+    let patched: string;
+    if (requestedCities.length === 0 || existing.mode === "none") {
+      // No city named OR nothing to subtract from → remove the whole line
+      patched = removeSectionLine(prevProgram, "EXTRA_BED_CITIES");
+      patched = replaceChat(patched, noteHeader.replace("التعديل", "حذف السرير الإضافي من جميع الفنادق"));
+      return patched;
+    }
+    // City-scoped removal: expand ALL=1 to actual hotel cities, then subtract.
+    const baseCities = existing.mode === "all" ? getProgramCities(prevProgram) : existing.cities;
+    const remaining = baseCities.filter(c => !requestedCities.includes(c));
+    if (remaining.length === 0) {
+      patched = removeSectionLine(prevProgram, "EXTRA_BED_CITIES");
+    } else {
+      patched = upsertSectionLine(prevProgram, "EXTRA_BED_CITIES", formatBedScope(remaining));
+    }
+    patched = replaceChat(patched, noteHeader.replace("التعديل",
+      `حذف السرير الإضافي من ${requestedCities.join("، ")}`));
     return patched;
   }
 
   // ── Pattern 2: ADD extra bed ─────────────────────────────────────────
   // Triggers when the message has any "add" verb (ضيف/اضف/زود/بدي/ابغى/...)
   // OR just mentions extra bed positively, AND mentions a bed keyword.
+  // Cumulative: adding Hanoi when Da Nang is already set yields both, not
+  // a replacement.
   const addVerb = /(?:ضيف|أضيف|اضف|أضف|زود|أزود|اضيف|أحتاج|احتاج|يحتاج|بدي|ابغى|أبغى|أبي|ابي|أريد|اريد|need|want|add|put|include)/iu;
   const addBedHit =
     (addVerb.test(msg) && isBedKeyword.test(msg)) ||
     (isBedKeyword.test(msg) && hasExtraIntent.test(msg));
   if (addBedHit) {
-    // Default scope: ALL
-    let value = "ALL=1";
-    // Try to detect a city name to scope it
-    const cityMap: Record<string, string> = {};
-    for (const dest of Object.keys(DEST_CITIES)) {
-      for (const c of DEST_CITIES[dest]) cityMap[c.canonical] = c.pattern.source;
-    }
-    for (const [canonical, src] of Object.entries(cityMap)) {
-      const re = new RegExp(src, "i");
-      if (re.test(msg)) { value = `${canonical}=1`; break; }
+    const requestedCities = detectCitiesInText(msg);
+    const existing = readBedScope(prevProgram);
+    let value: string;
+    if (requestedCities.length === 0) {
+      value = "ALL=1";
+    } else if (existing.mode === "all") {
+      value = "ALL=1";
+    } else {
+      const merged = [...new Set([...existing.cities, ...requestedCities])];
+      value = formatBedScope(merged);
     }
     let patched = upsertSectionLine(prevProgram, "EXTRA_BED_CITIES", value);
     patched = replaceChat(patched, noteHeader.replace("التعديل", `إضافة سرير إضافي (${value})`));
