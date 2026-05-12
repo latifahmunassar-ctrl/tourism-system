@@ -54,9 +54,15 @@ function arabicDigitsToLatin(s: string): string {
 
 /** Glue all messages into one searchable blob. */
 function joinMessages(messages: Array<{ role: string; content: unknown }>): string {
-  return messages
-    .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content))
-    .join("\n");
+  // Skip assistant turns (their text contains unrelated numbers — prices,
+  // page references — that pollute parseNightsByCity / parseDays). Then
+  // de-duplicate identical user messages so a repeated request doesn't
+  // double-count the night distribution (3 هانوي + 3 سابا = 6 → 12 if the
+  // employee re-sends after an error).
+  const texts = messages
+    .filter(m => m.role === "user")
+    .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content));
+  return [...new Set(texts.map(t => t.trim()))].join("\n");
 }
 
 const ARABIC_MONTHS: Record<string, number> = {

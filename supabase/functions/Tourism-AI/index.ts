@@ -160,10 +160,14 @@ function validateNightsDistribution(
   if (cities.length === 0) return { ok: true };
   // Take ONLY the user's own messages (skip assistant CHAT replies which contain
   // unrelated numbers like "50 ريال للشريحة" that polluted the validator).
-  const userText = messages
+  // De-duplicate identical messages — when the employee re-sends the same
+  // request after an error, the same distribution string appears twice and
+  // every per-city count gets doubled (9 → 18). Trim before deduping so
+  // whitespace-only differences still collapse.
+  const userMessageTexts = messages
     .filter(m => m.role === "user")
-    .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content))
-    .join("\n");
+    .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content));
+  const userText = [...new Set(userMessageTexts.map(t => t.trim()))].join("\n");
   const text = arabicDigitsToLatin(userText);
 
   // Extract target nights = days - 1 from any "N يوم" / "N أيام" mention.
