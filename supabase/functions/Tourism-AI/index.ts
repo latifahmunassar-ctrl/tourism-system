@@ -323,7 +323,28 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     return detectCitiesInText(text.slice(startIdx, endIdx));
   };
 
-  const formatBedScope = (cities: string[]): string => cities.map(c => `${c}=1`).join(", ");
+  // Map canonical English city names to their Arabic display form. The
+  // HOTELS section in built programs uses Arabic city names, so the
+  // frontend's extra-bed cost calculator can't match a canonical English
+  // entry against a Hotel-section city without help. We emit BOTH names
+  // in EXTRA_BED_CITIES so whichever side runs the lookup, it matches.
+  const CITY_AR: Record<string, string> = {
+    "Ha Noi": "هانوي", "Sapa": "سابا", "Ha Long": "هالونج",
+    "Da Nang": "دانانج", "Phu Quoc": "فوكوك", "Ho Chi Minh": "هوتشي مينه",
+    "Kuala Lumpur": "كوالالمبور", "Selangor": "سيلانجور",
+    "Langkawi": "لانكاوي", "Penang": "بينانج", "Cameron Highlands": "كاميرون هايلاند",
+    "Bangkok": "بانكوك", "Phuket": "بوكيت", "Krabi": "كرابي",
+    "Chiang Mai": "شيانغ ماي", "Pattaya": "باتايا", "Koh Samui": "كوه ساموي",
+    "Istanbul": "اسطنبول", "Trabzon": "طرابزون", "Uzungol": "أوزنجول",
+    "Ayder": "ايدر", "Rize": "ريزا", "Bursa": "بورصة", "Sapanca": "سابانجا",
+    "Moscow": "موسكو", "St Petersburg": "سانت بطرسبرغ", "Sochi": "سوتشي",
+    "Sarajevo": "سراييفو", "Mostar": "موستار", "Bihać": "بيهاتش",
+    "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
+  };
+  const formatBedScope = (cities: string[]): string => cities.flatMap(c => {
+    const ar = CITY_AR[c];
+    return ar && ar !== c ? [`${c}=1`, `${ar}=1`] : [`${c}=1`];
+  }).join(", ");
 
   // ── Pattern 1: REMOVE extra bed ──────────────────────────────────────
   // "احذف السرير الإضافي" → wipe all
