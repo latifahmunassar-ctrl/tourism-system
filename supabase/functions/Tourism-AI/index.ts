@@ -271,10 +271,12 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
   };
 
   // Helper: is this an "extra bed" mention? (covers many spellings)
-  // - سرير / اسرة / أسرّة / سرايا / سراير / سرير(ين)؟
-  // - اضافي / إضافي / اضاف / زيادة / extra bed / sofa bed
-  const isBedKeyword = /(?:سرير|اسرّ?ة|أسرّة|أسرة|سراير|سرايا|سرير(?:ين|ان)?|extra\s*-?\s*bed|sofa\s*-?\s*bed|rollaway|extra\s*mattress)/iu;
-  const hasExtraIntent = /(?:اضافي|إضافي|اضاف|زيادة|زياده|اضاف[يى]ه?|extra)/iu;
+  // Saudi/colloquial Arabic frequently uses ه instead of ة, ا instead of أ/إ,
+  // and ى instead of ي — so every Arabic class is widened to accept both.
+  // - سرير / سريرين / أسرة / اسره / سراير / سرايا / extra/sofa bed
+  const isBedKeyword = /(?:سرير(?:ين|ان)?|[أا]سرّ?[هة]|سراير|سرايا|extra\s*-?\s*bed|sofa\s*-?\s*bed|rollaway|extra\s*mattress)/iu;
+  // "اضافي/إضافي/اضافه/إضافية/زيادة/زياده/extra"
+  const hasExtraIntent = /(?:[إأا]?ضاف[يىه]?[هة]?|زياد[هة]|extra)/iu;
 
   // ── Pattern 1: REMOVE extra bed ──────────────────────────────────────
   // "احذف السرير الإضافي" / "شيل السرير" / "بدون سرير إضافي" / "remove extra bed"
