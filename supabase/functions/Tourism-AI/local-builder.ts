@@ -536,18 +536,16 @@ export function formatProgram(data: ProgramData): string {
   }
   out += "\n";
 
-  // ── FLIGHTS — only emit the section if there are actual flight rows.
-  //    Empty FLIGHTS section is suppressed entirely so the PDF stays clean.
+  // ── FLIGHTS — sort by day, multiply per-pax price by adults
   let flightsTotal = 0;
-  if (flights.length > 0) {
-    out += "FLIGHTS:\n";
-    for (const sf of flights) {
-      const total = sf.flight.price_per_pax * adults;
-      flightsTotal += total;
-      out += `${sf.flight.from_city} - ${sf.flight.to_city} | داخلي | ${formatNumber(sf.flight.price_per_pax)} ريال/شخص | ${adults} ${adults === 2 ? "أشخاص" : "أشخاص"} | ${formatNumber(total)} ريال\n`;
-    }
-    out += "\n";
+  out += "FLIGHTS:\n";
+  const sortedFlights = [...flights].sort((a, b) => a.day - b.day);
+  for (const sf of sortedFlights) {
+    const total = sf.flight.price_per_pax * adults;
+    flightsTotal += total;
+    out += `${sf.flight.from_city} - ${sf.flight.to_city} | داخلي | ${formatNumber(sf.flight.price_per_pax)} ريال/شخص | ${adults} أشخاص | ${formatNumber(total)} ريال\n`;
   }
+  out += "\n";
 
   // ── SIM ──────────────────────────────────────────────────────────────
   if (simCount > 0) {
@@ -683,10 +681,83 @@ export async function buildLocalProgram(
     }
   }
 
-  // 3. FLIGHTS — DISABLED per user request. Flights are always assumed to
-  //    exist (booked separately by the client). Inter-city movement is
-  //    handled exclusively via TRANSFERS rows below.
+  // 3. FLIGHTS — for each transit day, find a flight to attach.
+  //    Strategy:
+  //      a) Direct flight from→to exists → use it.
+  //      b) Otherwise, use the destination's preferred hub (geographic gateway,
+  //         not just the city with most flights — Da Nang has more flights
+  //         than Hanoi but Hanoi is the actual gateway to Halong/Sapa).
+  //      c) If fromCity is road-only (no flights), use hub → toCity.
+  //      d) If toCity is road-only, use fromCity → hub.
+  //      e) If both have flights but no direct route, try a 2-leg via hub.
   const selectedFlights: SelectedFlight[] = [];
+  const flightCities = new Set<string>();
+  for (const f of allFlights) {
+    flightCities.add(f.from_city.toLowerCase());
+    flightCities.add(f.to_city.toLowerCase());
+  }
+  // Hardcoded geographic hub per destination — the city most travellers transit
+  // through to reach road-only destinations (Halong/Sapa for Vietnam, etc.).
+  const PREFERRED_HUB: Record<string, string> = {
+    vietnam: "Ha Noi",
+    Malaysia: "Kuala Lumpur",
+    thailand: "Bangkok",
+    Turky: "Istanbul",
+    russia: "Moscow",
+    indonesia: "Jakarta",
+    Bosnia: "Sarajevo",
+  };
+  const mainHub = PREFERRED_HUB[request.destination!] || "";
+  // Strict check: a city "has flights" only if its full normalized name
+  // matches an entry in flightCities (handles "Ha Noi" ≈ "ha noi (han)"
+  // but rejects loose-prefix false positives like "Ha Long" ≈ "ha noi").
+  const normCity = (s: string) => s.toLowerCase()
+    .normalize("NFD").replace(/\p{M}/gu, "")
+    .replace(/[\(\)\.\-_,]/g, " ")
+    .replace(/\s+/g, " ").trim();
+  const cityHasFlights = (city: string): boolean => {
+    const target = normCity(city);
+    const targetWords = target.split(" ").filter(Boolean);
+    if (targetWords.length === 0) return false;
+    for (const fc of flightCities) {
+      const fcNorm = normCity(fc);
+      // All words of target must appear as substrings in flight city name
+      if (targetWords.every(w => fcNorm.includes(w))) return true;
+    }
+    return false;
+  };
+  for (const d of days) {
+    if (d.type !== "transit" || !d.fromCity || !d.toCity) continue;
+    const direct = findFlight(allFlights, d.fromCity, d.toCity);
+    if (direct) {
+      selectedFlights.push({ day: d.number, flight: direct });
+      continue;
+    }
+    const fromHasFlights = cityHasFlights(d.fromCity);
+    const toHasFlights = cityHasFlights(d.toCity);
+    // Case (c): fromCity is road-only → use hub→toCity flight
+    if (!fromHasFlights && toHasFlights && mainHub) {
+      const f = findFlight(allFlights, mainHub, d.toCity);
+      if (f) { selectedFlights.push({ day: d.number, flight: f }); continue; }
+    }
+    // Case (d): toCity is road-only → use fromCity→hub flight
+    if (fromHasFlights && !toHasFlights && mainHub) {
+      const f = findFlight(allFlights, d.fromCity, mainHub);
+      if (f) { selectedFlights.push({ day: d.number, flight: f }); continue; }
+    }
+    // Case (e): both have flights but no direct → try via hub
+    if (fromHasFlights && toHasFlights) {
+      for (const fcity of flightCities) {
+        const leg1 = findFlight(allFlights, d.fromCity, fcity);
+        const leg2 = findFlight(allFlights, fcity, d.toCity);
+        if (leg1 && leg2) {
+          selectedFlights.push({ day: d.number, flight: leg1 });
+          selectedFlights.push({ day: d.number, flight: leg2 });
+          break;
+        }
+      }
+    }
+  }
 
   // 4. Pick ground transfers (now passing cityDefs for strict matching)
   const selectedTransfers: SelectedTransfer[] = [];
