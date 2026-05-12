@@ -62,7 +62,13 @@ function joinMessages(messages: Array<{ role: string; content: unknown }>): stri
   const texts = messages
     .filter(m => m.role === "user")
     .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content));
-  return [...new Set(texts.map(t => t.trim()))].join("\n");
+  // Normalize: strip everything except digits and letters, so trivial
+  // punctuation/whitespace differences ("3 +4" vs "3 + 4") collapse.
+  const normalize = (t: string) => t.replace(/[^\d؀-ۿa-zA-Z]/g, "");
+  const seen = new Set<string>();
+  return texts
+    .filter(t => { const k = normalize(t); if (seen.has(k)) return false; seen.add(k); return true; })
+    .join("\n");
 }
 
 const ARABIC_MONTHS: Record<string, number> = {
