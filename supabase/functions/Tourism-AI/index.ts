@@ -2074,6 +2074,23 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Tweak-only follow-up with no built program AND no destination context:
+    // intercept locally so a "غير السيارة لخاصة" sent to a fresh chat returns
+    // a targeted message instead of being routed to Claude or to the lite
+    // "tell me your trip" template.
+    {
+      const isTweakOnly = /^(?:\s*(?:غير|غيّر|اجعل|خل[يى]?|بدل|حول|ابي|ابغى|اريد|أريد|أبي|أبغى|اعمل|اضف|أضف|ضيف|زود|احذف|الغ[يى]?|شيل)\s+)?(?:(?:ال)?(?:سياره|سيارة|سيارات|تنقل|التنقل|نقل|cars?|transport)|(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim|esim|سيم)|(?:سرير|أسر[ةه]|اسر[ةه]|سراير|سرايا|extra\s*-?\s*bed))/iu.test(lastUserMsg.trim());
+      if (isTweakOnly && !lastAssistantProgram && !detectedDest) {
+        return new Response(JSON.stringify({
+          id: "tweak-without-program",
+          model: "local",
+          role: "assistant",
+          content: [{ type: "text", text: "CHAT:محتاج برنامج محفوظ في المحادثة عشان أعدّله. أرسل تفاصيل الرحلة كاملة (الوجهة + الأيام + التوزيع + الأشخاص) أوّلاً، وبعدها قدر أعدّل السيارة/الشرائح/السرير الإضافي." }],
+          usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+        }), { headers: CORS_HEADERS });
+      }
+    }
+
     // ── Pure Local Engine ─────────────────────────────────────────────
     // If we have ALL required info (destination + cities + nights + adults),
     // build the entire program locally without calling Anthropic. $0 cost.
@@ -2103,6 +2120,20 @@ Deno.serve(async (req) => {
 
       // CASE A: distribution missing → ask locally (no Claude, $0)
       if (!canBuildLocally(tripRequest)) {
+        // Targeted message when the user is trying to tweak transport/SIM/
+        // bed but we have no built program AND insufficient trip details to
+        // (re)build. Otherwise the generic "tell me your cities" question
+        // is confusing — they're not asking to start over.
+        const isTweakOnly = /^(?:\s*(?:غير|غيّر|اجعل|خل[يى]?|بدل|حول|ابي|ابغى|اريد|أريد|أبي|أبغى|اعمل|اضف|أضف|ضيف|زود|احذف|الغ[يى]?|شيل)\s+)?(?:(?:ال)?(?:سياره|سيارة|سيارات|تنقل|التنقل|نقل|cars?|transport)|(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim|esim|سيم)|(?:سرير|أسر[ةه]|اسر[ةه]|سراير|سرايا|extra\s*-?\s*bed))/iu.test(lastUserMsg.trim());
+        if (isTweakOnly && !lastAssistantProgram) {
+          return new Response(JSON.stringify({
+            id: "tweak-without-program",
+            model: "local-engine",
+            role: "assistant",
+            content: [{ type: "text", text: "CHAT:محتاج برنامج محفوظ في المحادثة عشان أعدّله. أرسل تفاصيل الرحلة كاملة (الوجهة + الأيام + التوزيع + الأشخاص) أوّلاً، وبعدها قدر أعدّل السيارة/الشرائح/السرير الإضافي." }],
+            usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+          }), { headers: CORS_HEADERS });
+        }
         const cityList = cityDefs.map(c => cityArabicNames[c.canonical] || c.canonical).join("، ");
         const targetNights = tripRequest.daysTotal ? tripRequest.daysTotal - 1 : "[عدد الليالي]";
         const localQuestion = `CHAT:تمام! المدن المتاحة في ${destAr[detectedDest] || detectedDest}: ${cityList}. ` +
