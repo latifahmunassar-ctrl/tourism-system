@@ -196,15 +196,20 @@ function tourBelongsToCity(tour: TourRow, cityDefs: CityDef[], canonicalCity: st
 }
 
 /**
- * Pick tours for a city: free tours (price=0) first, then cheapest paid tours.
- * Returns up to `nightsInCity` unique tours. If we run out of tours, returns
- * what we have plus a flag indicating the deficit.
+ * Pick tours for a city: prefer FREE tours (price=0) first, then cheapest paid
+ * tours — but evaluate "cheapest" using the variant matching the actual pax
+ * count, NOT the default first-variant price. So a 6-pax group sorts tours
+ * by their pax-6-8 variant price.
+ *
+ * Returns up to `nightsInCity` unique tours plus deficit info if not enough
+ * tours exist for the city.
  */
 export function pickToursForCity(
   allTours: TourRow[],
   cityDefs: CityDef[],
   canonicalCity: string,
   nightsInCity: number,
+  paxCount: number,
 ): { selected: TourRow[]; available: number; deficit: number } {
   // Filter: real tours (not transfer rows) belonging to this city
   const TRANSFER_PREFIXES = [
@@ -223,9 +228,12 @@ export function pickToursForCity(
 
   const cityTours = allTours.filter(t => !isTransfer(t.name) && tourBelongsToCity(t, cityDefs, canonicalCity));
 
-  // Sort: free (0) first, then ascending price, then name for tie-break
+  // Sort by the PAX-MATCHING variant price (cheapest first), then name.
+  // Tours always private → isShared = false.
   cityTours.sort((a, b) => {
-    if (a.price !== b.price) return a.price - b.price;
+    const pa = pickTourVariantPrice(a, paxCount, false);
+    const pb = pickTourVariantPrice(b, paxCount, false);
+    if (pa !== pb) return pa - pb;
     return a.name.localeCompare(b.name);
   });
 
@@ -642,7 +650,7 @@ export async function buildLocalProgram(
     const cityStayDays = days.filter(d => d.city === city && d.type === "stay");
     const stayDayNumbers = cityStayDays.map(d => d.number);
     if (stayDayNumbers.length === 0) continue;
-    const { selected, available, deficit } = pickToursForCity(allTours, cityDefs, city, stayDayNumbers.length);
+    const { selected, available, deficit } = pickToursForCity(allTours, cityDefs, city, stayDayNumbers.length, request.adults || 2);
     selected.forEach((tour, i) => {
       selectedTours.push({ day: stayDayNumbers[i], city, tour });
     });
