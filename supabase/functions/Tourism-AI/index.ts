@@ -7,6 +7,14 @@
  */
 
 import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.30.0";
+import { parseTripRequest } from "./local-parser.ts";
+import {
+  buildLocalProgram,
+  canBuildLocally,
+  type HotelRow,
+  type TourRow,
+  type FlightRow,
+} from "./local-builder.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const CORS_HEADERS = {
@@ -1742,6 +1750,70 @@ Deno.serve(async (req) => {
           content: [{ type: "text", text: "CHAT:" + v.message }],
           usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
         }), { headers: CORS_HEADERS });
+      }
+    }
+
+    // ── Pure Local Engine ─────────────────────────────────────────────
+    // If we have ALL required info (destination + cities + nights + adults),
+    // build the entire program locally without calling Anthropic. $0 cost.
+    if (detectedDest && DEST_CITIES[detectedDest]) {
+      const cityDefs = DEST_CITIES[detectedDest];
+      const tripRequest = parseTripRequest(messages, cityDefs);
+      if (canBuildLocally(tripRequest)) {
+        try {
+          const cityArabicNames: Record<string, string> = {
+            "Ha Noi": "هانوي", "Sapa": "سابا", "Ha Long": "هالونج",
+            "Da Nang": "دانانج", "Phu Quoc": "فوكوك", "Ho Chi Minh": "هوتشي مينه",
+            "Kuala Lumpur": "كوالالمبور", "Selangor": "سيلانجور",
+            "Langkawi": "لانكاوي", "Penang": "بينانج", "Cameron Highlands": "كاميرون هايلاند",
+            "Bangkok": "بانكوك", "Phuket": "بوكيت", "Krabi": "كرابي",
+            "Chiang Mai": "شيانغ ماي", "Pattaya": "باتايا", "Koh Samui": "كوه ساموي",
+            "Istanbul": "اسطنبول", "Trabzon": "طرابزون", "Uzungol": "أوزنجول",
+            "Ayder": "ايدر", "Rize": "ريزا", "Bursa": "بورصة", "Sapanca": "سابانجا",
+            "Moscow": "موسكو", "St Petersburg": "سانت بطرسبرغ", "Sochi": "سوتشي",
+            "Sarajevo": "سراييفو", "Mostar": "موستار", "Bihać": "بيهاتش",
+            "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
+          };
+
+          const result = await buildLocalProgram(
+            tripRequest,
+            cityDefs,
+            async () => {
+              const dest = detectedDest;
+              const [hRes, tRes, fRes] = await Promise.all([
+                supabase.from("hotels").select("*").ilike("location", `% - ${dest}`),
+                supabase.from("tours").select("*").eq("type", dest),
+                supabase.from("flights").select("*").eq("destination", dest),
+              ]);
+              return {
+                hotels: (hRes.data || []) as HotelRow[],
+                tours: (tRes.data || []) as TourRow[],
+                flights: (fRes.data || []) as FlightRow[],
+              };
+            },
+            cityArabicNames,
+          );
+          if (result.ok) {
+            return new Response(JSON.stringify({
+              id: "local-build",
+              model: "local-engine",
+              role: "assistant",
+              content: [{ type: "text", text: result.program }],
+              usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+            }), { headers: CORS_HEADERS });
+          }
+          // result.ok === false → respond with CHAT message (still local, $0)
+          return new Response(JSON.stringify({
+            id: "local-build-incomplete",
+            model: "local-engine",
+            role: "assistant",
+            content: [{ type: "text", text: "CHAT:" + result.chatMessage }],
+            usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+          }), { headers: CORS_HEADERS });
+        } catch (e) {
+          // Fall through to Claude on any unexpected error — safer
+          console.error("[local-engine] error, falling back to Claude:", (e as Error).message);
+        }
       }
     }
 
