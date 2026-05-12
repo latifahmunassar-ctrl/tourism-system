@@ -122,15 +122,26 @@ function detectCitiesFromMessage(
  * { ok: true } when valid or when no distribution was given yet, otherwise
  * { ok: false, message: "..." } with a short Arabic error to send back in CHAT.
  */
+/** Convert Arabic-Indic and Eastern-Arabic-Indic digits to ASCII 0-9. */
+function arabicDigitsToLatin(s: string): string {
+  return s
+    .replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)))
+    .replace(/[۰-۹]/g, c => String("۰۱۲۳۴۵۶۷۸۹".indexOf(c)));
+}
+
 function validateNightsDistribution(
   messages: Array<{ role: string; content: unknown }>,
   destination: string,
   cities: string[],
 ): { ok: true } | { ok: false; message: string } {
   if (cities.length === 0) return { ok: true };
-  const text = messages
+  // Take ONLY the user's own messages (skip assistant CHAT replies which contain
+  // unrelated numbers like "50 ريال للشريحة" that polluted the validator).
+  const userText = messages
+    .filter(m => m.role === "user")
     .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content))
-    .join(" ");
+    .join("\n");
+  const text = arabicDigitsToLatin(userText);
 
   // Extract target nights = days - 1 from any "N يوم" / "N أيام" mention.
   const daysMatch = text.match(/(\d{1,2})\s*(?:يوم|أيام|ايام|days?)/i);
@@ -138,24 +149,30 @@ function validateNightsDistribution(
   const targetNights = parseInt(daysMatch[1], 10) - 1;
   if (!(targetNights > 0)) return { ok: true };
 
-  // For each detected city, look for a number that appears right beside it
-  // ("هانوي 2" / "2 هانوي" / "هانوي = 2"). Collect contributions.
+  // For each detected city, sum ALL occurrences of "N <city>" or "<city> N"
+  // — same city can appear twice (e.g. Hanoi at start AND end of itinerary).
   let sumNights = 0;
   let foundAny = false;
   const cityDefs = DEST_CITIES[destination] || [];
   for (const canonical of cities) {
     const def = cityDefs.find(c => c.canonical === canonical);
     if (!def) continue;
-    // Build a regex that captures a digit near the city name (±20 chars).
     const cityPat = def.pattern.source;
-    const re = new RegExp(`(?:(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|ليلتين|نايت|night)?\\s*(?:${cityPat}))|(?:(?:${cityPat})\\s*(?:=|:|-|بـ|في|عن)?\\s*(\\d{1,2}))`, "i");
-    const m = text.match(re);
-    if (m) {
+    // Global match — collect every "N city" or "city N" pair
+    const re = new RegExp(
+      `(?:(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|ليلتين|نايت|night)?\\s*(?:${cityPat}))` +
+      `|(?:(?:${cityPat})\\s*(?:=|:|-|بـ|في|عن|لمدة|ل)?\\s*(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|نايت|night)?)`,
+      "ig"
+    );
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
       const n = parseInt(m[1] || m[2] || "0", 10);
       if (n > 0 && n <= 30) {
         sumNights += n;
         foundAny = true;
       }
+      // Safety: prevent infinite loops on zero-width matches
+      if (m.index === re.lastIndex) re.lastIndex++;
     }
   }
 
@@ -166,7 +183,7 @@ function validateNightsDistribution(
     ok: false,
     message:
       `التوزيع الذي أعطيتني = ${sumNights} ليالي، لكن البرنامج ${targetNights + 1} أيام يحتاج ${targetNights} ليالي. ` +
-      `راجع توزيع الليالي وأعد الإرسال (مثال صحيح: ${cities.map((c, i) => `${c}=${Math.max(1, Math.floor((targetNights) / cities.length) + (i === 0 ? targetNights % cities.length : 0))}`).join(" + ")}).`,
+      `راجع توزيع الليالي وأعد الإرسال.`,
   };
 }
 
