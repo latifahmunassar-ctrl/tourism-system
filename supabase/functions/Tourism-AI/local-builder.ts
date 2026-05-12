@@ -646,7 +646,22 @@ export async function buildLocalProgram(
   for (const stay of stayOrder) {
     const hotel = pickCheapestHotel(allHotels, stay.city, request);
     if (!hotel) {
-      return { ok: false, chatMessage: `ما عندنا فندق يطابق المعايير في ${stay.city} (Adults=${request.adults}، نجوم=${request.stars?.join("/")  || "أيّ"}).` };
+      // Diagnose: what IS available in that city? Walk hotels matching just
+      // the city (ignoring pax/stars/date) so the employee can see what's
+      // close — and decide whether to adjust pax, change dates, or accept
+      // a stars filter relaxation.
+      const cityHotels = allHotels.filter(h => hotelCityMatches(h.location, stay.city));
+      let diag = "";
+      if (cityHotels.length === 0) {
+        diag = `لا توجد أيّ فنادق في ${stay.city} في قاعدة البيانات.`;
+      } else {
+        // Available occupancies (sorted, distinct)
+        const occs = [...new Set(cityHotels.map(h => extractAdultsCount(h.occupancy || "")).filter(n => n > 0))].sort((a, b) => a - b);
+        const stars = [...new Set(cityHotels.map(h => h.stars).filter(s => s > 0))].sort();
+        const total = cityHotels.length;
+        diag = `يوجد ${total} فندق في ${stay.city}، لكن الإشغال المتاح فقط: ${occs.join("/")} أشخاص (نجوم: ${stars.join("/")}). الموظف طلب ${request.adults} أشخاص.`;
+      }
+      return { ok: false, chatMessage: `ما عندنا فندق يطابق المعايير في ${stay.city} لـ ${request.adults} أشخاص. ${diag}` };
     }
     // Pull this stay's days out of the days[] array (next N days)
     const stayDays = days.slice(consumedDays, consumedDays + stay.nights);
