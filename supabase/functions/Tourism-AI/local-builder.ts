@@ -50,6 +50,12 @@ export type FlightRow = {
   destination: string;
 };
 
+// Trains share the same shape as flights — city pair + per-pax price.
+// Picked before flights for the same transit when both exist (e.g. Moscow ↔
+// St Petersburg by Sapsan), since trains are cheaper and more convenient
+// for short city-to-city routes within Russia / Europe.
+export type TrainRow = FlightRow;
+
 // ─────────────────────────────────────────────────────────────────────────
 // SELECTORS
 // ─────────────────────────────────────────────────────────────────────────
@@ -289,7 +295,12 @@ export function pickInterCityFlights(
 }
 
 function findFlight(flights: FlightRow[], from: string, to: string): FlightRow | null {
-  const norm = (s: string) => String(s || "").toLowerCase().replace(/[\s\.\-_]/g, "");
+  // Normalize then expand "saint" → "st" so canonical "St Petersburg" matches
+  // sheet entries written as "Saint Petersburg" (Russia trains, mainly).
+  const norm = (s: string) => String(s || "")
+    .toLowerCase()
+    .replace(/[\s\.\-_]/g, "")
+    .replace(/saint/g, "st");
   const f = norm(from);
   const t = norm(to);
   return flights.find(fl => {
@@ -467,7 +478,9 @@ export function arrangeDays(request: TripRequest): Day[] {
 
 export type SelectedHotel = { city: string; rangeFrom: Date; rangeTo: Date; nights: number; hotel: HotelRow };
 export type SelectedTour = { day: number; city: string; tour: TourRow };
-export type SelectedFlight = { day: number; flight: FlightRow };
+// kind defaults to "flight" when omitted; "train" routes are rendered with
+// the Arabic label "قطار" instead of "داخلي/دولي" in FLIGHTS section.
+export type SelectedFlight = { day: number; flight: FlightRow; kind?: "flight" | "train" };
 export type SelectedTransfer = { day: number; row: TourRow; kind: "Pickup" | "Drop" };
 
 export type ProgramData = {
@@ -558,7 +571,8 @@ export function formatProgram(data: ProgramData): string {
   for (const sf of sortedFlights) {
     const total = sf.flight.price_per_pax * adults;
     flightsTotal += total;
-    out += `${sf.flight.from_city} - ${sf.flight.to_city} | داخلي | ${formatNumber(sf.flight.price_per_pax)} ريال/شخص | ${adults} أشخاص | ${formatNumber(total)} ريال\n`;
+    const label = sf.kind === "train" ? "قطار" : "داخلي";
+    out += `${sf.flight.from_city} - ${sf.flight.to_city} | ${label} | ${formatNumber(sf.flight.price_per_pax)} ريال/شخص | ${adults} أشخاص | ${formatNumber(total)} ريال\n`;
   }
   out += "\n";
 
@@ -641,13 +655,14 @@ export function canBuildLocally(request: TripRequest): boolean {
 export async function buildLocalProgram(
   request: TripRequest,
   cityDefs: CityDef[],
-  fetchData: () => Promise<{ hotels: HotelRow[]; tours: TourRow[]; flights: FlightRow[] }>,
+  fetchData: () => Promise<{ hotels: HotelRow[]; tours: TourRow[]; flights: FlightRow[]; trains?: TrainRow[] }>,
   cityArabicNames: Record<string, string>,
 ): Promise<BuildResult> {
   if (!canBuildLocally(request)) {
     return { ok: false, chatMessage: "البيانات ناقصة، لم أستطع البناء محلّياً." };
   }
-  const { hotels: allHotels, tours: allTours, flights: allFlights } = await fetchData();
+  const { hotels: allHotels, tours: allTours, flights: allFlights, trains: allTrainsRaw } = await fetchData();
+  const allTrains: TrainRow[] = allTrainsRaw || [];
 
   // 1. Pick hotel for each STAY in order (handles repeated cities like
   //    "Hanoi at start, Sapa middle, Hanoi at end" → 2 separate Hanoi stays).
@@ -760,6 +775,14 @@ export async function buildLocalProgram(
   };
   for (const d of days) {
     if (d.type !== "transit" || !d.fromCity || !d.toCity) continue;
+    // Trains take precedence when a direct one exists for this city pair
+    // (Russia: Moscow ↔ Saint Petersburg by Sapsan; cheaper + faster than
+    // a flight). Only direct trains — no train hubbing.
+    const train = findFlight(allTrains, d.fromCity, d.toCity);
+    if (train) {
+      selectedFlights.push({ day: d.number, flight: train, kind: "train" });
+      continue;
+    }
     const direct = findFlight(allFlights, d.fromCity, d.toCity);
     if (direct) {
       selectedFlights.push({ day: d.number, flight: direct });

@@ -2074,15 +2074,17 @@ Deno.serve(async (req) => {
             cityDefs,
             async () => {
               const dest = detectedDest;
-              const [hRes, tRes, fRes] = await Promise.all([
+              const [hRes, tRes, fRes, trRes] = await Promise.all([
                 supabase.from("hotels").select("*").ilike("location", `% - ${dest}`),
                 supabase.from("tours").select("*").eq("type", dest),
                 supabase.from("flights").select("*").eq("destination", dest),
+                supabase.from("trains").select("*").eq("destination", dest),
               ]);
               return {
                 hotels: (hRes.data || []) as HotelRow[],
                 tours: (tRes.data || []) as TourRow[],
                 flights: (fRes.data || []) as FlightRow[],
+                trains: (trRes.error ? [] : (trRes.data || [])) as FlightRow[],
               };
             },
             cityArabicNames,
