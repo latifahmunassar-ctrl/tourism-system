@@ -272,9 +272,11 @@ function parseCityStaysOrdered(text: string, cityDefs: CityDef[]): CityStay[] {
   const hits: Hit[] = [];
   for (const { canonical, pattern } of cityDefs) {
     const cityPat = pattern.source;
+    // "city N" REQUIRES a trailing nights-word; otherwise a header like
+    // "سانت بطرس 10 ايام" would credit the trip-day count as nights.
     const re = new RegExp(
       `(?:(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|ليلتين|نايت|night)?\\s*(?:${cityPat}))` +
-      `|(?:(?:${cityPat})\\s*(?:=|:|-|بـ|في|عن|لمدة|ل)?\\s*(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|ليلتين|نايت|night)?)`,
+      `|(?:(?:${cityPat})\\s*(?:=|:|-|بـ|في|عن|لمدة|ل)?\\s*(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|ليلتين|نايت|night))`,
       "igu"
     );
     let m: RegExpExecArray | null;
@@ -298,9 +300,11 @@ function parseNightsByCity(text: string, cityDefs: CityDef[]): Record<string, nu
     const cityPat = pattern.source;
     // Global flag — sums ALL occurrences of "N city" / "city N" in the text.
     // This way "هانوي 2 + ... + هانوي 2" correctly totals as 4 for Hanoi.
+    // "city N" REQUIRES a trailing nights-word; otherwise a header like
+    // "سانت بطرس 10 ايام" would credit the trip-day count as nights.
     const re = new RegExp(
       `(?:(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|ليلتين|نايت|night)?\\s*(?:${cityPat}))` +
-      `|(?:(?:${cityPat})\\s*(?:=|:|-|بـ|في|عن|لمدة|ل)?\\s*(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|ليلتين|نايت|night)?)`,
+      `|(?:(?:${cityPat})\\s*(?:=|:|-|بـ|في|عن|لمدة|ل)?\\s*(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|ليلتين|نايت|night))`,
       "igu"
     );
     let total = 0;

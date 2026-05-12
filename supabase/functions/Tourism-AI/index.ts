@@ -53,54 +53,64 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
 // detector (does the employee already say which cities?) and the lite-mode
 // renderer (list-of-cities only response). Canonical names are the same ones
 // stored in hotels.location ("Hanoi - vietnam" etc.).
+// City regex patterns are deliberately wide to absorb dialectal/typo variants.
+// Common rules used throughout:
+//   • ج/غ interchangeable (جاكرتا = جاكرتا, دانانج = دانانغ, موستار same)
+//   • Trailing endings often dropped (سانت بطرسبرغ → سانت بطرس → بطرسبرغ)
+//   • ا often dropped/added (ماليزيا/ملزيا, لانكاوي/لنكاوي, كوالا/كولا)
+//   • ة/ه/ـة all accepted (بورصة/بورصه)
+//   • Latin alts always allowed (with optional spacing/hyphenation)
 const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>> = {
   vietnam: [
-    { canonical: "Ha Noi",      pattern: /هانوي|ha\s*noi|hanoi/i },
+    { canonical: "Ha Noi",      pattern: /هانوي|hanoi|ha\s*noi/i },
     { canonical: "Sapa",        pattern: /سابا|sapa|كات\s*كات|لاو\s*تشاي|تا\s*فان|فانسيبان/i },
-    { canonical: "Ha Long",     pattern: /هالونج|ha\s*long|halong/i },
-    { canonical: "Da Nang",     pattern: /دانانج|da\s*nang|danang|ba\s*na|ماي\s*خي/i },
-    { canonical: "Phu Quoc",    pattern: /فوكوك|phu\s*quoc/i },
-    { canonical: "Ho Chi Minh", pattern: /هوتشي|ho\s*chi|saigon|سايغون/i },
+    { canonical: "Ha Long",     pattern: /هالون[جغ]|halong|ha\s*long/i },
+    { canonical: "Da Nang",     pattern: /دانان[جغ]|danang|da\s*nang|ba\s*na|ماي\s*خي/i },
+    { canonical: "Phu Quoc",    pattern: /فوكوك|phu\s*quoc|phuquoc/i },
+    { canonical: "Ho Chi Minh", pattern: /هوتشي|هو\s*تشي|ho\s*chi|hochi|saigon|سايغون|سايجون/i },
   ],
   Malaysia: [
-    // كوالا(ل)?(\s*)مبور — accepts كوالالمبور / كوالامبور / كوالا لمبور / كوالا مبور
-    { canonical: "Kuala Lumpur",     pattern: /كوالا\s*ل?مبور|kuala\s*lumpur|\bKL\b/i },
-    { canonical: "Selangor",         pattern: /سيلانجور|سيلانغور|سلانجور|selangor|sunway|مدينة\s*الالعاب|مدينة\s*الألعاب/i },
-    { canonical: "Langkawi",         pattern: /لانكاوي|لنكاوي|langkawi/i },
-    { canonical: "Penang",           pattern: /بينانج|بينانغ|بنانج|بنانغ|penang/i },
-    { canonical: "Cameron Highlands",pattern: /كاميرون|كميرون|cameron|هايلاند|مرتفعات\s*الكامی?رون/i },
+    { canonical: "Kuala Lumpur",     pattern: /كوالا\s*ل?مبور|كولا\s*ل?مبور|kuala\s*lumpur|\bKL\b/i },
+    { canonical: "Selangor",         pattern: /سيلان[جغ]ور|سلان[جغ]ور|selangor|sunway|مدينة\s*ال[أا]لعاب/i },
+    { canonical: "Langkawi",         pattern: /لان?كاوي|langkawi/i },
+    { canonical: "Penang",           pattern: /بينان[جغ]|بنان[جغ]|penang/i },
+    { canonical: "Cameron Highlands",pattern: /كام?يرون|cameron|هايلاند|مرتفعات\s*الكام?ي?رون/i },
   ],
   thailand: [
-    { canonical: "Bangkok",      pattern: /بانكوك|bangkok/i },
-    { canonical: "Phuket",       pattern: /بوكيت|phuket|بوكت/i },
+    { canonical: "Bangkok",      pattern: /بان[كق]وك|bangkok/i },
+    { canonical: "Phuket",       pattern: /بوكي?ت|phuket/i },
     { canonical: "Krabi",        pattern: /كرابي|krabi/i },
-    { canonical: "Chiang Mai",   pattern: /شانغماي|شيانغ\s*ماي|chiang\s*mai|chiangmai/i },
-    { canonical: "Pattaya",      pattern: /بتايا|باتايا|pattaya/i },
-    { canonical: "Koh Samui",    pattern: /كوسموي|كوه\s*ساموي|koh\s*samui|samui/i },
+    { canonical: "Chiang Mai",   pattern: /شيان[جغ]?\s*ماي|شانغماي|chiang\s*mai|chiangmai/i },
+    { canonical: "Pattaya",      pattern: /با?تايا|pattaya/i },
+    { canonical: "Koh Samui",    pattern: /كو(?:ه|سم?)\s*ساموي|koh\s*samui|samui/i },
   ],
   Turky: [
-    { canonical: "Istanbul",   pattern: /اسطنبول|istanbul|آيا\s*صوفيا|البازار|تقسيم/i },
-    { canonical: "Trabzon",    pattern: /طرابزون|trabzon|سلطان\s*مراد|حيدر\s*نبي|هامسيكوي|بيشك\s*دوزو/i },
-    { canonical: "Uzungol",    pattern: /أوزنجول|اوزنجول|uzungol/i },
-    { canonical: "Ayder",      pattern: /ايدر|ayder/i },
-    { canonical: "Rize",       pattern: /ريزا|rize/i },
-    { canonical: "Bursa",      pattern: /بورصة|bursa/i },
-    { canonical: "Sapanca",    pattern: /سابانجا|sapanca|معشوقية/i },
+    { canonical: "Istanbul",   pattern: /اسطنبول|إسطنبول|إستانبول|istanbul|آيا\s*صوفيا|البازار|تقسيم/i },
+    { canonical: "Trabzon",    pattern: /طرابزون|طربزون|trabzon|سلطان\s*مراد|حيدر\s*نبي|هامسيكوي|بيشك\s*دوزو/i },
+    { canonical: "Uzungol",    pattern: /[أا]وزن[جغ]ول|uzungol/i },
+    { canonical: "Ayder",      pattern: /[أا]يدر|ayder/i },
+    { canonical: "Rize",       pattern: /ريزا|ريزه|rize/i },
+    { canonical: "Bursa",      pattern: /بورص[ةه]|bursa/i },
+    { canonical: "Sapanca",    pattern: /سابان[جغ]ا|sapanca|معشوقية/i },
   ],
   russia: [
-    { canonical: "Moscow",         pattern: /موسكو|moscow|moskva/i },
-    { canonical: "St Petersburg",  pattern: /سانت\s*بطرسبرغ|saint\s*petersburg|st\.?\s*petersburg/i },
-    { canonical: "Sochi",          pattern: /سوتشي|sochi/i },
+    { canonical: "Moscow",         pattern: /موسكو|موسكوا|moscow|moskva/i },
+    // Saudi often shortens to "سانت بطرس" or just "بطرسبرغ" / "بطرسبورج".
+    // Match strategy: the suffix (برغ/بورج/بورك) is enough on its own; the
+    // bare "بطرس" requires a "سان"/"سانت" prefix to avoid matching unrelated
+    // words that happen to contain those letters.
+    { canonical: "St Petersburg",  pattern: /(?:سان?ت?\s*)?بطرس(?:بور[جك]|برغ|بور)|سان?ت?\s+بطرس|saint\s*petersburg|st\.?\s*petersburg/i },
+    { canonical: "Sochi",          pattern: /سوتشي|سوشي|sochi/i },
   ],
   Bosnia: [
-    { canonical: "Sarajevo", pattern: /سراييفو|sarajevo/i },
+    { canonical: "Sarajevo", pattern: /سرايي?فو|sarajevo/i },
     { canonical: "Mostar",   pattern: /موستار|mostar/i },
     { canonical: "Bihać",    pattern: /بيهاتش|bihać|bihac/i },
   ],
   indonesia: [
-    { canonical: "Bali",     pattern: /بالي|bali|كوتا|kuta|أوبود|ubud|سمينياك|seminyak|جيمباران|jimbaran|نوسا\s*دوا/i },
-    { canonical: "Jakarta",  pattern: /جاكرتا|jakarta/i },
-    { canonical: "Bandung",  pattern: /باندونغ|باندونج|bandung/i },
+    { canonical: "Bali",     pattern: /بالي|bali|كوتا|kuta|[أا]وبود|ubud|سمينياك|seminyak|جيمباران|jimbaran|نوسا\s*دوا/i },
+    { canonical: "Jakarta",  pattern: /جا?كرتا|jakarta/i },
+    { canonical: "Bandung",  pattern: /باندون[جغ]|bandung/i },
     { canonical: "Puncak",   pattern: /بونشاك|puncak/i },
   ],
 };
@@ -171,10 +181,13 @@ function validateNightsDistribution(
     const def = cityDefs.find(c => c.canonical === canonical);
     if (!def) continue;
     const cityPat = def.pattern.source;
-    // Global match — collect every "N city" or "city N" pair
+    // Global match — collect every "N city" or "city N" pair.
+    // The "city N" form REQUIRES a nights-word suffix; otherwise a header
+    // like "سانت بطرس 10 ايام" would credit 10 nights to the city instead
+    // of recognizing 10 as the trip-day count.
     const re = new RegExp(
       `(?:(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|ليلتين|نايت|night)?\\s*(?:${cityPat}))` +
-      `|(?:(?:${cityPat})\\s*(?:=|:|-|بـ|في|عن|لمدة|ل)?\\s*(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|نايت|night)?)`,
+      `|(?:(?:${cityPat})\\s*(?:=|:|-|بـ|في|عن|لمدة|ل)?\\s*(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|نايت|night))`,
       "ig"
     );
     let m: RegExpExecArray | null;
