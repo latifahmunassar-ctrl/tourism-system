@@ -367,16 +367,36 @@ export function findInterCityTransfer(
   destination: string,
   cityDefs: CityDef[],
 ): TourRow | null {
-  const candidates = allTours.filter(tr => {
+  // Path 1: row that explicitly mentions BOTH cities (e.g. "موسكو ← سانت
+  // بطرسبرغ نقل برّي"). Most precise but rare in real data.
+  const both = allTours.filter(tr => {
+    if (tr.type !== destination) return false;
+    return tourNameMatchesCity(tr.name, fromCity, cityDefs)
+        && tourNameMatchesCity(tr.name, toCity, cityDefs);
+  });
+  if (both.length > 0) {
+    both.sort((a, b) => a.price - b.price);
+    return both[0];
+  }
+
+  // Path 2: an explicit drop-from-fromCity row (توديع/التوجه إلى المطار/المحطة)
+  // — used when leaving a city by train or flight. Real Russia data uses
+  // separate rows per city, not one combined inter-city transfer.
+  // Must NOT match Pickup rows that say "استقبال … والتوجه إلى الفندق" — so
+  // we explicitly reject any row containing استقبال and require a drop verb.
+  const fromDrop = allTours.filter(tr => {
     if (tr.type !== destination) return false;
     const n = tr.name;
-    const hasFrom = tourNameMatchesCity(n, fromCity, cityDefs);
-    const hasTo = tourNameMatchesCity(n, toCity, cityDefs);
-    return (hasFrom && hasTo);
+    if (/استقبال|الاستقبال|pickup/iu.test(n)) return false; // hard reject
+    if (!/توديع|التوديع|للعوده|للعودة|drop/iu.test(n) && !/التوجه.*(?:مطار|محطة|airport|station)/iu.test(n)) return false;
+    if (!/مطار|محطة|station|airport|قطار/iu.test(n)) return false;
+    return tourNameMatchesCity(n, fromCity, cityDefs);
   });
-  if (candidates.length === 0) return null;
-  candidates.sort((a, b) => a.price - b.price);
-  return candidates[0];
+  if (fromDrop.length > 0) {
+    fromDrop.sort((a, b) => a.price - b.price);
+    return fromDrop[0];
+  }
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -814,26 +834,31 @@ export async function buildLocalProgram(
     }
   }
 
-  // 4. Pick ground transfers (now passing cityDefs for strict matching)
+  // 4. Pick ground transfers (now passing cityDefs for strict matching).
+  // Use the actual stay order (not the deduped city list) so the last stay's
+  // city — not last unique — gets the departure drop. For a Moscow → StP →
+  // Moscow trip, the employee leaves from Moscow, not StP.
   const selectedTransfers: SelectedTransfer[] = [];
-  const firstCity = request.cities[0];
-  const lastCity = request.cities[request.cities.length - 1];
+  const firstCity = stayOrder.length > 0 ? stayOrder[0].city : request.cities[0];
+  const lastCity = stayOrder.length > 0 ? stayOrder[stayOrder.length - 1].city : request.cities[request.cities.length - 1];
   const dest = request.destination!;
   // Arrival pickup (Day 1)
   const arrPickup = findArrivalPickup(allTours, firstCity, dest, cityDefs);
   if (arrPickup) selectedTransfers.push({ day: 1, row: arrPickup, kind: "Pickup" });
-  // Inter-city transfers + arrival pickups
+  // Inter-city transfers + arrival pickups. Allow re-using the same Pickup
+  // row for repeat city visits (a Moscow → StP → Moscow loop needs a new
+  // Moscow pickup the second time around — same row, different occasion).
   for (const d of days) {
     if (d.type === "transit" && d.fromCity && d.toCity) {
       const fromAirportDrop = findInterCityTransfer(allTours, d.fromCity, d.toCity, dest, cityDefs);
       if (fromAirportDrop) selectedTransfers.push({ day: d.number, row: fromAirportDrop, kind: "Drop" });
       const arrPickupForCity = findArrivalPickup(allTours, d.toCity, dest, cityDefs);
-      if (arrPickupForCity && arrPickupForCity.id !== arrPickup?.id) {
+      if (arrPickupForCity) {
         selectedTransfers.push({ day: d.number, row: arrPickupForCity, kind: "Pickup" });
       }
     }
   }
-  // Departure drop (last day)
+  // Departure drop (last day) — uses the last STAY's city, not last unique
   const depDrop = findDepartureDrop(allTours, lastCity, dest, cityDefs);
   if (depDrop) selectedTransfers.push({ day: days.length, row: depDrop, kind: "Drop" });
 
