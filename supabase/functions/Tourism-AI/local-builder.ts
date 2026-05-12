@@ -396,22 +396,24 @@ function resolveStartDate(request: TripRequest): Date {
 
 /**
  * Build the day-by-day arrangement for the program.
- * Day 1 of each city = arrival/transit-in, then stay days, then transit out
- * is the FIRST day of the next city.
+ * Uses cityStaysOrdered if available (preserves order + duplicates like
+ * "Hanoi at start AND Hanoi at end"). Falls back to deduped cities otherwise.
  */
 export function arrangeDays(request: TripRequest): Day[] {
   const days: Day[] = [];
   const startDate = resolveStartDate(request);
 
-  const cityOrder = request.cities.length > 0
-    ? request.cities
-    : Object.keys(request.nightsByCity);
+  // Prefer the ordered list so repeated cities are kept as separate stays
+  const orderedStays: Array<{ city: string; nights: number }> =
+    request.cityStaysOrdered && request.cityStaysOrdered.length > 0
+      ? request.cityStaysOrdered.filter(s => s.nights > 0)
+      : (request.cities.length > 0 ? request.cities : Object.keys(request.nightsByCity))
+          .map(c => ({ city: c, nights: request.nightsByCity[c] || 0 }))
+          .filter(s => s.nights > 0);
 
   let dayNum = 1;
-  for (let i = 0; i < cityOrder.length; i++) {
-    const city = cityOrder[i];
-    const nights = request.nightsByCity[city] || 0;
-    if (nights <= 0) continue;
+  for (let i = 0; i < orderedStays.length; i++) {
+    const { city, nights } = orderedStays[i];
 
     for (let n = 0; n < nights; n++) {
       const date = addDays(startDate, dayNum - 1);
@@ -422,7 +424,7 @@ export function arrangeDays(request: TripRequest): Day[] {
         type = "arrival";
       } else if (n === 0) {
         type = "transit";
-        fromCity = cityOrder[i - 1];
+        fromCity = orderedStays[i - 1].city;
       } else {
         type = "stay";
       }
@@ -432,12 +434,12 @@ export function arrangeDays(request: TripRequest): Day[] {
   }
 
   // Final departure day (one extra day, no sleep)
-  const lastCity = cityOrder[cityOrder.length - 1];
-  if (lastCity) {
+  const lastStay = orderedStays[orderedStays.length - 1];
+  if (lastStay) {
     days.push({
       number: dayNum,
       type: "departure",
-      city: lastCity,
+      city: lastStay.city,
       date: addDays(startDate, dayNum - 1),
     });
   }
@@ -556,10 +558,11 @@ export function formatProgram(data: ProgramData): string {
     out += "EXTRA_BED_CITIES:" + data.extraBedScope.map(c => `${c}=1`).join(", ") + "\n\n";
   }
 
-  // ── TRANSFERS ────────────────────────────────────────────────────────
+  // ── TRANSFERS (sorted by day) ────────────────────────────────────────
   out += "TRANSFERS:\n";
   let transfersTotal = 0;
-  for (const t of transfers) {
+  const sortedTransfers = [...transfers].sort((a, b) => a.day - b.day);
+  for (const t of sortedTransfers) {
     const isShared = request.transport === "shared";
     const price = pickTourVariantPrice(t.row, adults, isShared);
     transfersTotal += isShared ? price * adults : price;
@@ -567,10 +570,11 @@ export function formatProgram(data: ProgramData): string {
   }
   out += "\n";
 
-  // ── TOURS ────────────────────────────────────────────────────────────
+  // ── TOURS (sorted by day for clean reading) ──────────────────────────
   out += "TOURS:\n";
   let toursTotal = 0;
-  for (const tt of tours) {
+  const sortedTours = [...tours].sort((a, b) => a.day - b.day);
+  for (const tt of sortedTours) {
     const price = pickTourVariantPrice(tt.tour, adults, false); // tours always private
     toursTotal += price;
     const tourType = "ثقافية"; // default; sheet doesn't always specify
@@ -629,21 +633,27 @@ export async function buildLocalProgram(
   }
   const { hotels: allHotels, tours: allTours, flights: allFlights } = await fetchData();
 
-  // 1. Pick hotel per city
+  // 1. Pick hotel for each STAY in order (handles repeated cities like
+  //    "Hanoi at start, Sapa middle, Hanoi at end" → 2 separate Hanoi stays).
   const days = arrangeDays(request);
-  const hotelsByCity = new Map<string, SelectedHotel>();
-  for (const city of request.cities) {
-    const nights = request.nightsByCity[city] || 0;
-    if (nights <= 0) continue;
-    const hotel = pickCheapestHotel(allHotels, city, request);
+  const stayOrder = request.cityStaysOrdered && request.cityStaysOrdered.length > 0
+    ? request.cityStaysOrdered.filter(s => s.nights > 0)
+    : request.cities.map(c => ({ city: c, nights: request.nightsByCity[c] || 0 })).filter(s => s.nights > 0);
+  const hotelsList: SelectedHotel[] = [];
+  // Walk days in order, grouping consecutive same-city days into stays.
+  let consumedDays = 0;
+  for (const stay of stayOrder) {
+    const hotel = pickCheapestHotel(allHotels, stay.city, request);
     if (!hotel) {
-      return { ok: false, chatMessage: `ما عندنا فندق يطابق المعايير في ${city} (Adults=${request.adults}، نجوم=${request.stars?.join("/")  || "أيّ"}).` };
+      return { ok: false, chatMessage: `ما عندنا فندق يطابق المعايير في ${stay.city} (Adults=${request.adults}، نجوم=${request.stars?.join("/")  || "أيّ"}).` };
     }
-    // Compute date range for this hotel stay
-    const cityDays = days.filter(d => d.city === city && d.type !== "departure");
-    const rangeFrom = cityDays[0].date;
-    const rangeTo = addDays(cityDays[cityDays.length - 1].date, 1);
-    hotelsByCity.set(city, { city, hotel, nights, rangeFrom, rangeTo });
+    // Pull this stay's days out of the days[] array (next N days)
+    const stayDays = days.slice(consumedDays, consumedDays + stay.nights);
+    consumedDays += stay.nights;
+    if (stayDays.length === 0) continue;
+    const rangeFrom = stayDays[0].date;
+    const rangeTo = addDays(stayDays[stayDays.length - 1].date, 1);
+    hotelsList.push({ city: stay.city, hotel, nights: stay.nights, rangeFrom, rangeTo });
   }
 
   // 2. Pick tours for each city's stay days. STAY days only —
@@ -670,16 +680,10 @@ export async function buildLocalProgram(
     }
   }
 
-  // 3. Pick inter-city flights
-  const flightsList = pickInterCityFlights(allFlights, [...new Set(request.cities)]);
+  // 3. FLIGHTS — DISABLED per user request. Flights are always assumed to
+  //    exist (booked separately by the client). Inter-city movement is
+  //    handled exclusively via TRANSFERS rows below.
   const selectedFlights: SelectedFlight[] = [];
-  for (const flight of flightsList) {
-    // Find the transit day where this flight occurs
-    const day = days.find(d => d.type === "transit" && d.fromCity && d.toCity &&
-      cityMatchesFlight(d.fromCity, flight.from_city) &&
-      cityMatchesFlight(d.toCity, flight.to_city));
-    selectedFlights.push({ day: day?.number || 1, flight });
-  }
 
   // 4. Pick ground transfers (now passing cityDefs for strict matching)
   const selectedTransfers: SelectedTransfer[] = [];
@@ -709,7 +713,7 @@ export async function buildLocalProgram(
     request,
     destinationName: DESTINATION_AR_NAMES[dest] || dest,
     days,
-    hotels: Array.from(hotelsByCity.values()),
+    hotels: hotelsList,
     flights: selectedFlights,
     tours: selectedTours,
     transfers: selectedTransfers,

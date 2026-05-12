@@ -4,14 +4,22 @@
 // asked for. Used by the deterministic program builder + validators.
 // ─────────────────────────────────────────────────────────────────────────
 
+export type CityStay = { city: string; nights: number };
+
 export type TripRequest = {
   /** "vietnam" / "Malaysia" / etc. — same canonical names as DEST_CITIES keys */
   destination: string | null;
-  /** Canonical city names mentioned by the employee (in mention order) */
+  /** Canonical city names mentioned by the employee (deduped) */
   cities: string[];
+  /**
+   * ORDERED stays — preserves the order the employee gave AND keeps duplicates
+   * (e.g. "2 هانوي + 2 هالونج + 2 هانوي" produces 3 entries with Hanoi twice).
+   * Used by the Day Arranger to schedule the actual route.
+   */
+  cityStaysOrdered: CityStay[];
   /** Total days from "N يوم" / "N أيام" */
   daysTotal: number | null;
-  /** Per-city nights distribution from "هانوي 3 + سابا 2" */
+  /** Per-city nights TOTAL across all stays (sum of cityStaysOrdered) */
   nightsByCity: Record<string, number>;
   /** Number of adults (defaults to 2 if not given) */
   adults: number | null;
@@ -244,6 +252,40 @@ function parseStartDate(text: string): string | null {
  *   "Hanoi=4، Penang=3"
  *   "كوالالمبور 4 وبينانج 3"
  */
+/**
+ * Parse ordered city stays from text. Scans the text linearly for "N city"
+ * pairs where the digit appears immediately before (or after) a city name —
+ * NOT bare digits like "6 اشخاص" or "15 يوم" elsewhere in the message.
+ * Preserves the ORDER the employee wrote, INCLUDING duplicates.
+ */
+function parseCityStaysOrdered(text: string, cityDefs: CityDef[]): CityStay[] {
+  const t = arabicDigitsToLatin(text);
+  // Build a single combined regex matching either "N city" or "city N",
+  // capturing the city name + number. Use named-group alternation by
+  // running per-city regex and merging results sorted by position.
+  type Hit = { city: string; nights: number; pos: number };
+  const hits: Hit[] = [];
+  for (const { canonical, pattern } of cityDefs) {
+    const cityPat = pattern.source;
+    const re = new RegExp(
+      `(?:(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|ليلتين|نايت|night)?\\s*(?:${cityPat}))` +
+      `|(?:(?:${cityPat})\\s*(?:=|:|-|بـ|في|عن|لمدة|ل)?\\s*(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|ليلتين|نايت|night)?)`,
+      "igu"
+    );
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(t)) !== null) {
+      const n = parseInt(m[1] || m[2] || "0", 10);
+      if (n > 0 && n <= 30) {
+        hits.push({ city: canonical, nights: n, pos: m.index });
+      }
+      if (m.index === re.lastIndex) re.lastIndex++;
+    }
+  }
+  // Sort by position so we get the order the employee wrote them
+  hits.sort((a, b) => a.pos - b.pos);
+  return hits.map(h => ({ city: h.city, nights: h.nights }));
+}
+
 function parseNightsByCity(text: string, cityDefs: CityDef[]): Record<string, number> {
   const t = arabicDigitsToLatin(text);
   const result: Record<string, number> = {};
@@ -281,11 +323,22 @@ export function parseTripRequest(
   const cities = parseCities(text, cityDefs);
   const monthInfo = parseMonth(text);
 
+  const stays = parseCityStaysOrdered(text, cityDefs);
+  // If we have ordered stays, derive nightsByCity from them (sums duplicates).
+  // Else fall back to the legacy per-city scanner.
+  const nightsByCity = stays.length > 0
+    ? stays.reduce<Record<string, number>>((acc, s) => {
+        acc[s.city] = (acc[s.city] || 0) + s.nights;
+        return acc;
+      }, {})
+    : parseNightsByCity(text, cityDefs);
+
   return {
     destination: dest,
     cities,
+    cityStaysOrdered: stays,
     daysTotal: parseDays(text),
-    nightsByCity: parseNightsByCity(text, cityDefs),
+    nightsByCity,
     adults: parseAdults(text),
     children: parseChildren(text),
     stars: parseStars(text),
