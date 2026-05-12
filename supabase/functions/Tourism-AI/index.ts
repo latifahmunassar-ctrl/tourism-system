@@ -184,6 +184,124 @@ function buildLiteCitiesContext(destination: string): string {
   return s;
 }
 
+/**
+ * Find the most recent assistant message that contains a built program
+ * (i.e. a "DEST:" header). Returns the raw text or null if none yet.
+ */
+function findLastBuiltProgram(messages: Array<{ role: string; content: unknown }>): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== "assistant") continue;
+    const txt = typeof m.content === "string" ? m.content : (() => {
+      if (Array.isArray(m.content)) {
+        for (const part of m.content as Array<{ type?: string; text?: string }>) {
+          if (part?.type === "text" && typeof part.text === "string") return part.text;
+        }
+      }
+      return "";
+    })();
+    if (typeof txt === "string" && /^DEST:/m.test(txt)) return txt;
+  }
+  return null;
+}
+
+/**
+ * Try to apply a simple structural edit (extra-bed / SIM count) to the previous
+ * program text. Returns the patched program or null if the message doesn't
+ * match a known local-edit pattern (so the handler falls back to Claude).
+ *
+ * Saves ~$0.04 per edit because Claude doesn't get called at all.
+ */
+function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
+  const msg = userMsg.trim();
+  if (msg.length === 0) return null;
+
+  // Helper: insert a new line right before the FLIGHTS section (or before
+  // SUMMARY if FLIGHTS is missing). Replaces an existing same-key line if any.
+  const upsertSectionLine = (text: string, key: string, value: string): string => {
+    const newLine = `${key}:${value}`;
+    const re = new RegExp(`^${key}:.*$`, "m");
+    if (re.test(text)) {
+      return text.replace(re, newLine);
+    }
+    // Insert before FLIGHTS, then before TRANSFERS, then before SUMMARY
+    for (const anchor of ["FLIGHTS:", "TRANSFERS:", "TOURS:", "SUMMARY:"]) {
+      const idx = text.indexOf(`\n${anchor}`);
+      if (idx >= 0) return text.slice(0, idx) + `\n${newLine}` + text.slice(idx);
+    }
+    // Fallback: append at end before CHAT
+    const chatIdx = text.indexOf("\nCHAT:");
+    if (chatIdx >= 0) return text.slice(0, chatIdx) + `\n${newLine}` + text.slice(chatIdx);
+    return text + `\n${newLine}`;
+  };
+
+  const removeSectionLine = (text: string, key: string): string => {
+    return text.replace(new RegExp(`^${key}:.*$\\n?`, "m"), "");
+  };
+
+  const noteHeader = "CHAT:تم تطبيق التعديل محلياً (بدون تكلفة API).";
+  const replaceChat = (text: string, newChat: string): string => {
+    if (/^CHAT:.*$/m.test(text)) return text.replace(/^CHAT:.*$/m, newChat);
+    return text.trimEnd() + `\n\n${newChat}`;
+  };
+
+  // ── Pattern 1: REMOVE extra bed ──────────────────────────────────────
+  // "احذف السرير الإضافي" / "شيل السرير" / "بدون سرير إضافي" / "remove extra bed"
+  if (/(احذف|شيل|الغ[يى]?|بدون|remove|cancel)\s*(?:ال)?سرير\s*(?:ال)?(?:إضافي|اضافي|اضاف)/i.test(msg)
+      || /no\s*extra\s*bed|cancel\s*extra\s*bed/i.test(msg)) {
+    let patched = removeSectionLine(prevProgram, "EXTRA_BED_CITIES");
+    patched = replaceChat(patched, noteHeader.replace("التعديل", "حذف السرير الإضافي"));
+    return patched;
+  }
+
+  // ── Pattern 2: ADD extra bed ─────────────────────────────────────────
+  // "ضيف/أضف/زود سرير اضافي [للكل / لهانوي / لـ X]"
+  const addBedRe = /(?:ضيف|اضف|أضف|زود|اضيف|add|put)\s*.{0,15}?\s*(?:سرير(?:[يى])?|extra\s*bed|sofa\s*bed)/i;
+  if (addBedRe.test(msg)) {
+    // Default scope: ALL
+    let value = "ALL=1";
+    // Try to detect a city name to scope it
+    const cityMap: Record<string, string> = {};
+    for (const dest of Object.keys(DEST_CITIES)) {
+      for (const c of DEST_CITIES[dest]) cityMap[c.canonical] = c.pattern.source;
+    }
+    for (const [canonical, src] of Object.entries(cityMap)) {
+      const re = new RegExp(src, "i");
+      if (re.test(msg)) { value = `${canonical}=1`; break; }
+    }
+    let patched = upsertSectionLine(prevProgram, "EXTRA_BED_CITIES", value);
+    patched = replaceChat(patched, noteHeader.replace("التعديل", `إضافة سرير إضافي (${value})`));
+    return patched;
+  }
+
+  // ── Pattern 3: CHANGE SIM count ──────────────────────────────────────
+  // "غيّر الشرائح لـ N" / "خل الشرائح N" / "اجعل الشرائح N شرائح"
+  const simRe = /(?:غير|غيّر|خل[يى]?|اجعل|عدل|change|set)\s*(?:عدد\s*)?(?:ال)?شرا(?:ئ|ي)ح\s*(?:هاتف\s*)?(?:لـ|إلى|الى|ل|to|=)?\s*(\d{1,2})/i;
+  const sm = msg.match(simRe);
+  if (sm) {
+    const n = parseInt(sm[1], 10);
+    if (n >= 0 && n <= 50) {
+      let patched: string;
+      if (n === 0) {
+        patched = removeSectionLine(prevProgram, "SIM");
+      } else {
+        patched = upsertSectionLine(prevProgram, "SIM", String(n));
+      }
+      patched = replaceChat(patched, noteHeader.replace("التعديل", `تعديل عدد الشرائح إلى ${n}`));
+      return patched;
+    }
+  }
+
+  // ── Pattern 4: REMOVE SIM ────────────────────────────────────────────
+  if (/(احذف|شيل|الغ[يى]?|بدون|remove|cancel)\s*(?:ال)?شرا(?:ئ|ي)ح/i.test(msg)) {
+    let patched = removeSectionLine(prevProgram, "SIM");
+    patched = replaceChat(patched, noteHeader.replace("التعديل", "حذف الشرائح"));
+    return patched;
+  }
+
+  return null;  // Not a known local edit → fall through to Claude
+}
+
 async function buildDataContext(
   supabase: ReturnType<typeof createClient>,
   destinationFilter: string | null = null,
@@ -485,8 +603,11 @@ function buildSystemPrompt(dataContext: string, frontendFormat: string): string 
     أو جولات. في هذه الحالة، أَجب بـ CHAT فقط بهذه الصيغة الحرفية:
 
     CHAT:تمام! المدن المتاحة في [الوجهة]: [اذكر القائمة من قسم
-    "📍 المدن المتاحة" أعلاه]. كم ليلة لكل مدينة؟ (مجموع الليالي يجب أن
-    يساوي [عدد الأيام - 1]). + كم شريحة هاتف؟ (50 ريال للشريحة، أو قول "بدون").
+    "📍 المدن المتاحة" أعلاه]. عشان أبني البرنامج بمكالمة واحدة (بأقل تكلفة)،
+    أعطني في رد واحد:
+    1) كم ليلة لكل مدينة؟ (مجموع الليالي = [عدد الأيام - 1])
+    2) كم شريحة هاتف؟ (50 ريال للشريحة، أو "بدون")
+    3) سرير إضافي؟ ("نعم لكل الفنادق" / "نعم لـ [مدينة]" / "بدون")
 
     ❌ ممنوع منعاً باتاً اقتراح توزيع من عندك ("أقترح هانوي 3 + سابا 2…").
     ❌ ممنوع بناء أيّ برنامج DEST: لأنّ البيانات الكاملة لم تُرسَل بعد.
@@ -1556,6 +1677,27 @@ Deno.serve(async (req) => {
 
     const detectedDest  = detectDestination(messages);
     const detectedCities = detectedDest ? detectCitiesFromMessage(messages, detectedDest) : [];
+
+    // ── Local Edit Engine ────────────────────────────────────────────────
+    // If the last user message is a simple structural patch (add/remove
+    // extra-bed, change SIM count) AND a built program exists in history,
+    // apply it locally and skip Anthropic entirely. Costs $0.
+    const lastUserMsg = (messages.length > 0 && messages[messages.length - 1].role === "user")
+      ? String(messages[messages.length - 1].content || "")
+      : "";
+    const lastAssistantProgram = findLastBuiltProgram(messages);
+    if (lastAssistantProgram && lastUserMsg) {
+      const patched = tryLocalEdit(lastUserMsg, lastAssistantProgram);
+      if (patched) {
+        return new Response(JSON.stringify({
+          id: "local-edit",
+          model: "local-edit-engine",
+          role: "assistant",
+          content: [{ type: "text", text: patched }],
+          usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+        }), { headers: CORS_HEADERS });
+      }
+    }
 
     // Local validation: if cities AND a per-city night distribution are
     // present but they don't sum to (days - 1), reject right here without
