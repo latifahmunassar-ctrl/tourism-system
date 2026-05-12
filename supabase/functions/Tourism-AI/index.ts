@@ -270,6 +270,115 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     return text.trimEnd() + `\n\n${newChat}`;
   };
 
+  // Recompute SUMMARY block after a structural edit (SIM count or extra-bed).
+  // The frontend recomputes the displayed total dynamically, but the program
+  // text itself (used for PDF export, DB save, chat display) needs to be in
+  // sync — otherwise employees see "TOTAL_GROUP:21,425" while the side panel
+  // shows 21,575. This rewrites just the lines that depend on SIM/extra-bed
+  // and leaves any unknown summary lines untouched.
+  const recomputeSummary = (text: string): string => {
+    const fmtNum = (n: number) => n.toLocaleString("en-US");
+    // First number only — hotel cells like "2 ليالي (من 1 يونيو 2026 إلى 3 يونيو 2026)"
+    // would otherwise concatenate to "212026320265" if we stripped all non-digits.
+    const firstInt = (s: string): number => {
+      const m = String(s || "").match(/(\d[\d,]*)/);
+      return m ? parseInt(m[1].replace(/,/g, ""), 10) || 0 : 0;
+    };
+    // For SUMMARY rows like "12,240 ريال" the first run captures the whole money.
+    const parseMoney = firstInt;
+
+    // Adults from META: "META:N أيام | M ليالي | ... | A أشخاص"
+    const metaPaxMatch = text.match(/META:[^\n]*?\|\s*(\d+)\s*(?:شخص|أشخاص|بالغين|بالغ)/);
+    const adults = metaPaxMatch ? parseInt(metaPaxMatch[1], 10) : 1;
+
+    // SIM count → SIM cost
+    const simMatch = text.match(/^SIM:\s*(\d+)/m);
+    const simCount = simMatch ? parseInt(simMatch[1], 10) : 0;
+    const simTotal = simCount * 50;
+
+    // EXTRA_BED_CITIES → which cities (or ALL) get a bed
+    const ebMatch = text.match(/^EXTRA_BED_CITIES:(.+)$/m);
+    const ebLine = ebMatch ? ebMatch[1].trim() : "";
+    const isAllBed = /\bALL\s*=/i.test(ebLine);
+    const ebCityKeys = new Set<string>();
+    if (!isAllBed && ebLine) {
+      for (const part of ebLine.split(/[,،;]/)) {
+        const eq = part.indexOf("=");
+        const name = (eq >= 0 ? part.slice(0, eq) : part).trim().toLowerCase();
+        if (name) ebCityKeys.add(name);
+      }
+    }
+
+    // Walk HOTELS lines: extract city/stars/price/nights to compute base
+    // hotels total + extra-bed cost. Format:
+    //   "Hotel Name | City | N نجوم | RoomType | PRICE ريال/ليلة | N ليالي (...) | meals"
+    const hotelsBlock = text.match(/HOTELS:\s*\n([\s\S]*?)(?=\n[A-Z_]+:|$)/);
+    let baseHotels = 0;
+    let extraBedTotal = 0;
+    if (hotelsBlock) {
+      for (const line of hotelsBlock[1].split("\n")) {
+        const cols = line.split("|").map(s => s.trim());
+        if (cols.length < 6) continue;
+        const cityKey = cols[1].toLowerCase();
+        const stars = firstInt(cols[2]);
+        const price = firstInt(cols[4]);
+        const nights = firstInt(cols[5]);
+        if (price === 0 || nights === 0) continue;
+        baseHotels += price * nights;
+        if (stars >= 4 && stars <= 5) {
+          const cityHasBed = isAllBed || ebCityKeys.has(cityKey);
+          if (cityHasBed) {
+            const bedNightly = stars >= 5 ? 120 : 100;
+            extraBedTotal += bedNightly * nights;
+          }
+        }
+      }
+    }
+    const hotelsWithBed = baseHotels + extraBedTotal;
+
+    // Read existing SUMMARY block (it has the unchanged flights/transfers/
+    // tours subtotals — we trust those since this edit didn't touch them).
+    const sumMatch = text.match(/(SUMMARY:\s*\n)([\s\S]*?)(?=\nCHAT:|$)/);
+    if (!sumMatch) return text;
+    let lines = sumMatch[2].split("\n").map(l => l.trim()).filter(Boolean);
+
+    const findVal = (labelRe: RegExp) => {
+      for (const l of lines) {
+        const p = l.split("|").map(x => x.trim());
+        if (labelRe.test(p[0] || "")) return firstInt(p[1] || "");
+      }
+      return 0;
+    };
+    const flightsTotal = findVal(/طيران/);
+    const transfersTotal = findVal(/انتقال/);
+    const toursTotal = findVal(/جولات/);
+
+    const newGroup = hotelsWithBed + flightsTotal + transfersTotal + toursTotal + simTotal;
+    const perPerson = adults > 0 ? Math.round(newGroup / adults) : newGroup;
+
+    // Upsert specific lines, preserve any unknown extras
+    const upsert = (labelRe: RegExp, newLine: string) => {
+      let found = false;
+      lines = lines.map(l => (labelRe.test(l) && !found) ? (found = true, newLine) : l);
+      if (!found) {
+        const idx = lines.findIndex(l => /^TOTAL_/.test(l));
+        if (idx >= 0) lines.splice(idx, 0, newLine); else lines.push(newLine);
+      }
+    };
+    upsert(/^الفنادق/, `الفنادق | ${fmtNum(hotelsWithBed)} ريال`);
+    if (simTotal > 0) {
+      upsert(/^شرائح\s*الاتصال/, `شرائح الاتصال | ${fmtNum(simTotal)} ريال`);
+    } else {
+      lines = lines.filter(l => !/^شرائح\s*الاتصال/.test(l));
+    }
+    upsert(/^TOTAL_PER_PERSON/, `TOTAL_PER_PERSON:${fmtNum(perPerson)}`);
+    const groupSuffix = `${adults} ${adults === 1 ? "شخص" : "أشخاص"}`;
+    upsert(/^TOTAL_GROUP/, `TOTAL_GROUP:${fmtNum(newGroup)} | ${groupSuffix}`);
+
+    return text.replace(/(SUMMARY:\s*\n)([\s\S]*?)(?=\nCHAT:|$)/,
+      sumMatch[1] + lines.join("\n") + "\n");
+  };
+
   // Helper: is this an "extra bed" mention? (covers many spellings)
   // Saudi/colloquial Arabic frequently uses ه instead of ة, ا instead of أ/إ,
   // and ى instead of ي — so every Arabic class is widened to accept both.
@@ -361,7 +470,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
       // No city named OR nothing to subtract from → remove the whole line
       patched = removeSectionLine(prevProgram, "EXTRA_BED_CITIES");
       patched = replaceChat(patched, noteHeader.replace("التعديل", "حذف السرير الإضافي من جميع الفنادق"));
-      return patched;
+      return recomputeSummary(patched);
     }
     // City-scoped removal: expand ALL=1 to actual hotel cities, then subtract.
     const baseCities = existing.mode === "all" ? getProgramCities(prevProgram) : existing.cities;
@@ -373,7 +482,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     }
     patched = replaceChat(patched, noteHeader.replace("التعديل",
       `حذف السرير الإضافي من ${requestedCities.join("، ")}`));
-    return patched;
+    return recomputeSummary(patched);
   }
 
   // ── Pattern 2: ADD extra bed ─────────────────────────────────────────
@@ -399,7 +508,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     }
     let patched = upsertSectionLine(prevProgram, "EXTRA_BED_CITIES", value);
     patched = replaceChat(patched, noteHeader.replace("التعديل", `إضافة سرير إضافي (${value})`));
-    return patched;
+    return recomputeSummary(patched);
   }
 
   // SIM keyword — singular/plural, with ة or ه, شرائح or شرايح, "sim card"
@@ -444,7 +553,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     if (count > 0 && count <= 50) {
       let patched = upsertSectionLine(prevProgram, "SIM", String(count));
       patched = replaceChat(patched, noteHeader.replace("التعديل", `إضافة شرائح هاتف (${count})`));
-      return patched;
+      return recomputeSummary(patched);
     }
   }
 
@@ -461,7 +570,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
         patched = upsertSectionLine(prevProgram, "SIM", String(n));
       }
       patched = replaceChat(patched, noteHeader.replace("التعديل", `تعديل عدد الشرائح إلى ${n}`));
-      return patched;
+      return recomputeSummary(patched);
     }
   }
 
@@ -469,7 +578,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
   if (/(احذف|شيل|الغ[يى]?|بدون|من\s*غير|remove|cancel|no)\s*(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim)/iu.test(msg)) {
     let patched = removeSectionLine(prevProgram, "SIM");
     patched = replaceChat(patched, noteHeader.replace("التعديل", "حذف الشرائح"));
-    return patched;
+    return recomputeSummary(patched);
   }
 
   return null;  // Not a known local edit → fall through to Claude
