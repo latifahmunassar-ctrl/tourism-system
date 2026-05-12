@@ -372,7 +372,8 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
       lines = lines.filter(l => !/^شرائح\s*الاتصال/.test(l));
     }
     upsert(/^TOTAL_PER_PERSON/, `TOTAL_PER_PERSON:${fmtNum(perPerson)}`);
-    const groupSuffix = `${adults} ${adults === 1 ? "شخص" : "أشخاص"}`;
+    // Match local-builder pluralization (lines 522/598): 1 or 2 → "شخص", else "أشخاص"
+    const groupSuffix = `${adults} ${(adults === 1 || adults === 2) ? "شخص" : "أشخاص"}`;
     upsert(/^TOTAL_GROUP/, `TOTAL_GROUP:${fmtNum(newGroup)} | ${groupSuffix}`);
 
     return text.replace(/(SUMMARY:\s*\n)([\s\S]*?)(?=\nCHAT:|$)/,
