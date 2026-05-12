@@ -245,19 +245,32 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     return text.trimEnd() + `\n\n${newChat}`;
   };
 
+  // Helper: is this an "extra bed" mention? (covers many spellings)
+  // - سرير / اسرة / أسرّة / سرايا / سراير / سرير(ين)؟
+  // - اضافي / إضافي / اضاف / زيادة / extra bed / sofa bed
+  const isBedKeyword = /(?:سرير|اسرّ?ة|أسرّة|أسرة|سراير|سرايا|سرير(?:ين|ان)?|extra\s*-?\s*bed|sofa\s*-?\s*bed|rollaway|extra\s*mattress)/iu;
+  const hasExtraIntent = /(?:اضافي|إضافي|اضاف|زيادة|زياده|اضاف[يى]ه?|extra)/iu;
+
   // ── Pattern 1: REMOVE extra bed ──────────────────────────────────────
   // "احذف السرير الإضافي" / "شيل السرير" / "بدون سرير إضافي" / "remove extra bed"
-  if (/(احذف|شيل|الغ[يى]?|بدون|remove|cancel)\s*(?:ال)?سرير\s*(?:ال)?(?:إضافي|اضافي|اضاف)/i.test(msg)
-      || /no\s*extra\s*bed|cancel\s*extra\s*bed/i.test(msg)) {
+  if (
+    (/(?:^|\s)(احذف|شيل|ألغ[يى]?|الغ[يى]?|بدون|من\s*غير|بد[ييى]?\s*بدون|remove|cancel|no)\b/iu.test(msg)
+      && isBedKeyword.test(msg))
+    || /no\s*extra\s*bed|cancel\s*extra\s*bed/i.test(msg)
+  ) {
     let patched = removeSectionLine(prevProgram, "EXTRA_BED_CITIES");
     patched = replaceChat(patched, noteHeader.replace("التعديل", "حذف السرير الإضافي"));
     return patched;
   }
 
   // ── Pattern 2: ADD extra bed ─────────────────────────────────────────
-  // "ضيف/أضف/زود سرير اضافي [للكل / لهانوي / لـ X]"
-  const addBedRe = /(?:ضيف|اضف|أضف|زود|اضيف|add|put)\s*.{0,15}?\s*(?:سرير(?:[يى])?|extra\s*bed|sofa\s*bed)/i;
-  if (addBedRe.test(msg)) {
+  // Triggers when the message has any "add" verb (ضيف/اضف/زود/بدي/ابغى/...)
+  // OR just mentions extra bed positively, AND mentions a bed keyword.
+  const addVerb = /(?:ضيف|أضيف|اضف|أضف|زود|أزود|اضيف|أحتاج|احتاج|يحتاج|بدي|ابغى|أبغى|أبي|ابي|أريد|اريد|need|want|add|put|include)/iu;
+  const addBedHit =
+    (addVerb.test(msg) && isBedKeyword.test(msg)) ||
+    (isBedKeyword.test(msg) && hasExtraIntent.test(msg));
+  if (addBedHit) {
     // Default scope: ALL
     let value = "ALL=1";
     // Try to detect a city name to scope it
