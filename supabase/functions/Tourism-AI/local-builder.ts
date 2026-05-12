@@ -344,8 +344,8 @@ export function findArrivalPickup(
   // both "استقبال من مطار موسكو" and "استقبال من قطار موسكو" — picking the
   // wrong one mislabels the transfer (employee sees airport pickup on day 7
   // when they actually arrived from St Petersburg by train).
-  const isAirport = (n: string) => /مطار|airport/iu.test(n) && !/قطار|محطة|station|train/iu.test(n);
-  const isTrain   = (n: string) => /قطار|محطة|station|train/iu.test(n);
+  const isAirport = (n: string) => /مطار|airport/iu.test(n) && !/قطار|محط[هة]|station|train/iu.test(n);
+  const isTrain   = (n: string) => /قطار|محط[هة]|station|train/iu.test(n);
   const preferred = candidates.filter(c => preferType === "airport" ? isAirport(c.name) : isTrain(c.name));
   const pool = preferred.length > 0 ? preferred : candidates;
   pool.sort((a, b) => a.price - b.price);
@@ -378,11 +378,11 @@ export function findInterCityTransfer(
   transitKind: "airport" | "train" = "airport",
 ): TourRow | null {
   // (Path 1 — "row mentions both cities" — was too loose: a row like
-  // "التوجه من فندق سانت برغ الى محطة القطار لذهاب الى موسكو" mentions both
+  // "التوجه من فندق سانت برغ الى محط[هة] القطار لذهاب الى موسكو" mentions both
   // Moscow and StP but is a drop FROM StP only. Path 2's anchored matching
   // is strictly more correct.)
 
-  // Path 2: an explicit drop-from-fromCity row (توديع/التوجه إلى المطار/المحطة)
+  // Path 2: an explicit drop-from-fromCity row (توديع/التوجه إلى المطار/المحط[هة])
   // — used when leaving a city by train or flight. Real Russia data uses
   // separate rows per city, not one combined inter-city transfer.
   // Must NOT match Pickup rows that say "استقبال … والتوجه إلى الفندق" — so
@@ -395,14 +395,14 @@ export function findInterCityTransfer(
     if (tr.type !== destination) return false;
     const n = tr.name;
     if (/استقبال|الاستقبال|pickup/iu.test(n)) return false; // hard reject
-    if (!/توديع|التوديع|للعوده|للعودة|drop/iu.test(n) && !/التوجه.*(?:مطار|محطة|airport|station)/iu.test(n)) return false;
-    if (!/مطار|محطة|station|airport|قطار/iu.test(n)) return false;
+    if (!/توديع|التوديع|للعوده|للعودة|drop/iu.test(n) && !/التوجه.*(?:مطار|محط[هة]|airport|station)/iu.test(n)) return false;
+    if (!/مطار|محط[هة]|station|airport|قطار/iu.test(n)) return false;
     // Transit-kind filter: train transits should NOT match an "airport drop"
     // row (and vice versa). The Russia sheet has a "توديع موسكو إلى المطار
     // الدولي للعوده الى أرض الوطن" — that's a final-departure airport row,
     // not appropriate for an inter-city train transit.
-    const isAirportRow = /مطار|airport/iu.test(n) && !/قطار|محطة|station|train/iu.test(n);
-    const isTrainRow   = /قطار|محطة|station|train/iu.test(n);
+    const isAirportRow = /مطار|airport/iu.test(n) && !/قطار|محط[هة]|station|train/iu.test(n);
+    const isTrainRow   = /قطار|محط[هة]|station|train/iu.test(n);
     if (transitKind === "train" && !isTrainRow) return false;
     if (transitKind === "airport" && isTrainRow && !isAirportRow) return false;
     // Departure city must appear in the "من فندق ..." segment (not just
