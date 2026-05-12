@@ -63,11 +63,12 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Ho Chi Minh", pattern: /هوتشي|ho\s*chi|saigon|سايغون/i },
   ],
   Malaysia: [
-    { canonical: "Kuala Lumpur",     pattern: /كوالالمبور|كوالا\s*لمبور|kuala\s*lumpur|\bKL\b/i },
-    { canonical: "Selangor",         pattern: /سيلانجور|سيلانغور|selangor|sunway|مدينة\s*الالعاب|مدينة\s*الألعاب/i },
-    { canonical: "Langkawi",         pattern: /لانكاوي|langkawi/i },
-    { canonical: "Penang",           pattern: /بينانج|بينانغ|penang/i },
-    { canonical: "Cameron Highlands",pattern: /كاميرون|cameron|هايلاند|مرتفعات\s*الكامیرون|مرتفعات\s*الكاميرون/i },
+    // كوالا(ل)?(\s*)مبور — accepts كوالالمبور / كوالامبور / كوالا لمبور / كوالا مبور
+    { canonical: "Kuala Lumpur",     pattern: /كوالا\s*ل?مبور|kuala\s*lumpur|\bKL\b/i },
+    { canonical: "Selangor",         pattern: /سيلانجور|سيلانغور|سلانجور|selangor|sunway|مدينة\s*الالعاب|مدينة\s*الألعاب/i },
+    { canonical: "Langkawi",         pattern: /لانكاوي|لنكاوي|langkawi/i },
+    { canonical: "Penang",           pattern: /بينانج|بينانغ|بنانج|بنانغ|penang/i },
+    { canonical: "Cameron Highlands",pattern: /كاميرون|كميرون|cameron|هايلاند|مرتفعات\s*الكامی?رون/i },
   ],
   thailand: [
     { canonical: "Bangkok",      pattern: /بانكوك|bangkok/i },

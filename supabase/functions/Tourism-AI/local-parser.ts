@@ -75,14 +75,19 @@ const ARABIC_MONTHS: Record<string, number> = {
 };
 
 function parseDestination(text: string): string | null {
+  // Keep this in sync with index.ts:detectDestination — both must accept the
+  // same Saudi/colloquial spellings, otherwise canBuildLocally fails for
+  // requests that the outer router accepted (the outer one knows the dest,
+  // but the parser doesn't, so request.destination is null and the engine
+  // falls back to asking the lite question).
   const map: Array<[RegExp, string]> = [
-    [/فيتنام|vietnam/i, "vietnam"],
-    [/ماليزيا|malaysia/i, "Malaysia"],
-    [/إندونيسيا|اندونيسيا|indonesia|بالي|bali|جاكرتا/i, "indonesia"],
-    [/تركيا|turky|turkey|اسطنبول|istanbul|طرابزون|trabzon/i, "Turky"],
-    [/روسيا|russia|موسكو|moscow|سانت بطرسبرغ/i, "russia"],
-    [/البوسنة|bosnia|سراييفو|sarajevo/i, "Bosnia"],
-    [/تايلاند|thailand|بانكوك|bangkok|بوكيت|phuket|كرابي/i, "thailand"],
+    [/فيتنام|ڤيتنام|فيتنامي|vietnam|hanoi|هانوي|halong|هالونج|danang|دانانج|sapa|سابا|phu\s*quoc|فوكوك/i, "vietnam"],
+    [/ماليزيا|مليزيا|ماليزى|malaysia|kuala\s*lumpur|كوالا|كوالالمبور|langkawi|لانكاوي|penang|بينانج|cameron|كاميرون|selangor|سيلانجور|sunway/i, "Malaysia"],
+    [/إندونيسيا|اندونيسيا|اندونيسي|indonesia|بالي|bali|جاكرتا|jakarta|باندونغ|bandung|puncak|بونشاك/i, "indonesia"],
+    [/تركيا|تركى|turky|turkey|اسطنبول|istanbul|طرابزون|trabzon|أوزنجول|اوزنجول|uzungol|بورصة|bursa|ايدر|ayder|سابانجا|sapanca/i, "Turky"],
+    [/روسيا|russia|موسكو|moscow|سانت\s*بطرسبرغ|saint\s*petersburg|سوتشي|sochi/i, "russia"],
+    [/البوسنة|البوسنه|bosnia|سراييفو|sarajevo|موستار|mostar|بيهاتش|bihać|bihac/i, "Bosnia"],
+    [/تايلاند|تايلند|thailand|بانكوك|bangkok|بوكيت|بوكت|phuket|كرابي|krabi|شيانغ|chiang|باتايا|بتايا|pattaya|ساموي|samui/i, "thailand"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;
