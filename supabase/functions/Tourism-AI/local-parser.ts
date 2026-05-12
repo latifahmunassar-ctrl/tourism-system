@@ -249,16 +249,21 @@ function parseNightsByCity(text: string, cityDefs: CityDef[]): Record<string, nu
   const result: Record<string, number> = {};
   for (const { canonical, pattern } of cityDefs) {
     const cityPat = pattern.source;
+    // Global flag — sums ALL occurrences of "N city" / "city N" in the text.
+    // This way "هانوي 2 + ... + هانوي 2" correctly totals as 4 for Hanoi.
     const re = new RegExp(
       `(?:(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|ليلتين|نايت|night)?\\s*(?:${cityPat}))` +
       `|(?:(?:${cityPat})\\s*(?:=|:|-|بـ|في|عن|لمدة|ل)?\\s*(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|ليلتين|نايت|night)?)`,
-      "iu"
+      "igu"
     );
-    const m = t.match(re);
-    if (m) {
+    let total = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(t)) !== null) {
       const n = parseInt(m[1] || m[2] || "0", 10);
-      if (n > 0 && n <= 30) result[canonical] = n;
+      if (n > 0 && n <= 30) total += n;
+      if (m.index === re.lastIndex) re.lastIndex++;
     }
+    if (total > 0) result[canonical] = total;
   }
   return result;
 }

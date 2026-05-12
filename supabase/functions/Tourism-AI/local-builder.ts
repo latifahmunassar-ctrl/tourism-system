@@ -100,25 +100,33 @@ function destFromLocation(location: string): string {
 }
 
 /**
- * Strict city match: use the city's full canonical name. Hotels store the
- * city as "Ha Noi" / "Halong" / "Bayview Hotel Langkawi" → split on " - "
- * gives the city portion. Matching uses **exact-word** comparison after
- * normalization (no substring tricks that confuse "Ha" with "Hanoi").
+ * Match hotel city against a canonical city name. Hotels in the sheet have
+ * messy city values like "Phu Quoc Island,ỉ", "ha.noi", "Cameron.Highland".
+ * The match logic:
+ *   1) normalize both: lowercase, strip diacritics, collapse separators.
+ *   2) compare word sets — every word in the target canonical name must
+ *      appear in the hotel's city (after normalization). Catches
+ *      "Phu Quoc Island" → "Phu Quoc" ✓ but rejects "Halong" → "Ha Noi" ✗.
  */
 function hotelCityMatches(hotelLocation: string, canonicalCity: string): boolean {
   const norm = (s: string) => s
     .toLowerCase()
     .normalize("NFD").replace(/\p{M}/gu, "")
-    .replace(/[\.\-_]/g, " ")
+    .replace(/[\.\-_,]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   const hotelCity = norm(cityFromLocation(hotelLocation));
   const target = norm(canonicalCity);
+  if (!hotelCity || !target) return false;
   // Exact match
   if (hotelCity === target) return true;
-  // Allow "ha noi" vs "hanoi" (whitespace differences)
+  // No-space variant: "halong" === "ha long"
   if (hotelCity.replace(/\s+/g, "") === target.replace(/\s+/g, "")) return true;
-  return false;
+  // Word-set match: all canonical words appear in hotel city
+  // (handles "Phu Quoc Island" matches "Phu Quoc")
+  const targetWords = target.split(/\s+/).filter(Boolean);
+  if (targetWords.length === 0) return false;
+  return targetWords.every(w => hotelCity.includes(w));
 }
 
 /**
