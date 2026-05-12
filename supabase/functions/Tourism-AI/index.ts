@@ -111,10 +111,13 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Bihać",    pattern: /بيهاتش|bihać|bihac/i },
   ],
   indonesia: [
-    { canonical: "Bali",     pattern: /بالي|bali|كوتا|kuta|[أا]وبود|ubud|سمينياك|seminyak|جيمباران|jimbaran|نوسا\s*دوا/i },
-    // jakarta typo: sheet sometimes writes "جاكزتا" with ز instead of ر
-    { canonical: "Jakarta",  pattern: /جا?ك[رز]تا|jakarta/i },
-    // bandung sheet variant: "باندونق" with ق (Egyptian dialect spelling)
+    // Bali aliases: kuta/seminyak/ubud/jimbaran/nusa dua are all Bali areas.
+    // Saudi spelling has both سمينياك (سم-ين-ياك) and سيمنياك (سي-من-ياك).
+    { canonical: "Bali",     pattern: /بالي|bali|كوتا|kuta|[أا]وبود|ubud|سمينياك|سيمنياك|seminyak|جيمباران|jimbaran|نوسا\s*دوا/i },
+    // Jakarta: also accept "جاكرت" without trailing ا (very common shorthand)
+    // and "جاكزتا" (ز instead of ر, sheet typo).
+    { canonical: "Jakarta",  pattern: /جا?ك[رز]تا?|jakarta/i },
+    // Bandung sheet variant: "باندونق" with ق (Egyptian dialect spelling)
     { canonical: "Bandung",  pattern: /باندون[جغق]|bandung/i },
     { canonical: "Puncak",   pattern: /بونشاك|puncak/i },
   ],
@@ -195,8 +198,8 @@ function validateNightsDistribution(
     // like "سانت بطرس 10 ايام" would credit 10 nights to the city instead
     // of recognizing 10 as the trip-day count.
     const re = new RegExp(
-      `(?:(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|ليلتين|نايت|night)?\\s*(?:${cityPat}))` +
-      `|(?:(?:${cityPat})\\s*(?:=|:|-|بـ|في|عن|لمدة|ل)?\\s*(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|نايت|night))`,
+      `(?:(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتهى]?|ليلتين|ليه|نايت|night)?\\s*(?:${cityPat}))` +
+      `|(?:(?:${cityPat})\\s*(?:=|:|-|بـ|في|عن|لمدة|ل)?\\s*(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتهى]?|نايت|night))`,
       "ig"
     );
     let m: RegExpExecArray | null;
