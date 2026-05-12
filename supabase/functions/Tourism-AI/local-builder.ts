@@ -333,12 +333,28 @@ export function findArrivalPickup(
   cityDefs: CityDef[],
   preferType: "airport" | "train" = "airport",
 ): TourRow | null {
-  // City-specific candidates first.
+  // City-specific candidates first. Two filters protect against picking
+  // wrong-direction rows:
+  //   (a) the row's PRIMARY verb must be a pickup (استقبال/الاستقبال) —
+  //       rows like "5. التوصيل من فندق باندونق ... والاستقبال هناك" are
+  //       drop+pickup combos where the actual pickup is at the OTHER city
+  //       (Bali in that example). Their primary verb is التوصيل, not
+  //       استقبال, so they're excluded.
+  //   (b) if the row explicitly names a hotel-destination city (e.g.
+  //       "والتوصيل للفندق في بونشاك"), THAT must be the query city —
+  //       otherwise we'd route a Jakarta query to a Puncak hotel.
+  const isPrimaryPickup = (n: string) => {
+    const firstWord = n.replace(/^[\d\.\s]+/, "").trim().split(/\s+/)[0] || "";
+    return /^(?:استقبال|الاستقبال|آلاستقبال)$/u.test(firstWord);
+  };
   let candidates = allTours.filter(t => {
     if (t.type !== destination) return false;
     const n = t.name;
-    if (!/استقبال|الاستقبال/.test(n)) return false;
-    return tourNameMatchesCity(n, city, cityDefs);
+    if (!isPrimaryPickup(n)) return false;                                              // (a)
+    if (!tourNameMatchesCity(n, city, cityDefs)) return false;
+    const hotelCity = extractRowHotelCity(n);
+    if (hotelCity && !tourNameMatchesCity(hotelCity, city, cityDefs)) return false;     // (b)
+    return true;
   });
   // Fallback: generic pickup rows (no DEST_CITIES city in the name) — used
   // by Turkey ("استقبال من المطار الدولي والتوجه للفندق") and Bosnia for
@@ -366,6 +382,19 @@ export function findArrivalPickup(
   const pool = preferred.length > 0 ? preferred : candidates;
   pool.sort((a, b) => a.price - b.price);
   return pool[0];
+}
+
+/**
+ * Extract the row's hotel-destination city. Real data has rows like
+ * "الاستقبال في مطار جاكرتا والتوصيل للفندق في بونشاك" — the airport is
+ * Jakarta but the actual hotel destination is Puncak. Without this, a
+ * pickup-for-Jakarta query would falsely select that row. Returns "" if
+ * no hotel-destination clause is found (row implicitly drops at the same
+ * city as the airport/station mentioned earlier).
+ */
+function extractRowHotelCity(n: string): string {
+  const m = n.match(/(?:للفندق|الى\s*الفندق|والتوصيل\s*للفندق|الى\s*فندق(?:\s+الاقامه)?)\s+في\s+([^\s.]+(?:\s+[^\s.]+){0,2}?)(?=\s|$|\.|واستلام|لاستلام)/iu);
+  return m ? m[1].trim() : "";
 }
 
 /**
@@ -484,15 +513,19 @@ export function findInterCityTransfer(
     return true;
   });
   if (fromDrop.length > 0) {
-    // Prefer rows that ALSO mention the actual destination city — when two
-    // rows share the same fromCity but one says "لذهاب الي جاكرتا" and the
-    // other says "للعوده الى الديار", the first is correct for an inter-city
-    // transit while the second is the final-departure row.
+    // Sort priority: (1) row explicitly mentions toCity → most precise.
+    // (2) row is NOT a "going home" departure → an inter-city transit
+    // shouldn't pick the final-departure row when an alternative exists.
+    // (3) cheapest price.
     const toDef = cityDefs.find(c => c.canonical === toCity);
+    const isGoingHome = (n: string) => /ارض\s*الوطن|الديار|للسلامه|للسلامة/iu.test(n);
     fromDrop.sort((a, b) => {
       const aHasTo = toDef ? toDef.pattern.test(a.name) : false;
       const bHasTo = toDef ? toDef.pattern.test(b.name) : false;
-      if (aHasTo !== bHasTo) return aHasTo ? -1 : 1;  // toCity-mentioning first
+      if (aHasTo !== bHasTo) return aHasTo ? -1 : 1;
+      const aHome = isGoingHome(a.name);
+      const bHome = isGoingHome(b.name);
+      if (aHome !== bHome) return aHome ? 1 : -1;  // non-home first
       return a.price - b.price;
     });
     return fromDrop[0];
