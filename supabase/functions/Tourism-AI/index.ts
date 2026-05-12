@@ -37,9 +37,157 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
   return null;
 }
 
+// City-name → canonical-city-tag table per destination. Used by both the city
+// detector (does the employee already say which cities?) and the lite-mode
+// renderer (list-of-cities only response). Canonical names are the same ones
+// stored in hotels.location ("Hanoi - vietnam" etc.).
+const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>> = {
+  vietnam: [
+    { canonical: "Ha Noi",      pattern: /هانوي|ha\s*noi|hanoi/i },
+    { canonical: "Sapa",        pattern: /سابا|sapa|كات\s*كات|لاو\s*تشاي|تا\s*فان|فانسيبان/i },
+    { canonical: "Ha Long",     pattern: /هالونج|ha\s*long|halong/i },
+    { canonical: "Da Nang",     pattern: /دانانج|da\s*nang|danang|ba\s*na|ماي\s*خي/i },
+    { canonical: "Phu Quoc",    pattern: /فوكوك|phu\s*quoc/i },
+    { canonical: "Ho Chi Minh", pattern: /هوتشي|ho\s*chi|saigon|سايغون/i },
+  ],
+  Malaysia: [
+    { canonical: "Kuala Lumpur",     pattern: /كوالالمبور|كوالا\s*لمبور|kuala\s*lumpur|\bKL\b/i },
+    { canonical: "Selangor",         pattern: /سيلانجور|سيلانغور|selangor|sunway|مدينة\s*الالعاب|مدينة\s*الألعاب/i },
+    { canonical: "Langkawi",         pattern: /لانكاوي|langkawi/i },
+    { canonical: "Penang",           pattern: /بينانج|بينانغ|penang/i },
+    { canonical: "Cameron Highlands",pattern: /كاميرون|cameron|هايلاند|مرتفعات\s*الكامیرون|مرتفعات\s*الكاميرون/i },
+  ],
+  thailand: [
+    { canonical: "Bangkok",      pattern: /بانكوك|bangkok/i },
+    { canonical: "Phuket",       pattern: /بوكيت|phuket|بوكت/i },
+    { canonical: "Krabi",        pattern: /كرابي|krabi/i },
+    { canonical: "Chiang Mai",   pattern: /شانغماي|شيانغ\s*ماي|chiang\s*mai|chiangmai/i },
+    { canonical: "Pattaya",      pattern: /بتايا|باتايا|pattaya/i },
+    { canonical: "Koh Samui",    pattern: /كوسموي|كوه\s*ساموي|koh\s*samui|samui/i },
+  ],
+  Turky: [
+    { canonical: "Istanbul",   pattern: /اسطنبول|istanbul|آيا\s*صوفيا|البازار|تقسيم/i },
+    { canonical: "Trabzon",    pattern: /طرابزون|trabzon|سلطان\s*مراد|حيدر\s*نبي|هامسيكوي|بيشك\s*دوزو/i },
+    { canonical: "Uzungol",    pattern: /أوزنجول|اوزنجول|uzungol/i },
+    { canonical: "Ayder",      pattern: /ايدر|ayder/i },
+    { canonical: "Rize",       pattern: /ريزا|rize/i },
+    { canonical: "Bursa",      pattern: /بورصة|bursa/i },
+    { canonical: "Sapanca",    pattern: /سابانجا|sapanca|معشوقية/i },
+  ],
+  russia: [
+    { canonical: "Moscow",         pattern: /موسكو|moscow|moskva/i },
+    { canonical: "St Petersburg",  pattern: /سانت\s*بطرسبرغ|saint\s*petersburg|st\.?\s*petersburg/i },
+    { canonical: "Sochi",          pattern: /سوتشي|sochi/i },
+  ],
+  Bosnia: [
+    { canonical: "Sarajevo", pattern: /سراييفو|sarajevo/i },
+    { canonical: "Mostar",   pattern: /موستار|mostar/i },
+    { canonical: "Bihać",    pattern: /بيهاتش|bihać|bihac/i },
+  ],
+  indonesia: [
+    { canonical: "Bali",     pattern: /بالي|bali|كوتا|kuta|أوبود|ubud|سمينياك|seminyak|جيمباران|jimbaran|نوسا\s*دوا/i },
+    { canonical: "Jakarta",  pattern: /جاكرتا|jakarta/i },
+    { canonical: "Bandung",  pattern: /باندونغ|باندونج|bandung/i },
+    { canonical: "Puncak",   pattern: /بونشاك|puncak/i },
+  ],
+};
+
+/**
+ * Detect which cities of `destination` are explicitly mentioned across all
+ * messages. Returns the canonical-name list (deduped, in mention order).
+ * Empty list = employee hasn't picked cities yet → caller should ship lite
+ * context and ask for the night distribution.
+ */
+function detectCitiesFromMessage(
+  messages: Array<{ role: string; content: unknown }>,
+  destination: string,
+): string[] {
+  const cities = DEST_CITIES[destination];
+  if (!cities) return [];
+  const text = messages
+    .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content))
+    .join(" ");
+  const found: string[] = [];
+  for (const { canonical, pattern } of cities) {
+    if (pattern.test(text) && !found.includes(canonical)) {
+      found.push(canonical);
+    }
+  }
+  return found;
+}
+
+/**
+ * Validate that the night distribution the employee wrote sums to (days - 1).
+ * Looks for tokens like "هانوي 2" / "سابا 3" near city names. Returns
+ * { ok: true } when valid or when no distribution was given yet, otherwise
+ * { ok: false, message: "..." } with a short Arabic error to send back in CHAT.
+ */
+function validateNightsDistribution(
+  messages: Array<{ role: string; content: unknown }>,
+  destination: string,
+  cities: string[],
+): { ok: true } | { ok: false; message: string } {
+  if (cities.length === 0) return { ok: true };
+  const text = messages
+    .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content))
+    .join(" ");
+
+  // Extract target nights = days - 1 from any "N يوم" / "N أيام" mention.
+  const daysMatch = text.match(/(\d{1,2})\s*(?:يوم|أيام|ايام|days?)/i);
+  if (!daysMatch) return { ok: true }; // no day count → can't validate
+  const targetNights = parseInt(daysMatch[1], 10) - 1;
+  if (!(targetNights > 0)) return { ok: true };
+
+  // For each detected city, look for a number that appears right beside it
+  // ("هانوي 2" / "2 هانوي" / "هانوي = 2"). Collect contributions.
+  let sumNights = 0;
+  let foundAny = false;
+  const cityDefs = DEST_CITIES[destination] || [];
+  for (const canonical of cities) {
+    const def = cityDefs.find(c => c.canonical === canonical);
+    if (!def) continue;
+    // Build a regex that captures a digit near the city name (±20 chars).
+    const cityPat = def.pattern.source;
+    const re = new RegExp(`(?:(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتى]?|ليلتين|نايت|night)?\\s*(?:${cityPat}))|(?:(?:${cityPat})\\s*(?:=|:|-|بـ|في|عن)?\\s*(\\d{1,2}))`, "i");
+    const m = text.match(re);
+    if (m) {
+      const n = parseInt(m[1] || m[2] || "0", 10);
+      if (n > 0 && n <= 30) {
+        sumNights += n;
+        foundAny = true;
+      }
+    }
+  }
+
+  if (!foundAny) return { ok: true }; // no per-city numbers yet → don't block
+  if (sumNights === targetNights) return { ok: true };
+
+  return {
+    ok: false,
+    message:
+      `التوزيع الذي أعطيتني = ${sumNights} ليالي، لكن البرنامج ${targetNights + 1} أيام يحتاج ${targetNights} ليالي. ` +
+      `راجع توزيع الليالي وأعد الإرسال (مثال صحيح: ${cities.map((c, i) => `${c}=${Math.max(1, Math.floor((targetNights) / cities.length) + (i === 0 ? targetNights % cities.length : 0))}`).join(" + ")}).`,
+  };
+}
+
+/**
+ * Build a TINY data context (just the city names) for the first conversation
+ * turn. Used when destination is known but the employee hasn't yet picked
+ * which cities to visit. Saves ~20K tokens per turn.
+ */
+function buildLiteCitiesContext(destination: string): string {
+  const cities = DEST_CITIES[destination] || [];
+  if (cities.length === 0) return "البيانات المتاحة في النظام: (لا توجد مدن مُعرَّفة لهذه الوجهة)\n";
+  let s = `البيانات المتاحة في النظام (وضع مختصر):\n\n📍 المدن المتاحة في ${destination}:\n`;
+  for (const { canonical } of cities) s += `  - ${canonical}\n`;
+  s += `\n⚠️ التفاصيل الكاملة (الفنادق + الجولات + الطيران) لم تُرسَل بعد لتوفير التكلفة. لمّا الموظف يحدّد المدن وعدد الليالي لكل مدينة، نُرسل لك بيانات تلك المدن فقط ثم تبني البرنامج.\n`;
+  return s;
+}
+
 async function buildDataContext(
   supabase: ReturnType<typeof createClient>,
   destinationFilter: string | null = null,
+  cityFilter: string[] | null = null,
 ): Promise<string> {
   const hotelQuery = supabase.from("hotels").select("*").order("stars", { ascending: false }).order("price_per_night");
   const tourQuery  = supabase.from("tours").select("*").order("price");
@@ -56,10 +204,33 @@ async function buildDataContext(
     flightQuery,
     supabase.from("trains").select("*"),
   ]);
-  const hotels = hotelsRes.data;
-  const tours = toursRes.data;
+  let hotels = hotelsRes.data;
+  let tours = toursRes.data;
   const flights = flightsRes.data;
   const trains = trainsRes.error ? [] : (trainsRes.data ?? []);
+
+  // City-level filter: when the employee picked specific cities, we drop
+  // hotels and tours that aren't in those cities. Hotels are matched on the
+  // location prefix ("Hanoi - vietnam"); tours are matched via the same
+  // city-name regex used by detectCitiesFromMessage. Flights are kept
+  // intact (the model needs all options for inter-city legs).
+  if (cityFilter && cityFilter.length > 0 && destinationFilter) {
+    const cityDefs = DEST_CITIES[destinationFilter] || [];
+    const allowed = new Set(cityFilter);
+    const allowedDefs = cityDefs.filter(c => allowed.has(c.canonical));
+    if (hotels) {
+      hotels = hotels.filter(h => {
+        const cityPart = String(h.location || "").split(" - ")[0]?.trim() || "";
+        return [...allowed].some(c => cityPart.toLowerCase().includes(c.toLowerCase().split(" ")[0]));
+      });
+    }
+    if (tours) {
+      tours = tours.filter(t => {
+        const name = String(t.name || "");
+        return allowedDefs.some(d => d.pattern.test(name));
+      });
+    }
+  }
 
   if ((!hotels || hotels.length === 0) && (!tours || tours.length === 0)) {
     return "⚠️ لا تتوفر بيانات حالياً. يرجى تشغيل المزامنة مع Google Sheets أولاً.";
@@ -306,13 +477,29 @@ function buildSystemPrompt(dataContext: string, frontendFormat: string): string 
 🏙️ تفصيل قاعدة المدن (هـ) — مهمّة جداً:
 كل وجهة عندنا تحوي عدّة مدن/مناطق (مثلاً: تركيا فيها اسطنبول/طرابزون/أوزونغول/بورصة، إندونيسيا فيها بالي/جاكرتا/بونشاك/باندونغ، فيتنام فيها هانوي/دانانج/فوكوك/هوتشي ميه، روسيا فيها موسكو/سانت بطرسبرغ/سوتشي، البوسنة فيها سراييفو/موستار/بيهاتش).
 
-عند طلب الموظف لوجهة بدون تحديد مدن، قبل بناء أيّ برنامج اسأل بهذه الصيغة:
-  CHAT:تمام! [الوجهة] فيها عندنا عدّة مدن: [اذكر المدن المتاحة فعلياً من بيانات الفنادق]. تبغى نوزّع الأيام على مدن معيّنة (قول لي المدن وعدد الليالي في كل وحدة)، ولا تبغى أقترح لك توزيع مناسب لـ [عدد الأيام]؟
+🚨 الفلو الإلزامي الجديد (لا تقترح توزيعاً أبداً):
 
-استخراج قائمة المدن: انظر إلى عمود "location" أو "City" في الفنادق المتاحة لتلك الوجهة في "البيانات المتاحة في النظام" أدناه، واذكر المدن الفريدة فقط.
+  المرحلة A — عرض المدن فقط (Lite mode):
+    إذا الموظف ذكر الوجهة لكن **لم** يحدّد المدن أو ليالي كل مدينة، النظام
+    يُرسل لك "وضع مختصر" يحوي **فقط أسماء المدن** بدون أيّ تفاصيل فنادق
+    أو جولات. في هذه الحالة، أَجب بـ CHAT فقط بهذه الصيغة الحرفية:
 
-• إذا قال الموظف "اقترح لي" أو ما حدّد: اختر توزيعاً منطقياً للمدن وابنِ البرنامج.
-• إذا حدّد المدن (مثلاً "بالي 5 ليالي + جاكرتا 3 ليالي"): استخدم توزيعه بالضبط.
+    CHAT:تمام! المدن المتاحة في [الوجهة]: [اذكر القائمة من قسم
+    "📍 المدن المتاحة" أعلاه]. كم ليلة لكل مدينة؟ (مجموع الليالي يجب أن
+    يساوي [عدد الأيام - 1]).
+
+    ❌ ممنوع منعاً باتاً اقتراح توزيع من عندك ("أقترح هانوي 3 + سابا 2…").
+    ❌ ممنوع بناء أيّ برنامج DEST: لأنّ البيانات الكاملة لم تُرسَل بعد.
+    ✅ فقط اعرض المدن واطلب التوزيع.
+
+  المرحلة B — البناء بعد التوزيع:
+    لمّا الموظف يحدّد المدن وليالي كل مدينة (مثل "هانوي 2 + سابا 2 + هالونج 1"
+    لبرنامج 6 أيام)، النظام يُرسل لك بيانات تلك المدن **فقط**. ابنِ البرنامج
+    باستخدام تلك البيانات.
+
+  • إذا قال الموظف "اقترح لي توزيع" / "اختر لي" → ❌ ارفض الاقتراح وأَعِد
+    عرض المدن مع طلب التوزيع. (هذا قرار الموظف، ليس قرارنا.)
+  • إذا حدّد المدن مع التوزيع في رسالة واحدة → استخدمه مباشرة وابنِ البرنامج.
 
 • إذا كانت أيّ معلومة من (أ) إلى (هـ) ناقصة، **ممنوع** بناء البرنامج. أجب فقط بسطر واحد بهذا الشكل:
   CHAT:[سؤال مختصر وودّي عن الناقص فقط، باللهجة السعودية]
@@ -1355,7 +1542,36 @@ Deno.serve(async (req) => {
     );
 
     const detectedDest  = detectDestination(messages);
-    const dataContext   = await buildDataContext(supabase, detectedDest);
+    const detectedCities = detectedDest ? detectCitiesFromMessage(messages, detectedDest) : [];
+
+    // Local validation: if cities AND a per-city night distribution are
+    // present but they don't sum to (days - 1), reject right here without
+    // calling Anthropic at all. Saves the entire turn cost.
+    if (detectedDest && detectedCities.length > 0) {
+      const v = validateNightsDistribution(messages, detectedDest, detectedCities);
+      if (!v.ok) {
+        return new Response(JSON.stringify({
+          id: "local-validation",
+          model: "local",
+          role: "assistant",
+          content: [{ type: "text", text: "CHAT:" + v.message }],
+          usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+        }), { headers: CORS_HEADERS });
+      }
+    }
+
+    // Two-mode data context:
+    //   - destination known but no cities yet → ship lite (city list only),
+    //     ~2K tokens. Prompt rule below tells the AI to ask for the
+    //     night distribution before doing anything else.
+    //   - cities specified → ship full data filtered to those cities only.
+    let dataContext: string;
+    if (detectedDest && detectedCities.length === 0) {
+      dataContext = buildLiteCitiesContext(detectedDest);
+    } else {
+      dataContext = await buildDataContext(supabase, detectedDest, detectedCities.length > 0 ? detectedCities : null);
+    }
+
     const formatSection = (typeof clientSystem === "string" && clientSystem.trim().length > 0)
       ? clientSystem
       : DEFAULT_FORMAT;
