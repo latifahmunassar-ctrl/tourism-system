@@ -287,13 +287,26 @@ function parseExtraBed(text: string, cityDefs: CityDef[]): TripRequest["extraBed
 }
 
 function parseTransport(text: string): "private" | "shared" | null {
-  // Use the LAST mention of a transport type so a follow-up override wins:
-  //   base: "بسيارة خاصة"  + follow-up: "غير لمشتركة" → "shared"
+  // Score each mention so a "negated" form ("بدون مشتركة" / "ليس مشتركة")
+  // contributes the OPPOSITE intent. Then the highest-positioned mention
+  // (latest in text) wins, so a follow-up override beats the base request.
+  // Without this, "خاصة وليس مشتركة" would resolve to shared (last word
+  // "مشتركة"), the wrong intent.
+  const NEG = /(?:بدون|ليس|مو|ليست|ما\s+ابي|ما\s+اريد|لا)\s*$/u;
   const privReg = /خاصة|خاص|private/giu;
   const sharReg = /مشتركة|مشترك|shared|ليموزين/giu;
   let lastPriv = -1, lastShar = -1;
-  for (const m of text.matchAll(privReg)) lastPriv = m.index ?? lastPriv;
-  for (const m of text.matchAll(sharReg)) lastShar = m.index ?? lastShar;
+  for (const m of text.matchAll(privReg)) {
+    const before = text.slice(Math.max(0, (m.index ?? 0) - 12), m.index ?? 0);
+    // "بدون خاصة" → counts as "shared"; otherwise as "private"
+    if (NEG.test(before)) lastShar = Math.max(lastShar, m.index ?? -1);
+    else                  lastPriv = Math.max(lastPriv, m.index ?? -1);
+  }
+  for (const m of text.matchAll(sharReg)) {
+    const before = text.slice(Math.max(0, (m.index ?? 0) - 12), m.index ?? 0);
+    if (NEG.test(before)) lastPriv = Math.max(lastPriv, m.index ?? -1);
+    else                  lastShar = Math.max(lastShar, m.index ?? -1);
+  }
   if (lastPriv < 0 && lastShar < 0) return null;
   return lastPriv > lastShar ? "private" : "shared";
 }
