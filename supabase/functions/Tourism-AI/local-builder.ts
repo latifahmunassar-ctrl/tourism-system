@@ -240,12 +240,30 @@ function normalizeArabic(s: string): string {
     .trim();
 }
 
+/** Arabic stop words that don't help discriminate between tours. */
+const ARABIC_STOP_WORDS = new Set([
+  "في", "من", "إلى", "الى", "على", "و", "أو", "او", "ال",
+  "بـ", "ب", "ل", "لـ", "هي", "هو", "ذا", "هذه", "هذا",
+  "the", "a", "an", "in", "of", "to", "and", "or",
+]);
+
+/** Jaccard similarity over character bigrams — robust to missing/extra letters. */
+function bigramSim(a: string, b: string): number {
+  if (!a || !b || a.length < 2 || b.length < 2) return 0;
+  const ab = new Set<string>(); for (let i = 0; i < a.length - 1; i++) ab.add(a.slice(i, i + 2));
+  const bb = new Set<string>(); for (let i = 0; i < b.length - 1; i++) bb.add(b.slice(i, i + 2));
+  let common = 0;
+  for (const g of ab) if (bb.has(g)) common++;
+  return common / Math.max(ab.size, bb.size);
+}
+
 /**
  * Find the best-matching tour by keyword overlap with the user-typed query.
- * - Returns null if no tour shares any 2+ char keyword.
  * - When `cityFilter` is given, only tours in that city are considered.
- * - Score = sum of matched keyword lengths (longer match = stronger signal).
- *   Ties broken by cheaper price first.
+ * - Per-keyword score: exact substring (q.length) OR bigram similarity ≥ 0.6
+ *   against any tour word (q.length × sim). Bigram fallback handles common
+ *   misspellings like "المنجروف" ≈ "المانجروف" (missing/extra alif).
+ * - Ties broken by cheaper price first.
  */
 function findTourByKeywords(
   query: string,
@@ -253,19 +271,40 @@ function findTourByKeywords(
   cityFilter?: { cityDefs: CityDef[]; canonicalCity: string },
 ): TourRow | null {
   const qNorm = normalizeArabic(query);
-  const qWords = qNorm.split(/\s+/).filter(w => w.length >= 2);
+  const qWords = qNorm.split(/\s+/)
+    .filter(w => (w.length >= 2 || /\d/.test(w)) && !ARABIC_STOP_WORDS.has(w));
   if (qWords.length === 0) return null;
 
   const pool = cityFilter
     ? tours.filter(t => tourBelongsToCity(t, cityFilter.cityDefs, cityFilter.canonicalCity))
     : tours;
 
+  const stripAl = (w: string) => w.replace(/^ال/, "");
+
   let best: { tour: TourRow; score: number } | null = null;
   for (const t of pool) {
     const nNorm = normalizeArabic(t.name);
+    const nWords = nNorm.split(/\s+/);
     let score = 0;
     for (const q of qWords) {
-      if (nNorm.includes(q)) score += q.length;
+      const qBare = stripAl(q);
+      // Fast path: exact substring (with or without leading ال)
+      if (nNorm.includes(q) || (qBare.length >= 2 && nNorm.includes(qBare))) {
+        score += q.length;
+        continue;
+      }
+      // Bigram fallback per word — catches alif/yaa/ta-marbuta typos
+      let bestSim = 0;
+      for (const nw of nWords) {
+        const nwBare = stripAl(nw);
+        for (const cand of [q, qBare]) {
+          for (const tgt of [nw, nwBare]) {
+            const s = bigramSim(cand, tgt);
+            if (s > bestSim) bestSim = s;
+          }
+        }
+      }
+      if (bestSim >= 0.6) score += q.length * bestSim;
     }
     if (score === 0) continue;
     if (!best || score > best.score || (score === best.score && (t.price || 0) < (best.tour.price || 0))) {
