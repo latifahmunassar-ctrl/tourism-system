@@ -331,6 +331,7 @@ export function findArrivalPickup(
   city: string,
   destination: string,
   cityDefs: CityDef[],
+  preferType: "airport" | "train" = "airport",
 ): TourRow | null {
   const candidates = allTours.filter(t => {
     if (t.type !== destination) return false;
@@ -339,8 +340,16 @@ export function findArrivalPickup(
     return tourNameMatchesCity(n, city, cityDefs);
   });
   if (candidates.length === 0) return null;
-  candidates.sort((a, b) => a.price - b.price);
-  return candidates[0];
+  // Prefer the row matching the requested arrival type. Russia's sheet has
+  // both "استقبال من مطار موسكو" and "استقبال من قطار موسكو" — picking the
+  // wrong one mislabels the transfer (employee sees airport pickup on day 7
+  // when they actually arrived from St Petersburg by train).
+  const isAirport = (n: string) => /مطار|airport/iu.test(n) && !/قطار|محطة|station|train/iu.test(n);
+  const isTrain   = (n: string) => /قطار|محطة|station|train/iu.test(n);
+  const preferred = candidates.filter(c => preferType === "airport" ? isAirport(c.name) : isTrain(c.name));
+  const pool = preferred.length > 0 ? preferred : candidates;
+  pool.sort((a, b) => a.price - b.price);
+  return pool[0];
 }
 
 export function findDepartureDrop(
@@ -366,30 +375,48 @@ export function findInterCityTransfer(
   toCity: string,
   destination: string,
   cityDefs: CityDef[],
+  transitKind: "airport" | "train" = "airport",
 ): TourRow | null {
-  // Path 1: row that explicitly mentions BOTH cities (e.g. "موسكو ← سانت
-  // بطرسبرغ نقل برّي"). Most precise but rare in real data.
-  const both = allTours.filter(tr => {
-    if (tr.type !== destination) return false;
-    return tourNameMatchesCity(tr.name, fromCity, cityDefs)
-        && tourNameMatchesCity(tr.name, toCity, cityDefs);
-  });
-  if (both.length > 0) {
-    both.sort((a, b) => a.price - b.price);
-    return both[0];
-  }
+  // (Path 1 — "row mentions both cities" — was too loose: a row like
+  // "التوجه من فندق سانت برغ الى محطة القطار لذهاب الى موسكو" mentions both
+  // Moscow and StP but is a drop FROM StP only. Path 2's anchored matching
+  // is strictly more correct.)
 
   // Path 2: an explicit drop-from-fromCity row (توديع/التوجه إلى المطار/المحطة)
   // — used when leaving a city by train or flight. Real Russia data uses
   // separate rows per city, not one combined inter-city transfer.
   // Must NOT match Pickup rows that say "استقبال … والتوجه إلى الفندق" — so
   // we explicitly reject any row containing استقبال and require a drop verb.
+  // The departure city must appear in a "من فندق <fromCity>" / "from
+  // <fromCity> hotel" anchor — otherwise rows like "من فندق سانت برغ الى
+  // موسكو" would falsely match for fromCity=Moscow because they happen to
+  // contain "موسكو" as the destination half of the trip.
   const fromDrop = allTours.filter(tr => {
     if (tr.type !== destination) return false;
     const n = tr.name;
     if (/استقبال|الاستقبال|pickup/iu.test(n)) return false; // hard reject
     if (!/توديع|التوديع|للعوده|للعودة|drop/iu.test(n) && !/التوجه.*(?:مطار|محطة|airport|station)/iu.test(n)) return false;
     if (!/مطار|محطة|station|airport|قطار/iu.test(n)) return false;
+    // Transit-kind filter: train transits should NOT match an "airport drop"
+    // row (and vice versa). The Russia sheet has a "توديع موسكو إلى المطار
+    // الدولي للعوده الى أرض الوطن" — that's a final-departure airport row,
+    // not appropriate for an inter-city train transit.
+    const isAirportRow = /مطار|airport/iu.test(n) && !/قطار|محطة|station|train/iu.test(n);
+    const isTrainRow   = /قطار|محطة|station|train/iu.test(n);
+    if (transitKind === "train" && !isTrainRow) return false;
+    if (transitKind === "airport" && isTrainRow && !isAirportRow) return false;
+    // Departure city must appear in the "من فندق ..." segment (not just
+    // anywhere in the row name). Arabic text has no \b word boundaries —
+    // use explicit whitespace around the "الى/إلى/الي" delimiter to stop the
+    // capture at the first occurrence, otherwise the non-greedy .+? still
+    // consumes through to the end of the string.
+    const fromHotelMatch = n.match(/من\s+فندق(?:\s+في)?\s+(.+?)\s+(?:الى|إلى|الي|to)\s/iu);
+    if (fromHotelMatch) {
+      return tourNameMatchesCity(fromHotelMatch[1], fromCity, cityDefs);
+    }
+    // Fallback: if the row doesn't have "من فندق ..." anchor, fall back to
+    // matching the city anywhere in the name (legacy behavior for tabs that
+    // don't follow the new naming convention).
     return tourNameMatchesCity(n, fromCity, cityDefs);
   });
   if (fromDrop.length > 0) {
@@ -842,17 +869,23 @@ export async function buildLocalProgram(
   const firstCity = stayOrder.length > 0 ? stayOrder[0].city : request.cities[0];
   const lastCity = stayOrder.length > 0 ? stayOrder[stayOrder.length - 1].city : request.cities[request.cities.length - 1];
   const dest = request.destination!;
-  // Arrival pickup (Day 1)
-  const arrPickup = findArrivalPickup(allTours, firstCity, dest, cityDefs);
+  // Day 1 = international arrival → always airport pickup.
+  const arrPickup = findArrivalPickup(allTours, firstCity, dest, cityDefs, "airport");
   if (arrPickup) selectedTransfers.push({ day: 1, row: arrPickup, kind: "Pickup" });
-  // Inter-city transfers + arrival pickups. Allow re-using the same Pickup
-  // row for repeat city visits (a Moscow → StP → Moscow loop needs a new
-  // Moscow pickup the second time around — same row, different occasion).
+  // Inter-city transit days. The pickup type for the destination city
+  // depends on HOW the group arrives — by train (qatar) or by flight.
+  // Look up whether this transit is a train (in selectedFlights with
+  // kind="train") so the matching pickup row gets selected.
+  const transitKind = (dayNum: number): "airport" | "train" => {
+    const sf = selectedFlights.find(f => f.day === dayNum);
+    return sf?.kind === "train" ? "train" : "airport";
+  };
   for (const d of days) {
     if (d.type === "transit" && d.fromCity && d.toCity) {
-      const fromAirportDrop = findInterCityTransfer(allTours, d.fromCity, d.toCity, dest, cityDefs);
+      const arrivalType = transitKind(d.number);
+      const fromAirportDrop = findInterCityTransfer(allTours, d.fromCity, d.toCity, dest, cityDefs, arrivalType);
       if (fromAirportDrop) selectedTransfers.push({ day: d.number, row: fromAirportDrop, kind: "Drop" });
-      const arrPickupForCity = findArrivalPickup(allTours, d.toCity, dest, cityDefs);
+      const arrPickupForCity = findArrivalPickup(allTours, d.toCity, dest, cityDefs, arrivalType);
       if (arrPickupForCity) {
         selectedTransfers.push({ day: d.number, row: arrPickupForCity, kind: "Pickup" });
       }

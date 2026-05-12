@@ -95,11 +95,13 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
   ],
   russia: [
     { canonical: "Moscow",         pattern: /موسكو|موسكوا|moscow|moskva/i },
-    // Saudi often shortens to "سانت بطرس" or just "بطرسبرغ" / "بطرسبورج".
-    // Match strategy: the suffix (برغ/بورج/بورك) is enough on its own; the
-    // bare "بطرس" requires a "سان"/"سانت" prefix to avoid matching unrelated
-    // words that happen to contain those letters.
-    { canonical: "St Petersburg",  pattern: /(?:سان?ت?\s*)?بطرس(?:بور[جك]|برغ|بور)|سان?ت?\s+بطرس|saint\s*petersburg|st\.?\s*petersburg/i },
+    // Saudi often shortens to "سانت بطرس", "بطرسبرغ"/"بطرسبورج", or even
+    // "سانت برغ" (drops the "بطرس" entirely). Match strategy:
+    //   - The suffix بطرسبرغ/بطرسبور[جك] is enough on its own.
+    //   - "سان/سانت + برغ" (no بطرس) — used in the sheet's transfer rows.
+    //   - "سان/سانت + بطرس" — common shortened spelling.
+    //   - Latin variants always allowed.
+    { canonical: "St Petersburg",  pattern: /(?:سان?ت?\s*)?بطرس(?:بور[جك]|برغ|بور)|سان?ت?\s+(?:بطرس|برغ)|saint\s*petersburg|st\.?\s*petersburg/i },
     { canonical: "Sochi",          pattern: /سوتشي|سوشي|sochi/i },
   ],
   Bosnia: [
