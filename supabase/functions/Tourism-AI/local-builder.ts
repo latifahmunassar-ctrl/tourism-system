@@ -377,47 +377,52 @@ export function findInterCityTransfer(
   cityDefs: CityDef[],
   transitKind: "airport" | "train" = "airport",
 ): TourRow | null {
-  // (Path 1 — "row mentions both cities" — was too loose: a row like
-  // "التوجه من فندق سانت برغ الى محط[هة] القطار لذهاب الى موسكو" mentions both
-  // Moscow and StP but is a drop FROM StP only. Path 2's anchored matching
-  // is strictly more correct.)
+  // Extract the row's *actual* departure-place from its text. The data uses
+  // many phrasings — we try the two structural patterns most common in the
+  // sheet, and a row that doesn't match either is rejected (don't fall back
+  // to "city appears anywhere", that's how wrong-direction rows leak in).
+  const rowFromCity = (n: string): string => {
+    // Pattern 1: "(verb) من [filler] CITY ... الى/إلى/الي"
+    //   filler ∈ {فندق(_في)?, خليج, مدينه, مدينة}
+    //   "التوجه من فندق في موسكو الى محطه القطار…"
+    //   "التوجه من خليج هالونج الى فندق…"
+    //   "التوديع من بتايا والتوصيل…"
+    //   "الذهاب من فندق بوكيت الى المطار…"
+    const m1 = n.match(/من\s+(?:فندق(?:\s+في)?\s+|خليج\s+|مدينه\s+|مدينة\s+)?(.+?)\s+(?:الى|إلى|الي|والتوصيل)\s/iu);
+    if (m1) return m1[1];
+    // Pattern 2: "التوجه (الى )?المطار(في)? CITY (للتوجة|للذهاب|للعوده|للعودة|والاستقبال)"
+    //   "التوجه الى المطار في كرابي للتوجة الى بانكوك"
+    //   "التوجه الى المطار الدولي في بانكوك للعوده بالسلامه"
+    const m2 = n.match(/(?:المطار|محط[هة])(?:\s+الدولي)?\s*(?:في\s*)?([^\n]+?)\s+(?:للتوجة|للذهاب|للعوده|للعودة|والاستقبال)/iu);
+    if (m2) return m2[1];
+    return "";
+  };
 
-  // Path 2: an explicit drop-from-fromCity row (توديع/التوجه إلى المطار/المحط[هة])
-  // — used when leaving a city by train or flight. Real Russia data uses
-  // separate rows per city, not one combined inter-city transfer.
-  // Must NOT match Pickup rows that say "استقبال … والتوجه إلى الفندق" — so
-  // we explicitly reject any row containing استقبال and require a drop verb.
-  // The departure city must appear in a "من فندق <fromCity>" / "from
-  // <fromCity> hotel" anchor — otherwise rows like "من فندق سانت برغ الى
-  // موسكو" would falsely match for fromCity=Moscow because they happen to
-  // contain "موسكو" as the destination half of the trip.
+  // Filter rules:
+  //   (a) outbound transfer verb required (توديع/التوجه/الذهاب/التوصيل/drop),
+  //   (b) reject pickup rows,
+  //   (c) row's actual departure place must match our fromCity,
+  //   (d) transit medium must be compatible with transitKind (train transits
+  //       can't pick airport-only rows, and vice versa).
+  const fromDef = cityDefs.find(c => c.canonical === fromCity);
+  if (!fromDef) return null;
+
   const fromDrop = allTours.filter(tr => {
     if (tr.type !== destination) return false;
     const n = tr.name;
-    if (/استقبال|الاستقبال|pickup/iu.test(n)) return false; // hard reject
-    if (!/توديع|التوديع|للعوده|للعودة|drop/iu.test(n) && !/التوجه.*(?:مطار|محط[هة]|airport|station)/iu.test(n)) return false;
-    if (!/مطار|محط[هة]|station|airport|قطار/iu.test(n)) return false;
-    // Transit-kind filter: train transits should NOT match an "airport drop"
-    // row (and vice versa). The Russia sheet has a "توديع موسكو إلى المطار
-    // الدولي للعوده الى أرض الوطن" — that's a final-departure airport row,
-    // not appropriate for an inter-city train transit.
+    if (/استقبال|الاستقبال|pickup/iu.test(n)) return false;                                // (b)
+    if (!/توديع|التوديع|التوجه|التوجة|الذهاب|للعوده|للعودة|التوصيل|drop/iu.test(n)) return false; // (a)
+
+    const rowFrom = rowFromCity(n);                                                         // (c)
+    if (!rowFrom) return false;
+    if (!tourNameMatchesCity(rowFrom, fromCity, cityDefs)) return false;
+
     const isAirportRow = /مطار|airport/iu.test(n) && !/قطار|محط[هة]|station|train/iu.test(n);
-    const isTrainRow   = /قطار|محط[هة]|station|train/iu.test(n);
-    if (transitKind === "train" && !isTrainRow) return false;
+    const isTrainRow   = /قطار|محط[هة]|station|train/iu.test(n);                            // (d)
+    if (transitKind === "train"   && !isTrainRow) return false;
     if (transitKind === "airport" && isTrainRow && !isAirportRow) return false;
-    // Departure city must appear in the "من فندق ..." segment (not just
-    // anywhere in the row name). Arabic text has no \b word boundaries —
-    // use explicit whitespace around the "الى/إلى/الي" delimiter to stop the
-    // capture at the first occurrence, otherwise the non-greedy .+? still
-    // consumes through to the end of the string.
-    const fromHotelMatch = n.match(/من\s+فندق(?:\s+في)?\s+(.+?)\s+(?:الى|إلى|الي|to)\s/iu);
-    if (fromHotelMatch) {
-      return tourNameMatchesCity(fromHotelMatch[1], fromCity, cityDefs);
-    }
-    // Fallback: if the row doesn't have "من فندق ..." anchor, fall back to
-    // matching the city anywhere in the name (legacy behavior for tabs that
-    // don't follow the new naming convention).
-    return tourNameMatchesCity(n, fromCity, cityDefs);
+
+    return true;
   });
   if (fromDrop.length > 0) {
     fromDrop.sort((a, b) => a.price - b.price);
