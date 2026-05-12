@@ -314,13 +314,58 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     return patched;
   }
 
-  // ── Pattern 3: CHANGE SIM count ──────────────────────────────────────
+  // SIM keyword — singular/plural, with ة or ه, شرائح or شرايح, "sim card"
+  const isSimKeyword = /(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim\s*card|sim|esim|إي\s*سيم)/iu;
+
+  // Normalize Arabic-Indic digits (٠-٩) and arabic-word numerals to Latin.
+  const arDigit = (s: string) => s.replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+  const wordToNum: Record<string, number> = {
+    "واحد": 1, "واحده": 1, "واحدة": 1, "وحده": 1,
+    "اثنين": 2, "اثنان": 2, "ثنتين": 2, "اتنين": 2, "شريحتين": 2,
+    "ثلاث": 3, "ثلاثة": 3, "ثلاثه": 3, "تلاته": 3, "تلات": 3,
+    "اربع": 4, "اربعة": 4, "اربعه": 4, "أربع": 4, "أربعة": 4,
+    "خمس": 5, "خمسة": 5, "خمسه": 5, "ست": 6, "ستة": 6, "سته": 6,
+    "سبع": 7, "سبعة": 7, "سبعه": 7, "ثمان": 8, "ثمانية": 8, "ثمانيه": 8,
+    "تسع": 9, "تسعة": 9, "تسعه": 9, "عشر": 10, "عشرة": 10, "عشره": 10,
+  };
+
+  // Extract a number from the message (Latin, Arabic-Indic, or Arabic word).
+  // Arabic word boundaries: \b doesn't work for non-Latin scripts, so we
+  // tokenize on any character that isn't an Arabic letter and look up
+  // each token in wordToNum. Also detects dual forms like "شريحتين" → 2.
+  const extractCount = (text: string): number | null => {
+    if (/شريحت(?:ين|ان)/u.test(text)) return 2;
+    const ascii = arDigit(text);
+    const m = ascii.match(/(?<!\d)(\d{1,2})(?!\d)/);
+    if (m) return parseInt(m[1], 10);
+    const tokens = text.split(/[^ا-يA-Za-z]+/u).filter(Boolean);
+    for (const tok of tokens) {
+      if (wordToNum[tok] !== undefined) return wordToNum[tok];
+    }
+    return null;
+  };
+
+  // ── Pattern 3a: ADD SIM (any add-verb + SIM keyword, count optional) ──
+  // "ضيف ٣ شرائح" / "اضف شريحه" / "احتاج شريحتين" / "ابغى ٢ شرايح"
+  // Also fires on the noun form "اضافه شرائح" (no explicit verb) via
+  // hasExtraIntent, which already covers اضافي/اضافه/إضافة/extra.
+  // Default count = 1 when no number is given.
+  const addSimHit = (addVerb.test(msg) || hasExtraIntent.test(msg)) && isSimKeyword.test(msg);
+  if (addSimHit) {
+    const count = extractCount(msg) ?? 1;
+    if (count > 0 && count <= 50) {
+      let patched = upsertSectionLine(prevProgram, "SIM", String(count));
+      patched = replaceChat(patched, noteHeader.replace("التعديل", `إضافة شرائح هاتف (${count})`));
+      return patched;
+    }
+  }
+
+  // ── Pattern 3b: CHANGE SIM count ──────────────────────────────────────
   // "غيّر الشرائح لـ N" / "خل الشرائح N" / "اجعل الشرائح N شرائح"
-  const simRe = /(?:غير|غيّر|خل[يى]?|اجعل|عدل|change|set)\s*(?:عدد\s*)?(?:ال)?شرا(?:ئ|ي)ح\s*(?:هاتف\s*)?(?:لـ|إلى|الى|ل|to|=)?\s*(\d{1,2})/i;
-  const sm = msg.match(simRe);
-  if (sm) {
-    const n = parseInt(sm[1], 10);
-    if (n >= 0 && n <= 50) {
+  const changeSimRe = /(?:غير|غيّر|خل[يى]?|اجعل|عدل|change|set)\s*(?:عدد\s*)?(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim)/iu;
+  if (changeSimRe.test(msg)) {
+    const n = extractCount(msg);
+    if (n !== null && n >= 0 && n <= 50) {
       let patched: string;
       if (n === 0) {
         patched = removeSectionLine(prevProgram, "SIM");
@@ -333,7 +378,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
   }
 
   // ── Pattern 4: REMOVE SIM ────────────────────────────────────────────
-  if (/(احذف|شيل|الغ[يى]?|بدون|remove|cancel)\s*(?:ال)?شرا(?:ئ|ي)ح/i.test(msg)) {
+  if (/(احذف|شيل|الغ[يى]?|بدون|من\s*غير|remove|cancel|no)\s*(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim)/iu.test(msg)) {
     let patched = removeSectionLine(prevProgram, "SIM");
     patched = replaceChat(patched, noteHeader.replace("التعديل", "حذف الشرائح"));
     return patched;
