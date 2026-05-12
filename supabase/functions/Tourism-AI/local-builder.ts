@@ -526,6 +526,15 @@ export function findInterCityTransfer(
     const isGoingHome = (n: string) => /ارض\s*الوطن|الديار|للسلامه|للسلامة/iu.test(n);
     const isSharedRow = (n: string) => /مشترك[ةه]?|shared|ليموزين/iu.test(n);
     const isPrivateRow = (n: string) => /بسيار[ةه]\s*خاص[ةه]?|سياره\s*خاص[ةه]?|private/iu.test(n);
+    // Default Hanoi ↔ Sapa transit in Vietnam to PRIVATE when employee
+    // didn't pick one. The shared "ليموزين" row is cheaper so it would
+    // otherwise win on price (4), but sales preference for this route is
+    // a private car priced for the group.
+    const isHanoiSapaVietnam =
+      destination === "vietnam" &&
+      ((fromCity === "Ha Noi" && toCity === "Sapa") ||
+       (fromCity === "Sapa" && toCity === "Ha Noi"));
+    const effectiveTransport = requestedTransport ?? (isHanoiSapaVietnam ? "private" : null);
     fromDrop.sort((a, b) => {
       // (1) prefer rows that explicitly mention toCity
       const aHasTo = toDef ? toDef.pattern.test(a.name) : false;
@@ -534,9 +543,9 @@ export function findInterCityTransfer(
       // (2) match the requested transport mode — shared trip picks the
       // "مشتركة" row, private trip picks the "خاصة" row. This is the user-
       // visible difference between "غير لخاصة" and "غير لمشتركة".
-      if (requestedTransport) {
-        const aMatches = requestedTransport === "shared" ? isSharedRow(a.name) : isPrivateRow(a.name);
-        const bMatches = requestedTransport === "shared" ? isSharedRow(b.name) : isPrivateRow(b.name);
+      if (effectiveTransport) {
+        const aMatches = effectiveTransport === "shared" ? isSharedRow(a.name) : isPrivateRow(a.name);
+        const bMatches = effectiveTransport === "shared" ? isSharedRow(b.name) : isPrivateRow(b.name);
         if (aMatches !== bMatches) return aMatches ? -1 : 1;
       }
       // (3) non-final-departure rows preferred for an inter-city transit
