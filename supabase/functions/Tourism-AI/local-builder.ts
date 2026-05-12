@@ -536,15 +536,18 @@ export function formatProgram(data: ProgramData): string {
   }
   out += "\n";
 
-  // ── FLIGHTS ──────────────────────────────────────────────────────────
-  out += "FLIGHTS:\n";
+  // ── FLIGHTS — only emit the section if there are actual flight rows.
+  //    Empty FLIGHTS section is suppressed entirely so the PDF stays clean.
   let flightsTotal = 0;
-  for (const sf of flights) {
-    const total = sf.flight.price_per_pax * adults;
-    flightsTotal += total;
-    out += `${sf.flight.from_city} - ${sf.flight.to_city} | داخلي | ${formatNumber(sf.flight.price_per_pax)} ريال/شخص | ${adults} ${adults === 2 ? "أشخاص" : "أشخاص"} | ${formatNumber(total)} ريال\n`;
+  if (flights.length > 0) {
+    out += "FLIGHTS:\n";
+    for (const sf of flights) {
+      const total = sf.flight.price_per_pax * adults;
+      flightsTotal += total;
+      out += `${sf.flight.from_city} - ${sf.flight.to_city} | داخلي | ${formatNumber(sf.flight.price_per_pax)} ريال/شخص | ${adults} ${adults === 2 ? "أشخاص" : "أشخاص"} | ${formatNumber(total)} ريال\n`;
+    }
+    out += "\n";
   }
-  out += "\n";
 
   // ── SIM ──────────────────────────────────────────────────────────────
   if (simCount > 0) {
