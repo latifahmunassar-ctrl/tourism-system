@@ -83,21 +83,20 @@ function normalizeNightWords(s: string): string {
 
 /** Glue all messages into one searchable blob. */
 function joinMessages(messages: Array<{ role: string; content: unknown }>): string {
-  // Skip assistant turns (their text contains unrelated numbers — prices,
-  // page references — that pollute parseNightsByCity / parseDays). Then
-  // de-duplicate identical user messages so a repeated request doesn't
-  // double-count the night distribution (3 هانوي + 3 سابا = 6 → 12 if the
-  // employee re-sends after an error).
+  // Use ONLY the LAST user message that looks like a full trip request
+  // (mentions days OR a date range). Re-sends with even one digit changed
+  // would otherwise BOTH count and double-credit every per-city number.
+  // Short follow-ups ("اضف شريحه") fall back to the most recent message.
   const texts = messages
     .filter(m => m.role === "user")
     .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content));
-  // Normalize: strip everything except digits and letters, so trivial
-  // punctuation/whitespace differences ("3 +4" vs "3 + 4") collapse.
-  const normalize = (t: string) => t.replace(/[^\d؀-ۿa-zA-Z]/g, "");
-  const seen = new Set<string>();
-  return texts
-    .filter(t => { const k = normalize(t); if (seen.has(k)) return false; seen.add(k); return true; })
-    .join("\n");
+  const hasTripSignal = (t: string) =>
+    /(\d{1,2})\s*(?:يوم|أيام|ايام|days?)/i.test(t) ||
+    /من\s+(?:تاريخ\s+|يوم\s+)?\d{1,2}\s+[؀-ۿ]+\s+(?:إلى|الى|إلي|الي|ل)\s+(?:تاريخ\s+|يوم\s+)?\d{1,2}\s+[؀-ۿ]+/iu.test(t);
+  for (let i = texts.length - 1; i >= 0; i--) {
+    if (hasTripSignal(texts[i])) return texts[i];
+  }
+  return texts[texts.length - 1] || "";
 }
 
 const ARABIC_MONTHS: Record<string, number> = {
@@ -174,10 +173,22 @@ function parseAdults(text: string): number | null {
   const t = arabicDigitsToLatin(text);
   // Dual forms (no number)
   if (/زوجين|زوجان|couple/i.test(t)) return 2;
-  if (/شخصين|شخصان|شخصاً|شخصا|بالغين|بالغان/.test(t)) return 2;
-  // "6 أشخاص" / "2 شخص" / "3 كبار" / "ل شخصين"
-  const m = t.match(/(\d{1,2})\s*(?:شخص|أشخاص|اشخاص|كبار|بالغ|adults?|persons?|pax)/i);
+  if (/شخصين|شخصان|شخصاً|شخصا|بالغين|بالغان|فردين|فردان|شخصاين/.test(t)) return 2;
+  // "6 أشخاص" / "2 شخص" / "3 كبار" / "ل شخصين" / "4 افراد" / "4 أفراد"
+  const personNoun = "(?:شخص|أشخاص|اشخاص|كبار|بالغ|[أا]فراد|[أا]فرد|adults?|persons?|pax)";
+  const m = t.match(new RegExp(`(\\d{1,2})\\s*${personNoun}`, "i"));
   if (m) return parseInt(m[1], 10);
+  // Word numbers: "أربع افراد" / "خمسة أشخاص" / "ست افراد"
+  const wordNum: Array<[string, number]> = [
+    ["عشر[ةه]?", 10], ["تسع[ةه]?", 9], ["ثمان(?:ية|يه)?", 8],
+    ["سبع[ةه]?", 7], ["ست[ةه]?", 6], ["خمس[ةه]?", 5],
+    ["[أا]ربع[ةه]?", 4], ["ثلاث[ةه]?|تلات[ةه]?", 3],
+    ["[إا]ثن[يا][نه]", 2], ["واحد[ةه]?|وحد[ةه]?", 1],
+  ];
+  for (const [w, n] of wordNum) {
+    const re = new RegExp(`(?:^|\\s|ل)(?:${w})\\s+${personNoun}`, "iu");
+    if (re.test(t)) return n;
+  }
   return null;
 }
 

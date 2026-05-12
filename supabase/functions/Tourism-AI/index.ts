@@ -182,21 +182,25 @@ function validateNightsDistribution(
   cities: string[],
 ): { ok: true } | { ok: false; message: string } {
   if (cities.length === 0) return { ok: true };
-  // Take ONLY the user's own messages (skip assistant CHAT replies which contain
-  // unrelated numbers like "50 ريال للشريحة" that polluted the validator).
-  // De-duplicate near-identical messages — when the employee re-sends after an
-  // error, the second copy often differs only in punctuation/whitespace
-  // ("3 +4 +2" vs "3 + 4 + 2"). Strip everything except digits and Arabic /
-  // Latin letters before comparing so all such variants collapse to the
-  // same key. Otherwise per-city counts get doubled (11 → 22 etc.).
-  const normalizeForDedup = (t: string) => t.replace(/[^\d؀-ۿa-zA-Z]/g, "");
-  const userMessageTexts = messages
+  // Use ONLY the LAST user message that looks like a full trip request
+  // (mentions days OR a date range). Re-sends with even one digit changed
+  // ("إلى 22" → "إلى 21") would otherwise BOTH count and double-credit
+  // every per-city number. The very first request is usually self-contained;
+  // any later "fix" is a complete replacement, not an addition.
+  const userMessages = messages
     .filter(m => m.role === "user")
     .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content));
-  const dedupSeen = new Set<string>();
-  const userText = userMessageTexts
-    .filter(t => { const k = normalizeForDedup(t); if (dedupSeen.has(k)) return false; dedupSeen.add(k); return true; })
-    .join("\n");
+  // Walk backward to find the most recent message that contains a trip-length
+  // signal (يوم/أيام/days OR "من X إلى Y"). Fall back to the last message
+  // if none qualifies — short follow-ups like "اضف شريحه" are still scanned.
+  const hasTripSignal = (t: string) =>
+    /(\d{1,2})\s*(?:يوم|أيام|ايام|days?)/i.test(t) ||
+    /من\s+(?:تاريخ\s+|يوم\s+)?\d{1,2}\s+[؀-ۿ]+\s+(?:إلى|الى|إلي|الي|ل)\s+(?:تاريخ\s+|يوم\s+)?\d{1,2}\s+[؀-ۿ]+/iu.test(t);
+  let userText = "";
+  for (let i = userMessages.length - 1; i >= 0; i--) {
+    if (hasTripSignal(userMessages[i])) { userText = userMessages[i]; break; }
+  }
+  if (!userText) userText = userMessages[userMessages.length - 1] || "";
   const text = normalizeNightWords(arabicDigitsToLatin(userText));
 
   // Extract target nights from any "N يوم/أيام" mention OR a date range
