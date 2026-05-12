@@ -83,20 +83,27 @@ function normalizeNightWords(s: string): string {
 
 /** Glue all messages into one searchable blob. */
 function joinMessages(messages: Array<{ role: string; content: unknown }>): string {
-  // Use ONLY the LAST user message that looks like a full trip request
-  // (mentions days OR a date range). Re-sends with even one digit changed
-  // would otherwise BOTH count and double-credit every per-city number.
-  // Short follow-ups ("اضف شريحه") fall back to the most recent message.
+  // Find the LATEST user message that contains a full trip request
+  // (mentions days OR a date range), then append any follow-up user
+  // messages that came AFTER it. This way:
+  //   - cities/days/adults are read from the most recent full request
+  //     (a re-send with one digit changed isn't double-counted)
+  //   - small follow-ups ("غير السيارة لخاصة" / "اضف شريحه" / "+ سرير
+  //     في هانوي") still influence the parsed result, so the engine
+  //     can rebuild with the updated transport / SIM / bed scope.
   const texts = messages
     .filter(m => m.role === "user")
     .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content));
   const hasTripSignal = (t: string) =>
     /(\d{1,2})\s*(?:يوم|أيام|ايام|days?)/i.test(t) ||
     /من\s+(?:تاريخ\s+|يوم\s+)?\d{1,2}\s+[؀-ۿ]+\s+(?:إلى|الى|إلي|الي|ل)\s+(?:تاريخ\s+|يوم\s+)?\d{1,2}\s+[؀-ۿ]+/iu.test(t);
+  let baseIdx = -1;
   for (let i = texts.length - 1; i >= 0; i--) {
-    if (hasTripSignal(texts[i])) return texts[i];
+    if (hasTripSignal(texts[i])) { baseIdx = i; break; }
   }
-  return texts[texts.length - 1] || "";
+  if (baseIdx < 0) return texts[texts.length - 1] || "";
+  // Base + any messages after it (follow-up edits).
+  return [texts[baseIdx], ...texts.slice(baseIdx + 1)].join("\n");
 }
 
 const ARABIC_MONTHS: Record<string, number> = {
@@ -280,9 +287,15 @@ function parseExtraBed(text: string, cityDefs: CityDef[]): TripRequest["extraBed
 }
 
 function parseTransport(text: string): "private" | "shared" | null {
-  if (/خاصة|خاص|بسيارة\s*خاصة|private/i.test(text)) return "private";
-  if (/مشتركة|مشترك|shared|ليموزين/i.test(text)) return "shared";
-  return null;
+  // Use the LAST mention of a transport type so a follow-up override wins:
+  //   base: "بسيارة خاصة"  + follow-up: "غير لمشتركة" → "shared"
+  const privReg = /خاصة|خاص|private/giu;
+  const sharReg = /مشتركة|مشترك|shared|ليموزين/giu;
+  let lastPriv = -1, lastShar = -1;
+  for (const m of text.matchAll(privReg)) lastPriv = m.index ?? lastPriv;
+  for (const m of text.matchAll(sharReg)) lastShar = m.index ?? lastShar;
+  if (lastPriv < 0 && lastShar < 0) return null;
+  return lastPriv > lastShar ? "private" : "shared";
 }
 
 function parseMonth(text: string): { month: string | null; year: number | null } {
