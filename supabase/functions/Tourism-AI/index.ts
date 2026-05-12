@@ -2175,11 +2175,25 @@ Deno.serve(async (req) => {
             cityArabicNames,
           );
           if (result.ok) {
+            // If this rebuild was triggered by a transport-only follow-up,
+            // overwrite the generic CHAT line with a clear acknowledgement.
+            // Without this, the employee sees the program update silently
+            // (no message saying "تم التغيير") and assumes nothing happened.
+            let programText = result.program;
+            const transportTweak = /^(?:\s*(?:غير|غيّر|اجعل|خل[يى]?|بدل|حول|ابي|ابغى|اريد|أريد|أبي|أبغى|اعمل|ت?غي[يّ]?ر)\s+)?(?:(?:ال)?(?:سياره|سيارة|سيارات|تنقل|التنقل|نقل|مشتركه|مشتركة)\s*)?(?:من\s+(?:ال)?(?:سياره|سيارة|مشتركه|مشتركة|خاصه|خاصة)\s+)?(?:ال[يى]|الى|إلى|الى)?\s*(خاصه|خاصة|مشتركه|مشتركة|private|shared)/iu.test(lastUserMsg.trim());
+            if (transportTweak && lastAssistantProgram) {
+              const newType = tripRequest.transport === "private" ? "خاصة" : "مشتركة";
+              const newTotalMatch = result.program.match(/TOTAL_GROUP:([\d,]+)/);
+              const newTotal = newTotalMatch ? newTotalMatch[1] : "?";
+              const ackChat = `CHAT:تم تغيير السيارة إلى ${newType}. الإجمالي الجديد: ${newTotal} ريال.`;
+              programText = result.program.replace(/^CHAT:.*$/m, ackChat);
+              if (!/^CHAT:/m.test(programText)) programText += `\n\n${ackChat}`;
+            }
             return new Response(JSON.stringify({
               id: "local-build",
               model: "local-engine",
               role: "assistant",
-              content: [{ type: "text", text: result.program }],
+              content: [{ type: "text", text: programText }],
               usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
             }), { headers: CORS_HEADERS });
           }
