@@ -403,7 +403,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
   }
 
   // SIM keyword — singular/plural, with ة or ه, شرائح or شرايح, "sim card"
-  const isSimKeyword = /(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim\s*card|sim|esim|إي\s*سيم)/iu;
+  const isSimKeyword = /(?:[شس]ر[اي]ئ?ح|[شس]ريح[هة]|[شس]رايح|sim\s*card|sim|esim|[إا]?ي\s*سيم|سيم)/iu;
 
   // Normalize Arabic-Indic digits (٠-٩) and arabic-word numerals to Latin.
   const arDigit = (s: string) => s.replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
