@@ -333,12 +333,28 @@ export function findArrivalPickup(
   cityDefs: CityDef[],
   preferType: "airport" | "train" = "airport",
 ): TourRow | null {
-  const candidates = allTours.filter(t => {
+  // City-specific candidates first.
+  let candidates = allTours.filter(t => {
     if (t.type !== destination) return false;
     const n = t.name;
     if (!/استقبال|الاستقبال/.test(n)) return false;
     return tourNameMatchesCity(n, city, cityDefs);
   });
+  // Fallback: generic pickup rows (no DEST_CITIES city in the name) — used
+  // by Turkey ("استقبال من المطار الدولي والتوجه للفندق") and Bosnia for
+  // arrivals into cities that don't have a dedicated pickup row.
+  if (candidates.length === 0) {
+    candidates = allTours.filter(t => {
+      if (t.type !== destination) return false;
+      const n = t.name;
+      if (!/استقبال|الاستقبال/.test(n)) return false;
+      // Reject rows that mention any specific city — those belong elsewhere.
+      for (const c of cityDefs) {
+        if (c.pattern.test(n)) return false;
+      }
+      return true;
+    });
+  }
   if (candidates.length === 0) return null;
   // Prefer the row matching the requested arrival type. Russia's sheet has
   // both "استقبال من مطار موسكو" and "استقبال من قطار موسكو" — picking the
@@ -352,20 +368,78 @@ export function findArrivalPickup(
   return pool[0];
 }
 
+/**
+ * Extract a row's actual departure-place from its name. Used by both
+ * findInterCityTransfer and findDepartureDrop so a row like "الخروج من
+ * فندق بالي والتوجه الى المطار لذهاب الي جاكزتا" is not falsely matched
+ * as a Jakarta departure (the Jakarta mention is the destination half).
+ */
+function extractRowFromCity(n: string): string {
+  // Pattern 1: "(verb) من [filler]? CITY <terminator>"
+  //   filler ∈ {فندق(_في)?, خليج, مدينه, مدينة}
+  //   terminator ∈ {الى/إلى/الي, والتوصيل, والتوجه, للمطار,
+  //                 للمحطة, للقطار, للتوجه, للذهاب}
+  const m1 = n.match(/من\s+(?:فندق(?:\s+في)?\s+|خليج\s+|مدينه\s+|مدينة\s+)?([^\s]+(?:\s+[^\s]+){0,2}?)\s+(?:الى|إلى|الي|والتوصيل|والتوجه|للمطار|للمحط[هة]|للقطار|للتوجه|للذهاب)/iu);
+  if (m1) return m1[1];
+  // Pattern 2: "(المطار|محط[هة])(_الدولي)? في? CITY <forward action>"
+  const m2 = n.match(/(?:المطار|محط[هة])(?:\s+الدولي)?\s*(?:في\s*)?([^\n]+?)\s+(?:للتوجة|للذهاب|للعوده|للعودة|والاستقبال)/iu);
+  if (m2) return m2[1];
+  return "";
+}
+
 export function findDepartureDrop(
   allTours: TourRow[],
   city: string,
   destination: string,
   cityDefs: CityDef[],
 ): TourRow | null {
-  const candidates = allTours.filter(t => {
+  let candidates = allTours.filter(t => {
     if (t.type !== destination) return false;
     const n = t.name;
-    if (!/توديع|التوديع|التوجه.*المطار|للعوده|للعودة/.test(n)) return false;
-    return tourNameMatchesCity(n, city, cityDefs);
+    if (/استقبال|الاستقبال|pickup/iu.test(n)) return false;
+    if (!/توديع|التوديع|التوجه|التوجة|الذهاب|الخروج|التوصيل|للعوده|للعودة|drop/iu.test(n)) return false;
+    const rowFrom = extractRowFromCity(n);
+    if (!rowFrom) return false;
+    if (!tourNameMatchesCity(rowFrom, city, cityDefs)) return false;
+    // Reject rows that are clearly an inter-city transit (their destination
+    // is another DEST_CITIES entry, not the airport for going home). For
+    // example "التوجه من هانوي الى مدينه هالونج" matches "Hanoi as from"
+    // but is a transit to Halong, not a departure to the international
+    // airport.
+    for (const c of cityDefs) {
+      if (c.canonical === city) continue;
+      // If the row mentions another canonical city, treat as inter-city.
+      // The "ارض الوطن/الديار/للسلامه/للعوده" markers override — those
+      // unambiguously indicate going home, not transitioning to that city.
+      const looksLikeGoingHome = /ارض\s*الوطن|الديار|للسلامه|للسلامة/iu.test(n);
+      if (!looksLikeGoingHome && c.pattern.test(n)) return false;
+    }
+    return true;
   });
+  // Fallback: generic departure rows ("توديع الى المطار الدولي" / "الخروج من
+  // الفندق للعوده الى ديار الوطن") that don't name any DEST_CITIES city.
+  // Used by Turkey + Bosnia where the sheet has one universal departure row.
+  if (candidates.length === 0) {
+    candidates = allTours.filter(t => {
+      if (t.type !== destination) return false;
+      const n = t.name;
+      if (/استقبال|الاستقبال|pickup/iu.test(n)) return false;
+      if (!/توديع|التوديع|الخروج|للعوده|للعودة|drop/iu.test(n)) return false;
+      // Must look like an international departure (going home/airport).
+      if (!/مطار|airport|ارض\s*الوطن|ديار|للسلامه|للسلامة/iu.test(n)) return false;
+      // Generic = mentions no DEST_CITIES city
+      for (const c of cityDefs) if (c.pattern.test(n)) return false;
+      return true;
+    });
+  }
   if (candidates.length === 0) return null;
-  candidates.sort((a, b) => a.price - b.price);
+  // Prefer the international-departure rows when multiple candidates remain.
+  candidates.sort((a, b) => {
+    const aHome = /ارض\s*الوطن|الديار|للسلامه|للسلامة|للعوده|للعودة|الدولي/iu.test(a.name) ? 1 : 0;
+    const bHome = /ارض\s*الوطن|الديار|للسلامه|للسلامة|للعوده|للعودة|الدولي/iu.test(b.name) ? 1 : 0;
+    if (aHome !== bHome) return bHome - aHome;
+    return a.price - b.price;
+  });
   return candidates[0];
 }
 
@@ -381,22 +455,7 @@ export function findInterCityTransfer(
   // many phrasings — we try the two structural patterns most common in the
   // sheet, and a row that doesn't match either is rejected (don't fall back
   // to "city appears anywhere", that's how wrong-direction rows leak in).
-  const rowFromCity = (n: string): string => {
-    // Pattern 1: "(verb) من [filler] CITY ... الى/إلى/الي"
-    //   filler ∈ {فندق(_في)?, خليج, مدينه, مدينة}
-    //   "التوجه من فندق في موسكو الى محطه القطار…"
-    //   "التوجه من خليج هالونج الى فندق…"
-    //   "التوديع من بتايا والتوصيل…"
-    //   "الذهاب من فندق بوكيت الى المطار…"
-    const m1 = n.match(/من\s+(?:فندق(?:\s+في)?\s+|خليج\s+|مدينه\s+|مدينة\s+)?(.+?)\s+(?:الى|إلى|الي|والتوصيل)\s/iu);
-    if (m1) return m1[1];
-    // Pattern 2: "التوجه (الى )?المطار(في)? CITY (للتوجة|للذهاب|للعوده|للعودة|والاستقبال)"
-    //   "التوجه الى المطار في كرابي للتوجة الى بانكوك"
-    //   "التوجه الى المطار الدولي في بانكوك للعوده بالسلامه"
-    const m2 = n.match(/(?:المطار|محط[هة])(?:\s+الدولي)?\s*(?:في\s*)?([^\n]+?)\s+(?:للتوجة|للذهاب|للعوده|للعودة|والاستقبال)/iu);
-    if (m2) return m2[1];
-    return "";
-  };
+  const rowFromCity = extractRowFromCity;
 
   // Filter rules:
   //   (a) outbound transfer verb required (توديع/التوجه/الذهاب/التوصيل/drop),
@@ -411,7 +470,7 @@ export function findInterCityTransfer(
     if (tr.type !== destination) return false;
     const n = tr.name;
     if (/استقبال|الاستقبال|pickup/iu.test(n)) return false;                                // (b)
-    if (!/توديع|التوديع|التوجه|التوجة|الذهاب|للعوده|للعودة|التوصيل|drop/iu.test(n)) return false; // (a)
+    if (!/توديع|التوديع|التوجه|التوجة|الذهاب|للعوده|للعودة|التوصيل|الخروج|drop/iu.test(n)) return false; // (a)
 
     const rowFrom = rowFromCity(n);                                                         // (c)
     if (!rowFrom) return false;
@@ -425,7 +484,17 @@ export function findInterCityTransfer(
     return true;
   });
   if (fromDrop.length > 0) {
-    fromDrop.sort((a, b) => a.price - b.price);
+    // Prefer rows that ALSO mention the actual destination city — when two
+    // rows share the same fromCity but one says "لذهاب الي جاكرتا" and the
+    // other says "للعوده الى الديار", the first is correct for an inter-city
+    // transit while the second is the final-departure row.
+    const toDef = cityDefs.find(c => c.canonical === toCity);
+    fromDrop.sort((a, b) => {
+      const aHasTo = toDef ? toDef.pattern.test(a.name) : false;
+      const bHasTo = toDef ? toDef.pattern.test(b.name) : false;
+      if (aHasTo !== bHasTo) return aHasTo ? -1 : 1;  // toCity-mentioning first
+      return a.price - b.price;
+    });
     return fromDrop[0];
   }
   return null;

@@ -87,7 +87,8 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
   Turky: [
     { canonical: "Istanbul",   pattern: /اسطنبول|إسطنبول|إستانبول|istanbul|آيا\s*صوفيا|البازار|تقسيم/i },
     { canonical: "Trabzon",    pattern: /طرابزون|طربزون|trabzon|سلطان\s*مراد|حيدر\s*نبي|هامسيكوي|بيشك\s*دوزو/i },
-    { canonical: "Uzungol",    pattern: /[أا]وزن[جغ]ول|uzungol/i },
+    // Saudi spelling alternates و↔ز order: اوزنجول vs ازونجول
+    { canonical: "Uzungol",    pattern: /[أا]وزن[جغ]ول|[أا]زون[جغ]ول|uzungol/i },
     { canonical: "Ayder",      pattern: /[أا]يدر|ayder/i },
     { canonical: "Rize",       pattern: /ريزا|ريزه|rize/i },
     { canonical: "Bursa",      pattern: /بورص[ةه]|bursa/i },
@@ -111,8 +112,10 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
   ],
   indonesia: [
     { canonical: "Bali",     pattern: /بالي|bali|كوتا|kuta|[أا]وبود|ubud|سمينياك|seminyak|جيمباران|jimbaran|نوسا\s*دوا/i },
-    { canonical: "Jakarta",  pattern: /جا?كرتا|jakarta/i },
-    { canonical: "Bandung",  pattern: /باندون[جغ]|bandung/i },
+    // jakarta typo: sheet sometimes writes "جاكزتا" with ز instead of ر
+    { canonical: "Jakarta",  pattern: /جا?ك[رز]تا|jakarta/i },
+    // bandung sheet variant: "باندونق" with ق (Egyptian dialect spelling)
+    { canonical: "Bandung",  pattern: /باندون[جغق]|bandung/i },
     { canonical: "Puncak",   pattern: /بونشاك|puncak/i },
   ],
 };
