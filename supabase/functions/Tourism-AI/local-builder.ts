@@ -108,19 +108,33 @@ function destFromLocation(location: string): string {
  *      appear in the hotel's city (after normalization). Catches
  *      "Phu Quoc Island" → "Phu Quoc" ✓ but rejects "Halong" → "Ha Noi" ✗.
  */
-function hotelCityMatches(hotelLocation: string, canonicalCity: string): boolean {
+function hotelCityMatches(hotelLocation: string, canonicalCity: string, cityPattern?: RegExp): boolean {
+  const hotelCityRaw = cityFromLocation(hotelLocation);
+
+  // Path 1: regex match — when caller passes the cityDefs pattern, use it.
+  // This is the most reliable because the same regex already accepts all
+  // dialectal spellings the parser knows (Saint/St Petersburg, Halong/Ha Long,
+  // كوالامبور/كوالا لمبور, etc.).
+  if (cityPattern) {
+    if (cityPattern.test(hotelCityRaw)) return true;
+  }
+
+  // Path 2: normalize-and-compare fallback for callers without cityDefs.
   const norm = (s: string) => s
     .toLowerCase()
     .normalize("NFD").replace(/\p{M}/gu, "")
     .replace(/[\.\-_,]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  const hotelCity = norm(cityFromLocation(hotelLocation));
-  const target = norm(canonicalCity);
+  // Common English abbreviations that bypass word-set matching otherwise.
+  // E.g. canonical "St Petersburg" vs hotel "Saint Petersburg".
+  const expandAbbrevs = (s: string) => s
+    .replace(/\bsaint\b/g, "st")
+    .replace(/\bst\.?/g, "st");
+  const hotelCity = expandAbbrevs(norm(hotelCityRaw));
+  const target = expandAbbrevs(norm(canonicalCity));
   if (!hotelCity || !target) return false;
-  // Exact match
   if (hotelCity === target) return true;
-  // No-space variant: "halong" === "ha long"
   if (hotelCity.replace(/\s+/g, "") === target.replace(/\s+/g, "")) return true;
   // Word-set match: all canonical words appear in hotel city
   // (handles "Phu Quoc Island" matches "Phu Quoc")
@@ -143,11 +157,12 @@ export function pickCheapestHotel(
   allHotels: HotelRow[],
   city: string,
   request: TripRequest,
+  cityPattern?: RegExp,
 ): HotelRow | null {
   const adults = request.adults || 2;
 
   let candidates = allHotels.filter(h => {
-    if (!hotelCityMatches(h.location, city)) return false;
+    if (!hotelCityMatches(h.location, city, cityPattern)) return false;
     // Adults exact match
     const ac = extractAdultsCount(h.occupancy || "");
     if (ac !== adults) return false;
@@ -644,13 +659,15 @@ export async function buildLocalProgram(
   // Walk days in order, grouping consecutive same-city days into stays.
   let consumedDays = 0;
   for (const stay of stayOrder) {
-    const hotel = pickCheapestHotel(allHotels, stay.city, request);
+    const cityDef = cityDefs.find(c => c.canonical === stay.city);
+    const cityPattern = cityDef?.pattern;
+    const hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern);
     if (!hotel) {
       // Diagnose: what IS available in that city? Walk hotels matching just
       // the city (ignoring pax/stars/date) so the employee can see what's
       // close — and decide whether to adjust pax, change dates, or accept
       // a stars filter relaxation.
-      const cityHotels = allHotels.filter(h => hotelCityMatches(h.location, stay.city));
+      const cityHotels = allHotels.filter(h => hotelCityMatches(h.location, stay.city, cityPattern));
       let diag = "";
       if (cityHotels.length === 0) {
         diag = `لا توجد أيّ فنادق في ${stay.city} في قاعدة البيانات.`;
