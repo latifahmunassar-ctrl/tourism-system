@@ -767,7 +767,21 @@ export function formatProgram(data: ProgramData): string {
   out += "\n";
 
   // ── SUMMARY ──────────────────────────────────────────────────────────
-  const hotelsTotal = hotels.reduce((s, sh) => s + sh.hotel.price_per_night * sh.nights, 0);
+  const hotelsBase = hotels.reduce((s, sh) => s + sh.hotel.price_per_night * sh.nights, 0);
+  // Extra-bed cost: 5★ → 120/night, 4★ → 100/night. Apply to every hotel
+  // in scope (ALL, country marker, or specific city list).
+  const isAllScope = data.extraBedScope === "all";
+  const scopeList = Array.isArray(data.extraBedScope) ? data.extraBedScope : [];
+  const extraBedTotal = hotels.reduce((s, sh) => {
+    if (sh.hotel.stars < 4 || sh.hotel.stars > 5) return s;
+    const inScope = isAllScope
+      || scopeList.includes(sh.city)
+      || scopeList.some(c => sh.city.toLowerCase() === String(c).toLowerCase());
+    if (!inScope) return s;
+    const nightly = sh.hotel.stars >= 5 ? 120 : 100;
+    return s + nightly * sh.nights;
+  }, 0);
+  const hotelsTotal = hotelsBase + extraBedTotal;
   const simTotal = simCount * 50;
   const grand = hotelsTotal + flightsTotal + transfersTotal + toursTotal + simTotal;
 
