@@ -479,6 +479,7 @@ export function findInterCityTransfer(
   destination: string,
   cityDefs: CityDef[],
   transitKind: "airport" | "train" = "airport",
+  requestedTransport: "private" | "shared" | null = null,
 ): TourRow | null {
   // Extract the row's *actual* departure-place from its text. The data uses
   // many phrasings — we try the two structural patterns most common in the
@@ -499,7 +500,8 @@ export function findInterCityTransfer(
     if (tr.type !== destination) return false;
     const n = tr.name;
     if (/استقبال|الاستقبال|pickup/iu.test(n)) return false;                                // (b)
-    if (!/توديع|التوديع|التوجه|التوجة|الذهاب|للعوده|للعودة|التوصيل|الخروج|drop/iu.test(n)) return false; // (a)
+    // (a) Outbound transfer verb. Includes العوده/العودة (Sapa return).
+    if (!/توديع|التوديع|التوجه|التوجة|الذهاب|العوده|العودة|للعوده|للعودة|التوصيل|الخروج|drop/iu.test(n)) return false;
 
     const rowFrom = rowFromCity(n);                                                         // (c)
     if (!rowFrom) return false;
@@ -513,19 +515,35 @@ export function findInterCityTransfer(
     return true;
   });
   if (fromDrop.length > 0) {
-    // Sort priority: (1) row explicitly mentions toCity → most precise.
-    // (2) row is NOT a "going home" departure → an inter-city transit
-    // shouldn't pick the final-departure row when an alternative exists.
-    // (3) cheapest price.
+    // Sort priority:
+    //   (1) row explicitly mentions toCity (most precise inter-city match)
+    //   (2) row's transport type matches the requested mode (private vs shared) —
+    //       a shared trip should pick the "ليموزين مشتركه" row, a private trip
+    //       should pick the "بسياره خاصه" row, even when both exist.
+    //   (3) row is NOT a "going home" departure
+    //   (4) cheapest price
     const toDef = cityDefs.find(c => c.canonical === toCity);
     const isGoingHome = (n: string) => /ارض\s*الوطن|الديار|للسلامه|للسلامة/iu.test(n);
+    const isSharedRow = (n: string) => /مشترك[ةه]?|shared|ليموزين/iu.test(n);
+    const isPrivateRow = (n: string) => /بسيار[ةه]\s*خاص[ةه]?|سياره\s*خاص[ةه]?|private/iu.test(n);
     fromDrop.sort((a, b) => {
+      // (1) prefer rows that explicitly mention toCity
       const aHasTo = toDef ? toDef.pattern.test(a.name) : false;
       const bHasTo = toDef ? toDef.pattern.test(b.name) : false;
       if (aHasTo !== bHasTo) return aHasTo ? -1 : 1;
+      // (2) match the requested transport mode — shared trip picks the
+      // "مشتركة" row, private trip picks the "خاصة" row. This is the user-
+      // visible difference between "غير لخاصة" and "غير لمشتركة".
+      if (requestedTransport) {
+        const aMatches = requestedTransport === "shared" ? isSharedRow(a.name) : isPrivateRow(a.name);
+        const bMatches = requestedTransport === "shared" ? isSharedRow(b.name) : isPrivateRow(b.name);
+        if (aMatches !== bMatches) return aMatches ? -1 : 1;
+      }
+      // (3) non-final-departure rows preferred for an inter-city transit
       const aHome = isGoingHome(a.name);
       const bHome = isGoingHome(b.name);
-      if (aHome !== bHome) return aHome ? 1 : -1;  // non-home first
+      if (aHome !== bHome) return aHome ? 1 : -1;
+      // (4) cheapest wins
       return a.price - b.price;
     });
     return fromDrop[0];
@@ -748,9 +766,20 @@ export function formatProgram(data: ProgramData): string {
   const sortedTransfers = [...transfers].sort((a, b) => a.day - b.day);
   for (const t of sortedTransfers) {
     const isShared = request.transport === "shared";
-    const price = pickTourVariantPrice(t.row, adults, isShared);
-    transfersTotal += isShared ? price * adults : price;
-    out += `اليوم ${t.day} | ${t.row.name.trim()} | ${t.kind} | ${formatNumber(isShared ? price * adults : price)} ريال\n`;
+    // Detect whether the chosen row actually has a "sharing per pax" variant.
+    // Some rows (e.g. "العوده من سابا الى هانوي بسياره خاصه") are PRIVATE-only —
+    // their variants are pax-range buckets (pax 1-3, pax 4-8) priced for the
+    // whole group, not per-pax. For those, multiplying by pax over-charges.
+    // Apply per-pax multiplication ONLY when the variant is genuinely
+    // "sharing per pax" or the row name explicitly says مشتركة/shared.
+    const variants = t.row.variants || [];
+    const hasPerPaxVariant = variants.some(v => /per\s*pax/i.test(v.label || ""));
+    const rowSaysShared = /مشترك[ةه]?|shared|ليموزين/iu.test(t.row.name || "");
+    const treatAsShared = isShared && (hasPerPaxVariant || rowSaysShared);
+    const price = pickTourVariantPrice(t.row, adults, treatAsShared);
+    const lineTotal = treatAsShared ? price * adults : price;
+    transfersTotal += lineTotal;
+    out += `اليوم ${t.day} | ${t.row.name.trim()} | ${t.kind} | ${formatNumber(lineTotal)} ريال\n`;
   }
   out += "\n";
 
@@ -1004,7 +1033,7 @@ export async function buildLocalProgram(
   for (const d of days) {
     if (d.type === "transit" && d.fromCity && d.toCity) {
       const arrivalType = transitKind(d.number);
-      const fromAirportDrop = findInterCityTransfer(allTours, d.fromCity, d.toCity, dest, cityDefs, arrivalType);
+      const fromAirportDrop = findInterCityTransfer(allTours, d.fromCity, d.toCity, dest, cityDefs, arrivalType, request.transport);
       if (fromAirportDrop) selectedTransfers.push({ day: d.number, row: fromAirportDrop, kind: "Drop" });
       const arrPickupForCity = findArrivalPickup(allTours, d.toCity, dest, cityDefs, arrivalType);
       if (arrPickupForCity) {
