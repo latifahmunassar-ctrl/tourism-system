@@ -1756,25 +1756,52 @@ Deno.serve(async (req) => {
     // ── Pure Local Engine ─────────────────────────────────────────────
     // If we have ALL required info (destination + cities + nights + adults),
     // build the entire program locally without calling Anthropic. $0 cost.
+    // Otherwise, if destination is known but cities/distribution missing,
+    // ALSO answer locally (template question) — Turn 1 should never hit
+    // Claude either.
     if (detectedDest && DEST_CITIES[detectedDest]) {
       const cityDefs = DEST_CITIES[detectedDest];
       const tripRequest = parseTripRequest(messages, cityDefs);
+      const cityArabicNames: Record<string, string> = {
+        "Ha Noi": "هانوي", "Sapa": "سابا", "Ha Long": "هالونج",
+        "Da Nang": "دانانج", "Phu Quoc": "فوكوك", "Ho Chi Minh": "هوتشي مينه",
+        "Kuala Lumpur": "كوالالمبور", "Selangor": "سيلانجور",
+        "Langkawi": "لانكاوي", "Penang": "بينانج", "Cameron Highlands": "كاميرون هايلاند",
+        "Bangkok": "بانكوك", "Phuket": "بوكيت", "Krabi": "كرابي",
+        "Chiang Mai": "شيانغ ماي", "Pattaya": "باتايا", "Koh Samui": "كوه ساموي",
+        "Istanbul": "اسطنبول", "Trabzon": "طرابزون", "Uzungol": "أوزنجول",
+        "Ayder": "ايدر", "Rize": "ريزا", "Bursa": "بورصة", "Sapanca": "سابانجا",
+        "Moscow": "موسكو", "St Petersburg": "سانت بطرسبرغ", "Sochi": "سوتشي",
+        "Sarajevo": "سراييفو", "Mostar": "موستار", "Bihać": "بيهاتش",
+        "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
+      };
+      const destAr: Record<string, string> = {
+        vietnam: "فيتنام", Malaysia: "ماليزيا", thailand: "تايلاند",
+        Turky: "تركيا", russia: "روسيا", Bosnia: "البوسنة", indonesia: "إندونيسيا",
+      };
+
+      // CASE A: distribution missing → ask locally (no Claude, $0)
+      if (!canBuildLocally(tripRequest)) {
+        const cityList = cityDefs.map(c => cityArabicNames[c.canonical] || c.canonical).join("، ");
+        const targetNights = tripRequest.daysTotal ? tripRequest.daysTotal - 1 : "[عدد الليالي]";
+        const localQuestion = `CHAT:تمام! المدن المتاحة في ${destAr[detectedDest] || detectedDest}: ${cityList}. ` +
+          `عشان أبني البرنامج بمكالمة واحدة (بأقل تكلفة)، أعطني في رد واحد:\n` +
+          `1) كم ليلة لكل مدينة؟ (مجموع الليالي = ${targetNights})\n` +
+          `2) كم شريحة هاتف؟ (50 ريال للشريحة، أو "بدون")\n` +
+          `3) سرير إضافي؟ ("نعم لكل الفنادق" / "نعم لـ [مدينة]" / "بدون")\n` +
+          `4) التنقل: خاصة أم مشتركة؟`;
+        return new Response(JSON.stringify({
+          id: "local-question",
+          model: "local-engine",
+          role: "assistant",
+          content: [{ type: "text", text: localQuestion }],
+          usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+        }), { headers: CORS_HEADERS });
+      }
+
+      // CASE B: full info present → build program locally
       if (canBuildLocally(tripRequest)) {
         try {
-          const cityArabicNames: Record<string, string> = {
-            "Ha Noi": "هانوي", "Sapa": "سابا", "Ha Long": "هالونج",
-            "Da Nang": "دانانج", "Phu Quoc": "فوكوك", "Ho Chi Minh": "هوتشي مينه",
-            "Kuala Lumpur": "كوالالمبور", "Selangor": "سيلانجور",
-            "Langkawi": "لانكاوي", "Penang": "بينانج", "Cameron Highlands": "كاميرون هايلاند",
-            "Bangkok": "بانكوك", "Phuket": "بوكيت", "Krabi": "كرابي",
-            "Chiang Mai": "شيانغ ماي", "Pattaya": "باتايا", "Koh Samui": "كوه ساموي",
-            "Istanbul": "اسطنبول", "Trabzon": "طرابزون", "Uzungol": "أوزنجول",
-            "Ayder": "ايدر", "Rize": "ريزا", "Bursa": "بورصة", "Sapanca": "سابانجا",
-            "Moscow": "موسكو", "St Petersburg": "سانت بطرسبرغ", "Sochi": "سوتشي",
-            "Sarajevo": "سراييفو", "Mostar": "موستار", "Bihać": "بيهاتش",
-            "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
-          };
-
           const result = await buildLocalProgram(
             tripRequest,
             cityDefs,
