@@ -1240,7 +1240,18 @@ export async function buildLocalProgram(
         const occs = [...new Set(cityHotels.map(h => extractAdultsCount(h.occupancy || "")).filter(n => n > 0))].sort((a, b) => a - b);
         const stars = [...new Set(cityHotels.map(h => h.stars).filter(s => s > 0))].sort();
         const total = cityHotels.length;
-        diag = `يوجد ${total} فندق في ${stay.city}، لكن الإشغال المتاح فقط: ${occs.join("/")} أشخاص (نجوم: ${stars.join("/")}). الموظف طلب ${request.adults} أشخاص.`;
+        const missingOccupancy = cityHotels.filter(h => extractAdultsCount(h.occupancy || "") === 0).length;
+        // When every (or almost every) hotel in the city has no occupancy data,
+        // that's a SHEET problem — the city has the rooms, the column is just
+        // blank. Tell the employee to fix the sheet rather than blaming the
+        // request.
+        if (missingOccupancy >= total) {
+          diag = `لكن كل الـ ${total} فندق في الشيت بدون قيمة في عمود occupancy (الإشغال). أضف عدد الأشخاص لكل صف في ${stay.city} ثم أعد المزامنة، عندها أقدر أبني البرنامج.`;
+        } else if (occs.length === 0) {
+          diag = `لكن قيم الإشغال في الشيت غير قابلة للقراءة لكل الـ ${total} فندق. راجع عمود occupancy في صفحة ${stay.city}.`;
+        } else {
+          diag = `يوجد ${total} فندق في ${stay.city}، لكن الإشغال المتاح فقط: ${occs.join("/")} أشخاص (نجوم: ${stars.join("/")}). الموظف طلب ${request.adults} أشخاص.`;
+        }
       }
       return { ok: false, chatMessage: `ما عندنا فندق يطابق المعايير في ${stay.city} لـ ${request.adults} أشخاص. ${diag}` };
     }
