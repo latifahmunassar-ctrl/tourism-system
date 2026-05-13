@@ -4,7 +4,12 @@
 // asked for. Used by the deterministic program builder + validators.
 // ─────────────────────────────────────────────────────────────────────────
 
-export type CityStay = { city: string; nights: number };
+export type CityStay = {
+  city: string;
+  nights: number;
+  /** Sub-area within the city (e.g. Bali → "Kuta"/"Seminyak"/"Ubud"/...). */
+  area?: string;
+};
 
 /**
  * A follow-up modification to a built program's tour list.
@@ -464,12 +469,24 @@ function parseStartDate(text: string): string | null {
  * NOT bare digits like "6 اشخاص" or "15 يوم" elsewhere in the message.
  * Preserves the ORDER the employee wrote, INCLUDING duplicates.
  */
+// Bali sub-areas: hotels in DB are tagged by location like "Bali-Kuta",
+// "Bali-Seminyak", etc. When the employee mentions an area (with or without
+// "بالي"), we attach it to that specific stay so the builder can filter by
+// area within the city.
+const BALI_AREAS: Array<{ pat: RegExp; name: string }> = [
+  { pat: /كوتا|kuta/iu, name: "Kuta" },
+  { pat: /سيمنياك|سمينياك|seminyak/iu, name: "Seminyak" },
+  { pat: /[أا]وبود|ubud/iu, name: "Ubud" },
+  { pat: /جيمبران|جيمباران|jimbaran/iu, name: "Jimbaran" },
+  { pat: /نوسا\s*دوا|nusa\s*dua/iu, name: "Nusa Dua" },
+];
+
 function parseCityStaysOrdered(text: string, cityDefs: CityDef[]): CityStay[] {
   const t = normalizeNightWords(arabicDigitsToLatin(text));
   // Build a single combined regex matching either "N city" or "city N",
   // capturing the city name + number. Use named-group alternation by
   // running per-city regex and merging results sorted by position.
-  type Hit = { city: string; nights: number; pos: number };
+  type Hit = { city: string; nights: number; pos: number; area?: string };
   const hits: Hit[] = [];
   for (const { canonical, pattern } of cityDefs) {
     const cityPat = pattern.source;
@@ -491,7 +508,44 @@ function parseCityStaysOrdered(text: string, cityDefs: CityDef[]): CityStay[] {
   }
   // Sort by position so we get the order the employee wrote them
   hits.sort((a, b) => a.pos - b.pos);
-  return hits.map(h => ({ city: h.city, nights: h.nights }));
+
+  // Attach Bali sub-area hints to nearby Bali stays. We collect all area
+  // mentions in the text, then for each Bali hit pick the closest UNUSED
+  // area mention within a small window (so the employee writing "4 بالي
+  // كوتا + 2 سيمنياك" gets two Bali stays tagged "Kuta" and "Seminyak"
+  // in that order).
+  const baliHits = hits.filter(h => h.city === "Bali");
+  if (baliHits.length > 0) {
+    const areaMentions: Array<{ name: string; pos: number; used: boolean }> = [];
+    for (const area of BALI_AREAS) {
+      const re = new RegExp(area.pat.source, "giu");
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(t)) !== null) {
+        areaMentions.push({ name: area.name, pos: m.index, used: false });
+        if (m.index === re.lastIndex) re.lastIndex++;
+      }
+    }
+    // Sort by position and greedily match each Bali hit to its nearest
+    // unused area mention within 40 chars (covers "4 ليالي بالي كوتا").
+    areaMentions.sort((a, b) => a.pos - b.pos);
+    for (const baliHit of baliHits) {
+      let best: { idx: number; dist: number } | null = null;
+      for (let i = 0; i < areaMentions.length; i++) {
+        if (areaMentions[i].used) continue;
+        const dist = Math.abs(areaMentions[i].pos - baliHit.pos);
+        if (dist > 40) continue;
+        if (best === null || dist < best.dist) best = { idx: i, dist };
+      }
+      if (best !== null) {
+        baliHit.area = areaMentions[best.idx].name;
+        areaMentions[best.idx].used = true;
+      }
+    }
+  }
+
+  return hits.map(h => h.area
+    ? { city: h.city, nights: h.nights, area: h.area }
+    : { city: h.city, nights: h.nights });
 }
 
 function parseNightsByCity(text: string, cityDefs: CityDef[]): Record<string, number> {

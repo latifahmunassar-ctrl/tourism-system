@@ -164,7 +164,7 @@ export function pickCheapestHotel(
   city: string,
   request: TripRequest,
   cityPattern?: RegExp,
-  options?: { excludeNames?: Set<string>; overrideAdults?: number },
+  options?: { excludeNames?: Set<string>; overrideAdults?: number; areaFilter?: string },
 ): HotelRow | null {
   // overrideAdults is set when the employee explicitly asks for a different
   // occupancy on a single swap ("غير فندق هانوي لـ 4 أشخاص"). In that case
@@ -189,6 +189,12 @@ export function pickCheapestHotel(
       if (!request.stars.includes(h.stars)) return false;
     }
     if (!hotelCoversDate(h, dateForCheck)) return false;
+    // Sub-area filter: when the employee asked for a specific area within
+    // the city ("Bali → Kuta"), require the hotel's location to mention it.
+    if (options?.areaFilter) {
+      const loc = (h.location || "").toLowerCase();
+      if (!loc.includes(options.areaFilter.toLowerCase())) return false;
+    }
     return true;
   };
   let candidates = allHotels.filter(h => {
@@ -1211,6 +1217,7 @@ export async function buildLocalProgram(
     const hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
       excludeNames: excludeForThisStay,
       overrideAdults: overrideForThisStay,
+      areaFilter: stay.area,
     });
     if (!hotel) {
       // Special case: explicit occupancy override that found no match. Don't
