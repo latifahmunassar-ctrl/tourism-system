@@ -164,9 +164,13 @@ export function pickCheapestHotel(
   city: string,
   request: TripRequest,
   cityPattern?: RegExp,
-  options?: { excludeNames?: Set<string> },
+  options?: { excludeNames?: Set<string>; overrideAdults?: number },
 ): HotelRow | null {
-  const adults = request.adults || 2;
+  // overrideAdults is set when the employee explicitly asks for a different
+  // occupancy on a single swap ("غير فندق هانوي لـ 4 أشخاص"). In that case
+  // we honor it strictly — no upsize fallback — since the choice was deliberate.
+  const adults = options?.overrideAdults ?? (request.adults || 2);
+  const strictOnly = options?.overrideAdults != null;
   const exclude = options?.excludeNames || new Set<string>();
   const isExcluded = (name: string) => exclude.has((name || "").trim().toLowerCase());
   const dateForCheck = request.startDate
@@ -191,7 +195,7 @@ export function pickCheapestHotel(
     if (!baseFilter(h)) return false;
     return extractAdultsCount(h.occupancy || "") === adults;
   });
-  if (candidates.length === 0) {
+  if (candidates.length === 0 && !strictOnly) {
     candidates = allHotels.filter(h => {
       if (!baseFilter(h)) return false;
       const ac = extractAdultsCount(h.occupancy || "");
@@ -1027,7 +1031,7 @@ export type AppliedModification =
   | { kind: "remove"; tourName: string; city: string }
   | { kind: "swap"; fromName: string; toName: string; city: string }
   | { kind: "add"; tourName: string; city: string }
-  | { kind: "hotelSwap"; city: string; fromName: string | null; toName: string; stayLabel: string | null };
+  | { kind: "hotelSwap"; city: string; fromName: string | null; toName: string; stayLabel: string | null; targetOccupancy: number | null };
 
 export type BuildResult =
   | { ok: true; program: string; appliedModifications: AppliedModification[] }
@@ -1078,8 +1082,10 @@ export async function buildLocalProgram(
   // where stayIndex is 0-based within that city's occurrences. If the city
   // appears multiple times AND the hint was "all", ask for disambiguation
   // rather than silently swapping all of them.
-  // Exclusion sets are keyed by `${city}#${stayIndex}`.
+  // Exclusion sets are keyed by `${city}#${stayIndex}`. Per-stay occupancy
+  // overrides (from "غير فندق هانوي لـ 4 أشخاص") use the same key shape.
   const hotelExcludesByStay: Record<string, Set<string>> = {};
+  const hotelOverrideOccupancyByStay: Record<string, number> = {};
   for (const mod of request.hotelModifications) {
     let resolvedCity: string | null = null;
     for (const def of cityDefs) {
@@ -1126,6 +1132,9 @@ export async function buildLocalProgram(
       hotelExcludesByStay[`${resolvedCity}#${idx}`] = new Set(
         Array.from(prev || new Set<string>()).map(n => n.toLowerCase()),
       );
+      if (mod.targetOccupancy != null) {
+        hotelOverrideOccupancyByStay[`${resolvedCity}#${idx}`] = mod.targetOccupancy;
+      }
     }
   }
 
@@ -1146,10 +1155,17 @@ export async function buildLocalProgram(
     const stayIdx = (stayIdxPerCity[stay.city] || 0);
     stayIdxPerCity[stay.city] = stayIdx + 1;
     const excludeForThisStay = hotelExcludesByStay[`${stay.city}#${stayIdx}`];
+    const overrideForThisStay = hotelOverrideOccupancyByStay[`${stay.city}#${stayIdx}`];
     const hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
       excludeNames: excludeForThisStay,
+      overrideAdults: overrideForThisStay,
     });
     if (!hotel) {
+      // Special case: explicit occupancy override that found no match. Don't
+      // dress this up as a "no hotel for the group" diag — name the override.
+      if (overrideForThisStay != null) {
+        return { ok: false, chatMessage: `ما عندنا فندق يتسع لـ ${overrideForThisStay} أشخاص في ${cityArabicNames[stay.city] || stay.city}. اختر عدد مختلف أو شيل التحديد.` };
+      }
       // Special case: the city had hotels but the modification's exclusion
       // set drained them. Distinguish from the generic "no match" so the
       // employee knows they've hit the bottom of the price ladder.
@@ -1191,12 +1207,16 @@ export async function buildLocalProgram(
         stayLabel: totalStaysOfCity > 1
           ? (stayIdx === 0 ? "الأول" : stayIdx === totalStaysOfCity - 1 ? "الأخير" : `رقم ${stayIdx + 1}`)
           : null,
+        targetOccupancy: overrideForThisStay ?? null,
       });
     }
     // Detect occupancy upsize so we can tell the employee in CHAT. Only
     // emit once per city even if multiple stays of the same city all upsize.
+    // Skip when the override fired — the employee already specified the size.
     const picked = extractAdultsCount(hotel.occupancy || "");
-    if (picked > (request.adults || 2) && !occupancyUpsizeNotes.some(n => n.includes(stay.city))) {
+    if (overrideForThisStay == null
+        && picked > (request.adults || 2)
+        && !occupancyUpsizeNotes.some(n => n.includes(stay.city))) {
       occupancyUpsizeNotes.push(
         `ما لقينا فندق بإشغال ${request.adults} أشخاص في ${cityArabicNames[stay.city] || stay.city}، اخترنا غرفة لـ ${picked} أشخاص (تكفي للمجموعة).`,
       );

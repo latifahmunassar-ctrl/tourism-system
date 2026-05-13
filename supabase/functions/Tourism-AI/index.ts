@@ -2323,9 +2323,11 @@ Deno.serve(async (req) => {
                 if (m.kind === "add") return `أضفت جولة "${m.tourName}" في ${ar(m.city)}`;
                 if (m.kind === "hotelSwap") {
                   const label = m.stayLabel ? ` ${m.stayLabel}` : "";
+                  const occ = m.targetOccupancy != null
+                    ? ` (يتسع لـ ${m.targetOccupancy} أشخاص)` : "";
                   return m.fromName
-                    ? `غيّرت فندق ${ar(m.city)}${label} من "${m.fromName}" إلى "${m.toName}"`
-                    : `غيّرت فندق ${ar(m.city)}${label} إلى "${m.toName}"`;
+                    ? `غيّرت فندق ${ar(m.city)}${label} من "${m.fromName}" إلى "${m.toName}"${occ}`
+                    : `غيّرت فندق ${ar(m.city)}${label} إلى "${m.toName}"${occ}`;
                 }
                 return `حذفت جولة "${m.tourName}" (اليوم صار حر)`;
               });

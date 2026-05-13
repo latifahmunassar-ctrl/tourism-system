@@ -35,9 +35,12 @@ export type HotelStayHint = "all" | "first" | "last" | number;
  *     unused option (matching occupancy + stars). The builder reads previous
  *     programs in the conversation to figure out which hotels have already
  *     been tried, so successive "غير فندق سابا" calls walk down the ladder.
+ *   - `targetOccupancy`: optional override for occupancy on THIS swap only,
+ *     e.g. "غير فندق هانوي لـ 4 أشخاص" — the rest of the trip keeps using
+ *     `request.adults`.
  */
 export type HotelModification =
-  | { kind: "nextCheaper"; cityHint: string; stayHint: HotelStayHint };
+  | { kind: "nextCheaper"; cityHint: string; stayHint: HotelStayHint; targetOccupancy: number | null };
 
 export type TripRequest = {
   /** "vietnam" / "Malaysia" / etc. — same canonical names as DEST_CITIES keys */
@@ -584,7 +587,23 @@ function parseHotelModifications(lastUserMsg: string): HotelModification[] {
   );
   const m = text.match(re);
   if (!m) return [];
-  const remainder = (m[1] || "").trim();
+  let remainder = (m[1] || "").trim();
+  if (!remainder) return [];
+
+  // Pull out an explicit occupancy override ("لـ 4 أشخاص" / "يتسع 4 افراد").
+  // Strip it from the remainder so the ordinal scan + city resolution don't
+  // see digits left over from the occupancy hint.
+  let targetOccupancy: number | null = null;
+  const occMatch = remainder.match(
+    /(?:\s+(?:ب\s*)?(?:ال)?فندق)?\s*(?:يتسع\s+)?(?:ل[ـ]?|لـ)\s*(\d{1,2})\s+(?:شخص|أشخاص|اشخاص|بالغ|بالغين|[أا]فراد|كبار|انفس|اشخاص)/iu,
+  );
+  if (occMatch && occMatch.index !== undefined) {
+    const n = parseInt(occMatch[1], 10);
+    if (n >= 1 && n <= 10) {
+      targetOccupancy = n;
+      remainder = remainder.slice(0, occMatch.index).trim();
+    }
+  }
   if (!remainder) return [];
 
   // Pull out a stay-ordinal qualifier from the remainder using a token scan
@@ -623,7 +642,7 @@ function parseHotelModifications(lastUserMsg: string): HotelModification[] {
   }
   const cityHint = tokens.join(" ").trim();
   if (!cityHint) return [];
-  return [{ kind: "nextCheaper", cityHint, stayHint }];
+  return [{ kind: "nextCheaper", cityHint, stayHint, targetOccupancy }];
 }
 
 /** Latest user message in the conversation, or "" if none. */
