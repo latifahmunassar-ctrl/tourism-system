@@ -164,11 +164,15 @@ export function pickCheapestHotel(
   city: string,
   request: TripRequest,
   cityPattern?: RegExp,
+  options?: { excludeNames?: Set<string> },
 ): HotelRow | null {
   const adults = request.adults || 2;
+  const exclude = options?.excludeNames || new Set<string>();
+  const isExcluded = (name: string) => exclude.has((name || "").trim().toLowerCase());
 
   let candidates = allHotels.filter(h => {
     if (!hotelCityMatches(h.location, city, cityPattern)) return false;
+    if (isExcluded(h.name)) return false;
     // Adults exact match
     const ac = extractAdultsCount(h.occupancy || "");
     if (ac !== adults) return false;
@@ -1003,11 +1007,12 @@ export function formatProgram(data: ProgramData): string {
 // PIPELINE — high-level builder that selects, arranges, formats
 // ─────────────────────────────────────────────────────────────────────────
 
-/** Describes a tour modification that was actually applied to the program. */
+/** Describes a tour or hotel modification that was actually applied. */
 export type AppliedModification =
   | { kind: "remove"; tourName: string; city: string }
   | { kind: "swap"; fromName: string; toName: string; city: string }
-  | { kind: "add"; tourName: string; city: string };
+  | { kind: "add"; tourName: string; city: string }
+  | { kind: "hotelSwap"; city: string; fromName: string | null; toName: string };
 
 export type BuildResult =
   | { ok: true; program: string; appliedModifications: AppliedModification[] }
@@ -1031,12 +1036,41 @@ export async function buildLocalProgram(
   cityDefs: CityDef[],
   fetchData: () => Promise<{ hotels: HotelRow[]; tours: TourRow[]; flights: FlightRow[]; trains?: TrainRow[] }>,
   cityArabicNames: Record<string, string>,
+  /**
+   * Conversation hotel history, keyed by canonical city. `all` is the union
+   * of every hotel previously shown for that city (used as the exclusion
+   * set when walking down the price ladder); `last` is the hotel currently
+   * in the most recent program (used as the "from" side of the acknowledgement).
+   */
+  hotelHistoryByCity?: Record<string, { all: Set<string>; last: string | null }>,
 ): Promise<BuildResult> {
   if (!canBuildLocally(request)) {
     return { ok: false, chatMessage: "البيانات ناقصة، لم أستطع البناء محلّياً." };
   }
   const { hotels: allHotels, tours: allTours, flights: allFlights, trains: allTrainsRaw } = await fetchData();
   const allTrains: TrainRow[] = allTrainsRaw || [];
+  const appliedHotelSwaps: AppliedModification[] = [];
+
+  // Resolve which cities the user asked to swap hotels for. Each hotel mod
+  // contributes its own exclusion set for that specific city (= every hotel
+  // previously shown in this conversation for that city).
+  const hotelExcludesByCity: Record<string, Set<string>> = {};
+  for (const mod of request.hotelModifications) {
+    let resolvedCity: string | null = null;
+    for (const def of cityDefs) {
+      if (def.pattern.test(mod.cityHint) && request.cities.includes(def.canonical)) {
+        resolvedCity = def.canonical;
+        break;
+      }
+    }
+    if (!resolvedCity) {
+      return { ok: false, chatMessage: `ما فهمت أي مدينة تقصد بـ "${mod.cityHint}". اذكر اسم مدينة من البرنامج (مثل سابا، هانوي).` };
+    }
+    const prev = hotelHistoryByCity?.[resolvedCity]?.all;
+    hotelExcludesByCity[resolvedCity] = new Set(
+      Array.from(prev || new Set<string>()).map(n => n.toLowerCase()),
+    );
+  }
 
   // 1. Pick hotel for each STAY in order (handles repeated cities like
   //    "Hanoi at start, Sapa middle, Hanoi at end" → 2 separate Hanoi stays).
@@ -1050,8 +1084,20 @@ export async function buildLocalProgram(
   for (const stay of stayOrder) {
     const cityDef = cityDefs.find(c => c.canonical === stay.city);
     const cityPattern = cityDef?.pattern;
-    const hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern);
+    const excludeForThisCity = hotelExcludesByCity[stay.city];
+    const hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
+      excludeNames: excludeForThisCity,
+    });
     if (!hotel) {
+      // Special case: the city had hotels but the modification's exclusion
+      // set drained them. Distinguish from the generic "no match" so the
+      // employee knows they've hit the bottom of the price ladder.
+      if (excludeForThisCity && excludeForThisCity.size > 0) {
+        const fallback = pickCheapestHotel(allHotels, stay.city, request, cityPattern);
+        if (fallback) {
+          return { ok: false, chatMessage: `وصلت لآخر فندق متاح في ${cityArabicNames[stay.city] || stay.city} لـ ${request.adults} أشخاص بنفس المعايير. ما عندنا خيار أرخص بعدها.` };
+        }
+      }
       // Diagnose: what IS available in that city? Walk hotels matching just
       // the city (ignoring pax/stars/date) so the employee can see what's
       // close — and decide whether to adjust pax, change dates, or accept
@@ -1068,6 +1114,18 @@ export async function buildLocalProgram(
         diag = `يوجد ${total} فندق في ${stay.city}، لكن الإشغال المتاح فقط: ${occs.join("/")} أشخاص (نجوم: ${stars.join("/")}). الموظف طلب ${request.adults} أشخاص.`;
       }
       return { ok: false, chatMessage: `ما عندنا فندق يطابق المعايير في ${stay.city} لـ ${request.adults} أشخاص. ${diag}` };
+    }
+    // Record the swap event if this city was a hotel-mod target. fromName is
+    // the hotel that was in the LAST program (so the CHAT line reads as a
+    // direct "X → Y" change, not just "Y was picked").
+    if (excludeForThisCity && excludeForThisCity.size > 0) {
+      const fromName = hotelHistoryByCity?.[stay.city]?.last || null;
+      appliedHotelSwaps.push({
+        kind: "hotelSwap",
+        city: stay.city,
+        fromName,
+        toName: hotel.name.trim(),
+      });
     }
     // Pull this stay's days out of the days[] array (next N days)
     const stayDays = days.slice(consumedDays, consumedDays + stay.nights);
@@ -1334,7 +1392,7 @@ export async function buildLocalProgram(
     program = program.replace(/^CHAT:.*$/m,
       `CHAT:${tourMessages.join(" | ")} حابب تكرّر جولة معيّنة؟ بلّغني الرقم.`);
   }
-  return { ok: true, program, appliedModifications };
+  return { ok: true, program, appliedModifications: [...appliedHotelSwaps, ...appliedModifications] };
 }
 
 function cityMatchesFlight(canonicalCity: string, flightCity: string): boolean {

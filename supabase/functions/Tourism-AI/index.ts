@@ -330,6 +330,54 @@ function buildTripContextFromProgram(programText: string): string | null {
 }
 
 /**
+ * Walk every assistant message in history and collect, per city, the union
+ * of hotel names that have been shown so far PLUS the name from the most
+ * recent program. Used so successive "غير فندق سابا" calls can skip every
+ * hotel already tried and report the swap as "from X → to Y".
+ *
+ * Returns an empty object if no built programs exist yet (caller treats
+ * this as "no exclusions, no history").
+ */
+function collectHotelHistoryByCity(
+  messages: Array<{ role: string; content: unknown }>,
+  cityDefs: Array<{ canonical: string; pattern: RegExp }>,
+): Record<string, { all: Set<string>; last: string | null }> {
+  const out: Record<string, { all: Set<string>; last: string | null }> = {};
+  const resolveCanonical = (cityCell: string): string | null => {
+    for (const def of cityDefs) {
+      if (def.pattern.test(cityCell)) return def.canonical;
+    }
+    return null;
+  };
+  for (const m of messages) {
+    if (m.role !== "assistant") continue;
+    const txt = typeof m.content === "string" ? m.content : (() => {
+      if (Array.isArray(m.content)) {
+        for (const part of m.content as Array<{ type?: string; text?: string }>) {
+          if (part?.type === "text" && typeof part.text === "string") return part.text;
+        }
+      }
+      return "";
+    })();
+    if (typeof txt !== "string" || !/^DEST:/m.test(txt)) continue;
+    const block = txt.match(/HOTELS:\s*\n([\s\S]+?)(?=\n[A-Z]+:|\n\n|$)/);
+    if (!block) continue;
+    for (const line of block[1].split("\n")) {
+      const parts = line.split("|").map(s => s.trim());
+      if (parts.length < 2) continue;
+      const name = parts[0];
+      const cityCell = parts[1];
+      const canonical = resolveCanonical(cityCell);
+      if (!name || !canonical) continue;
+      const slot = out[canonical] ||= { all: new Set<string>(), last: null };
+      slot.all.add(name.toLowerCase());
+      slot.last = name; // later programs overwrite, so this ends as the most-recent
+    }
+  }
+  return out;
+}
+
+/**
  * Find the most recent assistant message that contains a built program
  * (i.e. a "DEST:" header). Returns the raw text or null if none yet.
  */
@@ -2123,7 +2171,7 @@ Deno.serve(async (req) => {
     // a targeted message instead of being routed to Claude or to the lite
     // "tell me your trip" template.
     {
-      const isTweakOnly = /^(?:\s*(?:غير|غيّر|اجعل|خل[يى]?|بدل|حول|ابي|ابغى|اريد|أريد|أبي|أبغى|اعمل|اضف|أضف|ضيف|زود|احذف|الغ[يى]?|شيل|ت?غي[يّ]?ر|استبدل|اغير|[أا]زل)\s+)?(?:(?:ال)?(?:سياره|سيارة|سيارات|تنقل|التنقل|نقل|cars?|transport|مشتركه|مشتركة|خاصه|خاصة)|(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim|esim|سيم)|(?:سرير|أسر[ةه]|اسر[ةه]|سراير|سرايا|extra\s*-?\s*bed)|(?:ال)?جول[ةه]|tour)/iu.test(lastUserMsg.trim());
+      const isTweakOnly = /^(?:\s*(?:غير|غيّر|اجعل|خل[يى]?|بدل|حول|ابي|ابغى|اريد|أريد|أبي|أبغى|اعمل|اضف|أضف|ضيف|زود|احذف|الغ[يى]?|شيل|ت?غي[يّ]?ر|استبدل|اغير|[أا]زل|اعطن[يى]?|أعطن[يى]?)\s+)?(?:لي\s+)?(?:(?:ال)?(?:سياره|سيارة|سيارات|تنقل|التنقل|نقل|cars?|transport|مشتركه|مشتركة|خاصه|خاصة)|(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim|esim|سيم)|(?:سرير|أسر[ةه]|اسر[ةه]|سراير|سرايا|extra\s*-?\s*bed)|(?:ال)?جول[ةه]|tour|(?:ال)?فندق|hotel)/iu.test(lastUserMsg.trim());
       if (isTweakOnly && !lastAssistantProgram && !detectedDest) {
         return new Response(JSON.stringify({
           id: "tweak-without-program",
@@ -2188,7 +2236,7 @@ Deno.serve(async (req) => {
         // bed but we have no built program AND insufficient trip details to
         // (re)build. Otherwise the generic "tell me your cities" question
         // is confusing — they're not asking to start over.
-        const isTweakOnly = /^(?:\s*(?:غير|غيّر|اجعل|خل[يى]?|بدل|حول|ابي|ابغى|اريد|أريد|أبي|أبغى|اعمل|اضف|أضف|ضيف|زود|احذف|الغ[يى]?|شيل|ت?غي[يّ]?ر|استبدل|اغير|[أا]زل)\s+)?(?:(?:ال)?(?:سياره|سيارة|سيارات|تنقل|التنقل|نقل|cars?|transport|مشتركه|مشتركة|خاصه|خاصة)|(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim|esim|سيم)|(?:سرير|أسر[ةه]|اسر[ةه]|سراير|سرايا|extra\s*-?\s*bed)|(?:ال)?جول[ةه]|tour)/iu.test(lastUserMsg.trim());
+        const isTweakOnly = /^(?:\s*(?:غير|غيّر|اجعل|خل[يى]?|بدل|حول|ابي|ابغى|اريد|أريد|أبي|أبغى|اعمل|اضف|أضف|ضيف|زود|احذف|الغ[يى]?|شيل|ت?غي[يّ]?ر|استبدل|اغير|[أا]زل|اعطن[يى]?|أعطن[يى]?)\s+)?(?:لي\s+)?(?:(?:ال)?(?:سياره|سيارة|سيارات|تنقل|التنقل|نقل|cars?|transport|مشتركه|مشتركة|خاصه|خاصة)|(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim|esim|سيم)|(?:سرير|أسر[ةه]|اسر[ةه]|سراير|سرايا|extra\s*-?\s*bed)|(?:ال)?جول[ةه]|tour|(?:ال)?فندق|hotel)/iu.test(lastUserMsg.trim());
         if (isTweakOnly && !lastAssistantProgram) {
           return new Response(JSON.stringify({
             id: "tweak-without-program",
@@ -2237,6 +2285,7 @@ Deno.serve(async (req) => {
               };
             },
             cityArabicNames,
+            collectHotelHistoryByCity(messages, cityDefs),
           );
           if (result.ok) {
             // If this rebuild was triggered by a transport-only follow-up,
@@ -2261,13 +2310,16 @@ Deno.serve(async (req) => {
               const newTotalMatch = result.program.match(/TOTAL_GROUP:([\d,]+)/);
               const newTotal = newTotalMatch ? newTotalMatch[1] : "?";
               const ar = (c: string) => cityArabicNames[c] || c;
-              const parts = result.appliedModifications.map(m =>
-                m.kind === "swap"
-                  ? `استبدلت جولة "${m.fromName}" بـ "${m.toName}"`
-                  : m.kind === "add"
-                  ? `أضفت جولة "${m.tourName}" في ${ar(m.city)}`
-                  : `حذفت جولة "${m.tourName}" (اليوم صار حر)`,
-              );
+              const parts = result.appliedModifications.map(m => {
+                if (m.kind === "swap") return `استبدلت جولة "${m.fromName}" بـ "${m.toName}"`;
+                if (m.kind === "add") return `أضفت جولة "${m.tourName}" في ${ar(m.city)}`;
+                if (m.kind === "hotelSwap") {
+                  return m.fromName
+                    ? `غيّرت فندق ${ar(m.city)} من "${m.fromName}" إلى "${m.toName}"`
+                    : `غيّرت فندق ${ar(m.city)} إلى "${m.toName}"`;
+                }
+                return `حذفت جولة "${m.tourName}" (اليوم صار حر)`;
+              });
               const ackChat = `CHAT:${parts.join("، ")}. الإجمالي الجديد: ${newTotal} ريال.`;
               programText = programText.replace(/^CHAT:.*$/m, ackChat);
               if (!/^CHAT:/m.test(programText)) programText += `\n\n${ackChat}`;

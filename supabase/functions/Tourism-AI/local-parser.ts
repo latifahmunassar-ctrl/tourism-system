@@ -19,6 +19,16 @@ export type TourModification =
   | { kind: "swap"; from: string; to: string }
   | { kind: "add"; name: string; cityHint: string | null };
 
+/**
+ * A follow-up modification to a built program's hotel selection.
+ *   - `nextCheaper`: replace the hotel in `cityHint` with the next-cheapest
+ *     unused option (matching occupancy + stars). The builder reads previous
+ *     programs in the conversation to figure out which hotels have already
+ *     been tried, so successive "غير فندق سابا" calls walk down the ladder.
+ */
+export type HotelModification =
+  | { kind: "nextCheaper"; cityHint: string };
+
 export type TripRequest = {
   /** "vietnam" / "Malaysia" / etc. — same canonical names as DEST_CITIES keys */
   destination: string | null;
@@ -61,6 +71,11 @@ export type TripRequest = {
    * them against the catalog using fuzzy keyword matching.
    */
   tourModifications: TourModification[];
+  /**
+   * Follow-up edits to the previously built program's hotel selection. Same
+   * "latest message only" rule as tourModifications.
+   */
+  hotelModifications: HotelModification[];
 };
 
 export type CityDef = { canonical: string; pattern: RegExp };
@@ -522,6 +537,40 @@ function parseTourModifications(lastUserMsg: string): TourModification[] {
   return [];
 }
 
+/**
+ * Parse hotel-modification follow-ups from the LATEST user message.
+ *
+ * Recognized intents:
+ *   - "غير فندق سابا"               → nextCheaper, cityHint="سابا"
+ *   - "غير لي فندق في سابا"         → same
+ *   - "بدّل الفندق في سابا"         → same
+ *   - "اعطني فندق ثاني في سابا"     → same
+ *
+ * cityHint is a raw fragment — the builder resolves it against cityDefs.
+ * If the user omits the city ("غير الفندق"), no modification is returned
+ * (ambiguous) and the rebuild proceeds normally.
+ */
+function parseHotelModifications(lastUserMsg: string): HotelModification[] {
+  const text = lastUserMsg.replace(/ا{2,}/g, "ا").trim();
+  if (!text) return [];
+
+  const VERBS = "(?:بد[ّ]?ل[يىه]?|غي[ّ]?ر[يى]?|اغير|استبدل|change|swap|اعطن[يى]?|أعطن[يى]?)";
+
+  // Variants:
+  //   - "VERB لي? فندق [في] CITY"
+  //   - "VERB الفندق في CITY"
+  //   - "VERB لي? فندق ثاني/آخر/بديل في CITY"
+  const re = new RegExp(
+    `${VERBS}\\s+(?:لي\\s+)?(?:ال)?فندق(?:\\s+(?:ثاني|ثانيه|ثانية|آخر|اخر|بديل))?\\s+(?:في\\s+)?(.+?)(?=\\s*(?:$|[\\.,،\\n]))`,
+    "iu",
+  );
+  const m = text.match(re);
+  if (!m) return [];
+  const cityHint = (m[1] || "").trim();
+  if (!cityHint) return [];
+  return [{ kind: "nextCheaper", cityHint }];
+}
+
 /** Latest user message in the conversation, or "" if none. */
 function getLastUserMessage(messages: Array<{ role: string; content: unknown }>): string {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -569,5 +618,6 @@ export function parseTripRequest(
     year: monthInfo.year,
     startDate: parseStartDate(text),
     tourModifications: parseTourModifications(getLastUserMessage(messages)),
+    hotelModifications: parseHotelModifications(getLastUserMessage(messages)),
   };
 }
