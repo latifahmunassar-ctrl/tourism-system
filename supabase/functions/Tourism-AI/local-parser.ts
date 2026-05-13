@@ -10,12 +10,14 @@ export type CityStay = { city: string; nights: number };
  * A follow-up modification to a built program's tour list.
  *   - `remove`: drop the matching tour, leave a free day
  *   - `swap`:   replace `from` with `to` (both resolved against the catalog)
+ *   - `add`:    pin a specific tour for a city (for "free day → tour" requests)
  * Multiple modifications in one message are NOT supported in v1 — only the
  * latest/most-specific match wins.
  */
 export type TourModification =
   | { kind: "remove"; name: string }
-  | { kind: "swap"; from: string; to: string };
+  | { kind: "swap"; from: string; to: string }
+  | { kind: "add"; name: string; cityHint: string | null };
 
 export type TripRequest = {
   /** "vietnam" / "Malaysia" / etc. — same canonical names as DEST_CITIES keys */
@@ -454,7 +456,9 @@ function parseNightsByCity(text: string, cityDefs: CityDef[]): Record<string, nu
  * against the catalog (handles "المنجروف" → "المانجروف", etc.).
  */
 function parseTourModifications(lastUserMsg: string): TourModification[] {
-  const text = lastUserMsg.trim();
+  // Collapse repeated alifs ("االحر" → "الحر") and trim — handles common
+  // Saudi-dialect typos where a letter gets duplicated.
+  const text = lastUserMsg.replace(/ا{2,}/g, "ا").trim();
   if (!text) return [];
 
   // Verbs that can introduce a swap or a free-day replacement
@@ -474,6 +478,28 @@ function parseTourModifications(lastUserMsg: string): TourModification[] {
   );
   const fdSwap = text.match(freeDaySwapRe);
   if (fdSwap) return [{ kind: "remove", name: fdSwap[1].trim() }];
+
+  // (1b) Free day → tour: "غير يوم الحر في X الي جولة Y" / "اضف جولة Y في X"
+  // Anchors on "يوم حر" so it can't collide with tour-swap (which anchors
+  // on "جولة X"). cityHint is the segment after "في" if present.
+  const freeDayToTourRe = new RegExp(
+    `${SWAP_VERB}\\s+(?:ال)?يوم\\s*(?:ال)?حر(?:\\s+في\\s+(.+?))?\\s+${TO_PREP}\\s*(?:ال)?جول[ةه]\\s+(.+?)(?=\\s*(?:$|[\\.,،\\n]))`,
+    "iu",
+  );
+  const fdToTour = text.match(freeDayToTourRe);
+  if (fdToTour) {
+    return [{ kind: "add", name: fdToTour[2].trim(), cityHint: fdToTour[1]?.trim() || null }];
+  }
+  // (1c) Bare add: "اضف/ضيف جولة Y في X"
+  const ADD_VERB = "(?:اضف|أضف|ضيف|زود|add)";
+  const addRe = new RegExp(
+    `${ADD_VERB}\\s+(?:ال)?جول[ةه]\\s+(.+?)(?:\\s+في\\s+(.+?))?(?=\\s*(?:$|[\\.,،\\n]))`,
+    "iu",
+  );
+  const add = text.match(addRe);
+  if (add) {
+    return [{ kind: "add", name: add[1].trim(), cityHint: add[2]?.trim() || null }];
+  }
 
   // (2) Swap to another tour: "غير جولة X بجولة Y"
   // Second "جولة" is required to anchor where Y begins — otherwise we'd

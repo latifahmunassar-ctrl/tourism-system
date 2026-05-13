@@ -2260,9 +2260,12 @@ Deno.serve(async (req) => {
             if (result.appliedModifications.length > 0 && lastAssistantProgram) {
               const newTotalMatch = result.program.match(/TOTAL_GROUP:([\d,]+)/);
               const newTotal = newTotalMatch ? newTotalMatch[1] : "?";
+              const ar = (c: string) => cityArabicNames[c] || c;
               const parts = result.appliedModifications.map(m =>
                 m.kind === "swap"
                   ? `استبدلت جولة "${m.fromName}" بـ "${m.toName}"`
+                  : m.kind === "add"
+                  ? `أضفت جولة "${m.tourName}" في ${ar(m.city)}`
                   : `حذفت جولة "${m.tourName}" (اليوم صار حر)`,
               );
               const ackChat = `CHAT:${parts.join("، ")}. الإجمالي الجديد: ${newTotal} ريال.`;

@@ -969,7 +969,8 @@ export function formatProgram(data: ProgramData): string {
 /** Describes a tour modification that was actually applied to the program. */
 export type AppliedModification =
   | { kind: "remove"; tourName: string; city: string }
-  | { kind: "swap"; fromName: string; toName: string; city: string };
+  | { kind: "swap"; fromName: string; toName: string; city: string }
+  | { kind: "add"; tourName: string; city: string };
 
 export type BuildResult =
   | { ok: true; program: string; appliedModifications: AppliedModification[] }
@@ -1057,7 +1058,45 @@ export async function buildLocalProgram(
     if (!m) { m = { pinnedTours: [], excludeNames: new Set(), freeDayCount: 0 }; perCityMods.set(city, m); }
     return m;
   };
+  // Resolve a free-text city hint ("لانكاوي") to a canonical city in the trip.
+  const resolveCityHint = (hint: string): string | null => {
+    for (const def of cityDefs) {
+      if (def.pattern.test(hint) && request.cities.includes(def.canonical)) return def.canonical;
+    }
+    return null;
+  };
+
   for (const mod of request.tourModifications) {
+    if (mod.kind === "add") {
+      // Find the city: prefer the hint, fall back to the tour's own city tag.
+      const hintCity = mod.cityHint ? resolveCityHint(mod.cityHint) : null;
+      const tour = findTourByKeywords(
+        mod.name,
+        allTours,
+        hintCity ? { cityDefs, canonicalCity: hintCity } : undefined,
+      );
+      if (!tour) {
+        const where = hintCity ? ` في مدينة ${hintCity}` : "";
+        return { ok: false, chatMessage: `ما لقيت جولة "${mod.name}"${where}. تأكد من الاسم.` };
+      }
+      const city = hintCity || getTourCity(tour, cityDefs);
+      if (!city || !request.cities.includes(city)) {
+        return { ok: false, chatMessage: `الجولة "${tour.name.trim()}" مو في مدينة ضمن البرنامج.` };
+      }
+      const cm = ensureCityMod(city);
+      // The "add" intent comes from "غير يوم الحر بجولة Y" — exclude any
+      // "يوم حر" placeholder tour in the same city so the new tour actually
+      // takes its slot rather than just being added on top.
+      const yomHorTour = allTours.find(t =>
+        /^يوم\s*(?:ال)?حر/iu.test(t.name.trim())
+        && tourBelongsToCity(t, cityDefs, city),
+      );
+      if (yomHorTour) cm.excludeNames.add(yomHorTour.name.trim().toLowerCase());
+      cm.pinnedTours.push(tour);
+      appliedModifications.push({ kind: "add", tourName: tour.name.trim(), city });
+      continue;
+    }
+
     const fromQuery = mod.kind === "swap" ? mod.from : mod.name;
     const fromTour = findTourByKeywords(fromQuery, allTours);
     if (!fromTour) {
