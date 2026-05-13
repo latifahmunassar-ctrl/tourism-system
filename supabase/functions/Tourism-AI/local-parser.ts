@@ -20,6 +20,16 @@ export type TourModification =
   | { kind: "add"; name: string; cityHint: string | null };
 
 /**
+ * Which stay of a city the swap targets when the city appears multiple times
+ * in the trip (e.g., "Hanoi → Sapa → Hanoi"). "all" means apply to every
+ * stay of that city (the default when the user gave no qualifier); "first"
+ * / "last" are the common ordinal qualifiers; a number is the 1-based index
+ * ("الثاني" → 2). The builder asks for disambiguation when the city has
+ * multiple stays AND the hint is "all".
+ */
+export type HotelStayHint = "all" | "first" | "last" | number;
+
+/**
  * A follow-up modification to a built program's hotel selection.
  *   - `nextCheaper`: replace the hotel in `cityHint` with the next-cheapest
  *     unused option (matching occupancy + stars). The builder reads previous
@@ -27,7 +37,7 @@ export type TourModification =
  *     been tried, so successive "غير فندق سابا" calls walk down the ladder.
  */
 export type HotelModification =
-  | { kind: "nextCheaper"; cityHint: string };
+  | { kind: "nextCheaper"; cityHint: string; stayHint: HotelStayHint };
 
 export type TripRequest = {
   /** "vietnam" / "Malaysia" / etc. — same canonical names as DEST_CITIES keys */
@@ -556,19 +566,57 @@ function parseHotelModifications(lastUserMsg: string): HotelModification[] {
 
   const VERBS = "(?:بد[ّ]?ل[يىه]?|غي[ّ]?ر[يى]?|اغير|استبدل|change|swap|اعطن[يى]?|أعطن[يى]?)";
 
-  // Variants:
-  //   - "VERB لي? فندق [في] CITY"
-  //   - "VERB الفندق في CITY"
-  //   - "VERB لي? فندق ثاني/آخر/بديل في CITY"
+  // Match the verb + "فندق" + free-form remainder (city + optional ordinal).
+  // Note: we do NOT inline an "alternative" keyword like ثاني/اخر here,
+  // since "ثاني" can ALSO be the stay-ordinal ("هانوي الثاني") — letting
+  // it through this regex caused the city capture to drop it. We extract
+  // the stay-ordinal in a second pass below.
   const re = new RegExp(
-    `${VERBS}\\s+(?:لي\\s+)?(?:ال)?فندق(?:\\s+(?:ثاني|ثانيه|ثانية|آخر|اخر|بديل))?\\s+(?:في\\s+)?(.+?)(?=\\s*(?:$|[\\.,،\\n]))`,
+    `${VERBS}\\s+(?:لي\\s+)?(?:ال)?فندق\\s+(?:في\\s+)?(.+?)(?=\\s*(?:$|[\\.,،\\n]))`,
     "iu",
   );
   const m = text.match(re);
   if (!m) return [];
-  const cityHint = (m[1] || "").trim();
+  const remainder = (m[1] || "").trim();
+  if (!remainder) return [];
+
+  // Pull out a stay-ordinal qualifier from the remainder using a token scan
+  // (Arabic doesn't play nice with \b — letters are non-word in JS regex).
+  // Normalizes hamza/ya/ta-marbuta first so "الأول"/"الاولى" all match.
+  const stripPrefix = (t: string) => t.replace(/^ال/, "");
+  const norm = (t: string) => t
+    .replace(/[إأآ]/g, "ا")
+    .replace(/[ةه]/g, "ه")
+    .replace(/[يى]/g, "ي")
+    .trim();
+  let stayHint: HotelStayHint = "all";
+  const tokens = remainder.split(/\s+/);
+  // Scan right-to-left so "هانوي الاول" picks up "الاول" before "هانوي".
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    const t = norm(stripPrefix(norm(tokens[i])));
+    if (!t) continue;
+    if (/^(اول|اولي|اوله)$/u.test(t)) { stayHint = "first"; tokens.splice(i, 1); break; }
+    if (/^(اخير|اخيره|اخر|اخره)$/u.test(t)) { stayHint = "last"; tokens.splice(i, 1); break; }
+    if (/^ثاني[ه]?$/u.test(t))   { stayHint = 2; tokens.splice(i, 1); break; }
+    if (/^ثالث[ه]?$/u.test(t))   { stayHint = 3; tokens.splice(i, 1); break; }
+    if (/^رابع[ه]?$/u.test(t))   { stayHint = 4; tokens.splice(i, 1); break; }
+    // Multi-word: "...اول الجدول" / "...اول الرحلة" — peek backward
+    if (i > 0 && /^(الجدول|الرحله|البدايه)$/u.test(t)) {
+      const prev = norm(stripPrefix(norm(tokens[i - 1])));
+      if (/^(اول|في|البدايه)$/u.test(prev)) {
+        stayHint = "first"; tokens.splice(i - 1, 2); break;
+      }
+    }
+    if (i > 0 && /^(الجدول|الرحله|النهايه)$/u.test(t)) {
+      const prev = norm(stripPrefix(norm(tokens[i - 1])));
+      if (/^(اخر|اخير|في|النهايه)$/u.test(prev)) {
+        stayHint = "last"; tokens.splice(i - 1, 2); break;
+      }
+    }
+  }
+  const cityHint = tokens.join(" ").trim();
   if (!cityHint) return [];
-  return [{ kind: "nextCheaper", cityHint }];
+  return [{ kind: "nextCheaper", cityHint, stayHint }];
 }
 
 /** Latest user message in the conversation, or "" if none. */

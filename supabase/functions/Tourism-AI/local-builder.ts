@@ -1012,7 +1012,7 @@ export type AppliedModification =
   | { kind: "remove"; tourName: string; city: string }
   | { kind: "swap"; fromName: string; toName: string; city: string }
   | { kind: "add"; tourName: string; city: string }
-  | { kind: "hotelSwap"; city: string; fromName: string | null; toName: string };
+  | { kind: "hotelSwap"; city: string; fromName: string | null; toName: string; stayLabel: string | null };
 
 export type BuildResult =
   | { ok: true; program: string; appliedModifications: AppliedModification[] }
@@ -1037,12 +1037,13 @@ export async function buildLocalProgram(
   fetchData: () => Promise<{ hotels: HotelRow[]; tours: TourRow[]; flights: FlightRow[]; trains?: TrainRow[] }>,
   cityArabicNames: Record<string, string>,
   /**
-   * Conversation hotel history, keyed by canonical city. `all` is the union
-   * of every hotel previously shown for that city (used as the exclusion
-   * set when walking down the price ladder); `last` is the hotel currently
-   * in the most recent program (used as the "from" side of the acknowledgement).
+   * Conversation hotel history, keyed by canonical city → array of stays
+   * IN ORDER they appear in the program. Each stay's `all` is the union of
+   * every hotel previously offered for that specific position; `last` is
+   * the hotel currently in the most recent program. Per-stay tracking lets
+   * a "Hanoi → Sapa → Hanoi" trip swap just one of the Hanoi hotels.
    */
-  hotelHistoryByCity?: Record<string, { all: Set<string>; last: string | null }>,
+  hotelHistoryByCity?: Record<string, Array<{ all: Set<string>; last: string | null }>>,
 ): Promise<BuildResult> {
   if (!canBuildLocally(request)) {
     return { ok: false, chatMessage: "البيانات ناقصة، لم أستطع البناء محلّياً." };
@@ -1051,10 +1052,19 @@ export async function buildLocalProgram(
   const allTrains: TrainRow[] = allTrainsRaw || [];
   const appliedHotelSwaps: AppliedModification[] = [];
 
-  // Resolve which cities the user asked to swap hotels for. Each hotel mod
-  // contributes its own exclusion set for that specific city (= every hotel
-  // previously shown in this conversation for that city).
-  const hotelExcludesByCity: Record<string, Set<string>> = {};
+  // Build the stay order EARLY so we can count stays-per-city when resolving
+  // ordinal hints ("اول"/"اخير"/"الثاني"). Same logic as the hotel-picking
+  // loop below; we just need the city sequence here.
+  const stayOrder = request.cityStaysOrdered && request.cityStaysOrdered.length > 0
+    ? request.cityStaysOrdered.filter(s => s.nights > 0)
+    : request.cities.map(c => ({ city: c, nights: request.nightsByCity[c] || 0 })).filter(s => s.nights > 0);
+
+  // Resolve hotel modifications. Each one maps to a (city, stayIndex) pair
+  // where stayIndex is 0-based within that city's occurrences. If the city
+  // appears multiple times AND the hint was "all", ask for disambiguation
+  // rather than silently swapping all of them.
+  // Exclusion sets are keyed by `${city}#${stayIndex}`.
+  const hotelExcludesByStay: Record<string, Set<string>> = {};
   for (const mod of request.hotelModifications) {
     let resolvedCity: string | null = null;
     for (const def of cityDefs) {
@@ -1066,33 +1076,65 @@ export async function buildLocalProgram(
     if (!resolvedCity) {
       return { ok: false, chatMessage: `ما فهمت أي مدينة تقصد بـ "${mod.cityHint}". اذكر اسم مدينة من البرنامج (مثل سابا، هانوي).` };
     }
-    const prev = hotelHistoryByCity?.[resolvedCity]?.all;
-    hotelExcludesByCity[resolvedCity] = new Set(
-      Array.from(prev || new Set<string>()).map(n => n.toLowerCase()),
-    );
+    const cityStayCount = stayOrder.filter(s => s.city === resolvedCity).length;
+    if (cityStayCount === 0) {
+      return { ok: false, chatMessage: `${cityArabicNames[resolvedCity] || resolvedCity} مو ضمن إقامات البرنامج.` };
+    }
+
+    // Resolve which specific stay(s) the mod targets.
+    const targetIndices: number[] = [];
+    if (cityStayCount === 1) {
+      targetIndices.push(0); // no ambiguity
+    } else if (mod.stayHint === "all") {
+      // Multi-stay city + no ordinal → ask the employee to specify which one.
+      return {
+        ok: false,
+        chatMessage: `عندك ${cityStayCount} إقامات في ${cityArabicNames[resolvedCity] || resolvedCity}. حدد أيها تبي تغير: "غير فندق ${cityArabicNames[resolvedCity] || resolvedCity} الاول" أو "... الاخير".`,
+      };
+    } else if (mod.stayHint === "first") {
+      targetIndices.push(0);
+    } else if (mod.stayHint === "last") {
+      targetIndices.push(cityStayCount - 1);
+    } else if (typeof mod.stayHint === "number") {
+      const idx = mod.stayHint - 1;
+      if (idx < 0 || idx >= cityStayCount) {
+        return {
+          ok: false,
+          chatMessage: `ما عندك إقامة رقم ${mod.stayHint} في ${cityArabicNames[resolvedCity] || resolvedCity} (الموجود ${cityStayCount} إقامات فقط).`,
+        };
+      }
+      targetIndices.push(idx);
+    }
+
+    for (const idx of targetIndices) {
+      const prev = hotelHistoryByCity?.[resolvedCity]?.[idx]?.all;
+      hotelExcludesByStay[`${resolvedCity}#${idx}`] = new Set(
+        Array.from(prev || new Set<string>()).map(n => n.toLowerCase()),
+      );
+    }
   }
 
   // 1. Pick hotel for each STAY in order (handles repeated cities like
   //    "Hanoi at start, Sapa middle, Hanoi at end" → 2 separate Hanoi stays).
   const days = arrangeDays(request);
-  const stayOrder = request.cityStaysOrdered && request.cityStaysOrdered.length > 0
-    ? request.cityStaysOrdered.filter(s => s.nights > 0)
-    : request.cities.map(c => ({ city: c, nights: request.nightsByCity[c] || 0 })).filter(s => s.nights > 0);
   const hotelsList: SelectedHotel[] = [];
   // Walk days in order, grouping consecutive same-city days into stays.
   let consumedDays = 0;
+  const stayIdxPerCity: Record<string, number> = {};
   for (const stay of stayOrder) {
     const cityDef = cityDefs.find(c => c.canonical === stay.city);
     const cityPattern = cityDef?.pattern;
-    const excludeForThisCity = hotelExcludesByCity[stay.city];
+    const stayIdx = (stayIdxPerCity[stay.city] || 0);
+    stayIdxPerCity[stay.city] = stayIdx + 1;
+    const excludeForThisStay = hotelExcludesByStay[`${stay.city}#${stayIdx}`];
     const hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
-      excludeNames: excludeForThisCity,
+      excludeNames: excludeForThisStay,
     });
     if (!hotel) {
       // Special case: the city had hotels but the modification's exclusion
       // set drained them. Distinguish from the generic "no match" so the
       // employee knows they've hit the bottom of the price ladder.
-      if (excludeForThisCity && excludeForThisCity.size > 0) {
+      if (excludeForThisStay && excludeForThisStay.size > 0) {
         const fallback = pickCheapestHotel(allHotels, stay.city, request, cityPattern);
         if (fallback) {
           return { ok: false, chatMessage: `وصلت لآخر فندق متاح في ${cityArabicNames[stay.city] || stay.city} لـ ${request.adults} أشخاص بنفس المعايير. ما عندنا خيار أرخص بعدها.` };
@@ -1115,16 +1157,21 @@ export async function buildLocalProgram(
       }
       return { ok: false, chatMessage: `ما عندنا فندق يطابق المعايير في ${stay.city} لـ ${request.adults} أشخاص. ${diag}` };
     }
-    // Record the swap event if this city was a hotel-mod target. fromName is
-    // the hotel that was in the LAST program (so the CHAT line reads as a
-    // direct "X → Y" change, not just "Y was picked").
-    if (excludeForThisCity && excludeForThisCity.size > 0) {
-      const fromName = hotelHistoryByCity?.[stay.city]?.last || null;
+    // Record the swap event if this stay was a hotel-mod target. fromName
+    // is the hotel that was in the LAST program for THIS stay position
+    // (so a "Hanoi → Sapa → Hanoi" trip can swap just one of the Hanoi
+    // hotels and the ack names the right one).
+    if (excludeForThisStay && excludeForThisStay.size > 0) {
+      const fromName = hotelHistoryByCity?.[stay.city]?.[stayIdx]?.last || null;
+      const totalStaysOfCity = stayOrder.filter(s => s.city === stay.city).length;
       appliedHotelSwaps.push({
         kind: "hotelSwap",
         city: stay.city,
         fromName,
         toName: hotel.name.trim(),
+        stayLabel: totalStaysOfCity > 1
+          ? (stayIdx === 0 ? "الأول" : stayIdx === totalStaysOfCity - 1 ? "الأخير" : `رقم ${stayIdx + 1}`)
+          : null,
       });
     }
     // Pull this stay's days out of the days[] array (next N days)

@@ -341,8 +341,11 @@ function buildTripContextFromProgram(programText: string): string | null {
 function collectHotelHistoryByCity(
   messages: Array<{ role: string; content: unknown }>,
   cityDefs: Array<{ canonical: string; pattern: RegExp }>,
-): Record<string, { all: Set<string>; last: string | null }> {
-  const out: Record<string, { all: Set<string>; last: string | null }> = {};
+): Record<string, Array<{ all: Set<string>; last: string | null }>> {
+  // Output keyed per canonical city → array of stays. The array index
+  // matches the order this city appears in each program's HOTELS section
+  // (e.g., "Hanoi → Sapa → Hanoi" → out["Ha Noi"] has length 2).
+  const out: Record<string, Array<{ all: Set<string>; last: string | null }>> = {};
   const resolveCanonical = (cityCell: string): string | null => {
     for (const def of cityDefs) {
       if (def.pattern.test(cityCell)) return def.canonical;
@@ -362,6 +365,8 @@ function collectHotelHistoryByCity(
     if (typeof txt !== "string" || !/^DEST:/m.test(txt)) continue;
     const block = txt.match(/HOTELS:\s*\n([\s\S]+?)(?=\n[A-Z]+:|\n\n|$)/);
     if (!block) continue;
+    // Per-program counter so the same city appearing twice maps to slots 0,1.
+    const perProgramIdx: Record<string, number> = {};
     for (const line of block[1].split("\n")) {
       const parts = line.split("|").map(s => s.trim());
       if (parts.length < 2) continue;
@@ -369,7 +374,10 @@ function collectHotelHistoryByCity(
       const cityCell = parts[1];
       const canonical = resolveCanonical(cityCell);
       if (!name || !canonical) continue;
-      const slot = out[canonical] ||= { all: new Set<string>(), last: null };
+      const idx = perProgramIdx[canonical] = (perProgramIdx[canonical] || 0);
+      perProgramIdx[canonical] = idx + 1;
+      const arr = out[canonical] ||= [];
+      const slot = arr[idx] ||= { all: new Set<string>(), last: null };
       slot.all.add(name.toLowerCase());
       slot.last = name; // later programs overwrite, so this ends as the most-recent
     }
@@ -2314,9 +2322,10 @@ Deno.serve(async (req) => {
                 if (m.kind === "swap") return `استبدلت جولة "${m.fromName}" بـ "${m.toName}"`;
                 if (m.kind === "add") return `أضفت جولة "${m.tourName}" في ${ar(m.city)}`;
                 if (m.kind === "hotelSwap") {
+                  const label = m.stayLabel ? ` ${m.stayLabel}` : "";
                   return m.fromName
-                    ? `غيّرت فندق ${ar(m.city)} من "${m.fromName}" إلى "${m.toName}"`
-                    : `غيّرت فندق ${ar(m.city)} إلى "${m.toName}"`;
+                    ? `غيّرت فندق ${ar(m.city)}${label} من "${m.fromName}" إلى "${m.toName}"`
+                    : `غيّرت فندق ${ar(m.city)}${label} إلى "${m.toName}"`;
                 }
                 return `حذفت جولة "${m.tourName}" (اليوم صار حر)`;
               });
