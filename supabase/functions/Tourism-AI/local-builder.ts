@@ -914,15 +914,22 @@ export function formatProgram(data: ProgramData): string {
   }
   out += "\n";
 
-  // ── FLIGHTS — sort by day, multiply per-pax price by adults
+  // ── FLIGHTS — sort by day, multiply per-pax price by (adults + extra).
+  // Extra tickets cover an extra traveler who shares the planes/trains but
+  // NOT the hotels/tours/transfers (those stay sized for `adults`).
   let flightsTotal = 0;
+  const extraTickets = Math.max(0, request.extraTickets || 0);
+  const ticketPax = adults + extraTickets;
   out += "FLIGHTS:\n";
   const sortedFlights = [...flights].sort((a, b) => a.day - b.day);
   for (const sf of sortedFlights) {
-    const total = sf.flight.price_per_pax * adults;
+    const total = sf.flight.price_per_pax * ticketPax;
     flightsTotal += total;
     const label = sf.kind === "train" ? "قطار" : "داخلي";
-    out += `${sf.flight.from_city} - ${sf.flight.to_city} | ${label} | ${formatNumber(sf.flight.price_per_pax)} ريال/شخص | ${adults} أشخاص | ${formatNumber(total)} ريال\n`;
+    const paxLabel = extraTickets > 0
+      ? `${adults} + ${extraTickets} إضافي = ${ticketPax} أشخاص`
+      : `${adults} أشخاص`;
+    out += `${sf.flight.from_city} - ${sf.flight.to_city} | ${label} | ${formatNumber(sf.flight.price_per_pax)} ريال/شخص | ${paxLabel} | ${formatNumber(total)} ريال\n`;
   }
   out += "\n";
 

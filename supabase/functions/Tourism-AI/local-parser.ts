@@ -67,6 +67,13 @@ export type TripRequest = {
   roomFeatures: string[];
   /** null = not asked yet. 0 = explicit "no". N = asked for N SIMs */
   sim: number | null;
+  /**
+   * Extra flight/train tickets to bill on top of the trip's adult count.
+   * Used for "أضف تذكرة طيران شخص إضافي" — accommodation/tours/transfers
+   * stay sized for `adults`, but FLIGHTS lines (planes AND trains) are
+   * billed at `adults + extraTickets`. Default 0.
+   */
+  extraTickets: number;
   /** Extra-bed scope. "none" = not requested. "all" = every hotel. [city] = specific cities */
   extraBed: { scope: "none" | "all" | string[] };
   /** Inter-city transport preference */
@@ -229,13 +236,18 @@ function parseDays(text: string): number | null {
 }
 
 function parseAdults(text: string): number | null {
-  // Strip per-hotel occupancy overrides ("غير فندق هانوي لـ 4 أشخاص") before
-  // scanning — otherwise the override's "4" gets read as the trip's adult
-  // count and overrides the base request's "لثلاث افراد".
-  const cleaned = text.replace(
-    /(?:بد[ّ]?ل[يىه]?|غي[ّ]?ر[يى]?|اغير|استبدل|change|swap)\s+(?:لي\s+)?(?:ال)?فندق[^\n]*?(?:ل[ـ]?|لـ)\s*\d{1,2}\s*(?:شخص|أشخاص|اشخاص|بالغ|بالغين|[أا]فراد|كبار)/giu,
-    " ",
-  );
+  // Strip per-hotel occupancy overrides ("غير فندق هانوي لـ 4 أشخاص") AND
+  // extra-ticket fragments ("أضف تذكرة لشخصين") before scanning — otherwise
+  // their numeric pax mentions leak into the trip's adult counter.
+  const cleaned = text
+    .replace(
+      /(?:بد[ّ]?ل[يىه]?|غي[ّ]?ر[يى]?|اغير|استبدل|change|swap)\s+(?:لي\s+)?(?:ال)?فندق[^\n]*?(?:ل[ـ]?|لـ)\s*\d{1,2}\s*(?:شخص|أشخاص|اشخاص|بالغ|بالغين|[أا]فراد|كبار)/giu,
+      " ",
+    )
+    .replace(
+      /(?:اضف|أضف|ضيف|زود|أضيف|اضيف|احتاج|أحتاج)\s+(?:عدد\s+)?(?:\d+\s*)?(?:تذكر[ةه]|تذاكر|تذكرت[يا]ن)[^\n،.]*/giu,
+      " ",
+    );
   const t = arabicDigitsToLatin(cleaned);
   // Dual forms (no number)
   if (/زوجين|زوجان|couple/i.test(t)) return 2;
@@ -305,6 +317,33 @@ function parseRoomFeatures(text: string): string[] {
     if (re.test(text) && !found.includes(label)) found.push(label);
   }
   return found;
+}
+
+/**
+ * Parse extra-ticket count for flights/trains. Accommodation, tours, and
+ * transfers stay sized for the trip's adults; only the FLIGHTS section is
+ * billed at adults + extraTickets. Recognized phrasings:
+ *   - "أضف تذكرة شخص إضافي" / "ضيف تذكرة طيران" / "زود تذكرة قطار"  → 1
+ *   - "أضف تذكرتين" / "ضيف تذكرتين قطار"                             → 2
+ *   - "أضف ٣ تذاكر" / "زود 4 تذاكر طيران"                            → N
+ *   - "تذكرة طيران/قطار لشخص اضافي"                                  → 1
+ */
+function parseExtraTickets(text: string): number {
+  const t = arabicDigitsToLatin(text);
+  const ADD = "(?:اضف|أضف|ضيف|زود|أضيف|اضيف|احتاج|أحتاج|بدي|ابغى|أبغى)";
+  // Dual form ("تذكرتين" / "تذكرتان") — Arabic dual = 2, no digit
+  if (new RegExp(`${ADD}\\s+(?:عدد\\s+)?تذكرت[يا]ن`, "iu").test(t)) return 2;
+  // Numbered: "أضف N تذكرة/تذاكر [طيران|قطار|إضافية]"
+  const m = t.match(new RegExp(`${ADD}\\s+(?:عدد\\s+)?(\\d+)\\s*(?:تذكر[ةه]|تذاكر|tickets?)`, "iu"));
+  if (m) {
+    const n = parseInt(m[1], 10);
+    if (n >= 1 && n <= 20) return n;
+  }
+  // Bare "أضف تذكرة" — treat as 1
+  if (new RegExp(`${ADD}\\s+(?:عدد\\s+)?تذكر[ةه]`, "iu").test(t)) return 1;
+  // "تذكرة شخص اضافي" / "تذكرة طيران اضافية" without verb
+  if (/تذكر[ةه]\s+(?:طيران|قطار|للشخص|لشخص|اضافي|إضافي|اضافيه|إضافية)/iu.test(t)) return 1;
+  return 0;
 }
 
 function parseSim(text: string): number | null {
@@ -710,6 +749,7 @@ export function parseTripRequest(
     stars: parseStars(text),
     roomFeatures: parseRoomFeatures(text),
     sim: parseSim(text),
+    extraTickets: parseExtraTickets(text),
     extraBed: parseExtraBed(text, cityDefs),
     transport: parseTransport(text),
     month: monthInfo.month,
