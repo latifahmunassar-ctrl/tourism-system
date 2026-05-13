@@ -682,11 +682,19 @@ export function parseTripRequest(
       }, {})
     : parseNightsByCity(text, cityDefs);
 
+  // When the employee gives a per-city distribution but never says "N يوم"
+  // or a date range, infer the total from the night sum (days = nights + 1).
+  // Without this, canBuildLocally rejects perfectly-valid requests like
+  // "تاريخ 5 مايو، 1 ليله هانوي + 3 سابا + 2 هانوي" with the lite question.
+  const sumNights = Object.values(nightsByCity).reduce((s, n) => s + n, 0);
+  const explicitDays = parseDays(text);
+  const daysTotal = explicitDays ?? (sumNights > 0 ? sumNights + 1 : null);
+
   return {
     destination: dest,
     cities,
     cityStaysOrdered: stays,
-    daysTotal: parseDays(text),
+    daysTotal,
     nightsByCity,
     adults: parseAdults(text),
     children: parseChildren(text),
