@@ -225,6 +225,29 @@ function tourBelongsToCity(tour: TourRow, cityDefs: CityDef[], canonicalCity: st
 }
 
 /**
+ * Recognize transfer / pickup / inter-city movement rows. These are stored
+ * in the `tours` table but represent driver movements, not sightseeing
+ * activities — they must be excluded from tour-selection AND from the
+ * tour-modification fuzzy matcher (otherwise "غير جولة سراييفو" can match
+ * "الاستقبال من المطار...سراييفو").
+ */
+const TRANSFER_PREFIXES = [
+  "استقبال", "الاستقبال", "آلاستقبال",
+  "توديع", "التوديع",
+  "التوجه", "توصيل", "توصیل", "يتم توصيل", "يتم توصیل",
+  "العوده", "العودة", "العود",
+  "الانتقال", "انتقال", "النقل",
+  "حضور السائق", "السائق",
+  "ذهاب من", "الذهاب من", "للذهاب",
+  "انتهاء", "انتهاء جوله", "انتهاء جولة",
+  "الخروج", "خروج",
+];
+function isTransferTour(name: string): boolean {
+  const n = (name || "").trim();
+  return TRANSFER_PREFIXES.some(p => n.startsWith(p));
+}
+
+/**
  * Normalize Arabic text for fuzzy matching: convert Arabic-Indic digits to
  * ASCII (٨ → 8), strip tashkeel, fold alif/ya/ta-marbuta variants, collapse
  * whitespace. Lets us match "المنجروف" → "المانجروف" and "٨" → "8".
@@ -278,9 +301,12 @@ function findTourByKeywords(
     .filter(w => (w.length >= 2 || /\d/.test(w)) && !ARABIC_STOP_WORDS.has(w));
   if (qWords.length === 0) return null;
 
-  const pool = cityFilter
+  // Transfer/pickup rows live in the tours table too; filter them out so a
+  // request to "غير جولة X" never resolves to a driver-movement row.
+  const pool = (cityFilter
     ? tours.filter(t => tourBelongsToCity(t, cityFilter.cityDefs, cityFilter.canonicalCity))
-    : tours;
+    : tours
+  ).filter(t => !isTransferTour(t.name));
 
   const stripAl = (w: string) => w.replace(/^ال/, "");
 
@@ -349,20 +375,8 @@ export function pickToursForCity(
     freeDayCount?: number;
   },
 ): { selected: TourRow[]; available: number; deficit: number } {
-  // Filter: real tours (not transfer rows) belonging to this city
-  const TRANSFER_PREFIXES = [
-    "استقبال", "الاستقبال", "توديع", "التوديع",
-    "التوجه", "توصيل", "توصیل", "يتم توصيل", "يتم توصیل",
-    "العوده", "العودة", "العود",
-    "الانتقال", "انتقال",
-    "حضور السائق", "السائق",
-    "ذهاب من", "الذهاب من", "للذهاب",
-    "انتهاء", "انتهاء جوله", "انتهاء جولة",
-  ];
-  const isTransfer = (name: string) => {
-    const n = (name || "").trim();
-    return TRANSFER_PREFIXES.some(p => n.startsWith(p));
-  };
+  // Real tours only (not transfer/pickup rows) belonging to this city
+  const isTransfer = isTransferTour;
 
   const exclude = options?.excludeNames || new Set<string>();
   const pinned = options?.pinnedTours || [];
