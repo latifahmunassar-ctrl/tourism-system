@@ -903,7 +903,14 @@ export function formatProgram(data: ProgramData): string {
       ? `ما يشمل: ${sh.hotel.meals}`
       : (sh.hotel.includes_breakfast ? "إفطار مشمول" : "بدون وجبات");
     const cityAr = cityArabicNames[sh.city] || sh.city;
-    out += `${sh.hotel.name} | ${cityAr} | ${sh.hotel.stars} نجوم | ${sh.hotel.room_type} | ${formatNumber(sh.hotel.price_per_night)} ريال/ليلة | ${sh.nights} ${sh.nights === 1 ? "ليلة" : "ليالي"} (من ${formatArabicDate(sh.rangeFrom)} إلى ${formatArabicDate(sh.rangeTo)}) | ${meals}\n`;
+    // Append "(يتسع N أشخاص)" to the room_type field whenever the DB row
+    // declares an occupancy — makes capacity legible at a glance instead of
+    // hiding it inside cryptic room names like "SUITE STANDARD".
+    const occN = extractAdultsCount(sh.hotel.occupancy || "");
+    const roomTypeWithOcc = occN > 0
+      ? `${sh.hotel.room_type} (يتسع ${occN} أشخاص)`
+      : sh.hotel.room_type;
+    out += `${sh.hotel.name} | ${cityAr} | ${sh.hotel.stars} نجوم | ${roomTypeWithOcc} | ${formatNumber(sh.hotel.price_per_night)} ريال/ليلة | ${sh.nights} ${sh.nights === 1 ? "ليلة" : "ليالي"} (من ${formatArabicDate(sh.rangeFrom)} إلى ${formatArabicDate(sh.rangeTo)}) | ${meals}\n`;
   }
   out += "\n";
 
