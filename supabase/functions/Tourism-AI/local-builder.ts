@@ -1088,23 +1088,48 @@ export async function buildLocalProgram(
   const hotelOverrideOccupancyByStay: Record<string, number> = {};
   for (const mod of request.hotelModifications) {
     let resolvedCity: string | null = null;
+    let nameMatchedIndices: number[] | null = null;
+    // (1) Try city match first
     for (const def of cityDefs) {
       if (def.pattern.test(mod.cityHint) && request.cities.includes(def.canonical)) {
         resolvedCity = def.canonical;
         break;
       }
     }
+    // (2) Fall back to hotel-name lookup: scan every (city, stayIdx) slot in
+    // the conversation history for a hotel whose name appears as a substring
+    // of the hint. Lets the employee copy a name out of the program ("غير
+    // الفندق Beryl Charm Hotel & Spa لـ 4 أشخاص") instead of having to map
+    // it back to a city.
+    if (!resolvedCity && hotelHistoryByCity) {
+      const hintNorm = normalizeArabic(mod.cityHint);
+      for (const [city, stays] of Object.entries(hotelHistoryByCity)) {
+        for (let idx = 0; idx < stays.length; idx++) {
+          const last = stays[idx]?.last;
+          if (!last) continue;
+          const lastNorm = normalizeArabic(last);
+          if (lastNorm.length >= 4 && hintNorm.includes(lastNorm)) {
+            resolvedCity = city;
+            (nameMatchedIndices ??= []).push(idx);
+          }
+        }
+      }
+    }
     if (!resolvedCity) {
-      return { ok: false, chatMessage: `ما فهمت أي مدينة تقصد بـ "${mod.cityHint}". اذكر اسم مدينة من البرنامج (مثل سابا، هانوي).` };
+      return { ok: false, chatMessage: `ما فهمت أي مدينة أو فندق تقصد بـ "${mod.cityHint}". اذكر اسم مدينة من البرنامج أو انسخ اسم الفندق من البرنامج.` };
     }
     const cityStayCount = stayOrder.filter(s => s.city === resolvedCity).length;
     if (cityStayCount === 0) {
       return { ok: false, chatMessage: `${cityArabicNames[resolvedCity] || resolvedCity} مو ضمن إقامات البرنامج.` };
     }
 
-    // Resolve which specific stay(s) the mod targets.
-    const targetIndices: number[] = [];
-    if (cityStayCount === 1) {
+    // Resolve which specific stay(s) the mod targets. When the hint matched
+    // a hotel NAME, the matched indices are unambiguous — use them directly
+    // and skip the city-ordinal disambiguation (the name pin is the answer).
+    let targetIndices: number[] = [];
+    if (nameMatchedIndices) {
+      targetIndices = nameMatchedIndices;
+    } else if (cityStayCount === 1) {
       targetIndices.push(0); // no ambiguity
     } else if (mod.stayHint === "all") {
       // Multi-stay city + no ordinal → ask the employee to specify which one.

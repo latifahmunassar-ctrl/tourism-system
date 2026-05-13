@@ -578,7 +578,13 @@ function parseTourModifications(lastUserMsg: string): TourModification[] {
  * (ambiguous) and the rebuild proceeds normally.
  */
 function parseHotelModifications(lastUserMsg: string): HotelModification[] {
-  const text = lastUserMsg.replace(/ا{2,}/g, "ا").trim();
+  // Normalize Arabic-Indic digits FIRST so the occupancy regex's `\d{1,2}`
+  // can pick up "٤ اشخاص" (saudi-dialect digit form). Also collapse repeated
+  // alifs like everywhere else in the parser.
+  const text = lastUserMsg
+    .replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)))
+    .replace(/ا{2,}/g, "ا")
+    .trim();
   if (!text) return [];
 
   const VERBS = "(?:بد[ّ]?ل[يىه]?|غي[ّ]?ر[يى]?|اغير|استبدل|change|swap|اعطن[يى]?|أعطن[يى]?)";
