@@ -914,27 +914,25 @@ export function formatProgram(data: ProgramData): string {
   }
   out += "\n";
 
-  // ── FLIGHTS — sort by day, multiply per-pax price by (adults + extra).
-  // Extra tickets cover an extra traveler who shares the planes/trains but
-  // NOT the hotels/tours/transfers (those stay sized for `adults`). Track
-  // the base (adult) cost and the extras separately so the SUMMARY can show
-  // a stable per-person price for the original adults.
-  let flightsBase = 0;       // adults × per-pax price
-  let extraTicketsTotal = 0; // extraTickets × per-pax price
+  // ── FLIGHTS — sort by day, base on adults; extras emit a separate line
+  // per route so the frontend's line-by-line `per × pax` sum stays accurate.
+  // (Previously a "2 + 1 إضافي = 3 أشخاص" label confused parseCount → it
+  // picked up "2" and undershot the total. Two clean rows fix it.)
+  let flightsBase = 0;       // adults × per-pax
+  let extraTicketsTotal = 0; // extras × per-pax
   const extraTickets = Math.max(0, request.extraTickets || 0);
-  const ticketPax = adults + extraTickets;
   out += "FLIGHTS:\n";
   const sortedFlights = [...flights].sort((a, b) => a.day - b.day);
   for (const sf of sortedFlights) {
     const baseForThis = sf.flight.price_per_pax * adults;
-    const extraForThis = sf.flight.price_per_pax * extraTickets;
     flightsBase += baseForThis;
-    extraTicketsTotal += extraForThis;
     const label = sf.kind === "train" ? "قطار" : "داخلي";
-    const paxLabel = extraTickets > 0
-      ? `${adults} + ${extraTickets} إضافي = ${ticketPax} أشخاص`
-      : `${adults} أشخاص`;
-    out += `${sf.flight.from_city} - ${sf.flight.to_city} | ${label} | ${formatNumber(sf.flight.price_per_pax)} ريال/شخص | ${paxLabel} | ${formatNumber(baseForThis + extraForThis)} ريال\n`;
+    out += `${sf.flight.from_city} - ${sf.flight.to_city} | ${label} | ${formatNumber(sf.flight.price_per_pax)} ريال/شخص | ${adults} أشخاص | ${formatNumber(baseForThis)} ريال\n`;
+    if (extraTickets > 0) {
+      const extraForThis = sf.flight.price_per_pax * extraTickets;
+      extraTicketsTotal += extraForThis;
+      out += `${sf.flight.from_city} - ${sf.flight.to_city} | ${label} (تذكرة إضافية) | ${formatNumber(sf.flight.price_per_pax)} ريال/شخص | ${extraTickets} ${extraTickets === 1 ? "شخص" : "أشخاص"} | ${formatNumber(extraForThis)} ريال\n`;
+    }
   }
   const flightsTotal = flightsBase + extraTicketsTotal;
   out += "\n";
