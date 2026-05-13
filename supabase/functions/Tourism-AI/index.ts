@@ -2320,7 +2320,17 @@ Deno.serve(async (req) => {
               const newTotalMatch = result.program.match(/TOTAL_GROUP:([\d,]+)/);
               const newTotal = newTotalMatch ? newTotalMatch[1] : "?";
               const n = tripRequest.extraTickets;
-              const ackChat = `CHAT:أضفت ${n} ${n === 1 ? "تذكرة إضافية" : n === 2 ? "تذكرتين إضافيتين" : "تذاكر إضافية"} على رحلات الطيران/القطار. الإجمالي الجديد: ${newTotal} ريال.`;
+              // Check if the program actually has any flights/trains. A road-only
+              // trip (Hanoi↔Sapa, e.g.) emits an empty "FLIGHTS:\n\n" block, so
+              // the extra ticket can't multiply anything — say so explicitly
+              // instead of claiming we "added" something the employee can't see.
+              // The probe: does FLIGHTS: have any content on the very next line?
+              // Must use `\n[^\n]` (not `\s*\n`) — \s* would greedily eat
+              // the blank line and falsely match the TRANSFERS section below.
+              const hasAnyFlightLines = /FLIGHTS:\n[^\n]/.test(result.program);
+              const ackChat = hasAnyFlightLines
+                ? `CHAT:أضفت ${n} ${n === 1 ? "تذكرة إضافية" : n === 2 ? "تذكرتين إضافيتين" : "تذاكر إضافية"} على رحلات الطيران/القطار. الإجمالي الجديد: ${newTotal} ريال.`
+                : `CHAT:البرنامج الحالي ما فيه طيران داخلي أو قطار — التذكرة الإضافية تنطبق فقط على الرحلات الداخلية. الإجمالي ما تغيّر: ${newTotal} ريال.`;
               programText = programText.replace(/^CHAT:.*$/m, ackChat);
               if (!/^CHAT:/m.test(programText)) programText += `\n\n${ackChat}`;
             }
