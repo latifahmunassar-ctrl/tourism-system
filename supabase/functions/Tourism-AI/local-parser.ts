@@ -40,7 +40,7 @@ export type HotelStayHint = "all" | "first" | "last" | number;
  *     `request.adults`.
  */
 export type HotelModification =
-  | { kind: "nextCheaper"; cityHint: string; stayHint: HotelStayHint; targetOccupancy: number | null };
+  | { kind: "nextCheaper"; cityHint: string; stayHint: HotelStayHint; targetOccupancy: number | null; fullText: string };
 
 export type TripRequest = {
   /** "vietnam" / "Malaysia" / etc. — same canonical names as DEST_CITIES keys */
@@ -655,7 +655,10 @@ function parseHotelModifications(lastUserMsg: string): HotelModification[] {
   }
   const cityHint = tokens.join(" ").trim();
   if (!cityHint) return [];
-  return [{ kind: "nextCheaper", cityHint, stayHint, targetOccupancy }];
+  // Carry the full normalized message too — the builder uses it for hotel-name
+  // fallback when the employee wrote "<hotel name> غير الفندق هذا ...", which
+  // leaves the actual name OUTSIDE the verb-anchored capture group.
+  return [{ kind: "nextCheaper", cityHint, stayHint, targetOccupancy, fullText: text }];
 }
 
 /** Latest user message in the conversation, or "" if none. */

@@ -1096,19 +1096,19 @@ export async function buildLocalProgram(
         break;
       }
     }
-    // (2) Fall back to hotel-name lookup: scan every (city, stayIdx) slot in
-    // the conversation history for a hotel whose name appears as a substring
-    // of the hint. Lets the employee copy a name out of the program ("غير
-    // الفندق Beryl Charm Hotel & Spa لـ 4 أشخاص") instead of having to map
-    // it back to a city.
+    // (2) Fall back to hotel-name lookup. We check both the verb-anchored
+    // cityHint AND the full raw message, so the employee can put the hotel
+    // name BEFORE the verb too ("Beryl Charm Hotel & Spa غير الفندق هذا ل
+    // 4 أشخاص") — the name doesn't have to land inside the cityHint capture.
     if (!resolvedCity && hotelHistoryByCity) {
       const hintNorm = normalizeArabic(mod.cityHint);
+      const fullNorm = normalizeArabic(mod.fullText || mod.cityHint);
       for (const [city, stays] of Object.entries(hotelHistoryByCity)) {
         for (let idx = 0; idx < stays.length; idx++) {
           const last = stays[idx]?.last;
           if (!last) continue;
           const lastNorm = normalizeArabic(last);
-          if (lastNorm.length >= 4 && hintNorm.includes(lastNorm)) {
+          if (lastNorm.length >= 4 && (hintNorm.includes(lastNorm) || fullNorm.includes(lastNorm))) {
             resolvedCity = city;
             (nameMatchedIndices ??= []).push(idx);
           }
