@@ -243,6 +243,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <button class="ebtn ebtn-pdf" onclick="exportPDF('client')">📄 للعميل (لوغو + إجمالي)</button>
 <button class="ebtn ebtn-nologo" onclick="exportPDF('no_price')">📄 بدون سعر (بدون لوغو)</button>
 <button class="ebtn ebtn-pdf" onclick="exportPDF('detailed')">📄 تفصيلي (لوغو + تفصيل)</button>
+<button class="ebtn ebtn-nologo" id="currencyBtn" onclick="startCurrencyConversion()">💱 تحويل عملة</button>
 </div>
 </div>
 <div class="quote-wrap">
@@ -357,6 +358,13 @@ const history = [];
 let isLoading = false;
 let parsedData = null;
 let basePrice = 0;
+// Currency conversion state. `awaiting` is the next expected step from the
+// employee in the chat-driven flow: rate input → confirmation → applied.
+// When `applied`, the PDF renders the converted price for client/detailed
+// modes (no_price keeps the standard "no price" disclaimer).
+let currencyConversion = null;       // { name, rate, originalSAR, converted } when applied
+let currencyAwaiting = null;         // 'rate' | 'confirm' | null
+let currencyPending = null;          // { name, rate, originalSAR, converted } during the flow
 let lastProgramRaw = '';
 let lastSavedCode = '';
 
@@ -422,6 +430,71 @@ TOTAL_GROUP:[رقم فقط] | [عدد] اشخاص
 
 CHAT:[جملتين ودية للموظف باللهجة السعودية]`;
 
+// ═══════════════ Currency conversion (frontend-only chat flow) ═══════════════
+
+function startCurrencyConversion() {
+  if (!parsedData) {
+    addMessage('sys', 'محتاج برنامج مبني أولاً عشان أحول العملة.');
+    return;
+  }
+  const profit = parseInt(document.getElementById('profitInput').value) || 0;
+  const finalGroupPrice = basePrice + profit;
+  if (finalGroupPrice <= 0) {
+    addMessage('sys', 'الإجمالي صفر — ما فيه شي أحوّله.');
+    return;
+  }
+  currencyAwaiting = 'rate';
+  currencyPending = { name: '', rate: 0, originalSAR: finalGroupPrice, converted: 0 };
+  addMessage('sys', `💱 اعطيني اسم العملة وسعر الصرف (مثال: "الريال العماني 10" — يعني 1 ريال سعودي = 10 ريال عماني).`);
+}
+
+// Parse "<currency name> <rate>" or "<rate> <currency name>". Rate can be a
+// digit-only token; everything else is the name.
+function parseCurrencyInput(text) {
+  const t = String(text || '').trim().replace(/[،,]/g, ' ').replace(/\s+/g, ' ');
+  const arabicToLatin = s => s.replace(/[٠-٩]/g, c => String('٠١٢٣٤٥٦٧٨٩'.indexOf(c)));
+  const normalized = arabicToLatin(t);
+  const numMatch = normalized.match(/(\d+(?:\.\d+)?)/);
+  if (!numMatch) return null;
+  const rate = parseFloat(numMatch[1]);
+  if (!(rate > 0)) return null;
+  const name = normalized.replace(numMatch[1], '').trim().replace(/\s+/g, ' ');
+  if (!name) return null;
+  return { name, rate };
+}
+
+function handleCurrencyMessage(text) {
+  if (currencyAwaiting === 'rate') {
+    const parsed = parseCurrencyInput(text);
+    if (!parsed) {
+      addMessage('sys', 'ما قدرت أفهم. اكتب اسم العملة ورقم الصرف، مثال: "الريال العماني 10".');
+      return true;
+    }
+    currencyPending.name = parsed.name;
+    currencyPending.rate = parsed.rate;
+    currencyPending.converted = currencyPending.originalSAR / parsed.rate;
+    currencyAwaiting = 'confirm';
+    addMessage('sys',
+      `الإجمالي بعد التحويل: ${currencyPending.converted.toLocaleString(undefined, {maximumFractionDigits: 2})} ${parsed.name}\n` +
+      `(${currencyPending.originalSAR.toLocaleString()} ريال ÷ ${parsed.rate}). موافق؟ (موافق / لا)`);
+    return true;
+  }
+  if (currencyAwaiting === 'confirm') {
+    if (/^(موافق|نعم|ok|yes|اي|أي|ايوه|أيوه|تمام)/iu.test(text.trim())) {
+      currencyConversion = { ...currencyPending };
+      currencyAwaiting = null;
+      currencyPending = null;
+      addMessage('sys', `✅ تم. التحويل سيظهر في PDF "للعميل" و"التفصيلي" تلقائياً. (PDF بدون سعر لا يتأثر.)`);
+    } else {
+      currencyAwaiting = null;
+      currencyPending = null;
+      addMessage('sys', 'تم إلغاء التحويل.');
+    }
+    return true;
+  }
+  return false;
+}
+
 async function sendMessage() {
 const input = document.getElementById('chatInput');
 const text = input.value.trim();
@@ -429,6 +502,8 @@ if (!text || isLoading) return;
 addMessage('user', text);
 input.value = '';
 input.style.height = 'auto';
+// Currency conversion flow intercepts before any backend call.
+if (currencyAwaiting && handleCurrencyMessage(text)) return;
 history.push({ role: 'user', content: text });
 document.getElementById('quickChips').style.display = 'none';
 isLoading = true;
@@ -1006,6 +1081,11 @@ if (totalGroupFromText && computedGroup) {
 }
 
 parsedData = { dest, meta, dateFrom, dateTo, client, clientCode, extraBedCitiesLine, hotelsLines, flightsLines, transfersLines, toursLines, simText, summaryLines, totalPerson, persons, kids, infants, adults };
+// New program = stale currency conversion. Reset so the next PDF export uses
+// SAR by default, not whatever rate was set against the previous trip.
+currencyConversion = null;
+currencyAwaiting = null;
+currencyPending = null;
 
 let html = `
 <div class="review-header">
@@ -1220,6 +1300,20 @@ const finalGroupPrice = baseGroupPrice + profitTotal;
 const showLogo = mode === 'client' || mode === 'detailed';
 const showTotalPrice = mode === 'client' || mode === 'detailed';
 const showDetailed = mode === 'detailed';
+// Currency conversion is applied only to modes that show a price. For the
+// no-price PDF we never reveal pricing, so the conversion stays hidden too.
+// Re-divide originalSAR by the stored rate against the LATEST profit, so
+// editing the profit input after confirming the rate still produces the
+// right number. (Re-confirming the rate is up to the employee.)
+const applyConversion = !!currencyConversion && showTotalPrice;
+const displayCurrencyName = applyConversion ? currencyConversion.name : 'ريال';
+const conversionRate = applyConversion ? currencyConversion.rate : 1;
+const displayPrice = applyConversion
+  ? (finalGroupPrice / conversionRate)
+  : finalGroupPrice;
+const fmtMoney = (n) => Number(n).toLocaleString(undefined, {
+  maximumFractionDigits: applyConversion ? 2 : 0,
+});
 
 // صارم: لا نعرض أسعار تشغيل الفنادق/الطرق إلا في التفصيلي.
 function stripPricesText(t) {
@@ -1644,7 +1738,7 @@ ${logoHTML}
 <div class="pdf-dest-name">${dest}</div>
 ${citiesText ? `<div class="pdf-cities">📍 ${citiesText}</div>` : ''}
 <div class="pdf-date-price-row">
-${showTotalPrice ? `<div class="pdf-price-box"><div class="pdf-price-label">💰 السعر الإجمالي (${persons} أشخاص)</div><div class="pdf-price-val">${finalGroupPrice.toLocaleString()} ريال</div></div>` : ''}
+${showTotalPrice ? `<div class="pdf-price-box"><div class="pdf-price-label">💰 السعر الإجمالي (${persons} أشخاص)</div><div class="pdf-price-val">${fmtMoney(displayPrice)} ${displayCurrencyName}</div></div>` : ''}
 <div class="pdf-dates-card"><div class="pdf-dates-label">📅 التاريخ</div><div class="pdf-dates">من ${dateFrom}<br>إلى ${dateTo}</div></div>
 </div>
 <div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:10px 14px;margin-bottom:10px;color:#fff;font-size:13px;font-weight:700;">
@@ -1660,6 +1754,9 @@ ${showDetailed ? `
     <div>الإجمالي الأساسي: <span style="font-weight:900;">${baseGroupPrice.toLocaleString()} ريال</span></div>
     <div>إجمالي الربح: <span style="font-weight:900;">${profitTotal.toLocaleString()} ريال</span></div>
     <div>الإجمالي بعد الربح: <span style="font-weight:900;">${finalGroupPrice.toLocaleString()} ريال</span></div>
+    ${applyConversion ? `
+    <div>سعر الصرف: <span style="font-weight:900;">1 ريال = ${conversionRate} ${displayCurrencyName}</span></div>
+    <div>الإجمالي بعد التحويل: <span style="font-weight:900;">${fmtMoney(displayPrice)} ${displayCurrencyName}</span></div>` : ``}
   </div>
 </div>` : ``}
 ${mode === 'no_price'
