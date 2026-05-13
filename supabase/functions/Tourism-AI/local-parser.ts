@@ -229,7 +229,14 @@ function parseDays(text: string): number | null {
 }
 
 function parseAdults(text: string): number | null {
-  const t = arabicDigitsToLatin(text);
+  // Strip per-hotel occupancy overrides ("غير فندق هانوي لـ 4 أشخاص") before
+  // scanning — otherwise the override's "4" gets read as the trip's adult
+  // count and overrides the base request's "لثلاث افراد".
+  const cleaned = text.replace(
+    /(?:بد[ّ]?ل[يىه]?|غي[ّ]?ر[يى]?|اغير|استبدل|change|swap)\s+(?:لي\s+)?(?:ال)?فندق[^\n]*?(?:ل[ـ]?|لـ)\s*\d{1,2}\s*(?:شخص|أشخاص|اشخاص|بالغ|بالغين|[أا]فراد|كبار)/giu,
+    " ",
+  );
+  const t = arabicDigitsToLatin(cleaned);
   // Dual forms (no number)
   if (/زوجين|زوجان|couple/i.test(t)) return 2;
   if (/شخصين|شخصان|شخصاً|شخصا|بالغين|بالغان|فردين|فردان|شخصاين/.test(t)) return 2;
