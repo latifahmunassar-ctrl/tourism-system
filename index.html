@@ -102,6 +102,7 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .badge-tour { background:rgba(167,139,250,0.2); color:#a78bfa; }
 .badge-nature { background:rgba(52,211,153,0.2); color:#34d399; }
 .badge-sea { background:rgba(56,189,248,0.2); color:#38bdf8; }
+.badge-free { background:rgba(251,191,36,0.18); color:#fbbf24; }
 .summary-card { background:var(–s2); border:1px solid var(–border); border-radius:12px; padding:16px; margin-bottom:14px; }
 .summary-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05); font-size:13px; }
 .summary-row:last-child { border-bottom:none; }
@@ -1074,7 +1075,7 @@ html += `<div class="section-card">
 <thead><tr><th>اليوم</th><th>الجولة</th><th>النوع</th><th>سعر الشيت</th><th>المسافرون</th><th>المُعتمد حساباً</th></tr></thead>
 <tbody>${toursLines.map(l => {
 const p=l.split('|').map(x=>x.trim());
-const tcMap={'ثقافية':'badge-tour','طبيعية':'badge-nature','بحرية':'badge-sea'};
+const tcMap={'ثقافية':'badge-tour','طبيعية':'badge-nature','بحرية':'badge-sea','حر':'badge-free'};
 const tc=tcMap[p[2]]||'badge-tour';
 const { total: tourLineT } = computeTransferTourLineTotal(p, xferTourMeta, '🗺️ جولة');
 const paxCell = (p.length >= 5 && p[4]) ? p[4] : `${persons} (META)`;

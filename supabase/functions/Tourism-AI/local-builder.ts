@@ -932,15 +932,38 @@ export function formatProgram(data: ProgramData): string {
   out += "\n";
 
   // ── TOURS (sorted by day for clean reading) ──────────────────────────
+  // Emits one line per scheduled tour AND an explicit "يوم حر" line for any
+  // stay day that has no tour — so the pricing screen never leaves a gap
+  // between day numbers. Two kinds of free days surface here:
+  //   1) Stay days the builder couldn't fill (real deficit) — synthesized
+  //      with name "يوم حر — استرخاء في الفندق", type "حر", 0 ريال.
+  //   2) Sheet rows whose name starts with "يوم حر" (e.g. "يوم حر للاستجمام
+  //      في جزيرة لانكاوي") — relabeled to type "حر" so the pricing screen
+  //      shows the same badge as #1 instead of dressing them as "ثقافية".
+  const isFreeDayRow = (name: string) => /^يوم\s*(?:ال)?حر/iu.test((name || "").trim());
   out += "TOURS:\n";
   let toursTotal = 0;
-  const sortedTours = [...tours].sort((a, b) => a.day - b.day);
-  for (const tt of sortedTours) {
+  const tourDays = new Set(tours.map(t => t.day));
+  type TourOrFreeLine = { day: number; text: string };
+  const tourLines: TourOrFreeLine[] = tours.map(tt => {
     const price = pickTourVariantPrice(tt.tour, adults, false); // tours always private
     toursTotal += price;
-    const tourType = "ثقافية"; // default; sheet doesn't always specify
-    out += `اليوم ${tt.day} | ${tt.tour.name.trim()} | ${tourType} | ${formatNumber(price)} ريال\n`;
+    const tourType = isFreeDayRow(tt.tour.name) ? "حر" : "ثقافية";
+    return {
+      day: tt.day,
+      text: `اليوم ${tt.day} | ${tt.tour.name.trim()} | ${tourType} | ${formatNumber(price)} ريال`,
+    };
+  });
+  for (const d of days) {
+    if (d.type !== "stay") continue;       // arrival/transit/departure handled by TRANSFERS
+    if (tourDays.has(d.number)) continue;  // already has a scheduled tour
+    tourLines.push({
+      day: d.number,
+      text: `اليوم ${d.number} | يوم حر — استرخاء في الفندق | حر | 0 ريال`,
+    });
   }
+  tourLines.sort((a, b) => a.day - b.day);
+  for (const l of tourLines) out += `${l.text}\n`;
   out += "\n";
 
   // ── SUMMARY ──────────────────────────────────────────────────────────
