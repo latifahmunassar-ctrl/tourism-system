@@ -916,21 +916,27 @@ export function formatProgram(data: ProgramData): string {
 
   // ── FLIGHTS — sort by day, multiply per-pax price by (adults + extra).
   // Extra tickets cover an extra traveler who shares the planes/trains but
-  // NOT the hotels/tours/transfers (those stay sized for `adults`).
-  let flightsTotal = 0;
+  // NOT the hotels/tours/transfers (those stay sized for `adults`). Track
+  // the base (adult) cost and the extras separately so the SUMMARY can show
+  // a stable per-person price for the original adults.
+  let flightsBase = 0;       // adults × per-pax price
+  let extraTicketsTotal = 0; // extraTickets × per-pax price
   const extraTickets = Math.max(0, request.extraTickets || 0);
   const ticketPax = adults + extraTickets;
   out += "FLIGHTS:\n";
   const sortedFlights = [...flights].sort((a, b) => a.day - b.day);
   for (const sf of sortedFlights) {
-    const total = sf.flight.price_per_pax * ticketPax;
-    flightsTotal += total;
+    const baseForThis = sf.flight.price_per_pax * adults;
+    const extraForThis = sf.flight.price_per_pax * extraTickets;
+    flightsBase += baseForThis;
+    extraTicketsTotal += extraForThis;
     const label = sf.kind === "train" ? "قطار" : "داخلي";
     const paxLabel = extraTickets > 0
       ? `${adults} + ${extraTickets} إضافي = ${ticketPax} أشخاص`
       : `${adults} أشخاص`;
-    out += `${sf.flight.from_city} - ${sf.flight.to_city} | ${label} | ${formatNumber(sf.flight.price_per_pax)} ريال/شخص | ${paxLabel} | ${formatNumber(total)} ريال\n`;
+    out += `${sf.flight.from_city} - ${sf.flight.to_city} | ${label} | ${formatNumber(sf.flight.price_per_pax)} ريال/شخص | ${paxLabel} | ${formatNumber(baseForThis + extraForThis)} ريال\n`;
   }
+  const flightsTotal = flightsBase + extraTicketsTotal;
   out += "\n";
 
   // ── SIM ──────────────────────────────────────────────────────────────
@@ -1022,14 +1028,23 @@ export function formatProgram(data: ProgramData): string {
   const simTotal = simCount * 50;
   const grand = hotelsTotal + flightsTotal + transfersTotal + toursTotal + simTotal;
 
+  // TOTAL_PER_PERSON excludes the extra-tickets cost — that cost belongs to
+  // the additional traveler, not to the adults whose per-person price the
+  // employee quotes the client. extraTicketsTotal is shown as its own line
+  // so the breakdown still sums to TOTAL_GROUP.
+  const perPersonBase = hotelsTotal + flightsBase + transfersTotal + toursTotal + simTotal;
   out += "SUMMARY:\n";
   out += `الفنادق | ${formatNumber(hotelsTotal)} ريال\n`;
-  if (flightsTotal > 0) out += `الطيران الداخلي | ${formatNumber(flightsTotal)} ريال\n`;
+  if (flightsBase > 0) out += `الطيران الداخلي | ${formatNumber(flightsBase)} ريال\n`;
+  if (extraTicketsTotal > 0) out += `تذاكر إضافية (${extraTickets}) | ${formatNumber(extraTicketsTotal)} ريال\n`;
   if (transfersTotal > 0) out += `الانتقالات | ${formatNumber(transfersTotal)} ريال\n`;
   if (toursTotal > 0) out += `الجولات السياحية | ${formatNumber(toursTotal)} ريال\n`;
   if (simTotal > 0) out += `شرائح الاتصال | ${formatNumber(simTotal)} ريال\n`;
-  out += `TOTAL_PER_PERSON:${formatNumber(grand / adults)}\n`;
-  out += `TOTAL_GROUP:${formatNumber(grand)} | ${adults} ${adults === 2 ? "شخص" : "أشخاص"}\n\n`;
+  out += `TOTAL_PER_PERSON:${formatNumber(perPersonBase / adults)}\n`;
+  const groupSuffix = extraTickets > 0
+    ? `${adults} ${adults === 2 ? "شخص" : "أشخاص"} + ${extraTickets} تذكرة إضافية`
+    : `${adults} ${adults === 2 ? "شخص" : "أشخاص"}`;
+  out += `TOTAL_GROUP:${formatNumber(grand)} | ${groupSuffix}\n\n`;
 
   out += `CHAT:برنامجك جاهز! إجمالي ${totalDays} أيام / ${totalNights} ليالي بمبلغ ${formatNumber(grand)} ريال للمجموعة.`;
 
