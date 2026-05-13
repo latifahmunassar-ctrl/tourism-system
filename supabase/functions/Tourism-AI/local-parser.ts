@@ -213,7 +213,11 @@ function parseDays(text: string): number | null {
     if (m1 && m2) {
       const y = new Date().getFullYear();
       const start = new Date(y, m1 - 1, d1);
-      const end = new Date(y, m2 - 1, d2);
+      // Cross-year range (e.g., "25 ديسمبر إلى 8 يناير") — when the end
+      // month is numerically before the start month, the trip crosses the
+      // calendar boundary, so bump the end year by 1.
+      const endYear = m2 < m1 ? y + 1 : y;
+      const end = new Date(endYear, m2 - 1, d2);
       const days = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
       if (days > 0 && days <= 60) return days;
     }
