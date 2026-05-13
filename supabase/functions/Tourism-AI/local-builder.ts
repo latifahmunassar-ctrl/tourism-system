@@ -225,11 +225,14 @@ function tourBelongsToCity(tour: TourRow, cityDefs: CityDef[], canonicalCity: st
 }
 
 /**
- * Normalize Arabic text for fuzzy matching: strip tashkeel, fold alif/ya/ta-marbuta
- * variants, collapse whitespace. Lets us match "المنجروف" → "المانجروف", etc.
+ * Normalize Arabic text for fuzzy matching: convert Arabic-Indic digits to
+ * ASCII (٨ → 8), strip tashkeel, fold alif/ya/ta-marbuta variants, collapse
+ * whitespace. Lets us match "المنجروف" → "المانجروف" and "٨" → "8".
  */
 function normalizeArabic(s: string): string {
   return (s || "")
+    .replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)))
+    .replace(/[۰-۹]/g, c => String("۰۱۲۳۴۵۶۷۸۹".indexOf(c)))
     .replace(/[ً-ٰٟ]/g, "")
     .replace(/[إأآا]/g, "ا")
     .replace(/[ةه]/g, "ه")

@@ -286,6 +286,50 @@ function buildLiteCitiesContext(destination: string): string {
 }
 
 /**
+ * Reconstruct a synthetic trip-request line from a previously built program.
+ * Used as a fallback when the user's original phrasing doesn't trigger
+ * joinMessages' trip-signal regex (e.g., "5 ليالي" instead of "5 أيام",
+ * or Arabic-Indic digits not normalized at the filter level). The program
+ * already has the canonical answer in META + HOTELS, so we re-state it in
+ * a form the local parser is guaranteed to understand.
+ *
+ * Returns null if the program is missing the required headers — caller
+ * should then fall through to the normal "ask for trip details" flow.
+ */
+function buildTripContextFromProgram(programText: string): string | null {
+  const arabicToLatinDigits = (s: string) =>
+    s.replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)));
+
+  const dest = programText.match(/DEST:([^\n]+)/)?.[1]?.trim();
+  const metaRaw = programText.match(/META:([^\n]+)/)?.[1];
+  if (!dest || !metaRaw) return null;
+  const meta = arabicToLatinDigits(metaRaw);
+  const days = meta.match(/(\d+)\s*(?:أيام|ايام|يوم)/)?.[1];
+  const adults = meta.match(/(\d+)\s*(?:شخص|أشخاص|بالغ)/)?.[1];
+  const month = meta.match(/(يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)/)?.[1];
+  if (!days || !adults) return null;
+
+  // Hotels section: each line "Name | City | Stars | Room | Price/ليلة | N ليالي ..."
+  const cityStays: Array<{ city: string; nights: number }> = [];
+  const hotelsBlock = programText.match(/HOTELS:\s*\n([\s\S]+?)(?=\n[A-Z]+:|\n\n|$)/);
+  if (hotelsBlock) {
+    for (const line of hotelsBlock[1].split("\n")) {
+      const parts = line.split("|").map(s => s.trim());
+      if (parts.length < 6) continue;
+      const city = parts[1];
+      const nightsField = arabicToLatinDigits(parts[5] || "");
+      const nMatch = nightsField.match(/(\d+)\s*(?:ليالي|ليله|ليلة|nights?)/);
+      if (city && nMatch) cityStays.push({ city, nights: parseInt(nMatch[1], 10) });
+    }
+  }
+  if (cityStays.length === 0) return null;
+
+  const cityPart = cityStays.map(s => `${s.nights} ${s.city}`).join(" + ");
+  const monthPart = month ? ` ${month}` : "";
+  return `${days} ايام ${dest} ${cityPart} ل ${adults} شخص${monthPart}`;
+}
+
+/**
  * Find the most recent assistant message that contains a built program
  * (i.e. a "DEST:" header). Returns the raw text or null if none yet.
  */
@@ -2099,7 +2143,27 @@ Deno.serve(async (req) => {
     // Claude either.
     if (detectedDest && DEST_CITIES[detectedDest]) {
       const cityDefs = DEST_CITIES[detectedDest];
-      const tripRequest = parseTripRequest(messages, cityDefs);
+      let tripRequest = parseTripRequest(messages, cityDefs);
+      // Fallback: if the joined user-text doesn't have a recognized trip
+      // signal (e.g., user wrote "ليالي" not "أيام", or used Arabic-Indic
+      // digits the joinMessages filter doesn't normalize) BUT we have a
+      // built program in history, reconstruct trip details from the program
+      // and re-parse. This is what makes tour-modification follow-ups work
+      // even when the original phrasing was off-pattern.
+      if (!canBuildLocally(tripRequest) && lastAssistantProgram) {
+        const synthCtx = buildTripContextFromProgram(lastAssistantProgram);
+        if (synthCtx) {
+          // Parse against synth + ONLY the latest user message. Including
+          // earlier user messages would double-count cities/nights — the
+          // synth already restates everything from the program.
+          const lastUser = messages[messages.length - 1];
+          const synthMessages: Array<{ role: string; content: unknown }> = [
+            { role: "user", content: synthCtx },
+            ...(lastUser?.role === "user" ? [lastUser] : []),
+          ];
+          tripRequest = parseTripRequest(synthMessages, cityDefs);
+        }
+      }
       const cityArabicNames: Record<string, string> = {
         "Ha Noi": "هانوي", "Sapa": "سابا", "Ha Long": "هالونج",
         "Da Nang": "دانانج", "Phu Quoc": "فوكوك", "Ho Chi Minh": "هوتشي مينه",

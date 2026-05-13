@@ -461,8 +461,9 @@ function parseTourModifications(lastUserMsg: string): TourModification[] {
   const SWAP_VERB = "(?:بد[ّ]?ل[يىه]?|غي[ّ]?ر[يى]?|اغير|استبدل|حول|change|swap|replace)";
   // Verbs that introduce a pure removal (free day, no replacement)
   const REMOVE_VERB = "(?:احذف|شيل|ألغ[يى]?|الغ[يى]?|[أا]زل|remove|delete|cancel)";
-  // The X/Y separator between "جولة X" and the replacement
-  const TO_PREP = "(?:ب[ـ]?|ل[ـ]?|إلى|الى|مع)";
+  // The X/Y separator between "جولة X" and the replacement.
+  // Includes Saudi-dialect variants like "الي" / "إلي" (yaa without dots).
+  const TO_PREP = "(?:ب[ـ]?|ل[ـ]?|إلى|الى|إلي|الي|مع)";
   // Free-day target phrases (Y side of a swap-with-free-day)
   const FREE_DAY = "(?:يوم\\s*حر|يوم\\s*راح[ةه]|يوم\\s*استرخاء|بدون\\s*جول[ةه]|فاضي)";
 
