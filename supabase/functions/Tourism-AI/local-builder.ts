@@ -169,31 +169,46 @@ export function pickCheapestHotel(
   const adults = request.adults || 2;
   const exclude = options?.excludeNames || new Set<string>();
   const isExcluded = (name: string) => exclude.has((name || "").trim().toLowerCase());
+  const dateForCheck = request.startDate
+    || (request.year && request.month
+        ? `${request.year}-${String(monthNumber(request.month)).padStart(2, "0")}-01`
+        : null);
 
-  let candidates = allHotels.filter(h => {
+  // Build a candidate-filter that's identical except for the occupancy rule —
+  // strict on the first pass, "room fits the group" on the fallback. The
+  // fallback lets a 3-pax group book a 4-occupancy room when the sheet has
+  // no exact-fit 3-occupancy entry (common in Hanoi: only 2/4/6 are listed).
+  const baseFilter = (h: HotelRow): boolean => {
     if (!hotelCityMatches(h.location, city, cityPattern)) return false;
     if (isExcluded(h.name)) return false;
-    // Adults exact match
-    const ac = extractAdultsCount(h.occupancy || "");
-    if (ac !== adults) return false;
-    // Stars filter (if specified)
     if (request.stars && request.stars.length > 0) {
       if (!request.stars.includes(h.stars)) return false;
     }
-    // Date range filter (use startDate or first day of travel month)
-    const dateForCheck = request.startDate
-      || (request.year && request.month
-          ? `${request.year}-${String(monthNumber(request.month)).padStart(2, "0")}-01`
-          : null);
     if (!hotelCoversDate(h, dateForCheck)) return false;
     return true;
+  };
+  let candidates = allHotels.filter(h => {
+    if (!baseFilter(h)) return false;
+    return extractAdultsCount(h.occupancy || "") === adults;
   });
+  if (candidates.length === 0) {
+    candidates = allHotels.filter(h => {
+      if (!baseFilter(h)) return false;
+      const ac = extractAdultsCount(h.occupancy || "");
+      return ac > adults; // strictly larger so the group actually fits
+    });
+  }
 
   if (candidates.length === 0) return null;
 
-  // Sort: price ASC, then name ASC for deterministic tie-break
+  // Sort: price ASC, then prefer smaller occupancy (closer fit) on the
+  // fallback path, then name. On the strict path all candidates share the
+  // same occupancy so the second key is a no-op.
   candidates.sort((a, b) => {
     if (a.price_per_night !== b.price_per_night) return a.price_per_night - b.price_per_night;
+    const ac_a = extractAdultsCount(a.occupancy || "");
+    const ac_b = extractAdultsCount(b.occupancy || "");
+    if (ac_a !== ac_b) return ac_a - ac_b;
     return a.name.localeCompare(b.name);
   });
   return candidates[0];
@@ -1118,6 +1133,10 @@ export async function buildLocalProgram(
   //    "Hanoi at start, Sapa middle, Hanoi at end" → 2 separate Hanoi stays).
   const days = arrangeDays(request);
   const hotelsList: SelectedHotel[] = [];
+  // Per-city note when pickCheapestHotel falls back to a larger-occupancy
+  // room (e.g., 3 pax in a 4-occupancy room because no 3-pax room exists).
+  // Surfaced to the employee in CHAT so they aren't blindsided by the upsize.
+  const occupancyUpsizeNotes: string[] = [];
   // Walk days in order, grouping consecutive same-city days into stays.
   let consumedDays = 0;
   const stayIdxPerCity: Record<string, number> = {};
@@ -1173,6 +1192,14 @@ export async function buildLocalProgram(
           ? (stayIdx === 0 ? "الأول" : stayIdx === totalStaysOfCity - 1 ? "الأخير" : `رقم ${stayIdx + 1}`)
           : null,
       });
+    }
+    // Detect occupancy upsize so we can tell the employee in CHAT. Only
+    // emit once per city even if multiple stays of the same city all upsize.
+    const picked = extractAdultsCount(hotel.occupancy || "");
+    if (picked > (request.adults || 2) && !occupancyUpsizeNotes.some(n => n.includes(stay.city))) {
+      occupancyUpsizeNotes.push(
+        `ما لقينا فندق بإشغال ${request.adults} أشخاص في ${cityArabicNames[stay.city] || stay.city}، اخترنا غرفة لـ ${picked} أشخاص (تكفي للمجموعة).`,
+      );
     }
     // Pull this stay's days out of the days[] array (next N days)
     const stayDays = days.slice(consumedDays, consumedDays + stay.nights);
@@ -1435,9 +1462,15 @@ export async function buildLocalProgram(
   };
 
   let program = formatProgram(programData);
+  // Compose CHAT notes. Occupancy upsize comes first (more important — affects
+  // pricing & client expectations); tour-deficit second; default if neither.
+  const chatParts: string[] = [];
+  if (occupancyUpsizeNotes.length > 0) chatParts.push(occupancyUpsizeNotes.join(" "));
   if (tourMessages.length > 0) {
-    program = program.replace(/^CHAT:.*$/m,
-      `CHAT:${tourMessages.join(" | ")} حابب تكرّر جولة معيّنة؟ بلّغني الرقم.`);
+    chatParts.push(`${tourMessages.join(" | ")} حابب تكرّر جولة معيّنة؟ بلّغني الرقم.`);
+  }
+  if (chatParts.length > 0) {
+    program = program.replace(/^CHAT:.*$/m, `CHAT:${chatParts.join(" ")}`);
   }
   return { ok: true, program, appliedModifications: [...appliedHotelSwaps, ...appliedModifications] };
 }

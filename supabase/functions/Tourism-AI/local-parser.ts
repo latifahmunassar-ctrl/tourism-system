@@ -378,8 +378,11 @@ function parseMonth(text: string): { month: string | null; year: number | null }
 
 function parseStartDate(text: string): string | null {
   const t = arabicDigitsToLatin(text);
-  // "السفر 14 مايو" / "ابدأ من 1 يونيو 2026"
-  const m = t.match(/(?:السفر|ابدأ|ابدا|من|تاريخ|date)\s*(?:يوم\s*)?(\d{1,2})[\s/-]*(?:شهر\s*)?(\w+)?\s*(\d{4})?/i);
+  // "السفر 14 مايو" / "ابدأ من 1 يونيو 2026" / "من تاريخ 25 ديسمبر إلى 8 يناير"
+  // The month capture uses a non-whitespace class instead of \w because \w
+  // is ASCII-only in JS — Arabic month names like "ديسمبر" would otherwise
+  // fail to capture and the start date would silently fall back to next month.
+  const m = t.match(/(?:السفر|ابدأ|ابدا|من|تاريخ|date)\s*(?:يوم\s*)?(\d{1,2})[\s/-]*(?:شهر\s*)?([^\s/\-،,]+)?\s*(\d{4})?/i);
   if (m) {
     const day = parseInt(m[1], 10);
     let monthNum: number | null = null;
