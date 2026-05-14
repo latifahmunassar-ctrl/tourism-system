@@ -961,19 +961,23 @@ export function formatProgram(data: ProgramData): string {
   }
   out += "\n";
 
-  // ── FLIGHTS — sort by day. Extras are folded into the same row by bumping
-  // the pax count (2 → 3) instead of emitting a separate "تذكرة إضافية" line,
-  // so the pricing screen and PDF show one row per route. The pax label stays
-  // a single number so the frontend's parseCount stays accurate. The SUMMARY
-  // below still itemizes "تذاكر إضافية" so the breakdown is preserved.
-  let flightsBase = 0;       // adults × per-pax (per-person basis)
+  // ── FLIGHTS — sort by day. The pax count reflects EVERYONE the employee
+  // declared on the trip: adults + children + extras. Children count for
+  // flights/trains even when the hotel was downgraded to a 2-adult room
+  // (the kid shares the parents' room; the flight seat is non-negotiable).
+  // Extras fold into the same row by bumping the count, so the pricing
+  // screen and PDF show one row per route — SUMMARY still itemizes the
+  // extras so TOTAL_PER_PERSON correctly excludes them.
+  const tripChildren = Math.max(0, request.children || 0);
+  const tripPax = adults + tripChildren;  // children fly too
+  let flightsBase = 0;       // (adults + children) × per-pax — part of trip
   let extraTicketsTotal = 0; // extras × per-pax (itemized in SUMMARY only)
   const extraTickets = Math.max(0, request.extraTickets || 0);
-  const totalPax = adults + extraTickets;
+  const totalPax = tripPax + extraTickets;
   out += "FLIGHTS:\n";
   const sortedFlights = [...flights].sort((a, b) => a.day - b.day);
   for (const sf of sortedFlights) {
-    flightsBase += sf.flight.price_per_pax * adults;
+    flightsBase += sf.flight.price_per_pax * tripPax;
     extraTicketsTotal += sf.flight.price_per_pax * extraTickets;
     const lineTotal = sf.flight.price_per_pax * totalPax;
     const label = sf.kind === "train" ? "قطار" : "داخلي";

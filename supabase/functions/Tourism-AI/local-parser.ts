@@ -254,13 +254,16 @@ function parseAdults(text: string): number | null {
       " ",
     );
   const t = arabicDigitsToLatin(cleaned);
+  // Digit-prefixed counts FIRST — "3 بالغين"/"5 أشخاص" must parse as 3/5,
+  // not as the dual form "2". Otherwise the dual-form check below catches
+  // "بالغين" inside "3 بالغين" and short-circuits to 2.
+  // "6 أشخاص" / "2 شخص" / "3 كبار" / "ل شخصين" / "4 افراد" / "4 أفراد"
+  const personNoun = "(?:شخص|أشخاص|اشخاص|كبار|بالغ(?:ين|ان|ون)?|[أا]فراد|[أا]فرد|adults?|persons?|pax)";
+  const m = t.match(new RegExp(`(\\d{1,2})\\s*${personNoun}`, "i"));
+  if (m) return parseInt(m[1], 10);
   // Dual forms (no number)
   if (/زوجين|زوجان|couple/i.test(t)) return 2;
   if (/شخصين|شخصان|شخصاً|شخصا|بالغين|بالغان|فردين|فردان|شخصاين/.test(t)) return 2;
-  // "6 أشخاص" / "2 شخص" / "3 كبار" / "ل شخصين" / "4 افراد" / "4 أفراد"
-  const personNoun = "(?:شخص|أشخاص|اشخاص|كبار|بالغ|[أا]فراد|[أا]فرد|adults?|persons?|pax)";
-  const m = t.match(new RegExp(`(\\d{1,2})\\s*${personNoun}`, "i"));
-  if (m) return parseInt(m[1], 10);
   // Word numbers: "أربع افراد" / "خمسة أشخاص" / "ست افراد"
   const wordNum: Array<[string, number]> = [
     ["عشر[ةه]?", 10], ["تسع[ةه]?", 9], ["ثمان(?:ية|يه)?", 8],
@@ -277,8 +280,15 @@ function parseAdults(text: string): number | null {
 
 function parseChildren(text: string): number | null {
   const t = arabicDigitsToLatin(text);
-  const m = t.match(/(\d{1,2})\s*(?:طفل|أطفال|اطفال|child|children|kids?)/i);
-  return m ? parseInt(m[1], 10) : null;
+  // "3 أطفال" / "2 طفل" / "1 child" / "kids 4"
+  const childNoun = "(?:طفل[ةه]?|أطفال|اطفال|child(?:ren)?|kids?)";
+  const m = t.match(new RegExp(`(\\d{1,2})\\s*${childNoun}`, "iu"));
+  if (m) return parseInt(m[1], 10);
+  // Dual form: "طفلين" / "طفلان" → 2
+  if (/طفل[يا]ن/.test(t)) return 2;
+  // Bare "وطفل" / "+ طفل" / "ل طفل" / "و طفلة" — implicit 1
+  if (/(?:^|\s|و|\+|،|,|ل)\s*طفل[ةه]?(?:\s|$|،|,|\.|!)/u.test(t)) return 1;
+  return null;
 }
 
 function parseStars(text: string): number[] | null {
