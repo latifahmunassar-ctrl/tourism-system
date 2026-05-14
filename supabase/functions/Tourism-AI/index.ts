@@ -2347,11 +2347,13 @@ Deno.serve(async (req) => {
                 if (m.kind === "add") return `أضفت جولة "${m.tourName}" في ${ar(m.city)}`;
                 if (m.kind === "hotelSwap") {
                   const label = m.stayLabel ? ` ${m.stayLabel}` : "";
-                  const occ = m.targetOccupancy != null
-                    ? ` (يتسع لـ ${m.targetOccupancy} أشخاص)` : "";
+                  const bits: string[] = [];
+                  if (m.targetStars != null) bits.push(`${m.targetStars} نجوم`);
+                  if (m.targetOccupancy != null) bits.push(`يتسع لـ ${m.targetOccupancy} أشخاص`);
+                  const tail = bits.length > 0 ? ` (${bits.join("، ")})` : "";
                   return m.fromName
-                    ? `غيّرت فندق ${ar(m.city)}${label} من "${m.fromName}" إلى "${m.toName}"${occ}`
-                    : `غيّرت فندق ${ar(m.city)}${label} إلى "${m.toName}"${occ}`;
+                    ? `غيّرت فندق ${ar(m.city)}${label} من "${m.fromName}" إلى "${m.toName}"${tail}`
+                    : `غيّرت فندق ${ar(m.city)}${label} إلى "${m.toName}"${tail}`;
                 }
                 return `حذفت جولة "${m.tourName}" (اليوم صار حر)`;
               });

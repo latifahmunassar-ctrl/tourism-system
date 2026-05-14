@@ -45,7 +45,7 @@ export type HotelStayHint = "all" | "first" | "last" | number;
  *     `request.adults`.
  */
 export type HotelModification =
-  | { kind: "nextCheaper"; cityHint: string; stayHint: HotelStayHint; targetOccupancy: number | null; fullText: string };
+  | { kind: "nextCheaper"; cityHint: string; stayHint: HotelStayHint; targetOccupancy: number | null; targetStars: number | null; fullText: string };
 
 export type TripRequest = {
   /** "vietnam" / "Malaysia" / etc. — same canonical names as DEST_CITIES keys */
@@ -282,7 +282,13 @@ function parseChildren(text: string): number | null {
 }
 
 function parseStars(text: string): number[] | null {
-  const t = arabicDigitsToLatin(text);
+  // Strip per-hotel star-rating overrides ("غير فندق هانوي الى 5 نجوم")
+  // before scanning — the override is for that one hotel, not the trip.
+  const cleaned = text.replace(
+    /(?:بد[ّ]?ل[يىه]?|غي[ّ]?ر[يى]?|اغير|استبدل|change|swap)\s+(?:لي\s+)?(?:ال)?فندق[^\n]*?\d\s*(?:نجوم|نجمة|stars?)/giu,
+    " ",
+  );
+  const t = arabicDigitsToLatin(cleaned);
   // "4 أو 5 نجوم" / "4 و 5 نجوم"
   const range = t.match(/(\d)\s*(?:أو|او|و|or)\s*(\d)\s*(?:نجوم|نجمة|stars?|★)/i);
   if (range) {
@@ -731,6 +737,21 @@ function parseHotelModifications(lastUserMsg: string): HotelModification[] {
       remainder = remainder.slice(0, occMatch.index).trim();
     }
   }
+  // Pull out an explicit star-rating override ("الى 5 نجوم" / "ل ٤ نجوم" /
+  // "بفندق 5 نجوم"). Strip from remainder so trip-level parseStars doesn't
+  // pick up the digit and apply it to every hotel.
+  let targetStars: number | null = null;
+  const arDigits = remainder.replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)));
+  const starsMatch = arDigits.match(
+    /(?:\s+(?:ب\s*)?(?:ال)?فندق)?\s*(?:الى|إلى|ل[ـ]?|لـ|ب)?\s*(\d)\s+(?:نجوم|نجمة|stars?)/iu,
+  );
+  if (starsMatch && starsMatch.index !== undefined) {
+    const n = parseInt(starsMatch[1], 10);
+    if (n >= 1 && n <= 5) {
+      targetStars = n;
+      remainder = remainder.slice(0, starsMatch.index).trim();
+    }
+  }
   if (!remainder) return [];
 
   // Pull out a stay-ordinal qualifier from the remainder using a token scan
@@ -772,7 +793,7 @@ function parseHotelModifications(lastUserMsg: string): HotelModification[] {
   // Carry the full normalized message too — the builder uses it for hotel-name
   // fallback when the employee wrote "<hotel name> غير الفندق هذا ...", which
   // leaves the actual name OUTSIDE the verb-anchored capture group.
-  return [{ kind: "nextCheaper", cityHint, stayHint, targetOccupancy, fullText: text }];
+  return [{ kind: "nextCheaper", cityHint, stayHint, targetOccupancy, targetStars, fullText: text }];
 }
 
 /** Latest user message in the conversation, or "" if none. */

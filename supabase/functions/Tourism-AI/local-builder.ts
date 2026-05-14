@@ -164,7 +164,7 @@ export function pickCheapestHotel(
   city: string,
   request: TripRequest,
   cityPattern?: RegExp,
-  options?: { excludeNames?: Set<string>; overrideAdults?: number; areaFilter?: string },
+  options?: { excludeNames?: Set<string>; overrideAdults?: number; areaFilter?: string; overrideStars?: number },
 ): HotelRow | null {
   // overrideAdults is set when the employee explicitly asks for a different
   // occupancy on a single swap ("غير فندق هانوي لـ 4 أشخاص"). In that case
@@ -182,11 +182,14 @@ export function pickCheapestHotel(
   // strict on the first pass, "room fits the group" on the fallback. The
   // fallback lets a 3-pax group book a 4-occupancy room when the sheet has
   // no exact-fit 3-occupancy entry (common in Hanoi: only 2/4/6 are listed).
+  const effectiveStars = options?.overrideStars
+    ? [options.overrideStars]
+    : (request.stars || []);
   const baseFilter = (h: HotelRow): boolean => {
     if (!hotelCityMatches(h.location, city, cityPattern)) return false;
     if (isExcluded(h.name)) return false;
-    if (request.stars && request.stars.length > 0) {
-      if (!request.stars.includes(h.stars)) return false;
+    if (effectiveStars.length > 0) {
+      if (!effectiveStars.includes(h.stars)) return false;
     }
     if (!hotelCoversDate(h, dateForCheck)) return false;
     // Sub-area filter: when the employee asked for a specific area within
@@ -1099,7 +1102,7 @@ export type AppliedModification =
   | { kind: "remove"; tourName: string; city: string }
   | { kind: "swap"; fromName: string; toName: string; city: string }
   | { kind: "add"; tourName: string; city: string }
-  | { kind: "hotelSwap"; city: string; fromName: string | null; toName: string; stayLabel: string | null; targetOccupancy: number | null };
+  | { kind: "hotelSwap"; city: string; fromName: string | null; toName: string; stayLabel: string | null; targetOccupancy: number | null; targetStars: number | null };
 
 export type BuildResult =
   | { ok: true; program: string; appliedModifications: AppliedModification[] }
@@ -1154,6 +1157,7 @@ export async function buildLocalProgram(
   // overrides (from "غير فندق هانوي لـ 4 أشخاص") use the same key shape.
   const hotelExcludesByStay: Record<string, Set<string>> = {};
   const hotelOverrideOccupancyByStay: Record<string, number> = {};
+  const hotelOverrideStarsByStay: Record<string, number> = {};
   for (const mod of request.hotelModifications) {
     let resolvedCity: string | null = null;
     let nameMatchedIndices: number[] | null = null;
@@ -1228,6 +1232,9 @@ export async function buildLocalProgram(
       if (mod.targetOccupancy != null) {
         hotelOverrideOccupancyByStay[`${resolvedCity}#${idx}`] = mod.targetOccupancy;
       }
+      if (mod.targetStars != null) {
+        hotelOverrideStarsByStay[`${resolvedCity}#${idx}`] = mod.targetStars;
+      }
     }
   }
 
@@ -1249,9 +1256,11 @@ export async function buildLocalProgram(
     stayIdxPerCity[stay.city] = stayIdx + 1;
     const excludeForThisStay = hotelExcludesByStay[`${stay.city}#${stayIdx}`];
     const overrideForThisStay = hotelOverrideOccupancyByStay[`${stay.city}#${stayIdx}`];
+    const overrideStarsForThisStay = hotelOverrideStarsByStay[`${stay.city}#${stayIdx}`];
     const hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
       excludeNames: excludeForThisStay,
       overrideAdults: overrideForThisStay,
+      overrideStars: overrideStarsForThisStay,
       areaFilter: stay.area,
     });
     if (!hotel) {
@@ -1313,6 +1322,7 @@ export async function buildLocalProgram(
           ? (stayIdx === 0 ? "الأول" : stayIdx === totalStaysOfCity - 1 ? "الأخير" : `رقم ${stayIdx + 1}`)
           : null,
         targetOccupancy: overrideForThisStay ?? null,
+        targetStars: overrideStarsForThisStay ?? null,
       });
     }
     // Detect occupancy upsize so we can tell the employee in CHAT. Only
