@@ -1198,7 +1198,7 @@ html += `
 ${summaryHTML}
 </div>
 <div class="group-card">
-<span class="group-label">💰 الإجمالي (${persons} أشخاص)</span>
+<span class="group-label">💰 الإجمالي (${persons} أشخاص${kids ? ' + ' + kids + ' ' + (kids === 1 ? 'طفل' : 'أطفال') : ''})</span>
 <span class="group-val" id="totalGroupEl">${basePrice.toLocaleString()} ريال</span>
 </div>`;
 
@@ -1747,7 +1747,7 @@ ${logoHTML}
 <div class="pdf-dest-name">${dest}</div>
 ${citiesText ? `<div class="pdf-cities">📍 ${citiesText}</div>` : ''}
 <div class="pdf-date-price-row">
-${showTotalPrice ? `<div class="pdf-price-box"><div class="pdf-price-label">💰 السعر الإجمالي (${persons} أشخاص)</div><div class="pdf-price-val">${fmtMoney(displayPrice)} ${displayCurrencyName}</div></div>` : ''}
+${showTotalPrice ? `<div class="pdf-price-box"><div class="pdf-price-label">💰 السعر الإجمالي (${persons} أشخاص${kids ? ' + ' + kids + ' ' + (kids === 1 ? 'طفل' : 'أطفال') : ''})</div><div class="pdf-price-val">${fmtMoney(displayPrice)} ${displayCurrencyName}</div></div>` : ''}
 <div class="pdf-dates-card"><div class="pdf-dates-label">📅 التاريخ</div><div class="pdf-dates">من ${dateFrom}<br>إلى ${dateTo}</div></div>
 </div>
 <div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:10px 14px;margin-bottom:10px;color:#fff;font-size:13px;font-weight:700;">

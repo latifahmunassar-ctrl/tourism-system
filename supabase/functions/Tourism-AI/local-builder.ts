@@ -960,6 +960,14 @@ function pickTourVariantPrice(tour: TourRow, paxCount: number, isShared: boolean
 export function formatProgram(data: ProgramData): string {
   const { request, days, hotels, flights, tours, transfers, simCount, destinationName, cityArabicNames } = data;
   const adults = request.adults || 2;
+  const childrenCount = Math.max(0, request.children || 0);
+  // Surface "طفل" in META / CLIENT / TOTAL_GROUP whenever the trip has kids,
+  // so the PDF (and pricing screen) explicitly names them. The frontend still
+  // parses adult count from "N أشخاص" — that part stays at the start of the
+  // string; the child fragment is appended.
+  const childSuffix = childrenCount > 0
+    ? ` + ${childrenCount} ${childrenCount === 1 ? "طفل" : "أطفال"}`
+    : "";
   const totalDays = days.length;
   const totalNights = totalDays - 1;
   const monthLabel = request.month
@@ -972,10 +980,10 @@ export function formatProgram(data: ProgramData): string {
 
   // ── DEST / META / DATES / CLIENT ────────────────────────────────────
   out += `DEST:${destinationName}\n`;
-  out += `META:${totalDays} أيام | ${totalNights} ليالي | ${monthLabel} | ${adults} ${adults === 1 ? "شخص" : adults === 2 ? "شخص" : "أشخاص"}\n`;
+  out += `META:${totalDays} أيام | ${totalNights} ليالي | ${monthLabel} | ${adults} ${adults === 1 ? "شخص" : adults === 2 ? "شخص" : "أشخاص"}${childSuffix}\n`;
   out += `DATE_FROM:${formatArabicDate(startDate)}\n`;
   out += `DATE_TO:${formatArabicDate(endDate)}\n`;
-  out += `CLIENT:${adults === 2 ? "شخصان بالغان" : `${adults} بالغين`}\n`;
+  out += `CLIENT:${adults === 2 ? "شخصان بالغان" : `${adults} بالغين`}${childSuffix}\n`;
   out += `CLIENT_CODE:ALZ-2026-001\n\n`;
 
   // ── HOTELS ───────────────────────────────────────────────────────────
@@ -1123,9 +1131,9 @@ export function formatProgram(data: ProgramData): string {
   if (toursTotal > 0) out += `الجولات السياحية | ${formatNumber(toursTotal)} ريال\n`;
   if (simTotal > 0) out += `شرائح الاتصال | ${formatNumber(simTotal)} ريال\n`;
   out += `TOTAL_PER_PERSON:${formatNumber(perPersonBase / adults)}\n`;
-  const groupSuffix = extraTickets > 0
-    ? `${adults} ${adults === 2 ? "شخص" : "أشخاص"} + ${extraTickets} تذكرة إضافية`
-    : `${adults} ${adults === 2 ? "شخص" : "أشخاص"}`;
+  const adultPart = `${adults} ${adults === 2 ? "شخص" : "أشخاص"}`;
+  const extraPart = extraTickets > 0 ? ` + ${extraTickets} تذكرة إضافية` : "";
+  const groupSuffix = `${adultPart}${childSuffix}${extraPart}`;
   out += `TOTAL_GROUP:${formatNumber(grand)} | ${groupSuffix}\n\n`;
 
   out += `CHAT:برنامجك جاهز! إجمالي ${totalDays} أيام / ${totalNights} ليالي بمبلغ ${formatNumber(grand)} ريال للمجموعة.`;
