@@ -789,11 +789,31 @@ export function findInterCityTransfer(
     // requestedTransport as null. Employee can still override per-trip with
     // "مشتركة" or per-modification later.
     const effectiveTransport = requestedTransport ?? "private";
+    // Detect the row's destination type — "to hotel" (lands at next city's
+    // hotel, suitable for a stay) vs "to airport" (drops at airport, suitable
+    // for an onward flight or final departure). When the transit is a road
+    // ride that ends at a hotel night, the "to hotel" row is the right pick.
+    const destType = (n: string): "hotel" | "airport" | "other" => {
+      const m = n.match(/(?:الى|إلى)\s+(?:ال)?(فندق|hotel|مطار|airport)/iu);
+      if (!m) return "other";
+      return /فندق|hotel/i.test(m[1]) ? "hotel" : "airport";
+    };
     fromDrop.sort((a, b) => {
       // (1) prefer rows that explicitly mention toCity
       const aHasTo = toDef ? toDef.pattern.test(a.name) : false;
       const bHasTo = toDef ? toDef.pattern.test(b.name) : false;
       if (aHasTo !== bHasTo) return aHasTo ? -1 : 1;
+      // (1.5) "to hotel" beats "to airport" when both exist. Reason: this
+      // function is called for transit days that END at a hotel stay (the
+      // customer sleeps in toCity that night). A "to airport" row only
+      // makes sense for the final departure day, which is handled by
+      // findDepartureDrop instead.
+      const aDest = destType(a.name);
+      const bDest = destType(b.name);
+      if (aDest !== bDest) {
+        if (aDest === "hotel" && bDest === "airport") return -1;
+        if (aDest === "airport" && bDest === "hotel") return 1;
+      }
       // (2) match the requested transport mode — shared trip picks the
       // "مشتركة" row, private trip picks the "خاصة" row. This is the user-
       // visible difference between "غير لخاصة" and "غير لمشتركة".
@@ -1676,11 +1696,33 @@ export async function buildLocalProgram(
       // door car ride; the Drop row above covers the entire journey so an
       // additional "استقبال في مطار هانوي" line is bogus — the customer
       // never went through an airport.
-      const hasFlightOrTrain = !!selectedFlights.find(f => f.day === d.number);
-      if (hasFlightOrTrain) {
-        const arrPickupForCity = findArrivalPickup(allTours, d.toCity, dest, cityDefs, arrivalType);
-        if (arrPickupForCity) {
-          selectedTransfers.push({ day: d.number, row: arrPickupForCity, kind: "Pickup" });
+      const flightForDay = selectedFlights.find(f => f.day === d.number);
+      if (flightForDay) {
+        // Hub-flight case: flight lands at the destination's preferred hub
+        // (e.g. Hanoi) but the stay is in a road-only city (HaLong). The
+        // airport pickup at the hub doesn't deliver them to HaLong — so
+        // append the road segment from hub → toCity instead. Without it,
+        // the program shows the customer landing at Hanoi airport with no
+        // way of getting to HaLong.
+        const normCityKey = (s: string) => s.toLowerCase().normalize("NFD")
+          .replace(/\p{M}/gu, "").replace(/[\(\)\.\-_,]/g, " ")
+          .replace(/\s+/g, " ").trim();
+        const flightLandsAtHub =
+          mainHub &&
+          normCityKey(flightForDay.flight.to_city).includes(normCityKey(mainHub)) &&
+          normCityKey(d.toCity) !== normCityKey(mainHub);
+        if (flightLandsAtHub) {
+          const hubToCity = findInterCityTransfer(
+            allTours, mainHub, d.toCity, dest, cityDefs, "airport", request.transport,
+          );
+          if (hubToCity) {
+            selectedTransfers.push({ day: d.number, row: hubToCity, kind: "Pickup" });
+          }
+        } else {
+          const arrPickupForCity = findArrivalPickup(allTours, d.toCity, dest, cityDefs, arrivalType);
+          if (arrPickupForCity) {
+            selectedTransfers.push({ day: d.number, row: arrPickupForCity, kind: "Pickup" });
+          }
         }
       }
     }
