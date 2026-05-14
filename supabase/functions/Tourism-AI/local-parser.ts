@@ -240,13 +240,20 @@ function parseDays(text: string): number | null {
   return null;
 }
 
+// Shared verb list for hotel modifications. Used by parseAdults/parseStars to
+// scrub per-hotel override fragments before they pollute trip-level counts,
+// AND by parseHotelModifications to detect the request itself. Keep the three
+// uses in sync — adding a verb here automatically extends all three.
+const HOTEL_MOD_VERBS =
+  "(?:بد[ّ]?ل[يىه]?|غي[ّ]?ر[يى]?|اغير|استبدل|change|swap|اعطن[يى]?|أعطن[يى]?|خل[يى]|اجعل[يى]?|[أا]جعل[يى]?|حو[ّ]?ل[يى]?|ا[بپ]غ[يى]|[أا]ب[يى]|[أا]ريد|اريد|need|want|make)";
+
 function parseAdults(text: string): number | null {
   // Strip per-hotel occupancy overrides ("غير فندق هانوي لـ 4 أشخاص") AND
   // extra-ticket fragments ("أضف تذكرة لشخصين") before scanning — otherwise
   // their numeric pax mentions leak into the trip's adult counter.
   const cleaned = text
     .replace(
-      /(?:بد[ّ]?ل[يىه]?|غي[ّ]?ر[يى]?|اغير|استبدل|change|swap)\s+(?:لي\s+)?(?:ال)?فندق[^\n]*?(?:ل[ـ]?|لـ)\s*\d{1,2}\s*(?:شخص|أشخاص|اشخاص|بالغ|بالغين|[أا]فراد|كبار)/giu,
+      new RegExp(`${HOTEL_MOD_VERBS}\\s+(?:لي\\s+)?(?:ال)?فندق[^\\n]*?(?:ل[ـ]?|لـ)\\s*\\d{1,2}\\s*(?:شخص|أشخاص|اشخاص|بالغ|بالغين|[أا]فراد|كبار)`, "giu"),
       " ",
     )
     .replace(
@@ -295,7 +302,7 @@ function parseStars(text: string): number[] | null {
   // Strip per-hotel star-rating overrides ("غير فندق هانوي الى 5 نجوم")
   // before scanning — the override is for that one hotel, not the trip.
   const cleaned = text.replace(
-    /(?:بد[ّ]?ل[يىه]?|غي[ّ]?ر[يى]?|اغير|استبدل|change|swap)\s+(?:لي\s+)?(?:ال)?فندق[^\n]*?\d\s*(?:نجوم|نجمة|stars?)/giu,
+    new RegExp(`${HOTEL_MOD_VERBS}\\s+(?:لي\\s+)?(?:ال)?فندق[^\\n]*?\\d\\s*(?:نجوم|نجمة|stars?)`, "giu"),
     " ",
   );
   const t = arabicDigitsToLatin(cleaned);
@@ -717,7 +724,7 @@ function parseHotelModifications(lastUserMsg: string): HotelModification[] {
     .trim();
   if (!text) return [];
 
-  const VERBS = "(?:بد[ّ]?ل[يىه]?|غي[ّ]?ر[يى]?|اغير|استبدل|change|swap|اعطن[يى]?|أعطن[يى]?)";
+  const VERBS = HOTEL_MOD_VERBS;
 
   // Match the verb + "فندق" + free-form remainder (city + optional ordinal).
   // Note: we do NOT inline an "alternative" keyword like ثاني/اخر here,
