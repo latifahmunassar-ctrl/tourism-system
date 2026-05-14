@@ -548,7 +548,16 @@ export function findArrivalPickup(
   const isTrain   = (n: string) => /قطار|محط[هة]|station|train/iu.test(n);
   const preferred = candidates.filter(c => preferType === "airport" ? isAirport(c.name) : isTrain(c.name));
   const pool = preferred.length > 0 ? preferred : candidates;
-  pool.sort((a, b) => a.price - b.price);
+  // Default to PRIVATE pickup when both shared & private variants exist —
+  // matches the inter-city/departure transfers' bias.
+  const isPriv  = (n: string) => /بسيار[ةه]\s*خاص[ةه]?|سياره\s*خاص[ةه]?|private/iu.test(n);
+  const isShare = (n: string) => /مشترك[ةه]?|shared|ليموزين/iu.test(n);
+  pool.sort((a, b) => {
+    const aP = isPriv(a.name) ? 1 : (isShare(a.name) ? -1 : 0);
+    const bP = isPriv(b.name) ? 1 : (isShare(b.name) ? -1 : 0);
+    if (aP !== bP) return bP - aP;
+    return a.price - b.price;
+  });
   return pool[0];
 }
 
@@ -613,9 +622,11 @@ export function findDepartureDrop(
     for (const c of cityDefs) {
       if (c.canonical === city) continue;
       // If the row mentions another canonical city, treat as inter-city.
-      // The "ارض الوطن/الديار/للسلامه/للعوده" markers override — those
-      // unambiguously indicate going home, not transitioning to that city.
-      const looksLikeGoingHome = /ارض\s*الوطن|الديار|للسلامه|للسلامة/iu.test(n);
+      // The "ارض الوطن/الديار/للسلامه/للعوده/مطار" markers override —
+      // those unambiguously indicate going home (or to an airport, which
+      // is the only reason a departure row would name another city like
+      // "الى مطار هانوي" when leaving from HaLong).
+      const looksLikeGoingHome = /ارض\s*الوطن|الديار|للسلامه|للسلامة|مطار|airport/iu.test(n);
       if (!looksLikeGoingHome && c.pattern.test(n)) return false;
     }
     return true;
@@ -637,11 +648,19 @@ export function findDepartureDrop(
     });
   }
   if (candidates.length === 0) return null;
-  // Prefer the international-departure rows when multiple candidates remain.
+  // Sort priority:
+  //   (1) international-departure rows (mention "ارض الوطن"/"الديار"/"الدولي")
+  //   (2) PRIVATE rows preferred over shared — default sales preference
+  //   (3) cheapest within the same tier
+  const isPrivateRow = (n: string) => /بسيار[ةه]\s*خاص[ةه]?|سياره\s*خاص[ةه]?|private/iu.test(n);
+  const isSharedRow = (n: string) => /مشترك[ةه]?|shared|ليموزين/iu.test(n);
   candidates.sort((a, b) => {
     const aHome = /ارض\s*الوطن|الديار|للسلامه|للسلامة|للعوده|للعودة|الدولي/iu.test(a.name) ? 1 : 0;
     const bHome = /ارض\s*الوطن|الديار|للسلامه|للسلامة|للعوده|للعودة|الدولي/iu.test(b.name) ? 1 : 0;
     if (aHome !== bHome) return bHome - aHome;
+    const aPriv = isPrivateRow(a.name) ? 1 : (isSharedRow(a.name) ? -1 : 0);
+    const bPriv = isPrivateRow(b.name) ? 1 : (isSharedRow(b.name) ? -1 : 0);
+    if (aPriv !== bPriv) return bPriv - aPriv;
     return a.price - b.price;
   });
   return candidates[0];
@@ -705,11 +724,12 @@ export function findInterCityTransfer(
     // didn't pick one. The shared "ليموزين" row is cheaper so it would
     // otherwise win on price (4), but sales preference for this route is
     // a private car priced for the group.
-    const isHanoiSapaVietnam =
-      destination === "vietnam" &&
-      ((fromCity === "Ha Noi" && toCity === "Sapa") ||
-       (fromCity === "Sapa" && toCity === "Ha Noi"));
-    const effectiveTransport = requestedTransport ?? (isHanoiSapaVietnam ? "private" : null);
+    // Default ALL inter-city transit to PRIVATE when employee didn't pick
+    // one. Sales preference is private cars priced for the group; shared
+    // ليموزين rows are cheaper and would win on price alone if we left
+    // requestedTransport as null. Employee can still override per-trip with
+    // "مشتركة" or per-modification later.
+    const effectiveTransport = requestedTransport ?? "private";
     fromDrop.sort((a, b) => {
       // (1) prefer rows that explicitly mention toCity
       const aHasTo = toDef ? toDef.pattern.test(a.name) : false;
