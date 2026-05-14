@@ -700,6 +700,14 @@ export function findInterCityTransfer(
     const rowFrom = rowFromCity(n);                                                         // (c)
     if (!rowFrom) return false;
     if (!tourNameMatchesCity(rowFrom, fromCity, cityDefs)) return false;
+    // (c.1) Reject rows that target a THIRD canonical city — "Hanoi → HaLong"
+    // is not appropriate for a Hanoi → Phu Quoc transit even if it's the
+    // only Hanoi-departing road row available. Without this guard, the
+    // system silently slots a wrong-destination row into the program.
+    for (const c of cityDefs) {
+      if (c.canonical === fromCity || c.canonical === toCity) continue;
+      if (c.pattern.test(n)) return false;
+    }
 
     const isAirportRow = /مطار|airport/iu.test(n) && !/قطار|محط[هة]|station|train/iu.test(n);
     const isTrainRow   = /قطار|محط[هة]|station|train/iu.test(n);                            // (d)
