@@ -210,40 +210,50 @@ export function pickCheapestHotel(
     }
     return true;
   };
-  // When the trip includes children, the room MUST have a child slot —
-  // employee rule: a 3 بالغين+طفل request should prefer "3 adults + 1 child",
-  // then fall back to "2 adults + 1 child" (drop adults, keep child slot)
-  // rather than upgrading to a kid-less "4 adults" room.
+  // Employee rule: ADULT capacity is the primary constraint. Walk outward
+  // from the exact adult count — exact first, then –1, then +1, then –2,
+  // +2, … — and stop at the first tier that has matches. This way:
+  //   - "5 بالغين + طفلين" prefers a 5-adult room, falls to 4-adult if no 5
+  //     exists (matches the employee's "5 or 4 شخص" expectation).
+  //   - "3 بالغين + طفل" prefers a 3-adult room, falls to 2-adult before
+  //     jumping to 4 (matches the employee's "3+طفل else 2+طفل" rule).
+  //   - Trips of 2 in a sheet with only 4-adult rooms still find the 4
+  //     (eventually walks +2).
+  // Within the chosen adult-tier, when children are requested we PREFER
+  // rooms that explicitly mention a child slot (but don't require it —
+  // the adult capacity match is the deciding factor).
   const childrenCount = Math.max(0, request.children || 0);
   let candidates: HotelRow[] = [];
-  if (childrenCount > 0 && !strictOnly) {
-    // Tier 1: exact adults match AND fits the requested kids
-    candidates = allHotels.filter(h => {
-      if (!baseFilter(h)) return false;
-      return extractAdultsCount(h.occupancy || "") === adults
-          && extractChildrenCount(h.occupancy || "") >= childrenCount;
-    });
-    // Tier 2: any room that explicitly accommodates the kids — adults
-    // capacity drifts but the child slot is preserved (the requirement
-    // the employee called out by name).
-    if (candidates.length === 0) {
-      candidates = allHotels.filter(h => {
-        if (!baseFilter(h)) return false;
-        return extractChildrenCount(h.occupancy || "") >= childrenCount;
-      });
-    }
-  } else {
-    // No kids requested — exact adults match, then upsize fallback.
+  if (strictOnly) {
     candidates = allHotels.filter(h => {
       if (!baseFilter(h)) return false;
       return extractAdultsCount(h.occupancy || "") === adults;
     });
-    if (candidates.length === 0 && !strictOnly) {
-      candidates = allHotels.filter(h => {
-        if (!baseFilter(h)) return false;
-        const ac = extractAdultsCount(h.occupancy || "");
-        return ac > adults; // strictly larger so the group actually fits
-      });
+  } else {
+    const adultsByCap = (cap: number) => allHotels.filter(h => {
+      if (!baseFilter(h)) return false;
+      return extractAdultsCount(h.occupancy || "") === cap;
+    });
+    const order: number[] = [adults];
+    for (let d = 1; d <= 10; d++) {
+      if (adults - d >= 1) order.push(adults - d);
+      order.push(adults + d);
+    }
+    for (const cap of order) {
+      const atCap = adultsByCap(cap);
+      if (atCap.length === 0) continue;
+      // Among rooms with this adult capacity, prefer kid-accommodating
+      // ones when kids are on the trip. Fall back to the whole tier if
+      // none have an explicit child slot.
+      if (childrenCount > 0) {
+        const kidFriendly = atCap.filter(h =>
+          extractChildrenCount(h.occupancy || "") >= childrenCount,
+        );
+        candidates = kidFriendly.length > 0 ? kidFriendly : atCap;
+      } else {
+        candidates = atCap;
+      }
+      break;
     }
   }
 
