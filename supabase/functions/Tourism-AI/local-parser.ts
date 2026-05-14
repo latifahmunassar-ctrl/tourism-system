@@ -349,10 +349,20 @@ function parseExtraTickets(text: string): number {
   }
   // Pattern B (dual ticket noun): "ضيف تذكرتين"
   if (new RegExp(`${ADD}\\s+(?:عدد\\s+)?تذكرت[يا]ن`, "iu").test(t)) return 2;
-  // Pattern C: "أضف N تذكرة/تذاكر"
-  const m = t.match(new RegExp(`${ADD}\\s+(?:عدد\\s+)?(\\d+)\\s*(?:تذكر[ةه]|تذاكر|tickets?)`, "iu"));
+  // Pattern C: "أضف (عدد)? N <subject>" — number BEFORE the subject
+  //   ("اضف 3 تذاكر", "اضف عدد 2 طيران").
+  const m = t.match(new RegExp(`${ADD}\\s+(?:عدد\\s+)?(\\d+)\\s*${SUBJECT}`, "iu"));
   if (m) {
     const n = parseInt(m[1], 10);
+    if (n >= 1 && n <= 20) return n;
+  }
+  // Pattern C2: "VERB <subject> [filler]* عدد N" — number AFTER the subject
+  //   ("ضيف طيران داخلي اضافي عدد 2"). The fillers between subject and "عدد"
+  //   are accepted up to a few tokens. Stops at digit/punct so we don't
+  //   accidentally swallow another sentence.
+  const mC2 = t.match(new RegExp(`${ADD}\\s+${SUBJECT}\\s+(?:[^\\d،.\\n]+\\s+)?عدد\\s+(\\d+)`, "iu"));
+  if (mC2) {
+    const n = parseInt(mC2[1], 10);
     if (n >= 1 && n <= 20) return n;
   }
   // Pattern D: bare "أضف تذكرة/طيران/قطار" — treat as 1 (single extra)
