@@ -70,6 +70,16 @@ function extractAdultsCount(occupancy: string): number {
 }
 
 /**
+ * Extract child_count from occupancy strings like "4 adults + 2 child" /
+ * "2 adults + 2 child (Less then 5 years)". Returns 0 when the string has
+ * no child slot — meaning the room is not flagged as kid-accommodating.
+ */
+function extractChildrenCount(occupancy: string): number {
+  const m = String(occupancy || "").match(/(\d+)\s*child/i);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
+/**
  * Check if hotel's date range covers the requested travel date.
  * Travel date is a YYYY-MM-DD string. Hotel dates can be "1/6/2026" or
  * "01-06-2026" or ISO. Permissive parsing.
@@ -200,16 +210,41 @@ export function pickCheapestHotel(
     }
     return true;
   };
-  let candidates = allHotels.filter(h => {
-    if (!baseFilter(h)) return false;
-    return extractAdultsCount(h.occupancy || "") === adults;
-  });
-  if (candidates.length === 0 && !strictOnly) {
+  // When the trip includes children, the room MUST have a child slot —
+  // employee rule: a 3 بالغين+طفل request should prefer "3 adults + 1 child",
+  // then fall back to "2 adults + 1 child" (drop adults, keep child slot)
+  // rather than upgrading to a kid-less "4 adults" room.
+  const childrenCount = Math.max(0, request.children || 0);
+  let candidates: HotelRow[] = [];
+  if (childrenCount > 0 && !strictOnly) {
+    // Tier 1: exact adults match AND fits the requested kids
     candidates = allHotels.filter(h => {
       if (!baseFilter(h)) return false;
-      const ac = extractAdultsCount(h.occupancy || "");
-      return ac > adults; // strictly larger so the group actually fits
+      return extractAdultsCount(h.occupancy || "") === adults
+          && extractChildrenCount(h.occupancy || "") >= childrenCount;
     });
+    // Tier 2: any room that explicitly accommodates the kids — adults
+    // capacity drifts but the child slot is preserved (the requirement
+    // the employee called out by name).
+    if (candidates.length === 0) {
+      candidates = allHotels.filter(h => {
+        if (!baseFilter(h)) return false;
+        return extractChildrenCount(h.occupancy || "") >= childrenCount;
+      });
+    }
+  } else {
+    // No kids requested — exact adults match, then upsize fallback.
+    candidates = allHotels.filter(h => {
+      if (!baseFilter(h)) return false;
+      return extractAdultsCount(h.occupancy || "") === adults;
+    });
+    if (candidates.length === 0 && !strictOnly) {
+      candidates = allHotels.filter(h => {
+        if (!baseFilter(h)) return false;
+        const ac = extractAdultsCount(h.occupancy || "");
+        return ac > adults; // strictly larger so the group actually fits
+      });
+    }
   }
 
   if (candidates.length === 0) return null;
