@@ -1661,9 +1661,17 @@ export async function buildLocalProgram(
       const arrivalType = transitKind(d.number);
       const fromAirportDrop = findInterCityTransfer(allTours, d.fromCity, d.toCity, dest, cityDefs, arrivalType, request.transport);
       if (fromAirportDrop) selectedTransfers.push({ day: d.number, row: fromAirportDrop, kind: "Drop" });
-      const arrPickupForCity = findArrivalPickup(allTours, d.toCity, dest, cityDefs, arrivalType);
-      if (arrPickupForCity) {
-        selectedTransfers.push({ day: d.number, row: arrPickupForCity, kind: "Pickup" });
+      // Only add an airport pickup when this transit is actually a flight
+      // (or train). Road transits like Sapa → Hanoi use a single door-to-
+      // door car ride; the Drop row above covers the entire journey so an
+      // additional "استقبال في مطار هانوي" line is bogus — the customer
+      // never went through an airport.
+      const hasFlightOrTrain = !!selectedFlights.find(f => f.day === d.number);
+      if (hasFlightOrTrain) {
+        const arrPickupForCity = findArrivalPickup(allTours, d.toCity, dest, cityDefs, arrivalType);
+        if (arrPickupForCity) {
+          selectedTransfers.push({ day: d.number, row: arrPickupForCity, kind: "Pickup" });
+        }
       }
     }
   }
