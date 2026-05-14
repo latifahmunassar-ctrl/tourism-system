@@ -459,6 +459,9 @@ export function pickInterCityFlights(
   for (let i = 0; i < cityOrder.length - 1; i++) {
     const from = cityOrder[i];
     const to = cityOrder[i + 1];
+    // Intra-city moves (Bali Kuta → Bali Seminyak) share the same canonical
+    // city — no flight, even if a bogus "Bali → Bali" row exists in the DB.
+    if (from === to) continue;
     const match = findFlight(allFlights, from, to);
     if (match) result.push(match);
   }
@@ -1161,17 +1164,12 @@ export async function buildLocalProgram(
   for (const mod of request.hotelModifications) {
     let resolvedCity: string | null = null;
     let nameMatchedIndices: number[] | null = null;
-    // (1) Try city match first
-    for (const def of cityDefs) {
-      if (def.pattern.test(mod.cityHint) && request.cities.includes(def.canonical)) {
-        resolvedCity = def.canonical;
-        break;
-      }
-    }
-    // (1b) Match by sub-area name (e.g. "غير فندق سيمنياك ..."). If the hint
-    // references a known Bali area, find the Bali stay with that area tag
-    // and pin its index directly — skips the multi-stay disambiguation.
-    if (!resolvedCity) {
+    // (1) Area alias FIRST. The Bali cityDef pattern lists area names
+    // (سيمنياك/كوتا/...) as aliases, so a bare "سيمنياك" matches "Bali"
+    // generically — which would then trigger the multi-stay disambiguation
+    // since the trip has more than one Bali stay. Catching the area name
+    // here pins us to the specific stay and skips the prompt.
+    {
       const hintNorm = normalizeArabic(mod.cityHint);
       const AREA_ALIASES: Array<{ pat: RegExp; name: string }> = [
         { pat: /كوتا|kuta/iu, name: "Kuta" },
@@ -1190,6 +1188,15 @@ export async function buildLocalProgram(
             resolvedCity = stay.city;
             (nameMatchedIndices ??= []).push(idx);
           }
+        }
+      }
+    }
+    // (2) Plain city match (skip if area already resolved us)
+    if (!resolvedCity) {
+      for (const def of cityDefs) {
+        if (def.pattern.test(mod.cityHint) && request.cities.includes(def.canonical)) {
+          resolvedCity = def.canonical;
+          break;
         }
       }
     }
@@ -1539,6 +1546,9 @@ export async function buildLocalProgram(
   };
   for (const d of days) {
     if (d.type !== "transit" || !d.fromCity || !d.toCity) continue;
+    // Intra-city transit (Bali Kuta → Bali Seminyak): same canonical city,
+    // no flight/train needed even if a bogus "Bali → Bali" row exists.
+    if (d.fromCity === d.toCity) continue;
     // Trains take precedence when a direct one exists for this city pair
     // (Russia: Moscow ↔ Saint Petersburg by Sapsan; cheaper + faster than
     // a flight). Only direct trains — no train hubbing.
@@ -1599,6 +1609,10 @@ export async function buildLocalProgram(
   };
   for (const d of days) {
     if (d.type === "transit" && d.fromCity && d.toCity) {
+      // Intra-city transit (Bali Kuta → Bali Seminyak): no airport drop, no
+      // pickup, no flight. The employee organizes the area-to-area ride on
+      // their own; the sheet usually doesn't model these moves at all.
+      if (d.fromCity === d.toCity) continue;
       const arrivalType = transitKind(d.number);
       const fromAirportDrop = findInterCityTransfer(allTours, d.fromCity, d.toCity, dest, cityDefs, arrivalType, request.transport);
       if (fromAirportDrop) selectedTransfers.push({ day: d.number, row: fromAirportDrop, kind: "Drop" });

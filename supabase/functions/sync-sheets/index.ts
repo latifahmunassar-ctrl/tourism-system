@@ -197,9 +197,18 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
     const starsRaw   = get(row, "stars");
     const roomType   = get(row, "room");
     const priceStr   = get(row, "rate");
-    const includeStr = get(row, "include");
+    let includeStr = get(row, "include");
     const currencyStr = get(row, "currency");
-    const occupancyStr = get(row, "occupancy");
+    let occupancyStr = get(row, "occupancy");
+    // Fallback: many sheets accidentally put the "N adults + M child" value
+    // in the `Include` column instead of the `تتسع`/occupancy one. If the
+    // occupancy cell is blank but Include looks like an occupancy string
+    // ("2 adults", "4 adults + 2 child"), promote it and clear the include
+    // so meal info isn't polluted by it.
+    if (!occupancyStr && /\d+\s*adults?/i.test(includeStr)) {
+      occupancyStr = includeStr;
+      includeStr = "";
+    }
 
     if (!hotelName) { reject(i, `missing name`, row); continue; }
 
