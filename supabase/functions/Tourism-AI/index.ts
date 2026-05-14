@@ -2179,7 +2179,7 @@ Deno.serve(async (req) => {
     // a targeted message instead of being routed to Claude or to the lite
     // "tell me your trip" template.
     {
-      const isTweakOnly = /^(?:\s*(?:غير|غيّر|اجعل|خل[يى]?|بدل|حول|ابي|ابغى|اريد|أريد|أبي|أبغى|اعمل|اضف|أضف|ضيف|زود|احذف|الغ[يى]?|شيل|ت?غي[يّ]?ر|استبدل|اغير|[أا]زل|اعطن[يى]?|أعطن[يى]?)\s+)?(?:لي\s+)?(?:(?:ال)?(?:سياره|سيارة|سيارات|تنقل|التنقل|نقل|cars?|transport|مشتركه|مشتركة|خاصه|خاصة)|(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim|esim|سيم)|(?:سرير|أسر[ةه]|اسر[ةه]|سراير|سرايا|extra\s*-?\s*bed)|(?:ال)?جول[ةه]|tour|(?:ال)?فندق|hotel|(?:ال)?تذكر[ةه]|(?:ال)?تذاكر|tickets?)/iu.test(lastUserMsg.trim());
+      const isTweakOnly = /^(?:\s*(?:غير|غيّر|اجعل|خل[يى]?|بدل|حول|ابي|ابغى|اريد|أريد|أبي|أبغى|اعمل|اضف|أضف|ضيف|زود|احذف|الغ[يى]?|شيل|ت?غي[يّ]?ر|استبدل|اغير|[أا]زل|اعطن[يى]?|أعطن[يى]?)\s+)?(?:لي\s+)?(?:(?:ال)?(?:سياره|سيارة|سيارات|تنقل|التنقل|نقل|cars?|transport|مشتركه|مشتركة|خاصه|خاصة)|(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim|esim|سيم)|(?:سرير|أسر[ةه]|اسر[ةه]|سراير|سرايا|extra\s*-?\s*bed)|(?:ال)?جول[ةه]|tour|(?:ال)?فندق|hotel|(?:ال)?تذكر[ةه]|(?:ال)?تذاكر|tickets?|طيران|قطار)/iu.test(lastUserMsg.trim());
       if (isTweakOnly && !lastAssistantProgram && !detectedDest) {
         return new Response(JSON.stringify({
           id: "tweak-without-program",
@@ -2244,7 +2244,7 @@ Deno.serve(async (req) => {
         // bed but we have no built program AND insufficient trip details to
         // (re)build. Otherwise the generic "tell me your cities" question
         // is confusing — they're not asking to start over.
-        const isTweakOnly = /^(?:\s*(?:غير|غيّر|اجعل|خل[يى]?|بدل|حول|ابي|ابغى|اريد|أريد|أبي|أبغى|اعمل|اضف|أضف|ضيف|زود|احذف|الغ[يى]?|شيل|ت?غي[يّ]?ر|استبدل|اغير|[أا]زل|اعطن[يى]?|أعطن[يى]?)\s+)?(?:لي\s+)?(?:(?:ال)?(?:سياره|سيارة|سيارات|تنقل|التنقل|نقل|cars?|transport|مشتركه|مشتركة|خاصه|خاصة)|(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim|esim|سيم)|(?:سرير|أسر[ةه]|اسر[ةه]|سراير|سرايا|extra\s*-?\s*bed)|(?:ال)?جول[ةه]|tour|(?:ال)?فندق|hotel|(?:ال)?تذكر[ةه]|(?:ال)?تذاكر|tickets?)/iu.test(lastUserMsg.trim());
+        const isTweakOnly = /^(?:\s*(?:غير|غيّر|اجعل|خل[يى]?|بدل|حول|ابي|ابغى|اريد|أريد|أبي|أبغى|اعمل|اضف|أضف|ضيف|زود|احذف|الغ[يى]?|شيل|ت?غي[يّ]?ر|استبدل|اغير|[أا]زل|اعطن[يى]?|أعطن[يى]?)\s+)?(?:لي\s+)?(?:(?:ال)?(?:سياره|سيارة|سيارات|تنقل|التنقل|نقل|cars?|transport|مشتركه|مشتركة|خاصه|خاصة)|(?:ال)?(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim|esim|سيم)|(?:سرير|أسر[ةه]|اسر[ةه]|سراير|سرايا|extra\s*-?\s*bed)|(?:ال)?جول[ةه]|tour|(?:ال)?فندق|hotel|(?:ال)?تذكر[ةه]|(?:ال)?تذاكر|tickets?|طيران|قطار)/iu.test(lastUserMsg.trim());
         if (isTweakOnly && !lastAssistantProgram) {
           return new Response(JSON.stringify({
             id: "tweak-without-program",
@@ -2315,7 +2315,7 @@ Deno.serve(async (req) => {
             // lastUserMsg (verb + تذكرة/تذاكر) so the ack only fires when
             // they actually asked for it (vs the field being preserved
             // across an unrelated rebuild).
-            const ticketsTweak = /^(?:\s*(?:اضف|أضف|ضيف|زود|أضيف|اضيف|احتاج|أحتاج)\s+)?(?:عدد\s+)?(?:\d+\s*)?(?:تذكر[ةه]|تذاكر|تذكرت[يا]ن|tickets?)/iu.test(lastUserMsg.trim());
+            const ticketsTweak = /^(?:\s*(?:اضف|أضف|ضيف|زود|أضيف|اضيف|احتاج|أحتاج|اريد|أريد)\s+(?:\S+\s+)?)?(?:عدد\s+)?(?:\d+\s*)?(?:تذكر[ةه]|تذاكر|تذكرت[يا]ن|طيران|قطار|tickets?)/iu.test(lastUserMsg.trim());
             if (ticketsTweak && lastAssistantProgram && tripRequest.extraTickets > 0) {
               const newTotalMatch = result.program.match(/TOTAL_GROUP:([\d,]+)/);
               const newTotal = newTotalMatch ? newTotalMatch[1] : "?";

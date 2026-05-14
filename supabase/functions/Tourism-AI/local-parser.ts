@@ -250,7 +250,7 @@ function parseAdults(text: string): number | null {
       " ",
     )
     .replace(
-      /(?:اضف|أضف|ضيف|زود|أضيف|اضيف|احتاج|أحتاج)\s+(?:عدد\s+)?(?:\d+\s*)?(?:تذكر[ةه]|تذاكر|تذكرت[يا]ن)[^\n،.]*/giu,
+      /(?:اضف|أضف|ضيف|زود|أضيف|اضيف|احتاج|أحتاج|اريد|أريد)\s+(?:عدد\s+)?(?:\d+\s*)?(?:تذكر[ةه]|تذاكر|تذكرت[يا]ن|طيران|قطار)[^\n،.]*/giu,
       " ",
     );
   const t = arabicDigitsToLatin(cleaned);
@@ -335,18 +335,29 @@ function parseRoomFeatures(text: string): string[] {
  */
 function parseExtraTickets(text: string): number {
   const t = arabicDigitsToLatin(text);
-  const ADD = "(?:اضف|أضف|ضيف|زود|أضيف|اضيف|احتاج|أحتاج|بدي|ابغى|أبغى)";
-  // Dual form ("تذكرتين" / "تذكرتان") — Arabic dual = 2, no digit
+  const ADD = "(?:اضف|أضف|ضيف|زود|أضيف|اضيف|احتاج|أحتاج|بدي|ابغى|أبغى|اريد|أريد|اضافه|إضافة)";
+  const SUBJECT = "(?:تذكر[ةه]|تذاكر|تذكرت[يا]ن|طيران|قطار|tickets?)";
+  // Pattern A: "VERB <subject> [filler-word]? ل[ـ]? N شخص/أشخاص/افراد"
+  //   Catches "اضف طيران ل 2 شخص", "اريد طيران اضافي ل 3 اشخاص" (filler
+  //   "اضافي" between subject and "ل"), "ضيف تذكرة لشخصين" (dual via word).
+  const dualWord = /(?:شخصين|شخصان|فردين|فردان|اثنين)/iu;
+  if (new RegExp(`${ADD}\\s+(?:عدد\\s+)?${SUBJECT}\\s+(?:\\S+\\s+)?ل[ـ]?\\s*${dualWord.source}`, "iu").test(t)) return 2;
+  const mNa = t.match(new RegExp(`${ADD}\\s+(?:عدد\\s+)?${SUBJECT}\\s+(?:\\S+\\s+)?ل[ـ]?\\s*(\\d+)\\s*(?:شخص|أشخاص|اشخاص|بالغ|[أا]فراد|كبار)?`, "iu"));
+  if (mNa) {
+    const n = parseInt(mNa[1], 10);
+    if (n >= 1 && n <= 20) return n;
+  }
+  // Pattern B (dual ticket noun): "ضيف تذكرتين"
   if (new RegExp(`${ADD}\\s+(?:عدد\\s+)?تذكرت[يا]ن`, "iu").test(t)) return 2;
-  // Numbered: "أضف N تذكرة/تذاكر [طيران|قطار|إضافية]"
+  // Pattern C: "أضف N تذكرة/تذاكر"
   const m = t.match(new RegExp(`${ADD}\\s+(?:عدد\\s+)?(\\d+)\\s*(?:تذكر[ةه]|تذاكر|tickets?)`, "iu"));
   if (m) {
     const n = parseInt(m[1], 10);
     if (n >= 1 && n <= 20) return n;
   }
-  // Bare "أضف تذكرة" — treat as 1
-  if (new RegExp(`${ADD}\\s+(?:عدد\\s+)?تذكر[ةه]`, "iu").test(t)) return 1;
-  // "تذكرة شخص اضافي" / "تذكرة طيران اضافية" without verb
+  // Pattern D: bare "أضف تذكرة/طيران/قطار" — treat as 1 (single extra)
+  if (new RegExp(`${ADD}\\s+(?:عدد\\s+)?(?:تذكر[ةه]|طيران|قطار)`, "iu").test(t)) return 1;
+  // Pattern E: no verb — "تذكرة طيران اضافية" / "طيران لشخص اضافي"
   if (/تذكر[ةه]\s+(?:طيران|قطار|للشخص|لشخص|اضافي|إضافي|اضافيه|إضافية)/iu.test(t)) return 1;
   return 0;
 }
