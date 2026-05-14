@@ -1168,6 +1168,31 @@ export async function buildLocalProgram(
         break;
       }
     }
+    // (1b) Match by sub-area name (e.g. "غير فندق سيمنياك ..."). If the hint
+    // references a known Bali area, find the Bali stay with that area tag
+    // and pin its index directly — skips the multi-stay disambiguation.
+    if (!resolvedCity) {
+      const hintNorm = normalizeArabic(mod.cityHint);
+      const AREA_ALIASES: Array<{ pat: RegExp; name: string }> = [
+        { pat: /كوتا|kuta/iu, name: "Kuta" },
+        { pat: /سيمنياك|سمينياك|seminyak/iu, name: "Seminyak" },
+        { pat: /[أا]وبود|ubud/iu, name: "Ubud" },
+        { pat: /جيمبران|جيمباران|jimbaran/iu, name: "Jimbaran" },
+        { pat: /نوسا\s*دوا|nusa\s*dua/iu, name: "Nusa Dua" },
+      ];
+      const matchedArea = AREA_ALIASES.find(a => a.pat.test(hintNorm));
+      if (matchedArea) {
+        const cityIdxPerCity: Record<string, number> = {};
+        for (const stay of stayOrder) {
+          const idx = (cityIdxPerCity[stay.city] || 0);
+          cityIdxPerCity[stay.city] = idx + 1;
+          if (stay.area === matchedArea.name && request.cities.includes(stay.city)) {
+            resolvedCity = stay.city;
+            (nameMatchedIndices ??= []).push(idx);
+          }
+        }
+      }
+    }
     // (2) Fall back to hotel-name lookup. We check both the verb-anchored
     // cityHint AND the full raw message, so the employee can put the hotel
     // name BEFORE the verb too ("Beryl Charm Hotel & Spa غير الفندق هذا ل
