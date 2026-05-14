@@ -1269,6 +1269,11 @@ export async function buildLocalProgram(
       if (overrideForThisStay != null) {
         return { ok: false, chatMessage: `ما عندنا فندق يتسع لـ ${overrideForThisStay} أشخاص في ${cityArabicNames[stay.city] || stay.city}. اختر عدد مختلف أو شيل التحديد.` };
       }
+      // Explicit star override with no match — most often because no hotel
+      // at that rating exists for the trip's adult count or travel date.
+      if (overrideStarsForThisStay != null) {
+        return { ok: false, chatMessage: `ما عندنا فندق ${overrideStarsForThisStay} نجوم في ${cityArabicNames[stay.city] || stay.city} يتسع لـ ${request.adults} أشخاص بالتاريخ المطلوب. اختر تصنيف مختلف أو عدد مختلف.` };
+      }
       // Special case: the city had hotels but the modification's exclusion
       // set drained them. Distinguish from the generic "no match" so the
       // employee knows they've hit the bottom of the price ladder.
