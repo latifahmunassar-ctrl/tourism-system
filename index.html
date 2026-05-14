@@ -1258,6 +1258,71 @@ function handleRetrieveKey(e) {
   if (e.key === 'Enter') { e.preventDefault(); searchByCode(); }
 }
 
+// Build a short Arabic summary of a retrieved program so the employee can
+// see at a glance which trip the recall code restored — destination, length,
+// city distribution, headcount, and any add-ons (SIMs, extra tickets, extra
+// beds).
+function summarizeRetrievedProgram(raw) {
+  const get = (tag) => {
+    const m = raw.match(new RegExp(tag + ':([^\\n]+)'));
+    return m ? m[1].trim() : '';
+  };
+  const dest = get('DEST');
+  const meta = get('META');
+  const metaParts = meta.split('|').map(s => s.trim());
+  const daysPart = metaParts[0] || '';     // e.g. "10 أيام"
+  const paxPart  = metaParts[3] || '';     // e.g. "3 أشخاص + 1 طفل"
+  const tg = get('TOTAL_GROUP');           // "10,250 | 5 أشخاص + ..."
+  const tgPaxPart = (tg.split('|')[1] || '').trim();
+  const headline = paxPart || tgPaxPart;
+
+  // Per-city nights from HOTELS — accumulate consecutive entries into the
+  // distribution the employee wrote ("2 هانوي + 3 سابا + 2 هانوي").
+  const hotelsBlock = (raw.match(/HOTELS:\s*\n([\s\S]+?)(?=\n[A-Z_]+:|\Z)/) || [,''])[1];
+  const stays = [];
+  for (const line of hotelsBlock.split('\n')) {
+    const p = line.split('|').map(s => s.trim());
+    if (p.length < 6) continue;
+    const city = p[1];
+    const nightsMatch = p[5].match(/(\d+)\s*ليال|(\d+)\s*ليلة/);
+    const nights = nightsMatch ? parseInt(nightsMatch[1] || nightsMatch[2], 10) : 0;
+    if (!city || !nights) continue;
+    const last = stays[stays.length - 1];
+    if (last && last.city === city) last.nights += nights;
+    else stays.push({ city, nights });
+  }
+  const distribution = stays.map(s => `${s.nights} ${s.city}`).join(' + ');
+
+  const sim = get('SIM');
+  const simCount = (sim.match(/\d+/) || [null])[0];
+
+  // Extra flight tickets — emitted in SUMMARY as "تذاكر إضافية (N)".
+  const extraTicketsMatch = raw.match(/تذاكر\s+إضافية\s*\((\d+)\)/);
+  const extraTickets = extraTicketsMatch ? extraTicketsMatch[1] : null;
+
+  const extraBedLine = get('EXTRA_BED_CITIES');
+  let extraBeds = null;
+  if (extraBedLine) {
+    if (/ALL\s*=\s*\d+/i.test(extraBedLine)) {
+      const m = extraBedLine.match(/ALL\s*=\s*(\d+)/i);
+      extraBeds = `كل المدن (×${m ? m[1] : '1'})`;
+    } else {
+      extraBeds = extraBedLine.replace(/\s+/g, ' ').trim();
+    }
+  }
+
+  const lines = [];
+  lines.push(`✅ تم استرجاع البرنامج. التفاصيل:`);
+  if (dest)          lines.push(`• الوجهة: ${dest}`);
+  if (daysPart)      lines.push(`• المدة: ${daysPart}`);
+  if (distribution)  lines.push(`• توزيع المدن: ${distribution}`);
+  if (headline)      lines.push(`• عدد الأشخاص: ${headline}`);
+  if (simCount && parseInt(simCount, 10) > 0) lines.push(`• الشرائح المضافة: ${simCount}`);
+  if (extraTickets)  lines.push(`• الطيران المضاف: ${extraTickets}`);
+  if (extraBeds)     lines.push(`• الأسرّة الإضافية: ${extraBeds}`);
+  return lines.join('\n');
+}
+
 async function searchByCode() {
   const input = document.getElementById('programCodeInput');
   const code = (input?.value || '').trim();
@@ -1278,7 +1343,7 @@ async function searchByCode() {
         pill.style.display = 'inline-flex';
       }
       if (input) input.value = code;
-      addMessage('sys', 'تم الاسترجاع وعرض البرنامج للمراجعة.');
+      addMessage('sys', summarizeRetrievedProgram(data.program.raw));
     } else {
       addMessage('sys', (data && data.error) ? String(data.error) : ('تعذّر الاسترجاع (HTTP ' + res.status + ')'));
     }
