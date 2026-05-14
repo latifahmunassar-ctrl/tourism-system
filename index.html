@@ -1627,6 +1627,7 @@ function renderFlightsPDF() {
   if (!flightsLines.length) return '';
   let internalIdx = 0;
   const destPickupOcc = {};
+  const seenRoutes = new Set();
   const pdfFlightTitle = flightsLines.some(l => String(l.split('|')[1] || '').includes('قطار'))
     ? '✈️ الطيران والقطار'
     : '✈️ الطيران';
@@ -1635,6 +1636,14 @@ function renderFlightsPDF() {
 ${flightsLines.map(l => {
   const p = l.split('|').map(x => x.trim());
   const kind = String(p[1] || '');
+  const routeText = String(p[0] || '');
+  // Extra-ticket rows repeat the same route as the original ticket. The PDF
+  // already renders the route name in the original card right above; we
+  // suppress the route on the extra card so the same city pair doesn't
+  // appear twice. The "(تذكرة إضافية)" kind label still identifies it.
+  const isExtraTicket = /إضافي|اضافي/.test(kind);
+  const showRoute = !(isExtraTicket && seenRoutes.has(routeText));
+  if (!isExtraTicket) seenRoutes.add(routeText);
   let destOccIdx = 0;
   let dateLabel = '';
   if (isIntercityPricedTicket(kind)) {
@@ -1655,7 +1664,7 @@ ${flightsLines.map(l => {
 <div style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;display:flex;align-items:center;gap:14px;">
   <span style="font-size:30px;">✈️</span>
   <div style="flex:1;">
-    <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:6px;line-height:1.3;">${safeText(p[0]||'')}</div>
+    ${showRoute ? `<div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:6px;line-height:1.3;">${safeText(routeText)}</div>` : ''}
     <div style="font-size:18px;font-weight:700;color:#444;">${safeText(p[1]||'')}</div>
     <div style="margin-top:6px;font-size:15px;font-weight:800;color:#0d1f4a;">${dateLabel}</div>
     ${detailedLine}
