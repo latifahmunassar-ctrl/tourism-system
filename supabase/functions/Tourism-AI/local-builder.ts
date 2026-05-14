@@ -581,6 +581,13 @@ function extractRowFromCity(n: string): string {
   // Pattern 2: "(المطار|محط[هة])(_الدولي)? في? CITY <forward action>"
   const m2 = n.match(/(?:المطار|محط[هة])(?:\s+الدولي)?\s*(?:في\s*)?([^\n]+?)\s+(?:للتوجة|للذهاب|للعوده|للعودة|والاستقبال)/iu);
   if (m2) return m2[1];
+  // Pattern 3 (fallback): "من [filler]? CITY ..." — captures the first
+  // non-whitespace token after the filler with no terminator requirement.
+  // Catches rows like "العوده من مدينه هالونج بسياره ليموزين مشتركه الى
+  // المطار" where the means-of-transport ("بسياره ليموزين...") sits
+  // between the city and the destination-marker.
+  const m3 = n.match(/من\s+(?:فندق(?:\s+في)?\s+|خليج\s+|مدينه\s+|مدينة\s+)?([^\s]+)/iu);
+  if (m3) return m3[1];
   return "";
 }
 
@@ -594,7 +601,7 @@ export function findDepartureDrop(
     if (t.type !== destination) return false;
     const n = t.name;
     if (/استقبال|الاستقبال|pickup/iu.test(n)) return false;
-    if (!/توديع|التوديع|التوجه|التوجة|الذهاب|الخروج|التوصيل|للعوده|للعودة|drop/iu.test(n)) return false;
+    if (!/توديع|التوديع|التوجه|التوجة|الذهاب|الخروج|التوصيل|للعوده|للعودة|العوده|العودة|drop/iu.test(n)) return false;
     const rowFrom = extractRowFromCity(n);
     if (!rowFrom) return false;
     if (!tourNameMatchesCity(rowFrom, city, cityDefs)) return false;
