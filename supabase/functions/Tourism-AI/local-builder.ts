@@ -1054,7 +1054,11 @@ export function formatProgram(data: ProgramData): string {
     extraTicketsTotal += sf.flight.price_per_pax * extraTickets;
     const lineTotal = sf.flight.price_per_pax * totalPax;
     const label = sf.kind === "train" ? "قطار" : "داخلي";
-    out += `${sf.flight.from_city} - ${sf.flight.to_city} | ${label} | ${formatNumber(sf.flight.price_per_pax)} ريال/شخص | ${totalPax} ${totalPax === 1 ? "شخص" : "أشخاص"} | ${formatNumber(lineTotal)} ريال\n`;
+    // Prefix the route with "اليوم N:" so the frontend renders the correct
+    // departure date directly — without it, the renderer falls back to
+    // guessing dates from hotel check-ins (which gets the wrong stay when
+    // a city appears more than once in the trip, e.g. Hanoi at start AND end).
+    out += `اليوم ${sf.day}: ${sf.flight.from_city} - ${sf.flight.to_city} | ${label} | ${formatNumber(sf.flight.price_per_pax)} ريال/شخص | ${totalPax} ${totalPax === 1 ? "شخص" : "أشخاص"} | ${formatNumber(lineTotal)} ريال\n`;
   }
   const flightsTotal = flightsBase + extraTicketsTotal;
   out += "\n";
