@@ -1347,7 +1347,16 @@ async function searchByCode() {
         pill.style.display = 'inline-flex';
       }
       if (input) input.value = code;
+      // Seed the chat history so the next user message is treated as a
+      // follow-up modification (swap hotel, add/remove tour, …) against
+      // this retrieved program — not as a brand-new request. We clear any
+      // prior turns first so leftover state from earlier in this session
+      // doesn't bleed in.
+      history.length = 0;
+      history.push({ role: 'user', content: '(تم استرجاع برنامج محفوظ — استخدمه كسياق للتعديلات التالية)' });
+      history.push({ role: 'assistant', content: data.program.raw });
       addMessage('sys', summarizeRetrievedProgram(data.program.raw));
+      addMessage('sys', 'تقدر تعدّل عليه الحين: "غير فندق هانوي إلى 5 نجوم" أو "احذف جولة X" أو "اضف جولة Y" أو "ضيف تذكرة طيران اضافي"…');
     } else {
       addMessage('sys', (data && data.error) ? String(data.error) : ('تعذّر الاسترجاع (HTTP ' + res.status + ')'));
     }
