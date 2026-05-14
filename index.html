@@ -1272,6 +1272,8 @@ function summarizeRetrievedProgram(raw) {
   const metaParts = meta.split('|').map(s => s.trim());
   const daysPart = metaParts[0] || '';     // e.g. "10 أيام"
   const paxPart  = metaParts[3] || '';     // e.g. "3 أشخاص + 1 طفل"
+  const dateFrom = get('DATE_FROM');
+  const dateTo   = get('DATE_TO');
   const tg = get('TOTAL_GROUP');           // "10,250 | 5 أشخاص + ..."
   const tgPaxPart = (tg.split('|')[1] || '').trim();
   const headline = paxPart || tgPaxPart;
@@ -1315,6 +1317,8 @@ function summarizeRetrievedProgram(raw) {
   lines.push(`✅ تم استرجاع البرنامج. التفاصيل:`);
   if (dest)          lines.push(`• الوجهة: ${dest}`);
   if (daysPart)      lines.push(`• المدة: ${daysPart}`);
+  if (dateFrom && dateTo) lines.push(`• تاريخ السفر: من ${dateFrom} إلى ${dateTo}`);
+  else if (dateFrom)      lines.push(`• تاريخ السفر: من ${dateFrom}`);
   if (distribution)  lines.push(`• توزيع المدن: ${distribution}`);
   if (headline)      lines.push(`• عدد الأشخاص: ${headline}`);
   if (simCount && parseInt(simCount, 10) > 0) lines.push(`• الشرائح المضافة: ${simCount}`);
