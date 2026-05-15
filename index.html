@@ -160,7 +160,11 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .pdf-excludes-list li { margin:8px 0; }
 /* footer removed (no hosting info in PDF) */
 
-@page { size: A4; margin: 0 0 40px 0; }
+/* Zero page margins → Chrome has no room to print its automatic URL/title
+   footer, so the hosting address disappears whether the employee uses our
+   PDF export buttons or hits Cmd+P. Our own PDF cards already have their
+   own padding so we don't lose any content. */
+@page { size: A4; margin: 0; }
 @media print {
 
 - { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important; }
