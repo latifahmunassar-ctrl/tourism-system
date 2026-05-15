@@ -69,7 +69,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Phu Quoc",    pattern: /فوكوك|phu\s*quoc|phuquoc/i },
     { canonical: "Nha Trang",   pattern: /نها\s*تران[جغ]|نهاتران[جغ]|نياتران[جغ]|nha\s*trang/i },
     { canonical: "Da Lat",      pattern: /دالا[تط]|دا\s*لا[تط]|دلات|dalat|da\s*lat/i },
-    { canonical: "Ho Chi Minh", pattern: /هوتشي(?:\s*م[يى]?[نه][هة]?)?|هو\s*تشي(?:\s*م[يى]?[نه][هة]?)?|ho\s*chi(?:\s*minh)?|hochi(?:\s*minh)?|saigon|سايغون|سايجون/i },
+    { canonical: "Ho Chi Minh", pattern: /هوتشي(?:\s*م[يى]?[نه][هة]?)?|هوتشمي|هو\s*تشي(?:\s*م[يى]?[نه][هة]?)?|ho\s*chi(?:\s*minh)?|hochi(?:\s*minh)?|saigon|سايغون|سايجون/i },
   ],
   Malaysia: [
     { canonical: "Kuala Lumpur",     pattern: /كوالا\s*ل?مبور|كولا\s*ل?مبور|kuala\s*lumpur|\bKL\b/i },

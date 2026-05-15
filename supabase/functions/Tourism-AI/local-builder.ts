@@ -311,7 +311,7 @@ function tourBelongsToCity(tour: TourRow, cityDefs: CityDef[], canonicalCity: st
 const TRANSFER_PREFIXES = [
   "استقبال", "الاستقبال", "آلاستقبال",
   "توديع", "التوديع",
-  "التوجه", "توصيل", "توصیل", "يتم توصيل", "يتم توصیل",
+  "التوجه", "توجه", "توصيل", "توصیل", "يتم توصيل", "يتم توصیل",
   "العوده", "العودة", "العود",
   "الانتقال", "انتقال", "النقل",
   "حضور السائق", "السائق",
@@ -633,10 +633,11 @@ function extractRowHotelCity(n: string): string {
  */
 function extractRowFromCity(n: string): string {
   // Pattern 1: "(verb) من [filler]? CITY <terminator>"
-  //   filler ∈ {فندق(_في)?, خليج, مدينه, مدينة}
+  //   filler ∈ {(ال)?فندق(_في)?, خليج, مدينه, مدينة} — "ال" prefix is
+  //     accepted because the sheet inconsistently uses "من الفندق" vs "من فندق".
   //   terminator ∈ {الى/إلى/الي, والتوصيل, والتوجه, للمطار,
   //                 للمحطة, للقطار, للتوجه, للذهاب}
-  const m1 = n.match(/من\s+(?:فندق(?:\s+في)?\s+|خليج\s+|مدينه\s+|مدينة\s+)?([^\s]+(?:\s+[^\s]+){0,2}?)\s+(?:الى|إلى|الي|والتوصيل|والتوجه|للمطار|للمحط[هة]|للقطار|للتوجه|للذهاب)/iu);
+  const m1 = n.match(/من\s+(?:(?:ال)?فندق(?:\s+في)?\s+|(?:ال)?خليج\s+|(?:ال)?مدينه\s+|(?:ال)?مدينة\s+)?([^\s]+(?:\s+[^\s]+){0,2}?)\s+(?:الى|إلى|الي|والتوصيل|والتوجه|للمطار|للمحط[هة]|للقطار|للتوجه|للذهاب)/iu);
   if (m1) return m1[1];
   // Pattern 2: "(المطار|محط[هة])(_الدولي)? في? CITY <forward action>"
   const m2 = n.match(/(?:المطار|محط[هة])(?:\s+الدولي)?\s*(?:في\s*)?([^\n]+?)\s+(?:للتوجة|للذهاب|للعوده|للعودة|والاستقبال)/iu);
@@ -646,7 +647,7 @@ function extractRowFromCity(n: string): string {
   // Catches rows like "العوده من مدينه هالونج بسياره ليموزين مشتركه الى
   // المطار" where the means-of-transport ("بسياره ليموزين...") sits
   // between the city and the destination-marker.
-  const m3 = n.match(/من\s+(?:فندق(?:\s+في)?\s+|خليج\s+|مدينه\s+|مدينة\s+)?([^\s]+)/iu);
+  const m3 = n.match(/من\s+(?:(?:ال)?فندق(?:\s+في)?\s+|(?:ال)?خليج\s+|(?:ال)?مدينه\s+|(?:ال)?مدينة\s+)?([^\s]+)/iu);
   if (m3) return m3[1];
   return "";
 }
@@ -661,7 +662,7 @@ export function findDepartureDrop(
     if (t.type !== destination) return false;
     const n = t.name;
     if (/استقبال|الاستقبال|pickup/iu.test(n)) return false;
-    if (!/توديع|التوديع|التوجه|التوجة|الذهاب|الخروج|التوصيل|للعوده|للعودة|العوده|العودة|drop/iu.test(n)) return false;
+    if (!/توديع|التوديع|التوجه|التوجة|توج[ةه]|الذهاب|الخروج|توصيل|التوصيل|للعوده|للعودة|العوده|العودة|drop/iu.test(n)) return false;
     const rowFrom = extractRowFromCity(n);
     if (!rowFrom) return false;
     if (!tourNameMatchesCity(rowFrom, city, cityDefs)) return false;
@@ -746,7 +747,7 @@ export function findInterCityTransfer(
     const n = tr.name;
     if (/استقبال|الاستقبال|pickup/iu.test(n)) return false;                                // (b)
     // (a) Outbound transfer verb. Includes العوده/العودة (Sapa return).
-    if (!/توديع|التوديع|التوجه|التوجة|الذهاب|العوده|العودة|للعوده|للعودة|التوصيل|الخروج|drop/iu.test(n)) return false;
+    if (!/توديع|التوديع|التوجه|التوجة|توج[ةه]|الذهاب|العوده|العودة|للعوده|للعودة|توصيل|التوصيل|الخروج|drop/iu.test(n)) return false;
 
     const rowFrom = rowFromCity(n);                                                         // (c)
     if (!rowFrom) return false;
@@ -776,7 +777,12 @@ export function findInterCityTransfer(
     //   (3) row is NOT a "going home" departure
     //   (4) cheapest price
     const toDef = cityDefs.find(c => c.canonical === toCity);
-    const isGoingHome = (n: string) => /ارض\s*الوطن|الديار|للسلامه|للسلامة/iu.test(n);
+    // "international airport / المطار الدولي" rows are the FINAL departure
+    // out of the country — they only make sense for the homeward leg, not
+    // for an inter-city transit. Deprioritize them so the sorter prefers
+    // any row that mentions the actual toCity (or even a generic "to airport"
+    // row) ahead of the international-airport one.
+    const isGoingHome = (n: string) => /ارض\s*الوطن|الديار|للسلامه|للسلامة|المطار\s*الدول[يى]|international\s*airport/iu.test(n);
     const isSharedRow = (n: string) => /مشترك[ةه]?|shared|ليموزين/iu.test(n);
     const isPrivateRow = (n: string) => /بسيار[ةه]\s*خاص[ةه]?|سياره\s*خاص[ةه]?|private/iu.test(n);
     // Default Hanoi ↔ Sapa transit in Vietnam to PRIVATE when employee
