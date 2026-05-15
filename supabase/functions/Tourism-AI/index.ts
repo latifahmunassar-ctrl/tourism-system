@@ -2148,6 +2148,86 @@ Deno.serve(async (req) => {
       ? String(messages[messages.length - 1].content || "")
       : "";
     const lastAssistantProgram = findLastBuiltProgram(messages);
+
+    // ── Package Suggestions ────────────────────────────────────────────────
+    // Employee asks "اقتراحات / خيارات / بكج" for a given duration + airport
+    // pair. We answer from the package_suggestions table (populated by
+    // sync-sheets from the "اقتراحات توزيع مدن" column) — no Claude.
+    if (detectedDest && lastUserMsg) {
+      const suggestionsHit = /اقتراح(?:ات)?|اقترح|خيارات|بكج|package[s]?|suggestion[s]?/iu.test(lastUserMsg);
+      if (suggestionsHit) {
+        const tNorm = lastUserMsg.replace(/[٠-٩]/g, (c: string) => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)));
+        const daysMatch = tNorm.match(/(\d{1,2})\s*(?:يوم|ايام|أيام|days?)/iu);
+        const days = daysMatch ? parseInt(daysMatch[1], 10) : null;
+        const AIRPORT_LOOKUP: Record<string, Record<string, string>> = {
+          vietnam: {
+            "هانوي": "Ha Noi", "hanoi": "Ha Noi",
+            "هوتشي": "Ho Chi Minh", "هوتشي ميه": "Ho Chi Minh", "ho chi": "Ho Chi Minh", "saigon": "Ho Chi Minh",
+            "دانانج": "Da Nang", "دانانغ": "Da Nang", "danang": "Da Nang",
+            "فوكوك": "Phu Quoc", "phu quoc": "Phu Quoc",
+          },
+        };
+        const map = AIRPORT_LOOKUP[detectedDest] || {};
+        const findAirport = (re: RegExp): string | null => {
+          const m = lastUserMsg.match(re);
+          if (!m) return null;
+          const raw = String(m[1] || "").toLowerCase();
+          for (const [k, v] of Object.entries(map)) {
+            if (raw.includes(k.toLowerCase())) return v;
+          }
+          return null;
+        };
+        const arrival = findAirport(/(?:مطار\s+الوصول|الوصول\s+(?:مطار\s+)?(?:هو\s+)?|من\s+(?:مطار\s+)?)\s*([^\n,،.و]+?)(?=\s|$|،|,|\.|و|الى)/iu);
+        const departure = findAirport(/(?:مطار\s+المغادر[ةه]|المغادر[ةه]\s+(?:مطار\s+)?(?:هو\s+)?|الى\s+(?:مطار\s+)?)\s*([^\n,،.و]+?)(?=\s|$|،|,|\.|و|من)/iu);
+
+        let q = supabase.from("package_suggestions").select("*").eq("destination", detectedDest);
+        if (arrival)   q = q.eq("arrival_airport", arrival);
+        if (departure) q = q.eq("departure_airport", departure);
+        if (days)      q = q.eq("days", days);
+        const { data: sugs } = await q.order("days").order("label");
+
+        const destAr: Record<string, string> = {
+          vietnam: "فيتنام", Malaysia: "ماليزيا", thailand: "تايلاند",
+          Turky: "تركيا", russia: "روسيا", Bosnia: "البوسنة", indonesia: "إندونيسيا",
+        };
+        const cityAr: Record<string, string> = {
+          "Ha Noi": "هانوي", "Ho Chi Minh": "هوتشي مينه",
+          "Da Nang": "دانانج", "Phu Quoc": "فوكوك",
+        };
+        const ar = (canonical: string) => cityAr[canonical] || canonical;
+        const lines: string[] = [];
+        if (!sugs || sugs.length === 0) {
+          lines.push(`ما لقيت اقتراحات لـ ${destAr[detectedDest] || detectedDest}`);
+          if (days)      lines.push(`• المدة: ${days} أيام`);
+          if (arrival)   lines.push(`• مطار الوصول: ${ar(arrival)}`);
+          if (departure) lines.push(`• مطار المغادرة: ${ar(departure)}`);
+          lines.push("جرّب مدة مختلفة أو مطارات أخرى، أو راجع شيت 'اقتراحات توزيع مدن' في Google Sheet.");
+        } else {
+          const header = days
+            ? `اقتراحات ${days} أيام لـ ${destAr[detectedDest] || detectedDest}`
+            : `اقتراحات ${destAr[detectedDest] || detectedDest}`;
+          const scope = arrival && departure
+            ? ` (الوصول ${ar(arrival)} / المغادرة ${ar(departure)})`
+            : "";
+          lines.push(`📋 ${header}${scope}:`);
+          for (const s of sugs as Array<{ days: number; label: string | null; distribution: string; arrival_airport: string; departure_airport: string }>) {
+            const tag = s.label ? ` (${s.label})` : "";
+            lines.push(`• ${s.days} أيام${tag}: ${s.distribution}`);
+          }
+          lines.push("");
+          lines.push("اختر اللي تبيه واكتب الطلب بصيغة كاملة (التاريخ + عدد الأشخاص).");
+        }
+        const chat = lines.join("\n");
+        return new Response(JSON.stringify({
+          id: "local-suggestions",
+          model: "local-engine",
+          role: "assistant",
+          content: [{ type: "text", text: `CHAT:${chat}` }],
+          usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+        }), { headers: CORS_HEADERS });
+      }
+    }
+
     if (lastAssistantProgram && lastUserMsg) {
       const patched = tryLocalEdit(lastUserMsg, lastAssistantProgram);
       if (patched) {

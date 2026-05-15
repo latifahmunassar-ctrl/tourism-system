@@ -567,6 +567,101 @@ function extractTrains(rows: string[][], destination: string, debug?: { rejects:
   return trains;
 }
 
+// ── Package suggestions ────────────────────────────────────────────────────
+// One free-form column per destination ("اقتراحات توزيع مدن") holding a
+// stack of:
+//   1. scope line     "اذا الوصول مطار X والمغدره مطار Y"
+//   2. day header     "N أيام (label):"   ← optional label in parens
+//   3. distribution   "2 هانوي + 3 سابا + ..."
+// Pairs 2/3 alternate under whichever scope (1) was last seen. Returns rows
+// ready for upsert into package_suggestions.
+function extractSuggestions(
+  rows: string[][],
+  destination: string,
+): Array<{
+  destination: string;
+  arrival_airport: string;
+  departure_airport: string;
+  days: number;
+  label: string | null;
+  distribution: string;
+}> {
+  // 1. Locate the column by header text. The header is on the same row as
+  //    the hotels header (Vietnam: row 0). We search every row's cells for
+  //    a header matching "اقتراحات".
+  let colIdx = -1;
+  let headerRow = -1;
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    for (let j = 0; j < (rows[i] || []).length; j++) {
+      const cell = (rows[i][j] || "").trim();
+      if (/اقتراحات/.test(cell) && /(?:توزيع|مدن)/.test(cell)) {
+        colIdx = j;
+        headerRow = i;
+        break;
+      }
+    }
+    if (colIdx >= 0) break;
+  }
+  if (colIdx < 0) return [];
+
+  // 2. Canonical airport from a free-form Arabic word. Just a small lookup
+  //    table per destination — we only need the airports the agency actually
+  //    flies into/out of, so a Vietnam-only map is fine.
+  const airportMap: Record<string, string> = destination === "vietnam"
+    ? {
+        "هانوي":  "Ha Noi",
+        "هوتشي":  "Ho Chi Minh",
+        "دانانج": "Da Nang",
+        "دانانغ": "Da Nang",
+        "فوكوك":  "Phu Quoc",
+      }
+    : {};
+  const resolveAirport = (raw: string): string => {
+    const t = raw.trim();
+    for (const [ar, canonical] of Object.entries(airportMap)) {
+      if (t.includes(ar)) return canonical;
+    }
+    return t;
+  };
+
+  // 3. Walk down the column, maintaining current scope; pair each day-header
+  //    with the next non-empty cell as the distribution.
+  let arrival = "", departure = "";
+  const out: Array<{ destination: string; arrival_airport: string; departure_airport: string; days: number; label: string | null; distribution: string }> = [];
+  const SCOPE_RE = /الوصول\s+(?:مطار\s+)?(\S+)[\s\S]*?(?:المغدر[هةى]|المغادر[هةى])\s+(?:مطار\s+)?(\S+)/u;
+  const DAY_RE   = /(\d{1,2})\s*[أا]يام\s*(?:\(([^)]*)\))?\s*:/u;
+  let pendingDay: { days: number; label: string | null } | null = null;
+  for (let i = headerRow + 1; i < rows.length; i++) {
+    const cell = (rows[i][colIdx] || "").trim();
+    if (!cell) continue;
+    const scope = cell.match(SCOPE_RE);
+    if (scope) {
+      arrival   = resolveAirport(scope[1]);
+      departure = resolveAirport(scope[2]);
+      pendingDay = null;
+      continue;
+    }
+    const day = cell.match(DAY_RE);
+    if (day) {
+      pendingDay = { days: parseInt(day[1], 10), label: day[2]?.trim() || null };
+      continue;
+    }
+    // Treat any other non-empty cell as the distribution for the pending day.
+    if (pendingDay && arrival && departure) {
+      out.push({
+        destination,
+        arrival_airport: arrival,
+        departure_airport: departure,
+        days: pendingDay.days,
+        label: pendingDay.label,
+        distribution: cell,
+      });
+      pendingDay = null;
+    }
+  }
+  return out;
+}
+
 // ── Handler ────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
@@ -704,6 +799,15 @@ Deno.serve(async (req) => {
             .from("tours")
             .insert(dedupedTours);
           if (error) throw new Error(`جولات: ${error.message}`);
+        }
+
+        // Package suggestions (column "اقتراحات توزيع مدن") — free-form
+        // pre-canned distributions grouped by arrival/departure airport.
+        const suggestions = extractSuggestions(rows, tab);
+        await supabase.from("package_suggestions").delete().eq("destination", tab);
+        if (suggestions.length > 0) {
+          const { error } = await supabase.from("package_suggestions").insert(suggestions);
+          if (error) debugInfo?.rejects.push(`[${tab}] suggestions insert: ${error.message}`);
         }
 
         details[tab] = { hotels: hotels.length, tours: tours.length, flights: flights.length, trains: trains.length };
