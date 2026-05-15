@@ -523,7 +523,12 @@ const data = await res.json();
 const raw = data.content?.[0]?.text || '';
 removeTyping(typingId);
 history.push({ role: 'assistant', content: raw });
-const chatMatch = raw.match(/CHAT:([\s\S]+?)$/m);
+// Greedy + no $ anchor → CHAT is the LAST section in a program response, so
+// "from CHAT: to end of string" is correct and preserves multi-line content
+// (e.g. package-suggestion lists). The old lazy `+?$` with the `m` flag was
+// cutting at the first newline and dropping the actual list items below the
+// header.
+const chatMatch = raw.match(/CHAT:([\s\S]+)/);
 addMessage('sys', chatMatch ? chatMatch[1].trim() : 'تم بناء البرنامج!');
 if (raw.includes('DEST:')) buildReview(raw);
 } catch (e) {
