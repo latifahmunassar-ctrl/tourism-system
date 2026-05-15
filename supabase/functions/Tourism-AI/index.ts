@@ -37,7 +37,7 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
   // noun. Listing major cities + dialect variants prevents false negatives
   // that would route the request to Claude unnecessarily.
   const map: Array<[RegExp, string]> = [
-    [/فيتنام|ڤيتنام|فيتنامي|vietnam|hanoi|هانوي|halong|هالونج|danang|دانانج|sapa|سابا|phu\s*quoc|فوكوك/i, "vietnam"],
+    [/فيتنام|ڤيتنام|فيتنامي|vietnam|hanoi|هانوي|halong|هالونج|danang|دانانج|sapa|سابا|phu\s*quoc|فوكوك|nha\s*trang|نها\s*تران|dalat|da\s*lat|دالا[تط]/i, "vietnam"],
     [/ماليزيا|مليزيا|ماليزى|malaysia|kuala\s*lumpur|كوالا|كوالالمبور|langkawi|لانكاوي|penang|بينانج|cameron|كاميرون|selangor|سيلانجور|sunway/i, "Malaysia"],
     [/إندونيسيا|اندونيسيا|اندونيسي|indonesia|بالي|bali|جاكرتا|jakarta|باندونغ|bandung|puncak|بونشاك/i, "indonesia"],
     [/تركيا|تركى|turky|turkey|اسطنبول|istanbul|طرابزون|trabzon|أوزنجول|اوزنجول|uzungol|بورصة|bursa|ايدر|ayder|سابانجا|sapanca/i, "Turky"],
@@ -67,6 +67,8 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Ha Long",     pattern: /هالون[جغ]|halong|ha\s*long/i },
     { canonical: "Da Nang",     pattern: /دانان[جغ]|danang|da\s*nang|ba\s*na|ماي\s*خي/i },
     { canonical: "Phu Quoc",    pattern: /فوكوك|phu\s*quoc|phuquoc/i },
+    { canonical: "Nha Trang",   pattern: /نها\s*تران[جغ]|نهاتران[جغ]|نياتران[جغ]|nha\s*trang/i },
+    { canonical: "Da Lat",      pattern: /دالا[تط]|دا\s*لا[تط]|دلات|dalat|da\s*lat/i },
     { canonical: "Ho Chi Minh", pattern: /هوتشي|هو\s*تشي|ho\s*chi|hochi|saigon|سايغون|سايجون/i },
   ],
   Malaysia: [
@@ -617,6 +619,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
   const CITY_AR: Record<string, string> = {
     "Ha Noi": "هانوي", "Sapa": "سابا", "Ha Long": "هالونج",
     "Da Nang": "دانانج", "Phu Quoc": "فوكوك", "Ho Chi Minh": "هوتشي مينه",
+    "Nha Trang": "نها ترانج", "Da Lat": "دالات",
     "Kuala Lumpur": "كوالالمبور", "Selangor": "سيلانجور",
     "Langkawi": "لانكاوي", "Penang": "بينانج", "Cameron Highlands": "كاميرون هايلاند",
     "Bangkok": "بانكوك", "Phuket": "بوكيت", "Krabi": "كرابي",
@@ -2223,6 +2226,7 @@ Deno.serve(async (req) => {
       const cityArabicNames: Record<string, string> = {
         "Ha Noi": "هانوي", "Sapa": "سابا", "Ha Long": "هالونج",
         "Da Nang": "دانانج", "Phu Quoc": "فوكوك", "Ho Chi Minh": "هوتشي مينه",
+        "Nha Trang": "نها ترانج", "Da Lat": "دالات",
         "Kuala Lumpur": "كوالالمبور", "Selangor": "سيلانجور",
         "Langkawi": "لانكاوي", "Penang": "بينانج", "Cameron Highlands": "كاميرون هايلاند",
         "Bangkok": "بانكوك", "Phuket": "بوكيت", "Krabi": "كرابي",
