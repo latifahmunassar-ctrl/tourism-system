@@ -629,7 +629,12 @@ function extractSuggestions(
   let arrival = "", departure = "";
   const out: Array<{ destination: string; arrival_airport: string; departure_airport: string; days: number; label: string | null; distribution: string }> = [];
   const SCOPE_RE = /الوصول\s+(?:مطار\s+)?(\S+)[\s\S]*?(?:المغدر[هةى]|المغادر[هةى])\s+(?:مطار\s+)?(\S+)/u;
-  const DAY_RE   = /(\d{1,2})\s*[أا]يام\s*(?:\(([^)]*)\))?\s*:/u;
+  // Day header accepts both "N أيام" (plural — used in the sheet for 7-10
+  // day packages) AND "N يوم" (singular — used for 11+ day packages). The
+  // label can be multiple parens groups ("(نسخة دانانغ سابا) (متوسطه)") or
+  // a single one or none — we capture everything between the noun and the
+  // colon and let the formatter clean it up.
+  const DAY_RE   = /(\d{1,2})\s*(?:[أا]يام|يوم)\s*([^:]*?)\s*:/u;
   let pendingDay: { days: number; label: string | null } | null = null;
   for (let i = headerRow + 1; i < rows.length; i++) {
     const cell = (rows[i][colIdx] || "").trim();
@@ -643,7 +648,23 @@ function extractSuggestions(
     }
     const day = cell.match(DAY_RE);
     if (day) {
-      pendingDay = { days: parseInt(day[1], 10), label: day[2]?.trim() || null };
+      // Clean the label: collapse double parens "(a) (b)" → "a، b", strip
+      // the wrapping ones, trim trailing punctuation. Multiple labels in
+      // separate parens are joined with a comma so the chat output reads
+      // naturally instead of " (… )( …)".
+      let label: string | null = null;
+      const raw = (day[2] || "").trim();
+      if (raw) {
+        const parts: string[] = [];
+        const re2 = /\(([^)]*)\)/g;
+        let m: RegExpExecArray | null;
+        while ((m = re2.exec(raw)) !== null) {
+          const piece = m[1].trim();
+          if (piece) parts.push(piece);
+        }
+        label = parts.length > 0 ? parts.join("، ") : raw;
+      }
+      pendingDay = { days: parseInt(day[1], 10), label };
       continue;
     }
     // Treat any other non-empty cell as the distribution for the pending day.
