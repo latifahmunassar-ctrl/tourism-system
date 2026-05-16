@@ -1589,10 +1589,35 @@ export async function buildLocalProgram(
       cm.freeDayCount += 1;
       appliedModifications.push({ kind: "remove", tourName: fromTour.name.trim(), city: fromCity });
     } else {
-      // Swap: find the replacement tour, must be in the SAME city as the removed one
-      const toTour = findTourByKeywords(mod.to, allTours, { cityDefs, canonicalCity: fromCity });
+      // Swap target "أخرى/اخرى/ثانية/بديلة" is a placeholder for "pick any
+      // other unused tour from this city" — don't treat it as a literal
+      // tour name. Find the cheapest tour in the city that's not the
+      // source AND not already in any other applied mod for this city.
+      const isAnyAlternative = /^(?:[أا]خر[ىي][هة]?|ثاني[هة]?|بديل[هة]?|اي\s*جول[هة]?|أي\s*جول[هة]?|other|another|any)$/iu
+        .test((mod.to || "").trim());
+      let toTour: TourRow | null = null;
+      if (isAnyAlternative) {
+        const excludeForPick = new Set<string>(cm.excludeNames);
+        for (const p of cm.pinnedTours) excludeForPick.add(p.name.trim().toLowerCase());
+        const candidates = allTours.filter(t =>
+          !isTransferTour(t.name) &&
+          tourBelongsToCity(t, cityDefs, fromCity) &&
+          !excludeForPick.has(t.name.trim().toLowerCase()) &&
+          !/^يوم\s*(?:ال)?حر/iu.test(t.name.trim()),
+        );
+        candidates.sort((a, b) =>
+          pickTourVariantPrice(a, request.adults || 2, false) -
+          pickTourVariantPrice(b, request.adults || 2, false),
+        );
+        toTour = candidates[0] || null;
+        if (!toTour) {
+          return { ok: false, chatMessage: `ما عندنا جولة بديلة متاحة في ${cityArabicNames[fromCity] || fromCity}. كل الجولات مستخدمة.` };
+        }
+      } else {
+        toTour = findTourByKeywords(mod.to, allTours, { cityDefs, canonicalCity: fromCity });
+      }
       if (!toTour) {
-        return { ok: false, chatMessage: `ما لقيت جولة "${mod.to}" في مدينة ${fromCity}. اختر بديل من جولات هالمدينة فقط.` };
+        return { ok: false, chatMessage: `ما لقيت جولة "${mod.to}" في مدينة ${fromCity}. اختر بديل من جولات هالمدينة فقط، أو اكتب "غيّر جولة X الى جولة أخرى" لاختيار بديل تلقائياً.` };
       }
       cm.pinnedTours.push(toTour);
       appliedModifications.push({ kind: "swap", fromName: fromTour.name.trim(), toName: toTour.name.trim(), city: fromCity });
