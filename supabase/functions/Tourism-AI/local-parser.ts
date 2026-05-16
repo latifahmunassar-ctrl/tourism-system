@@ -648,13 +648,35 @@ function parseTourModifications(lastUserMsg: string): TourModification[] {
   // it doesn't bleed into the source/target name fragments. The day number
   // travels with the mod and lets the builder pin the swap to a specific
   // day even when the source-tour name is ambiguous (or just "يوم حر" which
-  // appears multiple times in the same city).
+  // appears multiple times in the same city). Accepts both Latin/Arabic
+  // digits AND Arabic word ordinals ("الثامن", "السادس عشر").
+  const ORD_WORDS: Array<[RegExp, number]> = [
+    [/[أا]ول[ىيه]?/u, 1], [/ثاني[هة]?/u, 2], [/ثالث[هة]?/u, 3],
+    [/رابع[هة]?/u, 4], [/خامس[هة]?/u, 5], [/سادس[هة]?/u, 6],
+    [/سابع[هة]?/u, 7], [/ثامن[هة]?/u, 8], [/تاسع[هة]?/u, 9],
+    [/عاشر[هة]?/u, 10], [/حادي\s*عشر/u, 11], [/ثاني\s*عشر/u, 12],
+    [/ثالث\s*عشر/u, 13], [/رابع\s*عشر/u, 14],
+  ];
   let dayNumber: number | null = null;
-  const dayMatch = text.match(/(?:في\s+|ب)?(?:ال)?يوم\s*(?:ال)?(?:رقم\s*)?(\d{1,2})\b/iu);
   let textNoDay = text;
-  if (dayMatch && dayMatch.index !== undefined) {
-    dayNumber = parseInt(dayMatch[1], 10);
-    textNoDay = (text.slice(0, dayMatch.index) + " " + text.slice(dayMatch.index + dayMatch[0].length)).replace(/\s+/g, " ").trim();
+  // Try digit form first ("اليوم 8") then word ordinal ("اليوم الثامن").
+  const digitMatch = text.match(/(?:في\s+|ب)?(?:ال)?يوم\s*(?:ال)?(?:رقم\s*)?(\d{1,2})\b/iu);
+  if (digitMatch && digitMatch.index !== undefined) {
+    dayNumber = parseInt(digitMatch[1], 10);
+    textNoDay = (text.slice(0, digitMatch.index) + " " + text.slice(digitMatch.index + digitMatch[0].length)).replace(/\s+/g, " ").trim();
+  } else {
+    for (const [pat, val] of ORD_WORDS) {
+      // JS \b doesn't work for Arabic letters, so anchor with a lookahead
+      // that requires whitespace / punctuation / end-of-string after the
+      // ordinal. Otherwise "ثامن" might absorb the next Arabic word.
+      const re = new RegExp(`(?:في\\s+|ب)?(?:ال)?يوم\\s+(?:ال)?(?:${pat.source})(?=\\s|$|،|,|\\.|!|\\?)`, pat.flags);
+      const m = text.match(re);
+      if (m && m.index !== undefined) {
+        dayNumber = val;
+        textNoDay = (text.slice(0, m.index) + " " + text.slice(m.index + m[0].length)).replace(/\s+/g, " ").trim();
+        break;
+      }
+    }
   }
   // After this point the swap/remove/add regexes work on textNoDay so the
   // day-marker doesn't get captured into cityHint or the tour name.
