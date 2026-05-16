@@ -1761,15 +1761,34 @@ export async function buildLocalProgram(
       const f = findFlight(allFlights, d.fromCity, mainHub);
       if (f) { selectedFlights.push({ day: d.number, flight: f }); continue; }
     }
-    // Case (e): both have flights but no direct → try via hub
+    // Case (e): both have flights but no direct → try via hub.
+    // SKIP any hub that's already part of the trip (the customer just
+    // came from Langkawi → flying back to Langkawi to reach KL is a
+    // geographic backtrack). Also prefer the destination's preferred
+    // mainHub when it produces both legs — that's the real gateway.
     if (fromHasFlights && toHasFlights) {
-      for (const fcity of flightCities) {
-        const leg1 = findFlight(allFlights, d.fromCity, fcity);
-        const leg2 = findFlight(allFlights, fcity, d.toCity);
+      const tripCityNorms = new Set(
+        request.cities.map(c => normCity(c)),
+      );
+      // Try mainHub first if it forms a valid pair.
+      const tryHub = (hubName: string): boolean => {
+        const leg1 = findFlight(allFlights, d.fromCity, hubName);
+        const leg2 = findFlight(allFlights, hubName, d.toCity);
         if (leg1 && leg2) {
           selectedFlights.push({ day: d.number, flight: leg1 });
           selectedFlights.push({ day: d.number, flight: leg2 });
-          break;
+          return true;
+        }
+        return false;
+      };
+      let found = mainHub ? tryHub(mainHub) : false;
+      if (!found) {
+        for (const fcity of flightCities) {
+          // A "hub" that's already a stop in this trip means the route
+          // backtracks. Skip it — better to leave the flight unset and
+          // let the employee see the gap than to invent a nonsense leg.
+          if (tripCityNorms.has(normCity(fcity))) continue;
+          if (tryHub(fcity)) { found = true; break; }
         }
       }
     }
