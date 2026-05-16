@@ -1786,6 +1786,15 @@ export async function buildLocalProgram(
     // geographic backtrack). Also prefer the destination's preferred
     // mainHub when it produces both legs — that's the real gateway.
     if (fromHasFlights && toHasFlights) {
+      // Road-first guard: if the sheet has a direct ground transfer from
+      // fromCity to toCity that doesn't terminate at an airport, that's
+      // a real car ride (e.g. Phuket → Krabi ≈ 3hr). Hub-flighting via
+      // Bangkok would add 2 hops, airport time, and a wrong "departure
+      // to international airport" pickup row at the hub. Prefer road.
+      const roadRow = findInterCityTransfer(
+        allTours, d.fromCity, d.toCity, request.destination!, cityDefs, "airport", request.transport,
+      );
+      if (roadRow && !/مطار|airport/iu.test(roadRow.name)) continue;
       const tripCityNorms = new Set(
         request.cities.map(c => normCity(c)),
       );
