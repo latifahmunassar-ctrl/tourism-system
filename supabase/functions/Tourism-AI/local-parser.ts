@@ -20,9 +20,9 @@ export type CityStay = {
  * latest/most-specific match wins.
  */
 export type TourModification =
-  | { kind: "remove"; name: string }
-  | { kind: "swap"; from: string; to: string }
-  | { kind: "add"; name: string; cityHint: string | null };
+  | { kind: "remove"; name: string; dayNumber?: number | null }
+  | { kind: "swap"; from: string; to: string; dayNumber?: number | null }
+  | { kind: "add"; name: string; cityHint: string | null; dayNumber?: number | null };
 
 /**
  * Which stay of a city the swap targets when the city appears multiple times
@@ -637,8 +637,29 @@ function parseNightsByCity(text: string, cityDefs: CityDef[]): Record<string, nu
 function parseTourModifications(lastUserMsg: string): TourModification[] {
   // Collapse repeated alifs ("االحر" → "الحر") and trim — handles common
   // Saudi-dialect typos where a letter gets duplicated.
-  const text = lastUserMsg.replace(/ا{2,}/g, "ا").trim();
+  // Also fold Arabic-Indic digits so "اليوم ٤" matches "اليوم 4" below.
+  const text = lastUserMsg
+    .replace(/[٠-٩]/g, (c) => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)))
+    .replace(/ا{2,}/g, "ا")
+    .trim();
   if (!text) return [];
+
+  // Pull a "في اليوم N" / "باليوم N" / "اليوم N" marker out of the message so
+  // it doesn't bleed into the source/target name fragments. The day number
+  // travels with the mod and lets the builder pin the swap to a specific
+  // day even when the source-tour name is ambiguous (or just "يوم حر" which
+  // appears multiple times in the same city).
+  let dayNumber: number | null = null;
+  const dayMatch = text.match(/(?:في\s+|ب)?(?:ال)?يوم\s*(?:ال)?(?:رقم\s*)?(\d{1,2})\b/iu);
+  let textNoDay = text;
+  if (dayMatch && dayMatch.index !== undefined) {
+    dayNumber = parseInt(dayMatch[1], 10);
+    textNoDay = (text.slice(0, dayMatch.index) + " " + text.slice(dayMatch.index + dayMatch[0].length)).replace(/\s+/g, " ").trim();
+  }
+  // After this point the swap/remove/add regexes work on textNoDay so the
+  // day-marker doesn't get captured into cityHint or the tour name.
+  const baseText = text;
+  void baseText;
 
   // Verbs that can introduce a swap or a free-day replacement
   const SWAP_VERB = "(?:بد[ّ]?ل[يىه]?|غي[ّ]?ر[يى]?|اغير|استبدل|حول|change|swap|replace)";
@@ -655,8 +676,8 @@ function parseTourModifications(lastUserMsg: string): TourModification[] {
     `${SWAP_VERB}\\s+(?:ال)?جول[ةه]\\s+(.+?)\\s+${TO_PREP}\\s*${FREE_DAY}`,
     "iu",
   );
-  const fdSwap = text.match(freeDaySwapRe);
-  if (fdSwap) return [{ kind: "remove", name: fdSwap[1].trim() }];
+  const fdSwap = textNoDay.match(freeDaySwapRe);
+  if (fdSwap) return [{ kind: "remove", name: fdSwap[1].trim(), dayNumber }];
 
   // (1b) Free day → tour: "غير يوم الحر في X الي جولة Y" / "اضف جولة Y في X"
   // Anchors on "يوم حر" so it can't collide with tour-swap (which anchors
@@ -665,9 +686,9 @@ function parseTourModifications(lastUserMsg: string): TourModification[] {
     `${SWAP_VERB}\\s+(?:ال)?يوم\\s*(?:ال)?حر(?:\\s+في\\s+(.+?))?\\s+${TO_PREP}\\s*(?:ال)?جول[ةه]\\s+(.+?)(?=\\s*(?:$|[\\.,،\\n]))`,
     "iu",
   );
-  const fdToTour = text.match(freeDayToTourRe);
+  const fdToTour = textNoDay.match(freeDayToTourRe);
   if (fdToTour) {
-    return [{ kind: "add", name: fdToTour[2].trim(), cityHint: fdToTour[1]?.trim() || null }];
+    return [{ kind: "add", name: fdToTour[2].trim(), cityHint: fdToTour[1]?.trim() || null, dayNumber }];
   }
   // (1c) Bare add: "اضف/ضيف جولة Y في X" — supports repetition. If the
   // employee writes the same add twice ("اضف جولة X. اضف جولة X") we emit
@@ -679,9 +700,9 @@ function parseTourModifications(lastUserMsg: string): TourModification[] {
     `${ADD_VERB}\\s+(?:ال)?جول[ةه]\\s+(.+?)(?:\\s+في\\s+(.+?))?(?=\\s*(?:$|[\\.,،\\n]))`,
     "giu",
   );
-  const adds = [...text.matchAll(addRe)];
+  const adds = [...textNoDay.matchAll(addRe)];
   if (adds.length > 0) {
-    return adds.map(m => ({ kind: "add" as const, name: m[1].trim(), cityHint: m[2]?.trim() || null }));
+    return adds.map(m => ({ kind: "add" as const, name: m[1].trim(), cityHint: m[2]?.trim() || null, dayNumber }));
   }
 
   // (2) Swap to another tour: "غير جولة X بجولة Y"
@@ -691,16 +712,30 @@ function parseTourModifications(lastUserMsg: string): TourModification[] {
     `${SWAP_VERB}\\s+(?:ال)?جول[ةه]\\s+(.+?)\\s+${TO_PREP}\\s*(?:ال)?جول[ةه]\\s+(.+?)(?=\\s*(?:$|[\\.,،\\n]))`,
     "iu",
   );
-  const sw = text.match(tourSwapRe);
-  if (sw) return [{ kind: "swap", from: sw[1].trim(), to: sw[2].trim() }];
+  const sw = textNoDay.match(tourSwapRe);
+  if (sw) return [{ kind: "swap", from: sw[1].trim(), to: sw[2].trim(), dayNumber }];
 
   // (3) Pure removal: "احذف جولة X"
   const removeRe = new RegExp(
     `${REMOVE_VERB}\\s+(?:ال)?جول[ةه]\\s+(.+?)(?=\\s*(?:$|[\\.,،\\n]))`,
     "iu",
   );
-  const rm = text.match(removeRe);
-  if (rm) return [{ kind: "remove", name: rm[1].trim() }];
+  const rm = textNoDay.match(removeRe);
+  if (rm) return [{ kind: "remove", name: rm[1].trim(), dayNumber }];
+
+  // (4) Day-only swap (no "جولة" anchor on the source): when the user names
+  // the source by day alone, e.g. "غير اليوم 4 الى جولة معالم هانوي" or
+  // "غير اليوم 4 الى يوم حر". Requires we extracted dayNumber up top.
+  if (dayNumber !== null) {
+    const toTour = textNoDay.match(new RegExp(
+      `${SWAP_VERB}\\s*${TO_PREP}?\\s*(?:ال)?جول[ةه]\\s+(.+?)(?=\\s*(?:$|[\\.,،\\n]))`, "iu",
+    ));
+    if (toTour) return [{ kind: "add", name: toTour[1].trim(), cityHint: null, dayNumber }];
+    const toFree = textNoDay.match(new RegExp(
+      `${SWAP_VERB}\\s*${TO_PREP}?\\s*${FREE_DAY}`, "iu",
+    ));
+    if (toFree) return [{ kind: "remove", name: "", dayNumber }];
+  }
 
   return [];
 }
