@@ -669,15 +669,19 @@ function parseTourModifications(lastUserMsg: string): TourModification[] {
   if (fdToTour) {
     return [{ kind: "add", name: fdToTour[2].trim(), cityHint: fdToTour[1]?.trim() || null }];
   }
-  // (1c) Bare add: "اضف/ضيف جولة Y في X"
+  // (1c) Bare add: "اضف/ضيف جولة Y في X" — supports repetition. If the
+  // employee writes the same add twice ("اضف جولة X. اضف جولة X") we emit
+  // two add mods so the builder pins the tour twice and fills a deficit
+  // day with a duplicate. The numbered-list reply rewriter in index.ts
+  // relies on this behavior to honor "نفذ الأولى" / "كرر الجولة الأولى".
   const ADD_VERB = "(?:اضف|أضف|ضيف|زود|add)";
   const addRe = new RegExp(
     `${ADD_VERB}\\s+(?:ال)?جول[ةه]\\s+(.+?)(?:\\s+في\\s+(.+?))?(?=\\s*(?:$|[\\.,،\\n]))`,
-    "iu",
+    "giu",
   );
-  const add = text.match(addRe);
-  if (add) {
-    return [{ kind: "add", name: add[1].trim(), cityHint: add[2]?.trim() || null }];
+  const adds = [...text.matchAll(addRe)];
+  if (adds.length > 0) {
+    return adds.map(m => ({ kind: "add" as const, name: m[1].trim(), cityHint: m[2]?.trim() || null }));
   }
 
   // (2) Swap to another tour: "غير جولة X بجولة Y"

@@ -2144,10 +2144,67 @@ Deno.serve(async (req) => {
     // If the last user message is a simple structural patch (add/remove
     // extra-bed, change SIM count) AND a built program exists in history,
     // apply it locally and skip Anthropic entirely. Costs $0.
-    const lastUserMsg = (messages.length > 0 && messages[messages.length - 1].role === "user")
+    let lastUserMsg = (messages.length > 0 && messages[messages.length - 1].role === "user")
       ? String(messages[messages.length - 1].content || "")
       : "";
     const lastAssistantProgram = findLastBuiltProgram(messages);
+
+    // ── Numbered-list reply rewrite ────────────────────────────────────────
+    // The tour-deficit CHAT asks "حابب تكرّر جولة معيّنة؟ بلّغني الرقم" and
+    // shows a numbered list. The employee answers with an ordinal — "الأول",
+    // "نفذ الاولي", "2", "اول وحده", … — and expects us to apply tour #N
+    // to fill the deficit. Translate that reply into a concrete
+    // "اضف جولة <name>" so the existing tour-mod path handles it.
+    if (lastAssistantProgram && lastUserMsg) {
+      const ordinalMatch = lastUserMsg.trim().match(
+        /^(?:نفذ|طبق|اعمل|سو[يى]?|اختر|خل[يى]?|ابي|اريد|كرر)?\s*(?:ال)?(اول[ىيه]?|[أا]ول[ىيه]?|اوله|الاولى|الاوله|اخير[هه]?|الاخير[هه]?|ثاني[هه]?|ثالث[هه]?|رابع[هه]?|خامس[هه]?|(\d{1,2}))(?:\s+واحد[ةه]?)?\s*[.!،]?$/iu,
+      );
+      if (ordinalMatch) {
+        // Walk back to the most recent assistant CHAT that asked for a
+        // number AND included a numbered list of tours.
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].role !== "assistant") continue;
+          const text = String(messages[i].content || "");
+          if (!/بلّغني\s+الرقم|بلغني\s+الرقم/u.test(text)) continue;
+          // Numbered list lines like " 1. tour name " — accept ASCII digits.
+          const items = [...text.matchAll(/(?:^|\n)\s*(\d+)\.\s*([^\n|]+?)\s*(?:\n|$)/gu)]
+            .map(m => ({ n: parseInt(m[1], 10), name: m[2].trim() }));
+          if (items.length === 0) break;
+          // Resolve the ordinal to an index (1-based).
+          const wordToNum: Record<string, number> = {
+            "اول": 1, "أول": 1, "اولى": 1, "أولى": 1, "اوله": 1, "اولي": 1, "الاولى": 1, "الاوله": 1,
+            "ثاني": 2, "ثانيه": 2, "ثانية": 2,
+            "ثالث": 3, "ثالثه": 3, "ثالثة": 3,
+            "رابع": 4, "رابعه": 4, "رابعة": 4,
+            "خامس": 5, "خامسه": 5, "خامسة": 5,
+            "اخير": items.length, "الاخير": items.length, "اخيره": items.length, "الاخيره": items.length, "اخيرة": items.length, "الاخيرة": items.length,
+          };
+          let pick: number | null = null;
+          if (ordinalMatch[2]) pick = parseInt(ordinalMatch[2], 10);
+          else {
+            const norm = (ordinalMatch[1] || "").replace(/[إأآ]/g, "ا").replace(/[ةه]/g, "ه").replace(/[يى]/g, "ي");
+            for (const [k, v] of Object.entries(wordToNum)) {
+              const nk = k.replace(/[إأآ]/g, "ا").replace(/[ةه]/g, "ه").replace(/[يى]/g, "ي");
+              if (norm === nk) { pick = v; break; }
+            }
+          }
+          if (!pick || pick < 1 || pick > items.length) break;
+          const tour = items[pick - 1];
+          // The previous CHAT typically tells us how many days are without a
+          // tour ("يوجد 2 يوم/أيام بدون جولة"). The employee replied with one
+          // ordinal so they want THAT tour to fill the gap — meaning we need
+          // to pin it (deficit + 1) times: the +1 covers the auto-pick slot
+          // the tour was already taking, and the rest plug the empty days.
+          const deficitMatch = text.match(/(\d+)\s*يوم(?:\/أيام|\s*\/\s*[أا]يام)?\s*بدون\s*جول[ةه]/u);
+          const deficitN = deficitMatch ? parseInt(deficitMatch[1], 10) : 0;
+          const copies = Math.max(2, deficitN + 1);  // at least two so a single deficit gets filled
+          const phrases = Array(copies).fill(`اضف جولة ${tour.name}`).join(". ");
+          lastUserMsg = phrases;
+          messages[messages.length - 1] = { ...messages[messages.length - 1], content: lastUserMsg };
+          break;
+        }
+      }
+    }
 
     // ── Package Suggestions ────────────────────────────────────────────────
     // Employee asks "اقتراحات / خيارات / بكج" for a given duration + airport
