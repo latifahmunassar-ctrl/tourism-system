@@ -305,8 +305,10 @@ function parseStars(text: string): number[] | null {
   //   2. "غير Bayview Hotel Langkawi الى فندق 5 نجوم" — verb + hotel-name +
   //      الى + فندق + stars
   // Both must be scrubbed; otherwise the "5 نجوم" leaks into trip-level
-  // parseStars and every hotel gets upgraded.
-  const cleaned = text
+  // parseStars and every hotel gets upgraded. Convert Arabic-Indic digits
+  // FIRST so the scrubbers' `\d` actually matches "٥" / "5" alike.
+  const normalized = arabicDigitsToLatin(text);
+  const cleaned = normalized
     .replace(
       new RegExp(`${HOTEL_MOD_VERBS}\\s+(?:لي\\s+)?(?:ال)?فندق[^\\n]*?\\d\\s*(?:نجوم|نجمة|stars?)`, "giu"),
       " ",
