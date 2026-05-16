@@ -431,13 +431,20 @@ function parseExtraBed(text: string, cityDefs: CityDef[]): TripRequest["extraBed
   const addVerb = /(?:ضيف|أضيف|اضف|أضف|زود|أزود|اضيف|أحتاج|احتاج|بدي|ابغى|أبغى|أبي|ابي|أريد|اريد|need|want|add|put|include)/iu;
 
   if ((addVerb.test(t) && isBedKeyword.test(t)) || (isBedKeyword.test(t) && hasExtraIntent.test(t))) {
-    // Try to find specific cities mentioned alongside the bed request
+    // Restrict city detection to the LINE(S) that mention the bed keyword —
+    // otherwise the joined-history text drags in trip-wide cities (Selangor,
+    // Langkawi) when the user only requested a bed in KL, and a later
+    // unrelated mod (e.g. adding a flight) silently expands the scope.
+    const bedLines = t
+      .split(/\n+/)
+      .filter(line => isBedKeyword.test(line));
+    const bedText = bedLines.length > 0 ? bedLines.join("\n") : t;
     const cities: string[] = [];
     for (const { canonical, pattern } of cityDefs) {
-      if (pattern.test(t)) cities.push(canonical);
+      if (pattern.test(bedText)) cities.push(canonical);
     }
     // If "كل / جميع / للكل / كافة" → ALL
-    if (/كل\s*الفنادق|جميع\s*الفنادق|للكل|كافة\s*الفنادق|all\s*hotels|in\s*all/i.test(t) || cities.length === 0) {
+    if (/كل\s*الفنادق|جميع\s*الفنادق|للكل|كافة\s*الفنادق|all\s*hotels|in\s*all/i.test(bedText) || cities.length === 0) {
       return { scope: "all" };
     }
     return { scope: cities };
