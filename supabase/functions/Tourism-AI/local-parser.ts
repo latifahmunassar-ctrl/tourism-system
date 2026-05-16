@@ -299,12 +299,22 @@ function parseChildren(text: string): number | null {
 }
 
 function parseStars(text: string): number[] | null {
-  // Strip per-hotel star-rating overrides ("غير فندق هانوي الى 5 نجوم")
-  // before scanning — the override is for that one hotel, not the trip.
-  const cleaned = text.replace(
-    new RegExp(`${HOTEL_MOD_VERBS}\\s+(?:لي\\s+)?(?:ال)?فندق[^\\n]*?\\d\\s*(?:نجوم|نجمة|stars?)`, "giu"),
-    " ",
-  );
+  // Strip per-hotel star-rating overrides before scanning — the override is
+  // for ONE hotel, not the trip. Two forms covered:
+  //   1. "غير فندق هانوي الى 5 نجوم" — verb + فندق + city + stars
+  //   2. "غير Bayview Hotel Langkawi الى فندق 5 نجوم" — verb + hotel-name +
+  //      الى + فندق + stars
+  // Both must be scrubbed; otherwise the "5 نجوم" leaks into trip-level
+  // parseStars and every hotel gets upgraded.
+  const cleaned = text
+    .replace(
+      new RegExp(`${HOTEL_MOD_VERBS}\\s+(?:لي\\s+)?(?:ال)?فندق[^\\n]*?\\d\\s*(?:نجوم|نجمة|stars?)`, "giu"),
+      " ",
+    )
+    .replace(
+      new RegExp(`${HOTEL_MOD_VERBS}\\s+(?:لي\\s+)?[^\\n]*?(?:الى|إلى|الي|ل[ـ]?|لـ)\\s+(?:ال)?فندق[^\\n]*?\\d\\s*(?:نجوم|نجمة|stars?)`, "giu"),
+      " ",
+    );
   const t = arabicDigitsToLatin(cleaned);
   // "4 أو 5 نجوم" / "4 و 5 نجوم"
   const range = t.match(/(\d)\s*(?:أو|او|و|or)\s*(\d)\s*(?:نجوم|نجمة|stars?|★)/i);
@@ -796,7 +806,23 @@ function parseHotelModifications(lastUserMsg: string): HotelModification[] {
     `${VERBS}\\s+(?:لي\\s+)?(?:ال)?فندق\\s+(?:في\\s+)?(.+?)(?=\\s*(?:$|[\\.,،\\n]))`,
     "iu",
   );
-  const m = text.match(re);
+  let m = text.match(re);
+  // Fallback: "غير <hotel name> الى فندق N نجوم" — verb + free-form hotel
+  // name + connector + فندق + remainder. Without this, an explicit name
+  // swap like "غير Bayview Hotel Langkawi الى فندق 5 نجوم" falls through
+  // and parseStars sees the "5 نجوم" un-scrubbed → upgrades the whole trip.
+  if (!m) {
+    const altRe = new RegExp(
+      `${VERBS}\\s+(?:لي\\s+)?(.+?)\\s+(?:الى|إلى|الي|ل[ـ]?|لـ)\\s+(?:ال)?فندق\\s+(.+?)(?=\\s*(?:$|[\\.,،\\n]))`,
+      "iu",
+    );
+    const altM = text.match(altRe);
+    if (altM) {
+      // Synthesize an `m` whose remainder is "<hotel name> + target hints",
+      // so the existing occupancy/stars/area extractors all keep working.
+      m = [altM[0], `${altM[1]} ${altM[2]}`] as RegExpMatchArray;
+    }
+  }
   if (!m) return [];
   let remainder = (m[1] || "").trim();
   if (!remainder) return [];
