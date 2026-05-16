@@ -863,6 +863,28 @@ function getLastUserMessage(messages: Array<{ role: string; content: unknown }>)
   return "";
 }
 
+/**
+ * Walk every user turn from oldest to newest and collect ALL tour
+ * modifications. The builder applies them in order, so an "اضف جولة X في
+ * اليوم 3" from turn 2 and "اضف جولة Y في اليوم 5" from turn 4 both end up
+ * on the final program — without this, only the latest turn's mods would
+ * apply and earlier edits would be lost on every rebuild.
+ *
+ * The initial-build message (the one that describes the trip distribution)
+ * normally produces no tour mods because it lacks the swap/add/remove
+ * verbs, so it contributes nothing here.
+ */
+function collectTourModifications(messages: Array<{ role: string; content: unknown }>): TourModification[] {
+  const all: TourModification[] = [];
+  for (const m of messages) {
+    if (m.role !== "user") continue;
+    const text = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
+    const mods = parseTourModifications(text);
+    if (mods.length > 0) all.push(...mods);
+  }
+  return all;
+}
+
 export function parseTripRequest(
   messages: Array<{ role: string; content: unknown }>,
   cityDefs: CityDef[],
@@ -907,7 +929,11 @@ export function parseTripRequest(
     month: monthInfo.month,
     year: monthInfo.year,
     startDate: parseStartDate(text),
-    tourModifications: parseTourModifications(getLastUserMessage(messages)),
+    // Accumulate tour modifications from EVERY user turn — not just the
+    // latest — so multi-step edits stack. When the employee changes a day
+    // in Penang and then a day in KL, the KL turn needs to remember the
+    // Penang change or the builder rebuilds from scratch and drops it.
+    tourModifications: collectTourModifications(messages),
     hotelModifications: parseHotelModifications(getLastUserMessage(messages)),
   };
 }
