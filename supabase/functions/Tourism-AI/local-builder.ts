@@ -1014,11 +1014,16 @@ export function formatProgram(data: ProgramData): string {
     : "";
   const totalDays = days.length;
   const totalNights = totalDays - 1;
-  const monthLabel = request.month
-    ? `${request.month}${request.year ? " " + request.year : ""}`
-    : "";
   const startDate = days[0]?.date || resolveStartDate(request);
   const endDate = days[days.length - 1]?.date || startDate;
+  // Derive META's month from the resolved start date — when an explicit
+  // travel date is provided ("سفر 10 اغسطس"), that's the source of truth.
+  // Without this, an unrelated "في شهر يونيو" elsewhere in the message
+  // would override and surface "يونيو" in META while DATE_FROM correctly
+  // shows August, which reads as a bug to the employee.
+  const monthLabel = startDate
+    ? `${ARABIC_MONTHS_OUT[startDate.getMonth()]} ${startDate.getFullYear()}`
+    : (request.month ? `${request.month}${request.year ? " " + request.year : ""}` : "");
 
   let out = "";
 
