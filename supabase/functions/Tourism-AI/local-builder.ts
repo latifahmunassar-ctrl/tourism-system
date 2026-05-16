@@ -468,9 +468,17 @@ export function pickToursForCity(
     && !pinnedNames.has(t.name.trim().toLowerCase()),
   );
 
-  // Sort by the PAX-MATCHING variant price (cheapest first), then name.
-  // Tours always private → isShared = false.
+  // Sort: paid sightseeing tours BEFORE "يوم حر" rows, then by price asc,
+  // then name. A "يوم حر للاستجمام" row is a placeholder for an empty day —
+  // it should only fill a slot when there are no paid tours left, not beat
+  // a paying tour just because it's free. Without this, KL with 2 stay
+  // days and 3 candidates [تسوق=200, جنتنج=200, يوم حر=0] picked
+  // [يوم حر, تسوق] and dropped Genting entirely.
+  const isFreeDayPlaceholder = (t: TourRow) => /^يوم\s*(?:ال)?حر/iu.test((t.name || "").trim());
   cityTours.sort((a, b) => {
+    const af = isFreeDayPlaceholder(a) ? 1 : 0;
+    const bf = isFreeDayPlaceholder(b) ? 1 : 0;
+    if (af !== bf) return af - bf;
     const pa = pickTourVariantPrice(a, paxCount, false);
     const pb = pickTourVariantPrice(b, paxCount, false);
     if (pa !== pb) return pa - pb;
