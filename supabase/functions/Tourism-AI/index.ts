@@ -2412,6 +2412,68 @@ Deno.serve(async (req) => {
         }), { headers: CORS_HEADERS });
       }
 
+      // For swap/remove tour mods, look up the source tour's day in the
+      // previously-built program and stamp it onto the mod. The builder's
+      // dayOverrides path will then anchor the replacement to that same
+      // day — so two consecutive swaps on different days don't squash each
+      // other into the first-cheapest slot.
+      if (lastAssistantProgram && tripRequest.tourModifications.length > 0) {
+        const toursBlockMatch = lastAssistantProgram.match(/TOURS:\s*\n([\s\S]+?)(?=\n[A-Z_]+:|\Z)/);
+        if (toursBlockMatch) {
+          const dayByName = new Map<string, number>();
+          for (const line of toursBlockMatch[1].split("\n")) {
+            const parts = line.split("|").map(s => s.trim());
+            if (parts.length < 2) continue;
+            const dayMatch = parts[0].match(/(\d{1,2})/);
+            if (!dayMatch) continue;
+            const day = parseInt(dayMatch[1], 10);
+            const name = parts[1].toLowerCase();
+            if (name && !dayByName.has(name)) dayByName.set(name, day);
+          }
+          // Lightweight fuzzy lookup: substring keyword match against the
+          // mod's "from" name. Avoids pulling the full bigram matcher in here.
+          const findDayForName = (query: string): number | null => {
+            if (!query) return null;
+            const q = query.toLowerCase().trim();
+            if (!q) return null;
+            // Exact / substring match wins outright.
+            for (const [name, day] of dayByName) {
+              if (name.includes(q) || q.includes(name)) return day;
+            }
+            // Token overlap fallback — pick the BEST scoring row, not the
+            // first one that crosses a threshold. "جولة" / "جزيرة" appear
+            // in every Phuket day-tour name, so an early-return on "≥2
+            // hits" would always pick day 3 for any Phuket-tour query.
+            // Discriminative tokens like "جيمس بوند" or "بي بي" are what
+            // actually point to the right row.
+            const qTokens = q.split(/\s+/).filter(t => t.length >= 3);
+            if (qTokens.length === 0) return null;
+            let best: { day: number; score: number } | null = null;
+            for (const [name, day] of dayByName) {
+              const hits = qTokens.filter(t => name.includes(t)).length;
+              if (hits < 2) continue;
+              if (!best || hits > best.score) best = { day, score: hits };
+            }
+            return best ? best.day : null;
+          };
+          tripRequest.tourModifications = tripRequest.tourModifications.map(mod => {
+            if (mod.dayNumber) return mod;
+            if (mod.kind === "swap" && mod.from) {
+              // Prefer the source's day in the latest program. If that fails
+              // (the mod was applied in a prior turn, so `from` is already
+              // gone), fall back to the target's day — the slot the
+              // already-applied swap currently occupies.
+              const day = findDayForName(mod.from) ?? (mod.to ? findDayForName(mod.to) : null);
+              if (day) return { ...mod, dayNumber: day };
+            }
+            if (mod.kind === "remove" && mod.name) {
+              const day = findDayForName(mod.name);
+              if (day) return { ...mod, dayNumber: day };
+            }
+            return mod;
+          });
+        }
+      }
       // CASE B: full info present → build program locally
       if (canBuildLocally(tripRequest)) {
         try {

@@ -1620,7 +1620,18 @@ export async function buildLocalProgram(
         return { ok: false, chatMessage: `ما لقيت جولة "${mod.to}" في مدينة ${fromCity}. اختر بديل من جولات هالمدينة فقط، أو اكتب "غيّر جولة X الى جولة أخرى" لاختيار بديل تلقائياً.` };
       }
       cm.pinnedTours.push(toTour);
+      // Anchor the replacement to the same day the original tour was on,
+      // when index.ts was able to look it up from the previous program.
+      // Without this, two consecutive swaps on different days both land on
+      // the first cheapest stay slot and only the latest one is visible.
+      if (mod.dayNumber) dayOverrides.set(mod.dayNumber, toTour);
       appliedModifications.push({ kind: "swap", fromName: fromTour.name.trim(), toName: toTour.name.trim(), city: fromCity });
+    }
+    // Same treatment for remove-by-name: if we resolved a dayNumber from the
+    // previous program, make THAT day the free day rather than letting the
+    // freeDayCount push out whatever auto-pick happened to land last.
+    if (mod.kind === "remove" && mod.dayNumber) {
+      dayOverrides.set(mod.dayNumber, null);
     }
   }
 
@@ -1645,35 +1656,38 @@ export async function buildLocalProgram(
         freeDayCount: cityMod.freeDayCount,
       } : undefined,
     );
-    // Day-specific overrides win over the order-based auto pick. For each
-    // stay day: if there's an override for that day number, use it; else
-    // consume the next auto-picked tour. Tours that an override displaces
-    // are dropped (the override took their seat by explicit request).
+    // Day-specific overrides win over the order-based auto pick. Two-pass
+    // assignment so an override on a later day still consumes its tour
+    // FROM the pool — otherwise the same tour was being added twice (once
+    // by the auto loop reaching it first, then again by the override).
     //
     // Re-sort the auto pool so "يوم حر" tours fall to the END of the city's
-    // stay days (the employee's rule: a free day should be the LAST day in
-    // a city, never the arrival day). pickToursForCity sorts purely by
-    // price, so a zero-priced "يوم حر للاستجمام" beats a paid 200 ريال
-    // sightseeing tour for the first slot — flipping the order here makes
-    // sure paying tours are scheduled first.
+    // stay days (employee rule: free day must be the LAST day in a city,
+    // never the arrival day). pickToursForCity sorts purely by price, so
+    // a zero-priced "يوم حر للاستجمام" beats a paid sightseeing tour for
+    // the first slot — flipping the order here makes paying tours go first.
     const isFreeRow = (n: string) => /^يوم\s*(?:ال)?حر/iu.test((n || "").trim());
     const autoPool = [...selected].sort((a, b) => {
       const af = isFreeRow(a.name) ? 1 : 0;
       const bf = isFreeRow(b.name) ? 1 : 0;
-      if (af !== bf) return af - bf; // non-free first, free last
-      return 0;                       // otherwise preserve picker's order
+      if (af !== bf) return af - bf;
+      return 0;
     });
+    // Pass 1: reserve each pinned-day from autoPool so it can't be re-used.
+    for (const dayNum of stayDayNumbers) {
+      if (!dayOverrides.has(dayNum)) continue;
+      const override = dayOverrides.get(dayNum);
+      if (!override) continue;
+      const idx = autoPool.findIndex(t => t.name === override.name);
+      if (idx >= 0) autoPool.splice(idx, 1);
+    }
+    // Pass 2: assign in day order. Override-days get their pinned tour;
+    // override=null days stay empty (free); other days consume autoPool.
     for (const dayNum of stayDayNumbers) {
       if (dayOverrides.has(dayNum)) {
         const override = dayOverrides.get(dayNum);
-        if (override) {
-          selectedTours.push({ day: dayNum, city, tour: override });
-          // Remove ONE matching copy from the auto pool so we don't
-          // double-assign the same tour on another day.
-          const idx = autoPool.findIndex(t => t.name === override.name);
-          if (idx >= 0) autoPool.splice(idx, 1);
-        }
-        // override === null → leave the day empty (free day), don't push
+        if (override) selectedTours.push({ day: dayNum, city, tour: override });
+        // null → leave the day empty (free day)
       } else if (autoPool.length > 0) {
         selectedTours.push({ day: dayNum, city, tour: autoPool.shift()! });
       }
