@@ -999,14 +999,19 @@ if (extraBedCitiesLine && !extraBedLineHasAssignments(extractedExtraBed)) {
 const totalPersonStr = getLine(raw, 'TOTAL_PER_PERSON');
 const totalGroupLine = getLine(raw, 'TOTAL_GROUP');
 const totalPerson = parseInt(totalPersonStr.replace(/[^\d]/g,'')) || 0;
-const personsMatch = totalGroupLine.match(/(\d+)\s*[أا]شخاص/);
-const persons = parseInt(personsMatch?.[1]) || 2;
-// أطفال/رضّع (اختياري) — لا تُحتسب في تسعير الطيران كبالغين
+// In our builder format, "N أشخاص" in META / TOTAL_GROUP is the ADULT count
+// (e.g. "3 أشخاص + 1 طفل" = 3 adults + 1 child). The frontend used to
+// subtract kids from it to "derive" adults, which gave 2 — making the
+// employee think the kid wasn't billed on the flight. Treat the matched
+// number as adults directly; `persons` is the headcount including kids.
+const adultsMatch = totalGroupLine.match(/(\d+)\s*[أا]شخاص/);
+const adults = parseInt(adultsMatch?.[1]) || 2;
+// أطفال/رضّع (اختياري) — يُحتسبون في تسعير الطيران/القطار
 const kidsMatch = (meta + ' ' + client + ' ' + totalGroupLine).match(/(\d+)\s*(?:طفل|أطفال)/);
 const infantsMatch = (meta + ' ' + client + ' ' + totalGroupLine).match(/(\d+)\s*(?:رضيع|رضّع)/);
 const kids = parseInt(kidsMatch?.[1] || '0') || 0;
 const infants = parseInt(infantsMatch?.[1] || '0') || 0;
-const adults = Math.max(0, persons - kids - infants);
+const persons = adults + kids + infants;
 // إجمالي المجموعة من النص (قد يخطئ النموذج) — سنقارنه مع حسابنا الفعلي
 const totalGroupFromText = parseInt((totalGroupLine.split('|')[0]||'').replace(/[^\d]/g,'')) || 0;
 const hotelsLines = parseHotelLinesFromRaw(raw);
@@ -1055,9 +1060,13 @@ const parseCount = (s) => parseInt(arabicDigitsToLatin(String(s || '')).replace(
 let flightsTotal = flightsLines.reduce((s,l) => {
   const p=l.split('|').map(x=>x.trim());
   const per = parseMoney(p[2]);
+  // Trust the FLIGHTS row's pax label — the builder emits adults+kids+
+  // extras as the count, so multiplying by it gives the correct group
+  // flight cost. The legacy "if lineCount matches persons and kids
+  // exist, subtract to adults" trick was for an older format and now
+  // accidentally drops the child's seat.
   const lineCount = parseCount(p[3]) || adults || persons;
-  const pax = (lineCount === persons && (kids + infants) > 0) ? adults : lineCount;
-  const total = per * pax;
+  const total = per * lineCount;
   return s + (total || parseMoney(p[4]));
 }, 0);
 const xferTourMeta = { persons, adults, kids, infants };
@@ -1133,9 +1142,18 @@ const k1 = String(p[1] || '');
 const tc = k1.includes('قطار') ? 'badge-train' : (k1.includes('داخلي') ? 'badge-pickup' : 'badge-flight');
 const per = parseMoney(p[2]);
 const lineCount = parseCount(p[3]) || adults || persons;
-const pax = (lineCount === persons && (kids + infants) > 0) ? adults : lineCount;
+// Trust the row's pax — kids/extras are already included by the builder.
+const pax = lineCount;
 const total = per * pax;
-return `<tr><td><strong>${p[0]||''}</strong></td><td><span class="type-badge ${tc}">${p[1]||''}</span></td><td class="price-cell">${p[2]||''}</td><td>${pax} بالغ</td><td class="price-cell">${(total||parseMoney(p[4])).toLocaleString()} ريال</td></tr>`;
+// Label "N شخص" — flights count adults+children alike, so "بالغ"
+// (adult) was misleading when a kid was on the trip. Show explicit
+// breakdown when kids/infants are present so the employee can verify
+// the child's seat was billed.
+const paxNoun = pax === 1 ? 'شخص' : 'أشخاص';
+const breakdown = (kids + infants > 0 && pax === adults + kids + infants)
+  ? ` (${adults} بالغ${kids ? ` + ${kids} ${kids === 1 ? 'طفل' : 'أطفال'}` : ''}${infants ? ` + ${infants} رضيع` : ''})`
+  : '';
+return `<tr><td><strong>${p[0]||''}</strong></td><td><span class="type-badge ${tc}">${p[1]||''}</span></td><td class="price-cell">${p[2]||''}</td><td>${pax} ${paxNoun}${breakdown}</td><td class="price-cell">${(total||parseMoney(p[4])).toLocaleString()} ريال</td></tr>`;
 }).join('')}</tbody>
 </table></div>`;
 }
@@ -1207,7 +1225,7 @@ html += `
 ${summaryHTML}
 </div>
 <div class="group-card">
-<span class="group-label">💰 الإجمالي (${persons} أشخاص${kids ? ' + ' + kids + ' ' + (kids === 1 ? 'طفل' : 'أطفال') : ''})</span>
+<span class="group-label">💰 الإجمالي (${adults} ${adults === 1 ? 'شخص' : 'أشخاص'}${kids ? ' + ' + kids + ' ' + (kids === 1 ? 'طفل' : 'أطفال') : ''}${infants ? ' + ' + infants + ' رضيع' : ''})</span>
 <span class="group-val" id="totalGroupEl">${basePrice.toLocaleString()} ريال</span>
 </div>`;
 
@@ -1441,8 +1459,8 @@ const flightsTotal = flightsLines.reduce((s,l) => {
   const p=l.split('|').map(x=>x.trim());
   const per = parseMoney(p[2]);
   const lineCount = parseCount(p[3]) || adults || persons;
-  const pax = (lineCount === persons && (kids + infants) > 0) ? adults : lineCount;
-  const total = per * pax;
+  // Trust the row's pax — builder includes adults+kids+extras already.
+  const total = per * lineCount;
   return s + (total || parseMoney(p[4]));
 }, 0);
 const simTotal = simCountNum * SIM_CARD_UNIT_PRICE_SAR;
@@ -1743,9 +1761,12 @@ ${flightsLines.map(l => {
   const detailedLine = showDetailed ? (() => {
     const per = parseMoney(p[2]);
     const lineCount = parseCount(p[3]) || adults || persons;
-    const pax = (lineCount === persons && (kids + infants) > 0) ? adults : lineCount;
+    const pax = lineCount; // builder includes adults+kids+extras already
     const total = per * pax;
-    return `<div style="margin-top:6px;font-size:16px;font-weight:800;color:#0d1f4a;">${per.toLocaleString()} ريال/بالغ | ${pax} بالغ | الإجمالي: ${(total || parseMoney(p[4])).toLocaleString()} ريال</div>`;
+    const breakdown = (kids + infants > 0 && pax === adults + kids + infants)
+      ? ` (${adults} بالغ${kids ? ` + ${kids} ${kids === 1 ? 'طفل' : 'أطفال'}` : ''}${infants ? ` + ${infants} رضيع` : ''})`
+      : '';
+    return `<div style="margin-top:6px;font-size:16px;font-weight:800;color:#0d1f4a;">${per.toLocaleString()} ريال/شخص | ${pax} ${pax === 1 ? 'شخص' : 'أشخاص'}${breakdown} | الإجمالي: ${(total || parseMoney(p[4])).toLocaleString()} ريال</div>`;
   })() : '';
   return `
 <div style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;display:flex;align-items:center;gap:14px;">
@@ -1834,7 +1855,7 @@ ${logoHTML}
 <div class="pdf-dest-name">${dest}</div>
 ${citiesText ? `<div class="pdf-cities">📍 ${citiesText}</div>` : ''}
 <div class="pdf-date-price-row">
-${showTotalPrice ? `<div class="pdf-price-box"><div class="pdf-price-label">💰 السعر الإجمالي (${persons} أشخاص${kids ? ' + ' + kids + ' ' + (kids === 1 ? 'طفل' : 'أطفال') : ''})</div><div class="pdf-price-val">${fmtMoney(displayPrice)} ${displayCurrencyName}</div></div>` : ''}
+${showTotalPrice ? `<div class="pdf-price-box"><div class="pdf-price-label">💰 السعر الإجمالي (${adults} ${adults === 1 ? 'شخص' : 'أشخاص'}${kids ? ' + ' + kids + ' ' + (kids === 1 ? 'طفل' : 'أطفال') : ''}${infants ? ' + ' + infants + ' رضيع' : ''})</div><div class="pdf-price-val">${fmtMoney(displayPrice)} ${displayCurrencyName}</div></div>` : ''}
 <div class="pdf-dates-card"><div class="pdf-dates-label">📅 التاريخ</div><div class="pdf-dates">من ${dateFrom}<br>إلى ${dateTo}</div></div>
 </div>
 <div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:10px 14px;margin-bottom:10px;color:#fff;font-size:13px;font-weight:700;">
