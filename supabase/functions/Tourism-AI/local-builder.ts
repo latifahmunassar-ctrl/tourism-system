@@ -1392,12 +1392,26 @@ export async function buildLocalProgram(
     const excludeForThisStay = hotelExcludesByStay[`${stay.city}#${stayIdx}`];
     const overrideForThisStay = hotelOverrideOccupancyByStay[`${stay.city}#${stayIdx}`];
     const overrideStarsForThisStay = hotelOverrideStarsByStay[`${stay.city}#${stayIdx}`];
-    const hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
-      excludeNames: excludeForThisStay,
-      overrideAdults: overrideForThisStay,
-      overrideStars: overrideStarsForThisStay,
-      areaFilter: stay.area,
-    });
+    // Pin slots NOT modded this turn to the hotel they had in the last
+    // program. Without this, a follow-up swap rebuilds from scratch and
+    // pickCheapestHotel reverts every untouched slot to the catalog's
+    // cheapest — undoing earlier turns' swaps. The `last` name is the
+    // hotel that was in the immediately-prior program for this slot.
+    const hasModForThisStay =
+      !!excludeForThisStay || overrideForThisStay != null || overrideStarsForThisStay != null;
+    const lastForThisStay = hotelHistoryByCity?.[stay.city]?.[stayIdx]?.last || null;
+    let hotel: HotelRow | null = null;
+    if (lastForThisStay && !hasModForThisStay) {
+      hotel = allHotels.find(h => h.name.trim() === lastForThisStay) || null;
+    }
+    if (!hotel) {
+      hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
+        excludeNames: excludeForThisStay,
+        overrideAdults: overrideForThisStay,
+        overrideStars: overrideStarsForThisStay,
+        areaFilter: stay.area,
+      });
+    }
     if (!hotel) {
       // Special case: explicit occupancy override that found no match. Don't
       // dress this up as a "no hotel for the group" diag — name the override.
