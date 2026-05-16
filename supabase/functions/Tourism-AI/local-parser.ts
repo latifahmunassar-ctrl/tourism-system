@@ -499,7 +499,7 @@ function parseStartDate(text: string): string | null {
   // The month capture uses a non-whitespace class instead of \w because \w
   // is ASCII-only in JS — Arabic month names like "ديسمبر" would otherwise
   // fail to capture and the start date would silently fall back to next month.
-  const m = t.match(/(?:السفر|ابدأ|ابدا|من|تاريخ|date)\s*(?:يوم\s*)?(\d{1,2})[\s/-]*(?:شهر\s*)?([^\s/\-،,]+)?\s*(\d{4})?/i);
+  const m = t.match(/(?:السفر|سفر|ابدأ|ابدا|من|تاريخ|date)\s*(?:يوم\s*)?(\d{1,2})[\s/-]*(?:شهر\s*)?([^\s/\-،,]+)?\s*(\d{4})?/i);
   if (m) {
     const day = parseInt(m[1], 10);
     let monthNum: number | null = null;
