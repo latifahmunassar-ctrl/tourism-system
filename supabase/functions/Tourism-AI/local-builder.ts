@@ -1616,7 +1616,20 @@ export async function buildLocalProgram(
     // stay day: if there's an override for that day number, use it; else
     // consume the next auto-picked tour. Tours that an override displaces
     // are dropped (the override took their seat by explicit request).
-    const autoPool = [...selected];
+    //
+    // Re-sort the auto pool so "يوم حر" tours fall to the END of the city's
+    // stay days (the employee's rule: a free day should be the LAST day in
+    // a city, never the arrival day). pickToursForCity sorts purely by
+    // price, so a zero-priced "يوم حر للاستجمام" beats a paid 200 ريال
+    // sightseeing tour for the first slot — flipping the order here makes
+    // sure paying tours are scheduled first.
+    const isFreeRow = (n: string) => /^يوم\s*(?:ال)?حر/iu.test((n || "").trim());
+    const autoPool = [...selected].sort((a, b) => {
+      const af = isFreeRow(a.name) ? 1 : 0;
+      const bf = isFreeRow(b.name) ? 1 : 0;
+      if (af !== bf) return af - bf; // non-free first, free last
+      return 0;                       // otherwise preserve picker's order
+    });
     for (const dayNum of stayDayNumbers) {
       if (dayOverrides.has(dayNum)) {
         const override = dayOverrides.get(dayNum);
