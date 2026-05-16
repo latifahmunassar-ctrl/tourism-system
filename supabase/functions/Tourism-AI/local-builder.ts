@@ -753,7 +753,12 @@ export function findInterCityTransfer(
   const fromDrop = allTours.filter(tr => {
     if (tr.type !== destination) return false;
     const n = tr.name;
-    if (/استقبال|الاستقبال|pickup/iu.test(n)) return false;                                // (b)
+    // (b) Reject pure arrival-pickup rows. A row that STARTS with "الاستقبال"
+    // is an arrival ride; a row like "التوجه الى المطار في كرابي ... والاستقبال
+    // هناك والتوصيل للفندق" mentions الاستقبال mid-sentence but is actually a
+    // combined drop+pickup transfer (begins with التوجه, a drop verb). Anchor
+    // the check to the start of the trimmed name so combined rows aren't lost.
+    if (/^\s*(?:الاستقبال|استقبال|pickup)(?=\s|$)/iu.test(n)) return false;                  // (b)
     // (a) Outbound transfer verb. Includes العوده/العودة (Sapa return).
     if (!/توديع|التوديع|التوجه|التوجة|توج[ةه]|الذهاب|العوده|العودة|للعوده|للعودة|توصيل|التوصيل|الخروج|drop/iu.test(n)) return false;
 
