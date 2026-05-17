@@ -713,6 +713,69 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify(data, null, 2), { headers: CORS_HEADERS });
   }
 
+  // ?dump_suggestions=TAB → dump the raw "اقتراحات توزيع مدن" column for that
+  // tab so we can see why extraction returned 0 rows. Reports the detected
+  // header position + every non-empty cell below it.
+  const dumpSuggTab = new URL(req.url).searchParams.get("dump_suggestions");
+  if (dumpSuggTab) {
+    try {
+      const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
+      const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
+      const tk = await getGoogleAccessToken(sa);
+      const quotedTab = /[\s'"]/.test(dumpSuggTab) ? `'${dumpSuggTab.replace(/'/g, "''")}'` : dumpSuggTab;
+      const rows = await readSheetRange(tk, ssid, `${quotedTab}!A1:AZ500`);
+      let colIdx = -1, headerRow = -1, headerText = "";
+      for (let i = 0; i < Math.min(rows.length, 10); i++) {
+        for (let j = 0; j < (rows[i] || []).length; j++) {
+          const cell = (rows[i][j] || "").trim();
+          if (/اقتراحات/.test(cell) && /(?:توزيع|مدن)/.test(cell)) {
+            colIdx = j; headerRow = i; headerText = cell;
+            break;
+          }
+        }
+        if (colIdx >= 0) break;
+      }
+      // Also dump column AL (index 37) regardless of header detection
+      const colALCells: Array<{ row: number; text: string }> = [];
+      for (let i = 0; i < Math.min(rows.length, 20); i++) {
+        const cell = (rows[i]?.[37] || "").trim();
+        if (cell) colALCells.push({ row: i, text: cell });
+      }
+      // And dump headers in row 0 to see all column labels
+      const row0Headers: Array<{ col: number; text: string }> = [];
+      for (let j = 0; j < (rows[0] || []).length; j++) {
+        const cell = (rows[0][j] || "").trim();
+        if (cell) row0Headers.push({ col: j, text: cell });
+      }
+      // Scan ALL rows up to 30 across ALL columns for any cell containing "اقتراحات"
+      const matchesAnywhere: Array<{ row: number; col: number; text: string }> = [];
+      for (let i = 0; i < Math.min(rows.length, 30); i++) {
+        for (let j = 0; j < (rows[i] || []).length; j++) {
+          const cell = (rows[i][j] || "").trim();
+          if (/اقتراحات/.test(cell)) {
+            matchesAnywhere.push({ row: i, col: j, text: cell.slice(0, 100) });
+          }
+        }
+      }
+      const cells: Array<{ row: number; text: string }> = [];
+      if (colIdx >= 0) {
+        for (let i = headerRow + 1; i < rows.length; i++) {
+          const cell = (rows[i][colIdx] || "").trim();
+          if (cell) cells.push({ row: i, text: cell });
+        }
+      }
+      return new Response(JSON.stringify({
+        tab: dumpSuggTab, headerRow, colIdx, headerText, cellCount: cells.length, cells,
+        extracted: colIdx >= 0 ? extractSuggestions(rows, dumpSuggTab) : [],
+        colAL_first20: colALCells,
+        row0Headers,
+        matchesAnywhere,
+      }, null, 2), { headers: CORS_HEADERS });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: CORS_HEADERS });
+    }
+  }
+
   // ?list_tabs=1 → return all tab names in the Google Spreadsheet (debug)
   if (new URL(req.url).searchParams.get("list_tabs") === "1") {
     try {
@@ -831,7 +894,7 @@ Deno.serve(async (req) => {
           if (error) debugInfo?.rejects.push(`[${tab}] suggestions insert: ${error.message}`);
         }
 
-        details[tab] = { hotels: hotels.length, tours: tours.length, flights: flights.length, trains: trains.length };
+        details[tab] = { hotels: hotels.length, tours: tours.length, flights: flights.length, trains: trains.length, suggestions: suggestions.length };
         totalHotels  += hotels.length;
         totalTours   += tours.length;
         totalFlights += flights.length;

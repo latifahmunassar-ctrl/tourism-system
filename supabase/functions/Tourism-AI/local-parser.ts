@@ -317,7 +317,20 @@ function parseStars(text: string): number[] | null {
       new RegExp(`${HOTEL_MOD_VERBS}\\s+(?:لي\\s+)?[^\\n]*?(?:الى|إلى|الي|ل[ـ]?|لـ)\\s+(?:ال)?فندق[^\\n]*?\\d\\s*(?:نجوم|نجمة|stars?)`, "giu"),
       " ",
     );
-  const t = arabicDigitsToLatin(cleaned);
+  // Convert Arabic word cardinals (واحد..خمس) to digits so phrases like
+  // "اربع نجوم" / "خمس نجوم" match the digit-based patterns below. Without
+  // this, parseStars returns null and the trip falls back to ANY stars,
+  // which usually surfaces the cheapest available rating (often 5★) — the
+  // opposite of what the employee asked for when they wrote "اربع نجوم".
+  const WORD_TO_DIGIT: Array<[RegExp, string]> = [
+    [/خمس(?:[ةه])?(?=\s+نجوم|\s+نجمة)/giu, "5"],
+    [/[أا]ربع(?:[ةه])?(?=\s+نجوم|\s+نجمة)/giu, "4"],
+    [/ثلاث(?:[ةه])?(?=\s+نجوم|\s+نجمة)/giu, "3"],
+    [/(?:اثن(?:ان|ين)|نجمتين)(?=\s+نجوم|\s+نجمة|$)/giu, "2"],
+    [/واحد(?:[ةه])?(?=\s+نجوم|\s+نجمة)/giu, "1"],
+  ];
+  let t = arabicDigitsToLatin(cleaned);
+  for (const [pat, digit] of WORD_TO_DIGIT) t = t.replace(pat, digit);
   // "4 أو 5 نجوم" / "4 و 5 نجوم"
   const range = t.match(/(\d)\s*(?:أو|او|و|or)\s*(\d)\s*(?:نجوم|نجمة|stars?|★)/i);
   if (range) {
