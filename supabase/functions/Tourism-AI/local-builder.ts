@@ -1240,6 +1240,12 @@ export async function buildLocalProgram(
    * a "Hanoi → Sapa → Hanoi" trip swap just one of the Hanoi hotels.
    */
   hotelHistoryByCity?: Record<string, Array<{ all: Set<string>; last: string | null }>>,
+  /**
+   * Tours that appear in the immediately-prior program (any day, any city).
+   * When the employee swaps to "أخرى/اخرى", the picker must exclude these so
+   * it doesn't snatch a tour from a non-modded day, leaving that day empty.
+   */
+  previouslyScheduledTourNames?: Set<string>,
 ): Promise<BuildResult> {
   if (!canBuildLocally(request)) {
     return { ok: false, chatMessage: "البيانات ناقصة، لم أستطع البناء محلّياً." };
@@ -1623,6 +1629,14 @@ export async function buildLocalProgram(
       if (isAnyAlternative) {
         const excludeForPick = new Set<string>(cm.excludeNames);
         for (const p of cm.pinnedTours) excludeForPick.add(p.name.trim().toLowerCase());
+        // Also exclude every tour currently in the previous program. Without
+        // this, "اخرى" can pick a tour that's already on a non-modded day —
+        // the builder pins it to the swap day, leaving the original day to
+        // be auto-filled with whatever's cheapest. Net result: a non-modded
+        // day gets clobbered and the employee sees the swap "undo" itself.
+        if (previouslyScheduledTourNames) {
+          for (const n of previouslyScheduledTourNames) excludeForPick.add(n.toLowerCase());
+        }
         const candidates = allTours.filter(t =>
           !isTransferTour(t.name) &&
           tourBelongsToCity(t, cityDefs, fromCity) &&

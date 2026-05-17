@@ -2418,10 +2418,23 @@ Deno.serve(async (req) => {
       // day — so two consecutive swaps on different days don't squash each
       // other into the first-cheapest slot.
       if (lastAssistantProgram && tripRequest.tourModifications.length > 0) {
-        const toursBlockMatch = lastAssistantProgram.match(/TOURS:\s*\n([\s\S]+?)(?=\n[A-Z_]+:|\Z)/);
-        if (toursBlockMatch) {
-          const dayByName = new Map<string, number>();
-          for (const line of toursBlockMatch[1].split("\n")) {
+        // Build dayByName from EVERY prior assistant program, not just the
+        // latest. When a swap was applied in turn 2, its source tour is gone
+        // from turn 2's program — but it still exists in turn 1's program at
+        // its original day. First-occurrence-wins so each tour name maps to
+        // the EARLIEST day it appeared on, which is its true "home" day.
+        const dayByName = new Map<string, number>();
+        const priorPrograms: string[] = [];
+        for (const msg of messages) {
+          if (msg.role === "assistant" && typeof msg.content === "string"
+              && /\bTOURS:/.test(msg.content)) {
+            priorPrograms.push(msg.content);
+          }
+        }
+        for (const program of priorPrograms) {
+          const tm = program.match(/TOURS:\s*\n([\s\S]+?)(?=\n[A-Z_]+:|\Z)/);
+          if (!tm) continue;
+          for (const line of tm[1].split("\n")) {
             const parts = line.split("|").map(s => s.trim());
             if (parts.length < 2) continue;
             const dayMatch = parts[0].match(/(\d{1,2})/);
@@ -2430,6 +2443,8 @@ Deno.serve(async (req) => {
             const name = parts[1].toLowerCase();
             if (name && !dayByName.has(name)) dayByName.set(name, day);
           }
+        }
+        if (dayByName.size > 0) {
           // Lightweight fuzzy lookup: substring keyword match against the
           // mod's "from" name. Avoids pulling the full bigram matcher in here.
           const findDayForName = (query: string): number | null => {
@@ -2456,15 +2471,58 @@ Deno.serve(async (req) => {
             }
             return best ? best.day : null;
           };
+          // Also build a day→name map from the LATEST program. We use this
+          // separately to freeze "أخرى" placeholder mods to whatever tour
+          // they resolved to in the prior turn — otherwise the placeholder
+          // picks a *new* tour each rebuild and mod1's effect drifts.
+          const latestDayToName = new Map<number, string>();
+          {
+            const tm = lastAssistantProgram.match(/TOURS:\s*\n([\s\S]+?)(?=\n[A-Z_]+:|\Z)/);
+            if (tm) {
+              for (const line of tm[1].split("\n")) {
+                const parts = line.split("|").map(s => s.trim());
+                if (parts.length < 2) continue;
+                const dm = parts[0].match(/(\d{1,2})/);
+                if (dm && parts[1]) latestDayToName.set(parseInt(dm[1], 10), parts[1]);
+              }
+            }
+          }
+          const isAnyAlternative = (s: string) =>
+            /^(?:[أا]خر[ىي][هة]?|ثاني[هة]?|بديل[هة]?|اي\s*جول[هة]?|أي\s*جول[هة]?|other|another|any)$/iu
+              .test((s || "").trim());
+
           tripRequest.tourModifications = tripRequest.tourModifications.map(mod => {
             if (mod.dayNumber) return mod;
             if (mod.kind === "swap" && mod.from) {
-              // Prefer the source's day in the latest program. If that fails
-              // (the mod was applied in a prior turn, so `from` is already
-              // gone), fall back to the target's day — the slot the
-              // already-applied swap currently occupies.
+              // Prefer the source's day across all prior programs (first
+              // occurrence is the true home). If that fails — the mod's
+              // target name might be a placeholder like "أخرى" — fall back
+              // to the target's day in the latest program.
               const day = findDayForName(mod.from) ?? (mod.to ? findDayForName(mod.to) : null);
-              if (day) return { ...mod, dayNumber: day };
+              if (day) {
+                // If this is an "أخرى" mod that's already been applied in
+                // a prior turn, freeze its target to whatever tour actually
+                // landed on that day. Without this, every rebuild picks a
+                // new "cheapest unused" and the swap appears to flip-flop.
+                let frozen = mod;
+                if (isAnyAlternative(mod.to)) {
+                  const currentOnDay = latestDayToName.get(day);
+                  // If day's current tour is NOT the source tour, that's
+                  // last turn's "أخرى" pick — pin it now. Use substring
+                  // containment because the user types a short fragment
+                  // ("المرجان") but the program stores the full row name
+                  // ("جولة بوكيت جزيرة المرجان (...)"); exact equality
+                  // would always read as "different" and re-freeze to the
+                  // source, producing a no-op swap.
+                  if (currentOnDay) {
+                    const cur = currentOnDay.toLowerCase();
+                    const src = mod.from.toLowerCase();
+                    const sameAsSource = cur.includes(src) || src.includes(cur);
+                    if (!sameAsSource) frozen = { ...mod, to: currentOnDay };
+                  }
+                }
+                return { ...frozen, dayNumber: day };
+              }
             }
             if (mod.kind === "remove" && mod.name) {
               const day = findDayForName(mod.name);
@@ -2497,6 +2555,20 @@ Deno.serve(async (req) => {
             },
             cityArabicNames,
             collectHotelHistoryByCity(messages, cityDefs),
+            // Set of tour names in the latest program — fed to buildLocalProgram
+            // so the "أخرى" swap target excludes tours that are already on
+            // another day. Without this, a swap can clobber a non-modded day.
+            (() => {
+              if (!lastAssistantProgram) return undefined;
+              const m = lastAssistantProgram.match(/TOURS:\s*\n([\s\S]+?)(?=\n[A-Z_]+:|\Z)/);
+              if (!m) return undefined;
+              const names = new Set<string>();
+              for (const line of m[1].split("\n")) {
+                const parts = line.split("|").map(s => s.trim());
+                if (parts.length >= 2 && parts[1]) names.add(parts[1].toLowerCase());
+              }
+              return names;
+            })(),
           );
           if (result.ok) {
             // If this rebuild was triggered by a transport-only follow-up,
