@@ -741,22 +741,54 @@ Deno.serve(async (req) => {
         const cell = (rows[i]?.[37] || "").trim();
         if (cell) colALCells.push({ row: i, text: cell });
       }
+      // And column BA (index 52) — user said the Malaysia data is here
+      const colBACells: Array<{ row: number; text: string }> = [];
+      for (let i = 0; i < Math.min(rows.length, 30); i++) {
+        const cell = (rows[i]?.[52] || "").trim();
+        if (cell) colBACells.push({ row: i, text: cell });
+      }
+      // Dump the LAST few populated columns so we can see where the data
+      // actually lives even when the user can't identify the right letter.
+      const tailColumns: Record<string, Array<{ row: number; text: string }>> = {};
+      const colsToDump = [44, 45, 46, 47, 48, 49, 50, 51, 52, 53];
+      for (const c of colsToDump) {
+        const arr: Array<{ row: number; text: string }> = [];
+        for (let i = 0; i < rows.length; i++) {
+          const cell = (rows[i]?.[c] || "").trim();
+          if (cell) arr.push({ row: i, text: cell.slice(0, 200) });
+        }
+        if (arr.length > 0) tailColumns[`col_${c}`] = arr;
+      }
       // And dump headers in row 0 to see all column labels
       const row0Headers: Array<{ col: number; text: string }> = [];
       for (let j = 0; j < (rows[0] || []).length; j++) {
         const cell = (rows[0][j] || "").trim();
         if (cell) row0Headers.push({ col: j, text: cell });
       }
-      // Scan ALL rows up to 30 across ALL columns for any cell containing "اقتراحات"
+      // Scan ALL rows × all columns for any cell containing "اقتراحات"
       const matchesAnywhere: Array<{ row: number; col: number; text: string }> = [];
-      for (let i = 0; i < Math.min(rows.length, 30); i++) {
+      for (let i = 0; i < rows.length; i++) {
         for (let j = 0; j < (rows[i] || []).length; j++) {
           const cell = (rows[i][j] || "").trim();
           if (/اقتراحات/.test(cell)) {
-            matchesAnywhere.push({ row: i, col: j, text: cell.slice(0, 100) });
+            matchesAnywhere.push({ row: i, col: j, text: cell.slice(0, 120) });
           }
         }
       }
+      // Also: total non-empty cells per column to find where data actually lives
+      const colCounts = new Map<number, number>();
+      let maxCol = 0;
+      for (const row of rows) {
+        if (!row) continue;
+        if (row.length > maxCol) maxCol = row.length;
+        for (let j = 0; j < row.length; j++) {
+          if ((row[j] || "").trim()) colCounts.set(j, (colCounts.get(j) || 0) + 1);
+        }
+      }
+      const colSummary: Array<{ col: number; count: number }> = [];
+      for (const [c, n] of colCounts) colSummary.push({ col: c, count: n });
+      colSummary.sort((a, b) => a.col - b.col);
+      const totalRows = rows.length;
       const cells: Array<{ row: number; text: string }> = [];
       if (colIdx >= 0) {
         for (let i = headerRow + 1; i < rows.length; i++) {
@@ -768,12 +800,62 @@ Deno.serve(async (req) => {
         tab: dumpSuggTab, headerRow, colIdx, headerText, cellCount: cells.length, cells,
         extracted: colIdx >= 0 ? extractSuggestions(rows, dumpSuggTab) : [],
         colAL_first20: colALCells,
+        colBA_first30: colBACells,
         row0Headers,
         matchesAnywhere,
+        totalRowsRead: totalRows,
+        nonEmptyColumns: colSummary,
+        tailColumns,
       }, null, 2), { headers: CORS_HEADERS });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: CORS_HEADERS });
     }
+  }
+
+  // ?seed_malaysia=1 → seed Malaysia package_suggestions directly (bypass sheet)
+  // Used as a one-shot when the employee can't get the suggestions column to
+  // sync via Google Sheets (hidden columns, mode issues, etc.). Replaces all
+  // Malaysia rows with the hard-coded set below. KL ↔ KL airport scope for all.
+  if (new URL(req.url).searchParams.get("seed_malaysia") === "1") {
+    const malaysia: Array<{ days: number; label: string | null; distribution: string }> = [
+      { days: 6,  label: null,        distribution: "5 كوالالمبور" },
+      { days: 7,  label: null,        distribution: "2 سيلانجور + 2 لانكاوي + 2 كوالالمبور" },
+      { days: 8,  label: null,        distribution: "2 سيلانجور + 3 لانكاوي + 2 كوالالمبور" },
+      { days: 9,  label: null,        distribution: "2 سيلانجور + 2 لانكاوي + 2 بينانج + 2 كوالالمبور" },
+      { days: 10, label: null,        distribution: "2 سيلانجور + 3 لانكاوي + 2 بينانج + 2 كوالالمبور" },
+      { days: 10, label: "الأرخص",    distribution: "2 سيلانجور + 3 لانكاوي + 4 كوالالمبور" },
+      { days: 11, label: null,        distribution: "2 سيلانجور + 3 لانكاوي + 2 بينانج + 3 كوالالمبور" },
+      { days: 12, label: null,        distribution: "2 سيلانجور + 3 لانكاوي + 3 بينانج + 3 كوالالمبور" },
+      { days: 13, label: null,        distribution: "2 سيلانجور + 3 لانكاوي + 3 بينانج + 4 كوالالمبور" },
+      { days: 14, label: null,        distribution: "2 سيلانجور + 4 لانكاوي + 3 بينانج + 4 كوالالمبور" },
+      { days: 15, label: null,        distribution: "2 سيلانجور + 4 لانكاوي + 4 بينانج + 4 كوالالمبور" },
+      { days: 15, label: "مع كاميرون هايلاند", distribution: "2 سيلانجور + 3 لانكاوي + 3 بينانج + 2 كاميرون هايلاند + 4 كوالالمبور" },
+      { days: 16, label: null,        distribution: "2 سيلانجور + 4 لانكاوي + 3 بينانج + 2 كاميرون هايلاند + 4 كوالالمبور" },
+    ];
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    await supabaseAdmin.from("package_suggestions").delete().eq("destination", "Malaysia");
+    const rows = malaysia.map(s => ({
+      destination: "Malaysia",
+      arrival_airport: "Kuala Lumpur",
+      departure_airport: "Kuala Lumpur",
+      days: s.days,
+      label: s.label,
+      distribution: s.distribution,
+    }));
+    const { error } = await supabaseAdmin.from("package_suggestions").insert(rows);
+    return new Response(JSON.stringify({
+      ok: !error, error: error?.message || null, inserted: rows.length,
+    }, null, 2), { headers: CORS_HEADERS });
+  }
+
+  // ?which_sheet=1 → report which spreadsheet ID the function is reading from
+  if (new URL(req.url).searchParams.get("which_sheet") === "1") {
+    return new Response(JSON.stringify({
+      spreadsheetId: Deno.env.get("GOOGLE_SPREADSHEET_ID") || null,
+    }, null, 2), { headers: CORS_HEADERS });
   }
 
   // ?list_tabs=1 → return all tab names in the Google Spreadsheet (debug)
@@ -783,10 +865,13 @@ Deno.serve(async (req) => {
       const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
       const tk = await getGoogleAccessToken(sa);
       const meta = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${ssid}?fields=sheets.properties.title`,
+        `https://sheets.googleapis.com/v4/spreadsheets/${ssid}?fields=sheets.properties`,
         { headers: { Authorization: `Bearer ${tk}` } }
       ).then(r => r.json());
-      const tabs = (meta.sheets || []).map((s: { properties: { title: string } }) => s.properties.title);
+      const tabs = (meta.sheets || []).map((s: { properties: { title: string; sheetId: number } }) => ({
+        title: s.properties.title,
+        gid: s.properties.sheetId,
+      }));
       return new Response(JSON.stringify({ tabs, count: tabs.length }, null, 2), { headers: CORS_HEADERS });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: CORS_HEADERS });
