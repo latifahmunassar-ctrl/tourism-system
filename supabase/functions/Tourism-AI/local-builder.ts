@@ -1145,12 +1145,26 @@ export function formatProgram(data: ProgramData): string {
       text: `اليوم ${tt.day} | ${tt.tour.name.trim()} | ${tourType} | ${formatNumber(price)} ريال`,
     };
   });
+  // Emit a placeholder line for every day not covered by a tour or transfer.
+  // Without this, days the builder couldn't fill (stay-day deficits) AND
+  // road-transit days that have no transfer row in the sheet (e.g. Sarajevo→
+  // Mostar by car) silently drop out of TOURS. The employee then can't see
+  // or edit them in the review screen even though they're real days of the
+  // trip. Transit days get a clearer "تنقّل" label so the customer knows
+  // it's a road day, not a true rest day.
+  const transferDays = new Set(transfers.map(t => t.day));
   for (const d of days) {
-    if (d.type !== "stay") continue;       // arrival/transit/departure handled by TRANSFERS
-    if (tourDays.has(d.number)) continue;  // already has a scheduled tour
+    if (tourDays.has(d.number)) continue;
+    if (transferDays.has(d.number)) continue;
+    let label = "يوم حر — استرخاء في الفندق";
+    if (d.type === "transit" && d.fromCity && d.toCity) {
+      const from = cityArabicNames[d.fromCity] || d.fromCity;
+      const to = cityArabicNames[d.toCity] || d.toCity;
+      label = `يوم تنقّل من ${from} الى ${to}`;
+    }
     tourLines.push({
       day: d.number,
-      text: `اليوم ${d.number} | يوم حر — استرخاء في الفندق | حر | 0 ريال`,
+      text: `اليوم ${d.number} | ${label} | حر | 0 ريال`,
     });
   }
   tourLines.sort((a, b) => a.day - b.day);
