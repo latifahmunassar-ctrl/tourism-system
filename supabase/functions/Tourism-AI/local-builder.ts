@@ -760,7 +760,7 @@ export function findInterCityTransfer(
     // the check to the start of the trimmed name so combined rows aren't lost.
     if (/^\s*(?:الاستقبال|استقبال|pickup)(?=\s|$)/iu.test(n)) return false;                  // (b)
     // (a) Outbound transfer verb. Includes العوده/العودة (Sapa return).
-    if (!/توديع|التوديع|التوجه|التوجة|توج[ةه]|الذهاب|العوده|العودة|للعوده|للعودة|توصيل|التوصيل|الخروج|drop/iu.test(n)) return false;
+    if (!/توديع|التوديع|التوجه|التوجة|توج[ةه]|الذهاب|العوده|العودة|للعوده|للعودة|توصيل|التوصيل|الخروج|النقل|نقل|الانتقال|انتقال|drop/iu.test(n)) return false;
 
     const rowFrom = rowFromCity(n);                                                         // (c)
     if (!rowFrom) return false;
