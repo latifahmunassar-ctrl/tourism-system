@@ -72,7 +72,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Ho Chi Minh", pattern: /هوتشي(?:\s*م[يى]?[نه][هة]?)?|هوتشمي|هو\s*تشي(?:\s*م[يى]?[نه][هة]?)?|ho\s*chi(?:\s*minh)?|hochi(?:\s*minh)?|saigon|سايغون|سايجون/i },
   ],
   Malaysia: [
-    { canonical: "Kuala Lumpur",     pattern: /كوالا\s*ل{0,3}\s*مبور|كولا\s*ل{0,3}\s*مبور|kuala\s*lumpur|\bKL\b/i },
+    { canonical: "Kuala Lumpur",     pattern: /كوالا\s*ل{0,3}\s*مبور?|كولا\s*ل{0,3}\s*مبور?|kuala\s*lumpur|\bKL\b/i },
     { canonical: "Selangor",         pattern: /سيلان[جغ]ور|سلان[جغ]ور|selangor|sunway|مدينة\s*ال[أا]لعاب/i },
     { canonical: "Langkawi",         pattern: /لان?كاوي|langkawi/i },
     { canonical: "Penang",           pattern: /بينان[جغ]|بنان[جغ]|penang/i },
@@ -935,7 +935,7 @@ async function buildDataContext(
       // Selangor first — أكثر تخصيصاً (Sunway و مدينة الألعاب السنوية ومعامل العسل
       // كلها في Selangor، وليست في KL رغم القرب الجغرافي)
       [/سيلانجور|سيلانغور|selangor|sunway|السنویة|السنوية|مدینة الالعاب|مدينة الألعاب|معامل العسل|معامل القهوة|معامل الشكلاته|معامل الشكلاتة|معامل الجلود|petaling|بيتالينج|دامانسارا|damansara|monk kiara|مونت كيارا|شاه عالم|شاه علم|shah alam/i, "Selangor"],
-      [/كوالالمبور|كوالا\s*لمبور|kuala\s*lumpur|kualalumpur|\bKL\b|البرجين|منارة كوالالمبور|petronas|بترونس/i, "Kuala Lumpur"],
+      [/كوالا\s*ل{0,3}\s*مبور?|كولا\s*ل{0,3}\s*مبور?|kuala\s*lumpur|kualalumpur|\bKL\b|البرجين|منارة كوالالمبور|petronas|بترونس/i, "Kuala Lumpur"],
       [/لانكاوي|langkawi/i,                              "Langkawi"],
       [/بينانج|بينانغ|بنانغ|penang/i,                    "Penang"],
       [/كاميرون|cameron|هايلاند|highlands|مرتفعات الكامیرون|مرتفعات الكاميرون|جبال الشاي/i, "Cameron Highlands"],
