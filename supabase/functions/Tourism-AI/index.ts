@@ -2397,12 +2397,33 @@ Deno.serve(async (req) => {
         }
         const cityList = cityDefs.map(c => cityArabicNames[c.canonical] || c.canonical).join("، ");
         const targetNights = tripRequest.daysTotal ? tripRequest.daysTotal - 1 : "[عدد الليالي]";
-        const localQuestion = `CHAT:تمام! المدن المتاحة في ${destAr[detectedDest] || detectedDest}: ${cityList}. ` +
-          `عشان أبني البرنامج بمكالمة واحدة (بأقل تكلفة)، أعطني في رد واحد:\n` +
-          `1) كم ليلة لكل مدينة؟ (مجموع الليالي = ${targetNights})\n` +
-          `2) كم شريحة هاتف؟ (50 ريال للشريحة، أو "بدون")\n` +
-          `3) سرير إضافي؟ ("نعم لكل الفنادق" / "نعم لـ [مدينة]" / "بدون")\n` +
-          `4) التنقل: خاصة أم مشتركة؟`;
+        // Transport-only mode: skip the SIM / extra-bed questions (no hotels,
+        // so no bed scope; sim is optional). Also if the only missing field
+        // is the adult count, ask just for that — listing 4 things confuses
+        // the employee when the distribution they gave is already in the
+        // message.
+        const sumNights = Object.values(tripRequest.nightsByCity).reduce((s, n) => s + n, 0);
+        const distributionGood =
+          tripRequest.daysTotal && sumNights === tripRequest.daysTotal - 1;
+        let localQuestion: string;
+        if (tripRequest.transportOnly && distributionGood && !tripRequest.adults) {
+          localQuestion = `CHAT:كم شخص في الرحلة؟ مثلاً "2 شخص" أو "4 افراد".`;
+        } else if (tripRequest.transportOnly) {
+          // Transport-only: only ask about distribution + adults + transport.
+          // No sim/extra-bed questions (no hotels in this mode).
+          const parts: string[] = [];
+          if (!distributionGood) parts.push(`1) كم ليلة لكل مدينة؟ (مجموع الليالي = ${targetNights})`);
+          if (!tripRequest.adults) parts.push(`${parts.length + 1}) كم شخص؟`);
+          parts.push(`${parts.length + 1}) التنقل: خاصة أم مشتركة؟`);
+          localQuestion = `CHAT:تمام! برنامج جولات + نقل فقط (بدون فنادق). المدن المتاحة: ${cityList}. أعطني:\n${parts.join("\n")}`;
+        } else {
+          localQuestion = `CHAT:تمام! المدن المتاحة في ${destAr[detectedDest] || detectedDest}: ${cityList}. ` +
+            `عشان أبني البرنامج بمكالمة واحدة (بأقل تكلفة)، أعطني في رد واحد:\n` +
+            `1) كم ليلة لكل مدينة؟ (مجموع الليالي = ${targetNights})\n` +
+            `2) كم شريحة هاتف؟ (50 ريال للشريحة، أو "بدون")\n` +
+            `3) سرير إضافي؟ ("نعم لكل الفنادق" / "نعم لـ [مدينة]" / "بدون")\n` +
+            `4) التنقل: خاصة أم مشتركة؟`;
+        }
         return new Response(JSON.stringify({
           id: "local-question",
           model: "local-engine",
