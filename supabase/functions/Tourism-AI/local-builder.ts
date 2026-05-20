@@ -1196,8 +1196,11 @@ export function formatProgram(data: ProgramData): string {
   // so the breakdown still sums to TOTAL_GROUP.
   const perPersonBase = hotelsTotal + flightsBase + transfersTotal + toursTotal + simTotal;
   out += "SUMMARY:\n";
-  out += `الفنادق | ${formatNumber(hotelsTotal)} ريال\n`;
-  if (flightsBase > 0) out += `الطيران الداخلي | ${formatNumber(flightsBase)} ريال\n`;
+  // Transport-only mode: no hotel and no flight totals — only transfers
+  // and tours show. Without this gate, the hotels line still prints "0 ريال"
+  // and confuses the employee about whether anything was billed.
+  if (!data.request.transportOnly) out += `الفنادق | ${formatNumber(hotelsTotal)} ريال\n`;
+  if (!data.request.transportOnly && flightsBase > 0) out += `الطيران الداخلي | ${formatNumber(flightsBase)} ريال\n`;
   if (extraTicketsTotal > 0) out += `تذاكر إضافية (${extraTickets}) | ${formatNumber(extraTicketsTotal)} ريال\n`;
   if (transfersTotal > 0) out += `الانتقالات | ${formatNumber(transfersTotal)} ريال\n`;
   if (toursTotal > 0) out += `الجولات السياحية | ${formatNumber(toursTotal)} ريال\n`;
@@ -1404,6 +1407,12 @@ export async function buildLocalProgram(
   // Walk days in order, grouping consecutive same-city days into stays.
   let consumedDays = 0;
   const stayIdxPerCity: Record<string, number> = {};
+  // Transport-only mode: employee wants only transfers + tours, no hotels.
+  // Skip the entire hotel-pick loop; the rest of the pipeline (transfers,
+  // tours, day arrangement) keeps working off the city distribution.
+  if (request.transportOnly) {
+    // No hotels to pick; jump past the loop by emptying stayOrder iteration.
+  } else
   for (const stay of stayOrder) {
     const cityDef = cityDefs.find(c => c.canonical === stay.city);
     const cityPattern = cityDef?.pattern;
@@ -1798,6 +1807,7 @@ export async function buildLocalProgram(
     return false;
   };
   for (const d of days) {
+    if (request.transportOnly) break; // transport-only: skip flight picking
     if (d.type !== "transit" || !d.fromCity || !d.toCity) continue;
     // Intra-city transit (Bali Kuta → Bali Seminyak): same canonical city,
     // no flight/train needed even if a bogus "Bali → Bali" row exists.

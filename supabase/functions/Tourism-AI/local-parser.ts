@@ -83,6 +83,13 @@ export type TripRequest = {
   extraBed: { scope: "none" | "all" | string[] };
   /** Inter-city transport preference */
   transport: "private" | "shared" | null;
+  /**
+   * "transport-only" mode: when the employee asks for a program with only
+   * transfers + tours (no hotels, no flights). Set when the request contains
+   * "برنامج مواصلات" / "مواصلات فقط" / "بدون فنادق" etc. Builder skips the
+   * HOTELS and FLIGHTS blocks and prices nothing for accommodation.
+   */
+  transportOnly: boolean;
   /** Travel month in Arabic ("يونيو") or numeric "6" */
   month: string | null;
   /** Travel year */
@@ -996,6 +1003,7 @@ export function parseTripRequest(
     extraTickets: parseExtraTickets(text),
     extraBed: parseExtraBed(text, cityDefs),
     transport: parseTransport(text),
+    transportOnly: /برنامج\s*مواصلات|مواصلات\s*فقط|نقل\s*وجولات\s*فقط|بدون\s*فنادق|بدون\s*طيران|بدون\s*فندق|نقل\s*فقط|فقط\s*مواصلات|فقط\s*نقل/iu.test(text),
     month: monthInfo.month,
     year: monthInfo.year,
     startDate: parseStartDate(text),
