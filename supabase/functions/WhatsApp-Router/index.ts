@@ -353,6 +353,19 @@ async function createHubspotTicket(args: {
 }
 
 // ── Twilio outbound ───────────────────────────────────────────────────────
+
+// Human-feeling typing delay based on message length. Ranges:
+//   short  (≤50 chars)   → 2s
+//   medium (51-150)      → 3-4s
+//   long   (>150)        → 5-7s
+// Randomised within bands so consecutive replies don't fire on identical timing.
+function humanTypingDelayMs(text: string): number {
+  const n = (text || "").length;
+  if (n <= 50)  return 2000;
+  if (n <= 150) return 3000 + Math.floor(Math.random() * 1000);
+  return 5000 + Math.floor(Math.random() * 2000);
+}
+
 async function sendWhatsapp(to: string, body: string): Promise<void> {
   const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
   const token = Deno.env.get("TWILIO_AUTH_TOKEN");
@@ -361,6 +374,13 @@ async function sendWhatsapp(to: string, body: string): Promise<void> {
     console.warn("Twilio credentials missing — would have sent to", to, ":", body);
     return;
   }
+
+  // Sleep to mimic a human composing the reply. The native WhatsApp "..."
+  // typing dots aren't exposed on Twilio's standard Messages API for a
+  // self-served WhatsApp sender, but the delay alone is what creates the
+  // not-an-instant-bot feel users notice.
+  await new Promise(r => setTimeout(r, humanTypingDelayMs(body)));
+
   const form = new URLSearchParams({ From: from, To: to, Body: body });
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
     method: "POST",
