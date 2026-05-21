@@ -466,12 +466,10 @@ async function handleMessage(args: {
     await startPackageFlow({ supabase, session, from, text });
     return;
   }
-  // general
+  // general — reply only when we have an FAQ match; stay silent otherwise
+  // so the conversation feels like a real agent, not a bot fallback.
   const answer = await findFaqAnswer(supabase, text);
-  await sendWhatsapp(
-    from,
-    answer || "شكراً لتواصلك. سيتواصل معك أحد موظفينا قريباً للإجابة على استفسارك.",
-  );
+  if (answer) await sendWhatsapp(from, answer);
   await supabase
     .from("whatsapp_sessions")
     .update({ last_message_at: new Date().toISOString() })
