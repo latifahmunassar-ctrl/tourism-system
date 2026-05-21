@@ -106,6 +106,96 @@ async function readSheetRange(
   return data.values || [];
 }
 
+// ── ALEZZ Chat sheet sync (separate spreadsheet) ──────────────────────────
+// Reads the FAQ-style answer sheet and upserts into chat_answers. Used by
+// WhatsApp-Router for general inquiries. Keys: ID, Intent, Sub-intent,
+// Keywords, sample Q, Answer_SA1, Answer_SA2, Answer clarification,
+// Answer_OM, Status.
+// deno-lint-ignore no-explicit-any
+async function syncChatAnswers(supabase: any, token: string): Promise<number> {
+  const chatSheetId = Deno.env.get("ALEZZ_CHAT_SPREADSHEET_ID")
+    || "1wBbUNMyZvYMFzxhw9CSVWZvnolMX_yzr13bUVfUxmYQ";
+
+  const rows = await readSheetRange(token, chatSheetId, "Sheet1!A1:J500");
+  if (rows.length < 2) return 0;
+
+  const header = rows[0].map(h => String(h || "").trim().toLowerCase());
+  const idx = (name: string) => header.indexOf(name.toLowerCase());
+  const cols = {
+    id: idx("id"),
+    intent: idx("intent"),
+    sub: idx("sub-intent"),
+    keywords: idx("keywords"),
+    sample: idx("sample q"),
+    sa1: idx("answer_sa1"),
+    sa2: idx("answer_sa2"),
+    clar: idx("answer clarification"),
+    om: idx("answer_om"),
+    status: idx("status"),
+  };
+  if (cols.id < 0) throw new Error("ALEZZ Chat: missing 'ID' column");
+
+  const upserts: Array<Record<string, unknown>> = [];
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    const id = String(row[cols.id] || "").trim();
+    if (!id) continue;
+    // Tokenise keywords. The sheet mixes separators — some cells use commas,
+    // others list everything space-separated. Split on commas/newlines/slashes
+    // first to preserve any deliberate multi-word phrases, then ALSO split
+    // those phrases into individual words so short tokens (سعر, تكلفه) match
+    // independently. Word-boundary matching in the router makes single-word
+    // tokens safe from false positives.
+    // Honour author intent for keyword cells:
+    //   • If the cell contains commas/slashes/newlines, treat each piece
+    //     between them as an intentional phrase — don't tokenise further.
+    //     Multi-word phrases ("عندكم عروض") then match only when both words
+    //     appear together, avoiding false positives.
+    //   • If the cell has only whitespace separators (e.g. PKG0011's
+    //     "دفع طريقه الدفع تحويل ..."), the author likely meant a word list —
+    //     tokenise into individual words.
+    const kwRaw = String(row[cols.keywords] || "").trim();
+    const allTokens = new Set<string>();
+    if (kwRaw) {
+      const hasSeparators = /[,،\n\/]/.test(kwRaw);
+      if (hasSeparators) {
+        for (const p of kwRaw.split(/[,،\n\/]+/)) {
+          const t = p.trim();
+          if (t.length >= 3) allTokens.add(t);
+        }
+      } else {
+        for (const w of kwRaw.split(/\s+/)) {
+          const t = w.trim();
+          if (t.length >= 3) allTokens.add(t);
+        }
+      }
+    }
+    const keywords = Array.from(allTokens);
+    upserts.push({
+      id,
+      intent: String(row[cols.intent] || "").trim(),
+      sub_intent: String(row[cols.sub] || "").trim(),
+      keywords,
+      sample_q: String(row[cols.sample] || "").trim(),
+      answer_sa1: String(row[cols.sa1] || "").trim(),
+      answer_sa2: String(row[cols.sa2] || "").trim(),
+      answer_clarification: String(row[cols.clar] || "").trim(),
+      answer_om: String(row[cols.om] || "").trim(),
+      status: String(row[cols.status] || "").trim(),
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  if (upserts.length === 0) return 0;
+  // Composite key (id, sub_intent) because PKG001 has two sub-intents:
+  // "General" and "Specific _Destination".
+  const { error } = await supabase
+    .from("chat_answers")
+    .upsert(upserts, { onConflict: "id,sub_intent" });
+  if (error) throw new Error(`chat_answers upsert: ${error.message}`);
+  return upserts.length;
+}
+
 // ── تنظيف نص العملة ───────────────────────────────────────────────────────
 function cleanCurrency(raw: string): string {
   const cleaned = (raw || "").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 3);
@@ -853,8 +943,16 @@ Deno.serve(async (req) => {
 
   // ?which_sheet=1 → report which spreadsheet ID the function is reading from
   if (new URL(req.url).searchParams.get("which_sheet") === "1") {
+    let serviceAccountEmail: string | null = null;
+    try {
+      const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT") || "{}");
+      serviceAccountEmail = sa.client_email || null;
+    } catch { /* ignore */ }
     return new Response(JSON.stringify({
       spreadsheetId: Deno.env.get("GOOGLE_SPREADSHEET_ID") || null,
+      chatSpreadsheetId: Deno.env.get("ALEZZ_CHAT_SPREADSHEET_ID")
+        || "1wBbUNMyZvYMFzxhw9CSVWZvnolMX_yzr13bUVfUxmYQ",
+      serviceAccountEmail,
     }, null, 2), { headers: CORS_HEADERS });
   }
 
@@ -990,6 +1088,17 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── ALEZZ Chat sheet → chat_answers (FAQ for WhatsApp-Router) ─────────
+    // مزامنة منفصلة لأن ورقة الدردشة في spreadsheet آخر. تفشل بصمت لو
+    // ALEZZ_CHAT_SPREADSHEET_ID مو مظبوط أو الورقة مو مشاركه مع service account.
+    let chatAnswersSynced = 0;
+    let chatAnswersError: string | null = null;
+    try {
+      chatAnswersSynced = await syncChatAnswers(supabase, token);
+    } catch (e) {
+      chatAnswersError = (e as Error).message;
+    }
+
     const duration = Date.now() - startTime;
 
     await supabase.from("sync_logs").insert({
@@ -1006,6 +1115,8 @@ Deno.serve(async (req) => {
         tours: totalTours,
         flights: totalFlights,
         trains: totalTrains,
+        chat_answers: chatAnswersSynced,
+        chat_answers_error: chatAnswersError,
         details,
         duration_ms: duration,
         debug: debugInfo?.rejects,
