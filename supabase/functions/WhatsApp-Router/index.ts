@@ -108,9 +108,19 @@ async function classify(text: string): Promise<ClassifyResult> {
 }
 
 // ── استخراج بيانات الباقة من نص حر ───────────────────────────────────────
+// Convert Arabic-Indic (٠-٩) and Extended Arabic-Indic (۰-۹) digits to ASCII.
+// Customers commonly type "٢ شخص" / "١٥/٠٧/٢٠٢٦" which must parse like "2 شخص"
+// / "15/07/2026".
+function arabicToAsciiDigits(text: string): string {
+  return text
+    .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06F0));
+}
+
 function extractPersons(text: string): number | null {
+  const normalized = arabicToAsciiDigits(text);
   // أرقام عربية أو لاتينية: "4 أشخاص" / "اثنين" / "ثلاثة"
-  const m = text.match(/(\d+)\s*(?:شخص|أشخاص|اشخاص|راكب|مسافر)?/);
+  const m = normalized.match(/(\d+)\s*(?:شخص|أشخاص|اشخاص|راكب|مسافر)?/);
   if (m) {
     const n = parseInt(m[1], 10);
     if (n >= 1 && n <= 50) return n;
@@ -125,8 +135,9 @@ function extractPersons(text: string): number | null {
 }
 
 function extractDate(text: string): string | null {
+  const normalized = arabicToAsciiDigits(text);
   // dd/mm أو dd-mm أو dd/mm/yyyy
-  const m = text.match(/(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
+  const m = normalized.match(/(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
   if (m) {
     const day = m[1].padStart(2, "0");
     const month = m[2].padStart(2, "0");
@@ -695,65 +706,35 @@ async function finalizePackage(args: {
     date: s.travel_date,
   });
 
-  // 1) أبلغ العميل أننا نعمل عليه
+  // 1) أبلغ العميل أن الطلب وصل وراح يجهز من قبل الموظف
   await sendWhatsapp(
     from,
-    `تمام! نجهّز لك عرض ${s.destination} لـ ${s.persons} أشخاص بتاريخ ${s.travel_date}.\nلحظات...`,
+    `تمام! استلمنا طلبك: عرض ${s.destination} لـ ${s.persons} أشخاص بتاريخ ${s.travel_date}.\n` +
+    `راح يجهز لك الموظف البرنامج ويرسله قريباً إن شاء الله 🌍`,
   );
 
-  // 2) استدعِ Tourism-AI ببداية محادثة جديدة
-  const seedPrompt = `أبي برنامج سياحي إلى ${s.destination} لـ ${s.persons} أشخاص بتاريخ ${s.travel_date}`;
-  const conversation: TaiTurn[] = [{ role: "user", content: seedPrompt }];
-  const result = await callTourismAI(conversation);
+  // 2) Tourism-AI تخطّي مؤقت — الموظف يبني البرنامج يدوياً.
+  //    ننقل الجلسة فوراً إلى pending_review عشان أي رسالة جاية من العميل تأخذ
+  //    رد الانتظار التلقائي بدل ما تُعاد للتصنيف.
+  const sales = staffList("SALES_WHATSAPP_NUMBERS");
+  const phoneDigits = from.replace(/^whatsapp:/, "");
+  const notice =
+    `📨 طلب باقة جديد جاهز للتجهيز\n` +
+    `العميل: ${s.profile_name} (${phoneDigits})\n` +
+    `الوجهة: ${s.destination}\n` +
+    `الأشخاص: ${s.persons}\n` +
+    `التاريخ: ${s.travel_date}\n\n` +
+    `جهّز البرنامج من الواجهة وأرسله للعميل مباشرة من واتسابك`;
+  await Promise.all(sales.map(num => sendWhatsapp(num, notice)));
 
-  if (!result) {
-    await sendWhatsapp(from, "تم تسجيل طلبك. سيتواصل معك أحد موظفي المبيعات قريباً.");
-    await supabase
-      .from("whatsapp_sessions")
-      .update({ stage: "done", last_message_at: new Date().toISOString() })
-      .eq("phone", from);
-    return;
-  }
-
-  conversation.push({ role: "assistant", content: result.raw });
-
-  // If Tourism-AI built a complete program (SUMMARY: present):
-  //   – DO NOT send it to the customer (staff approves first)
-  //   – store it in pending_program + transition to pending_review
-  //   – ping staff with the full text so they can copy/paste-forward
-  // Otherwise (clarification ask): forward to customer to continue gathering info.
-  const sessionUpdate: Record<string, unknown> = {
-    conversation,
-    last_message_at: new Date().toISOString(),
-  };
-
-  if (result.isProgram) {
-    sessionUpdate.stage = "pending_review";
-    sessionUpdate.pending_program = result.formatted;
-    sessionUpdate.pending_program_at = new Date().toISOString();
-    await sendProgramToStaff({
-      profileName: s.profile_name,
-      from,
-      destination: s.destination,
-      persons: s.persons,
-      travelDate: s.travel_date,
-      programText: result.formatted,
-    });
-  } else {
-    sessionUpdate.stage = "tourism_ai_active";
-    await sendWhatsapp(from, result.formatted);
-    // Lightweight alert — staff knows the conversation is still gathering info.
-    const sales = staffList("SALES_WHATSAPP_NUMBERS");
-    const notice =
-      `📨 طلب باقة جديد (Tourism-AI نشط)\n` +
-      `العميل: ${s.profile_name} (${from.replace(/^whatsapp:/, "")})\n` +
-      `الوجهة: ${s.destination}\n` +
-      `الأشخاص: ${s.persons}\n` +
-      `التاريخ: ${s.travel_date}`;
-    await Promise.all(sales.map(num => sendWhatsapp(num, notice)));
-  }
-
-  await supabase.from("whatsapp_sessions").update(sessionUpdate).eq("phone", from);
+  await supabase
+    .from("whatsapp_sessions")
+    .update({
+      stage: "pending_review",
+      pending_program_at: new Date().toISOString(),
+      last_message_at: new Date().toISOString(),
+    })
+    .eq("phone", from);
 }
 
 // نبّه موظفي المبيعات بأن البرنامج جاهز للمراجعة + أرسل النص الكامل عشان
