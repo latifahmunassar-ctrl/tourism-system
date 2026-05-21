@@ -1003,7 +1003,20 @@ export function parseTripRequest(
     extraTickets: parseExtraTickets(text),
     extraBed: parseExtraBed(text, cityDefs),
     transport: parseTransport(text),
-    transportOnly: /برنامج\s*مواصلات|مواصلات\s*فقط|نقل\s*وجولات\s*فقط|بدون\s*فنادق|بدون\s*طيران|بدون\s*فندق|نقل\s*فقط|فقط\s*مواصلات|فقط\s*نقل/iu.test(text),
+    // Transport-only mode detection. The employee uses many phrasings:
+    //   "برنامج مواصلات" / "مواصلات فقط" / "نقل فقط" / "تنقلات و جولات فقط"
+    //   "جولات ونقل فقط" / "بدون فنادق" / "بدون فندق" / "بدون طيران"
+    // Anchor 'فقط' near any of the transport/tour words rather than enumerate
+    // every word order — Saudi-dialect ordering varies a lot.
+    transportOnly: (() => {
+      const t = text;
+      if (/بدون\s*(?:ال)?فنادق|بدون\s*(?:ال)?فندق|بدون\s*(?:ال)?طيران|بدون\s*(?:ال)?حجز/iu.test(t)) return true;
+      // Any combination of {تنقلات/نقل/مواصلات/جولات} with "فقط" within ~30 chars
+      if (/(?:تنقلات|تنقل|نقل|مواصلات|جولات)[^\n]{0,30}فقط/iu.test(t)) return true;
+      if (/فقط[^\n]{0,30}(?:تنقلات|تنقل|نقل|مواصلات|جولات)/iu.test(t)) return true;
+      if (/برنامج\s*(?:تنقلات|نقل|مواصلات|جولات)/iu.test(t)) return true;
+      return false;
+    })(),
     month: monthInfo.month,
     year: monthInfo.year,
     startDate: parseStartDate(text),
