@@ -486,6 +486,19 @@ async function handleMessage(args: {
   const { supabase, from, profileName, body } = args;
   const text = body.trim();
 
+  // 0) Admin response interception. If this message comes from a staff
+  //    number AND there's a pending AI proposal awaiting decision, treat
+  //    the message as admin's answer (نعم / لا), regardless of the admin's
+  //    own session state. This must run BEFORE the welcome/isNew check so
+  //    admin's "نعم" doesn't trigger a new-customer welcome.
+  if (isAdminPhone(from)) {
+    const proposal = await getOldestPendingProposal(supabase);
+    if (proposal) {
+      await handleAdminResponse({ supabase, proposal, text, adminFrom: from });
+      return;
+    }
+  }
+
   // 1) اجلب أو أنشئ الجلسة
   const { data: existing } = await supabase
     .from("whatsapp_sessions")
@@ -553,10 +566,21 @@ async function handleMessage(args: {
     await startPackageFlow({ supabase, session, from, text });
     return;
   }
-  // general — reply only when we have an FAQ match; stay silent otherwise
-  // so the conversation feels like a real agent, not a bot fallback.
+  // general — try the FAQ first. If a chat_answers row matches, reply
+  // immediately. If not, ask Claude to draft something and surface the
+  // proposal to admin via createProposalAndNotifyAdmin (the customer
+  // hears nothing yet — admin approves before any reply is sent).
   const answer = await findFaqAnswer(supabase, text);
-  if (answer) await sendWhatsapp(from, answer);
+  if (answer) {
+    await sendWhatsapp(from, answer);
+  } else {
+    await createProposalAndNotifyAdmin({
+      supabase,
+      customerPhone: from,
+      profileName,
+      question: text,
+    });
+  }
   await supabase
     .from("whatsapp_sessions")
     .update({ last_message_at: new Date().toISOString() })
@@ -853,6 +877,331 @@ async function continueTourismAIConversation(args: {
   }
 
   await supabase.from("whatsapp_sessions").update(sessionUpdate).eq("phone", from);
+}
+
+// ── Admin-approved AI suggestions for unknown questions ──────────────────
+// Flow: customer asks something findFaqAnswer can't resolve →
+//   1. Claude analyses + proposes interpretation, reply, category, keywords
+//   2. Row inserted in whatsapp_admin_proposals (status='pending_reply_approval')
+//   3. Admin (any SALES_WHATSAPP_NUMBERS phone) gets the proposal on WhatsApp
+//   4. Admin replies "نعم" / "لا"
+//   5. On yes: bot sends the reply to the original customer, then asks admin
+//      whether to also add it to the sheet (status='pending_sheet_approval')
+//   6. On second "نعم": appendChatAnswerRow writes a new row to the ALEZZ
+//      Chat Google Sheet, then triggers sync-sheets so chat_answers reflects
+//      it within seconds and the next identical question hits the FAQ
+//      deterministically without Claude.
+
+const ALEZZ_CHAT_SPREADSHEET_ID = "1wBbUNMyZvYMFzxhw9CSVWZvnolMX_yzr13bUVfUxmYQ";
+
+type ProposalRow = {
+  id: string;
+  customer_phone: string;
+  customer_profile_name: string;
+  customer_question: string;
+  interpretation: string;
+  suggested_reply: string;
+  proposed_intent: string;
+  proposed_sub_intent: string;
+  proposed_keywords: string[];
+  status: string;
+  created_at: string;
+};
+
+type ClaudeAnalysis = {
+  interpretation: string;
+  suggestedReply: string;
+  proposedIntent: string;
+  proposedSubIntent: string;
+  proposedKeywords: string[];
+};
+
+async function analyzeUnknownQuestion(
+  supabase: ReturnType<typeof createClient>,
+  question: string,
+): Promise<ClaudeAnalysis | null> {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey) return null;
+
+  const { data: existing } = await supabase
+    .from("chat_answers")
+    .select("intent, sub_intent");
+  const categories = (existing || [])
+    .map((r: { intent: string; sub_intent: string }) =>
+      `${r.intent}${r.sub_intent ? " / " + r.sub_intent : ""}`)
+    .join(", ");
+
+  const sys =
+    `أنت مساعد لوكالة سياحية تعمل في عُمان والسعودية (ALEZZ Tourism). ` +
+    `يصلك سؤال عميل ما طابق أي إجابة في قاعدة الـ FAQ. مهمتك:\n` +
+    `1) اشرح بإيجاز (جملة واحدة) ماذا يقصد العميل\n` +
+    `2) اقترح رداً مناسباً باللهجة الخليجية بدون علامات ترقيم\n` +
+    `3) اقترح فئة (intent + sub_intent) — يفضل من الفئات الموجودة، أو فئة جديدة لو لزم\n` +
+    `4) اقترح 5-10 كلمات مفتاحية للمطابقة مستقبلاً\n\n` +
+    `الفئات الموجودة: ${categories}\n\n` +
+    `أعد JSON فقط بدون أي نص آخر بهذا الشكل:\n` +
+    `{"interpretation":"...","suggested_reply":"...","proposed_intent":"...","proposed_sub_intent":"...","proposed_keywords":["...","..."]}`;
+
+  try {
+    const anthropic = new Anthropic({ apiKey });
+    const res = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 700,
+      system: sys,
+      messages: [{ role: "user", content: question }],
+    });
+    const out = res.content?.[0];
+    if (!out || out.type !== "text") return null;
+    const m = out.text.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    const parsed = JSON.parse(m[0]);
+    return {
+      interpretation: String(parsed.interpretation || "").trim(),
+      suggestedReply: String(parsed.suggested_reply || "").trim(),
+      proposedIntent: String(parsed.proposed_intent || "").trim(),
+      proposedSubIntent: String(parsed.proposed_sub_intent || "").trim(),
+      proposedKeywords: Array.isArray(parsed.proposed_keywords)
+        ? parsed.proposed_keywords.map(String).map(s => s.trim()).filter(Boolean)
+        : [],
+    };
+  } catch (e) {
+    console.error("Claude analyse failed", (e as Error).message);
+    return null;
+  }
+}
+
+async function createProposalAndNotifyAdmin(args: {
+  supabase: ReturnType<typeof createClient>;
+  customerPhone: string;
+  profileName: string;
+  question: string;
+}): Promise<void> {
+  const { supabase, customerPhone, profileName, question } = args;
+  const analysis = await analyzeUnknownQuestion(supabase, question);
+  if (!analysis) return;
+
+  const { error } = await supabase.from("whatsapp_admin_proposals").insert({
+    customer_phone: customerPhone,
+    customer_profile_name: profileName,
+    customer_question: question,
+    interpretation: analysis.interpretation,
+    suggested_reply: analysis.suggestedReply,
+    proposed_intent: analysis.proposedIntent,
+    proposed_sub_intent: analysis.proposedSubIntent,
+    proposed_keywords: analysis.proposedKeywords,
+    status: "pending_reply_approval",
+  });
+  if (error) { console.error("Proposal insert failed", error.message); return; }
+
+  const phoneDigits = customerPhone.replace(/^whatsapp:/, "");
+  const notice =
+    `💡 سؤال جديد من عميل ينتظر موافقتك\n\n` +
+    `العميل: ${profileName} (${phoneDigits})\n` +
+    `السؤال: ${question}\n\n` +
+    `أنا أفهم إنه يقصد: ${analysis.interpretation}\n\n` +
+    `الرد المقترح:\n${analysis.suggestedReply}\n\n` +
+    `هل أرد بهذا؟  نعم / لا`;
+  const admins = staffList("SALES_WHATSAPP_NUMBERS");
+  await Promise.all(admins.map(num => sendWhatsapp(num, notice)));
+}
+
+function isAdminPhone(from: string): boolean {
+  return staffList("SALES_WHATSAPP_NUMBERS").includes(from);
+}
+
+async function getOldestPendingProposal(
+  supabase: ReturnType<typeof createClient>,
+): Promise<ProposalRow | null> {
+  const { data } = await supabase
+    .from("whatsapp_admin_proposals")
+    .select("*")
+    .in("status", ["pending_reply_approval", "pending_sheet_approval"])
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return (data as ProposalRow | null) || null;
+}
+
+function isAffirmative(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return ["نعم","ايوه","أيوه","ايوا","أيوا","موافق","تمام","صح","اي","yes","y","ok","اوكي","اوك"]
+    .some(w => t === w || t.startsWith(w + " ") || t.startsWith(w + "."));
+}
+function isNegative(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return ["لا","كلا","مرفوض","ارفض","أرفض","no","n"]
+    .some(w => t === w || t.startsWith(w + " ") || t.startsWith(w + "."));
+}
+
+async function handleAdminResponse(args: {
+  supabase: ReturnType<typeof createClient>;
+  proposal: ProposalRow;
+  text: string;
+  adminFrom: string;
+}): Promise<void> {
+  const { supabase, proposal, text, adminFrom } = args;
+  const yes = isAffirmative(text);
+  const no  = isNegative(text);
+
+  if (!yes && !no) {
+    await sendWhatsapp(adminFrom, proposal.status === "pending_reply_approval"
+      ? `رد بـ "نعم" لإرسال الرد للعميل أو "لا" للإلغاء`
+      : `رد بـ "نعم" لإضافة السؤال للشيت أو "لا" لتركه`);
+    return;
+  }
+
+  if (proposal.status === "pending_reply_approval") {
+    if (no) {
+      await supabase.from("whatsapp_admin_proposals")
+        .update({ status: "rejected", decided_at: new Date().toISOString() })
+        .eq("id", proposal.id);
+      await sendWhatsapp(adminFrom, "تم الإلغاء. ما رح يوصل أي رد للعميل");
+      return;
+    }
+    // Send the suggested reply to the original customer
+    await sendWhatsapp(proposal.customer_phone, proposal.suggested_reply);
+    await supabase.from("whatsapp_admin_proposals")
+      .update({ status: "pending_sheet_approval" })
+      .eq("id", proposal.id);
+
+    const kwStr = (proposal.proposed_keywords || []).join(" / ");
+    const subStr = proposal.proposed_sub_intent ? ` / ${proposal.proposed_sub_intent}` : "";
+    await sendWhatsapp(adminFrom,
+      `✅ تم إرسال الرد للعميل\n\n` +
+      `هل أضيف هذا السؤال للشيت؟\n` +
+      `الكاتيجوري: ${proposal.proposed_intent}${subStr}\n` +
+      `الكلمات المفتاحية: ${kwStr}\n` +
+      `الجواب: ${proposal.suggested_reply}\n\n` +
+      `نعم / لا`);
+    return;
+  }
+
+  if (proposal.status === "pending_sheet_approval") {
+    if (no) {
+      await supabase.from("whatsapp_admin_proposals")
+        .update({ status: "completed_no_add", decided_at: new Date().toISOString() })
+        .eq("id", proposal.id);
+      await sendWhatsapp(adminFrom, "تمام. ما رح يضاف للشيت");
+      return;
+    }
+    const ok = await appendChatAnswerRow({
+      intent: proposal.proposed_intent,
+      subIntent: proposal.proposed_sub_intent,
+      keywords: proposal.proposed_keywords,
+      sampleQ: proposal.customer_question,
+      answer: proposal.suggested_reply,
+    });
+    if (ok) {
+      await supabase.from("whatsapp_admin_proposals")
+        .update({ status: "completed_added", decided_at: new Date().toISOString() })
+        .eq("id", proposal.id);
+      await sendWhatsapp(adminFrom,
+        `✅ تم إضافة السؤال للشيت بنجاح\n` +
+        `في المرة القادمة لما يجي نفس السؤال راح يرد البوت تلقائياً 🎯`);
+      void triggerSyncSheets();
+    } else {
+      await sendWhatsapp(adminFrom,
+        `❌ ما قدرت أضيف للشيت. تأكدي إن tourism-sync@tourism-sysc-495108.iam.gserviceaccount.com عنده صلاحية Editor على الشيت`);
+    }
+    return;
+  }
+}
+
+// ── Google Sheets write helpers ──────────────────────────────────────────
+async function getGoogleSheetsToken(scope: string): Promise<string | null> {
+  const saStr = Deno.env.get("GOOGLE_SERVICE_ACCOUNT");
+  if (!saStr) return null;
+  let sa: { client_email: string; private_key: string };
+  try { sa = JSON.parse(saStr); } catch { return null; }
+
+  const now = Math.floor(Date.now() / 1000);
+  const enc = (o: object) => btoa(JSON.stringify(o))
+    .replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+
+  const header = enc({ alg: "RS256", typ: "JWT" });
+  const payload = enc({
+    iss: sa.client_email, scope,
+    aud: "https://oauth2.googleapis.com/token",
+    exp: now + 3600, iat: now,
+  });
+  const pem = sa.private_key.replace(/\\n/g, "\n");
+  const keyBody = pem.replace("-----BEGIN PRIVATE KEY-----", "")
+    .replace("-----END PRIVATE KEY-----", "").replace(/\s/g, "");
+  const binaryKey = Uint8Array.from(atob(keyBody), c => c.charCodeAt(0));
+  const cryptoKey = await crypto.subtle.importKey(
+    "pkcs8", binaryKey,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+  const rawSig = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5", cryptoKey,
+    new TextEncoder().encode(`${header}.${payload}`));
+  const sig = btoa(String.fromCharCode(...new Uint8Array(rawSig)))
+    .replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: `${header}.${payload}.${sig}`,
+    }).toString(),
+  });
+  const data = await res.json();
+  return data.access_token || null;
+}
+
+async function appendChatAnswerRow(args: {
+  intent: string;
+  subIntent: string;
+  keywords: string[];
+  sampleQ: string;
+  answer: string;
+}): Promise<boolean> {
+  const token = await getGoogleSheetsToken(
+    "https://www.googleapis.com/auth/spreadsheets");
+  if (!token) return false;
+
+  // Sheet column order:
+  // ID | Intent | Sub-intent | Keywords | sample Q | Answer_SA1 | Answer_SA2 | Answer clarification | Answer_OM | Status
+  const newId = `PKG_AI_${Date.now()}`;
+  const row = [
+    newId,
+    args.intent,
+    args.subIntent,
+    args.keywords.join(", "),
+    args.sampleQ,
+    args.answer,       // SA1
+    "",                // SA2
+    "",                // clarification
+    args.answer,       // OM (same — Claude already wrote in Khaleeji)
+    "AI-generated",
+  ];
+
+  const url =
+    `https://sheets.googleapis.com/v4/spreadsheets/${ALEZZ_CHAT_SPREADSHEET_ID}` +
+    `/values/Sheet1!A1:append` +
+    `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ values: [row] }),
+  });
+  if (!res.ok) {
+    console.error("Sheet append failed", res.status, await res.text());
+    return false;
+  }
+  return true;
+}
+
+async function triggerSyncSheets(): Promise<void> {
+  const jwt = Deno.env.get("LEGACY_ANON_JWT") || "";
+  try {
+    await fetch("https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/sync-sheets", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${jwt}`, apikey: jwt },
+    });
+  } catch (e) {
+    console.warn("triggerSyncSheets failed", (e as Error).message);
+  }
 }
 
 // ── HTTP entry point ─────────────────────────────────────────────────────
