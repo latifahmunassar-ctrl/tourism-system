@@ -164,31 +164,76 @@ function extractDestination(text: string): string | null {
   return null;
 }
 
-// ── FAQ lookup ────────────────────────────────────────────────────────────
+// ── Arabic normalisation for keyword matching ─────────────────────────────
+// Saudi/Omani dialect commonly swaps ة↔ه, uses various alef forms, drops
+// hamzas, and writes ى for ي. Normalise both haystack and keywords before
+// comparing so trivial spelling differences don't block FAQ matches.
+function normalizeArabic(s: string): string {
+  return String(s)
+    .replace(/[إأآا]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/[ؤئء]/g, "")
+    .replace(/[ًٌٍَُِّْـ]/g, "")          // remove tashkeel + tatweel
+    .replace(/[؟?!,.،؛:]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+// ── FAQ lookup against ALEZZ Chat sheet (synced into chat_answers) ────────
+// Strategy: count keyword overlaps per row, pick the highest-scoring row.
+// For the chosen row, prefer Answer_OM (Omani customers) → fallback SA1 →
+// fallback to clarification. Returns null if no row matched any keyword.
 async function findFaqAnswer(
   supabase: ReturnType<typeof createClient>,
   text: string,
 ): Promise<string | null> {
   const { data, error } = await supabase
-    .from("faqs")
-    .select("question_keywords, answer, priority")
-    .eq("active", true);
+    .from("chat_answers")
+    .select("id, sub_intent, keywords, answer_sa1, answer_om, answer_clarification");
   if (error || !data) return null;
 
-  let best: { answer: string; score: number; priority: number } | null = null;
-  for (const row of data as Array<{ question_keywords: string[]; answer: string; priority: number }>) {
+  const haystack = normalizeArabic(text);
+
+  // Word-bounded match: `كم` must not match inside `عندكم`. Boundary = string
+  // edge OR any non-letter (whitespace, punctuation). \p{L} covers Arabic +
+  // Latin letters. Bare 2-char keywords are too noisy to substring-match
+  // anyway, so we also require at least 3 normalised chars for short tokens
+  // unless surrounded by clear word boundaries.
+  // Arabic prepositions like ال/بال/ب/ل/ف/و/ك attach directly to nouns without
+  // spaces (بالفيزا، الطيران، وفيزا) — accept them as optional prefixes so the
+  // keyword still matches its natural context.
+  const matchesAsWord = (kw: string): boolean => {
+    if (kw.length < 2) return false;
+    const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(
+      `(^|[^\\p{L}])(?:ال|بال|وال|فال|لال|كال|[بلفوك])?${escaped}([^\\p{L}]|$)`,
+      "u",
+    );
+    return re.test(haystack);
+  };
+
+  let best: { score: number; row: typeof data[number] } | null = null;
+  for (const row of data as Array<{
+    id: string; sub_intent: string; keywords: string[];
+    answer_sa1: string; answer_om: string; answer_clarification: string;
+  }>) {
     let score = 0;
-    for (const kw of row.question_keywords) if (text.includes(kw)) score++;
-    if (score === 0) continue;
-    if (
-      !best ||
-      score > best.score ||
-      (score === best.score && row.priority > best.priority)
-    ) {
-      best = { answer: row.answer, score, priority: row.priority };
+    for (const kwRaw of row.keywords) {
+      const kw = normalizeArabic(kwRaw);
+      if (matchesAsWord(kw)) score++;
     }
+    if (score === 0) continue;
+    if (!best || score > best.score) best = { score, row };
   }
-  return best?.answer ?? null;
+  if (!best) return null;
+
+  const r = best.row;
+  return (r.answer_om && r.answer_om.trim())
+      || (r.answer_sa1 && r.answer_sa1.trim())
+      || (r.answer_clarification && r.answer_clarification.trim())
+      || null;
 }
 
 // ── HubSpot CRM ───────────────────────────────────────────────────────────
@@ -442,7 +487,18 @@ async function handleMessage(args: {
     );
   }
 
-  // 2) إذا العميل في محادثة Tourism-AI نشطة، مرّر الرد لـ Tourism-AI
+  // 2) برنامج جاهز ينتظر مراجعة الموظف — رد ودود بدون استدعاء Tourism-AI ولا
+  //    تصنيف. الموظف هو اللي بيرسل البرنامج لما يجهز.
+  if (session && session.stage === "pending_review") {
+    await sendWhatsapp(from, "سيتم إرسال برنامجك قريباً إن شاء الله 🌍 نعتذر عن الانتظار");
+    await supabase
+      .from("whatsapp_sessions")
+      .update({ last_message_at: new Date().toISOString() })
+      .eq("phone", from);
+    return;
+  }
+
+  // 3) إذا العميل في محادثة Tourism-AI نشطة، مرّر الرد لـ Tourism-AI
   //    مع تاريخ المحادثة بدل ما يعيد التصنيف من جديد
   if (session && session.stage === "tourism_ai_active") {
     await continueTourismAIConversation({ supabase, from, text, profileName: session.profile_name });
@@ -660,31 +716,80 @@ async function finalizePackage(args: {
   }
 
   conversation.push({ role: "assistant", content: result.raw });
-  await sendWhatsapp(from, result.formatted);
 
-  // إذا الـ Tourism-AI رد ببرنامج كامل (فيه SUMMARY:) خلّص الحالة done،
-  // وإلا خل العميل في حالة tourism_ai_active لإكمال المحادثة معه.
-  const nextStage = result.isProgram ? "done" : "tourism_ai_active";
+  // If Tourism-AI built a complete program (SUMMARY: present):
+  //   – DO NOT send it to the customer (staff approves first)
+  //   – store it in pending_program + transition to pending_review
+  //   – ping staff with the full text so they can copy/paste-forward
+  // Otherwise (clarification ask): forward to customer to continue gathering info.
+  const sessionUpdate: Record<string, unknown> = {
+    conversation,
+    last_message_at: new Date().toISOString(),
+  };
 
-  // نبّه موظفي المبيعات في الحالتين — للحالة المفتوحة نخبرهم الطلب وصل وفي محادثة جارية
+  if (result.isProgram) {
+    sessionUpdate.stage = "pending_review";
+    sessionUpdate.pending_program = result.formatted;
+    sessionUpdate.pending_program_at = new Date().toISOString();
+    await sendProgramToStaff({
+      profileName: s.profile_name,
+      from,
+      destination: s.destination,
+      persons: s.persons,
+      travelDate: s.travel_date,
+      programText: result.formatted,
+    });
+  } else {
+    sessionUpdate.stage = "tourism_ai_active";
+    await sendWhatsapp(from, result.formatted);
+    // Lightweight alert — staff knows the conversation is still gathering info.
+    const sales = staffList("SALES_WHATSAPP_NUMBERS");
+    const notice =
+      `📨 طلب باقة جديد (Tourism-AI نشط)\n` +
+      `العميل: ${s.profile_name} (${from.replace(/^whatsapp:/, "")})\n` +
+      `الوجهة: ${s.destination}\n` +
+      `الأشخاص: ${s.persons}\n` +
+      `التاريخ: ${s.travel_date}`;
+    await Promise.all(sales.map(num => sendWhatsapp(num, notice)));
+  }
+
+  await supabase.from("whatsapp_sessions").update(sessionUpdate).eq("phone", from);
+}
+
+// نبّه موظفي المبيعات بأن البرنامج جاهز للمراجعة + أرسل النص الكامل عشان
+// ينسخوه ويوصلوه للعميل من الواتس مباشرة
+async function sendProgramToStaff(args: {
+  profileName: string;
+  from: string;
+  destination: string | null;
+  persons: number | null;
+  travelDate: string | null;
+  programText: string;
+}): Promise<void> {
   const sales = staffList("SALES_WHATSAPP_NUMBERS");
-  const noticeHeader = result.isProgram ? "📨 برنامج جاهز للمراجعة" : "📨 طلب باقة جديد (Tourism-AI نشط)";
-  const notice =
-    `${noticeHeader}\n` +
-    `العميل: ${s.profile_name} (${from.replace(/^whatsapp:/, "")})\n` +
-    `الوجهة: ${s.destination}\n` +
-    `الأشخاص: ${s.persons}\n` +
-    `التاريخ: ${s.travel_date}`;
-  await Promise.all(sales.map(num => sendWhatsapp(num, notice)));
-
-  await supabase
-    .from("whatsapp_sessions")
-    .update({
-      stage: nextStage,
-      conversation,
-      last_message_at: new Date().toISOString(),
-    })
-    .eq("phone", from);
+  const phoneDigits = args.from.replace(/^whatsapp:/, "");
+  const header =
+    `✅ برنامج جاهز للمراجعة والإرسال للعميل\n` +
+    `العميل: ${args.profileName} (${phoneDigits})\n` +
+    `${args.destination ?? ""} · ${args.persons ?? "?"} أشخاص · ${args.travelDate ?? ""}\n` +
+    `\n────────────────\n`;
+  // Twilio WhatsApp body limit is ~1600 chars. Chunk into header + program;
+  // if program itself is huge, split into multiple parts.
+  const chunks: string[] = [];
+  const first = header + args.programText;
+  if (first.length <= 1500) {
+    chunks.push(first);
+  } else {
+    chunks.push(header + "(البرنامج التالي مقسوم على أجزاء)");
+    let s = args.programText;
+    while (s.length > 0) {
+      chunks.push(s.slice(0, 1500));
+      s = s.slice(1500);
+    }
+  }
+  for (const chunk of chunks) {
+    await Promise.all(sales.map(num => sendWhatsapp(num, chunk)));
+  }
 }
 
 // أكمل محادثة Tourism-AI: يأخذ تاريخ المحادثة من الجلسة، يضيف رد العميل
@@ -721,32 +826,32 @@ async function continueTourismAIConversation(args: {
   }
 
   conversation.push({ role: "assistant", content: result.raw });
-  await sendWhatsapp(from, result.formatted);
 
-  const nextStage = result.isProgram ? "done" : "tourism_ai_active";
-  await supabase
-    .from("whatsapp_sessions")
-    .update({
-      stage: nextStage,
-      conversation,
-      last_message_at: new Date().toISOString(),
-    })
-    .eq("phone", from);
+  // Same gating as finalizePackage: hold the program for staff review when
+  // SUMMARY: is present; only the customer-facing clarification stays auto-sent.
+  const sessionUpdate: Record<string, unknown> = {
+    conversation,
+    last_message_at: new Date().toISOString(),
+  };
 
-  // لو البرنامج صار جاهز (فيه SUMMARY)، نبه المبيعات بالناتج
   if (result.isProgram) {
-    const sales = staffList("SALES_WHATSAPP_NUMBERS");
-    const phoneDigits = from.replace(/^whatsapp:/, "");
-    const dest = data?.destination ?? "";
-    const persons = data?.persons ?? "";
-    const date = data?.travel_date ?? "";
-    const notice =
-      `✅ برنامج جاهز للمراجعة\n` +
-      `العميل: ${profileName} (${phoneDigits})\n` +
-      `${dest} · ${persons} أشخاص · ${date}\n\n` +
-      result.formatted.slice(0, 1100);
-    await Promise.all(sales.map(num => sendWhatsapp(num, notice)));
+    sessionUpdate.stage = "pending_review";
+    sessionUpdate.pending_program = result.formatted;
+    sessionUpdate.pending_program_at = new Date().toISOString();
+    await sendProgramToStaff({
+      profileName,
+      from,
+      destination: data?.destination ?? null,
+      persons: data?.persons ?? null,
+      travelDate: data?.travel_date ?? null,
+      programText: result.formatted,
+    });
+  } else {
+    sessionUpdate.stage = "tourism_ai_active";
+    await sendWhatsapp(from, result.formatted);
   }
+
+  await supabase.from("whatsapp_sessions").update(sessionUpdate).eq("phone", from);
 }
 
 // ── HTTP entry point ─────────────────────────────────────────────────────
