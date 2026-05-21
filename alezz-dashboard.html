@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>لوحة تحكم ALEZZ Tourism</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel-2: #273449;
+      --border: #334155;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --err: #ef4444;
+      --shadow: 0 4px 24px rgba(0,0,0,.35);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: "Tajawal", system-ui, sans-serif; }
+    .container { max-width: 1180px; margin: 0 auto; padding: 32px 24px 64px; }
+    header.hero {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      margin-bottom: 28px; padding-bottom: 18px; border-bottom: 1px solid var(--border);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .logo {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
+      display: grid; place-items: center; color: white; font-weight: 900; font-size: 20px;
+      box-shadow: var(--shadow);
+    }
+    .brand h1 { margin: 0; font-size: 22px; font-weight: 800; }
+    .brand p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+    .last-updated { color: var(--muted); font-size: 13px; }
+
+    .grid { display: grid; gap: 18px; }
+    .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+    .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+    @media (max-width: 900px) {
+      .grid.cols-3, .grid.cols-2 { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 20px;
+      box-shadow: var(--shadow);
+    }
+    .card h2 { margin: 0 0 6px; font-size: 15px; font-weight: 700; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+    .card .value { font-size: 28px; font-weight: 800; }
+    .card .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+    .status-row { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .dot.ok { background: var(--ok); box-shadow: 0 0 0 4px rgba(34,197,94,.18); }
+    .dot.warn { background: var(--warn); box-shadow: 0 0 0 4px rgba(245,158,11,.18); }
+    .dot.err { background: var(--err); box-shadow: 0 0 0 4px rgba(239,68,68,.18); }
+
+    section { margin-top: 28px; }
+    section > h3 {
+      margin: 0 0 12px; font-size: 14px; font-weight: 700;
+      color: var(--muted); letter-spacing: .08em; text-transform: uppercase;
+    }
+
+    .panel-list { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); }
+    .panel-list .row { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); gap: 12px; }
+    .panel-list .row:last-child { border-bottom: none; }
+    .panel-list .row .label { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .panel-list .row .meta { color: var(--muted); font-size: 13px; direction: ltr; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+
+    code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: var(--text); background: var(--panel-2); padding: 2px 6px; border-radius: 6px; direction: ltr; display: inline-block; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .flow {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      font-family: ui-monospace, monospace;
+      font-size: 13px;
+      color: var(--muted);
+      white-space: pre;
+      overflow-x: auto;
+      direction: ltr;
+      text-align: left;
+      box-shadow: var(--shadow);
+    }
+
+    footer { margin-top: 36px; color: var(--muted); font-size: 12px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <header class="hero">
+      <div class="brand">
+        <div class="logo">A</div>
+        <div>
+          <h1>لوحة تحكم ALEZZ Tourism</h1>
+          <p>نظرة عامة على حالة النظام ومكوناته</p>
+        </div>
+      </div>
+      <div class="last-updated">آخر تحديث: <span id="now"></span></div>
+    </header>
+
+    <div class="grid cols-3">
+      <div class="card">
+        <h2>WhatsApp Router</h2>
+        <div class="status-row"><span class="dot ok"></span><span>متصل ويعمل</span></div>
+        <div class="sub">webhook نشط على Twilio</div>
+      </div>
+      <div class="card">
+        <h2>Tourism-AI</h2>
+        <div class="status-row"><span class="dot ok"></span><span>منشور وفعّال</span></div>
+        <div class="sub">local parser + Claude fallback</div>
+      </div>
+      <div class="card">
+        <h2>HubSpot CRM</h2>
+        <div class="status-row"><span class="dot ok"></span><span>متصل</span></div>
+        <div class="sub">portal 148509683</div>
+      </div>
+    </div>
+
+    <section>
+      <h3>مكونات النظام</h3>
+      <div class="panel-list">
+        <div class="row">
+          <div class="label"><span class="dot ok"></span><span>Twilio WhatsApp Sender</span></div>
+          <div class="meta">whatsapp:+96891171630 · ONLINE</div>
+        </div>
+        <div class="row">
+          <div class="label"><span class="dot ok"></span><span>Supabase Edge Functions</span></div>
+          <div class="meta">project ofotvacszlmrqxzfjmtn</div>
+        </div>
+        <div class="row">
+          <div class="label"><span class="dot ok"></span><span>Supabase Database</span></div>
+          <div class="meta">hotels · tours · flights · whatsapp_sessions · faqs</div>
+        </div>
+        <div class="row">
+          <div class="label"><span class="dot ok"></span><span>Google Sheets Sync</span></div>
+          <div class="meta">sync-sheets · daily refresh</div>
+        </div>
+        <div class="row">
+          <div class="label"><span class="dot ok"></span><span>Anthropic Claude API</span></div>
+          <div class="meta">Sonnet/Haiku hybrid</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h3>تدفق رسائل WhatsApp</h3>
+      <pre class="flow">WhatsApp message → Twilio webhook → WhatsApp-Router
+                                           │
+        ┌──────────────────────────────────┼──────────────────────────────────┐
+        ▼                                  ▼                                  ▼
+  Package request                    Complaint                         General inquiry
+        │                                  │                                  │
+  ├─ extract: destination/persons/date     ├─ HubSpot ticket                  ├─ lookup faqs table
+  ├─ HubSpot contact upsert                ├─ alert complaints staff          └─ reply best match
+  ├─ call Tourism-AI                       └─ reply acknowledgment
+  ├─ reply customer with program
+  └─ alert sales staff</pre>
+    </section>
+
+    <section>
+      <h3>نقاط نهاية مهمة</h3>
+      <div class="panel-list">
+        <div class="row">
+          <div class="label"><span>Webhook URL</span></div>
+          <div class="meta"><code>https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/WhatsApp-Router</code></div>
+        </div>
+        <div class="row">
+          <div class="label"><span>Supabase Dashboard</span></div>
+          <div class="meta"><a href="https://supabase.com/dashboard/project/ofotvacszlmrqxzfjmtn" target="_blank">فتح المشروع</a></div>
+        </div>
+        <div class="row">
+          <div class="label"><span>Twilio Console</span></div>
+          <div class="meta"><a href="https://console.twilio.com/" target="_blank">إدارة الـ sender والـ webhooks</a></div>
+        </div>
+        <div class="row">
+          <div class="label"><span>HubSpot CRM</span></div>
+          <div class="meta"><a href="https://app.hubspot.com/contacts/148509683" target="_blank">جهات الاتصال</a></div>
+        </div>
+        <div class="row">
+          <div class="label"><span>Tourism Frontend</span></div>
+          <div class="meta"><a href="https://latifahmunassar-ctrl.github.io/tourism-system/" target="_blank">واجهة الموظف</a></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h3>الإعداد الحالي</h3>
+      <div class="grid cols-2">
+        <div class="card">
+          <h2>أرقام التنبيهات</h2>
+          <div class="status-row"><span>المبيعات</span></div>
+          <div class="sub">whatsapp:+96877428881</div>
+          <div style="height:8px"></div>
+          <div class="status-row"><span>الشكاوى</span></div>
+          <div class="sub">whatsapp:+96877428881</div>
+        </div>
+        <div class="card">
+          <h2>الوجهات المدعومة</h2>
+          <div class="sub">تركيا · ماليزيا · تايلاند · إندونيسيا · فيتنام · روسيا · البوسنة · أذربيجان · جورجيا · المالديف · موريشيوس · كازاخستان · مصر · الإمارات</div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      ALEZZ Tourism System · لوحة تحكم داخلية
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      const now = new Date();
+      const fmt = new Intl.DateTimeFormat('ar', {
+        dateStyle: 'medium', timeStyle: 'short', hour12: false
+      });
+      document.getElementById('now').textContent = fmt.format(now);
+    })();
+  </script>
+</body>
+</html>
