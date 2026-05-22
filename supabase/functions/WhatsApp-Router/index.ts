@@ -611,19 +611,15 @@ async function handleMessage(args: {
     };
     await supabase.from("whatsapp_sessions").insert(seed);
     session = { ...seed, destination: null, persons: null, travel_date: null } as typeof session;
-    // رسالة ترحيب — تُرسل مرّة واحدة. لكن لو الرسالة الأولى مجرد تحية،
-    // نتركها للـ agent يردّ بـ RULE 1 ("هلا 👋 أمرني كيف أقدر أخدمك؟")
-    // بدل ما نرسل ترحيب طويل وبعدين الـ agent يرد ثاني.
-    if (!isGreeting(text)) {
-      await sendWhatsapp(
-        from,
-        "حياك الله … معك طلال من خدمة العملاء كيف اقدر اخدمك",
-      );
-    }
+    // رسالة ترحيب — تُرسل مرّة واحدة لكل عميل جديد.
+    await sendWhatsapp(
+      from,
+      "حياك الله … معك طلال من خدمة العملاء كيف اقدر اخدمك",
+    );
   }
 
-  // 2) برنامج جاهز ينتظر مراجعة الموظف — رد ودود بدون استدعاء Tourism-AI ولا
-  //    تصنيف. الموظف هو اللي بيرسل البرنامج لما يجهز.
+  // 2) برنامج جاهز ينتظر مراجعة الموظف — رد ودود ثابت بدون استدعاء أي AI.
+  //    الموظف هو اللي بيرسل البرنامج لما يجهز.
   if (session && session.stage === "pending_review") {
     await sendWhatsapp(from, "سيتم إرسال برنامجك قريباً إن شاء الله 🌍 نعتذر عن الانتظار");
     await supabase
@@ -633,62 +629,33 @@ async function handleMessage(args: {
     return;
   }
 
-  // 2b) Greetings → Travel Agent so RULE 1 fires with its exact reply.
-  //     Sits after pending_review (where we want the holding message) but
-  //     before the in-flow / classify branches. Covers both brand-new and
-  //     existing-but-idle sessions.
-  if (isGreeting(text)) {
-    const { data: row } = await supabase
-      .from("whatsapp_sessions")
-      .select("conversation")
-      .eq("phone", from)
-      .maybeSingle();
-    const history = (row?.conversation || []) as TaiTurn[];
-    await runTravelAgentTurn({
-      supabase, from, text, history,
-      prev: {
-        destination: session?.destination ?? null,
-        persons: session?.persons ?? null,
-        travel_date: session?.travel_date ?? null,
-      },
-    });
-    return;
-  }
-
-  // 3) إذا العميل في محادثة Tourism-AI نشطة، مرّر الرد لـ Tourism-AI
-  //    مع تاريخ المحادثة بدل ما يعيد التصنيف من جديد
-  if (session && session.stage === "tourism_ai_active") {
-    await continueTourismAIConversation({ supabase, from, text, profileName: session.profile_name });
-    return;
-  }
-
-  // 3) لو الجلسة في وسط جمع بيانات الباقة (destination/persons/date)، أكمل الجمع
-  if (session && session.stage !== "new" && session.stage !== "done") {
-    await continuePackageFlow({ supabase, session, text, from });
-    return;
-  }
-
-  // 3) صنّف الرسالة
+  // 3) Complaints route to the dedicated escalation handler (HubSpot ticket
+  //    + complaints staff alert). Same as before — complaints are explicitly
+  //    flagged, not "AI-generated answers", so they stay enabled.
   const { category } = await classify(text);
-
   if (category === "complaint") {
     await handleComplaint({ supabase, session, from, profileName, text });
     return;
   }
-  if (category === "package") {
-    await startPackageFlow({ supabase, session, from, text });
-    return;
-  }
-  // general — try the FAQ first. If a chat_answers row matches, reply
-  // immediately. If not, ask Claude to draft something and surface the
-  // proposal to admin via createProposalAndNotifyAdmin (the customer
-  // hears nothing yet — admin approves before any reply is sent).
+
+  // 4) STRICT FAQ-OR-ADMIN FLOW.
+  //    The bot is FORBIDDEN from generating any customer-facing reply on its
+  //    own. Every reply must come from one of:
+  //      (a) chat_answers (FAQ row matched by keywords) — sent verbatim
+  //      (b) admin reply after explicit approval via the 4-state machine
+  //      (c) fixed system strings (welcome, pending_review holding)
+  //    All previous AI-driven paths (Travel Agent, Tourism-AI clarifications,
+  //    package-flow info gathering) are disabled at this layer — the agent
+  //    functions still exist in the file but are never invoked.
   const answer = await findFaqAnswer(supabase, text);
   if (answer) {
     await sendWhatsapp(from, answer);
   } else if (!isSmallTalk(text)) {
-    // Don't pay Claude on greetings, thanks, single-word acknowledgements.
-    // The welcome message (if isNew) is response enough; otherwise stay silent.
+    // Customer-facing holding message + escalation to admin. The AI's
+    // suggested reply (drafted inside createProposalAndNotifyAdmin) is only
+    // shown to admin — admin's approval/correction is what reaches the
+    // customer via handleAdminResponse.
+    await sendWhatsapp(from, "لحظة، راح أوصل سؤالك للمختص يرد عليك 🙏");
     await createProposalAndNotifyAdmin({
       supabase,
       customerPhone: from,
@@ -696,6 +663,8 @@ async function handleMessage(args: {
       question: text,
     });
   }
+  // small-talk (شكرا / تمام / اوكي / هلا on existing session): stay silent.
+
   await supabase
     .from("whatsapp_sessions")
     .update({ last_message_at: new Date().toISOString() })
