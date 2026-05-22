@@ -49,8 +49,13 @@ const COMPLAINT_PATTERNS = [
 const PACKAGE_PATTERNS = [
   /برنامج|عرض|باقة|باقه|رحلة|رحله|سياح|سفر/i,
   /سعر|تكلفة|تكلفه|كم\s*يكلف|كم\s*تكلف/i,
-  /أبي|ابي|بدي|أريد|اريد|أحتاج|احتاج/i,
+  /أبي|ابي|بدي|أريد|اريد|أحتاج|احتاج|ابغى|أبغى|ابغا/i,
   /حجز|احجز|أحجز/i,
+  // Travel-action verbs — clear signal of intent to book.
+  /اسافر|أسافر|نسافر|تسافر|سافر|نروح|تروح|نزور|تزور/i,
+  // Bare destination mentions (very common as a single-word reply to
+  // "وين تبي تسافر؟") — these should reach the Travel Agent, not the FAQ.
+  /تركيا|ماليزيا|تايلند|تايلاند|اندونيسيا|إندونيسيا|فيتنام|روسيا|البوسنه|البوسنة|اذربيجان|أذربيجان|جورجيا|المالديف|دبي|بالي|تونس|مصر|عمان\s|عمّان|سوتشي|كوالا|اسطنبول|سياحه|سياحة/i,
 ];
 
 type Category = "general" | "package" | "complaint";
@@ -71,7 +76,14 @@ function classifyByKeywords(text: string): ClassifyResult {
     return { category: "complaint", confidence: complaintHits >= 2 ? 0.9 : 0.7, via: "keywords" };
   }
   if (packageHits >= 1) {
-    return { category: "package", confidence: packageHits >= 2 ? 0.9 : 0.6, via: "keywords" };
+    // Travel-verb hits (pattern[4]) and destination-name hits (pattern[5]) are
+    // strong-on-their-own signals — a single one is enough to skip the Claude
+    // fallback. Otherwise need ≥2 hits for high confidence.
+    const strongAlone =
+      (PACKAGE_PATTERNS[4] && PACKAGE_PATTERNS[4].test(text)) ||
+      (PACKAGE_PATTERNS[5] && PACKAGE_PATTERNS[5].test(text));
+    const confidence = packageHits >= 2 || strongAlone ? 0.9 : 0.6;
+    return { category: "package", confidence, via: "keywords" };
   }
   return { category: "general", confidence: 0.3, via: "keywords" };
 }
