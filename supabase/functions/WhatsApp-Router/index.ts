@@ -235,6 +235,33 @@ function isGreeting(text: string): boolean {
   return GREETING_TOKENS.has(norm);
 }
 
+// "Is anyone there?" / "are you with me?" presence checks. Distinct from
+// greetings because they expect a presence acknowledgement, not a fresh
+// "how can I help" opener — and CASE 2 directly contradicts the welcome
+// ("معك طلال" vs "ما أنا معاك") so the handler skips the welcome when this
+// fires. Includes a few staff-name variants ("معي طلال") but the reply
+// NEVER claims any specific human name.
+const PRESENCE_TOKENS = new Set([
+  "في احد", "فيه احد", "في حد", "فيه حد",
+  "معي احد", "معي حد", "معاي احد", "معاي حد",
+  "موجود", "موجودين", "في موجود", "فيه موجود",
+  "معي طلال", "في طلال", "فيه طلال", "وين طلال",
+  "معي الموظف", "في الموظف", "وين الموظف", "وين المسوول",
+  "ولا رد", "في رد",
+]);
+function isPresenceCheck(text: string): boolean {
+  const norm = String(text)
+    .replace(/[إأآا]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي")
+    .replace(/[ؤئء]/g, "").replace(/[ًٌٍَُِّْـ]/g, "")
+    .replace(/[؟?!,.،؛:]/g, " ").replace(/\s+/g, " ")
+    .trim().toLowerCase();
+  if (!norm || norm.length > 40) return false;
+  if (PRESENCE_TOKENS.has(norm)) return true;
+  // "محد رد" / "ولا أحد رد" / "ما حد يرد"
+  if (/^(?:محد|ولا\s+احد|ما\s+حد|ما\s+احد)\s+(?:رد|يرد)$/.test(norm)) return true;
+  return false;
+}
+
 // ── Arabic normalisation for keyword matching ─────────────────────────────
 // Saudi/Omani dialect commonly swaps ة↔ه, uses various alef forms, drops
 // hamzas, and writes ى for ي. Normalise both haystack and keywords before
@@ -586,18 +613,8 @@ async function handleMessage(args: {
     }
   }
 
-  // 0b) Greetings short-circuit at the very top of the handler. Under the
-  //     strict FAQ-or-admin flow the Travel Agent is disabled, so this
-  //     hardcoded reply is the only path that answers "مرحبا / هلا / ..."
-  //     — same fixed string regardless of session state. Skips session
-  //     creation and the welcome message so repeated greetings always get
-  //     the same response.
-  if (isGreeting(text)) {
-    await sendWhatsapp(from, "هلا 👋 أمرني كيف أقدر أخدمك؟");
-    return;
-  }
-
-  // 1) اجلب أو أنشئ الجلسة
+  // 1) اجلب أو أنشئ الجلسة. لازم يكون قبل التحقق من التحية عشان العميل
+  //    الجديد ياخذ رسالة الترحيب (طلال من خدمة العملاء) قبل رد التحية.
   const { data: existing } = await supabase
     .from("whatsapp_sessions")
     .select("*")
@@ -622,11 +639,48 @@ async function handleMessage(args: {
     };
     await supabase.from("whatsapp_sessions").insert(seed);
     session = { ...seed, destination: null, persons: null, travel_date: null } as typeof session;
-    // رسالة ترحيب — تُرسل مرّة واحدة لكل عميل جديد.
-    await sendWhatsapp(
-      from,
-      "حياك الله … معك طلال من خدمة العملاء كيف اقدر اخدمك",
-    );
+    // رسالة ترحيب — تُرسل مرّة واحدة لكل عميل جديد. لكن لو الرسالة الأولى
+    // سؤال عن وجود الموظف ("في أحد؟") فالـ welcome يتعارض مع رد CASE 2
+    // ("ما أنا معاك"). نتخطى الترحيب في هذي الحالة، الرد التالي يقوم بكامل
+    // الجواب.
+    if (!isPresenceCheck(text)) {
+      await sendWhatsapp(
+        from,
+        "حياك الله … معك طلال من خدمة العملاء كيف اقدر اخدمك",
+      );
+    }
+  }
+
+  // 1b) Presence check ("في أحد؟" / "معي أحد؟" / "معي طلال؟"). Replies before
+  //     FAQ lookup with one of two fixed messages based on AUTOREPLY_ENABLED.
+  //     Default = ON → "أيوه أستاذي، معاك". Set the secret to "false" to
+  //     switch the bot to CASE 2 mode ("ما أنا معاك الحين"). The reply NEVER
+  //     claims a specific human name.
+  if (isPresenceCheck(text)) {
+    const autoreplyOn =
+      (Deno.env.get("AUTOREPLY_ENABLED") || "true").toLowerCase() !== "false";
+    const reply = autoreplyOn
+      ? "أيوه أستاذي، معاك 😊 كيف أقدر أخدمك؟"
+      : "أستاذي، ما أنا معاك الحين، بس دقائق وأكون معك 🙏";
+    await sendWhatsapp(from, reply);
+    if (!isNew) {
+      await supabase
+        .from("whatsapp_sessions")
+        .update({ last_message_at: new Date().toISOString() })
+        .eq("phone", from);
+    }
+    return;
+  }
+
+  // 1c) Greetings short-circuit BEFORE the rest of the routing. Under the
+  //     strict FAQ-or-admin flow the Travel Agent is disabled, so this
+  //     hardcoded reply is the only path that answers "مرحبا / هلا / ...".
+  //     On a brand-new session the welcome (just sent above) comes first,
+  //     then this greeting reply. On existing sessions only this reply
+  //     fires. Skips classify and FAQ/admin escalation.
+  if (isGreeting(text)) {
+    await sendWhatsapp(from, "هلا 👋 أمرني كيف أقدر أخدمك؟");
+    return;
   }
 
   // 2) برنامج جاهز ينتظر مراجعة الموظف — رد ودود ثابت بدون استدعاء أي AI.
