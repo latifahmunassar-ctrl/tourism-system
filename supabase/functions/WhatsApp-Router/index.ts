@@ -762,17 +762,33 @@ async function handleMessage(args: {
   if (answer) {
     await sendWhatsapp(from, answer);
   } else if (!isSmallTalk(text)) {
-    // Customer-facing holding message + escalation to admin. The AI's
-    // suggested reply (drafted inside createProposalAndNotifyAdmin) is only
-    // shown to admin — admin's approval/correction is what reaches the
-    // customer via handleAdminResponse.
-    await sendWhatsapp(from, "لحظة، راح أوصل سؤالك للمختص يرد عليك 🙏");
-    await createProposalAndNotifyAdmin({
-      supabase,
-      customerPhone: from,
-      profileName,
-      question: text,
-    });
+    // Check if this customer already has a pending proposal waiting for
+    // admin action. If yes → they're following up / being insistent →
+    // reply with the patience phrase, do NOT queue another proposal. If
+    // no → silently escalate (no customer-facing reply at all; admin's
+    // reply via handleAdminResponse is what they'll receive next).
+    const { data: pending } = await supabase
+      .from("whatsapp_admin_proposals")
+      .select("id")
+      .eq("customer_phone", from)
+      .in("status", [
+        "pending_reply_approval",
+        "pending_correction",
+        "pending_sheet_approval",
+        "pending_category_choice",
+      ])
+      .limit(1)
+      .maybeSingle();
+    if (pending) {
+      await sendWhatsapp(from, "حاضر استاذي دقايق واكون معاك لحظات بس");
+    } else {
+      await createProposalAndNotifyAdmin({
+        supabase,
+        customerPhone: from,
+        profileName,
+        question: text,
+      });
+    }
   }
   // small-talk (شكرا / تمام / اوكي / هلا on existing session): stay silent.
 
