@@ -175,6 +175,32 @@ function extractDestination(text: string): string | null {
   return null;
 }
 
+// ── Greetings / acknowledgements that shouldn't burn a Claude call ───────
+// If the customer's message is just a greeting or thanks, the welcome (for
+// new sessions) is response enough, and existing sessions should stay silent
+// rather than treating it as a "novel question". Compares to a normalised
+// short list using the same Arabic normaliser used for FAQ matching.
+const SMALL_TALK_TOKENS = new Set([
+  "مرحبا", "مرحبه", "هلا", "اهلا", "اهلا وسهلا",
+  "السلام عليكم", "وعليكم السلام", "سلام عليكم",
+  "صباح الخير", "مساء الخير", "صباح النور", "مساء النور",
+  "تحية طيبه", "حياك", "حياك الله",
+  "شكرا", "شكرا لك", "مشكور", "مشكوره", "تسلم", "يسلموا",
+  "تمام", "اوكي", "اوك", "حسنا", "ماشي",
+  "ok", "okay", "thanks", "thank you", "hi", "hello",
+]);
+function isSmallTalk(text: string): boolean {
+  // Reuse the same normaliser the FAQ matcher uses (declared below).
+  const norm = String(text)
+    .replace(/[إأآا]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي")
+    .replace(/[ؤئء]/g, "").replace(/[ًٌٍَُِّْـ]/g, "")
+    .replace(/[؟?!,.،؛:]/g, " ").replace(/\s+/g, " ")
+    .trim().toLowerCase();
+  if (!norm) return true;
+  if (norm.length > 30) return false;  // too long to be just small talk
+  return SMALL_TALK_TOKENS.has(norm);
+}
+
 // ── Arabic normalisation for keyword matching ─────────────────────────────
 // Saudi/Omani dialect commonly swaps ة↔ه, uses various alef forms, drops
 // hamzas, and writes ى for ي. Normalise both haystack and keywords before
@@ -503,15 +529,21 @@ async function handleMessage(args: {
   if (isAdminPhone(from)) {
     const proposal = await getOldestPendingProposal(supabase);
     if (proposal) {
-      await handleAdminResponse({ supabase, proposal, text, adminFrom: from });
-      return;
-    }
-    // No pending proposal — but if admin sent a bare confirmation word
-    // ("نعم" / "لا"), swallow it so the customer flow doesn't run Claude
-    // on it and accidentally spawn a new "proposal" about the word itself.
-    if (isAffirmative(text) || isNegative(text)) {
-      await sendWhatsapp(from, "ما في طلب معلّق حالياً 👍");
-      return;
+      // Only treat as admin response when the message LOOKS like one
+      // (clear yes/no token). A longer message means admin is acting as a
+      // customer — let it fall through to the normal flow; the proposal
+      // stays pending until they explicitly answer it later.
+      if (isAffirmative(text) || isNegative(text)) {
+        await handleAdminResponse({ supabase, proposal, text, adminFrom: from });
+        return;
+      }
+    } else {
+      // No pending proposal — but a bare confirmation word would otherwise
+      // be misinterpreted as a customer question by the general handler.
+      if (isAffirmative(text) || isNegative(text)) {
+        await sendWhatsapp(from, "ما في طلب معلّق حالياً 👍");
+        return;
+      }
     }
   }
 
@@ -589,7 +621,9 @@ async function handleMessage(args: {
   const answer = await findFaqAnswer(supabase, text);
   if (answer) {
     await sendWhatsapp(from, answer);
-  } else {
+  } else if (!isSmallTalk(text)) {
+    // Don't pay Claude on greetings, thanks, single-word acknowledgements.
+    // The welcome message (if isNew) is response enough; otherwise stay silent.
     await createProposalAndNotifyAdmin({
       supabase,
       customerPhone: from,
