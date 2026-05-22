@@ -586,6 +586,17 @@ async function handleMessage(args: {
     }
   }
 
+  // 0b) Greetings short-circuit at the very top of the handler. Under the
+  //     strict FAQ-or-admin flow the Travel Agent is disabled, so this
+  //     hardcoded reply is the only path that answers "مرحبا / هلا / ..."
+  //     — same fixed string regardless of session state. Skips session
+  //     creation and the welcome message so repeated greetings always get
+  //     the same response.
+  if (isGreeting(text)) {
+    await sendWhatsapp(from, "هلا 👋 أمرني كيف أقدر أخدمك؟");
+    return;
+  }
+
   // 1) اجلب أو أنشئ الجلسة
   const { data: existing } = await supabase
     .from("whatsapp_sessions")
