@@ -213,6 +213,28 @@ function isSmallTalk(text: string): boolean {
   return SMALL_TALK_TOKENS.has(norm);
 }
 
+// Opener-style greetings only (no acknowledgements like شكرا / تمام). These
+// route to the Travel Agent so RULE 1 fires and the customer gets the exact
+// "هلا 👋 أمرني كيف أقدر أخدمك؟" reply instead of falling through to the
+// FAQ/small-talk silent path.
+const GREETING_TOKENS = new Set([
+  "مرحبا", "مرحبه", "هلا", "اهلا", "اهلا وسهلا",
+  "السلام عليكم", "وعليكم السلام", "سلام عليكم", "سلام",
+  "صباح الخير", "مساء الخير", "صباح النور", "مساء النور",
+  "حياك", "حياك الله",
+  "لو سمحت", "اخوي", "اقولك",
+  "hi", "hello", "hey",
+]);
+function isGreeting(text: string): boolean {
+  const norm = String(text)
+    .replace(/[إأآا]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي")
+    .replace(/[ؤئء]/g, "").replace(/[ًٌٍَُِّْـ]/g, "")
+    .replace(/[؟?!,.،؛:]/g, " ").replace(/\s+/g, " ")
+    .trim().toLowerCase();
+  if (!norm || norm.length > 30) return false;
+  return GREETING_TOKENS.has(norm);
+}
+
 // ── Arabic normalisation for keyword matching ─────────────────────────────
 // Saudi/Omani dialect commonly swaps ة↔ه, uses various alef forms, drops
 // hamzas, and writes ى for ي. Normalise both haystack and keywords before
@@ -589,11 +611,15 @@ async function handleMessage(args: {
     };
     await supabase.from("whatsapp_sessions").insert(seed);
     session = { ...seed, destination: null, persons: null, travel_date: null } as typeof session;
-    // رسالة ترحيب — تُرسل مرّة واحدة
-    await sendWhatsapp(
-      from,
-      "حياك الله … معك طلال من خدمة العملاء كيف اقدر اخدمك",
-    );
+    // رسالة ترحيب — تُرسل مرّة واحدة. لكن لو الرسالة الأولى مجرد تحية،
+    // نتركها للـ agent يردّ بـ RULE 1 ("هلا 👋 أمرني كيف أقدر أخدمك؟")
+    // بدل ما نرسل ترحيب طويل وبعدين الـ agent يرد ثاني.
+    if (!isGreeting(text)) {
+      await sendWhatsapp(
+        from,
+        "حياك الله … معك طلال من خدمة العملاء كيف اقدر اخدمك",
+      );
+    }
   }
 
   // 2) برنامج جاهز ينتظر مراجعة الموظف — رد ودود بدون استدعاء Tourism-AI ولا
@@ -604,6 +630,28 @@ async function handleMessage(args: {
       .from("whatsapp_sessions")
       .update({ last_message_at: new Date().toISOString() })
       .eq("phone", from);
+    return;
+  }
+
+  // 2b) Greetings → Travel Agent so RULE 1 fires with its exact reply.
+  //     Sits after pending_review (where we want the holding message) but
+  //     before the in-flow / classify branches. Covers both brand-new and
+  //     existing-but-idle sessions.
+  if (isGreeting(text)) {
+    const { data: row } = await supabase
+      .from("whatsapp_sessions")
+      .select("conversation")
+      .eq("phone", from)
+      .maybeSingle();
+    const history = (row?.conversation || []) as TaiTurn[];
+    await runTravelAgentTurn({
+      supabase, from, text, history,
+      prev: {
+        destination: session?.destination ?? null,
+        persons: session?.persons ?? null,
+        travel_date: session?.travel_date ?? null,
+      },
+    });
     return;
   }
 
@@ -763,11 +811,24 @@ CATEGORY AUTHORITY RULE:
 - Admin decision is FINAL
 
 GULF FRIENDLY TONE RULE:
-ALLOWED openers (use randomly, no punctuation):
+ALLOWED openers (use randomly, no punctuation) — pick ONLY from this list:
 هلا والله / أهلين / حياك / بكل سرور / يا هلا / ابشر / أمرني / حالاً
 QUESTION STYLE: "أبشر 👌 وين حابين تسافرون؟"
-PROHIBITED: رايقين / وش مسوين / يا هلا انت وزوجتك / personal jokes
+PROHIBITED openers (NEVER start a reply with any of these): ماشي / تمام / تمام تمام / ممتاز / حلو / حلو جداً / ايوة / أكيد / رايقين / وش مسوين
+PROHIBITED phrases anywhere: يا هلا انت وزوجتك / personal jokes
 TONE = Polite Gulf travel consultant NOT casual friend
+
+NO FLATTERY RULE — do NOT praise or compliment the customer:
+- BANNED phrases (NEVER use any of these or close variants):
+  • "عائلة حلوة" / "عائلة صغيرة وحلوة" / "عيلة حلوة"
+  • "اختيار ممتاز" / "ذوقك حلو" / "ذوق راقي"
+  • "ما شاء الله عليك" / "ما شاء الله عليكم" / "تستاهلون كل خير"
+  • Any adjective describing the customer / their family / their choice as حلو / جميل / لطيف / رائع / ممتاز
+- Answer the question directly in Khaleeji without commenting on how nice/small/lovely the customer or their family or their plans are.
+- A natural spontaneous Khaleeji reply, not an over-eager host.
+  ✅ "أمرني 👌 كم يوم بتقضون في ماليزيا"
+  ❌ "ماشي تمام 👌 عائلة صغيرة وحلوة كم يوم بتقضون"
+  ❌ "ما شاء الله عليكم اختيار ممتاز كم يوم"
 
 SOFT OPENING RULE:
 Never start with question directly. Always soften first with friendly phrase.
