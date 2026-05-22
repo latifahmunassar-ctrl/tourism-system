@@ -1681,6 +1681,69 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Admin: reset a single customer's WhatsApp session + clear any pending
+  // admin proposals tied to that phone. Used when re-testing a flow from
+  // scratch without having to open the SQL editor. Same JWT gate as
+  // delete_chat_rows. Usage:
+  //   POST /functions/v1/WhatsApp-Router?admin_action=reset_session
+  //   Authorization: Bearer <legacy anon JWT>
+  //   body: {"phone": "0096877428881"}   // accepts +968…, 00968…, bare digits, or whatsapp:+968…
+  if (url.searchParams.get("admin_action") === "reset_session") {
+    const expected = Deno.env.get("LEGACY_ANON_JWT") || "";
+    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    if (!expected || got !== expected) {
+      return new Response(JSON.stringify({ error: "unauthorized" }),
+        { status: 401, headers: JSON_HEADERS });
+    }
+    try {
+      const payload = await req.json();
+      const rawPhone = String(payload.phone || "").trim();
+      if (!rawPhone) {
+        return new Response(JSON.stringify({ error: "missing phone" }),
+          { status: 400, headers: JSON_HEADERS });
+      }
+      // Normalize to whatsapp:+<digits>. Accepts whatsapp:+96877428881,
+      // +96877428881, 0096877428881, or bare 96877428881.
+      const digits = rawPhone
+        .replace(/^whatsapp:/, "")
+        .replace(/^\+/, "")
+        .replace(/^00/, "")
+        .replace(/[^0-9]/g, "");
+      if (!digits) {
+        return new Response(JSON.stringify({ error: "invalid phone" }),
+          { status: 400, headers: JSON_HEADERS });
+      }
+      const phone = `whatsapp:+${digits}`;
+
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { count: sessionsDeleted, error: sErr } = await supabase
+        .from("whatsapp_sessions")
+        .delete({ count: "exact" })
+        .eq("phone", phone);
+      const { count: proposalsDeleted, error: pErr } = await supabase
+        .from("whatsapp_admin_proposals")
+        .delete({ count: "exact" })
+        .eq("customer_phone", phone);
+      if (sErr || pErr) {
+        return new Response(JSON.stringify({
+          error: (sErr || pErr)?.message,
+          phone,
+        }), { status: 500, headers: JSON_HEADERS });
+      }
+      return new Response(JSON.stringify({
+        phone,
+        whatsapp_sessions_deleted: sessionsDeleted ?? 0,
+        whatsapp_admin_proposals_deleted: proposalsDeleted ?? 0,
+      }), { headers: JSON_HEADERS });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: JSON_HEADERS });
+    }
+  }
+
   try {
     const ct = req.headers.get("content-type") || "";
     let from = ""; let body = ""; let profileName = "";
