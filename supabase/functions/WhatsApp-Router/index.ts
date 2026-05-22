@@ -1449,29 +1449,55 @@ async function createProposalAndNotifyAdmin(args: {
 }): Promise<void> {
   const { supabase, customerPhone, profileName, question } = args;
   const analysis = await analyzeUnknownQuestion(supabase, question);
-  if (!analysis) return;
+
+  // Defensive fallback: if Claude analysis failed (returned null) we still
+  // ESCALATE — the customer was already told "لحظة، راح أوصل سؤالك للمختص"
+  // so we MUST notify admin. Skip the AI-suggestion approval step and go
+  // straight to pending_correction so the admin's next message becomes the
+  // reply sent to the customer.
+  if (!analysis) {
+    console.warn(
+      `analyzeUnknownQuestion returned null; escalating without AI suggestion: ${question.slice(0, 120)}`,
+    );
+  }
+  const safe = analysis ?? {
+    interpretation: "",
+    suggestedReply: "",
+    proposedIntent: "",
+    proposedSubIntent: "",
+    proposedKeywords: [] as string[],
+  };
+  const status = analysis ? "pending_reply_approval" : "pending_correction";
 
   const { error } = await supabase.from("whatsapp_admin_proposals").insert({
     customer_phone: customerPhone,
     customer_profile_name: profileName,
     customer_question: question,
-    interpretation: analysis.interpretation,
-    suggested_reply: analysis.suggestedReply,
-    proposed_intent: analysis.proposedIntent,
-    proposed_sub_intent: analysis.proposedSubIntent,
-    proposed_keywords: analysis.proposedKeywords,
-    status: "pending_reply_approval",
+    interpretation: safe.interpretation,
+    suggested_reply: safe.suggestedReply,
+    proposed_intent: safe.proposedIntent,
+    proposed_sub_intent: safe.proposedSubIntent,
+    proposed_keywords: safe.proposedKeywords,
+    status,
   });
   if (error) { console.error("Proposal insert failed", error.message); return; }
 
   const phoneDigits = customerPhone.replace(/^whatsapp:/, "");
-  const notice =
-    `💡 سؤال جديد من عميل\n\n` +
-    `العميل: ${profileName} (${phoneDigits})\n` +
-    `السؤال: ${question}\n\n` +
-    `الفهم: ${analysis.interpretation}\n\n` +
-    `الرد المقترح:\n${analysis.suggestedReply}\n\n` +
-    `هل هذا الفهم صحيح؟ نعم / لا`;
+  const notice = analysis
+    ? (
+        `💡 سؤال جديد من عميل\n\n` +
+        `العميل: ${profileName} (${phoneDigits})\n` +
+        `السؤال: ${question}\n\n` +
+        `الفهم: ${analysis.interpretation}\n\n` +
+        `الرد المقترح:\n${analysis.suggestedReply}\n\n` +
+        `هل هذا الفهم صحيح؟ نعم / لا`
+      )
+    : (
+        `💡 سؤال جديد من عميل (تحليل AI تعذّر)\n\n` +
+        `العميل: ${profileName} (${phoneDigits})\n` +
+        `السؤال: ${question}\n\n` +
+        `اكتب الرد للعميل مباشرة وراح يوصله`
+      );
   const admins = staffList("SALES_WHATSAPP_NUMBERS");
   await Promise.all(admins.map(num => sendWhatsapp(num, notice)));
 }
