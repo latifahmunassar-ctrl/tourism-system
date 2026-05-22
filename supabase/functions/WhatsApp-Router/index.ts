@@ -541,11 +541,16 @@ async function handleMessage(args: {
   if (isAdminPhone(from)) {
     const proposal = await getOldestPendingProposal(supabase);
     if (proposal) {
-      // Only treat as admin response when the message LOOKS like one
-      // (clear yes/no token). A longer message means admin is acting as a
-      // customer — let it fall through to the normal flow; the proposal
-      // stays pending until they explicitly answer it later.
-      if (isAffirmative(text) || isNegative(text)) {
+      // Two flavours of state require admin input:
+      //   • pending_reply_approval / pending_sheet_approval → expect a
+      //     yes/no token. Longer text passes through as a customer message.
+      //   • pending_correction / pending_category_choice → expect free
+      //     text (the corrected reply / preferred category). ANY non-empty
+      //     message is the answer, including yes/no.
+      const isFreeTextState =
+        proposal.status === "pending_correction" ||
+        proposal.status === "pending_category_choice";
+      if (isFreeTextState || isAffirmative(text) || isNegative(text)) {
         await handleAdminResponse({ supabase, proposal, text, adminFrom: from });
         return;
       }
@@ -1308,12 +1313,12 @@ async function createProposalAndNotifyAdmin(args: {
 
   const phoneDigits = customerPhone.replace(/^whatsapp:/, "");
   const notice =
-    `💡 سؤال جديد من عميل ينتظر موافقتك\n\n` +
+    `💡 سؤال جديد من عميل\n\n` +
     `العميل: ${profileName} (${phoneDigits})\n` +
     `السؤال: ${question}\n\n` +
-    `أنا أفهم إنه يقصد: ${analysis.interpretation}\n\n` +
+    `الفهم: ${analysis.interpretation}\n\n` +
     `الرد المقترح:\n${analysis.suggestedReply}\n\n` +
-    `هل أرد بهذا؟  نعم / لا`;
+    `هل هذا الفهم صحيح؟ نعم / لا`;
   const admins = staffList("SALES_WHATSAPP_NUMBERS");
   await Promise.all(admins.map(num => sendWhatsapp(num, notice)));
 }
@@ -1328,7 +1333,12 @@ async function getOldestPendingProposal(
   const { data } = await supabase
     .from("whatsapp_admin_proposals")
     .select("*")
-    .in("status", ["pending_reply_approval", "pending_sheet_approval"])
+    .in("status", [
+      "pending_reply_approval",   // admin reviewing AI suggestion (نعم / لا)
+      "pending_correction",       // admin typing the corrected reply
+      "pending_sheet_approval",   // admin deciding whether to save to Excel
+      "pending_category_choice",  // admin typing preferred category
+    ])
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -1337,13 +1347,29 @@ async function getOldestPendingProposal(
 
 function isAffirmative(text: string): boolean {
   const t = text.trim().toLowerCase();
-  return ["نعم","ايوه","أيوه","ايوا","أيوا","موافق","تمام","صح","اي","yes","y","ok","اوكي","اوك"]
+  // "تم" is the new affirmative token used by step 4 ("save to suggested
+  // category") in the admin correction flow — also keep all the old yeses.
+  return ["نعم","تم","ايوه","أيوه","ايوا","أيوا","موافق","تمام","صح","اي","yes","y","ok","اوكي","اوك"]
     .some(w => t === w || t.startsWith(w + " ") || t.startsWith(w + "."));
 }
 function isNegative(text: string): boolean {
   const t = text.trim().toLowerCase();
   return ["لا","كلا","مرفوض","ارفض","أرفض","no","n"]
     .some(w => t === w || t.startsWith(w + " ") || t.startsWith(w + "."));
+}
+
+// Composes the "save to Excel?" prompt sent to admin after the customer
+// reply has been delivered. Used after both step 1 YES and step 2 corrections.
+function buildSaveProposalMessage(proposal: ProposalRow, finalReply: string): string {
+  const sub = proposal.proposed_sub_intent ? ` / ${proposal.proposed_sub_intent}` : "";
+  return (
+    `تم الرد على العميل 👍\n\n` +
+    `هل تريد حفظ هذا الرد في Excel؟\n` +
+    `الكاتيجوري المقترح: ${proposal.proposed_intent}${sub}\n` +
+    `السبب: مطابقة لسؤال "${proposal.customer_question}"\n` +
+    `الرد المحفوظ: ${finalReply}\n\n` +
+    `تم / لا`
+  );
 }
 
 async function handleAdminResponse(args: {
@@ -1356,65 +1382,134 @@ async function handleAdminResponse(args: {
   const yes = isAffirmative(text);
   const no  = isNegative(text);
 
-  if (!yes && !no) {
-    await sendWhatsapp(adminFrom, proposal.status === "pending_reply_approval"
-      ? `رد بـ "نعم" لإرسال الرد للعميل أو "لا" للإلغاء`
-      : `رد بـ "نعم" لإضافة السؤال للشيت أو "لا" لتركه`);
-    return;
-  }
-
+  // ── STEP 1: admin reviewing AI suggestion ──────────────────────────────
   if (proposal.status === "pending_reply_approval") {
-    if (no) {
+    if (yes) {
+      // Send AI's suggested reply to customer; move to save-prompt.
+      await sendWhatsapp(proposal.customer_phone, proposal.suggested_reply);
       await supabase.from("whatsapp_admin_proposals")
-        .update({ status: "rejected", decided_at: new Date().toISOString() })
+        .update({ status: "pending_sheet_approval" })
         .eq("id", proposal.id);
-      await sendWhatsapp(adminFrom, "تم الإلغاء. ما رح يوصل أي رد للعميل");
+      await sendWhatsapp(adminFrom, buildSaveProposalMessage(proposal, proposal.suggested_reply));
       return;
     }
-    // Send the suggested reply to the original customer
-    await sendWhatsapp(proposal.customer_phone, proposal.suggested_reply);
-    await supabase.from("whatsapp_admin_proposals")
-      .update({ status: "pending_sheet_approval" })
-      .eq("id", proposal.id);
-
-    const kwStr = (proposal.proposed_keywords || []).join(" / ");
-    const subStr = proposal.proposed_sub_intent ? ` / ${proposal.proposed_sub_intent}` : "";
+    if (no) {
+      // Ask admin to write the corrected reply text.
+      await supabase.from("whatsapp_admin_proposals")
+        .update({ status: "pending_correction" })
+        .eq("id", proposal.id);
+      await sendWhatsapp(adminFrom,
+        `تمام 👌 كيف تبين الرد يكون على العميل اكتب الصيغة مباشرة`);
+      return;
+    }
     await sendWhatsapp(adminFrom,
-      `✅ تم إرسال الرد للعميل\n\n` +
-      `هل أضيف هذا السؤال للشيت؟\n` +
-      `الكاتيجوري: ${proposal.proposed_intent}${subStr}\n` +
-      `الكلمات المفتاحية: ${kwStr}\n` +
-      `الجواب: ${proposal.suggested_reply}\n\n` +
-      `نعم / لا`);
+      `رد بـ "نعم" لإرسال الرد المقترح للعميل أو "لا" لتعديل الرد`);
     return;
   }
 
-  if (proposal.status === "pending_sheet_approval") {
-    if (no) {
-      await supabase.from("whatsapp_admin_proposals")
-        .update({ status: "completed_no_add", decided_at: new Date().toISOString() })
-        .eq("id", proposal.id);
-      await sendWhatsapp(adminFrom, "تمام. ما رح يضاف للشيت");
+  // ── STEP 2 (corrected path): admin typed the actual reply text ────────
+  if (proposal.status === "pending_correction") {
+    const finalReply = text.trim();
+    if (!finalReply) {
+      await sendWhatsapp(adminFrom, `اكتب الرد كاملاً عشان أرسله للعميل`);
       return;
     }
+    // Forward admin's exact text to the customer — no confirmation step.
+    await sendWhatsapp(proposal.customer_phone, finalReply);
+    // Overwrite suggested_reply so the sheet save uses the corrected version.
+    await supabase.from("whatsapp_admin_proposals")
+      .update({ status: "pending_sheet_approval", suggested_reply: finalReply })
+      .eq("id", proposal.id);
+    await sendWhatsapp(adminFrom, buildSaveProposalMessage(proposal, finalReply));
+    return;
+  }
+
+  // ── STEP 3: admin deciding whether to save to Excel ───────────────────
+  if (proposal.status === "pending_sheet_approval") {
+    // Re-load the (possibly corrected) suggested_reply.
+    const { data: fresh } = await supabase
+      .from("whatsapp_admin_proposals")
+      .select("suggested_reply")
+      .eq("id", proposal.id)
+      .maybeSingle();
+    const finalReply = (fresh?.suggested_reply as string | undefined) || proposal.suggested_reply;
+
+    if (yes) {
+      // Save to the AI-suggested category immediately.
+      const ok = await appendChatAnswerRow({
+        intent: proposal.proposed_intent,
+        subIntent: proposal.proposed_sub_intent,
+        keywords: proposal.proposed_keywords,
+        sampleQ: proposal.customer_question,
+        answer: finalReply,
+      });
+      if (ok) {
+        await supabase.from("whatsapp_admin_proposals")
+          .update({ status: "completed_added", decided_at: new Date().toISOString() })
+          .eq("id", proposal.id);
+        await sendWhatsapp(adminFrom, `تم الحفظ 👍`);
+        void triggerSyncSheets();
+      } else {
+        await sendWhatsapp(adminFrom,
+          `❌ ما قدرت أحفظ للشيت تأكدي إن tourism-sync@tourism-sysc-495108.iam.gserviceaccount.com عنده صلاحية Editor`);
+      }
+      return;
+    }
+    if (no) {
+      // Ask admin for preferred category.
+      await supabase.from("whatsapp_admin_proposals")
+        .update({ status: "pending_category_choice" })
+        .eq("id", proposal.id);
+      await sendWhatsapp(adminFrom, `تمام 👌 وين تفضل نحفظه`);
+      return;
+    }
+    await sendWhatsapp(adminFrom,
+      `رد بـ "تم" للحفظ في الكاتيجوري المقترح أو "لا" لاختيار كاتيجوري ثاني`);
+    return;
+  }
+
+  // ── STEP 4: admin typed preferred category ────────────────────────────
+  if (proposal.status === "pending_category_choice") {
+    const raw = text.trim();
+    if (!raw) {
+      await sendWhatsapp(adminFrom, `اكتب اسم الكاتيجوري عشان أحفظه فيه`);
+      return;
+    }
+    // Accept "Intent / Sub-intent" or just a single value (treated as sub-intent).
+    let intent = proposal.proposed_intent;
+    let subIntent = raw;
+    if (raw.includes("/")) {
+      const parts = raw.split("/").map(s => s.trim()).filter(Boolean);
+      intent = parts[0] || intent;
+      subIntent = parts[1] || "";
+    }
+    const { data: fresh } = await supabase
+      .from("whatsapp_admin_proposals")
+      .select("suggested_reply")
+      .eq("id", proposal.id)
+      .maybeSingle();
+    const finalReply = (fresh?.suggested_reply as string | undefined) || proposal.suggested_reply;
     const ok = await appendChatAnswerRow({
-      intent: proposal.proposed_intent,
-      subIntent: proposal.proposed_sub_intent,
+      intent,
+      subIntent,
       keywords: proposal.proposed_keywords,
       sampleQ: proposal.customer_question,
-      answer: proposal.suggested_reply,
+      answer: finalReply,
     });
     if (ok) {
       await supabase.from("whatsapp_admin_proposals")
-        .update({ status: "completed_added", decided_at: new Date().toISOString() })
+        .update({
+          status: "completed_added",
+          proposed_intent: intent,
+          proposed_sub_intent: subIntent,
+          decided_at: new Date().toISOString(),
+        })
         .eq("id", proposal.id);
-      await sendWhatsapp(adminFrom,
-        `✅ تم إضافة السؤال للشيت بنجاح\n` +
-        `في المرة القادمة لما يجي نفس السؤال راح يرد البوت تلقائياً 🎯`);
+      await sendWhatsapp(adminFrom, `تم الحفظ 👍`);
       void triggerSyncSheets();
     } else {
       await sendWhatsapp(adminFrom,
-        `❌ ما قدرت أضيف للشيت. تأكدي إن tourism-sync@tourism-sysc-495108.iam.gserviceaccount.com عنده صلاحية Editor على الشيت`);
+        `❌ ما قدرت أحفظ تأكدي من الصلاحيات على الشيت`);
     }
     return;
   }
