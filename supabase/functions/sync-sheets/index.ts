@@ -112,12 +112,17 @@ async function readSheetRange(
 // Keywords, sample Q, Answer_SA1, Answer_SA2, Answer clarification,
 // Answer_OM, Status.
 // deno-lint-ignore no-explicit-any
-async function syncChatAnswers(supabase: any, token: string): Promise<number> {
+async function syncChatAnswers(supabase: any, token: string): Promise<{ upserted: number; deleted: number }> {
   const chatSheetId = Deno.env.get("ALEZZ_CHAT_SPREADSHEET_ID")
     || "1wBbUNMyZvYMFzxhw9CSVWZvnolMX_yzr13bUVfUxmYQ";
 
+  // Single timestamp for the whole sync — rows we upsert get this stamped on
+  // updated_at, so we can identify chat_answers rows that *weren't* refreshed
+  // (i.e. were deleted from the sheet) and prune them.
+  const syncTimestamp = new Date().toISOString();
+
   const rows = await readSheetRange(token, chatSheetId, "Sheet1!A1:J500");
-  if (rows.length < 2) return 0;
+  if (rows.length < 2) return { upserted: 0, deleted: 0 };
 
   const header = rows[0].map(h => String(h || "").trim().toLowerCase());
   const idx = (name: string) => header.indexOf(name.toLowerCase());
@@ -182,18 +187,29 @@ async function syncChatAnswers(supabase: any, token: string): Promise<number> {
       answer_clarification: String(row[cols.clar] || "").trim(),
       answer_om: String(row[cols.om] || "").trim(),
       status: String(row[cols.status] || "").trim(),
-      updated_at: new Date().toISOString(),
+      updated_at: syncTimestamp,
     });
   }
 
-  if (upserts.length === 0) return 0;
+  if (upserts.length === 0) return { upserted: 0, deleted: 0 };
   // Composite key (id, sub_intent) because PKG001 has two sub-intents:
   // "General" and "Specific _Destination".
   const { error } = await supabase
     .from("chat_answers")
     .upsert(upserts, { onConflict: "id,sub_intent" });
   if (error) throw new Error(`chat_answers upsert: ${error.message}`);
-  return upserts.length;
+
+  // Purge rows that exist in chat_answers but no longer in the sheet — they
+  // weren't part of this sync's upsert, so their updated_at is still older
+  // than syncTimestamp. This makes chat_answers a true mirror of the sheet
+  // (an admin-deleted sheet row disappears from chat_answers on next sync).
+  const { error: delErr, count: deleted } = await supabase
+    .from("chat_answers")
+    .delete({ count: "exact" })
+    .lt("updated_at", syncTimestamp);
+  if (delErr) throw new Error(`chat_answers prune: ${delErr.message}`);
+
+  return { upserted: upserts.length, deleted: deleted ?? 0 };
 }
 
 // ── تنظيف نص العملة ───────────────────────────────────────────────────────
@@ -1092,9 +1108,12 @@ Deno.serve(async (req) => {
     // مزامنة منفصلة لأن ورقة الدردشة في spreadsheet آخر. تفشل بصمت لو
     // ALEZZ_CHAT_SPREADSHEET_ID مو مظبوط أو الورقة مو مشاركه مع service account.
     let chatAnswersSynced = 0;
+    let chatAnswersDeleted = 0;
     let chatAnswersError: string | null = null;
     try {
-      chatAnswersSynced = await syncChatAnswers(supabase, token);
+      const r = await syncChatAnswers(supabase, token);
+      chatAnswersSynced = r.upserted;
+      chatAnswersDeleted = r.deleted;
     } catch (e) {
       chatAnswersError = (e as Error).message;
     }
@@ -1116,6 +1135,7 @@ Deno.serve(async (req) => {
         flights: totalFlights,
         trains: totalTrains,
         chat_answers: chatAnswersSynced,
+        chat_answers_pruned: chatAnswersDeleted,
         chat_answers_error: chatAnswersError,
         details,
         duration_ms: duration,

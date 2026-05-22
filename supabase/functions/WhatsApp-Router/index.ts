@@ -1218,6 +1218,64 @@ async function appendChatAnswerRow(args: {
   return true;
 }
 
+// Delete rows from the ALEZZ Chat sheet by their ID column (column A) value.
+// Used by the admin cleanup endpoint to remove duplicate/AI-generated rows.
+async function deleteChatAnswerRowsByIds(ids: string[]): Promise<{
+  deleted: number; not_found: string[]; sheet_id: number | null;
+}> {
+  const token = await getGoogleSheetsToken(
+    "https://www.googleapis.com/auth/spreadsheets");
+  if (!token) throw new Error("no google sheets token");
+
+  // First, find the numeric sheet ID for "Sheet1" (needed by batchUpdate).
+  const metaRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${ALEZZ_CHAT_SPREADSHEET_ID}?fields=sheets.properties`,
+    { headers: { Authorization: `Bearer ${token}` } });
+  const meta = await metaRes.json();
+  const firstSheet = (meta.sheets && meta.sheets[0]) || null;
+  const sheetId = firstSheet?.properties?.sheetId;
+  if (typeof sheetId !== "number") throw new Error("could not resolve Sheet1 sheetId");
+
+  // Read column A to find row indices.
+  const valsRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${ALEZZ_CHAT_SPREADSHEET_ID}/values/Sheet1!A1:A1000`,
+    { headers: { Authorization: `Bearer ${token}` } });
+  const vals = await valsRes.json();
+  const idCol: string[][] = vals.values || [];
+
+  const wanted = new Set(ids.map(s => s.trim()));
+  const idx0Based: number[] = []; // 0-based sheet row positions, skipping header row 0
+  for (let i = 1; i < idCol.length; i++) {
+    const cell = String((idCol[i] && idCol[i][0]) || "").trim();
+    if (wanted.has(cell)) idx0Based.push(i);
+  }
+  const foundIds = new Set(idx0Based.map(i => idCol[i][0]));
+  const notFound = ids.filter(id => !foundIds.has(id));
+
+  if (idx0Based.length === 0) {
+    return { deleted: 0, not_found: notFound, sheet_id: sheetId };
+  }
+
+  // Delete bottom-up so row indices don't shift mid-batch.
+  idx0Based.sort((a, b) => b - a);
+  const requests = idx0Based.map(i => ({
+    deleteDimension: {
+      range: { sheetId, dimension: "ROWS", startIndex: i, endIndex: i + 1 },
+    },
+  }));
+  const batchRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${ALEZZ_CHAT_SPREADSHEET_ID}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ requests }),
+    });
+  if (!batchRes.ok) {
+    throw new Error(`sheet batchUpdate failed: ${batchRes.status} ${await batchRes.text()}`);
+  }
+  return { deleted: idx0Based.length, not_found: notFound, sheet_id: sheetId };
+}
+
 async function triggerSyncSheets(): Promise<void> {
   const jwt = Deno.env.get("LEGACY_ANON_JWT") || "";
   try {
@@ -1237,6 +1295,31 @@ Deno.serve(async (req) => {
   }
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
+  }
+
+  // Admin: delete rows from the ALEZZ Chat sheet by ID. Gated by the legacy
+  // anon JWT (sent in Authorization header) since the function is otherwise
+  // open to Twilio. Usage:
+  //   POST /functions/v1/WhatsApp-Router?admin_action=delete_chat_rows
+  //   Authorization: Bearer <legacy anon JWT>
+  //   body: {"ids": ["PKG_AI_xxxx", "PKG_AI_yyyy"]}
+  const url = new URL(req.url);
+  if (url.searchParams.get("admin_action") === "delete_chat_rows") {
+    const expected = Deno.env.get("LEGACY_ANON_JWT") || "";
+    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    if (!expected || got !== expected) {
+      return new Response(JSON.stringify({ error: "unauthorized" }),
+        { status: 401, headers: JSON_HEADERS });
+    }
+    try {
+      const payload = await req.json();
+      const ids = Array.isArray(payload.ids) ? payload.ids.map(String) : [];
+      const result = await deleteChatAnswerRowsByIds(ids);
+      return new Response(JSON.stringify(result), { headers: JSON_HEADERS });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: JSON_HEADERS });
+    }
   }
 
   try {
