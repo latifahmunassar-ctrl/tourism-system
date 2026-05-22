@@ -668,42 +668,265 @@ async function handleComplaint(args: {
     .eq("phone", from);
 }
 
+// ── AI Travel Sales Agent ────────────────────────────────────────────────
+// Replaces regex extractors with a Claude-driven agent that handles
+// destination + dates + passengers + budget + duration extraction AND
+// composes warm Gulf-Arabic replies in one go. Returns JSON with both the
+// extracted data and the next customer message.
+const TRAVEL_AGENT_PROMPT = `You are an AI Travel Sales Agent for a travel agency.
+
+Your goal:
+Convert conversations into qualified travel leads and generate structured data + a customer reply.
+
+You must behave like a senior travel sales consultant, not a chatbot.
+
+TODAY DATE: {{TODAY}}
+
+OUTPUT FORMAT: Return VALID JSON ONLY.
+{
+  "data": {
+    "destination": null,
+    "travel_dates": { "start_date": null, "end_date": null, "flexible": false },
+    "passengers": { "adults": null, "children": null, "infants": null },
+    "trip_duration_days": null,
+    "budget": { "min": null, "max": null, "currency": "SAR" },
+    "notes": null
+  },
+  "intent": "request_quote | book_now | visa_inquiry | compare | support | unknown | warm_lead",
+  "action": "ask_question | suggest_destinations | send_offer | support",
+  "message": "...",
+  "lead_score": 0,
+  "lead_type": "hot | warm | cold",
+  "confidence": 0.0
+}
+
+EXTRACT DATA:
+- destination (normalized English names: فيتنام→Vietnam, تركيا→Turkey, تايلند→Thailand, جورجيا→Georgia, ماليزيا→Malaysia, اندونيسيا→Indonesia, بالي→Bali, المالديف→Maldives)
+- travel_dates (YYYY-MM-DD; interpret relative dates from TODAY; if vague → null + flexible=true)
+- passengers (أنا وزوجتي=2 adults; عائلة=2 adults + children unknown)
+- trip_duration_days, budget (currency SAR), notes
+
+CORE SALES RULES:
+1. ONE QUESTION RULE: never ask more than one question per message.
+2. DESTINATION FIRST: if destination missing → action=ask_question, message asks for destination only.
+3. NO OVER-ASKING: only ONE missing critical field at a time.
+4. NO EARLY BOOKING: do not action=send_offer unless destination + travel_dates.start_date + passengers.adults all exist.
+5. DO NOT RE-ASK DATA: never ask again for fields already provided in earlier turns or in CURRENT SESSION STATE below.
+6. UNCLEAR REQUEST: if vague → action=suggest_destinations, propose Turkey/Vietnam/Thailand/Georgia.
+
+STATE-AWARE HANDLING:
+A) If the latest user message is a greeting or general phrase (مرحبا، هلا، لو سمحت):
+   reply in Gulf Arabic friendly tone like "هلا أخوي 👋 أمرني كيف أقدر أساعدك" — do NOT mention previous request or status.
+B) If the user asks about an old request (وش صار، جاهز العرض، وين الطلب):
+   ONLY give status update like "جارٍ تجهيز أفضل العروض لك حالياً ✈️ وبإذن الله خلال دقائق يكون عندك" — no questions.
+C) NEW REQUEST: focus only on it.
+
+DATE RULES: convert all to YYYY-MM-DD. Understand 15 مايو, 15/5, next week, بعد أسبوع, after Eid, بعد شهرين. Unclear → null + flexible=true.
+
+LEAD SCORING: +30 destination, +20 dates, +20 passengers, +10 budget, +20 urgency.
+0-40 cold, 41-70 warm, 71-100 hot.
+
+ROUTING LOGIC:
+- destination missing → action=ask_question
+- destination exists but key data missing → action=ask_question (ONE field)
+- destination + date + passengers exist → intent=request_quote, action=send_offer
+- general inquiry about pricing/visa/policies/hotels → action=support
+- unclear → action=suggest_destinations
+
+RESPONSE STYLE:
+- Never explain reasoning, never output text outside JSON.
+- Gulf Arabic natural warm tone — "اكيد ابشر", "حياك الله", "تمام أخوي".
+- Short and human-like. Never sound like a robot question.
+- Maximum one question per message.
+`;
+
+type AgentDates = { start_date: string | null; end_date: string | null; flexible: boolean };
+type AgentPassengers = { adults: number | null; children: number | null; infants: number | null };
+type AgentResponse = {
+  data: {
+    destination: string | null;
+    travel_dates: AgentDates;
+    passengers: AgentPassengers;
+    trip_duration_days: number | null;
+    budget: { min: number | null; max: number | null; currency: string };
+    notes: string | null;
+  };
+  intent: string;
+  action: string;
+  message: string;
+  lead_score: number;
+  lead_type: string;
+  confidence: number;
+};
+
+async function runTravelAgent(args: {
+  history: TaiTurn[];
+  userMessage: string;
+  sessionState: { destination: string | null; persons: number | null; travel_date: string | null };
+}): Promise<AgentResponse | null> {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey) return null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const stateHint =
+    `\n\nCURRENT SESSION STATE (already extracted in earlier turns):` +
+    `\n- destination: ${args.sessionState.destination ?? "null"}` +
+    `\n- travel_dates.start_date: ${args.sessionState.travel_date ?? "null"}` +
+    `\n- passengers.adults: ${args.sessionState.persons ?? "null"}` +
+    `\nIf any of the above are NOT null, do NOT ask the user for them again. Merge new info into these.`;
+
+  const system = TRAVEL_AGENT_PROMPT.replace("{{TODAY}}", today) + stateHint;
+  const messages = [
+    ...args.history,
+    { role: "user" as const, content: args.userMessage },
+  ];
+
+  try {
+    const anthropic = new Anthropic({ apiKey });
+    const res = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 700,
+      system,
+      messages,
+    });
+    const block = res.content?.[0];
+    if (!block || block.type !== "text") return null;
+    const m = block.text.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    return JSON.parse(m[0]) as AgentResponse;
+  } catch (e) {
+    console.error("Travel agent failed", (e as Error).message);
+    return null;
+  }
+}
+
+// Map agent's nested response back onto whatsapp_sessions columns and decide
+// whether the package data is now complete enough to send to staff.
+function applyAgentResultToSession(args: {
+  prevDestination: string | null;
+  prevPersons: number | null;
+  prevTravelDate: string | null;
+  agent: AgentResponse;
+}): { destination: string | null; persons: number | null; travel_date: string | null; complete: boolean } {
+  const d = args.agent.data || ({} as AgentResponse["data"]);
+  const newDest = d.destination?.trim() || args.prevDestination;
+  const newPersons = d.passengers?.adults ?? args.prevPersons;
+  // Keep the existing YYYY-MM-DD or DD/MM/YYYY format we already used elsewhere;
+  // store the agent's ISO start_date as-is.
+  const newDate = d.travel_dates?.start_date?.trim() || args.prevTravelDate;
+  const complete = !!(newDest && newPersons && newDate);
+  return { destination: newDest, persons: newPersons, travel_date: newDate, complete };
+}
+
 async function startPackageFlow(args: {
   supabase: ReturnType<typeof createClient>;
   session: { destination: string | null; persons: number | null; travel_date: string | null } | null;
   from: string;
   text: string;
 }): Promise<void> {
-  const { supabase, from, text } = args;
-  // محاولة استخراج أي حقول من الرسالة الأولى
-  const destination = extractDestination(text);
-  const persons = extractPersons(text);
-  const date = extractDate(text);
+  const { supabase, from, text, session } = args;
+  await runTravelAgentTurn({
+    supabase, from, text,
+    history: [],
+    prev: {
+      destination: session?.destination ?? null,
+      persons: session?.persons ?? null,
+      travel_date: session?.travel_date ?? null,
+    },
+  });
+}
 
-  const nextStage = !destination
-    ? "awaiting_destination"
-    : !persons
-    ? "awaiting_persons"
-    : !date
-    ? "awaiting_date"
-    : "ready";
+async function runTravelAgentTurn(args: {
+  supabase: ReturnType<typeof createClient>;
+  from: string;
+  text: string;
+  history: TaiTurn[];
+  prev: { destination: string | null; persons: number | null; travel_date: string | null };
+}): Promise<void> {
+  const { supabase, from, text, history, prev } = args;
 
+  const agent = await runTravelAgent({
+    history,
+    userMessage: text,
+    sessionState: prev,
+  });
+
+  if (!agent) {
+    // Claude unavailable — fallback to a polite holding message + flag for staff.
+    await sendWhatsapp(from,
+      "تمام أخوي وصلني طلبك راح يجهز لك موظف من المبيعات وارسلك التفاصيل بعد لحظات 🌹");
+    await supabase.from("whatsapp_sessions")
+      .update({ stage: "in_agent", last_message_at: new Date().toISOString() })
+      .eq("phone", from);
+    return;
+  }
+
+  const merged = applyAgentResultToSession({
+    prevDestination: prev.destination,
+    prevPersons: prev.persons,
+    prevTravelDate: prev.travel_date,
+    agent,
+  });
+
+  const newHistory: TaiTurn[] = [
+    ...history,
+    { role: "user", content: text },
+    { role: "assistant", content: JSON.stringify({ message: agent.message, action: agent.action }) },
+  ];
+
+  // action === "send_offer" → all critical data captured; transition to
+  // pending_review and let staff build the program manually (same path as
+  // before, just driven by the agent's decision instead of the regex flow).
+  if (agent.action === "send_offer" && merged.complete) {
+    await supabase
+      .from("whatsapp_sessions")
+      .update({
+        stage: "pending_review",
+        destination: merged.destination,
+        persons: merged.persons,
+        travel_date: merged.travel_date,
+        conversation: newHistory,
+        pending_program_at: new Date().toISOString(),
+        last_message_at: new Date().toISOString(),
+      })
+      .eq("phone", from);
+
+    // Customer-facing warm reply (the agent's own message), then staff alert.
+    await sendWhatsapp(from, agent.message);
+    const sales = staffList("SALES_WHATSAPP_NUMBERS");
+    const phoneDigits = from.replace(/^whatsapp:/, "");
+    const notice =
+      `📨 طلب باقة جديد جاهز للتجهيز\n` +
+      `العميل: ${phoneDigits}\n` +
+      `الوجهة: ${merged.destination}\n` +
+      `الأشخاص: ${merged.persons}\n` +
+      `التاريخ: ${merged.travel_date}\n` +
+      `Lead score: ${agent.lead_score} (${agent.lead_type})\n\n` +
+      `جهّز البرنامج من الواجهة وأرسله للعميل مباشرة من واتسابك`;
+    await Promise.all(sales.map(num => sendWhatsapp(num, notice)));
+    return;
+  }
+
+  // action === "support" → defer to the FAQ. If the FAQ has a match, send
+  // that; otherwise fall back to the agent's own message.
+  let outgoing = agent.message;
+  if (agent.action === "support") {
+    const faq = await findFaqAnswer(supabase, text);
+    if (faq) outgoing = faq;
+  }
+
+  await sendWhatsapp(from, outgoing);
   await supabase
     .from("whatsapp_sessions")
     .update({
-      stage: nextStage,
-      destination,
-      persons,
-      travel_date: date,
+      stage: "in_agent",
+      destination: merged.destination,
+      persons: merged.persons,
+      travel_date: merged.travel_date,
+      conversation: newHistory,
       last_message_at: new Date().toISOString(),
     })
     .eq("phone", from);
-
-  if (nextStage === "ready") {
-    await finalizePackage({ supabase, from });
-    return;
-  }
-  await sendWhatsapp(from, promptForStage(nextStage));
 }
 
 async function continuePackageFlow(args: {
@@ -716,49 +939,21 @@ async function continuePackageFlow(args: {
   from: string;
 }): Promise<void> {
   const { supabase, session, text, from } = args;
-  const updates: Record<string, unknown> = { last_message_at: new Date().toISOString() };
-
-  if (session.stage === "awaiting_destination") {
-    const d = extractDestination(text) || text.slice(0, 80);
-    updates.destination = d;
-  } else if (session.stage === "awaiting_persons") {
-    const n = extractPersons(text);
-    if (!n) {
-      await sendWhatsapp(from, "ما فهمت العدد. اكتب رقم (مثلاً 4) أو كلمة (أربعة).");
-      return;
-    }
-    updates.persons = n;
-  } else if (session.stage === "awaiting_date") {
-    const d = extractDate(text);
-    if (!d) {
-      await sendWhatsapp(from, "ما فهمت التاريخ. اكتبه بصيغة dd/mm/yyyy أو اذكر الشهر (مثلاً يوليو).");
-      return;
-    }
-    updates.travel_date = d;
-  }
-
-  // حدّد الخطوة التالية بناءً على ما يتوفر بعد التحديث
-  const merged = {
-    destination: (updates.destination ?? session.destination) as string | null,
-    persons: (updates.persons ?? session.persons) as number | null,
-    travel_date: (updates.travel_date ?? session.travel_date) as string | null,
-  };
-  const nextStage = !merged.destination
-    ? "awaiting_destination"
-    : !merged.persons
-    ? "awaiting_persons"
-    : !merged.travel_date
-    ? "awaiting_date"
-    : "ready";
-  updates.stage = nextStage;
-
-  await supabase.from("whatsapp_sessions").update(updates).eq("phone", from);
-
-  if (nextStage === "ready") {
-    await finalizePackage({ supabase, from });
-  } else {
-    await sendWhatsapp(from, promptForStage(nextStage));
-  }
+  // Fetch conversation so the agent has full context.
+  const { data: row } = await supabase
+    .from("whatsapp_sessions")
+    .select("conversation")
+    .eq("phone", from)
+    .maybeSingle();
+  const history = ((row?.conversation || []) as TaiTurn[]);
+  await runTravelAgentTurn({
+    supabase, from, text, history,
+    prev: {
+      destination: session.destination,
+      persons: session.persons,
+      travel_date: session.travel_date,
+    },
+  });
 }
 
 function promptForStage(stage: string): string {
