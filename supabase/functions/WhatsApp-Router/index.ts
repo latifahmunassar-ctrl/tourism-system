@@ -262,6 +262,35 @@ function isPresenceCheck(text: string): boolean {
   return false;
 }
 
+// Personal greetings where the customer addresses the bot by name. Each
+// normalized phrase maps to its specific Khaleeji reply. Sent verbatim — no
+// AI generation. Keys are post-normalization (أ→ا, ة→ه, ى→ي, tashkeel and
+// punctuation stripped). Values keep their commas/emojis as written.
+const PERSONAL_GREETING_REPLIES: Record<string, string> = {
+  "هلا طلال":               "يا هلا وغلا 👋 تفضل",
+  "هلا والله طلال":         "يا هلا وغلا 👋 تفضل",
+  "اهلا طلال":              "أهلين فيك 👋 تفضل",
+  "اهلين طلال":             "أهلين فيك 👋 تفضل",
+  "كيف حالك طلال":          "الحمد لله بخير أبشرك 👌 أمرني",
+  "كيفك طلال":              "الحمد لله بخير أبشرك 👌 أمرني",
+  "كيف الحال طلال":         "الحمد لله بخير أبشرك 👌 أمرني",
+  "شلونك طلال":             "بخير ولله الحمد 👌 أمرني",
+  "شلون حالك طلال":         "بخير ولله الحمد 👌 أمرني",
+  "صباح الخير طلال":        "صباح النور والسرور 🌷 تفضل",
+  "مساء الخير طلال":        "مساء الخير 👌 حياك الله، أمرني",
+  "يعطيك العافيه طلال":     "الله يعافيك ويبارك فيك 👌 تفضل",
+  "الله يعطيك العافيه طلال": "الله يعافيك ويبارك فيك 👌 تفضل",
+};
+function getPersonalGreetingReply(text: string): string | null {
+  const norm = String(text)
+    .replace(/[إأآا]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي")
+    .replace(/[ؤئء]/g, "").replace(/[ًٌٍَُِّْـ]/g, "")
+    .replace(/[؟?!,.،؛:]/g, " ").replace(/\s+/g, " ")
+    .trim().toLowerCase();
+  if (!norm || norm.length > 50) return null;
+  return PERSONAL_GREETING_REPLIES[norm] ?? null;
+}
+
 // ── Arabic normalisation for keyword matching ─────────────────────────────
 // Saudi/Omani dialect commonly swaps ة↔ه, uses various alef forms, drops
 // hamzas, and writes ى for ي. Normalise both haystack and keywords before
@@ -672,12 +701,29 @@ async function handleMessage(args: {
     return;
   }
 
-  // 1c) Greetings short-circuit BEFORE the rest of the routing. Under the
-  //     strict FAQ-or-admin flow the Travel Agent is disabled, so this
-  //     hardcoded reply is the only path that answers "مرحبا / هلا / ...".
-  //     On a brand-new session the welcome (just sent above) comes first,
-  //     then this greeting reply. On existing sessions only this reply
-  //     fires. Skips classify and FAQ/admin escalation.
+  // 1c) Personal greetings ("هلا طلال" / "كيف حالك طلال" / "صباح الخير طلال").
+  //     Each matched variant has its own specific Khaleeji reply from
+  //     PERSONAL_GREETING_REPLIES. Sent verbatim — no AI involvement. Runs
+  //     before the generic isGreeting() check so "هلا طلال" doesn't fall
+  //     through and end up answered with the canonical RULE 1 reply.
+  const personalReply = getPersonalGreetingReply(text);
+  if (personalReply !== null) {
+    await sendWhatsapp(from, personalReply);
+    if (!isNew) {
+      await supabase
+        .from("whatsapp_sessions")
+        .update({ last_message_at: new Date().toISOString() })
+        .eq("phone", from);
+    }
+    return;
+  }
+
+  // 1d) Generic greetings short-circuit BEFORE the rest of the routing.
+  //     Under the strict FAQ-or-admin flow the Travel Agent is disabled, so
+  //     this hardcoded reply is the only path that answers bare
+  //     "مرحبا / هلا / ...". On a brand-new session the welcome (just sent
+  //     above) comes first, then this greeting reply. On existing sessions
+  //     only this reply fires. Skips classify and FAQ/admin escalation.
   if (isGreeting(text)) {
     await sendWhatsapp(from, "هلا 👋 أمرني كيف أقدر أخدمك؟");
     return;
