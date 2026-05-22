@@ -225,18 +225,27 @@ async function findFaqAnswer(
     return re.test(haystack);
   };
 
-  let best: { score: number; row: typeof data[number] } | null = null;
+  // Score rows by *length-weighted* keyword matches so a long phrase like
+  // "السفر مع الحيوانات" beats short generic keywords like "سفر" that
+  // appear in many rows. Each matched keyword contributes its char length
+  // (capped at 20) to the row's score; a row needs ≥1 keyword to be in the
+  // running.
+  let best: { score: number; matchCount: number; row: typeof data[number] } | null = null;
   for (const row of data as Array<{
     id: string; sub_intent: string; keywords: string[];
     answer_sa1: string; answer_om: string; answer_clarification: string;
   }>) {
     let score = 0;
+    let matchCount = 0;
     for (const kwRaw of row.keywords) {
       const kw = normalizeArabic(kwRaw);
-      if (matchesAsWord(kw)) score++;
+      if (matchesAsWord(kw)) {
+        matchCount++;
+        score += Math.min(kw.length, 20);
+      }
     }
-    if (score === 0) continue;
-    if (!best || score > best.score) best = { score, row };
+    if (matchCount === 0) continue;
+    if (!best || score > best.score) best = { score, matchCount, row };
   }
   if (!best) return null;
 
@@ -495,6 +504,13 @@ async function handleMessage(args: {
     const proposal = await getOldestPendingProposal(supabase);
     if (proposal) {
       await handleAdminResponse({ supabase, proposal, text, adminFrom: from });
+      return;
+    }
+    // No pending proposal — but if admin sent a bare confirmation word
+    // ("نعم" / "لا"), swallow it so the customer flow doesn't run Claude
+    // on it and accidentally spawn a new "proposal" about the word itself.
+    if (isAffirmative(text) || isNegative(text)) {
+      await sendWhatsapp(from, "ما في طلب معلّق حالياً 👍");
       return;
     }
   }
@@ -937,7 +953,17 @@ async function analyzeUnknownQuestion(
     `1) اشرح بإيجاز (جملة واحدة) ماذا يقصد العميل\n` +
     `2) اقترح رداً مناسباً باللهجة الخليجية بدون علامات ترقيم\n` +
     `3) اقترح فئة (intent + sub_intent) — يفضل من الفئات الموجودة، أو فئة جديدة لو لزم\n` +
-    `4) اقترح 5-10 كلمات مفتاحية للمطابقة مستقبلاً\n\n` +
+    `4) اقترح 10-18 كلمة مفتاحية للمطابقة مستقبلاً\n\n` +
+    `قواعد مهمة جداً للكلمات المفتاحية — المطابقة عبر substring مع حدود ` +
+    `كلمات وقبول البادئات (ال، بال، ب، ل، ف، و، ك). يعني:\n` +
+    `• ضع جذور الكلمات (ـ3 لـ ـ6 حروف) عشان تطابق أكبر عدد من المتغيرات.\n` +
+    `• ضع متغيرات الجمع والملكية لكل مفهوم — مثلاً قطه، قطط، قطتي، قطته.\n` +
+    `• تجنب الكلمات العامة الشائعة في عدة فئات: سفر، كيف، ابي، اريد، عندكم، ` +
+    `وش، متى، الى، من، رحلة، برنامج، باكج.\n` +
+    `• اعطِ تركيبات قصيرة (2-3 كلمات) فقط إذا كانت مميزة وفريدة لهذا المفهوم.\n` +
+    `• لا تستخدم علامات ترقيم داخل الكلمات.\n\n` +
+    `مثال جيد لسؤال عن السفر مع الحيوانات الأليفة:\n` +
+    `["قطه","قطط","قطتي","كلب","كلاب","كلبي","حيوان","حيوانات","اليف","اليفه","حيوان اليف","نقل الحيوان","شحن حيوانات"]\n\n` +
     `الفئات الموجودة: ${categories}\n\n` +
     `أعد JSON فقط بدون أي نص آخر بهذا الشكل:\n` +
     `{"interpretation":"...","suggested_reply":"...","proposed_intent":"...","proposed_sub_intent":"...","proposed_keywords":["...","..."]}`;
