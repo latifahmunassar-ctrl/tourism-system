@@ -808,8 +808,14 @@ async function handleMessage(args: {
       .limit(1)
       .maybeSingle();
     if (pending) {
+      // Customer is following up while admin still has their previous
+      // question open — patience phrase, no new proposal.
       await sendWhatsapp(from, "حاضر استاذي دقايق واكون معاك لحظات بس");
     } else {
+      // First-time escalation: quick acknowledgement so the customer
+      // sees something instantly (doesn't feel ignored), then admin gets
+      // the proposal and decides the actual reply.
+      await sendWhatsapp(from, "حاضر 👌 لحظات أستاذي");
       await createProposalAndNotifyAdmin({
         supabase,
         customerPhone: from,
