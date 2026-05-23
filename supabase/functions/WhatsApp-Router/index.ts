@@ -280,6 +280,10 @@ const PERSONAL_GREETING_REPLIES: Record<string, string> = {
   "مساء الخير طلال":        "مساء الخير 👌 حياك الله، أمرني",
   "يعطيك العافيه طلال":     "الله يعافيك ويبارك فيك 👌 تفضل",
   "الله يعطيك العافيه طلال": "الله يعافيك ويبارك فيك 👌 تفضل",
+  "حياك طلال":              "هلا فيك 👋 تفضل",
+  "حياك الله طلال":         "هلا فيك 👋 تفضل",
+  "الله يحييك طلال":        "هلا فيك 👋 تفضل",
+  "هلا فيك طلال":           "يا هلا وغلا 👋 تفضل",
 };
 function getPersonalGreetingReply(text: string): string | null {
   const norm = String(text)
@@ -1893,6 +1897,60 @@ Deno.serve(async (req) => {
       const ids = Array.isArray(payload.ids) ? payload.ids.map(String) : [];
       const result = await deleteChatAnswerRowsByIds(ids);
       return new Response(JSON.stringify(result), { headers: JSON_HEADERS });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: JSON_HEADERS });
+    }
+  }
+
+  // Admin: dump recent Twilio Messages for a specific phone (both inbound
+  // from the phone and outbound from us to it). Useful for diagnosing
+  // delivery, retracing what the bot actually sent, or confirming a
+  // customer's message reached Twilio. JWT-gated like the others.
+  // Usage: POST ?admin_action=twilio_messages  body: {"phone": "00968..."}
+  if (url.searchParams.get("admin_action") === "twilio_messages") {
+    const expected = Deno.env.get("LEGACY_ANON_JWT") || "";
+    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    if (!expected || got !== expected) {
+      return new Response(JSON.stringify({ error: "unauthorized" }),
+        { status: 401, headers: JSON_HEADERS });
+    }
+    try {
+      const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
+      const token = Deno.env.get("TWILIO_AUTH_TOKEN");
+      const fromEnv = Deno.env.get("TWILIO_WHATSAPP_FROM") || "";
+      if (!sid || !token) {
+        return new Response(JSON.stringify({ error: "twilio creds missing" }),
+          { status: 500, headers: JSON_HEADERS });
+      }
+      const payload = await req.json();
+      const phone = String(payload.phone || "").trim();
+      if (!phone) {
+        return new Response(JSON.stringify({ error: "missing phone" }),
+          { status: 400, headers: JSON_HEADERS });
+      }
+      const digits = phone.replace(/^whatsapp:/, "").replace(/^\+/, "")
+        .replace(/^00/, "").replace(/[^0-9]/g, "");
+      const to = `whatsapp:+${digits}`;
+      const auth = "Basic " + btoa(`${sid}:${token}`);
+      const outRes = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json?From=${encodeURIComponent(fromEnv)}&To=${encodeURIComponent(to)}&PageSize=10`,
+        { headers: { Authorization: auth } });
+      const outJson = await outRes.json();
+      const inRes = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json?From=${encodeURIComponent(to)}&To=${encodeURIComponent(fromEnv)}&PageSize=10`,
+        { headers: { Authorization: auth } });
+      const inJson = await inRes.json();
+      const slim = (msgs: unknown) => (Array.isArray(msgs) ? msgs.map((m: Record<string, unknown>) => ({
+        sid: m.sid, date_sent: m.date_sent, status: m.status,
+        error_code: m.error_code, body: typeof m.body === "string" ? m.body.slice(0, 250) : m.body,
+        from: m.from, to: m.to,
+      })) : msgs);
+      return new Response(JSON.stringify({
+        target: to,
+        outbound: slim(outJson.messages),
+        inbound: slim(inJson.messages),
+      }), { headers: JSON_HEADERS });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }),
         { status: 500, headers: JSON_HEADERS });
