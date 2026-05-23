@@ -686,6 +686,57 @@ async function callTourismAI(messages: TaiTurn[]): Promise<TaiResult | null> {
 }
 
 // ── معالج الرسالة الرئيسي ────────────────────────────────────────────────
+// ── Password hashing (PBKDF2-SHA256, Web Crypto) ──────────────────────────
+// Hashes are stored as "salthex:hashhex" — 16-byte salt, 32-byte hash,
+// 100k PBKDF2 iterations. Sufficient for an internal staff dashboard
+// with a small population.
+function bytesToHex(b: Uint8Array): string {
+  return Array.from(b).map(x => x.toString(16).padStart(2, "0")).join("");
+}
+function hexToBytes(s: string): Uint8Array {
+  const out = new Uint8Array(s.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(s.slice(i*2, i*2+2), 16);
+  return out;
+}
+async function derivePassword(password: string, salt: Uint8Array): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(password),
+    "PBKDF2", false, ["deriveBits"],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt, iterations: 100_000, hash: "SHA-256" },
+    key, 256,
+  );
+  return new Uint8Array(bits);
+}
+async function hashPassword(password: string): Promise<string> {
+  const salt = new Uint8Array(16);
+  crypto.getRandomValues(salt);
+  const hash = await derivePassword(password, salt);
+  return `${bytesToHex(salt)}:${bytesToHex(hash)}`;
+}
+async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const [saltHex, hashHex] = stored.split(":");
+  if (!saltHex || !hashHex) return false;
+  const want = hexToBytes(hashHex);
+  const got = await derivePassword(password, hexToBytes(saltHex));
+  if (got.length !== want.length) return false;
+  // Constant-time compare
+  let diff = 0;
+  for (let i = 0; i < got.length; i++) diff |= got[i] ^ want[i];
+  return diff === 0;
+}
+function genSessionToken(): string {
+  const buf = new Uint8Array(32);
+  crypto.getRandomValues(buf);
+  return bytesToHex(buf);
+}
+function normalizeWhatsappPhone(raw: string): string {
+  const digits = String(raw).replace(/^whatsapp:/, "").replace(/^\+/, "")
+    .replace(/^00/, "").replace(/[^0-9]/g, "");
+  return `whatsapp:+${digits}`;
+}
+
 // ── Staff identity guard ─────────────────────────────────────────────────
 // Any phone in wa_staff (or the legacy SALES_/COMPLAINTS_ env lists) is a
 // staff member, not a customer. Free-text messages from staff are blocked
@@ -2333,6 +2384,35 @@ Deno.serve(async (req) => {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
+  // Shared auth helpers — placed up here so every admin endpoint below
+  // can reference them. checkAuth = legacy master JWT only (admin).
+  // checkAuthOrSession = legacy JWT OR a valid staff session token
+  // (the bearer returned by staff_login). Use checkAuth for endpoints
+  // that should remain admin-only; checkAuthOrSession everywhere else.
+  const jsonCors = { ...JSON_HEADERS, ...corsHeaders };
+  const unauthorized = () => new Response(JSON.stringify({ error: "unauthorized" }),
+    { status: 401, headers: jsonCors });
+  const checkAuth = (req: Request): boolean => {
+    const expected = (Deno.env.get("LEGACY_ANON_JWT") || "").trim();
+    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    return !!expected && got === expected;
+  };
+  const checkAuthOrSession = async (req: Request): Promise<boolean> => {
+    if (checkAuth(req)) return true;
+    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    if (!got) return false;
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data } = await supabase.from("wa_staff_sessions")
+      .select("expires_at, revoked_at")
+      .eq("token", got)
+      .maybeSingle();
+    if (!data) return false;
+    const row = data as { expires_at: string; revoked_at: string | null };
+    if (row.revoked_at) return false;
+    if (new Date(row.expires_at) < new Date()) return false;
+    return true;
+  };
+
   // Admin: token-validity probe. Returns 200 with diagnostic info when
   // the token is correct, 401 otherwise. Useful when the browser shows
   // "unauthorized" but the same token works via curl — lets the dashboard
@@ -2364,12 +2444,7 @@ Deno.serve(async (req) => {
   //   • daily counts (received / completed / stalled / errored)
   //   • current pending proposals total
   if (url.searchParams.get("admin_action") === "dashboard_data") {
-    const expected = Deno.env.get("LEGACY_ANON_JWT") || "";
-    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
-    if (!expected || got !== expected.trim()) {
-      return new Response(JSON.stringify({ error: "unauthorized" }),
-        { status: 401, headers: { ...JSON_HEADERS, ...corsHeaders } });
-    }
+    if (!(await checkAuthOrSession(req))) return unauthorized();
     try {
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
@@ -2495,19 +2570,97 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Admin: staff + routing-rules management + manual transfer endpoints.
-  // All gated by the same LEGACY_ANON_JWT.
-  const checkAuth = (req: Request): boolean => {
-    const expected = (Deno.env.get("LEGACY_ANON_JWT") || "").trim();
-    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
-    return !!expected && got === expected;
-  };
-  const jsonCors = { ...JSON_HEADERS, ...corsHeaders };
-  const unauthorized = () => new Response(JSON.stringify({ error: "unauthorized" }),
-    { status: 401, headers: jsonCors });
+  // ── Staff login / logout / set-password ────────────────────────────────
+  // Admin endpoint (legacy JWT only) — set or change a staff member's
+  // username + password. POST body: {phone, username, password}.
+  if (url.searchParams.get("admin_action") === "staff_set_password") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const p = await req.json();
+      const rawPhone = String(p.phone || "").trim();
+      const username = String(p.username || "").trim().toLowerCase();
+      const password = String(p.password || "");
+      if (!rawPhone || !username || password.length < 4) {
+        return new Response(JSON.stringify({ error: "phone + username + password (4+ chars) required" }),
+          { status: 400, headers: jsonCors });
+      }
+      const phone = normalizeWhatsappPhone(rawPhone);
+      const hash = await hashPassword(password);
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { error, count } = await supabase.from("wa_staff")
+        .update({ username, password_hash: hash, password_set_at: new Date().toISOString() }, { count: "exact" })
+        .eq("phone", phone);
+      if (error) throw new Error(error.message);
+      if ((count ?? 0) === 0) {
+        return new Response(JSON.stringify({ error: "no staff with this phone — add them first" }),
+          { status: 404, headers: jsonCors });
+      }
+      return new Response(JSON.stringify({ ok: true, phone, username }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // Public-ish endpoint (no JWT — it's a login form). POST {username, password}.
+  // On success returns {token, expires_at, staff: {name, phone, username}}.
+  if (url.searchParams.get("admin_action") === "staff_login") {
+    try {
+      const p = await req.json();
+      const username = String(p.username || "").trim().toLowerCase();
+      const password = String(p.password || "");
+      if (!username || !password) {
+        return new Response(JSON.stringify({ error: "missing credentials" }),
+          { status: 400, headers: jsonCors });
+      }
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: staff } = await supabase.from("wa_staff")
+        .select("phone, name, username, password_hash, active")
+        .eq("username", username)
+        .maybeSingle();
+      const row = staff as { phone: string; name: string; username: string; password_hash: string | null; active: boolean } | null;
+      if (!row || !row.active || !row.password_hash) {
+        return new Response(JSON.stringify({ error: "invalid credentials" }),
+          { status: 401, headers: jsonCors });
+      }
+      const ok = await verifyPassword(password, row.password_hash);
+      if (!ok) {
+        return new Response(JSON.stringify({ error: "invalid credentials" }),
+          { status: 401, headers: jsonCors });
+      }
+      const token = genSessionToken();
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      await supabase.from("wa_staff_sessions").insert({
+        phone: row.phone, username: row.username, token, expires_at: expiresAt,
+      });
+      return new Response(JSON.stringify({
+        ok: true, token, expires_at: expiresAt,
+        staff: { name: row.name, phone: row.phone, username: row.username },
+      }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
+    }
+  }
+
+  // Revoke the caller's current session. Reads the Bearer token directly
+  // and flips revoked_at. Always returns 200 (no info leak).
+  if (url.searchParams.get("admin_action") === "staff_logout") {
+    try {
+      const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+      if (got) {
+        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        await supabase.from("wa_staff_sessions")
+          .update({ revoked_at: new Date().toISOString() })
+          .eq("token", got);
+      }
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (_) {
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    }
+  }
 
   if (url.searchParams.get("admin_action") === "list_staff") {
-    if (!checkAuth(req)) return unauthorized();
+    if (!(await checkAuthOrSession(req))) return unauthorized();
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data } = await supabase.from("wa_staff").select("*").order("name");
     return new Response(JSON.stringify({ staff: data ?? [] }), { headers: jsonCors });
@@ -2560,7 +2713,7 @@ Deno.serve(async (req) => {
   }
 
   if (url.searchParams.get("admin_action") === "list_routing_rules") {
-    if (!checkAuth(req)) return unauthorized();
+    if (!(await checkAuthOrSession(req))) return unauthorized();
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data } = await supabase.from("wa_routing_rules").select("*")
       .order("priority", { ascending: false }).order("created_at");
@@ -2617,7 +2770,7 @@ Deno.serve(async (req) => {
   //   ideally, but we don't enforce — flexible for ad-hoc transfers)
   // - transferred_by: optional phone of who initiated (admin or staff)
   if (url.searchParams.get("admin_action") === "transfer_conversation") {
-    if (!checkAuth(req)) return unauthorized();
+    if (!(await checkAuthOrSession(req))) return unauthorized();
     try {
       const p = await req.json();
       const rawCust = String(p.phone || "").trim();
@@ -2665,7 +2818,7 @@ Deno.serve(async (req) => {
   // dashboard timeline the message is labeled "Admin" via the
   // wa_admin_messages join on Twilio SID.
   if (url.searchParams.get("admin_action") === "send_admin_message") {
-    if (!checkAuth(req)) return unauthorized();
+    if (!(await checkAuthOrSession(req))) return unauthorized();
     try {
       const p = await req.json();
       const rawPhone = String(p.phone || "").trim();
@@ -2702,7 +2855,7 @@ Deno.serve(async (req) => {
   // whose Twilio SID matches a row in wa_admin_messages are tagged
   // "admin" (or the row's sent_by value); the rest are "ai".
   if (url.searchParams.get("admin_action") === "conversation_history") {
-    if (!checkAuth(req)) return unauthorized();
+    if (!(await checkAuthOrSession(req))) return unauthorized();
     try {
       const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
       const token = Deno.env.get("TWILIO_AUTH_TOKEN");
@@ -2804,12 +2957,7 @@ Deno.serve(async (req) => {
   //   {"phone": "00968...", "enabled": true|false|null}
   // null  → inherit global. true/false → force per-conversation.
   if (url.searchParams.get("admin_action") === "set_conversation_ai") {
-    const expected = Deno.env.get("LEGACY_ANON_JWT") || "";
-    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
-    if (!expected || got !== expected.trim()) {
-      return new Response(JSON.stringify({ error: "unauthorized" }),
-        { status: 401, headers: { ...JSON_HEADERS, ...corsHeaders } });
-    }
+    if (!(await checkAuthOrSession(req))) return unauthorized();
     try {
       const payload = await req.json();
       const rawPhone = String(payload.phone || "").trim();
@@ -2846,12 +2994,7 @@ Deno.serve(async (req) => {
   // customer's message reached Twilio. JWT-gated like the others.
   // Usage: POST ?admin_action=twilio_messages  body: {"phone": "00968..."}
   if (url.searchParams.get("admin_action") === "twilio_messages") {
-    const expected = Deno.env.get("LEGACY_ANON_JWT") || "";
-    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
-    if (!expected || got !== expected.trim()) {
-      return new Response(JSON.stringify({ error: "unauthorized" }),
-        { status: 401, headers: JSON_HEADERS });
-    }
+    if (!(await checkAuthOrSession(req))) return unauthorized();
     try {
       const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
       const token = Deno.env.get("TWILIO_AUTH_TOKEN");
