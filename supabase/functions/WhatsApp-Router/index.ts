@@ -554,6 +554,53 @@ function staffList(envVar: string): string[] {
     .map(s => s.startsWith("whatsapp:") ? s : `whatsapp:${s}`);
 }
 
+// ── Watchdog: detect inbound messages that handleMessage never finished ──
+// Every Twilio webhook inserts a wa_message_audit row at 'received'.
+// handleMessage flips it to 'completed' on success or 'errored' on
+// exception. If neither fires within the threshold (function killed in
+// the background after returning TwiML, etc.), this sweep marks it
+// 'stalled' and pings admins so the customer's message isn't silently
+// dropped. Runs at every incoming webhook — no separate cron needed.
+const STALL_THRESHOLD_MS = 60_000;
+async function checkStalledMessages(
+  supabase: ReturnType<typeof createClient>,
+): Promise<void> {
+  const cutoff = new Date(Date.now() - STALL_THRESHOLD_MS).toISOString();
+  const { data: stalled, error } = await supabase
+    .from("wa_message_audit")
+    .select("id, from_phone, body, received_at")
+    .eq("status", "received")
+    .lt("received_at", cutoff)
+    .order("received_at", { ascending: true })
+    .limit(20);
+  if (error || !stalled || stalled.length === 0) return;
+
+  // Flip them so the next sweep doesn't realert on the same rows.
+  await supabase.from("wa_message_audit")
+    .update({ status: "stalled" })
+    .in("id", (stalled as Array<{ id: string }>).map(s => s.id));
+
+  const admins = staffList("SALES_WHATSAPP_NUMBERS");
+  if (admins.length === 0) return;
+
+  const rows = stalled as Array<{
+    id: string; from_phone: string; body: string | null; received_at: string;
+  }>;
+  const lines = rows.map((s) => {
+    const ph = String(s.from_phone).replace(/^whatsapp:/, "");
+    const text = String(s.body || "").slice(0, 120);
+    const t = s.received_at?.replace("T", " ").slice(0, 19) || "";
+    return `• ${t}\n  ${ph}: ${text}`;
+  });
+  const notice =
+    `🔁 ${rows.length} رسالة لم يكتمل الرد عليها (تجاوزت ${STALL_THRESHOLD_MS / 1000}s)\n\n` +
+    lines.join("\n\n") +
+    `\n\nراجعوها ورودوا على العملاء يدوياً 🙏`;
+  for (const admin of admins) {
+    try { await sendWhatsapp(admin, notice); } catch (_) {}
+  }
+}
+
 // ── Tourism-AI invocation ────────────────────────────────────────────────
 // Tourism-AI returns Anthropic-style { content: [{type:"text", text:"..."}] }.
 // The text is structured with sectional anchors at line starts:
@@ -2076,11 +2123,47 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    // Watchdog: every webhook also sweeps any earlier inbound that stayed
+    // in 'received' too long (i.e., handleMessage failed silently in the
+    // background after returning TwiML). Marks them 'stalled' and alerts
+    // admin so customers don't get silently ignored. Fire-and-forget so
+    // it doesn't delay the TwiML response.
+    checkStalledMessages(supabase).catch(err => console.error("watchdog error", err));
+
+    // Audit: record the inbound BEFORE kicking off handleMessage so we can
+    // detect failures even if handleMessage never completes.
+    const { data: auditRow } = await supabase
+      .from("wa_message_audit")
+      .insert({
+        from_phone: from,
+        body: String(body).slice(0, 500),
+        status: "received",
+      })
+      .select("id")
+      .single();
+    const auditId = (auditRow as { id?: string } | null)?.id ?? null;
+
     // معالجة الرسالة بشكل غير حاجب — نرد على Twilio فوراً TwiML فارغ،
     // ونرسل الردود الفعلية عبر Twilio REST. هذا يمنع timeout من Twilio.
-    handleMessage({ supabase, from, profileName, body }).catch(err => {
-      console.error("handleMessage error", err);
-    });
+    handleMessage({ supabase, from, profileName, body })
+      .then(async () => {
+        if (auditId) {
+          await supabase.from("wa_message_audit").update({
+            status: "completed",
+            completed_at: new Date().toISOString(),
+          }).eq("id", auditId);
+        }
+      })
+      .catch(async (err) => {
+        console.error("handleMessage error", err);
+        if (auditId) {
+          await supabase.from("wa_message_audit").update({
+            status: "errored",
+            error_message: String((err as Error)?.stack ?? err).slice(0, 1000),
+            completed_at: new Date().toISOString(),
+          }).eq("id", auditId);
+        }
+      });
 
     return new Response(EMPTY_TWIML, { headers: TWIML_HEADERS });
   } catch (e) {
