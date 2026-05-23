@@ -2127,8 +2127,10 @@ Deno.serve(async (req) => {
     // in 'received' too long (i.e., handleMessage failed silently in the
     // background after returning TwiML). Marks them 'stalled' and alerts
     // admin so customers don't get silently ignored. Fire-and-forget so
-    // it doesn't delay the TwiML response.
-    checkStalledMessages(supabase).catch(err => console.error("watchdog error", err));
+    // it doesn't delay the TwiML response, but WRAPPED in
+    // EdgeRuntime.waitUntil so the isolate isn't reaped before it runs.
+    const watchdogTask = checkStalledMessages(supabase)
+      .catch(err => console.error("watchdog error", err));
 
     // Audit: record the inbound BEFORE kicking off handleMessage so we can
     // detect failures even if handleMessage never completes.
@@ -2145,7 +2147,15 @@ Deno.serve(async (req) => {
 
     // معالجة الرسالة بشكل غير حاجب — نرد على Twilio فوراً TwiML فارغ،
     // ونرسل الردود الفعلية عبر Twilio REST. هذا يمنع timeout من Twilio.
-    handleMessage({ supabase, from, profileName, body })
+    //
+    // ROOT-CAUSE FIX for the intermittent hang: Supabase Edge Functions
+    // run on Deno isolates that may be REAPED shortly after the Response
+    // is returned. Plain fire-and-forget promises (handleMessage, the
+    // watchdog) could be killed mid-execution — that's why our audit was
+    // seeing rows stuck at 'received' with no error logged. Wrapping the
+    // background work in EdgeRuntime.waitUntil() tells the runtime to
+    // keep the isolate alive until the promise settles.
+    const handleTask = handleMessage({ supabase, from, profileName, body })
       .then(async () => {
         if (auditId) {
           await supabase.from("wa_message_audit").update({
@@ -2164,6 +2174,14 @@ Deno.serve(async (req) => {
           }).eq("id", auditId);
         }
       });
+
+    // @ts-ignore EdgeRuntime is injected globally by Supabase Edge Runtime.
+    if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(handleTask);
+      // @ts-ignore
+      EdgeRuntime.waitUntil(watchdogTask);
+    }
 
     return new Response(EMPTY_TWIML, { headers: TWIML_HEADERS });
   } catch (e) {
