@@ -1611,6 +1611,30 @@ async function createProposalAndNotifyAdmin(args: {
   });
   if (error) { console.error("Proposal insert failed", error.message); return; }
 
+  // Pull recent context from wa_message_audit — last N inbound messages
+  // from this customer so admin sees the conversation thread, not just
+  // the isolated question. Helps when the current question relates to
+  // something the customer mentioned earlier.
+  const { data: history } = await supabase
+    .from("wa_message_audit")
+    .select("body, received_at")
+    .eq("from_phone", customerPhone)
+    .order("received_at", { ascending: false })
+    .limit(6);
+  // First entry is usually the current question itself; drop it and keep
+  // up to 5 earlier ones (oldest-first).
+  const earlier = ((history as Array<{ body: string; received_at: string }> | null) ?? [])
+    .slice(1, 6)
+    .reverse();
+  const contextBlock = earlier.length
+    ? `📜 رسائل سابقة من العميل:\n` +
+      earlier.map((r) => {
+        const t = (r.received_at || "").replace("T", " ").slice(0, 19);
+        const b = String(r.body || "").slice(0, 120);
+        return `  • [${t}] ${b}`;
+      }).join("\n") + `\n\n`
+    : "";
+
   const phoneDigits = customerPhone.replace(/^whatsapp:/, "");
   // Show the admin where the suggested reply came from so they can
   // approve confidently when it's from the curated FAQ, or push back
@@ -1625,6 +1649,7 @@ async function createProposalAndNotifyAdmin(args: {
         `💡 سؤال جديد من عميل\n\n` +
         `العميل: ${profileName} (${phoneDigits})\n` +
         `السؤال: ${question}\n\n` +
+        contextBlock +
         `الفهم: ${analysis.interpretation}\n\n` +
         `الرد المقترح:\n${analysis.suggestedReply}\n\n` +
         `${source}\n\n` +
@@ -1634,6 +1659,7 @@ async function createProposalAndNotifyAdmin(args: {
         `💡 سؤال جديد من عميل (تحليل AI تعذّر)\n\n` +
         `العميل: ${profileName} (${phoneDigits})\n` +
         `السؤال: ${question}\n\n` +
+        contextBlock +
         `اكتب الرد للعميل مباشرة وراح يوصله`
       );
   const admins = staffList("SALES_WHATSAPP_NUMBERS");
@@ -1685,8 +1711,18 @@ function buildSaveProposalMessage(proposal: ProposalRow, finalReply: string): st
     `الكاتيجوري المقترح: ${proposal.proposed_intent}${sub}\n` +
     `السبب: مطابقة لسؤال "${proposal.customer_question}"\n` +
     `الرد المحفوظ: ${finalReply}\n\n` +
-    `تم / لا`
+    `• تم → احفظ بالكاتيجوري المقترح\n` +
+    `• لا → اختر كاتيجوري ثاني\n` +
+    `• خاص → ما تحفظ (الرد خاص بهذا العميل فقط)`
   );
+}
+
+// Detect when admin wants to skip saving entirely (answer was specific
+// to this customer's context and shouldn't be generalized in the FAQ).
+function isSkipSave(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return ["خاص", "خاص بالعميل", "لا تحفظ", "لاتحفظ", "ما تحفظ", "متحفظ", "skip", "private"]
+    .some(w => t === w || t.startsWith(w + " ") || t.startsWith(w + "."));
 }
 
 async function handleAdminResponse(args: {
@@ -1751,6 +1787,17 @@ async function handleAdminResponse(args: {
       .maybeSingle();
     const finalReply = (fresh?.suggested_reply as string | undefined) || proposal.suggested_reply;
 
+    // "خاص" — admin marks the reply as customer-specific. No chat_answers
+    // row is created (so it doesn't get matched for other customers
+    // asking similar questions). Just close out the proposal.
+    if (isSkipSave(text)) {
+      await supabase.from("whatsapp_admin_proposals")
+        .update({ status: "completed_skipped", decided_at: new Date().toISOString() })
+        .eq("id", proposal.id);
+      await sendWhatsapp(adminFrom, `تمام 👌 ما حفظت — الرد خاص بهذا العميل`);
+      return;
+    }
+
     if (yes) {
       // Save to the AI-suggested category immediately.
       const ok = await appendChatAnswerRow({
@@ -1781,7 +1828,7 @@ async function handleAdminResponse(args: {
       return;
     }
     await sendWhatsapp(adminFrom,
-      `رد بـ "تم" للحفظ في الكاتيجوري المقترح أو "لا" لاختيار كاتيجوري ثاني`);
+      `رد بـ "تم" للحفظ، "لا" لاختيار كاتيجوري ثاني، أو "خاص" لو الرد لا يُعمَّم`);
     return;
   }
 
