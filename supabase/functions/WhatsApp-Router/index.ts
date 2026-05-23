@@ -2380,7 +2380,7 @@ Deno.serve(async (req) => {
         // with nullsfirst in PostgREST). Then newest first.
         .order("priority", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
-        .limit(20);
+        .limit(100);
 
       const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { data: audit } = await supabase
