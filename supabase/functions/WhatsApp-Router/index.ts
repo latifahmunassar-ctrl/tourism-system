@@ -519,13 +519,13 @@ function humanTypingDelayMs(text: string): number {
   return 1200;
 }
 
-async function sendWhatsapp(to: string, body: string): Promise<void> {
+async function sendWhatsapp(to: string, body: string): Promise<string | null> {
   const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
   const token = Deno.env.get("TWILIO_AUTH_TOKEN");
   const from = Deno.env.get("TWILIO_WHATSAPP_FROM") || "whatsapp:+96891171630";
   if (!sid || !token) {
     console.warn("Twilio credentials missing — would have sent to", to, ":", body);
-    return;
+    return null;
   }
 
   // Sleep to mimic a human composing the reply. The native WhatsApp "..."
@@ -543,7 +543,16 @@ async function sendWhatsapp(to: string, body: string): Promise<void> {
     },
     body: form.toString(),
   });
-  if (!res.ok) console.error("Twilio send failed", to, await res.text());
+  if (!res.ok) {
+    console.error("Twilio send failed", to, await res.text());
+    return null;
+  }
+  try {
+    const data = await res.json();
+    return typeof data?.sid === "string" ? data.sid : null;
+  } catch {
+    return null;
+  }
 }
 
 function staffList(envVar: string): string[] {
@@ -2428,6 +2437,33 @@ Deno.serve(async (req) => {
         .order("last_message_at", { ascending: false })
         .limit(50);
 
+      // Enrich each session with the latest proposal's classification so
+      // the dashboard's filters (customer_type / case_type / URGENT) can
+      // operate on conversations the same way they do on proposals.
+      const phones = (sessions ?? []).map((s: { phone: string }) => s.phone);
+      const { data: recentProposals } = phones.length
+        ? await supabase
+            .from("whatsapp_admin_proposals")
+            .select("customer_phone, customer_type, case_type, complaint_type, booking_status, priority, created_at")
+            .in("customer_phone", phones)
+            .order("created_at", { ascending: false })
+        : { data: [] as Array<Record<string, unknown>> };
+      const latestByPhone = new Map<string, Record<string, unknown>>();
+      for (const p of (recentProposals as Array<{ customer_phone: string }> ?? [])) {
+        if (!latestByPhone.has(p.customer_phone)) latestByPhone.set(p.customer_phone, p);
+      }
+      const conversationsEnriched = (sessions ?? []).map((s: Record<string, unknown>) => {
+        const cls = latestByPhone.get(s.phone as string) ?? {};
+        return {
+          ...s,
+          customer_type: cls.customer_type ?? null,
+          case_type: cls.case_type ?? null,
+          complaint_type: cls.complaint_type ?? null,
+          booking_status: cls.booking_status ?? null,
+          priority: cls.priority ?? null,
+        };
+      });
+
       const { data: staffList } = await supabase
         .from("wa_staff")
         .select("id, name, phone, active")
@@ -2446,7 +2482,7 @@ Deno.serve(async (req) => {
           pending_proposals_total: pending?.length ?? 0,
         },
         global_ai_enabled: globalAiEnabled,
-        conversations: sessions ?? [],
+        conversations: conversationsEnriched,
         staff: staffList ?? [],
         routing_rules: rulesList ?? [],
         pending_proposals: pending ?? [],
@@ -2621,6 +2657,120 @@ Deno.serve(async (req) => {
         { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // Admin: send a message TO a customer FROM the dashboard. The customer
+  // sees a normal WhatsApp message from the bot's sender; inside the
+  // dashboard timeline the message is labeled "Admin" via the
+  // wa_admin_messages join on Twilio SID.
+  if (url.searchParams.get("admin_action") === "send_admin_message") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const p = await req.json();
+      const rawPhone = String(p.phone || "").trim();
+      const body = String(p.body || "").trim();
+      if (!rawPhone || !body) {
+        return new Response(JSON.stringify({ error: "missing phone or body" }),
+          { status: 400, headers: jsonCors });
+      }
+      const digits = rawPhone.replace(/^whatsapp:/, "").replace(/^\+/, "")
+        .replace(/^00/, "").replace(/[^0-9]/g, "");
+      const phone = `whatsapp:+${digits}`;
+      const sentBy = String(p.sent_by || "admin");
+      const twilioSid = await sendWhatsapp(phone, body);
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      await supabase.from("wa_admin_messages").insert({
+        twilio_sid: twilioSid,
+        customer_phone: phone,
+        body: body.slice(0, 2000),
+        sent_by: sentBy,
+      });
+      return new Response(JSON.stringify({ ok: true, twilio_sid: twilioSid }),
+        { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
+    }
+  }
+
+  // Admin: full conversation timeline for one customer phone. Combines
+  // Twilio inbound + outbound with sender attribution. Outbound messages
+  // whose Twilio SID matches a row in wa_admin_messages are tagged
+  // "admin" (or the row's sent_by value); the rest are "ai".
+  if (url.searchParams.get("admin_action") === "conversation_history") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
+      const token = Deno.env.get("TWILIO_AUTH_TOKEN");
+      const fromEnv = Deno.env.get("TWILIO_WHATSAPP_FROM") || "";
+      if (!sid || !token) {
+        return new Response(JSON.stringify({ error: "twilio creds missing" }),
+          { status: 500, headers: jsonCors });
+      }
+      const p = req.method === "POST" ? await req.json() : Object.fromEntries(url.searchParams);
+      const rawPhone = String(p.phone || "").trim();
+      if (!rawPhone) {
+        return new Response(JSON.stringify({ error: "missing phone" }),
+          { status: 400, headers: jsonCors });
+      }
+      const digits = rawPhone.replace(/^whatsapp:/, "").replace(/^\+/, "")
+        .replace(/^00/, "").replace(/[^0-9]/g, "");
+      const phone = `whatsapp:+${digits}`;
+      const auth = "Basic " + btoa(`${sid}:${token}`);
+
+      // Pull recent outbound + inbound for this phone from Twilio. 50 each.
+      const [outRes, inRes] = await Promise.all([
+        fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json?From=${encodeURIComponent(fromEnv)}&To=${encodeURIComponent(phone)}&PageSize=50`,
+          { headers: { Authorization: auth } }),
+        fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json?From=${encodeURIComponent(phone)}&To=${encodeURIComponent(fromEnv)}&PageSize=50`,
+          { headers: { Authorization: auth } }),
+      ]);
+      const outJson = await outRes.json();
+      const inJson = await inRes.json();
+
+      // Pull admin-sent SIDs for attribution.
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { data: adminRows } = await supabase
+        .from("wa_admin_messages")
+        .select("twilio_sid, sent_by, body, sent_at")
+        .eq("customer_phone", phone);
+      const adminBySid = new Map<string, string>();
+      const adminByBody: Array<{ body: string; sender: string; sent_at: string }> = [];
+      for (const r of (adminRows as Array<{ twilio_sid?: string; sent_by: string; body?: string; sent_at: string }> | null) ?? []) {
+        if (r.twilio_sid) adminBySid.set(r.twilio_sid, r.sent_by);
+        if (r.body) adminByBody.push({ body: r.body, sender: r.sent_by, sent_at: r.sent_at });
+      }
+
+      type Item = { ts: string; body: string; sender: string; sid?: string };
+      const items: Item[] = [];
+      for (const m of (inJson.messages || [])) {
+        items.push({ ts: m.date_sent || m.date_created, body: m.body || "", sender: "customer", sid: m.sid });
+      }
+      for (const m of (outJson.messages || [])) {
+        const sidVal = String(m.sid || "");
+        let sender = adminBySid.get(sidVal);
+        if (!sender) {
+          // Fallback: body+timestamp match (in case SID wasn't captured)
+          const ts = new Date(m.date_sent || m.date_created).getTime();
+          const match = adminByBody.find(a =>
+            a.body.slice(0, 100) === String(m.body || "").slice(0, 100) &&
+            Math.abs(new Date(a.sent_at).getTime() - ts) < 60_000);
+          if (match) sender = match.sender;
+        }
+        items.push({ ts: m.date_sent || m.date_created, body: m.body || "", sender: sender || "ai", sid: sidVal });
+      }
+      items.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+      return new Response(JSON.stringify({ phone, items }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
     }
   }
 
