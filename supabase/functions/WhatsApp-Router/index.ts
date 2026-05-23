@@ -677,6 +677,66 @@ async function callTourismAI(messages: TaiTurn[]): Promise<TaiResult | null> {
 }
 
 // ── معالج الرسالة الرئيسي ────────────────────────────────────────────────
+// ── Staff routing helpers ────────────────────────────────────────────────
+// Send a WhatsApp ping to the staff member a conversation just got
+// assigned/transferred to. `source` is either "auto" (matched a routing
+// rule), the phone of the staff member who transferred, or "admin".
+async function notifyStaffAssignment(args: {
+  supabase: ReturnType<typeof createClient>;
+  staffPhone: string;
+  customerPhone: string;
+  customerName?: string;
+  destination?: string | null;
+  source: string;          // "auto" | sender phone | "admin"
+}): Promise<void> {
+  const customerDigits = args.customerPhone.replace(/^whatsapp:/, "");
+  const head = args.source === "auto"
+    ? "🎯 محادثة جديدة assigned لك تلقائياً"
+    : `🔄 محادثة محوّلة لك${args.source && args.source !== "admin" ? ` من ${args.source.replace(/^whatsapp:/, "")}` : ""}`;
+  const lines: string[] = [head];
+  if (args.customerName) lines.push(`العميل: ${args.customerName} (${customerDigits})`);
+  else lines.push(`العميل: ${customerDigits}`);
+  if (args.destination) lines.push(`الوجهة: ${args.destination}`);
+  lines.push("راجع المحادثة من الداشبورد وأكمل من هناك");
+  try { await sendWhatsapp(args.staffPhone, lines.join("\n")); } catch (_) {}
+}
+
+// If the session has no assignee yet AND we just detected a destination,
+// look up the routing rules and auto-assign. Idempotent — only fires
+// once per session because we check assigned_staff_phone first.
+async function maybeAutoAssign(args: {
+  supabase: ReturnType<typeof createClient>;
+  from: string;
+  customerName?: string;
+  destination: string | null;
+  alreadyAssigned: string | null | undefined;
+}): Promise<string | null> {
+  if (args.alreadyAssigned || !args.destination) return null;
+  const norm = (s: string) => s.trim().toLowerCase();
+  const { data: rules } = await args.supabase
+    .from("wa_routing_rules")
+    .select("assign_to_phone, match_destination")
+    .eq("active", true)
+    .order("priority", { ascending: false });
+  const match = (rules as Array<{ assign_to_phone: string; match_destination: string | null }> | null ?? [])
+    .find(r => r.match_destination && norm(r.match_destination) === norm(args.destination!));
+  if (!match) return null;
+  await args.supabase.from("whatsapp_sessions").update({
+    assigned_staff_phone: match.assign_to_phone,
+    assigned_at: new Date().toISOString(),
+    assigned_by: "auto",
+  }).eq("phone", args.from);
+  await notifyStaffAssignment({
+    supabase: args.supabase,
+    staffPhone: match.assign_to_phone,
+    customerPhone: args.from,
+    customerName: args.customerName,
+    destination: args.destination,
+    source: "auto",
+  });
+  return match.assign_to_phone;
+}
+
 // ── AI master switch ─────────────────────────────────────────────────────
 // Two-level toggle for whether the bot auto-replies on a given inbound:
 //   • wa_sessions.ai_enabled (boolean | null) — per-conversation override.
@@ -758,6 +818,7 @@ async function handleMessage(args: {
     destination: string | null; persons: number | null; travel_date: string | null;
     hubspot_contact_id: string | null;
     ai_enabled?: boolean | null;
+    assigned_staff_phone?: string | null;
   } | null;
 
   // AI master switch — per-conversation override wins over the global
@@ -776,7 +837,25 @@ async function handleMessage(args: {
       last_message_at: new Date().toISOString(),
     };
     await supabase.from("whatsapp_sessions").insert(seed);
-    session = { ...seed, destination: null, persons: null, travel_date: null, ai_enabled: null } as typeof session;
+    session = { ...seed, destination: null, persons: null, travel_date: null, ai_enabled: null, assigned_staff_phone: null } as typeof session;
+  }
+
+  // Destination detection + auto-routing. Runs regardless of AI state —
+  // even if the bot is muted, staff still want the assignment so the
+  // right person picks up the conversation.
+  const detectedDest = extractDestination(text);
+  if (detectedDest && !session?.destination) {
+    await supabase.from("whatsapp_sessions").update({ destination: detectedDest }).eq("phone", from);
+    if (session) session.destination = detectedDest;
+  }
+  if (!session?.assigned_staff_phone && (detectedDest || session?.destination)) {
+    const newlyAssigned = await maybeAutoAssign({
+      supabase, from,
+      customerName: session?.profile_name || profileName,
+      destination: detectedDest || session?.destination || null,
+      alreadyAssigned: session?.assigned_staff_phone,
+    });
+    if (newlyAssigned && session) session.assigned_staff_phone = newlyAssigned;
   }
 
   if (!aiOn) {
@@ -1706,8 +1785,17 @@ async function createProposalAndNotifyAdmin(args: {
         contextBlock +
         `اكتب الرد للعميل مباشرة وراح يوصله`
       );
-  const admins = staffList("SALES_WHATSAPP_NUMBERS");
-  await Promise.all(admins.map(num => sendWhatsapp(num, notice)));
+  // Routing: if this conversation has an assigned staff member (auto or
+  // manual), send the proposal to that one person. Otherwise broadcast
+  // to the full SALES_WHATSAPP_NUMBERS list.
+  const { data: assignedRow } = await supabase
+    .from("whatsapp_sessions")
+    .select("assigned_staff_phone")
+    .eq("phone", customerPhone)
+    .maybeSingle();
+  const assigned = (assignedRow as { assigned_staff_phone?: string | null } | null)?.assigned_staff_phone;
+  const targets = assigned ? [assigned] : staffList("SALES_WHATSAPP_NUMBERS");
+  await Promise.all(targets.map(num => sendWhatsapp(num, notice)));
 }
 
 function isAdminPhone(from: string): boolean {
@@ -2225,10 +2313,19 @@ Deno.serve(async (req) => {
 
       const { data: sessions } = await supabase
         .from("whatsapp_sessions")
-        .select("phone, profile_name, ai_enabled, last_message_at")
+        .select("phone, profile_name, ai_enabled, last_message_at, destination, assigned_staff_phone, assigned_at, assigned_by")
         .gte("last_message_at", since24h)
         .order("last_message_at", { ascending: false })
         .limit(50);
+
+      const { data: staffList } = await supabase
+        .from("wa_staff")
+        .select("id, name, phone, active")
+        .order("name");
+      const { data: rulesList } = await supabase
+        .from("wa_routing_rules")
+        .select("id, match_destination, assign_to_phone, priority, active")
+        .order("priority", { ascending: false });
 
       return new Response(JSON.stringify({
         counts: {
@@ -2240,6 +2337,8 @@ Deno.serve(async (req) => {
         },
         global_ai_enabled: globalAiEnabled,
         conversations: sessions ?? [],
+        staff: staffList ?? [],
+        routing_rules: rulesList ?? [],
         pending_proposals: pending ?? [],
         recent_audit: audit ?? [],
         generated_at: new Date().toISOString(),
@@ -2247,6 +2346,171 @@ Deno.serve(async (req) => {
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }),
         { status: 500, headers: { ...JSON_HEADERS, ...corsHeaders } });
+    }
+  }
+
+  // Admin: staff + routing-rules management + manual transfer endpoints.
+  // All gated by the same LEGACY_ANON_JWT.
+  const checkAuth = (req: Request): boolean => {
+    const expected = (Deno.env.get("LEGACY_ANON_JWT") || "").trim();
+    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    return !!expected && got === expected;
+  };
+  const jsonCors = { ...JSON_HEADERS, ...corsHeaders };
+  const unauthorized = () => new Response(JSON.stringify({ error: "unauthorized" }),
+    { status: 401, headers: jsonCors });
+
+  if (url.searchParams.get("admin_action") === "list_staff") {
+    if (!checkAuth(req)) return unauthorized();
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data } = await supabase.from("wa_staff").select("*").order("name");
+    return new Response(JSON.stringify({ staff: data ?? [] }), { headers: jsonCors });
+  }
+
+  // POST {phone, name, active?} → insert or update by phone.
+  if (url.searchParams.get("admin_action") === "upsert_staff") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const p = await req.json();
+      const rawPhone = String(p.phone || "").trim();
+      const name = String(p.name || "").trim();
+      const active = p.active === false ? false : true;
+      if (!rawPhone || !name) {
+        return new Response(JSON.stringify({ error: "missing phone or name" }),
+          { status: 400, headers: jsonCors });
+      }
+      const digits = rawPhone.replace(/^whatsapp:/, "").replace(/^\+/, "")
+        .replace(/^00/, "").replace(/[^0-9]/g, "");
+      const phone = `whatsapp:+${digits}`;
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data, error } = await supabase.from("wa_staff")
+        .upsert({ phone, name, active }, { onConflict: "phone" })
+        .select().single();
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true, staff: data }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
+    }
+  }
+
+  // POST {phone} → delete staff row by phone.
+  if (url.searchParams.get("admin_action") === "delete_staff") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const p = await req.json();
+      const rawPhone = String(p.phone || "").trim();
+      if (!rawPhone) return new Response(JSON.stringify({ error: "missing phone" }), { status: 400, headers: jsonCors });
+      const digits = rawPhone.replace(/^whatsapp:/, "").replace(/^\+/, "")
+        .replace(/^00/, "").replace(/[^0-9]/g, "");
+      const phone = `whatsapp:+${digits}`;
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { error } = await supabase.from("wa_staff").delete().eq("phone", phone);
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  if (url.searchParams.get("admin_action") === "list_routing_rules") {
+    if (!checkAuth(req)) return unauthorized();
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data } = await supabase.from("wa_routing_rules").select("*")
+      .order("priority", { ascending: false }).order("created_at");
+    return new Response(JSON.stringify({ rules: data ?? [] }), { headers: jsonCors });
+  }
+
+  // POST {id?, match_destination, assign_to_phone, priority?, active?} → upsert
+  if (url.searchParams.get("admin_action") === "upsert_routing_rule") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const p = await req.json();
+      const match_destination = String(p.match_destination || "").trim();
+      const rawAssign = String(p.assign_to_phone || "").trim();
+      if (!match_destination || !rawAssign) {
+        return new Response(JSON.stringify({ error: "missing match_destination or assign_to_phone" }),
+          { status: 400, headers: jsonCors });
+      }
+      const digits = rawAssign.replace(/^whatsapp:/, "").replace(/^\+/, "")
+        .replace(/^00/, "").replace(/[^0-9]/g, "");
+      const assign_to_phone = `whatsapp:+${digits}`;
+      const priority = Number.isFinite(p.priority) ? Number(p.priority) : 0;
+      const active = p.active === false ? false : true;
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const row = { match_destination, assign_to_phone, priority, active };
+      const q = p.id
+        ? supabase.from("wa_routing_rules").update(row).eq("id", p.id).select().single()
+        : supabase.from("wa_routing_rules").insert(row).select().single();
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true, rule: data }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  if (url.searchParams.get("admin_action") === "delete_routing_rule") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const p = await req.json();
+      const id = String(p.id || "").trim();
+      if (!id) return new Response(JSON.stringify({ error: "missing id" }), { status: 400, headers: jsonCors });
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { error } = await supabase.from("wa_routing_rules").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // Manual transfer. POST {phone, staff_phone, transferred_by?}
+  // - phone: customer phone (whatsapp:+E.164 or any flexible form)
+  // - staff_phone: target staff's whatsapp phone (must exist in wa_staff
+  //   ideally, but we don't enforce — flexible for ad-hoc transfers)
+  // - transferred_by: optional phone of who initiated (admin or staff)
+  if (url.searchParams.get("admin_action") === "transfer_conversation") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const p = await req.json();
+      const rawCust = String(p.phone || "").trim();
+      const rawStaff = String(p.staff_phone || "").trim();
+      if (!rawCust || !rawStaff) {
+        return new Response(JSON.stringify({ error: "missing phone or staff_phone" }),
+          { status: 400, headers: jsonCors });
+      }
+      const norm = (s: string) => {
+        const d = s.replace(/^whatsapp:/, "").replace(/^\+/, "").replace(/^00/, "").replace(/[^0-9]/g, "");
+        return `whatsapp:+${d}`;
+      };
+      const phone = norm(rawCust);
+      const staff_phone = norm(rawStaff);
+      const transferredBy = p.transferred_by ? norm(String(p.transferred_by)) : "admin";
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { error, data: updated } = await supabase.from("whatsapp_sessions")
+        .update({
+          assigned_staff_phone: staff_phone,
+          assigned_at: new Date().toISOString(),
+          assigned_by: transferredBy,
+        })
+        .eq("phone", phone)
+        .select("destination, profile_name")
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      // Fire notification to the new staff.
+      await notifyStaffAssignment({
+        supabase,
+        staffPhone: staff_phone,
+        customerPhone: phone,
+        customerName: (updated as { profile_name?: string } | null)?.profile_name,
+        destination: (updated as { destination?: string | null } | null)?.destination,
+        source: transferredBy,
+      });
+      return new Response(JSON.stringify({ ok: true, phone, assigned_staff_phone: staff_phone }),
+        { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }
   }
 
