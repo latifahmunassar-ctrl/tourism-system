@@ -833,36 +833,34 @@ async function handleMessage(args: {
   //    All previous AI-driven paths (Travel Agent, Tourism-AI clarifications,
   //    package-flow info gathering) are disabled at this layer — the agent
   //    functions still exist in the file but are never invoked.
-  const answer = await findFaqAnswer(supabase, text);
-  if (answer) {
-    await sendWhatsapp(from, answer);
-  } else if (!isSmallTalk(text)) {
-    // Check if this customer already has a pending proposal waiting for
-    // admin action. If yes → they're following up / being insistent →
-    // reply with the patience phrase, do NOT queue another proposal. If
-    // no → silently escalate (no customer-facing reply at all; admin's
-    // reply via handleAdminResponse is what they'll receive next).
-    const { data: pending } = await supabase
-      .from("whatsapp_admin_proposals")
-      .select("id")
-      .eq("customer_phone", from)
-      .in("status", [
-        "pending_reply_approval",
-        "pending_correction",
-        "pending_sheet_approval",
-        "pending_category_choice",
-      ])
-      .limit(1)
-      .maybeSingle();
-    if (pending) {
-      // Customer is following up while admin still has their previous
-      // question open — patience phrase, no new proposal.
-      await sendWhatsapp(from, "حاضر استاذي دقايق واكون معاك لحظات بس");
-    } else {
-      // First-time escalation: quick acknowledgement so the customer
-      // sees something instantly (doesn't feel ignored), then admin gets
-      // the proposal and decides the actual reply.
-      await sendWhatsapp(from, "حاضر 👌 لحظات أستاذي");
+  // Pending check FIRST: any message (even "؟" or a bare ack) sent while
+  // the customer's previous question is still being worked on by admin
+  // counts as them wondering / pushing. Reply with the patience phrase
+  // and skip FAQ / new-proposal entirely. Per admin policy: customers
+  // shouldn't get spammed with a "حاضر" on every question — only when
+  // they themselves signal they're waiting.
+  const { data: pending } = await supabase
+    .from("whatsapp_admin_proposals")
+    .select("id")
+    .eq("customer_phone", from)
+    .in("status", [
+      "pending_reply_approval",
+      "pending_correction",
+      "pending_sheet_approval",
+      "pending_category_choice",
+    ])
+    .limit(1)
+    .maybeSingle();
+  if (pending) {
+    await sendWhatsapp(from, "لحظات استاذي واكون معك");
+  } else {
+    // No pending — normal flow. FAQ match → send answer. No match and
+    // not small-talk → silent escalation (NO customer-facing ack;
+    // admin's eventual reply is the only thing the customer will see).
+    const answer = await findFaqAnswer(supabase, text);
+    if (answer) {
+      await sendWhatsapp(from, answer);
+    } else if (!isSmallTalk(text)) {
       await createProposalAndNotifyAdmin({
         supabase,
         customerPhone: from,
@@ -870,8 +868,8 @@ async function handleMessage(args: {
         question: text,
       });
     }
+    // small-talk + no pending: stay silent.
   }
-  // small-talk (شكرا / تمام / اوكي / هلا on existing session): stay silent.
 
   await supabase
     .from("whatsapp_sessions")
