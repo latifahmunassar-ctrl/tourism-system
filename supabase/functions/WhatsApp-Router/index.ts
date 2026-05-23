@@ -2057,8 +2057,8 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   if (url.searchParams.get("admin_action") === "delete_chat_rows") {
     const expected = Deno.env.get("LEGACY_ANON_JWT") || "";
-    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-    if (!expected || got !== expected) {
+    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    if (!expected || got !== expected.trim()) {
       return new Response(JSON.stringify({ error: "unauthorized" }),
         { status: 401, headers: JSON_HEADERS });
     }
@@ -2085,6 +2085,30 @@ Deno.serve(async (req) => {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
+  // Admin: token-validity probe. Returns 200 with diagnostic info when
+  // the token is correct, 401 otherwise. Useful when the browser shows
+  // "unauthorized" but the same token works via curl — lets the dashboard
+  // expose what it actually sent vs what the server expected.
+  if (url.searchParams.get("admin_action") === "whoami") {
+    const expected = (Deno.env.get("LEGACY_ANON_JWT") || "").trim();
+    const rawAuth = req.headers.get("authorization") || "";
+    const got = rawAuth.replace(/^Bearer\s+/i, "").trim();
+    const ok = !!expected && got === expected;
+    return new Response(JSON.stringify({
+      ok,
+      got_length: got.length,
+      expected_length: expected.length,
+      got_prefix: got.slice(0, 20),
+      got_suffix: got.slice(-20),
+      expected_prefix: expected.slice(0, 20),
+      expected_suffix: expected.slice(-20),
+      raw_auth_header_length: rawAuth.length,
+    }), {
+      status: ok ? 200 : 401,
+      headers: { ...JSON_HEADERS, ...corsHeaders },
+    });
+  }
+
   // Admin: dashboard data feed. Returns a small JSON snapshot for the
   // browser-based dashboard (latifahmunassar-ctrl.github.io/dashboard):
   //   • pending admin proposals (so the admin sees what's waiting on her)
@@ -2093,8 +2117,8 @@ Deno.serve(async (req) => {
   //   • current pending proposals total
   if (url.searchParams.get("admin_action") === "dashboard_data") {
     const expected = Deno.env.get("LEGACY_ANON_JWT") || "";
-    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-    if (!expected || got !== expected) {
+    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    if (!expected || got !== expected.trim()) {
       return new Response(JSON.stringify({ error: "unauthorized" }),
         { status: 401, headers: { ...JSON_HEADERS, ...corsHeaders } });
     }
@@ -2165,8 +2189,8 @@ Deno.serve(async (req) => {
   // Usage: POST ?admin_action=twilio_messages  body: {"phone": "00968..."}
   if (url.searchParams.get("admin_action") === "twilio_messages") {
     const expected = Deno.env.get("LEGACY_ANON_JWT") || "";
-    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-    if (!expected || got !== expected) {
+    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    if (!expected || got !== expected.trim()) {
       return new Response(JSON.stringify({ error: "unauthorized" }),
         { status: 401, headers: JSON_HEADERS });
     }
@@ -2221,8 +2245,8 @@ Deno.serve(async (req) => {
   //   body: {"phone": "0096877428881"}   // accepts +968…, 00968…, bare digits, or whatsapp:+968…
   if (url.searchParams.get("admin_action") === "reset_session") {
     const expected = Deno.env.get("LEGACY_ANON_JWT") || "";
-    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-    if (!expected || got !== expected) {
+    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    if (!expected || got !== expected.trim()) {
       return new Response(JSON.stringify({ error: "unauthorized" }),
         { status: 401, headers: JSON_HEADERS });
     }
