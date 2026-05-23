@@ -1902,18 +1902,19 @@ async function handleAdminResponse(args: {
   const no  = isNegative(text);
 
   // ── STEP 1: admin reviewing AI suggestion ──────────────────────────────
+  // Excel-save step is suspended — once the customer receives the reply
+  // the proposal is closed. Re-saving to Excel will move into the
+  // dashboard once it has proposal-action UI.
   if (proposal.status === "pending_reply_approval") {
     if (yes) {
-      // Send AI's suggested reply to customer; move to save-prompt.
       await sendWhatsapp(proposal.customer_phone, proposal.suggested_reply);
       await supabase.from("whatsapp_admin_proposals")
-        .update({ status: "pending_sheet_approval" })
+        .update({ status: "completed_skipped", decided_at: new Date().toISOString() })
         .eq("id", proposal.id);
-      await sendWhatsapp(adminFrom, buildSaveProposalMessage(proposal, proposal.suggested_reply));
+      await sendStaffNotice(adminFrom, "تم الرد على العميل 👍");
       return;
     }
     if (no) {
-      // Ask admin to write the corrected reply text.
       await supabase.from("whatsapp_admin_proposals")
         .update({ status: "pending_correction" })
         .eq("id", proposal.id);
@@ -1933,13 +1934,15 @@ async function handleAdminResponse(args: {
       await sendWhatsapp(adminFrom, `اكتب الرد كاملاً عشان أرسله للعميل`);
       return;
     }
-    // Forward admin's exact text to the customer — no confirmation step.
     await sendWhatsapp(proposal.customer_phone, finalReply);
-    // Overwrite suggested_reply so the sheet save uses the corrected version.
     await supabase.from("whatsapp_admin_proposals")
-      .update({ status: "pending_sheet_approval", suggested_reply: finalReply })
+      .update({
+        status: "completed_skipped",
+        suggested_reply: finalReply,
+        decided_at: new Date().toISOString(),
+      })
       .eq("id", proposal.id);
-    await sendWhatsapp(adminFrom, buildSaveProposalMessage(proposal, finalReply));
+    await sendStaffNotice(adminFrom, "تم الرد على العميل 👍");
     return;
   }
 
