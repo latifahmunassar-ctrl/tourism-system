@@ -1628,6 +1628,14 @@ type ClaudeAnalysis = {
   proposedIntent: string;
   proposedSubIntent: string;
   proposedKeywords: string[];
+  // CRM classifier output (per spec) — used for dashboard sorting,
+  // routing decisions, and surfacing URGENT cases to admin.
+  customerType: string;           // NEW_CUSTOMER | REPEAT_CUSTOMER | VIP_CUSTOMER | CORPORATE_BUSINESS | PARTNERSHIP
+  caseType: string;               // INQUIRY | BOOKING_REQUEST | BOOKING_CONFIRMED | COMPLAINT | CANCELLATION | MODIFICATION
+  complaintType: string | null;   // only when caseType=COMPLAINT
+  bookingStatus: string;          // NONE | CONFIRMED | ACTIVE | COMPLETED
+  priority: string | null;        // "URGENT" or null
+  priorityLabel: string | null;   // "URGENT 🚨" or null
 };
 
 async function analyzeUnknownQuestion(
@@ -1690,10 +1698,32 @@ async function analyzeUnknownQuestion(
     `   • متغيرات الجمع والملكية (قطه، قطط، قطتي).\n` +
     `   • تجنّب الكلمات الشائعة: سفر، رحلة، برنامج، باكج، عرض، سعر، كم، وش، متى.\n` +
     `   • لا علامات ترقيم.\n\n` +
+    `5) CRM classification — صنّف العميل وحالته:\n` +
+    `   customer_type (واحد فقط):\n` +
+    `     • NEW_CUSTOMER — ما عنده تعامل سابق معنا\n` +
+    `     • REPEAT_CUSTOMER — "حجزت معكم قبل" أو "سافرت معكم"\n` +
+    `     • VIP_CUSTOMER — يطلب luxury / 5-star / "أفضل" / "VIP" / تجربة فاخرة. يطغى على REPEAT و NEW.\n` +
+    `     • CORPORATE_BUSINESS — شركة / منظمة / موظفين / "رحلة عمل"\n` +
+    `     • PARTNERSHIP — مؤثّر / مُعلن / "رحلة مقابل إعلان" / barter\n` +
+    `   case_type (واحد فقط):\n` +
+    `     • INQUIRY — سؤال عام\n` +
+    `     • BOOKING_REQUEST — يطلب يحجز\n` +
+    `     • BOOKING_CONFIRMED — يأكّد حجزه\n` +
+    `     • COMPLAINT — شكوى\n` +
+    `     • CANCELLATION — إلغاء\n` +
+    `     • MODIFICATION — تعديل\n` +
+    `   complaint_type (فقط لو case_type=COMPLAINT، وإلا null):\n` +
+    `     • PAYMENT_ISSUE / GENERAL_DISSATISFACTION / DELAY_RESPONSE /\n` +
+    `       HOTEL_ISSUE / FLIGHT_ISSUE / SERVICE_ISSUE\n` +
+    `   booking_status: NONE | CONFIRMED | ACTIVE | COMPLETED\n` +
+    `   priority + priority_label:\n` +
+    `     • إذا booking_status=CONFIRMED AND case_type=COMPLAINT →\n` +
+    `         priority = "URGENT", priority_label = "URGENT 🚨"\n` +
+    `     • وإلا → priority = null, priority_label = null\n\n` +
     `قاعدة الـ FAQ الموجودة (${rows.length} صف):\n${faqRef}\n\n` +
     `الفئات الحالية: ${categories}\n\n` +
     `أعد JSON فقط بدون أي نص آخر:\n` +
-    `{"interpretation":"...","suggested_reply":"...","source_row_id":"PKG0xx أو null","proposed_intent":"...","proposed_sub_intent":"...","proposed_keywords":["...","..."]}`;
+    `{"interpretation":"...","suggested_reply":"...","source_row_id":"PKG0xx أو null","proposed_intent":"...","proposed_sub_intent":"...","proposed_keywords":["...","..."],"customer_type":"...","case_type":"...","complaint_type":"...أو null","booking_status":"...","priority":"URGENT أو null","priority_label":"URGENT 🚨 أو null"}`;
 
   try {
     const anthropic = new Anthropic({ apiKey });
@@ -1710,6 +1740,15 @@ async function analyzeUnknownQuestion(
     const parsed = JSON.parse(m[0]);
     const rawSourceId = String(parsed.source_row_id || "").trim();
     const sourceRowId = (rawSourceId && rawSourceId !== "null") ? rawSourceId : null;
+    const customerType = String(parsed.customer_type || "").trim().toUpperCase();
+    const caseType = String(parsed.case_type || "").trim().toUpperCase();
+    const rawComplaint = String(parsed.complaint_type || "").trim().toUpperCase();
+    const complaintType = (caseType === "COMPLAINT" && rawComplaint && rawComplaint !== "NULL")
+      ? rawComplaint : null;
+    const bookingStatus = String(parsed.booking_status || "NONE").trim().toUpperCase();
+    // Enforce the URGENT rule server-side so we don't depend on Claude
+    // following it correctly every time.
+    const isUrgent = caseType === "COMPLAINT" && bookingStatus === "CONFIRMED";
     return {
       interpretation: String(parsed.interpretation || "").trim(),
       suggestedReply: String(parsed.suggested_reply || "").trim(),
@@ -1719,6 +1758,12 @@ async function analyzeUnknownQuestion(
       proposedKeywords: Array.isArray(parsed.proposed_keywords)
         ? parsed.proposed_keywords.map(String).map(s => s.trim()).filter(Boolean)
         : [],
+      customerType,
+      caseType,
+      complaintType,
+      bookingStatus,
+      priority: isUrgent ? "URGENT" : null,
+      priorityLabel: isUrgent ? "URGENT 🚨" : null,
     };
   } catch (e) {
     console.error("Claude analyse failed", (e as Error).message);
@@ -1752,6 +1797,12 @@ async function createProposalAndNotifyAdmin(args: {
     proposedIntent: "",
     proposedSubIntent: "",
     proposedKeywords: [] as string[],
+    customerType: "",
+    caseType: "",
+    complaintType: null as string | null,
+    bookingStatus: "NONE",
+    priority: null as string | null,
+    priorityLabel: null as string | null,
   };
   const status = analysis ? "pending_reply_approval" : "pending_correction";
 
@@ -1764,6 +1815,12 @@ async function createProposalAndNotifyAdmin(args: {
     proposed_intent: safe.proposedIntent,
     proposed_sub_intent: safe.proposedSubIntent,
     proposed_keywords: safe.proposedKeywords,
+    customer_type: safe.customerType,
+    case_type: safe.caseType,
+    complaint_type: safe.complaintType,
+    booking_status: safe.bookingStatus,
+    priority: safe.priority,
+    priority_label: safe.priorityLabel,
     status,
   });
   if (error) { console.error("Proposal insert failed", error.message); return; }
@@ -1801,12 +1858,25 @@ async function createProposalAndNotifyAdmin(args: {
     : analysis
       ? `🧠 المصدر: AI (لا يوجد صف مشابه في الـ FAQ)`
       : "";
+  // CRM classifier badges (collapsed to one line). Skip values that
+  // came back empty.
+  const classifierLine = analysis ? (() => {
+    const parts: string[] = [];
+    if (analysis.customerType) parts.push(analysis.customerType);
+    if (analysis.caseType) parts.push(analysis.caseType);
+    if (analysis.complaintType) parts.push(analysis.complaintType);
+    if (analysis.bookingStatus && analysis.bookingStatus !== "NONE") parts.push(`booking:${analysis.bookingStatus}`);
+    return parts.length ? `🏷️ ${parts.join(" · ")}\n\n` : "";
+  })() : "";
+  // URGENT cases get a banner so the admin can't miss them in the chat.
+  const urgentBanner = analysis?.priority === "URGENT" ? `🚨🚨🚨 ${analysis.priorityLabel}\n\n` : "";
   const notice = analysis
     ? (
-        `💡 سؤال جديد من عميل\n\n` +
+        `${urgentBanner}💡 سؤال جديد من عميل\n\n` +
         `العميل: ${profileName} (${phoneDigits})\n` +
         `السؤال: ${question}\n\n` +
         contextBlock +
+        classifierLine +
         `الفهم: ${analysis.interpretation}\n\n` +
         `الرد المقترح:\n${analysis.suggestedReply}\n\n` +
         `${source}\n\n` +
@@ -2301,11 +2371,14 @@ Deno.serve(async (req) => {
 
       const { data: pending } = await supabase
         .from("whatsapp_admin_proposals")
-        .select("id, customer_phone, customer_profile_name, customer_question, status, created_at, proposed_intent, proposed_sub_intent")
+        .select("id, customer_phone, customer_profile_name, customer_question, status, created_at, proposed_intent, proposed_sub_intent, customer_type, case_type, complaint_type, booking_status, priority, priority_label")
         .in("status", [
           "pending_reply_approval", "pending_correction",
           "pending_sheet_approval", "pending_category_choice",
         ])
+        // URGENT first (priority IS NOT NULL sorts before NULL when DESC
+        // with nullsfirst in PostgREST). Then newest first.
+        .order("priority", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
         .limit(20);
 
