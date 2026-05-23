@@ -597,7 +597,7 @@ async function checkStalledMessages(
     lines.join("\n\n") +
     `\n\nراجعوها ورودوا على العملاء يدوياً 🙏`;
   for (const admin of admins) {
-    try { await sendWhatsapp(admin, notice); } catch (_) {}
+    try { await sendStaffNotice(admin, notice); } catch (_) {}
   }
 }
 
@@ -677,6 +677,44 @@ async function callTourismAI(messages: TaiTurn[]): Promise<TaiResult | null> {
 }
 
 // ── معالج الرسالة الرئيسي ────────────────────────────────────────────────
+// ── Staff identity guard ─────────────────────────────────────────────────
+// Any phone in wa_staff (or the legacy SALES_/COMPLAINTS_ env lists) is a
+// staff member, not a customer. Free-text messages from staff are blocked
+// at the front of handleMessage so a staff WhatsApp reply doesn't pretend
+// to be a customer inbound and confuse the FAQ / escalation flow. Admin
+// proposal actions (yes/no/correction) still pass through via the
+// existing handleAdminResponse path.
+const DASHBOARD_URL = "https://latifahmunassar-ctrl.github.io/dashboard/";
+const STAFF_WARNING_MESSAGE =
+  `⚠️ ردك ما وصل للعميل - افتح الداشبورد للرد على المحادثة\n\n${DASHBOARD_URL}`;
+const STAFF_NOTICE_SUFFIX =
+  `\n\n⚠️ لا ترد على هذا الرقم - افتح الداشبورد فقط\n${DASHBOARD_URL}`;
+
+async function isRegisteredStaff(
+  supabase: ReturnType<typeof createClient>,
+  phone: string,
+): Promise<boolean> {
+  if (staffList("SALES_WHATSAPP_NUMBERS").includes(phone)) return true;
+  if (staffList("COMPLAINTS_WHATSAPP_NUMBERS").includes(phone)) return true;
+  const { data } = await supabase
+    .from("wa_staff")
+    .select("phone")
+    .eq("phone", phone)
+    .eq("active", true)
+    .maybeSingle();
+  return !!data;
+}
+
+// Send a WhatsApp message to a staff member with the "don't reply here,
+// use the dashboard" footer attached. Use for any notification where the
+// staff member isn't expected to reply on WhatsApp (assignment ping,
+// watchdog alert, complaint alert, save-confirmation). Use plain
+// sendWhatsapp for the proposal/correction prompts that DO need a
+// WhatsApp reply to drive the 4-state admin machine.
+async function sendStaffNotice(phone: string, body: string): Promise<void> {
+  await sendWhatsapp(phone, body + STAFF_NOTICE_SUFFIX);
+}
+
 // ── Staff routing helpers ────────────────────────────────────────────────
 // Send a WhatsApp ping to the staff member a conversation just got
 // assigned/transferred to. `source` is either "auto" (matched a routing
@@ -698,7 +736,7 @@ async function notifyStaffAssignment(args: {
   else lines.push(`العميل: ${customerDigits}`);
   if (args.destination) lines.push(`الوجهة: ${args.destination}`);
   lines.push("راجع المحادثة من الداشبورد وأكمل من هناك");
-  try { await sendWhatsapp(args.staffPhone, lines.join("\n")); } catch (_) {}
+  try { await sendStaffNotice(args.staffPhone, lines.join("\n")); } catch (_) {}
 }
 
 // If the session has no assignee yet AND we just detected a destination,
@@ -773,35 +811,31 @@ async function handleMessage(args: {
   const { supabase, from, profileName, body } = args;
   const text = body.trim();
 
-  // 0) Admin response interception. If this message comes from a staff
-  //    number AND there's a pending AI proposal awaiting decision, treat
-  //    the message as admin's answer (نعم / لا), regardless of the admin's
-  //    own session state. This must run BEFORE the welcome/isNew check so
-  //    admin's "نعم" doesn't trigger a new-customer welcome.
-  if (isAdminPhone(from)) {
+  // 0) Staff guard + admin response interception. If this message comes
+  //    from a registered staff phone (wa_staff or the legacy env lists),
+  //    we either route it to the 4-state admin handler (if it's a valid
+  //    admin action) or block it with the "use the dashboard" warning so
+  //    it doesn't get treated as a customer message.
+  const fromIsStaff = await isRegisteredStaff(supabase, from);
+  if (fromIsStaff) {
     const proposal = await getOldestPendingProposal(supabase);
     if (proposal) {
-      // Two flavours of state require admin input:
-      //   • pending_reply_approval / pending_sheet_approval → expect a
-      //     yes/no token. Longer text passes through as a customer message.
-      //   • pending_correction / pending_category_choice → expect free
-      //     text (the corrected reply / preferred category). ANY non-empty
-      //     message is the answer, including yes/no.
       const isFreeTextState =
         proposal.status === "pending_correction" ||
         proposal.status === "pending_category_choice";
-      if (isFreeTextState || isAffirmative(text) || isNegative(text)) {
+      if (isFreeTextState || isAffirmative(text) || isNegative(text) || isSkipSave(text)) {
         await handleAdminResponse({ supabase, proposal, text, adminFrom: from });
         return;
       }
-    } else {
-      // No pending proposal — but a bare confirmation word would otherwise
-      // be misinterpreted as a customer question by the general handler.
-      if (isAffirmative(text) || isNegative(text)) {
-        await sendWhatsapp(from, "ما في طلب معلّق حالياً 👍");
-        return;
-      }
+    } else if (isAffirmative(text) || isNegative(text)) {
+      await sendStaffNotice(from, "ما في طلب معلّق حالياً 👍");
+      return;
     }
+    // Staff sent free text that doesn't match any admin action. Block it
+    // (do NOT treat as a customer inbound) and warn them to use the
+    // dashboard instead.
+    await sendWhatsapp(from, STAFF_WARNING_MESSAGE);
+    return;
   }
 
   // 1) اجلب أو أنشئ الجلسة. لازم يكون قبل التحقق من التحية عشان العميل
@@ -1019,7 +1053,7 @@ async function handleComplaint(args: {
   // تنبيه موظفي الشكاوى
   const staff = staffList("COMPLAINTS_WHATSAPP_NUMBERS");
   const notice = `⚠️ شكوى جديدة\nمن: ${profileName} (${from.replace(/^whatsapp:/, "")})\nالرسالة:\n${text}`;
-  await Promise.all(staff.map(num => sendWhatsapp(num, notice)));
+  await Promise.all(staff.map(num => sendStaffNotice(num, notice)));
 
   await sendWhatsapp(
     from,
@@ -1337,7 +1371,7 @@ async function runTravelAgentTurn(args: {
       `التاريخ: ${merged.travel_date}\n` +
       `Lead score: ${agent.lead_score} (${agent.lead_type})\n\n` +
       `جهّز البرنامج من الواجهة وأرسله للعميل مباشرة من واتسابك`;
-    await Promise.all(sales.map(num => sendWhatsapp(num, notice)));
+    await Promise.all(sales.map(num => sendStaffNotice(num, notice)));
     return;
   }
 
@@ -1448,7 +1482,7 @@ async function finalizePackage(args: {
     `الأشخاص: ${s.persons}\n` +
     `التاريخ: ${s.travel_date}\n\n` +
     `جهّز البرنامج من الواجهة وأرسله للعميل مباشرة من واتسابك`;
-  await Promise.all(sales.map(num => sendWhatsapp(num, notice)));
+  await Promise.all(sales.map(num => sendStaffNotice(num, notice)));
 
   await supabase
     .from("whatsapp_sessions")
@@ -1795,7 +1829,7 @@ async function createProposalAndNotifyAdmin(args: {
     .maybeSingle();
   const assigned = (assignedRow as { assigned_staff_phone?: string | null } | null)?.assigned_staff_phone;
   const targets = assigned ? [assigned] : staffList("SALES_WHATSAPP_NUMBERS");
-  await Promise.all(targets.map(num => sendWhatsapp(num, notice)));
+  await Promise.all(targets.map(num => sendStaffNotice(num, notice)));
 }
 
 function isAdminPhone(from: string): boolean {
