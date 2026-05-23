@@ -677,6 +677,33 @@ async function callTourismAI(messages: TaiTurn[]): Promise<TaiResult | null> {
 }
 
 // ── معالج الرسالة الرئيسي ────────────────────────────────────────────────
+// ── AI master switch ─────────────────────────────────────────────────────
+// Two-level toggle for whether the bot auto-replies on a given inbound:
+//   • wa_sessions.ai_enabled (boolean | null) — per-conversation override.
+//     null = inherit global. true/false force regardless of global.
+//   • wa_settings.ai_global_enabled (jsonb boolean) — global default.
+// Per-conversation always wins so admin can mute one chatty customer without
+// silencing the whole bot, or vice versa unmute one VIP while the bot is
+// globally off.
+async function isAiEnabledForSession(
+  supabase: ReturnType<typeof createClient>,
+  session: { ai_enabled?: boolean | null } | null,
+): Promise<boolean> {
+  if (session && session.ai_enabled === true) return true;
+  if (session && session.ai_enabled === false) return false;
+  const { data } = await supabase
+    .from("wa_settings")
+    .select("value")
+    .eq("key", "ai_global_enabled")
+    .maybeSingle();
+  const v = (data as { value?: unknown } | null)?.value;
+  // jsonb may come back as boolean or string depending on driver shape.
+  if (v === true) return true;
+  if (v === false) return false;
+  if (typeof v === "string") return v.toLowerCase() === "true";
+  return true; // default ON when unset
+}
+
 async function handleMessage(args: {
   supabase: ReturnType<typeof createClient>;
   from: string;
@@ -730,7 +757,14 @@ async function handleMessage(args: {
     phone: string; profile_name: string; stage: string;
     destination: string | null; persons: number | null; travel_date: string | null;
     hubspot_contact_id: string | null;
+    ai_enabled?: boolean | null;
   } | null;
+
+  // AI master switch — per-conversation override wins over the global
+  // setting. If AI is disabled for this conversation we just record the
+  // session (so the dashboard can see it) and return without sending any
+  // bot reply. Admin handles replies manually outside the bot.
+  const aiOn = await isAiEnabledForSession(supabase, session);
 
   if (isNew) {
     const contactId = await upsertHubspotContact({ phone: from, name: profileName });
@@ -742,17 +776,27 @@ async function handleMessage(args: {
       last_message_at: new Date().toISOString(),
     };
     await supabase.from("whatsapp_sessions").insert(seed);
-    session = { ...seed, destination: null, persons: null, travel_date: null } as typeof session;
+    session = { ...seed, destination: null, persons: null, travel_date: null, ai_enabled: null } as typeof session;
+  }
+
+  if (!aiOn) {
+    // AI silent for this conversation. Just touch last_message_at so the
+    // session shows recent activity in the dashboard.
+    await supabase
+      .from("whatsapp_sessions")
+      .update({ last_message_at: new Date().toISOString() })
+      .eq("phone", from);
+    return;
+  }
+
+  if (isNew && !isPresenceCheck(text)) {
     // رسالة ترحيب — تُرسل مرّة واحدة لكل عميل جديد. لكن لو الرسالة الأولى
     // سؤال عن وجود الموظف ("في أحد؟") فالـ welcome يتعارض مع رد CASE 2
-    // ("ما أنا معاك"). نتخطى الترحيب في هذي الحالة، الرد التالي يقوم بكامل
-    // الجواب.
-    if (!isPresenceCheck(text)) {
-      await sendWhatsapp(
-        from,
-        "حياك الله … معك طلال من خدمة العملاء كيف اقدر اخدمك",
-      );
-    }
+    // ("ما أنا معاك"). نتخطى الترحيب في هذي الحالة.
+    await sendWhatsapp(
+      from,
+      "حياك الله … معك طلال من خدمة العملاء كيف اقدر اخدمك",
+    );
   }
 
   // 1b) Presence check ("في أحد؟" / "معي أحد؟" / "معي طلال؟"). Replies before
@@ -2164,6 +2208,28 @@ Deno.serve(async (req) => {
         countWhere("wa_message_audit", "errored"),
       ]);
 
+      // Global AI toggle + per-conversation overrides for the dashboard
+      // toggles. Conversations = sessions that had activity in the last
+      // 24h, with their per-conversation ai_enabled value (null = inherit).
+      const { data: globalRow } = await supabase
+        .from("wa_settings")
+        .select("value")
+        .eq("key", "ai_global_enabled")
+        .maybeSingle();
+      const gv = (globalRow as { value?: unknown } | null)?.value;
+      const globalAiEnabled =
+        gv === true ? true :
+        gv === false ? false :
+        typeof gv === "string" ? gv.toLowerCase() === "true" :
+        true;
+
+      const { data: sessions } = await supabase
+        .from("whatsapp_sessions")
+        .select("phone, profile_name, ai_enabled, last_message_at")
+        .gte("last_message_at", since24h)
+        .order("last_message_at", { ascending: false })
+        .limit(50);
+
       return new Response(JSON.stringify({
         counts: {
           messages_today: received,
@@ -2172,10 +2238,78 @@ Deno.serve(async (req) => {
           errored_today: errored,
           pending_proposals_total: pending?.length ?? 0,
         },
+        global_ai_enabled: globalAiEnabled,
+        conversations: sessions ?? [],
         pending_proposals: pending ?? [],
         recent_audit: audit ?? [],
         generated_at: new Date().toISOString(),
       }), { headers: { ...JSON_HEADERS, ...corsHeaders } });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: { ...JSON_HEADERS, ...corsHeaders } });
+    }
+  }
+
+  // Admin: toggle the global AI master switch. POST body: {"enabled": bool}.
+  if (url.searchParams.get("admin_action") === "set_global_ai") {
+    const expected = Deno.env.get("LEGACY_ANON_JWT") || "";
+    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    if (!expected || got !== expected.trim()) {
+      return new Response(JSON.stringify({ error: "unauthorized" }),
+        { status: 401, headers: { ...JSON_HEADERS, ...corsHeaders } });
+    }
+    try {
+      const payload = await req.json();
+      const enabled = !!payload.enabled;
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { error } = await supabase.from("wa_settings")
+        .upsert({ key: "ai_global_enabled", value: enabled, updated_at: new Date().toISOString() });
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true, global_ai_enabled: enabled }),
+        { headers: { ...JSON_HEADERS, ...corsHeaders } });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: { ...JSON_HEADERS, ...corsHeaders } });
+    }
+  }
+
+  // Admin: toggle AI for a single conversation. POST body:
+  //   {"phone": "00968...", "enabled": true|false|null}
+  // null  → inherit global. true/false → force per-conversation.
+  if (url.searchParams.get("admin_action") === "set_conversation_ai") {
+    const expected = Deno.env.get("LEGACY_ANON_JWT") || "";
+    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    if (!expected || got !== expected.trim()) {
+      return new Response(JSON.stringify({ error: "unauthorized" }),
+        { status: 401, headers: { ...JSON_HEADERS, ...corsHeaders } });
+    }
+    try {
+      const payload = await req.json();
+      const rawPhone = String(payload.phone || "").trim();
+      if (!rawPhone) {
+        return new Response(JSON.stringify({ error: "missing phone" }),
+          { status: 400, headers: { ...JSON_HEADERS, ...corsHeaders } });
+      }
+      const digits = rawPhone.replace(/^whatsapp:/, "").replace(/^\+/, "")
+        .replace(/^00/, "").replace(/[^0-9]/g, "");
+      const phone = `whatsapp:+${digits}`;
+      const enabled: boolean | null =
+        payload.enabled === true ? true :
+        payload.enabled === false ? false : null;
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { error, count } = await supabase
+        .from("whatsapp_sessions")
+        .update({ ai_enabled: enabled }, { count: "exact" })
+        .eq("phone", phone);
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true, phone, ai_enabled: enabled, rows_updated: count ?? 0 }),
+        { headers: { ...JSON_HEADERS, ...corsHeaders } });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }),
         { status: 500, headers: { ...JSON_HEADERS, ...corsHeaders } });
