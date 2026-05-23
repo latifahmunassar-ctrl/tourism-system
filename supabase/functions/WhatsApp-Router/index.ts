@@ -2036,10 +2036,15 @@ async function triggerSyncSheets(): Promise<void> {
 
 // ── HTTP entry point ─────────────────────────────────────────────────────
 Deno.serve(async (req) => {
-  if (req.method === "GET") {
+  const urlEarly = new URL(req.url);
+  const isAdminAction = !!urlEarly.searchParams.get("admin_action");
+  // Plain GET with no admin_action → health-check style probe.
+  if (req.method === "GET" && !isAdminAction) {
     return new Response("WhatsApp-Router OK", { headers: { "Content-Type": "text/plain" } });
   }
-  if (req.method !== "POST") {
+  // Admin endpoints accept both GET (browser dashboard) and POST (curl).
+  // Twilio webhooks are always POST.
+  if (req.method !== "POST" && !isAdminAction) {
     return new Response("Method not allowed", { status: 405 });
   }
 
@@ -2065,6 +2070,91 @@ Deno.serve(async (req) => {
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }),
         { status: 500, headers: JSON_HEADERS });
+    }
+  }
+
+  // CORS for browser-based admin dashboard (hosted on GitHub Pages).
+  // Permissive because everything below this point is JWT-gated anyway.
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "authorization, content-type",
+    "Access-Control-Max-Age": "86400",
+  };
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  // Admin: dashboard data feed. Returns a small JSON snapshot for the
+  // browser-based dashboard (latifahmunassar-ctrl.github.io/dashboard):
+  //   • pending admin proposals (so the admin sees what's waiting on her)
+  //   • last 50 audit rows (so silent-failure cases surface)
+  //   • daily counts (received / completed / stalled / errored)
+  //   • current pending proposals total
+  if (url.searchParams.get("admin_action") === "dashboard_data") {
+    const expected = Deno.env.get("LEGACY_ANON_JWT") || "";
+    const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    if (!expected || got !== expected) {
+      return new Response(JSON.stringify({ error: "unauthorized" }),
+        { status: 401, headers: { ...JSON_HEADERS, ...corsHeaders } });
+    }
+    try {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const todayStart = new Date(); todayStart.setUTCHours(0, 0, 0, 0);
+      const todayISO = todayStart.toISOString();
+
+      const { data: pending } = await supabase
+        .from("whatsapp_admin_proposals")
+        .select("id, customer_phone, customer_profile_name, customer_question, status, created_at, proposed_intent, proposed_sub_intent")
+        .in("status", [
+          "pending_reply_approval", "pending_correction",
+          "pending_sheet_approval", "pending_category_choice",
+        ])
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: audit } = await supabase
+        .from("wa_message_audit")
+        .select("id, from_phone, body, status, received_at, completed_at, error_message")
+        .gte("received_at", since24h)
+        .order("received_at", { ascending: false })
+        .limit(50);
+
+      const countWhere = async (
+        table: string, status: string | null,
+      ): Promise<number> => {
+        let q = supabase.from(table).select("id", { count: "exact", head: true })
+          .gte("received_at", todayISO);
+        if (status) q = q.eq("status", status);
+        const { count } = await q;
+        return count ?? 0;
+      };
+      const [received, completed, stalled, errored] = await Promise.all([
+        countWhere("wa_message_audit", null),
+        countWhere("wa_message_audit", "completed"),
+        countWhere("wa_message_audit", "stalled"),
+        countWhere("wa_message_audit", "errored"),
+      ]);
+
+      return new Response(JSON.stringify({
+        counts: {
+          messages_today: received,
+          completed_today: completed,
+          stalled_today: stalled,
+          errored_today: errored,
+          pending_proposals_total: pending?.length ?? 0,
+        },
+        pending_proposals: pending ?? [],
+        recent_audit: audit ?? [],
+        generated_at: new Date().toISOString(),
+      }), { headers: { ...JSON_HEADERS, ...corsHeaders } });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: { ...JSON_HEADERS, ...corsHeaders } });
     }
   }
 
