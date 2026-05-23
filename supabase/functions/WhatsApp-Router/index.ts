@@ -199,6 +199,7 @@ const SMALL_TALK_TOKENS = new Set([
   "تحية طيبه", "حياك", "حياك الله",
   "شكرا", "شكرا لك", "مشكور", "مشكوره", "تسلم", "يسلموا",
   "تمام", "اوكي", "اوك", "حسنا", "ماشي",
+  "ممتاز", "زين", "كويس", "حلو", "جميل", "رائع", "اي", "ايوه", "ايوا", "أيوه", "أيوا",
   "ok", "okay", "thanks", "thank you", "hi", "hello",
 ]);
 function isSmallTalk(text: string): boolean {
@@ -345,27 +346,51 @@ async function findFaqAnswer(
     return re.test(haystack);
   };
 
+  // "Weak" keywords — generic words that appear in many customer questions
+  // and shouldn't qualify a row as a match on their own. PKG0067 (about
+  // duration) had "البرنامج" as a keyword which was matching ANY question
+  // mentioning the program (incl. "البرنامج ايش يشمل"), producing
+  // false-positive duration answers. A row that only matches via these
+  // weak keywords is skipped → no FAQ match → admin escalation fires.
+  const WEAK_KEYWORDS = new Set([
+    "البرنامج", "البرامج", "الرحله", "الرحلات", "السفر",
+    "العرض", "العروض", "الباقه", "الباقات", "البكج", "البكجات",
+    "الفندق", "الفنادق", "الطيران",
+    "برنامج", "رحله", "عرض", "باقه", "بكج", "فندق",
+  ]);
+
   // Score rows by *length-weighted* keyword matches so a long phrase like
   // "السفر مع الحيوانات" beats short generic keywords like "سفر" that
   // appear in many rows. Each matched keyword contributes its char length
-  // (capped at 20) to the row's score; a row needs ≥1 keyword to be in the
-  // running.
-  let best: { score: number; matchCount: number; row: typeof data[number] } | null = null;
+  // (capped at 20) to the row's score; a row needs ≥1 STRONG keyword
+  // (non-weak) to be in the running.
+  let best: { score: number; matchCount: number; strongCount: number; row: typeof data[number] } | null = null;
   for (const row of data as Array<{
     id: string; sub_intent: string; keywords: string[];
     answer_sa1: string; answer_om: string; answer_clarification: string;
   }>) {
     let score = 0;
     let matchCount = 0;
+    let strongCount = 0;
     for (const kwRaw of row.keywords) {
       const kw = normalizeArabic(kwRaw);
       if (matchesAsWord(kw)) {
         matchCount++;
         score += Math.min(kw.length, 20);
+        if (!WEAK_KEYWORDS.has(kw)) strongCount++;
       }
     }
     if (matchCount === 0) continue;
-    if (!best || score > best.score) best = { score, matchCount, row };
+    // Strict mode (admin's policy): a row qualifies only when the question
+    // matches the row STRONGLY — at least two distinct keyword matches AND
+    // at least one of them is non-weak. Single-keyword matches (even of
+    // strong destination names like "ماليزيا") are NOT enough — those
+    // escalate to admin so the AI suggests a reply and the admin decides
+    // the exact answer + category. Trades some auto-answer coverage for
+    // accuracy + a growing curated FAQ over time.
+    if (matchCount < 2) continue;
+    if (strongCount === 0) continue;
+    if (!best || score > best.score) best = { score, matchCount, strongCount, row };
   }
   if (!best) return null;
 
@@ -483,16 +508,15 @@ async function createHubspotTicket(args: {
 
 // ── Twilio outbound ───────────────────────────────────────────────────────
 
-// Human-feeling typing delay based on message length. Ranges:
-//   short  (≤50 chars)   → 2s
-//   medium (51-150)      → 3-4s
-//   long   (>150)        → 5-7s
-// Randomised within bands so consecutive replies don't fire on identical timing.
+// Light human-feel delay before sending. Kept short so concurrent webhook
+// invocations don't pile up — each sendWhatsapp call holds the function
+// open for delay+fetch, and stacked delays were a likely contributor to
+// occasional handleMessage hangs under load.
 function humanTypingDelayMs(text: string): number {
   const n = (text || "").length;
-  if (n <= 50)  return 2000;
-  if (n <= 150) return 3000 + Math.floor(Math.random() * 1000);
-  return 5000 + Math.floor(Math.random() * 2000);
+  if (n <= 50)  return 600;
+  if (n <= 150) return 900;
+  return 1200;
 }
 
 async function sendWhatsapp(to: string, body: string): Promise<void> {
