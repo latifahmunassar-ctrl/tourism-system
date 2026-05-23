@@ -1467,6 +1467,7 @@ type ProposalRow = {
 type ClaudeAnalysis = {
   interpretation: string;
   suggestedReply: string;
+  sourceRowId: string | null;     // id of FAQ row whose answer was reused (null = AI-generated)
   proposedIntent: string;
   proposedSubIntent: string;
   proposedKeywords: string[];
@@ -1479,40 +1480,69 @@ async function analyzeUnknownQuestion(
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) return null;
 
+  // Fetch existing FAQ rows WITH their answers so Claude can semantically
+  // match against the curated content first, rather than inventing replies
+  // from its own knowledge. This is the admin's policy: prefer ALEZZ Chat
+  // content; only generate fresh text if nothing in the sheet fits.
+  type FaqRow = {
+    id: string; intent: string; sub_intent: string | null;
+    keywords: string[] | null;
+    answer_om: string | null; answer_sa1: string | null;
+    answer_clarification: string | null;
+  };
   const { data: existing } = await supabase
     .from("chat_answers")
-    .select("intent, sub_intent");
-  const categories = (existing || [])
-    .map((r: { intent: string; sub_intent: string }) =>
-      `${r.intent}${r.sub_intent ? " / " + r.sub_intent : ""}`)
+    .select("id, intent, sub_intent, keywords, answer_om, answer_sa1, answer_clarification");
+
+  const rows = (existing as FaqRow[] | null ?? []).map((r) => ({
+    id: r.id,
+    intent: r.intent || "",
+    sub_intent: r.sub_intent || "",
+    keywords: Array.isArray(r.keywords) ? r.keywords.slice(0, 10).join(", ") : "",
+    answer: (
+      (r.answer_om && r.answer_om.trim()) ||
+      (r.answer_sa1 && r.answer_sa1.trim()) ||
+      (r.answer_clarification && r.answer_clarification.trim()) ||
+      ""
+    ).slice(0, 280),
+  })).filter((r) => r.answer);
+
+  const faqRef = rows.map((r) =>
+    `[${r.id}] ${r.intent}${r.sub_intent ? " / " + r.sub_intent : ""}\n` +
+    `  keywords: ${r.keywords}\n` +
+    `  answer: ${r.answer}`
+  ).join("\n\n");
+
+  const categories = rows
+    .map((r) => `${r.intent}${r.sub_intent ? " / " + r.sub_intent : ""}`)
+    .filter((v, i, a) => a.indexOf(v) === i)
     .join(", ");
 
   const sys =
-    `أنت مساعد لوكالة سياحية تعمل في عُمان والسعودية (ALEZZ Tourism). ` +
-    `يصلك سؤال عميل ما طابق أي إجابة في قاعدة الـ FAQ. مهمتك:\n` +
-    `1) اشرح بإيجاز (جملة واحدة) ماذا يقصد العميل\n` +
-    `2) اقترح رداً مناسباً باللهجة الخليجية بدون علامات ترقيم\n` +
-    `3) اقترح فئة (intent + sub_intent) — يفضل من الفئات الموجودة، أو فئة جديدة لو لزم\n` +
-    `4) اقترح 10-18 كلمة مفتاحية للمطابقة مستقبلاً\n\n` +
-    `قواعد مهمة جداً للكلمات المفتاحية — المطابقة عبر substring مع حدود ` +
-    `كلمات وقبول البادئات (ال، بال، ب، ل، ف، و، ك). يعني:\n` +
-    `• ضع جذور الكلمات (ـ3 لـ ـ6 حروف) عشان تطابق أكبر عدد من المتغيرات.\n` +
-    `• ضع متغيرات الجمع والملكية لكل مفهوم — مثلاً قطه، قطط، قطتي، قطته.\n` +
-    `• تجنب الكلمات العامة الشائعة في عدة فئات: سفر، كيف، ابي، اريد، عندكم، ` +
-    `وش، متى، الى، من، رحلة، برنامج، باكج.\n` +
-    `• اعطِ تركيبات قصيرة (2-3 كلمات) فقط إذا كانت مميزة وفريدة لهذا المفهوم.\n` +
-    `• لا تستخدم علامات ترقيم داخل الكلمات.\n\n` +
-    `مثال جيد لسؤال عن السفر مع الحيوانات الأليفة:\n` +
-    `["قطه","قطط","قطتي","كلب","كلاب","كلبي","حيوان","حيوانات","اليف","اليفه","حيوان اليف","نقل الحيوان","شحن حيوانات"]\n\n` +
-    `الفئات الموجودة: ${categories}\n\n` +
-    `أعد JSON فقط بدون أي نص آخر بهذا الشكل:\n` +
-    `{"interpretation":"...","suggested_reply":"...","proposed_intent":"...","proposed_sub_intent":"...","proposed_keywords":["...","..."]}`;
+    `أنت مساعد لوكالة سياحية تعمل في عُمان والسعودية (ALEZZ Tourism).\n` +
+    `يصلك سؤال عميل ما طابق أي إجابة بشكل دقيق في قاعدة الـ FAQ. مهمتك:\n\n` +
+    `1) interpretation: اشرح بإيجاز (جملة واحدة) ماذا يقصد العميل.\n\n` +
+    `2) suggested_reply + source_row_id (مهم جداً):\n` +
+    `   • ابحث في قاعدة الـ FAQ أدناه عن صف إجابته تناسب السؤال (دلالياً، حتى لو الكلمات مختلفة).\n` +
+    `   • لو لقيت صف مناسب → استخدم نص إجابة الصف بالضبط كـ suggested_reply، وضع id الصف في source_row_id.\n` +
+    `   • لو ما فيه أي صف يناسب → اكتب رد جديد بالخليجي بدون علامات ترقيم، وضع source_row_id = null.\n\n` +
+    `3) proposed_intent + proposed_sub_intent: الفئة المناسبة (يفضل من الفئات الحالية).\n\n` +
+    `4) proposed_keywords: 10-18 كلمة مفتاحية لو الإدارة قررت تحفظ الرد كصف جديد (لا تستخدمها لو source_row_id موجود).\n` +
+    `   قواعد الـ keywords:\n` +
+    `   • جذور الكلمات (3-6 حروف) عشان تطابق متغيرات.\n` +
+    `   • متغيرات الجمع والملكية (قطه، قطط، قطتي).\n` +
+    `   • تجنّب الكلمات الشائعة: سفر، رحلة، برنامج، باكج، عرض، سعر، كم، وش، متى.\n` +
+    `   • لا علامات ترقيم.\n\n` +
+    `قاعدة الـ FAQ الموجودة (${rows.length} صف):\n${faqRef}\n\n` +
+    `الفئات الحالية: ${categories}\n\n` +
+    `أعد JSON فقط بدون أي نص آخر:\n` +
+    `{"interpretation":"...","suggested_reply":"...","source_row_id":"PKG0xx أو null","proposed_intent":"...","proposed_sub_intent":"...","proposed_keywords":["...","..."]}`;
 
   try {
     const anthropic = new Anthropic({ apiKey });
     const res = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 700,
+      max_tokens: 800,
       system: sys,
       messages: [{ role: "user", content: question }],
     });
@@ -1521,9 +1551,12 @@ async function analyzeUnknownQuestion(
     const m = out.text.match(/\{[\s\S]*\}/);
     if (!m) return null;
     const parsed = JSON.parse(m[0]);
+    const rawSourceId = String(parsed.source_row_id || "").trim();
+    const sourceRowId = (rawSourceId && rawSourceId !== "null") ? rawSourceId : null;
     return {
       interpretation: String(parsed.interpretation || "").trim(),
       suggestedReply: String(parsed.suggested_reply || "").trim(),
+      sourceRowId,
       proposedIntent: String(parsed.proposed_intent || "").trim(),
       proposedSubIntent: String(parsed.proposed_sub_intent || "").trim(),
       proposedKeywords: Array.isArray(parsed.proposed_keywords)
@@ -1558,6 +1591,7 @@ async function createProposalAndNotifyAdmin(args: {
   const safe = analysis ?? {
     interpretation: "",
     suggestedReply: "",
+    sourceRowId: null as string | null,
     proposedIntent: "",
     proposedSubIntent: "",
     proposedKeywords: [] as string[],
@@ -1578,6 +1612,14 @@ async function createProposalAndNotifyAdmin(args: {
   if (error) { console.error("Proposal insert failed", error.message); return; }
 
   const phoneDigits = customerPhone.replace(/^whatsapp:/, "");
+  // Show the admin where the suggested reply came from so they can
+  // approve confidently when it's from the curated FAQ, or push back
+  // when it's invented from AI.
+  const source = analysis?.sourceRowId
+    ? `📚 المصدر: قاعدة الـ FAQ — ${analysis.sourceRowId}`
+    : analysis
+      ? `🧠 المصدر: AI (لا يوجد صف مشابه في الـ FAQ)`
+      : "";
   const notice = analysis
     ? (
         `💡 سؤال جديد من عميل\n\n` +
@@ -1585,6 +1627,7 @@ async function createProposalAndNotifyAdmin(args: {
         `السؤال: ${question}\n\n` +
         `الفهم: ${analysis.interpretation}\n\n` +
         `الرد المقترح:\n${analysis.suggestedReply}\n\n` +
+        `${source}\n\n` +
         `هل هذا الفهم صحيح؟ نعم / لا`
       )
     : (
