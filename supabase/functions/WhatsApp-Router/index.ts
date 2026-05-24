@@ -866,32 +866,48 @@ async function maybeAutoAssign(args: {
 //     ai_enabled=false. Set via "تشغيل الكل".
 // "* الكل عدا المخصصين" keeps both force flags = false and just flips
 // ai_global_enabled, so per-conversation overrides still win.
+// AI master mode — single 3-state setting that replaces the older
+// (ai_global_enabled, ai_force_*) combo for routing decisions. The
+// older keys are still kept on the wa_settings table for backward
+// compat with the dashboard's existing rendering, but new code paths
+// consult ai_mode.
+//
+//   ON      → AI runs and auto-replies (FAQ match) / escalates to admin
+//             (no FAQ match) — the historical default behavior.
+//   PREVIEW → AI runs (classifies, suggests a reply, fires the
+//             admin notification) but NEVER auto-sends. Even FAQ
+//             matches go through the admin approval step. The customer
+//             receives nothing until the admin approves.
+//   OFF     → AI doesn't run at all. handleMessage's FAQ-or-admin
+//             flow is short-circuited; conversation rows still
+//             get last_message_at touched.
+async function getAiMode(
+  supabase: ReturnType<typeof createClient>,
+): Promise<"ON" | "PREVIEW" | "OFF"> {
+  const { data } = await supabase
+    .from("wa_settings")
+    .select("value")
+    .eq("key", "ai_mode")
+    .maybeSingle();
+  const v = (data as { value?: unknown } | null)?.value;
+  const s = typeof v === "string" ? v.toUpperCase().trim() : "";
+  if (s === "ON" || s === "PREVIEW" || s === "OFF") return s;
+  return "ON"; // legacy default
+}
+
 async function isAiEnabledForSession(
   supabase: ReturnType<typeof createClient>,
   session: { ai_enabled?: boolean | null } | null,
 ): Promise<boolean> {
-  const { data: rows } = await supabase
-    .from("wa_settings")
-    .select("key, value")
-    .in("key", ["ai_global_enabled", "ai_force_off_all", "ai_force_on_all"]);
-  const map = new Map<string, unknown>();
-  for (const r of (rows as Array<{ key: string; value: unknown }> ?? [])) {
-    map.set(r.key, r.value);
-  }
-  const toBool = (v: unknown): boolean | null =>
-    v === true ? true :
-    v === false ? false :
-    typeof v === "string" ? v.toLowerCase() === "true" :
-    null;
-  // Force flags override everything — including explicit per-conversation
-  // values. force_off wins over force_on so a stuck "off" can't be left
-  // open accidentally (admin should turn force_off back off explicitly).
-  if (toBool(map.get("ai_force_off_all")) === true) return false;
-  if (toBool(map.get("ai_force_on_all"))  === true) return true;
+  // OFF mode silences the bot completely — overrides any per-conv ON.
+  const mode = await getAiMode(supabase);
+  if (mode === "OFF") return false;
+  // PREVIEW mode keeps "enabled" semantics so handleMessage still runs
+  // the classifier / FAQ check — only the auto-send is suppressed
+  // (handled at the FAQ branch). Returning true here is correct.
   if (session && session.ai_enabled === true) return true;
   if (session && session.ai_enabled === false) return false;
-  const g = toBool(map.get("ai_global_enabled"));
-  return g === null ? true : g;   // default ON when unset
+  return true;   // PREVIEW or ON, no override → run
 }
 
 async function handleMessage(args: {
@@ -1103,11 +1119,25 @@ async function handleMessage(args: {
   if (pending) {
     await sendWhatsapp(from, "لحظات استاذي واكون معك");
   } else {
-    // No pending — normal flow. FAQ match → send answer. No match and
-    // not small-talk → silent escalation (NO customer-facing ack;
-    // admin's eventual reply is the only thing the customer will see).
+    // No pending — normal flow.
+    //   ON mode      → FAQ match auto-sent; no match → silent escalation.
+    //   PREVIEW mode → NEVER auto-send. Even a FAQ match goes through the
+    //                  admin approval step so admin can verify the
+    //                  classifier picked the right answer + stage.
+    const aiMode = await getAiMode(supabase);
     const answer = await findFaqAnswer(supabase, text);
-    if (answer) {
+    if (aiMode === "PREVIEW") {
+      // Always escalate in preview, unless small-talk (which we ignore
+      // silently as before).
+      if (!isSmallTalk(text)) {
+        await createProposalAndNotifyAdmin({
+          supabase,
+          customerPhone: from,
+          profileName,
+          question: text,
+        });
+      }
+    } else if (answer) {
       await sendWhatsapp(from, answer);
     } else if (!isSmallTalk(text)) {
       await createProposalAndNotifyAdmin({
@@ -1729,6 +1759,33 @@ type ProposalRow = {
   created_at: string;
 };
 
+// Customer journey stages — used by the FAQ matcher and the
+// admin-preview notification.
+const CUSTOMER_STAGES = ["INQUIRY", "OFFER_SENT", "BOOKING_IN_PROGRESS", "BOOKING_CONFIRMED", "TRAVELING", "POST_TRAVEL"] as const;
+type CustomerStage = typeof CUSTOMER_STAGES[number];
+const STAGE_EMOJI: Record<CustomerStage, string> = {
+  INQUIRY: "🔍",
+  OFFER_SENT: "💼",
+  BOOKING_IN_PROGRESS: "📋",
+  BOOKING_CONFIRMED: "✅",
+  TRAVELING: "✈️",
+  POST_TRAVEL: "🔄",
+};
+const STAGE_LABEL_AR: Record<CustomerStage, string> = {
+  INQUIRY: "مجرد استفسار، ما بدأ الحجز",
+  OFFER_SENT: "تم إرسال عرض له",
+  BOOKING_IN_PROGRESS: "في مرحلة الحجز",
+  BOOKING_CONFIRMED: "حجز مؤكد",
+  TRAVELING: "في رحلته الآن",
+  POST_TRAVEL: "بعد الرحلة",
+};
+function stageBadge(stage: string | null | undefined): string {
+  if (!stage) return "🔍 INQUIRY";
+  const s = stage as CustomerStage;
+  const e = STAGE_EMOJI[s];
+  return e ? `${e} ${s}` : stage;
+}
+
 type ClaudeAnalysis = {
   interpretation: string;
   suggestedReply: string;
@@ -1744,6 +1801,7 @@ type ClaudeAnalysis = {
   bookingStatus: string;          // NONE | CONFIRMED | ACTIVE | COMPLETED
   priority: string | null;        // "URGENT" or null
   priorityLabel: string | null;   // "URGENT 🚨" or null
+  customerStage: CustomerStage;   // PREVIEW MODE stage classification
 };
 
 async function analyzeUnknownQuestion(
@@ -1828,10 +1886,17 @@ async function analyzeUnknownQuestion(
     `     • إذا booking_status=CONFIRMED AND case_type=COMPLAINT →\n` +
     `         priority = "URGENT", priority_label = "URGENT 🚨"\n` +
     `     • وإلا → priority = null, priority_label = null\n\n` +
+    `6) customer_stage — مرحلة العميل في رحلة الشراء (واحد فقط):\n` +
+    `   • INQUIRY — مجرد استفسار، ما بدأ الحجز بعد\n` +
+    `   • OFFER_SENT — استلم عرض/برنامج، يسأل عن تفاصيله أو يقارن\n` +
+    `   • BOOKING_IN_PROGRESS — في عملية الحجز، يتفاوض/يطلب تعديل/يدفع\n` +
+    `   • BOOKING_CONFIRMED — حجزه مؤكد، يتأكد من تفاصيل قبل السفر\n` +
+    `   • TRAVELING — حالياً في رحلته (يسأل عن مكان/سائق/فندق على الأرض)\n` +
+    `   • POST_TRAVEL — رجع من السفر، يعطي feedback أو يستفسر بعد الرحلة\n\n` +
     `قاعدة الـ FAQ الموجودة (${rows.length} صف):\n${faqRef}\n\n` +
     `الفئات الحالية: ${categories}\n\n` +
     `أعد JSON فقط بدون أي نص آخر:\n` +
-    `{"interpretation":"...","suggested_reply":"...","source_row_id":"PKG0xx أو null","proposed_intent":"...","proposed_sub_intent":"...","proposed_keywords":["...","..."],"customer_type":"...","case_type":"...","complaint_type":"...أو null","booking_status":"...","priority":"URGENT أو null","priority_label":"URGENT 🚨 أو null"}`;
+    `{"interpretation":"...","suggested_reply":"...","source_row_id":"PKG0xx أو null","proposed_intent":"...","proposed_sub_intent":"...","proposed_keywords":["...","..."],"customer_type":"...","case_type":"...","complaint_type":"...أو null","booking_status":"...","priority":"URGENT أو null","priority_label":"URGENT 🚨 أو null","customer_stage":"INQUIRY|OFFER_SENT|BOOKING_IN_PROGRESS|BOOKING_CONFIRMED|TRAVELING|POST_TRAVEL"}`;
 
   try {
     const anthropic = new Anthropic({ apiKey });
@@ -1857,6 +1922,21 @@ async function analyzeUnknownQuestion(
     // Enforce the URGENT rule server-side so we don't depend on Claude
     // following it correctly every time.
     const isUrgent = caseType === "COMPLAINT" && bookingStatus === "CONFIRMED";
+    // Customer stage — bound to the allowed enum + auto-promote from
+    // booking_status when Claude leaves the stage as INQUIRY but the
+    // booking is already CONFIRMED.
+    const rawStage = String(parsed.customer_stage || "INQUIRY").trim().toUpperCase();
+    let customerStage: CustomerStage =
+      (CUSTOMER_STAGES as readonly string[]).includes(rawStage)
+        ? (rawStage as CustomerStage)
+        : "INQUIRY";
+    if (customerStage === "INQUIRY" && bookingStatus === "CONFIRMED") {
+      customerStage = "BOOKING_CONFIRMED";
+    } else if (customerStage === "INQUIRY" && bookingStatus === "ACTIVE") {
+      customerStage = "TRAVELING";
+    } else if (customerStage === "INQUIRY" && bookingStatus === "COMPLETED") {
+      customerStage = "POST_TRAVEL";
+    }
     return {
       interpretation: String(parsed.interpretation || "").trim(),
       suggestedReply: String(parsed.suggested_reply || "").trim(),
@@ -1872,6 +1952,7 @@ async function analyzeUnknownQuestion(
       bookingStatus,
       priority: isUrgent ? "URGENT" : null,
       priorityLabel: isUrgent ? "URGENT 🚨" : null,
+      customerStage,
     };
   } catch (e) {
     console.error("Claude analyse failed", (e as Error).message);
@@ -1911,6 +1992,7 @@ async function createProposalAndNotifyAdmin(args: {
     bookingStatus: "NONE",
     priority: null as string | null,
     priorityLabel: null as string | null,
+    customerStage: "INQUIRY" as CustomerStage,
   };
   const status = analysis ? "pending_reply_approval" : "pending_correction";
 
@@ -1929,9 +2011,15 @@ async function createProposalAndNotifyAdmin(args: {
     booking_status: safe.bookingStatus,
     priority: safe.priority,
     priority_label: safe.priorityLabel,
+    customer_stage: safe.customerStage,
     status,
   });
   if (error) { console.error("Proposal insert failed", error.message); return; }
+  // Keep the session's customer_stage in sync — the dashboard reads it
+  // off whatsapp_sessions and the next FAQ lookup will use it.
+  await supabase.from("whatsapp_sessions")
+    .update({ customer_stage: safe.customerStage })
+    .eq("phone", customerPhone);
 
   // Pull recent context from wa_message_audit — last N inbound messages
   // from this customer so admin sees the conversation thread, not just
@@ -1978,24 +2066,29 @@ async function createProposalAndNotifyAdmin(args: {
   })() : "";
   // URGENT cases get a banner so the admin can't miss them in the chat.
   const urgentBanner = analysis?.priority === "URGENT" ? `🚨🚨🚨 ${analysis.priorityLabel}\n\n` : "";
+  // PREVIEW MODE preamble — admin must approve before customer sees anything
+  const previewBanner = `⚠️ وضع المعاينة - لم يُرسل للعميل\n\n`;
+  const stageLine = `📊 مرحلة العميل: ${stageBadge(safe.customerStage)} (${STAGE_LABEL_AR[safe.customerStage]})\n\n`;
   const notice = analysis
     ? (
-        `${urgentBanner}💡 سؤال جديد من عميل\n\n` +
-        `العميل: ${profileName} (${phoneDigits})\n` +
-        `السؤال: ${question}\n\n` +
+        `${urgentBanner}${previewBanner}` +
+        `📩 رسالة العميل: ${question}\n` +
+        `👤 ${profileName} (${phoneDigits})\n\n` +
+        stageLine +
         contextBlock +
         classifierLine +
-        `الفهم: ${analysis.interpretation}\n\n` +
-        `الرد المقترح:\n${analysis.suggestedReply}\n\n` +
+        `🧠 فهمت من العميل: ${analysis.interpretation}\n\n` +
+        `💡 ردي المقترح بناءً على مرحلته:\n${analysis.suggestedReply}\n\n` +
         `${source}\n\n` +
-        `هل هذا الفهم صحيح؟ نعم / لا`
+        `هل هذا صح؟ ✅ نعم / ❌ لا`
       )
     : (
-        `💡 سؤال جديد من عميل (تحليل AI تعذّر)\n\n` +
-        `العميل: ${profileName} (${phoneDigits})\n` +
-        `السؤال: ${question}\n\n` +
+        `${previewBanner}` +
+        `📩 رسالة العميل: ${question}\n` +
+        `👤 ${profileName} (${phoneDigits})\n\n` +
+        stageLine +
         contextBlock +
-        `اكتب الرد للعميل مباشرة وراح يوصله`
+        `⚠️ تحليل AI تعذّر — اكتب الرد للعميل مباشرة وراح يوصله`
       );
   // Routing: if this conversation has an assigned staff member (auto or
   // manual), send the proposal to that one person. Otherwise broadcast
@@ -2580,7 +2673,7 @@ Deno.serve(async (req) => {
       const { data: settingRows } = await supabase
         .from("wa_settings")
         .select("key, value")
-        .in("key", ["ai_global_enabled", "ai_force_off_all", "ai_force_on_all"]);
+        .in("key", ["ai_global_enabled", "ai_force_off_all", "ai_force_on_all", "ai_mode"]);
       const settingMap = new Map<string, unknown>();
       for (const r of (settingRows as Array<{ key: string; value: unknown }> ?? [])) {
         settingMap.set(r.key, r.value);
@@ -2593,6 +2686,14 @@ Deno.serve(async (req) => {
       const globalAiEnabled = toBool(settingMap.get("ai_global_enabled"), true);
       const aiForceOffAll  = toBool(settingMap.get("ai_force_off_all"), false);
       const aiForceOnAll   = toBool(settingMap.get("ai_force_on_all"),  false);
+      // ai_mode is the new authoritative 3-state value the dashboard
+      // toggles on. Defaults to ON for installs from before migration
+      // 025 where the row may not exist yet.
+      const rawMode = settingMap.get("ai_mode");
+      const modeStr = typeof rawMode === "string" ? rawMode.toUpperCase().trim() : "";
+      const aiMode = (modeStr === "ON" || modeStr === "PREVIEW" || modeStr === "OFF")
+        ? modeStr
+        : (globalAiEnabled ? "ON" : "OFF");
 
       // Time range + customer-phone filtering for the conversations panel.
       // range: today (24h) | week (7d) | month (30d) | all | custom
@@ -2621,7 +2722,7 @@ Deno.serve(async (req) => {
 
       let sessionsQuery = supabase
         .from("whatsapp_sessions")
-        .select("phone, profile_name, ai_enabled, last_message_at, destination, assigned_staff_phone, assigned_at, assigned_by")
+        .select("phone, profile_name, ai_enabled, last_message_at, destination, assigned_staff_phone, assigned_at, assigned_by, customer_stage")
         .gte("last_message_at", sessionsSince)
         .order("last_message_at", { ascending: false })
         .limit(sessionsLimit);
@@ -2704,6 +2805,7 @@ Deno.serve(async (req) => {
         global_ai_enabled: globalAiEnabled,
         ai_force_off_all: aiForceOffAll,
         ai_force_on_all:  aiForceOnAll,
+        ai_mode: aiMode,
         me: callerStaff,
         conversations: conversationsEnriched,
         staff: staffList ?? [],
@@ -3224,17 +3326,27 @@ Deno.serve(async (req) => {
     }
     try {
       const payload = await req.json();
-      const enabled = !!payload.enabled;
-      // Mutually-exclusive force flags. Only the one aligned with the
-      // new global state can be true; the opposite is always cleared.
-      const forceOffAll = !enabled && !!payload.force_off_all;
-      const forceOnAll  =  enabled && !!payload.force_on_all;
+      // New 3-state mode (canonical). Falls back to the legacy enabled
+      // boolean when callers haven't updated yet.
+      const rawMode = typeof payload.mode === "string" ? payload.mode.toUpperCase().trim() : "";
+      let mode: "ON" | "PREVIEW" | "OFF";
+      if (rawMode === "ON" || rawMode === "PREVIEW" || rawMode === "OFF") {
+        mode = rawMode;
+      } else {
+        mode = payload.enabled ? "ON" : "OFF";
+      }
+      // Derive the legacy settings so anything still reading them stays
+      // consistent.
+      const enabled = mode !== "OFF";
+      const forceOffAll = mode === "OFF";
+      const forceOnAll  = false;
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
       const now = new Date().toISOString();
       const { error } = await supabase.from("wa_settings").upsert([
+        { key: "ai_mode",           value: mode,         updated_at: now },
         { key: "ai_global_enabled", value: enabled,      updated_at: now },
         { key: "ai_force_off_all",  value: forceOffAll,  updated_at: now },
         { key: "ai_force_on_all",   value: forceOnAll,   updated_at: now },
@@ -3242,6 +3354,7 @@ Deno.serve(async (req) => {
       if (error) throw new Error(error.message);
       return new Response(JSON.stringify({
         ok: true,
+        ai_mode: mode,
         global_ai_enabled: enabled,
         ai_force_off_all: forceOffAll,
         ai_force_on_all:  forceOnAll,
