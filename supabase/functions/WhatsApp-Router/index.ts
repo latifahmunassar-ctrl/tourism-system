@@ -2621,7 +2621,12 @@ Deno.serve(async (req) => {
         const lastMsg = latestMsgByPhone.get(s.phone as string);
         return {
           ...s,
-          customer_type: cls.customer_type ?? null,
+          // Default a conversation's customer_type to NEW_CUSTOMER whenever
+          // the classifier hasn't tagged the customer with a more specific
+          // value (VIP / REPEAT / CORPORATE / PARTNERSHIP). Reflects the
+          // policy: "anyone who starts a conversation is a new customer
+          // until the conversation suggests otherwise."
+          customer_type: cls.customer_type ?? "NEW_CUSTOMER",
           case_type: cls.case_type ?? null,
           complaint_type: cls.complaint_type ?? null,
           booking_status: cls.booking_status ?? null,
