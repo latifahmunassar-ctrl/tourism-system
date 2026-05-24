@@ -1,0 +1,10 @@
+project_id = "ofotvacszlmrqxzfjmtn"
+
+# Twilio sends WhatsApp webhooks WITHOUT an Authorization header.
+# Without this flag every Twilio POST gets bounced with 401
+# UNAUTHORIZED_NO_AUTH_HEADER before our code even runs.
+# The function does its own auth gating internally on admin_action
+# endpoints (checkAuth / checkAuthOrSession) so disabling JWT
+# verification at the platform layer is safe.
+[functions.WhatsApp-Router]
+verify_jwt = false
