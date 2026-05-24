@@ -2064,6 +2064,7 @@ async function createProposalAndNotifyAdmin(args: {
     customer_question: question,
     interpretation: safe.interpretation,
     suggested_reply: safe.suggestedReply,
+    source_row_id: safe.sourceRowId,
     proposed_intent: safe.proposedIntent,
     proposed_sub_intent: safe.proposedSubIntent,
     proposed_keywords: safe.proposedKeywords,
@@ -2269,13 +2270,35 @@ async function handleAdminResponse(args: {
       if (!isPreview) {
         await sendCustomerReply(supabase, proposal.customer_phone, proposal.suggested_reply);
       }
+      // Save to chat_answers only if this is a NEW answer (no source_row_id).
+      // approve + source_row_id موجود → الرد جاي من شيت موجود، لا تكرّر.
+      const sourceRowId = (proposal as { source_row_id?: string | null }).source_row_id || null;
+      let saved = false;
+      if (!sourceRowId && proposal.suggested_reply) {
+        saved = await appendChatAnswerRow({
+          intent: proposal.proposed_intent,
+          subIntent: proposal.proposed_sub_intent,
+          keywords: proposal.proposed_keywords || [],
+          sampleQ: proposal.customer_question,
+          answer: proposal.suggested_reply,
+        });
+        if (saved) void triggerSyncSheets();
+      }
       await supabase.from("whatsapp_admin_proposals")
-        .update({ status: "completed_skipped", decided_at: new Date().toISOString() })
+        .update({
+          status: saved ? "completed_added" : "completed_skipped",
+          decided_at: new Date().toISOString(),
+        })
         .eq("id", proposal.id);
+      const saveTail = saved
+        ? "\n📚 حفظت الجواب في FAQ"
+        : sourceRowId
+          ? `\n📚 موجود أصلاً في FAQ (${sourceRowId}) — ما حفظت نسخة جديدة`
+          : "";
       await sendStaffNotice(adminFrom,
-        isPreview
+        (isPreview
           ? "✅ تمت الموافقة — لم يُرسل للعميل (وضع المعاينة)"
-          : "تم الرد على العميل 👍");
+          : "تم الرد على العميل 👍") + saveTail);
       return;
     }
     if (no) {
@@ -2303,17 +2326,29 @@ async function handleAdminResponse(args: {
     if (!isPreview) {
       await sendCustomerReply(supabase, proposal.customer_phone, finalReply);
     }
+    // التصحيح = جواب جديد دائماً → احفظه في FAQ
+    const saved = await appendChatAnswerRow({
+      intent: proposal.proposed_intent,
+      subIntent: proposal.proposed_sub_intent,
+      keywords: proposal.proposed_keywords || [],
+      sampleQ: proposal.customer_question,
+      answer: finalReply,
+    });
+    if (saved) void triggerSyncSheets();
     await supabase.from("whatsapp_admin_proposals")
       .update({
-        status: "completed_skipped",
+        status: saved ? "completed_added" : "completed_skipped",
         suggested_reply: finalReply,
         decided_at: new Date().toISOString(),
       })
       .eq("id", proposal.id);
+    const saveTail = saved
+      ? "\n📚 حفظت الرد المصحّح في FAQ"
+      : "\n📚 ما قدرت أحفظ — تأكدي من صلاحيات الشيت";
     await sendStaffNotice(adminFrom,
-      isPreview
+      (isPreview
         ? "✅ تم حفظ الرد — لم يُرسل للعميل (وضع المعاينة)"
-        : "تم الرد على العميل 👍");
+        : "تم الرد على العميل 👍") + saveTail);
     return;
   }
 
@@ -2716,7 +2751,7 @@ Deno.serve(async (req) => {
 
       const { data: pending } = await supabase
         .from("whatsapp_admin_proposals")
-        .select("id, customer_phone, customer_profile_name, customer_question, status, created_at, proposed_intent, proposed_sub_intent, customer_type, case_type, complaint_type, booking_status, priority, priority_label, interpretation, suggested_reply, customer_stage")
+        .select("id, customer_phone, customer_profile_name, customer_question, status, created_at, proposed_intent, proposed_sub_intent, proposed_keywords, customer_type, case_type, complaint_type, booking_status, priority, priority_label, interpretation, suggested_reply, customer_stage, source_row_id")
         .in("status", [
           "pending_reply_approval", "pending_correction",
           "pending_sheet_approval", "pending_category_choice",
@@ -3357,22 +3392,48 @@ Deno.serve(async (req) => {
       );
       const { data: proposal } = await supabase
         .from("whatsapp_admin_proposals")
-        .select("id, customer_phone, suggested_reply, status")
+        .select("id, customer_phone, customer_question, suggested_reply, source_row_id, proposed_intent, proposed_sub_intent, proposed_keywords, status")
         .eq("id", id)
         .maybeSingle();
       if (!proposal) {
         return new Response(JSON.stringify({ error: "proposal not found" }),
           { status: 404, headers: jsonCors });
       }
-      const row = proposal as { id: string; customer_phone: string; suggested_reply: string; status: string };
+      const row = proposal as {
+        id: string; customer_phone: string; customer_question: string;
+        suggested_reply: string; source_row_id: string | null;
+        proposed_intent: string; proposed_sub_intent: string;
+        proposed_keywords: string[]; status: string;
+      };
       const finalReply = decision === "approve" ? (row.suggested_reply || "") : correctedReply;
       const mode = await getAiMode(supabase);
       // ON mode: actually send. PREVIEW / OFF: skip the send.
       if (mode === "ON" && finalReply) {
         await sendCustomerReply(supabase, row.customer_phone, finalReply);
       }
+      // قاعدة الحفظ في FAQ:
+      //   approve + source_row_id موجود → موجود أصلاً في الشيت، لا تحفظ
+      //   approve + لا source_row_id      → جواب جديد، احفظه
+      //   correct                          → دائماً احفظه (تصحيح يدوي)
+      const shouldSave =
+        (decision === "correct" && finalReply) ||
+        (decision === "approve" && finalReply && !row.source_row_id);
+      let saveOutcome: "saved" | "skipped_already_in_faq" | "save_failed" | "no_save" = "no_save";
+      if (shouldSave) {
+        const ok = await appendChatAnswerRow({
+          intent: row.proposed_intent,
+          subIntent: row.proposed_sub_intent,
+          keywords: row.proposed_keywords || [],
+          sampleQ: row.customer_question,
+          answer: finalReply,
+        });
+        if (ok) { saveOutcome = "saved"; void triggerSyncSheets(); }
+        else saveOutcome = "save_failed";
+      } else if (decision === "approve" && row.source_row_id) {
+        saveOutcome = "skipped_already_in_faq";
+      }
       const updatePatch: Record<string, unknown> = {
-        status: "completed_skipped",
+        status: saveOutcome === "saved" ? "completed_added" : "completed_skipped",
         decided_at: new Date().toISOString(),
       };
       if (decision === "correct") updatePatch.suggested_reply = finalReply;
@@ -3384,6 +3445,7 @@ Deno.serve(async (req) => {
         ok: true,
         sent_to_customer: mode === "ON",
         mode,
+        save_outcome: saveOutcome,
       }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }),
