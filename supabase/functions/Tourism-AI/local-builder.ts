@@ -750,37 +750,49 @@ export function findInterCityTransfer(
   const fromDef = cityDefs.find(c => c.canonical === fromCity);
   if (!fromDef) return null;
 
-  const fromDrop = allTours.filter(tr => {
-    if (tr.type !== destination) return false;
-    const n = tr.name;
-    // (b) Reject pure arrival-pickup rows. A row that STARTS with "الاستقبال"
-    // is an arrival ride; a row like "التوجه الى المطار في كرابي ... والاستقبال
-    // هناك والتوصيل للفندق" mentions الاستقبال mid-sentence but is actually a
-    // combined drop+pickup transfer (begins with التوجه, a drop verb). Anchor
-    // the check to the start of the trimmed name so combined rows aren't lost.
+  // Two-pass filter: strict first (reject rows mentioning a third city),
+  // then a relaxed retry that allows third-city mentions when they're just
+  // a flight-destination hint (e.g. "التوجه من فندق دانانج الي المطار
+  // لذهاب الى فوكوك" — the airport drop applies to ANY onward flight, but
+  // the row text happens to name one specific flight destination).
+  const baseFilter = (n: string): boolean => {
     if (/^\s*(?:الاستقبال|استقبال|pickup)(?=\s|$)/iu.test(n)) return false;                  // (b)
-    // (a) Outbound transfer verb. Includes العوده/العودة (Sapa return).
     if (!/توديع|التوديع|التوجه|التوجة|توج[ةه]|الذهاب|العوده|العودة|للعوده|للعودة|توصيل|التوصيل|الخروج|النقل|نقل|الانتقال|انتقال|drop/iu.test(n)) return false;
-
-    const rowFrom = rowFromCity(n);                                                         // (c)
+    const isAirportRow = /مطار|airport/iu.test(n) && !/قطار|محط[هة]|station|train/iu.test(n);
+    const isTrainRow   = /قطار|محط[هة]|station|train/iu.test(n);
+    if (transitKind === "train"   && !isTrainRow) return false;
+    if (transitKind === "airport" && isTrainRow && !isAirportRow) return false;
+    return true;
+  };
+  const matchesFromAndType = (tr: TourRow): boolean => {
+    if (tr.type !== destination) return false;
+    if (!baseFilter(tr.name)) return false;
+    const rowFrom = rowFromCity(tr.name);
     if (!rowFrom) return false;
     if (!tourNameMatchesCity(rowFrom, fromCity, cityDefs)) return false;
-    // (c.1) Reject rows that target a THIRD canonical city — "Hanoi → HaLong"
-    // is not appropriate for a Hanoi → Phu Quoc transit even if it's the
-    // only Hanoi-departing road row available. Without this guard, the
-    // system silently slots a wrong-destination row into the program.
+    return true;
+  };
+  const isThirdCityClean = (n: string): boolean => {
     for (const c of cityDefs) {
       if (c.canonical === fromCity || c.canonical === toCity) continue;
       if (c.pattern.test(n)) return false;
     }
-
-    const isAirportRow = /مطار|airport/iu.test(n) && !/قطار|محط[هة]|station|train/iu.test(n);
-    const isTrainRow   = /قطار|محط[هة]|station|train/iu.test(n);                            // (d)
-    if (transitKind === "train"   && !isTrainRow) return false;
-    if (transitKind === "airport" && isTrainRow && !isAirportRow) return false;
-
     return true;
-  });
+  };
+  let fromDrop = allTours.filter(tr => matchesFromAndType(tr) && isThirdCityClean(tr.name));
+  // Relaxed retry: when no strict match exists but a "to airport" row from
+  // fromCity does (e.g. Da Nang → airport "to Phu Quoc" when transit is
+  // Da Nang→Hanoi), prefer it over emitting no transfer at all. Restrict
+  // to airport rows so we don't pick a wrong-destination road ride.
+  if (fromDrop.length === 0) {
+    fromDrop = allTours.filter(tr => {
+      if (!matchesFromAndType(tr)) return false;
+      // Only accept airport rows in the relaxed branch — a road row to a
+      // third city ("Hanoi → HaLong") would land the customer in the wrong
+      // city; an airport row's destination is generic (just the airport).
+      return /مطار|airport/iu.test(tr.name);
+    });
+  }
   if (fromDrop.length > 0) {
     // Sort priority:
     //   (1) row explicitly mentions toCity (most precise inter-city match)
@@ -1905,7 +1917,23 @@ export async function buildLocalProgram(
       // their own; the sheet usually doesn't model these moves at all.
       if (d.fromCity === d.toCity) continue;
       const arrivalType = transitKind(d.number);
-      const fromAirportDrop = findInterCityTransfer(allTours, d.fromCity, d.toCity, dest, cityDefs, arrivalType, request.transport);
+      let fromAirportDrop = findInterCityTransfer(allTours, d.fromCity, d.toCity, dest, cityDefs, arrivalType, request.transport);
+      // Hub-departure case: fromCity is road-only and the flight on this day
+      // departs from the destination's preferred hub. The customer needs a
+      // road segment from fromCity → hub BEFORE the flight, but the direct
+      // findInterCityTransfer(fromCity, toCity) returns nothing because the
+      // sheet has no fromCity-to-toCity row. Retry with the hub as the
+      // logical destination — that surfaces e.g. a "Sapa → Hanoi" row when
+      // the flight is Hanoi → Phu Quoc.
+      if (!fromAirportDrop && mainHub) {
+        const sfDay = selectedFlights.find(f => f.day === d.number);
+        const flightFromHub = sfDay
+          && normCity(sfDay.flight.from_city).split(" ").filter(Boolean).every(w => normCity(mainHub).includes(w))
+          && normCity(d.fromCity) !== normCity(mainHub);
+        if (flightFromHub) {
+          fromAirportDrop = findInterCityTransfer(allTours, d.fromCity, mainHub, dest, cityDefs, arrivalType, request.transport);
+        }
+      }
       if (fromAirportDrop) selectedTransfers.push({ day: d.number, row: fromAirportDrop, kind: "Drop" });
       // Only add an airport pickup when this transit is actually a flight
       // (or train). Road transits like Sapa → Hanoi use a single door-to-
