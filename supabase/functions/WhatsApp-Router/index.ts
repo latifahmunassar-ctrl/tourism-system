@@ -2798,7 +2798,7 @@ Deno.serve(async (req) => {
 
       let sessionsQuery = supabase
         .from("whatsapp_sessions")
-        .select("phone, profile_name, ai_enabled, last_message_at, last_outbound_at, destination, assigned_staff_phone, assigned_at, assigned_by, customer_stage")
+        .select("phone, profile_name, ai_enabled, last_message_at, last_outbound_at, last_opened_at, destination, assigned_staff_phone, assigned_at, assigned_by, customer_stage")
         .gte("last_message_at", sessionsSince)
         .order("last_message_at", { ascending: false })
         .limit(sessionsLimit);
@@ -3228,6 +3228,37 @@ Deno.serve(async (req) => {
         assigned_staff_name: c.assigned_staff_phone ? nameByPhone.get(c.assigned_staff_phone as string) || null : null,
       }));
       return new Response(JSON.stringify({ complaints: enriched }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
+    }
+  }
+
+  // Mark a conversation as opened (read) by any staff/admin/monitor.
+  //   POST { phone }
+  // Stamps last_opened_at = now() on the session row. The dashboard
+  // fires this when openConversation() runs.
+  if (url.searchParams.get("admin_action") === "mark_opened") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const p = await req.json();
+      const rawPhone = String(p.phone || "").trim();
+      if (!rawPhone) {
+        return new Response(JSON.stringify({ error: "missing phone" }),
+          { status: 400, headers: jsonCors });
+      }
+      const digits = rawPhone.replace(/^whatsapp:/, "").replace(/^\+/, "")
+        .replace(/^00/, "").replace(/[^0-9]/g, "");
+      const phone = `whatsapp:+${digits}`;
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { error } = await supabase.from("whatsapp_sessions")
+        .update({ last_opened_at: new Date().toISOString() })
+        .eq("phone", phone);
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }),
         { status: 500, headers: jsonCors });
