@@ -1140,6 +1140,14 @@ async function handleMessage(args: {
   const { category } = await classify(text);
   if (category === "complaint") {
     await handleComplaint({ supabase, session, from, profileName, text });
+    // Touch last_message_at so the complaint conversation appears in
+    // the dashboard's recent-activity window — handleComplaint creates
+    // a wa_complaints row but doesn't update the session, and the
+    // function returns here before the bottom-of-flow update fires.
+    await supabase
+      .from("whatsapp_sessions")
+      .update({ last_message_at: new Date().toISOString() })
+      .eq("phone", from);
     return;
   }
 
