@@ -1010,6 +1010,37 @@ async function handleMessage(args: {
     return;
   }
 
+  // PREVIEW MODE: suppress ALL automatic replies (welcome, presence,
+  // greeting, personal greeting, FAQ). Every customer message becomes
+  // an admin notification — admin approves what (if anything) to send.
+  // Side effect: customers in preview mode get NO acknowledgment until
+  // admin acts, by design.
+  const aiMode = await getAiMode(supabase);
+  if (aiMode === "PREVIEW") {
+    await supabase
+      .from("whatsapp_sessions")
+      .update({ last_message_at: new Date().toISOString() })
+      .eq("phone", from);
+    // Skip if a proposal is already pending for this customer (avoid
+    // spamming the admin with duplicates while they're deciding).
+    const { data: pending } = await supabase
+      .from("whatsapp_admin_proposals")
+      .select("id")
+      .eq("customer_phone", from)
+      .in("status", [
+        "pending_reply_approval", "pending_correction",
+        "pending_sheet_approval", "pending_category_choice",
+      ])
+      .limit(1)
+      .maybeSingle();
+    if (!pending && !isSmallTalk(text)) {
+      await createProposalAndNotifyAdmin({
+        supabase, customerPhone: from, profileName, question: text,
+      });
+    }
+    return;
+  }
+
   if (isNew && !isPresenceCheck(text)) {
     // رسالة ترحيب — تُرسل مرّة واحدة لكل عميل جديد. لكن لو الرسالة الأولى
     // سؤال عن وجود الموظف ("في أحد؟") فالـ welcome يتعارض مع رد CASE 2
