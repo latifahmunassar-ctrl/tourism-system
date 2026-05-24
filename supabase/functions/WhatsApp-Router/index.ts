@@ -2568,8 +2568,25 @@ Deno.serve(async (req) => {
       for (const p of (recentProposals as Array<{ customer_phone: string }> ?? [])) {
         if (!latestByPhone.has(p.customer_phone)) latestByPhone.set(p.customer_phone, p);
       }
+      // Latest INBOUND message body per phone — for the WhatsApp-style
+      // preview line under each conversation row.
+      const { data: latestAudits } = phones.length
+        ? await supabase
+            .from("wa_message_audit")
+            .select("from_phone, body, received_at")
+            .in("from_phone", phones)
+            .order("received_at", { ascending: false })
+        : { data: [] as Array<Record<string, unknown>> };
+      const latestMsgByPhone = new Map<string, { body: string | null; received_at: string }>();
+      for (const a of (latestAudits as Array<{ from_phone: string; body: string | null; received_at: string }> ?? [])) {
+        if (!latestMsgByPhone.has(a.from_phone)) {
+          latestMsgByPhone.set(a.from_phone, { body: a.body, received_at: a.received_at });
+        }
+      }
+
       const conversationsEnriched = (sessions ?? []).map((s: Record<string, unknown>) => {
         const cls = latestByPhone.get(s.phone as string) ?? {};
+        const lastMsg = latestMsgByPhone.get(s.phone as string);
         return {
           ...s,
           customer_type: cls.customer_type ?? null,
@@ -2577,6 +2594,8 @@ Deno.serve(async (req) => {
           complaint_type: cls.complaint_type ?? null,
           booking_status: cls.booking_status ?? null,
           priority: cls.priority ?? null,
+          last_message_body: lastMsg?.body ?? null,
+          last_inbound_at: lastMsg?.received_at ?? null,
         };
       });
 
