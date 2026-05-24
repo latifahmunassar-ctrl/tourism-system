@@ -519,6 +519,30 @@ function humanTypingDelayMs(text: string): number {
   return 1200;
 }
 
+// Wrapper around sendWhatsapp that ALSO stamps last_outbound_at on the
+// customer's session. Use this for every customer-facing reply (FAQ,
+// greeting, welcome, presence check, admin approval, manual reply via
+// the dashboard). Don't use it for sendStaffNotice / staff warnings —
+// those go to the staff number and shouldn't reset the "unanswered"
+// flag for the customer.
+async function sendCustomerReply(
+  supabase: ReturnType<typeof createClient>,
+  to: string,
+  body: string,
+): Promise<string | null> {
+  const sid = await sendWhatsapp(to, body);
+  // Update session last_outbound_at regardless of Twilio's return — even
+  // a failed send still represents an attempted reply we shouldn't
+  // re-flag as unanswered immediately. (If the customer follows up
+  // they'll get a new inbound that bumps last_inbound_at past this.)
+  try {
+    await supabase.from("whatsapp_sessions")
+      .update({ last_outbound_at: new Date().toISOString() })
+      .eq("phone", to);
+  } catch (_) { /* best-effort */ }
+  return sid;
+}
+
 async function sendWhatsapp(to: string, body: string): Promise<string | null> {
   const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
   const token = Deno.env.get("TWILIO_AUTH_TOKEN");
@@ -1045,8 +1069,7 @@ async function handleMessage(args: {
     // رسالة ترحيب — تُرسل مرّة واحدة لكل عميل جديد. لكن لو الرسالة الأولى
     // سؤال عن وجود الموظف ("في أحد؟") فالـ welcome يتعارض مع رد CASE 2
     // ("ما أنا معاك"). نتخطى الترحيب في هذي الحالة.
-    await sendWhatsapp(
-      from,
+    await sendCustomerReply(supabase, from,
       "حياك الله … معك طلال من خدمة العملاء كيف اقدر اخدمك",
     );
   }
@@ -1062,7 +1085,7 @@ async function handleMessage(args: {
     const reply = autoreplyOn
       ? "أيوه أستاذي، معاك 😊 كيف أقدر أخدمك؟"
       : "أستاذي، ما أنا معاك الحين، بس دقائق وأكون معك 🙏";
-    await sendWhatsapp(from, reply);
+    await sendCustomerReply(supabase, from, reply);
     if (!isNew) {
       await supabase
         .from("whatsapp_sessions")
@@ -1079,7 +1102,7 @@ async function handleMessage(args: {
   //     through and end up answered with the canonical RULE 1 reply.
   const personalReply = getPersonalGreetingReply(text);
   if (personalReply !== null) {
-    await sendWhatsapp(from, personalReply);
+    await sendCustomerReply(supabase, from, personalReply);
     if (!isNew) {
       await supabase
         .from("whatsapp_sessions")
@@ -1096,14 +1119,14 @@ async function handleMessage(args: {
   //     above) comes first, then this greeting reply. On existing sessions
   //     only this reply fires. Skips classify and FAQ/admin escalation.
   if (isGreeting(text)) {
-    await sendWhatsapp(from, "هلا 👋 أمرني كيف أقدر أخدمك؟");
+    await sendCustomerReply(supabase, from, "هلا 👋 أمرني كيف أقدر أخدمك؟");
     return;
   }
 
   // 2) برنامج جاهز ينتظر مراجعة الموظف — رد ودود ثابت بدون استدعاء أي AI.
   //    الموظف هو اللي بيرسل البرنامج لما يجهز.
   if (session && session.stage === "pending_review") {
-    await sendWhatsapp(from, "سيتم إرسال برنامجك قريباً إن شاء الله 🌍 نعتذر عن الانتظار");
+    await sendCustomerReply(supabase, from, "سيتم إرسال برنامجك قريباً إن شاء الله 🌍 نعتذر عن الانتظار");
     await supabase
       .from("whatsapp_sessions")
       .update({ last_message_at: new Date().toISOString() })
@@ -1148,7 +1171,7 @@ async function handleMessage(args: {
     .limit(1)
     .maybeSingle();
   if (pending) {
-    await sendWhatsapp(from, "لحظات استاذي واكون معك");
+    await sendCustomerReply(supabase, from, "لحظات استاذي واكون معك");
   } else {
     // No pending — normal flow.
     //   ON mode      → FAQ match auto-sent; no match → silent escalation.
@@ -1169,7 +1192,7 @@ async function handleMessage(args: {
         });
       }
     } else if (answer) {
-      await sendWhatsapp(from, answer);
+      await sendCustomerReply(supabase, from, answer);
     } else if (!isSmallTalk(text)) {
       await createProposalAndNotifyAdmin({
         supabase,
@@ -2236,7 +2259,7 @@ async function handleAdminResponse(args: {
   if (proposal.status === "pending_reply_approval") {
     if (yes) {
       if (!isPreview) {
-        await sendWhatsapp(proposal.customer_phone, proposal.suggested_reply);
+        await sendCustomerReply(supabase, proposal.customer_phone, proposal.suggested_reply);
       }
       await supabase.from("whatsapp_admin_proposals")
         .update({ status: "completed_skipped", decided_at: new Date().toISOString() })
@@ -2270,7 +2293,7 @@ async function handleAdminResponse(args: {
       return;
     }
     if (!isPreview) {
-      await sendWhatsapp(proposal.customer_phone, finalReply);
+      await sendCustomerReply(supabase, proposal.customer_phone, finalReply);
     }
     await supabase.from("whatsapp_admin_proposals")
       .update({
@@ -2775,7 +2798,7 @@ Deno.serve(async (req) => {
 
       let sessionsQuery = supabase
         .from("whatsapp_sessions")
-        .select("phone, profile_name, ai_enabled, last_message_at, destination, assigned_staff_phone, assigned_at, assigned_by, customer_stage")
+        .select("phone, profile_name, ai_enabled, last_message_at, last_outbound_at, destination, assigned_staff_phone, assigned_at, assigned_by, customer_stage")
         .gte("last_message_at", sessionsSince)
         .order("last_message_at", { ascending: false })
         .limit(sessionsLimit);
@@ -3307,7 +3330,7 @@ Deno.serve(async (req) => {
       const mode = await getAiMode(supabase);
       // ON mode: actually send. PREVIEW / OFF: skip the send.
       if (mode === "ON" && finalReply) {
-        await sendWhatsapp(row.customer_phone, finalReply);
+        await sendCustomerReply(supabase, row.customer_phone, finalReply);
       }
       const updatePatch: Record<string, unknown> = {
         status: "completed_skipped",
@@ -3382,11 +3405,11 @@ Deno.serve(async (req) => {
         .replace(/^00/, "").replace(/[^0-9]/g, "");
       const phone = `whatsapp:+${digits}`;
       const sentBy = String(p.sent_by || "admin");
-      const twilioSid = await sendWhatsapp(phone, body);
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
+      const twilioSid = await sendCustomerReply(supabase, phone, body);
       await supabase.from("wa_admin_messages").insert({
         twilio_sid: twilioSid,
         customer_phone: phone,
