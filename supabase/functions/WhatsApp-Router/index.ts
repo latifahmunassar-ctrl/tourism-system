@@ -3211,6 +3211,75 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Admin decides a pending proposal from the dashboard (instead of the
+  // WhatsApp reply flow).
+  //   POST { proposal_id, decision: "approve" }
+  //   POST { proposal_id, decision: "correct", reply: "..." }
+  //
+  // approve: use suggested_reply as-is. correct: use the given reply.
+  // In both cases:
+  //   • mode=PREVIEW → customer never gets anything. The reply is just
+  //     recorded on the proposal for the FAQ training queue.
+  //   • mode=ON      → reply gets sent to the customer via Twilio REST.
+  if (url.searchParams.get("admin_action") === "proposal_decide") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const p = await req.json();
+      const id = String(p.proposal_id || "").trim();
+      const decision = String(p.decision || "").toLowerCase().trim();
+      const correctedReply = typeof p.reply === "string" ? p.reply.trim() : "";
+      if (!id) {
+        return new Response(JSON.stringify({ error: "missing proposal_id" }),
+          { status: 400, headers: jsonCors });
+      }
+      if (decision !== "approve" && decision !== "correct") {
+        return new Response(JSON.stringify({ error: "decision must be 'approve' or 'correct'" }),
+          { status: 400, headers: jsonCors });
+      }
+      if (decision === "correct" && !correctedReply) {
+        return new Response(JSON.stringify({ error: "reply is required for decision='correct'" }),
+          { status: 400, headers: jsonCors });
+      }
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { data: proposal } = await supabase
+        .from("whatsapp_admin_proposals")
+        .select("id, customer_phone, suggested_reply, status")
+        .eq("id", id)
+        .maybeSingle();
+      if (!proposal) {
+        return new Response(JSON.stringify({ error: "proposal not found" }),
+          { status: 404, headers: jsonCors });
+      }
+      const row = proposal as { id: string; customer_phone: string; suggested_reply: string; status: string };
+      const finalReply = decision === "approve" ? (row.suggested_reply || "") : correctedReply;
+      const mode = await getAiMode(supabase);
+      // ON mode: actually send. PREVIEW / OFF: skip the send.
+      if (mode === "ON" && finalReply) {
+        await sendWhatsapp(row.customer_phone, finalReply);
+      }
+      const updatePatch: Record<string, unknown> = {
+        status: "completed_skipped",
+        decided_at: new Date().toISOString(),
+      };
+      if (decision === "correct") updatePatch.suggested_reply = finalReply;
+      const { error } = await supabase.from("whatsapp_admin_proposals")
+        .update(updatePatch)
+        .eq("id", id);
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({
+        ok: true,
+        sent_to_customer: mode === "ON",
+        mode,
+      }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
+    }
+  }
+
   // POST body: {id, severity?, status?, resolution_notes?, assigned_staff_phone?}
   // Any subset of fields may be updated. Setting status='resolved' also
   // stamps resolved_at automatically.
