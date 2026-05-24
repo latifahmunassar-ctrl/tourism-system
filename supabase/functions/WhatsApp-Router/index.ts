@@ -2403,13 +2403,22 @@ Deno.serve(async (req) => {
     if (!got) return false;
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data } = await supabase.from("wa_staff_sessions")
-      .select("expires_at, revoked_at")
+      .select("phone, expires_at, revoked_at")
       .eq("token", got)
       .maybeSingle();
     if (!data) return false;
-    const row = data as { expires_at: string; revoked_at: string | null };
+    const row = data as { phone: string; expires_at: string; revoked_at: string | null };
     if (row.revoked_at) return false;
     if (new Date(row.expires_at) < new Date()) return false;
+    // Also verify the staff member still exists and is active — if admin
+    // deletes or deactivates them, any cached "remember-me" session
+    // immediately stops working on the next request.
+    const { data: staffStillThere } = await supabase
+      .from("wa_staff")
+      .select("active")
+      .eq("phone", row.phone)
+      .maybeSingle();
+    if (!staffStillThere || !(staffStillThere as { active: boolean }).active) return false;
     return true;
   };
 
@@ -2627,8 +2636,14 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: "invalid credentials" }),
           { status: 401, headers: jsonCors });
       }
+      // "تذكرني" (remember=true) → 30-day session; default 24h. Either
+      // way checkAuthOrSession re-verifies the staff is still active on
+      // every request, so admin can revoke any device instantly by
+      // deactivating or deleting the staff member.
+      const remember = p.remember === true;
+      const lifetimeMs = remember ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
       const token = genSessionToken();
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const expiresAt = new Date(Date.now() + lifetimeMs).toISOString();
       await supabase.from("wa_staff_sessions").insert({
         phone: row.phone, username: row.username, token, expires_at: expiresAt,
       });
