@@ -1110,6 +1110,22 @@ async function handleComplaint(args: {
     phone: from,
   });
 
+  // Track in wa_complaints for the monitor dashboard. Keyword-classified
+  // complaints land here at severity='normal' by default; admin/monitor
+  // can escalate to medium/urgent.
+  const { data: sessionRow } = await supabase
+    .from("whatsapp_sessions").select("assigned_staff_phone")
+    .eq("phone", from).maybeSingle();
+  const assignedToStaff = (sessionRow as { assigned_staff_phone?: string | null } | null)?.assigned_staff_phone;
+  await supabase.from("wa_complaints").insert({
+    customer_phone: from,
+    customer_name: profileName,
+    severity: "normal",
+    description: text.slice(0, 1000),
+    assigned_staff_phone: assignedToStaff || null,
+    source: "keyword",
+  });
+
   // تنبيه موظفي الشكاوى
   const staff = staffList("COMPLAINTS_WHATSAPP_NUMBERS");
   const notice = `⚠️ شكوى جديدة\nمن: ${profileName} (${from.replace(/^whatsapp:/, "")})\nالرسالة:\n${text}`;
@@ -1954,10 +1970,26 @@ async function createProposalAndNotifyAdmin(args: {
   // to the full SALES_WHATSAPP_NUMBERS list.
   const { data: assignedRow } = await supabase
     .from("whatsapp_sessions")
-    .select("assigned_staff_phone")
+    .select("assigned_staff_phone, profile_name")
     .eq("phone", customerPhone)
     .maybeSingle();
   const assigned = (assignedRow as { assigned_staff_phone?: string | null } | null)?.assigned_staff_phone;
+  const assignedName = (assignedRow as { profile_name?: string } | null)?.profile_name;
+
+  // Track COMPLAINT cases as wa_complaints rows so the monitor dashboard
+  // gets its own curated queue with severity + status + resolution notes.
+  if (analysis && analysis.caseType === "COMPLAINT") {
+    const severity = analysis.priority === "URGENT" ? "urgent" : "normal";
+    await supabase.from("wa_complaints").insert({
+      customer_phone: customerPhone,
+      customer_name: assignedName || profileName,
+      complaint_type: analysis.complaintType,
+      severity,
+      description: question.slice(0, 1000),
+      assigned_staff_phone: assigned || null,
+      source: "ai",
+    });
+  }
   const targets = assigned ? [assigned] : staffList("SALES_WHATSAPP_NUMBERS");
   await Promise.all(targets.map(num => sendStaffNotice(num, notice)));
 }
@@ -2623,10 +2655,10 @@ Deno.serve(async (req) => {
       }
       const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       const { data: staff } = await supabase.from("wa_staff")
-        .select("phone, name, username, password_hash, active")
+        .select("phone, name, username, password_hash, active, role")
         .eq("username", username)
         .maybeSingle();
-      const row = staff as { phone: string; name: string; username: string; password_hash: string | null; active: boolean } | null;
+      const row = staff as { phone: string; name: string; username: string; password_hash: string | null; active: boolean; role?: string } | null;
       if (!row || !row.active || !row.password_hash) {
         return new Response(JSON.stringify({ error: "invalid credentials" }),
           { status: 401, headers: jsonCors });
@@ -2649,7 +2681,7 @@ Deno.serve(async (req) => {
       });
       return new Response(JSON.stringify({
         ok: true, token, expires_at: expiresAt,
-        staff: { name: row.name, phone: row.phone, username: row.username },
+        staff: { name: row.name, phone: row.phone, username: row.username, role: row.role || "sales" },
       }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }),
@@ -2873,6 +2905,71 @@ Deno.serve(async (req) => {
         { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // Monitor / admin: complaints queue. Returns all wa_complaints rows
+  // with their assigned staff name joined in. Filterable client-side
+  // by severity / status. Includes upsert endpoint for status / severity /
+  // resolution edits.
+  if (url.searchParams.get("admin_action") === "list_complaints") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: complaints } = await supabase.from("wa_complaints")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      // Resolve assigned staff names for display.
+      const { data: staffRows } = await supabase.from("wa_staff")
+        .select("phone, name");
+      const nameByPhone = new Map<string, string>();
+      for (const s of (staffRows as Array<{ phone: string; name: string }> | null) ?? []) {
+        nameByPhone.set(s.phone, s.name);
+      }
+      const enriched = (complaints ?? []).map((c: Record<string, unknown>) => ({
+        ...c,
+        assigned_staff_name: c.assigned_staff_phone ? nameByPhone.get(c.assigned_staff_phone as string) || null : null,
+      }));
+      return new Response(JSON.stringify({ complaints: enriched }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
+    }
+  }
+
+  // POST body: {id, severity?, status?, resolution_notes?, assigned_staff_phone?}
+  // Any subset of fields may be updated. Setting status='resolved' also
+  // stamps resolved_at automatically.
+  if (url.searchParams.get("admin_action") === "upsert_complaint") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const p = await req.json();
+      const id = String(p.id || "").trim();
+      if (!id) return new Response(JSON.stringify({ error: "missing id" }),
+        { status: 400, headers: jsonCors });
+      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (typeof p.severity === "string") patch.severity = p.severity;
+      if (typeof p.status === "string") {
+        patch.status = p.status;
+        if (p.status === "resolved" && !p.resolved_at) patch.resolved_at = new Date().toISOString();
+        if (p.status !== "resolved") patch.resolved_at = null;
+      }
+      if (typeof p.resolution_notes === "string") patch.resolution_notes = p.resolution_notes;
+      if (typeof p.complaint_type === "string") patch.complaint_type = p.complaint_type;
+      if ("assigned_staff_phone" in p) {
+        patch.assigned_staff_phone = p.assigned_staff_phone
+          ? `whatsapp:+${String(p.assigned_staff_phone).replace(/^whatsapp:/, "").replace(/^\+/, "").replace(/^00/, "").replace(/[^0-9]/g, "")}`
+          : null;
+      }
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { error, data } = await supabase.from("wa_complaints")
+        .update(patch).eq("id", id).select().single();
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true, complaint: data }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
     }
   }
 
