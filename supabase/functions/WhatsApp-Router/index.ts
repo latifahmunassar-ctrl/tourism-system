@@ -840,26 +840,35 @@ async function maybeAutoAssign(args: {
 //   • wa_sessions.ai_enabled (boolean | null) — per-conversation override.
 //     null = inherit global. true/false force regardless of global.
 //   • wa_settings.ai_global_enabled (jsonb boolean) — global default.
-// Per-conversation always wins so admin can mute one chatty customer without
-// silencing the whole bot, or vice versa unmute one VIP while the bot is
-// globally off.
+//   • wa_settings.ai_force_off_all (jsonb boolean) — kill switch. When true
+//     ALL conversations are silenced, including ones with explicit
+//     ai_enabled=true. Admin sets this via "إيقاف الكل". The plain
+//     "إيقاف الكل عدا المخصصين" keeps force_off_all=false and just flips
+//     ai_global_enabled to false, so explicit-on conversations keep
+//     running.
 async function isAiEnabledForSession(
   supabase: ReturnType<typeof createClient>,
   session: { ai_enabled?: boolean | null } | null,
 ): Promise<boolean> {
+  const { data: rows } = await supabase
+    .from("wa_settings")
+    .select("key, value")
+    .in("key", ["ai_global_enabled", "ai_force_off_all"]);
+  const map = new Map<string, unknown>();
+  for (const r of (rows as Array<{ key: string; value: unknown }> ?? [])) {
+    map.set(r.key, r.value);
+  }
+  const toBool = (v: unknown): boolean | null =>
+    v === true ? true :
+    v === false ? false :
+    typeof v === "string" ? v.toLowerCase() === "true" :
+    null;
+  // Force-off overrides everything — including explicit per-conversation ON.
+  if (toBool(map.get("ai_force_off_all")) === true) return false;
   if (session && session.ai_enabled === true) return true;
   if (session && session.ai_enabled === false) return false;
-  const { data } = await supabase
-    .from("wa_settings")
-    .select("value")
-    .eq("key", "ai_global_enabled")
-    .maybeSingle();
-  const v = (data as { value?: unknown } | null)?.value;
-  // jsonb may come back as boolean or string depending on driver shape.
-  if (v === true) return true;
-  if (v === false) return false;
-  if (typeof v === "string") return v.toLowerCase() === "true";
-  return true; // default ON when unset
+  const g = toBool(map.get("ai_global_enabled"));
+  return g === null ? true : g;   // default ON when unset
 }
 
 async function handleMessage(args: {
@@ -2534,17 +2543,21 @@ Deno.serve(async (req) => {
       // Global AI toggle + per-conversation overrides for the dashboard
       // toggles. Conversations = sessions that had activity in the last
       // 24h, with their per-conversation ai_enabled value (null = inherit).
-      const { data: globalRow } = await supabase
+      const { data: settingRows } = await supabase
         .from("wa_settings")
-        .select("value")
-        .eq("key", "ai_global_enabled")
-        .maybeSingle();
-      const gv = (globalRow as { value?: unknown } | null)?.value;
-      const globalAiEnabled =
-        gv === true ? true :
-        gv === false ? false :
-        typeof gv === "string" ? gv.toLowerCase() === "true" :
-        true;
+        .select("key, value")
+        .in("key", ["ai_global_enabled", "ai_force_off_all"]);
+      const settingMap = new Map<string, unknown>();
+      for (const r of (settingRows as Array<{ key: string; value: unknown }> ?? [])) {
+        settingMap.set(r.key, r.value);
+      }
+      const toBool = (v: unknown, fallback: boolean): boolean =>
+        v === true ? true :
+        v === false ? false :
+        typeof v === "string" ? v.toLowerCase() === "true" :
+        fallback;
+      const globalAiEnabled = toBool(settingMap.get("ai_global_enabled"), true);
+      const aiForceOffAll  = toBool(settingMap.get("ai_force_off_all"), false);
 
       // Time range + customer-phone filtering for the conversations panel.
       // range: today (24h) | week (7d) | month (30d) | all | custom
@@ -2654,6 +2667,7 @@ Deno.serve(async (req) => {
           pending_proposals_total: pending?.length ?? 0,
         },
         global_ai_enabled: globalAiEnabled,
+        ai_force_off_all: aiForceOffAll,
         conversations: conversationsEnriched,
         staff: staffList ?? [],
         routing_rules: rulesList ?? [],
@@ -3144,7 +3158,13 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Admin: toggle the global AI master switch. POST body: {"enabled": bool}.
+  // Admin: toggle the global AI master switch. POST body:
+  //   { enabled: bool, force_off_all?: bool }
+  // enabled       — flips ai_global_enabled (the default for conversations
+  //                 without an explicit override).
+  // force_off_all — when true (and enabled=false), even conversations with
+  //                 ai_enabled=true get silenced. Cleared on every "turn ON"
+  //                 to prevent it from sticking around accidentally.
   if (url.searchParams.get("admin_action") === "set_global_ai") {
     const expected = Deno.env.get("LEGACY_ANON_JWT") || "";
     const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
@@ -3155,15 +3175,24 @@ Deno.serve(async (req) => {
     try {
       const payload = await req.json();
       const enabled = !!payload.enabled;
+      // Turning ON always clears force_off_all. Turning OFF respects whatever
+      // the caller sent (default false → "إيقاف الكل عدا المخصصين").
+      const forceOffAll = enabled ? false : !!payload.force_off_all;
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
-      const { error } = await supabase.from("wa_settings")
-        .upsert({ key: "ai_global_enabled", value: enabled, updated_at: new Date().toISOString() });
+      const now = new Date().toISOString();
+      const { error } = await supabase.from("wa_settings").upsert([
+        { key: "ai_global_enabled", value: enabled,      updated_at: now },
+        { key: "ai_force_off_all",  value: forceOffAll,  updated_at: now },
+      ]);
       if (error) throw new Error(error.message);
-      return new Response(JSON.stringify({ ok: true, global_ai_enabled: enabled }),
-        { headers: { ...JSON_HEADERS, ...corsHeaders } });
+      return new Response(JSON.stringify({
+        ok: true,
+        global_ai_enabled: enabled,
+        ai_force_off_all: forceOffAll,
+      }), { headers: { ...JSON_HEADERS, ...corsHeaders } });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }),
         { status: 500, headers: { ...JSON_HEADERS, ...corsHeaders } });
