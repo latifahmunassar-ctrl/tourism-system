@@ -320,10 +320,11 @@ function normalizeArabic(s: string): string {
 async function findFaqAnswer(
   supabase: ReturnType<typeof createClient>,
   text: string,
+  customerStage?: string | null,
 ): Promise<string | null> {
   const { data, error } = await supabase
     .from("chat_answers")
-    .select("id, sub_intent, keywords, answer_sa1, answer_om, answer_clarification");
+    .select("id, sub_intent, keywords, answer_sa1, answer_om, answer_clarification, stage");
   if (error || !data) return null;
 
   const haystack = normalizeArabic(text);
@@ -364,11 +365,22 @@ async function findFaqAnswer(
   // appear in many rows. Each matched keyword contributes its char length
   // (capped at 20) to the row's score; a row needs ≥1 STRONG keyword
   // (non-weak) to be in the running.
+  // Stage-aware scoring: a row whose stage exactly matches the customer's
+  // current stage gets a +5 score boost, so it wins over a stage-agnostic
+  // (NULL) row when both match. Rows with a DIFFERENT stage are dropped
+  // entirely — they don't apply to this customer's current point in the
+  // journey.
+  const currentStage = (customerStage || "").toUpperCase();
   let best: { score: number; matchCount: number; strongCount: number; row: typeof data[number] } | null = null;
   for (const row of data as Array<{
     id: string; sub_intent: string; keywords: string[];
     answer_sa1: string; answer_om: string; answer_clarification: string;
+    stage: string | null;
   }>) {
+    const rowStage = (row.stage || "").toUpperCase();
+    // Skip rows scoped to a different stage. NULL/empty stage = ALL stages,
+    // and is always eligible.
+    if (rowStage && currentStage && rowStage !== currentStage) continue;
     let score = 0;
     let matchCount = 0;
     let strongCount = 0;
@@ -390,6 +402,9 @@ async function findFaqAnswer(
     // accuracy + a growing curated FAQ over time.
     if (matchCount < 2) continue;
     if (strongCount === 0) continue;
+    // Exact stage match → priority boost so it outranks a fallback
+    // ALL-stage row of similar keyword strength.
+    if (rowStage && rowStage === currentStage) score += 5;
     if (!best || score > best.score) best = { score, matchCount, strongCount, row };
   }
   if (!best) return null;
@@ -1187,7 +1202,8 @@ async function handleMessage(args: {
     //                  admin approval step so admin can verify the
     //                  classifier picked the right answer + stage.
     const aiMode = await getAiMode(supabase);
-    const answer = await findFaqAnswer(supabase, text);
+    const answer = await findFaqAnswer(supabase, text,
+      (session as { customer_stage?: string | null } | null)?.customer_stage || null);
     if (aiMode === "PREVIEW") {
       // Always escalate in preview, unless small-talk (which we ignore
       // silently as before).
@@ -2281,6 +2297,7 @@ async function handleAdminResponse(args: {
           keywords: proposal.proposed_keywords || [],
           sampleQ: proposal.customer_question,
           answer: proposal.suggested_reply,
+          stage: (proposal as { customer_stage?: string | null }).customer_stage || null,
         });
         if (saved) void triggerSyncSheets();
       }
@@ -2333,6 +2350,7 @@ async function handleAdminResponse(args: {
       keywords: proposal.proposed_keywords || [],
       sampleQ: proposal.customer_question,
       answer: finalReply,
+      stage: (proposal as { customer_stage?: string | null }).customer_stage || null,
     });
     if (saved) void triggerSyncSheets();
     await supabase.from("whatsapp_admin_proposals")
@@ -2381,6 +2399,7 @@ async function handleAdminResponse(args: {
         keywords: proposal.proposed_keywords,
         sampleQ: proposal.customer_question,
         answer: finalReply,
+        stage: (proposal as { customer_stage?: string | null }).customer_stage || null,
       });
       if (ok) {
         await supabase.from("whatsapp_admin_proposals")
@@ -2434,6 +2453,7 @@ async function handleAdminResponse(args: {
       keywords: proposal.proposed_keywords,
       sampleQ: proposal.customer_question,
       answer: finalReply,
+      stage: (proposal as { customer_stage?: string | null }).customer_stage || null,
     });
     if (ok) {
       await supabase.from("whatsapp_admin_proposals")
@@ -2502,13 +2522,16 @@ async function appendChatAnswerRow(args: {
   keywords: string[];
   sampleQ: string;
   answer: string;
+  stage?: string | null;   // INQUIRY | OFFER_SENT | ... | null = ALL
 }): Promise<boolean> {
   const token = await getGoogleSheetsToken(
     "https://www.googleapis.com/auth/spreadsheets");
   if (!token) return false;
 
   // Sheet column order:
-  // ID | Intent | Sub-intent | Keywords | sample Q | Answer_SA1 | Answer_SA2 | Answer clarification | Answer_OM | Status
+  // A: ID | B: Intent | C: Sub-intent | D: Keywords | E: sample Q |
+  // F: Answer_SA1 | G: Answer_SA2 | H: Answer clarification |
+  // I: Answer_OM | J: Status | K: Stage
   const newId = `PKG_AI_${Date.now()}`;
   const row = [
     newId,
@@ -2521,6 +2544,7 @@ async function appendChatAnswerRow(args: {
     "",                // clarification
     args.answer,       // OM (same — Claude already wrote in Khaleeji)
     "AI-generated",
+    args.stage || "",  // Stage (empty = applies to ALL stages)
   ];
 
   const url =
@@ -3392,7 +3416,7 @@ Deno.serve(async (req) => {
       );
       const { data: proposal } = await supabase
         .from("whatsapp_admin_proposals")
-        .select("id, customer_phone, customer_question, suggested_reply, source_row_id, proposed_intent, proposed_sub_intent, proposed_keywords, status")
+        .select("id, customer_phone, customer_question, suggested_reply, source_row_id, proposed_intent, proposed_sub_intent, proposed_keywords, customer_stage, status")
         .eq("id", id)
         .maybeSingle();
       if (!proposal) {
@@ -3403,7 +3427,8 @@ Deno.serve(async (req) => {
         id: string; customer_phone: string; customer_question: string;
         suggested_reply: string; source_row_id: string | null;
         proposed_intent: string; proposed_sub_intent: string;
-        proposed_keywords: string[]; status: string;
+        proposed_keywords: string[]; customer_stage: string | null;
+        status: string;
       };
       const finalReply = decision === "approve" ? (row.suggested_reply || "") : correctedReply;
       const mode = await getAiMode(supabase);
@@ -3425,6 +3450,7 @@ Deno.serve(async (req) => {
           subIntent: row.proposed_sub_intent,
           keywords: row.proposed_keywords || [],
           sampleQ: row.customer_question,
+          stage: row.customer_stage,
           answer: finalReply,
         });
         if (ok) { saveOutcome = "saved"; void triggerSyncSheets(); }

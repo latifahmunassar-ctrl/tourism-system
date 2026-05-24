@@ -121,7 +121,7 @@ async function syncChatAnswers(supabase: any, token: string): Promise<{ upserted
   // (i.e. were deleted from the sheet) and prune them.
   const syncTimestamp = new Date().toISOString();
 
-  const rows = await readSheetRange(token, chatSheetId, "Sheet1!A1:J500");
+  const rows = await readSheetRange(token, chatSheetId, "Sheet1!A1:K500");
   if (rows.length < 2) return { upserted: 0, deleted: 0 };
 
   const header = rows[0].map(h => String(h || "").trim().toLowerCase());
@@ -137,6 +137,7 @@ async function syncChatAnswers(supabase: any, token: string): Promise<{ upserted
     clar: idx("answer clarification"),
     om: idx("answer_om"),
     status: idx("status"),
+    stage: idx("stage"),   // NEW: customer-journey stage column
   };
   if (cols.id < 0) throw new Error("ALEZZ Chat: missing 'ID' column");
 
@@ -176,6 +177,8 @@ async function syncChatAnswers(supabase: any, token: string): Promise<{ upserted
       }
     }
     const keywords = Array.from(allTokens);
+    const rawStage = cols.stage >= 0 ? String(row[cols.stage] || "").trim().toUpperCase() : "";
+    const STAGES = new Set(["INQUIRY","OFFER_SENT","BOOKING_IN_PROGRESS","BOOKING_CONFIRMED","TRAVELING","POST_TRAVEL"]);
     upserts.push({
       id,
       intent: String(row[cols.intent] || "").trim(),
@@ -187,6 +190,7 @@ async function syncChatAnswers(supabase: any, token: string): Promise<{ upserted
       answer_clarification: String(row[cols.clar] || "").trim(),
       answer_om: String(row[cols.om] || "").trim(),
       status: String(row[cols.status] || "").trim(),
+      stage: STAGES.has(rawStage) ? rawStage : null,   // null = applies to ALL stages
       updated_at: syncTimestamp,
     });
   }
