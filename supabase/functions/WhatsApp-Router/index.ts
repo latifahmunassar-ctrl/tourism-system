@@ -2157,6 +2157,9 @@ function isAdminPhone(from: string): boolean {
 async function getOldestPendingProposal(
   supabase: ReturnType<typeof createClient>,
 ): Promise<ProposalRow | null> {
+  // LATEST pending proposal, not oldest — admin's "نعم/لا" on WhatsApp
+  // naturally targets the most recent notification she received, not the
+  // oldest one in the queue. (Function name kept for callsite stability.)
   const { data } = await supabase
     .from("whatsapp_admin_proposals")
     .select("*")
@@ -2166,7 +2169,7 @@ async function getOldestPendingProposal(
       "pending_sheet_approval",   // admin deciding whether to save to Excel
       "pending_category_choice",  // admin typing preferred category
     ])
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   return (data as ProposalRow | null) || null;
@@ -2218,6 +2221,13 @@ async function handleAdminResponse(args: {
   const { supabase, proposal, text, adminFrom } = args;
   const yes = isAffirmative(text);
   const no  = isNegative(text);
+  // PREVIEW MODE: never reach the customer. Admin's approve / correct
+  // both close the proposal but the suggested_reply or correction is
+  // recorded for future FAQ training instead of sent. Admin gets a
+  // confirmation that explicitly notes the customer didn't receive
+  // anything, so there's no ambiguity.
+  const aiMode = await getAiMode(supabase);
+  const isPreview = aiMode === "PREVIEW";
 
   // ── STEP 1: admin reviewing AI suggestion ──────────────────────────────
   // Excel-save step is suspended — once the customer receives the reply
@@ -2225,11 +2235,16 @@ async function handleAdminResponse(args: {
   // dashboard once it has proposal-action UI.
   if (proposal.status === "pending_reply_approval") {
     if (yes) {
-      await sendWhatsapp(proposal.customer_phone, proposal.suggested_reply);
+      if (!isPreview) {
+        await sendWhatsapp(proposal.customer_phone, proposal.suggested_reply);
+      }
       await supabase.from("whatsapp_admin_proposals")
         .update({ status: "completed_skipped", decided_at: new Date().toISOString() })
         .eq("id", proposal.id);
-      await sendStaffNotice(adminFrom, "تم الرد على العميل 👍");
+      await sendStaffNotice(adminFrom,
+        isPreview
+          ? "✅ تمت الموافقة — لم يُرسل للعميل (وضع المعاينة)"
+          : "تم الرد على العميل 👍");
       return;
     }
     if (no) {
@@ -2237,7 +2252,9 @@ async function handleAdminResponse(args: {
         .update({ status: "pending_correction" })
         .eq("id", proposal.id);
       await sendWhatsapp(adminFrom,
-        `تمام 👌 كيف تبين الرد يكون على العميل اكتب الصيغة مباشرة`);
+        isPreview
+          ? `تمام 👌 وش الرد الصحيح؟ اكتبه وراح أحفظه (في وضع المعاينة لن يُرسل للعميل)`
+          : `تمام 👌 كيف تبين الرد يكون على العميل اكتب الصيغة مباشرة`);
       return;
     }
     await sendWhatsapp(adminFrom,
@@ -2252,7 +2269,9 @@ async function handleAdminResponse(args: {
       await sendWhatsapp(adminFrom, `اكتب الرد كاملاً عشان أرسله للعميل`);
       return;
     }
-    await sendWhatsapp(proposal.customer_phone, finalReply);
+    if (!isPreview) {
+      await sendWhatsapp(proposal.customer_phone, finalReply);
+    }
     await supabase.from("whatsapp_admin_proposals")
       .update({
         status: "completed_skipped",
@@ -2260,7 +2279,10 @@ async function handleAdminResponse(args: {
         decided_at: new Date().toISOString(),
       })
       .eq("id", proposal.id);
-    await sendStaffNotice(adminFrom, "تم الرد على العميل 👍");
+    await sendStaffNotice(adminFrom,
+      isPreview
+        ? "✅ تم حفظ الرد — لم يُرسل للعميل (وضع المعاينة)"
+        : "تم الرد على العميل 👍");
     return;
   }
 
