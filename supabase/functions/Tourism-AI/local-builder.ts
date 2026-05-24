@@ -1927,9 +1927,13 @@ export async function buildLocalProgram(
       // the flight is Hanoi → Phu Quoc.
       if (!fromAirportDrop && mainHub) {
         const sfDay = selectedFlights.find(f => f.day === d.number);
-        const flightFromHub = sfDay
-          && normCity(sfDay.flight.from_city).split(" ").filter(Boolean).every(w => normCity(mainHub).includes(w))
-          && normCity(d.fromCity) !== normCity(mainHub);
+        const fc = sfDay ? normCity(sfDay.flight.from_city) : "";
+        const hub = normCity(mainHub);
+        // 'Ha Noi (HAN)' normalises to 'ha noi han' — substring either way
+        // covers the airport-code suffix without per-word strictness.
+        const flightFromHub = !!sfDay
+          && (fc.includes(hub) || hub.includes(fc))
+          && normCity(d.fromCity) !== hub;
         if (flightFromHub) {
           fromAirportDrop = findInterCityTransfer(allTours, d.fromCity, mainHub, dest, cityDefs, arrivalType, request.transport);
         }
