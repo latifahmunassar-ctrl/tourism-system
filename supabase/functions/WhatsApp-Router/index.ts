@@ -2685,7 +2685,7 @@ Deno.serve(async (req) => {
 
       const { data: pending } = await supabase
         .from("whatsapp_admin_proposals")
-        .select("id, customer_phone, customer_profile_name, customer_question, status, created_at, proposed_intent, proposed_sub_intent, customer_type, case_type, complaint_type, booking_status, priority, priority_label")
+        .select("id, customer_phone, customer_profile_name, customer_question, status, created_at, proposed_intent, proposed_sub_intent, customer_type, case_type, complaint_type, booking_status, priority, priority_label, interpretation, suggested_reply, customer_stage")
         .in("status", [
           "pending_reply_approval", "pending_correction",
           "pending_sheet_approval", "pending_category_choice",
