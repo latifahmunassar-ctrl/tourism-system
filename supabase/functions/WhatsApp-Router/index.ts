@@ -2657,6 +2657,54 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Staff self-service: change own password. Requires a valid session
+  // (NOT the master JWT). Verifies current_password before updating.
+  // POST body: {current_password, new_password}
+  if (url.searchParams.get("admin_action") === "staff_change_password") {
+    try {
+      const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+      if (!got) return unauthorized();
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      // Resolve the session → staff phone. Master JWT doesn't have a
+      // staff account so it can't self-change here.
+      const { data: sessionRow } = await supabase.from("wa_staff_sessions")
+        .select("phone, expires_at, revoked_at")
+        .eq("token", got)
+        .maybeSingle();
+      const session = sessionRow as { phone: string; expires_at: string; revoked_at: string | null } | null;
+      if (!session || session.revoked_at || new Date(session.expires_at) < new Date()) {
+        return unauthorized();
+      }
+      const p = await req.json();
+      const current = String(p.current_password || "");
+      const next = String(p.new_password || "");
+      if (!current || next.length < 4) {
+        return new Response(JSON.stringify({ error: "أدخل كلمة السر الحالية وكلمة سر جديدة (4 أحرف على الأقل)" }),
+          { status: 400, headers: jsonCors });
+      }
+      const { data: staffRow } = await supabase.from("wa_staff")
+        .select("password_hash, active")
+        .eq("phone", session.phone)
+        .maybeSingle();
+      const staff = staffRow as { password_hash: string | null; active: boolean } | null;
+      if (!staff || !staff.active || !staff.password_hash) return unauthorized();
+      const ok = await verifyPassword(current, staff.password_hash);
+      if (!ok) {
+        return new Response(JSON.stringify({ error: "كلمة السر الحالية غير صحيحة" }),
+          { status: 401, headers: jsonCors });
+      }
+      const newHash = await hashPassword(next);
+      const { error } = await supabase.from("wa_staff")
+        .update({ password_hash: newHash, password_set_at: new Date().toISOString() })
+        .eq("phone", session.phone);
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
+    }
+  }
+
   // Revoke the caller's current session. Reads the Bearer token directly
   // and flips revoked_at. Always returns 200 (no info leak).
   if (url.searchParams.get("admin_action") === "staff_logout") {
