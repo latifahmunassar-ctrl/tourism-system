@@ -2546,12 +2546,44 @@ Deno.serve(async (req) => {
         typeof gv === "string" ? gv.toLowerCase() === "true" :
         true;
 
-      const { data: sessions } = await supabase
+      // Time range + customer-phone filtering for the conversations panel.
+      // range: today (24h) | week (7d) | month (30d) | all | custom
+      // custom uses from / to (YYYY-MM-DD, inclusive of the 'to' day)
+      const range = url.searchParams.get("range") || "today";
+      const customerPhoneFilter = (url.searchParams.get("customer_phone") || "").trim();
+      const now = Date.now();
+      const DAY_MS = 24 * 60 * 60 * 1000;
+      let sessionsSince: string;
+      let sessionsUntil: string | null = null;
+      let sessionsLimit = 50;
+      if (range === "week")       { sessionsSince = new Date(now - 7 * DAY_MS).toISOString();  sessionsLimit = 200; }
+      else if (range === "month") { sessionsSince = new Date(now - 30 * DAY_MS).toISOString(); sessionsLimit = 500; }
+      else if (range === "all")   { sessionsSince = "1970-01-01T00:00:00Z";                    sessionsLimit = 1000; }
+      else if (range === "custom") {
+        const fromStr = url.searchParams.get("from");
+        const toStr = url.searchParams.get("to");
+        sessionsSince = fromStr ? new Date(fromStr + "T00:00:00Z").toISOString() : "1970-01-01T00:00:00Z";
+        if (toStr) {
+          const toDate = new Date(toStr + "T23:59:59.999Z");
+          sessionsUntil = toDate.toISOString();
+        }
+        sessionsLimit = 500;
+      }
+      else                        { sessionsSince = since24h; /* today / default */ }
+
+      let sessionsQuery = supabase
         .from("whatsapp_sessions")
         .select("phone, profile_name, ai_enabled, last_message_at, destination, assigned_staff_phone, assigned_at, assigned_by")
-        .gte("last_message_at", since24h)
+        .gte("last_message_at", sessionsSince)
         .order("last_message_at", { ascending: false })
-        .limit(50);
+        .limit(sessionsLimit);
+      if (sessionsUntil) sessionsQuery = sessionsQuery.lte("last_message_at", sessionsUntil);
+      if (customerPhoneFilter) {
+        // Substring match on the phone column — admin can paste a partial
+        // number (last digits) and still hit the row.
+        sessionsQuery = sessionsQuery.ilike("phone", `%${customerPhoneFilter.replace(/[^0-9+]/g, "")}%`);
+      }
+      const { data: sessions } = await sessionsQuery;
 
       // Enrich each session with the latest proposal's classification so
       // the dashboard's filters (customer_type / case_type / URGENT) can
