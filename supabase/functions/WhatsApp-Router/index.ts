@@ -2657,7 +2657,7 @@ Deno.serve(async (req) => {
 
       const { data: staffList } = await supabase
         .from("wa_staff")
-        .select("id, name, phone, active")
+        .select("id, name, phone, active, role, username, destinations")
         .order("name");
       const { data: rulesList } = await supabase
         .from("wa_routing_rules")
@@ -2847,6 +2847,14 @@ Deno.serve(async (req) => {
       const name = String(p.name || "").trim();
       const active = p.active === false ? false : true;
       const role = p.role === "monitor" ? "monitor" : "sales";
+      // الوجهات: قائمة نظيفة من نصوص — فاضية = كل الوجهات.
+      // نقبل array مباشرة أو CSV string.
+      let destinations: string[] | undefined = undefined;
+      if (Array.isArray(p.destinations)) {
+        destinations = (p.destinations as unknown[]).map(s => String(s).trim()).filter(Boolean);
+      } else if (typeof p.destinations === "string") {
+        destinations = p.destinations.split(",").map(s => s.trim()).filter(Boolean);
+      }
       if (!rawPhone || !name) {
         return new Response(JSON.stringify({ error: "missing phone or name" }),
           { status: 400, headers: jsonCors });
@@ -2855,8 +2863,10 @@ Deno.serve(async (req) => {
         .replace(/^00/, "").replace(/[^0-9]/g, "");
       const phone = `whatsapp:+${digits}`;
       const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const row: Record<string, unknown> = { phone, name, active, role };
+      if (destinations !== undefined) row.destinations = destinations;
       const { data, error } = await supabase.from("wa_staff")
-        .upsert({ phone, name, active, role }, { onConflict: "phone" })
+        .upsert(row, { onConflict: "phone" })
         .select().single();
       if (error) throw new Error(error.message);
       return new Response(JSON.stringify({ ok: true, staff: data }), { headers: jsonCors });
