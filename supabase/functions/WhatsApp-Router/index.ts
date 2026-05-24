@@ -811,28 +811,46 @@ async function maybeAutoAssign(args: {
 }): Promise<string | null> {
   if (args.alreadyAssigned || !args.destination) return null;
   const norm = (s: string) => s.trim().toLowerCase();
+  const destNorm = norm(args.destination);
+
+  // 1) قواعد التوجيه الصريحة (wa_routing_rules) — لها الأولوية
   const { data: rules } = await args.supabase
     .from("wa_routing_rules")
     .select("assign_to_phone, match_destination")
     .eq("active", true)
     .order("priority", { ascending: false });
-  const match = (rules as Array<{ assign_to_phone: string; match_destination: string | null }> | null ?? [])
-    .find(r => r.match_destination && norm(r.match_destination) === norm(args.destination!));
-  if (!match) return null;
+  let target: string | null = null;
+  const ruleMatch = (rules as Array<{ assign_to_phone: string; match_destination: string | null }> | null ?? [])
+    .find(r => r.match_destination && norm(r.match_destination) === destNorm);
+  if (ruleMatch) target = ruleMatch.assign_to_phone;
+
+  // 2) Fallback: موظف نشط وجهاته تشمل هذي الوجهة
+  if (!target) {
+    const { data: staffRows } = await args.supabase
+      .from("wa_staff")
+      .select("phone, destinations, role")
+      .eq("active", true)
+      .eq("role", "sales");
+    const candidate = (staffRows as Array<{ phone: string; destinations: string[] | null }> | null ?? [])
+      .find(s => Array.isArray(s.destinations) && s.destinations.some(d => norm(d) === destNorm));
+    if (candidate) target = candidate.phone;
+  }
+
+  if (!target) return null;
   await args.supabase.from("whatsapp_sessions").update({
-    assigned_staff_phone: match.assign_to_phone,
+    assigned_staff_phone: target,
     assigned_at: new Date().toISOString(),
     assigned_by: "auto",
   }).eq("phone", args.from);
   await notifyStaffAssignment({
     supabase: args.supabase,
-    staffPhone: match.assign_to_phone,
+    staffPhone: target,
     customerPhone: args.from,
     customerName: args.customerName,
     destination: args.destination,
     source: "auto",
   });
-  return match.assign_to_phone;
+  return target;
 }
 
 // ── AI master switch ─────────────────────────────────────────────────────
@@ -2445,27 +2463,35 @@ Deno.serve(async (req) => {
   };
   const checkAuthOrSession = async (req: Request): Promise<boolean> => {
     if (checkAuth(req)) return true;
+    return !!(await getCallerStaff(req));
+  };
+  // إذا كان الطلب باستخدام staff session، يرجع صف الموظف. وإلا (الادمن
+  // باستخدام legacy JWT أو غير مصرّح) يرجع null. تستخدم لتخصيص المحتوى
+  // حسب الموظف الفعلي اللي عامل تسجيل دخول.
+  const getCallerStaff = async (req: Request): Promise<{
+    phone: string; name: string; role: string; destinations: string[];
+  } | null> => {
     const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
-    if (!got) return false;
+    if (!got) return null;
+    // الـ legacy JWT للأدمن يطابق tokens تساوي SECRET — ما يكون له staff
+    // session مطابق، فهنا الـ select اللي تحت يرجع null عادي.
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data } = await supabase.from("wa_staff_sessions")
       .select("phone, expires_at, revoked_at")
       .eq("token", got)
       .maybeSingle();
-    if (!data) return false;
+    if (!data) return null;
     const row = data as { phone: string; expires_at: string; revoked_at: string | null };
-    if (row.revoked_at) return false;
-    if (new Date(row.expires_at) < new Date()) return false;
-    // Also verify the staff member still exists and is active — if admin
-    // deletes or deactivates them, any cached "remember-me" session
-    // immediately stops working on the next request.
-    const { data: staffStillThere } = await supabase
+    if (row.revoked_at) return null;
+    if (new Date(row.expires_at) < new Date()) return null;
+    const { data: staffRow } = await supabase
       .from("wa_staff")
-      .select("active")
+      .select("phone, name, role, active, destinations")
       .eq("phone", row.phone)
       .maybeSingle();
-    if (!staffStillThere || !(staffStillThere as { active: boolean }).active) return false;
-    return true;
+    if (!staffRow || !(staffRow as { active: boolean }).active) return null;
+    const s = staffRow as { phone: string; name: string; role: string; destinations: string[] | null };
+    return { phone: s.phone, name: s.name, role: s.role, destinations: s.destinations || [] };
   };
 
   // Admin: token-validity probe. Returns 200 with diagnostic info when
@@ -2500,6 +2526,9 @@ Deno.serve(async (req) => {
   //   • current pending proposals total
   if (url.searchParams.get("admin_action") === "dashboard_data") {
     if (!(await checkAuthOrSession(req))) return unauthorized();
+    // إذا كان staff عامل دخول (مو admin)، نعرف هويته عشان نرجعها للداش
+    // بورد. الداش يستخدمها لفلترة المحادثات حسب وجهات الموظف.
+    const callerStaff = await getCallerStaff(req);
     try {
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
@@ -2675,6 +2704,7 @@ Deno.serve(async (req) => {
         global_ai_enabled: globalAiEnabled,
         ai_force_off_all: aiForceOffAll,
         ai_force_on_all:  aiForceOnAll,
+        me: callerStaff,
         conversations: conversationsEnriched,
         staff: staffList ?? [],
         routing_rules: rulesList ?? [],
