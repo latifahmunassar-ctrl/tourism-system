@@ -3211,6 +3211,55 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Admin patches a proposal's classifications inline from the dashboard.
+  //   POST { proposal_id, customer_stage?, customer_type?, case_type?,
+  //          complaint_type?, proposed_intent?, proposed_sub_intent? }
+  // Any subset of fields may be provided. Unknown / blank values are
+  // ignored so the existing column value is preserved.
+  if (url.searchParams.get("admin_action") === "proposal_update") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const p = await req.json();
+      const id = String(p.proposal_id || "").trim();
+      if (!id) {
+        return new Response(JSON.stringify({ error: "missing proposal_id" }),
+          { status: 400, headers: jsonCors });
+      }
+      const STAGES = ["INQUIRY","OFFER_SENT","BOOKING_IN_PROGRESS","BOOKING_CONFIRMED","TRAVELING","POST_TRAVEL"];
+      const CUSTOMERS = ["NEW_CUSTOMER","REPEAT_CUSTOMER","VIP_CUSTOMER","CORPORATE_BUSINESS","PARTNERSHIP"];
+      const CASES = ["INQUIRY","BOOKING_REQUEST","BOOKING_CONFIRMED","COMPLAINT","CANCELLATION","MODIFICATION"];
+      const COMPLAINTS = ["PAYMENT_ISSUE","HOTEL_ISSUE","FLIGHT_ISSUE","SERVICE_ISSUE","DELAY_RESPONSE","GENERAL_DISSATISFACTION"];
+      const patch: Record<string, unknown> = {};
+      const tryAdd = (key: string, allowed: string[]) => {
+        if (typeof p[key] !== "string") return;
+        const v = p[key].toUpperCase().trim();
+        if (allowed.includes(v)) patch[key] = v;
+      };
+      tryAdd("customer_stage", STAGES);
+      tryAdd("customer_type",  CUSTOMERS);
+      tryAdd("case_type",      CASES);
+      tryAdd("complaint_type", COMPLAINTS);
+      if (typeof p.proposed_intent === "string")     patch.proposed_intent = p.proposed_intent.trim();
+      if (typeof p.proposed_sub_intent === "string") patch.proposed_sub_intent = p.proposed_sub_intent.trim();
+      if (!Object.keys(patch).length) {
+        return new Response(JSON.stringify({ error: "no fields to update" }),
+          { status: 400, headers: jsonCors });
+      }
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { error, data } = await supabase.from("whatsapp_admin_proposals")
+        .update(patch).eq("id", id).select().single();
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true, proposal: data }),
+        { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
+    }
+  }
+
   // Admin decides a pending proposal from the dashboard (instead of the
   // WhatsApp reply flow).
   //   POST { proposal_id, decision: "approve" }
