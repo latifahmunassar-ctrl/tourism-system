@@ -345,11 +345,14 @@ function buildTripContextFromProgram(programText: string): string | null {
 function collectHotelHistoryByCity(
   messages: Array<{ role: string; content: unknown }>,
   cityDefs: Array<{ canonical: string; pattern: RegExp }>,
-): Record<string, Array<{ all: Set<string>; last: string | null }>> {
+): Record<string, Array<{ all: Set<string>; last: string | null; lastRoomType: string | null }>> {
   // Output keyed per canonical city → array of stays. The array index
   // matches the order this city appears in each program's HOTELS section
   // (e.g., "Hanoi → Sapa → Hanoi" → out["Ha Noi"] has length 2).
-  const out: Record<string, Array<{ all: Set<string>; last: string | null }>> = {};
+  // lastRoomType pins the EXACT room — a single hotel name often has many
+  // rows (Deluxe Double for 2 vs Two-Bedroom Apartment for 4); without it
+  // the rebuild silently upgrades the customer to a bigger family room.
+  const out: Record<string, Array<{ all: Set<string>; last: string | null; lastRoomType: string | null }>> = {};
   const resolveCanonical = (cityCell: string): string | null => {
     for (const def of cityDefs) {
       if (def.pattern.test(cityCell)) return def.canonical;
@@ -381,9 +384,14 @@ function collectHotelHistoryByCity(
       const idx = perProgramIdx[canonical] = (perProgramIdx[canonical] || 0);
       perProgramIdx[canonical] = idx + 1;
       const arr = out[canonical] ||= [];
-      const slot = arr[idx] ||= { all: new Set<string>(), last: null };
+      const slot = arr[idx] ||= { all: new Set<string>(), last: null, lastRoomType: null };
       slot.all.add(name.toLowerCase());
       slot.last = name; // later programs overwrite, so this ends as the most-recent
+      // Room type lives at parts[3] in the standard 7-column HOTELS line.
+      // Strip the "(يتسع N أشخاص)" suffix the builder appends — we want the
+      // raw room name so the DB row match is robust to format changes.
+      const rt = (parts[3] || "").trim();
+      if (rt) slot.lastRoomType = rt.replace(/\s*\(يتسع\s+\d+\s+أشخاص\)\s*$/, "").trim();
     }
   }
   return out;

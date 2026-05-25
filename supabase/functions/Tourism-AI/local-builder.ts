@@ -1268,7 +1268,7 @@ export async function buildLocalProgram(
    * the hotel currently in the most recent program. Per-stay tracking lets
    * a "Hanoi → Sapa → Hanoi" trip swap just one of the Hanoi hotels.
    */
-  hotelHistoryByCity?: Record<string, Array<{ all: Set<string>; last: string | null }>>,
+  hotelHistoryByCity?: Record<string, Array<{ all: Set<string>; last: string | null; lastRoomType?: string | null }>>,
   /**
    * Tours that appear in the immediately-prior program (any day, any city).
    * When the employee swaps to "أخرى/اخرى", the picker must exclude these so
@@ -1441,9 +1441,19 @@ export async function buildLocalProgram(
     const hasModForThisStay =
       !!excludeForThisStay || overrideForThisStay != null || overrideStarsForThisStay != null;
     const lastForThisStay = hotelHistoryByCity?.[stay.city]?.[stayIdx]?.last || null;
+    const lastRoomTypeForThisStay = hotelHistoryByCity?.[stay.city]?.[stayIdx]?.lastRoomType || null;
     let hotel: HotelRow | null = null;
     if (lastForThisStay && !hasModForThisStay) {
-      hotel = allHotels.find(h => h.name.trim() === lastForThisStay) || null;
+      // Match BOTH name and room_type so a hotel with multiple room rows
+      // (Deluxe Double for 2 pax vs Two-Bedroom for 4 pax) pins back to
+      // the exact row, not just the first row whose name matches.
+      if (lastRoomTypeForThisStay) {
+        hotel = allHotels.find(h =>
+          h.name.trim() === lastForThisStay &&
+          (h.room_type || "").trim() === lastRoomTypeForThisStay,
+        ) || null;
+      }
+      if (!hotel) hotel = allHotels.find(h => h.name.trim() === lastForThisStay) || null;
     }
     if (!hotel) {
       hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
