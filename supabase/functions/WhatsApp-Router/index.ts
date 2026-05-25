@@ -3434,10 +3434,6 @@ Deno.serve(async (req) => {
       };
       const finalReply = decision === "approve" ? (row.suggested_reply || "") : correctedReply;
       const mode = await getAiMode(supabase);
-      // ON mode: actually send. PREVIEW / OFF: skip the send.
-      if (mode === "ON" && finalReply) {
-        await sendCustomerReply(supabase, row.customer_phone, finalReply);
-      }
       // قاعدة الحفظ في FAQ:
       //   approve + source_row_id موجود → موجود أصلاً في الشيت، لا تحفظ
       //   approve + لا source_row_id      → جواب جديد، احفظه
@@ -3445,23 +3441,12 @@ Deno.serve(async (req) => {
       const shouldSave =
         (decision === "correct" && finalReply) ||
         (decision === "approve" && finalReply && !row.source_row_id);
-      let saveOutcome: "saved" | "skipped_already_in_faq" | "save_failed" | "no_save" = "no_save";
-      if (shouldSave) {
-        const ok = await appendChatAnswerRow({
-          intent: row.proposed_intent,
-          subIntent: row.proposed_sub_intent,
-          keywords: row.proposed_keywords || [],
-          sampleQ: row.customer_question,
-          stage: row.customer_stage,
-          answer: finalReply,
-        });
-        if (ok) { saveOutcome = "saved"; void triggerSyncSheets(); }
-        else saveOutcome = "save_failed";
-      } else if (decision === "approve" && row.source_row_id) {
-        saveOutcome = "skipped_already_in_faq";
-      }
+      // Update proposal status FIRST so it disappears from the dashboard
+      // immediately. The actual sendCustomerReply + appendChatAnswerRow
+      // + triggerSyncSheets all run in the background — used to add 3-8s
+      // to the request and made the admin think "موافق" was hanging.
       const updatePatch: Record<string, unknown> = {
-        status: saveOutcome === "saved" ? "completed_added" : "completed_skipped",
+        status: shouldSave ? "completed_added" : "completed_skipped",
         decided_at: new Date().toISOString(),
       };
       if (decision === "correct") updatePatch.suggested_reply = finalReply;
@@ -3469,6 +3454,39 @@ Deno.serve(async (req) => {
         .update(updatePatch)
         .eq("id", id);
       if (error) throw new Error(error.message);
+
+      // Background fire-and-forget: send to customer + save to FAQ +
+      // trigger sync. Wrapped in EdgeRuntime.waitUntil so the Deno
+      // isolate stays alive until they settle even after we return.
+      const background = (async () => {
+        try {
+          if (mode === "ON" && finalReply) {
+            await sendCustomerReply(supabase, row.customer_phone, finalReply);
+          }
+          if (shouldSave) {
+            const ok = await appendChatAnswerRow({
+              intent: row.proposed_intent,
+              subIntent: row.proposed_sub_intent,
+              keywords: row.proposed_keywords || [],
+              sampleQ: row.customer_question,
+              stage: row.customer_stage,
+              answer: finalReply,
+            });
+            if (ok) await triggerSyncSheets();
+          }
+        } catch (e) {
+          console.error("proposal_decide background failed", (e as Error).message);
+        }
+      })();
+      // @ts-ignore EdgeRuntime injected by Supabase
+      if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(background);
+      }
+
+      const saveOutcome = shouldSave
+        ? "saving_in_background"
+        : (decision === "approve" && row.source_row_id ? "skipped_already_in_faq" : "no_save");
       return new Response(JSON.stringify({
         ok: true,
         sent_to_customer: mode === "ON",
