@@ -546,13 +546,15 @@ async function sendCustomerReply(
   body: string,
 ): Promise<string | null> {
   const sid = await sendWhatsapp(to, body);
-  // Update session last_outbound_at regardless of Twilio's return — even
-  // a failed send still represents an attempted reply we shouldn't
-  // re-flag as unanswered immediately. (If the customer follows up
-  // they'll get a new inbound that bumps last_inbound_at past this.)
+  // Update session last_outbound_at + last_outbound_body so the
+  // dashboard preview can show whichever side spoke last. Body capped
+  // at 500 chars (full text still lives on Twilio).
   try {
     await supabase.from("whatsapp_sessions")
-      .update({ last_outbound_at: new Date().toISOString() })
+      .update({
+        last_outbound_at: new Date().toISOString(),
+        last_outbound_body: (body || "").slice(0, 500),
+      })
       .eq("phone", to);
   } catch (_) { /* best-effort */ }
   return sid;
@@ -2865,7 +2867,7 @@ Deno.serve(async (req) => {
 
       let sessionsQuery = supabase
         .from("whatsapp_sessions")
-        .select("phone, profile_name, ai_enabled, last_message_at, last_outbound_at, last_opened_at, destination, assigned_staff_phone, assigned_at, assigned_by, customer_stage")
+        .select("phone, profile_name, ai_enabled, last_message_at, last_outbound_at, last_outbound_body, last_opened_at, destination, assigned_staff_phone, assigned_at, assigned_by, customer_stage")
         .gte("last_message_at", sessionsSince)
         .order("last_message_at", { ascending: false })
         .limit(sessionsLimit);
