@@ -788,6 +788,15 @@ function parseTourModifications(lastUserMsg: string): TourModification[] {
   // the source by day alone, e.g. "غير اليوم 4 الى جولة معالم هانوي" or
   // "غير اليوم 4 الى يوم حر". Requires we extracted dayNumber up top.
   if (dayNumber !== null) {
+    // (4a) Explicit free-day source: "بدل اليوم 2 من يوم حر الى جولة Y".
+    // After day extraction, text reads "بدل من يوم حر الى جولة Y"; pattern
+    // (1b) requires 'في X' between يوم حر and الى, so it misses 'من'. Match
+    // it here while we have a dayNumber pin to land on.
+    const fromFreeDayToTour = textNoDay.match(new RegExp(
+      `${SWAP_VERB}\\s+(?:من\\s+)?${FREE_DAY}\\s+${TO_PREP}\\s*(?:ال)?جول[ةه]\\s+(.+?)(?=\\s*(?:$|[\\.,،\\n]))`,
+      "iu",
+    ));
+    if (fromFreeDayToTour) return [{ kind: "add", name: fromFreeDayToTour[1].trim(), cityHint: null, dayNumber }];
     const toTour = textNoDay.match(new RegExp(
       `${SWAP_VERB}\\s*${TO_PREP}?\\s*(?:ال)?جول[ةه]\\s+(.+?)(?=\\s*(?:$|[\\.,،\\n]))`, "iu",
     ));
