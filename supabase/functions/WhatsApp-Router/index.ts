@@ -544,23 +544,26 @@ async function sendCustomerReply(
   supabase: ReturnType<typeof createClient>,
   to: string,
   body: string,
+  mediaUrl?: string,
 ): Promise<string | null> {
-  const sid = await sendWhatsapp(to, body);
+  const sid = await sendWhatsapp(to, body, mediaUrl);
   // Update session last_outbound_at + last_outbound_body so the
-  // dashboard preview can show whichever side spoke last. Body capped
-  // at 500 chars (full text still lives on Twilio).
+  // dashboard preview can show whichever side spoke last. For pure media
+  // sends, use a "[ملف مرفق]" placeholder so the preview line stays
+  // meaningful instead of blank.
+  const previewBody = body || (mediaUrl ? "📎 [ملف مرفق]" : "");
   try {
     await supabase.from("whatsapp_sessions")
       .update({
         last_outbound_at: new Date().toISOString(),
-        last_outbound_body: (body || "").slice(0, 500),
+        last_outbound_body: previewBody.slice(0, 500),
       })
       .eq("phone", to);
   } catch (_) { /* best-effort */ }
   return sid;
 }
 
-async function sendWhatsapp(to: string, body: string): Promise<string | null> {
+async function sendWhatsapp(to: string, body: string, mediaUrl?: string): Promise<string | null> {
   const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
   const token = Deno.env.get("TWILIO_AUTH_TOKEN");
   const from = Deno.env.get("TWILIO_WHATSAPP_FROM") || "whatsapp:+96891171630";
@@ -572,10 +575,14 @@ async function sendWhatsapp(to: string, body: string): Promise<string | null> {
   // Sleep to mimic a human composing the reply. The native WhatsApp "..."
   // typing dots aren't exposed on Twilio's standard Messages API for a
   // self-served WhatsApp sender, but the delay alone is what creates the
-  // not-an-instant-bot feel users notice.
-  await new Promise(r => setTimeout(r, humanTypingDelayMs(body)));
+  // not-an-instant-bot feel users notice. Skip the delay for media sends.
+  if (!mediaUrl) {
+    await new Promise(r => setTimeout(r, humanTypingDelayMs(body)));
+  }
 
-  const form = new URLSearchParams({ From: from, To: to, Body: body });
+  const form = new URLSearchParams({ From: from, To: to });
+  if (body) form.set("Body", body);
+  if (mediaUrl) form.set("MediaUrl", mediaUrl);
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
     method: "POST",
     headers: {
@@ -3544,8 +3551,9 @@ Deno.serve(async (req) => {
       const p = await req.json();
       const rawPhone = String(p.phone || "").trim();
       const body = String(p.body || "").trim();
-      if (!rawPhone || !body) {
-        return new Response(JSON.stringify({ error: "missing phone or body" }),
+      const mediaUrl = typeof p.media_url === "string" ? p.media_url.trim() : "";
+      if (!rawPhone || (!body && !mediaUrl)) {
+        return new Response(JSON.stringify({ error: "missing phone or body/media" }),
           { status: 400, headers: jsonCors });
       }
       const digits = rawPhone.replace(/^whatsapp:/, "").replace(/^\+/, "")
@@ -3556,14 +3564,67 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
-      const twilioSid = await sendCustomerReply(supabase, phone, body);
+      const twilioSid = await sendCustomerReply(supabase, phone, body, mediaUrl || undefined);
       await supabase.from("wa_admin_messages").insert({
         twilio_sid: twilioSid,
         customer_phone: phone,
-        body: body.slice(0, 2000),
+        body: (body || (mediaUrl ? `📎 ${mediaUrl}` : "")).slice(0, 2000),
         sent_by: sentBy,
       });
       return new Response(JSON.stringify({ ok: true, twilio_sid: twilioSid }),
+        { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
+    }
+  }
+
+  // Upload a file (multipart/form-data) to Supabase Storage and return
+  // a public URL Twilio can fetch as MediaUrl. Bucket
+  // "whatsapp-attachments" is created on first call (public read).
+  //   POST multipart with a single "file" field
+  //   → { ok: true, url: "https://...." }
+  if (url.searchParams.get("admin_action") === "upload_media") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const form = await req.formData();
+      const file = form.get("file");
+      if (!(file instanceof File)) {
+        return new Response(JSON.stringify({ error: "missing 'file' field" }),
+          { status: 400, headers: jsonCors });
+      }
+      const maxBytes = 5 * 1024 * 1024;   // Twilio WhatsApp limit
+      if (file.size > maxBytes) {
+        return new Response(JSON.stringify({ error: "file > 5MB" }),
+          { status: 413, headers: jsonCors });
+      }
+      const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+      const SRK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(SUPABASE_URL, SRK);
+      const BUCKET = "whatsapp-attachments";
+      // Ensure bucket exists + is public. Idempotent.
+      await fetch(`${SUPABASE_URL}/storage/v1/bucket/${BUCKET}`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${SRK}`, apikey: SRK },
+      }).then(async (r) => {
+        if (r.status === 404) {
+          await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${SRK}`, apikey: SRK, "Content-Type": "application/json" },
+            body: JSON.stringify({ id: BUCKET, name: BUCKET, public: true }),
+          });
+        }
+      }).catch(() => { /* try upload anyway */ });
+      const safeName = file.name.replace(/[^\w.\-]/g, "_");
+      const key = `${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeName}`;
+      const buf = await file.arrayBuffer();
+      const { error } = await supabase.storage.from(BUCKET).upload(key, buf, {
+        contentType: file.type || "application/octet-stream",
+        upsert: false,
+      });
+      if (error) throw new Error("storage: " + error.message);
+      const { data } = supabase.storage.from(BUCKET).getPublicUrl(key);
+      return new Response(JSON.stringify({ ok: true, url: data.publicUrl, content_type: file.type, size: file.size }),
         { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }),
