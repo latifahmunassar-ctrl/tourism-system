@@ -3545,6 +3545,52 @@ Deno.serve(async (req) => {
   // sees a normal WhatsApp message from the bot's sender; inside the
   // dashboard timeline the message is labeled "Admin" via the
   // wa_admin_messages join on Twilio SID.
+  // Delete a Twilio message from the Twilio logs (and therefore from
+  // the dashboard's conversation_history view next refresh).
+  //   POST { message_sid }
+  //
+  // ⚠️ NOTE: this does NOT recall the message on the customer's
+  // WhatsApp. WhatsApp's "delete for everyone" is only available
+  // through the native app within a 1-hour window. The Twilio API
+  // doesn't expose it. So the customer may still see the message in
+  // their chat — we just stop showing it on our side.
+  if (url.searchParams.get("admin_action") === "delete_message") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const p = await req.json();
+      const msgSid = String(p.message_sid || "").trim();
+      if (!msgSid) {
+        return new Response(JSON.stringify({ error: "missing message_sid" }),
+          { status: 400, headers: jsonCors });
+      }
+      const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
+      const tw = Deno.env.get("TWILIO_AUTH_TOKEN");
+      if (!sid || !tw) {
+        return new Response(JSON.stringify({ error: "twilio creds missing" }),
+          { status: 500, headers: jsonCors });
+      }
+      const auth = "Basic " + btoa(`${sid}:${tw}`);
+      const twRes = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages/${msgSid}.json`,
+        { method: "DELETE", headers: { Authorization: auth } },
+      );
+      // 204 = deleted, 404 = already gone (treat as success)
+      if (!twRes.ok && twRes.status !== 404) {
+        const errText = await twRes.text();
+        return new Response(JSON.stringify({
+          error: "twilio rejected delete",
+          status: twRes.status,
+          detail: errText.slice(0, 200),
+        }), { status: twRes.status, headers: jsonCors });
+      }
+      return new Response(JSON.stringify({ ok: true, sid: msgSid }),
+        { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
+    }
+  }
+
   if (url.searchParams.get("admin_action") === "send_admin_message") {
     if (!(await checkAuthOrSession(req))) return unauthorized();
     try {
