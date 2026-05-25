@@ -3555,6 +3555,43 @@ Deno.serve(async (req) => {
   // Twilio inbound + outbound with sender attribution. Outbound messages
   // whose Twilio SID matches a row in wa_admin_messages are tagged
   // "admin" (or the row's sent_by value); the rest are "ai".
+  // Stream a Twilio media attachment back to the dashboard browser.
+  //   GET ?admin_action=media_proxy&msg_sid=SMxxx&media_sid=MExxx
+  // Used by the conversation modal to render images/files inline
+  // without leaking Twilio credentials to the client. The Twilio
+  // Media endpoint returns a 302 redirect to a temporary signed URL —
+  // we follow it and stream the bytes, preserving Content-Type.
+  if (url.searchParams.get("admin_action") === "media_proxy") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
+      const tw = Deno.env.get("TWILIO_AUTH_TOKEN");
+      const msgSid = url.searchParams.get("msg_sid") || "";
+      const mediaSid = url.searchParams.get("media_sid") || "";
+      if (!sid || !tw || !msgSid || !mediaSid) {
+        return new Response(JSON.stringify({ error: "missing args or twilio creds" }),
+          { status: 400, headers: jsonCors });
+      }
+      const auth = "Basic " + btoa(`${sid}:${tw}`);
+      const mediaUrl = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages/${msgSid}/Media/${mediaSid}`;
+      const twRes = await fetch(mediaUrl, { headers: { Authorization: auth }, redirect: "follow" });
+      if (!twRes.ok || !twRes.body) {
+        return new Response("not found", { status: twRes.status, headers: corsHeaders });
+      }
+      const contentType = twRes.headers.get("content-type") || "application/octet-stream";
+      return new Response(twRes.body, {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": contentType,
+          "Cache-Control": "private, max-age=3600",
+        },
+      });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
+    }
+  }
+
   if (url.searchParams.get("admin_action") === "conversation_history") {
     if (!(await checkAuthOrSession(req))) return unauthorized();
     try {
@@ -3602,24 +3639,58 @@ Deno.serve(async (req) => {
         if (r.body) adminByBody.push({ body: r.body, sender: r.sent_by, sent_at: r.sent_at });
       }
 
-      type Item = { ts: string; body: string; sender: string; sid?: string };
+      type MediaItem = { sid: string; content_type: string };
+      type Item = {
+        ts: string; body: string; sender: string;
+        sid?: string; media?: MediaItem[];
+      };
       const items: Item[] = [];
-      for (const m of (inJson.messages || [])) {
-        items.push({ ts: m.date_sent || m.date_created, body: m.body || "", sender: "customer", sid: m.sid });
-      }
+      // Collect messages that carry attachments — we need to fetch the
+      // media list for each one separately (Twilio returns num_media on
+      // the message JSON but not the media sids/content-types until you
+      // GET /Messages/{sid}/Media.json).
+      const mediaFetches: Array<Promise<void>> = [];
+      const addItem = (m: Record<string, unknown>, sender: string) => {
+        const sidVal = String(m.sid || "");
+        const item: Item = {
+          ts: String(m.date_sent || m.date_created || ""),
+          body: String(m.body || ""),
+          sender,
+          sid: sidVal,
+        };
+        items.push(item);
+        const numMedia = Number(m.num_media || 0);
+        if (numMedia > 0 && sidVal) {
+          // Parallel fetch — Promise.all at the end.
+          mediaFetches.push((async () => {
+            try {
+              const mRes = await fetch(
+                `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages/${sidVal}/Media.json?PageSize=10`,
+                { headers: { Authorization: auth } },
+              );
+              if (!mRes.ok) return;
+              const mJson = await mRes.json();
+              const mediaList = (mJson.media_list || []) as Array<{ sid: string; content_type: string }>;
+              item.media = mediaList.map(mm => ({ sid: mm.sid, content_type: mm.content_type }));
+            } catch (_) { /* best-effort */ }
+          })());
+        }
+      };
+      for (const m of (inJson.messages || [])) addItem(m, "customer");
       for (const m of (outJson.messages || [])) {
         const sidVal = String(m.sid || "");
         let sender = adminBySid.get(sidVal);
         if (!sender) {
-          // Fallback: body+timestamp match (in case SID wasn't captured)
           const ts = new Date(m.date_sent || m.date_created).getTime();
           const match = adminByBody.find(a =>
             a.body.slice(0, 100) === String(m.body || "").slice(0, 100) &&
             Math.abs(new Date(a.sent_at).getTime() - ts) < 60_000);
           if (match) sender = match.sender;
         }
-        items.push({ ts: m.date_sent || m.date_created, body: m.body || "", sender: sender || "ai", sid: sidVal });
+        addItem(m, sender || "ai");
       }
+      // Wait for all media metadata fetches to complete before returning
+      await Promise.all(mediaFetches);
       items.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
       return new Response(JSON.stringify({ phone, items }), { headers: jsonCors });
     } catch (e) {
