@@ -3661,13 +3661,16 @@ Deno.serve(async (req) => {
         items.push(item);
         const numMedia = Number(m.num_media || 0);
         if (numMedia > 0 && sidVal) {
-          // Parallel fetch — Promise.all at the end.
+          // Parallel fetch with 2.5s per-call timeout so a single slow
+          // Twilio media list response can't drag down the whole batch.
           mediaFetches.push((async () => {
             try {
+              const ctrl = new AbortController();
+              const tm = setTimeout(() => ctrl.abort(), 2500);
               const mRes = await fetch(
                 `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages/${sidVal}/Media.json?PageSize=10`,
-                { headers: { Authorization: auth } },
-              );
+                { headers: { Authorization: auth }, signal: ctrl.signal },
+              ).finally(() => clearTimeout(tm));
               if (!mRes.ok) return;
               const mJson = await mRes.json();
               const mediaList = (mJson.media_list || []) as Array<{ sid: string; content_type: string }>;
@@ -3689,8 +3692,15 @@ Deno.serve(async (req) => {
         }
         addItem(m, sender || "ai");
       }
-      // Wait for all media metadata fetches to complete before returning
-      await Promise.all(mediaFetches);
+      // Wait for media metadata fetches, but cap at 3 seconds so a slow
+      // Twilio media list lookup can't hang the whole modal load. Any
+      // pending fetches at timeout are abandoned — the message just
+      // shows up without its media attachments instead of leaving the
+      // entire conversation stuck in "loading...".
+      await Promise.race([
+        Promise.allSettled(mediaFetches),
+        new Promise((r) => setTimeout(r, 3000)),
+      ]);
       items.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
       return new Response(JSON.stringify({ phone, items }), { headers: jsonCors });
     } catch (e) {
