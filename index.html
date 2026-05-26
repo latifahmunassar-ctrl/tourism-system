@@ -227,43 +227,29 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 .rfm-btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
 .rfm-hint { font-size:11px; color:var(--muted); margin-top:10px; line-height:1.7; }
 
-/* Branded preview document — built by the module, hidden until print. */
+/* Branded preview document — built by the module, hidden until print.
+   Reuses the existing .pdf-* classes (cover, sections, fields, etc.) so
+   the ready-file PDF looks IDENTICAL to the regular 'ملف أفراد' export.
+   Only a few day/free-block specific rules are added below. */
 #readyFilePdf { display:none; }
-.rfdoc { font-family:'Tajawal',sans-serif; color:#1a1a1a; background:#fff; padding:0; }
-.rfdoc-cover { min-height:100vh; padding:60px 50px; background:linear-gradient(150deg,#0F1923 0%,#1a3a8f 60%,#D4A843 130%); color:#fff; display:flex; flex-direction:column; justify-content:space-between; page-break-after:always; }
-.rfdoc-cover-top { display:flex; flex-direction:column; align-items:center; gap:20px; }
-.rfdoc-cover-logo { background:#fff; padding:18px 26px; border-radius:18px; box-shadow:0 10px 30px rgba(0,0,0,0.3); }
-.rfdoc-cover-logo img { max-width:260px; max-height:120px; display:block; }
-.rfdoc-cover-co { font-size:18px; font-weight:800; opacity:0.92; letter-spacing:0.5px; text-align:center; }
-.rfdoc-cover-mid { text-align:center; }
-.rfdoc-cover-label { font-size:14px; opacity:0.7; letter-spacing:3px; margin-bottom:14px; }
-.rfdoc-cover-dest { font-size:46px; font-weight:900; line-height:1.2; margin-bottom:10px; }
-.rfdoc-cover-tag { font-size:16px; font-weight:600; opacity:0.85; }
-.rfdoc-cover-card { background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.18); border-radius:14px; padding:20px 24px; backdrop-filter:blur(8px); }
-.rfdoc-cover-card-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.12); font-size:14px; }
-.rfdoc-cover-card-row:last-child { border-bottom:none; }
-.rfdoc-cover-card-k { opacity:0.7; }
-.rfdoc-cover-card-v { font-weight:800; }
-.rfdoc-page { padding:36px 44px; page-break-inside:avoid; }
-.rfdoc-page-head { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #D4A843; padding-bottom:10px; margin-bottom:18px; }
-.rfdoc-page-head-co { font-size:13px; font-weight:800; color:#1a3a8f; }
-.rfdoc-page-head-code { font-size:12px; color:#666; }
-.rfdoc-day-card { background:#f8f9fb; border:1px solid #e3e8ee; border-right:5px solid #D4A843; border-radius:10px; padding:16px 20px; margin-bottom:14px; page-break-inside:avoid; }
-.rfdoc-day-title { font-size:17px; font-weight:900; color:#1a3a8f; margin-bottom:8px; }
-.rfdoc-day-body { font-size:14px; line-height:1.85; color:#222; white-space:pre-wrap; word-wrap:break-word; }
-.rfdoc-section { background:#fff; border:1px solid #e3e8ee; border-radius:10px; padding:16px 20px; margin-bottom:14px; page-break-inside:avoid; }
-.rfdoc-section-title { font-size:15px; font-weight:900; color:#1a3a8f; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #e3e8ee; }
-.rfdoc-section-body { font-size:14px; line-height:1.85; color:#222; white-space:pre-wrap; word-wrap:break-word; }
-.rfdoc-table { width:100%; border-collapse:collapse; margin:10px 0; font-size:13px; }
-.rfdoc-table th { background:#1a3a8f; color:#fff; padding:8px 10px; text-align:right; font-weight:800; }
-.rfdoc-table td { padding:8px 10px; border-bottom:1px solid #e3e8ee; vertical-align:top; }
-.rfdoc-table tr:nth-child(even) td { background:#f8f9fb; }
-.rfdoc-footer { background:#0F1923; color:#fff; padding:22px 44px; margin-top:20px; page-break-inside:avoid; }
-.rfdoc-footer-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 24px; font-size:13px; }
-.rfdoc-footer-item { display:flex; gap:8px; align-items:center; }
-.rfdoc-footer-item .k { opacity:0.7; min-width:55px; }
-.rfdoc-footer-item .v { font-weight:700; }
-.rfdoc-footer-note { font-size:11px; color:rgba(255,255,255,0.55); margin-top:14px; text-align:center; border-top:1px solid rgba(255,255,255,0.12); padding-top:12px; }
+.rf-day-card { border:1.5px solid #d0deff; border-right:5px solid #1a3a8f; border-radius:10px; padding:16px 20px; margin-bottom:14px; page-break-inside:avoid; background:linear-gradient(135deg,#f5f9ff,#ffffff); }
+.rf-day-title { font-size:20px; font-weight:900; color:#1a3a8f; margin-bottom:10px; line-height:1.3; display:flex; align-items:center; gap:10px; }
+.rf-day-title::before { content:'📅'; font-size:18px; }
+.rf-day-body { font-size:15px; line-height:1.9; color:#0d1f4a; font-weight:600; white-space:pre-wrap; word-wrap:break-word; }
+.rf-free-card { border:1.5px solid #d0deff; border-radius:10px; padding:16px 20px; margin-bottom:14px; page-break-inside:avoid; background:#fff; }
+.rf-free-body { font-size:15px; line-height:1.9; color:#0d1f4a; font-weight:600; white-space:pre-wrap; word-wrap:break-word; }
+.rf-table { width:100%; border-collapse:collapse; margin:12px 0; font-size:14px; border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(26,58,143,0.08); }
+.rf-table th { background:#1a3a8f; color:#fff; padding:10px 12px; text-align:right; font-weight:800; font-size:13px; }
+.rf-table td { padding:10px 12px; border-bottom:1px solid #eef0f8; vertical-align:top; color:#0d1f4a; font-weight:700; }
+.rf-table tr:nth-child(even) td { background:#f5f9ff; }
+.rf-table tr:last-child td { border-bottom:none; }
+.rf-footer-band { background:linear-gradient(135deg,#1565d8 0%,#0d47a1 50%,#0a2f6e 100%); color:#fff; padding:26px 40px; margin-top:0; page-break-inside:avoid; }
+.rf-footer-title { font-size:18px; font-weight:900; margin-bottom:14px; text-align:center; letter-spacing:0.5px; }
+.rf-footer-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 28px; font-size:14px; }
+.rf-footer-item { display:flex; gap:10px; align-items:center; padding:8px 12px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); border-radius:10px; }
+.rf-footer-item .k { opacity:0.75; min-width:80px; font-weight:700; font-size:13px; }
+.rf-footer-item .v { font-weight:900; }
+.rf-footer-note { font-size:12px; color:rgba(255,255,255,0.7); margin-top:16px; text-align:center; border-top:1px solid rgba(255,255,255,0.18); padding-top:12px; }
 
 </style>
 </head>
@@ -2265,7 +2251,7 @@ function readyFile_bodyHtml(lines) {
       if (rows.length >= 2) {
         const headerLooksReal = rows[0].every(c => c && !/^\d+(\.\d+)?$/.test(c) && c.length <= 30);
         const hdr = headerLooksReal ? rows.shift() : null;
-        let html = '<table class="rfdoc-table">';
+        let html = '<table class="rf-table">';
         if (hdr) {
           html += '<thead><tr>' + hdr.map(c => `<th>${readyFile_escape(c)}</th>`).join('') + '</tr></thead>';
         }
@@ -2306,50 +2292,57 @@ function readyFile_generate() {
   for (const b of blocks) {
     const inner = readyFile_bodyHtml(b.body);
     if (b.kind === 'day') {
-      blocksHtml += `<div class="rfdoc-day-card"><div class="rfdoc-day-title">${readyFile_escape(b.title)}</div><div class="rfdoc-day-body">${inner}</div></div>`;
+      blocksHtml += `<div class="rf-day-card"><div class="rf-day-title">${readyFile_escape(b.title)}</div><div class="rf-day-body">${inner}</div></div>`;
     } else {
-      blocksHtml += `<div class="rfdoc-section"><div class="rfdoc-section-body">${inner}</div></div>`;
+      blocksHtml += `<div class="rf-free-card"><div class="rf-free-body">${inner}</div></div>`;
     }
   }
 
+  // Reuse existing PDF assets so the look is identical to 'ملف أفراد':
+  // the same airplane image, suitcase image, logo box, blue gradient cover,
+  // pdf-field cards, and pdf-section titles with the blue bottom border.
   const logoSrc = (typeof LOGO_IMG !== 'undefined' && LOGO_IMG) ? LOGO_IMG : '';
+  const airplane = (typeof FILLER_IMG !== 'undefined' && FILLER_IMG) ? FILLER_IMG : '';
+  const suitcase = (typeof SUITCASE_IMG !== 'undefined' && SUITCASE_IMG) ? SUITCASE_IMG : '';
+  const logoHTML = logoSrc ? `<div class="pdf-logo-box"><img class="pdf-logo-img" src="${logoSrc}" alt="logo"/></div>` : '';
+
   const html = `
-<div class="rfdoc">
-  <div class="rfdoc-cover">
-    <div class="rfdoc-cover-top">
-      ${logoSrc ? `<div class="rfdoc-cover-logo"><img src="${logoSrc}" alt="logo"></div>` : ''}
-      <div class="rfdoc-cover-co">${readyFile_escape(RFM_COMPANY.name)}</div>
+<div class="pdf-cover">
+  ${airplane ? `<img class="pdf-cover-airplane" src="${airplane}" alt=""/>` : ''}
+  ${logoHTML}
+  <div class="pdf-title">عرض رحلة سياحية</div>
+  <div class="pdf-dest-name">${readyFile_escape(dest || 'برنامج سياحي')}</div>
+  <div class="pdf-cities">✨ ${readyFile_escape(RFM_COMPANY.name)}</div>
+  <div class="pdf-date-price-row">
+    <div class="pdf-price-box">
+      <div class="pdf-price-label">👤 العميل</div>
+      <div class="pdf-price-val" style="font-size:24px;">${readyFile_escape(client)}</div>
     </div>
-    <div class="rfdoc-cover-mid">
-      <div class="rfdoc-cover-label">عرض رحلة</div>
-      <div class="rfdoc-cover-dest">${readyFile_escape(dest || 'برنامج سياحي')}</div>
-      <div class="rfdoc-cover-tag">برنامج مفصّل ومُعدّ بعناية</div>
-    </div>
-    <div class="rfdoc-cover-card">
-      <div class="rfdoc-cover-card-row"><span class="rfdoc-cover-card-k">العميل</span><span class="rfdoc-cover-card-v">${readyFile_escape(client)}</span></div>
-      <div class="rfdoc-cover-card-row"><span class="rfdoc-cover-card-k">رقم العرض</span><span class="rfdoc-cover-card-v">${readyFile_escape(offer)}</span></div>
-      <div class="rfdoc-cover-card-row"><span class="rfdoc-cover-card-k">تاريخ العرض</span><span class="rfdoc-cover-card-v">${readyFile_escape(today)}</span></div>
-      ${staff ? `<div class="rfdoc-cover-card-row"><span class="rfdoc-cover-card-k">إعداد</span><span class="rfdoc-cover-card-v">${readyFile_escape(staff)}</span></div>` : ''}
+    <div class="pdf-dates-card">
+      <div class="pdf-dates-label">📅 تاريخ العرض</div>
+      <div class="pdf-dates">${readyFile_escape(today)}</div>
     </div>
   </div>
-  <div class="rfdoc-page">
-    <div class="rfdoc-page-head">
-      <div class="rfdoc-page-head-co">${readyFile_escape(RFM_COMPANY.name)}</div>
-      <div class="rfdoc-page-head-code">عرض ${readyFile_escape(offer)} • ${readyFile_escape(client)}</div>
-    </div>
-    ${blocksHtml}
+  <div class="pdf-field"><span class="pdf-field-label">رقم العرض :</span><span class="pdf-field-value" style="font-weight:900;letter-spacing:1px;direction:ltr;unicode-bidi:plaintext;">${readyFile_escape(offer)}</span></div>
+  ${staff ? `<div class="pdf-field"><span class="pdf-field-label">إعداد :</span><span class="pdf-field-value">${readyFile_escape(staff)}</span></div>` : ''}
+  <div class="pdf-disclaimer">⚠️ هذا عرض سعر ولا يعني بالضرورة توفّر الغرف لحظتها</div>
+  ${suitcase ? `<img class="pdf-cover-suitcase" src="${suitcase}" alt=""/>` : ''}
+</div>
+<div class="pdf-section" style="page-break-before:always;">
+  <div class="pdf-section-title">🗓️ البرنامج السياحي</div>
+  ${blocksHtml}
+</div>
+<div class="rf-footer-band">
+  <div class="rf-footer-title">🤝 للتواصل والاستفسار</div>
+  <div class="rf-footer-grid">
+    <div class="rf-footer-item"><span class="k">📱 عُمان</span><span class="v" style="direction:ltr;unicode-bidi:plaintext;">${readyFile_escape(RFM_COMPANY.whatsappOman)}</span></div>
+    <div class="rf-footer-item"><span class="k">📱 السعودية</span><span class="v" style="direction:ltr;unicode-bidi:plaintext;">${readyFile_escape(RFM_COMPANY.whatsappSA)}</span></div>
+    <div class="rf-footer-item"><span class="k">🌐 الموقع</span><span class="v">${readyFile_escape(RFM_COMPANY.website)}</span></div>
+    <div class="rf-footer-item"><span class="k">📧 البريد</span><span class="v">${readyFile_escape(RFM_COMPANY.email)}</span></div>
+    <div class="rf-footer-item"><span class="k">📷 إنستقرام</span><span class="v">${readyFile_escape(RFM_COMPANY.instagram)}</span></div>
+    <div class="rf-footer-item"><span class="k">𝕏 تويتر</span><span class="v">${readyFile_escape(RFM_COMPANY.twitter)}</span></div>
   </div>
-  <div class="rfdoc-footer">
-    <div class="rfdoc-footer-grid">
-      <div class="rfdoc-footer-item"><span class="k">📱 عُمان</span><span class="v">${readyFile_escape(RFM_COMPANY.whatsappOman)}</span></div>
-      <div class="rfdoc-footer-item"><span class="k">📱 السعودية</span><span class="v">${readyFile_escape(RFM_COMPANY.whatsappSA)}</span></div>
-      <div class="rfdoc-footer-item"><span class="k">🌐</span><span class="v">${readyFile_escape(RFM_COMPANY.website)}</span></div>
-      <div class="rfdoc-footer-item"><span class="k">📧</span><span class="v">${readyFile_escape(RFM_COMPANY.email)}</span></div>
-      <div class="rfdoc-footer-item"><span class="k">📷</span><span class="v">${readyFile_escape(RFM_COMPANY.instagram)}</span></div>
-      <div class="rfdoc-footer-item"><span class="k">𝕏</span><span class="v">${readyFile_escape(RFM_COMPANY.twitter)}</span></div>
-    </div>
-    <div class="rfdoc-footer-note">شكراً لاختياركم ${readyFile_escape(RFM_COMPANY.name)} — نتمنى لكم رحلة سعيدة</div>
-  </div>
+  <div class="rf-footer-note">شكراً لاختياركم ${readyFile_escape(RFM_COMPANY.name)} — نتمنى لكم رحلة سعيدة 🌍</div>
 </div>`;
 
   document.getElementById('readyFilePdf').innerHTML = html;
