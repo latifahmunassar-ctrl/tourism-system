@@ -2943,13 +2943,39 @@ Deno.serve(async (req) => {
       const { data: recentProposals } = phones.length
         ? await supabase
             .from("whatsapp_admin_proposals")
-            .select("customer_phone, customer_type, case_type, complaint_type, booking_status, priority, created_at")
+            .select("customer_phone, customer_type, case_type, customer_stage, complaint_type, booking_status, priority, created_at")
             .in("customer_phone", phones)
             .order("created_at", { ascending: false })
         : { data: [] as Array<Record<string, unknown>> };
+      // For each phone, keep the LATEST proposal overall (used for
+      // priority + complaint_type which only make sense in context of
+      // the most recent message). For customer_type and case_type and
+      // customer_stage we walk all proposals newest-first and keep the
+      // first NON-NULL value — so once a customer is upgraded to VIP
+      // (or BOOKING_CONFIRMED), a later un-classified message can't
+      // demote them back to NEW_CUSTOMER.
       const latestByPhone = new Map<string, Record<string, unknown>>();
-      for (const p of (recentProposals as Array<{ customer_phone: string }> ?? [])) {
-        if (!latestByPhone.has(p.customer_phone)) latestByPhone.set(p.customer_phone, p);
+      const customerTypeByPhone = new Map<string, string>();
+      const caseTypeByPhone = new Map<string, string>();
+      const stageByPhone = new Map<string, string>();
+      type Prop = {
+        customer_phone: string;
+        customer_type?: string | null;
+        case_type?: string | null;
+        customer_stage?: string | null;
+      };
+      for (const p of (recentProposals as Prop[] ?? [])) {
+        const ph = p.customer_phone;
+        if (!latestByPhone.has(ph)) latestByPhone.set(ph, p);
+        if (!customerTypeByPhone.has(ph) && p.customer_type) {
+          customerTypeByPhone.set(ph, p.customer_type);
+        }
+        if (!caseTypeByPhone.has(ph) && p.case_type) {
+          caseTypeByPhone.set(ph, p.case_type);
+        }
+        if (!stageByPhone.has(ph) && p.customer_stage) {
+          stageByPhone.set(ph, p.customer_stage);
+        }
       }
       // Latest INBOUND message body per phone — for the WhatsApp-style
       // preview line under each conversation row.
@@ -2968,17 +2994,24 @@ Deno.serve(async (req) => {
       }
 
       const conversationsEnriched = (sessions ?? []).map((s: Record<string, unknown>) => {
-        const cls = latestByPhone.get(s.phone as string) ?? {};
-        const lastMsg = latestMsgByPhone.get(s.phone as string);
+        const phone = s.phone as string;
+        const cls = latestByPhone.get(phone) ?? {};
+        const lastMsg = latestMsgByPhone.get(phone);
+        // customer_type / case_type / customer_stage: pick the most recent
+        // NON-NULL value across all proposals so an upgrade (NEW → VIP →
+        // REPEAT) sticks even if subsequent un-classified messages followed.
+        // Falls back to NEW_CUSTOMER only when the customer has never been
+        // classified at all.
+        const customer_type = customerTypeByPhone.get(phone) || "NEW_CUSTOMER";
+        const case_type = caseTypeByPhone.get(phone) || null;
+        const customer_stage = stageByPhone.get(phone) || (s.customer_stage as string | null) || null;
         return {
           ...s,
-          // Default a conversation's customer_type to NEW_CUSTOMER whenever
-          // the classifier hasn't tagged the customer with a more specific
-          // value (VIP / REPEAT / CORPORATE / PARTNERSHIP). Reflects the
-          // policy: "anyone who starts a conversation is a new customer
-          // until the conversation suggests otherwise."
-          customer_type: cls.customer_type ?? "NEW_CUSTOMER",
-          case_type: cls.case_type ?? null,
+          customer_type,
+          case_type,
+          customer_stage,
+          // complaint_type + priority + booking_status reflect the LATEST
+          // proposal only — they describe the current state, not history.
           complaint_type: cls.complaint_type ?? null,
           booking_status: cls.booking_status ?? null,
           priority: cls.priority ?? null,
