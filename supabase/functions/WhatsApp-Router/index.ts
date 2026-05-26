@@ -563,6 +563,34 @@ async function sendCustomerReply(
   return sid;
 }
 
+// Twilio WhatsApp body limit = 1600 chars. Long admin messages (e.g.
+// detailed tour programs) used to fail silently. Split on natural
+// boundaries: paragraph → newline → sentence → space → hard cut.
+function splitForWhatsApp(text: string, maxLen = 1500): string[] {
+  if (!text || text.length <= maxLen) return text ? [text] : [];
+  const chunks: string[] = [];
+  let remaining = text;
+  while (remaining.length > maxLen) {
+    const window = remaining.slice(0, maxLen);
+    const minSplit = Math.floor(maxLen * 0.4);
+    // try double newline → single newline → sentence end → space → hard
+    const candidates = [
+      window.lastIndexOf("\n\n"),
+      window.lastIndexOf("\n"),
+      Math.max(window.lastIndexOf(". "), window.lastIndexOf("! "),
+               window.lastIndexOf("? "), window.lastIndexOf("، "),
+               window.lastIndexOf("؟ "), window.lastIndexOf("؛ ")),
+      window.lastIndexOf(" "),
+    ];
+    let splitIdx = candidates.find(i => i >= minSplit) ?? -1;
+    if (splitIdx < minSplit) splitIdx = maxLen;   // hard cut fallback
+    chunks.push(remaining.slice(0, splitIdx).trim());
+    remaining = remaining.slice(splitIdx).trimStart();
+  }
+  if (remaining.length) chunks.push(remaining);
+  return chunks;
+}
+
 async function sendWhatsapp(to: string, body: string, mediaUrl?: string): Promise<string | null> {
   const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
   const token = Deno.env.get("TWILIO_AUTH_TOKEN");
@@ -571,36 +599,58 @@ async function sendWhatsapp(to: string, body: string, mediaUrl?: string): Promis
     console.warn("Twilio credentials missing — would have sent to", to, ":", body);
     return null;
   }
+  // Single Twilio POST. Returns the SID or null on failure (error logged).
+  const postOne = async (chunkBody: string, chunkMedia?: string): Promise<string | null> => {
+    const form = new URLSearchParams({ From: from, To: to });
+    if (chunkBody) form.set("Body", chunkBody);
+    if (chunkMedia) form.set("MediaUrl", chunkMedia);
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+      method: "POST",
+      headers: {
+        Authorization: "Basic " + btoa(`${sid}:${token}`),
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: form.toString(),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("Twilio send failed", to, res.status, errText.slice(0, 400));
+      return null;
+    }
+    try {
+      const data = await res.json();
+      return typeof data?.sid === "string" ? data.sid : null;
+    } catch { return null; }
+  };
 
-  // Sleep to mimic a human composing the reply. The native WhatsApp "..."
-  // typing dots aren't exposed on Twilio's standard Messages API for a
-  // self-served WhatsApp sender, but the delay alone is what creates the
-  // not-an-instant-bot feel users notice. Skip the delay for media sends.
-  if (!mediaUrl) {
-    await new Promise(r => setTimeout(r, humanTypingDelayMs(body)));
+  const chunks = splitForWhatsApp(body);
+  // Pure media (no text) — single send.
+  if (chunks.length === 0 && mediaUrl) {
+    return await postOne("", mediaUrl);
   }
-
-  const form = new URLSearchParams({ From: from, To: to });
-  if (body) form.set("Body", body);
-  if (mediaUrl) form.set("MediaUrl", mediaUrl);
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
-    method: "POST",
-    headers: {
-      Authorization: "Basic " + btoa(`${sid}:${token}`),
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: form.toString(),
-  });
-  if (!res.ok) {
-    console.error("Twilio send failed", to, await res.text());
-    return null;
+  // Short message (single chunk) — preserve the human-typing delay.
+  if (chunks.length <= 1) {
+    if (!mediaUrl) {
+      await new Promise(r => setTimeout(r, humanTypingDelayMs(body)));
+    }
+    return await postOne(chunks[0] || "", mediaUrl);
   }
-  try {
-    const data = await res.json();
-    return typeof data?.sid === "string" ? data.sid : null;
-  } catch {
-    return null;
+  // Long message — fire each chunk sequentially with a small gap so
+  // WhatsApp renders them in order. Media (if any) goes with the LAST
+  // chunk so the file lands at the end of the program text.
+  let lastSid: string | null = null;
+  for (let i = 0; i < chunks.length; i++) {
+    const isLast = i === chunks.length - 1;
+    const chunkMedia = isLast ? mediaUrl : undefined;
+    const sidOrNull = await postOne(chunks[i], chunkMedia);
+    if (sidOrNull) lastSid = sidOrNull;
+    if (!isLast) {
+      // 700ms gap — keeps message order on the WhatsApp side while
+      // staying well under Twilio's per-account rate window.
+      await new Promise(r => setTimeout(r, 700));
+    }
   }
+  return lastSid;
 }
 
 function staffList(envVar: string): string[] {
