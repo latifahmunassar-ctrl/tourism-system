@@ -3206,6 +3206,53 @@ Deno.serve(async (req) => {
   }
 
   // POST {phone, name, active?} → insert or update by phone.
+  // Full customer directory for the "جهات الاتصال" tab — every
+  // whatsapp_sessions row (not time-filtered), enriched with the
+  // latest non-null customer_type from proposals. Newest activity
+  // first, capped at 2000.
+  if (url.searchParams.get("admin_action") === "list_contacts") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { data: sessions } = await supabase
+        .from("whatsapp_sessions")
+        .select("phone, profile_name, destination, assigned_staff_phone, customer_stage, last_message_at, created_at")
+        .order("last_message_at", { ascending: false, nullsFirst: false })
+        .limit(2000);
+      const rows = (sessions ?? []) as Array<Record<string, unknown>>;
+      const phones = rows.map(r => r.phone as string);
+      // Latest non-null customer_type per phone (chunk the IN to stay
+      // under URL limits if there are many contacts).
+      const typeByPhone = new Map<string, string>();
+      for (let i = 0; i < phones.length; i += 200) {
+        const chunk = phones.slice(i, i + 200);
+        if (!chunk.length) break;
+        const { data: props } = await supabase
+          .from("whatsapp_admin_proposals")
+          .select("customer_phone, customer_type, created_at")
+          .in("customer_phone", chunk)
+          .order("created_at", { ascending: false });
+        for (const p of (props as Array<{ customer_phone: string; customer_type: string | null }> ?? [])) {
+          if (!typeByPhone.has(p.customer_phone) && p.customer_type) {
+            typeByPhone.set(p.customer_phone, p.customer_type);
+          }
+        }
+      }
+      const contacts = rows.map(r => ({
+        ...r,
+        customer_type: typeByPhone.get(r.phone as string) || "NEW_CUSTOMER",
+      }));
+      return new Response(JSON.stringify({ contacts, count: contacts.length }),
+        { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
+    }
+  }
+
   if (url.searchParams.get("admin_action") === "upsert_staff") {
     if (!checkAuth(req)) return unauthorized();
     try {
