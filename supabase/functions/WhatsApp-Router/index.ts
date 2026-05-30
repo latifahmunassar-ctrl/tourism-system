@@ -417,6 +417,27 @@ async function findFaqAnswer(
 }
 
 // ── HubSpot CRM ───────────────────────────────────────────────────────────
+// مفتاح الدولة في رقم الواتساب → اسم الدولة الإنجليزي القياسي (خاصية HubSpot
+// `country` المدمجة). مرتّبة بطول المفتاح تنازلياً ليتطابق الأطول أولاً.
+const PHONE_COUNTRY: Array<[string, string]> = [
+  ["966", "Saudi Arabia"], ["971", "United Arab Emirates"], ["965", "Kuwait"],
+  ["973", "Bahrain"], ["974", "Qatar"], ["968", "Oman"], ["967", "Yemen"],
+  ["962", "Jordan"], ["961", "Lebanon"], ["963", "Syria"], ["964", "Iraq"],
+  ["970", "Palestine"], ["218", "Libya"], ["216", "Tunisia"], ["213", "Algeria"],
+  ["212", "Morocco"], ["249", "Sudan"], ["880", "Bangladesh"], ["20", "Egypt"],
+  ["90", "Turkey"], ["98", "Iran"], ["91", "India"], ["92", "Pakistan"],
+  ["62", "Indonesia"], ["60", "Malaysia"], ["63", "Philippines"], ["66", "Thailand"],
+  ["84", "Vietnam"], ["86", "China"], ["7", "Russia"], ["44", "United Kingdom"],
+  ["33", "France"], ["49", "Germany"], ["1", "United States"],
+].sort((a, b) => b[0].length - a[0].length);
+function countryFromPhone(phone: string): string | null {
+  const digits = phone.replace(/^whatsapp:/, "").replace(/\D/g, "");
+  for (const [code, name] of PHONE_COUNTRY) {
+    if (digits.startsWith(code)) return name;
+  }
+  return null;
+}
+
 async function upsertHubspotContact(args: {
   phone: string;           // whatsapp:+9665XXX → نشيل بادئة whatsapp:
   name: string;
@@ -444,6 +465,9 @@ async function upsertHubspotContact(args: {
     hs_lead_status: "NEW",
     lifecyclestage: "lead",
   };
+  // الدولة من مفتاح الرقم → خاصية HubSpot المدمجة `country` (نص قياسي إنجليزي).
+  const country = countryFromPhone(phone);
+  if (country) props.country = country;
 
   // البحث بالرقم أولاً (upsert بسيط بدون استخدام custom unique property)
   const searchRes = await fetch(
@@ -3769,9 +3793,9 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: "missing 'file' field" }),
           { status: 400, headers: jsonCors });
       }
-      const maxBytes = 5 * 1024 * 1024;   // Twilio WhatsApp limit
+      const maxBytes = 100 * 1024 * 1024;   // WhatsApp document limit (100MB)
       if (file.size > maxBytes) {
-        return new Response(JSON.stringify({ error: "file > 5MB" }),
+        return new Response(JSON.stringify({ error: "file > 100MB" }),
           { status: 413, headers: jsonCors });
       }
       const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -3779,6 +3803,10 @@ Deno.serve(async (req) => {
       const supabase = createClient(SUPABASE_URL, SRK);
       const BUCKET = "whatsapp-attachments";
       // Ensure bucket exists + is public. Idempotent.
+      // Ensure the bucket exists. We do NOT set a bucket-level file_size_limit
+      // because it cannot exceed the project's global storage upload limit
+      // (raising that is a project-settings/plan change, done in the Supabase
+      // dashboard). Leaving it null makes the bucket inherit the global limit.
       await fetch(`${SUPABASE_URL}/storage/v1/bucket/${BUCKET}`, {
         method: "GET",
         headers: { Authorization: `Bearer ${SRK}`, apikey: SRK },
