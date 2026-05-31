@@ -677,6 +677,46 @@ async function sendWhatsapp(to: string, body: string, mediaUrl?: string): Promis
   return lastSid;
 }
 
+// Send an approved WhatsApp template (Content API) — REQUIRED to initiate a
+// conversation with a number that hasn't messaged us in the last 24h. Posts
+// ContentSid (+ optional ContentVariables) instead of a free-form Body.
+// Throws on Twilio error so the caller can surface the reason (e.g. template
+// not approved, variable mismatch).
+async function sendWhatsappTemplate(
+  to: string,
+  contentSid: string,
+  contentVariables?: Record<string, string>,
+): Promise<string | null> {
+  const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
+  const token = Deno.env.get("TWILIO_AUTH_TOKEN");
+  const from = Deno.env.get("TWILIO_WHATSAPP_FROM") || "whatsapp:+96891171630";
+  if (!sid || !token) {
+    console.warn("Twilio credentials missing — would have sent template to", to);
+    throw new Error("Twilio credentials missing");
+  }
+  const form = new URLSearchParams({ From: from, To: to, ContentSid: contentSid });
+  if (contentVariables && Object.keys(contentVariables).length) {
+    form.set("ContentVariables", JSON.stringify(contentVariables));
+  }
+  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+    method: "POST",
+    headers: {
+      Authorization: "Basic " + btoa(`${sid}:${token}`),
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: form.toString(),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error("Twilio template send failed", to, res.status, errText.slice(0, 400));
+    throw new Error("twilio " + res.status + ": " + errText.slice(0, 200));
+  }
+  try {
+    const data = await res.json();
+    return typeof data?.sid === "string" ? data.sid : null;
+  } catch { return null; }
+}
+
 function staffList(envVar: string): string[] {
   return (Deno.env.get(envVar) || "")
     .split(",")
@@ -3951,6 +3991,79 @@ Deno.serve(async (req) => {
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }),
         { status: 500, headers: jsonCors });
+    }
+  }
+
+  // ── بدء محادثة جديدة عبر قالب واتساب ─────────────────────────────────────
+  // Admin: read/save the greeting template ContentSid (Twilio Content API).
+  if (url.searchParams.get("admin_action") === "get_greeting_template") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data } = await supabase.from("wa_settings").select("value").eq("key", "greeting_template_sid").maybeSingle();
+      const sid = typeof (data as { value?: unknown } | null)?.value === "string" ? (data as { value: string }).value : "";
+      return new Response(JSON.stringify({ content_sid: sid }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+  if (url.searchParams.get("admin_action") === "set_greeting_template") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const p = await req.json();
+      const contentSid = String(p.content_sid || "").trim();
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await supabase.from("wa_settings").upsert([{ key: "greeting_template_sid", value: contentSid, updated_at: new Date().toISOString() }]);
+      return new Response(JSON.stringify({ ok: true, content_sid: contentSid }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // Admin/staff: start a NEW conversation with a number that never messaged us.
+  // Sends an approved WhatsApp template, then upserts a whatsapp_sessions row
+  // (last_message_at = now) so the conversation shows up in the dashboard.
+  //   POST ?admin_action=start_conversation  body {phone, name?, vars?}
+  if (url.searchParams.get("admin_action") === "start_conversation") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const p = await req.json();
+      const rawPhone = String(p.phone || "").trim();
+      const name = String(p.name || "").trim();
+      if (!rawPhone) return new Response(JSON.stringify({ error: "missing phone" }), { status: 400, headers: jsonCors });
+      const phone = normalizeWhatsappPhone(rawPhone);
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: tRow } = await supabase.from("wa_settings").select("value").eq("key", "greeting_template_sid").maybeSingle();
+      const contentSid = (typeof (tRow as { value?: unknown } | null)?.value === "string" ? (tRow as { value: string }).value : "")
+        || (Deno.env.get("WHATSAPP_GREETING_TEMPLATE_SID") || "");
+      if (!contentSid) {
+        return new Response(JSON.stringify({ error: "لا يوجد قالب ترحيب محفوظ — احفظي ContentSid أولاً" }), { status: 400, headers: jsonCors });
+      }
+      const vars: Record<string, string> = {};
+      if (p.vars && typeof p.vars === "object") {
+        for (const [k, v] of Object.entries(p.vars)) vars[String(k)] = String(v);
+      } else if (name) {
+        vars["1"] = name;
+      }
+      const twilioSid = await sendWhatsappTemplate(phone, contentSid, vars);
+      const now = new Date().toISOString();
+      await supabase.from("whatsapp_sessions").upsert({
+        phone,
+        profile_name: name || null,
+        stage: "new",
+        last_message_at: now,
+        last_outbound_at: now,
+        last_outbound_body: "✉️ رسالة ترحيب (قالب)",
+      }, { onConflict: "phone" });
+      await supabase.from("wa_admin_messages").insert({
+        twilio_sid: twilioSid,
+        customer_phone: phone,
+        body: "✉️ بدء محادثة عبر قالب ترحيب",
+        sent_by: "admin",
+      });
+      return new Response(JSON.stringify({ ok: true, phone, twilio_sid: twilioSid }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }
   }
 
