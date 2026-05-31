@@ -2970,10 +2970,12 @@ Deno.serve(async (req) => {
       const DAY_MS = 24 * 60 * 60 * 1000;
       let sessionsSince: string;
       let sessionsUntil: string | null = null;
-      let sessionsLimit = 50;
-      if (range === "week")       { sessionsSince = new Date(now - 7 * DAY_MS).toISOString();  sessionsLimit = 200; }
-      else if (range === "month") { sessionsSince = new Date(now - 30 * DAY_MS).toISOString(); sessionsLimit = 500; }
-      else if (range === "all")   { sessionsSince = "1970-01-01T00:00:00Z";                    sessionsLimit = 1000; }
+      // حدود مرفوعة تستوعب أحجاماً عالية (100+ عميل/يوم) دون إخفاء محادثات.
+      // المعالجة batched (استعلامان فقط مهما كان العدد) فالرفع آمن.
+      let sessionsLimit = 300;   // today / default
+      if (range === "week")       { sessionsSince = new Date(now - 7 * DAY_MS).toISOString();  sessionsLimit = 1000; }
+      else if (range === "month") { sessionsSince = new Date(now - 30 * DAY_MS).toISOString(); sessionsLimit = 2000; }
+      else if (range === "all")   { sessionsSince = "1970-01-01T00:00:00Z";                    sessionsLimit = 5000; }
       else if (range === "custom") {
         const fromStr = url.searchParams.get("from");
         const toStr = url.searchParams.get("to");
@@ -2982,7 +2984,7 @@ Deno.serve(async (req) => {
           const toDate = new Date(toStr + "T23:59:59.999Z");
           sessionsUntil = toDate.toISOString();
         }
-        sessionsLimit = 500;
+        sessionsLimit = 2000;
       }
       else                        { sessionsSince = since24h; /* today / default */ }
 
