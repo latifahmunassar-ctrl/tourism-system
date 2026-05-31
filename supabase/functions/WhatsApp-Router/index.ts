@@ -3906,6 +3906,7 @@ Deno.serve(async (req) => {
       const file = form.get("file");
       const category = String(form.get("category") || "").trim();
       const label = String(form.get("label") || "").trim();
+      const note = String(form.get("note") || "").trim() || null;
       if (!(file instanceof File)) {
         return new Response(JSON.stringify({ error: "missing 'file' field" }),
           { status: 400, headers: jsonCors });
@@ -3953,6 +3954,7 @@ Deno.serve(async (req) => {
         storage_key: key,
         content_type: file.type || null,
         file_size: file.size,
+        note,
         uploaded_by: caller?.name || caller?.phone || "admin",
       }).select().single();
       if (insErr) throw new Error(insErr.message);
@@ -3971,7 +3973,7 @@ Deno.serve(async (req) => {
     try {
       const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       const { data, error } = await supabase.from("wa_offers")
-        .select("id, category, label, file_url, content_type, file_size, created_at")
+        .select("id, category, label, note, file_url, content_type, file_size, created_at")
         .eq("active", true)
         .order("category", { ascending: true })
         .order("sort", { ascending: true })
@@ -4018,6 +4020,8 @@ Deno.serve(async (req) => {
       const patch: Record<string, unknown> = {};
       if (typeof p.label === "string" && p.label.trim()) patch.label = p.label.trim();
       if (typeof p.category === "string" && p.category.trim()) patch.category = p.category.trim();
+      // note: نسمح بمسحها (نص فاضي → null)
+      if (typeof p.note === "string") patch.note = p.note.trim() || null;
       if (!Object.keys(patch).length) {
         return new Response(JSON.stringify({ error: "nothing to update" }), { status: 400, headers: jsonCors });
       }
