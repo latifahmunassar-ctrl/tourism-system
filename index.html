@@ -241,6 +241,10 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 .rf-day-body { font-size:15px; line-height:1.9; color:#0d1f4a; font-weight:600; white-space:pre-wrap; word-wrap:break-word; }
 .rf-free-card { border:1.5px solid #d0deff; border-radius:10px; padding:16px 20px; margin-bottom:14px; page-break-inside:avoid; background:#fff; }
 .rf-free-body { font-size:15px; line-height:1.9; color:#0d1f4a; font-weight:600; white-space:pre-wrap; word-wrap:break-word; }
+/* Ready-file hotel/flight item cards — one card per pasted block. */
+.rf-item-card { border:1.5px solid #d0deff; border-right:5px solid #1a3a8f; border-radius:10px; padding:16px 20px; margin-bottom:14px; page-break-inside:avoid; break-inside:avoid; background:linear-gradient(135deg,#f5f9ff,#ffffff); }
+.rf-item-title { font-size:21px; font-weight:900; color:#1a3a8f; margin-bottom:8px; line-height:1.4; }
+.rf-item-body { font-size:16px; line-height:1.9; color:#0d1f4a; font-weight:600; white-space:pre-wrap; word-wrap:break-word; }
 .rf-table { width:100%; border-collapse:collapse; margin:12px 0; font-size:14px; border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(26,58,143,0.08); }
 .rf-table th { background:#1a3a8f; color:#fff; padding:10px 12px; text-align:right; font-weight:800; font-size:13px; }
 .rf-table td { padding:10px 12px; border-bottom:1px solid #eef0f8; vertical-align:top; color:#0d1f4a; font-weight:700; }
@@ -354,7 +358,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div class="rfm-title">📄 ملف جاهز (أفراد)</div>
 <button class="rfm-close" onclick="readyFile_close()">×</button>
 </div>
-<div class="rfm-sub">الصق برنامج سياحي جاهز (من مورد، شركة أخرى، أو موظف) — يُحوَّل إلى ملف عرض احترافي بهوية مجموعة العز. <strong>المحتوى الأصلي يبقى كما هو</strong> — فقط تحسين التنسيق والتصميم.</div>
+<div class="rfm-sub">الصق كل قسم في خانته (الفنادق / الجدول اليومي / الطيران) — يُحوَّل إلى ملف عرض احترافي بهوية مجموعة العز بأقسام مرتّبة. <strong>المحتوى يبقى كما هو</strong> — فقط تنسيق وتصميم.</div>
 <div class="rfm-row">
 <div class="rfm-field"><label>اسم العميل *</label><input id="rfClient" type="text" placeholder="مثلاً: محمد العتيبي"></div>
 <div class="rfm-field"><label>رقم العرض *</label><input id="rfOffer" type="text" placeholder="ALZ-2026-XXX"></div>
@@ -363,12 +367,18 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div class="rfm-field"><label>اسم الموظف (اختياري)</label><input id="rfStaff" type="text" placeholder=""></div>
 <div class="rfm-field"><label>اسم الوجهة (لصفحة الغلاف)</label><input id="rfDest" type="text" placeholder="مثلاً: تركيا"></div>
 </div>
-<div class="rfm-field" style="margin-top:10px"><label>البرنامج السياحي الكامل *</label>
-<textarea id="rfBody" class="rfm-textarea" placeholder="الصق هنا البرنامج السياحي بالكامل — تفاصيل الأيام، الفنادق، الرحلات، الأنشطة، الأسعار، الملاحظات...
-
-النظام يحفظ كل المحتوى كما هو ويُحسّن التنسيق فقط."></textarea>
+<div class="rfm-row">
+<div class="rfm-field"><label>💰 السعر الإجمالي (يظهر في الغلاف — اختياري)</label><input id="rfPrice" type="text" placeholder="مثلاً: 1,103 ريال عماني"></div>
 </div>
-<label class="rfm-toggle"><input type="checkbox" id="rfFormatOnly"> تحسين التنسيق فقط (بدون فصل الأيام والأقسام تلقائياً)</label>
+<div class="rfm-field" style="margin-top:12px"><label>🏨 الفنادق — الصق الفنادق، افصل بين كل فندق بسطر فارغ</label>
+<textarea id="rfHotels" class="rfm-textarea" style="min-height:150px" placeholder="فندق Sunway Pyramid — سيلانجور — 4 نجوم&#10;غرفة ديلوكس (يتسع 2) · 2 ليالي · يشمل الإفطار&#10;الدخول 1 يونيو · الخروج 3 يونيو&#10;&#10;فندق Bayview Langkawi — لنكاوي — 4 نجوم&#10;غرفة سوبيريور · 3 ليالي · يشمل الإفطار"></textarea>
+</div>
+<div class="rfm-field" style="margin-top:12px"><label>🗓️ الجدول اليومي — الصق البرنامج، كل يوم يبدأ بـ «اليوم N»</label>
+<textarea id="rfDaily" class="rfm-textarea" style="min-height:170px" placeholder="اليوم 1: الاستقبال من المطار والتوجه إلى الفندق والراحة&#10;اليوم 2: جولة سيلانجور — معامل العسل والشوكولاتة ومدينة الألعاب&#10;اليوم 3: التوصيل إلى المطار للتوجه إلى لنكاوي"></textarea>
+</div>
+<div class="rfm-field" style="margin-top:12px"><label>✈️ الطيران — الصق الرحلات، افصل بين كل رحلة بسطر فارغ</label>
+<textarea id="rfFlights" class="rfm-textarea" style="min-height:120px" placeholder="كوالالمبور - لنكاوي · داخلي&#10;التاريخ: 3 يونيو 2026&#10;&#10;لنكاوي - كوالالمبور · داخلي&#10;التاريخ: 6 يونيو 2026"></textarea>
+</div>
 <div class="rfm-actions">
 <button class="rfm-close" onclick="readyFile_close()">إلغاء</button>
 <button class="rfm-btn-primary" id="rfGenBtn" onclick="readyFile_generate()">📄 توليد PDF</button>
@@ -2274,32 +2284,64 @@ function readyFile_bodyHtml(lines) {
   return out.join('\n');
 }
 
+// يقسّم نصاً ملصوقاً إلى كتل مفصولة بسطر فارغ (كل كتلة = أسطر بطاقة واحدة).
+function readyFile_blocks(raw) {
+  return String(raw || '').split(/\n[ \t]*\n/)
+    .map(chunk => chunk.replace(/^\s*\n/, '').split(/\r?\n/))
+    .filter(lines => lines.some(l => l.trim()));
+}
+
 function readyFile_generate() {
   const client = (document.getElementById('rfClient').value || '').trim();
   const offer  = (document.getElementById('rfOffer').value || '').trim();
   const staff  = (document.getElementById('rfStaff').value || '').trim();
   const dest   = (document.getElementById('rfDest').value || '').trim();
-  const body   = (document.getElementById('rfBody').value || '').trim();
-  const formatOnly = document.getElementById('rfFormatOnly').checked;
+  const price  = (document.getElementById('rfPrice').value || '').trim();
+  const hotelsRaw  = (document.getElementById('rfHotels').value  || '').trim();
+  const dailyRaw   = (document.getElementById('rfDaily').value   || '').trim();
+  const flightsRaw = (document.getElementById('rfFlights').value || '').trim();
 
   if (!client || !offer) { alert('اسم العميل ورقم العرض مطلوبَين'); return; }
-  if (!body)             { alert('الصق البرنامج السياحي في حقل النص'); return; }
+  if (!hotelsRaw && !dailyRaw && !flightsRaw) { alert('الصق محتوى واحد على الأقل: فنادق أو جدول يومي أو طيران'); return; }
 
-  // Build the branded HTML document — preserves user content verbatim,
-  // only adds the cover/header/footer wrapper.
   const today = new Date().toLocaleDateString('ar-SA-u-ca-gregory',
     { year: 'numeric', month: 'long', day: 'numeric' });
-  const blocks = formatOnly ? [{ kind: 'free', body: body.split(/\r?\n/) }] : readyFile_splitBlocks(body);
 
-  let blocksHtml = '';
-  for (const b of blocks) {
-    const inner = readyFile_bodyHtml(b.body);
-    if (b.kind === 'day') {
-      blocksHtml += `<div class="rf-day-card"><div class="rf-day-title">${readyFile_escape(b.title)}</div><div class="rf-day-body">${inner}</div></div>`;
-    } else {
-      blocksHtml += `<div class="rf-free-card"><div class="rf-free-body">${inner}</div></div>`;
+  // 🏨 الفنادق و✈️ الطيران: كل بطاقة = كتلة مفصولة بسطر فارغ، أول سطر هو العنوان.
+  const renderCards = (raw, icon) => readyFile_blocks(raw).map(lines => {
+    const tIdx = lines.findIndex(l => l.trim());
+    const title = tIdx >= 0 ? lines[tIdx].trim() : '';
+    const bodyLines = lines.slice(tIdx + 1);
+    while (bodyLines.length && !bodyLines[0].trim()) bodyLines.shift();
+    const bodyHtml = bodyLines.length ? readyFile_bodyHtml(bodyLines) : '';
+    return `<div class="pdf-keep rf-item-card"><div class="rf-item-title">${icon} ${readyFile_escape(title)}</div>${bodyHtml ? `<div class="rf-item-body">${bodyHtml}</div>` : ''}</div>`;
+  }).join('');
+  const hotelsHtml  = hotelsRaw  ? renderCards(hotelsRaw, '🏨') : '';
+  const flightsHtml = flightsRaw ? renderCards(flightsRaw, '✈️') : '';
+
+  // 🗓️ الجدول اليومي: نفس منطق فصل الأيام → بطاقة لكل يوم.
+  let dailyHtml = '';
+  if (dailyRaw) {
+    for (const b of readyFile_splitBlocks(dailyRaw)) {
+      const inner = readyFile_bodyHtml(b.body);
+      dailyHtml += (b.kind === 'day')
+        ? `<div class="rf-day-card"><div class="rf-day-title">${readyFile_escape(b.title)}</div><div class="rf-day-body">${inner}</div></div>`
+        : `<div class="rf-free-card"><div class="rf-free-body">${inner}</div></div>`;
     }
   }
+
+  // الأقسام المرتّبة: (الفنادق + الطيران) في صفحة، والجدول اليومي في صفحة.
+  const sectionsHtml =
+    ((hotelsHtml || flightsHtml) ? `
+<div class="pdf-section" style="page-break-before:always;">
+  ${hotelsHtml ? `<div class="pdf-section-title">🏨 الفنادق</div>${hotelsHtml}` : ''}
+  ${flightsHtml ? `<div class="pdf-section-title" style="margin-top:${hotelsHtml ? 28 : 0}px;">✈️ الطيران</div>${flightsHtml}` : ''}
+</div>` : '') +
+    (dailyHtml ? `
+<div class="pdf-section" style="page-break-before:always;">
+  <div class="pdf-section-title">🗓️ البرنامج اليومي</div>
+  ${dailyHtml}
+</div>` : '');
 
   // Reuse existing PDF assets so the look is identical to 'ملف أفراد':
   // the same airplane image, suitcase image, logo box, blue gradient cover,
@@ -2318,22 +2360,34 @@ function readyFile_generate() {
   <div class="pdf-cities">✨ ${readyFile_escape(RFM_COMPANY.name)}</div>
   <div class="pdf-date-price-row">
     <div class="pdf-price-box">
-      <div class="pdf-price-label">👤 العميل</div>
-      <div class="pdf-price-val" style="font-size:24px;">${readyFile_escape(client)}</div>
+      <div class="pdf-price-label">${price ? '💰 السعر الإجمالي' : '👤 العميل'}</div>
+      <div class="pdf-price-val"${price ? '' : ' style="font-size:24px;"'}>${readyFile_escape(price || client)}</div>
     </div>
     <div class="pdf-dates-card">
       <div class="pdf-dates-label">📅 تاريخ العرض</div>
       <div class="pdf-dates">${readyFile_escape(today)}</div>
     </div>
   </div>
+  ${price ? `<div class="pdf-field"><span class="pdf-field-label">العميل :</span><span class="pdf-field-value">${readyFile_escape(client)}</span></div>` : ''}
   <div class="pdf-field"><span class="pdf-field-label">رقم العرض :</span><span class="pdf-field-value" style="font-weight:900;letter-spacing:1px;direction:ltr;unicode-bidi:plaintext;">${readyFile_escape(offer)}</span></div>
   ${staff ? `<div class="pdf-field"><span class="pdf-field-label">إعداد :</span><span class="pdf-field-value">${readyFile_escape(staff)}</span></div>` : ''}
   <div class="pdf-disclaimer">⚠️ هذا عرض سعر ولا يعني بالضرورة توفّر الغرف لحظتها</div>
   ${suitcase ? `<img class="pdf-cover-suitcase" src="${suitcase}" alt=""/>` : ''}
 </div>
+${sectionsHtml}
 <div class="pdf-section" style="page-break-before:always;">
-  <div class="pdf-section-title">🗓️ البرنامج السياحي</div>
-  ${blocksHtml}
+  <div class="pdf-section-title">📋 السياسة العامة</div>
+  <div class="pdf-policy">
+    <div class="pdf-policy-title">📌 السياسة العامة</div>
+    <ul class="pdf-policy-list">
+      <li>🏨 الفنادق والمنتجعات للغرفة الواحدة شاملة وجبة الإفطار لشخصين + طفل تحت 5 سنوات. تسجيل الدخول 2:00 ظهراً والخروج 12:00 ظهراً.</li>
+      <li>🧳 الوزن المسموح به للطيران الداخلي 20 كيلو إلا إذا تم الاتفاق معنا مسبقاً على زيادة.</li>
+      <li>🧾 يُحتسب لكل شخص حقيبة سفر واحدة بوزن 20 كجم بالإضافة إلى حقيبة يد. وفي حال تجاوز الحد يتم توفير سيارة أكبر برسوم إضافية.</li>
+      <li>🚗 السيارات المقدمة حديثة، نظيفة ومكيفة، وتتناسب مع عدد الأفراد المذكورين.</li>
+      <li>🗺️ يحق للعميل اختيار المناطق السياحية بشرط أن تكون بحدود المنطقة المقيم بها، ولا تشمل تذاكر دخول الأماكن السياحية.</li>
+      <li>🤝 تأكد من إظهار الاحترام لعادات وأديان البلد ومعاملات الناس كما تحب أن تعامل، دون استصغار أو إهانة لأحد.</li>
+    </ul>
+  </div>
 </div>
 <div class="rf-footer-band">
   <div class="rf-footer-title">🤝 للتواصل والاستفسار</div>
@@ -2346,7 +2400,8 @@ function readyFile_generate() {
     <div class="rf-footer-item"><span class="k">𝕏 تويتر</span><span class="v">${readyFile_escape(RFM_COMPANY.twitter)}</span></div>
   </div>
   <div class="rf-footer-note">شكراً لاختياركم ${readyFile_escape(RFM_COMPANY.name)} — نتمنى لكم رحلة سعيدة 🌍</div>
-</div>`;
+</div>
+${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210mm;"><img src="${airplane}" alt="" style="width:210mm;height:auto;display:block;margin:0;padding:0;"/></div>` : ''}`;
 
   document.getElementById('readyFilePdf').innerHTML = html;
   // Toggle the body marker so the @media print rule swaps which document
