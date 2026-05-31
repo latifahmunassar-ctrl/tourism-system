@@ -4008,6 +4008,28 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Admin: rename/recategorize an offer.  POST {id, label?, category?}
+  if (url.searchParams.get("admin_action") === "update_offer") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const p = await req.json();
+      const id = String(p.id || "").trim();
+      if (!id) return new Response(JSON.stringify({ error: "missing id" }), { status: 400, headers: jsonCors });
+      const patch: Record<string, unknown> = {};
+      if (typeof p.label === "string" && p.label.trim()) patch.label = p.label.trim();
+      if (typeof p.category === "string" && p.category.trim()) patch.category = p.category.trim();
+      if (!Object.keys(patch).length) {
+        return new Response(JSON.stringify({ error: "nothing to update" }), { status: 400, headers: jsonCors });
+      }
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data, error } = await supabase.from("wa_offers").update(patch).eq("id", id).select().single();
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true, offer: data }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
   // ── بدء محادثة جديدة عبر قالب واتساب ─────────────────────────────────────
   // Admin: read/save the greeting template ContentSid (Twilio Content API).
   if (url.searchParams.get("admin_action") === "get_greeting_template") {
