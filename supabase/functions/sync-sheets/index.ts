@@ -717,38 +717,71 @@ function extractSuggestions(
   // 2. Canonical airport from a free-form Arabic word. Just a small lookup
   //    table per destination — we only need the airports the agency actually
   //    flies into/out of, so a Vietnam-only map is fine.
-  const airportMap: Record<string, string> = destination === "vietnam"
-    ? {
-        "هانوي":  "Ha Noi",
-        "هوتشي":  "Ho Chi Minh",
-        "دانانج": "Da Nang",
-        "دانانغ": "Da Nang",
-        "فوكوك":  "Phu Quoc",
-      }
-    : {};
+  // Per-destination airport map. Each agency's authors spell airport names
+  // differently in Arabic — we centralise the lookup so all destinations
+  // get the same canonical English city names downstream.
+  const AIRPORT_MAPS: Record<string, Record<string, string>> = {
+    vietnam: {
+      "هانوي": "Ha Noi", "هوتشي": "Ho Chi Minh",
+      "دانانج": "Da Nang", "دانانغ": "Da Nang", "فوكوك": "Phu Quoc",
+    },
+    thailand: {
+      "بانكوك": "Bangkok", "بانكوك ": "Bangkok",
+      "بوكيت": "Phuket", "بوكت": "Phuket",
+      "كرابي": "Krabi", "كوسوموي": "Koh Samui", "كوساموي": "Koh Samui",
+    },
+    Malaysia: {
+      "كوالا": "Kuala Lumpur", "كوالالمبور": "Kuala Lumpur", "كوالامبور": "Kuala Lumpur",
+      "بينانج": "Penang", "بينانغ": "Penang", "لانكاوي": "Langkawi",
+      "سيلانجور": "Selangor", "كاميرون": "Cameron Highlands",
+    },
+  };
+  const airportMap = AIRPORT_MAPS[destination] || {};
   const resolveAirport = (raw: string): string => {
     const t = raw.trim();
     for (const [ar, canonical] of Object.entries(airportMap)) {
-      if (t.includes(ar)) return canonical;
+      if (t.includes(ar.trim())) return canonical;
     }
     return t;
   };
+
+  // Convert Arabic-Indic digits to ASCII so the digit-class in the regexes
+  // below matches both '٧ ايام' and '7 ايام'. Authors mix the two freely.
+  const toLatinDigits = (s: string) => s.replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)));
 
   // 3. Walk down the column, maintaining current scope; pair each day-header
   //    with the next non-empty cell as the distribution.
   let arrival = "", departure = "";
   const out: Array<{ destination: string; arrival_airport: string; departure_airport: string; days: number; label: string | null; distribution: string }> = [];
   const SCOPE_RE = /الوصول\s+(?:مطار\s+)?(\S+)[\s\S]*?(?:المغدر[هةى]|المغادر[هةى])\s+(?:مطار\s+)?(\S+)/u;
-  // Day header accepts both "N أيام" (plural — used in the sheet for 7-10
-  // day packages) AND "N يوم" (singular — used for 11+ day packages). The
-  // label can be multiple parens groups ("(نسخة دانانغ سابا) (متوسطه)") or
-  // a single one or none — we capture everything between the noun and the
-  // colon and let the formatter clean it up.
-  const DAY_RE   = /(\d{1,2})\s*(?:[أا]يام|يوم)\s*([^:]*?)\s*:/u;
+  // Day header — three real-world shapes the agency uses:
+  //   Vietnam style: "N أيام (label):"           ← colon-terminated, label in parens
+  //   Thailand A:    "تايلاند.5.أيام."            ← dots between tokens, no colon
+  //   Thailand B:    "٧ ايام تايلاند"             ← country name suffix, no colon
+  // Match either "<N> ايام/يوم" OR "ايام/يوم <N>", strip the country word
+  // and any non-paren cruft (dots, dashes) from the label. Dots between the
+  // digit and 'ايام' are absorbed by the \s*[.\s]* allowance.
+  const COUNTRY_WORDS = /(?:تايلاند|تيلاند|فيتنام|ماليزيا|البوسنه|البوسنة|تركيا|اندونيسيا|روسيا|ع[ُّ]?مان|دبي|الإمارات|الامارات)/u;
+  const DAY_RE_DIGIT_FIRST = /(\d{1,2})[\s.]*(?:[أا]يام|يوم)([^:]*)(?::|$)/u;
+  const DAY_RE_DIGIT_LAST  = /(?:[أا]يام|يوم)[\s.]*(\d{1,2})([^:]*)(?::|$)/u;
   let pendingDay: { days: number; label: string | null } | null = null;
+  // Many sheets omit the scope line for single-airport destinations
+  // (Thailand can be entered/left from any major hub). Use the per-
+  // destination preferred hub as a sensible default when the scope is
+  // implicit, so the suggestion still gets stored.
+  const DEFAULT_AIRPORT: Record<string, string> = {
+    vietnam:  "Ha Noi",
+    thailand: "Bangkok",
+    Malaysia: "Kuala Lumpur",
+    Bosnia:   "Sarajevo",
+    russia:   "Moscow",
+    Turky:    "Istanbul",
+    indonesia: "Jakarta",
+  };
   for (let i = headerRow + 1; i < rows.length; i++) {
-    const cell = (rows[i][colIdx] || "").trim();
-    if (!cell) continue;
+    const rawCell = (rows[i][colIdx] || "").trim();
+    if (!rawCell) continue;
+    const cell = toLatinDigits(rawCell);
     const scope = cell.match(SCOPE_RE);
     if (scope) {
       arrival   = resolveAirport(scope[1]);
@@ -756,12 +789,14 @@ function extractSuggestions(
       pendingDay = null;
       continue;
     }
-    const day = cell.match(DAY_RE);
+    // Try digit-first then digit-last day-header shapes.
+    let day = cell.match(DAY_RE_DIGIT_FIRST);
+    if (!day) day = cell.match(DAY_RE_DIGIT_LAST);
     if (day) {
-      // Clean the label: collapse double parens "(a) (b)" → "a، b", strip
-      // the wrapping ones, trim trailing punctuation. Multiple labels in
-      // separate parens are joined with a comma so the chat output reads
-      // naturally instead of " (… )( …)".
+      // Clean the label: extract any parens groups; otherwise drop the
+      // country name and structural punctuation (dots, dashes) and use what
+      // remains as a free-form label. Multiple paren groups join with a
+      // comma so the chat output reads naturally instead of " (a)( b)".
       let label: string | null = null;
       const raw = (day[2] || "").trim();
       if (raw) {
@@ -772,21 +807,38 @@ function extractSuggestions(
           const piece = m[1].trim();
           if (piece) parts.push(piece);
         }
-        label = parts.length > 0 ? parts.join("، ") : raw;
+        if (parts.length > 0) {
+          label = parts.join("، ");
+        } else {
+          const cleaned = raw
+            .replace(COUNTRY_WORDS, "")
+            .replace(/[.\-–—_]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+          label = cleaned || null;
+        }
       }
       pendingDay = { days: parseInt(day[1], 10), label };
       continue;
     }
     // Treat any other non-empty cell as the distribution for the pending day.
-    if (pendingDay && arrival && departure) {
-      out.push({
-        destination,
-        arrival_airport: arrival,
-        departure_airport: departure,
-        days: pendingDay.days,
-        label: pendingDay.label,
-        distribution: cell,
-      });
+    // Fall back to the destination's preferred hub for both airports when no
+    // scope line preceded the day-header — many sheets omit the line when
+    // arrival and departure are the same single airport.
+    if (pendingDay) {
+      const hub = DEFAULT_AIRPORT[destination] || "";
+      const arr = arrival || hub;
+      const dep = departure || hub;
+      if (arr && dep) {
+        out.push({
+          destination,
+          arrival_airport: arr,
+          departure_airport: dep,
+          days: pendingDay.days,
+          label: pendingDay.label,
+          distribution: rawCell, // preserve original Arabic-Indic digits and separators
+        });
+      }
       pendingDay = null;
     }
   }
