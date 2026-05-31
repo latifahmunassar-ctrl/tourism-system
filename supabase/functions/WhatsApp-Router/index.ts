@@ -4509,22 +4509,25 @@ Deno.serve(async (req) => {
 
   try {
     const ct = req.headers.get("content-type") || "";
-    let from = ""; let body = ""; let profileName = "";
+    let from = ""; let body = ""; let profileName = ""; let numMedia = 0;
 
     if (ct.includes("application/x-www-form-urlencoded")) {
       const form = await req.formData();
       from = String(form.get("From") || "");
       body = String(form.get("Body") || "");
       profileName = String(form.get("ProfileName") || "");
+      numMedia = parseInt(String(form.get("NumMedia") || "0"), 10) || 0;
     } else {
       // JSON fallback (للاختبار اليدوي)
       const j = await req.json();
       from = j.From || j.from || "";
       body = j.Body || j.body || "";
       profileName = j.ProfileName || j.profileName || "";
+      numMedia = parseInt(String(j.NumMedia || "0"), 10) || 0;
     }
 
-    if (!from || !body) {
+    // تجاهل فقط لو ما فيه مُرسِل، أو الرسالة فاضية تماماً (لا نص ولا مرفق).
+    if (!from || (!body && numMedia === 0)) {
       return new Response(EMPTY_TWIML, { headers: TWIML_HEADERS });
     }
 
@@ -4532,6 +4535,30 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    // رسالة وسائط فقط (صورة/صوت/فيديو/ملف/موقع بدون نص): الـ parser/AI يحتاج
+    // نصّاً فلا نمرّرها له، لكن إسقاطها يخفي الرسالة عن الداشبورد. لذلك نضمن
+    // ظهورها: ننشئ/نحدّث الجلسة (last_message_at) ونسجّلها في التدقيق، فيشوفها
+    // الموظف كرسالة جديدة غير مقروءة ويفتحها (المرفق نفسه يظهر من Twilio).
+    if (!body && numMedia > 0) {
+      const nowIso = new Date().toISOString();
+      const { data: existingSess } = await supabase
+        .from("whatsapp_sessions").select("phone").eq("phone", from).maybeSingle();
+      if (existingSess) {
+        const upd: Record<string, unknown> = { last_message_at: nowIso };
+        if (profileName) upd.profile_name = profileName;
+        await supabase.from("whatsapp_sessions").update(upd).eq("phone", from);
+      } else {
+        await supabase.from("whatsapp_sessions").insert({
+          phone: from, profile_name: profileName || null, stage: "new", last_message_at: nowIso,
+        });
+      }
+      await supabase.from("wa_message_audit").insert({
+        from_phone: from, body: "📎 [مرفق من العميل بدون نص]",
+        status: "completed", completed_at: nowIso,
+      });
+      return new Response(EMPTY_TWIML, { headers: TWIML_HEADERS });
+    }
 
     // Watchdog: every webhook also sweeps any earlier inbound that stayed
     // in 'received' too long (i.e., handleMessage failed silently in the
