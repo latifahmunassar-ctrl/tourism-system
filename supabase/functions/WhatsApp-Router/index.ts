@@ -4067,6 +4067,83 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Admin/staff: create a WhatsApp greeting template via Twilio Content API,
+  // submit it for WhatsApp approval, and save its ContentSid to wa_settings.
+  //   POST ?admin_action=create_greeting_template  body {body?, category?}
+  if (url.searchParams.get("admin_action") === "create_greeting_template") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const p = await req.json().catch(() => ({}));
+      const body = String(p.body || "").trim()
+        || "مرحباً {{1}} 🌟\nشكراً لتواصلك مع وكالة العز للسياحة والسفر. يسعدنا خدمتك — وش الوجهة اللي تفكّر فيها، وكم عدد المسافرين والتاريخ المتوقع؟";
+      const category = String(p.category || "").toUpperCase() === "MARKETING" ? "MARKETING" : "UTILITY";
+      const tSid = Deno.env.get("TWILIO_ACCOUNT_SID");
+      const tTok = Deno.env.get("TWILIO_AUTH_TOKEN");
+      if (!tSid || !tTok) throw new Error("Twilio credentials missing");
+      const auth = "Basic " + btoa(`${tSid}:${tTok}`);
+      const friendly = "alezz_greeting_" + Date.now();
+      const hasVar = /\{\{\s*1\s*\}\}/.test(body);
+      const createBody: Record<string, unknown> = {
+        friendly_name: friendly,
+        language: "ar",
+        types: { "twilio/text": { body } },
+      };
+      if (hasVar) createBody.variables = { "1": "العميل" };
+      const cRes = await fetch("https://content.twilio.com/v1/Content", {
+        method: "POST",
+        headers: { Authorization: auth, "Content-Type": "application/json" },
+        body: JSON.stringify(createBody),
+      });
+      const cText = await cRes.text();
+      if (!cRes.ok) throw new Error("create: " + cRes.status + " " + cText.slice(0, 300));
+      const created = JSON.parse(cText);
+      const contentSid = String(created.sid || "");
+      // Submit for WhatsApp approval.
+      const aRes = await fetch(`https://content.twilio.com/v1/Content/${contentSid}/ApprovalRequests/whatsapp`, {
+        method: "POST",
+        headers: { Authorization: auth, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: friendly.toLowerCase(), category }),
+      });
+      const aText = await aRes.text();
+      let approval: unknown = null;
+      try { approval = JSON.parse(aText); } catch { approval = aText.slice(0, 300); }
+      const approvalStatus = (approval as { whatsapp?: { status?: string }; status?: string } | null)?.whatsapp?.status
+        || (approval as { status?: string } | null)?.status
+        || (aRes.ok ? "received" : "submit_failed");
+      // Save the ContentSid so start_conversation can use it immediately.
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await supabase.from("wa_settings").upsert([{ key: "greeting_template_sid", value: contentSid, updated_at: new Date().toISOString() }]);
+      return new Response(JSON.stringify({ ok: true, content_sid: contentSid, category, approval_status: approvalStatus, approval }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // Admin/staff: check WhatsApp approval status of the saved greeting template.
+  if (url.searchParams.get("admin_action") === "template_status") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data } = await supabase.from("wa_settings").select("value").eq("key", "greeting_template_sid").maybeSingle();
+      const contentSid = typeof (data as { value?: unknown } | null)?.value === "string" ? (data as { value: string }).value : "";
+      if (!contentSid) return new Response(JSON.stringify({ content_sid: "", status: "none" }), { headers: jsonCors });
+      const tSid = Deno.env.get("TWILIO_ACCOUNT_SID");
+      const tTok = Deno.env.get("TWILIO_AUTH_TOKEN");
+      const auth = "Basic " + btoa(`${tSid}:${tTok}`);
+      const r = await fetch(`https://content.twilio.com/v1/Content/${contentSid}/ApprovalRequests`, {
+        headers: { Authorization: auth },
+      });
+      const txt = await r.text();
+      let parsed: unknown = null;
+      try { parsed = JSON.parse(txt); } catch { parsed = txt.slice(0, 300); }
+      const status = (parsed as { whatsapp?: { status?: string } } | null)?.whatsapp?.status || "unknown";
+      const rejection = (parsed as { whatsapp?: { rejection_reason?: string } } | null)?.whatsapp?.rejection_reason || "";
+      return new Response(JSON.stringify({ content_sid: contentSid, status, rejection_reason: rejection, raw: parsed }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
   // Admin: full conversation timeline for one customer phone. Combines
   // Twilio inbound + outbound with sender attribution. Outbound messages
   // whose Twilio SID matches a row in wa_admin_messages are tagged
