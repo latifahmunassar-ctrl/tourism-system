@@ -3836,6 +3836,124 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── Offers library ─────────────────────────────────────────────────────
+  // مكتبة عروض مشتركة: الأدمن يرفع ملفات PDF مصنّفة (category = الزر مثل
+  // عمان/السعودية، label = اسم الوجهة مثل ماليزيا)، والموظف يرسلها للعميل
+  // من أي محادثة عبر send_admin_message. تُخزَّن في نفس bucket المرفقات
+  // تحت بادئة offers/.
+  //
+  // Admin: upload an offer file. multipart with fields: file, category, label.
+  //   POST ?admin_action=upload_offer  (multipart/form-data)
+  //   → { ok: true, offer: {...} }
+  if (url.searchParams.get("admin_action") === "upload_offer") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const form = await req.formData();
+      const file = form.get("file");
+      const category = String(form.get("category") || "").trim();
+      const label = String(form.get("label") || "").trim();
+      if (!(file instanceof File)) {
+        return new Response(JSON.stringify({ error: "missing 'file' field" }),
+          { status: 400, headers: jsonCors });
+      }
+      if (!category || !label) {
+        return new Response(JSON.stringify({ error: "missing category or label" }),
+          { status: 400, headers: jsonCors });
+      }
+      const maxBytes = 100 * 1024 * 1024;
+      if (file.size > maxBytes) {
+        return new Response(JSON.stringify({ error: "file > 100MB" }),
+          { status: 413, headers: jsonCors });
+      }
+      const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+      const SRK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(SUPABASE_URL, SRK);
+      const BUCKET = "whatsapp-attachments";
+      // Ensure bucket exists (same idempotent logic as upload_media).
+      await fetch(`${SUPABASE_URL}/storage/v1/bucket/${BUCKET}`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${SRK}`, apikey: SRK },
+      }).then(async (r) => {
+        if (r.status === 404) {
+          await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${SRK}`, apikey: SRK, "Content-Type": "application/json" },
+            body: JSON.stringify({ id: BUCKET, name: BUCKET, public: true }),
+          });
+        }
+      }).catch(() => { /* try upload anyway */ });
+      const safeName = file.name.replace(/[^\w.\-]/g, "_");
+      const key = `offers/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeName}`;
+      const buf = await file.arrayBuffer();
+      const { error: upErr } = await supabase.storage.from(BUCKET).upload(key, buf, {
+        contentType: file.type || "application/octet-stream",
+        upsert: false,
+      });
+      if (upErr) throw new Error("storage: " + upErr.message);
+      const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(key);
+      const caller = await getCallerStaff(req);
+      const { data: row, error: insErr } = await supabase.from("wa_offers").insert({
+        category,
+        label,
+        file_url: pub.publicUrl,
+        storage_key: key,
+        content_type: file.type || null,
+        file_size: file.size,
+        uploaded_by: caller?.name || caller?.phone || "admin",
+      }).select().single();
+      if (insErr) throw new Error(insErr.message);
+      return new Response(JSON.stringify({ ok: true, offer: row }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
+    }
+  }
+
+  // Staff + admin: list all active offers (for the quick-send buttons and the
+  // admin library view). Grouped client-side by category.
+  //   GET ?admin_action=list_offers → { offers: [...] }
+  if (url.searchParams.get("admin_action") === "list_offers") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data, error } = await supabase.from("wa_offers")
+        .select("id, category, label, file_url, content_type, file_size, created_at")
+        .eq("active", true)
+        .order("category", { ascending: true })
+        .order("sort", { ascending: true })
+        .order("created_at", { ascending: true });
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ offers: data ?? [] }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
+    }
+  }
+
+  // Admin: delete an offer (removes the storage object + the row).
+  //   POST ?admin_action=delete_offer  body {id}
+  if (url.searchParams.get("admin_action") === "delete_offer") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const p = await req.json();
+      const id = String(p.id || "").trim();
+      if (!id) return new Response(JSON.stringify({ error: "missing id" }), { status: 400, headers: jsonCors });
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: existing } = await supabase.from("wa_offers")
+        .select("storage_key").eq("id", id).maybeSingle();
+      const storageKey = (existing as { storage_key: string | null } | null)?.storage_key;
+      if (storageKey) {
+        await supabase.storage.from("whatsapp-attachments").remove([storageKey]).catch(() => {});
+      }
+      const { error } = await supabase.from("wa_offers").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }),
+        { status: 500, headers: jsonCors });
+    }
+  }
+
   // Admin: full conversation timeline for one customer phone. Combines
   // Twilio inbound + outbound with sender attribution. Outbound messages
   // whose Twilio SID matches a row in wa_admin_messages are tagged
