@@ -3095,6 +3095,17 @@ Deno.serve(async (req) => {
         .select("id, match_destination, assign_to_phone, priority, active")
         .order("priority", { ascending: false });
 
+      // رسائل تحتاج مراجعة (آخر 7 أيام): معلّقة/فاشلة لم يكتمل التعامل معها —
+      // للمؤشر المرئي «⚠️ تحتاج مراجعة» فيشوفها الموظف بنفسه ولا تضيع.
+      const reviewCutoff = new Date(now - 7 * DAY_MS).toISOString();
+      const { data: unhandledRows } = await supabase
+        .from("wa_message_audit")
+        .select("id, from_phone, body, status, received_at")
+        .gte("received_at", reviewCutoff)
+        .in("status", ["stalled", "errored"])
+        .order("received_at", { ascending: false })
+        .limit(50);
+
       return new Response(JSON.stringify({
         counts: {
           messages_today: received,
@@ -3113,6 +3124,7 @@ Deno.serve(async (req) => {
         routing_rules: rulesList ?? [],
         pending_proposals: pending ?? [],
         recent_audit: audit ?? [],
+        unhandled: unhandledRows ?? [],
         generated_at: new Date().toISOString(),
       }), { headers: { ...JSON_HEADERS, ...corsHeaders } });
     } catch (e) {
@@ -4141,6 +4153,39 @@ Deno.serve(async (req) => {
       const status = (parsed as { whatsapp?: { status?: string } } | null)?.whatsapp?.status || "unknown";
       const rejection = (parsed as { whatsapp?: { rejection_reason?: string } } | null)?.whatsapp?.rejection_reason || "";
       return new Response(JSON.stringify({ content_sid: contentSid, status, rejection_reason: rejection, raw: parsed }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // Cron/admin: run the stalled-message watchdog on demand (pg_cron calls
+  // this every minute so alerts fire even during quiet periods, not only
+  // when a new webhook arrives). Gated by the legacy JWT (same as the cron).
+  if (url.searchParams.get("admin_action") === "run_watchdog") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await checkStalledMessages(supabase);
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // Admin/staff: mark a customer's unhandled inbound messages as reviewed
+  // (clears them from the "needs review" indicator). body {phone}
+  if (url.searchParams.get("admin_action") === "mark_message_reviewed") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const p = await req.json();
+      const phone = normalizeWhatsappPhone(String(p.phone || ""));
+      if (!phone) return new Response(JSON.stringify({ error: "missing phone" }), { status: 400, headers: jsonCors });
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await supabase.from("wa_message_audit")
+        .update({ status: "completed", completed_at: new Date().toISOString() })
+        .eq("from_phone", phone)
+        .in("status", ["received", "stalled", "errored"]);
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }
