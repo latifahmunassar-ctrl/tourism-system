@@ -2563,6 +2563,51 @@ Deno.serve(async (req) => {
           });
         }
       }
+
+      // ── Carry forward "sticky" state from the last built program ──────────
+      // SIM count, extra flight/train tickets, and extra-bed scope are stateful:
+      // once set on the program they MUST persist across an UNRELATED rebuild
+      // (e.g. the employee adds a ticket, then later swaps a tour). The rebuild
+      // path re-derives these from the joined conversation, where the ORIGINAL
+      // "بدون شرائح" / "بدون سرير" / adult-only count still appears and silently
+      // wipes the later addition. So unless the LATEST message touches a field,
+      // we restore it from the last program (the true current state).
+      // Bug repro before this fix: تبديل جولة → اضف شريحتين → اضف تذكرة طيران
+      // wiped the SIM cards (and any prior sticky edits).
+      // Guard: only carry forward on a MODIFICATION turn. If the LATEST message
+      // is itself a complete new build, it must NOT inherit the previous
+      // program's SIM/bed/tickets.
+      const latestAloneIsFullBuild = (() => {
+        try { return canBuildLocally(parseTripRequest([{ role: "user", content: lastUserMsg }], cityDefs)); }
+        catch { return false; }
+      })();
+      if (lastAssistantProgram && canBuildLocally(tripRequest) && !latestAloneIsFullBuild) {
+        const m = lastUserMsg;
+        const simTouched = /(?:شر[اي]ئ?ح|شريح[هة]|شرايح|sim|esim|سيم)/iu.test(m);
+        if (!simTouched) {
+          const sm = lastAssistantProgram.match(/^SIM:\s*(\d+)/m);
+          if (sm) tripRequest.sim = parseInt(sm[1], 10);
+        }
+        const ticketsTouched = /تذكر[ةه]|تذاكر|تذكرت[يا]ن/iu.test(m);
+        if (!ticketsTouched) {
+          const tm = lastAssistantProgram.match(/تذاكر\s+إضافية\s*\((\d+)\)/u);
+          if (tm) tripRequest.extraTickets = parseInt(tm[1], 10);
+        }
+        const bedTouched = /سرير|أسر[ةه]|اسر[ةه]|سراير|سرايا|extra\s*-?\s*bed/iu.test(m);
+        if (!bedTouched && tripRequest.extraBed.scope === "none") {
+          const bm = lastAssistantProgram.match(/^EXTRA_BED_CITIES:(.+)$/m);
+          if (bm) {
+            const body = bm[1].trim();
+            if (/^ALL\s*=\s*1/i.test(body)) {
+              tripRequest.extraBed = { scope: "all" };
+            } else {
+              const cities = body.split(",").map(s => s.split("=")[0].trim()).filter(Boolean);
+              if (cities.length) tripRequest.extraBed = { scope: cities };
+            }
+          }
+        }
+      }
+
       // CASE B: full info present → build program locally
       if (canBuildLocally(tripRequest)) {
         try {
