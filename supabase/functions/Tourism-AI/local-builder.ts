@@ -1929,6 +1929,18 @@ export async function buildLocalProgram(
       selectedFlights.push({ day: d.number, flight: direct });
       continue;
     }
+    // Reverse-direction flight fallback: a route is bidirectional at the same
+    // fare, but the sheet often carries only one direction. Use the opposite
+    // row's price and SWAP its endpoints so the leg flies the right way (e.g.
+    // only "Phu Quoc → Ho Chi Minh" exists, but the trip needs HCM → Phu Quoc).
+    const reverseFlight = findFlight(allFlights, d.toCity, d.fromCity);
+    if (reverseFlight) {
+      selectedFlights.push({
+        day: d.number,
+        flight: { ...reverseFlight, from_city: reverseFlight.to_city, to_city: reverseFlight.from_city },
+      });
+      continue;
+    }
     const fromHasFlights = cityHasFlights(d.fromCity);
     const toHasFlights = cityHasFlights(d.toCity);
     // Case (c): fromCity is road-only → use hub→toCity flight
