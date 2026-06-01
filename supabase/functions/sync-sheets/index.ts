@@ -875,6 +875,38 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify(data, null, 2), { headers: CORS_HEADERS });
   }
 
+  // ?dump_rows=TAB&q=KEYWORD → raw sheet rows whose any cell contains KEYWORD,
+  // each cell tagged with its column index, plus the detected tour header.
+  // Debug for "I added a tour/row but it didn't sync" — shows whether the row
+  // sits under the tour header and whether its price cell aligns with a price
+  // column (extractTours drops rows with no valid price).
+  const dumpRowsTab = new URL(req.url).searchParams.get("dump_rows");
+  if (dumpRowsTab) {
+    try {
+      const q = (new URL(req.url).searchParams.get("q") || "").trim();
+      const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
+      const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
+      const tk = await getGoogleAccessToken(sa);
+      const quotedTab = /[\s'"]/.test(dumpRowsTab) ? `'${dumpRowsTab.replace(/'/g, "''")}'` : dumpRowsTab;
+      const rows = await readSheetRange(tk, ssid, `${quotedTab}!A1:AZ500`);
+      const tourHeader = findTourHeader(rows);
+      const matches: Array<{ row: number; cells: Array<{ col: number; text: string }> }> = [];
+      if (q) {
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i] || [];
+          if (!row.some(c => (c || "").includes(q))) continue;
+          matches.push({
+            row: i,
+            cells: row.map((c, j) => ({ col: j, text: (c || "").trim() })).filter(c => c.text),
+          });
+        }
+      }
+      return new Response(JSON.stringify({ tab: dumpRowsTab, q, tourHeader, matchCount: matches.length, matches }, null, 2), { headers: CORS_HEADERS });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: CORS_HEADERS });
+    }
+  }
+
   // ?dump_suggestions=TAB → dump the raw "اقتراحات توزيع مدن" column for that
   // tab so we can see why extraction returned 0 rows. Reports the detected
   // header position + every non-empty cell below it.
