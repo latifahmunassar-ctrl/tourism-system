@@ -1213,14 +1213,17 @@ if (totalGroupFromText && computedGroup) {
   }
 }
 
+const prevDest = parsedData && parsedData.dest;
 parsedData = { dest, meta, dateFrom, dateTo, client, clientCode, extraBedCitiesLine, hotelsLines, flightsLines, transfersLines, toursLines, simText, summaryLines, totalPerson, persons, kids, infants, adults };
 // New program = stale currency conversion. Reset so the next PDF export uses
 // SAR by default, not whatever rate was set against the previous trip.
 currencyConversion = null;
 currencyAwaiting = null;
 currencyPending = null;
-// برنامج جديد = تصفير التكاليف الإضافية اليدوية حتى لا تتسرب من رحلة لأخرى.
-extraCosts = [];
+// تصفير التكاليف الإضافية اليدوية فقط عند تغيير الوجهة (رحلة لبلد آخر) حتى لا
+// تتسرب من رحلة لأخرى. تعديلات نفس البرنامج (مثل "اضف شرائح" أو تبديل فندق)
+// تحافظ عليها بدل ما تمسحها.
+if (prevDest && prevDest !== dest) extraCosts = [];
 
 let html = `
 <div class="review-header">
@@ -1356,6 +1359,9 @@ ${summaryHTML}
 
 document.getElementById('reviewPanel').innerHTML = html;
 renderExtraCostsList();
+// تعديل على نفس البرنامج قد يحمل تكاليف إضافية محفوظة + ربح مُدخل سابقاً —
+// حدّث الإجمالي ليعكسها فوراً بدل ما يظهر السعر الأساسي فقط.
+updateProfit();
 document.getElementById('emptyOutput').style.display = 'none';
 document.getElementById('exportBtns').style.display = 'flex';
 }
