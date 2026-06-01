@@ -117,7 +117,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
   indonesia: [
     // Bali aliases: kuta/seminyak/ubud/jimbaran/nusa dua are all Bali areas.
     // Saudi spelling has both سمينياك (سم-ين-ياك) and سيمنياك (سي-من-ياك).
-    { canonical: "Bali",     pattern: /بالي|bali|كوتا|kuta|[أا]وبود|ubud|سمينياك|سيمنياك|seminyak|جيمباران|jimbaran|نوسا\s*دوا/i },
+    { canonical: "Bali",     pattern: /بالي|bali|كوتا|kuta|[أا]و?بود|ubud|سمينياك|سيمنياك|سيمينياك|seminyak|جيمبران|جيمباران|jimbaran|نوسا\s*دوا/i },
     // Jakarta: also accept "جاكرت" without trailing ا (very common shorthand)
     // and "جاكزتا" (ز instead of ر, sheet typo).
     { canonical: "Jakarta",  pattern: /جا?ك[رز]تا?|jakarta/i },
@@ -914,7 +914,7 @@ async function buildDataContext(
       [/فوكوك|phu\s*quoc|فوكوك/i,                        "Phu Quoc"],
       [/هوتشي|ho\s*chi|saigon|سايغون/i,                  "Ho Chi Minh"],
       // Indonesia
-      [/بالي|bali|اوبود|كوتا|سمينياك|أوبود|ubud|kuta/i,  "Bali"],
+      [/بالي|bali|[أا]و?بود|كوتا|سمينياك|سيمينياك|جيمبران|جيمباران|jimbaran|ubud|kuta/i,  "Bali"],
       [/جاكرتا|jakarta/i,                                "Jakarta"],
       [/باندونج|باندونغ|bandung/i,                       "Bandung"],
       [/بونشاك|puncak/i,                                 "Puncak"],
