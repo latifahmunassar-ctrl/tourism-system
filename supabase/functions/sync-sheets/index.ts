@@ -1121,21 +1121,25 @@ Deno.serve(async (req) => {
         const flights = extractFlights(rows, tab, debugInfo);
         const trains  = extractTrains(rows, tab, debugInfo);
 
+        // طيران: full-replace لكل وجهة (مثل الفنادق/الجولات). الحذف يجب أن يحدث
+        // دائماً — حتى لو القائمة فاضية — وإلا فالرحلة المحذوفة من الشيت تبقى
+        // أبدياً في القاعدة (كان upsert فقط لا يحذف ما اختفى من الشيت).
+        await supabase.from("flights").delete().eq("destination", tab);
         if (flights.length > 0) {
           const dedup = Array.from(
             new Map(flights.map((f: any) => [`${f.from_city}|${f.to_city}`, f])).values()
           );
-          const { error } = await supabase.from("flights").upsert(dedup, { onConflict: "from_city,to_city,destination" });
+          const { error } = await supabase.from("flights").insert(dedup);
           if (error) throw new Error(`طيران: ${error.message}`);
         }
 
+        // قطار: نفس مبدأ الـ full-replace.
+        await supabase.from("trains").delete().eq("destination", tab);
         if (trains.length > 0) {
           const dedupT = Array.from(
             new Map(trains.map((t: any) => [`${t.from_city}|${t.to_city}`, t])).values()
           );
-          const { error: trainErr } = await supabase
-            .from("trains")
-            .upsert(dedupT, { onConflict: "from_city,to_city,destination" });
+          const { error: trainErr } = await supabase.from("trains").insert(dedupT);
           if (trainErr) throw new Error(`قطار: ${trainErr.message}`);
         }
 
