@@ -229,15 +229,12 @@ export function pickCheapestHotel(
     }
     return true;
   };
-  // Employee rule: ADULT capacity is the primary constraint. Walk outward
-  // from the exact adult count — exact first, then –1, then +1, then –2,
-  // +2, … — and stop at the first tier that has matches. This way:
-  //   - "5 بالغين + طفلين" prefers a 5-adult room, falls to 4-adult if no 5
-  //     exists (matches the employee's "5 or 4 شخص" expectation).
-  //   - "3 بالغين + طفل" prefers a 3-adult room, falls to 2-adult before
-  //     jumping to 4 (matches the employee's "3+طفل else 2+طفل" rule).
-  //   - Trips of 2 in a sheet with only 4-adult rooms still find the 4
-  //     (eventually walks +2).
+  // Employee rule: ADULT capacity is the primary constraint, and we ROUND UP —
+  // the room must actually FIT all the adults. Walk from the exact count
+  // upward FIRST (exact, +1, +2, …) and only drop below if no larger room
+  // exists. So "3 بالغين" with rooms [2,4,6] picks the 4-adult room (fits 3),
+  // never the 2-adult one (which can't hold 3). The employee can then bump it
+  // up manually ("غيّرها لفندق يتسع 6") if the family needs more space.
   // Within the chosen adult-tier, when children are requested we PREFER
   // rooms that explicitly mention a child slot (but don't require it —
   // the adult capacity match is the deciding factor).
@@ -255,8 +252,8 @@ export function pickCheapestHotel(
     });
     const order: number[] = [adults];
     for (let d = 1; d <= 10; d++) {
-      if (adults - d >= 1) order.push(adults - d);
-      order.push(adults + d);
+      order.push(adults + d);                         // round UP first (fit the adults)
+      if (adults - d >= 1) order.push(adults - d);    // smaller only as last resort
     }
     for (const cap of order) {
       const atCap = adultsByCap(cap);
