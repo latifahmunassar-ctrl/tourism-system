@@ -1890,46 +1890,14 @@ export async function buildLocalProgram(
       const f = findFlight(allFlights, d.fromCity, mainHub);
       if (f) { selectedFlights.push({ day: d.number, flight: f }); continue; }
     }
-    // Case (e): both have flights but no direct → try via hub.
-    // SKIP any hub that's already part of the trip (the customer just
-    // came from Langkawi → flying back to Langkawi to reach KL is a
-    // geographic backtrack). Also prefer the destination's preferred
-    // mainHub when it produces both legs — that's the real gateway.
-    if (fromHasFlights && toHasFlights) {
-      // Road-first guard: if the sheet has a direct ground transfer from
-      // fromCity to toCity that doesn't terminate at an airport, that's
-      // a real car ride (e.g. Phuket → Krabi ≈ 3hr). Hub-flighting via
-      // Bangkok would add 2 hops, airport time, and a wrong "departure
-      // to international airport" pickup row at the hub. Prefer road.
-      const roadRow = findInterCityTransfer(
-        allTours, d.fromCity, d.toCity, request.destination!, cityDefs, "airport", request.transport,
-      );
-      if (roadRow && !/مطار|airport/iu.test(roadRow.name)) continue;
-      const tripCityNorms = new Set(
-        request.cities.map(c => normCity(c)),
-      );
-      // Try mainHub first if it forms a valid pair.
-      const tryHub = (hubName: string): boolean => {
-        const leg1 = findFlight(allFlights, d.fromCity, hubName);
-        const leg2 = findFlight(allFlights, hubName, d.toCity);
-        if (leg1 && leg2) {
-          selectedFlights.push({ day: d.number, flight: leg1 });
-          selectedFlights.push({ day: d.number, flight: leg2 });
-          return true;
-        }
-        return false;
-      };
-      let found = mainHub ? tryHub(mainHub) : false;
-      if (!found) {
-        for (const fcity of flightCities) {
-          // A "hub" that's already a stop in this trip means the route
-          // backtracks. Skip it — better to leave the flight unset and
-          // let the employee see the gap than to invent a nonsense leg.
-          if (tripCityNorms.has(normCity(fcity))) continue;
-          if (tryHub(fcity)) { found = true; break; }
-        }
-      }
-    }
+    // Case (e): both cities have flights but no DIRECT route between them.
+    // We deliberately do NOT invent a multi-hop "via hub" flight here — that
+    // produced wrong routes through cities not in the trip (e.g. Ho Chi Minh →
+    // Ha Noi → Nha Trang) and even backtracked through a LATER stop (Nha Trang
+    // → Phu Quoc → Dalat). Leave the leg without a flight: the transfer loop
+    // adds a ground/car ride when the sheet has a road row in EITHER direction,
+    // and otherwise the employee sees the gap and adds the missing direct
+    // flight to the sheet — far safer than fabricating a nonsense route.
   }
 
   // 4. Pick ground transfers (now passing cityDefs for strict matching).
@@ -1958,7 +1926,15 @@ export async function buildLocalProgram(
       // their own; the sheet usually doesn't model these moves at all.
       if (d.fromCity === d.toCity) continue;
       const arrivalType = transitKind(d.number);
+      const hasFlightThisLeg = selectedFlights.some(f => f.day === d.number);
       let fromAirportDrop = findInterCityTransfer(allTours, d.fromCity, d.toCity, dest, cityDefs, arrivalType, request.transport);
+      // A road leg (no flight) must NOT use an airport-drop row — the customer
+      // isn't flying, so "go from the hotel to the airport" is bogus. Drop any
+      // airport-only match so the road fallbacks below (forward road row, then
+      // reverse-direction synthesized car) take over instead.
+      if (!hasFlightThisLeg && fromAirportDrop && /مطار|airport/iu.test(fromAirportDrop.name)) {
+        fromAirportDrop = null;
+      }
       // Hub-departure case: fromCity is road-only and the flight on this day
       // departs from the destination's preferred hub. The customer needs a
       // road segment from fromCity → hub BEFORE the flight, but the direct
@@ -1977,6 +1953,21 @@ export async function buildLocalProgram(
           && normCity(d.fromCity) !== hub;
         if (flightFromHub) {
           fromAirportDrop = findInterCityTransfer(allTours, d.fromCity, mainHub, dest, cityDefs, arrivalType, request.transport);
+        }
+      }
+      // Reverse-direction road fallback: when this leg has no flight and no
+      // forward road row, but the sheet carries the OPPOSITE direction (e.g.
+      // only "Dalat → Nha Trang بسيارة" for a Nha Trang → Dalat leg), reuse
+      // that row's price but emit a correctly-worded forward line so the
+      // customer sees "from → to", not the reverse. Without this the short
+      // road hop would silently disappear from the program.
+      if (!fromAirportDrop && arrivalType === "airport"
+          && !selectedFlights.some(f => f.day === d.number)) {
+        const rev = findInterCityTransfer(allTours, d.toCity, d.fromCity, dest, cityDefs, "airport", request.transport);
+        if (rev && !/مطار|airport/iu.test(rev.name)) {
+          const fromAr = cityArabicNames[d.fromCity] || d.fromCity;
+          const toAr = cityArabicNames[d.toCity] || d.toCity;
+          fromAirportDrop = { ...rev, name: `التوجه من ${fromAr} إلى ${toAr} بسيارة خاصة` };
         }
       }
       if (fromAirportDrop) selectedTransfers.push({ day: d.number, row: fromAirportDrop, kind: "Drop" });
