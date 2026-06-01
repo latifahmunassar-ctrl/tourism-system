@@ -272,12 +272,14 @@ function parseAdults(text: string): number | null {
   // not as the dual form "2". Otherwise the dual-form check below catches
   // "بالغين" inside "3 بالغين" and short-circuits to 2.
   // "6 أشخاص" / "2 شخص" / "3 كبار" / "ل شخصين" / "4 افراد" / "4 أفراد"
-  const personNoun = "(?:شخص|أشخاص|اشخاص|كبار|بالغ(?:ين|ان|ون)?|[أا]?فراد|[أا]?فرد|adults?|persons?|pax)";
+  // ش[خح]ص يتحمّل خطأ اللهجة الشائع «شحص/شحاص» (خ↔ح) — وإلا يفشل قراءة العدد
+  // فيُعاد سؤال الموظف رغم أنه ذكر العدد. مثال: "ل ٢ شحص".
+  const personNoun = "(?:ش[خح]ص|[أا]ش[خح]اص|كبار|بالغ(?:ين|ان|ون)?|[أا]?فراد|[أا]?فرد|adults?|persons?|pax)";
   const m = t.match(new RegExp(`(\\d{1,2})\\s*${personNoun}`, "i"));
   if (m) return parseInt(m[1], 10);
   // Dual forms (no number)
   if (/زوجين|زوجان|couple/i.test(t)) return 2;
-  if (/شخصين|شخصان|شخصاً|شخصا|بالغين|بالغان|فردين|فردان|شخصاين/.test(t)) return 2;
+  if (/ش[خح]صين|ش[خح]صان|ش[خح]صاً|ش[خح]صا|بالغين|بالغان|فردين|فردان|ش[خح]صاين/.test(t)) return 2;
   // Word numbers: "أربع افراد" / "خمسة أشخاص" / "ست افراد"
   const wordNum: Array<[string, number]> = [
     ["عشر[ةه]?", 10], ["تسع[ةه]?", 9], ["ثمان(?:ية|يه)?", 8],
