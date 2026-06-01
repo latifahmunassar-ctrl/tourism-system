@@ -2159,6 +2159,38 @@ Deno.serve(async (req) => {
       : "";
     const lastAssistantProgram = findLastBuiltProgram(messages);
 
+    // ── "الفندق الأول/الثاني/الأخير" → resolve to that hotel's city ─────────
+    // The hotel-mod parser needs a city (or hotel name). When the employee
+    // references a hotel by its POSITION in the program ("غير الفندق الأول
+    // بمسبح خاص"), look up the Nth hotel's city from the last program and
+    // rewrite to "فندق <city> <ordinal>" so the existing path resolves it.
+    if (lastAssistantProgram && /(?:ال)?فندق\s+(?:ال)?(?:اول|أول|اولى|أولى|ثاني|ثالث|رابع|اخير|أخير)/u.test(lastUserMsg)) {
+      const hm = lastAssistantProgram.match(/HOTELS:\s*\n([\s\S]+?)(?=\n[A-Z_]+:|\Z)/);
+      const hotelCities: string[] = [];
+      if (hm) {
+        for (const line of hm[1].split("\n")) {
+          const parts = line.split("|").map(s => s.trim());
+          if (parts.length >= 2 && parts[1]) hotelCities.push(parts[1]);
+        }
+      }
+      if (hotelCities.length > 0) {
+        const ordMap: Array<[RegExp, number, string]> = [
+          [/(?:ال)?فندق\s+(?:ال)?(?:اول|أول|اولى|أولى)/u, 1, "اول"],
+          [/(?:ال)?فندق\s+(?:ال)?ثاني/u, 2, "ثاني"],
+          [/(?:ال)?فندق\s+(?:ال)?ثالث/u, 3, "ثالث"],
+          [/(?:ال)?فندق\s+(?:ال)?رابع/u, 4, "رابع"],
+          [/(?:ال)?فندق\s+(?:ال)?(?:اخير|أخير)/u, hotelCities.length, "اخير"],
+        ];
+        for (const [re, n, ordWord] of ordMap) {
+          if (re.test(lastUserMsg) && n >= 1 && n <= hotelCities.length) {
+            lastUserMsg = lastUserMsg.replace(re, `فندق ${hotelCities[n - 1]} ${ordWord}`);
+            messages[messages.length - 1] = { ...messages[messages.length - 1], content: lastUserMsg };
+            break;
+          }
+        }
+      }
+    }
+
     // ── Numbered-list reply rewrite ────────────────────────────────────────
     // The tour-deficit CHAT asks "حابب تكرّر جولة معيّنة؟ بلّغني الرقم" and
     // shows a numbered list. The employee answers with an ordinal — "الأول",

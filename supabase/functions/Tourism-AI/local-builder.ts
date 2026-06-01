@@ -174,7 +174,7 @@ export function pickCheapestHotel(
   city: string,
   request: TripRequest,
   cityPattern?: RegExp,
-  options?: { excludeNames?: Set<string>; overrideAdults?: number; areaFilter?: string; overrideStars?: number },
+  options?: { excludeNames?: Set<string>; overrideAdults?: number; areaFilter?: string; overrideStars?: number; feature?: string },
 ): HotelRow | null {
   // overrideAdults is set when the employee explicitly asks for a different
   // occupancy on a single swap ("غير فندق هانوي لـ 4 أشخاص"). In that case
@@ -207,6 +207,13 @@ export function pickCheapestHotel(
     if (options?.areaFilter) {
       const loc = (h.location || "").toLowerCase();
       if (!loc.includes(options.areaFilter.toLowerCase())) return false;
+    }
+    // Amenity filter ("بمسبح خاص" / "فيلا"): require the room_type to mention
+    // the requested feature. Pool villas/private-pool rooms match "pool".
+    if (options?.feature) {
+      const rt = (h.room_type || "").toLowerCase();
+      if (options.feature === "pool"  && !/pool|مسبح/iu.test(rt)) return false;
+      if (options.feature === "villa" && !/villa|فيلا/iu.test(rt)) return false;
     }
     return true;
   };
@@ -1330,6 +1337,7 @@ export async function buildLocalProgram(
   const hotelExcludesByStay: Record<string, Set<string>> = {};
   const hotelOverrideOccupancyByStay: Record<string, number> = {};
   const hotelOverrideStarsByStay: Record<string, number> = {};
+  const hotelOverrideFeatureByStay: Record<string, string> = {}; // "pool" | "villa"
   for (const mod of request.hotelModifications) {
     let resolvedCity: string | null = null;
     let nameMatchedIndices: number[] | null = null;
@@ -1436,6 +1444,9 @@ export async function buildLocalProgram(
       if (mod.targetStars != null) {
         hotelOverrideStarsByStay[`${resolvedCity}#${idx}`] = mod.targetStars;
       }
+      if (mod.targetFeature) {
+        hotelOverrideFeatureByStay[`${resolvedCity}#${idx}`] = mod.targetFeature;
+      }
     }
   }
 
@@ -1464,13 +1475,14 @@ export async function buildLocalProgram(
     const excludeForThisStay = hotelExcludesByStay[`${stay.city}#${stayIdx}`];
     const overrideForThisStay = hotelOverrideOccupancyByStay[`${stay.city}#${stayIdx}`];
     const overrideStarsForThisStay = hotelOverrideStarsByStay[`${stay.city}#${stayIdx}`];
+    const featureForThisStay = hotelOverrideFeatureByStay[`${stay.city}#${stayIdx}`];
     // Pin slots NOT modded this turn to the hotel they had in the last
     // program. Without this, a follow-up swap rebuilds from scratch and
     // pickCheapestHotel reverts every untouched slot to the catalog's
     // cheapest — undoing earlier turns' swaps. The `last` name is the
     // hotel that was in the immediately-prior program for this slot.
     const hasModForThisStay =
-      !!excludeForThisStay || overrideForThisStay != null || overrideStarsForThisStay != null;
+      !!excludeForThisStay || overrideForThisStay != null || overrideStarsForThisStay != null || !!featureForThisStay;
     const lastForThisStay = hotelHistoryByCity?.[stay.city]?.[stayIdx]?.last || null;
     const lastRoomTypeForThisStay = hotelHistoryByCity?.[stay.city]?.[stayIdx]?.lastRoomType || null;
     let hotel: HotelRow | null = null;
@@ -1492,6 +1504,7 @@ export async function buildLocalProgram(
         overrideAdults: overrideForThisStay,
         overrideStars: overrideStarsForThisStay,
         areaFilter: stay.area,
+        feature: featureForThisStay,
       });
     }
     if (!hotel) {

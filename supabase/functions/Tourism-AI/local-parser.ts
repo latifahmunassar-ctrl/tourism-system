@@ -45,7 +45,7 @@ export type HotelStayHint = "all" | "first" | "last" | number;
  *     `request.adults`.
  */
 export type HotelModification =
-  | { kind: "nextCheaper"; cityHint: string; stayHint: HotelStayHint; targetOccupancy: number | null; targetStars: number | null; fullText: string };
+  | { kind: "nextCheaper"; cityHint: string; stayHint: HotelStayHint; targetOccupancy: number | null; targetStars: number | null; targetFeature: string | null; fullText: string };
 
 export type TripRequest = {
   /** "vietnam" / "Malaysia" / etc. — same canonical names as DEST_CITIES keys */
@@ -897,6 +897,23 @@ function parseHotelModifications(lastUserMsg: string): HotelModification[] {
       remainder = remainder.slice(0, starsMatch.index).trim();
     }
   }
+  // Pull out a room-amenity target ("الى فندق بمسبح خاص" / "بفيلا خاصة" / "فيه
+  // مسبح"). The builder filters that stay's candidates by this feature. Strip
+  // the whole phrase (connector + "فندق" + amenity words) so only the city/
+  // ordinal remains for resolution.
+  let targetFeature: string | null = null;
+  if (/مسبح|بمسبح|pool|private\s*pool/iu.test(remainder)) targetFeature = "pool";
+  else if (/فيلا|villa/iu.test(remainder)) targetFeature = "villa";
+  if (targetFeature) {
+    remainder = remainder
+      .replace(/(?:الى|إلى|الي|ل[ـ]?|لـ)?\s*(?:ال)?فندق/giu, " ")               // "الى فندق"
+      // "فندق آخر" = another hotel (filler). Remove آخر/اخرى but NOT اخير (last),
+      // which is a real stay-ordinal handled below.
+      .replace(/(?:^|\s)(?:آخر|أخرى|اخرى|اخر)(?=\s|$)/giu, " ")
+      .replace(/(?:ب|بـ|مع\s*)?(?:مسبح|private\s*pool|pool|فيلا|villa)/giu, " ")  // amenity word
+      .replace(/خاص[ةه]?|private/giu, " ")                                       // "خاص/خاصة"
+      .replace(/\s+/g, " ").trim();
+  }
   if (!remainder) return [];
 
   // Pull out a stay-ordinal qualifier from the remainder using a token scan
@@ -938,7 +955,7 @@ function parseHotelModifications(lastUserMsg: string): HotelModification[] {
   // Carry the full normalized message too — the builder uses it for hotel-name
   // fallback when the employee wrote "<hotel name> غير الفندق هذا ...", which
   // leaves the actual name OUTSIDE the verb-anchored capture group.
-  return [{ kind: "nextCheaper", cityHint, stayHint, targetOccupancy, targetStars, fullText: text }];
+  return [{ kind: "nextCheaper", cityHint, stayHint, targetOccupancy, targetStars, targetFeature, fullText: text }];
 }
 
 /** Latest user message in the conversation, or "" if none. */
