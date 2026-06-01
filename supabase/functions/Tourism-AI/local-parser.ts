@@ -560,8 +560,9 @@ function parseStartDate(text: string): string | null {
 // area within the city.
 const BALI_AREAS: Array<{ pat: RegExp; name: string }> = [
   { pat: /كوتا|kuta/iu, name: "Kuta" },
-  { pat: /سيمنياك|سمينياك|seminyak/iu, name: "Seminyak" },
-  { pat: /[أا]وبود|ubud/iu, name: "Ubud" },
+  { pat: /سيم[يی]?نياك|سمينياك|seminyak/iu, name: "Seminyak" },
+  // الواو الأولى اختيارية: «ابود» مثل «اوبود/أوبود» (صياغة شائعة للموظف).
+  { pat: /[أا]و?بود|ubud/iu, name: "Ubud" },
   { pat: /جيمبران|جيمباران|jimbaran/iu, name: "Jimbaran" },
   { pat: /نوسا\s*دوا|nusa\s*dua/iu, name: "Nusa Dua" },
 ];
