@@ -3900,7 +3900,7 @@ Deno.serve(async (req) => {
   //   POST ?admin_action=upload_offer  (multipart/form-data)
   //   → { ok: true, offer: {...} }
   if (url.searchParams.get("admin_action") === "upload_offer") {
-    if (!checkAuth(req)) return unauthorized();
+    if (!(await checkAuthOrSession(req))) return unauthorized();
     try {
       const form = await req.formData();
       const file = form.get("file");
@@ -3989,7 +3989,7 @@ Deno.serve(async (req) => {
   // Admin: delete an offer (removes the storage object + the row).
   //   POST ?admin_action=delete_offer  body {id}
   if (url.searchParams.get("admin_action") === "delete_offer") {
-    if (!checkAuth(req)) return unauthorized();
+    if (!(await checkAuthOrSession(req))) return unauthorized();
     try {
       const p = await req.json();
       const id = String(p.id || "").trim();
@@ -4012,7 +4012,7 @@ Deno.serve(async (req) => {
 
   // Admin: rename/recategorize an offer.  POST {id, label?, category?}
   if (url.searchParams.get("admin_action") === "update_offer") {
-    if (!checkAuth(req)) return unauthorized();
+    if (!(await checkAuthOrSession(req))) return unauthorized();
     try {
       const p = await req.json();
       const id = String(p.id || "").trim();
