@@ -906,13 +906,14 @@ function parseHotelModifications(lastUserMsg: string): HotelModification[] {
   // villa misspellings ("فله"/"فيله").
   if (/مسبح|بمسبح|سمبح|بسمبح|pool|private\s*pool/iu.test(remainder)) targetFeature = "pool";
   else if (/فيلا|فله|فيله|فل[ةه]|villa/iu.test(remainder)) targetFeature = "villa";
+  else if (/سويت|سويتات|suite|جناح/iu.test(remainder)) targetFeature = "suite";
   if (targetFeature) {
     remainder = remainder
       .replace(/(?:الى|إلى|الي|ل[ـ]?|لـ)?\s*(?:ال)?فندق/giu, " ")               // "الى فندق"
       // "فندق آخر" = another hotel (filler). Remove آخر/اخرى but NOT اخير (last),
       // which is a real stay-ordinal handled below.
       .replace(/(?:^|\s)(?:آخر|أخرى|اخرى|اخر)(?=\s|$)/giu, " ")
-      .replace(/(?:ب|بـ|مع\s*)?(?:مسبح|سمبح|private\s*pool|pool|فيلا|فيله|فل[ةه]|villa)/giu, " ")  // amenity word
+      .replace(/(?:ب|بـ|مع\s*)?(?:مسبح|سمبح|private\s*pool|pool|فيلا|فيله|فل[ةه]|villa|سويتات|سويت|suite|جناح)/giu, " ")  // amenity/room-type word
       .replace(/خاص[ةه]?|private/giu, " ")                                       // "خاص/خاصة"
       .replace(/(?:^|\s)(?:الى|إلى|الي)(?=\s|$)/giu, " ")                         // leftover connector
       .replace(/\s+/g, " ").trim();

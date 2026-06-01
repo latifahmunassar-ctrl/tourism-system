@@ -225,6 +225,7 @@ export function pickCheapestHotel(
       const rt = (h.room_type || "").toLowerCase();
       if (options.feature === "pool"  && !/pool|مسبح/iu.test(rt)) return false;
       if (options.feature === "villa" && !/villa|فيلا/iu.test(rt)) return false;
+      if (options.feature === "suite" && !/suite|سويت|جناح/iu.test(rt)) return false;
     }
     return true;
   };
@@ -1447,18 +1448,19 @@ export async function buildLocalProgram(
 
     for (const idx of targetIndices) {
       const key = `${resolvedCity}#${idx}`;
+      const curName = hotelHistoryByCity?.[resolvedCity]?.[idx]?.last;
+      const curHotel = curName ? allHotels.find(h => h.name.trim() === curName) : null;
+      // Lock EVERY change to the current hotel's sub-area (Bali: Jimbaran/Ubud/
+      // …) so a swap never jumps Jimbaran→Kuta. Non-Bali locations return null,
+      // and the canonical-city filter already keeps those in the same city.
+      const area = curHotel ? extractHotelArea(curHotel.location) : null;
+      if (area) hotelOverrideAreaByStay[key] = area;
+
       if (mod.targetFeature) {
-        // Feature change ("بمسبح خاص" / "بفيلا"): the goal is the AMENITY, not a
-        // different hotel — so don't exclude the current hotel (its own pool/
-        // villa room may be the answer), and constrain to the SAME sub-area
-        // (Bali: Jimbaran/Ubud/…) as the current hotel. If nothing in that area
-        // has the feature, the picker returns null and we notify (no silent
-        // jump to a different area).
+        // Amenity swap ("بمسبح/بفيلا/سويت"): the goal is the room type, not a
+        // different hotel — so don't exclude the current one (its own matching
+        // room may be the answer). If nothing in this area has it, we notify.
         hotelOverrideFeatureByStay[key] = mod.targetFeature;
-        const curName = hotelHistoryByCity?.[resolvedCity]?.[idx]?.last;
-        const curHotel = curName ? allHotels.find(h => h.name.trim() === curName) : null;
-        const area = curHotel ? extractHotelArea(curHotel.location) : null;
-        if (area) hotelOverrideAreaByStay[key] = area;
       } else {
         const prev = hotelHistoryByCity?.[resolvedCity]?.[idx]?.all;
         hotelExcludesByStay[key] = new Set(
@@ -1470,6 +1472,10 @@ export async function buildLocalProgram(
       }
       if (mod.targetStars != null) {
         hotelOverrideStarsByStay[key] = mod.targetStars;
+      } else if (!mod.targetFeature && curHotel && curHotel.stars) {
+        // Plain "غير الفندق": keep the SAME star rating as the current hotel so
+        // a 4★ swaps to another 4★ — even when the trip set no star constraint.
+        hotelOverrideStarsByStay[key] = curHotel.stars;
       }
     }
   }
@@ -1536,7 +1542,8 @@ export async function buildLocalProgram(
       // Feature request (مسبح/فيلا) with no match in the same area → tell the
       // employee plainly instead of silently jumping to another area/room.
       if (featureForThisStay) {
-        const featAr = featureForThisStay === "pool" ? "مسبح خاص" : "فيلا خاصة";
+        const featAr = featureForThisStay === "pool" ? "مسبح خاص"
+          : featureForThisStay === "villa" ? "فيلا خاصة" : "سويت";
         const where = areaForThisStay || cityArabicNames[stay.city] || stay.city;
         return { ok: false, chatMessage: `ما فيه فندق فيه ${featAr} في ${where} يتسع لـ ${request.adults} أشخاص بالتاريخ المطلوب. جرّب مدينة/منطقة ثانية أو شيل شرط ${featAr}.` };
       }
@@ -1548,15 +1555,17 @@ export async function buildLocalProgram(
       // Explicit star override with no match — most often because no hotel
       // at that rating exists for the trip's adult count or travel date.
       if (overrideStarsForThisStay != null) {
-        return { ok: false, chatMessage: `ما عندنا فندق ${overrideStarsForThisStay} نجوم في ${cityArabicNames[stay.city] || stay.city} يتسع لـ ${request.adults} أشخاص بالتاريخ المطلوب. اختر تصنيف مختلف أو عدد مختلف.` };
+        const where = areaForThisStay || cityArabicNames[stay.city] || stay.city;
+        return { ok: false, chatMessage: `ما عندنا فندق ${overrideStarsForThisStay} نجوم متاح في ${where} يتسع لـ ${request.adults} أشخاص بالتاريخ المطلوب. جرّب منطقة/مدينة ثانية أو غيّر التصنيف.` };
       }
       // Special case: the city had hotels but the modification's exclusion
       // set drained them. Distinguish from the generic "no match" so the
       // employee knows they've hit the bottom of the price ladder.
       if (excludeForThisStay && excludeForThisStay.size > 0) {
-        const fallback = pickCheapestHotel(allHotels, stay.city, request, cityPattern);
+        const where = areaForThisStay || cityArabicNames[stay.city] || stay.city;
+        const fallback = pickCheapestHotel(allHotels, stay.city, request, cityPattern, { areaFilter: areaForThisStay });
         if (fallback) {
-          return { ok: false, chatMessage: `وصلت لآخر فندق متاح في ${cityArabicNames[stay.city] || stay.city} لـ ${request.adults} أشخاص بنفس المعايير. ما عندنا خيار أرخص بعدها.` };
+          return { ok: false, chatMessage: `وصلت لآخر فندق متاح في ${where} لـ ${request.adults} أشخاص بنفس المعايير. ما عندنا خيار ثاني في نفس المنطقة.` };
         }
       }
       // Diagnose: what IS available in that city? Walk hotels matching just
