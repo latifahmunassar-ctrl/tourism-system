@@ -559,6 +559,7 @@ export function findArrivalPickup(
   destination: string,
   cityDefs: CityDef[],
   preferType: "airport" | "train" = "airport",
+  requestedTransport: "private" | "shared" | null = null,
 ): TourRow | null {
   // City-specific candidates first. Two filters protect against picking
   // wrong-direction rows:
@@ -606,11 +607,20 @@ export function findArrivalPickup(
   const isAirport = (n: string) => /مطار|airport/iu.test(n) && !/قطار|محط[هة]|station|train/iu.test(n);
   const isTrain   = (n: string) => /قطار|محط[هة]|station|train/iu.test(n);
   const preferred = candidates.filter(c => preferType === "airport" ? isAirport(c.name) : isTrain(c.name));
-  const pool = preferred.length > 0 ? preferred : candidates;
-  // Default to PRIVATE pickup when both shared & private variants exist —
-  // matches the inter-city/departure transfers' bias.
+  let pool = preferred.length > 0 ? preferred : candidates;
   const isPriv  = (n: string) => /بسيار[ةه]\s*خاص[ةه]?|سياره\s*خاص[ةه]?|private/iu.test(n);
   const isShare = (n: string) => /مشترك[ةه]?|shared|ليموزين/iu.test(n);
+  // Sales rule: ALL transfers default to PRIVATE. Shared (ليموزين/مشتركة)
+  // rows are only chosen when the employee explicitly asked for shared.
+  // If no private option exists, return null instead of silently auto-
+  // picking a shared row — employee will see "no transfer" and can either
+  // request shared explicitly or add the row to the sheet.
+  const effectiveTransport = requestedTransport ?? "private";
+  if (effectiveTransport === "private") {
+    const privatePool = pool.filter(c => !isShare(c.name));
+    if (privatePool.length === 0) return null;
+    pool = privatePool;
+  }
   pool.sort((a, b) => {
     const aP = isPriv(a.name) ? 1 : (isShare(a.name) ? -1 : 0);
     const bP = isPriv(b.name) ? 1 : (isShare(b.name) ? -1 : 0);
@@ -665,6 +675,7 @@ export function findDepartureDrop(
   city: string,
   destination: string,
   cityDefs: CityDef[],
+  requestedTransport: "private" | "shared" | null = null,
 ): TourRow | null {
   let candidates = allTours.filter(t => {
     if (t.type !== destination) return false;
@@ -714,6 +725,14 @@ export function findDepartureDrop(
   //   (3) cheapest within the same tier
   const isPrivateRow = (n: string) => /بسيار[ةه]\s*خاص[ةه]?|سياره\s*خاص[ةه]?|private/iu.test(n);
   const isSharedRow = (n: string) => /مشترك[ةه]?|shared|ليموزين/iu.test(n);
+  // Sales rule (mirrors findArrivalPickup / findInterCityTransfer): default
+  // to PRIVATE. Never auto-fall-back to a shared row.
+  const effectiveTransport = requestedTransport ?? "private";
+  if (effectiveTransport === "private") {
+    const privateOnly = candidates.filter(c => !isSharedRow(c.name));
+    if (privateOnly.length === 0) return null;
+    candidates = privateOnly;
+  }
   candidates.sort((a, b) => {
     const aHome = /ارض\s*الوطن|الديار|للسلامه|للسلامة|للعوده|للعودة|الدولي/iu.test(a.name) ? 1 : 0;
     const bHome = /ارض\s*الوطن|الديار|للسلامه|للسلامة|للعوده|للعودة|الدولي/iu.test(b.name) ? 1 : 0;
@@ -792,6 +811,18 @@ export function findInterCityTransfer(
       // city; an airport row's destination is generic (just the airport).
       return /مطار|airport/iu.test(tr.name);
     });
+  }
+  // Sales rule (mirrors findArrivalPickup / findDepartureDrop): default
+  // to PRIVATE. Never auto-fall-back to a shared (مشتركة/ليموزين) row
+  // unless the employee explicitly asked for shared transport.
+  {
+    const isSharedRowEarly = (n: string) => /مشترك[ةه]?|shared|ليموزين/iu.test(n);
+    const effectiveTransportEarly = requestedTransport ?? "private";
+    if (effectiveTransportEarly === "private" && fromDrop.length > 0) {
+      const privateOnly = fromDrop.filter(tr => !isSharedRowEarly(tr.name));
+      if (privateOnly.length === 0) return null;
+      fromDrop = privateOnly;
+    }
   }
   if (fromDrop.length > 0) {
     // Sort priority:
@@ -1910,7 +1941,7 @@ export async function buildLocalProgram(
   const lastCity = stayOrder.length > 0 ? stayOrder[stayOrder.length - 1].city : request.cities[request.cities.length - 1];
   const dest = request.destination!;
   // Day 1 = international arrival → always airport pickup.
-  const arrPickup = findArrivalPickup(allTours, firstCity, dest, cityDefs, "airport");
+  const arrPickup = findArrivalPickup(allTours, firstCity, dest, cityDefs, "airport", request.transport);
   if (arrPickup) selectedTransfers.push({ day: 1, row: arrPickup, kind: "Pickup" });
   // Inter-city transit days. The pickup type for the destination city
   // depends on HOW the group arrives — by train (qatar) or by flight.
@@ -1977,7 +2008,7 @@ export async function buildLocalProgram(
             selectedTransfers.push({ day: d.number, row: hubToCity, kind: "Pickup" });
           }
         } else {
-          const arrPickupForCity = findArrivalPickup(allTours, d.toCity, dest, cityDefs, arrivalType);
+          const arrPickupForCity = findArrivalPickup(allTours, d.toCity, dest, cityDefs, arrivalType, request.transport);
           if (arrPickupForCity) {
             selectedTransfers.push({ day: d.number, row: arrPickupForCity, kind: "Pickup" });
           }
@@ -1986,7 +2017,7 @@ export async function buildLocalProgram(
     }
   }
   // Departure drop (last day) — uses the last STAY's city, not last unique
-  const depDrop = findDepartureDrop(allTours, lastCity, dest, cityDefs);
+  const depDrop = findDepartureDrop(allTours, lastCity, dest, cityDefs, request.transport);
   if (depDrop) selectedTransfers.push({ day: days.length, row: depDrop, kind: "Drop" });
 
   // 5. Format
