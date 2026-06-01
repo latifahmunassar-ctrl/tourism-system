@@ -902,16 +902,19 @@ function parseHotelModifications(lastUserMsg: string): HotelModification[] {
   // the whole phrase (connector + "فندق" + amenity words) so only the city/
   // ordinal remains for resolution.
   let targetFeature: string | null = null;
-  if (/مسبح|بمسبح|pool|private\s*pool/iu.test(remainder)) targetFeature = "pool";
-  else if (/فيلا|villa/iu.test(remainder)) targetFeature = "villa";
+  // Tolerate the common س↔م swap typo ("بسمبح"/"سمبح" for "بمسبح"/"مسبح") and
+  // villa misspellings ("فله"/"فيله").
+  if (/مسبح|بمسبح|سمبح|بسمبح|pool|private\s*pool/iu.test(remainder)) targetFeature = "pool";
+  else if (/فيلا|فله|فيله|فل[ةه]|villa/iu.test(remainder)) targetFeature = "villa";
   if (targetFeature) {
     remainder = remainder
       .replace(/(?:الى|إلى|الي|ل[ـ]?|لـ)?\s*(?:ال)?فندق/giu, " ")               // "الى فندق"
       // "فندق آخر" = another hotel (filler). Remove آخر/اخرى but NOT اخير (last),
       // which is a real stay-ordinal handled below.
       .replace(/(?:^|\s)(?:آخر|أخرى|اخرى|اخر)(?=\s|$)/giu, " ")
-      .replace(/(?:ب|بـ|مع\s*)?(?:مسبح|private\s*pool|pool|فيلا|villa)/giu, " ")  // amenity word
+      .replace(/(?:ب|بـ|مع\s*)?(?:مسبح|سمبح|private\s*pool|pool|فيلا|فيله|فل[ةه]|villa)/giu, " ")  // amenity word
       .replace(/خاص[ةه]?|private/giu, " ")                                       // "خاص/خاصة"
+      .replace(/(?:^|\s)(?:الى|إلى|الي)(?=\s|$)/giu, " ")                         // leftover connector
       .replace(/\s+/g, " ").trim();
   }
   if (!remainder) return [];

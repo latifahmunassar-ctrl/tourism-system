@@ -169,6 +169,17 @@ function hotelCityMatches(hotelLocation: string, canonicalCity: string, cityPatt
  * On tie (same price), pick alphabetically first.
  * Returns the chosen HotelRow or null if nothing matches.
  */
+/**
+ * Extract the Bali sub-area from a hotel location, e.g.
+ * "Bali-Jimbaran - indonesia" → "Jimbaran". Returns null for locations that
+ * don't follow the "Bali-<area>" shape (other destinations have one area per
+ * canonical city, so no sub-area lock is needed).
+ */
+function extractHotelArea(location: string): string | null {
+  const m = String(location || "").match(/bali\s*[-–]\s*(.+?)\s*[-–]\s*[a-z]+\s*$/i);
+  return m ? m[1].trim() : null;
+}
+
 export function pickCheapestHotel(
   allHotels: HotelRow[],
   city: string,
@@ -1338,6 +1349,7 @@ export async function buildLocalProgram(
   const hotelOverrideOccupancyByStay: Record<string, number> = {};
   const hotelOverrideStarsByStay: Record<string, number> = {};
   const hotelOverrideFeatureByStay: Record<string, string> = {}; // "pool" | "villa"
+  const hotelOverrideAreaByStay: Record<string, string> = {}; // Bali sub-area lock for feature swaps
   for (const mod of request.hotelModifications) {
     let resolvedCity: string | null = null;
     let nameMatchedIndices: number[] | null = null;
@@ -1434,18 +1446,30 @@ export async function buildLocalProgram(
     }
 
     for (const idx of targetIndices) {
-      const prev = hotelHistoryByCity?.[resolvedCity]?.[idx]?.all;
-      hotelExcludesByStay[`${resolvedCity}#${idx}`] = new Set(
-        Array.from(prev || new Set<string>()).map(n => n.toLowerCase()),
-      );
+      const key = `${resolvedCity}#${idx}`;
+      if (mod.targetFeature) {
+        // Feature change ("بمسبح خاص" / "بفيلا"): the goal is the AMENITY, not a
+        // different hotel — so don't exclude the current hotel (its own pool/
+        // villa room may be the answer), and constrain to the SAME sub-area
+        // (Bali: Jimbaran/Ubud/…) as the current hotel. If nothing in that area
+        // has the feature, the picker returns null and we notify (no silent
+        // jump to a different area).
+        hotelOverrideFeatureByStay[key] = mod.targetFeature;
+        const curName = hotelHistoryByCity?.[resolvedCity]?.[idx]?.last;
+        const curHotel = curName ? allHotels.find(h => h.name.trim() === curName) : null;
+        const area = curHotel ? extractHotelArea(curHotel.location) : null;
+        if (area) hotelOverrideAreaByStay[key] = area;
+      } else {
+        const prev = hotelHistoryByCity?.[resolvedCity]?.[idx]?.all;
+        hotelExcludesByStay[key] = new Set(
+          Array.from(prev || new Set<string>()).map(n => n.toLowerCase()),
+        );
+      }
       if (mod.targetOccupancy != null) {
-        hotelOverrideOccupancyByStay[`${resolvedCity}#${idx}`] = mod.targetOccupancy;
+        hotelOverrideOccupancyByStay[key] = mod.targetOccupancy;
       }
       if (mod.targetStars != null) {
-        hotelOverrideStarsByStay[`${resolvedCity}#${idx}`] = mod.targetStars;
-      }
-      if (mod.targetFeature) {
-        hotelOverrideFeatureByStay[`${resolvedCity}#${idx}`] = mod.targetFeature;
+        hotelOverrideStarsByStay[key] = mod.targetStars;
       }
     }
   }
@@ -1476,6 +1500,7 @@ export async function buildLocalProgram(
     const overrideForThisStay = hotelOverrideOccupancyByStay[`${stay.city}#${stayIdx}`];
     const overrideStarsForThisStay = hotelOverrideStarsByStay[`${stay.city}#${stayIdx}`];
     const featureForThisStay = hotelOverrideFeatureByStay[`${stay.city}#${stayIdx}`];
+    const areaForThisStay = hotelOverrideAreaByStay[`${stay.city}#${stayIdx}`];
     // Pin slots NOT modded this turn to the hotel they had in the last
     // program. Without this, a follow-up swap rebuilds from scratch and
     // pickCheapestHotel reverts every untouched slot to the catalog's
@@ -1503,11 +1528,18 @@ export async function buildLocalProgram(
         excludeNames: excludeForThisStay,
         overrideAdults: overrideForThisStay,
         overrideStars: overrideStarsForThisStay,
-        areaFilter: stay.area,
+        areaFilter: areaForThisStay || stay.area,
         feature: featureForThisStay,
       });
     }
     if (!hotel) {
+      // Feature request (مسبح/فيلا) with no match in the same area → tell the
+      // employee plainly instead of silently jumping to another area/room.
+      if (featureForThisStay) {
+        const featAr = featureForThisStay === "pool" ? "مسبح خاص" : "فيلا خاصة";
+        const where = areaForThisStay || cityArabicNames[stay.city] || stay.city;
+        return { ok: false, chatMessage: `ما فيه فندق فيه ${featAr} في ${where} يتسع لـ ${request.adults} أشخاص بالتاريخ المطلوب. جرّب مدينة/منطقة ثانية أو شيل شرط ${featAr}.` };
+      }
       // Special case: explicit occupancy override that found no match. Don't
       // dress this up as a "no hotel for the group" diag — name the override.
       if (overrideForThisStay != null) {
