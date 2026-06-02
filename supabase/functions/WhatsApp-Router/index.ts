@@ -3624,9 +3624,18 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: "missing proposal_id" }),
           { status: 400, headers: jsonCors });
       }
-      if (decision !== "approve" && decision !== "correct") {
-        return new Response(JSON.stringify({ error: "decision must be 'approve' or 'correct'" }),
+      if (decision !== "approve" && decision !== "correct" && decision !== "dismiss") {
+        return new Response(JSON.stringify({ error: "decision must be 'approve', 'correct', or 'dismiss'" }),
           { status: 400, headers: jsonCors });
+      }
+      // حذف/تجاهل الاقتراح بدون إرسال للعميل ولا حفظ في FAQ.
+      if (decision === "dismiss") {
+        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const { error } = await supabase.from("whatsapp_admin_proposals")
+          .update({ status: "dismissed", decided_at: new Date().toISOString() })
+          .eq("id", id);
+        if (error) throw new Error(error.message);
+        return new Response(JSON.stringify({ ok: true, dismissed: true }), { headers: jsonCors });
       }
       if (decision === "correct" && !correctedReply) {
         return new Response(JSON.stringify({ error: "reply is required for decision='correct'" }),
