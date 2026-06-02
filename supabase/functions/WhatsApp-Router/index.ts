@@ -2651,23 +2651,28 @@ async function appendChatAnswerRow(args: {
     "https://www.googleapis.com/auth/spreadsheets");
   if (!token) return false;
 
-  // Sheet column order:
-  // A: ID | B: Intent | C: Sub-intent | D: Keywords | E: sample Q |
-  // F: Answer_SA1 | G: Answer_SA2 | H: Answer clarification |
-  // I: Answer_OM | J: Status | K: Stage
+  // ترتيب الأعمدة يطابق عناوين شيت «ALEZZ Chat» الفعلية:
+  // A: ID | B: Intent | C: Sub-intent | D: Stage | E: status |
+  // F: Keywords | G: sample Q | H: Answer_SA1 | I: Answer_SA2 |
+  // J: Answer clarification | K: Answer_OM | L: Status | M: وقت السؤال
   const newId = `PKG_AI_${Date.now()}`;
+  // وقت السؤال بتوقيت مسقط (UTC+4)، صيغة قابلة للقراءة YYYY-MM-DD HH:MM
+  const askedAt = new Date(Date.now() + 4 * 60 * 60 * 1000)
+    .toISOString().replace("T", " ").slice(0, 16);
   const row = [
-    newId,
-    args.intent,
-    args.subIntent,
-    args.keywords.join(", "),
-    args.sampleQ,
-    args.answer,       // SA1
-    "",                // SA2
-    "",                // clarification
-    args.answer,       // OM (same — Claude already wrote in Khaleeji)
-    "AI-generated",
-    args.stage || "",  // Stage (empty = applies to ALL stages)
+    newId,                     // A: ID
+    args.intent,               // B: Intent
+    args.subIntent,            // C: Sub-intent
+    args.stage || "",          // D: Stage (فارغ = ينطبق على كل المراحل)
+    "Active",                  // E: status
+    args.keywords.join(", "),  // F: Keywords
+    args.sampleQ,              // G: sample Q
+    args.answer,               // H: Answer_SA1
+    "",                        // I: Answer_SA2
+    "",                        // J: Answer clarification
+    args.answer,               // K: Answer_OM (نفس النص — Claude يكتب بالخليجي)
+    "AI-generated",            // L: Status
+    askedAt,                   // M: وقت السؤال
   ];
 
   const url =
