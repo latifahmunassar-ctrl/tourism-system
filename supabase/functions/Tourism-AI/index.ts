@@ -121,8 +121,9 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     // Jakarta: also accept "جاكرت" without trailing ا (very common shorthand)
     // and "جاكزتا" (ز instead of ر, sheet typo).
     { canonical: "Jakarta",  pattern: /جا?ك[رز]تا?|jakarta/i },
-    // Bandung sheet variant: "باندونق" with ق (Egyptian dialect spelling)
-    { canonical: "Bandung",  pattern: /باندون[جغق]|bandung/i },
+    // Bandung variants: "باندونغ/باندونج/باندونق" and the ن-dropped "باندوق"
+    // (Saudi shorthand — ung→وق). The ن before the final letter is optional.
+    { canonical: "Bandung",  pattern: /باندون?[جغقك]|bandung/i },
     { canonical: "Puncak",   pattern: /بونشاك|puncak/i },
   ],
 };
@@ -916,7 +917,7 @@ async function buildDataContext(
       // Indonesia
       [/بالي|bali|[أا]و?بود|كوتا|سمينياك|سيمينياك|جيمبران|جيمباران|jimbaran|ubud|kuta/i,  "Bali"],
       [/جاكرتا|jakarta/i,                                "Jakarta"],
-      [/باندونج|باندونغ|bandung/i,                       "Bandung"],
+      [/باندون?[جغقك]|bandung/i,                          "Bandung"],
       [/بونشاك|puncak/i,                                 "Puncak"],
       // Turkey
       [/ريزا|rize|اشلاي|فرتتنه/i,                        "Rize"],
