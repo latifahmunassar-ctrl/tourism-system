@@ -1128,6 +1128,42 @@ Deno.serve(async (req) => {
     }, null, 2), { headers: CORS_HEADERS });
   }
 
+  // ?seed_suggestions=DEST → seed package_suggestions for a destination from the
+  // POST body, for tabs with no "اقتراحات توزيع مدن" column (Bosnia/Russia/
+  // Turky/Indonesia/Malaysia). Body: {"rows":[{days, distribution, arrival?,
+  // departure?, label?}, …]}. Replaces all rows for that destination. Survives
+  // future syncs (the sync only replaces suggestions when the sheet has some).
+  const seedDest = new URL(req.url).searchParams.get("seed_suggestions");
+  if (seedDest) {
+    try {
+      const body = await req.json().catch(() => ({}));
+      const rowsIn = Array.isArray((body as { rows?: unknown[] })?.rows) ? (body as { rows: unknown[] }).rows : [];
+      const rows = rowsIn.map((s) => {
+        const o = s as Record<string, unknown>;
+        return {
+          destination:      seedDest,
+          arrival_airport:  String(o.arrival ?? o.arrival_airport ?? ""),
+          departure_airport: String(o.departure ?? o.departure_airport ?? ""),
+          days:             Number(o.days),
+          label:            (o.label ?? null) as string | null,
+          distribution:     String(o.distribution ?? ""),
+        };
+      }).filter(r => r.days > 0 && r.distribution);
+      if (rows.length === 0) {
+        return new Response(JSON.stringify({ ok: false, error: "no valid rows in body" }), { status: 400, headers: CORS_HEADERS });
+      }
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      await supabaseAdmin.from("package_suggestions").delete().eq("destination", seedDest);
+      const { error } = await supabaseAdmin.from("package_suggestions").insert(rows);
+      return new Response(JSON.stringify({ ok: !error, error: error?.message || null, destination: seedDest, inserted: rows.length }, null, 2), { headers: CORS_HEADERS });
+    } catch (e) {
+      return new Response(JSON.stringify({ ok: false, error: (e as Error).message }), { status: 500, headers: CORS_HEADERS });
+    }
+  }
+
   // ?which_sheet=1 → report which spreadsheet ID the function is reading from
   if (new URL(req.url).searchParams.get("which_sheet") === "1") {
     let serviceAccountEmail: string | null = null;
