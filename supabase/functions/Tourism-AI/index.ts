@@ -2253,7 +2253,7 @@ Deno.serve(async (req) => {
     // pair. We answer from the package_suggestions table (populated by
     // sync-sheets from the "اقتراحات توزيع مدن" column) — no Claude.
     if (detectedDest && lastUserMsg) {
-      const suggestionsHit = /اقتراح(?:ات)?|اقترح|خيارات|بكج|package[s]?|suggestion[s]?/iu.test(lastUserMsg);
+      const suggestionsHit = /اقتراح(?:ات)?|مقترح(?:ات)?|اقترح|خيارات|بكج|package[s]?|suggestion[s]?/iu.test(lastUserMsg);
       if (suggestionsHit) {
         const tNorm = lastUserMsg.replace(/[٠-٩]/g, (c: string) => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)));
         const daysMatch = tNorm.match(/(\d{1,2})\s*(?:يوم|ايام|أيام|days?)/iu);
