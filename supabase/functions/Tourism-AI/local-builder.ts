@@ -36,6 +36,7 @@ export type TourRow = {
   id?: number;
   name: string;
   type: string;            // destination
+  city?: string;           // canonical city from sheet section header ("" if unknown)
   price: number;
   currency: string;
   variants?: Array<{ label: string; price: number; currency?: string }>;
@@ -311,10 +312,51 @@ function monthNumber(monthName: string): number {
  * Match a tour to a city using the same regex table as the parser.
  * Returns true if any of the city's patterns matches the tour name.
  */
-function tourBelongsToCity(tour: TourRow, cityDefs: CityDef[], canonicalCity: string): boolean {
-  const def = cityDefs.find(c => c.canonical === canonicalCity);
-  if (!def) return false;
-  return def.pattern.test(tour.name);
+// Canonical city whose pattern matches the tour NAME, or null. The name is the
+// most specific signal (e.g. "جولة معالم ايدر" → Ayder); used as the primary
+// owner when that city is actually part of the program.
+function tourNameCity(tour: TourRow, cityDefs: CityDef[]): string | null {
+  for (const c of cityDefs) {
+    if (c.pattern.test(tour.name)) return c.canonical;
+  }
+  return null;
+}
+
+/**
+ * Does `tour` belong to `canonicalCity`?
+ *
+ * Two signals: the tour NAME (specific) and the sheet SECTION header the tour
+ * was filed under (broad — captures day-trips like سابانجا / الأميرات / فيالاند
+ * that never name their base city). They can disagree: بورصة and ايدر day-trips
+ * sit under the Istanbul / Trabzon sections yet name their own stay-cities.
+ *
+ * When `itineraryCities` is supplied (the cities actually in the program) we
+ * arbitrate so each tour lands in exactly one of them:
+ *   1. name-city wins if it's in the itinerary (ايدر day-trip → Ayder, not the
+ *      Trabzon section — so Ayder isn't starved),
+ *   2. else the section-city owns it if it's in the itinerary (بورصة/سابانجا on
+ *      an Istanbul-only trip → Istanbul),
+ *   3. else fall back to a plain name match.
+ * Without itinerary context (modification look-ups) we OR both signals so a
+ * tour is findable by either its name or its section city.
+ */
+function tourBelongsToCity(
+  tour: TourRow,
+  cityDefs: CityDef[],
+  canonicalCity: string,
+  itineraryCities?: Set<string>,
+): boolean {
+  const nameCity = tourNameCity(tour, cityDefs);
+  const sectionCity = tour.city && tour.city.trim() ? tour.city.trim() : null;
+
+  if (itineraryCities) {
+    if (nameCity && itineraryCities.has(nameCity)) return nameCity === canonicalCity;
+    if (sectionCity && itineraryCities.has(sectionCity)) return sectionCity === canonicalCity;
+    return nameCity === canonicalCity;
+  }
+
+  // No itinerary context: a tour matches the city if EITHER signal points to it.
+  return sectionCity === canonicalCity || nameCity === canonicalCity;
 }
 
 /**
@@ -336,7 +378,10 @@ const TRANSFER_PREFIXES = [
   "الخروج", "خروج",
 ];
 function isTransferTour(name: string): boolean {
-  const n = (name || "").trim();
+  // Strip a leading list number ("5. " / "1) " / "٢-") so a transfer row
+  // written as "5. التوصيل من فندق ... للمطار" is still recognized as a
+  // transfer (and excluded from the sightseeing-tour pool), not a tour.
+  const n = (name || "").trim().replace(/^[\d٠-٩]+\s*[.\-)،]\s*/, "");
   return TRANSFER_PREFIXES.some(p => n.startsWith(p));
 }
 
@@ -436,12 +481,21 @@ function findTourByKeywords(
   return best ? best.tour : null;
 }
 
-/** Return the canonical city this tour belongs to, or null if none match. */
-function getTourCity(tour: TourRow, cityDefs: CityDef[]): string | null {
-  for (const c of cityDefs) {
-    if (c.pattern.test(tour.name)) return c.canonical;
+/**
+ * Return the single canonical city this tour belongs to, or null. Prefers the
+ * name-city, falling back to the sheet section-city (so nameless day-trips like
+ * الأميرات / فيالاند still resolve to their base city). When `itineraryCities`
+ * is given, a name-city or section-city that's part of the program wins, so the
+ * answer matches how the tour is actually placed in the itinerary.
+ */
+function getTourCity(tour: TourRow, cityDefs: CityDef[], itineraryCities?: Set<string>): string | null {
+  const nameCity = tourNameCity(tour, cityDefs);
+  const sectionCity = tour.city && tour.city.trim() ? tour.city.trim() : null;
+  if (itineraryCities) {
+    if (nameCity && itineraryCities.has(nameCity)) return nameCity;
+    if (sectionCity && itineraryCities.has(sectionCity)) return sectionCity;
   }
-  return null;
+  return nameCity || sectionCity;
 }
 
 /**
@@ -466,6 +520,8 @@ export function pickToursForCity(
     excludeNames?: Set<string>;
     /** Number of stay-days to leave EMPTY (free day) — shrinks selected list */
     freeDayCount?: number;
+    /** Cities in the whole program — arbitrates name-city vs section-city. */
+    itineraryCities?: Set<string>;
   },
 ): { selected: TourRow[]; available: number; deficit: number } {
   // Real tours only (not transfer/pickup rows) belonging to this city
@@ -479,7 +535,7 @@ export function pickToursForCity(
 
   const cityTours = allTours.filter(t =>
     !isTransfer(t.name)
-    && tourBelongsToCity(t, cityDefs, canonicalCity)
+    && tourBelongsToCity(t, cityDefs, canonicalCity, options?.itineraryCities)
     && !isExcluded(t.name)
     && !pinnedNames.has(t.name.trim().toLowerCase()),
   );
@@ -537,21 +593,36 @@ export function pickInterCityFlights(
   return result;
 }
 
-function findFlight(flights: FlightRow[], from: string, to: string): FlightRow | null {
-  // Normalize then expand "saint" → "st" so canonical "St Petersburg" matches
-  // sheet entries written as "Saint Petersburg" (Russia trains, mainly).
-  const norm = (s: string) => String(s || "")
+// Normalize a city name for flight/train matching: lowercase, drop airport-code
+// parentheticals ("Ha Noi (HAN)"), strip diacritics/separators, expand
+// "saint" → "st" so canonical "St Petersburg" matches "Saint Petersburg".
+function normFlightCity(s: string): string {
+  return String(s || "")
     .toLowerCase()
-    .replace(/[\s\.\-_]/g, "")
+    .normalize("NFD").replace(/\p{M}/gu, "")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/[\s\.\-_,]/g, "")
     .replace(/saint/g, "st");
-  const f = norm(from);
-  const t = norm(to);
-  return flights.find(fl => {
-    const ff = norm(fl.from_city);
-    const tt = norm(fl.to_city);
-    return (ff.includes(f.split(" ")[0]) || f.includes(ff.split(" ")[0]))
-        && (tt.includes(t.split(" ")[0]) || t.includes(tt.split(" ")[0]));
-  }) || null;
+}
+
+// True when two city names refer to the same place despite sheet spelling
+// drift. The flight block is hand-typed and frequently misspells the canonical
+// names ("Istanbol"≈"Istanbul", "Trabozon"≈"Trabzon"). Substring match handles
+// prefixes/airport codes; a bigram-similarity fallback (≥0.6) absorbs the
+// one/two-letter typos that plain includes() can't. Both the from- and to-city
+// must match, so the threshold stays safe from cross-city false positives.
+function flightCityMatches(a: string, b: string): boolean {
+  const x = normFlightCity(a);
+  const y = normFlightCity(b);
+  if (!x || !y) return false;
+  if (x.includes(y) || y.includes(x)) return true;
+  return bigramSim(x, y) >= 0.6;
+}
+
+function findFlight(flights: FlightRow[], from: string, to: string): FlightRow | null {
+  return flights.find(fl =>
+    flightCityMatches(fl.from_city, from) && flightCityMatches(fl.to_city, to)
+  ) || null;
 }
 
 /**
@@ -825,6 +896,23 @@ export function findInterCityTransfer(
       // Only accept airport rows in the relaxed branch — a road row to a
       // third city ("Hanoi → HaLong") would land the customer in the wrong
       // city; an airport row's destination is generic (just the airport).
+      return /مطار|airport/iu.test(tr.name);
+    });
+  }
+  // Generic airport-drop fallback (mirrors findArrivalPickup's generic-pickup
+  // branch). Some agencies model the hotel→airport ride with a single city-less
+  // row ("توديع الى المطار الدولي" in Turkey) reused for every city. The strict
+  // passes above reject it because it names no origin city, so a domestic-flight
+  // leg ended up with an arrival pickup but no departure drop. Accept a generic
+  // airport row — one that names NEITHER an origin nor any other canonical city
+  // — only for airport transits; the caller already nulls airport rows on road
+  // legs, so this can't attach a bogus "go to the airport" line to a car ride.
+  if (fromDrop.length === 0 && transitKind === "airport") {
+    fromDrop = allTours.filter(tr => {
+      if (tr.type !== destination) return false;
+      if (!baseFilter(tr.name)) return false;          // outbound verb + airport + type
+      if (rowFromCity(tr.name)) return false;          // must be city-less (generic)
+      if (!isThirdCityClean(tr.name)) return false;    // names no other canonical city
       return /مطار|airport/iu.test(tr.name);
     });
   }
@@ -1672,6 +1760,10 @@ export async function buildLocalProgram(
   // A value of `null` means "make this day a free day" (remove the tour).
   const dayOverrides = new Map<number, TourRow | null>();
 
+  // Cities actually in this program — lets tour↔city matching arbitrate between
+  // a tour's name-city and its sheet section-city (see tourBelongsToCity).
+  const itinerarySet = new Set(request.cities);
+
   for (const mod of request.tourModifications) {
     if (mod.kind === "add") {
       // Find the city: prefer the explicit day number, then the hint, then
@@ -1688,7 +1780,7 @@ export async function buildLocalProgram(
         const where = hintCity ? ` في مدينة ${hintCity}` : "";
         return { ok: false, chatMessage: `ما لقيت جولة "${mod.name}"${where}. تأكد من الاسم.` };
       }
-      const city = hintCity || getTourCity(tour, cityDefs);
+      const city = hintCity || getTourCity(tour, cityDefs, itinerarySet);
       if (!city || !request.cities.includes(city)) {
         return { ok: false, chatMessage: `الجولة "${tour.name.trim()}" مو في مدينة ضمن البرنامج.` };
       }
@@ -1698,7 +1790,7 @@ export async function buildLocalProgram(
       // takes its slot rather than just being added on top.
       const yomHorTour = allTours.find(t =>
         /^يوم\s*(?:ال)?حر/iu.test(t.name.trim())
-        && tourBelongsToCity(t, cityDefs, city),
+        && tourBelongsToCity(t, cityDefs, city, itinerarySet),
       );
       if (yomHorTour) cm.excludeNames.add(yomHorTour.name.trim().toLowerCase());
       cm.pinnedTours.push(tour);
@@ -1732,7 +1824,7 @@ export async function buildLocalProgram(
     if (!fromTour) {
       return { ok: false, chatMessage: `ما لقيت جولة باسم "${fromQuery}" في النظام. تأكد من الاسم أو راجع الشيت.` };
     }
-    const fromCity = getTourCity(fromTour, cityDefs);
+    const fromCity = getTourCity(fromTour, cityDefs, itinerarySet);
     if (!fromCity) {
       return { ok: false, chatMessage: `الجولة "${fromTour.name.trim()}" مو مربوطة بمدينة معروفة في وجهة ${request.destination}.` };
     }
@@ -1766,7 +1858,7 @@ export async function buildLocalProgram(
         }
         const candidates = allTours.filter(t =>
           !isTransferTour(t.name) &&
-          tourBelongsToCity(t, cityDefs, fromCity) &&
+          tourBelongsToCity(t, cityDefs, fromCity, itinerarySet) &&
           !excludeForPick.has(t.name.trim().toLowerCase()) &&
           !/^يوم\s*(?:ال)?حر/iu.test(t.name.trim()),
         );
@@ -1815,11 +1907,12 @@ export async function buildLocalProgram(
     const cityMod = perCityMods.get(city);
     const { selected, available, deficit } = pickToursForCity(
       allTours, cityDefs, city, stayDayNumbers.length, request.adults || 2,
-      cityMod ? {
-        pinnedTours: cityMod.pinnedTours,
-        excludeNames: cityMod.excludeNames,
-        freeDayCount: cityMod.freeDayCount,
-      } : undefined,
+      {
+        pinnedTours: cityMod?.pinnedTours,
+        excludeNames: cityMod?.excludeNames,
+        freeDayCount: cityMod?.freeDayCount,
+        itineraryCities: itinerarySet,
+      },
     );
     // Day-specific overrides win over the order-based auto pick. Two-pass
     // assignment so an override on a later day still consumes its tour
