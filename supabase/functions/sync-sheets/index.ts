@@ -28,6 +28,74 @@ const CORS_HEADERS = {
 
 const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia"];
 
+// Per-destination canonical-city patterns — MUST stay in sync with DEST_CITIES
+// in Tourism-AI/index.ts (same canonical names the builder groups by). Used
+// only to recognise the city section-header rows the agency puts above each
+// city's tour block (e.g. "جولات وانتقالات اسطنبول" → Istanbul), so every tour
+// under that header inherits the city even when its own name never mentions it.
+const SECTION_CITY_DEFS: Record<string, Array<{ canonical: string; pattern: RegExp }>> = {
+  vietnam: [
+    { canonical: "Ha Noi",      pattern: /هانوي|hanoi|ha\s*noi/i },
+    { canonical: "Sapa",        pattern: /سابا|sapa|كات\s*كات|لاو\s*تشاي|تا\s*فان|فانسيبان/i },
+    { canonical: "Ha Long",     pattern: /هالون[جغ]|halong|ha\s*long/i },
+    { canonical: "Da Nang",     pattern: /دانان[جغ]|danang|da\s*nang|ba\s*na|ماي\s*خي/i },
+    { canonical: "Phu Quoc",    pattern: /فوكوك|phu\s*quoc|phuquoc/i },
+    { canonical: "Nha Trang",   pattern: /نها\s*تران[جغ]|نهاتران[جغ]|نياتران[جغ]|nha\s*trang/i },
+    { canonical: "Da Lat",      pattern: /دالا[تط]|دا\s*لا[تط]|دلات|dalat|da\s*lat/i },
+    { canonical: "Ho Chi Minh", pattern: /هوتشي|هوتشمي|هو\s*تشي|ho\s*chi|hochi|saigon|سايغون|سايجون/i },
+  ],
+  Malaysia: [
+    { canonical: "Kuala Lumpur",     pattern: /كوالا\s*ل{0,3}\s*مبور?|كولا\s*ل{0,3}\s*مبور?|kuala\s*lumpur|\bKL\b/i },
+    { canonical: "Selangor",         pattern: /سيلان[جغ]ور|سلان[جغ]ور|selangor|sunway/i },
+    { canonical: "Langkawi",         pattern: /لان?كاوي|langkawi/i },
+    { canonical: "Penang",           pattern: /بينان[جغ]|بنان[جغ]|penang/i },
+    { canonical: "Cameron Highlands",pattern: /كام?يرون|cameron|هايلاند/i },
+  ],
+  thailand: [
+    { canonical: "Bangkok",      pattern: /بان[كق]وك|bangkok/i },
+    { canonical: "Phuket",       pattern: /بوكي?ت|phuket/i },
+    { canonical: "Krabi",        pattern: /كرابي|krabi/i },
+    { canonical: "Chiang Mai",   pattern: /شيان[جغ]?\s*ماي|شانغماي|chiang\s*mai|chiangmai/i },
+    { canonical: "Pattaya",      pattern: /با?تايا|pattaya/i },
+    { canonical: "Koh Samui",    pattern: /كو(?:ه|سم?)\s*ساموي|koh\s*samui|samui/i },
+  ],
+  Turky: [
+    { canonical: "Istanbul",   pattern: /اسطنبول|إسطنبول|إستانبول|istanbul/i },
+    { canonical: "Trabzon",    pattern: /طرابزون|طربزون|trabzon/i },
+    { canonical: "Uzungol",    pattern: /[أا]وزن[جغ]ول|[أا]زون[جغ]ول|uzungol/i },
+    { canonical: "Ayder",      pattern: /[أا]يدر|ayder/i },
+    { canonical: "Rize",       pattern: /ريزا|ريزه|rize/i },
+    { canonical: "Bursa",      pattern: /بورص[ةه]|bursa/i },
+    { canonical: "Sapanca",    pattern: /سابان[جغ]ا|sapanca|معشوقية/i },
+  ],
+  russia: [
+    { canonical: "Moscow",         pattern: /موسكو|موسكوا|moscow|moskva/i },
+    { canonical: "St Petersburg",  pattern: /(?:سان?ت?\s*)?بطرس(?:بور[جك]|برغ|بور)|سان?ت?\s+(?:بطرس|برغ)|saint\s*petersburg|st\.?\s*petersburg/i },
+    { canonical: "Sochi",          pattern: /سوتشي|سوشي|sochi/i },
+  ],
+  Bosnia: [
+    { canonical: "Sarajevo", pattern: /سرايي?فو|sarajevo/i },
+    { canonical: "Mostar",   pattern: /موستار|mostar/i },
+    { canonical: "Bihać",    pattern: /بيهاتش|bihać|bihac/i },
+  ],
+  indonesia: [
+    { canonical: "Bali",     pattern: /بالي|bali|كوتا|kuta|[أا]و?بود|ubud|سمينياك|سيمنياك|سيمينياك|seminyak|جيمبران|جيمباران|jimbaran|نوسا\s*دوا/i },
+    { canonical: "Jakarta",  pattern: /جا?ك[رز]تا?|jakarta/i },
+    { canonical: "Bandung",  pattern: /باندون[جغق]|bandung/i },
+    { canonical: "Puncak",   pattern: /بونشاك|puncak/i },
+  ],
+};
+
+// Match a price-less tour-block row against the destination's city patterns.
+// Returns the canonical city if the row is a city section header, else null.
+function detectSectionCity(name: string, destination: string): string | null {
+  const defs = SECTION_CITY_DEFS[destination] || [];
+  for (const { canonical, pattern } of defs) {
+    if (pattern.test(name)) return canonical;
+  }
+  return null;
+}
+
 const HOTEL_HEADER_KEYWORDS = [
   "hotel", "city", "star", "room", "rate", "include",
   "currency", "from", "to", "note", "no_header", "sr",
@@ -468,6 +536,14 @@ function extractTours(rows: string[][], destination: string, debug?: { rejects: 
     `currency=${header.currencyCol ?? "default"}`
   );
 
+  // City section header tracking: the agency groups tours under per-city
+  // header rows ("جولات وانتقالات اسطنبول", "طرابزون", …). These rows carry no
+  // price, so we'd skip them anyway — but first we read the city off them and
+  // stamp it onto every following tour until the next header. This rescues
+  // day-trips (سابانجا، بورصة، الأميرات، فيالاند، فينيسيا) that never name
+  // their owning city and so were dropped by the builder's name-only matcher.
+  let currentCity = "";
+
   for (let i = header.rowIdx + 1; i < rows.length; i++) {
     const row  = rows[i].map(x => (x || "").trim());
     const name = row[header.nameCol] || "";
@@ -493,7 +569,13 @@ function extractTours(rows: string[][], destination: string, debug?: { rejects: 
       })
       .filter((v): v is { label: string; price: number } => v !== null);
 
-    if (variants.length === 0) continue;
+    if (variants.length === 0) {
+      // Price-less row → candidate city section header. If it names a city,
+      // switch the current section; otherwise it's just a non-tour row we skip.
+      const sectionCity = detectSectionCity(name, destination);
+      if (sectionCity) currentCity = sectionCity;
+      continue;
+    }
 
     const currency = cleanCurrency(
       (header.currencyCol !== undefined ? row[header.currencyCol] : "") || "SAR"
@@ -507,6 +589,7 @@ function extractTours(rows: string[][], destination: string, debug?: { rejects: 
     tours.push({
       name,
       type:           destination,
+      city:           currentCity, // canonical city from the section header ("" if none)
       price:          variants[0].price, // legacy: أوّل سعر كافتراضي
       currency,
       description:    name,
@@ -1178,9 +1261,13 @@ Deno.serve(async (req) => {
 
         // Package suggestions (column "اقتراحات توزيع مدن") — free-form
         // pre-canned distributions grouped by arrival/departure airport.
+        // Only REPLACE suggestions when the sheet actually has some for this
+        // destination. If the sheet has none (e.g. Malaysia, whose suggestions
+        // live in a hard-coded seed via ?seed_malaysia=1), DON'T delete — that
+        // would wipe the seed on every sync and force a manual re-seed.
         const suggestions = extractSuggestions(rows, tab);
-        await supabase.from("package_suggestions").delete().eq("destination", tab);
         if (suggestions.length > 0) {
+          await supabase.from("package_suggestions").delete().eq("destination", tab);
           const { error } = await supabase.from("package_suggestions").insert(suggestions);
           if (error) debugInfo?.rejects.push(`[${tab}] suggestions insert: ${error.message}`);
         }
