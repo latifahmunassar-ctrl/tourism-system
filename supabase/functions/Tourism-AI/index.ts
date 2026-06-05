@@ -44,7 +44,7 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     [/إندونيسيا|اندونيسيا|اندونيسي|indonesia|بالي|bali|جاكرتا|jakarta|باندونغ|bandung|puncak|بونشاك/i, "indonesia"],
     [/تركيا|تركى|turky|turkey|اسطنبول|istanbul|طرابزون|trabzon|أوزنجول|اوزنجول|uzungol|بورصة|bursa|ايدر|ayder|سابانجا|sapanca/i, "Turky"],
     [/روسيا|russia|موسكو|moscow|سانت\s*بطرسبرغ|saint\s*petersburg|سوتشي|sochi/i, "russia"],
-    [/البوسنة|البوسنه|bosnia|سراييفو|sarajevo|موستار|mostar|بيهاتش|bihać|bihac/i, "Bosnia"],
+    [/(?:ال)?بوسن[ةه]|bosnia|سراييفو|sarayevo|sarajevo|موستار|mostar|بيهاتش|bihać|bihac/i, "Bosnia"],
     [/تايلاند|تايلند|thailand|بانكوك|bangkok|بوكيت|بوكت|phuket|كرابي|krabi|شيانغ|chiang|باتايا|بتايا|pattaya|ساموي|samui/i, "thailand"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
