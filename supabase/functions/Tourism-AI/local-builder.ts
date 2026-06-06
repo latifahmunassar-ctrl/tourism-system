@@ -309,12 +309,9 @@ function monthNumber(monthName: string): number {
 }
 
 /**
- * Match a tour to a city using the same regex table as the parser.
- * Returns true if any of the city's patterns matches the tour name.
+ * Canonical city whose DEST_CITIES pattern matches the tour NAME, or null.
+ * The most specific signal (e.g. "جولة معالم ايدر" → Ayder).
  */
-// Canonical city whose pattern matches the tour NAME, or null. The name is the
-// most specific signal (e.g. "جولة معالم ايدر" → Ayder); used as the primary
-// owner when that city is actually part of the program.
 function tourNameCity(tour: TourRow, cityDefs: CityDef[]): string | null {
   for (const c of cityDefs) {
     if (c.pattern.test(tour.name)) return c.canonical;
@@ -323,40 +320,22 @@ function tourNameCity(tour: TourRow, cityDefs: CityDef[]): string | null {
 }
 
 /**
- * Does `tour` belong to `canonicalCity`?
- *
- * Two signals: the tour NAME (specific) and the sheet SECTION header the tour
- * was filed under (broad — captures day-trips like سابانجا / الأميرات / فيالاند
- * that never name their base city). They can disagree: بورصة and ايدر day-trips
- * sit under the Istanbul / Trabzon sections yet name their own stay-cities.
- *
- * When `itineraryCities` is supplied (the cities actually in the program) we
- * arbitrate so each tour lands in exactly one of them:
- *   1. name-city wins if it's in the itinerary (ايدر day-trip → Ayder, not the
- *      Trabzon section — so Ayder isn't starved),
- *   2. else the section-city owns it if it's in the itinerary (بورصة/سابانجا on
- *      an Istanbul-only trip → Istanbul),
- *   3. else fall back to a plain name match.
- * Without itinerary context (modification look-ups) we OR both signals so a
- * tour is findable by either its name or its section city.
+ * Does `tour` belong to `canonicalCity`? The tour NAME is authoritative; the
+ * sheet SECTION tag is consulted only for tours that name no city at all.
  */
-function tourBelongsToCity(
-  tour: TourRow,
-  cityDefs: CityDef[],
-  canonicalCity: string,
-  itineraryCities?: Set<string>,
-): boolean {
+function tourBelongsToCity(tour: TourRow, cityDefs: CityDef[], canonicalCity: string): boolean {
+  // The tour NAME is authoritative: a tour that names a city ("جولة معالم فوكوك"
+  // → Phu Quoc) belongs to THAT city only — never to whatever sheet section it
+  // was filed under. Most sheets (Vietnam, …) keep a flat tour list with no
+  // per-city sections, so the section tag over-propagates; honouring it for a
+  // named tour would drop a Phu Quoc tour onto a Hanoi day.
   const nameCity = tourNameCity(tour, cityDefs);
+  if (nameCity) return nameCity === canonicalCity;
+  // Nameless tours only (Istanbul day-trips الأميرات / فيالاند / فينيسيا that
+  // never name a base city) fall back to the sheet section tag. sync stamps the
+  // section onto exactly those nameless rows, so the tag is trustworthy here.
   const sectionCity = tour.city && tour.city.trim() ? tour.city.trim() : null;
-
-  if (itineraryCities) {
-    if (nameCity && itineraryCities.has(nameCity)) return nameCity === canonicalCity;
-    if (sectionCity && itineraryCities.has(sectionCity)) return sectionCity === canonicalCity;
-    return nameCity === canonicalCity;
-  }
-
-  // No itinerary context: a tour matches the city if EITHER signal points to it.
-  return sectionCity === canonicalCity || nameCity === canonicalCity;
+  return sectionCity === canonicalCity;
 }
 
 /**
@@ -482,20 +461,14 @@ function findTourByKeywords(
 }
 
 /**
- * Return the single canonical city this tour belongs to, or null. Prefers the
- * name-city, falling back to the sheet section-city (so nameless day-trips like
- * الأميرات / فيالاند still resolve to their base city). When `itineraryCities`
- * is given, a name-city or section-city that's part of the program wins, so the
- * answer matches how the tour is actually placed in the itinerary.
+ * Return the single canonical city this tour belongs to, or null. The name-city
+ * is authoritative; only a nameless tour falls back to its sheet section-city
+ * (so day-trips like الأميرات / فيالاند still resolve to their base city).
  */
-function getTourCity(tour: TourRow, cityDefs: CityDef[], itineraryCities?: Set<string>): string | null {
+function getTourCity(tour: TourRow, cityDefs: CityDef[]): string | null {
   const nameCity = tourNameCity(tour, cityDefs);
-  const sectionCity = tour.city && tour.city.trim() ? tour.city.trim() : null;
-  if (itineraryCities) {
-    if (nameCity && itineraryCities.has(nameCity)) return nameCity;
-    if (sectionCity && itineraryCities.has(sectionCity)) return sectionCity;
-  }
-  return nameCity || sectionCity;
+  if (nameCity) return nameCity;
+  return tour.city && tour.city.trim() ? tour.city.trim() : null;
 }
 
 /**
@@ -520,8 +493,6 @@ export function pickToursForCity(
     excludeNames?: Set<string>;
     /** Number of stay-days to leave EMPTY (free day) — shrinks selected list */
     freeDayCount?: number;
-    /** Cities in the whole program — arbitrates name-city vs section-city. */
-    itineraryCities?: Set<string>;
   },
 ): { selected: TourRow[]; available: number; deficit: number } {
   // Real tours only (not transfer/pickup rows) belonging to this city
@@ -535,7 +506,7 @@ export function pickToursForCity(
 
   const cityTours = allTours.filter(t =>
     !isTransfer(t.name)
-    && tourBelongsToCity(t, cityDefs, canonicalCity, options?.itineraryCities)
+    && tourBelongsToCity(t, cityDefs, canonicalCity)
     && !isExcluded(t.name)
     && !pinnedNames.has(t.name.trim().toLowerCase()),
   );
@@ -1760,10 +1731,6 @@ export async function buildLocalProgram(
   // A value of `null` means "make this day a free day" (remove the tour).
   const dayOverrides = new Map<number, TourRow | null>();
 
-  // Cities actually in this program — lets tour↔city matching arbitrate between
-  // a tour's name-city and its sheet section-city (see tourBelongsToCity).
-  const itinerarySet = new Set(request.cities);
-
   for (const mod of request.tourModifications) {
     if (mod.kind === "add") {
       // Find the city: prefer the explicit day number, then the hint, then
@@ -1780,7 +1747,7 @@ export async function buildLocalProgram(
         const where = hintCity ? ` في مدينة ${hintCity}` : "";
         return { ok: false, chatMessage: `ما لقيت جولة "${mod.name}"${where}. تأكد من الاسم.` };
       }
-      const city = hintCity || getTourCity(tour, cityDefs, itinerarySet);
+      const city = hintCity || getTourCity(tour, cityDefs);
       if (!city || !request.cities.includes(city)) {
         return { ok: false, chatMessage: `الجولة "${tour.name.trim()}" مو في مدينة ضمن البرنامج.` };
       }
@@ -1790,7 +1757,7 @@ export async function buildLocalProgram(
       // takes its slot rather than just being added on top.
       const yomHorTour = allTours.find(t =>
         /^يوم\s*(?:ال)?حر/iu.test(t.name.trim())
-        && tourBelongsToCity(t, cityDefs, city, itinerarySet),
+        && tourBelongsToCity(t, cityDefs, city),
       );
       if (yomHorTour) cm.excludeNames.add(yomHorTour.name.trim().toLowerCase());
       cm.pinnedTours.push(tour);
@@ -1824,7 +1791,7 @@ export async function buildLocalProgram(
     if (!fromTour) {
       return { ok: false, chatMessage: `ما لقيت جولة باسم "${fromQuery}" في النظام. تأكد من الاسم أو راجع الشيت.` };
     }
-    const fromCity = getTourCity(fromTour, cityDefs, itinerarySet);
+    const fromCity = getTourCity(fromTour, cityDefs);
     if (!fromCity) {
       return { ok: false, chatMessage: `الجولة "${fromTour.name.trim()}" مو مربوطة بمدينة معروفة في وجهة ${request.destination}.` };
     }
@@ -1858,7 +1825,7 @@ export async function buildLocalProgram(
         }
         const candidates = allTours.filter(t =>
           !isTransferTour(t.name) &&
-          tourBelongsToCity(t, cityDefs, fromCity, itinerarySet) &&
+          tourBelongsToCity(t, cityDefs, fromCity) &&
           !excludeForPick.has(t.name.trim().toLowerCase()) &&
           !/^يوم\s*(?:ال)?حر/iu.test(t.name.trim()),
         );
@@ -1907,12 +1874,11 @@ export async function buildLocalProgram(
     const cityMod = perCityMods.get(city);
     const { selected, available, deficit } = pickToursForCity(
       allTours, cityDefs, city, stayDayNumbers.length, request.adults || 2,
-      {
-        pinnedTours: cityMod?.pinnedTours,
-        excludeNames: cityMod?.excludeNames,
-        freeDayCount: cityMod?.freeDayCount,
-        itineraryCities: itinerarySet,
-      },
+      cityMod ? {
+        pinnedTours: cityMod.pinnedTours,
+        excludeNames: cityMod.excludeNames,
+        freeDayCount: cityMod.freeDayCount,
+      } : undefined,
     );
     // Day-specific overrides win over the order-based auto pick. Two-pass
     // assignment so an override on a later day still consumes its tour

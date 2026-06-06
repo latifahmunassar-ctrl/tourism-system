@@ -538,10 +538,14 @@ function extractTours(rows: string[][], destination: string, debug?: { rejects: 
 
   // City section header tracking: the agency groups tours under per-city
   // header rows ("جولات وانتقالات اسطنبول", "طرابزون", …). These rows carry no
-  // price, so we'd skip them anyway — but first we read the city off them and
-  // stamp it onto every following tour until the next header. This rescues
-  // day-trips (سابانجا، بورصة، الأميرات، فيالاند، فينيسيا) that never name
-  // their owning city and so were dropped by the builder's name-only matcher.
+  // price, so we'd skip them anyway — but first we read the city off them.
+  //
+  // We then stamp the section city ONLY onto tours whose name matches no city at
+  // all (الأميرات، فيالاند، فينيسيا — Istanbul day-trips that never name a base
+  // city). Tours that DO name a city keep city="" so the builder resolves them
+  // by name. This is critical for flat sheets with no real per-city sections
+  // (Vietnam): there one stray "هانوي" header would otherwise tag a Phu Quoc /
+  // Da Nang tour as Hanoi and the builder would drop it onto a Hanoi day.
   let currentCity = "";
 
   for (let i = header.rowIdx + 1; i < rows.length; i++) {
@@ -586,10 +590,15 @@ function extractTours(rows: string[][], destination: string, debug?: { rejects: 
     if (seen.has(key)) continue;
     seen.add(key);
 
+    // Stamp the section city ONLY on nameless tours (name matches no city). A
+    // tour that names its own city keeps "" so the builder resolves it by name
+    // — never by an over-propagated section header.
+    const tourCity = detectSectionCity(name, destination) ? "" : currentCity;
+
     tours.push({
       name,
       type:           destination,
-      city:           currentCity, // canonical city from the section header ("" if none)
+      city:           tourCity, // section city for nameless day-trips, else ""
       price:          variants[0].price, // legacy: أوّل سعر كافتراضي
       currency,
       description:    name,
