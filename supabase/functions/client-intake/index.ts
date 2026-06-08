@@ -70,7 +70,7 @@ function buildRequestText(r: Record<string, any>): string {
     String(r.destination || "").trim(),
     r.days ? `${r.days} ايام` : "",
     cities,
-    r.pax ? `ل ${r.pax} اشخاص` : "",
+    r.pax ? `ل ${r.pax} بالغين${r.children && Number(r.children) > 0 ? ` و ${r.children} اطفال` : ""}` : "",
     r.date_from ? `تاريخ ${formatDate(String(r.date_from))}` : "",
     String(r.transport || "") === "shared" ? "النقل مشتركة" : "",
     r.sim_count && Number(r.sim_count) > 0 ? `${r.sim_count} شرائح` : "",
@@ -124,7 +124,7 @@ function stripPrice(s: string): string {
 }
 
 interface ClientView {
-  destination: string; meta: string; dateFrom: string; dateTo: string; pax: number;
+  destination: string; meta: string; dateFrom: string; dateTo: string; pax: number; children: number;
   hotels: Array<{ name: string; city: string; stars: string; room: string; nights: string; meals: string }>;
   timeline: Array<{ day: number; items: Array<{ kind: string; text: string }> }>;
   groupTotal: number | null; currency: string;
@@ -201,14 +201,17 @@ function toClientView(raw: string): { view: ClientView; groupTotal: number | nul
     const m = tg.match(/TOTAL_GROUP:\s*([\d.,]+)/);
     if (m) groupTotal = parseFloat(m[1].replace(/,/g, "")) || null;
   }
-  const metaPax = (get(/^META:/) || "").match(/(\d+)\s*(?:أشخاص|اشخاص|شخص|بالغ)/u);
+  const metaStr = get(/^META:/) || "";
+  const metaPax = metaStr.match(/(\d+)\s*(?:أشخاص|اشخاص|شخص|بالغ)/u);
+  const metaKids = metaStr.match(/(\d+)\s*(?:أطفال|اطفال|طفل)/u);
 
   const view: ClientView = {
     destination: get(/^DEST:/),
-    meta: get(/^META:/),
+    meta: metaStr,
     dateFrom: get(/^DATE_FROM:/),
     dateTo: get(/^DATE_TO:/),
     pax: metaPax ? parseInt(metaPax[1], 10) : 0,
+    children: metaKids ? parseInt(metaKids[1], 10) : 0,
     hotels, timeline,
     groupTotal, currency: "ريال",
   };
@@ -332,7 +335,7 @@ Deno.serve(async (req) => {
     contact_phone: String(body.contact_phone || "").trim(),
     destination,
     cities_nights: Array.isArray(body.cities_nights) ? body.cities_nights : [],
-    pax, days,
+    pax, children: parseInt(String(body.children || "0"), 10) || 0, days,
     date_from: String(body.date_from || "").trim(),
     transport: String(body.transport || "private"),
     extra_bed: String(body.extra_bed || "").trim(),

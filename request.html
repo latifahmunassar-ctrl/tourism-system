@@ -77,11 +77,15 @@
     <div class="card">
       <h2>تفاصيل الرحلة</h2>
       <div class="sub">الوجهة والمدة وتوزيع المدن</div>
+      <div class="field"><label>الوجهة <span class="req">*</span></label>
+        <select name="destination" id="destination" required><option value="">اختر الوجهة…</option></select>
+      </div>
       <div class="row">
-        <div class="field"><label>الوجهة <span class="req">*</span></label>
-          <select name="destination" id="destination" required><option value="">اختر الوجهة…</option></select>
+        <div class="field"><label>عدد البالغين <span class="req">*</span></label><input name="pax" id="pax" type="number" min="1" max="40" value="2" required></div>
+        <div class="field"><label>عدد الأطفال</label>
+          <input id="children" type="number" min="0" max="20" value="0">
+          <div class="nightsum">👶 الطفل <b>أقل من 5 سنوات</b> — يشارك غرفة والديه ولا يُحتسب عليه سعر منفصل.</div>
         </div>
-        <div class="field"><label>عدد الأشخاص <span class="req">*</span></label><input name="pax" id="pax" type="number" min="1" max="40" value="2" required></div>
       </div>
 
       <div class="field"><label>طريقة تحديد المدن</label>
@@ -257,7 +261,7 @@ document.getElementById('form').addEventListener('submit', async (e)=>{
   const payload={
     company_name:f.company_name.value.trim(), contact_name:f.contact_name.value.trim(),
     contact_email:f.contact_email.value.trim(), contact_phone:f.contact_phone.value.trim(),
-    destination:destSel.value, pax:+f.pax.value, transport:f.transport.value,
+    destination:destSel.value, pax:+f.pax.value, children:+document.getElementById('children').value||0, transport:f.transport.value,
     sim_count:+f.sim_count.value||0, extra_bed:f.extra_bed.value.trim(), notes:f.notes.value.trim(),
   };
   if(mode()==='ready'){

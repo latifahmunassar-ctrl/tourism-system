@@ -65,8 +65,9 @@ function render(d){
       <div class="daynum"><b>${t.day}</b><span>اليوم</span></div>
       <div class="acts">${t.items.map(it=>`<div class="act"><span class="ic">${ICON[it.kind]||"•"}</span><span>${esc(it.text)}</span></div>`).join("")}</div>
     </div>`).join("");
+  const paxTxt=`${p.pax||""} بالغين${p.children?` + ${p.children} أطفال`:""}`;
   const total=p.groupTotal!=null?`
-    <div class="total"><div class="lbl">الإجمالي للمجموعة (${p.pax||""} أشخاص)</div>
+    <div class="total"><div class="lbl">الإجمالي للمجموعة (${paxTxt})</div>
       <div class="amt">${fmt(p.groupTotal)} <small>ريال</small></div>
       <div class="sub">السعر شامل البرنامج الموضّح أعلاه</div></div>`:"";
   document.getElementById('app').innerHTML=`
