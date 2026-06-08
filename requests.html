@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>صندوق طلبات الشركات (داخلي) | ALEZZ</title>
+<style>
+  :root{--brand:#0d4f4a;--brand2:#13746c;--bg:#eef1f1;--ink:#1d2b2a;--muted:#6b7c7a;--line:#dde4e3;--ok:#15803d;--err:#b91c1c;--warn:#b45309}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+  .top{background:var(--brand);color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center}
+  .top b{letter-spacing:2px}
+  .top button{background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:9px;padding:7px 12px;cursor:pointer}
+  .grid{display:grid;grid-template-columns:380px 1fr;gap:16px;padding:16px;max-width:1200px;margin:0 auto}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .panel h3{margin:0;padding:13px 16px;font-size:14px;background:#f7faf9;border-bottom:1px solid var(--line)}
+  .item{padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer}
+  .item:hover{background:#f6faf9}.item.sel{background:#eef6f5}
+  .item .r1{display:flex;justify-content:space-between;font-size:13.5px}
+  .item .co{font-weight:700}
+  .item .r2{color:var(--muted);font-size:12.5px;margin-top:3px}
+  .badge{font-size:11px;padding:2px 9px;border-radius:20px;font-weight:700}
+  .b-pending_review{background:#fef3c7;color:var(--warn)} .b-sent{background:#dcfce7;color:var(--ok)}
+  .b-build_failed{background:#fee2e2;color:var(--err)} .b-new{background:#e0e7ff;color:#3730a3} .b-closed{background:#e5e7eb;color:#555}
+  .detail{padding:16px}
+  .detail .empty{color:var(--muted);text-align:center;padding:50px}
+  .kv{font-size:13.5px;margin-bottom:5px}.kv b{color:var(--brand2)}
+  textarea{width:100%;min-height:340px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;border:1px solid var(--line);border-radius:10px;padding:12px;direction:rtl;line-height:1.7}
+  .bar{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .btn{border:none;border-radius:10px;padding:10px 16px;font:inherit;font-weight:700;cursor:pointer}
+  .btn.save{background:#eef3f2;color:var(--brand)} .btn.approve{background:var(--ok);color:#fff} .btn.copy{background:#eef3f2;color:var(--brand)}
+  .msg{margin-top:10px;font-size:13px;padding:8px 12px;border-radius:9px;display:none}
+  .msg.ok{background:#dcfce7;color:var(--ok)} .msg.err{background:#fee2e2;color:var(--err)}
+  .link{margin-top:12px;background:#f7faf9;border:1px dashed var(--brand2);border-radius:10px;padding:10px;font-size:12.5px;word-break:break-all;display:none}
+  .login{max-width:380px;margin:80px auto;background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px;text-align:center}
+  .login input{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;margin:12px 0}
+  .warn{background:#fef3c7;color:var(--warn);font-size:12.5px;padding:8px 12px;border-radius:9px;margin-bottom:10px}
+</style>
+</head>
+<body>
+<div id="loginView" class="login">
+  <h2 style="color:var(--brand)">صندوق الطلبات — دخول الموظفين</h2>
+  <p style="color:var(--muted);font-size:13px">أدخل المفتاح الإداري (CLIENT_ADMIN_SECRET)</p>
+  <input id="secret" type="password" placeholder="المفتاح الإداري" autocomplete="off">
+  <button class="btn approve" style="width:100%" onclick="login()">دخول</button>
+  <div id="loginErr" style="color:var(--err);font-size:13px;margin-top:10px;display:none">مفتاح غير صحيح</div>
+</div>
+
+<div id="appView" style="display:none">
+  <div class="top"><b>ALEZZ — صندوق طلبات الشركات</b>
+    <span><button onclick="loadList()">↻ تحديث</button> <button onclick="logout()">خروج</button></span>
+  </div>
+  <div class="grid">
+    <div class="panel"><h3>الطلبات الواردة</h3><div id="list"></div></div>
+    <div class="panel"><h3>تفاصيل الطلب</h3><div id="detail" class="detail"><div class="empty">اختر طلباً من القائمة</div></div></div>
+  </div>
+</div>
+
+<script>
+const BASE="https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake";
+const PROPOSAL_PAGE=location.origin+location.pathname.replace(/requests\.html$/,"")+"proposal.html";
+let SECRET=localStorage.getItem("alezz_admin_secret")||"";
+let current=null;
+
+const H=()=>({"x-admin-secret":SECRET,"Content-Type":"application/json"});
+const esc=s=>String(s||"").replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+const STAT={pending_review:"للمراجعة",sent:"تم الإرسال",build_failed:"يحتاج إكمال",new:"جديد",closed:"مغلق"};
+
+async function login(){
+  SECRET=document.getElementById('secret').value.trim();
+  const res=await fetch(BASE+"?admin_action=list",{headers:H()});
+  if(res.status===401){document.getElementById('loginErr').style.display='block';return;}
+  localStorage.setItem("alezz_admin_secret",SECRET);
+  show();
+}
+function logout(){localStorage.removeItem("alezz_admin_secret");SECRET="";location.reload();}
+function show(){document.getElementById('loginView').style.display='none';document.getElementById('appView').style.display='block';loadList();}
+
+async function loadList(){
+  const res=await fetch(BASE+"?admin_action=list",{headers:H()});
+  if(!res.ok){return;}
+  const {requests}=await res.json();
+  document.getElementById('list').innerHTML=(requests||[]).map(r=>`
+    <div class="item ${current===r.id?'sel':''}" onclick="openReq('${r.id}')">
+      <div class="r1"><span class="co">${esc(r.company_name)}</span><span class="badge b-${r.status}">${STAT[r.status]||r.status}</span></div>
+      <div class="r2">${esc(r.ref_no)} • ${esc(r.destination)} • ${r.days} أيام • ${r.pax} أشخاص${r.group_total?" • "+Number(r.group_total).toLocaleString('en-US')+" ريال":""}</div>
+    </div>`).join("")||'<div class="empty" style="padding:30px">لا توجد طلبات</div>';
+}
+
+async function openReq(id){
+  current=id; loadList();
+  const res=await fetch(BASE+"?admin_action=get&id="+id,{headers:H()});
+  const {request:r}=await res.json();
+  const link=PROPOSAL_PAGE+"?token="+r.view_token;
+  const cn=(r.cities_nights||[]).map(c=>`${c.nights} ${c.city}`).join(" + ");
+  document.getElementById('detail').innerHTML=`
+    <div class="kv"><b>الشركة:</b> ${esc(r.company_name)} — ${esc(r.contact_name)} ${esc(r.contact_phone)} ${esc(r.contact_email)}</div>
+    <div class="kv"><b>الطلب:</b> ${esc(r.destination)} • ${r.days} أيام • ${r.pax} أشخاص • ${esc(cn)} • تاريخ ${esc(r.date_from)} • نقل ${r.transport==='shared'?'مشترك':'خاص'}</div>
+    <div class="kv"><b>الحالة:</b> <span class="badge b-${r.status}">${STAT[r.status]||r.status}</span> • <b>الإجمالي:</b> ${r.group_total?Number(r.group_total).toLocaleString('en-US')+' ريال':'—'}</div>
+    ${r.status==='build_failed'?`<div class="warn">⚠️ ما انبنى تلقائياً: ${esc(r.build_message||'')}. عدّل البرنامج يدوياً تحت ثم احفظ.</div>`:''}
+    <p style="font-size:12.5px;color:var(--muted);margin:12px 0 4px">البرنامج الداخلي (بالتسعير) — عدّل ثم احفظ، وبعدها اعتمد وأرسل:</p>
+    <textarea id="prog">${esc(r.built_program)}</textarea>
+    <div class="bar">
+      <button class="btn save" onclick="saveProg('${id}')">💾 حفظ التعديلات</button>
+      <button class="btn approve" onclick="approve('${id}')">✅ اعتماد وإرسال للشركة</button>
+      <button class="btn copy" onclick="copyLink('${link}')">🔗 نسخ رابط العميل</button>
+    </div>
+    <div class="msg" id="msg"></div>
+    <div class="link" id="linkBox">رابط العرض للعميل:<br><a href="${esc(link)}" target="_blank">${esc(link)}</a></div>`;
+  if(r.status==='sent'){document.getElementById('linkBox').style.display='block';}
+}
+function flash(t,ok){const m=document.getElementById('msg');m.textContent=t;m.className='msg '+(ok?'ok':'err');m.style.display='block';}
+async function saveProg(id){
+  const built=document.getElementById('prog').value;
+  const res=await fetch(BASE+"?admin_action=update_program&id="+id,{method:'POST',headers:H(),body:JSON.stringify({built_program:built})});
+  const d=await res.json();
+  if(d.ok){flash("تم الحفظ. الإجمالي المحسوب: "+(d.group_total?Number(d.group_total).toLocaleString('en-US')+' ريال':'—'),true);}else{flash(d.error||'فشل الحفظ',false);}
+}
+async function approve(id){
+  if(!confirm("اعتماد وإرسال العرض للشركة؟ بيقدرون يفتحون الرابط ويشوفون النتيجة (بدون تسعير داخلي).")) return;
+  const res=await fetch(BASE+"?admin_action=approve&id="+id,{method:'POST',headers:H()});
+  const d=await res.json();
+  if(d.ok){flash("تم الاعتماد ✅ — رابط العميل صار فعّال.",true);document.getElementById('linkBox').style.display='block';loadList();}else{flash(d.error||'فشل الاعتماد',false);}
+}
+function copyLink(l){navigator.clipboard.writeText(l).then(()=>flash("تم نسخ الرابط",true));}
+
+if(SECRET){fetch(BASE+"?admin_action=list",{headers:H()}).then(r=>{if(r.ok)show();});}
+</script>
+</body>
+</html>

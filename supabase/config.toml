@@ -8,3 +8,14 @@ project_id = "ofotvacszlmrqxzfjmtn"
 # verification at the platform layer is safe.
 [functions.WhatsApp-Router]
 verify_jwt = false
+
+# Public B2B intake form posts here with no auth header. The function gates its
+# admin actions internally on CLIENT_ADMIN_SECRET; the public submit path only
+# ever writes a request + returns a ref number (never reads pricing).
+[functions.client-intake]
+verify_jwt = false
+
+# Public proposal page fetches the sanitized client view by unguessable token,
+# with no auth header. Only returns data for status='sent' requests.
+[functions.client-proposal]
+verify_jwt = false

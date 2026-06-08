@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>عرضك السياحي | ALEZZ</title>
+<style>
+  :root{--brand:#0d4f4a;--brand2:#13746c;--accent:#c8a24a;--bg:#f4f6f7;--ink:#1d2b2a;--muted:#6b7c7a;--line:#e1e7e6}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+  .wrap{max-width:820px;margin:0 auto;padding:0 16px 60px}
+  header{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:30px 22px;border-radius:0 0 26px 26px;box-shadow:0 6px 24px rgba(13,79,74,.18)}
+  .htop{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+  .logo{font-size:26px;font-weight:800;letter-spacing:3px}.logo span{color:var(--accent)}
+  .ref{background:rgba(255,255,255,.16);padding:6px 14px;border-radius:20px;font-size:13px}
+  header h1{margin:16px 0 4px;font-size:23px}
+  header .meta{opacity:.92;font-size:14.5px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px;margin-top:20px;box-shadow:0 2px 14px rgba(0,0,0,.04)}
+  .card h2{margin:0 0 14px;font-size:16px;color:var(--brand);display:flex;align-items:center;gap:8px}
+  .hotel{border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px;background:#fcfdfd}
+  .hotel .hn{font-weight:700;font-size:15px}
+  .hotel .hc{color:var(--brand2);font-size:13.5px;margin:3px 0}
+  .hotel .hd{color:var(--muted);font-size:13px}
+  .stars{color:var(--accent)}
+  .day{display:flex;gap:14px;padding:12px 0;border-bottom:1px dashed var(--line)}
+  .day:last-child{border-bottom:none}
+  .daynum{flex:0 0 54px;text-align:center}
+  .daynum b{display:block;background:var(--brand);color:#fff;border-radius:12px;padding:8px 0;font-size:15px}
+  .daynum span{font-size:11px;color:var(--muted)}
+  .acts{flex:1}
+  .act{display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:14px}
+  .act .ic{flex:0 0 22px}
+  .total{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border-radius:18px;padding:22px;margin-top:20px;text-align:center;box-shadow:0 6px 20px rgba(13,79,74,.22)}
+  .total .lbl{opacity:.9;font-size:14px}
+  .total .amt{font-size:34px;font-weight:800;margin-top:4px}
+  .total .amt small{font-size:17px;font-weight:600}
+  .total .sub{opacity:.85;font-size:12.5px;margin-top:6px}
+  .actions{text-align:center;margin-top:18px}
+  .btn{background:var(--brand);color:#fff;border:none;border-radius:12px;padding:12px 24px;font:inherit;font-weight:700;cursor:pointer}
+  .state{text-align:center;padding:70px 20px;color:var(--muted)}
+  .state .big{font-size:50px;margin-bottom:14px}
+  .foot{text-align:center;color:var(--muted);font-size:12.5px;margin-top:26px}
+  @media print{.actions,.foot{display:none}header{border-radius:0}}
+</style>
+</head>
+<body>
+<div id="app"><div class="state"><div class="big">⏳</div><div>جارٍ تحميل العرض…</div></div></div>
+
+<script>
+const PROPOSAL_URL="https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-proposal";
+const ICON={tour:"📍",transfer:"🚗",flight:"✈️"};
+const fmt=n=>(n==null?"":Number(n).toLocaleString('en-US'));
+const esc=s=>String(s||"").replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+
+function render(d){
+  const p=d.proposal;
+  const hotels=(p.hotels||[]).map(h=>`
+    <div class="hotel">
+      <div class="hn">${esc(h.name)} <span class="stars">${"★".repeat(parseInt(h.stars)||0)}</span></div>
+      <div class="hc">📍 ${esc(h.city)}</div>
+      <div class="hd">${esc(h.room||"")}${h.nights?" • "+esc(h.nights):""}${h.meals?" • "+esc(h.meals):""}</div>
+    </div>`).join("");
+  const days=(p.timeline||[]).map(t=>`
+    <div class="day">
+      <div class="daynum"><b>${t.day}</b><span>اليوم</span></div>
+      <div class="acts">${t.items.map(it=>`<div class="act"><span class="ic">${ICON[it.kind]||"•"}</span><span>${esc(it.text)}</span></div>`).join("")}</div>
+    </div>`).join("");
+  const total=p.groupTotal!=null?`
+    <div class="total"><div class="lbl">الإجمالي للمجموعة (${p.pax||""} أشخاص)</div>
+      <div class="amt">${fmt(p.groupTotal)} <small>ريال</small></div>
+      <div class="sub">السعر شامل البرنامج الموضّح أعلاه</div></div>`:"";
+  document.getElementById('app').innerHTML=`
+    <header>
+      <div class="htop"><div class="logo">AL<span>E</span>ZZ</div><div class="ref">${esc(d.ref_no)}</div></div>
+      <h1>عرض رحلة ${esc(p.destination||d.destination||"")}</h1>
+      <div class="meta">${esc(p.meta||"")}${p.dateFrom?" • من "+esc(p.dateFrom):""}${p.dateTo?" إلى "+esc(p.dateTo):""}</div>
+      <div class="meta" style="margin-top:6px">مُعدّ لـ: ${esc(d.company_name||"")}</div>
+    </header>
+    <div class="wrap">
+      ${hotels?`<div class="card"><h2>🏨 الإقامة</h2>${hotels}</div>`:""}
+      ${days?`<div class="card"><h2>🗺️ البرنامج اليومي</h2>${days}</div>`:""}
+      ${total}
+      <div class="actions"><button class="btn" onclick="window.print()">🖨️ حفظ / طباعة العرض</button></div>
+      <div class="foot">عرض مقدّم من ALEZZ للسياحة والسفر — الأسعار تقديرية وقابلة للتأكيد عند الحجز.</div>
+    </div>`;
+}
+
+function stateMsg(icon,msg){document.getElementById('app').innerHTML=`<div class="state"><div class="big">${icon}</div><div>${msg}</div></div>`;}
+
+(async()=>{
+  const token=new URLSearchParams(location.search).get('token');
+  if(!token){stateMsg("🔗","الرابط غير صحيح — لا يوجد رمز عرض.");return;}
+  try{
+    const res=await fetch(PROPOSAL_URL+"?token="+encodeURIComponent(token));
+    const d=await res.json();
+    if(d.status==="ready"){render(d);}
+    else if(d.status==="pending"){stateMsg("⏳",d.message||"العرض قيد التجهيز، نوافيك قريباً.");}
+    else{stateMsg("❓","لم نجد هذا العرض. تأكد من الرابط.");}
+  }catch(e){stateMsg("⚠️","تعذّر تحميل العرض، حاول لاحقاً.");}
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,325 @@
+/**
+ * client-intake — B2B intake form backend.
+ *
+ * PUBLIC submit (POST, no auth): a company sends its trip request from
+ * request.html. We auto-build the program with Tourism-AI, store the FULL
+ * internal program (with pricing) for staff review, derive a SANITIZED client
+ * view (no internal pricing, single group total), notify sales on WhatsApp, and
+ * return ONLY { ok, ref_no } to the company. No program, no price leaves here.
+ *
+ * ADMIN actions (?admin_action=…, gated by CLIENT_ADMIN_SECRET header) power the
+ * internal inbox: list / get (full internal program) / update_program (after a
+ * staff edit) / approve (sanitize current program → status 'sent' → company can
+ * open the proposal link).
+ *
+ * The company-facing client view is produced HERE, server-side, by copying only
+ * non-price fields out of the program — prices physically never enter it.
+ */
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const PROJECT_REF = "ofotvacszlmrqxzfjmtn";
+const TOURISM_AI_URL = `https://${PROJECT_REF}.supabase.co/functions/v1/Tourism-AI`;
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, x-admin-secret",
+  "Content-Type": "application/json",
+};
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: CORS });
+
+// ── helpers ────────────────────────────────────────────────────────────────
+const MONTHS_AR = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+
+function randToken(len = 24): string {
+  const bytes = new Uint8Array(len);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(b => b.toString(36).padStart(2, "0")).join("").slice(0, len);
+}
+
+// "2026-08-20" → "20 أغسطس 2026" (Tourism-AI parses Arabic dates). Pass through
+// any other free-form date string unchanged.
+function formatDate(raw: string): string {
+  const m = (raw || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return raw || "";
+  const [, y, mo, d] = m;
+  return `${parseInt(d, 10)} ${MONTHS_AR[parseInt(mo, 10) - 1] || ""} ${y}`;
+}
+
+// Compose the natural-language request Tourism-AI already understands from the
+// structured form input.
+function buildRequestText(r: Record<string, any>): string {
+  const cities = Array.isArray(r.cities_nights)
+    ? r.cities_nights.filter((c: any) => c && c.city && c.nights)
+        .map((c: any) => `${c.nights} ${c.city}`).join(" + ")
+    : "";
+  const parts = [
+    String(r.destination || "").trim(),
+    r.days ? `${r.days} ايام` : "",
+    cities,
+    r.pax ? `ل ${r.pax} اشخاص` : "",
+    r.date_from ? `تاريخ ${formatDate(String(r.date_from))}` : "",
+    String(r.transport || "") === "shared" ? "النقل مشتركة" : "",
+    r.sim_count && Number(r.sim_count) > 0 ? `${r.sim_count} شرائح` : "",
+    String(r.extra_bed || "").trim() ? `سرير اضافي ${r.extra_bed}` : "",
+    String(r.notes || "").trim(),
+  ].filter(Boolean);
+  return parts.join(" ");
+}
+
+async function callTourismAI(text: string): Promise<string | null> {
+  const jwt = Deno.env.get("LEGACY_ANON_JWT") || "";
+  const res = await fetch(TOURISM_AI_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}`, apikey: jwt },
+    body: JSON.stringify({ messages: [{ role: "user", content: text }] }),
+  });
+  if (!res.ok) { console.error("Tourism-AI failed", res.status, (await res.text()).slice(0, 300)); return null; }
+  const data = await res.json();
+  const block = Array.isArray(data?.content) ? data.content[0] : null;
+  return block?.type === "text" ? String(block.text || "") : null;
+}
+
+async function notifySales(text: string): Promise<void> {
+  const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
+  const token = Deno.env.get("TWILIO_AUTH_TOKEN");
+  const from = Deno.env.get("TWILIO_WHATSAPP_FROM") || "whatsapp:+96891171630";
+  const nums = (Deno.env.get("SALES_WHATSAPP_NUMBERS") || "").split(",").map(s => s.trim()).filter(Boolean);
+  if (!sid || !token || nums.length === 0) { console.warn("notifySales skipped (missing twilio/numbers)"); return; }
+  for (const to of nums) {
+    try {
+      const form = new URLSearchParams({ From: from, To: to, Body: text });
+      await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        method: "POST",
+        headers: { Authorization: "Basic " + btoa(`${sid}:${token}`), "Content-Type": "application/x-www-form-urlencoded" },
+        body: form.toString(),
+      });
+    } catch (e) { console.error("notifySales send error", (e as Error).message); }
+  }
+}
+
+// ── SANITIZER (security boundary) ───────────────────────────────────────────
+// Build the company-facing view by copying ONLY non-price fields out of the
+// internal program text. Prices are in fields we never read; a defensive
+// stripPrice() also scrubs any "<n> ريال" remnant from each emitted string.
+function stripPrice(s: string): string {
+  return (s || "")
+    .replace(/[\d.,]+\s*ريال\s*\/?\s*(?:ليلة|شخص|للشخص)?/gu, "")
+    .replace(/\|\s*$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+interface ClientView {
+  destination: string; meta: string; dateFrom: string; dateTo: string; pax: number;
+  hotels: Array<{ name: string; city: string; stars: string; room: string; nights: string; meals: string }>;
+  timeline: Array<{ day: number; items: Array<{ kind: string; text: string }> }>;
+  groupTotal: number | null; currency: string;
+}
+
+function toClientView(raw: string): { view: ClientView; groupTotal: number | null } {
+  const lines = (raw || "").split("\n");
+  const get = (re: RegExp) => { const l = lines.find(x => re.test(x)); return l ? l.replace(re, "").trim() : ""; };
+
+  const section = (name: string): string[] => {
+    const start = lines.findIndex(l => l.trim() === `${name}:`);
+    if (start < 0) return [];
+    const out: string[] = [];
+    for (let i = start + 1; i < lines.length; i++) {
+      const l = lines[i];
+      if (/^[A-Z_]+:/.test(l.trim()) || l.trim() === "") {
+        if (/^[A-Z_]+:/.test(l.trim())) break;
+        else continue;
+      }
+      out.push(l);
+    }
+    return out;
+  };
+
+  const hotels: ClientView["hotels"] = [];
+  for (const l of section("HOTELS")) {
+    const p = l.split("|").map(s => s.trim());
+    if (p.length < 4) continue;
+    // name | city | stars | room | PRICE/ليلة | nights (dates) | ما يشمل: …
+    hotels.push({
+      name: p[0] || "", city: p[1] || "", stars: p[2] || "", room: p[3] || "",
+      nights: stripPrice(p[5] || ""), meals: (p[6] || "").replace(/^ما يشمل:\s*/u, "").trim(),
+    });
+  }
+
+  const timelineMap = new Map<number, Array<{ kind: string; text: string }>>();
+  const addDay = (day: number, kind: string, text: string) => {
+    const t = stripPrice(text);
+    if (!t) return;
+    if (!timelineMap.has(day)) timelineMap.set(day, []);
+    timelineMap.get(day)!.push({ kind, text: t });
+  };
+  const dayOf = (cell: string): number | null => {
+    const m = cell.match(/اليوم\s*(\d+)/u);
+    return m ? parseInt(m[1], 10) : null;
+  };
+
+  for (const l of section("TRANSFERS")) {
+    const p = l.split("|").map(s => s.trim());
+    const d = dayOf(p[0] || ""); if (d === null) continue;
+    addDay(d, "transfer", p[1] || "");
+  }
+  for (const l of section("TOURS")) {
+    const p = l.split("|").map(s => s.trim());
+    const d = dayOf(p[0] || ""); if (d === null) continue;
+    addDay(d, "tour", p[1] || "");
+  }
+  for (const l of section("FLIGHTS")) {
+    // "اليوم 6: Istanbol - Trabozon | داخلي | …"
+    const head = (l.split("|")[0] || "").trim();
+    const m = head.match(/اليوم\s*(\d+)\s*:?\s*(.+)/u);
+    if (!m) continue;
+    addDay(parseInt(m[1], 10), "flight", `رحلة داخلية: ${m[2].trim()}`);
+  }
+
+  const timeline = Array.from(timelineMap.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([day, items]) => ({ day, items }));
+
+  // Single group total from SUMMARY's TOTAL_GROUP line.
+  let groupTotal: number | null = null;
+  const tg = lines.find(l => /^TOTAL_GROUP:/.test(l.trim()));
+  if (tg) {
+    const m = tg.match(/TOTAL_GROUP:\s*([\d.,]+)/);
+    if (m) groupTotal = parseFloat(m[1].replace(/,/g, "")) || null;
+  }
+  const metaPax = (get(/^META:/) || "").match(/(\d+)\s*(?:أشخاص|اشخاص|شخص|بالغ)/u);
+
+  const view: ClientView = {
+    destination: get(/^DEST:/),
+    meta: get(/^META:/),
+    dateFrom: get(/^DATE_FROM:/),
+    dateTo: get(/^DATE_TO:/),
+    pax: metaPax ? parseInt(metaPax[1], 10) : 0,
+    hotels, timeline,
+    groupTotal, currency: "ريال",
+  };
+  return { view, groupTotal };
+}
+
+// ── handler ─────────────────────────────────────────────────────────────────
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+  const url = new URL(req.url);
+  const adminAction = url.searchParams.get("admin_action");
+
+  // ── admin actions (staff inbox) ──────────────────────────────────────────
+  if (adminAction) {
+    const expected = (Deno.env.get("CLIENT_ADMIN_SECRET") || "").trim();
+    const got = (req.headers.get("x-admin-secret") || "").trim();
+    if (!expected || got !== expected) return json({ error: "unauthorized" }, 401);
+
+    if (adminAction === "list") {
+      const { data, error } = await supabase
+        .from("client_requests")
+        .select("id, ref_no, company_name, destination, pax, days, status, group_total, created_at, sent_at")
+        .order("created_at", { ascending: false }).limit(200);
+      if (error) return json({ error: error.message }, 500);
+      return json({ requests: data });
+    }
+
+    const id = url.searchParams.get("id") || "";
+    if (adminAction === "get") {
+      const { data, error } = await supabase.from("client_requests").select("*").eq("id", id).single();
+      if (error) return json({ error: error.message }, 404);
+      return json({ request: data });
+    }
+
+    if (adminAction === "update_program" && req.method === "POST") {
+      const body = await req.json().catch(() => ({}));
+      const built = String(body.built_program || "");
+      const { view, groupTotal } = toClientView(built);
+      const { error } = await supabase.from("client_requests")
+        .update({ built_program: built, client_program: view, group_total: groupTotal, status: "pending_review" })
+        .eq("id", id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true, group_total: groupTotal });
+    }
+
+    if (adminAction === "approve" && req.method === "POST") {
+      const { data: row, error: e1 } = await supabase.from("client_requests").select("built_program").eq("id", id).single();
+      if (e1 || !row) return json({ error: "not found" }, 404);
+      const { view, groupTotal } = toClientView(row.built_program || "");
+      const { error } = await supabase.from("client_requests")
+        .update({ client_program: view, group_total: groupTotal, status: "sent", sent_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+
+    return json({ error: "unknown admin_action" }, 400);
+  }
+
+  // ── public submit ────────────────────────────────────────────────────────
+  if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
+  const body = await req.json().catch(() => null);
+  if (!body) return json({ error: "bad json" }, 400);
+
+  // minimal validation
+  const company = String(body.company_name || "").trim();
+  const destination = String(body.destination || "").trim();
+  const pax = parseInt(String(body.pax || "0"), 10);
+  const days = parseInt(String(body.days || "0"), 10);
+  if (!company || !destination || !pax || !days) {
+    return json({ error: "الحقول الأساسية ناقصة (الشركة، الوجهة، عدد الأشخاص، عدد الأيام)" }, 400);
+  }
+
+  // ref + token
+  const year = formatDate(String(body.date_from || "")).match(/\d{4}/)?.[0] || "2026";
+  const ref_no = `REQ-${year}-${randToken(4).toUpperCase()}`;
+  const view_token = randToken(28);
+
+  // auto-build
+  const requestText = buildRequestText(body);
+  const raw = await callTourismAI(requestText);
+  const isProgram = !!raw && /^SUMMARY:/m.test(raw);
+  let built_program = "", client_program: ClientView | null = null, group_total: number | null = null, build_message = "", status = "build_failed";
+  if (isProgram) {
+    built_program = raw!;
+    const s = toClientView(raw!);
+    client_program = s.view; group_total = s.groupTotal;
+    status = "pending_review";
+  } else {
+    // No SUMMARY → engine asked for more info or hit a data gap. Keep the CHAT
+    // line so staff can finish it manually; company still just sees "received".
+    build_message = (raw || "").replace(/^CHAT:/m, "").trim().slice(0, 800);
+  }
+
+  const { error } = await supabase.from("client_requests").insert({
+    ref_no, view_token,
+    company_name: company,
+    contact_name: String(body.contact_name || "").trim(),
+    contact_email: String(body.contact_email || "").trim(),
+    contact_phone: String(body.contact_phone || "").trim(),
+    destination,
+    cities_nights: Array.isArray(body.cities_nights) ? body.cities_nights : [],
+    pax, days,
+    date_from: String(body.date_from || "").trim(),
+    transport: String(body.transport || "private"),
+    extra_bed: String(body.extra_bed || "").trim(),
+    sim_count: parseInt(String(body.sim_count || "0"), 10) || 0,
+    notes: String(body.notes || "").trim(),
+    status, built_program, client_program, group_total, build_message,
+  });
+  if (error) { console.error("insert failed", error.message); return json({ error: "تعذّر حفظ الطلب" }, 500); }
+
+  // notify sales (best-effort, non-blocking failure)
+  const statusAr = status === "pending_review" ? "جاهز للمراجعة" : "يحتاج إكمال يدوي";
+  await notifySales(
+    `📥 طلب جديد ${ref_no}\nالشركة: ${company}\nالوجهة: ${destination} | ${days} أيام | ${pax} أشخاص\nالحالة: ${statusAr}`,
+  );
+
+  return json({ ok: true, ref_no });
+});
