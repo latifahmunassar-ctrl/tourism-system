@@ -33,6 +33,12 @@ const json = (body: unknown, status = 200) =>
 // ── helpers ────────────────────────────────────────────────────────────────
 const MONTHS_AR = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 
+// Arabic form destination → package_suggestions.destination key (sheet tab name).
+const DEST_KEY: Record<string, string> = {
+  "فيتنام": "vietnam", "ماليزيا": "Malaysia", "تايلاند": "thailand",
+  "تركيا": "Turky", "روسيا": "russia", "البوسنة": "Bosnia", "إندونيسيا": "indonesia",
+};
+
 function randToken(len = 24): string {
   const bytes = new Uint8Array(len);
   crypto.getRandomValues(bytes);
@@ -51,10 +57,15 @@ function formatDate(raw: string): string {
 // Compose the natural-language request Tourism-AI already understands from the
 // structured form input.
 function buildRequestText(r: Record<string, any>): string {
-  const cities = Array.isArray(r.cities_nights)
-    ? r.cities_nights.filter((c: any) => c && c.city && c.nights)
-        .map((c: any) => `${c.nights} ${c.city}`).join(" + ")
-    : "";
+  // A chosen ready-made suggestion sends its raw distribution string ("2 سيلانجور
+  // + 2 لانكاوي + …"), which Tourism-AI parses natively — prefer it over the
+  // manual city rows.
+  const cities = String(r.distribution || "").trim()
+    ? String(r.distribution).trim()
+    : (Array.isArray(r.cities_nights)
+        ? r.cities_nights.filter((c: any) => c && c.city && c.nights)
+            .map((c: any) => `${c.nights} ${c.city}`).join(" + ")
+        : "");
   const parts = [
     String(r.destination || "").trim(),
     r.days ? `${r.days} ايام` : "",
@@ -213,6 +224,22 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
   const url = new URL(req.url);
+
+  // ── public: ready-made city-distribution suggestions for a destination ────
+  // Safe to expose — these are just the agency's offered city splits grouped by
+  // arrival/departure airport (no pricing). Powers the form's "ready" mode.
+  const sugDestAr = url.searchParams.get("suggestions");
+  if (sugDestAr) {
+    const key = DEST_KEY[sugDestAr.trim()] || sugDestAr.trim();
+    const { data, error } = await supabase
+      .from("package_suggestions")
+      .select("days, label, arrival_airport, departure_airport, distribution")
+      .eq("destination", key)
+      .order("arrival_airport").order("days");
+    if (error) return json({ error: error.message }, 500);
+    return json({ suggestions: data || [] });
+  }
+
   const adminAction = url.searchParams.get("admin_action");
 
   // ── admin actions (staff inbox) ──────────────────────────────────────────

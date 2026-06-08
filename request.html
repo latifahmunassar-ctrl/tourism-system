@@ -36,8 +36,14 @@
   .seg{display:flex;gap:8px}
   .seg label{flex:1;border:1px solid var(--line);border-radius:11px;padding:11px;text-align:center;cursor:pointer;margin:0;background:#fcfdfd;font-weight:600}
   .seg input{display:none}
-  .seg input:checked+span{color:var(--brand)}
-  .seg label:has(input:checked){border-color:var(--brand2);background:#eef6f5;box-shadow:0 0 0 2px rgba(19,116,108,.1)}
+  .seg label:has(input:checked){border-color:var(--brand2);background:#eef6f5;box-shadow:0 0 0 2px rgba(19,116,108,.1);color:var(--brand)}
+  .suglist{display:flex;flex-direction:column;gap:9px;margin-top:6px}
+  .sug{border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;background:#fcfdfd;transition:.12s}
+  .sug:hover{border-color:var(--brand2)}
+  .sug.sel{border-color:var(--brand2);background:#eef6f5;box-shadow:0 0 0 2px rgba(19,116,108,.12)}
+  .sug .d{font-weight:700;color:var(--brand);font-size:14px}
+  .sug .lab{font-size:11.5px;color:#fff;background:var(--accent);border-radius:20px;padding:1px 9px;margin-right:6px}
+  .sug .dist{font-size:13.5px;margin-top:4px;color:var(--ink)}
   .submit{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:14px;padding:15px;width:100%;font-size:16px;font-weight:700;cursor:pointer;margin-top:6px;box-shadow:0 6px 18px rgba(13,79,74,.22)}
   .submit:disabled{opacity:.6;cursor:default}
   .note{font-size:12.5px;color:var(--muted);text-align:center;margin-top:14px}
@@ -46,6 +52,7 @@
   .done .ref{display:inline-block;background:#eef3f2;color:var(--brand);font-weight:800;font-size:20px;letter-spacing:1px;padding:8px 18px;border-radius:12px;margin:10px 0}
   .err{background:#fbeaea;color:var(--err);border-radius:11px;padding:11px;font-size:13.5px;margin-top:12px;display:none}
   .req{color:var(--err)}
+  .hintbox{background:#fff7e6;border:1px solid #f0dcae;color:#8a6d1f;border-radius:11px;padding:10px;font-size:12.5px;margin-top:6px;display:none}
 </style>
 </head>
 <body>
@@ -76,17 +83,43 @@
         </div>
         <div class="field"><label>عدد الأشخاص <span class="req">*</span></label><input name="pax" id="pax" type="number" min="1" max="40" value="2" required></div>
       </div>
-      <div class="row">
-        <div class="field"><label>عدد الأيام <span class="req">*</span></label><input name="days" id="days" type="number" min="2" max="30" value="8" required></div>
-        <div class="field"><label>تاريخ السفر</label><input name="date_from" type="date"></div>
+
+      <div class="field"><label>طريقة تحديد المدن</label>
+        <div class="seg" id="modeSeg">
+          <label><input type="radio" name="mode" value="ready" checked><span>📋 اقتراحات جاهزة</span></label>
+          <label><input type="radio" name="mode" value="manual"><span>✏️ تخصيص بنفسي</span></label>
+        </div>
       </div>
 
-      <div class="field cities">
-        <label>توزيع المدن والليالي</label>
-        <div id="cityRows"></div>
-        <button type="button" class="addcity" id="addCity">+ أضف مدينة</button>
-        <div class="nightsum">مجموع الليالي: <b id="nsum">0</b> — المتوقّع للبرنامج: <b id="nexp">7</b> ليلة</div>
+      <!-- READY MODE: pick airport pair + a ready distribution -->
+      <div id="readyPanel">
+        <div class="field" id="airportField">
+          <label>مطار القدوم والمغادرة</label>
+          <select id="airportSel"></select>
+        </div>
+        <div class="field">
+          <label>اختر برنامجاً جاهزاً (حسب عدد الأيام)</label>
+          <div id="sugList" class="suglist"></div>
+          <div class="hintbox" id="sugEmpty">لا توجد اقتراحات جاهزة لهذه الوجهة — استخدم «تخصيص بنفسي».</div>
+        </div>
       </div>
+
+      <!-- MANUAL MODE -->
+      <div id="manualPanel" style="display:none">
+        <div class="row">
+          <div class="field"><label>عدد الأيام <span class="req">*</span></label><input id="daysManual" type="number" min="2" max="30" value="8"></div>
+          <div class="field"><label>تاريخ السفر</label><input id="dateManual" type="date"></div>
+        </div>
+        <div class="field cities">
+          <label>توزيع المدن والليالي</label>
+          <div id="cityRows"></div>
+          <button type="button" class="addcity" id="addCity">+ أضف مدينة</button>
+          <div class="nightsum">مجموع الليالي: <b id="nsum">0</b> — المتوقّع: <b id="nexp">7</b> ليلة</div>
+        </div>
+      </div>
+
+      <!-- shared date for ready mode -->
+      <div class="field" id="readyDateField"><label>تاريخ السفر</label><input id="dateReady" type="date"></div>
     </div>
 
     <div class="card">
@@ -130,13 +163,68 @@ const CITIES = {
   "البوسنة":["سراييفو","موستار","بيهاتش"],
   "إندونيسيا":["بالي","جاكرتا","باندونغ","بونشاك"],
 };
-const destSel = document.getElementById('destination');
+const AIRPORT_AR={Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي"};
+const airAr=a=>AIRPORT_AR[a]||a;
+const esc=s=>String(s||"").replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+
+const destSel=document.getElementById('destination');
 Object.keys(CITIES).forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent=d;destSel.appendChild(o)});
 
-const cityRows = document.getElementById('cityRows');
-function cityOptions(){ const d=destSel.value; const list=CITIES[d]||[]; return '<option value="">اختر مدينة…</option>'+list.map(c=>`<option>${c}</option>`).join(''); }
+let SUGS=[];           // all suggestions for current destination
+let chosen=null;       // chosen suggestion object
+
+// ── mode toggle ──
+function mode(){return document.querySelector('input[name=mode]:checked').value;}
+function applyMode(){
+  const m=mode();
+  document.getElementById('readyPanel').style.display=m==='ready'?'':'none';
+  document.getElementById('readyDateField').style.display=m==='ready'?'':'none';
+  document.getElementById('manualPanel').style.display=m==='manual'?'':'none';
+}
+document.querySelectorAll('input[name=mode]').forEach(r=>r.onchange=applyMode);
+
+// ── READY: fetch + render suggestions grouped by airport pair ──
+async function loadSuggestions(){
+  SUGS=[]; chosen=null;
+  const dest=destSel.value;
+  const sel=document.getElementById('airportSel');
+  const list=document.getElementById('sugList');
+  sel.innerHTML=''; list.innerHTML='';
+  document.getElementById('sugEmpty').style.display='none';
+  if(!dest) return;
+  try{
+    const res=await fetch(INTAKE_URL+"?suggestions="+encodeURIComponent(dest));
+    const d=await res.json(); SUGS=d.suggestions||[];
+  }catch(e){ SUGS=[]; }
+  if(SUGS.length===0){ document.getElementById('sugEmpty').style.display='block'; document.getElementById('airportField').style.display='none'; return; }
+  // distinct airport pairs
+  const pairs=[...new Set(SUGS.map(s=>s.arrival_airport+'|'+s.departure_airport))];
+  document.getElementById('airportField').style.display=pairs.length>1?'':'none';
+  sel.innerHTML=pairs.map(p=>{const [a,b]=p.split('|');const lbl=a===b?`القدوم والمغادرة: ${airAr(a)}`:`القدوم: ${airAr(a)} — المغادرة: ${airAr(b)}`;return `<option value="${esc(p)}">${esc(lbl)}</option>`}).join('');
+  sel.onchange=renderSugList; renderSugList();
+}
+function renderSugList(){
+  const pair=document.getElementById('airportSel').value || (SUGS[0]?SUGS[0].arrival_airport+'|'+SUGS[0].departure_airport:'');
+  const list=document.getElementById('sugList');
+  const rows=SUGS.filter(s=>(s.arrival_airport+'|'+s.departure_airport)===pair);
+  list.innerHTML=rows.map((s,i)=>`
+    <div class="sug" data-k="${esc(s.arrival_airport+'|'+s.departure_airport+'|'+s.days+'|'+(s.label||'')+'|'+s.distribution)}">
+      <div><span class="d">${s.days} أيام</span>${s.label?`<span class="lab">${esc(s.label)}</span>`:''}</div>
+      <div class="dist">${esc(s.distribution)}</div>
+    </div>`).join('');
+  list.querySelectorAll('.sug').forEach(el=>el.onclick=()=>{
+    list.querySelectorAll('.sug').forEach(x=>x.classList.remove('sel'));
+    el.classList.add('sel');
+    const [a,b,days,label,dist]=el.dataset.k.split('|');
+    chosen={arrival_airport:a,departure_airport:b,days:+days,label,distribution:dist};
+  });
+}
+
+// ── MANUAL city rows ──
+const cityRows=document.getElementById('cityRows');
+function cityOptions(){const d=destSel.value;const l=CITIES[d]||[];return '<option value="">اختر مدينة…</option>'+l.map(c=>`<option>${c}</option>`).join('');}
 function addCityRow(city='',nights=2){
-  const div=document.createElement('div'); div.className='crow';
+  const div=document.createElement('div');div.className='crow';
   div.innerHTML=`<select class="csel">${cityOptions()}</select>
     <div class="nights"><button type="button" class="minus">−</button><input class="cnights" type="number" min="1" max="20" value="${nights}"><button type="button" class="plus">+</button></div>
     <button type="button" class="delc">×</button>`;
@@ -148,38 +236,47 @@ function addCityRow(city='',nights=2){
   div.querySelector('.delc').onclick=()=>{div.remove();sumNights()};
   sumNights();
 }
-function refreshCityOptions(){ cityRows.querySelectorAll('.csel').forEach(s=>{const v=s.value;s.innerHTML=cityOptions();s.value=v}); }
-function sumNights(){
-  let s=0; cityRows.querySelectorAll('.cnights').forEach(i=>s+=(+i.value||0));
-  document.getElementById('nsum').textContent=s;
-}
-function expectedNights(){ const d=+document.getElementById('days').value||0; const e=Math.max(0,d-1); document.getElementById('nexp').textContent=e; }
-destSel.onchange=()=>{ cityRows.innerHTML=''; addCityRow(); };
+function sumNights(){let s=0;cityRows.querySelectorAll('.cnights').forEach(i=>s+=(+i.value||0));document.getElementById('nsum').textContent=s;}
+function expectedNights(){const d=+document.getElementById('daysManual').value||0;document.getElementById('nexp').textContent=Math.max(0,d-1);}
+
+destSel.onchange=()=>{ loadSuggestions(); cityRows.innerHTML=''; addCityRow(); };
 document.getElementById('addCity').onclick=()=>addCityRow();
-document.getElementById('days').oninput=expectedNights;
-expectedNights(); addCityRow();
+document.getElementById('daysManual').oninput=expectedNights;
+expectedNights(); applyMode();
+
+// parse "2 سيلانجور + 3 لانكاوي" → [{city,nights}] (for storage/display only)
+function parseDist(str){return String(str||'').split(/[+\-]/).map(s=>s.trim()).map(s=>{const m=s.match(/^(\d+)\s+(.+)$/);return m?{city:m[2].trim(),nights:+m[1]}:null}).filter(Boolean);}
 
 document.getElementById('form').addEventListener('submit', async (e)=>{
   e.preventDefault();
   const errBox=document.getElementById('errBox'); errBox.style.display='none';
-  const btn=document.getElementById('submitBtn');
-  const f=e.target;
-  const cities=[...cityRows.querySelectorAll('.crow')].map(r=>({city:r.querySelector('.csel').value,nights:+r.querySelector('.cnights').value||0})).filter(c=>c.city&&c.nights);
-  if(!f.company_name.value.trim()||!destSel.value||!f.pax.value||!f.days.value||cities.length===0){
-    errBox.textContent='الرجاء تعبئة: اسم الشركة، الوجهة، عدد الأشخاص، عدد الأيام، ومدينة واحدة على الأقل.'; errBox.style.display='block'; return;
+  const btn=document.getElementById('submitBtn'); const f=e.target;
+  if(!f.company_name.value.trim()||!destSel.value||!f.pax.value){
+    errBox.textContent='الرجاء تعبئة: اسم الشركة، الوجهة، وعدد الأشخاص.'; errBox.style.display='block'; return;
   }
   const payload={
     company_name:f.company_name.value.trim(), contact_name:f.contact_name.value.trim(),
     contact_email:f.contact_email.value.trim(), contact_phone:f.contact_phone.value.trim(),
-    destination:destSel.value, cities_nights:cities, pax:+f.pax.value, days:+f.days.value,
-    date_from:f.date_from.value, transport:f.transport.value, sim_count:+f.sim_count.value||0,
-    extra_bed:f.extra_bed.value.trim(), notes:f.notes.value.trim(),
+    destination:destSel.value, pax:+f.pax.value, transport:f.transport.value,
+    sim_count:+f.sim_count.value||0, extra_bed:f.extra_bed.value.trim(), notes:f.notes.value.trim(),
   };
+  if(mode()==='ready'){
+    if(!chosen){ errBox.textContent='اختر برنامجاً جاهزاً من القائمة، أو بدّل لـ«تخصيص بنفسي».'; errBox.style.display='block'; return; }
+    payload.days=chosen.days; payload.distribution=chosen.distribution;
+    payload.cities_nights=parseDist(chosen.distribution);
+    payload.date_from=document.getElementById('dateReady').value;
+    payload.notes=[payload.notes,`اقتراح جاهز: ${chosen.label||''} (${airAr(chosen.arrival_airport)}↔${airAr(chosen.departure_airport)})`].filter(Boolean).join(' | ');
+  } else {
+    const cities=[...cityRows.querySelectorAll('.crow')].map(r=>({city:r.querySelector('.csel').value,nights:+r.querySelector('.cnights').value||0})).filter(c=>c.city&&c.nights);
+    if(cities.length===0){ errBox.textContent='أضف مدينة واحدة على الأقل.'; errBox.style.display='block'; return; }
+    payload.days=+document.getElementById('daysManual').value; payload.cities_nights=cities;
+    payload.date_from=document.getElementById('dateManual').value;
+  }
   btn.disabled=true; btn.textContent='جارٍ الإرسال…';
   try{
     const res=await fetch(INTAKE_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const data=await res.json();
-    if(!res.ok||!data.ok){ throw new Error(data.error||'تعذّر إرسال الطلب'); }
+    if(!res.ok||!data.ok) throw new Error(data.error||'تعذّر إرسال الطلب');
     document.getElementById('form').style.display='none';
     document.getElementById('refNo').textContent=data.ref_no;
     document.getElementById('done').style.display='block';
