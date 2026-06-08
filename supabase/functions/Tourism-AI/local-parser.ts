@@ -579,7 +579,7 @@ function parseCityStaysOrdered(text: string, cityDefs: CityDef[]): CityStay[] {
     // "city N" REQUIRES a trailing nights-word; otherwise a header like
     // "سانت بطرس 10 ايام" would credit the trip-day count as nights.
     const re = new RegExp(
-      `(?:(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتهى]?|ليلتين|ليه|نايت|night)?\\s*(?:${cityPat}))` +
+      `(?:(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتهى]?|ليلتين|ليه|نايت|night)?\\s*(?:في|فى|بـ|ب)?\\s*(?:${cityPat}))` +
       `|(?:(?:${cityPat})\\s*(?:=|:|-|بـ|في|عن|لمدة|ل)?\\s*(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتهى]?|ليلتين|ليه|نايت|night))`,
       "igu"
     );
@@ -644,7 +644,7 @@ function parseNightsByCity(text: string, cityDefs: CityDef[]): Record<string, nu
     // "city N" REQUIRES a trailing nights-word; otherwise a header like
     // "سانت بطرس 10 ايام" would credit the trip-day count as nights.
     const re = new RegExp(
-      `(?:(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتهى]?|ليلتين|ليه|نايت|night)?\\s*(?:${cityPat}))` +
+      `(?:(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتهى]?|ليلتين|ليه|نايت|night)?\\s*(?:في|فى|بـ|ب)?\\s*(?:${cityPat}))` +
       `|(?:(?:${cityPat})\\s*(?:=|:|-|بـ|في|عن|لمدة|ل)?\\s*(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتهى]?|ليلتين|ليه|نايت|night))`,
       "igu"
     );

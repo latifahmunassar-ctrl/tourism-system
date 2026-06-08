@@ -827,6 +827,11 @@ function extractSuggestions(
       "بينانج": "Penang", "بينانغ": "Penang", "لانكاوي": "Langkawi",
       "سيلانجور": "Selangor", "كاميرون": "Cameron Highlands",
     },
+    Turky: {
+      "اسطنبول": "Istanbul", "إسطنبول": "Istanbul",
+      "طرابزون": "Trabzon", "طربزون": "Trabzon",
+      "اوزنجول": "Uzungol", "ازونجول": "Uzungol", "ايدر": "Ayder",
+    },
   };
   const airportMap = AIRPORT_MAPS[destination] || {};
   const resolveAirport = (raw: string): string => {
@@ -845,6 +850,10 @@ function extractSuggestions(
   //    with the next non-empty cell as the distribution.
   let arrival = "", departure = "";
   const out: Array<{ destination: string; arrival_airport: string; departure_airport: string; days: number; label: string | null; distribution: string }> = [];
+  // Combined-airport scope: "مطار الوصول والمغادره اسطنبول" — ONE airport serves
+  // both arrival and departure (Turkey). Must be tried BEFORE the two-airport
+  // SCOPE_RE, which otherwise mis-reads the connecting "و" as the arrival.
+  const SCOPE_COMBINED_RE = /(?:مطار\s+)?الوصول\s+والمغادر[هةى]\s+(?:مطار\s+)?(\S+)/u;
   const SCOPE_RE = /الوصول\s+(?:مطار\s+)?(\S+)[\s\S]*?(?:المغدر[هةى]|المغادر[هةى])\s+(?:مطار\s+)?(\S+)/u;
   // Day header — three real-world shapes the agency uses:
   //   Vietnam style: "N أيام (label):"           ← colon-terminated, label in parens
@@ -856,6 +865,11 @@ function extractSuggestions(
   const COUNTRY_WORDS = /(?:تايلاند|تيلاند|فيتنام|ماليزيا|البوسنه|البوسنة|تركيا|اندونيسيا|روسيا|ع[ُّ]?مان|دبي|الإمارات|الامارات)/u;
   const DAY_RE_DIGIT_FIRST = /(\d{1,2})[\s.]*(?:[أا]يام|يوم)([^:]*)(?::|$)/u;
   const DAY_RE_DIGIT_LAST  = /(?:[أا]يام|يوم)[\s.]*(\d{1,2})([^:]*)(?::|$)/u;
+  // Country-suffix shape with NO "أيام" word — "10 تركيا" (Turkey rows 10-12
+  // drop "أيام" that the 6-9 day rows include). Anchored at the start and gated
+  // on the country word so it can't swallow a distribution line ("3 اسطنبول…",
+  // whose second token is a city, not a country).
+  const DAY_RE_DIGIT_COUNTRY = new RegExp(`^(\\d{1,2})[\\s.]*${COUNTRY_WORDS.source}([^:]*)(?::|$)`, "u");
   let pendingDay: { days: number; label: string | null } | null = null;
   // Many sheets omit the scope line for single-airport destinations
   // (Thailand can be entered/left from any major hub). Use the per-
@@ -874,6 +888,12 @@ function extractSuggestions(
     const rawCell = (rows[i][colIdx] || "").trim();
     if (!rawCell) continue;
     const cell = toLatinDigits(rawCell);
+    const combined = cell.match(SCOPE_COMBINED_RE);
+    if (combined) {
+      arrival = departure = resolveAirport(combined[1]);
+      pendingDay = null;
+      continue;
+    }
     const scope = cell.match(SCOPE_RE);
     if (scope) {
       arrival   = resolveAirport(scope[1]);
@@ -881,9 +901,11 @@ function extractSuggestions(
       pendingDay = null;
       continue;
     }
-    // Try digit-first then digit-last day-header shapes.
+    // Try digit-first then digit-last day-header shapes, then the country-suffix
+    // shape that omits "أيام" ("10 تركيا").
     let day = cell.match(DAY_RE_DIGIT_FIRST);
     if (!day) day = cell.match(DAY_RE_DIGIT_LAST);
+    if (!day) day = cell.match(DAY_RE_DIGIT_COUNTRY);
     if (day) {
       // Clean the label: extract any parens groups; otherwise drop the
       // country name and structural punctuation (dots, dashes) and use what

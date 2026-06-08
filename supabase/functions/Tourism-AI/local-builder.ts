@@ -383,6 +383,19 @@ function normalizeArabic(s: string): string {
     .trim();
 }
 
+/**
+ * Recognize a "free day" placeholder tour row. The sheet decorates some with a
+ * leading parenthesis or list number ("(يوم حر فيه سرايفوا بدون ساىق )"), so we
+ * strip any leading non-Arabic characters before anchoring the match. Without
+ * this the row reads as a price-0 sightseeing tour that sorts AHEAD of real
+ * tours — stealing a stay-day slot and, on a later edit, displacing the tour
+ * that was already scheduled on another day.
+ */
+function isFreeDayName(name: string): boolean {
+  const n = (name || "").trim().replace(/^[^؀-ۿ]+/u, "");
+  return /^يوم\s*(?:ال)?حر/u.test(n);
+}
+
 /** Arabic stop words that don't help discriminate between tours. */
 const ARABIC_STOP_WORDS = new Set([
   "في", "من", "إلى", "الى", "على", "و", "أو", "او", "ال",
@@ -517,7 +530,7 @@ export function pickToursForCity(
   // a paying tour just because it's free. Without this, KL with 2 stay
   // days and 3 candidates [تسوق=200, جنتنج=200, يوم حر=0] picked
   // [يوم حر, تسوق] and dropped Genting entirely.
-  const isFreeDayPlaceholder = (t: TourRow) => /^يوم\s*(?:ال)?حر/iu.test((t.name || "").trim());
+  const isFreeDayPlaceholder = (t: TourRow) => isFreeDayName(t.name);
   cityTours.sort((a, b) => {
     const af = isFreeDayPlaceholder(a) ? 1 : 0;
     const bf = isFreeDayPlaceholder(b) ? 1 : 0;
@@ -1249,7 +1262,7 @@ export function formatProgram(data: ProgramData): string {
   //   2) Sheet rows whose name starts with "يوم حر" (e.g. "يوم حر للاستجمام
   //      في جزيرة لانكاوي") — relabeled to type "حر" so the pricing screen
   //      shows the same badge as #1 instead of dressing them as "ثقافية".
-  const isFreeDayRow = (name: string) => /^يوم\s*(?:ال)?حر/iu.test((name || "").trim());
+  const isFreeDayRow = (name: string) => isFreeDayName(name);
   out += "TOURS:\n";
   let toursTotal = 0;
   const tourDays = new Set(tours.map(t => t.day));
@@ -1756,7 +1769,7 @@ export async function buildLocalProgram(
       // "يوم حر" placeholder tour in the same city so the new tour actually
       // takes its slot rather than just being added on top.
       const yomHorTour = allTours.find(t =>
-        /^يوم\s*(?:ال)?حر/iu.test(t.name.trim())
+        isFreeDayName(t.name)
         && tourBelongsToCity(t, cityDefs, city),
       );
       if (yomHorTour) cm.excludeNames.add(yomHorTour.name.trim().toLowerCase());
@@ -1827,7 +1840,7 @@ export async function buildLocalProgram(
           !isTransferTour(t.name) &&
           tourBelongsToCity(t, cityDefs, fromCity) &&
           !excludeForPick.has(t.name.trim().toLowerCase()) &&
-          !/^يوم\s*(?:ال)?حر/iu.test(t.name.trim()),
+          !isFreeDayName(t.name),
         );
         candidates.sort((a, b) =>
           pickTourVariantPrice(a, request.adults || 2, false) -
@@ -1890,7 +1903,7 @@ export async function buildLocalProgram(
     // never the arrival day). pickToursForCity sorts purely by price, so
     // a zero-priced "يوم حر للاستجمام" beats a paid sightseeing tour for
     // the first slot — flipping the order here makes paying tours go first.
-    const isFreeRow = (n: string) => /^يوم\s*(?:ال)?حر/iu.test((n || "").trim());
+    const isFreeRow = (n: string) => isFreeDayName(n);
     const autoPool = [...selected].sort((a, b) => {
       const af = isFreeRow(a.name) ? 1 : 0;
       const bf = isFreeRow(b.name) ? 1 : 0;

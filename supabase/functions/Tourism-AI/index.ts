@@ -2266,6 +2266,10 @@ Deno.serve(async (req) => {
             "دانانج": "Da Nang", "دانانغ": "Da Nang", "danang": "Da Nang",
             "فوكوك": "Phu Quoc", "phu quoc": "Phu Quoc",
           },
+          Turky: {
+            "اسطنبول": "Istanbul", "istanbul": "Istanbul",
+            "طرابزون": "Trabzon", "طربزون": "Trabzon", "trabzon": "Trabzon",
+          },
         };
         const map = AIRPORT_LOOKUP[detectedDest] || {};
         const findAirport = (re: RegExp): string | null => {
@@ -2299,6 +2303,7 @@ Deno.serve(async (req) => {
         const cityAr: Record<string, string> = {
           "Ha Noi": "هانوي", "Ho Chi Minh": "هوتشي مينه",
           "Da Nang": "دانانج", "Phu Quoc": "فوكوك",
+          "Istanbul": "اسطنبول", "Trabzon": "طرابزون",
         };
         const ar = (canonical: string) => cityAr[canonical] || canonical;
         const lines: string[] = [];
