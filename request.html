@@ -31,6 +31,8 @@
   .nights input{border:none;text-align:center;background:transparent;padding:0}
   .delc{border:none;background:#fbeaea;color:var(--err);border-radius:10px;height:42px;cursor:pointer;font-size:16px}
   .addcity{background:#eef3f2;color:var(--brand);border:1px dashed var(--brand2);border-radius:11px;padding:9px;width:100%;cursor:pointer;font-weight:600}
+  .gobtn{background:var(--brand);color:#fff;border:none;border-radius:11px;padding:0 18px;font-weight:700;cursor:pointer;white-space:nowrap}
+  .daysrow{display:grid;grid-template-columns:1fr auto;gap:10px}
   .nightsum{font-size:12.5px;color:var(--muted);margin-top:4px}
   .nightsum b{color:var(--brand)}
   .seg{display:flex;gap:8px}
@@ -102,13 +104,17 @@
           <select id="airportSel"></select>
         </div>
         <div class="field" id="daysField">
-          <label>عدد الأيام <span class="req">*</span></label>
-          <select id="daysSel"><option value="">اختر عدد الأيام…</option></select>
+          <label>عدد الأيام المطلوبة <span class="req">*</span></label>
+          <div class="daysrow">
+            <input id="daysReady" type="number" min="2" max="30" placeholder="مثال: 10">
+            <button type="button" class="gobtn" id="showOpts">عرض الخيارات</button>
+          </div>
+          <div class="nightsum" id="daysAvail"></div>
         </div>
         <div class="field" id="sugListField">
           <label>التوزيع المقترح للمدن</label>
           <div id="sugList" class="suglist"></div>
-          <div class="nightsum" id="sugPick">اختر عدد الأيام لعرض التوزيع المقترح.</div>
+          <div class="nightsum" id="sugPick">اكتب عدد الأيام واضغط «عرض الخيارات».</div>
           <div class="hintbox" id="sugEmpty">لا توجد اقتراحات جاهزة لهذه الوجهة — استخدم «تخصيص بنفسي».</div>
         </div>
       </div>
@@ -217,29 +223,31 @@ async function loadSuggestions(){
   const pairs=[...new Set(SUGS.map(s=>s.arrival_airport+'|'+s.departure_airport))];
   document.getElementById('airportField').style.display=pairs.length>1?'':'none';
   sel.innerHTML=pairs.map(p=>{const [a,b]=p.split('|');const lbl=a===b?`القدوم والمغادرة: ${airAr(a)}`:`القدوم: ${airAr(a)} — المغادرة: ${airAr(b)}`;return `<option value="${esc(p)}">${esc(lbl)}</option>`}).join('');
-  sel.onchange=renderDays; renderDays();
+  sel.onchange=onPairChange; onPairChange();
 }
-// populate the days dropdown with the distinct day-counts available for the pair
-function renderDays(){
+function curPair(){return document.getElementById('airportSel').value || (SUGS[0]?SUGS[0].arrival_airport+'|'+SUGS[0].departure_airport:'');}
+function daysForPair(){return [...new Set(SUGS.filter(s=>(s.arrival_airport+'|'+s.departure_airport)===curPair()).map(s=>s.days))].sort((a,b)=>a-b);}
+// when the airport pair changes: show which day-counts exist, reset the list
+function onPairChange(){
   chosen=null;
-  const pair=document.getElementById('airportSel').value || (SUGS[0]?SUGS[0].arrival_airport+'|'+SUGS[0].departure_airport:'');
-  const daysSel=document.getElementById('daysSel');
-  const days=[...new Set(SUGS.filter(s=>(s.arrival_airport+'|'+s.departure_airport)===pair).map(s=>s.days))].sort((a,b)=>a-b);
-  daysSel.innerHTML='<option value="">اختر عدد الأيام…</option>'+days.map(d=>`<option value="${d}">${d} أيام</option>`).join('');
-  daysSel.onchange=renderSugList;
+  document.getElementById('daysAvail').innerHTML='الأيام المتوفّرة: <b>'+daysForPair().join('، ')+'</b>';
   document.getElementById('sugList').innerHTML='';
   document.getElementById('sugPick').style.display='';
 }
-// show the distribution(s) for the chosen pair + days; auto-select if only one
-function renderSugList(){
+// "عرض الخيارات" button: show ONLY the distributions matching the typed days
+function showOptions(){
   chosen=null;
-  const pair=document.getElementById('airportSel').value || (SUGS[0]?SUGS[0].arrival_airport+'|'+SUGS[0].departure_airport:'');
-  const days=+document.getElementById('daysSel').value||0;
+  const days=+document.getElementById('daysReady').value||0;
   const list=document.getElementById('sugList');
   const pickHint=document.getElementById('sugPick');
-  if(!days){ list.innerHTML=''; pickHint.style.display=''; return; }
+  if(!days){ list.innerHTML=''; pickHint.textContent='اكتب عدد الأيام أولاً.'; pickHint.style.display=''; return; }
+  const rows=SUGS.filter(s=>(s.arrival_airport+'|'+s.departure_airport)===curPair() && s.days===days);
+  if(rows.length===0){
+    list.innerHTML='';
+    pickHint.innerHTML='لا يوجد برنامج جاهز لـ '+days+' أيام. الأيام المتوفّرة: <b>'+daysForPair().join('، ')+'</b> — أو استخدم «تخصيص بنفسي».';
+    pickHint.style.display=''; return;
+  }
   pickHint.style.display='none';
-  const rows=SUGS.filter(s=>(s.arrival_airport+'|'+s.departure_airport)===pair && s.days===days);
   list.innerHTML=rows.map(s=>`
     <div class="sug" data-k="${esc(s.arrival_airport+'|'+s.departure_airport+'|'+s.days+'|'+(s.label||'')+'|'+s.distribution)}">
       <div><span class="d">${s.days} أيام</span>${s.label?`<span class="lab">${esc(s.label)}</span>`:''}</div>
@@ -251,8 +259,9 @@ function renderSugList(){
     const [a,b,d,label,dist]=el.dataset.k.split('|');
     chosen={arrival_airport:a,departure_airport:b,days:+d,label,distribution:dist};
   });
-  if(els.length===1){ els[0].click(); }   // single option → auto-pick
+  if(els.length===1){ els[0].click(); }   // single match → auto-pick
 }
+document.getElementById('showOpts').onclick=showOptions;
 
 // ── MANUAL city rows ──
 const cityRows=document.getElementById('cityRows');
