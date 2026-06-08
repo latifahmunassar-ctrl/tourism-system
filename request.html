@@ -95,15 +95,20 @@
         </div>
       </div>
 
-      <!-- READY MODE: pick airport pair + a ready distribution -->
+      <!-- READY MODE: pick airport pair → number of days → matching distribution -->
       <div id="readyPanel">
         <div class="field" id="airportField">
           <label>مطار القدوم والمغادرة</label>
           <select id="airportSel"></select>
         </div>
-        <div class="field">
-          <label>اختر برنامجاً جاهزاً (حسب عدد الأيام)</label>
+        <div class="field" id="daysField">
+          <label>عدد الأيام <span class="req">*</span></label>
+          <select id="daysSel"><option value="">اختر عدد الأيام…</option></select>
+        </div>
+        <div class="field" id="sugListField">
+          <label>التوزيع المقترح للمدن</label>
           <div id="sugList" class="suglist"></div>
+          <div class="nightsum" id="sugPick">اختر عدد الأيام لعرض التوزيع المقترح.</div>
           <div class="hintbox" id="sugEmpty">لا توجد اقتراحات جاهزة لهذه الوجهة — استخدم «تخصيص بنفسي».</div>
         </div>
       </div>
@@ -187,41 +192,66 @@ function applyMode(){
 }
 document.querySelectorAll('input[name=mode]').forEach(r=>r.onchange=applyMode);
 
-// ── READY: fetch + render suggestions grouped by airport pair ──
+// ── READY: fetch suggestions → choose airport pair → choose days → distribution ──
 async function loadSuggestions(){
   SUGS=[]; chosen=null;
   const dest=destSel.value;
   const sel=document.getElementById('airportSel');
-  const list=document.getElementById('sugList');
-  sel.innerHTML=''; list.innerHTML='';
+  sel.innerHTML=''; document.getElementById('sugList').innerHTML='';
   document.getElementById('sugEmpty').style.display='none';
+  document.getElementById('sugPick').style.display='';
+  document.getElementById('daysField').style.display='';
+  document.getElementById('sugListField').style.display='';
   if(!dest) return;
   try{
     const res=await fetch(INTAKE_URL+"?suggestions="+encodeURIComponent(dest));
     const d=await res.json(); SUGS=d.suggestions||[];
   }catch(e){ SUGS=[]; }
-  if(SUGS.length===0){ document.getElementById('sugEmpty').style.display='block'; document.getElementById('airportField').style.display='none'; return; }
-  // distinct airport pairs
+  if(SUGS.length===0){
+    document.getElementById('sugEmpty').style.display='block';
+    document.getElementById('airportField').style.display='none';
+    document.getElementById('daysField').style.display='none';
+    document.getElementById('sugListField').style.display='none';
+    return;
+  }
   const pairs=[...new Set(SUGS.map(s=>s.arrival_airport+'|'+s.departure_airport))];
   document.getElementById('airportField').style.display=pairs.length>1?'':'none';
   sel.innerHTML=pairs.map(p=>{const [a,b]=p.split('|');const lbl=a===b?`القدوم والمغادرة: ${airAr(a)}`:`القدوم: ${airAr(a)} — المغادرة: ${airAr(b)}`;return `<option value="${esc(p)}">${esc(lbl)}</option>`}).join('');
-  sel.onchange=renderSugList; renderSugList();
+  sel.onchange=renderDays; renderDays();
 }
-function renderSugList(){
+// populate the days dropdown with the distinct day-counts available for the pair
+function renderDays(){
+  chosen=null;
   const pair=document.getElementById('airportSel').value || (SUGS[0]?SUGS[0].arrival_airport+'|'+SUGS[0].departure_airport:'');
+  const daysSel=document.getElementById('daysSel');
+  const days=[...new Set(SUGS.filter(s=>(s.arrival_airport+'|'+s.departure_airport)===pair).map(s=>s.days))].sort((a,b)=>a-b);
+  daysSel.innerHTML='<option value="">اختر عدد الأيام…</option>'+days.map(d=>`<option value="${d}">${d} أيام</option>`).join('');
+  daysSel.onchange=renderSugList;
+  document.getElementById('sugList').innerHTML='';
+  document.getElementById('sugPick').style.display='';
+}
+// show the distribution(s) for the chosen pair + days; auto-select if only one
+function renderSugList(){
+  chosen=null;
+  const pair=document.getElementById('airportSel').value || (SUGS[0]?SUGS[0].arrival_airport+'|'+SUGS[0].departure_airport:'');
+  const days=+document.getElementById('daysSel').value||0;
   const list=document.getElementById('sugList');
-  const rows=SUGS.filter(s=>(s.arrival_airport+'|'+s.departure_airport)===pair);
-  list.innerHTML=rows.map((s,i)=>`
+  const pickHint=document.getElementById('sugPick');
+  if(!days){ list.innerHTML=''; pickHint.style.display=''; return; }
+  pickHint.style.display='none';
+  const rows=SUGS.filter(s=>(s.arrival_airport+'|'+s.departure_airport)===pair && s.days===days);
+  list.innerHTML=rows.map(s=>`
     <div class="sug" data-k="${esc(s.arrival_airport+'|'+s.departure_airport+'|'+s.days+'|'+(s.label||'')+'|'+s.distribution)}">
       <div><span class="d">${s.days} أيام</span>${s.label?`<span class="lab">${esc(s.label)}</span>`:''}</div>
       <div class="dist">${esc(s.distribution)}</div>
     </div>`).join('');
-  list.querySelectorAll('.sug').forEach(el=>el.onclick=()=>{
-    list.querySelectorAll('.sug').forEach(x=>x.classList.remove('sel'));
-    el.classList.add('sel');
-    const [a,b,days,label,dist]=el.dataset.k.split('|');
-    chosen={arrival_airport:a,departure_airport:b,days:+days,label,distribution:dist};
+  const els=[...list.querySelectorAll('.sug')];
+  els.forEach(el=>el.onclick=()=>{
+    els.forEach(x=>x.classList.remove('sel')); el.classList.add('sel');
+    const [a,b,d,label,dist]=el.dataset.k.split('|');
+    chosen={arrival_airport:a,departure_airport:b,days:+d,label,distribution:dist};
   });
+  if(els.length===1){ els[0].click(); }   // single option → auto-pick
 }
 
 // ── MANUAL city rows ──
@@ -265,7 +295,7 @@ document.getElementById('form').addEventListener('submit', async (e)=>{
     sim_count:+f.sim_count.value||0, extra_bed:f.extra_bed.value.trim(), notes:f.notes.value.trim(),
   };
   if(mode()==='ready'){
-    if(!chosen){ errBox.textContent='اختر برنامجاً جاهزاً من القائمة، أو بدّل لـ«تخصيص بنفسي».'; errBox.style.display='block'; return; }
+    if(!chosen){ errBox.textContent='اختر عدد الأيام ثم التوزيع المقترح، أو بدّل لـ«تخصيص بنفسي».'; errBox.style.display='block'; return; }
     payload.days=chosen.days; payload.distribution=chosen.distribution;
     payload.cities_nights=parseDist(chosen.distribution);
     payload.date_from=document.getElementById('dateReady').value;
