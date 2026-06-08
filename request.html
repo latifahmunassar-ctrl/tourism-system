@@ -90,6 +90,11 @@
         </div>
       </div>
 
+      <div class="row">
+        <div class="field"><label>عدد الأيام <span class="req">*</span></label><input id="days" type="number" min="2" max="30" value="8" required></div>
+        <div class="field"><label>تاريخ السفر</label><input id="dateGlobal" type="date"></div>
+      </div>
+
       <div class="field"><label>طريقة تحديد المدن</label>
         <div class="seg" id="modeSeg">
           <label><input type="radio" name="mode" value="ready" checked><span>📋 اقتراحات جاهزة</span></label>
@@ -97,34 +102,26 @@
         </div>
       </div>
 
-      <!-- READY MODE: pick airport pair → number of days → matching distribution -->
+      <!-- READY MODE: airport pair → "عرض الخيارات" shows splits matching عدد الأيام above -->
       <div id="readyPanel">
         <div class="field" id="airportField">
           <label>مطار القدوم والمغادرة</label>
           <select id="airportSel"></select>
         </div>
         <div class="field" id="daysField">
-          <label>عدد الأيام المطلوبة <span class="req">*</span></label>
-          <div class="daysrow">
-            <input id="daysReady" type="number" min="2" max="30" placeholder="مثال: 10">
-            <button type="button" class="gobtn" id="showOpts">عرض الخيارات</button>
-          </div>
           <div class="nightsum" id="daysAvail"></div>
+          <button type="button" class="gobtn" id="showOpts" style="width:100%;padding:12px">📋 عرض الخيارات حسب عدد الأيام</button>
         </div>
         <div class="field" id="sugListField">
           <label>التوزيع المقترح للمدن</label>
           <div id="sugList" class="suglist"></div>
-          <div class="nightsum" id="sugPick">اكتب عدد الأيام واضغط «عرض الخيارات».</div>
+          <div class="nightsum" id="sugPick">اضغط «عرض الخيارات» لعرض التوزيع المطابق لعدد الأيام المختار.</div>
           <div class="hintbox" id="sugEmpty">لا توجد اقتراحات جاهزة لهذه الوجهة — استخدم «تخصيص بنفسي».</div>
         </div>
       </div>
 
       <!-- MANUAL MODE -->
       <div id="manualPanel" style="display:none">
-        <div class="row">
-          <div class="field"><label>عدد الأيام <span class="req">*</span></label><input id="daysManual" type="number" min="2" max="30" value="8"></div>
-          <div class="field"><label>تاريخ السفر</label><input id="dateManual" type="date"></div>
-        </div>
         <div class="field cities">
           <label>توزيع المدن والليالي</label>
           <div id="cityRows"></div>
@@ -132,9 +129,6 @@
           <div class="nightsum">مجموع الليالي: <b id="nsum">0</b> — المتوقّع: <b id="nexp">7</b> ليلة</div>
         </div>
       </div>
-
-      <!-- shared date for ready mode -->
-      <div class="field" id="readyDateField"><label>تاريخ السفر</label><input id="dateReady" type="date"></div>
     </div>
 
     <div class="card">
@@ -193,7 +187,6 @@ function mode(){return document.querySelector('input[name=mode]:checked').value;
 function applyMode(){
   const m=mode();
   document.getElementById('readyPanel').style.display=m==='ready'?'':'none';
-  document.getElementById('readyDateField').style.display=m==='ready'?'':'none';
   document.getElementById('manualPanel').style.display=m==='manual'?'':'none';
 }
 document.querySelectorAll('input[name=mode]').forEach(r=>r.onchange=applyMode);
@@ -237,10 +230,10 @@ function onPairChange(){
 // "عرض الخيارات" button: show ONLY the distributions matching the typed days
 function showOptions(){
   chosen=null;
-  const days=+document.getElementById('daysReady').value||0;
+  const days=+document.getElementById('days').value||0;
   const list=document.getElementById('sugList');
   const pickHint=document.getElementById('sugPick');
-  if(!days){ list.innerHTML=''; pickHint.textContent='اكتب عدد الأيام أولاً.'; pickHint.style.display=''; return; }
+  if(!days){ list.innerHTML=''; pickHint.textContent='اكتب عدد الأيام في الأعلى أولاً.'; pickHint.style.display=''; return; }
   const rows=SUGS.filter(s=>(s.arrival_airport+'|'+s.departure_airport)===curPair() && s.days===days);
   if(rows.length===0){
     list.innerHTML='';
@@ -280,11 +273,19 @@ function addCityRow(city='',nights=2){
   sumNights();
 }
 function sumNights(){let s=0;cityRows.querySelectorAll('.cnights').forEach(i=>s+=(+i.value||0));document.getElementById('nsum').textContent=s;}
-function expectedNights(){const d=+document.getElementById('daysManual').value||0;document.getElementById('nexp').textContent=Math.max(0,d-1);}
+function expectedNights(){const d=+document.getElementById('days').value||0;document.getElementById('nexp').textContent=Math.max(0,d-1);}
 
 destSel.onchange=()=>{ loadSuggestions(); cityRows.innerHTML=''; addCityRow(); };
 document.getElementById('addCity').onclick=()=>addCityRow();
-document.getElementById('daysManual').oninput=expectedNights;
+document.getElementById('days').oninput=()=>{
+  expectedNights();
+  // changing the day count invalidates any shown ready split
+  chosen=null;
+  const sp=document.getElementById('sugPick');
+  document.getElementById('sugList').innerHTML='';
+  sp.textContent='اضغط «عرض الخيارات» لعرض التوزيع المطابق لعدد الأيام المختار.';
+  sp.style.display='';
+};
 expectedNights(); applyMode();
 
 // parse "2 سيلانجور + 3 لانكاوي" → [{city,nights}] (for storage/display only)
@@ -301,19 +302,19 @@ document.getElementById('form').addEventListener('submit', async (e)=>{
     company_name:f.company_name.value.trim(), contact_name:f.contact_name.value.trim(),
     contact_email:f.contact_email.value.trim(), contact_phone:f.contact_phone.value.trim(),
     destination:destSel.value, pax:+f.pax.value, children:+document.getElementById('children').value||0, transport:f.transport.value,
+    days:+document.getElementById('days').value, date_from:document.getElementById('dateGlobal').value,
     sim_count:+f.sim_count.value||0, extra_bed:f.extra_bed.value.trim(), notes:f.notes.value.trim(),
   };
+  if(!payload.days){ errBox.textContent='اكتب عدد الأيام.'; errBox.style.display='block'; return; }
   if(mode()==='ready'){
-    if(!chosen){ errBox.textContent='اختر عدد الأيام ثم التوزيع المقترح، أو بدّل لـ«تخصيص بنفسي».'; errBox.style.display='block'; return; }
-    payload.days=chosen.days; payload.distribution=chosen.distribution;
+    if(!chosen){ errBox.textContent='اضغط «عرض الخيارات» واختر التوزيع المقترح، أو بدّل لـ«تخصيص بنفسي».'; errBox.style.display='block'; return; }
+    payload.distribution=chosen.distribution;
     payload.cities_nights=parseDist(chosen.distribution);
-    payload.date_from=document.getElementById('dateReady').value;
     payload.notes=[payload.notes,`اقتراح جاهز: ${chosen.label||''} (${airAr(chosen.arrival_airport)}↔${airAr(chosen.departure_airport)})`].filter(Boolean).join(' | ');
   } else {
     const cities=[...cityRows.querySelectorAll('.crow')].map(r=>({city:r.querySelector('.csel').value,nights:+r.querySelector('.cnights').value||0})).filter(c=>c.city&&c.nights);
     if(cities.length===0){ errBox.textContent='أضف مدينة واحدة على الأقل.'; errBox.style.display='block'; return; }
-    payload.days=+document.getElementById('daysManual').value; payload.cities_nights=cities;
-    payload.date_from=document.getElementById('dateManual').value;
+    payload.cities_nights=cities;
   }
   btn.disabled=true; btn.textContent='جارٍ الإرسال…';
   try{
