@@ -90,6 +90,11 @@
         </div>
       </div>
 
+      <div class="field" id="airportField">
+        <label>مطار القدوم والمغادرة</label>
+        <select id="airportSel"></select>
+      </div>
+
       <div class="row">
         <div class="field"><label>عدد الأيام <span class="req">*</span></label><input id="days" type="number" min="2" max="30" value="8" required></div>
         <div class="field"><label>تاريخ السفر</label><input id="dateGlobal" type="date"></div>
@@ -102,12 +107,8 @@
         </div>
       </div>
 
-      <!-- READY MODE: airport pair → "عرض الخيارات" shows splits matching عدد الأيام above -->
+      <!-- READY MODE: "عرض الخيارات" shows splits matching the airport + عدد الأيام above -->
       <div id="readyPanel">
-        <div class="field" id="airportField">
-          <label>مطار القدوم والمغادرة</label>
-          <select id="airportSel"></select>
-        </div>
         <div class="field" id="daysField">
           <div class="nightsum" id="daysAvail"></div>
           <button type="button" class="gobtn" id="showOpts" style="width:100%;padding:12px">📋 عرض الخيارات حسب عدد الأيام</button>
@@ -207,10 +208,12 @@ async function loadSuggestions(){
     const d=await res.json(); SUGS=d.suggestions||[];
   }catch(e){ SUGS=[]; }
   if(SUGS.length===0){
+    // no ready suggestions for this destination → hide airport + button, but keep
+    // the panel visible so the "use manual" hint shows.
     document.getElementById('sugEmpty').style.display='block';
+    document.getElementById('sugPick').style.display='none';
     document.getElementById('airportField').style.display='none';
     document.getElementById('daysField').style.display='none';
-    document.getElementById('sugListField').style.display='none';
     return;
   }
   const pairs=[...new Set(SUGS.map(s=>s.arrival_airport+'|'+s.departure_airport))];
