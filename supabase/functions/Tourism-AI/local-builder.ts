@@ -202,6 +202,7 @@ export function pickCheapestHotel(
     || (request.year && request.month
         ? `${request.year}-${String(monthNumber(request.month)).padStart(2, "0")}-01`
         : null);
+  let activeDate = dateForCheck;   // قد نُلغيه كملاذ أخير لو التاريخ خارج كل المواسم المُسعّرة
 
   // Build a candidate-filter that's identical except for the occupancy rule —
   // strict on the first pass, "room fits the group" on the fallback. The
@@ -216,7 +217,7 @@ export function pickCheapestHotel(
     if (effectiveStars.length > 0) {
       if (!effectiveStars.includes(h.stars)) return false;
     }
-    if (!hotelCoversDate(h, dateForCheck)) return false;
+    if (!hotelCoversDate(h, activeDate)) return false;
     // Sub-area filter: when the employee asked for a specific area within
     // the city ("Bali → Kuta"), require the hotel's location to mention it.
     if (options?.areaFilter) {
@@ -243,13 +244,13 @@ export function pickCheapestHotel(
   // rooms that explicitly mention a child slot (but don't require it —
   // the adult capacity match is the deciding factor).
   const childrenCount = Math.max(0, request.children || 0);
-  let candidates: HotelRow[] = [];
-  if (strictOnly) {
-    candidates = allHotels.filter(h => {
-      if (!baseFilter(h)) return false;
-      return extractAdultsCount(h.occupancy || "") === adults;
-    });
-  } else {
+  const findCandidates = (): HotelRow[] => {
+    if (strictOnly) {
+      return allHotels.filter(h => {
+        if (!baseFilter(h)) return false;
+        return extractAdultsCount(h.occupancy || "") === adults;
+      });
+    }
     const adultsByCap = (cap: number) => allHotels.filter(h => {
       if (!baseFilter(h)) return false;
       return extractAdultsCount(h.occupancy || "") === cap;
@@ -260,19 +261,22 @@ export function pickCheapestHotel(
     for (const cap of order) {
       const atCap = adultsByCap(cap);
       if (atCap.length === 0) continue;
-      // Among rooms with this adult capacity, prefer kid-accommodating
-      // ones when kids are on the trip. Fall back to the whole tier if
-      // none have an explicit child slot.
       if (childrenCount > 0) {
         const kidFriendly = atCap.filter(h =>
           extractChildrenCount(h.occupancy || "") >= childrenCount,
         );
-        candidates = kidFriendly.length > 0 ? kidFriendly : atCap;
-      } else {
-        candidates = atCap;
+        return kidFriendly.length > 0 ? kidFriendly : atCap;
       }
-      break;
+      return atCap;
     }
+    return [];
+  };
+  let candidates = findCandidates();
+  // التاريخ خارج كل المواسم المُسعّرة (مثلاً صلالة سبتمبر-ديسمبر غير مُسعّر) →
+  // أعد المحاولة بتجاهل التاريخ (أقرب سعر متاح) بدل إرجاع "لا يوجد فندق".
+  if (candidates.length === 0 && dateForCheck) {
+    activeDate = null;
+    candidates = findCandidates();
   }
 
   if (candidates.length === 0) return null;
