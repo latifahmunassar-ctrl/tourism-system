@@ -2138,8 +2138,22 @@ CHAT:[جملتين ودية للموظف باللهجة السعودية]`;
 // ── list_hotels: فنادق مدينة معيّنة (لقائمة تبديل الفندق في الداشبورد) ──────
 // المدخل: { action:"list_hotels", dest:"ماليزيا", region:"كوالالمبور", occupancy:2 }
 // نُطابق اسم المدينة العربي عبر DEST_CITIES → canonical إنجليزي → عمود location.
+// تاريخ السفر (DATE_FROM عربي مثل "4 أبريل 2026" أو ISO) → ISO، لفلترة التسعير الموسمي.
+const AR_MONTHS_NUM: Record<string, number> = {
+  "يناير":1,"فبراير":2,"مارس":3,"ابريل":4,"أبريل":4,"مايو":5,"يونيو":6,
+  "يوليو":7,"اغسطس":8,"أغسطس":8,"سبتمبر":9,"اكتوبر":10,"أكتوبر":10,"نوفمبر":11,"ديسمبر":12,
+};
+function travelDateToISO(s: string): string | null {
+  const t = (s || "").replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)));
+  let m = t.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  m = t.match(/(\d{1,2})\s+([^\s\d]+)\s+(\d{4})/);
+  if (m) { const mo = AR_MONTHS_NUM[m[2]]; if (mo) return `${m[3]}-${String(mo).padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
+  return null;
+}
+
 async function handleListHotels(body: {
-  dest?: string; region?: string; occupancy?: number | string; current?: string;
+  dest?: string; region?: string; occupancy?: number | string; current?: string; date?: string;
 }): Promise<Response> {
   try {
     const destAr = String(body.dest || "").trim();
@@ -2153,7 +2167,7 @@ async function handleListHotels(body: {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
     let q = supabase.from("hotels")
-      .select("name,stars,location,price_per_night,room_type,includes_breakfast,occupancy");
+      .select("name,stars,location,price_per_night,room_type,includes_breakfast,occupancy,date_from,date_to");
     if (destKey) q = q.ilike("location", `% - ${destKey}`);
     const { data, error } = await q
       .order("stars", { ascending: false })
@@ -2203,6 +2217,28 @@ async function handleListHotels(body: {
       const curArea = curRow ? subAreaOf(String(curRow.location || "")) : "";
       if (curArea) rows = rows.filter(h => subAreaOf(String(h.location || "")) === curArea);
     }
+
+    // فلترة الموسم حسب التاريخ المطلوب: نُبقي فقط صف السعر الذي يغطّي التاريخ
+    // (التواريخ ISO فالمقارنة النصية = الزمنية). الصفوف بلا تاريخ تبقى دائماً.
+    const travelISO = travelDateToISO(String(body.date || ""));
+    if (travelISO) {
+      rows = rows.filter(h => {
+        const df = String(h.date_from || ""), dt = String(h.date_to || "");
+        if (!df && !dt) return true;
+        if (df && travelISO < df) return false;
+        if (dt && travelISO > dt) return false;
+        return true;
+      });
+    }
+    // إزالة التكرار: كل (فندق + نوع الغرفة) مرة واحدة — لا تتكرر بمواسم مختلفة.
+    // مرتّبة سعراً تصاعدياً، فيبقى الأرخص المطابق عند غياب التاريخ.
+    const seenHotelRoom = new Set<string>();
+    rows = rows.filter(h => {
+      const k = `${String(h.name || "").trim()}|${String(h.room_type || "").trim()}`;
+      if (seenHotelRoom.has(k)) return false;
+      seenHotelRoom.add(k);
+      return true;
+    });
 
     const hotels = rows.map(h => ({
       name: h.name,

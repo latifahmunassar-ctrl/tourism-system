@@ -826,7 +826,7 @@ async function hswFetch(cell){
     const res = await fetch(SUPABASE_URL, {
       method:'POST',
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
-      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: occ, current: cell.dataset.name || '' })
+      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: occ, current: cell.dataset.name || '', date: getLine(lastProgramRaw, 'DATE_FROM') || '' })
     });
     const data = await res.json();
     cell.dataset.loaded = '1';
