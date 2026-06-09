@@ -6,13 +6,13 @@
 <title>طلب برنامج سياحي | ALEZZ</title>
 <style>
   :root{
-    --brand:#1a3a8f; --brand2:#13296b; --accent:#d4a843; --bg:#f3f5fa;
-    --ink:#1d2b2a; --muted:#6b7c7a; --line:#e3e7f0; --ok:#15803d; --err:#b91c1c;
+    --brand:#0e9d6a; --brand2:#c41d88; --accent:#e0218a; --bg:#f1f8f4;
+    --ink:#1d2b2a; --muted:#6b7c7a; --line:#dcede6; --ok:#15803d; --err:#b91c1c;
   }
   *{box-sizing:border-box}
   body{margin:0;font-family:"Segoe UI",Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
   .wrap{max-width:760px;margin:0 auto;padding:0 16px 60px}
-  header{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:34px 20px;border-radius:0 0 26px 26px;text-align:center;box-shadow:0 6px 24px rgba(26,58,143,.18)}
+  header{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:34px 20px;border-radius:0 0 26px 26px;text-align:center;box-shadow:0 6px 24px rgba(14,157,106,.18)}
   header .logo{font-size:30px;font-weight:800;letter-spacing:3px}
   header .logo span{color:var(--accent)}
   header p{margin:8px 0 0;opacity:.92;font-size:15px}
@@ -23,14 +23,14 @@
   .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   @media(max-width:560px){.row{grid-template-columns:1fr}}
   input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:11px;font:inherit;background:#fcfdfd;color:var(--ink)}
-  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brand2);box-shadow:0 0 0 3px rgba(26,58,143,.12)}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brand2);box-shadow:0 0 0 3px rgba(14,157,106,.12)}
   .field{margin-bottom:14px}
   .cities .crow{display:grid;grid-template-columns:1fr 120px 40px;gap:10px;margin-bottom:10px;align-items:center}
   .nights{display:flex;align-items:center;border:1px solid var(--line);border-radius:11px;overflow:hidden;background:#fcfdfd}
-  .nights button{border:none;background:#eef2fc;color:var(--brand);font-size:18px;width:38px;height:42px;cursor:pointer}
+  .nights button{border:none;background:#e9f7f1;color:var(--brand);font-size:18px;width:38px;height:42px;cursor:pointer}
   .nights input{border:none;text-align:center;background:transparent;padding:0}
   .delc{border:none;background:#fbeaea;color:var(--err);border-radius:10px;height:42px;cursor:pointer;font-size:16px}
-  .addcity{background:#eef2fc;color:var(--brand);border:1px dashed var(--brand2);border-radius:11px;padding:9px;width:100%;cursor:pointer;font-weight:600}
+  .addcity{background:#e9f7f1;color:var(--brand);border:1px dashed var(--brand2);border-radius:11px;padding:9px;width:100%;cursor:pointer;font-weight:600}
   .gobtn{background:var(--brand);color:#fff;border:none;border-radius:11px;padding:0 18px;font-weight:700;cursor:pointer;white-space:nowrap}
   .daysrow{display:grid;grid-template-columns:1fr auto;gap:10px}
   .nightsum{font-size:12.5px;color:var(--muted);margin-top:4px}
@@ -38,20 +38,20 @@
   .seg{display:flex;gap:8px}
   .seg label{flex:1;border:1px solid var(--line);border-radius:11px;padding:11px;text-align:center;cursor:pointer;margin:0;background:#fcfdfd;font-weight:600}
   .seg input{display:none}
-  .seg label:has(input:checked){border-color:var(--brand2);background:#eef2fc;box-shadow:0 0 0 2px rgba(26,58,143,.1);color:var(--brand)}
+  .seg label:has(input:checked){border-color:var(--brand2);background:#e9f7f1;box-shadow:0 0 0 2px rgba(14,157,106,.1);color:var(--brand)}
   .suglist{display:flex;flex-direction:column;gap:9px;margin-top:6px}
   .sug{border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;background:#fcfdfd;transition:.12s}
   .sug:hover{border-color:var(--brand2)}
-  .sug.sel{border-color:var(--brand2);background:#eef2fc;box-shadow:0 0 0 2px rgba(26,58,143,.12)}
+  .sug.sel{border-color:var(--brand2);background:#e9f7f1;box-shadow:0 0 0 2px rgba(14,157,106,.12)}
   .sug .d{font-weight:700;color:var(--brand);font-size:14px}
   .sug .lab{font-size:11.5px;color:#fff;background:var(--accent);border-radius:20px;padding:1px 9px;margin-right:6px}
   .sug .dist{font-size:13.5px;margin-top:4px;color:var(--ink)}
-  .submit{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:14px;padding:15px;width:100%;font-size:16px;font-weight:700;cursor:pointer;margin-top:6px;box-shadow:0 6px 18px rgba(26,58,143,.22)}
+  .submit{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:14px;padding:15px;width:100%;font-size:16px;font-weight:700;cursor:pointer;margin-top:6px;box-shadow:0 6px 18px rgba(14,157,106,.22)}
   .submit:disabled{opacity:.6;cursor:default}
   .note{font-size:12.5px;color:var(--muted);text-align:center;margin-top:14px}
   .done{text-align:center;padding:30px 10px}
   .done .check{width:74px;height:74px;border-radius:50%;background:#e7f6ee;color:var(--ok);display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto 14px}
-  .done .ref{display:inline-block;background:#eef2fc;color:var(--brand);font-weight:800;font-size:20px;letter-spacing:1px;padding:8px 18px;border-radius:12px;margin:10px 0}
+  .done .ref{display:inline-block;background:#e9f7f1;color:var(--brand);font-weight:800;font-size:20px;letter-spacing:1px;padding:8px 18px;border-radius:12px;margin:10px 0}
   .err{background:#fbeaea;color:var(--err);border-radius:11px;padding:11px;font-size:13.5px;margin-top:12px;display:none}
   .req{color:var(--err)}
   .hintbox{background:#fff7e6;border:1px solid #f0dcae;color:#8a6d1f;border-radius:11px;padding:10px;font-size:12.5px;margin-top:6px;display:none}

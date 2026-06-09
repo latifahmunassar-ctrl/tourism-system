@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>صندوق طلبات الشركات (داخلي) | ALEZZ</title>
 <style>
-  :root{--brand:#1a3a8f;--brand2:#13296b;--bg:#eef1f7;--ink:#1d2b2a;--muted:#6b7c7a;--line:#dde2ee;--ok:#15803d;--err:#b91c1c;--warn:#b45309}
+  :root{--brand:#0e9d6a;--brand2:#c41d88;--bg:#eef6f2;--ink:#1d2b2a;--muted:#6b7c7a;--line:#d8e8e0;--ok:#15803d;--err:#b91c1c;--warn:#b45309}
   *{box-sizing:border-box}
   body{margin:0;font-family:"Segoe UI",Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
   .top{background:var(--brand);color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center}
@@ -14,9 +14,9 @@
   .grid{display:grid;grid-template-columns:380px 1fr;gap:16px;padding:16px;max-width:1200px;margin:0 auto}
   @media(max-width:820px){.grid{grid-template-columns:1fr}}
   .panel{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
-  .panel h3{margin:0;padding:13px 16px;font-size:14px;background:#f6f8fd;border-bottom:1px solid var(--line)}
+  .panel h3{margin:0;padding:13px 16px;font-size:14px;background:#f2faf6;border-bottom:1px solid var(--line)}
   .item{padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer}
-  .item:hover{background:#f6f8fd}.item.sel{background:#eef2fc}
+  .item:hover{background:#f2faf6}.item.sel{background:#e9f7f1}
   .item .r1{display:flex;justify-content:space-between;font-size:13.5px}
   .item .co{font-weight:700}
   .item .r2{color:var(--muted);font-size:12.5px;margin-top:3px}
@@ -29,10 +29,10 @@
   textarea{width:100%;min-height:340px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;border:1px solid var(--line);border-radius:10px;padding:12px;direction:rtl;line-height:1.7}
   .bar{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
   .btn{border:none;border-radius:10px;padding:10px 16px;font:inherit;font-weight:700;cursor:pointer}
-  .btn.save{background:#eef2fc;color:var(--brand)} .btn.approve{background:var(--ok);color:#fff} .btn.copy{background:#eef2fc;color:var(--brand)}
+  .btn.save{background:#e9f7f1;color:var(--brand)} .btn.approve{background:var(--ok);color:#fff} .btn.copy{background:#e9f7f1;color:var(--brand)}
   .msg{margin-top:10px;font-size:13px;padding:8px 12px;border-radius:9px;display:none}
   .msg.ok{background:#dcfce7;color:var(--ok)} .msg.err{background:#fee2e2;color:var(--err)}
-  .link{margin-top:12px;background:#f6f8fd;border:1px dashed var(--brand2);border-radius:10px;padding:10px;font-size:12.5px;word-break:break-all;display:none}
+  .link{margin-top:12px;background:#f2faf6;border:1px dashed var(--brand2);border-radius:10px;padding:10px;font-size:12.5px;word-break:break-all;display:none}
   .login{max-width:380px;margin:80px auto;background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px;text-align:center}
   .login input{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;margin:12px 0}
   .warn{background:#fef3c7;color:var(--warn);font-size:12.5px;padding:8px 12px;border-radius:9px;margin-bottom:10px}
