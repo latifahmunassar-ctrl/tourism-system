@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>بوابة الشركات | ALEZZ</title>
+<style>
+  :root{--brand:#0e9d6a;--brand2:#c41d88;--gold:#D4A843;--accent:#e0218a;--bg:#f1f8f4;--ink:#1d2b2a;--muted:#6b7c7a;--line:#dcede6;--ok:#15803d;--err:#b91c1c;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+  .wrap{max-width:760px;margin:0 auto;padding:0 16px 60px}
+  header{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:30px 20px;border-radius:0 0 26px 26px;text-align:center;box-shadow:0 6px 24px rgba(14,157,106,.18)}
+  header .logo{font-size:28px;font-weight:800;letter-spacing:3px}.header .logo span,header .logo span{color:var(--gold)}
+  header p{margin:8px 0 0;opacity:.92;font-size:14px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px;margin-top:22px;box-shadow:0 2px 14px rgba(0,0,0,.04)}
+  .card h2{margin:0 0 4px;font-size:17px;color:var(--brand)}
+  .card .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+  label{display:block;font-size:13.5px;font-weight:600;margin:0 0 6px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:560px){.row{grid-template-columns:1fr}}
+  .field{margin-bottom:14px}
+  input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:11px;font:inherit;background:#fcfdfd;color:var(--ink)}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brand2);box-shadow:0 0 0 3px rgba(14,157,106,.12)}
+  .req{color:var(--err)}
+  .submit{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:14px;padding:15px;width:100%;font-size:16px;font-weight:700;cursor:pointer;margin-top:6px;box-shadow:0 6px 18px rgba(14,157,106,.22)}
+  .submit:disabled{opacity:.6;cursor:default}
+  .err{background:#fbeaea;color:var(--err);border-radius:11px;padding:11px;font-size:13.5px;margin-top:12px;display:none}
+  .note{font-size:12.5px;color:var(--muted);text-align:center;margin-top:14px}
+  .note a{color:var(--brand);font-weight:700;text-decoration:none}
+  /* profile banner */
+  .prof{display:flex;gap:14px;align-items:center;background:#e9f7f1;border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:22px}
+  .prof .lg{width:54px;height:54px;border-radius:13px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--brand);font-weight:900;flex-shrink:0}
+  .prof .lg img{width:100%;height:100%;object-fit:cover}
+  .prof .nm{font-weight:800;font-size:15px}.prof .mt{color:var(--muted);font-size:12.5px;margin-top:3px}
+  .prof .out{margin-inline-start:auto;background:#fff;border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:7px 12px;cursor:pointer;font-weight:700;font-size:12.5px}
+  .seg{display:flex;gap:8px}
+  .seg label{flex:1;border:1px solid var(--line);border-radius:11px;padding:11px;text-align:center;cursor:pointer;margin:0;background:#fcfdfd;font-weight:600}
+  .seg input{display:none}
+  .seg label:has(input:checked){border-color:var(--brand2);background:#e9f7f1;box-shadow:0 0 0 2px rgba(14,157,106,.1);color:var(--brand)}
+  .suglist{display:flex;flex-direction:column;gap:9px;margin-top:6px}
+  .sug{border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;background:#fcfdfd}
+  .sug:hover{border-color:var(--brand2)} .sug.sel{border-color:var(--brand2);background:#e9f7f1;box-shadow:0 0 0 2px rgba(14,157,106,.12)}
+  .sug .d{font-weight:700;color:var(--brand);font-size:14px}
+  .sug .lab{font-size:11.5px;color:#fff;background:var(--accent);border-radius:20px;padding:1px 9px;margin-right:6px}
+  .sug .dist{font-size:13.5px;margin-top:4px}
+  .gobtn{background:var(--brand);color:#fff;border:none;border-radius:11px;padding:12px;font-weight:700;cursor:pointer;width:100%}
+  .nightsum{font-size:12.5px;color:var(--muted);margin-top:4px}.nightsum b{color:var(--brand)}
+  .hintbox{background:#fff7e6;border:1px solid #f0dcae;color:#8a6d1f;border-radius:11px;padding:10px;font-size:12.5px;margin-top:6px;display:none}
+  .cities .crow{display:grid;grid-template-columns:1fr 120px 40px;gap:10px;margin-bottom:10px;align-items:center}
+  .nights{display:flex;align-items:center;border:1px solid var(--line);border-radius:11px;overflow:hidden;background:#fcfdfd}
+  .nights button{border:none;background:#e9f7f1;color:var(--brand);font-size:18px;width:38px;height:42px;cursor:pointer}
+  .nights input{border:none;text-align:center;background:transparent;padding:0}
+  .delc{border:none;background:#fbeaea;color:var(--err);border-radius:10px;height:42px;cursor:pointer}
+  .addcity{background:#e9f7f1;color:var(--brand);border:1px dashed var(--brand2);border-radius:11px;padding:9px;width:100%;cursor:pointer;font-weight:600}
+  .done{text-align:center;padding:30px 10px}
+  .done .check{width:74px;height:74px;border-radius:50%;background:#e7f6ee;color:var(--ok);display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto 14px}
+  .done .ref{display:inline-block;background:#e9f7f1;color:var(--brand);font-weight:800;font-size:20px;letter-spacing:1px;padding:8px 18px;border-radius:12px;margin:10px 0}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">AL<span>E</span>ZZ</div>
+  <p id="hsub">بوابة الشركات — سجّل دخولك واطلب برنامجك</p>
+</header>
+
+<div class="wrap">
+
+  <!-- ===== LOGIN ===== -->
+  <form id="loginForm" class="card" style="max-width:420px;margin:22px auto 0">
+    <h2>دخول الشركات</h2>
+    <div class="sub">بالجوال وكلمة المرور اللي سجّلت فيها.</div>
+    <div class="field"><label>رقم الجوال <span class="req">*</span></label><input id="lphone" inputmode="tel" placeholder="+9665..." required></div>
+    <div class="field"><label>كلمة المرور <span class="req">*</span></label><input id="lpass" type="password" required></div>
+    <button type="submit" class="submit" id="loginBtn">دخول</button>
+    <div class="err" id="loginErr"></div>
+    <div class="note">شركة جديدة؟ <a href="company-register.html">سجّل حساب</a></div>
+  </form>
+
+  <!-- ===== APP (after login) ===== -->
+  <div id="app" style="display:none">
+    <div class="prof">
+      <div class="lg" id="pLogo">🏢</div>
+      <div><div class="nm" id="pName">—</div><div class="mt" id="pMeta">—</div></div>
+      <button class="out" onclick="logout()">خروج</button>
+    </div>
+
+    <form id="form">
+      <div class="card">
+        <h2>اطلب برنامجاً سياحياً</h2>
+        <div class="sub">بياناتك محفوظة — كمّل تفاصيل الرحلة فقط.</div>
+        <div class="field"><label>الوجهة <span class="req">*</span></label>
+          <select id="destination" required><option value="">اختر الوجهة…</option></select>
+        </div>
+        <div class="row">
+          <div class="field"><label>عدد البالغين <span class="req">*</span></label><input id="pax" type="number" min="1" max="40" value="2" required></div>
+          <div class="field"><label>عدد الأطفال <span style="font-weight:500;color:var(--muted);font-size:11.5px">(أقل من 5)</span></label><input id="children" type="number" min="0" max="20" value="0"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>عدد الأيام <span class="req">*</span></label><input id="days" type="number" min="2" max="30" value="8" required></div>
+          <div class="field"><label>تاريخ السفر</label><input id="dateGlobal" type="date"></div>
+        </div>
+
+        <div class="field"><label>طريقة تحديد المدن</label>
+          <div class="seg" id="modeSeg">
+            <label><input type="radio" name="mode" value="ready" checked><span>📋 اقتراحات جاهزة</span></label>
+            <label><input type="radio" name="mode" value="manual"><span>✏️ تخصيص بنفسي</span></label>
+          </div>
+        </div>
+
+        <div id="readyPanel">
+          <div class="field"><div class="nightsum" id="daysAvail"></div>
+            <button type="button" class="gobtn" id="showOpts">📋 عرض الخيارات حسب عدد الأيام</button></div>
+          <div class="field"><label>التوزيع المقترح للمدن</label>
+            <div id="sugList" class="suglist"></div>
+            <div class="nightsum" id="sugPick">اضغط «عرض الخيارات» لعرض التوزيع المطابق.</div>
+            <div class="hintbox" id="sugEmpty">لا توجد اقتراحات جاهزة لهذه الوجهة — استخدم «تخصيص بنفسي».</div>
+          </div>
+        </div>
+
+        <div id="manualPanel" style="display:none">
+          <div class="field cities"><label>توزيع المدن والليالي</label>
+            <div id="cityRows"></div>
+            <button type="button" class="addcity" id="addCity">+ أضف مدينة</button>
+            <div class="nightsum">مجموع الليالي: <b id="nsum">0</b> — المتوقّع: <b id="nexp">7</b> ليلة</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>تفضيلات</h2>
+        <div class="sub">اختياري</div>
+        <div class="field"><label>نوع التنقّل</label>
+          <div class="seg">
+            <label><input type="radio" name="transport" value="private" checked><span>🚗 خاص</span></label>
+            <label><input type="radio" name="transport" value="shared"><span>🚐 مشترك</span></label>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field"><label>عدد شرائح الاتصال</label><input id="sim_count" type="number" min="0" max="40" value="0"></div>
+          <div class="field"><label>سرير إضافي</label><input id="extra_bed" placeholder="مثال: نعم لكل الفنادق"></div>
+        </div>
+        <div class="field"><label>ملاحظات</label><textarea id="notes" rows="2" placeholder="أي طلبات خاصة…"></textarea></div>
+      </div>
+
+      <button type="submit" class="submit" id="submitBtn">إرسال الطلب</button>
+      <div class="err" id="errBox"></div>
+      <div class="note">يصلك العرض بعد مراجعة فريق ALEZZ.</div>
+    </form>
+
+    <div class="card done" id="done" style="display:none">
+      <div class="check">✓</div>
+      <h2 style="font-size:20px;color:var(--brand)">تم استلام طلبك</h2>
+      <p style="color:var(--muted)">فريق ALEZZ يجهّز برنامجك ويرسل لك العرض قريباً.</p>
+      <div class="ref" id="refNo"></div>
+      <button class="gobtn" style="max-width:240px;margin:8px auto 0" onclick="newRequest()">+ طلب جديد</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const INTAKE="https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake";
+const CITIES={
+  "فيتنام":["هانوي","سابا","ها لونج","دانانج","فوكوك","نها ترانج","دالات","هوتشي مينه"],
+  "ماليزيا":["كوالالمبور","سيلانجور","لانكاوي","بينانج","كاميرون هايلاند"],
+  "تايلاند":["بانكوك","بوكيت","كرابي","شيانغ ماي","باتايا","كوساموي"],
+  "تركيا":["اسطنبول","طرابزون","أوزنجول","أيدر","ريزا","بورصة","سابانجا"],
+  "روسيا":["موسكو","سانت بطرسبرغ","سوتشي"],
+  "البوسنة":["سراييفو","موستار","بيهاتش"],
+  "إندونيسيا":["بالي","جاكرتا","باندونغ","بونشاك"],
+};
+const esc=s=>String(s||"").replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+const $=id=>document.getElementById(id);
+let TOKEN=localStorage.getItem('alezz_company_token')||'';
+let COMPANY=null;
+
+// ── auth ──
+$('loginForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const err=$('loginErr'); err.style.display='none';
+  const btn=$('loginBtn'); btn.disabled=true; btn.textContent='جارٍ الدخول…';
+  try{
+    const res=await fetch(INTAKE+'?company_action=login',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contact_phone:$('lphone').value.trim(),password:$('lpass').value})});
+    const d=await res.json();
+    if(!res.ok||!d.ok) throw new Error(d.error||'تعذّر الدخول');
+    TOKEN=d.token; localStorage.setItem('alezz_company_token',TOKEN);
+    COMPANY=d.company; showApp();
+  }catch(ex){ err.textContent=ex.message; err.style.display='block'; }
+  finally{ btn.disabled=false; btn.textContent='دخول'; }
+});
+function logout(){ localStorage.removeItem('alezz_company_token'); TOKEN=''; COMPANY=null; location.reload(); }
+function showApp(){
+  $('loginForm').style.display='none'; $('app').style.display='block';
+  $('hsub').textContent='أهلاً بعودتك 👋';
+  $('pName').textContent=COMPANY.company_name;
+  $('pMeta').textContent=[COMPANY.contact_name,COMPANY.contact_phone].filter(Boolean).join(' · ');
+  if(COMPANY.logo_url) $('pLogo').innerHTML=`<img src="${esc(COMPANY.logo_url)}" alt="">`;
+  else $('pLogo').textContent='🏢';
+}
+// resume session
+(async ()=>{
+  if(!TOKEN) return;
+  try{
+    const res=await fetch(INTAKE+'?company_action=me',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:TOKEN})});
+    const d=await res.json();
+    if(res.ok&&d.ok){ COMPANY=d.company; showApp(); } else { localStorage.removeItem('alezz_company_token'); TOKEN=''; }
+  }catch(_){}
+})();
+
+// ── request form (mirrors request.html, minus company fields) ──
+const destSel=$('destination');
+Object.keys(CITIES).forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent=d;destSel.appendChild(o)});
+let SUGS=[], chosen=null;
+function mode(){return document.querySelector('input[name=mode]:checked').value;}
+function applyMode(){ $('readyPanel').style.display=mode()==='ready'?'':'none'; $('manualPanel').style.display=mode()==='manual'?'':'none'; }
+document.querySelectorAll('input[name=mode]').forEach(r=>r.onchange=applyMode);
+
+async function loadSuggestions(){
+  SUGS=[]; chosen=null; const dest=destSel.value;
+  $('sugList').innerHTML=''; $('sugEmpty').style.display='none'; $('sugPick').style.display='';
+  if(!dest) return;
+  try{ const res=await fetch(INTAKE+"?suggestions="+encodeURIComponent(dest)); const d=await res.json(); SUGS=d.suggestions||[]; }catch(e){ SUGS=[]; }
+  if(SUGS.length===0){ $('sugEmpty').style.display='block'; $('sugPick').style.display='none'; return; }
+  $('daysAvail').innerHTML='الأيام المتوفّرة: <b>'+[...new Set(SUGS.map(s=>s.days))].sort((a,b)=>a-b).join('، ')+'</b>';
+}
+function showOptions(){
+  chosen=null; const days=+$('days').value||0; const list=$('sugList'); const pick=$('sugPick');
+  if(!days){ list.innerHTML=''; pick.textContent='اكتب عدد الأيام أولاً.'; pick.style.display=''; return; }
+  const rows=SUGS.filter(s=>s.days===days);
+  if(rows.length===0){ list.innerHTML=''; pick.innerHTML='لا يوجد برنامج جاهز لـ '+days+' أيام — أو استخدم «تخصيص بنفسي».'; pick.style.display=''; return; }
+  pick.style.display='none';
+  list.innerHTML=rows.map(s=>`<div class="sug" data-d="${esc(s.distribution)}"><div><span class="d">${s.days} أيام</span>${s.label?`<span class="lab">${esc(s.label)}</span>`:''}</div><div class="dist">${esc(s.distribution)}</div></div>`).join('');
+  const els=[...list.querySelectorAll('.sug')];
+  els.forEach(el=>el.onclick=()=>{ els.forEach(x=>x.classList.remove('sel')); el.classList.add('sel'); chosen={distribution:el.dataset.d}; });
+  if(els.length===1) els[0].click();
+}
+$('showOpts').onclick=showOptions;
+
+const cityRows=$('cityRows');
+function cityOptions(){const l=CITIES[destSel.value]||[];return '<option value="">اختر مدينة…</option>'+l.map(c=>`<option>${c}</option>`).join('');}
+function addCityRow(city='',nights=2){
+  const div=document.createElement('div');div.className='crow';
+  div.innerHTML=`<select class="csel">${cityOptions()}</select><div class="nights"><button type="button" class="minus">−</button><input class="cnights" type="number" min="1" max="20" value="${nights}"><button type="button" class="plus">+</button></div><button type="button" class="delc">×</button>`;
+  cityRows.appendChild(div); if(city) div.querySelector('.csel').value=city;
+  div.querySelector('.plus').onclick=()=>{const i=div.querySelector('.cnights');i.value=Math.min(20,(+i.value||0)+1);sumNights()};
+  div.querySelector('.minus').onclick=()=>{const i=div.querySelector('.cnights');i.value=Math.max(1,(+i.value||0)-1);sumNights()};
+  div.querySelector('.cnights').oninput=sumNights;
+  div.querySelector('.delc').onclick=()=>{div.remove();sumNights()};
+  sumNights();
+}
+function sumNights(){let s=0;cityRows.querySelectorAll('.cnights').forEach(i=>s+=(+i.value||0));$('nsum').textContent=s;}
+function expectedNights(){const d=+$('days').value||0;$('nexp').textContent=Math.max(0,d-1);}
+destSel.onchange=()=>{ loadSuggestions(); cityRows.innerHTML=''; addCityRow(); };
+$('addCity').onclick=()=>addCityRow();
+$('days').oninput=()=>{ expectedNights(); chosen=null; $('sugList').innerHTML=''; $('sugPick').textContent='اضغط «عرض الخيارات».'; $('sugPick').style.display=''; };
+expectedNights(); applyMode();
+
+function parseDist(str){return String(str||'').split(/[+\-]/).map(s=>s.trim()).map(s=>{const m=s.match(/^(\d+)\s+(.+)$/);return m?{city:m[2].trim(),nights:+m[1]}:null}).filter(Boolean);}
+
+$('form').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const err=$('errBox'); err.style.display='none'; const btn=$('submitBtn');
+  if(!destSel.value||!$('pax').value||!$('days').value){ err.textContent='عبّي الوجهة، عدد البالغين، وعدد الأيام.'; err.style.display='block'; return; }
+  const payload={
+    company_token:TOKEN,
+    destination:destSel.value, pax:+$('pax').value, children:+$('children').value||0,
+    transport:document.querySelector('input[name=transport]:checked').value,
+    days:+$('days').value, date_from:$('dateGlobal').value,
+    sim_count:+$('sim_count').value||0, extra_bed:$('extra_bed').value.trim(), notes:$('notes').value.trim(),
+  };
+  if(mode()==='ready'){
+    if(!chosen){ err.textContent='اضغط «عرض الخيارات» واختر توزيعاً، أو بدّل لـ«تخصيص بنفسي».'; err.style.display='block'; return; }
+    payload.distribution=chosen.distribution; payload.cities_nights=parseDist(chosen.distribution);
+  }else{
+    const cities=[...cityRows.querySelectorAll('.crow')].map(r=>({city:r.querySelector('.csel').value,nights:+r.querySelector('.cnights').value||0})).filter(c=>c.city&&c.nights);
+    if(cities.length===0){ err.textContent='أضف مدينة واحدة على الأقل.'; err.style.display='block'; return; }
+    payload.cities_nights=cities;
+  }
+  btn.disabled=true; btn.textContent='جارٍ الإرسال…';
+  try{
+    const res=await fetch(INTAKE,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const d=await res.json();
+    if(!res.ok||!d.ok) throw new Error(d.error||'تعذّر إرسال الطلب');
+    $('form').style.display='none'; $('refNo').textContent=d.ref_no; $('done').style.display='block';
+    window.scrollTo({top:0,behavior:'smooth'});
+  }catch(ex){ err.textContent=ex.message; err.style.display='block'; btn.disabled=false; btn.textContent='إرسال الطلب'; }
+});
+function newRequest(){ $('done').style.display='none'; $('form').style.display='block'; $('form').reset(); chosen=null; $('sugList').innerHTML=''; }
+</script>
+</body>
+</html>

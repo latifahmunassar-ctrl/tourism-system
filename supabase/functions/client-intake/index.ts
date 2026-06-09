@@ -22,7 +22,7 @@ const TOURISM_AI_URL = `https://${PROJECT_REF}.supabase.co/functions/v1/Tourism-
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, x-admin-secret",
   "Content-Type": "application/json",
 };
@@ -44,6 +44,54 @@ function randToken(len = 24): string {
   const bytes = new Uint8Array(len);
   crypto.getRandomValues(bytes);
   return Array.from(bytes).map(b => b.toString(36).padStart(2, "0")).join("").slice(0, len);
+}
+
+// ── company account auth helpers ────────────────────────────────────────────
+// Passwords are stored as sha-256(salt + password). Low-stakes B2B (trip
+// requests, no payments); salted SHA-256 is acceptable here.
+async function sha256Hex(s: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+async function hashPassword(password: string, salt: string): Promise<string> {
+  return sha256Hex(salt + ":" + password);
+}
+// normalize a phone for matching: keep digits, drop leading 00/0, ensure no spaces.
+function normPhone(raw: string): string {
+  let p = String(raw || "").replace(/[^\d+]/g, "");
+  if (p.startsWith("00")) p = "+" + p.slice(2);
+  return p;
+}
+// upload a base64 data-URL logo to the public company-logos bucket, return URL.
+async function uploadLogo(supabase: any, dataUrl: string, phone: string): Promise<string | null> {
+  const m = String(dataUrl || "").match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if (!m) return null;
+  const [, mime, b64] = m;
+  const ext = mime.split("/")[1].replace("jpeg", "jpg").replace(/[^a-z0-9]/g, "") || "png";
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  if (bytes.length > 2_000_000) return null; // 2MB cap
+  const path = `${normPhone(phone).replace(/\D/g, "")}-${randToken(6)}.${ext}`;
+  const { error } = await supabase.storage.from("company-logos").upload(path, bytes, { contentType: mime, upsert: true });
+  if (error) { console.error("logo upload failed", error.message); return null; }
+  const { data } = supabase.storage.from("company-logos").getPublicUrl(path);
+  return data?.publicUrl || null;
+}
+// company stats: total / answered (sent) / pending (everything else)
+async function companyStats(supabase: any, companyId: string) {
+  const { data } = await supabase.from("client_requests").select("status").eq("company_id", companyId);
+  const rows = (data || []) as Array<{ status: string }>;
+  const total = rows.length;
+  const done = rows.filter(r => r.status === "sent").length;
+  return { total, done, pending: total - done };
+}
+// shape a company row for the company-facing side (never leak hash/salt).
+function publicCompany(c: any) {
+  return {
+    id: c.id, company_name: c.company_name, contact_name: c.contact_name,
+    contact_phone: c.contact_phone, contact_email: c.contact_email,
+    logo_url: c.logo_url, website: c.website, status: c.status,
+    whatsapp_group_link: c.status === "approved" ? c.whatsapp_group_link : null,
+  };
 }
 
 // "2026-08-20" → "20 أغسطس 2026" (Tourism-AI parses Arabic dates). Pass through
@@ -274,6 +322,72 @@ Deno.serve(async (req) => {
     return json({ suggestions });
   }
 
+  // ── public: company account actions (register / login) ────────────────────
+  const companyAction = url.searchParams.get("company_action");
+  if (companyAction) {
+    if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
+    const body = await req.json().catch(() => ({} as Record<string, any>));
+
+    if (companyAction === "register") {
+      const name = String(body.company_name || "").trim();
+      const phone = normPhone(body.contact_phone);
+      const password = String(body.password || "");
+      if (!name || !phone || password.length < 4) {
+        return json({ error: "الاسم، رقم الجوال، وكلمة المرور (4 خانات على الأقل) مطلوبة" }, 400);
+      }
+      // reject duplicate phone
+      const { data: existing } = await supabase.from("client_companies").select("id, status").eq("contact_phone", phone).maybeSingle();
+      if (existing) return json({ error: "رقم الجوال مسجّل مسبقاً. سجّلي الدخول بدله." }, 409);
+
+      const salt = randToken(16);
+      const password_hash = await hashPassword(password, salt);
+      let logo_url: string | null = null;
+      if (body.logo_base64) logo_url = await uploadLogo(supabase, body.logo_base64, phone);
+
+      const { data, error } = await supabase.from("client_companies").insert({
+        company_name: name,
+        contact_name: String(body.contact_name || "").trim(),
+        contact_phone: phone,
+        contact_email: String(body.contact_email || "").trim(),
+        password_hash, password_salt: salt,
+        logo_url,
+        website: String(body.website || "").trim(),
+        status: "pending",
+      }).select("id").single();
+      if (error) { console.error("company register failed", error.message); return json({ error: "تعذّر التسجيل" }, 500); }
+
+      await notifySales(`🏢 طلب حساب شركة جديد\nالشركة: ${name}\nالمسؤول: ${String(body.contact_name || "-")}\nالجوال: ${phone}\nبانتظار موافقتك في لوحة الموظفين.`);
+      return json({ ok: true, id: data.id, status: "pending" });
+    }
+
+    if (companyAction === "login") {
+      const phone = normPhone(body.contact_phone);
+      const password = String(body.password || "");
+      if (!phone || !password) return json({ error: "أدخلي رقم الجوال وكلمة المرور" }, 400);
+      const { data: c } = await supabase.from("client_companies").select("*").eq("contact_phone", phone).maybeSingle();
+      if (!c) return json({ error: "لا يوجد حساب بهذا الرقم" }, 404);
+      const hash = await hashPassword(password, c.password_salt);
+      if (hash !== c.password_hash) return json({ error: "كلمة المرور غير صحيحة" }, 401);
+      if (c.status === "pending")  return json({ error: "حسابك قيد المراجعة. ننبّهك عند التفعيل." }, 403);
+      if (c.status === "rejected") return json({ error: "تعذّر تفعيل الحساب. تواصلي مع ALEZZ." }, 403);
+      if (c.status === "suspended")return json({ error: "الحساب موقوف مؤقتاً. تواصلي مع ALEZZ." }, 403);
+      // issue a rotating session token
+      const token = randToken(28);
+      await supabase.from("client_companies").update({ login_token: token }).eq("id", c.id);
+      return json({ ok: true, token, company: publicCompany(c) });
+    }
+
+    if (companyAction === "me") {
+      const token = String(body.token || "");
+      if (!token) return json({ error: "no token" }, 401);
+      const { data: c } = await supabase.from("client_companies").select("*").eq("login_token", token).maybeSingle();
+      if (!c || c.status !== "approved") return json({ error: "انتهت الجلسة، سجّلي الدخول من جديد" }, 401);
+      return json({ ok: true, company: publicCompany(c) });
+    }
+
+    return json({ error: "unknown company_action" }, 400);
+  }
+
   const adminAction = url.searchParams.get("admin_action");
 
   // ── admin actions (staff inbox) ──────────────────────────────────────────
@@ -281,6 +395,52 @@ Deno.serve(async (req) => {
     const expected = (Deno.env.get("CLIENT_ADMIN_SECRET") || "").trim();
     const got = (req.headers.get("x-admin-secret") || "").trim();
     if (!expected || got !== expected) return json({ error: "unauthorized" }, 401);
+
+    // ── company-account management ──
+    if (adminAction === "companies") {
+      const { data, error } = await supabase.from("client_companies")
+        .select("id, company_name, contact_name, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, created_at, approved_at")
+        .order("created_at", { ascending: false }).limit(300);
+      if (error) return json({ error: error.message }, 500);
+      // attach request stats per company
+      const { data: reqs } = await supabase.from("client_requests").select("company_id, status").not("company_id", "is", null);
+      const stat: Record<string, { total: number; done: number; pending: number }> = {};
+      for (const r of (reqs || []) as Array<{ company_id: string; status: string }>) {
+        const s = stat[r.company_id] || (stat[r.company_id] = { total: 0, done: 0, pending: 0 });
+        s.total++; if (r.status === "sent") s.done++; else s.pending++;
+      }
+      const companies = (data || []).map((c: any) => ({ ...c, stats: stat[c.id] || { total: 0, done: 0, pending: 0 } }));
+      return json({ companies });
+    }
+
+    if (adminAction === "company_get") {
+      const cid = url.searchParams.get("id") || "";
+      const { data: c, error } = await supabase.from("client_companies")
+        .select("id, company_name, contact_name, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, notes, created_at, approved_at, approved_by")
+        .eq("id", cid).single();
+      if (error) return json({ error: error.message }, 404);
+      const stats = await companyStats(supabase, cid);
+      const { data: requests } = await supabase.from("client_requests")
+        .select("id, ref_no, destination, days, pax, status, group_total, created_at")
+        .eq("company_id", cid).order("created_at", { ascending: false }).limit(100);
+      return json({ company: c, stats, requests: requests || [] });
+    }
+
+    if (adminAction === "company_update" && req.method === "POST") {
+      const cid = url.searchParams.get("id") || "";
+      const body = await req.json().catch(() => ({} as Record<string, any>));
+      const patch: Record<string, any> = {};
+      if (body.status && ["pending", "approved", "rejected", "suspended"].includes(body.status)) {
+        patch.status = body.status;
+        if (body.status === "approved") { patch.approved_at = new Date().toISOString(); patch.approved_by = String(body.by || "staff"); }
+      }
+      if (typeof body.whatsapp_group_link === "string") patch.whatsapp_group_link = body.whatsapp_group_link.trim();
+      if (typeof body.notes === "string") patch.notes = body.notes;
+      if (!Object.keys(patch).length) return json({ error: "لا تغييرات" }, 400);
+      const { error } = await supabase.from("client_companies").update(patch).eq("id", cid);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
 
     if (adminAction === "list") {
       const { data, error } = await supabase
@@ -328,8 +488,16 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => null);
   if (!body) return json({ error: "bad json" }, 400);
 
+  // If a company is logged in, resolve it from its session token and use its
+  // stored profile (the company doesn't re-type its details).
+  let companyRow: any = null;
+  if (body.company_token) {
+    const { data } = await supabase.from("client_companies").select("*").eq("login_token", String(body.company_token)).maybeSingle();
+    if (data && data.status === "approved") companyRow = data;
+  }
+
   // minimal validation
-  const company = String(body.company_name || "").trim();
+  const company = companyRow ? String(companyRow.company_name) : String(body.company_name || "").trim();
   const destination = String(body.destination || "").trim();
   const pax = parseInt(String(body.pax || "0"), 10);
   const days = parseInt(String(body.days || "0"), 10);
@@ -360,10 +528,11 @@ Deno.serve(async (req) => {
 
   const { error } = await supabase.from("client_requests").insert({
     ref_no, view_token,
+    company_id: companyRow ? companyRow.id : null,
     company_name: company,
-    contact_name: String(body.contact_name || "").trim(),
-    contact_email: String(body.contact_email || "").trim(),
-    contact_phone: String(body.contact_phone || "").trim(),
+    contact_name: companyRow ? String(companyRow.contact_name || "") : String(body.contact_name || "").trim(),
+    contact_email: companyRow ? String(companyRow.contact_email || "") : String(body.contact_email || "").trim(),
+    contact_phone: companyRow ? String(companyRow.contact_phone || "") : String(body.contact_phone || "").trim(),
     destination,
     cities_nights: Array.isArray(body.cities_nights) ? body.cities_nights : [],
     pax, children: parseInt(String(body.children || "0"), 10) || 0, days,
