@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام حسابات Alezz</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{--bg:#0f1729;--card:#182238;--card2:#1f2c47;--line:#2a3a5c;--txt:#e8eefc;--muted:#9fb0d0;--accent:#4f8cff;--green:#2fd98a;--red:#ff6b7a;--amber:#ffc24b;--purple:#a98bff}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Segoe UI",Tahoma,system-ui,sans-serif;background:linear-gradient(160deg,#0c1220,#101a30);color:var(--txt);min-height:100vh}
+  .wrap{max-width:1280px;margin:0 auto;padding:18px}
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#4f8cff,#a98bff);display:grid;place-items:center;font-weight:800;font-size:19px}
+  h1{font-size:19px} .sub{color:var(--muted);font-size:12px}
+  .badge{font-size:10.5px;background:#243657;color:var(--green);padding:2px 8px;border-radius:20px}
+  button{font-family:inherit;cursor:pointer}
+  .btn{background:var(--accent);color:#fff;border:none;padding:9px 15px;border-radius:10px;font-size:13px}
+  .btn.ghost{background:var(--card);border:1px solid var(--line);color:var(--txt)}
+  .btn.green{background:var(--green);color:#06281a}
+  /* tabs */
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;border-bottom:1px solid var(--line);padding-bottom:0}
+  .tab{padding:10px 16px;border-radius:10px 10px 0 0;background:transparent;border:none;color:var(--muted);font-size:13.5px;font-weight:600;border-bottom:2px solid transparent}
+  .tab.on{color:var(--txt);background:var(--card);border-bottom:2px solid var(--accent)}
+  .page{display:none} .page.on{display:block}
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 15px;position:relative;overflow:hidden}
+  .kpi .ttl{color:var(--muted);font-size:11.5px;margin-bottom:6px}
+  .kpi .val{font-size:21px;font-weight:800}
+  .kpi .cur{font-size:11px;color:var(--muted)}
+  .kpi::after{content:"";position:absolute;inset-inline-start:0;top:0;bottom:0;width:4px}
+  .k1::after{background:var(--green)}.k2::after{background:var(--accent)}.k3::after{background:var(--purple)}.k4::after{background:var(--amber)}.k5::after{background:var(--red)}
+  .grid{display:grid;grid-template-columns:1.5fr 1fr;gap:14px;margin-bottom:14px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px 16px}
+  .panel h3{font-size:14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+  .panel h3 .cnt{font-size:11px;color:var(--muted);font-weight:400}
+  canvas{max-height:230px}
+  .tbl-wrap{overflow:auto;max-height:440px}
+  table{width:100%;border-collapse:collapse;font-size:12.3px}
+  th{position:sticky;top:0;background:var(--card2);text-align:right;color:var(--muted);font-weight:600;padding:8px;border-bottom:1px solid var(--line);font-size:11px;white-space:nowrap}
+  td{padding:8px;border-bottom:1px solid #1e2a44;white-space:nowrap}
+  tr:hover td{background:#1c2840}
+  .num{font-variant-numeric:tabular-nums;font-weight:600}
+  .pos{color:var(--green)}.neg{color:var(--red)}
+  .pill{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600}
+  .pill.active{background:rgba(47,217,138,.15);color:var(--green)}
+  .pill.cancel{background:rgba(255,107,122,.15);color:var(--red)}
+  .pill.over{background:rgba(255,107,122,.2);color:var(--red)}
+  .src{font-size:9.5px;padding:1px 6px;border-radius:10px}
+  .src.sheet{background:#243657;color:var(--muted)} .src.dashboard{background:rgba(79,140,255,.18);color:var(--accent)}
+  /* form */
+  .formbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .flt{padding:8px 11px;border-radius:9px;border:1px solid var(--line);background:#0f1729;color:var(--txt);font-family:inherit;font-size:12.5px}
+  .flt:focus{outline:none;border-color:var(--accent)}
+  .alertbox{background:rgba(255,107,122,.12);border:1px solid var(--red);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:12.5px;line-height:2;color:#ffd5da}
+  .alertbox .ttl{font-weight:700;color:var(--red);margin-bottom:4px;display:block}
+  .dueinp{background:#0f1729;border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:5px 7px;font-family:inherit;font-size:11.5px}
+  .modal{position:fixed;inset:0;background:rgba(8,12,22,.85);display:none;place-items:center;z-index:20;padding:16px}
+  .modal.on{display:grid}
+  .mbox{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;width:560px;max-width:100%;max-height:92vh;overflow:auto}
+  .mbox h3{margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
+  .seg{display:flex;gap:6px;margin-bottom:14px}
+  .seg button{flex:1;padding:9px;border-radius:9px;border:1px solid var(--line);background:#0f1729;color:var(--muted);font-size:12.5px}
+  .seg button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .fld{display:flex;flex-direction:column;gap:4px;margin-bottom:4px}
+  .fld label{font-size:11.5px;color:var(--muted)}
+  .fld input,.fld select{padding:9px;border-radius:9px;border:1px solid var(--line);background:#0f1729;color:var(--txt);font-family:inherit;font-size:13px}
+  .full{grid-column:1/3}
+  .calc{background:#0f1729;border:1px dashed var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between}
+  .calc b{color:var(--green);font-size:15px}
+  #msg{font-size:12px;min-height:16px;margin-top:6px}
+  .foot{color:var(--muted);font-size:11px;text-align:center;margin-top:14px}
+  /* login */
+  #login{position:fixed;inset:0;background:rgba(8,12,22,.96);display:grid;place-items:center;z-index:30}
+  .lbox{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px;width:320px;text-align:center}
+  .lbox input{width:100%;padding:11px;margin:14px 0;border-radius:10px;border:1px solid var(--line);background:#0f1729;color:var(--txt);font-family:inherit;text-align:center}
+  #err{color:var(--red);font-size:12px;min-height:16px}
+  #loading{text-align:center;color:var(--muted);padding:50px}
+  @media(max-width:900px){.kpis{grid-template-columns:1fr 1fr}.grid,.grid2,.fgrid{grid-template-columns:1fr}.full{grid-column:1}}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="lbox">
+    <div class="logo" style="margin:0 auto 6px">A</div>
+    <h1 style="font-size:17px">نظام حسابات Alezz</h1>
+    <div class="sub" style="margin-top:4px">أدخلي كلمة المرور</div>
+    <input type="password" id="pw" placeholder="••••••••" onkeydown="if(event.key==='Enter')login()">
+    <div id="err"></div>
+    <button class="btn" style="width:100%" onclick="login()">دخول</button>
+  </div>
+</div>
+
+<div class="wrap" id="app" style="display:none">
+  <header>
+    <div class="brand"><div class="logo">A</div>
+      <div><h1>نظام حسابات Alezz <span class="badge">● حيّ</span></h1>
+      <div class="sub" id="synced">مربوط بقاعدة البيانات مباشرة</div></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
+      <button class="btn ghost" onclick="load()">🔄 تحديث</button>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab on" data-p="overview" onclick="tab(this)">📊 لوحة المعلومات</button>
+    <button class="tab" data-p="clients" onclick="tab(this)">👤 العملاء (First Client Data)</button>
+    <button class="tab" data-p="sales" onclick="tab(this)">🧳 Sales Form</button>
+    <button class="tab" data-p="bookings" onclick="tab(this)">🧾 كل الحجوزات</button>
+    <button class="tab" data-p="pnl" onclick="tab(this)">💹 الأرباح والخسائر</button>
+    <button class="tab" data-p="due" onclick="tab(this)">⏳ المستحقات</button>
+    <button class="tab" data-p="staff" onclick="tab(this)">👥 الموظفين</button>
+    <button class="tab" data-p="agents" onclick="tab(this)">🏢 الوكلاء</button>
+  </div>
+
+  <div id="loading">⏳ جاري التحميل...</div>
+
+  <div id="content" style="display:none">
+    <!-- لوحة المعلومات -->
+    <div class="page on" id="p-overview">
+      <div class="kpis">
+        <div class="kpi k1"><div class="ttl">💰 إجمالي الربح</div><div class="val" id="kp-profit">—</div></div>
+        <div class="kpi k2"><div class="ttl">📋 الحجوزات</div><div class="val" id="kp-bookings">—</div></div>
+        <div class="kpi k3"><div class="ttl">👥 العملاء</div><div class="val" id="kp-clients">—</div></div>
+        <div class="kpi k4"><div class="ttl">⏳ مستحقات العملاء</div><div class="val" id="kp-out">—</div></div>
+        <div class="kpi k5"><div class="ttl">🔴 متأخرين</div><div class="val" id="kp-over">—</div></div>
+      </div>
+      <div class="grid">
+        <div class="panel"><h3>الربح الشهري</h3><canvas id="chart"></canvas></div>
+        <div class="panel"><h3>أعلى الموظفين ربحاً</h3><div class="tbl-wrap"><table id="t-staff-mini"><thead><tr><th>الموظف</th><th>حجوزات</th><th>الربح</th></tr></thead><tbody></tbody></table></div></div>
+      </div>
+    </div>
+
+    <!-- العملاء -->
+    <div class="page" id="p-clients">
+      <div class="formbar">
+        <button class="btn green" onclick="openForm()">➕ عميل / دفعة جديدة</button>
+        <input id="flt-q" class="flt" placeholder="🔍 اسم العميل أو الكود" oninput="renderFcd()" style="min-width:200px">
+        <select id="flt-agent" class="flt" onchange="renderFcd()"><option value="">كل الوكالات</option></select>
+        <select id="flt-bank" class="flt" onchange="renderFcd()"><option value="">كل البنوك (مكان الإيداع)</option></select>
+        <select id="flt-due" class="flt" onchange="renderFcd()">
+          <option value="">كل الأرصدة</option>
+          <option value="owe">🔴 عليه مستحق (لم يدفع)</option>
+          <option value="over">دفع زيادة</option>
+          <option value="paid">مسدّد</option>
+        </select>
+        <button class="btn ghost" onclick="clearFlt()">مسح الفلاتر</button>
+      </div>
+      <div class="panel"><h3>First Client Data <span class="cnt" id="fcd-cnt"></span></h3>
+        <div class="tbl-wrap"><table id="t-fcd"><thead><tr>
+          <th>كود الدفعة</th><th>كود العميل</th><th>العميل</th><th>الجوال</th><th>الوكالة</th><th>من</th><th>إلى</th>
+          <th>تاريخ الحجز</th><th>الوصول</th><th>النوع</th><th>التكلفة</th><th>الربح</th><th>السعر</th><th>المدفوع</th>
+          <th>الرصيد</th><th>العملة</th><th>البنك (الإيداع)</th><th>مرجع البنك</th><th>الموظف</th><th>الحالة</th><th>ملاحظة</th><th>الإيميل</th><th>المصدر</th>
+        </tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- الحجوزات -->
+    <div class="page" id="p-bookings">
+      <div class="panel"><h3>كل الحجوزات <span class="cnt" id="ov-cnt"></span></h3>
+        <div class="tbl-wrap"><table id="t-ov"><thead><tr>
+          <th>تاريخ الحجز</th><th>العميل</th><th>الوكيل</th><th>الوجهة</th><th>النوع</th><th>الموظف</th><th>الربح المتوقّع</th><th>الربح/الخسارة الفعلي</th><th>الرصيد</th><th>الحالة</th>
+        </tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- Sales Form -->
+    <div class="page" id="p-sales">
+      <div class="panel" style="margin-bottom:14px">
+        <h3>➕ إضافة خدمة للباكدج <span class="cnt">فندق / طيران / مواصلات / خدمة</span></h3>
+        <datalist id="codes2"></datalist>
+        <div class="fgrid">
+          <div class="fld"><label>كود العميل</label><input id="s-code" list="codes2" placeholder="C26010"></div>
+          <div class="fld"><label>نوع الخدمة</label><select id="s-type">
+            <option value="hotel">🏨 فندق</option><option value="flight">✈️ طيران</option>
+            <option value="transport">🚐 مواصلات</option><option value="visa">🛂 تأشيرة</option>
+            <option value="tour">🗺️ جولة</option><option value="other">أخرى</option></select></div>
+          <div class="fld full"><label>الاسم / التفاصيل (اسم الفندق أو وصف الخدمة)</label><input id="s-desc" placeholder="مثال: فندق Address Makkah — غرفة ديلوكس"></div>
+          <div class="fld"><label>المورّد (اختياري)</label><input id="s-supplier"></div>
+          <div class="fld"><label>السعر</label><input type="number" id="s-price" value="0"></div>
+          <div class="fld"><label>العملة</label><select id="s-cur"><option>SAR</option><option>OMR</option><option>USD</option><option>MYR</option></select></div>
+          <div class="fld"><label>العدد (ليالي/تذاكر)</label><input type="number" id="s-qty" value="1"></div>
+          <div class="fld"><label>دخول (للفندق)</label><input type="date" id="s-in"></div>
+          <div class="fld"><label>خروج (للفندق)</label><input type="date" id="s-out"></div>
+        </div>
+        <div id="s-msg" style="font-size:12px;min-height:16px;margin:6px 0"></div>
+        <button class="btn green" onclick="addSales()">حفظ الخدمة</button>
+      </div>
+      <div class="formbar"><input id="sflt-q" class="flt" placeholder="🔍 كود أو اسم العميل" oninput="renderSales()" style="min-width:220px"></div>
+      <div class="panel"><h3>خدمات الباكدجات <span class="cnt" id="sales-cnt"></span></h3>
+        <div class="tbl-wrap"><table id="t-sales"><thead><tr>
+          <th>كود العميل</th><th>نوع الخدمة</th><th>الفندق / التفاصيل</th><th>المورّد</th><th>دخول</th><th>خروج</th><th>العدد</th><th>السعر</th><th>العملة</th>
+        </tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- الأرباح والخسائر -->
+    <div class="page" id="p-pnl">
+      <div class="kpis" style="grid-template-columns:repeat(5,1fr)">
+        <div class="kpi k2"><div class="ttl">💵 سعر البيع الكلي</div><div class="val" id="pnl-sales">—</div></div>
+        <div class="kpi k4"><div class="ttl">📦 التكلفة الكلية</div><div class="val" id="pnl-cost">—</div></div>
+        <div class="kpi k1"><div class="ttl">💰 صافي الربح</div><div class="val" id="pnl-profit">—</div></div>
+        <div class="kpi k5"><div class="ttl">🔴 حجوزات خاسرة</div><div class="val" id="pnl-losses">—</div></div>
+        <div class="kpi k3"><div class="ttl">📈 متوسط الهامش</div><div class="val" id="pnl-margin">—</div></div>
+      </div>
+      <div class="formbar">
+        <input id="pflt-q" class="flt" placeholder="🔍 العميل أو الكود" oninput="renderPnl()" style="min-width:180px">
+        <select id="pflt-show" class="flt" onchange="renderPnl()">
+          <option value="all">عرض: الكل</option>
+          <option value="loss">🔴 الخاسرة فقط</option>
+          <option value="win">🟢 الرابحة فقط</option>
+        </select>
+        <select id="pflt-sort" class="flt" onchange="renderPnl()">
+          <option value="loss">ترتيب: الخسارة أولاً</option>
+          <option value="profit">ترتيب: الأعلى ربحاً</option>
+          <option value="margin">ترتيب: الهامش %</option>
+        </select>
+      </div>
+      <div class="panel"><h3>الربح / الخسارة لكل حجز <span class="cnt" id="pnl-cnt"></span></h3>
+        <div class="tbl-wrap"><table id="t-pnl"><thead><tr>
+          <th>كود العميل</th><th>العميل</th><th>الوجهة</th><th>الوكالة</th><th>التكلفة</th><th>سعر البيع</th><th>الربح/الخسارة</th><th>الهامش %</th><th>الحالة</th>
+        </tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- المستحقات -->
+    <div class="page" id="p-due">
+      <div id="due-alerts"></div>
+      <div class="formbar">
+        <input id="dflt-q" class="flt" placeholder="🔍 اسم العميل أو الكود" oninput="renderDue()" style="min-width:200px">
+        <select id="dflt-agent" class="flt" onchange="renderDue()"><option value="">كل الوكالات</option></select>
+        <select id="dflt-st" class="flt" onchange="renderDue()">
+          <option value="owe">🔴 عليه مستحق (لم يدفع)</option>
+          <option value="overdue">⚠️ متأخر (حان السداد)</option>
+          <option value="hasdue">له تاريخ سداد محدد</option>
+          <option value="all">الكل</option>
+        </select>
+        <button class="btn ghost" onclick="dclear()">مسح</button>
+      </div>
+      <div class="panel"><h3>مستحقات العملاء <span class="cnt" id="due-cnt"></span></h3>
+        <div class="tbl-wrap"><table id="t-due"><thead><tr>
+          <th>تنبيه</th><th>العميل</th><th>الوكالة</th><th>السعر</th><th>المدفوع</th><th>المتبقي</th><th>الوصول</th><th>تاريخ السداد</th><th>الحالة</th>
+        </tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- الموظفين -->
+    <div class="page" id="p-staff">
+      <div class="panel"><h3>تقرير الموظفين <span class="cnt" id="staff-cnt"></span></h3>
+        <div class="tbl-wrap"><table id="t-staff"><thead><tr>
+          <th>الموظف</th><th>حجوزات</th><th>نشط</th><th>ملغى</th><th>المبيعات</th><th>الربح</th><th>المحصّل</th><th>المتبقي</th>
+        </tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- الوكلاء -->
+    <div class="page" id="p-agents">
+      <div class="panel"><h3>حسابات الوكلاء <span class="cnt" id="agents-cnt"></span></h3>
+        <div class="tbl-wrap"><table id="t-agents"><thead><tr>
+          <th>الوكيل</th><th>عملاء</th><th>نشط</th><th>ملغى</th><th>المبيعات</th><th>الربح</th><th>رصيد الوكيل</th>
+        </tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="foot" id="foot"></div>
+  </div>
+</div>
+
+<!-- نموذج الإدخال -->
+<div class="modal" id="modal">
+  <div class="mbox">
+    <h3>إدخال جديد <button class="btn ghost" onclick="closeForm()">✕</button></h3>
+    <div class="seg">
+      <button id="seg-new" class="on" onclick="setMode(true)">🆕 عميل جديد</button>
+      <button id="seg-pay" onclick="setMode(false)">💵 دفعة لعميل موجود</button>
+    </div>
+    <!-- وضع الدفعة: استدعاء العميل بالكود -->
+    <div id="recall" style="display:none;margin-bottom:12px">
+      <div class="fld"><label>كود العميل الموجود — اكتبيه أو اختاري من القائمة</label>
+        <input id="f-code" placeholder="مثال C26010" list="codes" oninput="onCodeInput()"></div>
+      <datalist id="codes"></datalist>
+      <div id="client-info" style="display:none;background:#0f1729;border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:10px"></div>
+    </div>
+
+    <div class="fgrid">
+      <div class="fld"><label>تاريخ الحجز</label><input type="date" id="f-bdate"></div>
+      <div class="fld"><label>تاريخ الوصول</label><input type="date" id="f-adate"></div>
+      <div class="fld new-only"><label>اسم العميل</label><input id="f-name"></div>
+      <div class="fld new-only"><label>الجوال</label><input id="f-phone"></div>
+      <div class="fld new-only"><label>الوكيل (Agent)</label><input id="f-agent"></div>
+      <div class="fld new-only"><label>من</label><input id="f-from" value="Saudi"></div>
+      <div class="fld new-only"><label>إلى</label><input id="f-to"></div>
+      <div class="fld new-only"><label>التكلفة (COST)</label><input type="number" id="f-cost" value="0" oninput="calc()"></div>
+      <div class="fld new-only"><label>الربح (Profit)</label><input type="number" id="f-profit" value="0" oninput="calc()"></div>
+      <div class="fld"><label>المبلغ المدفوع الآن</label><input type="number" id="f-paid" value="0" oninput="calc()"></div>
+      <div class="fld"><label>العملة</label><select id="f-cur"><option>SAR</option><option>OMR</option><option>USD</option><option>MYR</option></select></div>
+      <div class="fld new-only"><label>نوع الباكدج</label><select id="f-type"><option>Full pakage</option><option>TOUR ONLY</option><option>Transportaion</option><option>HOTEL & TOURS</option></select></div>
+      <div class="fld"><label>الموظف (Confirmed by)</label><input id="f-staff"></div>
+      <div class="fld"><label>مكان إيداع المبلغ <span style="color:var(--red)">*</span></label>
+        <select id="f-bank" onchange="onBankChange()"><option value="">— اختاري —</option></select></div>
+      <div class="fld" id="fld-bank-other" style="display:none"><label>اسم بنك جديد</label><input id="f-bank-other"></div>
+      <div class="fld"><label>مرجع البنك / الإيداع</label><input id="f-ref"></div>
+    </div>
+    <div class="calc"><span><span id="c-rate-label">سعر البيع = التكلفة + الربح =</span> <b id="c-rate">0</b></span><span><span id="c-bal-label">الرصيد = السعر − المدفوع =</span> <b id="c-bal" style="color:var(--amber)">0</b></span></div>
+    <div id="msg"></div>
+    <button class="btn green" style="width:100%" id="save-btn" onclick="save()">حفظ — وتوليد الكود تلقائياً</button>
+  </div>
+</div>
+
+<script>
+const FN = 'https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/acc-dashboard';
+let KEY = localStorage.getItem('acc_key')||'', DATA=null, chart, isNew=true, selectedClient=null;
+const $=id=>document.getElementById(id);
+const fmt=n=>Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});
+const esc=s=>(s==null?'':String(s)).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+function bal(v){v=Number(v||0);return '<span class="num '+(v>1?'neg':(v<-1?'pos':''))+'">'+fmt(v)+'</span>';}
+function rw(c){return '<tr>'+c.map(x=>'<td>'+x+'</td>').join('')+'</tr>';}
+
+async function api(opts){ return fetch(FN+'?key='+encodeURIComponent(KEY), opts); }
+
+async function login(){
+  const pw=$('pw').value.trim(); $('err').textContent='';
+  const r=await fetch(FN+'?key='+encodeURIComponent(pw));
+  if(r.status===401){$('err').textContent='كلمة المرور غير صحيحة';return;}
+  KEY=pw; localStorage.setItem('acc_key',pw);
+  $('login').style.display='none'; $('app').style.display='block'; render(await r.json());
+}
+async function load(){
+  $('loading').style.display='block'; $('content').style.display='none';
+  const r=await api({}); if(r.status===401){localStorage.removeItem('acc_key');location.reload();return;}
+  render(await r.json());
+}
+function tab(el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+  el.classList.add('on'); $('p-'+el.dataset.p).classList.add('on');
+}
+
+function render(d){
+  DATA=d; $('loading').style.display='none'; $('content').style.display='block';
+  $('kp-profit').innerHTML=fmt(d.kpis.totalProfit)+' <span class="cur">SAR</span>';
+  $('kp-bookings').textContent=fmt(d.kpis.bookings);
+  $('kp-clients').textContent=fmt(d.kpis.clients);
+  $('kp-out').innerHTML=fmt(d.kpis.outstanding)+' <span class="cur">SAR</span>';
+  $('kp-over').textContent=fmt(d.kpis.overdue);
+
+  document.querySelector('#t-staff-mini tbody').innerHTML=d.staff.slice(0,6).map(s=>rw([esc(s.staff),fmt(s.bookings),'<span class="num pos">'+fmt(s.total_profit)+'</span>'])).join('');
+
+  fillFilters(); renderFcd(); renderPnl(); fillCodes2(); renderSales();
+
+  document.querySelector('#t-ov tbody').innerHTML=d.overview.map(b=>{
+    const ap=Number(b.actual_profit_loss||0), apc=ap< -0.5?'neg':'pos', isLoss=ap< -0.5;
+    return '<tr'+(isLoss?' style="background:rgba(255,107,122,.10)"':'')+'>'+[
+      esc(b.booking_date||''),esc(b.client_name||b.client_code),esc(b.agent_name||''),esc(b.travel_to||''),
+      esc(b.package_type||''),esc(b.confirmed_by||''),'<span class="num pos">'+fmt(b.profit)+'</span>',
+      (isLoss?'🔴 ':'')+'<span class="num '+apc+'">'+fmt(ap)+'</span>',bal(b.client_balance),
+      String(b.conf_status||'').toLowerCase().includes('cancel')?'<span class="pill cancel">ملغى</span>':'<span class="pill active">نشط</span>'
+    ].map(c=>'<td>'+c+'</td>').join('')+'</tr>';
+  }).join(''); $('ov-cnt').textContent=d.overview.length+' حجز';
+
+  fillDueFilters(); renderDue();
+
+  document.querySelector('#t-staff tbody').innerHTML=d.staff.map(s=>rw([
+    esc(s.staff),fmt(s.bookings),fmt(s.active_bookings),fmt(s.cancelled_bookings),
+    '<span class="num">'+fmt(s.total_sales)+'</span>','<span class="num pos">'+fmt(s.total_profit)+'</span>',
+    '<span class="num">'+fmt(s.total_collected)+'</span>',bal(s.total_outstanding)
+  ])).join(''); $('staff-cnt').textContent=d.staff.length+' موظف';
+
+  document.querySelector('#t-agents tbody').innerHTML=d.agents.map(a=>rw([
+    esc(a.agent_name),fmt(a.clients),fmt(a.active_clients),fmt(a.cancelled_clients),
+    '<span class="num">'+fmt(a.total_sales)+'</span>','<span class="num pos">'+fmt(a.total_profit)+'</span>',
+    '<span class="num">'+fmt(a.account_balance)+'</span>'
+  ])).join(''); $('agents-cnt').textContent=d.agents.length+' وكيل';
+
+  const labels=d.monthly.map(m=>m.month), profit=d.monthly.map(m=>m.profit);
+  if(chart)chart.destroy();
+  chart=new Chart($('chart'),{type:'bar',data:{labels,datasets:[{label:'الربح',data:profit,backgroundColor:'#2fd98a',borderRadius:5}]},
+    options:{plugins:{legend:{labels:{color:'#9fb0d0'}}},scales:{x:{ticks:{color:'#9fb0d0'},grid:{display:false}},y:{ticks:{color:'#9fb0d0'},grid:{color:'#1e2a44'}}}}});
+
+  const ls=d.lastSync; $('synced').textContent = (ls? 'آخر مزامنة من الشيت: '+new Date(ls.ran_at).toLocaleString('ar')+' ('+ls.rows_synced+' صف)' : 'مربوط بقاعدة البيانات مباشرة');
+  $('foot').textContent='آخر تحديث: '+new Date(d.generatedAt).toLocaleString('ar');
+}
+
+// ---- First Client Data: فلاتر + كل الأعمدة ----
+function fillFilters(){
+  const sel=(id,ph,vals)=>{ const cur=$(id).value;
+    $(id).innerHTML='<option value="">'+ph+'</option>'+vals.map(v=>'<option'+(v===cur?' selected':'')+'>'+esc(v)+'</option>').join(''); };
+  const agents=[...new Set(DATA.fcd.map(r=>r.agent_name).filter(Boolean))].sort();
+  const banks=[...new Set(DATA.fcd.map(r=>r.bank_name).filter(Boolean))].sort();
+  sel('flt-agent','كل الوكالات',agents);
+  sel('flt-bank','كل البنوك (مكان الإيداع)',banks);
+}
+function clearFlt(){ $('flt-q').value=''; $('flt-agent').value=''; $('flt-bank').value=''; $('flt-due').value=''; renderFcd(); }
+function renderFcd(){
+  if(!DATA) return;
+  const q=($('flt-q').value||'').trim().toLowerCase(), ag=$('flt-agent').value, bk=$('flt-bank').value, due=$('flt-due').value;
+  // رصيد كل عميل (مجموع السعر − المدفوع) لفلتر المستحقات
+  const cb={}; for(const r of DATA.fcd){ const c=r.client_code; if(!c)continue; cb[c]=(cb[c]||0)+(Number(r.package_rate||0)-Number(r.amount_paid||0)); }
+  const rows=DATA.fcd.filter(r=>{
+    if(q && !((r.client_name||'').toLowerCase().includes(q)||(r.client_code||'').toLowerCase().includes(q)||(r.payment_code||'').toLowerCase().includes(q))) return false;
+    if(ag && r.agent_name!==ag) return false;
+    if(bk && r.bank_name!==bk) return false;
+    if(due){ const b=cb[r.client_code]||0;
+      if(due==='owe' && !(b>1)) return false;
+      if(due==='over' && !(b<-1)) return false;
+      if(due==='paid' && Math.abs(b)>1) return false; }
+    return true;
+  });
+  document.querySelector('#t-fcd tbody').innerHTML=rows.map(r=>rw([
+    esc(r.payment_code||''),esc(r.client_code||''),esc(r.client_name||''),esc(r.phone||''),esc(r.agent_name||''),
+    esc(r.travel_from||''),esc(r.travel_to||''),esc(r.booking_date||''),esc(r.arrival_date||''),esc(r.package_type||''),
+    '<span class="num">'+fmt(r.cost)+'</span>','<span class="num pos">'+fmt(r.profit)+'</span>','<span class="num">'+fmt(r.package_rate)+'</span>',
+    '<span class="num">'+fmt(r.amount_paid)+'</span>',bal(r.balance),esc(r.currency||''),esc(r.bank_name||''),esc(r.bank_ref||''),
+    esc(r.confirmed_by||''),String(r.conf_status||'').toLowerCase().includes('cancel')?'<span class="pill cancel">ملغى</span>':'<span class="pill active">'+esc(r.conf_status||'')+'</span>',
+    esc(r.note||''),esc(r.client_email||''),'<span class="src '+(r.source||'sheet')+'">'+(r.source==='dashboard'?'داشبورد':'شيت')+'</span>'
+  ])).join('');
+  $('fcd-cnt').textContent=rows.length+(rows.length!==DATA.fcd.length?' من '+DATA.fcd.length:'')+' صف';
+}
+
+// ---- Sales Form ----
+const SVC={hotel:'🏨 فندق',flight:'✈️ طيران',transport:'🚐 مواصلات',visa:'🛂 تأشيرة',tour:'🗺️ جولة',other:'خدمة'};
+function fillCodes2(){
+  const m={}; for(const r of (DATA?DATA.fcd:[])){ if(r.client_code && !(r.client_code in m)) m[r.client_code]=r.client_name||''; }
+  $('codes2').innerHTML=Object.entries(m).map(([c,n])=>'<option value="'+esc(c)+'">'+esc(n)+'</option>').join('');
+}
+function renderSales(){
+  if(!DATA) return;
+  const q=($('sflt-q').value||'').trim().toLowerCase();
+  let rows=DATA.sales||[];
+  if(q) rows=rows.filter(r=>(r.client_code||'').toLowerCase().includes(q)||(r.client_name||'').toLowerCase().includes(q));
+  document.querySelector('#t-sales tbody').innerHTML=rows.map(r=>rw([
+    esc(r.client_code||''),(SVC[r.service_type]||esc(r.service_type||'')),
+    esc(r.hotel_name||r.description||''),esc(r.supplier_name||''),
+    esc(r.check_in||''),esc(r.check_out||''),esc(r.quantity||''),
+    '<span class="num">'+fmt(r.price)+'</span>',esc(r.currency||'')
+  ])).join('')||rw(['لا خدمات بعد — أضيفي من الأعلى','','','','','','','','']);
+  $('sales-cnt').textContent=rows.length+' خدمة';
+}
+async function addSales(){
+  $('s-msg').textContent='';
+  const code=$('s-code').value.trim();
+  if(!code){ $('s-msg').innerHTML='<span style="color:var(--red)">اكتبي كود العميل</span>'; return; }
+  const type=$('s-type').value, desc=$('s-desc').value.trim();
+  const p={ client_code:code, service_type:type,
+    hotel_name: type==='hotel'?desc:null, description: type==='hotel'?null:desc,
+    supplier_name:$('s-supplier').value||null, price:+$('s-price').value||0, currency:$('s-cur').value,
+    quantity:+$('s-qty').value||null, check_in:$('s-in').value||null, check_out:$('s-out').value||null };
+  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_sales_item',payload:p})});
+  const j=await r.json();
+  if(j.error){ $('s-msg').innerHTML='<span style="color:var(--red)">خطأ: '+esc(j.error)+'</span>'; return; }
+  $('s-msg').innerHTML='<span style="color:var(--green)">✓ تمت إضافة الخدمة للعميل '+esc(code)+'</span>';
+  ['s-desc','s-supplier','s-in','s-out'].forEach(i=>$(i).value=''); $('s-price').value=0; $('s-qty').value=1;
+  load();
+}
+
+// ---- الأرباح/الخسائر لكل حجز ----
+function renderPnl(){
+  if(!DATA) return;
+  const m={};
+  for(const r of DATA.fcd){ const c=r.client_code; if(!c)continue;
+    if(!m[c]) m[c]={code:c,name:'',to:'',agent:'',cost:0,profit:0,rate:0,status:'Active',actual:false};
+    m[c].cost+=Number(r.cost||0); m[c].profit+=Number(r.profit||0); m[c].rate+=Number(r.package_rate||0);
+    if(r.client_name&&!m[c].name)m[c].name=r.client_name;
+    if(r.travel_to&&!m[c].to)m[c].to=r.travel_to;
+    if(r.agent_name&&!m[c].agent)m[c].agent=r.agent_name;
+    if(String(r.conf_status||'').toLowerCase().includes('cancel'))m[c].status='Cancel';
+  }
+  // ادمج التكلفة/الربح الفعلي من Booking Form (وأضف عملاء الحجز الفعلي غير الموجودين)
+  const bf=DATA.bf||{};
+  for(const c in bf){
+    if(m[c]){ m[c].cost=bf[c].cost; m[c].rate=bf[c].sold; m[c].profit=bf[c].profit; m[c].actual=true; }
+    else { m[c]={code:c,name:bf[c].name||'',to:'',agent:'',cost:bf[c].cost,rate:bf[c].sold,profit:bf[c].profit,status:'Active',actual:true}; }
+  }
+  let arr=Object.values(m);
+  const q=($('pflt-q').value||'').trim().toLowerCase();
+  if(q) arr=arr.filter(x=>x.name.toLowerCase().includes(q)||x.code.toLowerCase().includes(q));
+  // إجماليات (على الكل) + الخاسرة
+  const tc=arr.reduce((s,x)=>s+x.cost,0), ts=arr.reduce((s,x)=>s+x.rate,0), tp=arr.reduce((s,x)=>s+x.profit,0);
+  const losers=arr.filter(x=>x.profit< -1);
+  const lossTotal=losers.reduce((s,x)=>s+x.profit,0);
+  $('pnl-sales').textContent=fmt(ts); $('pnl-cost').textContent=fmt(tc); $('pnl-profit').textContent=fmt(tp);
+  $('pnl-losses').innerHTML=losers.length+' <span class="cur">('+fmt(Math.abs(lossTotal))+')</span>';
+  $('pnl-margin').textContent=(ts?Math.round(tp/ts*100):0)+'%';
+  // فلتر العرض
+  const show=$('pflt-show').value||'all';
+  let view = show==='loss'? arr.filter(x=>x.profit< -1) : show==='win'? arr.filter(x=>x.profit>1) : arr;
+  const sort=$('pflt-sort').value||'loss';
+  view.sort((a,b)=> sort==='profit'? b.profit-a.profit : sort==='margin'? ((b.rate?b.profit/b.rate:0)-(a.rate?a.profit/a.rate:0)) : a.profit-b.profit);
+  document.querySelector('#t-pnl tbody').innerHTML=view.map(x=>{
+    const margin=x.rate?Math.round(x.profit/x.rate*100):0, isLoss=x.profit< -1, pc=isLoss?'neg':'pos';
+    const cells=[ (isLoss?'🔴 ':'')+esc(x.code)+(x.actual?' <span class="src dashboard" style="font-size:9px">فعلي</span>':''),esc(x.name),esc(x.to),esc(x.agent),
+      '<span class="num">'+fmt(x.cost)+'</span>','<span class="num">'+fmt(x.rate)+'</span>',
+      '<span class="num '+pc+'">'+fmt(x.profit)+'</span>','<span class="num '+pc+'">'+margin+'%</span>',
+      x.status.toLowerCase().includes('cancel')?'<span class="pill cancel">ملغى</span>':'<span class="pill active">نشط</span>'];
+    return '<tr'+(isLoss?' style="background:rgba(255,107,122,.10)"':'')+'>'+cells.map(c=>'<td>'+c+'</td>').join('')+'</tr>';
+  }).join(''); $('pnl-cnt').textContent=view.length+' حجز'+(losers.length?' · 🔴 '+losers.length+' خاسر':'');
+}
+
+// ---- المستحقات: فلاتر + تنبيهات + تاريخ السداد ----
+function fillDueFilters(){
+  const cur=$('dflt-agent').value;
+  const agents=[...new Set(DATA.due.map(r=>r.agent_name).filter(Boolean))].sort();
+  $('dflt-agent').innerHTML='<option value="">كل الوكالات</option>'+agents.map(a=>'<option'+(a===cur?' selected':'')+'>'+esc(a)+'</option>').join('');
+}
+function dclear(){ $('dflt-q').value=''; $('dflt-agent').value=''; $('dflt-st').value='owe'; renderDue(); }
+function renderDue(){
+  if(!DATA) return;
+  const q=($('dflt-q').value||'').trim().toLowerCase(), ag=$('dflt-agent').value, st=$('dflt-st').value||'owe';
+  // تنبيهات: المتأخرون (عليهم مبلغ + حان/فات تاريخهم)
+  const al=DATA.due.filter(r=>r.is_overdue && Number(r.balance||0)>1);
+  $('due-alerts').innerHTML = al.length ? '<div class="alertbox"><span class="ttl">⚠️ تنبيهات سداد ('+al.length+')</span>'+al.map(r=>
+    'العميل <b>'+esc(r.client_code)+'</b>'+(r.client_name?' ('+esc(r.client_name)+')':'')+
+    ' — وكالة <b>'+esc(r.agent_name||'—')+'</b> · وجب عليه السداد'+
+    (r.due_date?' بتاريخ <b>'+esc(r.due_date)+'</b>':(r.arrival_date?' (تاريخ الوصول '+esc(r.arrival_date)+')':''))+
+    ' · المتبقي <b>'+fmt(r.balance)+' '+esc(r.currency||'')+'</b>'
+  ).join('<br>')+'</div>' : '';
+  // الجدول
+  const rows=DATA.due.filter(r=>{
+    if(q && !((r.client_name||'').toLowerCase().includes(q)||(r.client_code||'').toLowerCase().includes(q))) return false;
+    if(ag && r.agent_name!==ag) return false;
+    const b=Number(r.balance||0);
+    if(st==='owe' && !(b>1)) return false;
+    if(st==='overdue' && !r.is_overdue) return false;
+    if(st==='hasdue' && !r.due_date) return false;
+    return true;
+  });
+  document.querySelector('#t-due tbody').innerHTML=rows.map(r=>rw([
+    r.is_overdue?'<span style="font-size:15px">⚠️</span>':'',
+    esc(r.client_code)+' — '+esc(r.client_name||''),esc(r.agent_name||''),
+    '<span class="num">'+fmt(r.final_rate)+'</span>','<span class="num">'+fmt(r.amount_paid)+'</span>',bal(r.balance),
+    esc(r.arrival_date||''),
+    '<input type="date" class="dueinp" value="'+(r.due_date||'')+'" onchange="setDue(\''+esc(r.client_code)+'\',this.value)">',
+    r.is_overdue?'<span class="pill over">متأخر</span>':'<span class="pill active">'+esc(r.balance_status||'')+'</span>'
+  ])).join('')||rw(['','لا نتائج','','','','','','','']);
+  $('due-cnt').textContent=rows.length+' عميل';
+}
+async function setDue(code,val){
+  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_client_due',payload:{client_code:code,due_date:val||null}})});
+  const j=await r.json(); if(j.error){ alert('خطأ في حفظ التاريخ: '+j.error); return; }
+  load();
+}
+
+// ---- form ----
+function openForm(){ $('modal').classList.add('on'); $('msg').textContent=''; $('f-bdate').value=new Date().toISOString().slice(0,10); fillBankOptions(); fillCodes(); calc(); }
+function fillCodes(){
+  const m={}; for(const r of (DATA?DATA.fcd:[])){ if(r.client_code && !(r.client_code in m)) m[r.client_code]=r.client_name||''; }
+  $('codes').innerHTML=Object.entries(m).map(([c,n])=>'<option value="'+esc(c)+'">'+esc(n)+'</option>').join('');
+}
+function onCodeInput(){
+  const code=$('f-code').value.trim().toUpperCase();
+  const box=$('client-info');
+  const rows=(DATA?DATA.fcd:[]).filter(r=>(r.client_code||'').toUpperCase()===code);
+  if(!rows.length){ selectedClient=null; box.style.display='none'; box.innerHTML=''; calc(); return; }
+  const pick=f=>rows.find(r=>r[f])?.[f]||'';
+  const name=pick('client_name'), agent=pick('agent_name'), to=pick('travel_to'), from=pick('travel_from'),
+        type=pick('package_type'), phone=pick('phone'), cur=pick('currency')||'SAR';
+  const totalRate=rows.reduce((s,r)=>s+Number(r.package_rate||0),0);
+  const totalPaid=rows.reduce((s,r)=>s+Number(r.amount_paid||0),0);
+  const balance=totalRate-totalPaid;
+  selectedClient={code,name,balance,cur};
+  $('f-cur').value=['SAR','OMR','USD','MYR'].includes(cur)?cur:'SAR';
+  const pays=rows.slice().sort((a,b)=>String(a.payment_code).localeCompare(String(b.payment_code)))
+    .map(r=>'<tr><td>'+esc(r.payment_code||'')+'</td><td>'+esc(r.booking_date||r.payment_date||'')+'</td><td class="num">'+fmt(r.amount_paid)+'</td><td>'+esc(r.bank_name||'')+'</td></tr>').join('');
+  box.style.display='block';
+  box.innerHTML=
+    '<div style="font-size:13px;margin-bottom:6px"><b style="color:var(--accent)">'+esc(name)+'</b> '+(phone?'· '+esc(phone):'')+'</div>'+
+    '<div class="sub" style="margin-bottom:8px">'+esc(from)+' → '+esc(to)+' · '+esc(agent)+' · '+esc(type)+'</div>'+
+    '<div style="display:flex;gap:14px;font-size:12.5px;margin-bottom:8px">'+
+      '<span>سعر الباكدج: <b class="num">'+fmt(totalRate)+'</b></span>'+
+      '<span>مدفوع سابقاً: <b class="num">'+fmt(totalPaid)+'</b></span>'+
+      '<span>المتبقي: <b class="num" style="color:var(--amber)">'+fmt(balance)+'</b> '+esc(cur)+'</span></div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">الدفعات السابقة ('+rows.length+'):</div>'+
+    '<table style="font-size:11.5px"><thead><tr><th>الكود</th><th>التاريخ</th><th>المبلغ</th><th>البنك</th></tr></thead><tbody>'+pays+'</tbody></table>';
+  calc();
+}
+function fillBankOptions(){
+  const banks=[...new Set((DATA?DATA.fcd:[]).map(r=>r.bank_name).filter(Boolean))].sort();
+  $('f-bank').innerHTML='<option value="">— اختاري —</option>'+banks.map(b=>'<option>'+esc(b)+'</option>').join('')+'<option value="__other">+ بنك جديد…</option>';
+  $('fld-bank-other').style.display='none';
+}
+function onBankChange(){ $('fld-bank-other').style.display = $('f-bank').value==='__other'?'flex':'none'; }
+function closeForm(){ $('modal').classList.remove('on'); }
+function setMode(n){ isNew=n; $('seg-new').classList.toggle('on',n); $('seg-pay').classList.toggle('on',!n);
+  $('recall').style.display=n?'none':'block';
+  document.querySelectorAll('.new-only').forEach(e=>e.style.display=n?'flex':'none');
+  if(n){ selectedClient=null; $('client-info').style.display='none'; $('f-code').value=''; }
+  calc(); }
+function calc(){
+  if(isNew){
+    const rate=(+$('f-cost').value||0)+(+$('f-profit').value||0);
+    $('c-rate-label').textContent='سعر البيع = التكلفة + الربح ='; $('c-rate').textContent=fmt(rate);
+    $('c-bal-label').textContent='الرصيد = السعر − المدفوع ='; $('c-bal').textContent=fmt(rate-(+$('f-paid').value||0));
+  } else {
+    const prev=selectedClient?selectedClient.balance:0, paid=+$('f-paid').value||0;
+    $('c-rate-label').textContent='المتبقي قبل الدفعة ='; $('c-rate').textContent=fmt(prev);
+    $('c-bal-label').textContent='المتبقي بعد الدفعة ='; $('c-bal').textContent=fmt(prev-paid);
+  }
+}
+async function save(){
+  $('msg').textContent='';
+  let bank=$('f-bank').value; if(bank==='__other') bank=($('f-bank-other').value||'').trim();
+  const paid=+$('f-paid').value||0;
+  // قاعدة محاسبية: ما نأكّد دفعة بدون تحديد مكان الإيداع
+  if(paid>0 && !bank){ $('msg').innerHTML='<span style="color:var(--red)">⚠️ لازم تحددي مكان إيداع المبلغ قبل تأكيد الدفعة</span>'; $('f-bank').focus(); return; }
+  $('save-btn').disabled=true;
+  const p={ is_new_client:isNew, client_code:isNew?null:$('f-code').value.trim(),
+    booking_date:$('f-bdate').value||null, arrival_date:$('f-adate').value||null,
+    client_name:$('f-name').value||null, phone:$('f-phone').value||null, agent_name:$('f-agent').value||null,
+    travel_from:$('f-from').value||null, travel_to:$('f-to').value||null,
+    cost:+$('f-cost').value||0, profit:+$('f-profit').value||0, amount_paid:paid,
+    currency:$('f-cur').value, package_type:$('f-type').value, confirmed_by:$('f-staff').value||null,
+    bank_name:bank||null, bank_ref:$('f-ref').value||null };
+  if(!isNew && !p.client_code){ $('msg').innerHTML='<span style="color:var(--red)">اكتبي كود العميل الموجود</span>'; $('save-btn').disabled=false; return; }
+  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_client_entry',payload:p})});
+  const j=await r.json(); $('save-btn').disabled=false;
+  if(j.error){ $('msg').innerHTML='<span style="color:var(--red)">خطأ: '+esc(j.error)+'</span>'; return; }
+  const newBal = isNew ? Number(j.row.balance||0) : ((selectedClient?selectedClient.balance:0) - paid);
+  $('msg').innerHTML='<span style="color:var(--green)">✓ '+(isNew?'عميل جديد':'دفعة جديدة')+' — الكود: <b>'+esc(j.row.payment_code)+'</b> · المتبقي الآن: '+fmt(newBal)+'</span>';
+  setTimeout(()=>{ closeForm(); selectedClient=null; $('client-info').style.display='none';
+    ['f-name','f-phone','f-agent','f-to','f-ref','f-code'].forEach(i=>$(i).value='');
+    ['f-cost','f-profit','f-paid'].forEach(i=>$(i).value=0); load(); }, 1600);
+}
+if(KEY){ $('login').style.display='none'; $('app').style.display='block'; load(); }
+</script>
+</body>
+</html>

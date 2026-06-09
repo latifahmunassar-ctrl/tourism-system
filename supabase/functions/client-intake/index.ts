@@ -390,9 +390,12 @@ Deno.serve(async (req) => {
 
   const adminAction = url.searchParams.get("admin_action");
 
-  // ── admin actions (staff inbox) ──────────────────────────────────────────
+  // ── admin actions ─────────────────────────────────────────────────────────
   if (adminAction) {
-    const expected = (Deno.env.get("CLIENT_ADMIN_SECRET") || "").trim();
+    // Company-account management is OWNER-only (separate private dashboard) and
+    // uses COMPANIES_ADMIN_SECRET. The staff request inbox keeps CLIENT_ADMIN_SECRET.
+    const ownerOnly = ["companies", "company_get", "company_update"].includes(adminAction);
+    const expected = (Deno.env.get(ownerOnly ? "COMPANIES_ADMIN_SECRET" : "CLIENT_ADMIN_SECRET") || "").trim();
     const got = (req.headers.get("x-admin-secret") || "").trim();
     if (!expected || got !== expected) return json({ error: "unauthorized" }, 401);
 

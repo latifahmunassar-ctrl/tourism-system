@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>داشبورد الشركات (خاص) | ALEZZ</title>
+<style>
+  :root{--brand:#0e9d6a;--brand2:#c41d88;--gold:#D4A843;--accent:#e0218a;--bg:#f1f8f4;--panel:#fff;--panel2:#f7faf8;--line:#dcede6;--ink:#1d2b2a;--muted:#6b7c7a;--ok:#15803d;--warn:#b45309;--err:#b91c1c;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+  .top{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center}
+  .top .logo{font-weight:900;letter-spacing:3px;font-size:19px}.top .logo span{color:var(--gold)}
+  .top .rt{display:flex;gap:8px;align-items:center;font-size:12.5px}
+  .top button{background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:9px;padding:7px 12px;cursor:pointer}
+  /* login */
+  .login{max-width:400px;margin:80px auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:34px 28px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.05)}
+  .login .ic{font-size:46px;margin-bottom:10px}
+  .login h2{color:var(--brand);margin:0 0 4px;font-size:20px}
+  .login p{color:var(--muted);font-size:13px;margin:0 0 22px}
+  .login input{width:100%;padding:13px 16px;border-radius:12px;border:1px solid var(--line);background:#fcfdfd;color:var(--ink);font-size:15px;text-align:center;letter-spacing:2px;margin-bottom:14px}
+  .login input:focus{outline:none;border-color:var(--brand2)}
+  .login button{width:100%;padding:13px;border-radius:12px;border:none;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;font-weight:900;cursor:pointer;font-size:15px}
+  .login .err{color:var(--err);font-size:13px;margin-top:12px;min-height:16px}
+  /* app */
+  .grid{display:grid;grid-template-columns:360px 1fr;gap:16px;max-width:1120px;margin:18px auto;padding:0 16px}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 2px 14px rgba(0,0,0,.04)}
+  .panel h3{margin:0;padding:13px 16px;font-size:14px;background:#f2faf6;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;color:var(--brand)}
+  .panel h3 small{color:var(--muted);font-weight:600;font-size:11.5px}
+  #list{padding:10px;max-height:74vh;overflow:auto}
+  .ac-item{background:#fcfdfd;border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:9px;cursor:pointer;display:flex;gap:11px;align-items:center;transition:.12s}
+  .ac-item:hover{border-color:var(--brand2)}.ac-item.sel{border-color:var(--brand2);background:#e9f7f1;box-shadow:inset 3px 0 0 var(--brand)}
+  .ac-lg{width:42px;height:42px;border-radius:10px;background:#e9f7f1;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-weight:900;color:var(--brand);font-size:14px;overflow:hidden;flex-shrink:0}
+  .ac-lg img{width:100%;height:100%;object-fit:cover}
+  .ac-nm{font-weight:800;font-size:13.5px}.ac-mt{color:var(--muted);font-size:11.5px;margin-top:2px}
+  .ac-mini{display:flex;gap:5px;margin-top:5px;flex-wrap:wrap}
+  .ac-mini span{font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px}
+  .ac-mini .t{background:#eef2f0;color:var(--muted)}.ac-mini .d{background:#dcfce7;color:var(--ok)}.ac-mini .p{background:#fef3c7;color:var(--warn)}
+  .acbdg{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:800;white-space:nowrap;margin-inline-start:auto}
+  .s-pending{background:#fef3c7;color:var(--warn)}.s-approved{background:#dcfce7;color:var(--ok)}.s-rejected{background:#fee2e2;color:var(--err)}.s-suspended{background:#e5e7eb;color:#555}
+  .ac-empty{color:var(--muted);text-align:center;padding:40px 10px}
+  #detail{padding:18px;min-height:300px}
+  .ac-head{display:flex;gap:13px;align-items:center;margin-bottom:14px}
+  .ac-head .lg{width:58px;height:58px;border-radius:13px;background:#e9f7f1;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-weight:900;color:var(--brand);font-size:18px;overflow:hidden}
+  .ac-head .lg img{width:100%;height:100%;object-fit:cover}
+  .ac-head .t1{font-size:17px;font-weight:900}.ac-head .t2{color:var(--muted);font-size:12px;margin-top:3px}
+  .ac-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:14px}
+  .ac-stat{border:1px solid var(--line);border-radius:11px;padding:12px;text-align:center;background:var(--panel2)}
+  .ac-stat .n{font-size:23px;font-weight:900;line-height:1}.ac-stat .l{font-size:11px;color:var(--muted);margin-top:5px}
+  .ac-stat.t .n{color:var(--ink)}.ac-stat.d .n{color:var(--ok)}.ac-stat.p .n{color:var(--warn)}
+  .ac-kv{display:grid;grid-template-columns:110px 1fr;gap:5px 12px;font-size:13px;background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:13px;margin-bottom:14px}
+  .ac-kv .k{color:var(--muted)}.ac-kv a{color:var(--brand);text-decoration:none}
+  .ac-wa{background:#effdf4;border:1px dashed #25d366;border-radius:11px;padding:13px;margin-bottom:14px}
+  .ac-wa .t{font-weight:800;color:#15803d;font-size:12.5px;margin-bottom:7px}
+  .ac-wa input{width:100%;padding:10px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);font:inherit}
+  .ac-bar{display:flex;gap:9px;flex-wrap:wrap}
+  .ac-btn{border:none;border-radius:10px;padding:10px 15px;font:inherit;font-weight:800;cursor:pointer}
+  .ac-btn.ok{background:var(--ok);color:#fff}.ac-btn.no{background:#fbeaea;color:var(--err)}.ac-btn.save{background:#e9f7f1;color:var(--brand)}
+  .ac-msg{margin-top:10px;font-size:12.5px;padding:8px 11px;border-radius:9px;display:none}
+  .ac-msg.ok{background:#dcfce7;color:var(--ok)}.ac-msg.err{background:#fee2e2;color:var(--err)}
+  .ac-reqs{margin-top:16px}.ac-reqs h4{font-size:12.5px;color:var(--muted);margin:0 0 7px}
+  .dest-wrap{display:flex;flex-wrap:wrap;gap:8px}
+  .dest-chip{background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:5px 12px;font-size:12.5px;color:var(--ink)}
+  .dest-chip b{color:var(--brand);margin-inline-start:3px}
+</style>
+</head>
+<body>
+
+<!-- LOGIN (مؤقتاً معطّل — يُفعّل لمن نضيف كلمة المرور الخاصة بعد اكتمال البناء) -->
+<div id="loginView" class="login" style="display:none">
+  <div class="ic">🔐</div>
+  <h2>داشبورد الشركات</h2>
+  <p>دخول خاص — لإدارة حسابات الشركات والموافقة عليها</p>
+  <input id="secret" type="password" placeholder="كلمة المرور الخاصة" autocomplete="off">
+  <button onclick="login()">دخول</button>
+  <div class="err" id="loginErr"></div>
+</div>
+
+<!-- APP -->
+<div id="appView" style="display:none">
+  <div class="top">
+    <div class="logo">AL<span>E</span>ZZ — داشبورد الشركات</div>
+    <div class="rt"><button onclick="loadList()">↻ تحديث</button> <button onclick="logout()">خروج</button></div>
+  </div>
+  <div class="grid">
+    <div class="panel"><h3>الشركات <small>قيد المراجعة + معتمدة</small></h3><div id="list"><div class="ac-empty">جارٍ التحميل…</div></div></div>
+    <div class="panel"><h3>ملف الشركة</h3><div id="detail"><div class="ac-empty">اختاري شركة من القائمة</div></div></div>
+  </div>
+</div>
+
+<script>
+const BASE="https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake";
+const AC_STAT={pending:"قيد المراجعة",approved:"معتمدة",rejected:"مرفوضة",suspended:"موقوفة"};
+const REQ_STAT={pending_review:"للمراجعة",sent:"تم الإرسال",build_failed:"يحتاج إكمال",new:"جديد",closed:"مغلق"};
+// مؤقت: دخول مفتوح بدون كلمة سر لين يكتمل البناء. لاحقاً: نحذف هذا السطر ونرجّع
+// شاشة الدخول (login) + كلمة المرور الخاصة المخزّنة في COMPANIES_ADMIN_SECRET.
+let SECRET=localStorage.getItem('alezz_owner_secret')||'alezz-companies-open';
+let cur=null, data=[];
+const esc=s=>String(s==null?'':s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+const H=()=>({'x-admin-secret':SECRET,'Content-Type':'application/json'});
+const initials=n=>esc(String(n||'؟').trim().slice(0,2));
+const $=id=>document.getElementById(id);
+
+async function login(){
+  SECRET=$('secret').value.trim();
+  const r=await fetch(BASE+'?admin_action=companies',{headers:H()});
+  if(r.status===401){ $('loginErr').textContent='كلمة المرور غير صحيحة'; return; }
+  localStorage.setItem('alezz_owner_secret',SECRET);
+  show();
+}
+function logout(){ localStorage.removeItem('alezz_owner_secret'); SECRET=''; location.reload(); }
+function show(){ $('loginView').style.display='none'; $('appView').style.display='block'; loadList(); }
+
+async function loadList(){
+  const r=await fetch(BASE+'?admin_action=companies',{headers:H()});
+  if(!r.ok){ if(r.status===401){logout();} return; }
+  data=(await r.json()).companies||[];
+  const order={pending:0,approved:1,suspended:2,rejected:3};
+  data.sort((a,b)=>(order[a.status]??9)-(order[b.status]??9));
+  if(!data.length){ $('list').innerHTML='<div class="ac-empty">لا توجد شركات</div>'; return; }
+  $('list').innerHTML=data.map(c=>{
+    const st=c.stats||{total:0,done:0,pending:0};
+    const logo=c.logo_url?`<img src="${esc(c.logo_url)}" alt="">`:initials(c.company_name);
+    const mini=c.status==='approved'?`<div class="ac-mini"><span class="t">📋 ${st.total}</span><span class="d">✅ ${st.done}</span>${st.pending?`<span class="p">⏳ ${st.pending}</span>`:''}</div>`:'';
+    return `<div class="ac-item ${cur===c.id?'sel':''}" onclick="openCo('${c.id}')">
+      <div class="ac-lg">${logo}</div>
+      <div style="flex:1;min-width:0"><div class="ac-nm">${esc(c.company_name)}</div><div class="ac-mt">${esc(c.contact_phone)}</div>${mini}</div>
+      <span class="acbdg s-${c.status}">${AC_STAT[c.status]||c.status}</span></div>`;
+  }).join('');
+}
+
+async function openCo(id){
+  cur=id; loadList();
+  $('detail').innerHTML='<div class="ac-empty">جارٍ التحميل…</div>';
+  const r=await fetch(BASE+'?admin_action=company_get&id='+id,{headers:H()});
+  const j=await r.json(); const c=j.company; if(!c){ $('detail').innerHTML='<div class="ac-empty">تعذّر الفتح</div>'; return; }
+  const st=j.stats||{total:0,done:0,pending:0};
+  const approved=c.status==='approved';
+  const logo=c.logo_url?`<img src="${esc(c.logo_url)}" alt="">`:initials(c.company_name);
+  // ملخّص الوجهات المطلوبة (أرقام فقط، بدون تفاصيل البرامج — تلك في داشبورد الموظفين)
+  const destCount={};
+  (j.requests||[]).forEach(rq=>{ const d=(rq.destination||'').trim()||'غير محدّد'; destCount[d]=(destCount[d]||0)+1; });
+  const destChips=Object.entries(destCount).sort((a,b)=>b[1]-a[1])
+    .map(([d,n])=>`<span class="dest-chip">${esc(d)} <b>${n}</b></span>`).join('')
+    || '<span class="ac-mt">لا طلبات بعد</span>';
+  $('detail').innerHTML=`
+    <div class="ac-head"><div class="lg">${logo}</div>
+      <div><div class="t1">${esc(c.company_name)}</div><div class="t2">سجّل: ${esc((c.created_at||'').slice(0,10))} · <span class="acbdg s-${c.status}">${AC_STAT[c.status]||c.status}</span></div></div></div>
+    ${approved?`<div class="ac-stats">
+      <div class="ac-stat t"><div class="n">${st.total}</div><div class="l">📋 إجمالي الطلبات</div></div>
+      <div class="ac-stat d"><div class="n">${st.done}</div><div class="l">✅ تم الرد عليها</div></div>
+      <div class="ac-stat p"><div class="n">${st.pending}</div><div class="l">⏳ معلّقة</div></div>
+    </div>`:`<div class="ac-msg ok" style="display:block;background:rgba(227,179,65,.12);color:var(--warn)">📋 الإحصائية تبدأ بعد تفعيل الحساب وبدء الشركة بالطلب.</div>`}
+    <div class="ac-kv">
+      <span class="k">المسؤول</span><span>${esc(c.contact_name||'—')}</span>
+      <span class="k">الجوال</span><span>${esc(c.contact_phone)}</span>
+      <span class="k">البريد</span><span>${esc(c.contact_email||'—')}</span>
+      <span class="k">الموقع/انستقرام</span><span>${c.website?`<a href="${/^https?:/.test(c.website)?esc(c.website):'https://'+esc(c.website)}" target="_blank">${esc(c.website)}</a>`:'—'}</span>
+    </div>
+    <div class="ac-wa"><div class="t">📲 رابط جروب الواتساب <span style="color:var(--muted);font-weight:600">— تضيفينه أنتِ</span></div>
+      <input id="acWa" placeholder="https://chat.whatsapp.com/..." value="${esc(c.whatsapp_group_link||'')}"></div>
+    <div class="ac-bar">
+      ${approved
+        ? `<button class="ac-btn save" onclick="save('${id}')">💾 حفظ رابط الواتساب</button>
+           <button class="ac-btn no" onclick="setStatus('${id}','suspended')">⏸️ إيقاف الحساب</button>`
+        : (c.status==='suspended'
+          ? `<button class="ac-btn ok" onclick="setStatus('${id}','approved')">▶️ إعادة تفعيل</button>`
+          : `<button class="ac-btn ok" onclick="setStatus('${id}','approved')">✅ موافقة وتفعيل</button>
+             <button class="ac-btn no" onclick="setStatus('${id}','rejected')">❌ رفض</button>
+             <button class="ac-btn save" onclick="save('${id}')">💾 حفظ رابط الواتساب</button>`)}
+    </div>
+    <div class="ac-msg" id="acMsg"></div>
+    ${approved?`<div class="ac-reqs"><h4>الوجهات المطلوبة (ملخّص نشاط)</h4><div class="dest-wrap">${destChips}</div>
+      <div class="ac-mt" style="margin-top:8px">التفاصيل الكاملة للطلبات في داشبورد الموظفين.</div></div>`:''}`;
+}
+function flash(t,ok){const m=$('acMsg');if(!m)return;m.textContent=t;m.className='ac-msg '+(ok?'ok':'err');m.style.display='block';}
+async function update(id,patch){ const r=await fetch(BASE+'?admin_action=company_update&id='+id,{method:'POST',headers:H(),body:JSON.stringify(patch)}); return r.json(); }
+async function save(id){ const wa=($('acWa')||{}).value||''; const d=await update(id,{whatsapp_group_link:wa}); flash(d.ok?'تم حفظ رابط الواتساب ✅':(d.error||'فشل الحفظ'),!!d.ok); }
+async function setStatus(id,status){
+  const labels={approved:'تفعيل',rejected:'رفض',suspended:'إيقاف'};
+  if(!confirm('تأكيد '+labels[status]+' الحساب؟')) return;
+  const wa=($('acWa')||{}).value||'';
+  const d=await update(id,{status,whatsapp_group_link:wa,by:'owner'});
+  if(d.ok){ flash('تم '+labels[status]+' ✅',true); await loadList(); openCo(id); } else flash(d.error||'فشل التحديث',false);
+}
+
+// مؤقتاً: افتح مباشرة بدون كلمة سر
+show();
+</script>
+</body>
+</html>
