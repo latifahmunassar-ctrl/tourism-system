@@ -68,6 +68,8 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .profit-wrap { display:flex; align-items:center; gap:6px; background:var(--s2); border:1px solid var(--border); border-radius:8px; padding:5px 10px; }
 .profit-input { width:80px; background:transparent; border:none; color:var(--gold); font-family:'Tajawal',sans-serif; font-size:13px; font-weight:700; outline:none; text-align:center; }
 .profit-label { font-size:10px; color:var(--muted); }
+.ctype-btn { font-size:11px; font-weight:800; border:1px solid var(--border); background:var(--s1); color:var(--muted); border-radius:7px; padding:4px 9px; cursor:pointer; font-family:'Tajawal',sans-serif; }
+.ctype-btn.on { background:rgba(42,157,143,0.18); color:var(--text); border-color:var(--teal); }
 .ebtn { padding:7px 14px; border-radius:8px; font-family:'Tajawal',sans-serif; font-size:12px; font-weight:700; cursor:pointer; border:none; display:flex; align-items:center; gap:5px; transition:all 0.2s; }
 .ebtn-pdf { background:linear-gradient(135deg,var(--gold),var(--gold2)); color:#0F1923; font-weight:800; }
 .ebtn-pdf:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgba(212,168,67,0.3); }
@@ -366,6 +368,9 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 </div>
 <div class="export-btns" id="exportBtns" style="display:none">
 <div class="profit-wrap">
+<span class="profit-label">العميل</span>
+<button type="button" class="ctype-btn on" id="ctypeCompany" onclick="setCustomerType('company')">🏢 شركات</button>
+<button type="button" class="ctype-btn" id="ctypeIndividual" onclick="setCustomerType('individual')">👤 أفراد</button>
 <span class="profit-label">هامش الربح (إجمالي)</span>
 <input class="profit-input" id="profitInput" type="number" placeholder="0" value="0" oninput="updateProfit()">
 <span class="profit-label">ريال</span>
@@ -804,6 +809,53 @@ document.getElementById('sendBtn').disabled = false;
 }
 
 function quickSend(t) { document.getElementById('chatInput').value = t; sendMessage(); }
+
+// ── هامش الربح التلقائي حسب التكلفة الإجمالية + نوع العميل (شركات/أفراد) ──
+let customerType = 'company';     // الافتراضي: شركات
+let profitMargins = [];
+let profitMarginsDest = null;
+let lastAutoProfitMsg = '';
+async function loadProfitMargins(dest){
+  if(!dest) { profitMargins = []; return; }
+  if(profitMarginsDest === dest && profitMargins.length) return;  // مخزّن
+  try{
+    const res = await fetch(SUPABASE_URL, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
+      body: JSON.stringify({ action:'profit_margins', dest })
+    });
+    const data = await res.json();
+    profitMargins = data.margins || [];
+    profitMarginsDest = dest;
+  }catch(e){ profitMargins = []; }
+}
+function applyAutoProfit(){
+  const inp = document.getElementById('profitInput');
+  if(!inp || !profitMargins.length) return;
+  const cost = (basePrice || 0) + extraCostsTotal();   // التكلفة الإجمالية قبل الربح
+  const tier = profitMargins.find(m => cost >= +m.cost_min && cost <= +m.cost_max);
+  if(!tier){
+    // خارج كل النطاقات → بدون ربح تلقائي + تنبيه (مرة واحدة لكل تكلفة)
+    const msg = `⚠️ التكلفة الإجمالية (${cost.toLocaleString()} ريال) خارج نطاقات جدول الأرباح لهذه الوجهة — اكتب هامش الربح يدوياً.`;
+    if(msg !== lastAutoProfitMsg){ addMessage('sys', msg); lastAutoProfitMsg = msg; }
+    return;
+  }
+  lastAutoProfitMsg = '';
+  const profit = customerType === 'company' ? (+tier.profit_company || 0) : (+tier.profit_individual || 0);
+  inp.value = profit;
+  updateProfit();
+}
+function setCustomerType(t){
+  customerType = t;
+  const cBtn = document.getElementById('ctypeCompany'), iBtn = document.getElementById('ctypeIndividual');
+  if(cBtn) cBtn.classList.toggle('on', t === 'company');
+  if(iBtn) iBtn.classList.toggle('on', t === 'individual');
+  applyAutoProfit();
+}
+async function autoProfitForProgram(dest){
+  await loadProfitMargins(dest);
+  applyAutoProfit();
+}
 
 // ── تبديل الفندق من قائمة منسدلة (يمين الشاشة) — يعيد كتابة سطر HOTELS ويعيد البناء محلياً ──
 function hswEsc(s){ return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
@@ -1877,6 +1929,8 @@ ${summaryHTML}
 
 document.getElementById('reviewPanel').innerHTML = html;
 renderExtraCostsList();
+// هامش الربح التلقائي: يجلب جدول أرباح الوجهة ويملأ الربح حسب التكلفة + نوع العميل.
+autoProfitForProgram(dest);
 // تعديل على نفس البرنامج قد يحمل تكاليف إضافية محفوظة + ربح مُدخل سابقاً —
 // حدّث الإجمالي ليعكسها فوراً بدل ما يظهر السعر الأساسي فقط.
 updateProfit();

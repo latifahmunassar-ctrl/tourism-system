@@ -2307,6 +2307,28 @@ async function handleListTours(body: {
   }
 }
 
+// ── profit_margins: جدول الأرباح لوجهة (نطاق التكلفة → شركات/أفراد) ──────────
+async function handleProfitMargins(body: { dest?: string }): Promise<Response> {
+  try {
+    const destAr = String(body.dest || "").trim();
+    const destKey = destAr ? detectDestination([{ role: "user", content: destAr }]) : null;
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    let q = supabase.from("profit_margins")
+      .select("cost_min,cost_max,profit_company,profit_individual")
+      .order("cost_min");
+    if (destKey) q = q.eq("destination", destKey);
+    const { data, error } = await q;
+    if (error) throw error;
+    return new Response(JSON.stringify({ margins: data || [] }), { headers: CORS_HEADERS });
+  } catch (e) {
+    return new Response(JSON.stringify({ margins: [], error: String((e as Error).message) }),
+      { status: 200, headers: CORS_HEADERS });
+  }
+}
+
 // ── Handler ────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
@@ -2319,6 +2341,7 @@ Deno.serve(async (req) => {
     // قائمة فنادق مدينة (لقائمة التبديل في الداشبورد) — قبل التحقق من messages.
     if (reqBody && reqBody.action === "list_hotels") return await handleListHotels(reqBody);
     if (reqBody && reqBody.action === "list_tours") return await handleListTours(reqBody);
+    if (reqBody && reqBody.action === "profit_margins") return await handleProfitMargins(reqBody);
     const { messages, max_tokens = 1200, system: clientSystem } = reqBody;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {

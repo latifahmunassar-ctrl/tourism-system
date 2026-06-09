@@ -974,6 +974,48 @@ function extractSuggestions(
 }
 
 // ── Handler ────────────────────────────────────────────────────────────────
+// ── استخراج جدول الأرباح: نطاق التكلفة → ربح «شركات» وربح «آفراد».
+// الأعمدة تختلف بين الشيتات، فنحدّدها بالعنوان: عمود «شركات» + المجاور «آفراد»،
+// وعمود النطاق هو الذي قبل «شركات» مباشرةً (يحوي "N-M").
+function extractProfitMargins(rows: string[][], destination: string): Array<{
+  destination: string; cost_min: number; cost_max: number; profit_company: number; profit_individual: number;
+}> {
+  const toLatin = (s: string) => (s || "").replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)));
+  const norm = (s: string) =>
+    (s || "").replace(/[إأآا]/g, "ا").replace(/[ةه]/g, "ه").replace(/\s+/g, "").toLowerCase().trim();
+  let headerRow = -1, companyCol = -1, individualCol = -1, rangeCol = -1;
+  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+    const cells = rows[i] || [];
+    for (let j = 0; j < cells.length; j++) {
+      if (norm(cells[j]) === "شركات" || norm(cells[j]) === "الشركات") {
+        for (let k = Math.max(0, j - 1); k <= j + 2; k++) {
+          const cc = norm(cells[k] || "");
+          if (cc === "افراد" || cc === "الافراد") { individualCol = k; break; }
+        }
+        if (individualCol >= 0) { headerRow = i; companyCol = j; rangeCol = j - 1; break; }
+      }
+    }
+    if (headerRow >= 0) break;
+  }
+  if (headerRow < 0 || rangeCol < 0) return [];
+  const out: Array<{ destination: string; cost_min: number; cost_max: number; profit_company: number; profit_individual: number }> = [];
+  for (let i = headerRow + 1; i < rows.length; i++) {
+    const cells = rows[i] || [];
+    const m = toLatin((cells[rangeCol] || "").trim()).match(/(\d+)\s*-\s*(\d+)/);
+    if (!m) continue;
+    const cmin = parseInt(m[1], 10), cmax = parseInt(m[2], 10);
+    const pc = parsePrice((cells[companyCol] || "").trim());
+    const pi = parsePrice((cells[individualCol] || "").trim());
+    if (cmax > 0) out.push({
+      destination,
+      cost_min: cmin, cost_max: cmax,
+      profit_company: isNaN(pc) ? 0 : pc,
+      profit_individual: isNaN(pi) ? 0 : pi,
+    });
+  }
+  return out;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
   if (req.method !== "POST")
@@ -1354,7 +1396,15 @@ Deno.serve(async (req) => {
           if (error) debugInfo?.rejects.push(`[${tab}] suggestions insert: ${error.message}`);
         }
 
-        details[tab] = { hotels: hotels.length, tours: tours.length, flights: flights.length, trains: trains.length, suggestions: suggestions.length };
+        // جدول الأرباح (نطاق التكلفة → شركات/أفراد) — full-replace per destination.
+        const margins = extractProfitMargins(rows, tab);
+        if (margins.length > 0) {
+          await supabase.from("profit_margins").delete().eq("destination", tab);
+          const { error } = await supabase.from("profit_margins").insert(margins);
+          if (error) debugInfo?.rejects.push(`[${tab}] profit_margins insert: ${error.message}`);
+        }
+
+        details[tab] = { hotels: hotels.length, tours: tours.length, flights: flights.length, trains: trains.length, suggestions: suggestions.length, margins: margins.length };
         totalHotels  += hotels.length;
         totalTours   += tours.length;
         totalFlights += flights.length;
