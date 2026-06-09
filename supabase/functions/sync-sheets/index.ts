@@ -1060,7 +1060,7 @@ Deno.serve(async (req) => {
       const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
       const tk = await getGoogleAccessToken(sa);
       const quotedTab = /[\s'"]/.test(dumpRowsTab) ? `'${dumpRowsTab.replace(/'/g, "''")}'` : dumpRowsTab;
-      const rows = await readSheetRange(tk, ssid, `${quotedTab}!A1:AZ500`);
+      const rows = await readSheetRange(tk, ssid, `${quotedTab}!A1:CZ500`);
       const tourHeader = findTourHeader(rows);
       const matches: Array<{ row: number; cells: Array<{ col: number; text: string }> }> = [];
       if (q) {
@@ -1089,7 +1089,7 @@ Deno.serve(async (req) => {
       const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
       const tk = await getGoogleAccessToken(sa);
       const quotedTab = /[\s'"]/.test(dumpSuggTab) ? `'${dumpSuggTab.replace(/'/g, "''")}'` : dumpSuggTab;
-      const rows = await readSheetRange(tk, ssid, `${quotedTab}!A1:AZ500`);
+      const rows = await readSheetRange(tk, ssid, `${quotedTab}!A1:CZ500`);
       let colIdx = -1, headerRow = -1, headerText = "";
       for (let i = 0; i < Math.min(rows.length, 10); i++) {
         for (let j = 0; j < (rows[i] || []).length; j++) {
@@ -1314,7 +1314,7 @@ Deno.serve(async (req) => {
         // Google Sheets requires single-quotes around tab names that contain
         // spaces or other special chars (e.g. 'Malaysia '!A1:Z500).
         const quotedTab = /[\s'"]/.test(tabRaw) ? `'${tabRaw.replace(/'/g, "''")}'` : tabRaw;
-        const rows = await readSheetRange(token, spreadsheetId, `${quotedTab}!A1:AZ500`);
+        const rows = await readSheetRange(token, spreadsheetId, `${quotedTab}!A1:CZ500`);
 
         // Optional dump for diagnostic — show ALL columns so we can see flight cols if present
         if (dumpTab && tab.toLowerCase() === dumpTab.toLowerCase() && debugInfo) {
