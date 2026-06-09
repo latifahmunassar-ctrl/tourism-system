@@ -1142,7 +1142,7 @@ async function bfLoadSuggestions(){
   if(!pairs.length){
     aSel.innerHTML = '<option value="">لا مطارات لهذه الوجهة — استخدم «تخصيص»</option>';
   } else {
-    aSel.innerHTML = pairs.map(p=>{
+    aSel.innerHTML = '<option value="ALL">🌐 كل المطارات (كل الاقتراحات)</option>' + pairs.map(p=>{
       const [a,b] = p.split('|');
       const lbl = a===b ? `القدوم والمغادرة: ${bfAirAr(a)}` : `القدوم: ${bfAirAr(a)} — المغادرة: ${bfAirAr(b)}`;
       return `<option value="${bfEsc(p)}">${bfEsc(lbl)}</option>`;
@@ -1158,23 +1158,40 @@ function bfShowOptions(){
   const list = document.getElementById('bf-sugList');
   const hint = document.getElementById('bf-sugHint');
   if(!BF_SUGS.length){ list.innerHTML=''; hint.innerHTML='لا توجد اقتراحات جاهزة لهذه الوجهة — استخدم «تخصيص».'; hint.style.display=''; return; }
-  if(!days){ list.innerHTML=''; hint.textContent='اكتب عدد الأيام في الأعلى أولاً.'; hint.style.display=''; return; }
-  bfShownRows = BF_SUGS.filter(s=>+s.days===days && bfPairOf(s)===bfCurPair());
-  if(!bfShownRows.length){
-    list.innerHTML='';
-    hint.innerHTML = 'لا يوجد برنامج جاهز لـ ' + days + ' أيام. المتوفّر: <b>' + bfDaysAvail() + '</b> — أو استخدم «تخصيص».';
-    hint.style.display=''; return;
+  const pair = bfCurPair();
+  const isAll = !pair || pair === 'ALL';
+  if(isAll){
+    // «كل المطارات»: نعرض كل الاقتراحات — لو فيه أيام مكتوبة نصفّيها بها، وإلا الكل.
+    bfShownRows = days ? BF_SUGS.filter(s=>+s.days===days) : BF_SUGS.slice();
+    if(!bfShownRows.length) bfShownRows = BF_SUGS.slice();   // لا مطابق للأيام → اعرض الكل
+  } else {
+    if(!days){ list.innerHTML=''; hint.textContent='اكتب عدد الأيام أولاً، أو اختر «كل المطارات».'; hint.style.display=''; return; }
+    bfShownRows = BF_SUGS.filter(s=>+s.days===days && bfPairOf(s)===pair);
+    if(!bfShownRows.length){
+      list.innerHTML='';
+      hint.innerHTML = 'لا يوجد برنامج جاهز لـ ' + days + ' أيام لهذا المطار. المتوفّر: <b>' + bfDaysAvail() + '</b> أيام — أو اختر «🌐 كل المطارات» لرؤية كل الاقتراحات، أو «تخصيص».';
+      hint.style.display=''; return;
+    }
   }
+  bfShownRows.sort((a,b)=>(+a.days)-(+b.days));
   hint.style.display='none';
-  list.innerHTML = bfShownRows.map((s,i)=>`
-    <div class="bf-sug" data-i="${i}">
-      <div><span class="bf-sug-d">${s.days} أيام</span>${s.label?`<span class="bf-sug-lab">${bfEsc(s.label)}</span>`:''}</div>
+  list.innerHTML = bfShownRows.map((s,i)=>{
+    const [a,b]=bfPairOf(s).split('|');
+    const route = a===b ? bfAirAr(a) : `${bfAirAr(a)} → ${bfAirAr(b)}`;
+    const tag = isAll ? `<span class="bf-sug-lab">✈️ ${bfEsc(route)}</span>` : (s.label?`<span class="bf-sug-lab">${bfEsc(s.label)}</span>`:'');
+    return `<div class="bf-sug" data-i="${i}">
+      <div><span class="bf-sug-d">${s.days} أيام</span>${tag}</div>
       <div class="bf-sug-dist">${bfEsc(s.distribution)}</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   const els = [...list.querySelectorAll('.bf-sug')];
   els.forEach(el=>el.onclick=()=>{
     els.forEach(x=>x.classList.remove('sel')); el.classList.add('sel');
-    bfChosen = bfShownRows[+el.dataset.i].distribution;
+    const s = bfShownRows[+el.dataset.i];
+    bfChosen = s.distribution;
+    // اضبط عدد الأيام على الاقتراح المختار (مهم عند «كل المطارات» بأيام مختلفة)
+    const dEl = document.getElementById('bf-days');
+    if(dEl && +dEl.value !== +s.days){ dEl.value = s.days; bfExpected(); }
   });
   if(els.length===1) els[0].click();   // single match → auto-pick
 }
