@@ -853,32 +853,36 @@ function hswRender(cell, hotels){
   });
 }
 function hswPick(cell, idx){
-  const h = (cell._hotels || [])[idx];
-  if(!h) return;
-  const hidx = +cell.dataset.hidx;
-  if(h.name === cell.dataset.name){ cell.classList.remove('open'); return; }   // نفس الحالي
-  const lines = parseHotelLinesFromRaw(lastProgramRaw);
-  const oldLine = lines[hidx];
-  if(!oldLine) return;
-  const p = oldLine.split('|').map(x=>x.trim());
-  // نُبقي المدينة (p[1]) وعدد الليالي/التواريخ (p[5]) كما هي، ونبدّل الباقي
-  const newLine = [
-    h.name,
-    p[1] || '',
-    (h.stars || p[2] || '') + ' نجوم',
-    h.room_type || p[3] || '',
-    (h.price_per_night || 0) + ' ريال/ليلة',
-    p[5] || '',
-    p[6] || (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : '')
-  ].join(' | ');
-  const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
-  // مزامنة البرنامج المعروض مع history حتى تعمل تعديلات الشات اللاحقة
-  // (مثل «اضف سرير اضافي») على البرنامج بعد التبديل ولا ترجع للقديم.
-  for (let i = history.length - 1; i >= 0; i--) {
-    if (history[i].role === 'assistant') { history[i].content = newRaw; break; }
-  }
-  buildReview(newRaw);
-  addMessage('sys', `تم تبديل فندق ${p[1]||''} إلى «${h.name}» — أُعيد احتساب الإجمالي.`);
+  try {
+    cell.classList.remove('open');
+    const h = (cell._hotels || [])[idx];
+    if(!h) { addMessage('sys','تعذّر التبديل: لم أجد بيانات الفندق المختار.'); return; }
+    const hidx = +cell.dataset.hidx;
+    const lines = parseHotelLinesFromRaw(lastProgramRaw);
+    const oldLine = lines[hidx];
+    if(!oldLine){ addMessage('sys','تعذّر التبديل: لم أجد سطر الفندق الحالي.'); return; }
+    const p = oldLine.split('|').map(x=>x.trim());
+    // نفس الفندق ونفس الغرفة → لا تغيير
+    if((h.name||'').trim() === (p[0]||'').trim() && (h.room_type||'').trim() === (p[3]||'').trim()) return;
+    // نُبقي المدينة (p[1]) وعدد الليالي/التواريخ (p[5]) كما هي، ونبدّل الباقي
+    const newLine = [
+      h.name,
+      p[1] || '',
+      (h.stars || p[2] || '') + ' نجوم',
+      h.room_type || p[3] || '',
+      (h.price_per_night || 0) + ' ريال/ليلة',
+      p[5] || '',
+      p[6] || (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : '')
+    ].join(' | ');
+    const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
+    if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر تطبيق التبديل — لم يتغيّر البرنامج.'); return; }
+    // مزامنة البرنامج المعروض مع history حتى تعمل تعديلات الشات اللاحقة.
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].role === 'assistant') { history[i].content = newRaw; break; }
+    }
+    buildReview(newRaw);
+    addMessage('sys', `تم تبديل فندق ${p[1]||''} إلى «${h.name}» — أُعيد احتساب الإجمالي.`);
+  } catch(e){ addMessage('sys','خطأ أثناء التبديل: ' + (e && e.message ? e.message : e)); }
 }
 function hswSwapRaw(raw, hidx, newLine){
   const re = new RegExp('(HOTELS:)([\\s\\S]+?)(?=\\n(?:' + DOC_SECTION_HEAD_RE + '):)', 'm');

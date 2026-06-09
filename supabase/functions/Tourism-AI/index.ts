@@ -2132,11 +2132,12 @@ CHAT:[جملتين ودية للموظف باللهجة السعودية]`;
 // المدخل: { action:"list_hotels", dest:"ماليزيا", region:"كوالالمبور", occupancy:2 }
 // نُطابق اسم المدينة العربي عبر DEST_CITIES → canonical إنجليزي → عمود location.
 async function handleListHotels(body: {
-  dest?: string; region?: string; occupancy?: number | string;
+  dest?: string; region?: string; occupancy?: number | string; current?: string;
 }): Promise<Response> {
   try {
     const destAr = String(body.dest || "").trim();
     const region = String(body.region || "").trim();
+    const current = String(body.current || "").trim();   // اسم الفندق الحالي (لتقييد المنطقة الفرعية)
     const occ = parseInt(String(body.occupancy ?? "").replace(/[^\d]/g, ""), 10) || 0;
     const destKey = destAr ? detectDestination([{ role: "user", content: destAr }]) : null;
 
@@ -2178,6 +2179,22 @@ async function handleListHotels(body: {
         const m = String(h.occupancy || "").match(/\d+/);
         return !m || parseInt(m[0], 10) === occ;
       });
+    }
+
+    // تقييد المنطقة الفرعية: بعض المدن لها مناطق داخل عمود location (مثل بالي:
+    // "Bali-Jimbaran"، "Bali-Ubud"). لو الفندق الحالي في منطقة فرعية محددة،
+    // نُرجع فقط فنادق نفس المنطقة — لا باقي مناطق المدينة.
+    if (current && matched) {
+      const areaNorm = (s: string) =>
+        s.toLowerCase().replace(/[-._]+/g, " ").replace(/\s+/g, " ").trim();
+      const canon = areaNorm(matched.canonical);
+      const subAreaOf = (loc: string) => {
+        const cityPart = areaNorm(String(loc || "").split(" - ")[0]);
+        return cityPart.startsWith(canon) ? cityPart.slice(canon.length).trim() : "";
+      };
+      const curRow = rows.find(h => String(h.name || "").trim() === current);
+      const curArea = curRow ? subAreaOf(String(curRow.location || "")) : "";
+      if (curArea) rows = rows.filter(h => subAreaOf(String(h.location || "")) === curArea);
     }
 
     const hotels = rows.map(h => ({
