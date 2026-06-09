@@ -2194,12 +2194,24 @@ async function handleListHotels(body: {
       rows = [];
     }
 
-    // إشغال (occupancy نصّي) — قارن أول رقم فيه؛ المجهول يبقى.
-    if (occ) {
-      rows = rows.filter(h => {
-        const m = String(h.occupancy || "").match(/\d+/);
-        return !m || parseInt(m[0], 10) === occ;
-      });
+    // إشغال: نُرجع الفنادق التي *تتّسع* للمجموعة، لا التي تطابق العدد بالضبط.
+    // سبب مهم: الغرفة الأساسية قد تكون سعتها 2 ويُضاف لها سرير إضافي لتسع 3،
+    // فالبناء يقبلها — لكن التطابق التام (=== occ) كان يخفي كل البدائل (مثل
+    // كوتا: 4 فنادق سعتها 2/4 بينما الطلب 3 → القائمة تطلع فاضية).
+    // الحل: العتبة = سعة الفندق الحالي (البناء اعتمده لهذه الإقامة) أو العدد
+    // المطلوب، ونقبل أي فندق سعته ≥ العتبة (أو سعته مجهولة).
+    const capOf = (h: Record<string, unknown>) => {
+      const m = String(h.occupancy || "").match(/\d+/);
+      return m ? parseInt(m[0], 10) : 0;
+    };
+    let threshold = occ;
+    if (current) {
+      const cur = rows.find(h => String(h.name || "").trim() === current);
+      const curCap = cur ? capOf(cur) : 0;
+      if (curCap) threshold = curCap;
+    }
+    if (threshold) {
+      rows = rows.filter(h => { const c = capOf(h); return !c || c >= threshold; });
     }
 
     // تقييد المنطقة الفرعية: بعض المدن لها مناطق داخل عمود location (مثل بالي:
