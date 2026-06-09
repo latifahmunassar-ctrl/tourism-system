@@ -518,6 +518,15 @@ function parseMonth(text: string): { month: string | null; year: number | null }
 
 function parseStartDate(text: string): string | null {
   const t = arabicDigitsToLatin(text);
+  // ISO "2026-04-04" — صيغة حقل التاريخ في الفورم. تُفحص أولاً قبل النمط العربي
+  // (وإلا تُقرأ "2026-04-04" خطأً كـ يوم 20 شهر 26 فتُهمَل ويرجع التاريخ للافتراضي).
+  const iso = t.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) {
+    const y = parseInt(iso[1], 10), mo = parseInt(iso[2], 10), d = parseInt(iso[3], 10);
+    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
+      return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    }
+  }
   // "السفر 14 مايو" / "ابدأ من 1 يونيو 2026" / "من تاريخ 25 ديسمبر إلى 8 يناير"
   // The month capture uses a non-whitespace class instead of \w because \w
   // is ASCII-only in JS — Arabic month names like "ديسمبر" would otherwise

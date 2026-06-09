@@ -361,8 +361,9 @@ function isTransferTour(name: string): boolean {
   // Strip a leading list number ("5. " / "1) " / "٢-") so a transfer row
   // written as "5. التوصيل من فندق ... للمطار" is still recognized as a
   // transfer (and excluded from the sightseeing-tour pool), not a tour.
-  const n = (name || "").trim().replace(/^[\d٠-٩]+\s*[.\-)،]\s*/, "");
-  return TRANSFER_PREFIXES.some(p => n.startsWith(p));
+  // طبّع الألف (آ/أ/إ → ا) قبل المطابقة حتى يُلتقط "آستقبال" (شيت عُمان) كاستقبال.
+  const n = normalizeArabic((name || "").trim().replace(/^[\d٠-٩]+\s*[.\-)،]\s*/, ""));
+  return TRANSFER_PREFIXES.some(p => n.startsWith(normalizeArabic(p)));
 }
 
 /**
@@ -644,8 +645,9 @@ export function findArrivalPickup(
   //       "والتوصيل للفندق في بونشاك"), THAT must be the query city —
   //       otherwise we'd route a Jakarta query to a Puncak hotel.
   const isPrimaryPickup = (n: string) => {
-    const firstWord = n.replace(/^[\d\.\s]+/, "").trim().split(/\s+/)[0] || "";
-    return /^(?:استقبال|الاستقبال|آلاستقبال)$/u.test(firstWord);
+    // طبّع الألف فيُلتقط "آستقبال" (شيت عُمان) كـ استقبال.
+    const firstWord = normalizeArabic(n.replace(/^[\d\.\s]+/, "").trim().split(/\s+/)[0] || "");
+    return /^(?:استقبال|الاستقبال)$/u.test(firstWord);
   };
   let candidates = allTours.filter(t => {
     if (t.type !== destination) return false;
@@ -663,7 +665,7 @@ export function findArrivalPickup(
     candidates = allTours.filter(t => {
       if (t.type !== destination) return false;
       const n = t.name;
-      if (!/استقبال|الاستقبال/.test(n)) return false;
+      if (!/استقبال/.test(normalizeArabic(n))) return false;
       // Reject rows that mention any specific city — those belong elsewhere.
       for (const c of cityDefs) {
         if (c.pattern.test(n)) return false;
