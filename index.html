@@ -341,6 +341,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 </div>
 <div style="display:flex;align-items:center;gap:10px;">
   <div class="user-pill"><div class="avatar">م</div>موظف المبيعات</div>
+  <button class="logout-btn" type="button" onclick="inboxOpen()" style="position:relative;">📥 طلبات الشركات<span id="inboxBadge" style="display:none;position:absolute;top:-7px;left:-7px;background:#e0218a;color:#fff;border-radius:999px;font-size:10px;padding:1px 6px;font-weight:900;">0</span></button>
   <a href="https://latifahmunassar-ctrl.github.io/dashboard/" target="_blank" rel="noopener" class="logout-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">📊 لوحة التحكم</a>
   <button class="logout-btn" type="button" onclick="logout()">تسجيل خروج</button>
 </div>
@@ -368,6 +369,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <button class="ebtn ebtn-nologo" onclick="exportPDF('no_price')">📄 بدون سعر (بدون لوغو)</button>
 <button class="ebtn ebtn-pdf" onclick="exportPDF('detailed')">📄 تفصيلي (لوغو + تفصيل)</button>
 <button class="ebtn ebtn-nologo" id="currencyBtn" onclick="startCurrencyConversion()">💱 تحويل عملة</button>
+<button class="ebtn ebtn-pdf" id="inboxSendBtn" style="display:none;background:linear-gradient(135deg,#0e9d6a,#c41d88);border:none;color:#fff" onclick="inboxSend()">📤 إرسال للشركة</button>
 </div>
 </div>
 <div class="quote-wrap">
@@ -813,12 +815,13 @@ async function hswFetch(cell){
   menu.innerHTML = '<div class="hsw-loading">جارٍ جلب الفنادق…</div>';
   const dest = getLine(lastProgramRaw, 'DEST');
   const region = cell.dataset.region || '';
-  const adults = (parsedData && parsedData.adults) || 2;
+  // إشغال الغرفة الحالية (لا عدد البالغين) — عشان البدائل تطابق نفس سعة الغرفة المعروضة.
+  const occ = (+cell.dataset.occ) || (parsedData && parsedData.adults) || 2;
   try{
     const res = await fetch(SUPABASE_URL, {
       method:'POST',
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
-      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: adults })
+      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: occ, current: cell.dataset.name || '' })
     });
     const data = await res.json();
     cell.dataset.loaded = '1';
@@ -1668,7 +1671,10 @@ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLin
 const extraCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest);
 const extraTotal = extraCount > 0 ? (extraBedPricePerNight * (nights||0) * extraCount) : 0;
 const bedTxt = extraCount ? (`${extraCount} × ${extraTotal.toLocaleString()} ريال`) : '—';
-const nameCell = `<td class="hsw-cell" data-hidx="${hidx}" data-region="${hswEsc(p[1]||'')}" data-name="${hswEsc(p[0]||'')}" data-nightly="${nightly}" data-nights="${nights}">`
+// إشغال الغرفة الحالية من نص الغرفة "(يتسع N أشخاص)" — نجلب البدائل بنفس الإشغال
+// (مهم بعد التقريب لأسفل: 3 أشخاص = غرفة 2، فالبدائل لازم تكون إشغال 2 لا 3).
+const occN = parseInt((arabicDigitsToLatin(String(p[3]||'')).match(/يتسع\s*(\d+)/)||[])[1]||'',10) || 0;
+const nameCell = `<td class="hsw-cell" data-hidx="${hidx}" data-region="${hswEsc(p[1]||'')}" data-name="${hswEsc(p[0]||'')}" data-nightly="${nightly}" data-nights="${nights}" data-occ="${occN}">`
   + `<div class="hsw-cur" onclick="hswToggle(this)"><span class="hsw-name"><strong>${p[0]||''}${extraCount ? ' + Extra bed / Sofa Bed' : ''}</strong></span><span class="hsw-chev">▼</span></div>`
   + `<div class="hsw-menu"></div></td>`;
 return `<tr><td>${p[1]||''}</td>${nameCell}<td>${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td><td class="price-cell">${(totalLine + (extraTotal||0)).toLocaleString()} ريال</td><td>${bedTxt}</td></tr>`;
@@ -2926,6 +2932,123 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     setTimeout(() => { document.body.classList.remove('rfm-printing'); }, 1500);
   }, 200);
 }
+</script>
+
+<!-- ===== صندوق طلبات الشركات (B2B integration) — additive, isolated ===== -->
+<style>
+#inboxOverlay{position:fixed;inset:0;background:rgba(8,15,30,.6);z-index:9999;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
+#inboxOverlay .ibx{background:#0f1b33;border:1px solid rgba(255,255,255,.08);border-radius:18px;max-width:680px;width:100%;color:#e9eef7;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+#inboxOverlay .ibhd{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.08)}
+#inboxOverlay .ibhd b{font-size:16px}
+#inboxOverlay .ibx-x{background:none;border:none;color:#9fb0c8;font-size:22px;cursor:pointer}
+#inboxList{padding:10px;max-height:62vh;overflow:auto}
+.ib-item{background:#14233f;border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:12px 14px;margin-bottom:9px;cursor:pointer;transition:.12s}
+.ib-item:hover{border-color:#0e9d6a}
+.ib-r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ib-co{font-weight:800;font-size:14px}
+.ib-r2{color:#9fb0c8;font-size:12.5px;margin-top:4px}
+.ib-bdg{font-size:11px;padding:2px 9px;border-radius:20px;font-weight:800;white-space:nowrap}
+.ib-pending_review{background:#3a2f12;color:#e3b341}.ib-sent{background:#14361f;color:#36c46f}
+.ib-build_failed{background:#3a1717;color:#f06a6a}.ib-new{background:#1c2c4a;color:#7aa0e0}.ib-closed{background:#2a2f37;color:#9aa}
+.ib-empty{color:#9fb0c8;text-align:center;padding:30px}
+#inboxBanner{position:fixed;top:0;left:0;right:0;z-index:9000;background:linear-gradient(135deg,#0e9d6a,#c41d88);color:#fff;padding:9px 16px;display:none;align-items:center;justify-content:center;gap:14px;font-size:13.5px;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+#inboxBanner button{background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:8px;padding:5px 10px;cursor:pointer;font-weight:700}
+</style>
+<div id="inboxBanner"></div>
+<div id="inboxOverlay" onclick="if(event.target===this)inboxClose()">
+  <div class="ibx">
+    <div class="ibhd"><b>📥 طلبات الشركات الواردة</b><button class="ibx-x" onclick="inboxClose()">×</button></div>
+    <div id="inboxList"><div class="ib-empty">جارٍ التحميل…</div></div>
+  </div>
+</div>
+<script>
+(function(){
+  const IB_BASE="https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake";
+  const IB_PROPOSAL="https://latifahmunassar-ctrl.github.io/tourism-system/proposal.html";
+  const IB_STAT={pending_review:"للمراجعة",sent:"تم الإرسال",build_failed:"يحتاج إكمال",new:"جديد",closed:"مغلق"};
+  let ibState=null;
+  const ibEsc=s=>String(s==null?'':s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+  function ibSecret(force){
+    let s=localStorage.getItem('alezz_admin_secret')||'';
+    if(!s||force){ const p=prompt('المفتاح الإداري (CLIENT_ADMIN_SECRET):',''); if(p){s=p.trim();localStorage.setItem('alezz_admin_secret',s);} }
+    return s;
+  }
+  const ibH=()=>({'x-admin-secret':localStorage.getItem('alezz_admin_secret')||'','Content-Type':'application/json'});
+  async function ibList(){
+    const r=await fetch(IB_BASE+'?admin_action=list',{headers:ibH()});
+    if(r.status===401){ if(ibSecret(true)) return ibList(); throw new Error('unauthorized'); }
+    const d=await r.json(); return d.requests||[];
+  }
+  function ibBadge(n){const b=document.getElementById('inboxBadge');if(!b)return;if(n>0){b.textContent=n;b.style.display='';}else b.style.display='none';}
+  window.inboxOpen=async function(){
+    if(!ibSecret()) return;
+    document.getElementById('inboxOverlay').style.display='flex';
+    document.getElementById('inboxList').innerHTML='<div class="ib-empty">جارٍ التحميل…</div>';
+    try{ ibRender(await ibList()); }
+    catch(e){ document.getElementById('inboxList').innerHTML='<div class="ib-empty">تعذّر التحميل — تأكد من المفتاح الإداري.</div>'; }
+  };
+  window.inboxClose=function(){document.getElementById('inboxOverlay').style.display='none';};
+  function ibRender(reqs){
+    if(!reqs.length){document.getElementById('inboxList').innerHTML='<div class="ib-empty">لا توجد طلبات</div>';ibBadge(0);return;}
+    const order={build_failed:0,pending_review:1,new:1,sent:2,closed:3};
+    reqs.sort((a,b)=>(order[a.status]??9)-(order[b.status]??9));
+    document.getElementById('inboxList').innerHTML=reqs.map(r=>`
+      <div class="ib-item" onclick="inboxLoad('${r.id}')">
+        <div class="ib-r1"><span class="ib-co">${ibEsc(r.company_name)}</span><span class="ib-bdg ib-${r.status}">${IB_STAT[r.status]||r.status}</span></div>
+        <div class="ib-r2">${ibEsc(r.ref_no)} • ${ibEsc(r.destination)} • ${r.days} أيام • ${r.pax} أشخاص${r.group_total?' • '+Number(r.group_total).toLocaleString('en-US')+' ريال':''}</div>
+      </div>`).join('');
+    ibBadge(reqs.filter(r=>r.status==='pending_review'||r.status==='build_failed').length);
+  }
+  window.inboxLoad=async function(id){
+    inboxClose();
+    const r=await fetch(IB_BASE+'?admin_action=get&id='+id,{headers:ibH()});
+    const j=await r.json(); const req=j.request;
+    if(!req){alert('تعذّر فتح الطلب');return;}
+    ibState={id:req.id,ref:req.ref_no,company:req.company_name,token:req.view_token};
+    if(!req.built_program || !/TOTAL_GROUP:/.test(req.built_program)){
+      const cn=(req.cities_nights||[]).map(c=>`${c.nights} ${c.city}`).join(' + ');
+      const ci=document.getElementById('chatInput');
+      if(ci){ ci.value=`${req.destination} ${req.days} ايام ${cn} ل ${req.pax} بالغين${req.children?(' و '+req.children+' اطفال'):''}${req.date_from?(' تاريخ '+req.date_from):''}`; ci.focus(); }
+      alert('هذا الطلب ما انبنى تلقائياً'+(req.build_message?(' ('+req.build_message+')'):'')+'.\nعبّيت تفاصيله في الشات — اضغط إرسال لبنائه، ثم «📤 إرسال للشركة».');
+      ibBanner(); return;
+    }
+    buildReview(req.built_program);
+    ibBanner();
+    window.scrollTo({top:0,behavior:'smooth'});
+  };
+  function ibBanner(){
+    const el=document.getElementById('inboxBanner');
+    if(!ibState){el.style.display='none';document.body.style.paddingTop='';return;}
+    el.innerHTML=`📥 طلب شركة: <b>${ibEsc(ibState.company)}</b> — ${ibEsc(ibState.ref)} &nbsp; أضف الربح ثم اضغط «📤 إرسال للشركة» <button onclick="inboxDismiss()">إلغاء الربط</button>`;
+    el.style.display='flex'; document.body.style.paddingTop='40px';
+    const sb=document.getElementById('inboxSendBtn'); if(sb) sb.style.display='';
+  }
+  window.inboxDismiss=function(){ibState=null;const sb=document.getElementById('inboxSendBtn');if(sb)sb.style.display='none';document.getElementById('inboxBanner').style.display='none';document.body.style.paddingTop='';};
+  window.inboxSend=async function(){
+    if(!ibState){alert('ما فيه طلب شركة مربوط');return;}
+    if(!lastProgramRaw||!/TOTAL_GROUP:/.test(lastProgramRaw)){alert('ابنِ البرنامج أولاً (اضغط إرسال في الشات).');return;}
+    const profit=parseInt((document.getElementById('profitInput')||{}).value)||0;
+    const extra=(typeof extraCostsTotal==='function')?extraCostsTotal():0;
+    const finalGroup=(basePrice||0)+extra+profit;
+    if(!confirm(`إرسال العرض لشركة «${ibState.company}» بإجمالي ${finalGroup.toLocaleString('en-US')} ريال؟\nالشركة بتشوف البرنامج + هذا الإجمالي فقط (بدون أي تسعير داخلي).`)) return;
+    const prog=lastProgramRaw.replace(/TOTAL_GROUP:\s*[\d.,]+/, 'TOTAL_GROUP:'+finalGroup);
+    try{
+      let res=await fetch(IB_BASE+'?admin_action=update_program&id='+ibState.id,{method:'POST',headers:ibH(),body:JSON.stringify({built_program:prog})});
+      if(!res.ok) throw new Error('فشل حفظ البرنامج');
+      res=await fetch(IB_BASE+'?admin_action=approve&id='+ibState.id,{method:'POST',headers:ibH()});
+      const d=await res.json(); if(!d.ok) throw new Error(d.error||'فشل الاعتماد');
+      const link=IB_PROPOSAL+'?token='+ibState.token;
+      try{await navigator.clipboard.writeText(link);}catch(_){}
+      alert('✅ تم إرسال العرض للشركة!\nرابط العميل (انتسخ تلقائياً):\n'+link);
+      inboxDismiss();
+    }catch(e){alert('تعذّر الإرسال: '+(e.message||e));}
+  };
+  // passive badge refresh on load (no prompt)
+  if(localStorage.getItem('alezz_admin_secret')){
+    fetch(IB_BASE+'?admin_action=list',{headers:ibH()}).then(r=>r.ok?r.json():null)
+      .then(d=>{ if(d&&d.requests) ibBadge(d.requests.filter(r=>r.status==='pending_review'||r.status==='build_failed').length); }).catch(()=>{});
+  }
+})();
 </script>
 
 </body>
