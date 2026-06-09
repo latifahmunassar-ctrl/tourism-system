@@ -3149,8 +3149,9 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
 .ib-item{background:#14233f;border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:12px 14px;margin-bottom:9px;cursor:pointer;transition:.12s}
 .ib-item:hover{border-color:#0e9d6a}
 .ib-r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.ib-co{font-weight:800;font-size:14px}
-.ib-r2{color:#9fb0c8;font-size:12.5px;margin-top:4px}
+.ib-co{font-weight:800;font-size:14.5px}
+.ib-dest{color:#36c46f;font-weight:800;font-size:13.5px;margin-top:5px}
+.ib-r2{color:#9fb0c8;font-size:12px;margin-top:4px}
 .ib-bdg{font-size:11px;padding:2px 9px;border-radius:20px;font-weight:800;white-space:nowrap}
 .ib-pending_review{background:#3a2f12;color:#e3b341}.ib-sent{background:#14361f;color:#36c46f}
 .ib-build_failed{background:#3a1717;color:#f06a6a}.ib-new{background:#1c2c4a;color:#7aa0e0}.ib-closed{background:#2a2f37;color:#9aa}
@@ -3198,8 +3199,9 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     reqs.sort((a,b)=>(order[a.status]??9)-(order[b.status]??9));
     document.getElementById('inboxList').innerHTML=reqs.map(r=>`
       <div class="ib-item" onclick="inboxLoad('${r.id}')">
-        <div class="ib-r1"><span class="ib-co">${ibEsc(r.company_name)}</span><span class="ib-bdg ib-${r.status}">${IB_STAT[r.status]||r.status}</span></div>
-        <div class="ib-r2">${ibEsc(r.ref_no)} • ${ibEsc(r.destination)} • ${r.days} أيام • ${r.pax} أشخاص${r.group_total?' • '+Number(r.group_total).toLocaleString('en-US')+' ريال':''}</div>
+        <div class="ib-r1"><span class="ib-co">🏢 ${ibEsc(r.company_name)}</span><span class="ib-bdg ib-${r.status}">${IB_STAT[r.status]||r.status}</span></div>
+        <div class="ib-dest">📍 ${ibEsc(r.destination)} · ${r.days} أيام · ${r.pax} أشخاص</div>
+        <div class="ib-r2">${ibEsc(r.ref_no)}${r.group_total?' · '+Number(r.group_total).toLocaleString('en-US')+' ريال':''}</div>
       </div>`).join('');
     ibBadge(reqs.filter(r=>r.status==='pending_review'||r.status==='build_failed').length);
   }
@@ -3208,7 +3210,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     const r=await fetch(IB_BASE+'?admin_action=get&id='+id,{headers:ibH()});
     const j=await r.json(); const req=j.request;
     if(!req){alert('تعذّر فتح الطلب');return;}
-    ibState={id:req.id,ref:req.ref_no,company:req.company_name,token:req.view_token};
+    ibState={id:req.id,ref:req.ref_no,company:req.company_name,token:req.view_token,dest:req.destination};
     if(!req.built_program || !/TOTAL_GROUP:/.test(req.built_program)){
       const cn=(req.cities_nights||[]).map(c=>`${c.nights} ${c.city}`).join(' + ');
       const ci=document.getElementById('chatInput');
@@ -3223,7 +3225,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
   function ibBanner(){
     const el=document.getElementById('inboxBanner');
     if(!ibState){el.style.display='none';document.body.style.paddingTop='';return;}
-    el.innerHTML=`📥 طلب شركة: <b>${ibEsc(ibState.company)}</b> — ${ibEsc(ibState.ref)} &nbsp; أضف الربح ثم اضغط «📤 إرسال للشركة» <button onclick="inboxDismiss()">إلغاء الربط</button>`;
+    el.innerHTML=`📥 طلب من: <b>${ibEsc(ibState.company)}</b> &nbsp;·&nbsp; 📍 ${ibEsc(ibState.dest||'')} &nbsp;·&nbsp; ${ibEsc(ibState.ref)} &nbsp; أضف الربح ثم اضغط «📤 إرسال للشركة» <button onclick="inboxDismiss()">إلغاء الربط</button>`;
     el.style.display='flex'; document.body.style.paddingTop='40px';
     const sb=document.getElementById('inboxSendBtn'); if(sb) sb.style.display='';
   }
