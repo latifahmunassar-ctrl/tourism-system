@@ -26,7 +26,7 @@ const CORS_HEADERS = {
   "Content-Type": "application/json",
 };
 
-const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia"];
+const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman "];
 
 // Per-destination canonical-city patterns — MUST stay in sync with DEST_CITIES
 // in Tourism-AI/index.ts (same canonical names the builder groups by). Used
@@ -83,6 +83,9 @@ const SECTION_CITY_DEFS: Record<string, Array<{ canonical: string; pattern: RegE
     { canonical: "Jakarta",  pattern: /جا?ك[رز]تا?|jakarta/i },
     { canonical: "Bandung",  pattern: /باندون[جغق]|bandung/i },
     { canonical: "Puncak",   pattern: /بونشاك|puncak/i },
+  ],
+  Oman: [
+    { canonical: "Salalah",  pattern: /صلال[ةه]|salalah/i },
   ],
 };
 
@@ -832,6 +835,9 @@ function extractSuggestions(
       "طرابزون": "Trabzon", "طربزون": "Trabzon",
       "اوزنجول": "Uzungol", "ازونجول": "Uzungol", "ايدر": "Ayder",
     },
+    Oman: {
+      "صلاله": "Salalah", "صلالة": "Salalah",
+    },
   };
   const airportMap = AIRPORT_MAPS[destination] || {};
   const resolveAirport = (raw: string): string => {
@@ -883,6 +889,7 @@ function extractSuggestions(
     russia:   "Moscow",
     Turky:    "Istanbul",
     indonesia: "Jakarta",
+    Oman:     "Salalah",
   };
   for (let i = headerRow + 1; i < rows.length; i++) {
     const rawCell = (rows[i][colIdx] || "").trim();

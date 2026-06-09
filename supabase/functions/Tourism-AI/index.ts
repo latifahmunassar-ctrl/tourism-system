@@ -47,6 +47,7 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     [/روسيا|russia|موسكو|moscow|سانت\s*بطرسبرغ|saint\s*petersburg|سوتشي|sochi/i, "russia"],
     [/(?:ال)?بوسن[ةه]|bosnia|سراييفو|sarayevo|sarajevo|موستار|mostar|بيهاتش|bihać|bihac/i, "Bosnia"],
     [/تايلاند|تايلند|thailand|بانكوك|bangkok|بوكيت|بوكت|phuket|كرابي|krabi|شيانغ|chiang|باتايا|بتايا|pattaya|ساموي|samui/i, "thailand"],
+    [/عُمان|عمان|سلطنة\s*عمان|oman|صلال[ةه]|salalah/i, "Oman"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;
@@ -126,6 +127,10 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     // (Saudi shorthand — ung→وق). The ن before the final letter is optional.
     { canonical: "Bandung",  pattern: /باندون?[جغقك]|bandung/i },
     { canonical: "Puncak",   pattern: /بونشاك|puncak/i },
+  ],
+  // عُمان — وجهة صلالة (مناطق فرعية: وسط المدينة، هوانا — داخل location)
+  Oman: [
+    { canonical: "Salalah",  pattern: /صلال[ةه]|salalah/i },
   ],
 };
 
@@ -634,7 +639,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     "Nha Trang": "نها ترانج", "Da Lat": "دالات",
     "Kuala Lumpur": "كوالالمبور", "Selangor": "سيلانجور",
     "Langkawi": "لانكاوي", "Penang": "بينانج", "Cameron Highlands": "كاميرون هايلاند",
-    "Bangkok": "بانكوك", "Phuket": "بوكيت", "Krabi": "كرابي",
+    "Bangkok": "بانكوك", "Phuket": "بوكيت", "Krabi": "كرابي", "Salalah": "صلالة",
     "Chiang Mai": "شيانغ ماي", "Pattaya": "باتايا", "Koh Samui": "كوه ساموي",
     "Istanbul": "اسطنبول", "Trabzon": "طرابزون", "Uzungol": "أوزنجول",
     "Ayder": "ايدر", "Rize": "ريزا", "Bursa": "بورصة", "Sapanca": "سابانجا",
@@ -920,6 +925,7 @@ async function buildDataContext(
       [/جاكرتا|jakarta/i,                                "Jakarta"],
       [/باندون?[جغقك]|bandung/i,                          "Bandung"],
       [/بونشاك|puncak/i,                                 "Puncak"],
+      [/صلال[ةه]|salalah/i,                              "Salalah"],
       // Turkey
       [/ريزا|rize|اشلاي|فرتتنه/i,                        "Rize"],
       [/أوزنجول|أوزونغول|uzungol|اوزنجول/i,              "Uzungol"],
@@ -2563,7 +2569,7 @@ Deno.serve(async (req) => {
         "Nha Trang": "نها ترانج", "Da Lat": "دالات",
         "Kuala Lumpur": "كوالالمبور", "Selangor": "سيلانجور",
         "Langkawi": "لانكاوي", "Penang": "بينانج", "Cameron Highlands": "كاميرون هايلاند",
-        "Bangkok": "بانكوك", "Phuket": "بوكيت", "Krabi": "كرابي",
+        "Bangkok": "بانكوك", "Phuket": "بوكيت", "Krabi": "كرابي", "Salalah": "صلالة",
         "Chiang Mai": "شيانغ ماي", "Pattaya": "باتايا", "Koh Samui": "كوه ساموي",
         "Istanbul": "اسطنبول", "Trabzon": "طرابزون", "Uzungol": "أوزنجول",
         "Ayder": "ايدر", "Rize": "ريزا", "Bursa": "بورصة", "Sapanca": "سابانجا",

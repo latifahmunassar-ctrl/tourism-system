@@ -202,6 +202,7 @@ function parseDestination(text: string): string | null {
     [/روسيا|russia|موسكو|moscow|سان?ت?\s+(?:بطرس|برغ)|بطرس(?:بور[جك]|برغ)|saint\s*petersburg|سوتشي|sochi/i, "russia"],
     [/البوسنة|البوسنه|bosnia|سراييفو|sarajevo|موستار|mostar|بيهاتش|bihać|bihac/i, "Bosnia"],
     [/تايلاند|تايلند|thailand|بانكوك|bangkok|بوكيت|بوكت|phuket|كرابي|krabi|شيانغ|chiang|باتايا|بتايا|pattaya|ساموي|samui/i, "thailand"],
+    [/عُمان|عمان|سلطنة\s*عمان|oman|صلال[ةه]|salalah/i, "Oman"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;
