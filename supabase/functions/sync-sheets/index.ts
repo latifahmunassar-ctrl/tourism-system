@@ -314,6 +314,9 @@ const HEADER_ALIASES: Record<string, RegExp> = {
   currency:   /^(currency|عملة|العملة)$/i,
   occupancy:  /^(occupancy|capacity|pax|اشغال|الإشغال|اشخاص|الأشخاص|استيعاب|تتسع|يتسع|سعة|تسع)$/i,
   include:    /^(include|includes|breakfast|meals|شامل|يشمل|الإفطار)$/i,
+  // أعمدة الموسم/التاريخ (تسعير موسمي مثل خريف صلالة) — From/To في شيت عُمان.
+  dateFrom:   /^(from|date\s*from|valid\s*from|من|من\s*تاريخ|بداية|check\s*in)$/i,
+  dateTo:     /^(to|date\s*to|valid\s*to|الى|إلى|الى\s*تاريخ|نهاية|check\s*out)$/i,
 };
 
 function findHotelHeader(rows: string[][]): { rowIdx: number; cols: Record<string, number> } | null {
@@ -381,6 +384,8 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
     let includeStr = get(row, "include");
     const currencyStr = get(row, "currency");
     let occupancyStr = get(row, "occupancy");
+    const dateFromRaw = get(row, "dateFrom");   // موسم: من تاريخ
+    const dateToRaw   = get(row, "dateTo");     // موسم: إلى تاريخ
     // Fallback: many sheets accidentally put the "N adults + M child" value
     // in the `Include` column instead of the `تتسع`/occupancy one. If the
     // occupancy cell is blank but Include looks like an occupancy string
@@ -446,6 +451,8 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
       meals:              mealsAr,
       currency:           cleanCurrency(currencyStr || "SAR"),
       occupancy:          occupancyStr,
+      date_from:          dateFromRaw,
+      date_to:            dateToRaw,
       last_synced_at:     new Date().toISOString(),
     });
   }
@@ -1302,8 +1309,9 @@ Deno.serve(async (req) => {
 
         // dedup داخل batch + full-replace per destination (يحذف القديم ويُعيد المحدّث)
         const dedupedMap = new Map<string, object>();
-        for (const h of hotels as Array<{ name: string; room_type: string; occupancy: string; location: string }>) {
-          const key = `${h.name}|${h.room_type}|${h.occupancy}`;
+        for (const h of hotels as Array<{ name: string; room_type: string; occupancy: string; location: string; date_from?: string }>) {
+          // المفتاح يشمل date_from حتى لا تنطمس صفوف المواسم (نفس الفندق/الغرفة بسعرين)
+          const key = `${h.name}|${h.room_type}|${h.occupancy}|${h.date_from || ""}`;
           dedupedMap.set(key, h);
         }
         const dedupedHotels = Array.from(dedupedMap.values());
