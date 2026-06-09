@@ -186,13 +186,16 @@ export function pickCheapestHotel(
   city: string,
   request: TripRequest,
   cityPattern?: RegExp,
-  options?: { excludeNames?: Set<string>; overrideAdults?: number; areaFilter?: string; overrideStars?: number; feature?: string },
+  options?: { excludeNames?: Set<string>; overrideAdults?: number; areaFilter?: string; overrideStars?: number; feature?: string; lockOccupancyAdults?: number },
 ): HotelRow | null {
   // overrideAdults is set when the employee explicitly asks for a different
   // occupancy on a single swap ("غير فندق هانوي لـ 4 أشخاص"). In that case
   // we honor it strictly — no upsize fallback — since the choice was deliberate.
-  const adults = options?.overrideAdults ?? (request.adults || 2);
-  const strictOnly = options?.overrideAdults != null;
+  // lockOccupancyAdults is set on a plain hotel swap ("غير فندق هانوي") to KEEP
+  // the same room capacity as the hotel being replaced — a swap must never
+  // change the occupancy unless the employee asked for it. Also strict (no upsize).
+  const adults = options?.overrideAdults ?? options?.lockOccupancyAdults ?? (request.adults || 2);
+  const strictOnly = options?.overrideAdults != null || options?.lockOccupancyAdults != null;
   const exclude = options?.excludeNames || new Set<string>();
   const isExcluded = (name: string) => exclude.has((name || "").trim().toLowerCase());
   const dateForCheck = request.startDate
@@ -230,12 +233,12 @@ export function pickCheapestHotel(
     }
     return true;
   };
-  // Employee rule: ADULT capacity is the primary constraint, and we ROUND UP —
-  // the room must actually FIT all the adults. Walk from the exact count
-  // upward FIRST (exact, +1, +2, …) and only drop below if no larger room
-  // exists. So "3 بالغين" with rooms [2,4,6] picks the 4-adult room (fits 3),
-  // never the 2-adult one (which can't hold 3). The employee can then bump it
-  // up manually ("غيّرها لفندق يتسع 6") if the family needs more space.
+  // Employee rule: ADULT capacity is the primary constraint, and we ROUND DOWN —
+  // pick the room with the exact adult count, else the LARGEST room that does
+  // NOT exceed the requested count. So "3 بالغين" with rooms [2,4,6] picks the
+  // 2-adult room (الأساس على غرفة أصغر، والموظف يضيف سرير إضافي أو يغيّر الغرفة
+  // لاحقاً)، و"5" يختار غرفة 5 إن وُجدت وإلا 4. نقرّب لأعلى فقط كملاذ أخير لو ما
+  // فيه ولا غرفة بحجم ≤ العدد (مثلاً طلب 1 والمتاح 2 فقط).
   // Within the chosen adult-tier, when children are requested we PREFER
   // rooms that explicitly mention a child slot (but don't require it —
   // the adult capacity match is the deciding factor).
@@ -251,11 +254,9 @@ export function pickCheapestHotel(
       if (!baseFilter(h)) return false;
       return extractAdultsCount(h.occupancy || "") === cap;
     });
-    const order: number[] = [adults];
-    for (let d = 1; d <= 10; d++) {
-      order.push(adults + d);                         // round UP first (fit the adults)
-      if (adults - d >= 1) order.push(adults - d);    // smaller only as last resort
-    }
+    const order: number[] = [];
+    for (let cap = adults; cap >= 1; cap--) order.push(cap);          // العدد ثم لأسفل
+    for (let cap = adults + 1; cap <= adults + 10; cap++) order.push(cap); // لأعلى كملاذ أخير
     for (const cap of order) {
       const atCap = adultsByCap(cap);
       if (atCap.length === 0) continue;
@@ -1599,12 +1600,33 @@ export async function buildLocalProgram(
       if (!hotel) hotel = allHotels.find(h => h.name.trim() === lastForThisStay) || null;
     }
     if (!hotel) {
+      // On a plain swap (excluding the current hotel, no explicit occupancy
+      // request), lock the new hotel to the SAME room capacity as the one being
+      // replaced — so "غير فندق X" never silently jumps 2→4 persons. We read the
+      // prior program's room occupancy for this slot; only applies when the
+      // employee didn't explicitly override occupancy/feature.
+      let lockOccupancyAdults: number | undefined = undefined;
+      if (excludeForThisStay && excludeForThisStay.size > 0
+          && overrideForThisStay == null && !featureForThisStay) {
+        let prevHotel: HotelRow | null = null;
+        if (lastForThisStay) {
+          if (lastRoomTypeForThisStay) {
+            prevHotel = allHotels.find(h =>
+              h.name.trim() === lastForThisStay &&
+              (h.room_type || "").trim() === lastRoomTypeForThisStay) || null;
+          }
+          if (!prevHotel) prevHotel = allHotels.find(h => h.name.trim() === lastForThisStay) || null;
+        }
+        const occ = prevHotel ? extractAdultsCount(prevHotel.occupancy || "") : 0;
+        if (occ > 0) lockOccupancyAdults = occ;
+      }
       hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
         excludeNames: excludeForThisStay,
         overrideAdults: overrideForThisStay,
         overrideStars: overrideStarsForThisStay,
         areaFilter: areaForThisStay || stay.area,
         feature: featureForThisStay,
+        lockOccupancyAdults,
       });
     }
     if (!hotel) {
@@ -1688,12 +1710,21 @@ export async function buildLocalProgram(
     // emit once per city even if multiple stays of the same city all upsize.
     // Skip when the override fired — the employee already specified the size.
     const picked = extractAdultsCount(hotel.occupancy || "");
-    if (overrideForThisStay == null
-        && picked > (request.adults || 2)
+    const reqAdults = request.adults || 2;
+    const cityAr = cityArabicNames[stay.city] || stay.city;
+    if (overrideForThisStay == null && picked > 0
         && !occupancyUpsizeNotes.some(n => n.includes(stay.city))) {
-      occupancyUpsizeNotes.push(
-        `ما لقينا فندق بإشغال ${request.adults} أشخاص في ${cityArabicNames[stay.city] || stay.city}، اخترنا غرفة لـ ${picked} أشخاص (تكفي للمجموعة).`,
-      );
+      if (picked > reqAdults) {
+        // كملاذ أخير: ما فيه غرفة ≤ العدد، اخترنا أكبر منه (تكفي المجموعة).
+        occupancyUpsizeNotes.push(
+          `ما لقينا فندق بإشغال ${reqAdults} أشخاص في ${cityAr}، اخترنا غرفة لـ ${picked} أشخاص (تكفي للمجموعة).`,
+        );
+      } else if (picked < reqAdults) {
+        // التقريب لأسفل: الغرفة أصغر من المجموعة — نبّه الموظف.
+        occupancyUpsizeNotes.push(
+          `غرفة ${cityAr} تتسع ${picked} أشخاص للمجموعة (${reqAdults}) — أضف سرير إضافي أو غيّر الغرفة لو تبغى سعة أكبر.`,
+        );
+      }
     }
     // Pull this stay's days out of the days[] array (next N days)
     const stayDays = days.slice(consumedDays, consumedDays + stay.nights);

@@ -240,7 +240,37 @@ Deno.serve(async (req) => {
       .eq("destination", key)
       .order("arrival_airport").order("days");
     if (error) return json({ error: error.message }, 500);
-    return json({ suggestions: data || [] });
+    let suggestions = (data || []) as Array<Record<string, unknown>>;
+    // إندونيسيا: عمود المطار في الشيت موحّد (Jakarta للكل) فيخلط برامج بالي ببرامج
+    // جاكرتا. نشتق مطار القدوم/المغادرة فعلياً من مدن التوزيع: مناطق بالي → Bali،
+    // مدن جاوة (جاكرتا/بونشاك/باندونغ) → Jakarta — فتنفصل اقتراحات كل مطار.
+    if (key === "indonesia") {
+      const airportOfCity = (c: string): string | null => {
+        const t = c.toLowerCase();
+        if (/بالي|جيمباران|[أا]بود|كوتا|نوسا\s*دوا|سيمينياك|اولو|أولو|دينباسار|denpasar|bali|ubud|kuta|seminyak|jimbaran|nusa/u.test(t)) return "Bali";
+        if (/جاكرتا|جكارتا|بونشاك|بونتشاك|باندون[غج]|بو[غق]ور|jakarta|puncak|bandung|bogor/u.test(t)) return "Jakarta";
+        return null;
+      };
+      const citiesOf = (dist: string): string[] =>
+        String(dist || "").split(/[+\-]/).map(s =>
+          s.replace(/\([^)]*\)/g, " ")               // أزل المناطق بين الأقواس
+           .replace(/[٠-٩\d]+/g, " ")                 // أزل الأرقام
+           .replace(/ليالي|ليلة|ليال|أيام|يوم/g, " ") // أزل وحدات الليالي
+           .trim(),
+        ).filter(Boolean);
+      suggestions = suggestions.map(s => {
+        const cs = citiesOf(String(s.distribution || ""));
+        if (!cs.length) return s;
+        const arr = airportOfCity(cs[0]);
+        const dep = airportOfCity(cs[cs.length - 1]);
+        return {
+          ...s,
+          arrival_airport: arr || s.arrival_airport,
+          departure_airport: dep || s.departure_airport,
+        };
+      });
+    }
+    return json({ suggestions });
   }
 
   const adminAction = url.searchParams.get("admin_action");

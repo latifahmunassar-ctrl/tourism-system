@@ -258,6 +258,66 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 .rf-footer-item .v { font-weight:900; }
 .rf-footer-note { font-size:12px; color:rgba(255,255,255,0.7); margin-top:16px; text-align:center; border-top:1px solid rgba(255,255,255,0.18); padding-top:12px; }
 
+/* ── Build-form panel (يسار: بناء منظّم + تبويب تعديلات) ── */
+.fp-tabs{display:flex;padding:10px 10px 0;gap:6px;border-bottom:1px solid var(--border);flex-shrink:0}
+.fp-tab{flex:1;text-align:center;padding:9px;font-size:12.5px;font-weight:800;color:var(--muted);cursor:pointer;border:1px solid transparent;border-bottom:none;border-radius:10px 10px 0 0;font-family:'Tajawal',sans-serif}
+.fp-tab.active{color:var(--text);background:var(--s2);border-color:var(--border)}
+.fp-tab .badge{background:var(--teal);color:#04201c;font-size:10px;font-weight:800;border-radius:10px;padding:0 6px;margin-right:4px}
+#tab-build{flex:1;overflow-y:auto;padding:14px;display:none;flex-direction:column}
+#tab-build::-webkit-scrollbar{width:5px}
+#tab-build::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:3px}
+#tab-mods{flex:1;min-height:0;flex-direction:column}
+.bf-sec{background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:13px;margin-bottom:12px}
+.bf-sec h3{margin:0 0 2px;font-size:13px;color:var(--gold)}
+.bf-sec .bf-sub{font-size:11px;color:var(--muted);margin-bottom:11px}
+.bf-field{margin-bottom:11px}
+.bf-field label{display:block;font-size:12px;font-weight:700;margin:0 0 5px}
+.bf-req{color:#f87171}
+#tab-build input,#tab-build select,#tab-build textarea{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:10px;font:inherit;font-size:13px;background:var(--bg);color:var(--text);outline:none;font-family:'Tajawal',sans-serif}
+#tab-build input:focus,#tab-build select:focus,#tab-build textarea:focus{border-color:rgba(212,168,67,.5)}
+.bf-row{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.bf-hint{font-size:11px;color:var(--muted);margin-top:5px}
+.bf-hint b{color:var(--gold)}
+.bf-seg{display:flex;gap:7px;flex-wrap:wrap}
+.bf-seg label{flex:1;min-width:60px;border:1px solid var(--border);border-radius:10px;padding:8px;text-align:center;cursor:pointer;margin:0;background:var(--bg);font-weight:700;font-size:12px}
+.bf-seg input{display:none}
+.bf-seg label.on{border-color:var(--teal);background:rgba(42,157,143,.14);color:var(--text)}
+.bf-crow{display:grid;grid-template-columns:1fr 92px 32px;gap:7px;margin-bottom:7px;align-items:center}
+.bf-nights{display:flex;align-items:center;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg)}
+.bf-nights button{border:none;background:var(--s3);color:var(--gold);font-size:16px;width:28px;height:38px;cursor:pointer}
+.bf-nights input{border:none!important;text-align:center;background:transparent!important;padding:0!important}
+.bf-delc{border:none;background:rgba(248,113,113,.13);color:#f87171;border-radius:9px;height:38px;cursor:pointer;font-size:15px}
+.bf-addcity{background:var(--bg);color:var(--gold);border:1px dashed rgba(212,168,67,.4);border-radius:10px;padding:8px;width:100%;cursor:pointer;font-weight:700;font-size:12px;font-family:'Tajawal',sans-serif}
+.bf-build-btn{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#1a1305;border:none;border-radius:12px;padding:13px;width:100%;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 6px 18px rgba(212,168,67,.2);font-family:'Tajawal',sans-serif}
+.bf-build-btn:disabled{opacity:.6;cursor:default}
+.bf-sug{border:1px solid var(--border);border-radius:11px;padding:10px 12px;cursor:pointer;background:var(--bg);margin-bottom:7px}
+.bf-sug.sel{border-color:var(--teal);background:rgba(42,157,143,.12)}
+.bf-sug-d{font-weight:800;color:var(--gold);font-size:12.5px}
+.bf-sug-lab{font-size:10.5px;color:#04201c;background:var(--gold);border-radius:20px;padding:1px 8px;margin-right:6px}
+.bf-sug-dist{font-size:12.5px;margin-top:4px}
+/* ── تبديل الفندق من قائمة منسدلة داخل جدول التسعيرة ── */
+.section-card.hsw-host{overflow:visible}   /* لا يقصّ القائمة المنسدلة */
+.hsw-cell{position:relative;min-width:210px}
+.hsw-cur{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:7px 10px;cursor:pointer;transition:border-color .15s}
+.hsw-cur:hover{border-color:rgba(212,168,67,.55)}
+.hsw-name{font-size:13px}
+.hsw-chev{color:var(--gold);font-size:10px;flex-shrink:0;transition:transform .15s}
+.hsw-cell.open .hsw-chev{transform:rotate(180deg)}
+.hsw-menu{position:absolute;top:calc(100% + 5px);right:0;left:0;background:var(--s2);border:1px solid var(--border);border-radius:11px;box-shadow:0 14px 38px rgba(0,0,0,.55);z-index:50;padding:6px;display:none;max-height:300px;overflow-y:auto;min-width:280px}
+.hsw-cell.open .hsw-menu{display:block}
+.hsw-title{font-size:10.5px;color:var(--muted);padding:5px 8px 7px}
+.hsw-loading{font-size:12px;color:var(--muted);padding:10px 8px;text-align:center}
+.hsw-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 9px;border-radius:8px;cursor:pointer}
+.hsw-opt:hover{background:var(--s3)}
+.hsw-opt.sel{background:rgba(212,168,67,.12);border:1px solid rgba(212,168,67,.35)}
+.hsw-l .hsw-n{font-weight:700;font-size:12.5px}
+.hsw-l .hsw-m{font-size:10.5px;color:var(--muted);margin-top:2px}
+.hsw-chk{color:var(--teal);font-weight:900}
+.hsw-price{font-weight:800;color:var(--gold);font-size:12.5px;white-space:nowrap;text-align:left}
+.hsw-price small{display:block;font-weight:500;color:var(--muted);font-size:9.5px}
+.hsw-delta{font-size:10px;border-radius:20px;padding:0 6px;margin-right:4px}
+.hsw-delta.up{background:rgba(248,113,113,.16);color:#f8a3a3}
+.hsw-delta.down{background:rgba(74,222,128,.16);color:#86efac}
 </style>
 </head>
 <body class="is-locked">
@@ -321,6 +381,87 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 </div>
 
 <div class="chat-panel">
+<div class="fp-tabs">
+<div class="fp-tab active" data-tab="build" onclick="fpTab('build')">📋 بناء تسعيرة</div>
+<div class="fp-tab" data-tab="mods" onclick="fpTab('mods')">💬 تعديلات <span class="badge">شات</span></div>
+</div>
+
+<div id="tab-build" style="display:flex">
+  <div class="bf-sec">
+    <h3>تفاصيل الرحلة</h3>
+    <div class="bf-sub">الوجهة والمدة والأشخاص</div>
+    <div class="bf-field"><label>الوجهة <span class="bf-req">*</span></label>
+      <select id="bf-dest" onchange="bfOnDest()"><option value="">اختر الوجهة…</option></select>
+    </div>
+    <div class="bf-row">
+      <div class="bf-field"><label>عدد البالغين <span class="bf-req">*</span></label><input id="bf-adults" type="number" min="1" max="40" value="2"></div>
+      <div class="bf-field"><label>عدد الأطفال</label><input id="bf-children" type="number" min="0" max="20" value="0"><div class="bf-hint">👶 أقل من 5 سنوات يشارك غرفة الوالدين.</div></div>
+    </div>
+    <div class="bf-row">
+      <div class="bf-field"><label>عدد الأيام <span class="bf-req">*</span></label><input id="bf-days" type="number" min="2" max="30" value="8"></div>
+      <div class="bf-field"><label>تاريخ السفر</label><input id="bf-date" type="date"></div>
+    </div>
+  </div>
+
+  <div class="bf-sec">
+    <h3>توزيع المدن</h3>
+    <div class="bf-sub">اختر اقتراحاً جاهزاً أو خصّص بنفسك — اختر الوجهة أولاً</div>
+    <div class="bf-field"><div class="bf-seg" id="bf-modeSeg">
+      <label class="on"><input type="radio" name="bf-mode" value="ready" checked onchange="bfSetMode('ready',this)">📋 اقتراحات جاهزة</label>
+      <label><input type="radio" name="bf-mode" value="manual" onchange="bfSetMode('manual',this)">✏️ تخصيص</label>
+    </div></div>
+
+    <div id="bf-readyMode">
+      <div class="bf-field" id="bf-airportField">
+        <label>مطار القدوم والمغادرة <span class="bf-req">*</span></label>
+        <select id="bf-airport" onchange="bfShowOptions()"><option value="">اختر الوجهة أولاً…</option></select>
+      </div>
+      <button type="button" class="bf-addcity" style="border-style:solid;margin-bottom:8px" onclick="bfShowOptions()">📋 عرض الخيارات حسب عدد الأيام</button>
+      <div id="bf-sugList"></div>
+      <div class="bf-hint" id="bf-sugHint">اختر الوجهة وعدد الأيام ثم اضغط «عرض الخيارات».</div>
+    </div>
+
+    <div id="bf-manualMode" style="display:none">
+      <div id="bf-cityRows"></div>
+      <button type="button" class="bf-addcity" onclick="bfAddCity()">+ أضف مدينة</button>
+      <div class="bf-hint" style="margin-top:8px">مجموع الليالي: <b id="bf-nsum">0</b> — المتوقّع: <b id="bf-nexp">7</b> ليلة</div>
+    </div>
+  </div>
+
+  <div class="bf-sec">
+    <h3>تفضيلات</h3>
+    <div class="bf-sub">تُراعى عند البناء</div>
+    <div class="bf-field"><label>نوع التنقّل</label>
+      <div class="bf-seg" id="bf-trSeg">
+        <label class="on"><input type="radio" name="bf-tr" value="private" checked onchange="bfPick(this)">🚗 خاص</label>
+        <label><input type="radio" name="bf-tr" value="shared" onchange="bfPick(this)">🚐 مشترك</label>
+      </div>
+      <div class="bf-hint">الافتراضي <b>خاص</b> (سياسة الوكالة).</div>
+    </div>
+    <div class="bf-field"><label>تصنيف الفنادق</label>
+      <div class="bf-seg" id="bf-starSeg">
+        <label><input type="radio" name="bf-stars" value="3" onchange="bfPick(this)">3★</label>
+        <label><input type="radio" name="bf-stars" value="4" onchange="bfPick(this)">4★</label>
+        <label class="on"><input type="radio" name="bf-stars" value="5" checked onchange="bfPick(this)">5★</label>
+        <label><input type="radio" name="bf-stars" value="mixed" onchange="bfPick(this)">مختلط</label>
+      </div>
+    </div>
+    <div class="bf-row">
+      <div class="bf-field"><label>شرائح اتصال</label><input id="bf-sims" type="number" min="0" max="40" value="0"></div>
+      <div class="bf-field"><label>سرير إضافي</label>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;font-size:12.5px;padding-top:6px">
+          <input type="checkbox" id="bf-extrabed-on" style="width:auto"> 🛏️ لكل الفنادق (4★ و5★)
+        </label>
+      </div>
+    </div>
+    <div class="bf-field"><label>ملاحظات</label><textarea id="bf-notes" rows="2" placeholder="أي طلبات خاصة…"></textarea></div>
+  </div>
+
+  <button class="bf-build-btn" id="bf-buildBtn" onclick="buildFromForm()">⚡ ابنِ التسعيرة</button>
+  <div class="bf-hint" style="text-align:center;margin-top:9px">يُغذّى نفس محرّك البناء — التعديلات بعدها من تبويب «تعديلات».</div>
+</div>
+
+<div id="tab-mods" style="display:none">
 <div class="chat-header">
 <div class="status-dot"></div>
 <div class="chat-header-title">المساعد السياحي</div>
@@ -340,8 +481,9 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <button class="qchip" onclick="quickSend('دبي 4 ليالي عائلة 4 أشخاص فندق 5 نجوم مع جولات')">🇦🇪 دبي</button>
 </div>
 <div class="chat-input-wrap">
-<textarea class="chat-input" id="chatInput" placeholder="اكتب تفاصيل العميل هنا..." rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+<textarea class="chat-input" id="chatInput" placeholder="اكتب تعديلك على البرنامج هنا..." rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
 <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
+</div>
 </div>
 </div>
 </div>
@@ -655,6 +797,289 @@ document.getElementById('sendBtn').disabled = false;
 }
 
 function quickSend(t) { document.getElementById('chatInput').value = t; sendMessage(); }
+
+// ── تبديل الفندق من قائمة منسدلة (يمين الشاشة) — يعيد كتابة سطر HOTELS ويعيد البناء محلياً ──
+function hswEsc(s){ return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+function hswToggle(curEl){
+  const cell = curEl.closest('.hsw-cell');
+  const wasOpen = cell.classList.contains('open');
+  document.querySelectorAll('.hsw-cell.open').forEach(c=>c.classList.remove('open'));
+  if(wasOpen) return;
+  cell.classList.add('open');
+  if(!cell.dataset.loaded) hswFetch(cell);
+}
+async function hswFetch(cell){
+  const menu = cell.querySelector('.hsw-menu');
+  menu.innerHTML = '<div class="hsw-loading">جارٍ جلب الفنادق…</div>';
+  const dest = getLine(lastProgramRaw, 'DEST');
+  const region = cell.dataset.region || '';
+  const adults = (parsedData && parsedData.adults) || 2;
+  try{
+    const res = await fetch(SUPABASE_URL, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
+      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: adults })
+    });
+    const data = await res.json();
+    cell.dataset.loaded = '1';
+    hswRender(cell, data.hotels || []);
+  }catch(e){ menu.innerHTML = '<div class="hsw-loading">تعذّر جلب الفنادق</div>'; }
+}
+function hswRender(cell, hotels){
+  cell._hotels = hotels;
+  const menu = cell.querySelector('.hsw-menu');
+  const nights = +cell.dataset.nights || 0;
+  const curName = cell.dataset.name;
+  const curNightly = +cell.dataset.nightly || 0;
+  if(!hotels.length){ menu.innerHTML = '<div class="hsw-loading">ما فيه فنادق بديلة لنفس الإشغال</div>'; return; }
+  const title = `<div class="hsw-title">فنادق ${hswEsc(cell.dataset.region)} — السعر/ليلة واضح قبل الاختيار</div>`;
+  menu.innerHTML = title + hotels.map((h,i)=>{
+    const isCur = h.name === curName;
+    const total = (h.price_per_night||0) * nights;
+    const diff = (h.price_per_night||0) - curNightly;
+    const dCls = diff>0?'up':(diff<0?'down':'');
+    const dTxt = diff===0?'':((diff>0?'+':'−')+Math.abs(diff));
+    return `<div class="hsw-opt ${isCur?'sel':''}" data-idx="${i}">`
+      + `<div class="hsw-l"><div class="hsw-n">${hswEsc(h.name)}${isCur?' <span class="hsw-chk">✓</span>':''}</div>`
+      + `<div class="hsw-m">⭐${h.stars} · ${hswEsc(h.room_type||'')}${h.includes_breakfast?' · إفطار':''}</div></div>`
+      + `<div class="hsw-price">${(h.price_per_night||0).toLocaleString()} ريال ${dTxt?`<span class="hsw-delta ${dCls}">${dTxt}</span>`:''}<small>×${nights} = ${total.toLocaleString()}</small></div>`
+      + `</div>`;
+  }).join('');
+  menu.querySelectorAll('.hsw-opt').forEach(opt=>{
+    opt.addEventListener('click', ()=> hswPick(cell, +opt.dataset.idx));
+  });
+}
+function hswPick(cell, idx){
+  const h = (cell._hotels || [])[idx];
+  if(!h) return;
+  const hidx = +cell.dataset.hidx;
+  if(h.name === cell.dataset.name){ cell.classList.remove('open'); return; }   // نفس الحالي
+  const lines = parseHotelLinesFromRaw(lastProgramRaw);
+  const oldLine = lines[hidx];
+  if(!oldLine) return;
+  const p = oldLine.split('|').map(x=>x.trim());
+  // نُبقي المدينة (p[1]) وعدد الليالي/التواريخ (p[5]) كما هي، ونبدّل الباقي
+  const newLine = [
+    h.name,
+    p[1] || '',
+    (h.stars || p[2] || '') + ' نجوم',
+    h.room_type || p[3] || '',
+    (h.price_per_night || 0) + ' ريال/ليلة',
+    p[5] || '',
+    p[6] || (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : '')
+  ].join(' | ');
+  const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
+  // مزامنة البرنامج المعروض مع history حتى تعمل تعديلات الشات اللاحقة
+  // (مثل «اضف سرير اضافي») على البرنامج بعد التبديل ولا ترجع للقديم.
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].role === 'assistant') { history[i].content = newRaw; break; }
+  }
+  buildReview(newRaw);
+  addMessage('sys', `تم تبديل فندق ${p[1]||''} إلى «${h.name}» — أُعيد احتساب الإجمالي.`);
+}
+function hswSwapRaw(raw, hidx, newLine){
+  const re = new RegExp('(HOTELS:)([\\s\\S]+?)(?=\\n(?:' + DOC_SECTION_HEAD_RE + '):)', 'm');
+  return raw.replace(re, (full, head, bodyText)=>{
+    let c = -1;
+    const nb = bodyText.split('\n').map(line=>{
+      if(line.includes('|')){ c++; if(c===hidx) return line.replace(line.trim(), newLine); }
+      return line;
+    }).join('\n');
+    return head + nb;
+  });
+}
+document.addEventListener('click', e=>{ if(!e.target.closest('.hsw-cell')) document.querySelectorAll('.hsw-cell.open').forEach(c=>c.classList.remove('open')); });
+
+// ── Build-form (يسار) → يركّب نفس نص الموظف ويغذّي sendMessage بلا أي مساس بمحرّك التسعير ──
+function fpTab(t){
+  document.querySelectorAll('.fp-tab').forEach(x=>x.classList.toggle('active', x.dataset.tab===t));
+  document.getElementById('tab-build').style.display = t==='build' ? 'flex' : 'none';
+  document.getElementById('tab-mods').style.display  = t==='mods'  ? 'flex' : 'none';
+}
+const BF_CITIES = {
+  "فيتنام":["هانوي","سابا","ها لونج","دانانج","فوكوك","نها ترانج","دالات","هوتشي مينه"],
+  "ماليزيا":["كوالالمبور","سيلانجور","لانكاوي","بينانج","كاميرون هايلاند"],
+  "تايلاند":["بانكوك","بوكيت","كرابي","شيانغ ماي","باتايا","كوساموي"],
+  "تركيا":["اسطنبول","طرابزون","أوزنجول","أيدر","ريزا","بورصة","سابانجا"],
+  "روسيا":["موسكو","سانت بطرسبرغ","سوتشي"],
+  "البوسنة":["سراييفو","موستار","بيهاتش"],
+  "إندونيسيا":["بالي","جاكرتا","باندونغ","بونشاك"],
+};
+const BF_INTAKE = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake";
+let BF_SUGS = [];        // all ready suggestions for current destination
+let bfShownRows = [];    // suggestions currently rendered as cards
+let bfChosen = null;     // chosen distribution string (ready mode)
+function bfEsc(s){ return String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
+const BF_AIRPORT_AR = {Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي"};
+function bfAirAr(a){ return BF_AIRPORT_AR[a] || a; }
+function bfPairOf(s){ return s.arrival_airport + '|' + s.departure_airport; }
+function bfCurPair(){
+  const sel = document.getElementById('bf-airport');
+  return (sel && sel.value) || (BF_SUGS[0] ? bfPairOf(BF_SUGS[0]) : '');
+}
+function bfMode(){ return (document.querySelector('input[name=bf-mode]:checked')||{}).value || 'ready'; }
+function bfSetMode(m,el){
+  if(el) bfPick(el);
+  document.getElementById('bf-readyMode').style.display  = m==='ready'  ? '' : 'none';
+  document.getElementById('bf-manualMode').style.display = m==='manual' ? '' : 'none';
+}
+async function bfLoadSuggestions(){
+  BF_SUGS = []; bfChosen = null; bfShownRows = [];
+  document.getElementById('bf-sugList').innerHTML = '';
+  const dest = document.getElementById('bf-dest').value;
+  const hint = document.getElementById('bf-sugHint');
+  if(!dest){ hint.textContent = 'اختر الوجهة وعدد الأيام ثم اضغط «عرض الخيارات».'; hint.style.display=''; return; }
+  hint.textContent = 'جارٍ جلب الاقتراحات…'; hint.style.display='';
+  try{
+    const res = await fetch(BF_INTAKE + '?suggestions=' + encodeURIComponent(dest));
+    const d = await res.json(); BF_SUGS = d.suggestions || [];
+  }catch(e){ BF_SUGS = []; }
+  // أزواج المطارات المتاحة لهذه الوجهة — الخانة ظاهرة دائماً ليحدّد الموظف القدوم/المغادرة صراحةً
+  const aSel = document.getElementById('bf-airport');
+  const pairs = [...new Set(BF_SUGS.map(bfPairOf))];
+  if(!pairs.length){
+    aSel.innerHTML = '<option value="">لا مطارات لهذه الوجهة — استخدم «تخصيص»</option>';
+  } else {
+    aSel.innerHTML = pairs.map(p=>{
+      const [a,b] = p.split('|');
+      const lbl = a===b ? `القدوم والمغادرة: ${bfAirAr(a)}` : `القدوم: ${bfAirAr(a)} — المغادرة: ${bfAirAr(b)}`;
+      return `<option value="${bfEsc(p)}">${bfEsc(lbl)}</option>`;
+    }).join('');
+  }
+  if(!BF_SUGS.length){ hint.innerHTML = 'لا توجد اقتراحات جاهزة لهذه الوجهة — استخدم «تخصيص».'; }
+  else { hint.textContent = 'اضغط «عرض الخيارات» لعرض التوزيع المطابق لعدد الأيام.'; }
+}
+function bfDaysAvail(){ const p=bfCurPair(); return [...new Set(BF_SUGS.filter(s=>bfPairOf(s)===p).map(s=>+s.days))].sort((a,b)=>a-b).join('، '); }
+function bfShowOptions(){
+  bfChosen = null;
+  const days = +document.getElementById('bf-days').value||0;
+  const list = document.getElementById('bf-sugList');
+  const hint = document.getElementById('bf-sugHint');
+  if(!BF_SUGS.length){ list.innerHTML=''; hint.innerHTML='لا توجد اقتراحات جاهزة لهذه الوجهة — استخدم «تخصيص».'; hint.style.display=''; return; }
+  if(!days){ list.innerHTML=''; hint.textContent='اكتب عدد الأيام في الأعلى أولاً.'; hint.style.display=''; return; }
+  bfShownRows = BF_SUGS.filter(s=>+s.days===days && bfPairOf(s)===bfCurPair());
+  if(!bfShownRows.length){
+    list.innerHTML='';
+    hint.innerHTML = 'لا يوجد برنامج جاهز لـ ' + days + ' أيام. المتوفّر: <b>' + bfDaysAvail() + '</b> — أو استخدم «تخصيص».';
+    hint.style.display=''; return;
+  }
+  hint.style.display='none';
+  list.innerHTML = bfShownRows.map((s,i)=>`
+    <div class="bf-sug" data-i="${i}">
+      <div><span class="bf-sug-d">${s.days} أيام</span>${s.label?`<span class="bf-sug-lab">${bfEsc(s.label)}</span>`:''}</div>
+      <div class="bf-sug-dist">${bfEsc(s.distribution)}</div>
+    </div>`).join('');
+  const els = [...list.querySelectorAll('.bf-sug')];
+  els.forEach(el=>el.onclick=()=>{
+    els.forEach(x=>x.classList.remove('sel')); el.classList.add('sel');
+    bfChosen = bfShownRows[+el.dataset.i].distribution;
+  });
+  if(els.length===1) els[0].click();   // single match → auto-pick
+}
+// "٢ بانكوك - ٣ بوكيت" أو "2 سيلانجور + 2 لانكاوي" → [{n,city}]
+function bfParseDist(str){
+  const norm = String(str||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+  return norm.split(/[+\-]/).map(s=>s.trim()).map(s=>{
+    const m = s.match(/^(\d+)\s*(?:ليالي|ليلة|أيام)?\s*(.+)$/);
+    return m ? { n:+m[1], city:m[2].trim() } : null;
+  }).filter(Boolean);
+}
+function bfCityOptions(){
+  const d = document.getElementById('bf-dest').value;
+  const l = BF_CITIES[d] || [];
+  return '<option value="">اختر مدينة…</option>' + l.map(c=>`<option>${c}</option>`).join('');
+}
+function bfAddCity(city, nights){
+  city = city || ''; nights = nights || 2;
+  const div = document.createElement('div'); div.className = 'bf-crow';
+  div.innerHTML = `<select class="bf-city">${bfCityOptions()}</select>
+    <div class="bf-nights"><button type="button">−</button><input class="bf-n" type="number" min="1" max="30" value="${nights}"><button type="button">+</button></div>
+    <button type="button" class="bf-delc">×</button>`;
+  document.getElementById('bf-cityRows').appendChild(div);
+  if (city) div.querySelector('.bf-city').value = city;
+  const inp = div.querySelector('.bf-n');
+  const btns = div.querySelectorAll('.bf-nights button');
+  btns[0].onclick = ()=>{ inp.value = Math.max(1,(+inp.value||0)-1); bfSum(); };
+  btns[1].onclick = ()=>{ inp.value = Math.min(30,(+inp.value||0)+1); bfSum(); };
+  inp.oninput = bfSum;
+  div.querySelector('.bf-delc').onclick = ()=>{ div.remove(); bfSum(); };
+  bfSum();
+}
+function bfSum(){
+  let s=0; document.querySelectorAll('#bf-cityRows .bf-n').forEach(i=>s+=(+i.value||0));
+  document.getElementById('bf-nsum').textContent = s;
+}
+function bfExpected(){
+  const d = +document.getElementById('bf-days').value||0;
+  document.getElementById('bf-nexp').textContent = Math.max(0,d-1);
+}
+function bfOnDest(){ document.getElementById('bf-cityRows').innerHTML=''; bfAddCity(); bfLoadSuggestions(); }
+function bfPick(el){
+  const seg = el.closest('.bf-seg');
+  seg.querySelectorAll('label').forEach(l=>l.classList.remove('on'));
+  el.closest('label').classList.add('on');
+}
+function buildFromForm(){
+  const dest = document.getElementById('bf-dest').value;
+  if(!dest){ alert('اختر الوجهة أولاً'); return; }
+  const days = +document.getElementById('bf-days').value||0;
+  if(!days){ alert('اكتب عدد الأيام'); return; }
+  const adults = +document.getElementById('bf-adults').value||0;
+  const children = +document.getElementById('bf-children').value||0;
+  let cities;
+  if(bfMode()==='ready'){
+    if(!bfChosen){ alert('اضغط «عرض الخيارات» واختر توزيعاً جاهزاً، أو بدّل لـ«تخصيص».'); return; }
+    cities = bfParseDist(bfChosen);
+  } else {
+    cities = [...document.querySelectorAll('#bf-cityRows .bf-crow')]
+      .map(r=>({ city:r.querySelector('.bf-city').value, n:+r.querySelector('.bf-n').value||0 }))
+      .filter(c=>c.city && c.n);
+  }
+  if(!cities.length){ alert('أضف مدينة واحدة على الأقل'); return; }
+  const stars = (document.querySelector('input[name=bf-stars]:checked')||{}).value || '5';
+  const tr    = (document.querySelector('input[name=bf-tr]:checked')||{}).value || 'private';
+  const sims  = +document.getElementById('bf-sims').value||0;
+  const extraBedOn = document.getElementById('bf-extrabed-on').checked;
+  const notes = document.getElementById('bf-notes').value.trim();
+  const date  = document.getElementById('bf-date').value;
+
+  const parts = [dest, days + ' أيام'];
+  cities.forEach(c=>parts.push(c.n + ' ' + c.city));
+  let persons = (adults===2 && !children) ? 'زوجين' : (adults + ' أشخاص بالغين');
+  if(children) persons += ' مع ' + children + ' أطفال';
+  parts.push(persons);
+  parts.push(stars==='mixed' ? 'فنادق مختلطة' : ('فنادق ' + stars + ' نجوم'));
+  parts.push(tr==='shared' ? 'تنقل مشترك' : 'تنقل خاص');
+  parts.push('مع جولات وانتقالات');
+  if(sims)  parts.push(sims + ' شرائح اتصال');
+  if(extraBedOn) parts.push('سرير إضافي لكل الفنادق');
+  if(date)  parts.push('بتاريخ ' + date);
+  if(notes) parts.push(notes);
+
+  // الفورم = تسعيرة جديدة دائماً. نبدأ محادثة نظيفة حتى لا يُفسَّر البناء كتعديل
+  // على برنامج سابق (كان يُبقي الوجهة القديمة ويتجاهل طلبات مثل السرير الإضافي).
+  history.length = 0;
+  document.getElementById('messages').innerHTML = '';
+  fpTab('mods');
+  document.getElementById('chatInput').value = parts.join('، ');
+  sendMessage();
+}
+function bfInit(){
+  const sel = document.getElementById('bf-dest');
+  if(!sel) return;
+  Object.keys(BF_CITIES).forEach(d=>{ const o=document.createElement('option'); o.value=d; o.textContent=d; sel.appendChild(o); });
+  document.getElementById('bf-days').addEventListener('input', ()=>{
+    bfExpected();
+    // تغيير الأيام يُبطل أي توزيع جاهز معروض
+    bfChosen = null;
+    document.getElementById('bf-sugList').innerHTML = '';
+    const h = document.getElementById('bf-sugHint');
+    h.textContent = 'اضغط «عرض الخيارات» لعرض التوزيع المطابق لعدد الأيام.'; h.style.display='';
+  });
+  bfExpected(); bfAddCity();
+}
+if(document.readyState!=='loading') bfInit();
+else document.addEventListener('DOMContentLoaded', bfInit);
 
 function getLine(raw, key) {
 const m = raw.match(new RegExp(key + ':(.+)'));
@@ -1234,16 +1659,19 @@ let html = `
 </div>`;
 
 if (hotelsLines.length) {
-html += `<div class="section-card">
+html += `<div class="section-card hsw-host">
 <div class="section-card-header"><div class="section-card-title">🏨 الفنادق</div><div class="section-total">${hotelsTotal.toLocaleString()} ريال</div></div>
 <table class="pricing-table">
 <thead><tr><th>المدينة</th><th>الفندق</th><th>النجوم</th><th>الغرفة</th><th>السعر/ليلة</th><th>الليالي</th><th>الإجمالي</th><th>Extra Bed</th></tr></thead>
-<tbody>${hotelsLines.map(l => {
+<tbody>${hotelsLines.map((l, hidx) => {
 const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l);
 const extraCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest);
 const extraTotal = extraCount > 0 ? (extraBedPricePerNight * (nights||0) * extraCount) : 0;
 const bedTxt = extraCount ? (`${extraCount} × ${extraTotal.toLocaleString()} ريال`) : '—';
-return `<tr><td>${p[1]||''}</td><td><strong>${p[0]||''}${extraCount ? ' + Extra bed / Sofa Bed' : ''}</strong></td><td>${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td><td class="price-cell">${(totalLine + (extraTotal||0)).toLocaleString()} ريال</td><td>${bedTxt}</td></tr>`;
+const nameCell = `<td class="hsw-cell" data-hidx="${hidx}" data-region="${hswEsc(p[1]||'')}" data-name="${hswEsc(p[0]||'')}" data-nightly="${nightly}" data-nights="${nights}">`
+  + `<div class="hsw-cur" onclick="hswToggle(this)"><span class="hsw-name"><strong>${p[0]||''}${extraCount ? ' + Extra bed / Sofa Bed' : ''}</strong></span><span class="hsw-chev">▼</span></div>`
+  + `<div class="hsw-menu"></div></td>`;
+return `<tr><td>${p[1]||''}</td>${nameCell}<td>${p[2]||''}</td><td>${p[3]||''}</td><td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td><td class="price-cell">${(totalLine + (extraTotal||0)).toLocaleString()} ريال</td><td>${bedTxt}</td></tr>`;
 }).join('')}</tbody>
 </table></div>`;
 }

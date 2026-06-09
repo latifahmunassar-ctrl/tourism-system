@@ -2128,13 +2128,86 @@ TOTAL_GROUP:[رقم فقط] | [عدد] اشخاص
 
 CHAT:[جملتين ودية للموظف باللهجة السعودية]`;
 
+// ── list_hotels: فنادق مدينة معيّنة (لقائمة تبديل الفندق في الداشبورد) ──────
+// المدخل: { action:"list_hotels", dest:"ماليزيا", region:"كوالالمبور", occupancy:2 }
+// نُطابق اسم المدينة العربي عبر DEST_CITIES → canonical إنجليزي → عمود location.
+async function handleListHotels(body: {
+  dest?: string; region?: string; occupancy?: number | string;
+}): Promise<Response> {
+  try {
+    const destAr = String(body.dest || "").trim();
+    const region = String(body.region || "").trim();
+    const occ = parseInt(String(body.occupancy ?? "").replace(/[^\d]/g, ""), 10) || 0;
+    const destKey = destAr ? detectDestination([{ role: "user", content: destAr }]) : null;
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    let q = supabase.from("hotels")
+      .select("name,stars,location,price_per_night,room_type,includes_breakfast,occupancy");
+    if (destKey) q = q.ilike("location", `% - ${destKey}`);
+    const { data, error } = await q
+      .order("stars", { ascending: false })
+      .order("price_per_night");
+    if (error) throw error;
+    let rows = (data || []) as Array<Record<string, unknown>>;
+
+    // طابق المدينة عبر نمط هذه المنطقة بالضبط — فنادق نفس المدينة فقط، لا غيرها إطلاقاً.
+    // ملاحظة: عمود location يستخدم نقاطاً أحياناً ("kuala.lumpur") فنوحّد الفواصل أولاً.
+    const norm = (s: string) => s.toLowerCase().replace(/[._]+/g, " ").replace(/\s+/g, " ").trim();
+    const cityDefs = destKey ? (DEST_CITIES[destKey] || []) : [];
+    const matched = cityDefs.find(c => c.pattern.test(region));
+    const cityPartOf = (h: Record<string, unknown>) =>
+      norm(String(h.location || "").split(" - ")[0]);
+    if (matched) {
+      const canon = norm(matched.canonical);
+      rows = rows.filter(h => {
+        const city = cityPartOf(h);
+        // نمط المدينة (يغطي الإنجليزي والعربي) أو تطابق الاسم القانوني حرفياً
+        return matched.pattern.test(city) || city === canon;
+      });
+    } else {
+      // المنطقة لا تطابق أي مدينة معروفة → لا نُرجع فنادق عشوائية من مدن أخرى
+      rows = [];
+    }
+
+    // إشغال (occupancy نصّي) — قارن أول رقم فيه؛ المجهول يبقى.
+    if (occ) {
+      rows = rows.filter(h => {
+        const m = String(h.occupancy || "").match(/\d+/);
+        return !m || parseInt(m[0], 10) === occ;
+      });
+    }
+
+    const hotels = rows.map(h => ({
+      name: h.name,
+      stars: Number(h.stars) || 0,
+      room_type: h.room_type || "",
+      price_per_night: Number(h.price_per_night) || 0,
+      includes_breakfast: !!h.includes_breakfast,
+    }));
+    return new Response(JSON.stringify({ hotels }), { headers: CORS_HEADERS });
+  } catch (e) {
+    return new Response(
+      JSON.stringify({ hotels: [], error: String((e as Error).message) }),
+      { status: 200, headers: CORS_HEADERS },
+    );
+  }
+}
+
 // ── Handler ────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
+  if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
+  if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
 
   try {
-    const { messages, max_tokens = 1200, system: clientSystem } = await req.json();
+    const reqBody = await req.json();
+    // قائمة فنادق مدينة (لقائمة التبديل في الداشبورد) — قبل التحقق من messages.
+    if (reqBody && reqBody.action === "list_hotels") return await handleListHotels(reqBody);
+    const { messages, max_tokens = 1200, system: clientSystem } = reqBody;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(
