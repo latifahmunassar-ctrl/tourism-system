@@ -560,7 +560,9 @@ function extractTours(rows: string[][], destination: string, debug?: { rejects: 
 
   for (let i = header.rowIdx + 1; i < rows.length; i++) {
     const row  = rows[i].map(x => (x || "").trim());
-    const name = row[header.nameCol] || "";
+    // اسم الجولة قد يحوي أسطراً جديدة داخل الخلية (شيت عُمان) فتكسر سطر TOURS
+    // في الشاشة و PDF — نستبدلها بمسافة لتبقى الجولة في سطر واحد.
+    const name = (row[header.nameCol] || "").replace(/\s*[\r\n]+\s*/g, " ").replace(/\s{2,}/g, " ").trim();
     if (!name) continue;
     // تخطّي صفوف تبدو كرؤوس أقسام أخرى
     if (/^hotel(s)?$/i.test(name)) break; // وصلنا قسم الفنادق

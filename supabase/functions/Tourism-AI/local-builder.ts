@@ -1276,7 +1276,7 @@ export function formatProgram(data: ProgramData): string {
     const tourType = isFreeDayRow(tt.tour.name) ? "حر" : "ثقافية";
     return {
       day: tt.day,
-      text: `اليوم ${tt.day} | ${tt.tour.name.trim()} | ${tourType} | ${formatNumber(price)} ريال`,
+      text: `اليوم ${tt.day} | ${tt.tour.name.replace(/\s*[\r\n]+\s*/g, " ").replace(/\s{2,}/g, " ").trim()} | ${tourType} | ${formatNumber(price)} ريال`,
     };
   });
   // Emit a placeholder line for every day not covered by a tour or transfer.
