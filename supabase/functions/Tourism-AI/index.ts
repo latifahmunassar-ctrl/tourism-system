@@ -11,6 +11,7 @@ import { parseTripRequest } from "./local-parser.ts";
 import {
   buildLocalProgram,
   canBuildLocally,
+  pickTourVariantPrice,
   type HotelRow,
   type TourRow,
   type FlightRow,
@@ -2213,6 +2214,57 @@ async function handleListHotels(body: {
   }
 }
 
+// ── list_tours: جولات نفس مدينة الجولة الحالية (لقائمة تبديل الجولة) ──────────
+// المدخل: { action:"list_tours", dest:"فيتنام", current:"<اسم الجولة الحالية>", pax:3 }
+const TOUR_NON_TOUR_PREFIXES = [
+  "استقبال", "الاستقبال", "توديع", "التوديع", "التوجه", "توصيل", "توصیل",
+  "العوده", "العودة", "العود", "الانتقال", "انتقال", "السائق", "حضور السائق",
+  "ذهاب من", "الذهاب من", "للذهاب", "انتهاء", "يوم حر", "يوم تنقّل", "يوم تنقل",
+];
+function isNonTourRow(name: string): boolean {
+  const n = (name || "").trim();
+  return TOUR_NON_TOUR_PREFIXES.some(p => n.startsWith(p));
+}
+async function handleListTours(body: {
+  dest?: string; current?: string; pax?: number | string;
+}): Promise<Response> {
+  try {
+    const destAr = String(body.dest || "").trim();
+    const current = String(body.current || "").trim();
+    const pax = parseInt(String(body.pax ?? "").replace(/[^\d]/g, ""), 10) || 2;
+    const destKey = destAr ? detectDestination([{ role: "user", content: destAr }]) : null;
+    const cityDefs = destKey ? (DEST_CITIES[destKey] || []) : [];
+    // مدينة الجولة الحالية عبر أنماط المدن (اسم الجولة غالباً يذكر المدينة/معلَماً فيها)
+    const curCity = cityDefs.find(c => c.pattern.test(current));
+    if (!curCity) return new Response(JSON.stringify({ tours: [] }), { headers: CORS_HEADERS });
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    let q = supabase.from("tours").select("name,type,price,currency,variants").order("price");
+    if (destKey) q = q.eq("type", destKey);
+    const { data, error } = await q;
+    if (error) throw error;
+    const rows = ((data || []) as TourRow[])
+      .filter(t => !isNonTourRow(t.name))           // جولات فقط — لا انتقالات/أيام حرة
+      .filter(t => curCity.pattern.test(t.name));   // نفس مدينة الجولة الحالية فقط
+    const seen = new Set<string>();
+    const tours: Array<{ name: string; type: string; price: number }> = [];
+    for (const t of rows) {
+      const key = (t.name || "").trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      tours.push({ name: t.name, type: t.type, price: pickTourVariantPrice(t, pax, false) });
+    }
+    tours.sort((a, b) => a.price - b.price);
+    return new Response(JSON.stringify({ tours }), { headers: CORS_HEADERS });
+  } catch (e) {
+    return new Response(JSON.stringify({ tours: [], error: String((e as Error).message) }),
+      { status: 200, headers: CORS_HEADERS });
+  }
+}
+
 // ── Handler ────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
@@ -2224,6 +2276,7 @@ Deno.serve(async (req) => {
     const reqBody = await req.json();
     // قائمة فنادق مدينة (لقائمة التبديل في الداشبورد) — قبل التحقق من messages.
     if (reqBody && reqBody.action === "list_hotels") return await handleListHotels(reqBody);
+    if (reqBody && reqBody.action === "list_tours") return await handleListTours(reqBody);
     const { messages, max_tokens = 1200, system: clientSystem } = reqBody;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {

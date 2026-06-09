@@ -318,6 +318,11 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 .hsw-delta{font-size:10px;border-radius:20px;padding:0 6px;margin-right:4px}
 .hsw-delta.up{background:rgba(248,113,113,.16);color:#f8a3a3}
 .hsw-delta.down{background:rgba(74,222,128,.16);color:#86efac}
+/* تبديل الجولة — يعيد استخدام مظهر قائمة الفنادق (.hsw-menu/.hsw-opt…) */
+.tsw-cell{position:relative;min-width:240px}
+.tsw-cell.open .hsw-menu{display:block}
+.tsw-cell.open .hsw-chev{transform:rotate(180deg)}
+.section-card.tsw-host{overflow:visible}
 </style>
 </head>
 <body class="is-locked">
@@ -895,7 +900,74 @@ function hswSwapRaw(raw, hidx, newLine){
     return head + nb;
   });
 }
-document.addEventListener('click', e=>{ if(!e.target.closest('.hsw-cell')) document.querySelectorAll('.hsw-cell.open').forEach(c=>c.classList.remove('open')); });
+document.addEventListener('click', e=>{ if(!e.target.closest('.hsw-cell') && !e.target.closest('.tsw-cell')) document.querySelectorAll('.hsw-cell.open,.tsw-cell.open').forEach(c=>c.classList.remove('open')); });
+
+// ── تبديل الجولة من قائمة منسدلة (نفس المنطقة فقط) — مثل الفنادق ──
+function tswToggle(curEl){
+  const cell = curEl.closest('.tsw-cell');
+  const wasOpen = cell.classList.contains('open');
+  document.querySelectorAll('.hsw-cell.open,.tsw-cell.open').forEach(c=>c.classList.remove('open'));
+  if(wasOpen) return;
+  cell.classList.add('open');
+  if(!cell.dataset.loaded) tswFetch(cell);
+}
+async function tswFetch(cell){
+  const menu = cell.querySelector('.hsw-menu');
+  menu.innerHTML = '<div class="hsw-loading">جارٍ جلب الجولات…</div>';
+  const dest = getLine(lastProgramRaw, 'DEST');
+  const current = cell.dataset.tname || '';
+  const pax = (parsedData && parsedData.adults) || 2;
+  try{
+    const res = await fetch(SUPABASE_URL, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
+      body: JSON.stringify({ action:'list_tours', dest, current, pax })
+    });
+    const data = await res.json();
+    cell.dataset.loaded = '1';
+    tswRender(cell, data.tours || []);
+  }catch(e){ menu.innerHTML = '<div class="hsw-loading">تعذّر جلب الجولات</div>'; }
+}
+function tswRender(cell, tours){
+  cell._tours = tours;
+  const menu = cell.querySelector('.hsw-menu');
+  const curName = (cell.dataset.tname||'').trim();
+  const curPrice = +cell.dataset.tprice || 0;
+  if(!tours.length){ menu.innerHTML = '<div class="hsw-loading">ما فيه جولات بديلة في نفس المنطقة</div>'; return; }
+  const title = `<div class="hsw-title">جولات نفس المنطقة — السعر واضح قبل الاختيار</div>`;
+  menu.innerHTML = title + tours.map((t,i)=>{
+    const isCur = (t.name||'').trim() === curName;
+    const diff = (t.price||0) - curPrice;
+    const dCls = diff>0?'up':(diff<0?'down':'');
+    const dTxt = diff===0?'':((diff>0?'+':'−')+Math.abs(diff));
+    return `<div class="hsw-opt ${isCur?'sel':''}" data-idx="${i}">`
+      + `<div class="hsw-l"><div class="hsw-n">${hswEsc(t.name)}${isCur?' <span class="hsw-chk">✓</span>':''}</div></div>`
+      + `<div class="hsw-price">${(t.price||0).toLocaleString()} ريال ${dTxt?`<span class="hsw-delta ${dCls}">${dTxt}</span>`:''}</div>`
+      + `</div>`;
+  }).join('');
+  menu.querySelectorAll('.hsw-opt').forEach(opt=>{
+    opt.addEventListener('click', ()=> tswPick(cell, +opt.dataset.idx));
+  });
+}
+function tswPick(cell, idx){
+  try {
+    cell.classList.remove('open');
+    const t = (cell._tours || [])[idx];
+    if(!t) { addMessage('sys','تعذّر تبديل الجولة: لم أجد بيانات الجولة.'); return; }
+    const oldLine = cell.dataset.tline || '';
+    if(!oldLine){ addMessage('sys','تعذّر تبديل الجولة: لم أجد سطر الجولة.'); return; }
+    const p = oldLine.split('|').map(x=>x.trim());
+    if((t.name||'').trim() === (p[1]||'').trim()) return;  // نفس الجولة
+    const newLine = `${p[0]||''} | ${t.name} | ${p[2]||'ثقافية'} | ${t.price||0} ريال`;
+    const newRaw = lastProgramRaw.replace(oldLine, newLine);
+    if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر تطبيق تبديل الجولة — لم يتغيّر البرنامج.'); return; }
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].role === 'assistant') { history[i].content = newRaw; break; }
+    }
+    buildReview(newRaw);
+    addMessage('sys', `تم تبديل الجولة إلى «${t.name}» — أُعيد احتساب الإجمالي.`);
+  } catch(e){ addMessage('sys','خطأ أثناء تبديل الجولة: ' + (e && e.message ? e.message : e)); }
+}
 
 // ── Build-form (يسار) → يركّب نفس نص الموظف ويغذّي sendMessage بلا أي مساس بمحرّك التسعير ──
 function fpTab(t){
@@ -1734,7 +1806,7 @@ return `<tr><td>${p[0]||''}</td><td>${p[1]||''}</td><td><span class="type-badge 
 }
 
 if (toursLines.length) {
-html += `<div class="section-card">
+html += `<div class="section-card tsw-host">
 <div class="section-card-header"><div class="section-card-title">🗺️ الجولات السياحية</div><div class="section-total">${toursTotal.toLocaleString()} ريال</div></div>
 <table class="pricing-table">
 <thead><tr><th>اليوم</th><th>الجولة</th><th>النوع</th><th>سعر الشيت</th><th>المسافرون</th><th>المُعتمد حساباً</th></tr></thead>
@@ -1744,7 +1816,14 @@ const tcMap={'ثقافية':'badge-tour','طبيعية':'badge-nature','بحري
 const tc=tcMap[p[2]]||'badge-tour';
 const { total: tourLineT } = computeTransferTourLineTotal(p, xferTourMeta, '🗺️ جولة');
 const paxCell = (p.length >= 5 && p[4]) ? p[4] : `${persons} (META)`;
-return `<tr><td>${p[0]||''}</td><td><strong>${p[1]||''}</strong></td><td><span class="type-badge ${tc}">${p[2]||''}</span></td><td class="price-cell">${p[3]||''}</td><td>${paxCell}</td><td class="price-cell">${tourLineT.toLocaleString()} ريال</td></tr>`;
+// أيام حرة/تنقّل ليست جولات → نص عادي بلا قائمة. الجولات الحقيقية = قائمة منسدلة.
+const isFree = p[2]==='حر' || /^يوم\s/.test(p[1]||'');
+const tourCell = isFree
+  ? `<td><strong>${p[1]||''}</strong></td>`
+  : `<td class="tsw-cell" data-tname="${hswEsc(p[1]||'')}" data-tprice="${tourLineT}" data-tline="${hswEsc(l)}">`
+    + `<div class="hsw-cur" onclick="tswToggle(this)"><span class="hsw-name"><strong>${p[1]||''}</strong></span><span class="hsw-chev">▼</span></div>`
+    + `<div class="hsw-menu"></div></td>`;
+return `<tr><td>${p[0]||''}</td>${tourCell}<td><span class="type-badge ${tc}">${p[2]||''}</span></td><td class="price-cell">${p[3]||''}</td><td>${paxCell}</td><td class="price-cell">${tourLineT.toLocaleString()} ريال</td></tr>`;
 }).join('')}</tbody>
 </table></div>`;
 }

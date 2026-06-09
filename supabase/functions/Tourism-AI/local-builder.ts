@@ -1116,7 +1116,7 @@ function formatNumber(n: number): string {
   return Math.round(n).toLocaleString("en-US"); // 1,500 with English digits
 }
 
-function pickTourVariantPrice(tour: TourRow, paxCount: number, isShared: boolean): number {
+export function pickTourVariantPrice(tour: TourRow, paxCount: number, isShared: boolean): number {
   const variants = tour.variants || [];
   if (variants.length === 0) return tour.price || 0;
   // Find best matching variant by pax range

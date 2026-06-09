@@ -872,8 +872,11 @@ function parseHotelModifications(lastUserMsg: string): HotelModification[] {
   // Strip it from the remainder so the ordinal scan + city resolution don't
   // see digits left over from the occupancy hint.
   let targetOccupancy: number | null = null;
+  // يلتقط override الإشغال بصيغ متعددة: "لـ 4 أشخاص" / "يتسع 4 أشخاص" /
+  // "(ل)غرفة تتسع 4 أشخاص" / "تتسع الى 4 اشخاص" — يشترط وجود (تتسع/يتسع) أو
+  // أداة ربط (لـ/الى) قبل الرقم حتى لا يلتقط رقماً عابراً.
   const occMatch = remainder.match(
-    /(?:\s+(?:ب\s*)?(?:ال)?فندق)?\s*(?:يتسع\s+)?(?:ل[ـ]?|لـ)\s*(\d{1,2})\s+(?:شخص|أشخاص|اشخاص|بالغ|بالغين|[أا]فراد|كبار|انفس|اشخاص)/iu,
+    /(?:ل?\s*غرف[ةه]\s*)?(?:(?:[يت]تسع\s*)?(?:ل[ـ]?|لـ|[إا]ل[ىي])|[يت]تسع)\s*(\d{1,2})\s+(?:شخص|أشخاص|اشخاص|بالغ|بالغين|[أا]فراد|كبار|انفس)/iu,
   );
   if (occMatch && occMatch.index !== undefined) {
     const n = parseInt(occMatch[1], 10);
