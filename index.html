@@ -2576,9 +2576,7 @@ ${showDetailed ? `
     <div>الإجمالي بعد التحويل: <span style="font-weight:900;">${fmtMoney(displayPrice)} ${displayCurrencyName}</span></div>` : ``}
   </div>
 </div>` : ``}
-${mode === 'no_price'
-    ? `<div class="pdf-disclaimer">⚠️ هذا مستند تنظيمي بدون أسعار وتفاصيل التسعير، ولا يعني بالضرورة توفّر الخدمات أو الغرف لحظتها</div>`
-    : `<div class="pdf-disclaimer">⚠️ هذا عرض سعر ولا يعني بالضرورة توفّر الغرف لحظتها</div>`}
+<div class="pdf-disclaimer">⚠️ هذا عرض سعر ولا يعني بالضرورة توفّر الغرف لحظتها</div>
 <img class="pdf-cover-suitcase" src="${SUITCASE_IMG}" alt=""/>
 </div>
 ${(hotelsLines.length || flightsLines.length || simText || extraCosts.length) ? `
