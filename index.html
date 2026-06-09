@@ -378,7 +378,9 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <button class="ebtn ebtn-pdf" onclick="exportPDF('client')">📄 أفراد</button>
 <button class="ebtn ebtn-nologo" onclick="exportPDF('no_price')">📄 بدون سعر (بدون لوغو)</button>
 <button class="ebtn ebtn-pdf" onclick="exportPDF('detailed')">📄 تفصيلي (لوغو + تفصيل)</button>
-<button class="ebtn ebtn-nologo" id="currencyBtn" onclick="startCurrencyConversion()">💱 تحويل عملة</button>
+<button class="ebtn ebtn-nologo" id="currencyBtn" onclick="toggleCurrencyPicker()">💱 تحويل عملة</button>
+<select id="currencyPicker" onchange="onCurrencyPick()" style="display:none; padding:7px 10px; border-radius:8px; border:1px solid var(--border); background:var(--s2); color:var(--text); font-family:'Tajawal',sans-serif; font-size:12px; font-weight:700; cursor:pointer;"><option value="">💱 بدون تحويل (ريال)</option></select>
+<span id="currencyResult" style="display:none; font-size:13px; font-weight:900; color:var(--gold); background:var(--s2); border:1px solid rgba(212,168,67,0.35); border-radius:8px; padding:6px 12px; white-space:nowrap;"></span>
 <button class="ebtn ebtn-pdf" id="inboxSendBtn" style="display:none;background:linear-gradient(135deg,#0e9d6a,#c41d88);border:none;color:#fff" onclick="inboxSend()">📤 إرسال للشركة</button>
 </div>
 </div>
@@ -704,6 +706,62 @@ TOTAL_GROUP:[رقم فقط] | [عدد] اشخاص
 CHAT:[جملتين ودية للموظف باللهجة السعودية]`;
 
 // ═══════════════ Currency conversion (frontend-only chat flow) ═══════════════
+
+// ── محوّل العملة من قائمة (أسعار الصرف من شيت currency المُزامَن) ──
+let availableCurrencies = [];
+let currenciesLoaded = false;
+function currentFinalGroup(){
+  const profit = parseInt(document.getElementById('profitInput').value) || 0;
+  return (basePrice || 0) + extraCostsTotal() + profit;
+}
+async function loadCurrencies(){
+  if(currenciesLoaded) return;
+  try{
+    const res = await fetch(SUPABASE_URL, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
+      body: JSON.stringify({ action:'currencies' })
+    });
+    const data = await res.json();
+    availableCurrencies = data.currencies || [];
+    currenciesLoaded = true;
+    const sel = document.getElementById('currencyPicker');
+    sel.innerHTML = '<option value="">💱 بدون تحويل (ريال)</option>' +
+      availableCurrencies.map(c => `<option value="${c.code}" data-rate="${c.rate}" data-name="${c.name_ar}">${c.name_ar} (1 = ${c.rate} ريال)</option>`).join('');
+  }catch(e){ /* تجاهل */ }
+}
+async function toggleCurrencyPicker(){
+  if(!parsedData){ addMessage('sys', 'محتاج برنامج مبني أولاً عشان أحوّل العملة.'); return; }
+  await loadCurrencies();
+  if(!availableCurrencies.length){ addMessage('sys', 'ما فيه عملات مُزامَنة — تأكد من شيت currency وزامن.'); return; }
+  const sel = document.getElementById('currencyPicker');
+  sel.style.display = (sel.style.display === 'none') ? '' : 'none';
+}
+function onCurrencyPick(){
+  const sel = document.getElementById('currencyPicker');
+  const box = document.getElementById('currencyResult');
+  const opt = sel.options[sel.selectedIndex];
+  const rate = parseFloat(opt && opt.dataset.rate || '0');
+  const name = (opt && opt.dataset.name) || '';
+  if(!sel.value || !(rate > 0)){
+    currencyConversion = null;
+    box.style.display = 'none';
+    return;
+  }
+  const finalGroupPrice = currentFinalGroup();
+  currencyConversion = { name, rate, originalSAR: finalGroupPrice, converted: finalGroupPrice / rate };
+  refreshCurrencyBox();
+}
+function refreshCurrencyBox(){
+  const box = document.getElementById('currencyResult');
+  if(!box) return;
+  if(!currencyConversion){ box.style.display = 'none'; return; }
+  const finalGroupPrice = currentFinalGroup();
+  currencyConversion.originalSAR = finalGroupPrice;
+  currencyConversion.converted = finalGroupPrice / currencyConversion.rate;
+  box.textContent = `= ${currencyConversion.converted.toLocaleString(undefined,{maximumFractionDigits:2})} ${currencyConversion.name}`;
+  box.style.display = '';
+}
 
 function startCurrencyConversion() {
   if (!parsedData) {
@@ -1784,6 +1842,8 @@ parsedData = { dest, meta, dateFrom, dateTo, client, clientCode, extraBedCitiesL
 currencyConversion = null;
 currencyAwaiting = null;
 currencyPending = null;
+// صفّر اختيار العملة في الواجهة (برنامج جديد = بدون تحويل افتراضياً)
+{ const _cpk = document.getElementById('currencyPicker'); if(_cpk){ _cpk.value=''; _cpk.style.display='none'; } const _crb = document.getElementById('currencyResult'); if(_crb) _crb.style.display='none'; }
 // تصفير التكاليف الإضافية اليدوية فقط عند تغيير الوجهة (رحلة لبلد آخر) حتى لا
 // تتسرب من رحلة لأخرى. تعديلات نفس البرنامج (مثل "اضف شرائح" أو تبديل فندق)
 // تحافظ عليها بدل ما تمسحها.
@@ -1952,6 +2012,7 @@ const profit = parseInt(document.getElementById('profitInput').value)||0;
 const newGroup = basePrice + extraCostsTotal() + profit;
 const el = document.getElementById('totalGroupEl');
 if(el) el.textContent = newGroup.toLocaleString()+' ريال';
+refreshCurrencyBox();   // حدّث صندوق العملة المحوّلة لو فيه تحويل مفعّل
 }
 
 // ── تكاليف إضافية يدوية ───────────────────────────────────────────────

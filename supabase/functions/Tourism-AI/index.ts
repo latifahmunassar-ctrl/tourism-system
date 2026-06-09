@@ -2329,6 +2329,23 @@ async function handleProfitMargins(body: { dest?: string }): Promise<Response> {
   }
 }
 
+// ── currencies: قائمة العملات وأسعار الصرف (لمحوّل العملة في الواجهة) ──────────
+async function handleCurrencies(): Promise<Response> {
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const { data, error } = await supabase.from("currencies")
+      .select("code,name_ar,rate").order("name_ar");
+    if (error) throw error;
+    return new Response(JSON.stringify({ currencies: data || [] }), { headers: CORS_HEADERS });
+  } catch (e) {
+    return new Response(JSON.stringify({ currencies: [], error: String((e as Error).message) }),
+      { status: 200, headers: CORS_HEADERS });
+  }
+}
+
 // ── Handler ────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
@@ -2342,6 +2359,7 @@ Deno.serve(async (req) => {
     if (reqBody && reqBody.action === "list_hotels") return await handleListHotels(reqBody);
     if (reqBody && reqBody.action === "list_tours") return await handleListTours(reqBody);
     if (reqBody && reqBody.action === "profit_margins") return await handleProfitMargins(reqBody);
+    if (reqBody && reqBody.action === "currencies") return await handleCurrencies();
     const { messages, max_tokens = 1200, system: clientSystem } = reqBody;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {

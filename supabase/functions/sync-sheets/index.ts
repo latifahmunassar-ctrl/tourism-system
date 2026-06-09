@@ -1018,6 +1018,35 @@ function extractProfitMargins(rows: string[][], destination: string): Array<{
   return out;
 }
 
+// ── مزامنة أسعار العملات من تبويب "currency" (نفس spreadsheet الرئيسي) ──
+// كل صف: "SAR - OMR" | 10  → code=OMR، rate=10 (كم ريال سعودي لكل وحدة).
+async function syncCurrencies(supabase: any, token: string, spreadsheetId: string): Promise<number> {
+  const CODE_AR: Record<string, string> = {
+    OMR: "ريال عماني", USD: "دولار أمريكي", UAE: "درهم إماراتي", AED: "درهم إماراتي",
+    EUR: "يورو", GBP: "جنيه إسترليني", KWD: "دينار كويتي", BHD: "دينار بحريني",
+    QAR: "ريال قطري", EGP: "جنيه مصري", JOD: "دينار أردني", TRY: "ليرة تركية",
+    THB: "بات تايلندي", MYR: "رينغيت ماليزي", IDR: "روبية إندونيسية", RUB: "روبل روسي",
+  };
+  const rows = await readSheetRange(token, spreadsheetId, "currency!A1:D100");
+  const out: Array<{ code: string; name_ar: string; rate: number }> = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const label = (row[0] || "").toString().trim();
+    const rate = parseFloat((row[1] ?? "").toString().replace(/[^\d.]/g, ""));
+    const m = label.match(/SAR\s*[-–—]?\s*([A-Za-z]{2,4})/i);
+    if (!m || !rate || isNaN(rate) || rate <= 0) continue;
+    const code = m[1].toUpperCase();
+    if (seen.has(code)) continue;
+    seen.add(code);
+    out.push({ code, name_ar: CODE_AR[code] || code, rate });
+  }
+  if (out.length > 0) {
+    await supabase.from("currencies").delete().neq("code", "___none___");
+    await supabase.from("currencies").insert(out);
+  }
+  return out.length;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
   if (req.method !== "POST")
@@ -1431,6 +1460,10 @@ Deno.serve(async (req) => {
       chatAnswersError = (e as Error).message;
     }
 
+    // أسعار العملات (تبويب currency في نفس الـ spreadsheet)
+    let currenciesSynced = 0;
+    try { currenciesSynced = await syncCurrencies(supabase, token, spreadsheetId); } catch (_e) { /* صامت */ }
+
     const duration = Date.now() - startTime;
 
     await supabase.from("sync_logs").insert({
@@ -1450,6 +1483,7 @@ Deno.serve(async (req) => {
         chat_answers: chatAnswersSynced,
         chat_answers_pruned: chatAnswersDeleted,
         chat_answers_error: chatAnswersError,
+        currencies: currenciesSynced,
         details,
         duration_ms: duration,
         debug: debugInfo?.rejects,
