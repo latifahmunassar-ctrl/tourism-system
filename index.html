@@ -840,10 +840,17 @@ function applyAutoProfit(){
     if(msg !== lastAutoProfitMsg){ addMessage('sys', msg); lastAutoProfitMsg = msg; }
     return;
   }
-  lastAutoProfitMsg = '';
   const profit = customerType === 'company' ? (+tier.profit_company || 0) : (+tier.profit_individual || 0);
   inp.value = profit;
   updateProfit();
+  // الشريحة موجودة لكن ربح هذا النوع غير مُدخَل في الشيت (خانة فاضية) → نبّه بدل صفر صامت.
+  if(profit === 0){
+    const typeAr = customerType === 'company' ? 'الشركات' : 'الأفراد';
+    const msg2 = `⚠️ ربح ${typeAr} لشريحة ${(+tier.cost_min).toLocaleString()}–${(+tier.cost_max).toLocaleString()} غير مُدخَل في شيت هذه الوجهة — أضِفه في الشيت وزامن، أو اكتب الربح يدوياً.`;
+    if(msg2 !== lastAutoProfitMsg){ addMessage('sys', msg2); lastAutoProfitMsg = msg2; }
+  } else {
+    lastAutoProfitMsg = '';
+  }
 }
 function setCustomerType(t){
   customerType = t;
