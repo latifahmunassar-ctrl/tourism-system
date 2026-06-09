@@ -878,8 +878,11 @@ function extractSuggestions(
   // and any non-paren cruft (dots, dashes) from the label. Dots between the
   // digit and 'ايام' are absorbed by the \s*[.\s]* allowance.
   const COUNTRY_WORDS = /(?:تايلاند|تيلاند|فيتنام|ماليزيا|البوسنه|البوسنة|تركيا|اندونيسيا|روسيا|ع[ُّ]?مان|دبي|الإمارات|الامارات)/u;
-  const DAY_RE_DIGIT_FIRST = /(\d{1,2})[\s.]*(?:[أا]يام|يوم)([^:]*)(?::|$)/u;
-  const DAY_RE_DIGIT_LAST  = /(?:[أا]يام|يوم)[\s.]*(\d{1,2})([^:]*)(?::|$)/u;
+  // "أيام" متسامح: يقبل ألف ممدودة (آ) ومسافة داخل الكلمة ("آيا م" — إملاء شيت
+  // فيتنام لترويسات 12 يوم) و"ايام/أيام" و"يوم".
+  const DAY_WORD = "(?:[أاآ]\\s?ي\\s?ا\\s?م|يوم)";
+  const DAY_RE_DIGIT_FIRST = new RegExp(`(\\d{1,2})[\\s.]*${DAY_WORD}([^:]*)(?::|$)`, "u");
+  const DAY_RE_DIGIT_LAST  = new RegExp(`${DAY_WORD}[\\s.]*(\\d{1,2})([^:]*)(?::|$)`, "u");
   // Country-suffix shape with NO "أيام" word — "10 تركيا" (Turkey rows 10-12
   // drop "أيام" that the 6-9 day rows include). Anchored at the start and gated
   // on the country word so it can't swallow a distribution line ("3 اسطنبول…",
