@@ -9,10 +9,11 @@
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 :root {
---bg:#0F1923; --s1:#162030; --s2:#1C2B3A; --s3:#243347;
---border:rgba(255,255,255,0.07);
---gold:#D4A843; --gold2:#F0C96A;
---teal:#2A9D8F; --text:#E8EDF2; --muted:rgba(232,237,242,0.42);
+/* ثيم فاتح (نعناعي/أخضر) مطابق لداشبورد الشركات */
+--bg:#eef6f2; --s1:#ffffff; --s2:#f4faf7; --s3:#e9f3ee;
+--border:rgba(13,79,74,0.13);
+--gold:#a67c1b; --gold2:#d4a843;
+--teal:#0e9d6a; --text:#1d2b2a; --muted:#6b7c7a;
 --r:12px; --blue1:#1a3a8f; --blue3:#2952c4;
 }
 body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
@@ -23,7 +24,7 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .brand-sub { font-size:10px; color:var(--muted); }
 .user-pill { background:var(--s2); border:1px solid var(--border); border-radius:20px; padding:5px 12px 5px 7px; display:flex; align-items:center; gap:7px; font-size:12px; color:var(--muted); }
 .logout-btn { border:1px solid var(--border); background:transparent; color:var(--muted); padding:7px 10px; border-radius:12px; font-weight:800; cursor:pointer; }
-.logout-btn:hover { background:rgba(255,255,255,0.04); }
+.logout-btn:hover { background:rgba(0,0,0,0.04); }
 .avatar { width:24px; height:24px; border-radius:50%; background:linear-gradient(135deg,var(--teal),#1a7a70); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; color:#fff; }
 .layout { display:flex; flex:1; overflow:hidden; }
 .chat-panel { display:flex; flex-direction:column; width:380px; flex-shrink:0; border-left:1px solid var(--border); background:var(--s1); }
@@ -33,7 +34,7 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 @keyframes pulse2 { 0%,100%{opacity:1} 50%{opacity:0.5} }
 .messages { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px; scroll-behavior:smooth; }
 .messages::-webkit-scrollbar { width:4px; }
-.messages::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:2px; }
+.messages::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.1); border-radius:2px; }
 .msg { display:flex; gap:8px; animation:msgIn 0.3s ease both; }
 @keyframes msgIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
 .msg.user { flex-direction:row-reverse; }
@@ -90,10 +91,10 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .section-card-title { font-size:13px; font-weight:800; display:flex; align-items:center; gap:8px; }
 .section-total { font-size:13px; font-weight:800; color:var(–gold); }
 .pricing-table { width:100%; border-collapse:collapse; }
-.pricing-table th { background:rgba(255,255,255,0.04); font-size:11px; font-weight:700; color:var(–muted); padding:8px 12px; text-align:right; border-bottom:1px solid var(–border); }
-.pricing-table td { font-size:12px; padding:9px 12px; border-bottom:1px solid rgba(255,255,255,0.04); color:var(–text); }
+.pricing-table th { background:rgba(0,0,0,0.04); font-size:11px; font-weight:700; color:var(–muted); padding:8px 12px; text-align:right; border-bottom:1px solid var(–border); }
+.pricing-table td { font-size:12px; padding:9px 12px; border-bottom:1px solid rgba(0,0,0,0.04); color:var(–text); }
 .pricing-table tr:last-child td { border-bottom:none; }
-.pricing-table tr:hover td { background:rgba(255,255,255,0.02); }
+.pricing-table tr:hover td { background:rgba(0,0,0,0.02); }
 .price-cell { font-weight:800; color:var(–gold); white-space:nowrap; }
 .type-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:6px; white-space:nowrap; }
 .badge-hotel { background:rgba(42,157,143,0.2); color:#2A9D8F; }
@@ -106,7 +107,7 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .badge-sea { background:rgba(56,189,248,0.2); color:#38bdf8; }
 .badge-free { background:rgba(251,191,36,0.18); color:#fbbf24; }
 .summary-card { background:var(–s2); border:1px solid var(–border); border-radius:12px; padding:16px; margin-bottom:14px; }
-.summary-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05); font-size:13px; }
+.summary-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(0,0,0,0.05); font-size:13px; }
 .summary-row:last-child { border-bottom:none; }
 .summary-label { color:var(–muted); }
 .summary-val { font-weight:700; }
