@@ -3168,6 +3168,8 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
 #inboxOverlay .ibhd{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #dcede6;background:#f2faf6;border-radius:18px 18px 0 0}
 #inboxOverlay .ibhd b{font-size:16px;color:#0e9d6a}
 #inboxOverlay .ibx-x{background:none;border:none;color:#6b7c7a;font-size:22px;cursor:pointer}
+.ib-staff{padding:10px 14px 0;font-size:13px;font-weight:800;color:#0e5a40;display:flex;align-items:center;gap:8px}
+.ib-staff select{flex:1;padding:8px 10px;border:1px solid #cfe3d8;border-radius:9px;font:inherit;font-weight:700;background:#f3fbf7}
 .ib-tabs{display:flex;gap:8px;padding:10px 14px 0}
 .ib-tab{flex:1;background:#f2faf6;border:1px solid #dcede6;border-bottom:none;border-radius:11px 11px 0 0;padding:10px;font:inherit;font-weight:800;font-size:13px;color:#6b7c7a;cursor:pointer}
 .ib-tab.active{background:#fff;color:#0e9d6a;box-shadow:0 -2px 0 #0e9d6a inset}
@@ -3194,6 +3196,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
 <div id="inboxOverlay" onclick="if(event.target===this)inboxClose()">
   <div class="ibx">
     <div class="ibhd"><b>📥 طلبات الشركات</b><button class="ibx-x" onclick="inboxClose()">×</button></div>
+    <div class="ib-staff">👤 الموظف: <select id="ibStaffSelect" onchange="ibStaffSet()"><option value="">— اختر اسمك —</option></select></div>
     <div class="ib-tabs">
       <button id="ibTabIn" class="ib-tab active" onclick="ibTab('in')">📥 الواردة <span class="ib-cnt" id="ibCountIn">0</span></button>
       <button id="ibTabSent" class="ib-tab" onclick="ibTab('sent')">✅ المُرسلة <span class="ib-cnt" id="ibCountSent">0</span></button>
@@ -3225,9 +3228,22 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     if(!ibSecret()) return;
     document.getElementById('inboxOverlay').style.display='flex';
     document.getElementById('inboxList').innerHTML='<div class="ib-empty">جارٍ التحميل…</div>';
+    ibLoadStaff();
     try{ ibRender(await ibList()); }
     catch(e){ document.getElementById('inboxList').innerHTML='<div class="ib-empty">تعذّر التحميل — تأكد من المفتاح الإداري.</div>'; }
   };
+  // قائمة أسماء الموظفين (تديرها المالكة) — يختار الموظف اسمه
+  async function ibLoadStaff(){
+    const sel=document.getElementById('ibStaffSelect'); if(!sel) return;
+    const saved=localStorage.getItem('alezz_staff_name')||'';
+    try{
+      const r=await fetch(IB_BASE+'?admin_action=staff_list',{headers:ibH()});
+      const d=await r.json(); const list=d.staff||[];
+      sel.innerHTML='<option value="">— اختر اسمك —</option>'+list.map(s=>`<option value="${ibEsc(s.name)}">${ibEsc(s.name)}</option>`).join('');
+      if(saved && list.some(s=>s.name===saved)) sel.value=saved;
+    }catch(_){ }
+  }
+  window.ibStaffSet=function(){ const sel=document.getElementById('ibStaffSelect'); if(sel) localStorage.setItem('alezz_staff_name', sel.value||''); };
   window.inboxClose=function(){document.getElementById('inboxOverlay').style.display='none';};
   function ibFmtTime(iso){ if(!iso) return ''; const d=new Date(iso); if(isNaN(d.getTime())) return ''; const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} - ${p(d.getHours())}:${p(d.getMinutes())}`; }
   window.ibTab=function(which){
@@ -3366,6 +3382,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
   window.inboxSend=async function(){
     if(!ibState){alert('ما فيه طلب شركة مربوط');return;}
     if(!lastProgramRaw||!/TOTAL_GROUP:/.test(lastProgramRaw)){alert('ابنِ البرنامج أولاً (اضغط إرسال في الشات).');return;}
+    if(!ibStaffName()){ alert('اختر اسمك من قائمة «👤 الموظف» في أعلى صندوق الطلبات أولاً.'); const s=document.getElementById('ibStaffSelect'); if(s){ inboxOpen(); setTimeout(()=>s.focus(),300);} return; }
     const profit=parseInt((document.getElementById('profitInput')||{}).value)||0;
     const extra=(typeof extraCostsTotal==='function')?extraCostsTotal():0;
     const finalGroup=(basePrice||0)+extra+profit;
@@ -3397,9 +3414,10 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     }catch(e){alert('تعذّر الإرسال: '+(e.message||e));}
   };
   function ibStaffName(){
-    let n=localStorage.getItem('alezz_staff_name')||'';
-    if(!n){ const p=prompt('اسمك (يُسجّل كموظف أرسل الطلب):',''); if(p){ n=p.trim(); localStorage.setItem('alezz_staff_name',n); } }
-    return n;
+    const sel=document.getElementById('ibStaffSelect');
+    let n=(sel&&sel.value)||localStorage.getItem('alezz_staff_name')||'';
+    if(n) localStorage.setItem('alezz_staff_name',n);
+    return n.trim();
   }
   // passive badge refresh on load (no prompt)
   if(localStorage.getItem('alezz_admin_secret')){

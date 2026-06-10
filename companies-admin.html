@@ -40,6 +40,11 @@
   .ac-item.has-edit{border-color:#f0dcae;box-shadow:0 0 0 2px rgba(212,168,67,.15)}
   #listHd:not(:empty){margin:0 10px 8px}
   .hd-edit{display:block;background:#fff7e6;color:#b45309;border:1px solid #f0dcae;border-radius:10px;padding:8px 11px;font-size:12px;font-weight:800;text-align:center}
+  .staff-add{display:flex;gap:8px;margin-bottom:12px}
+  .staff-add input{flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fcfdfd}
+  .staff-list{display:flex;flex-wrap:wrap;gap:8px}
+  .staff-chip{display:inline-flex;align-items:center;gap:8px;background:#e9f7f1;border:1px solid #b8e0d0;color:#0e5a40;border-radius:20px;padding:6px 12px;font-weight:700;font-size:13px}
+  .staff-chip button{background:#fff;border:1px solid #d6b3c8;color:var(--brand2);border-radius:50%;width:20px;height:20px;cursor:pointer;font-weight:900;line-height:1}
   .acbdg{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:800;white-space:nowrap;margin-inline-start:auto}
   .s-pending{background:#fef3c7;color:var(--warn)}.s-approved{background:#dcfce7;color:var(--ok)}.s-rejected{background:#fee2e2;color:var(--err)}.s-suspended{background:#e5e7eb;color:#555}
   .ac-empty{color:var(--muted);text-align:center;padding:40px 10px}
@@ -98,6 +103,16 @@
     <div class="panel"><h3>الشركات <small>قيد المراجعة + معتمدة</small></h3><div id="listHd"></div><div id="list"><div class="ac-empty">جارٍ التحميل…</div></div></div>
     <div class="panel"><h3>ملف الشركة</h3><div id="detail"><div class="ac-empty">اختاري شركة من القائمة</div></div></div>
   </div>
+
+  <div class="panel" style="margin-top:14px">
+    <h3>👥 أسماء الموظفين <small>تظهر كقائمة يختار منها الموظف عند «إرسال للشركة»</small></h3>
+    <div class="staff-add">
+      <input id="staffName" placeholder="اسم الموظف الجديد" onkeydown="if(event.key==='Enter')addStaff()">
+      <button class="ac-btn ok" onclick="addStaff()">➕ إضافة</button>
+    </div>
+    <div id="staffList" class="staff-list"><div class="ac-empty">جارٍ التحميل…</div></div>
+    <div class="ac-msg" id="staffMsg"></div>
+  </div>
 </div>
 
 <script>
@@ -122,7 +137,28 @@ async function login(){
   show();
 }
 function logout(){ localStorage.removeItem('alezz_owner_secret'); SECRET=''; location.reload(); }
-function show(){ $('loginView').style.display='none'; $('appView').style.display='block'; loadList(); }
+function show(){ $('loginView').style.display='none'; $('appView').style.display='block'; loadList(); loadStaff(); }
+// ── إدارة أسماء الموظفين ──
+function staffFlash(t,ok){const m=$('staffMsg');if(!m)return;m.textContent=t;m.className='ac-msg '+(ok?'ok':'err');m.style.display='block';setTimeout(()=>{m.style.display='none'},2500);}
+async function loadStaff(){
+  try{
+    const r=await fetch(BASE+'?admin_action=staff_list',{headers:H()});
+    const d=await r.json(); const list=d.staff||[];
+    $('staffList').innerHTML=list.length?list.map(s=>`<span class="staff-chip">${esc(s.name)} <button title="حذف" onclick="removeStaff('${s.id}','${esc(s.name)}')">✕</button></span>`).join(''):'<div class="ac-empty">لا أسماء بعد — أضيفي أول اسم</div>';
+  }catch(_){ $('staffList').innerHTML='<div class="ac-empty">تعذّر التحميل</div>'; }
+}
+async function addStaff(){
+  const nm=($('staffName').value||'').trim(); if(!nm) return;
+  const r=await fetch(BASE+'?admin_action=staff_add',{method:'POST',headers:H(),body:JSON.stringify({name:nm})});
+  const d=await r.json();
+  if(d.ok){ $('staffName').value=''; staffFlash('أُضيف ✅',true); loadStaff(); } else staffFlash(d.error||'فشل',false);
+}
+async function removeStaff(id,nm){
+  if(!confirm('حذف «'+nm+'» من قائمة الموظفين؟')) return;
+  const r=await fetch(BASE+'?admin_action=staff_remove&id='+id,{method:'POST',headers:H()});
+  const d=await r.json();
+  if(d.ok){ staffFlash('حُذف ✅',true); loadStaff(); } else staffFlash(d.error||'فشل',false);
+}
 
 async function loadList(){
   const r=await fetch(BASE+'?admin_action=companies',{headers:H()});

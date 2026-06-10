@@ -547,10 +547,39 @@ Deno.serve(async (req) => {
   if (adminAction) {
     // Company-account management is OWNER-only (separate private dashboard) and
     // uses COMPANIES_ADMIN_SECRET. The staff request inbox keeps CLIENT_ADMIN_SECRET.
-    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate"].includes(adminAction);
+    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove"].includes(adminAction);
     const expected = (Deno.env.get(ownerOnly ? "COMPANIES_ADMIN_SECRET" : "CLIENT_ADMIN_SECRET") || "").trim();
     const got = (req.headers.get("x-admin-secret") || "").trim();
+
+    // staff_list: readable by either dashboard (owner manages, staff picks name)
+    if (adminAction === "staff_list") {
+      const staffSec = (Deno.env.get("CLIENT_ADMIN_SECRET") || "").trim();
+      const ownerSec = (Deno.env.get("COMPANIES_ADMIN_SECRET") || "").trim();
+      if (!got || (got !== staffSec && got !== ownerSec)) return json({ error: "unauthorized" }, 401);
+      const { data } = await supabase.from("staff_members").select("id, name").eq("active", true).order("name");
+      return json({ staff: data || [] });
+    }
+
     if (!expected || got !== expected) return json({ error: "unauthorized" }, 401);
+
+    // owner: manage staff names (used in the «إرسال للشركة» dropdown)
+    if (adminAction === "staff_add") {
+      const body = await req.json().catch(() => ({} as Record<string, any>));
+      const nm = String(body.name || "").trim();
+      if (!nm) return json({ error: "الاسم مطلوب" }, 400);
+      const { data: dup } = await supabase.from("staff_members").select("id").eq("name", nm).eq("active", true).maybeSingle();
+      if (dup) return json({ error: "الاسم موجود مسبقاً" }, 409);
+      const { error } = await supabase.from("staff_members").insert({ name: nm });
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+    if (adminAction === "staff_remove") {
+      const sid = url.searchParams.get("id") || "";
+      if (!sid) return json({ error: "id required" }, 400);
+      const { error } = await supabase.from("staff_members").update({ active: false }).eq("id", sid);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
 
     // owner "view as company": mint a separate impersonation token + return it,
     // so the owner can open the company portal without its password.
