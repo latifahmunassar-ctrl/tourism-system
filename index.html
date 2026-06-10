@@ -3367,13 +3367,17 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     const extra=(typeof extraCostsTotal==='function')?extraCostsTotal():0;
     const finalGroup=(basePrice||0)+extra+profit;
     if(!confirm(`إرسال العرض لشركة «${ibState.company}» بإجمالي ${finalGroup.toLocaleString('en-US')} ريال؟\nالشركة بتشوف البرنامج + هذا الإجمالي فقط (بدون أي تسعير داخلي).`)) return;
+    // تنبيه: عملة الشركة ليست ريال والموظف ما طبّق «💱 تحويل عملة» → السعر بيُرسل بالريال
+    const _hasConv=(typeof currencyConversion!=='undefined' && currencyConversion && currencyConversion.rate);
+    if(ibState.currency && ibState.currency!=='SAR' && !_hasConv){
+      const _cn={USD:'دولار',EUR:'يورو',AED:'درهم',OMR:'ريال عماني',KWD:'دينار كويتي',EGP:'جنيه مصري'}[ibState.currency]||ibState.currency;
+      if(!confirm(`⚠️ عملة الشركة «${_cn}» لكن ما طبّقت «💱 تحويل عملة».\nلو كمّلت بيُرسل السعر بالريال. تبي تكمل بالريال؟\n(إلغاء = ارجع وحوّل للعملة أولاً)`)) return;
+    }
     const by=ibStaffName();   // اسم الموظف المرسِل (يُسأل مرة ويُحفظ)
-    // سعر البرنامج للشركة بعملتها (يظهر للشركة في «طلباتي» لتضيف ربحها). الموظف يحوّل عبر «💱 تحويل عملة».
-    const IB_CUR={SAR:'ريال سعودي',USD:'دولار',EUR:'يورو',AED:'درهم إماراتي',OMR:'ريال عماني',KWD:'دينار كويتي',EGP:'جنيه مصري'};
-    const curName=IB_CUR[ibState.currency]||ibState.currency||'ريال';
-    const cpRaw=prompt(`💰 سعر البرنامج للشركة بعملتها (${curName}):\nالشركة تشوفه في «طلباتي» وتضيف ربحها. اتركه فارغاً لو ما تبين سعراً الآن.`, '');
-    if(cpRaw===null) return;   // ألغى الإرسال
-    const companyPrice=(cpRaw.trim()==='')?null:(parseFloat(cpRaw.replace(/[^\d.]/g,''))||null);
+    // السعر للشركة تلقائياً = الإجمالي (التكلفة + ربح العز) — بعملة الشركة لو طُبّق «💱 تحويل عملة»، وإلا بالريال.
+    const companyPrice = _hasConv
+      ? Math.round((finalGroup / currencyConversion.rate)*100)/100
+      : finalGroup;
     const prog=lastProgramRaw.replace(/TOTAL_GROUP:\s*[\d.,]+/, 'TOTAL_GROUP:'+finalGroup);
     try{
       let res=await fetch(IB_BASE+'?admin_action=update_program&id='+ibState.id,{method:'POST',headers:ibH(),body:JSON.stringify({built_program:prog})});
