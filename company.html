@@ -32,7 +32,7 @@
   .prof .lg img{width:100%;height:100%;object-fit:cover}
   .prof .nm{font-weight:800;font-size:15px}.prof .mt{color:var(--muted);font-size:12.5px;margin-top:3px}
   .prof .out{background:#fff;border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:7px 12px;cursor:pointer;font-weight:700;font-size:12.5px}
-  #btnProfile{background:#e9f7f1;color:var(--brand);border-color:var(--line)}
+  .prof .tab.on{background:var(--brand);color:#fff;border-color:var(--brand)}
   .seg{display:flex;gap:8px}
   .seg label{flex:1;border:1px solid var(--line);border-radius:11px;padding:11px;text-align:center;cursor:pointer;margin:0;background:#fcfdfd;font-weight:600}
   .seg input{display:none}
@@ -112,8 +112,9 @@
       <div class="lg" id="pLogo">🏢</div>
       <div><div class="nm" id="pName">—</div><div class="mt" id="pMeta">—</div></div>
       <div style="margin-inline-start:auto;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="out" id="btnRequests" onclick="showRequests()">📋 طلباتي</button>
-        <button class="out" id="btnProfile" onclick="showProfile()">🏢 معلومات شركتي</button>
+        <button class="out tab" id="btnHome" onclick="showRequest()">✈️ طلب برنامج</button>
+        <button class="out tab" id="btnRequests" onclick="showRequests()">📋 طلباتي</button>
+        <button class="out tab" id="btnProfile" onclick="showProfile()">🏢 معلومات شركتي</button>
         <button class="out" onclick="logout()">خروج</button>
       </div>
     </div>
@@ -287,6 +288,7 @@ function showApp(){
   if(COMPANY.logo_url) $('pLogo').innerHTML=`<img src="${esc(COMPANY.logo_url)}" alt="">`;
   else $('pLogo').textContent='🏢';
   renderProfile();
+  setTab('btnHome');
 }
 
 // ── company profile (view + edit → pending owner approval) ──
@@ -322,9 +324,10 @@ function startEdit(){
 }
 function cancelEdit(){ $('profEdit').style.display='none'; $('profView').style.display='block'; }
 function hideViews(){ $('profileCard').style.display='none'; $('requestsView').style.display='none'; $('form').style.display='none'; $('done').style.display='none'; }
-function showProfile(){ cancelEdit(); hideViews(); $('profileCard').style.display=''; window.scrollTo({top:0,behavior:'smooth'}); }
-function showRequest(){ hideViews(); $('form').style.display=''; window.scrollTo({top:0,behavior:'smooth'}); }
-function showRequests(){ hideViews(); $('requestsView').style.display=''; loadMyRequests(); window.scrollTo({top:0,behavior:'smooth'}); }
+function setTab(id){ ['btnHome','btnRequests','btnProfile'].forEach(b=>{const e=$(b); if(e) e.classList.toggle('on', b===id);}); }
+function showProfile(){ cancelEdit(); hideViews(); $('profileCard').style.display=''; setTab('btnProfile'); window.scrollTo({top:0,behavior:'smooth'}); }
+function showRequest(){ hideViews(); $('form').style.display=''; setTab('btnHome'); window.scrollTo({top:0,behavior:'smooth'}); }
+function showRequests(){ hideViews(); $('requestsView').style.display=''; setTab('btnRequests'); loadMyRequests(); window.scrollTo({top:0,behavior:'smooth'}); }
 
 // ── طلباتي ──
 let MY_REQS=[];
