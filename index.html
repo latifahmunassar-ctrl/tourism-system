@@ -3237,6 +3237,8 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
   };
   function ibRender(reqs){
     reqs=reqs||[];
+    const IB_CURN={SAR:'ريال',USD:'دولار',EUR:'يورو',AED:'درهم',OMR:'ريال عماني',KWD:'دينار كويتي',EGP:'جنيه مصري'};
+    const curTag=r=>r.company_currency?` · 💱 ${ibEsc(IB_CURN[r.company_currency]||r.company_currency)}`:'';
     // الواردة = غير المُرسلة وغير المغلقة، الأحدث أولاً
     const incoming=reqs.filter(r=>r.status!=='sent'&&r.status!=='closed')
       .sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
@@ -3248,13 +3250,13 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     document.getElementById('inboxList').innerHTML=incoming.length?incoming.map(r=>`
       <div class="ib-item" onclick="inboxLoad('${r.id}')">
         <div class="ib-r1"><span class="ib-co">🏢 ${ibEsc(r.company_name)}</span><span class="ib-bdg ib-${r.status}">${IB_STAT[r.status]||r.status}</span></div>
-        <div class="ib-dest">📍 ${ibEsc(r.destination)} · ${r.days} أيام · ${r.pax} أشخاص</div>
+        <div class="ib-dest">📍 ${ibEsc(r.destination)} · ${r.days} أيام · ${r.pax} أشخاص${curTag(r)}</div>
         <div class="ib-r2">${ibEsc(r.ref_no)}${r.group_total?' · '+Number(r.group_total).toLocaleString('en-US')+' ريال':''}</div>
       </div>`).join(''):'<div class="ib-empty">لا توجد طلبات واردة</div>';
     document.getElementById('inboxSentList').innerHTML=sent.length?sent.map(r=>`
       <div class="ib-item ib-sent-item">
         <div class="ib-r1"><span class="ib-co">🏢 ${ibEsc(r.company_name)}</span><span class="ib-bdg ib-sent">تم الإرسال</span></div>
-        <div class="ib-dest">📍 ${ibEsc(r.destination)} · ${r.days} أيام · ${r.pax} أشخاص</div>
+        <div class="ib-dest">📍 ${ibEsc(r.destination)} · ${r.days} أيام · ${r.pax} أشخاص${curTag(r)}</div>
         <div class="ib-r2">${ibEsc(r.ref_no)}${r.group_total?' · '+Number(r.group_total).toLocaleString('en-US')+' ريال':''}</div>
         <div class="ib-sent-meta">📤 ${r.sent_by?('أرسله: <b>'+ibEsc(r.sent_by)+'</b> · '):''}${ibFmtTime(r.sent_at)}</div>
       </div>`).join(''):'<div class="ib-empty">لا توجد طلبات مُرسلة بعد</div>';
@@ -3366,18 +3368,19 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     const profit=parseInt((document.getElementById('profitInput')||{}).value)||0;
     const extra=(typeof extraCostsTotal==='function')?extraCostsTotal():0;
     const finalGroup=(basePrice||0)+extra+profit;
-    if(!confirm(`إرسال العرض لشركة «${ibState.company}» بإجمالي ${finalGroup.toLocaleString('en-US')} ريال؟\nالشركة بتشوف البرنامج + هذا الإجمالي فقط (بدون أي تسعير داخلي).`)) return;
     // تنبيه: عملة الشركة ليست ريال والموظف ما طبّق «💱 تحويل عملة» → السعر بيُرسل بالريال
     const _hasConv=(typeof currencyConversion!=='undefined' && currencyConversion && currencyConversion.rate);
     if(ibState.currency && ibState.currency!=='SAR' && !_hasConv){
       const _cn={USD:'دولار',EUR:'يورو',AED:'درهم',OMR:'ريال عماني',KWD:'دينار كويتي',EGP:'جنيه مصري'}[ibState.currency]||ibState.currency;
       if(!confirm(`⚠️ عملة الشركة «${_cn}» لكن ما طبّقت «💱 تحويل عملة».\nلو كمّلت بيُرسل السعر بالريال. تبي تكمل بالريال؟\n(إلغاء = ارجع وحوّل للعملة أولاً)`)) return;
     }
+    // السعر يطلع جاهزاً = الإجمالي (التكلفة + ربح العز)، والموظف يوافق أو يعدّله قبل الإرسال
+    const autoPrice = _hasConv ? Math.round((finalGroup/currencyConversion.rate)*100)/100 : finalGroup;
+    const curName = _hasConv ? (currencyConversion.name||'') : 'ريال';
+    const cpRaw = prompt(`💰 السعر اللي بيُرسل لـ«${ibState.company}» (${curName}):\nهذا الإجمالي (التكلفة + ربح العز) — وافقي عليه (OK) أو عدّلي الرقم.`, String(autoPrice));
+    if(cpRaw===null) return;   // ألغى الإرسال
+    const companyPrice = parseFloat(String(cpRaw).replace(/[^\d.]/g,'')) || autoPrice;
     const by=ibStaffName();   // اسم الموظف المرسِل (يُسأل مرة ويُحفظ)
-    // السعر للشركة تلقائياً = الإجمالي (التكلفة + ربح العز) — بعملة الشركة لو طُبّق «💱 تحويل عملة»، وإلا بالريال.
-    const companyPrice = _hasConv
-      ? Math.round((finalGroup / currencyConversion.rate)*100)/100
-      : finalGroup;
     const prog=lastProgramRaw.replace(/TOTAL_GROUP:\s*[\d.,]+/, 'TOTAL_GROUP:'+finalGroup);
     try{
       let res=await fetch(IB_BASE+'?admin_action=update_program&id='+ibState.id,{method:'POST',headers:ibH(),body:JSON.stringify({built_program:prog})});

@@ -449,7 +449,7 @@ Deno.serve(async (req) => {
     // ── company-account management ──
     if (adminAction === "companies") {
       const { data, error } = await supabase.from("client_companies")
-        .select("id, company_name, contact_name, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, created_at, approved_at, pending_edit")
+        .select("id, company_name, contact_name, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, created_at, approved_at, pending_edit, currency")
         .order("created_at", { ascending: false }).limit(300);
       if (error) return json({ error: error.message }, 500);
       // attach request stats per company
@@ -466,7 +466,7 @@ Deno.serve(async (req) => {
     if (adminAction === "company_get") {
       const cid = url.searchParams.get("id") || "";
       const { data: c, error } = await supabase.from("client_companies")
-        .select("id, company_name, contact_name, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, notes, created_at, approved_at, approved_by, pending_edit, pending_edit_at")
+        .select("id, company_name, contact_name, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, notes, created_at, approved_at, approved_by, pending_edit, pending_edit_at, currency")
         .eq("id", cid).single();
       if (error) return json({ error: error.message }, 404);
       const stats = await companyStats(supabase, cid);
@@ -518,10 +518,18 @@ Deno.serve(async (req) => {
     if (adminAction === "list") {
       const { data, error } = await supabase
         .from("client_requests")
-        .select("id, ref_no, company_name, destination, pax, days, status, group_total, created_at, sent_at, sent_by")
+        .select("id, ref_no, company_name, destination, pax, days, status, group_total, created_at, sent_at, sent_by, company_id")
         .order("created_at", { ascending: false }).limit(200);
       if (error) return json({ error: error.message }, 500);
-      return json({ requests: data });
+      // attach each company's pricing currency
+      const compIds = [...new Set((data || []).map((r: any) => r.company_id).filter(Boolean))];
+      const curMap: Record<string, string> = {};
+      if (compIds.length) {
+        const { data: comps } = await supabase.from("client_companies").select("id, currency").in("id", compIds);
+        for (const c of (comps || []) as Array<{ id: string; currency: string }>) curMap[c.id] = c.currency || "SAR";
+      }
+      const requests = (data || []).map((r: any) => ({ ...r, company_currency: r.company_id ? (curMap[r.company_id] || "SAR") : null }));
+      return json({ requests });
     }
 
     const id = url.searchParams.get("id") || "";
