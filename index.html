@@ -3324,7 +3324,19 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     ibState={id:req.id,ref:req.ref_no,company:req.company_name,token:req.view_token,dest:req.destination};
     const filled=await inboxFillForm(req);
     ibBanner();
-    if((filled==='ready'||filled==='manual') && typeof buildFromForm==='function'){ buildFromForm(); if(typeof fpTab==='function') fpTab('build'); }
+    if((filled==='ready'||filled==='manual') && typeof buildFromForm==='function'){
+      const before=(typeof lastProgramRaw!=='undefined')?lastProgramRaw:'';
+      buildFromForm();
+      if(typeof fpTab==='function') fpTab('build');
+      // راقب نتيجة البناء: إن فشل (ما طلع برنامج خلال مهلة) ورّي الشات ليشوف الموظف السبب ويعدّل
+      let waited=0;
+      const chk=setInterval(()=>{
+        waited+=700;
+        const built=(typeof lastProgramRaw!=='undefined') && lastProgramRaw && lastProgramRaw!==before && /TOTAL_GROUP:/.test(lastProgramRaw);
+        if(built){ clearInterval(chk); }
+        else if(waited>=9000){ clearInterval(chk); if(typeof fpTab==='function') fpTab('mods'); }
+      }, 700);
+    }
     else {
       const cn=(req.cities_nights||[]).map(c=>`${c.nights} ${c.city}`).join(' + ');
       const ci=document.getElementById('chatInput');
