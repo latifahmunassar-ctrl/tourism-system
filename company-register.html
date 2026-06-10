@@ -49,8 +49,8 @@
     <div class="field"><label>اسم المسؤول / Contact Person</label><input name="contact_name"></div>
     <div class="field"><label>رقم الجوال / Mobile <span class="req">*</span> <span class="hint">(للدخول لاحقاً / used to log in)</span></label><input name="contact_phone" inputmode="tel" placeholder="+9665..." required></div>
     <div class="field"><label>كلمة المرور / Password <span class="req">*</span> <span class="hint">(4 خانات على الأقل / min 4)</span></label><input name="password" type="password" minlength="4" required></div>
-    <div class="field"><label>البريد الإلكتروني / Email</label><input name="contact_email" type="email"></div>
-    <div class="field"><label>الموقع أو الانستقرام / Website or Instagram</label><input name="website" placeholder="instagram.com/yourcompany"></div>
+    <div class="field"><label>البريد الإلكتروني / Email <span class="req">*</span></label><input name="contact_email" type="email" required></div>
+    <div class="field"><label>الموقع أو الانستقرام / Website or Instagram <span class="req">*</span></label><input name="website" placeholder="instagram.com/yourcompany" required></div>
     <div class="field"><label>عملة التسعير / Pricing Currency <span class="hint">(نسعّر لك البرنامج بها / we price in it)</span></label>
       <select name="currency">
         <option value="SAR">ريال سعودي / SAR</option>
@@ -66,6 +66,15 @@
         <div class="logo-prev" id="logoPrev">بدون شعار<br>No logo</div>
         <button type="button" class="logo-btn" id="logoBtn">📤 اختيار الشعار / Choose logo</button>
         <input type="file" id="logoFile" accept="image/*" style="display:none">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>وثيقة الشركة / Company Document <span class="hint">(اختياري / optional — السجل التجاري أو الترخيص · PDF أو صورة)</span></label>
+      <div class="logo-up">
+        <div class="logo-prev" id="docPrev">بدون وثيقة<br>No file</div>
+        <button type="button" class="logo-btn" id="docBtn">📎 اختيار الوثيقة / Choose file</button>
+        <input type="file" id="docFile" accept="application/pdf,image/*" style="display:none">
       </div>
     </div>
 
@@ -117,6 +126,18 @@ $('logoFile').onchange=e=>{
   });
 };
 
+// وثيقة الشركة (اختياري): PDF أو صورة — تُرفع كما هي
+let docData=null;
+$('docBtn').onclick=()=>$('docFile').click();
+$('docFile').onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  if(f.size>8_000_000){ alert('الملف كبير جداً (الحد 8 ميجابايت). / File too large (max 8MB).'); return; }
+  const r=new FileReader();
+  r.onload=()=>{ docData=r.result; $('docPrev').innerHTML=`📄<br><span style="font-size:9px">${(f.name||'ملف').slice(0,16)}</span>`; $('docBtn').textContent='✓ تغيير الوثيقة / Change'; };
+  r.onerror=()=>{ docData=null; alert('تعذّر قراءة الملف. / Could not read file.'); };
+  r.readAsDataURL(f);
+};
+
 $('form').addEventListener('submit', async e=>{
   e.preventDefault();
   const f=e.target, err=$('errBox'); err.style.display='none';
@@ -124,12 +145,19 @@ $('form').addEventListener('submit', async e=>{
   if(!f.company_name.value.trim()||!f.contact_phone.value.trim()||f.password.value.length<4){
     err.textContent='عبّي اسم الشركة، رقم الجوال، وكلمة المرور (4 خانات على الأقل).'; err.style.display='block'; return;
   }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.contact_email.value.trim())){
+    err.textContent='البريد الإلكتروني مطلوب وبصيغة صحيحة. / A valid email is required.'; err.style.display='block'; return;
+  }
+  if(!f.website.value.trim()){
+    err.textContent='الموقع أو الانستقرام مطلوب. / Website or Instagram is required.'; err.style.display='block'; return;
+  }
   const payload={
     company_name:f.company_name.value.trim(), contact_name:f.contact_name.value.trim(),
     contact_phone:f.contact_phone.value.trim(), password:f.password.value,
     contact_email:f.contact_email.value.trim(), website:f.website.value.trim(),
     currency:(f.currency&&f.currency.value)||'SAR',
     logo_base64:logoData||undefined,
+    document_base64:docData||undefined,
   };
   btn.disabled=true; btn.textContent='جارٍ الإرسال…';
   try{

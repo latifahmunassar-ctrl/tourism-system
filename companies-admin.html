@@ -188,6 +188,7 @@ async function openCo(id){
       <span class="k">البريد</span><span>${esc(c.contact_email||'—')}</span>
       <span class="k">الموقع/انستقرام</span><span>${c.website?`<a href="${/^https?:/.test(c.website)?esc(c.website):'https://'+esc(c.website)}" target="_blank">${esc(c.website)}</a>`:'—'}</span>
       <span class="k">💱 عملة التسعير</span><span><b>${esc(CURN[c.currency]||c.currency||'ريال سعودي / SAR')}</b></span>
+      ${c.document_url?`<span class="k">📄 وثيقة الشركة</span><span><a href="${esc(c.document_url)}" target="_blank">عرض / تنزيل الوثيقة ↗</a></span>`:''}
     </div>
     <div class="ac-wa"><div class="t">📲 رابط جروب الواتساب <span style="color:var(--muted);font-weight:600">— تضيفينه أنتِ</span></div>
       <input id="acWa" placeholder="https://chat.whatsapp.com/..." value="${esc(c.whatsapp_group_link||'')}"></div>

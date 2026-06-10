@@ -76,6 +76,21 @@ async function uploadLogo(supabase: any, dataUrl: string, phone: string): Promis
   const { data } = supabase.storage.from("company-logos").getPublicUrl(path);
   return data?.publicUrl || null;
 }
+
+// upload a base64 data-URL company document (PDF or image) to storage, return URL.
+async function uploadDoc(supabase: any, dataUrl: string, phone: string): Promise<string | null> {
+  const m = String(dataUrl || "").match(/^data:([a-zA-Z0-9.+\/-]+);base64,(.+)$/);
+  if (!m) return null;
+  const [, mime, b64] = m;
+  const ext = (mime.split("/")[1] || "bin").replace("jpeg", "jpg").replace(/[^a-z0-9]/g, "") || "bin";
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  if (bytes.length > 8_000_000) return null; // 8MB cap
+  const path = `doc-${normPhone(phone).replace(/\D/g, "")}-${randToken(6)}.${ext}`;
+  const { error } = await supabase.storage.from("company-logos").upload(path, bytes, { contentType: mime, upsert: true });
+  if (error) { console.error("doc upload failed", error.message); return null; }
+  const { data } = supabase.storage.from("company-logos").getPublicUrl(path);
+  return data?.publicUrl || null;
+}
 // company stats: total / answered (sent) / pending (everything else)
 async function companyStats(supabase: any, companyId: string) {
   const { data } = await supabase.from("client_requests").select("status").eq("company_id", companyId);
@@ -334,8 +349,16 @@ Deno.serve(async (req) => {
       const name = String(body.company_name || "").trim();
       const phone = normPhone(body.contact_phone);
       const password = String(body.password || "");
+      const email = String(body.contact_email || "").trim();
+      const website = String(body.website || "").trim();
       if (!name || !phone || password.length < 4) {
         return json({ error: "الاسم، رقم الجوال، وكلمة المرور (4 خانات على الأقل) مطلوبة" }, 400);
+      }
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return json({ error: "البريد الإلكتروني مطلوب وبصيغة صحيحة" }, 400);
+      }
+      if (!website) {
+        return json({ error: "الموقع أو الانستقرام مطلوب" }, 400);
       }
       // reject duplicate phone
       const { data: existing } = await supabase.from("client_companies").select("id, status").eq("contact_phone", phone).maybeSingle();
@@ -345,15 +368,18 @@ Deno.serve(async (req) => {
       const password_hash = await hashPassword(password, salt);
       let logo_url: string | null = null;
       if (body.logo_base64) logo_url = await uploadLogo(supabase, body.logo_base64, phone);
+      let document_url: string | null = null;
+      if (body.document_base64) document_url = await uploadDoc(supabase, body.document_base64, phone);
 
       const { data, error } = await supabase.from("client_companies").insert({
         company_name: name,
         contact_name: String(body.contact_name || "").trim(),
         contact_phone: phone,
-        contact_email: String(body.contact_email || "").trim(),
+        contact_email: email,
         password_hash, password_salt: salt,
         logo_url,
-        website: String(body.website || "").trim(),
+        document_url,
+        website,
         currency: ["SAR","AED","USD","OMR"].includes(String(body.currency)) ? String(body.currency) : "SAR",
         status: "pending",
       }).select("id").single();
@@ -466,7 +492,7 @@ Deno.serve(async (req) => {
     if (adminAction === "company_get") {
       const cid = url.searchParams.get("id") || "";
       const { data: c, error } = await supabase.from("client_companies")
-        .select("id, company_name, contact_name, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, notes, created_at, approved_at, approved_by, pending_edit, pending_edit_at, currency")
+        .select("id, company_name, contact_name, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, notes, created_at, approved_at, approved_by, pending_edit, pending_edit_at, currency, document_url")
         .eq("id", cid).single();
       if (error) return json({ error: error.message }, 404);
       const stats = await companyStats(supabase, cid);
