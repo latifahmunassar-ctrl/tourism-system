@@ -19,6 +19,8 @@
   label{display:block;font-size:13.5px;font-weight:600;margin:0 0 6px}
   .req{color:var(--err)} .hint{color:var(--muted);font-weight:500;font-size:11.5px}
   .field{margin-bottom:14px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:520px){.row2{grid-template-columns:1fr}}
   input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:11px;font:inherit;background:#fcfdfd;color:var(--ink)}
   input:focus{outline:none;border-color:var(--brand2);box-shadow:0 0 0 3px rgba(14,157,106,.12)}
   .logo-up{display:flex;gap:14px;align-items:center}
@@ -46,7 +48,10 @@
     <div class="sub">بياناتك تُحفظ مرة واحدة، ويراجع فريق ALEZZ الطلب ويفعّل حسابك.<br>Your details are saved once; the ALEZZ team reviews and activates your account.</div>
 
     <div class="field"><label>اسم الشركة / Company Name <span class="req">*</span></label><input name="company_name" required></div>
-    <div class="field"><label>اسم المسؤول / Contact Person</label><input name="contact_name"></div>
+    <div class="row2">
+      <div class="field"><label>اسم المسؤول / Contact Person <span class="req">*</span></label><input name="contact_name" required></div>
+      <div class="field"><label>موقعه من الشركة / Role <span class="hint">(مثال: المالك · المدير · مسؤول الحجوزات)</span></label><input name="contact_role" placeholder="المدير / Manager"></div>
+    </div>
     <div class="field"><label>رقم الجوال / Mobile <span class="req">*</span> <span class="hint">(للدخول لاحقاً / used to log in)</span></label><input name="contact_phone" inputmode="tel" placeholder="+9665..." required></div>
     <div class="field"><label>كلمة المرور / Password <span class="req">*</span> <span class="hint">(4 خانات على الأقل / min 4)</span></label><input name="password" type="password" minlength="4" required></div>
     <div class="field"><label>البريد الإلكتروني / Email <span class="req">*</span></label><input name="contact_email" type="email" required></div>
@@ -145,6 +150,9 @@ $('form').addEventListener('submit', async e=>{
   if(!f.company_name.value.trim()||!f.contact_phone.value.trim()||f.password.value.length<4){
     err.textContent='عبّي اسم الشركة، رقم الجوال، وكلمة المرور (4 خانات على الأقل).'; err.style.display='block'; return;
   }
+  if(!f.contact_name.value.trim()){
+    err.textContent='اسم المسؤول مطلوب. / Contact person is required.'; err.style.display='block'; return;
+  }
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.contact_email.value.trim())){
     err.textContent='البريد الإلكتروني مطلوب وبصيغة صحيحة. / A valid email is required.'; err.style.display='block'; return;
   }
@@ -153,6 +161,7 @@ $('form').addEventListener('submit', async e=>{
   }
   const payload={
     company_name:f.company_name.value.trim(), contact_name:f.contact_name.value.trim(),
+    contact_role:f.contact_role.value.trim(),
     contact_phone:f.contact_phone.value.trim(), password:f.password.value,
     contact_email:f.contact_email.value.trim(), website:f.website.value.trim(),
     currency:(f.currency&&f.currency.value)||'SAR',

@@ -351,8 +351,12 @@ Deno.serve(async (req) => {
       const password = String(body.password || "");
       const email = String(body.contact_email || "").trim();
       const website = String(body.website || "").trim();
+      const contactName = String(body.contact_name || "").trim();
       if (!name || !phone || password.length < 4) {
         return json({ error: "الاسم، رقم الجوال، وكلمة المرور (4 خانات على الأقل) مطلوبة" }, 400);
+      }
+      if (!contactName) {
+        return json({ error: "اسم المسؤول مطلوب" }, 400);
       }
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return json({ error: "البريد الإلكتروني مطلوب وبصيغة صحيحة" }, 400);
@@ -373,7 +377,8 @@ Deno.serve(async (req) => {
 
       const { data, error } = await supabase.from("client_companies").insert({
         company_name: name,
-        contact_name: String(body.contact_name || "").trim(),
+        contact_name: contactName,
+        contact_role: String(body.contact_role || "").trim() || null,
         contact_phone: phone,
         contact_email: email,
         password_hash, password_salt: salt,
@@ -492,7 +497,7 @@ Deno.serve(async (req) => {
     if (adminAction === "company_get") {
       const cid = url.searchParams.get("id") || "";
       const { data: c, error } = await supabase.from("client_companies")
-        .select("id, company_name, contact_name, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, notes, created_at, approved_at, approved_by, pending_edit, pending_edit_at, currency, document_url")
+        .select("id, company_name, contact_name, contact_role, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, notes, created_at, approved_at, approved_by, pending_edit, pending_edit_at, currency, document_url")
         .eq("id", cid).single();
       if (error) return json({ error: error.message }, 404);
       const stats = await companyStats(supabase, cid);
