@@ -294,7 +294,7 @@ $('loginForm').addEventListener('submit', async e=>{
 function logout(){ localStorage.removeItem('alezz_company_token'); TOKEN=''; COMPANY=null; location.reload(); }
 function showApp(){
   $('loginForm').style.display='none'; $('app').style.display='block';
-  $('hsub').textContent='أهلاً بعودتك 👋 · Welcome back';
+  $('hsub').textContent='نمو أسرع يبدأ من عرض أسرع · Faster growth starts with a faster offer';
   $('pName').textContent=COMPANY.company_name;
   $('pMeta').textContent=[COMPANY.contact_name,COMPANY.contact_phone].filter(Boolean).join(' · ');
   if(COMPANY.logo_url) $('pLogo').innerHTML=`<img src="${esc(COMPANY.logo_url)}" alt="">`;
