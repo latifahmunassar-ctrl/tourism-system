@@ -88,6 +88,15 @@
     <div class="note">عندك حساب مفعّل؟ <a href="company.html">سجّل الدخول</a> · Have an account? <a href="company.html">Log in</a></div>
   </form>
 
+  <div class="card" id="otpCard" style="display:none">
+    <h2 style="color:var(--brand);margin-bottom:4px">🔐 تأكيد رقم الجوال / Verify your number</h2>
+    <div class="sub">أرسلنا كود تحقّق على <b>واتساب</b> للرقم <b id="otpPhone" dir="ltr"></b>. أدخليه للمتابعة.<br>We sent a verification code on WhatsApp. Enter it to continue.</div>
+    <div class="field"><label>كود التحقق / Verification code</label><input id="otpInput" inputmode="numeric" maxlength="8" placeholder="● ● ● ● ● ●" style="text-align:center;letter-spacing:8px;font-size:22px;font-weight:800"></div>
+    <button type="button" class="submit" id="otpBtn">تأكيد وإتمام التسجيل / Verify</button>
+    <div class="err" id="otpErr" style="display:none"></div>
+    <div class="note"><a href="#" id="otpResend">إعادة إرسال الكود / Resend code</a></div>
+  </div>
+
   <div class="card done" id="done" style="display:none">
     <div class="check">✓</div>
     <h2 style="font-size:20px;color:var(--brand)">تم استلام طلب التسجيل / Registration Received</h2>
@@ -177,15 +186,45 @@ $('form').addEventListener('submit', async e=>{
     logo_base64:logoData||undefined,
     document_base64:docData||undefined,
   };
+  REG_PAYLOAD=payload;
   btn.disabled=true; btn.textContent='جارٍ الإرسال…';
   try{
-    const res=await fetch(INTAKE+'?company_action=register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    const d=await res.json();
-    if(!res.ok||!d.ok) throw new Error(d.error||'تعذّر التسجيل');
+    const d=await submitReg(payload);
+    if(d.otp_sent){   // يحتاج تأكيد كود واتساب
+      $('form').style.display='none'; $('otpCard').style.display='block';
+      $('otpPhone').textContent=payload.contact_phone; $('otpInput').value=''; $('otpInput').focus();
+      window.scrollTo({top:0,behavior:'smooth'});
+      btn.disabled=false; btn.textContent='إرسال طلب التسجيل'; return;
+    }
+    if(!d.ok) throw new Error(d.error||'تعذّر التسجيل');
     $('form').style.display='none'; $('done').style.display='block';
     window.scrollTo({top:0,behavior:'smooth'});
   }catch(ex){ err.textContent=ex.message||'صار خطأ، حاول مرة ثانية.'; err.style.display='block'; btn.disabled=false; btn.textContent='إرسال طلب التسجيل'; }
 });
+
+// ── تأكيد رقم الجوال بكود واتساب (OTP) ──
+let REG_PAYLOAD=null;
+async function submitReg(payload, code){
+  const body=code?{...payload,otp_code:code}:payload;
+  const res=await fetch(INTAKE+'?company_action=register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  return await res.json();
+}
+$('otpBtn').onclick=async ()=>{
+  const oerr=$('otpErr'); oerr.style.display='none'; oerr.style.color='';
+  const code=$('otpInput').value.replace(/\D/g,'');
+  if(code.length<4){ oerr.textContent='أدخلي الكود المرسل على واتساب. / Enter the code.'; oerr.style.display='block'; return; }
+  const ob=$('otpBtn'); ob.disabled=true; ob.textContent='جارٍ التحقق…';
+  try{
+    const d=await submitReg(REG_PAYLOAD, code);
+    if(!d.ok) throw new Error(d.error||'كود غير صحيح');
+    $('otpCard').style.display='none'; $('done').style.display='block'; window.scrollTo({top:0,behavior:'smooth'});
+  }catch(ex){ oerr.textContent=ex.message; oerr.style.display='block'; ob.disabled=false; ob.textContent='تأكيد وإتمام التسجيل / Verify'; }
+};
+$('otpResend').onclick=async (e)=>{
+  e.preventDefault(); const oerr=$('otpErr');
+  try{ const d=await submitReg(REG_PAYLOAD); oerr.textContent=d.otp_sent?'أُرسل كود جديد على واتساب ✅':'تعذّر الإرسال'; oerr.style.color=d.otp_sent?'var(--ok)':''; oerr.style.display='block'; }
+  catch(_){ oerr.textContent='تعذّر إعادة الإرسال'; oerr.style.display='block'; }
+};
 </script>
 </body>
 </html>

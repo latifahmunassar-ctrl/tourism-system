@@ -179,6 +179,43 @@ async function notifySales(text: string): Promise<void> {
   }
 }
 
+// ── OTP via Twilio Verify (WhatsApp channel) ────────────────────────────────
+// Requires TWILIO_VERIFY_SERVICE_SID (a Verify Service with the WhatsApp channel
+// enabled in the Twilio console). When the secret is absent, OTP is skipped.
+function verifyConfigured(): boolean {
+  return !!(Deno.env.get("TWILIO_ACCOUNT_SID") && Deno.env.get("TWILIO_AUTH_TOKEN") && Deno.env.get("TWILIO_VERIFY_SERVICE_SID"));
+}
+async function verifyStart(phone: string): Promise<{ ok: boolean; error?: string }> {
+  const sid = Deno.env.get("TWILIO_ACCOUNT_SID")!, token = Deno.env.get("TWILIO_AUTH_TOKEN")!;
+  const vsid = Deno.env.get("TWILIO_VERIFY_SERVICE_SID")!;
+  try {
+    const form = new URLSearchParams({ To: phone, Channel: "whatsapp" });
+    const res = await fetch(`https://verify.twilio.com/v2/Services/${vsid}/Verifications`, {
+      method: "POST",
+      headers: { Authorization: "Basic " + btoa(`${sid}:${token}`), "Content-Type": "application/x-www-form-urlencoded" },
+      body: form.toString(),
+    });
+    if (res.ok) return { ok: true };
+    const t = await res.text(); console.error("verifyStart failed", res.status, t.slice(0, 300));
+    return { ok: false, error: "تعذّر إرسال كود التحقق — تأكدي أن الرقم على واتساب" };
+  } catch (e) { console.error("verifyStart error", (e as Error).message); return { ok: false, error: "تعذّر إرسال كود التحقق" }; }
+}
+async function verifyCheck(phone: string, code: string): Promise<boolean> {
+  const sid = Deno.env.get("TWILIO_ACCOUNT_SID")!, token = Deno.env.get("TWILIO_AUTH_TOKEN")!;
+  const vsid = Deno.env.get("TWILIO_VERIFY_SERVICE_SID")!;
+  try {
+    const form = new URLSearchParams({ To: phone, Code: code });
+    const res = await fetch(`https://verify.twilio.com/v2/Services/${vsid}/VerificationCheck`, {
+      method: "POST",
+      headers: { Authorization: "Basic " + btoa(`${sid}:${token}`), "Content-Type": "application/x-www-form-urlencoded" },
+      body: form.toString(),
+    });
+    if (!res.ok) return false;
+    const d = await res.json().catch(() => ({}));
+    return d?.status === "approved";
+  } catch (e) { console.error("verifyCheck error", (e as Error).message); return false; }
+}
+
 // ── SANITIZER (security boundary) ───────────────────────────────────────────
 // Build the company-facing view by copying ONLY non-price fields out of the
 // internal program text. Prices are in fields we never read; a defensive
@@ -378,6 +415,18 @@ Deno.serve(async (req) => {
       // reject duplicate phone
       const { data: existing } = await supabase.from("client_companies").select("id, status").eq("contact_phone", phone).maybeSingle();
       if (existing) return json({ error: "رقم الجوال مسجّل مسبقاً. سجّلي الدخول بدله." }, 409);
+
+      // OTP verification via WhatsApp (Twilio Verify). Skipped when not configured.
+      if (verifyConfigured()) {
+        const code = String(body.otp_code || "").trim();
+        if (!code) {
+          const sent = await verifyStart(phone);
+          if (!sent.ok) return json({ error: sent.error || "تعذّر إرسال كود التحقق" }, 400);
+          return json({ otp_sent: true });
+        }
+        const okCode = await verifyCheck(phone, code);
+        if (!okCode) return json({ error: "كود التحقق غير صحيح أو منتهي — تأكدي من الكود المرسل على واتساب" }, 400);
+      }
 
       const salt = randToken(16);
       const password_hash = await hashPassword(password, salt);
