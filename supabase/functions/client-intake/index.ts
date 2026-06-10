@@ -387,6 +387,24 @@ Deno.serve(async (req) => {
       return json({ ok: true, company: publicCompany(c) });
     }
 
+    // company sees its own requests; view_token exposed only when the offer was sent
+    if (companyAction === "my_requests") {
+      const token = String(body.token || "");
+      if (!token) return json({ error: "no token" }, 401);
+      const { data: c } = await supabase.from("client_companies").select("id, status").eq("login_token", token).maybeSingle();
+      if (!c || c.status !== "approved") return json({ error: "انتهت الجلسة، سجّلي الدخول من جديد" }, 401);
+      const { data: reqs } = await supabase.from("client_requests")
+        .select("ref_no, destination, days, pax, status, created_at, view_token")
+        .eq("company_id", c.id).order("created_at", { ascending: false }).limit(100);
+      const requests = (reqs || []).map((r: any) => ({
+        ref_no: r.ref_no, destination: r.destination, days: r.days, pax: r.pax,
+        status: r.status === "sent" ? "sent" : "working",
+        created_at: r.created_at,
+        view_token: r.status === "sent" ? r.view_token : null,
+      }));
+      return json({ ok: true, requests });
+    }
+
     // Company proposes a profile edit (contact name / phone / logo). Stored in
     // pending_edit awaiting owner approval — live fields don't change until then.
     if (companyAction === "update_profile") {

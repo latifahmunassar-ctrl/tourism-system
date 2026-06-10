@@ -64,6 +64,20 @@
   .pf-pending{background:#fff7e6;border:1px solid #f0dcae;color:#8a6d1f;border-radius:11px;padding:11px;font-size:12.5px;margin-bottom:12px;line-height:1.7}
   .pf-edit-btn{background:#e9f7f1;color:var(--brand);border:1px solid var(--line);border-radius:11px;padding:11px;width:100%;cursor:pointer;font-weight:700;margin-top:10px}
   .pf-back{background:none;border:none;color:var(--brand);font-weight:700;cursor:pointer;font-size:13.5px;padding:0;margin-bottom:14px}
+  /* طلباتي */
+  .rq-filters{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px;margin-bottom:16px}
+  @media(max-width:560px){.rq-filters{grid-template-columns:1fr}}
+  .rq-lbl{font-size:11.5px;color:var(--muted);font-weight:700;margin:0 0 5px 2px;display:block}
+  .rq{border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:11px;background:#fcfdfd}
+  .rq .top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .rq .dest{font-weight:800;font-size:15px}
+  .rq .meta{color:var(--muted);font-size:12.5px;margin-top:6px}
+  .rq .ref{font-family:ui-monospace,Menlo,monospace;color:var(--brand);font-weight:700}
+  .rq-bdg{font-size:11.5px;padding:3px 11px;border-radius:20px;font-weight:800;white-space:nowrap}
+  .rq-working{background:#fef3c7;color:var(--warn)} .rq-sent{background:#dcfce7;color:var(--ok)}
+  .rq-dl{margin-top:12px;display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:11px;padding:10px 16px;font-weight:800;cursor:pointer;font-size:13.5px;text-decoration:none}
+  .rq-hint{margin-top:10px;font-size:12px;color:var(--muted);background:#f7faf8;border:1px dashed var(--line);border-radius:10px;padding:8px 11px}
+  .rq-empty{color:var(--muted);text-align:center;padding:30px}
   .pf-logo-up{display:flex;gap:12px;align-items:center}
   .pf-prev{width:60px;height:60px;border-radius:12px;border:1px solid var(--line);background:#f7faf8;display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--muted);font-size:11px;text-align:center;flex-shrink:0}
   .pf-prev img{width:100%;height:100%;object-fit:cover}
@@ -98,6 +112,7 @@
       <div class="lg" id="pLogo">🏢</div>
       <div><div class="nm" id="pName">—</div><div class="mt" id="pMeta">—</div></div>
       <div style="margin-inline-start:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="out" id="btnRequests" onclick="showRequests()">📋 طلباتي</button>
         <button class="out" id="btnProfile" onclick="showProfile()">🏢 معلومات شركتي</button>
         <button class="out" onclick="logout()">خروج</button>
       </div>
@@ -135,6 +150,18 @@
           <button type="button" class="pf-cancel" onclick="cancelEdit()">إلغاء</button>
         </div>
       </div>
+    </div>
+
+    <!-- ===== طلباتي (صفحة منفصلة) ===== -->
+    <div class="card" id="requestsView" style="display:none">
+      <button type="button" class="pf-back" onclick="showRequest()">← رجوع لطلب البرنامج</button>
+      <h2>📋 طلباتي</h2>
+      <div class="rq-filters">
+        <div><label class="rq-lbl">🔎 رقم الطلب</label><input id="fRef" oninput="renderReqs()" placeholder="REQ-2026-..."></div>
+        <div><label class="rq-lbl">📍 الوجهة</label><select id="fDest" onchange="renderReqs()"><option value="">كل الوجهات</option></select></div>
+        <div><label class="rq-lbl">⏳ الحالة</label><select id="fStatus" onchange="renderReqs()"><option value="">كل الحالات</option><option value="working">جاري العمل</option><option value="sent">تم الرد</option></select></div>
+      </div>
+      <div id="reqsList"><div class="rq-empty">جارٍ التحميل…</div></div>
     </div>
 
     <form id="form">
@@ -294,8 +321,42 @@ function startEdit(){
   $('peErr').style.display='none';
 }
 function cancelEdit(){ $('profEdit').style.display='none'; $('profView').style.display='block'; }
-function showProfile(){ cancelEdit(); $('profileCard').style.display=''; $('form').style.display='none'; $('done').style.display='none'; window.scrollTo({top:0,behavior:'smooth'}); }
-function showRequest(){ $('profileCard').style.display='none'; $('form').style.display=''; window.scrollTo({top:0,behavior:'smooth'}); }
+function hideViews(){ $('profileCard').style.display='none'; $('requestsView').style.display='none'; $('form').style.display='none'; $('done').style.display='none'; }
+function showProfile(){ cancelEdit(); hideViews(); $('profileCard').style.display=''; window.scrollTo({top:0,behavior:'smooth'}); }
+function showRequest(){ hideViews(); $('form').style.display=''; window.scrollTo({top:0,behavior:'smooth'}); }
+function showRequests(){ hideViews(); $('requestsView').style.display=''; loadMyRequests(); window.scrollTo({top:0,behavior:'smooth'}); }
+
+// ── طلباتي ──
+let MY_REQS=[];
+const DEST_FLAG={'تايلاند':'🇹🇭','ماليزيا':'🇲🇾','تركيا':'🇹🇷','فيتنام':'🇻🇳','روسيا':'🇷🇺','البوسنة':'🇧🇦','إندونيسيا':'🇮🇩'};
+function rqFmtDate(iso){ if(!iso)return''; const d=new Date(iso); if(isNaN(d.getTime()))return''; const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())}`; }
+async function loadMyRequests(){
+  $('reqsList').innerHTML='<div class="rq-empty">جارٍ التحميل…</div>';
+  try{
+    const res=await fetch(INTAKE+'?company_action=my_requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:TOKEN})});
+    const d=await res.json(); if(!res.ok||!d.ok) throw new Error(d.error||'تعذّر التحميل');
+    MY_REQS=d.requests||[];
+    const dests=[...new Set(MY_REQS.map(r=>r.destination).filter(Boolean))];
+    $('fDest').innerHTML='<option value="">كل الوجهات</option>'+dests.map(x=>`<option>${esc(x)}</option>`).join('');
+    renderReqs();
+  }catch(ex){ $('reqsList').innerHTML='<div class="rq-empty">'+esc(ex.message)+'</div>'; }
+}
+function renderReqs(){
+  const ref=($('fRef').value||'').trim().toLowerCase(), dest=$('fDest').value, st=$('fStatus').value;
+  const rows=MY_REQS.filter(r=>(!ref||String(r.ref_no||'').toLowerCase().includes(ref))&&(!dest||r.destination===dest)&&(!st||r.status===st));
+  if(!rows.length){ $('reqsList').innerHTML='<div class="rq-empty">لا توجد طلبات مطابقة</div>'; return; }
+  $('reqsList').innerHTML=rows.map(r=>{
+    const flag=DEST_FLAG[r.destination]||'📍', sent=r.status==='sent';
+    const dl=sent&&r.view_token
+      ? `<a class="rq-dl" href="proposal.html?token=${esc(r.view_token)}" target="_blank" rel="noopener">⬇️ تحميل البرنامج</a>`
+      : `<div class="rq-hint">فريق ALEZZ يجهّز برنامجك — يوصلك زر التحميل هنا بعد الانتهاء.</div>`;
+    return `<div class="rq">
+      <div class="top"><span class="dest">${flag} ${esc(r.destination)}</span><span class="rq-bdg ${sent?'rq-sent':'rq-working'}">${sent?'✅ تم الرد':'⏳ جاري العمل'}</span></div>
+      <div class="meta"><span class="ref">${esc(r.ref_no)}</span> · ${r.days} أيام · ${r.pax} أشخاص · ${rqFmtDate(r.created_at)}</div>
+      ${dl}
+    </div>`;
+  }).join('');
+}
 $('peLogoBtn').onclick=()=>$('peLogoFile').click();
 $('peLogoFile').onchange=e=>{
   const f=e.target.files[0]; if(!f) return;
