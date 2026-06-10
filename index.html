@@ -3281,6 +3281,9 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     set('bf-date', req.date_from||'');
     const nt=document.getElementById('bf-notes'); if(nt) nt.value=req.notes||'';
     const tr=document.querySelector('input[name=bf-tr][value="'+(req.transport==='shared'?'shared':'private')+'"]'); if(tr) tr.checked=true;
+    // الشركة لا تحدّد فئة النجوم → اجعلها «مختلط» حتى لا تُستبعد فنادق متاحة (مثل 4★ في كوساموي)
+    const starMixed=document.querySelector('input[name=bf-stars][value=mixed]');
+    if(starMixed){ starMixed.checked=true; if(typeof bfPick==='function') bfPick(starMixed); }
     const eb=document.getElementById('bf-extrabed-on'); if(eb) eb.checked=!!(req.extra_bed && /نعم|كل|all/i.test(req.extra_bed));
 
     // (1) اقتراح جاهز مختار → «اقتراحات جاهزة» + تظليل نفس المقترح
