@@ -303,12 +303,14 @@ function renderProfile(){
   if(pe){
     const names={contact_name:'اسم المسؤول',contact_phone:'رقم المسؤول',logo_url:'الشعار'};
     const items=Object.keys(pe).map(k=>names[k]||k).join('، ');
-    box.innerHTML=`⏳ <b>لديك تعديل قيد المراجعة / Edit under review</b> (${esc(items)}). ينطبق بعد موافقة ALEZZ.`;
+    box.innerHTML=`⏳ <b>لديك تعديل قيد المراجعة / Edit under review</b> (${esc(items)}). ينطبق بعد موافقة ALEZZ. · يمكنك تعديله من جديد (يستبدل المعلّق). / You can re-edit (replaces the pending one).`;
     box.style.display='block';
-    $('pfEditBtn').style.display='none';
+    $('pfEditBtn').style.display='';
+    $('pfEditBtn').textContent='✏️ تعديل الطلب المعلّق / Edit pending request';
   }else{
     box.style.display='none';
     $('pfEditBtn').style.display='';
+    $('pfEditBtn').textContent='✏️ تعديل بياناتي / Edit my info';
   }
   const bp=$('btnProfile'); if(bp) bp.textContent = pe ? '🏢 معلوماتي / My info ⏳' : '🏢 معلوماتي / My info';
 }
