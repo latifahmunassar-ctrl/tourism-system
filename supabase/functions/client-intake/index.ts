@@ -103,8 +103,10 @@ async function companyStats(supabase: any, companyId: string) {
 function publicCompany(c: any) {
   return {
     id: c.id, company_name: c.company_name, contact_name: c.contact_name,
+    contact_role: c.contact_role || null,
     contact_phone: c.contact_phone, contact_email: c.contact_email,
-    logo_url: c.logo_url, website: c.website, status: c.status, currency: c.currency || "SAR",
+    logo_url: c.logo_url, document_url: c.document_url || null,
+    website: c.website, status: c.status, currency: c.currency || "SAR",
     whatsapp_group_link: c.status === "approved" ? c.whatsapp_group_link : null,
     pending_edit: c.pending_edit || null,
   };
@@ -450,6 +452,10 @@ Deno.serve(async (req) => {
       const edit: Record<string, any> = {};
       const name = String(body.contact_name ?? "").trim();
       if (name && name !== (c.contact_name || "")) edit.contact_name = name;
+      if (body.contact_role != null) {
+        const role = String(body.contact_role).trim();
+        if (role !== (c.contact_role || "")) edit.contact_role = role;
+      }
       if (body.contact_phone != null) {
         const phone = normPhone(body.contact_phone);
         if (phone && phone !== c.contact_phone) {

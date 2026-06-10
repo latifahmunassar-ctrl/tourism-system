@@ -128,20 +128,26 @@
     <div class="card" id="profileCard" style="display:none">
       <button type="button" class="pf-back" onclick="showRequest()">← رجوع لطلب البرنامج / Back to request</button>
       <h2>معلومات شركتي / My Company Info</h2>
-      <div class="sub">تقدر تعدّل اسم المسؤول ورقمه والشعار. أي تعديل يُرسل لـ ALEZZ للموافقة قبل ما ينطبق.<br>You can edit the contact name, phone and logo. Edits are sent to ALEZZ for approval before they apply.</div>
+      <div class="sub">تقدر تعدّل اسم المسؤول، منصبه، رقمه، والشعار. (🔒 اسم الشركة، البريد، والموقع ثابتة.) أي تعديل يُرسل لـ ALEZZ للموافقة قبل ما ينطبق.<br>You can edit the contact name, role, phone and logo. (🔒 Company name, email and website are fixed.) Edits are sent to ALEZZ for approval before they apply.</div>
       <div class="pf-pending" id="pfPending" style="display:none"></div>
 
       <div id="profView">
-        <div class="pf-row"><span class="k">اسم الشركة / Company</span><span id="pvCompany">—</span></div>
+        <div class="pf-row"><span class="k">🔒 اسم الشركة / Company</span><span id="pvCompany">—</span></div>
         <div class="pf-row"><span class="k">اسم المسؤول / Contact</span><span id="pvName">—</span></div>
+        <div class="pf-row"><span class="k">موقعه من الشركة / Role</span><span id="pvRole">—</span></div>
         <div class="pf-row"><span class="k">رقم المسؤول / Phone</span><span id="pvPhone">—</span></div>
+        <div class="pf-row"><span class="k">🔒 البريد / Email</span><span id="pvEmail">—</span></div>
+        <div class="pf-row"><span class="k">🔒 الموقع / Website</span><span id="pvWebsite">—</span></div>
+        <div class="pf-row"><span class="k">💱 عملة التسعير / Currency</span><span id="pvCurrency">—</span></div>
         <div class="pf-row"><span class="k">الشعار / Logo</span><span id="pvLogo">—</span></div>
+        <div class="pf-row" id="pvDocRow" style="display:none"><span class="k">📄 وثيقة الشركة / Document</span><span id="pvDoc">—</span></div>
         <button type="button" class="pf-edit-btn" id="pfEditBtn" onclick="startEdit()">✏️ تعديل بياناتي / Edit my info</button>
       </div>
 
       <div id="profEdit" style="display:none">
         <div class="field"><label>اسم الشركة / Company <span style="font-weight:500;color:var(--muted);font-size:11.5px">(ثابت / fixed)</span></label><input id="peCompany" disabled></div>
         <div class="field"><label>اسم المسؤول / Contact Person</label><input id="peName"></div>
+        <div class="field"><label>موقعه من الشركة / Role</label><input id="peRole" placeholder="المدير / Manager"></div>
         <div class="field"><label>رقم المسؤول / Phone <span style="font-weight:500;color:var(--muted);font-size:11.5px">(هو رقم الدخول / login number)</span></label><input id="pePhone" inputmode="tel" placeholder="+9665..."></div>
         <div class="field"><label>الشعار / Logo</label>
           <div class="pf-logo-up">
@@ -300,14 +306,21 @@ function showApp(){
 // ── company profile (view + edit → pending owner approval) ──
 let peLogoData=null;
 function renderProfile(){
+  const CURN={SAR:'ريال سعودي / SAR',AED:'درهم إماراتي / AED',USD:'دولار / USD',OMR:'ريال عماني / OMR'};
   $('pvCompany').textContent=COMPANY.company_name||'—';
   $('pvName').textContent=COMPANY.contact_name||'—';
+  $('pvRole').textContent=COMPANY.contact_role||'—';
   $('pvPhone').textContent=COMPANY.contact_phone||'—';
+  $('pvEmail').textContent=COMPANY.contact_email||'—';
+  $('pvWebsite').textContent=COMPANY.website||'—';
+  $('pvCurrency').textContent=CURN[COMPANY.currency]||COMPANY.currency||'ريال سعودي / SAR';
   $('pvLogo').innerHTML=COMPANY.logo_url?`<img src="${esc(COMPANY.logo_url)}" style="height:26px;border-radius:6px;vertical-align:middle">`:'بدون شعار';
+  if(COMPANY.document_url){ $('pvDocRow').style.display=''; $('pvDoc').innerHTML=`<a href="${esc(COMPANY.document_url)}" target="_blank">عرض / View ↗</a>`; }
+  else $('pvDocRow').style.display='none';
   const pe=COMPANY.pending_edit;
   const box=$('pfPending');
   if(pe){
-    const names={contact_name:'اسم المسؤول',contact_phone:'رقم المسؤول',logo_url:'الشعار'};
+    const names={contact_name:'اسم المسؤول',contact_role:'المنصب',contact_phone:'رقم المسؤول',logo_url:'الشعار'};
     const items=Object.keys(pe).map(k=>names[k]||k).join('، ');
     box.innerHTML=`⏳ <b>لديك تعديل قيد المراجعة / Edit under review</b> (${esc(items)}). ينطبق بعد موافقة ALEZZ. · يمكنك تعديله من جديد (يستبدل المعلّق). / You can re-edit (replaces the pending one).`;
     box.style.display='block';
@@ -324,6 +337,7 @@ function startEdit(){
   $('profView').style.display='none'; $('profEdit').style.display='block';
   $('peCompany').value=COMPANY.company_name||'';
   $('peName').value=COMPANY.contact_name||'';
+  $('peRole').value=COMPANY.contact_role||'';
   $('pePhone').value=COMPANY.contact_phone||'';
   peLogoData=null;
   $('peLogoPrev').innerHTML=COMPANY.logo_url?`<img src="${esc(COMPANY.logo_url)}" alt="">`:'بدون<br>شعار';
@@ -402,7 +416,7 @@ $('peLogoFile').onchange=e=>{
 async function saveProfile(){
   const err=$('peErr'); err.style.display='none';
   const btn=$('peSave');
-  const payload={token:TOKEN, contact_name:$('peName').value.trim(), contact_phone:$('pePhone').value.trim()};
+  const payload={token:TOKEN, contact_name:$('peName').value.trim(), contact_role:$('peRole').value.trim(), contact_phone:$('pePhone').value.trim()};
   if(peLogoData) payload.logo_base64=peLogoData;
   btn.disabled=true; btn.textContent='جارٍ الإرسال…';
   try{

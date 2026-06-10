@@ -163,7 +163,7 @@ async function openCo(id){
   // بند منفصل: طلب تعديل بروفايل بانتظار الموافقة
   let peHtml='';
   if(c.pending_edit){
-    const pe=c.pending_edit; const names={contact_name:'اسم المسؤول',contact_phone:'رقم المسؤول',logo_url:'الشعار'};
+    const pe=c.pending_edit; const names={contact_name:'اسم المسؤول',contact_role:'المنصب',contact_phone:'رقم المسؤول',logo_url:'الشعار'};
     const rows=Object.keys(pe).map(k=>{
       const oldV=k==='logo_url'?(c.logo_url?`<img src="${esc(c.logo_url)}" class="pe-logo">`:'بدون'):esc(c[k]||'—');
       const newV=k==='logo_url'?`<img src="${esc(pe[k])}" class="pe-logo">`:esc(pe[k]);
