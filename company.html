@@ -31,7 +31,8 @@
   .prof .lg{width:54px;height:54px;border-radius:13px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--brand);font-weight:900;flex-shrink:0}
   .prof .lg img{width:100%;height:100%;object-fit:cover}
   .prof .nm{font-weight:800;font-size:15px}.prof .mt{color:var(--muted);font-size:12.5px;margin-top:3px}
-  .prof .out{margin-inline-start:auto;background:#fff;border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:7px 12px;cursor:pointer;font-weight:700;font-size:12.5px}
+  .prof .out{background:#fff;border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:7px 12px;cursor:pointer;font-weight:700;font-size:12.5px}
+  #btnProfile{background:#e9f7f1;color:var(--brand);border-color:var(--line)}
   .seg{display:flex;gap:8px}
   .seg label{flex:1;border:1px solid var(--line);border-radius:11px;padding:11px;text-align:center;cursor:pointer;margin:0;background:#fcfdfd;font-weight:600}
   .seg input{display:none}
@@ -62,6 +63,7 @@
   .pf-row:last-child{border:none}.pf-row .k{color:var(--muted)}
   .pf-pending{background:#fff7e6;border:1px solid #f0dcae;color:#8a6d1f;border-radius:11px;padding:11px;font-size:12.5px;margin-bottom:12px;line-height:1.7}
   .pf-edit-btn{background:#e9f7f1;color:var(--brand);border:1px solid var(--line);border-radius:11px;padding:11px;width:100%;cursor:pointer;font-weight:700;margin-top:10px}
+  .pf-back{background:none;border:none;color:var(--brand);font-weight:700;cursor:pointer;font-size:13.5px;padding:0;margin-bottom:14px}
   .pf-logo-up{display:flex;gap:12px;align-items:center}
   .pf-prev{width:60px;height:60px;border-radius:12px;border:1px solid var(--line);background:#f7faf8;display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--muted);font-size:11px;text-align:center;flex-shrink:0}
   .pf-prev img{width:100%;height:100%;object-fit:cover}
@@ -95,12 +97,16 @@
     <div class="prof">
       <div class="lg" id="pLogo">🏢</div>
       <div><div class="nm" id="pName">—</div><div class="mt" id="pMeta">—</div></div>
-      <button class="out" onclick="logout()">خروج</button>
+      <div style="margin-inline-start:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="out" id="btnProfile" onclick="showProfile()">🏢 معلومات شركتي</button>
+        <button class="out" onclick="logout()">خروج</button>
+      </div>
     </div>
 
-    <!-- ===== بروفايل الشركة (بند منفصل) ===== -->
-    <div class="card" id="profileCard">
-      <h2>بروفايل الشركة</h2>
+    <!-- ===== معلومات شركتي (صفحة منفصلة) ===== -->
+    <div class="card" id="profileCard" style="display:none">
+      <button type="button" class="pf-back" onclick="showRequest()">← رجوع لطلب البرنامج</button>
+      <h2>معلومات شركتي</h2>
       <div class="sub">معلوماتك المحفوظة — تقدر تعدّل اسم المسؤول ورقمه والشعار. أي تعديل يُرسل لـ ALEZZ للموافقة قبل ما ينطبق.</div>
       <div class="pf-pending" id="pfPending" style="display:none"></div>
 
@@ -275,6 +281,7 @@ function renderProfile(){
     box.style.display='none';
     $('pfEditBtn').style.display='';
   }
+  const bp=$('btnProfile'); if(bp) bp.textContent = pe ? '🏢 معلومات شركتي ⏳' : '🏢 معلومات شركتي';
 }
 function startEdit(){
   $('profView').style.display='none'; $('profEdit').style.display='block';
@@ -287,6 +294,8 @@ function startEdit(){
   $('peErr').style.display='none';
 }
 function cancelEdit(){ $('profEdit').style.display='none'; $('profView').style.display='block'; }
+function showProfile(){ cancelEdit(); $('profileCard').style.display=''; $('form').style.display='none'; $('done').style.display='none'; window.scrollTo({top:0,behavior:'smooth'}); }
+function showRequest(){ $('profileCard').style.display='none'; $('form').style.display=''; window.scrollTo({top:0,behavior:'smooth'}); }
 $('peLogoBtn').onclick=()=>$('peLogoFile').click();
 $('peLogoFile').onchange=e=>{
   const f=e.target.files[0]; if(!f) return;
