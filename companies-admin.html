@@ -194,7 +194,8 @@ async function openCo(id){
       <input id="acWa" placeholder="https://chat.whatsapp.com/..." value="${esc(c.whatsapp_group_link||'')}"></div>
     <div class="ac-bar">
       ${approved
-        ? `<button class="ac-btn save" onclick="save('${id}')">💾 حفظ رابط الواتساب</button>
+        ? `<button class="ac-btn ok" onclick="viewAs('${id}')">👁️ دخول كالشركة</button>
+           <button class="ac-btn save" onclick="save('${id}')">💾 حفظ رابط الواتساب</button>
            <button class="ac-btn no" onclick="setStatus('${id}','suspended')">⏸️ إيقاف الحساب</button>`
         : (c.status==='suspended'
           ? `<button class="ac-btn ok" onclick="setStatus('${id}','approved')">▶️ إعادة تفعيل</button>`
@@ -209,6 +210,17 @@ async function openCo(id){
 function flash(t,ok){const m=$('acMsg');if(!m)return;m.textContent=t;m.className='ac-msg '+(ok?'ok':'err');m.style.display='block';}
 async function update(id,patch){ const r=await fetch(BASE+'?admin_action=company_update&id='+id,{method:'POST',headers:H(),body:JSON.stringify(patch)}); return r.json(); }
 async function save(id){ const wa=($('acWa')||{}).value||''; const d=await update(id,{whatsapp_group_link:wa}); flash(d.ok?'تم حفظ رابط الواتساب ✅':(d.error||'فشل الحفظ'),!!d.ok); }
+// دخول كالشركة: تجيب توكن معاينة وتفتح بوابتهم بدون كلمة سر
+async function viewAs(id){
+  flash('جارٍ فتح بوابة الشركة…',true);
+  try{
+    const r=await fetch(BASE+'?admin_action=impersonate&id='+id,{method:'POST',headers:H()});
+    const d=await r.json();
+    if(!r.ok||!d.ok||!d.token) throw new Error(d.error||'تعذّر الدخول');
+    window.open('company.html?token='+encodeURIComponent(d.token),'_blank');
+    flash('فُتحت بوابة الشركة في تبويب جديد 👁️',true);
+  }catch(e){ flash(e.message||'تعذّر الدخول',false); }
+}
 async function setStatus(id,status){
   const labels={approved:'تفعيل',rejected:'رفض',suspended:'إيقاف'};
   if(!confirm('تأكيد '+labels[status]+' الحساب؟')) return;

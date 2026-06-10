@@ -431,13 +431,18 @@ async function saveProfile(){
   }catch(ex){ err.textContent=ex.message; err.style.display='block'; }
   finally{ btn.disabled=false; btn.textContent='حفظ وإرسال للموافقة'; }
 }
-// resume session
+// resume session — or "دخول كالشركة" عبر ?token= (معاينة المالكة بدون كلمة سر)
+let IMPERSONATING=false;
 (async ()=>{
+  const urlTok=new URLSearchParams(location.search).get('token');
+  if(urlTok){ TOKEN=urlTok; localStorage.setItem('alezz_company_token',TOKEN); IMPERSONATING=true; history.replaceState(null,'',location.pathname); }
   if(!TOKEN) return;
   try{
     const res=await fetch(INTAKE+'?company_action=me',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:TOKEN})});
     const d=await res.json();
-    if(res.ok&&d.ok){ COMPANY=d.company; showApp(); } else { localStorage.removeItem('alezz_company_token'); TOKEN=''; }
+    if(res.ok&&d.ok){ COMPANY=d.company; showApp();
+      if(IMPERSONATING){ const b=document.createElement('div'); b.textContent='👁️ وضع المعاينة (دخول كالشركة) — '+(COMPANY.company_name||''); b.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#7c3aed;color:#fff;text-align:center;padding:8px;font-weight:800;font-size:13px;z-index:9999'; document.body.appendChild(b); }
+    } else { localStorage.removeItem('alezz_company_token'); TOKEN=''; }
   }catch(_){}
 })();
 

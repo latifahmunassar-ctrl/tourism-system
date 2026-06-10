@@ -112,6 +112,15 @@ function publicCompany(c: any) {
   };
 }
 
+// look up a company by its own login_token OR the owner's impersonate_token,
+// so "view as company" works without ending the company's real session.
+async function companyByToken(supabase: any, token: string): Promise<any | null> {
+  if (!token) return null;
+  let { data } = await supabase.from("client_companies").select("*").eq("login_token", token).maybeSingle();
+  if (!data) ({ data } = await supabase.from("client_companies").select("*").eq("impersonate_token", token).maybeSingle());
+  return data || null;
+}
+
 // "2026-08-20" → "20 أغسطس 2026" (Tourism-AI parses Arabic dates). Pass through
 // any other free-form date string unchanged.
 function formatDate(raw: string): string {
@@ -474,7 +483,7 @@ Deno.serve(async (req) => {
     if (companyAction === "me") {
       const token = String(body.token || "");
       if (!token) return json({ error: "no token" }, 401);
-      const { data: c } = await supabase.from("client_companies").select("*").eq("login_token", token).maybeSingle();
+      const c = await companyByToken(supabase, token);
       if (!c || c.status !== "approved") return json({ error: "انتهت الجلسة، سجّلي الدخول من جديد" }, 401);
       return json({ ok: true, company: publicCompany(c) });
     }
@@ -483,7 +492,7 @@ Deno.serve(async (req) => {
     if (companyAction === "my_requests") {
       const token = String(body.token || "");
       if (!token) return json({ error: "no token" }, 401);
-      const { data: c } = await supabase.from("client_companies").select("id, status, currency").eq("login_token", token).maybeSingle();
+      const c = await companyByToken(supabase, token);
       if (!c || c.status !== "approved") return json({ error: "انتهت الجلسة، سجّلي الدخول من جديد" }, 401);
       const { data: reqs } = await supabase.from("client_requests")
         .select("ref_no, destination, days, pax, status, created_at, view_token, company_price, customer_name, sent_by")
@@ -505,7 +514,7 @@ Deno.serve(async (req) => {
     if (companyAction === "update_profile") {
       const token = String(body.token || "");
       if (!token) return json({ error: "انتهت الجلسة، سجّلي الدخول من جديد" }, 401);
-      const { data: c } = await supabase.from("client_companies").select("*").eq("login_token", token).maybeSingle();
+      const c = await companyByToken(supabase, token);
       if (!c || c.status !== "approved") return json({ error: "انتهت الجلسة، سجّلي الدخول من جديد" }, 401);
       const edit: Record<string, any> = {};
       const name = String(body.contact_name ?? "").trim();
@@ -538,10 +547,23 @@ Deno.serve(async (req) => {
   if (adminAction) {
     // Company-account management is OWNER-only (separate private dashboard) and
     // uses COMPANIES_ADMIN_SECRET. The staff request inbox keeps CLIENT_ADMIN_SECRET.
-    const ownerOnly = ["companies", "company_get", "company_update", "company_edit"].includes(adminAction);
+    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate"].includes(adminAction);
     const expected = (Deno.env.get(ownerOnly ? "COMPANIES_ADMIN_SECRET" : "CLIENT_ADMIN_SECRET") || "").trim();
     const got = (req.headers.get("x-admin-secret") || "").trim();
     if (!expected || got !== expected) return json({ error: "unauthorized" }, 401);
+
+    // owner "view as company": mint a separate impersonation token + return it,
+    // so the owner can open the company portal without its password.
+    if (adminAction === "impersonate") {
+      const cid = url.searchParams.get("id") || "";
+      const { data: c } = await supabase.from("client_companies").select("id, status").eq("id", cid).maybeSingle();
+      if (!c) return json({ error: "الشركة غير موجودة" }, 404);
+      if (c.status !== "approved") return json({ error: "الحساب غير مفعّل بعد" }, 400);
+      const itoken = randToken(28);
+      const { error } = await supabase.from("client_companies").update({ impersonate_token: itoken }).eq("id", cid);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true, token: itoken });
+    }
 
     // ── company-account management ──
     if (adminAction === "companies") {
@@ -678,7 +700,7 @@ Deno.serve(async (req) => {
   // stored profile (the company doesn't re-type its details).
   let companyRow: any = null;
   if (body.company_token) {
-    const { data } = await supabase.from("client_companies").select("*").eq("login_token", String(body.company_token)).maybeSingle();
+    const data = await companyByToken(supabase, String(body.company_token));
     if (data && data.status === "approved") companyRow = data;
   }
 
