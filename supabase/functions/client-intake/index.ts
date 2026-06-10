@@ -354,17 +354,26 @@ Deno.serve(async (req) => {
       const email = String(body.contact_email || "").trim();
       const website = String(body.website || "").trim();
       const contactName = String(body.contact_name || "").trim();
+      const contactRole = String(body.contact_role || "").trim();
+      const phoneDigits = phone.replace(/\D/g, "");
       if (!name || !phone || password.length < 4) {
         return json({ error: "الاسم، رقم الجوال، وكلمة المرور (4 خانات على الأقل) مطلوبة" }, 400);
       }
       if (!contactName) {
         return json({ error: "اسم المسؤول مطلوب" }, 400);
       }
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (!contactRole) {
+        return json({ error: "منصب المسؤول (موقعه من الشركة) مطلوب" }, 400);
+      }
+      if (phoneDigits.length < 9 || phoneDigits.length > 15) {
+        return json({ error: "رقم الجوال غير صحيح — أدخلي رقماً دولياً صحيحاً" }, 400);
+      }
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
         return json({ error: "البريد الإلكتروني مطلوب وبصيغة صحيحة" }, 400);
       }
-      if (!website) {
-        return json({ error: "الموقع أو الانستقرام مطلوب" }, 400);
+      const okWeb = /^(https?:\/\/)?([\w-]+\.)+[\w-]{2,}(\/\S*)?$/i.test(website) || /^@[\w.]{2,}$/.test(website);
+      if (!website || !okWeb) {
+        return json({ error: "الموقع أو الانستقرام مطلوب وبصيغة صحيحة (مثال: example.com أو @handle)" }, 400);
       }
       // reject duplicate phone
       const { data: existing } = await supabase.from("client_companies").select("id, status").eq("contact_phone", phone).maybeSingle();
