@@ -4,6 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>عرضك السياحي | ALEZZ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
 <style>
   :root{--brand:#0e9d6a;--brand2:#c41d88;--accent:#e0218a;--bg:#f1f8f4;--ink:#1d2b2a;--muted:#6b7c7a;--line:#dcede6}
   *{box-sizing:border-box}
@@ -44,6 +46,50 @@
   .state .big{font-size:50px;margin-bottom:14px}
   .foot{text-align:center;color:var(--muted);font-size:12.5px;margin-top:26px}
   @media print{.actions,.foot{display:none}header{border-radius:0}}
+  /* ===== تصميم PDF للشركات — مطابق لداشبورد الموظفين (نفس القياسات والهوامش) ===== */
+  @page{size:A4;margin:0}
+  #pdf{font-family:'Tajawal',sans-serif;background:#fff}
+  #pdf .pdf-cover{background:linear-gradient(150deg,#1565d8 0%,#0d47a1 40%,#0a2f6e 100%);color:#fff;padding:28px 32px;min-height:280mm;box-sizing:border-box;position:relative;overflow:hidden;page-break-inside:avoid}
+  #pdf .pdf-cover::before{content:"";position:absolute;top:-100px;left:-100px;width:400px;height:400px;background:rgba(255,255,255,0.04);border-radius:50%}
+  #pdf .pdf-cover::after{content:"";position:absolute;bottom:-80px;right:-80px;width:300px;height:300px;background:rgba(255,255,255,0.04);border-radius:50%}
+  #pdf .pdf-cover-airplane{position:absolute;top:24px;left:24px;width:240px;opacity:.95;z-index:2}
+  #pdf .pdf-logo-box{background:#fff;border-radius:14px;padding:14px 20px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:18px;box-shadow:0 6px 20px rgba(0,0,0,0.18);position:relative;z-index:3}
+  #pdf .pdf-logo-img{max-width:240px;max-height:120px;display:block}
+  #pdf .pdf-logo-name{color:#0d47a1;font-weight:900;font-size:24px}
+  #pdf .pdf-title{font-size:36px;font-weight:900;line-height:1.1;margin:8px 0 4px;text-shadow:0 3px 18px rgba(0,0,0,0.3)}
+  #pdf .pdf-dest-name{font-size:46px;font-weight:900;line-height:1.15;margin:0 0 8px;text-shadow:0 4px 24px rgba(0,0,0,0.35)}
+  #pdf .pdf-cities{font-size:14px;color:rgba(255,255,255,0.8);margin-bottom:16px;font-weight:700}
+  #pdf .pdf-date-row{display:flex;gap:18px;margin-bottom:14px}
+  #pdf .pdf-dates-card{background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.28);border-radius:14px;padding:14px 20px;min-width:200px}
+  #pdf .pdf-dates-label{font-size:11px;color:rgba(255,255,255,0.65);letter-spacing:2px;margin-bottom:6px;text-transform:uppercase;font-weight:700}
+  #pdf .pdf-dates{font-size:17px;font-weight:800;line-height:1.7}
+  #pdf .pdf-durbar{background:rgba(255,255,255,0.1);border-radius:10px;padding:10px 14px;margin-bottom:10px;color:#fff;font-size:13px;font-weight:700}
+  #pdf .pdf-disclaimer{background:rgba(255,235,59,0.96);color:#5d3a00;padding:14px 22px;border-radius:12px;margin-top:18px;text-align:center;font-size:18px;font-weight:900;line-height:1.45;border:2px solid #ffc107}
+  #pdf .pdf-cover-suitcase{display:block;margin:14px auto 0;max-width:300px;max-height:240px}
+  #pdf .pdf-section{padding:40px;background:#fff}
+  #pdf .pdf-section-title{font-size:22px;font-weight:900;color:#1a3a8f;border-bottom:4px solid #1a3a8f;padding-bottom:10px;margin-bottom:20px;page-break-after:avoid}
+  #pdf .pdf-keep{border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;page-break-inside:avoid}
+  #pdf .ht-name{font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:12px;line-height:1.3}
+  #pdf .ht-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:20px;font-weight:800;color:#0d1f4a;line-height:1.5}
+  #pdf .ht-grid .full{grid-column:1/-1}
+  #pdf .fl-name{font-weight:900;font-size:22px;color:#1a3a8f;margin-bottom:6px}
+  #pdf .fl-meta{font-size:18px;font-weight:800;color:#0d1f4a;line-height:1.6}
+  #pdf .day-row{display:flex;gap:14px;padding:12px 0;border-bottom:1px dashed #d0deff;page-break-inside:avoid}
+  #pdf .day-row:last-child{border-bottom:none}
+  #pdf .day-num{flex:0 0 60px;text-align:center}
+  #pdf .day-num b{display:block;background:#1a3a8f;color:#fff;border-radius:12px;padding:9px 0;font-size:17px}
+  #pdf .day-num span{font-size:11px;color:#7c8aa5}
+  #pdf .day-acts{flex:1;font-size:16px;font-weight:700;color:#0d1f4a;line-height:1.9}
+  #pdf .pdf-excludes{background:linear-gradient(135deg,#fff7ed,#fff);border:2px solid #ffd7b5;border-radius:14px;padding:18px 20px;margin:0 40px 18px;page-break-inside:avoid}
+  #pdf .pdf-excludes-title{font-size:20px;font-weight:900;color:#b45309;margin:0 0 6px}
+  #pdf .pdf-excludes-sub{font-size:14px;font-weight:800;color:#7c2d12;opacity:.9;margin:0 0 10px}
+  #pdf .pdf-excludes-list{margin:0;padding:0 18px;color:#0d1f4a;font-weight:800;font-size:16px;line-height:1.95}
+  #pdf .pdf-policy{background:linear-gradient(135deg,#eff6ff,#fff);border:2px solid #bcd7ff;border-radius:14px;padding:18px 20px;margin:0 40px 24px;page-break-inside:avoid}
+  #pdf .pdf-policy-title{font-size:20px;font-weight:900;color:#1a3a8f;margin:0 0 10px}
+  #pdf .pdf-policy-list{margin:0;padding:0 18px;color:#0d1f4a;font-weight:800;font-size:16px;line-height:1.95}
+  #pdf .pdf-filler-img{display:block;width:100%;height:auto;page-break-before:always}
+  .pdf-actions{text-align:center;padding:20px;background:#e9eef5}
+  @media print{.pdf-actions{display:none}}
 </style>
 </head>
 <body>
@@ -58,6 +104,49 @@ const esc=s=>String(s||"").replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp
 function shareWhatsApp(){
   const text=encodeURIComponent('عرض رحلتك / Your travel offer:\n'+location.href);
   window.open('https://wa.me/?text='+text,'_blank');
+}
+const EXCL=['💳 المصاريف الشخصية.','🎟️ تذاكر دخول الأماكن السياحية والفعاليات.','🛡️ تأمين السفر.','🍽️ الوجبات غير المذكورة في البرنامج.','🛂 التأشيرات إن وجدت.','➕ أي رسوم أو خدمات إضافية غير مذكورة ضمن تفاصيل البرنامج.','🏨 ضريبة السائح (Tourism Tax) التي تتطلب بعض الفنادق أو المدن دفعها مباشرة عند الوصول.'];
+const POL=['🏨 الفنادق والمنتجعات للغرفة الواحدة شاملة الإفطار لشخصين + طفل تحت 5 سنوات. تسجيل الدخول 2:00 ظهراً والخروج 12:00 ظهراً.','🧳 الوزن المسموح للطيران الداخلي 20 كيلو إلا إذا تم الاتفاق مسبقاً على زيادة.','🧾 لكل شخص حقيبة سفر واحدة 20 كجم + حقيبة يد. وعند تجاوز الحد يتم توفير سيارة أكبر برسوم إضافية.','🚗 السيارات حديثة ونظيفة ومكيفة وتتناسب مع عدد الأفراد المذكورين.','🗺️ يحق للعميل اختيار المناطق السياحية بحدود المنطقة المقيم بها، ولا تشمل تذاكر دخول الأماكن.','🤝 يُرجى احترام عادات وأديان البلد ومعاملة الناس بلطف.'];
+// عرض الشركات: نفس تصميم ملف الموظفين (وايت-ليبل: شعار الشركة، بدون سعر) بنفس القياسات والصور
+function renderRichPDF(d){
+  const p=d.proposal;
+  const cities=[...new Set((p.hotels||[]).map(h=>h.city).filter(Boolean))].join(' · ');
+  const daysCount=Math.max(0,...(p.timeline||[]).map(t=>+t.day||0));
+  const paxText=`${p.pax||''} شخص${p.children?` + ${p.children} طفل`:''}`.trim();
+  const dur=[]; if(daysCount) dur.push(daysCount+' أيام'); if(p.pax) dur.push(paxText);
+  const brand=d.company_logo?`<img class="pdf-logo-img" src="${esc(d.company_logo)}" alt="${esc(d.company_name||'')}">`:`<span class="pdf-logo-name">${esc(d.company_name||'')}</span>`;
+  const hotels=(p.hotels||[]).map(h=>`
+    <div class="pdf-keep"><div class="ht-name">🏨 ${esc(h.name)}</div>
+      <div class="ht-grid">
+        <span>📍 المدينة: ${esc(h.city||'')}</span><span>⭐ النجوم: ${esc(h.stars||'')}</span>
+        <span>🛏️ الغرفة: ${esc(h.room||'')}</span><span>📅 الإقامة: ${esc(h.nights||'')}</span>
+        ${h.meals?`<span class="full">✅ يشمل: ${esc(h.meals)}</span>`:''}
+      </div></div>`).join('');
+  const flightTexts=[]; (p.timeline||[]).forEach(t=>(t.items||[]).forEach(it=>{ if(it.kind==='flight') flightTexts.push(it.text); }));
+  const flights=flightTexts.length?`<div class="pdf-section" style="padding-top:0"><div class="pdf-section-title">✈️ الطيران والقطار / Flights & Trains</div>${flightTexts.map(t=>`<div class="pdf-keep"><div class="fl-name">✈️ ${esc(t)}</div></div>`).join('')}</div>`:'';
+  const days=(p.timeline||[]).map(t=>`<div class="day-row"><div class="day-num"><b>${t.day}</b><span>اليوم</span></div><div class="day-acts">${(t.items||[]).map(it=>`${ICON[it.kind]||'•'} ${esc(it.text)}`).join('<br>')}</div></div>`).join('');
+  document.getElementById('app').innerHTML=`
+    <div class="pdf-actions"><button class="btn" onclick="window.print()">🖨️ حفظ / طباعة PDF</button><button class="btn btn-wa" onclick="shareWhatsApp()">📲 مشاركة واتساب</button></div>
+    <div id="pdf">
+      <div class="pdf-cover">
+        <img class="pdf-cover-airplane" src="assets/pdf-airplane.png" alt="">
+        <div class="pdf-logo-box">${brand}</div>
+        <div class="pdf-title">رحلة سياحية</div>
+        <div class="pdf-dest-name">${esc(p.destination||d.destination||'')}</div>
+        ${cities?`<div class="pdf-cities">📍 ${esc(cities)}</div>`:''}
+        <div class="pdf-date-row"><div class="pdf-dates-card"><div class="pdf-dates-label">📅 التاريخ</div><div class="pdf-dates">${p.dateFrom?`من ${esc(p.dateFrom)}`:''}${p.dateTo?`<br>إلى ${esc(p.dateTo)}`:''}</div></div></div>
+        ${dur.length?`<div class="pdf-durbar">⏱️ ${esc(dur.join(' · '))}</div>`:''}
+        <div class="pdf-disclaimer">⚠️ هذا عرض برنامج ولا يعني بالضرورة توفّر الغرف لحظتها</div>
+        <img class="pdf-cover-suitcase" src="assets/pdf-suitcase.png" alt="">
+      </div>
+      ${hotels?`<div class="pdf-section"><div class="pdf-section-title">🏨 الفنادق / Hotels</div>${hotels}</div>`:''}
+      ${flights}
+      ${days?`<div class="pdf-section" style="padding-top:0"><div class="pdf-section-title">🗺️ البرنامج اليومي / Daily Program</div>${days}</div>`:''}
+      <div class="pdf-section" style="padding:0 0 4px"><div class="pdf-section-title" style="margin:0 40px 16px">🚫 البرنامج لا يشمل / Not Included</div></div>
+      <div class="pdf-excludes"><div class="pdf-excludes-title">🚫 البرنامج لا يشمل</div><div class="pdf-excludes-sub">يرجى الاطلاع على البنود التالية</div><ul class="pdf-excludes-list">${EXCL.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>
+      <div class="pdf-section" style="padding:0 0 4px"><div class="pdf-section-title" style="margin:0 40px 16px">📋 السياسة العامة / General Policy</div></div>
+      <div class="pdf-policy"><div class="pdf-policy-title">📌 السياسة العامة</div><ul class="pdf-policy-list">${POL.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>
+    </div>`;
 }
 function render(d){
   const p=d.proposal;
@@ -110,7 +199,7 @@ function stateMsg(icon,msg){document.getElementById('app').innerHTML=`<div class
   try{
     const res=await fetch(PROPOSAL_URL+"?token="+encodeURIComponent(token));
     const d=await res.json();
-    if(d.status==="ready"){render(d);}
+    if(d.status==="ready"){ (d.is_company?renderRichPDF:render)(d); }
     else if(d.status==="pending"){stateMsg("⏳",d.message||"العرض قيد التجهيز، نوافيك قريباً.");}
     else{stateMsg("❓","لم نجد هذا العرض. تأكد من الرابط.");}
   }catch(e){stateMsg("⚠️","تعذّر تحميل العرض، حاول لاحقاً.");}
