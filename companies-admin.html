@@ -55,6 +55,10 @@
   .rep-table tbody tr:hover{background:#f7faf8}
   .rep-rank{font-weight:900;color:var(--brand2)}
   .rep-cnt{font-weight:900;color:var(--brand);font-size:16px}
+  .tabbar{display:flex;gap:10px;margin-bottom:16px}
+  .tabbtn{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 26px;cursor:pointer;font:inherit;font-weight:800;color:var(--muted);font-size:14.5px;transition:.12s}
+  .tabbtn:hover{color:var(--ink)}
+  .tabbtn.on{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border-color:transparent;box-shadow:0 4px 14px rgba(14,157,106,.22)}
   .acbdg{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:800;white-space:nowrap;margin-inline-start:auto}
   .s-pending{background:#fef3c7;color:var(--warn)}.s-approved{background:#dcfce7;color:var(--ok)}.s-rejected{background:#fee2e2;color:var(--err)}.s-suspended{background:#e5e7eb;color:#555}
   .ac-empty{color:var(--muted);text-align:center;padding:40px 10px}
@@ -109,12 +113,21 @@
     <div class="logo">AL<span>E</span>ZZ — لوحة التحكم · الشركات والموظفين</div>
     <div class="rt"><button onclick="loadList()">↻ تحديث</button> <button onclick="logout()">خروج</button></div>
   </div>
+
+  <div class="tabbar">
+    <button id="tabBtnCompanies" class="tabbtn on" onclick="showTab('companies')">🏢 الشركات</button>
+    <button id="tabBtnStaff" class="tabbtn" onclick="showTab('staff')">👥 الموظفون</button>
+  </div>
+
+  <div id="tabCompanies" class="tabpane">
   <div class="grid">
     <div class="panel"><h3>الشركات <small>قيد المراجعة + معتمدة</small></h3><div id="listHd"></div><div id="list"><div class="ac-empty">جارٍ التحميل…</div></div></div>
     <div class="panel"><h3>ملف الشركة</h3><div id="detail"><div class="ac-empty">اختاري شركة من القائمة</div></div></div>
   </div>
+  </div><!-- /tabCompanies -->
 
-  <div class="panel" style="margin-top:14px">
+  <div id="tabStaff" class="tabpane" style="display:none">
+  <div class="panel">
     <h3>👥 أسماء الموظفين <small>تظهر كقائمة يختار منها الموظف عند «إرسال للشركة»</small></h3>
     <div class="staff-add">
       <input id="staffName" placeholder="اسم الموظف الجديد" onkeydown="if(event.key==='Enter')addStaff()">
@@ -136,6 +149,7 @@
     </div>
     <div id="repTable"><div class="ac-empty">جارٍ التحميل…</div></div>
   </div>
+  </div><!-- /tabStaff -->
 </div>
 
 <script>
@@ -161,6 +175,14 @@ async function login(){
 }
 function logout(){ localStorage.removeItem('alezz_owner_secret'); SECRET=''; location.reload(); }
 function show(){ $('loginView').style.display='none'; $('appView').style.display='block'; loadList(); loadStaff(); repPeriod('today', document.querySelector('.rep-btn')); }
+function showTab(t){
+  const isC=t==='companies';
+  $('tabCompanies').style.display=isC?'':'none';
+  $('tabStaff').style.display=isC?'none':'';
+  $('tabBtnCompanies').classList.toggle('on',isC);
+  $('tabBtnStaff').classList.toggle('on',!isC);
+  if(!isC){ loadStaff(); repPeriod('today', document.querySelector('.rep-btn')); }
+}
 // ── إدارة أسماء الموظفين ──
 function staffFlash(t,ok){const m=$('staffMsg');if(!m)return;m.textContent=t;m.className='ac-msg '+(ok?'ok':'err');m.style.display='block';setTimeout(()=>{m.style.display='none'},2500);}
 async function loadStaff(){
