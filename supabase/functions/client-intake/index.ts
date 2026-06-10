@@ -354,7 +354,7 @@ Deno.serve(async (req) => {
         password_hash, password_salt: salt,
         logo_url,
         website: String(body.website || "").trim(),
-        currency: ["SAR","USD","EUR","AED","OMR","KWD","EGP"].includes(String(body.currency)) ? String(body.currency) : "SAR",
+        currency: ["SAR","AED","USD"].includes(String(body.currency)) ? String(body.currency) : "SAR",
         status: "pending",
       }).select("id").single();
       if (error) { console.error("company register failed", error.message); return json({ error: "تعذّر التسجيل" }, 500); }
