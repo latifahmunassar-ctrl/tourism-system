@@ -3162,23 +3162,23 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
 
 <!-- ===== صندوق طلبات الشركات (B2B integration) — additive, isolated ===== -->
 <style>
-#inboxOverlay{position:fixed;inset:0;background:rgba(8,15,30,.6);z-index:9999;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
-#inboxOverlay .ibx{background:#0f1b33;border:1px solid rgba(255,255,255,.08);border-radius:18px;max-width:680px;width:100%;color:#e9eef7;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-#inboxOverlay .ibhd{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.08)}
-#inboxOverlay .ibhd b{font-size:16px}
-#inboxOverlay .ibx-x{background:none;border:none;color:#9fb0c8;font-size:22px;cursor:pointer}
+#inboxOverlay{position:fixed;inset:0;background:rgba(13,30,26,.45);z-index:9999;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
+#inboxOverlay .ibx{background:#fff;border:1px solid #dcede6;border-radius:18px;max-width:680px;width:100%;color:#1d2b2a;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+#inboxOverlay .ibhd{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #dcede6;background:#f2faf6;border-radius:18px 18px 0 0}
+#inboxOverlay .ibhd b{font-size:16px;color:#0e9d6a}
+#inboxOverlay .ibx-x{background:none;border:none;color:#6b7c7a;font-size:22px;cursor:pointer}
 #inboxList{padding:10px;max-height:62vh;overflow:auto}
-.ib-item{background:#14233f;border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:12px 14px;margin-bottom:9px;cursor:pointer;transition:.12s}
-.ib-item:hover{border-color:#0e9d6a}
+.ib-item{background:#fcfdfd;border:1px solid #dcede6;border-radius:12px;padding:12px 14px;margin-bottom:9px;cursor:pointer;transition:.12s}
+.ib-item:hover{border-color:#0e9d6a;background:#f2faf6}
 .ib-r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .ib-co{font-weight:800;font-size:14.5px}
-.ib-dest{color:#36c46f;font-weight:800;font-size:13.5px;margin-top:5px}
-.ib-r2{color:#9fb0c8;font-size:12px;margin-top:4px}
+.ib-dest{color:#0e9d6a;font-weight:800;font-size:13.5px;margin-top:5px}
+.ib-r2{color:#6b7c7a;font-size:12px;margin-top:4px}
 .ib-bdg{font-size:11px;padding:2px 9px;border-radius:20px;font-weight:800;white-space:nowrap}
-.ib-pending_review{background:#3a2f12;color:#e3b341}.ib-sent{background:#14361f;color:#36c46f}
-.ib-build_failed{background:#3a1717;color:#f06a6a}.ib-new{background:#1c2c4a;color:#7aa0e0}.ib-closed{background:#2a2f37;color:#9aa}
-.ib-empty{color:#9fb0c8;text-align:center;padding:30px}
-#inboxBanner{position:fixed;top:0;left:0;right:0;z-index:9000;background:linear-gradient(135deg,#0e9d6a,#c41d88);color:#fff;padding:9px 16px;display:none;align-items:center;justify-content:center;gap:14px;font-size:13.5px;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.ib-pending_review{background:#fef3c7;color:#b45309}.ib-sent{background:#dcfce7;color:#15803d}
+.ib-build_failed{background:#fee2e2;color:#b91c1c}.ib-new{background:#e0e7ff;color:#3730a3}.ib-closed{background:#e5e7eb;color:#555}
+.ib-empty{color:#6b7c7a;text-align:center;padding:30px}
+#inboxBanner{position:fixed;top:0;left:0;right:0;z-index:9000;background:linear-gradient(135deg,#0e9d6a,#c41d88);color:#fff;padding:9px 16px;display:none;align-items:center;justify-content:center;gap:14px;font-size:13.5px;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.2)}
 #inboxBanner button{background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:8px;padding:5px 10px;cursor:pointer;font-weight:700}
 </style>
 <div id="inboxBanner"></div>
@@ -3227,21 +3227,68 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       </div>`).join('');
     ibBadge(reqs.filter(r=>r.status==='pending_review'||r.status==='build_failed').length);
   }
+  // عبّي الفورم اليسار بمعلومات الطلب. لو الشركة اختارت اقتراحاً جاهزاً نفتح «اقتراحات
+  // جاهزة» ونظلّل نفس المقترح (هو الأساس)، وإلا نعبّي المدن في «تخصيص».
+  async function inboxFillForm(req){
+    const set=(id,v)=>{const e=document.getElementById(id); if(e!=null && v!=null && v!=='') e.value=v;};
+    set('bf-dest', req.destination);
+    set('bf-adults', req.pax||2);
+    const ch=document.getElementById('bf-children'); if(ch) ch.value=req.children||0;
+    set('bf-days', req.days||8);
+    const sm=document.getElementById('bf-sims'); if(sm) sm.value=req.sim_count||0;
+    set('bf-date', req.date_from||'');
+    const nt=document.getElementById('bf-notes'); if(nt) nt.value=req.notes||'';
+    const tr=document.querySelector('input[name=bf-tr][value="'+(req.transport==='shared'?'shared':'private')+'"]'); if(tr) tr.checked=true;
+    const eb=document.getElementById('bf-extrabed-on'); if(eb) eb.checked=!!(req.extra_bed && /نعم|كل|all/i.test(req.extra_bed));
+
+    // (1) اقتراح جاهز مختار → «اقتراحات جاهزة» + تظليل نفس المقترح
+    if(req.sel_distribution){
+      try{
+        const ready=document.querySelector('input[name=bf-mode][value=ready]');
+        if(ready){ ready.checked=true; if(typeof bfSetMode==='function') bfSetMode('ready', ready); }
+        if(typeof bfLoadSuggestions==='function'){ await bfLoadSuggestions(); }
+        const aSel=document.getElementById('bf-airport'); if(aSel && req.sel_pair) aSel.value=req.sel_pair;
+        if(typeof bfShowOptions==='function') bfShowOptions();
+        const want=String(req.sel_distribution).trim();
+        const match=[...document.querySelectorAll('#bf-sugList .bf-sug')].find(el=>{
+          const d=el.querySelector('.bf-sug-dist'); return d && d.textContent.trim()===want;
+        });
+        if(match){ match.click(); if(typeof bfExpected==='function') bfExpected(); return 'ready'; }
+      }catch(e){ console.warn('ready fill failed → fallback to manual', e); }
+      // ما لقى تطابق أو صار خطأ → نكمّل لوضع تخصيص
+    }
+
+    // (2) وضع تخصيص بالمدن
+    const manual=document.querySelector('input[name=bf-mode][value=manual]');
+    if(manual){ manual.checked=true; if(typeof bfSetMode==='function') bfSetMode('manual', manual); }
+    const rows=document.getElementById('bf-cityRows'); if(rows) rows.innerHTML='';
+    const cn=Array.isArray(req.cities_nights)?req.cities_nights.filter(c=>c&&c.city&&c.nights):[];
+    if(typeof bfAddCity==='function'){
+      if(cn.length){ cn.forEach(c=>{
+        bfAddCity(c.city, c.nights);
+        const sel=rows && rows.lastElementChild && rows.lastElementChild.querySelector('.bf-city');
+        if(sel && sel.value!==c.city){ const o=document.createElement('option'); o.value=c.city; o.textContent=c.city; sel.appendChild(o); sel.value=c.city; }
+      }); }
+      else bfAddCity();
+    }
+    if(typeof bfExpected==='function') bfExpected();
+    return cn.length ? 'manual' : 'empty';
+  }
   window.inboxLoad=async function(id){
     inboxClose();
     const r=await fetch(IB_BASE+'?admin_action=get&id='+id,{headers:ibH()});
     const j=await r.json(); const req=j.request;
     if(!req){alert('تعذّر فتح الطلب');return;}
     ibState={id:req.id,ref:req.ref_no,company:req.company_name,token:req.view_token,dest:req.destination};
-    if(!req.built_program || !/TOTAL_GROUP:/.test(req.built_program)){
+    const filled=await inboxFillForm(req);
+    ibBanner();
+    if((filled==='ready'||filled==='manual') && typeof buildFromForm==='function'){ buildFromForm(); if(typeof fpTab==='function') fpTab('build'); }
+    else {
       const cn=(req.cities_nights||[]).map(c=>`${c.nights} ${c.city}`).join(' + ');
       const ci=document.getElementById('chatInput');
-      if(ci){ ci.value=`${req.destination} ${req.days} ايام ${cn} ل ${req.pax} بالغين${req.children?(' و '+req.children+' اطفال'):''}${req.date_from?(' تاريخ '+req.date_from):''}`; ci.focus(); }
-      alert('هذا الطلب ما انبنى تلقائياً'+(req.build_message?(' ('+req.build_message+')'):'')+'.\nعبّيت تفاصيله في الشات — اضغط إرسال لبنائه، ثم «📤 إرسال للشركة».');
-      ibBanner(); return;
+      if(ci) ci.value=`${req.destination} ${req.days} ايام ${cn} ل ${req.pax} بالغين${req.children?(' و '+req.children+' اطفال'):''}${req.date_from?(' تاريخ '+req.date_from):''}${req.transport==='shared'?' النقل مشتركة':''}`;
+      if(typeof sendMessage==='function') sendMessage();
     }
-    buildReview(req.built_program);
-    ibBanner();
     window.scrollTo({top:0,behavior:'smooth'});
   };
   function ibBanner(){

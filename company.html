@@ -383,7 +383,14 @@ $('addCity').onclick=()=>addCityRow();
 $('days').oninput=()=>{ expectedNights(); chosen=null; $('sugList').innerHTML=''; $('sugPick').textContent='اضغط «عرض الخيارات».'; $('sugPick').style.display=''; };
 expectedNights(); applyMode();
 
-function parseDist(str){return String(str||'').split(/[+\-]/).map(s=>s.trim()).map(s=>{const m=s.match(/^(\d+)\s+(.+)$/);return m?{city:m[2].trim(),nights:+m[1]}:null}).filter(Boolean);}
+// يفك الأرقام العربية (٢،٣) وكلمات «ليالي/ليلة/أيام» — مطابق لمنطق داشبورد الموظفين
+function parseDist(str){
+  const norm=String(str||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+  return norm.split(/[+\-]/).map(s=>s.trim()).map(s=>{
+    const m=s.match(/^(\d+)\s*(?:ليالي|ليلة|ليال|أيام|يوم)?\s*(.+)$/);
+    return m?{city:m[2].trim(),nights:+m[1]}:null;
+  }).filter(Boolean);
+}
 
 $('form').addEventListener('submit', async e=>{
   e.preventDefault();
@@ -398,7 +405,12 @@ $('form').addEventListener('submit', async e=>{
   };
   if(mode()==='ready'){
     if(!chosen){ err.textContent='اضغط «عرض الخيارات» واختر توزيعاً، أو بدّل لـ«تخصيص بنفسي».'; err.style.display='block'; return; }
-    payload.distribution=chosen.distribution; payload.cities_nights=parseDist(chosen.distribution);
+    const cn=parseDist(chosen.distribution);
+    payload.cities_nights=cn;
+    if(!cn.length) payload.distribution=chosen.distribution;   // fallback لو تعذّر فكّ التوزيع
+    // احفظ اختيار الشركة عشان الموظف يفتحه في «اقتراحات جاهزة» نفسه
+    payload.selected_distribution=chosen.distribution;
+    payload.selected_pair=(chosen.arrival_airport||'')+'|'+(chosen.departure_airport||'');
     if(chosen.arrival_airport) payload.notes=[payload.notes,`اقتراح جاهز (${airAr(chosen.arrival_airport)}↔${airAr(chosen.departure_airport)})`].filter(Boolean).join(' | ');
   }else{
     const cities=[...cityRows.querySelectorAll('.crow')].map(r=>({city:r.querySelector('.csel').value,nights:+r.querySelector('.cnights').value||0})).filter(c=>c.city&&c.nights);

@@ -587,6 +587,8 @@ Deno.serve(async (req) => {
     contact_phone: companyRow ? String(companyRow.contact_phone || "") : String(body.contact_phone || "").trim(),
     destination,
     cities_nights: Array.isArray(body.cities_nights) ? body.cities_nights : [],
+    sel_distribution: body.selected_distribution ? String(body.selected_distribution) : null,
+    sel_pair: body.selected_pair ? String(body.selected_pair) : null,
     pax, children: parseInt(String(body.children || "0"), 10) || 0, days,
     date_from: String(body.date_from || "").trim(),
     transport: String(body.transport || "private"),
