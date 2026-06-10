@@ -36,6 +36,10 @@
   .ac-mini{display:flex;gap:5px;margin-top:5px;flex-wrap:wrap}
   .ac-mini span{font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px}
   .ac-mini .t{background:#eef2f0;color:var(--muted)}.ac-mini .d{background:#dcfce7;color:var(--ok)}.ac-mini .p{background:#fef3c7;color:var(--warn)}
+  .ac-editbdg{display:inline-block;margin-top:6px;background:#fff7e6;color:#b45309;border:1px solid #f0dcae;font-size:10.5px;font-weight:800;padding:2px 9px;border-radius:20px}
+  .ac-item.has-edit{border-color:#f0dcae;box-shadow:0 0 0 2px rgba(212,168,67,.15)}
+  #listHd:not(:empty){margin:0 10px 8px}
+  .hd-edit{display:block;background:#fff7e6;color:#b45309;border:1px solid #f0dcae;border-radius:10px;padding:8px 11px;font-size:12px;font-weight:800;text-align:center}
   .acbdg{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:800;white-space:nowrap;margin-inline-start:auto}
   .s-pending{background:#fef3c7;color:var(--warn)}.s-approved{background:#dcfce7;color:var(--ok)}.s-rejected{background:#fee2e2;color:var(--err)}.s-suspended{background:#e5e7eb;color:#555}
   .ac-empty{color:var(--muted);text-align:center;padding:40px 10px}
@@ -91,7 +95,7 @@
     <div class="rt"><button onclick="loadList()">↻ تحديث</button> <button onclick="logout()">خروج</button></div>
   </div>
   <div class="grid">
-    <div class="panel"><h3>الشركات <small>قيد المراجعة + معتمدة</small></h3><div id="list"><div class="ac-empty">جارٍ التحميل…</div></div></div>
+    <div class="panel"><h3>الشركات <small>قيد المراجعة + معتمدة</small></h3><div id="listHd"></div><div id="list"><div class="ac-empty">جارٍ التحميل…</div></div></div>
     <div class="panel"><h3>ملف الشركة</h3><div id="detail"><div class="ac-empty">اختاري شركة من القائمة</div></div></div>
   </div>
 </div>
@@ -123,16 +127,20 @@ async function loadList(){
   const r=await fetch(BASE+'?admin_action=companies',{headers:H()});
   if(!r.ok){ if(r.status===401){logout();} return; }
   data=(await r.json()).companies||[];
+  // الشركات اللي عندها طلب تعديل معلّق أولاً، ثم حسب الحالة
   const order={pending:0,approved:1,suspended:2,rejected:3};
-  data.sort((a,b)=>(order[a.status]??9)-(order[b.status]??9));
+  data.sort((a,b)=>(b.has_pending_edit?1:0)-(a.has_pending_edit?1:0) || (order[a.status]??9)-(order[b.status]??9));
+  const editCount=data.filter(c=>c.has_pending_edit).length;
+  const hd=document.getElementById('listHd'); if(hd) hd.innerHTML = editCount?`<span class="hd-edit">✏️ ${editCount} طلب تعديل بانتظار موافقتك</span>`:'';
   if(!data.length){ $('list').innerHTML='<div class="ac-empty">لا توجد شركات</div>'; return; }
   $('list').innerHTML=data.map(c=>{
     const st=c.stats||{total:0,done:0,pending:0};
     const logo=c.logo_url?`<img src="${esc(c.logo_url)}" alt="">`:initials(c.company_name);
     const mini=c.status==='approved'?`<div class="ac-mini"><span class="t">📋 ${st.total}</span><span class="d">✅ ${st.done}</span>${st.pending?`<span class="p">⏳ ${st.pending}</span>`:''}</div>`:'';
-    return `<div class="ac-item ${cur===c.id?'sel':''}" onclick="openCo('${c.id}')">
+    const editb=c.has_pending_edit?`<div class="ac-editbdg">✏️ طلب تعديل بيانات</div>`:'';
+    return `<div class="ac-item ${cur===c.id?'sel':''} ${c.has_pending_edit?'has-edit':''}" onclick="openCo('${c.id}')">
       <div class="ac-lg">${logo}</div>
-      <div style="flex:1;min-width:0"><div class="ac-nm">${esc(c.company_name)}</div><div class="ac-mt">${esc(c.contact_phone)}</div>${mini}</div>
+      <div style="flex:1;min-width:0"><div class="ac-nm">${esc(c.company_name)}</div><div class="ac-mt">${esc(c.contact_phone)}</div>${mini}${editb}</div>
       <span class="acbdg s-${c.status}">${AC_STAT[c.status]||c.status}</span></div>`;
   }).join('');
 }

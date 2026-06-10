@@ -447,7 +447,7 @@ Deno.serve(async (req) => {
     // ── company-account management ──
     if (adminAction === "companies") {
       const { data, error } = await supabase.from("client_companies")
-        .select("id, company_name, contact_name, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, created_at, approved_at")
+        .select("id, company_name, contact_name, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, created_at, approved_at, pending_edit")
         .order("created_at", { ascending: false }).limit(300);
       if (error) return json({ error: error.message }, 500);
       // attach request stats per company
@@ -457,7 +457,7 @@ Deno.serve(async (req) => {
         const s = stat[r.company_id] || (stat[r.company_id] = { total: 0, done: 0, pending: 0 });
         s.total++; if (r.status === "sent") s.done++; else s.pending++;
       }
-      const companies = (data || []).map((c: any) => ({ ...c, stats: stat[c.id] || { total: 0, done: 0, pending: 0 } }));
+      const companies = (data || []).map((c: any) => ({ ...c, pending_edit: undefined, has_pending_edit: !!c.pending_edit, stats: stat[c.id] || { total: 0, done: 0, pending: 0 } }));
       return json({ companies });
     }
 
