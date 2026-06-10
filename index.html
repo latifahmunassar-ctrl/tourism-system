@@ -3168,6 +3168,8 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
 #inboxOverlay .ibhd{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #dcede6;background:#f2faf6;border-radius:18px 18px 0 0}
 #inboxOverlay .ibhd b{font-size:16px;color:#0e9d6a}
 #inboxOverlay .ibx-x{background:none;border:none;color:#6b7c7a;font-size:22px;cursor:pointer}
+.ib-search{padding:10px 14px 0}
+.ib-search input{width:100%;padding:9px 12px;border:1px solid #cfe3d8;border-radius:9px;font:inherit;font-size:13px;background:#f7fbf9}
 .ib-staff{padding:10px 14px 0;font-size:13px;font-weight:800;color:#0e5a40;display:flex;align-items:center;gap:8px}
 .ib-staff select{flex:1;padding:8px 10px;border:1px solid #cfe3d8;border-radius:9px;font:inherit;font-weight:700;background:#f3fbf7}
 .ib-tabs{display:flex;gap:8px;padding:10px 14px 0}
@@ -3201,6 +3203,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       <button id="ibTabIn" class="ib-tab active" onclick="ibTab('in')">📥 الواردة <span class="ib-cnt" id="ibCountIn">0</span></button>
       <button id="ibTabSent" class="ib-tab" onclick="ibTab('sent')">✅ المُرسلة <span class="ib-cnt" id="ibCountSent">0</span></button>
     </div>
+    <div class="ib-search"><input id="ibSearch" type="search" placeholder="🔎 بحث: شركة · وجهة · موظف · رقم الطلب" oninput="ibSearchApply()"></div>
     <div id="inboxList"><div class="ib-empty">جارٍ التحميل…</div></div>
     <div id="inboxSentList" style="display:none"></div>
   </div>
@@ -3252,15 +3255,25 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     document.getElementById('ibTabIn').classList.toggle('active',which==='in');
     document.getElementById('ibTabSent').classList.toggle('active',which==='sent');
   };
+  let ibLastReqs=[];
+  // فلترة الصندوق: شركة · وجهة · موظف · رقم الطلب (تطبّق على الوارد والمرسل)
+  function ibMatch(r,q){
+    if(!q) return true;
+    const hay=[r.company_name,r.destination,r.ref_no,r.sent_by,r.customer_name].map(x=>String(x||'').toLowerCase()).join(' | ');
+    return q.toLowerCase().split(/\s+/).filter(Boolean).every(t=>hay.includes(t));
+  }
+  window.ibSearchApply=function(){ ibRender(ibLastReqs); };
   function ibRender(reqs){
     reqs=reqs||[];
+    ibLastReqs=reqs;
+    const q=(document.getElementById('ibSearch')||{}).value||'';
     const IB_CURN={SAR:'ريال',USD:'دولار',EUR:'يورو',AED:'درهم',OMR:'ريال عماني',KWD:'دينار كويتي',EGP:'جنيه مصري'};
     const curTag=r=>r.company_currency?` · 💱 ${ibEsc(IB_CURN[r.company_currency]||r.company_currency)}`:'';
     // الواردة = غير المُرسلة وغير المغلقة، الأحدث أولاً
-    const incoming=reqs.filter(r=>r.status!=='sent'&&r.status!=='closed')
+    const incoming=reqs.filter(r=>r.status!=='sent'&&r.status!=='closed').filter(r=>ibMatch(r,q))
       .sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
     // المُرسلة، الأحدث إرسالاً أولاً
-    const sent=reqs.filter(r=>r.status==='sent')
+    const sent=reqs.filter(r=>r.status==='sent').filter(r=>ibMatch(r,q))
       .sort((a,b)=>String(b.sent_at||'').localeCompare(String(a.sent_at||'')));
     document.getElementById('ibCountIn').textContent=incoming.length;
     document.getElementById('ibCountSent').textContent=sent.length;
