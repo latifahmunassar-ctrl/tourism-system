@@ -122,8 +122,13 @@ function renderRichPDF(d){
         <span>🛏️ الغرفة: ${esc(h.room||'')}</span><span>📅 الإقامة: ${esc(h.nights||'')}</span>
         ${h.meals?`<span class="full">✅ يشمل: ${esc(h.meals)}</span>`:''}
       </div></div>`).join('');
-  const flightTexts=[]; (p.timeline||[]).forEach(t=>(t.items||[]).forEach(it=>{ if(it.kind==='flight') flightTexts.push(it.text); }));
-  const flights=flightTexts.length?`<div class="pdf-section" style="padding-top:0"><div class="pdf-section-title">✈️ الطيران والقطار / Flights & Trains</div>${flightTexts.map(t=>`<div class="pdf-keep"><div class="fl-name">✈️ ${esc(t)}</div></div>`).join('')}</div>`:'';
+  // تاريخ كل يوم = تاريخ البداية + (اليوم − 1)
+  const _M=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  const _AR={'يناير':0,'فبراير':1,'مارس':2,'أبريل':3,'مايو':4,'يونيو':5,'يوليو':6,'أغسطس':7,'سبتمبر':8,'أكتوبر':9,'نوفمبر':10,'ديسمبر':11};
+  function _start(){ const s=String(p.dateFrom||''); let m=s.match(/(\d{4})-(\d{2})-(\d{2})/); if(m)return new Date(+m[1],+m[2]-1,+m[3]); m=s.match(/(\d{1,2})\s+([^\s\d]+)\s+(\d{4})/); if(m&&_AR[m[2]]!=null)return new Date(+m[3],_AR[m[2]],+m[1]); return null; }
+  function dateForDay(day){ const d0=_start(); if(!d0||!day)return''; const d=new Date(d0); d.setDate(d.getDate()+(+day-1)); return `${d.getDate()} ${_M[d.getMonth()]} ${d.getFullYear()}`; }
+  const fls=[]; (p.timeline||[]).forEach(t=>(t.items||[]).forEach(it=>{ if(it.kind==='flight') fls.push({day:t.day,text:it.text}); }));
+  const flights=fls.length?`<div class="pdf-section" style="padding-top:0"><div class="pdf-section-title">✈️ الطيران والقطار / Flights & Trains</div>${fls.map(f=>`<div class="pdf-keep"><div class="fl-name">✈️ ${esc(f.text)}</div><div class="fl-meta">📅 اليوم ${f.day}${dateForDay(f.day)?' · '+esc(dateForDay(f.day)):''}</div></div>`).join('')}</div>`:'';
   const days=(p.timeline||[]).map(t=>`<div class="day-row"><div class="day-num"><b>${t.day}</b><span>اليوم</span></div><div class="day-acts">${(t.items||[]).map(it=>`${ICON[it.kind]||'•'} ${esc(it.text)}`).join('<br>')}</div></div>`).join('');
   document.getElementById('app').innerHTML=`
     <div class="pdf-actions"><button class="btn" onclick="window.print()">🖨️ حفظ / طباعة PDF</button><button class="btn btn-wa" onclick="shareWhatsApp()">📲 مشاركة واتساب</button></div>
