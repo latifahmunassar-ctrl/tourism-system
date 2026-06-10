@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
   // Select only client-safe columns — built_program is deliberately excluded.
   const { data, error } = await supabase
     .from("client_requests")
-    .select("ref_no, company_name, destination, status, client_program, group_total")
+    .select("ref_no, company_name, destination, status, client_program, group_total, company_id")
     .eq("view_token", token)
     .single();
 
@@ -46,6 +46,14 @@ Deno.serve(async (req) => {
     return json({ status: "pending", message: "العرض قيد التجهيز من فريقنا، نوافيك قريباً." }, 200);
   }
 
+  // B2B company offer → white-label: the company's own logo, no price.
+  let company_logo: string | null = null;
+  if (data.company_id) {
+    const { data: comp } = await supabase
+      .from("client_companies").select("logo_url").eq("id", data.company_id).maybeSingle();
+    company_logo = comp?.logo_url || null;
+  }
+
   return json({
     status: "ready",
     ref_no: data.ref_no,
@@ -53,5 +61,7 @@ Deno.serve(async (req) => {
     destination: data.destination,
     group_total: data.group_total,
     proposal: data.client_program,
+    is_company: !!data.company_id,
+    company_logo,
   });
 });
