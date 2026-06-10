@@ -3168,7 +3168,14 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
 #inboxOverlay .ibhd{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #dcede6;background:#f2faf6;border-radius:18px 18px 0 0}
 #inboxOverlay .ibhd b{font-size:16px;color:#0e9d6a}
 #inboxOverlay .ibx-x{background:none;border:none;color:#6b7c7a;font-size:22px;cursor:pointer}
-#inboxList{padding:10px;max-height:62vh;overflow:auto}
+.ib-tabs{display:flex;gap:8px;padding:10px 14px 0}
+.ib-tab{flex:1;background:#f2faf6;border:1px solid #dcede6;border-bottom:none;border-radius:11px 11px 0 0;padding:10px;font:inherit;font-weight:800;font-size:13px;color:#6b7c7a;cursor:pointer}
+.ib-tab.active{background:#fff;color:#0e9d6a;box-shadow:0 -2px 0 #0e9d6a inset}
+.ib-cnt{display:inline-block;min-width:18px;background:#e9f7f1;color:#0e9d6a;border-radius:999px;font-size:11px;padding:0 6px;margin-inline-start:4px}
+.ib-tab.active .ib-cnt{background:#0e9d6a;color:#fff}
+#inboxList,#inboxSentList{padding:10px;max-height:60vh;overflow:auto}
+.ib-sent-item{cursor:default;opacity:.95}
+.ib-sent-meta{margin-top:7px;font-size:12px;color:#15803d;background:#dcfce7;border-radius:8px;padding:5px 9px;display:inline-block}
 .ib-item{background:#fcfdfd;border:1px solid #dcede6;border-radius:12px;padding:12px 14px;margin-bottom:9px;cursor:pointer;transition:.12s}
 .ib-item:hover{border-color:#0e9d6a;background:#f2faf6}
 .ib-r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -3185,8 +3192,13 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
 <div id="inboxBanner"></div>
 <div id="inboxOverlay" onclick="if(event.target===this)inboxClose()">
   <div class="ibx">
-    <div class="ibhd"><b>📥 طلبات الشركات الواردة</b><button class="ibx-x" onclick="inboxClose()">×</button></div>
+    <div class="ibhd"><b>📥 طلبات الشركات</b><button class="ibx-x" onclick="inboxClose()">×</button></div>
+    <div class="ib-tabs">
+      <button id="ibTabIn" class="ib-tab active" onclick="ibTab('in')">📥 الواردة <span class="ib-cnt" id="ibCountIn">0</span></button>
+      <button id="ibTabSent" class="ib-tab" onclick="ibTab('sent')">✅ المُرسلة <span class="ib-cnt" id="ibCountSent">0</span></button>
+    </div>
     <div id="inboxList"><div class="ib-empty">جارٍ التحميل…</div></div>
+    <div id="inboxSentList" style="display:none"></div>
   </div>
 </div>
 <script>
@@ -3216,17 +3228,37 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     catch(e){ document.getElementById('inboxList').innerHTML='<div class="ib-empty">تعذّر التحميل — تأكد من المفتاح الإداري.</div>'; }
   };
   window.inboxClose=function(){document.getElementById('inboxOverlay').style.display='none';};
+  function ibFmtTime(iso){ if(!iso) return ''; const d=new Date(iso); if(isNaN(d.getTime())) return ''; const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} - ${p(d.getHours())}:${p(d.getMinutes())}`; }
+  window.ibTab=function(which){
+    document.getElementById('inboxList').style.display=which==='in'?'':'none';
+    document.getElementById('inboxSentList').style.display=which==='sent'?'':'none';
+    document.getElementById('ibTabIn').classList.toggle('active',which==='in');
+    document.getElementById('ibTabSent').classList.toggle('active',which==='sent');
+  };
   function ibRender(reqs){
-    if(!reqs.length){document.getElementById('inboxList').innerHTML='<div class="ib-empty">لا توجد طلبات</div>';ibBadge(0);return;}
-    const order={build_failed:0,pending_review:1,new:1,sent:2,closed:3};
-    reqs.sort((a,b)=>(order[a.status]??9)-(order[b.status]??9));
-    document.getElementById('inboxList').innerHTML=reqs.map(r=>`
+    reqs=reqs||[];
+    // الواردة = غير المُرسلة وغير المغلقة، الأحدث أولاً
+    const incoming=reqs.filter(r=>r.status!=='sent'&&r.status!=='closed')
+      .sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+    // المُرسلة، الأحدث إرسالاً أولاً
+    const sent=reqs.filter(r=>r.status==='sent')
+      .sort((a,b)=>String(b.sent_at||'').localeCompare(String(a.sent_at||'')));
+    document.getElementById('ibCountIn').textContent=incoming.length;
+    document.getElementById('ibCountSent').textContent=sent.length;
+    document.getElementById('inboxList').innerHTML=incoming.length?incoming.map(r=>`
       <div class="ib-item" onclick="inboxLoad('${r.id}')">
         <div class="ib-r1"><span class="ib-co">🏢 ${ibEsc(r.company_name)}</span><span class="ib-bdg ib-${r.status}">${IB_STAT[r.status]||r.status}</span></div>
         <div class="ib-dest">📍 ${ibEsc(r.destination)} · ${r.days} أيام · ${r.pax} أشخاص</div>
         <div class="ib-r2">${ibEsc(r.ref_no)}${r.group_total?' · '+Number(r.group_total).toLocaleString('en-US')+' ريال':''}</div>
-      </div>`).join('');
-    ibBadge(reqs.filter(r=>r.status==='pending_review'||r.status==='build_failed').length);
+      </div>`).join(''):'<div class="ib-empty">لا توجد طلبات واردة</div>';
+    document.getElementById('inboxSentList').innerHTML=sent.length?sent.map(r=>`
+      <div class="ib-item ib-sent-item">
+        <div class="ib-r1"><span class="ib-co">🏢 ${ibEsc(r.company_name)}</span><span class="ib-bdg ib-sent">تم الإرسال</span></div>
+        <div class="ib-dest">📍 ${ibEsc(r.destination)} · ${r.days} أيام · ${r.pax} أشخاص</div>
+        <div class="ib-r2">${ibEsc(r.ref_no)}${r.group_total?' · '+Number(r.group_total).toLocaleString('en-US')+' ريال':''}</div>
+        <div class="ib-sent-meta">📤 ${r.sent_by?('أرسله: <b>'+ibEsc(r.sent_by)+'</b> · '):''}${ibFmtTime(r.sent_at)}</div>
+      </div>`).join(''):'<div class="ib-empty">لا توجد طلبات مُرسلة بعد</div>';
+    ibBadge(incoming.filter(r=>r.status==='pending_review'||r.status==='build_failed').length);
   }
   // عبّي الفورم اليسار بمعلومات الطلب. لو الشركة اختارت اقتراحاً جاهزاً نفتح «اقتراحات
   // جاهزة» ونظلّل نفس المقترح (هو الأساس)، وإلا نعبّي المدن في «تخصيص».
@@ -3316,18 +3348,26 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     const extra=(typeof extraCostsTotal==='function')?extraCostsTotal():0;
     const finalGroup=(basePrice||0)+extra+profit;
     if(!confirm(`إرسال العرض لشركة «${ibState.company}» بإجمالي ${finalGroup.toLocaleString('en-US')} ريال؟\nالشركة بتشوف البرنامج + هذا الإجمالي فقط (بدون أي تسعير داخلي).`)) return;
+    const by=ibStaffName();   // اسم الموظف المرسِل (يُسأل مرة ويُحفظ)
     const prog=lastProgramRaw.replace(/TOTAL_GROUP:\s*[\d.,]+/, 'TOTAL_GROUP:'+finalGroup);
     try{
       let res=await fetch(IB_BASE+'?admin_action=update_program&id='+ibState.id,{method:'POST',headers:ibH(),body:JSON.stringify({built_program:prog})});
       if(!res.ok) throw new Error('فشل حفظ البرنامج');
-      res=await fetch(IB_BASE+'?admin_action=approve&id='+ibState.id,{method:'POST',headers:ibH()});
+      res=await fetch(IB_BASE+'?admin_action=approve&id='+ibState.id,{method:'POST',headers:ibH(),body:JSON.stringify({by})});
       const d=await res.json(); if(!d.ok) throw new Error(d.error||'فشل الاعتماد');
       const link=IB_PROPOSAL+'?token='+ibState.token;
       try{await navigator.clipboard.writeText(link);}catch(_){}
       alert('✅ تم إرسال العرض للشركة!\nرابط العميل (انتسخ تلقائياً):\n'+link);
       inboxDismiss();
+      // حدّث القوائم: الطلب ينتقل من «الواردة» إلى «المُرسلة»
+      try{ const lr=await fetch(IB_BASE+'?admin_action=list',{headers:ibH()}); const lj=await lr.json(); if(lj&&lj.requests) ibRender(lj.requests); }catch(_){}
     }catch(e){alert('تعذّر الإرسال: '+(e.message||e));}
   };
+  function ibStaffName(){
+    let n=localStorage.getItem('alezz_staff_name')||'';
+    if(!n){ const p=prompt('اسمك (يُسجّل كموظف أرسل الطلب):',''); if(p){ n=p.trim(); localStorage.setItem('alezz_staff_name',n); } }
+    return n;
+  }
   // passive badge refresh on load (no prompt)
   if(localStorage.getItem('alezz_admin_secret')){
     fetch(IB_BASE+'?admin_action=list',{headers:ibH()}).then(r=>r.ok?r.json():null)

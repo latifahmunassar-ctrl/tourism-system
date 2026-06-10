@@ -497,7 +497,7 @@ Deno.serve(async (req) => {
     if (adminAction === "list") {
       const { data, error } = await supabase
         .from("client_requests")
-        .select("id, ref_no, company_name, destination, pax, days, status, group_total, created_at, sent_at")
+        .select("id, ref_no, company_name, destination, pax, days, status, group_total, created_at, sent_at, sent_by")
         .order("created_at", { ascending: false }).limit(200);
       if (error) return json({ error: error.message }, 500);
       return json({ requests: data });
@@ -522,11 +522,13 @@ Deno.serve(async (req) => {
     }
 
     if (adminAction === "approve" && req.method === "POST") {
+      const body = await req.json().catch(() => ({} as Record<string, any>));
+      const sentBy = String(body.by || "").trim() || null;
       const { data: row, error: e1 } = await supabase.from("client_requests").select("built_program").eq("id", id).single();
       if (e1 || !row) return json({ error: "not found" }, 404);
       const { view, groupTotal } = toClientView(row.built_program || "");
       const { error } = await supabase.from("client_requests")
-        .update({ client_program: view, group_total: groupTotal, status: "sent", sent_at: new Date().toISOString() })
+        .update({ client_program: view, group_total: groupTotal, status: "sent", sent_at: new Date().toISOString(), sent_by: sentBy })
         .eq("id", id);
       if (error) return json({ error: error.message }, 500);
       return json({ ok: true });
