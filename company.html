@@ -95,7 +95,7 @@
 <body>
 <header>
   <div class="logo">AL<span>E</span>ZZ</div>
-  <p id="hsub">نمو أسرع يبدأ من عرض أسرع<br>Faster growth starts with a faster offer</p>
+  <p id="hsub">نمو أسرع يبدأ من عرض أسرع<br><span style="font-size:.82em;opacity:.85">Faster growth starts with a faster offer</span></p>
 </header>
 
 <div class="wrap">
@@ -294,7 +294,7 @@ $('loginForm').addEventListener('submit', async e=>{
 function logout(){ localStorage.removeItem('alezz_company_token'); TOKEN=''; COMPANY=null; location.reload(); }
 function showApp(){
   $('loginForm').style.display='none'; $('app').style.display='block';
-  $('hsub').textContent='نمو أسرع يبدأ من عرض أسرع · Faster growth starts with a faster offer';
+  $('hsub').innerHTML='نمو أسرع يبدأ من عرض أسرع<br><span style="font-size:.82em;opacity:.85">Faster growth starts with a faster offer</span>';
   $('pName').textContent=COMPANY.company_name;
   $('pMeta').textContent=[COMPANY.contact_name,COMPANY.contact_phone].filter(Boolean).join(' · ');
   if(COMPANY.logo_url) $('pLogo').innerHTML=`<img src="${esc(COMPANY.logo_url)}" alt="">`;
