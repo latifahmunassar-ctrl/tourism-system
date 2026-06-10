@@ -403,6 +403,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 
 <div id="tab-build" style="display:flex">
   <div class="bf-sec">
+    <div id="bf-clientChoice" style="display:none;background:#e9f7f1;border:1px solid #b8e0d0;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:1.8;color:#0e5a40"></div>
     <h3>تفاصيل الرحلة</h3>
     <div class="bf-sub">الوجهة والمدة والأشخاص</div>
     <div class="bf-field"><label>الوجهة <span class="bf-req">*</span></label>
@@ -3231,6 +3232,15 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
   // جاهزة» ونظلّل نفس المقترح (هو الأساس)، وإلا نعبّي المدن في «تخصيص».
   async function inboxFillForm(req){
     const set=(id,v)=>{const e=document.getElementById(id); if(e!=null && v!=null && v!=='') e.value=v;};
+    // صندوق ثابت يعرض اختيار الشركة كما هو (موثوق دائماً، مهما كان وضع التعبئة)
+    const cc=document.getElementById('bf-clientChoice');
+    if(cc){
+      let route='';
+      if(req.sel_pair){ const [a,b]=String(req.sel_pair).split('|'); const arr=(typeof bfAirAr==='function')?bfAirAr(a):a, dep=(typeof bfAirAr==='function')?bfAirAr(b):b; route=(a===b)?`القدوم والمغادرة: <b>${ibEsc(arr)}</b>`:`القدوم: <b>${ibEsc(arr)}</b> ← المغادرة: <b>${ibEsc(dep)}</b>`; }
+      const dist=req.sel_distribution || (Array.isArray(req.cities_nights)?req.cities_nights.map(c=>`${c.nights} ${c.city}`).join(' - '):'');
+      cc.innerHTML=`<b>📋 طلب الشركة كما اختارته:</b><br>${ibEsc(req.destination)} · ${req.days} أيام · ${req.pax} أشخاص${req.children?(' + '+req.children+' أطفال'):''}${route?(' · '+route):''}${dist?('<br>🗺️ التوزيع: <b>'+ibEsc(dist)+'</b>'):''}`;
+      cc.style.display='block';
+    }
     set('bf-dest', req.destination);
     set('bf-adults', req.pax||2);
     const ch=document.getElementById('bf-children'); if(ch) ch.value=req.children||0;
