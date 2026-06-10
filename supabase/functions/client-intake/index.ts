@@ -547,7 +547,7 @@ Deno.serve(async (req) => {
   if (adminAction) {
     // Company-account management is OWNER-only (separate private dashboard) and
     // uses COMPANIES_ADMIN_SECRET. The staff request inbox keeps CLIENT_ADMIN_SECRET.
-    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove"].includes(adminAction);
+    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove", "staff_report"].includes(adminAction);
     const expected = (Deno.env.get(ownerOnly ? "COMPANIES_ADMIN_SECRET" : "CLIENT_ADMIN_SECRET") || "").trim();
     const got = (req.headers.get("x-admin-secret") || "").trim();
 
@@ -579,6 +579,30 @@ Deno.serve(async (req) => {
       const { error } = await supabase.from("staff_members").update({ active: false }).eq("id", sid);
       if (error) return json({ error: error.message }, 500);
       return json({ ok: true });
+    }
+    // per-employee performance: packages sent + average send speed in a period
+    if (adminAction === "staff_report") {
+      const from = url.searchParams.get("from") || "";
+      const to = url.searchParams.get("to") || "";
+      let q = supabase.from("client_requests").select("sent_by, sent_at, created_at").eq("status", "sent").not("sent_by", "is", null);
+      if (from) q = q.gte("sent_at", from);
+      if (to) q = q.lte("sent_at", to);
+      const { data } = await q.limit(5000);
+      const map: Record<string, any> = {};
+      for (const r of (data || []) as Array<any>) {
+        const k = String(r.sent_by || "").trim(); if (!k) continue;
+        const m = map[k] || (map[k] = { name: k, count: 0, totalMs: 0, speedN: 0 });
+        m.count++;
+        if (r.sent_at && r.created_at) {
+          const ms = new Date(r.sent_at).getTime() - new Date(r.created_at).getTime();
+          if (ms >= 0) { m.totalMs += ms; m.speedN++; }
+        }
+      }
+      const { data: staff } = await supabase.from("staff_members").select("name").eq("active", true);
+      for (const s of (staff || []) as Array<any>) { const k = String(s.name).trim(); if (k && !map[k]) map[k] = { name: k, count: 0, totalMs: 0, speedN: 0 }; }
+      const report = Object.values(map).map((m: any) => ({ name: m.name, count: m.count, avg_speed_ms: m.speedN ? Math.round(m.totalMs / m.speedN) : null }))
+        .sort((a: any, b: any) => b.count - a.count);
+      return json({ report });
     }
 
     // owner "view as company": mint a separate impersonation token + return it,

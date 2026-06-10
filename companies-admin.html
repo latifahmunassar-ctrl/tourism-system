@@ -45,6 +45,16 @@
   .staff-list{display:flex;flex-wrap:wrap;gap:8px}
   .staff-chip{display:inline-flex;align-items:center;gap:8px;background:#e9f7f1;border:1px solid #b8e0d0;color:#0e5a40;border-radius:20px;padding:6px 12px;font-weight:700;font-size:13px}
   .staff-chip button{background:#fff;border:1px solid #d6b3c8;color:var(--brand2);border-radius:50%;width:20px;height:20px;cursor:pointer;font-weight:900;line-height:1}
+  .rep-periods{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .rep-btn{background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 14px;cursor:pointer;font:inherit;font-weight:700;color:var(--muted)}
+  .rep-btn.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .rep-periods input{padding:7px 9px;border:1px solid var(--line);border-radius:8px;font:inherit}
+  .rep-table{width:100%;border-collapse:collapse;font-size:13.5px}
+  .rep-table th,.rep-table td{padding:10px 12px;text-align:right;border-bottom:1px solid var(--line)}
+  .rep-table th{color:var(--muted);font-size:12px;font-weight:800}
+  .rep-table tbody tr:hover{background:#f7faf8}
+  .rep-rank{font-weight:900;color:var(--brand2)}
+  .rep-cnt{font-weight:900;color:var(--brand);font-size:16px}
   .acbdg{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:800;white-space:nowrap;margin-inline-start:auto}
   .s-pending{background:#fef3c7;color:var(--warn)}.s-approved{background:#dcfce7;color:var(--ok)}.s-rejected{background:#fee2e2;color:var(--err)}.s-suspended{background:#e5e7eb;color:#555}
   .ac-empty{color:var(--muted);text-align:center;padding:40px 10px}
@@ -96,7 +106,7 @@
 <!-- APP -->
 <div id="appView" style="display:none">
   <div class="top">
-    <div class="logo">AL<span>E</span>ZZ — داشبورد الشركات</div>
+    <div class="logo">AL<span>E</span>ZZ — لوحة التحكم · الشركات والموظفين</div>
     <div class="rt"><button onclick="loadList()">↻ تحديث</button> <button onclick="logout()">خروج</button></div>
   </div>
   <div class="grid">
@@ -112,6 +122,19 @@
     </div>
     <div id="staffList" class="staff-list"><div class="ac-empty">جارٍ التحميل…</div></div>
     <div class="ac-msg" id="staffMsg"></div>
+  </div>
+
+  <div class="panel" style="margin-top:14px">
+    <h3>📊 أداء الموظفين <small>عدد البكجات المُرسلة + متوسط سرعة الإرسال</small></h3>
+    <div class="rep-periods">
+      <button class="rep-btn on" onclick="repPeriod('today',this)">اليوم</button>
+      <button class="rep-btn" onclick="repPeriod('week',this)">الأسبوع</button>
+      <button class="rep-btn" onclick="repPeriod('month',this)">الشهر</button>
+      <button class="rep-btn" onclick="repPeriod('all',this)">الكل</button>
+      <button class="rep-btn" onclick="repPeriod('custom',this)">مخصص</button>
+      <span id="repCustom" style="display:none">من <input type="date" id="repFrom"> إلى <input type="date" id="repTo"> <button class="ac-btn ok" onclick="repCustomGo()">عرض</button></span>
+    </div>
+    <div id="repTable"><div class="ac-empty">جارٍ التحميل…</div></div>
   </div>
 </div>
 
@@ -137,7 +160,7 @@ async function login(){
   show();
 }
 function logout(){ localStorage.removeItem('alezz_owner_secret'); SECRET=''; location.reload(); }
-function show(){ $('loginView').style.display='none'; $('appView').style.display='block'; loadList(); loadStaff(); }
+function show(){ $('loginView').style.display='none'; $('appView').style.display='block'; loadList(); loadStaff(); repPeriod('today', document.querySelector('.rep-btn')); }
 // ── إدارة أسماء الموظفين ──
 function staffFlash(t,ok){const m=$('staffMsg');if(!m)return;m.textContent=t;m.className='ac-msg '+(ok?'ok':'err');m.style.display='block';setTimeout(()=>{m.style.display='none'},2500);}
 async function loadStaff(){
@@ -157,7 +180,45 @@ async function removeStaff(id,nm){
   if(!confirm('حذف «'+nm+'» من قائمة الموظفين؟')) return;
   const r=await fetch(BASE+'?admin_action=staff_remove&id='+id,{method:'POST',headers:H()});
   const d=await r.json();
-  if(d.ok){ staffFlash('حُذف ✅',true); loadStaff(); } else staffFlash(d.error||'فشل',false);
+  if(d.ok){ staffFlash('حُذف ✅',true); loadStaff(); loadReport(); } else staffFlash(d.error||'فشل',false);
+}
+// ── تقرير أداء الموظفين ──
+let REP_RANGE={from:'',to:''};
+function repPeriod(p,btn){
+  document.querySelectorAll('.rep-btn').forEach(b=>b.classList.remove('on')); if(btn) btn.classList.add('on');
+  $('repCustom').style.display = p==='custom'?'inline-flex':'none';
+  if(p==='custom') return;
+  const now=new Date(); let from=null;
+  if(p==='today'){ from=new Date(now.getFullYear(),now.getMonth(),now.getDate()); }
+  else if(p==='week'){ from=new Date(now); from.setDate(now.getDate()-6); from.setHours(0,0,0,0); }
+  else if(p==='month'){ from=new Date(now); from.setDate(now.getDate()-29); from.setHours(0,0,0,0); }
+  REP_RANGE={ from: from?from.toISOString():'', to:'' };
+  loadReport();
+}
+function repCustomGo(){
+  const f=$('repFrom').value, t=$('repTo').value;
+  REP_RANGE={ from: f?new Date(f+'T00:00:00').toISOString():'', to: t?new Date(t+'T23:59:59').toISOString():'' };
+  loadReport();
+}
+function fmtSpeed(ms){
+  if(ms==null) return '—';
+  const min=Math.round(ms/60000);
+  if(min<1) return 'أقل من دقيقة';
+  if(min<60) return min+' دقيقة';
+  const h=Math.floor(min/60), m=min%60;
+  if(h<24) return h+' ساعة'+(m?' و'+m+' د':'');
+  const d=Math.floor(h/24), hh=h%24; return d+' يوم'+(hh?' و'+hh+' س':'');
+}
+async function loadReport(){
+  const box=$('repTable'); if(!box) return; box.innerHTML='<div class="ac-empty">جارٍ التحميل…</div>';
+  try{
+    const qs=[]; if(REP_RANGE.from) qs.push('from='+encodeURIComponent(REP_RANGE.from)); if(REP_RANGE.to) qs.push('to='+encodeURIComponent(REP_RANGE.to));
+    const r=await fetch(BASE+'?admin_action=staff_report'+(qs.length?'&'+qs.join('&'):''),{headers:H()});
+    const d=await r.json(); const rep=d.report||[];
+    if(!rep.length){ box.innerHTML='<div class="ac-empty">لا بيانات في هذه الفترة</div>'; return; }
+    box.innerHTML='<table class="rep-table"><thead><tr><th>#</th><th>الموظف</th><th>📦 البكجات المرسلة</th><th>⚡ متوسط سرعة الإرسال</th></tr></thead><tbody>'+
+      rep.map((s,i)=>`<tr><td class="rep-rank">${i+1}</td><td>${esc(s.name)}</td><td class="rep-cnt">${s.count}</td><td>${esc(fmtSpeed(s.avg_speed_ms))}</td></tr>`).join('')+'</tbody></table>';
+  }catch(_){ box.innerHTML='<div class="ac-empty">تعذّر التحميل</div>'; }
 }
 
 async function loadList(){
