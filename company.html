@@ -172,6 +172,7 @@
       <div class="card">
         <h2>اطلب برنامجاً سياحياً / Request a Program</h2>
         <div class="sub">بياناتك محفوظة — كمّل تفاصيل الرحلة فقط. · Your details are saved — just fill the trip details.</div>
+        <div class="field"><label>اسم العميل / Customer name <span style="font-weight:500;color:var(--muted);font-size:11.5px">(اختياري — لمن البرنامج / optional)</span></label><input id="customer_name" placeholder="اسم عميلك النهائي / your end customer"></div>
         <div class="field"><label>الوجهة / Destination <span class="req">*</span></label>
           <select id="destination" required><option value="">اختر الوجهة… / Choose…</option></select>
         </div>
@@ -506,6 +507,7 @@ $('form').addEventListener('submit', async e=>{
   if(!destSel.value||!$('pax').value||!$('days').value){ err.textContent='عبّي الوجهة، عدد البالغين، وعدد الأيام.'; err.style.display='block'; return; }
   const payload={
     company_token:TOKEN,
+    customer_name:($('customer_name').value||'').trim(),
     destination:destSel.value, pax:+$('pax').value, children:+$('children').value||0,
     transport:document.querySelector('input[name=transport]:checked').value,
     stars:(document.querySelector('input[name=stars]:checked')||{}).value||'mixed',

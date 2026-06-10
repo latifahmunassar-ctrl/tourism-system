@@ -549,7 +549,7 @@ Deno.serve(async (req) => {
     if (adminAction === "list") {
       const { data, error } = await supabase
         .from("client_requests")
-        .select("id, ref_no, company_name, destination, pax, days, status, group_total, created_at, sent_at, sent_by, company_id")
+        .select("id, ref_no, company_name, customer_name, destination, pax, days, status, group_total, created_at, sent_at, sent_by, company_id")
         .order("created_at", { ascending: false }).limit(200);
       if (error) return json({ error: error.message }, 500);
       // attach each company's pricing currency
@@ -654,6 +654,7 @@ Deno.serve(async (req) => {
     contact_email: companyRow ? String(companyRow.contact_email || "") : String(body.contact_email || "").trim(),
     contact_phone: companyRow ? String(companyRow.contact_phone || "") : String(body.contact_phone || "").trim(),
     destination,
+    customer_name: String(body.customer_name || "").trim() || null,
     cities_nights: Array.isArray(body.cities_nights) ? body.cities_nights : [],
     sel_distribution: body.selected_distribution ? String(body.selected_distribution) : null,
     sel_pair: body.selected_pair ? String(body.selected_pair) : null,

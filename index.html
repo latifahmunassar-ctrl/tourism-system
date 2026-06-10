@@ -3181,6 +3181,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
 .ib-r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .ib-co{font-weight:800;font-size:14.5px}
 .ib-dest{color:#0e9d6a;font-weight:800;font-size:13.5px;margin-top:5px}
+.ib-cust{color:#9333ea;font-weight:700;font-size:12.5px;margin-top:4px}
 .ib-r2{color:#6b7c7a;font-size:12px;margin-top:4px}
 .ib-bdg{font-size:11px;padding:2px 9px;border-radius:20px;font-weight:800;white-space:nowrap}
 .ib-pending_review{background:#fef3c7;color:#b45309}.ib-sent{background:#dcfce7;color:#15803d}
@@ -3250,13 +3251,13 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     document.getElementById('inboxList').innerHTML=incoming.length?incoming.map(r=>`
       <div class="ib-item" onclick="inboxLoad('${r.id}')">
         <div class="ib-r1"><span class="ib-co">🏢 ${ibEsc(r.company_name)}</span><span class="ib-bdg ib-${r.status}">${IB_STAT[r.status]||r.status}</span></div>
-        <div class="ib-dest">📍 ${ibEsc(r.destination)} · ${r.days} أيام · ${r.pax} أشخاص${curTag(r)}</div>
+        <div class="ib-dest">📍 ${ibEsc(r.destination)} · ${r.days} أيام · ${r.pax} أشخاص${curTag(r)}</div>${r.customer_name?`<div class="ib-cust">👤 العميل: ${ibEsc(r.customer_name)}</div>`:''}
         <div class="ib-r2">${ibEsc(r.ref_no)}${r.group_total?' · '+Number(r.group_total).toLocaleString('en-US')+' ريال':''}</div>
       </div>`).join(''):'<div class="ib-empty">لا توجد طلبات واردة</div>';
     document.getElementById('inboxSentList').innerHTML=sent.length?sent.map(r=>`
       <div class="ib-item ib-sent-item">
         <div class="ib-r1"><span class="ib-co">🏢 ${ibEsc(r.company_name)}</span><span class="ib-bdg ib-sent">تم الإرسال</span></div>
-        <div class="ib-dest">📍 ${ibEsc(r.destination)} · ${r.days} أيام · ${r.pax} أشخاص${curTag(r)}</div>
+        <div class="ib-dest">📍 ${ibEsc(r.destination)} · ${r.days} أيام · ${r.pax} أشخاص${curTag(r)}</div>${r.customer_name?`<div class="ib-cust">👤 العميل: ${ibEsc(r.customer_name)}</div>`:''}
         <div class="ib-r2">${ibEsc(r.ref_no)}${r.group_total?' · '+Number(r.group_total).toLocaleString('en-US')+' ريال':''}</div>
         <div class="ib-sent-meta">📤 ${r.sent_by?('أرسله: <b>'+ibEsc(r.sent_by)+'</b> · '):''}${ibFmtTime(r.sent_at)}</div>
       </div>`).join(''):'<div class="ib-empty">لا توجد طلبات مُرسلة بعد</div>';
