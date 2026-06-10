@@ -52,7 +52,7 @@
       <div class="field"><label>اسم المسؤول / Contact Person <span class="req">*</span></label><input name="contact_name" required></div>
       <div class="field"><label>موقعه من الشركة / Role <span class="req">*</span> <span class="hint">(مثال: المالك · المدير · مسؤول الحجوزات)</span></label><input name="contact_role" placeholder="المدير / Manager" required></div>
     </div>
-    <div class="field"><label>رقم الجوال / Mobile <span class="req">*</span> <span class="hint">(للدخول لاحقاً / used to log in)</span></label><input name="contact_phone" inputmode="tel" placeholder="+9665..." required></div>
+    <div class="field"><label>رقم الجوال / Mobile <span class="req">*</span> <span class="hint">(مع رمز الدولة +966… · للدخول / with country code, used to log in)</span></label><input name="contact_phone" inputmode="tel" placeholder="+9665XXXXXXXX" required></div>
     <div class="field"><label>كلمة المرور / Password <span class="req">*</span> <span class="hint">(4 خانات على الأقل / min 4)</span></label><input name="password" type="password" minlength="4" required></div>
     <div class="field"><label>البريد الإلكتروني / Email <span class="req">*</span></label><input name="contact_email" type="email" required></div>
     <div class="field"><label>الموقع أو الانستقرام / Website or Instagram <span class="req">*</span></label><input name="website" placeholder="instagram.com/yourcompany" required></div>
@@ -156,9 +156,9 @@ $('form').addEventListener('submit', async e=>{
   if(!f.contact_role.value.trim()){
     err.textContent='منصب المسؤول (موقعه من الشركة) مطلوب. / Contact role is required.'; err.style.display='block'; return;
   }
-  const _digits=f.contact_phone.value.replace(/\D/g,'');
-  if(_digits.length<9||_digits.length>15){
-    err.textContent='رقم الجوال غير صحيح — أدخل رقماً دولياً صحيحاً. / Invalid phone number.'; err.style.display='block'; return;
+  let _ph=f.contact_phone.value.replace(/[^\d+]/g,''); if(_ph.startsWith('00')) _ph='+'+_ph.slice(2);
+  if(!/^\+[1-9]\d{9,14}$/.test(_ph)){
+    err.textContent='رقم الجوال غير صحيح — أدخل الرقم بصيغة دولية مع رمز الدولة، مثال: +9665XXXXXXXX. / Use full international format with country code.'; err.style.display='block'; return;
   }
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.contact_email.value.trim())){
     err.textContent='البريد الإلكتروني مطلوب وبصيغة صحيحة. / A valid email is required.'; err.style.display='block'; return;

@@ -355,7 +355,6 @@ Deno.serve(async (req) => {
       const website = String(body.website || "").trim();
       const contactName = String(body.contact_name || "").trim();
       const contactRole = String(body.contact_role || "").trim();
-      const phoneDigits = phone.replace(/\D/g, "");
       if (!name || !phone || password.length < 4) {
         return json({ error: "الاسم، رقم الجوال، وكلمة المرور (4 خانات على الأقل) مطلوبة" }, 400);
       }
@@ -365,8 +364,9 @@ Deno.serve(async (req) => {
       if (!contactRole) {
         return json({ error: "منصب المسؤول (موقعه من الشركة) مطلوب" }, 400);
       }
-      if (phoneDigits.length < 9 || phoneDigits.length > 15) {
-        return json({ error: "رقم الجوال غير صحيح — أدخلي رقماً دولياً صحيحاً" }, 400);
+      // require full international format with country code (E.164): +<country><number>
+      if (!/^\+[1-9]\d{9,14}$/.test(phone)) {
+        return json({ error: "رقم الجوال غير صحيح — أدخلي الرقم بصيغة دولية مع رمز الدولة، مثال: +9665XXXXXXXX" }, 400);
       }
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
         return json({ error: "البريد الإلكتروني مطلوب وبصيغة صحيحة" }, 400);
