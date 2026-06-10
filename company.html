@@ -77,6 +77,9 @@
   .rq-working{background:#fef3c7;color:var(--warn)} .rq-sent{background:#dcfce7;color:var(--ok)}
   .rq-dl{margin-top:12px;display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:11px;padding:10px 16px;font-weight:800;cursor:pointer;font-size:13.5px;text-decoration:none}
   .rq-hint{margin-top:10px;font-size:12px;color:var(--muted);background:#f7faf8;border:1px dashed var(--line);border-radius:10px;padding:8px 11px}
+  .rq-price{margin-top:10px;background:#e9f7f1;border:1px solid #b8e0d0;border-radius:10px;padding:9px 12px;font-size:14px;color:#0e5a40}
+  .rq-price b{font-size:16px}
+  .rq-price-note{font-size:11px;color:var(--muted);margin-top:3px}
   .rq-empty{color:var(--muted);text-align:center;padding:30px}
   .pf-logo-up{display:flex;gap:12px;align-items:center}
   .pf-prev{width:60px;height:60px;border-radius:12px;border:1px solid var(--line);background:#f7faf8;display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--muted);font-size:11px;text-align:center;flex-shrink:0}
@@ -332,7 +335,8 @@ function showRequest(){ hideViews(); $('form').style.display=''; setTab('btnHome
 function showRequests(){ hideViews(); $('requestsView').style.display=''; setTab('btnRequests'); loadMyRequests(); window.scrollTo({top:0,behavior:'smooth'}); }
 
 // ── طلباتي ──
-let MY_REQS=[];
+let MY_REQS=[], MY_CURRENCY='SAR';
+const CUR={SAR:'ريال / SAR',USD:'دولار / USD',EUR:'يورو / EUR',AED:'درهم / AED',OMR:'ريال عماني / OMR',KWD:'دينار / KWD',EGP:'جنيه / EGP'};
 const DEST_FLAG={'تايلاند':'🇹🇭','ماليزيا':'🇲🇾','تركيا':'🇹🇷','فيتنام':'🇻🇳','روسيا':'🇷🇺','البوسنة':'🇧🇦','إندونيسيا':'🇮🇩'};
 function rqFmtDate(iso){ if(!iso)return''; const d=new Date(iso); if(isNaN(d.getTime()))return''; const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())}`; }
 async function loadMyRequests(){
@@ -340,7 +344,7 @@ async function loadMyRequests(){
   try{
     const res=await fetch(INTAKE+'?company_action=my_requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:TOKEN})});
     const d=await res.json(); if(!res.ok||!d.ok) throw new Error(d.error||'تعذّر التحميل');
-    MY_REQS=d.requests||[];
+    MY_REQS=d.requests||[]; MY_CURRENCY=d.currency||'SAR';
     const dests=[...new Set(MY_REQS.map(r=>r.destination).filter(Boolean))];
     $('fDest').innerHTML='<option value="">كل الوجهات</option>'+dests.map(x=>`<option>${esc(x)}</option>`).join('');
     renderReqs();
@@ -355,10 +359,11 @@ function renderReqs(){
     const dl=sent&&r.view_token
       ? `<a class="rq-dl" href="proposal.html?token=${esc(r.view_token)}" target="_blank" rel="noopener">⬇️ تحميل البرنامج / Download program</a>`
       : `<div class="rq-hint">فريق ALEZZ يجهّز برنامجك — يوصلك زر التحميل بعد الانتهاء. · Being prepared — download will appear here when ready.</div>`;
+    const price=(sent&&r.company_price!=null)?`<div class="rq-price">💰 سعر البرنامج / Program price: <b>${Number(r.company_price).toLocaleString('en-US')} ${esc(CUR[MY_CURRENCY]||MY_CURRENCY)}</b><div class="rq-price-note">أضِف ربحك قبل تحويله لعميلك · add your margin before sharing</div></div>`:'';
     return `<div class="rq">
       <div class="top"><span class="dest">${flag} ${esc(r.destination)}</span><span class="rq-bdg ${sent?'rq-sent':'rq-working'}">${sent?'✅ تم الرد / Ready':'⏳ جاري العمل / In progress'}</span></div>
       <div class="meta"><span class="ref">${esc(r.ref_no)}</span> · ${r.days} أيام/days · ${r.pax} أشخاص/pax · ${rqFmtDate(r.created_at)}</div>
-      ${dl}
+      ${price}${dl}
     </div>`;
   }).join('');
 }

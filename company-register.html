@@ -51,6 +51,17 @@
     <div class="field"><label>كلمة المرور / Password <span class="req">*</span> <span class="hint">(4 خانات على الأقل / min 4)</span></label><input name="password" type="password" minlength="4" required></div>
     <div class="field"><label>البريد الإلكتروني / Email</label><input name="contact_email" type="email"></div>
     <div class="field"><label>الموقع أو الانستقرام / Website or Instagram</label><input name="website" placeholder="instagram.com/yourcompany"></div>
+    <div class="field"><label>عملة التسعير / Pricing Currency <span class="hint">(نسعّر لك البرنامج بها / we price in it)</span></label>
+      <select name="currency">
+        <option value="SAR">ريال سعودي / SAR</option>
+        <option value="USD">دولار / USD</option>
+        <option value="EUR">يورو / EUR</option>
+        <option value="AED">درهم إماراتي / AED</option>
+        <option value="OMR">ريال عماني / OMR</option>
+        <option value="KWD">دينار كويتي / KWD</option>
+        <option value="EGP">جنيه مصري / EGP</option>
+      </select>
+    </div>
 
     <div class="field">
       <label>شعار الشركة / Company Logo <span class="hint">(اختياري / optional — PNG/JPG)</span></label>
@@ -120,6 +131,7 @@ $('form').addEventListener('submit', async e=>{
     company_name:f.company_name.value.trim(), contact_name:f.contact_name.value.trim(),
     contact_phone:f.contact_phone.value.trim(), password:f.password.value,
     contact_email:f.contact_email.value.trim(), website:f.website.value.trim(),
+    currency:(f.currency&&f.currency.value)||'SAR',
     logo_base64:logoData||undefined,
   };
   btn.disabled=true; btn.textContent='جارٍ الإرسال…';

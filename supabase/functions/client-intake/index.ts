@@ -89,7 +89,7 @@ function publicCompany(c: any) {
   return {
     id: c.id, company_name: c.company_name, contact_name: c.contact_name,
     contact_phone: c.contact_phone, contact_email: c.contact_email,
-    logo_url: c.logo_url, website: c.website, status: c.status,
+    logo_url: c.logo_url, website: c.website, status: c.status, currency: c.currency || "SAR",
     whatsapp_group_link: c.status === "approved" ? c.whatsapp_group_link : null,
     pending_edit: c.pending_edit || null,
   };
@@ -354,6 +354,7 @@ Deno.serve(async (req) => {
         password_hash, password_salt: salt,
         logo_url,
         website: String(body.website || "").trim(),
+        currency: ["SAR","USD","EUR","AED","OMR","KWD","EGP"].includes(String(body.currency)) ? String(body.currency) : "SAR",
         status: "pending",
       }).select("id").single();
       if (error) { console.error("company register failed", error.message); return json({ error: "تعذّر التسجيل" }, 500); }
@@ -391,18 +392,19 @@ Deno.serve(async (req) => {
     if (companyAction === "my_requests") {
       const token = String(body.token || "");
       if (!token) return json({ error: "no token" }, 401);
-      const { data: c } = await supabase.from("client_companies").select("id, status").eq("login_token", token).maybeSingle();
+      const { data: c } = await supabase.from("client_companies").select("id, status, currency").eq("login_token", token).maybeSingle();
       if (!c || c.status !== "approved") return json({ error: "انتهت الجلسة، سجّلي الدخول من جديد" }, 401);
       const { data: reqs } = await supabase.from("client_requests")
-        .select("ref_no, destination, days, pax, status, created_at, view_token")
+        .select("ref_no, destination, days, pax, status, created_at, view_token, company_price")
         .eq("company_id", c.id).order("created_at", { ascending: false }).limit(100);
       const requests = (reqs || []).map((r: any) => ({
         ref_no: r.ref_no, destination: r.destination, days: r.days, pax: r.pax,
         status: r.status === "sent" ? "sent" : "working",
         created_at: r.created_at,
         view_token: r.status === "sent" ? r.view_token : null,
+        company_price: r.status === "sent" ? r.company_price : null,
       }));
-      return json({ ok: true, requests });
+      return json({ ok: true, requests, currency: c.currency || "SAR" });
     }
 
     // Company proposes a profile edit (contact name / phone / logo). Stored in
@@ -526,7 +528,12 @@ Deno.serve(async (req) => {
     if (adminAction === "get") {
       const { data, error } = await supabase.from("client_requests").select("*").eq("id", id).single();
       if (error) return json({ error: error.message }, 404);
-      return json({ request: data });
+      let company_currency = "SAR";
+      if (data.company_id) {
+        const { data: comp } = await supabase.from("client_companies").select("currency").eq("id", data.company_id).maybeSingle();
+        company_currency = comp?.currency || "SAR";
+      }
+      return json({ request: { ...data, company_currency } });
     }
 
     if (adminAction === "update_program" && req.method === "POST") {
@@ -543,11 +550,12 @@ Deno.serve(async (req) => {
     if (adminAction === "approve" && req.method === "POST") {
       const body = await req.json().catch(() => ({} as Record<string, any>));
       const sentBy = String(body.by || "").trim() || null;
+      const cp = (body.company_price != null && String(body.company_price).trim() !== "") ? Number(body.company_price) : null;
       const { data: row, error: e1 } = await supabase.from("client_requests").select("built_program").eq("id", id).single();
       if (e1 || !row) return json({ error: "not found" }, 404);
       const { view, groupTotal } = toClientView(row.built_program || "");
       const { error } = await supabase.from("client_requests")
-        .update({ client_program: view, group_total: groupTotal, status: "sent", sent_at: new Date().toISOString(), sent_by: sentBy })
+        .update({ client_program: view, group_total: groupTotal, status: "sent", sent_at: new Date().toISOString(), sent_by: sentBy, company_price: (cp != null && !isNaN(cp)) ? cp : null })
         .eq("id", id);
       if (error) return json({ error: error.message }, 500);
       return json({ ok: true });

@@ -3326,7 +3326,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     const r=await fetch(IB_BASE+'?admin_action=get&id='+id,{headers:ibH()});
     const j=await r.json(); const req=j.request;
     if(!req){alert('تعذّر فتح الطلب');return;}
-    ibState={id:req.id,ref:req.ref_no,company:req.company_name,token:req.view_token,dest:req.destination};
+    ibState={id:req.id,ref:req.ref_no,company:req.company_name,token:req.view_token,dest:req.destination,currency:req.company_currency||'SAR'};
     const filled=await inboxFillForm(req);
     ibBanner();
     if((filled==='ready'||filled==='manual') && typeof buildFromForm==='function'){
@@ -3353,7 +3353,9 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
   function ibBanner(){
     const el=document.getElementById('inboxBanner');
     if(!ibState){el.style.display='none';document.body.style.paddingTop='';return;}
-    el.innerHTML=`📥 طلب من: <b>${ibEsc(ibState.company)}</b> &nbsp;·&nbsp; 📍 ${ibEsc(ibState.dest||'')} &nbsp;·&nbsp; ${ibEsc(ibState.ref)} &nbsp; أضف الربح ثم اضغط «📤 إرسال للشركة» <button onclick="inboxDismiss()">إلغاء الربط</button>`;
+    const _cur={SAR:'ريال سعودي',USD:'دولار',EUR:'يورو',AED:'درهم',OMR:'ريال عماني',KWD:'دينار كويتي',EGP:'جنيه مصري'}[ibState.currency]||ibState.currency;
+    const curTag=(ibState.currency&&ibState.currency!=='SAR')?` &nbsp;·&nbsp; 💱 سعّر بـ<b>${ibEsc(_cur)}</b>`:'';
+    el.innerHTML=`📥 طلب من: <b>${ibEsc(ibState.company)}</b> &nbsp;·&nbsp; 📍 ${ibEsc(ibState.dest||'')} &nbsp;·&nbsp; ${ibEsc(ibState.ref)}${curTag} &nbsp; أضف الربح ثم اضغط «📤 إرسال للشركة» <button onclick="inboxDismiss()">إلغاء الربط</button>`;
     el.style.display='flex'; document.body.style.paddingTop='40px';
     const sb=document.getElementById('inboxSendBtn'); if(sb) sb.style.display='';
   }
@@ -3366,11 +3368,17 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     const finalGroup=(basePrice||0)+extra+profit;
     if(!confirm(`إرسال العرض لشركة «${ibState.company}» بإجمالي ${finalGroup.toLocaleString('en-US')} ريال؟\nالشركة بتشوف البرنامج + هذا الإجمالي فقط (بدون أي تسعير داخلي).`)) return;
     const by=ibStaffName();   // اسم الموظف المرسِل (يُسأل مرة ويُحفظ)
+    // سعر البرنامج للشركة بعملتها (يظهر للشركة في «طلباتي» لتضيف ربحها). الموظف يحوّل عبر «💱 تحويل عملة».
+    const IB_CUR={SAR:'ريال سعودي',USD:'دولار',EUR:'يورو',AED:'درهم إماراتي',OMR:'ريال عماني',KWD:'دينار كويتي',EGP:'جنيه مصري'};
+    const curName=IB_CUR[ibState.currency]||ibState.currency||'ريال';
+    const cpRaw=prompt(`💰 سعر البرنامج للشركة بعملتها (${curName}):\nالشركة تشوفه في «طلباتي» وتضيف ربحها. اتركه فارغاً لو ما تبين سعراً الآن.`, '');
+    if(cpRaw===null) return;   // ألغى الإرسال
+    const companyPrice=(cpRaw.trim()==='')?null:(parseFloat(cpRaw.replace(/[^\d.]/g,''))||null);
     const prog=lastProgramRaw.replace(/TOTAL_GROUP:\s*[\d.,]+/, 'TOTAL_GROUP:'+finalGroup);
     try{
       let res=await fetch(IB_BASE+'?admin_action=update_program&id='+ibState.id,{method:'POST',headers:ibH(),body:JSON.stringify({built_program:prog})});
       if(!res.ok) throw new Error('فشل حفظ البرنامج');
-      res=await fetch(IB_BASE+'?admin_action=approve&id='+ibState.id,{method:'POST',headers:ibH(),body:JSON.stringify({by})});
+      res=await fetch(IB_BASE+'?admin_action=approve&id='+ibState.id,{method:'POST',headers:ibH(),body:JSON.stringify({by, company_price:companyPrice})});
       const d=await res.json(); if(!d.ok) throw new Error(d.error||'فشل الاعتماد');
       const link=IB_PROPOSAL+'?token='+ibState.token;
       try{await navigator.clipboard.writeText(link);}catch(_){}
