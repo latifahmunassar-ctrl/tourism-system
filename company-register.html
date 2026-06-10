@@ -79,13 +79,34 @@ const INTAKE="https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intak
 let logoData=null;
 const $=id=>document.getElementById(id);
 
+// يحوّل أي صورة لـ PNG صغيرة (≤400px) عبر canvas: يضمن صيغة يعرضها المتصفح
+// (يعالج HEIC/الصور الكبيرة) ويصغّر الحجم. cb(null) لو الصورة غير قابلة للقراءة.
+function processLogo(file, cb){
+  const r=new FileReader();
+  r.onload=()=>{
+    const img=new Image();
+    img.onload=()=>{
+      const max=400, s=Math.min(1, max/Math.max(img.width,img.height)||1);
+      const w=Math.max(1,Math.round(img.width*s)), h=Math.max(1,Math.round(img.height*s));
+      const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      try{ cb(cv.toDataURL('image/png')); }catch(_){ cb(null); }
+    };
+    img.onerror=()=>cb(null);
+    img.src=r.result;
+  };
+  r.onerror=()=>cb(null);
+  r.readAsDataURL(file);
+}
 $('logoBtn').onclick=()=>$('logoFile').click();
 $('logoFile').onchange=e=>{
   const f=e.target.files[0]; if(!f) return;
-  if(f.size>2_000_000){ alert('حجم الصورة كبير (الحد 2 ميجابايت).'); return; }
-  const r=new FileReader();
-  r.onload=()=>{ logoData=r.result; $('logoPrev').innerHTML=`<img src="${logoData}" alt="logo">`; $('logoBtn').textContent='✓ تغيير الشعار'; };
-  r.readAsDataURL(f);
+  if(f.size>15_000_000){ alert('الصورة كبيرة جداً.'); return; }
+  $('logoBtn').textContent='جارٍ المعالجة…';
+  processLogo(f, data=>{
+    if(!data){ logoData=null; $('logoBtn').textContent='📤 اختيار صورة الشعار'; alert('تعذّر قراءة هذه الصورة. جرّبي صيغة PNG أو JPG (صور الآيفون HEIC قد لا تُدعم — صدّريها كـ JPG).'); return; }
+    logoData=data; $('logoPrev').innerHTML=`<img src="${logoData}" alt="logo">`; $('logoBtn').textContent='✓ تغيير الشعار';
+  });
 };
 
 $('form').addEventListener('submit', async e=>{
