@@ -3279,7 +3279,8 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     set('bf-days', req.days||8);
     const sm=document.getElementById('bf-sims'); if(sm) sm.value=req.sim_count||0;
     set('bf-date', req.date_from||'');
-    const nt=document.getElementById('bf-notes'); if(nt) nt.value=req.notes||'';
+    // نظّف ملاحظة «اقتراح جاهز (مطار↔مطار)» التعريفية حتى لا تلوّث نص البناء (Phuket إنجليزي يربك المحلّل)
+    const nt=document.getElementById('bf-notes'); if(nt) nt.value=String(req.notes||'').replace(/\s*\|?\s*اقتراح جاهز\s*\([^)]*\)\s*/g,' ').replace(/^\s*\|\s*/,'').trim();
     const tr=document.querySelector('input[name=bf-tr][value="'+(req.transport==='shared'?'shared':'private')+'"]'); if(tr) tr.checked=true;
     // الشركة لا تحدّد فئة النجوم → اجعلها «مختلط» حتى لا تُستبعد فنادق متاحة (مثل 4★ في كوساموي)
     const starMixed=document.querySelector('input[name=bf-stars][value=mixed]');
