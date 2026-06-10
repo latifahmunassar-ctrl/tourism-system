@@ -36,6 +36,9 @@
   .seg label{flex:1;border:1px solid var(--line);border-radius:11px;padding:11px;text-align:center;cursor:pointer;margin:0;background:#fcfdfd;font-weight:600}
   .seg input{display:none}
   .seg label:has(input:checked){border-color:var(--brand2);background:#e9f7f1;box-shadow:0 0 0 2px rgba(14,157,106,.1);color:var(--brand)}
+  .seg-stars label{font-size:13px;line-height:1.55}
+  .seg-stars small{color:var(--muted);font-weight:500;font-size:10px}
+  .reco{display:inline-block;background:var(--gold);color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:20px;vertical-align:middle;letter-spacing:.3px}
   .suglist{display:flex;flex-direction:column;gap:9px;margin-top:6px}
   .sug{border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;background:#fcfdfd}
   .sug:hover{border-color:var(--brand2)} .sug.sel{border-color:var(--brand2);background:#e9f7f1;box-shadow:0 0 0 2px rgba(14,157,106,.12)}
@@ -176,6 +179,13 @@
       <div class="card">
         <h2>تفضيلات</h2>
         <div class="sub">اختياري</div>
+        <div class="field"><label>فئة الفنادق</label>
+          <div class="seg seg-stars">
+            <label><input type="radio" name="stars" value="mixed" checked><span>⭐ ٤ و ٥ نجوم <span class="reco">Recommended</span><br><small>الأوفر — نختار لك الأرخص</small></span></label>
+            <label><input type="radio" name="stars" value="5"><span>٥ نجوم</span></label>
+            <label><input type="radio" name="stars" value="4"><span>٤ نجوم</span></label>
+          </div>
+        </div>
         <div class="field"><label>نوع التنقّل</label>
           <div class="seg">
             <label><input type="radio" name="transport" value="private" checked><span>🚗 خاص</span></label>
@@ -400,6 +410,7 @@ $('form').addEventListener('submit', async e=>{
     company_token:TOKEN,
     destination:destSel.value, pax:+$('pax').value, children:+$('children').value||0,
     transport:document.querySelector('input[name=transport]:checked').value,
+    stars:(document.querySelector('input[name=stars]:checked')||{}).value||'mixed',
     days:+$('days').value, date_from:$('dateGlobal').value,
     sim_count:+$('sim_count').value||0, extra_bed:$('extra_bed').value.trim(), notes:$('notes').value.trim(),
   };

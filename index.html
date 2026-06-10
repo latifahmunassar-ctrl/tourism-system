@@ -3282,9 +3282,10 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     // نظّف ملاحظة «اقتراح جاهز (مطار↔مطار)» التعريفية حتى لا تلوّث نص البناء (Phuket إنجليزي يربك المحلّل)
     const nt=document.getElementById('bf-notes'); if(nt) nt.value=String(req.notes||'').replace(/\s*\|?\s*اقتراح جاهز\s*\([^)]*\)\s*/g,' ').replace(/^\s*\|\s*/,'').trim();
     const tr=document.querySelector('input[name=bf-tr][value="'+(req.transport==='shared'?'shared':'private')+'"]'); if(tr) tr.checked=true;
-    // الشركة لا تحدّد فئة النجوم → اجعلها «مختلط» حتى لا تُستبعد فنادق متاحة (مثل 4★ في كوساموي)
-    const starMixed=document.querySelector('input[name=bf-stars][value=mixed]');
-    if(starMixed){ starMixed.checked=true; if(typeof bfPick==='function') bfPick(starMixed); }
+    // فئة النجوم التي اختارتها الشركة (افتراضي «مختلط» = الأوفر، يشمل 4★ و5★)
+    const starVal=['4','5','mixed'].includes(String(req.stars))?String(req.stars):'mixed';
+    const starEl=document.querySelector('input[name=bf-stars][value="'+starVal+'"]');
+    if(starEl){ starEl.checked=true; if(typeof bfPick==='function') bfPick(starEl); }
     const eb=document.getElementById('bf-extrabed-on'); if(eb) eb.checked=!!(req.extra_bed && /نعم|كل|all/i.test(req.extra_bed));
 
     // (1) اقتراح جاهز مختار → «اقتراحات جاهزة» + تظليل نفس المقترح
