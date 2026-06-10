@@ -62,6 +62,14 @@
   .dest-wrap{display:flex;flex-wrap:wrap;gap:8px}
   .dest-chip{background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:5px 12px;font-size:12.5px;color:var(--ink)}
   .dest-chip b{color:var(--brand);margin-inline-start:3px}
+  /* pending profile-edit بند */
+  .pe-box{background:#fff7e6;border:1px solid #f0dcae;border-radius:12px;padding:14px;margin-bottom:14px}
+  .pe-t{font-weight:800;color:#b45309;font-size:13px;margin-bottom:10px}
+  .pe-row{display:grid;grid-template-columns:88px 1fr 16px 1fr;gap:8px;align-items:center;font-size:12.5px;padding:6px 0;border-bottom:1px dashed #f0dcae}
+  .pe-row:last-of-type{border:none}
+  .pe-k{color:#8a6d1f;font-weight:700}.pe-old{color:var(--muted);text-decoration:line-through}.pe-ar{color:#b45309;font-weight:900;text-align:center}.pe-new{color:var(--ink);font-weight:800}
+  .pe-logo{height:26px;border-radius:6px;vertical-align:middle}
+  .pe-bar{display:flex;gap:9px;margin-top:12px}
 </style>
 </head>
 <body>
@@ -143,9 +151,23 @@ async function openCo(id){
   const destChips=Object.entries(destCount).sort((a,b)=>b[1]-a[1])
     .map(([d,n])=>`<span class="dest-chip">${esc(d)} <b>${n}</b></span>`).join('')
     || '<span class="ac-mt">لا طلبات بعد</span>';
+  // بند منفصل: طلب تعديل بروفايل بانتظار الموافقة
+  let peHtml='';
+  if(c.pending_edit){
+    const pe=c.pending_edit; const names={contact_name:'اسم المسؤول',contact_phone:'رقم المسؤول',logo_url:'الشعار'};
+    const rows=Object.keys(pe).map(k=>{
+      const oldV=k==='logo_url'?(c.logo_url?`<img src="${esc(c.logo_url)}" class="pe-logo">`:'بدون'):esc(c[k]||'—');
+      const newV=k==='logo_url'?`<img src="${esc(pe[k])}" class="pe-logo">`:esc(pe[k]);
+      return `<div class="pe-row"><span class="pe-k">${names[k]||k}</span><span class="pe-old">${oldV}</span><span class="pe-ar">←</span><span class="pe-new">${newV}</span></div>`;
+    }).join('');
+    peHtml=`<div class="pe-box"><div class="pe-t">✏️ طلب تعديل بيانات — بانتظار موافقتك</div>${rows}
+      <div class="pe-bar"><button class="ac-btn ok" onclick="editDecision('${c.id}','approve')">✅ موافقة على التعديل</button>
+      <button class="ac-btn no" onclick="editDecision('${c.id}','reject')">❌ رفض التعديل</button></div></div>`;
+  }
   $('detail').innerHTML=`
     <div class="ac-head"><div class="lg">${logo}</div>
       <div><div class="t1">${esc(c.company_name)}</div><div class="t2">سجّل: ${esc((c.created_at||'').slice(0,10))} · <span class="acbdg s-${c.status}">${AC_STAT[c.status]||c.status}</span></div></div></div>
+    ${peHtml}
     ${approved?`<div class="ac-stats">
       <div class="ac-stat t"><div class="n">${st.total}</div><div class="l">📋 إجمالي الطلبات</div></div>
       <div class="ac-stat d"><div class="n">${st.done}</div><div class="l">✅ تم الرد عليها</div></div>
@@ -183,6 +205,13 @@ async function setStatus(id,status){
   const d=await update(id,{status,whatsapp_group_link:wa,by:'owner'});
   if(d.ok){ flash('تم '+labels[status]+' ✅',true); await loadList(); openCo(id); } else flash(d.error||'فشل التحديث',false);
 }
+window.editDecision=async function(id,decision){
+  const label=decision==='approve'?'الموافقة على':'رفض';
+  if(!confirm('تأكيد '+label+' التعديل؟')) return;
+  const r=await fetch(BASE+'?admin_action=company_edit&id='+id,{method:'POST',headers:H(),body:JSON.stringify({decision})});
+  const d=await r.json();
+  if(d.ok){ await loadList(); openCo(id); } else alert(d.error||'فشل العملية');
+};
 
 // مؤقتاً: افتح مباشرة بدون كلمة سر
 show();

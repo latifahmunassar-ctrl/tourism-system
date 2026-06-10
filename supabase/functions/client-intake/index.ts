@@ -91,6 +91,7 @@ function publicCompany(c: any) {
     contact_phone: c.contact_phone, contact_email: c.contact_email,
     logo_url: c.logo_url, website: c.website, status: c.status,
     whatsapp_group_link: c.status === "approved" ? c.whatsapp_group_link : null,
+    pending_edit: c.pending_edit || null,
   };
 }
 
@@ -385,6 +386,31 @@ Deno.serve(async (req) => {
       return json({ ok: true, company: publicCompany(c) });
     }
 
+    // Company proposes a profile edit (contact name / phone / logo). Stored in
+    // pending_edit awaiting owner approval — live fields don't change until then.
+    if (companyAction === "update_profile") {
+      const token = String(body.token || "");
+      if (!token) return json({ error: "انتهت الجلسة، سجّلي الدخول من جديد" }, 401);
+      const { data: c } = await supabase.from("client_companies").select("*").eq("login_token", token).maybeSingle();
+      if (!c || c.status !== "approved") return json({ error: "انتهت الجلسة، سجّلي الدخول من جديد" }, 401);
+      const edit: Record<string, any> = {};
+      const name = String(body.contact_name ?? "").trim();
+      if (name && name !== (c.contact_name || "")) edit.contact_name = name;
+      if (body.contact_phone != null) {
+        const phone = normPhone(body.contact_phone);
+        if (phone && phone !== c.contact_phone) {
+          const { data: dup } = await supabase.from("client_companies").select("id").eq("contact_phone", phone).neq("id", c.id).maybeSingle();
+          if (dup) return json({ error: "رقم الجوال مستخدم من شركة أخرى" }, 409);
+          edit.contact_phone = phone;
+        }
+      }
+      if (body.logo_base64) { const url = await uploadLogo(supabase, body.logo_base64, c.contact_phone); if (url) edit.logo_url = url; }
+      if (!Object.keys(edit).length) return json({ error: "ما فيه تغييرات للحفظ" }, 400);
+      await supabase.from("client_companies").update({ pending_edit: edit, pending_edit_at: new Date().toISOString() }).eq("id", c.id);
+      await notifySales(`✏️ طلب تعديل بيانات\nالشركة: ${c.company_name}\nبانتظار موافقتك في داشبورد الشركات.`);
+      return json({ ok: true });
+    }
+
     return json({ error: "unknown company_action" }, 400);
   }
 
@@ -394,7 +420,7 @@ Deno.serve(async (req) => {
   if (adminAction) {
     // Company-account management is OWNER-only (separate private dashboard) and
     // uses COMPANIES_ADMIN_SECRET. The staff request inbox keeps CLIENT_ADMIN_SECRET.
-    const ownerOnly = ["companies", "company_get", "company_update"].includes(adminAction);
+    const ownerOnly = ["companies", "company_get", "company_update", "company_edit"].includes(adminAction);
     const expected = (Deno.env.get(ownerOnly ? "COMPANIES_ADMIN_SECRET" : "CLIENT_ADMIN_SECRET") || "").trim();
     const got = (req.headers.get("x-admin-secret") || "").trim();
     if (!expected || got !== expected) return json({ error: "unauthorized" }, 401);
@@ -419,7 +445,7 @@ Deno.serve(async (req) => {
     if (adminAction === "company_get") {
       const cid = url.searchParams.get("id") || "";
       const { data: c, error } = await supabase.from("client_companies")
-        .select("id, company_name, contact_name, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, notes, created_at, approved_at, approved_by")
+        .select("id, company_name, contact_name, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, notes, created_at, approved_at, approved_by, pending_edit, pending_edit_at")
         .eq("id", cid).single();
       if (error) return json({ error: error.message }, 404);
       const stats = await companyStats(supabase, cid);
@@ -443,6 +469,29 @@ Deno.serve(async (req) => {
       const { error } = await supabase.from("client_companies").update(patch).eq("id", cid);
       if (error) return json({ error: error.message }, 500);
       return json({ ok: true });
+    }
+
+    // owner approves/rejects a pending profile edit
+    if (adminAction === "company_edit" && req.method === "POST") {
+      const cid = url.searchParams.get("id") || "";
+      const body = await req.json().catch(() => ({} as Record<string, any>));
+      const { data: c } = await supabase.from("client_companies").select("pending_edit").eq("id", cid).single();
+      if (!c || !c.pending_edit) return json({ error: "لا يوجد تعديل معلّق" }, 400);
+      if (body.decision === "approve") {
+        // re-check phone uniqueness at approval time
+        if (c.pending_edit.contact_phone) {
+          const { data: dup } = await supabase.from("client_companies").select("id").eq("contact_phone", c.pending_edit.contact_phone).neq("id", cid).maybeSingle();
+          if (dup) return json({ error: "رقم الجوال صار مستخدماً من شركة أخرى" }, 409);
+        }
+        const { error } = await supabase.from("client_companies").update({ ...c.pending_edit, pending_edit: null, pending_edit_at: null }).eq("id", cid);
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true, applied: c.pending_edit });
+      }
+      if (body.decision === "reject") {
+        await supabase.from("client_companies").update({ pending_edit: null, pending_edit_at: null }).eq("id", cid);
+        return json({ ok: true });
+      }
+      return json({ error: "decision required (approve|reject)" }, 400);
     }
 
     if (adminAction === "list") {

@@ -54,6 +54,18 @@
   .done{text-align:center;padding:30px 10px}
   .done .check{width:74px;height:74px;border-radius:50%;background:#e7f6ee;color:var(--ok);display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto 14px}
   .done .ref{display:inline-block;background:#e9f7f1;color:var(--brand);font-weight:800;font-size:20px;letter-spacing:1px;padding:8px 18px;border-radius:12px;margin:10px 0}
+  /* company profile section */
+  .pf-row{display:flex;justify-content:space-between;gap:10px;font-size:13.5px;padding:8px 0;border-bottom:1px dashed var(--line)}
+  .pf-row:last-child{border:none}.pf-row .k{color:var(--muted)}
+  .pf-pending{background:#fff7e6;border:1px solid #f0dcae;color:#8a6d1f;border-radius:11px;padding:11px;font-size:12.5px;margin-bottom:12px;line-height:1.7}
+  .pf-edit-btn{background:#e9f7f1;color:var(--brand);border:1px solid var(--line);border-radius:11px;padding:11px;width:100%;cursor:pointer;font-weight:700;margin-top:10px}
+  .pf-logo-up{display:flex;gap:12px;align-items:center}
+  .pf-prev{width:60px;height:60px;border-radius:12px;border:1px solid var(--line);background:#f7faf8;display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--muted);font-size:11px;text-align:center;flex-shrink:0}
+  .pf-prev img{width:100%;height:100%;object-fit:cover}
+  .pf-logo-btn{border:1px dashed var(--brand2);background:#e9f7f1;color:var(--brand);border-radius:11px;padding:10px 12px;cursor:pointer;font-weight:600;flex:1}
+  .pf-actions{display:flex;gap:10px;margin-top:8px}
+  .pf-save{background:var(--brand);color:#fff;border:none;border-radius:11px;padding:12px;font-weight:700;cursor:pointer;flex:1}
+  .pf-cancel{background:#f1f4f3;color:var(--muted);border:none;border-radius:11px;padding:12px 18px;font-weight:700;cursor:pointer}
 </style>
 </head>
 <body>
@@ -83,6 +95,39 @@
       <button class="out" onclick="logout()">خروج</button>
     </div>
 
+    <!-- ===== بروفايل الشركة (بند منفصل) ===== -->
+    <div class="card" id="profileCard">
+      <h2>بروفايل الشركة</h2>
+      <div class="sub">معلوماتك المحفوظة — تقدر تعدّل اسم المسؤول ورقمه والشعار. أي تعديل يُرسل لـ ALEZZ للموافقة قبل ما ينطبق.</div>
+      <div class="pf-pending" id="pfPending" style="display:none"></div>
+
+      <div id="profView">
+        <div class="pf-row"><span class="k">اسم الشركة</span><span id="pvCompany">—</span></div>
+        <div class="pf-row"><span class="k">اسم المسؤول</span><span id="pvName">—</span></div>
+        <div class="pf-row"><span class="k">رقم المسؤول</span><span id="pvPhone">—</span></div>
+        <div class="pf-row"><span class="k">الشعار</span><span id="pvLogo">—</span></div>
+        <button type="button" class="pf-edit-btn" id="pfEditBtn" onclick="startEdit()">✏️ تعديل بياناتي</button>
+      </div>
+
+      <div id="profEdit" style="display:none">
+        <div class="field"><label>اسم الشركة <span style="font-weight:500;color:var(--muted);font-size:11.5px">(ثابت — لا يُعدّل)</span></label><input id="peCompany" disabled></div>
+        <div class="field"><label>اسم المسؤول</label><input id="peName"></div>
+        <div class="field"><label>رقم المسؤول <span style="font-weight:500;color:var(--muted);font-size:11.5px">(هو نفسه رقم الدخول)</span></label><input id="pePhone" inputmode="tel" placeholder="+9665..."></div>
+        <div class="field"><label>الشعار</label>
+          <div class="pf-logo-up">
+            <div class="pf-prev" id="peLogoPrev">بدون<br>شعار</div>
+            <button type="button" class="pf-logo-btn" id="peLogoBtn">📤 تغيير الشعار</button>
+            <input type="file" id="peLogoFile" accept="image/*" style="display:none">
+          </div>
+        </div>
+        <div class="err" id="peErr" style="margin-bottom:10px"></div>
+        <div class="pf-actions">
+          <button type="button" class="pf-save" id="peSave" onclick="saveProfile()">حفظ وإرسال للموافقة</button>
+          <button type="button" class="pf-cancel" onclick="cancelEdit()">إلغاء</button>
+        </div>
+      </div>
+    </div>
+
     <form id="form">
       <div class="card">
         <h2>اطلب برنامجاً سياحياً</h2>
@@ -98,6 +143,9 @@
           <div class="field"><label>عدد الأيام <span class="req">*</span></label><input id="days" type="number" min="2" max="30" value="8" required></div>
           <div class="field"><label>تاريخ السفر</label><input id="dateGlobal" type="date"></div>
         </div>
+
+        <div class="field" id="airportField"><label>مطار القدوم والمغادرة</label>
+          <select id="airportSel" onchange="onPairChange()"><option value="">اختر الوجهة أولاً…</option></select></div>
 
         <div class="field"><label>طريقة تحديد المدن</label>
           <div class="seg" id="modeSeg">
@@ -195,6 +243,65 @@ function showApp(){
   $('pMeta').textContent=[COMPANY.contact_name,COMPANY.contact_phone].filter(Boolean).join(' · ');
   if(COMPANY.logo_url) $('pLogo').innerHTML=`<img src="${esc(COMPANY.logo_url)}" alt="">`;
   else $('pLogo').textContent='🏢';
+  renderProfile();
+}
+
+// ── company profile (view + edit → pending owner approval) ──
+let peLogoData=null;
+function renderProfile(){
+  $('pvCompany').textContent=COMPANY.company_name||'—';
+  $('pvName').textContent=COMPANY.contact_name||'—';
+  $('pvPhone').textContent=COMPANY.contact_phone||'—';
+  $('pvLogo').innerHTML=COMPANY.logo_url?`<img src="${esc(COMPANY.logo_url)}" style="height:26px;border-radius:6px;vertical-align:middle">`:'بدون شعار';
+  const pe=COMPANY.pending_edit;
+  const box=$('pfPending');
+  if(pe){
+    const names={contact_name:'اسم المسؤول',contact_phone:'رقم المسؤول',logo_url:'الشعار'};
+    const items=Object.keys(pe).map(k=>names[k]||k).join('، ');
+    box.innerHTML=`⏳ <b>لديك تعديل قيد المراجعة</b> (${esc(items)}). ينطبق بعد موافقة ALEZZ.`;
+    box.style.display='block';
+    $('pfEditBtn').style.display='none';
+  }else{
+    box.style.display='none';
+    $('pfEditBtn').style.display='';
+  }
+}
+function startEdit(){
+  $('profView').style.display='none'; $('profEdit').style.display='block';
+  $('peCompany').value=COMPANY.company_name||'';
+  $('peName').value=COMPANY.contact_name||'';
+  $('pePhone').value=COMPANY.contact_phone||'';
+  peLogoData=null;
+  $('peLogoPrev').innerHTML=COMPANY.logo_url?`<img src="${esc(COMPANY.logo_url)}" alt="">`:'بدون<br>شعار';
+  $('peLogoBtn').textContent='📤 تغيير الشعار';
+  $('peErr').style.display='none';
+}
+function cancelEdit(){ $('profEdit').style.display='none'; $('profView').style.display='block'; }
+$('peLogoBtn').onclick=()=>$('peLogoFile').click();
+$('peLogoFile').onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  if(f.size>2_000_000){ alert('حجم الصورة كبير (الحد 2 ميجابايت).'); return; }
+  const r=new FileReader();
+  r.onload=()=>{ peLogoData=r.result; $('peLogoPrev').innerHTML=`<img src="${peLogoData}" alt="">`; $('peLogoBtn').textContent='✓ تم اختيار شعار'; };
+  r.readAsDataURL(f);
+};
+async function saveProfile(){
+  const err=$('peErr'); err.style.display='none';
+  const btn=$('peSave');
+  const payload={token:TOKEN, contact_name:$('peName').value.trim(), contact_phone:$('pePhone').value.trim()};
+  if(peLogoData) payload.logo_base64=peLogoData;
+  btn.disabled=true; btn.textContent='جارٍ الإرسال…';
+  try{
+    const res=await fetch(INTAKE+'?company_action=update_profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const d=await res.json();
+    if(!res.ok||!d.ok) throw new Error(d.error||'تعذّر إرسال التعديل');
+    // reflect pending locally + refresh from server
+    cancelEdit();
+    try{ const me=await fetch(INTAKE+'?company_action=me',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:TOKEN})}); const mj=await me.json(); if(mj.ok){ COMPANY=mj.company; } }catch(_){}
+    renderProfile();
+    $('pfPending').scrollIntoView({behavior:'smooth',block:'center'});
+  }catch(ex){ err.textContent=ex.message; err.style.display='block'; }
+  finally{ btn.disabled=false; btn.textContent='حفظ وإرسال للموافقة'; }
 }
 // resume session
 (async ()=>{
@@ -210,27 +317,49 @@ function showApp(){
 const destSel=$('destination');
 Object.keys(CITIES).forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent=d;destSel.appendChild(o)});
 let SUGS=[], chosen=null;
+const AIRPORT_AR={Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي"};
+const airAr=a=>AIRPORT_AR[a]||a;
 function mode(){return document.querySelector('input[name=mode]:checked').value;}
-function applyMode(){ $('readyPanel').style.display=mode()==='ready'?'':'none'; $('manualPanel').style.display=mode()==='manual'?'':'none'; }
+function applyMode(){ const r=mode()==='ready'; $('readyPanel').style.display=r?'':'none'; $('manualPanel').style.display=r?'none':''; $('airportField').style.display=r?'':'none'; }
 document.querySelectorAll('input[name=mode]').forEach(r=>r.onchange=applyMode);
 
+let shownRows=[];
+const pairOf=s=>s.arrival_airport+'|'+s.departure_airport;
 async function loadSuggestions(){
-  SUGS=[]; chosen=null; const dest=destSel.value;
+  SUGS=[]; chosen=null; shownRows=[]; const dest=destSel.value; const sel=$('airportSel');
   $('sugList').innerHTML=''; $('sugEmpty').style.display='none'; $('sugPick').style.display='';
-  if(!dest) return;
+  if(!dest){ sel.innerHTML='<option value="">اختر الوجهة أولاً…</option>'; return; }
   try{ const res=await fetch(INTAKE+"?suggestions="+encodeURIComponent(dest)); const d=await res.json(); SUGS=d.suggestions||[]; }catch(e){ SUGS=[]; }
+  // الخانة ظاهرة دائماً (مطابق لداشبورد الموظفين) + خيار «كل المطارات»
+  const pairs=[...new Set(SUGS.map(pairOf))];
+  if(!pairs.length){ sel.innerHTML='<option value="">لا مطارات لهذه الوجهة — استخدم «تخصيص»</option>'; }
+  else { sel.innerHTML='<option value="ALL">🌐 كل المطارات (كل الاقتراحات)</option>'+pairs.map(p=>{const [a,b]=p.split('|');const lbl=a===b?`القدوم والمغادرة: ${airAr(a)}`:`القدوم: ${airAr(a)} — المغادرة: ${airAr(b)}`;return `<option value="${esc(p)}">${esc(lbl)}</option>`}).join(''); }
   if(SUGS.length===0){ $('sugEmpty').style.display='block'; $('sugPick').style.display='none'; return; }
-  $('daysAvail').innerHTML='الأيام المتوفّرة: <b>'+[...new Set(SUGS.map(s=>s.days))].sort((a,b)=>a-b).join('، ')+'</b>';
+  onPairChange();
+}
+function curPair(){return $('airportSel').value || (SUGS[0]?pairOf(SUGS[0]):'');}
+function daysForPair(){return [...new Set(SUGS.filter(s=>pairOf(s)===curPair()).map(s=>+s.days))].sort((a,b)=>a-b);}
+function onPairChange(){
+  chosen=null; $('sugList').innerHTML='';
+  const p=curPair(), isAll=!p||p==='ALL';
+  $('daysAvail').innerHTML=isAll?'كل المطارات — اضغط «عرض الخيارات»':('الأيام المتوفّرة: <b>'+daysForPair().join('، ')+'</b>');
+  $('sugPick').style.display='';
 }
 function showOptions(){
   chosen=null; const days=+$('days').value||0; const list=$('sugList'); const pick=$('sugPick');
-  if(!days){ list.innerHTML=''; pick.textContent='اكتب عدد الأيام أولاً.'; pick.style.display=''; return; }
-  const rows=SUGS.filter(s=>s.days===days);
-  if(rows.length===0){ list.innerHTML=''; pick.innerHTML='لا يوجد برنامج جاهز لـ '+days+' أيام — أو استخدم «تخصيص بنفسي».'; pick.style.display=''; return; }
+  if(!SUGS.length){ list.innerHTML=''; $('sugEmpty').style.display='block'; pick.style.display='none'; return; }
+  const pair=curPair(), isAll=!pair||pair==='ALL';
+  if(isAll){ shownRows=days?SUGS.filter(s=>+s.days===days):SUGS.slice(); if(!shownRows.length) shownRows=SUGS.slice(); }
+  else{
+    if(!days){ list.innerHTML=''; pick.textContent='اكتب عدد الأيام أولاً، أو اختر «كل المطارات».'; pick.style.display=''; return; }
+    shownRows=SUGS.filter(s=>+s.days===days && pairOf(s)===pair);
+    if(!shownRows.length){ list.innerHTML=''; pick.innerHTML='لا يوجد برنامج جاهز لـ '+days+' أيام لهذا المطار. المتوفّر: <b>'+daysForPair().join('، ')+'</b> — أو «🌐 كل المطارات» أو «تخصيص».'; pick.style.display=''; return; }
+  }
+  shownRows.sort((a,b)=>(+a.days)-(+b.days));
   pick.style.display='none';
-  list.innerHTML=rows.map(s=>`<div class="sug" data-d="${esc(s.distribution)}"><div><span class="d">${s.days} أيام</span>${s.label?`<span class="lab">${esc(s.label)}</span>`:''}</div><div class="dist">${esc(s.distribution)}</div></div>`).join('');
+  list.innerHTML=shownRows.map((s,i)=>{const [a,b]=pairOf(s).split('|');const route=a===b?airAr(a):`${airAr(a)} → ${airAr(b)}`;const tag=isAll?`<span class="lab">✈️ ${esc(route)}</span>`:(s.label?`<span class="lab">${esc(s.label)}</span>`:'');return `<div class="sug" data-i="${i}"><div><span class="d">${s.days} أيام</span>${tag}</div><div class="dist">${esc(s.distribution)}</div></div>`}).join('');
   const els=[...list.querySelectorAll('.sug')];
-  els.forEach(el=>el.onclick=()=>{ els.forEach(x=>x.classList.remove('sel')); el.classList.add('sel'); chosen={distribution:el.dataset.d}; });
+  els.forEach(el=>el.onclick=()=>{ els.forEach(x=>x.classList.remove('sel')); el.classList.add('sel'); const s=shownRows[+el.dataset.i]; chosen={distribution:s.distribution,arrival_airport:s.arrival_airport,departure_airport:s.departure_airport}; const dEl=$('days'); if(+dEl.value!==+s.days){ dEl.value=s.days; expectedNights(); } });
   if(els.length===1) els[0].click();
 }
 $('showOpts').onclick=showOptions;
@@ -270,6 +399,7 @@ $('form').addEventListener('submit', async e=>{
   if(mode()==='ready'){
     if(!chosen){ err.textContent='اضغط «عرض الخيارات» واختر توزيعاً، أو بدّل لـ«تخصيص بنفسي».'; err.style.display='block'; return; }
     payload.distribution=chosen.distribution; payload.cities_nights=parseDist(chosen.distribution);
+    if(chosen.arrival_airport) payload.notes=[payload.notes,`اقتراح جاهز (${airAr(chosen.arrival_airport)}↔${airAr(chosen.departure_airport)})`].filter(Boolean).join(' | ');
   }else{
     const cities=[...cityRows.querySelectorAll('.crow')].map(r=>({city:r.querySelector('.csel').value,nights:+r.querySelector('.cnights').value||0})).filter(c=>c.city&&c.nights);
     if(cities.length===0){ err.textContent='أضف مدينة واحدة على الأقل.'; err.style.display='block'; return; }
