@@ -88,7 +88,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Krabi",        pattern: /كرابي|krabi/i },
     { canonical: "Chiang Mai",   pattern: /شيان[جغ]?\s*ماي|شانغماي|chiang\s*mai|chiangmai/i },
     { canonical: "Pattaya",      pattern: /با?تايا|pattaya/i },
-    { canonical: "Koh Samui",    pattern: /كو(?:ه|سم?)\s*ساموي|koh\s*samui|samui/i },
+    { canonical: "Koh Samui",    pattern: /كوه?\s*ساموي|كوسوموي|كوسموي|koh?\s*samui|samui/i },
   ],
   Turky: [
     { canonical: "Istanbul",   pattern: /اسطنبول|إسطنبول|إستانبول|istanbul|آيا\s*صوفيا|البازار|تقسيم/i },
@@ -948,7 +948,7 @@ async function buildDataContext(
       [/بوكيت|phuket|بوكت/i,                             "Phuket"],
       [/شانغماي|شيانغ\s*ماي|شانج\s*ماي|chiang\s*mai|chiangmai/i, "Chiang Mai"],
       [/بتايا|باتايا|pattaya/i,                          "Pattaya"],
-      [/كوسموي|كوه\s*ساموي|كو\s*ساموي|koh\s*samui|kohsamui|samui/i, "Koh Samui"],
+      [/كوه?\s*ساموي|كوسوموي|كوسموي|koh?\s*samui|kohsamui|samui/i, "Koh Samui"],
       // Malaysia
       // Selangor first — أكثر تخصيصاً (Sunway و مدينة الألعاب السنوية ومعامل العسل
       // كلها في Selangor، وليست في KL رغم القرب الجغرافي)
