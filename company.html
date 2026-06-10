@@ -80,6 +80,8 @@
   .rq-price{margin-top:10px;background:#e9f7f1;border:1px solid #b8e0d0;border-radius:10px;padding:9px 12px;font-size:14px;color:#0e5a40}
   .rq-price b{font-size:16px}
   .rq-price-note{font-size:11px;color:var(--muted);margin-top:3px}
+  .rq-cust{margin-top:6px;font-size:13.5px;color:#7c3aed;font-weight:700}
+  .rq-by{margin-top:8px;font-size:13px;color:var(--brand2);background:#fdf2f8;border:1px solid #f5d9ea;border-radius:9px;padding:7px 10px}
   .rq-empty{color:var(--muted);text-align:center;padding:30px}
   .pf-logo-up{display:flex;gap:12px;align-items:center}
   .pf-prev{width:60px;height:60px;border-radius:12px;border:1px solid var(--line);background:#f7faf8;display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--muted);font-size:11px;text-align:center;flex-shrink:0}
@@ -361,10 +363,13 @@ function renderReqs(){
       ? `<a class="rq-dl" href="proposal.html?token=${esc(r.view_token)}" target="_blank" rel="noopener">⬇️ تحميل البرنامج / Download program</a>`
       : `<div class="rq-hint">فريق ALEZZ يجهّز برنامجك — يوصلك زر التحميل بعد الانتهاء. · Being prepared — download will appear here when ready.</div>`;
     const price=(sent&&r.company_price!=null)?`<div class="rq-price">💰 سعر البرنامج / Program price: <b>${Number(r.company_price).toLocaleString('en-US')} ${esc(CUR[MY_CURRENCY]||MY_CURRENCY)}</b><div class="rq-price-note">أضِف ربحك قبل تحويله لعميلك · add your margin before sharing</div></div>`:'';
+    const cust=r.customer_name?`<div class="rq-cust">👤 العميل / Customer: <b>${esc(r.customer_name)}</b></div>`:'';
+    const by=(sent&&r.sent_by)?`<div class="rq-by">🧑‍💼 رتّبه لك / Arranged by: <b>${esc(r.sent_by)}</b></div>`:'';
     return `<div class="rq">
       <div class="top"><span class="dest">${flag} ${esc(r.destination)}</span><span class="rq-bdg ${sent?'rq-sent':'rq-working'}">${sent?'✅ تم الرد / Ready':'⏳ جاري العمل / In progress'}</span></div>
+      ${cust}
       <div class="meta"><span class="ref">${esc(r.ref_no)}</span> · ${r.days} أيام/days · ${r.pax} أشخاص/pax · ${rqFmtDate(r.created_at)}</div>
-      ${price}${dl}
+      ${by}${price}${dl}
     </div>`;
   }).join('');
 }

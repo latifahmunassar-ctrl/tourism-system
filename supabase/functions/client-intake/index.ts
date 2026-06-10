@@ -426,14 +426,16 @@ Deno.serve(async (req) => {
       const { data: c } = await supabase.from("client_companies").select("id, status, currency").eq("login_token", token).maybeSingle();
       if (!c || c.status !== "approved") return json({ error: "انتهت الجلسة، سجّلي الدخول من جديد" }, 401);
       const { data: reqs } = await supabase.from("client_requests")
-        .select("ref_no, destination, days, pax, status, created_at, view_token, company_price")
+        .select("ref_no, destination, days, pax, status, created_at, view_token, company_price, customer_name, sent_by")
         .eq("company_id", c.id).order("created_at", { ascending: false }).limit(100);
       const requests = (reqs || []).map((r: any) => ({
         ref_no: r.ref_no, destination: r.destination, days: r.days, pax: r.pax,
         status: r.status === "sent" ? "sent" : "working",
         created_at: r.created_at,
+        customer_name: r.customer_name || null,
         view_token: r.status === "sent" ? r.view_token : null,
         company_price: r.status === "sent" ? r.company_price : null,
+        sent_by: r.status === "sent" ? (r.sent_by || null) : null,
       }));
       return json({ ok: true, requests, currency: c.currency || "SAR" });
     }
