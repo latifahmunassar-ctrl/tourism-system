@@ -90,20 +90,20 @@
 <body>
 <header>
   <div class="logo">AL<span>E</span>ZZ</div>
-  <p id="hsub">بوابة الشركات — سجّل دخولك واطلب برنامجك</p>
+  <p id="hsub">بوابة الشركات — سجّل دخولك واطلب برنامجك<br>Companies Portal — log in and request your program</p>
 </header>
 
 <div class="wrap">
 
   <!-- ===== LOGIN ===== -->
   <form id="loginForm" class="card" style="max-width:420px;margin:22px auto 0">
-    <h2>دخول الشركات</h2>
-    <div class="sub">بالجوال وكلمة المرور اللي سجّلت فيها.</div>
-    <div class="field"><label>رقم الجوال <span class="req">*</span></label><input id="lphone" inputmode="tel" placeholder="+9665..." required></div>
-    <div class="field"><label>كلمة المرور <span class="req">*</span></label><input id="lpass" type="password" required></div>
-    <button type="submit" class="submit" id="loginBtn">دخول</button>
+    <h2>دخول الشركات / Company Login</h2>
+    <div class="sub">بالجوال وكلمة المرور اللي سجّلت فيها. · Use your registered mobile & password.</div>
+    <div class="field"><label>رقم الجوال / Mobile <span class="req">*</span></label><input id="lphone" inputmode="tel" placeholder="+9665..." required></div>
+    <div class="field"><label>كلمة المرور / Password <span class="req">*</span></label><input id="lpass" type="password" required></div>
+    <button type="submit" class="submit" id="loginBtn">دخول / Log in</button>
     <div class="err" id="loginErr"></div>
-    <div class="note">شركة جديدة؟ <a href="company-register.html">سجّل حساب</a></div>
+    <div class="note">شركة جديدة؟ <a href="company-register.html">سجّل حساب</a> · New company? <a href="company-register.html">Register</a></div>
   </form>
 
   <!-- ===== APP (after login) ===== -->
@@ -112,138 +112,138 @@
       <div class="lg" id="pLogo">🏢</div>
       <div><div class="nm" id="pName">—</div><div class="mt" id="pMeta">—</div></div>
       <div style="margin-inline-start:auto;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="out tab" id="btnHome" onclick="showRequest()">✈️ طلب برنامج</button>
-        <button class="out tab" id="btnRequests" onclick="showRequests()">📋 طلباتي</button>
-        <button class="out tab" id="btnProfile" onclick="showProfile()">🏢 معلومات شركتي</button>
-        <button class="out" onclick="logout()">خروج</button>
+        <button class="out tab" id="btnHome" onclick="showRequest()">✈️ طلب برنامج / Request</button>
+        <button class="out tab" id="btnRequests" onclick="showRequests()">📋 طلباتي / My requests</button>
+        <button class="out tab" id="btnProfile" onclick="showProfile()">🏢 معلوماتي / My info</button>
+        <button class="out" onclick="logout()">خروج / Logout</button>
       </div>
     </div>
 
     <!-- ===== معلومات شركتي (صفحة منفصلة) ===== -->
     <div class="card" id="profileCard" style="display:none">
-      <button type="button" class="pf-back" onclick="showRequest()">← رجوع لطلب البرنامج</button>
-      <h2>معلومات شركتي</h2>
-      <div class="sub">معلوماتك المحفوظة — تقدر تعدّل اسم المسؤول ورقمه والشعار. أي تعديل يُرسل لـ ALEZZ للموافقة قبل ما ينطبق.</div>
+      <button type="button" class="pf-back" onclick="showRequest()">← رجوع لطلب البرنامج / Back to request</button>
+      <h2>معلومات شركتي / My Company Info</h2>
+      <div class="sub">تقدر تعدّل اسم المسؤول ورقمه والشعار. أي تعديل يُرسل لـ ALEZZ للموافقة قبل ما ينطبق.<br>You can edit the contact name, phone and logo. Edits are sent to ALEZZ for approval before they apply.</div>
       <div class="pf-pending" id="pfPending" style="display:none"></div>
 
       <div id="profView">
-        <div class="pf-row"><span class="k">اسم الشركة</span><span id="pvCompany">—</span></div>
-        <div class="pf-row"><span class="k">اسم المسؤول</span><span id="pvName">—</span></div>
-        <div class="pf-row"><span class="k">رقم المسؤول</span><span id="pvPhone">—</span></div>
-        <div class="pf-row"><span class="k">الشعار</span><span id="pvLogo">—</span></div>
-        <button type="button" class="pf-edit-btn" id="pfEditBtn" onclick="startEdit()">✏️ تعديل بياناتي</button>
+        <div class="pf-row"><span class="k">اسم الشركة / Company</span><span id="pvCompany">—</span></div>
+        <div class="pf-row"><span class="k">اسم المسؤول / Contact</span><span id="pvName">—</span></div>
+        <div class="pf-row"><span class="k">رقم المسؤول / Phone</span><span id="pvPhone">—</span></div>
+        <div class="pf-row"><span class="k">الشعار / Logo</span><span id="pvLogo">—</span></div>
+        <button type="button" class="pf-edit-btn" id="pfEditBtn" onclick="startEdit()">✏️ تعديل بياناتي / Edit my info</button>
       </div>
 
       <div id="profEdit" style="display:none">
-        <div class="field"><label>اسم الشركة <span style="font-weight:500;color:var(--muted);font-size:11.5px">(ثابت — لا يُعدّل)</span></label><input id="peCompany" disabled></div>
-        <div class="field"><label>اسم المسؤول</label><input id="peName"></div>
-        <div class="field"><label>رقم المسؤول <span style="font-weight:500;color:var(--muted);font-size:11.5px">(هو نفسه رقم الدخول)</span></label><input id="pePhone" inputmode="tel" placeholder="+9665..."></div>
-        <div class="field"><label>الشعار</label>
+        <div class="field"><label>اسم الشركة / Company <span style="font-weight:500;color:var(--muted);font-size:11.5px">(ثابت / fixed)</span></label><input id="peCompany" disabled></div>
+        <div class="field"><label>اسم المسؤول / Contact Person</label><input id="peName"></div>
+        <div class="field"><label>رقم المسؤول / Phone <span style="font-weight:500;color:var(--muted);font-size:11.5px">(هو رقم الدخول / login number)</span></label><input id="pePhone" inputmode="tel" placeholder="+9665..."></div>
+        <div class="field"><label>الشعار / Logo</label>
           <div class="pf-logo-up">
-            <div class="pf-prev" id="peLogoPrev">بدون<br>شعار</div>
-            <button type="button" class="pf-logo-btn" id="peLogoBtn">📤 تغيير الشعار</button>
+            <div class="pf-prev" id="peLogoPrev">بدون شعار<br>No logo</div>
+            <button type="button" class="pf-logo-btn" id="peLogoBtn">📤 تغيير الشعار / Change logo</button>
             <input type="file" id="peLogoFile" accept="image/*" style="display:none">
           </div>
         </div>
         <div class="err" id="peErr" style="margin-bottom:10px"></div>
         <div class="pf-actions">
-          <button type="button" class="pf-save" id="peSave" onclick="saveProfile()">حفظ وإرسال للموافقة</button>
-          <button type="button" class="pf-cancel" onclick="cancelEdit()">إلغاء</button>
+          <button type="button" class="pf-save" id="peSave" onclick="saveProfile()">حفظ وإرسال للموافقة / Save & send for approval</button>
+          <button type="button" class="pf-cancel" onclick="cancelEdit()">إلغاء / Cancel</button>
         </div>
       </div>
     </div>
 
     <!-- ===== طلباتي (صفحة منفصلة) ===== -->
     <div class="card" id="requestsView" style="display:none">
-      <button type="button" class="pf-back" onclick="showRequest()">← رجوع لطلب البرنامج</button>
-      <h2>📋 طلباتي</h2>
+      <button type="button" class="pf-back" onclick="showRequest()">← رجوع لطلب البرنامج / Back to request</button>
+      <h2>📋 طلباتي / My Requests</h2>
       <div class="rq-filters">
-        <div><label class="rq-lbl">🔎 رقم الطلب</label><input id="fRef" oninput="renderReqs()" placeholder="REQ-2026-..."></div>
-        <div><label class="rq-lbl">📍 الوجهة</label><select id="fDest" onchange="renderReqs()"><option value="">كل الوجهات</option></select></div>
-        <div><label class="rq-lbl">⏳ الحالة</label><select id="fStatus" onchange="renderReqs()"><option value="">كل الحالات</option><option value="working">جاري العمل</option><option value="sent">تم الرد</option></select></div>
+        <div><label class="rq-lbl">🔎 رقم الطلب / Ref</label><input id="fRef" oninput="renderReqs()" placeholder="REQ-2026-..."></div>
+        <div><label class="rq-lbl">📍 الوجهة / Destination</label><select id="fDest" onchange="renderReqs()"><option value="">كل الوجهات / All</option></select></div>
+        <div><label class="rq-lbl">⏳ الحالة / Status</label><select id="fStatus" onchange="renderReqs()"><option value="">الكل / All</option><option value="working">جاري العمل / In progress</option><option value="sent">تم الرد / Ready</option></select></div>
       </div>
       <div id="reqsList"><div class="rq-empty">جارٍ التحميل…</div></div>
     </div>
 
     <form id="form">
       <div class="card">
-        <h2>اطلب برنامجاً سياحياً</h2>
-        <div class="sub">بياناتك محفوظة — كمّل تفاصيل الرحلة فقط.</div>
-        <div class="field"><label>الوجهة <span class="req">*</span></label>
-          <select id="destination" required><option value="">اختر الوجهة…</option></select>
+        <h2>اطلب برنامجاً سياحياً / Request a Program</h2>
+        <div class="sub">بياناتك محفوظة — كمّل تفاصيل الرحلة فقط. · Your details are saved — just fill the trip details.</div>
+        <div class="field"><label>الوجهة / Destination <span class="req">*</span></label>
+          <select id="destination" required><option value="">اختر الوجهة… / Choose…</option></select>
         </div>
         <div class="row">
-          <div class="field"><label>عدد البالغين <span class="req">*</span></label><input id="pax" type="number" min="1" max="40" value="2" required></div>
-          <div class="field"><label>عدد الأطفال <span style="font-weight:500;color:var(--muted);font-size:11.5px">(أقل من 5)</span></label><input id="children" type="number" min="0" max="20" value="0"></div>
+          <div class="field"><label>عدد البالغين / Adults <span class="req">*</span></label><input id="pax" type="number" min="1" max="40" value="2" required></div>
+          <div class="field"><label>عدد الأطفال / Children <span style="font-weight:500;color:var(--muted);font-size:11.5px">(أقل من 5 / under 5)</span></label><input id="children" type="number" min="0" max="20" value="0"></div>
         </div>
         <div class="row">
-          <div class="field"><label>عدد الأيام <span class="req">*</span></label><input id="days" type="number" min="2" max="30" value="8" required></div>
-          <div class="field"><label>تاريخ السفر</label><input id="dateGlobal" type="date"></div>
+          <div class="field"><label>عدد الأيام / Days <span class="req">*</span></label><input id="days" type="number" min="2" max="30" value="8" required></div>
+          <div class="field"><label>تاريخ السفر / Travel date</label><input id="dateGlobal" type="date"></div>
         </div>
 
-        <div class="field" id="airportField"><label>مطار القدوم والمغادرة</label>
-          <select id="airportSel" onchange="onPairChange()"><option value="">اختر الوجهة أولاً…</option></select></div>
+        <div class="field" id="airportField"><label>مطار القدوم والمغادرة / Arrival & departure airport</label>
+          <select id="airportSel" onchange="onPairChange()"><option value="">اختر الوجهة أولاً… / Choose destination first</option></select></div>
 
-        <div class="field"><label>طريقة تحديد المدن</label>
+        <div class="field"><label>طريقة تحديد المدن / Cities</label>
           <div class="seg" id="modeSeg">
-            <label><input type="radio" name="mode" value="ready" checked><span>📋 اقتراحات جاهزة</span></label>
-            <label><input type="radio" name="mode" value="manual"><span>✏️ تخصيص بنفسي</span></label>
+            <label><input type="radio" name="mode" value="ready" checked><span>📋 اقتراحات جاهزة / Ready</span></label>
+            <label><input type="radio" name="mode" value="manual"><span>✏️ تخصيص / Custom</span></label>
           </div>
         </div>
 
         <div id="readyPanel">
           <div class="field"><div class="nightsum" id="daysAvail"></div>
-            <button type="button" class="gobtn" id="showOpts">📋 عرض الخيارات حسب عدد الأيام</button></div>
-          <div class="field"><label>التوزيع المقترح للمدن</label>
+            <button type="button" class="gobtn" id="showOpts">📋 عرض الخيارات / Show options</button></div>
+          <div class="field"><label>التوزيع المقترح للمدن / Suggested split</label>
             <div id="sugList" class="suglist"></div>
-            <div class="nightsum" id="sugPick">اضغط «عرض الخيارات» لعرض التوزيع المطابق.</div>
-            <div class="hintbox" id="sugEmpty">لا توجد اقتراحات جاهزة لهذه الوجهة — استخدم «تخصيص بنفسي».</div>
+            <div class="nightsum" id="sugPick">اضغط «عرض الخيارات» لعرض التوزيع المطابق. · Tap “Show options”.</div>
+            <div class="hintbox" id="sugEmpty">لا توجد اقتراحات جاهزة لهذه الوجهة — استخدم «تخصيص». · No ready options — use Custom.</div>
           </div>
         </div>
 
         <div id="manualPanel" style="display:none">
-          <div class="field cities"><label>توزيع المدن والليالي</label>
+          <div class="field cities"><label>توزيع المدن والليالي / Cities & nights</label>
             <div id="cityRows"></div>
-            <button type="button" class="addcity" id="addCity">+ أضف مدينة</button>
-            <div class="nightsum">مجموع الليالي: <b id="nsum">0</b> — المتوقّع: <b id="nexp">7</b> ليلة</div>
+            <button type="button" class="addcity" id="addCity">+ أضف مدينة / Add city</button>
+            <div class="nightsum">مجموع الليالي / Total nights: <b id="nsum">0</b> — المتوقّع / expected: <b id="nexp">7</b></div>
           </div>
         </div>
       </div>
 
       <div class="card">
-        <h2>تفضيلات</h2>
-        <div class="sub">اختياري</div>
-        <div class="field"><label>فئة الفنادق</label>
+        <h2>تفضيلات / Preferences</h2>
+        <div class="sub">اختياري / optional</div>
+        <div class="field"><label>فئة الفنادق / Hotel class</label>
           <div class="seg seg-stars">
-            <label><input type="radio" name="stars" value="mixed" checked><span>⭐ ٤ و ٥ نجوم <span class="reco">Recommended</span><br><small>الأوفر — نختار لك الأرخص</small></span></label>
-            <label><input type="radio" name="stars" value="5"><span>٥ نجوم</span></label>
-            <label><input type="radio" name="stars" value="4"><span>٤ نجوم</span></label>
+            <label><input type="radio" name="stars" value="mixed" checked><span>⭐ ٤ و ٥ نجوم / 4 & 5★ <span class="reco">Recommended</span><br><small>الأوفر — نختار لك الأرخص · Best value</small></span></label>
+            <label><input type="radio" name="stars" value="5"><span>٥ نجوم / 5★</span></label>
+            <label><input type="radio" name="stars" value="4"><span>٤ نجوم / 4★</span></label>
           </div>
         </div>
-        <div class="field"><label>نوع التنقّل</label>
+        <div class="field"><label>نوع التنقّل / Transport</label>
           <div class="seg">
-            <label><input type="radio" name="transport" value="private" checked><span>🚗 خاص</span></label>
-            <label><input type="radio" name="transport" value="shared"><span>🚐 مشترك</span></label>
+            <label><input type="radio" name="transport" value="private" checked><span>🚗 خاص / Private</span></label>
+            <label><input type="radio" name="transport" value="shared"><span>🚐 مشترك / Shared</span></label>
           </div>
         </div>
         <div class="row">
-          <div class="field"><label>عدد شرائح الاتصال</label><input id="sim_count" type="number" min="0" max="40" value="0"></div>
-          <div class="field"><label>سرير إضافي</label><input id="extra_bed" placeholder="مثال: نعم لكل الفنادق"></div>
+          <div class="field"><label>عدد شرائح الاتصال / SIM cards</label><input id="sim_count" type="number" min="0" max="40" value="0"></div>
+          <div class="field"><label>سرير إضافي / Extra bed</label><input id="extra_bed" placeholder="مثال: نعم لكل الفنادق / e.g. yes"></div>
         </div>
-        <div class="field"><label>ملاحظات</label><textarea id="notes" rows="2" placeholder="أي طلبات خاصة…"></textarea></div>
+        <div class="field"><label>ملاحظات / Notes</label><textarea id="notes" rows="2" placeholder="أي طلبات خاصة… / any special requests…"></textarea></div>
       </div>
 
-      <button type="submit" class="submit" id="submitBtn">إرسال الطلب</button>
+      <button type="submit" class="submit" id="submitBtn">إرسال الطلب / Submit Request</button>
       <div class="err" id="errBox"></div>
-      <div class="note">يصلك العرض بعد مراجعة فريق ALEZZ.</div>
+      <div class="note">يصلك العرض بعد مراجعة فريق ALEZZ. · You’ll receive the offer after the ALEZZ team reviews it.</div>
     </form>
 
     <div class="card done" id="done" style="display:none">
       <div class="check">✓</div>
-      <h2 style="font-size:20px;color:var(--brand)">تم استلام طلبك</h2>
-      <p style="color:var(--muted)">فريق ALEZZ يجهّز برنامجك ويرسل لك العرض قريباً.</p>
+      <h2 style="font-size:20px;color:var(--brand)">تم استلام طلبك / Request Received</h2>
+      <p style="color:var(--muted)">فريق ALEZZ يجهّز برنامجك ويرسل لك العرض قريباً.<br>The ALEZZ team is preparing your program and will send the offer soon.</p>
       <div class="ref" id="refNo"></div>
-      <button class="gobtn" style="max-width:240px;margin:8px auto 0" onclick="newRequest()">+ طلب جديد</button>
+      <button class="gobtn" style="max-width:240px;margin:8px auto 0" onclick="newRequest()">+ طلب جديد / New request</button>
     </div>
   </div>
 </div>
@@ -282,7 +282,7 @@ $('loginForm').addEventListener('submit', async e=>{
 function logout(){ localStorage.removeItem('alezz_company_token'); TOKEN=''; COMPANY=null; location.reload(); }
 function showApp(){
   $('loginForm').style.display='none'; $('app').style.display='block';
-  $('hsub').textContent='أهلاً بعودتك 👋';
+  $('hsub').textContent='أهلاً بعودتك 👋 · Welcome back';
   $('pName').textContent=COMPANY.company_name;
   $('pMeta').textContent=[COMPANY.contact_name,COMPANY.contact_phone].filter(Boolean).join(' · ');
   if(COMPANY.logo_url) $('pLogo').innerHTML=`<img src="${esc(COMPANY.logo_url)}" alt="">`;
@@ -303,14 +303,14 @@ function renderProfile(){
   if(pe){
     const names={contact_name:'اسم المسؤول',contact_phone:'رقم المسؤول',logo_url:'الشعار'};
     const items=Object.keys(pe).map(k=>names[k]||k).join('، ');
-    box.innerHTML=`⏳ <b>لديك تعديل قيد المراجعة</b> (${esc(items)}). ينطبق بعد موافقة ALEZZ.`;
+    box.innerHTML=`⏳ <b>لديك تعديل قيد المراجعة / Edit under review</b> (${esc(items)}). ينطبق بعد موافقة ALEZZ.`;
     box.style.display='block';
     $('pfEditBtn').style.display='none';
   }else{
     box.style.display='none';
     $('pfEditBtn').style.display='';
   }
-  const bp=$('btnProfile'); if(bp) bp.textContent = pe ? '🏢 معلومات شركتي ⏳' : '🏢 معلومات شركتي';
+  const bp=$('btnProfile'); if(bp) bp.textContent = pe ? '🏢 معلوماتي / My info ⏳' : '🏢 معلوماتي / My info';
 }
 function startEdit(){
   $('profView').style.display='none'; $('profEdit').style.display='block';
@@ -347,15 +347,15 @@ async function loadMyRequests(){
 function renderReqs(){
   const ref=($('fRef').value||'').trim().toLowerCase(), dest=$('fDest').value, st=$('fStatus').value;
   const rows=MY_REQS.filter(r=>(!ref||String(r.ref_no||'').toLowerCase().includes(ref))&&(!dest||r.destination===dest)&&(!st||r.status===st));
-  if(!rows.length){ $('reqsList').innerHTML='<div class="rq-empty">لا توجد طلبات مطابقة</div>'; return; }
+  if(!rows.length){ $('reqsList').innerHTML='<div class="rq-empty">لا توجد طلبات مطابقة · No matching requests</div>'; return; }
   $('reqsList').innerHTML=rows.map(r=>{
     const flag=DEST_FLAG[r.destination]||'📍', sent=r.status==='sent';
     const dl=sent&&r.view_token
-      ? `<a class="rq-dl" href="proposal.html?token=${esc(r.view_token)}" target="_blank" rel="noopener">⬇️ تحميل البرنامج</a>`
-      : `<div class="rq-hint">فريق ALEZZ يجهّز برنامجك — يوصلك زر التحميل هنا بعد الانتهاء.</div>`;
+      ? `<a class="rq-dl" href="proposal.html?token=${esc(r.view_token)}" target="_blank" rel="noopener">⬇️ تحميل البرنامج / Download program</a>`
+      : `<div class="rq-hint">فريق ALEZZ يجهّز برنامجك — يوصلك زر التحميل بعد الانتهاء. · Being prepared — download will appear here when ready.</div>`;
     return `<div class="rq">
-      <div class="top"><span class="dest">${flag} ${esc(r.destination)}</span><span class="rq-bdg ${sent?'rq-sent':'rq-working'}">${sent?'✅ تم الرد':'⏳ جاري العمل'}</span></div>
-      <div class="meta"><span class="ref">${esc(r.ref_no)}</span> · ${r.days} أيام · ${r.pax} أشخاص · ${rqFmtDate(r.created_at)}</div>
+      <div class="top"><span class="dest">${flag} ${esc(r.destination)}</span><span class="rq-bdg ${sent?'rq-sent':'rq-working'}">${sent?'✅ تم الرد / Ready':'⏳ جاري العمل / In progress'}</span></div>
+      <div class="meta"><span class="ref">${esc(r.ref_no)}</span> · ${r.days} أيام/days · ${r.pax} أشخاص/pax · ${rqFmtDate(r.created_at)}</div>
       ${dl}
     </div>`;
   }).join('');

@@ -37,40 +37,40 @@
 <body>
 <header>
   <div class="logo">AL<span>E</span>ZZ</div>
-  <p>سجّل شركتك مرة وحدة — بعد التفعيل تطلب برامجك بدون إعادة كتابة بياناتك</p>
+  <p>سجّل شركتك مرة وحدة — بعد التفعيل تطلب برامجك بدون إعادة كتابة بياناتك<br>Register once — then request programs without re-entering your details</p>
 </header>
 
 <div class="wrap">
   <form id="form" class="card">
-    <h2>تسجيل حساب شركة</h2>
-    <div class="sub">بياناتك تُحفظ مرة واحدة، ويراجع فريق ALEZZ الطلب ويفعّل حسابك.</div>
+    <h2>تسجيل حساب شركة / Company Registration</h2>
+    <div class="sub">بياناتك تُحفظ مرة واحدة، ويراجع فريق ALEZZ الطلب ويفعّل حسابك.<br>Your details are saved once; the ALEZZ team reviews and activates your account.</div>
 
-    <div class="field"><label>اسم الشركة <span class="req">*</span></label><input name="company_name" required></div>
-    <div class="field"><label>اسم المسؤول</label><input name="contact_name"></div>
-    <div class="field"><label>رقم الجوال <span class="req">*</span> <span class="hint">(تدخلين به لاحقاً)</span></label><input name="contact_phone" inputmode="tel" placeholder="+9665..." required></div>
-    <div class="field"><label>كلمة المرور <span class="req">*</span> <span class="hint">(4 خانات على الأقل)</span></label><input name="password" type="password" minlength="4" required></div>
-    <div class="field"><label>البريد الإلكتروني</label><input name="contact_email" type="email"></div>
-    <div class="field"><label>الموقع الإلكتروني أو الانستقرام</label><input name="website" placeholder="instagram.com/yourcompany"></div>
+    <div class="field"><label>اسم الشركة / Company Name <span class="req">*</span></label><input name="company_name" required></div>
+    <div class="field"><label>اسم المسؤول / Contact Person</label><input name="contact_name"></div>
+    <div class="field"><label>رقم الجوال / Mobile <span class="req">*</span> <span class="hint">(للدخول لاحقاً / used to log in)</span></label><input name="contact_phone" inputmode="tel" placeholder="+9665..." required></div>
+    <div class="field"><label>كلمة المرور / Password <span class="req">*</span> <span class="hint">(4 خانات على الأقل / min 4)</span></label><input name="password" type="password" minlength="4" required></div>
+    <div class="field"><label>البريد الإلكتروني / Email</label><input name="contact_email" type="email"></div>
+    <div class="field"><label>الموقع أو الانستقرام / Website or Instagram</label><input name="website" placeholder="instagram.com/yourcompany"></div>
 
     <div class="field">
-      <label>شعار الشركة <span class="hint">(اختياري — PNG/JPG)</span></label>
+      <label>شعار الشركة / Company Logo <span class="hint">(اختياري / optional — PNG/JPG)</span></label>
       <div class="logo-up">
-        <div class="logo-prev" id="logoPrev">بدون<br>شعار</div>
-        <button type="button" class="logo-btn" id="logoBtn">📤 اختيار صورة الشعار</button>
+        <div class="logo-prev" id="logoPrev">بدون شعار<br>No logo</div>
+        <button type="button" class="logo-btn" id="logoBtn">📤 اختيار الشعار / Choose logo</button>
         <input type="file" id="logoFile" accept="image/*" style="display:none">
       </div>
     </div>
 
-    <button type="submit" class="submit" id="submitBtn">إرسال طلب التسجيل</button>
+    <button type="submit" class="submit" id="submitBtn">إرسال طلب التسجيل / Submit Registration</button>
     <div class="err" id="errBox"></div>
-    <div class="note">عندك حساب مفعّل؟ <a href="company.html">سجّل الدخول</a></div>
+    <div class="note">عندك حساب مفعّل؟ <a href="company.html">سجّل الدخول</a> · Have an account? <a href="company.html">Log in</a></div>
   </form>
 
   <div class="card done" id="done" style="display:none">
     <div class="check">✓</div>
-    <h2 style="font-size:20px;color:var(--brand)">تم استلام طلب التسجيل</h2>
-    <p style="color:var(--muted)">يراجع فريق ALEZZ بياناتك ويفعّل حسابك قريباً. بعد التفعيل تقدر تدخل وتطلب برامجك.</p>
-    <div class="note"><a href="company.html">صفحة الدخول</a></div>
+    <h2 style="font-size:20px;color:var(--brand)">تم استلام طلب التسجيل / Registration Received</h2>
+    <p style="color:var(--muted)">يراجع فريق ALEZZ بياناتك ويفعّل حسابك قريباً. بعد التفعيل تقدر تدخل وتطلب برامجك.<br>The ALEZZ team is reviewing your details and will activate your account soon. Once active, you can log in and request programs.</p>
+    <div class="note"><a href="company.html">صفحة الدخول / Login</a></div>
   </div>
 </div>
 
