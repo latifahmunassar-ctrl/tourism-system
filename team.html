@@ -628,11 +628,12 @@ const history = [];
 let isLoading = false;
 let parsedData = null;
 let basePrice = 0;
-// عدد الغرف لكل فندق (الافتراضي 1). يُضرب في تكلفة الفندق. يُعاد ضبطه عند بناء برنامج جديد.
+// عدد الغرف لكل فندق (الافتراضي 1). يُضرب في تكلفة الفندق.
+// يُحفظ عبر كل إعادة بناء (تعديلات/سرير إضافي/تبديل فندق) ما دامت نفس المدن، ويُصفّر فقط لبرنامج مختلف.
 let hotelRooms = [];
-let _preserveRooms = false;            // أثناء إعادة العرض (تغيير غرف/تبديل فندق) نحتفظ بالأعداد
+let _lastHotelCities = [];
 function hRooms(i){ const n = parseInt(hotelRooms[i], 10); return (n >= 1 && n <= 10) ? n : 1; }
-function setHotelRooms(i, n){ hotelRooms[i] = Math.max(1, Math.min(10, parseInt(n,10)||1)); _preserveRooms = true; if (typeof lastProgramRaw === 'string' && lastProgramRaw) buildReview(lastProgramRaw); }
+function setHotelRooms(i, n){ hotelRooms[i] = Math.max(1, Math.min(10, parseInt(n,10)||1)); if (typeof lastProgramRaw === 'string' && lastProgramRaw) buildReview(lastProgramRaw); }
 // تكاليف إضافية يدوية يضيفها الموظف (غير موجودة بالشيت): تذاكر دولية، فيزا، تأمين…
 // تُجمع كلياً على إجمالي المجموعة (قبل الربح)، وتظهر بالاسم في قسمها بالـ PDF.
 let extraCosts = []; // [{ label:'', amount:'', section:'flights' }]
@@ -1782,9 +1783,13 @@ const persons = adults + kids + infants;
 // إجمالي المجموعة من النص (قد يخطئ النموذج) — سنقارنه مع حسابنا الفعلي
 const totalGroupFromText = parseInt((totalGroupLine.split('|')[0]||'').replace(/[^\d]/g,'')) || 0;
 const hotelsLines = parseHotelLinesFromRaw(raw);
-// عدد الغرف: نعيد الضبط لبرنامج جديد، ونحتفظ به عند إعادة العرض (تغيير غرف/تبديل فندق)
-if (!_preserveRooms || hotelRooms.length !== hotelsLines.length) hotelRooms = hotelsLines.map(() => 1);
-_preserveRooms = false;
+// عدد الغرف: نحتفظ به ما دامت نفس المدن بنفس الترتيب (تعديلات/سرير إضافي/تبديل فندق
+// لا تُصفّره)، ونعيد الضبط فقط لبرنامج بهيكل مختلف.
+const _newHotelCities = hotelsLines.map(l => (String(l).split('|')[1] || '').trim());
+if (hotelRooms.length !== hotelsLines.length || JSON.stringify(_newHotelCities) !== JSON.stringify(_lastHotelCities)) {
+  hotelRooms = hotelsLines.map(() => 1);
+}
+_lastHotelCities = _newHotelCities;
 const flightsLines = parseSection(raw, 'FLIGHTS');
 let transfersLines = parseSection(raw, 'TRANSFERS');
 let toursLines = parseSection(raw, 'TOURS');
