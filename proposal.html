@@ -49,10 +49,14 @@
   /* ===== تصميم PDF للشركات — مطابق لداشبورد الموظفين (نفس القياسات والهوامش) ===== */
   @page{size:A4;margin:0}
   #pdf{font-family:'Tajawal',sans-serif;background:#fff}
+  /* اطبع الخلفيات والألوان (الأزرق وغيره) — وإلا المتصفح يحذفها */
+  #pdf, #pdf *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
+  /* النص فوق صورة الطائرة (تفادي التداخل) */
+  #pdf .pdf-cover > div{position:relative;z-index:5}
   #pdf .pdf-cover{background:linear-gradient(150deg,#1565d8 0%,#0d47a1 40%,#0a2f6e 100%);color:#fff;padding:28px 32px;min-height:280mm;box-sizing:border-box;position:relative;overflow:hidden;page-break-inside:avoid}
   #pdf .pdf-cover::before{content:"";position:absolute;top:-100px;left:-100px;width:400px;height:400px;background:rgba(255,255,255,0.04);border-radius:50%}
   #pdf .pdf-cover::after{content:"";position:absolute;bottom:-80px;right:-80px;width:300px;height:300px;background:rgba(255,255,255,0.04);border-radius:50%}
-  #pdf .pdf-cover-airplane{position:absolute;top:24px;left:24px;width:240px;opacity:.95;z-index:2}
+  #pdf .pdf-cover-airplane{position:absolute;top:20px;left:20px;width:190px;opacity:.5;z-index:1}
   #pdf .pdf-logo-box{background:#fff;border-radius:14px;padding:14px 20px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:18px;box-shadow:0 6px 20px rgba(0,0,0,0.18);position:relative;z-index:3}
   #pdf .pdf-logo-img{max-width:240px;max-height:120px;display:block}
   #pdf .pdf-logo-name{color:#0d47a1;font-weight:900;font-size:24px}
