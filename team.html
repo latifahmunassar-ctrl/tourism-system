@@ -329,6 +329,16 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 .tsw-cell{position:relative;min-width:240px}
 .tsw-cell.open .hsw-menu{display:block}
 .tsw-cell.open .hsw-chev{transform:rotate(180deg)}
+/* اختيار السيارة (السعة) */
+.vsw-cell{position:relative;min-width:150px}
+.vsw-cell.open .hsw-menu{display:block}
+.vsw-cell.open .hsw-chev{transform:rotate(180deg)}
+.vsw-cell .hsw-cur{background:#e9f7f1;border:1px solid #b8e0d0;color:#0e5a40;border-radius:8px}
+.vsw-acts{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.vsw-pick,.vsw-add{border:none;border-radius:7px;padding:4px 9px;font:inherit;font-weight:800;font-size:12px;cursor:pointer}
+.vsw-pick{background:#0e9d6a;color:#fff}
+.vsw-add{background:#fff3e8;color:#c41d88;border:1px solid #f0c9e0}
+.vsw-small{color:#b45309;font-weight:700;font-size:11px}
 .section-card.tsw-host{overflow:visible}
 </style>
 </head>
@@ -1033,7 +1043,7 @@ function hswSwapRaw(raw, hidx, newLine){
     return head + nb;
   });
 }
-document.addEventListener('click', e=>{ if(!e.target.closest('.hsw-cell') && !e.target.closest('.tsw-cell')) document.querySelectorAll('.hsw-cell.open,.tsw-cell.open').forEach(c=>c.classList.remove('open')); });
+document.addEventListener('click', e=>{ if(!e.target.closest('.hsw-cell') && !e.target.closest('.tsw-cell') && !e.target.closest('.vsw-cell')) document.querySelectorAll('.hsw-cell.open,.tsw-cell.open,.vsw-cell.open').forEach(c=>c.classList.remove('open')); });
 
 // ── تبديل الجولة من قائمة منسدلة (نفس المنطقة فقط) — مثل الفنادق ──
 function tswToggle(curEl){
@@ -1100,6 +1110,72 @@ function tswPick(cell, idx){
     buildReview(newRaw);
     addMessage('sys', `تم تبديل الجولة إلى «${t.name}» — أُعيد احتساب الإجمالي.`);
   } catch(e){ addMessage('sys','خطأ أثناء تبديل الجولة: ' + (e && e.message ? e.message : e)); }
+}
+
+// ── اختيار السيارة (السعة/السعر) لانتقال/جولة — خيارات variants من الشيت ─────────
+function vswToggle(curEl){
+  const cell = curEl.closest('.vsw-cell');
+  const wasOpen = cell.classList.contains('open');
+  document.querySelectorAll('.hsw-cell.open,.tsw-cell.open,.vsw-cell.open').forEach(c=>c.classList.remove('open'));
+  if(wasOpen) return;
+  cell.classList.add('open');
+  if(!cell.dataset.loaded) vswFetch(cell);
+}
+async function vswFetch(cell){
+  const menu = cell.querySelector('.hsw-menu');
+  menu.innerHTML = '<div class="hsw-loading">جارٍ جلب خيارات السيارة…</div>';
+  const dest = getLine(lastProgramRaw, 'DEST');
+  const name = cell.dataset.vname || '';
+  try{
+    const res = await fetch(SUPABASE_URL, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY }, body: JSON.stringify({ action:'tour_variants', dest, name }) });
+    const data = await res.json();
+    cell.dataset.loaded = '1';
+    vswRender(cell, data.variants || []);
+  }catch(e){ menu.innerHTML = '<div class="hsw-loading">تعذّر جلب الخيارات</div>'; }
+}
+function vswRender(cell, variants){
+  cell._variants = variants;
+  const menu = cell.querySelector('.hsw-menu');
+  const curPrice = +cell.dataset.vprice || 0;
+  const grp = (parsedData && parsedData.adults) || 0;
+  if(!variants.length){ menu.innerHTML = '<div class="hsw-loading">ما فيه خيارات سيارة لهذي</div>'; return; }
+  menu.innerHTML = `<div class="hsw-title">🚗 السيارة (السعة) — المجموعة ${grp} ${grp===1?'شخص':'أشخاص'}</div>` + variants.map((v,i)=>{
+    const isCur = Math.abs((v.price||0) - curPrice) < 1;
+    const rangeTxt = (v.min && v.max && v.min!==v.max) ? `${v.min}-${v.max}` : `${v.min||v.max||'?'}`;
+    const small = (grp>0 && v.max>0 && grp>v.max) ? ' <span class="vsw-small">(أصغر من المجموعة)</span>' : '';
+    return `<div class="hsw-opt ${isCur?'sel':''}">`
+      + `<div class="hsw-l"><div class="hsw-n">👥 يتسع ${rangeTxt}${isCur?' <span class="hsw-chk">✓</span>':''}${small}</div></div>`
+      + `<div class="vsw-acts"><span class="hsw-price">${(v.price||0).toLocaleString()} ريال</span>`
+      + `<button type="button" class="vsw-pick" onclick="vswPick(this.closest('.vsw-cell'),${i})">اختيار</button>`
+      + `<button type="button" class="vsw-add" onclick="vswAddSecond(this.closest('.vsw-cell'),${i})">➕ سيارة ثانية</button></div></div>`;
+  }).join('');
+}
+function _vswReplaceRaw(oldLine, newRaw){
+  if(newRaw===lastProgramRaw) return false;
+  for (let i = history.length - 1; i >= 0; i--){ if (history[i].role === 'assistant'){ history[i].content = newRaw; break; } }
+  buildReview(newRaw); return true;
+}
+function vswPick(cell, idx){
+  try{
+    cell.classList.remove('open');
+    const v = (cell._variants||[])[idx]; if(!v) return;
+    const oldLine = cell.dataset.vline||''; if(!oldLine) return;
+    const p = oldLine.split('|').map(x=>x.trim());
+    const newLine = `${p[0]||''} | ${p[1]||''} | ${p[2]||''} | ${v.price||0} ريال`;
+    if(_vswReplaceRaw(oldLine, lastProgramRaw.replace(oldLine, newLine)))
+      addMessage('sys', `تم اختيار سيارة تتسع ${v.min}${v.max>v.min?'-'+v.max:''} شخص — السعر ${(v.price||0).toLocaleString()} ريال.`);
+  }catch(e){ addMessage('sys','خطأ في اختيار السيارة: '+(e&&e.message?e.message:e)); }
+}
+function vswAddSecond(cell, idx){
+  try{
+    cell.classList.remove('open');
+    const v = (cell._variants||[])[idx]; if(!v) return;
+    const oldLine = cell.dataset.vline||''; if(!oldLine) return;
+    const p = oldLine.split('|').map(x=>x.trim());
+    const secondLine = `${p[0]||''} | نقل إضافي — ${p[1]||''} | ${p[2]||'Pickup'} | ${v.price||0} ريال`;
+    if(_vswReplaceRaw(oldLine, lastProgramRaw.replace(oldLine, oldLine + '\n' + secondLine)))
+      addMessage('sys', `أُضيفت سيارة ثانية (يتسع ${v.min}${v.max>v.min?'-'+v.max:''} شخص) بسعر ${(v.price||0).toLocaleString()} ريال.`);
+  }catch(e){ addMessage('sys','خطأ في إضافة السيارة: '+(e&&e.message?e.message:e)); }
 }
 
 // ── Build-form (يسار) → يركّب نفس نص الموظف ويغذّي sendMessage بلا أي مساس بمحرّك التسعير ──
@@ -1958,10 +2034,10 @@ return `<tr><td><strong>${p[0]||''}</strong></td><td><span class="type-badge ${t
 }
 
 if (transfersLines.length) {
-html += `<div class="section-card">
+html += `<div class="section-card tsw-host">
 <div class="section-card-header"><div class="section-card-title">🚗 الانتقالات</div><div class="section-total">${transfersTotal.toLocaleString()} ريال</div></div>
 <table class="pricing-table">
-<thead><tr><th>اليوم</th><th>التفاصيل</th><th>النوع</th><th>سعر الشيت</th><th>المسافرون</th><th>المُعتمد حساباً</th></tr></thead>
+<thead><tr><th>اليوم</th><th>التفاصيل</th><th>النوع</th><th>سعر الشيت</th><th>المسافرون</th><th>🚗 السيارة (السعة)</th><th>المُعتمد حساباً</th></tr></thead>
 <tbody>${transfersLines.map(l => {
 const p=l.split('|').map(x=>x.trim());
 const isPickup=(p[2]||'').toLowerCase().includes('pickup');
@@ -1969,7 +2045,8 @@ const tc=isPickup?'badge-pickup':'badge-drop';
 const tl=isPickup?'🚗 Pickup':'🚖 Drop';
 const { total: lineTT } = computeTransferTourLineTotal(p, xferTourMeta, '🚗 انتقال');
 const paxCell = (p.length >= 5 && p[4]) ? p[4] : `${persons} (META)`;
-return `<tr><td>${p[0]||''}</td><td>${p[1]||''}</td><td><span class="type-badge ${tc}">${tl}</span></td><td class="price-cell">${p[3]||''}</td><td>${paxCell}</td><td class="price-cell">${lineTT.toLocaleString()} ريال</td></tr>`;
+const vCell = `<td class="vsw-cell" data-vname="${hswEsc(p[1]||'')}" data-vprice="${lineTT}" data-vline="${hswEsc(l)}"><div class="hsw-cur" onclick="vswToggle(this)"><span class="hsw-name">🚗 اختر السيارة</span><span class="hsw-chev">▼</span></div><div class="hsw-menu"></div></td>`;
+return `<tr><td>${p[0]||''}</td><td>${p[1]||''}</td><td><span class="type-badge ${tc}">${tl}</span></td><td class="price-cell">${p[3]||''}</td><td>${paxCell}</td>${vCell}<td class="price-cell">${lineTT.toLocaleString()} ريال</td></tr>`;
 }).join('')}</tbody>
 </table></div>`;
 }
@@ -1978,7 +2055,7 @@ if (toursLines.length) {
 html += `<div class="section-card tsw-host">
 <div class="section-card-header"><div class="section-card-title">🗺️ الجولات السياحية</div><div class="section-total">${toursTotal.toLocaleString()} ريال</div></div>
 <table class="pricing-table">
-<thead><tr><th>اليوم</th><th>الجولة</th><th>النوع</th><th>سعر الشيت</th><th>المسافرون</th><th>المُعتمد حساباً</th></tr></thead>
+<thead><tr><th>اليوم</th><th>الجولة</th><th>النوع</th><th>سعر الشيت</th><th>المسافرون</th><th>🚗 السيارة (السعة)</th><th>المُعتمد حساباً</th></tr></thead>
 <tbody>${toursLines.map(l => {
 const p=l.split('|').map(x=>x.trim());
 const tcMap={'ثقافية':'badge-tour','طبيعية':'badge-nature','بحرية':'badge-sea','حر':'badge-free'};
@@ -1992,7 +2069,10 @@ const tourCell = isFree
   : `<td class="tsw-cell" data-tname="${hswEsc(p[1]||'')}" data-tprice="${tourLineT}" data-tline="${hswEsc(l)}">`
     + `<div class="hsw-cur" onclick="tswToggle(this)"><span class="hsw-name"><strong>${p[1]||''}</strong></span><span class="hsw-chev">▼</span></div>`
     + `<div class="hsw-menu"></div></td>`;
-return `<tr><td>${p[0]||''}</td>${tourCell}<td><span class="type-badge ${tc}">${p[2]||''}</span></td><td class="price-cell">${p[3]||''}</td><td>${paxCell}</td><td class="price-cell">${tourLineT.toLocaleString()} ريال</td></tr>`;
+const vCell = isFree
+  ? `<td>—</td>`
+  : `<td class="vsw-cell" data-vname="${hswEsc(p[1]||'')}" data-vprice="${tourLineT}" data-vline="${hswEsc(l)}"><div class="hsw-cur" onclick="vswToggle(this)"><span class="hsw-name">🚗 اختر السيارة</span><span class="hsw-chev">▼</span></div><div class="hsw-menu"></div></td>`;
+return `<tr><td>${p[0]||''}</td>${tourCell}<td><span class="type-badge ${tc}">${p[2]||''}</span></td><td class="price-cell">${p[3]||''}</td><td>${paxCell}</td>${vCell}<td class="price-cell">${tourLineT.toLocaleString()} ريال</td></tr>`;
 }).join('')}</tbody>
 </table></div>`;
 }
