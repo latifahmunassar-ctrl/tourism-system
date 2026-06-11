@@ -2319,6 +2319,42 @@ async function handleListTours(body: {
   }
 }
 
+// ── tour_variants: خيارات السعة (نطاقات pax + أسعارها) لجولة/انتقال محدّد ──────
+// المدخل: { action:"tour_variants", dest:"ماليزيا", name:"<اسم الجولة/الانتقال>" }
+// المخرج: { variants:[{ label, price, min, max }] } — min/max = نطاق الأشخاص من الـ label
+async function handleTourVariants(body: { dest?: string; name?: string }): Promise<Response> {
+  try {
+    const destAr = String(body.dest || "").trim();
+    const name = String(body.name || "").trim();
+    const destKey = destAr ? detectDestination([{ role: "user", content: destAr }]) : null;
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    let q = supabase.from("tours").select("name,variants");
+    if (destKey) q = q.eq("type", destKey);
+    const { data, error } = await q;
+    if (error) throw error;
+    const norm = (s: string) => String(s || "").replace(/\s+/g, " ").trim();
+    const target = norm(name);
+    let row = (data || []).find((t: { name: string }) => norm(t.name) === target);
+    if (!row) row = (data || []).find((t: { name: string }) =>
+      norm(t.name).includes(target) || target.includes(norm(t.name)));
+    const variants = ((row && Array.isArray((row as { variants?: unknown }).variants)
+      ? (row as { variants: Array<{ label: string; price: number }> }).variants : [])
+    ).map(v => {
+      const m = String(v.label || "").match(/(\d+)\s*[-–]\s*(\d+)|(\d+)/);
+      let min = 0, max = 0;
+      if (m) { if (m[1] && m[2]) { min = +m[1]; max = +m[2]; } else if (m[3]) { min = max = +m[3]; } }
+      return { label: v.label, price: v.price, min, max };
+    }).filter(v => v.price > 0);
+    return new Response(JSON.stringify({ variants }), { headers: CORS_HEADERS });
+  } catch (e) {
+    return new Response(JSON.stringify({ variants: [], error: String((e as Error).message) }),
+      { status: 200, headers: CORS_HEADERS });
+  }
+}
+
 // ── profit_margins: جدول الأرباح لوجهة (نطاق التكلفة → شركات/أفراد) ──────────
 async function handleProfitMargins(body: { dest?: string }): Promise<Response> {
   try {
@@ -2370,6 +2406,7 @@ Deno.serve(async (req) => {
     // قائمة فنادق مدينة (لقائمة التبديل في الداشبورد) — قبل التحقق من messages.
     if (reqBody && reqBody.action === "list_hotels") return await handleListHotels(reqBody);
     if (reqBody && reqBody.action === "list_tours") return await handleListTours(reqBody);
+    if (reqBody && reqBody.action === "tour_variants") return await handleTourVariants(reqBody);
     if (reqBody && reqBody.action === "profit_margins") return await handleProfitMargins(reqBody);
     if (reqBody && reqBody.action === "currencies") return await handleCurrencies();
     const { messages, max_tokens = 1200, system: clientSystem } = reqBody;
