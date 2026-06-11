@@ -208,7 +208,12 @@ function stateMsg(icon,msg){document.getElementById('app').innerHTML=`<div class
   try{
     const res=await fetch(PROPOSAL_URL+"?token="+encodeURIComponent(token));
     const d=await res.json();
-    if(d.status==="ready"){ (d.is_company?renderRichPDF:render)(d); }
+    if(d.status==="ready"){
+      // اسم ملف الـ PDF عند الحفظ/الطباعة = اسم العميل + رقم الطلب
+      const fname=[(d.customer_name||d.destination||'').trim(), (d.ref_no||'').trim()].filter(Boolean).join(' - ');
+      if(fname) document.title=fname;
+      (d.is_company?renderRichPDF:render)(d);
+    }
     else if(d.status==="pending"){stateMsg("⏳",d.message||"العرض قيد التجهيز، نوافيك قريباً.");}
     else{stateMsg("❓","لم نجد هذا العرض. تأكد من الرابط.");}
   }catch(e){stateMsg("⚠️","تعذّر تحميل العرض، حاول لاحقاً.");}
