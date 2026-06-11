@@ -300,6 +300,8 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 .bf-sug-dist{font-size:12.5px;margin-top:4px}
 /* قائمة عدد الغرف في جدول التسعيرة */
 .rooms-sel{padding:5px 8px;border:1px solid #b8e0d0;border-radius:8px;font:inherit;font-weight:800;background:#e9f7f1;color:#0e5a40;cursor:pointer;font-size:14px}
+/* تنبيه سعة الغرفة أقل من عدد الأشخاص */
+.cap-warn{background:#fff3cd;border:2px solid #ffc107;color:#7a5b00;border-radius:12px;padding:14px 18px;margin:14px 0;font-size:15px;font-weight:700;line-height:1.8;box-shadow:0 3px 12px rgba(255,193,7,.25)}
 /* ── تبديل الفندق من قائمة منسدلة داخل جدول التسعيرة ── */
 .section-card.hsw-host{overflow:visible}   /* لا يقصّ القائمة المنسدلة */
 .hsw-cell{position:relative;min-width:210px}
@@ -1894,6 +1896,13 @@ let html = `
 <div class="review-meta">${meta}<br>${dateFrom} ← ${dateTo} | ${client} | ${clientCode}</div>
 </div>
 </div>`;
+
+// تنبيه: سعة الغرف أقل من عدد الأشخاص المطلوب — عشان الموظف يضيف سريراً/غرفة إضافية
+const _roomCaps = hotelsLines.map(l => { const pp = String(l).split('|'); return parseInt((arabicDigitsToLatin(String(pp[3]||'')).match(/يتسع\s*(\d+)/)||[])[1]||'',10) || 0; }).filter(c => c > 0);
+const _minCap = _roomCaps.length ? Math.min(..._roomCaps) : 0;
+if (_minCap > 0 && adults > _minCap) {
+  html += `<div class="cap-warn">⚠️ <b>تنبيه:</b> تم بناء البرنامج لغرف تتسع لـ <b>${_minCap} ${_minCap===1?'شخص':'أشخاص'}</b> فقط، بينما المطلوب <b>${adults} أشخاص</b>.<br>أضف <b>سريراً إضافياً</b> أو <b>غرفة إضافية</b> حسب الحاجة.</div>`;
+}
 
 if (hotelsLines.length) {
 html += `<div class="section-card hsw-host">
