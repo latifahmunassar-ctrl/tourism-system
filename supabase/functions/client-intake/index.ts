@@ -424,6 +424,12 @@ Deno.serve(async (req) => {
       // reject duplicate phone
       const { data: existing } = await supabase.from("client_companies").select("id, status").eq("contact_phone", phone).maybeSingle();
       if (existing) return json({ error: "رقم الجوال مسجّل مسبقاً. سجّلي الدخول بدله." }, 409);
+      // reject duplicate company NAME — stops the same company registering again with another number
+      const { data: dupName } = await supabase.from("client_companies").select("id").ilike("company_name", name).limit(1);
+      if (dupName && dupName.length) return json({ error: "هذه الشركة مسجّلة مسبقاً بهذا الاسم. سجّلي الدخول، أو تواصلي معنا لو تحتاجين مساعدة." }, 409);
+      // reject duplicate email
+      const { data: dupEmail } = await supabase.from("client_companies").select("id").ilike("contact_email", email).limit(1);
+      if (dupEmail && dupEmail.length) return json({ error: "هذا البريد الإلكتروني مسجّل مسبقاً." }, 409);
 
       // OTP verification via WhatsApp (Twilio Verify). Skipped when not configured.
       if (verifyConfigured()) {
