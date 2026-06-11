@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>بوابة الشركات | ALEZZ</title>
+<title>بوابة الشركات | Madar Trip</title>
 <style>
   :root{--brand:#0e9d6a;--brand2:#c41d88;--gold:#D4A843;--accent:#e0218a;--bg:#f1f8f4;--ink:#1d2b2a;--muted:#6b7c7a;--line:#dcede6;--ok:#15803d;--err:#b91c1c;}
   *{box-sizing:border-box}
   body{margin:0;font-family:"Segoe UI",Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
   .wrap{max-width:760px;margin:0 auto;padding:0 16px 60px}
   header{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:30px 20px;border-radius:0 0 26px 26px;text-align:center;box-shadow:0 6px 24px rgba(14,157,106,.18)}
-  header .logo{font-size:28px;font-weight:800;letter-spacing:3px}.header .logo span,header .logo span{color:var(--gold)}
+  header .logo{font-size:32px;font-weight:900;letter-spacing:2px;text-shadow:0 3px 16px rgba(0,0,0,.32)}.header .logo span,header .logo span{color:var(--gold);text-shadow:0 0 18px rgba(212,168,67,.6)}
   header p{margin:8px 0 0;opacity:.92;font-size:14px}
   .card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px;margin-top:22px;box-shadow:0 2px 14px rgba(0,0,0,.04)}
   .card h2{margin:0 0 4px;font-size:17px;color:var(--brand)}
@@ -94,7 +94,7 @@
 </head>
 <body>
 <header>
-  <div class="logo">AL<span>E</span>ZZ</div>
+  <div class="logo">MADAR <span>TRIP</span></div>
   <p id="hsub">نمو أسرع يبدأ من عرض أسرع<br><span style="font-size:.82em;opacity:.85">Faster growth starts with a faster offer</span></p>
 </header>
 
@@ -128,7 +128,7 @@
     <div class="card" id="profileCard" style="display:none">
       <button type="button" class="pf-back" onclick="showRequest()">← رجوع لطلب البرنامج / Back to request</button>
       <h2>معلومات شركتي / My Company Info</h2>
-      <div class="sub">تقدر تعدّل اسم المسؤول، منصبه، رقمه، والشعار. (🔒 اسم الشركة، البريد، والموقع ثابتة.) أي تعديل يُرسل لـ ALEZZ للموافقة قبل ما ينطبق.<br>You can edit the contact name, role, phone and logo. (🔒 Company name, email and website are fixed.) Edits are sent to ALEZZ for approval before they apply.</div>
+      <div class="sub">تقدر تعدّل اسم المسؤول، منصبه، رقمه، والشعار. (🔒 اسم الشركة، البريد، والموقع ثابتة.) أي تعديل يُرسل لـ Madar Trip للموافقة قبل ما ينطبق.<br>You can edit the contact name, role, phone and logo. (🔒 Company name, email and website are fixed.) Edits are sent to Madar Trip for approval before they apply.</div>
       <div class="pf-pending" id="pfPending" style="display:none"></div>
 
       <div id="profView">
@@ -247,13 +247,13 @@
 
       <button type="submit" class="submit" id="submitBtn">إرسال الطلب / Submit Request</button>
       <div class="err" id="errBox"></div>
-      <div class="note">يصلك العرض بعد مراجعة فريق ALEZZ. · You’ll receive the offer after the ALEZZ team reviews it.</div>
+      <div class="note">يصلك العرض بعد مراجعة فريق Madar Trip. · You’ll receive the offer after the Madar Trip team reviews it.</div>
     </form>
 
     <div class="card done" id="done" style="display:none">
       <div class="check">✓</div>
       <h2 style="font-size:20px;color:var(--brand)">تم استلام طلبك / Request Received</h2>
-      <p style="color:var(--muted)">فريق ALEZZ يجهّز برنامجك ويرسل لك العرض قريباً.<br>The ALEZZ team is preparing your program and will send the offer soon.</p>
+      <p style="color:var(--muted)">فريق Madar Trip يجهّز برنامجك ويرسل لك العرض قريباً.<br>The Madar Trip team is preparing your program and will send the offer soon.</p>
       <div class="ref" id="refNo"></div>
       <button class="gobtn" style="max-width:240px;margin:8px auto 0" onclick="newRequest()">+ طلب جديد / New request</button>
     </div>
@@ -322,7 +322,7 @@ function renderProfile(){
   if(pe){
     const names={contact_name:'اسم المسؤول',contact_role:'المنصب',contact_phone:'رقم المسؤول',logo_url:'الشعار'};
     const items=Object.keys(pe).map(k=>names[k]||k).join('، ');
-    box.innerHTML=`⏳ <b>لديك تعديل قيد المراجعة / Edit under review</b> (${esc(items)}). ينطبق بعد موافقة ALEZZ. · يمكنك تعديله من جديد (يستبدل المعلّق). / You can re-edit (replaces the pending one).`;
+    box.innerHTML=`⏳ <b>لديك تعديل قيد المراجعة / Edit under review</b> (${esc(items)}). ينطبق بعد موافقة Madar Trip. · يمكنك تعديله من جديد (يستبدل المعلّق). / You can re-edit (replaces the pending one).`;
     box.style.display='block';
     $('pfEditBtn').style.display='';
     $('pfEditBtn').textContent='✏️ تعديل الطلب المعلّق / Edit pending request';
@@ -375,7 +375,7 @@ function renderReqs(){
     const flag=DEST_FLAG[r.destination]||'📍', sent=r.status==='sent';
     const dl=sent&&r.view_token
       ? `<a class="rq-dl" href="proposal.html?token=${esc(r.view_token)}" target="_blank" rel="noopener">⬇️ تحميل البرنامج / Download program</a>`
-      : `<div class="rq-hint">فريق ALEZZ يجهّز برنامجك — يوصلك زر التحميل بعد الانتهاء. · Being prepared — download will appear here when ready.</div>`;
+      : `<div class="rq-hint">فريق Madar Trip يجهّز برنامجك — يوصلك زر التحميل بعد الانتهاء. · Being prepared — download will appear here when ready.</div>`;
     const price=(sent&&r.company_price!=null)?`<div class="rq-price">💰 سعر البرنامج / Program price: <b>${Number(r.company_price).toLocaleString('en-US')} ${esc(CUR[MY_CURRENCY]||MY_CURRENCY)}</b><div class="rq-price-note">أضِف ربحك قبل تحويله لعميلك · add your margin before sharing</div></div>`:'';
     const cust=r.customer_name?`<div class="rq-cust">👤 العميل / Customer: <b>${esc(r.customer_name)}</b></div>`:'';
     const by=(sent&&r.sent_by)?`<div class="rq-by">🧑‍💼 رتّبه لك / Arranged by: <b>${esc(r.sent_by)}</b></div>`:'';
