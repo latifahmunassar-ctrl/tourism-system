@@ -975,7 +975,16 @@ function extractSuggestions(
       pendingDay = null;
     }
   }
-  return out;
+  // إزالة التكرار: نفس الأيام + المطارات + التوزيع (بعد توحيد الأرقام والمسافات)
+  const seen = new Set<string>();
+  const deduped: typeof out = [];
+  for (const s of out) {
+    const key = `${s.days}|${s.arrival_airport}|${s.departure_airport}|${toLatinDigits(s.distribution).replace(/\s+/g, " ").trim()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(s);
+  }
+  return deduped;
 }
 
 // ── Handler ────────────────────────────────────────────────────────────────
