@@ -239,7 +239,7 @@ function stripPrice(s: string): string {
 
 interface ClientView {
   destination: string; meta: string; dateFrom: string; dateTo: string; pax: number; children: number;
-  hotels: Array<{ name: string; city: string; stars: string; room: string; nights: string; meals: string }>;
+  hotels: Array<{ name: string; city: string; stars: string; room: string; nights: string; meals: string; rooms?: number }>;
   timeline: Array<{ day: number; items: Array<{ kind: string; text: string }> }>;
   groupTotal: number | null; currency: string;
 }
@@ -273,6 +273,9 @@ function toClientView(raw: string): { view: ClientView; groupTotal: number | nul
       nights: stripPrice(p[5] || ""), meals: (p[6] || "").replace(/^ما يشمل:\s*/u, "").trim(),
     });
   }
+  // عدد الغرف لكل فندق (سطر "HOTEL_ROOMS: 2,1,3" بترتيب الفنادق) — يظهر في PDF الشركة
+  const roomsCounts = ((raw.match(/^HOTEL_ROOMS:\s*(.+)$/mu)?.[1]) || "").split(",").map(x => parseInt(x.trim(), 10));
+  hotels.forEach((h, i) => { const n = roomsCounts[i]; h.rooms = (n >= 1 && n <= 10) ? n : 1; });
 
   const timelineMap = new Map<number, Array<{ kind: string; text: string }>>();
   const addDay = (day: number, kind: string, text: string) => {

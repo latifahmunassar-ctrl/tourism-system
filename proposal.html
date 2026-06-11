@@ -124,6 +124,7 @@ function renderRichPDF(d){
       <div class="ht-grid">
         <span>📍 المدينة: ${esc(h.city||'')}</span><span>⭐ النجوم: ${esc(h.stars||'')}</span>
         <span>🛏️ الغرفة: ${esc(h.room||'')}</span><span>📅 الإقامة: ${esc(h.nights||'')}</span>
+        <span>🏨 عدد الغرف: ${esc(String(h.rooms||1))}</span>
         ${h.meals?`<span class="full">✅ يشمل: ${esc(h.meals)}</span>`:''}
       </div></div>`).join('');
   // تاريخ كل يوم = تاريخ البداية + (اليوم − 1)
