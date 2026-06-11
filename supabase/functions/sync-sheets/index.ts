@@ -868,8 +868,8 @@ function extractSuggestions(
   // Combined-airport scope: "مطار الوصول والمغادره اسطنبول" — ONE airport serves
   // both arrival and departure (Turkey). Must be tried BEFORE the two-airport
   // SCOPE_RE, which otherwise mis-reads the connecting "و" as the arrival.
-  const SCOPE_COMBINED_RE = /(?:مطار\s+)?الوصول\s+والمغادر[هةى]\s+(?:مطار\s+)?(\S+)/u;
-  const SCOPE_RE = /الوصول\s+(?:مطار\s+)?(\S+)[\s\S]*?(?:المغدر[هةى]|المغادر[هةى])\s+(?:مطار\s+)?(\S+)/u;
+  const SCOPE_COMBINED_RE = /(?:مطار\s+)?(?:الوصول|القدوم|الوصو?ل)\s+والمغادر[هةى]\s+(?:مطار\s+)?(\S+)/u;
+  const SCOPE_RE = /(?:الوصول|القدوم|الوصو?ل)\s+(?:مطار\s+)?(\S+)[\s\S]*?(?:المغدر[هةى]|المغادر[هةى])\s+(?:مطار\s+)?(\S+)/u;
   // Day header — three real-world shapes the agency uses:
   //   Vietnam style: "N أيام (label):"           ← colon-terminated, label in parens
   //   Thailand A:    "تايلاند.5.أيام."            ← dots between tokens, no colon

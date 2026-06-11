@@ -1298,7 +1298,8 @@ export function formatProgram(data: ProgramData): string {
     if (d.type === "transit" && d.fromCity && d.toCity) {
       const from = cityArabicNames[d.fromCity] || d.fromCity;
       const to = cityArabicNames[d.toCity] || d.toCity;
-      label = `يوم تنقّل من ${from} الى ${to}`;
+      // نفس المدينة (فندق آخر) ليست تنقّلاً بين مدن — إنما تغيير فندق داخل المدينة
+      label = (d.fromCity === d.toCity) ? `يوم حر — تغيير الفندق في ${to}` : `يوم تنقّل من ${from} الى ${to}`;
     }
     tourLines.push({
       day: d.number,
