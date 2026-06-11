@@ -157,9 +157,8 @@ const BASE="https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake"
 const AC_STAT={pending:"قيد المراجعة",approved:"معتمدة",rejected:"مرفوضة",suspended:"موقوفة"};
 const CURN={SAR:'ريال سعودي / SAR',USD:'دولار / USD',EUR:'يورو / EUR',AED:'درهم إماراتي / AED',OMR:'ريال عماني / OMR',KWD:'دينار كويتي / KWD',EGP:'جنيه مصري / EGP'};
 const REQ_STAT={pending_review:"للمراجعة",sent:"تم الإرسال",build_failed:"يحتاج إكمال",new:"جديد",closed:"مغلق"};
-// مؤقت: دخول مفتوح بدون كلمة سر لين يكتمل البناء. لاحقاً: نحذف هذا السطر ونرجّع
-// شاشة الدخول (login) + كلمة المرور الخاصة المخزّنة في COMPANIES_ADMIN_SECRET.
-let SECRET=localStorage.getItem('alezz_owner_secret')||'alezz-companies-open';
+// كلمة المرور الخاصة (COMPANIES_ADMIN_SECRET) — لا قيمة افتراضية، الدخول إجباري.
+let SECRET=localStorage.getItem('alezz_owner_secret')||'';
 let cur=null, data=[];
 const esc=s=>String(s==null?'':s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
 const H=()=>({'x-admin-secret':SECRET,'Content-Type':'application/json'});
@@ -355,8 +354,19 @@ window.editDecision=async function(id,decision){
   if(d.ok){ await loadList(); openCo(id); } else alert(d.error||'فشل العملية');
 };
 
-// مؤقتاً: افتح مباشرة بدون كلمة سر
-show();
+// الدخول إجباري: لو فيه جلسة محفوظة نتحقق منها من السيرفر، وإلا نعرض شاشة الدخول
+(async function init(){
+  if(SECRET){
+    try{
+      const r=await fetch(BASE+'?admin_action=companies',{headers:H()});
+      if(r.ok){ show(); return; }
+    }catch(_){}
+    localStorage.removeItem('alezz_owner_secret'); SECRET='';
+  }
+  $('loginView').style.display='';
+})();
+// دخول بزر Enter
+document.addEventListener('DOMContentLoaded',()=>{ const s=$('secret'); if(s) s.addEventListener('keydown',e=>{ if(e.key==='Enter') login(); }); });
 </script>
 </body>
 </html>
