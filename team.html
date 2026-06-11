@@ -2760,7 +2760,7 @@ ${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPri
 ${(sd.checkInText && sd.checkOutText) ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText} | 🔴 الخروج: ${sd.checkOutText}</span>` : (sd.checkInText ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText}</span>` : ``)}
 ${showDetailed && extraBedCount ? `<span>🛋️ Extra bed / Sofa Bed: ${extraBedPricePerNight} ريال/ليلة × ${nights||'—'} ليالي × ${extraBedCount} = ${(extraBedTotal||0).toLocaleString()} ريال</span>` : ``}
 ${showDetailed ? `<span>💵 تفصيل السعر: ${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي × ${rooms} غرفة = ${(totalLine*rooms).toLocaleString()} ريال</span>` : ``}
-<span style="grid-column:1/-1;">✅ يشمل: ${safeText(p[6]||'')}</span>
+<span style="grid-column:1/-1;">✅ يشمل: ${safeText(String(p[6]||'').replace(/^\s*ما\s*يشمل\s*:?\s*/u,'').trim())}</span>
 </div>
 </div>`; }).join('')}${extrasCards('hotels')}` : ''}
 
