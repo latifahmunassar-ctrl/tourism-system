@@ -103,7 +103,7 @@ async function companyStats(supabase: any, companyId: string) {
 function publicCompany(c: any) {
   return {
     id: c.id, company_name: c.company_name, contact_name: c.contact_name,
-    contact_role: c.contact_role || null,
+    contact_role: c.contact_role || null, country: c.country || null,
     contact_phone: c.contact_phone, contact_email: c.contact_email,
     logo_url: c.logo_url, document_url: c.document_url || null,
     website: c.website, status: c.status, currency: c.currency || "SAR",
@@ -401,11 +401,15 @@ Deno.serve(async (req) => {
       const website = String(body.website || "").trim();
       const contactName = String(body.contact_name || "").trim();
       const contactRole = String(body.contact_role || "").trim();
+      const country = String(body.country || "").trim();
       if (!name || !phone || password.length < 4) {
         return json({ error: "الاسم، رقم الجوال، وكلمة المرور (4 خانات على الأقل) مطلوبة" }, 400);
       }
       if (!contactName) {
         return json({ error: "اسم المسؤول مطلوب" }, 400);
+      }
+      if (!country) {
+        return json({ error: "بلد الشركة مطلوب" }, 400);
       }
       if (!contactRole) {
         return json({ error: "منصب المسؤول (موقعه من الشركة) مطلوب" }, 400);
@@ -424,9 +428,10 @@ Deno.serve(async (req) => {
       // reject duplicate phone
       const { data: existing } = await supabase.from("client_companies").select("id, status").eq("contact_phone", phone).maybeSingle();
       if (existing) return json({ error: "رقم الجوال مسجّل مسبقاً. سجّلي الدخول بدله." }, 409);
-      // reject duplicate company NAME — stops the same company registering again with another number
-      const { data: dupName } = await supabase.from("client_companies").select("id").ilike("company_name", name).limit(1);
-      if (dupName && dupName.length) return json({ error: "هذه الشركة مسجّلة مسبقاً بهذا الاسم. سجّلي الدخول، أو تواصلي معنا لو تحتاجين مساعدة." }, 409);
+      // reject duplicate company NAME *within the same country* — different
+      // countries may legitimately share a name, so we scope the check by country.
+      const { data: dupName } = await supabase.from("client_companies").select("id").ilike("company_name", name).ilike("country", country).limit(1);
+      if (dupName && dupName.length) return json({ error: "هذه الشركة مسجّلة مسبقاً في نفس البلد. سجّلي الدخول، أو تواصلي معنا لو تحتاجين مساعدة." }, 409);
       // reject duplicate email
       const { data: dupEmail } = await supabase.from("client_companies").select("id").ilike("contact_email", email).limit(1);
       if (dupEmail && dupEmail.length) return json({ error: "هذا البريد الإلكتروني مسجّل مسبقاً." }, 409);
@@ -454,6 +459,7 @@ Deno.serve(async (req) => {
         company_name: name,
         contact_name: contactName,
         contact_role: String(body.contact_role || "").trim() || null,
+        country,
         contact_phone: phone,
         contact_email: email,
         password_hash, password_salt: salt,
@@ -644,7 +650,7 @@ Deno.serve(async (req) => {
     if (adminAction === "company_get") {
       const cid = url.searchParams.get("id") || "";
       const { data: c, error } = await supabase.from("client_companies")
-        .select("id, company_name, contact_name, contact_role, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, notes, created_at, approved_at, approved_by, pending_edit, pending_edit_at, currency, document_url")
+        .select("id, company_name, contact_name, contact_role, country, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, notes, created_at, approved_at, approved_by, pending_edit, pending_edit_at, currency, document_url")
         .eq("id", cid).single();
       if (error) return json({ error: error.message }, 404);
       const stats = await companyStats(supabase, cid);

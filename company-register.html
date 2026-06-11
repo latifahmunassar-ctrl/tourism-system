@@ -47,7 +47,19 @@
     <h2>تسجيل حساب شركة / Company Registration</h2>
     <div class="sub">بياناتك تُحفظ مرة واحدة، ويراجع فريق Madar Trip الطلب ويفعّل حسابك.<br>Your details are saved once; the Madar Trip team reviews and activates your account.</div>
 
-    <div class="field"><label>اسم الشركة / Company Name <span class="req">*</span></label><input name="company_name" required></div>
+    <div class="row2">
+      <div class="field"><label>اسم الشركة / Company Name <span class="req">*</span></label><input name="company_name" required></div>
+      <div class="field"><label>بلد الشركة / Country <span class="req">*</span></label>
+        <select name="country" required>
+          <option value="">اختر البلد… / Choose…</option>
+          <option>السعودية</option><option>الإمارات</option><option>عُمان</option><option>الكويت</option>
+          <option>قطر</option><option>البحرين</option><option>مصر</option><option>الأردن</option>
+          <option>لبنان</option><option>العراق</option><option>سوريا</option><option>فلسطين</option>
+          <option>اليمن</option><option>المغرب</option><option>الجزائر</option><option>تونس</option>
+          <option>ليبيا</option><option>السودان</option><option>تركيا</option><option>أخرى</option>
+        </select>
+      </div>
+    </div>
     <div class="row2">
       <div class="field"><label>اسم المسؤول / Contact Person <span class="req">*</span></label><input name="contact_name" required></div>
       <div class="field"><label>موقعه من الشركة / Role <span class="req">*</span> <span class="hint">(مثال: المالك · المدير · مسؤول الحجوزات)</span></label><input name="contact_role" placeholder="المدير / Manager" required></div>
@@ -162,6 +174,9 @@ $('form').addEventListener('submit', async e=>{
   if(!f.contact_name.value.trim()){
     err.textContent='اسم المسؤول مطلوب. / Contact person is required.'; err.style.display='block'; return;
   }
+  if(!f.country.value.trim()){
+    err.textContent='بلد الشركة مطلوب. / Company country is required.'; err.style.display='block'; return;
+  }
   if(!f.contact_role.value.trim()){
     err.textContent='منصب المسؤول (موقعه من الشركة) مطلوب. / Contact role is required.'; err.style.display='block'; return;
   }
@@ -179,6 +194,7 @@ $('form').addEventListener('submit', async e=>{
   }
   const payload={
     company_name:f.company_name.value.trim(), contact_name:f.contact_name.value.trim(),
+    country:f.country.value.trim(),
     contact_role:f.contact_role.value.trim(),
     contact_phone:f.contact_phone.value.trim(), password:f.password.value,
     contact_email:f.contact_email.value.trim(), website:f.website.value.trim(),

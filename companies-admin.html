@@ -301,6 +301,7 @@ async function openCo(id){
       <div class="ac-stat p"><div class="n">${st.pending}</div><div class="l">⏳ معلّقة</div></div>
     </div>`:`<div class="ac-msg ok" style="display:block;background:rgba(227,179,65,.12);color:var(--warn)">📋 الإحصائية تبدأ بعد تفعيل الحساب وبدء الشركة بالطلب.</div>`}
     <div class="ac-kv">
+      <span class="k">🌍 البلد</span><span><b>${esc(c.country||'—')}</b></span>
       <span class="k">المسؤول</span><span>${esc(c.contact_name||'—')}${c.contact_role?` <span style="color:var(--muted)">— ${esc(c.contact_role)}</span>`:''}</span>
       <span class="k">الجوال</span><span>${esc(c.contact_phone)}</span>
       <span class="k">البريد</span><span>${esc(c.contact_email||'—')}</span>

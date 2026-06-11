@@ -133,6 +133,7 @@
 
       <div id="profView">
         <div class="pf-row"><span class="k">🔒 اسم الشركة / Company</span><span id="pvCompany">—</span></div>
+        <div class="pf-row"><span class="k">🔒 بلد الشركة / Country</span><span id="pvCountry">—</span></div>
         <div class="pf-row"><span class="k">اسم المسؤول / Contact</span><span id="pvName">—</span></div>
         <div class="pf-row"><span class="k">موقعه من الشركة / Role</span><span id="pvRole">—</span></div>
         <div class="pf-row"><span class="k">رقم المسؤول / Phone</span><span id="pvPhone">—</span></div>
@@ -308,6 +309,7 @@ let peLogoData=null;
 function renderProfile(){
   const CURN={SAR:'ريال سعودي / SAR',AED:'درهم إماراتي / AED',USD:'دولار / USD',OMR:'ريال عماني / OMR'};
   $('pvCompany').textContent=COMPANY.company_name||'—';
+  $('pvCountry').textContent=COMPANY.country||'—';
   $('pvName').textContent=COMPANY.contact_name||'—';
   $('pvRole').textContent=COMPANY.contact_role||'—';
   $('pvPhone').textContent=COMPANY.contact_phone||'—';
