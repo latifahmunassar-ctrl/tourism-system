@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>تصوّر: حسابات الشركات | ALEZZ</title>
+<style>
+  :root{
+    --brand:#0e9d6a; --brand2:#c41d88; --gold:#D4A843; --accent:#e0218a;
+    --bg:#0a1428; --panel:#0f1b33; --panel2:#14233f; --line:rgba(255,255,255,.08);
+    --ink:#e9eef7; --muted:#9fb0c8; --ok:#36c46f; --warn:#e3b341; --err:#f06a6a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+  .note{max-width:1080px;margin:0 auto;padding:14px 18px;color:var(--muted);font-size:12.5px;text-align:center;background:linear-gradient(135deg,rgba(14,157,106,.12),rgba(196,29,136,.12));border-bottom:1px solid var(--line)}
+  .note b{color:var(--gold)}
+  .top{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center}
+  .top .logo{font-weight:900;letter-spacing:3px;font-size:20px}.top .logo span{color:var(--gold)}
+  .tabs{display:flex;gap:8px;max-width:1080px;margin:18px auto 0;padding:0 18px;flex-wrap:wrap}
+  .tab{background:var(--panel);border:1px solid var(--line);color:var(--muted);border-radius:11px 11px 0 0;padding:11px 18px;cursor:pointer;font-weight:700;font-size:13.5px;position:relative}
+  .tab.active{background:var(--panel2);color:#fff;border-bottom-color:transparent}
+  .tab .badge{background:var(--accent);color:#fff;border-radius:999px;font-size:10px;padding:1px 7px;font-weight:900;margin-right:6px}
+  .wrap{max-width:1080px;margin:0 auto;padding:18px}
+  .view{display:none}.view.active{display:block}
+  .grid{display:grid;grid-template-columns:360px 1fr;gap:16px}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .panel h3{margin:0;padding:13px 16px;font-size:14px;background:rgba(255,255,255,.03);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+  .panel h3 small{color:var(--muted);font-weight:600;font-size:11.5px}
+  /* company list item */
+  .co{display:flex;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid var(--line);cursor:pointer;transition:.12s}
+  .co:hover{background:var(--panel2)}.co.sel{background:var(--panel2);box-shadow:inset 3px 0 0 var(--brand)}
+  .co .lg{width:46px;height:46px;border-radius:11px;background:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;color:var(--brand);font-size:15px;flex-shrink:0;overflow:hidden}
+  .co .nm{font-weight:800;font-size:14px}
+  .co .mt{color:var(--muted);font-size:12px;margin-top:3px}
+  .co .mini{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+  .co .mini span{font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:20px}
+  .co .mini .m-t{background:rgba(255,255,255,.07);color:var(--muted)} .co .mini .m-d{background:rgba(54,196,111,.14);color:var(--ok)} .co .mini .m-p{background:rgba(227,179,65,.14);color:var(--warn)}
+  /* detail stats */
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+  .stat{border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;background:var(--panel2)}
+  .stat .num{font-size:26px;font-weight:900;line-height:1}
+  .stat .lbl{font-size:11.5px;color:var(--muted);margin-top:6px;font-weight:600}
+  .stat.s-t .num{color:#fff} .stat.s-d .num{color:var(--ok)} .stat.s-p .num{color:var(--warn)}
+  .stats-empty{background:var(--panel2);border:1px dashed var(--line);border-radius:12px;padding:14px;text-align:center;color:var(--muted);font-size:12.5px;margin-bottom:16px}
+  .bdg{font-size:10.5px;padding:2px 9px;border-radius:20px;font-weight:800;white-space:nowrap}
+  .b-pending{background:#3a2f12;color:var(--warn)} .b-approved{background:#14361f;color:var(--ok)} .b-rejected{background:#3a1717;color:var(--err)}
+  /* detail */
+  .detail{padding:18px}
+  .detail .empty{color:var(--muted);text-align:center;padding:60px 10px}
+  .head{display:flex;gap:14px;align-items:center;margin-bottom:16px}
+  .head .lg{width:64px;height:64px;border-radius:14px;background:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;color:var(--brand);font-size:20px;overflow:hidden}
+  .head .t1{font-size:18px;font-weight:900}
+  .head .t2{color:var(--muted);font-size:12.5px;margin-top:3px}
+  .kv{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:13.5px;margin-bottom:16px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .kv .k{color:var(--muted)} .kv a{color:var(--brand);text-decoration:none}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
+  .field label .hint{color:var(--gold);font-weight:600;font-size:11.5px;margin-right:6px}
+  input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--ink);font:inherit}
+  input:focus{outline:none;border-color:var(--brand2)}
+  .bar{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+  .btn{border:none;border-radius:10px;padding:11px 18px;font:inherit;font-weight:800;cursor:pointer}
+  .btn.ok{background:var(--ok);color:#06210f} .btn.no{background:#3a1717;color:var(--err)} .btn.save{background:rgba(255,255,255,.08);color:var(--ink)}
+  .wa{background:rgba(37,211,102,.08);border:1px dashed #25d366;border-radius:12px;padding:14px;margin:6px 0 16px}
+  .wa .t{font-weight:800;color:#25d366;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  /* company side */
+  .device{max-width:420px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+  .device .dhd{background:linear-gradient(135deg,var(--brand),var(--brand2));padding:22px;text-align:center;color:#fff}
+  .device .dhd .logo{font-weight:900;letter-spacing:3px;font-size:22px}.device .dhd .logo span{color:var(--gold)}
+  .device .dhd p{margin:6px 0 0;font-size:12.5px;opacity:.9}
+  .device .body{padding:18px}
+  .step{font-size:11px;color:var(--gold);font-weight:800;letter-spacing:1px;margin-bottom:4px}
+  .prefill{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+  .prefill .row{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px dashed var(--line)}
+  .prefill .row:last-child{border:none}.prefill .row .k{color:var(--muted)}
+  .prefill .badge2{display:inline-flex;align-items:center;gap:5px;background:rgba(54,196,111,.12);color:var(--ok);font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:20px;margin-bottom:10px}
+  .submit{width:100%;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:12px;padding:13px;font-weight:800;cursor:pointer;font-size:14.5px;margin-top:4px}
+  .upl{border:1.5px dashed var(--brand2);border-radius:12px;padding:18px;text-align:center;color:var(--muted);font-size:12.5px;background:var(--panel2)}
+  .flow{display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;margin:6px auto 22px;color:var(--muted);font-size:12px;max-width:900px}
+  .flow .b{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-weight:700;color:var(--ink)}
+  .flow .ar{color:var(--gold);font-weight:900}
+  h2.sec{font-size:15px;color:var(--gold);margin:4px 0 14px;text-align:center;font-weight:800}
+</style>
+</head>
+<body>
+
+<div class="note">🎨 <b>تصوّر بصري فقط (Mockup)</b> — بيانات تجريبية لتوضيح الشكل المقترح. لسا ما تم بناء النظام الفعلي. وافقي على الشكل ونبدأ التنفيذ.</div>
+
+<div class="top">
+  <div class="logo">AL<span>E</span>ZZ — لوحة الموظفين</div>
+  <div style="font-size:12.5px;opacity:.9">د. لطيفة 👤</div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="go('emp',this)">🏢 حسابات الشركات <span class="badge">2</span></div>
+  <div class="tab" onclick="go('co',this)">📱 تجربة الشركة (للتوضيح)</div>
+  <div class="tab" onclick="go('flow',this)">🔄 التدفق الكامل</div>
+</div>
+
+<div class="wrap">
+
+  <!-- ===================== EMPLOYEE VIEW ===================== -->
+  <div id="emp" class="view active">
+    <div class="grid">
+      <div class="panel">
+        <h3>الشركات <small>قيد المراجعة + معتمدة</small></h3>
+        <div id="list"></div>
+      </div>
+      <div class="panel">
+        <h3>ملف الشركة</h3>
+        <div id="detail" class="detail"><div class="empty">اختاري شركة من القائمة</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== COMPANY VIEW ===================== -->
+  <div id="co" class="view">
+    <div class="grid" style="grid-template-columns:1fr 1fr;gap:24px">
+      <div>
+        <h2 class="sec">① أول مرة — تسجيل الشركة</h2>
+        <div class="device">
+          <div class="dhd"><div class="logo">AL<span>E</span>ZZ</div><p>سجّل شركتك مرة وحدة — بعدها تطلب برامجك بسهولة</p></div>
+          <div class="body">
+            <div class="field"><label>اسم الشركة <span style="color:var(--err)">*</span></label><input value="شركة النخبة للسياحة" readonly></div>
+            <div class="field"><label>اسم المسؤول</label><input value="أحمد العتيبي" readonly></div>
+            <div class="field"><label>رقم الجوال <span style="color:var(--err)">*</span> <span class="hint">(للدخول لاحقاً)</span></label><input value="+966551234567" readonly></div>
+            <div class="field"><label>كلمة المرور <span style="color:var(--err)">*</span></label><input type="password" value="123456" readonly></div>
+            <div class="field"><label>البريد الإلكتروني</label><input value="info@nukhba.sa" readonly></div>
+            <div class="field"><label>الموقع الإلكتروني / الانستقرام</label><input value="instagram.com/nukhba.travel" readonly></div>
+            <div class="field"><label>شعار الشركة</label><div class="upl">📤 اسحب صورة الشعار أو اضغط للرفع<br><small>PNG / JPG</small></div></div>
+            <button class="submit">إرسال طلب التسجيل</button>
+            <p style="text-align:center;color:var(--muted);font-size:11.5px;margin-top:12px">يُراجع فريق ALEZZ الطلب ويفعّل حسابك.</p>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h2 class="sec">② بعد الموافقة — دخول لاحق</h2>
+        <div class="device">
+          <div class="dhd"><div class="logo">AL<span>E</span>ZZ</div><p>أهلاً بعودتك 👋</p></div>
+          <div class="body">
+            <div class="badge2">✅ حساب مُفعّل — مرحباً شركة النخبة</div>
+            <div class="step">بياناتك محفوظة (ما تنكتب من جديد)</div>
+            <div class="prefill">
+              <div class="row"><span class="k">الشركة</span><span>شركة النخبة للسياحة</span></div>
+              <div class="row"><span class="k">المسؤول</span><span>أحمد العتيبي</span></div>
+              <div class="row"><span class="k">الجوال</span><span>+966551234567</span></div>
+              <div class="row"><span class="k">الإيميل</span><span>info@nukhba.sa</span></div>
+            </div>
+            <div class="step">تكملين تفاصيل الرحلة فقط 👇</div>
+            <div class="field"><label>الوجهة</label><input value="تايلاند" readonly></div>
+            <div class="field"><label>عدد الأيام / البالغين</label><input value="7 أيام — 4 بالغين" readonly></div>
+            <button class="submit">إرسال طلب البرنامج</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== FLOW VIEW ===================== -->
+  <div id="flow" class="view">
+    <h2 class="sec">رحلة الشركة من التسجيل حتى الطلب</h2>
+    <div class="flow">
+      <span class="b">📝 الشركة تسجّل<br><small style="color:var(--muted)">اسم/جوال/كلمة سر/شعار/انستقرام</small></span>
+      <span class="ar">←</span>
+      <span class="b">🔒 يوصل قسم محمي<br><small style="color:var(--muted)">حسابات الشركات</small></span>
+      <span class="ar">←</span>
+      <span class="b">✅ د. لطيفة توافق<br><small style="color:var(--muted)">+ رابط جروب الواتساب</small></span>
+      <span class="ar">←</span>
+      <span class="b">📱 الشركة تدخل بجوالها<br><small style="color:var(--muted)">تشوف بياناتها المحفوظة</small></span>
+      <span class="ar">←</span>
+      <span class="b">✈️ تطلب برنامج<br><small style="color:var(--muted)">تفاصيل الرحلة فقط</small></span>
+    </div>
+    <div class="panel" style="max-width:760px;margin:0 auto"><div class="detail">
+      <div class="kv" style="grid-template-columns:160px 1fr">
+        <span class="k">يُطلب مرة وحدة</span><span>اسم الشركة · المسؤول · الجوال · الإيميل · الشعار · الموقع/الانستقرام</span>
+        <span class="k">يضيفه الموظف</span><span>رابط جروب الواتساب (في ملف الشركة عند الموافقة)</span>
+        <span class="k">يتكرر كل طلب</span><span>الوجهة · الأيام · عدد الأشخاص · التفضيلات فقط</span>
+        <span class="k">الدخول لاحقاً</span><span>رقم الجوال + كلمة المرور</span>
+      </div>
+    </div></div>
+  </div>
+
+</div>
+
+<script>
+const COMPANIES=[
+  {id:1,status:"pending",name:"شركة النخبة للسياحة",initials:"نخ",contact:"أحمد العتيبي",phone:"+966551234567",email:"info@nukhba.sa",site:"instagram.com/nukhba.travel",when:"اليوم 02:14 م",reqTotal:0,reqDone:0,reqPending:0},
+  {id:2,status:"approved",name:"دروب الخليج",initials:"در",contact:"سارة القحطاني",phone:"+966509876543",email:"hello@duroob.com",site:"duroob.com",when:"أمس 06:40 م",wa:"https://chat.whatsapp.com/duroob-grp",reqTotal:5,reqDone:3,reqPending:2},
+  {id:3,status:"approved",name:"رحلات الواحة",initials:"وا",contact:"خالد",phone:"+966500001122",email:"oasis@trips.sa",site:"instagram.com/oasis.trips",when:"قبل ٣ أيام",wa:"https://chat.whatsapp.com/oasis-grp",reqTotal:12,reqDone:11,reqPending:1},
+];
+const STAT={pending:"قيد المراجعة",approved:"معتمدة",rejected:"مرفوضة"};
+let cur=null;
+function esc(s){return String(s==null?'':s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));}
+function renderList(){
+  document.getElementById('list').innerHTML=COMPANIES.map(c=>`
+    <div class="co ${cur===c.id?'sel':''}" onclick="openCo(${c.id})">
+      <div class="lg">${esc(c.initials)}</div>
+      <div style="flex:1">
+        <div class="nm">🏢 ${esc(c.name)}</div>
+        <div class="mt">${esc(c.contact)} · ${esc(c.phone)}</div>
+        ${c.status==='approved'?`<div class="mini"><span class="m-t">📋 ${c.reqTotal} طلب</span><span class="m-d">✅ ${c.reqDone} رُدّ</span>${c.reqPending?`<span class="m-p">⏳ ${c.reqPending} معلّق</span>`:''}</div>`:''}
+      </div>
+      <span class="bdg b-${c.status}">${STAT[c.status]}</span>
+    </div>`).join('');
+}
+function openCo(id){
+  cur=id; renderList();
+  const c=COMPANIES.find(x=>x.id===id);
+  const approved=c.status==='approved';
+  document.getElementById('detail').innerHTML=`
+    <div class="head">
+      <div class="lg">${esc(c.initials)}</div>
+      <div><div class="t1">${esc(c.name)}</div><div class="t2">سجّل: ${esc(c.when)} · <span class="bdg b-${c.status}">${STAT[c.status]}</span></div></div>
+    </div>
+    ${approved?`<div class="stats">
+      <div class="stat s-t"><div class="num">${c.reqTotal}</div><div class="lbl">📋 إجمالي الطلبات</div></div>
+      <div class="stat s-d"><div class="num">${c.reqDone}</div><div class="lbl">✅ تم الرد عليها</div></div>
+      <div class="stat s-p"><div class="num">${c.reqPending}</div><div class="lbl">⏳ معلّقة</div></div>
+    </div>`:`<div class="stats-empty">📋 لا توجد طلبات بعد — تظهر الإحصائية بعد تفعيل الحساب وبدء الشركة بالطلب.</div>`}
+    <div class="kv">
+      <span class="k">المسؤول</span><span>${esc(c.contact)}</span>
+      <span class="k">رقم الجوال</span><span>${esc(c.phone)}</span>
+      <span class="k">البريد</span><span>${esc(c.email)}</span>
+      <span class="k">الموقع/انستقرام</span><span><a href="#" onclick="return false">${esc(c.site)}</a></span>
+      <span class="k">الشعار</span><span>🖼️ شعار.png (مرفوع)</span>
+    </div>
+    <div class="wa">
+      <div class="t">📲 رابط جروب الواتساب <span style="color:var(--muted);font-weight:600;font-size:11px">— تضيفينه أنتِ في ملف الشركة</span></div>
+      <input placeholder="https://chat.whatsapp.com/..." value="${esc(c.wa||'')}">
+    </div>
+    <div class="bar">
+      ${approved
+        ? `<button class="btn save" onclick="alert('(تجريبي) حُفظ في ملف الشركة')">💾 حفظ التعديلات</button>
+           <button class="btn no" onclick="alert('(تجريبي) إيقاف الحساب')">⏸️ إيقاف الحساب</button>`
+        : `<button class="btn ok" onclick="alert('(تجريبي) تمت الموافقة — الشركة تقدر تدخل بجوالها الحين')">✅ موافقة وتفعيل الحساب</button>
+           <button class="btn no" onclick="alert('(تجريبي) رُفض الطلب')">❌ رفض</button>
+           <button class="btn save" onclick="alert('(تجريبي) حُفظ رابط الواتساب')">💾 حفظ رابط الواتساب</button>`}
+    </div>`;
+}
+function go(id,el){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(id).classList.add('active'); el.classList.add('active');
+}
+renderList(); openCo(1);
+</script>
+</body>
+</html>

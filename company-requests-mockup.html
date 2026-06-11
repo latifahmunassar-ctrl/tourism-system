@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>موك اب: طلباتي | ALEZZ</title>
+<style>
+  :root{--brand:#0e9d6a;--brand2:#c41d88;--gold:#D4A843;--accent:#e0218a;--bg:#f1f8f4;--ink:#1d2b2a;--muted:#6b7c7a;--line:#dcede6;--ok:#15803d;--warn:#b45309;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+  .note{max-width:760px;margin:0 auto;padding:12px 16px;color:var(--muted);font-size:12.5px;text-align:center;background:#fff7e6;border-bottom:1px solid #f0dcae}
+  .note b{color:var(--warn)}
+  header{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:26px 20px;text-align:center}
+  header .logo{font-size:26px;font-weight:800;letter-spacing:3px}.header .logo span,header .logo span{color:var(--gold)}
+  .wrap{max-width:760px;margin:0 auto;padding:0 16px 50px}
+  .prof{display:flex;gap:12px;align-items:center;background:#e9f7f1;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-top:18px}
+  .prof .lg{width:46px;height:46px;border-radius:11px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--brand);font-weight:900}
+  .prof .nm{font-weight:800;font-size:14.5px}.prof .mt{color:var(--muted);font-size:12px}
+  .prof .tabs{margin-inline-start:auto;display:flex;gap:8px}
+  .prof .tab{background:#fff;border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:7px 12px;cursor:pointer;font-weight:700;font-size:12.5px}
+  .prof .tab.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px;margin-top:18px;box-shadow:0 2px 14px rgba(0,0,0,.04)}
+  .card h2{margin:0 0 14px;font-size:18px;color:var(--brand)}
+  /* filters */
+  .filters{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px;margin-bottom:16px}
+  @media(max-width:560px){.filters{grid-template-columns:1fr}}
+  .filters input,.filters select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:11px;font:inherit;background:#fcfdfd;color:var(--ink)}
+  .filters .lbl{font-size:11.5px;color:var(--muted);font-weight:700;margin:0 0 5px 2px;display:block}
+  /* request row */
+  .req{border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:11px;background:#fcfdfd}
+  .req .top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .req .dest{font-weight:800;font-size:15.5px}
+  .req .meta{color:var(--muted);font-size:12.5px;margin-top:6px}
+  .req .ref{font-family:ui-monospace,Menlo,monospace;color:var(--brand);font-weight:700}
+  .bdg{font-size:11.5px;padding:3px 11px;border-radius:20px;font-weight:800;white-space:nowrap}
+  .b-prog{background:#fef3c7;color:var(--warn)} .b-done{background:#dcfce7;color:var(--ok)}
+  .dl{margin-top:12px;display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:11px;padding:10px 16px;font-weight:800;cursor:pointer;font-size:13.5px;text-decoration:none}
+  .prog-hint{margin-top:10px;font-size:12px;color:var(--muted);background:#f7faf8;border:1px dashed var(--line);border-radius:10px;padding:8px 11px}
+  .empty{color:var(--muted);text-align:center;padding:30px}
+</style>
+</head>
+<body>
+<div class="note">🎨 <b>موك اب فقط</b> — بيانات تجريبية لتوضيح شكل قسم «طلباتي» في بوابة الشركة. وافقي على الشكل وأنفّذه.</div>
+<header><div class="logo">AL<span>E</span>ZZ</div></header>
+
+<div class="wrap">
+  <div class="prof">
+    <div class="lg">در</div>
+    <div><div class="nm">دروب الخليج للسياحة</div><div class="mt">سارة القحطاني · +966509876543</div></div>
+    <div class="tabs">
+      <span class="tab">✈️ طلب برنامج</span>
+      <span class="tab on">📋 طلباتي</span>
+      <span class="tab">🏢 معلوماتي</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📋 طلباتي</h2>
+
+    <!-- فلاتر -->
+    <div class="filters">
+      <div><label class="lbl">🔎 بحث برقم الطلب</label><input placeholder="REQ-2026-..."></div>
+      <div><label class="lbl">📍 الوجهة</label>
+        <select><option>كل الوجهات</option><option>تايلاند</option><option>ماليزيا</option><option>تركيا</option><option>فيتنام</option></select></div>
+      <div><label class="lbl">⏳ الحالة</label>
+        <select><option>كل الحالات</option><option>جاري العمل</option><option>تم الرد</option></select></div>
+    </div>
+
+    <!-- الطلبات (الأحدث أولاً) -->
+    <div class="req">
+      <div class="top"><span class="dest">🇹🇭 تايلاند</span><span class="bdg b-done">✅ تم الرد</span></div>
+      <div class="meta"><span class="ref">REQ-2026-2B3A</span> · 7 أيام · 4 أشخاص · 2026/06/10</div>
+      <a class="dl" href="#" onclick="return false">⬇️ تحميل البرنامج</a>
+    </div>
+
+    <div class="req">
+      <div class="top"><span class="dest">🇲🇾 ماليزيا</span><span class="bdg b-prog">⏳ جاري العمل</span></div>
+      <div class="meta"><span class="ref">REQ-2026-0B3P</span> · 6 أيام · 2 أشخاص · 2026/06/09</div>
+      <div class="prog-hint">فريق ALEZZ يجهّز برنامجك — يوصلك زر التحميل هنا بعد الانتهاء.</div>
+    </div>
+
+    <div class="req">
+      <div class="top"><span class="dest">🇹🇷 تركيا</span><span class="bdg b-done">✅ تم الرد</span></div>
+      <div class="meta"><span class="ref">REQ-2026-6G18</span> · 6 أيام · 3 أشخاص · 2026/06/08</div>
+      <a class="dl" href="#" onclick="return false">⬇️ تحميل البرنامج</a>
+    </div>
+
+    <div class="req">
+      <div class="top"><span class="dest">🇻🇳 فيتنام</span><span class="bdg b-prog">⏳ جاري العمل</span></div>
+      <div class="meta"><span class="ref">REQ-2026-176Z</span> · 9 أيام · 3 أشخاص · 2026/06/07</div>
+      <div class="prog-hint">فريق ALEZZ يجهّز برنامجك — يوصلك زر التحميل هنا بعد الانتهاء.</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
