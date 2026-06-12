@@ -854,15 +854,17 @@ function extractSuggestions(
       "اوزنجول": "Uzungol", "ازونجول": "Uzungol", "ايدر": "Ayder",
     },
     Oman: {
-      // نبقي مطارات عُمان بالعربي في بند الوصول/المغادرة (إنجليزي → عربي إن وُجد)
-      "salalah": "صلالة", "muscat": "مسقط",
+      // مطارات عُمان بالعربي مع توحيد الإملاء (صلاله/Salalah → صلالة)
+      "صلالة": "صلالة", "صلاله": "صلالة", "salalah": "صلالة",
+      "مسقط": "مسقط", "مسقت": "مسقط", "muscat": "مسقط",
     },
   };
   const airportMap = AIRPORT_MAPS[destination] || {};
   const resolveAirport = (raw: string): string => {
     const t = raw.trim();
+    const tl = t.toLowerCase();
     for (const [ar, canonical] of Object.entries(airportMap)) {
-      if (t.includes(ar.trim())) return canonical;
+      if (tl.includes(ar.trim().toLowerCase())) return canonical;
     }
     return t;
   };
