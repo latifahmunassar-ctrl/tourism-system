@@ -3361,6 +3361,8 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
 #inboxList,#inboxSentList{padding:10px;max-height:60vh;overflow:auto}
 .ib-sent-item{cursor:default;opacity:.95}
 .ib-sent-meta{margin-top:7px;font-size:12px;color:#15803d;background:#dcfce7;border-radius:8px;padding:5px 9px;display:inline-block}
+.ib-reoffer{display:block;width:100%;margin-top:9px;background:linear-gradient(135deg,#0e9d6a,#c41d88);color:#fff;border:none;border-radius:9px;padding:9px;font:inherit;font-weight:800;font-size:13px;cursor:pointer}
+.ib-reoffer:hover{opacity:.92}
 .ib-item{background:#fcfdfd;border:1px solid #dcede6;border-radius:12px;padding:12px 14px;margin-bottom:9px;cursor:pointer;transition:.12s}
 .ib-item:hover{border-color:#0e9d6a;background:#f2faf6}
 .ib-r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -3470,6 +3472,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
         <div class="ib-dest">📍 ${ibEsc(r.destination)} · ${r.days} أيام · ${r.pax} أشخاص${curTag(r)}</div>${r.customer_name?`<div class="ib-cust">👤 العميل: ${ibEsc(r.customer_name)}</div>`:''}${r.requested_by?`<div class="ib-cust" style="color:#0e5a40">🧑‍💼 طلبه: ${ibEsc(r.requested_by)}</div>`:''}
         <div class="ib-r2">${ibEsc(r.ref_no)}${r.group_total?' · '+Number(r.group_total).toLocaleString('en-US')+' ريال':''}</div>
         <div class="ib-sent-meta">📤 ${r.sent_by?('أرسله: <b>'+ibEsc(r.sent_by)+'</b> · '):''}${ibFmtTime(r.sent_at)}</div>
+        <button class="ib-reoffer" type="button" onclick="inboxReoffer('${r.id}')">🔄 إرسال عرض آخر</button>
       </div>`).join(''):'<div class="ib-empty">لا توجد طلبات مُرسلة بعد</div>';
     ibBadge(incoming.filter(r=>r.status==='pending_review'||r.status==='build_failed').length);
   }
@@ -3609,6 +3612,22 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       // حدّث القوائم: الطلب ينتقل من «الواردة» إلى «المُرسلة»
       try{ const lr=await fetch(IB_BASE+'?admin_action=list',{headers:ibH()}); const lj=await lr.json(); if(lj&&lj.requests) ibRender(lj.requests); }catch(_){}
     }catch(e){alert('تعذّر الإرسال: '+(e.message||e));}
+  };
+  // «إرسال عرض آخر» — ينسخ الطلب المُرسل كطلب جديد، يفتحه في المُسعّر مربوطاً بالشركة ليعدّله الموظف ويرسله
+  window.inboxReoffer = async function(srcId){
+    if(!confirm('إنشاء عرض آخر من هذا البرنامج؟ بيُفتح لك للتعديل (غيّري الفندق أو أي شيء) ثم ترسلينه.')) return;
+    try{
+      const dr = await fetch(IB_BASE+'?admin_action=duplicate&id='+srcId, {method:'POST', headers:ibH()});
+      const dj = await dr.json(); if(!dj.ok) throw new Error(dj.error||'فشل النسخ');
+      const gr = await fetch(IB_BASE+'?admin_action=get&id='+dj.id, {headers:ibH()});
+      const gj = await gr.json(); const r = gj.request;
+      if(!r) throw new Error('تعذّر فتح البرنامج الجديد');
+      ibState = { id: dj.id, company: r.company_name, dest: r.destination, ref: dj.ref_no, token: dj.view_token, currency: r.company_currency||'SAR' };
+      if(r.built_program) buildReview(r.built_program);
+      ibBanner();
+      if(typeof addMessage==='function') addMessage('sys', `↻ فُتح عرض آخر لـ«${r.company_name}» (${dj.ref_no}) — عدّلي الفندق أو أي شيء، ثم اضغطي «📤 إرسال للشركة».`);
+      window.scrollTo({top:0,behavior:'smooth'});
+    }catch(e){ alert('تعذّر إنشاء عرض آخر: '+(e.message||e)); }
   };
   function ibStaffName(){
     const sel=document.getElementById('ibStaffSelect');

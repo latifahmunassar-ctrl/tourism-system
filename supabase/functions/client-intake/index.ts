@@ -762,6 +762,28 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    // staff: «إرسال عرض آخر» — انسخ طلباً مُرسلاً إلى طلب جديد (لنفس الشركة) ليبني الموظف عرضاً بديلاً
+    if (adminAction === "duplicate" && req.method === "POST") {
+      const { data: o, error: ge } = await supabase.from("client_requests").select("*").eq("id", id).single();
+      if (ge || !o) return json({ error: "not found" }, 404);
+      const year = (String(o.ref_no || "").match(/\d{4}/) || ["2026"])[0];
+      const newRef = `REQ-${year}-${randToken(4).toUpperCase()}`;
+      const newToken = randToken(28);
+      const { data: ins, error } = await supabase.from("client_requests").insert({
+        ref_no: newRef, view_token: newToken,
+        company_id: o.company_id, company_name: o.company_name,
+        contact_name: o.contact_name, contact_email: o.contact_email, contact_phone: o.contact_phone,
+        destination: o.destination, customer_name: o.customer_name, requested_by: o.requested_by,
+        cities_nights: o.cities_nights, sel_distribution: o.sel_distribution, sel_pair: o.sel_pair,
+        stars: o.stars, pax: o.pax, children: o.children, days: o.days,
+        date_from: o.date_from, transport: o.transport, extra_bed: o.extra_bed, sim_count: o.sim_count,
+        notes: o.notes, built_program: o.built_program, client_program: o.client_program,
+        group_total: o.group_total, status: "pending_review",
+      }).select("id, ref_no, view_token").single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true, id: ins.id, ref_no: ins.ref_no, view_token: ins.view_token });
+    }
+
     return json({ error: "unknown admin_action" }, 400);
   }
 
