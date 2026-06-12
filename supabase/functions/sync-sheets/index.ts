@@ -854,8 +854,8 @@ function extractSuggestions(
       "اوزنجول": "Uzungol", "ازونجول": "Uzungol", "ايدر": "Ayder",
     },
     Oman: {
-      "صلاله": "Salalah", "صلالة": "Salalah",
-      "مسقط": "Muscat", "مسقت": "Muscat", "muscat": "Muscat",
+      // نبقي مطارات عُمان بالعربي في بند الوصول/المغادرة (إنجليزي → عربي إن وُجد)
+      "salalah": "صلالة", "muscat": "مسقط",
     },
   };
   const airportMap = AIRPORT_MAPS[destination] || {};

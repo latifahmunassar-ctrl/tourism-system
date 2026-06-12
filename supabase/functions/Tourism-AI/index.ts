@@ -2547,8 +2547,8 @@ Deno.serve(async (req) => {
             "طرابزون": "Trabzon", "طربزون": "Trabzon", "trabzon": "Trabzon",
           },
           Oman: {
-            "مسقط": "Muscat", "مسقت": "Muscat", "muscat": "Muscat",
-            "صلالة": "Salalah", "صلاله": "Salalah", "salalah": "Salalah",
+            "مسقط": "مسقط", "مسقت": "مسقط", "muscat": "مسقط",
+            "صلالة": "صلالة", "صلاله": "صلالة", "salalah": "صلالة",
           },
         };
         const map = AIRPORT_LOOKUP[detectedDest] || {};
