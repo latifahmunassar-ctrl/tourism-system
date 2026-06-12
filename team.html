@@ -339,6 +339,12 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 .vsw-pick{background:#0e9d6a;color:#fff}
 .vsw-add{background:#fff3e8;color:#c41d88;border:1px solid #f0c9e0}
 .vsw-small{color:#b45309;font-weight:700;font-size:11px}
+.vsw-cur-box{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 14px;background:#e9f7f1;border-bottom:2px solid #0e9d6a}
+.vsw-cur-l{font-weight:900;color:#0e5a40;font-size:13.5px}
+.vsw-cur-r{display:flex;align-items:center;gap:8px}
+.vsw-sub{padding:8px 14px 4px;font-size:11.5px;color:#9aa7a5;font-weight:800}
+/* صف جمع سيارتي اليوم */
+.day-cars{background:#f0f7ff;font-weight:900;color:#1a3a8f}
 .section-card.tsw-host{overflow:visible}
 </style>
 </head>
@@ -1133,22 +1139,32 @@ async function vswFetch(cell){
     vswRender(cell, data.variants || []);
   }catch(e){ menu.innerHTML = '<div class="hsw-loading">تعذّر جلب الخيارات</div>'; }
 }
+function _vswRange(v){ return (v.min && v.max && v.min!==v.max) ? `${v.min}-${v.max}` : `${v.min||v.max||'?'}`; }
+function _stripCap(s){ return String(s||'').replace(/\s*\(سيارة تتسع[^)]*\)/g,'').trim(); }
 function vswRender(cell, variants){
   cell._variants = variants;
   const menu = cell.querySelector('.hsw-menu');
   const curPrice = +cell.dataset.vprice || 0;
   const grp = (parsedData && parsedData.adults) || 0;
   if(!variants.length){ menu.innerHTML = '<div class="hsw-loading">ما فيه خيارات سيارة لهذي</div>'; return; }
-  menu.innerHTML = `<div class="hsw-title">🚗 السيارة (السعة) — المجموعة ${grp} ${grp===1?'شخص':'أشخاص'}</div>` + variants.map((v,i)=>{
-    const isCur = Math.abs((v.price||0) - curPrice) < 1;
-    const rangeTxt = (v.min && v.max && v.min!==v.max) ? `${v.min}-${v.max}` : `${v.min||v.max||'?'}`;
+  let curIdx = variants.findIndex(v => Math.abs((v.price||0) - curPrice) < 1);
+  if(curIdx < 0) curIdx = 0;
+  const cur = variants[curIdx];
+  // الخيار الحالي أولاً وواضح
+  const curHtml = `<div class="vsw-cur-box"><div class="vsw-cur-l">✓ الحالي: 👥 يتسع ${_vswRange(cur)}</div>`
+    + `<div class="vsw-cur-r"><span class="hsw-price">${(cur.price||0).toLocaleString()} ريال</span>`
+    + `<button type="button" class="vsw-add" onclick="vswAddSecond(this.closest('.vsw-cell'),${curIdx})">➕ سيارة ثانية</button></div></div>`;
+  // باقي الخيارات
+  const others = variants.map((v,i)=>{
+    if(i===curIdx) return '';
     const small = (grp>0 && v.max>0 && grp>v.max) ? ' <span class="vsw-small">(أصغر من المجموعة)</span>' : '';
-    return `<div class="hsw-opt ${isCur?'sel':''}">`
-      + `<div class="hsw-l"><div class="hsw-n">👥 يتسع ${rangeTxt}${isCur?' <span class="hsw-chk">✓</span>':''}${small}</div></div>`
+    return `<div class="hsw-opt"><div class="hsw-l"><div class="hsw-n">👥 يتسع ${_vswRange(v)}${small}</div></div>`
       + `<div class="vsw-acts"><span class="hsw-price">${(v.price||0).toLocaleString()} ريال</span>`
       + `<button type="button" class="vsw-pick" onclick="vswPick(this.closest('.vsw-cell'),${i})">اختيار</button>`
       + `<button type="button" class="vsw-add" onclick="vswAddSecond(this.closest('.vsw-cell'),${i})">➕ سيارة ثانية</button></div></div>`;
   }).join('');
+  menu.innerHTML = `<div class="hsw-title">🚗 السيارة (السعة) — المجموعة ${grp} ${grp===1?'شخص':'أشخاص'}</div>`
+    + curHtml + `<div class="vsw-sub">خيارات أخرى — اختاري لو تبين تغيّرين:</div>` + others;
 }
 function _vswReplaceRaw(oldLine, newRaw){
   if(newRaw===lastProgramRaw) return false;
@@ -1161,9 +1177,11 @@ function vswPick(cell, idx){
     const v = (cell._variants||[])[idx]; if(!v) return;
     const oldLine = cell.dataset.vline||''; if(!oldLine) return;
     const p = oldLine.split('|').map(x=>x.trim());
-    const newLine = `${p[0]||''} | ${p[1]||''} | ${p[2]||''} | ${v.price||0} ريال`;
+    const cap = _vswRange(v);
+    const detail = _stripCap(p[1]);
+    const newLine = `${p[0]||''} | ${detail} (سيارة تتسع ${cap}) | ${p[2]||''} | ${v.price||0} ريال`;
     if(_vswReplaceRaw(oldLine, lastProgramRaw.replace(oldLine, newLine)))
-      addMessage('sys', `تم اختيار سيارة تتسع ${v.min}${v.max>v.min?'-'+v.max:''} شخص — السعر ${(v.price||0).toLocaleString()} ريال.`);
+      addMessage('sys', `تم اختيار سيارة تتسع ${cap} — السعر ${(v.price||0).toLocaleString()} ريال.`);
   }catch(e){ addMessage('sys','خطأ في اختيار السيارة: '+(e&&e.message?e.message:e)); }
 }
 function vswAddSecond(cell, idx){
@@ -1172,9 +1190,10 @@ function vswAddSecond(cell, idx){
     const v = (cell._variants||[])[idx]; if(!v) return;
     const oldLine = cell.dataset.vline||''; if(!oldLine) return;
     const p = oldLine.split('|').map(x=>x.trim());
-    const secondLine = `${p[0]||''} | نقل إضافي — ${p[1]||''} | ${p[2]||'Pickup'} | ${v.price||0} ريال`;
+    const cap = _vswRange(v);
+    const secondLine = `${p[0]||''} | نقل إضافي — سيارة تتسع ${cap} | ${p[2]||'Pickup'} | ${v.price||0} ريال`;
     if(_vswReplaceRaw(oldLine, lastProgramRaw.replace(oldLine, oldLine + '\n' + secondLine)))
-      addMessage('sys', `أُضيفت سيارة ثانية (يتسع ${v.min}${v.max>v.min?'-'+v.max:''} شخص) بسعر ${(v.price||0).toLocaleString()} ريال.`);
+      addMessage('sys', `أُضيفت سيارة ثانية (تتسع ${cap}) بسعر ${(v.price||0).toLocaleString()} ريال — في نفس اليوم.`);
   }catch(e){ addMessage('sys','خطأ في إضافة السيارة: '+(e&&e.message?e.message:e)); }
 }
 
@@ -2034,11 +2053,15 @@ return `<tr><td><strong>${p[0]||''}</strong></td><td><span class="type-badge ${t
 }
 
 if (transfersLines.length) {
+// جمع سيارات نفس اليوم: عدد + إجمالي + آخر سطر لكل يوم
+const _xDay = l => (String(l).split('|')[0]||'').trim();
+const _xCnt = {}, _xSum = {}, _xLast = {};
+transfersLines.forEach((l,i)=>{ const d=_xDay(l); _xCnt[d]=(_xCnt[d]||0)+1; _xSum[d]=(_xSum[d]||0)+computeTransferTourLineTotal(l.split('|').map(x=>x.trim()), xferTourMeta, '🚗 انتقال').total; _xLast[d]=i; });
 html += `<div class="section-card tsw-host">
 <div class="section-card-header"><div class="section-card-title">🚗 الانتقالات</div><div class="section-total">${transfersTotal.toLocaleString()} ريال</div></div>
 <table class="pricing-table">
 <thead><tr><th>اليوم</th><th>التفاصيل</th><th>النوع</th><th>سعر الشيت</th><th>المسافرون</th><th>🚗 السيارة (السعة)</th><th>المُعتمد حساباً</th></tr></thead>
-<tbody>${transfersLines.map(l => {
+<tbody>${transfersLines.map((l, _i) => {
 const p=l.split('|').map(x=>x.trim());
 const isPickup=(p[2]||'').toLowerCase().includes('pickup');
 const tc=isPickup?'badge-pickup':'badge-drop';
@@ -2046,17 +2069,22 @@ const tl=isPickup?'🚗 Pickup':'🚖 Drop';
 const { total: lineTT } = computeTransferTourLineTotal(p, xferTourMeta, '🚗 انتقال');
 const paxCell = (p.length >= 5 && p[4]) ? p[4] : `${persons} (META)`;
 const vCell = `<td class="vsw-cell" data-vname="${hswEsc(p[1]||'')}" data-vprice="${lineTT}" data-vline="${hswEsc(l)}"><div class="hsw-cur" onclick="vswToggle(this)"><span class="hsw-name">🚗 اختر السيارة</span><span class="hsw-chev">▼</span></div><div class="hsw-menu"></div></td>`;
-return `<tr><td>${p[0]||''}</td><td>${p[1]||''}</td><td><span class="type-badge ${tc}">${tl}</span></td><td class="price-cell">${p[3]||''}</td><td>${paxCell}</td>${vCell}<td class="price-cell">${lineTT.toLocaleString()} ريال</td></tr>`;
+const _d=_xDay(l);
+const sumRow = (_xCnt[_d]>1 && _xLast[_d]===_i) ? `<tr class="day-cars"><td colspan="6">🚗 ${_d}: ${_xCnt[_d]} سيارات في نفس اليوم</td><td class="price-cell">${(_xSum[_d]||0).toLocaleString()} ريال</td></tr>` : '';
+return `<tr><td>${p[0]||''}</td><td>${p[1]||''}</td><td><span class="type-badge ${tc}">${tl}</span></td><td class="price-cell">${p[3]||''}</td><td>${paxCell}</td>${vCell}<td class="price-cell">${lineTT.toLocaleString()} ريال</td></tr>${sumRow}`;
 }).join('')}</tbody>
 </table></div>`;
 }
 
 if (toursLines.length) {
+const _tDay = l => (String(l).split('|')[0]||'').trim();
+const _tCnt = {}, _tSum = {}, _tLast = {};
+toursLines.forEach((l,i)=>{ const d=_tDay(l); _tCnt[d]=(_tCnt[d]||0)+1; _tSum[d]=(_tSum[d]||0)+computeTransferTourLineTotal(l.split('|').map(x=>x.trim()), xferTourMeta, '🗺️ جولة').total; _tLast[d]=i; });
 html += `<div class="section-card tsw-host">
 <div class="section-card-header"><div class="section-card-title">🗺️ الجولات السياحية</div><div class="section-total">${toursTotal.toLocaleString()} ريال</div></div>
 <table class="pricing-table">
 <thead><tr><th>اليوم</th><th>الجولة</th><th>النوع</th><th>سعر الشيت</th><th>المسافرون</th><th>🚗 السيارة (السعة)</th><th>المُعتمد حساباً</th></tr></thead>
-<tbody>${toursLines.map(l => {
+<tbody>${toursLines.map((l, _i) => {
 const p=l.split('|').map(x=>x.trim());
 const tcMap={'ثقافية':'badge-tour','طبيعية':'badge-nature','بحرية':'badge-sea','حر':'badge-free'};
 const tc=tcMap[p[2]]||'badge-tour';
@@ -2072,7 +2100,9 @@ const tourCell = isFree
 const vCell = isFree
   ? `<td>—</td>`
   : `<td class="vsw-cell" data-vname="${hswEsc(p[1]||'')}" data-vprice="${tourLineT}" data-vline="${hswEsc(l)}"><div class="hsw-cur" onclick="vswToggle(this)"><span class="hsw-name">🚗 اختر السيارة</span><span class="hsw-chev">▼</span></div><div class="hsw-menu"></div></td>`;
-return `<tr><td>${p[0]||''}</td>${tourCell}<td><span class="type-badge ${tc}">${p[2]||''}</span></td><td class="price-cell">${p[3]||''}</td><td>${paxCell}</td>${vCell}<td class="price-cell">${tourLineT.toLocaleString()} ريال</td></tr>`;
+const _d=_tDay(l);
+const sumRow = (_tCnt[_d]>1 && _tLast[_d]===_i) ? `<tr class="day-cars"><td colspan="6">🚗 ${_d}: ${_tCnt[_d]} سيارات في نفس اليوم</td><td class="price-cell">${(_tSum[_d]||0).toLocaleString()} ريال</td></tr>` : '';
+return `<tr><td>${p[0]||''}</td>${tourCell}<td><span class="type-badge ${tc}">${p[2]||''}</span></td><td class="price-cell">${p[3]||''}</td><td>${paxCell}</td>${vCell}<td class="price-cell">${tourLineT.toLocaleString()} ريال</td></tr>${sumRow}`;
 }).join('')}</tbody>
 </table></div>`;
 }
