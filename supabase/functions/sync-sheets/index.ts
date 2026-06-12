@@ -913,7 +913,7 @@ function extractSuggestions(
     russia:   "Moscow",
     Turky:    "Istanbul",
     indonesia: "Jakarta",
-    Oman:     "Salalah",
+    Oman:     "صلالة",
   };
   for (let i = headerRow + 1; i < rows.length; i++) {
     const rawCell = (rows[i][colIdx] || "").trim();
