@@ -1078,19 +1078,22 @@ async function tswFetch(cell){
   }catch(e){ menu.innerHTML = '<div class="hsw-loading">تعذّر جلب الجولات</div>'; }
 }
 function tswRender(cell, tours){
-  cell._tours = tours;
+  // خيار «يوم حر» دائماً ضمن القائمة (idx 0) — تحويل جولة ليوم حر أو العكس
+  const all = [{ name: 'يوم حر — استرخاء في الفندق', price: 0, _free: true }, ...tours];
+  cell._tours = all;
   const menu = cell.querySelector('.hsw-menu');
   const curName = (cell.dataset.tname||'').trim();
+  const curIsFree = cell.dataset.tfree==='1' || /^يوم\s*حر/.test(curName);
   const curPrice = +cell.dataset.tprice || 0;
-  if(!tours.length){ menu.innerHTML = '<div class="hsw-loading">ما فيه جولات بديلة في نفس المنطقة</div>'; return; }
-  const title = `<div class="hsw-title">جولات نفس المنطقة — السعر واضح قبل الاختيار</div>`;
-  menu.innerHTML = title + tours.map((t,i)=>{
-    const isCur = (t.name||'').trim() === curName;
+  const title = `<div class="hsw-title">جولات نفس المنطقة + يوم حر — اختر</div>`;
+  menu.innerHTML = title + all.map((t,i)=>{
+    const isCur = t._free ? curIsFree : ((t.name||'').trim() === curName);
     const diff = (t.price||0) - curPrice;
     const dCls = diff>0?'up':(diff<0?'down':'');
-    const dTxt = diff===0?'':((diff>0?'+':'−')+Math.abs(diff));
+    const dTxt = (t._free||diff===0)?'':((diff>0?'+':'−')+Math.abs(diff));
+    const label = t._free ? '🛋️ يوم حر — استرخاء في الفندق' : hswEsc(t.name);
     return `<div class="hsw-opt ${isCur?'sel':''}" data-idx="${i}">`
-      + `<div class="hsw-l"><div class="hsw-n">${hswEsc(t.name)}${isCur?' <span class="hsw-chk">✓</span>':''}</div></div>`
+      + `<div class="hsw-l"><div class="hsw-n">${label}${isCur?' <span class="hsw-chk">✓</span>':''}</div></div>`
       + `<div class="hsw-price">${(t.price||0).toLocaleString()} ريال ${dTxt?`<span class="hsw-delta ${dCls}">${dTxt}</span>`:''}</div>`
       + `</div>`;
   }).join('');
@@ -1106,15 +1109,22 @@ function tswPick(cell, idx){
     const oldLine = cell.dataset.tline || '';
     if(!oldLine){ addMessage('sys','تعذّر تبديل الجولة: لم أجد سطر الجولة.'); return; }
     const p = oldLine.split('|').map(x=>x.trim());
-    if((t.name||'').trim() === (p[1]||'').trim()) return;  // نفس الجولة
-    const newLine = `${p[0]||''} | ${t.name} | ${p[2]||'ثقافية'} | ${t.price||0} ريال`;
+    let newLine;
+    if (t._free) {
+      if (/^يوم\s*حر/.test((p[1]||'').trim())) return;   // أصلاً يوم حر
+      newLine = `${p[0]||''} | يوم حر — استرخاء في الفندق | حر | 0 ريال`;
+    } else {
+      if((t.name||'').trim() === (p[1]||'').trim()) return;  // نفس الجولة
+      const type = (p[2] && p[2]!=='حر') ? p[2] : 'ثقافية';  // يوم حر → جولة يأخذ نوعاً حقيقياً
+      newLine = `${p[0]||''} | ${t.name} | ${type} | ${t.price||0} ريال`;
+    }
     const newRaw = lastProgramRaw.replace(oldLine, newLine);
-    if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر تطبيق تبديل الجولة — لم يتغيّر البرنامج.'); return; }
+    if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر تطبيق التبديل — لم يتغيّر البرنامج.'); return; }
     for (let i = history.length - 1; i >= 0; i--) {
       if (history[i].role === 'assistant') { history[i].content = newRaw; break; }
     }
     buildReview(newRaw);
-    addMessage('sys', `تم تبديل الجولة إلى «${t.name}» — أُعيد احتساب الإجمالي.`);
+    addMessage('sys', t._free ? `تم تحويل اليوم إلى «يوم حر».` : `تم تبديل الجولة إلى «${t.name}» — أُعيد احتساب الإجمالي.`);
   } catch(e){ addMessage('sys','خطأ أثناء تبديل الجولة: ' + (e && e.message ? e.message : e)); }
 }
 
@@ -2090,14 +2100,15 @@ const tcMap={'ثقافية':'badge-tour','طبيعية':'badge-nature','بحري
 const tc=tcMap[p[2]]||'badge-tour';
 const { total: tourLineT } = computeTransferTourLineTotal(p, xferTourMeta, '🗺️ جولة');
 const paxCell = (p.length >= 5 && p[4]) ? p[4] : `${persons} (META)`;
-// أيام حرة/تنقّل ليست جولات → نص عادي بلا قائمة. الجولات الحقيقية = قائمة منسدلة.
-const isFree = p[2]==='حر' || /^يوم\s/.test(p[1]||'');
-const tourCell = isFree
+// أيام التنقّل فقط تبقى نصاً. اليوم الحر = قائمة (يتحوّل لجولة أو يبقى حر). الجولات = قائمة.
+const isTransit = /^يوم\s*تنقّل/.test(p[1]||'') || /^يوم\s*تنقل/.test(p[1]||'');
+const isFreeDay = !isTransit && (p[2]==='حر' || /^يوم\s*حر/.test(p[1]||''));
+const tourCell = isTransit
   ? `<td><strong>${p[1]||''}</strong></td>`
-  : `<td class="tsw-cell" data-tname="${hswEsc(p[1]||'')}" data-tprice="${tourLineT}" data-tline="${hswEsc(l)}">`
+  : `<td class="tsw-cell" data-tname="${hswEsc(p[1]||'')}" data-tprice="${tourLineT}" data-tline="${hswEsc(l)}"${isFreeDay?' data-tfree="1"':''}>`
     + `<div class="hsw-cur" onclick="tswToggle(this)"><span class="hsw-name"><strong>${p[1]||''}</strong></span><span class="hsw-chev">▼</span></div>`
     + `<div class="hsw-menu"></div></td>`;
-const vCell = isFree
+const vCell = (isTransit || isFreeDay)
   ? `<td>—</td>`
   : `<td class="vsw-cell" data-vname="${hswEsc(p[1]||'')}" data-vprice="${tourLineT}" data-vline="${hswEsc(l)}"><div class="hsw-cur" onclick="vswToggle(this)"><span class="hsw-name">🚗 اختر السيارة</span><span class="hsw-chev">▼</span></div><div class="hsw-menu"></div></td>`;
 const _d=_tDay(l);
