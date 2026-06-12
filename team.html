@@ -3361,6 +3361,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
 #inboxList,#inboxSentList{padding:10px;max-height:60vh;overflow:auto}
 .ib-sent-item{cursor:default;opacity:.95}
 .ib-sent-meta{margin-top:7px;font-size:12px;color:#15803d;background:#dcfce7;border-radius:8px;padding:5px 9px;display:inline-block}
+.ib-multi{display:inline-block;margin-right:6px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:800}
 .ib-reoffer{display:block;width:100%;margin-top:9px;background:linear-gradient(135deg,#0e9d6a,#c41d88);color:#fff;border:none;border-radius:9px;padding:9px;font:inherit;font-weight:800;font-size:13px;cursor:pointer}
 .ib-reoffer:hover{opacity:.92}
 .ib-item{background:#fcfdfd;border:1px solid #dcede6;border-radius:12px;padding:12px 14px;margin-bottom:9px;cursor:pointer;transition:.12s}
@@ -3449,6 +3450,10 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
   function ibRender(reqs){
     reqs=reqs||[];
     ibLastReqs=reqs;
+    // عدد العروض المُرسلة لنفس الطلب (group_ref) — يظهر «N عروض» إذا كانت 2 أو أكثر
+    const _grpCount={};
+    reqs.forEach(r=>{ if(r.status==='sent'){ const k=r.group_ref||r.ref_no; _grpCount[k]=(_grpCount[k]||0)+1; } });
+    const _grpBadge=r=>{ const n=_grpCount[r.group_ref||r.ref_no]||0; return n>=2?`<span class="ib-multi">📑 ${n} عروض</span>`:''; };
     const q=(document.getElementById('ibSearch')||{}).value||'';
     const IB_CURN={SAR:'ريال',USD:'دولار',EUR:'يورو',AED:'درهم',OMR:'ريال عماني',KWD:'دينار كويتي',EGP:'جنيه مصري'};
     const curTag=r=>r.company_currency?` · 💱 ${ibEsc(IB_CURN[r.company_currency]||r.company_currency)}`:'';
@@ -3462,13 +3467,13 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     document.getElementById('ibCountSent').textContent=sent.length;
     document.getElementById('inboxList').innerHTML=incoming.length?incoming.map(r=>`
       <div class="ib-item" onclick="inboxLoad('${r.id}')">
-        <div class="ib-r1"><span class="ib-co">🏢 ${ibEsc(r.company_name)}</span><span class="ib-bdg ib-${r.status}">${IB_STAT[r.status]||r.status}</span></div>
+        <div class="ib-r1"><span class="ib-co">🏢 ${ibEsc(r.company_name)}</span><span class="ib-bdg ib-${r.status}">${IB_STAT[r.status]||r.status}</span>${_grpBadge(r)}</div>
         <div class="ib-dest">📍 ${ibEsc(r.destination)} · ${r.days} أيام · ${r.pax} أشخاص${curTag(r)}</div>${r.customer_name?`<div class="ib-cust">👤 العميل: ${ibEsc(r.customer_name)}</div>`:''}${r.requested_by?`<div class="ib-cust" style="color:#0e5a40">🧑‍💼 طلبه: ${ibEsc(r.requested_by)}</div>`:''}
         <div class="ib-r2">${ibEsc(r.ref_no)}${r.group_total?' · '+Number(r.group_total).toLocaleString('en-US')+' ريال':''}</div>
       </div>`).join(''):'<div class="ib-empty">لا توجد طلبات واردة</div>';
     document.getElementById('inboxSentList').innerHTML=sent.length?sent.map(r=>`
       <div class="ib-item ib-sent-item">
-        <div class="ib-r1"><span class="ib-co">🏢 ${ibEsc(r.company_name)}</span><span class="ib-bdg ib-sent">تم الإرسال</span></div>
+        <div class="ib-r1"><span class="ib-co">🏢 ${ibEsc(r.company_name)}</span><span class="ib-bdg ib-sent">تم الإرسال</span>${_grpBadge(r)}</div>
         <div class="ib-dest">📍 ${ibEsc(r.destination)} · ${r.days} أيام · ${r.pax} أشخاص${curTag(r)}</div>${r.customer_name?`<div class="ib-cust">👤 العميل: ${ibEsc(r.customer_name)}</div>`:''}${r.requested_by?`<div class="ib-cust" style="color:#0e5a40">🧑‍💼 طلبه: ${ibEsc(r.requested_by)}</div>`:''}
         <div class="ib-r2">${ibEsc(r.ref_no)}${r.group_total?' · '+Number(r.group_total).toLocaleString('en-US')+' ريال':''}</div>
         <div class="ib-sent-meta">📤 ${r.sent_by?('أرسله: <b>'+ibEsc(r.sent_by)+'</b> · '):''}${ibFmtTime(r.sent_at)}</div>

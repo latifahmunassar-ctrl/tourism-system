@@ -715,7 +715,7 @@ Deno.serve(async (req) => {
     if (adminAction === "list") {
       const { data, error } = await supabase
         .from("client_requests")
-        .select("id, ref_no, company_name, customer_name, requested_by, destination, pax, days, status, group_total, created_at, sent_at, sent_by, company_id")
+        .select("id, ref_no, company_name, customer_name, requested_by, destination, pax, days, status, group_total, created_at, sent_at, sent_by, company_id, group_ref, is_reoffer")
         .order("created_at", { ascending: false }).limit(200);
       if (error) return json({ error: error.message }, 500);
       // attach each company's pricing currency
