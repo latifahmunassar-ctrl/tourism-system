@@ -517,7 +517,8 @@ Deno.serve(async (req) => {
       const { data: reqs } = await supabase.from("client_requests")
         .select("ref_no, destination, days, pax, status, created_at, view_token, company_price, customer_name, requested_by, sent_by, is_reoffer")
         .eq("company_id", c.id).order("created_at", { ascending: false }).limit(100);
-      const requests = (reqs || []).map((r: any) => ({
+      // عروض «عرض آخر» تظهر للشركة فقط بعد الإرسال (المسوّدات تبقى مخفية عند الموظف)
+      const requests = (reqs || []).filter((r: any) => !(r.is_reoffer && r.status !== "sent")).map((r: any) => ({
         ref_no: r.ref_no, destination: r.destination, days: r.days, pax: r.pax,
         status: r.status === "sent" ? "sent" : "working",
         created_at: r.created_at,
