@@ -197,30 +197,16 @@
         <div class="field" id="airportField"><label>مطار القدوم والمغادرة / Arrival & departure airport</label>
           <select id="airportSel" onchange="onPairChange()"><option value="">اختر الوجهة أولاً… / Choose destination first</option></select></div>
 
-        <div class="field"><label>طريقة تحديد المدن / Cities</label>
-          <div class="seg" id="modeSeg">
-            <label><input type="radio" name="mode" value="ready" checked><span>📋 اقتراحات جاهزة / Ready</span></label>
-            <label><input type="radio" name="mode" value="manual"><span>✏️ تخصيص / Custom</span></label>
-          </div>
-        </div>
-
         <div id="readyPanel">
           <div class="field"><div class="nightsum" id="daysAvail"></div>
             <button type="button" class="gobtn" id="showOpts">📋 عرض الخيارات / Show options</button></div>
           <div class="field"><label>التوزيع المقترح للمدن / Suggested split</label>
             <div id="sugList" class="suglist"></div>
             <div class="nightsum" id="sugPick">اضغط «عرض الخيارات» لعرض التوزيع المطابق. · Tap “Show options”.</div>
-            <div class="hintbox" id="sugEmpty">لا توجد اقتراحات جاهزة لهذه الوجهة — استخدم «تخصيص». · No ready options — use Custom.</div>
+            <div class="hintbox" id="sugEmpty">لا توجد اقتراحات جاهزة لهذه الوجهة بعد — تواصلي معنا وبنجهّزها لك. · No ready options yet — contact us.</div>
           </div>
         </div>
 
-        <div id="manualPanel" style="display:none">
-          <div class="field cities"><label>توزيع المدن والليالي / Cities & nights</label>
-            <div id="cityRows"></div>
-            <button type="button" class="addcity" id="addCity">+ أضف مدينة / Add city</button>
-            <div class="nightsum">مجموع الليالي / Total nights: <b id="nsum">0</b> — المتوقّع / expected: <b id="nexp">7</b></div>
-          </div>
-        </div>
       </div>
 
       <div class="card">
@@ -454,9 +440,9 @@ Object.keys(CITIES).forEach(d=>{const o=document.createElement('option');o.value
 let SUGS=[], chosen=null;
 const AIRPORT_AR={Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي"};
 const airAr=a=>AIRPORT_AR[a]||a;
-function mode(){return document.querySelector('input[name=mode]:checked').value;}
-function applyMode(){ const r=mode()==='ready'; $('readyPanel').style.display=r?'':'none'; $('manualPanel').style.display=r?'none':''; $('airportField').style.display=r?'':'none'; }
-document.querySelectorAll('input[name=mode]').forEach(r=>r.onchange=applyMode);
+// التخصيص اليدوي أُزيل — الوضع دائماً «اقتراحات جاهزة»
+function mode(){ return 'ready'; }
+function applyMode(){ const rp=$('readyPanel'); if(rp) rp.style.display=''; const af=$('airportField'); if(af) af.style.display=''; }
 
 let shownRows=[];
 const pairOf=s=>s.arrival_airport+'|'+s.departure_airport;
@@ -467,7 +453,7 @@ async function loadSuggestions(){
   try{ const res=await fetch(INTAKE+"?suggestions="+encodeURIComponent(dest)); const d=await res.json(); SUGS=d.suggestions||[]; }catch(e){ SUGS=[]; }
   // الخانة ظاهرة دائماً (مطابق لداشبورد الموظفين) + خيار «كل المطارات»
   const pairs=[...new Set(SUGS.map(pairOf))];
-  if(!pairs.length){ sel.innerHTML='<option value="">لا مطارات لهذه الوجهة — استخدم «تخصيص»</option>'; }
+  if(!pairs.length){ sel.innerHTML='<option value="">لا مطارات لهذه الوجهة بعد</option>'; }
   else { sel.innerHTML='<option value="ALL">🌐 كل المطارات (كل الاقتراحات)</option>'+pairs.map(p=>{const [a,b]=p.split('|');const lbl=a===b?`القدوم والمغادرة: ${airAr(a)}`:`القدوم: ${airAr(a)} — المغادرة: ${airAr(b)}`;return `<option value="${esc(p)}">${esc(lbl)}</option>`}).join(''); }
   if(SUGS.length===0){ $('sugEmpty').style.display='block'; $('sugPick').style.display='none'; return; }
   onPairChange();
@@ -488,7 +474,7 @@ function showOptions(){
   else{
     if(!days){ list.innerHTML=''; pick.textContent='اكتب عدد الأيام أولاً، أو اختر «كل المطارات».'; pick.style.display=''; return; }
     shownRows=SUGS.filter(s=>+s.days===days && pairOf(s)===pair);
-    if(!shownRows.length){ list.innerHTML=''; pick.innerHTML='لا يوجد برنامج جاهز لـ '+days+' أيام لهذا المطار. المتوفّر: <b>'+daysForPair().join('، ')+'</b> — أو «🌐 كل المطارات» أو «تخصيص».'; pick.style.display=''; return; }
+    if(!shownRows.length){ list.innerHTML=''; pick.innerHTML='لا يوجد برنامج جاهز لـ '+days+' أيام لهذا المطار. المتوفّر: <b>'+daysForPair().join('، ')+'</b> — أو جرّبي «🌐 كل المطارات».'; pick.style.display=''; return; }
   }
   shownRows.sort((a,b)=>(+a.days)-(+b.days));
   pick.style.display='none';
@@ -499,22 +485,8 @@ function showOptions(){
 }
 $('showOpts').onclick=showOptions;
 
-const cityRows=$('cityRows');
-function cityOptions(){const l=CITIES[destSel.value]||[];return '<option value="">اختر مدينة…</option>'+l.map(c=>`<option>${c}</option>`).join('');}
-function addCityRow(city='',nights=2){
-  const div=document.createElement('div');div.className='crow';
-  div.innerHTML=`<select class="csel">${cityOptions()}</select><div class="nights"><button type="button" class="minus">−</button><input class="cnights" type="number" min="1" max="20" value="${nights}"><button type="button" class="plus">+</button></div><button type="button" class="delc">×</button>`;
-  cityRows.appendChild(div); if(city) div.querySelector('.csel').value=city;
-  div.querySelector('.plus').onclick=()=>{const i=div.querySelector('.cnights');i.value=Math.min(20,(+i.value||0)+1);sumNights()};
-  div.querySelector('.minus').onclick=()=>{const i=div.querySelector('.cnights');i.value=Math.max(1,(+i.value||0)-1);sumNights()};
-  div.querySelector('.cnights').oninput=sumNights;
-  div.querySelector('.delc').onclick=()=>{div.remove();sumNights()};
-  sumNights();
-}
-function sumNights(){let s=0;cityRows.querySelectorAll('.cnights').forEach(i=>s+=(+i.value||0));$('nsum').textContent=s;}
-function expectedNights(){const d=+$('days').value||0;$('nexp').textContent=Math.max(0,d-1);}
-destSel.onchange=()=>{ loadSuggestions(); cityRows.innerHTML=''; addCityRow(); };
-$('addCity').onclick=()=>addCityRow();
+function expectedNights(){ const e=$('nexp'); if(e){ const d=+$('days').value||0; e.textContent=Math.max(0,d-1); } }
+destSel.onchange=()=>{ loadSuggestions(); };
 $('days').oninput=()=>{ expectedNights(); chosen=null; $('sugList').innerHTML=''; $('sugPick').textContent='اضغط «عرض الخيارات».'; $('sugPick').style.display=''; };
 expectedNights(); applyMode();
 
@@ -540,20 +512,14 @@ $('form').addEventListener('submit', async e=>{
     days:+$('days').value, date_from:$('dateGlobal').value,
     sim_count:+$('sim_count').value||0, extra_bed:$('extra_bed').value.trim(), notes:$('notes').value.trim(),
   };
-  if(mode()==='ready'){
-    if(!chosen){ err.textContent='اضغط «عرض الخيارات» واختر توزيعاً، أو بدّل لـ«تخصيص بنفسي».'; err.style.display='block'; return; }
-    const cn=parseDist(chosen.distribution);
-    payload.cities_nights=cn;
-    if(!cn.length) payload.distribution=chosen.distribution;   // fallback لو تعذّر فكّ التوزيع
-    // احفظ اختيار الشركة عشان الموظف يفتحه في «اقتراحات جاهزة» نفسه
-    payload.selected_distribution=chosen.distribution;
-    payload.selected_pair=(chosen.arrival_airport||'')+'|'+(chosen.departure_airport||'');
-    if(chosen.arrival_airport) payload.notes=[payload.notes,`اقتراح جاهز (${airAr(chosen.arrival_airport)}↔${airAr(chosen.departure_airport)})`].filter(Boolean).join(' | ');
-  }else{
-    const cities=[...cityRows.querySelectorAll('.crow')].map(r=>({city:r.querySelector('.csel').value,nights:+r.querySelector('.cnights').value||0})).filter(c=>c.city&&c.nights);
-    if(cities.length===0){ err.textContent='أضف مدينة واحدة على الأقل.'; err.style.display='block'; return; }
-    payload.cities_nights=cities;
-  }
+  if(!chosen){ err.textContent='اضغط «عرض الخيارات» واختر توزيعاً مقترحاً.'; err.style.display='block'; return; }
+  const cn=parseDist(chosen.distribution);
+  payload.cities_nights=cn;
+  if(!cn.length) payload.distribution=chosen.distribution;   // fallback لو تعذّر فكّ التوزيع
+  // احفظ اختيار الشركة عشان الموظف يفتحه في «اقتراحات جاهزة» نفسه
+  payload.selected_distribution=chosen.distribution;
+  payload.selected_pair=(chosen.arrival_airport||'')+'|'+(chosen.departure_airport||'');
+  if(chosen.arrival_airport) payload.notes=[payload.notes,`اقتراح جاهز (${airAr(chosen.arrival_airport)}↔${airAr(chosen.departure_airport)})`].filter(Boolean).join(' | ');
   btn.disabled=true; btn.textContent='جارٍ الإرسال…';
   try{
     const res=await fetch(INTAKE,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
