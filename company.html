@@ -81,6 +81,7 @@
   .rq-price b{font-size:16px}
   .rq-price-note{font-size:11px;color:var(--muted);margin-top:3px}
   .rq-cust{margin-top:6px;font-size:13.5px;color:#7c3aed;font-weight:700}
+  .rq-reoff{margin-top:6px;display:inline-block;font-size:12.5px;font-weight:800;color:#c2410c;background:#fff7ed;border:1px solid #fed7aa;border-radius:9px;padding:5px 10px}
   .rq-by{margin-top:8px;font-size:13px;color:var(--brand2);background:#fdf2f8;border:1px solid #f5d9ea;border-radius:9px;padding:7px 10px}
   .rq-empty{color:var(--muted);text-align:center;padding:30px}
   .pf-logo-up{display:flex;gap:12px;align-items:center}
@@ -370,9 +371,10 @@ function renderReqs(){
     const cust=r.customer_name?`<div class="rq-cust">👤 العميل / Customer: <b>${esc(r.customer_name)}</b></div>`:'';
     const reqby=r.requested_by?`<div class="rq-cust" style="color:#0e5a40">🧑‍💼 طلبه / Requested by: <b>${esc(r.requested_by)}</b></div>`:'';
     const by=(sent&&r.sent_by)?`<div class="rq-by">🧑‍💼 رتّبه لك / Arranged by: <b>${esc(r.sent_by)}</b></div>`:'';
+    const reoff=r.is_reoffer?`<div class="rq-reoff">🔁 عرض آخر للعميل / Alternative offer</div>`:'';
     return `<div class="rq">
       <div class="top"><span class="dest">${flag} ${esc(r.destination)}</span><span class="rq-bdg ${sent?'rq-sent':'rq-working'}">${sent?'✅ تم الرد / Ready':'⏳ جاري العمل / In progress'}</span></div>
-      ${cust}${reqby}
+      ${reoff}${cust}${reqby}
       <div class="meta"><span class="ref">${esc(r.ref_no)}</span> · ${r.days} أيام/days · ${r.pax} أشخاص/pax · ${rqFmtDate(r.created_at)}</div>
       ${by}${price}${dl}
     </div>`;
