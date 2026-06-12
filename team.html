@@ -1065,12 +1065,13 @@ async function tswFetch(cell){
   menu.innerHTML = '<div class="hsw-loading">جارٍ جلب الجولات…</div>';
   const dest = getLine(lastProgramRaw, 'DEST');
   const current = cell.dataset.tname || '';
+  const city = cell.dataset.tcity || '';   // مدينة اليوم (لليوم الحر)
   const pax = (parsedData && parsedData.adults) || 2;
   try{
     const res = await fetch(SUPABASE_URL, {
       method:'POST',
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
-      body: JSON.stringify({ action:'list_tours', dest, current, pax })
+      body: JSON.stringify({ action:'list_tours', dest, current, pax, city })
     });
     const data = await res.json();
     cell.dataset.loaded = '1';
@@ -2090,6 +2091,10 @@ if (toursLines.length) {
 const _tDay = l => (String(l).split('|')[0]||'').trim();
 const _tCnt = {}, _tSum = {}, _tLast = {};
 toursLines.forEach((l,i)=>{ const d=_tDay(l); _tCnt[d]=(_tCnt[d]||0)+1; _tSum[d]=(_tSum[d]||0)+computeTransferTourLineTotal(l.split('|').map(x=>x.trim()), xferTourMeta, '🗺️ جولة').total; _tLast[d]=i; });
+// مدينة كل يوم (من الفنادق) — نمرّرها لليوم الحر عشان تطلع جولات منطقته
+const _dayCity = {}; let _dcn = 1;
+hotelsLines.forEach(hl => { const _c=(hl.split('|')[1]||'').trim(); const _n=hotelLineTotals(hl).nights||0; for(let _k=0;_k<_n;_k++) _dayCity[_dcn+_k]=_c; _dcn+=_n; });
+if(hotelsLines.length) _dayCity[_dcn] = (hotelsLines[hotelsLines.length-1].split('|')[1]||'').trim();
 html += `<div class="section-card tsw-host">
 <div class="section-card-header"><div class="section-card-title">🗺️ الجولات السياحية</div><div class="section-total">${toursTotal.toLocaleString()} ريال</div></div>
 <table class="pricing-table">
@@ -2103,9 +2108,10 @@ const paxCell = (p.length >= 5 && p[4]) ? p[4] : `${persons} (META)`;
 // أيام التنقّل فقط تبقى نصاً. اليوم الحر = قائمة (يتحوّل لجولة أو يبقى حر). الجولات = قائمة.
 const isTransit = /^يوم\s*تنقّل/.test(p[1]||'') || /^يوم\s*تنقل/.test(p[1]||'');
 const isFreeDay = !isTransit && (p[2]==='حر' || /^يوم\s*حر/.test(p[1]||''));
+const _tcity = _dayCity[parseInt((p[0]||'').replace(/[^\d]/g,''),10)] || '';
 const tourCell = isTransit
   ? `<td><strong>${p[1]||''}</strong></td>`
-  : `<td class="tsw-cell" data-tname="${hswEsc(p[1]||'')}" data-tprice="${tourLineT}" data-tline="${hswEsc(l)}"${isFreeDay?' data-tfree="1"':''}>`
+  : `<td class="tsw-cell" data-tname="${hswEsc(p[1]||'')}" data-tprice="${tourLineT}" data-tline="${hswEsc(l)}"${isFreeDay?` data-tfree="1" data-tcity="${hswEsc(_tcity)}"`:''}>`
     + `<div class="hsw-cur" onclick="tswToggle(this)"><span class="hsw-name"><strong>${p[1]||''}</strong></span><span class="hsw-chev">▼</span></div>`
     + `<div class="hsw-menu"></div></td>`;
 const vCell = (isTransit || isFreeDay)

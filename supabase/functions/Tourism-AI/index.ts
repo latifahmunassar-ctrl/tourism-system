@@ -2280,16 +2280,17 @@ function isNonTourRow(name: string): boolean {
   return TOUR_NON_TOUR_PREFIXES.some(p => n.startsWith(p));
 }
 async function handleListTours(body: {
-  dest?: string; current?: string; pax?: number | string;
+  dest?: string; current?: string; pax?: number | string; city?: string;
 }): Promise<Response> {
   try {
     const destAr = String(body.dest || "").trim();
     const current = String(body.current || "").trim();
+    const cityHint = String(body.city || "").trim();   // مدينة اليوم من البرنامج (لليوم الحر)
     const pax = parseInt(String(body.pax ?? "").replace(/[^\d]/g, ""), 10) || 2;
     const destKey = destAr ? detectDestination([{ role: "user", content: destAr }]) : null;
     const cityDefs = destKey ? (DEST_CITIES[destKey] || []) : [];
-    // مدينة الجولة الحالية عبر أنماط المدن (اسم الجولة غالباً يذكر المدينة/معلَماً فيها)
-    const curCity = cityDefs.find(c => c.pattern.test(current));
+    // مدينة اليوم: أولاً التلميح الصريح (مدينة اليوم)، وإلا من نص الجولة/اليوم الحالي
+    const curCity = (cityHint && cityDefs.find(c => c.pattern.test(cityHint))) || cityDefs.find(c => c.pattern.test(current));
     if (!curCity) return new Response(JSON.stringify({ tours: [] }), { headers: CORS_HEADERS });
 
     const supabase = createClient(
