@@ -515,13 +515,14 @@ Deno.serve(async (req) => {
       const c = await companyByToken(supabase, token);
       if (!c || c.status !== "approved") return json({ error: "انتهت الجلسة، سجّلي الدخول من جديد" }, 401);
       const { data: reqs } = await supabase.from("client_requests")
-        .select("ref_no, destination, days, pax, status, created_at, view_token, company_price, customer_name, sent_by")
+        .select("ref_no, destination, days, pax, status, created_at, view_token, company_price, customer_name, requested_by, sent_by")
         .eq("company_id", c.id).order("created_at", { ascending: false }).limit(100);
       const requests = (reqs || []).map((r: any) => ({
         ref_no: r.ref_no, destination: r.destination, days: r.days, pax: r.pax,
         status: r.status === "sent" ? "sent" : "working",
         created_at: r.created_at,
         customer_name: r.customer_name || null,
+        requested_by: r.requested_by || null,
         view_token: r.status === "sent" ? r.view_token : null,
         company_price: r.status === "sent" ? r.company_price : null,
         sent_by: r.status === "sent" ? (r.sent_by || null) : null,
@@ -710,7 +711,7 @@ Deno.serve(async (req) => {
     if (adminAction === "list") {
       const { data, error } = await supabase
         .from("client_requests")
-        .select("id, ref_no, company_name, customer_name, destination, pax, days, status, group_total, created_at, sent_at, sent_by, company_id")
+        .select("id, ref_no, company_name, customer_name, requested_by, destination, pax, days, status, group_total, created_at, sent_at, sent_by, company_id")
         .order("created_at", { ascending: false }).limit(200);
       if (error) return json({ error: error.message }, 500);
       // attach each company's pricing currency
@@ -816,6 +817,7 @@ Deno.serve(async (req) => {
     contact_phone: companyRow ? String(companyRow.contact_phone || "") : String(body.contact_phone || "").trim(),
     destination,
     customer_name: String(body.customer_name || "").trim() || null,
+    requested_by: String(body.requested_by || "").trim() || null,
     cities_nights: Array.isArray(body.cities_nights) ? body.cities_nights : [],
     sel_distribution: body.selected_distribution ? String(body.selected_distribution) : null,
     sel_pair: body.selected_pair ? String(body.selected_pair) : null,
