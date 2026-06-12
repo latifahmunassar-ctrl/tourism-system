@@ -128,10 +128,11 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Bandung",  pattern: /باندون?[جغقك]|bandung/i },
     { canonical: "Puncak",   pattern: /بونشاك|puncak/i },
   ],
-  // عُمان — صلالة + مسقط (مناطق فرعية: وسط المدينة، هوانا — داخل location)
+  // عُمان — صلالة + مسقط + الجبل الأخضر
   Oman: [
-    { canonical: "Salalah",  pattern: /صلال[ةه]|salalah/i },
-    { canonical: "Muscat",   pattern: /مسقط|مسقت|muscat/i },
+    { canonical: "Salalah",      pattern: /صلال[ةه]|salalah/i },
+    { canonical: "Muscat",       pattern: /مسقط|مسقت|muscat/i },
+    { canonical: "Jabal Akhdar", pattern: /(?:ال)?ج[يب]ل\s*الا?خضر|jabal\s*akhdar|jebel\s*akhdar|green\s*mountain/i },
   ],
 };
 
@@ -640,7 +641,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     "Nha Trang": "نها ترانج", "Da Lat": "دالات",
     "Kuala Lumpur": "كوالالمبور", "Selangor": "سيلانجور",
     "Langkawi": "لانكاوي", "Penang": "بينانج", "Cameron Highlands": "كاميرون هايلاند",
-    "Bangkok": "بانكوك", "Phuket": "بوكيت", "Krabi": "كرابي", "Salalah": "صلالة", "Muscat": "مسقط",
+    "Bangkok": "بانكوك", "Phuket": "بوكيت", "Krabi": "كرابي", "Salalah": "صلالة", "Muscat": "مسقط", "Jabal Akhdar": "الجبل الأخضر",
     "Chiang Mai": "شيانغ ماي", "Pattaya": "باتايا", "Koh Samui": "كوه ساموي",
     "Istanbul": "اسطنبول", "Trabzon": "طرابزون", "Uzungol": "أوزنجول",
     "Ayder": "ايدر", "Rize": "ريزا", "Bursa": "بورصة", "Sapanca": "سابانجا",
@@ -928,6 +929,7 @@ async function buildDataContext(
       [/بونشاك|puncak/i,                                 "Puncak"],
       [/صلال[ةه]|salalah/i,                              "Salalah"],
       [/مسقط|مسقت|muscat/i,                              "Muscat"],
+      [/(?:ال)?ج[يب]ل\s*الا?خضر|jabal\s*akhdar|jebel\s*akhdar|green\s*mountain/i, "Jabal Akhdar"],
       // Turkey
       [/ريزا|rize|اشلاي|فرتتنه/i,                        "Rize"],
       [/أوزنجول|أوزونغول|uzungol|اوزنجول/i,              "Uzungol"],
@@ -2704,7 +2706,7 @@ Deno.serve(async (req) => {
         "Nha Trang": "نها ترانج", "Da Lat": "دالات",
         "Kuala Lumpur": "كوالالمبور", "Selangor": "سيلانجور",
         "Langkawi": "لانكاوي", "Penang": "بينانج", "Cameron Highlands": "كاميرون هايلاند",
-        "Bangkok": "بانكوك", "Phuket": "بوكيت", "Krabi": "كرابي", "Salalah": "صلالة", "Muscat": "مسقط",
+        "Bangkok": "بانكوك", "Phuket": "بوكيت", "Krabi": "كرابي", "Salalah": "صلالة", "Muscat": "مسقط", "Jabal Akhdar": "الجبل الأخضر",
         "Chiang Mai": "شيانغ ماي", "Pattaya": "باتايا", "Koh Samui": "كوه ساموي",
         "Istanbul": "اسطنبول", "Trabzon": "طرابزون", "Uzungol": "أوزنجول",
         "Ayder": "ايدر", "Rize": "ريزا", "Bursa": "بورصة", "Sapanca": "سابانجا",
