@@ -515,13 +515,15 @@ Deno.serve(async (req) => {
       const c = await companyByToken(supabase, token);
       if (!c || c.status !== "approved") return json({ error: "انتهت الجلسة، سجّلي الدخول من جديد" }, 401);
       const { data: reqs } = await supabase.from("client_requests")
-        .select("ref_no, destination, days, pax, status, created_at, view_token, company_price, customer_name, requested_by, sent_by, is_reoffer")
+        .select("ref_no, destination, days, pax, status, created_at, sent_at, view_token, company_price, customer_name, requested_by, sent_by, is_reoffer, group_ref")
         .eq("company_id", c.id).order("created_at", { ascending: false }).limit(100);
       // عروض «عرض آخر» تظهر للشركة فقط بعد الإرسال (المسوّدات تبقى مخفية عند الموظف)
       const requests = (reqs || []).filter((r: any) => !(r.is_reoffer && r.status !== "sent")).map((r: any) => ({
         ref_no: r.ref_no, destination: r.destination, days: r.days, pax: r.pax,
         status: r.status === "sent" ? "sent" : "working",
         created_at: r.created_at,
+        sent_at: r.sent_at || null,
+        group_ref: r.group_ref || r.ref_no,
         customer_name: r.customer_name || null,
         requested_by: r.requested_by || null,
         is_reoffer: !!r.is_reoffer,
@@ -781,6 +783,7 @@ Deno.serve(async (req) => {
         date_from: o.date_from, transport: o.transport, extra_bed: o.extra_bed, sim_count: o.sim_count,
         notes: o.notes, built_program: o.built_program, client_program: o.client_program,
         group_total: o.group_total, status: "pending_review", is_reoffer: true,
+        group_ref: o.group_ref || o.ref_no,   // كل عروض نفس العميل تتشارك مرجع المجموعة
       }).select("id, ref_no, view_token").single();
       if (error) return json({ error: error.message }, 500);
       return json({ ok: true, id: ins.id, ref_no: ins.ref_no, view_token: ins.view_token });

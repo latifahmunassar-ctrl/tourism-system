@@ -171,7 +171,7 @@
       <button type="button" class="pf-back" onclick="showRequest()">← رجوع لطلب البرنامج / Back to request</button>
       <h2>📋 طلباتي / My Requests</h2>
       <div class="rq-filters">
-        <div><label class="rq-lbl">🔎 رقم الطلب / Ref</label><input id="fRef" oninput="renderReqs()" placeholder="REQ-2026-..."></div>
+        <div><label class="rq-lbl">🔎 بحث (رقم / موظف / عميل)</label><input id="fRef" oninput="renderReqs()" placeholder="رقم الطلب أو اسم الموظف الطالب أو العميل"></div>
         <div><label class="rq-lbl">📍 الوجهة / Destination</label><select id="fDest" onchange="renderReqs()"><option value="">كل الوجهات / All</option></select></div>
         <div><label class="rq-lbl">⏳ الحالة / Status</label><select id="fStatus" onchange="renderReqs()"><option value="">الكل / All</option><option value="working">جاري العمل / In progress</option><option value="sent">تم الرد / Ready</option></select></div>
       </div>
@@ -359,8 +359,15 @@ async function loadMyRequests(){
   }catch(ex){ $('reqsList').innerHTML='<div class="rq-empty">'+esc(ex.message)+'</div>'; }
 }
 function renderReqs(){
-  const ref=($('fRef').value||'').trim().toLowerCase(), dest=$('fDest').value, st=$('fStatus').value;
-  const rows=MY_REQS.filter(r=>(!ref||String(r.ref_no||'').toLowerCase().includes(ref))&&(!dest||r.destination===dest)&&(!st||r.status===st));
+  const q=($('fRef').value||'').trim().toLowerCase(), dest=$('fDest').value, st=$('fStatus').value;
+  const rows=MY_REQS.filter(r=>
+    (!q || [r.ref_no,r.requested_by,r.customer_name].some(x=>String(x||'').toLowerCase().includes(q)))
+    && (!dest||r.destination===dest) && (!st||r.status===st));
+  // ترتيب: عروض نفس العميل (group_ref) متجاورة، والأحدث أولاً (آخر إرسال يرفع المجموعة كلها للمقدمة)
+  const gk=r=>r.group_ref||r.ref_no;
+  const gmax={};
+  rows.forEach(r=>{ const t=new Date(r.sent_at||r.created_at).getTime(); const k=gk(r); if(!gmax[k]||t>gmax[k]) gmax[k]=t; });
+  rows.sort((a,b)=> (gmax[gk(b)]-gmax[gk(a)]) || (new Date(b.sent_at||b.created_at)-new Date(a.sent_at||a.created_at)));
   if(!rows.length){ $('reqsList').innerHTML='<div class="rq-empty">لا توجد طلبات مطابقة · No matching requests</div>'; return; }
   $('reqsList').innerHTML=rows.map(r=>{
     const flag=DEST_FLAG[r.destination]||'📍', sent=r.status==='sent';
