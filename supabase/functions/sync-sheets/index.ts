@@ -855,6 +855,7 @@ function extractSuggestions(
     },
     Oman: {
       "صلاله": "Salalah", "صلالة": "Salalah",
+      "مسقط": "Muscat", "مسقت": "Muscat", "muscat": "Muscat",
     },
   };
   const airportMap = AIRPORT_MAPS[destination] || {};

@@ -2546,6 +2546,10 @@ Deno.serve(async (req) => {
             "اسطنبول": "Istanbul", "istanbul": "Istanbul",
             "طرابزون": "Trabzon", "طربزون": "Trabzon", "trabzon": "Trabzon",
           },
+          Oman: {
+            "مسقط": "Muscat", "مسقت": "Muscat", "muscat": "Muscat",
+            "صلالة": "Salalah", "صلاله": "Salalah", "salalah": "Salalah",
+          },
         };
         const map = AIRPORT_LOOKUP[detectedDest] || {};
         const findAirport = (re: RegExp): string | null => {
