@@ -300,6 +300,9 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 .bf-sug-dist{font-size:12.5px;margin-top:4px}
 /* قائمة عدد الغرف في جدول التسعيرة */
 .rooms-sel{padding:5px 8px;border:1px solid #b8e0d0;border-radius:8px;font:inherit;font-weight:800;background:#e9f7f1;color:#0e5a40;cursor:pointer;font-size:14px}
+/* زر حذف رحلة طيران */
+.del-flight{background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;border-radius:8px;padding:5px 10px;font:inherit;font-weight:800;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.del-flight:hover{background:#fecaca}
 /* تنبيه سعة الغرفة أقل من عدد الأشخاص */
 .cap-warn{background:#fff3cd;border:2px solid #ffc107;color:#7a5b00;border-radius:12px;padding:14px 18px;margin:14px 0;font-size:15px;font-weight:700;line-height:1.8;box-shadow:0 3px 12px rgba(255,193,7,.25)}
 /* ── تبديل الفندق من قائمة منسدلة داخل جدول التسعيرة ── */
@@ -652,6 +655,19 @@ let hotelRooms = [];
 let _lastHotelCities = [];
 function hRooms(i){ const n = parseInt(hotelRooms[i], 10); return (n >= 1 && n <= 10) ? n : 1; }
 function setHotelRooms(i, n){ hotelRooms[i] = Math.max(1, Math.min(10, parseInt(n,10)||1)); if (typeof lastProgramRaw === 'string' && lastProgramRaw) buildReview(lastProgramRaw); }
+// حذف رحلة طيران من البرنامج (لو العميل حاجزها بنفسه) — يُعيد احتساب الإجمالي
+function removeFlightLine(btn){
+  try{
+    const line = (btn && btn.dataset && btn.dataset.line) || '';
+    if(!line) return;
+    if(!confirm('حذف هذه الرحلة من البرنامج؟ (لو العميل حاجزها بنفسه)')) return;
+    const newRaw = String(lastProgramRaw||'').split('\n').filter(l => l.trim() !== line.trim()).join('\n');
+    if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر حذف الرحلة — لم تتغيّر.'); return; }
+    for (let i = history.length - 1; i >= 0; i--){ if (history[i].role === 'assistant'){ history[i].content = newRaw; break; } }
+    buildReview(newRaw);
+    addMessage('sys','تم حذف الطيران من البرنامج وأُعيد احتساب الإجمالي.');
+  }catch(e){ addMessage('sys','خطأ في حذف الرحلة: '+(e&&e.message?e.message:e)); }
+}
 // تكاليف إضافية يدوية يضيفها الموظف (غير موجودة بالشيت): تذاكر دولية، فيزا، تأمين…
 // تُجمع كلياً على إجمالي المجموعة (قبل الربح)، وتظهر بالاسم في قسمها بالـ PDF.
 let extraCosts = []; // [{ label:'', amount:'', section:'flights' }]
@@ -2040,7 +2056,7 @@ const flightSectionTitle = flightsLines.some(l => String(l.split('|')[1] || '').
 html += `<div class="section-card">
 <div class="section-card-header"><div class="section-card-title">${flightSectionTitle}</div><div class="section-total">${flightsTotal.toLocaleString()} ريال</div></div>
 <table class="pricing-table">
-<thead><tr><th>الرحلة</th><th>النوع</th><th>السعر/شخص</th><th>الأشخاص</th><th>الإجمالي</th></tr></thead>
+<thead><tr><th>الرحلة</th><th>النوع</th><th>السعر/شخص</th><th>الأشخاص</th><th>الإجمالي</th><th>حذف</th></tr></thead>
 <tbody>${flightsLines.map(l => {
 const p=l.split('|').map(x=>x.trim());
 const k1 = String(p[1] || '');
@@ -2058,7 +2074,7 @@ const paxNoun = pax === 1 ? 'شخص' : 'أشخاص';
 const breakdown = (kids + infants > 0 && pax === adults + kids + infants)
   ? ` (${adults} بالغ${kids ? ` + ${kids} ${kids === 1 ? 'طفل' : 'أطفال'}` : ''}${infants ? ` + ${infants} رضيع` : ''})`
   : '';
-return `<tr><td><strong>${p[0]||''}</strong></td><td><span class="type-badge ${tc}">${p[1]||''}</span></td><td class="price-cell">${p[2]||''}</td><td>${pax} ${paxNoun}${breakdown}</td><td class="price-cell">${(total||parseMoney(p[4])).toLocaleString()} ريال</td></tr>`;
+return `<tr><td><strong>${p[0]||''}</strong></td><td><span class="type-badge ${tc}">${p[1]||''}</span></td><td class="price-cell">${p[2]||''}</td><td>${pax} ${paxNoun}${breakdown}</td><td class="price-cell">${(total||parseMoney(p[4])).toLocaleString()} ريال</td><td><button type="button" class="del-flight" data-line="${hswEsc(l)}" onclick="removeFlightLine(this)" title="حذف الرحلة (لو العميل حاجزها بنفسه)">🗑️ حذف</button></td></tr>`;
 }).join('')}</tbody>
 </table></div>`;
 }
