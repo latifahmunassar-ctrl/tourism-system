@@ -120,6 +120,7 @@
       <div style="margin-inline-start:auto;display:flex;gap:8px;flex-wrap:wrap">
         <button class="out tab" id="btnHome" onclick="showRequest()">✈️ طلب برنامج / Request</button>
         <button class="out tab" id="btnRequests" onclick="showRequests()">📋 طلباتي / My requests</button>
+        <button class="out tab" id="btnStaff" onclick="showStaff()">👥 موظفيني / My Staff</button>
         <button class="out tab" id="btnProfile" onclick="showProfile()">🏢 معلوماتي / My info</button>
         <button class="out" onclick="logout()">خروج / Logout</button>
       </div>
@@ -166,6 +167,19 @@
       </div>
     </div>
 
+    <!-- ===== موظفيني (لوحة تحكم) ===== -->
+    <div class="card" id="staffView" style="display:none">
+      <button type="button" class="pf-back" onclick="showRequest()">← رجوع لطلب البرنامج / Back to request</button>
+      <h2>👥 موظفيني / My Staff</h2>
+      <p class="sub">أضف أسماء موظفيك، وبيظهرون كقائمة عند طلب البرنامج ليختار كل واحد اسمه.<br>Add your staff — they'll appear as a dropdown when requesting a program.</p>
+      <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px">
+        <div class="field" style="flex:1;margin:0"><label>اسم الموظف / Staff name</label><input id="newStaffName" placeholder="مثلاً: خالد العتيبي" onkeydown="if(event.key==='Enter'){event.preventDefault();addStaff();}"></div>
+        <button type="button" class="gobtn" style="margin:0" onclick="addStaff()">+ إضافة / Add</button>
+      </div>
+      <div id="staffErr" class="errBox" style="display:none"></div>
+      <div id="staffList"></div>
+    </div>
+
     <!-- ===== طلباتي (صفحة منفصلة) ===== -->
     <div class="card" id="requestsView" style="display:none">
       <button type="button" class="pf-back" onclick="showRequest()">← رجوع لطلب البرنامج / Back to request</button>
@@ -209,7 +223,9 @@
         </div>
 
         <div class="field"><label>اسم الموظف الذي طلب البرنامج / Requested by <span class="req">*</span></label>
-          <input id="requested_by" placeholder="اسم موظفك الذي طلب البرنامج / your staff member" required></div>
+          <select id="reqStaffSel" onchange="reqStaffChange()" style="display:none"></select>
+          <input id="requested_by" placeholder="اسم موظفك الذي طلب البرنامج / your staff member">
+          <div class="rq-hint" id="staffHint" style="display:none;margin-top:6px">💡 أضف أسماء موظفيك من تبويب «👥 موظفيني» وبتظهر هنا كقائمة. · Add staff in “My Staff”.</div></div>
       </div>
 
       <div class="card">
@@ -291,6 +307,7 @@ function showApp(){
   else $('pLogo').textContent='🏢';
   renderProfile();
   setTab('btnHome');
+  loadCompanyStaff(false);   // حمّل أسماء الموظفين لتعبئة قائمة الطلب
 }
 
 // ── company profile (view + edit → pending owner approval) ──
@@ -336,10 +353,62 @@ function startEdit(){
   $('peErr').style.display='none';
 }
 function cancelEdit(){ $('profEdit').style.display='none'; $('profView').style.display='block'; }
-function hideViews(){ $('profileCard').style.display='none'; $('requestsView').style.display='none'; $('form').style.display='none'; $('done').style.display='none'; }
-function setTab(id){ ['btnHome','btnRequests','btnProfile'].forEach(b=>{const e=$(b); if(e) e.classList.toggle('on', b===id);}); }
+function hideViews(){ $('profileCard').style.display='none'; $('requestsView').style.display='none'; $('staffView').style.display='none'; $('form').style.display='none'; $('done').style.display='none'; }
+function setTab(id){ ['btnHome','btnRequests','btnStaff','btnProfile'].forEach(b=>{const e=$(b); if(e) e.classList.toggle('on', b===id);}); }
 function showProfile(){ cancelEdit(); hideViews(); $('profileCard').style.display=''; setTab('btnProfile'); window.scrollTo({top:0,behavior:'smooth'}); }
-function showRequest(){ hideViews(); $('form').style.display=''; setTab('btnHome'); window.scrollTo({top:0,behavior:'smooth'}); }
+function showRequest(){ hideViews(); $('form').style.display=''; setTab('btnHome'); populateReqStaff(); window.scrollTo({top:0,behavior:'smooth'}); }
+function showStaff(){ hideViews(); $('staffView').style.display=''; setTab('btnStaff'); loadCompanyStaff(true); window.scrollTo({top:0,behavior:'smooth'}); }
+
+// ── موظفي الشركة (قائمة الاسم في الطلب) ──
+let COMPANY_STAFF=[];
+async function loadCompanyStaff(render){
+  try{
+    const res=await fetch(INTAKE+'?company_action=staff_list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:TOKEN})});
+    const d=await res.json(); COMPANY_STAFF=(d&&d.staff)||[];
+  }catch(e){ COMPANY_STAFF=[]; }
+  if(render) renderStaffList();
+  populateReqStaff();
+}
+function renderStaffList(){
+  const el=$('staffList'); if(!el) return;
+  el.innerHTML = COMPANY_STAFF.length
+    ? COMPANY_STAFF.map(s=>`<div class="rq" style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px"><b>🧑‍💼 ${esc(s.name)}</b><button type="button" class="out" style="color:#dc2626;border-color:#fca5a5" onclick="removeStaff('${s.id}','${esc(s.name)}')">حذف / Remove</button></div>`).join('')
+    : '<div class="rq-empty">لا يوجد موظفون بعد — أضف أول اسم فوق. · No staff yet.</div>';
+}
+async function addStaff(){
+  const inp=$('newStaffName'), err=$('staffErr'); const name=(inp.value||'').trim();
+  err.style.display='none';
+  if(!name){ err.textContent='اكتب اسم الموظف.'; err.style.display='block'; return; }
+  try{
+    const res=await fetch(INTAKE+'?company_action=staff_add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:TOKEN,name})});
+    const d=await res.json(); if(!res.ok||!d.ok) throw new Error(d.error||'تعذّر الإضافة');
+    inp.value=''; await loadCompanyStaff(true);
+  }catch(e){ err.textContent=e.message; err.style.display='block'; }
+}
+async function removeStaff(id,name){
+  if(!confirm('حذف «'+name+'» من قائمة موظفيك؟')) return;
+  try{ await fetch(INTAKE+'?company_action=staff_remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:TOKEN,id})}); await loadCompanyStaff(true); }catch(e){}
+}
+// قائمة الاسم في فورم الطلب (احتياطي يدوي لو فاضية + خيار «اسم آخر»)
+function populateReqStaff(){
+  const sel=$('reqStaffSel'), inp=$('requested_by'), hint=$('staffHint'); if(!sel||!inp) return;
+  if(COMPANY_STAFF.length){
+    sel.innerHTML='<option value="">— اختر اسمك / Choose —</option>'+COMPANY_STAFF.map(s=>`<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('')+'<option value="__other__">✏️ اسم آخر / Other…</option>';
+    sel.style.display=''; inp.style.display='none'; hint.style.display='none';
+  } else {
+    sel.style.display='none'; inp.style.display=''; hint.style.display='';
+  }
+}
+function reqStaffChange(){
+  const sel=$('reqStaffSel'), inp=$('requested_by');
+  if(sel.value==='__other__'){ inp.style.display=''; inp.value=''; inp.focus(); }
+  else { inp.style.display='none'; }
+}
+function reqStaffValue(){
+  const sel=$('reqStaffSel');
+  if(sel && sel.style.display!=='none' && sel.value && sel.value!=='__other__') return sel.value;
+  return ($('requested_by').value||'').trim();
+}
 function showRequests(){ hideViews(); $('requestsView').style.display=''; setTab('btnRequests'); loadMyRequests(); window.scrollTo({top:0,behavior:'smooth'}); }
 
 // ── طلباتي ──
@@ -515,10 +584,10 @@ $('form').addEventListener('submit', async e=>{
   e.preventDefault();
   const err=$('errBox'); err.style.display='none'; const btn=$('submitBtn');
   if(!destSel.value||!$('pax').value||!$('days').value){ err.textContent='عبّي الوجهة، عدد البالغين، وعدد الأيام.'; err.style.display='block'; return; }
-  if(!($('requested_by').value||'').trim()){ err.textContent='اكتب اسم الموظف الذي طلب البرنامج.'; err.style.display='block'; return; }
+  if(!reqStaffValue()){ err.textContent='اختر أو اكتب اسم الموظف الذي طلب البرنامج.'; err.style.display='block'; return; }
   const payload={
     company_token:TOKEN,
-    requested_by:($('requested_by').value||'').trim(),
+    requested_by:reqStaffValue(),
     customer_name:($('customer_name').value||'').trim(),
     destination:destSel.value, pax:+$('pax').value, children:+$('children').value||0,
     transport:document.querySelector('input[name=transport]:checked').value,

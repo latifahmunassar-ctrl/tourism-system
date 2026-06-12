@@ -563,6 +563,34 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    // ── company-managed staff names (for the «اسم الموظف الطالب» dropdown) ──
+    if (companyAction === "staff_list") {
+      const c = await companyByToken(supabase, String(body.token || ""));
+      if (!c || c.status !== "approved") return json({ error: "انتهت الجلسة، سجّلي الدخول من جديد" }, 401);
+      const { data } = await supabase.from("company_staff").select("id, name").eq("company_id", c.id).eq("active", true).order("name");
+      return json({ ok: true, staff: data || [] });
+    }
+    if (companyAction === "staff_add") {
+      const c = await companyByToken(supabase, String(body.token || ""));
+      if (!c || c.status !== "approved") return json({ error: "انتهت الجلسة، سجّلي الدخول من جديد" }, 401);
+      const nm = String(body.name || "").trim();
+      if (!nm) return json({ error: "الاسم مطلوب" }, 400);
+      const { data: dup } = await supabase.from("company_staff").select("id").eq("company_id", c.id).eq("active", true).ilike("name", nm).limit(1);
+      if (dup && dup.length) return json({ error: "الاسم موجود مسبقاً" }, 409);
+      const { error } = await supabase.from("company_staff").insert({ company_id: c.id, name: nm });
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+    if (companyAction === "staff_remove") {
+      const c = await companyByToken(supabase, String(body.token || ""));
+      if (!c || c.status !== "approved") return json({ error: "انتهت الجلسة، سجّلي الدخول من جديد" }, 401);
+      const sid = String(body.id || "");
+      if (!sid) return json({ error: "id required" }, 400);
+      const { error } = await supabase.from("company_staff").update({ active: false }).eq("id", sid).eq("company_id", c.id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+
     return json({ error: "unknown company_action" }, 400);
   }
 
