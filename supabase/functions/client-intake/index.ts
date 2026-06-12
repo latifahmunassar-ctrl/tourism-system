@@ -241,6 +241,7 @@ interface ClientView {
   destination: string; meta: string; dateFrom: string; dateTo: string; pax: number; children: number;
   hotels: Array<{ name: string; city: string; stars: string; room: string; nights: string; meals: string; rooms?: number }>;
   timeline: Array<{ day: number; items: Array<{ kind: string; text: string }> }>;
+  extra_car_days: number[];
   groupTotal: number | null; currency: string;
 }
 
@@ -289,14 +290,17 @@ function toClientView(raw: string): { view: ClientView; groupTotal: number | nul
     return m ? parseInt(m[1], 10) : null;
   };
 
+  const extraCarDays = new Set<number>();   // أيام بسيارة إضافية → تنبيه في ملف الشركة
   for (const l of section("TRANSFERS")) {
     const p = l.split("|").map(s => s.trim());
     const d = dayOf(p[0] || ""); if (d === null) continue;
+    if (/نقل إضافي/.test(p[1] || "")) { extraCarDays.add(d); continue; }   // لا يظهر كنقطة خام
     addDay(d, "transfer", p[1] || "");
   }
   for (const l of section("TOURS")) {
     const p = l.split("|").map(s => s.trim());
     const d = dayOf(p[0] || ""); if (d === null) continue;
+    if (/نقل إضافي/.test(p[1] || "")) { extraCarDays.add(d); continue; }
     addDay(d, "tour", p[1] || "");
   }
   for (const l of section("FLIGHTS")) {
@@ -330,6 +334,7 @@ function toClientView(raw: string): { view: ClientView; groupTotal: number | nul
     pax: metaPax ? parseInt(metaPax[1], 10) : 0,
     children: metaKids ? parseInt(metaKids[1], 10) : 0,
     hotels, timeline,
+    extra_car_days: Array.from(extraCarDays).sort((a, b) => a - b),
     groupTotal, currency: "ريال",
   };
   return { view, groupTotal };

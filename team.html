@@ -2783,15 +2783,18 @@ ${flightExtrasHtml}
 
 // Build itinerary by day
 const allActivities = [];
+const _extraCarDays = new Set();   // أيام فيها سيارة إضافية (سيارتان) → تنبيه في البرنامج
 transfersLines.forEach(l => {
 const p=l.split('|').map(x=>x.trim());
 const dayNum = parseTransferDayNum(p[0]) || 999;
+if(/نقل إضافي/.test(p[1]||'')){ if(dayNum!==999) _extraCarDays.add(dayNum); return; }  // لا يظهر كنقطة خام
 const isPickup=(p[2]||'').toLowerCase().includes('pickup');
 allActivities.push({ day: dayNum, icon: isPickup?'🚗':'🚖', text: p[1]||'', badge: isPickup?'استقبال':'توديع', color: isPickup?'#d4a843':'#ef4444' });
 });
 toursLines.forEach(l => {
 const p=l.split('|').map(x=>x.trim());
 const dayNum = parseTransferDayNum(p[0]) || 999;
+if(/نقل إضافي/.test(p[1]||'')){ if(dayNum!==999) _extraCarDays.add(dayNum); return; }
 const iconMap={'ثقافية':'🏛️','طبيعية':'🌿','بحرية':'🏖️'};
 allActivities.push({ day: dayNum, icon: iconMap[p[2]]||'🗺️', text: p[1]||'', badge: p[2]||'', color: '#1a3a8f' });
 });
@@ -2842,6 +2845,14 @@ itineraryHTML += `
 <span style="font-size:16px;font-weight:800;padding:7px 14px;border-radius:8px;background:#e8f0ff;color:#1a3a8f;white-space:nowrap;">${act.badge}</span>
 </div>`;
 });
+}
+// تنبيه السيارة الإضافية — فقط للأيام التي فيها سيارتان
+if (_extraCarDays.has(d)) {
+itineraryHTML += `
+<div style="display:flex;align-items:center;gap:14px;padding:12px 0 4px;">
+<span style="font-size:30px;">🚗</span>
+<div style="flex:1;font-size:19px;font-weight:800;color:#0e5a40;line-height:1.5;">تم إضافة سيارة إضافية (سيارتان لهذا اليوم)</div>
+</div>`;
 }
 itineraryHTML += `</div></div>`;
 }

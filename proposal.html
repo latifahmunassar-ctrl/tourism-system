@@ -134,7 +134,14 @@ function renderRichPDF(d){
   function dateForDay(day){ const d0=_start(); if(!d0||!day)return''; const d=new Date(d0); d.setDate(d.getDate()+(+day-1)); return `${d.getDate()} ${_M[d.getMonth()]} ${d.getFullYear()}`; }
   const fls=[]; (p.timeline||[]).forEach(t=>(t.items||[]).forEach(it=>{ if(it.kind==='flight') fls.push({day:t.day,text:it.text}); }));
   const flights=fls.length?`<div class="pdf-section" style="padding-top:0"><div class="pdf-section-title">✈️ الطيران والقطار / Flights & Trains</div>${fls.map(f=>`<div class="pdf-keep"><div class="fl-name">✈️ ${esc(f.text)}</div><div class="fl-meta">📅 اليوم ${f.day}${dateForDay(f.day)?' · '+esc(dateForDay(f.day)):''}</div></div>`).join('')}</div>`:'';
-  const days=(p.timeline||[]).map(t=>`<div class="day-row"><div class="day-num"><b>${t.day}</b><span>اليوم</span></div><div class="day-acts">${(t.items||[]).map(it=>`${ICON[it.kind]||'•'} ${esc(it.text)}`).join('<br>')}</div></div>`).join('');
+  const _ecd=new Set((p.extra_car_days||[]).map(Number));
+  const _tlMap={}; (p.timeline||[]).forEach(t=>_tlMap[+t.day]=t.items||[]);
+  const _allDays=[...new Set([...(p.timeline||[]).map(t=>+t.day), ..._ecd])].sort((a,b)=>a-b);
+  const days=_allDays.map(day=>{
+    const acts=(_tlMap[day]||[]).map(it=>`${ICON[it.kind]||'•'} ${esc(it.text)}`).join('<br>');
+    const carNote=_ecd.has(day)?`${acts?'<br>':''}<span style="color:#0e5a40;font-weight:800;">🚗 تم إضافة سيارة إضافية (سيارتان لهذا اليوم)</span>`:'';
+    return `<div class="day-row"><div class="day-num"><b>${day}</b><span>اليوم</span></div><div class="day-acts">${acts}${carNote}</div></div>`;
+  }).join('');
   document.getElementById('app').innerHTML=`
     <div class="pdf-actions"><button class="btn" onclick="window.print()">🖨️ حفظ / طباعة PDF</button><button class="btn btn-wa" onclick="shareWhatsApp()">📲 مشاركة واتساب</button></div>
     <div id="pdf">
