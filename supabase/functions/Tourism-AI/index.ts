@@ -2579,11 +2579,13 @@ Deno.serve(async (req) => {
         const destAr: Record<string, string> = {
           vietnam: "فيتنام", Malaysia: "ماليزيا", thailand: "تايلاند",
           Turky: "تركيا", russia: "روسيا", Bosnia: "البوسنة", indonesia: "إندونيسيا",
+          Oman: "عمان",
         };
         const cityAr: Record<string, string> = {
           "Ha Noi": "هانوي", "Ho Chi Minh": "هوتشي مينه",
           "Da Nang": "دانانج", "Phu Quoc": "فوكوك",
           "Istanbul": "اسطنبول", "Trabzon": "طرابزون",
+          "Muscat": "مسقط", "Salalah": "صلالة",
         };
         const ar = (canonical: string) => cityAr[canonical] || canonical;
         const lines: string[] = [];
