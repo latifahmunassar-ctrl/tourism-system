@@ -467,7 +467,9 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
 // عمود الاسم هو أيسر عمود سعر (أو يسبقه)، وعمود العملة إن وُجد بعدها.
 // كل صف بيانات يُنتج tour واحدة فيها variants متعدّدة.
 
-const PRICE_TIER_RE = /(\d+\s*-\s*\d+\s*pax|pax\s*\d+(\s*-\s*\d+)?|per\s*pax|(jan|feb|mar|apr|may|jun(e)?|jul(y)?|aug|sep|oct|nov|dec)\w*\s*month|month|tour\s*fees?)/i;
+// نطاقات السعر: "1-3 Pax"، "Pax 1-4"، وكذلك نطاقات بأنواع سيارات بلا Pax مثل
+// "6- 11 mini bus" / "4-5 forwheel" / "1-3 sedan" (شيت عُمان الجديد).
+const PRICE_TIER_RE = /(\d+\s*-\s*\d+\s*(?:pax|sedan|for\s*wheel|forwheel|4\s*wd|mini\s*bus|bus|van|coaster)|pax\s*\d+(\s*-\s*\d+)?|per\s*pax|(jan|feb|mar|apr|may|jun(e)?|jul(y)?|aug|sep|oct|nov|dec)\w*\s*month|month|tour\s*fees?)/i;
 const CURRENCY_RE   = /^(currency|عملة|العملة)$/i;
 
 interface TourHeader {
@@ -496,8 +498,15 @@ function findTourHeader(rows: string[][]): TourHeader | null {
     }
     if (priceCols.length >= 1) candidates.push({ i, priceCols, currencyCol });
   }
-  // رتّب: الأكثر أعمدة أسعار أولاً
-  candidates.sort((a, b) => b.priceCols.length - a.priceCols.length);
+  // رتّب حسب أكبر "عنقود" أعمدة أسعار متجاورة (نافذة 7 أعمدة) — يفضّل صف النطاقات
+  // التفصيلية (مثل "1-3 Pax | 4-5 | 6-11") على صف عام فيه "Tour Fees" مبعثرة.
+  const clusterSize = (cols: { col: number }[]): number => {
+    const xs = cols.map(p => p.col).sort((a, b) => a - b);
+    let best = 0;
+    for (let s = 0; s < xs.length; s++) { let c = 0; for (let e = s; e < xs.length && xs[e] - xs[s] <= 7; e++) c++; if (c > best) best = c; }
+    return best;
+  };
+  candidates.sort((a, b) => (clusterSize(b.priceCols) - clusterSize(a.priceCols)) || (b.priceCols.length - a.priceCols.length));
 
   for (const cand of candidates) {
     let { i, priceCols, currencyCol } = cand;
