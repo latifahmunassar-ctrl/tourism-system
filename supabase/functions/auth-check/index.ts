@@ -1,15 +1,18 @@
 /**
- * auth-check — التحقّق من كلمة مرور التطبيق
+ * auth-check — التحقّق من كلمة مرور داشبورد البرامج + طبقة أمان (دولة + سجل دخول)
  *
  * البيئة المطلوبة (Supabase Secrets):
- *   APP_PASSWORD → كلمة المرور المشتركة بين الموظفات
+ *   APP_PASSWORD            → كلمة المرور المشتركة (مؤقتة أثناء التحويل)
+ *   SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY → للوصول لجداول الأمان والسجل
  *
- * التغيير: لتغيير كلمة السر، شغّلي على الترمنال:
- *   supabase secrets set APP_PASSWORD=الكلمة_الجديدة --project-ref ofotvacszlmrqxzfjmtn
- * أو غيّريها من Supabase Dashboard → Project Settings → Edge Functions → Secrets
- *
- * بمجرّد تغيير كلمة السر، الموظفات اللاتي عندهنّ الكلمة القديمة لن يستطعن الدخول.
+ * منطق الأمان (مرحلة ١):
+ *   • يكشف دولة الـIP ويسجّل كل محاولة في auth_log.
+ *   • يحظر الدخول من خارج الدول المسموحة فقط إذا enforce_country=true
+ *     في جدول security_settings (افتراضياً false = «وضع المراقبة» بلا حظر).
+ *   • لتغيير كلمة السر: supabase secrets set APP_PASSWORD=... --project-ref ofotvacszlmrqxzfjmtn
  */
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -18,54 +21,94 @@ const CORS_HEADERS = {
   "Content-Type": "application/json",
 };
 
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: CORS_HEADERS });
+}
+
 // مقارنة آمنة من timing-attacks (constant-time)
 function safeEquals(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
+  for (let i = 0; i < a.length; i++) result |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return result === 0;
+}
+
+function clientIP(req: Request): string {
+  const xff = req.headers.get("x-forwarded-for") || "";
+  const first = xff.split(",")[0].trim();
+  return first || req.headers.get("x-real-ip") || "";
+}
+
+function isPrivateIP(ip: string): boolean {
+  return !ip || /^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|fc|fd|localhost)/i.test(ip);
+}
+
+// كشف الدولة عبر ipwho.is (مجاني، https، بلا مفتاح). يرجّع رمز ISO-2 أو null.
+async function lookupCountry(ip: string): Promise<{ code: string | null; note: string }> {
+  if (isPrivateIP(ip)) return { code: null, note: "private_ip" };
+  try {
+    const r = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}?fields=success,country_code`, {
+      signal: AbortSignal.timeout(4000),
+    });
+    const j = await r.json();
+    if (j && j.success && j.country_code) return { code: String(j.country_code).toUpperCase(), note: "ok" };
+    return { code: null, note: "geo_no_result" };
+  } catch (_e) {
+    return { code: null, note: "geo_error" };
+  }
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ ok: false, error: "Method not allowed" }), {
-      status: 405,
-      headers: CORS_HEADERS,
-    });
-  }
+  if (req.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
+
+  const ip = clientIP(req);
+  const ua = req.headers.get("user-agent") || "";
+  const supa = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+
+  const logAttempt = async (row: Record<string, unknown>) => {
+    try { await supa.from("auth_log").insert(row); } catch (_e) { /* السجل best-effort */ }
+  };
 
   try {
     const { password } = await req.json();
     if (typeof password !== "string" || password.length === 0) {
-      return new Response(JSON.stringify({ ok: false, error: "كلمة السر مطلوبة" }), {
-        status: 400,
-        headers: CORS_HEADERS,
-      });
+      return json({ ok: false, error: "كلمة السر مطلوبة" }, 400);
     }
 
     const expected = Deno.env.get("APP_PASSWORD");
-    if (!expected) {
-      return new Response(JSON.stringify({ ok: false, error: "النظام غير مهيّأ" }), {
-        status: 500,
-        headers: CORS_HEADERS,
-      });
-    }
+    if (!expected) return json({ ok: false, error: "النظام غير مهيّأ" }, 500);
+    const passOk = safeEquals(password, expected);
 
-    if (safeEquals(password, expected)) {
-      return new Response(JSON.stringify({ ok: true }), { headers: CORS_HEADERS });
-    } else {
-      return new Response(JSON.stringify({ ok: false, error: "كلمة سر غير صحيحة" }), {
-        status: 401,
-        headers: CORS_HEADERS,
-      });
+    // كشف الدولة + تحميل الإعدادات والقائمة بالتوازي
+    const [geo, settingsRes, allowedRes] = await Promise.all([
+      lookupCountry(ip),
+      supa.from("security_settings").select("enforce_country, fail_open_geo").eq("id", 1).single(),
+      supa.from("security_allowed_countries").select("code"),
+    ]);
+    const enforce = settingsRes.data?.enforce_country ?? false;
+    const failOpen = settingsRes.data?.fail_open_geo ?? true;
+    const allowed = (allowedRes.data || []).map((r: { code: string }) => String(r.code).toUpperCase());
+
+    const geoKnown = !!geo.code;
+    const countryAllowed = geoKnown ? allowed.includes(geo.code!) : failOpen;
+
+    // القرار
+    if (!passOk) {
+      await logAttempt({ event: "login_fail", ip, country: geo.code, country_allowed: countryAllowed, success: false, user_agent: ua, detail: geo.note });
+      return json({ ok: false, error: "كلمة سر غير صحيحة" }, 401);
     }
+    if (enforce && !countryAllowed) {
+      await logAttempt({ event: geoKnown ? "blocked_country" : "geo_unknown", ip, country: geo.code, country_allowed: false, success: false, user_agent: ua, detail: geo.note });
+      return json({ ok: false, error: "الدخول غير مسموح من موقعك الحالي. تواصلي مع الإدارة." }, 403);
+    }
+    // نجاح (في وضع المراقبة قد تكون الدولة غير مدرجة — نسجّلها لتظهر في اللوحة)
+    await logAttempt({ event: "login_ok", ip, country: geo.code, country_allowed: countryAllowed, success: true, user_agent: ua, detail: geo.note });
+    return json({ ok: true }, 200);
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: e.message }), {
-      status: 500,
-      headers: CORS_HEADERS,
-    });
+    return json({ ok: false, error: (e as Error).message }, 500);
   }
 });
