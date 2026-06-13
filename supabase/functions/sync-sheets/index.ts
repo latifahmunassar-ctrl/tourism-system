@@ -899,7 +899,7 @@ function extractSuggestions(
   // Match either "<N> ايام/يوم" OR "ايام/يوم <N>", strip the country word
   // and any non-paren cruft (dots, dashes) from the label. Dots between the
   // digit and 'ايام' are absorbed by the \s*[.\s]* allowance.
-  const COUNTRY_WORDS = /(?:تايلاند|تيلاند|فيتنام|ماليزيا|البوسنه|البوسنة|تركيا|اندونيسيا|روسيا|ع[ُّ]?مان|دبي|الإمارات|الامارات)/u;
+  const COUNTRY_WORDS = /(?:تايلاند|تيلاند|فيتنام|ماليزيا|البوسنه|البوسنة|تركيا|اندونيسيا|روسيا|ع[ُّ]?مان|سلطن[هة]|دبي|الإمارات|الامارات)/u;
   // "أيام" متسامح: يقبل ألف ممدودة (آ) ومسافة داخل الكلمة ("آيا م" — إملاء شيت
   // فيتنام لترويسات 12 يوم) و"ايام/أيام" و"يوم".
   const DAY_WORD = "(?:[أاآ]\\s?ي\\s?ا\\s?م|يوم)";
