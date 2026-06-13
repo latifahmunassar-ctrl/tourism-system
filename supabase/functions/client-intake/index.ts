@@ -600,7 +600,7 @@ Deno.serve(async (req) => {
   if (adminAction) {
     // Company-account management is OWNER-only (separate private dashboard) and
     // uses COMPANIES_ADMIN_SECRET. The staff request inbox keeps CLIENT_ADMIN_SECRET.
-    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove", "staff_report", "sec_overview", "sec_country_add", "sec_country_remove", "sec_enforce_set"].includes(adminAction);
+    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove", "staff_report", "sec_overview", "sec_country_add", "sec_country_remove", "sec_enforce_set", "sec_device_trust", "sec_device_approve", "sec_device_remove"].includes(adminAction);
     const expected = (Deno.env.get(ownerOnly ? "COMPANIES_ADMIN_SECRET" : "CLIENT_ADMIN_SECRET") || "").trim();
     const got = (req.headers.get("x-admin-secret") || "").trim();
 
@@ -614,6 +614,20 @@ Deno.serve(async (req) => {
     }
 
     if (!expected || got !== expected) return json({ error: "unauthorized" }, 401);
+
+    // الموظفة (بعد تسجيل الدخول) تطلب توثيق جهازها الحالي → pending بانتظار موافقة المالكة
+    if (adminAction === "device_request") {
+      const b = await req.json().catch(() => ({} as Record<string, any>));
+      const token = String(b.device_token || "").trim();
+      const label = String(b.label || "").trim().slice(0, 80) || "جهاز بدون اسم";
+      const uaStr = String(b.user_agent || req.headers.get("user-agent") || "").slice(0, 300);
+      if (token.length < 16) return json({ error: "رمز الجهاز غير صالح" }, 400);
+      const { data: existing } = await supabase.from("trusted_devices").select("id, approved").eq("device_token", token).maybeSingle();
+      if (existing) return json({ ok: true, status: existing.approved ? "approved" : "pending" });
+      const { error } = await supabase.from("trusted_devices").insert({ device_token: token, label, user_agent: uaStr, approved: false });
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true, status: "pending" });
+    }
 
     // owner: manage staff names (used in the «إرسال للشركة» dropdown)
     if (adminAction === "staff_add") {
@@ -673,16 +687,45 @@ Deno.serve(async (req) => {
 
     // ── أمان داشبورد البرامج: سجل الدخول + الدول المسموحة + تفعيل الحظر ──
     if (adminAction === "sec_overview") {
-      const [settingsRes, countriesRes, logRes] = await Promise.all([
+      const [settingsRes, countriesRes, logRes, devicesRes] = await Promise.all([
         supabase.from("security_settings").select("enforce_country, fail_open_geo").eq("id", 1).single(),
         supabase.from("security_allowed_countries").select("code, name_ar").order("name_ar"),
         supabase.from("auth_log").select("created_at, event, ip, country, country_allowed, success, detail").order("created_at", { ascending: false }).limit(100),
+        supabase.from("trusted_devices").select("id, label, approved, last_country, last_ip, last_seen, created_at").order("created_at", { ascending: false }).limit(100),
       ]);
       return json({
         settings: settingsRes.data || { enforce_country: false, fail_open_geo: true },
         countries: countriesRes.data || [],
         log: logRes.data || [],
+        devices: devicesRes.data || [],
       });
+    }
+    // المالكة توثّق جهازها الحالي فوراً (approved=true)
+    if (adminAction === "sec_device_trust") {
+      const b = await req.json().catch(() => ({} as Record<string, any>));
+      const token = String(b.device_token || "").trim();
+      const label = String(b.label || "").trim().slice(0, 80) || "جهاز المالكة";
+      const uaStr = String(b.user_agent || req.headers.get("user-agent") || "").slice(0, 300);
+      if (token.length < 16) return json({ error: "رمز الجهاز غير صالح" }, 400);
+      const nowIso = new Date().toISOString();
+      const { error } = await supabase.from("trusted_devices")
+        .upsert({ device_token: token, label, user_agent: uaStr, approved: true, approved_by: "owner", approved_at: nowIso }, { onConflict: "device_token" });
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+    if (adminAction === "sec_device_approve") {
+      const id = url.searchParams.get("id") || "";
+      if (!id) return json({ error: "id required" }, 400);
+      const { error } = await supabase.from("trusted_devices").update({ approved: true, approved_by: "owner", approved_at: new Date().toISOString() }).eq("id", id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+    if (adminAction === "sec_device_remove") {
+      const id = url.searchParams.get("id") || "";
+      if (!id) return json({ error: "id required" }, 400);
+      const { error } = await supabase.from("trusted_devices").delete().eq("id", id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
     }
     if (adminAction === "sec_country_add") {
       const body = await req.json().catch(() => ({} as Record<string, any>));

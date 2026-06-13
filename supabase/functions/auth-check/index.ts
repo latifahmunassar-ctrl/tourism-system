@@ -74,7 +74,9 @@ Deno.serve(async (req) => {
   };
 
   try {
-    const { password } = await req.json();
+    const body = await req.json();
+    const password = body?.password;
+    const deviceToken = typeof body?.device_token === "string" ? body.device_token.trim() : "";
     if (typeof password !== "string" || password.length === 0) {
       return json({ ok: false, error: "كلمة السر مطلوبة" }, 400);
     }
@@ -83,31 +85,42 @@ Deno.serve(async (req) => {
     if (!expected) return json({ ok: false, error: "النظام غير مهيّأ" }, 500);
     const passOk = safeEquals(password, expected);
 
-    // كشف الدولة + تحميل الإعدادات والقائمة بالتوازي
-    const [geo, settingsRes, allowedRes] = await Promise.all([
+    // كشف الدولة + تحميل الإعدادات والقائمة + الجهاز الموثوق بالتوازي
+    const [geo, settingsRes, allowedRes, deviceRes] = await Promise.all([
       lookupCountry(ip),
       supa.from("security_settings").select("enforce_country, fail_open_geo").eq("id", 1).single(),
       supa.from("security_allowed_countries").select("code"),
+      deviceToken
+        ? supa.from("trusted_devices").select("id, approved").eq("device_token", deviceToken).maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
     const enforce = settingsRes.data?.enforce_country ?? false;
     const failOpen = settingsRes.data?.fail_open_geo ?? true;
     const allowed = (allowedRes.data || []).map((r: { code: string }) => String(r.code).toUpperCase());
 
     const geoKnown = !!geo.code;
-    const countryAllowed = geoKnown ? allowed.includes(geo.code!) : failOpen;
+    const deviceTrusted = !!(deviceRes?.data && deviceRes.data.approved);
+    // الجهاز الموثوق يتخطّى حصر الدولة من أي مكان
+    const countryAllowed = deviceTrusted ? true : (geoKnown ? allowed.includes(geo.code!) : failOpen);
+
+    // تحديث آخر ظهور للجهاز الموثوق (best-effort)
+    if (deviceTrusted) {
+      try { await supa.from("trusted_devices").update({ last_seen: new Date().toISOString(), last_ip: ip, last_country: geo.code }).eq("device_token", deviceToken); } catch (_e) { /* */ }
+    }
+    const devNote = deviceTrusted ? "trusted_device" : geo.note;
 
     // القرار
     if (!passOk) {
-      await logAttempt({ event: "login_fail", ip, country: geo.code, country_allowed: countryAllowed, success: false, user_agent: ua, detail: geo.note });
+      await logAttempt({ event: "login_fail", ip, country: geo.code, country_allowed: countryAllowed, success: false, user_agent: ua, detail: devNote });
       return json({ ok: false, error: "كلمة سر غير صحيحة" }, 401);
     }
     if (enforce && !countryAllowed) {
-      await logAttempt({ event: geoKnown ? "blocked_country" : "geo_unknown", ip, country: geo.code, country_allowed: false, success: false, user_agent: ua, detail: geo.note });
+      await logAttempt({ event: geoKnown ? "blocked_country" : "geo_unknown", ip, country: geo.code, country_allowed: false, success: false, user_agent: ua, detail: devNote });
       return json({ ok: false, error: "الدخول غير مسموح من موقعك الحالي. تواصلي مع الإدارة." }, 403);
     }
     // نجاح (في وضع المراقبة قد تكون الدولة غير مدرجة — نسجّلها لتظهر في اللوحة)
-    await logAttempt({ event: "login_ok", ip, country: geo.code, country_allowed: countryAllowed, success: true, user_agent: ua, detail: geo.note });
-    return json({ ok: true }, 200);
+    await logAttempt({ event: "login_ok", ip, country: geo.code, country_allowed: countryAllowed, success: true, user_agent: ua, detail: devNote });
+    return json({ ok: true, device_trusted: deviceTrusted }, 200);
   } catch (e) {
     return json({ ok: false, error: (e as Error).message }, 500);
   }

@@ -374,6 +374,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
   <div class="user-pill"><div class="avatar">م</div>موظف المبيعات</div>
   <button class="logout-btn" type="button" onclick="inboxOpen()" style="position:relative;">📥 طلبات الشركات<span id="inboxBadge" style="display:none;position:absolute;top:-7px;left:-7px;background:#e0218a;color:#fff;border-radius:999px;font-size:10px;padding:1px 6px;font-weight:900;">0</span></button>
   <a href="https://latifahmunassar-ctrl.github.io/dashboard/" target="_blank" rel="noopener" class="logout-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">📊 لوحة التحكم</a>
+  <button class="logout-btn" type="button" onclick="trustDevice()" title="اطلبي توثيق هذا الجهاز ليدخل من أي دولة">🔓 توثيق الجهاز</button>
   <button class="logout-btn" type="button" onclick="logout()">تسجيل خروج</button>
 </div>
 </div>
@@ -579,6 +580,15 @@ const FILLER_IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA34AAAQ4CAYAAA
 const SUPABASE_URL = 'https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/Tourism-AI';
 const AUTH_URL = 'https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/auth-check';
 const PROGRAMS_URL = 'https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/programs';
+// رمز جهاز ثابت لهذا المتصفح (يُرسل مع الدخول؛ الجهاز الموثوق يتخطّى حصر الدولة)
+function getDeviceToken(){
+  let t = localStorage.getItem('alezz_device_token');
+  if(!t || t.length < 16){
+    t = (self.crypto && crypto.randomUUID ? crypto.randomUUID() : ('dev-'+Date.now()+'-'+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2)));
+    localStorage.setItem('alezz_device_token', t);
+  }
+  return t;
+}
 
 // ─── LOGIN ─────────────────────────────────────────────────
 const AUTH_KEY = 'tourism_auth_v1';
@@ -610,7 +620,7 @@ async function doLogin() {
     const res = await fetch(AUTH_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
-      body: JSON.stringify({ password })
+      body: JSON.stringify({ password, device_token: getDeviceToken() })
     });
     const data = await res.json();
     if (res.ok && data.ok) {
@@ -634,6 +644,27 @@ function logout() {
   sessionStorage.removeItem(AUTH_KEY);
   localStorage.removeItem('alezz_admin_secret');
   showLogin();
+}
+
+// اطلبي توثيق هذا الجهاز ليدخل من أي دولة (الموظفة تطلب → المالكة توافق من داشبورد الشركات)
+async function trustDevice() {
+  const sec = localStorage.getItem('alezz_admin_secret') || '';
+  if (!sec) { alert('سجّلي الدخول أولاً.'); return; }
+  let label = prompt('اسم هذا الجهاز (مثل: جوال لطيفة):', '');
+  if (label === null) return;
+  label = (label || '').trim() || 'جهازي';
+  try {
+    const r = await fetch('https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake?admin_action=device_request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'x-admin-secret': sec },
+      body: JSON.stringify({ device_token: getDeviceToken(), label, user_agent: navigator.userAgent })
+    });
+    const d = await r.json();
+    if (d.ok) alert(d.status === 'approved'
+      ? 'هذا الجهاز موثّق ✅ يدخل من أي دولة.'
+      : 'تم إرسال طلب توثيق هذا الجهاز ⏳\nبانتظار موافقة الإدارة من داشبورد الشركات.');
+    else alert(d.error || 'تعذّر إرسال الطلب');
+  } catch (_) { alert('تعذّر الاتصال، حاولي مجدداً.'); }
 }
 
 // On load
