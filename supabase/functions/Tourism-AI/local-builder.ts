@@ -1137,11 +1137,15 @@ export function pickTourVariantPrice(tour: TourRow, paxCount: number, isShared: 
     return 0;
   };
   if (variants.some(v => labelMonth(v.label) > 0)) {
-    if (month) {
-      const m = variants.find(v => labelMonth(v.label) === month);
-      if (m) return m.price;
+    const mv = variants.map(v => ({ v, m: labelMonth(v.label) })).filter(x => x.m > 0).sort((a, b) => a.m - b.m);
+    const base = mv.length ? mv[0].v.price : (variants[0].price || tour.price || 0);  // أدنى شهر = السعر الأساسي
+    if (!month || !mv.length) return base;
+    // موسم الذروة الصيفي يونيو–أغسطس له سعر مختلف؛ باقي السنة بالسعر الأساسي.
+    if (month >= 6 && month <= 8) {
+      const summer = mv.find(x => x.m >= 6 && x.m <= 8);
+      return summer ? summer.v.price : mv[mv.length - 1].v.price;
     }
-    return variants[0].price || tour.price || 0;   // لا شهر → أول variant
+    return base;
   }
   // Find best matching variant by pax range
   const labelMatches = (label: string): boolean => {
