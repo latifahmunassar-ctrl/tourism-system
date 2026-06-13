@@ -2272,6 +2272,21 @@ async function handleListHotels(body: {
   }
 }
 
+// يستخرج رقم الشهر من تاريخ بأي صيغة (ISO، أو DD-MM-YYYY، أو اسم شهر عربي/إنجليزي).
+function parseMonthFromDate(s: string): number {
+  const t = String(s || "");
+  const iso = t.match(/\b\d{4}-(\d{1,2})-\d{1,2}\b/);
+  if (iso) return parseInt(iso[1], 10);
+  const dmy = t.match(/\b(\d{1,2})[-\/.](\d{1,2})[-\/.]\d{4}\b/);
+  if (dmy) return parseInt(dmy[2], 10);
+  const arMonths = ["يناير", "فبراير", "مارس", "[أا]بريل", "مايو", "يونيو", "يوليو", "[أا]غسطس", "سبتمبر", "[أا]كتوبر", "نوفمبر", "ديسمبر"];
+  for (let i = 0; i < arMonths.length; i++) if (new RegExp(arMonths[i]).test(t)) return i + 1;
+  const enMonths = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const tl = t.toLowerCase();
+  for (let i = 0; i < enMonths.length; i++) if (tl.includes(enMonths[i])) return i + 1;
+  return 0;
+}
+
 // ── list_tours: جولات نفس مدينة الجولة الحالية (لقائمة تبديل الجولة) ──────────
 // المدخل: { action:"list_tours", dest:"فيتنام", current:"<اسم الجولة الحالية>", pax:3 }
 const TOUR_NON_TOUR_PREFIXES = [
@@ -2284,13 +2299,14 @@ function isNonTourRow(name: string): boolean {
   return TOUR_NON_TOUR_PREFIXES.some(p => n.startsWith(p));
 }
 async function handleListTours(body: {
-  dest?: string; current?: string; pax?: number | string; city?: string;
+  dest?: string; current?: string; pax?: number | string; city?: string; date?: string;
 }): Promise<Response> {
   try {
     const destAr = String(body.dest || "").trim();
     const current = String(body.current || "").trim();
     const cityHint = String(body.city || "").trim();   // مدينة اليوم من البرنامج (لليوم الحر)
     const pax = parseInt(String(body.pax ?? "").replace(/[^\d]/g, ""), 10) || 2;
+    const month = parseMonthFromDate(String(body.date || ""));   // شهر التاريخ للتسعير الموسمي
     const destKey = destAr ? detectDestination([{ role: "user", content: destAr }]) : null;
     const cityDefs = destKey ? (DEST_CITIES[destKey] || []) : [];
     // مدينة اليوم: أولاً التلميح الصريح (مدينة اليوم)، وإلا من نص الجولة/اليوم الحالي
@@ -2314,7 +2330,7 @@ async function handleListTours(body: {
       const key = (t.name || "").trim();
       if (!key || seen.has(key)) continue;
       seen.add(key);
-      tours.push({ name: t.name, type: t.type, price: pickTourVariantPrice(t, pax, false) });
+      tours.push({ name: t.name, type: t.type, price: pickTourVariantPrice(t, pax, false, month) });
     }
     tours.sort((a, b) => a.price - b.price);
     return new Response(JSON.stringify({ tours }), { headers: CORS_HEADERS });
