@@ -354,6 +354,16 @@ function findHotelHeader(rows: string[][]): { rowIdx: number; cols: Record<strin
   return null;
 }
 
+// يوحّد صيغة التاريخ إلى ISO (YYYY-MM-DD) — الشيت يخلط بين "2026-06-01" و"01-06-2026".
+function normalizeISODate(s: string): string {
+  const t = (s || "").trim();
+  if (!t) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;                  // أصلاً ISO
+  const m = t.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/); // DD-MM-YYYY → ISO
+  if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  return t;
+}
+
 function extractHotels(rows: string[][], destination: string, debug?: { rejects: string[] }): object[] {
   const hotels: object[] = [];
   const reject = (i: number, reason: string, row: string[]) =>
@@ -384,8 +394,8 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
     let includeStr = get(row, "include");
     const currencyStr = get(row, "currency");
     let occupancyStr = get(row, "occupancy");
-    const dateFromRaw = get(row, "dateFrom");   // موسم: من تاريخ
-    const dateToRaw   = get(row, "dateTo");     // موسم: إلى تاريخ
+    const dateFromRaw = normalizeISODate(get(row, "dateFrom"));   // موسم: من تاريخ
+    const dateToRaw   = normalizeISODate(get(row, "dateTo"));     // موسم: إلى تاريخ
     // Fallback: many sheets accidentally put the "N adults + M child" value
     // in the `Include` column instead of the `تتسع`/occupancy one. If the
     // occupancy cell is blank but Include looks like an occupancy string
