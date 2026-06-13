@@ -1148,7 +1148,11 @@ export function pickTourVariantPrice(tour: TourRow, paxCount: number, isShared: 
     }
     return 0;
   };
-  if (variants.some(v => labelMonth(v.label) > 0)) {
+  const hasPaxRange = variants.some(v => /\d+\s*-\s*\d+/.test(String(v.label || "")) || /per\s*pax/i.test(String(v.label || "")));
+
+  // (1) Pure month-based seasonal rows (no pax ranges): pick by the request's
+  // month so May ≠ June pricing is honored (Turkey seasonal tour rows).
+  if (!hasPaxRange && variants.some(v => labelMonth(v.label) > 0)) {
     const mv = variants.map(v => ({ v, m: labelMonth(v.label) })).filter(x => x.m > 0).sort((a, b) => a.m - b.m);
     const base = mv.length ? mv[0].v.price : (variants[0].price || tour.price || 0);  // أدنى شهر = السعر الأساسي
     if (!month || !mv.length) return base;
@@ -1159,7 +1163,11 @@ export function pickTourVariantPrice(tour: TourRow, paxCount: number, isShared: 
     }
     return base;
   }
-  // Find best matching variant by pax range
+
+  // (2) Pax-range rows. These MAY also carry seasonal columns: the same pax
+  // range repeated, ordered base-season then peak-season (Turkey transfers:
+  // col "1-8 pax"=380 عادي ثم "1-8 pax"=415 ذروة). We match the pax bucket
+  // first, then disambiguate the season by COLUMN ORDER among the survivors.
   const labelMatches = (label: string): boolean => {
     const lbl = label.toLowerCase();
     if (/per\s*pax/.test(lbl)) return isShared;
@@ -1172,23 +1180,30 @@ export function pickTourVariantPrice(tour: TourRow, paxCount: number, isShared: 
     if (single) return paxCount === parseInt(single[1], 10);
     return false;
   };
-  const match = variants.find(v => labelMatches(v.label));
-  if (match) return match.price;
-  // No exact range matched. If the group is LARGER than every defined pax
-  // range (e.g. 9 pax but the row caps at "pax 4-8"), use the BIGGEST vehicle
-  // (highest upper bound) — never fall back to variants[0] (the cheapest
-  // "1-3" bucket), which silently under-charges a large group. The caller
-  // surfaces a "vehicle holds N — add another car if needed" warning.
-  const ranged = variants
-    .map(v => { const m = String(v.label || "").toLowerCase().match(/(\d+)\s*-\s*(\d+)/); return m ? { v, lo: parseInt(m[1], 10), hi: parseInt(m[2], 10) } : null; })
-    .filter((x): x is { v: { label: string; price: number }; lo: number; hi: number } => !!x);
-  if (ranged.length) {
-    const maxHi = Math.max(...ranged.map(r => r.hi));
-    if (paxCount > maxHi) return ranged.reduce((a, b) => (b.hi > a.hi ? b : a)).v.price; // أكبر سيارة
-    return ranged.reduce((a, b) => (b.lo < a.lo ? b : a)).v.price;                       // أصغر من كل النطاقات → أصغر سيارة
+
+  // Candidate variants for this pax count (column order preserved).
+  let cands = variants.filter(v => labelMatches(v.label));
+  if (cands.length === 0) {
+    // No exact bucket. If the group is LARGER than every defined range (e.g. 10
+    // pax but rows cap at "1-8 pax"), use the BIGGEST vehicle; if smaller than
+    // all, the smallest. NEVER fall back to variants[0] (cheapest), which would
+    // under-charge a large group. Keep ALL columns of the chosen bucket so the
+    // seasonal pick below still applies. Caller adds a capacity warning.
+    const ranged = variants
+      .map(v => { const m = String(v.label || "").toLowerCase().match(/(\d+)\s*-\s*(\d+)/); return m ? { v, lo: parseInt(m[1], 10), hi: parseInt(m[2], 10) } : null; })
+      .filter((x): x is { v: { label: string; price: number }; lo: number; hi: number } => !!x);
+    if (ranged.length) {
+      const maxHi = Math.max(...ranged.map(r => r.hi));
+      if (paxCount > maxHi) cands = ranged.filter(r => r.hi === maxHi).map(r => r.v);   // أكبر سيارة
+      else { const minLo = Math.min(...ranged.map(r => r.lo)); cands = ranged.filter(r => r.lo === minLo).map(r => r.v); }
+    }
   }
-  // Fallback: first variant
-  return variants[0].price || tour.price || 0;
+  if (cands.length === 0) return variants[0].price || tour.price || 0;
+  if (cands.length === 1) return cands[0].price;
+  // Multiple columns share the matched bucket → seasonal: first = base season,
+  // last = peak (June–August).
+  if (month >= 6 && month <= 8) return cands[cands.length - 1].price;
+  return cands[0].price;
 }
 
 // أقصى سعة ركاب للصف (من شرائح "pax A-B")؛ 0 إذا ما فيه نطاقات معرّفة.
