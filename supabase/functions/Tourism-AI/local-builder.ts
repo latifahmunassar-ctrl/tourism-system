@@ -1174,8 +1174,32 @@ export function pickTourVariantPrice(tour: TourRow, paxCount: number, isShared: 
   };
   const match = variants.find(v => labelMatches(v.label));
   if (match) return match.price;
+  // No exact range matched. If the group is LARGER than every defined pax
+  // range (e.g. 9 pax but the row caps at "pax 4-8"), use the BIGGEST vehicle
+  // (highest upper bound) — never fall back to variants[0] (the cheapest
+  // "1-3" bucket), which silently under-charges a large group. The caller
+  // surfaces a "vehicle holds N — add another car if needed" warning.
+  const ranged = variants
+    .map(v => { const m = String(v.label || "").toLowerCase().match(/(\d+)\s*-\s*(\d+)/); return m ? { v, lo: parseInt(m[1], 10), hi: parseInt(m[2], 10) } : null; })
+    .filter((x): x is { v: { label: string; price: number }; lo: number; hi: number } => !!x);
+  if (ranged.length) {
+    const maxHi = Math.max(...ranged.map(r => r.hi));
+    if (paxCount > maxHi) return ranged.reduce((a, b) => (b.hi > a.hi ? b : a)).v.price; // أكبر سيارة
+    return ranged.reduce((a, b) => (b.lo < a.lo ? b : a)).v.price;                       // أصغر من كل النطاقات → أصغر سيارة
+  }
   // Fallback: first variant
   return variants[0].price || tour.price || 0;
+}
+
+// أقصى سعة ركاب للصف (من شرائح "pax A-B")؛ 0 إذا ما فيه نطاقات معرّفة.
+export function vehicleMaxCapacity(tour: TourRow): number {
+  const variants = tour.variants || [];
+  let maxHi = 0;
+  for (const v of variants) {
+    const m = String(v.label || "").toLowerCase().match(/(\d+)\s*-\s*(\d+)/);
+    if (m) maxHi = Math.max(maxHi, parseInt(m[2], 10));
+  }
+  return maxHi;
 }
 
 export function formatProgram(data: ProgramData): string {
@@ -1291,7 +1315,12 @@ export function formatProgram(data: ProgramData): string {
     const price = pickTourVariantPrice(t.row, adults, treatAsShared, reqMonth);
     const lineTotal = treatAsShared ? price * adults : price;
     transfersTotal += lineTotal;
-    out += `اليوم ${t.day} | ${t.row.name.trim()} | ${t.kind} | ${formatNumber(lineTotal)} ريال\n`;
+    // سعة السيارة: لو المجموعة أكبر من أقصى شريحة ركاب (سيارة خاصة)، نختار أكبر
+    // سيارة ونضيف "(سيارة تتسع N)" حتى تعرض الواجهة تنبيهاً للموظف ليضيف سيارة
+    // ثانية عند الحاجة. لا ينطبق على الليموزين المشترك (تسعير بالراكب).
+    const cap = treatAsShared ? 0 : vehicleMaxCapacity(t.row);
+    const capNote = (cap > 0 && adults > cap) ? ` (سيارة تتسع ${cap})` : "";
+    out += `اليوم ${t.day} | ${t.row.name.trim()}${capNote} | ${t.kind} | ${formatNumber(lineTotal)} ريال\n`;
   }
   out += "\n";
 

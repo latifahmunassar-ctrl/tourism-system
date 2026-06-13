@@ -2026,6 +2026,24 @@ if (_minCap > 0 && adults > _minCap) {
   html += `<div class="cap-warn">⚠️ <b>تنبيه:</b> تم بناء البرنامج لغرف تتسع لـ <b>${_minCap} ${_minCap===1?'شخص':'أشخاص'}</b> فقط، بينما المطلوب <b>${adults} أشخاص</b>.<br>أضف <b>سريراً إضافياً</b> أو <b>غرفة إضافية</b> حسب الحاجة.</div>`;
 }
 
+// تنبيه: سعة سيارة النقل أقل من عدد الأشخاص — يجمع سعة كل السيارات في نفس اليوم
+// (يشمل أي «نقل إضافي» أضافه الموظف)، فإذا بقي يومٌ سعته الإجمالية أقل من المطلوب
+// يظهر التنبيه ليضيف سيارة. السطور التي ضمن السعة لا تحمل «تتسع N» فلا تُحتسب نقصاً.
+const _capByDay = {};
+for (const l of transfersLines) {
+  const ll = arabicDigitsToLatin(String(l));
+  const dm = ll.match(/اليوم\s*(\d+)/);
+  const cm = ll.match(/تتسع\s*(\d+)/);
+  if (!dm || !cm) continue;
+  const day = dm[1]; const cap = parseInt(cm[1], 10) || 0;
+  _capByDay[day] = (_capByDay[day] || 0) + cap;
+}
+const _shortCaps = Object.values(_capByDay).filter(c => c > 0 && c < adults);
+if (_shortCaps.length) {
+  const _xferMinCap = Math.min(..._shortCaps);
+  html += `<div class="cap-warn">🚗 <b>تنبيه نقل:</b> السيارة المستخدمة تتسع لـ <b>${_xferMinCap} أشخاص</b> كحد أقصى، بينما المطلوب <b>${adults} أشخاص</b>.<br>أضف <b>سيارة إضافية</b> من زر النقل في الأيام المعنيّة حسب الحاجة.</div>`;
+}
+
 if (hotelsLines.length) {
 html += `<div class="section-card hsw-host">
 <div class="section-card-header"><div class="section-card-title">🏨 الفنادق</div><div class="section-total">${hotelsTotal.toLocaleString()} ريال</div></div>
