@@ -600,7 +600,7 @@ Deno.serve(async (req) => {
   if (adminAction) {
     // Company-account management is OWNER-only (separate private dashboard) and
     // uses COMPANIES_ADMIN_SECRET. The staff request inbox keeps CLIENT_ADMIN_SECRET.
-    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove", "staff_report"].includes(adminAction);
+    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove", "staff_report", "sec_overview", "sec_country_add", "sec_country_remove", "sec_enforce_set"].includes(adminAction);
     const expected = (Deno.env.get(ownerOnly ? "COMPANIES_ADMIN_SECRET" : "CLIENT_ADMIN_SECRET") || "").trim();
     const got = (req.headers.get("x-admin-secret") || "").trim();
 
@@ -669,6 +669,44 @@ Deno.serve(async (req) => {
       const { error } = await supabase.from("client_companies").update({ impersonate_token: itoken }).eq("id", cid);
       if (error) return json({ error: error.message }, 500);
       return json({ ok: true, token: itoken });
+    }
+
+    // ── أمان داشبورد البرامج: سجل الدخول + الدول المسموحة + تفعيل الحظر ──
+    if (adminAction === "sec_overview") {
+      const [settingsRes, countriesRes, logRes] = await Promise.all([
+        supabase.from("security_settings").select("enforce_country, fail_open_geo").eq("id", 1).single(),
+        supabase.from("security_allowed_countries").select("code, name_ar").order("name_ar"),
+        supabase.from("auth_log").select("created_at, event, ip, country, country_allowed, success, detail").order("created_at", { ascending: false }).limit(100),
+      ]);
+      return json({
+        settings: settingsRes.data || { enforce_country: false, fail_open_geo: true },
+        countries: countriesRes.data || [],
+        log: logRes.data || [],
+      });
+    }
+    if (adminAction === "sec_country_add") {
+      const body = await req.json().catch(() => ({} as Record<string, any>));
+      const code = String(body.code || "").trim().toUpperCase();
+      const name_ar = String(body.name_ar || "").trim();
+      if (!/^[A-Z]{2}$/.test(code)) return json({ error: "رمز الدولة لازم حرفين (ISO-2) مثل SA" }, 400);
+      if (!name_ar) return json({ error: "اسم الدولة مطلوب" }, 400);
+      const { error } = await supabase.from("security_allowed_countries").upsert({ code, name_ar }, { onConflict: "code" });
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+    if (adminAction === "sec_country_remove") {
+      const code = String(url.searchParams.get("code") || "").trim().toUpperCase();
+      if (!code) return json({ error: "code required" }, 400);
+      const { error } = await supabase.from("security_allowed_countries").delete().eq("code", code);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+    if (adminAction === "sec_enforce_set") {
+      const body = await req.json().catch(() => ({} as Record<string, any>));
+      const enforce = !!body.enforce;
+      const { error } = await supabase.from("security_settings").update({ enforce_country: enforce, updated_at: new Date().toISOString() }).eq("id", 1);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true, enforce_country: enforce });
     }
 
     // ── company-account management ──

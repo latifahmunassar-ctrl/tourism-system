@@ -93,6 +93,12 @@
   .pe-k{color:#8a6d1f;font-weight:700}.pe-old{color:var(--muted);text-decoration:line-through}.pe-ar{color:#b45309;font-weight:900;text-align:center}.pe-new{color:var(--ink);font-weight:800}
   .pe-logo{height:26px;border-radius:6px;vertical-align:middle}
   .pe-bar{display:flex;gap:9px;margin-top:12px}
+  /* security tab */
+  .sec-enf{display:flex;justify-content:space-between;align-items:center;gap:14px;border-radius:12px;padding:14px 16px;margin-bottom:18px;border:1px solid;flex-wrap:wrap}
+  .sec-enf.off{background:#fffbeb;border-color:#f0dcae}.sec-enf.on{background:#fef2f2;border-color:#f5c2c2}
+  .sec-enf-t{font-weight:900;font-size:14.5px}.sec-enf-s{font-size:12px;color:var(--muted);margin-top:3px;max-width:560px;line-height:1.6}
+  .sec-sub{font-weight:800;color:var(--brand);font-size:13.5px;margin:6px 0 10px}
+  #cCode{text-transform:uppercase}
 </style>
 </head>
 <body>
@@ -117,6 +123,7 @@
   <div class="tabbar">
     <button id="tabBtnCompanies" class="tabbtn on" onclick="showTab('companies')">🏢 الشركات</button>
     <button id="tabBtnStaff" class="tabbtn" onclick="showTab('staff')">👥 الموظفون</button>
+    <button id="tabBtnSecurity" class="tabbtn" onclick="showTab('security')">🔒 الأمان</button>
   </div>
 
   <div id="tabCompanies" class="tabpane">
@@ -150,6 +157,13 @@
     <div id="repTable"><div class="ac-empty">جارٍ التحميل…</div></div>
   </div>
   </div><!-- /tabStaff -->
+
+  <div id="tabSecurity" class="tabpane" style="display:none">
+  <div class="panel">
+    <h3>🔒 حماية داشبورد البرامج <small>حصر الدخول حسب الدولة + سجل الدخول</small></h3>
+    <div id="secBody" style="padding:14px"><div class="ac-empty">جارٍ التحميل…</div></div>
+  </div>
+  </div><!-- /tabSecurity -->
 </div>
 
 <script>
@@ -175,12 +189,60 @@ async function login(){
 function logout(){ localStorage.removeItem('alezz_owner_secret'); SECRET=''; location.reload(); }
 function show(){ $('loginView').style.display='none'; $('appView').style.display='block'; loadList(); loadStaff(); repPeriod('today', document.querySelector('.rep-btn')); }
 function showTab(t){
-  const isC=t==='companies';
-  $('tabCompanies').style.display=isC?'':'none';
-  $('tabStaff').style.display=isC?'none':'';
-  $('tabBtnCompanies').classList.toggle('on',isC);
-  $('tabBtnStaff').classList.toggle('on',!isC);
-  if(!isC){ loadStaff(); repPeriod('today', document.querySelector('.rep-btn')); }
+  const panes={companies:'tabCompanies',staff:'tabStaff',security:'tabSecurity'};
+  const btns={companies:'tabBtnCompanies',staff:'tabBtnStaff',security:'tabBtnSecurity'};
+  for(const k in panes){ $(panes[k]).style.display = (k===t?'':'none'); $(btns[k]).classList.toggle('on',k===t); }
+  if(t==='staff'){ loadStaff(); repPeriod('today', document.querySelector('.rep-btn')); }
+  if(t==='security'){ loadSecurity(); }
+}
+// ── أمان داشبورد البرامج: الدول المسموحة + سجل الدخول + تفعيل الحظر ──
+function secFlash(t,ok){const m=$('secMsg');if(!m)return;m.textContent=t;m.className='ac-msg '+(ok?'ok':'err');m.style.display='block';setTimeout(()=>{m.style.display='none'},2600);}
+async function loadSecurity(){
+  const box=$('secBody'); if(!box) return; box.innerHTML='<div class="ac-empty">جارٍ التحميل…</div>';
+  try{
+    const r=await fetch(BASE+'?admin_action=sec_overview',{headers:H()});
+    const d=await r.json(); if(!r.ok) throw new Error(d.error||'');
+    const enforce=!!(d.settings&&d.settings.enforce_country);
+    const countries=d.countries||[], log=d.log||[];
+    const evMap={login_ok:'✅ دخول',login_fail:'⛔ كلمة خطأ',blocked_country:'🚫 دولة محظورة',geo_unknown:'❓ دولة غير معروفة'};
+    box.innerHTML=`
+      <div class="sec-enf ${enforce?'on':'off'}">
+        <div><div class="sec-enf-t">${enforce?'🔴 الحظر مُفعّل':'🟡 وضع المراقبة (لا حظر)'}</div>
+        <div class="sec-enf-s">${enforce?'يُمنع الدخول من خارج الدول المسموحة أدناه.':'يُسجَّل كل دخول ودولته بدون منع أحد. بعد ما تتأكدين القائمة تشمل دولتك ودول موظفاتك، فعّلي الحظر.'}</div></div>
+        <button class="ac-btn ${enforce?'no':'ok'}" onclick="toggleEnforce(${enforce?'false':'true'})">${enforce?'⏸️ إيقاف الحظر':'🔒 تفعيل الحظر'}</button>
+      </div>
+      <div class="sec-sub">🌍 الدول المسموح الدخول منها</div>
+      <div class="staff-add">
+        <input id="cCode" maxlength="2" placeholder="رمز (SA)" style="max-width:120px">
+        <input id="cName" placeholder="اسم الدولة (السعودية)" onkeydown="if(event.key==='Enter')addCountry()">
+        <button class="ac-btn ok" onclick="addCountry()">➕ إضافة</button>
+      </div>
+      <div class="staff-list" style="margin-bottom:6px">${countries.length?countries.map(c=>`<span class="staff-chip">${esc(c.name_ar)} <b style="color:var(--muted)">${esc(c.code)}</b> <button title="حذف" onclick="removeCountry('${esc(c.code)}','${esc(c.name_ar)}')">✕</button></span>`).join(''):'<div class="ac-empty">لا دول مضافة — أضيفي واحدة على الأقل قبل تفعيل الحظر</div>'}</div>
+      <div class="ac-msg" id="secMsg"></div>
+      <div class="sec-sub" style="margin-top:20px">📜 آخر ${log.length} محاولة دخول</div>
+      ${log.length?`<table class="rep-table"><thead><tr><th>الوقت</th><th>الحدث</th><th>الدولة</th><th>IP</th></tr></thead><tbody>${log.map(l=>{
+        const cflag=l.country?(l.country_allowed?`<span style="color:var(--ok);font-weight:800">${esc(l.country)} ✓</span>`:`<span style="color:var(--err);font-weight:800">${esc(l.country)} ✕</span>`):'<span style="color:var(--muted)">؟</span>';
+        return `<tr><td style="white-space:nowrap">${esc((l.created_at||'').slice(0,16).replace('T',' '))}</td><td>${evMap[l.event]||esc(l.event)}</td><td>${cflag}</td><td style="color:var(--muted);font-size:12px">${esc(l.ip||'—')}</td></tr>`;
+      }).join('')}</tbody></table>`:'<div class="ac-empty">لا محاولات دخول بعد</div>'}`;
+  }catch(_){ box.innerHTML='<div class="ac-empty">تعذّر التحميل</div>'; }
+}
+async function addCountry(){
+  const code=($('cCode').value||'').trim().toUpperCase(), name=($('cName').value||'').trim();
+  if(!/^[A-Z]{2}$/.test(code)){ secFlash('رمز الدولة لازم حرفين مثل SA / EG / OM',false); return; }
+  if(!name){ secFlash('اكتبي اسم الدولة',false); return; }
+  const r=await fetch(BASE+'?admin_action=sec_country_add',{method:'POST',headers:H(),body:JSON.stringify({code,name_ar:name})});
+  const d=await r.json(); if(d.ok){ secFlash('أُضيفت ✅',true); loadSecurity(); } else secFlash(d.error||'فشل',false);
+}
+async function removeCountry(code,name){
+  if(!confirm('حذف «'+name+'» من الدول المسموحة؟')) return;
+  const r=await fetch(BASE+'?admin_action=sec_country_remove&code='+encodeURIComponent(code),{method:'POST',headers:H()});
+  const d=await r.json(); if(d.ok){ secFlash('حُذفت ✅',true); loadSecurity(); } else secFlash(d.error||'فشل',false);
+}
+async function toggleEnforce(on){
+  const msg=on?'تفعيل حظر الدخول من خارج الدول المسموحة؟\n\n⚠️ تأكدي إن القائمة تشمل دولتكِ ودول موظفاتك، وإلا تنحبسون.':'إيقاف الحظر والرجوع لوضع المراقبة (تسجيل بلا منع)؟';
+  if(!confirm(msg)) return;
+  const r=await fetch(BASE+'?admin_action=sec_enforce_set',{method:'POST',headers:H(),body:JSON.stringify({enforce:on})});
+  const d=await r.json(); if(d.ok){ secFlash(on?'تم تفعيل الحظر 🔴':'رجعنا لوضع المراقبة 🟡',true); loadSecurity(); } else secFlash(d.error||'فشل',false);
 }
 // ── إدارة أسماء الموظفين ──
 function staffFlash(t,ok){const m=$('staffMsg');if(!m)return;m.textContent=t;m.className='ac-msg '+(ok?'ok':'err');m.style.display='block';setTimeout(()=>{m.style.display='none'},2500);}
