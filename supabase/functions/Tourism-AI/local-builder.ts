@@ -1124,9 +1124,25 @@ function formatNumber(n: number): string {
   return Math.round(n).toLocaleString("en-US"); // 1,500 with English digits
 }
 
-export function pickTourVariantPrice(tour: TourRow, paxCount: number, isShared: boolean): number {
+export function pickTourVariantPrice(tour: TourRow, paxCount: number, isShared: boolean, month = 0): number {
   const variants = tour.variants || [];
   if (variants.length === 0) return tour.price || 0;
+  // Month-based variants (e.g. "may month" / "june month" / "شهر يونيو") — pick by
+  // the request's month so May ≠ June pricing is honored (Turkey seasonal rows).
+  const labelMonth = (label: string): number => {
+    const lbl = label.toLowerCase();
+    for (const [name, num] of Object.entries(ARABIC_MONTH_TO_NUMBER)) {
+      if (name.length >= 3 && lbl.includes(name)) return num;
+    }
+    return 0;
+  };
+  if (variants.some(v => labelMonth(v.label) > 0)) {
+    if (month) {
+      const m = variants.find(v => labelMonth(v.label) === month);
+      if (m) return m.price;
+    }
+    return variants[0].price || tour.price || 0;   // لا شهر → أول variant
+  }
   // Find best matching variant by pax range
   const labelMatches = (label: string): boolean => {
     const lbl = label.toLowerCase();
@@ -1161,6 +1177,7 @@ export function formatProgram(data: ProgramData): string {
   const totalNights = totalDays - 1;
   const startDate = days[0]?.date || resolveStartDate(request);
   const endDate = days[days.length - 1]?.date || startDate;
+  const reqMonth = startDate ? (startDate.getMonth() + 1) : 0;   // شهر التاريخ للتسعير الموسمي
   // Derive META's month from the resolved start date — when an explicit
   // travel date is provided ("سفر 10 اغسطس"), that's the source of truth.
   // Without this, an unrelated "في شهر يونيو" elsewhere in the message
@@ -1255,7 +1272,7 @@ export function formatProgram(data: ProgramData): string {
     const hasPerPaxVariant = variants.some(v => /per\s*pax/i.test(v.label || ""));
     const rowSaysShared = /مشترك[ةه]?|shared|ليموزين/iu.test(t.row.name || "");
     const treatAsShared = isShared && (hasPerPaxVariant || rowSaysShared);
-    const price = pickTourVariantPrice(t.row, adults, treatAsShared);
+    const price = pickTourVariantPrice(t.row, adults, treatAsShared, reqMonth);
     const lineTotal = treatAsShared ? price * adults : price;
     transfersTotal += lineTotal;
     out += `اليوم ${t.day} | ${t.row.name.trim()} | ${t.kind} | ${formatNumber(lineTotal)} ريال\n`;
@@ -1277,7 +1294,7 @@ export function formatProgram(data: ProgramData): string {
   const tourDays = new Set(tours.map(t => t.day));
   type TourOrFreeLine = { day: number; text: string };
   const tourLines: TourOrFreeLine[] = tours.map(tt => {
-    const price = pickTourVariantPrice(tt.tour, adults, false); // tours always private
+    const price = pickTourVariantPrice(tt.tour, adults, false, reqMonth); // tours always private
     toursTotal += price;
     const tourType = isFreeDayRow(tt.tour.name) ? "حر" : "ثقافية";
     return {
