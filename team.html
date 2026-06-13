@@ -356,10 +356,16 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div class="login-card">
 <div class="login-icon">🔐</div>
 <div class="login-title">نظام البرامج السياحية</div>
-<div class="login-sub">يرجى إدخال كلمة المرور للدخول</div>
+<div class="login-sub">دخول الموظفات</div>
+<button id="passkeyBtn" class="login-btn" style="margin-bottom:12px" onclick="passkeyLogin()">👆 دخول بالبصمة / Face ID</button>
+<div style="color:rgba(255,255,255,0.45);font-size:12px;margin:2px 0 12px">— أو —</div>
 <input id="loginInput" class="login-input" type="password" placeholder="كلمة المرور" autocomplete="current-password" />
-<button id="loginBtn" class="login-btn" onclick="doLogin()">دخول</button>
+<button id="loginBtn" class="login-btn" onclick="doLogin()">دخول بكلمة السر</button>
 <div id="loginError" class="login-error"></div>
+<div style="margin-top:16px;display:flex;flex-direction:column;gap:7px">
+  <a href="#" onclick="passkeySetup();return false" style="color:#F0C96A;font-size:13px;font-weight:800;text-decoration:none">✨ إعداد البصمة على هذا الجهاز</a>
+  <a href="#" onclick="staffRegister();return false" style="color:rgba(255,255,255,0.6);font-size:12.5px;text-decoration:none">موظفة جديدة؟ سجّلي حسابك</a>
+</div>
 </div>
 </div>
 <div class="topbar">
@@ -665,6 +671,47 @@ async function trustDevice() {
       : 'تم إرسال طلب توثيق هذا الجهاز ⏳\nبانتظار موافقة الإدارة من داشبورد الشركات.');
     else alert(d.error || 'تعذّر إرسال الطلب');
   } catch (_) { alert('تعذّر الاتصال، حاولي مجدداً.'); }
+}
+
+// ── دخول/تسجيل بمفاتيح المرور (Passkey / بصمة / Face ID) ──
+const WEBAUTHN_URL = 'https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/webauthn';
+let _waLib = null;
+async function waLib(){ if(!_waLib) _waLib = await import('https://esm.sh/@simplewebauthn/browser@13'); return _waLib; }
+async function waPost(body){
+  const r = await fetch(WEBAUTHN_URL, { method:'POST', headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}, body:JSON.stringify(body) });
+  return r.json();
+}
+async function passkeyLogin(){
+  const err=document.getElementById('loginError'); err.textContent='';
+  const btn=document.getElementById('passkeyBtn'); const ot=btn.textContent; btn.disabled=true; btn.textContent='جارٍ فتح البصمة...';
+  try{
+    const { startAuthentication } = await waLib();
+    const start = await waPost({ action:'auth_start' });
+    if(!start.options) throw new Error(start.error||'تعذّر بدء الدخول');
+    const resp = await startAuthentication({ optionsJSON: start.options });
+    const fin = await waPost({ action:'auth_finish', challengeId:start.challengeId, response:resp });
+    if(fin.ok){ sessionStorage.setItem(AUTH_KEY,'1'); if(fin.user&&fin.user.name) localStorage.setItem('alezz_user_name',fin.user.name); showApp(); }
+    else throw new Error(fin.error||'فشل الدخول بالبصمة');
+  }catch(e){ err.textContent = (e&&e.name==='NotAllowedError')?'أُلغيت البصمة' : (e.message||'تعذّر الدخول بالبصمة'); }
+  finally{ btn.disabled=false; btn.textContent=ot; }
+}
+async function passkeySetup(){
+  const phone = prompt('رقم جوالك (المسجّل):',''); if(phone===null) return;
+  try{
+    const { startRegistration } = await waLib();
+    const start = await waPost({ action:'reg_start', phone });
+    if(!start.options){ alert(start.error||'تعذّر — تأكدي إنك مسجّلة ومعتمدة من الإدارة'); return; }
+    const resp = await startRegistration({ optionsJSON: start.options });
+    const fin = await waPost({ action:'reg_finish', phone, challengeId:start.challengeId, response:resp, device_label:navigator.userAgent.slice(0,60) });
+    alert(fin.ok ? 'تم تسجيل بصمتك على هذا الجهاز ✅ تقدرين تدخلين بالبصمة.' : (fin.error||'فشل التسجيل'));
+  }catch(e){ alert((e&&e.name==='NotAllowedError')?'أُلغيت البصمة':(e.message||'تعذّر')); }
+}
+async function staffRegister(){
+  const name = prompt('اسمك الكامل:',''); if(name===null) return;
+  const phone = prompt('رقم جوالك:',''); if(phone===null) return;
+  const d = await waPost({ action:'register', name, phone });
+  if(d.ok) alert(d.already ? ('حسابك '+(d.status==='active'?'مفعّل ✅ — اضغطي «إعداد البصمة»':'بانتظار الموافقة ⏳')) : 'تم إرسال طلبك ⏳ بانتظار موافقة الإدارة. بعد الموافقة، اضغطي «إعداد البصمة».');
+  else alert(d.error||'تعذّر التسجيل');
 }
 
 // On load

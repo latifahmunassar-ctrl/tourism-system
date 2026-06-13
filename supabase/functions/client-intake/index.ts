@@ -600,7 +600,7 @@ Deno.serve(async (req) => {
   if (adminAction) {
     // Company-account management is OWNER-only (separate private dashboard) and
     // uses COMPANIES_ADMIN_SECRET. The staff request inbox keeps CLIENT_ADMIN_SECRET.
-    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove", "staff_report", "sec_overview", "sec_country_add", "sec_country_remove", "sec_enforce_set", "sec_device_trust", "sec_device_approve", "sec_device_remove"].includes(adminAction);
+    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove", "staff_report", "sec_overview", "sec_country_add", "sec_country_remove", "sec_enforce_set", "sec_device_trust", "sec_device_approve", "sec_device_remove", "sec_user_approve", "sec_user_suspend", "sec_user_remove"].includes(adminAction);
     const expected = (Deno.env.get(ownerOnly ? "COMPANIES_ADMIN_SECRET" : "CLIENT_ADMIN_SECRET") || "").trim();
     const got = (req.headers.get("x-admin-secret") || "").trim();
 
@@ -693,12 +693,40 @@ Deno.serve(async (req) => {
         supabase.from("auth_log").select("created_at, event, ip, country, country_allowed, success, detail").order("created_at", { ascending: false }).limit(100),
         supabase.from("trusted_devices").select("id, label, approved, last_country, last_ip, last_seen, created_at").order("created_at", { ascending: false }).limit(100),
       ]);
+      // حسابات الموظفات + عدد مفاتيح كل واحدة
+      const { data: usersRaw } = await supabase.from("app_users").select("id, name, phone, status, created_at, last_login_at").order("created_at", { ascending: false }).limit(200);
+      const { data: pkCounts } = await supabase.from("user_passkeys").select("user_id");
+      const pkMap: Record<string, number> = {};
+      for (const p of (pkCounts || []) as Array<{ user_id: number }>) pkMap[p.user_id] = (pkMap[p.user_id] || 0) + 1;
+      const users = (usersRaw || []).map((u: any) => ({ ...u, passkeys: pkMap[u.id] || 0 }));
       return json({
         settings: settingsRes.data || { enforce_country: false, fail_open_geo: true },
         countries: countriesRes.data || [],
         log: logRes.data || [],
         devices: devicesRes.data || [],
+        users,
       });
+    }
+    if (adminAction === "sec_user_approve") {
+      const id = url.searchParams.get("id") || "";
+      if (!id) return json({ error: "id required" }, 400);
+      const { error } = await supabase.from("app_users").update({ status: "active", approved_at: new Date().toISOString() }).eq("id", id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+    if (adminAction === "sec_user_suspend") {
+      const id = url.searchParams.get("id") || "";
+      if (!id) return json({ error: "id required" }, 400);
+      const { error } = await supabase.from("app_users").update({ status: "suspended" }).eq("id", id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+    if (adminAction === "sec_user_remove") {
+      const id = url.searchParams.get("id") || "";
+      if (!id) return json({ error: "id required" }, 400);
+      const { error } = await supabase.from("app_users").delete().eq("id", id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
     }
     // المالكة توثّق جهازها الحالي فوراً (approved=true)
     if (adminAction === "sec_device_trust") {

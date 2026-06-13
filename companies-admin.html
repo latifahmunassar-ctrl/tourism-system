@@ -203,7 +203,8 @@ async function loadSecurity(){
     const r=await fetch(BASE+'?admin_action=sec_overview',{headers:H()});
     const d=await r.json(); if(!r.ok) throw new Error(d.error||'');
     const enforce=!!(d.settings&&d.settings.enforce_country);
-    const countries=d.countries||[], log=d.log||[], devices=d.devices||[];
+    const countries=d.countries||[], log=d.log||[], devices=d.devices||[], users=d.users||[];
+    const uStat={pending:'⏳ بانتظار موافقتك',active:'✅ مفعّلة',suspended:'⏸️ موقوفة'};
     const evMap={login_ok:'✅ دخول',login_fail:'⛔ كلمة خطأ',blocked_country:'🚫 دولة محظورة',geo_unknown:'❓ دولة غير معروفة'};
     box.innerHTML=`
       <div class="sec-enf ${enforce?'on':'off'}">
@@ -211,7 +212,16 @@ async function loadSecurity(){
         <div class="sec-enf-s">${enforce?'يُمنع الدخول من خارج الدول المسموحة أدناه.':'يُسجَّل كل دخول ودولته بدون منع أحد. بعد ما تتأكدين القائمة تشمل دولتك ودول موظفاتك، فعّلي الحظر.'}</div></div>
         <button class="ac-btn ${enforce?'no':'ok'}" onclick="toggleEnforce(${enforce?'false':'true'})">${enforce?'⏸️ إيقاف الحظر':'🔒 تفعيل الحظر'}</button>
       </div>
-      <div class="sec-sub">🌍 الدول المسموح الدخول منها</div>
+      <div class="sec-sub">👩‍💼 حسابات الموظفات (الدخول بالبصمة)</div>
+      ${users.length?`<table class="rep-table"><thead><tr><th>الاسم</th><th>الجوال</th><th>الحالة</th><th>بصمات</th><th></th></tr></thead><tbody>${users.map(u=>{
+        const st=u.status==='pending'?`<span style="color:var(--warn);font-weight:800">${uStat.pending}</span>`:(u.status==='active'?`<span style="color:var(--ok);font-weight:800">${uStat.active}</span>`:`<span style="color:#555;font-weight:800">${uStat.suspended}</span>`);
+        let act='';
+        if(u.status==='pending') act=`<button class="ac-btn ok" onclick="approveUser('${u.id}')">✅ اعتماد</button> <button class="ac-btn no" onclick="removeUser('${u.id}','${esc(u.name)}')">رفض</button>`;
+        else if(u.status==='active') act=`<button class="ac-btn no" onclick="suspendUser('${u.id}')">⏸️ إيقاف</button>`;
+        else act=`<button class="ac-btn ok" onclick="approveUser('${u.id}')">▶️ تفعيل</button> <button class="ac-btn no" onclick="removeUser('${u.id}','${esc(u.name)}')">حذف</button>`;
+        return `<tr><td>${esc(u.name)}</td><td style="direction:ltr;text-align:right">${esc(u.phone)}</td><td>${st}</td><td>${u.passkeys||0}</td><td>${act}</td></tr>`;
+      }).join('')}</tbody></table>`:'<div class="ac-empty">لا حسابات موظفات بعد</div>'}
+      <div class="sec-sub" style="margin-top:20px">🌍 الدول المسموح الدخول منها</div>
       <div class="staff-add">
         <input id="cCode" maxlength="2" placeholder="رمز (SA)" style="max-width:120px">
         <input id="cName" placeholder="اسم الدولة (السعودية)" onkeydown="if(event.key==='Enter')addCountry()">
@@ -266,6 +276,20 @@ async function removeDevice(id,label){
   if(!confirm('إزالة «'+label+'» من الأجهزة الموثوقة؟ بيرجع عليه قيد الدولة.')) return;
   const r=await fetch(BASE+'?admin_action=sec_device_remove&id='+id,{method:'POST',headers:H()});
   const d=await r.json(); if(d.ok){ secFlash('تمت الإزالة ✅',true); loadSecurity(); } else secFlash(d.error||'فشل',false);
+}
+async function approveUser(id){
+  const r=await fetch(BASE+'?admin_action=sec_user_approve&id='+id,{method:'POST',headers:H()});
+  const d=await r.json(); if(d.ok){ secFlash('تم اعتماد الموظفة ✅ — تقدر تسجّل بصمتها الآن',true); loadSecurity(); } else secFlash(d.error||'فشل',false);
+}
+async function suspendUser(id){
+  if(!confirm('إيقاف دخول هذه الموظفة؟')) return;
+  const r=await fetch(BASE+'?admin_action=sec_user_suspend&id='+id,{method:'POST',headers:H()});
+  const d=await r.json(); if(d.ok){ secFlash('تم الإيقاف ⏸️',true); loadSecurity(); } else secFlash(d.error||'فشل',false);
+}
+async function removeUser(id,name){
+  if(!confirm('حذف حساب «'+name+'» نهائياً؟ (تنحذف بصماتها أيضاً)')) return;
+  const r=await fetch(BASE+'?admin_action=sec_user_remove&id='+id,{method:'POST',headers:H()});
+  const d=await r.json(); if(d.ok){ secFlash('تم الحذف ✅',true); loadSecurity(); } else secFlash(d.error||'فشل',false);
 }
 // ── إدارة أسماء الموظفين ──
 function staffFlash(t,ok){const m=$('staffMsg');if(!m)return;m.textContent=t;m.className='ac-msg '+(ok?'ok':'err');m.style.display='block';setTimeout(()=>{m.style.display='none'},2500);}
