@@ -609,9 +609,21 @@ function flightCityMatches(a: string, b: string): boolean {
   return bigramSim(x, y) >= 0.6;
 }
 
+// مدن فرعية ليس لها مطار خاص — الوصول إليها يكون عبر مطار مدينة أخرى.
+// مثال: أوزنجول/آيدر/ريزه تُخدَم بمطار طرابزون، فالطيران من اسطنبول إليها = اسطنبول→طرابزون.
+const AIRPORT_REGION: Array<{ airport: string; pattern: RegExp }> = [
+  { airport: "Trabzon", pattern: /uzungol|[أا]وزنجول|[أا]وزونغول|ayder|[أآا]يدر|rize|ريز[ها]?/i },
+];
+function flightAirportCity(city: string): string {
+  const hit = AIRPORT_REGION.find(r => r.pattern.test(city));
+  return hit ? hit.airport : city;
+}
 function findFlight(flights: FlightRow[], from: string, to: string): FlightRow | null {
+  // اربط المدن الفرعية بمطارها قبل المطابقة (أوزنجول→طرابزون)
+  const f = flightAirportCity(from), t = flightAirportCity(to);
+  if (normFlightCity(f) === normFlightCity(t)) return null;   // نفس المطار → لا طيران
   return flights.find(fl =>
-    flightCityMatches(fl.from_city, from) && flightCityMatches(fl.to_city, to)
+    flightCityMatches(fl.from_city, f) && flightCityMatches(fl.to_city, t)
   ) || null;
 }
 
