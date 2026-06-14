@@ -2272,6 +2272,66 @@ async function handleListHotels(body: {
   }
 }
 
+// ── list_room_types: أنواع الغرف المتاحة لنفس الفندق (لإضافة/استبدال نوع غرفة) ──
+// المدخل: { action:"list_room_types", dest, region:"<المدينة>", hotel:"<اسم الفندق>", date }
+async function handleListRoomTypes(body: {
+  dest?: string; region?: string; hotel?: string; date?: string;
+}): Promise<Response> {
+  try {
+    const destAr = String(body.dest || "").trim();
+    const region = String(body.region || "").trim();
+    const hotelName = String(body.hotel || "").trim();
+    if (!hotelName) return new Response(JSON.stringify({ rooms: [] }), { headers: CORS_HEADERS });
+    const destKey = destAr ? detectDestination([{ role: "user", content: destAr }]) : null;
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    let q = supabase.from("hotels")
+      .select("name,stars,location,price_per_night,room_type,includes_breakfast,meals,occupancy,date_from,date_to");
+    if (destKey) q = q.ilike("location", `% - ${destKey}`);
+    const { data, error } = await q.order("price_per_night");
+    if (error) throw error;
+    let rows = (data || []) as Array<Record<string, unknown>>;
+
+    // نفس الفندق بالاسم بالضبط
+    rows = rows.filter(h => String(h.name || "").trim() === hotelName);
+
+    // صفّ التاريخ المطلوب فقط (الموسم) — صفوف بلا تاريخ تبقى دائماً
+    const travelISO = travelDateToISO(String(body.date || ""));
+    if (travelISO) {
+      rows = rows.filter(h => {
+        const df = String(h.date_from || ""), dt = String(h.date_to || "");
+        if (!df && !dt) return true;
+        if (df && travelISO < df) return false;
+        if (dt && travelISO > dt) return false;
+        return true;
+      });
+    }
+    // نوع غرفة واحد لكل نوع (الأرخص عند تكرار الموسم)، مرتّبة سعراً
+    const seen = new Set<string>();
+    rows = rows.filter(h => {
+      const k = String(h.room_type || "").trim().toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+
+    const rooms = rows.map(h => ({
+      room_type: h.room_type || "",
+      price_per_night: Number(h.price_per_night) || 0,
+      occupancy: parseInt(String(h.occupancy || "").match(/\d+/)?.[0] || "0", 10) || 0,
+      stars: Number(h.stars) || 0,
+      includes_breakfast: !!h.includes_breakfast,
+      meals: String(h.meals || ""),
+    }));
+    return new Response(JSON.stringify({ rooms }), { headers: CORS_HEADERS });
+  } catch (e) {
+    return new Response(JSON.stringify({ rooms: [], error: String((e as Error).message) }), { status: 200, headers: CORS_HEADERS });
+  }
+}
+
 // يستخرج رقم الشهر من تاريخ بأي صيغة (ISO، أو DD-MM-YYYY، أو اسم شهر عربي/إنجليزي).
 function parseMonthFromDate(s: string): number {
   const t = String(s || "");
@@ -2426,6 +2486,7 @@ Deno.serve(async (req) => {
     const reqBody = await req.json();
     // قائمة فنادق مدينة (لقائمة التبديل في الداشبورد) — قبل التحقق من messages.
     if (reqBody && reqBody.action === "list_hotels") return await handleListHotels(reqBody);
+    if (reqBody && reqBody.action === "list_room_types") return await handleListRoomTypes(reqBody);
     if (reqBody && reqBody.action === "list_tours") return await handleListTours(reqBody);
     if (reqBody && reqBody.action === "tour_variants") return await handleTourVariants(reqBody);
     if (reqBody && reqBody.action === "profit_margins") return await handleProfitMargins(reqBody);
