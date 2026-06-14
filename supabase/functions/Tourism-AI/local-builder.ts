@@ -1647,6 +1647,9 @@ export async function buildLocalProgram(
   // Walk days in order, grouping consecutive same-city days into stays.
   let consumedDays = 0;
   const stayIdxPerCity: Record<string, number> = {};
+  // «فندق آخر»: لتتبّع الإقامة السابقة — إقامة متتالية بنفس المدينة تختار فندقاً مختلفاً.
+  let prevStayCity: string | null = null;
+  let prevHotelName: string | null = null;
   // Transport-only mode: employee wants only transfers + tours, no hotels.
   // Skip the entire hotel-pick loop; the rest of the pipeline (transfers,
   // tours, day arrangement) keeps working off the city distribution.
@@ -1706,14 +1709,25 @@ export async function buildLocalProgram(
         const occ = prevHotel ? extractAdultsCount(prevHotel.occupancy || "") : 0;
         if (occ > 0) lockOccupancyAdults = occ;
       }
-      hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
-        excludeNames: excludeForThisStay,
+      // «فندق آخر»: لو هذي إقامة متتالية بنفس المدينة (توزيعة مثل «٣ صلالة - ٣ صلالة
+      // فندق آخر»)، استبعد فندق الإقامة السابقة فيختار فندقاً مختلفاً. لا نطبّقها مع
+      // تعديلات صريحة (excludeForThisStay) حتى لا نتعارض معها.
+      const wantDifferentHotel = prevStayCity === stay.city && !!prevHotelName && !excludeForThisStay;
+      const pickOpts = {
         overrideAdults: overrideForThisStay,
         overrideStars: overrideStarsForThisStay,
         areaFilter: areaForThisStay || stay.area,
         feature: featureForThisStay,
         lockOccupancyAdults,
+      };
+      hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
+        excludeNames: wantDifferentHotel ? new Set([...(excludeForThisStay || []), prevHotelName!.toLowerCase()]) : excludeForThisStay,
+        ...pickOpts,
       });
+      // المدينة فيها فندق واحد فقط → الاستبعاد يُفرغ الخيارات؛ ارجع لنفس الفندق بدل فشل البناء.
+      if (!hotel && wantDifferentHotel) {
+        hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, { excludeNames: excludeForThisStay, ...pickOpts });
+      }
     }
     if (!hotel) {
       // Feature request (مسبح/فيلا) with no match in the same area → tell the
@@ -1819,6 +1833,8 @@ export async function buildLocalProgram(
     const rangeFrom = stayDays[0].date;
     const rangeTo = addDays(stayDays[stayDays.length - 1].date, 1);
     hotelsList.push({ city: stay.city, hotel, nights: stay.nights, rangeFrom, rangeTo });
+    prevStayCity = stay.city;
+    prevHotelName = hotel.name.trim();
   }
 
   // 2. Resolve follow-up tour modifications (remove / swap) against the
