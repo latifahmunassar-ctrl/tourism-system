@@ -151,7 +151,9 @@ Deno.serve(async (req) => {
       if (!verification.verified) return json({ error: "فشل الدخول بالبصمة" }, 401);
       await supa.from("user_passkeys").update({ counter: verification.authenticationInfo.newCounter, last_used_at: new Date().toISOString() }).eq("id", key.id);
       await supa.from("app_users").update({ last_login_at: new Date().toISOString() }).eq("id", user.id);
-      return json({ ok: true, user: { name: user.name, phone: user.phone } });
+      // المستخدم أثبت هويته بالبصمة → نسلّمه مفتاح صندوق الطلبات تلقائياً
+      // (نفس CLIENT_ADMIN_SECRET) فلا يُطلب منه إدخاله يدوياً.
+      return json({ ok: true, user: { name: user.name, phone: user.phone }, admin_secret: Deno.env.get("CLIENT_ADMIN_SECRET") || "" });
     }
 
     return json({ error: "unknown action" }, 400);

@@ -705,7 +705,7 @@ async function passkeyLogin(){
     if(!start.options) throw new Error(start.error||'تعذّر بدء الدخول');
     const resp = await startAuthentication({ optionsJSON: start.options });
     const fin = await waPost({ action:'auth_finish', challengeId:start.challengeId, response:resp });
-    if(fin.ok){ sessionStorage.setItem(AUTH_KEY,'1'); if(fin.user&&fin.user.name) localStorage.setItem('alezz_user_name',fin.user.name); showApp(); }
+    if(fin.ok){ sessionStorage.setItem(AUTH_KEY,'1'); if(fin.user&&fin.user.name) localStorage.setItem('alezz_user_name',fin.user.name); if(fin.admin_secret) localStorage.setItem('alezz_admin_secret', fin.admin_secret); showApp(); }
     else throw new Error(fin.error||'فشل الدخول بالبصمة');
   }catch(e){ err.textContent = (e&&e.name==='NotAllowedError')?'أُلغيت البصمة' : (e.message||'تعذّر الدخول بالبصمة'); }
   finally{ btn.disabled=false; btn.textContent=ot; }
