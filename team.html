@@ -325,6 +325,11 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 .rtw-badge{display:inline-block;background:#fff3cd;color:#7a5b00;border:1px solid #ffc107;border-radius:20px;font-size:10px;font-weight:800;padding:2px 8px}
 .rtw-rm{background:#5a1620;color:#ff9aa2;border:1px solid #7a2330;border-radius:7px;padding:2px 8px;font-size:11px;font-weight:800;cursor:pointer;margin-inline-start:4px}
 .rtw-extra{color:#F0C96A}
+.bed-stp{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:9px;overflow:hidden}
+.bed-stp button{border:none;background:var(--bg);color:var(--gold);width:26px;height:26px;font-size:15px;font-weight:900;cursor:pointer;line-height:1}
+.bed-stp button:disabled{opacity:.4;cursor:not-allowed}
+.bed-stp .bed-n{min-width:26px;text-align:center;font-weight:900;font-size:13px}
+.bed-cost{font-size:10.5px;color:var(--muted);margin-top:3px}
 .hsw-title{font-size:10.5px;color:var(--muted);padding:5px 8px 7px}
 .hsw-loading{font-size:12px;color:var(--muted);padding:10px 8px;text-align:center}
 .hsw-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 9px;border-radius:8px;cursor:pointer}
@@ -751,6 +756,10 @@ function parseAddRoom(line){
   return { room_type:(a[0]||'').trim(), price:parseInt(a[1]||'0',10)||0, occ:parseInt(a[2]||'0',10)||0, meals:(a[3]||'').trim() };
 }
 function stripAddRoom(line){ return String(line||'').replace(/\s*\|\s*ADDROOM:.+$/,''); }
+// عدد الأسرّة الإضافية لكل فندق (override يدوي؛ undefined = الافتراضي المحسوب من النطاق)
+let hotelBeds = [];
+function hBeds(i, def){ const v = hotelBeds[i]; return (v===undefined || v===null) ? (parseInt(def,10)||0) : Math.max(0, parseInt(v,10)||0); }
+function setHotelBeds(i, n){ hotelBeds[i] = Math.max(0, Math.min(20, parseInt(n,10)||0)); if (typeof lastProgramRaw === 'string' && lastProgramRaw) buildReview(lastProgramRaw); }
 // حذف رحلة طيران من البرنامج (لو العميل حاجزها بنفسه) — يُعيد احتساب الإجمالي
 function removeFlightLine(btn){
   try{
@@ -2081,6 +2090,7 @@ const hotelsLines = parseHotelLinesFromRaw(raw);
 const _newHotelCities = hotelsLines.map(l => (String(l).split('|')[1] || '').trim());
 if (hotelRooms.length !== hotelsLines.length || JSON.stringify(_newHotelCities) !== JSON.stringify(_lastHotelCities)) {
   hotelRooms = hotelsLines.map(() => 1);
+  hotelBeds = [];   // إعادة الضبط للافتراضي عند تغيّر هيكل البرنامج
 }
 _lastHotelCities = _newHotelCities;
 const flightsLines = parseSection(raw, 'FLIGHTS');
@@ -2111,7 +2121,7 @@ const extraBedByCity = parseExtraBedCitiesLine(extraBedCitiesLine);
 // Totals
 let hotelsTotal = hotelsLines.reduce((s, l, i) => {
   const t = hotelLineTotals(l);
-  const extraCount = extraBedCountForHotelLine(extraBedByCity, t.p?.[1], t.stars, dest);
+  const extraCount = hBeds(i, extraBedCountForHotelLine(extraBedByCity, t.p?.[1], t.stars, dest));
   const extraTotal = extraCount > 0 ? (t.extraBedPricePerNight * (t.nights || 0) * extraCount) : 0;
   const ar = parseAddRoom(l);   // غرفة إضافية مُدمجة بنفس السطر
   const addTotal = ar ? (ar.price * (t.nights || 0)) : 0;
@@ -2222,9 +2232,10 @@ html += `<div class="section-card hsw-host">
 <thead><tr><th>المدينة</th><th>الفندق</th><th>النجوم</th><th>الغرفة</th><th>السعر/ليلة</th><th>الليالي</th><th>🏨 عدد الغرف</th><th>الإجمالي</th><th>Extra Bed</th></tr></thead>
 <tbody>${hotelsLines.map((l, hidx) => {
 const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l);
-const extraCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest);
+const extraCount = hBeds(hidx, extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest));
 const extraTotal = extraCount > 0 ? (extraBedPricePerNight * (nights||0) * extraCount) : 0;
-const bedTxt = extraCount ? (`${extraCount} × ${extraTotal.toLocaleString()} ريال`) : '—';
+// عدّاد الأسرّة الإضافية لهذا الفندق (− عدد +) + تكلفته
+const bedTxt = `<div class="bed-stp"><button type="button" onclick="setHotelBeds(${hidx}, ${extraCount-1})"${extraCount<=0?' disabled':''}>−</button><span class="bed-n">${extraCount}</span><button type="button" onclick="setHotelBeds(${hidx}, ${extraCount+1})">+</button></div>${extraCount>0?`<div class="bed-cost">${extraBedPricePerNight}×${nights||0}×${extraCount} = ${extraTotal.toLocaleString()} ريال</div>`:''}`;
 // إشغال الغرفة الحالية من نص الغرفة "(يتسع N أشخاص)" — نجلب البدائل بنفس الإشغال
 // (مهم بعد التقريب لأسفل: 3 أشخاص = غرفة 2، فالبدائل لازم تكون إشغال 2 لا 3).
 const occN = parseInt((arabicDigitsToLatin(String(p[3]||'')).match(/يتسع\s*(\d+)/)||[])[1]||'',10) || 0;
@@ -2667,7 +2678,7 @@ const extraBedByCity = parseExtraBedCitiesLine(extraBedCitiesLine);
 // Totals (for detailed PDF calculations)
 const hotelsTotal = hotelsLines.reduce((s, l, i) => {
   const t = hotelLineTotals(l);
-  const extraCount = extraBedCountForHotelLine(extraBedByCity, t.p?.[1], t.stars, dest);
+  const extraCount = hBeds(i, extraBedCountForHotelLine(extraBedByCity, t.p?.[1], t.stars, dest));
   const extraTotal = extraCount > 0 ? (t.extraBedPricePerNight * (t.nights || 0) * extraCount) : 0;
   const ar = parseAddRoom(l);
   const addTotal = ar ? (ar.price * (t.nights || 0)) : 0;
@@ -3115,7 +3126,7 @@ ${showDetailed ? `
 ${(hotelsLines.length || flightsLines.length || simText || extraCosts.length) ? `
 <div class="pdf-section" style="page-break-before:always;">
 ${(hotelsLines.length || extrasCards('hotels')) ? `<div class="pdf-section-title">🏨 الفنادق</div>
-${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l); const rooms = hRooms(idx); const extraBedCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const _ar = parseAddRoom(l); const _arTotal = _ar ? (_ar.price * (nights||0)) : 0; const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; return `
+${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l); const rooms = hRooms(idx); const extraBedCount = hBeds(idx, extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest)); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const _ar = parseAddRoom(l); const _arTotal = _ar ? (_ar.price * (nights||0)) : 0; const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; return `
 <div class="pdf-keep" style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;">
 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;">
   <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:12px;line-height:1.3;">🏨 ${safeText(p[0]||'')}${extraBedCount ? ' + Extra bed / Sofa Bed' : ''}</div>
@@ -3128,7 +3139,7 @@ ${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPri
 <span>🏨 عدد الغرف: ${rooms}</span>
 <span>📅 الإقامة: ${stayText}</span>
 ${(sd.checkInText && sd.checkOutText) ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText} | 🔴 الخروج: ${sd.checkOutText}</span>` : (sd.checkInText ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText}</span>` : ``)}
-${showDetailed && extraBedCount ? `<span>🛋️ Extra bed / Sofa Bed: ${extraBedPricePerNight} ريال/ليلة × ${nights||'—'} ليالي × ${extraBedCount} = ${(extraBedTotal||0).toLocaleString()} ريال</span>` : ``}
+${extraBedCount ? `<span>🛋️ سرير إضافي / Sofa Bed: <b>${extraBedCount}</b>${showDetailed ? ` — ${extraBedPricePerNight} ريال/ليلة × ${nights||'—'} ليالي × ${extraBedCount} = ${(extraBedTotal||0).toLocaleString()} ريال` : ''}</span>` : ``}
 ${showDetailed ? `<span>💵 تفصيل السعر: ${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي × ${rooms} غرفة = ${(totalLine*rooms).toLocaleString()} ريال</span>` : ``}
 ${_ar ? `<span style="grid-column:1/-1;color:#b45309;font-weight:900;">➕ غرفة إضافية: ${safeText(_ar.room_type)}${_ar.occ?` (يتسع ${_ar.occ})`:''}${showDetailed ? ` — ${_ar.price.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي = ${_arTotal.toLocaleString()} ريال` : ''}</span>` : ``}
 <span style="grid-column:1/-1;">✅ يشمل: ${safeText(String(p[6]||'').replace(/^\s*ما\s*يشمل\s*:?\s*/u,'').trim())}</span>
@@ -3162,7 +3173,7 @@ ${(showDetailed && (hotelsLines.length || transfersLines.length || toursLines.le
 <div class="pdf-section">
   <div class="pdf-section-title">💼 تفصيل الخدمات</div>
   ${hotelsLines.length ? `<div style="font-weight:900;color:#1a3a8f;font-size:18px;margin:8px 0 14px;">🏨 الفنادق</div>
-  ${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l); const rooms = hRooms(idx); const extraBedCount = extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const _ar = parseAddRoom(l); const _arTotal = _ar ? (_ar.price * (nights||0)) : 0; const lineGrand = ((totalLine || 0) * rooms) + (extraBedTotal || 0) + _arTotal; return `
+  ${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l); const rooms = hRooms(idx); const extraBedCount = hBeds(idx, extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest)); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const _ar = parseAddRoom(l); const _arTotal = _ar ? (_ar.price * (nights||0)) : 0; const lineGrand = ((totalLine || 0) * rooms) + (extraBedTotal || 0) + _arTotal; return `
     <div class="pdf-keep" style="border:1px solid #eef0f8;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;gap:12px;">
       <div style="font-weight:800;color:#0d1f4a;font-size:16px;line-height:1.6;">
         ${p[1]||''} | ${p[0]||''}${extraBedCount ? ' + Extra bed' : ''} <span style="opacity:0.8">(${p[2]||''})</span> · 🏨 ${rooms} غرفة<br>
