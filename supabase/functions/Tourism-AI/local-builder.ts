@@ -1826,6 +1826,18 @@ export async function buildLocalProgram(
         );
       }
     }
+    // تنبيه موسمي صارم: لو الفندق المختار صفّ تواريخه لا يغطّي التاريخ المطلوب
+    // (التاريخ خارج كل المواسم المُسعّرة) فالسعر من أقرب موسم ولا يطابق التاريخ —
+    // نُخبر الموظف صراحةً بدل سعر صامت غلط.
+    if (request.startDate && !hotelCoversDate(hotel, request.startDate)
+        && !occupancyUpsizeNotes.some(n => n.includes("خارج المواسم"))) {
+      const seasons = [...new Set(allHotels
+        .filter(h => h.name === hotel.name && (h.date_from || h.date_to))
+        .map(h => `${h.date_from || "?"}→${h.date_to || "?"}`))].join("، ");
+      occupancyUpsizeNotes.push(
+        `⚠️ التاريخ المطلوب خارج المواسم المُسعّرة لفندق ${hotel.name} في ${cityAr} — السعر المعروض (${hotel.price_per_night} ريال/ليلة) لأقرب موسم${seasons ? ` (المُسعّر: ${seasons})` : ""}، وقد لا يطابق التاريخ. أضِف تسعير الموسم في الشيت للتاريخ المطلوب.`,
+      );
+    }
     // Pull this stay's days out of the days[] array (next N days)
     const stayDays = days.slice(consumedDays, consumedDays + stay.nights);
     consumedDays += stay.nights;
