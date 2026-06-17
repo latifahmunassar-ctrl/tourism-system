@@ -208,7 +208,7 @@ export function pickCheapestHotel(
   // strict on the first pass, "room fits the group" on the fallback. The
   // fallback lets a 3-pax group book a 4-occupancy room when the sheet has
   // no exact-fit 3-occupancy entry (common in Hanoi: only 2/4/6 are listed).
-  const effectiveStars = options?.overrideStars
+  let effectiveStars = options?.overrideStars
     ? [options.overrideStars]
     : (request.stars || []);
   const baseFilter = (h: HotelRow): boolean => {
@@ -277,6 +277,26 @@ export function pickCheapestHotel(
   if (candidates.length === 0 && dateForCheck) {
     activeDate = null;
     candidates = findCandidates();
+  }
+  // فئة النجوم المطلوبة غير متاحة في هذه المدينة (مثلاً 5 نجوم وكاميرون ما فيها
+  // إلا 4) → بدل إفشال البرنامج كله، انزل لأقرب فئة متاحة (الأعلى التي ≤ المطلوب،
+  // وإلا الأقرب رقمياً) وأعد المحاولة. المتصل يقارن نجوم الفندق المختار بالمطلوب
+  // ويُنبّه الموظف. لا ينطبق على overrideStars (اختيار صريح في تبديل واحد له رسالته).
+  if (candidates.length === 0 && effectiveStars.length > 0 && !options?.overrideStars) {
+    const want = Math.max(...effectiveStars);
+    const availStars = [...new Set(allHotels
+      .filter(h => hotelCityMatches(h.location, city, cityPattern) && !isExcluded(h.name) && h.stars > 0)
+      .map(h => h.stars))];
+    if (availStars.length > 0) {
+      const lower = availStars.filter(s => s <= want).sort((a, b) => b - a);
+      const nearest = lower.length > 0
+        ? lower[0]
+        : [...availStars].sort((a, b) => Math.abs(a - want) - Math.abs(b - want))[0];
+      effectiveStars = [nearest];
+      activeDate = dateForCheck;            // أعد تفعيل فلتر التاريخ مع الفئة الجديدة
+      candidates = findCandidates();
+      if (candidates.length === 0 && dateForCheck) { activeDate = null; candidates = findCandidates(); }
+    }
   }
 
   if (candidates.length === 0) return null;
@@ -1826,6 +1846,16 @@ export async function buildLocalProgram(
         );
       }
     }
+    // تنبيه فئة النجوم: لو نزلنا لأقرب فئة متاحة في المدينة (المطلوب 5 وكاميرون
+    // ما فيها إلا 4) نُخبر الموظف صراحةً بدل بناء صامت بفئة أقل. مرة واحدة لكل مدينة.
+    const reqStars = overrideStarsForThisStay
+      ?? (request.stars && request.stars.length ? Math.max(...request.stars) : 0);
+    if (reqStars > 0 && hotel.stars > 0 && hotel.stars !== reqStars
+        && !occupancyUpsizeNotes.some(n => n.includes("نجوم") && n.includes(cityAr))) {
+      occupancyUpsizeNotes.push(
+        `ما فيه فندق ${reqStars} نجوم في ${cityAr} — اخترنا ${hotel.stars} نجوم (الأقرب المتاح). غيّر المدينة/المنطقة أو الفئة لو تبغى ${reqStars} نجوم.`,
+      );
+    }
     // تنبيه موسمي صارم: لو الفندق المختار صفّ تواريخه لا يغطّي التاريخ المطلوب
     // (التاريخ خارج كل المواسم المُسعّرة) فالسعر من أقرب موسم ولا يطابق التاريخ —
     // نُخبر الموظف صراحةً بدل سعر صامت غلط.
@@ -2160,13 +2190,22 @@ export async function buildLocalProgram(
     }
     const fromHasFlights = cityHasFlights(d.fromCity);
     const toHasFlights = cityHasFlights(d.toCity);
+    // لو فيه انتقال بري مباشر بين المدينتين (بأي اتجاه)، فضّله على التطيير عبر
+    // الـhub. مثال: بينانج→كاميرون فيه طريق بري مباشر (600 ريال)، فلا نطيّرهم
+    // بينانج→كوالالمبور ثم نوصّلهم بسيارة من كوالالمبور — لأن ذلك يضيف رحلة طيران
+    // بلا داعٍ ويُنتج انتقالين على نفس اليوم (التوصيل البري + التقاط الـhub).
+    // كاميرون بلا مطار، فالشيت يقصد الطريق البري المباشر.
+    const directRoad =
+      findInterCityTransfer(allTours, d.fromCity, d.toCity, request.destination!, cityDefs, "airport", request.transport) ||
+      findInterCityTransfer(allTours, d.toCity, d.fromCity, request.destination!, cityDefs, "airport", request.transport);
+    const hasDirectRoad = !!directRoad && !/مطار|airport/iu.test(directRoad.name);
     // Case (c): fromCity is road-only → use hub→toCity flight
-    if (!fromHasFlights && toHasFlights && mainHub) {
+    if (!hasDirectRoad && !fromHasFlights && toHasFlights && mainHub) {
       const f = findFlight(allFlights, mainHub, d.toCity);
       if (f) { selectedFlights.push({ day: d.number, flight: f }); continue; }
     }
     // Case (d): toCity is road-only → use fromCity→hub flight
-    if (fromHasFlights && !toHasFlights && mainHub) {
+    if (!hasDirectRoad && fromHasFlights && !toHasFlights && mainHub) {
       const f = findFlight(allFlights, d.fromCity, mainHub);
       if (f) { selectedFlights.push({ day: d.number, flight: f }); continue; }
     }
@@ -2250,6 +2289,23 @@ export async function buildLocalProgram(
           fromAirportDrop = { ...rev, name: `التوجه من ${fromAr} إلى ${toAr} بسيارة خاصة` };
         }
       }
+      // Hub-road fallback: leg has no flight, no direct row AND no reverse row,
+      // but the destination's hub HAS a road row into toCity. Common when the
+      // sheet prices a road-only city only FROM the hub (e.g. كاميرون: يوجد
+      // كوالالمبور→كاميرون فقط، ولا يوجد سيلانجور→كاميرون). سيلانجور في نطاق
+      // كوالالمبور الكبرى فنعيد استخدام سعر صف الـhub مع نص from→to الصحيح،
+      // وإلا يختفي المقطع البري الداخل للمدينة بصمت ويبدو العميل وكأنه انتقل
+      // تلقائياً. (الاحتجاز على صف بري للـhub يمنع تطبيقه على المدن البعيدة.)
+      if (!fromAirportDrop && arrivalType === "airport"
+          && !selectedFlights.some(f => f.day === d.number)
+          && mainHub && normCity(d.fromCity) !== normCity(mainHub)) {
+        const hubRow = findInterCityTransfer(allTours, mainHub, d.toCity, dest, cityDefs, "airport", request.transport);
+        if (hubRow && !/مطار|airport/iu.test(hubRow.name)) {
+          const fromAr = cityArabicNames[d.fromCity] || d.fromCity;
+          const toAr = cityArabicNames[d.toCity] || d.toCity;
+          fromAirportDrop = { ...hubRow, name: `التوجه من ${fromAr} إلى ${toAr} بسيارة خاصة` };
+        }
+      }
       if (fromAirportDrop) selectedTransfers.push({ day: d.number, row: fromAirportDrop, kind: "Drop" });
       // Only add an airport pickup when this transit is actually a flight
       // (or train). Road transits like Sapa → Hanoi use a single door-to-
@@ -2289,7 +2345,31 @@ export async function buildLocalProgram(
   }
   // Departure drop (last day) — uses the last STAY's city, not last unique
   const depDrop = findDepartureDrop(allTours, lastCity, dest, cityDefs, request.transport);
-  if (depDrop) selectedTransfers.push({ day: days.length, row: depDrop, kind: "Drop" });
+  if (depDrop) {
+    selectedTransfers.push({ day: days.length, row: depDrop, kind: "Drop" });
+  } else if (mainHub && normCity(lastCity) !== normCity(mainHub)) {
+    // المدينة الأخيرة بلا مطار (مثل كاميرون) → نوديّع عبر الـ hub: انتقال
+    // الأخيرة→الـhub (كاميرون→كوالالمبور) ثم توديع الـhub→المطار الدولي. بدون
+    // هذا كان البرنامج ينتهي في المدينة الأخيرة بلا أي انتقال مغادرة.
+    let toHub = findInterCityTransfer(allTours, lastCity, mainHub, dest, cityDefs, "airport", request.transport);
+    // كثير من الوجهات تُسعّر الطريق باتجاه واحد فقط في الشيت (مثل كاميرون:
+    // يوجد كوالالمبور→كاميرون لكن لا يوجد كاميرون→كوالالمبور). تكلفة الطريق
+    // نفسها بالاتجاهين، فنعيد استخدام الصف المعاكس بنفس السعر/الشرائح مع نص
+    // معكوس بدل ترك الرحلة تنتهي في المدينة الأخيرة بلا انتقال مغادرة.
+    if (!toHub) {
+      const reverse = findInterCityTransfer(allTours, mainHub, lastCity, dest, cityDefs, "airport", request.transport);
+      if (reverse) {
+        const fromAr = cityArabicNames[lastCity] || lastCity;
+        const toAr   = cityArabicNames[mainHub]  || mainHub;
+        const isShared = /مشترك[ةه]?|shared|ليموزين/iu.test(reverse.name);
+        const mode = isShared ? "ليموزين مشترك" : "بسيارة خاصة";
+        toHub = { ...reverse, name: `التوجه من ${fromAr} إلى ${toAr} ${mode}` };
+      }
+    }
+    const hubDrop = findDepartureDrop(allTours, mainHub, dest, cityDefs, request.transport);
+    if (toHub)   selectedTransfers.push({ day: days.length, row: toHub,   kind: "Drop" });
+    if (hubDrop) selectedTransfers.push({ day: days.length, row: hubDrop, kind: "Drop" });
+  }
 
   // 5. Format
   const programData: ProgramData = {
