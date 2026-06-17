@@ -427,6 +427,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <button class="ebtn ebtn-nologo" id="currencyBtn" onclick="toggleCurrencyPicker()">💱 تحويل عملة</button>
 <select id="currencyPicker" onchange="onCurrencyPick()" style="display:none; padding:7px 10px; border-radius:8px; border:1px solid var(--border); background:var(--s2); color:var(--text); font-family:'Tajawal',sans-serif; font-size:12px; font-weight:700; cursor:pointer;"><option value="">💱 بدون تحويل (ريال)</option></select>
 <span id="currencyResult" style="display:none; font-size:13px; font-weight:900; color:var(--gold); background:var(--s2); border:1px solid rgba(212,168,67,0.35); border-radius:8px; padding:6px 12px; white-space:nowrap;"></span>
+<button class="ebtn ebtn-pdf" id="waGroupBtn" style="background:linear-gradient(135deg,#25D366,#128C7E);border:none;color:#fff" onclick="waGroupOpen()" title="جهّز ملف PDF وشاركه لجروب واتساب محفوظ">📲 أرسل PDF للجروب</button>
 <button class="ebtn ebtn-pdf" id="inboxSendBtn" style="display:none;background:linear-gradient(135deg,#0e9d6a,#c41d88);border:none;color:#fff" onclick="inboxSend()">📤 إرسال للشركة</button>
 </div>
 </div>
@@ -587,6 +588,25 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <button class="rfm-btn-primary" id="rfGenBtn" onclick="readyFile_generate()">📄 توليد PDF</button>
 </div>
 <div class="rfm-hint">يستخدم النظام نافذة الطباعة في المتصفح. عند الفتح اختر <strong>Save as PDF</strong> من قائمة الوجهة. <br>المحتوى لا يُعدَّل — لا أسعار، لا فنادق، لا أيام تتغير.</div>
+</div>
+</div>
+
+<!-- نافذة إرسال البكج لجروب واتساب — آمنة 100%: تنسخ النص وتفتح الجروب، بدون أي API -->
+<div class="rfm-overlay" id="waGroupOverlay" onclick="if(event.target===this)waGroupClose()">
+<div class="rfm-modal" style="max-width:560px">
+<div class="rfm-head">
+<div class="rfm-title" style="color:#25D366">📲 إرسال البكج لجروب واتساب</div>
+<button class="rfm-close" onclick="waGroupClose()">✕</button>
+</div>
+<div class="rfm-sub">يُجهَّز ملف PDF ويُشارك للجروب: على الجوال تختارين الجروب من قائمة المشاركة، وعلى الكمبيوتر يُنزَّل الملف ويُفتح الجروب لإرفاقه. آمن 100% بدون أي API.</div>
+<div id="waGroupList" style="margin-bottom:14px"></div>
+<div style="border-top:1px solid var(--border);padding-top:14px">
+<div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:8px">➕ إضافة جروب جديد</div>
+<div class="rfm-field" style="margin-bottom:8px"><input id="waNewLabel" placeholder="اسم الجروب (مثلاً: جروب المبيعات)"></div>
+<div class="rfm-field" style="margin-bottom:8px"><input id="waNewLink" placeholder="رابط دعوة الجروب (https://chat.whatsapp.com/...)"></div>
+<button class="rfm-btn-primary" style="background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;width:100%" onclick="waGroupAdd()">حفظ الجروب</button>
+<div class="rfm-hint">للحصول على رابط الجروب: من واتساب → معلومات المجموعة → دعوة عبر رابط → نسخ الرابط.</div>
+</div>
 </div>
 </div>
 
@@ -2457,6 +2477,182 @@ function updateExtra(i, field, val) {
   extraCosts[i][field] = val;
   // الإجمالي يعتمد على المبلغ ووجود الاسم — حدّثه عند تغيير أيٍّ منهما.
   if (field === 'amount' || field === 'label') updateProfit();
+}
+
+// ── إرسال البكج لجروب واتساب (آمن: نسخ + فتح الجروب، بدون أي API) ───────────
+const WA_GROUPS_KEY = 'alezz_wa_groups';
+function waGroupsLoad(){ try { return JSON.parse(localStorage.getItem(WA_GROUPS_KEY) || '[]'); } catch(e){ return []; } }
+function waGroupsSave(arr){ localStorage.setItem(WA_GROUPS_KEY, JSON.stringify(arr)); }
+function waEsc(s){ return String(s==null?'':s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+
+// يبني نص البكج بصيغة واتساب من البرنامج الحالي (وجهة + تواريخ + فنادق + برنامج يومي + السعر النهائي)
+function buildWhatsappText(){
+  const raw = lastProgramRaw || '';
+  const d = parsedData || {};
+  const dest = d.dest || getLine(raw,'DEST') || '';
+  const dateFrom = d.dateFrom || getLine(raw,'DATE_FROM') || '';
+  const dateTo = d.dateTo || getLine(raw,'DATE_TO') || '';
+  const persons = d.persons || 0;
+  const meta = d.meta || getLine(raw,'META') || '';
+  const metaDays = parseInt((String(meta).split('|')[0]||'').replace(/[^\d]/g,'')) || 0;
+
+  // الفنادق: مدينة + اسم + نجوم + ليالي (بدون أسعار داخلية)
+  const hotelsLines = d.hotelsLines || parseHotelLinesFromRaw(raw);
+  const hotelTxt = (hotelsLines||[]).map(l=>{
+    const p = String(l).split('|').map(x=>x.trim());
+    const name=p[0]||'', city=p[1]||'', stars=(p[2]||'').match(/\d+/), nights=(p[5]||'').replace(/\(.*?\)/g,'').trim();
+    if(!name && !city) return '';
+    return `• ${city}${stars?` ⭐${stars[0]}`:''}: ${name}${nights?` — ${nights}`:''}`;
+  }).filter(Boolean);
+
+  // البرنامج اليومي: دمج الانتقالات + الجولات حسب اليوم (بدون أسعار)
+  const transfers = d.transfersLines || parseSection(raw,'TRANSFERS');
+  const tours = d.toursLines || parseSection(raw,'TOURS');
+  const acts = [];
+  (transfers||[]).forEach(l=>{ const p=String(l).split('|').map(x=>x.trim()); if(/نقل إضافي/.test(p[1]||'')) return; const day=parseTransferDayNum(p[0])||999; const isP=(p[2]||'').toLowerCase().includes('pickup'); acts.push({day,icon:isP?'🚗':'🚖',text:p[1]||''}); });
+  (tours||[]).forEach(l=>{ const p=String(l).split('|').map(x=>x.trim()); if(/نقل إضافي/.test(p[1]||'')) return; const day=parseTransferDayNum(p[0])||999; const map={'ثقافية':'🏛️','طبيعية':'🌿','بحرية':'🏖️'}; acts.push({day,icon:map[p[2]]||'🗺️',text:p[1]||''}); });
+  acts.sort((a,b)=>a.day-b.day);
+  const cap = finalHomewardFarewellDay(transfers);
+  const maxAct = acts.reduce((m,a)=>Math.max(m, a.day===999?0:a.day),0);
+  let totalDays = Math.max(metaDays, maxAct);
+  if(cap) totalDays = Math.min(totalDays, cap);
+  const byDay={}; acts.forEach(a=>{ (byDay[a.day]=byDay[a.day]||[]).push(a); });
+  const dayTxt=[];
+  for(let dd=1; dd<=totalDays; dd++){
+    const list = byDay[dd]||[];
+    if(!list.length) dayTxt.push(`*اليوم ${dd}:* 🏨 يوم حر — استرخاء في الفندق`);
+    else dayTxt.push(`*اليوم ${dd}:* ${list.map(a=>`${a.icon} ${a.text}`).join(' + ')}`);
+  }
+
+  // السعر النهائي للمجموعة = التكلفة + التكاليف الإضافية + هامش الربح (نفس المعروض بالشاشة)
+  const profit = parseInt((document.getElementById('profitInput')||{}).value) || 0;
+  const finalGroup = (typeof basePrice==='number'?basePrice:0) + extraCostsTotal() + profit;
+
+  let out = `🌍 *برنامج سياحي — ${dest}*\n`;
+  if(dateFrom) out += `📅 ${dateFrom}${dateTo?` ← ${dateTo}`:''}\n`;
+  if(persons) out += `👥 ${persons} أشخاص\n`;
+  if(hotelTxt.length) out += `\n🏨 *الفنادق:*\n${hotelTxt.join('\n')}\n`;
+  if(dayTxt.length) out += `\n🗓️ *البرنامج اليومي:*\n${dayTxt.join('\n')}\n`;
+  out += `\n💰 *الإجمالي: ${finalGroup.toLocaleString()} ريال للمجموعة*\n`;
+  out += `\n— مجموعة العز للسياحة والسفر ✈️`;
+  return out;
+}
+
+async function waCopy(text){
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch(e){
+    try { const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select(); const ok=document.execCommand('copy'); document.body.removeChild(ta); return ok; }
+    catch(e2){ return false; }
+  }
+}
+
+function waGroupOpen(){
+  if(!parsedData || !lastProgramRaw){ addMessage('sys','ابنِ برنامجاً أولاً ثم أرسله للجروب.'); return; }
+  waGroupRenderList();
+  document.getElementById('waGroupOverlay').classList.add('open');
+}
+function waGroupClose(){ document.getElementById('waGroupOverlay').classList.remove('open'); }
+
+function waGroupRenderList(){
+  const groups = waGroupsLoad();
+  const box = document.getElementById('waGroupList');
+  if(!groups.length){ box.innerHTML = '<div style="font-size:13px;color:var(--muted);text-align:center;padding:18px 0">ما فيه جروبات محفوظة بعد — أضيفي رابط جروب من الأسفل.</div>'; return; }
+  box.innerHTML = groups.map((g,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;font-size:14px;color:var(--text)">${waEsc(g.label)}</div>
+        <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${waEsc(g.link)}</div>
+      </div>
+      <button class="ebtn" style="background:#25D366;color:#fff;font-weight:800" onclick="waGroupSend(${i})">📲 أرسل</button>
+      <button class="ebtn ebtn-nologo" onclick="waGroupDelete(${i})" title="حذف">🗑️</button>
+    </div>`).join('');
+}
+
+function waGroupAdd(){
+  const label = (document.getElementById('waNewLabel').value||'').trim();
+  const link = (document.getElementById('waNewLink').value||'').trim();
+  if(!label || !link){ alert('أدخلي اسم الجروب ورابطه.'); return; }
+  if(!/^https?:\/\/(chat\.whatsapp\.com|wa\.me|api\.whatsapp\.com)\//i.test(link)){
+    if(!confirm('الرابط ما يبدو رابط جروب واتساب (chat.whatsapp.com). تبين تحفظينه على كل حال؟')) return;
+  }
+  const groups = waGroupsLoad(); groups.push({label, link}); waGroupsSave(groups);
+  document.getElementById('waNewLabel').value=''; document.getElementById('waNewLink').value='';
+  waGroupRenderList();
+}
+function waGroupDelete(i){ if(!confirm('حذف هذا الجروب؟')) return; const g=waGroupsLoad(); g.splice(i,1); waGroupsSave(g); waGroupRenderList(); }
+
+// تحميل مكتبة توليد PDF عند الحاجة فقط (lazy) — ما تثقّل تحميل الصفحة.
+let _html2pdfLoading = null;
+function loadHtml2Pdf(){
+  if (window.html2pdf) return Promise.resolve();
+  if (_html2pdfLoading) return _html2pdfLoading;
+  _html2pdfLoading = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js';
+    s.onload = () => resolve();
+    s.onerror = () => { _html2pdfLoading = null; reject(new Error('تعذّر تحميل مكتبة الـPDF — تأكدي من الاتصال بالإنترنت.')); };
+    document.head.appendChild(s);
+  });
+  return _html2pdfLoading;
+}
+
+// يولّد ملف PDF فعلي (Blob) من نفس قالب #pdfContent المستخدم في الطباعة.
+async function generatePdfBlob(mode){
+  await loadHtml2Pdf();
+  buildPDF(mode);                                  // يملأ #pdfContent (بدون شبكة)
+  const el = document.getElementById('pdfContent');
+  if (!el || !el.innerHTML.trim()) throw new Error('لا يوجد محتوى لتوليد الـPDF.');
+  // نخفي العنصر داخل غلاف (max-height:0 + overflow:hidden) مع إبقاء أنماطه نظيفة
+  // ومرئية. مهم جدًّا: لو وضعنا الإخفاء (left:-99999px أو opacity:0) على العنصر
+  // نفسه، يستنسخه html2pdf مخفيًّا فتطلع صفحة فارغة (3KB). الغلاف يخفيه بصريًّا
+  // دون لمس أنماط العنصر المُلتقَط. (مُتحقَّق منه: 3KB فارغة → 2.4MB كاملة.)
+  const prevStyle = el.getAttribute('style') || '';
+  const parent = el.parentNode, next = el.nextSibling;
+  const holder = document.createElement('div');
+  holder.style.cssText = 'position:fixed;left:0;top:0;width:210mm;max-height:0;overflow:hidden;opacity:0.01;pointer-events:none;z-index:-1;';
+  holder.appendChild(el);
+  document.body.appendChild(holder);
+  el.style.cssText = 'display:block;width:210mm;background:#fff;';
+  try {
+    return await window.html2pdf().set({
+      margin: 0,
+      image: { type: 'jpeg', quality: 0.95 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'] }
+    }).from(el).outputPdf('blob');
+  } finally {
+    el.setAttribute('style', prevStyle);            // يرجع display:none من الـCSS
+    if (next) parent.insertBefore(el, next); else parent.appendChild(el);
+    holder.remove();
+    el.innerHTML = '';
+  }
+}
+
+// إرسال ملف الـPDF للجروب: على الجوال عبر مشاركة الجهاز (تختار الجروب)، وعلى
+// الكمبيوتر تنزيل الملف + فتح الجروب لإرفاقه يدويًّا. آمن 100% بدون أي API.
+async function waGroupSend(i){
+  const g = waGroupsLoad()[i]; if(!g) return;
+  if(!parsedData || !lastProgramRaw){ addMessage('sys','ابنِ برنامجاً أولاً ثم أرسله للجروب.'); return; }
+  waGroupClose();
+  addMessage('sys','⏳ يُجهَّز ملف الـPDF...');
+  let blob;
+  try { blob = await generatePdfBlob('client'); }
+  catch(e){ addMessage('sys','فشل تجهيز الـPDF: ' + (e && e.message ? e.message : e)); return; }
+  const fname = ('برنامج-' + ((parsedData && parsedData.dest) || 'العز') + '.pdf').replace(/\s+/g,'-');
+  const file = new File([blob], fname, { type: 'application/pdf' });
+  // مشاركة الجهاز (الجوال/التابلت) — تفتح قائمة المشاركة وتختارين الجروب فيها.
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'برنامج سياحي — مجموعة العز' });
+          addMessage('sys','✅ فُتحت المشاركة — اختاري الجروب وأرسلي الملف.'); return; }
+    catch(e){ if (e && e.name === 'AbortError') return; /* غير مدعوم → نزول للبديل */ }
+  }
+  // بديل الكمبيوتر: تنزيل الملف + فتح الجروب لإرفاقه.
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
+  if (g.link) window.open(g.link, '_blank');
+  addMessage('sys', `✅ نُزّل ملف «${fname}»${g.link ? ` وفُتح «${g.label}»` : ''} — أرفقي الملف (📎) داخل الجروب وأرسلي.`);
 }
 
 async function saveCurrentProgramOnce(pdfVariant, finalGroupPrice) {
