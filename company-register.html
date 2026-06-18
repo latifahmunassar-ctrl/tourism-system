@@ -29,7 +29,10 @@
   .logo-btn{border:1px dashed var(--brand2);background:#e9f7f1;color:var(--brand);border-radius:11px;padding:11px 14px;cursor:pointer;font-weight:600;flex:1}
   .submit{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:14px;padding:15px;width:100%;font-size:16px;font-weight:700;cursor:pointer;margin-top:6px;box-shadow:0 6px 18px rgba(14,157,106,.22)}
   .submit:disabled{opacity:.6;cursor:default}
-  .err{background:#fbeaea;color:var(--err);border-radius:11px;padding:11px;font-size:13.5px;margin-top:12px;display:none}
+  .err{background:#fbeaea;color:var(--err);border:1.5px solid #f0c0c0;border-radius:11px;padding:13px 14px;font-size:14px;font-weight:700;line-height:1.7;margin-top:12px;display:none}
+  .err b{color:#7a1020}
+  .field-err{border-color:#dc2626 !important;box-shadow:0 0 0 3px rgba(220,38,38,.16) !important;background:#fff7f7 !important}
+  select.field-err,input.field-err{outline:none}
   .note{font-size:12.5px;color:var(--muted);text-align:center;margin-top:14px}
   .note a{color:var(--brand);font-weight:700;text-decoration:none}
   .done{text-align:center;padding:30px 10px}
@@ -172,30 +175,30 @@ $('form').addEventListener('submit', async e=>{
   e.preventDefault();
   const f=e.target, err=$('errBox'); err.style.display='none';
   const btn=$('submitBtn');
-  if(!f.company_name.value.trim()||!f.contact_phone.value.trim()||f.password.value.length<4){
-    err.textContent='عبّي اسم الشركة، رقم الجوال، وكلمة المرور (4 خانات على الأقل).'; err.style.display='block'; return;
-  }
-  if(!f.contact_name.value.trim()){
-    err.textContent='اسم المسؤول مطلوب. / Contact person is required.'; err.style.display='block'; return;
-  }
-  if(!f.country.value.trim()){
-    err.textContent='بلد الشركة مطلوب. / Company country is required.'; err.style.display='block'; return;
-  }
-  if(!f.contact_role.value.trim()){
-    err.textContent='منصب المسؤول (موقعه من الشركة) مطلوب. / Contact role is required.'; err.style.display='block'; return;
-  }
-  let _ph=f.contact_phone.value.replace(/[^\d+]/g,''); if(_ph.startsWith('00')) _ph='+'+_ph.slice(2);
-  if(!/^\+[1-9]\d{9,14}$/.test(_ph)){
-    err.textContent='رقم الجوال غير صحيح — أدخل الرقم بصيغة دولية مع رمز الدولة، مثال: +9665XXXXXXXX. / Use full international format with country code.'; err.style.display='block'; return;
-  }
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.contact_email.value.trim())){
-    err.textContent='البريد الإلكتروني مطلوب وبصيغة صحيحة. / A valid email is required.'; err.style.display='block'; return;
-  }
+  // يعرض الخطأ بوضوح: يبرز الرسالة + يمرّر إليها + يميّز الحقل الخاطئ ويركّز عليه
+  const fail=(msg, field)=>{
+    err.innerHTML='⚠️ '+msg; err.style.display='block';
+    try{ err.scrollIntoView({behavior:'smooth',block:'center'}); }catch(_){}
+    document.querySelectorAll('.field-err').forEach(x=>x.classList.remove('field-err'));
+    if(field){ field.classList.add('field-err'); try{ field.focus({preventScroll:true}); }catch(_){ field.focus(); } }
+  };
+  if(!f.company_name.value.trim()){ fail('اسم الشركة مطلوب. / Company name is required.', f.company_name); return; }
+  if(!f.contact_name.value.trim()){ fail('اسم المسؤول مطلوب. / Contact person is required.', f.contact_name); return; }
+  if(!f.country.value.trim()){ fail('بلد الشركة مطلوب — اختاري البلد من القائمة. / Company country is required.', f.country); return; }
+  if(!f.contact_role.value.trim()){ fail('منصب المسؤول مطلوب (مثلاً: مدير، موظف حجوزات). / Contact role is required.', f.contact_role); return; }
+  // ── تحقّق الجوال برسائل محدّدة حسب نوع الخطأ ──
+  const rawPh=f.contact_phone.value.trim();
+  let _ph=rawPh.replace(/[^\d+]/g,''); if(_ph.startsWith('00')) _ph='+'+_ph.slice(2);
+  if(!rawPh){ fail('رقم الجوال مطلوب. اكتبيه بصيغة دولية، مثال السعودية: <b dir="ltr">+9665XXXXXXXX</b>', f.contact_phone); return; }
+  if(/[A-Za-zء-ي]/.test(rawPh)){ fail('رقم الجوال يحتوي حروفاً — اكتبي أرقاماً فقط مع رمز الدولة، مثال: <b dir="ltr">+9665XXXXXXXX</b>', f.contact_phone); return; }
+  if(!_ph.startsWith('+')){ fail('ابدئي الرقم بعلامة <b>+</b> ثم رمز الدولة (السعودية 966) ثم الرقم بدون الصفر الأول. مثال: <b dir="ltr">+9665XXXXXXXX</b>', f.contact_phone); return; }
+  if(_ph.replace(/\D/g,'').length < 10){ fail('الرقم ناقص — تأكدي إنه كامل مع رمز الدولة. مثال السعودية: <b dir="ltr">+9665XXXXXXXX</b>', f.contact_phone); return; }
+  if(!/^\+[1-9]\d{9,14}$/.test(_ph)){ fail('صيغة رقم الجوال غير مقبولة. الصيغة المطلوبة: <b>+</b> رمز الدولة ثم الرقم. مثال: <b dir="ltr">+9665XXXXXXXX</b>', f.contact_phone); return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.contact_email.value.trim())){ fail('البريد الإلكتروني مطلوب وبصيغة صحيحة، مثال: <b dir="ltr">name@company.com</b>', f.contact_email); return; }
   const _web=f.website.value.trim();
   const _okWeb=/^(https?:\/\/)?([\w-]+\.)+[\w-]{2,}(\/\S*)?$/i.test(_web)||/^@[\w.]{2,}$/.test(_web);
-  if(!_web||!_okWeb){
-    err.textContent='الموقع أو الانستقرام مطلوب وبصيغة صحيحة (مثال: example.com أو ‎@handle). / A valid website/Instagram is required.'; err.style.display='block'; return;
-  }
+  if(!_web||!_okWeb){ fail('الموقع أو الانستقرام مطلوب وبصيغة صحيحة — مثال موقع: <b dir="ltr">example.com</b> أو انستقرام: <b dir="ltr">@handle</b>', f.website); return; }
+  if(f.password.value.length<4){ fail('كلمة المرور قصيرة — لازم 4 خانات على الأقل. / Password must be at least 4 characters.', f.password); return; }
   const payload={
     company_name:f.company_name.value.trim(), contact_name:f.contact_name.value.trim(),
     country:f.country.value.trim(),
@@ -219,7 +222,22 @@ $('form').addEventListener('submit', async e=>{
     if(!d.ok) throw new Error(d.error||'تعذّر التسجيل');
     $('form').style.display='none'; $('done').style.display='block';
     window.scrollTo({top:0,behavior:'smooth'});
-  }catch(ex){ err.textContent=ex.message||'صار خطأ، حاول مرة ثانية.'; err.style.display='block'; btn.disabled=false; btn.textContent='إرسال طلب التسجيل'; }
+  }catch(ex){  // eslint-keep
+    const m=String(ex.message||'');
+    // أخطاء السيرفر الشائعة → ميّز الحقل المعني ووضّح الحل
+    let field=null;
+    if(/جوال|الرقم/.test(m)) field=f.contact_phone;
+    else if(/بريد|الإلكتروني/.test(m)) field=f.contact_email;
+    else if(/اسم الشركة|الشركة.*مسجّل/.test(m)) field=f.company_name;
+    const extra = /مسجّل مسبق/.test(m) ? '<br><span style="font-weight:600">إذا هذا حسابك، استخدمي «تسجيل الدخول» بدل إنشاء حساب جديد.</span>' : '';
+    fail((m||'تعذّر إرسال الطلب — تحقّقي من الاتصال وحاولي مرة ثانية.')+extra, field);
+    btn.disabled=false; btn.textContent='إرسال طلب التسجيل';
+  }
+});
+// إزالة تمييز الخطأ بمجرّد ما يبدأ المستخدم بتصحيح الحقل
+document.querySelectorAll('#form input, #form select').forEach(el=>{
+  el.addEventListener('input', ()=>el.classList.remove('field-err'));
+  el.addEventListener('change', ()=>el.classList.remove('field-err'));
 });
 
 // ── تأكيد رقم الجوال بكود واتساب (OTP) ──
