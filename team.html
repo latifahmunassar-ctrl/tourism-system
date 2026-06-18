@@ -1512,7 +1512,7 @@ function bfShowOptions(){
     const tag = isAll ? `<span class="bf-sug-lab">✈️ ${bfEsc(route)}</span>` : (s.label?`<span class="bf-sug-lab">${bfEsc(s.label)}</span>`:'');
     return `<div class="bf-sug" data-i="${i}">
       <div><span class="bf-sug-d">${s.days} أيام</span>${tag}</div>
-      <div class="bf-sug-dist">${bfEsc(s.distribution)}</div>
+      <div class="bf-sug-dist">${bfEsc(arabicDigitsToLatin(s.distribution))}</div>
     </div>`;
   }).join('');
   const els = [...list.querySelectorAll('.bf-sug')];
@@ -2636,10 +2636,15 @@ async function waGroupSend(i){
   if(!parsedData || !lastProgramRaw){ addMessage('sys','ابنِ برنامجاً أولاً ثم أرسله للجروب.'); return; }
   waGroupClose();
   addMessage('sys','⏳ يُجهَّز ملف الـPDF...');
+  // احفظ البرنامج (إن لم يُحفظ بعد) للحصول على كود الاسترجاع لاسم الملف. لو فشل
+  // الحفظ، نكمل بالاسم العادي حتى لا يتعطّل الإرسال.
+  const profit = parseInt((document.getElementById('profitInput')||{}).value) || 0;
+  const code = await saveCurrentProgramOnce('client', basePrice + extraCostsTotal() + profit);
   let blob;
   try { blob = await generatePdfBlob('client'); }
   catch(e){ addMessage('sys','فشل تجهيز الـPDF: ' + (e && e.message ? e.message : e)); return; }
-  const fname = ('برنامج-' + ((parsedData && parsedData.dest) || 'العز') + '.pdf').replace(/\s+/g,'-');
+  const baseName = sanitizeFileName(code || lastSavedCode || ('برنامج-' + ((parsedData && parsedData.dest) || 'العز')));
+  const fname = baseName + '.pdf';
   const file = new File([blob], fname, { type: 'application/pdf' });
   // مشاركة الجهاز (الجوال/التابلت) — تفتح قائمة المشاركة وتختارين الجروب فيها.
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -3455,10 +3460,25 @@ async function exportPDF(mode) {
     return;
   }
   try {
+    // اسم الملف المقترح في نافذة «Save as PDF» = كود الاسترجاع (كود النظام)،
+    // بدل عنوان الصفحة، حتى يسهل البحث عنه يوم يُرسَل للعميل. نرجّع العنوان بعدها.
+    const origTitle = document.title;
+    const codeName = sanitizeFileName(saved || lastSavedCode || '');
+    if (codeName) {
+      document.title = codeName;
+      const restoreTitle = () => { document.title = origTitle; };
+      window.addEventListener('afterprint', restoreTitle, { once: true });
+      setTimeout(restoreTitle, 60000);   // أمان: رجّع العنوان حتى لو لم يُطلَق afterprint
+    }
     setTimeout(()=>{ window.print(); }, 300);
   } catch (e) {
     addMessage('sys', 'فشل فتح نافذة الطباعة: ' + String((e && e.message) ? e.message : e));
   }
+}
+
+// تنظيف اسم الملف من المحارف غير المسموحة + توحيد المسافات.
+function sanitizeFileName(s){
+  return String(s || '').trim().replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '-');
 }
 
 function addMessage(type, text) {
@@ -3932,9 +3952,9 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
         if(typeof bfLoadSuggestions==='function'){ await bfLoadSuggestions(); }
         const aSel=document.getElementById('bf-airport'); if(aSel && req.sel_pair) aSel.value=req.sel_pair;
         if(typeof bfShowOptions==='function') bfShowOptions();
-        const want=String(req.sel_distribution).trim();
+        const want=arabicDigitsToLatin(String(req.sel_distribution).trim());
         const match=[...document.querySelectorAll('#bf-sugList .bf-sug')].find(el=>{
-          const d=el.querySelector('.bf-sug-dist'); return d && d.textContent.trim()===want;
+          const d=el.querySelector('.bf-sug-dist'); return d && arabicDigitsToLatin(d.textContent.trim())===want;
         });
         if(match){ match.click(); if(typeof bfExpected==='function') bfExpected(); return 'ready'; }
       }catch(e){ console.warn('ready fill failed → fallback to manual', e); }

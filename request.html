@@ -177,6 +177,7 @@ const CITIES = {
 const AIRPORT_AR={Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي"};
 const airAr=a=>AIRPORT_AR[a]||a;
 const esc=s=>String(s||"").replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+const toLatinD=s=>String(s||"").replace(/[٠-٩]/g,d=>"٠١٢٣٤٥٦٧٨٩".indexOf(d));
 
 const destSel=document.getElementById('destination');
 Object.keys(CITIES).forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent=d;destSel.appendChild(o)});
@@ -248,7 +249,7 @@ function showOptions(){
   list.innerHTML=rows.map(s=>`
     <div class="sug" data-k="${esc(s.arrival_airport+'|'+s.departure_airport+'|'+s.days+'|'+(s.label||'')+'|'+s.distribution)}">
       <div><span class="d">${s.days} أيام</span>${s.label?`<span class="lab">${esc(s.label)}</span>`:''}</div>
-      <div class="dist">${esc(s.distribution)}</div>
+      <div class="dist">${esc(toLatinD(s.distribution))}</div>
     </div>`).join('');
   const els=[...list.querySelectorAll('.sug')];
   els.forEach(el=>el.onclick=()=>{

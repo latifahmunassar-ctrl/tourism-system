@@ -279,6 +279,8 @@ const CITIES={
   "عُمان":["مسقط","صلالة","الجبل الأخضر"],
 };
 const esc=s=>String(s||"").replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+// توحيد الأرقام: حوّل الأرقام العربية (٠-٩) إلى لاتيني لتنسيق موحّد في المقترحات
+const toLatinD=s=>String(s||"").replace(/[٠-٩]/g,d=>"٠١٢٣٤٥٦٧٨٩".indexOf(d));
 const $=id=>document.getElementById(id);
 let TOKEN=localStorage.getItem('alezz_company_token')||'';
 let COMPANY=null;
@@ -560,7 +562,7 @@ function showOptions(){
   }
   shownRows.sort((a,b)=>(+a.days)-(+b.days));
   pick.style.display='none';
-  list.innerHTML=shownRows.map((s,i)=>{const [a,b]=pairOf(s).split('|');const route=a===b?airAr(a):`${airAr(a)} → ${airAr(b)}`;const tag=isAll?`<span class="lab">✈️ ${esc(route)}</span>`:(s.label?`<span class="lab">${esc(s.label)}</span>`:'');return `<div class="sug" data-i="${i}"><div><span class="d">${s.days} أيام</span>${tag}</div><div class="dist">${esc(s.distribution)}</div></div>`}).join('');
+  list.innerHTML=shownRows.map((s,i)=>{const [a,b]=pairOf(s).split('|');const route=a===b?airAr(a):`${airAr(a)} → ${airAr(b)}`;const tag=isAll?`<span class="lab">✈️ ${esc(route)}</span>`:(s.label?`<span class="lab">${esc(s.label)}</span>`:'');return `<div class="sug" data-i="${i}"><div><span class="d">${s.days} أيام</span>${tag}</div><div class="dist">${esc(toLatinD(s.distribution))}</div></div>`}).join('');
   const els=[...list.querySelectorAll('.sug')];
   els.forEach(el=>el.onclick=()=>{ els.forEach(x=>x.classList.remove('sel')); el.classList.add('sel'); const s=shownRows[+el.dataset.i]; chosen={distribution:s.distribution,arrival_airport:s.arrival_airport,departure_airport:s.departure_airport}; const dEl=$('days'); if(+dEl.value!==+s.days){ dEl.value=s.days; expectedNights(); } });
   if(els.length===1) els[0].click();
