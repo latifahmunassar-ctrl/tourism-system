@@ -276,6 +276,7 @@ const CITIES={
   "روسيا":["موسكو","سانت بطرسبرغ","سوتشي"],
   "البوسنة":["سراييفو","موستار","بيهاتش"],
   "إندونيسيا":["بالي","جاكرتا","باندونغ","بونشاك"],
+  "عُمان":["مسقط","صلالة","الجبل الأخضر"],
 };
 const esc=s=>String(s||"").replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
 const $=id=>document.getElementById(id);
@@ -414,7 +415,7 @@ function showRequests(){ hideViews(); $('requestsView').style.display=''; setTab
 // ── طلباتي ──
 let MY_REQS=[], MY_CURRENCY='SAR';
 const CUR={SAR:'ريال / SAR',USD:'دولار / USD',EUR:'يورو / EUR',AED:'درهم / AED',OMR:'ريال عماني / OMR',KWD:'دينار / KWD',EGP:'جنيه / EGP'};
-const DEST_FLAG={'تايلاند':'🇹🇭','ماليزيا':'🇲🇾','تركيا':'🇹🇷','فيتنام':'🇻🇳','روسيا':'🇷🇺','البوسنة':'🇧🇦','إندونيسيا':'🇮🇩'};
+const DEST_FLAG={'تايلاند':'🇹🇭','ماليزيا':'🇲🇾','تركيا':'🇹🇷','فيتنام':'🇻🇳','روسيا':'🇷🇺','البوسنة':'🇧🇦','إندونيسيا':'🇮🇩','عُمان':'🇴🇲'};
 function rqFmtDate(iso){ if(!iso)return''; const d=new Date(iso); if(isNaN(d.getTime()))return''; const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())}`; }
 async function loadMyRequests(){
   $('reqsList').innerHTML='<div class="rq-empty">جارٍ التحميل…</div>';
