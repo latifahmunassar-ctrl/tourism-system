@@ -394,7 +394,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div style="display:flex;align-items:center;gap:10px;">
   <div class="user-pill"><div class="avatar">م</div>موظف المبيعات</div>
   <button class="logout-btn" type="button" onclick="inboxOpen()" style="position:relative;">📥 طلبات الشركات<span id="inboxBadge" style="display:none;position:absolute;top:-7px;left:-7px;background:#e0218a;color:#fff;border-radius:999px;font-size:10px;padding:1px 6px;font-weight:900;">0</span></button>
-  <button class="logout-btn" type="button" onclick="indivOpen()" style="position:relative;">👤 طلبات الأفراد</button>
+  <button class="logout-btn" type="button" onclick="indivOpen()" style="position:relative;">👤 طلبات الأفراد<span id="indivBadge" style="display:none;position:absolute;top:-7px;left:-7px;background:#e0218a;color:#fff;border-radius:999px;font-size:10px;padding:1px 6px;font-weight:900;">0</span></button>
   <a href="https://latifahmunassar-ctrl.github.io/dashboard/" target="_blank" rel="noopener" class="logout-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">📊 لوحة التحكم</a>
   <button class="logout-btn" type="button" onclick="trustDevice()" title="اطلبي توثيق هذا الجهاز ليدخل من أي دولة">🔓 توثيق الجهاز</button>
   <button class="logout-btn" type="button" onclick="logout()">تسجيل خروج</button>
@@ -4102,6 +4102,9 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
   if(localStorage.getItem('alezz_admin_secret')){
     fetch(IB_BASE+'?admin_action=list',{headers:ibH()}).then(r=>r.ok?r.json():null)
       .then(d=>{ if(d&&d.requests) ibBadge(d.requests.filter(r=>r.status==='pending_review'||r.status==='build_failed').length); }).catch(()=>{});
+    // عدّاد طلبات الأفراد: عدد الواردة (غير المُرسلة).
+    fetch(IB_BASE+'?admin_action=list_individuals',{headers:ibH()}).then(r=>r.ok?r.json():null)
+      .then(d=>{ if(d&&d.requests) indBadge(d.requests.filter(r=>r.status!=='sent').length); }).catch(()=>{});
   }
 
   // ── 👤 صندوق طلبات الأفراد (booking_brief) — منفصل، يعمل مثل الشركات ──────────
@@ -4137,6 +4140,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       <button class="ib-reoffer" type="button" onclick="indivReoffer('${r.id}')">🔄 إرسال عرض آخر</button>`:''}
     </div>`;
   }
+  function indBadge(n){ const b=document.getElementById('indivBadge'); if(!b) return; if(n>0){ b.textContent=n; b.style.display=''; } else b.style.display='none'; }
   function indivRender(reqs){
     reqs=reqs||[]; indivLast=reqs;
     const q=(document.getElementById('indivSearch')||{}).value||'';
@@ -4145,6 +4149,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     const sent=f.filter(r=>r.status==='sent').sort((a,b)=>String(b.sent_at||'').localeCompare(String(a.sent_at||'')));
     const ci=document.getElementById('indCountIn'); if(ci) ci.textContent=incoming.length;
     const cs=document.getElementById('indCountSent'); if(cs) cs.textContent=sent.length;
+    indBadge(incoming.length);
     document.getElementById('indivList').innerHTML=incoming.length?incoming.map(r=>indivCard(r,false)).join(''):'<div class="ib-empty">لا توجد طلبات واردة</div>';
     document.getElementById('indivSentList').innerHTML=sent.length?sent.map(r=>indivCard(r,true)).join(''):'<div class="ib-empty">لا توجد طلبات مُرسلة</div>';
   }
