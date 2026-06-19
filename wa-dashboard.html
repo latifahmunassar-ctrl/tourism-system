@@ -718,9 +718,49 @@
         <button class="refresh-btn" id="mute-btn" title="إيقاف/تشغيل صوت الإشعارات">🔔</button>
         <button class="refresh-btn" id="refresh">↻ تحديث</button>
         <button class="refresh-btn" id="logout" title="تسجيل خروج (مسح التوكن)">🔐</button>
+        <button class="refresh-btn" id="waDevBtn" title="الموافقة على أجهزة داشبورد الواتساب (للمالكة)" onclick="waDevOpen()">🔒 أجهزة</button>
         <div class="last-updated">آخر تحديث: <span id="now">—</span></div>
       </div>
     </header>
+    <!-- 🔒 الموافقة على أجهزة داشبورد الواتساب (للمالكة) — نفس باكند الأمان -->
+    <div id="waDevModal" style="display:none; position:fixed; inset:0; z-index:9998; background:rgba(0,0,0,.45); align-items:flex-start; justify-content:center; padding:40px 16px; overflow:auto;">
+      <div style="background:#fff; border-radius:16px; max-width:640px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,.3);">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid #eee; background:#f8fafc; border-radius:16px 16px 0 0;">
+          <b style="color:#0b5d4e;">🔒 الموافقة على أجهزة داشبورد الواتساب</b>
+          <button type="button" onclick="document.getElementById('waDevModal').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748b;">×</button>
+        </div>
+        <div id="waDevList" style="padding:14px 18px; max-height:62vh; overflow:auto;">جارٍ التحميل…</div>
+      </div>
+    </div>
+    <script>
+    (function(){
+      const INTAKE='https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake';
+      const esc=s=>String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+      function ownerSec(force){ let s=localStorage.getItem('alezz_owner_secret')||''; if(!s||force){ const p=prompt('مفتاح المالكة الإداري (COMPANIES_ADMIN_SECRET):',''); if(p){ s=p.trim(); localStorage.setItem('alezz_owner_secret',s);} } return localStorage.getItem('alezz_owner_secret')||''; }
+      const oH=()=>({'Content-Type':'application/json','x-admin-secret':localStorage.getItem('alezz_owner_secret')||''});
+      async function fetchDevs(){ const r=await fetch(INTAKE+'?admin_action=sec_overview',{headers:oH()}); if(r.status===401){ if(ownerSec(true)) return fetchDevs(); throw new Error('unauthorized'); } const d=await r.json(); return (d.devices||[]).filter(v=>v.source==='whatsapp'); }
+      function render(devs){
+        document.getElementById('waDevList').innerHTML = devs.length ? devs.map(v=>{
+          const badge=v.approved?'<span style="color:#15803d;font-weight:800">✅ موثّق</span>':'<span style="color:#b45309;font-weight:800">⏳ بانتظار موافقتك</span>';
+          const act=v.approved
+            ? `<button type="button" onclick="waDevAct('${v.id}','remove')" style="background:#fee2e2;color:#b91c1c;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer">إلغاء التوثيق</button>`
+            : `<button type="button" onclick="waDevAct('${v.id}','approve')" style="background:#dcfce7;color:#15803d;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer">✅ اعتماد</button> <button type="button" onclick="waDevAct('${v.id}','remove')" style="background:#fee2e2;color:#b91c1c;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer">رفض</button>`;
+          return `<div style="border:1px solid #e3e8ee;border-radius:10px;padding:11px 13px;margin-bottom:9px;"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><b>${esc(v.label||'جهاز')}</b>${badge}</div><div style="color:#64748b;font-size:12px;margin-top:4px;">آخر دولة: ${esc(v.last_country||'—')} · ${esc((v.last_seen||'').slice(0,16).replace('T',' ')||'—')}</div><div style="margin-top:8px;">${act}</div></div>`;
+        }).join('') : '<div style="color:#64748b;text-align:center;padding:24px;">لا طلبات أجهزة من داشبورد الواتساب بعد</div>';
+      }
+      window.waDevOpen=async function(){
+        if(!ownerSec()) return;
+        document.getElementById('waDevModal').style.display='flex';
+        document.getElementById('waDevList').innerHTML='جارٍ التحميل…';
+        try{ render(await fetchDevs()); }catch(e){ document.getElementById('waDevList').innerHTML='<div style="color:#dc2626;text-align:center;padding:20px;">تعذّر — تأكدي من مفتاح المالكة الإداري.</div>'; }
+      };
+      window.waDevAct=async function(id,action){
+        const ep=action==='approve'?'sec_device_approve':'sec_device_remove';
+        if(action==='remove' && !confirm('إزالة/رفض هذا الجهاز؟ بيرجع عليه قيد الدولة.')) return;
+        try{ const r=await fetch(INTAKE+'?admin_action='+ep+'&id='+encodeURIComponent(id),{method:'POST',headers:oH()}); const d=await r.json(); if(d.ok){ render(await fetchDevs()); } else alert(d.error||'فشل'); }catch(_){ alert('تعذّر الاتصال'); }
+      };
+    })();
+    </script>
 
     <!-- Admin-only tab bar. Hidden in sales / monitor views. -->
     <nav class="tab-bar" id="tab-bar">
