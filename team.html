@@ -394,6 +394,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div style="display:flex;align-items:center;gap:10px;">
   <div class="user-pill"><div class="avatar">م</div>موظف المبيعات</div>
   <button class="logout-btn" type="button" onclick="inboxOpen()" style="position:relative;">📥 طلبات الشركات<span id="inboxBadge" style="display:none;position:absolute;top:-7px;left:-7px;background:#e0218a;color:#fff;border-radius:999px;font-size:10px;padding:1px 6px;font-weight:900;">0</span></button>
+  <button class="logout-btn" type="button" onclick="indivOpen()" style="position:relative;">👤 طلبات الأفراد</button>
   <a href="https://latifahmunassar-ctrl.github.io/dashboard/" target="_blank" rel="noopener" class="logout-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">📊 لوحة التحكم</a>
   <button class="logout-btn" type="button" onclick="trustDevice()" title="اطلبي توثيق هذا الجهاز ليدخل من أي دولة">🔓 توثيق الجهاز</button>
   <button class="logout-btn" type="button" onclick="logout()">تسجيل خروج</button>
@@ -3812,6 +3813,13 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
 .ib-empty{color:#6b7c7a;text-align:center;padding:30px}
 #inboxBanner{position:fixed;top:0;left:0;right:0;z-index:9000;background:linear-gradient(135deg,#0e9d6a,#c41d88);color:#fff;padding:9px 16px;display:none;align-items:center;justify-content:center;gap:14px;font-size:13.5px;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.2)}
 #inboxBanner button{background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:8px;padding:5px 10px;cursor:pointer;font-weight:700}
+/* صندوق طلبات الأفراد — يشارك كل الـ classes العامة (.ib-*) مع صندوق الشركات */
+#indivOverlay{position:fixed;inset:0;background:rgba(13,30,26,.45);z-index:9999;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
+#indivOverlay .ibx{background:#fff;border:1px solid #dcede6;border-radius:18px;max-width:680px;width:100%;color:#1d2b2a;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+#indivOverlay .ibhd{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #dcede6;background:#f2faf6;border-radius:18px 18px 0 0}
+#indivOverlay .ibhd b{font-size:16px;color:#0e9d6a}
+#indivOverlay .ibx-x{background:none;border:none;color:#6b7c7a;font-size:22px;cursor:pointer}
+#indivList{padding:10px;max-height:60vh;overflow:auto}
 </style>
 <div id="inboxBanner"></div>
 <div id="inboxOverlay" onclick="if(event.target===this)inboxClose()">
@@ -3825,6 +3833,14 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     <div class="ib-search"><input id="ibSearch" type="search" placeholder="🔎 بحث: شركة · وجهة · موظف · رقم الطلب" oninput="ibSearchApply()"></div>
     <div id="inboxList"><div class="ib-empty">جارٍ التحميل…</div></div>
     <div id="inboxSentList" style="display:none"></div>
+  </div>
+</div>
+<!-- ===== صندوق طلبات الأفراد (booking_brief) — منفصل، يعمل مثل الشركات ===== -->
+<div id="indivOverlay" onclick="if(event.target===this)indivClose()">
+  <div class="ibx">
+    <div class="ibhd"><b>👤 طلبات الأفراد</b><button class="ibx-x" onclick="indivClose()">×</button></div>
+    <div class="ib-search"><input id="indivSearch" type="search" placeholder="🔎 بحث: عميل · رقم · وجهة · موظف" oninput="indivSearchApply()"></div>
+    <div id="indivList"><div class="ib-empty">جارٍ التحميل…</div></div>
   </div>
 </div>
 <script>
@@ -4080,6 +4096,72 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     fetch(IB_BASE+'?admin_action=list',{headers:ibH()}).then(r=>r.ok?r.json():null)
       .then(d=>{ if(d&&d.requests) ibBadge(d.requests.filter(r=>r.status==='pending_review'||r.status==='build_failed').length); }).catch(()=>{});
   }
+
+  // ── 👤 صندوق طلبات الأفراد (booking_brief) — منفصل، يعمل مثل الشركات ──────────
+  // يعيد استخدام inboxFillForm + buildFromForm (نفس آلية تعبئة المبني وتسعيره).
+  let indivLast=[];
+  const IND_STAT={incomplete:'غير مكتمل',complete:'مكتمل',transferred:'محوّل'};
+  const indivPh=p=>String(p||'').replace(/^whatsapp:/,'');
+  async function indivList(){
+    const r=await fetch(IB_BASE+'?admin_action=list_individuals',{headers:ibH()});
+    if(r.status===401){ if(ibSecret(true)) return indivList(); throw new Error('unauthorized'); }
+    const d=await r.json(); return d.requests||[];
+  }
+  window.indivOpen=async function(){
+    if(!ibSecret()) return;
+    document.getElementById('indivOverlay').style.display='flex';
+    document.getElementById('indivList').innerHTML='<div class="ib-empty">جارٍ التحميل…</div>';
+    try{ indivRender(await indivList()); }
+    catch(e){ document.getElementById('indivList').innerHTML='<div class="ib-empty">تعذّر التحميل — تأكد من المفتاح الإداري.</div>'; }
+  };
+  window.indivClose=function(){document.getElementById('indivOverlay').style.display='none';};
+  function indivMatch(r,q){ if(!q) return true; const hay=[r.customer_name,r.contact_phone,r.destination,r.handled_by].map(x=>String(x||'').toLowerCase()).join(' | '); return q.toLowerCase().split(/\s+/).filter(Boolean).every(t=>hay.includes(t)); }
+  window.indivSearchApply=function(){ indivRender(indivLast); };
+  function indivRender(reqs){
+    reqs=reqs||[]; indivLast=reqs;
+    const q=(document.getElementById('indivSearch')||{}).value||'';
+    const rows=reqs.filter(r=>indivMatch(r,q)).sort((a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||'')));
+    const bcls=s=>s==='complete'?'ib-sent':(s==='transferred'?'ib-new':'ib-pending_review');
+    document.getElementById('indivList').innerHTML=rows.length?rows.map(r=>`
+      <div class="ib-item" onclick="indivLoad('${r.id}')">
+        <div class="ib-r1"><span class="ib-co">👤 ${ibEsc(r.customer_name||indivPh(r.contact_phone)||'—')}</span><span class="ib-bdg ${bcls(r.status)}">${IND_STAT[r.status]||r.status}</span></div>
+        <div class="ib-dest">📍 ${ibEsc(r.destination||'—')} · ${r.days||'—'} أيام · ${r.pax||'—'} بالغ${r.children?(' + '+r.children+' أطفال'):''}</div>
+        <div class="ib-cust">📱 ${ibEsc(indivPh(r.contact_phone))}${r.handled_by?(' · 🧑‍💼 '+ibEsc(r.handled_by)):''}${r.currency?(' · 💱 '+ibEsc(r.currency)):''}</div>
+        ${r.distribution?`<div class="ib-r2">🗺️ ${ibEsc(r.distribution)}</div>`:''}
+      </div>`).join(''):'<div class="ib-empty">لا توجد طلبات أفراد</div>';
+  }
+  window.indivLoad=async function(id){
+    indivClose();
+    const r=await fetch(IB_BASE+'?admin_action=get_individual&id='+id,{headers:ibH()});
+    const j=await r.json(); const b=j.request;
+    if(!b){alert('تعذّر فتح الطلب');return;}
+    // اربط حقول booking_brief بالصيغة التي يفهمها inboxFillForm (نفس مبنى الشركات)
+    const req={
+      destination:b.destination, pax:b.pax, children:b.children, days:b.days,
+      sim_count:b.sim_count, date_from:b.date_from, notes:b.notes, transport:'private',
+      stars:b.hotel_stars, cities_nights:b.cities_nights,
+      sel_distribution:b.distribution||'',
+      sel_pair:(b.arrival_airport||'')+'|'+(b.departure_airport||''),
+    };
+    // طلب فرد ليس له «إرسال للشركة» — نلغي أي ربط شركة سابق ونخفي شريطه.
+    if(typeof inboxDismiss==='function') inboxDismiss();
+    const filled=await inboxFillForm(req);
+    if((filled==='ready'||filled==='manual') && typeof buildFromForm==='function'){
+      const before=(typeof lastProgramRaw!=='undefined')?lastProgramRaw:'';
+      buildFromForm();
+      if(typeof fpTab==='function') fpTab('build');
+      let waited=0; const chk=setInterval(()=>{ waited+=700;
+        const built=(typeof lastProgramRaw!=='undefined') && lastProgramRaw && lastProgramRaw!==before && /TOTAL_GROUP:/.test(lastProgramRaw);
+        if(built){clearInterval(chk);} else if(waited>=9000){clearInterval(chk); if(typeof fpTab==='function') fpTab('mods');}
+      },700);
+    } else {
+      const cn=(b.cities_nights||[]).map(c=>`${c.nights} ${c.city}`).join(' + ');
+      const ci=document.getElementById('chatInput');
+      if(ci) ci.value=`${b.destination||''} ${b.days||''} ايام ${cn} ل ${b.pax||''} بالغين${b.children?(' و '+b.children+' اطفال'):''}${b.date_from?(' تاريخ '+b.date_from):''}`;
+      if(typeof sendMessage==='function') sendMessage();
+    }
+    window.scrollTo({top:0,behavior:'smooth'});
+  };
 })();
 </script>
 
