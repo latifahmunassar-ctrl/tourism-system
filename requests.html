@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>صندوق طلبات الشركات (داخلي) | ALEZZ</title>
+<title>صندوق الطلبات (داخلي) | ALEZZ</title>
 <style>
   :root{--brand:#0e9d6a;--brand2:#c41d88;--bg:#eef6f2;--ink:#1d2b2a;--muted:#6b7c7a;--line:#d8e8e0;--ok:#15803d;--err:#b91c1c;--warn:#b45309}
   *{box-sizing:border-box}
@@ -36,6 +36,10 @@
   .login{max-width:380px;margin:80px auto;background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px;text-align:center}
   .login input{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;margin:12px 0}
   .warn{background:#fef3c7;color:var(--warn);font-size:12.5px;padding:8px 12px;border-radius:9px;margin-bottom:10px}
+  .tabs{display:flex;border-bottom:1px solid var(--line)}
+  .tab{flex:1;background:#f7fbf9;border:none;border-bottom:3px solid transparent;padding:11px 8px;font:inherit;font-weight:700;font-size:13px;color:var(--muted);cursor:pointer}
+  .tab.on{color:var(--brand);border-bottom-color:var(--brand);background:#fff}
+  .b-incomplete{background:#fef3c7;color:var(--warn)} .b-complete{background:#dcfce7;color:var(--ok)} .b-transferred{background:#e0e7ff;color:#3730a3}
 </style>
 </head>
 <body>
@@ -48,11 +52,17 @@
 </div>
 
 <div id="appView" style="display:none">
-  <div class="top"><b>ALEZZ — صندوق طلبات الشركات</b>
+  <div class="top"><b>ALEZZ — صندوق الطلبات</b>
     <span><button onclick="loadList()">↻ تحديث</button> <button onclick="logout()">خروج</button></span>
   </div>
   <div class="grid">
-    <div class="panel"><h3>الطلبات الواردة</h3><div id="list"></div></div>
+    <div class="panel">
+      <div class="tabs">
+        <button class="tab on" id="tab-individual" onclick="setTab('individual')">👤 طلبات الأفراد</button>
+        <button class="tab" id="tab-company" onclick="setTab('company')">🏢 طلبات الشركات</button>
+      </div>
+      <div id="list"></div>
+    </div>
     <div class="panel"><h3>تفاصيل الطلب</h3><div id="detail" class="detail"><div class="empty">اختر طلباً من القائمة</div></div></div>
   </div>
 </div>
@@ -62,10 +72,19 @@ const BASE="https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake"
 const PROPOSAL_PAGE=location.origin+location.pathname.replace(/requests\.html$/,"")+"proposal.html";
 let SECRET=localStorage.getItem("alezz_admin_secret")||"";
 let current=null;
+let activeTab="individual";   // 👤 الأفراد افتراضياً، 🏢 الشركات بالتبويب الآخر
 
 const H=()=>({"x-admin-secret":SECRET,"Content-Type":"application/json"});
 const esc=s=>String(s||"").replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
-const STAT={pending_review:"للمراجعة",sent:"تم الإرسال",build_failed:"يحتاج إكمال",new:"جديد",closed:"مغلق"};
+const fmtPh=p=>String(p||"").replace(/^whatsapp:/,"");
+const STAT={pending_review:"للمراجعة",sent:"تم الإرسال",build_failed:"يحتاج إكمال",new:"جديد",closed:"مغلق",incomplete:"غير مكتمل",complete:"مكتمل",transferred:"محوّل"};
+function setTab(t){
+  activeTab=t; current=null;
+  document.getElementById('tab-individual').classList.toggle('on',t==='individual');
+  document.getElementById('tab-company').classList.toggle('on',t==='company');
+  document.getElementById('detail').innerHTML='<div class="empty">اختر طلباً من القائمة</div>';
+  loadList();
+}
 
 async function login(){
   SECRET=document.getElementById('secret').value.trim();
@@ -78,6 +97,7 @@ function logout(){localStorage.removeItem("alezz_admin_secret");SECRET="";locati
 function show(){document.getElementById('loginView').style.display='none';document.getElementById('appView').style.display='block';loadList();}
 
 async function loadList(){
+  if(activeTab==='individual') return loadIndividuals();
   const res=await fetch(BASE+"?admin_action=list",{headers:H()});
   if(!res.ok){return;}
   const {requests}=await res.json();
@@ -85,7 +105,37 @@ async function loadList(){
     <div class="item ${current===r.id?'sel':''}" onclick="openReq('${r.id}')">
       <div class="r1"><span class="co">${esc(r.company_name)}</span><span class="badge b-${r.status}">${STAT[r.status]||r.status}</span></div>
       <div class="r2">${esc(r.ref_no)} • ${esc(r.destination)} • ${r.days} أيام • ${r.pax} أشخاص${r.group_total?" • "+Number(r.group_total).toLocaleString('en-US')+" ريال":""}</div>
-    </div>`).join("")||'<div class="empty" style="padding:30px">لا توجد طلبات</div>';
+    </div>`).join("")||'<div class="empty" style="padding:30px">لا توجد طلبات شركات</div>';
+}
+async function loadIndividuals(){
+  const res=await fetch(BASE+"?admin_action=list_individuals",{headers:H()});
+  if(!res.ok){return;}
+  const {requests}=await res.json();
+  document.getElementById('list').innerHTML=(requests||[]).map(r=>{
+    const who=esc(r.customer_name||fmtPh(r.contact_phone)||'—');
+    return `<div class="item ${current===r.id?'sel':''}" onclick="openIndiv('${r.id}')">
+      <div class="r1"><span class="co">${who}</span><span class="badge b-${r.status}">${STAT[r.status]||r.status}</span></div>
+      <div class="r2">${esc(fmtPh(r.contact_phone))} • ${esc(r.destination||'—')} • ${r.days||'—'} أيام • ${r.pax||'—'} بالغ${r.handled_by?' • 👤 '+esc(r.handled_by):''}${r.currency?' • '+esc(r.currency):''}</div>
+      ${r.distribution?`<div class="r2">🗺️ ${esc(r.distribution)}</div>`:''}
+    </div>`;
+  }).join("")||'<div class="empty" style="padding:30px">لا توجد طلبات أفراد</div>';
+}
+async function openIndiv(id){
+  current=id; loadList();
+  const res=await fetch(BASE+"?admin_action=get_individual&id="+id,{headers:H()});
+  const {request:r}=await res.json();
+  if(!r){return;}
+  const cn=(r.cities_nights||[]).map(c=>`${c.nights} ${c.city}`).join(" + ");
+  const stars=r.hotel_stars?esc(r.hotel_stars)+' نجوم':'—';
+  document.getElementById('detail').innerHTML=`
+    <div class="kv"><b>العميل:</b> ${esc(r.customer_name||'—')} — ${esc(fmtPh(r.contact_phone))}</div>
+    <div class="kv"><b>الوجهة:</b> ${esc(r.destination||'—')} • ${r.days||'—'} أيام • ${r.pax||'—'} بالغ${r.children?' + '+r.children+' طفل':''}</div>
+    <div class="kv"><b>المطار:</b> قدوم ${esc(r.arrival_airport||'—')} — مغادرة ${esc(r.departure_airport||'—')}</div>
+    <div class="kv"><b>توزيع المدن:</b> ${esc(r.distribution||cn||'—')}</div>
+    <div class="kv"><b>التاريخ:</b> ${esc(r.date_from||'—')} • <b>الشرائح:</b> ${r.sim_count||'—'} • <b>الفندق:</b> ${stars}</div>
+    <div class="kv"><b>ملاحظات:</b> ${esc(r.notes||'—')}</div>
+    <div class="kv"><b>الموظف:</b> ${esc(r.handled_by||'—')} • <b>العملة:</b> ${esc(r.currency||'—')} • <b>الحالة:</b> <span class="badge b-${r.status}">${STAT[r.status]||r.status}</span></div>
+    <p style="font-size:12px;color:var(--muted);margin-top:14px">طلب فرد مُعبّأ يدوياً من لوحة الواتساب.</p>`;
 }
 
 async function openReq(id){
