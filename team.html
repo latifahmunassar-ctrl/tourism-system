@@ -3999,6 +3999,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     const j=await r.json(); const req=j.request;
     if(!req){alert('تعذّر فتح الطلب');return;}
     ibState={id:req.id,ref:req.ref_no,company:req.company_name,token:req.view_token,dest:req.destination,currency:req.company_currency||'SAR'};
+    if(typeof setCustomerType==='function') setCustomerType('company');   // طلب شركة → هامش ربح الشركات
     const filled=await inboxFillForm(req);
     ibBanner();
     if((filled==='ready'||filled==='manual') && typeof buildFromForm==='function'){
@@ -4130,6 +4131,27 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
         ${r.distribution?`<div class="ib-r2">🗺️ ${ibEsc(r.distribution)}</div>`:''}
       </div>`).join(''):'<div class="ib-empty">لا توجد طلبات أفراد</div>';
   }
+  // عملة العميل من رمز دولة الهاتف (يبقى قابلاً للتغيير يدوياً لو طلب عملة أخرى).
+  function indivCurrencyCode(phone){
+    const d=String(phone||'').replace(/[^0-9]/g,'');
+    if(d.startsWith('968')) return 'OMR';
+    if(d.startsWith('971')) return 'AED';
+    if(d.startsWith('965')) return 'KWD';
+    if(d.startsWith('974')) return 'QAR';
+    if(d.startsWith('973')) return 'BHD';
+    if(d.startsWith('966')) return 'SAR';
+    if(d.startsWith('20'))  return 'EGP';
+    return '';
+  }
+  async function indivApplyCurrency(phone){
+    const code=indivCurrencyCode(phone);
+    if(!code||code==='SAR') return;                 // ريال = بدون تحويل
+    if(typeof loadCurrencies==='function') await loadCurrencies();
+    const sel=document.getElementById('currencyPicker');
+    if(!sel) return;
+    const opt=[...sel.options].find(o=>o.value===code);
+    if(opt){ sel.value=code; if(sel.style.display==='none') sel.style.display=''; if(typeof onCurrencyPick==='function') onCurrencyPick(); }
+  }
   window.indivLoad=async function(id){
     indivClose();
     const r=await fetch(IB_BASE+'?admin_action=get_individual&id='+id,{headers:ibH()});
@@ -4145,6 +4167,8 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     };
     // طلب فرد ليس له «إرسال للشركة» — نلغي أي ربط شركة سابق ونخفي شريطه.
     if(typeof inboxDismiss==='function') inboxDismiss();
+    // 🎯 طلب فرد → هامش ربح الأفراد تلقائياً (يطبّقه autoProfitForProgram أثناء البناء)
+    if(typeof setCustomerType==='function') setCustomerType('individual');
     const filled=await inboxFillForm(req);
     if((filled==='ready'||filled==='manual') && typeof buildFromForm==='function'){
       const before=(typeof lastProgramRaw!=='undefined')?lastProgramRaw:'';
@@ -4152,13 +4176,15 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       if(typeof fpTab==='function') fpTab('build');
       let waited=0; const chk=setInterval(()=>{ waited+=700;
         const built=(typeof lastProgramRaw!=='undefined') && lastProgramRaw && lastProgramRaw!==before && /TOTAL_GROUP:/.test(lastProgramRaw);
-        if(built){clearInterval(chk);} else if(waited>=9000){clearInterval(chk); if(typeof fpTab==='function') fpTab('mods');}
+        if(built){ clearInterval(chk); indivApplyCurrency(b.contact_phone); }   // 💱 عملة العميل تلقائياً
+        else if(waited>=9000){ clearInterval(chk); indivApplyCurrency(b.contact_phone); if(typeof fpTab==='function') fpTab('mods'); }
       },700);
     } else {
       const cn=(b.cities_nights||[]).map(c=>`${c.nights} ${c.city}`).join(' + ');
       const ci=document.getElementById('chatInput');
       if(ci) ci.value=`${b.destination||''} ${b.days||''} ايام ${cn} ل ${b.pax||''} بالغين${b.children?(' و '+b.children+' اطفال'):''}${b.date_from?(' تاريخ '+b.date_from):''}`;
       if(typeof sendMessage==='function') sendMessage();
+      setTimeout(()=>indivApplyCurrency(b.contact_phone), 4000);   // 💱 بعد بناء الشات
     }
     window.scrollTo({top:0,behavior:'smooth'});
   };
