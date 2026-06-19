@@ -126,7 +126,7 @@ async function openIndiv(id){
   const {request:r}=await res.json();
   if(!r){return;}
   const cn=(r.cities_nights||[]).map(c=>`${c.nights} ${c.city}`).join(" + ");
-  const stars=r.hotel_stars?esc(r.hotel_stars)+' نجوم':'—';
+  const stars=r.hotel_stars==='mixed'?'٤/٥ نجوم (مختلط)':(r.hotel_stars?esc(r.hotel_stars)+' نجوم':'—');
   document.getElementById('detail').innerHTML=`
     <div class="kv"><b>العميل:</b> ${esc(r.customer_name||'—')} — ${esc(fmtPh(r.contact_phone))}</div>
     <div class="kv"><b>الوجهة:</b> ${esc(r.destination||'—')} • ${r.days||'—'} أيام • ${r.pax||'—'} بالغ${r.children?' + '+r.children+' طفل':''}</div>
