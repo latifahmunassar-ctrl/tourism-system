@@ -206,6 +206,14 @@ async function loadSecurity(){
     const countries=d.countries||[], log=d.log||[], devices=d.devices||[], users=d.users||[];
     const uStat={pending:'⏳ بانتظار موافقتك',active:'✅ مفعّلة',suspended:'⏸️ موقوفة'};
     const evMap={login_ok:'✅ دخول',login_fail:'⛔ كلمة خطأ',blocked_country:'🚫 دولة محظورة',geo_unknown:'❓ دولة غير معروفة'};
+    const devRow=v=>{
+      const badge=v.approved?'<span style="color:var(--ok);font-weight:800">✅ موثّق</span>':'<span style="color:var(--warn);font-weight:800">⏳ بانتظار موافقتك</span>';
+      const act=v.approved?`<button class="ac-btn no" onclick="removeDevice('${v.id}','${esc(v.label)}')">إلغاء التوثيق</button>`:`<button class="ac-btn ok" onclick="approveDevice('${v.id}')">✅ اعتماد</button> <button class="ac-btn no" onclick="removeDevice('${v.id}','${esc(v.label)}')">رفض</button>`;
+      return `<tr><td>${esc(v.label||'—')}</td><td>${badge}</td><td>${esc(v.last_country||'—')}</td><td style="white-space:nowrap">${esc((v.last_seen||'').slice(0,16).replace('T',' ')||'—')}</td><td>${act}</td></tr>`;
+    };
+    const devTable=(arr,emptyMsg)=>arr.length?`<table class="rep-table"><thead><tr><th>الجهاز</th><th>الحالة</th><th>آخر دولة</th><th>آخر دخول</th><th></th></tr></thead><tbody>${arr.map(devRow).join('')}</tbody></table>`:`<div class="ac-empty">${emptyMsg}</div>`;
+    const devTourism=devices.filter(v=>v.source!=='whatsapp');
+    const devWhatsapp=devices.filter(v=>v.source==='whatsapp');
     box.innerHTML=`
       <div class="sec-enf ${enforce?'on':'off'}">
         <div><div class="sec-enf-t">${enforce?'🔴 الحظر مُفعّل':'🟡 وضع المراقبة (لا حظر)'}</div>
@@ -229,13 +237,11 @@ async function loadSecurity(){
       </div>
       <div class="staff-list" style="margin-bottom:6px">${countries.length?countries.map(c=>`<span class="staff-chip">${esc(c.name_ar)} <b style="color:var(--muted)">${esc(c.code)}</b> <button title="حذف" onclick="removeCountry('${esc(c.code)}','${esc(c.name_ar)}')">✕</button></span>`).join(''):'<div class="ac-empty">لا دول مضافة — أضيفي واحدة على الأقل قبل تفعيل الحظر</div>'}</div>
       <div class="ac-msg" id="secMsg"></div>
-      <div class="sec-sub" style="margin-top:20px">🖥️ الأجهزة الموثوقة <span style="font-weight:600;color:var(--muted);font-size:11.5px">— تتخطّى حصر الدولة وتدخل من أي مكان</span></div>
+      <div class="sec-sub" style="margin-top:20px">🖥️ أجهزة الداشبورد السياحي <span style="font-weight:600;color:var(--muted);font-size:11.5px">— تتخطّى حصر الدولة وتدخل من أي مكان</span></div>
       <div style="margin-bottom:10px"><button class="ac-btn ok" onclick="trustThisDevice()">🔓 وثّقي هذا الجهاز (يدخل من أي دولة)</button></div>
-      ${devices.length?`<table class="rep-table"><thead><tr><th>الجهاز</th><th>الحالة</th><th>آخر دولة</th><th>آخر دخول</th><th></th></tr></thead><tbody>${devices.map(v=>{
-        const badge=v.approved?'<span style="color:var(--ok);font-weight:800">✅ موثّق</span>':'<span style="color:var(--warn);font-weight:800">⏳ بانتظار موافقتك</span>';
-        const act=v.approved?`<button class="ac-btn no" onclick="removeDevice('${v.id}','${esc(v.label)}')">إلغاء التوثيق</button>`:`<button class="ac-btn ok" onclick="approveDevice('${v.id}')">✅ اعتماد</button> <button class="ac-btn no" onclick="removeDevice('${v.id}','${esc(v.label)}')">رفض</button>`;
-        return `<tr><td>${esc(v.label||'—')}</td><td>${badge}</td><td>${esc(v.last_country||'—')}</td><td style="white-space:nowrap">${esc((v.last_seen||'').slice(0,16).replace('T',' ')||'—')}</td><td>${act}</td></tr>`;
-      }).join('')}</tbody></table>`:'<div class="ac-empty">لا أجهزة موثوقة بعد — وثّقي جهازك أو وافقي على طلبات الموظفات</div>'}
+      ${devTable(devTourism,'لا أجهزة سياحية موثوقة بعد — وثّقي جهازك أو وافقي على طلبات الموظفات')}
+      <div class="sec-sub" style="margin-top:24px">🔒 الموافقة الأمنية لداشبورد الواتساب <span style="font-weight:600;color:var(--muted);font-size:11.5px">— أجهزة منفصلة، تُعتمد لداشبورد الواتساب وحده</span></div>
+      ${devTable(devWhatsapp,'لا طلبات أجهزة من داشبورد الواتساب بعد')}
       <div class="sec-sub" style="margin-top:20px">📜 آخر ${log.length} محاولة دخول</div>
       ${log.length?`<table class="rep-table"><thead><tr><th>الوقت</th><th>الحدث</th><th>الدولة</th><th>IP</th></tr></thead><tbody>${log.map(l=>{
         const cflag=l.country?(l.country_allowed?`<span style="color:var(--ok);font-weight:800">${esc(l.country)} ✓</span>`:`<span style="color:var(--err);font-weight:800">${esc(l.country)} ✕</span>`):'<span style="color:var(--muted)">؟</span>';
