@@ -430,6 +430,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <span id="currencyResult" style="display:none; font-size:13px; font-weight:900; color:var(--gold); background:var(--s2); border:1px solid rgba(212,168,67,0.35); border-radius:8px; padding:6px 12px; white-space:nowrap;"></span>
 <button class="ebtn ebtn-pdf" id="waGroupBtn" style="background:linear-gradient(135deg,#25D366,#128C7E);border:none;color:#fff" onclick="waGroupOpen()" title="جهّز ملف PDF وشاركه لجروب واتساب محفوظ">📲 أرسل PDF للجروب</button>
 <button class="ebtn ebtn-pdf" id="inboxSendBtn" style="display:none;background:linear-gradient(135deg,#0e9d6a,#c41d88);border:none;color:#fff" onclick="inboxSend()">📤 إرسال للشركة</button>
+<button class="ebtn ebtn-pdf" id="indivSendBtn" style="display:none;background:linear-gradient(135deg,#25D366,#128C7E);border:none;color:#fff" onclick="indivSend()">📤 إرسال للعميل (واتساب)</button>
 </div>
 </div>
 <div class="quote-wrap">
@@ -3819,7 +3820,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
 #indivOverlay .ibhd{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #dcede6;background:#f2faf6;border-radius:18px 18px 0 0}
 #indivOverlay .ibhd b{font-size:16px;color:#0e9d6a}
 #indivOverlay .ibx-x{background:none;border:none;color:#6b7c7a;font-size:22px;cursor:pointer}
-#indivList{padding:10px;max-height:60vh;overflow:auto}
+#indivList,#indivSentList{padding:10px;max-height:60vh;overflow:auto}
 </style>
 <div id="inboxBanner"></div>
 <div id="inboxOverlay" onclick="if(event.target===this)inboxClose()">
@@ -3839,8 +3840,13 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
 <div id="indivOverlay" onclick="if(event.target===this)indivClose()">
   <div class="ibx">
     <div class="ibhd"><b>👤 طلبات الأفراد</b><button class="ibx-x" onclick="indivClose()">×</button></div>
+    <div class="ib-tabs">
+      <button id="indTabIn" class="ib-tab active" onclick="indivTab('in')">📥 الواردة <span class="ib-cnt" id="indCountIn">0</span></button>
+      <button id="indTabSent" class="ib-tab" onclick="indivTab('sent')">✅ المُرسلة <span class="ib-cnt" id="indCountSent">0</span></button>
+    </div>
     <div class="ib-search"><input id="indivSearch" type="search" placeholder="🔎 بحث: عميل · رقم · وجهة · موظف" oninput="indivSearchApply()"></div>
     <div id="indivList"><div class="ib-empty">جارٍ التحميل…</div></div>
+    <div id="indivSentList" style="display:none"></div>
   </div>
 </div>
 <script>
@@ -4118,19 +4124,71 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
   window.indivClose=function(){document.getElementById('indivOverlay').style.display='none';};
   function indivMatch(r,q){ if(!q) return true; const hay=[r.customer_name,r.contact_phone,r.destination,r.handled_by].map(x=>String(x||'').toLowerCase()).join(' | '); return q.toLowerCase().split(/\s+/).filter(Boolean).every(t=>hay.includes(t)); }
   window.indivSearchApply=function(){ indivRender(indivLast); };
+  let indivState=null;
+  function indivCard(r,sent){
+    const bcls=(r.status==='complete'||r.status==='sent')?'ib-sent':(r.status==='transferred'?'ib-new':'ib-pending_review');
+    const lbl=sent?'مُرسل':(IND_STAT[r.status]||r.status);
+    return `<div class="ib-item${sent?' ib-sent-item':''}"${sent?'':` onclick="indivLoad('${r.id}')"`}>
+      <div class="ib-r1"><span class="ib-co">👤 ${ibEsc(r.customer_name||indivPh(r.contact_phone)||'—')}</span><span class="ib-bdg ${bcls}">${ibEsc(lbl)}</span></div>
+      <div class="ib-dest">📍 ${ibEsc(r.destination||'—')} · ${r.days||'—'} أيام · ${r.pax||'—'} بالغ${r.children?(' + '+r.children+' أطفال'):''}</div>
+      <div class="ib-cust">📱 ${ibEsc(indivPh(r.contact_phone))}${r.handled_by?(' · 🧑‍💼 '+ibEsc(r.handled_by)):''}${r.currency?(' · 💱 '+ibEsc(r.currency)):''}</div>
+      ${r.distribution?`<div class="ib-r2">🗺️ ${ibEsc(r.distribution)}</div>`:''}
+      ${sent?`<div class="ib-sent-meta">📤 ${r.sent_by?('أرسله: <b>'+ibEsc(r.sent_by)+'</b> · '):''}${r.sent_price?(Number(r.sent_price).toLocaleString('en-US')+' '+ibEsc(r.sent_currency||'')):''}</div>
+      <button class="ib-reoffer" type="button" onclick="indivReoffer('${r.id}')">🔄 إرسال عرض آخر</button>`:''}
+    </div>`;
+  }
   function indivRender(reqs){
     reqs=reqs||[]; indivLast=reqs;
     const q=(document.getElementById('indivSearch')||{}).value||'';
-    const rows=reqs.filter(r=>indivMatch(r,q)).sort((a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||'')));
-    const bcls=s=>s==='complete'?'ib-sent':(s==='transferred'?'ib-new':'ib-pending_review');
-    document.getElementById('indivList').innerHTML=rows.length?rows.map(r=>`
-      <div class="ib-item" onclick="indivLoad('${r.id}')">
-        <div class="ib-r1"><span class="ib-co">👤 ${ibEsc(r.customer_name||indivPh(r.contact_phone)||'—')}</span><span class="ib-bdg ${bcls(r.status)}">${IND_STAT[r.status]||r.status}</span></div>
-        <div class="ib-dest">📍 ${ibEsc(r.destination||'—')} · ${r.days||'—'} أيام · ${r.pax||'—'} بالغ${r.children?(' + '+r.children+' أطفال'):''}</div>
-        <div class="ib-cust">📱 ${ibEsc(indivPh(r.contact_phone))}${r.handled_by?(' · 🧑‍💼 '+ibEsc(r.handled_by)):''}${r.currency?(' · 💱 '+ibEsc(r.currency)):''}</div>
-        ${r.distribution?`<div class="ib-r2">🗺️ ${ibEsc(r.distribution)}</div>`:''}
-      </div>`).join(''):'<div class="ib-empty">لا توجد طلبات أفراد</div>';
+    const f=reqs.filter(r=>indivMatch(r,q));
+    const incoming=f.filter(r=>r.status!=='sent').sort((a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||'')));
+    const sent=f.filter(r=>r.status==='sent').sort((a,b)=>String(b.sent_at||'').localeCompare(String(a.sent_at||'')));
+    const ci=document.getElementById('indCountIn'); if(ci) ci.textContent=incoming.length;
+    const cs=document.getElementById('indCountSent'); if(cs) cs.textContent=sent.length;
+    document.getElementById('indivList').innerHTML=incoming.length?incoming.map(r=>indivCard(r,false)).join(''):'<div class="ib-empty">لا توجد طلبات واردة</div>';
+    document.getElementById('indivSentList').innerHTML=sent.length?sent.map(r=>indivCard(r,true)).join(''):'<div class="ib-empty">لا توجد طلبات مُرسلة</div>';
   }
+  window.indivTab=function(which){
+    document.getElementById('indivList').style.display=which==='in'?'':'none';
+    document.getElementById('indivSentList').style.display=which==='sent'?'':'none';
+    document.getElementById('indTabIn').classList.toggle('active',which==='in');
+    document.getElementById('indTabSent').classList.toggle('active',which==='sent');
+  };
+  window.indivSend=async function(){
+    if(!indivState){alert('افتح طلب فرد أولاً من «👤 طلبات الأفراد».');return;}
+    if(typeof lastProgramRaw==='undefined' || !lastProgramRaw || !/TOTAL_GROUP:/.test(lastProgramRaw)){alert('ابنِ البرنامج وسعّره أولاً.');return;}
+    const note=prompt('✍️ ملاحظة تُرسل مع الملف للعميل (اختياري):','تفضل أستاذي، هذا برنامجك 🌟');
+    if(note===null) return;
+    const btn=document.getElementById('indivSendBtn'); const old=btn?btn.textContent:'';
+    if(btn){btn.disabled=true;btn.textContent='⏳ يُجهّز ويُرسل…';}
+    try{
+      const blob=await generatePdfBlob('client');
+      const b64=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(String(fr.result).split(',')[1]);fr.onerror=rej;fr.readAsDataURL(blob);});
+      const price=(typeof currentFinalGroup==='function')?currentFinalGroup():null;
+      const currency=(typeof currencyConversion!=='undefined'&&currencyConversion)?currencyConversion.name:'ريال';
+      const fname=(`عرض_${indivState.dest||'سفر'}_${indivState.name||''}`).replace(/\s+/g,'_').slice(0,60)+'.pdf';
+      const r=await fetch(IB_BASE+'?admin_action=send_individual',{method:'POST',headers:ibH(),body:JSON.stringify({
+        id:indivState.id, phone:indivState.phone, pdf_base64:b64, filename:fname, note,
+        program:lastProgramRaw, price, currency, sent_by:(typeof ibStaffName==='function'?ibStaffName():'')
+      })});
+      const d=await r.json();
+      if(!r.ok||!d.ok){ throw new Error((d&&d.detail&&(d.detail.message||JSON.stringify(d.detail)))||d.error||('HTTP '+r.status)); }
+      alert('✅ تم إرسال الـ PDF للعميل على واتساب!');
+      indivState=null; if(btn) btn.style.display='none';
+    }catch(e){
+      const m=String(e.message||e);
+      const hint=/132000|re-?engag|24|outside|window|session|recipient/i.test(m)?'\n\n(غالباً مرّ أكثر من 24 ساعة على آخر رسالة من العميل — أرسلي من لوحة الواتساب أو خلّيه يرسل رسالة أولاً.)':'';
+      alert('تعذّر الإرسال: '+m+hint);
+    }finally{ if(btn){btn.disabled=false;btn.textContent=old;} }
+  };
+  window.indivReoffer=async function(id){
+    if(!confirm('إنشاء عرض آخر من هذا الطلب؟ بيُفتح لك في المبني لتعدّليه وترسليه.')) return;
+    try{
+      const dr=await fetch(IB_BASE+'?admin_action=duplicate_individual&id='+id,{method:'POST',headers:ibH()});
+      const dj=await dr.json(); if(!dj.ok) throw new Error(dj.error||'فشل النسخ');
+      indivClose(); indivLoad(dj.id);
+    }catch(e){ alert('تعذّر إنشاء عرض آخر: '+(e.message||e)); }
+  };
   // عملة العميل من رمز دولة الهاتف (يبقى قابلاً للتغيير يدوياً لو طلب عملة أخرى).
   function indivCurrencyCode(phone){
     const d=String(phone||'').replace(/[^0-9]/g,'');
@@ -4157,6 +4215,10 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     const r=await fetch(IB_BASE+'?admin_action=get_individual&id='+id,{headers:ibH()});
     const j=await r.json(); const b=j.request;
     if(!b){alert('تعذّر فتح الطلب');return;}
+    // اربط الطلب بحالة الإرسال وأظهر زر «إرسال للعميل» (وأخفِ زر الشركة)
+    indivState={id:b.id, phone:b.contact_phone, name:b.customer_name||'', dest:b.destination};
+    const _isb=document.getElementById('indivSendBtn'); if(_isb) _isb.style.display='';
+    const _csb=document.getElementById('inboxSendBtn'); if(_csb) _csb.style.display='none';
     // اربط حقول booking_brief بالصيغة التي يفهمها inboxFillForm (نفس مبنى الشركات)
     const req={
       destination:b.destination, pax:b.pax, children:b.children, days:b.days,
