@@ -1116,6 +1116,7 @@
           </div>
           <div id="bf-msg" style="margin:6px 0; font-size:13px; font-weight:700; min-height:16px;"></div>
           <button type="button" id="bf-save" style="margin-top:4px; width:100%; background:#0b5d4e; color:#fff; border:none; border-radius:8px; padding:10px; font-weight:700; cursor:pointer; position:sticky; bottom:0; box-shadow:0 -6px 12px #fbfdfc;">💾 حفظ الطلب</button>
+          <button type="button" id="bf-transfer" style="margin-top:8px; width:100%; background:#c41d88; color:#fff; border:none; border-radius:8px; padding:10px; font-weight:700; cursor:pointer;">📤 تحويل للتسعير (صندوق الأفراد)</button>
         </div>
       </div>
       <div class="conv-footer">
@@ -2789,9 +2790,30 @@
     function bfBadge(status) {
       const el = $("bf-status-badge");
       if (!el) return;
-      el.innerHTML = status === "complete"
+      el.innerHTML = status === "transferred"
+        ? '<span style="color:#9333ea;">● محوّل للتسعير</span>'
+        : status === "complete"
         ? '<span style="color:#15803d;">● مكتمل</span>'
         : '<span style="color:#b45309;">● غير مكتمل</span>';
+    }
+    async function transferBrief() {
+      // نحفظ أولاً (يحدّث الحقول + يرسل التأكيد لو مكتمل)، ثم نحوّل للتسعير.
+      await saveBrief();
+      const btn = $("bf-transfer"); const old = btn.textContent; btn.disabled = true; btn.textContent = "جاري التحويل…";
+      const msg = $("bf-msg");
+      try {
+        const r = await fetch(BASE + "?admin_action=transfer_booking_brief", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+          body: JSON.stringify({ contact_phone: convPhone }),
+        });
+        const d = await r.json();
+        if (!r.ok || d.error) throw new Error(d.error || ("HTTP " + r.status));
+        msg.style.color = "#9333ea"; msg.textContent = "📤 تم التحويل لصندوق الأفراد (للتسعير) ✅";
+        bfBadge("transferred");
+      } catch (e) {
+        msg.style.color = "#dc2626"; msg.textContent = "تعذّر التحويل: " + e.message;
+      } finally { btn.disabled = false; btn.textContent = old; }
     }
     // "2 سيلانجور - 2 لانكاوي" → [{city,nights}]
     function bfParseDist(str){
@@ -2961,6 +2983,7 @@
     if ($("bf-airport")) $("bf-airport").addEventListener("change", bfRenderSugs);
     if ($("bf-days")) $("bf-days").addEventListener("input", bfRenderSugs);
     if ($("bf-save")) $("bf-save").addEventListener("click", saveBrief);
+    if ($("bf-transfer")) $("bf-transfer").addEventListener("click", transferBrief);
     async function loadConversationHistory() {
       if (!convPhone) return;
       const phone = convPhone;
