@@ -605,9 +605,97 @@
     .filter-urgent.active .cnt { background: rgba(255,255,255,.22); }
 
     footer { margin-top: 36px; color: var(--muted); font-size: 12px; text-align: center; }
+    /* ── بوابة الأمان (مثل داشبورد السياحي) ── */
+    .wa-gate { position:fixed; inset:0; z-index:99999; background:linear-gradient(150deg,#0b5d4e 0%,#0e7c66 45%,#06342b 100%); display:flex; align-items:center; justify-content:center; font-family:inherit; }
+    .wa-gate.gate-hidden { display:none !important; }
+    .wa-gate-card { background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); backdrop-filter:blur(16px); border-radius:20px; padding:38px 34px; width:90%; max-width:380px; box-shadow:0 20px 60px rgba(0,0,0,0.4); text-align:center; }
+    .wa-gate-card .gi { font-size:50px; margin-bottom:12px; }
+    .wa-gate-card .gt { font-size:21px; font-weight:900; color:#fff; margin-bottom:5px; }
+    .wa-gate-card .gs { font-size:13px; color:rgba(255,255,255,0.72); margin-bottom:24px; }
+    .wa-gate-card input { width:100%; padding:13px 16px; border-radius:12px; border:1.5px solid rgba(255,255,255,0.22); background:rgba(255,255,255,0.1); color:#fff; font:inherit; font-size:16px; font-weight:700; outline:none; text-align:center; letter-spacing:2px; margin-bottom:13px; box-sizing:border-box; }
+    .wa-gate-card input::placeholder { color:rgba(255,255,255,0.45); letter-spacing:0; font-weight:500; }
+    .wa-gate-btn { width:100%; padding:13px; border-radius:12px; border:none; background:linear-gradient(135deg,#0b5d4e,#0e9d6a); color:#fff; font:inherit; font-size:15px; font-weight:900; cursor:pointer; }
+    .wa-gate-btn:disabled { opacity:0.6; cursor:not-allowed; }
+    .wa-gate-err { color:#ffb4b4; font-size:13px; font-weight:700; margin-top:9px; min-height:18px; }
   </style>
 </head>
 <body>
+  <div id="waGate" class="wa-gate">
+    <div class="wa-gate-card">
+      <div class="gi">🔐</div>
+      <div class="gt">داشبورد الواتساب</div>
+      <div class="gs">دخول آمن — العز الدولية للسفر والسياحة</div>
+      <button id="waPkBtn" class="wa-gate-btn" style="margin-bottom:12px" onclick="waGatePasskey()">👆 دخول بالبصمة / Face ID</button>
+      <div style="color:rgba(255,255,255,0.45);font-size:12px;margin:2px 0 12px">— أو —</div>
+      <input id="waGateInput" type="password" placeholder="كلمة المرور" autocomplete="current-password" />
+      <button id="waGateBtn" class="wa-gate-btn" onclick="waGateLogin()">دخول بكلمة السر</button>
+      <div id="waGateErr" class="wa-gate-err"></div>
+      <div style="margin-top:16px;display:flex;flex-direction:column;gap:7px">
+        <a href="#" onclick="waTrustDevice();return false" style="color:#9be7c9;font-size:13px;font-weight:800;text-decoration:none">🔓 طلب توثيق هذا الجهاز</a>
+        <a href="#" onclick="waPasskeySetup();return false" style="color:rgba(255,255,255,0.6);font-size:12.5px;text-decoration:none">✨ إعداد البصمة على هذا الجهاز</a>
+      </div>
+    </div>
+  </div>
+  <script>
+  (function(){
+    const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mb3R2YWNzemxtcnF4emZqbXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2MjI5NTYsImV4cCI6MjA5MzE5ODk1Nn0.1nQmxW63BFZSK-cn4fzh8tYM7a2JO10AQ0RGQ5bcdYo';
+    const AUTH='https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/auth-check';
+    const WEBAUTHN='https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/webauthn';
+    const INTAKE='https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake';
+    const SESS='wa_gate_v1';
+    function devTok(){ let t=localStorage.getItem('alezz_wa_device_token'); if(!t||t.length<16){ t=(self.crypto&&crypto.randomUUID)?crypto.randomUUID():('wad-'+Date.now()+'-'+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2)); localStorage.setItem('alezz_wa_device_token',t);} return t; }
+    function open_(){ const g=document.getElementById('waGate'); if(g) g.classList.add('gate-hidden'); }
+    function show_(){ const g=document.getElementById('waGate'); if(g) g.classList.remove('gate-hidden'); }
+    const wp=async b=>(await fetch(WEBAUTHN,{method:'POST',headers:{'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK},body:JSON.stringify(b)})).json();
+    window.waGateLogin=async function(){
+      const inp=document.getElementById('waGateInput'),btn=document.getElementById('waGateBtn'),err=document.getElementById('waGateErr');
+      const password=inp.value.trim(); if(!password){ err.textContent='أدخلي كلمة المرور'; return; }
+      err.textContent=''; btn.disabled=true; const ot=btn.textContent; btn.textContent='جارٍ التحقّق...';
+      try{
+        const r=await fetch(AUTH,{method:'POST',headers:{'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK},body:JSON.stringify({password,device_token:devTok(),source:'whatsapp'})});
+        const d=await r.json();
+        if(r.ok&&d.ok){ sessionStorage.setItem(SESS,'1'); localStorage.setItem('wa_gate_secret',password); inp.value=''; open_(); }
+        else err.textContent=d.error||'كلمة سر غير صحيحة';
+      }catch(e){ err.textContent='تعذّر الاتصال، حاولي مجدداً'; }
+      finally{ btn.disabled=false; btn.textContent=ot; }
+    };
+    window.waGatePasskey=async function(){
+      const err=document.getElementById('waGateErr'); err.textContent='';
+      const btn=document.getElementById('waPkBtn'); const ot=btn.textContent; btn.disabled=true; btn.textContent='جارٍ فتح البصمة...';
+      try{
+        const lib=await import('https://esm.sh/@simplewebauthn/browser@13');
+        const start=await wp({action:'auth_start'}); if(!start.options) throw new Error(start.error||'تعذّر');
+        const resp=await lib.startAuthentication({optionsJSON:start.options});
+        const fin=await wp({action:'auth_finish',challengeId:start.challengeId,response:resp});
+        if(fin.ok){ sessionStorage.setItem(SESS,'1'); if(fin.admin_secret) localStorage.setItem('wa_gate_secret',fin.admin_secret); open_(); }
+        else throw new Error(fin.error||'فشل الدخول بالبصمة');
+      }catch(e){ err.textContent=(e&&e.name==='NotAllowedError')?'أُلغيت البصمة':(e.message||'تعذّر'); }
+      finally{ btn.disabled=false; btn.textContent=ot; }
+    };
+    window.waPasskeySetup=async function(){
+      const phone=prompt('رقم جوالك (المسجّل لدى الإدارة):',''); if(phone===null) return;
+      try{ const lib=await import('https://esm.sh/@simplewebauthn/browser@13');
+        const start=await wp({action:'reg_start',phone}); if(!start.options){ alert(start.error||'تعذّر — تأكدي إنك مسجّلة ومعتمدة'); return; }
+        const resp=await lib.startRegistration({optionsJSON:start.options});
+        const fin=await wp({action:'reg_finish',phone,challengeId:start.challengeId,response:resp,device_label:navigator.userAgent.slice(0,60)});
+        alert(fin.ok?'تم تسجيل البصمة على هذا الجهاز ✅':(fin.error||'فشل التسجيل'));
+      }catch(e){ alert((e&&e.name==='NotAllowedError')?'أُلغيت البصمة':(e.message||'تعذّر')); }
+    };
+    window.waTrustDevice=async function(){
+      const sec=(document.getElementById('waGateInput').value.trim())||localStorage.getItem('wa_gate_secret')||'';
+      if(!sec){ alert('اكتبي كلمة المرور في الخانة أولاً ثم اطلبي التوثيق.'); return; }
+      let label=prompt('اسم هذا الجهاز (مثل: جوال غروب):',''); if(label===null) return; label=(label||'').trim()||'جهازي';
+      try{
+        const r=await fetch(INTAKE+'?admin_action=device_request',{method:'POST',headers:{'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK,'x-admin-secret':sec},body:JSON.stringify({device_token:devTok(),label,user_agent:navigator.userAgent,source:'whatsapp'})});
+        const d=await r.json();
+        if(d.ok) alert(d.status==='approved'?'هذا الجهاز موثّق ✅':'تم إرسال طلب توثيق هذا الجهاز ⏳\nبانتظار موافقة الإدارة من داشبورد الشركات.');
+        else alert(d.error||'تعذّر إرسال الطلب');
+      }catch(_){ alert('تعذّر الاتصال، حاولي مجدداً.'); }
+    };
+    if(sessionStorage.getItem(SESS)==='1') open_(); else show_();
+    document.getElementById('waGateInput')&&document.getElementById('waGateInput').addEventListener('keydown',e=>{ if(e.key==='Enter') waGateLogin(); });
+  })();
+  </script>
   <div class="container">
 
     <header class="hero">
