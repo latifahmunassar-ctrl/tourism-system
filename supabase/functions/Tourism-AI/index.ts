@@ -78,9 +78,9 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
   Malaysia: [
     { canonical: "Kuala Lumpur",     pattern: /كوالا\s*ل{0,3}\s*مبور?|كولا\s*ل{0,3}\s*مبور?|kuala\s*lumpur|\bKL\b/i },
     { canonical: "Selangor",         pattern: /سيلان[جغ]ور|سلان[جغ]ور|selangor|sunway|مدينة\s*ال[أا]لعاب/i },
-    { canonical: "Langkawi",         pattern: /لان?كاوي|langkawi/i },
+    { canonical: "Langkawi",         pattern: /لا?[نتغ]*\s*كاوي|langkawi/i },
     { canonical: "Penang",           pattern: /بينان[جغ]|بنان[جغ]|penang/i },
-    { canonical: "Cameron Highlands",pattern: /كام?يرون|cameron|هايلاند|مرتفعات\s*الكام?ي?رون/i },
+    { canonical: "Cameron Highlands",pattern: /كام?[يی]رون|cameron|هايلاند|مرتفعات\s*الكام?[يی]?رون/i },
   ],
   thailand: [
     { canonical: "Bangkok",      pattern: /بان[كق]وك|bangkok/i },
@@ -88,7 +88,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Krabi",        pattern: /كرابي|krabi/i },
     { canonical: "Chiang Mai",   pattern: /شيان[جغ]?\s*ماي|شانغماي|chiang\s*mai|chiangmai/i },
     { canonical: "Pattaya",      pattern: /با?تايا|pattaya/i },
-    { canonical: "Koh Samui",    pattern: /كوه?\s*ساموي|كوسوموي|كوسموي|koh?\s*samui|samui/i },
+    { canonical: "Koh Samui",    pattern: /كو\s*سا?\s*موي|كوسوموي|كوسموي|كوه?\s*ساموي|koh?\s*samui|kohsamui|samui/i },
   ],
   Turky: [
     { canonical: "Istanbul",   pattern: /اسطنبول|إسطنبول|إستانبول|istanbul|آيا\s*صوفيا|البازار|تقسيم/i },
@@ -952,13 +952,13 @@ async function buildDataContext(
       [/بوكيت|phuket|بوكت/i,                             "Phuket"],
       [/شانغماي|شيانغ\s*ماي|شانج\s*ماي|chiang\s*mai|chiangmai/i, "Chiang Mai"],
       [/بتايا|باتايا|pattaya/i,                          "Pattaya"],
-      [/كوه?\s*ساموي|كوسوموي|كوسموي|koh?\s*samui|kohsamui|samui/i, "Koh Samui"],
+      [/كو\s*سا?\s*موي|كوسوموي|كوسموي|كوه?\s*ساموي|koh?\s*samui|kohsamui|samui/i, "Koh Samui"],
       // Malaysia
       // Selangor first — أكثر تخصيصاً (Sunway و مدينة الألعاب السنوية ومعامل العسل
       // كلها في Selangor، وليست في KL رغم القرب الجغرافي)
       [/سيلانجور|سيلانغور|selangor|sunway|السنویة|السنوية|مدینة الالعاب|مدينة الألعاب|معامل العسل|معامل القهوة|معامل الشكلاته|معامل الشكلاتة|معامل الجلود|petaling|بيتالينج|دامانسارا|damansara|monk kiara|مونت كيارا|شاه عالم|شاه علم|shah alam/i, "Selangor"],
       [/كوالا\s*ل{0,3}\s*مبور?|كولا\s*ل{0,3}\s*مبور?|kuala\s*lumpur|kualalumpur|\bKL\b|البرجين|منارة كوالالمبور|petronas|بترونس/i, "Kuala Lumpur"],
-      [/لانكاوي|langkawi/i,                              "Langkawi"],
+      [/لا?[نتغ]*\s*كاوي|langkawi/i,                     "Langkawi"],
       [/بينانج|بينانغ|بنانغ|penang/i,                    "Penang"],
       [/كاميرون|cameron|هايلاند|highlands|مرتفعات الكامیرون|مرتفعات الكاميرون|جبال الشاي/i, "Cameron Highlands"],
     ];
@@ -2214,9 +2214,9 @@ async function handleListHotels(body: {
       const curCap = cur ? capOf(cur) : 0;
       if (curCap) threshold = curCap;
     }
-    if (threshold) {
-      rows = rows.filter(h => { const c = capOf(h); return !c || c >= threshold; });
-    }
+    // ملاحظة (تعديل المالكة): لم نَعُد نُسقِط الفنادق الأصغر سعةً — نُرجِع كل
+    // فنادق المنطقة، ونعلّم كلاً منها بـ fits (سعته ≥ العتبة) ليُعرض المطابق
+    // أولاً بلون فاتح والباقي بعده مع إظهار السعة. الفلترة بقيت فقط للموسم/المنطقة.
 
     // تقييد المنطقة الفرعية: بعض المدن لها مناطق داخل عمود location (مثل بالي:
     // "Bali-Jimbaran"، "Bali-Ubud"). لو الفندق الحالي في منطقة فرعية محددة،
@@ -2238,13 +2238,17 @@ async function handleListHotels(body: {
     // (التواريخ ISO فالمقارنة النصية = الزمنية). الصفوف بلا تاريخ تبقى دائماً.
     const travelISO = travelDateToISO(String(body.date || ""));
     if (travelISO) {
-      rows = rows.filter(h => {
+      const dated = rows.filter(h => {
         const df = String(h.date_from || ""), dt = String(h.date_to || "");
         if (!df && !dt) return true;
         if (df && travelISO < df) return false;
         if (dt && travelISO > dt) return false;
         return true;
       });
+      // لو التاريخ خارج كل المواسم المُسعّرة (مثل صلالة خارج الخريف) لا نُفرّغ
+      // القائمة — نُبقي كل فنادق المدينة (أقرب موسم) حتى يبقى عند الموظف بدائل
+      // للتبديل، تماشياً مع سلوك البناء الذي يختار فندقاً بتجاهل التاريخ مع تنبيه.
+      if (dated.length > 0) rows = dated;
     }
     // إزالة التكرار: كل (فندق + نوع الغرفة) مرة واحدة — لا تتكرر بمواسم مختلفة.
     // مرتّبة سعراً تصاعدياً، فيبقى الأرخص المطابق عند غياب التاريخ.
@@ -2256,13 +2260,24 @@ async function handleListHotels(body: {
       return true;
     });
 
-    const hotels = rows.map(h => ({
-      name: h.name,
-      stars: Number(h.stars) || 0,
-      room_type: h.room_type || "",
-      price_per_night: Number(h.price_per_night) || 0,
-      includes_breakfast: !!h.includes_breakfast,
-    }));
+    const hotels = rows.map(h => {
+      const cap = capOf(h);
+      return {
+        name: h.name,
+        stars: Number(h.stars) || 0,
+        room_type: h.room_type || "",
+        price_per_night: Number(h.price_per_night) || 0,
+        includes_breakfast: !!h.includes_breakfast,
+        occupancy: h.occupancy || "",            // نص الإشغال كما في الشيت
+        capacity: cap,                            // أقصى عدد تتسعه الغرفة (رقم)
+        fits: !cap || !threshold || cap >= threshold,  // مطابق للعدد المطلوب؟
+      };
+    });
+    // المطابق للعدد أولاً (يُعرض بلون فاتح)، ثم الأعلى نجوماً، ثم الأرخص.
+    hotels.sort((a, b) =>
+      (a.fits === b.fits ? 0 : (a.fits ? -1 : 1))
+      || (b.stars - a.stars)
+      || (a.price_per_night - b.price_per_night));
     return new Response(JSON.stringify({ hotels }), { headers: CORS_HEADERS });
   } catch (e) {
     return new Response(
@@ -2301,13 +2316,16 @@ async function handleListRoomTypes(body: {
     // صفّ التاريخ المطلوب فقط (الموسم) — صفوف بلا تاريخ تبقى دائماً
     const travelISO = travelDateToISO(String(body.date || ""));
     if (travelISO) {
-      rows = rows.filter(h => {
+      const dated = rows.filter(h => {
         const df = String(h.date_from || ""), dt = String(h.date_to || "");
         if (!df && !dt) return true;
         if (df && travelISO < df) return false;
         if (dt && travelISO > dt) return false;
         return true;
       });
+      // خارج كل المواسم المُسعّرة → لا نُفرّغ القائمة، نرجع لكل أنواع غرف الفندق
+      // (أقرب موسم) بدل ترك الموظف بلا خيارات. (نفس fallback قائمة التبديل.)
+      if (dated.length > 0) rows = dated;
     }
     // نوع غرفة واحد لكل نوع (الأرخص عند تكرار الموسم)، مرتّبة سعراً
     const seen = new Set<string>();

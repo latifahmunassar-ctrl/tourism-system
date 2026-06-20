@@ -335,6 +335,11 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 .hsw-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 9px;border-radius:8px;cursor:pointer}
 .hsw-opt:hover{background:var(--s3)}
 .hsw-opt.sel{background:rgba(212,168,67,.12);border:1px solid rgba(212,168,67,.35)}
+.hsw-opt.hsw-fit{background:rgba(47,217,138,.14);border:1px solid rgba(47,217,138,.34)}
+.hsw-opt.hsw-fit:hover{background:rgba(47,217,138,.22)}
+.hsw-opt.hsw-nofit{opacity:.72}
+.hsw-sep{font-size:10px;color:var(--muted);text-align:center;padding:8px 4px 4px;border-top:1px dashed var(--border);margin-top:5px}
+.hsw-cap{color:var(--green,#2fd98a);font-weight:700}
 .hsw-l .hsw-n{font-weight:700;font-size:12.5px}
 .hsw-l .hsw-m{font-size:10.5px;color:var(--muted);margin-top:2px}
 .hsw-chk{color:var(--teal);font-weight:900}
@@ -1131,17 +1136,22 @@ function hswRender(cell, hotels){
   const nights = +cell.dataset.nights || 0;
   const curName = cell.dataset.name;
   const curNightly = +cell.dataset.nightly || 0;
-  if(!hotels.length){ menu.innerHTML = '<div class="hsw-loading">ما فيه فنادق بديلة لنفس الإشغال</div>'; return; }
-  const title = `<div class="hsw-title">فنادق ${hswEsc(cell.dataset.region)} — السعر/ليلة واضح قبل الاختيار</div>`;
+  if(!hotels.length){ menu.innerHTML = '<div class="hsw-loading">ما فيه فنادق بهذه المنطقة</div>'; return; }
+  const title = `<div class="hsw-title">فنادق ${hswEsc(cell.dataset.region)} — المطابق للعدد أولاً (مظلّل) ثم الباقي · السعة واضحة</div>`;
+  let sepShown = false;
   menu.innerHTML = title + hotels.map((h,i)=>{
     const isCur = h.name === curName;
     const total = (h.price_per_night||0) * nights;
     const diff = (h.price_per_night||0) - curNightly;
     const dCls = diff>0?'up':(diff<0?'down':'');
     const dTxt = diff===0?'':((diff>0?'+':'−')+Math.abs(diff));
-    return `<div class="hsw-opt ${isCur?'sel':''}" data-idx="${i}">`
+    const cap = h.capacity ? `<span class="hsw-cap">👥 يتسع ${h.capacity}</span>` : (h.occupancy?`<span class="hsw-cap">👥 ${hswEsc(String(h.occupancy))}</span>`:'');
+    const cls = isCur ? 'sel' : (h.fits ? 'hsw-fit' : 'hsw-nofit');
+    let sep = '';
+    if(!isCur && !h.fits && !sepShown){ sepShown = true; sep = `<div class="hsw-sep">— باقي فنادق المنطقة (سعة مختلفة عن العدد) —</div>`; }
+    return sep + `<div class="hsw-opt ${cls}" data-idx="${i}">`
       + `<div class="hsw-l"><div class="hsw-n">${hswEsc(h.name)}${isCur?' <span class="hsw-chk">✓</span>':''}</div>`
-      + `<div class="hsw-m">⭐${h.stars} · ${hswEsc(h.room_type||'')}${h.includes_breakfast?' · إفطار':''}</div></div>`
+      + `<div class="hsw-m">⭐${h.stars} · ${hswEsc(h.room_type||'')}${cap?' · '+cap:''}${h.includes_breakfast?' · إفطار':''}</div></div>`
       + `<div class="hsw-price">${(h.price_per_night||0).toLocaleString()} ريال ${dTxt?`<span class="hsw-delta ${dCls}">${dTxt}</span>`:''}<small>×${nights} = ${total.toLocaleString()}</small></div>`
       + `</div>`;
   }).join('');
