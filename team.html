@@ -4212,8 +4212,12 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     if(typeof loadCurrencies==='function') await loadCurrencies();
     const sel=document.getElementById('currencyPicker');
     if(!sel) return;
-    const opt=[...sel.options].find(o=>o.value===code);
-    if(opt){ sel.value=code; if(sel.style.display==='none') sel.style.display=''; if(typeof onCurrencyPick==='function') onCurrencyPick(); }
+    // الرمز في شيت currency قد يختلف عن المعياري (مثلاً الإمارات مخزّنة «UAE» لا «AED») —
+    // نطابق بالرمز + أسماء بديلة معروفة حتى لا يفشل التحويل التلقائي بسبب اختلاف الترميز.
+    const ALIAS={ AED:['UAE','AED'], UAE:['UAE','AED'] };
+    const wanted=ALIAS[code]||[code];
+    const opt=[...sel.options].find(o=>wanted.includes(o.value));
+    if(opt){ sel.value=opt.value; if(sel.style.display==='none') sel.style.display=''; if(typeof onCurrencyPick==='function') onCurrencyPick(); }
   }
   window.indivLoad=async function(id){
     indivClose();
