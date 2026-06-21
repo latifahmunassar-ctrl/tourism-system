@@ -2855,8 +2855,14 @@
         if (b.sim_count != null) setv("bf-sim_count", b.sim_count);
         if (b.hotel_stars) setv("bf-hotel_stars", String(b.hotel_stars));
         if (b.notes) setv("bf-notes", b.notes);
-        if (b.destination && typeof bfLoadSugs === "function") await bfLoadSugs(b.destination);
-        if (msg) { msg.style.color = "#6d28d9"; msg.textContent = "✨ عُبّئت من المحادثة — راجعي وعدّلي قبل الحفظ."; }
+        if (b.destination && typeof bfLoadSugs === "function") {
+          await bfLoadSugs(b.destination);
+          // المطار: لو زوج واحد فقط نختاره تلقائيًا فتظهر اقتراحات التوزيع؛ وإلا نترك الموظف يختار.
+          const aSel = $("bf-airport");
+          if (aSel) { const opts = [...aSel.options].filter(o => o.value); if (opts.length === 1) aSel.value = opts[0].value; }
+          if (typeof bfRenderSugs === "function") bfRenderSugs();
+        }
+        if (msg) { msg.style.color = "#6d28d9"; msg.textContent = "✨ عُبّئت من المحادثة — اختاري مطار القدوم/المغادرة (لو متعدد) وراجعي قبل الحفظ."; }
       } catch (e) {
         if (msg) { msg.style.color = "#dc2626"; msg.textContent = "تعذّر القراءة من المحادثة: " + (e.message || e); }
       } finally { if (btn) { btn.disabled = false; btn.textContent = old; } }
