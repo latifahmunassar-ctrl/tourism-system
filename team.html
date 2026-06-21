@@ -4048,19 +4048,26 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     if(starEl){ starEl.checked=true; if(typeof bfPick==='function') bfPick(starEl); }
     const eb=document.getElementById('bf-extrabed-on'); if(eb) eb.checked=!!(req.extra_bed && /نعم|كل|all/i.test(req.extra_bed));
 
-    // (1) اقتراح جاهز مختار → «اقتراحات جاهزة» + تظليل نفس المقترح
-    if(req.sel_distribution){
+    // (1) اقتراح جاهز مختار، أو مطار محدّد بلا توزيع → «اقتراحات جاهزة» + عرض المطابق.
+    if(req.sel_distribution || req.sel_pair){
       try{
         const ready=document.querySelector('input[name=bf-mode][value=ready]');
         if(ready){ ready.checked=true; if(typeof bfSetMode==='function') bfSetMode('ready', ready); }
         if(typeof bfLoadSuggestions==='function'){ await bfLoadSuggestions(); }
         const aSel=document.getElementById('bf-airport'); if(aSel && req.sel_pair) aSel.value=req.sel_pair;
         if(typeof bfShowOptions==='function') bfShowOptions();
-        const want=arabicDigitsToLatin(String(req.sel_distribution).trim());
-        const match=[...document.querySelectorAll('#bf-sugList .bf-sug')].find(el=>{
-          const d=el.querySelector('.bf-sug-dist'); return d && arabicDigitsToLatin(d.textContent.trim())===want;
-        });
-        if(match){ match.click(); if(typeof bfExpected==='function') bfExpected(); return 'ready'; }
+        if(req.sel_distribution){
+          // توزيع محفوظ → ظلّل نفس المقترح.
+          const want=arabicDigitsToLatin(String(req.sel_distribution).trim());
+          const match=[...document.querySelectorAll('#bf-sugList .bf-sug')].find(el=>{
+            const d=el.querySelector('.bf-sug-dist'); return d && arabicDigitsToLatin(d.textContent.trim())===want;
+          });
+          if(match){ match.click(); if(typeof bfExpected==='function') bfExpected(); return 'ready'; }
+        } else if(document.querySelectorAll('#bf-sugList .bf-sug').length){
+          // مطار محدّد بلا توزيع: عُرضت التوزيعات المطابقة (وتُختار تلقائياً لو وحدة) ليختار الموظف.
+          if(typeof bfExpected==='function') bfExpected();
+          return 'ready';
+        }
       }catch(e){ console.warn('ready fill failed → fallback to manual', e); }
       // ما لقى تطابق أو صار خطأ → نكمّل لوضع تخصيص
     }
