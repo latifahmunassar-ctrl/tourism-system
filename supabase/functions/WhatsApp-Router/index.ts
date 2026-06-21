@@ -3785,6 +3785,54 @@ Deno.serve(async (req) => {
     }
   }
 
+  // إعادة تحليل المقترحات المعلّقة بالمنطق الجديد (استخراج الهدف + إعادة استخدام
+  // الرد المعتمد + عدّاد الثقة). يعالج دفعة لكل نداء (للحدّ من زمن الاستجابة)؛
+  // نادِه مراراً حتى remaining=0. يحدّث فقط ما ينقصه الهدف (للاستئناف الآمن).
+  if (url.searchParams.get("admin_action") === "reanalyze_pending") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
+      const { data: pend } = await supabase.from("whatsapp_admin_proposals")
+        .select("id, customer_question")
+        .in("status", ["pending_reply_approval", "pending_correction"])
+        .is("customer_goal", null)
+        .order("created_at", { ascending: false }).limit(10);
+      const list = (pend as Array<{ id: string; customer_question: string }> | null) ?? [];
+      let updated = 0;
+      for (const pr of list) {
+        try {
+          const a = await analyzeUnknownQuestion(supabase, pr.customer_question || "");
+          if (!a) continue;
+          let sc: number | null = null;
+          if (a.sourceRowId) {
+            const { data: fc } = await supabase.from("faq_confirmations")
+              .select("confirmations").eq("row_id", a.sourceRowId).maybeSingle();
+            sc = (((fc as { confirmations?: number } | null)?.confirmations) ?? 0);
+          }
+          await supabase.from("whatsapp_admin_proposals").update({
+            customer_goal: a.goal || "",
+            interpretation: a.interpretation,
+            suggested_reply: a.suggestedReply,
+            source_row_id: a.sourceRowId,
+            source_confirmations: sc,
+            proposed_intent: a.proposedIntent,
+            proposed_sub_intent: a.proposedSubIntent,
+          }).eq("id", pr.id);
+          updated++;
+        } catch (_e) { /* تخطّى هذا وواصل */ }
+      }
+      const { count: remaining } = await supabase.from("whatsapp_admin_proposals")
+        .select("id", { count: "exact", head: true })
+        .in("status", ["pending_reply_approval", "pending_correction"])
+        .is("customer_goal", null);
+      return new Response(JSON.stringify({ ok: true, updated, remaining: remaining ?? 0 }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
   // Admin decides a pending proposal from the dashboard (instead of the
   // WhatsApp reply flow).
   //   POST { proposal_id, decision: "approve" }
