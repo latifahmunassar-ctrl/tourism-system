@@ -437,6 +437,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <span id="currencyResult" style="display:none; font-size:13px; font-weight:900; color:var(--gold); background:var(--s2); border:1px solid rgba(212,168,67,0.35); border-radius:8px; padding:6px 12px; white-space:nowrap;"></span>
 <button class="ebtn ebtn-pdf" id="waGroupBtn" style="background:linear-gradient(135deg,#25D366,#128C7E);border:none;color:#fff" onclick="waGroupOpen()" title="جهّز ملف PDF وشاركه لجروب واتساب محفوظ">📲 أرسل PDF للجروب</button>
 <button class="ebtn ebtn-pdf" id="inboxSendBtn" style="display:none;background:linear-gradient(135deg,#0e9d6a,#c41d88);border:none;color:#fff" onclick="inboxSend()">📤 إرسال للشركة</button>
+<button class="ebtn ebtn-nologo" id="indivSaveBtn" style="display:none;background:#0b5d4e;border:none;color:#fff" onclick="indivSaveOnly()" title="احفظ البرنامج والسعر بدون إرسال للعميل (لو أرسلته سابقاً)">💾 حفظ فقط</button>
 <button class="ebtn ebtn-pdf" id="indivSendBtn" style="display:none;background:linear-gradient(135deg,#25D366,#128C7E);border:none;color:#fff" onclick="indivSend()">📤 إرسال للعميل (واتساب)</button>
 </div>
 </div>
@@ -4285,6 +4286,26 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       alert('تعذّر الإرسال: '+m+hint);
     }finally{ if(btn){btn.disabled=false;btn.textContent=old;} }
   };
+  window.indivSaveOnly=async function(){
+    if(!indivState){alert('افتح طلب فرد أولاً من «👤 طلبات الأفراد».');return;}
+    if(typeof lastProgramRaw==='undefined' || !lastProgramRaw || !/TOTAL_GROUP:/.test(lastProgramRaw)){alert('ابنِ البرنامج وسعّره أولاً.');return;}
+    const btn=document.getElementById('indivSaveBtn'); const old=btn?btn.textContent:'';
+    if(btn){btn.disabled=true;btn.textContent='⏳ يحفظ…';}
+    try{
+      const price=(typeof currentFinalGroup==='function')?currentFinalGroup():null;
+      const currency=(typeof currencyConversion!=='undefined'&&currencyConversion)?currencyConversion.name:'ريال';
+      const r=await fetch(IB_BASE+'?admin_action=save_individual',{method:'POST',headers:ibH(),body:JSON.stringify({
+        id:indivState.id, program:lastProgramRaw, price, currency, sent_by:(typeof ibStaffName==='function'?ibStaffName():'')
+      })});
+      const d=await r.json();
+      if(!r.ok||!d.ok) throw new Error(d.error||('HTTP '+r.status));
+      alert('💾 تم الحفظ بدون إرسال ✅');
+      indivState=null;
+      const sv=document.getElementById('indivSaveBtn'); if(sv) sv.style.display='none';
+      const sb=document.getElementById('indivSendBtn'); if(sb) sb.style.display='none';
+    }catch(e){ alert('تعذّر الحفظ: '+(e.message||e)); }
+    finally{ if(btn){btn.disabled=false;btn.textContent=old;} }
+  };
   window.indivReoffer=async function(id){
     if(!confirm('إنشاء عرض آخر من هذا الطلب؟ بيُفتح لك في المبني لتعدّليه وترسليه.')) return;
     try{
@@ -4326,6 +4347,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     // اربط الطلب بحالة الإرسال وأظهر زر «إرسال للعميل» (وأخفِ زر الشركة)
     indivState={id:b.id, phone:b.contact_phone, name:b.customer_name||'', dest:b.destination};
     const _isb=document.getElementById('indivSendBtn'); if(_isb) _isb.style.display='';
+    const _isv=document.getElementById('indivSaveBtn'); if(_isv) _isv.style.display='';
     const _csb=document.getElementById('inboxSendBtn'); if(_csb) _csb.style.display='none';
     // اربط حقول booking_brief بالصيغة التي يفهمها inboxFillForm (نفس مبنى الشركات)
     const req={

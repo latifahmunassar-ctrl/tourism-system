@@ -726,6 +726,27 @@ Deno.serve(async (req) => {
       }
     }
 
+    // «حفظ فقط» (بدون إرسال): يخزّن البرنامج والسعر ويعلّم الطلب مُنجَزاً، بلا
+    // إرسال PDF للعميل — للحالات التي أُرسل فيها العرض للعميل سابقاً يدوياً.
+    if (adminAction === "save_individual") {
+      const b = await req.json().catch(() => ({} as Record<string, any>));
+      const id = String(b.id || "").trim();
+      if (!id) return json({ error: "missing id" }, 400);
+      const note = String(b.note || "").trim().slice(0, 500);
+      const { error } = await supabase.from("booking_brief").update({
+        status: "sent",
+        sent_at: new Date().toISOString(),
+        sent_by: String(b.sent_by || "").trim() || null,
+        built_program: String(b.program || "").slice(0, 100000) || null,
+        sent_price: (b.price != null && b.price !== "") ? Number(b.price) : null,
+        sent_currency: String(b.currency || "").trim() || null,
+        send_note: "💾 حفظ بدون إرسال" + (note ? (" — " + note) : ""),
+        updated_at: new Date().toISOString(),
+      }).eq("id", id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+
     // «إرسال عرض آخر»: ينسخ طلب الفرد كطلب جديد وارد (يُعاد بناؤه وإرساله).
     if (adminAction === "duplicate_individual") {
       const id = url.searchParams.get("id") || "";
