@@ -400,7 +400,9 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
   <div class="user-pill"><div class="avatar">م</div>موظف المبيعات</div>
   <button class="logout-btn" type="button" onclick="inboxOpen()" style="position:relative;">📥 طلبات الشركات<span id="inboxBadge" style="display:none;position:absolute;top:-7px;left:-7px;background:#e0218a;color:#fff;border-radius:999px;font-size:10px;padding:1px 6px;font-weight:900;">0</span></button>
   <button class="logout-btn" type="button" onclick="indivOpen()" style="position:relative;">👤 طلبات الأفراد<span id="indivBadge" style="display:none;position:absolute;top:-7px;left:-7px;background:#e0218a;color:#fff;border-radius:999px;font-size:10px;padding:1px 6px;font-weight:900;">0</span></button>
-  <a href="https://madartrip.com/wa-dashboard.html" target="_blank" rel="noopener" class="logout-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">💬 داشبورد الواتساب</a>
+  <a id="waDashLink" href="https://madartrip.com/wa-dashboard.html" target="_blank" rel="noopener" class="logout-btn" style="text-decoration:none;display:none;align-items:center;gap:6px;">💬 داشبورد الواتساب</a>
+  <script>/* منفذ للأدمن فقط: يظهر إذا دور الواتساب (نفس الدومين madartrip) = admin */
+  (function(){ try{ var el=document.getElementById('waDashLink'); if(el && (localStorage.getItem('alezz_dashboard_role')||'')==='admin') el.style.display='inline-flex'; }catch(e){} })();</script>
   <button class="logout-btn" type="button" onclick="trustDevice()" title="اطلبي توثيق هذا الجهاز ليدخل من أي دولة">🔓 توثيق الجهاز</button>
   <button class="logout-btn" type="button" onclick="logout()">تسجيل خروج</button>
 </div>
@@ -804,6 +806,23 @@ function removeFlightLine(btn){
     buildReview(newRaw);
     addMessage('sys','تم حذف الطيران من البرنامج وأُعيد احتساب الإجمالي.');
   }catch(e){ addMessage('sys','خطأ في حذف الرحلة: '+(e&&e.message?e.message:e)); }
+}
+// حذف سيارة إضافية (سطر «نقل إضافي») أضافها الموظف — يحذف نسخة واحدة فقط (لو فيه
+// أكثر من سيارة إضافية بنفس اليوم) ويُعيد احتساب الإجمالي.
+function removeExtraCarLine(btn){
+  try{
+    const line = (btn && btn.dataset && btn.dataset.line) || '';
+    if(!line) return;
+    if(!confirm('حذف السيارة الإضافية؟')) return;
+    const lines = String(lastProgramRaw||'').split('\n');
+    const idx = lines.findIndex(l => l.trim() === line.trim());
+    if(idx < 0){ addMessage('sys','تعذّر حذف السيارة الإضافية — لم تتغيّر.'); return; }
+    lines.splice(idx, 1);
+    const newRaw = lines.join('\n');
+    for (let i = history.length - 1; i >= 0; i--){ if (history[i].role === 'assistant'){ history[i].content = newRaw; break; } }
+    buildReview(newRaw);
+    addMessage('sys','تم حذف السيارة الإضافية وأُعيد احتساب الإجمالي.');
+  }catch(e){ addMessage('sys','خطأ في حذف السيارة الإضافية: '+(e&&e.message?e.message:e)); }
 }
 // تكاليف إضافية يدوية يضيفها الموظف (غير موجودة بالشيت): تذاكر دولية، فيزا، تأمين…
 // تُجمع كلياً على إجمالي المجموعة (قبل الربح)، وتظهر بالاسم في قسمها بالـ PDF.
@@ -1488,6 +1507,21 @@ const BF_CITIES = {
   "إندونيسيا":["بالي","جاكرتا","باندونغ","بونشاك"],
   "عُمان":["صلالة"],
 };
+// يحوّل أي تهجئة للوجهة (همزة/تشكيل/إنجليزي) إلى مفتاح BF_CITIES المطابق، حتى لا
+// تفشل تعبئة الفورم عند ضبط bf-dest من طلب محفوظ (مثال: "اندونيسيا" بلا همزة أو
+// "indonesia" كانت تُرفَض من القائمة فتطلع المدن فاضية، وكذلك "عمان" بلا ضمة).
+function bfResolveDest(d){
+  const raw = String(d||'').trim();
+  if (BF_CITIES[raw]) return raw;
+  const norm = s => String(s||'').toLowerCase()
+    .replace(/[ً-ْ]/g,'').replace(/[إأآى]/g,'ا').replace(/\s+/g,'').trim();
+  const n = norm(raw);
+  const EN = { indonesia:'إندونيسيا', vietnam:'فيتنام', malaysia:'ماليزيا',
+    thailand:'تايلاند', turky:'تركيا', turkey:'تركيا', russia:'روسيا',
+    bosnia:'البوسنة', oman:'عُمان' };
+  if (EN[n]) return EN[n];
+  return Object.keys(BF_CITIES).find(k => norm(k) === n) || raw;
+}
 const BF_INTAKE = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake";
 let BF_SUGS = [];        // all ready suggestions for current destination
 let bfShownRows = [];    // suggestions currently rendered as cards
@@ -2381,8 +2415,11 @@ const { total: lineTT } = computeTransferTourLineTotal(p, xferTourMeta, '🚗 ا
 const paxCell = (p.length >= 5 && p[4]) ? p[4] : `${persons} (META)`;
 const vCell = `<td class="vsw-cell" data-vname="${hswEsc(p[1]||'')}" data-vprice="${lineTT}" data-vline="${hswEsc(l)}"><div class="hsw-cur" onclick="vswToggle(this)"><span class="hsw-name">🚗 اختر السيارة</span><span class="hsw-chev">▼</span></div><div class="hsw-menu"></div></td>`;
 const _d=_xDay(l);
+// سيارة إضافية أضافها الموظف → زر حذف (✕) لإزالتها
+const isExtraCar = /نقل إضافي/.test(p[1]||'');
+const delBtn = isExtraCar ? ` <button type="button" data-line="${hswEsc(l)}" onclick="removeExtraCarLine(this)" title="حذف السيارة الإضافية" style="background:#fee2e2;color:#b91c1c;border:none;border-radius:6px;padding:2px 8px;font-weight:900;cursor:pointer;font-size:12px">✕ حذف</button>` : '';
 const sumRow = (_xCnt[_d]>1 && _xLast[_d]===_i) ? `<tr class="day-cars"><td colspan="6">🚗 ${_d}: ${_xCnt[_d]} سيارات في نفس اليوم</td><td class="price-cell">${(_xSum[_d]||0).toLocaleString()} ريال</td></tr>` : '';
-return `<tr><td>${p[0]||''}</td><td>${p[1]||''}</td><td><span class="type-badge ${tc}">${tl}</span></td><td class="price-cell">${p[3]||''}</td><td>${paxCell}</td>${vCell}<td class="price-cell">${lineTT.toLocaleString()} ريال</td></tr>${sumRow}`;
+return `<tr><td>${p[0]||''}</td><td>${p[1]||''}${delBtn}</td><td><span class="type-badge ${tc}">${tl}</span></td><td class="price-cell">${p[3]||''}</td><td>${paxCell}</td>${vCell}<td class="price-cell">${lineTT.toLocaleString()} ريال</td></tr>${sumRow}`;
 }).join('')}</tbody>
 </table></div>`;
 }
@@ -3996,7 +4033,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       cc.innerHTML=`<b>📋 طلب الشركة كما اختارته:</b><br>${ibEsc(req.destination)} · ${req.days} أيام · ${req.pax} أشخاص${req.children?(' + '+req.children+' أطفال'):''}${route?(' · '+route):''}${dist?('<br>🗺️ التوزيع: <b>'+ibEsc(dist)+'</b>'):''}`;
       cc.style.display='block';
     }
-    set('bf-dest', req.destination);
+    set('bf-dest', bfResolveDest(req.destination));
     set('bf-adults', req.pax||2);
     const ch=document.getElementById('bf-children'); if(ch) ch.value=req.children||0;
     set('bf-days', req.days||8);

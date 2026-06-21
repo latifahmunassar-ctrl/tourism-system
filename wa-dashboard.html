@@ -113,6 +113,8 @@
        conversations once we add scoping; for now this bar is hidden in
        staff mode. */
     body.staff-mode .admin-only-filter { display: none; }
+    /* منفذ المساعد السياحي — للأدمن فقط (مخفي عن الموظف والمراقب) */
+    body.staff-mode .ts-admin-link, body.monitor-mode .ts-admin-link { display: none !important; }
     body.staff-mode .last-updated::before {
       content: "👤 وضع الموظفين · ";
       color: var(--accent); font-weight: 800;
@@ -768,6 +770,7 @@
       <button class="tab-btn" data-tab="contacts">📇 جهات الاتصال</button>
       <button class="tab-btn" data-tab="offers">📁 مكتبة العروض</button>
       <button class="tab-btn" data-tab="users">👤 إدارة المستخدمين</button>
+      <a class="tab-btn ts-admin-link" href="https://madartrip.com/team.html" target="_blank" rel="noopener" style="text-decoration:none">🧳 المساعد السياحي</a>
     </nav>
 
     <div class="ai-toggle-card" id="ai-toggle-card">
@@ -1474,6 +1477,7 @@
     // Admin tab bar — toggle main / contacts / users views
     document.querySelectorAll(".tab-btn").forEach(btn => {
       btn.addEventListener("click", () => {
+        if (!btn.dataset.tab) return; // رابط خارجي (المساعد السياحي) — يفتح بتبويب جديد بلا تبديل
         document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
         const tab = btn.dataset.tab;
