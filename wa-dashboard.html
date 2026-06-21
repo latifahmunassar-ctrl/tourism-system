@@ -3967,6 +3967,7 @@
                 <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;">
                   <button class="toggle-btn inherit" data-proposal-action="view-convo" data-phone="${escapeHtml(p.customer_phone)}" data-name="${escapeHtml(p.customer_profile_name || "")}" style="min-width:auto; padding:8px 14px; background:#e0f2fe; color:#075985; border-color:#bae6fd;">💬 المحادثة كاملة</button>
                   <button class="toggle-btn" data-proposal-action="approve" data-id="${escapeHtml(p.id)}" style="min-width:auto; padding:8px 14px;">✅ موافق — أرسل</button>
+                  <button class="toggle-btn" data-proposal-action="save-only" data-id="${escapeHtml(p.id)}" style="min-width:auto; padding:8px 14px; background:#1d4ed8; color:#fff; border-color:#1d4ed8;" title="اعتمد الرد المقترح واحفظه بدون إرسال للعميل (لو رددتِ عليه سابقاً)">💾 حفظ فقط (بدون إرسال)</button>
                   <button class="toggle-btn off" data-proposal-action="reject" data-id="${escapeHtml(p.id)}" style="min-width:auto; padding:8px 14px;">✏️ تعديل الرد</button>
                   <button class="toggle-btn off" data-proposal-action="delete" data-id="${escapeHtml(p.id)}" style="min-width:auto; padding:8px 14px; background:#fee2e2; color:#991b1b; border-color:#fecaca;">🗑️ حذف</button>
                 </div>
