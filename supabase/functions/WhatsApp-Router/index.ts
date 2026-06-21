@@ -1123,6 +1123,82 @@ async function isAiEnabledForSession(
   return true;   // PREVIEW or ON, no override → run
 }
 
+// ── استقبال العملاء الجدد (طلال) ─────────────────────────────────────────
+// يجمع المعلومات الأساسية بمحادثة طبيعية (وجهة/عدد/تاريخ/أعمار/مدينة الوصول
+// والمغادرة) ويرد تلقائياً، ثم يتوقّف عند الاكتمال ليتسلّمها الموظف. يخص
+// المحادثات الجديدة فقط (intake_active). يفهم النص والأرقام والكلام المجزّأ.
+async function handleNewLeadIntake(args: {
+  supabase: ReturnType<typeof createClient>; from: string; body: string;
+}): Promise<void> {
+  const { supabase, from } = args;
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  const [inboundRes, outboundRes, sessRes] = await Promise.all([
+    supabase.from("wa_message_audit").select("body, received_at").eq("from_phone", from)
+      .not("body", "is", null).order("received_at", { ascending: false }).limit(30),
+    supabase.from("wa_admin_messages").select("body, sent_at").eq("customer_phone", from)
+      .order("sent_at", { ascending: false }).limit(30),
+    supabase.from("whatsapp_sessions").select("intake_data").eq("phone", from).maybeSingle(),
+  ]);
+  type Row = { body?: string | null; received_at?: string; sent_at?: string };
+  const msgs: Array<{ ts: string; who: string; body: string }> = [];
+  for (const m of ((inboundRes.data || []) as Row[])) if (m.body && !String(m.body).startsWith("📎")) msgs.push({ ts: m.received_at || "", who: "العميل", body: String(m.body) });
+  for (const m of ((outboundRes.data || []) as Row[])) if (m.body) msgs.push({ ts: m.sent_at || "", who: "طلال", body: String(m.body) });
+  msgs.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+  const transcript = msgs.slice(-24).map(m => m.who + ": " + m.body).join("\n").slice(-4000);
+  const prev = (sessRes.data as { intake_data?: unknown } | null)?.intake_data || {};
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (!apiKey) {
+    await supabase.from("whatsapp_sessions").update({ last_message_at: new Date().toISOString() }).eq("phone", from);
+    return;
+  }
+  const sys = `أنت «طلال»، موظف خدمة عملاء لوكالة سفر، تتكلم بلهجة خليجية ودودة ومختصرة (لا فصحى).
+مهمتك جمع ٥ معلومات أساسية من العميل:
+1) وجهة السفر  2) عدد المسافرين  3) تاريخ السفر  4) أعمار المسافرين (مهم خصوصاً الأطفال)  5) مدينة الوصول والمغادرة.
+قواعد:
+- أول رد ابدأه بالترحيب: "حياك الله 🌟 معك طلال من خدمة العملاء" (كرسالة قصيرة لحالها) ثم اسأل عن أول معلومة ناقصة برسالة ثانية قصيرة.
+- ⚠️ ممنوع منعاً باتاً تمدح أو تعلّق على اختيار العميل أو وجهته. لا تقل نهائياً: «حلو / ممتاز / جميل / رائع / اختيار موفق / تمام تمام / حلو الاختيار». كن مباشراً ومحترفاً.
+- ردودك قصيرة جداً: سؤال واحد مختصر، بلا ملخصات ولا علامات ✓ ولا كلام زائد.
+- مثال صحيح: «كم عدد المسافرين؟» — مثال خاطئ (ممنوع): «تايلند اختيار حلو! كم عدد المسافرين؟».
+- اسأل عن معلومة ناقصة واحدة فقط في كل رد (الأهم أولاً: الوجهة ثم العدد ثم التاريخ ثم الأعمار ثم مدينة الوصول/المغادرة).
+- مهم: إذا ذكر العميل أطفال/عيال/رضيع، اسأل عن أعمارهم تحديداً (مثل: كم أعمار الأطفال؟) قبل الانتقال لأي سؤال آخر — لأن السعر يعتمد على عمر الطفل. خزّن الأعمار الفعلية في ages.
+- افهم النص والأرقام المكتوبة بالحروف والكلام المجزّأ على عدة رسائل. لا تكرر سؤالاً أُجيب عنه.
+- لو نسي العميل معلومة ذكّره بها تحديداً بلطف.
+- مدينة الوصول/المغادرة: اسأل "من أي مدينة تحب الوصول والمغادرة؟" ولو قال "ما أدري" اقبلها وكمّل.
+- لو كان كلام العميل شكوى أو سؤال عام (مو حجز)، لا تضغط بأسئلة الاستقبال — ردّ بلطف إن زميلنا بيتواصل معه، واجعل complete=true.
+- لمّا تكتمل المعلومات الـ٥: اشكره بالضبط "شكراً 🌟 معلوماتك وصلت، زميلنا بيجهّز لك أفضل عرض ويتواصل معك قريباً" واجعل complete=true.
+اليوم: ${today}. المعلومات المجموعة سابقاً: ${JSON.stringify(prev)}.
+أعد JSON فقط: {"messages":["رسالة قصيرة","رسالة قصيرة ثانية اختيارية"],"fields":{"destination":"","pax":null,"date":"","ages":"","cities":""},"complete":false}
+حيث messages مصفوفة من رسالة إلى رسالتين قصيرتين منفصلتين (لا تجمع كل شيء في رسالة واحدة طويلة).`;
+  let out: { reply?: string; messages?: unknown; fields?: Record<string, unknown>; complete?: boolean } | null = null;
+  try {
+    const anthropic = new Anthropic({ apiKey });
+    const res = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001", max_tokens: 500, system: sys,
+      messages: [{ role: "user", content: transcript || "(أول رسالة من العميل)" }],
+    });
+    let txt = ""; for (const b of res.content) if ((b as { type?: string }).type === "text") txt += (b as { text?: string }).text || "";
+    const m = txt.match(/\{[\s\S]*\}/); if (m) out = JSON.parse(m[0]);
+  } catch (_e) { /* فشل AI — لا نرد، الرسالة محفوظة للموظف */ }
+  if (!out) {
+    await supabase.from("whatsapp_sessions").update({ last_message_at: new Date().toISOString() }).eq("phone", from);
+    return;
+  }
+  // رسائل قصيرة منفصلة (تُرسل بالتتابع للحفاظ على الترتيب) — تدعم messages مصفوفة أو reply نصّي.
+  let outMsgs: string[] = [];
+  if (Array.isArray(out.messages)) outMsgs = (out.messages as unknown[]).map(x => String(x || "").trim()).filter(Boolean);
+  else if (out.reply) outMsgs = [String(out.reply).trim()];
+  for (const msg of outMsgs.slice(0, 3)) {
+    await sendCustomerReply(supabase, from, msg);
+    // نسجّل كل رسالة من طلال لتظهر منفصلة في خيط المحادثة بالداشبورد.
+    try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: msg, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* best-effort */ }
+  }
+  const upd: Record<string, unknown> = { last_message_at: new Date().toISOString() };
+  if (out.fields && typeof out.fields === "object") upd.intake_data = { ...(prev as Record<string, unknown>), ...out.fields };
+  if (out.complete === true) upd.intake_active = false;
+  await supabase.from("whatsapp_sessions").update(upd).eq("phone", from);
+}
+
 async function handleMessage(args: {
   supabase: ReturnType<typeof createClient>;
   from: string;
@@ -1174,6 +1250,7 @@ async function handleMessage(args: {
     hubspot_contact_id: string | null;
     ai_enabled?: boolean | null;
     assigned_staff_phone?: string | null;
+    intake_active?: boolean | null;
   } | null;
 
   // AI master switch — per-conversation override wins over the global
@@ -1190,6 +1267,7 @@ async function handleMessage(args: {
       stage: "new",
       hubspot_contact_id: contactId,
       last_message_at: new Date().toISOString(),
+      intake_active: true,   // عميل جديد → طلال يستقبله ويجمع المعلومات الأساسية
     };
     await supabase.from("whatsapp_sessions").insert(seed);
     session = { ...seed, destination: null, persons: null, travel_date: null, ai_enabled: null, assigned_staff_phone: null } as typeof session;
@@ -1220,6 +1298,16 @@ async function handleMessage(args: {
       .from("whatsapp_sessions")
       .update({ last_message_at: new Date().toISOString() })
       .eq("phone", from);
+    return;
+  }
+
+  // ── استقبال طلال للعملاء الجدد فقط ──────────────────────────────────────
+  // المحادثات الجديدة (intake_active=true، تُضبط عند أول تواصل): طلال يرحّب
+  // ويجمع المعلومات الأساسية (وجهة/عدد/تاريخ/أعمار/مدينة الوصول والمغادرة)
+  // تلقائياً — حتى في وضع PREVIEW (العميل الجديد يحتاج رداً فورياً). أما
+  // العملاء الحاليون (intake_active فارغ) فيكملون على التدفّق المعتاد (يدوي).
+  if (session?.intake_active === true) {
+    await handleNewLeadIntake({ supabase, from, body: text });
     return;
   }
 
