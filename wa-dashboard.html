@@ -1103,6 +1103,7 @@
           <span id="brief-caret">▾</span>
         </button>
         <div id="brief-form" style="display:none; padding:10px 16px 14px; background:#fbfdfc; max-height:62vh; overflow-y:auto; scroll-behavior:smooth; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;">
+          <button type="button" id="bf-extract" style="width:100%; margin-bottom:10px; background:#6d28d9; color:#fff; border:none; border-radius:8px; padding:9px; font-weight:700; cursor:pointer;">✨ عبّي من المحادثة</button>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:13px;">
             <label style="display:flex; flex-direction:column; gap:3px;">الوجهة
               <select id="bf-destination" style="padding:7px; border:1px solid #d7dee6; border-radius:7px;">
@@ -2831,6 +2832,35 @@
       const hit = map.find(([p]) => d.startsWith(p));
       return hit ? hit[1] : "";
     }
+    async function bfExtract() {
+      if (!convPhone) return;
+      const setv = (id, v) => { const el = $(id); if (el) el.value = (v == null ? "" : v); };
+      const btn = $("bf-extract"); const old = btn ? btn.textContent : ""; if (btn) { btn.disabled = true; btn.textContent = "⏳ يقرأ المحادثة…"; }
+      const msg = $("bf-msg"); const phone = convPhone;
+      try {
+        const r = await fetch(BASE + "?admin_action=extract_brief", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+          body: JSON.stringify({ contact_phone: convPhone }),
+        });
+        const d = await r.json();
+        if (!r.ok || d.error) throw new Error(d.error || ("HTTP " + r.status));
+        if (phone !== convPhone) return;
+        const b = d.brief || {};
+        if (b.destination) setv("bf-destination", b.destination);
+        if (b.date_from) setv("bf-date_from", b.date_from);
+        if (b.pax != null) setv("bf-pax", b.pax);
+        if (b.children != null) setv("bf-children", b.children);
+        if (b.days != null) setv("bf-days", b.days);
+        if (b.sim_count != null) setv("bf-sim_count", b.sim_count);
+        if (b.hotel_stars) setv("bf-hotel_stars", String(b.hotel_stars));
+        if (b.notes) setv("bf-notes", b.notes);
+        if (b.destination && typeof bfLoadSugs === "function") await bfLoadSugs(b.destination);
+        if (msg) { msg.style.color = "#6d28d9"; msg.textContent = "✨ عُبّئت من المحادثة — راجعي وعدّلي قبل الحفظ."; }
+      } catch (e) {
+        if (msg) { msg.style.color = "#dc2626"; msg.textContent = "تعذّر القراءة من المحادثة: " + (e.message || e); }
+      } finally { if (btn) { btn.disabled = false; btn.textContent = old; } }
+    }
     function bfBadge(status) {
       const el = $("bf-status-badge");
       if (!el) return;
@@ -3028,6 +3058,7 @@
     if ($("bf-days")) $("bf-days").addEventListener("input", bfRenderSugs);
     if ($("bf-save")) $("bf-save").addEventListener("click", saveBrief);
     if ($("bf-transfer")) $("bf-transfer").addEventListener("click", transferBrief);
+    if ($("bf-extract")) $("bf-extract").addEventListener("click", bfExtract);
     async function loadConversationHistory() {
       if (!convPhone) return;
       const phone = convPhone;
