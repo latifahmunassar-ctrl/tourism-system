@@ -4349,6 +4349,20 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     const _isb=document.getElementById('indivSendBtn'); if(_isb) _isb.style.display='';
     const _isv=document.getElementById('indivSaveBtn'); if(_isv) _isv.style.display='';
     const _csb=document.getElementById('inboxSendBtn'); if(_csb) _csb.style.display='none';
+    // ✅ برنامج معتمد محفوظ سابقاً → حمّله كما هو (لا تعيد البناء حتى لا يتغيّر
+    // المقترح ولا الأسعار). يخص الطلبات اللي سبق بُنيت وأُرسلت/حُفظت.
+    if(b.built_program && /TOTAL_GROUP:/.test(b.built_program)){
+      if(typeof inboxDismiss==='function') inboxDismiss();
+      if(typeof setCustomerType==='function') setCustomerType('individual');
+      buildReview(b.built_program);   // يعرض البرنامج المعتمد ويضبط lastProgramRaw
+      if(typeof history!=='undefined' && Array.isArray(history)){
+        history.push({role:'user', content:'(طلب فرد محفوظ — استخدمه كسياق لأي تعديل لاحق)'});
+        history.push({role:'assistant', content:b.built_program});
+      }
+      if(typeof indivApplyCurrency==='function') indivApplyCurrency(b.contact_phone);
+      window.scrollTo({top:0,behavior:'smooth'});
+      return;
+    }
     // اربط حقول booking_brief بالصيغة التي يفهمها inboxFillForm (نفس مبنى الشركات)
     const req={
       destination:b.destination, pax:b.pax, children:b.children, days:b.days,
