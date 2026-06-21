@@ -661,13 +661,12 @@ Deno.serve(async (req) => {
       const rawPhone = String(b.phone || "").trim();
       const to = rawPhone.replace(/^whatsapp:/, "").replace(/^\+/, "").replace(/[^0-9]/g, "");
       const pdfB64 = String(b.pdf_base64 || "");
-      // واتساب يلخبط أسماء الملفات غير اللاتينية (mojibake) — نضمن اسماً لاتينياً آمناً.
-      let filename = String(b.filename || "Alezz_Travel_Offer.pdf").slice(0, 80);
-      if (/[^\x00-\x7F]/.test(filename)) {
-        filename = filename.replace(/[^\x00-\x7F]+/g, "").replace(/\s+/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "");
-        if (!filename || filename === ".pdf") filename = "Alezz_Travel_Offer.pdf";
-      }
+      // الاسم المعروض للعميل (يدعم العربي عبر document.filename — JSON بترميز UTF-8).
+      let filename = String(b.filename || "عرض سفر.pdf").slice(0, 120);
       if (!/\.pdf$/i.test(filename)) filename += ".pdf";
+      // ⚠️ خطوة رفع الوسيط (multipart) تُتلف الأسماء غير اللاتينية → نرفع باسم لاتيني
+      // ثابت، والاسم العربي يُعرض من document.filename أدناه (هذا ما يراه العميل).
+      const uploadName = "program.pdf";
       const note = String(b.note || "").trim().slice(0, 1000);
       if (!id || !to || !pdfB64) return json({ error: "missing id/phone/pdf" }, 400);
       try {
@@ -679,7 +678,7 @@ Deno.serve(async (req) => {
         const fd = new FormData();
         fd.append("messaging_product", "whatsapp");
         fd.append("type", "application/pdf");
-        fd.append("file", new Blob([bytes], { type: "application/pdf" }), filename);
+        fd.append("file", new Blob([bytes], { type: "application/pdf" }), uploadName);
         const upRes = await fetch(`https://graph.facebook.com/v22.0/${PHONE_ID}/media`, {
           method: "POST", headers: { Authorization: `Bearer ${TOKEN}` }, body: fd,
         });

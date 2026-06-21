@@ -4253,11 +4253,8 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       const b64=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(String(fr.result).split(',')[1]);fr.onerror=rej;fr.readAsDataURL(blob);});
       const price=(typeof currentFinalGroup==='function')?currentFinalGroup():null;
       const currency=(typeof currencyConversion!=='undefined'&&currencyConversion)?currencyConversion.name:'ريال';
-      // اسم ملف لاتيني آمن — أسماء الوجهات العربية تتلخبط عند العميل في واتساب (mojibake).
-      const _DEST_EN={'عمان':'Oman','عُمان':'Oman','ماليزيا':'Malaysia','تايلند':'Thailand','تايلاند':'Thailand','فيتنام':'Vietnam','تركيا':'Turkey','جورجيا':'Georgia','اذربيجان':'Azerbaijan','أذربيجان':'Azerbaijan','مصر':'Egypt','المالديف':'Maldives','مالديف':'Maldives','اندونيسيا':'Indonesia','إندونيسيا':'Indonesia','بالي':'Bali','سريلانكا':'SriLanka','الامارات':'UAE','الإمارات':'UAE','دبي':'Dubai','البوسنة':'Bosnia','المغرب':'Morocco'};
-      const _destAr=String(indivState.dest||'').trim();
-      const _destEn=_DEST_EN[_destAr]||(/^[\x00-\x7F]+$/.test(_destAr)?_destAr:'Trip');
-      const fname=('Alezz_Travel_'+_destEn+'_Offer').replace(/[^\x00-\x7F]/g,'').replace(/\s+/g,'_').replace(/_+/g,'_').slice(0,60)+'.pdf';
+      // اسم الملف بالعربي (الوجهة) — يُعرض للعميل عبر document.filename بترميز UTF-8.
+      const fname=('عرض '+String(indivState.dest||'سفر').trim()).slice(0,60)+'.pdf';
       const r=await fetch(IB_BASE+'?admin_action=send_individual',{method:'POST',headers:ibH(),body:JSON.stringify({
         id:indivState.id, phone:indivState.phone, pdf_base64:b64, filename:fname, note,
         program:lastProgramRaw, price, currency, sent_by:(typeof ibStaffName==='function'?ibStaffName():'')
