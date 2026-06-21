@@ -4324,12 +4324,14 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     if(typeof setCustomerType==='function') setCustomerType('individual');
     const filled=await inboxFillForm(req);
     if((filled==='ready'||filled==='manual') && typeof buildFromForm==='function'){
-      const before=(typeof lastProgramRaw!=='undefined')?lastProgramRaw:'';
+      // «عرض آخر»: امسح أثر البرنامج السابق لنكتشف اكتمال البناء الجديد حتى لو طابقه،
+      // وإلا يتأخّر تطبيق عملة العميل (حتى 9ث) فيُرسَل بالريال بدل عملته.
+      try{ if(typeof lastProgramRaw!=='undefined') lastProgramRaw=''; }catch(_){}
       buildFromForm();
       if(typeof fpTab==='function') fpTab('build');
       let waited=0; const chk=setInterval(()=>{ waited+=700;
-        const built=(typeof lastProgramRaw!=='undefined') && lastProgramRaw && lastProgramRaw!==before && /TOTAL_GROUP:/.test(lastProgramRaw);
-        if(built){ clearInterval(chk); indivApplyCurrency(b.contact_phone); }   // 💱 عملة العميل تلقائياً
+        const built=(typeof lastProgramRaw!=='undefined') && lastProgramRaw && /TOTAL_GROUP:/.test(lastProgramRaw);
+        if(built){ clearInterval(chk); indivApplyCurrency(b.contact_phone); setTimeout(()=>indivApplyCurrency(b.contact_phone),1800); }   // 💱 عملة العميل تلقائياً + تأكيد بعد استقرار البناء
         else if(waited>=9000){ clearInterval(chk); indivApplyCurrency(b.contact_phone); if(typeof fpTab==='function') fpTab('mods'); }
       },700);
     } else {
