@@ -3100,7 +3100,9 @@
       }
       const label = ct === "application/pdf" ? "📄 ملف PDF" : "📎 ملف مرفق";
       const fn = filename ? (" — " + escapeHtml(filename)) : "";
-      return `<div class="conv-media"><a id="${id}" data-media-url="${escapeHtml(url)}" download style="display:inline-block; padding:8px 12px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; border-radius:8px; font-weight:700; text-decoration:none; font-size:13px;">${label}${fn}</a></div>`;
+      // الملفات (PDF/مستندات): رابط مباشر للبروكسي (مصادقة _t) يفتح بتبويب جديد —
+      // بلا جلب blob ولا مهلة 10ث (الملفات الكبيرة كانت تفشل فلا تنفتح).
+      return `<div class="conv-media"><a id="${id}" href="${escapeHtml(url)}" target="_blank" rel="noopener" style="display:inline-block; padding:8px 12px; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; border-radius:8px; font-weight:700; text-decoration:none; font-size:13px;">${label}${fn} ↗</a></div>`;
     }
     function hydrateMediaElements() {
       // نجلب كل media عبر fetch مع Authorization → blob URL → نلصقها.
@@ -3110,7 +3112,7 @@
         el.dataset.mediaLoaded = "loading";
         const url = el.dataset.mediaUrl.replace(/&_t=[^&]*/, "");
         const ctrl = new AbortController();
-        const tm = setTimeout(() => ctrl.abort(), 10000);
+        const tm = setTimeout(() => ctrl.abort(), 30000);
         fetch(url, {
           headers: { Authorization: "Bearer " + token },
           signal: ctrl.signal,
