@@ -2737,6 +2737,7 @@
     // Messages.json round-trip takes ~1–3s; we render the cached copy
     // immediately and refresh in the background.
     const convHistoryCache = new Map();
+    const convReferralCache = new Map();   // phone → بيانات إعلان «اضغط للمحادثة»
     // Hover-prefetch: kick the fetch when the mouse enters the row, so
     // by the time the click registers the response is already in flight.
     const convInflight = new Map();
@@ -2750,6 +2751,7 @@
         .then(r => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
         .then(data => {
           convHistoryCache.set(phone, data.items || []);
+          convReferralCache.set(phone, data.ad_referral || null);
           return data.items || [];
         })
         .finally(() => convInflight.delete(phone));
@@ -3131,14 +3133,29 @@
           .finally(() => clearTimeout(tm));
       });
     }
+    function adBannerHtml(ref) {
+      if (!ref || typeof ref !== "object") return "";
+      const src = ref.source_type === "post" ? "منشور" : "إعلان";
+      const head = ref.headline ? escapeHtml(String(ref.headline)) : "";
+      const bdy = ref.body ? escapeHtml(String(ref.body)) : "";
+      const url = ref.source_url ? String(ref.source_url) : "";
+      const link = url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:#1e40af; font-weight:700; word-break:break-all;">🔗 ${escapeHtml(url)}</a>` : "";
+      return `<div style="position:sticky; top:0; z-index:2; margin:0 0 8px; padding:9px 12px; background:#fdf2f8; border:1px solid #fbcfe8; border-right:4px solid #c41d88; border-radius:8px; font-size:12.5px; color:#831843;">
+        <div style="font-weight:800;">📢 جاء من ${src} على إنستقرام/فيسبوك</div>
+        ${head ? `<div style="margin-top:3px; font-weight:700;">${head}</div>` : ""}
+        ${bdy ? `<div style="margin-top:2px; color:#9d174d;">${bdy}</div>` : ""}
+        ${link ? `<div style="margin-top:4px;">${link}</div>` : ""}
+      </div>`;
+    }
     function renderConvBody(items) {
       const body = $("conv-body");
+      const adBanner = adBannerHtml(convReferralCache.get(convPhone));
       if (!items.length) {
-        body.innerHTML = '<div class="empty">ولا رسالة بعد</div>';
+        body.innerHTML = adBanner + '<div class="empty">ولا رسالة بعد</div>';
         convLastItemsCount = 0;
         return;
       }
-      body.innerHTML = items.map(m => {
+      body.innerHTML = adBanner + items.map(m => {
         const mediaHtml = m.media_id
           ? `<div style="margin-top:4px; display:flex; flex-direction:column; gap:4px;">${renderMediaItem(m.media_id, m.media_mime, m.media_filename)}</div>`
           : "";

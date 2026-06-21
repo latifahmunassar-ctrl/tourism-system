@@ -4638,10 +4638,10 @@ Deno.serve(async (req) => {
       // التي لا تُسجَّل في wa_admin_messages. نضيفه فقط إن لم يكن مكرراً.
       const { data: sess } = await supabase
         .from("whatsapp_sessions")
-        .select("last_outbound_at, last_outbound_body")
+        .select("last_outbound_at, last_outbound_body, ad_referral")
         .eq("phone", phone)
         .maybeSingle();
-      const so = sess as { last_outbound_at: string | null; last_outbound_body: string | null } | null;
+      const so = sess as { last_outbound_at: string | null; last_outbound_body: string | null; ad_referral?: Record<string, unknown> | null } | null;
       if (so?.last_outbound_at && so.last_outbound_body) {
         const dupe = items.some(it =>
           it.sender !== "customer" &&
@@ -4653,7 +4653,7 @@ Deno.serve(async (req) => {
       }
 
       items.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
-      return new Response(JSON.stringify({ phone, items }), { headers: jsonCors });
+      return new Response(JSON.stringify({ phone, items, ad_referral: so?.ad_referral || null }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }),
         { status: 500, headers: jsonCors });
@@ -4876,7 +4876,8 @@ Deno.serve(async (req) => {
     const payload = await req.json();
 
     type Incoming = { from: string; body: string; numMedia: number; profileName: string;
-      media_id: string; media_mime: string; media_filename: string; media_label: string };
+      media_id: string; media_mime: string; media_filename: string; media_label: string;
+      referral: Record<string, unknown> | null };
     const incoming: Incoming[] = [];
     const mediaLabels: Record<string, string> = {
       image: "📷 صورة", document: "📄 ملف", audio: "🎤 رسالة صوتية", voice: "🎤 رسالة صوتية",
@@ -4899,21 +4900,32 @@ Deno.serve(async (req) => {
           const t = String(m?.type || "");
           const isText = t === "text";
           // الوسائط القابلة للتنزيل لها كائن باسم النوع فيه id/mime_type/filename/caption.
-          const mediaObj = (!isText && m?.[t] && typeof m[t] === "object") ? m[t] as Record<string, unknown> : null;
+          let mediaObj = (!isText && m?.[t] && typeof m[t] === "object") ? m[t] as Record<string, unknown> : null;
+          // احتياط: نوع غير متوقّع لكن الرسالة تحمل وسيطاً تحت مفتاح معروف — التقطه.
+          if (!isText && (!mediaObj || !mediaObj.id)) {
+            for (const k of ["document", "image", "video", "audio", "voice", "sticker"]) {
+              const o = m?.[k];
+              if (o && typeof o === "object" && (o as Record<string, unknown>).id) { mediaObj = o as Record<string, unknown>; break; }
+            }
+          }
           const media_id = mediaObj ? String(mediaObj.id || "") : "";
+          // تشخيص: مرفق غير نصّي بلا وسيط — نسجّل النوع والمفاتيح لمعرفة السبب.
+          if (!isText && !media_id) { try { console.log("UNHANDLED_MEDIA type=" + t + " keys=" + Object.keys(m || {}).join(",")); } catch (_) { /* */ } }
           const media_mime = mediaObj ? String(mediaObj.mime_type || "") : "";
           const media_filename = mediaObj ? String(mediaObj.filename || "") : "";
           const caption = mediaObj ? String(mediaObj.caption || "") : "";
           const b = isText ? String(m?.text?.body || "") : caption;
           const media_label = (!isText) ? (mediaLabels[t] || "📎 مرفق") : "";
           const nm = (!isText) ? 1 : 0;
-          if (!b && nm === 0) continue;   // لا نص ولا مرفق — تجاهل.
+          // إعلان «اضغط للمحادثة» (إنستقرام/فيسبوك): واتساب يرسل referral مع أول رسالة.
+          const referral = (m?.referral && typeof m.referral === "object") ? m.referral as Record<string, unknown> : null;
+          if (!b && nm === 0 && !referral) continue;   // لا نص ولا مرفق ولا إعلان — تجاهل.
           incoming.push({
             from: metaFromToInternal(rawFrom),
             body: b,
             numMedia: nm,
             profileName: nameByWaId.get(rawFrom) || "",
-            media_id, media_mime, media_filename, media_label,
+            media_id, media_mime, media_filename, media_label, referral,
           });
         }
       }
@@ -4932,23 +4944,25 @@ Deno.serve(async (req) => {
     // معالجة رسالة واحدة: تُسجّل في التدقيق أولاً (حتى لو فشل ما بعدها لا تُفقد)
     // ثم تُمرّر للمنطق — أو placeholder لو وسائط بلا نص.
     const processOne = async (item: Incoming): Promise<void> => {
-      const { from, body, numMedia, profileName, media_id, media_mime, media_filename, media_label } = item;
+      const { from, body, numMedia, profileName, media_id, media_mime, media_filename, media_label, referral } = item;
       // أعمدة الوسائط تُضاف فقط عند وجود معرّف (لعرض الملف بالداشبورد عبر media_proxy).
       const mediaCols: Record<string, unknown> = media_id
         ? { media_id, media_mime: media_mime || null, media_filename: media_filename || null }
         : {};
+      // إعلان «اضغط للمحادثة»: نخزّن مصدر الإعلان على الجلسة ليظهر بالداشبورد.
+      const refCols: Record<string, unknown> = referral ? { ad_referral: referral } : {};
       if (!body && numMedia > 0) {
         // وسائط بلا نص: نضمن ظهورها بالداشبورد عبر تحديث الجلسة + سطر تدقيق مع معرّف الوسيط.
         const nowIso = new Date().toISOString();
         const { data: existingSess } = await supabase
           .from("whatsapp_sessions").select("phone").eq("phone", from).maybeSingle();
         if (existingSess) {
-          const upd: Record<string, unknown> = { last_message_at: nowIso };
+          const upd: Record<string, unknown> = { last_message_at: nowIso, ...refCols };
           if (profileName) upd.profile_name = profileName;
           await supabase.from("whatsapp_sessions").update(upd).eq("phone", from);
         } else {
           await supabase.from("whatsapp_sessions").insert({
-            phone: from, profile_name: profileName || null, stage: "new", last_message_at: nowIso,
+            phone: from, profile_name: profileName || null, stage: "new", last_message_at: nowIso, ...refCols,
           });
         }
         await supabase.from("wa_message_audit").insert({
@@ -4966,6 +4980,8 @@ Deno.serve(async (req) => {
       const auditId = (auditRow as { id?: string } | null)?.id ?? null;
       try {
         await handleMessage({ supabase, from, profileName, body });
+        // خزّن مصدر الإعلان على الجلسة بعد إنشائها/تحديثها في handleMessage.
+        if (referral) { try { await supabase.from("whatsapp_sessions").update({ ad_referral: referral }).eq("phone", from); } catch (_e) { /* */ } }
         if (auditId) {
           await supabase.from("wa_message_audit").update({
             status: "completed", completed_at: new Date().toISOString(),
