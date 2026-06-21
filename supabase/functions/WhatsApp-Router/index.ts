@@ -3765,6 +3765,7 @@ Deno.serve(async (req) => {
       tryAdd("complaint_type", COMPLAINTS);
       if (typeof p.proposed_intent === "string")     patch.proposed_intent = p.proposed_intent.trim();
       if (typeof p.proposed_sub_intent === "string") patch.proposed_sub_intent = p.proposed_sub_intent.trim();
+      if (typeof p.customer_goal === "string")       patch.customer_goal = p.customer_goal.trim().slice(0, 600);
       if (!Object.keys(patch).length) {
         return new Response(JSON.stringify({ error: "no fields to update" }),
           { status: 400, headers: jsonCors });

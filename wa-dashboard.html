@@ -3958,11 +3958,10 @@
                     <div style="font-size:11px; font-weight:800; color:#0f766e; margin-bottom:2px;">🧠 فهمت من العميل</div>
                     <div style="font-size:13px; color:#134e4a; font-weight:600;">${escapeHtml(interp)}</div>
                   </div>` : ""}
-                ${p.customer_goal ? `
-                  <div style="margin-top:6px; padding:8px; background:#eef2ff; border-right:3px solid #6366f1; border-radius:6px;">
-                    <div style="font-size:11px; font-weight:800; color:#4338ca; margin-bottom:2px;">🎯 هدف العميل</div>
-                    <div style="font-size:13px; color:#3730a3; font-weight:600;">${escapeHtml(p.customer_goal)}</div>
-                  </div>` : ""}
+                <div style="margin-top:6px; padding:8px; background:#eef2ff; border-right:3px solid #6366f1; border-radius:6px;">
+                  <div style="font-size:11px; font-weight:800; color:#4338ca; margin-bottom:3px;">🎯 هدف العميل <span style="font-weight:600; color:#818cf8;">— عدّليه لو خطأ (يُحفظ تلقائياً)</span></div>
+                  <textarea class="proposal-intent" data-class-field="customer_goal" data-id="${escapeHtml(p.id)}" rows="2" placeholder="اكتبي هدف العميل…" style="width:100%; box-sizing:border-box; padding:6px 8px; border:1px solid #c7d2fe; border-radius:6px; font-family:inherit; font-weight:600; font-size:13px; color:#3730a3; background:white; resize:vertical;">${escapeHtml(p.customer_goal || "")}</textarea>
+                </div>
                 ${reply ? `
                   <div style="margin-top:6px; padding:8px; background:#fef3c7; border-right:3px solid #f59e0b; border-radius:6px;">
                     <div style="font-size:11px; font-weight:800; color:#92400e; margin-bottom:2px;">💡 الرد المقترح${(p.source_confirmations > 0) ? ` <span style="background:#dcfce7;color:#15803d;border-radius:10px;padding:1px 7px;font-size:10px;" title="هذا الرد سبق أن اعتمدتِه — كل تأكيد يرفع ثقته">✓ مؤكّد ${p.source_confirmations}×</span>` : ""}</div>
