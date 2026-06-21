@@ -3960,7 +3960,7 @@
                   </div>` : ""}
                 ${reply ? `
                   <div style="margin-top:6px; padding:8px; background:#fef3c7; border-right:3px solid #f59e0b; border-radius:6px;">
-                    <div style="font-size:11px; font-weight:800; color:#92400e; margin-bottom:2px;">💡 الرد المقترح</div>
+                    <div style="font-size:11px; font-weight:800; color:#92400e; margin-bottom:2px;">💡 الرد المقترح${(p.source_confirmations > 0) ? ` <span style="background:#dcfce7;color:#15803d;border-radius:10px;padding:1px 7px;font-size:10px;" title="هذا الرد سبق أن اعتمدتِه — كل تأكيد يرفع ثقته">✓ مؤكّد ${p.source_confirmations}×</span>` : ""}</div>
                     <div style="font-size:13px; color:#78350f; font-weight:600; white-space:pre-wrap;">${escapeHtml(reply)}</div>
                   </div>` : ""}
                 <!-- زرّا القرار + خانة التصحيح (مخفية افتراضياً) -->

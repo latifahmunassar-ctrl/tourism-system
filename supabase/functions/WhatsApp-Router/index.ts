@@ -2336,6 +2336,14 @@ async function createProposalAndNotifyAdmin(args: {
   };
   const status = analysis ? "pending_reply_approval" : "pending_correction";
 
+  // عدّاد تأكيدات الرد المعتمد (إن طابق صفاً موجوداً) — مؤشّر ثقة يظهر بالداشبورد.
+  let sourceConfirmations: number | null = null;
+  if (safe.sourceRowId) {
+    const { data: fc } = await supabase.from("faq_confirmations")
+      .select("confirmations").eq("row_id", safe.sourceRowId).maybeSingle();
+    sourceConfirmations = (((fc as { confirmations?: number } | null)?.confirmations) ?? 0);
+  }
+
   const { error } = await supabase.from("whatsapp_admin_proposals").insert({
     customer_phone: customerPhone,
     customer_profile_name: profileName,
@@ -2343,6 +2351,7 @@ async function createProposalAndNotifyAdmin(args: {
     interpretation: safe.interpretation,
     suggested_reply: safe.suggestedReply,
     source_row_id: safe.sourceRowId,
+    source_confirmations: sourceConfirmations,
     proposed_intent: safe.proposedIntent,
     proposed_sub_intent: safe.proposedSubIntent,
     proposed_keywords: safe.proposedKeywords,
@@ -3058,7 +3067,7 @@ Deno.serve(async (req) => {
 
       const { data: pending } = await supabase
         .from("whatsapp_admin_proposals")
-        .select("id, customer_phone, customer_profile_name, customer_question, status, created_at, proposed_intent, proposed_sub_intent, proposed_keywords, customer_type, case_type, complaint_type, booking_status, priority, priority_label, interpretation, suggested_reply, customer_stage, source_row_id")
+        .select("id, customer_phone, customer_profile_name, customer_question, status, created_at, proposed_intent, proposed_sub_intent, proposed_keywords, customer_type, case_type, complaint_type, booking_status, priority, priority_label, interpretation, suggested_reply, customer_stage, source_row_id, source_confirmations")
         .in("status", [
           "pending_reply_approval", "pending_correction",
           "pending_sheet_approval", "pending_category_choice",
@@ -3826,10 +3835,11 @@ Deno.serve(async (req) => {
       //   approve + source_row_id موجود → موجود أصلاً في الشيت، لا تحفظ
       //   approve + لا source_row_id      → جواب جديد، احفظه
       //   correct                          → دائماً احفظه (تصحيح يدوي)
-      const shouldSave =
-        (decision === "correct" && finalReply) ||
-        (decision === "save_only" && finalReply) ||
-        (decision === "approve" && finalReply && !row.source_row_id);
+      // احفظ فقط الرد الجديد أو المعدّل. لا تُعد حفظ رد معتمد موجود أصلاً في
+      // قاعدة المعرفة (source_row_id موجود ولم يتغيّر نصّه) حتى لا تتكرّر الصفوف.
+      const isUnchangedExisting = !!row.source_row_id && finalReply === (row.suggested_reply || "");
+      const shouldSave = !!finalReply && !isUnchangedExisting &&
+        (decision === "correct" || decision === "save_only" || decision === "approve");
       // Update proposal status FIRST so it disappears from the dashboard
       // immediately. The actual sendCustomerReply + appendChatAnswerRow
       // + triggerSyncSheets all run in the background — used to add 3-8s
@@ -3862,6 +3872,16 @@ Deno.serve(async (req) => {
               answer: finalReply,
             });
             if (ok) await triggerSyncSheets();
+          }
+          // تأكيد إضافي لرد معتمد موجود أصلاً (بدل الحفظ المكرّر): زِد عدّاد التأكيدات
+          // ليرتفع مستوى الثقة بهذا الرد مستقبلاً.
+          if (isUnchangedExisting && row.source_row_id) {
+            const { data: cur } = await supabase.from("faq_confirmations")
+              .select("confirmations").eq("row_id", row.source_row_id).maybeSingle();
+            const n = (((cur as { confirmations?: number } | null)?.confirmations) || 0) + 1;
+            await supabase.from("faq_confirmations").upsert({
+              row_id: row.source_row_id, confirmations: n, last_confirmed_at: new Date().toISOString(),
+            });
           }
         } catch (e) {
           console.error("proposal_decide background failed", (e as Error).message);
