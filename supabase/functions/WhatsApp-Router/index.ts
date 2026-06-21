@@ -2128,6 +2128,7 @@ function stageBadge(stage: string | null | undefined): string {
 
 type ClaudeAnalysis = {
   interpretation: string;
+  goal: string;                   // هدف العميل الحقيقي من سؤاله — لتحسين الفهم والرد
   suggestedReply: string;
   sourceRowId: string | null;     // id of FAQ row whose answer was reused (null = AI-generated)
   proposedIntent: string;
@@ -2165,6 +2166,15 @@ async function analyzeUnknownQuestion(
     .from("chat_answers")
     .select("id, intent, sub_intent, keywords, answer_om, answer_sa1, answer_clarification");
 
+  // أمثلة الأسئلة وأهداف العملاء المتراكمة لكل رد معتمد — تساعد على المطابقة بالهدف.
+  const { data: confExamples } = await supabase
+    .from("faq_confirmations")
+    .select("row_id, sample_questions, goals");
+  const exByRow = new Map<string, { q: string[]; g: string[] }>();
+  for (const c of ((confExamples as Array<{ row_id: string; sample_questions?: string[]; goals?: string[] }> | null) ?? [])) {
+    exByRow.set(c.row_id, { q: (c.sample_questions || []).slice(-5), g: (c.goals || []).slice(-5) });
+  }
+
   const rows = (existing as FaqRow[] | null ?? []).map((r) => ({
     id: r.id,
     intent: r.intent || "",
@@ -2178,11 +2188,14 @@ async function analyzeUnknownQuestion(
     ).slice(0, 280),
   })).filter((r) => r.answer);
 
-  const faqRef = rows.map((r) =>
-    `[${r.id}] ${r.intent}${r.sub_intent ? " / " + r.sub_intent : ""}\n` +
-    `  keywords: ${r.keywords}\n` +
-    `  answer: ${r.answer}`
-  ).join("\n\n");
+  const faqRef = rows.map((r) => {
+    const ex = exByRow.get(r.id);
+    const exLine = ex && ex.q.length ? `\n  أمثلة أسئلة سبق ربطها بهذا الرد: ${ex.q.join(" | ")}` : "";
+    const goalLine = ex && ex.g.length ? `\n  أهداف العملاء لهذا الرد: ${ex.g.join(" | ")}` : "";
+    return `[${r.id}] ${r.intent}${r.sub_intent ? " / " + r.sub_intent : ""}\n` +
+      `  keywords: ${r.keywords}\n` +
+      `  answer: ${r.answer}${exLine}${goalLine}`;
+  }).join("\n\n");
 
   const categories = rows
     .map((r) => `${r.intent}${r.sub_intent ? " / " + r.sub_intent : ""}`)
@@ -2193,6 +2206,7 @@ async function analyzeUnknownQuestion(
     `أنت مساعد لوكالة سياحية تعمل في عُمان والسعودية (ALEZZ Tourism).\n` +
     `يصلك سؤال عميل ما طابق أي إجابة بشكل دقيق في قاعدة الـ FAQ. مهمتك:\n\n` +
     `1) interpretation: اشرح بإيجاز (جملة واحدة) ماذا يقصد العميل.\n\n` +
+    `1ب) goal: هدف العميل الحقيقي من سؤاله أو محادثته بإيجاز — وش يبي يحقّق فعلياً (مثل: يقارن الأسعار قبل الحجز، يتأكد من توفّر رحلة بتاريخه، يبي أرخص خيار، يبي برنامج عائلي مريح...). هذا الهدف يساعد على فهم الاستفسار والرد عليه على أصوله.\n\n` +
     `2) suggested_reply + source_row_id (الأهم — أولوية قصوى لإعادة استخدام المعتمد سابقاً):\n` +
     `   • القاعدة الأساسية: لا تخترع رداً جديداً إذا كان في قاعدة الـ FAQ أدناه صف إجابته تناسب نفس الاستفسار — حتى لو الصياغة أو الكلمات مختلفة تماماً. طابق بالمعنى لا بالكلمات.\n` +
     `   • لو لقيت صفاً مناسباً (أو قريباً في المعنى) → استخدم نص إجابته **حرفياً كما هو** كـ suggested_reply، وضع id الصف في source_row_id. هذا هو السلوك الافتراضي المطلوب.\n` +
@@ -2236,7 +2250,7 @@ async function analyzeUnknownQuestion(
     `قاعدة الـ FAQ الموجودة (${rows.length} صف):\n${faqRef}\n\n` +
     `الفئات الحالية: ${categories}\n\n` +
     `أعد JSON فقط بدون أي نص آخر:\n` +
-    `{"interpretation":"...","suggested_reply":"...","source_row_id":"PKG0xx أو null","proposed_intent":"...","proposed_sub_intent":"...","proposed_keywords":["...","..."],"customer_type":"...","case_type":"...","complaint_type":"...أو null","booking_status":"...","priority":"URGENT أو null","priority_label":"URGENT 🚨 أو null","customer_stage":"INQUIRY|OFFER_SENT|BOOKING_IN_PROGRESS|BOOKING_CONFIRMED|TRAVELING|POST_TRAVEL"}`;
+    `{"interpretation":"...","goal":"...","suggested_reply":"...","source_row_id":"PKG0xx أو null","proposed_intent":"...","proposed_sub_intent":"...","proposed_keywords":["...","..."],"customer_type":"...","case_type":"...","complaint_type":"...أو null","booking_status":"...","priority":"URGENT أو null","priority_label":"URGENT 🚨 أو null","customer_stage":"INQUIRY|OFFER_SENT|BOOKING_IN_PROGRESS|BOOKING_CONFIRMED|TRAVELING|POST_TRAVEL"}`;
 
   try {
     const anthropic = new Anthropic({ apiKey });
@@ -2279,6 +2293,7 @@ async function analyzeUnknownQuestion(
     }
     return {
       interpretation: String(parsed.interpretation || "").trim(),
+      goal: String(parsed.goal || "").trim(),
       suggestedReply: String(parsed.suggested_reply || "").trim(),
       sourceRowId,
       proposedIntent: String(parsed.proposed_intent || "").trim(),
@@ -2321,6 +2336,7 @@ async function createProposalAndNotifyAdmin(args: {
   }
   const safe = analysis ?? {
     interpretation: "",
+    goal: "",
     suggestedReply: "",
     sourceRowId: null as string | null,
     proposedIntent: "",
@@ -2349,6 +2365,7 @@ async function createProposalAndNotifyAdmin(args: {
     customer_profile_name: profileName,
     customer_question: question,
     interpretation: safe.interpretation,
+    customer_goal: safe.goal,
     suggested_reply: safe.suggestedReply,
     source_row_id: safe.sourceRowId,
     source_confirmations: sourceConfirmations,
@@ -3067,7 +3084,7 @@ Deno.serve(async (req) => {
 
       const { data: pending } = await supabase
         .from("whatsapp_admin_proposals")
-        .select("id, customer_phone, customer_profile_name, customer_question, status, created_at, proposed_intent, proposed_sub_intent, proposed_keywords, customer_type, case_type, complaint_type, booking_status, priority, priority_label, interpretation, suggested_reply, customer_stage, source_row_id, source_confirmations")
+        .select("id, customer_phone, customer_profile_name, customer_question, status, created_at, proposed_intent, proposed_sub_intent, proposed_keywords, customer_type, case_type, complaint_type, booking_status, priority, priority_label, interpretation, customer_goal, suggested_reply, customer_stage, source_row_id, source_confirmations")
         .in("status", [
           "pending_reply_approval", "pending_correction",
           "pending_sheet_approval", "pending_category_choice",
@@ -3811,7 +3828,7 @@ Deno.serve(async (req) => {
       );
       const { data: proposal } = await supabase
         .from("whatsapp_admin_proposals")
-        .select("id, customer_phone, customer_question, suggested_reply, source_row_id, proposed_intent, proposed_sub_intent, proposed_keywords, customer_stage, status")
+        .select("id, customer_phone, customer_question, customer_goal, suggested_reply, source_row_id, proposed_intent, proposed_sub_intent, proposed_keywords, customer_stage, status")
         .eq("id", id)
         .maybeSingle();
       if (!proposal) {
@@ -3820,6 +3837,7 @@ Deno.serve(async (req) => {
       }
       const row = proposal as {
         id: string; customer_phone: string; customer_question: string;
+        customer_goal: string | null;
         suggested_reply: string; source_row_id: string | null;
         proposed_intent: string; proposed_sub_intent: string;
         proposed_keywords: string[]; customer_stage: string | null;
@@ -3877,10 +3895,14 @@ Deno.serve(async (req) => {
           // ليرتفع مستوى الثقة بهذا الرد مستقبلاً.
           if (isUnchangedExisting && row.source_row_id) {
             const { data: cur } = await supabase.from("faq_confirmations")
-              .select("confirmations").eq("row_id", row.source_row_id).maybeSingle();
-            const n = (((cur as { confirmations?: number } | null)?.confirmations) || 0) + 1;
+              .select("confirmations, sample_questions, goals").eq("row_id", row.source_row_id).maybeSingle();
+            const c = cur as { confirmations?: number; sample_questions?: string[]; goals?: string[] } | null;
+            const n = ((c?.confirmations) || 0) + 1;
+            // راكم سؤال العميل وهدفه (آخر 15) لتحسين المطابقة بالهدف مستقبلاً.
+            const sq = [...(c?.sample_questions || []), row.customer_question].filter(Boolean).slice(-15);
+            const gl = row.customer_goal ? [...(c?.goals || []), row.customer_goal].filter(Boolean).slice(-15) : (c?.goals || []);
             await supabase.from("faq_confirmations").upsert({
-              row_id: row.source_row_id, confirmations: n, last_confirmed_at: new Date().toISOString(),
+              row_id: row.source_row_id, confirmations: n, sample_questions: sq, goals: gl, last_confirmed_at: new Date().toISOString(),
             });
           }
         } catch (e) {
