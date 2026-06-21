@@ -615,16 +615,149 @@ Deno.serve(async (req) => {
 
     if (!expected || got !== expected) return json({ error: "unauthorized" }, 401);
 
+    // ── طلبات الأفراد (booking_brief) — نفس صندوق الطلبات، تبويب منفصل ──────────
+    // قراءة فقط: تُعرض طلبات الواتساب الفردية بجانب طلبات الشركات دون أي خلط.
+    if (adminAction === "list_individuals") {
+      // أي طلب مكتمل يظهر فورًا (complete) + المحوّل (transferred) + المُرسل (sent).
+      // المسودّات الناقصة (incomplete) فقط تبقى خاصّة في لوحة الواتساب.
+      const { data: briefs } = await supabase.from("booking_brief")
+        .select("id, contact_phone, destination, pax, children, days, distribution, handled_by, currency, status, updated_at")
+        .eq("request_type", "individual")
+        .in("status", ["complete", "transferred", "sent"])
+        .order("updated_at", { ascending: false }).limit(500);
+      const rows = (briefs || []) as Array<Record<string, any>>;
+      const phones = [...new Set(rows.map(r => r.contact_phone).filter(Boolean))];
+      const nameByPhone: Record<string, string> = {};
+      if (phones.length) {
+        const { data: sess } = await supabase.from("whatsapp_sessions")
+          .select("phone, profile_name").in("phone", phones);
+        for (const s of (sess || []) as Array<any>) if (s.profile_name) nameByPhone[s.phone] = s.profile_name;
+      }
+      const out = rows.map(r => ({ ...r, customer_name: nameByPhone[r.contact_phone] || null }));
+      return json({ requests: out });
+    }
+    if (adminAction === "get_individual") {
+      const id = url.searchParams.get("id") || "";
+      if (!id) return json({ error: "id required" }, 400);
+      const { data } = await supabase.from("booking_brief").select("*").eq("id", id).maybeSingle();
+      if (!data) return json({ error: "غير موجود" }, 404);
+      let customer_name: string | null = null;
+      if ((data as any).contact_phone) {
+        const { data: s } = await supabase.from("whatsapp_sessions")
+          .select("profile_name").eq("phone", (data as any).contact_phone).maybeSingle();
+        customer_name = (s as any)?.profile_name || null;
+      }
+      return json({ request: { ...data, customer_name } });
+    }
+
+    // إرسال عرض الفرد: يرفع الـ PDF لـ Graph ثم يرسله كملف document لرقم العميل،
+    // مع ملاحظة الموظف كـ caption. ثم يعلّم الطلب «مُرسل». قيد واتساب: نافذة 24 ساعة.
+    if (adminAction === "send_individual") {
+      const TOKEN = (Deno.env.get("WHATSAPP_ACCESS_TOKEN") || "").trim();
+      const PHONE_ID = (Deno.env.get("WHATSAPP_PHONE_NUMBER_ID") || "").trim();
+      if (!TOKEN || !PHONE_ID) return json({ error: "WhatsApp credentials missing" }, 500);
+      const b = await req.json().catch(() => ({} as Record<string, any>));
+      const id = String(b.id || "").trim();
+      const rawPhone = String(b.phone || "").trim();
+      const to = rawPhone.replace(/^whatsapp:/, "").replace(/^\+/, "").replace(/[^0-9]/g, "");
+      const pdfB64 = String(b.pdf_base64 || "");
+      // واتساب يلخبط أسماء الملفات غير اللاتينية (mojibake) — نضمن اسماً لاتينياً آمناً.
+      let filename = String(b.filename || "Alezz_Travel_Offer.pdf").slice(0, 80);
+      if (/[^\x00-\x7F]/.test(filename)) {
+        filename = filename.replace(/[^\x00-\x7F]+/g, "").replace(/\s+/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+        if (!filename || filename === ".pdf") filename = "Alezz_Travel_Offer.pdf";
+      }
+      if (!/\.pdf$/i.test(filename)) filename += ".pdf";
+      const note = String(b.note || "").trim().slice(0, 1000);
+      if (!id || !to || !pdfB64) return json({ error: "missing id/phone/pdf" }, 400);
+      try {
+        // base64 → bytes
+        const bin = atob(pdfB64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        // 1) رفع الملف كوسيط
+        const fd = new FormData();
+        fd.append("messaging_product", "whatsapp");
+        fd.append("type", "application/pdf");
+        fd.append("file", new Blob([bytes], { type: "application/pdf" }), filename);
+        const upRes = await fetch(`https://graph.facebook.com/v22.0/${PHONE_ID}/media`, {
+          method: "POST", headers: { Authorization: `Bearer ${TOKEN}` }, body: fd,
+        });
+        const upJson = await upRes.json();
+        if (!upRes.ok || !upJson.id) return json({ error: "media upload failed", detail: upJson }, 502);
+        // 2) إرسال الملف للعميل (الملاحظة كـ caption)
+        const msgBody: Record<string, any> = {
+          messaging_product: "whatsapp", to, type: "document",
+          document: { id: upJson.id, filename, ...(note ? { caption: note } : {}) },
+        };
+        const sendRes = await fetch(`https://graph.facebook.com/v22.0/${PHONE_ID}/messages`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+          body: JSON.stringify(msgBody),
+        });
+        const sendJson = await sendRes.json();
+        if (!sendRes.ok) return json({ error: "send failed", detail: sendJson?.error || sendJson }, 502);
+        // 3) علّم الطلب «مُرسل» (نخزّن البرنامج والسعر والملاحظة)
+        await supabase.from("booking_brief").update({
+          status: "sent",
+          sent_at: new Date().toISOString(),
+          sent_by: String(b.sent_by || "").trim() || null,
+          built_program: String(b.program || "").slice(0, 100000) || null,
+          sent_price: (b.price != null && b.price !== "") ? Number(b.price) : null,
+          sent_currency: String(b.currency || "").trim() || null,
+          send_note: note || null,
+          updated_at: new Date().toISOString(),
+        }).eq("id", id);
+        // سجّل الإرسال في خيط المحادثة ليظهر الملف (والملاحظة) بالداشبورد.
+        const customerPhone = rawPhone.startsWith("whatsapp:") ? rawPhone : ("whatsapp:+" + to);
+        const threadBody = (note ? note + "\n" : "") + "📎 [ملف البرنامج PDF]";
+        try {
+          await supabase.from("wa_admin_messages").insert({
+            customer_phone: customerPhone, body: threadBody,
+            sent_by: String(b.sent_by || "").trim() || "النظام", sent_at: new Date().toISOString(),
+            media_id: upJson.id, media_mime: "application/pdf", media_filename: filename,
+          });
+          await supabase.from("whatsapp_sessions").update({
+            last_outbound_at: new Date().toISOString(), last_outbound_body: "📎 ملف البرنامج (PDF)",
+          }).eq("phone", customerPhone);
+        } catch (_) { /* best-effort */ }
+        return json({ ok: true, message_id: sendJson?.messages?.[0]?.id || null });
+      } catch (e) {
+        return json({ error: (e as Error).message }, 500);
+      }
+    }
+
+    // «إرسال عرض آخر»: ينسخ طلب الفرد كطلب جديد وارد (يُعاد بناؤه وإرساله).
+    if (adminAction === "duplicate_individual") {
+      const id = url.searchParams.get("id") || "";
+      if (!id) return json({ error: "id required" }, 400);
+      const { data: src } = await supabase.from("booking_brief").select("*").eq("id", id).maybeSingle();
+      if (!src) return json({ error: "غير موجود" }, 404);
+      const s = src as Record<string, any>;
+      const { data: ins, error } = await supabase.from("booking_brief").insert({
+        contact_phone: s.contact_phone, destination: s.destination, pax: s.pax, children: s.children,
+        days: s.days, date_from: s.date_from, arrival_airport: s.arrival_airport,
+        departure_airport: s.departure_airport, sim_count: s.sim_count, hotel_stars: s.hotel_stars,
+        notes: s.notes, handled_by: s.handled_by, currency: s.currency,
+        distribution: s.distribution, cities_nights: s.cities_nights,
+        request_type: "individual", status: "complete", updated_at: new Date().toISOString(),
+      }).select("id").single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true, id: (ins as any).id });
+    }
+
     // الموظفة (بعد تسجيل الدخول) تطلب توثيق جهازها الحالي → pending بانتظار موافقة المالكة
     if (adminAction === "device_request") {
       const b = await req.json().catch(() => ({} as Record<string, any>));
       const token = String(b.device_token || "").trim();
       const label = String(b.label || "").trim().slice(0, 80) || "جهاز بدون اسم";
       const uaStr = String(b.user_agent || req.headers.get("user-agent") || "").slice(0, 300);
+      // مصدر الطلب: tourism (افتراضي) أو whatsapp — للموافقة المنفصلة المُعلَّمة.
+      const source = (["tourism", "whatsapp"].includes(String(b.source))) ? String(b.source) : "tourism";
       if (token.length < 16) return json({ error: "رمز الجهاز غير صالح" }, 400);
       const { data: existing } = await supabase.from("trusted_devices").select("id, approved").eq("device_token", token).maybeSingle();
       if (existing) return json({ ok: true, status: existing.approved ? "approved" : "pending" });
-      const { error } = await supabase.from("trusted_devices").insert({ device_token: token, label, user_agent: uaStr, approved: false });
+      const { error } = await supabase.from("trusted_devices").insert({ device_token: token, label, user_agent: uaStr, approved: false, source });
       if (error) return json({ error: error.message }, 500);
       return json({ ok: true, status: "pending" });
     }
@@ -691,7 +824,7 @@ Deno.serve(async (req) => {
         supabase.from("security_settings").select("enforce_country, fail_open_geo").eq("id", 1).single(),
         supabase.from("security_allowed_countries").select("code, name_ar").order("name_ar"),
         supabase.from("auth_log").select("created_at, event, ip, country, country_allowed, success, detail").order("created_at", { ascending: false }).limit(100),
-        supabase.from("trusted_devices").select("id, label, approved, last_country, last_ip, last_seen, created_at").order("created_at", { ascending: false }).limit(100),
+        supabase.from("trusted_devices").select("id, label, approved, source, last_country, last_ip, last_seen, created_at").order("created_at", { ascending: false }).limit(100),
       ]);
       // حسابات الموظفات + عدد مفاتيح كل واحدة
       const { data: usersRaw } = await supabase.from("app_users").select("id, name, phone, status, created_at, last_login_at").order("created_at", { ascending: false }).limit(200);
