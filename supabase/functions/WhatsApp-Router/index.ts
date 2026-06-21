@@ -3779,8 +3779,8 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: "missing proposal_id" }),
           { status: 400, headers: jsonCors });
       }
-      if (decision !== "approve" && decision !== "correct" && decision !== "dismiss") {
-        return new Response(JSON.stringify({ error: "decision must be 'approve', 'correct', or 'dismiss'" }),
+      if (decision !== "approve" && decision !== "correct" && decision !== "dismiss" && decision !== "save_only") {
+        return new Response(JSON.stringify({ error: "decision must be 'approve', 'correct', 'dismiss', or 'save_only'" }),
           { status: 400, headers: jsonCors });
       }
       // حذف/تجاهل الاقتراح بدون إرسال للعميل ولا حفظ في FAQ.
@@ -3816,7 +3816,11 @@ Deno.serve(async (req) => {
         proposed_keywords: string[]; customer_stage: string | null;
         status: string;
       };
-      const finalReply = decision === "approve" ? (row.suggested_reply || "") : correctedReply;
+      // save_only: «حفظ فقط بدون إرسال» — يحفظ الرد (المحرّر أو المقترح) في FAQ
+      // ويُنهي الاقتراح، لكن لا يُرسل للعميل (لأنه رُدّ عليه سابقاً يدوياً).
+      const finalReply = decision === "approve"
+        ? (row.suggested_reply || "")
+        : (decision === "save_only" ? (correctedReply || row.suggested_reply || "") : correctedReply);
       const mode = await getAiMode(supabase);
       // قاعدة الحفظ في FAQ:
       //   approve + source_row_id موجود → موجود أصلاً في الشيت، لا تحفظ
@@ -3824,6 +3828,7 @@ Deno.serve(async (req) => {
       //   correct                          → دائماً احفظه (تصحيح يدوي)
       const shouldSave =
         (decision === "correct" && finalReply) ||
+        (decision === "save_only" && finalReply) ||
         (decision === "approve" && finalReply && !row.source_row_id);
       // Update proposal status FIRST so it disappears from the dashboard
       // immediately. The actual sendCustomerReply + appendChatAnswerRow
@@ -3833,7 +3838,7 @@ Deno.serve(async (req) => {
         status: shouldSave ? "completed_added" : "completed_skipped",
         decided_at: new Date().toISOString(),
       };
-      if (decision === "correct") updatePatch.suggested_reply = finalReply;
+      if (decision === "correct" || decision === "save_only") updatePatch.suggested_reply = finalReply;
       const { error } = await supabase.from("whatsapp_admin_proposals")
         .update(updatePatch)
         .eq("id", id);
@@ -3844,7 +3849,7 @@ Deno.serve(async (req) => {
       // isolate stays alive until they settle even after we return.
       const background = (async () => {
         try {
-          if (mode === "ON" && finalReply) {
+          if (mode === "ON" && finalReply && decision !== "save_only") {
             await sendCustomerReply(supabase, row.customer_phone, finalReply);
           }
           if (shouldSave) {

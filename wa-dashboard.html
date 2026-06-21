@@ -3974,6 +3974,7 @@
                   <textarea class="proposal-correct-text" rows="3" placeholder="اكتبي الرد الصحيح للعميل…" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:8px; font-family:inherit; font-weight:600; font-size:13px; resize:vertical;"></textarea>
                   <div style="margin-top:6px; display:flex; gap:6px;">
                     <button class="toggle-btn" data-proposal-action="submit-correction" data-id="${escapeHtml(p.id)}" style="min-width:auto; padding:6px 12px;">💾 حفظ + إرسال</button>
+                    <button class="toggle-btn" data-proposal-action="save-only" data-id="${escapeHtml(p.id)}" style="min-width:auto; padding:6px 12px; background:#1d4ed8; color:#fff; border-color:#1d4ed8;" title="احفظ الرد بدون إرسال للعميل (لو رددتِ عليه سابقاً)">💾 حفظ فقط (بدون إرسال)</button>
                     <button class="toggle-btn inherit" data-proposal-action="cancel-correction" data-id="${escapeHtml(p.id)}" style="min-width:auto; padding:6px 12px;">إلغاء</button>
                   </div>
                 </div>
@@ -4049,6 +4050,12 @@
             if (!txt) { alert("اكتبي الرد قبل الحفظ"); return; }
             return decideProposal(id, "correct", txt, b);
           }
+          if (action === "save-only") {
+            // حفظ بدون إرسال — الرد المحرّر إن وُجد، وإلا يُحفظ الرد المقترح كما هو.
+            const box = list.querySelector(`[data-correct-for="${CSS.escape(id)}"]`);
+            const txt = box ? box.querySelector("textarea").value.trim() : "";
+            return decideProposal(id, "save_only", txt || null, b);
+          }
           if (action === "cancel-correction") {
             const box = list.querySelector(`[data-correct-for="${CSS.escape(id)}"]`);
             if (box) { box.style.display = "none"; box.querySelector("textarea").value = ""; }
@@ -4073,7 +4080,7 @@
       // Fire the API call in background — we already showed success.
       try {
         const body = { proposal_id: id, decision };
-        if (decision === "correct" && replyText) body.reply = replyText;
+        if ((decision === "correct" || decision === "save_only") && replyText) body.reply = replyText;
         const res = await fetch(BASE + "?admin_action=proposal_decide", {
           method: "POST",
           headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
