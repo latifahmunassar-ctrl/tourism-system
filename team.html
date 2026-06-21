@@ -4256,6 +4256,9 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     const btn=document.getElementById('indivSendBtn'); const old=btn?btn.textContent:'';
     if(btn){btn.disabled=true;btn.textContent='⏳ يُجهّز ويُرسل…';}
     try{
+      // اضمن عملة العميل (حسب رقم جواله) قبل توليد الملف مباشرةً — لا نعتمد على
+      // توقيت البناء (كان أحياناً يُرسل بالريال قبل ما تنطبق عملة العميل).
+      if(typeof indivApplyCurrency==='function'){ try{ await indivApplyCurrency(indivState.phone); }catch(_){} await new Promise(r=>setTimeout(r,500)); }
       const blob=await generatePdfBlob('client');
       const b64=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(String(fr.result).split(',')[1]);fr.onerror=rej;fr.readAsDataURL(blob);});
       const price=(typeof currentFinalGroup==='function')?currentFinalGroup():null;
