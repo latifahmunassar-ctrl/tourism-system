@@ -2256,9 +2256,11 @@ let flightsTotal = flightsLines.reduce((s,l) => {
   // flight cost. The legacy "if lineCount matches persons and kids
   // exist, subtract to adults" trick was for an older format and now
   // accidentally drops the child's seat.
-  const lineCount = parseCount(p[3]) || adults || persons;
+  // اعتمد عدد المسافرين الفعلي (persons = بالغين + أطفال + رضّع من META) بدل
+  // الرقم المخزّن في سطر الطيران — وإلا يبقى عدد قديم («14») حتى لو العدد 8.
+  const lineCount = persons || adults || parseCount(p[3]);
   const total = per * lineCount;
-  return s + (total || parseMoney(p[4]));
+  return s + total;
 }, 0);
 const xferTourMeta = { persons, adults, kids, infants };
 let transfersTotal = 0;
@@ -2388,9 +2390,9 @@ const p=l.split('|').map(x=>x.trim());
 const k1 = String(p[1] || '');
 const tc = k1.includes('قطار') ? 'badge-train' : (k1.includes('داخلي') ? 'badge-pickup' : 'badge-flight');
 const per = parseMoney(p[2]);
-const lineCount = parseCount(p[3]) || adults || persons;
-// Trust the row's pax — kids/extras are already included by the builder.
-const pax = lineCount;
+// ركاب الطيران = عدد المسافرين الفعلي (persons من META)، لا الرقم المخزّن في
+// السطر — حتى لا يظهر عدد قديم («14») بينما العدد الحقيقي 8.
+const pax = persons || adults || parseCount(p[3]);
 const total = per * pax;
 // Label "N شخص" — flights count adults+children alike, so "بالغ"
 // (adult) was misleading when a kid was on the trip. Show explicit
