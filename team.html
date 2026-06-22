@@ -2186,12 +2186,19 @@ const totalPerson = parseInt(totalPersonStr.replace(/[^\d]/g,'')) || 0;
 // employee think the kid wasn't billed on the flight. Treat the matched
 // number as adults directly; `persons` is the headcount including kids.
 const adultsMatch = totalGroupLine.match(/(\d+)\s*[أا]شخاص/);
-const adults = parseInt(adultsMatch?.[1]) || 2;
-// أطفال/رضّع (اختياري) — يُحتسبون في تسعير الطيران/القطار
 const kidsMatch = (meta + ' ' + client + ' ' + totalGroupLine).match(/(\d+)\s*(?:طفل|أطفال)/);
 const infantsMatch = (meta + ' ' + client + ' ' + totalGroupLine).match(/(\d+)\s*(?:رضيع|رضّع)/);
-const kids = parseInt(kidsMatch?.[1] || '0') || 0;
-const infants = parseInt(infantsMatch?.[1] || '0') || 0;
+// عدد الأفراد يُعتمد من «فورمة التسعير» (عدد البالغين + عدد الأطفال) كمصدر وحيد —
+// لا من نص البرنامج، تفادياً لأي انحراف في تفسير النموذج أو فشل استخراج الرقم.
+const _bfA = document.getElementById('bf-adults');
+const _bfC = document.getElementById('bf-children');
+const _formAdults = _bfA ? (parseInt(_bfA.value) || 0) : 0;
+const _formChildren = _bfC ? (parseInt(_bfC.value) || 0) : 0;
+const adults = _formAdults || parseInt(adultsMatch?.[1]) || 2;
+// إجمالي الأطفال من الفورمة؛ نُبقي تقسيم الرُضّع (المُستخرج من الأعمار) محدوداً بإجمالي الفورمة.
+const _parsedInfants = parseInt(infantsMatch?.[1] || '0') || 0;
+const infants = _bfC ? Math.min(_parsedInfants, _formChildren) : _parsedInfants;
+const kids = _bfC ? Math.max(0, _formChildren - infants) : (parseInt(kidsMatch?.[1] || '0') || 0);
 const persons = adults + kids + infants;
 // إجمالي المجموعة من النص (قد يخطئ النموذج) — سنقارنه مع حسابنا الفعلي
 const totalGroupFromText = parseInt((totalGroupLine.split('|')[0]||'').replace(/[^\d]/g,'')) || 0;
