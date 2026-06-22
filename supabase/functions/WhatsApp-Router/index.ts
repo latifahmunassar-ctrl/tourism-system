@@ -1275,7 +1275,9 @@ async function handleMessage(args: {
       last_message_at: new Date().toISOString(),
       intake_active: true,   // عميل جديد → طلال يستقبله ويجمع المعلومات الأساسية
     };
-    await supabase.from("whatsapp_sessions").insert(seed);
+    // upsert (لا insert) لتفادي سباق الرسائل السريعة من عميل جديد: لو وصلت رسالتان
+    // متزامنتان كلاهما isNew، يضمن الـupsert ضبط intake_active=true بدل رمي خطأ.
+    await supabase.from("whatsapp_sessions").upsert(seed, { onConflict: "phone", ignoreDuplicates: true });
     session = { ...seed, destination: null, persons: null, travel_date: null, ai_enabled: null, assigned_staff_phone: null } as typeof session;
   }
 
@@ -1312,7 +1314,13 @@ async function handleMessage(args: {
   // ويجمع المعلومات الأساسية (وجهة/عدد/تاريخ/أعمار/مدينة الوصول والمغادرة)
   // تلقائياً — حتى في وضع PREVIEW (العميل الجديد يحتاج رداً فورياً). أما
   // العملاء الحاليون (intake_active فارغ) فيكملون على التدفّق المعتاد (يدوي).
-  if (session?.intake_active === true) {
+  // شبكة أمان: لو لأي سبب ما تُضبط intake_active (سباق رسائل سريعة، أو جلسة أنشأها
+  // مسار وسائط قديم)، فأي جلسة جديدة (stage=new) لم نردّ عليها قط ولم يُكمَّل
+  // استقبالها = عميل جديد → يستقبله طلال. (intake_active===false = اكتمل، نتجاوزه.)
+  const s = session as ({ intake_active?: boolean | null; stage?: string; last_outbound_at?: string | null; last_outbound_body?: string | null } | null);
+  const isFreshLead = s?.intake_active === true
+    || (s != null && s.intake_active == null && s.stage === "new" && !s.last_outbound_at && !s.last_outbound_body);
+  if (isFreshLead) {
     await handleNewLeadIntake({ supabase, from, body: text });
     return;
   }
@@ -5291,8 +5299,10 @@ Deno.serve(async (req) => {
           if (profileName) upd.profile_name = profileName;
           await supabase.from("whatsapp_sessions").update(upd).eq("phone", from);
         } else {
+          // عميل جديد أول رسالة منه وسائط/ملصق → نضبط intake_active=true أيضاً حتى
+          // يستقبله طلال عند أول رسالة نصية (وإلا تروح رسائله للمعاينة بدل الردّ).
           await supabase.from("whatsapp_sessions").insert({
-            phone: from, profile_name: profileName || null, stage: "new", last_message_at: nowIso, ...refCols,
+            phone: from, profile_name: profileName || null, stage: "new", last_message_at: nowIso, intake_active: true, ...refCols,
           });
         }
         await supabase.from("wa_message_audit").insert({
