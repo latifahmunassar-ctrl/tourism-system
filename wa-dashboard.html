@@ -3108,11 +3108,22 @@
         const d = await r.json();
         if (!r.ok || d.error) throw new Error(d.error || ("HTTP " + r.status));
         okSaved = true;
-        msg.style.color = "#15803d";
-        let extra = "";
-        if (d.confirmation_sent) extra = " · 📨 أُرسلت رسالة تأكيد للعميل";
-        else if (d.status === "complete") extra = " · (لم تُرسَل رسالة التأكيد — إمّا أُرسلت سابقاً أو العميل خارج نافذة 24 ساعة)";
-        msg.textContent = "✅ تم الحفظ (" + (d.status === "complete" ? "مكتمل" : "غير مكتمل") + ")" + extra;
+        if (d.status === "complete") {
+          msg.style.color = "#15803d";
+          const extra = d.confirmation_sent
+            ? " · 📨 أُرسلت رسالة تأكيد للعميل"
+            : " · (لم تُرسَل رسالة التأكيد — إمّا أُرسلت سابقاً أو العميل خارج نافذة 24 ساعة)";
+          msg.textContent = "✅ تم الحفظ (مكتمل)" + extra;
+        } else {
+          // غير مكتمل: نوضّح الناقص — لن يُرسل للعميل ولا يظهر للتسعير حتى يكتمل.
+          const miss = [];
+          if (!payload.destination) miss.push("الوجهة");
+          if (!(parseInt(payload.pax) >= 1)) miss.push("عدد الأشخاص");
+          if (!(parseInt(payload.days) >= 1)) miss.push("عدد الأيام");
+          msg.style.color = "#dc2626";
+          msg.textContent = "⚠️ حُفظ لكنه غير مكتمل — ناقص: " + (miss.join("، ") || "بيانات أساسية")
+            + ". لن يصل العميل ملخّص ولن يظهر للتسعير حتى تُكمليه.";
+        }
         bfBadge(d.status);
       } catch (e) {
         msg.style.color = "#dc2626"; msg.textContent = "خطأ: " + e.message;
