@@ -1648,7 +1648,13 @@ function bfExpected(){
   const d = +document.getElementById('bf-days').value||0;
   document.getElementById('bf-nexp').textContent = Math.max(0,d-1);
 }
-function bfOnDest(){ document.getElementById('bf-cityRows').innerHTML=''; bfAddCity(); bfLoadSuggestions(); }
+function bfOnDest(){
+  // بدء برنامج جديد (اختيار/تغيير الوجهة) → صفّر خانة الأطفال حتى لا تتسرّب قيمة
+  // من برنامج سابق فتُضاف بصمت لعدد المسافرين (مثال: 8 بالغين + 6 أطفال متبقية =
+  // طيران 14). تحميل طلب من الصندوق يضبط الأطفال صراحةً بعدها (set لا يُطلق onchange).
+  const ch=document.getElementById('bf-children'); if(ch) ch.value=0;
+  document.getElementById('bf-cityRows').innerHTML=''; bfAddCity(); bfLoadSuggestions();
+}
 function bfPick(el){
   const seg = el.closest('.bf-seg');
   seg.querySelectorAll('label').forEach(l=>l.classList.remove('on'));
