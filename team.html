@@ -4384,7 +4384,9 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     const _csb=document.getElementById('inboxSendBtn'); if(_csb) _csb.style.display='none';
     // ✅ برنامج معتمد محفوظ سابقاً → حمّله كما هو (لا تعيد البناء حتى لا يتغيّر
     // المقترح ولا الأسعار). يخص الطلبات اللي سبق بُنيت وأُرسلت/حُفظت.
-    if(b.built_program && /TOTAL_GROUP:/.test(b.built_program)){
+    // ⚠️ لكن لا نحمّل برنامجاً محفوظاً مكسوراً «بلا فنادق» (قسم HOTELS متبوع بسطر فاضي) — نعيد بناءه.
+    const _bpHasHotels = b.built_program && !/HOTELS:[ \t]*\n[ \t]*\n/.test(b.built_program);
+    if(b.built_program && /TOTAL_GROUP:/.test(b.built_program) && _bpHasHotels){
       if(typeof inboxDismiss==='function') inboxDismiss();
       if(typeof setCustomerType==='function') setCustomerType('individual');
       syncFormPeopleFromProgram(b.built_program);
