@@ -47,9 +47,9 @@ const SECTION_CITY_DEFS: Record<string, Array<{ canonical: string; pattern: RegE
   Malaysia: [
     { canonical: "Kuala Lumpur",     pattern: /كوالا\s*ل{0,3}\s*مبور?|كولا\s*ل{0,3}\s*مبور?|kuala\s*lumpur|\bKL\b/i },
     { canonical: "Selangor",         pattern: /سيلان[جغ]ور|سلان[جغ]ور|selangor|sunway/i },
-    { canonical: "Langkawi",         pattern: /لان?كاوي|langkawi/i },
+    { canonical: "Langkawi",         pattern: /لا?[نتغ]*\s*كاوي|langkawi/i },
     { canonical: "Penang",           pattern: /بينان[جغ]|بنان[جغ]|penang/i },
-    { canonical: "Cameron Highlands",pattern: /كام?يرون|cameron|هايلاند/i },
+    { canonical: "Cameron Highlands",pattern: /كام?[يی]رون|cameron|هايلاند/i },
   ],
   thailand: [
     { canonical: "Bangkok",      pattern: /بان[كق]وك|bangkok/i },
@@ -57,7 +57,7 @@ const SECTION_CITY_DEFS: Record<string, Array<{ canonical: string; pattern: RegE
     { canonical: "Krabi",        pattern: /كرابي|krabi/i },
     { canonical: "Chiang Mai",   pattern: /شيان[جغ]?\s*ماي|شانغماي|chiang\s*mai|chiangmai/i },
     { canonical: "Pattaya",      pattern: /با?تايا|pattaya/i },
-    { canonical: "Koh Samui",    pattern: /كو(?:ه|سم?)\s*ساموي|koh\s*samui|samui/i },
+    { canonical: "Koh Samui",    pattern: /كو\s*سا?\s*موي|كوسوموي|كوسموي|كوه?\s*ساموي|koh?\s*samui|kohsamui|samui/i },
   ],
   Turky: [
     { canonical: "Istanbul",   pattern: /اسطنبول|إسطنبول|إستانبول|istanbul/i },

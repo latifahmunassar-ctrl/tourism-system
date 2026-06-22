@@ -402,7 +402,8 @@ function normalizeArabic(s: string): string {
     .replace(/[ً-ٰٟ]/g, "")
     .replace(/[إأآا]/g, "ا")
     .replace(/[ةه]/g, "ه")
-    .replace(/[يى]/g, "ي")
+    .replace(/[يىیﻱ]/g, "ي")
+    .replace(/[كک]/g, "ك")
     .replace(/[ؤئ]/g, "ا")
     .replace(/[\s ]+/g, " ")
     .toLowerCase()
@@ -772,6 +773,12 @@ function extractRowFromCity(n: string): string {
   // Pattern 2: "(المطار|محط[هة])(_الدولي)? في? CITY <forward action>"
   const m2 = n.match(/(?:المطار|محط[هة])(?:\s+الدولي)?\s*(?:في\s*)?([^\n]+?)\s+(?:للتوجة|للذهاب|للعوده|للعودة|والاستقبال)/iu);
   if (m2) return m2[1];
+  // Pattern 2b: "(توديع) من المطار (الدولي) في CITY" — departure rows where the
+  // city follows في and من points at the airport (e.g. "توديع من المطار الدولي
+  // في لانكاوي"). Without this, Pattern 3 grabs "المطار" and the Langkawi drop
+  // never matches → the airport farewell silently disappears for that leg.
+  const m2b = n.match(/(?:المطار|محط[هة])(?:\s+الدولي)?\s+في\s+([^\s]+(?:\s+[^\s]+)?)/iu);
+  if (m2b) return m2b[1];
   // Pattern 3 (fallback): "من [filler]? CITY ..." — captures the first
   // non-whitespace token after the filler with no terminator requirement.
   // Catches rows like "العوده من مدينه هالونج بسياره ليموزين مشتركه الى

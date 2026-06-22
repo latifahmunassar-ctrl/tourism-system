@@ -91,7 +91,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Koh Samui",    pattern: /كو\s*سا?\s*موي|كوسوموي|كوسموي|كوه?\s*ساموي|koh?\s*samui|kohsamui|samui/i },
   ],
   Turky: [
-    { canonical: "Istanbul",   pattern: /اسطنبول|إسطنبول|إستانبول|istanbul|آيا\s*صوفيا|البازار|تقسيم/i },
+    { canonical: "Istanbul",   pattern: /اسطنبول|إسطنبول|إستانبول|istanbul|آيا\s*صوفيا|البازار|تقسيم|taksim|اورتاكوي|اميرجان|اولوس\s*بار|ال[أا]ميرات|الفيالاند|فيالاند|vialand|فينيسيا|venezia/i },
     { canonical: "Trabzon",    pattern: /طرابزون|طربزون|trabzon|سلطان\s*مراد|حيدر\s*نبي|هامسيكوي|بيشك\s*دوزو/i },
     // Saudi spelling alternates و↔ز order: اوزنجول vs ازونجول
     { canonical: "Uzungol",    pattern: /[أا]وزن[جغ]ول|[أا]زون[جغ]ول|uzungol/i },
