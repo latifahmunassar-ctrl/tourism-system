@@ -3032,6 +3032,15 @@
         if ($("bf-days") && +$("bf-days").value !== +s.days) $("bf-days").value = s.days;
         if ($("bf-chosen-wrap")) { $("bf-chosen-wrap").style.display = ""; $("bf-chosen-dist").textContent = bfChosenDist; }
       });
+      // اختيار تلقائي لو فيه توزيع واحد فقط — فلا يُحفظ التوزيع فاضياً لمجرّد عدم الضغط.
+      if (rows.length === 1 && !bfChosenDist) {
+        const s = rows[0];
+        bfChosenDist = s.distribution || "";
+        bfChosenCN = bfParseDist(bfChosenDist);
+        bfChosenPair = bfPairOf(s);
+        const card = list.querySelector(".bf-sugcard"); if (card) card.style.background = "#eaf5f1";
+        if ($("bf-chosen-wrap")) { $("bf-chosen-wrap").style.display = ""; $("bf-chosen-dist").textContent = bfChosenDist; }
+      }
     }
     async function loadBrief(phone) {
       const setv = (id, v) => { const el = $(id); if (el) el.value = (v == null ? "" : v); };
@@ -3115,7 +3124,9 @@
           const extra = d.confirmation_sent
             ? " · 📨 أُرسلت رسالة تأكيد للعميل"
             : " · (لم تُرسَل رسالة التأكيد — إمّا أُرسلت سابقاً أو العميل خارج نافذة 24 ساعة)";
-          msg.textContent = "✅ تم الحفظ (مكتمل)" + extra;
+          // تنبيه: بلا توزيع مدن مختار → البرنامج يُرتَّب تلقائيًا وقد يكون أقل دقّة.
+          const distNote = (!payload.distribution) ? "  ⚠️ بدون توزيع مدن — اضغطي بطاقة الاقتراح ليُبنى بتوزيع أدقّ" : "";
+          msg.textContent = "✅ تم الحفظ (مكتمل)" + extra + distNote;
         } else {
           // غير مكتمل: نوضّح الناقص — لن يُرسل للعميل ولا يظهر للتسعير حتى يكتمل.
           const miss = [];
