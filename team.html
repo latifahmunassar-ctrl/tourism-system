@@ -4,6 +4,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+/* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
+   لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
+(function () {
+  var BUILD = '2026-06-22-hotelsfix';
+  try {
+    var u = new URL(location.href);
+    if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
+    if (sessionStorage.getItem('twReloadedFor') === BUILD) return; // منع التكرار
+    sessionStorage.setItem('twReloadedFor', BUILD);
+    u.searchParams.set('v', BUILD);
+    location.replace(u.toString());
+  } catch (e) { /* تجاهل */ }
+})();
+</script>
 <title>نظام البرامج السياحية</title>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
 <style>
