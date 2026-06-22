@@ -2174,10 +2174,14 @@ async function buildConversationContext(
   return msgs.slice(-24).map(m => m.who + ": " + m.body).join("\n").slice(-4000);
 }
 
+const MODEL_FAST = "claude-haiku-4-5-20251001";   // رخيص — للمتكرّر/البسيط
+const MODEL_DEEP = "claude-sonnet-4-6";            // أغلى وأذكى — للجديد/التحليل العميق
+
 async function analyzeUnknownQuestion(
   supabase: ReturnType<typeof createClient>,
   question: string,
   conversation: string = "",
+  model: string = MODEL_FAST,
 ): Promise<ClaudeAnalysis | null> {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) return null;
@@ -2294,9 +2298,7 @@ async function analyzeUnknownQuestion(
   try {
     const anthropic = new Anthropic({ apiKey });
     const res = await anthropic.messages.create({
-      // Sonnet: يوازن بين إعادة استخدام الرد المعتمد ووعي السياق (لا يكرّر سؤالاً
-      // أجاب عنه العميل) — وهو ما لا يتقنه haiku في هذه الحالة الدقيقة.
-      model: "claude-sonnet-4-6",
+      model,   // MODEL_FAST افتراضياً (رخيص)، أو MODEL_DEEP للتحليل العميق عند الحاجة
       max_tokens: 900,
       system: sys,
       messages: [{ role: "user", content: question }],
@@ -2367,7 +2369,13 @@ async function createProposalAndNotifyAdmin(args: {
 }): Promise<void> {
   const { supabase, customerPhone, profileName, question } = args;
   const convContext = await buildConversationContext(supabase, customerPhone);
-  const analysis = await analyzeUnknownQuestion(supabase, question, convContext);
+  // توفير: الموديل الرخيص أولاً (مناسب للمتكرّر اللي يطابق رداً معتمداً). لو ما
+  // طابق (استفسار جديد) → نرفّع لتحليل أعمق بـ Sonnet. ويبقى زر «تحليل أعمق» يدوياً.
+  let analysis = await analyzeUnknownQuestion(supabase, question, convContext, MODEL_FAST);
+  if (!analysis || !analysis.sourceRowId) {
+    const deep = await analyzeUnknownQuestion(supabase, question, convContext, MODEL_DEEP);
+    if (deep) analysis = deep;
+  }
 
   // Defensive fallback: if Claude analysis failed (returned null) we still
   // ESCALATE — the customer was already told "لحظة، راح أوصل سؤالك للمختص"
@@ -3855,7 +3863,8 @@ Deno.serve(async (req) => {
       for (const pr of list) {
         try {
           const ctx = await buildConversationContext(supabase, pr.customer_phone || "");
-          const a = await analyzeUnknownQuestion(supabase, pr.customer_question || "", ctx);
+          let a = await analyzeUnknownQuestion(supabase, pr.customer_question || "", ctx, MODEL_FAST);
+          if (a && !a.sourceRowId) { const deep = await analyzeUnknownQuestion(supabase, pr.customer_question || "", ctx, MODEL_DEEP); if (deep) a = deep; }
           if (!a) continue;
           let sc: number | null = null;
           if (a.sourceRowId) {
@@ -3884,6 +3893,39 @@ Deno.serve(async (req) => {
         .in("status", ["pending_reply_approval", "pending_correction"])
         .is("customer_goal", null);
       return new Response(JSON.stringify({ ok: true, updated, remaining: remaining ?? 0 }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // «تحليل أعمق» يدوي لمقترح واحد بـ Sonnet (عند الشك في رد ولّده الموديل الرخيص).
+  if (url.searchParams.get("admin_action") === "deepen_proposal") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const p = await req.json();
+      const id = String(p.proposal_id || "").trim();
+      if (!id) return new Response(JSON.stringify({ error: "missing proposal_id" }), { status: 400, headers: jsonCors });
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: pr } = await supabase.from("whatsapp_admin_proposals")
+        .select("customer_question, customer_phone").eq("id", id).maybeSingle();
+      const row = pr as { customer_question?: string; customer_phone?: string } | null;
+      if (!row) return new Response(JSON.stringify({ error: "not found" }), { status: 404, headers: jsonCors });
+      const ctx = await buildConversationContext(supabase, row.customer_phone || "");
+      const a = await analyzeUnknownQuestion(supabase, row.customer_question || "", ctx, MODEL_DEEP);
+      if (!a) return new Response(JSON.stringify({ error: "analysis failed" }), { status: 502, headers: jsonCors });
+      let sc: number | null = null;
+      if (a.sourceRowId) {
+        const { data: fc } = await supabase.from("faq_confirmations").select("confirmations").eq("row_id", a.sourceRowId).maybeSingle();
+        sc = (((fc as { confirmations?: number } | null)?.confirmations) ?? 0);
+      }
+      await supabase.from("whatsapp_admin_proposals").update({
+        customer_goal: a.goal || "", interpretation: a.interpretation, suggested_reply: a.suggestedReply,
+        source_row_id: a.sourceRowId, source_confirmations: sc,
+        proposed_intent: a.proposedIntent, proposed_sub_intent: a.proposedSubIntent,
+        customer_stage: a.customerStage, extracted_data: a.extractedData,
+        missing_data: a.missingData, business_metadata: a.businessMetadata,
+      }).eq("id", id);
+      return new Response(JSON.stringify({ ok: true, deepened: true }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }

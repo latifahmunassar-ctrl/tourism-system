@@ -3984,6 +3984,7 @@
                   <button class="toggle-btn" data-proposal-action="approve" data-id="${escapeHtml(p.id)}" style="min-width:auto; padding:8px 14px;">✅ موافق — أرسل</button>
                   <button class="toggle-btn" data-proposal-action="save-only" data-id="${escapeHtml(p.id)}" style="min-width:auto; padding:8px 14px; background:#1d4ed8; color:#fff; border-color:#1d4ed8;" title="اعتمد الرد المقترح واحفظه بدون إرسال للعميل (لو رددتِ عليه سابقاً)">💾 حفظ فقط (بدون إرسال)</button>
                   <button class="toggle-btn off" data-proposal-action="reject" data-id="${escapeHtml(p.id)}" style="min-width:auto; padding:8px 14px;">✏️ تعديل الرد</button>
+                  <button class="toggle-btn off" data-proposal-action="deepen" data-id="${escapeHtml(p.id)}" style="min-width:auto; padding:8px 14px; background:#ede9fe; color:#6d28d9; border-color:#ddd6fe;" title="أعد تحليل المقترح بموديل أذكى (Sonnet) لو شكّيتِ في الرد">🔍 تحليل أعمق</button>
                   <button class="toggle-btn off" data-proposal-action="delete" data-id="${escapeHtml(p.id)}" style="min-width:auto; padding:8px 14px; background:#fee2e2; color:#991b1b; border-color:#fecaca;">🗑️ حذف</button>
                 </div>
                 <div class="proposal-correct" data-correct-for="${escapeHtml(p.id)}" style="display:none; margin-top:8px;">
@@ -4050,6 +4051,7 @@
             return;
           }
           if (action === "approve") return decideProposal(id, "approve", null, b);
+          if (action === "deepen") return deepenProposal(id, b);
           if (action === "delete") {
             if (confirm("حذف هذا الاقتراح؟ لن يُرسل أي رد للعميل.")) return decideProposal(id, "dismiss", null, b);
             return;
@@ -4079,6 +4081,23 @@
           }
         });
       });
+    }
+    async function deepenProposal(id, btn) {
+      // إعادة تحليل المقترح بموديل Sonnet (أعمق) عند الشك في رد ولّده الموديل الرخيص.
+      const ot = btn.textContent; btn.disabled = true; btn.textContent = "⏳ يحلّل بعمق…";
+      try {
+        const res = await fetch(BASE + "?admin_action=deepen_proposal", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+          body: JSON.stringify({ proposal_id: id }),
+        });
+        const d = await res.json();
+        if (!res.ok || d.error) throw new Error(d.error || ("HTTP " + res.status));
+        refresh();   // يعيد جلب المقترحات بالتحليل الأعمق
+      } catch (e) {
+        alert("تعذّر التحليل الأعمق: " + (e.message || e));
+        btn.disabled = false; btn.textContent = ot;
+      }
     }
     async function decideProposal(id, decision, replyText, btn) {
       btn.disabled = true;
