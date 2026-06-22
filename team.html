@@ -4201,7 +4201,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     fetch(IB_BASE+'?admin_action=list',{headers:ibH()}).then(r=>r.ok?r.json():null)
       .then(d=>{ if(d&&d.requests) ibBadge(d.requests.filter(r=>r.status==='pending_review'||r.status==='build_failed').length); }).catch(()=>{});
     // عدّاد طلبات الأفراد: عدد الواردة (غير المُرسلة).
-    fetch(IB_BASE+'?admin_action=list_individuals',{headers:ibH()}).then(r=>r.ok?r.json():null)
+    fetch(IB_BASE+'?admin_action=list_individuals',{cache:'no-store',headers:ibH()}).then(r=>r.ok?r.json():null)
       .then(d=>{ if(d&&d.requests) indBadge(d.requests.filter(r=>r.status!=='sent').length); }).catch(()=>{});
   }
 
@@ -4211,7 +4211,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
   const IND_STAT={incomplete:'غير مكتمل',complete:'مكتمل',transferred:'محوّل'};
   const indivPh=p=>String(p||'').replace(/^whatsapp:/,'');
   async function indivList(){
-    const r=await fetch(IB_BASE+'?admin_action=list_individuals',{headers:ibH()});
+    const r=await fetch(IB_BASE+'?admin_action=list_individuals',{cache:'no-store',headers:ibH()});
     if(r.status===401){ if(ibSecret(true)) return indivList(); throw new Error('unauthorized'); }
     const d=await r.json(); return d.requests||[];
   }
@@ -4349,7 +4349,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
   }
   window.indivLoad=async function(id){
     indivClose();
-    const r=await fetch(IB_BASE+'?admin_action=get_individual&id='+id,{headers:ibH()});
+    const r=await fetch(IB_BASE+'?admin_action=get_individual&id='+id,{cache:'no-store',headers:ibH()});
     const j=await r.json(); const b=j.request;
     if(!b){alert('تعذّر فتح الطلب');return;}
     // اربط الطلب بحالة الإرسال وأظهر زر «إرسال للعميل» (وأخفِ زر الشركة)

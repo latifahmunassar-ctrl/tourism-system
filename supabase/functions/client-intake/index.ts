@@ -25,6 +25,9 @@ const CORS = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, x-admin-secret",
   "Content-Type": "application/json",
+  // امنع كاش المتصفح: قوائم/طلبات الأفراد والشركات لازم تطلع آخر حالة دائماً،
+  // وإلا يعرض برنامجاً قديماً بعد أي تعديل على السجل (عدد أشخاص/طيران قديم).
+  "Cache-Control": "no-store, no-cache, must-revalidate",
 };
 
 const json = (body: unknown, status = 200) =>
