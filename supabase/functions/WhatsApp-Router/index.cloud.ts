@@ -2107,7 +2107,7 @@ type ProposalRow = {
 
 // Customer journey stages — used by the FAQ matcher and the
 // admin-preview notification.
-const CUSTOMER_STAGES = ["INQUIRY", "OFFER_SENT", "BOOKING_IN_PROGRESS", "BOOKING_CONFIRMED", "TRAVELING", "POST_TRAVEL"] as const;
+const CUSTOMER_STAGES = ["INQUIRY", "READY_FOR_QUOTE", "OFFER_SENT", "BOOKING_IN_PROGRESS", "BOOKING_CONFIRMED", "TRAVELING", "POST_TRAVEL"] as const;
 type CustomerStage = typeof CUSTOMER_STAGES[number];
 const STAGE_EMOJI: Record<CustomerStage, string> = {
   INQUIRY: "🔍",
@@ -2149,6 +2149,10 @@ type ClaudeAnalysis = {
   priority: string | null;        // "URGENT" or null
   priorityLabel: string | null;   // "URGENT 🚨" or null
   customerStage: CustomerStage;   // PREVIEW MODE stage classification
+  // ── إضافات للمراجعة البشرية (لا تُعتمد إلا بموافقة) ──
+  extractedData: Record<string, unknown>;     // destination/travel_dates/adults/children/children_ages/budget/trip_type
+  missingData: string[];                       // المعلومات الناقصة لإعداد عرض
+  businessMetadata: Record<string, unknown>;   // service_name/service_status/seasonal_availability/start_date/end_date (اقتراح)
 };
 
 // يبني نص سياق المحادثة (رسائل العميل + ردود طلال، الأقدم أولاً) لإعطاء المُحلّل
@@ -2271,6 +2275,7 @@ async function analyzeUnknownQuestion(
     `     • وإلا → priority = null, priority_label = null\n\n` +
     `6) customer_stage — مرحلة العميل في رحلة الشراء (واحد فقط):\n` +
     `   • INQUIRY — مجرد استفسار، ما بدأ الحجز بعد\n` +
+    `   • READY_FOR_QUOTE — توفّرت المعلومات الأساسية الكافية لإعداد عرض سعر (وجهة + تاريخ + عدد المسافرين على الأقل)\n` +
     `   • OFFER_SENT — استلم عرض/برنامج، يسأل عن تفاصيله أو يقارن\n` +
     `   • BOOKING_IN_PROGRESS — في عملية الحجز، يتفاوض/يطلب تعديل/يدفع\n` +
     `   • BOOKING_CONFIRMED — حجزه مؤكد، يتأكد من تفاصيل قبل السفر\n` +
@@ -2279,8 +2284,12 @@ async function analyzeUnknownQuestion(
     `سياق المحادثة مع العميل (الأقدم أولاً) — اقرأه كاملاً قبل اقتراح الرد لتعرف ما قاله سابقاً:\n${conversation || "(لا سياق سابق — أول رسالة)"}\n\n` +
     `قاعدة الـ FAQ الموجودة (${rows.length} صف):\n${faqRef}\n\n` +
     `الفئات الحالية: ${categories}\n\n` +
+    `7) استخراج بيانات منظّمة (إضافة للمراجعة البشرية — لا تُعتمد إلا بموافقة):\n` +
+    `   • extracted_data: استخرج من المحادثة كاملةً: destination (الوجهة)، travel_dates (تواريخ/شهر السفر)، adults (عدد الكبار)، children (عدد الأطفال)، children_ages (أعمار الأطفال نص)، budget (الميزانية)، trip_type (نوع الرحلة: عائلية/شهر عسل/مجموعة...). اترك أي حقل فارغاً إن لم يُذكر. عند تعارض جديد مع قديم اعتمد الأحدث المؤكَّد.\n` +
+    `   • missing_data: قائمة بأهم المعلومات الأساسية الناقصة لإعداد عرض (مثل ["تاريخ السفر","الميزانية"])، فارغة لو الأساسيات مكتملة.\n` +
+    `   • business_metadata (اقتراح فقط، لا يُعتمد إلا بموافقة بشرية): service_name، service_status، seasonal_availability، start_date، end_date. اتركها فارغة إن لم تُكتشف.\n\n` +
     `أعد JSON فقط بدون أي نص آخر:\n` +
-    `{"interpretation":"...","goal":"...","suggested_reply":"...","source_row_id":"PKG0xx أو null","proposed_intent":"...","proposed_sub_intent":"...","proposed_keywords":["...","..."],"customer_type":"...","case_type":"...","complaint_type":"...أو null","booking_status":"...","priority":"URGENT أو null","priority_label":"URGENT 🚨 أو null","customer_stage":"INQUIRY|OFFER_SENT|BOOKING_IN_PROGRESS|BOOKING_CONFIRMED|TRAVELING|POST_TRAVEL"}`;
+    `{"interpretation":"...","goal":"...","suggested_reply":"...","source_row_id":"PKG0xx أو null","proposed_intent":"...","proposed_sub_intent":"...","proposed_keywords":["...","..."],"customer_type":"...","case_type":"...","complaint_type":"...أو null","booking_status":"...","priority":"URGENT أو null","priority_label":"URGENT 🚨 أو null","customer_stage":"INQUIRY|READY_FOR_QUOTE|OFFER_SENT|BOOKING_IN_PROGRESS|BOOKING_CONFIRMED|TRAVELING|POST_TRAVEL","extracted_data":{"destination":"","travel_dates":"","adults":null,"children":null,"children_ages":"","budget":"","trip_type":""},"missing_data":["..."],"business_metadata":{"service_name":"","service_status":"","seasonal_availability":"","start_date":"","end_date":""}}`;
 
   try {
     const anthropic = new Anthropic({ apiKey });
@@ -2340,6 +2349,9 @@ async function analyzeUnknownQuestion(
       priority: isUrgent ? "URGENT" : null,
       priorityLabel: isUrgent ? "URGENT 🚨" : null,
       customerStage,
+      extractedData: (parsed.extracted_data && typeof parsed.extracted_data === "object") ? parsed.extracted_data as Record<string, unknown> : {},
+      missingData: Array.isArray(parsed.missing_data) ? (parsed.missing_data as unknown[]).map(String).map(s => s.trim()).filter(Boolean) : [],
+      businessMetadata: (parsed.business_metadata && typeof parsed.business_metadata === "object") ? parsed.business_metadata as Record<string, unknown> : {},
     };
   } catch (e) {
     console.error("Claude analyse failed", (e as Error).message);
@@ -2382,6 +2394,9 @@ async function createProposalAndNotifyAdmin(args: {
     priority: null as string | null,
     priorityLabel: null as string | null,
     customerStage: "INQUIRY" as CustomerStage,
+    extractedData: {} as Record<string, unknown>,
+    missingData: [] as string[],
+    businessMetadata: {} as Record<string, unknown>,
   };
   const status = analysis ? "pending_reply_approval" : "pending_correction";
 
@@ -2412,6 +2427,9 @@ async function createProposalAndNotifyAdmin(args: {
     priority: safe.priority,
     priority_label: safe.priorityLabel,
     customer_stage: safe.customerStage,
+    extracted_data: safe.extractedData,
+    missing_data: safe.missingData,
+    business_metadata: safe.businessMetadata,
     status,
   });
   if (error) { console.error("Proposal insert failed", error.message); return; }
@@ -3117,7 +3135,7 @@ Deno.serve(async (req) => {
 
       const { data: pending } = await supabase
         .from("whatsapp_admin_proposals")
-        .select("id, customer_phone, customer_profile_name, customer_question, status, created_at, proposed_intent, proposed_sub_intent, proposed_keywords, customer_type, case_type, complaint_type, booking_status, priority, priority_label, interpretation, customer_goal, suggested_reply, customer_stage, source_row_id, source_confirmations")
+        .select("id, customer_phone, customer_profile_name, customer_question, status, created_at, proposed_intent, proposed_sub_intent, proposed_keywords, customer_type, case_type, complaint_type, booking_status, priority, priority_label, interpretation, customer_goal, suggested_reply, customer_stage, source_row_id, source_confirmations, extracted_data, missing_data, business_metadata")
         .in("status", [
           "pending_reply_approval", "pending_correction",
           "pending_sheet_approval", "pending_category_choice",
@@ -3782,7 +3800,7 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: "missing proposal_id" }),
           { status: 400, headers: jsonCors });
       }
-      const STAGES = ["INQUIRY","OFFER_SENT","BOOKING_IN_PROGRESS","BOOKING_CONFIRMED","TRAVELING","POST_TRAVEL"];
+      const STAGES = ["INQUIRY","READY_FOR_QUOTE","OFFER_SENT","BOOKING_IN_PROGRESS","BOOKING_CONFIRMED","TRAVELING","POST_TRAVEL"];
       const CUSTOMERS = ["NEW_CUSTOMER","REPEAT_CUSTOMER","VIP_CUSTOMER","CORPORATE_BUSINESS","PARTNERSHIP"];
       const CASES = ["INQUIRY","BOOKING_REQUEST","BOOKING_CONFIRMED","COMPLAINT","CANCELLATION","MODIFICATION"];
       const COMPLAINTS = ["PAYMENT_ISSUE","HOTEL_ISSUE","FLIGHT_ISSUE","SERVICE_ISSUE","DELAY_RESPONSE","GENERAL_DISSATISFACTION"];
@@ -3853,6 +3871,10 @@ Deno.serve(async (req) => {
             source_confirmations: sc,
             proposed_intent: a.proposedIntent,
             proposed_sub_intent: a.proposedSubIntent,
+            customer_stage: a.customerStage,
+            extracted_data: a.extractedData,
+            missing_data: a.missingData,
+            business_metadata: a.businessMetadata,
           }).eq("id", pr.id);
           updated++;
         } catch (_e) { /* تخطّى هذا وواصل */ }

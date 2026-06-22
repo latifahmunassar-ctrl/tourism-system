@@ -2435,7 +2435,7 @@
         if (c.priority === "URGENT") tags.push(`<span class="pill urgent">URGENT 🚨</span>`);
         // Customer stage pill — أول وسم يظهر عشان يبيّن مرحلة العميل بسرعة
         if (c.customer_stage) {
-          const stageEmoji = ({INQUIRY:"🔍",OFFER_SENT:"💼",BOOKING_IN_PROGRESS:"📋",BOOKING_CONFIRMED:"✅",TRAVELING:"✈️",POST_TRAVEL:"🔄"})[c.customer_stage] || "🔍";
+          const stageEmoji = ({INQUIRY:"🔍",READY_FOR_QUOTE:"📝",OFFER_SENT:"💼",BOOKING_IN_PROGRESS:"📋",BOOKING_CONFIRMED:"✅",TRAVELING:"✈️",POST_TRAVEL:"🔄"})[c.customer_stage] || "🔍";
           tags.push(`<span class="pill tag-case">${stageEmoji} ${escapeHtml(c.customer_stage)}</span>`);
         }
         if (c.customer_type) {
@@ -3911,7 +3911,7 @@
         // تقدر تصحّح تصنيف الـ AI لو غلط.
         const stageVal = p.customer_stage || "INQUIRY";
         const stageOpts = [
-          ["INQUIRY","🔍 INQUIRY"], ["OFFER_SENT","💼 OFFER_SENT"],
+          ["INQUIRY","🔍 INQUIRY"], ["READY_FOR_QUOTE","📝 READY_FOR_QUOTE"], ["OFFER_SENT","💼 OFFER_SENT"],
           ["BOOKING_IN_PROGRESS","📋 BOOKING_IN_PROGRESS"], ["BOOKING_CONFIRMED","✅ BOOKING_CONFIRMED"],
           ["TRAVELING","✈️ TRAVELING"], ["POST_TRAVEL","🔄 POST_TRAVEL"],
         ];
@@ -3962,6 +3962,17 @@
                   <div style="font-size:11px; font-weight:800; color:#4338ca; margin-bottom:3px;">🎯 هدف العميل <span style="font-weight:600; color:#818cf8;">— عدّليه لو خطأ (يُحفظ تلقائياً)</span></div>
                   <textarea class="proposal-intent" data-class-field="customer_goal" data-id="${escapeHtml(p.id)}" rows="2" placeholder="اكتبي هدف العميل…" style="width:100%; box-sizing:border-box; padding:6px 8px; border:1px solid #c7d2fe; border-radius:6px; font-family:inherit; font-weight:600; font-size:13px; color:#3730a3; background:white; resize:vertical;">${escapeHtml(p.customer_goal || "")}</textarea>
                 </div>
+                ${(function(){
+                  const ed = p.extracted_data || {};
+                  const edItems = [['الوجهة',ed.destination],['التواريخ',ed.travel_dates],['كبار',ed.adults],['أطفال',ed.children],['أعمار',ed.children_ages],['الميزانية',ed.budget],['نوع الرحلة',ed.trip_type]].filter(x=>x[1]!=null && x[1]!=='');
+                  const edHtml = edItems.length ? `<div style="margin-top:6px; padding:7px 9px; background:#ecfeff; border-right:3px solid #06b6d4; border-radius:6px; font-size:12px;"><b style="color:#0e7490;">📊 البيانات المستخرجة</b><div style="margin-top:3px; color:#155e63;">${edItems.map(x=>`${x[0]}: <b>${escapeHtml(String(x[1]))}</b>`).join(' · ')}</div></div>` : '';
+                  const md = Array.isArray(p.missing_data) ? p.missing_data.filter(Boolean) : [];
+                  const mdHtml = md.length ? `<div style="margin-top:6px; padding:7px 9px; background:#fff7ed; border-right:3px solid #f97316; border-radius:6px; font-size:12px;"><b style="color:#9a3412;">⚠️ الناقص:</b> <span style="color:#7c2d12;">${md.map(escapeHtml).join(' · ')}</span></div>` : '';
+                  const bm = p.business_metadata || {};
+                  const bmItems = [['الخدمة',bm.service_name],['الحالة',bm.service_status],['الموسمية',bm.seasonal_availability],['من',bm.start_date],['إلى',bm.end_date]].filter(x=>x[1]!=null && x[1]!=='');
+                  const bmHtml = bmItems.length ? `<div style="margin-top:6px; padding:7px 9px; background:#f5f3ff; border-right:3px solid #8b5cf6; border-radius:6px; font-size:12px;"><b style="color:#6d28d9;">🏷️ بيانات خدمة مقترحة <span style="font-weight:600;">(للمراجعة فقط)</span></b><div style="margin-top:3px; color:#5b21b6;">${bmItems.map(x=>`${x[0]}: <b>${escapeHtml(String(x[1]))}</b>`).join(' · ')}</div></div>` : '';
+                  return edHtml + mdHtml + bmHtml;
+                })()}
                 ${reply ? `
                   <div style="margin-top:6px; padding:8px; background:#fef3c7; border-right:3px solid #f59e0b; border-radius:6px;">
                     <div style="font-size:11px; font-weight:800; color:#92400e; margin-bottom:2px;">💡 الرد المقترح${(p.source_confirmations > 0) ? ` <span style="background:#dcfce7;color:#15803d;border-radius:10px;padding:1px 7px;font-size:10px;" title="هذا الرد سبق أن اعتمدتِه — كل تأكيد يرفع ثقته">✓ مؤكّد ${p.source_confirmations}×</span>` : ""}</div>
