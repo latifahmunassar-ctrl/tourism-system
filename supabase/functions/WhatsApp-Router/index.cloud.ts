@@ -2148,9 +2148,29 @@ type ClaudeAnalysis = {
   customerStage: CustomerStage;   // PREVIEW MODE stage classification
 };
 
+// يبني نص سياق المحادثة (رسائل العميل + ردود طلال، الأقدم أولاً) لإعطاء المُحلّل
+// صورة كاملة فلا يكرّر سؤالاً أجاب عنه العميل ويعرف الناقص لبناء البرنامج.
+async function buildConversationContext(
+  supabase: ReturnType<typeof createClient>, phone: string, limit = 30,
+): Promise<string> {
+  const [inb, outb] = await Promise.all([
+    supabase.from("wa_message_audit").select("body, received_at").eq("from_phone", phone)
+      .not("body", "is", null).order("received_at", { ascending: false }).limit(limit),
+    supabase.from("wa_admin_messages").select("body, sent_at").eq("customer_phone", phone)
+      .order("sent_at", { ascending: false }).limit(limit),
+  ]);
+  type R = { body?: string | null; received_at?: string; sent_at?: string };
+  const msgs: Array<{ ts: string; who: string; body: string }> = [];
+  for (const m of ((inb.data || []) as R[])) if (m.body && !String(m.body).startsWith("📎")) msgs.push({ ts: m.received_at || "", who: "العميل", body: String(m.body) });
+  for (const m of ((outb.data || []) as R[])) if (m.body) msgs.push({ ts: m.sent_at || "", who: "طلال", body: String(m.body) });
+  msgs.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+  return msgs.slice(-24).map(m => m.who + ": " + m.body).join("\n").slice(-4000);
+}
+
 async function analyzeUnknownQuestion(
   supabase: ReturnType<typeof createClient>,
   question: string,
+  conversation: string = "",
 ): Promise<ClaudeAnalysis | null> {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) return null;
@@ -2210,10 +2230,13 @@ async function analyzeUnknownQuestion(
     `يصلك سؤال عميل ما طابق أي إجابة بشكل دقيق في قاعدة الـ FAQ. مهمتك:\n\n` +
     `1) interpretation: اشرح بإيجاز (جملة واحدة) ماذا يقصد العميل.\n\n` +
     `1ب) goal: هدف العميل الحقيقي من سؤاله أو محادثته بإيجاز — وش يبي يحقّق فعلياً (مثل: يقارن الأسعار قبل الحجز، يتأكد من توفّر رحلة بتاريخه، يبي أرخص خيار، يبي برنامج عائلي مريح...). هذا الهدف يساعد على فهم الاستفسار والرد عليه على أصوله.\n\n` +
+    `1ج) أنت مساعد مبيعات سياحي. المعلومات الأساسية لبناء برنامج سياحي هي: الوجهة · تاريخ السفر · عدد المسافرين · أعمار الأطفال (إن وُجدوا) · عدد الأيام/المدة · المدن المراد زيارتها أو ترك الترتيب للوكالة · (الميزانية وفئة الفندق إن ذُكرت). اقرأ "سياق المحادثة" أدناه كاملاً واعرف أيّها قدّمه العميل سابقاً وأيّها ناقص.\n\n` +
     `2) suggested_reply + source_row_id (الأهم — أولوية قصوى لإعادة استخدام المعتمد سابقاً):\n` +
     `   • القاعدة الأساسية: لا تخترع رداً جديداً إذا كان في قاعدة الـ FAQ أدناه صف إجابته تناسب نفس الاستفسار — حتى لو الصياغة أو الكلمات مختلفة تماماً. طابق بالمعنى لا بالكلمات.\n` +
     `   • لو لقيت صفاً مناسباً (أو قريباً في المعنى) → استخدم نص إجابته **حرفياً كما هو** كـ suggested_reply، وضع id الصف في source_row_id. هذا هو السلوك الافتراضي المطلوب.\n` +
-    `   • اكتب رداً جديداً (source_row_id = null) **فقط** لو كان الاستفسار جديداً فعلاً ولا يوجد أي صف قريب منه إطلاقاً. عند الشك، أعد استخدام أقرب صف بدل اختراع رد جديد.\n\n` +
+    `   • اكتب رداً جديداً (source_row_id = null) **فقط** لو كان الاستفسار جديداً فعلاً ولا يوجد أي صف قريب منه إطلاقاً. عند الشك، أعد استخدام أقرب صف بدل اختراع رد جديد.\n` +
+    `   • ⚠️ ابنِ الرد بناءً على **سياق المحادثة كاملاً** (أدناه). لا تكرّر سؤالاً أجاب عنه العميل سابقاً — لو ذكر وجهته أو تاريخه أو عدده قبل، لا تسأل عنه مرة ثانية. لو ناقصة معلومات أساسية لبناء البرنامج، اطلب **الناقص منها فقط** بإيجاز ولطف. لو كل الأساسيات متوفرة، أكّد أنك ستجهّز البرنامج وتتواصل معه — بلا أسئلة زائدة.\n` +
+    `   • أهم استثناء: إذا كان الصف المعتمد الذي ستعيد استخدامه **يطلب من العميل معلومات قدّمها أصلاً** (مثل الوجهة/العدد/التاريخ)، فلا تعِد طلبها — **عدّل نص الرد** ليطلب الناقص فقط أو ليؤكّد التجهيز. هنا السياق له الأولوية على التكرار الحرفي. (التكرار الحرفي يبقى فقط للردود المعلوماتية التي لا تطلب معلومات من العميل.)\n\n` +
     `3) proposed_intent + proposed_sub_intent: الفئة المناسبة (يفضل من الفئات الحالية).\n\n` +
     `4) proposed_keywords: 10-18 كلمة مفتاحية لو الإدارة قررت تحفظ الرد كصف جديد (لا تستخدمها لو source_row_id موجود).\n` +
     `   قواعد الـ keywords:\n` +
@@ -2250,6 +2273,7 @@ async function analyzeUnknownQuestion(
     `   • BOOKING_CONFIRMED — حجزه مؤكد، يتأكد من تفاصيل قبل السفر\n` +
     `   • TRAVELING — حالياً في رحلته (يسأل عن مكان/سائق/فندق على الأرض)\n` +
     `   • POST_TRAVEL — رجع من السفر، يعطي feedback أو يستفسر بعد الرحلة\n\n` +
+    `سياق المحادثة مع العميل (الأقدم أولاً) — اقرأه كاملاً قبل اقتراح الرد لتعرف ما قاله سابقاً:\n${conversation || "(لا سياق سابق — أول رسالة)"}\n\n` +
     `قاعدة الـ FAQ الموجودة (${rows.length} صف):\n${faqRef}\n\n` +
     `الفئات الحالية: ${categories}\n\n` +
     `أعد JSON فقط بدون أي نص آخر:\n` +
@@ -2258,8 +2282,10 @@ async function analyzeUnknownQuestion(
   try {
     const anthropic = new Anthropic({ apiKey });
     const res = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 800,
+      // Sonnet: يوازن بين إعادة استخدام الرد المعتمد ووعي السياق (لا يكرّر سؤالاً
+      // أجاب عنه العميل) — وهو ما لا يتقنه haiku في هذه الحالة الدقيقة.
+      model: "claude-sonnet-4-6",
+      max_tokens: 900,
       system: sys,
       messages: [{ role: "user", content: question }],
     });
@@ -2325,7 +2351,8 @@ async function createProposalAndNotifyAdmin(args: {
   question: string;
 }): Promise<void> {
   const { supabase, customerPhone, profileName, question } = args;
-  const analysis = await analyzeUnknownQuestion(supabase, question);
+  const convContext = await buildConversationContext(supabase, customerPhone);
+  const analysis = await analyzeUnknownQuestion(supabase, question, convContext);
 
   // Defensive fallback: if Claude analysis failed (returned null) we still
   // ESCALATE — the customer was already told "لحظة، راح أوصل سؤالك للمختص"
@@ -3798,15 +3825,16 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
       const { data: pend } = await supabase.from("whatsapp_admin_proposals")
-        .select("id, customer_question")
+        .select("id, customer_question, customer_phone")
         .in("status", ["pending_reply_approval", "pending_correction"])
         .is("customer_goal", null)
         .order("created_at", { ascending: false }).limit(10);
-      const list = (pend as Array<{ id: string; customer_question: string }> | null) ?? [];
+      const list = (pend as Array<{ id: string; customer_question: string; customer_phone: string }> | null) ?? [];
       let updated = 0;
       for (const pr of list) {
         try {
-          const a = await analyzeUnknownQuestion(supabase, pr.customer_question || "");
+          const ctx = await buildConversationContext(supabase, pr.customer_phone || "");
+          const a = await analyzeUnknownQuestion(supabase, pr.customer_question || "", ctx);
           if (!a) continue;
           let sc: number | null = null;
           if (a.sourceRowId) {
