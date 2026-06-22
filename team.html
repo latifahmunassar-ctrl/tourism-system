@@ -4399,5 +4399,9 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
 })();
 </script>
 
+<div id="scrollNav" class="app-locked" style="position:fixed; bottom:20px; left:16px; z-index:900; display:flex; flex-direction:column; gap:8px;">
+  <button type="button" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="أعلى الصفحة" aria-label="أعلى الصفحة" style="width:44px;height:44px;border-radius:50%;border:none;background:#0b5d4e;color:#fff;font-size:22px;font-weight:900;line-height:1;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.28);">↑</button>
+  <button type="button" onclick="window.scrollTo({top:document.documentElement.scrollHeight,behavior:'smooth'})" title="أسفل الصفحة" aria-label="أسفل الصفحة" style="width:44px;height:44px;border-radius:50%;border:none;background:#0b5d4e;color:#fff;font-size:22px;font-weight:900;line-height:1;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.28);">↓</button>
+</div>
 </body>
 </html>
