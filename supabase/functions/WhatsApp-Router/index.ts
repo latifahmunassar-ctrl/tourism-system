@@ -3060,6 +3060,28 @@ Deno.serve(async (req) => {
   const jsonCors = { ...JSON_HEADERS, ...corsHeaders };
   const unauthorized = () => new Response(JSON.stringify({ error: "unauthorized" }),
     { status: 401, headers: jsonCors });
+  const forbidden = (msg = "ليس لديك صلاحية لهذه العملية") =>
+    new Response(JSON.stringify({ error: msg }), { status: 403, headers: jsonCors });
+  // الصلاحيات الافتراضية للموظف (الأدمن دائماً كامل الصلاحية).
+  const PERM_DEFAULTS: Record<string, boolean> = {
+    view_proposals: false, send_messages: true, delete_messages: false,
+    manage_offers: false, transfer_conversations: true, manage_ai: false,
+  };
+  const staffHasPerm = (
+    staff: { permissions?: Record<string, unknown> | null } | null, key: string,
+  ): boolean => {
+    if (!staff) return true; // أدمن (legacy JWT) — صلاحية كاملة
+    const p = (staff.permissions || {}) as Record<string, unknown>;
+    if (key in p) return !!p[key];
+    return PERM_DEFAULTS[key] ?? false;
+  };
+  // بوابة: تتحقق من المصادقة ثم الصلاحية. ترجع Response خطأ، أو null لو مسموح.
+  const requirePerm = async (req: Request, key: string): Promise<Response | null> => {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    const caller = await getCallerStaff(req); // null = أدمن (صلاحية كاملة)
+    if (caller && !staffHasPerm(caller, key)) return forbidden();
+    return null;
+  };
   const checkAuth = (req: Request): boolean => {
     const expected = (Deno.env.get("LEGACY_ANON_JWT") || "").trim();
     const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
@@ -3074,6 +3096,7 @@ Deno.serve(async (req) => {
   // حسب الموظف الفعلي اللي عامل تسجيل دخول.
   const getCallerStaff = async (req: Request): Promise<{
     phone: string; name: string; role: string; destinations: string[];
+    permissions: Record<string, unknown>;
   } | null> => {
     const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
     if (!got) return null;
@@ -3090,12 +3113,12 @@ Deno.serve(async (req) => {
     if (new Date(row.expires_at) < new Date()) return null;
     const { data: staffRow } = await supabase
       .from("wa_staff")
-      .select("phone, name, role, active, destinations")
+      .select("phone, name, role, active, destinations, permissions")
       .eq("phone", row.phone)
       .maybeSingle();
     if (!staffRow || !(staffRow as { active: boolean }).active) return null;
-    const s = staffRow as { phone: string; name: string; role: string; destinations: string[] | null };
-    return { phone: s.phone, name: s.name, role: s.role, destinations: s.destinations || [] };
+    const s = staffRow as { phone: string; name: string; role: string; destinations: string[] | null; permissions: Record<string, unknown> | null };
+    return { phone: s.phone, name: s.name, role: s.role, destinations: s.destinations || [], permissions: s.permissions || {} };
   };
 
   // Admin: token-validity probe. Returns 200 with diagnostic info when
@@ -3357,7 +3380,7 @@ Deno.serve(async (req) => {
           completed_today: completed,
           stalled_today: stalled,
           errored_today: errored,
-          pending_proposals_total: pending?.length ?? 0,
+          pending_proposals_total: staffHasPerm(callerStaff, "view_proposals") ? (pending?.length ?? 0) : 0,
         },
         global_ai_enabled: globalAiEnabled,
         ai_force_off_all: aiForceOffAll,
@@ -3367,7 +3390,7 @@ Deno.serve(async (req) => {
         conversations: conversationsEnriched,
         staff: staffList ?? [],
         routing_rules: rulesList ?? [],
-        pending_proposals: pending ?? [],
+        pending_proposals: staffHasPerm(callerStaff, "view_proposals") ? (pending ?? []) : [],
         recent_audit: audit ?? [],
         unhandled: unhandledRows ?? [],
         generated_at: new Date().toISOString(),
@@ -3592,6 +3615,14 @@ Deno.serve(async (req) => {
       } else if (typeof p.destinations === "string") {
         destinations = p.destinations.split(",").map(s => s.trim()).filter(Boolean);
       }
+      // الصلاحيات: كائن {key: bool} مقتصر على المفاتيح المعروفة فقط.
+      let permissions: Record<string, boolean> | undefined = undefined;
+      if (p.permissions && typeof p.permissions === "object" && !Array.isArray(p.permissions)) {
+        const PKEYS = ["view_proposals", "send_messages", "delete_messages", "manage_offers", "transfer_conversations", "manage_ai"];
+        const src = p.permissions as Record<string, unknown>;
+        permissions = {};
+        for (const k of PKEYS) permissions[k] = !!src[k];
+      }
       if (!rawPhone || !name) {
         return new Response(JSON.stringify({ error: "missing phone or name" }),
           { status: 400, headers: jsonCors });
@@ -3602,6 +3633,7 @@ Deno.serve(async (req) => {
       const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       const row: Record<string, unknown> = { phone, name, active, role };
       if (destinations !== undefined) row.destinations = destinations;
+      if (permissions !== undefined) row.permissions = permissions;
       const { data, error } = await supabase.from("wa_staff")
         .upsert(row, { onConflict: "phone" })
         .select().single();
@@ -3690,7 +3722,7 @@ Deno.serve(async (req) => {
   //   ideally, but we don't enforce — flexible for ad-hoc transfers)
   // - transferred_by: optional phone of who initiated (admin or staff)
   if (url.searchParams.get("admin_action") === "transfer_conversation") {
-    if (!(await checkAuthOrSession(req))) return unauthorized();
+    { const g = await requirePerm(req, "transfer_conversations"); if (g) return g; }
     try {
       const p = await req.json();
       const rawCust = String(p.phone || "").trim();
@@ -3800,7 +3832,7 @@ Deno.serve(async (req) => {
   // Any subset of fields may be provided. Unknown / blank values are
   // ignored so the existing column value is preserved.
   if (url.searchParams.get("admin_action") === "proposal_update") {
-    if (!(await checkAuthOrSession(req))) return unauthorized();
+    { const g = await requirePerm(req, "view_proposals"); if (g) return g; }
     try {
       const p = await req.json();
       const id = String(p.proposal_id || "").trim();
@@ -3861,7 +3893,7 @@ Deno.serve(async (req) => {
   // الرد المعتمد + عدّاد الثقة). يعالج دفعة لكل نداء (للحدّ من زمن الاستجابة)؛
   // نادِه مراراً حتى remaining=0. يحدّث فقط ما ينقصه الهدف (للاستئناف الآمن).
   if (url.searchParams.get("admin_action") === "reanalyze_pending") {
-    if (!(await checkAuthOrSession(req))) return unauthorized();
+    { const g = await requirePerm(req, "view_proposals"); if (g) return g; }
     try {
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -3913,7 +3945,7 @@ Deno.serve(async (req) => {
 
   // «تحليل أعمق» يدوي لمقترح واحد بـ Sonnet (عند الشك في رد ولّده الموديل الرخيص).
   if (url.searchParams.get("admin_action") === "deepen_proposal") {
-    if (!(await checkAuthOrSession(req))) return unauthorized();
+    { const g = await requirePerm(req, "view_proposals"); if (g) return g; }
     try {
       const p = await req.json();
       const id = String(p.proposal_id || "").trim();
@@ -3955,7 +3987,7 @@ Deno.serve(async (req) => {
   //     recorded on the proposal for the FAQ training queue.
   //   • mode=ON      → reply gets sent to the customer via Twilio REST.
   if (url.searchParams.get("admin_action") === "proposal_decide") {
-    if (!(await checkAuthOrSession(req))) return unauthorized();
+    { const g = await requirePerm(req, "view_proposals"); if (g) return g; }
     try {
       const p = await req.json();
       const id = String(p.proposal_id || "").trim();
@@ -4139,7 +4171,7 @@ Deno.serve(async (req) => {
   // doesn't expose it. So the customer may still see the message in
   // their chat — we just stop showing it on our side.
   if (url.searchParams.get("admin_action") === "delete_message") {
-    if (!(await checkAuthOrSession(req))) return unauthorized();
+    { const g = await requirePerm(req, "delete_messages"); if (g) return g; }
     try {
       const p = await req.json();
       const msgSid = String(p.message_sid || "").trim();
@@ -4176,7 +4208,7 @@ Deno.serve(async (req) => {
   }
 
   if (url.searchParams.get("admin_action") === "send_admin_message") {
-    if (!(await checkAuthOrSession(req))) return unauthorized();
+    { const g = await requirePerm(req, "send_messages"); if (g) return g; }
     try {
       const p = await req.json();
       const rawPhone = String(p.phone || "").trim();
@@ -4279,7 +4311,7 @@ Deno.serve(async (req) => {
   //   POST ?admin_action=upload_offer  (multipart/form-data)
   //   → { ok: true, offer: {...} }
   if (url.searchParams.get("admin_action") === "upload_offer") {
-    if (!(await checkAuthOrSession(req))) return unauthorized();
+    { const g = await requirePerm(req, "manage_offers"); if (g) return g; }
     try {
       const form = await req.formData();
       const file = form.get("file");
@@ -4368,7 +4400,7 @@ Deno.serve(async (req) => {
   // Admin: delete an offer (removes the storage object + the row).
   //   POST ?admin_action=delete_offer  body {id}
   if (url.searchParams.get("admin_action") === "delete_offer") {
-    if (!(await checkAuthOrSession(req))) return unauthorized();
+    { const g = await requirePerm(req, "manage_offers"); if (g) return g; }
     try {
       const p = await req.json();
       const id = String(p.id || "").trim();
@@ -4391,7 +4423,7 @@ Deno.serve(async (req) => {
 
   // Admin: rename/recategorize an offer.  POST {id, label?, category?}
   if (url.searchParams.get("admin_action") === "update_offer") {
-    if (!(await checkAuthOrSession(req))) return unauthorized();
+    { const g = await requirePerm(req, "manage_offers"); if (g) return g; }
     try {
       const p = await req.json();
       const id = String(p.id || "").trim();
@@ -5020,7 +5052,7 @@ Deno.serve(async (req) => {
   //   {"phone": "00968...", "enabled": true|false|null}
   // null  → inherit global. true/false → force per-conversation.
   if (url.searchParams.get("admin_action") === "set_conversation_ai") {
-    if (!(await checkAuthOrSession(req))) return unauthorized();
+    { const g = await requirePerm(req, "manage_ai"); if (g) return g; }
     try {
       const payload = await req.json();
       const rawPhone = String(payload.phone || "").trim();

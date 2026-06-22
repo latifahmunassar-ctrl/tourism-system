@@ -108,6 +108,12 @@
       content: "👁️ وضع المراقبين · ";
       color: var(--accent); font-weight: 800;
     }
+    /* صلاحيات لكل موظف (يُحجب القسم لو ما عنده الصلاحية — الأمان مفروض خادمياً كذلك). */
+    body.perm-no-proposals section:has(#proposals-list) { display: none !important; }
+    body.perm-no-offers-mgmt #offer-form { display: none !important; }
+    body.perm-no-offers-mgmt [data-offer-del],
+    body.perm-no-offers-mgmt [data-offer-edit],
+    body.perm-no-offers-mgmt [data-offer-note] { display: none !important; }
 
     /* Per-staff conversation filter — admin only. Staff see their own
        conversations once we add scoping; for now this bar is hidden in
@@ -1330,6 +1336,23 @@
       else if (role === "monitor") document.body.classList.add("monitor-mode");
       // role === "admin" → no class, full view
     }
+    // صلاحيات لكل موظف (مرآة لـ PERM_DEFAULTS في السيرفر). me=null يعني أدمن (كامل).
+    const PERM_DEFAULTS = { view_proposals: false, send_messages: true, delete_messages: false, manage_offers: false, transfer_conversations: true, manage_ai: false };
+    function hasPerm(me, key) {
+      if (!me) return true; // أدمن — صلاحية كاملة
+      const p = (me && me.permissions) || {};
+      if (key in p) return !!p[key];
+      return PERM_DEFAULTS[key] !== undefined ? PERM_DEFAULTS[key] : false;
+    }
+    function applyPermissions(me) {
+      const b = document.body.classList;
+      b.toggle("perm-no-proposals", !hasPerm(me, "view_proposals"));
+      b.toggle("perm-no-offers-mgmt", !hasPerm(me, "manage_offers"));
+      b.toggle("perm-no-delete", !hasPerm(me, "delete_messages"));
+      b.toggle("perm-no-ai", !hasPerm(me, "manage_ai"));
+      b.toggle("perm-no-transfer", !hasPerm(me, "transfer_conversations"));
+      b.toggle("perm-no-send", !hasPerm(me, "send_messages"));
+    }
     function setSession(newToken, role) {
       token = newToken;
       localStorage.setItem(STORAGE_KEY, newToken);
@@ -1605,6 +1628,7 @@
             <button class="toggle-btn" data-action="staff-destinations" data-phone="${escapeHtml(s.phone)}" data-name="${escapeHtml(s.name)}" data-current="${escapeHtml(dests.join(", "))}" style="min-width:auto;padding:6px 10px" title="تعديل الوجهات">🌍 وجهات</button>
             <button class="toggle-btn" data-action="staff-role" data-phone="${escapeHtml(s.phone)}" data-name="${escapeHtml(s.name)}" data-role="${escapeHtml(s.role || 'sales')}" style="min-width:auto;padding:6px 10px" title="تغيير الدور">🔄 دور</button>
             <button class="toggle-btn" data-action="staff-password" data-phone="${escapeHtml(s.phone)}" data-username="${escapeHtml(s.username || '')}" style="min-width:auto;padding:6px 10px" title="ضبط كلمة السر">🔑 كلمة سر</button>
+            <button class="toggle-btn" data-action="staff-perms" data-phone="${escapeHtml(s.phone)}" data-name="${escapeHtml(s.name)}" data-role="${escapeHtml(s.role || 'sales')}" data-active="${s.active ? 1 : 0}" data-perms="${escapeHtml(JSON.stringify(s.permissions || {}))}" style="min-width:auto;padding:6px 10px;background:#ede9fe;color:#6d28d9;border-color:#ddd6fe" title="صلاحيات الموظف">🛡️ صلاحيات</button>
             <button class="toggle-btn off" data-action="staff-delete" data-phone="${escapeHtml(s.phone)}" style="min-width:auto;padding:6px 10px">حذف</button>
           </div>
         </div>`;
@@ -1620,6 +1644,8 @@
         b.addEventListener("click", () => toggleStaffRole(b.dataset.phone, b.dataset.name, b.dataset.role)));
       list.querySelectorAll('[data-action=staff-destinations]').forEach(b =>
         b.addEventListener("click", () => editStaffDestinations(b.dataset.phone, b.dataset.name, b.dataset.current)));
+      list.querySelectorAll('[data-action=staff-perms]').forEach(b =>
+        b.addEventListener("click", () => editStaffPermissions(b.dataset.phone, b.dataset.name, b.dataset.role, +b.dataset.active === 1, b.dataset.perms)));
       // Populate the rule-staff dropdown too
       const ruleSel = $("rule-staff");
       ruleSel.innerHTML = '<option value="">— اختر موظف —</option>' +
@@ -1885,6 +1911,45 @@
         refresh();
       } catch (e) { alert("فشل: " + e.message); }
     });
+    function editStaffPermissions(phone, name, role, active, permsJson) {
+      let perms = {};
+      try { perms = JSON.parse(permsJson || "{}"); } catch (e) {}
+      const FIELDS = [
+        ["view_proposals", "👁️ رؤية المقترحات (قسم المعاينة)"],
+        ["send_messages", "💬 إرسال الردود والعروض للعميل"],
+        ["transfer_conversations", "🔄 نقل المحادثة لموظف آخر"],
+        ["delete_messages", "🗑️ حذف الرسائل/المحادثات"],
+        ["manage_offers", "🛠️ إدارة العروض وصور الدفع (رفع/حذف)"],
+        ["manage_ai", "🤖 التحكم بالذكاء الاصطناعي للمحادثة"],
+      ];
+      const val = (k) => (k in perms ? !!perms[k] : !!PERM_DEFAULTS[k]);
+      const overlay = document.createElement("div");
+      overlay.style.cssText = "position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9999; display:grid; place-items:center;";
+      overlay.innerHTML = `<div style="background:#fff; border-radius:16px; padding:20px; max-width:430px; width:92%; max-height:85vh; overflow:auto; font-family:inherit;">
+        <h3 style="margin:0 0 4px;">🛡️ صلاحيات: ${escapeHtml(name)}</h3>
+        <div style="font-size:12px; color:#64748b; margin-bottom:12px;">فعّلي ما تسمحين به لهذا الموظف فقط — محميّة في السيرفر (لو مطفأة ما تشتغل حتى لو تحايل).</div>
+        ${FIELDS.map(([k, label]) => `<label style="display:flex; align-items:center; gap:10px; padding:9px 6px; border-bottom:1px solid #f1f5f9; cursor:pointer; font-weight:600; font-size:14px;">
+          <input type="checkbox" data-perm-key="${k}" ${val(k) ? "checked" : ""} style="width:18px; height:18px; accent-color:#6d28d9;" />
+          <span>${label}</span></label>`).join("")}
+        <div style="display:flex; gap:8px; margin-top:16px;">
+          <button id="perm-save" style="flex:1; background:#6d28d9; color:#fff; border:none; padding:11px; border-radius:10px; font-weight:800; cursor:pointer;">💾 حفظ</button>
+          <button id="perm-cancel" style="flex:1; background:#f1f5f9; color:#334155; border:none; padding:11px; border-radius:10px; font-weight:800; cursor:pointer;">إلغاء</button>
+        </div>
+      </div>`;
+      document.body.appendChild(overlay);
+      overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+      overlay.querySelector("#perm-cancel").onclick = () => overlay.remove();
+      overlay.querySelector("#perm-save").onclick = async () => {
+        const out = {};
+        overlay.querySelectorAll("[data-perm-key]").forEach(cb => { out[cb.dataset.permKey] = cb.checked; });
+        const btn = overlay.querySelector("#perm-save"); btn.disabled = true; btn.textContent = "⏳…";
+        try {
+          await callApi("upsert_staff", { phone, name, role, active, permissions: out });
+          overlay.remove();
+          refresh();
+        } catch (e) { alert("فشل حفظ الصلاحيات: " + e.message); btn.disabled = false; btn.textContent = "💾 حفظ"; }
+      };
+    }
     async function deleteStaff(phone) {
       if (!confirm("احذف الموظف؟")) return;
       try { await callApi("delete_staff", { phone }); refresh(); }
@@ -4273,6 +4338,7 @@
         if (!res.ok) throw new Error("HTTP " + res.status);
         const data = await res.json();
         me = data.me || null;
+        applyPermissions(me);
         renderGlobalToggle(!!data.global_ai_enabled, !!data.ai_force_off_all, !!data.ai_force_on_all, data.ai_mode || "ON");
         renderCounts(data.counts || {});
         renderStaff(data.staff || []);
