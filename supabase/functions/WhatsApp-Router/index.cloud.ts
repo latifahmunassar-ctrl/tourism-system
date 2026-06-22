@@ -4112,7 +4112,10 @@ Deno.serve(async (req) => {
       const digits = rawPhone.replace(/^whatsapp:/, "").replace(/^\+/, "")
         .replace(/^00/, "").replace(/[^0-9]/g, "");
       const phone = `whatsapp:+${digits}`;
-      const sentBy = String(p.sent_by || "admin");
+      // اسم المرسل من جلسة الموظف الفعلية (موثوق) — يظهر في خيط المحادثة بالداشبورد.
+      // الأدمن (legacy JWT) ما له staff session فيرجع null → نستخدم admin/المُمرَّر.
+      const callerStaff = await getCallerStaff(req);
+      const sentBy = (callerStaff && callerStaff.name) ? callerStaff.name : String(p.sent_by || "admin");
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
