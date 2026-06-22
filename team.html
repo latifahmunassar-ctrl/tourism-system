@@ -4403,7 +4403,8 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       sim_count:b.sim_count, date_from:b.date_from, notes:b.notes, transport:'private',
       stars:b.hotel_stars, cities_nights:b.cities_nights,
       sel_distribution:b.distribution||'',
-      sel_pair:(b.arrival_airport||'')+'|'+(b.departure_airport||''),
+      // لا نبني sel_pair إلا لو المطاران موجودان؛ وإلا '|' الفارغة تُفعّل مسار «جاهز» بمطار غير صالح.
+      sel_pair:(b.arrival_airport && b.departure_airport) ? (b.arrival_airport+'|'+b.departure_airport) : '',
     };
     // طلب فرد ليس له «إرسال للشركة» — نلغي أي ربط شركة سابق ونخفي شريطه.
     if(typeof inboxDismiss==='function') inboxDismiss();
@@ -4423,8 +4424,11 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       },700);
     } else {
       const cn=(b.cities_nights||[]).map(c=>`${c.nights} ${c.city}`).join(' + ');
+      // ⚠️ لازم نذكر فئة النجوم في نص البناء، وإلا الذكاء يرتّب المدن بلا فنادق.
+      const starVal=['3','4','5'].includes(String(b.hotel_stars))?String(b.hotel_stars):'';
+      const starsTxt=starVal?('فنادق '+starVal+' نجوم'):'فنادق مختلطة';
       const ci=document.getElementById('chatInput');
-      if(ci) ci.value=`${b.destination||''} ${b.days||''} ايام ${cn} ل ${b.pax||''} بالغين${b.children?(' و '+b.children+' اطفال'):''}${b.date_from?(' تاريخ '+b.date_from):''}`;
+      if(ci) ci.value=`${b.destination||''} ${b.days||''} ايام ${cn} ل ${b.pax||''} بالغين${b.children?(' و '+b.children+' اطفال'):''}${b.date_from?(' تاريخ '+b.date_from):''} ${starsTxt}`;
       if(typeof sendMessage==='function') sendMessage();
       setTimeout(()=>indivApplyCurrency(b.contact_phone), 4000);   // 💱 بعد بناء الشات
     }
