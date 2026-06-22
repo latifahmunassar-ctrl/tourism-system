@@ -3808,6 +3808,10 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: "missing proposal_id" }),
           { status: 400, headers: jsonCors });
       }
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      );
       const STAGES = ["INQUIRY","READY_FOR_QUOTE","OFFER_SENT","BOOKING_IN_PROGRESS","BOOKING_CONFIRMED","TRAVELING","POST_TRAVEL"];
       const CUSTOMERS = ["NEW_CUSTOMER","REPEAT_CUSTOMER","VIP_CUSTOMER","CORPORATE_BUSINESS","PARTNERSHIP"];
       const CASES = ["INQUIRY","BOOKING_REQUEST","BOOKING_CONFIRMED","COMPLAINT","CANCELLATION","MODIFICATION"];
@@ -3825,14 +3829,23 @@ Deno.serve(async (req) => {
       if (typeof p.proposed_intent === "string")     patch.proposed_intent = p.proposed_intent.trim();
       if (typeof p.proposed_sub_intent === "string") patch.proposed_sub_intent = p.proposed_sub_intent.trim();
       if (typeof p.customer_goal === "string")       patch.customer_goal = p.customer_goal.trim().slice(0, 600);
+      // تعديل بيانات الخدمة المقترحة (jsonb) — دمج الحقول المُرسلة في الموجود.
+      if (p.business_metadata && typeof p.business_metadata === "object" && !Array.isArray(p.business_metadata)) {
+        const { data: cur } = await supabase.from("whatsapp_admin_proposals")
+          .select("business_metadata").eq("id", id).maybeSingle();
+        const curBm = (((cur as { business_metadata?: Record<string, unknown> } | null)?.business_metadata) || {}) as Record<string, unknown>;
+        const allowed = ["service_name","service_status","seasonal_availability","start_date","end_date"];
+        const incoming = p.business_metadata as Record<string, unknown>;
+        const merged: Record<string, unknown> = { ...curBm };
+        for (const k of allowed) {
+          if (k in incoming) merged[k] = String(incoming[k] ?? "").slice(0, 200);
+        }
+        patch.business_metadata = merged;
+      }
       if (!Object.keys(patch).length) {
         return new Response(JSON.stringify({ error: "no fields to update" }),
           { status: 400, headers: jsonCors });
       }
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      );
       const { error, data } = await supabase.from("whatsapp_admin_proposals")
         .update(patch).eq("id", id).select().single();
       if (error) throw new Error(error.message);

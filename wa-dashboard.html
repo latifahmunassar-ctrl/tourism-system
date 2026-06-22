@@ -3969,8 +3969,8 @@
                   const md = Array.isArray(p.missing_data) ? p.missing_data.filter(Boolean) : [];
                   const mdHtml = md.length ? `<div style="margin-top:6px; padding:7px 9px; background:#fff7ed; border-right:3px solid #f97316; border-radius:6px; font-size:12px;"><b style="color:#9a3412;">⚠️ الناقص:</b> <span style="color:#7c2d12;">${md.map(escapeHtml).join(' · ')}</span></div>` : '';
                   const bm = p.business_metadata || {};
-                  const bmItems = [['الخدمة',bm.service_name],['الحالة',bm.service_status],['الموسمية',bm.seasonal_availability],['من',bm.start_date],['إلى',bm.end_date]].filter(x=>x[1]!=null && x[1]!=='');
-                  const bmHtml = bmItems.length ? `<div style="margin-top:6px; padding:7px 9px; background:#f5f3ff; border-right:3px solid #8b5cf6; border-radius:6px; font-size:12px;"><b style="color:#6d28d9;">🏷️ بيانات خدمة مقترحة <span style="font-weight:600;">(للمراجعة فقط)</span></b><div style="margin-top:3px; color:#5b21b6;">${bmItems.map(x=>`${x[0]}: <b>${escapeHtml(String(x[1]))}</b>`).join(' · ')}</div></div>` : '';
+                  const bmFields = [['service_name','الخدمة'],['service_status','الحالة'],['seasonal_availability','الموسمية'],['start_date','من'],['end_date','إلى']];
+                  const bmHtml = `<div style="margin-top:6px; padding:8px 9px; background:#f5f3ff; border-right:3px solid #8b5cf6; border-radius:6px; font-size:12px;"><b style="color:#6d28d9;">🏷️ بيانات خدمة مقترحة <span style="font-weight:600;">— عدّليها لو احتجتِ (تُحفظ تلقائياً)</span></b><div style="display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-top:6px;">${bmFields.map(f=>`<label style="display:flex; flex-direction:column; gap:2px; font-size:10px; color:#7c3aed; font-weight:700;">${f[1]}<input class="proposal-meta" data-meta-field="${f[0]}" data-id="${escapeHtml(p.id)}" value="${escapeHtml(String(bm[f[0]]||''))}" placeholder="—" style="padding:4px 7px; border:1px solid #ddd6fe; border-radius:5px; font-family:inherit; font-weight:600; font-size:12px; color:#5b21b6; background:white;" /></label>`).join('')}</div></div>`;
                   return edHtml + mdHtml + bmHtml;
                 })()}
                 ${reply ? `
@@ -4020,11 +4020,38 @@
           if (el) el.disabled = false;
         }
       }
+      async function patchProposalMeta(id, field, value, el) {
+        if (el) el.disabled = true;
+        try {
+          const res = await fetch(BASE + "?admin_action=proposal_update", {
+            method: "POST",
+            headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+            body: JSON.stringify({ proposal_id: id, business_metadata: { [field]: value } }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
+        } catch (err) {
+          alert("فشل: " + err.message);
+        } finally {
+          if (el) el.disabled = false;
+        }
+      }
       list.querySelectorAll(".proposal-class").forEach((sel) => {
         sel.addEventListener("change", (e) => {
           e.stopPropagation();
           patchProposalField(sel.dataset.id, sel.dataset.classField, sel.value, sel);
         });
+      });
+      // بيانات الخدمة المقترحة: حقول حرة تُحفظ عند blur أو Enter (دمج في jsonb)
+      list.querySelectorAll(".proposal-meta").forEach((input) => {
+        const send = () => {
+          const v = input.value.trim();
+          if (v === (input.defaultValue || "").trim()) return;
+          patchProposalMeta(input.dataset.id, input.dataset.metaField, v, input);
+          input.defaultValue = v;
+        };
+        input.addEventListener("blur", send);
+        input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); input.blur(); } });
       });
       // Intent + sub-intent: free text, save on blur OR Enter
       list.querySelectorAll(".proposal-intent").forEach((input) => {
