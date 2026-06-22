@@ -932,10 +932,17 @@
         <div class="form-row" id="offer-form" style="flex-wrap:wrap; gap:8px; flex-direction:column; align-items:stretch;">
           <div style="display:flex; flex-wrap:wrap; gap:8px;">
             <select id="offer-category" style="padding:8px; border:1px solid #d1d5db; border-radius:6px; font-weight:600;">
-              <option value="عمان">عمان</option>
-              <option value="السعودية">السعودية</option>
+              <optgroup label="عروض">
+                <option value="عمان">عمان</option>
+                <option value="السعودية">السعودية</option>
+              </optgroup>
+              <optgroup label="💳 طرق الدفع (صور)">
+                <option value="pay_oman">💳 دفع — عُمان</option>
+                <option value="pay_saudi">💳 دفع — السعودية</option>
+                <option value="pay_world">💳 دفع — باقي العالم</option>
+              </optgroup>
             </select>
-            <input id="offer-label" placeholder="اسم الوجهة (مثل: ماليزيا)" />
+            <input id="offer-label" placeholder="اسم الوجهة (مثل: ماليزيا) / أو اسم طريقة الدفع" />
             <input id="offer-note" placeholder="ملاحظة داخلية (للموظف فقط - اختياري)" />
             <input type="file" id="offer-file" accept="application/pdf,.pdf,image/*,.doc,.docx,.xls,.xlsx" style="padding:6px;" />
           </div>
@@ -3499,6 +3506,9 @@
     // ── مكتبة العروض ─────────────────────────────────────────────────────
     // التصنيفات ثابتة: عمان والسعودية فقط (أزرار ثابتة في كل محادثة).
     const OFFER_CATEGORIES = ["عمان", "السعودية"];
+    // طرق الدفع: صور جاهزة في نفس مكتبة العروض، بفئات محجوزة حسب جنسية العميل.
+    const PAY_CATEGORIES = [["pay_oman", "عُمان 🇴🇲"], ["pay_saudi", "السعودية 🇸🇦"], ["pay_world", "باقي دول العالم 🌍"]];
+    const PAY_LABEL = { pay_oman: "💳 دفع — عُمان", pay_saudi: "💳 دفع — السعودية", pay_world: "💳 دفع — باقي العالم" };
     let offersCache = [];
     let offersLoaded = false;
     let openOfferMenu = null;
@@ -3543,13 +3553,16 @@
       const form = list.querySelector("#offer-form");
       const formHtml = form ? form.outerHTML : "";
       // التصنيفات الثابتة + أي تصنيف قديم متبقّي (عشان الأدمن يشوفه وينظّفه)
-      const extra = [...new Set(offersCache.map(o => o.category))].filter(c => !OFFER_CATEGORIES.includes(c));
-      const cats = [...OFFER_CATEGORIES, ...extra];
+      const payVals = PAY_CATEGORIES.map(c => c[0]);
+      const known = [...OFFER_CATEGORIES, ...payVals];
+      const extra = [...new Set(offersCache.map(o => o.category))].filter(c => !known.includes(c));
+      const cats = [...OFFER_CATEGORIES, ...payVals, ...extra];
       const badge = $("o-badge"); if (badge) badge.textContent = offersCache.length;
       let rows = "";
       cats.forEach(cat => {
         const items = offersCache.filter(o => o.category === cat);
-        rows += `<div style="font-weight:800; margin:10px 0 4px; color:#155e75;">📋 ${escapeHtml(cat)} <span style="color:var(--muted);font-weight:600;">(${items.length})</span></div>`;
+        const catLabel = PAY_LABEL[cat] || ("📋 " + cat);
+        rows += `<div style="font-weight:800; margin:10px 0 4px; color:#155e75;">${escapeHtml(catLabel)} <span style="color:var(--muted);font-weight:600;">(${items.length})</span></div>`;
         rows += items.length ? items.map(o => `<div class="row" style="display:flex; align-items:center; gap:8px; padding:6px 0; flex-wrap:wrap;">
           <a href="${escapeHtml(o.file_url)}" target="_blank" rel="noopener" style="flex:1; min-width:140px; font-weight:700; color:var(--text); text-decoration:none;">📄 ${escapeHtml(o.label)}</a>
           <button class="toggle-btn" data-offer-edit="${escapeHtml(o.id)}" data-offer-label="${escapeHtml(o.label)}" style="min-width:auto;padding:6px 10px;">✏️ تعديل</button>
@@ -3693,6 +3706,64 @@
         });
         bar.appendChild(btn);
       });
+      buildPaymentButton(bar);
+    }
+
+    // زر «💳 طرق الدفع» — صور الدفع الجاهزة مقسّمة حسب جنسية العميل (عُمان/السعودية/العالم).
+    function buildPaymentButton(bar) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "offer-cat-btn";
+      btn.style.background = "#ecfdf5";
+      btn.style.borderColor = "#a7f3d0";
+      btn.textContent = "💳 طرق الدفع";
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (openOfferMenu && openOfferMenu.dataset.cat === "__pay__") { closeOfferMenu(); return; }
+        closeOfferMenu();
+        const menu = document.createElement("div");
+        menu.className = "offer-menu";
+        menu.dataset.cat = "__pay__";
+        PAY_CATEGORIES.forEach(([val, label]) => {
+          const items = offersCache.filter(o => o.category === val);
+          const hdr = document.createElement("div");
+          hdr.style.cssText = "padding:7px 12px 4px; font-weight:800; color:#047857; background:#f0fdf4; font-size:12px; border-top:1px solid #d1fae5;";
+          hdr.textContent = label;
+          menu.appendChild(hdr);
+          if (!items.length) {
+            const empty = document.createElement("div");
+            empty.style.cssText = "padding:5px 14px 7px; color:#94a3b8; font-size:12px;";
+            empty.textContent = "— لا صور بعد —";
+            menu.appendChild(empty);
+          }
+          items.forEach(o => {
+            const it = document.createElement("button");
+            it.type = "button";
+            it.className = "offer-menu-item";
+            it.innerHTML = `💳 ${escapeHtml(o.label)}` +
+              (o.note ? `<div style="font-size:11px; color:#92400e; font-weight:600; margin-top:2px;">📝 ${escapeHtml(o.note)}</div>` : "");
+            it.addEventListener("click", () => { closeOfferMenu(); sendOffer(o); });
+            menu.appendChild(it);
+          });
+        });
+        document.body.appendChild(menu);
+        const r = btn.getBoundingClientRect();
+        const gap = 6;
+        menu.style.right = Math.max(8, window.innerWidth - r.right) + "px";
+        const spaceBelow = window.innerHeight - r.bottom;
+        const spaceAbove = r.top;
+        if (spaceAbove > spaceBelow) {
+          menu.style.top = "auto";
+          menu.style.bottom = (window.innerHeight - r.top + gap) + "px";
+          menu.style.maxHeight = Math.max(140, spaceAbove - gap - 12) + "px";
+        } else {
+          menu.style.bottom = "auto";
+          menu.style.top = (r.bottom + gap) + "px";
+          menu.style.maxHeight = Math.max(140, spaceBelow - gap - 12) + "px";
+        }
+        openOfferMenu = menu;
+      });
+      bar.appendChild(btn);
     }
 
     async function sendOffer(offer) {
@@ -3708,7 +3779,7 @@
         const body = $("conv-body");
         const optimistic = document.createElement("div");
         optimistic.className = "conv-msg bot admin";
-        optimistic.innerHTML = `<span class="sender-pill">Admin</span><div class="bubble">📎 ${escapeHtml(offer.label)} — ${escapeHtml(offer.category)}</div><div class="meta">جاري الإرسال…</div>`;
+        optimistic.innerHTML = `<span class="sender-pill">Admin</span><div class="bubble">📎 ${escapeHtml(offer.label)} — ${escapeHtml(PAY_LABEL[offer.category] || offer.category)}</div><div class="meta">جاري الإرسال…</div>`;
         body.appendChild(optimistic);
         body.scrollTop = body.scrollHeight;
         setTimeout(() => loadConversationHistory(), 4000);
