@@ -2161,6 +2161,20 @@ function hotelLineTotals(line) {
   return { p, nightly, nights, totalLine, stars, extraBedCount, extraBedPricePerNight, extraBedTotal };
 }
 
+// عند فتح برنامج محفوظ: اضبط خانتي البالغين/الأطفال في الفورم حسب عدد أشخاص
+// البرنامج نفسه (META/TOTAL_GROUP). buildReview يحسب كل شي من الفورم، فلو بقيت
+// قيمة قديمة في خانة الأطفال يطلع الطيران غلط (14 بدل 8). هذا يضمن تطابق الفورم
+// مع البرنامج المفتوح دائماً، فلا تتكرر مشكلة عدد المسافرين.
+function syncFormPeopleFromProgram(raw){
+  try{
+    const line = String(getLine(raw,'TOTAL_GROUP')||'') + ' ' + String(getLine(raw,'META')||'');
+    const a = (line.match(/(\d+)\s*[أا]شخاص/)||[])[1];
+    const k = (line.match(/(\d+)\s*(?:طفل|أطفال)/)||[])[1];
+    const af=document.getElementById('bf-adults'); if(af && a) af.value=parseInt(a,10);
+    const cf=document.getElementById('bf-children'); if(cf) cf.value = k ? parseInt(k,10) : 0;
+  }catch(e){}
+}
+
 function buildReview(raw) {
 lastProgramRaw = raw || '';
 lastSavedCode = '';
@@ -2293,6 +2307,14 @@ if (totalGroupFromText && computedGroup) {
 
 const prevDest = parsedData && parsedData.dest;
 parsedData = { dest, meta, dateFrom, dateTo, client, clientCode, extraBedCitiesLine, hotelsLines, flightsLines, transfersLines, toursLines, simText, summaryLines, totalPerson, persons, kids, infants, adults };
+// تنبيه حاسم: برنامج بلا فنادق غالباً ناقص — السبب الشائع أن توزيع المدن/الليالي أو
+// فئة النجوم غير محدّدة، فلا يُبنى الفندق (فندق لكل مدينة×ليلة×فئة). لا تُرسليه هكذا.
+if (!hotelsLines || hotelsLines.length === 0) {
+  addMessage('sys', '⚠️ تنبيه مهم: البرنامج طلع بدون فنادق! غالباً لأن توزيع المدن/الليالي أو فئة النجوم غير محدّدة. راجعي توزيع المدن وفئة النجوم وأعيدي البناء قبل الإرسال للعميل.');
+}
+if (!flightsLines || flightsLines.length === 0) {
+  addMessage('sys', '⚠️ تنبيه: البرنامج بدون طيران — تأكّدي من مطار الوصول/المغادرة إن كانت الرحلة تتطلب طيراناً دولياً.');
+}
 // New program = stale currency conversion. Reset so the next PDF export uses
 // SAR by default, not whatever rate was set against the previous trip.
 currencyConversion = null;
@@ -2878,6 +2900,7 @@ async function searchByCode() {
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.ok && data.program?.raw) {
+      syncFormPeopleFromProgram(data.program.raw);
       buildReview(data.program.raw);
       lastSavedCode = data.program.code || code;
       const pill = document.getElementById('savedCodePill');
@@ -4364,6 +4387,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     if(b.built_program && /TOTAL_GROUP:/.test(b.built_program)){
       if(typeof inboxDismiss==='function') inboxDismiss();
       if(typeof setCustomerType==='function') setCustomerType('individual');
+      syncFormPeopleFromProgram(b.built_program);
       buildReview(b.built_program);   // يعرض البرنامج المعتمد ويضبط lastProgramRaw
       if(typeof history!=='undefined' && Array.isArray(history)){
         history.push({role:'user', content:'(طلب فرد محفوظ — استخدمه كسياق لأي تعديل لاحق)'});
