@@ -2870,6 +2870,7 @@ async function searchByCode() {
   try {
     const res = await fetch(PROGRAMS_URL + '?code=' + encodeURIComponent(code), {
       method: 'GET',
+      cache: 'no-store',   // لا تعرض نسخة مخزّنة قديمة — اجلب آخر حالة دائماً
       headers: { 'Authorization': 'Bearer ' + SUPABASE_KEY, 'apikey': SUPABASE_KEY }
     });
     const data = await res.json().catch(() => ({}));

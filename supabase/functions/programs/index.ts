@@ -17,6 +17,9 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
   "Content-Type": "application/json",
+  // امنع المتصفح من تخزين استرجاع البرنامج بالكود، وإلا يعرض نسخة قديمة بعد أي
+  // تعديل على البرنامج المحفوظ (كان يطلّع عدد أشخاص/طيران قديم رغم تحديث القاعدة).
+  "Cache-Control": "no-store, no-cache, must-revalidate",
 };
 
 function json(status: number, body: unknown) {
