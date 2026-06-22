@@ -1129,8 +1129,10 @@ async function isAiEnabledForSession(
 // المحادثات الجديدة فقط (intake_active). يفهم النص والأرقام والكلام المجزّأ.
 async function handleNewLeadIntake(args: {
   supabase: ReturnType<typeof createClient>; from: string; body: string;
+  returning?: boolean;
 }): Promise<void> {
   const { supabase, from } = args;
+  const returning = args.returning === true;
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   const [inboundRes, outboundRes, sessRes] = await Promise.all([
     supabase.from("wa_message_audit").select("body, received_at").eq("from_phone", from)
@@ -1159,7 +1161,9 @@ async function handleNewLeadIntake(args: {
 مهمتك جمع ٥ معلومات أساسية من العميل:
 1) وجهة السفر  2) عدد المسافرين  3) تاريخ السفر  4) أعمار الأطفال فقط (إن وُجد أطفال)  5) المدن التي يحبون زيارتها (أو ترك الترتيب للوكالة).
 قواعد:
-- أول رد ابدأه بالترحيب: "حياك الله 🌟 معك طلال من خدمة العملاء" (كرسالة قصيرة لحالها) ثم اسأل عن أول معلومة ناقصة برسالة ثانية قصيرة.
+${returning
+  ? `- هذا عميل **سبق تعامل معنا وعاد بطلب وجهة جديدة**. ابدأ أول رد بترحيب بعودته بطريقة تُشعره أنك تعرفه (لا كأنها أول مرة): "حياك الله من جديد 🌟 سعدنا برجوعك! معك طلال" (كرسالة قصيرة لحالها) ثم اسأل عن أول معلومة ناقصة للرحلة الجديدة برسالة ثانية قصيرة.\n- ⚠️ تجاهل تفاصيل أي رحلة قديمة في السياق؛ هذا طلب رحلة جديدة — اجمع معلوماتها من جديد.`
+  : `- أول رد ابدأه بالترحيب: "حياك الله 🌟 معك طلال من خدمة العملاء" (كرسالة قصيرة لحالها) ثم اسأل عن أول معلومة ناقصة برسالة ثانية قصيرة.`}
 - ⚠️ ممنوع منعاً باتاً تمدح أو تعلّق على اختيار العميل أو وجهته. لا تقل نهائياً: «حلو / ممتاز / جميل / رائع / اختيار موفق / تمام تمام / حلو الاختيار». كن مباشراً ومحترفاً.
 - ردودك قصيرة جداً: سؤال واحد مختصر، بلا ملخصات ولا علامات ✓ ولا كلام زائد.
 - مثال صحيح: «كم عدد المسافرين؟» — مثال خاطئ (ممنوع): «تايلند اختيار حلو! كم عدد المسافرين؟».
@@ -1285,6 +1289,7 @@ async function handleMessage(args: {
   // even if the bot is muted, staff still want the assignment so the
   // right person picks up the conversation.
   const detectedDest = extractDestination(text);
+  const hadDest = session?.destination ?? null;   // الوجهة قبل هذه الرسالة (لكشف «وجهة جديدة»)
   if (detectedDest && !session?.destination) {
     await supabase.from("whatsapp_sessions").update({ destination: detectedDest }).eq("phone", from);
     if (session) session.destination = detectedDest;
@@ -1322,6 +1327,16 @@ async function handleMessage(args: {
     || (s != null && s.intake_active == null && s.stage === "new" && !s.last_outbound_at && !s.last_outbound_body);
   if (isFreshLead) {
     await handleNewLeadIntake({ supabase, from, body: text });
+    return;
+  }
+
+  // عميل قديم (سبق رددنا عليه أو اكتمل استقباله) عاد بطلب **وجهة جديدة** (مختلفة عن
+  // وجهته السابقة) → نعيد تفعيل طلال بترحيب «بعودتك» وجمع معلومات الرحلة الجديدة من جديد.
+  if (s?.intake_active !== true && detectedDest && detectedDest !== hadDest) {
+    await supabase.from("whatsapp_sessions")
+      .update({ intake_active: true, intake_data: null, destination: detectedDest })
+      .eq("phone", from);
+    await handleNewLeadIntake({ supabase, from, body: text, returning: true });
     return;
   }
 
