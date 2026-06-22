@@ -3140,11 +3140,11 @@
       const bdy = ref.body ? escapeHtml(String(ref.body)) : "";
       const url = ref.source_url ? String(ref.source_url) : "";
       const link = url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:#1e40af; font-weight:700; word-break:break-all;">🔗 ${escapeHtml(url)}</a>` : "";
-      return `<div style="position:sticky; top:0; z-index:2; margin:0 0 8px; padding:9px 12px; background:#fdf2f8; border:1px solid #fbcfe8; border-right:4px solid #c41d88; border-radius:8px; font-size:12.5px; color:#831843;">
-        <div style="font-weight:800;">📢 جاء من ${src} على إنستقرام/فيسبوك</div>
-        ${head ? `<div style="margin-top:3px; font-weight:700;">${head}</div>` : ""}
-        ${bdy ? `<div style="margin-top:2px; color:#9d174d;">${bdy}</div>` : ""}
-        ${link ? `<div style="margin-top:4px;">${link}</div>` : ""}
+      const details = (`${head ? `<div style="margin-top:4px; font-weight:700;">${head}</div>` : ""}${bdy ? `<div style="margin-top:2px; color:#9d174d;">${bdy}</div>` : ""}${link ? `<div style="margin-top:4px;">${link}</div>` : ""}`) || `<div style="margin-top:4px; color:#9d174d;">لا تفاصيل إضافية</div>`;
+      // شريط مختصر (سطر واحد) — يتوسّع بالضغط لعرض المحتوى ويرجع.
+      return `<div style="position:sticky; top:0; z-index:2; margin:0 0 6px; padding:5px 10px; background:#fdf2f8; border:1px solid #fbcfe8; border-right:4px solid #c41d88; border-radius:8px; font-size:12px; color:#831843;">
+        <div onclick="(function(b){var d=b.nextElementSibling;var open=d.style.display==='none';d.style.display=open?'block':'none';var c=b.querySelector('.adcv');if(c)c.textContent=open?'▴ إخفاء':'▾ التفاصيل';})(this)" style="cursor:pointer; font-weight:800; display:flex; align-items:center; gap:8px;"><span>📢 جاء من ${src} على إنستقرام/فيسبوك</span><span class="adcv" style="margin-right:auto; font-weight:700; color:#be185d; font-size:11px;">▾ التفاصيل</span></div>
+        <div style="display:none;">${details}</div>
       </div>`;
     }
     function renderConvBody(items) {
