@@ -2953,8 +2953,9 @@
         : '<span style="color:#b45309;">● غير مكتمل</span>';
     }
     async function transferBrief() {
-      // نحفظ أولاً (يحدّث الحقول + يرسل التأكيد لو مكتمل)، ثم نحوّل للتسعير.
-      await saveBrief();
+      // نحفظ أولاً — لو رُفض الحفظ (معلومات ناقصة) لا ننقل الطلب للتسعير.
+      const ok = await saveBrief();
+      if (!ok) return;
       const btn = $("bf-transfer"); const old = btn.textContent; btn.disabled = true; btn.textContent = "جاري التحويل…";
       const msg = $("bf-msg");
       try {
@@ -3107,6 +3108,17 @@
         distribution: bfChosenDist || "",
         cities_nights: bfChosenCN || null,
       };
+      // ⛔ رفض الحفظ لو المعلومات الأساسية ناقصة — لا يُحفظ ولا يُنقل حتى يكتمل.
+      const missReq = [];
+      if (!payload.destination) missReq.push("الوجهة");
+      if (!(parseInt(payload.pax) >= 1)) missReq.push("عدد الأشخاص");
+      if (!(parseInt(payload.days) >= 1)) missReq.push("عدد الأيام");
+      if (!payload.arrival_airport || !payload.departure_airport) missReq.push("مطار القدوم/المغادرة");
+      if (!payload.distribution) missReq.push("توزيع المدن (اضغطي بطاقة الاقتراح)");
+      if (missReq.length) {
+        const m = $("bf-msg"); if (m) { m.style.color = "#dc2626"; m.textContent = "⛔ لا يمكن الحفظ — أكملي أولاً: " + missReq.join("، "); }
+        return false;
+      }
       const btn = $("bf-save"); const old = btn.textContent; btn.disabled = true; btn.textContent = "جاري الحفظ…";
       const msg = $("bf-msg"); msg.style.color = "#64748b"; msg.textContent = "";
       let okSaved = false;
@@ -3145,6 +3157,7 @@
         if (okSaved) { btn.textContent = "✅ تم الحفظ"; setTimeout(() => { btn.textContent = old; }, 3000); }
         else { btn.textContent = old; }
       }
+      return okSaved;
     }
     if ($("brief-toggle")) $("brief-toggle").addEventListener("click", () => {
       const f = $("brief-form"); const willOpen = f.style.display === "none";
