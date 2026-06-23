@@ -591,6 +591,13 @@ async function sendCustomerReply(
   body: string,
   mediaUrl?: string,
 ): Promise<string | null> {
+  // تأخير طبيعي بزمن «الكتابة» قبل إرسال رد البوت — حتى لا يبدو رداً آلياً فورياً.
+  // خفيف ومتناسب مع طول الرسالة (يُضاف فوق زمن معالجة الذكاء)، بحد أقصى ٤.٥ ثانية
+  // ليبقى الإجمالي طبيعياً (قراءة + كتابة) دون مبالغة.
+  if (body) {
+    const delayMs = Math.min(4500, 900 + body.length * 55);
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
   const sid = await sendWhatsapp(to, body, mediaUrl);
   // Update session last_outbound_at + last_outbound_body so the
   // dashboard preview can show whichever side spoke last. For pure media
