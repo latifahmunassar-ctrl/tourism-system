@@ -934,6 +934,26 @@
     </section>
 
     <section class="offers-section">
+      <h3>🔔 المتابعة التلقائية</h3>
+      <p style="color:var(--muted); font-size:13px; margin:0 0 12px;">رسالة متابعة واحدة تلقائيًا للعميل اليوم الثاني بعد إرسال البرنامج/العرض («طمّنّي عسى البرنامج عجبك»). بتوقيت السعودية.</p>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+        <label style="display:flex; align-items:center; gap:6px; font-weight:700;">
+          <input type="checkbox" id="fu-enabled" style="width:18px; height:18px;" /> مُفعّلة
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; font-weight:700;">⏰ ساعة الإرسال (KSA):
+          <input type="number" id="fu-hour" min="0" max="23" style="width:64px; padding:6px; border:1px solid #d1d5db; border-radius:6px;" />
+        </label>
+        <button id="fu-save" class="toggle-btn" style="min-width:auto; padding:8px 16px; background:#0b5d4e; color:#fff; border:none;">💾 حفظ</button>
+        <span id="fu-msg" style="font-size:12px; font-weight:700;"></span>
+      </div>
+      <div style="margin-top:8px;">
+        <label style="font-size:12px; color:var(--muted); font-weight:700;">اسم قالب واتساب المعتمد (يُملأ بعد اعتماد Meta — يخلّي المتابعة تصل بعد ٢٤ ساعة):</label>
+        <input type="text" id="fu-template" placeholder="مثلاً: program_followup" style="width:100%; max-width:360px; padding:7px; border:1px solid #d1d5db; border-radius:6px; margin-top:4px;" />
+        <div style="font-size:11px; color:var(--muted); margin-top:4px;">اتركيه فارغًا = رسالة حرة (تصل فقط خلال ٢٤ ساعة).</div>
+      </div>
+    </section>
+
+    <section class="offers-section">
       <h3>💳 طرق الدفع (صور) <span class="badge" id="pay-badge">0</span></h3>
       <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">ارفعي صورة طريقة الدفع لكل منطقة حسب جنسية العميل، وعدّلي أو احذفي أي صورة. يرسلها الموظف بضغطة من زر «💳 طرق الدفع» داخل المحادثة.</p>
       <div class="panel-list" id="payments-mgmt"></div>
@@ -1536,7 +1556,7 @@
         document.body.classList.toggle("admin-offers-tab", tab === "offers");
         // First time opening contacts → load them
         if (tab === "contacts" && !contactsLoaded) loadContacts();
-        if (tab === "offers") loadOffers();
+        if (tab === "offers") { loadOffers(); loadFollowupSettings(); }
       });
     });
     function devEnter(role) {
@@ -3672,6 +3692,32 @@
       }
     });
 
+    async function loadFollowupSettings() {
+      try {
+        const res = await fetch(BASE + "?admin_action=followup_settings", { headers: { Authorization: "Bearer " + token } });
+        const d = await res.json();
+        if ($("fu-enabled")) $("fu-enabled").checked = d.enabled !== false;
+        if ($("fu-hour")) $("fu-hour").value = (d.hour != null ? d.hour : 12);
+        if ($("fu-template")) $("fu-template").value = d.template_name || "";
+      } catch (e) { /* تجاهل */ }
+    }
+    async function saveFollowupSettings() {
+      const btn = $("fu-save"), msg = $("fu-msg"); if (!btn) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(BASE + "?admin_action=set_followup_settings", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: $("fu-enabled").checked, hour: parseInt($("fu-hour").value) || 12, template_name: $("fu-template").value.trim() }),
+        });
+        const d = await res.json();
+        if (!res.ok || d.error) throw new Error(d.error || ("HTTP " + res.status));
+        msg.style.color = "#15803d"; msg.textContent = "✅ تم الحفظ";
+        setTimeout(() => { msg.textContent = ""; }, 2500);
+      } catch (e) { msg.style.color = "#dc2626"; msg.textContent = "فشل: " + (e.message || e); }
+      finally { btn.disabled = false; }
+    }
+    if ($("fu-save")) $("fu-save").addEventListener("click", saveFollowupSettings);
     async function loadOffers() {
       try {
         const res = await fetch(BASE + "?admin_action=list_offers", {

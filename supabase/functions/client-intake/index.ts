@@ -720,9 +720,12 @@ Deno.serve(async (req) => {
             media_id: upJson.id, media_mime: "application/pdf", media_filename: filename,
           });
           // last_message_at كذلك → ترتفع المحادثة لأعلى قائمة داشبورد الواتساب (أسلوب واتساب).
+          // + جدولة متابعة «اليوم الثاني» (تاريخ السعودية + 1 يوم) — تُرسل مرة واحدة بالكرون.
           const _ts = new Date().toISOString();
+          const _ksaTom = new Date(Date.now() + 3 * 3600 * 1000); _ksaTom.setUTCDate(_ksaTom.getUTCDate() + 1);
           await supabase.from("whatsapp_sessions").update({
             last_message_at: _ts, last_outbound_at: _ts, last_outbound_body: "📎 ملف البرنامج (PDF)",
+            followup_due_date: _ksaTom.toISOString().slice(0, 10), followup_done: false,
           }).eq("phone", customerPhone);
         } catch (_) { /* best-effort */ }
         return json({ ok: true, message_id: sendJson?.messages?.[0]?.id || null });

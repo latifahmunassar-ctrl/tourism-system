@@ -4261,11 +4261,18 @@ Deno.serve(async (req) => {
         sent_by: sentBy,
       });
       // نرفع المحادثة لأعلى القائمة (أسلوب واتساب): أي إرسال يحدّث last_message_at.
+      // + لو الإرسال ملف/عرض (mediaUrl) نجدول متابعة «اليوم الثاني» (تُرسل مرة بالكرون).
       const _nowIso = new Date().toISOString();
-      await supabase.from("whatsapp_sessions").update({
+      const _sessUpd: Record<string, unknown> = {
         last_message_at: _nowIso, last_outbound_at: _nowIso,
         last_outbound_body: (body || (mediaUrl ? "📎 ملف" : "")).slice(0, 200),
-      }).eq("phone", phone);
+      };
+      if (mediaUrl) {
+        const _ksaTom = new Date(Date.now() + 3 * 3600 * 1000); _ksaTom.setUTCDate(_ksaTom.getUTCDate() + 1);
+        _sessUpd.followup_due_date = _ksaTom.toISOString().slice(0, 10);
+        _sessUpd.followup_done = false;
+      }
+      await supabase.from("whatsapp_sessions").update(_sessUpd).eq("phone", phone);
       return new Response(JSON.stringify({ ok: true, twilio_sid: twilioSid }),
         { headers: jsonCors });
     } catch (e) {
@@ -5130,6 +5137,84 @@ Deno.serve(async (req) => {
       const { error } = await supabase.from("whatsapp_sessions").update({ label }).eq("phone", phone);
       if (error) throw new Error(error.message);
       return new Response(JSON.stringify({ ok: true, label }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // كرون: متابعة «اليوم الثاني» — رسالة واحدة لكل عميل أُرسل له برنامج/عرض، عند الساعة
+  // المحدّدة (KSA). يُستدعى من pg_cron كل ساعة؛ يُرسل فقط لو الساعة الحالية = المضبوطة.
+  if (url.searchParams.get("admin_action") === "run_followups") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: setRows } = await supabase.from("wa_settings").select("key, value")
+        .in("key", ["followup_hour_ksa", "followup_template_sid", "followup_enabled"]);
+      const sm: Record<string, unknown> = {};
+      for (const r of ((setRows || []) as Array<{ key: string; value: unknown }>)) sm[r.key] = r.value;
+      if (sm.followup_enabled === false) return new Response(JSON.stringify({ ok: true, skipped: "disabled" }), { headers: jsonCors });
+      const hour = typeof sm.followup_hour_ksa === "number" ? sm.followup_hour_ksa : 12;
+      const templateName = typeof sm.followup_template_sid === "string" ? sm.followup_template_sid.trim() : "";
+      const ksaNow = new Date(Date.now() + 3 * 3600 * 1000);
+      const force = url.searchParams.get("force") === "1";
+      if (!force && ksaNow.getUTCHours() !== hour) {
+        return new Response(JSON.stringify({ ok: true, skipped: "not_the_hour", ksaHour: ksaNow.getUTCHours(), hour }), { headers: jsonCors });
+      }
+      const ksaToday = ksaNow.toISOString().slice(0, 10);
+      const { data: due } = await supabase.from("whatsapp_sessions")
+        .select("phone, profile_name")
+        .lte("followup_due_date", ksaToday)
+        .eq("followup_done", false)
+        .not("followup_due_date", "is", null)
+        .limit(80);
+      let sent = 0, failed = 0;
+      for (const s of ((due || []) as Array<{ phone: string; profile_name: string | null }>)) {
+        const name = (s.profile_name || "").trim() || "أستاذي";
+        try {
+          if (templateName) {
+            await sendWhatsappTemplate(s.phone, templateName, { "1": name }, "ar");
+          } else {
+            await sendWhatsapp(s.phone, `طمّنّي ${name} 🌟 عسى البرنامج اللي أرسلناه لك عجبك، وإذا تبي أي تعديل أو عندك استفسار أنا حاضر لخدمتك.`);
+          }
+          await supabase.from("wa_admin_messages").insert({ customer_phone: s.phone, body: "🔔 متابعة تلقائية أُرسلت للعميل", sent_by: "طلال", sent_at: new Date().toISOString() });
+          sent++;
+        } catch (_e) { failed++; /* غالباً خارج نافذة 24س بلا قالب */ }
+        // علّمها done دائماً (نجاح أو فشل) لتفادي إعادة المحاولة كل ساعة.
+        await supabase.from("whatsapp_sessions").update({ followup_done: true }).eq("phone", s.phone);
+      }
+      return new Response(JSON.stringify({ ok: true, sent, failed, due: (due || []).length }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // قراءة إعدادات المتابعة (الساعة/التفعيل/اسم القالب).
+  if (url.searchParams.get("admin_action") === "followup_settings") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data } = await supabase.from("wa_settings").select("key, value")
+      .in("key", ["followup_hour_ksa", "followup_template_sid", "followup_enabled"]);
+    const sm: Record<string, unknown> = {};
+    for (const r of ((data || []) as Array<{ key: string; value: unknown }>)) sm[r.key] = r.value;
+    return new Response(JSON.stringify({
+      hour: typeof sm.followup_hour_ksa === "number" ? sm.followup_hour_ksa : 12,
+      enabled: sm.followup_enabled !== false,
+      template_name: typeof sm.followup_template_sid === "string" ? sm.followup_template_sid : "",
+    }), { headers: jsonCors });
+  }
+
+  // حفظ إعدادات المتابعة (أدمن فقط).
+  if (url.searchParams.get("admin_action") === "set_followup_settings") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const p = await req.json();
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const ups: Array<{ key: string; value: unknown }> = [];
+      if (p.hour != null) ups.push({ key: "followup_hour_ksa", value: Math.max(0, Math.min(23, parseInt(String(p.hour)) || 12)) });
+      if (typeof p.enabled === "boolean") ups.push({ key: "followup_enabled", value: p.enabled });
+      if (typeof p.template_name === "string") ups.push({ key: "followup_template_sid", value: p.template_name.trim() });
+      for (const u of ups) await supabase.from("wa_settings").upsert(u, { onConflict: "key" });
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }
