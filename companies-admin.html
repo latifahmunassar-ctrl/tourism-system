@@ -206,10 +206,12 @@ async function loadSecurity(){
     const countries=d.countries||[], log=d.log||[], devices=d.devices||[], users=d.users||[];
     const uStat={pending:'⏳ بانتظار موافقتك',active:'✅ مفعّلة',suspended:'⏸️ موقوفة'};
     const evMap={login_ok:'✅ دخول',login_fail:'⛔ كلمة خطأ',blocked_country:'🚫 دولة محظورة',geo_unknown:'❓ دولة غير معروفة'};
+    const uaHint=ua=>{ ua=(ua||'').toLowerCase(); const os=/iphone|ipad/.test(ua)?'📱 iPhone/iPad':/android/.test(ua)?'📱 Android':/windows/.test(ua)?'💻 Windows':/mac os|macintosh/.test(ua)?'💻 Mac':/linux/.test(ua)?'💻 Linux':'🖥️ جهاز'; const br=/edg/.test(ua)?'Edge':/(chrome|crios)/.test(ua)?'Chrome':/(firefox|fxios)/.test(ua)?'Firefox':/safari/.test(ua)?'Safari':''; return os+(br?' · '+br:''); };
     const devRow=v=>{
       const badge=v.approved?'<span style="color:var(--ok);font-weight:800">✅ موثّق</span>':'<span style="color:var(--warn);font-weight:800">⏳ بانتظار موافقتك</span>';
       const act=v.approved?`<button class="ac-btn no" onclick="removeDevice('${v.id}','${esc(v.label)}')">إلغاء التوثيق</button>`:`<button class="ac-btn ok" onclick="approveDevice('${v.id}')">✅ اعتماد</button> <button class="ac-btn no" onclick="removeDevice('${v.id}','${esc(v.label)}')">رفض</button>`;
-      return `<tr><td>${esc(v.label||'—')}</td><td>${badge}</td><td>${esc(v.last_country||'—')}</td><td style="white-space:nowrap">${esc((v.last_seen||'').slice(0,16).replace('T',' ')||'—')}</td><td>${act}</td></tr>`;
+      const info=`<div style="font-size:11px;color:var(--muted);margin-top:2px">${esc(uaHint(v.user_agent))}${v.last_ip?(' · '+esc(v.last_ip)):''}</div>`;
+      return `<tr><td><b>${esc(v.label||'—')}</b>${info}</td><td>${badge}</td><td>${esc(v.last_country||'—')}</td><td style="white-space:nowrap">${esc((v.last_seen||v.created_at||'').slice(0,16).replace('T',' ')||'—')}</td><td>${act}</td></tr>`;
     };
     const devTable=(arr,emptyMsg)=>arr.length?`<table class="rep-table"><thead><tr><th>الجهاز</th><th>الحالة</th><th>آخر دولة</th><th>آخر دخول</th><th></th></tr></thead><tbody>${arr.map(devRow).join('')}</tbody></table>`:`<div class="ac-empty">${emptyMsg}</div>`;
     const devTourism=devices.filter(v=>v.source!=='whatsapp');

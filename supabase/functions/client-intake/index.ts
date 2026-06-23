@@ -783,8 +783,14 @@ Deno.serve(async (req) => {
       // مصدر الطلب: tourism (افتراضي) أو whatsapp — للموافقة المنفصلة المُعلَّمة.
       const source = (["tourism", "whatsapp"].includes(String(b.source))) ? String(b.source) : "tourism";
       if (token.length < 16) return json({ error: "رمز الجهاز غير صالح" }, 400);
-      const { data: existing } = await supabase.from("trusted_devices").select("id, approved").eq("device_token", token).maybeSingle();
-      if (existing) return json({ ok: true, status: existing.approved ? "approved" : "pending" });
+      const { data: existing } = await supabase.from("trusted_devices").select("id, approved, label").eq("device_token", token).maybeSingle();
+      if (existing) {
+        // طلب لم يُعتمد بعد + وصل تعريف (اسم/رقم) → حدّث التسمية ليعرفها صاحب اللوحة.
+        if (!existing.approved && label && label !== "جهاز بدون اسم") {
+          try { await supabase.from("trusted_devices").update({ label }).eq("id", existing.id); } catch (_e) { /* */ }
+        }
+        return json({ ok: true, status: existing.approved ? "approved" : "pending" });
+      }
       const { error } = await supabase.from("trusted_devices").insert({ device_token: token, label, user_agent: uaStr, approved: false, source });
       if (error) return json({ error: error.message }, 500);
       return json({ ok: true, status: "pending" });
@@ -852,7 +858,7 @@ Deno.serve(async (req) => {
         supabase.from("security_settings").select("enforce_country, fail_open_geo").eq("id", 1).single(),
         supabase.from("security_allowed_countries").select("code, name_ar").order("name_ar"),
         supabase.from("auth_log").select("created_at, event, ip, country, country_allowed, success, detail").order("created_at", { ascending: false }).limit(100),
-        supabase.from("trusted_devices").select("id, label, approved, source, last_country, last_ip, last_seen, created_at").order("created_at", { ascending: false }).limit(100),
+        supabase.from("trusted_devices").select("id, label, approved, source, last_country, last_ip, last_seen, created_at, user_agent").order("created_at", { ascending: false }).limit(100),
       ]);
       // حسابات الموظفات + عدد مفاتيح كل واحدة
       const { data: usersRaw } = await supabase.from("app_users").select("id, name, phone, status, created_at, last_login_at").order("created_at", { ascending: false }).limit(200);

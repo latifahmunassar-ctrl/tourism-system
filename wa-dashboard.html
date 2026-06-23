@@ -666,6 +666,13 @@
         const r=await fetch(AUTH,{method:'POST',headers:{'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK},body:JSON.stringify({password,device_token:devTok(),source:'whatsapp'})});
         const d=await r.json();
         if(r.ok&&d.ok){ sessionStorage.setItem(SESS,'1'); localStorage.setItem('wa_gate_secret',password); inp.value=''; open_(); }
+        else if(d.device_pending){
+          err.textContent=d.error||'جهازك غير معتمد';
+          const who=prompt('عرّفي نفسك للإدارة عشان تعتمد جهازك (اسمك أو رقم جوالك):','');
+          if(who&&who.trim()){
+            try{ await fetch(INTAKE+'?admin_action=device_request',{method:'POST',headers:{'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK},body:JSON.stringify({device_token:devTok(),label:who.trim(),user_agent:navigator.userAgent,source:'whatsapp'})}); err.textContent='✅ أُرسل طلب توثيق جهازك باسم «'+who.trim()+'» — انتظري موافقة الإدارة ثم حاولي مجدداً.'; }catch(_){}
+          }
+        }
         else err.textContent=d.error||'كلمة سر غير صحيحة';
       }catch(e){ err.textContent='تعذّر الاتصال، حاولي مجدداً'; }
       finally{ btn.disabled=false; btn.textContent=ot; }
