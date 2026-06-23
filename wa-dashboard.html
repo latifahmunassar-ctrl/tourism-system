@@ -117,6 +117,10 @@
     body.perm-no-offers-mgmt .pay-upload-row,
     body.perm-no-offers-mgmt [data-pay-del],
     body.perm-no-offers-mgmt [data-pay-edit] { display: none !important; }
+    /* «المعاينة» وتحكّم الذكاء — للمالكة فقط؛ تُخفى عمّن لا يملك إدارة الذكاء
+       (لافتة وضع المعاينة + شارة/زر «👁️ معاينة» بكل محادثة). */
+    body.perm-no-ai #preview-banner,
+    body.perm-no-ai [data-action="toggle"] { display: none !important; }
 
     /* Per-staff conversation filter — admin only. Staff see their own
        conversations once we add scoping; for now this bar is hidden in
