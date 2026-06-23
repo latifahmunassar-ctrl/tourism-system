@@ -5113,7 +5113,7 @@ Deno.serve(async (req) => {
       const p = await req.json();
       const rawPhone = String(p.phone || "").trim();
       if (!rawPhone) return new Response(JSON.stringify({ error: "missing phone" }), { status: 400, headers: jsonCors });
-      const ALLOWED = ["URGENT", "FOLLOW_UP"];
+      const ALLOWED = ["URGENT", "FOLLOW_UP", "VIP", "PAYMENT", "CONFIRMED"];
       const label = (p.label == null || p.label === "") ? null
         : (ALLOWED.includes(String(p.label)) ? String(p.label) : "__invalid__");
       if (label === "__invalid__") return new Response(JSON.stringify({ error: "invalid label" }), { status: 400, headers: jsonCors });

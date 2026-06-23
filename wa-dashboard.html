@@ -1097,6 +1097,9 @@
         <span style="font-size:12px; color:var(--muted); font-weight:700;">🏷️ تصنيف:</span>
         <button type="button" class="conv-label-btn" data-label="URGENT" style="border:1px solid #fecaca; background:#fee2e2; color:#991b1b; border-radius:14px; padding:4px 12px; font-weight:800; font-size:12px; cursor:pointer;">🚨 عاجل</button>
         <button type="button" class="conv-label-btn" data-label="FOLLOW_UP" style="border:1px solid #fde68a; background:#fef3c7; color:#92400e; border-radius:14px; padding:4px 12px; font-weight:800; font-size:12px; cursor:pointer;">🔔 متابعة</button>
+        <button type="button" class="conv-label-btn" data-label="VIP" style="border:1px solid #e9d5ff; background:#f3e8ff; color:#6b21a8; border-radius:14px; padding:4px 12px; font-weight:800; font-size:12px; cursor:pointer;">⭐ VIP</button>
+        <button type="button" class="conv-label-btn" data-label="PAYMENT" style="border:1px solid #bfdbfe; background:#dbeafe; color:#1e40af; border-radius:14px; padding:4px 12px; font-weight:800; font-size:12px; cursor:pointer;">💳 مرحلة الدفع</button>
+        <button type="button" class="conv-label-btn" data-label="CONFIRMED" style="border:1px solid #bbf7d0; background:#dcfce7; color:#166534; border-radius:14px; padding:4px 12px; font-weight:800; font-size:12px; cursor:pointer;">✅ مؤكّد</button>
         <button type="button" class="conv-label-btn" data-label="" style="border:1px solid #e5e7eb; background:#f9fafb; color:#6b7280; border-radius:14px; padding:4px 12px; font-weight:700; font-size:12px; cursor:pointer;">✕ إزالة</button>
       </div>
       <div class="conv-body" id="conv-body">جاري التحميل…</div>
@@ -1347,7 +1350,13 @@
     // صلاحيات لكل موظف (مرآة لـ PERM_DEFAULTS في السيرفر). me=null يعني أدمن (كامل).
     const PERM_DEFAULTS = { view_proposals: false, send_messages: true, delete_messages: false, manage_offers: false, transfer_conversations: true, manage_ai: false };
     // تصنيفات يدوية ثابتة للمحادثة (تُعرَض كوسم + تُختار من رأس المحادثة).
-    const CONV_LABELS = { URGENT: { t: "🚨 عاجل", bg: "#fee2e2", c: "#991b1b" }, FOLLOW_UP: { t: "🔔 متابعة", bg: "#fef3c7", c: "#92400e" } };
+    const CONV_LABELS = {
+      URGENT:    { t: "🚨 عاجل",      bg: "#fee2e2", c: "#991b1b" },
+      FOLLOW_UP: { t: "🔔 متابعة",    bg: "#fef3c7", c: "#92400e" },
+      VIP:       { t: "⭐ VIP",        bg: "#f3e8ff", c: "#6b21a8" },
+      PAYMENT:   { t: "💳 مرحلة الدفع", bg: "#dbeafe", c: "#1e40af" },
+      CONFIRMED: { t: "✅ مؤكّد",      bg: "#dcfce7", c: "#166534" },
+    };
     function hasPerm(me, key) {
       if (!me) return true; // أدمن — صلاحية كاملة
       const p = (me && me.permissions) || {};
