@@ -77,6 +77,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const password = body?.password;
     const deviceToken = typeof body?.device_token === "string" ? body.device_token.trim() : "";
+    const source = typeof body?.source === "string" ? body.source.trim() : "";
     if (typeof password !== "string" || password.length === 0) {
       return json({ ok: false, error: "كلمة السر مطلوبة" }, 400);
     }
@@ -117,6 +118,20 @@ Deno.serve(async (req) => {
     if (enforce && !countryAllowed) {
       await logAttempt({ event: geoKnown ? "blocked_country" : "geo_unknown", ip, country: geo.code, country_allowed: false, success: false, user_agent: ua, detail: devNote });
       return json({ ok: false, error: "الدخول غير مسموح من موقعك الحالي. تواصلي مع الإدارة." }, 403);
+    }
+    // ⛔ إنفاذ توثيق الجهاز لداشبورد الواتساب: لا دخول إلا بجهاز معتمد (حتى لو كلمة السر صحيحة).
+    if (source === "whatsapp" && !deviceTrusted) {
+      // أنشئ طلب توثيق معلّق إن لم يوجد سجل لهذا الجهاز، ليظهر للإدارة في companies-admin.
+      if (!deviceRes?.data && deviceToken) {
+        try {
+          await supa.from("trusted_devices").insert({
+            device_token: deviceToken, label: "جهاز جديد (واتساب) — بانتظار التوثيق", user_agent: ua,
+            approved: false, source: "whatsapp", last_ip: ip, last_country: geo.code,
+          });
+        } catch (_e) { /* موجود مسبقاً */ }
+      }
+      await logAttempt({ event: "wa_device_unapproved", ip, country: geo.code, country_allowed: countryAllowed, success: false, user_agent: ua, detail: "device_pending" });
+      return json({ ok: false, error: "🔒 جهازك غير معتمد بعد. أُرسل طلب توثيق للإدارة تلقائيًا — انتظري الموافقة ثم حاولي مجدداً.", device_pending: true }, 403);
     }
     // نجاح (في وضع المراقبة قد تكون الدولة غير مدرجة — نسجّلها لتظهر في اللوحة)
     await logAttempt({ event: "login_ok", ip, country: geo.code, country_allowed: countryAllowed, success: true, user_agent: ua, detail: devNote });
