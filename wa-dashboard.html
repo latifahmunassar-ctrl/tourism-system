@@ -1093,6 +1093,12 @@
         </div>
         <button class="refresh-btn" id="conv-close">✕</button>
       </div>
+      <div id="conv-labels" style="display:flex; gap:6px; flex-wrap:wrap; padding:8px 16px 0; align-items:center;">
+        <span style="font-size:12px; color:var(--muted); font-weight:700;">🏷️ تصنيف:</span>
+        <button type="button" class="conv-label-btn" data-label="URGENT" style="border:1px solid #fecaca; background:#fee2e2; color:#991b1b; border-radius:14px; padding:4px 12px; font-weight:800; font-size:12px; cursor:pointer;">🚨 عاجل</button>
+        <button type="button" class="conv-label-btn" data-label="FOLLOW_UP" style="border:1px solid #fde68a; background:#fef3c7; color:#92400e; border-radius:14px; padding:4px 12px; font-weight:800; font-size:12px; cursor:pointer;">🔔 متابعة</button>
+        <button type="button" class="conv-label-btn" data-label="" style="border:1px solid #e5e7eb; background:#f9fafb; color:#6b7280; border-radius:14px; padding:4px 12px; font-weight:700; font-size:12px; cursor:pointer;">✕ إزالة</button>
+      </div>
       <div class="conv-body" id="conv-body">جاري التحميل…</div>
       <!-- Reply-preview bar: shows when admin clicked "↪️ رد" on a message -->
       <div id="reply-preview" class="reply-preview" style="display:none;">
@@ -1340,6 +1346,8 @@
     }
     // صلاحيات لكل موظف (مرآة لـ PERM_DEFAULTS في السيرفر). me=null يعني أدمن (كامل).
     const PERM_DEFAULTS = { view_proposals: false, send_messages: true, delete_messages: false, manage_offers: false, transfer_conversations: true, manage_ai: false };
+    // تصنيفات يدوية ثابتة للمحادثة (تُعرَض كوسم + تُختار من رأس المحادثة).
+    const CONV_LABELS = { URGENT: { t: "🚨 عاجل", bg: "#fee2e2", c: "#991b1b" }, FOLLOW_UP: { t: "🔔 متابعة", bg: "#fef3c7", c: "#92400e" } };
     function hasPerm(me, key) {
       if (!me) return true; // أدمن — صلاحية كاملة
       const p = (me && me.permissions) || {};
@@ -2506,6 +2514,11 @@
           : "";
         // Classification tags (from latest proposal joined onto conversation)
         const tags = [];
+        // تصنيف يدوي ثابت (عاجل/متابعة) — أول وسم ليبان بسرعة
+        if (c.label && CONV_LABELS[c.label]) {
+          const L = CONV_LABELS[c.label];
+          tags.push(`<span class="pill" style="background:${L.bg};color:${L.c};font-weight:800;">${L.t}</span>`);
+        }
         if (c.priority === "URGENT") tags.push(`<span class="pill urgent">URGENT 🚨</span>`);
         // Customer stage pill — أول وسم يظهر عشان يبيّن مرحلة العميل بسرعة
         if (c.customer_stage) {
@@ -2861,11 +2874,36 @@
         }
       } catch (_) { /* silent — next tick retries */ }
     }
+    function highlightConvLabel(label) {
+      document.querySelectorAll('.conv-label-btn').forEach(b => {
+        const active = (b.dataset.label || '') === (label || '');
+        b.style.outline = active && b.dataset.label ? '2px solid #0b5d4e' : 'none';
+        b.style.opacity = (label && b.dataset.label && !active) ? '0.5' : '1';
+      });
+    }
+    async function setConvLabel(label) {
+      if (!convPhone) return;
+      try {
+        const res = await fetch(BASE + "?admin_action=set_conversation_label", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: convPhone, label: label || null }),
+        });
+        const d = await res.json();
+        if (!res.ok || d.error) throw new Error(d.error || ("HTTP " + res.status));
+        highlightConvLabel(label || '');
+        const c = conversationsCache.find(x => x.phone === convPhone); if (c) c.label = label || null;
+        refresh();   // يحدّث وسم القائمة
+      } catch (e) { alert("تعذّر التصنيف: " + (e.message || e)); }
+    }
+    document.querySelectorAll('.conv-label-btn').forEach(b =>
+      b.addEventListener('click', () => setConvLabel(b.dataset.label)));
     async function openConversation(phone, name) {
       convPhone = phone;
       $("conv-title").textContent = name;
       $("conv-sub").textContent = fmtPhone(phone);
       $("conv-overlay").style.display = "grid";
+      highlightConvLabel((conversationsCache.find(c => c.phone === phone) || {}).label || '');
       $("conv-input").value = "";
       // أزرار العروض السريعة — تُبنى من المكتبة (تُحمّل أول مرة)
       if (offersLoaded) buildOfferQuickbar(); else loadOffers();

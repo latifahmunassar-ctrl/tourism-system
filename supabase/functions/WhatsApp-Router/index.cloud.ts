@@ -3281,7 +3281,7 @@ Deno.serve(async (req) => {
 
       let sessionsQuery = supabase
         .from("whatsapp_sessions")
-        .select("phone, profile_name, ai_enabled, last_message_at, last_outbound_at, last_outbound_body, last_opened_at, destination, assigned_staff_phone, assigned_at, assigned_by, customer_stage")
+        .select("phone, profile_name, ai_enabled, last_message_at, last_outbound_at, last_outbound_body, last_opened_at, destination, assigned_staff_phone, assigned_at, assigned_by, customer_stage, label")
         .gte("last_message_at", sessionsSince)
         .order("last_message_at", { ascending: false })
         .limit(sessionsLimit);
@@ -5103,6 +5103,28 @@ Deno.serve(async (req) => {
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }),
         { status: 500, headers: { ...JSON_HEADERS, ...corsHeaders } });
+    }
+  }
+
+  // تصنيف يدوي ثابت للمحادثة (عاجل/متابعة). label=null يزيله. أي موظف مصرّح له بالإرسال.
+  if (url.searchParams.get("admin_action") === "set_conversation_label") {
+    { const g = await requirePerm(req, "send_messages"); if (g) return g; }
+    try {
+      const p = await req.json();
+      const rawPhone = String(p.phone || "").trim();
+      if (!rawPhone) return new Response(JSON.stringify({ error: "missing phone" }), { status: 400, headers: jsonCors });
+      const ALLOWED = ["URGENT", "FOLLOW_UP"];
+      const label = (p.label == null || p.label === "") ? null
+        : (ALLOWED.includes(String(p.label)) ? String(p.label) : "__invalid__");
+      if (label === "__invalid__") return new Response(JSON.stringify({ error: "invalid label" }), { status: 400, headers: jsonCors });
+      const digits = rawPhone.replace(/^whatsapp:/, "").replace(/^\+/, "").replace(/^00/, "").replace(/[^0-9]/g, "");
+      const phone = `whatsapp:+${digits}`;
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { error } = await supabase.from("whatsapp_sessions").update({ label }).eq("phone", phone);
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true, label }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }
   }
 
