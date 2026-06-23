@@ -124,6 +124,11 @@
     body.staff-mode .admin-only-filter { display: none; }
     /* منفذ المساعد السياحي — للأدمن فقط (مخفي عن الموظف والمراقب) */
     body.staff-mode .ts-admin-link, body.monitor-mode .ts-admin-link { display: none !important; }
+    /* جهات الاتصال + إدارة المستخدمين — للأدمن فقط (بيانات حساسة: أرقام العملاء وتصديرهم) */
+    body.staff-mode [data-tab="contacts"], body.monitor-mode [data-tab="contacts"],
+    body.staff-mode [data-tab="users"], body.monitor-mode [data-tab="users"] { display: none !important; }
+    body.staff-mode section.contacts-section, body.monitor-mode section.contacts-section,
+    body.staff-mode section.users-section, body.monitor-mode section.users-section { display: none !important; }
     body.staff-mode .last-updated::before {
       content: "👤 وضع الموظفين · ";
       color: var(--accent); font-weight: 800;

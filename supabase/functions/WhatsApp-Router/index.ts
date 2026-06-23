@@ -3585,7 +3585,8 @@ Deno.serve(async (req) => {
   // latest non-null customer_type from proposals. Newest activity
   // first, capped at 2000.
   if (url.searchParams.get("admin_action") === "list_contacts") {
-    if (!(await checkAuthOrSession(req))) return unauthorized();
+    // أدمن فقط — قائمة العملاء وتصديرها بيانات حساسة، ممنوعة على الموظفين.
+    if (!checkAuth(req)) return unauthorized();
     try {
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
