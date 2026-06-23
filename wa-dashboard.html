@@ -1633,6 +1633,10 @@
 
     function renderStaff(arr) {
       staffList = arr;
+      // لا تُعِد بناء القائمة أثناء كتابة المالكة في فورمة الإضافة (التحديث الدوري
+      // كان يمسح الكتابة ويُفقد التركيز فتصير الصفحة «غير مستقرة»).
+      const _ae = document.activeElement;
+      if (_ae && _ae.closest && _ae.closest("#staff-form")) { return; }
       // If the staff we're filtering by got deleted, drop the filter.
       if (filterStaff && filterStaff !== "" && filterStaff !== "__unassigned__"
           && !staffList.find(s => s.phone === filterStaff)) {
