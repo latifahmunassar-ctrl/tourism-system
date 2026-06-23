@@ -678,7 +678,13 @@
         const start=await wp({action:'auth_start'}); if(!start.options) throw new Error(start.error||'تعذّر');
         const resp=await lib.startAuthentication({optionsJSON:start.options});
         const fin=await wp({action:'auth_finish',challengeId:start.challengeId,response:resp});
-        if(fin.ok){ sessionStorage.setItem(SESS,'1'); if(fin.admin_secret) localStorage.setItem('wa_gate_secret',fin.admin_secret); open_(); }
+        if(fin.ok){
+          if(fin.admin_secret) localStorage.setItem('wa_gate_secret',fin.admin_secret);
+          // ⛔ إنفاذ موافقة الجهاز حتى مع البصمة — مرة واحدة فقط (الجهاز المعتمد يدخل دائماً بعدها).
+          let dev=null; try{ const dr=await fetch(INTAKE+'?admin_action=device_request',{method:'POST',headers:{'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK},body:JSON.stringify({device_token:devTok(),label:'جهاز (بصمة)',user_agent:navigator.userAgent,source:'whatsapp'})}); dev=await dr.json(); }catch(_){}
+          if(dev&&dev.ok&&dev.status==='approved'){ sessionStorage.setItem(SESS,'1'); open_(); }
+          else { err.textContent='🔒 جهازك غير معتمد بعد. أُرسل طلب توثيق للإدارة — انتظري الموافقة ثم ادخلي بالبصمة مجدداً.'; }
+        }
         else throw new Error(fin.error||'فشل الدخول بالبصمة');
       }catch(e){ err.textContent=(e&&e.name==='NotAllowedError')?'أُلغيت البصمة':(e.message||'تعذّر'); }
       finally{ btn.disabled=false; btn.textContent=ot; }
