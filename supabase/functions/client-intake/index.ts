@@ -719,8 +719,10 @@ Deno.serve(async (req) => {
             sent_by: String(b.sent_by || "").trim() || "النظام", sent_at: new Date().toISOString(),
             media_id: upJson.id, media_mime: "application/pdf", media_filename: filename,
           });
+          // last_message_at كذلك → ترتفع المحادثة لأعلى قائمة داشبورد الواتساب (أسلوب واتساب).
+          const _ts = new Date().toISOString();
           await supabase.from("whatsapp_sessions").update({
-            last_outbound_at: new Date().toISOString(), last_outbound_body: "📎 ملف البرنامج (PDF)",
+            last_message_at: _ts, last_outbound_at: _ts, last_outbound_body: "📎 ملف البرنامج (PDF)",
           }).eq("phone", customerPhone);
         } catch (_) { /* best-effort */ }
         return json({ ok: true, message_id: sendJson?.messages?.[0]?.id || null });

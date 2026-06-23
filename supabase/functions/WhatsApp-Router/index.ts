@@ -4259,6 +4259,12 @@ Deno.serve(async (req) => {
         body: (body || (mediaUrl ? `📎 ${mediaUrl}` : "")).slice(0, 2000),
         sent_by: sentBy,
       });
+      // نرفع المحادثة لأعلى القائمة (أسلوب واتساب): أي إرسال يحدّث last_message_at.
+      const _nowIso = new Date().toISOString();
+      await supabase.from("whatsapp_sessions").update({
+        last_message_at: _nowIso, last_outbound_at: _nowIso,
+        last_outbound_body: (body || (mediaUrl ? "📎 ملف" : "")).slice(0, 200),
+      }).eq("phone", phone);
       return new Response(JSON.stringify({ ok: true, twilio_sid: twilioSid }),
         { headers: jsonCors });
     } catch (e) {
