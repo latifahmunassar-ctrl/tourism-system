@@ -1649,7 +1649,19 @@ function bfAddCity(city, nights){
     <div class="bf-nights"><button type="button">−</button><input class="bf-n" type="number" min="1" max="30" value="${nights}"><button type="button">+</button></div>
     <button type="button" class="bf-delc">×</button>`;
   document.getElementById('bf-cityRows').appendChild(div);
-  if (city) div.querySelector('.bf-city').value = city;
+  if (city) {
+    const sel = div.querySelector('.bf-city');
+    sel.value = city;
+    // المدينة قد تأتي بصيغة موسّعة تتضمّن المنطقة («صلاله في وسط المدينه») بينما
+    // قائمة الفورم فيها الاسم المجرّد («صلالة») فقط → القيمة لا تُطابق أي خيار
+    // فيبقى الحقل فاضياً ولا يُمكن التعديل. نطابق على أقرب خيار بالتطبيع.
+    if (sel.value !== city) {
+      const norm = s => String(s||'').replace(/[إأآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[()،,.\-_]/g,'').replace(/\s+/g,'').toLowerCase();
+      const c = norm(city);
+      const opt = [...sel.options].find(o => o.value && (c.includes(norm(o.value)) || norm(o.value).includes(c)));
+      if (opt) sel.value = opt.value;
+    }
+  }
   const inp = div.querySelector('.bf-n');
   const btns = div.querySelectorAll('.bf-nights button');
   btns[0].onclick = ()=>{ inp.value = Math.max(1,(+inp.value||0)-1); bfSum(); };
