@@ -4579,7 +4579,14 @@
       if (isManual) refreshBtn.disabled = true;
       try {
         const res = await fetch(buildDashboardUrl(), { headers: { Authorization: "Bearer " + token } });
-        if (res.status === 401) { showAuth("التوكن خطأ"); return; }
+        // 401 لحظي (غالباً إعادة تشغيل الوظيفة لحظة النشر) ما يطرد الجلسة فوراً —
+        // نتسامح حتى ٣ مرات متتالية قبل طلب تسجيل الدخول، فتبقى جلسة الأدمن مفتوحة.
+        if (res.status === 401) {
+          window.__auth401 = (window.__auth401 || 0) + 1;
+          if (window.__auth401 >= 3) { window.__auth401 = 0; showAuth("التوكن خطأ"); return; }
+          return;
+        }
+        window.__auth401 = 0;
         if (!res.ok) throw new Error("HTTP " + res.status);
         const data = await res.json();
         me = data.me || null;
