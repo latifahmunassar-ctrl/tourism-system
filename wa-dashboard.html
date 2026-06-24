@@ -1302,8 +1302,8 @@
 
       <!-- Admin form -->
       <div id="auth-admin-mode" style="display:none;">
-        <p style="margin:0 0 8px; font-size:12px; color:var(--muted);">الصق LEGACY_ANON_JWT</p>
-        <input id="auth-input" type="password" placeholder="eyJhbGc..." autocomplete="off" />
+        <p style="margin:0 0 8px; font-size:12px; color:var(--muted);">أدخلي كلمة سر الإدمن</p>
+        <input id="auth-input" type="password" placeholder="كلمة سر الإدمن" autocomplete="current-password" />
         <button id="auth-submit">دخول الإدمن</button>
         <div style="text-align:center; margin-top:10px;">
           <a href="#" class="auth-back" style="font-size:12px;">↩️ رجوع</a>
@@ -1379,9 +1379,15 @@
       if (filterCustomerPhone) params.set("customer_phone", filterCustomerPhone);
       return BASE + "?" + params.toString();
     }
-    const STORAGE_KEY = "alezz_dashboard_token";
+    // ⚠️ نسخة v2: تبديل الاسم يمسح كل الجلسات القديمة المعلّقة بصلاحية إدمن
+    // (من الدخول التلقائي السابق) ويُجبر الجميع على الدخول من شاشة الأقسام.
+    const STORAGE_KEY = "alezz_dashboard_token_v2";
     const ROLE_KEY = "alezz_dashboard_role";
     const USERNAME_KEY = "alezz_dashboard_username";
+    // توكن الإدمن الكامل (= legacy anon JWT). يُمنح فقط بعد إدخال كلمة سر
+    // الإدمن في شاشة الأقسام. لتغيير كلمة السر بدّلي قيمة ADMIN_PASSWORD.
+    const ADMIN_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mb3R2YWNzemxtcnF4emZqbXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2MjI5NTYsImV4cCI6MjA5MzE5ODk1Nn0.1nQmxW63BFZSK-cn4fzh8tYM7a2JO10AQ0RGQ5bcdYo";
+    const ADMIN_PASSWORD = "AlezzAdmin@2026";
 
     function applyRole(role) {
       document.body.classList.remove("staff-mode", "monitor-mode");
@@ -1483,7 +1489,7 @@
         const res = await fetch(BASE + "?admin_action=staff_login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password, remember }),
+          body: JSON.stringify({ username, password, remember, device_token: localStorage.getItem("alezz_wa_device_token") || "" }),
         });
         const data = await res.json();
         if (!res.ok || !data.token) {
@@ -1531,7 +1537,7 @@
       $("auth-staff-mode").style.display = "none";
       $("auth-admin-mode").style.display = "";
       $("auth-title").textContent = "🛡️ دخول الإدمن";
-      $("auth-help").textContent = "الصق LEGACY_ANON_JWT للوصول الكامل.";
+      $("auth-help").textContent = "أدخلي كلمة سر الإدمن للوصول الكامل.";
       authError.textContent = "";
       setTimeout(() => $("auth-input").focus(), 60);
     }
@@ -1608,11 +1614,14 @@
       a.addEventListener("click", (e) => { e.preventDefault(); showAuthPicker(); }));
 
     authSubmit.addEventListener("click", () => {
-      const _admin_t_ = authInput.value.replace(/\s+/g, "");
-      if (!_admin_t_) return;
-      setSession(_admin_t_, "admin");
+      const pw = authInput.value;
+      if (!pw) return;
+      if (pw !== ADMIN_PASSWORD) { authError.textContent = "كلمة سر الإدمن غير صحيحة"; return; }
+      authInput.value = "";
+      setSession(ADMIN_TOKEN, "admin");
       hideAuth();
       refresh();
+      startAutoRefresh();
     });
     authInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") authSubmit.click();
@@ -4650,13 +4659,18 @@
       refresh();
     });
 
-    // دخول تلقائي بصلاحية الإدمن بدون لصق توكن (طلب صريح من المالك).
-    // ⚠️ هذا التوكن مضمّن داخل صفحة عامة على GitHub Pages — أي شخص معه
-    // رابط الداشبورد يحصل على وصول إدمن كامل. لإعادة تفعيل بوابة التوكن،
-    // احذف هذا السطر وأرجع إلى `if (!token) showAuth();`.
-    const DEFAULT_ADMIN_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mb3R2YWNzemxtcnF4emZqbXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2MjI5NTYsImV4cCI6MjA5MzE5ODk1Nn0.1nQmxW63BFZSK-cn4fzh8tYM7a2JO10AQ0RGQ5bcdYo";
-    if (!token) setSession(DEFAULT_ADMIN_TOKEN, localStorage.getItem(ROLE_KEY) || "admin");
-    refresh(); startAutoRefresh();
+    // التوكن الإداري الكامل (= legacy anon JWT). يُمنح فقط بعد دخول الإدمن
+    // بكلمة السر من شاشة الأقسام — لا يُمنح تلقائياً بعد الآن. المبيعات/المراقب
+    // يدخلون باسم مستخدم + كلمة مرور خاصة فيستلمون توكن موظف محدود الصلاحيات.
+    // ⚠️ التوكن مضمّن بصفحة عامة (GitHub Pages)؛ كلمة سر الإدمن هنا فصلٌ بين
+    // الأدوار داخل الجلسة الموثوقة، وليست الحصن الوحيد (راجع بوابة الجهاز).
+    if (!token) {
+      // showAuth بعد DOMContentLoaded ليفوز على defensiveBoot الذي يخفي
+      // auth-overlay عند التحميل (وإلا تختفي شاشة الدخول فوراً).
+      if (document.readyState === "loading")
+        document.addEventListener("DOMContentLoaded", () => showAuth());
+      else showAuth();
+    } else { refresh(); startAutoRefresh(); }
   </script>
 <div id="scrollNav" style="position:fixed; bottom:20px; left:16px; z-index:900; display:flex; flex-direction:column; gap:8px;">
   <button type="button" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="أعلى الصفحة" aria-label="أعلى الصفحة" style="width:44px;height:44px;border-radius:50%;border:none;background:#0b5d4e;color:#fff;font-size:22px;font-weight:900;line-height:1;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.28);">↑</button>

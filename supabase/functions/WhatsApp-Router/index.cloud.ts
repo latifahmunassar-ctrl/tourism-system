@@ -682,13 +682,6 @@ async function sendWhatsapp(to: string, body: string, mediaUrl?: string): Promis
   const graphTo = internalToGraph(to);
   const endpoint = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`;
 
-  // TODO(media): الوسائط الصادرة معطّلة في نسخة Cloud API. Twilio كان يقبل
-  // MediaUrl كرابط مباشر؛ Graph يحتاج type:"image"/"document" مع link أو
-  // media id مرفوع مسبقاً. حتى نهاجر المرفقات، نتجاهل mediaUrl ونرسل النص فقط.
-  if (mediaUrl) {
-    console.warn("TODO(media): outbound media not yet supported on Cloud API — sending text only to", to);
-  }
-
   // POST نصّي واحد لـ Graph. يرجّع messages[0].id أو null عند الفشل (مع لوق).
   const postOne = async (chunkBody: string): Promise<string | null> => {
     if (!chunkBody) return null;   // Graph يرفض رسالة نصية فارغة.
@@ -716,6 +709,47 @@ async function sendWhatsapp(to: string, body: string, mediaUrl?: string): Promis
       return typeof id === "string" ? id : null;
     } catch { return null; }
   };
+
+  // ── إرسال الوسائط (PDF/صورة) عبر Graph ───────────────────────────────────
+  // كان معطّلاً بعد الهجرة من Twilio فالملف ما يصل العميل (يُرسَل نصّ فقط، ولو
+  // بلا نص لا شيء). الـbucket عام (getPublicUrl) فـMeta يقدر يجيب الرابط.
+  // PDF/غير الصور → document (مع اسم ملف)، الصور → image، وcaption لو فيه نص قصير.
+  if (mediaUrl) {
+    const cleanUrl = mediaUrl.split("?")[0];
+    const isImage = /\.(jpe?g|png|webp|gif)$/i.test(cleanUrl);
+    const mediaType = isImage ? "image" : "document";
+    const mediaObj: Record<string, unknown> = { link: mediaUrl };
+    const caption = (body && body.trim() && body.length <= 1024) ? body.trim() : "";
+    if (caption) mediaObj.caption = caption;
+    if (!isImage) {
+      const fname = decodeURIComponent(cleanUrl.split("/").pop() || "").trim();
+      mediaObj.filename = fname || "برنامج.pdf";
+    }
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", to: graphTo, type: mediaType, [mediaType]: mediaObj }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("Cloud API media send failed", to, res.status, errText.slice(0, 400));
+      return null;
+    }
+    let mediaId: string | null = null;
+    try {
+      const data = await res.json();
+      const id = data?.messages?.[0]?.id;
+      mediaId = typeof id === "string" ? id : null;
+    } catch { /* ignore */ }
+    // نصّ أطول من حدّ الـcaption (1024) → أرسله رسائل نصية بعد الملف.
+    if (body && body.length > 1024) {
+      for (const chunk of splitForWhatsApp(body)) {
+        await postOne(chunk);
+        await new Promise(r => setTimeout(r, 600));
+      }
+    }
+    return mediaId;
+  }
 
   const chunks = splitForWhatsApp(body);
   // لا نص للإرسال (كان رسالة وسائط بحتة في Twilio) — لا شيء يُرسَل بعد.
@@ -3534,6 +3568,23 @@ Deno.serve(async (req) => {
       if (!ok) {
         return new Response(JSON.stringify({ error: "invalid credentials" }),
           { status: 401, headers: jsonCors });
+      }
+      // 🔗 ربط الجهاز بالموظف: لا يدخل موظف من جهاز مربوط بموظف آخر (يمنع الانتحال
+      //    حتى لو عرف كلمة سر زميله). أول دخول من جهاز معتمد يربطه بهذا الموظف.
+      const deviceToken = String(p.device_token || "").trim();
+      if (deviceToken) {
+        const { data: dev } = await supabase.from("trusted_devices")
+          .select("id, staff_phone").eq("device_token", deviceToken).maybeSingle();
+        const drow = dev as { id: string; staff_phone: string | null } | null;
+        if (drow) {
+          if (drow.staff_phone && drow.staff_phone !== row.phone) {
+            return new Response(JSON.stringify({ error: "🔒 هذا الجهاز مخصّص لموظفة أخرى. تواصلي مع الإدارة." }),
+              { status: 403, headers: jsonCors });
+          }
+          if (!drow.staff_phone) {
+            try { await supabase.from("trusted_devices").update({ staff_phone: row.phone }).eq("id", drow.id); } catch (_e) { /* best-effort */ }
+          }
+        }
       }
       // "تذكرني" (remember=true) → 30-day session; default 24h. Either
       // way checkAuthOrSession re-verifies the staff is still active on
