@@ -3577,21 +3577,33 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: "invalid credentials" }),
           { status: 401, headers: jsonCors });
       }
-      // 🔗 ربط الجهاز بالموظف: لا يدخل موظف من جهاز مربوط بموظف آخر (يمنع الانتحال
-      //    حتى لو عرف كلمة سر زميله). أول دخول من جهاز معتمد يربطه بهذا الموظف.
+      // 🔒 اعتماد الجهاز + 🔗 ربطه بالموظف: لا دخول إلا بجهاز معتمد، ولا يدخل موظف
+      //    من جهاز مربوط بموظف آخر (يمنع الانتحال حتى لو عرف كلمة سر زميله). أول
+      //    دخول من جهاز معتمد يربطه بهذا الموظف.
       const deviceToken = String(p.device_token || "").trim();
       if (deviceToken) {
         const { data: dev } = await supabase.from("trusted_devices")
-          .select("id, staff_phone").eq("device_token", deviceToken).maybeSingle();
-        const drow = dev as { id: string; staff_phone: string | null } | null;
-        if (drow) {
-          if (drow.staff_phone && drow.staff_phone !== row.phone) {
-            return new Response(JSON.stringify({ error: "🔒 هذا الجهاز مخصّص لموظفة أخرى. تواصلي مع الإدارة." }),
-              { status: 403, headers: jsonCors });
+          .select("id, staff_phone, approved").eq("device_token", deviceToken).maybeSingle();
+        const drow = dev as { id: string; staff_phone: string | null; approved: boolean } | null;
+        // غير معتمد (أو غير موجود) → أنشئ طلب توثيق وارفض حتى موافقة الإدارة.
+        if (!drow || !drow.approved) {
+          if (!drow) {
+            try {
+              await supabase.from("trusted_devices").insert({
+                device_token: deviceToken, label: "جهاز جديد (واتساب) — بانتظار التوثيق",
+                approved: false, source: "whatsapp",
+              });
+            } catch (_e) { /* موجود مسبقاً */ }
           }
-          if (!drow.staff_phone) {
-            try { await supabase.from("trusted_devices").update({ staff_phone: row.phone }).eq("id", drow.id); } catch (_e) { /* best-effort */ }
-          }
+          return new Response(JSON.stringify({ error: "🔒 جهازك غير معتمد بعد. أُرسل طلب توثيق للإدارة — انتظري الموافقة ثم حاولي مجدداً.", device_pending: true }),
+            { status: 403, headers: jsonCors });
+        }
+        if (drow.staff_phone && drow.staff_phone !== row.phone) {
+          return new Response(JSON.stringify({ error: "🔒 هذا الجهاز مخصّص لموظفة أخرى. تواصلي مع الإدارة." }),
+            { status: 403, headers: jsonCors });
+        }
+        if (!drow.staff_phone) {
+          try { await supabase.from("trusted_devices").update({ staff_phone: row.phone }).eq("id", drow.id); } catch (_e) { /* best-effort */ }
         }
       }
       // "تذكرني" (remember=true) → 30-day session; default 24h. Either

@@ -725,7 +725,11 @@
         else alert(d.error||'تعذّر إرسال الطلب');
       }catch(_){ alert('تعذّر الاتصال، حاولي مجدداً.'); }
     };
-    if(sessionStorage.getItem(SESS)==='1') open_(); else show_();
+    // 🚪 ألغينا البوابة المشتركة: نتجاوزها دائماً فيظهر «مُنتقي الدور» (أدمن/مبيعات/
+    //    مراقب) مباشرةً. الحماية انتقلت لدخول الموظف (اعتماد الجهاز + الربط) + دخول
+    //    الأدمن الخاص. نضمن توليد رمز الجهاز هنا ليصل مع تسجيل الدخول.
+    try{ devTok(); }catch(_){}
+    open_();
     document.getElementById('waGateInput')&&document.getElementById('waGateInput').addEventListener('keydown',e=>{ if(e.key==='Enter') waGateLogin(); });
   })();
   </script>

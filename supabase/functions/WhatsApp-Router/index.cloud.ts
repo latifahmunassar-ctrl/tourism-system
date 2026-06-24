@@ -671,11 +671,17 @@ function splitForWhatsApp(text: string, maxLen = 1500): string[] {
   return chunks;
 }
 
+// آخر سبب فشل إرسال (نص أو وسائط) من Graph — يقرأه send_admin_message ليُظهر
+// للموظفة سبب عدم وصول الرسالة/الملف بدل «تم» الكاذبة. أفضل-جهد (قد يُداس عند
+// إرسالين متزامنين) لكنه كافٍ للتشخيص؛ نجاح/فشل الإرسال نفسه يُحدَّد من القيمة المُعادة.
+let lastWhatsappError = "";
 async function sendWhatsapp(to: string, body: string, mediaUrl?: string): Promise<string | null> {
+  lastWhatsappError = "";
   const token = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
   const phoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
   if (!token || !phoneNumberId) {
     console.warn("Cloud API credentials missing — would have sent to", to, ":", body);
+    lastWhatsappError = "Cloud API credentials missing (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID)";
     return null;
   }
   // ترجمة الحدّ الصادر: التمثيل الداخلي "whatsapp:+968…" → "968…" لـ Graph.
@@ -701,6 +707,7 @@ async function sendWhatsapp(to: string, body: string, mediaUrl?: string): Promis
     if (!res.ok) {
       const errText = await res.text();
       console.error("Cloud API send failed", to, res.status, errText.slice(0, 400));
+      lastWhatsappError = `text ${res.status}: ${errText.slice(0, 300)}`;
       return null;
     }
     try {
@@ -733,6 +740,7 @@ async function sendWhatsapp(to: string, body: string, mediaUrl?: string): Promis
     if (!res.ok) {
       const errText = await res.text();
       console.error("Cloud API media send failed", to, res.status, errText.slice(0, 400));
+      lastWhatsappError = `media ${res.status}: ${errText.slice(0, 300)}`;
       return null;
     }
     let mediaId: string | null = null;
@@ -3569,21 +3577,33 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: "invalid credentials" }),
           { status: 401, headers: jsonCors });
       }
-      // 🔗 ربط الجهاز بالموظف: لا يدخل موظف من جهاز مربوط بموظف آخر (يمنع الانتحال
-      //    حتى لو عرف كلمة سر زميله). أول دخول من جهاز معتمد يربطه بهذا الموظف.
+      // 🔒 اعتماد الجهاز + 🔗 ربطه بالموظف: لا دخول إلا بجهاز معتمد، ولا يدخل موظف
+      //    من جهاز مربوط بموظف آخر (يمنع الانتحال حتى لو عرف كلمة سر زميله). أول
+      //    دخول من جهاز معتمد يربطه بهذا الموظف.
       const deviceToken = String(p.device_token || "").trim();
       if (deviceToken) {
         const { data: dev } = await supabase.from("trusted_devices")
-          .select("id, staff_phone").eq("device_token", deviceToken).maybeSingle();
-        const drow = dev as { id: string; staff_phone: string | null } | null;
-        if (drow) {
-          if (drow.staff_phone && drow.staff_phone !== row.phone) {
-            return new Response(JSON.stringify({ error: "🔒 هذا الجهاز مخصّص لموظفة أخرى. تواصلي مع الإدارة." }),
-              { status: 403, headers: jsonCors });
+          .select("id, staff_phone, approved").eq("device_token", deviceToken).maybeSingle();
+        const drow = dev as { id: string; staff_phone: string | null; approved: boolean } | null;
+        // غير معتمد (أو غير موجود) → أنشئ طلب توثيق وارفض حتى موافقة الإدارة.
+        if (!drow || !drow.approved) {
+          if (!drow) {
+            try {
+              await supabase.from("trusted_devices").insert({
+                device_token: deviceToken, label: "جهاز جديد (واتساب) — بانتظار التوثيق",
+                approved: false, source: "whatsapp",
+              });
+            } catch (_e) { /* موجود مسبقاً */ }
           }
-          if (!drow.staff_phone) {
-            try { await supabase.from("trusted_devices").update({ staff_phone: row.phone }).eq("id", drow.id); } catch (_e) { /* best-effort */ }
-          }
+          return new Response(JSON.stringify({ error: "🔒 جهازك غير معتمد بعد. أُرسل طلب توثيق للإدارة — انتظري الموافقة ثم حاولي مجدداً.", device_pending: true }),
+            { status: 403, headers: jsonCors });
+        }
+        if (drow.staff_phone && drow.staff_phone !== row.phone) {
+          return new Response(JSON.stringify({ error: "🔒 هذا الجهاز مخصّص لموظفة أخرى. تواصلي مع الإدارة." }),
+            { status: 403, headers: jsonCors });
+        }
+        if (!drow.staff_phone) {
+          try { await supabase.from("trusted_devices").update({ staff_phone: row.phone }).eq("id", drow.id); } catch (_e) { /* best-effort */ }
         }
       }
       // "تذكرني" (remember=true) → 30-day session; default 24h. Either
@@ -4359,6 +4379,19 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
       const twilioSid = await sendCustomerReply(supabase, phone, body, mediaUrl || undefined);
+      // فشل الإرسال (Graph رفض) → القيمة null. لا نُرجِع «تم» كاذبة: نخزّن السبب
+      // الفعلي ونُعيده للداشبورد حتى تعرف الموظفة لماذا لم يصل الملف/الرسالة
+      // (غالباً: مرّ أكثر من ٢٤ ساعة على آخر رسالة من العميل → يلزم قالب معتمد).
+      if (!twilioSid) {
+        const reason = lastWhatsappError || "سبب غير معروف (لم يرجّع Meta معرّف رسالة)";
+        await supabase.from("wa_admin_messages").insert({
+          customer_phone: phone,
+          body: `❌ تعذّر الإرسال: ${reason}`.slice(0, 2000),
+          sent_by: sentBy,
+        }).catch(() => {});
+        return new Response(JSON.stringify({ error: "send_failed", detail: reason }),
+          { status: 502, headers: jsonCors });
+      }
       await supabase.from("wa_admin_messages").insert({
         twilio_sid: twilioSid,
         customer_phone: phone,
