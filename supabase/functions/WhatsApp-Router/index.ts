@@ -4436,6 +4436,16 @@ Deno.serve(async (req) => {
         _sessUpd.followup_due_date = _ksaTom.toISOString().slice(0, 10);
         _sessUpd.followup_done = false;
       }
+      // 🏷️ إسناد تلقائي: لو ردّت موظفة (مو الأدمن) على محادثة غير مُسنَدة → تُسنَد لها
+      //    تلقائياً فيظهر اسمها كـ«ليبل» على المحادثة (أول من يرد يملكها).
+      if (callerStaff && callerStaff.phone) {
+        const { data: _cur } = await supabase.from("whatsapp_sessions")
+          .select("assigned_staff_phone").eq("phone", phone).maybeSingle();
+        if (!(_cur as { assigned_staff_phone?: string | null } | null)?.assigned_staff_phone) {
+          _sessUpd.assigned_staff_phone = callerStaff.phone;
+          _sessUpd.assigned_by = "auto";
+        }
+      }
       await supabase.from("whatsapp_sessions").update(_sessUpd).eq("phone", phone);
       return new Response(JSON.stringify({ ok: true, twilio_sid: twilioSid }),
         { headers: jsonCors });
