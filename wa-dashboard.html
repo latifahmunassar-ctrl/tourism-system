@@ -1388,10 +1388,8 @@
     const STORAGE_KEY = "alezz_dashboard_token_v2";
     const ROLE_KEY = "alezz_dashboard_role";
     const USERNAME_KEY = "alezz_dashboard_username";
-    // توكن الإدمن الكامل (= legacy anon JWT). يُمنح فقط بعد إدخال كلمة سر
-    // الإدمن في شاشة الأقسام. لتغيير كلمة السر بدّلي قيمة ADMIN_PASSWORD.
-    const ADMIN_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mb3R2YWNzemxtcnF4emZqbXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2MjI5NTYsImV4cCI6MjA5MzE5ODk1Nn0.1nQmxW63BFZSK-cn4fzh8tYM7a2JO10AQ0RGQ5bcdYo";
-    const ADMIN_PASSWORD = "AlezzAdmin@2026";
+    // 🔒 توكن الإدمن وكلمة سره لم يعودا في الصفحة — التحقّق على السيرفر عبر
+    //    admin_login، فيُعاد التوكن فقط بعد كلمة سر صحيحة (سرّ WA_ADMIN_PASSWORD).
 
     function applyRole(role) {
       document.body.classList.remove("staff-mode", "monitor-mode");
@@ -1617,15 +1615,24 @@
     document.querySelectorAll(".auth-back").forEach(a =>
       a.addEventListener("click", (e) => { e.preventDefault(); showAuthPicker(); }));
 
-    authSubmit.addEventListener("click", () => {
+    authSubmit.addEventListener("click", async () => {
       const pw = authInput.value;
       if (!pw) return;
-      if (pw !== ADMIN_PASSWORD) { authError.textContent = "كلمة سر الإدمن غير صحيحة"; return; }
-      authInput.value = "";
-      setSession(ADMIN_TOKEN, "admin");
-      hideAuth();
-      refresh();
-      startAutoRefresh();
+      authError.textContent = "جارٍ التحقّق…";
+      try {
+        // التحقّق على السيرفر — كلمة سر الأدمن والتوكن لم يعودا في كود الصفحة.
+        const res = await fetch(BASE + "?admin_action=admin_login", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: pw }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.token) { authError.textContent = data.error || "كلمة سر الإدمن غير صحيحة"; return; }
+        authInput.value = "";
+        setSession(data.token, "admin");
+        hideAuth();
+        refresh();
+        startAutoRefresh();
+      } catch (e) { authError.textContent = "تعذّر الاتصال، حاولي مجدداً"; }
     });
     authInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") authSubmit.click();
@@ -1699,6 +1706,7 @@
             <div class="label-text">
               <span class="primary">${escapeHtml(s.name)} ${roleBadge}</span>
               <span class="secondary">${escapeHtml(fmtPhone(s.phone))}${s.username ? " · @" + escapeHtml(s.username) : ""}</span>
+              ${s.password_plain ? `<div style="margin-top:4px;"><span style="background:#fef9c3;color:#854d0e;padding:3px 9px;border-radius:8px;font-size:12px;font-weight:800;font-family:monospace;direction:ltr;display:inline-block;">👤 ${escapeHtml(s.username || "")}  🔑 ${escapeHtml(s.password_plain)}</span></div>` : ""}
               ${destLine}
             </div>
           </div>

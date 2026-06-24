@@ -3473,10 +3473,17 @@ Deno.serve(async (req) => {
         };
       });
 
-      const { data: staffList } = await supabase
+      const { data: staffListRaw } = await supabase
         .from("wa_staff")
-        .select("id, name, phone, active, role, username, destinations")
+        .select("id, name, phone, active, role, username, destinations, password_plain")
         .order("name");
+      // password_plain يُعرض للمالكة (الأدمن) فقط — يُحجب عن أي موظف.
+      const isAdminCaller = callerStaff == null;
+      const staffList = ((staffListRaw ?? []) as Array<Record<string, unknown>>).map((s) => {
+        if (isAdminCaller) return s;
+        const { password_plain: _omit, ...rest } = s;
+        return rest;
+      });
       const { data: rulesList } = await supabase
         .from("wa_routing_rules")
         .select("id, match_destination, assign_to_phone, priority, active")
@@ -3538,7 +3545,7 @@ Deno.serve(async (req) => {
       const hash = await hashPassword(password);
       const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       const { error, count } = await supabase.from("wa_staff")
-        .update({ username, password_hash: hash, password_set_at: new Date().toISOString() }, { count: "exact" })
+        .update({ username, password_hash: hash, password_plain: password, password_set_at: new Date().toISOString() }, { count: "exact" })
         .eq("phone", phone);
       if (error) throw new Error(error.message);
       if ((count ?? 0) === 0) {
@@ -3553,6 +3560,25 @@ Deno.serve(async (req) => {
 
   // Public-ish endpoint (no JWT — it's a login form). POST {username, password}.
   // On success returns {token, expires_at, staff: {name, phone, username}}.
+  // دخول الأدمن (المالكة): تحقّق كلمة السر **على السيرفر** (سرّ WA_ADMIN_PASSWORD)
+  // بدل كتابتها في الصفحة، ثم يُعاد توكن الأدمن. كذا لا تظهر كلمة السر ولا التوكن
+  // في مصدر الصفحة لأي موظف.
+  if (url.searchParams.get("admin_action") === "admin_login") {
+    try {
+      const p = await req.json();
+      const password = String(p.password || "");
+      const expected = (Deno.env.get("WA_ADMIN_PASSWORD") || "").trim();
+      if (!expected || password !== expected) {
+        return new Response(JSON.stringify({ error: "كلمة سر الإدمن غير صحيحة" }), { status: 401, headers: jsonCors });
+      }
+      const token = (Deno.env.get("LEGACY_ANON_JWT") || "").trim();
+      if (!token) return new Response(JSON.stringify({ error: "النظام غير مهيّأ" }), { status: 500, headers: jsonCors });
+      return new Response(JSON.stringify({ ok: true, token }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
   if (url.searchParams.get("admin_action") === "staff_login") {
     try {
       const p = await req.json();
