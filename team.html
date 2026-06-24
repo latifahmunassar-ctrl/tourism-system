@@ -4407,7 +4407,18 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     if(b.built_program && /TOTAL_GROUP:/.test(b.built_program) && _bpHasHotels){
       if(typeof inboxDismiss==='function') inboxDismiss();
       if(typeof setCustomerType==='function') setCustomerType('individual');
-      syncFormPeopleFromProgram(b.built_program);
+      // عبّي الفورم اليسار (الوجهة/الأيام/المدن/الأشخاص) من الطلب في وضع «تخصيص»
+      // (قابل للتعديل)، حتى تقدر الموظفة تعدّل وتعيد البناء — ثم اعرض البرنامج
+      // المحفوظ في التسعيرة كما هو. (بدون sel_distribution لتفادي وضع «الجاهز»
+      // غير القابل للتعديل.) سابقاً كان الفورم يبقى فاضياً فلا تقدر تعدّل المدن.
+      try{
+        await inboxFillForm({
+          destination:b.destination, pax:b.pax, children:b.children, days:b.days,
+          sim_count:b.sim_count, date_from:b.date_from, notes:b.notes, transport:b.transport||'private',
+          stars:b.hotel_stars, cities_nights:b.cities_nights, sel_distribution:'', sel_pair:'',
+        });
+      }catch(_){}
+      syncFormPeopleFromProgram(b.built_program);   // العدد يطابق البرنامج المعروض
       buildReview(b.built_program);   // يعرض البرنامج المعتمد ويضبط lastProgramRaw
       if(typeof history!=='undefined' && Array.isArray(history)){
         history.push({role:'user', content:'(طلب فرد محفوظ — استخدمه كسياق لأي تعديل لاحق)'});
