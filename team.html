@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-06-22-hotelsfix';
+  var BUILD = '2026-06-24-readymsg';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -4303,7 +4303,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
   window.indivSend=async function(){
     if(!indivState){alert('افتح طلب فرد أولاً من «👤 طلبات الأفراد».');return;}
     if(typeof lastProgramRaw==='undefined' || !lastProgramRaw || !/TOTAL_GROUP:/.test(lastProgramRaw)){alert('ابنِ البرنامج وسعّره أولاً.');return;}
-    const note=prompt('✍️ ملاحظة تُرسل مع الملف للعميل (اختياري):','تفضل أستاذي، هذا برنامجك 🌟');
+    const note=prompt('✍️ ملاحظة تُرسل مع الملف للعميل (اختياري):','تفضّل أستاذي، صار برنامجك جاهز 🌟\nوأنا موجود في حال أي استفسار آخر، وفي انتظار تأكيدك 🙏');
     if(note===null) return;
     const btn=document.getElementById('indivSendBtn'); const old=btn?btn.textContent:'';
     if(btn){btn.disabled=true;btn.textContent='⏳ يُجهّز ويُرسل…';}
