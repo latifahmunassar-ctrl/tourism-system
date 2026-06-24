@@ -1524,7 +1524,7 @@ const BF_CITIES = {
   "روسيا":["موسكو","سانت بطرسبرغ","سوتشي"],
   "البوسنة":["سراييفو","موستار","بيهاتش"],
   "إندونيسيا":["بالي","جاكرتا","باندونغ","بونشاك"],
-  "عُمان":["صلالة"],
+  "عُمان":["صلالة - وسط المدينة","صلالة - هوانا"],
 };
 // يحوّل أي تهجئة للوجهة (همزة/تشكيل/إنجليزي) إلى مفتاح BF_CITIES المطابق، حتى لا
 // تفشل تعبئة الفورم عند ضبط bf-dest من طلب محفوظ (مثال: "اندونيسيا" بلا همزة أو
@@ -1652,14 +1652,23 @@ function bfAddCity(city, nights){
   if (city) {
     const sel = div.querySelector('.bf-city');
     sel.value = city;
-    // المدينة قد تأتي بصيغة موسّعة تتضمّن المنطقة («صلاله في وسط المدينه») بينما
-    // قائمة الفورم فيها الاسم المجرّد («صلالة») فقط → القيمة لا تُطابق أي خيار
-    // فيبقى الحقل فاضياً ولا يُمكن التعديل. نطابق على أقرب خيار بالتطبيع.
+    // المدينة قد تأتي بصيغة موسّعة تتضمّن المنطقة («صلاله في منطقه هوانا» /
+    // «صلاله في وسط المدينه») بينما خيارات القائمة بصيغة مختلفة («صلالة - هوانا»)
+    // → القيمة لا تُطابق أي خيار فيبقى الحقل فاضياً ولا يُمكن التعديل. نطابق
+    // بالكلمات (tokens): الخيار صاحب أكبر عدد كلمات مشتركة مع اسم المدينة يفوز،
+    // فتتميّز هوانا عن وسط المدينة رغم اختلاف الصياغة.
     if (sel.value !== city) {
-      const norm = s => String(s||'').replace(/[إأآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[()،,.\-_]/g,'').replace(/\s+/g,'').toLowerCase();
-      const c = norm(city);
-      const opt = [...sel.options].find(o => o.value && (c.includes(norm(o.value)) || norm(o.value).includes(c)));
-      if (opt) sel.value = opt.value;
+      const norm = s => String(s||'').replace(/[إأآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[()،,.\-_]/g,' ').replace(/\s+/g,' ').trim().toLowerCase();
+      const STOP = new Set(['في','منطقه','مدينه','ال','هتل','فندق','حي']);
+      const toks = s => norm(s).split(' ').filter(w => w && !STOP.has(w));
+      const cToks = new Set(toks(city));
+      let best=null, bestScore=0;
+      for (const o of sel.options){
+        if (!o.value) continue;
+        const score = toks(o.value).filter(t => cToks.has(t)).length;
+        if (score > bestScore){ bestScore = score; best = o.value; }
+      }
+      if (best) sel.value = best;
     }
   }
   const inp = div.querySelector('.bf-n');
@@ -4440,14 +4449,16 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       window.scrollTo({top:0,behavior:'smooth'});
       return;
     }
-    // اربط حقول booking_brief بالصيغة التي يفهمها inboxFillForm (نفس مبنى الشركات)
+    // اربط حقول booking_brief بالصيغة التي يفهمها inboxFillForm (نفس مبنى الشركات).
+    // طلب فرد جديد (بلا برنامج محفوظ) → نفتحه دائماً بوضع «تخصيص» قابل للتعديل
+    // (sel_distribution فارغ) حتى تقدر الموظفة تعدّل المدن/الأشخاص قبل/بعد البناء.
+    // وضع «الجاهز» كان يمنع التعديل. حقول المدن تُحلّ لخيارات القائمة (مثلاً صلالة
+    // هوانا/وسط) عبر مطابقة الكلمات في bfAddCity.
     const req={
       destination:b.destination, pax:b.pax, children:b.children, days:b.days,
-      sim_count:b.sim_count, date_from:b.date_from, notes:b.notes, transport:'private',
+      sim_count:b.sim_count, date_from:b.date_from, notes:b.notes, transport:b.transport||'private',
       stars:b.hotel_stars, cities_nights:b.cities_nights,
-      sel_distribution:b.distribution||'',
-      // لا نبني sel_pair إلا لو المطاران موجودان؛ وإلا '|' الفارغة تُفعّل مسار «جاهز» بمطار غير صالح.
-      sel_pair:(b.arrival_airport && b.departure_airport) ? (b.arrival_airport+'|'+b.departure_airport) : '',
+      sel_distribution:'', sel_pair:'',
     };
     // طلب فرد ليس له «إرسال للشركة» — نلغي أي ربط شركة سابق ونخفي شريطه.
     if(typeof inboxDismiss==='function') inboxDismiss();

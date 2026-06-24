@@ -1786,10 +1786,17 @@ export async function buildLocalProgram(
       // فندق آخر»)، استبعد فندق الإقامة السابقة فيختار فندقاً مختلفاً. لا نطبّقها مع
       // تعديلات صريحة (excludeForThisStay) حتى لا نتعارض معها.
       const wantDifferentHotel = prevStayCity === stay.city && !!prevHotelName && !excludeForThisStay;
+      // منطقة فرعية مُستنتَجة من نص الطلب (صلالة: هوانا/وسط). تفضيل ناعم: نفلتر
+      // الفندق على المنطقة، فتتبعها الجولات والانتقالات تلقائياً (تُختار حسب موقع
+      // الفندق). لا نطبّقها لو فيه منطقة صريحة من تعديل (areaForThisStay/stay.area)
+      // — تلك أقوى. وإن لم يوجد فندق بالمنطقة المُستنتَجة نتدرّج لأفضل متاح (أدناه).
+      const inferredArea = (!areaForThisStay && !stay.area)
+        ? request.subAreaByCity?.[stay.city]
+        : undefined;
       const pickOpts = {
         overrideAdults: overrideForThisStay,
         overrideStars: overrideStarsForThisStay,
-        areaFilter: areaForThisStay || stay.area,
+        areaFilter: areaForThisStay || stay.area || inferredArea,
         feature: featureForThisStay,
         lockOccupancyAdults,
       };
@@ -1800,6 +1807,16 @@ export async function buildLocalProgram(
       // المدينة فيها فندق واحد فقط → الاستبعاد يُفرغ الخيارات؛ ارجع لنفس الفندق بدل فشل البناء.
       if (!hotel && wantDifferentHotel) {
         hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, { excludeNames: excludeForThisStay, ...pickOpts });
+      }
+      // تدرّج آمن: المنطقة المُستنتَجة تفضيل لا شرط — لو ما فيه فندق بها لا نُفشل
+      // البرنامج، نعيد الاختيار بلا فلتر المنطقة (أفضل متاح). لا ينطبق على المنطقة
+      // الصريحة من تعديل (تبقى شرطاً).
+      if (!hotel && inferredArea) {
+        hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
+          excludeNames: wantDifferentHotel ? new Set([...(excludeForThisStay || []), prevHotelName!.toLowerCase()]) : excludeForThisStay,
+          ...pickOpts,
+          areaFilter: undefined,
+        });
       }
     }
     if (!hotel) {

@@ -62,6 +62,14 @@ export type TripRequest = {
   daysTotal: number | null;
   /** Per-city nights TOTAL across all stays (sum of cityStaysOrdered) */
   nightsByCity: Record<string, number>;
+  /**
+   * Sub-area preference per canonical city, inferred from the request text.
+   * Currently only صلالة (Salalah → "هوانا" أو "وسط") since its two areas have
+   * DIFFERENT tour/transfer prices and different hotels. Used as a SOFT filter
+   * on hotel selection (degrades to best-available if the area has no hotel),
+   * which then cascades to area-matched tours/transfers via the chosen hotel.
+   */
+  subAreaByCity?: Record<string, string>;
   /** Number of adults (defaults to 2 if not given) */
   adults: number | null;
   /** Number of children mentioned (under-5 not counted toward occupancy) */
@@ -1008,6 +1016,19 @@ function collectTourModifications(messages: Array<{ role: string; content: unkno
   return all;
 }
 
+// صلالة لها منطقتان فرعيتان بأسعار مختلفة: «هوانا» (جولات 380 / استقبال+توديع
+// 100) و«وسط المدينة» (330 / 50). نلتقط المنطقة من نص الطلب لتختار الفنادق
+// والجولات والانتقالات المنطقة الصحيحة. الكلمتان لا تظهران إلا لصلالة فالالتقاط
+// آمن؛ ومع ذلك نشترط ذكر صلالة احتياطاً. هوانا أولاً (الأكثر تحديداً).
+function parseSubAreas(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (/صلال[ةه]|salalah/iu.test(text)) {
+    if (/هوانا|hawana/iu.test(text)) out["Salalah"] = "هوانا";
+    else if (/وسط/u.test(text)) out["Salalah"] = "وسط";
+  }
+  return out;
+}
+
 export function parseTripRequest(
   messages: Array<{ role: string; content: unknown }>,
   cityDefs: CityDef[],
@@ -1041,6 +1062,7 @@ export function parseTripRequest(
     cityStaysOrdered: stays,
     daysTotal,
     nightsByCity,
+    subAreaByCity: parseSubAreas(text),
     adults: parseAdults(text),
     children: parseChildren(text),
     stars: parseStars(text),
