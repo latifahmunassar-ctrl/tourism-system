@@ -3201,12 +3201,15 @@
         distribution: bfChosenDist || "",
         cities_nights: bfChosenCN || null,
       };
+      // وجهة محلية (داخل عُمان: صلالة/مسقط/الجبل الأخضر) — رحلة بريّة بلا طيران،
+      // فلا نطلب مطار القدوم/المغادرة (وإلا يُرفض الطلب ولا يُبنى).
+      const isDomestic = /صلال|مسقط|مسقت|عُمان|عمان|الجبل\s*الأخضر|\boman\b|salalah|muscat/i.test(payload.destination || "");
       // ⛔ رفض الحفظ لو المعلومات الأساسية ناقصة — لا يُحفظ ولا يُنقل حتى يكتمل.
       const missReq = [];
       if (!payload.destination) missReq.push("الوجهة");
       if (!(parseInt(payload.pax) >= 1)) missReq.push("عدد الأشخاص");
       if (!(parseInt(payload.days) >= 1)) missReq.push("عدد الأيام");
-      if (!payload.arrival_airport || !payload.departure_airport) missReq.push("مطار القدوم/المغادرة");
+      if (!isDomestic && (!payload.arrival_airport || !payload.departure_airport)) missReq.push("مطار القدوم/المغادرة");
       if (!payload.distribution) missReq.push("توزيع المدن (اضغطي بطاقة الاقتراح)");
       if (missReq.length) {
         const m = $("bf-msg"); if (m) { m.style.color = "#dc2626"; m.textContent = "⛔ لا يمكن الحفظ — أكملي أولاً: " + missReq.join("، "); }
