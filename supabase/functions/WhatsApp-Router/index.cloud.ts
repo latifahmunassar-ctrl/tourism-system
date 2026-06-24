@@ -4890,6 +4890,43 @@ Deno.serve(async (req) => {
           console.error("booking_brief confirmation send failed", sendErr);
         }
       }
+      // 🏗️ بناء تلقائي على السيرفر وقت اكتمال الطلب: يبني البرنامج عبر Tourism-AI
+      //    ويخزّنه في built_program، فيفتح الداشبورد برنامجاً جاهزاً مباشرةً بدل
+      //    الاعتماد على بناء المتصفّح (الذي يتأثر بالكاش/المسار) — حل جذري لتكرار
+      //    «ما يبني». يعمل في الخلفية فلا يؤخّر الرد، ولا يطمس برنامجاً موجوداً.
+      if (row?.status === "complete" && row.id) {
+        const briefId = row.id;
+        const f = fields as Record<string, unknown>;
+        const autoBuild = async () => {
+          try {
+            const { data: cur } = await supabase.from("booking_brief").select("built_program").eq("id", briefId).maybeSingle();
+            const existingBp = (cur as { built_program?: string | null } | null)?.built_program || "";
+            if (/TOTAL_GROUP:/.test(existingBp)) return; // لا نبني فوق برنامج جاهز
+            const dest = String(f.destination || "").trim();
+            if (!dest || !f.days || !f.pax) return;
+            const starsTxt = (f.hotel_stars && f.hotel_stars !== "mixed") ? `فنادق ${f.hotel_stars} نجوم` : "فنادق مختلطة";
+            const prompt = `${dest} ${f.days} ايام ${String(f.distribution || "")} ل ${f.pax} بالغين${f.children ? ` و ${f.children} اطفال` : ""}${f.date_from ? ` تاريخ ${f.date_from}` : ""} ${starsTxt}`.replace(/\s+/g, " ").trim();
+            const taUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/Tourism-AI`;
+            const key = Deno.env.get("LEGACY_ANON_JWT") || "";
+            const r = await fetch(taUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}`, apikey: key },
+              body: JSON.stringify({ messages: [{ role: "user", content: prompt }], max_tokens: 4000 }),
+            });
+            const d = await r.json();
+            const txt = (d?.content?.[0]?.text as string) || "";
+            // نحفظ فقط لو طلع برنامج فعلي بفنادق (لا نحفظ رد AI فاضٍ بلا HOTELS).
+            const hasHotels = /TOTAL_GROUP:/.test(txt) && !/HOTELS:[ \t]*\n[ \t]*\n/.test(txt) && /HOTELS:[ \t]*\n[ \t]*\S/.test(txt);
+            if (hasHotels) await supabase.from("booking_brief").update({ built_program: txt }).eq("id", briefId);
+          } catch (e) { console.error("auto-build brief failed", e); }
+        };
+        if (typeof EdgeRuntime !== "undefined" && typeof (EdgeRuntime as { waitUntil?: unknown }).waitUntil === "function") {
+          (EdgeRuntime as { waitUntil: (p: Promise<unknown>) => void }).waitUntil(autoBuild());
+        } else {
+          await autoBuild();
+        }
+      }
+
       return new Response(JSON.stringify({ ok: true, id: row?.id, status: row?.status, confirmation_sent: confirmationSent }),
         { headers: jsonCors });
     } catch (e) {
