@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-06-24-readymsg';
+  var BUILD = '2026-06-24-logofix';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2769,6 +2769,16 @@ async function generatePdfBlob(mode){
   holder.appendChild(el);
   document.body.appendChild(holder);
   el.style.cssText = 'display:block;width:210mm;background:#fff;';
+  // ⚠️ انتظر فكّ تشفير صور الـPDF (شعار الشركة base64 + الطائرة/الحقيبة) قبل الالتقاط،
+  // وإلا يلتقط html2canvas قبل ظهور الصورة فيطلع الشعار فاضياً عند العميل.
+  try {
+    const imgs = Array.from(el.querySelectorAll('img'));
+    await Promise.all(imgs.map(im => {
+      if (im.complete && im.naturalWidth > 0) return Promise.resolve();
+      if (im.decode) return im.decode().catch(() => {});
+      return new Promise(r => { im.onload = im.onerror = r; });
+    }));
+  } catch (_) { /* أفضل جهد */ }
   try {
     return await window.html2pdf().set({
       margin: 0,
