@@ -671,11 +671,17 @@ function splitForWhatsApp(text: string, maxLen = 1500): string[] {
   return chunks;
 }
 
+// آخر سبب فشل إرسال (نص أو وسائط) من Graph — يقرأه send_admin_message ليُظهر
+// للموظفة سبب عدم وصول الرسالة/الملف بدل «تم» الكاذبة. أفضل-جهد (قد يُداس عند
+// إرسالين متزامنين) لكنه كافٍ للتشخيص؛ نجاح/فشل الإرسال نفسه يُحدَّد من القيمة المُعادة.
+let lastWhatsappError = "";
 async function sendWhatsapp(to: string, body: string, mediaUrl?: string): Promise<string | null> {
+  lastWhatsappError = "";
   const token = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
   const phoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
   if (!token || !phoneNumberId) {
     console.warn("Cloud API credentials missing — would have sent to", to, ":", body);
+    lastWhatsappError = "Cloud API credentials missing (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID)";
     return null;
   }
   // ترجمة الحدّ الصادر: التمثيل الداخلي "whatsapp:+968…" → "968…" لـ Graph.
@@ -701,6 +707,7 @@ async function sendWhatsapp(to: string, body: string, mediaUrl?: string): Promis
     if (!res.ok) {
       const errText = await res.text();
       console.error("Cloud API send failed", to, res.status, errText.slice(0, 400));
+      lastWhatsappError = `text ${res.status}: ${errText.slice(0, 300)}`;
       return null;
     }
     try {
@@ -733,6 +740,7 @@ async function sendWhatsapp(to: string, body: string, mediaUrl?: string): Promis
     if (!res.ok) {
       const errText = await res.text();
       console.error("Cloud API media send failed", to, res.status, errText.slice(0, 400));
+      lastWhatsappError = `media ${res.status}: ${errText.slice(0, 300)}`;
       return null;
     }
     let mediaId: string | null = null;
@@ -4359,6 +4367,19 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
       const twilioSid = await sendCustomerReply(supabase, phone, body, mediaUrl || undefined);
+      // فشل الإرسال (Graph رفض) → القيمة null. لا نُرجِع «تم» كاذبة: نخزّن السبب
+      // الفعلي ونُعيده للداشبورد حتى تعرف الموظفة لماذا لم يصل الملف/الرسالة
+      // (غالباً: مرّ أكثر من ٢٤ ساعة على آخر رسالة من العميل → يلزم قالب معتمد).
+      if (!twilioSid) {
+        const reason = lastWhatsappError || "سبب غير معروف (لم يرجّع Meta معرّف رسالة)";
+        await supabase.from("wa_admin_messages").insert({
+          customer_phone: phone,
+          body: `❌ تعذّر الإرسال: ${reason}`.slice(0, 2000),
+          sent_by: sentBy,
+        }).catch(() => {});
+        return new Response(JSON.stringify({ error: "send_failed", detail: reason }),
+          { status: 502, headers: jsonCors });
+      }
       await supabase.from("wa_admin_messages").insert({
         twilio_sid: twilioSid,
         customer_phone: phone,
