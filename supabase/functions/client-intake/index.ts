@@ -616,7 +616,12 @@ Deno.serve(async (req) => {
       return json({ staff: data || [] });
     }
 
-    if (!expected || got !== expected) return json({ error: "unauthorized" }, 401);
+    // توحيد الباسوورد: للصندوق العام (غير owner-only) نقبل أيضاً **كلمة بوابة الأمان
+    // المشتركة** (APP_PASSWORD) إضافةً إلى CLIENT_ADMIN_SECRET — فيكفي الموظفَ دخولُه
+    // بكلمة واحدة بدل مفتاح إداري منفصل. (المالكة بمفتاحها القديم تبقى تعمل.)
+    const gatePass = (Deno.env.get("APP_PASSWORD") || "").trim();
+    const okSecret = !!got && (got === expected || (!ownerOnly && !!gatePass && got === gatePass));
+    if (!okSecret) return json({ error: "unauthorized" }, 401);
 
     // ── طلبات الأفراد (booking_brief) — نفس صندوق الطلبات، تبويب منفصل ──────────
     // قراءة فقط: تُعرض طلبات الواتساب الفردية بجانب طلبات الشركات دون أي خلط.
