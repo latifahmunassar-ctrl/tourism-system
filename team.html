@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-06-25-logofix2';
+  var BUILD = '2026-06-25-logofix3';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -146,8 +146,9 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
    للعميل/الجروب) لا يرسم الصور داخل حاويات تتقلّص لمحتواها (inline-flex /
    inline-block) فيطلع الشعار فاضياً في ملف الـPDF المُرسَل. مُتحقَّق بصرياً
    بالمتصفح الheadless: flex/inline-block → صندوق فاضي، block بعرض صريح → الشعار
-   يظهر. التوسيط عبر margin:auto + text-align. الأبعاد الصريحة (236×120) تحافظ على
-   نسبة الشعار الأصلية (647×328). */
+   يظهر. مهم: بلا margin:auto وبلا text-align حتى يبقى الشعار في مكانه الأصلي (جهة
+   البداية = يمين في RTL، بمحاذاة الطائرة يسار) ولا يتوسّط. الأبعاد الصريحة
+   (236×120) تحافظ على نسبة الشعار الأصلية (647×328). */
 .pdf-logo-box { background:#fff; border-radius:14px; padding:14px 20px; display:block; width:236px; margin:0 0 18px 0; box-shadow:0 6px 20px rgba(0,0,0,0.18); }
 .pdf-logo-img { width:236px; height:120px; display:block; }
 .pdf-cover-airplane { position:absolute; top:24px; left:24px; width:240px; opacity:0.95; pointer-events:none; z-index:2; }
