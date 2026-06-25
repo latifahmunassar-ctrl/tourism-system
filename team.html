@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-06-24-logofix';
+  var BUILD = '2026-06-25-logofix2';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -142,8 +142,14 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .pdf-cover { background:linear-gradient(150deg,#1565d8 0%,#0d47a1 40%,#0a2f6e 100%); color:#fff; padding:28px 32px; height:280mm; max-height:280mm; box-sizing:border-box; font-family:‘Tajawal’,sans-serif; position:relative; overflow:hidden; page-break-inside:avoid; break-inside:avoid; }
 .pdf-cover::before { content:’’; position:absolute; top:-100px; left:-100px; width:400px; height:400px; background:rgba(255,255,255,0.04); border-radius:50%; }
 .pdf-cover::after { content:’’; position:absolute; bottom:-80px; right:-80px; width:300px; height:300px; background:rgba(255,255,255,0.04); border-radius:50%; }
-.pdf-logo-box { background:#fff; border-radius:14px; padding:14px 20px; display:inline-flex; align-items:center; justify-content:center; margin-bottom:18px; box-shadow:0 6px 20px rgba(0,0,0,0.18); }
-.pdf-logo-img { max-width:240px; max-height:120px; height:auto; width:auto; display:block; }
+/* ⚠️ display:block + عرض صريح إلزامي: html2canvas (داخل html2pdf، مسار الإرسال
+   للعميل/الجروب) لا يرسم الصور داخل حاويات تتقلّص لمحتواها (inline-flex /
+   inline-block) فيطلع الشعار فاضياً في ملف الـPDF المُرسَل. مُتحقَّق بصرياً
+   بالمتصفح الheadless: flex/inline-block → صندوق فاضي، block بعرض صريح → الشعار
+   يظهر. التوسيط عبر margin:auto + text-align. الأبعاد الصريحة (236×120) تحافظ على
+   نسبة الشعار الأصلية (647×328). */
+.pdf-logo-box { background:#fff; border-radius:14px; padding:14px 20px; display:block; width:236px; margin:0 auto 18px; text-align:center; box-shadow:0 6px 20px rgba(0,0,0,0.18); }
+.pdf-logo-img { width:236px; height:120px; display:block; }
 .pdf-cover-airplane { position:absolute; top:24px; left:24px; width:240px; opacity:0.95; pointer-events:none; z-index:2; }
 .pdf-cover-suitcase { display:block; margin:14px auto 0; max-width:300px; max-height:240px; width:auto; height:auto; }
 .pdf-disclaimer { background:rgba(255,235,59,0.96); color:#5d3a00; padding:14px 22px; border-radius:12px; margin-top:18px; text-align:center; font-size:18px; font-weight:900; line-height:1.45; box-shadow:0 4px 16px rgba(0,0,0,0.2); border:2px solid #ffc107; }
