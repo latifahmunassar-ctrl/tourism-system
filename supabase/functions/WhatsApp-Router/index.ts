@@ -3375,13 +3375,30 @@ Deno.serve(async (req) => {
       }
       else                        { sessionsSince = since24h; /* today / default */ }
 
+      // فلتر «تم إرسال متابعة»: server-side على followup_due_date نفسه،
+      // مستقلّ تماماً عن نطاق الفترة العام (last_message_at). عند تفعيله
+      // نعرض فقط من followup_done=true و followup_due_date ضمن [fu_from, fu_to].
+      const followupMode = url.searchParams.get("followup") === "1";
+      const fuFrom = (url.searchParams.get("fu_from") || "").trim();
+      const fuTo = (url.searchParams.get("fu_to") || "").trim();
+
       let sessionsQuery = supabase
         .from("whatsapp_sessions")
-        .select("phone, profile_name, ai_enabled, last_message_at, last_outbound_at, last_outbound_body, last_opened_at, destination, assigned_staff_phone, assigned_at, assigned_by, customer_stage, label")
-        .gte("last_message_at", sessionsSince)
-        .order("last_message_at", { ascending: false })
-        .limit(sessionsLimit);
-      if (sessionsUntil) sessionsQuery = sessionsQuery.lte("last_message_at", sessionsUntil);
+        .select("phone, profile_name, ai_enabled, last_message_at, last_outbound_at, last_outbound_body, last_opened_at, destination, assigned_staff_phone, assigned_at, assigned_by, customer_stage, label, followup_done, followup_due_date")
+        .limit(followupMode ? 2000 : sessionsLimit);
+      if (followupMode) {
+        sessionsQuery = sessionsQuery
+          .eq("followup_done", true)
+          .not("followup_due_date", "is", null)
+          .order("followup_due_date", { ascending: false });
+        if (fuFrom) sessionsQuery = sessionsQuery.gte("followup_due_date", fuFrom);
+        if (fuTo)   sessionsQuery = sessionsQuery.lte("followup_due_date", fuTo);
+      } else {
+        sessionsQuery = sessionsQuery
+          .gte("last_message_at", sessionsSince)
+          .order("last_message_at", { ascending: false });
+        if (sessionsUntil) sessionsQuery = sessionsQuery.lte("last_message_at", sessionsUntil);
+      }
       if (customerPhoneFilter) {
         // Substring match on the phone column — admin can paste a partial
         // number (last digits) and still hit the row.
@@ -5381,13 +5398,23 @@ Deno.serve(async (req) => {
       let sent = 0, failed = 0;
       for (const s of ((due || []) as Array<{ phone: string; profile_name: string | null }>)) {
         const name = (s.profile_name || "").trim() || "أستاذي";
+        // النص الفعلي للمتابعة — نبنيه مرة واحدة ونستخدمه للإرسال وللتخزين معاً
+        // حتى يكون المخزَّن في wa_admin_messages = نفس ما يصل العميل بالضبط (لا placeholder).
+        const followupBody = `طمّنّي ${name} 🌟 عسى البرنامج اللي أرسلناه لك عجبك، وإذا تبي أي تعديل أو عندك استفسار أنا حاضر لخدمتك.`;
         try {
           if (templateName) {
             await sendWhatsappTemplate(s.phone, templateName, { "1": name }, "ar");
           } else {
-            await sendWhatsapp(s.phone, `طمّنّي ${name} 🌟 عسى البرنامج اللي أرسلناه لك عجبك، وإذا تبي أي تعديل أو عندك استفسار أنا حاضر لخدمتك.`);
+            await sendWhatsapp(s.phone, followupBody);
           }
-          await supabase.from("wa_admin_messages").insert({ customer_phone: s.phone, body: "🔔 متابعة تلقائية أُرسلت للعميل", sent_by: "طلال", sent_at: new Date().toISOString() });
+          await supabase.from("wa_admin_messages").insert({ customer_phone: s.phone, body: followupBody, sent_by: "طلال", sent_at: new Date().toISOString() });
+          // إرسال المتابعة = نشاط على المحادثة: نرفعها لأعلى قائمة الداشبورد
+          // بنفس أسلوب send_admin_message (تحديث last_message_at + آخر صادر).
+          const _fuNow = new Date().toISOString();
+          await supabase.from("whatsapp_sessions").update({
+            last_message_at: _fuNow, last_outbound_at: _fuNow,
+            last_outbound_body: followupBody.slice(0, 200),
+          }).eq("phone", s.phone);
           sent++;
         } catch (_e) { failed++; /* غالباً خارج نافذة 24س بلا قالب */ }
         // علّمها done دائماً (نجاح أو فشل) لتفادي إعادة المحاولة كل ساعة.

@@ -900,6 +900,22 @@
       <button class="filter-urgent" id="filter-urgent" data-active="false" style="margin-bottom:10px;">
         🚨 عرض العاجلة فقط <span class="cnt" id="urgent-cnt">0</span>
       </button>
+      <div class="filter-bar" id="followup-filter-bar" style="margin-bottom:10px; gap:8px; flex-wrap:wrap; align-items:center;">
+        <button class="filter-btn" id="filter-followup" data-active="false" style="background:#fef3c7; color:#92400e; border-color:#fde68a; font-weight:700;">
+          🔔 تم إرسال متابعة <span class="cnt" id="followup-cnt">0</span>
+        </button>
+        <select id="filter-followup-period" class="filter-select" style="display:none;">
+          <option value="today" selected>اليوم</option>
+          <option value="yesterday">أمس</option>
+          <option value="last7">آخر ٧ أيام</option>
+          <option value="custom">مخصّص</option>
+        </select>
+        <span id="followup-custom-row" style="display:none; gap:6px; align-items:center;">
+          <input type="date" id="followup-from" class="filter-select" style="padding:6px;" />
+          <input type="date" id="followup-to" class="filter-select" style="padding:6px;" />
+          <button class="filter-btn" id="followup-custom-apply" style="background:var(--accent); color:white; border-color:var(--accent);">تطبيق</button>
+        </span>
+      </div>
       <div class="panel-list" id="conversations-list">
         <div class="empty">جاري التحميل…</div>
       </div>
@@ -1373,6 +1389,10 @@
     let filterFrom = "";             // YYYY-MM-DD (custom only)
     let filterTo = "";               // YYYY-MM-DD (custom only)
     let filterCustomerPhone = "";
+    let filterFollowup = false;          // فلتر «تم إرسال متابعة» (server-side على followup_due_date)
+    let filterFollowupPeriod = "today";  // today | yesterday | last7 | custom
+    let fuFrom = "";                     // YYYY-MM-DD (custom)
+    let fuTo = "";                       // YYYY-MM-DD (custom)
     function buildDashboardUrl() {
       const params = new URLSearchParams({ admin_action: "dashboard_data" });
       if (filterRange && filterRange !== "today") params.set("range", filterRange);
@@ -1381,6 +1401,12 @@
         if (filterTo) params.set("to", filterTo);
       }
       if (filterCustomerPhone) params.set("customer_phone", filterCustomerPhone);
+      if (filterFollowup) {
+        params.set("followup", "1");
+        const r = followupDateRange();
+        if (r.from) params.set("fu_from", r.from);
+        if (r.to)   params.set("fu_to", r.to);
+      }
       return BASE + "?" + params.toString();
     }
     // ⚠️ نسخة v2: تبديل الاسم يمسح كل الجلسات القديمة المعلّقة بصلاحية إدمن
@@ -2249,6 +2275,8 @@
       });
       renderConversationRows(arr);
       renderStaffFilterCounts();
+      const _fc = $("followup-cnt");
+      if (_fc) _fc.textContent = filterFollowup ? conversationsCache.length : 0;
     }
 
     function renderStaffFilterBar() {
@@ -4675,6 +4703,43 @@
       $("filter-phone-search").value = "";
       $("phone-search-clear").style.display = "none";
       filterCustomerPhone = "";
+      refresh();
+    });
+
+    // ── فلتر «تم إرسال متابعة» (server-side على followup_due_date) ──────
+    // تاريخ التقويم بتوقيت KSA (UTC+3)، مستقلّ عن منطقة المتصفح — يطابق
+    // طريقة تخزين followup_due_date في run_followups.
+    function ksaDateStr(offsetDays) {
+      const ms = Date.now() + 3 * 3600 * 1000 - (offsetDays || 0) * 86400000;
+      return new Date(ms).toISOString().slice(0, 10);
+    }
+    function followupDateRange() {
+      if (filterFollowupPeriod === "today")     return { from: ksaDateStr(0), to: ksaDateStr(0) };
+      if (filterFollowupPeriod === "yesterday") return { from: ksaDateStr(1), to: ksaDateStr(1) };
+      if (filterFollowupPeriod === "last7")     return { from: ksaDateStr(6), to: ksaDateStr(0) };
+      if (filterFollowupPeriod === "custom")    return { from: fuFrom, to: fuTo };
+      return { from: "", to: "" };
+    }
+    $("filter-followup").addEventListener("click", () => {
+      filterFollowup = !filterFollowup;
+      $("filter-followup").classList.toggle("active", filterFollowup);
+      $("filter-followup").dataset.active = filterFollowup ? "true" : "false";
+      $("filter-followup-period").style.display = filterFollowup ? "" : "none";
+      $("followup-custom-row").style.display =
+        (filterFollowup && filterFollowupPeriod === "custom") ? "inline-flex" : "none";
+      refresh();
+    });
+    $("filter-followup-period").addEventListener("change", (e) => {
+      filterFollowupPeriod = e.target.value;
+      const isCustom = filterFollowupPeriod === "custom";
+      $("followup-custom-row").style.display = isCustom ? "inline-flex" : "none";
+      if (!isCustom) refresh();
+      else if (fuFrom && fuTo) refresh();
+    });
+    $("followup-custom-apply").addEventListener("click", () => {
+      fuFrom = $("followup-from").value;
+      fuTo = $("followup-to").value;
+      if (!fuFrom || !fuTo) { alert("اختاري التاريخين"); return; }
       refresh();
     });
 
