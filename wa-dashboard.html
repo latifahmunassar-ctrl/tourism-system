@@ -900,6 +900,9 @@
       <button class="filter-urgent" id="filter-urgent" data-active="false" style="margin-bottom:10px;">
         🚨 عرض العاجلة فقط <span class="cnt" id="urgent-cnt">0</span>
       </button>
+      <button class="filter-btn" id="filter-pending" data-active="false" style="margin-bottom:10px; background:#fff7ed; color:#9a3412; border-color:#fed7aa; font-weight:700;">
+        🟠 بانتظار ردّنا (لم يُرَد على العميل) <span class="cnt" id="pending-cnt">0</span>
+      </button>
       <div class="filter-bar" id="followup-filter-bar" style="margin-bottom:10px; gap:8px; flex-wrap:wrap; align-items:center;">
         <button class="filter-btn" id="filter-followup" data-active="false" style="background:#fef3c7; color:#92400e; border-color:#fde68a; font-weight:700;">
           🔔 تم إرسال متابعة <span class="cnt" id="followup-cnt">0</span>
@@ -2222,6 +2225,7 @@
     let conversationsCache = [];
     let filterAi = "";          // "" | "on" | "off"
     let filterRead = "";        // "" | "unread" | "read"
+    let filterPending = false;  // «بانتظار ردّنا»: آخر رسالة من العميل أحدث من آخر ردّ منّا
 
     // نفس منطق effective state اللي يستخدمه renderConversationRows.
     // force_off_all → الكل موقوف. force_on_all → الكل شغال. وإلا
@@ -2264,6 +2268,13 @@
           if (filterRead === "unread" && !unread) return false;
           if (filterRead === "read"   &&  unread) return false;
         }
+        if (filterPending) {
+          // بانتظار ردّنا = آخر رسالة من العميل أحدث من آخر ردّ مِنّا
+          // (سواء فُتحت أو لا). لو ردّ موظف/طلال/AI بعدها، تختفي تلقائياً.
+          const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
+          const lout = c.last_outbound_at ? new Date(c.last_outbound_at).getTime() : 0;
+          if (!(lin > 0 && lout < lin)) return false;
+        }
         if (complaintPhones && !complaintPhones.has(c.phone)) return false;
         if (myDest && myDest.size > 0) {
           // المبيعات يشوف: محادثة وجهتها ضمن وجهاتي، أو معيّن لي بالاسم
@@ -2277,6 +2288,12 @@
       renderStaffFilterCounts();
       const _fc = $("followup-cnt");
       if (_fc) _fc.textContent = filterFollowup ? conversationsCache.length : 0;
+      const _pc = $("pending-cnt");
+      if (_pc) _pc.textContent = conversationsCache.reduce((n, c) => {
+        const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
+        const lout = c.last_outbound_at ? new Date(c.last_outbound_at).getTime() : 0;
+        return n + ((lin > 0 && lout < lin) ? 1 : 0);
+      }, 0);
     }
 
     function renderStaffFilterBar() {
@@ -4704,6 +4721,14 @@
       $("phone-search-clear").style.display = "none";
       filterCustomerPhone = "";
       refresh();
+    });
+
+    // ── فلتر «بانتظار ردّنا» (تلقائي client-side، بدون أي تأشير يدوي) ───
+    $("filter-pending").addEventListener("click", () => {
+      filterPending = !filterPending;
+      $("filter-pending").classList.toggle("active", filterPending);
+      $("filter-pending").dataset.active = filterPending ? "true" : "false";
+      applyConversationsFilter();
     });
 
     // ── فلتر «تم إرسال متابعة» (server-side على followup_due_date) ──────
