@@ -2712,9 +2712,10 @@
               <span class="dot ${dotCls}"></span>
               <div class="label-text">
                 <span class="primary">${escapeHtml(c.profile_name || ph)}</span>
+                <span class="secondary" style="direction:ltr; text-align:right; font-weight:800; color:#0b5d4e; letter-spacing:.3px;">📱 ${escapeHtml(ph)}</span>
                 ${previewLine}
                 ${assignedLine}
-                <span class="secondary">${escapeHtml(ph)} · آخر نشاط ${escapeHtml(fmtTime(c.last_message_at))}${destBadge}${assignedBadge}</span>
+                <span class="secondary">🕐 آخر نشاط ${escapeHtml(fmtTime(c.last_message_at))}${destBadge}${assignedBadge}</span>
                 ${tags.length ? `<div style="margin-top:6px; display:flex; gap:4px; flex-wrap:wrap;">${tags.join("")}</div>` : ""}
               </div>
             </div>
