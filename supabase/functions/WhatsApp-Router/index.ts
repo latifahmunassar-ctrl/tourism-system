@@ -5420,13 +5420,12 @@ Deno.serve(async (req) => {
         .limit(80);
       let sent = 0, failed = 0;
       for (const s of ((due || []) as Array<{ phone: string; profile_name: string | null }>)) {
-        const name = (s.profile_name || "").trim() || "أستاذي";
-        // النص الفعلي للمتابعة — نبنيه مرة واحدة ونستخدمه للإرسال وللتخزين معاً
-        // حتى يكون المخزَّن في wa_admin_messages = نفس ما يصل العميل بالضبط (لا placeholder).
-        const followupBody = `طمّنّي ${name} 🌟 عسى البرنامج اللي أرسلناه لك عجبك، وإذا تبي أي تعديل أو عندك استفسار أنا حاضر لخدمتك.`;
+        // ❌ بلا اسم العميل — جواله قد لا يكون مسجّلاً باسمه (اسم بروفايل غريب) فيظهر
+        //    شيء غير لائق يفضح أنه رد آلي. نستخدم «أستاذي» العامّة المحترمة.
+        const followupBody = `طمّنّي أستاذي 🌟 عسى البرنامج اللي أرسلناه لك عجبك، وإذا تبي أي تعديل أو عندك استفسار أنا حاضر لخدمتك.`;
         try {
           if (templateName) {
-            await sendWhatsappTemplate(s.phone, templateName, { "1": name }, "ar");
+            await sendWhatsappTemplate(s.phone, templateName, undefined, "ar");
           } else {
             await sendWhatsapp(s.phone, followupBody);
           }

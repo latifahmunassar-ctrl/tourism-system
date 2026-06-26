@@ -1211,6 +1211,27 @@ async function handleNewLeadIntake(args: {
   const { supabase, from } = args;
   const returning = args.returning === true;
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+
+  // ── نافذة صمت (debounce) لمنع الردود المتوازية المتداخلة ──────────────
+  // العميل غالباً يرسل جوابه مقسّماً على عدة رسائل سريعة، وكل رسالة تشغّل
+  // نسخة مستقلة من هذا المعالج. بدون تنسيق تردّ كل نسخة فتطلع ترحيبات/أسئلة
+  // مكررة ومتناقضة (وتسأل عن معلومة العميل ردّها للتو). الحل: ننتظر ٨ ثوانٍ،
+  // فإن وصلت رسالة أحدث أثناء الانتظار تنسحب هذه النسخة وتترك الرد للنسخة
+  // الأحدث التي ترى المحادثة كاملة. النتيجة: رد واحد مجمّع لكل دفعة رسائل.
+  const DEBOUNCE_MS = 8000;
+  const latestInboundTs = async (): Promise<string | null> => {
+    const { data } = await supabase.from("wa_message_audit").select("received_at")
+      .eq("from_phone", from).not("received_at", "is", null)
+      .order("received_at", { ascending: false }).limit(1).maybeSingle();
+    return (data as { received_at?: string } | null)?.received_at ?? null;
+  };
+  const myLatest = await latestInboundTs();
+  await new Promise((r) => setTimeout(r, DEBOUNCE_MS));
+  const afterLatest = await latestInboundTs();
+  if (myLatest && afterLatest && new Date(afterLatest).getTime() > new Date(myLatest).getTime()) {
+    return;   // وصلت رسالة أحدث → النسخة الأحدث ستتولّى الرد على الصورة الكاملة
+  }
+
   const [inboundRes, outboundRes, sessRes] = await Promise.all([
     supabase.from("wa_message_audit").select("body, received_at").eq("from_phone", from)
       .not("body", "is", null).order("received_at", { ascending: false }).limit(30),
@@ -1260,6 +1281,8 @@ ${returning
   • لو كان المسافرون **كبار فقط بلا أطفال** → لا تسأل عن الأعمار **إطلاقاً**، تجاوز الموضوع تماماً وانتقل لباقي المعلومات.
   • ❌ ممنوع منعاً باتاً تسأل عن عمر أي بالغ/كبير (لا الزوج ولا الزوجة/المدام ولا **العاملة المنزلية/الخادمة/الشغالة ولا السائق ولا أي مرافق بالغ**) — سؤال غير لائق ومحرج. كل بالغ يُحسب **عدداً فقط**. الأعمار **حصراً** للأطفال الصغار، ولا أحد غيرهم إطلاقاً.
 - ⚠️ التاريخ: **لا تسأل عن السنة إطلاقاً**. لو ذكر العميل شهرًا (أو يومًا) بدون سنة → اعتبرها **سنة هذا العام** تلقائيًا (السنة من «اليوم» أدناه). لا تستخدم سنة أخرى إلا إذا قال العميل صراحةً «السنة الجاية» أو ذكر سنة معيّنة (مثل ٢٠٢٧) من نفسه. يكفي أن تسأل: «متى موعد السفر؟» وتأخذ الشهر.
+  • ⚠️ لو أعطى العميل يومًا وشهرًا (مثل «30/7» أو «بداية من 30/7») فالتاريخ **مكتمل** — ❌ ممنوع تسأل عنه مرة ثانية أو تطلب «التاريخ بالضبط».
+- ⚠️⚠️ العميل الموجود **أصلاً في الوجهة**: لو ذكر أنه موجود/حالياً/واصل الوجهة (مثل «أنا في كوالالمبور»، «موجود بماليزيا»، «واصل دبي») → هو يريد ترتيبات **داخلية** (جولات/فنادق/تنقلات) وهو هناك بالفعل. ❌❌ ممنوع منعاً باتاً تسأل «متى السفر؟» (سؤال محيّر يجعله يرد «أي سفر؟»). بدّلها بسؤال منطقي مثل: «حاضر، متى تحبون نبدأ الترتيبات؟ وكم يوم باقي لكم هناك؟»، واعتبر مدة بقائه/تاريخ بدء الخدمات هو التاريخ (date).
 - افهم النص والأرقام المكتوبة بالحروف والكلام المجزّأ على عدة رسائل. لا تكرر سؤالاً أُجيب عنه.
 - ❌ ممنوع منعاً باتاً تسأل العميل عن حاله: لا «وش أخبارك» ولا «كيف الحال» ولا «إن شاء الله تمام التمام» ولا أي مجاملة فاضية. أنت **تخدمه** لا تسأله عن حاله. لو حيّاك أو سأل عنك، ردّ «أبشر 🌟» باختصار وانتقل **فوراً** للمعلومة الناقصة.
 - ❌ ممنوع تقول عبارات آلية مثل «أنا هنا لتجميع معلوماتك» أو «أنا هنا لمساعدتك» — تكلّم طبيعي.
@@ -3375,13 +3398,30 @@ Deno.serve(async (req) => {
       }
       else                        { sessionsSince = since24h; /* today / default */ }
 
+      // فلتر «تم إرسال متابعة»: server-side على followup_due_date نفسه،
+      // مستقلّ تماماً عن نطاق الفترة العام (last_message_at). عند تفعيله
+      // نعرض فقط من followup_done=true و followup_due_date ضمن [fu_from, fu_to].
+      const followupMode = url.searchParams.get("followup") === "1";
+      const fuFrom = (url.searchParams.get("fu_from") || "").trim();
+      const fuTo = (url.searchParams.get("fu_to") || "").trim();
+
       let sessionsQuery = supabase
         .from("whatsapp_sessions")
-        .select("phone, profile_name, ai_enabled, last_message_at, last_outbound_at, last_outbound_body, last_opened_at, destination, assigned_staff_phone, assigned_at, assigned_by, customer_stage, label")
-        .gte("last_message_at", sessionsSince)
-        .order("last_message_at", { ascending: false })
-        .limit(sessionsLimit);
-      if (sessionsUntil) sessionsQuery = sessionsQuery.lte("last_message_at", sessionsUntil);
+        .select("phone, profile_name, ai_enabled, last_message_at, last_outbound_at, last_outbound_body, last_opened_at, destination, assigned_staff_phone, assigned_at, assigned_by, customer_stage, label, followup_done, followup_due_date")
+        .limit(followupMode ? 2000 : sessionsLimit);
+      if (followupMode) {
+        sessionsQuery = sessionsQuery
+          .eq("followup_done", true)
+          .not("followup_due_date", "is", null)
+          .order("followup_due_date", { ascending: false });
+        if (fuFrom) sessionsQuery = sessionsQuery.gte("followup_due_date", fuFrom);
+        if (fuTo)   sessionsQuery = sessionsQuery.lte("followup_due_date", fuTo);
+      } else {
+        sessionsQuery = sessionsQuery
+          .gte("last_message_at", sessionsSince)
+          .order("last_message_at", { ascending: false });
+        if (sessionsUntil) sessionsQuery = sessionsQuery.lte("last_message_at", sessionsUntil);
+      }
       if (customerPhoneFilter) {
         // Substring match on the phone column — admin can paste a partial
         // number (last digits) and still hit the row.
@@ -5380,14 +5420,23 @@ Deno.serve(async (req) => {
         .limit(80);
       let sent = 0, failed = 0;
       for (const s of ((due || []) as Array<{ phone: string; profile_name: string | null }>)) {
-        const name = (s.profile_name || "").trim() || "أستاذي";
+        // ❌ بلا اسم العميل — جواله قد لا يكون مسجّلاً باسمه (اسم بروفايل غريب) فيظهر
+        //    شيء غير لائق يفضح أنه رد آلي. نستخدم «أستاذي» العامّة المحترمة.
+        const followupBody = `طمّنّي أستاذي 🌟 عسى البرنامج اللي أرسلناه لك عجبك، وإذا تبي أي تعديل أو عندك استفسار أنا حاضر لخدمتك.`;
         try {
           if (templateName) {
-            await sendWhatsappTemplate(s.phone, templateName, { "1": name }, "ar");
+            await sendWhatsappTemplate(s.phone, templateName, undefined, "ar");
           } else {
-            await sendWhatsapp(s.phone, `طمّنّي ${name} 🌟 عسى البرنامج اللي أرسلناه لك عجبك، وإذا تبي أي تعديل أو عندك استفسار أنا حاضر لخدمتك.`);
+            await sendWhatsapp(s.phone, followupBody);
           }
-          await supabase.from("wa_admin_messages").insert({ customer_phone: s.phone, body: "🔔 متابعة تلقائية أُرسلت للعميل", sent_by: "طلال", sent_at: new Date().toISOString() });
+          await supabase.from("wa_admin_messages").insert({ customer_phone: s.phone, body: followupBody, sent_by: "طلال", sent_at: new Date().toISOString() });
+          // إرسال المتابعة = نشاط على المحادثة: نرفعها لأعلى قائمة الداشبورد
+          // بنفس أسلوب send_admin_message (تحديث last_message_at + آخر صادر).
+          const _fuNow = new Date().toISOString();
+          await supabase.from("whatsapp_sessions").update({
+            last_message_at: _fuNow, last_outbound_at: _fuNow,
+            last_outbound_body: followupBody.slice(0, 200),
+          }).eq("phone", s.phone);
           sent++;
         } catch (_e) { failed++; /* غالباً خارج نافذة 24س بلا قالب */ }
         // علّمها done دائماً (نجاح أو فشل) لتفادي إعادة المحاولة كل ساعة.
