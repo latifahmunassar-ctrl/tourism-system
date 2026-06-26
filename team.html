@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-06-26-roomname-bidi';
+  var BUILD = '2026-06-26-company-editable';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -4140,7 +4140,11 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
   }
   // عبّي الفورم اليسار بمعلومات الطلب. لو الشركة اختارت اقتراحاً جاهزاً نفتح «اقتراحات
   // جاهزة» ونظلّل نفس المقترح (هو الأساس)، وإلا نعبّي المدن في «تخصيص».
-  async function inboxFillForm(req){
+  async function inboxFillForm(req, opts){
+    // forceManual=true → افتح الفورم بوضع «تخصيص» قابل للتعديل دائماً (مدن قابلة
+    // للتغيير) حتى لو للطلب توزيع/مطار محفوظ — لتجهيز عرض آخر. صندوق «اختيار
+    // الشركة» يبقى ظاهراً كمرجع. (يُستخدم لطلبات الشركات من الصندوق.)
+    const forceManual = !!(opts && opts.forceManual);
     const set=(id,v)=>{const e=document.getElementById(id); if(e!=null && v!=null && v!=='') e.value=v;};
     // صندوق ثابت يعرض اختيار الشركة كما هو (موثوق دائماً، مهما كان وضع التعبئة)
     const cc=document.getElementById('bf-clientChoice');
@@ -4167,7 +4171,8 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     const eb=document.getElementById('bf-extrabed-on'); if(eb) eb.checked=!!(req.extra_bed && /نعم|كل|all/i.test(req.extra_bed));
 
     // (1) اقتراح جاهز مختار، أو مطار محدّد بلا توزيع → «اقتراحات جاهزة» + عرض المطابق.
-    if(req.sel_distribution || req.sel_pair){
+    // (يُتخطّى عند forceManual لفتح الفورم قابلاً للتعديل مباشرةً.)
+    if(!forceManual && (req.sel_distribution || req.sel_pair)){
       try{
         const ready=document.querySelector('input[name=bf-mode][value=ready]');
         if(ready){ ready.checked=true; if(typeof bfSetMode==='function') bfSetMode('ready', ready); }
@@ -4213,7 +4218,9 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     if(!req){alert('تعذّر فتح الطلب');return;}
     ibState={id:req.id,ref:req.ref_no,company:req.company_name,token:req.view_token,dest:req.destination,currency:req.company_currency||'SAR'};
     if(typeof setCustomerType==='function') setCustomerType('company');   // طلب شركة → هامش ربح الشركات
-    const filled=await inboxFillForm(req);
+    // افتح الفورم قابلاً للتعديل (تخصيص) لتجهيز عرض آخر؛ الموظفة تعدّل المدن وتعيد
+    // البناء. وضع «الجاهز» كان يمنع التعديل فلا يستجيب النظام لتغييراتها.
+    const filled=await inboxFillForm(req, {forceManual:true});
     ibBanner();
     if((filled==='ready'||filled==='manual') && typeof buildFromForm==='function'){
       const before=(typeof lastProgramRaw!=='undefined')?lastProgramRaw:'';
