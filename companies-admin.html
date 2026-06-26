@@ -223,13 +223,20 @@ async function loadSecurity(){
         <button class="ac-btn ${enforce?'no':'ok'}" onclick="toggleEnforce(${enforce?'false':'true'})">${enforce?'⏸️ إيقاف الحظر':'🔒 تفعيل الحظر'}</button>
       </div>
       <div class="sec-sub">👩‍💼 حسابات الموظفات (الدخول بالبصمة)</div>
-      ${users.length?`<table class="rep-table"><thead><tr><th>الاسم</th><th>الجوال</th><th>الحالة</th><th>بصمات</th><th></th></tr></thead><tbody>${users.map(u=>{
+      ${(()=>{ const act=users.filter(u=>u.status==='active'); const done=act.filter(u=>(u.passkeys||0)>0); const ready=act.length>0&&done.length===act.length; const miss=act.filter(u=>(u.passkeys||0)===0).map(u=>esc(u.name)); return `
+      <div class="sec-enf ${ready?'on':'off'}" style="margin-bottom:10px">
+        <div><div class="sec-enf-t">${ready?'🟢 الكل سجّل بصمته':'🟡 لسّه فيه ناقص'} — سجّل البصمة ${done.length} من ${act.length} ${act.length===1?'موظفة':'موظفات'} نشطة</div>
+        <div class="sec-enf-s">${ready?'تقدرين تلغين كلمة المرور المشتركة بأمان الآن — قولي لـClaude «الكل سجّل».':('⚠️ لا تُلغى كلمة المرور المشتركة بعد، وإلا تنقفل: '+(miss.join('، ')||'—'))}</div></div>
+      </div>`; })()}
+      ${users.length?`<table class="rep-table"><thead><tr><th>الاسم</th><th>الجوال</th><th>الحالة</th><th>البصمة</th><th></th></tr></thead><tbody>${users.map(u=>{
         const st=u.status==='pending'?`<span style="color:var(--warn);font-weight:800">${uStat.pending}</span>`:(u.status==='active'?`<span style="color:var(--ok);font-weight:800">${uStat.active}</span>`:`<span style="color:#555;font-weight:800">${uStat.suspended}</span>`);
+        const pk=(u.passkeys||0)>0?'<span style="color:var(--ok);font-weight:800">✅ سجّلت</span>':'<span style="color:var(--err);font-weight:800">❌ لم تسجّل</span>';
+        const hl=(u.status==='active'&&(u.passkeys||0)===0)?' style="background:rgba(229,57,53,0.07)"':'';
         let act='';
         if(u.status==='pending') act=`<button class="ac-btn ok" onclick="approveUser('${u.id}')">✅ اعتماد</button> <button class="ac-btn no" onclick="removeUser('${u.id}','${esc(u.name)}')">رفض</button>`;
         else if(u.status==='active') act=`<button class="ac-btn no" onclick="suspendUser('${u.id}')">⏸️ إيقاف</button>`;
         else act=`<button class="ac-btn ok" onclick="approveUser('${u.id}')">▶️ تفعيل</button> <button class="ac-btn no" onclick="removeUser('${u.id}','${esc(u.name)}')">حذف</button>`;
-        return `<tr><td>${esc(u.name)}</td><td style="direction:ltr;text-align:right">${esc(u.phone)}</td><td>${st}</td><td>${u.passkeys||0}</td><td>${act}</td></tr>`;
+        return `<tr${hl}><td>${esc(u.name)}</td><td style="direction:ltr;text-align:right">${esc(u.phone)}</td><td>${st}</td><td>${pk}</td><td>${act}</td></tr>`;
       }).join('')}</tbody></table>`:'<div class="ac-empty">لا حسابات موظفات بعد</div>'}
       <div class="sec-sub" style="margin-top:20px">🌍 الدول المسموح الدخول منها</div>
       <div class="staff-add">
