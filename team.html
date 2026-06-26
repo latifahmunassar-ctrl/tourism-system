@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-06-26-deviceapprove';
+  var BUILD = '2026-06-26-loginguide';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -217,7 +217,16 @@ img { image-rendering:-webkit-optimize-contrast; }
 }
 
 /* ─── Login Overlay ─────────────────────────────────────── */
-.login-overlay { position:fixed; inset:0; z-index:9999; background:linear-gradient(150deg,#1565d8 0%,#0d47a1 40%,#0a2f6e 100%); display:flex; align-items:center; justify-content:center; font-family:‘Tajawal’,sans-serif; }
+.login-overlay { position:fixed; inset:0; z-index:9999; background:linear-gradient(150deg,#1565d8 0%,#0d47a1 40%,#0a2f6e 100%); display:flex; align-items:center; justify-content:center; gap:26px; flex-wrap:wrap; align-content:center; padding:20px; overflow:auto; font-family:‘Tajawal’,sans-serif; }
+/* لوحة إرشادات الموظفة (يمين الشاشة في RTL) */
+.login-guide { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.16); backdrop-filter:blur(16px); border-radius:20px; padding:26px 24px; width:90%; max-width:380px; box-shadow:0 20px 60px rgba(0,0,0,0.35); color:#fff; text-align:right; }
+.login-guide h3 { font-size:17px; font-weight:900; margin:0 0 4px; color:#fff; }
+.login-guide .lg-sub { font-size:12px; color:rgba(255,255,255,0.6); margin-bottom:18px; }
+.login-step { display:flex; gap:11px; margin-bottom:15px; align-items:flex-start; }
+.login-step-num { flex:none; width:28px; height:28px; border-radius:50%; background:linear-gradient(135deg,#D4A843,#F0C96A); color:#0F1923; font-weight:900; display:flex; align-items:center; justify-content:center; font-size:14px; }
+.login-step-txt { font-size:13px; line-height:1.65; font-weight:600; color:rgba(255,255,255,0.92); padding-top:3px; }
+.login-step-txt b { color:#F0C96A; font-weight:900; }
+.login-guide .lg-note { margin-top:8px; font-size:11.5px; line-height:1.6; color:rgba(255,255,255,0.75); background:rgba(0,0,0,0.18); border-radius:10px; padding:10px 12px; }
 .login-card { background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.18); backdrop-filter:blur(16px); border-radius:20px; padding:40px 36px; width:90%; max-width:380px; box-shadow:0 20px 60px rgba(0,0,0,0.4); text-align:center; }
 .login-icon { font-size:54px; margin-bottom:14px; }
 .login-title { font-size:22px; font-weight:900; color:#fff; margin-bottom:6px; }
@@ -398,6 +407,16 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 </head>
 <body class="is-locked">
 <div id="loginOverlay" class="login-overlay">
+<div class="login-guide">
+  <h3>📋 خطوات تفعيل حسابك</h3>
+  <div class="lg-sub">اتبعي الخطوات بالترتيب — مرة وحدة على جهازك</div>
+  <div class="login-step"><div class="login-step-num">1</div><div class="login-step-txt"><b>أول مرة فقط:</b> اضغطي «موظفة جديدة؟ سجّلي حسابك» تحت، واكتبي اسمك ورقم جوالك.</div></div>
+  <div class="login-step"><div class="login-step-num">2</div><div class="login-step-txt">انتظري <b>موافقة الإدارة</b> على حسابك (تتفعّل من لوحة الإدارة).</div></div>
+  <div class="login-step"><div class="login-step-num">3</div><div class="login-step-txt">اضغطي <b>«✨ إعداد البصمة على هذا الجهاز»</b>، اكتبي نفس رقم جوالك، ثم أكّدي بالبصمة / Face ID.</div></div>
+  <div class="login-step"><div class="login-step-num">4</div><div class="login-step-txt">انتظري <b>موافقة الإدارة على جهازك</b> — خطوة أمان لكل جهاز.</div></div>
+  <div class="login-step"><div class="login-step-num">5</div><div class="login-step-txt">اضغطي <b>«👆 دخول بالبصمة»</b> فوق وادخلي 🎉</div></div>
+  <div class="lg-note">⚠️ بصمتك مربوطة <b>بهذا الجهاز فقط</b> — ما تشتغل من جهاز ثاني. لو بدّلتِ جهازك أو واجهتِ مشكلة، راجعي الإدارة لإعادة الضبط.</div>
+</div>
 <div class="login-card">
 <div class="login-icon">🔐</div>
 <div class="login-title">نظام البرامج السياحية</div>
