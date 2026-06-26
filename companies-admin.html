@@ -223,18 +223,22 @@ async function loadSecurity(){
         <button class="ac-btn ${enforce?'no':'ok'}" onclick="toggleEnforce(${enforce?'false':'true'})">${enforce?'⏸️ إيقاف الحظر':'🔒 تفعيل الحظر'}</button>
       </div>
       <div class="sec-sub">👩‍💼 حسابات الموظفات (الدخول بالبصمة)</div>
-      ${(()=>{ const act=users.filter(u=>u.status==='active'); const done=act.filter(u=>(u.passkeys||0)>0); const ready=act.length>0&&done.length===act.length; const miss=act.filter(u=>(u.passkeys||0)===0).map(u=>esc(u.name)); return `
-      <div class="sec-enf ${ready?'on':'off'}" style="margin-bottom:10px">
-        <div><div class="sec-enf-t">${ready?'🟢 الكل سجّل بصمته':'🟡 لسّه فيه ناقص'} — سجّل البصمة ${done.length} من ${act.length} ${act.length===1?'موظفة':'موظفات'} نشطة</div>
-        <div class="sec-enf-s">${ready?'تقدرين تلغين كلمة المرور المشتركة بأمان الآن — قولي لـClaude «الكل سجّل».':('⚠️ لا تُلغى كلمة المرور المشتركة بعد، وإلا تنقفل: '+(miss.join('، ')||'—'))}</div></div>
+      ${(()=>{ const act=users.filter(u=>u.status==='active'); const done=act.filter(u=>u.device_approved); const pend=act.filter(u=>u.device_pending); const miss=act.filter(u=>!u.device_approved&&!u.device_pending).map(u=>esc(u.name)); const ready=act.length>0&&done.length===act.length; return `
+      <div class="sec-enf ${ready?'on':(pend.length?'off':'off')}" style="margin-bottom:10px">
+        <div><div class="sec-enf-t">${ready?'🟢 كل الأجهزة معتمدة':'🟡 فيه أجهزة تحتاج إجراء'} — معتمدة ${done.length} من ${act.length} ${act.length===1?'موظفة':'موظفات'} نشطة</div>
+        <div class="sec-enf-s">${pend.length?('⏳ بانتظار اعتمادك على جهاز: '+pend.map(u=>esc(u.name)).join('، ')+' — اضغطي «✅ اعتماد الجهاز».'):(miss.length?('❌ لم تسجّل بصمتها بعد: '+miss.join('، ')):'كل الموظفات النشطات أجهزتهن معتمدة ✅')}</div></div>
       </div>`; })()}
-      ${users.length?`<table class="rep-table"><thead><tr><th>الاسم</th><th>الجوال</th><th>الحالة</th><th>البصمة</th><th></th></tr></thead><tbody>${users.map(u=>{
+      ${users.length?`<table class="rep-table"><thead><tr><th>الاسم</th><th>الجوال</th><th>الحالة</th><th>الجهاز/البصمة</th><th></th></tr></thead><tbody>${users.map(u=>{
         const st=u.status==='pending'?`<span style="color:var(--warn);font-weight:800">${uStat.pending}</span>`:(u.status==='active'?`<span style="color:var(--ok);font-weight:800">${uStat.active}</span>`:`<span style="color:#555;font-weight:800">${uStat.suspended}</span>`);
-        const pk=(u.passkeys||0)>0?'<span style="color:var(--ok);font-weight:800">✅ سجّلت</span>':'<span style="color:var(--err);font-weight:800">❌ لم تسجّل</span>';
-        const hl=(u.status==='active'&&(u.passkeys||0)===0)?' style="background:rgba(229,57,53,0.07)"':'';
+        const pk=u.device_approved?'<span style="color:var(--ok);font-weight:800">✅ جهاز معتمد</span>':(u.device_pending?'<span style="color:var(--warn);font-weight:800">⏳ بانتظار اعتمادك</span>':'<span style="color:var(--err);font-weight:800">❌ لم تسجّل</span>');
+        const hl=(u.status==='active'&&u.device_pending)?' style="background:rgba(245,166,35,0.10)"':((u.status==='active'&&!u.device_approved)?' style="background:rgba(229,57,53,0.07)"':'');
         let act='';
-        if(u.status==='pending') act=`<button class="ac-btn ok" onclick="approveUser('${u.id}')">✅ اعتماد</button> <button class="ac-btn no" onclick="removeUser('${u.id}','${esc(u.name)}')">رفض</button>`;
-        else if(u.status==='active') act=`${(u.passkeys||0)>0?`<button class="ac-btn no" onclick="resetUser('${u.id}','${esc(u.name)}')">🔄 إعادة ضبط الجهاز</button> `:''}<button class="ac-btn no" onclick="suspendUser('${u.id}')">⏸️ إيقاف</button>`;
+        if(u.status==='pending') act=`<button class="ac-btn ok" onclick="approveUser('${u.id}')">✅ اعتماد الحساب</button> <button class="ac-btn no" onclick="removeUser('${u.id}','${esc(u.name)}')">رفض</button>`;
+        else if(u.status==='active'){
+          const approveDev=u.device_pending?`<button class="ac-btn ok" onclick="approveDeviceUser('${u.id}','${esc(u.name)}')">✅ اعتماد الجهاز</button> `:'';
+          const resetDev=(u.passkeys||0)>0?`<button class="ac-btn no" onclick="resetUser('${u.id}','${esc(u.name)}')">🔄 إعادة ضبط الجهاز</button> `:'';
+          act=`${approveDev}${resetDev}<button class="ac-btn no" onclick="suspendUser('${u.id}')">⏸️ إيقاف</button>`;
+        }
         else act=`<button class="ac-btn ok" onclick="approveUser('${u.id}')">▶️ تفعيل</button> <button class="ac-btn no" onclick="removeUser('${u.id}','${esc(u.name)}')">حذف</button>`;
         return `<tr${hl}><td>${esc(u.name)}</td><td style="direction:ltr;text-align:right">${esc(u.phone)}</td><td>${st}</td><td>${pk}</td><td>${act}</td></tr>`;
       }).join('')}</tbody></table>`:'<div class="ac-empty">لا حسابات موظفات بعد</div>'}
@@ -295,6 +299,11 @@ async function removeDevice(id,label){
 async function approveUser(id){
   const r=await fetch(BASE+'?admin_action=sec_user_approve&id='+id,{method:'POST',headers:H()});
   const d=await r.json(); if(d.ok){ secFlash('تم اعتماد الموظفة ✅ — تقدر تسجّل بصمتها الآن',true); loadSecurity(); } else secFlash(d.error||'فشل',false);
+}
+async function approveDeviceUser(id,name){
+  if(!confirm('اعتماد جهاز «'+name+'»؟\n\nبعد الاعتماد تقدر تدخل بالبصمة من هذا الجهاز فقط. تأكدي إنه جهازها الصحيح.')) return;
+  const r=await fetch(BASE+'?admin_action=sec_user_device_approve&id='+id,{method:'POST',headers:H()});
+  const d=await r.json(); if(d.ok){ secFlash('تم اعتماد جهاز «'+name+'» ✅ — تقدر تدخل بالبصمة الآن',true); loadSecurity(); } else secFlash(d.error||'فشل',false);
 }
 async function resetUser(id,name){
   if(!confirm('إعادة ضبط جهاز «'+name+'»؟\n\nبتُحذف بصمتها الحالية، فتقدر تسجّل بصمة على جهاز جديد. الحساب يبقى نشطاً. استخدميها لو بدّلت جهازها أو انقفلت.')) return;

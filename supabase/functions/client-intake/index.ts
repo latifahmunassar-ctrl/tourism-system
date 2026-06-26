@@ -603,7 +603,7 @@ Deno.serve(async (req) => {
   if (adminAction) {
     // Company-account management is OWNER-only (separate private dashboard) and
     // uses COMPANIES_ADMIN_SECRET. The staff request inbox keeps CLIENT_ADMIN_SECRET.
-    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove", "staff_report", "sec_overview", "sec_country_add", "sec_country_remove", "sec_enforce_set", "sec_device_trust", "sec_device_approve", "sec_device_remove", "sec_user_approve", "sec_user_suspend", "sec_user_remove", "sec_user_reset"].includes(adminAction);
+    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove", "staff_report", "sec_overview", "sec_country_add", "sec_country_remove", "sec_enforce_set", "sec_device_trust", "sec_device_approve", "sec_device_remove", "sec_user_approve", "sec_user_suspend", "sec_user_remove", "sec_user_reset", "sec_user_device_approve"].includes(adminAction);
     const expected = (Deno.env.get(ownerOnly ? "COMPANIES_ADMIN_SECRET" : "CLIENT_ADMIN_SECRET") || "").trim();
     const got = (req.headers.get("x-admin-secret") || "").trim();
 
@@ -867,10 +867,21 @@ Deno.serve(async (req) => {
       ]);
       // حسابات الموظفات + عدد مفاتيح كل واحدة
       const { data: usersRaw } = await supabase.from("app_users").select("id, name, phone, status, created_at, last_login_at").order("created_at", { ascending: false }).limit(200);
-      const { data: pkCounts } = await supabase.from("user_passkeys").select("user_id");
-      const pkMap: Record<string, number> = {};
-      for (const p of (pkCounts || []) as Array<{ user_id: number }>) pkMap[p.user_id] = (pkMap[p.user_id] || 0) + 1;
-      const users = (usersRaw || []).map((u: any) => ({ ...u, passkeys: pkMap[u.id] || 0 }));
+      const { data: pkRows } = await supabase.from("user_passkeys").select("user_id, approved, device_label");
+      const pkMap: Record<string, { count: number; pending: boolean; approved: number; label: string | null }> = {};
+      for (const p of (pkRows || []) as Array<{ user_id: number; approved: boolean; device_label: string | null }>) {
+        const e = pkMap[p.user_id] || { count: 0, pending: false, approved: 0, label: null };
+        e.count++; if (p.approved) e.approved++; else e.pending = true;
+        if (!e.label && p.device_label) e.label = p.device_label;
+        pkMap[p.user_id] = e;
+      }
+      const users = (usersRaw || []).map((u: any) => ({
+        ...u,
+        passkeys: pkMap[u.id]?.count || 0,
+        device_approved: (pkMap[u.id]?.approved || 0) > 0,
+        device_pending: pkMap[u.id]?.pending || false,
+        device_label: pkMap[u.id]?.label || null,
+      }));
       return json({
         settings: settingsRes.data || { enforce_country: false, fail_open_geo: true },
         countries: countriesRes.data || [],
@@ -897,6 +908,15 @@ Deno.serve(async (req) => {
       const id = url.searchParams.get("id") || "";
       if (!id) return json({ error: "id required" }, 400);
       const { error } = await supabase.from("app_users").delete().eq("id", id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+    // اعتماد جهاز الموظفة: تفعيل بصمتها (approved=true) فتقدر تدخل. لا تشتغل
+    // البصمة قبل موافقة المالكة على الجهاز.
+    if (adminAction === "sec_user_device_approve") {
+      const id = url.searchParams.get("id") || "";
+      if (!id) return json({ error: "id required" }, 400);
+      const { error } = await supabase.from("user_passkeys").update({ approved: true }).eq("user_id", id);
       if (error) return json({ error: error.message }, 500);
       return json({ ok: true });
     }

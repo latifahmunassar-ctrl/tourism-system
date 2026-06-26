@@ -161,6 +161,10 @@ Deno.serve(async (req) => {
       } catch (e) { return json({ error: "فشل التحقّق: " + (e as Error).message }, 400); }
       await supa.from("webauthn_challenges").delete().eq("id", challengeId);
       if (!verification.verified) return json({ error: "فشل الدخول بالبصمة" }, 401);
+      // موافقة المالكة على الجهاز: البصمة لا تشتغل حتى تعتمد المالكة هذا الجهاز.
+      if (!key.approved) {
+        return json({ error: "بصمتك على هذا الجهاز بانتظار موافقة الإدارة. تواصلي مع المالكة لاعتماد جهازك." }, 403);
+      }
       // قفل قوي: الدخول من نفس المتصفح/الجهاز المسجّل فقط — حتى لو تزامنت البصمة
       // عبر آيكلاود/جوجل لجهاز ثانٍ، الـdevice_token يختلف فيُرفض. البصمات القديمة
       // (سُجّلت قبل الربط، device_token فارغ) تُربَط بأول جهاز يدخل منها (bind-on-use).
