@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-06-26-vehicletype';
+  var BUILD = '2026-06-26-passkeyonly';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -401,11 +401,11 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div class="login-card">
 <div class="login-icon">🔐</div>
 <div class="login-title">نظام البرامج السياحية</div>
-<div class="login-sub">دخول الموظفات</div>
+<div class="login-sub">الدخول بالبصمة فقط</div>
 <button id="passkeyBtn" class="login-btn" style="margin-bottom:12px" onclick="passkeyLogin()">👆 دخول بالبصمة / Face ID</button>
-<div style="color:rgba(255,255,255,0.45);font-size:12px;margin:2px 0 12px">— أو —</div>
-<input id="loginInput" class="login-input" type="password" placeholder="كلمة المرور" autocomplete="current-password" />
-<button id="loginBtn" class="login-btn" onclick="doLogin()">دخول بكلمة السر</button>
+<!-- كلمة المرور المشتركة أُلغيت (2026-06-26): الدخول بالبصمة لكل موظفة. خانة
+     كلمة السر و«دخول بكلمة السر» أُزيلت. للطوارئ: إعادة المشتركة = supabase
+     secrets set APP_PASSWORD=... + إرجاع الحقل من git history. -->
 <div id="loginError" class="login-error"></div>
 <div style="margin-top:16px;display:flex;flex-direction:column;gap:7px">
   <a href="#" onclick="passkeySetup();return false" style="color:#F0C96A;font-size:13px;font-weight:800;text-decoration:none">✨ إعداد البصمة على هذا الجهاز</a>
