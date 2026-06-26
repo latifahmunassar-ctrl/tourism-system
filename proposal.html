@@ -125,6 +125,7 @@ function renderRichPDF(d){
         <span>📍 المدينة: ${esc(h.city||'')}</span><span>⭐ النجوم: ${esc(h.stars||'')}</span>
         <span>🛏️ الغرفة: ${esc(h.room||'')}</span><span>📅 الإقامة: ${esc(h.nights||'')}</span>
         <span>🏨 عدد الغرف: ${esc(String(h.rooms||1))}</span>
+        ${(h.add_rooms||[]).map((ar,j)=>`<span class="full" style="color:#b45309;font-weight:800">➕ غرفة إضافية ${j+1}: <span dir="ltr" style="unicode-bidi:isolate">${esc(ar.room||'')}</span>${ar.occ?` (يتسع ${esc(ar.occ)})`:''}</span>`).join('')}
         ${h.meals?`<span class="full">✅ يشمل: ${esc(h.meals)}</span>`:''}
       </div></div>`).join('');
   // تاريخ كل يوم = تاريخ البداية + (اليوم − 1)
@@ -173,6 +174,7 @@ function render(d){
       <div class="hn">${esc(h.name)} <span class="stars">${"★".repeat(parseInt(h.stars)||0)}</span></div>
       <div class="hc">📍 ${esc(h.city)}</div>
       <div class="hd">${esc(h.room||"")}${h.nights?" • "+esc(h.nights):""}${h.meals?" • "+esc(h.meals):""}</div>
+      ${(h.add_rooms||[]).map((ar,j)=>`<div class="hd" style="color:#b45309;font-weight:800">➕ غرفة إضافية ${j+1}: <span dir="ltr" style="unicode-bidi:isolate">${esc(ar.room||"")}</span>${ar.occ?` (يتسع ${esc(ar.occ)})`:""}</div>`).join("")}
     </div>`).join("");
   const days=(p.timeline||[]).map(t=>`
     <div class="day">

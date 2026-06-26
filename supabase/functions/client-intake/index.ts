@@ -242,7 +242,7 @@ function stripPrice(s: string): string {
 
 interface ClientView {
   destination: string; meta: string; dateFrom: string; dateTo: string; pax: number; children: number;
-  hotels: Array<{ name: string; city: string; stars: string; room: string; nights: string; meals: string; rooms?: number }>;
+  hotels: Array<{ name: string; city: string; stars: string; room: string; nights: string; meals: string; rooms?: number; add_rooms?: Array<{ room: string; occ: string }> }>;
   timeline: Array<{ day: number; items: Array<{ kind: string; text: string }> }>;
   extra_car_days: number[];
   groupTotal: number | null; currency: string;
@@ -271,10 +271,20 @@ function toClientView(raw: string): { view: ClientView; groupTotal: number | nul
   for (const l of section("HOTELS")) {
     const p = l.split("|").map(s => s.trim());
     if (p.length < 4) continue;
-    // name | city | stars | room | PRICE/ليلة | nights (dates) | ما يشمل: …
+    // name | city | stars | room | PRICE/ليلة | nights (dates) | ما يشمل: … | ADDROOM:… | …
+    // الغرف الإضافية (ADDROOM) المضافة في شاشة التسعيرة لازم تظهر في ملف الشركة
+    // أيضاً (النوع + السعة فقط، بلا سعر — ملف الشركة بلا تكاليف داخلية).
+    const add_rooms: Array<{ room: string; occ: string }> = [];
+    const arRe = /ADDROOM:([^|]+)/g; let am: RegExpExecArray | null;
+    while ((am = arRe.exec(l)) !== null) {
+      const a = am[1].split("~");
+      const room = (a[0] || "").trim();
+      if (room) add_rooms.push({ room, occ: (a[2] || "").trim() });
+    }
     hotels.push({
       name: p[0] || "", city: p[1] || "", stars: p[2] || "", room: p[3] || "",
       nights: stripPrice(p[5] || ""), meals: (p[6] || "").replace(/^ما يشمل:\s*/u, "").trim(),
+      add_rooms,
     });
   }
   // عدد الغرف لكل فندق (سطر "HOTEL_ROOMS: 2,1,3" بترتيب الفنادق) — يظهر في PDF الشركة
