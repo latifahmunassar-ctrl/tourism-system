@@ -4696,6 +4696,53 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── 📍 مواقع/عناوين فروع الشركة (نص) — يرسلها الموظف للعميل بضغطة ──────────
+  if (url.searchParams.get("admin_action") === "list_locations") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data } = await supabase.from("wa_locations").select("id, title, body, sort_order").order("sort_order").order("created_at");
+      return new Response(JSON.stringify({ locations: data ?? [] }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+  if (url.searchParams.get("admin_action") === "save_location") {
+    { const g = await requirePerm(req, "manage_offers"); if (g) return g; }
+    try {
+      const p = await req.json();
+      const title = String(p.title || "").trim();
+      const body = String(p.body || "").trim();
+      if (!title || !body) return new Response(JSON.stringify({ error: "العنوان والنص مطلوبان" }), { status: 400, headers: jsonCors });
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const id = String(p.id || "").trim();
+      if (id) {
+        const { data, error } = await supabase.from("wa_locations").update({ title, body }).eq("id", id).select().single();
+        if (error) throw new Error(error.message);
+        return new Response(JSON.stringify({ ok: true, location: data }), { headers: jsonCors });
+      }
+      const { data, error } = await supabase.from("wa_locations").insert({ title, body }).select().single();
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true, location: data }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+  if (url.searchParams.get("admin_action") === "delete_location") {
+    { const g = await requirePerm(req, "manage_offers"); if (g) return g; }
+    try {
+      const p = await req.json();
+      const id = String(p.id || "").trim();
+      if (!id) return new Response(JSON.stringify({ error: "missing id" }), { status: 400, headers: jsonCors });
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { error } = await supabase.from("wa_locations").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
   // ── بدء محادثة جديدة عبر قالب واتساب ─────────────────────────────────────
   // Admin: read/save the greeting template ContentSid (Twilio Content API).
   if (url.searchParams.get("admin_action") === "get_greeting_template") {

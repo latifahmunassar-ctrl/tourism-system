@@ -1005,6 +1005,21 @@
     </section>
 
     <section class="offers-section">
+      <h3>📍 مواقع الشركة <span class="badge" id="loc-badge">0</span></h3>
+      <p style="color:var(--muted); font-size:13px; margin:0 0 12px;">اكتبي مواقع/عناوين فروع الشركة، والموظف يرسلها للعميل نصًّا بضغطة من زر «📍 مواقع الشركة» داخل المحادثة.</p>
+      <div id="loc-form" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px; max-width:560px;">
+        <input id="loc-title" placeholder="اسم الموقع (مثل: فرع صلالة)" style="padding:8px 12px; border:1px solid #d1d5db; border-radius:8px; font-weight:600;" />
+        <textarea id="loc-body" rows="3" placeholder="العنوان الكامل + رابط الخريطة (اختياري)…" style="padding:8px 12px; border:1px solid #d1d5db; border-radius:8px; font-family:inherit; font-size:13px; resize:vertical;"></textarea>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <button id="loc-save" class="toggle-btn" style="min-width:auto; padding:8px 16px; background:#0b5d4e; color:#fff; border:none;">💾 حفظ الموقع</button>
+          <button id="loc-cancel" class="toggle-btn" style="display:none; min-width:auto; padding:8px 14px;">إلغاء التعديل</button>
+          <span id="loc-msg" style="font-size:12px; font-weight:700;"></span>
+        </div>
+      </div>
+      <div class="panel-list" id="locations-mgmt"></div>
+    </section>
+
+    <section class="offers-section">
       <h3>📁 مكتبة العروض <span class="badge" id="o-badge">0</span></h3>
       <p style="color:var(--muted); font-size:13px; margin:0 0 14px;">ارفعي ملفات العروض (PDF) وصنّفيها. «التصنيف» = الزر الرئيسي (مثل: عمان، السعودية)، و«الوجهة» = اسم الملف داخل القائمة (مثل: ماليزيا، اندونيسيا). تظهر لكل الموظفين أمام كل محادثة.</p>
       <div class="panel-list" id="offers-list">
@@ -1615,7 +1630,7 @@
         document.body.classList.toggle("admin-offers-tab", tab === "offers");
         // First time opening contacts → load them
         if (tab === "contacts" && !contactsLoaded) loadContacts();
-        if (tab === "offers") { loadOffers(); loadFollowupSettings(); }
+        if (tab === "offers") { loadOffers(); loadFollowupSettings(); loadLocations(); }
       });
     });
     function devEnter(role) {
@@ -3775,6 +3790,73 @@
     const PAY_LABEL = { pay_oman: "💳 دفع — عُمان", pay_saudi: "💳 دفع — السعودية", pay_world: "💳 دفع — باقي العالم" };
     let offersCache = [];
     let offersLoaded = false;
+    // ── 📍 مواقع الشركة (نص) ──────────────────────────────────────────────
+    let locationsCache = [];
+    let locEditId = null;
+    async function loadLocations() {
+      try {
+        const res = await fetch(BASE + "?admin_action=list_locations", { headers: { Authorization: "Bearer " + token } });
+        const d = await res.json();
+        locationsCache = d.locations || [];
+        renderLocations();
+      } catch (e) { /* تجاهل */ }
+    }
+    function renderLocations() {
+      const box = $("locations-mgmt"); if (!box) return;
+      const badge = $("loc-badge"); if (badge) badge.textContent = locationsCache.length;
+      if (!locationsCache.length) { box.innerHTML = '<div class="empty">لا مواقع بعد — أضيفي موقعًا أعلاه.</div>'; return; }
+      box.innerHTML = locationsCache.map(l => `
+        <div class="row" style="align-items:flex-start;">
+          <div class="label" style="flex:1; min-width:0;">
+            <div class="label-text">
+              <span class="primary">📍 ${escapeHtml(l.title)}</span>
+              <span class="secondary" style="white-space:pre-wrap;">${escapeHtml(l.body)}</span>
+            </div>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button class="toggle-btn" data-loc-edit="${l.id}" style="min-width:auto;padding:6px 10px;">✏️ تعديل</button>
+            <button class="toggle-btn off" data-loc-del="${l.id}" style="min-width:auto;padding:6px 10px;">حذف</button>
+          </div>
+        </div>`).join("");
+      box.querySelectorAll('[data-loc-edit]').forEach(b => b.addEventListener("click", () => editLocation(b.dataset.locEdit)));
+      box.querySelectorAll('[data-loc-del]').forEach(b => b.addEventListener("click", () => deleteLocation(b.dataset.locDel)));
+    }
+    function editLocation(id) {
+      const l = locationsCache.find(x => x.id === id); if (!l) return;
+      locEditId = id; $("loc-title").value = l.title; $("loc-body").value = l.body;
+      $("loc-cancel").style.display = ""; $("loc-title").focus();
+    }
+    async function saveLocation() {
+      const title = $("loc-title").value.trim(), body = $("loc-body").value.trim(), msg = $("loc-msg");
+      if (!title || !body) { msg.style.color = "#dc2626"; msg.textContent = "اكتبي الاسم والعنوان"; return; }
+      const btn = $("loc-save"); btn.disabled = true;
+      try {
+        const res = await fetch(BASE + "?admin_action=save_location", {
+          method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+          body: JSON.stringify({ id: locEditId || undefined, title, body }),
+        });
+        const d = await res.json();
+        if (!res.ok || d.error) throw new Error(d.error || ("HTTP " + res.status));
+        $("loc-title").value = ""; $("loc-body").value = ""; locEditId = null; $("loc-cancel").style.display = "none";
+        msg.style.color = "#15803d"; msg.textContent = "✅ تم الحفظ"; setTimeout(() => { msg.textContent = ""; }, 2000);
+        loadLocations();
+      } catch (e) { msg.style.color = "#dc2626"; msg.textContent = "فشل: " + (e.message || e); }
+      finally { btn.disabled = false; }
+    }
+    async function deleteLocation(id) {
+      if (!confirm("حذف هذا الموقع؟")) return;
+      try {
+        const res = await fetch(BASE + "?admin_action=delete_location", {
+          method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        const d = await res.json();
+        if (!res.ok || d.error) throw new Error(d.error || ("HTTP " + res.status));
+        loadLocations();
+      } catch (e) { alert("فشل الحذف: " + (e.message || e)); }
+    }
+    if ($("loc-save")) $("loc-save").addEventListener("click", saveLocation);
+    if ($("loc-cancel")) $("loc-cancel").addEventListener("click", () => { locEditId = null; $("loc-title").value = ""; $("loc-body").value = ""; $("loc-cancel").style.display = "none"; $("loc-msg").textContent = ""; });
     let openOfferMenu = null;
 
     function closeOfferMenu() {
@@ -4062,6 +4144,7 @@
         bar.appendChild(btn);
       });
       buildPaymentButton(bar);
+      buildLocationButton(bar);
     }
 
     // زر «💳 طرق الدفع» — صور الدفع الجاهزة مقسّمة حسب جنسية العميل (عُمان/السعودية/العالم).
@@ -4119,6 +4202,76 @@
         openOfferMenu = menu;
       });
       bar.appendChild(btn);
+    }
+
+    // زر «📍 مواقع الشركة» — يرسل عنوان الفرع نصًّا للعميل.
+    function buildLocationButton(bar) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "offer-cat-btn";
+      btn.style.background = "#eff6ff";
+      btn.style.borderColor = "#bfdbfe";
+      btn.textContent = "📍 مواقع الشركة";
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (openOfferMenu && openOfferMenu.dataset.cat === "__loc__") { closeOfferMenu(); return; }
+        closeOfferMenu();
+        if (!locationsCache.length) { try { await loadLocations(); } catch (_) {} }
+        const menu = document.createElement("div");
+        menu.className = "offer-menu";
+        menu.dataset.cat = "__loc__";
+        if (!locationsCache.length) {
+          const empty = document.createElement("div");
+          empty.style.cssText = "padding:8px 14px; color:#94a3b8; font-size:12px;";
+          empty.textContent = "— لا مواقع بعد (أضيفيها من تبويب مكتبة العروض) —";
+          menu.appendChild(empty);
+        }
+        locationsCache.forEach(l => {
+          const it = document.createElement("button");
+          it.type = "button";
+          it.className = "offer-menu-item";
+          it.innerHTML = `📍 ${escapeHtml(l.title)}`;
+          it.addEventListener("click", () => { closeOfferMenu(); sendLocation(l); });
+          menu.appendChild(it);
+        });
+        document.body.appendChild(menu);
+        const r = btn.getBoundingClientRect();
+        const gap = 6;
+        menu.style.right = Math.max(8, window.innerWidth - r.right) + "px";
+        const spaceBelow = window.innerHeight - r.bottom, spaceAbove = r.top;
+        if (spaceAbove > spaceBelow) {
+          menu.style.top = "auto"; menu.style.bottom = (window.innerHeight - r.top + gap) + "px";
+          menu.style.maxHeight = Math.max(140, spaceAbove - gap - 12) + "px";
+        } else {
+          menu.style.bottom = "auto"; menu.style.top = (r.bottom + gap) + "px";
+          menu.style.maxHeight = Math.max(140, spaceBelow - gap - 12) + "px";
+        }
+        openOfferMenu = menu;
+      });
+      bar.appendChild(btn);
+    }
+
+    async function sendLocation(l) {
+      if (!convPhone) return;
+      if (!confirm('إرسال موقع «' + l.title + '» للعميل؟')) return;
+      const text = `📍 ${l.title}\n${l.body}`;
+      try {
+        const res = await fetch(BASE + "?admin_action=send_admin_message", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: convPhone, body: text, sent_by: "admin" }),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const cbody = $("conv-body");
+        const optimistic = document.createElement("div");
+        optimistic.className = "conv-msg bot admin";
+        optimistic.innerHTML = `<span class="sender-pill">Admin</span><div class="bubble">📍 ${escapeHtml(l.title)}</div><div class="meta">جاري الإرسال…</div>`;
+        cbody.appendChild(optimistic);
+        cbody.scrollTop = cbody.scrollHeight;
+        setTimeout(() => loadConversationHistory(), 3500);
+      } catch (e) {
+        alert("فشل إرسال الموقع: " + e.message);
+      }
     }
 
     async function sendOffer(offer) {
