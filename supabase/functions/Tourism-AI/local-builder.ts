@@ -1279,6 +1279,47 @@ export function pickTourVariantPrice(tour: TourRow, paxCount: number, isShared: 
   return cands[0].price;
 }
 
+// نوع السيارة المختار حسب عدد الأشخاص — نُرجع label المتغيّر المطابق للشريحة
+// (نفس منطق مطابقة الشرائح في pickTourVariantPrice، لكن بلا تمييز موسمي لأن النوع
+// واحد عبر الأعمدة الموسمية). دالة مستقلة عمداً حتى لا نلمس دالة التسعير الحساسة.
+export function pickTourVariantLabel(tour: TourRow, paxCount: number, isShared: boolean): string {
+  const variants = tour.variants || [];
+  if (variants.length === 0) return "";
+  const labelMatches = (label: string): boolean => {
+    const lbl = String(label || "").toLowerCase();
+    if (/per\s*pax/.test(lbl)) return isShared;
+    const range = lbl.match(/(\d+)\s*-\s*(\d+)/);
+    if (range) {
+      const a = parseInt(range[1], 10), b = parseInt(range[2], 10);
+      return paxCount >= a && paxCount <= b;
+    }
+    const single = lbl.match(/(?:^|\s|pax\s*)(\d+)\s*$/) || lbl.match(/^(\d+)\s*$/);
+    if (single) return paxCount === parseInt(single[1], 10);
+    return false;
+  };
+  let cands = variants.filter(v => labelMatches(v.label));
+  if (cands.length === 0) {
+    // أكبر من كل الشرائح → أكبر سيارة؛ أصغر → أصغر سيارة (مطابق لمنطق التسعير).
+    const ranged = variants
+      .map(v => { const m = String(v.label || "").toLowerCase().match(/(\d+)\s*-\s*(\d+)/); return m ? { v, lo: parseInt(m[1], 10), hi: parseInt(m[2], 10) } : null; })
+      .filter((x): x is { v: { label: string; price: number }; lo: number; hi: number } => !!x);
+    if (ranged.length) {
+      const maxHi = Math.max(...ranged.map(r => r.hi));
+      if (paxCount > maxHi) cands = ranged.filter(r => r.hi === maxHi).map(r => r.v);
+      else { const minLo = Math.min(...ranged.map(r => r.lo)); cands = ranged.filter(r => r.lo === minLo).map(r => r.v); }
+    }
+  }
+  return cands.length ? String(cands[0].label || "") : String(variants[0].label || "");
+}
+
+// نوع السيارة بالعربي من label المتغيّر. صلالة فقط لها النوع بين قوسين عربي
+// («1- 3 Pax Sedan (سيدان )» → «سيدان»)؛ باقي الوجهات بلا قوس عربي تُرجع "" فلا
+// تتأثر إطلاقاً (التحديد محصور على صلالة بهذا الشرط دون حاجة لفحص الوجهة).
+export function vehicleTypeFromLabel(label: string): string {
+  const ar = String(label || "").match(/\(([^)]*[؀-ۿ][^)]*)\)/u);
+  return ar ? ar[1].replace(/\s+/g, " ").trim() : "";
+}
+
 // أقصى سعة ركاب للصف (من شرائح "pax A-B")؛ 0 إذا ما فيه نطاقات معرّفة.
 export function vehicleMaxCapacity(tour: TourRow): number {
   const variants = tour.variants || [];
@@ -1407,8 +1448,14 @@ export function formatProgram(data: ProgramData): string {
     // سيارة ونضيف "(سيارة تتسع N)" حتى تعرض الواجهة تنبيهاً للموظف ليضيف سيارة
     // ثانية عند الحاجة. لا ينطبق على الليموزين المشترك (تسعير بالراكب).
     const cap = treatAsShared ? 0 : vehicleMaxCapacity(t.row);
-    const capNote = (cap > 0 && adults > cap) ? ` (سيارة تتسع ${cap})` : "";
-    out += `اليوم ${t.day} | ${t.row.name.trim()}${capNote} | ${t.kind} | ${formatNumber(lineTotal)} ريال\n`;
+    const oversized = cap > 0 && adults > cap;
+    // نوع السيارة المختار حسب الأشخاص (صلالة: سيدان/دفع رباعي/باص) — يظهر في كل
+    // ملفات الـPDF. محصور على صلالة عبر شرط النوع العربي بين قوسين في الـlabel.
+    const vType = treatAsShared ? "" : vehicleTypeFromLabel(pickTourVariantLabel(t.row, adults, treatAsShared));
+    const note = vType
+      ? (oversized ? ` (${vType} — تتسع ${cap}، أضف سيارة)` : ` (${vType})`)
+      : (oversized ? ` (سيارة تتسع ${cap})` : "");
+    out += `اليوم ${t.day} | ${t.row.name.trim()}${note} | ${t.kind} | ${formatNumber(lineTotal)} ريال\n`;
   }
   out += "\n";
 
@@ -1429,10 +1476,15 @@ export function formatProgram(data: ProgramData): string {
   const tourLines: TourOrFreeLine[] = tours.map(tt => {
     const price = pickTourVariantPrice(tt.tour, adults, false, reqMonth); // tours always private
     toursTotal += price;
-    const tourType = isFreeDayRow(tt.tour.name) ? "حر" : "ثقافية";
+    const isFree = isFreeDayRow(tt.tour.name);
+    const tourType = isFree ? "حر" : "ثقافية";
+    const cleanName = tt.tour.name.replace(/\s*[\r\n]+\s*/g, " ").replace(/\s{2,}/g, " ").trim();
+    // نوع السيارة المختار حسب الأشخاص (صلالة فقط عبر شرط النوع العربي بين قوسين).
+    const vType = isFree ? "" : vehicleTypeFromLabel(pickTourVariantLabel(tt.tour, adults, false));
+    const nameWithV = vType ? `${cleanName} (${vType})` : cleanName;
     return {
       day: tt.day,
-      text: `اليوم ${tt.day} | ${tt.tour.name.replace(/\s*[\r\n]+\s*/g, " ").replace(/\s{2,}/g, " ").trim()} | ${tourType} | ${formatNumber(price)} ريال`,
+      text: `اليوم ${tt.day} | ${nameWithV} | ${tourType} | ${formatNumber(price)} ريال`,
     };
   });
   // Emit a placeholder line for every day not covered by a tour or transfer.

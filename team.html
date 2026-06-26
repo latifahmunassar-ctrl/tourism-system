@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-06-25-logofix3';
+  var BUILD = '2026-06-26-vehicletype';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1432,7 +1432,12 @@ async function vswFetch(cell){
   }catch(e){ menu.innerHTML = '<div class="hsw-loading">تعذّر جلب الخيارات</div>'; }
 }
 function _vswRange(v){ return (v.min && v.max && v.min!==v.max) ? `${v.min}-${v.max}` : `${v.min||v.max||'?'}`; }
-function _stripCap(s){ return String(s||'').replace(/\s*\(سيارة تتسع[^)]*\)/g,'').trim(); }
+// يجرّد أي ملاحظة سيارة من اسم السطر (سعة أو نوع: سيدان/باص/دفع رباعي) قبل إعادة
+// كتابتها — حتى لا تتراكم الأقواس عند تبديل السيارة. يطابق المحرّك الذي يضيف
+// «(دفع رباعي)» / «(سيارة تتسع N)» لانتقالات صلالة.
+function _stripCap(s){ return String(s||'').replace(/\s*\((?:سيارة|سياره|سيدان|باص|دفع\s*رباعي)[^)]*\)/g,'').trim(); }
+// نوع السيارة بالعربي من label المتغيّر (صلالة فقط لها النوع بين قوسين عربي).
+function _vehType(label){ const m=String(label||'').match(/\(([^)]*[؀-ۿ][^)]*)\)/); return m?m[1].replace(/\s+/g,' ').trim():''; }
 function vswRender(cell, variants){
   cell._variants = variants;
   const menu = cell.querySelector('.hsw-menu');
@@ -1475,9 +1480,11 @@ function vswPick(cell, idx){
     const p = oldLine.split('|').map(x=>x.trim());
     const cap = _vswRange(v);
     const detail = _stripCap(p[1]);
-    const newLine = `${p[0]||''} | ${detail} (سيارة تتسع ${cap}) | ${p[2]||''} | ${v.price||0} ريال`;
+    const vType = _vehType(v.label);                       // نوع السيارة (صلالة: سيدان/دفع رباعي/باص)
+    const note = vType ? `(${vType} — تتسع ${cap})` : `(سيارة تتسع ${cap})`;
+    const newLine = `${p[0]||''} | ${detail} ${note} | ${p[2]||''} | ${v.price||0} ريال`;
     if(_vswReplaceRaw(oldLine, lastProgramRaw.replace(oldLine, newLine)))
-      addMessage('sys', `تم اختيار سيارة تتسع ${cap} — السعر ${(v.price||0).toLocaleString()} ريال.`);
+      addMessage('sys', `تم اختيار ${vType?vType+' ':''}سيارة تتسع ${cap} — السعر ${(v.price||0).toLocaleString()} ريال.`);
   }catch(e){ addMessage('sys','خطأ في اختيار السيارة: '+(e&&e.message?e.message:e)); }
 }
 function vswAddSecond(cell, idx){
@@ -1490,15 +1497,17 @@ function vswAddSecond(cell, idx){
     const oldLine = cell.dataset.vline||''; if(!oldLine) return;
     const p = oldLine.split('|').map(x=>x.trim());
     const cap = _vswRange(v);
-    const secondLine = `${p[0]||''} | نقل إضافي — سيارة تتسع ${cap} | ${p[2]||'Pickup'} | ${v.price||0} ريال`;
+    const vType = _vehType(v.label);
+    const secondLine = `${p[0]||''} | نقل إضافي — ${vType?vType+' ':'سيارة '}تتسع ${cap} | ${p[2]||'Pickup'} | ${v.price||0} ريال`;
     if(_vswReplaceRaw(oldLine, lastProgramRaw.replace(oldLine, oldLine + '\n' + secondLine)))
-      addMessage('sys', `أُضيفت سيارة ثانية (تتسع ${cap}) بسعر ${(v.price||0).toLocaleString()} ريال — في نفس اليوم.`);
+      addMessage('sys', `أُضيفت سيارة ثانية (${vType?vType+' ':''}تتسع ${cap}) بسعر ${(v.price||0).toLocaleString()} ريال — في نفس اليوم.`);
   }catch(e){ addMessage('sys','خطأ في إضافة السيارة: '+(e&&e.message?e.message:e)); }
 }
 // تطبيق «سيارة ثانية» (نفس السعة والسعر) على كل الجولات دفعة واحدة — يتخطّى الجولات التي عندها سيارة ثانية مسبقاً
 function vswApplyAllTours(v){
   try{
     const cap = _vswRange(v);
+    const vType = _vehType(v.label);
     const tours = parseSection(lastProgramRaw, 'TOURS') || [];
     const haveSecond = new Set(tours.filter(t=>/نقل إضافي/.test(t)).map(t=>String(t.split('|')[0]||'').trim()));
     let raw = lastProgramRaw, added = 0;
@@ -1507,7 +1516,7 @@ function vswApplyAllTours(v){
       const p = tl.split('|').map(x=>x.trim());
       const day = p[0]||'';
       if(haveSecond.has(day)) return;                        // عنده سيارة ثانية مسبقاً
-      const secondLine = `${day} | نقل إضافي — سيارة تتسع ${cap} | ${p[2]||'Pickup'} | ${v.price||0} ريال`;
+      const secondLine = `${day} | نقل إضافي — ${vType?vType+' ':'سيارة '}تتسع ${cap} | ${p[2]||'Pickup'} | ${v.price||0} ريال`;
       raw = raw.replace(tl, tl + '\n' + secondLine);
       haveSecond.add(day); added++;
     });
