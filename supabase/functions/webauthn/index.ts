@@ -73,6 +73,11 @@ Deno.serve(async (req) => {
       if (user.status === "pending") return json({ error: "حسابك بانتظار موافقة الإدارة" }, 403);
       if (user.status !== "active") return json({ error: "الحساب موقوف" }, 403);
       const { data: existing } = await supa.from("user_passkeys").select("credential_id, transports").eq("user_id", user.id);
+      // قفل قوي: بصمة واحدة لكل موظفة (جهاز واحد). لو عندها بصمة أصلاً نرفض
+      // تسجيل جهاز ثانٍ — المالكة لازم تضغط «إعادة ضبط الجهاز» أولاً لتسمح بجهاز جديد.
+      if ((existing || []).length >= 1) {
+        return json({ error: "عندك بصمة مسجّلة على جهازك. لتسجيل جهاز جديد لازم الإدارة تعيد ضبط جهازك أولاً." }, 409);
+      }
       const opts = await generateRegistrationOptions({
         rpName: RP_NAME, rpID: RP_ID,
         userID: new TextEncoder().encode(String(user.id)),
@@ -101,10 +106,14 @@ Deno.serve(async (req) => {
       await supa.from("webauthn_challenges").delete().eq("id", challengeId);
       if (!verification.verified || !verification.registrationInfo) return json({ error: "لم يُقبل المفتاح" }, 400);
       const cred = verification.registrationInfo.credential;
+      // ربط البصمة بالمتصفح/الجهاز الذي سجّل منه (قفل قوي) — الدخول لاحقاً لا يُقبل
+      // إلا من نفس device_token.
+      const regDeviceToken = String(body.device_token || "").trim() || null;
       const { error } = await supa.from("user_passkeys").insert({
         user_id: user.id, credential_id: cred.id, public_key: b64url(cred.publicKey),
         counter: cred.counter || 0, transports: (cred.transports || []).join(","),
         device_label: String(body.device_label || "").slice(0, 80) || null,
+        device_token: regDeviceToken,
       });
       if (error) return json({ error: error.message }, 500);
       return json({ ok: true });
@@ -152,6 +161,17 @@ Deno.serve(async (req) => {
       } catch (e) { return json({ error: "فشل التحقّق: " + (e as Error).message }, 400); }
       await supa.from("webauthn_challenges").delete().eq("id", challengeId);
       if (!verification.verified) return json({ error: "فشل الدخول بالبصمة" }, 401);
+      // قفل قوي: الدخول من نفس المتصفح/الجهاز المسجّل فقط — حتى لو تزامنت البصمة
+      // عبر آيكلاود/جوجل لجهاز ثانٍ، الـdevice_token يختلف فيُرفض. البصمات القديمة
+      // (سُجّلت قبل الربط، device_token فارغ) تُربَط بأول جهاز يدخل منها (bind-on-use).
+      const authDeviceToken = String(body.device_token || "").trim();
+      if (key.device_token) {
+        if (!authDeviceToken || authDeviceToken !== key.device_token) {
+          return json({ error: "هذا الجهاز غير مصرّح. الدخول مسموح من جهازك المسجّل فقط — راجعي الإدارة لإعادة الضبط." }, 403);
+        }
+      } else if (authDeviceToken) {
+        await supa.from("user_passkeys").update({ device_token: authDeviceToken }).eq("id", key.id);
+      }
       await supa.from("user_passkeys").update({ counter: verification.authenticationInfo.newCounter, last_used_at: new Date().toISOString() }).eq("id", key.id);
       await supa.from("app_users").update({ last_login_at: new Date().toISOString() }).eq("id", user.id);
       // المستخدم أثبت هويته بالبصمة → نسلّمه مفتاح صندوق الطلبات تلقائياً

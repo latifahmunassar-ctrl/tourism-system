@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-06-26-passkeyonly';
+  var BUILD = '2026-06-26-onedevice';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -759,7 +759,7 @@ async function passkeyLogin(){
     const start = await waPost({ action:'auth_start' });
     if(!start.options) throw new Error(start.error||'تعذّر بدء الدخول');
     const resp = await startAuthentication({ optionsJSON: start.options });
-    const fin = await waPost({ action:'auth_finish', challengeId:start.challengeId, response:resp });
+    const fin = await waPost({ action:'auth_finish', challengeId:start.challengeId, response:resp, device_token:getDeviceToken() });
     if(fin.ok){ sessionStorage.setItem(AUTH_KEY,'1'); if(fin.user&&fin.user.name) localStorage.setItem('alezz_user_name',fin.user.name); if(fin.admin_secret) localStorage.setItem('alezz_admin_secret', fin.admin_secret); showApp(); }
     else throw new Error(fin.error||'فشل الدخول بالبصمة');
   }catch(e){ err.textContent = (e&&e.name==='NotAllowedError')?'أُلغيت البصمة' : (e.message||'تعذّر الدخول بالبصمة'); }
@@ -772,7 +772,7 @@ async function passkeySetup(){
     const start = await waPost({ action:'reg_start', phone });
     if(!start.options){ alert(start.error||'تعذّر — تأكدي إنك مسجّلة ومعتمدة من الإدارة'); return; }
     const resp = await startRegistration({ optionsJSON: start.options });
-    const fin = await waPost({ action:'reg_finish', phone, challengeId:start.challengeId, response:resp, device_label:navigator.userAgent.slice(0,60) });
+    const fin = await waPost({ action:'reg_finish', phone, challengeId:start.challengeId, response:resp, device_label:navigator.userAgent.slice(0,60), device_token:getDeviceToken() });
     alert(fin.ok ? 'تم تسجيل بصمتك على هذا الجهاز ✅ تقدرين تدخلين بالبصمة.' : (fin.error||'فشل التسجيل'));
   }catch(e){ alert((e&&e.name==='NotAllowedError')?'أُلغيت البصمة':(e.message||'تعذّر')); }
 }

@@ -603,7 +603,7 @@ Deno.serve(async (req) => {
   if (adminAction) {
     // Company-account management is OWNER-only (separate private dashboard) and
     // uses COMPANIES_ADMIN_SECRET. The staff request inbox keeps CLIENT_ADMIN_SECRET.
-    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove", "staff_report", "sec_overview", "sec_country_add", "sec_country_remove", "sec_enforce_set", "sec_device_trust", "sec_device_approve", "sec_device_remove", "sec_user_approve", "sec_user_suspend", "sec_user_remove"].includes(adminAction);
+    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove", "staff_report", "sec_overview", "sec_country_add", "sec_country_remove", "sec_enforce_set", "sec_device_trust", "sec_device_approve", "sec_device_remove", "sec_user_approve", "sec_user_suspend", "sec_user_remove", "sec_user_reset"].includes(adminAction);
     const expected = (Deno.env.get(ownerOnly ? "COMPANIES_ADMIN_SECRET" : "CLIENT_ADMIN_SECRET") || "").trim();
     const got = (req.headers.get("x-admin-secret") || "").trim();
 
@@ -897,6 +897,15 @@ Deno.serve(async (req) => {
       const id = url.searchParams.get("id") || "";
       if (!id) return json({ error: "id required" }, 400);
       const { error } = await supabase.from("app_users").delete().eq("id", id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+    // إعادة ضبط جهاز الموظفة: نحذف بصماتها فتقدر تسجّل بصمة على جهاز جديد (قفل
+    // الجهاز الواحد يمنعها من إضافة جهاز ثانٍ إلا بعد هذا). الحساب يبقى نشطاً.
+    if (adminAction === "sec_user_reset") {
+      const id = url.searchParams.get("id") || "";
+      if (!id) return json({ error: "id required" }, 400);
+      const { error } = await supabase.from("user_passkeys").delete().eq("user_id", id);
       if (error) return json({ error: error.message }, 500);
       return json({ ok: true });
     }

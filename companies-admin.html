@@ -234,7 +234,7 @@ async function loadSecurity(){
         const hl=(u.status==='active'&&(u.passkeys||0)===0)?' style="background:rgba(229,57,53,0.07)"':'';
         let act='';
         if(u.status==='pending') act=`<button class="ac-btn ok" onclick="approveUser('${u.id}')">✅ اعتماد</button> <button class="ac-btn no" onclick="removeUser('${u.id}','${esc(u.name)}')">رفض</button>`;
-        else if(u.status==='active') act=`<button class="ac-btn no" onclick="suspendUser('${u.id}')">⏸️ إيقاف</button>`;
+        else if(u.status==='active') act=`${(u.passkeys||0)>0?`<button class="ac-btn no" onclick="resetUser('${u.id}','${esc(u.name)}')">🔄 إعادة ضبط الجهاز</button> `:''}<button class="ac-btn no" onclick="suspendUser('${u.id}')">⏸️ إيقاف</button>`;
         else act=`<button class="ac-btn ok" onclick="approveUser('${u.id}')">▶️ تفعيل</button> <button class="ac-btn no" onclick="removeUser('${u.id}','${esc(u.name)}')">حذف</button>`;
         return `<tr${hl}><td>${esc(u.name)}</td><td style="direction:ltr;text-align:right">${esc(u.phone)}</td><td>${st}</td><td>${pk}</td><td>${act}</td></tr>`;
       }).join('')}</tbody></table>`:'<div class="ac-empty">لا حسابات موظفات بعد</div>'}
@@ -295,6 +295,11 @@ async function removeDevice(id,label){
 async function approveUser(id){
   const r=await fetch(BASE+'?admin_action=sec_user_approve&id='+id,{method:'POST',headers:H()});
   const d=await r.json(); if(d.ok){ secFlash('تم اعتماد الموظفة ✅ — تقدر تسجّل بصمتها الآن',true); loadSecurity(); } else secFlash(d.error||'فشل',false);
+}
+async function resetUser(id,name){
+  if(!confirm('إعادة ضبط جهاز «'+name+'»؟\n\nبتُحذف بصمتها الحالية، فتقدر تسجّل بصمة على جهاز جديد. الحساب يبقى نشطاً. استخدميها لو بدّلت جهازها أو انقفلت.')) return;
+  const r=await fetch(BASE+'?admin_action=sec_user_reset&id='+id,{method:'POST',headers:H()});
+  const d=await r.json(); if(d.ok){ secFlash('تمت إعادة الضبط ✅ — تقدر «'+name+'» تسجّل بصمة على جهازها الجديد الآن',true); loadSecurity(); } else secFlash(d.error||'فشل',false);
 }
 async function suspendUser(id){
   if(!confirm('إيقاف دخول هذه الموظفة؟')) return;
