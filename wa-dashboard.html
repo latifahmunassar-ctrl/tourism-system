@@ -2711,8 +2711,7 @@
             <div class="label conv-clickable" data-action="open-conv" data-phone="${escapeHtml(c.phone)}" data-name="${escapeHtml(c.profile_name || ph)}">
               <span class="dot ${dotCls}"></span>
               <div class="label-text">
-                <span class="primary">${escapeHtml(c.profile_name || ph)}</span>
-                <span class="secondary" style="direction:ltr; text-align:right; font-weight:800; color:#0b5d4e; letter-spacing:.3px;">📱 ${escapeHtml(ph)}</span>
+                <span class="primary">${escapeHtml(c.profile_name || ph)}${c.profile_name ? ` <span style="font-size:12px; font-weight:700; color:#0b5d4e; direction:ltr; unicode-bidi:isolate; white-space:nowrap;">📱 ${escapeHtml(ph)}</span>` : ""}</span>
                 ${previewLine}
                 ${assignedLine}
                 <span class="secondary">🕐 آخر نشاط ${escapeHtml(fmtTime(c.last_message_at))}${destBadge}${assignedBadge}</span>
