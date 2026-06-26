@@ -4404,6 +4404,8 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       if(!r.ok||!d.ok){ throw new Error((d&&d.detail&&(d.detail.message||JSON.stringify(d.detail)))||d.error||('HTTP '+r.status)); }
       alert('✅ تم إرسال الـ PDF للعميل على واتساب!');
       indivState=null; if(btn) btn.style.display='none';
+      // ينتقل الطلب فورًا من «الواردة» إلى «المرسلة» ويُنظَّف الوارد + العدّاد.
+      try{ indivRender(await indivList()); }catch(_){}
     }catch(e){
       const m=String(e.message||e);
       const hint=/132000|re-?engag|24|outside|window|session|recipient/i.test(m)?'\n\n(غالباً مرّ أكثر من 24 ساعة على آخر رسالة من العميل — أرسلي من لوحة الواتساب أو خلّيه يرسل رسالة أولاً.)':'';
