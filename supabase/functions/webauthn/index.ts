@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
         userName: user.phone, userDisplayName: user.name,
         attestationType: "none",
         excludeCredentials: (existing || []).map((c: any) => ({ id: c.credential_id, transports: c.transports ? c.transports.split(",") : undefined })),
-        authenticatorSelection: { residentKey: "preferred", userVerification: "preferred" },
+        authenticatorSelection: { residentKey: "preferred", userVerification: "required" },
       });
       const challengeId = crypto.randomUUID();
       await supa.from("webauthn_challenges").insert({ id: challengeId, user_id: user.id, challenge: opts.challenge, kind: "reg", expires_at: new Date(Date.now() + 300000).toISOString() });
@@ -124,7 +124,10 @@ Deno.serve(async (req) => {
         if (!keys || !keys.length) return json({ error: "لا توجد بصمة مسجّلة لهذا الحساب" }, 404);
         allow = keys.map((c: any) => ({ id: c.credential_id, transports: c.transports ? c.transports.split(",") : undefined }));
       }
-      const opts = await generateAuthenticationOptions({ rpID: RP_ID, allowCredentials: allow, userVerification: "preferred" });
+      // userVerification: "required" — لازم يتطابق مع التحقق في auth_finish (الذي
+      // يفرض UV افتراضياً في @simplewebauthn v13). "preferred" كان يسمح للجهاز
+      // يرجع بلا تحقق بيومتري فيُرفض بخطأ «User verification required».
+      const opts = await generateAuthenticationOptions({ rpID: RP_ID, allowCredentials: allow, userVerification: "required" });
       const challengeId = crypto.randomUUID();
       await supa.from("webauthn_challenges").insert({ id: challengeId, user_id: userId, challenge: opts.challenge, kind: "auth", expires_at: new Date(Date.now() + 300000).toISOString() });
       return json({ ok: true, challengeId, options: opts });
