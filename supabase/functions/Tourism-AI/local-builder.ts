@@ -1527,12 +1527,14 @@ export function formatProgram(data: ProgramData): string {
   const isAllScope = data.extraBedScope === "all";
   const scopeList = Array.isArray(data.extraBedScope) ? data.extraBedScope : [];
   const extraBedTotal = hotels.reduce((s, sh) => {
-    if (sh.hotel.stars < 4 || sh.hotel.stars > 5) return s;
+    // صلالة: السرير الإضافي 150 ريال/ليلة لأي فندق (بأي تصنيف). غيرها: 4-5★ فقط (5★=120 / 4★=100).
+    const isSalalah = sh.city === "Salalah";
+    if (!isSalalah && (sh.hotel.stars < 4 || sh.hotel.stars > 5)) return s;
     const inScope = isAllScope
       || scopeList.includes(sh.city)
       || scopeList.some(c => sh.city.toLowerCase() === String(c).toLowerCase());
     if (!inScope) return s;
-    const nightly = sh.hotel.stars >= 5 ? 120 : 100;
+    const nightly = isSalalah ? 150 : (sh.hotel.stars >= 5 ? 120 : 100);
     return s + nightly * sh.nights;
   }, 0);
   const hotelsTotal = hotelsBase + extraBedTotal;

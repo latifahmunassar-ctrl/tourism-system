@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-06-27-oman-pdf-typeonly';
+  var BUILD = '2026-06-27-salalah-bed150';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1948,7 +1948,8 @@ function parseExtraBedCitiesLine(line) {
 }
 
 function extraBedCountForHotelLine(extraBedMap, cityRaw, stars, destRaw) {
-  if (!(stars >= 4 && stars <= 5)) return 0;
+  // صلالة: السرير الإضافي متاح لأي فندق (بأي تصنيف). غيرها: 4-5★ فقط.
+  if (!/صلال/.test(String(cityRaw || '')) && !(stars >= 4 && stars <= 5)) return 0;
   if (extraBedMap.__all__ !== undefined) return extraBedMap.__all__;
 
   const hLat = normExtraBedCityKey(cityRaw);
@@ -2229,7 +2230,9 @@ function hotelLineTotals(line) {
     }
   }
   const stars = parseInt(String(p[2] || '').replace(/[^\d]/g, ''), 10) || 0;
-  const extraBedPricePerNight = stars >= 5 ? 120 : (stars === 4 ? 100 : 0);
+  // صلالة: السرير الإضافي 150 ريال/ليلة لأي فندق (بأي تصنيف). غيرها: 5★=120 / 4★=100.
+  const _isSalalah = /صلال/.test(String(p[1] || ''));
+  const extraBedPricePerNight = _isSalalah ? 150 : (stars >= 5 ? 120 : (stars === 4 ? 100 : 0));
   const extraBedCount = 0;
   const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * nights * extraBedCount) : 0;
   return { p, nightly, nights, totalLine, stars, extraBedCount, extraBedPricePerNight, extraBedTotal };
