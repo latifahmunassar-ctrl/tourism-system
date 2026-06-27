@@ -3233,6 +3233,15 @@ Deno.serve(async (req) => {
     if (checkAuth(req)) return true;
     return !!(await getCallerStaff(req));
   };
+  // بوابة المالكة الموحّدة لإدارة أمان الموظفين: تقبل إمّا توكن الأدمن (legacy
+  // JWT من داشبورد الواتساب) أو مفتاح المالكة COMPANIES_ADMIN_SECRET (من
+  // companies-admin). فالموافقة من أي واجهة تشتغل على نفس الجداول → موحّدة.
+  const ownerGate = (req: Request): boolean => {
+    if (checkAuth(req)) return true;
+    const sec = (Deno.env.get("COMPANIES_ADMIN_SECRET") || "").trim();
+    const got = (req.headers.get("x-admin-secret") || "").trim();
+    return !!sec && got === sec;
+  };
   // إذا كان الطلب باستخدام staff session، يرجع صف الموظف. وإلا (الادمن
   // باستخدام legacy JWT أو غير مصرّح) يرجع null. تستخدم لتخصيص المحتوى
   // حسب الموظف الفعلي اللي عامل تسجيل دخول.
@@ -3657,7 +3666,7 @@ Deno.serve(async (req) => {
             try {
               await supabase.from("trusted_devices").insert({
                 device_token: deviceToken, label: "جهاز جديد (واتساب) — بانتظار التوثيق",
-                approved: false, source: "whatsapp",
+                approved: false, source: "whatsapp", staff_phone: row.phone,
               });
             } catch (_e) { /* موجود مسبقاً */ }
           }
@@ -3690,6 +3699,91 @@ Deno.serve(async (req) => {
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }),
         { status: 500, headers: jsonCors });
+    }
+  }
+
+  // ── أمان الموظفين الموحّد: أجهزة + بصمات لكل موظف ─────────────────────
+  // كل العمليات على نفس الجداول (trusted_devices + wa_staff_passkeys) فالموافقة
+  // من الداشبورد أو من companies-admin تسري في الاثنين. بوابة: ownerGate.
+  if (url.searchParams.get("admin_action") === "staff_security_overview") {
+    if (!ownerGate(req)) return unauthorized();
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const [staffRes, devRes, pkRes] = await Promise.all([
+        supabase.from("wa_staff").select("phone, name, username, role, active").order("name"),
+        supabase.from("trusted_devices").select("id, staff_phone, approved, label, created_at").eq("source", "whatsapp").order("created_at", { ascending: false }),
+        supabase.from("wa_staff_passkeys").select("id, staff_phone, device_label, last_used_at, created_at"),
+      ]);
+      const devs = (devRes.data || []) as Array<{ id: string; staff_phone: string | null; approved: boolean; label: string | null; created_at: string }>;
+      const pks = (pkRes.data || []) as Array<{ id: string; staff_phone: string; device_label: string | null; last_used_at: string | null; created_at: string }>;
+      const staff = ((staffRes.data || []) as Array<{ phone: string; name: string; username: string | null; role: string; active: boolean }>).map(s => {
+        const myDevs = devs.filter(d => d.staff_phone === s.phone);
+        const approvedDev = myDevs.find(d => d.approved) || null;
+        const pendingDev = myDevs.find(d => !d.approved) || null;
+        const myPks = pks.filter(p => p.staff_phone === s.phone);
+        return {
+          phone: s.phone, name: s.name, username: s.username, role: s.role, active: s.active,
+          device_approved: !!approvedDev,
+          approved_device_id: approvedDev?.id || null,
+          pending_device_id: pendingDev?.id || null,
+          has_passkey: myPks.length > 0,
+          passkey_count: myPks.length,
+          passkey_last_used: myPks.map(p => p.last_used_at).filter(Boolean).sort().pop() || null,
+        };
+      });
+      // أجهزة معلّقة غير مربوطة بأي موظف (للاعتماد العام).
+      const unassignedPending = devs.filter(d => !d.approved && !d.staff_phone).map(d => ({ id: d.id, label: d.label, created_at: d.created_at }));
+      return new Response(JSON.stringify({ ok: true, staff, unassignedPending }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // اعتماد جهاز (بالمعرّف) — يفعّل دخول الموظف (وبصمته) من هذا الجهاز.
+  if (url.searchParams.get("admin_action") === "staff_device_approve") {
+    if (!ownerGate(req)) return unauthorized();
+    try {
+      const p = await req.json(); const id = String(p.device_id || "").trim();
+      if (!id) return new Response(JSON.stringify({ error: "device_id required" }), { status: 400, headers: jsonCors });
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { error } = await supabase.from("trusted_devices").update({ approved: true, approved_by: "owner", approved_at: new Date().toISOString() }).eq("id", id);
+      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonCors });
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // رفض/إلغاء جهاز (بالمعرّف) + إنهاء جلسات الموظف المرتبط فوراً.
+  if (url.searchParams.get("admin_action") === "staff_device_revoke") {
+    if (!ownerGate(req)) return unauthorized();
+    try {
+      const p = await req.json(); const id = String(p.device_id || "").trim();
+      if (!id) return new Response(JSON.stringify({ error: "device_id required" }), { status: 400, headers: jsonCors });
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: dev } = await supabase.from("trusted_devices").select("staff_phone").eq("id", id).maybeSingle();
+      const phone = (dev as { staff_phone?: string | null } | null)?.staff_phone || null;
+      await supabase.from("trusted_devices").delete().eq("id", id);
+      if (phone) await supabase.from("wa_staff_sessions").update({ revoked_at: new Date().toISOString() }).eq("phone", phone).is("revoked_at", null);
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // إعادة ضبط/حذف بصمة موظف (لو بدّل جواله أو انقفل) — يحذف مفاتيحه فيقدر
+  // يسجّل بصمة جديدة على جهازه المعتمد. الحساب يبقى نشطاً.
+  if (url.searchParams.get("admin_action") === "staff_passkey_reset") {
+    if (!ownerGate(req)) return unauthorized();
+    try {
+      const p = await req.json(); const phone = normalizeWhatsappPhone(String(p.phone || ""));
+      if (!phone || phone === "whatsapp:+") return new Response(JSON.stringify({ error: "phone required" }), { status: 400, headers: jsonCors });
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { error } = await supabase.from("wa_staff_passkeys").delete().eq("staff_phone", phone);
+      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonCors });
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }
   }
 

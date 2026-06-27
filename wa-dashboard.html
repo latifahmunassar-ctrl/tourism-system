@@ -997,6 +997,12 @@
       </div>
     </section>
 
+    <section class="users-section">
+      <h3>🔒 أجهزة وبصمات الموظفين</h3>
+      <p style="color:var(--muted); font-size:13px; margin:0 0 12px;">اعتماد جهاز كل موظف وإدارة بصمته. أي إجراء هنا يسري أيضاً في «إدارة المستخدمين» (نفس المصدر).</p>
+      <div class="panel-list" id="staff-sec-list"><div class="empty">جاري التحميل…</div></div>
+    </section>
+
     <section class="offers-section">
       <h3>🔔 المتابعة التلقائية</h3>
       <p style="color:var(--muted); font-size:13px; margin:0 0 12px;">رسالة متابعة واحدة تلقائيًا للعميل اليوم الثاني بعد إرسال البرنامج/العرض («طمّنّي عسى البرنامج عجبك»). بتوقيت السعودية.</p>
@@ -1708,6 +1714,7 @@
         document.body.classList.toggle("admin-contacts-tab", tab === "contacts");
         document.body.classList.toggle("admin-offers-tab", tab === "offers");
         // First time opening contacts → load them
+        if (tab === "users") loadStaffSecurity();
         if (tab === "contacts" && !contactsLoaded) loadContacts();
         if (tab === "offers") { loadOffers(); loadFollowupSettings(); loadLocations(); }
       });
@@ -1795,6 +1802,47 @@
       const s = staffList.find(x => x.phone === phone);
       return s ? s.name : (phone ? fmtPhone(phone) : "");
     }
+
+    // ── أمان الموظفين: أجهزة + بصمات (موحّد مع إدارة المستخدمين) ──────────
+    async function loadStaffSecurity() {
+      const box = $("staff-sec-list"); if (!box) return;
+      try {
+        const res = await fetch(BASE + "?admin_action=staff_security_overview", { headers: { Authorization: "Bearer " + token } });
+        const d = await res.json();
+        if (!res.ok || !d.ok) { box.innerHTML = '<div class="empty">تعذّر التحميل</div>'; return; }
+        renderStaffSecurity(d.staff || [], d.unassignedPending || []);
+      } catch (_e) { box.innerHTML = '<div class="empty">تعذّر الاتصال</div>'; }
+    }
+    function renderStaffSecurity(staff, pending) {
+      const box = $("staff-sec-list");
+      if (!staff.length) { box.innerHTML = '<div class="empty">لا يوجد موظفون</div>'; return; }
+      const rows = staff.map(s => {
+        const dev = s.device_approved
+          ? '<span style="color:#15803d;font-weight:800">✅ جهاز معتمد</span>'
+          : (s.pending_device_id ? '<span style="color:#b45309;font-weight:800">⏳ جهاز بانتظار اعتمادك</span>' : '<span style="color:#9ca3af;font-weight:700">— لا يوجد جهاز</span>');
+        const pk = s.has_passkey ? '<span style="color:#15803d;font-weight:800">👆 بصمة مفعّلة</span>' : '<span style="color:#9ca3af;font-weight:700">— لا بصمة</span>';
+        let btns = "";
+        if (s.pending_device_id) btns += `<button class="filter-btn" style="background:#dcfce7;color:#15803d;border-color:#bbf7d0" onclick="secApproveDevice('${s.pending_device_id}')">✅ اعتماد الجهاز</button>`;
+        if (s.approved_device_id) btns += `<button class="filter-btn" style="background:#fee2e2;color:#b91c1c;border-color:#fecaca" onclick="secRevokeDevice('${s.approved_device_id}','${escapeHtml(s.name)}')">إلغاء الجهاز</button>`;
+        if (s.has_passkey) btns += `<button class="filter-btn" style="background:#fef3c7;color:#92400e;border-color:#fde68a" onclick="secResetPasskey('${s.phone}','${escapeHtml(s.name)}')">🔄 إعادة ضبط البصمة</button>`;
+        return `<div class="row" style="flex-direction:column;align-items:stretch;gap:6px;padding:12px 14px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+            <b>${escapeHtml(s.name)} <span style="color:var(--muted);font-weight:600;font-size:12px">(${s.role === "monitor" ? "مراقب" : "مبيعات"})</span></b>
+            <span style="font-size:12px">${dev} · ${pk}</span>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">${btns || '<span style="color:var(--muted);font-size:12px">لا إجراءات مطلوبة</span>'}</div>
+        </div>`;
+      }).join("");
+      const pend = pending.length ? `<div style="padding:10px 14px;background:#fff7ed;border-top:1px solid #fed7aa;font-size:12px;color:#9a3412">⏳ ${pending.length} جهاز معلّق غير مرتبط بموظف — يظهر في زر «🔒 أجهزة».</div>` : "";
+      box.innerHTML = rows + pend;
+    }
+    async function secAct(body) {
+      const res = await fetch(BASE + "?admin_action=" + body.action, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify(body) });
+      return res.json();
+    }
+    window.secApproveDevice = async (id) => { const d = await secAct({ action: "staff_device_approve", device_id: id }); if (d.ok) loadStaffSecurity(); else alert(d.error || "فشل"); };
+    window.secRevokeDevice = async (id, name) => { if (!confirm("إلغاء جهاز «" + name + "»؟ سيُسجَّل خروجه فوراً.")) return; const d = await secAct({ action: "staff_device_revoke", device_id: id }); if (d.ok) loadStaffSecurity(); else alert(d.error || "فشل"); };
+    window.secResetPasskey = async (phone, name) => { if (!confirm("إعادة ضبط بصمة «" + name + "»؟ تُحذف بصمته الحالية فيقدر يسجّل بصمة جديدة على جهازه المعتمد.")) return; const d = await secAct({ action: "staff_passkey_reset", phone }); if (d.ok) loadStaffSecurity(); else alert(d.error || "فشل"); };
 
     function renderStaff(arr) {
       staffList = arr;

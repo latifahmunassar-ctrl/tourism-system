@@ -176,6 +176,30 @@ let SECRET=localStorage.getItem('alezz_owner_secret')||'';
 let cur=null, data=[];
 const esc=s=>String(s==null?'':s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
 const H=()=>({'x-admin-secret':SECRET,'Content-Type':'application/json'});
+// أمان موظفي الواتساب (wa_staff): نفس endpoints الداشبورد، بمفتاح المالكة.
+const WAR="https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/WhatsApp-Router";
+async function loadWaStaffSec(){
+  const box=$('waStaffSec'); if(!box) return;
+  try{
+    const r=await fetch(WAR+'?admin_action=staff_security_overview',{headers:{'x-admin-secret':SECRET}});
+    const d=await r.json(); if(!r.ok||!d.ok){ box.innerHTML='<div class="ac-empty">تعذّر تحميل موظفي الواتساب</div>'; return; }
+    const staff=d.staff||[];
+    if(!staff.length){ box.innerHTML='<div class="ac-empty">لا موظفون</div>'; return; }
+    box.innerHTML=`<table class="rep-table"><thead><tr><th>الاسم</th><th>الدور</th><th>الجهاز</th><th>البصمة</th><th></th></tr></thead><tbody>${staff.map(s=>{
+      const dev=s.device_approved?'<span style="color:var(--ok);font-weight:800">✅ معتمد</span>':(s.pending_device_id?'<span style="color:var(--warn);font-weight:800">⏳ بانتظار اعتمادك</span>':'<span style="color:var(--muted)">— لا يوجد</span>');
+      const pk=s.has_passkey?'<span style="color:var(--ok);font-weight:800">👆 مفعّلة</span>':'<span style="color:var(--muted)">— لا بصمة</span>';
+      let act='';
+      if(s.pending_device_id) act+=`<button class="ac-btn ok" onclick="waApproveDev('${s.pending_device_id}')">✅ اعتماد الجهاز</button> `;
+      if(s.approved_device_id) act+=`<button class="ac-btn no" onclick="waRevokeDev('${s.approved_device_id}','${esc(s.name)}')">إلغاء الجهاز</button> `;
+      if(s.has_passkey) act+=`<button class="ac-btn no" onclick="waResetPk('${s.phone}','${esc(s.name)}')">🔄 إعادة ضبط البصمة</button>`;
+      return `<tr><td>${esc(s.name)}</td><td>${s.role==='monitor'?'مراقب':'مبيعات'}</td><td>${dev}</td><td>${pk}</td><td>${act||'<span style="color:var(--muted);font-size:12px">—</span>'}</td></tr>`;
+    }).join('')}</tbody></table>`;
+  }catch(_){ box.innerHTML='<div class="ac-empty">تعذّر الاتصال</div>'; }
+}
+async function waSecAct(body){ const r=await fetch(WAR+'?admin_action='+body.action,{method:'POST',headers:{'x-admin-secret':SECRET,'Content-Type':'application/json'},body:JSON.stringify(body)}); return r.json(); }
+async function waApproveDev(id){ const d=await waSecAct({action:'staff_device_approve',device_id:id}); if(d.ok){ secFlash('تم اعتماد الجهاز ✅',true); loadWaStaffSec(); } else secFlash(d.error||'فشل',false); }
+async function waRevokeDev(id,name){ if(!confirm('إلغاء جهاز «'+name+'»؟ سيُسجَّل خروجه فوراً.')) return; const d=await waSecAct({action:'staff_device_revoke',device_id:id}); if(d.ok){ secFlash('تم الإلغاء ✅',true); loadWaStaffSec(); } else secFlash(d.error||'فشل',false); }
+async function waResetPk(phone,name){ if(!confirm('إعادة ضبط بصمة «'+name+'»؟ تُحذف بصمته الحالية فيقدر يسجّل بصمة جديدة على جهازه المعتمد.')) return; const d=await waSecAct({action:'staff_passkey_reset',phone}); if(d.ok){ secFlash('تمت إعادة الضبط ✅',true); loadWaStaffSec(); } else secFlash(d.error||'فشل',false); }
 const initials=n=>esc(String(n||'؟').trim().slice(0,2));
 const $=id=>document.getElementById(id);
 
@@ -255,11 +279,14 @@ async function loadSecurity(){
       ${devTable(devTourism,'لا أجهزة سياحية موثوقة بعد — وثّقي جهازك أو وافقي على طلبات الموظفات')}
       <div class="sec-sub" style="margin-top:24px">🔒 الموافقة الأمنية لداشبورد الواتساب <span style="font-weight:600;color:var(--muted);font-size:11.5px">— أجهزة منفصلة، تُعتمد لداشبورد الواتساب وحده</span></div>
       ${devTable(devWhatsapp,'لا طلبات أجهزة من داشبورد الواتساب بعد')}
+      <div class="sec-sub" style="margin-top:24px">🔑 أجهزة وبصمات موظفي الواتساب <span style="font-weight:600;color:var(--muted);font-size:11.5px">— اعتماد الجهاز + إدارة البصمة لكل موظف (موحّد مع الداشبورد)</span></div>
+      <div id="waStaffSec"><div class="ac-empty">جارٍ التحميل…</div></div>
       <div class="sec-sub" style="margin-top:20px">📜 آخر ${log.length} محاولة دخول</div>
       ${log.length?`<table class="rep-table"><thead><tr><th>الوقت</th><th>الحدث</th><th>الدولة</th><th>IP</th></tr></thead><tbody>${log.map(l=>{
         const cflag=l.country?(l.country_allowed?`<span style="color:var(--ok);font-weight:800">${esc(l.country)} ✓</span>`:`<span style="color:var(--err);font-weight:800">${esc(l.country)} ✕</span>`):'<span style="color:var(--muted)">؟</span>';
         return `<tr><td style="white-space:nowrap">${esc((l.created_at||'').slice(0,16).replace('T',' '))}</td><td>${evMap[l.event]||esc(l.event)}</td><td>${cflag}</td><td style="color:var(--muted);font-size:12px">${esc(l.ip||'—')}</td></tr>`;
       }).join('')}</tbody></table>`:'<div class="ac-empty">لا محاولات دخول بعد</div>'}`;
+    loadWaStaffSec();
   }catch(_){ box.innerHTML='<div class="ac-empty">تعذّر التحميل</div>'; }
 }
 async function addCountry(){
