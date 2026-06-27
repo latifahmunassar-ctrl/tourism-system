@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-06-26-company-editable';
+  var BUILD = '2026-06-27-oman-pdf-typeonly';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -3015,7 +3015,20 @@ async function searchByCode() {
 function buildPDF(mode) {
 if (!parsedData) return;
 const profit=parseInt(document.getElementById('profitInput').value)||0;
-const {dest,meta,dateFrom,dateTo,client,clientCode,extraBedCitiesLine,hotelsLines,flightsLines,transfersLines,toursLines,simText,persons,kids,infants,adults}=parsedData;
+let {dest,meta,dateFrom,dateTo,client,clientCode,extraBedCitiesLine,hotelsLines,flightsLines,transfersLines,toursLines,simText,persons,kids,infants,adults}=parsedData;
+// سلطنة عُمان حصراً: في ملف العميل نعرض نوع السيارة فقط (سيدان/دفع رباعي/باص) جنب
+// الجولة/الانتقال، ونحذف تنبيه السعة الداخلي «— تتسع N» و«أضف سيارة» (يبقى في شاشة
+// التسعيرة فقط). لا يؤثّر على الأسعار (السعر من عمود مستقل، لا من الاسم).
+if (/عمان|عُمان|oman/i.test(String(dest||''))) {
+  const _stripCap = s => String(s||'')
+    .replace(/\s*[—–-]\s*تتسع\s*[\d٠-٩]+\s*(?:،\s*أضف\s*سيار[ةه])?/g, '')
+    .replace(/\s*\(\s*سيار[ةه]\s*تتسع\s*[\d٠-٩]+\s*\)/g, '')
+    .replace(/\s*تتسع\s*[\d٠-٩]+\s*(?:،\s*أضف\s*سيار[ةه])?/g, '')
+    .replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim();
+  const _stripLine = l => { const p = String(l).split('|'); if (p[1] != null) p[1] = ' ' + _stripCap(p[1]) + ' '; return p.join('|'); };
+  toursLines = (toursLines||[]).map(_stripLine);
+  transfersLines = (transfersLines||[]).map(_stripLine);
+}
 const simCountNum = parseInt((arabicDigitsToLatin(String(simText || '')).match(/\d+/) || ['0'])[0].replace(/[^\d]/g, '')) || 0;
 const systemCode = (lastSavedCode || '').trim();
 // السعر النهائي الإجمالي = السعر الأساسي للمجموعة + الربح (إجمالي)
