@@ -1333,6 +1333,12 @@
           <span>تذكّرني (دخول تلقائي لمدة 30 يوم)</span>
         </label>
         <button id="auth-staff-submit" style="margin-top:10px;">دخول المبيعات</button>
+        <div style="margin-top:12px; border-top:1px dashed var(--border); padding-top:12px;">
+          <button type="button" id="auth-staff-passkey" style="background:#0e7c66;">👆 دخول بالبصمة / Face ID</button>
+          <div style="text-align:center; margin-top:8px;">
+            <a href="#" id="auth-staff-passkey-setup" style="font-size:12px; color:var(--muted);">✨ إعداد البصمة على هذا الجهاز (بعد دخولك بكلمة السر)</a>
+          </div>
+        </div>
         <div style="text-align:center; margin-top:10px;">
           <a href="#" class="auth-back" style="font-size:12px;">↩️ رجوع</a>
         </div>
@@ -1556,6 +1562,46 @@
         authError.textContent = "خطأ: " + e.message;
       }
     });
+    // ── دخول/إعداد البصمة لموظفي الواتساب (Passkey عبر دالة webauthn) ──────
+    // verify_jwt=false على الدالة، لكن نمرّر anon JWT صالح احتياطاً.
+    const WEBAUTHN_URL = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/webauthn";
+    const WA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mb3R2YWNzemxtcnF4emZqbXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2MjI5NTYsImV4cCI6MjA5MzE5ODk1Nn0.1nQmxW63BFZSK-cn4fzh8tYM7a2JO10AQ0RGQ5bcdYo";
+    const wpReq = async (b) => (await fetch(WEBAUTHN_URL, { method: "POST", headers: { "Content-Type": "application/json", "apikey": WA_ANON, "Authorization": "Bearer " + WA_ANON }, body: JSON.stringify(b) })).json();
+    function waDeviceToken() {
+      let t = localStorage.getItem("alezz_wa_device_token");
+      if (!t || t.length < 16) { t = (self.crypto && crypto.randomUUID) ? crypto.randomUUID() : ("wad-" + Date.now() + "-" + Math.random().toString(36).slice(2)); localStorage.setItem("alezz_wa_device_token", t); }
+      return t;
+    }
+    async function staffPasskeyLogin() {
+      authError.textContent = "";
+      try {
+        const lib = await import("https://esm.sh/@simplewebauthn/browser@13");
+        const start = await wpReq({ action: "staff_auth_start" });
+        if (!start.options) throw new Error(start.error || "تعذّر بدء البصمة");
+        const resp = await lib.startAuthentication({ optionsJSON: start.options });
+        const fin = await wpReq({ action: "staff_auth_finish", challengeId: start.challengeId, response: resp, device_token: waDeviceToken() });
+        if (!fin.ok || !fin.token) { authError.textContent = fin.error || "فشل الدخول بالبصمة"; return; }
+        if (fin.staff && fin.staff.username) localStorage.setItem(USERNAME_KEY, fin.staff.username);
+        setSession(fin.token, (fin.staff && fin.staff.role) || "sales");
+        hideAuth(); refresh(); startAutoRefresh();
+      } catch (e) { authError.textContent = (e && e.name === "NotAllowedError") ? "أُلغيت البصمة" : (e.message || "تعذّر"); }
+    }
+    async function staffPasskeySetup() {
+      const phone = prompt("رقم جوالك المسجّل لدى الإدارة (مثل +20…):", "");
+      if (phone === null) return;
+      authError.textContent = "";
+      try {
+        const lib = await import("https://esm.sh/@simplewebauthn/browser@13");
+        const start = await wpReq({ action: "staff_reg_start", phone, device_token: waDeviceToken() });
+        if (!start.options) { alert(start.error || "تعذّر — لازم تدخلين بكلمة السر أول من هذا الجهاز بعد اعتماده، ثم فعّلي البصمة."); return; }
+        const resp = await lib.startRegistration({ optionsJSON: start.options });
+        const fin = await wpReq({ action: "staff_reg_finish", phone, challengeId: start.challengeId, response: resp, device_token: waDeviceToken(), device_label: navigator.userAgent.slice(0, 60) });
+        alert(fin.ok ? "تم تسجيل البصمة على هذا الجهاز ✅ — تقدرين تدخلين بالبصمة من الآن." : (fin.error || "فشل التسجيل"));
+      } catch (e) { alert((e && e.name === "NotAllowedError") ? "أُلغيت البصمة" : (e.message || "تعذّر")); }
+    }
+    $("auth-staff-passkey").addEventListener("click", staffPasskeyLogin);
+    $("auth-staff-passkey-setup").addEventListener("click", (e) => { e.preventDefault(); staffPasskeySetup(); });
+
     // Show / hide password
     $("auth-show-password").addEventListener("click", () => {
       const pw = $("auth-password");

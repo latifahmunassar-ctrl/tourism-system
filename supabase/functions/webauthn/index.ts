@@ -41,6 +41,16 @@ function unb64url(s: string): Uint8Array {
   for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u;
 }
 const normPhone = (p: string) => String(p || "").replace(/[\s\-()]/g, "").trim();
+// رقم موظف الواتساب بصيغة wa_staff.phone القياسية: whatsapp:+<digits>
+const staffPhone = (p: string) => {
+  const d = String(p || "").replace(/^whatsapp:/, "").replace(/^\+/, "").replace(/^00/, "").replace(/[^0-9]/g, "");
+  return "whatsapp:+" + d;
+};
+// توكن جلسة عشوائي (مطابق لـ genSessionToken في WhatsApp-Router) لإدراجه في wa_staff_sessions.
+function genStaffToken(): string {
+  const b = new Uint8Array(32); crypto.getRandomValues(b);
+  let s = ""; for (const x of b) s += x.toString(16).padStart(2, "0"); return s;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
@@ -181,6 +191,109 @@ Deno.serve(async (req) => {
       // المستخدم أثبت هويته بالبصمة → نسلّمه مفتاح صندوق الطلبات تلقائياً
       // (نفس CLIENT_ADMIN_SECRET) فلا يُطلب منه إدخاله يدوياً.
       return json({ ok: true, user: { name: user.name, phone: user.phone }, admin_secret: Deno.env.get("CLIENT_ADMIN_SECRET") || "" });
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // مسار موظفي داشبورد الواتساب (wa_staff) — منفصل عن app_users أعلاه.
+    // البصمة هنا تُصدر توكن جلسة حقيقي (wa_staff_sessions) وتفرض اعتماد
+    // الجهاز + ربطه (trusted_devices) تماماً كدخول كلمة السر.
+    // ════════════════════════════════════════════════════════════════════
+
+    // بدء تسجيل بصمة لموظف: مسموح فقط من جهاز معتمد ومربوط بهذا الموظف
+    // (أي بعد أن يكون دخل بكلمة السر مرة على هذا الجهاز واعتمدته الإدارة).
+    if (action === "staff_reg_start") {
+      const phone = staffPhone(body.phone);
+      const deviceToken = String(body.device_token || "").trim();
+      if (!deviceToken) return json({ error: "تعذّر تحديد الجهاز" }, 400);
+      const { data: staff } = await supa.from("wa_staff").select("phone, name, active").eq("phone", phone).maybeSingle();
+      if (!staff) return json({ error: "لا يوجد موظف بهذا الرقم" }, 404);
+      if (!staff.active) return json({ error: "الحساب موقوف" }, 403);
+      const { data: dev } = await supa.from("trusted_devices").select("approved, staff_phone").eq("device_token", deviceToken).maybeSingle();
+      if (!dev || !dev.approved || dev.staff_phone !== phone) {
+        return json({ error: "فعّلي البصمة بعد دخولك بكلمة السر من جهازك المعتمد فقط." }, 403);
+      }
+      const { data: existing } = await supa.from("wa_staff_passkeys").select("credential_id, transports").eq("staff_phone", phone);
+      const opts = await generateRegistrationOptions({
+        rpName: RP_NAME, rpID: RP_ID,
+        userID: new TextEncoder().encode(phone),
+        userName: phone, userDisplayName: staff.name,
+        attestationType: "none",
+        excludeCredentials: (existing || []).map((c: any) => ({ id: c.credential_id, transports: c.transports ? c.transports.split(",") : undefined })),
+        authenticatorSelection: { residentKey: "required", userVerification: "required" },
+      });
+      const challengeId = crypto.randomUUID();
+      await supa.from("webauthn_challenges").insert({ id: challengeId, user_id: null, challenge: opts.challenge, kind: "staff_reg", expires_at: new Date(Date.now() + 300000).toISOString() });
+      return json({ ok: true, challengeId, options: opts });
+    }
+
+    // إنهاء تسجيل بصمة الموظف.
+    if (action === "staff_reg_finish") {
+      const phone = staffPhone(body.phone);
+      const deviceToken = String(body.device_token || "").trim();
+      const challengeId = String(body.challengeId || "");
+      const { data: ch } = await supa.from("webauthn_challenges").select("*").eq("id", challengeId).maybeSingle();
+      if (!ch || ch.kind !== "staff_reg" || new Date(ch.expires_at) < new Date()) return json({ error: "انتهت صلاحية الطلب، حاولي مجدداً" }, 400);
+      const { data: dev } = await supa.from("trusted_devices").select("approved, staff_phone").eq("device_token", deviceToken).maybeSingle();
+      if (!dev || !dev.approved || dev.staff_phone !== phone) return json({ error: "الجهاز غير معتمد لهذا الموظف" }, 403);
+      let verification;
+      try {
+        verification = await verifyRegistrationResponse({ response: body.response, expectedChallenge: ch.challenge, expectedOrigin: ORIGIN, expectedRPID: RP_ID });
+      } catch (e) { return json({ error: "فشل التحقّق: " + (e as Error).message }, 400); }
+      await supa.from("webauthn_challenges").delete().eq("id", challengeId);
+      if (!verification.verified || !verification.registrationInfo) return json({ error: "لم يُقبل المفتاح" }, 400);
+      const cred = verification.registrationInfo.credential;
+      const { error } = await supa.from("wa_staff_passkeys").insert({
+        staff_phone: phone, credential_id: cred.id, public_key: b64url(cred.publicKey),
+        counter: cred.counter || 0, transports: (cred.transports || []).join(","),
+        device_label: String(body.device_label || "").slice(0, 80) || null, device_token: deviceToken || null,
+      });
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+
+    // بدء دخول الموظف بالبصمة (discoverable — لا يحتاج إدخال الرقم).
+    if (action === "staff_auth_start") {
+      const opts = await generateAuthenticationOptions({ rpID: RP_ID, allowCredentials: [], userVerification: "required" });
+      const challengeId = crypto.randomUUID();
+      await supa.from("webauthn_challenges").insert({ id: challengeId, user_id: null, challenge: opts.challenge, kind: "staff_auth", expires_at: new Date(Date.now() + 300000).toISOString() });
+      return json({ ok: true, challengeId, options: opts });
+    }
+
+    // إنهاء دخول الموظف بالبصمة → يفرض اعتماد الجهاز ويُصدر توكن جلسة wa_staff_sessions.
+    if (action === "staff_auth_finish") {
+      const deviceToken = String(body.device_token || "").trim();
+      const challengeId = String(body.challengeId || "");
+      const { data: ch } = await supa.from("webauthn_challenges").select("*").eq("id", challengeId).maybeSingle();
+      if (!ch || ch.kind !== "staff_auth" || new Date(ch.expires_at) < new Date()) return json({ error: "انتهت صلاحية الطلب، حاولي مجدداً" }, 400);
+      const credId = String(body.response?.id || "");
+      const { data: key } = await supa.from("wa_staff_passkeys").select("*").eq("credential_id", credId).maybeSingle();
+      if (!key) return json({ error: "بصمة غير معروفة" }, 404);
+      const { data: staff } = await supa.from("wa_staff").select("phone, name, username, role, active").eq("phone", key.staff_phone).maybeSingle();
+      if (!staff || !staff.active) return json({ error: "الحساب غير مفعّل" }, 403);
+      let verification;
+      try {
+        verification = await verifyAuthenticationResponse({
+          response: body.response, expectedChallenge: ch.challenge, expectedOrigin: ORIGIN, expectedRPID: RP_ID,
+          credential: { id: key.credential_id, publicKey: unb64url(key.public_key), counter: Number(key.counter) || 0, transports: key.transports ? key.transports.split(",") : undefined },
+        });
+      } catch (e) { return json({ error: "فشل التحقّق: " + (e as Error).message }, 400); }
+      await supa.from("webauthn_challenges").delete().eq("id", challengeId);
+      if (!verification.verified) return json({ error: "فشل الدخول بالبصمة" }, 401);
+      // إنفاذ اعتماد الجهاز + ربطه (نفس منطق staff_login بكلمة السر).
+      if (!deviceToken) return json({ error: "تعذّر تحديد الجهاز" }, 400);
+      const { data: dev } = await supa.from("trusted_devices").select("id, approved, staff_phone").eq("device_token", deviceToken).maybeSingle();
+      if (!dev || !dev.approved) return json({ error: "🔒 جهازك غير معتمد بعد — راجعي الإدارة لاعتماده." }, 403);
+      if (dev.staff_phone && dev.staff_phone !== staff.phone) return json({ error: "🔒 هذا الجهاز مخصّص لموظفة أخرى." }, 403);
+      if (!dev.staff_phone) { try { await supa.from("trusted_devices").update({ staff_phone: staff.phone }).eq("id", dev.id); } catch (_e) { /* */ } }
+      // ربط البصمة بالجهاز الأول الذي تدخل منه؛ بعدها لا تُقبل إلا منه.
+      if (key.device_token && key.device_token !== deviceToken) return json({ error: "الدخول مسموح من جهازك المسجّل فقط — راجعي الإدارة لإعادة الضبط." }, 403);
+      if (!key.device_token) { try { await supa.from("wa_staff_passkeys").update({ device_token: deviceToken }).eq("id", key.id); } catch (_e) { /* */ } }
+      await supa.from("wa_staff_passkeys").update({ counter: verification.authenticationInfo.newCounter, last_used_at: new Date().toISOString() }).eq("id", key.id);
+      // إصدار توكن جلسة حقيقي (٢٤ ساعة) يقبله WhatsApp-Router عبر checkAuthOrSession.
+      const token = genStaffToken();
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      await supa.from("wa_staff_sessions").insert({ phone: staff.phone, username: staff.username, token, expires_at: expiresAt });
+      return json({ ok: true, token, expires_at: expiresAt, staff: { name: staff.name, phone: staff.phone, username: staff.username, role: staff.role } });
     }
 
     return json({ error: "unknown action" }, 400);

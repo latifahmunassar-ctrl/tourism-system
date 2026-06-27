@@ -19,3 +19,15 @@ verify_jwt = false
 # with no auth header. Only returns data for status='sent' requests.
 [functions.client-proposal]
 verify_jwt = false
+
+# WhatsApp group bridge posts raw group messages here with no auth header.
+# The function gates every request internally on the x-intake-secret header
+# (INTAKE_SECRET), so disabling platform JWT verification is safe.
+[functions.group-intake]
+verify_jwt = false
+
+# Passkey (WebAuthn) endpoint. Called from the dashboard with no guaranteed
+# JWT; every action is gated internally by cryptographic challenge + credential
+# verification (+ device approval for staff), so platform JWT check is unneeded.
+[functions.webauthn]
+verify_jwt = false
