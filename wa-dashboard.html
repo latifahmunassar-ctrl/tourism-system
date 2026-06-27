@@ -330,6 +330,25 @@
       padding: 28px; max-width: 480px; width: 100%;
       box-shadow: 0 10px 40px rgba(15,23,42,.15), 0 4px 12px rgba(15,23,42,.08);
     }
+    /* لوحة إرشاد طريقة الدخول — ثابتة على يمين الشاشة (وضع المبيعات فقط) */
+    .auth-guide {
+      position: fixed; top: 50%; right: 32px; transform: translateY(-50%);
+      width: 300px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px;
+      padding: 20px 18px; box-shadow: 0 12px 40px rgba(15,23,42,.14); z-index: 101; text-align: right;
+    }
+    .auth-guide .ag-title { font-size: 16px; font-weight: 900; color: #0b5d4e; margin-bottom: 14px; }
+    .auth-guide .ag-step { display: flex; gap: 10px; margin-bottom: 13px; font-size: 13px; line-height: 1.6; }
+    .auth-guide .ag-step b { color: #0f172a; }
+    .auth-guide .ag-step span { color: #64748b; }
+    .auth-guide .ag-num {
+      flex: 0 0 24px; height: 24px; border-radius: 50%; background: #0b5d4e; color: #fff;
+      font-size: 12px; font-weight: 900; display: inline-flex; align-items: center; justify-content: center;
+    }
+    .auth-guide .ag-note {
+      margin-top: 6px; background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412;
+      border-radius: 10px; padding: 9px 11px; font-size: 12px; font-weight: 700; line-height: 1.6;
+    }
+    @media (max-width: 920px) { .auth-guide { display: none !important; } }
     .auth-card h2 { margin: 0 0 8px; font-size: 18px; }
     .auth-card p { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
     .auth-card input {
@@ -1356,6 +1375,16 @@
 
       <div class="auth-error" id="auth-error"></div>
     </div>
+
+    <!-- لوحة إرشادية بطريقة الدخول — تظهر على يمين الشاشة عند اختيار المبيعات -->
+    <aside class="auth-guide" id="auth-guide" style="display:none;">
+      <div class="ag-title">📋 طريقة الدخول</div>
+      <div class="ag-step"><span class="ag-num">1</span><div><b>الدخول بكلمة السر</b><br><span>اكتب اسم المستخدم وكلمة المرور ثم «دخول المبيعات».</span></div></div>
+      <div class="ag-step"><span class="ag-num">2</span><div><b>أول مرة فقط — اعتماد الجهاز</b><br><span>إذا ظهر «جهازك غير معتمد»، تنتظر موافقة الإدارة مرة وحدة.</span></div></div>
+      <div class="ag-step"><span class="ag-num">3</span><div><b>تفعيل البصمة (اختياري)</b><br><span>بعد دخولك، اضغط «✨ إعداد البصمة» وأكّد ببصمتك/Face ID.</span></div></div>
+      <div class="ag-step"><span class="ag-num">4</span><div><b>الدخول السريع لاحقاً</b><br><span>اضغط «👆 دخول بالبصمة» وادخل بلمسة بدون كلمة سر.</span></div></div>
+      <div class="ag-note">🔒 الدخول مسموح فقط من جهازك المعتمد المربوط بك.</div>
+    </aside>
   </div>
 
   <!-- Defensive boot: force light background + hide every dark overlay
@@ -1528,7 +1557,7 @@
       showAuthPicker();
       if (msg) authError.textContent = msg;
     }
-    function hideAuth() { overlay.style.display = "none"; authError.textContent = ""; }
+    function hideAuth() { overlay.style.display = "none"; authError.textContent = ""; const g = $("auth-guide"); if (g) g.style.display = "none"; }
 
     // Staff login path — username + password (+ optional "تذكّرني")
     $("auth-staff-submit").addEventListener("click", async () => {
@@ -1616,6 +1645,7 @@
       if (e.key === "Enter") $("auth-password").focus();
     });
     // Role picker — three-way entry on the initial auth screen.
+    function setAuthGuide(show) { const g = $("auth-guide"); if (g) g.style.display = show ? "" : "none"; }
     function showAuthPicker() {
       $("auth-picker").style.display = "";
       $("auth-staff-mode").style.display = "none";
@@ -1623,6 +1653,7 @@
       $("auth-title").textContent = "🔐 تسجيل الدخول";
       $("auth-help").textContent = "اختر نوع المستخدم";
       authError.textContent = "";
+      setAuthGuide(false);
     }
     function showAuthAdmin() {
       $("auth-picker").style.display = "none";
@@ -1631,6 +1662,7 @@
       $("auth-title").textContent = "🛡️ دخول الإدمن";
       $("auth-help").textContent = "أدخلي كلمة سر الإدمن للوصول الكامل.";
       authError.textContent = "";
+      setAuthGuide(false);
       setTimeout(() => $("auth-input").focus(), 60);
     }
     function showAuthSales() {
@@ -1640,6 +1672,7 @@
       $("auth-title").textContent = "💼 دخول المبيعات";
       $("auth-help").textContent = "أدخل اسم المستخدم وكلمة المرور.";
       authError.textContent = "";
+      setAuthGuide(true);
       const lastUser = localStorage.getItem(USERNAME_KEY) || "";
       $("auth-username").value = lastUser;
       $("auth-password").value = "";
