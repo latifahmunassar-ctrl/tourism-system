@@ -1334,7 +1334,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           <summary style="cursor:pointer; font-weight:800; color:#475569; font-size:13px;">🏢 بيانات الشركة في الفاتورة (تُحفظ مرة وحدة)</summary>
           <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
             <input id="co-name" placeholder="اسم الشركة" style="padding:8px; border:1px solid #d1d5db; border-radius:7px;">
-            <input id="co-address" placeholder="العنوان (المدينة، الدولة)" style="padding:8px; border:1px solid #d1d5db; border-radius:7px;">
+            <textarea id="co-address" rows="3" placeholder="العنوان — فرع لكل سطر" style="padding:8px; border:1px solid #d1d5db; border-radius:7px; font-family:inherit; resize:vertical;"></textarea>
             <input id="co-phones" placeholder="أرقام التواصل (هاتف / واتساب)" style="padding:8px; border:1px solid #d1d5db; border-radius:7px;">
             <input id="co-website" placeholder="الموقع / الإيميل" style="padding:8px; border:1px solid #d1d5db; border-radius:7px;">
             <input id="co-extra" placeholder="سطر إضافي (سجل تجاري / ضريبي) — اختياري" style="padding:8px; border:1px solid #d1d5db; border-radius:7px;">
@@ -1723,7 +1723,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           <div><img src="${window.WA_LOGO||""}" style="width:230px;display:block;"></div>
           <div style="text-align:left;font-size:12.5px;color:#475569;line-height:1.9;">
             <div style="font-size:15px;font-weight:900;color:#0b5d4e;">${escapeHtml(co.name||"")}</div>
-            ${co.address?`<div>📍 ${escapeHtml(co.address)}</div>`:""}
+            ${co.address?escapeHtml(co.address).split("\n").map(l=>l.trim()?`<div>📍 ${l}</div>`:"").join(""):""}
             ${co.phones?`<div>📞 ${escapeHtml(co.phones)}</div>`:""}
             ${co.website?`<div>🌐 ${escapeHtml(co.website)}</div>`:""}
             ${co.extra?`<div>${escapeHtml(co.extra)}</div>`:""}
