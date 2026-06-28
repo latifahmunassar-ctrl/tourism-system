@@ -507,9 +507,13 @@ Deno.serve(async (req) => {
       if (c.status === "pending")  return json({ error: "حسابك قيد المراجعة. ننبّهك عند التفعيل." }, 403);
       if (c.status === "rejected") return json({ error: "تعذّر تفعيل الحساب. تواصلي مع ALEZZ." }, 403);
       if (c.status === "suspended")return json({ error: "الحساب موقوف مؤقتاً. تواصلي مع ALEZZ." }, 403);
-      // issue a rotating session token
+      // issue a rotating session token + سجّل دخولاً للشركة (عدّاد + آخر دخول)
       const token = randToken(28);
-      await supabase.from("client_companies").update({ login_token: token }).eq("id", c.id);
+      await supabase.from("client_companies").update({
+        login_token: token,
+        login_count: (Number(c.login_count) || 0) + 1,
+        last_login_at: new Date().toISOString(),
+      }).eq("id", c.id);
       return json({ ok: true, token, company: publicCompany(c) });
     }
 
@@ -1011,7 +1015,7 @@ Deno.serve(async (req) => {
     // ── company-account management ──
     if (adminAction === "companies") {
       const { data, error } = await supabase.from("client_companies")
-        .select("id, company_name, contact_name, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, created_at, approved_at, pending_edit, currency")
+        .select("id, company_name, contact_name, contact_phone, contact_email, logo_url, website, whatsapp_group_link, status, created_at, approved_at, pending_edit, currency, login_count, last_login_at")
         .order("created_at", { ascending: false }).limit(300);
       if (error) return json({ error: error.message }, 500);
       // attach request stats per company

@@ -123,6 +123,7 @@
   <div class="tabbar">
     <button id="tabBtnCompanies" class="tabbtn on" onclick="showTab('companies')">🏢 الشركات</button>
     <button id="tabBtnStaff" class="tabbtn" onclick="showTab('staff')">👥 الموظفون</button>
+    <button id="tabBtnLogins" class="tabbtn" onclick="showTab('logins')">📈 سجل الدخول</button>
     <button id="tabBtnSecurity" class="tabbtn" onclick="showTab('security')">🔒 الأمان</button>
   </div>
 
@@ -157,6 +158,13 @@
     <div id="repTable"><div class="ac-empty">جارٍ التحميل…</div></div>
   </div>
   </div><!-- /tabStaff -->
+
+  <div id="tabLogins" class="tabpane" style="display:none">
+  <div class="panel">
+    <h3>📈 سجل دخول الشركات <small>عدد مرات تسجيل الدخول لكل شركة عبر المنصة + آخر دخول</small></h3>
+    <div id="loginsTable"><div class="ac-empty">جارٍ التحميل…</div></div>
+  </div>
+  </div><!-- /tabLogins -->
 
   <div id="tabSecurity" class="tabpane" style="display:none">
   <div class="panel">
@@ -213,10 +221,11 @@ async function login(){
 function logout(){ localStorage.removeItem('alezz_owner_secret'); SECRET=''; location.reload(); }
 function show(){ $('loginView').style.display='none'; $('appView').style.display='block'; loadList(); loadStaff(); repPeriod('today', document.querySelector('.rep-btn')); }
 function showTab(t){
-  const panes={companies:'tabCompanies',staff:'tabStaff',security:'tabSecurity'};
-  const btns={companies:'tabBtnCompanies',staff:'tabBtnStaff',security:'tabBtnSecurity'};
+  const panes={companies:'tabCompanies',staff:'tabStaff',logins:'tabLogins',security:'tabSecurity'};
+  const btns={companies:'tabBtnCompanies',staff:'tabBtnStaff',logins:'tabBtnLogins',security:'tabBtnSecurity'};
   for(const k in panes){ $(panes[k]).style.display = (k===t?'':'none'); $(btns[k]).classList.toggle('on',k===t); }
   if(t==='staff'){ loadStaff(); repPeriod('today', document.querySelector('.rep-btn')); }
+  if(t==='logins'){ loadLogins(); }
   if(t==='security'){ loadSecurity(); }
 }
 // ── أمان داشبورد البرامج: الدول المسموحة + سجل الدخول + تفعيل الحظر ──
@@ -427,6 +436,33 @@ async function loadList(){
       <div style="flex:1;min-width:0"><div class="ac-nm">${esc(c.company_name)}</div><div class="ac-mt">${esc(c.contact_phone)}</div>${mini}${editb}</div>
       <span class="acbdg s-${c.status}">${AC_STAT[c.status]||c.status}</span></div>`;
   }).join('');
+}
+
+// ── تبويب سجل الدخول: قائمة الشركات مرتّبة حسب عدد مرات الدخول عبر المنصة ──
+function fmtDateTime(s){
+  if(!s) return '—';
+  try{
+    const d=new Date(s);
+    return d.toLocaleString('ar-SA',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  }catch(_){ return esc(String(s)); }
+}
+async function loadLogins(){
+  const box=$('loginsTable'); if(!box) return; box.innerHTML='<div class="ac-empty">جارٍ التحميل…</div>';
+  let rows=[];
+  try{
+    const r=await fetch(BASE+'?admin_action=companies',{headers:H()});
+    if(!r.ok){ if(r.status===401){logout();return;} throw new Error(); }
+    rows=(await r.json()).companies||[];
+  }catch(_){ box.innerHTML='<div class="ac-empty">تعذّر التحميل</div>'; return; }
+  // المعتمدة فقط (هي اللي تقدر تسجّل دخول)، مرتّبة حسب عدد الدخول تنازلياً ثم آخر دخول
+  rows=rows.filter(c=>c.status==='approved')
+    .sort((a,b)=>(Number(b.login_count)||0)-(Number(a.login_count)||0)
+      || (new Date(b.last_login_at||0))-(new Date(a.last_login_at||0)));
+  if(!rows.length){ box.innerHTML='<div class="ac-empty">لا توجد شركات معتمدة بعد</div>'; return; }
+  const total=rows.reduce((s,c)=>s+(Number(c.login_count)||0),0);
+  box.innerHTML=`<table class="rep-table"><thead><tr><th>#</th><th>الشركة</th><th>عدد مرات الدخول</th><th>آخر دخول</th></tr></thead><tbody>${
+    rows.map((c,i)=>`<tr><td class="rep-rank">${i+1}</td><td>${esc(c.company_name)}</td><td class="rep-cnt">${Number(c.login_count)||0}</td><td>${fmtDateTime(c.last_login_at)}</td></tr>`).join('')
+  }</tbody></table><div class="ac-mt" style="margin-top:10px">إجمالي مرات الدخول: <b>${total}</b> · العدّ يبدأ من تفعيل الميزة</div>`;
 }
 
 async function openCo(id){
