@@ -1695,9 +1695,10 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       row.querySelector(".inv-amt").addEventListener("input", invRecalc);
       $("inv-items").appendChild(row);
     }
-    let invPayImg=null, invPayLoaded=false;
-    function invIsOMR(){ return /ر\.?\s*ع|عُمان|عمان|\bOMR\b/i.test($("inv-currency").value||""); }
-    async function invLoadPayImg(){ if(invPayLoaded) return; invPayLoaded=true; try{ const r=await fetch(BASE+"?admin_action=invoice_pay_image&cat=pay_oman",{headers:{Authorization:"Bearer "+token}}); const d=await r.json(); invPayImg=(d&&d.image)||null; }catch(_e){} }
+    let invPayImgs={};
+    // طريقة الدفع حسب العملة: ريال عماني→حسابات عُمان، ريال سعودي→حسابات السعودية. (نفحص عُمان أولاً لأن «ريال عماني» تحوي «ريال»).
+    function invPayCat(){ const c=$("inv-currency").value||""; if(/ر\.?\s*ع|عُمان|عمان|\bOMR\b/i.test(c)) return "pay_oman"; if(/ر\.?\s*س|سعود|\bSAR\b|ريال/i.test(c)) return "pay_saudi"; return null; }
+    async function invLoadPayImg(cat){ if(!cat||invPayImgs[cat]!==undefined) return; try{ const r=await fetch(BASE+"?admin_action=invoice_pay_image&cat="+encodeURIComponent(cat),{headers:{Authorization:"Bearer "+token}}); const d=await r.json(); invPayImgs[cat]=(d&&d.image)||null; }catch(_e){ invPayImgs[cat]=null; } }
     async function invLoadCompany(){
       try{ const r=await fetch(BASE+"?admin_action=invoice_company",{headers:{Authorization:"Bearer "+token}}); const d=await r.json(); const co=(d&&d.company)||{};
         $("co-name").value=co.name||"مجموعة العز الدولية للسفر والسياحة"; $("co-address").value=co.address||""; $("co-phones").value=co.phones||""; $("co-website").value=co.website||"alezzgroup.net"; $("co-extra").value=co.extra||"";
@@ -1714,7 +1715,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       $("inv-no").value="…";
       try{ const r=await fetch(BASE+"?admin_action=next_invoice_no",{method:"POST",headers:{Authorization:"Bearer "+token}}); const d=await r.json(); $("inv-no").value=d.invoice_no||"INV"; }catch(_e){ $("inv-no").value="INV"; }
       invLoadCompany();
-      if(invIsOMR()) invLoadPayImg();
+      { const cat=invPayCat(); if(cat) invLoadPayImg(cat); }
     }
     function invBuildHTML(){
       const cur=$("inv-currency").value||"";
@@ -1723,6 +1724,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       const co={name:$("co-name").value, address:$("co-address").value, phones:$("co-phones").value, website:$("co-website").value, extra:$("co-extra").value};
       const rows=items.map((i,idx)=>`<tr style="background:${idx%2?'#f6faf9':'#ffffff'}"><td style="padding:11px 14px;border-bottom:1px solid #edf2f0;">${escapeHtml(i.d)}</td><td style="padding:11px 14px;border-bottom:1px solid #edf2f0;text-align:left;white-space:nowrap;font-weight:700;">${i.a.toLocaleString("en-US")} ${escapeHtml(cur)}</td></tr>`).join("");
       const addrHTML=co.address?escapeHtml(co.address).split("\n").map(l=>l.trim()?`<div style="margin-bottom:2px;">📍 ${l}</div>`:"").join(""):"";
+      const _payCat=invPayCat(); const payImg=_payCat?invPayImgs[_payCat]:null;
       return `<div style="width:720px;font-family:'Segoe UI',Tahoma,sans-serif;direction:rtl;color:#0f172a;background:#fff;box-sizing:border-box;">
         <div style="height:12px;background:linear-gradient(135deg,#0b5d4e,#13b07a);"></div>
         <div style="padding:30px 38px 8px;">
@@ -1752,9 +1754,9 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
             <div style="background:linear-gradient(135deg,#0b5d4e,#0e9d6a);color:#fff;border-radius:12px;padding:14px 28px;font-size:18px;font-weight:900;box-shadow:0 6px 16px rgba(11,93,78,.25);">الإجمالي · Total: ${total.toLocaleString("en-US")} ${escapeHtml(cur)}</div>
           </div>
           ${$("inv-note").value?`<div style="margin-top:18px;font-size:13px;color:#475569;background:#f8fafc;border:1px solid #eef2f1;border-radius:10px;padding:13px 15px;">📝 ${escapeHtml($("inv-note").value)}</div>`:""}
-          ${(invIsOMR()&&invPayImg)?`<div style="margin-top:18px;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">
+          ${payImg?`<div style="margin-top:18px;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">
             <div style="background:#0b5d4e;color:#fff;padding:9px 14px;font-weight:800;font-size:13px;">🏦 بيانات الدفع · Payment Details</div>
-            <div style="padding:12px;text-align:center;"><img src="${invPayImg}" style="max-width:100%;border-radius:6px;display:block;margin:auto;"></div>
+            <div style="padding:12px;text-align:center;"><img src="${payImg}" style="max-width:100%;border-radius:6px;display:block;margin:auto;"></div>
           </div>`:""}
           <div style="margin-top:26px;text-align:center;font-size:12.5px;color:#64748b;">شكراً لتعاملكم معنا 🌟 — نتمنّى لكم رحلة سعيدة</div>
         </div>
@@ -1762,7 +1764,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       </div>`;
     }
     async function invToPdfBlob(){
-      if(invIsOMR()) await invLoadPayImg();
+      { const cat=invPayCat(); if(cat) await invLoadPayImg(cat); }
       const holder=document.createElement("div"); holder.style.cssText="position:fixed;left:-9999px;top:0;"; holder.innerHTML=invBuildHTML(); document.body.appendChild(holder);
       const opt={margin:0,filename:($("inv-no").value||"invoice")+".pdf",image:{type:"jpeg",quality:0.98},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:"pt",format:"a4",orientation:"portrait"}};
       try{ return await html2pdf().set(opt).from(holder.firstElementChild).outputPdf("blob"); }
