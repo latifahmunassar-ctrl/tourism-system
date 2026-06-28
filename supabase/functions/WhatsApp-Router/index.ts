@@ -4638,11 +4638,76 @@ Deno.serve(async (req) => {
         await supabase.from("wa_admin_messages").insert({ customer_phone: customerPhone, body: threadBody.slice(0, 2000), sent_by: sentBy, sent_at: new Date().toISOString(), media_id: upJson.id, media_mime: "application/pdf", media_filename: filename });
         const _ts = new Date().toISOString();
         await supabase.from("whatsapp_sessions").update({ last_message_at: _ts, last_outbound_at: _ts, last_outbound_body: "🧾 فاتورة" }).eq("phone", customerPhone);
+        // لو الفاتورة محفوظة في التبويب، علّمها «مُرسلة».
+        const invId = String(b.invoice_id || "").trim();
+        if (invId) await supabase.from("invoices").update({ status: "sent", sent_at: _ts, updated_at: _ts }).eq("id", invId);
       } catch (_e) { /* best-effort */ }
       return new Response(JSON.stringify({ ok: true, message_id: sendJson?.messages?.[0]?.id || null }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }
+  }
+
+  // ── تبويب الفواتير: حفظ/قائمة/جلب/حذف (قابلة للتعديل وإعادة الإرسال) ──────
+  if (url.searchParams.get("admin_action") === "list_invoices") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data } = await supabase.from("invoices")
+      .select("id, invoice_no, customer_phone, customer_name, currency, total, status, inv_date, created_by, sent_at, updated_at")
+      .order("updated_at", { ascending: false }).limit(300);
+    return new Response(JSON.stringify({ ok: true, invoices: data || [] }), { headers: jsonCors });
+  }
+
+  if (url.searchParams.get("admin_action") === "get_invoice") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    const id = (url.searchParams.get("id") || "").trim();
+    if (!id) return new Response(JSON.stringify({ error: "id required" }), { status: 400, headers: jsonCors });
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data } = await supabase.from("invoices").select("*").eq("id", id).maybeSingle();
+    return new Response(JSON.stringify({ ok: true, invoice: data || null }), { headers: jsonCors });
+  }
+
+  if (url.searchParams.get("admin_action") === "save_invoice") {
+    { const g = await requirePerm(req, "send_messages"); if (g) return g; }
+    try {
+      const b = await req.json();
+      const callerStaff = await getCallerStaff(req);
+      const row: Record<string, unknown> = {
+        invoice_no: String(b.invoice_no || "").slice(0, 60) || null,
+        customer_phone: String(b.customer_phone || "").slice(0, 40) || null,
+        customer_name: String(b.customer_name || "").slice(0, 200) || null,
+        currency: String(b.currency || "").slice(0, 30) || null,
+        items: Array.isArray(b.items) ? b.items.slice(0, 100) : [],
+        note: String(b.note || "").slice(0, 1000) || null,
+        inv_date: String(b.inv_date || "").slice(0, 10) || null,
+        total: (b.total != null && b.total !== "") ? Number(b.total) : 0,
+        created_by: (callerStaff && callerStaff.name) ? callerStaff.name : String(b.created_by || "admin"),
+        updated_at: new Date().toISOString(),
+      };
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const id = String(b.id || "").trim();
+      if (id) {
+        const { error } = await supabase.from("invoices").update(row).eq("id", id);
+        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonCors });
+        return new Response(JSON.stringify({ ok: true, id }), { headers: jsonCors });
+      } else {
+        const { data, error } = await supabase.from("invoices").insert(row).select("id").single();
+        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonCors });
+        return new Response(JSON.stringify({ ok: true, id: (data as { id: string }).id }), { headers: jsonCors });
+      }
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  if (url.searchParams.get("admin_action") === "delete_invoice") {
+    { const g = await requirePerm(req, "send_messages"); if (g) return g; }
+    const id = (url.searchParams.get("id") || "").trim();
+    if (!id) return new Response(JSON.stringify({ error: "id required" }), { status: 400, headers: jsonCors });
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { error } = await supabase.from("invoices").delete().eq("id", id);
+    if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonCors });
+    return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
   }
 
   if (url.searchParams.get("admin_action") === "send_admin_message") {

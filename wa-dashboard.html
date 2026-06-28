@@ -208,6 +208,10 @@
     body.admin-offers-tab section { display: none; }
     body.admin-offers-tab .ai-toggle-card { display: none; }
     body.admin-offers-tab section.offers-section { display: block; }
+    section.invoices-section { display: none; }
+    body.admin-invoices-tab section { display: none; }
+    body.admin-invoices-tab .ai-toggle-card { display: none; }
+    body.admin-invoices-tab section.invoices-section { display: block; }
     /* أزرار العروض السريعة داخل المحادثة */
     .offer-quickbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px 0; }
     .offer-cat-btn {
@@ -827,6 +831,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       <button class="tab-btn active" data-tab="main">📊 الرئيسية</button>
       <button class="tab-btn" data-tab="contacts">📇 جهات الاتصال</button>
       <button class="tab-btn" data-tab="offers">📁 مكتبة العروض</button>
+      <button class="tab-btn" data-tab="invoices">🧾 الفواتير</button>
       <button class="tab-btn" data-tab="users">👤 إدارة المستخدمين</button>
       <a class="tab-btn ts-admin-link" href="https://madartrip.com/team.html" target="_blank" rel="noopener" style="text-decoration:none">🧳 المساعد السياحي</a>
     </nav>
@@ -1046,6 +1051,16 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         </div>
       </div>
       <div class="panel-list" id="locations-mgmt"></div>
+    </section>
+
+    <section class="invoices-section">
+      <h3>🧾 الفواتير <span class="badge" id="inv-badge">0</span></h3>
+      <p style="color:var(--muted); font-size:13px; margin:0 0 12px;">أنشئي فاتورة جديدة أو عدّلي فاتورة محفوظة وأعيدي إرسالها للعميل. المُرسلة تظهر بحالة «✅ مُرسلة».</p>
+      <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+        <button id="inv-new-btn" class="filter-btn" style="background:#0e7c66; color:#fff; border:none; font-weight:800;">➕ فاتورة جديدة</button>
+        <input id="inv-search" placeholder="بحث: اسم العميل / رقم الفاتورة" style="flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-family:inherit;">
+      </div>
+      <div class="panel-list" id="invoices-list"><div class="empty">جاري التحميل…</div></div>
     </section>
 
     <section class="offers-section">
@@ -1323,7 +1338,10 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           <label style="flex:1; min-width:120px; font-size:12px; font-weight:700; color:#475569;">التاريخ<input type="date" id="inv-date" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:7px; margin-top:3px;"></label>
           <label style="width:110px; font-size:12px; font-weight:700; color:#475569;">العملة<input id="inv-currency" placeholder="ريال" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:7px; margin-top:3px;"></label>
         </div>
-        <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:10px;">اسم العميل<input id="inv-client" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:7px; margin-top:3px;"></label>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+          <label style="flex:1; min-width:160px; font-size:12px; font-weight:700; color:#475569;">اسم العميل<input id="inv-client" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:7px; margin-top:3px;"></label>
+          <label style="flex:1; min-width:160px; font-size:12px; font-weight:700; color:#475569;">رقم العميل (واتساب)<input id="inv-phone" placeholder="مثل +96890000000" dir="ltr" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:7px; margin-top:3px; text-align:right;"></label>
+        </div>
         <div style="font-size:12px; font-weight:800; color:#0b5d4e; margin-bottom:6px;">البنود</div>
         <div id="inv-items"></div>
         <button type="button" id="inv-add-item" style="background:#dcfce7; color:#166534; border:1px solid #bbf7d0; border-radius:7px; padding:7px 12px; font-weight:700; cursor:pointer; margin-bottom:10px;">➕ إضافة بند</button>
@@ -1343,8 +1361,9 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         </details>
 
         <div style="display:flex; gap:8px;">
-          <button type="button" id="inv-preview" style="flex:1; background:#f1f5f9; color:#0f172a; border:1px solid #e2e8f0; border-radius:8px; padding:11px; font-weight:800; cursor:pointer;">👁️ معاينة PDF</button>
-          <button type="button" id="inv-send" style="flex:2; background:linear-gradient(135deg,#25D366,#128C7E); color:#fff; border:none; border-radius:8px; padding:11px; font-weight:900; cursor:pointer;">📤 إرسال الفاتورة للعميل</button>
+          <button type="button" id="inv-preview" style="flex:1; background:#f1f5f9; color:#0f172a; border:1px solid #e2e8f0; border-radius:8px; padding:11px; font-weight:800; cursor:pointer;">👁️ معاينة</button>
+          <button type="button" id="inv-save" style="flex:1; background:#1d4ed8; color:#fff; border:none; border-radius:8px; padding:11px; font-weight:800; cursor:pointer;">💾 حفظ</button>
+          <button type="button" id="inv-send" style="flex:2; background:linear-gradient(135deg,#25D366,#128C7E); color:#fff; border:none; border-radius:8px; padding:11px; font-weight:900; cursor:pointer;">📤 إرسال للعميل</button>
         </div>
         <div id="inv-msg" style="font-size:13px; font-weight:700; margin-top:8px; min-height:18px;"></div>
       </div>
@@ -1704,19 +1723,89 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         $("co-name").value=co.name||"مجموعة العز الدولية للسفر والسياحة"; $("co-address").value=co.address||""; $("co-phones").value=co.phones||""; $("co-website").value=co.website||"alezzgroup.net"; $("co-extra").value=co.extra||"";
       }catch(_e){}
     }
-    async function openInvoice(){
-      if(!convPhone){ alert("افتح محادثة عميل أولاً."); return; }
-      $("invoice-overlay").style.display="flex"; $("inv-msg").textContent="";
-      const c=(conversationsCache||[]).find(x=>x.phone===convPhone);
-      $("inv-client").value=(c&&c.profile_name)||"";
-      $("inv-date").value=new Date(Date.now()+3*3600*1000).toISOString().slice(0,10);
-      $("inv-currency").value=invCurForPhone(convPhone);
-      $("inv-items").innerHTML=""; invAddItem("",""); invRecalc();
-      $("inv-no").value="…";
-      try{ const r=await fetch(BASE+"?admin_action=next_invoice_no",{method:"POST",headers:{Authorization:"Bearer "+token}}); const d=await r.json(); $("inv-no").value=d.invoice_no||"INV"; }catch(_e){ $("inv-no").value="INV"; }
+    let invEditId=null;
+    function invPhoneNorm(){ const d=String($("inv-phone").value||"").replace(/^whatsapp:/,"").replace(/^\+/,"").replace(/^00/,"").replace(/[^0-9]/g,""); return d?("whatsapp:+"+d):""; }
+    async function openInvoice(rec){
+      $("invoice-overlay").style.display="flex"; $("inv-msg").textContent=""; $("inv-items").innerHTML="";
       invLoadCompany();
+      if(rec && rec.id){
+        invEditId=rec.id;
+        $("inv-no").value=rec.invoice_no||"";
+        $("inv-date").value=rec.inv_date||new Date(Date.now()+3*3600*1000).toISOString().slice(0,10);
+        $("inv-currency").value=rec.currency||"";
+        $("inv-client").value=rec.customer_name||"";
+        $("inv-phone").value=String(rec.customer_phone||"").replace(/^whatsapp:/,"");
+        $("inv-note").value=rec.note||"";
+        const items=Array.isArray(rec.items)?rec.items:[];
+        if(items.length) items.forEach(it=>invAddItem(it.d||"", it.a!=null?it.a:"")); else invAddItem("","");
+      } else {
+        invEditId=null;
+        const ph=(rec!=="new"&&convPhone)?convPhone:"";
+        const c=(conversationsCache||[]).find(x=>x.phone===ph);
+        $("inv-client").value=(c&&c.profile_name)||"";
+        $("inv-phone").value=String(ph||"").replace(/^whatsapp:/,"");
+        $("inv-note").value="";
+        $("inv-date").value=new Date(Date.now()+3*3600*1000).toISOString().slice(0,10);
+        $("inv-currency").value=ph?invCurForPhone(ph):"ريال";
+        invAddItem("","");
+        $("inv-no").value="…";
+        try{ const r=await fetch(BASE+"?admin_action=next_invoice_no",{method:"POST",headers:{Authorization:"Bearer "+token}}); const d=await r.json(); $("inv-no").value=d.invoice_no||"INV"; }catch(_e){ $("inv-no").value="INV"; }
+      }
+      invRecalc();
       { const cat=invPayCat(); if(cat) invLoadPayImg(cat); }
     }
+    function invCollect(){
+      const items=[...document.querySelectorAll("#inv-items .inv-item-row")].map(r=>({d:r.querySelector(".inv-desc").value.trim(), a:parseFloat(r.querySelector(".inv-amt").value)||0})).filter(x=>x.d||x.a);
+      let total=0; items.forEach(i=>total+=i.a);
+      return { id:invEditId||undefined, invoice_no:$("inv-no").value, customer_phone:invPhoneNorm(), customer_name:$("inv-client").value, currency:$("inv-currency").value, items, note:$("inv-note").value, inv_date:$("inv-date").value, total };
+    }
+    async function invSave(silent){
+      const r=await fetch(BASE+"?admin_action=save_invoice",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify(invCollect())});
+      const d=await r.json(); if(!r.ok||!d.ok) throw new Error(d.error||"فشل الحفظ");
+      invEditId=d.id; if(!silent){ $("inv-msg").style.color="#15803d"; $("inv-msg").textContent="💾 حُفظت الفاتورة ✅"; } loadInvoices();
+      return d.id;
+    }
+    async function loadInvoices(){
+      const box=$("invoices-list"); if(!box) return;
+      try{ const r=await fetch(BASE+"?admin_action=list_invoices",{headers:{Authorization:"Bearer "+token}}); const d=await r.json();
+        if(!r.ok||!d.ok){ box.innerHTML='<div class="empty">تعذّر التحميل</div>'; return; }
+        invListCache=d.invoices||[]; renderInvoices();
+      }catch(_e){ box.innerHTML='<div class="empty">تعذّر الاتصال</div>'; }
+    }
+    let invListCache=[];
+    function renderInvoices(){
+      const q=($("inv-search").value||"").trim().toLowerCase();
+      const arr=invListCache.filter(v=>!q||((v.customer_name||"")+" "+(v.invoice_no||"")+" "+(v.customer_phone||"")).toLowerCase().includes(q));
+      const b=$("inv-badge"); if(b) b.textContent=invListCache.length;
+      const box=$("invoices-list");
+      if(!arr.length){ box.innerHTML='<div class="empty">لا فواتير بعد — اضغطي «➕ فاتورة جديدة».</div>'; return; }
+      box.innerHTML=arr.map(v=>{
+        const sent=v.status==="sent";
+        const badge=sent?'<span style="background:#dcfce7;color:#15803d;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:800;">✅ مُرسلة</span>':'<span style="background:#fef3c7;color:#92400e;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:800;">📝 مسودة</span>';
+        return `<div class="row" style="flex-direction:column;align-items:stretch;gap:6px;padding:12px 14px;border-bottom:1px solid var(--border);">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+            <b>${escapeHtml(v.customer_name||fmtPhone(v.customer_phone||"")||"—")} <span style="color:var(--muted);font-weight:600;font-size:12px;">${escapeHtml(v.invoice_no||"")}</span></b>
+            <span>${badge}</span>
+          </div>
+          <div style="font-size:12px;color:var(--muted);">${(Number(v.total)||0).toLocaleString("en-US")} ${escapeHtml(v.currency||"")} · ${escapeHtml(v.inv_date||"")}${v.created_by?(" · "+escapeHtml(v.created_by)):""}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="filter-btn" onclick='invEdit("${v.id}")'>✏️ تعديل</button>
+            <button class="filter-btn" style="background:#dcfce7;color:#15803d;border-color:#bbf7d0;" onclick='invEdit("${v.id}")'>📤 ${sent?"إعادة الإرسال":"إرسال"}</button>
+            <button class="filter-btn" style="background:#fee2e2;color:#b91c1c;border-color:#fecaca;" onclick='invDelete("${v.id}")'>🗑️</button>
+          </div>
+        </div>`;
+      }).join("");
+    }
+    window.invEdit=async function(id){
+      try{ const r=await fetch(BASE+"?admin_action=get_invoice&id="+encodeURIComponent(id),{headers:{Authorization:"Bearer "+token}}); const d=await r.json(); if(d.invoice) openInvoice(d.invoice); }catch(_e){ alert("تعذّر فتح الفاتورة"); }
+    };
+    window.invDelete=async function(id){
+      if(!confirm("حذف هذه الفاتورة؟")) return;
+      try{ const r=await fetch(BASE+"?admin_action=delete_invoice&id="+encodeURIComponent(id),{method:"POST",headers:{Authorization:"Bearer "+token}}); const d=await r.json(); if(d.ok) loadInvoices(); else alert(d.error||"فشل"); }catch(_e){ alert("تعذّر"); }
+    };
+    $("inv-new-btn") && $("inv-new-btn").addEventListener("click", ()=>openInvoice("new"));
+    $("inv-search") && $("inv-search").addEventListener("input", renderInvoices);
+    $("inv-save") && $("inv-save").addEventListener("click", async ()=>{ try{ await invSave(false); }catch(e){ $("inv-msg").style.color="#b91c1c"; $("inv-msg").textContent=e.message||"تعذّر الحفظ"; } });
     function invBuildHTML(){
       const cur=$("inv-currency").value||"";
       const items=[...document.querySelectorAll("#inv-items .inv-item-row")].map(r=>({d:r.querySelector(".inv-desc").value.trim(), a:parseFloat(r.querySelector(".inv-amt").value)||0})).filter(x=>x.d||x.a);
@@ -1770,7 +1859,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       try{ return await html2pdf().set(opt).from(holder.firstElementChild).outputPdf("blob"); }
       finally{ holder.remove(); }
     }
-    $("invoice-btn") && $("invoice-btn").addEventListener("click", openInvoice);
+    $("invoice-btn") && $("invoice-btn").addEventListener("click", ()=>openInvoice());
     $("inv-close").addEventListener("click", ()=>{ $("invoice-overlay").style.display="none"; });
     $("inv-add-item").addEventListener("click", ()=>invAddItem("",""));
     $("inv-currency").addEventListener("input", invRecalc);
@@ -1785,14 +1874,18 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       catch(e){ $("inv-msg").style.color="#b91c1c"; $("inv-msg").textContent="تعذّر إنشاء PDF: "+(e.message||e); }
     });
     $("inv-send").addEventListener("click", async ()=>{
-      const btn=$("inv-send"); btn.disabled=true; $("inv-msg").style.color="#475569"; $("inv-msg").textContent="⏳ يرسل الفاتورة…";
+      const phone=invPhoneNorm();
+      if(!phone){ $("inv-msg").style.color="#b91c1c"; $("inv-msg").textContent="أدخل رقم العميل أولاً."; return; }
+      const btn=$("inv-send"); btn.disabled=true; $("inv-msg").style.color="#475569"; $("inv-msg").textContent="⏳ يحفظ ويرسل…";
       try{
+        const id=await invSave(true);
         const blob=await invToPdfBlob();
         const b64=await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(",")[1]); fr.onerror=rej; fr.readAsDataURL(blob); });
-        const r=await fetch(BASE+"?admin_action=send_invoice",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({phone:convPhone,pdf_base64:b64,filename:($("inv-client").value?("فاتورة "+$("inv-client").value):"فاتورة")+".pdf",caption:$("inv-note").value||""})});
+        const r=await fetch(BASE+"?admin_action=send_invoice",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({phone,invoice_id:id,pdf_base64:b64,filename:($("inv-client").value?("فاتورة "+$("inv-client").value):"فاتورة")+".pdf",caption:$("inv-note").value||""})});
         const d=await r.json();
         if(!r.ok||!d.ok) throw new Error(d.error||("HTTP "+r.status));
         $("inv-msg").style.color="#15803d"; $("inv-msg").textContent="✅ أُرسلت الفاتورة للعميل";
+        loadInvoices();
         setTimeout(()=>{ $("invoice-overlay").style.display="none"; if(typeof loadConversationHistory==="function") loadConversationHistory(); },1100);
       }catch(e){ $("inv-msg").style.color="#b91c1c"; $("inv-msg").textContent="تعذّر الإرسال: "+(e.message||e)+" (تأكد أن العميل راسلك خلال ٢٤ ساعة)"; }
       finally{ btn.disabled=false; }
@@ -1858,7 +1951,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       btn.addEventListener("click", () => {
         if (!token) { showAuth(); return; }
         const r = btn.dataset.roleSwitch;
-        document.body.classList.remove("admin-users-tab", "admin-contacts-tab", "admin-offers-tab");
+        document.body.classList.remove("admin-users-tab", "admin-contacts-tab", "admin-offers-tab", "admin-invoices-tab");
         document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === "main"));
         setSession(token, r);
         refresh();
@@ -1874,7 +1967,9 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         document.body.classList.toggle("admin-users-tab", tab === "users");
         document.body.classList.toggle("admin-contacts-tab", tab === "contacts");
         document.body.classList.toggle("admin-offers-tab", tab === "offers");
+        document.body.classList.toggle("admin-invoices-tab", tab === "invoices");
         // First time opening contacts → load them
+        if (tab === "invoices") loadInvoices();
         if (tab === "users") loadStaffSecurity();
         if (tab === "contacts" && !contactsLoaded) loadContacts();
         if (tab === "offers") { loadOffers(); loadFollowupSettings(); loadLocations(); }
