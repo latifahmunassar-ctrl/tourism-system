@@ -1727,25 +1727,25 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
             <div style="text-align:left;font-size:12px;color:#5b6b78;line-height:1.75;">
               <div style="font-size:15px;font-weight:900;color:#0b5d4e;margin-bottom:4px;">${escapeHtml(co.name||"")}</div>
               ${addrHTML}
-              ${co.phones?`<div>📞 ${escapeHtml(co.phones)}</div>`:""}
-              ${co.website?`<div>🌐 ${escapeHtml(co.website)}</div>`:""}
+              ${co.phones?`<div>📞 <span dir="ltr" style="unicode-bidi:embed;">${escapeHtml(co.phones)}</span></div>`:""}
+              ${co.website?`<div>🌐 <span dir="ltr">${escapeHtml(co.website)}</span></div>`:""}
               ${co.extra?`<div>${escapeHtml(co.extra)}</div>`:""}
             </div>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin:24px 0 20px;background:#f0fdf9;border:1px solid #cdeee3;border-radius:14px;padding:14px 20px;">
-            <div style="font-size:24px;font-weight:900;color:#0b5d4e;letter-spacing:1px;">فاتورة</div>
+            <div><div style="font-size:24px;font-weight:900;color:#0b5d4e;letter-spacing:2px;line-height:1;">INVOICE</div><div style="font-size:14px;font-weight:800;color:#0e9d6a;">فاتورة</div></div>
             <div style="text-align:left;font-size:13px;color:#334155;line-height:1.9;">
-              <div>رقم: <b style="color:#0b5d4e;">${escapeHtml($("inv-no").value)}</b></div>
-              <div>التاريخ: <b>${escapeHtml($("inv-date").value)}</b></div>
+              <div>No. / رقم: <b style="color:#0b5d4e;">${escapeHtml($("inv-no").value)}</b></div>
+              <div>Date / التاريخ: <b>${escapeHtml($("inv-date").value)}</b></div>
             </div>
           </div>
-          <div style="font-size:14px;margin-bottom:14px;color:#475569;">فاتورة إلى: <b style="color:#0f172a;font-size:15.5px;">${escapeHtml($("inv-client").value||"—")}</b></div>
+          <div style="font-size:14px;margin-bottom:14px;color:#475569;">Bill To / فاتورة إلى: <b style="color:#0f172a;font-size:15.5px;">${escapeHtml($("inv-client").value||"—")}</b></div>
           <table style="width:100%;border-collapse:collapse;font-size:14px;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
-            <thead><tr style="background:#0b5d4e;color:#fff;"><th style="padding:12px 14px;text-align:right;font-weight:800;">وصف الخدمة</th><th style="padding:12px 14px;text-align:left;width:170px;font-weight:800;">المبلغ</th></tr></thead>
+            <thead><tr style="background:#0b5d4e;color:#fff;"><th style="padding:12px 14px;text-align:right;font-weight:800;">وصف الخدمة · Description</th><th style="padding:12px 14px;text-align:left;width:185px;font-weight:800;">المبلغ · Amount</th></tr></thead>
             <tbody>${rows||'<tr><td colspan=2 style="padding:14px;color:#94a3b8;">—</td></tr>'}</tbody>
           </table>
           <div style="display:flex;justify-content:flex-start;margin-top:18px;">
-            <div style="background:linear-gradient(135deg,#0b5d4e,#0e9d6a);color:#fff;border-radius:12px;padding:14px 28px;font-size:18px;font-weight:900;box-shadow:0 6px 16px rgba(11,93,78,.25);">الإجمالي: ${total.toLocaleString("en-US")} ${escapeHtml(cur)}</div>
+            <div style="background:linear-gradient(135deg,#0b5d4e,#0e9d6a);color:#fff;border-radius:12px;padding:14px 28px;font-size:18px;font-weight:900;box-shadow:0 6px 16px rgba(11,93,78,.25);">الإجمالي · Total: ${total.toLocaleString("en-US")} ${escapeHtml(cur)}</div>
           </div>
           ${$("inv-note").value?`<div style="margin-top:18px;font-size:13px;color:#475569;background:#f8fafc;border:1px solid #eef2f1;border-radius:10px;padding:13px 15px;">📝 ${escapeHtml($("inv-note").value)}</div>`:""}
           <div style="margin-top:26px;text-align:center;font-size:12.5px;color:#64748b;">شكراً لتعاملكم معنا 🌟 — نتمنّى لكم رحلة سعيدة</div>
