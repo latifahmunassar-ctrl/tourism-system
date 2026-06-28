@@ -4367,9 +4367,18 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       <div class="ib-cust">📱 ${ibEsc(indivPh(r.contact_phone))}${r.handled_by?(' · 🧑‍💼 '+ibEsc(r.handled_by)):''}${r.currency?(' · 💱 '+ibEsc(r.currency)):''}</div>
       ${r.distribution?`<div class="ib-r2">🗺️ ${ibEsc(r.distribution)}</div>`:''}
       ${sent?`<div class="ib-sent-meta">📤 ${r.sent_by?('أرسله: <b>'+ibEsc(r.sent_by)+'</b> · '):''}${r.sent_price?(Number(r.sent_price).toLocaleString('en-US')+' '+ibEsc(r.sent_currency||'')):''}</div>
-      <button class="ib-reoffer" type="button" onclick="indivReoffer('${r.id}')">🔄 إرسال عرض آخر</button>`:''}
+      <button class="ib-reoffer" type="button" onclick="indivReoffer('${r.id}')">🔄 إرسال عرض آخر</button>`:
+      `<button class="ib-reoffer" type="button" style="background:#dcfce7;color:#15803d;border-color:#bbf7d0" onclick="event.stopPropagation();indivMarkSent('${r.id}')" title="علّم الطلب مُرسلاً بدون إعادة إرسال (لو أرسلتيه للعميل من لوحة الواتساب)">✅ نقل للمُرسلة</button>`}
     </div>`;
   }
+  window.indivMarkSent=async function(id){
+    if(!confirm('نقل هذا الطلب إلى «المُرسلة»؟\n\nاستخدميها لو أرسلتي البرنامج للعميل بطريقة أخرى. ما يُعاد إرسال أي شيء.')) return;
+    try{
+      const r=await fetch(IB_BASE+'?admin_action=mark_individual_sent',{method:'POST',headers:ibH(),body:JSON.stringify({id,sent_by:(typeof ibStaffName==='function'?ibStaffName():'')})});
+      const d=await r.json(); if(!r.ok||!d.ok) throw new Error(d.error||('HTTP '+r.status));
+      indivRender(await indivList());
+    }catch(e){ alert('تعذّر النقل: '+(e.message||e)); }
+  };
   function indBadge(n){ const b=document.getElementById('indivBadge'); if(!b) return; if(n>0){ b.textContent=n; b.style.display=''; } else b.style.display='none'; }
   function indivRender(reqs){
     reqs=reqs||[]; indivLast=reqs;

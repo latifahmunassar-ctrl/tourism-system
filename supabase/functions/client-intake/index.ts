@@ -770,6 +770,23 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    // نقل طلب فرد للمُرسلة بنقرة واحدة — بدون إعادة بناء/تسعير/إرسال. لِما يكون
+    // الموظف أرسل البرنامج للعميل بطريقة أخرى (لوحة الواتساب) فيبقى عالقاً بالوارد.
+    if (adminAction === "mark_individual_sent") {
+      const b = await req.json().catch(() => ({} as Record<string, any>));
+      const id = String(b.id || "").trim();
+      if (!id) return json({ error: "missing id" }, 400);
+      const { error } = await supabase.from("booking_brief").update({
+        status: "sent",
+        sent_at: new Date().toISOString(),
+        sent_by: String(b.sent_by || "").trim() || null,
+        send_note: "✅ نُقل يدوياً للمُرسلة (أُرسل للعميل سابقاً)",
+        updated_at: new Date().toISOString(),
+      }).eq("id", id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+
     // «إرسال عرض آخر»: ينسخ طلب الفرد كطلب جديد وارد (يُعاد بناؤه وإرساله).
     if (adminAction === "duplicate_individual") {
       const id = url.searchParams.get("id") || "";
