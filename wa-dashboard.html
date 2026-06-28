@@ -3560,6 +3560,17 @@
         <div style="display:none;">${details}</div>
       </div>`;
     }
+    // يحوّل روابط http(s) في نص الرسالة إلى روابط قابلة للضغط تفتح بتبويب جديد.
+    // مهم للملفات المُرسَلة (تُخزَّن كـ«📎 رابط»): بدون هذا تظهر نصًّا لا يُفتح،
+    // ومع هذا تُفتح مباشرةً من التخزين العام (يُعرض صحيحًا في المتصفّح).
+    function linkifyBody(escaped) {
+      return escaped.replace(/(https?:\/\/[^\s<]+)/g, (u) => {
+        const isPdf = /\.pdf($|\?|&amp;)/i.test(u);
+        const isImg = /\.(jpe?g|png|webp|gif)($|\?|&amp;)/i.test(u);
+        const label = isPdf ? "📄 فتح الملف ↗" : isImg ? "🖼️ فتح الصورة ↗" : (u.length > 45 ? u.slice(0, 45) + "…" : u);
+        return `<a href="${u}" target="_blank" rel="noopener" style="color:#1e40af; font-weight:700; text-decoration:underline;">${label}</a>`;
+      });
+    }
     function renderConvBody(items) {
       const body = $("conv-body");
       const adBanner = adBannerHtml(convReferralCache.get(convPhone));
@@ -3589,7 +3600,7 @@
         return `
         <div class="conv-msg ${senderClass(m.sender)}">
           <span class="sender-pill">${senderPillLabel}</span>
-          <div class="bubble">${quotedBlock}${escapeHtml(restBody)}${mediaHtml}</div>
+          <div class="bubble">${quotedBlock}${linkifyBody(escapeHtml(restBody))}${mediaHtml}</div>
           <div class="meta">${fmtTime(m.ts)}</div>
           <div class="msg-actions">
             <button type="button" data-msg-action="reply" data-msg-body="${safeBodyAttr}" data-msg-sender="${escapeHtml(senderPillLabel)}">↪️ رد</button>
