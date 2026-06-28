@@ -1248,11 +1248,19 @@ async function handleNewLeadIntake(args: {
   const prev = (sessRes.data as { intake_data?: unknown } | null)?.intake_data || {};
   const today = new Date().toISOString().slice(0, 10);
   // هل سبق أن ردّ طلال في هذه المحادثة؟ (لتفادي تكرار التعريف/الترحيب كل رسالة)
-  const alreadyGreeted = ((outboundRes.data || []) as Row[]).some(m => !!m.body);
+  let alreadyGreeted = ((outboundRes.data || []) as Row[]).some(m => !!m.body);
 
   if (!apiKey) {
     await supabase.from("whatsapp_sessions").update({ last_message_at: new Date().toISOString() }).eq("phone", from);
     return;
+  }
+  // 🔒 مطالبة ذرّية بالترحيب: عند أول تواصل قد تصل رسائل العميل متتالية وتُعالَج بالتوازي،
+  //    وكلها ترى «لم يُرحَّب» فترحّب أكثر من مرة. نحسمها بتحديث ذرّي — من ينجح بضبط
+  //    greeted=true (من false) هو الوحيد الذي يرحّب؛ الباقي يتوقف فوراً.
+  if (!alreadyGreeted && !returning) {
+    const { data: claim } = await supabase.from("whatsapp_sessions")
+      .update({ greeted: true }).eq("phone", from).eq("greeted", false).select("phone");
+    if (!claim || (claim as unknown[]).length === 0) return; // خسرنا السباق — معالجة أخرى ترحّب الآن
   }
   const sys = `أنت «طلال»، موظف خدمة عملاء لوكالة سفر، تتكلم بلهجة خليجية ودودة ومختصرة (لا فصحى).
 ⚠️ الاحترام أساسي: تكلّم بلباقة واحترام دائماً. ابدأ أسئلتك بعبارة مؤدبة مثل «حاضر» أو «أبشر» أو «حياك الله» ثم اطرح السؤال بلطف. ممنوع الأسلوب الجاف أو المختصر بطريقة غير لائقة.
