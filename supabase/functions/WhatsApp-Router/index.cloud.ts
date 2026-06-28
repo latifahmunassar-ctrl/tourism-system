@@ -1272,6 +1272,7 @@ async function handleNewLeadIntake(args: {
 - ❌❌ ممنوع منعاً باتاً تقول إن موقعنا في الرياض أو أي مدينة. لا تذكر أي موقع أو مدينة للشركة إطلاقاً — حتى لو ألحّ العميل، حوّله للزميل.
 مهمتك جمع ٥ معلومات أساسية من العميل:
 1) وجهة السفر  2) عدد المسافرين  3) تاريخ السفر  4) أعمار الأطفال فقط (إن وُجد أطفال)  5) المدن التي يحبون زيارتها (أو ترك الترتيب للوكالة).
+⚠️ توضيح وجهة مهم: «عُمان» أو «عمان» (بدون شدّة) تعني **دائماً سلطنة عُمان** (وجهة داخلية، مثل صلالة) — **وليست «عَمّان» عاصمة الأردن**. إذا ذكر العميل «عمان» فالمقصود سلطنة عُمان؛ خزّن destination = «عُمان» ولا تخلط بينها وبين الأردن إطلاقاً.
 قواعد:
 ${returning
   ? `- هذا عميل **سبق تعامل معنا وعاد بطلب وجهة جديدة**. ابدأ أول رد بترحيب بعودته بطريقة تُشعره أنك تعرفه (لا كأنها أول مرة): "حياك الله من جديد 🌟 سعدنا برجوعك! معك طلال" (كرسالة قصيرة لحالها) ثم اسأل عن أول معلومة ناقصة للرحلة الجديدة برسالة ثانية قصيرة.\n- ⚠️ تجاهل تفاصيل أي رحلة قديمة في السياق؛ هذا طلب رحلة جديدة — اجمع معلوماتها من جديد.`
@@ -4531,6 +4532,119 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── الفواتير: رقم تسلسلي + بيانات الشركة + إرسال PDF للعميل ───────────
+  // رقم فاتورة تالٍ بشكل ذري: INV-YYYY-NNN (دالة next_program_code الموجودة).
+  if (url.searchParams.get("admin_action") === "next_invoice_no") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data, error } = await supabase.rpc("next_program_code", { p_prefix: "INV" });
+      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonCors });
+      return new Response(JSON.stringify({ ok: true, invoice_no: data }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // قراءة بيانات الشركة للفاتورة (ترويسة ثابتة) من wa_settings.
+  if (url.searchParams.get("admin_action") === "invoice_company") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data } = await supabase.from("wa_settings").select("value").eq("key", "invoice_company").maybeSingle();
+    const v = (data as { value?: unknown } | null)?.value || {};
+    return new Response(JSON.stringify({ ok: true, company: v }), { headers: jsonCors });
+  }
+
+  // حفظ بيانات الشركة للفاتورة (أدمن فقط).
+  if (url.searchParams.get("admin_action") === "set_invoice_company") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const p = await req.json();
+      const company = {
+        name: String(p.name || "").slice(0, 200),
+        address: String(p.address || "").slice(0, 300),
+        phones: String(p.phones || "").slice(0, 200),
+        website: String(p.website || "").slice(0, 120),
+        extra: String(p.extra || "").slice(0, 200),
+      };
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await supabase.from("wa_settings").upsert({ key: "invoice_company", value: company }, { onConflict: "key" });
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // صورة بيانات الدفع (حسابات بنكية) من طرق الدفع المحفوظة (wa_offers) كـ base64 —
+  // تُضمَّن في الفاتورة عند الدفع بالريال العماني (cat=pay_oman افتراضياً).
+  if (url.searchParams.get("admin_action") === "invoice_pay_image") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const cat = (url.searchParams.get("cat") || "pay_oman").trim();
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data } = await supabase.from("wa_offers").select("file_url, content_type").eq("category", cat).eq("active", true).order("sort").limit(1).maybeSingle();
+      const fileUrl = (data as { file_url?: string } | null)?.file_url;
+      if (!fileUrl) return new Response(JSON.stringify({ ok: true, image: null }), { headers: jsonCors });
+      const imgRes = await fetch(fileUrl);
+      if (!imgRes.ok) return new Response(JSON.stringify({ ok: true, image: null }), { headers: jsonCors });
+      const buf = new Uint8Array(await imgRes.arrayBuffer());
+      let bin = ""; for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+      const mime = (data as { content_type?: string } | null)?.content_type || "image/jpeg";
+      return new Response(JSON.stringify({ ok: true, image: `data:${mime};base64,${btoa(bin)}` }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // إرسال فاتورة PDF (base64) للعميل عبر Graph — يرفعها كوسيط ثم يرسلها document.
+  if (url.searchParams.get("admin_action") === "send_invoice") {
+    { const g = await requirePerm(req, "send_messages"); if (g) return g; }
+    try {
+      const TOKEN = (Deno.env.get("WHATSAPP_ACCESS_TOKEN") || "").trim();
+      const PHONE_ID = (Deno.env.get("WHATSAPP_PHONE_NUMBER_ID") || "").trim();
+      if (!TOKEN || !PHONE_ID) return new Response(JSON.stringify({ error: "WhatsApp credentials missing" }), { status: 500, headers: jsonCors });
+      const b = await req.json();
+      const rawPhone = String(b.phone || "").trim();
+      const to = rawPhone.replace(/^whatsapp:/, "").replace(/^\+/, "").replace(/[^0-9]/g, "");
+      const pdfB64 = String(b.pdf_base64 || "");
+      let filename = String(b.filename || "فاتورة.pdf").slice(0, 120);
+      if (!/\.pdf$/i.test(filename)) filename += ".pdf";
+      const caption = String(b.caption || "").trim().slice(0, 1000);
+      if (!to || !pdfB64) return new Response(JSON.stringify({ error: "missing phone/pdf" }), { status: 400, headers: jsonCors });
+      const bin = atob(pdfB64); const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const fd = new FormData();
+      fd.append("messaging_product", "whatsapp");
+      fd.append("type", "application/pdf");
+      fd.append("file", new Blob([bytes], { type: "application/pdf" }), "invoice.pdf");
+      const upRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${PHONE_ID}/media`, {
+        method: "POST", headers: { Authorization: `Bearer ${TOKEN}` }, body: fd,
+      });
+      const upJson = await upRes.json();
+      if (!upRes.ok || !upJson.id) return new Response(JSON.stringify({ error: "media upload failed", detail: upJson }), { status: 502, headers: jsonCors });
+      const msgBody = { messaging_product: "whatsapp", to, type: "document", document: { id: upJson.id, filename, ...(caption ? { caption } : {}) } };
+      const sendRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${PHONE_ID}/messages`, {
+        method: "POST", headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify(msgBody),
+      });
+      const sendJson = await sendRes.json();
+      if (!sendRes.ok) return new Response(JSON.stringify({ error: "send failed", detail: sendJson?.error || sendJson }), { status: 502, headers: jsonCors });
+      // سجّل بخيط المحادثة + ارفع المحادثة لأعلى.
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const customerPhone = rawPhone.startsWith("whatsapp:") ? rawPhone : ("whatsapp:+" + to);
+      const callerStaff = await getCallerStaff(req);
+      const sentBy = (callerStaff && callerStaff.name) ? callerStaff.name : String(b.sent_by || "admin");
+      const threadBody = (caption ? caption + "\n" : "") + "🧾 [فاتورة PDF]";
+      try {
+        await supabase.from("wa_admin_messages").insert({ customer_phone: customerPhone, body: threadBody.slice(0, 2000), sent_by: sentBy, sent_at: new Date().toISOString(), media_id: upJson.id, media_mime: "application/pdf", media_filename: filename });
+        const _ts = new Date().toISOString();
+        await supabase.from("whatsapp_sessions").update({ last_message_at: _ts, last_outbound_at: _ts, last_outbound_body: "🧾 فاتورة" }).eq("phone", customerPhone);
+      } catch (_e) { /* best-effort */ }
+      return new Response(JSON.stringify({ ok: true, message_id: sendJson?.messages?.[0]?.id || null }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
   if (url.searchParams.get("admin_action") === "send_admin_message") {
     { const g = await requirePerm(req, "send_messages"); if (g) return g; }
     try {
@@ -5046,10 +5160,21 @@ Deno.serve(async (req) => {
   // Media endpoint returns a 302 redirect to a temporary signed URL —
   // we follow it and stream the bytes, preserving Content-Type.
   if (url.searchParams.get("admin_action") === "media_proxy") {
-    // مصادقة: header عادي، أو _t كـ query param (لأن <img> ما يقدر يبعث header).
+    // مصادقة: header عادي، أو _t كـ query param (لأن <img>/التبويب الجديد ما يبعث header).
     const tParam = (url.searchParams.get("_t") || "").trim();
     const legacy = (Deno.env.get("LEGACY_ANON_JWT") || "").trim();
-    const authedByParam = !!tParam && !!legacy && tParam === legacy;
+    let authedByParam = !!tParam && !!legacy && tParam === legacy; // الأدمن
+    // 🐛 إصلاح «الملف يطلع أسود/unauthorized» عند الموظفات: توكنهنّ توكن جلسة موظف
+    //    (مو الـlegacy JWT)، والتبويب الجديد ما يبعث header — فنقبل توكن جلسة الموظف عبر _t.
+    if (!authedByParam && tParam) {
+      try {
+        const sAuth = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const { data: sess } = await sAuth.from("wa_staff_sessions")
+          .select("expires_at, revoked_at").eq("token", tParam).maybeSingle();
+        const srow = sess as { expires_at: string; revoked_at: string | null } | null;
+        if (srow && !srow.revoked_at && new Date(srow.expires_at) >= new Date()) authedByParam = true;
+      } catch (_e) { /* يسقط للفحص العادي تحت */ }
+    }
     if (!authedByParam && !(await checkAuthOrSession(req))) return unauthorized();
     try {
       const mediaId = (url.searchParams.get("media_id") || "").trim();

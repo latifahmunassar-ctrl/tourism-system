@@ -1272,6 +1272,7 @@ async function handleNewLeadIntake(args: {
 - ❌❌ ممنوع منعاً باتاً تقول إن موقعنا في الرياض أو أي مدينة. لا تذكر أي موقع أو مدينة للشركة إطلاقاً — حتى لو ألحّ العميل، حوّله للزميل.
 مهمتك جمع ٥ معلومات أساسية من العميل:
 1) وجهة السفر  2) عدد المسافرين  3) تاريخ السفر  4) أعمار الأطفال فقط (إن وُجد أطفال)  5) المدن التي يحبون زيارتها (أو ترك الترتيب للوكالة).
+⚠️ توضيح وجهة مهم: «عُمان» أو «عمان» (بدون شدّة) تعني **دائماً سلطنة عُمان** (وجهة داخلية، مثل صلالة) — **وليست «عَمّان» عاصمة الأردن**. إذا ذكر العميل «عمان» فالمقصود سلطنة عُمان؛ خزّن destination = «عُمان» ولا تخلط بينها وبين الأردن إطلاقاً.
 قواعد:
 ${returning
   ? `- هذا عميل **سبق تعامل معنا وعاد بطلب وجهة جديدة**. ابدأ أول رد بترحيب بعودته بطريقة تُشعره أنك تعرفه (لا كأنها أول مرة): "حياك الله من جديد 🌟 سعدنا برجوعك! معك طلال" (كرسالة قصيرة لحالها) ثم اسأل عن أول معلومة ناقصة للرحلة الجديدة برسالة ثانية قصيرة.\n- ⚠️ تجاهل تفاصيل أي رحلة قديمة في السياق؛ هذا طلب رحلة جديدة — اجمع معلوماتها من جديد.`
@@ -5159,10 +5160,21 @@ Deno.serve(async (req) => {
   // Media endpoint returns a 302 redirect to a temporary signed URL —
   // we follow it and stream the bytes, preserving Content-Type.
   if (url.searchParams.get("admin_action") === "media_proxy") {
-    // مصادقة: header عادي، أو _t كـ query param (لأن <img> ما يقدر يبعث header).
+    // مصادقة: header عادي، أو _t كـ query param (لأن <img>/التبويب الجديد ما يبعث header).
     const tParam = (url.searchParams.get("_t") || "").trim();
     const legacy = (Deno.env.get("LEGACY_ANON_JWT") || "").trim();
-    const authedByParam = !!tParam && !!legacy && tParam === legacy;
+    let authedByParam = !!tParam && !!legacy && tParam === legacy; // الأدمن
+    // 🐛 إصلاح «الملف يطلع أسود/unauthorized» عند الموظفات: توكنهنّ توكن جلسة موظف
+    //    (مو الـlegacy JWT)، والتبويب الجديد ما يبعث header — فنقبل توكن جلسة الموظف عبر _t.
+    if (!authedByParam && tParam) {
+      try {
+        const sAuth = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const { data: sess } = await sAuth.from("wa_staff_sessions")
+          .select("expires_at, revoked_at").eq("token", tParam).maybeSingle();
+        const srow = sess as { expires_at: string; revoked_at: string | null } | null;
+        if (srow && !srow.revoked_at && new Date(srow.expires_at) >= new Date()) authedByParam = true;
+      } catch (_e) { /* يسقط للفحص العادي تحت */ }
+    }
     if (!authedByParam && !(await checkAuthOrSession(req))) return unauthorized();
     try {
       const mediaId = (url.searchParams.get("media_id") || "").trim();
