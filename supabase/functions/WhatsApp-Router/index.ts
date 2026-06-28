@@ -4574,6 +4574,27 @@ Deno.serve(async (req) => {
     }
   }
 
+  // صورة بيانات الدفع (حسابات بنكية) من طرق الدفع المحفوظة (wa_offers) كـ base64 —
+  // تُضمَّن في الفاتورة عند الدفع بالريال العماني (cat=pay_oman افتراضياً).
+  if (url.searchParams.get("admin_action") === "invoice_pay_image") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const cat = (url.searchParams.get("cat") || "pay_oman").trim();
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data } = await supabase.from("wa_offers").select("file_url, content_type").eq("category", cat).eq("active", true).order("sort").limit(1).maybeSingle();
+      const fileUrl = (data as { file_url?: string } | null)?.file_url;
+      if (!fileUrl) return new Response(JSON.stringify({ ok: true, image: null }), { headers: jsonCors });
+      const imgRes = await fetch(fileUrl);
+      if (!imgRes.ok) return new Response(JSON.stringify({ ok: true, image: null }), { headers: jsonCors });
+      const buf = new Uint8Array(await imgRes.arrayBuffer());
+      let bin = ""; for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+      const mime = (data as { content_type?: string } | null)?.content_type || "image/jpeg";
+      return new Response(JSON.stringify({ ok: true, image: `data:${mime};base64,${btoa(bin)}` }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
   // إرسال فاتورة PDF (base64) للعميل عبر Graph — يرفعها كوسيط ثم يرسلها document.
   if (url.searchParams.get("admin_action") === "send_invoice") {
     { const g = await requirePerm(req, "send_messages"); if (g) return g; }
