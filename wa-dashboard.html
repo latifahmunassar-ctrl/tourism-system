@@ -338,6 +338,9 @@
       padding: 28px; max-width: 480px; width: 100%;
       box-shadow: 0 10px 40px rgba(15,23,42,.15), 0 4px 12px rgba(15,23,42,.08);
     }
+    @keyframes attendPulse { 0%,100% { box-shadow:0 0 0 0 rgba(245,158,11,.55); } 50% { box-shadow:0 0 0 7px rgba(245,158,11,0); } }
+    .attend-pulse { animation: attendPulse 1.4s infinite; }
+    #attend-toast { position:fixed; top:14px; left:50%; transform:translateX(-50%); background:#f59e0b; color:#fff; font-weight:800; font-size:13.5px; padding:11px 18px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.2); z-index:100000; display:none; }
     /* لوحة إرشاد طريقة الدخول — ثابتة على يمين الشاشة (وضع المبيعات فقط) */
     .auth-guide {
       position: fixed; top: 50%; right: 32px; transform: translateY(-50%);
@@ -671,6 +674,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
   </script>
 </head>
 <body>
+  <div id="attend-toast"></div>
   <div id="waGate" class="wa-gate">
     <div class="wa-gate-card">
       <div class="gi">🔐</div>
@@ -3447,8 +3451,10 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     document.querySelectorAll('.conv-label-btn').forEach(b =>
       b.addEventListener('click', () => setConvLabel(b.dataset.label)));
     // ── الحضور والنشاط (event-based) ─────────────────────────────────────
-    let attendState=null;
+    let attendState=null, attendNudged=false;
     function fmtHMS(sec){ sec=Math.max(0,Math.round(sec||0)); const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60); return h+"س "+m+"د"; }
+    let _attendToastT=null;
+    function attendToast(msg){ const t=$("attend-toast"); if(!t) return; t.textContent=msg; t.style.display="block"; clearTimeout(_attendToastT); _attendToastT=setTimeout(()=>{ t.style.display="none"; }, 6000); }
     function trackActivity(type){ if(!token) return; try{ fetch(BASE+"?admin_action=track_activity",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({type:type||"activity"})}); }catch(_e){} }
     async function attendLoad(){
       const w=$("attend-widget"); if(!w||!token) return;
@@ -3456,8 +3462,18 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if(!d.is_staff){ w.style.display="none"; return; }
         w.style.display="flex"; attendState=d;
         const btn=$("attend-btn"), st=$("attend-status");
-        if(d.checked_in){ btn.textContent="🔚 إنهاء الدوام"; btn.style.background="#fee2e2"; btn.style.color="#b91c1c"; st.textContent=(d.status==="idle")?"🟠 خامل":"🟢 نشط"; }
-        else{ btn.textContent="⏱️ بدء الدوام"; btn.style.background=""; btn.style.color=""; st.textContent="⚪ خارج الدوام"; }
+        if(d.checked_in){
+          attendNudged=false;
+          btn.classList.remove("attend-pulse"); w.style.background="#fff"; w.style.borderColor="var(--border)";
+          btn.textContent="🔚 إنهاء الدوام"; btn.style.background="#fee2e2"; btn.style.color="#b91c1c";
+          st.textContent=(d.status==="idle")?"🟠 خامل":"🟢 نشط";
+        } else {
+          // غير مسجِّل دوام — تذكير واضح (الودجت أصفر + نبض + رسالة مرة واحدة).
+          btn.textContent="⏱️ بدء الدوام"; btn.style.background="#f59e0b"; btn.style.color="#fff";
+          btn.classList.add("attend-pulse"); w.style.background="#fffbeb"; w.style.borderColor="#fde68a";
+          st.textContent="⚠️ لم تبدأ الدوام";
+          if(!attendNudged){ attendNudged=true; attendToast("⏱️ لا تنسى بدء الدوام حتى تُحتسب ساعاتك والتزامك"); }
+        }
       }catch(_e){}
     }
     async function attendToggle(){
