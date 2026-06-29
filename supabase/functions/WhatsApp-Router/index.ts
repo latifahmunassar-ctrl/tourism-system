@@ -1027,6 +1027,29 @@ function normalizeWhatsappPhone(raw: string): string {
   return `whatsapp:+${digits}`;
 }
 
+// ── الحضور والنشاط: تسجيل حدث فعلي + تحديث الجلسة المفتوحة (event-based) ──
+const ATTEND_IDLE_SEC = 15 * 60; // عتبة الخمول: ١٥ دقيقة بلا نشاط
+async function recordActivity(
+  supabase: ReturnType<typeof createClient>,
+  phone: string, name: string | null, type: string,
+  ip: string | null, ua: string | null,
+): Promise<void> {
+  const now = new Date().toISOString();
+  try { await supabase.from("activity_events").insert({ staff_phone: phone, staff_name: name, event_type: type, created_at: now, ip, user_agent: ua }); } catch (_e) { /* */ }
+  // أي نشاط يحدّث آخر نشاط للجلسة المفتوحة ويعيد الحالة Active (يوقف الخمول).
+  try { await supabase.from("attendance_sessions").update({ last_activity_at: now, status: "active" }).eq("staff_phone", phone).is("check_out_at", null); } catch (_e) { /* */ }
+}
+// حساب ثواني النشاط/الخمول من فجوات الأحداث (فجوة < العتبة = نشاط، وإلا خمول).
+function splitActiveIdle(checkInIso: string, eventIsos: string[], endIso: string): { active: number; idle: number } {
+  let prev = new Date(checkInIso).getTime();
+  const end = new Date(endIso).getTime();
+  let active = 0, idle = 0;
+  const ts = eventIsos.map(s => new Date(s).getTime()).filter(t => t >= prev && t <= end).sort((a, b) => a - b);
+  for (const t of ts) { const gap = (t - prev) / 1000; if (gap > 0) { if (gap < ATTEND_IDLE_SEC) active += gap; else idle += gap; } prev = t; }
+  const tail = (end - prev) / 1000; if (tail > 0) { if (tail < ATTEND_IDLE_SEC) active += tail; else idle += tail; }
+  return { active: Math.round(active), idle: Math.round(idle) };
+}
+
 // ── Staff identity guard ─────────────────────────────────────────────────
 // Any phone in wa_staff (or the legacy SALES_/COMPLAINTS_ env lists) is a
 // staff member, not a customer. Free-text messages from staff are blocked
@@ -1466,12 +1489,16 @@ async function handleMessage(args: {
   }
 
   // عميل قديم (سبق رددنا عليه أو اكتمل استقباله) عاد بطلب **وجهة جديدة** (مختلفة عن
-  // وجهته السابقة) → نعيد تفعيل طلال بترحيب «بعودتك» وجمع معلومات الرحلة الجديدة من جديد.
+  // وجهته السابقة) → نعيد تفعيل طلال لجمع معلومات الرحلة الجديدة.
+  // ❌ بلا ترحيب أو تعريف من جديد («سعدنا بعودتك / معك طلال») مهما طالت المدة —
+  //    العميل يعرفنا، فلا نمرّر returning (وبوجود ردود سابقة يعتبره طلال «منتصف
+  //    محادثة» فلا يعرّف بنفسه). نبذر الوجهة المكتشفة في intake_data حتى لا يعيد
+  //    سؤالها، ونمسح بقية تفاصيل الرحلة القديمة فقط (العدد/التاريخ/الأعمار/المدن).
   if (s?.intake_active !== true && detectedDest && detectedDest !== hadDest) {
     await supabase.from("whatsapp_sessions")
-      .update({ intake_active: true, intake_data: null, destination: detectedDest })
+      .update({ intake_active: true, intake_data: { destination: detectedDest }, destination: detectedDest })
       .eq("phone", from);
-    await handleNewLeadIntake({ supabase, from, body: text, returning: true });
+    await handleNewLeadIntake({ supabase, from, body: text });
     return;
   }
 
@@ -3803,6 +3830,78 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── الحضور والانصراف + تتبّع النشاط (event-based) ─────────────────────
+  // بدء الدوام — للموظف فقط (الأدمن/المالكة بلا staff session لا يسجّل دوام).
+  if (url.searchParams.get("admin_action") === "attendance_check_in") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    const staff = await getCallerStaff(req);
+    if (!staff) return new Response(JSON.stringify({ error: "الحضور للموظفين فقط" }), { status: 403, headers: jsonCors });
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || null;
+      const ua = req.headers.get("user-agent") || null;
+      const { data: open } = await supabase.from("attendance_sessions").select("id, check_in_at").eq("staff_phone", staff.phone).is("check_out_at", null).order("check_in_at", { ascending: false }).limit(1).maybeSingle();
+      if (open) { await recordActivity(supabase, staff.phone, staff.name, "resume", ip, ua); return new Response(JSON.stringify({ ok: true, already: true, id: (open as { id: string }).id }), { headers: jsonCors }); }
+      const now = new Date().toISOString();
+      const ksaToday = new Date(Date.now() + 3 * 3600 * 1000).toISOString().slice(0, 10);
+      const { data, error } = await supabase.from("attendance_sessions").insert({ staff_phone: staff.phone, staff_name: staff.name, work_date: ksaToday, check_in_at: now, last_activity_at: now, status: "active" }).select("id").single();
+      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonCors });
+      await recordActivity(supabase, staff.phone, staff.name, "check_in", ip, ua);
+      return new Response(JSON.stringify({ ok: true, id: (data as { id: string }).id, check_in_at: now }), { headers: jsonCors });
+    } catch (e) { return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors }); }
+  }
+
+  // إنهاء الدوام — يحسب النشاط/الخمول من الأحداث ويقفل الجلسة.
+  if (url.searchParams.get("admin_action") === "attendance_check_out") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    const staff = await getCallerStaff(req);
+    if (!staff) return new Response(JSON.stringify({ error: "الحضور للموظفين فقط" }), { status: 403, headers: jsonCors });
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: open } = await supabase.from("attendance_sessions").select("id, check_in_at").eq("staff_phone", staff.phone).is("check_out_at", null).order("check_in_at", { ascending: false }).limit(1).maybeSingle();
+      if (!open) return new Response(JSON.stringify({ ok: true, no_session: true }), { headers: jsonCors });
+      const o = open as { id: string; check_in_at: string };
+      const now = new Date().toISOString();
+      const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || null;
+      const ua = req.headers.get("user-agent") || null;
+      await recordActivity(supabase, staff.phone, staff.name, "check_out", ip, ua);
+      const { data: evs } = await supabase.from("activity_events").select("created_at").eq("staff_phone", staff.phone).gte("created_at", o.check_in_at).order("created_at", { ascending: true }).limit(5000);
+      const { active, idle } = splitActiveIdle(o.check_in_at, ((evs || []) as Array<{ created_at: string }>).map(e => e.created_at), now);
+      await supabase.from("attendance_sessions").update({ check_out_at: now, active_seconds: active, idle_seconds: idle, status: "offline", last_activity_at: now }).eq("id", o.id);
+      const total = Math.round((new Date(now).getTime() - new Date(o.check_in_at).getTime()) / 1000);
+      return new Response(JSON.stringify({ ok: true, check_out_at: now, total_seconds: total, active_seconds: active, idle_seconds: idle }), { headers: jsonCors });
+    } catch (e) { return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors }); }
+  }
+
+  // حالة دوامي الحالية (لزر الواجهة): مسجَّل دخول؟ active/idle؟
+  if (url.searchParams.get("admin_action") === "attendance_status") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    const staff = await getCallerStaff(req);
+    if (!staff) return new Response(JSON.stringify({ ok: true, is_staff: false }), { headers: jsonCors });
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: open } = await supabase.from("attendance_sessions").select("id, check_in_at, last_activity_at").eq("staff_phone", staff.phone).is("check_out_at", null).order("check_in_at", { ascending: false }).limit(1).maybeSingle();
+    if (!open) return new Response(JSON.stringify({ ok: true, is_staff: true, checked_in: false, staff_name: staff.name }), { headers: jsonCors });
+    const o = open as { id: string; check_in_at: string; last_activity_at: string };
+    const idleSec = (Date.now() - new Date(o.last_activity_at).getTime()) / 1000;
+    return new Response(JSON.stringify({ ok: true, is_staff: true, checked_in: true, status: idleSec >= ATTEND_IDLE_SEC ? "idle" : "active", check_in_at: o.check_in_at, last_activity_at: o.last_activity_at, staff_name: staff.name }), { headers: jsonCors });
+  }
+
+  // تسجيل نشاط فعلي من الواجهة (فتح محادثة، تعديل…) — الأدمن no-op.
+  if (url.searchParams.get("admin_action") === "track_activity") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    const staff = await getCallerStaff(req);
+    if (!staff) return new Response(JSON.stringify({ ok: true, skipped: true }), { headers: jsonCors });
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const p = await req.json().catch(() => ({} as Record<string, unknown>));
+      const type = String((p as { type?: string }).type || "activity").slice(0, 40);
+      const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || null;
+      const ua = req.headers.get("user-agent") || null;
+      await recordActivity(supabase, staff.phone, staff.name, type, ip, ua);
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) { return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors }); }
+  }
+
   // Staff self-service: change own password. Requires a valid session
   // (NOT the master JWT). Verifies current_password before updating.
   // POST body: {current_password, new_password}
@@ -4775,6 +4874,8 @@ Deno.serve(async (req) => {
         }
       }
       await supabase.from("whatsapp_sessions").update(_sessUpd).eq("phone", phone);
+      // نشاط فعلي: ردّ الموظف على عميل (event-based attendance).
+      if (callerStaff) { await recordActivity(supabase, callerStaff.phone, callerStaff.name, "send_message", null, req.headers.get("user-agent")); }
       return new Response(JSON.stringify({ ok: true, twilio_sid: twilioSid }),
         { headers: jsonCors });
     } catch (e) {

@@ -774,6 +774,10 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         <div id="dev-bypass-banner" style="display:none; background:#fef3c7; color:#92400e; padding:6px 12px; border-radius:8px; font-size:13px; font-weight:700; border:1px solid #fde68a;">
           🧪 وضع اختبار — دخول بدون كلمة سر
         </div>
+        <div id="attend-widget" style="display:none; align-items:center; gap:8px; background:#fff; border:1px solid var(--border); border-radius:10px; padding:5px 10px;">
+          <span id="attend-status" style="font-size:12px; font-weight:800; color:#64748b;">—</span>
+          <button class="refresh-btn" id="attend-btn" style="font-weight:800;">⏱️ بدء الدوام</button>
+        </div>
         <div style="display:flex; gap:4px;">
           <button class="refresh-btn" data-role-switch="admin" title="عرض الإدمن">🛡️</button>
           <button class="refresh-btn" data-role-switch="sales" title="عرض المبيعات">💼</button>
@@ -3417,8 +3421,34 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     }
     document.querySelectorAll('.conv-label-btn').forEach(b =>
       b.addEventListener('click', () => setConvLabel(b.dataset.label)));
+    // ── الحضور والنشاط (event-based) ─────────────────────────────────────
+    let attendState=null;
+    function fmtHMS(sec){ sec=Math.max(0,Math.round(sec||0)); const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60); return h+"س "+m+"د"; }
+    function trackActivity(type){ if(!token) return; try{ fetch(BASE+"?admin_action=track_activity",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({type:type||"activity"})}); }catch(_e){} }
+    async function attendLoad(){
+      const w=$("attend-widget"); if(!w||!token) return;
+      try{ const r=await fetch(BASE+"?admin_action=attendance_status",{headers:{Authorization:"Bearer "+token}}); const d=await r.json();
+        if(!d.is_staff){ w.style.display="none"; return; }
+        w.style.display="flex"; attendState=d;
+        const btn=$("attend-btn"), st=$("attend-status");
+        if(d.checked_in){ btn.textContent="🔚 إنهاء الدوام"; btn.style.background="#fee2e2"; btn.style.color="#b91c1c"; st.textContent=(d.status==="idle")?"🟠 خامل":"🟢 نشط"; }
+        else{ btn.textContent="⏱️ بدء الدوام"; btn.style.background=""; btn.style.color=""; st.textContent="⚪ خارج الدوام"; }
+      }catch(_e){}
+    }
+    async function attendToggle(){
+      const btn=$("attend-btn"); btn.disabled=true;
+      try{
+        const act=(attendState&&attendState.checked_in)?"attendance_check_out":"attendance_check_in";
+        const r=await fetch(BASE+"?admin_action="+act,{method:"POST",headers:{Authorization:"Bearer "+token}}); const d=await r.json();
+        if(act==="attendance_check_out"&&d.ok&&!d.no_session){ alert("تم إنهاء الدوام ✅\nنشاط فعلي: "+fmtHMS(d.active_seconds)+" · خمول: "+fmtHMS(d.idle_seconds)); }
+        await attendLoad();
+      }catch(_e){ alert("تعذّر — حاول مجدداً"); } finally{ btn.disabled=false; }
+    }
+    $("attend-btn") && $("attend-btn").addEventListener("click", attendToggle);
+
     async function openConversation(phone, name) {
       convPhone = phone;
+      trackActivity("open_conversation");
       $("conv-title").textContent = name;
       $("conv-sub").textContent = fmtPhone(phone);
       $("conv-overlay").style.display = "grid";
@@ -5163,6 +5193,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     let refreshInflight = false;
     async function refresh(opts) {
       if (!token) { showAuth(); return; }
+      attendLoad();   // حدّث حالة الدوام (نشط/خامل/خارج) مع كل دورة
       // الـ auto-poll السريع قد يطلق طلبات متراكبة لو الشبكة بطيئة —
       // نتجاهل الـ tick القادم لو في طلب جاري بعد.
       if (refreshInflight) return;
