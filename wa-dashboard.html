@@ -938,6 +938,12 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       <button class="filter-btn staff-only-filter" id="filter-mine" data-active="false" style="margin-bottom:10px; background:#eef2ff; color:#3730a3; border-color:#c7d2fe; font-weight:800;">
         👤 محادثاتي فقط <span class="cnt" id="mine-cnt">0</span>
       </button>
+      <div class="filter-bar" id="reply-state-filter-bar" style="margin-bottom:10px; gap:6px; flex-wrap:wrap; align-items:center;">
+        <span style="font-size:12px; color:var(--muted);">حالة الرد:</span>
+        <button class="filter-btn" id="filter-st-noreply" style="background:#f3e8ff; color:#5b21b6; border-color:#ddd6fe; font-weight:700;">🟣 لم يُرَد عليها <span class="cnt" id="st-noreply-cnt">0</span></button>
+        <button class="filter-btn" id="filter-st-seen" style="background:#fff1e6; color:#9a3412; border-color:#fed7aa; font-weight:700;">🟠 بانتظار الرد <span class="cnt" id="st-seen-cnt">0</span></button>
+        <button class="filter-btn" id="filter-st-replied" style="background:#ecfdf5; color:#065f46; border-color:#a7f3d0; font-weight:700;">⚪ تم الرد <span class="cnt" id="st-replied-cnt">0</span></button>
+      </div>
       <div class="filter-bar" id="followup-filter-bar" style="margin-bottom:10px; gap:8px; flex-wrap:wrap; align-items:center;">
         <button class="filter-btn" id="filter-followup" data-active="false" style="background:#fef3c7; color:#92400e; border-color:#fde68a; font-weight:700;">
           🔔 تم إرسال متابعة <span class="cnt" id="followup-cnt">0</span>
@@ -2681,6 +2687,15 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     let filterRead = "";        // "" | "unread" | "read"
     let filterPending = false;  // «بانتظار ردّنا»: آخر رسالة من العميل أحدث من آخر ردّ منّا
     let filterMine = false;     // «محادثاتي فقط»: المُسنَدة للموظفة الحالية
+    let filterReplyState = "";  // حالة الرد: ""|"noreply"|"seen"|"replied" (نفس ألوان الصفوف)
+    // حالة الرد لمحادثة: لم يُرَد (بنفسجي) / شُوهدت بلا رد (برتقالي) / تم الرد (طبيعي).
+    function replyStateOf(c) {
+      const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
+      const lout = c.last_human_outbound_at ? new Date(c.last_human_outbound_at).getTime() : 0;
+      const lop = c.last_opened_at ? new Date(c.last_opened_at).getTime() : 0;
+      if (!isUnanswered(lin, lout, c.last_message_body)) return "replied";
+      return (lin > 0 && lop >= lin) ? "seen" : "noreply";
+    }
 
     // نفس منطق effective state اللي يستخدمه renderConversationRows.
     // force_off_all → الكل موقوف. force_on_all → الكل شغال. وإلا
@@ -2731,6 +2746,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           const lout = c.last_human_outbound_at ? new Date(c.last_human_outbound_at).getTime() : 0;
           if (!isUnanswered(lin, lout, c.last_message_body)) return false;
         }
+        if (filterReplyState && replyStateOf(c) !== filterReplyState) return false;
         if (complaintPhones && !complaintPhones.has(c.phone)) return false;
         if (myDest && myDest.size > 0) {
           // المبيعات يشوف: محادثة وجهتها ضمن وجهاتي، أو معيّن لي بالاسم
@@ -2752,6 +2768,11 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       }, 0);
       const _mc = $("mine-cnt");
       if (_mc) _mc.textContent = (me ? conversationsCache.filter(c => c.assigned_staff_phone === me.phone).length : 0);
+      // عدّادات حالة الرد (إجمالي عبر كل المحادثات المحمّلة)
+      const stc = { noreply: 0, seen: 0, replied: 0 };
+      conversationsCache.forEach(c => { stc[replyStateOf(c)]++; });
+      const _setc = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+      _setc("st-noreply-cnt", stc.noreply); _setc("st-seen-cnt", stc.seen); _setc("st-replied-cnt", stc.replied);
     }
 
     function renderStaffFilterBar() {
@@ -5495,6 +5516,19 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       $("filter-mine").classList.toggle("active", filterMine);
       $("filter-mine").dataset.active = filterMine ? "true" : "false";
       applyConversationsFilter();
+    });
+    // فلاتر حالة الرد (حصرية: زر واحد فعّال؛ ضغط الفعّال يلغيه)
+    ["noreply", "seen", "replied"].forEach(st => {
+      const btn = $("filter-st-" + st);
+      if (!btn) return;
+      btn.addEventListener("click", () => {
+        filterReplyState = (filterReplyState === st) ? "" : st;
+        ["noreply", "seen", "replied"].forEach(s => {
+          const b = $("filter-st-" + s);
+          if (b) b.classList.toggle("active", filterReplyState === s);
+        });
+        applyConversationsFilter();
+      });
     });
 
     // ── فلتر «تم إرسال متابعة» (server-side على followup_due_date) ──────
