@@ -3950,29 +3950,35 @@ Deno.serve(async (req) => {
         supabase.from("attendance_sessions").select("staff_phone, work_date, check_in_at, check_out_at, active_seconds, idle_seconds, last_activity_at").gte("check_in_at", fromIso).lte("check_in_at", toIso).limit(5000),
         supabase.from("activity_events").select("staff_phone, created_at").gte("created_at", fromIso).lte("created_at", toIso).limit(20000),
         supabase.from("wa_admin_messages").select("sent_by, customer_phone, sent_at").in("sent_by", names.length ? names : ["__none__"]).gte("sent_at", fromIso).lte("sent_at", toIso).limit(15000),
-        supabase.from("wa_message_audit").select("from_phone, received_at").gte("received_at", fromIso).lte("received_at", toIso).limit(20000),
+        supabase.from("wa_message_audit").select("from_phone, received_at, body").gte("received_at", fromIso).lte("received_at", toIso).limit(20000),
         // حالة المحادثات المُسنَدة (لقطة حالية): مؤكّدة / غير مردودة / شافتها بلا رد.
-        supabase.from("whatsapp_sessions").select("assigned_staff_phone, label, last_message_at, last_outbound_at, last_opened_at").not("assigned_staff_phone", "is", null).limit(8000),
+        supabase.from("whatsapp_sessions").select("phone, assigned_staff_phone, label, last_message_at, last_outbound_at, last_opened_at").not("assigned_staff_phone", "is", null).limit(8000),
       ]);
       // تجميع لكل موظف: حجوزات مؤكّدة + غير مردودة (آخر نشاط من العميل) + منها كم شافتها بلا رد.
       const confirmedBy: Record<string, number> = {}, unansweredBy: Record<string, number> = {}, unansweredSeenBy: Record<string, number> = {};
-      for (const w of ((wsRes.data || []) as Array<{ assigned_staff_phone: string; label: string | null; last_message_at: string | null; last_outbound_at: string | null; last_opened_at: string | null }>)) {
+      for (const w of ((wsRes.data || []) as Array<{ phone: string; assigned_staff_phone: string; label: string | null; last_message_at: string | null; last_outbound_at: string | null; last_opened_at: string | null }>)) {
         const ph = w.assigned_staff_phone;
         if (w.label === "CONFIRMED") confirmedBy[ph] = (confirmedBy[ph] || 0) + 1;
         const lm = w.last_message_at ? Date.parse(w.last_message_at) : 0;
         const lo = w.last_outbound_at ? Date.parse(w.last_outbound_at) : 0;
         const lop = w.last_opened_at ? Date.parse(w.last_opened_at) : 0;
-        // مهلة ٥د: رسالة العميل القريبة من ردّنا (تأكيد قصير) لا تُعدّ «غير مردودة».
-        if (lm > 0 && (lm - lo) > 5 * 60 * 1000) { unansweredBy[ph] = (unansweredBy[ph] || 0) + 1; if (lop >= lm) unansweredSeenBy[ph] = (unansweredSeenBy[ph] || 0) + 1; }
+        // غير مردودة: العميل أحدث من ردّنا. المهلة (٥د) تُعفي فقط رسائل التأكيد القصيرة.
+        const gap = lm - lo;
+        const lastTxt = lastInBody[w.phone]?.body ?? null;
+        const unanswered = lm > 0 && lm > lo && (gap > 5 * 60 * 1000 || !isAckText(lastTxt));
+        if (unanswered) { unansweredBy[ph] = (unansweredBy[ph] || 0) + 1; if (lop >= lm) unansweredSeenBy[ph] = (unansweredSeenBy[ph] || 0) + 1; }
       }
       const sessions = (sessRes.data || []) as Array<{ staff_phone: string; work_date: string; check_in_at: string; check_out_at: string | null; active_seconds: number; idle_seconds: number; last_activity_at: string }>;
       const events = (evRes.data || []) as Array<{ staff_phone: string; created_at: string }>;
       const outs = (outRes.data || []) as Array<{ sent_by: string; customer_phone: string; sent_at: string }>;
-      const ins = (inRes.data || []) as Array<{ from_phone: string; received_at: string }>;
+      const ins = (inRes.data || []) as Array<{ from_phone: string; received_at: string; body: string | null }>;
 
-      // فهرسة الوارد لكل عميل (لحساب زمن الاستجابة)
+      // رسالة تأكيد/شكر قصيرة لا تتطلب رداً
+      const isAckText = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return true; if ([...s].length <= 6) return true; return /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|👍|🙏|❤|🌹|💚|💐|🤍|الله ?يعطيك|يعطيك ?العاف|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(s); };
+      // فهرسة الوارد لكل عميل (لحساب زمن الاستجابة) + آخر نص وارد.
       const inByPhone: Record<string, number[]> = {};
-      for (const m of ins) { (inByPhone[m.from_phone] ||= []).push(Date.parse(m.received_at)); }
+      const lastInBody: Record<string, { ts: number; body: string | null }> = {};
+      for (const m of ins) { const ts = Date.parse(m.received_at); (inByPhone[m.from_phone] ||= []).push(ts); if (!lastInBody[m.from_phone] || ts > lastInBody[m.from_phone].ts) lastInBody[m.from_phone] = { ts, body: m.body }; }
       for (const k in inByPhone) inByPhone[k].sort((a, b) => a - b);
       const evByPhone: Record<string, string[]> = {};
       for (const e of events) { (evByPhone[e.staff_phone] ||= []).push(e.created_at); }
