@@ -596,6 +596,20 @@
     .panel-list .row.unread-row.unanswered-row {
       background: linear-gradient(90deg, rgba(59,130,246,.12) 0%, rgba(245,158,11,.08) 60%, transparent 100%);
     }
+    /* محادثة فُتحت (قرأها أحد) — لون بنفسجي واضح على كامل السطر */
+    .panel-list .row.opened-row {
+      background: #f3e8ff;
+      border-right: 4px solid #8b5cf6;
+    }
+    .panel-list .row.opened-row .primary::after {
+      content: " 👁️";
+      font-size: 11px;
+    }
+    /* فُتحت لكن بانتظار رد (شافها بلا رد) — بنفسجي + حدّ كهرماني تنبيهاً */
+    .panel-list .row.opened-row.unanswered-row {
+      background: linear-gradient(90deg, rgba(139,92,246,.20) 0%, rgba(245,158,11,.12) 70%, #f3e8ff 100%);
+      border-right: 4px solid #f59e0b;
+    }
 
     .filter-bar {
       display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
@@ -3162,6 +3176,8 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         const lastOpen = c.last_opened_at ? new Date(c.last_opened_at).getTime() : 0;
         const isUnread = lastIn > 0 && lastOpen < lastIn;
         const unreadRow = isUnread ? " unread-row" : "";
+        // محادثة "فُتحت" — قرأها أحد (آخر فتح بعد آخر رسالة عميل، أي مقروءة).
+        const openedRow = (!isUnread && lastOpen > 0) ? " opened-row" : "";
         // WhatsApp-style preview line — يعرض أحدث رسالة سواء كانت من
         // العميل أو من الموظف/الإدمن/البوت. السطر يحمل الـ prefix:
         //   💬  لرسالة العميل (inbound)
@@ -3184,7 +3200,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           ? `<span class="conv-assigned">👤 المسؤول: ${escapeHtml(staffNameFor(c.assigned_staff_phone))}${c.assigned_by ? " (" + escapeHtml(c.assigned_by === "auto" ? "تلقائي" : "نقل") + ")" : ""}</span>`
           : `<span class="conv-assigned unassigned">👤 غير معيّن — يحتاج تخصيص موظف</span>`;
         return `
-          <div class="row${urgentRow}${unansweredRow}${unreadRow}" data-phone="${escapeHtml(c.phone)}">
+          <div class="row${urgentRow}${unansweredRow}${unreadRow}${openedRow}" data-phone="${escapeHtml(c.phone)}">
             <div class="label conv-clickable" data-action="open-conv" data-phone="${escapeHtml(c.phone)}" data-name="${escapeHtml(c.profile_name || ph)}">
               <span class="dot ${dotCls}"></span>
               <div class="label-text">
