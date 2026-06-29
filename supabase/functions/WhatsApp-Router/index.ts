@@ -3573,8 +3573,11 @@ Deno.serve(async (req) => {
       // فالعميل لا يزال ينتظر الردّ/الملف الفعلي.
       const isStaffAck = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return true; const n = [...s].length; if (n <= 6) return true; return n <= 15 && /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|ابشر|أبشر|تبشر|حاضر|حياك|اهلا|أهلا|هلا|لحظة|لحظه|ثانية|ثواني|دقيقة|دقيقه|👍|🙏|❤|🌹|💚|💐|🤍|يعطيك|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(s); };
       const isStaffPromise = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return false; if (/أرسلت|ارسلت|رسلت|جهّزت|جهزت|عملت|سويت|بعثت|أعطيت|اعطيت|رتبت|وصلك|وصلت|تفضل|هذا برنامج/.test(s)) return false; return /((الان|الحين|حالا|راح|رح|سوف|توني|تبشر|ابشر|أبشر).{0,10}(ا?رسل|ا?جهز|جهّز|ا?عمل|ا?سوي|ابعث|ا?خلص|ا?كمل|ا?رتب|أرتب))|(^\s*(بأرسل|بارسل|بجهز|باجهز|بأجهز|بسوي|باعمل|بعمل|برتب|بخلص|بكمل|سأرسل|سارسل))|((ثوان|لحظ|دقيق|دقاي).{0,12}(ا?رسل|ا?جهز|ا?عمل|ا?سوي))|(جاري.{0,8}(تجهيز|الت|الإرسال|الارسال|العمل|عمل))/.test(s); };
-      // سؤال موجّه للعميل = ردّ فعلي (الكرة بملعب العميل، فهو من يتأخّر لا نحن).
-      const isStaffQuestion = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return false; if (/[؟?]/.test(s)) return true; return /(^|\s)(كم|متى|وين|اين|أين|هل|كيف|ايش|أيش|وش|وشو|تبي|تبغى|تبغون|تبون|تحب|تحبون|عندك|عندكم|تنوون|تخططون|مين|اي)(\s|$|[،.!:])/.test(s); };
+      // ردّ فعلي قطعاً يضع الكرة بملعب العميل (لا يحتاج AI): سؤال موجّه له، أو تسليم ملف/رابط،
+      // أو طلب تأكيد منه. فالعميل هو من يتأخّر بعدها لا الموظف.
+      const isStaffQuestion = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return false; if (/[؟?]/.test(s)) return true; return /(^|\s)(كم|كام|متى|وين|اين|أين|هل|كيف|ايش|أيش|وش|وشو|تبي|تبغى|تبغون|تبون|تحب|تحبو|تحبون|ودك|عندك|عندكم|تنوون|تخططون|مين)(\s|$|[،.!:])/.test(s); };
+      const isStaffDelivery = (t: string | null): boolean => { const s = String(t || ""); return /📎|https?:\/\/|\[ملف|ملف البرنامج/.test(s) || /في انتظار\s*(تاكيد|تأكيد|رد|ردّ|موافق|اختيار|اعتماد)\S{0,3}كم/.test(s); };
+      const isDefiniteReply = (t: string | null): boolean => isStaffQuestion(t) || isStaffDelivery(t);
       const { data: humanOuts } = phones.length
         ? await supabase.from("wa_admin_messages").select("customer_phone, sent_at, sent_by, body")
             .in("customer_phone", phones).order("sent_at", { ascending: false }).limit(20000)
@@ -3590,7 +3593,7 @@ Deno.serve(async (req) => {
         if (BOT_SENDERS.has(String(m.sent_by || "").trim())) continue;
         if (isStaffAck(m.body)) continue;             // مجاملة → ليست الرسالة الحاسمة
         decided.add(ph);                              // أول رسالة غير-مجاملة = الحاسمة
-        if (isStaffQuestion(m.body)) continue;        // سؤال = ردّ، لا يحتاج AI
+        if (isDefiniteReply(m.body)) continue;        // سؤال/ملف/طلب تأكيد = ردّ قطعاً، لا يحتاج AI
         latestCand.set(ph, { key: ph + "|" + m.sent_at, sent_at: m.sent_at, body: m.body });
       }
       // اقرأ أحكام Haiku المخزّنة لهؤلاء المرشّحين
@@ -3609,8 +3612,8 @@ Deno.serve(async (req) => {
         if (isStaffAck(m.body)) continue;
         const cand = latestCand.get(ph);
         const key = ph + "|" + m.sent_at;
-        // سؤال للعميل = ردّ قطعاً. غير ذلك: حكم Haiku للمرشّح الأحدث إن وُجد، وإلا القاعدة المجانية.
-        const isReply = isStaffQuestion(m.body) ? true
+        // سؤال/ملف/طلب تأكيد = ردّ قطعاً. غير ذلك: حكم Haiku للمرشّح الأحدث إن وُجد، وإلا القاعدة.
+        const isReply = isDefiniteReply(m.body) ? true
           : (cand && cand.key === key && verdicts.has(key)) ? verdicts.get(key)! : !isStaffPromise(m.body);
         if (isReply) lastHumanOutByPhone.set(ph, m.sent_at);
       }
@@ -4058,9 +4061,10 @@ Deno.serve(async (req) => {
       // «ليست ردّاً فعلياً»: مجاملة قصيرة أو وعد بالإرسال (نفس قاعدة dashboard_data).
       const isStaffAck = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return true; const n = [...s].length; if (n <= 6) return true; return n <= 15 && /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|ابشر|أبشر|تبشر|حاضر|حياك|اهلا|أهلا|هلا|لحظة|لحظه|ثانية|ثواني|دقيقة|دقيقه|👍|🙏|❤|🌹|💚|💐|🤍|يعطيك|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(s); };
       const isStaffPromise = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return false; if (/أرسلت|ارسلت|رسلت|جهّزت|جهزت|عملت|سويت|بعثت|أعطيت|اعطيت|رتبت|وصلك|وصلت|تفضل|هذا برنامج/.test(s)) return false; return /((الان|الحين|حالا|راح|رح|سوف|توني|تبشر|ابشر|أبشر).{0,10}(ا?رسل|ا?جهز|جهّز|ا?عمل|ا?سوي|ابعث|ا?خلص|ا?كمل|ا?رتب|أرتب))|(^\s*(بأرسل|بارسل|بجهز|باجهز|بأجهز|بسوي|باعمل|بعمل|برتب|بخلص|بكمل|سأرسل|سارسل))|((ثوان|لحظ|دقيق|دقاي).{0,12}(ا?رسل|ا?جهز|ا?عمل|ا?سوي))|(جاري.{0,8}(تجهيز|الت|الإرسال|الارسال|العمل|عمل))/.test(s); };
-      const isStaffQuestion = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return false; if (/[؟?]/.test(s)) return true; return /(^|\s)(كم|متى|وين|اين|أين|هل|كيف|ايش|أيش|وش|وشو|تبي|تبغى|تبغون|تبون|تحب|تحبون|عندك|عندكم|تنوون|تخططون|مين|اي)(\s|$|[،.!:])/.test(s); };
-      // سؤال للعميل = ردّ (الكرة بملعب العميل)؛ يتقدّم على استبعاد الوعد/المجاملة.
-      const isNonReply = (t: string | null): boolean => !isStaffQuestion(t) && (isStaffAck(t) || isStaffPromise(t));
+      const isStaffQuestion = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return false; if (/[؟?]/.test(s)) return true; return /(^|\s)(كم|كام|متى|وين|اين|أين|هل|كيف|ايش|أيش|وش|وشو|تبي|تبغى|تبغون|تبون|تحب|تحبو|تحبون|ودك|عندك|عندكم|تنوون|تخططون|مين)(\s|$|[،.!:])/.test(s); };
+      const isStaffDelivery = (t: string | null): boolean => { const s = String(t || ""); return /📎|https?:\/\/|\[ملف|ملف البرنامج/.test(s) || /في انتظار\s*(تاكيد|تأكيد|رد|ردّ|موافق|اختيار|اعتماد)\S{0,3}كم/.test(s); };
+      // سؤال/ملف/طلب تأكيد للعميل = ردّ (الكرة بملعبه)؛ يتقدّم على استبعاد الوعد/المجاملة.
+      const isNonReply = (t: string | null): boolean => !(isStaffQuestion(t) || isStaffDelivery(t)) && (isStaffAck(t) || isStaffPromise(t));
       const lastStaffOutByPhone: Record<string, number> = {};
       for (const o of outs) { if (isNonReply(o.body)) continue; const t = Date.parse(o.sent_at); if (!lastStaffOutByPhone[o.customer_phone] || t > lastStaffOutByPhone[o.customer_phone]) lastStaffOutByPhone[o.customer_phone] = t; }
       // تجميع لكل موظف: حجوزات مؤكّدة + غير مردودة (آخر نشاط من العميل) + منها كم شافتها بلا رد.
