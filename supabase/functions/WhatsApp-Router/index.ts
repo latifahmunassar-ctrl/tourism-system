@@ -3537,16 +3537,20 @@ Deno.serve(async (req) => {
           latestMsgByPhone.set(a.from_phone, { body: a.body, received_at: a.received_at });
         }
       }
-      // آخر ردّ **بشري** (موظفة/أدمن) لكل عميل — نستبعد البوت/التلقائي (طلال/تأكيد
-      // تلقائي/النظام) حتى لا يُحتسب ردّ البوت كردّ؛ فالمحادثة تبقى «بانتظار رد بشري».
+      // آخر ردّ **بشري فعلي** لكل عميل — نستبعد البوت/التلقائي (طلال/تأكيد تلقائي/النظام)
+      // ونستبعد ردود المجاملة القصيرة («ابشر/لحظة/حياك») لأنها لا تجيب العميل فعلياً؛
+      // فتبقى المحادثة «بانتظار رد» حتى يردّ موظف ردّاً جوهرياً.
       const BOT_SENDERS = new Set(["طلال", "تأكيد تلقائي", "النظام"]);
+      // ردّ مجاملة/إقرار قصير من الموظف (مقيّد بطول ≤15 حرف حتى لا نُسقط ردّاً جوهرياً يبدأ بتحية).
+      const isStaffAck = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return true; const n = [...s].length; if (n <= 6) return true; return n <= 15 && /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|ابشر|أبشر|تبشر|حاضر|حياك|اهلا|أهلا|هلا|لحظة|لحظه|ثانية|ثواني|دقيقة|دقيقه|👍|🙏|❤|🌹|💚|💐|🤍|يعطيك|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(s); };
       const { data: humanOuts } = phones.length
-        ? await supabase.from("wa_admin_messages").select("customer_phone, sent_at, sent_by")
+        ? await supabase.from("wa_admin_messages").select("customer_phone, sent_at, sent_by, body")
             .in("customer_phone", phones).order("sent_at", { ascending: false }).limit(20000)
         : { data: [] as Array<Record<string, unknown>> };
       const lastHumanOutByPhone = new Map<string, string>();
-      for (const m of (humanOuts as Array<{ customer_phone: string; sent_at: string; sent_by: string | null }> ?? [])) {
+      for (const m of (humanOuts as Array<{ customer_phone: string; sent_at: string; sent_by: string | null; body: string | null }> ?? [])) {
         if (BOT_SENDERS.has(String(m.sent_by || "").trim())) continue;
+        if (isStaffAck(m.body)) continue;   // ردّ مجاملة قصير لا يُحتسب ردّاً فعلياً
         if (!lastHumanOutByPhone.has(m.customer_phone)) lastHumanOutByPhone.set(m.customer_phone, m.sent_at);
       }
 
@@ -3962,14 +3966,14 @@ Deno.serve(async (req) => {
       const [sessRes, evRes, outRes, inRes, wsRes] = await Promise.all([
         supabase.from("attendance_sessions").select("staff_phone, work_date, check_in_at, check_out_at, active_seconds, idle_seconds, last_activity_at").gte("check_in_at", fromIso).lte("check_in_at", toIso).limit(5000),
         supabase.from("activity_events").select("staff_phone, created_at").gte("created_at", fromIso).lte("created_at", toIso).limit(20000),
-        supabase.from("wa_admin_messages").select("sent_by, customer_phone, sent_at").in("sent_by", names.length ? names : ["__none__"]).gte("sent_at", fromIso).lte("sent_at", toIso).limit(15000),
+        supabase.from("wa_admin_messages").select("sent_by, customer_phone, sent_at, body").in("sent_by", names.length ? names : ["__none__"]).gte("sent_at", fromIso).lte("sent_at", toIso).limit(15000),
         supabase.from("wa_message_audit").select("from_phone, received_at, body").gte("received_at", fromIso).lte("received_at", toIso).limit(20000),
         // حالة المحادثات المُسنَدة (لقطة حالية): مؤكّدة / غير مردودة / شافتها بلا رد.
         supabase.from("whatsapp_sessions").select("phone, assigned_staff_phone, label, last_message_at, last_outbound_at, last_opened_at").not("assigned_staff_phone", "is", null).limit(8000),
       ]);
       const sessions = (sessRes.data || []) as Array<{ staff_phone: string; work_date: string; check_in_at: string; check_out_at: string | null; active_seconds: number; idle_seconds: number; last_activity_at: string }>;
       const events = (evRes.data || []) as Array<{ staff_phone: string; created_at: string }>;
-      const outs = (outRes.data || []) as Array<{ sent_by: string; customer_phone: string; sent_at: string }>;
+      const outs = (outRes.data || []) as Array<{ sent_by: string; customer_phone: string; sent_at: string; body: string | null }>;
       const ins = (inRes.data || []) as Array<{ from_phone: string; received_at: string; body: string | null }>;
 
       // رسالة تأكيد/شكر قصيرة لا تتطلب رداً
@@ -3982,8 +3986,10 @@ Deno.serve(async (req) => {
       const evByPhone: Record<string, string[]> = {};
       for (const e of events) { (evByPhone[e.staff_phone] ||= []).push(e.created_at); }
       // آخر ردّ **موظف** لكل عميل (outs مفلترة على أسماء الموظفين، فتستبعد طلال/التلقائي/النظام).
+      // ردّ مجاملة قصير من الموظف لا يُحتسب ردّاً فعلياً (نفس قاعدة dashboard_data).
+      const isStaffAck = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return true; const n = [...s].length; if (n <= 6) return true; return n <= 15 && /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|ابشر|أبشر|تبشر|حاضر|حياك|اهلا|أهلا|هلا|لحظة|لحظه|ثانية|ثواني|دقيقة|دقيقه|👍|🙏|❤|🌹|💚|💐|🤍|يعطيك|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(s); };
       const lastStaffOutByPhone: Record<string, number> = {};
-      for (const o of outs) { const t = Date.parse(o.sent_at); if (!lastStaffOutByPhone[o.customer_phone] || t > lastStaffOutByPhone[o.customer_phone]) lastStaffOutByPhone[o.customer_phone] = t; }
+      for (const o of outs) { if (isStaffAck(o.body)) continue; const t = Date.parse(o.sent_at); if (!lastStaffOutByPhone[o.customer_phone] || t > lastStaffOutByPhone[o.customer_phone]) lastStaffOutByPhone[o.customer_phone] = t; }
       // تجميع لكل موظف: حجوزات مؤكّدة + غير مردودة (آخر نشاط من العميل) + منها كم شافتها بلا رد.
       const confirmedBy: Record<string, number> = {}, unansweredBy: Record<string, number> = {}, unansweredSeenBy: Record<string, number> = {};
       for (const w of ((wsRes.data || []) as Array<{ phone: string; assigned_staff_phone: string; label: string | null; last_message_at: string | null; last_outbound_at: string | null; last_opened_at: string | null }>)) {
