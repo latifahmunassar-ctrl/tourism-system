@@ -1209,7 +1209,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
        ضغطة على ✕ تأجّله 5 دقائق. -->
   <div id="inbox-notify" style="display:none; position:fixed; top:20px; left:50%; transform:translateX(-50%); z-index:9500; background:#ffffff; border:2px solid #f59e0b; border-radius:14px; padding:16px 22px; min-width:340px; max-width:90vw; box-shadow:0 12px 36px rgba(0,0,0,.20); cursor:pointer; font-family:inherit; direction:rtl;">
     <button type="button" id="inbox-notify-close" title="إغلاق" style="position:absolute; top:8px; left:10px; background:transparent; border:none; cursor:pointer; font-size:20px; color:#b45309; padding:2px 8px; line-height:1;">✕</button>
-    <div style="font-weight:900; font-size:15px; color:#92400e; margin-bottom:8px; padding-left:24px;">
+    <div id="inbox-notify-title" style="font-weight:900; font-size:15px; color:#92400e; margin-bottom:8px; padding-left:24px;">
       ⚠️ تنبيه: عندك محادثات بانتظار الرد
     </div>
     <div id="inbox-notify-unread" style="display:none; font-weight:800; font-size:13px; color:#1e40af; margin-bottom:4px;">
@@ -1218,6 +1218,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     <div id="inbox-notify-pending" style="display:none; font-weight:800; font-size:13px; color:#b45309; margin-bottom:4px;">
       ⏳ <span class="cnt">0</span> محادثات شفتيها لكن ما رددتي عليها
     </div>
+    <div id="inbox-notify-bystaff" style="display:none; font-size:13px; color:#334155; margin-top:8px; border-top:1px dashed #fde68a; padding-top:8px; line-height:1.9;"></div>
     <div style="font-size:11px; color:var(--muted); font-weight:700; margin-top:6px;">
       اضغطي على التنبيه لفتح أول محادثة
     </div>
@@ -2991,6 +2992,35 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       }
       return { unread, pendingRep, firstUnreadPhone, firstUnreadName, firstPendingPhone, firstPendingName };
     }
+    // للأدمن: محادثات غير المردودة لكل موظفة (المُسنَدة لها، آخر نشاط من العميل).
+    function computeStaffUnanswered() {
+      const map = {}; const unassigned = { total: 0, seen: 0 };
+      for (const c of conversationsCache) {
+        const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
+        const lout = c.last_outbound_at ? new Date(c.last_outbound_at).getTime() : 0;
+        const lop = c.last_opened_at ? new Date(c.last_opened_at).getTime() : 0;
+        if (lin === 0 || !(lout < lin)) continue;   // غير مردودة فقط
+        const seen = lop >= lin;
+        const ph = c.assigned_staff_phone;
+        if (ph) { (map[ph] || (map[ph] = { total: 0, seen: 0 })); map[ph].total++; if (seen) map[ph].seen++; }
+        else { unassigned.total++; if (seen) unassigned.seen++; }
+      }
+      return { map, unassigned };
+    }
+    function renderStaffUnanswered() {
+      const box = $("inbox-notify-bystaff");
+      if (!box) return 0;
+      if (me) { box.style.display = "none"; return 0; }   // الموظفة تشوف عدّادها فقط
+      const { map, unassigned } = computeStaffUnanswered();
+      const entries = Object.entries(map).sort((a, b) => b[1].total - a[1].total);
+      const total = entries.reduce((n, e) => n + e[1].total, 0) + unassigned.total;
+      if (!total) { box.style.display = "none"; return 0; }
+      let html = '<div style="font-weight:900;color:#92400e;margin-bottom:3px;">حسب الموظفة:</div>';
+      html += entries.map(([ph, v]) => `<div>👤 <b>${escapeHtml(staffNameFor(ph))}</b>: <b style="color:#b91c1c;">${v.total}</b> غير مردودة${v.seen ? ` <span style="color:var(--muted);font-weight:600;">(شافت ${v.seen})</span>` : ""}</div>`).join("");
+      if (unassigned.total) html += `<div>📥 <b>غير مسنَدة</b>: <b style="color:#b91c1c;">${unassigned.total}</b></div>`;
+      box.innerHTML = html; box.style.display = "block";
+      return total;
+    }
     function maybeShowInboxNotification() {
       const banner = $("inbox-notify");
       if (!banner) return;
@@ -3008,20 +3038,23 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         return;
       }
       const c = computeInboxCounts();
-      if (c.unread === 0 && c.pendingRep === 0) {
-        banner.style.display = "none";
-        return;
-      }
       const u = $("inbox-notify-unread");
       const p = $("inbox-notify-pending");
-      if (c.unread > 0) {
-        u.style.display = "block";
-        u.querySelector(".cnt").textContent = c.unread;
-      } else u.style.display = "none";
-      if (c.pendingRep > 0) {
-        p.style.display = "block";
-        p.querySelector(".cnt").textContent = c.pendingRep;
-      } else p.style.display = "none";
+      const title = $("inbox-notify-title");
+      if (!me) {
+        // الأدمن: تفصيل حسب كل موظفة (الأسماء + عدد غير المردودة أمام كل اسم).
+        const total = renderStaffUnanswered();
+        if (total === 0) { banner.style.display = "none"; return; }
+        u.style.display = "none"; p.style.display = "none";
+        if (title) title.textContent = "⚠️ محادثات بانتظار الرد لدى الموظفات";
+      } else {
+        // الموظفة: عدّادها فقط.
+        $("inbox-notify-bystaff").style.display = "none";
+        if (c.unread === 0 && c.pendingRep === 0) { banner.style.display = "none"; return; }
+        if (title) title.textContent = "⚠️ تنبيه: عندك محادثات بانتظار الرد";
+        if (c.unread > 0) { u.style.display = "block"; u.querySelector(".cnt").textContent = c.unread; } else u.style.display = "none";
+        if (c.pendingRep > 0) { p.style.display = "block"; p.querySelector(".cnt").textContent = c.pendingRep; } else p.style.display = "none";
+      }
       // remember which to jump to on click — prefer unread, fall back to pending
       banner.dataset.jumpPhone = c.firstUnreadPhone || c.firstPendingPhone || "";
       banner.dataset.jumpName = c.firstUnreadName || c.firstPendingName || "";
