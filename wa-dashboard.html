@@ -126,6 +126,8 @@
        conversations once we add scoping; for now this bar is hidden in
        staff mode. */
     body.staff-mode .admin-only-filter { display: none; }
+    .staff-only-filter { display: none; }
+    body.staff-mode .staff-only-filter { display: block; }
     /* منفذ المساعد السياحي — للأدمن فقط (مخفي عن الموظف والمراقب) */
     body.staff-mode .ts-admin-link, body.monitor-mode .ts-admin-link { display: none !important; }
     /* جهات الاتصال + إدارة المستخدمين — للأدمن فقط (بيانات حساسة: أرقام العملاء وتصديرهم) */
@@ -943,6 +945,9 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       </button>
       <button class="filter-btn" id="filter-pending" data-active="false" style="margin-bottom:10px; background:#fff7ed; color:#9a3412; border-color:#fed7aa; font-weight:700;">
         🟠 بانتظار ردّنا (لم يُرَد على العميل) <span class="cnt" id="pending-cnt">0</span>
+      </button>
+      <button class="filter-btn staff-only-filter" id="filter-mine" data-active="false" style="margin-bottom:10px; background:#eef2ff; color:#3730a3; border-color:#c7d2fe; font-weight:800;">
+        👤 محادثاتي فقط <span class="cnt" id="mine-cnt">0</span>
       </button>
       <div class="filter-bar" id="followup-filter-bar" style="margin-bottom:10px; gap:8px; flex-wrap:wrap; align-items:center;">
         <button class="filter-btn" id="filter-followup" data-active="false" style="background:#fef3c7; color:#92400e; border-color:#fde68a; font-weight:700;">
@@ -2675,6 +2680,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     let filterAi = "";          // "" | "on" | "off"
     let filterRead = "";        // "" | "unread" | "read"
     let filterPending = false;  // «بانتظار ردّنا»: آخر رسالة من العميل أحدث من آخر ردّ منّا
+    let filterMine = false;     // «محادثاتي فقط»: المُسنَدة للموظفة الحالية
 
     // نفس منطق effective state اللي يستخدمه renderConversationRows.
     // force_off_all → الكل موقوف. force_on_all → الكل شغال. وإلا
@@ -2717,6 +2723,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           if (filterRead === "unread" && !unread) return false;
           if (filterRead === "read"   &&  unread) return false;
         }
+        if (filterMine && me && c.assigned_staff_phone !== me.phone) return false;
         if (filterPending) {
           // بانتظار ردّنا = آخر رسالة من العميل أحدث من آخر ردّ مِنّا
           // (سواء فُتحت أو لا). لو ردّ موظف/طلال/AI بعدها، تختفي تلقائياً.
@@ -2743,6 +2750,8 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         const lout = c.last_outbound_at ? new Date(c.last_outbound_at).getTime() : 0;
         return n + ((lin > 0 && lout < lin) ? 1 : 0);
       }, 0);
+      const _mc = $("mine-cnt");
+      if (_mc) _mc.textContent = (me ? conversationsCache.filter(c => c.assigned_staff_phone === me.phone).length : 0);
     }
 
     function renderStaffFilterBar() {
@@ -5438,6 +5447,12 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       filterPending = !filterPending;
       $("filter-pending").classList.toggle("active", filterPending);
       $("filter-pending").dataset.active = filterPending ? "true" : "false";
+      applyConversationsFilter();
+    });
+    $("filter-mine") && $("filter-mine").addEventListener("click", () => {
+      filterMine = !filterMine;
+      $("filter-mine").classList.toggle("active", filterMine);
+      $("filter-mine").dataset.active = filterMine ? "true" : "false";
       applyConversationsFilter();
     });
 
