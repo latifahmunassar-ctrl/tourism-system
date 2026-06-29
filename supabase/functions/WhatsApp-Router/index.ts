@@ -3537,10 +3537,10 @@ Deno.serve(async (req) => {
           latestMsgByPhone.set(a.from_phone, { body: a.body, received_at: a.received_at });
         }
       }
-      // آخر ردّ **بشري فعلي** لكل عميل — نستبعد البوت/التلقائي (طلال/تأكيد تلقائي/النظام)
-      // ونستبعد ردود المجاملة القصيرة («ابشر/لحظة/حياك») لأنها لا تجيب العميل فعلياً؛
-      // فتبقى المحادثة «بانتظار رد» حتى يردّ موظف ردّاً جوهرياً.
-      const BOT_SENDERS = new Set(["طلال", "تأكيد تلقائي", "النظام"]);
+      // آخر ردّ **بشري فعلي** لكل عميل — نستبعد البوت/التلقائي فقط: طلال (AI) و«تأكيد
+      // تلقائي». «النظام» = إرسال البرنامج (PDF) الذي تبنيه الموظفة وترسله عبر المنصة،
+      // فهو ردّ بشري فعلي ويُحتسب. ونستبعد ردود المجاملة القصيرة («ابشر/لحظة»).
+      const BOT_SENDERS = new Set(["طلال", "تأكيد تلقائي"]);
       // ردّ مجاملة/إقرار قصير من الموظف (مقيّد بطول ≤15 حرف حتى لا نُسقط ردّاً جوهرياً يبدأ بتحية).
       const isStaffAck = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return true; const n = [...s].length; if (n <= 6) return true; return n <= 15 && /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|ابشر|أبشر|تبشر|حاضر|حياك|اهلا|أهلا|هلا|لحظة|لحظه|ثانية|ثواني|دقيقة|دقيقه|👍|🙏|❤|🌹|💚|💐|🤍|يعطيك|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(s); };
       const { data: humanOuts } = phones.length
@@ -3966,7 +3966,7 @@ Deno.serve(async (req) => {
       const [sessRes, evRes, outRes, inRes, wsRes] = await Promise.all([
         supabase.from("attendance_sessions").select("staff_phone, work_date, check_in_at, check_out_at, active_seconds, idle_seconds, last_activity_at").gte("check_in_at", fromIso).lte("check_in_at", toIso).limit(5000),
         supabase.from("activity_events").select("staff_phone, created_at").gte("created_at", fromIso).lte("created_at", toIso).limit(20000),
-        supabase.from("wa_admin_messages").select("sent_by, customer_phone, sent_at, body").in("sent_by", names.length ? names : ["__none__"]).gte("sent_at", fromIso).lte("sent_at", toIso).limit(15000),
+        supabase.from("wa_admin_messages").select("sent_by, customer_phone, sent_at, body").in("sent_by", names.length ? [...names, "النظام"] : ["النظام"]).gte("sent_at", fromIso).lte("sent_at", toIso).limit(15000),
         supabase.from("wa_message_audit").select("from_phone, received_at, body").gte("received_at", fromIso).lte("received_at", toIso).limit(20000),
         // حالة المحادثات المُسنَدة (لقطة حالية): مؤكّدة / غير مردودة / شافتها بلا رد.
         supabase.from("whatsapp_sessions").select("phone, assigned_staff_phone, label, last_message_at, last_outbound_at, last_opened_at").not("assigned_staff_phone", "is", null).limit(8000),
@@ -3985,7 +3985,8 @@ Deno.serve(async (req) => {
       for (const k in inByPhone) inByPhone[k].sort((a, b) => a - b);
       const evByPhone: Record<string, string[]> = {};
       for (const e of events) { (evByPhone[e.staff_phone] ||= []).push(e.created_at); }
-      // آخر ردّ **موظف** لكل عميل (outs مفلترة على أسماء الموظفين، فتستبعد طلال/التلقائي/النظام).
+      // آخر ردّ **موظف** لكل عميل: ردود الموظفين + إرسال البرامج «النظام» (ردّ بشري عبر
+      // المنصة) — تستبعد طلال/التلقائي. «النظام» تُحتسب كردّ بالمحادثة لكن لا تُنسب لموظف.
       // ردّ مجاملة قصير من الموظف لا يُحتسب ردّاً فعلياً (نفس قاعدة dashboard_data).
       const isStaffAck = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return true; const n = [...s].length; if (n <= 6) return true; return n <= 15 && /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|ابشر|أبشر|تبشر|حاضر|حياك|اهلا|أهلا|هلا|لحظة|لحظه|ثانية|ثواني|دقيقة|دقيقه|👍|🙏|❤|🌹|💚|💐|🤍|يعطيك|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(s); };
       const lastStaffOutByPhone: Record<string, number> = {};
