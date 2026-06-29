@@ -3537,6 +3537,18 @@ Deno.serve(async (req) => {
           latestMsgByPhone.set(a.from_phone, { body: a.body, received_at: a.received_at });
         }
       }
+      // آخر ردّ **بشري** (موظفة/أدمن) لكل عميل — نستبعد البوت/التلقائي (طلال/تأكيد
+      // تلقائي/النظام) حتى لا يُحتسب ردّ البوت كردّ؛ فالمحادثة تبقى «بانتظار رد بشري».
+      const BOT_SENDERS = new Set(["طلال", "تأكيد تلقائي", "النظام"]);
+      const { data: humanOuts } = phones.length
+        ? await supabase.from("wa_admin_messages").select("customer_phone, sent_at, sent_by")
+            .in("customer_phone", phones).order("sent_at", { ascending: false }).limit(20000)
+        : { data: [] as Array<Record<string, unknown>> };
+      const lastHumanOutByPhone = new Map<string, string>();
+      for (const m of (humanOuts as Array<{ customer_phone: string; sent_at: string; sent_by: string | null }> ?? [])) {
+        if (BOT_SENDERS.has(String(m.sent_by || "").trim())) continue;
+        if (!lastHumanOutByPhone.has(m.customer_phone)) lastHumanOutByPhone.set(m.customer_phone, m.sent_at);
+      }
 
       const conversationsEnriched = (sessions ?? []).map((s: Record<string, unknown>) => {
         const phone = s.phone as string;
@@ -3562,6 +3574,7 @@ Deno.serve(async (req) => {
           priority: cls.priority ?? null,
           last_message_body: lastMsg?.body ?? null,
           last_inbound_at: lastMsg?.received_at ?? null,
+          last_human_outbound_at: lastHumanOutByPhone.get(phone) ?? null,
         };
       });
 
@@ -3954,20 +3967,6 @@ Deno.serve(async (req) => {
         // حالة المحادثات المُسنَدة (لقطة حالية): مؤكّدة / غير مردودة / شافتها بلا رد.
         supabase.from("whatsapp_sessions").select("phone, assigned_staff_phone, label, last_message_at, last_outbound_at, last_opened_at").not("assigned_staff_phone", "is", null).limit(8000),
       ]);
-      // تجميع لكل موظف: حجوزات مؤكّدة + غير مردودة (آخر نشاط من العميل) + منها كم شافتها بلا رد.
-      const confirmedBy: Record<string, number> = {}, unansweredBy: Record<string, number> = {}, unansweredSeenBy: Record<string, number> = {};
-      for (const w of ((wsRes.data || []) as Array<{ phone: string; assigned_staff_phone: string; label: string | null; last_message_at: string | null; last_outbound_at: string | null; last_opened_at: string | null }>)) {
-        const ph = w.assigned_staff_phone;
-        if (w.label === "CONFIRMED") confirmedBy[ph] = (confirmedBy[ph] || 0) + 1;
-        const lm = w.last_message_at ? Date.parse(w.last_message_at) : 0;
-        const lo = w.last_outbound_at ? Date.parse(w.last_outbound_at) : 0;
-        const lop = w.last_opened_at ? Date.parse(w.last_opened_at) : 0;
-        // غير مردودة: العميل أحدث من ردّنا. المهلة (٥د) تُعفي فقط رسائل التأكيد القصيرة.
-        const gap = lm - lo;
-        const lastTxt = lastInBody[w.phone]?.body ?? null;
-        const unanswered = lm > 0 && lm > lo && (gap > 5 * 60 * 1000 || !isAckText(lastTxt));
-        if (unanswered) { unansweredBy[ph] = (unansweredBy[ph] || 0) + 1; if (lop >= lm) unansweredSeenBy[ph] = (unansweredSeenBy[ph] || 0) + 1; }
-      }
       const sessions = (sessRes.data || []) as Array<{ staff_phone: string; work_date: string; check_in_at: string; check_out_at: string | null; active_seconds: number; idle_seconds: number; last_activity_at: string }>;
       const events = (evRes.data || []) as Array<{ staff_phone: string; created_at: string }>;
       const outs = (outRes.data || []) as Array<{ sent_by: string; customer_phone: string; sent_at: string }>;
@@ -3982,6 +3981,23 @@ Deno.serve(async (req) => {
       for (const k in inByPhone) inByPhone[k].sort((a, b) => a - b);
       const evByPhone: Record<string, string[]> = {};
       for (const e of events) { (evByPhone[e.staff_phone] ||= []).push(e.created_at); }
+      // آخر ردّ **موظف** لكل عميل (outs مفلترة على أسماء الموظفين، فتستبعد طلال/التلقائي/النظام).
+      const lastStaffOutByPhone: Record<string, number> = {};
+      for (const o of outs) { const t = Date.parse(o.sent_at); if (!lastStaffOutByPhone[o.customer_phone] || t > lastStaffOutByPhone[o.customer_phone]) lastStaffOutByPhone[o.customer_phone] = t; }
+      // تجميع لكل موظف: حجوزات مؤكّدة + غير مردودة (آخر نشاط من العميل) + منها كم شافتها بلا رد.
+      const confirmedBy: Record<string, number> = {}, unansweredBy: Record<string, number> = {}, unansweredSeenBy: Record<string, number> = {};
+      for (const w of ((wsRes.data || []) as Array<{ phone: string; assigned_staff_phone: string; label: string | null; last_message_at: string | null; last_outbound_at: string | null; last_opened_at: string | null }>)) {
+        const ph = w.assigned_staff_phone;
+        if (w.label === "CONFIRMED") confirmedBy[ph] = (confirmedBy[ph] || 0) + 1;
+        const lm = w.last_message_at ? Date.parse(w.last_message_at) : 0;
+        const lo = lastStaffOutByPhone[w.phone] || 0;   // آخر ردّ موظف (مو البوت)
+        const lop = w.last_opened_at ? Date.parse(w.last_opened_at) : 0;
+        // غير مردودة: العميل أحدث من ردّ الموظف. المهلة (٥د) تُعفي فقط رسائل التأكيد القصيرة.
+        const gap = lm - lo;
+        const lastTxt = lastInBody[w.phone]?.body ?? null;
+        const unanswered = lm > 0 && lm > lo && (gap > 5 * 60 * 1000 || !isAckText(lastTxt));
+        if (unanswered) { unansweredBy[ph] = (unansweredBy[ph] || 0) + 1; if (lop >= lm) unansweredSeenBy[ph] = (unansweredSeenBy[ph] || 0) + 1; }
+      }
 
       const report = staffRows.map(s => {
         const ss = sessions.filter(x => x.staff_phone === s.phone);

@@ -2728,7 +2728,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           // بانتظار ردّنا = آخر رسالة من العميل أحدث من آخر ردّ مِنّا
           // (سواء فُتحت أو لا). لو ردّ موظف/طلال/AI بعدها، تختفي تلقائياً.
           const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
-          const lout = c.last_outbound_at ? new Date(c.last_outbound_at).getTime() : 0;
+          const lout = c.last_human_outbound_at ? new Date(c.last_human_outbound_at).getTime() : 0;
           if (!isUnanswered(lin, lout, c.last_message_body)) return false;
         }
         if (complaintPhones && !complaintPhones.has(c.phone)) return false;
@@ -2747,7 +2747,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       const _pc = $("pending-cnt");
       if (_pc) _pc.textContent = conversationsCache.reduce((n, c) => {
         const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
-        const lout = c.last_outbound_at ? new Date(c.last_outbound_at).getTime() : 0;
+        const lout = c.last_human_outbound_at ? new Date(c.last_human_outbound_at).getTime() : 0;
         return n + (isUnanswered(lin, lout, c.last_message_body) ? 1 : 0);
       }, 0);
       const _mc = $("mine-cnt");
@@ -2971,7 +2971,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if (!isUserScopeConversation(c)) continue;
         const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
         const lop = c.last_opened_at ? new Date(c.last_opened_at).getTime() : 0;
-        const lout = c.last_outbound_at ? new Date(c.last_outbound_at).getTime() : 0;
+        const lout = c.last_human_outbound_at ? new Date(c.last_human_outbound_at).getTime() : 0;
         if (lin === 0) continue;   // no inbound = nothing to do
         const isUnread = lop < lin;
         const isPendingReply = !isUnread && isUnanswered(lin, lout, c.last_message_body);
@@ -2996,7 +2996,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       const map = {}; const unassigned = { total: 0, seen: 0 };
       for (const c of conversationsCache) {
         const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
-        const lout = c.last_outbound_at ? new Date(c.last_outbound_at).getTime() : 0;
+        const lout = c.last_human_outbound_at ? new Date(c.last_human_outbound_at).getTime() : 0;
         const lop = c.last_opened_at ? new Date(c.last_opened_at).getTime() : 0;
         if (!isUnanswered(lin, lout, c.last_message_body)) continue;   // غير مردودة فقط (مع مهلة ٥د)
         const seen = lop >= lin;
@@ -3152,7 +3152,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         }
         const urgentRow = c.priority === "URGENT" ? " urgent-row" : "";
         const lastIn = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
-        const lastOut = c.last_outbound_at ? new Date(c.last_outbound_at).getTime() : 0;
+        const lastOut = c.last_human_outbound_at ? new Date(c.last_human_outbound_at).getTime() : 0;
         const lastOpen = c.last_opened_at ? new Date(c.last_opened_at).getTime() : 0;
         const isUnread = lastIn > 0 && lastOpen < lastIn;
         // ٣ حالات لون: لم يُرَد عليها (بنفسجي) · رُد عليها (طبيعي) · شُوهدت بلا رد (لون آخر).
