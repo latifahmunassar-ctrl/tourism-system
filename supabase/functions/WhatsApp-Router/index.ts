@@ -3902,6 +3902,83 @@ Deno.serve(async (req) => {
     } catch (e) { return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors }); }
   }
 
+  // تقرير الحضور والإنتاجية — المدير يرى الجميع، الموظف يرى نفسه فقط (خادمياً).
+  if (url.searchParams.get("admin_action") === "attendance_report") {
+    const caller = await getCallerStaff(req);
+    const isAdmin = !caller && ownerGate(req);
+    if (!caller && !isAdmin) return unauthorized();
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const range = url.searchParams.get("range") || "day";
+      const DAY = 24 * 3600 * 1000; const nowMs = Date.now();
+      let fromMs = nowMs - DAY;
+      if (range === "week") fromMs = nowMs - 7 * DAY;
+      else if (range === "month") fromMs = nowMs - 30 * DAY;
+      else if (range === "all") fromMs = 0;
+      else if (range === "custom") { const f = url.searchParams.get("from"); if (f) fromMs = Date.parse(f + "T00:00:00Z"); }
+      let toMs = nowMs;
+      if (range === "custom") { const t = url.searchParams.get("to"); if (t) toMs = Date.parse(t + "T23:59:59Z"); }
+      const fromIso = new Date(fromMs).toISOString(); const toIso = new Date(toMs).toISOString();
+
+      // قائمة الموظفين المستهدفين
+      let staffRows: Array<{ phone: string; name: string }> = [];
+      if (caller) staffRows = [{ phone: caller.phone, name: caller.name }];
+      else { const { data } = await supabase.from("wa_staff").select("phone, name").eq("active", true); staffRows = (data || []) as Array<{ phone: string; name: string }>; }
+      const names = staffRows.map(s => s.name);
+
+      // جلب البيانات دفعة واحدة (بلا N+1)
+      const [sessRes, evRes, outRes, inRes] = await Promise.all([
+        supabase.from("attendance_sessions").select("staff_phone, work_date, check_in_at, check_out_at, active_seconds, idle_seconds, last_activity_at").gte("check_in_at", fromIso).lte("check_in_at", toIso).limit(5000),
+        supabase.from("activity_events").select("staff_phone, created_at").gte("created_at", fromIso).lte("created_at", toIso).limit(20000),
+        supabase.from("wa_admin_messages").select("sent_by, customer_phone, sent_at").in("sent_by", names.length ? names : ["__none__"]).gte("sent_at", fromIso).lte("sent_at", toIso).limit(15000),
+        supabase.from("wa_message_audit").select("from_phone, received_at").gte("received_at", fromIso).lte("received_at", toIso).limit(20000),
+      ]);
+      const sessions = (sessRes.data || []) as Array<{ staff_phone: string; work_date: string; check_in_at: string; check_out_at: string | null; active_seconds: number; idle_seconds: number; last_activity_at: string }>;
+      const events = (evRes.data || []) as Array<{ staff_phone: string; created_at: string }>;
+      const outs = (outRes.data || []) as Array<{ sent_by: string; customer_phone: string; sent_at: string }>;
+      const ins = (inRes.data || []) as Array<{ from_phone: string; received_at: string }>;
+
+      // فهرسة الوارد لكل عميل (لحساب زمن الاستجابة)
+      const inByPhone: Record<string, number[]> = {};
+      for (const m of ins) { (inByPhone[m.from_phone] ||= []).push(Date.parse(m.received_at)); }
+      for (const k in inByPhone) inByPhone[k].sort((a, b) => a - b);
+      const evByPhone: Record<string, string[]> = {};
+      for (const e of events) { (evByPhone[e.staff_phone] ||= []).push(e.created_at); }
+
+      const report = staffRows.map(s => {
+        const ss = sessions.filter(x => x.staff_phone === s.phone);
+        let active = 0, idle = 0; const days = new Set<string>();
+        let liveStatus = "offline", lastAct: string | null = null, checkIn: string | null = null, checkOut: string | null = null;
+        let latestStart = 0;
+        for (const x of ss) {
+          days.add(x.work_date);
+          if (x.check_out_at) { active += x.active_seconds; idle += x.idle_seconds; }
+          else { const { active: a, idle: i } = splitActiveIdle(x.check_in_at, evByPhone[s.phone] || [], new Date(nowMs).toISOString()); active += a; idle += i; const idleSec = (nowMs - Date.parse(x.last_activity_at)) / 1000; liveStatus = idleSec >= ATTEND_IDLE_SEC ? "idle" : "active"; lastAct = x.last_activity_at; }
+          const st = Date.parse(x.check_in_at); if (st > latestStart) { latestStart = st; checkIn = x.check_in_at; checkOut = x.check_out_at; }
+        }
+        const total = active + idle;
+        const myOut = outs.filter(o => o.sent_by === s.name);
+        const messages = myOut.length;
+        const clients = new Set(myOut.map(o => o.customer_phone)).size;
+        // متوسط زمن الاستجابة: لكل رسالة صادرة، أقرب وارد سابق لنفس العميل خلال ١٢ ساعة
+        let rsum = 0, rcnt = 0;
+        for (const o of myOut) {
+          const arr = inByPhone[o.customer_phone]; if (!arr) continue;
+          const ot = Date.parse(o.sent_at); let lo = 0, hi = arr.length - 1, best = -1;
+          while (lo <= hi) { const mid = (lo + hi) >> 1; if (arr[mid] < ot) { best = arr[mid]; lo = mid + 1; } else hi = mid - 1; }
+          if (best > 0) { const diff = (ot - best) / 1000; if (diff > 0 && diff < 12 * 3600) { rsum += diff; rcnt++; } }
+        }
+        const avgResp = rcnt ? Math.round(rsum / rcnt) : null;
+        const compliance = total > 0 ? Math.round((active / total) * 100) : 0;
+        return { phone: s.phone, name: s.name, status: liveStatus, check_in_at: checkIn, check_out_at: checkOut, last_activity_at: lastAct, active_seconds: active, idle_seconds: idle, total_seconds: total, days_present: days.size, messages, clients, avg_response_seconds: avgResp, compliance };
+      });
+      report.sort((a, b) => b.active_seconds - a.active_seconds);
+      return new Response(JSON.stringify({ ok: true, is_admin: isAdmin, range, from: fromIso, to: toIso, report }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
   // Staff self-service: change own password. Requires a valid session
   // (NOT the master JWT). Verifies current_password before updating.
   // POST body: {current_password, new_password}

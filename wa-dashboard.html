@@ -212,6 +212,10 @@
     body.admin-invoices-tab section { display: none; }
     body.admin-invoices-tab .ai-toggle-card { display: none; }
     body.admin-invoices-tab section.invoices-section { display: block; }
+    section.attendance-section { display: none; }
+    body.admin-attendance-tab section { display: none; }
+    body.admin-attendance-tab .ai-toggle-card { display: none; }
+    body.admin-attendance-tab section.attendance-section { display: block; }
     /* أزرار العروض السريعة داخل المحادثة */
     .offer-quickbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px 0; }
     .offer-cat-btn {
@@ -836,6 +840,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       <button class="tab-btn" data-tab="contacts">📇 جهات الاتصال</button>
       <button class="tab-btn" data-tab="offers">📁 مكتبة العروض</button>
       <button class="tab-btn" data-tab="invoices">🧾 الفواتير</button>
+      <button class="tab-btn" data-tab="attendance">📊 التقارير</button>
       <button class="tab-btn" data-tab="users">👤 إدارة المستخدمين</button>
       <a class="tab-btn ts-admin-link" href="https://madartrip.com/team.html" target="_blank" rel="noopener" style="text-decoration:none">🧳 المساعد السياحي</a>
     </nav>
@@ -1055,6 +1060,24 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         </div>
       </div>
       <div class="panel-list" id="locations-mgmt"></div>
+    </section>
+
+    <section class="attendance-section">
+      <h3>📊 <span id="att-title">الحضور والتقارير</span></h3>
+      <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
+        <span style="font-weight:700; font-size:13px; color:var(--muted);">الفترة</span>
+        <select id="att-range" class="filter-select">
+          <option value="day">اليوم</option>
+          <option value="week" selected>الأسبوع</option>
+          <option value="month">الشهر</option>
+          <option value="all">الكل</option>
+          <option value="custom">مخصّص</option>
+        </select>
+        <input type="date" id="att-from" style="display:none; padding:6px; border:1px solid var(--border); border-radius:6px;">
+        <input type="date" id="att-to" style="display:none; padding:6px; border:1px solid var(--border); border-radius:6px;">
+        <button id="att-refresh" class="filter-btn">↻ تحديث</button>
+      </div>
+      <div class="panel-list" id="attendance-list"><div class="empty">جاري التحميل…</div></div>
     </section>
 
     <section class="invoices-section">
@@ -1955,7 +1978,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       btn.addEventListener("click", () => {
         if (!token) { showAuth(); return; }
         const r = btn.dataset.roleSwitch;
-        document.body.classList.remove("admin-users-tab", "admin-contacts-tab", "admin-offers-tab", "admin-invoices-tab");
+        document.body.classList.remove("admin-users-tab", "admin-contacts-tab", "admin-offers-tab", "admin-invoices-tab", "admin-attendance-tab");
         document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === "main"));
         setSession(token, r);
         refresh();
@@ -1972,8 +1995,10 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         document.body.classList.toggle("admin-contacts-tab", tab === "contacts");
         document.body.classList.toggle("admin-offers-tab", tab === "offers");
         document.body.classList.toggle("admin-invoices-tab", tab === "invoices");
+        document.body.classList.toggle("admin-attendance-tab", tab === "attendance");
         // First time opening contacts → load them
         if (tab === "invoices") loadInvoices();
+        if (tab === "attendance") loadAttendance();
         if (tab === "users") loadStaffSecurity();
         if (tab === "contacts" && !contactsLoaded) loadContacts();
         if (tab === "offers") { loadOffers(); loadFollowupSettings(); loadLocations(); }
@@ -3445,6 +3470,47 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       }catch(_e){ alert("تعذّر — حاول مجدداً"); } finally{ btn.disabled=false; }
     }
     $("attend-btn") && $("attend-btn").addEventListener("click", attendToggle);
+
+    // ── تبويب التقارير (مدير: كل الموظفين · موظف: نفسه فقط — مفروض خادمياً) ──
+    function attFmtH(sec){ sec=Math.max(0,Math.round(sec||0)); const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60); return h+":"+String(m).padStart(2,"0"); }
+    function attBadge(s){ return s==="active"?'<span style="color:#15803d;font-weight:800">🟢 نشط</span>':s==="idle"?'<span style="color:#b45309;font-weight:800">🟠 خامل</span>':'<span style="color:#94a3b8;font-weight:700">⚪ غير متصل</span>'; }
+    function renderAttendance(rows){
+      const box=$("attendance-list");
+      if(!rows.length){ box.innerHTML='<div class="empty">لا بيانات في هذه الفترة</div>'; return; }
+      box.innerHTML=rows.map(r=>{
+        const resp=r.avg_response_seconds!=null?(Math.round(r.avg_response_seconds/60)+" د"):"—";
+        const last=r.last_activity_at?new Date(r.last_activity_at).toLocaleString("ar-EG",{hour12:true}):"—";
+        return `<div class="row" style="flex-direction:column;align-items:stretch;gap:8px;padding:13px 15px;border-bottom:1px solid var(--border);">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+            <b style="font-size:14.5px;">${escapeHtml(r.name||"")}</b> <span>${attBadge(r.status)}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:7px;font-size:12.5px;color:#475569;">
+            <div>🟢 نشاط: <b style="color:#0f172a;">${attFmtH(r.active_seconds)}</b></div>
+            <div>🟠 خمول: <b style="color:#0f172a;">${attFmtH(r.idle_seconds)}</b></div>
+            <div>📅 أيام حضور: <b style="color:#0f172a;">${r.days_present}</b></div>
+            <div>💬 رسائل: <b style="color:#0f172a;">${r.messages}</b></div>
+            <div>👥 عملاء: <b style="color:#0f172a;">${r.clients}</b></div>
+            <div>⏱️ متوسط الرد: <b style="color:#0f172a;">${resp}</b></div>
+            <div>📈 الالتزام: <b style="color:#0f172a;">${r.compliance}%</b></div>
+            <div>🕒 آخر نشاط: <b style="color:#0f172a;">${last}</b></div>
+          </div>
+        </div>`;
+      }).join("");
+    }
+    async function loadAttendance(){
+      const box=$("attendance-list"); if(!box||!token) return;
+      const range=$("att-range").value;
+      let u=BASE+"?admin_action=attendance_report&range="+range;
+      if(range==="custom"){ const f=$("att-from").value,t=$("att-to").value; if(f)u+="&from="+f; if(t)u+="&to="+t; }
+      box.innerHTML='<div class="empty">جاري التحميل…</div>';
+      try{ const r=await fetch(u,{headers:{Authorization:"Bearer "+token}}); const d=await r.json();
+        if(!r.ok||!d.ok){ box.innerHTML='<div class="empty">تعذّر التحميل</div>'; return; }
+        const t=$("att-title"); if(t) t.textContent=d.is_admin?"حضور الموظفين والتقارير":"تقاريري";
+        renderAttendance(d.report||[]);
+      }catch(_e){ box.innerHTML='<div class="empty">تعذّر الاتصال</div>'; }
+    }
+    $("att-range") && $("att-range").addEventListener("change",()=>{ const c=$("att-range").value==="custom"; $("att-from").style.display=c?"":"none"; $("att-to").style.display=c?"":"none"; if(!c) loadAttendance(); });
+    $("att-refresh") && $("att-refresh").addEventListener("click", loadAttendance);
 
     async function openConversation(phone, name) {
       convPhone = phone;
