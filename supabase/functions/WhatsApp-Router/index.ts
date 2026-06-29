@@ -3962,7 +3962,8 @@ Deno.serve(async (req) => {
         const lm = w.last_message_at ? Date.parse(w.last_message_at) : 0;
         const lo = w.last_outbound_at ? Date.parse(w.last_outbound_at) : 0;
         const lop = w.last_opened_at ? Date.parse(w.last_opened_at) : 0;
-        if (lm > 0 && lm > lo) { unansweredBy[ph] = (unansweredBy[ph] || 0) + 1; if (lop >= lm) unansweredSeenBy[ph] = (unansweredSeenBy[ph] || 0) + 1; }
+        // مهلة ٥د: رسالة العميل القريبة من ردّنا (تأكيد قصير) لا تُعدّ «غير مردودة».
+        if (lm > 0 && (lm - lo) > 5 * 60 * 1000) { unansweredBy[ph] = (unansweredBy[ph] || 0) + 1; if (lop >= lm) unansweredSeenBy[ph] = (unansweredSeenBy[ph] || 0) + 1; }
       }
       const sessions = (sessRes.data || []) as Array<{ staff_phone: string; work_date: string; check_in_at: string; check_out_at: string | null; active_seconds: number; idle_seconds: number; last_activity_at: string }>;
       const events = (evRes.data || []) as Array<{ staff_phone: string; created_at: string }>;

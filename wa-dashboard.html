@@ -1587,6 +1587,10 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     let filterFollowupPeriod = "today";  // today | yesterday | last7 | custom
     let fuFrom = "";                     // YYYY-MM-DD (custom)
     let fuTo = "";                       // YYYY-MM-DD (custom)
+    // «غير مردودة» = آخر رسالة من العميل أحدث من آخر ردّ منّا بأكثر من ٥ دقائق.
+    // المهلة تتجاهل رسائل التأكيد القصيرة (شكراً/تمام) التي تأتي مباشرة بعد ردّنا.
+    const UNANS_GRACE_MS = 5 * 60 * 1000;
+    function isUnanswered(lin, lout) { return lin > 0 && (lin - lout) > UNANS_GRACE_MS; }
     function buildDashboardUrl() {
       const params = new URLSearchParams({ admin_action: "dashboard_data" });
       if (filterRange && filterRange !== "today") params.set("range", filterRange);
@@ -2745,7 +2749,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           // (سواء فُتحت أو لا). لو ردّ موظف/طلال/AI بعدها، تختفي تلقائياً.
           const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
           const lout = c.last_outbound_at ? new Date(c.last_outbound_at).getTime() : 0;
-          if (!(lin > 0 && lout < lin)) return false;
+          if (!isUnanswered(lin, lout)) return false;
         }
         if (complaintPhones && !complaintPhones.has(c.phone)) return false;
         if (myDest && myDest.size > 0) {
@@ -2764,7 +2768,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       if (_pc) _pc.textContent = conversationsCache.reduce((n, c) => {
         const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
         const lout = c.last_outbound_at ? new Date(c.last_outbound_at).getTime() : 0;
-        return n + ((lin > 0 && lout < lin) ? 1 : 0);
+        return n + (isUnanswered(lin, lout) ? 1 : 0);
       }, 0);
       const _mc = $("mine-cnt");
       if (_mc) _mc.textContent = (me ? conversationsCache.filter(c => c.assigned_staff_phone === me.phone).length : 0);
@@ -2990,7 +2994,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         const lout = c.last_outbound_at ? new Date(c.last_outbound_at).getTime() : 0;
         if (lin === 0) continue;   // no inbound = nothing to do
         const isUnread = lop < lin;
-        const isPendingReply = !isUnread && lout < lin;
+        const isPendingReply = !isUnread && isUnanswered(lin, lout);
         if (isUnread) {
           unread++;
           if (!firstUnreadPhone) {
@@ -3014,7 +3018,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
         const lout = c.last_outbound_at ? new Date(c.last_outbound_at).getTime() : 0;
         const lop = c.last_opened_at ? new Date(c.last_opened_at).getTime() : 0;
-        if (lin === 0 || !(lout < lin)) continue;   // غير مردودة فقط
+        if (!isUnanswered(lin, lout)) continue;   // غير مردودة فقط (مع مهلة ٥د)
         const seen = lop >= lin;
         const ph = c.assigned_staff_phone;
         if (ph) { (map[ph] || (map[ph] = { total: 0, seen: 0 })); map[ph].total++; if (seen) map[ph].seen++; }
@@ -3171,7 +3175,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         // outbound بعدها (أو ما فيه outbound أصلاً).
         const lastIn = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
         const lastOut = c.last_outbound_at ? new Date(c.last_outbound_at).getTime() : 0;
-        const unansweredRow = lastIn > 0 && lastOut < lastIn ? " unanswered-row" : "";
+        const unansweredRow = isUnanswered(lastIn, lastOut) ? " unanswered-row" : "";
         // محادثة "غير مقروءة": ما فُتحت أبداً، أو وصلت رسالة جديدة بعد آخر فتح
         const lastOpen = c.last_opened_at ? new Date(c.last_opened_at).getTime() : 0;
         const isUnread = lastIn > 0 && lastOpen < lastIn;
