@@ -564,52 +564,27 @@
       background: linear-gradient(90deg, rgba(239,68,68,.10) 0%, transparent 70%);
       border-right: 3px solid var(--err);
     }
-    /* محادثة بانتظار الرد — لون مميّز في كل الداش بوردات */
-    .panel-list .row.unanswered-row {
-      background: linear-gradient(90deg, rgba(245,158,11,.14) 0%, transparent 75%);
-      border-right: 3px solid #f59e0b;
-    }
-    /* عاجلة + بانتظار رد = الأحمر يطغى لكن الحدّ ينقسم */
-    .panel-list .row.urgent-row.unanswered-row {
-      background: linear-gradient(90deg, rgba(239,68,68,.14) 0%, rgba(245,158,11,.08) 60%, transparent 100%);
-      border-right: 4px double var(--err);
-    }
-    .panel-list .row.unanswered-row .primary::before {
-      content: "⏳ ";
-      color: #b45309;
-      font-weight: 800;
-    }
-    /* محادثة غير مقروءة — لم تُفتح بعد (أو وصلت رسالة جديدة بعد آخر فتح) */
-    .panel-list .row.unread-row {
-      background: linear-gradient(90deg, rgba(59,130,246,.10) 0%, transparent 75%);
-      border-right: 3px solid #3b82f6;
-    }
-    .panel-list .row.unread-row .primary {
-      font-weight: 900;
-      color: #1e3a8a;
-    }
-    .panel-list .row.unread-row .primary::after {
-      content: " 🔵";
-      font-size: 11px;
-    }
-    /* غير مقروءة + بانتظار رد = اللون الأزرق يطغى، يبقى ⏳ */
-    .panel-list .row.unread-row.unanswered-row {
-      background: linear-gradient(90deg, rgba(59,130,246,.12) 0%, rgba(245,158,11,.08) 60%, transparent 100%);
-    }
-    /* محادثة فُتحت (قرأها أحد) — لون بنفسجي واضح على كامل السطر */
-    .panel-list .row.opened-row {
+    /* لم يُرَد عليها وما فُتحت — 🟣 بنفسجي واضح على كامل السطر */
+    .panel-list .row.noreply-row {
       background: #f3e8ff;
       border-right: 4px solid #8b5cf6;
     }
-    .panel-list .row.opened-row .primary::after {
-      content: " 👁️";
-      font-size: 11px;
+    .panel-list .row.noreply-row .primary { font-weight: 900; color: #5b21b6; }
+    .panel-list .row.noreply-row .primary::after { content: " 🟣"; font-size: 11px; }
+    /* شُوهدت لكن بلا رد — 🟠 برتقالي قوي (تنبيه: الموظفة فتحتها وما ردّت) */
+    .panel-list .row.seen-noreply-row {
+      background: #fff1e6;
+      border-right: 4px solid #f97316;
     }
-    /* فُتحت لكن بانتظار رد (شافها بلا رد) — بنفسجي + حدّ كهرماني تنبيهاً */
-    .panel-list .row.opened-row.unanswered-row {
-      background: linear-gradient(90deg, rgba(139,92,246,.20) 0%, rgba(245,158,11,.12) 70%, #f3e8ff 100%);
-      border-right: 4px solid #f59e0b;
+    .panel-list .row.seen-noreply-row .primary { font-weight: 900; color: #9a3412; }
+    .panel-list .row.seen-noreply-row .primary::before { content: "👁️ "; }
+    .panel-list .row.seen-noreply-row .primary::after { content: " ⏳"; font-size: 11px; }
+    /* عاجلة + لم يُرَد عليها = حدّ أحمر مزدوج */
+    .panel-list .row.urgent-row.noreply-row,
+    .panel-list .row.urgent-row.seen-noreply-row {
+      border-right: 4px double var(--err);
     }
+    /* رُد عليها = لون طبيعي (بلا تمييز) */
 
     .filter-bar {
       display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
@@ -3171,17 +3146,14 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           tags.push(`<span class="pill ${cls3}">${escapeHtml(c.case_type)}</span>`);
         }
         const urgentRow = c.priority === "URGENT" ? " urgent-row" : "";
-        // محادثة "بانتظار الرد": آخر رسالة inbound من العميل ولا فيه
-        // outbound بعدها (أو ما فيه outbound أصلاً).
         const lastIn = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
         const lastOut = c.last_outbound_at ? new Date(c.last_outbound_at).getTime() : 0;
-        const unansweredRow = isUnanswered(lastIn, lastOut) ? " unanswered-row" : "";
-        // محادثة "غير مقروءة": ما فُتحت أبداً، أو وصلت رسالة جديدة بعد آخر فتح
         const lastOpen = c.last_opened_at ? new Date(c.last_opened_at).getTime() : 0;
         const isUnread = lastIn > 0 && lastOpen < lastIn;
-        const unreadRow = isUnread ? " unread-row" : "";
-        // محادثة "فُتحت" — قرأها أحد (آخر فتح بعد آخر رسالة عميل، أي مقروءة).
-        const openedRow = (!isUnread && lastOpen > 0) ? " opened-row" : "";
+        // ٣ حالات لون: لم يُرَد عليها (بنفسجي) · رُد عليها (طبيعي) · شُوهدت بلا رد (لون آخر).
+        const notReplied = isUnanswered(lastIn, lastOut);
+        const seenIt = lastIn > 0 && lastOpen >= lastIn;   // فتحت آخر رسالة من العميل
+        const stateRow = notReplied ? (seenIt ? " seen-noreply-row" : " noreply-row") : "";
         // WhatsApp-style preview line — يعرض أحدث رسالة سواء كانت من
         // العميل أو من الموظف/الإدمن/البوت. السطر يحمل الـ prefix:
         //   💬  لرسالة العميل (inbound)
@@ -3204,7 +3176,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           ? `<span class="conv-assigned">👤 المسؤول: ${escapeHtml(staffNameFor(c.assigned_staff_phone))}${c.assigned_by ? " (" + escapeHtml(c.assigned_by === "auto" ? "تلقائي" : "نقل") + ")" : ""}</span>`
           : `<span class="conv-assigned unassigned">👤 غير معيّن — يحتاج تخصيص موظف</span>`;
         return `
-          <div class="row${urgentRow}${unansweredRow}${unreadRow}${openedRow}" data-phone="${escapeHtml(c.phone)}">
+          <div class="row${urgentRow}${stateRow}" data-phone="${escapeHtml(c.phone)}">
             <div class="label conv-clickable" data-action="open-conv" data-phone="${escapeHtml(c.phone)}" data-name="${escapeHtml(c.profile_name || ph)}">
               <span class="dot ${dotCls}"></span>
               <div class="label-text">
