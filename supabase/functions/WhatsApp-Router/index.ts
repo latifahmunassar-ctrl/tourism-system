@@ -1287,6 +1287,7 @@ async function handleNewLeadIntake(args: {
   }
   const sys = `أنت «طلال»، موظف خدمة عملاء لوكالة سفر، تتكلم بلهجة خليجية ودودة ومختصرة (لا فصحى).
 ⚠️ الاحترام أساسي: تكلّم بلباقة واحترام دائماً. ابدأ أسئلتك بعبارة مؤدبة مثل «حاضر» أو «أبشر» أو «حياك الله» ثم اطرح السؤال بلطف. ممنوع الأسلوب الجاف أو المختصر بطريقة غير لائقة.
+⛔⛔ قاعدة صارمة: **ممنوع منعاً باتاً تذكر اسم العميل إطلاقاً** — حتى لو عرّف عن نفسه أو ظهر اسمه في المحادثة. نادِه **دائماً** بـ«أستاذي» (أو «أستاذ» / «أستاذتي» للأنثى) فقط. ❌ ممنوع «حاضر يا عباس» — الصحيح «حاضر أستاذي».
 - مثال صحيح: «أبشر، وين حابين تسافرون؟» / «حاضر، أي وجهة في بالكم؟»
 - مثال خاطئ (ممنوع): «وين بتروح؟» / «وش تبي؟» / «كم عددكم؟» بدون مقدمة مؤدبة.
 ⛔⛔ القاعدة الأهم على الإطلاق — ممنوع منعاً باتاً أن تعطي أي معلومة من عندك:
@@ -3541,8 +3542,11 @@ Deno.serve(async (req) => {
       // تلقائي». «النظام» = إرسال البرنامج (PDF) الذي تبنيه الموظفة وترسله عبر المنصة،
       // فهو ردّ بشري فعلي ويُحتسب. ونستبعد ردود المجاملة القصيرة («ابشر/لحظة»).
       const BOT_SENDERS = new Set(["طلال", "تأكيد تلقائي"]);
-      // ردّ مجاملة/إقرار قصير من الموظف (مقيّد بطول ≤15 حرف حتى لا نُسقط ردّاً جوهرياً يبدأ بتحية).
+      // «ليست ردّاً فعلياً»: مجاملة/إقرار قصير، أو وعد بالإرسال («الآن أرسلك البرنامج»)
+      // فالعميل لا يزال ينتظر الردّ/الملف الفعلي.
       const isStaffAck = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return true; const n = [...s].length; if (n <= 6) return true; return n <= 15 && /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|ابشر|أبشر|تبشر|حاضر|حياك|اهلا|أهلا|هلا|لحظة|لحظه|ثانية|ثواني|دقيقة|دقيقه|👍|🙏|❤|🌹|💚|💐|🤍|يعطيك|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(s); };
+      const isStaffPromise = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return false; if (/أرسلت|ارسلت|رسلت|جهّزت|جهزت|بعثت|أعطيت|اعطيت|وصلك|وصلت|تفضل|هذا برنامج/.test(s)) return false; return /((الان|الحين|حالا|راح|رح|سوف|توني).{0,8}(ا?رسل|ا?جهز|ابعث))|(^\s*(بأرسل|بارسل|بجهز|باجهز|بأجهز|سأرسل|سارسل))|((ثوان|لحظ|دقيق|دقاي).{0,10}(ا?رسل|ا?جهز))|(جاري.{0,6}(تجهيز|الت|الإرسال|الارسال))/.test(s); };
+      const isNonReply = (t: string | null): boolean => isStaffAck(t) || isStaffPromise(t);
       const { data: humanOuts } = phones.length
         ? await supabase.from("wa_admin_messages").select("customer_phone, sent_at, sent_by, body")
             .in("customer_phone", phones).order("sent_at", { ascending: false }).limit(20000)
@@ -3550,7 +3554,7 @@ Deno.serve(async (req) => {
       const lastHumanOutByPhone = new Map<string, string>();
       for (const m of (humanOuts as Array<{ customer_phone: string; sent_at: string; sent_by: string | null; body: string | null }> ?? [])) {
         if (BOT_SENDERS.has(String(m.sent_by || "").trim())) continue;
-        if (isStaffAck(m.body)) continue;   // ردّ مجاملة قصير لا يُحتسب ردّاً فعلياً
+        if (isNonReply(m.body)) continue;   // مجاملة قصيرة أو وعد بالإرسال لا يُحتسب ردّاً فعلياً
         if (!lastHumanOutByPhone.has(m.customer_phone)) lastHumanOutByPhone.set(m.customer_phone, m.sent_at);
       }
 
@@ -3987,10 +3991,12 @@ Deno.serve(async (req) => {
       for (const e of events) { (evByPhone[e.staff_phone] ||= []).push(e.created_at); }
       // آخر ردّ **موظف** لكل عميل: ردود الموظفين + إرسال البرامج «النظام» (ردّ بشري عبر
       // المنصة) — تستبعد طلال/التلقائي. «النظام» تُحتسب كردّ بالمحادثة لكن لا تُنسب لموظف.
-      // ردّ مجاملة قصير من الموظف لا يُحتسب ردّاً فعلياً (نفس قاعدة dashboard_data).
+      // «ليست ردّاً فعلياً»: مجاملة قصيرة أو وعد بالإرسال (نفس قاعدة dashboard_data).
       const isStaffAck = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return true; const n = [...s].length; if (n <= 6) return true; return n <= 15 && /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|ابشر|أبشر|تبشر|حاضر|حياك|اهلا|أهلا|هلا|لحظة|لحظه|ثانية|ثواني|دقيقة|دقيقه|👍|🙏|❤|🌹|💚|💐|🤍|يعطيك|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(s); };
+      const isStaffPromise = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return false; if (/أرسلت|ارسلت|رسلت|جهّزت|جهزت|بعثت|أعطيت|اعطيت|وصلك|وصلت|تفضل|هذا برنامج/.test(s)) return false; return /((الان|الحين|حالا|راح|رح|سوف|توني).{0,8}(ا?رسل|ا?جهز|ابعث))|(^\s*(بأرسل|بارسل|بجهز|باجهز|بأجهز|سأرسل|سارسل))|((ثوان|لحظ|دقيق|دقاي).{0,10}(ا?رسل|ا?جهز))|(جاري.{0,6}(تجهيز|الت|الإرسال|الارسال))/.test(s); };
+      const isNonReply = (t: string | null): boolean => isStaffAck(t) || isStaffPromise(t);
       const lastStaffOutByPhone: Record<string, number> = {};
-      for (const o of outs) { if (isStaffAck(o.body)) continue; const t = Date.parse(o.sent_at); if (!lastStaffOutByPhone[o.customer_phone] || t > lastStaffOutByPhone[o.customer_phone]) lastStaffOutByPhone[o.customer_phone] = t; }
+      for (const o of outs) { if (isNonReply(o.body)) continue; const t = Date.parse(o.sent_at); if (!lastStaffOutByPhone[o.customer_phone] || t > lastStaffOutByPhone[o.customer_phone]) lastStaffOutByPhone[o.customer_phone] = t; }
       // تجميع لكل موظف: حجوزات مؤكّدة + غير مردودة (آخر نشاط من العميل) + منها كم شافتها بلا رد.
       const confirmedBy: Record<string, number> = {}, unansweredBy: Record<string, number> = {}, unansweredSeenBy: Record<string, number> = {};
       for (const w of ((wsRes.data || []) as Array<{ phone: string; assigned_staff_phone: string; label: string | null; last_message_at: string | null; last_outbound_at: string | null; last_opened_at: string | null }>)) {
