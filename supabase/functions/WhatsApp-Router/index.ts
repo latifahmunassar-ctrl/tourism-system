@@ -3988,6 +3988,11 @@ Deno.serve(async (req) => {
           // التأخير: وقت الدخول الفعلي (بتوقيت KSA) مقابل وقت الدخول المتوقّع.
           if (shStart != null) { const todSec = ((Date.parse(x.check_in_at) + 3 * 3600 * 1000) % 86400000) / 1000; const late = todSec - shStart; if (late > 0) { lateSum += late; lateCnt++; } }
         }
+        // الحالة الحيّة = حسب آخر نشاط فعلي (تظهر «متصل/نشط» متى عملت فعلاً، حتى قبل
+        // ضغط «بدء الدوام»). الساعات تبقى من جلسات الدوام المسجَّلة.
+        let lastEvMs = lastAct ? Date.parse(lastAct) : 0;
+        for (const t of (evByPhone[s.phone] || [])) { const m = Date.parse(t); if (m > lastEvMs) lastEvMs = m; }
+        if (lastEvMs) { const gap = (nowMs - lastEvMs) / 1000; liveStatus = gap < ATTEND_IDLE_SEC ? "active" : (gap < 3600 ? "idle" : "offline"); lastAct = new Date(lastEvMs).toISOString(); }
         const total = active + idle;
         const myOut = outs.filter(o => o.sent_by === s.name);
         const messages = myOut.length;
