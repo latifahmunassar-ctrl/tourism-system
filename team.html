@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-06-27-salalah-bed150';
+  var BUILD = '2026-06-29-pdf-export-menu';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -92,6 +92,11 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 .ebtn { padding:7px 14px; border-radius:8px; font-family:'Tajawal',sans-serif; font-size:12px; font-weight:700; cursor:pointer; border:none; display:flex; align-items:center; gap:5px; transition:all 0.2s; }
 .ebtn-pdf { background:linear-gradient(135deg,var(--gold),var(--gold2)); color:#0F1923; font-weight:800; }
 .ebtn-pdf:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgba(212,168,67,0.3); }
+/* قائمة تصدير PDF المنسدلة (زر واحد بخيارات) */
+.pdf-export-menu { position:absolute; top:calc(100% + 4px); right:0; z-index:60; background:var(--s1); border:1px solid var(--border); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.18); padding:6px; min-width:250px; }
+.pdf-menu-item { display:block; width:100%; text-align:right; background:transparent; border:none; border-radius:9px; padding:10px 12px; font-family:'Tajawal',sans-serif; font-size:13.5px; font-weight:800; color:var(--text); cursor:pointer; white-space:nowrap; }
+.pdf-menu-item:hover { background:var(--s2); }
+.pdf-menu-item small { color:var(--muted); font-weight:600; font-size:11.5px; }
 .ebtn-nologo { background:var(--s2); color:var(--muted); border:1px solid var(--border); }
 .ebtn-nologo:hover { color:var(--text); }
 .quote-wrap { flex:1; overflow-y:auto; padding:20px; }
@@ -473,9 +478,14 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <input class="profit-input" id="profitInput" type="number" placeholder="0" value="0" oninput="updateProfit()">
 <span class="profit-label">ريال</span>
 </div>
-<button class="ebtn ebtn-pdf" onclick="exportPDF('client')">📄 أفراد</button>
-<button class="ebtn ebtn-nologo" onclick="exportPDF('no_price')">📄 بدون سعر (بدون لوغو)</button>
-<button class="ebtn ebtn-pdf" onclick="exportPDF('detailed')">📄 تفصيلي (لوغو + تفصيل)</button>
+<div class="pdf-export-wrap" style="position:relative;display:inline-block">
+  <button type="button" class="ebtn ebtn-pdf" onclick="pdfMenuToggle(event)" title="صدّر البرنامج PDF — اختاري النوع">📄 تصدير PDF ▾</button>
+  <div id="pdfExportMenu" class="pdf-export-menu" style="display:none">
+    <button type="button" class="pdf-menu-item" onclick="pdfMenuPick('client')">👤 أفراد <small>— للعميل (لوغو + سعر)</small></button>
+    <button type="button" class="pdf-menu-item" onclick="pdfMenuPick('detailed')">📊 تفصيلي <small>— لوغو + تفصيل الأسعار</small></button>
+    <button type="button" class="pdf-menu-item" onclick="pdfMenuPick('no_price')">🚫 بدون سعر <small>— بدون لوغو</small></button>
+  </div>
+</div>
 <button class="ebtn ebtn-nologo" id="currencyBtn" onclick="toggleCurrencyPicker()">💱 تحويل عملة</button>
 <select id="currencyPicker" onchange="onCurrencyPick()" style="display:none; padding:7px 10px; border-radius:8px; border:1px solid var(--border); background:var(--s2); color:var(--text); font-family:'Tajawal',sans-serif; font-size:12px; font-weight:700; cursor:pointer;"><option value="">💱 بدون تحويل (ريال)</option></select>
 <span id="currencyResult" style="display:none; font-size:13px; font-weight:900; color:var(--gold); background:var(--s2); border:1px solid rgba(212,168,67,0.35); border-radius:8px; padding:6px 12px; white-space:nowrap;"></span>
@@ -3661,6 +3671,10 @@ ${showDetailed ? `
 </div>`;
 }
 
+// زر «📄 تصدير PDF» الموحّد: يفتح قائمة اختيار النوع (أفراد/تفصيلي/بدون سعر).
+function pdfMenuToggle(e){ if(e){ e.stopPropagation(); } const m=document.getElementById('pdfExportMenu'); if(!m) return; m.style.display = (m.style.display==='none'||!m.style.display) ? 'block' : 'none'; }
+function pdfMenuPick(mode){ const m=document.getElementById('pdfExportMenu'); if(m) m.style.display='none'; exportPDF(mode); }
+document.addEventListener('click', function(e){ const insideWrap = e.target && e.target.closest && e.target.closest('.pdf-export-wrap'); if(!insideWrap){ const m=document.getElementById('pdfExportMenu'); if(m) m.style.display='none'; } });
 async function exportPDF(mode) {
   if (!parsedData) return;
   const profit=parseInt(document.getElementById('profitInput').value)||0;
