@@ -2366,6 +2366,30 @@ async function buildConversationContext(
 const MODEL_FAST = "claude-haiku-4-5-20251001";   // رخيص — للمتكرّر/البسيط
 const MODEL_DEEP = "claude-sonnet-4-6";            // أغلى وأذكى — للجديد/التحليل العميق
 
+// تصنيف دفعي لرسائل الموظفين الرمادية: هل كل رسالة ردّ فعلي أم وعد/مجاملة؟
+// يُستدعى في الخلفية (waitUntil) للحالات غير المخزّنة فقط، ويُخزَّن في wa_reply_verdict.
+// مفتاح كل رسالة ثابت (phone|sent_at) فتُصنَّف مرّة واحدة فقط طوال العمر.
+async function classifyStaffReplies(
+  supabase: ReturnType<typeof createClient>,
+  items: Array<{ key: string; body: string }>,
+): Promise<void> {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey || !items.length) return;
+  try {
+    const anthropic = new Anthropic({ apiKey });
+    const list = items.map((it, i) => `${i + 1}. ${String(it.body || "").replace(/\s+/g, " ").trim().slice(0, 220)}`).join("\n");
+    const sys = "أنت تصنّف رسائل موظف خدمة عملاء في وكالة سياحة (الرسالة من الموظف للعميل). لكل رسالة قرّر: هل هي ردّ فعلي يجيب العميل (سعر/برنامج/فندق/معلومة/جواب واضح/سؤال استيضاح)، أم مجرّد وعد بالإرسال أو التجهيز لاحقاً («الآن أرسلك»، «راح أجهّز لك»، «تبشّر») أو مجاملة/تطمين بلا محتوى؟ أعِد JSON array من قيم منطقية فقط بنفس ترتيب الرسائل: true = ردّ فعلي، false = وعد أو مجاملة. بلا أي شرح أو نص إضافي.";
+    const res = await anthropic.messages.create({ model: MODEL_FAST, max_tokens: 800, system: sys, messages: [{ role: "user", content: list }] });
+    const txt = (res.content as Array<{ type: string; text?: string }>).filter(b => b.type === "text").map(b => b.text || "").join("");
+    const m = txt.match(/\[[\s\S]*\]/);
+    if (!m) return;
+    const arr = JSON.parse(m[0]) as unknown[];
+    const rows = items.map((it, i) => ({ msg_key: it.key, is_reply: arr[i] === true, body_preview: String(it.body || "").slice(0, 120) }))
+      .filter((_, i) => typeof arr[i] === "boolean");
+    if (rows.length) await supabase.from("wa_reply_verdict").upsert(rows, { onConflict: "msg_key" });
+  } catch (_e) { /* تجاهل — القاعدة المجانية تبقى الاحتياط */ }
+}
+
 async function analyzeUnknownQuestion(
   supabase: ReturnType<typeof createClient>,
   question: string,
@@ -3554,11 +3578,43 @@ Deno.serve(async (req) => {
         ? await supabase.from("wa_admin_messages").select("customer_phone, sent_at, sent_by, body")
             .in("customer_phone", phones).order("sent_at", { ascending: false }).limit(20000)
         : { data: [] as Array<Record<string, unknown>> };
-      const lastHumanOutByPhone = new Map<string, string>();
-      for (const m of (humanOuts as Array<{ customer_phone: string; sent_at: string; sent_by: string | null; body: string | null }> ?? [])) {
+      const humanRows = (humanOuts as Array<{ customer_phone: string; sent_at: string; sent_by: string | null; body: string | null }> ?? []);
+      // أحدث رسالة موظف غير-مجاملة لكل عميل (المرشّح الذي يحدّد حالة الرد) — نتحقّق منه
+      // عبر Haiku للحالات الرمادية (وعد بصياغة جديدة لا تمسكها الكلمات).
+      const latestCand = new Map<string, { key: string; sent_at: string; body: string | null }>();
+      for (const m of humanRows) {
+        const ph = m.customer_phone;
+        if (latestCand.has(ph)) continue;
         if (BOT_SENDERS.has(String(m.sent_by || "").trim())) continue;
-        if (isNonReply(m.body)) continue;   // مجاملة قصيرة أو وعد بالإرسال لا يُحتسب ردّاً فعلياً
-        if (!lastHumanOutByPhone.has(m.customer_phone)) lastHumanOutByPhone.set(m.customer_phone, m.sent_at);
+        if (isStaffAck(m.body)) continue;   // مجاملة قصيرة قطعاً ليست رداً — لا تحتاج AI
+        latestCand.set(ph, { key: ph + "|" + m.sent_at, sent_at: m.sent_at, body: m.body });
+      }
+      // اقرأ أحكام Haiku المخزّنة لهؤلاء المرشّحين
+      const verdicts = new Map<string, boolean>();
+      const candKeys = [...latestCand.values()].map(c => c.key);
+      for (let i = 0; i < candKeys.length; i += 300) {
+        const { data: vd } = await supabase.from("wa_reply_verdict").select("msg_key, is_reply").in("msg_key", candKeys.slice(i, i + 300));
+        for (const v of (vd as Array<{ msg_key: string; is_reply: boolean }> ?? [])) verdicts.set(v.msg_key, v.is_reply);
+      }
+      const toClassify = [...latestCand.values()].filter(c => !verdicts.has(c.key)).map(c => ({ key: c.key, body: c.body || "" }));
+      const lastHumanOutByPhone = new Map<string, string>();
+      for (const m of humanRows) {
+        const ph = m.customer_phone;
+        if (lastHumanOutByPhone.has(ph)) continue;
+        if (BOT_SENDERS.has(String(m.sent_by || "").trim())) continue;
+        if (isStaffAck(m.body)) continue;
+        const cand = latestCand.get(ph);
+        const key = ph + "|" + m.sent_at;
+        // المرشّح الأحدث: حكم Haiku إن وُجد، وإلا القاعدة المجانية مؤقتاً. الأقدم: القاعدة فقط.
+        const isReply = (cand && cand.key === key && verdicts.has(key)) ? verdicts.get(key)! : !isStaffPromise(m.body);
+        if (isReply) lastHumanOutByPhone.set(ph, m.sent_at);
+      }
+      // صنّف غير المخزّن في الخلفية (لا يبطّئ الرد) — يُطبَّق في التحديث التالي.
+      if (toClassify.length) {
+        const _task = classifyStaffReplies(supabase, toClassify.slice(0, 40));
+        // @ts-ignore EdgeRuntime injected by Supabase
+        if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") EdgeRuntime.waitUntil(_task);
+        else _task.catch(() => {});
       }
 
       const conversationsEnriched = (sessions ?? []).map((s: Record<string, unknown>) => {
