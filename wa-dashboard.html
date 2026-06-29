@@ -126,8 +126,8 @@
        conversations once we add scoping; for now this bar is hidden in
        staff mode. */
     body.staff-mode .admin-only-filter { display: none; }
-    .staff-only-filter { display: none; }
-    body.staff-mode .staff-only-filter { display: block; }
+    .staff-only-filter { display: none !important; }
+    body.staff-mode .staff-only-filter { display: inline-flex !important; }
     /* منفذ المساعد السياحي — للأدمن فقط (مخفي عن الموظف والمراقب) */
     body.staff-mode .ts-admin-link, body.monitor-mode .ts-admin-link { display: none !important; }
     /* جهات الاتصال + إدارة المستخدمين — للأدمن فقط (بيانات حساسة: أرقام العملاء وتصديرهم) */
