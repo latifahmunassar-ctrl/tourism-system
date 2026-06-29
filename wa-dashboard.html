@@ -1086,6 +1086,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         <input type="date" id="att-to" style="display:none; padding:6px; border:1px solid var(--border); border-radius:6px;">
         <button id="att-refresh" class="filter-btn">↻ تحديث</button>
       </div>
+      <div id="att-unanswered-summary" style="display:none; background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; padding:12px 16px; margin-bottom:12px;"></div>
       <div class="panel-list" id="attendance-list"><div class="empty">جاري التحميل…</div></div>
     </section>
 
@@ -3551,7 +3552,17 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     let attReportCache=[];
     function attFmtH(sec){ sec=Math.max(0,Math.round(sec||0)); const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60); return h+":"+String(m).padStart(2,"0"); }
     function attBadge(s){ return s==="active"?'<span style="color:#15803d;font-weight:800">🟢 نشط</span>':s==="idle"?'<span style="color:#b45309;font-weight:800">🟠 خامل</span>':'<span style="color:#94a3b8;font-weight:700">⚪ غير متصل</span>'; }
+    function renderAttendanceUnansweredSummary(rows){
+      const box=$("att-unanswered-summary"); if(!box) return;
+      const arr=rows.filter(r=>(r.unanswered||0)>0).sort((a,b)=>(b.unanswered||0)-(a.unanswered||0));
+      const total=rows.reduce((n,r)=>n+(r.unanswered||0),0);
+      if(!total){ box.style.display="none"; return; }
+      box.innerHTML='<div style="font-weight:900;color:#92400e;margin-bottom:7px;">📭 محادثات بانتظار الرد ('+total+') — حسب الموظفة</div>'
+        + arr.map(r=>`<div style="font-size:13px;color:#334155;line-height:1.95;">👤 <b>${escapeHtml(r.name||"")}</b>: <b style="color:#b91c1c;">${r.unanswered}</b> غير مردودة${(r.unanswered_seen||0)>0?` <span style="color:var(--muted);font-weight:600;">(شافت ${r.unanswered_seen} بلا رد)</span>`:""}</div>`).join("");
+      box.style.display="block";
+    }
     function renderAttendance(rows, isAdmin){
+      renderAttendanceUnansweredSummary(rows);
       const box=$("attendance-list");
       if(!rows.length){ box.innerHTML='<div class="empty">لا بيانات في هذه الفترة</div>'; return; }
       box.innerHTML=rows.map(r=>{
@@ -3575,7 +3586,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
             <div>💬 رسائل: <b style="color:#0f172a;">${r.messages}</b></div>
             <div>👥 عملاء: <b style="color:#0f172a;">${r.clients}</b></div>
             <div>✅ حجوزات مؤكّدة: <b style="color:#15803d;">${r.confirmed_bookings||0}</b></div>
-            <div>📭 غير مردودة: <b style="color:${(r.unanswered||0)>0?'#b91c1c':'#0f172a'};">${r.unanswered||0}</b></div>
+            <div>📭 غير مردودة: <b style="color:${(r.unanswered||0)>0?'#b91c1c':'#0f172a'};">${r.unanswered||0}</b>${(r.unanswered_seen||0)>0?` <span style="font-size:10px;color:var(--muted);">(شافت ${r.unanswered_seen})</span>`:''}</div>
             <div>⏱️ متوسط الرد: <b style="color:#0f172a;">${resp}</b></div>
             <div>📈 الالتزام: <b style="color:#0f172a;">${r.compliance}%</b>${compTag}</div>
             <div>🕒 آخر نشاط: <b style="color:#0f172a;">${last}</b></div>

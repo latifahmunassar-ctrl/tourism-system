@@ -3951,17 +3951,18 @@ Deno.serve(async (req) => {
         supabase.from("activity_events").select("staff_phone, created_at").gte("created_at", fromIso).lte("created_at", toIso).limit(20000),
         supabase.from("wa_admin_messages").select("sent_by, customer_phone, sent_at").in("sent_by", names.length ? names : ["__none__"]).gte("sent_at", fromIso).lte("sent_at", toIso).limit(15000),
         supabase.from("wa_message_audit").select("from_phone, received_at").gte("received_at", fromIso).lte("received_at", toIso).limit(20000),
-        // حالة المحادثات المُسنَدة (لقطة حالية): مؤكّدة / غير مردودة.
-        supabase.from("whatsapp_sessions").select("assigned_staff_phone, label, last_message_at, last_outbound_at").not("assigned_staff_phone", "is", null).limit(8000),
+        // حالة المحادثات المُسنَدة (لقطة حالية): مؤكّدة / غير مردودة / شافتها بلا رد.
+        supabase.from("whatsapp_sessions").select("assigned_staff_phone, label, last_message_at, last_outbound_at, last_opened_at").not("assigned_staff_phone", "is", null).limit(8000),
       ]);
-      // تجميع لكل موظف: حجوزات مؤكّدة (label=CONFIRMED) + محادثات غير مردودة (آخر نشاط من العميل).
-      const confirmedBy: Record<string, number> = {}, unansweredBy: Record<string, number> = {};
-      for (const w of ((wsRes.data || []) as Array<{ assigned_staff_phone: string; label: string | null; last_message_at: string | null; last_outbound_at: string | null }>)) {
+      // تجميع لكل موظف: حجوزات مؤكّدة + غير مردودة (آخر نشاط من العميل) + منها كم شافتها بلا رد.
+      const confirmedBy: Record<string, number> = {}, unansweredBy: Record<string, number> = {}, unansweredSeenBy: Record<string, number> = {};
+      for (const w of ((wsRes.data || []) as Array<{ assigned_staff_phone: string; label: string | null; last_message_at: string | null; last_outbound_at: string | null; last_opened_at: string | null }>)) {
         const ph = w.assigned_staff_phone;
         if (w.label === "CONFIRMED") confirmedBy[ph] = (confirmedBy[ph] || 0) + 1;
         const lm = w.last_message_at ? Date.parse(w.last_message_at) : 0;
         const lo = w.last_outbound_at ? Date.parse(w.last_outbound_at) : 0;
-        if (lm > 0 && lm > lo) unansweredBy[ph] = (unansweredBy[ph] || 0) + 1;
+        const lop = w.last_opened_at ? Date.parse(w.last_opened_at) : 0;
+        if (lm > 0 && lm > lo) { unansweredBy[ph] = (unansweredBy[ph] || 0) + 1; if (lop >= lm) unansweredSeenBy[ph] = (unansweredSeenBy[ph] || 0) + 1; }
       }
       const sessions = (sessRes.data || []) as Array<{ staff_phone: string; work_date: string; check_in_at: string; check_out_at: string | null; active_seconds: number; idle_seconds: number; last_activity_at: string }>;
       const events = (evRes.data || []) as Array<{ staff_phone: string; created_at: string }>;
@@ -4019,7 +4020,7 @@ Deno.serve(async (req) => {
         const expected = (shiftSec != null) ? shiftSec * baseDays : 0;
         const compliance = expected > 0 ? Math.min(100, Math.round((active / expected) * 100)) : (total > 0 ? Math.round((active / total) * 100) : 0);
         const avgLate = lateCnt ? Math.round(lateSum / lateCnt) : null;
-        return { phone: s.phone, name: s.name, status: liveStatus, check_in_at: checkIn, check_out_at: checkOut, last_activity_at: lastAct, active_seconds: active, idle_seconds: idle, total_seconds: total, days_present: days.size, messages, clients, avg_response_seconds: avgResp, compliance, shift_start: s.shift_start || null, shift_end: s.shift_end || null, work_days: s.work_days || null, expected_days: expectedDays, absence_days: absenceDays, expected_seconds: expected, avg_late_seconds: avgLate, schedule_based: expected > 0, confirmed_bookings: confirmedBy[s.phone] || 0, unanswered: unansweredBy[s.phone] || 0 };
+        return { phone: s.phone, name: s.name, status: liveStatus, check_in_at: checkIn, check_out_at: checkOut, last_activity_at: lastAct, active_seconds: active, idle_seconds: idle, total_seconds: total, days_present: days.size, messages, clients, avg_response_seconds: avgResp, compliance, shift_start: s.shift_start || null, shift_end: s.shift_end || null, work_days: s.work_days || null, expected_days: expectedDays, absence_days: absenceDays, expected_seconds: expected, avg_late_seconds: avgLate, schedule_based: expected > 0, confirmed_bookings: confirmedBy[s.phone] || 0, unanswered: unansweredBy[s.phone] || 0, unanswered_seen: unansweredSeenBy[s.phone] || 0 };
       });
       report.sort((a, b) => b.active_seconds - a.active_seconds);
       return new Response(JSON.stringify({ ok: true, is_admin: isAdmin, range, from: fromIso, to: toIso, report }), { headers: jsonCors });
