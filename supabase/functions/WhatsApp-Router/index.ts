@@ -3902,6 +3902,20 @@ Deno.serve(async (req) => {
     } catch (e) { return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors }); }
   }
 
+  // تحديد دوام الموظف (وقت دخول/خروج متوقّع) — المدير فقط.
+  if (url.searchParams.get("admin_action") === "set_staff_schedule") {
+    if (!ownerGate(req)) return unauthorized();
+    try {
+      const p = await req.json();
+      const phone = normalizeWhatsappPhone(String(p.phone || ""));
+      const clean = (v: unknown) => { const s = String(v || "").trim(); return /^\d{1,2}:\d{2}$/.test(s) ? s.padStart(5, "0") : null; };
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { error } = await supabase.from("wa_staff").update({ shift_start: clean(p.shift_start), shift_end: clean(p.shift_end) }).eq("phone", phone);
+      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonCors });
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) { return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors }); }
+  }
+
   // تقرير الحضور والإنتاجية — المدير يرى الجميع، الموظف يرى نفسه فقط (خادمياً).
   if (url.searchParams.get("admin_action") === "attendance_report") {
     const caller = await getCallerStaff(req);
@@ -3920,11 +3934,13 @@ Deno.serve(async (req) => {
       if (range === "custom") { const t = url.searchParams.get("to"); if (t) toMs = Date.parse(t + "T23:59:59Z"); }
       const fromIso = new Date(fromMs).toISOString(); const toIso = new Date(toMs).toISOString();
 
-      // قائمة الموظفين المستهدفين
-      let staffRows: Array<{ phone: string; name: string }> = [];
-      if (caller) staffRows = [{ phone: caller.phone, name: caller.name }];
-      else { const { data } = await supabase.from("wa_staff").select("phone, name").eq("active", true); staffRows = (data || []) as Array<{ phone: string; name: string }>; }
+      // قائمة الموظفين المستهدفين (مع دوامهم المحدّد)
+      let staffRows: Array<{ phone: string; name: string; shift_start: string | null; shift_end: string | null }> = [];
+      { const sel = supabase.from("wa_staff").select("phone, name, shift_start, shift_end");
+        const { data } = caller ? await sel.eq("phone", caller.phone) : await sel.eq("active", true);
+        staffRows = (data || []) as typeof staffRows; }
       const names = staffRows.map(s => s.name);
+      const hhmmSec = (s: string | null): number | null => { if (!s) return null; const m = /^(\d{1,2}):(\d{2})$/.exec(s); if (!m) return null; return (+m[1]) * 3600 + (+m[2]) * 60; };
 
       // جلب البيانات دفعة واحدة (بلا N+1)
       const [sessRes, evRes, outRes, inRes] = await Promise.all([
@@ -3950,11 +3966,16 @@ Deno.serve(async (req) => {
         let active = 0, idle = 0; const days = new Set<string>();
         let liveStatus = "offline", lastAct: string | null = null, checkIn: string | null = null, checkOut: string | null = null;
         let latestStart = 0;
+        const shStart = hhmmSec(s.shift_start), shEnd = hhmmSec(s.shift_end);
+        const shiftSec = (shStart != null && shEnd != null && shEnd > shStart) ? (shEnd - shStart) : null;
+        let lateSum = 0, lateCnt = 0;
         for (const x of ss) {
           days.add(x.work_date);
           if (x.check_out_at) { active += x.active_seconds; idle += x.idle_seconds; }
           else { const { active: a, idle: i } = splitActiveIdle(x.check_in_at, evByPhone[s.phone] || [], new Date(nowMs).toISOString()); active += a; idle += i; const idleSec = (nowMs - Date.parse(x.last_activity_at)) / 1000; liveStatus = idleSec >= ATTEND_IDLE_SEC ? "idle" : "active"; lastAct = x.last_activity_at; }
           const st = Date.parse(x.check_in_at); if (st > latestStart) { latestStart = st; checkIn = x.check_in_at; checkOut = x.check_out_at; }
+          // التأخير: وقت الدخول الفعلي (بتوقيت KSA) مقابل وقت الدخول المتوقّع.
+          if (shStart != null) { const todSec = ((Date.parse(x.check_in_at) + 3 * 3600 * 1000) % 86400000) / 1000; const late = todSec - shStart; if (late > 0) { lateSum += late; lateCnt++; } }
         }
         const total = active + idle;
         const myOut = outs.filter(o => o.sent_by === s.name);
@@ -3969,8 +3990,12 @@ Deno.serve(async (req) => {
           if (best > 0) { const diff = (ot - best) / 1000; if (diff > 0 && diff < 12 * 3600) { rsum += diff; rcnt++; } }
         }
         const avgResp = rcnt ? Math.round(rsum / rcnt) : null;
-        const compliance = total > 0 ? Math.round((active / total) * 100) : 0;
-        return { phone: s.phone, name: s.name, status: liveStatus, check_in_at: checkIn, check_out_at: checkOut, last_activity_at: lastAct, active_seconds: active, idle_seconds: idle, total_seconds: total, days_present: days.size, messages, clients, avg_response_seconds: avgResp, compliance };
+        // الالتزام = النشاط الفعلي مقابل ساعات الدوام المتوقّعة (الدوام المحدّد × أيام الحضور).
+        // لو ما حُدّد دوام، نرجع لنسبة النشاط من الوقت المسجّل.
+        const expected = (shiftSec != null) ? shiftSec * days.size : 0;
+        const compliance = expected > 0 ? Math.min(100, Math.round((active / expected) * 100)) : (total > 0 ? Math.round((active / total) * 100) : 0);
+        const avgLate = lateCnt ? Math.round(lateSum / lateCnt) : null;
+        return { phone: s.phone, name: s.name, status: liveStatus, check_in_at: checkIn, check_out_at: checkOut, last_activity_at: lastAct, active_seconds: active, idle_seconds: idle, total_seconds: total, days_present: days.size, messages, clients, avg_response_seconds: avgResp, compliance, shift_start: s.shift_start || null, shift_end: s.shift_end || null, expected_seconds: expected, avg_late_seconds: avgLate, schedule_based: expected > 0 };
       });
       report.sort((a, b) => b.active_seconds - a.active_seconds);
       return new Response(JSON.stringify({ ok: true, is_admin: isAdmin, range, from: fromIso, to: toIso, report }), { headers: jsonCors });

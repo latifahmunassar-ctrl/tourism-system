@@ -3474,29 +3474,40 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     // ── تبويب التقارير (مدير: كل الموظفين · موظف: نفسه فقط — مفروض خادمياً) ──
     function attFmtH(sec){ sec=Math.max(0,Math.round(sec||0)); const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60); return h+":"+String(m).padStart(2,"0"); }
     function attBadge(s){ return s==="active"?'<span style="color:#15803d;font-weight:800">🟢 نشط</span>':s==="idle"?'<span style="color:#b45309;font-weight:800">🟠 خامل</span>':'<span style="color:#94a3b8;font-weight:700">⚪ غير متصل</span>'; }
-    function renderAttendance(rows){
+    function renderAttendance(rows, isAdmin){
       const box=$("attendance-list");
       if(!rows.length){ box.innerHTML='<div class="empty">لا بيانات في هذه الفترة</div>'; return; }
       box.innerHTML=rows.map(r=>{
         const resp=r.avg_response_seconds!=null?(Math.round(r.avg_response_seconds/60)+" د"):"—";
         const last=r.last_activity_at?new Date(r.last_activity_at).toLocaleString("ar-EG",{hour12:true}):"—";
+        const shift=(r.shift_start&&r.shift_end)?(r.shift_start+"–"+r.shift_end):"غير محدّد";
+        const late=r.avg_late_seconds!=null?(Math.round(r.avg_late_seconds/60)+" د"):"—";
+        const compTag=r.schedule_based?' <span style="font-size:10px;color:#15803d;">(حسب الدوام)</span>':'';
+        const editBtn=isAdmin?`<div style="margin-top:2px;"><button class="filter-btn" style="font-size:12px;" onclick='attSetSchedule("${r.phone}","${r.shift_start||""}","${r.shift_end||""}")'>⏰ تحديد/تعديل الدوام</button></div>`:"";
         return `<div class="row" style="flex-direction:column;align-items:stretch;gap:8px;padding:13px 15px;border-bottom:1px solid var(--border);">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
-            <b style="font-size:14.5px;">${escapeHtml(r.name||"")}</b> <span>${attBadge(r.status)}</span>
+            <b style="font-size:14.5px;">${escapeHtml(r.name||"")} <span style="color:var(--muted);font-weight:600;font-size:12px;">⏰ ${shift}</span></b> <span>${attBadge(r.status)}</span>
           </div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:7px;font-size:12.5px;color:#475569;">
             <div>🟢 نشاط: <b style="color:#0f172a;">${attFmtH(r.active_seconds)}</b></div>
             <div>🟠 خمول: <b style="color:#0f172a;">${attFmtH(r.idle_seconds)}</b></div>
             <div>📅 أيام حضور: <b style="color:#0f172a;">${r.days_present}</b></div>
+            <div>⌛ متوسط التأخير: <b style="color:#0f172a;">${late}</b></div>
             <div>💬 رسائل: <b style="color:#0f172a;">${r.messages}</b></div>
             <div>👥 عملاء: <b style="color:#0f172a;">${r.clients}</b></div>
             <div>⏱️ متوسط الرد: <b style="color:#0f172a;">${resp}</b></div>
-            <div>📈 الالتزام: <b style="color:#0f172a;">${r.compliance}%</b></div>
+            <div>📈 الالتزام: <b style="color:#0f172a;">${r.compliance}%</b>${compTag}</div>
             <div>🕒 آخر نشاط: <b style="color:#0f172a;">${last}</b></div>
           </div>
+          ${editBtn}
         </div>`;
       }).join("");
     }
+    window.attSetSchedule=async function(phone,start,end){
+      const s=prompt("وقت الدخول المتوقّع (HH:MM، مثل 09:00):", start||"09:00"); if(s===null) return;
+      const e=prompt("وقت الخروج المتوقّع (HH:MM، مثل 17:00):", end||"17:00"); if(e===null) return;
+      try{ const r=await fetch(BASE+"?admin_action=set_staff_schedule",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({phone,shift_start:s,shift_end:e})}); const d=await r.json(); if(d.ok) loadAttendance(); else alert(d.error||"فشل الحفظ"); }catch(_e){ alert("تعذّر الاتصال"); }
+    };
     async function loadAttendance(){
       const box=$("attendance-list"); if(!box||!token) return;
       const range=$("att-range").value;
@@ -3506,7 +3517,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       try{ const r=await fetch(u,{headers:{Authorization:"Bearer "+token}}); const d=await r.json();
         if(!r.ok||!d.ok){ box.innerHTML='<div class="empty">تعذّر التحميل</div>'; return; }
         const t=$("att-title"); if(t) t.textContent=d.is_admin?"حضور الموظفين والتقارير":"تقاريري";
-        renderAttendance(d.report||[]);
+        renderAttendance(d.report||[], d.is_admin);
       }catch(_e){ box.innerHTML='<div class="empty">تعذّر الاتصال</div>'; }
     }
     $("att-range") && $("att-range").addEventListener("change",()=>{ const c=$("att-range").value==="custom"; $("att-from").style.display=c?"":"none"; $("att-to").style.display=c?"":"none"; if(!c) loadAttendance(); });
