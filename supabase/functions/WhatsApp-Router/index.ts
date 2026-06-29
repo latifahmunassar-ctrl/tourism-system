@@ -2378,7 +2378,7 @@ async function classifyStaffReplies(
   try {
     const anthropic = new Anthropic({ apiKey });
     const list = items.map((it, i) => `${i + 1}. ${String(it.body || "").replace(/\s+/g, " ").trim().slice(0, 220)}`).join("\n");
-    const sys = "أنت تصنّف رسائل موظف خدمة عملاء في وكالة سياحة (الرسالة من الموظف للعميل). لكل رسالة قرّر: هل هي ردّ فعلي يجيب العميل (سعر/برنامج/فندق/معلومة/جواب واضح/سؤال استيضاح)، أم مجرّد وعد بالإرسال أو التجهيز لاحقاً («الآن أرسلك»، «راح أجهّز لك»، «تبشّر») أو مجاملة/تطمين بلا محتوى؟ أعِد JSON array من قيم منطقية فقط بنفس ترتيب الرسائل: true = ردّ فعلي، false = وعد أو مجاملة. بلا أي شرح أو نص إضافي.";
+    const sys = "أنت تصنّف رسائل موظف خدمة عملاء في وكالة سياحة (الرسالة من الموظف للعميل). لكل رسالة قرّر true أو false:\n- true = ردّ فعلي يضع الكرة في ملعب العميل: جواب/سعر/برنامج/فندق/معلومة، **أو أي سؤال موجّه للعميل** (مثل «كم مدة الإقامة؟»، «متى السفر؟»، «تحبون فندق ٥ نجوم؟») — لأن العميل هو من يتأخّر بعدها لا الموظف.\n- false = وعد بالإرسال/التجهيز لاحقاً («الآن أرسلك»، «راح أجهّز لك»، «قيد التنفيذ»، «بنعمل لك حجز») أو مجاملة/تطمين بلا محتوى ولا سؤال.\nأي رسالة فيها سؤال للعميل = true دائماً. أعِد JSON array من قيم منطقية فقط بنفس ترتيب الرسائل، بلا أي شرح.";
     const res = await anthropic.messages.create({ model: MODEL_FAST, max_tokens: 800, system: sys, messages: [{ role: "user", content: list }] });
     const txt = (res.content as Array<{ type: string; text?: string }>).filter(b => b.type === "text").map(b => b.text || "").join("");
     const m = txt.match(/\[[\s\S]*\]/);
@@ -3573,20 +3573,24 @@ Deno.serve(async (req) => {
       // فالعميل لا يزال ينتظر الردّ/الملف الفعلي.
       const isStaffAck = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return true; const n = [...s].length; if (n <= 6) return true; return n <= 15 && /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|ابشر|أبشر|تبشر|حاضر|حياك|اهلا|أهلا|هلا|لحظة|لحظه|ثانية|ثواني|دقيقة|دقيقه|👍|🙏|❤|🌹|💚|💐|🤍|يعطيك|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(s); };
       const isStaffPromise = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return false; if (/أرسلت|ارسلت|رسلت|جهّزت|جهزت|عملت|سويت|بعثت|أعطيت|اعطيت|رتبت|وصلك|وصلت|تفضل|هذا برنامج/.test(s)) return false; return /((الان|الحين|حالا|راح|رح|سوف|توني|تبشر|ابشر|أبشر).{0,10}(ا?رسل|ا?جهز|جهّز|ا?عمل|ا?سوي|ابعث|ا?خلص|ا?كمل|ا?رتب|أرتب))|(^\s*(بأرسل|بارسل|بجهز|باجهز|بأجهز|بسوي|باعمل|بعمل|برتب|بخلص|بكمل|سأرسل|سارسل))|((ثوان|لحظ|دقيق|دقاي).{0,12}(ا?رسل|ا?جهز|ا?عمل|ا?سوي))|(جاري.{0,8}(تجهيز|الت|الإرسال|الارسال|العمل|عمل))/.test(s); };
-      const isNonReply = (t: string | null): boolean => isStaffAck(t) || isStaffPromise(t);
+      // سؤال موجّه للعميل = ردّ فعلي (الكرة بملعب العميل، فهو من يتأخّر لا نحن).
+      const isStaffQuestion = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return false; if (/[؟?]/.test(s)) return true; return /(^|\s)(كم|متى|وين|اين|أين|هل|كيف|ايش|أيش|وش|وشو|تبي|تبغى|تبغون|تبون|تحب|تحبون|عندك|عندكم|تنوون|تخططون|مين|اي)(\s|$|[،.!:])/.test(s); };
       const { data: humanOuts } = phones.length
         ? await supabase.from("wa_admin_messages").select("customer_phone, sent_at, sent_by, body")
             .in("customer_phone", phones).order("sent_at", { ascending: false }).limit(20000)
         : { data: [] as Array<Record<string, unknown>> };
       const humanRows = (humanOuts as Array<{ customer_phone: string; sent_at: string; sent_by: string | null; body: string | null }> ?? []);
-      // أحدث رسالة موظف غير-مجاملة لكل عميل (المرشّح الذي يحدّد حالة الرد) — نتحقّق منه
-      // عبر Haiku للحالات الرمادية (وعد بصياغة جديدة لا تمسكها الكلمات).
+      // المرشّح الذي يحتاج تحقّق Haiku = أحدث رسالة موظف غير-مجاملة وغير-سؤال لكل عميل.
+      // (المجاملة قطعاً ليست رداً؛ السؤال قطعاً ردّ — كلاهما يُحسم بالقاعدة بلا AI.)
       const latestCand = new Map<string, { key: string; sent_at: string; body: string | null }>();
+      const decided = new Set<string>();
       for (const m of humanRows) {
         const ph = m.customer_phone;
-        if (latestCand.has(ph)) continue;
+        if (decided.has(ph)) continue;
         if (BOT_SENDERS.has(String(m.sent_by || "").trim())) continue;
-        if (isStaffAck(m.body)) continue;   // مجاملة قصيرة قطعاً ليست رداً — لا تحتاج AI
+        if (isStaffAck(m.body)) continue;             // مجاملة → ليست الرسالة الحاسمة
+        decided.add(ph);                              // أول رسالة غير-مجاملة = الحاسمة
+        if (isStaffQuestion(m.body)) continue;        // سؤال = ردّ، لا يحتاج AI
         latestCand.set(ph, { key: ph + "|" + m.sent_at, sent_at: m.sent_at, body: m.body });
       }
       // اقرأ أحكام Haiku المخزّنة لهؤلاء المرشّحين
@@ -3605,8 +3609,9 @@ Deno.serve(async (req) => {
         if (isStaffAck(m.body)) continue;
         const cand = latestCand.get(ph);
         const key = ph + "|" + m.sent_at;
-        // المرشّح الأحدث: حكم Haiku إن وُجد، وإلا القاعدة المجانية مؤقتاً. الأقدم: القاعدة فقط.
-        const isReply = (cand && cand.key === key && verdicts.has(key)) ? verdicts.get(key)! : !isStaffPromise(m.body);
+        // سؤال للعميل = ردّ قطعاً. غير ذلك: حكم Haiku للمرشّح الأحدث إن وُجد، وإلا القاعدة المجانية.
+        const isReply = isStaffQuestion(m.body) ? true
+          : (cand && cand.key === key && verdicts.has(key)) ? verdicts.get(key)! : !isStaffPromise(m.body);
         if (isReply) lastHumanOutByPhone.set(ph, m.sent_at);
       }
       // صنّف غير المخزّن في الخلفية (لا يبطّئ الرد) — يُطبَّق في التحديث التالي.
@@ -4053,7 +4058,9 @@ Deno.serve(async (req) => {
       // «ليست ردّاً فعلياً»: مجاملة قصيرة أو وعد بالإرسال (نفس قاعدة dashboard_data).
       const isStaffAck = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return true; const n = [...s].length; if (n <= 6) return true; return n <= 15 && /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|ابشر|أبشر|تبشر|حاضر|حياك|اهلا|أهلا|هلا|لحظة|لحظه|ثانية|ثواني|دقيقة|دقيقه|👍|🙏|❤|🌹|💚|💐|🤍|يعطيك|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(s); };
       const isStaffPromise = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return false; if (/أرسلت|ارسلت|رسلت|جهّزت|جهزت|عملت|سويت|بعثت|أعطيت|اعطيت|رتبت|وصلك|وصلت|تفضل|هذا برنامج/.test(s)) return false; return /((الان|الحين|حالا|راح|رح|سوف|توني|تبشر|ابشر|أبشر).{0,10}(ا?رسل|ا?جهز|جهّز|ا?عمل|ا?سوي|ابعث|ا?خلص|ا?كمل|ا?رتب|أرتب))|(^\s*(بأرسل|بارسل|بجهز|باجهز|بأجهز|بسوي|باعمل|بعمل|برتب|بخلص|بكمل|سأرسل|سارسل))|((ثوان|لحظ|دقيق|دقاي).{0,12}(ا?رسل|ا?جهز|ا?عمل|ا?سوي))|(جاري.{0,8}(تجهيز|الت|الإرسال|الارسال|العمل|عمل))/.test(s); };
-      const isNonReply = (t: string | null): boolean => isStaffAck(t) || isStaffPromise(t);
+      const isStaffQuestion = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return false; if (/[؟?]/.test(s)) return true; return /(^|\s)(كم|متى|وين|اين|أين|هل|كيف|ايش|أيش|وش|وشو|تبي|تبغى|تبغون|تبون|تحب|تحبون|عندك|عندكم|تنوون|تخططون|مين|اي)(\s|$|[،.!:])/.test(s); };
+      // سؤال للعميل = ردّ (الكرة بملعب العميل)؛ يتقدّم على استبعاد الوعد/المجاملة.
+      const isNonReply = (t: string | null): boolean => !isStaffQuestion(t) && (isStaffAck(t) || isStaffPromise(t));
       const lastStaffOutByPhone: Record<string, number> = {};
       for (const o of outs) { if (isNonReply(o.body)) continue; const t = Date.parse(o.sent_at); if (!lastStaffOutByPhone[o.customer_phone] || t > lastStaffOutByPhone[o.customer_phone]) lastStaffOutByPhone[o.customer_phone] = t; }
       // تجميع لكل موظف: حجوزات مؤكّدة + غير مردودة (آخر نشاط من العميل) + منها كم شافتها بلا رد.
