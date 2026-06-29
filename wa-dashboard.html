@@ -1401,6 +1401,24 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     </div>
   </div>
 
+  <!-- ⏰ تحديد دوام الموظف (توقيت + أيام عمل) -->
+  <div class="auth-overlay" id="sched-overlay" style="display:none; z-index:10003;">
+    <div style="background:#fff; border-radius:14px; width:100%; max-width:430px; padding:18px; box-shadow:0 20px 60px rgba(0,0,0,.3);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <b style="color:#0b5d4e;">⏰ دوام <span id="sched-name"></span></b>
+        <button type="button" id="sched-close" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748b;">×</button>
+      </div>
+      <div style="display:flex; gap:8px; margin-bottom:14px;">
+        <label style="flex:1; font-size:12px; font-weight:700; color:#475569;">وقت الدخول<input type="time" id="sched-start" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:7px; margin-top:3px;"></label>
+        <label style="flex:1; font-size:12px; font-weight:700; color:#475569;">وقت الخروج<input type="time" id="sched-end" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:7px; margin-top:3px;"></label>
+      </div>
+      <div style="font-size:12px; font-weight:800; color:#475569; margin-bottom:7px;">أيام العمل (اضغط لتحديد/إلغاء)</div>
+      <div id="sched-days" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px;"></div>
+      <button type="button" id="sched-save" style="width:100%; background:#0e7c66; color:#fff; border:none; border-radius:8px; padding:11px; font-weight:900; cursor:pointer;">💾 حفظ الدوام</button>
+      <div id="sched-msg" style="font-size:13px; font-weight:700; margin-top:8px; min-height:16px;"></div>
+    </div>
+  </div>
+
   <!-- محادثة جديدة: بدء التواصل مع رقم ما راسلنا عبر قالب واتساب معتمد -->
   <div class="auth-overlay" id="newconv-overlay" style="display:none; z-index:10001;">
     <div class="auth-card" style="text-align:right; max-width:480px;">
@@ -3488,6 +3506,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     $("attend-btn") && $("attend-btn").addEventListener("click", attendToggle);
 
     // ── تبويب التقارير (مدير: كل الموظفين · موظف: نفسه فقط — مفروض خادمياً) ──
+    let attReportCache=[];
     function attFmtH(sec){ sec=Math.max(0,Math.round(sec||0)); const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60); return h+":"+String(m).padStart(2,"0"); }
     function attBadge(s){ return s==="active"?'<span style="color:#15803d;font-weight:800">🟢 نشط</span>':s==="idle"?'<span style="color:#b45309;font-weight:800">🟠 خامل</span>':'<span style="color:#94a3b8;font-weight:700">⚪ غير متصل</span>'; }
     function renderAttendance(rows, isAdmin){
@@ -3499,7 +3518,8 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         const shift=(r.shift_start&&r.shift_end)?(r.shift_start+"–"+r.shift_end):"غير محدّد";
         const late=r.avg_late_seconds!=null?(Math.round(r.avg_late_seconds/60)+" د"):"—";
         const compTag=r.schedule_based?' <span style="font-size:10px;color:#15803d;">(حسب الدوام)</span>':'';
-        const editBtn=isAdmin?`<div style="margin-top:2px;"><button class="filter-btn" style="font-size:12px;" onclick='attSetSchedule("${r.phone}","${r.shift_start||""}","${r.shift_end||""}")'>⏰ تحديد/تعديل الدوام</button></div>`:"";
+        const absCell=(r.absence_days!=null)?`<div>🚫 غياب: <b style="color:${r.absence_days>0?'#b91c1c':'#15803d'};">${r.absence_days} يوم</b> <span style="font-size:10px;color:var(--muted);">(من ${r.expected_days})</span></div>`:'';
+        const editBtn=isAdmin?`<div style="margin-top:2px;"><button class="filter-btn" style="font-size:12px;" onclick='attSetSchedule("${r.phone}")'>⏰ تحديد/تعديل الدوام والأيام</button></div>`:"";
         return `<div class="row" style="flex-direction:column;align-items:stretch;gap:8px;padding:13px 15px;border-bottom:1px solid var(--border);">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
             <b style="font-size:14.5px;">${escapeHtml(r.name||"")} <span style="color:var(--muted);font-weight:600;font-size:12px;">⏰ ${shift}</span></b> <span>${attBadge(r.status)}</span>
@@ -3508,6 +3528,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
             <div>🟢 نشاط: <b style="color:#0f172a;">${attFmtH(r.active_seconds)}</b></div>
             <div>🟠 خمول: <b style="color:#0f172a;">${attFmtH(r.idle_seconds)}</b></div>
             <div>📅 أيام حضور: <b style="color:#0f172a;">${r.days_present}</b></div>
+            ${absCell}
             <div>⌛ متوسط التأخير: <b style="color:#0f172a;">${late}</b></div>
             <div>💬 رسائل: <b style="color:#0f172a;">${r.messages}</b></div>
             <div>👥 عملاء: <b style="color:#0f172a;">${r.clients}</b></div>
@@ -3521,11 +3542,26 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         </div>`;
       }).join("");
     }
-    window.attSetSchedule=async function(phone,start,end){
-      const s=prompt("وقت الدخول المتوقّع (HH:MM، مثل 09:00):", start||"09:00"); if(s===null) return;
-      const e=prompt("وقت الخروج المتوقّع (HH:MM، مثل 17:00):", end||"17:00"); if(e===null) return;
-      try{ const r=await fetch(BASE+"?admin_action=set_staff_schedule",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({phone,shift_start:s,shift_end:e})}); const d=await r.json(); if(d.ok) loadAttendance(); else alert(d.error||"فشل الحفظ"); }catch(_e){ alert("تعذّر الاتصال"); }
+    const WD_NAMES=["الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+    let schedPhone=null;
+    function styleSchedDay(b){ const on=b.dataset.on==="1"; b.style.border="1px solid "+(on?"#0e7c66":"#d1d5db"); b.style.background=on?"#dcfce7":"#fff"; b.style.color=on?"#15803d":"#475569"; b.style.borderRadius="20px"; b.style.padding="6px 12px"; b.style.fontWeight="700"; b.style.fontSize="12.5px"; b.style.cursor="pointer"; }
+    window.attSetSchedule=function(phone){
+      const r=(attReportCache||[]).find(x=>x.phone===phone)||{};
+      schedPhone=phone; $("sched-msg").textContent="";
+      $("sched-name").textContent=r.name||"";
+      $("sched-start").value=r.shift_start||"09:00"; $("sched-end").value=r.shift_end||"17:00";
+      const set=new Set(Array.isArray(r.work_days)&&r.work_days.length?r.work_days:[0,1,2,3,4]);
+      const box=$("sched-days"); box.innerHTML="";
+      WD_NAMES.forEach((n,i)=>{ const b=document.createElement("button"); b.type="button"; b.textContent=n; b.dataset.dow=i; b.dataset.on=set.has(i)?"1":"0"; styleSchedDay(b); b.addEventListener("click",()=>{ b.dataset.on=b.dataset.on==="1"?"0":"1"; styleSchedDay(b); }); box.appendChild(b); });
+      $("sched-overlay").style.display="grid";
     };
+    $("sched-close") && $("sched-close").addEventListener("click",()=>{ $("sched-overlay").style.display="none"; });
+    $("sched-save") && $("sched-save").addEventListener("click", async ()=>{
+      const work_days=[...$("sched-days").querySelectorAll("button")].filter(b=>b.dataset.on==="1").map(b=>+b.dataset.dow);
+      try{ const r=await fetch(BASE+"?admin_action=set_staff_schedule",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({phone:schedPhone,shift_start:$("sched-start").value,shift_end:$("sched-end").value,work_days})});
+        const d=await r.json(); if(d.ok){ $("sched-overlay").style.display="none"; loadAttendance(); } else { $("sched-msg").style.color="#b91c1c"; $("sched-msg").textContent=d.error||"فشل الحفظ"; }
+      }catch(_e){ $("sched-msg").style.color="#b91c1c"; $("sched-msg").textContent="تعذّر الاتصال"; }
+    });
     async function loadAttendance(){
       const box=$("attendance-list"); if(!box||!token) return;
       const range=$("att-range").value;
@@ -3535,7 +3571,8 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       try{ const r=await fetch(u,{headers:{Authorization:"Bearer "+token}}); const d=await r.json();
         if(!r.ok||!d.ok){ box.innerHTML='<div class="empty">تعذّر التحميل</div>'; return; }
         const t=$("att-title"); if(t) t.textContent=d.is_admin?"حضور الموظفين والتقارير":"تقاريري";
-        renderAttendance(d.report||[], d.is_admin);
+        attReportCache=d.report||[];
+        renderAttendance(attReportCache, d.is_admin);
       }catch(_e){ box.innerHTML='<div class="empty">تعذّر الاتصال</div>'; }
     }
     $("att-range") && $("att-range").addEventListener("change",()=>{ const c=$("att-range").value==="custom"; $("att-from").style.display=c?"":"none"; $("att-to").style.display=c?"":"none"; if(!c) loadAttendance(); });

@@ -3909,8 +3909,9 @@ Deno.serve(async (req) => {
       const p = await req.json();
       const phone = normalizeWhatsappPhone(String(p.phone || ""));
       const clean = (v: unknown) => { const s = String(v || "").trim(); return /^\d{1,2}:\d{2}$/.test(s) ? s.padStart(5, "0") : null; };
+      const wd = Array.isArray(p.work_days) ? [...new Set((p.work_days as unknown[]).map(Number).filter(n => Number.isInteger(n) && n >= 0 && n <= 6))].sort() : null;
       const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-      const { error } = await supabase.from("wa_staff").update({ shift_start: clean(p.shift_start), shift_end: clean(p.shift_end) }).eq("phone", phone);
+      const { error } = await supabase.from("wa_staff").update({ shift_start: clean(p.shift_start), shift_end: clean(p.shift_end), work_days: wd }).eq("phone", phone);
       if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonCors });
       return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
     } catch (e) { return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors }); }
@@ -3934,13 +3935,15 @@ Deno.serve(async (req) => {
       if (range === "custom") { const t = url.searchParams.get("to"); if (t) toMs = Date.parse(t + "T23:59:59Z"); }
       const fromIso = new Date(fromMs).toISOString(); const toIso = new Date(toMs).toISOString();
 
-      // قائمة الموظفين المستهدفين (مع دوامهم المحدّد)
-      let staffRows: Array<{ phone: string; name: string; shift_start: string | null; shift_end: string | null }> = [];
-      { const sel = supabase.from("wa_staff").select("phone, name, shift_start, shift_end");
+      // قائمة الموظفين المستهدفين (مع دوامهم وأيام عملهم المحدّدة)
+      let staffRows: Array<{ phone: string; name: string; shift_start: string | null; shift_end: string | null; work_days: number[] | null }> = [];
+      { const sel = supabase.from("wa_staff").select("phone, name, shift_start, shift_end, work_days");
         const { data } = caller ? await sel.eq("phone", caller.phone) : await sel.eq("active", true);
         staffRows = (data || []) as typeof staffRows; }
       const names = staffRows.map(s => s.name);
       const hhmmSec = (s: string | null): number | null => { if (!s) return null; const m = /^(\d{1,2}):(\d{2})$/.exec(s); if (!m) return null; return (+m[1]) * 3600 + (+m[2]) * 60; };
+      // أيام الفترة بتوقيت KSA (لحساب أيام العمل المتوقّعة → الغياب).
+      const windowDows: number[] = []; { const seen = new Set<string>(); for (let cur = fromMs; cur <= toMs; cur += 12 * 3600 * 1000) { const ksa = new Date(cur + 3 * 3600 * 1000); const ds = ksa.toISOString().slice(0, 10); if (!seen.has(ds)) { seen.add(ds); windowDows.push(ksa.getUTCDay()); } } }
 
       // جلب البيانات دفعة واحدة (بلا N+1)
       const [sessRes, evRes, outRes, inRes, wsRes] = await Promise.all([
@@ -4006,12 +4009,17 @@ Deno.serve(async (req) => {
           if (best > 0) { const diff = (ot - best) / 1000; if (diff > 0 && diff < 12 * 3600) { rsum += diff; rcnt++; } }
         }
         const avgResp = rcnt ? Math.round(rsum / rcnt) : null;
-        // الالتزام = النشاط الفعلي مقابل ساعات الدوام المتوقّعة (الدوام المحدّد × أيام الحضور).
-        // لو ما حُدّد دوام، نرجع لنسبة النشاط من الوقت المسجّل.
-        const expected = (shiftSec != null) ? shiftSec * days.size : 0;
+        // أيام العمل المتوقّعة في الفترة (حسب أيام عمله المحدّدة) → الغياب.
+        const wdSet = (s.work_days && s.work_days.length) ? new Set(s.work_days) : null;
+        const expectedDays = wdSet ? windowDows.filter(d => wdSet.has(d)).length : null;
+        const absenceDays = (expectedDays != null) ? Math.max(0, expectedDays - days.size) : null;
+        // الالتزام = النشاط الفعلي مقابل ساعات الدوام المتوقّعة. الأساس: عدد أيام
+        // العمل المتوقّعة (يعاقب الغياب) إن حُدّدت أيام العمل، وإلا أيام الحضور.
+        const baseDays = (expectedDays != null) ? expectedDays : days.size;
+        const expected = (shiftSec != null) ? shiftSec * baseDays : 0;
         const compliance = expected > 0 ? Math.min(100, Math.round((active / expected) * 100)) : (total > 0 ? Math.round((active / total) * 100) : 0);
         const avgLate = lateCnt ? Math.round(lateSum / lateCnt) : null;
-        return { phone: s.phone, name: s.name, status: liveStatus, check_in_at: checkIn, check_out_at: checkOut, last_activity_at: lastAct, active_seconds: active, idle_seconds: idle, total_seconds: total, days_present: days.size, messages, clients, avg_response_seconds: avgResp, compliance, shift_start: s.shift_start || null, shift_end: s.shift_end || null, expected_seconds: expected, avg_late_seconds: avgLate, schedule_based: expected > 0, confirmed_bookings: confirmedBy[s.phone] || 0, unanswered: unansweredBy[s.phone] || 0 };
+        return { phone: s.phone, name: s.name, status: liveStatus, check_in_at: checkIn, check_out_at: checkOut, last_activity_at: lastAct, active_seconds: active, idle_seconds: idle, total_seconds: total, days_present: days.size, messages, clients, avg_response_seconds: avgResp, compliance, shift_start: s.shift_start || null, shift_end: s.shift_end || null, work_days: s.work_days || null, expected_days: expectedDays, absence_days: absenceDays, expected_seconds: expected, avg_late_seconds: avgLate, schedule_based: expected > 0, confirmed_bookings: confirmedBy[s.phone] || 0, unanswered: unansweredBy[s.phone] || 0 };
       });
       report.sort((a, b) => b.active_seconds - a.active_seconds);
       return new Response(JSON.stringify({ ok: true, is_admin: isAdmin, range, from: fromIso, to: toIso, report }), { headers: jsonCors });
