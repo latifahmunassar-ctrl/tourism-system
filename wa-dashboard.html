@@ -3184,14 +3184,18 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           const stageEmoji = ({INQUIRY:"🔍",READY_FOR_QUOTE:"📝",OFFER_SENT:"💼",BOOKING_IN_PROGRESS:"📋",BOOKING_CONFIRMED:"✅",TRAVELING:"✈️",POST_TRAVEL:"🔄"})[c.customer_stage] || "🔍";
           tags.push(`<span class="pill tag-case">${stageEmoji} ${escapeHtml(c.customer_stage)}</span>`);
         }
-        if (c.customer_type) {
+        // نوع العميل من التصنيف؛ وإن لم يُصنَّف بعد ولم يردّ عليه موظف → اعتبره «🆕 جديد»
+        // (محادثة جديدة لم تُعالَج بعد). المحادثات المُعالَجة بلا تصنيف تبقى بلا وسم كالسابق.
+        const ctRaw = c.customer_type || (!c.last_human_outbound_at ? "NEW_CUSTOMER" : "");
+        if (ctRaw) {
           const cls2 =
-            c.customer_type === "VIP_CUSTOMER" ? "tag-vip" :
-            c.customer_type === "CORPORATE_BUSINESS" ? "tag-corporate" :
-            c.customer_type === "PARTNERSHIP" ? "tag-partnership" :
-            c.customer_type === "REPEAT_CUSTOMER" ? "tag-repeat" :
+            ctRaw === "VIP_CUSTOMER" ? "tag-vip" :
+            ctRaw === "CORPORATE_BUSINESS" ? "tag-corporate" :
+            ctRaw === "PARTNERSHIP" ? "tag-partnership" :
+            ctRaw === "REPEAT_CUSTOMER" ? "tag-repeat" :
             "tag-new";
-          tags.push(`<span class="pill ${cls2}">${escapeHtml(c.customer_type)}</span>`);
+          const ctLabel = ({ NEW_CUSTOMER: "🆕 جديد", REPEAT_CUSTOMER: "🔁 متكرر", VIP_CUSTOMER: "⭐ VIP", CORPORATE_BUSINESS: "🏢 شركة", PARTNERSHIP: "🤝 شراكة" })[ctRaw] || ctRaw;
+          tags.push(`<span class="pill ${cls2}">${escapeHtml(ctLabel)}</span>`);
         }
         if (c.case_type) {
           const cls3 = c.case_type === "COMPLAINT" ? "tag-complaint" :
