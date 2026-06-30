@@ -589,7 +589,9 @@ function humanTypingDelayMs(text: string): number {
 // حتى لو انزلقت من الموديل رغم منعها في البرومبت. ثم ينظّف الفراغات والعلامات.
 function stripBannedPhrases(text: string): string {
   if (!text) return text;
-  let t = text;
+  // تجريد كل التشكيل (الحركات: فتحة/ضمة/كسرة/شدّة/تنوين/سكون + الألف الخنجرية)
+  // ضمانًا لانطباع كتابة بشرية على واتساب — حتى لو أضاف الـLLM حركات رغم التعليمات.
+  let t = text.replace(/[ً-ْٰ]/g, "");
   const banned: RegExp[] = [
     /تمام\s+تمام/g, /تمام\s+التمام/g,
     /تمام\s+نمرة\s*واحدة/g, /نمرة\s+واحدة/g,
@@ -1027,6 +1029,29 @@ function normalizeWhatsappPhone(raw: string): string {
   return `whatsapp:+${digits}`;
 }
 
+// ── الحضور والنشاط: تسجيل حدث فعلي + تحديث الجلسة المفتوحة (event-based) ──
+const ATTEND_IDLE_SEC = 15 * 60; // عتبة الخمول: ١٥ دقيقة بلا نشاط
+async function recordActivity(
+  supabase: ReturnType<typeof createClient>,
+  phone: string, name: string | null, type: string,
+  ip: string | null, ua: string | null,
+): Promise<void> {
+  const now = new Date().toISOString();
+  try { await supabase.from("activity_events").insert({ staff_phone: phone, staff_name: name, event_type: type, created_at: now, ip, user_agent: ua }); } catch (_e) { /* */ }
+  // أي نشاط يحدّث آخر نشاط للجلسة المفتوحة ويعيد الحالة Active (يوقف الخمول).
+  try { await supabase.from("attendance_sessions").update({ last_activity_at: now, status: "active" }).eq("staff_phone", phone).is("check_out_at", null); } catch (_e) { /* */ }
+}
+// حساب ثواني النشاط/الخمول من فجوات الأحداث (فجوة < العتبة = نشاط، وإلا خمول).
+function splitActiveIdle(checkInIso: string, eventIsos: string[], endIso: string): { active: number; idle: number } {
+  let prev = new Date(checkInIso).getTime();
+  const end = new Date(endIso).getTime();
+  let active = 0, idle = 0;
+  const ts = eventIsos.map(s => new Date(s).getTime()).filter(t => t >= prev && t <= end).sort((a, b) => a - b);
+  for (const t of ts) { const gap = (t - prev) / 1000; if (gap > 0) { if (gap < ATTEND_IDLE_SEC) active += gap; else idle += gap; } prev = t; }
+  const tail = (end - prev) / 1000; if (tail > 0) { if (tail < ATTEND_IDLE_SEC) active += tail; else idle += tail; }
+  return { active: Math.round(active), idle: Math.round(idle) };
+}
+
 // ── Staff identity guard ─────────────────────────────────────────────────
 // Any phone in wa_staff (or the legacy SALES_/COMPLAINTS_ env lists) is a
 // staff member, not a customer. Free-text messages from staff are blocked
@@ -1264,6 +1289,8 @@ async function handleNewLeadIntake(args: {
   }
   const sys = `أنت «طلال»، موظف خدمة عملاء لوكالة سفر، تتكلم بلهجة خليجية ودودة ومختصرة (لا فصحى).
 ⚠️ الاحترام أساسي: تكلّم بلباقة واحترام دائماً. ابدأ أسئلتك بعبارة مؤدبة مثل «حاضر» أو «أبشر» أو «حياك الله» ثم اطرح السؤال بلطف. ممنوع الأسلوب الجاف أو المختصر بطريقة غير لائقة.
+⛔⛔ قاعدة صارمة: **ممنوع منعاً باتاً تذكر اسم العميل إطلاقاً** — حتى لو عرّف عن نفسه أو ظهر اسمه في المحادثة. نادِه **دائماً** بـ«أستاذي» (أو «أستاذ» / «أستاذتي» للأنثى) فقط. ❌ ممنوع «حاضر يا عباس» — الصحيح «حاضر أستاذي».
+⛔ اكتب **بدون أي تشكيل (حركات) إطلاقاً**: لا فتحة ولا ضمة ولا كسرة ولا شدّة ولا تنوين ولا سكون ولا مدّة. كتابة عادية مثل أي إنسان على واتساب، عشان يكون الانطباع بشري بحت.
 - مثال صحيح: «أبشر، وين حابين تسافرون؟» / «حاضر، أي وجهة في بالكم؟»
 - مثال خاطئ (ممنوع): «وين بتروح؟» / «وش تبي؟» / «كم عددكم؟» بدون مقدمة مؤدبة.
 ⛔⛔ القاعدة الأهم على الإطلاق — ممنوع منعاً باتاً أن تعطي أي معلومة من عندك:
@@ -1466,12 +1493,16 @@ async function handleMessage(args: {
   }
 
   // عميل قديم (سبق رددنا عليه أو اكتمل استقباله) عاد بطلب **وجهة جديدة** (مختلفة عن
-  // وجهته السابقة) → نعيد تفعيل طلال بترحيب «بعودتك» وجمع معلومات الرحلة الجديدة من جديد.
+  // وجهته السابقة) → نعيد تفعيل طلال لجمع معلومات الرحلة الجديدة.
+  // ❌ بلا ترحيب أو تعريف من جديد («سعدنا بعودتك / معك طلال») مهما طالت المدة —
+  //    العميل يعرفنا، فلا نمرّر returning (وبوجود ردود سابقة يعتبره طلال «منتصف
+  //    محادثة» فلا يعرّف بنفسه). نبذر الوجهة المكتشفة في intake_data حتى لا يعيد
+  //    سؤالها، ونمسح بقية تفاصيل الرحلة القديمة فقط (العدد/التاريخ/الأعمار/المدن).
   if (s?.intake_active !== true && detectedDest && detectedDest !== hadDest) {
     await supabase.from("whatsapp_sessions")
-      .update({ intake_active: true, intake_data: null, destination: detectedDest })
+      .update({ intake_active: true, intake_data: { destination: detectedDest }, destination: detectedDest })
       .eq("phone", from);
-    await handleNewLeadIntake({ supabase, from, body: text, returning: true });
+    await handleNewLeadIntake({ supabase, from, body: text });
     return;
   }
 
@@ -2334,6 +2365,30 @@ async function buildConversationContext(
 
 const MODEL_FAST = "claude-haiku-4-5-20251001";   // رخيص — للمتكرّر/البسيط
 const MODEL_DEEP = "claude-sonnet-4-6";            // أغلى وأذكى — للجديد/التحليل العميق
+
+// تصنيف دفعي لرسائل الموظفين الرمادية: هل كل رسالة ردّ فعلي أم وعد/مجاملة؟
+// يُستدعى في الخلفية (waitUntil) للحالات غير المخزّنة فقط، ويُخزَّن في wa_reply_verdict.
+// مفتاح كل رسالة ثابت (phone|sent_at) فتُصنَّف مرّة واحدة فقط طوال العمر.
+async function classifyStaffReplies(
+  supabase: ReturnType<typeof createClient>,
+  items: Array<{ key: string; body: string }>,
+): Promise<void> {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey || !items.length) return;
+  try {
+    const anthropic = new Anthropic({ apiKey });
+    const list = items.map((it, i) => `${i + 1}. ${String(it.body || "").replace(/\s+/g, " ").trim().slice(0, 220)}`).join("\n");
+    const sys = "أنت تصنّف رسائل موظف خدمة عملاء في وكالة سياحة (الرسالة من الموظف للعميل). لكل رسالة قرّر true أو false:\n- true = ردّ فعلي يضع الكرة في ملعب العميل: جواب/سعر/برنامج/فندق/معلومة، **أو أي سؤال موجّه للعميل** (مثل «كم مدة الإقامة؟»، «متى السفر؟»، «تحبون فندق ٥ نجوم؟») — لأن العميل هو من يتأخّر بعدها لا الموظف.\n- false = وعد بالإرسال/التجهيز لاحقاً («الآن أرسلك»، «راح أجهّز لك»، «قيد التنفيذ»، «بنعمل لك حجز») أو مجاملة/تطمين بلا محتوى ولا سؤال.\nأي رسالة فيها سؤال للعميل = true دائماً. أعِد JSON array من قيم منطقية فقط بنفس ترتيب الرسائل، بلا أي شرح.";
+    const res = await anthropic.messages.create({ model: MODEL_FAST, max_tokens: 800, system: sys, messages: [{ role: "user", content: list }] });
+    const txt = (res.content as Array<{ type: string; text?: string }>).filter(b => b.type === "text").map(b => b.text || "").join("");
+    const m = txt.match(/\[[\s\S]*\]/);
+    if (!m) return;
+    const arr = JSON.parse(m[0]) as unknown[];
+    const rows = items.map((it, i) => ({ msg_key: it.key, is_reply: arr[i] === true, body_preview: String(it.body || "").slice(0, 120) }))
+      .filter((_, i) => typeof arr[i] === "boolean");
+    if (rows.length) await supabase.from("wa_reply_verdict").upsert(rows, { onConflict: "msg_key" });
+  } catch (_e) { /* تجاهل — القاعدة المجانية تبقى الاحتياط */ }
+}
 
 async function analyzeUnknownQuestion(
   supabase: ReturnType<typeof createClient>,
@@ -3510,6 +3565,65 @@ Deno.serve(async (req) => {
           latestMsgByPhone.set(a.from_phone, { body: a.body, received_at: a.received_at });
         }
       }
+      // آخر ردّ **بشري فعلي** لكل عميل — نستبعد البوت/التلقائي فقط: طلال (AI) و«تأكيد
+      // تلقائي». «النظام» = إرسال البرنامج (PDF) الذي تبنيه الموظفة وترسله عبر المنصة،
+      // فهو ردّ بشري فعلي ويُحتسب. ونستبعد ردود المجاملة القصيرة («ابشر/لحظة»).
+      const BOT_SENDERS = new Set(["طلال", "تأكيد تلقائي"]);
+      // «ليست ردّاً فعلياً»: مجاملة/إقرار قصير، أو وعد بالإرسال («الآن أرسلك البرنامج»)
+      // فالعميل لا يزال ينتظر الردّ/الملف الفعلي.
+      const isStaffAck = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return true; const n = [...s].length; if (n <= 6) return true; return n <= 15 && /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|ابشر|أبشر|تبشر|حاضر|حياك|اهلا|أهلا|هلا|لحظة|لحظه|ثانية|ثواني|دقيقة|دقيقه|👍|🙏|❤|🌹|💚|💐|🤍|يعطيك|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(s); };
+      const isStaffPromise = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return false; if (/أرسلت|ارسلت|رسلت|جهّزت|جهزت|عملت|سويت|بعثت|أعطيت|اعطيت|رتبت|وصلك|وصلت|تفضل|هذا برنامج/.test(s)) return false; return /((الان|الحين|حالا|راح|رح|سوف|توني|تبشر|ابشر|أبشر).{0,10}(ا?رسل|ا?جهز|جهّز|ا?عمل|ا?سوي|ابعث|ا?خلص|ا?كمل|ا?رتب|أرتب))|(^\s*(بأرسل|بارسل|بجهز|باجهز|بأجهز|بسوي|باعمل|بعمل|برتب|بخلص|بكمل|سأرسل|سارسل))|((ثوان|لحظ|دقيق|دقاي).{0,12}(ا?رسل|ا?جهز|ا?عمل|ا?سوي))|(جاري.{0,8}(تجهيز|الت|الإرسال|الارسال|العمل|عمل))/.test(s); };
+      // ردّ فعلي قطعاً يضع الكرة بملعب العميل (لا يحتاج AI): سؤال موجّه له، أو تسليم ملف/رابط،
+      // أو طلب تأكيد منه. فالعميل هو من يتأخّر بعدها لا الموظف.
+      const isStaffQuestion = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return false; if (/[؟?]/.test(s)) return true; return /(^|\s)(كم|كام|متى|وين|اين|أين|هل|كيف|ايش|أيش|وش|وشو|تبي|تبغى|تبغون|تبون|تحب|تحبو|تحبون|ودك|عندك|عندكم|تنوون|تخططون|مين)(\s|$|[،.!:])/.test(s); };
+      const isStaffDelivery = (t: string | null): boolean => { const s = String(t || ""); return /📎|https?:\/\/|\[ملف|ملف البرنامج/.test(s) || /في انتظار\s*(تاكيد|تأكيد|رد|ردّ|موافق|اختيار|اعتماد)\S{0,3}كم/.test(s); };
+      const isDefiniteReply = (t: string | null): boolean => isStaffQuestion(t) || isStaffDelivery(t);
+      const { data: humanOuts } = phones.length
+        ? await supabase.from("wa_admin_messages").select("customer_phone, sent_at, sent_by, body")
+            .in("customer_phone", phones).order("sent_at", { ascending: false }).limit(20000)
+        : { data: [] as Array<Record<string, unknown>> };
+      const humanRows = (humanOuts as Array<{ customer_phone: string; sent_at: string; sent_by: string | null; body: string | null }> ?? []);
+      // المرشّح الذي يحتاج تحقّق Haiku = أحدث رسالة موظف غير-مجاملة وغير-سؤال لكل عميل.
+      // (المجاملة قطعاً ليست رداً؛ السؤال قطعاً ردّ — كلاهما يُحسم بالقاعدة بلا AI.)
+      const latestCand = new Map<string, { key: string; sent_at: string; body: string | null }>();
+      const decided = new Set<string>();
+      for (const m of humanRows) {
+        const ph = m.customer_phone;
+        if (decided.has(ph)) continue;
+        if (BOT_SENDERS.has(String(m.sent_by || "").trim())) continue;
+        if (isStaffAck(m.body)) continue;             // مجاملة → ليست الرسالة الحاسمة
+        decided.add(ph);                              // أول رسالة غير-مجاملة = الحاسمة
+        if (isDefiniteReply(m.body)) continue;        // سؤال/ملف/طلب تأكيد = ردّ قطعاً، لا يحتاج AI
+        latestCand.set(ph, { key: ph + "|" + m.sent_at, sent_at: m.sent_at, body: m.body });
+      }
+      // اقرأ أحكام Haiku المخزّنة لهؤلاء المرشّحين
+      const verdicts = new Map<string, boolean>();
+      const candKeys = [...latestCand.values()].map(c => c.key);
+      for (let i = 0; i < candKeys.length; i += 300) {
+        const { data: vd } = await supabase.from("wa_reply_verdict").select("msg_key, is_reply").in("msg_key", candKeys.slice(i, i + 300));
+        for (const v of (vd as Array<{ msg_key: string; is_reply: boolean }> ?? [])) verdicts.set(v.msg_key, v.is_reply);
+      }
+      const toClassify = [...latestCand.values()].filter(c => !verdicts.has(c.key)).map(c => ({ key: c.key, body: c.body || "" }));
+      const lastHumanOutByPhone = new Map<string, string>();
+      for (const m of humanRows) {
+        const ph = m.customer_phone;
+        if (lastHumanOutByPhone.has(ph)) continue;
+        if (BOT_SENDERS.has(String(m.sent_by || "").trim())) continue;
+        if (isStaffAck(m.body)) continue;
+        const cand = latestCand.get(ph);
+        const key = ph + "|" + m.sent_at;
+        // سؤال/ملف/طلب تأكيد = ردّ قطعاً. غير ذلك: حكم Haiku للمرشّح الأحدث إن وُجد، وإلا القاعدة.
+        const isReply = isDefiniteReply(m.body) ? true
+          : (cand && cand.key === key && verdicts.has(key)) ? verdicts.get(key)! : !isStaffPromise(m.body);
+        if (isReply) lastHumanOutByPhone.set(ph, m.sent_at);
+      }
+      // صنّف غير المخزّن في الخلفية (لا يبطّئ الرد) — يُطبَّق في التحديث التالي.
+      if (toClassify.length) {
+        const _task = classifyStaffReplies(supabase, toClassify.slice(0, 40));
+        // @ts-ignore EdgeRuntime injected by Supabase
+        if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") EdgeRuntime.waitUntil(_task);
+        else _task.catch(() => {});
+      }
 
       const conversationsEnriched = (sessions ?? []).map((s: Record<string, unknown>) => {
         const phone = s.phone as string;
@@ -3535,6 +3649,7 @@ Deno.serve(async (req) => {
           priority: cls.priority ?? null,
           last_message_body: lastMsg?.body ?? null,
           last_inbound_at: lastMsg?.received_at ?? null,
+          last_human_outbound_at: lastHumanOutByPhone.get(phone) ?? null,
         };
       });
 
@@ -3798,6 +3913,223 @@ Deno.serve(async (req) => {
       const { error } = await supabase.from("wa_staff_passkeys").delete().eq("staff_phone", phone);
       if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonCors });
       return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // ── الحضور والانصراف + تتبّع النشاط (event-based) ─────────────────────
+  // بدء الدوام — للموظف فقط (الأدمن/المالكة بلا staff session لا يسجّل دوام).
+  if (url.searchParams.get("admin_action") === "attendance_check_in") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    const staff = await getCallerStaff(req);
+    if (!staff) return new Response(JSON.stringify({ error: "الحضور للموظفين فقط" }), { status: 403, headers: jsonCors });
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || null;
+      const ua = req.headers.get("user-agent") || null;
+      const { data: open } = await supabase.from("attendance_sessions").select("id, check_in_at").eq("staff_phone", staff.phone).is("check_out_at", null).order("check_in_at", { ascending: false }).limit(1).maybeSingle();
+      if (open) { await recordActivity(supabase, staff.phone, staff.name, "resume", ip, ua); return new Response(JSON.stringify({ ok: true, already: true, id: (open as { id: string }).id }), { headers: jsonCors }); }
+      const now = new Date().toISOString();
+      const ksaToday = new Date(Date.now() + 3 * 3600 * 1000).toISOString().slice(0, 10);
+      const { data, error } = await supabase.from("attendance_sessions").insert({ staff_phone: staff.phone, staff_name: staff.name, work_date: ksaToday, check_in_at: now, last_activity_at: now, status: "active" }).select("id").single();
+      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonCors });
+      await recordActivity(supabase, staff.phone, staff.name, "check_in", ip, ua);
+      return new Response(JSON.stringify({ ok: true, id: (data as { id: string }).id, check_in_at: now }), { headers: jsonCors });
+    } catch (e) { return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors }); }
+  }
+
+  // إنهاء الدوام — يحسب النشاط/الخمول من الأحداث ويقفل الجلسة.
+  if (url.searchParams.get("admin_action") === "attendance_check_out") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    const staff = await getCallerStaff(req);
+    if (!staff) return new Response(JSON.stringify({ error: "الحضور للموظفين فقط" }), { status: 403, headers: jsonCors });
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: open } = await supabase.from("attendance_sessions").select("id, check_in_at").eq("staff_phone", staff.phone).is("check_out_at", null).order("check_in_at", { ascending: false }).limit(1).maybeSingle();
+      if (!open) return new Response(JSON.stringify({ ok: true, no_session: true }), { headers: jsonCors });
+      const o = open as { id: string; check_in_at: string };
+      const now = new Date().toISOString();
+      const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || null;
+      const ua = req.headers.get("user-agent") || null;
+      await recordActivity(supabase, staff.phone, staff.name, "check_out", ip, ua);
+      const { data: evs } = await supabase.from("activity_events").select("created_at").eq("staff_phone", staff.phone).gte("created_at", o.check_in_at).order("created_at", { ascending: true }).limit(5000);
+      const { active, idle } = splitActiveIdle(o.check_in_at, ((evs || []) as Array<{ created_at: string }>).map(e => e.created_at), now);
+      await supabase.from("attendance_sessions").update({ check_out_at: now, active_seconds: active, idle_seconds: idle, status: "offline", last_activity_at: now }).eq("id", o.id);
+      const total = Math.round((new Date(now).getTime() - new Date(o.check_in_at).getTime()) / 1000);
+      return new Response(JSON.stringify({ ok: true, check_out_at: now, total_seconds: total, active_seconds: active, idle_seconds: idle }), { headers: jsonCors });
+    } catch (e) { return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors }); }
+  }
+
+  // حالة دوامي الحالية (لزر الواجهة): مسجَّل دخول؟ active/idle؟
+  if (url.searchParams.get("admin_action") === "attendance_status") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    const staff = await getCallerStaff(req);
+    if (!staff) return new Response(JSON.stringify({ ok: true, is_staff: false }), { headers: jsonCors });
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: open } = await supabase.from("attendance_sessions").select("id, check_in_at, last_activity_at").eq("staff_phone", staff.phone).is("check_out_at", null).order("check_in_at", { ascending: false }).limit(1).maybeSingle();
+    if (!open) return new Response(JSON.stringify({ ok: true, is_staff: true, checked_in: false, staff_name: staff.name }), { headers: jsonCors });
+    const o = open as { id: string; check_in_at: string; last_activity_at: string };
+    const idleSec = (Date.now() - new Date(o.last_activity_at).getTime()) / 1000;
+    return new Response(JSON.stringify({ ok: true, is_staff: true, checked_in: true, status: idleSec >= ATTEND_IDLE_SEC ? "idle" : "active", check_in_at: o.check_in_at, last_activity_at: o.last_activity_at, staff_name: staff.name }), { headers: jsonCors });
+  }
+
+  // تسجيل نشاط فعلي من الواجهة (فتح محادثة، تعديل…) — الأدمن no-op.
+  if (url.searchParams.get("admin_action") === "track_activity") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    const staff = await getCallerStaff(req);
+    if (!staff) return new Response(JSON.stringify({ ok: true, skipped: true }), { headers: jsonCors });
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const p = await req.json().catch(() => ({} as Record<string, unknown>));
+      const type = String((p as { type?: string }).type || "activity").slice(0, 40);
+      const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || null;
+      const ua = req.headers.get("user-agent") || null;
+      await recordActivity(supabase, staff.phone, staff.name, type, ip, ua);
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) { return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors }); }
+  }
+
+  // تحديد دوام الموظف (وقت دخول/خروج متوقّع) — المدير فقط.
+  if (url.searchParams.get("admin_action") === "set_staff_schedule") {
+    if (!ownerGate(req)) return unauthorized();
+    try {
+      const p = await req.json();
+      const phone = normalizeWhatsappPhone(String(p.phone || ""));
+      const clean = (v: unknown) => { const s = String(v || "").trim(); return /^\d{1,2}:\d{2}$/.test(s) ? s.padStart(5, "0") : null; };
+      const wd = Array.isArray(p.work_days) ? [...new Set((p.work_days as unknown[]).map(Number).filter(n => Number.isInteger(n) && n >= 0 && n <= 6))].sort() : null;
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { error } = await supabase.from("wa_staff").update({ shift_start: clean(p.shift_start), shift_end: clean(p.shift_end), work_days: wd }).eq("phone", phone);
+      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonCors });
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) { return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors }); }
+  }
+
+  // تقرير الحضور والإنتاجية — المدير يرى الجميع، الموظف يرى نفسه فقط (خادمياً).
+  if (url.searchParams.get("admin_action") === "attendance_report") {
+    const caller = await getCallerStaff(req);
+    const isAdmin = !caller && ownerGate(req);
+    if (!caller && !isAdmin) return unauthorized();
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const range = url.searchParams.get("range") || "day";
+      const DAY = 24 * 3600 * 1000; const nowMs = Date.now();
+      let fromMs = nowMs - DAY;
+      if (range === "week") fromMs = nowMs - 7 * DAY;
+      else if (range === "month") fromMs = nowMs - 30 * DAY;
+      else if (range === "all") fromMs = 0;
+      else if (range === "custom") { const f = url.searchParams.get("from"); if (f) fromMs = Date.parse(f + "T00:00:00Z"); }
+      let toMs = nowMs;
+      if (range === "custom") { const t = url.searchParams.get("to"); if (t) toMs = Date.parse(t + "T23:59:59Z"); }
+      const fromIso = new Date(fromMs).toISOString(); const toIso = new Date(toMs).toISOString();
+
+      // قائمة الموظفين المستهدفين (مع دوامهم وأيام عملهم المحدّدة)
+      let staffRows: Array<{ phone: string; name: string; shift_start: string | null; shift_end: string | null; work_days: number[] | null }> = [];
+      { const sel = supabase.from("wa_staff").select("phone, name, shift_start, shift_end, work_days");
+        const { data } = caller ? await sel.eq("phone", caller.phone) : await sel.eq("active", true);
+        staffRows = (data || []) as typeof staffRows; }
+      const names = staffRows.map(s => s.name);
+      const hhmmSec = (s: string | null): number | null => { if (!s) return null; const m = /^(\d{1,2}):(\d{2})$/.exec(s); if (!m) return null; return (+m[1]) * 3600 + (+m[2]) * 60; };
+      // أيام الفترة بتوقيت KSA (لحساب أيام العمل المتوقّعة → الغياب).
+      const windowDows: number[] = []; { const seen = new Set<string>(); for (let cur = fromMs; cur <= toMs; cur += 12 * 3600 * 1000) { const ksa = new Date(cur + 3 * 3600 * 1000); const ds = ksa.toISOString().slice(0, 10); if (!seen.has(ds)) { seen.add(ds); windowDows.push(ksa.getUTCDay()); } } }
+
+      // جلب البيانات دفعة واحدة (بلا N+1)
+      const [sessRes, evRes, outRes, inRes, wsRes] = await Promise.all([
+        supabase.from("attendance_sessions").select("staff_phone, work_date, check_in_at, check_out_at, active_seconds, idle_seconds, last_activity_at").gte("check_in_at", fromIso).lte("check_in_at", toIso).limit(5000),
+        supabase.from("activity_events").select("staff_phone, created_at").gte("created_at", fromIso).lte("created_at", toIso).limit(20000),
+        supabase.from("wa_admin_messages").select("sent_by, customer_phone, sent_at, body").in("sent_by", names.length ? [...names, "النظام"] : ["النظام"]).gte("sent_at", fromIso).lte("sent_at", toIso).limit(15000),
+        supabase.from("wa_message_audit").select("from_phone, received_at, body").gte("received_at", fromIso).lte("received_at", toIso).limit(20000),
+        // حالة المحادثات المُسنَدة (لقطة حالية): مؤكّدة / غير مردودة / شافتها بلا رد.
+        supabase.from("whatsapp_sessions").select("phone, assigned_staff_phone, label, last_message_at, last_outbound_at, last_opened_at").not("assigned_staff_phone", "is", null).limit(8000),
+      ]);
+      const sessions = (sessRes.data || []) as Array<{ staff_phone: string; work_date: string; check_in_at: string; check_out_at: string | null; active_seconds: number; idle_seconds: number; last_activity_at: string }>;
+      const events = (evRes.data || []) as Array<{ staff_phone: string; created_at: string }>;
+      const outs = (outRes.data || []) as Array<{ sent_by: string; customer_phone: string; sent_at: string; body: string | null }>;
+      const ins = (inRes.data || []) as Array<{ from_phone: string; received_at: string; body: string | null }>;
+
+      // رسالة تأكيد/شكر قصيرة لا تتطلب رداً
+      const isAckText = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return true; if (/[؟?]/.test(s) || /(^|[\s،])(كم|بكم|وكم|كام|متى|وين|فين|كيف|ليش|ليه|هل|ايش|أيش|وش|سعر|السعر|الاسعار|التكلفه|التكلفة)([\s،؟?]|$)/i.test(s)) return false; if ([...s].length <= 6) return true; return /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|👍|🙏|❤|🌹|💚|💐|🤍|الله ?يعطيك|يعطيك ?العاف|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(s); };
+      // فهرسة الوارد لكل عميل (لحساب زمن الاستجابة) + آخر نص وارد.
+      const inByPhone: Record<string, number[]> = {};
+      const lastInBody: Record<string, { ts: number; body: string | null }> = {};
+      for (const m of ins) { const ts = Date.parse(m.received_at); (inByPhone[m.from_phone] ||= []).push(ts); if (!lastInBody[m.from_phone] || ts > lastInBody[m.from_phone].ts) lastInBody[m.from_phone] = { ts, body: m.body }; }
+      for (const k in inByPhone) inByPhone[k].sort((a, b) => a - b);
+      const evByPhone: Record<string, string[]> = {};
+      for (const e of events) { (evByPhone[e.staff_phone] ||= []).push(e.created_at); }
+      // آخر ردّ **موظف** لكل عميل: ردود الموظفين + إرسال البرامج «النظام» (ردّ بشري عبر
+      // المنصة) — تستبعد طلال/التلقائي. «النظام» تُحتسب كردّ بالمحادثة لكن لا تُنسب لموظف.
+      // «ليست ردّاً فعلياً»: مجاملة قصيرة أو وعد بالإرسال (نفس قاعدة dashboard_data).
+      const isStaffAck = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return true; const n = [...s].length; if (n <= 6) return true; return n <= 15 && /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|ابشر|أبشر|تبشر|حاضر|حياك|اهلا|أهلا|هلا|لحظة|لحظه|ثانية|ثواني|دقيقة|دقيقه|👍|🙏|❤|🌹|💚|💐|🤍|يعطيك|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(s); };
+      const isStaffPromise = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return false; if (/أرسلت|ارسلت|رسلت|جهّزت|جهزت|عملت|سويت|بعثت|أعطيت|اعطيت|رتبت|وصلك|وصلت|تفضل|هذا برنامج/.test(s)) return false; return /((الان|الحين|حالا|راح|رح|سوف|توني|تبشر|ابشر|أبشر).{0,10}(ا?رسل|ا?جهز|جهّز|ا?عمل|ا?سوي|ابعث|ا?خلص|ا?كمل|ا?رتب|أرتب))|(^\s*(بأرسل|بارسل|بجهز|باجهز|بأجهز|بسوي|باعمل|بعمل|برتب|بخلص|بكمل|سأرسل|سارسل))|((ثوان|لحظ|دقيق|دقاي).{0,12}(ا?رسل|ا?جهز|ا?عمل|ا?سوي))|(جاري.{0,8}(تجهيز|الت|الإرسال|الارسال|العمل|عمل))/.test(s); };
+      const isStaffQuestion = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return false; if (/[؟?]/.test(s)) return true; return /(^|\s)(كم|كام|متى|وين|اين|أين|هل|كيف|ايش|أيش|وش|وشو|تبي|تبغى|تبغون|تبون|تحب|تحبو|تحبون|ودك|عندك|عندكم|تنوون|تخططون|مين)(\s|$|[،.!:])/.test(s); };
+      const isStaffDelivery = (t: string | null): boolean => { const s = String(t || ""); return /📎|https?:\/\/|\[ملف|ملف البرنامج/.test(s) || /في انتظار\s*(تاكيد|تأكيد|رد|ردّ|موافق|اختيار|اعتماد)\S{0,3}كم/.test(s); };
+      // سؤال/ملف/طلب تأكيد للعميل = ردّ (الكرة بملعبه)؛ يتقدّم على استبعاد الوعد/المجاملة.
+      const isNonReply = (t: string | null): boolean => !(isStaffQuestion(t) || isStaffDelivery(t)) && (isStaffAck(t) || isStaffPromise(t));
+      const lastStaffOutByPhone: Record<string, number> = {};
+      for (const o of outs) { if (isNonReply(o.body)) continue; const t = Date.parse(o.sent_at); if (!lastStaffOutByPhone[o.customer_phone] || t > lastStaffOutByPhone[o.customer_phone]) lastStaffOutByPhone[o.customer_phone] = t; }
+      // تجميع لكل موظف: حجوزات مؤكّدة + غير مردودة (آخر نشاط من العميل) + منها كم شافتها بلا رد.
+      const confirmedBy: Record<string, number> = {}, unansweredBy: Record<string, number> = {}, unansweredSeenBy: Record<string, number> = {};
+      for (const w of ((wsRes.data || []) as Array<{ phone: string; assigned_staff_phone: string; label: string | null; last_message_at: string | null; last_outbound_at: string | null; last_opened_at: string | null }>)) {
+        const ph = w.assigned_staff_phone;
+        if (w.label === "CONFIRMED") confirmedBy[ph] = (confirmedBy[ph] || 0) + 1;
+        const lm = w.last_message_at ? Date.parse(w.last_message_at) : 0;
+        const lo = lastStaffOutByPhone[w.phone] || 0;   // آخر ردّ موظف (مو البوت)
+        const lop = w.last_opened_at ? Date.parse(w.last_opened_at) : 0;
+        // غير مردودة: العميل أحدث من ردّ الموظف، **ورسالته الأخيرة جوهرية** (لا شكر/تأكيد/إغلاق).
+        // رسالة الشكر («جزاك الله»، «شكراً»، 🌹) تُنهي المحادثة فلا تُحسب بانتظار رد ولو مرّ وقت.
+        const lastTxt = lastInBody[w.phone]?.body ?? null;
+        const unanswered = lm > 0 && lm > lo && !isAckText(lastTxt);
+        if (unanswered) { unansweredBy[ph] = (unansweredBy[ph] || 0) + 1; if (lop >= lm) unansweredSeenBy[ph] = (unansweredSeenBy[ph] || 0) + 1; }
+      }
+
+      const report = staffRows.map(s => {
+        const ss = sessions.filter(x => x.staff_phone === s.phone);
+        let active = 0, idle = 0; const days = new Set<string>();
+        let liveStatus = "offline", lastAct: string | null = null, checkIn: string | null = null, checkOut: string | null = null;
+        let latestStart = 0;
+        const shStart = hhmmSec(s.shift_start), shEnd = hhmmSec(s.shift_end);
+        const shiftSec = (shStart != null && shEnd != null && shEnd > shStart) ? (shEnd - shStart) : null;
+        let lateSum = 0, lateCnt = 0;
+        for (const x of ss) {
+          days.add(x.work_date);
+          if (x.check_out_at) { active += x.active_seconds; idle += x.idle_seconds; }
+          else { const { active: a, idle: i } = splitActiveIdle(x.check_in_at, evByPhone[s.phone] || [], new Date(nowMs).toISOString()); active += a; idle += i; const idleSec = (nowMs - Date.parse(x.last_activity_at)) / 1000; liveStatus = idleSec >= ATTEND_IDLE_SEC ? "idle" : "active"; lastAct = x.last_activity_at; }
+          const st = Date.parse(x.check_in_at); if (st > latestStart) { latestStart = st; checkIn = x.check_in_at; checkOut = x.check_out_at; }
+          // التأخير: وقت الدخول الفعلي (بتوقيت KSA) مقابل وقت الدخول المتوقّع.
+          if (shStart != null) { const todSec = ((Date.parse(x.check_in_at) + 3 * 3600 * 1000) % 86400000) / 1000; const late = todSec - shStart; if (late > 0) { lateSum += late; lateCnt++; } }
+        }
+        // الحالة الحيّة = حسب آخر نشاط فعلي (تظهر «متصل/نشط» متى عملت فعلاً، حتى قبل
+        // ضغط «بدء الدوام»). الساعات تبقى من جلسات الدوام المسجَّلة.
+        let lastEvMs = lastAct ? Date.parse(lastAct) : 0;
+        for (const t of (evByPhone[s.phone] || [])) { const m = Date.parse(t); if (m > lastEvMs) lastEvMs = m; }
+        if (lastEvMs) { const gap = (nowMs - lastEvMs) / 1000; liveStatus = gap < ATTEND_IDLE_SEC ? "active" : (gap < 3600 ? "idle" : "offline"); lastAct = new Date(lastEvMs).toISOString(); }
+        const total = active + idle;
+        const myOut = outs.filter(o => o.sent_by === s.name);
+        const messages = myOut.length;
+        const clients = new Set(myOut.map(o => o.customer_phone)).size;
+        // متوسط زمن الاستجابة: لكل رسالة صادرة، أقرب وارد سابق لنفس العميل خلال ١٢ ساعة
+        let rsum = 0, rcnt = 0;
+        for (const o of myOut) {
+          const arr = inByPhone[o.customer_phone]; if (!arr) continue;
+          const ot = Date.parse(o.sent_at); let lo = 0, hi = arr.length - 1, best = -1;
+          while (lo <= hi) { const mid = (lo + hi) >> 1; if (arr[mid] < ot) { best = arr[mid]; lo = mid + 1; } else hi = mid - 1; }
+          if (best > 0) { const diff = (ot - best) / 1000; if (diff > 0 && diff < 12 * 3600) { rsum += diff; rcnt++; } }
+        }
+        const avgResp = rcnt ? Math.round(rsum / rcnt) : null;
+        // أيام العمل المتوقّعة في الفترة (حسب أيام عمله المحدّدة) → الغياب.
+        const wdSet = (s.work_days && s.work_days.length) ? new Set(s.work_days) : null;
+        const expectedDays = wdSet ? windowDows.filter(d => wdSet.has(d)).length : null;
+        const absenceDays = (expectedDays != null) ? Math.max(0, expectedDays - days.size) : null;
+        // الالتزام = النشاط الفعلي مقابل ساعات الدوام المتوقّعة. الأساس: عدد أيام
+        // العمل المتوقّعة (يعاقب الغياب) إن حُدّدت أيام العمل، وإلا أيام الحضور.
+        const baseDays = (expectedDays != null) ? expectedDays : days.size;
+        const expected = (shiftSec != null) ? shiftSec * baseDays : 0;
+        const compliance = expected > 0 ? Math.min(100, Math.round((active / expected) * 100)) : (total > 0 ? Math.round((active / total) * 100) : 0);
+        const avgLate = lateCnt ? Math.round(lateSum / lateCnt) : null;
+        return { phone: s.phone, name: s.name, status: liveStatus, check_in_at: checkIn, check_out_at: checkOut, last_activity_at: lastAct, active_seconds: active, idle_seconds: idle, total_seconds: total, days_present: days.size, messages, clients, avg_response_seconds: avgResp, compliance, shift_start: s.shift_start || null, shift_end: s.shift_end || null, work_days: s.work_days || null, expected_days: expectedDays, absence_days: absenceDays, expected_seconds: expected, avg_late_seconds: avgLate, schedule_based: expected > 0, confirmed_bookings: confirmedBy[s.phone] || 0, unanswered: unansweredBy[s.phone] || 0, unanswered_seen: unansweredSeenBy[s.phone] || 0 };
+      });
+      report.sort((a, b) => b.active_seconds - a.active_seconds);
+      return new Response(JSON.stringify({ ok: true, is_admin: isAdmin, range, from: fromIso, to: toIso, report }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }
@@ -4638,11 +4970,76 @@ Deno.serve(async (req) => {
         await supabase.from("wa_admin_messages").insert({ customer_phone: customerPhone, body: threadBody.slice(0, 2000), sent_by: sentBy, sent_at: new Date().toISOString(), media_id: upJson.id, media_mime: "application/pdf", media_filename: filename });
         const _ts = new Date().toISOString();
         await supabase.from("whatsapp_sessions").update({ last_message_at: _ts, last_outbound_at: _ts, last_outbound_body: "🧾 فاتورة" }).eq("phone", customerPhone);
+        // لو الفاتورة محفوظة في التبويب، علّمها «مُرسلة».
+        const invId = String(b.invoice_id || "").trim();
+        if (invId) await supabase.from("invoices").update({ status: "sent", sent_at: _ts, updated_at: _ts }).eq("id", invId);
       } catch (_e) { /* best-effort */ }
       return new Response(JSON.stringify({ ok: true, message_id: sendJson?.messages?.[0]?.id || null }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }
+  }
+
+  // ── تبويب الفواتير: حفظ/قائمة/جلب/حذف (قابلة للتعديل وإعادة الإرسال) ──────
+  if (url.searchParams.get("admin_action") === "list_invoices") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data } = await supabase.from("invoices")
+      .select("id, invoice_no, customer_phone, customer_name, currency, total, status, inv_date, created_by, sent_at, updated_at")
+      .order("updated_at", { ascending: false }).limit(300);
+    return new Response(JSON.stringify({ ok: true, invoices: data || [] }), { headers: jsonCors });
+  }
+
+  if (url.searchParams.get("admin_action") === "get_invoice") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    const id = (url.searchParams.get("id") || "").trim();
+    if (!id) return new Response(JSON.stringify({ error: "id required" }), { status: 400, headers: jsonCors });
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data } = await supabase.from("invoices").select("*").eq("id", id).maybeSingle();
+    return new Response(JSON.stringify({ ok: true, invoice: data || null }), { headers: jsonCors });
+  }
+
+  if (url.searchParams.get("admin_action") === "save_invoice") {
+    { const g = await requirePerm(req, "send_messages"); if (g) return g; }
+    try {
+      const b = await req.json();
+      const callerStaff = await getCallerStaff(req);
+      const row: Record<string, unknown> = {
+        invoice_no: String(b.invoice_no || "").slice(0, 60) || null,
+        customer_phone: String(b.customer_phone || "").slice(0, 40) || null,
+        customer_name: String(b.customer_name || "").slice(0, 200) || null,
+        currency: String(b.currency || "").slice(0, 30) || null,
+        items: Array.isArray(b.items) ? b.items.slice(0, 100) : [],
+        note: String(b.note || "").slice(0, 1000) || null,
+        inv_date: String(b.inv_date || "").slice(0, 10) || null,
+        total: (b.total != null && b.total !== "") ? Number(b.total) : 0,
+        created_by: (callerStaff && callerStaff.name) ? callerStaff.name : String(b.created_by || "admin"),
+        updated_at: new Date().toISOString(),
+      };
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const id = String(b.id || "").trim();
+      if (id) {
+        const { error } = await supabase.from("invoices").update(row).eq("id", id);
+        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonCors });
+        return new Response(JSON.stringify({ ok: true, id }), { headers: jsonCors });
+      } else {
+        const { data, error } = await supabase.from("invoices").insert(row).select("id").single();
+        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonCors });
+        return new Response(JSON.stringify({ ok: true, id: (data as { id: string }).id }), { headers: jsonCors });
+      }
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  if (url.searchParams.get("admin_action") === "delete_invoice") {
+    { const g = await requirePerm(req, "send_messages"); if (g) return g; }
+    const id = (url.searchParams.get("id") || "").trim();
+    if (!id) return new Response(JSON.stringify({ error: "id required" }), { status: 400, headers: jsonCors });
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { error } = await supabase.from("invoices").delete().eq("id", id);
+    if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonCors });
+    return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
   }
 
   if (url.searchParams.get("admin_action") === "send_admin_message") {
@@ -4687,6 +5084,18 @@ Deno.serve(async (req) => {
         body: (body || (mediaUrl ? `📎 ${mediaUrl}` : "")).slice(0, 2000),
         sent_by: sentBy,
       });
+      // 📦 نقل تلقائي «الواردة → المُرسلة»: لو أُرسل ملف PDF (برنامج) لعميل عنده طلب
+      // فرد وارد، نعلّم طلبه «مُرسل» فينتقل لصندوق المُرسلة ولا يبقى بالوارد. يحلّ
+      // الحالة: الإرسال من لوحة الواتساب (بسبب نافذة 24 ساعة) كان لا يحدّث حالة الطلب.
+      if (mediaUrl && /\.pdf(\?|$)/i.test(mediaUrl)) {
+        try {
+          const _now = new Date().toISOString();
+          await supabase.from("booking_brief")
+            .update({ status: "sent", sent_at: _now, sent_by: sentBy, updated_at: _now })
+            .eq("contact_phone", phone)
+            .in("status", ["complete", "transferred"]);
+        } catch (_) { /* أفضل جهد — لا نُفشل الإرسال لأجل النقل */ }
+      }
       // نرفع المحادثة لأعلى القائمة (أسلوب واتساب): أي إرسال يحدّث last_message_at.
       // + لو الإرسال ملف/عرض (mediaUrl) نجدول متابعة «اليوم الثاني» (تُرسل مرة بالكرون).
       const _nowIso = new Date().toISOString();
@@ -4710,6 +5119,8 @@ Deno.serve(async (req) => {
         }
       }
       await supabase.from("whatsapp_sessions").update(_sessUpd).eq("phone", phone);
+      // نشاط فعلي: ردّ الموظف على عميل (event-based attendance).
+      if (callerStaff) { await recordActivity(supabase, callerStaff.phone, callerStaff.name, "send_message", null, req.headers.get("user-agent")); }
       return new Response(JSON.stringify({ ok: true, twilio_sid: twilioSid }),
         { headers: jsonCors });
     } catch (e) {

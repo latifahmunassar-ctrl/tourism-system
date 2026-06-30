@@ -4075,10 +4075,10 @@ Deno.serve(async (req) => {
         const lm = w.last_message_at ? Date.parse(w.last_message_at) : 0;
         const lo = lastStaffOutByPhone[w.phone] || 0;   // آخر ردّ موظف (مو البوت)
         const lop = w.last_opened_at ? Date.parse(w.last_opened_at) : 0;
-        // غير مردودة: العميل أحدث من ردّ الموظف. المهلة (٥د) تُعفي فقط رسائل التأكيد القصيرة.
-        const gap = lm - lo;
+        // غير مردودة: العميل أحدث من ردّ الموظف، **ورسالته الأخيرة جوهرية** (لا شكر/تأكيد/إغلاق).
+        // رسالة الشكر («جزاك الله»، «شكراً»، 🌹) تُنهي المحادثة فلا تُحسب بانتظار رد ولو مرّ وقت.
         const lastTxt = lastInBody[w.phone]?.body ?? null;
-        const unanswered = lm > 0 && lm > lo && (gap > 5 * 60 * 1000 || !isAckText(lastTxt));
+        const unanswered = lm > 0 && lm > lo && !isAckText(lastTxt);
         if (unanswered) { unansweredBy[ph] = (unansweredBy[ph] || 0) + 1; if (lop >= lm) unansweredSeenBy[ph] = (unansweredSeenBy[ph] || 0) + 1; }
       }
 
@@ -5084,6 +5084,18 @@ Deno.serve(async (req) => {
         body: (body || (mediaUrl ? `📎 ${mediaUrl}` : "")).slice(0, 2000),
         sent_by: sentBy,
       });
+      // 📦 نقل تلقائي «الواردة → المُرسلة»: لو أُرسل ملف PDF (برنامج) لعميل عنده طلب
+      // فرد وارد، نعلّم طلبه «مُرسل» فينتقل لصندوق المُرسلة ولا يبقى بالوارد. يحلّ
+      // الحالة: الإرسال من لوحة الواتساب (بسبب نافذة 24 ساعة) كان لا يحدّث حالة الطلب.
+      if (mediaUrl && /\.pdf(\?|$)/i.test(mediaUrl)) {
+        try {
+          const _now = new Date().toISOString();
+          await supabase.from("booking_brief")
+            .update({ status: "sent", sent_at: _now, sent_by: sentBy, updated_at: _now })
+            .eq("contact_phone", phone)
+            .in("status", ["complete", "transferred"]);
+        } catch (_) { /* أفضل جهد — لا نُفشل الإرسال لأجل النقل */ }
+      }
       // نرفع المحادثة لأعلى القائمة (أسلوب واتساب): أي إرسال يحدّث last_message_at.
       // + لو الإرسال ملف/عرض (mediaUrl) نجدول متابعة «اليوم الثاني» (تُرسل مرة بالكرون).
       const _nowIso = new Date().toISOString();
