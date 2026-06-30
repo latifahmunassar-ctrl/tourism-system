@@ -731,6 +731,14 @@ Deno.serve(async (req) => {
         }).eq("id", id);
         // سجّل الإرسال في خيط المحادثة ليظهر الملف (والملاحظة) بالداشبورد.
         const customerPhone = rawPhone.startsWith("whatsapp:") ? rawPhone : ("whatsapp:+" + to);
+        // نظّف مكرّرات نفس العميل: المحادثة تُنشئ عدة طلبات (booking_brief) لنفس
+        // الجوال؛ بعد إرسال البرنامج نعلّمها كلها «مُرسلة» حتى لا تبقى نسخ بالواردة.
+        try {
+          await supabase.from("booking_brief")
+            .update({ status: "sent", sent_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            .eq("contact_phone", customerPhone)
+            .in("status", ["complete", "transferred"]);
+        } catch (_) { /* أفضل جهد */ }
         const threadBody = (note ? note + "\n" : "") + "📎 [ملف البرنامج PDF]";
         try {
           await supabase.from("wa_admin_messages").insert({
