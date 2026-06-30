@@ -4048,7 +4048,7 @@ Deno.serve(async (req) => {
       const ins = (inRes.data || []) as Array<{ from_phone: string; received_at: string; body: string | null }>;
 
       // رسالة تأكيد/شكر قصيرة لا تتطلب رداً
-      const isAckText = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return true; if (/[؟?]/.test(s) || /(^|[\s،])(كم|بكم|وكم|كام|متى|وين|فين|كيف|ليش|ليه|هل|ايش|أيش|وش|سعر|السعر|الاسعار|التكلفه|التكلفة)([\s،؟?]|$)/i.test(s)) return false; if ([...s].length <= 6) return true; return /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|👍|🙏|❤|🌹|💚|💐|🤍|الله ?يعطيك|يعطيك ?العاف|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(s); };
+      const isAckText = (t: string | null): boolean => { const s = String(t || "").trim(); if (!s) return true; if (/[؟?]/.test(s) || /(^|[\s،])(كم|بكم|وكم|كام|متى|وين|فين|كيف|ليش|ليه|هل|ايش|أيش|وش|سعر|السعر|الاسعار|التكلفه|التكلفة)([\s،؟?]|$)/i.test(s)) return false; if (/^(نعم|ايوه|ايوا|أيوه|أيوا|ايوة|أيوة|اي|إي|اكيد|أكيد|اجل|أجل|تمام نعم|اي نعم|yes|yep|yeah)\.?$/i.test(s)) return false; if ([...s].length <= 6) return true; return /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|👍|🙏|❤|🌹|💚|💐|🤍|الله ?يعطيك|يعطيك ?العاف|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(s); };
       // فهرسة الوارد لكل عميل (لحساب زمن الاستجابة) + آخر نص وارد.
       const inByPhone: Record<string, number[]> = {};
       const lastInBody: Record<string, { ts: number; body: string | null }> = {};

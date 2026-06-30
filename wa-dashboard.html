@@ -1574,6 +1574,8 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     function isAckText(t) { t = String(t || "").trim(); if (!t) return true;
       // سؤال قصير جوهري (بكم؟ كم؟ متى؟ وين؟ السعر؟) ليس تأكيداً — يحتاج رد فوراً.
       if (/[؟?]/.test(t) || /(^|[\s،])(كم|بكم|وكم|كام|متى|وين|فين|كيف|ليش|ليه|هل|ايش|أيش|وش|سعر|السعر|الاسعار|التكلفه|التكلفة)([\s،؟?]|$)/i.test(t)) return false;
+      // موافقة بـ«نعم» ليست إغلاقاً — العميل وافق وينتظر إجراءنا (نرسل/نرتّب)، فهي بانتظار رد.
+      if (/^(نعم|ايوه|ايوا|أيوه|أيوا|ايوة|أيوة|اي|إي|اكيد|أكيد|اجل|أجل|تمام نعم|اي نعم|yes|yep|yeah)\.?$/i.test(t)) return false;
       if ([...t].length <= 6) return true; return /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|👍|🙏|❤|🌹|💚|💐|🤍|الله ?يعطيك|يعطيك ?العاف|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(t); }
     function isUnanswered(lin, lout, lastInText) {
       if (lin <= 0 || lin <= lout) return false;     // ردّينا بعد العميل → مردودة
