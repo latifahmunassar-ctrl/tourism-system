@@ -132,7 +132,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
   Oman: [
     { canonical: "Salalah",      pattern: /صلال[ةه]|salalah/i },
     { canonical: "Muscat",       pattern: /مسقط|مسقت|muscat/i },
-    { canonical: "Jabal Akhdar", pattern: /(?:ال)?ج[يب]ل\s*الا?خضر|jabal\s*akhdar|jebel\s*akhdar|green\s*mountain/i },
+    { canonical: "Jabal Akhdar", pattern: /(?:ال)?ج[يب]ل\s*ال[اأإآ]?خضر|jabal\s*akhdar|jebel\s*akhdar|green\s*mountain/i },
   ],
 };
 
@@ -929,7 +929,7 @@ async function buildDataContext(
       [/بونشاك|puncak/i,                                 "Puncak"],
       [/صلال[ةه]|salalah/i,                              "Salalah"],
       [/مسقط|مسقت|muscat/i,                              "Muscat"],
-      [/(?:ال)?ج[يب]ل\s*الا?خضر|jabal\s*akhdar|jebel\s*akhdar|green\s*mountain/i, "Jabal Akhdar"],
+      [/(?:ال)?ج[يب]ل\s*ال[اأإآ]?خضر|jabal\s*akhdar|jebel\s*akhdar|green\s*mountain/i, "Jabal Akhdar"],
       // Turkey
       [/ريزا|rize|اشلاي|فرتتنه/i,                        "Rize"],
       [/أوزنجول|أوزونغول|uzungol|اوزنجول/i,              "Uzungol"],

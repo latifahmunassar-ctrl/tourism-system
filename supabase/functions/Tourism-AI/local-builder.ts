@@ -850,7 +850,7 @@ export function findDepartureDrop(
     if (t.type !== destination) return false;
     const n = t.name;
     if (/استقبال|الاستقبال|pickup/iu.test(n)) return false;
-    if (!/توديع|التوديع|التوجه|التوجة|توج[ةه]|الذهاب|الخروج|توصيل|التوصيل|للعوده|للعودة|العوده|العودة|drop/iu.test(n)) return false;
+    if (!/توديع|التوديع|التوجه|التوجة|توج[ةه]|الذهاب|الخروج|توصيل|التوصيل|للعوده|للعودة|العوده|العودة|انتقال|drop/iu.test(n)) return false;
     const rowFrom = extractRowFromCity(n);
     if (!rowFrom) return false;
     if (!tourNameMatchesCity(rowFrom, city, cityDefs)) return false;
