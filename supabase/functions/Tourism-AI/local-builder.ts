@@ -2449,6 +2449,15 @@ export async function buildLocalProgram(
       // never went through an airport.
       const flightForDay = selectedFlights.find(f => f.day === d.number);
       if (flightForDay) {
+        // طيران داخلي: أضف «توديع مدينة الانطلاق → مطارها» قبل الطيران، ما لم يكن
+        // أُضيف انتقال مباشر from→to (fromAirportDrop) يغطّي جهة المغادرة (مثل مسار
+        // الـhub). يكمّل سلسلة الانتقالات: «توديع صلالة → المطار» قبل طيران صلالة→مسقط.
+        // نمرّر موقع فندق مدينة الانطلاق لاختيار توديع المنطقة الصحيحة (هوانا/وسط).
+        if (!fromAirportDrop) {
+          const originLoc = hotelsList.find(h => h.city === d.fromCity)?.hotel?.location || "";
+          const originDep = findDepartureDrop(allTours, d.fromCity, dest, cityDefs, request.transport, originLoc);
+          if (originDep) selectedTransfers.push({ day: d.number, row: originDep, kind: "Drop" });
+        }
         // Hub-flight case: flight lands at the destination's preferred hub
         // (e.g. Hanoi) but the stay is in a road-only city (HaLong). The
         // airport pickup at the hub doesn't deliver them to HaLong — so
