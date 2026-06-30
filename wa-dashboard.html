@@ -1577,7 +1577,16 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       // موافقة بـ«نعم» ليست إغلاقاً — العميل وافق وينتظر إجراءنا (نرسل/نرتّب)، فهي بانتظار رد.
       if (/^(نعم|ايوه|ايوا|أيوه|أيوا|ايوة|أيوة|اي|إي|اكيد|أكيد|اجل|أجل|تمام نعم|اي نعم|yes|yep|yeah)\.?$/i.test(t)) return false;
       if ([...t].length <= 6) return true; return /^(شكر|تسلم|تمام|تمم|تم\b|طيب|ماشي|زين|اوك|اوكي|ok|okay|thanks|thx|👍|🙏|❤|🌹|💚|💐|🤍|الله ?يعطيك|يعطيك ?العاف|جزاك|ممتاز|رائع|حلو|كفو|يسلمو|تسلمو)/i.test(t); }
-    function isUnanswered(lin, lout, lastInText) {
+    // وعد منّا بإرسال برنامج/عرض ولم يُنفَّذ («الآن أرسلك البرنامج…»، «بجهّزه وأبعثه») — التزام
+    // معلّق يحتاج تنفيذ، فلا تُعتبر المحادثة منتهية. يُستثنى إن تضمّن تسليمًا فعليًا (📎/تفضّل/صار جاهز).
+    function isPromisePending(t) {
+      const s = String(t || "").trim();
+      if (!s) return false;
+      if (/أرسلت|ارسلت|رسلت|جهّزت|جهزت|عملت|سويت|بعثت|أعطيت|اعطيت|رتبت|وصلك|وصلت|تفضّل|تفضل|📎|صار جاهز|صار البرنامج|هذا البرنامج|هذا برنامج/.test(s)) return false;
+      return /((الان|الآن|الحين|حالا|راح|رح|سوف|توني|تبشر|ابشر|أبشر).{0,12}(ا?رسل|ا?جهز|جهّز|ا?عمل|ا?سوي|ابعث|ا?خلص|ا?كمل|ا?رتب))|^\s*(بأرسل|بارسل|بجهز|باجهز|بأجهز|بسوي|باعمل|بعمل|برتب|بخلص|بكمل|سأرسل|سارسل)|((ثوان|لحظ|دقيق|دقاي).{0,12}(ا?رسل|ا?جهز|ا?عمل|ا?سوي))|جاري.{0,8}(تجهيز|الت|الإرسال|الارسال|العمل|عمل)/.test(s);
+    }
+    function isUnanswered(lin, lout, lastInText, lastOutText) {
+      if (isPromisePending(lastOutText)) return true; // وعدنا بإرسال برنامج ولم نرسله → يحتاج تنفيذ
       if (lin <= 0 || lin <= lout) return false;     // ردّينا بعد العميل → مردودة
       // آخر رسالة من العميل شكر/تأكيد/إغلاق (شكراً، جزاك الله، تمام، 🌹) → المحادثة منتهية،
       // ليست بانتظار رد — حتى لو مرّ وقت طويل على آخر ردّ بشري. (كان يُفلغها خطأً بعد ٥د.)
@@ -2700,7 +2709,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
       const lout = c.last_human_outbound_at ? new Date(c.last_human_outbound_at).getTime() : 0;
       const lop = c.last_opened_at ? new Date(c.last_opened_at).getTime() : 0;
-      if (!isUnanswered(lin, lout, c.last_message_body)) return "replied";
+      if (!isUnanswered(lin, lout, c.last_message_body, c.last_outbound_body)) return "replied";
       return (lin > 0 && lop >= lin) ? "seen" : "noreply";
     }
 
@@ -2751,7 +2760,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           // (سواء فُتحت أو لا). لو ردّ موظف/طلال/AI بعدها، تختفي تلقائياً.
           const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
           const lout = c.last_human_outbound_at ? new Date(c.last_human_outbound_at).getTime() : 0;
-          if (!isUnanswered(lin, lout, c.last_message_body)) return false;
+          if (!isUnanswered(lin, lout, c.last_message_body, c.last_outbound_body)) return false;
         }
         if (filterReplyState && replyStateOf(c) !== filterReplyState) return false;
         if (complaintPhones && !complaintPhones.has(c.phone)) return false;
@@ -2771,7 +2780,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       if (_pc) _pc.textContent = conversationsCache.reduce((n, c) => {
         const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
         const lout = c.last_human_outbound_at ? new Date(c.last_human_outbound_at).getTime() : 0;
-        return n + (isUnanswered(lin, lout, c.last_message_body) ? 1 : 0);
+        return n + (isUnanswered(lin, lout, c.last_message_body, c.last_outbound_body) ? 1 : 0);
       }, 0);
       const _mc = $("mine-cnt");
       if (_mc) _mc.textContent = (me ? conversationsCache.filter(c => c.assigned_staff_phone === me.phone).length : 0);
@@ -3002,7 +3011,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         const lout = c.last_human_outbound_at ? new Date(c.last_human_outbound_at).getTime() : 0;
         if (lin === 0) continue;   // no inbound = nothing to do
         const isUnread = lop < lin;
-        const isPendingReply = !isUnread && isUnanswered(lin, lout, c.last_message_body);
+        const isPendingReply = !isUnread && isUnanswered(lin, lout, c.last_message_body, c.last_outbound_body);
         if (isUnread) {
           unread++;
           if (!firstUnreadPhone) {
@@ -3026,7 +3035,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
         const lout = c.last_human_outbound_at ? new Date(c.last_human_outbound_at).getTime() : 0;
         const lop = c.last_opened_at ? new Date(c.last_opened_at).getTime() : 0;
-        if (!isUnanswered(lin, lout, c.last_message_body)) continue;   // غير مردودة فقط (مع مهلة ٥د)
+        if (!isUnanswered(lin, lout, c.last_message_body, c.last_outbound_body)) continue;   // غير مردودة فقط (مع مهلة ٥د)
         const seen = lop >= lin;
         const ph = c.assigned_staff_phone;
         if (ph) { (map[ph] || (map[ph] = { total: 0, seen: 0 })); map[ph].total++; if (seen) map[ph].seen++; }
@@ -3184,7 +3193,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         const lastOpen = c.last_opened_at ? new Date(c.last_opened_at).getTime() : 0;
         const isUnread = lastIn > 0 && lastOpen < lastIn;
         // ٣ حالات لون: لم يُرَد عليها (بنفسجي) · رُد عليها (طبيعي) · شُوهدت بلا رد (لون آخر).
-        const notReplied = isUnanswered(lastIn, lastOut, c.last_message_body);
+        const notReplied = isUnanswered(lastIn, lastOut, c.last_message_body, c.last_outbound_body);
         const seenIt = lastIn > 0 && lastOpen >= lastIn;   // فتحت آخر رسالة من العميل
         const stateRow = notReplied ? (seenIt ? " seen-noreply-row" : " noreply-row") : "";
         // WhatsApp-style preview line — يعرض أحدث رسالة سواء كانت من
