@@ -4025,8 +4025,8 @@ Deno.serve(async (req) => {
       const fromIso = new Date(fromMs).toISOString(); const toIso = new Date(toMs).toISOString();
 
       // قائمة الموظفين المستهدفين (مع دوامهم وأيام عملهم المحدّدة)
-      let staffRows: Array<{ phone: string; name: string; shift_start: string | null; shift_end: string | null; work_days: number[] | null }> = [];
-      { const sel = supabase.from("wa_staff").select("phone, name, shift_start, shift_end, work_days");
+      let staffRows: Array<{ phone: string; name: string; shift_start: string | null; shift_end: string | null; shift_start2: string | null; shift_end2: string | null; work_days: number[] | null }> = [];
+      { const sel = supabase.from("wa_staff").select("phone, name, shift_start, shift_end, shift_start2, shift_end2, work_days");
         const { data } = caller ? await sel.eq("phone", caller.phone) : await sel.eq("active", true);
         staffRows = (data || []) as typeof staffRows; }
       const names = staffRows.map(s => s.name);
@@ -4089,15 +4089,26 @@ Deno.serve(async (req) => {
         let liveStatus = "offline", lastAct: string | null = null, checkIn: string | null = null, checkOut: string | null = null;
         let latestStart = 0;
         const shStart = hhmmSec(s.shift_start), shEnd = hhmmSec(s.shift_end);
-        const shiftSec = (shStart != null && shEnd != null && shEnd > shStart) ? (shEnd - shStart) : null;
+        const shStart2 = hhmmSec(s.shift_start2), shEnd2 = hhmmSec(s.shift_end2);
+        // دوام مقسوم: مجموع مدّتَي الفترتين (الفترة الثانية اختيارية)
+        const dur1 = (shStart != null && shEnd != null && shEnd > shStart) ? (shEnd - shStart) : 0;
+        const dur2 = (shStart2 != null && shEnd2 != null && shEnd2 > shStart2) ? (shEnd2 - shStart2) : 0;
+        const shiftSec = (dur1 + dur2) > 0 ? (dur1 + dur2) : null;
+        const shiftStarts = [shStart, shStart2].filter((v): v is number => v != null);
         let lateSum = 0, lateCnt = 0;
         for (const x of ss) {
           days.add(x.work_date);
           if (x.check_out_at) { active += x.active_seconds; idle += x.idle_seconds; }
           else { const { active: a, idle: i } = splitActiveIdle(x.check_in_at, evByPhone[s.phone] || [], new Date(nowMs).toISOString()); active += a; idle += i; const idleSec = (nowMs - Date.parse(x.last_activity_at)) / 1000; liveStatus = idleSec >= ATTEND_IDLE_SEC ? "idle" : "active"; lastAct = x.last_activity_at; }
           const st = Date.parse(x.check_in_at); if (st > latestStart) { latestStart = st; checkIn = x.check_in_at; checkOut = x.check_out_at; }
-          // التأخير: وقت الدخول الفعلي (بتوقيت KSA) مقابل وقت الدخول المتوقّع.
-          if (shStart != null) { const todSec = ((Date.parse(x.check_in_at) + 3 * 3600 * 1000) % 86400000) / 1000; const late = todSec - shStart; if (late > 0) { lateSum += late; lateCnt++; } }
+          // التأخير: وقت الدخول الفعلي (بتوقيت عُمان UTC+4) مقابل بداية أقرب فترة دوام يدخل فيها
+          // (يدعم الدوام المقسوم: يُقاس التأخير للفترة الصباحية أو المسائية حسب وقت الدخول).
+          if (shiftStarts.length) {
+            const todSec = ((Date.parse(x.check_in_at) + 4 * 3600 * 1000) % 86400000) / 1000;
+            let bestLate: number | null = null;
+            for (const st of shiftStarts) { const d = todSec - st; if (d >= -3600 && (bestLate === null || d < bestLate)) bestLate = d; }
+            if (bestLate !== null && bestLate > 60 && bestLate < 4 * 3600) { lateSum += bestLate; lateCnt++; }
+          }
         }
         // الحالة الحيّة = حسب آخر نشاط فعلي (تظهر «متصل/نشط» متى عملت فعلاً، حتى قبل
         // ضغط «بدء الدوام»). الساعات تبقى من جلسات الدوام المسجَّلة.
