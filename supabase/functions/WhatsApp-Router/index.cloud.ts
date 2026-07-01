@@ -4022,6 +4022,11 @@ Deno.serve(async (req) => {
       else if (range === "custom") { const f = url.searchParams.get("from"); if (f) fromMs = Date.parse(f + "T00:00:00Z"); }
       let toMs = nowMs;
       if (range === "custom") { const t = url.searchParams.get("to"); if (t) toMs = Date.parse(t + "T23:59:59Z"); }
+      // أرضية التصفير: لا يُحتسب أي شيء قبل تاريخ بدء التقارير مهما كانت الفترة المختارة
+      // (wa_settings.report_floor_at). ضبطتها المالكة لتبدأ التقارير من اليوم نظيفة.
+      { const { data: fl } = await supabase.from("wa_settings").select("value").eq("key", "report_floor_at").maybeSingle();
+        const flms = fl && (fl as { value?: unknown }).value ? Date.parse(String((fl as { value?: unknown }).value)) : NaN;
+        if (Number.isFinite(flms) && flms > fromMs) fromMs = flms; }
       const fromIso = new Date(fromMs).toISOString(); const toIso = new Date(toMs).toISOString();
 
       // قائمة الموظفين المستهدفين (مع دوامهم وأيام عملهم المحدّدة)
