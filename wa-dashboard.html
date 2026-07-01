@@ -1410,9 +1410,15 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         <b style="color:#0b5d4e;">⏰ دوام <span id="sched-name"></span></b>
         <button type="button" id="sched-close" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748b;">×</button>
       </div>
-      <div style="display:flex; gap:8px; margin-bottom:14px;">
+      <div style="font-size:11px; font-weight:800; color:#0b5d4e; margin-bottom:5px;">الفترة الأولى (صباحية)</div>
+      <div style="display:flex; gap:8px; margin-bottom:10px;">
         <label style="flex:1; font-size:12px; font-weight:700; color:#475569;">وقت الدخول<input type="time" id="sched-start" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:7px; margin-top:3px;"></label>
         <label style="flex:1; font-size:12px; font-weight:700; color:#475569;">وقت الخروج<input type="time" id="sched-end" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:7px; margin-top:3px;"></label>
+      </div>
+      <div style="font-size:11px; font-weight:800; color:#0b5d4e; margin-bottom:5px;">الفترة الثانية (مسائية) — اختيارية</div>
+      <div style="display:flex; gap:8px; margin-bottom:14px;">
+        <label style="flex:1; font-size:12px; font-weight:700; color:#475569;">وقت الدخول<input type="time" id="sched-start2" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:7px; margin-top:3px;"></label>
+        <label style="flex:1; font-size:12px; font-weight:700; color:#475569;">وقت الخروج<input type="time" id="sched-end2" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:7px; margin-top:3px;"></label>
       </div>
       <div style="font-size:12px; font-weight:800; color:#475569; margin-bottom:7px;">أيام العمل (اضغط لتحديد/إلغاء)</div>
       <div id="sched-days" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px;"></div>
@@ -3620,7 +3626,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       box.innerHTML=rows.map(r=>{
         const resp=r.avg_response_seconds!=null?(Math.round(r.avg_response_seconds/60)+" د"):"—";
         const last=r.last_activity_at?new Date(r.last_activity_at).toLocaleString("ar-EG",{hour12:true}):"—";
-        const shift=(r.shift_start&&r.shift_end)?(r.shift_start+"–"+r.shift_end):"غير محدّد";
+        const shift=(r.shift_start&&r.shift_end)?((r.shift_start+"–"+r.shift_end)+((r.shift_start2&&r.shift_end2)?(" + "+r.shift_start2+"–"+r.shift_end2):"")):"غير محدّد";
         const late=r.avg_late_seconds!=null?(Math.round(r.avg_late_seconds/60)+" د"):"—";
         const compTag=r.schedule_based?' <span style="font-size:10px;color:#15803d;">(حسب الدوام)</span>':'';
         const absCell=(r.absence_days!=null)?`<div>🚫 غياب: <b style="color:${r.absence_days>0?'#b91c1c':'#15803d'};">${r.absence_days} يوم</b> <span style="font-size:10px;color:var(--muted);">(من ${r.expected_days})</span></div>`:'';
@@ -3655,6 +3661,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       schedPhone=phone; $("sched-msg").textContent="";
       $("sched-name").textContent=r.name||"";
       $("sched-start").value=r.shift_start||"09:00"; $("sched-end").value=r.shift_end||"17:00";
+      $("sched-start2").value=r.shift_start2||""; $("sched-end2").value=r.shift_end2||"";
       const set=new Set(Array.isArray(r.work_days)&&r.work_days.length?r.work_days:[0,1,2,3,4]);
       const box=$("sched-days"); box.innerHTML="";
       WD_NAMES.forEach((n,i)=>{ const b=document.createElement("button"); b.type="button"; b.textContent=n; b.dataset.dow=i; b.dataset.on=set.has(i)?"1":"0"; styleSchedDay(b); b.addEventListener("click",()=>{ b.dataset.on=b.dataset.on==="1"?"0":"1"; styleSchedDay(b); }); box.appendChild(b); });
@@ -3663,7 +3670,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     $("sched-close") && $("sched-close").addEventListener("click",()=>{ $("sched-overlay").style.display="none"; });
     $("sched-save") && $("sched-save").addEventListener("click", async ()=>{
       const work_days=[...$("sched-days").querySelectorAll("button")].filter(b=>b.dataset.on==="1").map(b=>+b.dataset.dow);
-      try{ const r=await fetch(BASE+"?admin_action=set_staff_schedule",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({phone:schedPhone,shift_start:$("sched-start").value,shift_end:$("sched-end").value,work_days})});
+      try{ const r=await fetch(BASE+"?admin_action=set_staff_schedule",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({phone:schedPhone,shift_start:$("sched-start").value,shift_end:$("sched-end").value,shift_start2:$("sched-start2").value,shift_end2:$("sched-end2").value,work_days})});
         const d=await r.json(); if(d.ok){ $("sched-overlay").style.display="none"; loadAttendance(); } else { $("sched-msg").style.color="#b91c1c"; $("sched-msg").textContent=d.error||"فشل الحفظ"; }
       }catch(_e){ $("sched-msg").style.color="#b91c1c"; $("sched-msg").textContent="تعذّر الاتصال"; }
     });
