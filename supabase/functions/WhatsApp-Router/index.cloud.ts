@@ -3603,7 +3603,7 @@ Deno.serve(async (req) => {
         const { data: vd } = await supabase.from("wa_reply_verdict").select("msg_key, is_reply").in("msg_key", candKeys.slice(i, i + 300));
         for (const v of (vd as Array<{ msg_key: string; is_reply: boolean }> ?? [])) verdicts.set(v.msg_key, v.is_reply);
       }
-      const toClassify = [...latestCand.values()].filter(c => !verdicts.has(c.key)).map(c => ({ key: c.key, body: c.body || "" }));
+      const toClassify: Array<{ key: string; body: string }> = []; // معطّل: نعتمد القاعدة لا Haiku (كان يرفض كل الردود)
       const lastHumanOutByPhone = new Map<string, string>();
       for (const m of humanRows) {
         const ph = m.customer_phone;
@@ -3613,8 +3613,9 @@ Deno.serve(async (req) => {
         const cand = latestCand.get(ph);
         const key = ph + "|" + m.sent_at;
         // سؤال/ملف/طلب تأكيد = ردّ قطعاً. غير ذلك: حكم Haiku للمرشّح الأحدث إن وُجد، وإلا القاعدة.
-        const isReply = isDefiniteReply(m.body) ? true
-          : (cand && cand.key === key && verdicts.has(key)) ? verdicts.get(key)! : !isStaffPromise(m.body);
+        // نتجاهل حكم Haiku (كان يرفض كل ردود الموظفين خطأً فتبقى المحادثة «بانتظار» رغم أن الموظف
+        // جاوب فعلاً). القاعدة كافية ودقيقة: رسالة موظف غير-مجاملة وغير-وعد = ردّ فعلي يُنهي الانتظار.
+        const isReply = isDefiniteReply(m.body) ? true : !isStaffPromise(m.body);
         if (isReply) lastHumanOutByPhone.set(ph, m.sent_at);
       }
       // صنّف غير المخزّن في الخلفية (لا يبطّئ الرد) — يُطبَّق في التحديث التالي.
