@@ -4037,7 +4037,8 @@ Deno.serve(async (req) => {
       const names = staffRows.map(s => s.name);
       const hhmmSec = (s: string | null): number | null => { if (!s) return null; const m = /^(\d{1,2}):(\d{2})$/.exec(s); if (!m) return null; return (+m[1]) * 3600 + (+m[2]) * 60; };
       // أيام الفترة بتوقيت KSA (لحساب أيام العمل المتوقّعة → الغياب).
-      const windowDows: number[] = []; { const seen = new Set<string>(); for (let cur = fromMs; cur <= toMs; cur += 12 * 3600 * 1000) { const ksa = new Date(cur + 3 * 3600 * 1000); const ds = ksa.toISOString().slice(0, 10); if (!seen.has(ds)) { seen.add(ds); windowDows.push(ksa.getUTCDay()); } } }
+      const windowDates: Array<{ ds: string; dow: number }> = []; { const seen = new Set<string>(); for (let cur = fromMs; cur <= toMs; cur += 12 * 3600 * 1000) { const om = new Date(cur + 4 * 3600 * 1000); const ds = om.toISOString().slice(0, 10); if (!seen.has(ds)) { seen.add(ds); windowDates.push({ ds, dow: om.getUTCDay() }); } } }
+      const todayStrOman = new Date(nowMs + 4 * 3600 * 1000).toISOString().slice(0, 10);
 
       // جلب البيانات دفعة واحدة (بلا N+1)
       const [sessRes, evRes, outRes, inRes, wsRes] = await Promise.all([
@@ -4133,10 +4134,14 @@ Deno.serve(async (req) => {
           if (best > 0) { const diff = (ot - best) / 1000; if (diff > 0 && diff < 12 * 3600) { rsum += diff; rcnt++; } }
         }
         const avgResp = rcnt ? Math.round(rsum / rcnt) : null;
-        // أيام العمل المتوقّعة في الفترة (حسب أيام عمله المحدّدة) → الغياب.
+        // أيام العمل المتوقّعة في الفترة (حسب أيام عمله المحدّدة).
         const wdSet = (s.work_days && s.work_days.length) ? new Set(s.work_days) : null;
-        const expectedDays = wdSet ? windowDows.filter(d => wdSet.has(d)).length : null;
-        const absenceDays = (expectedDays != null) ? Math.max(0, expectedDays - days.size) : null;
+        const expectedDays = wdSet ? windowDates.filter(d => wdSet.has(d.dow)).length : null;
+        // ⚠️ الغياب يُحسب فقط لأيام العمل **المنقضية** (قبل اليوم) بلا حضور. لا نحسب **اليوم الجاري**
+        // غياباً لأنه ما زال بإمكانها تسجيل الحضور فيه (خصوصاً الفترة المسائية للدوام المقسوم).
+        const expectedPast = wdSet ? windowDates.filter(d => wdSet.has(d.dow) && d.ds < todayStrOman).length : null;
+        const presentPast = [...days].filter(ds => ds < todayStrOman).length;
+        const absenceDays = (expectedPast != null) ? Math.max(0, expectedPast - presentPast) : null;
         // الالتزام = النشاط الفعلي مقابل ساعات الدوام المتوقّعة. الأساس: عدد أيام
         // العمل المتوقّعة (يعاقب الغياب) إن حُدّدت أيام العمل، وإلا أيام الحضور.
         const baseDays = (expectedDays != null) ? expectedDays : days.size;
