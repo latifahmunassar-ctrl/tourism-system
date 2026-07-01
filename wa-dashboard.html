@@ -3521,6 +3521,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     }
     async function pollConvHistory() {
       if (!convPhone) return;
+      if (document.hidden) return;   // توفير Egress: لا تستطلع سجل المحادثة والتبويب مخفي
       if ($("conv-overlay").style.display === "none") { stopConvPolling(); return; }
       try {
         // Reuse the prefetch dedup helper so multiple opens of the same
@@ -5427,6 +5428,8 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     let refreshInflight = false;
     async function refresh(opts) {
       if (!token) { showAuth(); return; }
+      // توفير Egress: لا تستطلع الخادم والتبويب مخفي بالخلفية (يُستأنف فوراً عند العودة عبر visibilitychange).
+      if (document.hidden && !(opts && opts.manual)) return;
       attendLoad();   // حدّث حالة الدوام (نشط/خامل/خارج) مع كل دورة
       // الـ auto-poll السريع قد يطلق طلبات متراكبة لو الشبكة بطيئة —
       // نتجاهل الـ tick القادم لو في طلب جاري بعد.
@@ -5467,11 +5470,9 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     }
     function startAutoRefresh() {
       stopAutoRefresh();
-      // Poll every 3s for near-real-time appearance of new messages. The
-      // dashboard_data endpoint is light (5 simple queries) and the
-      // response is small — the perceived latency drops from up-to-30s
-      // to ~1.5s on average.
-      refreshTimer = setInterval(refresh, 3_000);
+      // استطلاع كل ١٠ث (كان ٣ث) + يتوقّف تلقائياً والتبويب مخفي (داخل refresh) —
+      // تخفيض ~٧٠٪ من الطلبات والتبويب ظاهر، و~١٠٠٪ وهو مخفي بالخلفية.
+      refreshTimer = setInterval(refresh, 10_000);
     }
     // عند رجوع المتصفح للتاب (visibilitychange) أو focus، حدّث فوراً
     // بدون انتظار الـ tick القادم.
