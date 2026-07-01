@@ -643,7 +643,7 @@ Deno.serve(async (req) => {
       // أي طلب مكتمل يظهر فورًا (complete) + المحوّل (transferred) + المُرسل (sent).
       // المسودّات الناقصة (incomplete) فقط تبقى خاصّة في لوحة الواتساب.
       const { data: briefs } = await supabase.from("booking_brief")
-        .select("id, contact_phone, destination, pax, children, days, distribution, handled_by, currency, status, updated_at")
+        .select("id, contact_phone, destination, pax, children, days, distribution, handled_by, currency, status, updated_at, created_at, sent_at, sent_by, sent_price, sent_currency")
         .eq("request_type", "individual")
         .in("status", ["complete", "transferred", "sent"])
         .order("updated_at", { ascending: false }).limit(500);

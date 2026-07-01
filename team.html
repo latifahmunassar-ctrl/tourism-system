@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-06-29-pdf-export-menu';
+  var BUILD = '2026-07-01-req-times';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -4157,6 +4157,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
         <div class="ib-r1"><span class="ib-co">🏢 ${ibEsc(r.company_name)}</span><span class="ib-bdg ib-${r.status}">${IB_STAT[r.status]||r.status}</span>${_grpBadge(r)}</div>
         <div class="ib-dest">📍 ${ibEsc(r.destination)} · ${r.days} أيام · ${r.pax} أشخاص${curTag(r)}</div>${r.customer_name?`<div class="ib-cust">👤 العميل: ${ibEsc(r.customer_name)}</div>`:''}${r.requested_by?`<div class="ib-cust" style="color:#0e5a40">🧑‍💼 طلبه: ${ibEsc(r.requested_by)}</div>`:''}
         <div class="ib-r2">${ibEsc(r.ref_no)}${r.group_total?' · '+Number(r.group_total).toLocaleString('en-US')+' ريال':''}</div>
+        <div class="ib-sent-meta">🕐 طُلب: ${ibFmtTime(r.created_at)||'—'}</div>
       </div>`).join(''):'<div class="ib-empty">لا توجد طلبات واردة</div>';
     document.getElementById('inboxSentList').innerHTML=sent.length?sent.map(r=>`
       <div class="ib-item ib-sent-item">
@@ -4380,9 +4381,10 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       <div class="ib-dest">📍 ${ibEsc(r.destination||'—')} · ${r.days||'—'} أيام · ${r.pax||'—'} بالغ${r.children?(' + '+r.children+' أطفال'):''}</div>
       <div class="ib-cust">📱 ${ibEsc(indivPh(r.contact_phone))}${r.handled_by?(' · 🧑‍💼 '+ibEsc(r.handled_by)):''}${r.currency?(' · 💱 '+ibEsc(r.currency)):''}</div>
       ${r.distribution?`<div class="ib-r2">🗺️ ${ibEsc(r.distribution)}</div>`:''}
-      ${sent?`<div class="ib-sent-meta">📤 ${r.sent_by?('أرسله: <b>'+ibEsc(r.sent_by)+'</b> · '):''}${r.sent_price?(Number(r.sent_price).toLocaleString('en-US')+' '+ibEsc(r.sent_currency||'')):''}</div>
+      ${sent?`<div class="ib-sent-meta">📤 ${r.sent_by?('أرسله: <b>'+ibEsc(r.sent_by)+'</b> · '):''}${r.sent_price?(Number(r.sent_price).toLocaleString('en-US')+' '+ibEsc(r.sent_currency||'')+' · '):''}🕐 أُرسل: ${ibFmtTime(r.sent_at)||'—'}</div>
       <button class="ib-reoffer" type="button" onclick="indivReoffer('${r.id}')">🔄 إرسال عرض آخر</button>`:
-      `<button class="ib-reoffer" type="button" style="background:#dcfce7;color:#15803d;border-color:#bbf7d0" onclick="event.stopPropagation();indivMarkSent('${r.id}')" title="علّم الطلب مُرسلاً بدون إعادة إرسال (لو أرسلتيه للعميل من لوحة الواتساب)">✅ نقل للمُرسلة</button>`}
+      `<div class="ib-sent-meta">🕐 طُلب: ${ibFmtTime(r.created_at)||'—'}</div>
+      <button class="ib-reoffer" type="button" style="background:#dcfce7;color:#15803d;border-color:#bbf7d0" onclick="event.stopPropagation();indivMarkSent('${r.id}')" title="علّم الطلب مُرسلاً بدون إعادة إرسال (لو أرسلتيه للعميل من لوحة الواتساب)">✅ نقل للمُرسلة</button>`}
     </div>`;
   }
   window.indivMarkSent=async function(id){
