@@ -5081,6 +5081,13 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
+      // ⏱️ تسجيل الحضور إلزامي: الموظف ما يقدر يرسل للعميل إلا وعنده جلسة دوام مفتوحة
+      // (الأدمن callerStaff=null فلا يُمنع). بما إن الدوام فترتين، يسجّل الحضور في كل فترة.
+      if (callerStaff) {
+        const { data: openSess } = await supabase.from("attendance_sessions")
+          .select("id").eq("staff_phone", callerStaff.phone).is("check_out_at", null).limit(1).maybeSingle();
+        if (!openSess) return new Response(JSON.stringify({ error: "attendance_required", message: "⏱️ سجّلي الحضور «بدء الدوام» أولاً قبل الرد على العملاء" }), { status: 403, headers: jsonCors });
+      }
       const twilioSid = await sendCustomerReply(supabase, phone, body, mediaUrl || undefined);
       // فشل الإرسال (Graph رفض) → القيمة null. لا نُرجِع «تم» كاذبة: نخزّن السبب
       // الفعلي ونُعيده للداشبورد حتى تعرف الموظفة لماذا لم يصل الملف/الرسالة

@@ -3691,6 +3691,13 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     $("att-refresh") && $("att-refresh").addEventListener("click", loadAttendance);
 
     async function openConversation(phone, name) {
+      // ⏱️ تسجيل الحضور إلزامي: الموظفة ما تقدر تفتح محادثة إلا بعد ضغط «بدء الدوام».
+      // (المالكة/الأدمن ليست staff فلا تُمنع.) بما إن الدوام فترتين، تضغطه في كل فترة.
+      if (attendState && attendState.is_staff && !attendState.checked_in) {
+        attendToast("⏱️ سجّلي الحضور «بدء الدوام» أولاً — إلزامي قبل فتح المحادثات والرد على العملاء");
+        const b = $("attend-btn"); if (b) { b.classList.add("attend-pulse"); try { b.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (_) {} }
+        return;
+      }
       convPhone = phone;
       trackActivity("open_conversation");
       $("conv-title").textContent = name;
@@ -4426,6 +4433,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
+        if (res.status === 403) { const e = await res.json().catch(() => ({})); if (e.error === "attendance_required") { attendToast(e.message || "⏱️ سجّلي الحضور «بدء الدوام» أولاً"); try { attendLoad(); const b = $("attend-btn"); if (b) b.classList.add("attend-pulse"); } catch (_) {} $("conv-send").disabled = false; return; } }
         if (!res.ok) throw new Error("HTTP " + res.status);
         $("conv-input").value = "";
         cancelReply();
