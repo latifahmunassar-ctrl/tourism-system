@@ -182,8 +182,11 @@
       display: flex; gap: 8px; max-width: 1200px;
       margin: 0 auto 18px; padding: 0 16px;
     }
-    body.staff-mode .tab-bar,
+    /* المراقب: بلا شريط تبويبات. الموظف: يظهر الشريط لكن بتبويبَي «الرئيسية» و«التقارير» فقط
+       (تبويبات الإدارة — جهات الاتصال/المستخدمين/العروض/الفواتير — مخفية عنه). */
     body.monitor-mode .tab-bar { display: none; }
+    body.staff-mode [data-tab="offers"],
+    body.staff-mode [data-tab="invoices"] { display: none !important; }
     /* زر «محادثة جديدة» — مخفي للمراقبين (ما يبدؤون محادثات) */
     body.monitor-mode #newconv-btn { display: none; }
     .tab-btn {
