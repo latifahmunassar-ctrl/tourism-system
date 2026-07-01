@@ -130,6 +130,9 @@
     body.staff-mode .staff-only-filter { display: inline-flex !important; }
     /* منفذ المساعد السياحي — للأدمن فقط (مخفي عن الموظف والمراقب) */
     body.staff-mode .ts-admin-link, body.monitor-mode .ts-admin-link { display: none !important; }
+    /* اعتماد الأجهزة + أزرار تبديل العرض (🛡️💼👁️) — للمالكة فقط، تُخفى عن الموظف والمراقب */
+    body.staff-mode #waDevBtn, body.monitor-mode #waDevBtn,
+    body.staff-mode [data-role-switch], body.monitor-mode [data-role-switch] { display: none !important; }
     /* جهات الاتصال + إدارة المستخدمين — للأدمن فقط (بيانات حساسة: أرقام العملاء وتصديرهم) */
     body.staff-mode [data-tab="contacts"], body.monitor-mode [data-tab="contacts"],
     body.staff-mode [data-tab="users"], body.monitor-mode [data-tab="users"] { display: none !important; }
