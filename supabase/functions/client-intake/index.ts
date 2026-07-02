@@ -749,13 +749,20 @@ Deno.serve(async (req) => {
         }).eq("id", id);
         // سجّل الإرسال في خيط المحادثة ليظهر الملف (والملاحظة) بالداشبورد.
         const customerPhone = rawPhone.startsWith("whatsapp:") ? rawPhone : ("whatsapp:+" + to);
-        // نظّف مكرّرات نفس العميل: المحادثة تُنشئ عدة طلبات (booking_brief) لنفس
-        // الجوال؛ بعد إرسال البرنامج نعلّمها كلها «مُرسلة» حتى لا تبقى نسخ بالواردة.
+        // نظّف مكرّرات نفس العميل لنفس الوجهة فقط: المحادثة تُنشئ عدة طلبات لنفس
+        // الجوال لنفس الرحلة؛ نعلّمها «مُرسلة». مهم: نقصر على نفس الوجهة حتى لا
+        // نُخفي طلباً جديداً لوجهة مختلفة (كان يُعلَّم مُرسلاً بالغلط فيختفي من الواردة).
         try {
-          await supabase.from("booking_brief")
-            .update({ status: "sent", sent_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-            .eq("contact_phone", customerPhone)
-            .in("status", ["complete", "transferred"]);
+          const { data: sentRow } = await supabase.from("booking_brief")
+            .select("destination").eq("id", id).maybeSingle();
+          const sentDest = (sentRow as { destination?: string | null } | null)?.destination || null;
+          if (sentDest) {
+            await supabase.from("booking_brief")
+              .update({ status: "sent", sent_at: new Date().toISOString(), sent_by: String(b.sent_by || "").trim() || null, updated_at: new Date().toISOString() })
+              .eq("contact_phone", customerPhone)
+              .eq("destination", sentDest)
+              .in("status", ["complete", "transferred"]);
+          }
         } catch (_) { /* أفضل جهد */ }
         const threadBody = (note ? note + "\n" : "") + "📎 [ملف البرنامج PDF]";
         try {
