@@ -618,6 +618,9 @@ Deno.serve(async (req) => {
     // Company-account management is OWNER-only (separate private dashboard) and
     // uses COMPANIES_ADMIN_SECRET. The staff request inbox keeps CLIENT_ADMIN_SECRET.
     const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove", "staff_report", "sec_overview", "sec_country_add", "sec_country_remove", "sec_enforce_set", "sec_device_trust", "sec_device_approve", "sec_device_remove", "sec_user_approve", "sec_user_suspend", "sec_user_remove", "sec_user_reset", "sec_user_device_approve"].includes(adminAction);
+    // صندوق طلبات الشركات (عرض/بناء/إرسال) — محمي بكلمة الشركات (AA2026) أو مفتاح المالكة فقط،
+    // لا يُفتح بمفتاح موظفي الأفراد العام، فيبقى مخفيًّا عن من يشتغل على الأفراد.
+    const companyInbox = ["list", "get", "approve", "update_program", "duplicate"].includes(adminAction);
     const expected = (Deno.env.get(ownerOnly ? "COMPANIES_ADMIN_SECRET" : "CLIENT_ADMIN_SECRET") || "").trim();
     const got = (req.headers.get("x-admin-secret") || "").trim();
 
@@ -635,10 +638,18 @@ Deno.serve(async (req) => {
     // المشتركة** (APP_PASSWORD) إضافةً إلى CLIENT_ADMIN_SECRET — فيكفي الموظفَ دخولُه
     // بكلمة واحدة بدل مفتاح إداري منفصل. (المالكة بمفتاحها القديم تبقى تعمل.)
     const gatePass = (Deno.env.get("APP_PASSWORD") || "").trim();
-    // كلمة مرور مخصّصة لموظف صندوق الطلبات (شركات + أفراد) — تُقبل للإجراءات غير owner-only
-    // فقط (عرض/بناء/إرسال الطلبات)، ولا تفتح إدارة الشركات ولا الأمان/الأجهزة.
-    const staffPass = (Deno.env.get("REQUESTS_STAFF_SECRET") || "").trim();
-    const okSecret = !!got && (got === expected || (!ownerOnly && ((!!gatePass && got === gatePass) || (!!staffPass && got === staffPass))));
+    const ownerSec = (Deno.env.get("COMPANIES_ADMIN_SECRET") || "").trim();
+    // كلمة صندوق الشركات (AA2026) — تفتح الشركات (+ الأفراد) لكنها ليست مفتاح المالكة.
+    const companyPass = (Deno.env.get("REQUESTS_STAFF_SECRET") || "").trim();
+    let okSecret: boolean;
+    if (ownerOnly) {
+      okSecret = !!got && got === expected;                          // إدارة/أمان: المالكة فقط
+    } else if (companyInbox) {
+      okSecret = !!got && (got === ownerSec || (!!companyPass && got === companyPass)); // شركات: المالكة أو AA2026
+    } else {
+      // الأفراد + العام: مفتاح الموظف العام أو البوابة أو المالكة أو كلمة الشركات
+      okSecret = !!got && (got === expected || got === ownerSec || (!!gatePass && got === gatePass) || (!!companyPass && got === companyPass));
+    }
     if (!okSecret) return json({ error: "unauthorized" }, 401);
 
     // ── طلبات الأفراد (booking_brief) — نفس صندوق الطلبات، تبويب منفصل ──────────

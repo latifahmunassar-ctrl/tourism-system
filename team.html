@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-07-01-req-times';
+  var BUILD = '2026-07-02-company-lock';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -4092,9 +4092,16 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     return s;
   }
   const ibH=()=>({'x-admin-secret':localStorage.getItem('alezz_admin_secret')||'','Content-Type':'application/json'});
+  // مفتاح منفصل لصندوق طلبات الشركات (محمي بكلمة خاصة AA2026) — لا يفتحه مفتاح موظفي الأفراد.
+  function ibCoSecret(force){
+    let s=localStorage.getItem('alezz_company_secret')||'';
+    if(!s||force){ const p=prompt('🔒 صندوق طلبات الشركات محمي — أدخلي كلمة مروره الخاصة:',''); if(p){s=p.trim();localStorage.setItem('alezz_company_secret',s);} }
+    return localStorage.getItem('alezz_company_secret')||'';
+  }
+  const ibCoH=()=>({'x-admin-secret':localStorage.getItem('alezz_company_secret')||'','Content-Type':'application/json'});
   async function ibList(){
-    const r=await fetch(IB_BASE+'?admin_action=list',{headers:ibH()});
-    if(r.status===401){ if(ibSecret(true)) return ibList(); throw new Error('unauthorized'); }
+    const r=await fetch(IB_BASE+'?admin_action=list',{headers:ibCoH()});
+    if(r.status===401){ if(ibCoSecret(true)) return ibList(); throw new Error('unauthorized'); }
     const d=await r.json(); return d.requests||[];
   }
   function ibBadge(n){const b=document.getElementById('inboxBadge');if(!b)return;if(n>0){b.textContent=n;b.style.display='';}else b.style.display='none';}
@@ -4244,7 +4251,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
   }
   window.inboxLoad=async function(id){
     inboxClose();
-    const r=await fetch(IB_BASE+'?admin_action=get&id='+id,{headers:ibH()});
+    const r=await fetch(IB_BASE+'?admin_action=get&id='+id,{headers:ibCoH()});
     const j=await r.json(); const req=j.request;
     if(!req){alert('تعذّر فتح الطلب');return;}
     ibState={id:req.id,ref:req.ref_no,company:req.company_name,token:req.view_token,dest:req.destination,currency:req.company_currency||'SAR'};
@@ -4309,25 +4316,25 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     const _roomsCsv=((parsedData&&parsedData.hotelsLines)?parsedData.hotelsLines:[]).map((_,i)=>hRooms(i)).join(',');
     if(_roomsCsv){ prog=prog.replace(/\n*HOTEL_ROOMS:[^\n]*/g,'').replace(/\s+$/,'')+'\nHOTEL_ROOMS: '+_roomsCsv; }
     try{
-      let res=await fetch(IB_BASE+'?admin_action=update_program&id='+ibState.id,{method:'POST',headers:ibH(),body:JSON.stringify({built_program:prog})});
+      let res=await fetch(IB_BASE+'?admin_action=update_program&id='+ibState.id,{method:'POST',headers:ibCoH(),body:JSON.stringify({built_program:prog})});
       if(!res.ok) throw new Error('فشل حفظ البرنامج');
-      res=await fetch(IB_BASE+'?admin_action=approve&id='+ibState.id,{method:'POST',headers:ibH(),body:JSON.stringify({by, company_price:companyPrice})});
+      res=await fetch(IB_BASE+'?admin_action=approve&id='+ibState.id,{method:'POST',headers:ibCoH(),body:JSON.stringify({by, company_price:companyPrice})});
       const d=await res.json(); if(!d.ok) throw new Error(d.error||'فشل الاعتماد');
       const link=IB_PROPOSAL+'?token='+ibState.token;
       try{await navigator.clipboard.writeText(link);}catch(_){}
       alert('✅ تم إرسال العرض للشركة!\nرابط العميل (انتسخ تلقائياً):\n'+link);
       inboxDismiss();
       // حدّث القوائم: الطلب ينتقل من «الواردة» إلى «المُرسلة»
-      try{ const lr=await fetch(IB_BASE+'?admin_action=list',{headers:ibH()}); const lj=await lr.json(); if(lj&&lj.requests) ibRender(lj.requests); }catch(_){}
+      try{ const lr=await fetch(IB_BASE+'?admin_action=list',{headers:ibCoH()}); const lj=await lr.json(); if(lj&&lj.requests) ibRender(lj.requests); }catch(_){}
     }catch(e){alert('تعذّر الإرسال: '+(e.message||e));}
   };
   // «إرسال عرض آخر» — ينسخ الطلب المُرسل كطلب جديد، يفتحه في المُسعّر مربوطاً بالشركة ليعدّله الموظف ويرسله
   window.inboxReoffer = async function(srcId){
     if(!confirm('إنشاء عرض آخر من هذا البرنامج؟ بيُفتح لك للتعديل (غيّري الفندق أو أي شيء) ثم ترسلينه.')) return;
     try{
-      const dr = await fetch(IB_BASE+'?admin_action=duplicate&id='+srcId, {method:'POST', headers:ibH()});
+      const dr = await fetch(IB_BASE+'?admin_action=duplicate&id='+srcId, {method:'POST', headers:ibCoH()});
       const dj = await dr.json(); if(!dj.ok) throw new Error(dj.error||'فشل النسخ');
-      const gr = await fetch(IB_BASE+'?admin_action=get&id='+dj.id, {headers:ibH()});
+      const gr = await fetch(IB_BASE+'?admin_action=get&id='+dj.id, {headers:ibCoH()});
       const gj = await gr.json(); const r = gj.request;
       if(!r) throw new Error('تعذّر فتح البرنامج الجديد');
       ibState = { id: dj.id, company: r.company_name, dest: r.destination, ref: dj.ref_no, token: dj.view_token, currency: r.company_currency||'SAR' };
@@ -4345,7 +4352,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
   }
   // passive badge refresh on load (no prompt)
   if(localStorage.getItem('alezz_admin_secret')){
-    fetch(IB_BASE+'?admin_action=list',{headers:ibH()}).then(r=>r.ok?r.json():null)
+    fetch(IB_BASE+'?admin_action=list',{headers:ibCoH()}).then(r=>r.ok?r.json():null)
       .then(d=>{ if(d&&d.requests) ibBadge(d.requests.filter(r=>r.status==='pending_review'||r.status==='build_failed').length); }).catch(()=>{});
     // عدّاد طلبات الأفراد: عدد الواردة (غير المُرسلة).
     fetch(IB_BASE+'?admin_action=list_individuals',{cache:'no-store',headers:ibH()}).then(r=>r.ok?r.json():null)
