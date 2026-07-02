@@ -625,7 +625,8 @@ Deno.serve(async (req) => {
     if (adminAction === "staff_list") {
       const staffSec = (Deno.env.get("CLIENT_ADMIN_SECRET") || "").trim();
       const ownerSec = (Deno.env.get("COMPANIES_ADMIN_SECRET") || "").trim();
-      if (!got || (got !== staffSec && got !== ownerSec)) return json({ error: "unauthorized" }, 401);
+      const reqSec = (Deno.env.get("REQUESTS_STAFF_SECRET") || "").trim();
+      if (!got || (got !== staffSec && got !== ownerSec && !(reqSec && got === reqSec))) return json({ error: "unauthorized" }, 401);
       const { data } = await supabase.from("staff_members").select("id, name").eq("active", true).order("name");
       return json({ staff: data || [] });
     }
@@ -634,7 +635,10 @@ Deno.serve(async (req) => {
     // المشتركة** (APP_PASSWORD) إضافةً إلى CLIENT_ADMIN_SECRET — فيكفي الموظفَ دخولُه
     // بكلمة واحدة بدل مفتاح إداري منفصل. (المالكة بمفتاحها القديم تبقى تعمل.)
     const gatePass = (Deno.env.get("APP_PASSWORD") || "").trim();
-    const okSecret = !!got && (got === expected || (!ownerOnly && !!gatePass && got === gatePass));
+    // كلمة مرور مخصّصة لموظف صندوق الطلبات (شركات + أفراد) — تُقبل للإجراءات غير owner-only
+    // فقط (عرض/بناء/إرسال الطلبات)، ولا تفتح إدارة الشركات ولا الأمان/الأجهزة.
+    const staffPass = (Deno.env.get("REQUESTS_STAFF_SECRET") || "").trim();
+    const okSecret = !!got && (got === expected || (!ownerOnly && ((!!gatePass && got === gatePass) || (!!staffPass && got === staffPass))));
     if (!okSecret) return json({ error: "unauthorized" }, 401);
 
     // ── طلبات الأفراد (booking_brief) — نفس صندوق الطلبات، تبويب منفصل ──────────
