@@ -4395,7 +4395,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     </div>`;
   }
   window.indivMarkSent=async function(id){
-    if(!confirm('نقل هذا الطلب إلى «المُرسلة»؟\n\nاستخدميها لو أرسلتي البرنامج للعميل بطريقة أخرى. ما يُعاد إرسال أي شيء.')) return;
+    if(!confirm('⚠️ متأكدة تبين تنقلين هذا الطلب إلى صندوق «المُرسلة»؟\n\nاضغطي «موافق» فقط لو تأكدتِ إنك أرسلتِ البرنامج للعميل فعلاً.\nلو ضغطتيه بالخطأ، اضغطي «إلغاء» ويبقى في الوارد.')) return;
     try{
       const r=await fetch(IB_BASE+'?admin_action=mark_individual_sent',{method:'POST',headers:ibH(),body:JSON.stringify({id,sent_by:(typeof ibStaffName==='function'?ibStaffName():'')})});
       const d=await r.json(); if(!r.ok||!d.ok) throw new Error(d.error||('HTTP '+r.status));
