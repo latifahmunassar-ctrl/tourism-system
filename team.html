@@ -490,6 +490,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <select id="currencyPicker" onchange="onCurrencyPick()" style="display:none; padding:7px 10px; border-radius:8px; border:1px solid var(--border); background:var(--s2); color:var(--text); font-family:'Tajawal',sans-serif; font-size:12px; font-weight:700; cursor:pointer;"><option value="">💱 بدون تحويل (ريال)</option></select>
 <span id="currencyResult" style="display:none; font-size:13px; font-weight:900; color:var(--gold); background:var(--s2); border:1px solid rgba(212,168,67,0.35); border-radius:8px; padding:6px 12px; white-space:nowrap;"></span>
 <button class="ebtn ebtn-pdf" id="waGroupBtn" style="background:linear-gradient(135deg,#25D366,#128C7E);border:none;color:#fff" onclick="waGroupOpen()" title="جهّز ملف PDF وشاركه لجروب واتساب محفوظ">📲 أرسل PDF للجروب</button>
+<button class="ebtn ebtn-pdf" id="waBridgeBtn" style="background:linear-gradient(135deg,#128C7E,#075E54);border:none;color:#fff" onclick="waBridgeOpen()" title="إرسال مباشر عبر بردج واتساب — أفراد وجروبات">📲 واتساب مباشر</button>
 <button class="ebtn ebtn-pdf" id="inboxSendBtn" style="display:none;background:linear-gradient(135deg,#0e9d6a,#c41d88);border:none;color:#fff" onclick="inboxSend()">📤 إرسال للشركة</button>
 <button class="ebtn ebtn-nologo" id="indivSaveBtn" style="display:none;background:#1d4ed8;border:none;color:#fff;font-weight:800" onclick="indivSaveOnly()" title="احفظ البرنامج والسعر بدون إرسال للعميل (لو أرسلته سابقاً)">💾 حفظ فقط (بدون إرسال)</button>
 <button class="ebtn ebtn-pdf" id="indivSendBtn" style="display:none;background:linear-gradient(135deg,#25D366,#128C7E);border:none;color:#fff" onclick="indivSend()">📤 إرسال للعميل (واتساب)</button>
@@ -674,6 +675,82 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 </div>
 </div>
 
+
+<!-- نافذة واتساب مباشر (البردج) — إرسال فعلي عبر Supabase wa-bridge -->
+<style>
+.wab-mode{flex:1;font-size:12px;font-weight:800;padding:8px 4px}
+.wab-mode.active{outline:2px solid #25D366;outline-offset:-2px}
+.wab-num{width:62px;box-sizing:border-box;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-family:'Tajawal',sans-serif;font-size:13px;text-align:center}
+.wab-mini{font-size:11px;padding:5px 9px}
+.wab-check{display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px}
+.wab-check:hover{background:var(--s2)}
+.wab-box{width:20px;height:20px;min-width:20px;border:1.5px solid var(--border);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-weight:900}
+.wab-check.on .wab-box{background:#25D366;border-color:#25D366}
+.wab-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wab-size{color:var(--muted);font-size:11px;white-space:nowrap}
+.wab-x{background:none;border:none;cursor:pointer;font-size:14px;opacity:.55;padding:2px 4px;line-height:1}
+.wab-x:hover{opacity:1}
+#waBridgeBody{width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-family:'Tajawal',sans-serif;font-size:13px;line-height:1.7;resize:vertical}
+#waBridgeSearch{width:100%;box-sizing:border-box;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-family:'Tajawal',sans-serif;font-size:13px;margin-bottom:6px}
+</style>
+<div class="rfm-overlay" id="waBridgeOverlay" onclick="if(event.target===this)waBridgeClose()">
+<div class="rfm-modal" style="max-width:640px">
+<div class="rfm-head">
+<div class="rfm-title" style="color:#128C7E">📲 واتساب مباشر <span id="waBridgeStatus" style="font-size:11px;font-weight:800;padding:3px 9px;border-radius:20px;margin-inline-start:6px">…</span></div>
+<button class="rfm-close" onclick="waBridgeClose()">✕</button>
+</div>
+<div class="rfm-sub">إرسال فعلي عبر بردج واتساب — للأفراد والجروبات. اختاري النوع، اكتبي النص، علّمي ✓ على الجروبات، وأرسلي.</div>
+
+<div style="display:flex;gap:6px;margin-bottom:12px">
+<button class="wab-mode ebtn" data-mode="program" onclick="waBridgeMode('program')">📋 البرنامج الحالي</button>
+<button class="wab-mode ebtn" data-mode="news" onclick="waBridgeMode('news')">📢 خبر / إعلان</button>
+<button class="wab-mode ebtn" data-mode="offer" onclick="waBridgeMode('offer')">🎁 عرض جاهز</button>
+</div>
+
+<div id="waBridgeOfferBox" style="display:none;margin-bottom:10px">
+<select id="waBridgeOfferSel" onchange="waBridgeOfferPick()" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-family:'Tajawal';font-size:12px;margin-bottom:6px"></select>
+<button class="ebtn ebtn-nologo" style="font-size:12px" onclick="waBridgeSaveOffer()">💾 احفظ النص الحالي كعرض جاهز</button>
+</div>
+
+<div style="margin-bottom:12px"><textarea id="waBridgeBody" rows="6" placeholder="نص الرسالة..."></textarea></div>
+
+<div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px">🎯 الوجهات — علّمي ✓ على اللي تبينها (القائمة كاملة، تقدرين تنزلين وتختارين)</div>
+<div id="waBridgeNewPanel" style="display:none;border:1px solid #d4a843;background:rgba(212,168,67,.08);border-radius:10px;padding:10px;margin-bottom:10px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+<b style="font-size:13px;color:#d4a843">🆕 جروبات جديدة (<span id="waBridgeNewCount">0</span>) — اعتمديها للدخول في قائمتك</b>
+<button class="ebtn ebtn-nologo wab-mini" onclick="waBridgeApproveAllNew()">✅ اعتمد الكل</button>
+</div>
+<div id="waBridgeNewList" style="max-height:170px;overflow-y:auto"></div>
+</div>
+<input id="waBridgeSearch" placeholder="🔍 صفّي القائمة بالاسم، أو اكتبي رقم جوال..." oninput="waBridgeRenderList()">
+<div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:center">
+<button class="ebtn ebtn-nologo wab-mini" onclick="waBridgeSelectAllShown()">✓ حدّد كل المعروض</button>
+<button class="ebtn ebtn-nologo wab-mini" onclick="waBridgeClearTargets()">✗ إلغاء الكل</button>
+<button class="ebtn ebtn-nologo wab-mini" onclick="waBridgeRefresh()" title="جيب الجروبات الجديدة من واتساب">🔄 تحديث</button>
+<span style="font-size:12px;color:var(--muted);margin-inline-start:auto">المحدد: <b id="waBridgeCount" style="color:#128C7E">0</b> · معروض: <b id="waBridgeShownCount">0</b></span>
+</div>
+<div id="waBridgeList" style="max-height:min(55vh,480px);overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:12px"></div>
+<div style="display:flex;justify-content:center;gap:14px;margin:-6px 0 12px">
+<button class="ebtn ebtn-nologo" style="font-size:15px;padding:4px 22px" onclick="waBridgeScroll(-1)" title="أعلى القائمة">▲</button>
+<button class="ebtn ebtn-nologo" style="font-size:15px;padding:4px 22px" onclick="waBridgeScroll(1)" title="أسفل القائمة">▼</button>
+</div>
+
+
+<div id="waBridgeExcludedBar" style="font-size:12px;color:var(--muted);margin-bottom:12px;display:none">🚫 المستبعدة من الإعلان: <b id="waBridgeExcludedCount">0</b> <button class="ebtn ebtn-nologo wab-mini" style="margin-inline-start:8px" onclick="waBridgeRestoreAll()">↩️ استرجاع الكل</button></div>
+<div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:12px">
+<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:8px"><input type="checkbox" id="waBridgeThrottle" onchange="waBridgeThrottleToggle()"> ⏱️ إرسال على دفعات (لتفادي حظر واتساب)</label>
+<div id="waBridgeThrottleBox" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;font-weight:700">
+<span>أرسل</span><input id="waBridgeBatch" class="wab-num" type="number" min="1" value="10" oninput="waBridgeEta()"><span>جروب كل</span><input id="waBridgeInterval" class="wab-num" type="number" min="1" value="5" oninput="waBridgeEta()"><span>دقيقة</span>
+</div>
+<div id="waBridgeEtaMsg" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
+</div>
+
+<button class="rfm-btn-primary" style="background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;width:100%" onclick="waBridgeSend()">📤 إرسال (<span id="waBridgeSendCount">0</span>)</button>
+<div id="waBridgeMsg" style="font-size:12px;text-align:center;margin-top:8px;min-height:16px"></div>
+<div id="waBridgeOutbox" style="margin-top:10px"></div>
+</div>
+</div>
+
 <!-- Branded print container — populated by readyFile_generate() then printed -->
 <div id="readyFilePdf"></div>
 
@@ -685,6 +762,7 @@ const FILLER_IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA34AAAQ4CAYAAA
 const SUPABASE_URL = 'https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/Tourism-AI';
 const AUTH_URL = 'https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/auth-check';
 const PROGRAMS_URL = 'https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/programs';
+const WA_BRIDGE_URL = 'https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/wa-bridge';
 // رمز جهاز ثابت لهذا المتصفح (يُرسل مع الدخول؛ الجهاز الموثوق يتخطّى حصر الدولة)
 function getDeviceToken(){
   let t = localStorage.getItem('alezz_device_token');
@@ -2784,6 +2862,304 @@ function waGroupAdd(){
   waGroupRenderList();
 }
 function waGroupDelete(i){ if(!confirm('حذف هذا الجروب؟')) return; const g=waGroupsLoad(); g.splice(i,1); waGroupsSave(g); waGroupRenderList(); }
+
+// ── واتساب مباشر (البردج) — إرسال فعلي عبر Supabase wa-bridge ───────────────
+let waBridgeCurMode = 'news';
+let waBridgeOffers = [];
+let waBridgeAllGroups = [];        // [{jid,name,size}] كل الجروبات
+let waBridgeSel = new Set();        // jids المحددة
+let waBridgeNames = {};             // jid -> name (يشمل الأرقام اليدوية)
+let waBridgeStatusTimer = null;
+let waBridgeGroupsLoaded = false;
+
+async function waBridgeCall(action, extra = {}) {
+  const r = await fetch(WA_BRIDGE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
+    body: JSON.stringify({ action, ...extra })
+  });
+  return r.json();
+}
+
+function waBridgeOpen() {
+  document.getElementById('waBridgeOverlay').classList.add('open');
+  const hasProgram = (typeof parsedData !== 'undefined' && parsedData && typeof lastProgramRaw !== 'undefined' && lastProgramRaw);
+  waBridgeMode(hasProgram ? 'program' : 'news');
+  waBridgeRefreshStatus();
+  waBridgeLoadOffers();
+  waBridgeRenderOutbox();
+  waBridgeUpdateExcludedCount();
+  waBridgeLoadNew();
+  if (!waBridgeGroupsLoaded) waBridgeLoadGroups(); else waBridgeRenderList();
+  clearInterval(waBridgeStatusTimer);
+  waBridgeStatusTimer = setInterval(waBridgeRefreshStatus, 15000);
+}
+function waBridgeClose() {
+  document.getElementById('waBridgeOverlay').classList.remove('open');
+  clearInterval(waBridgeStatusTimer);
+}
+
+async function waBridgeRefreshStatus() {
+  const el = document.getElementById('waBridgeStatus');
+  try {
+    const s = await waBridgeCall('status');
+    if (s.online) { el.textContent = '🟢 متصل'; el.style.background = 'rgba(37,211,102,.15)'; el.style.color = '#25D366'; }
+    else { el.textContent = '🔴 غير متصل'; el.style.background = 'rgba(239,68,68,.15)'; el.style.color = '#ef4444'; }
+  } catch (e) { el.textContent = '⚠️ تعذّر'; }
+}
+
+function waBridgeMode(m) {
+  waBridgeCurMode = m;
+  document.querySelectorAll('.wab-mode').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+  document.getElementById('waBridgeOfferBox').style.display = m === 'offer' ? 'block' : 'none';
+  const ta = document.getElementById('waBridgeBody');
+  if (m === 'program') {
+    const hasProgram = (typeof parsedData !== 'undefined' && parsedData && typeof lastProgramRaw !== 'undefined' && lastProgramRaw);
+    if (hasProgram) { ta.value = buildWhatsappText(); }
+    else { ta.value = ''; ta.placeholder = 'ابنِ برنامجاً أولاً ثم ارجعي لهذا النوع.'; }
+  } else if (m === 'news') { ta.value = ''; ta.placeholder = 'اكتبي الخبر أو الإعلان الذي تبين بثّه...'; }
+}
+
+async function waBridgeLoadOffers() {
+  try {
+    const r = await waBridgeCall('offers');
+    waBridgeOffers = r.offers || [];
+    const sel = document.getElementById('waBridgeOfferSel');
+    sel.innerHTML = '<option value="">— اختاري عرضاً محفوظاً —</option>' + waBridgeOffers.map(o => `<option value="${o.id}">${waEsc(o.title)}</option>`).join('');
+  } catch (e) {}
+}
+function waBridgeOfferPick() {
+  const id = document.getElementById('waBridgeOfferSel').value;
+  const o = waBridgeOffers.find(x => String(x.id) === String(id));
+  if (o) document.getElementById('waBridgeBody').value = o.body;
+}
+async function waBridgeSaveOffer() {
+  const body = (document.getElementById('waBridgeBody').value || '').trim();
+  if (!body) { alert('اكتبي نص العرض أولاً في مربع النص.'); return; }
+  const title = prompt('اسم العرض (للحفظ في المكتبة):');
+  if (!title) return;
+  const r = await waBridgeCall('save-offer', { title, body });
+  if (r.ok) { await waBridgeLoadOffers(); alert('تم حفظ العرض ✅'); }
+  else alert('تعذّر الحفظ: ' + (r.error || ''));
+}
+
+// ── قائمة الجروبات الكاملة ──
+async function waBridgeLoadGroups() {
+  const list = document.getElementById('waBridgeList');
+  list.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">⏳ جاري تحميل كل الجروبات...</div>';
+  try {
+    const r = await waBridgeCall('groups-all', {});
+    waBridgeAllGroups = (r.groups || []).map(g => ({ jid: g.jid, name: g.name || '(بدون اسم)', size: g.size }));
+    waBridgeAllGroups.forEach(g => { waBridgeNames[g.jid] = g.name; });
+    waBridgeGroupsLoaded = true;
+    waBridgeRenderList();
+  } catch (e) {
+    list.innerHTML = '<div style="padding:12px;color:#ef4444;font-size:12px">تعذّر تحميل الجروبات: ' + e.message + '</div>';
+  }
+}
+
+function waBridgeScroll(dir){
+  const el=document.getElementById("waBridgeList");
+  if(el) el.scrollBy({top: dir*el.clientHeight*0.85, behavior:"smooth"});
+}
+
+function waBridgeRenderList() {
+  const q = (document.getElementById('waBridgeSearch').value || '').trim();
+  const list = document.getElementById('waBridgeList');
+  let html = '';
+  // خيار إرسال لرقم يدوي إذا كان البحث رقماً
+  const digits = q.replace(/[^0-9]/g, '');
+  if (digits.length >= 8 && /^[0-9+\s]+$/.test(q)) {
+    const jid = digits + '@s.whatsapp.net';
+    const on = waBridgeSel.has(jid) ? ' on' : '';
+    html += `<div class="wab-check${on}" data-jid="${jid}" onclick="waBridgeToggle('${jid}','رقم ${digits}')"><span class="wab-box">${on ? '✓' : ''}</span><span class="wab-name">📱 إرسال للرقم ${digits}</span></div>`;
+  }
+  const ql = q.toLowerCase();
+  const matches = q ? waBridgeAllGroups.filter(g => g.name.toLowerCase().includes(ql)) : waBridgeAllGroups;
+  html += matches.map(g => {
+    const on = waBridgeSel.has(g.jid) ? ' on' : '';
+    return `<div class="wab-check${on}" data-jid="${g.jid}" onclick="waBridgeToggle('${g.jid}')"><span class="wab-box">${on ? '✓' : ''}</span><span class="wab-name">${waEsc(g.name)}</span><span class="wab-size" title="عدد الأعضاء في الجروب">${g.size ? '👥 ' + g.size : ''}</span><button class="wab-x" title="حذف من قائمة الإعلان" onclick="event.stopPropagation();waBridgeExclude('${g.jid}')">🚫</button></div>`;
+  }).join('');
+  list.innerHTML = html || '<div style="padding:12px;color:var(--muted);font-size:12px">لا نتائج مطابقة</div>';
+  document.getElementById('waBridgeShownCount').textContent = matches.length;
+  waBridgeUpdateCount();
+}
+
+function waBridgeToggle(jid, name) {
+  if (waBridgeSel.has(jid)) waBridgeSel.delete(jid);
+  else { waBridgeSel.add(jid); if (name) waBridgeNames[jid] = name; }
+  const row = document.querySelector('.wab-check[data-jid="' + jid + '"]');
+  if (row) {
+    const on = waBridgeSel.has(jid);
+    row.classList.toggle('on', on);
+    row.querySelector('.wab-box').textContent = on ? '✓' : '';
+  }
+  waBridgeUpdateCount();
+}
+
+function waBridgeSelectAllShown() {
+  const q = (document.getElementById('waBridgeSearch').value || '').trim().toLowerCase();
+  const matches = q ? waBridgeAllGroups.filter(g => g.name.toLowerCase().includes(q)) : waBridgeAllGroups;
+  matches.forEach(g => { waBridgeSel.add(g.jid); waBridgeNames[g.jid] = g.name; });
+  waBridgeRenderList();
+}
+function waBridgeClearTargets() { waBridgeSel.clear(); waBridgeRenderList(); }
+
+function waBridgeUpdateCount() {
+  const n = waBridgeSel.size;
+  document.getElementById('waBridgeCount').textContent = n;
+  document.getElementById('waBridgeSendCount').textContent = n;
+  waBridgeEta();
+}
+
+function waBridgeThrottleToggle() {
+  document.getElementById('waBridgeThrottleBox').style.display = document.getElementById('waBridgeThrottle').checked ? 'flex' : 'none';
+  waBridgeEta();
+}
+function waBridgeEta() {
+  const msg = document.getElementById('waBridgeEtaMsg');
+  const on = document.getElementById('waBridgeThrottle').checked;
+  const n = waBridgeSel.size;
+  if (!on || n === 0) { msg.textContent = ''; return; }
+  const b = Math.max(1, parseInt(document.getElementById('waBridgeBatch').value) || 1);
+  const iv = Math.max(1, parseInt(document.getElementById('waBridgeInterval').value) || 1);
+  const batches = Math.ceil(n / b);
+  const mins = (batches - 1) * iv;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  const dur = mins <= 0 ? 'فوراً' : ((h ? h + ' ساعة ' : '') + (m ? m + ' دقيقة' : '')).trim();
+  msg.textContent = `📊 ${n} وجهة · ${batches} دفعة · تخلص خلال ~${dur}`;
+}
+
+async function waBridgeExclude(jid) {
+  const g = waBridgeAllGroups.find(x => x.jid === jid);
+  const nm = g ? g.name : jid;
+  if (!confirm("حذف «" + nm + "» من قائمة الإعلان؟ (تقدرين تسترجعينها لاحقاً)")) return;
+  try {
+    const r = await waBridgeCall("exclude-group", { jid });
+    if (r.ok) {
+      waBridgeAllGroups = waBridgeAllGroups.filter(x => x.jid !== jid);
+      waBridgeSel.delete(jid);
+      waBridgeRenderList();
+      waBridgeSetExcludedCount(r.excluded_count);
+    }
+  } catch (e) { alert("تعذّر الحذف: " + e.message); }
+}
+function waBridgeSetExcludedCount(n) {
+  const bar = document.getElementById("waBridgeExcludedBar");
+  document.getElementById("waBridgeExcludedCount").textContent = n || 0;
+  bar.style.display = (n && n > 0) ? "block" : "none";
+}
+async function waBridgeUpdateExcludedCount() {
+  try { const r = await waBridgeCall("excluded-count"); waBridgeSetExcludedCount(r.excluded_count); } catch (e) {}
+}
+async function waBridgeRestoreAll() {
+  if (!confirm("استرجاع كل الجروبات المستبعدة إلى القائمة؟")) return;
+  await waBridgeCall("restore-all");
+  waBridgeGroupsLoaded = false;
+  await waBridgeLoadGroups();
+  waBridgeUpdateExcludedCount();
+}
+
+async function waBridgeRefresh() {
+  const msg = document.getElementById("waBridgeMsg");
+  msg.textContent = "🔄 طلب تحديث... يجيب الجديد خلال ~٣٠ ثانية"; msg.style.color = "var(--muted)";
+  try {
+    await waBridgeCall("request-sync");
+    let tries = 0;
+    const iv = setInterval(async () => {
+      tries++;
+      let s = {};
+      try { s = await waBridgeCall("status"); } catch (e) {}
+      if (!s.sync_requested || tries >= 12) {
+        clearInterval(iv);
+        waBridgeGroupsLoaded = false;
+        await waBridgeLoadGroups();
+        await waBridgeLoadNew();
+        msg.textContent = "✅ تم التحديث"; msg.style.color = "#25D366";
+      }
+    }, 4000);
+  } catch (e) { msg.textContent = "❌ " + e.message; msg.style.color = "#ef4444"; }
+}
+
+async function waBridgeLoadNew() {
+  try {
+    const r = await waBridgeCall("new-groups");
+    const groups = r.groups || [];
+    const panel = document.getElementById("waBridgeNewPanel");
+    document.getElementById("waBridgeNewCount").textContent = groups.length;
+    if (!groups.length) { panel.style.display = "none"; document.getElementById("waBridgeNewList").innerHTML = ""; return; }
+    panel.style.display = "block";
+    document.getElementById("waBridgeNewList").innerHTML = groups.map(g => {
+      const nm = waEsc(g.name || "(بدون اسم)");
+      const sz = g.size ? "👥 " + g.size : "";
+      return `<div class="wab-check" style="cursor:default"><span class="wab-name">${nm}</span><span class="wab-size">${sz}</span><button class="ebtn ebtn-nologo wab-mini" style="background:#25D366;color:#fff" title="اعتماد" onclick="waBridgeApprove('${g.jid}')">✅</button><button class="wab-x" title="رفض" onclick="waBridgeRejectNew('${g.jid}')">🚫</button></div>`;
+    }).join("");
+  } catch (e) {}
+}
+async function waBridgeApprove(jid) {
+  await waBridgeCall("approve-group", { jid });
+  waBridgeGroupsLoaded = false;
+  await waBridgeLoadGroups();
+  await waBridgeLoadNew();
+}
+async function waBridgeApproveAllNew() {
+  if (!confirm("اعتماد كل الجروبات الجديدة وإضافتها لقائمتك؟")) return;
+  await waBridgeCall("approve-all-new");
+  waBridgeGroupsLoaded = false;
+  await waBridgeLoadGroups();
+  await waBridgeLoadNew();
+}
+async function waBridgeRejectNew(jid) {
+  await waBridgeCall("exclude-group", { jid });
+  await waBridgeLoadNew();
+}
+
+async function waBridgeSend() {
+  const body = (document.getElementById('waBridgeBody').value || '').trim();
+  const msg = document.getElementById('waBridgeMsg');
+  const targets = Array.from(waBridgeSel).map(jid => ({ jid, name: waBridgeNames[jid] || jid }));
+  if (!targets.length) { msg.textContent = '⚠️ علّمي ✓ على وجهة واحدة على الأقل.'; msg.style.color = '#ef4444'; return; }
+  if (!body) { msg.textContent = '⚠️ اكتبي نص الرسالة.'; msg.style.color = '#ef4444'; return; }
+  const throttle = document.getElementById('waBridgeThrottle').checked;
+  const batch = Math.max(1, parseInt(document.getElementById('waBridgeBatch').value) || 10);
+  const interval = Math.max(1, parseInt(document.getElementById('waBridgeInterval').value) || 5);
+  let summary = 'إرسال إلى ' + targets.length + ' وجهة';
+  if (throttle) {
+    const batches = Math.ceil(targets.length / batch);
+    const mins = (batches - 1) * interval;
+    summary += '\nعلى دفعات: ' + batch + ' كل ' + interval + ' دقيقة (' + batches + ' دفعة، تخلص خلال ~' + mins + ' دقيقة)';
+  }
+  summary += '\n\nمتأكدة؟';
+  if (!confirm(summary)) return;
+  msg.textContent = '⏳ جاري الجدولة...'; msg.style.color = 'var(--muted)';
+  const createdBy = (localStorage.getItem('alezz_staff_name') || 'team');
+  const payload = { targets, body, kind: waBridgeCurMode, created_by: createdBy };
+  if (throttle) { payload.batch_size = batch; payload.interval_minutes = interval; }
+  try {
+    const r = await waBridgeCall('enqueue', payload);
+    if (r.ok) {
+      let m = '✅ تمت جدولة ' + r.queued + ' رسالة';
+      if (r.eta_minutes > 0) m += ' — تخلص خلال ~' + r.eta_minutes + ' دقيقة'; else m += ' — تُرسل الآن';
+      msg.textContent = m; msg.style.color = '#25D366';
+      waBridgeSel.clear(); waBridgeRenderList();
+      setTimeout(waBridgeRenderOutbox, 3500);
+    } else { msg.textContent = '❌ ' + (r.error || 'فشل الإرسال'); msg.style.color = '#ef4444'; }
+  } catch (e) { msg.textContent = '❌ ' + e.message; msg.style.color = '#ef4444'; }
+}
+
+async function waBridgeRenderOutbox() {
+  try {
+    const r = await waBridgeCall('outbox');
+    const box = document.getElementById('waBridgeOutbox');
+    const list = r.outbox || [];
+    if (!list.length) { box.innerHTML = ''; return; }
+    box.innerHTML = '<div style="font-size:12px;font-weight:800;color:var(--muted);margin:8px 0 4px">📋 آخر الإرسالات</div>' + list.slice(0, 8).map(o => {
+      const ic = o.status === 'sent' ? '✅' : o.status === 'failed' ? '❌' : o.status === 'processing' ? '⏳' : '•';
+      const err = o.status === 'failed' && o.error ? ` <span style="color:#ef4444">${waEsc(o.error).slice(0, 40)}</span>` : '';
+      return `<div style="font-size:12px;display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid var(--border)"><span>${ic} ${waEsc(o.target_name || o.kind)}${err}</span><span style="color:var(--muted);white-space:nowrap">${o.kind}</span></div>`;
+    }).join('');
+  } catch (e) {}
+}
 
 // تحميل مكتبة توليد PDF عند الحاجة فقط (lazy) — ما تثقّل تحميل الصفحة.
 let _html2pdfLoading = null;
