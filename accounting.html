@@ -197,7 +197,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5يوليو-و · زر «معاينة كموظف» للمالكة + رصيد مجمّع + ثيم فاتح ملوّن 👁️🔐</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5يوليو-ز · سجل دخول/خروج الموظفين بلوحة التحكّم حسب اليوم/التاريخ 📅 + معاينة كموظف 👁️🔐</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -953,6 +953,10 @@ function renderControl(){
   const susp=audit.filter(a=>a.severity==='critical'||a.severity==='warning');
   const sevPill=(s)=>s==='critical'?'<span class="pill" style="background:var(--red);color:#fff">🚨 خطير</span>':(s==='warning'?'<span class="pill" style="background:#d98a00;color:#fff">⚠️ تنبيه</span>':'<span class="pill active">عادي</span>');
   const evName=(e)=>({unauthorized:'محاولة وصول بمفتاح خاطئ',failed_login:'دخول فاشل',login:'تسجيل دخول',data_delete:'حذف بيانات',logout:'خروج'}[e]||e);
+  // ===== سجل دخول/خروج الموظفين حسب اليوم =====
+  h+='<div class="panel" style="border:1px solid var(--accent);margin-bottom:14px"><h3 style="margin-top:0">📅 سجل دخول وخروج الموظفين</h3>'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><label style="font-size:12.5px;font-weight:700">اختاري اليوم:</label><input type="date" id="att-date" class="dueinp" onchange="renderAttendance()"><button class="btn ghost" style="padding:4px 12px;font-size:11.5px" onclick="attToday()">اليوم</button></div>'+
+    '<div id="att-body"></div></div>';
   h+='<div class="panel" id="seclog" style="border:1px solid '+(susp.length?'var(--red)':'var(--line)')+'"><h3 style="margin-top:0">🛡️ سجل الدخول والتدقيق <span class="cnt">'+audit.length+' حدث'+(susp.length?' · '+susp.length+' مشبوه':'')+'</span> '+
     (susp.length?'<button class="btn" style="background:var(--red);color:#fff;padding:3px 11px;font-size:11px;margin-right:8px" onclick="ackSecAll()">✅ اطّلعت على الكل</button>':'')+'</h3>'+
     '<div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">يسجّل: محاولات المفتاح الخاطئ (401) · الدخول الناجح/الفاشل · حذف البيانات. (دائم في القاعدة — بلا قيد 24 ساعة.)</div>'+
@@ -962,6 +966,7 @@ function renderControl(){
     '</tbody></table></div></div>';
   box.innerHTML=h;
   try{ renderDevices(); }catch(_){}
+  try{ attToday(); }catch(_){}
 }
 function secFilter(mode){ document.querySelectorAll('#seclog-tb .seclog-row').forEach(r=>{ const sev=r.dataset.sev; r.style.display=(mode==='all'||sev==='critical'||sev==='warning')?'':'none'; }); }
 function ctlAllTabs(on){ document.querySelectorAll('.ctl-tab').forEach(c=>c.checked=on); }
@@ -4464,6 +4469,30 @@ function isOwnerUser(){ if(PREVIEW_USER) return false; const me=(DATA&&DATA.me)|
 var PREVIEW_USER=null;
 function previewAs(name){ if(!isOwnerUser()&&!PREVIEW_USER)return; const u=staffList().find(x=>x.staff_name===name); if(!u){ alert('الموظف غير موجود'); return; } if(u.is_owner){ alert('لا حاجة لمعاينة حساب المالكة'); return; } PREVIEW_USER={staff_name:u.staff_name,is_owner:false,allowed_tabs:u.allowed_tabs||[]}; window.scrollTo(0,0); applyPermissions(); }
 function exitPreview(){ PREVIEW_USER=null; window.scrollTo(0,0); applyPermissions(); }
+// 📅 سجل دخول/خروج الموظفين ليوم محدّد (من سجل التدقيق)
+function attToday(){ const d=$('att-date'); if(d && !d.value){ const now=new Date(); d.value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0'); } renderAttendance(); }
+function renderAttendance(){
+  const box=$('att-body'); if(!box)return; const day=(($('att-date')||{}).value)||''; if(!day){ box.innerHTML=''; return; }
+  const MAP={login:{t:'🟢 دخول',c:'#0e9d6a'},logout:{t:'🔴 خروج',c:'#e5484d'},failed_login:{t:'⚠️ محاولة فاشلة',c:'#d98a00'},device_request:{t:'📱 طلب اعتماد جهاز',c:'#7c3aed'}};
+  const evs=(DATA.auditLog||[]).filter(a=>MAP[a.event_type] && String(a.ts||'').slice(0,10)===day)
+    .sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||'')));
+  // ملخّص لكل موظف: أول دخول + آخر خروج + عدد مرات الدخول
+  const perStaff={};
+  evs.forEach(a=>{ const s=a.staff_name||'—'; perStaff[s]=perStaff[s]||{first:'',last:'',logins:0,fails:0}; const tm=String(a.ts||'').slice(11,16); if(a.event_type==='login'){ perStaff[s].logins++; if(!perStaff[s].first)perStaff[s].first=tm; } if(a.event_type==='logout')perStaff[s].last=tm; if(a.event_type==='failed_login')perStaff[s].fails++; });
+  const staffKeys=Object.keys(perStaff);
+  let h='';
+  if(!evs.length){ box.innerHTML='<div style="color:var(--muted);font-size:12.5px;padding:8px">لا يوجد نشاط دخول/خروج في هذا اليوم.</div>'; return; }
+  // جدول ملخّص لكل موظف
+  h+='<div class="tbl-wrap" style="margin-bottom:10px"><table style="font-size:12px"><thead><tr><th>الموظف</th><th>🟢 أول دخول</th><th>🔴 آخر خروج</th><th>مرات الدخول</th><th>محاولات فاشلة</th></tr></thead><tbody>'+
+    staffKeys.map(s=>{ const o=perStaff[s]; return '<tr><td><b>'+esc(s)+'</b></td><td style="color:#0e9d6a;font-weight:700">'+esc(o.first||'—')+'</td><td style="color:#e5484d;font-weight:700">'+esc(o.last||'—')+'</td><td class="num">'+o.logins+'</td><td class="num" style="color:'+(o.fails?'#d98a00':'inherit')+'">'+(o.fails||'—')+'</td></tr>'; }).join('')+
+    '</tbody></table></div>';
+  // السجل الزمني التفصيلي لليوم
+  h+='<details open><summary style="cursor:pointer;color:var(--accent);font-weight:700;font-size:12.5px;margin-bottom:6px">📋 التفاصيل الزمنية ('+evs.length+' حدث)</summary>'+
+    '<div class="tbl-wrap" style="max-height:320px"><table style="font-size:11.5px"><thead><tr><th>الوقت</th><th>الموظف</th><th>الحدث</th><th>IP</th></tr></thead><tbody>'+
+    evs.map(a=>{ const m=MAP[a.event_type]; return '<tr><td style="font-weight:700">'+esc(String(a.ts||'').slice(11,16))+'</td><td>'+esc(a.staff_name||'—')+'</td><td style="color:'+m.c+';font-weight:700">'+m.t+'</td><td style="font-size:10px;color:var(--muted)">'+esc(a.ip||'—')+'</td></tr>'; }).join('')+
+    '</tbody></table></div></details>';
+  box.innerHTML=h;
+}
 function listCatLabel(cat){ return {banks:'Banks Name (اسم بنك)',charged_from:'charged from',bc_desc:'Banks Cash — وصف',bc_det:'Banks Cash — تفصيل',bc_subdet:'Banks Cash — تفصيل فرعي'}[cat]||cat; }
 function listValDisplay(cat,val){ return (cat==='bc_det'||cat==='bc_subdet')?String(val||'').split(BC_SEP).join(' ← '):String(val||''); }
 async function reqListItem(category,value,label){
