@@ -9,15 +9,15 @@
 <title>نظام حسابات Alezz</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
-  :root{--bg:#0f1729;--card:#182238;--card2:#1f2c47;--line:#2a3a5c;--txt:#e8eefc;--muted:#9fb0d0;--accent:#4f8cff;--green:#2fd98a;--red:#ff6b7a;--amber:#ffc24b;--purple:#a98bff}
+  :root{--bg:#eef2f7;--card:#ffffff;--card2:#f1f5fb;--line:#d6deeb;--txt:#1a2438;--muted:#5b6b86;--accent:#2f6fe0;--green:#0e9d6a;--red:#e5484d;--amber:#c47f00;--purple:#7c5cff}
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:"Segoe UI",Tahoma,system-ui,sans-serif;background:linear-gradient(160deg,#0c1220,#101a30);color:var(--txt);min-height:100vh}
+  body{font-family:"Segoe UI",Tahoma,system-ui,sans-serif;background:linear-gradient(160deg,#eef2f7,#e3ebf6);color:var(--txt);min-height:100vh}
   .wrap{max-width:1280px;margin:0 auto;padding:18px}
   header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px}
   .brand{display:flex;align-items:center;gap:12px}
   .logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#4f8cff,#a98bff);display:grid;place-items:center;font-weight:800;font-size:19px}
   h1{font-size:19px} .sub{color:var(--muted);font-size:12px}
-  .badge{font-size:10.5px;background:#243657;color:var(--green);padding:2px 8px;border-radius:20px}
+  .badge{font-size:10.5px;background:#e3edf7;color:var(--green);padding:2px 8px;border-radius:20px}
   button{font-family:inherit;cursor:pointer}
   .btn{background:var(--accent);color:#fff;border:none;padding:9px 15px;border-radius:10px;font-size:13px}
   .btn.ghost{background:var(--card);border:1px solid var(--line);color:var(--txt)}
@@ -53,41 +53,41 @@
   .pill.cancel{background:rgba(255,107,122,.15);color:var(--red)}
   .pill.over{background:rgba(255,107,122,.2);color:var(--red)}
   .src{font-size:9.5px;padding:1px 6px;border-radius:10px}
-  .src.sheet{background:#243657;color:var(--muted)} .src.dashboard{background:rgba(79,140,255,.18);color:var(--accent)}
+  .src.sheet{background:#e3edf7;color:var(--muted)} .src.dashboard{background:rgba(79,140,255,.18);color:var(--accent)}
   /* form */
   .formbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
-  .flt{padding:8px 11px;border-radius:9px;border:1px solid var(--line);background:#0f1729;color:var(--txt);font-family:inherit;font-size:12.5px}
+  .flt{padding:8px 11px;border-radius:9px;border:1px solid var(--line);background:#f6f8fc;color:var(--txt);font-family:inherit;font-size:12.5px}
   .flt:focus{outline:none;border-color:var(--accent)}
   .alertbox{background:rgba(255,107,122,.12);border:1px solid var(--red);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:12.5px;line-height:2;color:#ffd5da}
   .alertbox .ttl{font-weight:700;color:var(--red);margin-bottom:4px;display:block}
-  .dueinp{background:#0f1729;border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:5px 7px;font-family:inherit;font-size:11.5px}
+  .dueinp{background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:5px 7px;font-family:inherit;font-size:11.5px}
   .modal{position:fixed;inset:0;background:rgba(8,12,22,.85);display:none;place-items:center;z-index:20;padding:16px}
   .modal.on{display:grid}
   .mbox{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;width:560px;max-width:100%;max-height:92vh;overflow:auto}
   .mbox h3{margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
   .seg{display:flex;gap:6px;margin-bottom:14px}
-  .seg button{flex:1;padding:9px;border-radius:9px;border:1px solid var(--line);background:#0f1729;color:var(--muted);font-size:12.5px}
+  .seg button{flex:1;padding:9px;border-radius:9px;border:1px solid var(--line);background:#f6f8fc;color:var(--muted);font-size:12.5px}
   .seg button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
   .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .fld{display:flex;flex-direction:column;gap:4px;margin-bottom:4px}
   .fld label{font-size:11.5px;color:var(--muted)}
-  .fld input,.fld select{padding:9px;border-radius:9px;border:1px solid var(--line);background:#0f1729;color:var(--txt);font-family:inherit;font-size:13px}
+  .fld input,.fld select{padding:9px;border-radius:9px;border:1px solid var(--line);background:#f6f8fc;color:var(--txt);font-family:inherit;font-size:13px}
   .full{grid-column:1/3}
-  .calc{background:#0f1729;border:1px dashed var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between}
+  .calc{background:#f6f8fc;border:1px dashed var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between}
   .calc b{color:var(--green);font-size:15px}
   #msg{font-size:12px;min-height:16px;margin-top:6px}
   .foot{color:var(--muted);font-size:11px;text-align:center;margin-top:14px}
   /* login */
-  #login{position:fixed;inset:0;background:rgba(8,12,22,.96);display:grid;place-items:center;z-index:30}
+  #login{position:fixed;inset:0;background:rgba(226,233,244,.97);display:grid;place-items:center;z-index:30}
   .lbox{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px;width:320px;text-align:center}
-  .lbox input{width:100%;padding:11px;margin:14px 0;border-radius:10px;border:1px solid var(--line);background:#0f1729;color:var(--txt);font-family:inherit;text-align:center}
+  .lbox input{width:100%;padding:11px;margin:14px 0;border-radius:10px;border:1px solid var(--line);background:#f6f8fc;color:var(--txt);font-family:inherit;text-align:center}
   #err{color:var(--red);font-size:12px;min-height:16px}
   #loading{text-align:center;color:var(--muted);padding:50px}
   @media(max-width:900px){.kpis{grid-template-columns:1fr 1fr}.grid,.grid2,.fgrid{grid-template-columns:1fr}.full{grid-column:1}}
   .bf-scroll{overflow-x:auto;scrollbar-width:auto}
   .bf-scroll::-webkit-scrollbar{height:15px}
-  .bf-scroll::-webkit-scrollbar-track{background:#0f1729;border-radius:8px}
-  .bf-scroll::-webkit-scrollbar-thumb{background:var(--accent);border-radius:8px;border:2px solid #0f1729}
+  .bf-scroll::-webkit-scrollbar-track{background:#f6f8fc;border-radius:8px}
+  .bf-scroll::-webkit-scrollbar-thumb{background:var(--accent);border-radius:8px;border:2px solid #f6f8fc}
   .bf-scroll::-webkit-scrollbar-thumb:hover{background:#3aa0ff}
 </style>
 </head>
@@ -100,10 +100,10 @@
     <div class="sub" style="margin-top:4px">اختر قسمك ثم سجّل الدخول</div>
     <div id="lg-form">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0">
-        <div class="lg-role" onclick="lgPickRole(this,'acct')" style="background:#0e2038;border:1px solid var(--line);border-radius:11px;padding:11px 6px;font-size:13px;cursor:pointer;font-weight:700;text-align:center">🧾 محاسبة</div>
-        <div class="lg-role" onclick="lgPickRole(this,'sales')" style="background:#0e2038;border:1px solid var(--line);border-radius:11px;padding:11px 6px;font-size:13px;cursor:pointer;font-weight:700;text-align:center">🧳 مبيعات</div>
-        <div class="lg-role" onclick="lgPickRole(this,'booking')" style="background:#0e2038;border:1px solid var(--line);border-radius:11px;padding:11px 6px;font-size:13px;cursor:pointer;font-weight:700;text-align:center">🏷️ حجوزات</div>
-        <div class="lg-role" onclick="lgPickRole(this,'admin')" style="background:#0e2038;border:1px solid var(--line);border-radius:11px;padding:11px 6px;font-size:13px;cursor:pointer;font-weight:700;text-align:center">👑 الإدارة</div>
+        <div class="lg-role" onclick="lgPickRole(this,'acct')" style="background:#e8eef6;border:1px solid var(--line);border-radius:11px;padding:11px 6px;font-size:13px;cursor:pointer;font-weight:700;text-align:center">🧾 محاسبة</div>
+        <div class="lg-role" onclick="lgPickRole(this,'sales')" style="background:#e8eef6;border:1px solid var(--line);border-radius:11px;padding:11px 6px;font-size:13px;cursor:pointer;font-weight:700;text-align:center">🧳 مبيعات</div>
+        <div class="lg-role" onclick="lgPickRole(this,'booking')" style="background:#e8eef6;border:1px solid var(--line);border-radius:11px;padding:11px 6px;font-size:13px;cursor:pointer;font-weight:700;text-align:center">🏷️ حجوزات</div>
+        <div class="lg-role" onclick="lgPickRole(this,'admin')" style="background:#e8eef6;border:1px solid var(--line);border-radius:11px;padding:11px 6px;font-size:13px;cursor:pointer;font-weight:700;text-align:center">👑 الإدارة</div>
       </div>
       <input id="lg-name" placeholder="اسمك" onkeydown="if(event.key==='Enter')staffGateLogin()">
       <input type="password" id="lg-pin" placeholder="رمز الدخول (PIN)" onkeydown="if(event.key==='Enter')staffGateLogin()">
@@ -111,7 +111,7 @@
       <div id="err"></div>
     </div>
     <div id="lg-pending" style="display:none"></div>
-    <style>.lg-role.on{border-color:var(--accent)!important;background:rgba(79,140,255,.16)!important;color:#cfe0ff}</style>
+    <style>.lg-role.on{border-color:var(--accent)!important;background:rgba(79,140,255,.16)!important;color:#1e5aa8}</style>
     <details style="margin-top:12px"><summary style="cursor:pointer;font-size:12px;color:var(--muted)">🔑 دخول المالكة (كلمة سر النظام)</summary>
       <input type="password" id="pw" placeholder="كلمة سر النظام" onkeydown="if(event.key==='Enter')login()" style="margin-top:6px">
       <button class="btn ghost" style="width:100%;margin-top:6px" onclick="login()">دخول المالكة</button>
@@ -127,7 +127,7 @@
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4يوليو-ط · زر خروج واضح أعلى الصفحة + عرض الدور ورقم الدخول + اعتماد الأجهزة 🔐</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5يوليو · ثيم فاتح (نهاري) + منشور أونلاين + اعتماد الأجهزة + لوحة تحكّم للمالكة فقط 🔐</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -198,26 +198,26 @@
         <datalist id="codes6"></datalist>
         <div class="fgrid">
           <div class="fld"><label>CODE</label><input id="e-code" list="codes6" placeholder="C26016" oninput="eRecall()"></div>
-          <div class="fld"><label>Supplier name <button type="button" onclick="mgrToggle('suppliers','Supplier name')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#1a2540;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-supplier"></select></div>
-          <div class="fld"><label>Agent name <button type="button" onclick="mgrToggle('agents','Agent name')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#1a2540;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-agent"></select></div>
+          <div class="fld"><label>Supplier name <button type="button" onclick="mgrToggle('suppliers','Supplier name')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-supplier"></select></div>
+          <div class="fld"><label>Agent name <button type="button" onclick="mgrToggle('agents','Agent name')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-agent"></select></div>
           <div class="fld"><label>الكود (Code)</label><input id="e-agentcode"></div>
-          <div class="fld"><label>country from <button type="button" onclick="mgrToggle('country_from','country from')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#1a2540;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-from"></select></div>
-          <div class="fld"><label>Travel To <button type="button" onclick="mgrToggle('travel_to','Travel To')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#1a2540;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-to"></select></div>
-          <div class="fld"><label>Banks Name <button type="button" onclick="mgrToggle('banks','Banks Name')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#1a2540;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-bank"></select></div>
-          <div class="fld"><label>the currency <button type="button" onclick="mgrToggle('currency','the currency')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#1a2540;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-cur"></select></div>
-          <div class="fld"><label>service Type <button type="button" onclick="mgrToggle('kinds','service Type')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#1a2540;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-kind"></select></div>
-          <div class="fld"><label>🧾 Service Type <span style="font-size:9px;color:var(--muted)">(تظهر في Sales Form فقط)</span> <button type="button" onclick="mgrToggle('sales_service_type','Service Type — Sales Form')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#1a2540;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-stype"></select></div>
-          <div class="fld"><label>Confirmed BY <button type="button" onclick="mgrToggle('confirmed_by','Confirmed BY')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#1a2540;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-cby"></select></div>
-          <div class="fld"><label>Booked By <button type="button" onclick="mgrToggle('booked_by','Booked By')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#1a2540;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-by"></select></div>
-          <div class="fld"><label>hotels or System <button type="button" onclick="mgrToggle('hotels_system','hotels or System')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#1a2540;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-bfrom"></select></div>
-          <div class="fld"><label>charged from <button type="button" onclick="mgrToggle('charged_from','charged from')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#1a2540;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-cfrom"></select></div>
+          <div class="fld"><label>country from <button type="button" onclick="mgrToggle('country_from','country from')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-from"></select></div>
+          <div class="fld"><label>Travel To <button type="button" onclick="mgrToggle('travel_to','Travel To')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-to"></select></div>
+          <div class="fld"><label>Banks Name <button type="button" onclick="mgrToggle('banks','Banks Name')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-bank"></select></div>
+          <div class="fld"><label>the currency <button type="button" onclick="mgrToggle('currency','the currency')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-cur"></select></div>
+          <div class="fld"><label>service Type <button type="button" onclick="mgrToggle('kinds','service Type')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-kind"></select></div>
+          <div class="fld"><label>🧾 Service Type <span style="font-size:9px;color:var(--muted)">(تظهر في Sales Form فقط)</span> <button type="button" onclick="mgrToggle('sales_service_type','Service Type — Sales Form')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-stype"></select></div>
+          <div class="fld"><label>Confirmed BY <button type="button" onclick="mgrToggle('confirmed_by','Confirmed BY')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-cby"></select></div>
+          <div class="fld"><label>Booked By <button type="button" onclick="mgrToggle('booked_by','Booked By')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-by"></select></div>
+          <div class="fld"><label>hotels or System <button type="button" onclick="mgrToggle('hotels_system','hotels or System')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-bfrom"></select></div>
+          <div class="fld"><label>charged from <button type="button" onclick="mgrToggle('charged_from','charged from')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-cfrom"></select></div>
         </div>
-        <div id="listmgr" data-cat="" style="display:none;background:#0f1729;border:1px solid var(--accent);border-radius:10px;padding:10px;margin:8px 0">
+        <div id="listmgr" data-cat="" style="display:none;background:#f6f8fc;border:1px solid var(--accent);border-radius:10px;padding:10px;margin:8px 0">
           <div style="font-size:12px;margin-bottom:6px"><b id="listmgr-title"></b></div>
           <div style="display:flex;gap:6px;margin-bottom:8px"><input id="listmgr-input" placeholder="عنصر جديد…" style="flex:1" onkeydown="if(event.key==='Enter')mgrAdd()"><button class="btn green" style="padding:5px 12px" onclick="mgrAdd()">+ إضافة</button></div>
           <div id="listmgr-items"></div>
         </div>
-        <div id="e-cinfo" style="display:none;background:#0f1729;border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0;font-size:12.5px"></div>
+        <div id="e-cinfo" style="display:none;background:#f6f8fc;border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0;font-size:12.5px"></div>
         <div id="e-msg" style="font-size:12px;min-height:16px;margin:6px 0"></div>
         <button class="btn green" onclick="eSave()">💾 حفظ</button>
       </div>
@@ -228,19 +228,19 @@
           <div style="flex:1;min-width:240px">
             <b style="font-size:12.5px">📝 الوصف (رئيسي) <span class="cnt" id="bcl-desc-cnt"></span></b>
             <div style="display:flex;gap:6px;margin:6px 0"><input id="bcl-desc-new" placeholder="وصف جديد…" style="flex:1" onkeydown="if(event.key==='Enter')bclAddDesc()"><button class="btn green" style="padding:5px 12px" onclick="bclAddDesc()">+ إضافة</button></div>
-            <input id="bcl-desc-q" oninput="renderBcLists()" placeholder="🔍 ابحثي بالاسم…" autocomplete="off" style="width:100%;margin-bottom:6px;background:#fff;color:#0f1729">
+            <input id="bcl-desc-q" oninput="renderBcLists()" placeholder="🔍 ابحثي بالاسم…" autocomplete="off" style="width:100%;margin-bottom:6px;background:#fff;color:#f6f8fc">
             <div id="bcl-desc-list" style="max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px"></div>
           </div>
           <div style="flex:1;min-width:240px">
             <b style="font-size:12.5px">📋 التفاصيل التابعة لـ: <span id="bcl-sel-desc" style="color:var(--accent)">— اختاري وصفاً —</span></b>
             <div style="display:flex;gap:6px;margin:6px 0"><input id="bcl-det-new" placeholder="تفصيل جديد…" style="flex:1" onkeydown="if(event.key==='Enter')bclAddDet()"><button class="btn green" style="padding:5px 12px" onclick="bclAddDet()">+ إضافة</button></div>
-            <input id="bcl-det-q" oninput="renderBcLists()" placeholder="🔍 ابحثي بالاسم…" autocomplete="off" style="width:100%;margin-bottom:6px;background:#fff;color:#0f1729">
+            <input id="bcl-det-q" oninput="renderBcLists()" placeholder="🔍 ابحثي بالاسم…" autocomplete="off" style="width:100%;margin-bottom:6px;background:#fff;color:#f6f8fc">
             <div id="bcl-det-list" style="max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px"></div>
           </div>
           <div style="flex:1;min-width:240px">
             <b style="font-size:12.5px">🔖 التفاصيل الفرعية تحت: <span id="bcl-sel-det" style="color:var(--accent)">— اختاري تفصيلاً —</span></b>
             <div style="display:flex;gap:6px;margin:6px 0"><input id="bcl-sub-new" placeholder="تفصيل فرعي جديد…" style="flex:1" onkeydown="if(event.key==='Enter')bclAddSub()"><button class="btn green" style="padding:5px 12px" onclick="bclAddSub()">+ إضافة</button></div>
-            <input id="bcl-sub-q" oninput="renderBcLists()" placeholder="🔍 ابحثي بالاسم…" autocomplete="off" style="width:100%;margin-bottom:6px;background:#fff;color:#0f1729">
+            <input id="bcl-sub-q" oninput="renderBcLists()" placeholder="🔍 ابحثي بالاسم…" autocomplete="off" style="width:100%;margin-bottom:6px;background:#fff;color:#f6f8fc">
             <div id="bcl-sub-list" style="max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px"></div>
           </div>
         </div>
@@ -310,19 +310,19 @@
           <div class="fld" id="fld-room" style="display:none"><label>🛏️ نوع الغرفة <span class="hotel-req-star" style="color:var(--red);display:none">*</span> <span style="font-size:9px;color:var(--muted)">(كتابة يدوية)</span></label><input id="s-room" autocomplete="off" placeholder="اكتبي نوع الغرفة (مثال: ديلوكس)"></div>
           <div class="fld"><label><span id="lbl-supplier">مصدر الحجز من</span> <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">اكتبي أول الحروف للبحث</span></label><input id="s-supplier" list="s-supplier-list" autocomplete="off" placeholder="اكتبي أول حروف الاسم…"><datalist id="s-supplier-list"></datalist></div>
           <div class="fld"><label>سعر البيع (للعميل) <span class="hotel-req-star" style="color:var(--red);display:none">*</span></label><input type="number" id="s-price" value="0" oninput="sCalc()"></div>
-          <div class="fld"><label>عملة البيع (من ملف العميل)</label><select id="s-sellcur" disabled style="background:#0d1322;color:var(--accent);font-weight:700"><option>SAR</option><option>USD</option><option>MYR</option><option>OMR</option><option>AED</option><option>EUR</option></select></div>
+          <div class="fld"><label>عملة البيع (من ملف العميل)</label><select id="s-sellcur" disabled style="background:#f1f5fb;color:var(--accent);font-weight:700"><option>SAR</option><option>USD</option><option>MYR</option><option>OMR</option><option>AED</option><option>EUR</option></select></div>
           <div class="fld"><label>عملة المورّد <span class="hotel-req-star" style="color:var(--red);display:none">*</span></label><select id="s-cur" onchange="sRate()"><option>SAR</option><option>USD</option><option>MYR</option><option>OMR</option><option>AED</option><option>EUR</option></select></div>
-          <div class="fld"><label>سعر الصرف (تلقائي من الإدارة)</label><input type="number" id="s-rate" value="1" disabled style="background:#0d1322;color:var(--accent);font-weight:700"><span id="s-rate-msg" style="color:var(--red);font-size:10px"></span></div>
-          <div class="fld"><label>سعر المورد (محسوب بعملته)</label><input id="s-supcalc" disabled style="background:#0d1322;color:var(--accent);font-weight:700"></div>
+          <div class="fld"><label>سعر الصرف (تلقائي من الإدارة)</label><input type="number" id="s-rate" value="1" disabled style="background:#f1f5fb;color:var(--accent);font-weight:700"><span id="s-rate-msg" style="color:var(--red);font-size:10px"></span></div>
+          <div class="fld"><label>سعر المورد (محسوب بعملته)</label><input id="s-supcalc" disabled style="background:#f1f5fb;color:var(--accent);font-weight:700"></div>
           <div class="fld"><label>🌙 عدد الليالي <span style="font-size:9px;color:var(--muted)">(تلقائي من التواريخ)</span></label><input type="number" id="s-qty" value="1"></div>
           <div class="fld"><label>دخول <span class="sdate-req" style="color:var(--red);display:none">*</span></label><input type="date" id="s-in" onchange="sNights()"></div>
           <div class="fld"><label>خروج <span class="sdate-req" style="color:var(--red);display:none">*</span></label><input type="date" id="s-out" onchange="sNights()"></div>
         </div>
         <input type="hidden" id="s-id">
-        <div id="s-info" style="display:none;background:#0f1729;border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0;font-size:12.5px"></div>
+        <div id="s-info" style="display:none;background:#f6f8fc;border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0;font-size:12.5px"></div>
         <div id="s-cart" style="display:none;margin:8px 0"></div>
         <div id="s-msg" style="font-size:12px;min-height:16px;margin:6px 0"></div>
-        <button class="btn" id="s-add-btn" onclick="sAddAnother()" style="background:#1a2540;border:1px solid var(--accent);color:var(--accent)">➕ أضف خدمة أخرى للطلب</button>
+        <button class="btn" id="s-add-btn" onclick="sAddAnother()" style="background:#eef2f8;border:1px solid var(--accent);color:var(--accent)">➕ أضف خدمة أخرى للطلب</button>
         <button class="btn green" id="s-save-btn" onclick="addSales()" style="margin-right:6px">💾 حفظ الطلب</button>
         <button class="btn ghost" onclick="cancelEditSales()" style="margin-right:6px">جديد / إلغاء التعديل</button>
       </div>
@@ -346,7 +346,7 @@
           <div class="fld" style="max-width:280px"><label>👤 Booked by <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">(للعميل كامل)</span></label><input id="b-by" list="bookedby-list" autocomplete="off" placeholder="اسم من حجز للعميل (إجباري)"><datalist id="bookedby-list"></datalist></div>
         </div>
         <div style="font-size:12px;color:var(--muted);background:rgba(58,123,213,.06);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:8px">ℹ️ لا يمكن إنشاء حجز يدوي من هنا — الحجوزات تأتي تلقائياً من <b>Sales Form</b>. استدعي العميل بكوده أعلاه، وسجّلي <b>الحجز الفعلي</b> لكل خدمة في الجدول الذي يظهر بالأسفل.</div>
-        <div id="b-info" style="display:none;background:#0f1729;border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0;font-size:12.5px"></div>
+        <div id="b-info" style="display:none;background:#f6f8fc;border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0;font-size:12.5px"></div>
         <div style="border-top:1px dashed var(--line);margin-top:10px;padding-top:10px">
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
             <span style="font-size:12.5px;font-weight:700">📄 تصدير سند الحجز للعميل المُستدعى:</span>
@@ -496,7 +496,7 @@
     </div>
 
     <div class="page" id="p-suppliers">
-      <div class="formbar"><label style="font-weight:700;margin-left:8px">🧾 اكتبي اسم المورّد للبحث السريع:</label><input id="supflt" list="supflt-list" class="flt" onchange="renderSupplierDetail()" autocomplete="off" placeholder="اكتبي اسم المورّد…" style="min-width:320px;background:#fff;color:#0f1729"><datalist id="supflt-list"></datalist><button class="btn ghost" style="padding:7px 14px" onclick="$('supflt').value='';renderSupplierDetail()">مسح</button></div>
+      <div class="formbar"><label style="font-weight:700;margin-left:8px">🧾 اكتبي اسم المورّد للبحث السريع:</label><input id="supflt" list="supflt-list" class="flt" onchange="renderSupplierDetail()" autocomplete="off" placeholder="اكتبي اسم المورّد…" style="min-width:320px;background:#fff;color:#f6f8fc"><datalist id="supflt-list"></datalist><button class="btn ghost" style="padding:7px 14px" onclick="$('supflt').value='';renderSupplierDetail()">مسح</button></div>
       <div id="sup-dups"></div>
       <div id="supplier-detail"></div>
       <div class="panel" id="all-suppliers-panel"><h3>كل الموردين <span class="cnt" id="sup-cnt"></span></h3>
@@ -514,7 +514,7 @@
           <div class="fld" style="min-width:220px"><label>🏦 البنك / الحساب (في نظامك)</label><select id="rec-bank"><option value="">— اختاري البنك —</option></select></div>
           <div class="fld"><label>📅 من تاريخ</label><input type="date" id="rec-from" style="color-scheme:dark;cursor:pointer"></div>
           <div class="fld"><label>📅 إلى تاريخ</label><input type="date" id="rec-to" style="color-scheme:dark;cursor:pointer"></div>
-          <div class="fld" style="min-width:240px"><label>⬆️ كشف البنك الأصلي (PDF / CSV)</label><input type="file" id="rec-file" accept=".pdf,.csv" style="font-size:11px;padding:6px;background:#0f1729;border:1px solid var(--line);border-radius:8px;color:var(--txt)"></div>
+          <div class="fld" style="min-width:240px"><label>⬆️ كشف البنك الأصلي (PDF / CSV)</label><input type="file" id="rec-file" accept=".pdf,.csv" style="font-size:11px;padding:6px;background:#f6f8fc;border:1px solid var(--line);border-radius:8px;color:var(--txt)"></div>
           <button class="btn green" style="padding:9px 20px" onclick="runReconcile()">🔍 تحقّق وقارن</button>
         </div>
         <div id="rec-result" style="margin-top:14px"></div>
@@ -535,22 +535,22 @@
         <h3 style="margin-top:0">➕ إضافة حركة كاش (داخل / خارج) يدوياً</h3>
         <div class="fgrid">
           <div class="fld"><label>📅 التاريخ</label><input type="date" id="bca-date" style="color-scheme:dark;cursor:pointer"></div>
-          <div class="fld"><label>البنك / البطاقة <span style="color:var(--red)">*</span></label><input id="bca-bank" list="bc-bank-list" autocomplete="off" placeholder="اكتبي اسم البنك…" style="background:#fff;color:#0f1729"></div>
+          <div class="fld"><label>البنك / البطاقة <span style="color:var(--red)">*</span></label><input id="bca-bank" list="bc-bank-list" autocomplete="off" placeholder="اكتبي اسم البنك…" style="background:#fff;color:#f6f8fc"></div>
           <div class="fld"><label>داخل (+)</label><input type="number" id="bca-in" placeholder="0"></div>
           <div class="fld"><label>خارج (−)</label><input type="number" id="bca-out" placeholder="0"></div>
-          <div class="fld"><label>العملة</label><input id="bca-cur" list="bc-cur-list" autocomplete="off" placeholder="OMR / USD…" style="background:#fff;color:#0f1729"></div>
+          <div class="fld"><label>العملة</label><input id="bca-cur" list="bc-cur-list" autocomplete="off" placeholder="OMR / USD…" style="background:#fff;color:#f6f8fc"></div>
           <div class="fld"><label>سعر الصرف (1 وحدة = ؟ ر.س)</label><input type="number" id="bca-rate" step="0.0001" placeholder="مثال 9.5"></div>
           <div class="fld"><label>المرجع البنكي</label><input id="bca-ref"></div>
-          <div class="fld"><label>الوصف <span style="color:var(--red)">*</span></label><select id="bca-desc" onchange="bcFillAddDetails()" style="background:#fff;color:#0f1729"></select></div>
-          <div class="fld"><label>التفاصيل (تتبع الوصف) <span style="color:var(--red)">*</span></label><select id="bca-details" onchange="bcFillAddMore()" style="background:#fff;color:#0f1729"></select></div>
-          <div class="fld"><label>📝 تفاصيل أكثر (تتبع التفاصيل) <span style="color:var(--red)">*</span></label><select id="bca-more" style="background:#fff;color:#0f1729"></select></div>
+          <div class="fld"><label>الوصف <span style="color:var(--red)">*</span></label><select id="bca-desc" onchange="bcFillAddDetails()" style="background:#fff;color:#f6f8fc"></select></div>
+          <div class="fld"><label>التفاصيل (تتبع الوصف) <span style="color:var(--red)">*</span></label><select id="bca-details" onchange="bcFillAddMore()" style="background:#fff;color:#f6f8fc"></select></div>
+          <div class="fld"><label>📝 تفاصيل أكثر (تتبع التفاصيل) <span style="color:var(--red)">*</span></label><select id="bca-more" style="background:#fff;color:#f6f8fc"></select></div>
           <div class="fld"><label>ملاحظة</label><input id="bca-note"></div>
         </div>
         <div style="margin-top:8px;display:flex;gap:10px;align-items:center"><button class="btn" onclick="addBankCash()">💾 حفظ الحركة</button><span id="bc-add-msg" style="font-size:12px"></span></div>
         <div style="font-size:11px;color:var(--muted);margin-top:4px">القيمة بالريال تُحسب تلقائياً = المبلغ × سعر الصرف. الحركات اليدوية لا تمسحها المزامنة.</div>
       </div>
       <div class="formbar">
-        <div class="fld" style="min-width:240px"><label>🏦 البنك / البطاقة</label><input id="bc-bank" list="bc-bank-list" autocomplete="off" oninput="renderBanksCashDetail()" placeholder="كل البنوك — أو اكتبي للبحث" style="background:#fff;color:#0f1729"></div>
+        <div class="fld" style="min-width:240px"><label>🏦 البنك / البطاقة</label><input id="bc-bank" list="bc-bank-list" autocomplete="off" oninput="renderBanksCashDetail()" placeholder="كل البنوك — أو اكتبي للبحث" style="background:#fff;color:#f6f8fc"></div>
         <div class="fld"><label>💱 العملة</label><select id="bc-cur" class="flt" onchange="renderBanksCashDetail()"><option value="">كل العملات</option></select></div>
         <div class="fld" style="min-width:200px;flex:1"><label>🔍 بحث (بنك/مرجع/وصف/ملاحظة)</label><input id="bc-q" oninput="renderBanksCashDetail()" placeholder="اكتبي…"></div>
         <div class="fld"><label>من 📅</label><input type="date" id="bc-from" onchange="renderBanksCashDetail()" style="color-scheme:dark;cursor:pointer"></div>
@@ -562,7 +562,7 @@
       <div class="panel" id="bc-desc-panel" style="display:none;margin-bottom:10px;border-color:var(--accent)">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
           <b style="font-size:13px">📝 اختاري الوصف (واحد أو أكثر)</b>
-          <input id="bc-desc-search" oninput="bcRenderMulti('desc')" placeholder="🔍 بحث في الوصف…" style="flex:1;min-width:160px;background:#fff;color:#0f1729">
+          <input id="bc-desc-search" oninput="bcRenderMulti('desc')" placeholder="🔍 بحث في الوصف…" style="flex:1;min-width:160px;background:#fff;color:#f6f8fc">
           <button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="bcMultiAll('desc',true)">تحديد الظاهر</button>
           <button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="bcMultiAll('desc',false)">مسح التحديد</button>
         </div>
@@ -571,7 +571,7 @@
       <div class="panel" id="bc-details-panel" style="display:none;margin-bottom:10px;border-color:var(--accent)">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
           <b style="font-size:13px">📋 اختاري التفاصيل (عدة قيم مرة وحدة)</b>
-          <input id="bc-details-search" oninput="bcRenderMulti('details')" placeholder="🔍 بحث في التفاصيل…" style="flex:1;min-width:160px;background:#fff;color:#0f1729">
+          <input id="bc-details-search" oninput="bcRenderMulti('details')" placeholder="🔍 بحث في التفاصيل…" style="flex:1;min-width:160px;background:#fff;color:#f6f8fc">
           <button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="bcMultiAll('details',true)">تحديد الظاهر</button>
           <button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="bcMultiAll('details',false)">مسح التحديد</button>
         </div>
@@ -636,7 +636,7 @@
       <div class="fld"><label>كود العميل الموجود — اكتبيه أو اختاري من القائمة</label>
         <input id="f-code" placeholder="مثال C26010" list="codes" oninput="onCodeInput()"></div>
       <datalist id="codes"></datalist>
-      <div id="client-info" style="display:none;background:#0f1729;border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:10px"></div>
+      <div id="client-info" style="display:none;background:#f6f8fc;border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:10px"></div>
     </div>
 
     <div class="fgrid">
@@ -661,7 +661,7 @@
         <select id="f-bank" onchange="onBankChange()"><option value="">— اختاري —</option></select></div>
       <div class="fld" id="fld-bank-other" style="display:none"><label>اسم بنك جديد</label><input id="f-bank-other"></div>
       <div class="fld" id="fld-supplier" style="display:none"><label>🤝 اسم المورّد <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">سُلّم له المبلغ مباشرة</span></label><select id="f-supplier" onchange="onSupplierPick()"><option value="">— اختاري المورّد —</option></select></div>
-      <div class="fld" id="fld-supcur" style="display:none"><label>عملة المورّد المعتمدة <span style="font-size:9px;color:var(--muted)">🔒 تلقائية</span></label><input id="f-supcur" readonly style="background:#1a2540;font-weight:700;color:var(--accent)"></div>
+      <div class="fld" id="fld-supcur" style="display:none"><label>عملة المورّد المعتمدة <span style="font-size:9px;color:var(--muted)">🔒 تلقائية</span></label><input id="f-supcur" readonly style="background:#eef2f8;font-weight:700;color:var(--accent)"></div>
       <div class="fld" id="fld-suprate" style="display:none"><label>سعر الصرف التقريبي <span style="color:var(--red)">*</span> <span style="font-size:9px;color:#d98a00">إجباري · قابل للتعديل</span></label><input type="number" id="f-suprate" step="0.0001" placeholder="أدخلي سعر الصرف" oninput="supConvCalc()"></div>
       <div class="fld full" id="fld-supconv" style="display:none"><div style="font-size:12px;color:var(--accent);font-weight:700" id="f-supconv"></div></div>
       <div class="fld" id="fld-ref"><label>مرجع البنك / الإيداع <span style="font-size:9px;color:#d98a00">بدونه = غير معتمد</span></label><input id="f-ref"></div>
@@ -855,14 +855,14 @@ function renderControl(){
     '<div class="fld"><label>النوع</label><select id="ctl-owner"><option value="0">موظف (صلاحيات محددة)</option><option value="1">مالكة (كل الصلاحيات)</option></select></div>'+
     '</div>'+
     '<div style="margin:10px 0 6px;font-size:12.5px;font-weight:700">التبويبات المسموحة للموظف:</div>'+
-    '<div id="ctl-tabs" style="display:flex;flex-wrap:wrap;gap:7px 18px;background:#0f1729;border:1px solid var(--line);border-radius:8px;padding:10px">'+TABS.map(t=>'<label style="font-size:12px;cursor:pointer"><input type="checkbox" class="ctl-tab" value="'+t.k+'"> '+esc(t.l)+'</label>').join('')+'</div>'+
+    '<div id="ctl-tabs" style="display:flex;flex-wrap:wrap;gap:7px 18px;background:#f6f8fc;border:1px solid var(--line);border-radius:8px;padding:10px">'+TABS.map(t=>'<label style="font-size:12px;cursor:pointer"><input type="checkbox" class="ctl-tab" value="'+t.k+'"> '+esc(t.l)+'</label>').join('')+'</div>'+
     '<div style="margin-top:6px"><button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="ctlAllTabs(true)">☑ تحديد الكل</button> <button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="ctlAllTabs(false)">مسح</button></div>'+
     '<button class="btn green" style="margin-top:12px" onclick="ctlSave()">💾 حفظ الموظف</button> <span id="ctl-msg" style="font-size:12px;margin-right:8px"></span></div>'+
     '<div class="panel"><h3>🔐 الموظفون وصلاحياتهم <span class="cnt">'+list.length+'</span></h3>'+
     '<div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">⚠️ الحماية على مستوى الواجهة لتنظيم العمل (الملف محلي). الدخول الكامل يتطلب كلمة سر النظام.</div>'+
     '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الموظف</th><th>الدور</th><th>🔑 رقم الدخول</th><th>النوع</th><th>الحالة</th><th>التبويبات المسموحة</th><th>إجراءات</th></tr></thead><tbody>'+
     (list.length?list.map(u=>{ const nm=esc(u.staff_name); const arg="'"+nm.replace(/'/g,"\\'")+"'"; return '<tr><td><b>'+nm+'</b></td>'+
-      '<td>'+(u.role?'<span class="pill" style="background:#1e3a52;color:#bde3ff">'+esc(u.role)+'</span>':'<span style="color:var(--muted)">—</span>')+'</td>'+
+      '<td>'+(u.role?'<span class="pill" style="background:#e3edf7;color:#1e5aa8">'+esc(u.role)+'</span>':'<span style="color:var(--muted)">—</span>')+'</td>'+
       '<td style="font-weight:700;font-size:14px;letter-spacing:2px;color:var(--amber)">'+(u.pin?esc(u.pin):(u.has_pin?'••••':'<span style="color:var(--red);font-size:11px">بلا رمز</span>'))+'</td>'+
       '<td>'+(u.is_owner?'<span class="pill active">مالكة</span>':'موظف')+'</td>'+
       '<td>'+(u.active===false?'<span class="pill cancel">موقوف</span>':'<span class="pill active">نشط</span>')+'</td>'+
@@ -1197,7 +1197,7 @@ function bRecall(){
   }
   if(svcs.length){
     h+='<div style="margin-top:8px;font-size:12px"><b>كل حجوزات العميل ('+svcs.length+') — الخلايا قابلة للتعديل:</b> <span style="color:var(--muted);font-size:11px">← اسحبي يمين/يسار أو استخدمي أزرار التمرير تحت</span></div><div class="tbl-wrap bf-scroll" id="bf-tbl" style="max-height:360px"><table style="font-size:11px"><thead><tr><th>النوع</th><th>الخدمة</th><th>Conf No</th><th>سعر البيع</th><th>سعر المورد</th><th>الحجز الفعلي</th><th>الفرق</th><th>الربح</th><th>رسوم الإلغاء</th><th>المرتجع</th><th>المرتجع المفترض</th><th>Booked from</th><th>📅 تاريخ الدفع <span style="color:var(--red)">*</span></th><th>Charge from <span style="color:var(--red)">*</span></th><th>الحالة</th><th>سعر الصرف</th><th>حفظ</th></tr></thead><tbody>'+
-    svcs.map(b=>{ const i=b.id; const st='style="width:80px;padding:3px 4px;background:#0f1729;border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:11px"';
+    svcs.map(b=>{ const i=b.id; const st='style="width:80px;padding:3px 4px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:11px"';
       const inp=(f,v,num,extra)=>'<input id="sb-'+f+'-'+i+'" '+(num?'type="number"':'')+' value="'+esc(v!=null?v:'')+'" '+st+' '+(extra||'')+'>';
       const selInp=(f,v,cat)=>{ const cur=(v==null?'':String(v)); const vals=listValues(cat);
         let o='<option value=""></option>'+vals.map(x=>'<option'+(x.value===cur?' selected':'')+'>'+esc(x.value)+'</option>').join('');
@@ -1225,7 +1225,7 @@ function bRecall(){
         '<td>'+inp('conf',b.conf_no,false)+'</td>'+
         '<td class="num">'+fmt(sell)+cur(sellCur)+'</td>'+
         '<td class="num" id="sb-sup-'+i+'" data-rate="'+rate+'" data-sell="'+sell+'" data-sellcur="'+esc(sellCur)+'" data-supcur="'+esc(supCur)+'">'+fmt(supPrice)+' <b style="color:var(--accent);font-size:11.5px">'+esc(supCur)+'</b></td>'+
-        '<td>'+bookedCell+'<select id="sb-bcur-'+i+'" data-sf="'+esc(supCur)+'" onchange="bRow('+i+')" '+(lockedCost?'disabled ':'')+'style="width:58px;padding:2px;background:#0f1729;border:1px solid var(--line);color:var(--txt);border-radius:5px;font-size:10px;margin-right:3px">'+['SAR','USD','MYR','OMR','AED','EUR','SGD'].map(cc=>'<option'+(((supCur||b.booked_currency||'SAR')===cc)?' selected':'')+'>'+cc+'</option>').join('')+'</select><span id="sb-cwarn-'+i+'" style="color:var(--red);font-size:9px;display:block"></span></td>'+
+        '<td>'+bookedCell+'<select id="sb-bcur-'+i+'" data-sf="'+esc(supCur)+'" onchange="bRow('+i+')" '+(lockedCost?'disabled ':'')+'style="width:58px;padding:2px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:5px;font-size:10px;margin-right:3px">'+['SAR','USD','MYR','OMR','AED','EUR','SGD'].map(cc=>'<option'+(((supCur||b.booked_currency||'SAR')===cc)?' selected':'')+'>'+cc+'</option>').join('')+'</select><span id="sb-cwarn-'+i+'" style="color:var(--red);font-size:9px;display:block"></span></td>'+
         '<td class="num" id="sb-diffsup-'+i+'"'+(diffSup!=null?' style="color:'+(diffSup<0?'var(--red)':'var(--green)')+';font-weight:700"':'')+'>'+(diffSup!=null?fmt(diffSup)+cur(supCur):'')+'</td>'+
         '<td class="num" id="sb-profit-'+i+'"'+(profitSar!=null?' style="color:'+(profitSar<0?'var(--red)':'var(--green)')+';font-weight:700"':'')+'>'+(profitSar!=null?fmt(profitSar)+cur(sellCur):'')+'</td>'+
         '<td>'+inp('cancel',b.cancel_charge,true,'oninput="bRow('+i+')"')+cur(supCur)+'</td><td>'+inp('refund',(isC?Number(_refSup.toFixed(2)):0),true)+cur(supCur)+'</td><td class="num pos" id="sb-exp-'+i+'">'+fmt(isC?Number((_refSup*rate).toFixed(2)):0)+cur(sellCur)+'</td><td>'+selInp('bfrom',b.booked_from||b.supplier,'hotels_system')+'</td><td><input type="date" id="sb-cdate-'+i+'" class="dueinp" style="width:122px" value="'+esc(CHARGE_DATE_OVR[i]!=null?CHARGE_DATE_OVR[i]:bookDate)+'" title="تاريخ الدفع (إجباري) — الافتراضي تاريخ الحجز، قابل للتعديل" onchange="setChargeDate('+i+',this.value)"></td><td>'+selInp('cfrom',b.charge_from,'charged_from')+'</td>'+
@@ -1897,7 +1897,7 @@ function renderHotels(){
   rows.sort((a,b)=>{ const da=a._booking?1:0, db=b._booking?1:0; if(da!==db) return db-da; if(da===1) return String(b.created_at||'').localeCompare(String(a.created_at||'')); return String(b.arrival_date||'').localeCompare(String(a.arrival_date||'')); });  // حجوزات الداشبورد (الأحدث) أولاً ثم الشيت بتاريخ الوصول
   let sSell=0,sBook=0,sRef=0,nc=0;
   for(const h of rows){ sSell+=Number(h.selling_rate||0); sBook+=Number(h.final_rate_booked||0); sRef+=Number(h.refund||0); if(/cancel/i.test(h.status||''))nc++; }
-  const chip=(l,v)=>'<span style="display:inline-block;background:#0f1729;border:1px solid var(--line);border-radius:9px;padding:5px 11px;margin:0 4px 4px 0;font-size:12px"><b style="color:var(--accent)">'+v+'</b> '+l+'</span>';
+  const chip=(l,v)=>'<span style="display:inline-block;background:#f6f8fc;border:1px solid var(--line);border-radius:9px;padding:5px 11px;margin:0 4px 4px 0;font-size:12px"><b style="color:var(--accent)">'+v+'</b> '+l+'</span>';
   $('ho-sum').innerHTML=chip('حجوزات',rows.length)+chip('ملغية',nc)+chip('إجمالي البيع',fmt(sSell))+chip('إجمالي المحجوز',fmt(sBook))+chip('إجمالي المرتجع',fmt(sRef));
   const apm=actualProfitMaps().byClient;
   const chg={},chgC={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel'||!s.charge_from)return; const cc=(s.client_code||'').toUpperCase(); const k=cc+'|'+(s.check_in||''); if(!chg[k])chg[k]=s.charge_from; if(!chgC[cc])chgC[cc]=s.charge_from; });
@@ -2116,7 +2116,7 @@ function hpRows(){
         '<td class="num" style="font-weight:700">'+fmt(frb)+'</td>'+
         '<td>'+(isC?'<span class="pill cancel">ملغي</span>':'<span class="pill active">✅ مدفوع</span>')+'</td>'+
         (function(){ const meth=payMethod(sbank); return '<td style="font-size:10px">'+(sbank?esc(sbank)+(meth?' <span style="font-size:9px;color:var(--accent)">'+meth+'</span>':'')+(sref?'<br><span style="font-size:9px;color:#0e9d6a">🔖 مرجع: '+esc(sref)+'</span>':''):'<span style="color:#9aa">—</span>')+'</td>'; })()+
-        '<td><input type="number" class="hp-damt2" data-code="'+esc(c)+'" oninput="hpDistTotal()" placeholder="'+(frb>0?frb:'')+'" style="width:95px;padding:3px;background:#0f1729;border:1px solid var(--line);color:var(--txt);border-radius:6px"></td></tr>';
+        '<td><input type="number" class="hp-damt2" data-code="'+esc(c)+'" oninput="hpDistTotal()" placeholder="'+(frb>0?frb:'')+'" style="width:95px;padding:3px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px"></td></tr>';
     }).join(''):'<tr><td colspan="14" style="text-align:center;color:var(--muted);padding:12px">لا توجد حجوزات</td></tr>';
   } else {
     const cli=hpPayeeClientMap(HO_PAYEE); const codes=Object.keys(cli).sort((a,b)=>cli[b].remain-cli[a].remain);
@@ -2127,7 +2127,7 @@ function hpRows(){
         '<td class="num">'+fmt(o.owed)+'</td>'+
         '<td class="num" style="color:#0e9d6a">'+(o.paid>0.5?fmt(o.paid):'<span style="color:#9aa">—</span>')+'</td>'+
         '<td class="num" style="color:#b8860b;font-weight:700">'+fmt(o.remain)+'</td>'+
-        '<td><input type="number" class="hp-cli" data-code="'+esc(c)+'" data-name="'+esc(o.name)+'" data-remain="'+(o.remain>0?o.remain.toFixed(2):0)+'" oninput="hpTotal()" style="width:95px;padding:3px;background:#0f1729;border:1px solid var(--line);color:var(--txt);border-radius:6px"></td></tr>';
+        '<td><input type="number" class="hp-cli" data-code="'+esc(c)+'" data-name="'+esc(o.name)+'" data-remain="'+(o.remain>0?o.remain.toFixed(2):0)+'" oninput="hpTotal()" style="width:95px;padding:3px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px"></td></tr>';
     }).join(''):'<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:12px">لا توجد حجوزات لهذا المدفوع له</td></tr>';
   }
   hpTotal(); hpFcdRender();
@@ -2811,7 +2811,7 @@ async function parseBankCsv(file){
   });
   return { txns:rows, header:{}, raw:t };
 }
-function recDiag(raw){ const txt=String(raw||''); const empty=txt.replace(/\s/g,'').length<20; const sample=txt.slice(0,4000); window._recRaw=txt; return '<div style="background:rgba(217,138,0,.08);border:1px solid #d98a00;border-radius:8px;padding:12px;margin-top:6px">'+(empty?'<div style="font-weight:700;color:#d11;margin-bottom:6px">❌ الملف لا يحتوي نصاً قابلاً للقراءة — غالباً كشف مصوّر (صورة/سكان). صدّري الكشف من تطبيق البنك كـ PDF نصّي أو CSV.</div>':'<div style="font-weight:700;color:#d98a00;margin-bottom:6px">⚠️ تعذّر التعرّف على تنسيق هذا الكشف. انسخي النص التالي وأرسليه للمساعد ليضبط القارئ على بنكك:</div>')+'<textarea readonly onclick="this.select()" style="width:100%;height:160px;font-size:10px;direction:ltr;background:#0f1729;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:8px;white-space:pre">'+esc(sample)+'</textarea>'+(empty?'':'<button class="btn" style="margin-top:6px;padding:6px 14px" onclick="navigator.clipboard.writeText(window._recRaw||\'\').then(()=>{this.textContent=\'✅ تم النسخ — أرسليه للمساعد\'})">📋 نسخ النص الكامل</button>')+'</div>'; }
+function recDiag(raw){ const txt=String(raw||''); const empty=txt.replace(/\s/g,'').length<20; const sample=txt.slice(0,4000); window._recRaw=txt; return '<div style="background:rgba(217,138,0,.08);border:1px solid #d98a00;border-radius:8px;padding:12px;margin-top:6px">'+(empty?'<div style="font-weight:700;color:#d11;margin-bottom:6px">❌ الملف لا يحتوي نصاً قابلاً للقراءة — غالباً كشف مصوّر (صورة/سكان). صدّري الكشف من تطبيق البنك كـ PDF نصّي أو CSV.</div>':'<div style="font-weight:700;color:#d98a00;margin-bottom:6px">⚠️ تعذّر التعرّف على تنسيق هذا الكشف. انسخي النص التالي وأرسليه للمساعد ليضبط القارئ على بنكك:</div>')+'<textarea readonly onclick="this.select()" style="width:100%;height:160px;font-size:10px;direction:ltr;background:#f6f8fc;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:8px;white-space:pre">'+esc(sample)+'</textarea>'+(empty?'':'<button class="btn" style="margin-top:6px;padding:6px 14px" onclick="navigator.clipboard.writeText(window._recRaw||\'\').then(()=>{this.textContent=\'✅ تم النسخ — أرسليه للمساعد\'})">📋 نسخ النص الكامل</button>')+'</div>'; }
 function runReconcile(){
   const bank=($('rec-bank')||{}).value||'', from=($('rec-from')||{}).value||'', to=($('rec-to')||{}).value||'';
   const file=($('rec-file')&&$('rec-file').files)?$('rec-file').files[0]:null;
@@ -3466,7 +3466,7 @@ function renderSupplierDetail(){
           const fc=fcdCli[(c||'').toUpperCase()]||{pr:0,paid:0,cur:''}; const cbal=fc.pr-fc.paid; const prof=_APM.byClient[(c||'').toUpperCase()]; const ccur=curSym(fc.cur||'SAR'); const canc=cancCli[c]||0; const rbc=befCli[c]||0; const bookAct=actCli[c]||0;
           const invCell = entered
             ? '<td id="sinvcell-'+mid+'" data-val="'+av+'" data-booked="'+owed+'"><span class="num">'+fmt(av)+'</span> <button class="btn ghost" style="padding:1px 9px;font-size:10px;margin-right:4px" onclick="editSupInv('+mid+')">✏️ تعديل</button></td>'
-            : '<td><input type="number" id="sinv-'+mid+'" data-booked="'+owed+'" value="" placeholder="'+fmt(owed)+'" onchange="saveSupInvoice('+mid+',this.value)" style="width:85px;padding:3px;background:#0f1729;border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:11px"></td>';
+            : '<td><input type="number" id="sinv-'+mid+'" data-booked="'+owed+'" value="" placeholder="'+fmt(owed)+'" onchange="saveSupInvoice('+mid+',this.value)" style="width:85px;padding:3px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:11px"></td>';
           const diffCell = entered
             ? '<td class="num" id="sdiff-'+mid+'" style="font-weight:700;color:'+(diff<-0.5?'#d11':(diff>0.5?'#0e9d6a':'inherit'))+'">'+fmt(diff)+'</td>'
             : '<td class="num" id="sdiff-'+mid+'"></td>';
@@ -3479,7 +3479,7 @@ function renderSupplierDetail(){
             '<td class="num">'+fmt(bookAct)+'</td>'+ invCell + diffCell +
             '<td class="num">'+fmt(paid)+'</td>'+
             '<td class="num" style="font-weight:700;color:'+(bal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(bal)+'</td>'+
-            '<td><input type="number" class="sp-cli" data-code="'+esc(c)+'" data-name="'+esc(nameCli[c]||'')+'" oninput="spTotal()" style="width:90px;padding:3px;background:#0f1729;border:1px solid var(--line);color:var(--txt);border-radius:6px"></td></tr>';
+            '<td><input type="number" class="sp-cli" data-code="'+esc(c)+'" data-name="'+esc(nameCli[c]||'')+'" oninput="spTotal()" style="width:90px;padding:3px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px"></td></tr>';
         };
         const top=cliRows.filter(c=>cliActual[c]==null);
         const done=cliRows.filter(c=>cliActual[c]!=null);
@@ -3668,7 +3668,7 @@ function editSupInv(id){
   const cell=$('sinvcell-'+id); if(!cell)return;
   const owed=Number(cell.dataset.booked)||0; const cur=cell.dataset.val||'';
   cell.removeAttribute('id');
-  cell.innerHTML='<input type="number" id="sinv-'+id+'" data-booked="'+owed+'" value="'+cur+'" onchange="saveSupInvoice('+id+',this.value)" style="width:85px;padding:3px;background:#0f1729;border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:11px">';
+  cell.innerHTML='<input type="number" id="sinv-'+id+'" data-booked="'+owed+'" value="'+cur+'" onchange="saveSupInvoice('+id+',this.value)" style="width:85px;padding:3px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:11px">';
   const i=$('sinv-'+id); if(i){ i.focus(); i.select(); }
 }
 async function saveSupInvoice(id,val){
@@ -4408,7 +4408,7 @@ function mgrToggle(cat,title){ const box=$('listmgr');
 }
 function mgrRender(){
   const vals=listValues(MGR_CAT);
-  $('listmgr-items').innerHTML=vals.length?vals.map(v=>'<span style="display:inline-flex;align-items:center;gap:5px;background:#1a2540;border:1px solid var(--line);border-radius:14px;padding:3px 10px;margin:3px;font-size:12px">'+esc(v.value)+' <span style="cursor:pointer;color:var(--red);font-weight:700" onclick="mgrDel('+v.id+')">✖</span></span>').join(''):'<span style="color:var(--muted);font-size:12px">لا عناصر بعد — أضيفي أول وجهة</span>';
+  $('listmgr-items').innerHTML=vals.length?vals.map(v=>'<span style="display:inline-flex;align-items:center;gap:5px;background:#eef2f8;border:1px solid var(--line);border-radius:14px;padding:3px 10px;margin:3px;font-size:12px">'+esc(v.value)+' <span style="cursor:pointer;color:var(--red);font-weight:700" onclick="mgrDel('+v.id+')">✖</span></span>').join(''):'<span style="color:var(--muted);font-size:12px">لا عناصر بعد — أضيفي أول وجهة</span>';
 }
 async function mgrAdd(){
   const v=($('listmgr-input').value||'').trim(); if(!v) return;
