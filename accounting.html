@@ -197,7 +197,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5يوليو-هـ · رصيد العميل مجمّع (لا سالب من الدفعات الإضافية) + ثيم فاتح ملوّن 🔐</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5يوليو-و · زر «معاينة كموظف» للمالكة + رصيد مجمّع + ثيم فاتح ملوّن 👁️🔐</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -829,6 +829,15 @@ function applyPermissions(){
   const list=staffList();
   let u=CURRENT_USER;
   const me=(DATA&&DATA.me)||null;
+  // 👁️ وضع المعاينة (للمالكة فقط، مرئي فقط): يعرض الداشبورد بصلاحيات موظف محدّد بلا تغيير الجلسة الحقيقية
+  if(PREVIEW_USER){
+    const eff=PREVIEW_USER;
+    document.querySelectorAll('.tabs .tab').forEach(b=>{ const k=b.dataset.p; let ok; if(k==='control'||k==='notifs') ok=false; else ok=(eff.allowed_tabs||[]).includes(k); b.style.display=ok?'':'none'; });
+    const ab=document.querySelector('.tabs .tab.on'); if(!ab || ab.style.display==='none'){ const f=[...document.querySelectorAll('.tabs .tab')].find(b=>b.style.display!=='none'); if(f)tab(f); }
+    const ub=$('userbar'); if(ub) ub.innerHTML='<span style="background:#7c3aed;color:#fff;padding:3px 10px;border-radius:8px;font-weight:800">👁️ معاينة كـ '+esc(eff.staff_name)+' ('+(eff.allowed_tabs||[]).length+' تبويب)</span> <button class="btn" style="padding:3px 12px;font-size:11.5px;background:var(--red)" onclick="exitPreview()">✖ خروج من المعاينة</button>';
+    try{ renderSecBanner(eff); renderNotifBanner(eff); renderDevices(); }catch(_){}
+    return;
+  }
   if(me && me.via==='key'){
     // دخول المالكة بالمفتاح: مالكة بكل الصلاحيات (حتى لو وُجد موظفون) — الخادم أكّد via='key'
     u={staff_name:(CURRENT_USER&&CURRENT_USER.staff_name)||'المالكة',is_owner:true,allowed_tabs:TABS.map(t=>t.k)}; CURRENT_USER=u; localStorage.setItem('acc_user',JSON.stringify(u));
@@ -937,7 +946,7 @@ function renderControl(){
       '<td>'+(u.is_owner?'<span class="pill active">مالكة</span>':'موظف')+'</td>'+
       '<td>'+(u.active===false?'<span class="pill cancel">موقوف</span>':'<span class="pill active">نشط</span>')+'</td>'+
       '<td style="font-size:10.5px;color:var(--muted);max-width:300px;white-space:normal">'+(u.is_owner?'الكل':((u.allowed_tabs||[]).length+' تبويب'+((u.allowed_tabs||[]).length?': '+(u.allowed_tabs||[]).map(k=>{const t=TABS.find(x=>x.k===k);return t?t.l.replace(/^[^\s]+\s/,''):k;}).join('، '):'')))+'</td>'+
-      '<td style="white-space:nowrap"><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="ctlEdit('+arg+')">✏️ تعديل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="ctlToggleActive('+arg+','+(u.active===false?'true':'false')+')">'+(u.active===false?'▶️ تفعيل':'⏸ إيقاف')+'</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="ctlDelete('+arg+')">🗑️</button></td></tr>'; }).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:14px">لا يوجد موظفون بعد — أضيفي أول موظف بالأعلى</td></tr>')+
+      '<td style="white-space:nowrap">'+(u.is_owner?'':'<button class="btn" style="padding:2px 9px;font-size:11px;background:#7c3aed" onclick="previewAs('+arg+')">👁️ معاينة</button> ')+'<button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="ctlEdit('+arg+')">✏️ تعديل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="ctlToggleActive('+arg+','+(u.active===false?'true':'false')+')">'+(u.active===false?'▶️ تفعيل':'⏸ إيقاف')+'</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="ctlDelete('+arg+')">🗑️</button></td></tr>'; }).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:14px">لا يوجد موظفون بعد — أضيفي أول موظف بالأعلى</td></tr>')+
     '</tbody></table></div></div>';
   // ===== سجل الدخول والتدقيق + التنبيهات الأمنية =====
   const audit=(DATA.auditLog||[]); const sevOrder={critical:0,warning:1,info:2};
@@ -4450,7 +4459,11 @@ function fillLists(){
 let MGR_CAT='';
 // ===== قوائم تحتاج موافقة المالكة قبل ظهورها (المحاسب يرسل طلباً؛ المالكة تضيف مباشرة) =====
 const LIST_APPROVAL_CATS=['banks','charged_from','bc_desc','bc_det','bc_subdet'];
-function isOwnerUser(){ const me=(DATA&&DATA.me)||null; if(me) return (me.via==='key' || !!me.is_owner); return !!(CURRENT_USER&&CURRENT_USER.is_owner); }
+function isOwnerUser(){ if(PREVIEW_USER) return false; const me=(DATA&&DATA.me)||null; if(me) return (me.via==='key' || !!me.is_owner); return !!(CURRENT_USER&&CURRENT_USER.is_owner); }
+// 👁️ معاينة كموظف (للمالكة فقط، مرئية فقط — لا تغيّر الجلسة الحقيقية)
+var PREVIEW_USER=null;
+function previewAs(name){ if(!isOwnerUser()&&!PREVIEW_USER)return; const u=staffList().find(x=>x.staff_name===name); if(!u){ alert('الموظف غير موجود'); return; } if(u.is_owner){ alert('لا حاجة لمعاينة حساب المالكة'); return; } PREVIEW_USER={staff_name:u.staff_name,is_owner:false,allowed_tabs:u.allowed_tabs||[]}; window.scrollTo(0,0); applyPermissions(); }
+function exitPreview(){ PREVIEW_USER=null; window.scrollTo(0,0); applyPermissions(); }
 function listCatLabel(cat){ return {banks:'Banks Name (اسم بنك)',charged_from:'charged from',bc_desc:'Banks Cash — وصف',bc_det:'Banks Cash — تفصيل',bc_subdet:'Banks Cash — تفصيل فرعي'}[cat]||cat; }
 function listValDisplay(cat,val){ return (cat==='bc_det'||cat==='bc_subdet')?String(val||'').split(BC_SEP).join(' ← '):String(val||''); }
 async function reqListItem(category,value,label){
