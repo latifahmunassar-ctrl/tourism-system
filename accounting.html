@@ -76,6 +76,9 @@
   .fld{display:flex;flex-direction:column;gap:4px;margin-bottom:4px}
   .fld label{font-size:11.5px;color:var(--muted)}
   .fld input,.fld select{padding:9px;border-radius:9px;border:1px solid var(--line);background:#f6f8fc;color:var(--txt);font-family:inherit;font-size:13px}
+  input,select,textarea{color:var(--txt);color-scheme:light}
+  input[type=date]{color-scheme:light;color:var(--txt)}
+  ::placeholder{color:var(--muted);opacity:1}
   .full{grid-column:1/3}
   .calc{background:#f6f8fc;border:1px dashed var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between}
   .calc b{color:var(--green);font-size:15px}
@@ -197,7 +200,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5يوليو-ز · سجل دخول/خروج الموظفين بلوحة التحكّم حسب اليوم/التاريخ 📅 + معاينة كموظف 👁️🔐</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5يوليو-ح · نص حقول التاريخ أسود واضح على الخلفية البيضاء 📅🖊️ + سجل دخول/خروج الموظفين</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -541,8 +544,8 @@ table{font-weight:600}
           <div class="fld" style="min-width:150px"><label>📊 التجميع حسب</label><select id="st-basis" class="flt" onchange="stBasisChange()"><option value="confirmed">Confirmed by</option><option value="booked">Booked by</option></select></div>
           <div class="fld" style="min-width:180px"><label>👤 اسم الموظف</label><select id="st-staff" class="flt" onchange="renderStaff()"><option value="">كل الموظفين</option></select></div>
           <div class="fld" style="min-width:180px"><label>🧳 نوع العمل</label><select id="st-job" class="flt" onchange="renderStaff()"><option value="">كل أنواع العمل</option></select></div>
-          <div class="fld"><label>📅 من تاريخ</label><input type="date" id="st-from" onchange="renderStaff()" style="color-scheme:dark;cursor:pointer"></div>
-          <div class="fld"><label>📅 إلى تاريخ</label><input type="date" id="st-to" onchange="renderStaff()" style="color-scheme:dark;cursor:pointer"></div>
+          <div class="fld"><label>📅 من تاريخ</label><input type="date" id="st-from" onchange="renderStaff()" style="color-scheme:light;cursor:pointer"></div>
+          <div class="fld"><label>📅 إلى تاريخ</label><input type="date" id="st-to" onchange="renderStaff()" style="color-scheme:light;cursor:pointer"></div>
           <button class="btn ghost" style="padding:7px 14px" onclick="stClear()">مسح الفلتر</button>
           <span style="font-size:11px;color:var(--muted);align-self:center" id="st-basis-note">التجميع حسب «Confirmed by» · نوع العمل = نوع الباقة · التاريخ = تاريخ الحجز</span>
         </div>
@@ -582,8 +585,8 @@ table{font-weight:600}
         <h3 style="margin-top:0">🔍 مطابقة كشف الحساب البنكي <span style="font-size:11px;color:var(--muted);font-weight:400">— ارفعي كشف البنك الأصلي ويقارنه النظام بحركاتك</span></h3>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
           <div class="fld" style="min-width:220px"><label>🏦 البنك / الحساب (في نظامك)</label><select id="rec-bank"><option value="">— اختاري البنك —</option></select></div>
-          <div class="fld"><label>📅 من تاريخ</label><input type="date" id="rec-from" style="color-scheme:dark;cursor:pointer"></div>
-          <div class="fld"><label>📅 إلى تاريخ</label><input type="date" id="rec-to" style="color-scheme:dark;cursor:pointer"></div>
+          <div class="fld"><label>📅 من تاريخ</label><input type="date" id="rec-from" style="color-scheme:light;cursor:pointer"></div>
+          <div class="fld"><label>📅 إلى تاريخ</label><input type="date" id="rec-to" style="color-scheme:light;cursor:pointer"></div>
           <div class="fld" style="min-width:240px"><label>⬆️ كشف البنك الأصلي (PDF / CSV)</label><input type="file" id="rec-file" accept=".pdf,.csv" style="font-size:11px;padding:6px;background:#f6f8fc;border:1px solid var(--line);border-radius:8px;color:var(--txt)"></div>
           <button class="btn green" style="padding:9px 20px" onclick="runReconcile()">🔍 تحقّق وقارن</button>
         </div>
@@ -604,7 +607,7 @@ table{font-weight:600}
       <div class="panel" style="border-color:var(--green);margin-bottom:14px">
         <h3 style="margin-top:0">➕ إضافة حركة كاش (داخل / خارج) يدوياً</h3>
         <div class="fgrid">
-          <div class="fld"><label>📅 التاريخ</label><input type="date" id="bca-date" style="color-scheme:dark;cursor:pointer"></div>
+          <div class="fld"><label>📅 التاريخ</label><input type="date" id="bca-date" style="color-scheme:light;cursor:pointer"></div>
           <div class="fld"><label>البنك / البطاقة <span style="color:var(--red)">*</span></label><input id="bca-bank" list="bc-bank-list" autocomplete="off" placeholder="اكتبي اسم البنك…" style="background:#fff;color:#f6f8fc"></div>
           <div class="fld"><label>داخل (+)</label><input type="number" id="bca-in" placeholder="0"></div>
           <div class="fld"><label>خارج (−)</label><input type="number" id="bca-out" placeholder="0"></div>
@@ -623,8 +626,8 @@ table{font-weight:600}
         <div class="fld" style="min-width:240px"><label>🏦 البنك / البطاقة</label><input id="bc-bank" list="bc-bank-list" autocomplete="off" oninput="renderBanksCashDetail()" placeholder="كل البنوك — أو اكتبي للبحث" style="background:#fff;color:#f6f8fc"></div>
         <div class="fld"><label>💱 العملة</label><select id="bc-cur" class="flt" onchange="renderBanksCashDetail()"><option value="">كل العملات</option></select></div>
         <div class="fld" style="min-width:200px;flex:1"><label>🔍 بحث (بنك/مرجع/وصف/ملاحظة)</label><input id="bc-q" oninput="renderBanksCashDetail()" placeholder="اكتبي…"></div>
-        <div class="fld"><label>من 📅</label><input type="date" id="bc-from" onchange="renderBanksCashDetail()" style="color-scheme:dark;cursor:pointer"></div>
-        <div class="fld"><label>إلى 📅</label><input type="date" id="bc-to" onchange="renderBanksCashDetail()" style="color-scheme:dark;cursor:pointer"></div>
+        <div class="fld"><label>من 📅</label><input type="date" id="bc-from" onchange="renderBanksCashDetail()" style="color-scheme:light;cursor:pointer"></div>
+        <div class="fld"><label>إلى 📅</label><input type="date" id="bc-to" onchange="renderBanksCashDetail()" style="color-scheme:light;cursor:pointer"></div>
         <button class="btn ghost" id="bc-desc-btn" style="padding:7px 14px" onclick="bcToggleMulti('desc')">📝 الوصف ▾</button>
         <button class="btn ghost" id="bc-details-btn" style="padding:7px 14px" onclick="bcToggleMulti('details')">📋 التفاصيل ▾</button>
         <button class="btn ghost" style="padding:7px 14px" onclick="bcClear()">🧹 مسح الكل</button>
@@ -683,7 +686,7 @@ table{font-weight:600}
       <div class="fld"><label>المبلغ المدفوع</label><input type="number" id="fe-paid" oninput="feCalc()"></div>
       <div class="fld"><label>البنك</label><select id="fe-bank" onchange="if(this.value==='__other')this.nextElementSibling.style.display='flex'"></select></div>
       <div class="fld"><label>مرجع البنك <span style="font-size:9px;color:#d98a00">إجباري لو فيه دفعة</span></label><input id="fe-ref"></div>
-      <div class="fld"><label>📅 تاريخ الدفع</label><input type="date" id="fe-paydate" style="color-scheme:dark;cursor:pointer"></div>
+      <div class="fld"><label>📅 تاريخ الدفع</label><input type="date" id="fe-paydate" style="color-scheme:light;cursor:pointer"></div>
       <div class="fld" style="flex:1;min-width:220px"><label>ملاحظة</label><input id="fe-note"></div>
     </div>
     <div class="calc"><span>الإجمالي (تكلفة + ربح) = <b id="fe-total">0</b></span><span>المتبقّي على هذا السطر = <b id="fe-bal" style="color:var(--amber)">0</b></span></div>
@@ -721,7 +724,7 @@ table{font-weight:600}
       <div class="fld svc-cost"><label id="lbl-cost">التكلفة (COST)</label><input type="number" id="f-cost" value="0" oninput="calc()"></div>
       <div class="fld svc-cost"><label id="lbl-profit">الربح (Profit)</label><input type="number" id="f-profit" value="0" oninput="calc()"></div>
       <div class="fld"><label id="lbl-paid">المبلغ المدفوع الآن</label><input type="number" id="f-paid" value="0" oninput="calc()"></div>
-      <div class="fld" id="fld-paydate" style="display:none"><label>📅 تاريخ الدفع</label><input type="date" id="f-paydate" style="color-scheme:dark;cursor:pointer"></div>
+      <div class="fld" id="fld-paydate" style="display:none"><label>📅 تاريخ الدفع</label><input type="date" id="f-paydate" style="color-scheme:light;cursor:pointer"></div>
       <div class="fld"><label>العملة</label><select id="f-cur"><option>SAR</option><option>OMR</option><option>USD</option><option>MYR</option></select></div>
       <div class="fld new-only"><label>نوع الباكدج</label><select id="f-type"><option>Full pakage</option><option>TOUR ONLY</option><option>Transportaion</option><option>HOTEL & TOURS</option></select></div>
       <div class="fld" id="fld-staff"><label>الموظف (Confirmed by) <span style="font-size:9px;color:var(--muted)">من القائمة</span></label><select id="f-staff"></select></div>
@@ -735,7 +738,7 @@ table{font-weight:600}
       <div class="fld" id="fld-suprate" style="display:none"><label>سعر الصرف التقريبي <span style="color:var(--red)">*</span> <span style="font-size:9px;color:#d98a00">إجباري · قابل للتعديل</span></label><input type="number" id="f-suprate" step="0.0001" placeholder="أدخلي سعر الصرف" oninput="supConvCalc()"></div>
       <div class="fld full" id="fld-supconv" style="display:none"><div style="font-size:12px;color:var(--accent);font-weight:700" id="f-supconv"></div></div>
       <div class="fld" id="fld-ref"><label>مرجع البنك / الإيداع <span style="font-size:9px;color:#d98a00">بدونه = غير معتمد</span></label><input id="f-ref"></div>
-      <div class="fld" id="fld-duedate" style="border:1px solid var(--line);border-radius:8px;padding:6px 8px"><label>📅 تاريخ الاستحقاق <span class="due-req" style="display:none"><span style="color:var(--red)">*</span> <span style="font-size:9px;color:#d98a00">إجباري — على العميل مبلغ متبقٍّ</span></span></label><input type="date" id="f-duedate" style="color-scheme:dark;cursor:pointer"></div>
+      <div class="fld" id="fld-duedate" style="border:1px solid var(--line);border-radius:8px;padding:6px 8px"><label>📅 تاريخ الاستحقاق <span class="due-req" style="display:none"><span style="color:var(--red)">*</span> <span style="font-size:9px;color:#d98a00">إجباري — على العميل مبلغ متبقٍّ</span></span></label><input type="date" id="f-duedate" style="color-scheme:light;cursor:pointer"></div>
     </div>
     <div class="calc"><span><span id="c-rate-label">سعر البيع = التكلفة + الربح =</span> <b id="c-rate">0</b></span><span><span id="c-bal-label">الرصيد = السعر − المدفوع =</span> <b id="c-bal" style="color:var(--amber)">0</b></span></div>
     <div id="msg"></div>
@@ -2088,8 +2091,8 @@ function hpSummaryHtml(){
     '<div style="font-size:11.5px;color:var(--muted);margin-top:8px;padding:6px 10px;background:rgba(14,157,106,.08);border-radius:8px">✅ القيم أصلاً بعملة المورّد (<b>'+esc(cur)+'</b>): «السعر المحجوز» و«المدفوع» مسجّلان بعملة المورّد في الشيت (الدفعات بعملات مختلفة حُوِّلت لـ'+esc(cur)+' بسعر الصرف داخل الشيت). فالرصيد رقم نهائي بـ'+esc(cur)+' بلا تحويل إضافي.</div>'+
     (settled?'<div style="font-size:11.5px;margin-top:6px;padding:6px 10px;background:rgba(14,157,106,.08);border-radius:8px">📌 <b>كل الحجوزات المُدخلة سابقاً مدفوعة</b> عبر التحويلات البنكية للمورّد (المدفوع = '+fmt(paid)+' '+esc(cur)+'). الرصيد <b>'+fmt(bal)+' '+esc(cur)+'</b> '+(bal<-0.5?'= رصيد دائن لنا لدى المورّد (Open balance، دفعنا زيادة)':(bal>0.5?'= متبقّي للمورّد':'= مُسوّى بالكامل'))+'.</div>':'')+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px;border-top:1px solid var(--line);padding-top:10px">'+
-      '<div class="fld"><label>📅 من تاريخ</label><input type="date" id="hp-rep-from" onchange="hpReport()" style="color-scheme:dark;cursor:pointer"></div>'+
-      '<div class="fld"><label>📅 إلى تاريخ</label><input type="date" id="hp-rep-to" onchange="hpReport()" style="color-scheme:dark;cursor:pointer"></div>'+
+      '<div class="fld"><label>📅 من تاريخ</label><input type="date" id="hp-rep-from" onchange="hpReport()" style="color-scheme:light;cursor:pointer"></div>'+
+      '<div class="fld"><label>📅 إلى تاريخ</label><input type="date" id="hp-rep-to" onchange="hpReport()" style="color-scheme:light;cursor:pointer"></div>'+
       '<button class="btn ghost" style="padding:7px 14px" onclick="var a=document.getElementById(\'hp-rep-from\'),b=document.getElementById(\'hp-rep-to\');if(a)a.value=\'\';if(b)b.value=\'\';hpReport()">مسح الفلتر</button>'+
       '<button class="btn" style="padding:7px 14px;background:#c41d88;color:#fff" onclick="exportHotelPayPDF()">🖨️ تصدير PDF (التقرير + الجداول)</button>'+
       '<div style="font-size:11px;color:var(--muted);align-self:center">يفلتر <b>جدول الحجوزات بتاريخ الدخول</b> ويُظهر <b>جدول دفعات العملاء من First Client Data</b> · المدفوع/العمليات حسب تاريخ الدفع · المستحق حسب تاريخ الدخول</div>'+
@@ -3046,7 +3049,7 @@ function renderBankDetail(){
   box.innerHTML='<div class="panel" style="margin-bottom:14px;border:1px solid var(--accent)"><h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span>🏦 '+esc(bank)+' <span style="font-size:12px;color:var(--muted)">('+esc(cur)+')</span></span><button class="btn" style="padding:6px 16px" onclick="exportBankPDF()">🖨️ تصدير PDF</button></h3>'+
     '<div style="font-weight:800;color:var(--brand);font-size:12.5px;margin-bottom:4px">📊 التقرير العام — كامل حركة الحساب</div>'+
     '<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px"><span>عدد الحركات: <b>'+fmt(tx.length)+'</b></span><span>✅ داخل (+): <b style="color:#0e9d6a">'+fmt(ti)+' '+esc(cur)+'</b></span><span>↘️ خارج (−): <b class="neg">'+fmt(to)+' '+esc(cur)+'</b></span><span>📌 الصافي: <b style="color:'+(net>=0?'#0e9d6a':'#d11')+'">'+fmt(net)+' '+esc(cur)+'</b></span></div>'+
-    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:10px 0"><div class="fld" style="min-width:200px;flex:1"><label>🔍 بحث (عميل/مرجع/ملاحظة)</label><input id="bnk-q" oninput="bnkFilter()" placeholder="اكتبي..."></div><div class="fld"><label>من تاريخ 📅</label><input type="date" id="bnk-from" onchange="bnkFilter()" style="color-scheme:dark;cursor:pointer"></div><div class="fld"><label>إلى تاريخ 📅</label><input type="date" id="bnk-to" onchange="bnkFilter()" style="color-scheme:dark;cursor:pointer"></div><button class="btn ghost" style="padding:7px 14px" onclick="bnkClear()">مسح</button></div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:10px 0"><div class="fld" style="min-width:200px;flex:1"><label>🔍 بحث (عميل/مرجع/ملاحظة)</label><input id="bnk-q" oninput="bnkFilter()" placeholder="اكتبي..."></div><div class="fld"><label>من تاريخ 📅</label><input type="date" id="bnk-from" onchange="bnkFilter()" style="color-scheme:light;cursor:pointer"></div><div class="fld"><label>إلى تاريخ 📅</label><input type="date" id="bnk-to" onchange="bnkFilter()" style="color-scheme:light;cursor:pointer"></div><button class="btn ghost" style="padding:7px 14px" onclick="bnkClear()">مسح</button></div>'+
     '<div id="bnk-period" data-cur="'+esc(cur)+'"></div>'+
     '<div class="tbl-wrap bf-scroll" id="bnk-tbl"><table style="font-size:11px;white-space:nowrap"><thead><tr>'+H.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+
     (tx.length?tx.map(x=>{ const qd=((x.client_name||'')+' '+(x.client_code||'')+' '+(x.bank_ref||'')+' '+(x.note||'')).toLowerCase();
@@ -3535,8 +3538,8 @@ function renderSupplierDetail(){
       '<div style="font-size:11px;color:var(--muted);margin:4px 0">وزّعي المبلغ على العملاء <b>بعملة المورّد ('+esc(SCUR)+')</b>؛ لو دفعتِ بعملة ثانية حدّدي عملة الدفع وسعر الصرف فيظهر المبلغ القابل للتوزيع محوَّلاً لعملة المورّد:</div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px">'+
         '<div class="fld" style="min-width:210px;flex:1"><label>🔍 بحث (اسم العميل أو الكود)</label><input id="spc-q" oninput="spcliFilter()" placeholder="اكتبي اسم أو كود العميل..."></div>'+
-        '<div class="fld"><label>من تاريخ (الوصول) 📅</label><input type="date" id="spc-from" onchange="spcliFilter()" style="color-scheme:dark;cursor:pointer"></div>'+
-        '<div class="fld"><label>إلى تاريخ 📅</label><input type="date" id="spc-to" onchange="spcliFilter()" style="color-scheme:dark;cursor:pointer"></div>'+
+        '<div class="fld"><label>من تاريخ (الوصول) 📅</label><input type="date" id="spc-from" onchange="spcliFilter()" style="color-scheme:light;cursor:pointer"></div>'+
+        '<div class="fld"><label>إلى تاريخ 📅</label><input type="date" id="spc-to" onchange="spcliFilter()" style="color-scheme:light;cursor:pointer"></div>'+
         '<button class="btn ghost" style="padding:7px 14px" onclick="spcliClear()">مسح الفلتر</button>'+
       '</div>'+
       '<div class="tbl-wrap" style="max-height:300px"><table style="font-size:11.5px"><thead><tr><th>كود العميل</th><th>العميل</th><th>الوكيل</th><th>قيمة الدفع المُسدَّد<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>client balance payment</th><th>ربح البرنامج</th><th>قيمة الحجز قبل الإلغاء<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>رسوم الإلغاء<br><span style="font-size:9px;color:var(--muted)">Cancelation Charge ('+esc(SCUR)+')</span></th><th>قيمة الحجز<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>فاتورة المورّد ✏️<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>الفرق</th><th>مدفوع سابقاً</th><th>المتبقّي</th><th>ادفع الآن</th></tr></thead><tbody id="sp-dist-tbl">'+
@@ -3588,8 +3591,8 @@ function renderSupplierDetail(){
       return '<div class="panel"><h3>حركة المبيعات / الفواتير (<span id="supd-count">'+list.length+'</span>)</h3>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px">'+
         '<div class="fld" style="min-width:210px;flex:1"><label>🔍 بحث (اسم العميل أو الكود)</label><input id="supd-q" oninput="supdFilter()" placeholder="اكتبي اسم أو كود العميل..."></div>'+
-        '<div class="fld"><label>من تاريخ (الوصول) 📅</label><input type="date" id="supd-from" onchange="supdFilter()" style="color-scheme:dark;cursor:pointer"></div>'+
-        '<div class="fld"><label>إلى تاريخ 📅</label><input type="date" id="supd-to" onchange="supdFilter()" style="color-scheme:dark;cursor:pointer"></div>'+
+        '<div class="fld"><label>من تاريخ (الوصول) 📅</label><input type="date" id="supd-from" onchange="supdFilter()" style="color-scheme:light;cursor:pointer"></div>'+
+        '<div class="fld"><label>إلى تاريخ 📅</label><input type="date" id="supd-to" onchange="supdFilter()" style="color-scheme:light;cursor:pointer"></div>'+
         '<button class="btn ghost" style="padding:7px 14px" onclick="supdClear()">مسح الفلتر</button>'+
       '</div>'+
       '<div class="tbl-wrap bf-scroll" id="supd-tbl"><table style="font-size:10.5px;white-space:nowrap"><thead><tr>'+H.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody>'+
