@@ -200,7 +200,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5يوليو-ط · نموذج الإدخال يمرّر بالكامل حتى آخر حقل وزر الحفظ 📝⬇️ + نص التاريخ أسود</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6يوليو · نص بحث الموردين/البنوك وروابط الأسماء أسود واضح 🔎🖊️</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -301,19 +301,19 @@ table{font-weight:600}
           <div style="flex:1;min-width:240px">
             <b style="font-size:12.5px">📝 الوصف (رئيسي) <span class="cnt" id="bcl-desc-cnt"></span></b>
             <div style="display:flex;gap:6px;margin:6px 0"><input id="bcl-desc-new" placeholder="وصف جديد…" style="flex:1" onkeydown="if(event.key==='Enter')bclAddDesc()"><button class="btn green" style="padding:5px 12px" onclick="bclAddDesc()">+ إضافة</button></div>
-            <input id="bcl-desc-q" oninput="renderBcLists()" placeholder="🔍 ابحثي بالاسم…" autocomplete="off" style="width:100%;margin-bottom:6px;background:#fff;color:#f6f8fc">
+            <input id="bcl-desc-q" oninput="renderBcLists()" placeholder="🔍 ابحثي بالاسم…" autocomplete="off" style="width:100%;margin-bottom:6px;background:#fff;color:var(--txt)">
             <div id="bcl-desc-list" style="max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px"></div>
           </div>
           <div style="flex:1;min-width:240px">
             <b style="font-size:12.5px">📋 التفاصيل التابعة لـ: <span id="bcl-sel-desc" style="color:var(--accent)">— اختاري وصفاً —</span></b>
             <div style="display:flex;gap:6px;margin:6px 0"><input id="bcl-det-new" placeholder="تفصيل جديد…" style="flex:1" onkeydown="if(event.key==='Enter')bclAddDet()"><button class="btn green" style="padding:5px 12px" onclick="bclAddDet()">+ إضافة</button></div>
-            <input id="bcl-det-q" oninput="renderBcLists()" placeholder="🔍 ابحثي بالاسم…" autocomplete="off" style="width:100%;margin-bottom:6px;background:#fff;color:#f6f8fc">
+            <input id="bcl-det-q" oninput="renderBcLists()" placeholder="🔍 ابحثي بالاسم…" autocomplete="off" style="width:100%;margin-bottom:6px;background:#fff;color:var(--txt)">
             <div id="bcl-det-list" style="max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px"></div>
           </div>
           <div style="flex:1;min-width:240px">
             <b style="font-size:12.5px">🔖 التفاصيل الفرعية تحت: <span id="bcl-sel-det" style="color:var(--accent)">— اختاري تفصيلاً —</span></b>
             <div style="display:flex;gap:6px;margin:6px 0"><input id="bcl-sub-new" placeholder="تفصيل فرعي جديد…" style="flex:1" onkeydown="if(event.key==='Enter')bclAddSub()"><button class="btn green" style="padding:5px 12px" onclick="bclAddSub()">+ إضافة</button></div>
-            <input id="bcl-sub-q" oninput="renderBcLists()" placeholder="🔍 ابحثي بالاسم…" autocomplete="off" style="width:100%;margin-bottom:6px;background:#fff;color:#f6f8fc">
+            <input id="bcl-sub-q" oninput="renderBcLists()" placeholder="🔍 ابحثي بالاسم…" autocomplete="off" style="width:100%;margin-bottom:6px;background:#fff;color:var(--txt)">
             <div id="bcl-sub-list" style="max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px"></div>
           </div>
         </div>
@@ -569,7 +569,7 @@ table{font-weight:600}
     </div>
 
     <div class="page" id="p-suppliers">
-      <div class="formbar"><label style="font-weight:700;margin-left:8px">🧾 اكتبي اسم المورّد للبحث السريع:</label><input id="supflt" list="supflt-list" class="flt" onchange="renderSupplierDetail()" autocomplete="off" placeholder="اكتبي اسم المورّد…" style="min-width:320px;background:#fff;color:#f6f8fc"><datalist id="supflt-list"></datalist><button class="btn ghost" style="padding:7px 14px" onclick="$('supflt').value='';renderSupplierDetail()">مسح</button></div>
+      <div class="formbar"><label style="font-weight:700;margin-left:8px">🧾 اكتبي اسم المورّد للبحث السريع:</label><input id="supflt" list="supflt-list" class="flt" onchange="renderSupplierDetail()" autocomplete="off" placeholder="اكتبي اسم المورّد…" style="min-width:320px;background:#fff;color:var(--txt)"><datalist id="supflt-list"></datalist><button class="btn ghost" style="padding:7px 14px" onclick="$('supflt').value='';renderSupplierDetail()">مسح</button></div>
       <div id="sup-dups"></div>
       <div id="supplier-detail"></div>
       <div class="panel" id="all-suppliers-panel"><h3>كل الموردين <span class="cnt" id="sup-cnt"></span></h3>
@@ -608,22 +608,22 @@ table{font-weight:600}
         <h3 style="margin-top:0">➕ إضافة حركة كاش (داخل / خارج) يدوياً</h3>
         <div class="fgrid">
           <div class="fld"><label>📅 التاريخ</label><input type="date" id="bca-date" style="color-scheme:light;cursor:pointer"></div>
-          <div class="fld"><label>البنك / البطاقة <span style="color:var(--red)">*</span></label><input id="bca-bank" list="bc-bank-list" autocomplete="off" placeholder="اكتبي اسم البنك…" style="background:#fff;color:#f6f8fc"></div>
+          <div class="fld"><label>البنك / البطاقة <span style="color:var(--red)">*</span></label><input id="bca-bank" list="bc-bank-list" autocomplete="off" placeholder="اكتبي اسم البنك…" style="background:#fff;color:var(--txt)"></div>
           <div class="fld"><label>داخل (+)</label><input type="number" id="bca-in" placeholder="0"></div>
           <div class="fld"><label>خارج (−)</label><input type="number" id="bca-out" placeholder="0"></div>
-          <div class="fld"><label>العملة</label><input id="bca-cur" list="bc-cur-list" autocomplete="off" placeholder="OMR / USD…" style="background:#fff;color:#f6f8fc"></div>
+          <div class="fld"><label>العملة</label><input id="bca-cur" list="bc-cur-list" autocomplete="off" placeholder="OMR / USD…" style="background:#fff;color:var(--txt)"></div>
           <div class="fld"><label>سعر الصرف (1 وحدة = ؟ ر.س)</label><input type="number" id="bca-rate" step="0.0001" placeholder="مثال 9.5"></div>
           <div class="fld"><label>المرجع البنكي</label><input id="bca-ref"></div>
-          <div class="fld"><label>الوصف <span style="color:var(--red)">*</span></label><select id="bca-desc" onchange="bcFillAddDetails()" style="background:#fff;color:#f6f8fc"></select></div>
-          <div class="fld"><label>التفاصيل (تتبع الوصف) <span style="color:var(--red)">*</span></label><select id="bca-details" onchange="bcFillAddMore()" style="background:#fff;color:#f6f8fc"></select></div>
-          <div class="fld"><label>📝 تفاصيل أكثر (تتبع التفاصيل) <span style="color:var(--red)">*</span></label><select id="bca-more" style="background:#fff;color:#f6f8fc"></select></div>
+          <div class="fld"><label>الوصف <span style="color:var(--red)">*</span></label><select id="bca-desc" onchange="bcFillAddDetails()" style="background:#fff;color:var(--txt)"></select></div>
+          <div class="fld"><label>التفاصيل (تتبع الوصف) <span style="color:var(--red)">*</span></label><select id="bca-details" onchange="bcFillAddMore()" style="background:#fff;color:var(--txt)"></select></div>
+          <div class="fld"><label>📝 تفاصيل أكثر (تتبع التفاصيل) <span style="color:var(--red)">*</span></label><select id="bca-more" style="background:#fff;color:var(--txt)"></select></div>
           <div class="fld"><label>ملاحظة</label><input id="bca-note"></div>
         </div>
         <div style="margin-top:8px;display:flex;gap:10px;align-items:center"><button class="btn" onclick="addBankCash()">💾 حفظ الحركة</button><span id="bc-add-msg" style="font-size:12px"></span></div>
         <div style="font-size:11px;color:var(--muted);margin-top:4px">القيمة بالريال تُحسب تلقائياً = المبلغ × سعر الصرف. الحركات اليدوية لا تمسحها المزامنة.</div>
       </div>
       <div class="formbar">
-        <div class="fld" style="min-width:240px"><label>🏦 البنك / البطاقة</label><input id="bc-bank" list="bc-bank-list" autocomplete="off" oninput="renderBanksCashDetail()" placeholder="كل البنوك — أو اكتبي للبحث" style="background:#fff;color:#f6f8fc"></div>
+        <div class="fld" style="min-width:240px"><label>🏦 البنك / البطاقة</label><input id="bc-bank" list="bc-bank-list" autocomplete="off" oninput="renderBanksCashDetail()" placeholder="كل البنوك — أو اكتبي للبحث" style="background:#fff;color:var(--txt)"></div>
         <div class="fld"><label>💱 العملة</label><select id="bc-cur" class="flt" onchange="renderBanksCashDetail()"><option value="">كل العملات</option></select></div>
         <div class="fld" style="min-width:200px;flex:1"><label>🔍 بحث (بنك/مرجع/وصف/ملاحظة)</label><input id="bc-q" oninput="renderBanksCashDetail()" placeholder="اكتبي…"></div>
         <div class="fld"><label>من 📅</label><input type="date" id="bc-from" onchange="renderBanksCashDetail()" style="color-scheme:light;cursor:pointer"></div>
@@ -635,7 +635,7 @@ table{font-weight:600}
       <div class="panel" id="bc-desc-panel" style="display:none;margin-bottom:10px;border-color:var(--accent)">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
           <b style="font-size:13px">📝 اختاري الوصف (واحد أو أكثر)</b>
-          <input id="bc-desc-search" oninput="bcRenderMulti('desc')" placeholder="🔍 بحث في الوصف…" style="flex:1;min-width:160px;background:#fff;color:#f6f8fc">
+          <input id="bc-desc-search" oninput="bcRenderMulti('desc')" placeholder="🔍 بحث في الوصف…" style="flex:1;min-width:160px;background:#fff;color:var(--txt)">
           <button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="bcMultiAll('desc',true)">تحديد الظاهر</button>
           <button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="bcMultiAll('desc',false)">مسح التحديد</button>
         </div>
@@ -644,7 +644,7 @@ table{font-weight:600}
       <div class="panel" id="bc-details-panel" style="display:none;margin-bottom:10px;border-color:var(--accent)">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
           <b style="font-size:13px">📋 اختاري التفاصيل (عدة قيم مرة وحدة)</b>
-          <input id="bc-details-search" oninput="bcRenderMulti('details')" placeholder="🔍 بحث في التفاصيل…" style="flex:1;min-width:160px;background:#fff;color:#f6f8fc">
+          <input id="bc-details-search" oninput="bcRenderMulti('details')" placeholder="🔍 بحث في التفاصيل…" style="flex:1;min-width:160px;background:#fff;color:var(--txt)">
           <button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="bcMultiAll('details',true)">تحديد الظاهر</button>
           <button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="bcMultiAll('details',false)">مسح التحديد</button>
         </div>
@@ -3023,7 +3023,7 @@ function renderBanks(){
   const dl=$('banklist'); if(dl) dl.innerHTML=names.map(b=>'<option value="'+esc(b)+'"></option>').join('');
   const tb=document.querySelector('#t-bank tbody');
   if(tb){ tb.innerHTML=names.map(b=>{ const list=byBank[b]; const cur=bankMainCur(list); const ti=list.reduce((s,x)=>s+Number(x.amount_in||0),0), to=list.reduce((s,x)=>s+Number(x.amount_out||0),0), net=ti-to;
-    return '<tr><td><a href="#" data-bank="'+esc(b)+'" style="color:#fff;font-weight:700;text-decoration:none;cursor:pointer" onclick="$(\'bankflt\').value=this.dataset.bank;renderBankDetail();window.scrollTo(0,0);return false">'+esc(b)+'</a></td><td style="font-size:11px">'+esc(payMethod(b))+'</td><td class="num">'+fmt(list.length)+'</td><td class="num" style="color:#0e9d6a">'+fmt(ti)+' <small style="color:var(--muted)">'+esc(cur)+'</small></td><td class="num neg">'+fmt(to)+' <small style="color:var(--muted)">'+esc(cur)+'</small></td><td class="num" style="font-weight:700;color:'+(net>=0?'#0e9d6a':'#d11')+'">'+fmt(net)+' <small style="color:var(--muted)">'+esc(cur)+'</small></td></tr>'; }).join(''); }
+    return '<tr><td><a href="#" data-bank="'+esc(b)+'" style="color:var(--accent);font-weight:800;text-decoration:underline;cursor:pointer" onclick="$(\'bankflt\').value=this.dataset.bank;renderBankDetail();window.scrollTo(0,0);return false">'+esc(b)+'</a></td><td style="font-size:11px">'+esc(payMethod(b))+'</td><td class="num">'+fmt(list.length)+'</td><td class="num" style="color:#0e9d6a">'+fmt(ti)+' <small style="color:var(--muted)">'+esc(cur)+'</small></td><td class="num neg">'+fmt(to)+' <small style="color:var(--muted)">'+esc(cur)+'</small></td><td class="num" style="font-weight:700;color:'+(net>=0?'#0e9d6a':'#d11')+'">'+fmt(net)+' <small style="color:var(--muted)">'+esc(cur)+'</small></td></tr>'; }).join(''); }
   if($('bank-cnt'))$('bank-cnt').textContent=names.length+' بنك/بطاقة';
   renderBankDetail();
 }
@@ -3405,7 +3405,7 @@ function renderSuppliers(){
   const payBy={}; (DATA.supplierPayments||[]).forEach(x=>{ const s=x.supplier_name||'?'; payBy[s]=(payBy[s]||0)+Number(x.amount||0); });
   tb.innerHTML=names.map(s=>{ const list=by[s]; const clients=new Set(list.map(x=>x.client_code)).size;
     const cur=supplierCurrency(s); const owed=supOwed(list); const paid=payBy[s]||0; const bal=owed-paid;
-    return rw(['<a href="#" style="color:#fff;font-weight:700;text-decoration:none;cursor:pointer" onclick="$(\'supflt\').value=\''+esc(s)+'\';renderSupplierDetail();window.scrollTo(0,0);return false">'+esc(s)+'</a>', fmt(list.length), fmt(clients),
+    return rw(['<a href="#" style="color:var(--accent);font-weight:800;text-decoration:underline;cursor:pointer" onclick="$(\'supflt\').value=\''+esc(s)+'\';renderSupplierDetail();window.scrollTo(0,0);return false">'+esc(s)+'</a>', fmt(list.length), fmt(clients),
       '<b>'+fmt(owed)+'</b> '+esc(cur), (paid?'<span class="num">'+fmt(paid)+'</span>':'—'), '<b style="color:'+(bal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(bal)+'</b> '+esc(cur)]);
   }).join('');
   $('sup-cnt').textContent=names.length+' مورّد';
