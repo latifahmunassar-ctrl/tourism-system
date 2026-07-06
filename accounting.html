@@ -144,6 +144,9 @@
 #p-agents .panel>h3{border-right:5px solid #9333ea;padding-right:9px;color:#9333ea}
 .tab[data-p="suppliers"]{border-bottom:2px solid #ea580c55}
 .tab[data-p="suppliers"].on{color:#ea580c;background:#ea580c12;border-bottom:2px solid #ea580c}
+.tab[data-p="curaudit"]{border-bottom:2px solid #0891b255}
+.tab[data-p="curaudit"].on{color:#0891b2;background:#0891b212;border-bottom:2px solid #0891b2}
+#p-curaudit .panel>h3{border-right:5px solid #0891b2;padding-right:9px;color:#0891b2}
 #p-suppliers .panel>h3{border-right:5px solid #ea580c;padding-right:9px;color:#ea580c}
 .tab[data-p="banks"]{border-bottom:2px solid #0e749055}
 .tab[data-p="banks"].on{color:#0e7490;background:#0e749012;border-bottom:2px solid #0e7490}
@@ -200,7 +203,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6يوليو-ب · نص تنبيهات المستحقات أسود واضح ⏳🖊️ + بحث الموردين/البنوك أسود</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6يوليو-ج · تبويب «🔍 تدقيق العملة» يكشف فوارق تحويل عملة المورّد في الربح الفعلي</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -225,6 +228,7 @@ table{font-weight:600}
     <button class="tab" data-p="staff" onclick="tab(this)">👥 الموظفين</button>
     <button class="tab" data-p="agents" onclick="tab(this)">🏢 الوكلاء</button>
     <button class="tab" data-p="suppliers" onclick="tab(this)">🧾 الموردين</button>
+    <button class="tab" data-p="curaudit" onclick="tab(this)">🔍 تدقيق العملة</button>
     <button class="tab" data-p="banks" onclick="tab(this)">🏦 البنوك والبطاقات</button>
     <button class="tab" data-p="bankscash" onclick="tab(this)">💵 Banks Cash in/Out</button>
     <button class="tab" data-p="control" onclick="tab(this)" style="display:none">🔐 لوحة التحكم</button>
@@ -580,6 +584,32 @@ table{font-weight:600}
       </div>
     </div>
 
+    <div class="page" id="p-curaudit">
+      <div class="panel" style="border:1px solid #0891b2">
+        <h3 style="margin-top:0">🔍 تدقيق العملة — مطابقة التكلفة الفعلية بين المصدرين</h3>
+        <div style="font-size:12px;color:var(--muted);line-height:1.9;margin-bottom:10px">
+          يقارن <b>تكلفة Booking Form</b> (عمود «data TOTAL PACKAGE COST» الجاهز من الشيت) بـ<b>مجموع تفصيل الخدمات</b> (خام × سعر صرف).
+          الفرق الكبير غالباً سببه <b>سعر صرف مورّد غير موحّد أو غير محوّل</b>. راجعي كل حجز واعتمدي التكلفة الصحيحة.
+        </div>
+        <div class="kpirow" id="ca-kpis" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+          <label style="font-size:12.5px;font-weight:700">حدّ الفرق الأدنى (ر.س):</label>
+          <input type="number" id="ca-thr" value="500" step="100" class="dueinp" style="width:110px" onchange="renderCurAudit()">
+          <button class="btn ghost" style="padding:5px 14px" onclick="caExport()">📄 تصدير PDF</button>
+        </div>
+      </div>
+      <div id="ca-rates"></div>
+      <div class="panel"><h3>الحجوزات ذات الفرق <span class="cnt" id="ca-cnt"></span></h3>
+        <div class="tbl-wrap bf-scroll" id="t-ca-wrap"><table id="t-ca"><thead><tr>
+          <th>الكود</th><th>العميل</th><th>البيع (ر.س)</th>
+          <th>تكلفة BookingForm</th><th>ربح BookingForm</th>
+          <th>تكلفة الخدمات</th><th>ربح الخدمات</th>
+          <th>الفرق</th><th>أسعار الصرف المستخدمة</th><th>تنبيه</th>
+        </tr></thead><tbody></tbody></table></div>
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:5px 16px" onclick="hScroll('t-ca-wrap',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:5px 16px" onclick="hScroll('t-ca-wrap',1)">تمرير ▶▶</button></div>
+      </div>
+    </div>
+
     <div class="page" id="p-banks">
       <div class="panel" style="margin-bottom:14px;border:1px solid var(--accent)">
         <h3 style="margin-top:0">🔍 مطابقة كشف الحساب البنكي <span style="font-size:11px;color:var(--muted);font-weight:400">— ارفعي كشف البنك الأصلي ويقارنه النظام بحركاتك</span></h3>
@@ -825,7 +855,7 @@ function tab(el){
 }
 
 // ===== الصلاحيات / لوحة التحكم =====
-const TABS=[{k:'overview',l:'📊 لوحة المعلومات'},{k:'notifs',l:'🔔 إشعارات'},{k:'tickets',l:'🎫 Tickets'},{k:'entry',l:'📝 مدخل البيانات'},{k:'clients',l:'👤 العملاء'},{k:'sales',l:'🧳 Sales Form'},{k:'booking',l:'🏷️ Booking Form'},{k:'bookings',l:'🧾 كل الحجوزات'},{k:'detail',l:'🔎 تفصيل الحجز'},{k:'hotels',l:'🏨 Hotels Overview'},{k:'pnl',l:'💹 الأرباح والخسائر'},{k:'due',l:'⏳ المستحقات'},{k:'payments',l:'💳 الدفعات/المرتجعات'},{k:'staff',l:'👥 الموظفين'},{k:'agents',l:'🏢 الوكلاء'},{k:'suppliers',l:'🧾 الموردين'},{k:'banks',l:'🏦 البنوك والبطاقات'},{k:'bankscash',l:'💵 Banks Cash in/Out'}];
+const TABS=[{k:'overview',l:'📊 لوحة المعلومات'},{k:'notifs',l:'🔔 إشعارات'},{k:'tickets',l:'🎫 Tickets'},{k:'entry',l:'📝 مدخل البيانات'},{k:'clients',l:'👤 العملاء'},{k:'sales',l:'🧳 Sales Form'},{k:'booking',l:'🏷️ Booking Form'},{k:'bookings',l:'🧾 كل الحجوزات'},{k:'detail',l:'🔎 تفصيل الحجز'},{k:'hotels',l:'🏨 Hotels Overview'},{k:'pnl',l:'💹 الأرباح والخسائر'},{k:'due',l:'⏳ المستحقات'},{k:'payments',l:'💳 الدفعات/المرتجعات'},{k:'staff',l:'👥 الموظفين'},{k:'agents',l:'🏢 الوكلاء'},{k:'suppliers',l:'🧾 الموردين'},{k:'banks',l:'🏦 البنوك والبطاقات'},{k:'bankscash',l:'💵 Banks Cash in/Out'},{k:'curaudit',l:'🔍 تدقيق العملة'}];
 let CURRENT_USER=null; try{ CURRENT_USER=JSON.parse(localStorage.getItem('acc_user')||'null'); }catch(e){}
 function staffList(){ return (DATA&&DATA.staffAccess)||[]; }
 function applyPermissions(){
@@ -1018,6 +1048,7 @@ function render(d){
   renderSuppliers();
   renderBanks();
   renderBanksCash();
+  try{ renderCurAudit(); }catch(_){}
 
   const labels=d.monthly.map(m=>m.month), profit=d.monthly.map(m=>m.profit);
   if(chart)chart.destroy();
@@ -3395,6 +3426,78 @@ async function resolveCliEdit(id,decision){
     await load();
     alert(approve?'✅ اعتُمد التعديل — طُبّق على السطر.':'❌ رُفض الطلب — القيم كما هي.');
   }catch(e){ alert('خطأ: '+e.message); }
+}
+// ===== 🔍 تدقيق العملة: مطابقة تكلفة Booking Form بتفصيل الخدمات =====
+function caData(){
+  const svc={};
+  (DATA.serviceLines||[]).forEach(s=>{
+    if(/cancel/i.test(s.status||'')) return;
+    const c=(s.client_code||'').toUpperCase(); if(!c) return;
+    const o=svc[c]||(svc[c]={cost:0,rates:{},n:0});
+    o.cost+=Number(s.amount||0); o.n++;
+    const r=s.currency_rate; if(r!=null&&r!=='') o.rates[String(Number(r))]=1;
+  });
+  const bf={};
+  (DATA.bookingForm||[]).forEach(b=>{
+    const c=(b.client_code||'').toUpperCase(); if(!c) return;
+    const o=bf[c]||(bf[c]={sold:0,cost:0,name:''});
+    o.sold+=Number(b.sold_to_client||0); o.cost+=Number(b.cost_local||0);
+    if(b.client_name&&!o.name)o.name=b.client_name;
+  });
+  const rows=[];
+  Object.keys(bf).forEach(c=>{
+    const s=svc[c]; if(!s||!(s.cost>0)) return;
+    const diff=Number((bf[c].cost - s.cost).toFixed(2));
+    const rates=Object.keys(s.rates).map(Number).sort((a,b)=>a-b);
+    rows.push({code:c,name:bf[c].name||'',sold:bf[c].sold,bfCost:bf[c].cost,svcCost:s.cost,diff:diff,rates:rates,nLines:s.n});
+  });
+  return rows;
+}
+function caRateFlag(rates){
+  const frac=rates.filter(r=>r>0&&r<1), whole=rates.filter(r=>r>=1);
+  if(frac.length&&whole.length) return {t:'⚠️ خلط صرف كسري وصحيح',c:'#c0392b'};
+  if(rates.length>=3) return {t:'⚠️ أسعار صرف متعددة',c:'#d98a00'};
+  return null;
+}
+function renderCurAudit(){
+  if(!DATA) return;
+  const thr=Math.abs(Number(($('ca-thr')&&$('ca-thr').value)||0));
+  const all=caData();
+  const rows=all.filter(r=>Math.abs(r.diff)>=thr).sort((a,b)=>Math.abs(b.diff)-Math.abs(a.diff));
+  const n500=all.filter(r=>Math.abs(r.diff)>500).length, n2000=all.filter(r=>Math.abs(r.diff)>2000).length;
+  const mag=all.filter(r=>Math.abs(r.diff)>500).reduce((s,r)=>s+Math.abs(r.diff),0);
+  const kb=$('ca-kpis'); if(kb) kb.innerHTML=
+    '<div class="kpi" style="border-right:4px solid #0891b2"><div class="ttl">حجوزات فيها فرق (>500)</div><div class="val">'+n500+'</div></div>'+
+    '<div class="kpi" style="border-right:4px solid #c0392b"><div class="ttl">فرق كبير (>2000)</div><div class="val">'+n2000+'</div></div>'+
+    '<div class="kpi" style="border-right:4px solid #d98a00"><div class="ttl">إجمالي حجم الفروقات (ر.س)</div><div class="val">'+fmt(Math.round(mag))+'</div></div>';
+  const rateCount={};
+  (DATA.serviceLines||[]).forEach(s=>{ if(/cancel/i.test(s.status||''))return; const r=s.currency_rate; if(r==null||r==='')return; const k=String(Number(r)); rateCount[k]=(rateCount[k]||0)+1; });
+  const ccyGuess=(r)=>{ r=Number(r); if(r>=9&&r<=11)return 'OMR؟'; if(r>=3.6&&r<=4.2)return 'USD/AED؟'; if(r>=0.9&&r<=1.1)return 'SAR (بلا تحويل)'; if(r>=0.07&&r<=0.12)return 'EGP؟'; if(r>0&&r<0.9)return 'كسري ⚠️'; return '—'; };
+  const rp=$('ca-rates');
+  if(rp){ const ks=Object.keys(rateCount).map(Number).sort((a,b)=>b-a);
+    rp.innerHTML='<div class="panel"><h3>أسعار الصرف المستخدمة في الخدمات</h3><div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>سعر الصرف</th><th>العملة المرجّحة</th><th>عدد الخدمات</th></tr></thead><tbody>'+
+      ks.map(r=>'<tr><td class="num"><b>'+r+'</b></td><td>'+esc(ccyGuess(r))+'</td><td class="num">'+rateCount[String(r)]+'</td></tr>').join('')+
+      '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚠️ تعدّد أسعار الصرف لنفس العملة (مثل OMR بـ10 و0.1) هو السبب الرئيسي للفروقات.</div></div>';
+  }
+  document.querySelector('#t-ca tbody').innerHTML=rows.map(r=>{
+    const pf=caRateFlag(r.rates);
+    const profBF=Number((r.sold-r.bfCost).toFixed(2)), profSvc=Number((r.sold-r.svcCost).toFixed(2));
+    return '<tr><td>'+esc(r.code)+'</td><td>'+esc(r.name)+'</td><td class="num">'+fmt(r.sold)+'</td>'+
+      '<td class="num">'+fmt(r.bfCost)+'</td><td class="num pos">'+fmt(profBF)+'</td>'+
+      '<td class="num">'+fmt(r.svcCost)+'</td><td class="num pos">'+fmt(profSvc)+'</td>'+
+      '<td class="num" style="font-weight:800;color:'+(Math.abs(r.diff)>2000?'#c0392b':'#d98a00')+'">'+fmt(r.diff)+'</td>'+
+      '<td style="font-size:11px">'+r.rates.join('، ')+'</td>'+
+      '<td>'+(pf?'<span style="font-size:10.5px;color:'+pf.c+';font-weight:700">'+pf.t+'</span>':'<span style="color:var(--muted)">—</span>')+'</td></tr>';
+  }).join('')||'<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:14px">لا حجوزات تتجاوز حدّ الفرق</td></tr>';
+  const cc=$('ca-cnt'); if(cc) cc.textContent=rows.length+' حجز';
+}
+function caExport(){
+  const rows=caData().filter(r=>Math.abs(r.diff)>=Math.abs(Number(($('ca-thr')&&$('ca-thr').value)||0))).sort((a,b)=>Math.abs(b.diff)-Math.abs(a.diff));
+  let html='<html dir="rtl"><head><meta charset="utf-8"><style>body{font-family:Arial;padding:16px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #999;padding:5px;text-align:center}th{background:#0891b2;color:#fff}h2{color:#0891b2}</style></head><body><h2>🔍 تقرير تدقيق العملة</h2><table><thead><tr><th>الكود</th><th>العميل</th><th>البيع</th><th>تكلفة BF</th><th>ربح BF</th><th>تكلفة الخدمات</th><th>ربح الخدمات</th><th>الفرق</th><th>أسعار الصرف</th></tr></thead><tbody>'+
+    rows.map(r=>'<tr><td>'+esc(r.code)+'</td><td>'+esc(r.name)+'</td><td>'+fmt(r.sold)+'</td><td>'+fmt(r.bfCost)+'</td><td>'+fmt(r.sold-r.bfCost)+'</td><td>'+fmt(r.svcCost)+'</td><td>'+fmt(r.sold-r.svcCost)+'</td><td>'+fmt(r.diff)+'</td><td>'+r.rates.join('، ')+'</td></tr>').join('')+
+    '</tbody></table></body></html>';
+  const f=document.createElement('iframe'); f.style.position='fixed'; f.style.right='-9999px'; f.style.width='800px'; f.style.height='600px'; document.body.appendChild(f);
+  f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close(); f.contentWindow.focus(); setTimeout(()=>{try{f.contentWindow.print();}catch(_){}},300);
 }
 function renderSuppliers(){
   const tb=document.querySelector('#t-sup tbody'); if(!tb) return;
