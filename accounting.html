@@ -203,7 +203,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6يوليو-ز · قائمة أسماء الموظفين النظيفة (من القوائم المُدارة) + خيار اسم جديد 👤</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6يوليو-ح · قائمة الموظفين تشمل حسابات الموظفين المُنشأة (علي المحاسب وغيره) + منفّذي الحجوزات</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -956,10 +956,11 @@ function doLogout(){ if(!confirm('تسجيل الخروج من النظام؟'))
   localStorage.removeItem('acc_user'); localStorage.removeItem('acc_token'); localStorage.removeItem('acc_key'); CURRENT_USER=null; TOKEN=''; KEY=''; location.reload(); }
 function switchUser(){ localStorage.removeItem('acc_user'); CURRENT_USER=null; if(TOKEN){ localStorage.removeItem('acc_token'); TOKEN=''; location.reload(); return; } showIdentityGate(); }
 function logoutUser(){ localStorage.removeItem('acc_user'); CURRENT_USER=null; if(TOKEN){ localStorage.removeItem('acc_token'); TOKEN=''; location.reload(); return; } showIdentityGate(); }
-// أسماء الموظفين النظيفة فقط — من القوائم المُدارة (confirmed_by/booked_by) التي تتحكّم بها المالكة بزر ⚙️ إدارة
+// أسماء الموظفين النظيفة — من القوائم المُدارة (منفّذو الحجوزات) + حسابات الموظفين المُنشأة (محاسب/مبيعات/حجوزات مثل علي)
 function staffNameOptions(){
   const set={};
   ['confirmed_by','booked_by'].forEach(cat=>{ listValues(cat).forEach(x=>{ const v=(x.value||'').trim(); if(v)set[v]=1; }); });
+  staffList().forEach(u=>{ const v=(u.staff_name||'').trim(); if(v)set[v]=1; });
   return Object.keys(set).sort((a,b)=>a.localeCompare(b,'ar')).map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');
 }
 // عند اختيار موظف من القائمة المنسدلة: يملأ خانة الاسم (و«اسم جديد» يفرّغها للكتابة)
