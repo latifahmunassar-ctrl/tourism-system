@@ -203,7 +203,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6يوليو-ج · تبويب «🔍 تدقيق العملة» يكشف فوارق تحويل عملة المورّد في الربح الفعلي</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6يوليو-د · زر ✏️ تعديل + حذف لكل خدمة بجدول Sales Form مباشرة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -406,7 +406,7 @@ table{font-weight:600}
       <div class="formbar"><input id="sflt-q" class="flt" placeholder="🔍 كود أو اسم العميل" oninput="renderSales()" style="min-width:220px"></div>
       <div class="panel"><h3>خدمات الباكدجات <span class="cnt" id="sales-cnt"></span></h3>
         <div class="tbl-wrap bf-scroll" id="sl-tbl"><table id="t-sales"><thead><tr>
-          <th>كود العميل</th><th>نوع الخدمة</th><th>الاسم</th><th>التفاصيل / الغرفة</th><th>🏷️ مصدر الحجز / المورّد</th><th>دخول</th><th>خروج</th><th>العملة</th><th>سعر الصرف</th><th>البيع (ر.س)</th><th>سعر المورد</th><th>المصدر</th>
+          <th>كود العميل</th><th>نوع الخدمة</th><th>الاسم</th><th>التفاصيل / الغرفة</th><th>🏷️ مصدر الحجز / المورّد</th><th>دخول</th><th>خروج</th><th>العملة</th><th>سعر الصرف</th><th>البيع (ر.س)</th><th>سعر المورد</th><th>المصدر</th><th>إجراء</th>
         </tr></thead><tbody></tbody></table></div>
         <div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:6px 18px;font-size:14px" onclick="hScroll('sl-tbl',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:6px 18px;font-size:14px" onclick="hScroll('sl-tbl',1)">تمرير ▶▶</button></div>
       </div>
@@ -1762,8 +1762,9 @@ function renderSales(){
     esc(r.check_in||''),esc(r.check_out||''),esc(r.currency||''),esc(r.currency_rate!=null?r.currency_rate:''),
     '<span class="num">'+fmt(r.amount)+'</span>',
     '<span class="num">'+fmt(Number(r.currency_rate)?Number(r.amount)/Number(r.currency_rate):Number(r.amount))+'</span>',
-    '<span class="src '+(r.source==='dashboard'?'dashboard':'sheet')+'">'+(r.source==='dashboard'?'داشبورد':'شيت')+'</span>'
-  ])).join('')||rw(['لا خدمات بعد — أضيفي من الأعلى','','','','','','','','','','',''])
+    '<span class="src '+(r.source==='dashboard'?'dashboard':'sheet')+'">'+(r.source==='dashboard'?'داشبورد':'شيت')+'</span>',
+    '<span style="white-space:nowrap"><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="editSalesItem('+r.id+')">✏️ تعديل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="delSalesItem('+r.id+',\''+esc(r.client_code||'')+'\')">🗑️</button></span>'
+  ])).join('')||rw(['لا خدمات بعد — أضيفي من الأعلى','','','','','','','','','','','',''])
 
 ;
   $('sales-cnt').textContent=rows.length+' خدمة';
