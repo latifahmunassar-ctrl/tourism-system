@@ -203,7 +203,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6يوليو-هـ · اسم الموظف بلوحة الصلاحيات قائمة منسدلة من المُدخَلين</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6يوليو-و · قائمة منسدلة واضحة لاختيار الموظف بلوحة الصلاحيات 👤</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -962,15 +962,17 @@ function staffNameOptions(){
   ['confirmed_by','booked_by'].forEach(cat=>{ listValues(cat).forEach(x=>{ const v=(x.value||'').trim(); if(v)set[v]=1; }); });
   ((DATA&&DATA.fcd)||[]).forEach(r=>{ const v=(r.confirmed_by||'').trim(); if(v)set[v]=1; });
   ((DATA&&DATA.serviceLines)||[]).forEach(s=>{ [s.confirmed_by,s.booked_by].forEach(x=>{ const v=(x||'').trim(); if(v)set[v]=1; }); });
-  // استبعد من هو مضاف مسبقاً كموظف صلاحيات (يبقى بالجدول)، لكن نُبقيه بالقائمة للراحة
-  return Object.keys(set).sort((a,b)=>a.localeCompare(b,'ar')).map(v=>'<option value="'+esc(v)+'"></option>').join('');
+  return Object.keys(set).sort((a,b)=>a.localeCompare(b,'ar')).map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');
 }
+// عند اختيار موظف من القائمة المنسدلة: يملأ خانة الاسم (و«اسم جديد» يفرّغها للكتابة)
+function ctlPickName(v){ const n=$('ctl-name'); if(!n)return; if(v==='__new'){ n.value=''; n.focus(); } else if(v){ n.value=v; } }
 function renderControl(){
   const box=$('p-control'); if(!box)return; const list=staffList();
   let h='<div id="dev-panel"></div>'+
     '<div class="panel" style="border-color:var(--green);margin-bottom:14px"><h3 style="margin-top:0">➕ إضافة / تعديل موظف وصلاحياته</h3>'+
     '<div class="fgrid">'+
-    '<div class="fld"><label>اسم الموظف <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">اختاري من المُدخَلين أو اكتبي جديد</span></label><input id="ctl-name" list="ctl-name-list" autocomplete="off" placeholder="اختاري من القائمة…"><datalist id="ctl-name-list">'+staffNameOptions()+'</datalist></div>'+
+    '<div class="fld"><label>👤 اختاري موظفاً مُدخَلاً <span style="font-size:9px;color:var(--muted)">من قائمة المُدخَلين بالنظام</span></label><select id="ctl-name-pick" onchange="ctlPickName(this.value)"><option value="">— اختاري من القائمة —</option>'+staffNameOptions()+'<option value="__new">➕ اسم جديد (اكتبيه يدوياً)</option></select></div>'+
+    '<div class="fld"><label>اسم الموظف <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">يُملأ من القائمة أو اكتبيه</span></label><input id="ctl-name" autocomplete="off" placeholder="اختاري من القائمة أو اكتبي اسماً جديداً"></div>'+
     '<div class="fld"><label>رمز الدخول (PIN)</label><input id="ctl-pin" placeholder="أرقام — اتركيه فارغاً للإبقاء على القديم"></div>'+
     '<div class="fld"><label>الدور</label><input id="ctl-role" list="ctl-role-list" placeholder="محاسب / مبيعات / حجوزات / الإدارة"><datalist id="ctl-role-list"><option>محاسب</option><option>مبيعات</option><option>حجوزات</option><option>الإدارة</option></datalist></div>'+
     '<div class="fld"><label>النوع</label><select id="ctl-owner"><option value="0">موظف (صلاحيات محددة)</option><option value="1">مالكة (كل الصلاحيات)</option></select></div>'+
