@@ -203,7 +203,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 7يوليو-ج · القناة أول السلسلة وتفلتر الوصف←التفاصيل←تفاصيل أكثر + ربط الأوصاف الموجودة بضغطة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 7يوليو-د · تنبيه تلقائي «عميل دفع بلا حجز فعلي» في البانر وتبويب الإشعارات 🚫</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -904,16 +904,17 @@ function costReason(msg){ const m=String(msg||''); const i=m.indexOf('السبب
 function costBy(msg){ const m=String(msg||''); const i=m.indexOf('مقدّم الطلب:'); return i>=0? m.slice(i+'مقدّم الطلب:'.length).trim() : ''; }
 function renderNotifBanner(u){
   const el=$('notifbanner'); if(!el)return;
-  const pend=((DATA&&DATA.alerts)||[]).filter(a=>a.status==='pending'&&(a.type==='profit_decrease'||a.type==='freeze_request')).concat(liveBookingLosses());
+  const pend=((DATA&&DATA.alerts)||[]).filter(a=>a.status==='pending'&&(a.type==='profit_decrease'||a.type==='freeze_request')).concat(liveBookingLosses()).concat(liveNoBooking());
   // إشعارات «بانتظار قرارك» للمالكة فقط
   if(pend.length && isOwnerUser()){
-    const pp=pend.filter(a=>a.type==='profit_decrease'), pd=pend.filter(a=>a.type==='freeze_request'), plo=pend.filter(a=>a.type==='booking_loss');
-    const latest=pend.slice().sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))[0];
+    const pp=pend.filter(a=>a.type==='profit_decrease'), pd=pend.filter(a=>a.type==='freeze_request'), plo=pend.filter(a=>a.type==='booking_loss'), pnb=pend.filter(a=>a.type==='no_booking');
+    const latest=pend.slice().sort((a,b)=>((b.urgent?1:0)-(a.urgent?1:0))||String(b.created_at||'').localeCompare(String(a.created_at||'')))[0];
     let txt;
     if(latest.type==='freeze_request') txt='🔔 إشعار: <b>'+pend.length+'</b> إشعار بانتظار قرارك — آخرها <b>🧊 طلب تجميد حساب</b> «'+esc(latest.client_code||'')+(latest.service_name?' · '+esc(latest.service_name):'')+'»';
     else if(latest.type==='booking_loss') txt='🔔 إشعار: <b>'+pend.length+'</b> إشعار بانتظار اطّلاعكِ — آخرها <b>📉 خسارة حجز</b> «'+esc(latest.client_code||'')+'» · <span style="color:#ffd9d9">'+esc(latest.message||'')+'</span>';
+    else if(latest.type==='no_booking') txt='🔔 إشعار: <b>'+pend.length+'</b> إشعار بانتظار اطّلاعكِ — آخرها <b>🚫 دفع بلا حجز فعلي</b> · <span style="color:#ffd9d9">'+esc(latest.message||'')+'</span>';
     else { const reason=profitReason(latest.message)||esc(latest.message||''); txt='🔔 إشعار: <b>'+pend.length+'</b> إشعار بانتظار قرارك — آخرها <b>تخفيض ربح</b> «'+esc(latest.client_code||'')+'» · <b>السبب:</b> <span style="color:#ffd9d9">'+esc(reason)+'</span>'; }
-    const parts=[]; if(pd.length)parts.push(pd.length+' تجميد'); if(plo.length)parts.push(plo.length+' خسارة'); if(pp.length)parts.push(pp.length+' ربح');
+    const parts=[]; if(pd.length)parts.push(pd.length+' تجميد'); if(plo.length)parts.push(plo.length+' خسارة'); if(pnb.length)parts.push(pnb.length+' بلا حجز'); if(pp.length)parts.push(pp.length+' ربح');
     const extra=(parts.length>1)?' <span style="opacity:.85;font-weight:400">('+parts.join(' · ')+')</span>':'';
     el.style.display='block';
     el.innerHTML='<div style="background:#7a1320;color:#fff;padding:10px 16px;font-weight:700;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>'+txt+extra+'</span><span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" style="background:#fff;color:#7a1320;padding:4px 12px;font-weight:700" onclick="openNotifs()">🔔 عرض الإشعارات</button></span></div>';
@@ -2448,6 +2449,26 @@ function liveBookingLosses(){
   out.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
   return out;
 }
+// 🚫 تنبيه حيّ: عميل دفع مبلغاً ولا يوجد له أي حجز فعلي (لا Booking Form ولا خدمات) — يُحسب تلقائياً بلا حفظ
+function liveNoBooking(){
+  const out=[]; const cl={};
+  (DATA.fcd||[]).forEach(r=>{ const c=r.client_code; if(!c)return; const o=cl[c]||(cl[c]={paid:0,name:'',agent:'',arr:'',st:'',cur:'',created:''});
+    o.paid+=Number(r.amount_paid||0); if(r.client_name&&!o.name)o.name=r.client_name; if(r.agent_name&&!o.agent)o.agent=r.agent_name;
+    if(r.arrival_date&&(!o.arr||String(r.arrival_date)>o.arr))o.arr=String(r.arrival_date).slice(0,10); if(r.conf_status&&!o.st)o.st=r.conf_status;
+    if(r.currency&&!o.cur)o.cur=r.currency; if(r.created_at&&String(r.created_at)>o.created)o.created=String(r.created_at); });
+  const frozen=frozenCodes();
+  const bfCodes=new Set((DATA.bookingForm||[]).map(b=>(b.client_code||'').toUpperCase()));
+  const svcCodes=new Set((DATA.serviceLines||[]).map(s=>(s.client_code||'').toUpperCase()));
+  const today=new Date(); const todayStr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  Object.keys(cl).forEach(c=>{ const o=cl[c]; const uc=c.toUpperCase();
+    if(!(o.paid>1)) return; if(/cancel/i.test(o.st||'')) return; if(frozen.has(c)) return;
+    if(bfCodes.has(uc)||svcCodes.has(uc)) return;
+    const passed=!!(o.arr && o.arr<todayStr);
+    out.push({ type:'no_booking', client_code:c, service_name:o.name||'', created_at:o.created||'', _live:true, urgent:passed,
+      message:'🚫 دفع بلا حجز فعلي — «'+esc(c)+'»'+(o.name?' ('+esc(o.name)+')':'')+' دفع '+fmt(o.paid)+' '+esc(o.cur||'SAR')+(o.agent?' · وكيل '+esc(o.agent):'')+(o.arr?(' · الوصول '+esc(o.arr)+(passed?' ⚠️ فات ولا حجز':'')):'') }); });
+  out.sort((a,b)=>((b.urgent?1:0)-(a.urgent?1:0))||String(b.created_at||'').localeCompare(String(a.created_at||'')));
+  return out;
+}
 // ---- Overview of Bookings: متابعة كل حجز (بيع/مدفوع/رصيد/متوقّع/فعلي/خدمات) ----
 function renderAlerts(){
   const box=$('alerts-box'); if(!box) return;
@@ -2468,6 +2489,7 @@ function renderAlerts(){
   const resolvedRefund=mvAll.filter(m=>m.kind==='refund'&&(m.status==='approved'||m.status==='rejected')).sort((a,b)=>String(b.decided_at||b.id).localeCompare(String(a.decided_at||a.id))).slice(0,15);
   const pendList=mvAll.filter(m=>m.kind==='list_item'&&m.status==='pending').sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
   const pendLoss=liveBookingLosses();   // خسائر الحجوزات تُحسب حيّاً (كل حجز فعلي يفوق البيع) — تظهر تلقائياً بلا حفظ
+  const pendNoBook=liveNoBooking();      // 🚫 عملاء دفعوا بلا أي حجز فعلي — تُكشَف تلقائياً
   for(const a of all){ if(a.status!=='pending') continue;
     if(a.type==='profit_decrease'){ pendProfit.push(a); continue; }
     if(a.type==='freeze_request'){ pendFreeze.push(a); continue; }
@@ -2500,6 +2522,12 @@ function renderAlerts(){
       '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>الخدمة</th><th>📉 تفاصيل الخسارة</th></tr></thead><tbody>'+
       pendLoss.map(a=>'<tr><td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="font-size:11px;color:var(--red);font-weight:600">'+esc(a.message||'')+'</td></tr>').join('')+
       '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تُكشَف تلقائياً لأي حجز فعلي يفوق سعر البيع، وتختفي فور تصحيح الحجز.</div></div>';
+  }
+  if(pendNoBook.length){
+    h+='<div class="panel" style="border:1px solid #c026d3;background:rgba(192,38,211,.06);margin-bottom:14px"><h3 style="color:#c026d3;margin-top:0">🚫 عملاء دفعوا بلا حجز فعلي ('+pendNoBook.length+')</h3>'+
+      '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>العميل</th><th>التفاصيل</th><th>إجراء</th></tr></thead><tbody>'+
+      pendNoBook.map(a=>'<tr'+(a.urgent?' style="background:rgba(255,107,122,.10)"':'')+'><td>'+esc(a.client_code||'')+(a.urgent?' <span title="فات وصوله" style="color:var(--red)">⚠️</span>':'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="font-size:11px;color:#a21caf;font-weight:600">'+esc(a.message||'')+'</td><td><button class="btn" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(a.client_code||'')+'\')">📋 إدخال حجزه</button></td></tr>').join('')+
+      '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تُكشَف تلقائياً لأي عميل دفع ولا يوجد له حجز في Booking Form/الخدمات (عدا الملغى والمجمّد). تختفي فور إدخال حجزه. الأحمر = فات وصوله.</div></div>';
   }
   if(pend.length){
     h+='<div class="panel" style="border:1px solid var(--amber);background:rgba(245,158,11,.07);margin-bottom:14px"><h3 style="color:var(--amber);margin-top:0">⚠️ تذاكر بانتظار تعديل العملة ('+pend.length+')</h3>'+
