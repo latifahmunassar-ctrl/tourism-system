@@ -26,7 +26,7 @@ const CORS_HEADERS = {
   "Content-Type": "application/json",
 };
 
-const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman "];
+const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa "];
 
 // Per-destination canonical-city patterns — MUST stay in sync with DEST_CITIES
 // in Tourism-AI/index.ts (same canonical names the builder groups by). Used

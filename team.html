@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-07-02-company-lock';
+  var BUILD = '2026-07-07-south-africa';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -736,7 +736,8 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 </div>
 
 
-<div id="waBridgeExcludedBar" style="font-size:12px;color:var(--muted);margin-bottom:12px;display:none">🚫 المستبعدة من الإعلان: <b id="waBridgeExcludedCount">0</b> <button class="ebtn ebtn-nologo wab-mini" style="margin-inline-start:8px" onclick="waBridgeRestoreAll()">↩️ استرجاع الكل</button></div>
+<div id="waBridgeExcludedBar" style="font-size:12px;color:var(--muted);margin-bottom:8px;display:none">🚫 المستبعدة من الإعلان: <b id="waBridgeExcludedCount">0</b> <button class="ebtn ebtn-nologo wab-mini" style="margin-inline-start:8px" onclick="waBridgeToggleExcludedList()">👁️ عرض القائمة</button> <button class="ebtn ebtn-nologo wab-mini" onclick="waBridgeRestoreAll()">↩️ استرجاع الكل</button></div>
+<div id="waBridgeExcludedList" style="display:none;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:12px"></div>
 <div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:12px">
 <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:8px"><input type="checkbox" id="waBridgeThrottle" onchange="waBridgeThrottleToggle()"> ⏱️ إرسال على دفعات (لتفادي حظر واتساب)</label>
 <div id="waBridgeThrottleBox" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;font-weight:700">
@@ -3114,6 +3115,31 @@ async function waBridgeRejectNew(jid) {
   await waBridgeLoadNew();
 }
 
+async function waBridgeToggleExcludedList() {
+  const box = document.getElementById("waBridgeExcludedList");
+  if (box.style.display === "block") { box.style.display = "none"; return; }
+  box.style.display = "block";
+  box.innerHTML = '<div style="padding:10px;color:var(--muted);font-size:12px">⏳ تحميل المستبعدة...</div>';
+  try {
+    const r = await waBridgeCall("excluded-groups");
+    const groups = r.groups || [];
+    if (!groups.length) { box.innerHTML = '<div style="padding:10px;color:var(--muted);font-size:12px">ما فيه جروبات مستبعدة</div>'; return; }
+    box.innerHTML = groups.map(g => {
+      const nm = waEsc(g.name || "(بدون اسم)");
+      const sz = g.size ? "👥 " + g.size : "";
+      return `<div class="wab-check" style="cursor:default"><span class="wab-name">🚫 ${nm}</span><span class="wab-size">${sz}</span><button class="ebtn ebtn-nologo wab-mini" style="background:#25D366;color:#fff" title="استرجاع للقائمة" onclick="waBridgeRestoreGroup('${g.jid}')">↩️</button></div>`;
+    }).join("");
+  } catch (e) { box.innerHTML = '<div style="padding:10px;color:#ef4444;font-size:12px">تعذّر: ' + e.message + '</div>'; }
+}
+async function waBridgeRestoreGroup(jid) {
+  const r = await waBridgeCall("restore-group", { jid });
+  waBridgeGroupsLoaded = false;
+  await waBridgeLoadGroups();
+  waBridgeSetExcludedCount(r.excluded_count);
+  const box = document.getElementById("waBridgeExcludedList");
+  if (box.style.display === "block") { box.style.display = "none"; await waBridgeToggleExcludedList(); }
+}
+
 async function waBridgeSend() {
   const body = (document.getElementById('waBridgeBody').value || '').trim();
   const msg = document.getElementById('waBridgeMsg');
@@ -4814,7 +4840,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       const currency=(typeof currencyConversion!=='undefined'&&currencyConversion)?currencyConversion.name:'ريال';
       // اسم الملف إنجليزي نظيف (واتساب يلخبط الأسماء العربية في الملف نفسه)،
       // واسم الوجهة بالعربي يظهر سليم في نص الرسالة (caption) أسفل الملف.
-      const _DEST_EN={'عمان':'Oman','عُمان':'Oman','ماليزيا':'Malaysia','تايلند':'Thailand','تايلاند':'Thailand','فيتنام':'Vietnam','تركيا':'Turkey','روسيا':'Russia','جورجيا':'Georgia','اذربيجان':'Azerbaijan','أذربيجان':'Azerbaijan','مصر':'Egypt','المالديف':'Maldives','مالديف':'Maldives','اندونيسيا':'Indonesia','إندونيسيا':'Indonesia','بالي':'Bali','سريلانكا':'SriLanka','الامارات':'UAE','الإمارات':'UAE','دبي':'Dubai','البوسنة':'Bosnia','المغرب':'Morocco'};
+      const _DEST_EN={'عمان':'Oman','عُمان':'Oman','ماليزيا':'Malaysia','تايلند':'Thailand','تايلاند':'Thailand','فيتنام':'Vietnam','تركيا':'Turkey','روسيا':'Russia','جورجيا':'Georgia','اذربيجان':'Azerbaijan','أذربيجان':'Azerbaijan','مصر':'Egypt','المالديف':'Maldives','مالديف':'Maldives','اندونيسيا':'Indonesia','إندونيسيا':'Indonesia','بالي':'Bali','سريلانكا':'SriLanka','الامارات':'UAE','الإمارات':'UAE','دبي':'Dubai','البوسنة':'Bosnia','المغرب':'Morocco','جنوب أفريقيا':'SouthAfrica','جنوب افريقيا':'SouthAfrica'};
       const _destAr=String(indivState.dest||'').trim();
       const _destEn=_DEST_EN[_destAr]||(/^[\x00-\x7F]+$/.test(_destAr)?_destAr:'Trip');
       const fname=('Alezz_Travel_'+_destEn+'_Offer').replace(/[^\x00-\x7F]/g,'').replace(/\s+/g,'_').replace(/_+/g,'_').slice(0,60)+'.pdf';
