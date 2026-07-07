@@ -367,9 +367,16 @@ function tourNameCity(tour: TourRow, cityDefs: CityDef[]): string | null {
   return null;
 }
 
+// مدن قريبة تُعامَل جولاتها كرحلات يوم من مدينة الإقامة: المفتاح = مدينة الإقامة، والقيمة = المدن
+// القريبة التي تُضاف جولاتها لقائمتها. مثال: هارمونس قريبة من كيب تاون → جولاتها تظهر في قائمة كيب تاون.
+const NEARBY_TOUR_CITIES: Record<string, string[]> = {
+  "Cape Town": ["Hermanus"],
+};
+
 /**
  * Does `tour` belong to `canonicalCity`? The tour NAME is authoritative; the
  * sheet SECTION tag is consulted only for tours that name no city at all.
+ * Nearby day-trip cities (NEARBY_TOUR_CITIES) also count (Hermanus → Cape Town).
  */
 function tourBelongsToCity(tour: TourRow, cityDefs: CityDef[], canonicalCity: string): boolean {
   // The tour NAME is authoritative: a tour that names a city ("جولة معالم فوكوك"
@@ -378,7 +385,11 @@ function tourBelongsToCity(tour: TourRow, cityDefs: CityDef[], canonicalCity: st
   // per-city sections, so the section tag over-propagates; honouring it for a
   // named tour would drop a Phu Quoc tour onto a Hanoi day.
   const nameCity = tourNameCity(tour, cityDefs);
-  if (nameCity) return nameCity === canonicalCity;
+  if (nameCity) {
+    if (nameCity === canonicalCity) return true;
+    // جولة مدينة قريبة (رحلة يوم) تُتاح من مدينة الإقامة — مثلاً هارمونس من كيب تاون.
+    return (NEARBY_TOUR_CITIES[canonicalCity] || []).includes(nameCity);
+  }
   // Nameless tours only (Istanbul day-trips الأميرات / فيالاند / فينيسيا that
   // never name a base city) fall back to the sheet section tag. sync stamps the
   // section onto exactly those nameless rows, so the tag is trustworthy here.

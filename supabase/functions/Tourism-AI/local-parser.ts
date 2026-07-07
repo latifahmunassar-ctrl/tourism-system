@@ -211,7 +211,7 @@ function parseDestination(text: string): string | null {
     [/البوسنة|البوسنه|bosnia|سراييفو|sarajevo|موستار|mostar|بيهاتش|bihać|bihac/i, "Bosnia"],
     [/تايلاند|تايلند|thailand|بانكوك|bangkok|بوكيت|بوكت|phuket|كرابي|krabi|شيانغ|chiang|باتايا|بتايا|pattaya|ساموي|samui/i, "thailand"],
     [/عُمان|عمان|سلطنة\s*عمان|oman|صلال[ةه]|salalah/i, "Oman"],
-    [/جنوب\s*(?:ال)?[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبر[جغ]|johannesburg|ه(?:ي|ا)?رمانوس|hermanus|بريتوريا|pretoria|سن\s*سيتي|sun\s*city|كروجر|kruger/i, "South Africa"],
+    [/جنوب\s*(?:ال)?[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبر[جغ]|johannesburg|(?:هارمونس|هارمانوس|هيرمانوس|هرمانوس)|hermanus|بريتوريا|pretoria|سن\s*سيتي|sun\s*city|كروجر|kruger/i, "South Africa"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;

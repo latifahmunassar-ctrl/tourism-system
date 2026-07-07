@@ -48,7 +48,7 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     [/(?:ال)?بوسن[ةه]|bosnia|سراييفو|sarayevo|sarajevo|موستار|mostar|بيهاتش|bihać|bihac/i, "Bosnia"],
     [/تايلاند|تايلند|thailand|بانكوك|bangkok|بوكيت|بوكت|phuket|كرابي|krabi|شيانغ|chiang|باتايا|بتايا|pattaya|ساموي|samui/i, "thailand"],
     [/عُمان|عمان|سلطنة\s*عمان|oman|صلال[ةه]|salalah/i, "Oman"],
-    [/جنوب\s*(?:ال)?[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبر[جغ]|johannesburg|ه(?:ي|ا)?رمانوس|hermanus|بريتوريا|pretoria|سن\s*سيتي|sun\s*city|كروجر|kruger/i, "South Africa"],
+    [/جنوب\s*(?:ال)?[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبر[جغ]|johannesburg|(?:هارمونس|هارمانوس|هيرمانوس|هرمانوس)|hermanus|بريتوريا|pretoria|سن\s*سيتي|sun\s*city|كروجر|kruger/i, "South Africa"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;
@@ -137,7 +137,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
   ],
   "South Africa": [
     { canonical: "Cape Town",    pattern: /كيب\s*تاون|cape\s*town/i },
-    { canonical: "Hermanus",     pattern: /ه(?:ي|ا)?رمانوس|hermanus/i },
+    { canonical: "Hermanus",     pattern: /(?:هارمونس|هارمانوس|هيرمانوس|هرمانوس)|hermanus/i },
     { canonical: "Johannesburg", pattern: /جوهانسبر[جغ]|جوهانسبورغ|johannesburg|joburg/i },
     { canonical: "Pretoria",     pattern: /بريتوريا|pretoria/i },
     { canonical: "Sun City",     pattern: /سن\s*سيتي|sun\s*city/i },
