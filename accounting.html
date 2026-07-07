@@ -203,7 +203,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 7يوليو-د · تنبيه تلقائي «عميل دفع بلا حجز فعلي» في البانر وتبويب الإشعارات 🚫</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 7يوليو-هـ · شارة «مش محجوز له» بجانب الاسم في First Client Data + بانر الحجوزات الناقصة يشمل من دفع بلا حجز إطلاقاً</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1104,10 +1104,20 @@ function renderFcd(){
   // المرتجع الفعلي لكل عميل (من شيت Refund) — يُعرض في First Client Data
   const refByClient={}; (DATA.refunds||[]).forEach(x=>{ const c=(x.client_code||'').toUpperCase(); if(!c)return; refByClient[c]=(refByClient[c]||0)+Number(x.refund||0); });
   // تنبيه أمام الاسم: لم يدفع شيئاً (paidByClient=0) أو غير محجوز في Booking Form (له خدمات بلا حجز فعلي)
-  const paidByClient={}, bookedByClient={}, hasSvcByClient={};
+  const paidByClient={}, bookedByClient={}, hasSvcByClient={}, bfByClient={};
   (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!c)return; paidByClient[c]=(paidByClient[c]||0)+(payConfirmed(r)?Number(r.amount_paid||0):0); });
   (DATA.serviceLines||[]).forEach(s=>{ const c=(s.client_code||'').toUpperCase(); if(!c)return; if(/profit/i.test(String(s.name||'')))return; if(/cancel/i.test(String(s.status||'')))return; hasSvcByClient[c]=true; if(Number(s.final_rate_booked||0)>0) bookedByClient[c]=true; });
-  const nameWarn=(c,pr)=>{ if(!(Number(pr||0)>0))return ''; c=(c||'').toUpperCase(); const np=(paidByClient[c]||0)<=0.005; const nb=hasSvcByClient[c] && !bookedByClient[c]; if(!np&&!nb)return ''; const lbl=(np&&nb)?'لم يدفع + غير محجوز':(np?'لم يدفع':'غير محجوز'); return '<span title="'+(np?'لم يدفع أي مبلغ':'')+(np&&nb?' · ':'')+(nb?'غير محجوز في Booking Form':'')+'" style="background:#d11;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:4px">⚠️ '+lbl+'</span>'; };
+  (DATA.bookingForm||[]).forEach(b=>{ const c=(b.client_code||'').toUpperCase(); if(c)bfByClient[c]=true; });
+  const nameWarn=(c,pr)=>{ if(!(Number(pr||0)>0))return ''; c=(c||'').toUpperCase();
+    const paid=(paidByClient[c]||0)>0.005, np=!paid;
+    const nbAll=paid && !hasSvcByClient[c] && !bfByClient[c];
+    const nb=hasSvcByClient[c] && !bookedByClient[c];
+    if(!np&&!nb&&!nbAll)return '';
+    let out='';
+    if(np) out+='<span title="لم يدفع أي مبلغ" style="background:#d11;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:4px">⚠️ لم يدفع</span>';
+    if(nbAll) out+='<span title="مش محجوز له — لا يوجد أي حجز في Booking Form أو الخدمات" style="background:#c026d3;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:4px">🚫 مش محجوز له</span>';
+    else if(nb) out+='<span title="غير محجوز في Booking Form" style="background:#d11;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:4px">⚠️ غير محجوز</span>';
+    return out; };
   const rows=DATA.fcd.filter(r=>{
     if(q && !((r.client_name||'').toLowerCase().includes(q)||(r.client_code||'').toLowerCase().includes(q)||(r.payment_code||'').toLowerCase().includes(q))) return false;
     if(ag && r.agent_name!==ag) return false;
@@ -1602,17 +1612,21 @@ function incompleteBookings(){
     byClient[c].maxId=Math.max(byClient[c].maxId, Number(s.id)||0);
   });
   const out=Object.values(byClient).map(o=>{ const ci=clientInfo(o.code); return { code:o.code, name:(ci&&ci.name)||'', agent:(ci&&ci.agent)||'', n:o.services.length, services:o.services, maxId:o.maxId }; });
-  out.sort((a,b)=>b.maxId-a.maxId);   // الأحدث أولاً
+  // + عملاء دفعوا بلا أي خدمة/حجز إطلاقاً (لا خدمات في Sales Form أصلاً) — مثل C260465
+  const already=new Set(out.map(o=>o.code));
+  (typeof liveNoBooking==='function'?liveNoBooking():[]).forEach(nb=>{ const c=(nb.client_code||'').toUpperCase(); if(already.has(c))return; already.add(c); const ci=clientInfo(c); out.push({ code:c, name:(ci&&ci.name)||nb.service_name||'', agent:(ci&&ci.agent)||'', n:0, services:['🚫 لا خدمات مُدخَلة إطلاقاً'], maxId:0, urgent:!!nb.urgent, noSvc:true }); });
+  out.sort((a,b)=>((b.urgent?1:0)-(a.urgent?1:0))||(b.maxId-a.maxId));   // العاجل (فات وصوله) ثم الأحدث
   return out;
 }
 function renderIncompleteBookings(){
   const box=$('b-incomplete'); if(!box) return;
   const list=incompleteBookings();
   if(!list.length){ box.innerHTML=''; return; }
-  box.innerHTML='<div class="panel" style="border:1px solid var(--amber);background:rgba(245,158,11,.08);margin-bottom:14px"><h3 style="color:var(--amber);margin-top:0">⚠️ حجوزات لم تتم ('+list.length+') — خدمات في Sales Form بلا حجز فعلي في Booking Form</h3>'+
-    '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الوكيل</th><th>الخدمات الناقصة</th><th>إجراء</th></tr></thead><tbody>'+
-    list.map(o=>'<tr><td><button class="btn" style="background:var(--amber);color:#000;padding:2px 10px;font-size:12px;font-weight:700" title="اضغطي لاستدعاء نموذج الحجز" onclick="gotoBooking(\''+esc(o.code)+'\')">'+esc(o.code)+'</button></td><td><b>'+esc(o.name||'—')+'</b></td><td>'+esc(o.agent||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(o.services.join('، '))+' <b style="color:var(--amber)">('+o.n+')</b></td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(o.code)+'\')">📋 استدعاء النموذج</button></td></tr>').join('')+
-    '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تظهر تلقائياً لأي خدمة أُدخلت في Sales Form (أياً كان نوعها) ولم يُسجَّل لها حجز فعلي في Booking Form، وتختفي فور إدخاله. اضغطي الكود لاستدعاء نموذج الحجز فوراً ومعرفة الإشكالية.</div></div>';
+  const nUrg=list.filter(o=>o.urgent).length;
+  box.innerHTML='<div class="panel" style="border:1px solid var(--amber);background:rgba(245,158,11,.08);margin-bottom:14px"><h3 style="color:var(--amber);margin-top:0">⚠️ حجوزات تحتاج إكمال ('+list.length+') — لم تُسجَّل في Booking Form'+(nUrg?' · <span style="color:var(--red)">🔴 '+nUrg+' فات وصولهم</span>':'')+'</h3>'+
+    '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الوكيل</th><th>الناقص</th><th>إجراء</th></tr></thead><tbody>'+
+    list.map(o=>'<tr'+(o.urgent?' style="background:rgba(255,107,122,.10)"':'')+'><td><button class="btn" style="background:'+(o.urgent?'var(--red)':'var(--amber)')+';color:#fff;padding:2px 10px;font-size:12px;font-weight:700" title="اضغطي لاستدعاء نموذج الحجز" onclick="gotoBooking(\''+esc(o.code)+'\')">'+esc(o.code)+'</button>'+(o.urgent?' <span title="فات وصوله ولا حجز" style="color:var(--red)">⚠️</span>':'')+'</td><td><b>'+esc(o.name||'—')+'</b></td><td>'+esc(o.agent||'—')+'</td><td style="font-size:11px;color:'+(o.noSvc?'#c026d3':'var(--muted)')+';font-weight:'+(o.noSvc?'700':'400')+'">'+esc(o.services.join('، '))+(o.n?' <b style="color:var(--amber)">('+o.n+')</b>':'')+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(o.code)+'\')">📋 إدخال الحجز</button></td></tr>').join('')+
+    '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تشمل: خدمات في Sales Form بلا حجز فعلي + عملاء دفعوا بلا أي خدمة/حجز إطلاقاً (بنفسجي). تختفي فور إدخال الحجز. 🔴 = فات وصوله.</div></div>';
 }
 function gotoBooking(code){
   const t=document.querySelector('.tab[data-p="booking"]'); if(t && typeof tab==='function') tab(t);
