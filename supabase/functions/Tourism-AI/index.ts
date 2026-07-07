@@ -2408,18 +2408,19 @@ async function handleListTours(body: {
     if (destKey) q = q.eq("type", destKey);
     const { data, error } = await q;
     if (error) throw error;
+    // نعرض **كل** جولات الوجهة للاختيار (كل المدن)، لا نقصرها على مدينة اليوم — طلب المالكة.
+    // نستبعد فقط الانتقالات/الأيام الحرة. وترتّب جولات مدينة اليوم أولاً ثم الباقي بالسعر.
     const rows = ((data || []) as TourRow[])
-      .filter(t => !isNonTourRow(t.name))           // جولات فقط — لا انتقالات/أيام حرة
-      .filter(t => curCity.pattern.test(t.name));   // نفس مدينة الجولة الحالية فقط
+      .filter(t => !isNonTourRow(t.name));          // جولات فقط — لا انتقالات/أيام حرة
     const seen = new Set<string>();
-    const tours: Array<{ name: string; type: string; price: number }> = [];
+    const tours: Array<{ name: string; type: string; price: number; _cur: boolean }> = [];
     for (const t of rows) {
       const key = (t.name || "").trim();
       if (!key || seen.has(key)) continue;
       seen.add(key);
-      tours.push({ name: t.name, type: t.type, price: pickTourVariantPrice(t, pax, false, month) });
+      tours.push({ name: t.name, type: t.type, price: pickTourVariantPrice(t, pax, false, month), _cur: curCity.pattern.test(t.name) });
     }
-    tours.sort((a, b) => a.price - b.price);
+    tours.sort((a, b) => (Number(b._cur) - Number(a._cur)) || (a.price - b.price));
     return new Response(JSON.stringify({ tours }), { headers: CORS_HEADERS });
   } catch (e) {
     return new Response(JSON.stringify({ tours: [], error: String((e as Error).message) }),

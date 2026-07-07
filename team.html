@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-07-07-sa-dist';
+  var BUILD = '2026-07-07-all-tours';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1475,7 +1475,7 @@ function tswRender(cell, tours){
   const curName = (cell.dataset.tname||'').trim();
   const curIsFree = cell.dataset.tfree==='1' || /^يوم\s*حر/.test(curName);
   const curPrice = +cell.dataset.tprice || 0;
-  const title = `<div class="hsw-title">جولات نفس المنطقة + يوم حر — اختر</div>`;
+  const title = `<div class="hsw-title">كل الجولات + يوم حر — اختر</div>`;
   menu.innerHTML = title + all.map((t,i)=>{
     const isCur = t._free ? curIsFree : ((t.name||'').trim() === curName);
     const diff = (t.price||0) - curPrice;
