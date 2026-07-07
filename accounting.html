@@ -203,7 +203,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 7يوليو · ترتيب عملاء توزيع دفعة المورّد بالأحدث إدخالاً (First Client Data) بقائمة واحدة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 7يوليو-ب · عمود «📡 القناة» مستقل أول إدخالات Banks Cash in/out + قائمة قابلة للإدارة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -299,8 +299,13 @@ table{font-weight:600}
         <button class="btn green" onclick="eSave()">💾 حفظ</button>
       </div>
       <div class="panel" id="bc-lists-mgr">
-        <h3>🏦 قوائم Banks Cash — الوصف ← التفاصيل ← تفاصيل فرعية (قابلة للتعديل)</h3>
-        <p style="font-size:11.5px;color:var(--muted);margin:0 0 10px">٣ مستويات: اختاري وصفاً تطلع تفاصيله، واختاري تفصيلاً تطلع تفاصيله الفرعية. كل مستوى تضيفين/تعدّلين/تحذفين فيه.</p>
+        <h3>🏦 قوائم Banks Cash — القناة (مستقلة) · الوصف ← التفاصيل ← تفاصيل فرعية (قابلة للتعديل)</h3>
+        <p style="font-size:11.5px;color:var(--muted);margin:0 0 10px">📡 «القناة» قائمة مستقلة (أول الإدخال). ثم ٣ مستويات متسلسلة: اختاري وصفاً تطلع تفاصيله، واختاري تفصيلاً تطلع تفاصيله الفرعية.</p>
+        <div style="border:1px solid #15803d;border-radius:10px;padding:10px;margin-bottom:12px;background:rgba(21,128,61,.05)">
+          <b style="font-size:12.5px;color:#15803d">📡 القناة (مستقلة) <span class="cnt" id="bcl-ch-cnt"></span></b>
+          <div style="display:flex;gap:6px;margin:6px 0;max-width:420px"><input id="bcl-ch-new" placeholder="قناة جديدة… (مثل Facebook)" style="flex:1" onkeydown="if(event.key==='Enter')bclAddChannel()"><button class="btn green" style="padding:5px 12px" onclick="bclAddChannel()">+ إضافة</button></div>
+          <div id="bcl-ch-list" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+        </div>
         <div style="display:flex;gap:16px;flex-wrap:wrap">
           <div style="flex:1;min-width:240px">
             <b style="font-size:12.5px">📝 الوصف (رئيسي) <span class="cnt" id="bcl-desc-cnt"></span></b>
@@ -644,6 +649,7 @@ table{font-weight:600}
           <div class="fld"><label>العملة</label><input id="bca-cur" list="bc-cur-list" autocomplete="off" placeholder="OMR / USD…" style="background:#fff;color:var(--txt)"></div>
           <div class="fld"><label>سعر الصرف (1 وحدة = ؟ ر.س)</label><input type="number" id="bca-rate" step="0.0001" placeholder="مثال 9.5"></div>
           <div class="fld"><label>المرجع البنكي</label><input id="bca-ref"></div>
+          <div class="fld"><label>📡 القناة <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">مستقلة — تُدار بزر ⚙️</span></label><select id="bca-channel" style="background:#fff;color:var(--txt)"></select></div>
           <div class="fld"><label>الوصف <span style="color:var(--red)">*</span></label><select id="bca-desc" onchange="bcFillAddDetails()" style="background:#fff;color:var(--txt)"></select></div>
           <div class="fld"><label>التفاصيل (تتبع الوصف) <span style="color:var(--red)">*</span></label><select id="bca-details" onchange="bcFillAddMore()" style="background:#fff;color:var(--txt)"></select></div>
           <div class="fld"><label>📝 تفاصيل أكثر (تتبع التفاصيل) <span style="color:var(--red)">*</span></label><select id="bca-more" style="background:#fff;color:var(--txt)"></select></div>
@@ -3138,9 +3144,16 @@ function bcRate(v){ return (v==null||v==='')?'':Number(v).toLocaleString('en-US'
 const BC_SEP='';
 let bclSelDesc='', bclSelDet='';
 function bclDescs(){ return [...new Set(((DATA&&DATA.lists)||[]).filter(l=>l.category==='bc_desc').map(l=>String(l.value)))].sort((a,b)=>a.localeCompare(b,'ar')); }
+// 📡 القناة: قائمة مستقلة (المستوى الرئيسي الأول، غير متسلسل)
+function bclChannels(){ return [...new Set(((DATA&&DATA.lists)||[]).filter(l=>l.category==='bc_channel').map(l=>String(l.value)))].sort((a,b)=>a.localeCompare(b,'ar')); }
+async function bclAddChannel(){ const i=$('bcl-ch-new'); const v=(i.value||'').trim(); if(!v)return; if(!isOwnerUser()){ const ok=await reqListItem('bc_channel',v,v); if(ok){ i.value=''; alert('✅ أُرسلت القناة «'+v+'» لموافقة الإدارة — تظهر بعد الاعتماد.'); } return; } if(!DATA.lists)DATA.lists=[]; if(!DATA.lists.some(l=>l.category==='bc_channel'&&l.value===v)){ await bclAddItem('bc_channel',v); DATA.lists.push({category:'bc_channel',value:v}); } i.value=''; renderBcLists(); bcFillAddForm(); }
+async function bclDelChannel(v){ if(!isOwnerUser()){ const ok=await reqListOps('bc_channel','delete','🗑️ حذف القناة «'+v+'»',[{do:'del',category:'bc_channel',value:v}]); if(ok)alert('✅ أُرسل طلب حذف القناة «'+v+'» لموافقة الإدارة.'); return; } if(!confirm('حذف القناة «'+v+'»؟'))return; await bclDelItem('bc_channel',v); DATA.lists=DATA.lists.filter(l=>!(l.category==='bc_channel'&&l.value===v)); renderBcLists(); bcFillAddForm(); }
 function bclDets(desc){ return [...new Set(((DATA&&DATA.lists)||[]).filter(l=>l.category==='bc_det'&&String(l.value).split(BC_SEP)[0]===desc).map(l=>String(l.value).split(BC_SEP)[1]||'').filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar')); }
 function bclSubs(desc,det){ return [...new Set(((DATA&&DATA.lists)||[]).filter(l=>{const p=String(l.value).split(BC_SEP); return l.category==='bc_subdet'&&p[0]===desc&&p[1]===det;}).map(l=>String(l.value).split(BC_SEP)[2]||'').filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar')); }
 function renderBcLists(){
+  // 📡 قائمة القناة المستقلة (شرائح مع زر حذف)
+  const chBox=$('bcl-ch-list'); if(chBox){ const chs=bclChannels(); const cc=$('bcl-ch-cnt'); if(cc)cc.textContent='('+chs.length+')';
+    chBox.innerHTML=chs.length?chs.map(v=>{ const a=esc(v).replace(/"/g,'&quot;'); return '<span style="display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px solid #15803d;border-radius:14px;padding:3px 10px;font-size:12px;font-weight:700;color:#15803d">'+esc(v)+' <button onclick="bclDelChannel(&quot;'+a+'&quot;)" style="border:none;background:none;color:var(--red);cursor:pointer;font-size:13px;padding:0;line-height:1">✕</button></span>'; }).join(''):'<span style="color:var(--muted);font-size:11.5px">لا قنوات بعد — أضيفي أول قناة بالأعلى</span>'; }
   const dbox=$('bcl-desc-list'); if(!dbox)return;
   const dq=(($('bcl-desc-q')||{}).value||'').trim().toLowerCase();
   let descs=bclDescs(); if(dq)descs=descs.filter(d=>d.toLowerCase().indexOf(dq)>=0);
@@ -3210,7 +3223,7 @@ async function bclEditSub(s){
   await bclDelItem('bc_subdet',oldEnc); DATA.lists=DATA.lists.filter(l=>l.value!==oldEnc);
   renderBcLists();
 }
-function bcFillAddForm(){ const s=$('bca-desc'); if(s){ const cur=s.value; s.innerHTML='<option value="">— اختاري الوصف —</option>'+bclDescs().map(d=>'<option>'+esc(d)+'</option>').join(''); s.value=cur; } bcFillAddDetails(); }
+function bcFillAddForm(){ const ch=$('bca-channel'); if(ch){ const curc=ch.value; ch.innerHTML='<option value="">— اختاري القناة —</option>'+bclChannels().map(c=>'<option>'+esc(c)+'</option>').join(''); ch.value=curc; } const s=$('bca-desc'); if(s){ const cur=s.value; s.innerHTML='<option value="">— اختاري الوصف —</option>'+bclDescs().map(d=>'<option>'+esc(d)+'</option>').join(''); s.value=cur; } bcFillAddDetails(); }
 function bcFillAddDetails(){ const s=$('bca-details'); if(s){ const desc=(($('bca-desc')||{}).value||'').trim(); const dets=desc?bclDets(desc):[]; const ph=!desc?'— اختاري الوصف أولاً —':(dets.length?'— اختاري التفاصيل (إجباري) —':'— لا يوجد —'); const cur=s.value; s.innerHTML='<option value="">'+ph+'</option>'+dets.map(t=>'<option>'+esc(t)+'</option>').join(''); s.value=cur; } bcFillAddMore(); }
 function bcFillAddMore(){ const s=$('bca-more'); if(!s)return; const desc=(($('bca-desc')||{}).value||'').trim(); const det=(($('bca-details')||{}).value||'').trim(); const subs=(desc&&det)?bclSubs(desc,det):[]; const ph=!(desc&&det)?'— اختاري التفاصيل أولاً —':(subs.length?'— اختاري (إجباري) —':'— لا يوجد تفاصيل أكثر —'); const cur=s.value; s.innerHTML='<option value="">'+ph+'</option>'+subs.map(t=>'<option>'+esc(t)+'</option>').join(''); s.value=cur; }
 let bcSelDesc=new Set(), bcSelDetails=new Set();
@@ -3276,7 +3289,7 @@ function bcApply(opts){
   if(cur)a=a.filter(x=>bankCur(x.bank_name)===cur);
   if(f)a=a.filter(x=>x.tx_date&&x.tx_date>=f);
   if(t)a=a.filter(x=>x.tx_date&&x.tx_date<=t);
-  if(q)a=a.filter(x=>((x.bank_name||'')+' '+(x.bank_ref||'')+' '+(x.description||'')+' '+(x.details||'')+' '+(x.more_details||'')+' '+(x.note||'')).toLowerCase().indexOf(q)>=0);
+  if(q)a=a.filter(x=>((x.bank_name||'')+' '+(x.bank_ref||'')+' '+(x.channel||'')+' '+(x.description||'')+' '+(x.details||'')+' '+(x.more_details||'')+' '+(x.note||'')).toLowerCase().indexOf(q)>=0);
   if(opts.skip!=='desc' && bcSelDesc.size)a=a.filter(x=>bcSelDesc.has((x.description||'').trim()));
   if(opts.skip!=='details' && bcSelDetails.size)a=a.filter(x=>bcSelDetails.has((x.details||'').trim()));
   return a;
@@ -3289,7 +3302,7 @@ function renderBanksCashDetail(){
   const byCur={};
   a.forEach(x=>{ const c=bankCur(x.bank_name); byCur[c]=byCur[c]||{i:0,o:0}; byCur[c].i+=Number(x.in_raw||0); byCur[c].o+=Number(x.out_raw||0); });
   const ncur=Object.keys(byCur).length;
-  const H=['📅 تاريخ الدفع','داخل (+)','خارج (−)','العملة','سعر الصرف','داخل (ر.س)','خارج (ر.س)','البنك / البطاقة','المرجع','الوصف','التفاصيل','📝 تفاصيل أكثر','ملاحظة','المصدر',''];
+  const H=['📅 تاريخ الدفع','داخل (+)','خارج (−)','العملة','سعر الصرف','داخل (ر.س)','خارج (ر.س)','البنك / البطاقة','المرجع','📡 القناة','الوصف','التفاصيل','📝 تفاصيل أكثر','ملاحظة','المصدر',''];
   let html='<div class="panel" style="margin-bottom:14px;border:1px solid var(--accent)">'+
     '<h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span>💵 Banks Cash in / Out</span><span class="cnt">'+fmt(a.length)+' حركة</span></h3>'+
     '<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px">'+
@@ -3325,6 +3338,7 @@ function renderBanksCashDetail(){
         '<td class="num neg">'+bcFmt(x.out_sar)+'</td>'+
         '<td>'+esc(x.bank_name||'')+'</td>'+
         '<td>'+esc(x.bank_ref||'')+'</td>'+
+        '<td style="font-weight:700;color:#15803d">'+esc(x.channel||'')+'</td>'+
         '<td>'+esc(x.description||'')+'</td>'+
         '<td style="font-size:10px">'+esc(x.details||'')+'</td>'+
         '<td style="font-size:10px">'+esc(x.more_details||'')+'</td>'+
@@ -3342,11 +3356,12 @@ async function addBankCash(){
   if(!bank){ if(msg)msg.textContent='⚠️ لازم تحددي البنك'; return; }
   if(!$('bca-in').value && !$('bca-out').value){ if(msg)msg.textContent='⚠️ أدخلي مبلغ داخل أو خارج'; return; }
   // اختيار إجباري متسلسل من القوائم الموجودة فقط (ممنوع الإدخال اليدوي — كلها منسدلة)
-  const _desc=(($('bca-desc')||{}).value||'').trim(); const _det=(($('bca-details')||{}).value||'').trim(); const _more=(($('bca-more')||{}).value||'').trim();
+  const _channel=(($('bca-channel')||{}).value||'').trim(); const _desc=(($('bca-desc')||{}).value||'').trim(); const _det=(($('bca-details')||{}).value||'').trim(); const _more=(($('bca-more')||{}).value||'').trim();
+  if(!_channel){ if(msg)msg.textContent='⚠️ لازم اختيار القناة من القائمة'; return; }
   if(!_desc){ if(msg)msg.textContent='⚠️ لازم اختيار الوصف من القائمة'; return; }
   if(bclDets(_desc).length && !_det){ if(msg)msg.textContent='⚠️ لازم اختيار التفاصيل من القائمة'; return; }
   if(_desc && _det && bclSubs(_desc,_det).length && !_more){ if(msg)msg.textContent='⚠️ لازم اختيار «تفاصيل أكثر» من القائمة'; return; }
-  const p={ tx_date:$('bca-date').value||null, in_raw:$('bca-in').value||null, out_raw:$('bca-out').value||null, bank_name:bank, bank_ref:$('bca-ref').value||null, description:$('bca-desc').value||null, details:$('bca-details').value||null, more_details:_more||null, note:$('bca-note').value||null, currency:(($('bca-cur').value||'').trim())||null, currency_rate:$('bca-rate').value||null };
+  const p={ tx_date:$('bca-date').value||null, in_raw:$('bca-in').value||null, out_raw:$('bca-out').value||null, bank_name:bank, bank_ref:$('bca-ref').value||null, channel:_channel||null, description:$('bca-desc').value||null, details:$('bca-details').value||null, more_details:_more||null, note:$('bca-note').value||null, currency:(($('bca-cur').value||'').trim())||null, currency_rate:$('bca-rate').value||null };
   // 📋 تأكيد إلزامي بالقيم قبل الإرسال (الإضافة لا تنعكس إلا بموافقة الأدمن)
   const cur=p.currency||''; const inV=Number(p.in_raw||0), outV=Number(p.out_raw||0);
   const confirmMsg='📋 تأكيد إضافة حركة كاش — راجعي القيم جيداً:\n\n'+
@@ -3355,6 +3370,7 @@ async function addBankCash(){
     (outV>0?('• خارج (−): '+fmt(outV)+' '+cur+'\n'):'')+
     '• التاريخ: '+(p.tx_date||'— غير محدّد —')+'\n'+
     '• المرجع: '+(p.bank_ref||'—')+'\n'+
+    '• القناة: '+(_channel||'—')+'\n'+
     '• الوصف: '+(_desc||'—')+(_det?(' · '+_det):'')+'\n\n'+
     '🔒 المبالغ غير قابلة للتعديل إلا بموافقة الأدمن، ولن ينعكس أثرها على النظام حتى يعتمدها.\nهل القيم صحيحة وتريدين الإرسال للموافقة؟';
   if(!confirm(confirmMsg))return;
@@ -3365,7 +3381,7 @@ async function addBankCash(){
     const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'request_cash_add',payload:p})});
     const d=await r.json();
     if(d.error){ if(msg)msg.textContent='❌ '+d.error; return; }
-    ['bca-in','bca-out','bca-ref','bca-desc','bca-details','bca-more','bca-note'].forEach(i=>{const e=$(i);if(e)e.value='';});
+    ['bca-in','bca-out','bca-ref','bca-channel','bca-desc','bca-details','bca-more','bca-note'].forEach(i=>{const e=$(i);if(e)e.value='';});
     if(msg)msg.textContent='✅ أُرسلت للأدمن للموافقة — لن تنعكس على النظام حتى يعتمدها';
     await load();
   }catch(e){ if(msg)msg.textContent='❌ '+e.message; }
