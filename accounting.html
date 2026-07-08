@@ -203,7 +203,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 7يوليو-هـ · شارة «مش محجوز له» بجانب الاسم في First Client Data + بانر الحجوزات الناقصة يشمل من دفع بلا حجز إطلاقاً</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 8يوليو · إصلاح حذف عناصر القوائم (البنوك وغيرها) بمدخل الإدخال — يحذف بالاسم كبديل مضمون + تأكيد</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4706,7 +4706,7 @@ function mgrToggle(cat,title){ const box=$('listmgr');
 }
 function mgrRender(){
   const vals=listValues(MGR_CAT);
-  $('listmgr-items').innerHTML=vals.length?vals.map(v=>'<span style="display:inline-flex;align-items:center;gap:5px;background:#eef2f8;border:1px solid var(--line);border-radius:14px;padding:3px 10px;margin:3px;font-size:12px">'+esc(v.value)+' <span style="cursor:pointer;color:var(--red);font-weight:700" onclick="mgrDel('+v.id+')">✖</span></span>').join(''):'<span style="color:var(--muted);font-size:12px">لا عناصر بعد — أضيفي أول وجهة</span>';
+  $('listmgr-items').innerHTML=vals.length?vals.map(v=>'<span style="display:inline-flex;align-items:center;gap:5px;background:#eef2f8;border:1px solid var(--line);border-radius:14px;padding:3px 10px;margin:3px;font-size:12px">'+esc(v.value)+' <span data-id="'+(v.id!=null?v.id:'')+'" data-val="'+esc(String(v.value||'')).replace(/"/g,'&quot;')+'" style="cursor:pointer;color:var(--red);font-weight:700" onclick="mgrDel(this)">✖</span></span>').join(''):'<span style="color:var(--muted);font-size:12px">لا عناصر بعد — أضيفي أول عنصر</span>';
 }
 async function mgrAdd(){
   const v=($('listmgr-input').value||'').trim(); if(!v) return;
@@ -4719,15 +4719,21 @@ async function mgrAdd(){
   const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
   $('listmgr-input').value=''; await load(); fillLists(); mgrRender();
 }
-async function mgrDel(id){
+async function mgrDel(el){
+  // el قد يكون عنصر DOM (data-id/data-val) أو id قديم — نتعامل مع الحالتين
+  let id='', val='';
+  if(el && el.dataset){ id=el.dataset.id||''; val=el.dataset.val||''; }
+  else { id=el; const it=(DATA.lists||[]).find(l=>String(l.id)===String(el))||{}; val=it.value||''; }
   // حذف عنصر من قائمة حسّاسة + المستخدم ليس مالكاً → طلب موافقة (لا يُحذف حتى الاعتماد)
   if(!isOwnerUser() && LIST_APPROVAL_CATS.includes(MGR_CAT)){
-    const item=(DATA.lists||[]).find(l=>l.id===id)||{}; const val=item.value||'';
     const ok=await reqListOps(MGR_CAT,'delete','🗑️ حذف «'+val+'» من قائمة «'+listCatLabel(MGR_CAT)+'»',[{do:'del',category:MGR_CAT,value:val}]);
     if(ok) alert('✅ أُرسل طلب حذف «'+val+'» لموافقة الإدارة — لا يُحذف حتى الاعتماد.');
     return;
   }
-  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_list_item',payload:{id}})});
+  if(!confirm('حذف «'+val+'» من قائمة «'+listCatLabel(MGR_CAT)+'»؟'))return;
+  // نرسل الاسم كبديل مضمون + الـ id إن وُجد (الخادم يحذف بالـ id أولاً وإلا بالاسم)
+  const payload={ category:MGR_CAT, value:val }; if(id!=='' && id!=null) payload.id=Number(id);
+  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_list_item',payload})});
   const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
   await load(); fillLists(); mgrRender();
 }
