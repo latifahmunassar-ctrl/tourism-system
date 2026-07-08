@@ -203,7 +203,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 8يوليو · إصلاح حذف عناصر القوائم (البنوك وغيرها) بمدخل الإدخال — يحذف بالاسم كبديل مضمون + تأكيد</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 8يوليو-ب · علامة «بانتظار المرجع» على طرفي التحويل بين الحسابات + إدخال المحاسب للمرجع للحساب الداخل</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3380,8 +3380,15 @@ function renderBanksCashDetail(){
         '</tbody></table></div></div>';
     }
   }
+  // 🔁 تحويلات داخلية بانتظار الرقم المرجعي: الحوالة الداخلة (قناة تحويل بين الحسابات · داخل>0 · بلا مرجع)
+  const isXfer=(r)=>/transfer/i.test(String(r.channel||''));
+  const xferInPending=new Set(); const xferPendKeys=new Set();
+  a.forEach(r=>{ if(isXfer(r) && Number(r.in_raw||0)>0 && !String(r.bank_ref||'').trim()){ xferInPending.add(r.id); xferPendKeys.add(String(r.details||'')+'|'+Number(r.in_raw||0)); } });
   html+='<div class="panel"><div class="tbl-wrap bf-scroll" id="bc-tbl"><table style="font-size:11px;white-space:nowrap"><thead><tr>'+H.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+
     (a.length?a.map(x=>{ const isDash=(x.source==='dashboard');
+      const flagIn=xferInPending.has(x.id);
+      const flagOut=isXfer(x) && Number(x.out_raw||0)>0 && xferPendKeys.has(String(x.details||'')+'|'+Number(x.out_raw||0));
+      const flagged=flagIn||flagOut;
       return '<tr'+(isDash?' style="background:rgba(47,217,138,.07)"':'')+'><td>'+esc(x.tx_date||'')+'</td>'+
         '<td class="num" style="color:#0e9d6a">'+bcFmt(x.in_raw)+'</td>'+
         '<td class="num neg">'+bcFmt(x.out_raw)+'</td>'+
@@ -3389,8 +3396,10 @@ function renderBanksCashDetail(){
         '<td class="num">'+bcRate(x.currency_rate)+'</td>'+
         '<td class="num" style="color:#0e9d6a">'+bcFmt(x.in_sar)+'</td>'+
         '<td class="num neg">'+bcFmt(x.out_sar)+'</td>'+
-        '<td>'+esc(x.bank_name||'')+'</td>'+
-        '<td>'+esc(x.bank_ref||'')+'</td>'+
+        '<td'+(flagged?' style="background:rgba(217,138,0,.12)"':'')+'>'+esc(x.bank_name||'')+(flagged?' <span title="'+(flagIn?'تحويل داخلي — الحساب الداخل بانتظار الرقم المرجعي':'تحويل داخلي — الطرف الداخل بانتظار المرجع')+'" style="background:#d98a00;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:7px">⚠️ '+(flagIn?'بانتظار المرجع':'تحويل ناقص')+'</span>':'')+'</td>'+
+        (flagIn
+          ? '<td style="background:rgba(217,138,0,.12)"><span style="display:inline-flex;gap:4px;align-items:center;white-space:nowrap"><input id="cref-'+x.id+'" placeholder="أدخلي المرجع" style="width:100px;padding:2px 5px;border:1px solid #d98a00;background:#fff;color:var(--txt);border-radius:6px;font-size:11px" onkeydown="if(event.key===\'Enter\')saveCashRef('+x.id+')"><button class="btn ghost" style="padding:2px 7px;font-size:11px" onclick="saveCashRef('+x.id+')" title="حفظ الرقم المرجعي — تختفي العلامة">💾</button></span></td>'
+          : '<td>'+esc(x.bank_ref||'')+'</td>')+
         '<td style="font-weight:700;color:#15803d">'+esc(x.channel||'')+'</td>'+
         '<td>'+esc(x.description||'')+'</td>'+
         '<td style="font-size:10px">'+esc(x.details||'')+'</td>'+
@@ -3438,6 +3447,16 @@ async function addBankCash(){
     if(msg)msg.textContent='✅ أُرسلت للأدمن للموافقة — لن تنعكس على النظام حتى يعتمدها';
     await load();
   }catch(e){ if(msg)msg.textContent='❌ '+e.message; }
+}
+// 🔁 حفظ الرقم المرجعي لحوالة داخلية (يكمّله المحاسب) — تختفي علامة «بانتظار المرجع» على الطرفين
+async function saveCashRef(id){
+  const el=$('cref-'+id); const v=((el&&el.value)||'').trim();
+  if(!v){ alert('أدخلي الرقم المرجعي أولاً'); if(el)el.focus(); return; }
+  try{
+    const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_cash_ref',payload:{id:id,bank_ref:v,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
+    const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
+    await load(); try{ renderBanksCash(); }catch(_){} try{ renderBanksCashDetail(); }catch(_){}
+  }catch(e){ alert('خطأ: '+e.message); }
 }
 async function reqCashEdit(id,inRaw,outRaw,cur){
   const isIn=Number(inRaw||0)>0; const oldAmt=isIn?Number(inRaw):Number(outRaw||0); const dir=isIn?'داخل (+)':'خارج (−)';
