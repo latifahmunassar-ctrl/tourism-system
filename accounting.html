@@ -203,7 +203,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 8يوليو-ب · علامة «بانتظار المرجع» على طرفي التحويل بين الحسابات + إدخال المحاسب للمرجع للحساب الداخل</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 8يوليو-ج · فلتر «📡 القناة» في Banks Cash in/out</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -662,6 +662,7 @@ table{font-weight:600}
       <div class="formbar">
         <div class="fld" style="min-width:240px"><label>🏦 البنك / البطاقة</label><input id="bc-bank" list="bc-bank-list" autocomplete="off" oninput="renderBanksCashDetail()" placeholder="كل البنوك — أو اكتبي للبحث" style="background:#fff;color:var(--txt)"></div>
         <div class="fld"><label>💱 العملة</label><select id="bc-cur" class="flt" onchange="renderBanksCashDetail()"><option value="">كل العملات</option></select></div>
+        <div class="fld"><label>📡 القناة</label><select id="bc-chan" class="flt" onchange="renderBanksCashDetail()"><option value="">كل القنوات</option></select></div>
         <div class="fld" style="min-width:200px;flex:1"><label>🔍 بحث (بنك/مرجع/وصف/ملاحظة)</label><input id="bc-q" oninput="renderBanksCashDetail()" placeholder="اكتبي…"></div>
         <div class="fld"><label>من 📅</label><input type="date" id="bc-from" onchange="renderBanksCashDetail()" style="color-scheme:light;cursor:pointer"></div>
         <div class="fld"><label>إلى 📅</label><input type="date" id="bc-to" onchange="renderBanksCashDetail()" style="color-scheme:light;cursor:pointer"></div>
@@ -3330,16 +3331,21 @@ function renderBanksCash(){
   const curs=[...new Set(all.map(x=>bankCur(x.bank_name)).filter(Boolean))].sort();
   const cdl=$('bc-cur-list'); if(cdl)cdl.innerHTML=curs.map(c=>'<option>'+esc(c)+'</option>').join('');
   const csel=$('bc-cur'); if(csel){ const cur=csel.value; csel.innerHTML='<option value="">كل العملات</option>'+curs.map(c=>'<option'+(c===cur?' selected':'')+'>'+esc(c)+'</option>').join(''); }
+  // 📡 فلتر القناة — من القنوات المُدخَلة في الحركات
+  const chans=[...new Set(all.map(x=>x.channel).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'ar'));
+  const chsel=$('bc-chan'); if(chsel){ const cv=chsel.value; chsel.innerHTML='<option value="">كل القنوات</option>'+chans.map(c=>'<option'+(c===cv?' selected':'')+'>'+esc(c)+'</option>').join(''); }
   renderBanksCashDetail();
 }
 function bcApply(opts){
   opts=opts||{}; let a=((DATA&&DATA.banksCash)||[]).slice();
   const bank=(($('bc-bank')||{}).value||'').trim();
   const cur=(($('bc-cur')||{}).value||'').trim();
+  const chan=(($('bc-chan')||{}).value||'').trim();
   const q=(($('bc-q')||{}).value||'').trim().toLowerCase();
   const f=(($('bc-from')||{}).value)||''; const t=(($('bc-to')||{}).value)||'';
   if(bank)a=a.filter(x=>(x.bank_name||'')===bank);
   if(cur)a=a.filter(x=>bankCur(x.bank_name)===cur);
+  if(chan)a=a.filter(x=>(x.channel||'')===chan);
   if(f)a=a.filter(x=>x.tx_date&&x.tx_date>=f);
   if(t)a=a.filter(x=>x.tx_date&&x.tx_date<=t);
   if(q)a=a.filter(x=>((x.bank_name||'')+' '+(x.bank_ref||'')+' '+(x.channel||'')+' '+(x.description||'')+' '+(x.details||'')+' '+(x.more_details||'')+' '+(x.note||'')).toLowerCase().indexOf(q)>=0);
