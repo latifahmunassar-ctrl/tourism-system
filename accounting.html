@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 9يوليو-هـ · اسم الموظفة المؤكِّدة جنب الوكيل ببانر «حجوزات تحتاج إكمال» في Booking Form</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 9يوليو-و · اسم الموظفة المؤكِّدة في عمود مستقل ببانر Booking Form</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1642,8 +1642,8 @@ function renderIncompleteBookings(){
   if(!list.length){ box.innerHTML=''; return; }
   const nUrg=list.filter(o=>o.urgent).length;
   box.innerHTML='<div class="panel" style="border:1px solid var(--amber);background:rgba(245,158,11,.08);margin-bottom:14px"><h3 style="color:var(--amber);margin-top:0">⚠️ حجوزات تحتاج إكمال ('+list.length+') — لم تُسجَّل في Booking Form'+(nUrg?' · <span style="color:var(--red)">🔴 '+nUrg+' فات وصولهم</span>':'')+'</h3>'+
-    '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الوكيل / ✅ المؤكِّدة</th><th>الناقص</th><th>إجراء</th></tr></thead><tbody>'+
-    list.map(o=>'<tr'+(o.urgent?' style="background:rgba(255,107,122,.10)"':'')+'><td><button class="btn" style="background:'+(o.urgent?'var(--red)':'var(--amber)')+';color:#fff;padding:2px 10px;font-size:12px;font-weight:700" title="اضغطي لاستدعاء نموذج الحجز" onclick="gotoBooking(\''+esc(o.code)+'\')">'+esc(o.code)+'</button>'+(o.urgent?' <span title="فات وصوله ولا حجز" style="color:var(--red)">⚠️</span>':'')+'</td><td><b>'+esc(o.name||'—')+'</b></td><td>'+esc(o.agent||'—')+(o.confirmedBy?' <span style="color:#0e9d6a;font-weight:700;font-size:11px" title="الموظفة التي أكّدت الحجز">· ✅ '+esc(o.confirmedBy)+'</span>':'')+'</td><td style="font-size:11px;color:'+(o.noSvc?'#c026d3':'var(--muted)')+';font-weight:'+(o.noSvc?'700':'400')+'">'+esc(o.services.join('، '))+(o.n?' <b style="color:var(--amber)">('+o.n+')</b>':'')+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(o.code)+'\')">📋 إدخال الحجز</button></td></tr>').join('')+
+    '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الوكيل</th><th>✅ الموظفة المؤكِّدة</th><th>الناقص</th><th>إجراء</th></tr></thead><tbody>'+
+    list.map(o=>'<tr'+(o.urgent?' style="background:rgba(255,107,122,.10)"':'')+'><td><button class="btn" style="background:'+(o.urgent?'var(--red)':'var(--amber)')+';color:#fff;padding:2px 10px;font-size:12px;font-weight:700" title="اضغطي لاستدعاء نموذج الحجز" onclick="gotoBooking(\''+esc(o.code)+'\')">'+esc(o.code)+'</button>'+(o.urgent?' <span title="فات وصوله ولا حجز" style="color:var(--red)">⚠️</span>':'')+'</td><td><b>'+esc(o.name||'—')+'</b></td><td>'+esc(o.agent||'—')+'</td><td style="color:#0e9d6a;font-weight:700">'+(o.confirmedBy?'✅ '+esc(o.confirmedBy):'<span style="color:var(--muted);font-weight:400">—</span>')+'</td><td style="font-size:11px;color:'+(o.noSvc?'#c026d3':'var(--muted)')+';font-weight:'+(o.noSvc?'700':'400')+'">'+esc(o.services.join('، '))+(o.n?' <b style="color:var(--amber)">('+o.n+')</b>':'')+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(o.code)+'\')">📋 إدخال الحجز</button></td></tr>').join('')+
     '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تشمل: خدمات في Sales Form بلا حجز فعلي + عملاء دفعوا بلا أي خدمة/حجز إطلاقاً (بنفسجي). تختفي فور إدخال الحجز. 🔴 = فات وصوله.</div></div>';
 }
 function gotoBooking(code){
