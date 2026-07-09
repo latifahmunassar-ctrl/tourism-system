@@ -378,6 +378,16 @@ Deno.serve(async (req) => {
       .order("arrival_airport").order("days");
     if (error) return json({ error: error.message }, 500);
     let suggestions = (data || []) as Array<Record<string, unknown>>;
+    // احتياط دائم: وجهة بلا اقتراحات في الشيت لكنها **موقع واحد** (جزيرة مثل موريشيوس —
+    // كل فنادقها بنفس المدينة) → نولّد توزيعًا افتراضيًّا «N ليال [الوجهة]» ومطار القدوم = الوجهة.
+    if (!suggestions.length) {
+      const { data: hs } = await supabase.from("hotels").select("location").ilike("location", `% - ${key}`).limit(500);
+      const cities = [...new Set(((hs || []) as Array<{ location: string }>).map(h => String(h.location || "").split(" - ")[0].trim()).filter(Boolean))];
+      if (cities.length === 1) {
+        const cityAr = sugDestAr.trim();   // الاسم العربي للوجهة (يطابقه الباني بنمط المدينة)
+        suggestions = [5, 6, 7, 8, 9, 10].map(d => ({ days: d, label: null, arrival_airport: cityAr, departure_airport: cityAr, distribution: `${d - 1} ليال ${cityAr}` }));
+      }
+    }
     // إندونيسيا: عمود المطار في الشيت موحّد (Jakarta للكل) فيخلط برامج بالي ببرامج
     // جاكرتا. نشتق مطار القدوم/المغادرة فعلياً من مدن التوزيع: مناطق بالي → Bali،
     // مدن جاوة (جاكرتا/بونشاك/باندونغ) → Jakarta — فتنفصل اقتراحات كل مطار.
