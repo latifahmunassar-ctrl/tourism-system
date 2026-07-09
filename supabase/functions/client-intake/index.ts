@@ -42,6 +42,7 @@ const DEST_KEY: Record<string, string> = {
   "تركيا": "Turky", "روسيا": "russia", "البوسنة": "Bosnia", "إندونيسيا": "indonesia",
   "عُمان": "Oman", "عمان": "Oman", "سلطنة عمان": "Oman",
   "جنوب أفريقيا": "South Africa", "جنوب افريقيا": "South Africa",
+  "موريشيوس": "mauritius", "موريشس": "mauritius",
 };
 
 function randToken(len = 24): string {

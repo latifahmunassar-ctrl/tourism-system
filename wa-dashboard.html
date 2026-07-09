@@ -1297,7 +1297,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
                 <option value="">— اختر —</option>
                 <option>فيتنام</option><option>ماليزيا</option><option>تايلاند</option>
                 <option>تركيا</option><option>روسيا</option><option>البوسنة</option>
-                <option>إندونيسيا</option><option>عُمان</option><option>جنوب أفريقيا</option>
+                <option>إندونيسيا</option><option>عُمان</option><option>جنوب أفريقيا</option><option>موريشيوس</option>
               </select>
             </label>
             <label style="display:flex; flex-direction:column; gap:3px;">تاريخ السفر
@@ -2271,7 +2271,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     // قائمة الوجهات اللي يتعرفها النظام — مطابقة لـ DESTINATION_HINTS
     // في الـ Edge Function. تخليها هنا تضمن إن الـ dropdown يعرض نفس
     // الأسماء اللي تكتشف من رسائل العملاء.
-    const KNOWN_DESTINATIONS = ["ماليزيا", "تركيا", "إندونيسيا", "فيتنام", "تايلاند", "البوسنة", "روسيا", "جنوب أفريقيا"];
+    const KNOWN_DESTINATIONS = ["ماليزيا", "تركيا", "إندونيسيا", "فيتنام", "تايلاند", "البوسنة", "روسيا", "جنوب أفريقيا", "موريشيوس"];
 
     // Generic chips renderer reused by add-form + edit modal.
     function renderDestChips(containerEl, list, onRemove) {

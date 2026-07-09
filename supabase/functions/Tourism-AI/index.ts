@@ -49,6 +49,7 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     [/تايلاند|تايلند|thailand|بانكوك|bangkok|بوكيت|بوكت|phuket|كرابي|krabi|شيانغ|chiang|باتايا|بتايا|pattaya|ساموي|samui/i, "thailand"],
     [/عُمان|عمان|سلطنة\s*عمان|oman|صلال[ةه]|salalah/i, "Oman"],
     [/جنوب\s*(?:ال)?[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبر[جغ]|johannesburg|(?:هارمونس|هارمانوس|هيرمانوس|هرمانوس)|hermanus|بريتوريا|pretoria|سن\s*سيتي|sun\s*city|كروجر|kruger/i, "South Africa"],
+    [/موريشيوس|موريش[سي]|mauritius|بورت\s*لويس|port\s*louis/i, "mauritius"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;
@@ -142,6 +143,10 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Pretoria",     pattern: /بريتوريا|pretoria/i },
     { canonical: "Sun City",     pattern: /سن\s*سيتي|sun\s*city/i },
     { canonical: "Kruger",       pattern: /كروجر|كروغر|kruger/i },
+  ],
+  // موريشيوس = جزيرة/موقع واحد؛ canonical واحد يطابق فنادقها (مدينتها «mauritius») ومعالمها.
+  mauritius: [
+    { canonical: "Mauritius", pattern: /موريشيوس|mauritius|بورت\s*لويس|port\s*louis|بلاك\s*ريفر|black\s*river|بلومارين|blue\s*(?:bay|marine)|معالم\s*المدين|غورج/i },
   ],
 };
 

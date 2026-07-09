@@ -1221,6 +1221,7 @@ const DESTINATION_AR_NAMES: Record<string, string> = {
   Bosnia: "البوسنة",
   indonesia: "إندونيسيا",
   "South Africa": "جنوب أفريقيا",
+  mauritius: "موريشيوس",
 };
 
 function formatNumber(n: number): string {

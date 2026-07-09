@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-07-07-all-tours';
+  var BUILD = '2026-07-09-mauritius';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1650,6 +1650,7 @@ const BF_CITIES = {
   "إندونيسيا":["بالي","جاكرتا","باندونغ","بونشاك"],
   "عُمان":["صلالة - وسط المدينة","صلالة - هوانا"],
   "جنوب أفريقيا":["كيب تاون","هارمانوس"],
+  "موريشيوس":["موريشيوس"],
 };
 // يحوّل أي تهجئة للوجهة (همزة/تشكيل/إنجليزي) إلى مفتاح BF_CITIES المطابق، حتى لا
 // تفشل تعبئة الفورم عند ضبط bf-dest من طلب محفوظ (مثال: "اندونيسيا" بلا همزة أو
@@ -1662,7 +1663,7 @@ function bfResolveDest(d){
   const n = norm(raw);
   const EN = { indonesia:'إندونيسيا', vietnam:'فيتنام', malaysia:'ماليزيا',
     thailand:'تايلاند', turky:'تركيا', turkey:'تركيا', russia:'روسيا',
-    bosnia:'البوسنة', oman:'عُمان', southafrica:'جنوب أفريقيا' };
+    bosnia:'البوسنة', oman:'عُمان', southafrica:'جنوب أفريقيا', mauritius:'موريشيوس' };
   if (EN[n]) return EN[n];
   return Object.keys(BF_CITIES).find(k => norm(k) === n) || raw;
 }
@@ -4841,7 +4842,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       const currency=(typeof currencyConversion!=='undefined'&&currencyConversion)?currencyConversion.name:'ريال';
       // اسم الملف إنجليزي نظيف (واتساب يلخبط الأسماء العربية في الملف نفسه)،
       // واسم الوجهة بالعربي يظهر سليم في نص الرسالة (caption) أسفل الملف.
-      const _DEST_EN={'عمان':'Oman','عُمان':'Oman','ماليزيا':'Malaysia','تايلند':'Thailand','تايلاند':'Thailand','فيتنام':'Vietnam','تركيا':'Turkey','روسيا':'Russia','جورجيا':'Georgia','اذربيجان':'Azerbaijan','أذربيجان':'Azerbaijan','مصر':'Egypt','المالديف':'Maldives','مالديف':'Maldives','اندونيسيا':'Indonesia','إندونيسيا':'Indonesia','بالي':'Bali','سريلانكا':'SriLanka','الامارات':'UAE','الإمارات':'UAE','دبي':'Dubai','البوسنة':'Bosnia','المغرب':'Morocco','جنوب أفريقيا':'SouthAfrica','جنوب افريقيا':'SouthAfrica'};
+      const _DEST_EN={'عمان':'Oman','عُمان':'Oman','ماليزيا':'Malaysia','تايلند':'Thailand','تايلاند':'Thailand','فيتنام':'Vietnam','تركيا':'Turkey','روسيا':'Russia','جورجيا':'Georgia','اذربيجان':'Azerbaijan','أذربيجان':'Azerbaijan','مصر':'Egypt','المالديف':'Maldives','مالديف':'Maldives','اندونيسيا':'Indonesia','إندونيسيا':'Indonesia','بالي':'Bali','سريلانكا':'SriLanka','الامارات':'UAE','الإمارات':'UAE','دبي':'Dubai','البوسنة':'Bosnia','المغرب':'Morocco','جنوب أفريقيا':'SouthAfrica','جنوب افريقيا':'SouthAfrica','موريشيوس':'Mauritius'};
       const _destAr=String(indivState.dest||'').trim();
       const _destEn=_DEST_EN[_destAr]||(/^[\x00-\x7F]+$/.test(_destAr)?_destAr:'Trip');
       const fname=('Alezz_Travel_'+_destEn+'_Offer').replace(/[^\x00-\x7F]/g,'').replace(/\s+/g,'_').replace(/_+/g,'_').slice(0,60)+'.pdf';
