@@ -405,7 +405,7 @@ function tourBelongsToCity(tour: TourRow, cityDefs: CityDef[], canonicalCity: st
  * "الاستقبال من المطار...سراييفو").
  */
 const TRANSFER_PREFIXES = [
-  "استقبال", "الاستقبال", "آلاستقبال",
+  "استقبال", "الاستقبال", "آلاستقبال", "استقيال", "الاستقيال", "آستقيال",
   "توديع", "التوديع",
   "التوجه", "التوجة", "توجه", "توجة", "التوصيل", "توصيل", "توصیل", "يتم توصيل", "يتم توصیل",
   "العوده", "العودة", "العود",
@@ -742,7 +742,7 @@ export function findArrivalPickup(
   const isPrimaryPickup = (n: string) => {
     // طبّع الألف فيُلتقط "آستقبال" (شيت عُمان) كـ استقبال.
     const firstWord = normalizeArabic(n.replace(/^[\d\.\s]+/, "").trim().split(/\s+/)[0] || "");
-    return /^(?:استقبال|الاستقبال)$/u.test(firstWord);
+    return /^(?:استقبال|الاستقبال|استقيال|الاستقيال)$/u.test(firstWord);  // نتحمّل خطأ «استقيال»
   };
   let candidates = allTours.filter(t => {
     if (t.type !== destination) return false;
