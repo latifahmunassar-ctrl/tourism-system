@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 9يوليو · توسيع نموذج إدخال First Client Data (٣ أعمدة) لوضوح المعلومات</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 9يوليو-ب · تسوية/شطب المستحقات الصغيرة (زر 🧹 + عمود مُسوّى) — يصفّر الرصيد وينقص الربح بمقداره</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -542,6 +542,7 @@ table{font-weight:600}
           <option value="overpaid">↩️ مدفوع زيادة (مرتجع للعميل)</option>
           <option value="overdue">⚠️ متأخر (حان السداد)</option>
           <option value="hasdue">له تاريخ سداد محدد</option>
+          <option value="settled">🧹 مُسوّاة/مشطوبة</option>
           <option value="all">الكل (كل من له رصيد)</option>
         </select>
         <button class="btn ghost" onclick="dclear()">مسح</button>
@@ -2756,6 +2757,8 @@ function openSalesFix(code){ const t=document.querySelector('.tab[data-p=\"sales
 function pnl(v){v=Number(v)||0;return '<span class="num" style="font-weight:700;color:'+(v>=0?'#0e9d6a':'#d11')+'">'+fmt(v)+'</span>';}
 // الربح الفعلي = سعر البيع (package_rate) − مجموع أسعار الحجز الفعلية − المرتجع الفعلي المدفوع.
 // القاعدة (قرار الموظفة): أي مرتجع فعلي في شيت المسترجعات (acc_refunds) ينقص ربح الشركة الفعلي = الربح النقدي المتحقّق.
+// 🧹 مجموع التسويات (الشطب) لكل عميل — تُطرح من الرصيد والربح في العرض
+function settledByClient(){ const m={}; ((DATA&&DATA.settlements)||[]).forEach(s=>{ const c=(s.client_code||'').toUpperCase(); if(!c)return; m[c]=(m[c]||0)+Number(s.amount||0); }); return m; }
 function actualProfitMaps(){
   const booked={}, miss={}, prc={}, costF={}, profF={}, a2c={}, refC={}, hasCanc={};
   (DATA.serviceLines||[]).forEach(s=>{
@@ -2785,6 +2788,9 @@ function actualProfitMaps(){
     // حجز ناقص: مجموع الحجز الفعلي أقل بكثير من التكلفة المسجّلة (الإدخال غير مكتمل في المصدر)
     if(booked[c]!=null && !rf && !hasCanc[c] && (costF[c]||0)-booked[c] > 1500){ incClient[c]=true; if(ag)incAgent[ag]=(incAgent[ag]||0)+1; }
   });
+  // 🧹 التسويات/الشطب تُطرح من الربح الفعلي (المبلغ المشطوب = إيراد لم يُحصَّل)
+  const setl=settledByClient();
+  Object.keys(setl).forEach(c=>{ const s=setl[c]; if(!(s>0))return; if(byClient[c]!=null){ byClient[c]-=s; const ag=a2c[c]; if(ag&&byAgent[ag]!=null)byAgent[ag]-=s; } });
   return {byClient,byAgent,missClient,missAgent,refClient,flagClient,incClient,incAgent};
 }
 // v=الربح الفعلي · miss=خدمات بلا حجز · inc=الحجز الفعلي أقل بكثير من التكلفة المسجّلة (ناقص بالمصدر)
@@ -4385,10 +4391,14 @@ function dclear(){ $('dflt-q').value=''; $('dflt-agent').value=''; $('dflt-st').
 function renderDue(){
   if(!DATA) return;
   const q=($('dflt-q').value||'').trim().toLowerCase(), ag=$('dflt-agent').value, st=$('dflt-st').value||'owe';
-  // تنبيهات السداد المستحقة الآن (عليه رصيد + حان تاريخ التنبيه الفعّال)
-  const al=DATA.due.filter(r=>r.is_overdue && Number(r.balance||0)>1);
-  // قاعدة صارمة: أي عميل عليه رصيد (>1) وما له تاريخ سداد محدّد = مستحق يجب تحديد تاريخه (غير المنبَّه عليهم أصلاً)
-  const alND=DATA.due.filter(r=>Number(r.balance||0)>1 && !r.due_date && !r.is_overdue);
+  // 🧹 التسويات (الشطب): الرصيد الفعّال = المتبقّي − المشطوب
+  const setl=settledByClient();
+  const dset=(r)=>Number(setl[(r.client_code||'').toUpperCase()]||0);
+  const effBal=(r)=>Number(r.balance||0)-dset(r);
+  // تنبيهات السداد المستحقة الآن (عليه رصيد فعّال + حان تاريخ التنبيه الفعّال)
+  const al=DATA.due.filter(r=>r.is_overdue && effBal(r)>1);
+  // قاعدة صارمة: أي عميل عليه رصيد فعّال (>1) وما له تاريخ سداد محدّد = مستحق يجب تحديد تاريخه (غير المنبَّه عليهم أصلاً)
+  const alND=DATA.due.filter(r=>effBal(r)>1 && !r.due_date && !r.is_overdue);
   let aHtml = al.length ? '<div class="alertbox"><span class="ttl">🔔 تنبيهات سداد مستحقة الآن ('+al.length+')</span>'+al.map(r=>{
     const onDue = r.due_date && r.alert_date===r.due_date;  // معتمد على تاريخ السداد
     return 'العميل <b>'+esc(r.client_code)+'</b>'+(r.client_name?' ('+esc(r.client_name)+')':'')+
@@ -4406,12 +4416,13 @@ function renderDue(){
   const rows=DATA.due.filter(r=>{
     if(q && !((r.client_name||'').toLowerCase().includes(q)||(r.client_code||'').toLowerCase().includes(q))) return false;
     if(ag && r.agent_name!==ag) return false;
-    const b=Number(r.balance||0);
+    const b=effBal(r);
     if(st==='owe' && !(b>1)) return false;
     if(st==='nodate' && !(b>1 && !r.due_date)) return false;
     if(st==='overpaid' && !(b< -1)) return false;
-    if(st==='overdue' && !r.is_overdue) return false;
+    if(st==='overdue' && !(r.is_overdue && b>1)) return false;
     if(st==='hasdue' && !r.due_date) return false;
+    if(st==='settled' && !(dset(r)>0)) return false;
     return true;
   });
   // عملاء مُضافون من الداشبورد (الأحدث) يُرفعون للأعلى — والباقي بترتيبه الأصلي (view المستحقات بلا عمود source)
@@ -4426,14 +4437,32 @@ function renderDue(){
   document.querySelector('#t-due tbody').innerHTML=rows.map(r=>rw([
     r.is_overdue?'<span style="font-size:15px">⚠️</span>':'',
     esc(r.client_code)+' — '+esc(r.client_name||'')+clientNameWarn(r.client_code,_wmDue),esc(r.agent_name||''),
-    '<span class="num">'+fmt(r.final_rate)+'</span>','<span class="num">'+fmt(r.amount_paid)+'</span>',bal(r.balance)+(Number(r.unconfirmed_paid||0)>1?'<br><span style="font-size:9px;color:#d98a00">⚠️ '+fmt(r.unconfirmed_paid)+' مكتوب بلا مرجع (غير معتمد)</span>':''),
+    '<span class="num">'+fmt(r.final_rate)+'</span>','<span class="num">'+fmt(r.amount_paid)+'</span>',
+    (function(){ var s=dset(r), eb=effBal(r); var out=bal(eb);
+      if(s>0){ out+='<br><span class="pill" style="background:#7c3aed;color:#fff;font-size:9px" title="مبلغ مُسوّى/مشطوب — طُرح من الرصيد والربح">🧹 مُسوّى '+fmt(s)+'</span>'; }
+      else if(Number(r.balance||0)>1){ out+=' <button class="btn ghost" style="padding:1px 7px;font-size:10px;color:#7c3aed;border-color:#7c3aed" title="تسوية/شطب الرصيد الصغير — يصفّره وينقص الربح بمقداره" onclick="settleDue(\''+esc(r.client_code)+'\','+Number(r.balance||0)+',\''+esc(r.currency||'')+'\')">🧹 تسوية</button>'; }
+      if(Number(r.unconfirmed_paid||0)>1) out+='<br><span style="font-size:9px;color:#d98a00">⚠️ '+fmt(r.unconfirmed_paid)+' مكتوب بلا مرجع (غير معتمد)</span>';
+      return out; })(),
     esc(r.arrival_date||''),
     '<input type="date" class="dueinp" value="'+(r.due_date||'')+'"'+((Number(r.balance||0)>1 && !r.due_date)?' style="border:1px solid #d98a00;background:rgba(217,138,0,.12)" title="عليه رصيد بدون تاريخ سداد — حدّدي التاريخ"':'')+' onchange="setDue(\''+esc(r.client_code)+'\',this.value)">',
     r.is_overdue?'<span class="pill over" title="بدء التنبيه: '+esc(r.alert_date||'')+((r.due_date&&r.alert_date===r.due_date)?' (تاريخ السداد)':' (قبل الوصول بأسبوع — تاريخ السداد قريب من الوصول)')+'">🔔 تنبيه سداد</span>':((Number(r.balance||0)>1 && !r.due_date)?'<span class="pill" style="background:#d98a00;color:#fff">بلا تاريخ سداد</span>':'<span class="pill active">'+esc(r.balance_status||'')+'</span>')
   ])).join('')||rw(['','لا نتائج','','','','','','','']);
-  const nOwe=DATA.due.filter(r=>Number(r.balance||0)>1).length, nOver=DATA.due.filter(r=>Number(r.balance||0)<-1).length, nND=DATA.due.filter(r=>Number(r.balance||0)>1 && !r.due_date).length, nUnc=DATA.due.filter(r=>Number(r.unconfirmed_paid||0)>1).length;
-  $('due-cnt').textContent=rows.length+' ظاهر · 🔴 '+nOwe+' عليه مستحق (منهم 🟠 '+nND+' بلا تاريخ سداد) · ↩️ '+nOver+' مدفوع زيادة'+(nUnc?' · ⚠️ '+nUnc+' فيه مبلغ بلا مرجع':'');
+  const nOwe=DATA.due.filter(r=>effBal(r)>1).length, nOver=DATA.due.filter(r=>effBal(r)<-1).length, nND=DATA.due.filter(r=>effBal(r)>1 && !r.due_date).length, nUnc=DATA.due.filter(r=>Number(r.unconfirmed_paid||0)>1).length, nSet=DATA.due.filter(r=>dset(r)>0).length;
+  $('due-cnt').textContent=rows.length+' ظاهر · 🔴 '+nOwe+' عليه مستحق (منهم 🟠 '+nND+' بلا تاريخ سداد) · ↩️ '+nOver+' مدفوع زيادة'+(nSet?' · 🧹 '+nSet+' مُسوّى':'')+(nUnc?' · ⚠️ '+nUnc+' فيه مبلغ بلا مرجع':'');
 }
+// 🧹 تسوية/شطب رصيد صغير — يصفّر الرصيد وينقص الربح بمقداره (موثّق ودائم)
+async function settleDue(code,balance,cur){
+  const amt=Math.round(Number(balance||0)*100)/100;
+  if(!(amt>0)){ alert('لا يوجد رصيد للتسوية'); return; }
+  if(!confirm('🧹 تسوية/شطب رصيد «'+code+'» بمبلغ '+fmt(amt)+' '+(cur||'')+'؟\n\n• يصفّر الرصيد (يصير مُسوّى).\n• يُنقص ربح العميل بمقدار '+fmt(amt)+' (إيراد لم يُحصَّل).\n• موثّق ويمكن التراجع.'))return;
+  const reason=prompt('سبب التسوية:','شطب مستحق صغير')||'شطب مستحق صغير';
+  try{
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_settlement',payload:{client_code:code,amount:amt,currency:cur||'',reason:reason,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
+    const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
+    await load();
+  }catch(e){ alert('خطأ: '+e.message); }
+}
+async function unsettleDue(id){ if(!confirm('التراجع عن التسوية وإرجاع الرصيد؟'))return; try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_settlement',payload:{id:id}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } await load(); }catch(e){ alert('خطأ: '+e.message); } }
 async function setDue(code,val){
   const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_client_due',payload:{client_code:code,due_date:val||null}})});
   const j=await r.json(); if(j.error){ alert('خطأ في حفظ التاريخ: '+j.error); return; }
