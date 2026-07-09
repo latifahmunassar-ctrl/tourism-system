@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 9يوليو-ج · التسوية حصراً للمالكة + سجل التسويات/الشطب في تبويب المستحقات</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 9يوليو-د · تعبئة اسم البنك/المرجع مباشرة بجدول العملاء (فارغ=بلا موافقة · تغيير موجود=بموافقة المالكة)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -794,7 +794,7 @@ table{font-weight:600}
 <script>
 const FN = 'https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/acc-dashboard';
 const FN_RECON = 'https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/acc-recon';
-let KEY = localStorage.getItem('acc_key')||'', TOKEN = localStorage.getItem('acc_token')||'', DATA=null, chart, isNew=true, selectedClient=null, RECON_LIST=[], PAYDATE_OVR={}, CHARGE_DATE_OVR={}, REFUND_DOCS=[], DEVICES=[];
+let KEY = localStorage.getItem('acc_key')||'', TOKEN = localStorage.getItem('acc_token')||'', DATA=null, chart, isNew=true, selectedClient=null, RECON_LIST=[], PAYDATE_OVR={}, CHARGE_DATE_OVR={}, BANKREF_OVR={}, REFUND_DOCS=[], DEVICES=[];
 // 🔐 رمز جهاز ثابت لكل متصفّح (لاعتماد الأجهزة) — يُنشأ مرة ويبقى
 let DEVICE_TOKEN=localStorage.getItem('acc_device')||''; if(!DEVICE_TOKEN){ DEVICE_TOKEN=(self.crypto&&crypto.randomUUID?crypto.randomUUID():('d'+Date.now()+Math.round(Math.random()*1e9)))+'-'+(self.crypto&&crypto.randomUUID?crypto.randomUUID():Math.round(Math.random()*1e9)); localStorage.setItem('acc_device',DEVICE_TOKEN); }
 let LG_ROLE='';   // القسم المختار في شاشة الدخول (محاسبة/مبيعات/حجوزات/إدارة) — للعرض فقط
@@ -807,7 +807,9 @@ function rw(c){return '<tr>'+c.map(x=>'<td>'+x+'</td>').join('')+'</tr>';}
 
 async function api(opts){ opts=opts||{}; opts.cache='no-store'; if(TOKEN)opts.headers=Object.assign({},opts.headers||{},{'x-acc-token':TOKEN}); return fetch(FN+'?key='+encodeURIComponent(KEY)+'&_t='+Date.now(), opts); }  // _t + no-store: يمنع الكاش؛ x-acc-token: مصادقة الموظف بدل المفتاح المشترك
 async function apiRecon(opts){ opts=opts||{}; opts.cache='no-store'; if(TOKEN)opts.headers=Object.assign({},opts.headers||{},{'x-acc-token':TOKEN}); return fetch(FN_RECON+'?key='+encodeURIComponent(KEY)+'&_t='+Date.now(), opts); }
-async function loadReconList(){ try{ const r=await apiRecon({}); const j=await r.json(); RECON_LIST=j.reconReports||[]; REFUND_DOCS=j.refundDocs||[]; DEVICES=j.devices||[]; PAYDATE_OVR={}; (j.paymentDates||[]).forEach(x=>{ if(x.payment_code) PAYDATE_OVR[x.payment_code]=x.payment_date?String(x.payment_date).slice(0,10):null; }); CHARGE_DATE_OVR={}; (j.chargeDates||[]).forEach(x=>{ if(x.service_id!=null) CHARGE_DATE_OVR[x.service_id]=x.charge_date?String(x.charge_date).slice(0,10):null; }); try{ renderDevices(); }catch(_){} }catch(e){ RECON_LIST=[]; REFUND_DOCS=[]; DEVICES=[]; } }
+async function loadReconList(){ try{ const r=await apiRecon({}); const j=await r.json(); RECON_LIST=j.reconReports||[]; REFUND_DOCS=j.refundDocs||[]; DEVICES=j.devices||[]; PAYDATE_OVR={}; (j.paymentDates||[]).forEach(x=>{ if(x.payment_code) PAYDATE_OVR[x.payment_code]=x.payment_date?String(x.payment_date).slice(0,10):null; }); CHARGE_DATE_OVR={}; (j.chargeDates||[]).forEach(x=>{ if(x.service_id!=null) CHARGE_DATE_OVR[x.service_id]=x.charge_date?String(x.charge_date).slice(0,10):null; }); BANKREF_OVR={}; (j.bankOverrides||[]).forEach(x=>{ if(x.payment_code) BANKREF_OVR[x.payment_code]={bank_name:x.bank_name||'',bank_ref:x.bank_ref||''}; }); try{ applyBankOverrides(); }catch(_){} try{ renderDevices(); }catch(_){} try{ renderFcd(); }catch(_){} }catch(e){ RECON_LIST=[]; REFUND_DOCS=[]; DEVICES=[]; } }
+// تطبيق تجاوز البنك/المرجع على صفوف FCD (يجعل الدفعة معتمدة + الرصيد صحيح، ويبقى رغم المزامنة)
+function applyBankOverrides(){ if(!DATA||!DATA.fcd)return; DATA.fcd.forEach(r=>{ const o=BANKREF_OVR[r.payment_code]; if(o){ if(o.bank_name)r.bank_name=o.bank_name; if(o.bank_ref)r.bank_ref=o.bank_ref; } }); }
 // ===== لوحة اعتماد الأجهزة (المالكة فقط) =====
 function devLabel(ua){ ua=String(ua||''); let os=/iphone|ipad/i.test(ua)?'iPhone/iPad':(/android/i.test(ua)?'Android':(/mac/i.test(ua)?'Mac':(/win/i.test(ua)?'Windows':'جهاز'))); let br=/edg/i.test(ua)?'Edge':(/chrome/i.test(ua)?'Chrome':(/safari/i.test(ua)?'Safari':(/firefox/i.test(ua)?'Firefox':''))); return os+(br?' · '+br:''); }
 function renderDevices(){
@@ -1116,6 +1118,7 @@ function renderFcd(){
   (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!c)return; paidByClient[c]=(paidByClient[c]||0)+(payConfirmed(r)?Number(r.amount_paid||0):0); });
   (DATA.serviceLines||[]).forEach(s=>{ const c=(s.client_code||'').toUpperCase(); if(!c)return; if(/profit/i.test(String(s.name||'')))return; if(/cancel/i.test(String(s.status||'')))return; hasSvcByClient[c]=true; if(Number(s.final_rate_booked||0)>0) bookedByClient[c]=true; });
   (DATA.bookingForm||[]).forEach(b=>{ const c=(b.client_code||'').toUpperCase(); if(c)bfByClient[c]=true; });
+  const bankOpts=listValues('banks').map(b=>'<option>'+esc(b.value)+'</option>').join('');
   const nameWarn=(c,pr)=>{ if(!(Number(pr||0)>0))return ''; c=(c||'').toUpperCase();
     const paid=(paidByClient[c]||0)>0.005, np=!paid;
     const nbAll=paid && !hasSvcByClient[c] && !bfByClient[c];
@@ -1155,7 +1158,14 @@ function renderFcd(){
     esc(r.payment_code||''),esc(r.client_code||''),(r.pax!=null&&r.pax!==''?'<span class="num" style="font-weight:700">'+esc(r.pax)+'</span>':'<span style="color:var(--muted)">—</span>'),esc(r.client_name||'')+nameWarn(r.client_code,r.package_rate),esc(r.phone||''),esc(r.agent_name||''),
     esc(r.travel_from||''),esc(r.travel_to||''),esc(r.booking_date||''),esc(r.arrival_date||''),esc(r.package_type||''),
     '<span class="num">'+fmt(r.cost)+'</span>','<span class="num pos">'+fmt(r.profit)+'</span>'+((Number(r.package_rate||0)>0&&r.payment_code)?' <button class="btn ghost" style="padding:0 5px;font-size:10px" title="تغيير الربح" onclick="chgProfit('+r.id+')">✏️</button>':'')+((DATA.profitOverrides||[]).some(o=>o.payment_code===r.payment_code)?' <span title="ربح معدّل يدوياً" style="font-size:9px;color:#f0a500">●</span>':''),'<span class="num">'+fmt(r.package_rate)+'</span>',
-    '<span class="num">'+fmt(r.amount_paid)+'</span>'+((Number(r.amount_paid||0)>1 && !payConfirmed(r))?'<br><span style="font-size:9px;color:#d98a00">⚠️ بلا مرجع/بنك (غير معتمد)</span>':''),bal(cb[r.client_code]||0),(function(){ var c=(r.client_code||'').toUpperCase(); var rfv=refByClient[c]||0; return (rfv>0.005 && Number(r.package_rate||0)>0)?'<span class="num neg" style="font-weight:700">'+fmt(rfv)+'</span>':'<span style="color:var(--muted)">—</span>'; })(),(function(){ var c=(r.client_code||'').toUpperCase(); var dd=dueMap[c]||''; var owing=(cb[r.client_code]||0)>1; return '<input type="date" class="dueinp" value="'+esc(dd)+'"'+((owing&&!dd)?' style="border:1px solid #d98a00;background:rgba(217,138,0,.12)" title="عليه رصيد بدون تاريخ استحقاق — حدّديه"':'')+' onchange="setDue(\''+esc(r.client_code)+'\',this.value)">'; })(),(function(){ var pc=r.payment_code||''; var eff=effPayDate(r); var paidNoDate=Number(r.amount_paid||0)>1 && !eff; if(pc){ return '<input type="date" class="dueinp" value="'+esc(eff)+'"'+(paidNoDate?' style="border:1px solid #d98a00;background:rgba(217,138,0,.12)" title="دفعة بلا تاريخ — حدّدي التاريخ"':' title="تاريخ دفع المبلغ — قابل للتعديل من الداشبورد"')+' onchange="setPayDate(\''+esc(pc)+'\',this.value)">'; } return eff?esc(eff):(paidNoDate?'<span style="color:#d98a00;font-weight:700">⚠️ مطلوب</span>':'<span style="color:var(--muted)">—</span>'); })(),esc(r.currency||''),(((r.bank_name||'').toString().trim())?esc(r.bank_name):(Number(r.amount_paid||0)>1?'<span style="color:#d98a00">⚠️ مطلوب</span>':'')),(((r.bank_ref||'').toString().trim())?esc(r.bank_ref):(Number(r.amount_paid||0)>1?'<span style="color:#d98a00">⚠️ مطلوب</span>':'')),
+    '<span class="num">'+fmt(r.amount_paid)+'</span>'+((Number(r.amount_paid||0)>1 && !payConfirmed(r))?'<br><span style="font-size:9px;color:#d98a00">⚠️ بلا مرجع/بنك (غير معتمد)</span>':''),bal(cb[r.client_code]||0),(function(){ var c=(r.client_code||'').toUpperCase(); var rfv=refByClient[c]||0; return (rfv>0.005 && Number(r.package_rate||0)>0)?'<span class="num neg" style="font-weight:700">'+fmt(rfv)+'</span>':'<span style="color:var(--muted)">—</span>'; })(),(function(){ var c=(r.client_code||'').toUpperCase(); var dd=dueMap[c]||''; var owing=(cb[r.client_code]||0)>1; return '<input type="date" class="dueinp" value="'+esc(dd)+'"'+((owing&&!dd)?' style="border:1px solid #d98a00;background:rgba(217,138,0,.12)" title="عليه رصيد بدون تاريخ استحقاق — حدّديه"':'')+' onchange="setDue(\''+esc(r.client_code)+'\',this.value)">'; })(),(function(){ var pc=r.payment_code||''; var eff=effPayDate(r); var paidNoDate=Number(r.amount_paid||0)>1 && !eff; if(pc){ return '<input type="date" class="dueinp" value="'+esc(eff)+'"'+(paidNoDate?' style="border:1px solid #d98a00;background:rgba(217,138,0,.12)" title="دفعة بلا تاريخ — حدّدي التاريخ"':' title="تاريخ دفع المبلغ — قابل للتعديل من الداشبورد"')+' onchange="setPayDate(\''+esc(pc)+'\',this.value)">'; } return eff?esc(eff):(paidNoDate?'<span style="color:#d98a00;font-weight:700">⚠️ مطلوب</span>':'<span style="color:var(--muted)">—</span>'); })(),esc(r.currency||''),(function(){ var pc=r.payment_code||''; var bn=(r.bank_name||'').toString().trim(); var hasPay=Number(r.amount_paid||0)>1;
+    if(bn) return esc(bn);
+    if(!hasPay||!pc) return '';
+    return '<select class="dueinp" style="min-width:120px;border:1px solid #d98a00;background:rgba(217,138,0,.12)" title="تعبئة اسم البنك (خانة فارغة) — تُحفظ مباشرة" onchange="fillFcdBank(\''+esc(pc)+'\',\'bank\',this.value)"><option value="">— اختاري البنك —</option>'+bankOpts+'</select>'; })(),
+  (function(){ var pc=r.payment_code||''; var br=(r.bank_ref||'').toString().trim(); var hasPay=Number(r.amount_paid||0)>1;
+    if(br) return esc(br);
+    if(!hasPay||!pc) return '';
+    return '<input class="dueinp" style="width:100px;border:1px solid #d98a00;background:rgba(217,138,0,.12)" placeholder="أدخلي المرجع" title="تعبئة المرجع (خانة فارغة) — تُحفظ مباشرة" onkeydown="if(event.key===\'Enter\')fillFcdBank(\''+esc(pc)+'\',\'ref\',this.value)" onblur="if(this.value.trim())fillFcdBank(\''+esc(pc)+'\',\'ref\',this.value)">'; })(),
     esc(r.confirmed_by||''),String(r.conf_status||'').toLowerCase().includes('cancel')?'<span class="pill cancel">ملغى</span>':'<span class="pill active">'+esc(r.conf_status||'')+'</span>',
     esc(r.note||''),esc(r.client_email||''),'<span class="src '+(r.source||'sheet')+'">'+(r.source==='dashboard'?'داشبورد':'شيت')+'</span>'+(r.source==='dashboard'?' <button class="btn ghost" style="padding:1px 6px;font-size:11px" title="تعديل" onclick="fcdEdit('+r.id+')">✏️</button> <button class="btn ghost" style="padding:1px 6px;font-size:11px" title="حذف" onclick="fcdDel('+r.id+',\''+esc((r.payment_code||'')+' · '+fmt(r.package_rate))+'\')">🗑️</button>':'')+(r.client_code?(FROZEN.has(r.client_code)?' <span class="pill" style="background:#3a7bd5;color:#fff" title="حساب مجمّد">🧊 مجمّد</span>':' <button class="btn ghost" style="padding:1px 6px;font-size:10px;color:#3a7bd5;border-color:#3a7bd5" title="طلب تجميد الحساب (يُرفع للإدارة)" onclick="reqFreezeClient(\''+esc(r.client_code)+'\')">🧊 تجميد الحساب</button>'):'')
   ])).join('');
@@ -4479,6 +4489,18 @@ async function setDue(code,val){
   load();
 }
 // تعديل تاريخ الدفع مباشرة من الشيت لأي صف (بمفتاح payment_code) — يُخزَّن في override يبقى رغم مزامنة الشيت
+// 🏦 تعبئة اسم البنك/المرجع مباشرة لخانة فارغة في First Client Data (بلا موافقة). تغيير قيمة موجودة يرفضه الخادم للمحاسب (يحتاج موافقة المالكة عبر ✏️ تعديل).
+async function fillFcdBank(pc, which, value){
+  if(!pc)return; const row=(DATA.fcd||[]).find(r=>r.payment_code===pc); if(!row)return;
+  const bank = which==='bank' ? (value||'') : (row.bank_name||'');
+  const ref  = which==='ref'  ? (value||'') : (row.bank_ref||'');
+  if(which==='bank' && !value) return;
+  try{
+    const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_fcd_bankref',payload:{payment_code:pc,bank_name:bank||null,bank_ref:ref||null,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
+    const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
+    await load();
+  }catch(e){ alert('خطأ: '+e.message); }
+}
 async function setPayDate(paymentCode,val){
   if(!paymentCode)return;
   try{
