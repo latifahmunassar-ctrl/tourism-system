@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 9يوليو-ب · تسوية/شطب المستحقات الصغيرة (زر 🧹 + عمود مُسوّى) — يصفّر الرصيد وينقص الربح بمقداره</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 9يوليو-ج · التسوية حصراً للمالكة + سجل التسويات/الشطب في تبويب المستحقات</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4411,6 +4411,16 @@ function renderDue(){
   aHtml += alND.length ? '<div class="alertbox" style="border-color:#d98a00;background:rgba(217,138,0,.10)"><span class="ttl" style="color:#d98a00">🟠 عليه رصيد بدون تاريخ سداد محدّد ('+alND.length+') — قاعدة صارمة: لازم تحديد تاريخ السداد</span>'+alND.map(r=>
     'العميل <b>'+esc(r.client_code)+'</b>'+(r.client_name?' ('+esc(r.client_name)+')':'')+' — وكالة <b>'+esc(r.agent_name||'—')+'</b> · المتبقي <b>'+fmt(r.balance)+' '+esc(r.currency||'')+'</b>'+(r.arrival_date?' · الوصول '+esc(r.arrival_date):'')
   ).join('<br>')+'</div>' : '';
+  // 🧹 سجل التسويات/الشطب (كل ما سُوّي — للمراجعة)
+  const stls=((DATA&&DATA.settlements)||[]).slice().sort((a,b)=>String(b.settled_at||'').localeCompare(String(a.settled_at||'')));
+  if(stls.length){
+    const nmMap={}; (DATA.due||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(r.client_name&&!nmMap[c])nmMap[c]=r.client_name; }); (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(r.client_name&&!nmMap[c])nmMap[c]=r.client_name; });
+    const totCur={}; stls.forEach(s=>{ const c=s.currency||'SAR'; totCur[c]=(totCur[c]||0)+Number(s.amount||0); });
+    aHtml+='<details style="margin-bottom:14px;border:1px solid #7c3aed;border-radius:12px;padding:8px 12px;background:rgba(124,92,255,.05)"><summary style="cursor:pointer;color:#7c3aed;font-weight:800">🧹 سجل التسويات/الشطب ('+stls.length+') — إجمالي مشطوب: '+Object.entries(totCur).map(function(e){return fmt(e[1])+' '+esc(e[0]);}).join(' · ')+'</summary>'+
+      '<div class="tbl-wrap" style="margin-top:8px"><table style="font-size:12px"><thead><tr><th>التاريخ</th><th>العميل</th><th>المبلغ المشطوب</th><th>السبب</th><th>بواسطة</th>'+(isOwnerUser()?'<th>تراجع</th>':'')+'</tr></thead><tbody>'+
+      stls.map(function(s){ var c=(s.client_code||'').toUpperCase(); return '<tr><td>'+esc(String(s.settled_at||'').replace('T',' ').slice(0,16))+'</td><td><b>'+esc(s.client_code||'')+'</b>'+(nmMap[c]?' · '+esc(nmMap[c]):'')+'</td><td class="num" style="color:#7c3aed;font-weight:700">'+fmt(s.amount)+' '+esc(s.currency||'')+'</td><td style="font-size:11px">'+esc(s.reason||'')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(s.settled_by||'—')+'</td>'+(isOwnerUser()?'<td><button class="btn ghost" style="padding:1px 8px;font-size:10px;color:var(--red)" onclick="unsettleDue('+s.id+')" title="التراجع وإرجاع الرصيد">↩️ تراجع</button></td>':'')+'</tr>'; }).join('')+
+      '</tbody></table></div></details>';
+  }
   $('due-alerts').innerHTML = aHtml;
   // الجدول
   const rows=DATA.due.filter(r=>{
@@ -4440,7 +4450,7 @@ function renderDue(){
     '<span class="num">'+fmt(r.final_rate)+'</span>','<span class="num">'+fmt(r.amount_paid)+'</span>',
     (function(){ var s=dset(r), eb=effBal(r); var out=bal(eb);
       if(s>0){ out+='<br><span class="pill" style="background:#7c3aed;color:#fff;font-size:9px" title="مبلغ مُسوّى/مشطوب — طُرح من الرصيد والربح">🧹 مُسوّى '+fmt(s)+'</span>'; }
-      else if(Number(r.balance||0)>1){ out+=' <button class="btn ghost" style="padding:1px 7px;font-size:10px;color:#7c3aed;border-color:#7c3aed" title="تسوية/شطب الرصيد الصغير — يصفّره وينقص الربح بمقداره" onclick="settleDue(\''+esc(r.client_code)+'\','+Number(r.balance||0)+',\''+esc(r.currency||'')+'\')">🧹 تسوية</button>'; }
+      else if(Number(r.balance||0)>1 && isOwnerUser()){ out+=' <button class="btn ghost" style="padding:1px 7px;font-size:10px;color:#7c3aed;border-color:#7c3aed" title="تسوية/شطب الرصيد الصغير — للمالكة فقط" onclick="settleDue(\''+esc(r.client_code)+'\','+Number(r.balance||0)+',\''+esc(r.currency||'')+'\')">🧹 تسوية</button>'; }
       if(Number(r.unconfirmed_paid||0)>1) out+='<br><span style="font-size:9px;color:#d98a00">⚠️ '+fmt(r.unconfirmed_paid)+' مكتوب بلا مرجع (غير معتمد)</span>';
       return out; })(),
     esc(r.arrival_date||''),
