@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ق · الإشعارات: لوحة «حجوزات ناقصة إدخالات (Charge from / تاريخ الدفع)» + عدّها في البانر الأحمر وعدّاد الإشعارات</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ك٢ · نقص الإدخالات (Charge from/تاريخ الدفع) يظهر داخل Booking Form فقط (لائحة إكمال) — للمحجوزين آخر ٥ أشهر، والقديمون مستثنون؛ أُزيل من إشعارات المالكة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -937,14 +937,13 @@ function renderNotifBanner(u){
     {n:P(m=>m.kind==='refund'), l:'إرجاع مبلغ'},
     {n:P(m=>m.kind==='list_item'), l:'تعديل قائمة'},
   ];
-  const liveLoss=liveBookingLosses(), liveNB=liveNoBooking(), liveMiss=(typeof bookingsMissingFields==='function'?bookingsMissingFields():[]);
+  const liveLoss=liveBookingLosses(), liveNB=liveNoBooking();
   const reqTotal=reqCats.reduce((s,c)=>s+c.n,0);
-  const total=reqTotal+liveLoss.length+liveNB.length+liveMiss.length;
+  const total=reqTotal+liveLoss.length+liveNB.length;
   if(!total){ el.style.display='none'; el.innerHTML=''; return; }
   const parts=reqCats.filter(c=>c.n).map(c=>'<b>'+c.n+'</b> '+c.l);
   if(liveLoss.length)parts.push('<b>'+liveLoss.length+'</b> خسارة حجز');
   if(liveNB.length)parts.push('<b>'+liveNB.length+'</b> دفع بلا حجز');
-  if(liveMiss.length)parts.push('<b>'+liveMiss.length+'</b> ناقص إدخالات');
   const head = reqTotal
     ? ('🔔 <b>'+total+'</b> بانتظار قرارك — منها <b>'+reqTotal+'</b> طلب من المحاسب لا يُنفَّذ إلا بموافقتك')
     : ('🔔 <b>'+total+'</b> بانتظار اطّلاعكِ');
@@ -1691,12 +1690,20 @@ function incompleteBookings(){
 function renderIncompleteBookings(){
   const box=$('b-incomplete'); if(!box) return;
   const list=incompleteBookings();
-  if(!list.length){ box.innerHTML=''; return; }
+  const miss=bookingsMissingFields();
+  if(!list.length && !miss.length){ box.innerHTML=''; return; }
   const nUrg=list.filter(o=>o.urgent).length;
-  box.innerHTML='<div class="panel" style="border:1px solid var(--amber);background:rgba(245,158,11,.08);margin-bottom:14px"><h3 style="color:var(--amber);margin-top:0">⚠️ حجوزات تحتاج إكمال ('+list.length+') — لم تُسجَّل في Booking Form'+(nUrg?' · <span style="color:var(--red)">🔴 '+nUrg+' فات وصولهم</span>':'')+'</h3>'+
+  let html=(list.length?('<div class="panel" style="border:1px solid var(--amber);background:rgba(245,158,11,.08);margin-bottom:14px"><h3 style="color:var(--amber);margin-top:0">⚠️ حجوزات تحتاج إكمال ('+list.length+') — لم تُسجَّل في Booking Form'+(nUrg?' · <span style="color:var(--red)">🔴 '+nUrg+' فات وصولهم</span>':'')+'</h3>'+
     '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الوكيل</th><th>✅ الموظفة المؤكِّدة</th><th>الناقص</th><th>إجراء</th></tr></thead><tbody>'+
     list.map(o=>'<tr'+(o.urgent?' style="background:rgba(255,107,122,.10)"':'')+'><td><button class="btn" style="background:'+(o.urgent?'var(--red)':'var(--amber)')+';color:#fff;padding:2px 10px;font-size:12px;font-weight:700" title="اضغطي لاستدعاء نموذج الحجز" onclick="gotoBooking(\''+esc(o.code)+'\')">'+esc(o.code)+'</button>'+(o.urgent?' <span title="فات وصوله ولا حجز" style="color:var(--red)">⚠️</span>':'')+'</td><td><b>'+esc(o.name||'—')+'</b></td><td>'+esc(o.agent||'—')+'</td><td style="color:#0e9d6a;font-weight:700">'+(o.confirmedBy?'✅ '+esc(o.confirmedBy):'<span style="color:var(--muted);font-weight:400">—</span>')+'</td><td style="font-size:11px;color:'+(o.noSvc?'#c026d3':'var(--muted)')+';font-weight:'+(o.noSvc?'700':'400')+'">'+esc(o.services.join('، '))+(o.n?' <b style="color:var(--amber)">('+o.n+')</b>':'')+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(o.code)+'\')">📋 إدخال الحجز</button></td></tr>').join('')+
-    '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تشمل: خدمات في Sales Form بلا حجز فعلي + عملاء دفعوا بلا أي خدمة/حجز إطلاقاً (بنفسجي). تختفي فور إدخال الحجز. 🔴 = فات وصوله.</div></div>';
+    '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تشمل: خدمات في Sales Form بلا حجز فعلي + عملاء دفعوا بلا أي خدمة/حجز إطلاقاً (بنفسجي). تختفي فور إدخال الحجز. 🔴 = فات وصوله.</div></div>'):'');
+  if(miss.length){
+    html+='<div class="panel" style="border:1px solid #b8860b;background:rgba(217,138,0,.08);margin-bottom:14px"><h3 style="color:#b8860b;margin-top:0">📝 حجوزات مسجّلة ناقصة إدخالات — Charge from / تاريخ الدفع ('+miss.length+') <span style="font-size:11px;font-weight:400;color:var(--muted)">· آخر ٥ أشهر فقط</span></h3>'+
+      '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الخدمة</th><th>الناقص</th><th>إجراء</th></tr></thead><tbody>'+
+      miss.map(a=>'<tr><td><button class="btn" style="background:#b8860b;color:#fff;padding:2px 10px;font-size:12px;font-weight:700" title="استدعاء الحجز" onclick="gotoBooking(\''+esc(a.code)+'\')">'+esc(a.code)+'</button></td><td><b>'+esc(a.name||'—')+'</b></td><td style="font-size:11px">'+esc(a.svc)+'</td><td style="color:var(--red);font-weight:700">'+a.miss.map(esc).join('، ')+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(a.code)+'\')">📋 إكمال</button></td></tr>').join('')+
+      '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ حجوزات مسجّلة (لها حجز فعلي) لكن ينقصها Charge from أو تاريخ الدفع (اختياريان) — للعملاء المحجوزين خلال آخر ٥ أشهر فقط. تختفي فور إكمالها.</div></div>';
+  }
+  box.innerHTML=html;
 }
 function gotoBooking(code){
   const t=document.querySelector('.tab[data-p="booking"]'); if(t && typeof tab==='function') tab(t);
@@ -2566,6 +2573,9 @@ function liveNoBooking(){
 // حجوزات محفوظة (لها حجز فعلي) لكن ناقصة إدخالات اختيارية: Charge from / تاريخ الدفع — تظهر في الإشعارات
 function bookingsMissingFields(){
   if(!DATA) return [];
+  // نافذة ٥ أشهر: فقط العملاء المحجوزون خلال آخر ٥ أشهر — القديمون لا تظهر إشعاراتهم
+  const cutoff=(function(){ try{ const d=new Date(); d.setMonth(d.getMonth()-5); return d.toISOString().slice(0,10); }catch(_){ return ''; } })();
+  const bookDate={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!c||!r.booking_date)return; const x=String(r.booking_date).slice(0,10); if(!bookDate[c]||x>bookDate[c])bookDate[c]=x; });
   const out=[];
   (DATA.serviceLines||[]).forEach(s=>{
     const c=(s.client_code||'').toUpperCase(); if(!c)return;
@@ -2574,6 +2584,8 @@ function bookingsMissingFields(){
     if(/cancel/i.test(String(s.status||'')))return;
     const booked=(s.final_rate_booked!=null && s.final_rate_booked!=='' && Number(s.final_rate_booked)>0);
     if(!booked) return;   // غير المحجوز يظهر في «عملاء دفعوا بلا حجز» أصلاً
+    const bd=bookDate[c]||(s.check_in?String(s.check_in).slice(0,10):'')||(s.created_at?String(s.created_at).slice(0,10):'');
+    if(cutoff && bd && bd<cutoff) return;   // أقدم من ٥ أشهر → تجاهل
     const m=[];
     if(!String(s.charge_from||'').trim()) m.push('Charge from');
     if(CHARGE_DATE_OVR[s.id]==null) m.push('تاريخ الدفع');
@@ -2660,13 +2672,6 @@ function renderAlerts(){
   const nbox=$('notif-box');
   if(nbox){
     let n='';
-    const pendMiss=bookingsMissingFields();
-    if(pendMiss.length){
-      n+='<div class="panel" style="border:1px solid var(--amber);background:rgba(245,158,11,.08);margin-bottom:14px"><h3 style="color:#b8860b;margin-top:0">📝 حجوزات ناقصة إدخالات — Charge from / تاريخ الدفع ('+pendMiss.length+')</h3>'+
-        '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>العميل</th><th>الخدمة</th><th>الناقص</th><th>إجراء</th></tr></thead><tbody>'+
-        pendMiss.map(a=>'<tr><td>'+esc(a.code)+'</td><td>'+esc(a.name)+'</td><td>'+esc(a.svc)+'</td><td style="color:var(--red);font-weight:700">'+a.miss.map(esc).join('، ')+'</td><td><button class="btn" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(a.code)+'\')">📋 إكمال</button></td></tr>').join('')+
-        '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ حجوزات محفوظة لكن ينقصها Charge from أو تاريخ الدفع (اختياريان). تختفي فور إكمالها.</div></div>';
-    }
     if(pendFreeze.length){
       n+='<div class="panel" style="border:1px solid #3a7bd5;background:rgba(58,123,213,.08);margin-bottom:14px"><h3 style="color:#3a7bd5;margin-top:0">🧊 طلبات تجميد حسابات ('+pendFreeze.length+') — تحتاج قرارك</h3>'+
         '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>العميل</th><th>التفاصيل</th><th>التاريخ</th><th>القرار</th></tr></thead><tbody>'+
@@ -2845,7 +2850,7 @@ function renderAlerts(){
         resolvedProfit.map(a=>{ const rs=profitReason(a.message)||esc(a.message||''); return '<tr><td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="color:var(--muted)">'+esc(rs)+'</td><td>'+esc((a.resolved_at||'').slice(0,10))+'</td></tr>'; }).join('')+
         '</tbody></table></div></details>';
     }
-    const ntot=pendProfit.length+pendFreeze.length+pendCost.length+pendCancel.length+pendReactivate.length+pendLoss.length+pendSupPay.length+pendSupEdit.length+pendCash.length+pendCashEdit.length+pendCliEntry.length+pendCliEdit.length+pendRefund.length+pendList.length+pendMiss.length;
+    const ntot=pendProfit.length+pendFreeze.length+pendCost.length+pendCancel.length+pendReactivate.length+pendLoss.length+pendSupPay.length+pendSupEdit.length+pendCash.length+pendCashEdit.length+pendCliEntry.length+pendCliEdit.length+pendRefund.length+pendList.length;
     const nc=$('nt-cnt'); if(nc) nc.innerHTML = ntot? '<span style="background:var(--red);color:#fff;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700">'+ntot+'</span>':'';
     nbox.innerHTML = n || '<div class="panel"><div style="color:var(--muted);text-align:center;padding:24px">لا توجد إشعارات 🎉</div></div>';
   }
