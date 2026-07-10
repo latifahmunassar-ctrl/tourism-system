@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ن٣ · رقم التأكيد (Conf No) من Booking Form يظهر في جدول توزيع الدفعات بجانب الفندق/الغرفة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-س٣ · عملة الفندق: اعتماد يدوي (أول مرة مباشر) والتغيير اللاحق يتطلب موافقة المالكة — مثل عملة المورّد</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2246,6 +2246,17 @@ function hpPayeeCur(payee){
 async function hpSetPayeeCur(){
   const cur=($('hp-tcur')||{}).value||HO_TCUR;
   const existing=(DATA.lists||[]).filter(l=>l.category==='payee_currency' && String(l.value||'').split('=')[0]===HO_PAYEE);
+  const owner=isOwnerUser();
+  // محاسب + توجد عملة معتمدة سابقاً → التغيير يتطلب موافقة المالكة (لا يُطبَّق حتى الاعتماد)
+  if(!owner && existing.length){
+    const oldVal=existing[0].value; const oldCur=String(oldVal).split('=')[1]||'';
+    if(cur===oldCur){ return; }
+    const ok=await reqListOps('payee_currency','change','🪙 طلب تغيير عملة الفندق «'+HO_PAYEE+'» إلى '+cur+' (المعتمدة حالياً: '+oldCur+')',[{do:'del',category:'payee_currency',value:oldVal},{do:'add',category:'payee_currency',value:HO_PAYEE+'='+cur}]);
+    if(ok) alert('✅ أُرسل طلب تغيير عملة الفندق «'+HO_PAYEE+'» إلى '+cur+' لموافقة المالكة — لا يتغيّر حتى الاعتماد (يظهر في 🔔 إشعارات).');
+    HO_TCUR=oldCur||HO_TCUR; if($('hp-tcur'))$('hp-tcur').value=HO_TCUR; buildHotelPay();   // أرجع العرض للعملة الحالية
+    return;
+  }
+  // مالكة (دائماً مباشر) أو محاسب لأول مرة (لا يوجد اعتماد سابق) → تطبيق مباشر
   for(const e of existing){ if(e.id)await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_list_item',payload:{id:e.id}})}); }
   await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_list_item',payload:{category:'payee_currency',value:HO_PAYEE+'='+cur}})});
   HO_TCUR=cur; await load();
@@ -2362,7 +2373,7 @@ function buildHotelPay(){
     '<div style="font-size:12px;color:var(--muted);margin-bottom:6px"><b>اختاري أولاً اسم الفندق/النظام المدفوع له</b> (يحدّد وجهة الدفعة). <b>عملة المدفوع له موحّدة</b> — تختارينها مرة وتثبت لكل عملياته. أدخلي مبلغ التحويل الإجمالي وشيّكي على العملاء ووزّعي عليهم. <b>الملاحظة يدوية فقط.</b> الحركة تُسجَّل مباشرة في الحسابات.</div>'+
     '<div class="fgrid">'+
       '<div class="fld" style="min-width:280px;flex:1.6"><label>🏨 الفندق / النظام (المدفوع له) <span style="color:var(--red)">*</span></label><select id="hp-payee" onchange="hpPayeeChange()">'+payeeOpts+'</select></div>'+
-      '<div class="fld"><label>💱 عملة المدفوع له (موحّدة) <span style="color:var(--red)">*</span></label><select id="hp-tcur" onchange="hpSetPayeeCur()">'+tcurOpts+'</select></div>'+
+      '<div class="fld"><label>💱 عملة المدفوع له (موحّدة) <span style="color:var(--red)">*</span> '+((DATA.lists||[]).some(l=>l.category==='payee_currency' && String(l.value||'').split('=')[0]===HO_PAYEE)?'<span style="font-size:9px;color:#0e9d6a">✍️ معتمدة · التغيير بموافقة المالكة</span>':'<span style="font-size:9px;color:var(--muted)">(تلقائية — الاعتماد أول مرة يثبّتها)</span>')+'</label><select id="hp-tcur" onchange="hpSetPayeeCur()">'+tcurOpts+'</select></div>'+
       '<div class="fld"><label>💰 المبلغ (يترحّل للبنوك) <span style="color:var(--red)">*</span></label><input type="number" id="hp-gross" oninput="hpTotal()" placeholder="0"></div>'+
       '<div class="fld"><label>🔁 نوع الحركة <span style="color:var(--red)">*</span></label><select id="hp-txntype" onchange="hpTotal()"><option value="transfer">💸 تحويل (دفع للمورّد)</option><option value="refund">↩️ مرتجع (استرداد كاش من الفندق لنا)</option></select></div>'+
       '<div class="fld"><label>عملة الدفع الفعلية</label><select id="hp-cur" onchange="hpRate()">'+payCurOpts+'</select></div>'+
@@ -5001,7 +5012,7 @@ function renderAttendance(){
     '</tbody></table></div></details>';
   box.innerHTML=h;
 }
-function listCatLabel(cat){ return {banks:'Banks Name (اسم بنك)',charged_from:'charged from',bc_desc:'Banks Cash — وصف',bc_det:'Banks Cash — تفصيل',bc_subdet:'Banks Cash — تفصيل فرعي',supplier_cur:'عملة المورّد المعتمدة'}[cat]||cat; }
+function listCatLabel(cat){ return {banks:'Banks Name (اسم بنك)',charged_from:'charged from',bc_desc:'Banks Cash — وصف',bc_det:'Banks Cash — تفصيل',bc_subdet:'Banks Cash — تفصيل فرعي',supplier_cur:'عملة المورّد المعتمدة',payee_currency:'عملة الفندق المعتمدة'}[cat]||cat; }
 function listValDisplay(cat,val){ return (cat==='bc_det'||cat==='bc_subdet')?String(val||'').split(BC_SEP).join(' ← '):String(val||''); }
 async function reqListItem(category,value,label){
   const disp=listValDisplay(category,value);
