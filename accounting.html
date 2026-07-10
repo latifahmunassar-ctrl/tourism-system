@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-د · البانر الأحمر يشمل كل طلبات المحاسب المعلّقة (تعديل عميل/كاش/دفعات موردين) — يظهر لك على أي تبويب فور رفع الطلب</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-هـ · تبويب الموردين يعرض الموردين المُضافين للقائمة حتى بلا حركة (بأصفار + شارة «مُضاف — بلا حركة») مثل FANAR HoTEL</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2936,7 +2936,8 @@ function supplierCurrency(name){ const n=String(name||''); for(const r of SUPPLI
 function supOwed(invs){ return invs.reduce((s,x)=>s+Number(x.invoice_amount||0),0); }   // الأرقام دقيقة؛ العملة من المورّد
 function fillSupplierFilter(){
   const dl=$('supflt-list'); if(!dl) return;
-  const names=[...new Set(supInvAll().map(x=>x.supplier_name).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'ar'));
+  // أسماء الموردين ذوي الحركة + الموردين المُضافين للقائمة المُدارة (حتى بلا حركة)
+  const names=[...new Set([...supInvAll().map(x=>x.supplier_name), ...listValues('suppliers').map(v=>v.value)].map(s=>String(s||'').trim()).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'ar'));
   dl.innerHTML=names.map(n=>'<option>'+esc(n)+'</option>').join('');
 }
 function bankCur(b){ b=String(b||''); if(/USD/i.test(b))return 'USD'; if(/MYR/i.test(b))return 'MYR'; if(/EUR/i.test(b))return 'EUR'; if(/\bSAR\b|rawafi|ريال سعودي/i.test(b))return 'SAR'; return 'OMR'; }
@@ -3657,12 +3658,19 @@ function renderSuppliers(){
   inv.forEach(x=>{ const s=x.supplier_name||'?'; (by[s]=by[s]||[]).push(x); });
   const names=Object.keys(by).sort((a,b)=>by[b].length-by[a].length);
   const payBy={}; (DATA.supplierPayments||[]).forEach(x=>{ const s=x.supplier_name||'?'; payBy[s]=(payBy[s]||0)+Number(x.amount||0); });
+  // موردون مُضافون للقائمة المُدارة لكن بلا أي فاتورة/حجز بعد — نعرضهم بأصفار في نفس الجدول
+  const norm=(s)=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+  const actSet=new Set(names.map(norm));
+  const inactive=[...new Set(listValues('suppliers').map(v=>String(v.value||'').trim()).filter(Boolean))].filter(s=>!actSet.has(norm(s))).sort((a,b)=>String(a).localeCompare(String(b),'ar'));
   tb.innerHTML=names.map(s=>{ const list=by[s]; const clients=new Set(list.map(x=>x.client_code)).size;
     const cur=supplierCurrency(s); const owed=supOwed(list); const paid=payBy[s]||0; const bal=owed-paid;
     return rw(['<a href="#" style="color:var(--accent);font-weight:800;text-decoration:underline;cursor:pointer" onclick="$(\'supflt\').value=\''+esc(s)+'\';renderSupplierDetail();window.scrollTo(0,0);return false">'+esc(s)+'</a>', fmt(list.length), fmt(clients),
       '<b>'+fmt(owed)+'</b> '+esc(cur), (paid?'<span class="num">'+fmt(paid)+'</span>':'—'), '<b style="color:'+(bal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(bal)+'</b> '+esc(cur)]);
+  }).join('')
+  + inactive.map(s=>{ const cur=supplierCurrency(s);
+      return rw(['<span style="font-weight:700;color:var(--muted)">'+esc(s)+'</span> <span style="background:#e5e7eb;color:#6b7280;font-size:9.5px;padding:1px 6px;border-radius:8px;font-weight:700">مُضاف — بلا حركة</span>', '0', '0', '<span style="color:var(--muted)">0 '+esc(cur)+'</span>', '—', '<span style="color:var(--muted)">0 '+esc(cur)+'</span>']);
   }).join('');
-  $('sup-cnt').textContent=names.length+' مورّد';
+  $('sup-cnt').textContent=names.length+' مورّد بحركة'+(inactive.length?(' · '+inactive.length+' مُضاف بلا حركة'):'');
   renderSupDups();
   fillSupplierFilter(); if($('supflt')&&$('supflt').value)renderSupplierDetail();
 }
