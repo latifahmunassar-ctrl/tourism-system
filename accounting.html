@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-س٢ · كشف حساب فندق: إجمالي المدفوع محسوب لسنة 2026 فقط (دفعات 2026 + charge from) بلا مدفوعات السنة السابقة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ع٢ · كشف حساب فندق: المدفوع والمستحق كلاهما لسنة 2026 فقط (تسمية واضحة) — بلا أي بيانات 2025</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2226,7 +2226,7 @@ function renderHotelStatement(){
     '<span style="background:#f6f8fc;border:1px solid var(--line);border-radius:9px;padding:5px 11px">🏨 <b>'+esc(q)+'</b></span>'+
     '<span style="background:#f6f8fc;border:1px solid var(--line);border-radius:9px;padding:5px 11px">حجوزات 2026: <b>'+rows.length+'</b>'+(nCanc?' · ملغاة '+nCanc:'')+'</span>'+
     '<span style="background:rgba(14,157,106,.10);border:1px solid #0e9d6a;border-radius:9px;padding:5px 11px">💰 إجمالي المدفوع (2026): <b>'+fmt(paid2026)+' '+esc(hcur)+'</b> <span style="font-size:10px;color:var(--muted)">('+nPaid+' مسدَّد)</span></span>'+
-    '<span style="background:rgba(217,138,0,.10);border:1px solid var(--amber);border-radius:9px;padding:5px 11px">⏳ مستحق (رصيد): <b>'+nDue+'</b> · <b>'+fmt(dueTot)+' '+esc(hcur)+'</b></span>'+
+    '<span style="background:rgba(217,138,0,.10);border:1px solid var(--amber);border-radius:9px;padding:5px 11px">⏳ مستحق 2026 (رصيد): <b>'+nDue+'</b> · <b>'+fmt(dueTot)+' '+esc(hcur)+'</b></span>'+
     '</div>'+
     '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">السداد يُحتسب من: 💳 charge from (بطاقة/بنك في Booking Form) أو دفعة مورّد مسجّلة. المستحق = حجوزات بلا سداد.</div>'+
     '<div class="tbl-wrap" style="max-height:440px"><table style="font-size:11.5px;white-space:nowrap"><thead><tr><th>كود</th><th>العميل</th><th>الغرفة</th><th>الدخول</th><th>المحجوز (التكلفة)</th><th>حالة السداد</th><th>Conf No</th><th>المصدر</th></tr></thead><tbody>'+trs+'</tbody></table></div>';
