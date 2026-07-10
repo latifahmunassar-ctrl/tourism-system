@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ف · تتبّع «مُدخِل الصف» في First Client Data: كل إدخال جديد يُختَم باسم الموظف المُدخِل + عمود «🖊️ مُدخِل» بالجدول</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ص · Booking Form: «Charge from» و«تاريخ الدفع» صارا اختياريين للحفظ + بانر أعلى الحجز يبيّن الإدخالات الناقصة لكل خدمة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1395,7 +1395,21 @@ function bRecall(){
       '</div>';
   }
   if(svcs.length){
-    h+='<div style="margin-top:8px;font-size:12px"><b>كل حجوزات العميل ('+svcs.length+') — الخلايا قابلة للتعديل:</b> <span style="color:var(--muted);font-size:11px">← اسحبي يمين/يسار أو استخدمي أزرار التمرير تحت</span></div><div class="tbl-wrap bf-scroll" id="bf-tbl" style="max-height:360px"><table style="font-size:11px"><thead><tr><th>النوع</th><th>الخدمة</th><th>Conf No</th><th>سعر البيع</th><th>سعر المورد</th><th>الحجز الفعلي</th><th>الفرق</th><th>الربح</th><th>رسوم الإلغاء</th><th>المرتجع</th><th>المرتجع المفترض</th><th>Booked from</th><th>📅 تاريخ الدفع <span style="color:var(--red)">*</span></th><th>Charge from <span style="color:var(--red)">*</span></th><th>الحالة</th><th>سعر الصرف</th><th>حفظ</th></tr></thead><tbody>'+
+    // 🔔 بانر نقص الإدخالات — Charge from وتاريخ الدفع اختياريان؛ رقم التأكيد إلزامي للفنادق/الطيران
+    const missRows=[];
+    svcs.forEach(s=>{ if(/cancel/i.test(String(s.status||'')))return; const m=[];
+      if(!String(s.charge_from||'').trim()) m.push('Charge from');
+      if(CHARGE_DATE_OVR[s.id]==null) m.push('تاريخ الدفع');
+      if(bIsConfReq(s.kind) && !String(s.conf_no||'').trim()) m.push('رقم التأكيد');
+      if(m.length) missRows.push({nm:(SVC[s.kind]||s.kind||'')+(s.name?' · '+s.name:''), m}); });
+    if(missRows.length){
+      h+='<div style="margin-top:8px;background:rgba(245,158,11,.12);border:1px solid var(--amber);border-radius:8px;padding:9px 12px;font-size:12px">'+
+        '⚠️ <b style="color:#b8860b">هذا الحجز ينقصه إدخالات ('+missRows.length+' خدمة):</b>'+
+        missRows.map(r=>'<div style="margin-top:3px">• <b>'+esc(r.nm)+'</b> — ناقص: <span style="color:var(--red);font-weight:700">'+r.m.map(esc).join('، ')+'</span></div>').join('')+
+        '<div style="margin-top:5px;font-size:10.5px;color:var(--muted)">يمكنك الحفظ الآن — «Charge from» و«تاريخ الدفع» اختياريان. (رقم التأكيد للفنادق/الطيران يبقى إلزامياً)</div>'+
+        '</div>';
+    }
+    h+='<div style="margin-top:8px;font-size:12px"><b>كل حجوزات العميل ('+svcs.length+') — الخلايا قابلة للتعديل:</b> <span style="color:var(--muted);font-size:11px">← اسحبي يمين/يسار أو استخدمي أزرار التمرير تحت</span></div><div class="tbl-wrap bf-scroll" id="bf-tbl" style="max-height:360px"><table style="font-size:11px"><thead><tr><th>النوع</th><th>الخدمة</th><th>Conf No</th><th>سعر البيع</th><th>سعر المورد</th><th>الحجز الفعلي</th><th>الفرق</th><th>الربح</th><th>رسوم الإلغاء</th><th>المرتجع</th><th>المرتجع المفترض</th><th>Booked from</th><th>📅 تاريخ الدفع <span style="font-size:9px;color:var(--muted)">(اختياري)</span></th><th>Charge from <span style="font-size:9px;color:var(--muted)">(اختياري)</span></th><th>الحالة</th><th>سعر الصرف</th><th>حفظ</th></tr></thead><tbody>'+
     svcs.map(b=>{ const i=b.id; const st='style="width:80px;padding:3px 4px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:11px"';
       const inp=(f,v,num,extra)=>'<input id="sb-'+f+'-'+i+'" '+(num?'type="number"':'')+' value="'+esc(v!=null?v:'')+'" '+st+' '+(extra||'')+'>';
       const selInp=(f,v,cat)=>{ const cur=(v==null?'':String(v)); const vals=listValues(cat);
@@ -1427,7 +1441,7 @@ function bRecall(){
         '<td>'+bookedCell+'<select id="sb-bcur-'+i+'" data-sf="'+esc(supCur)+'" onchange="bRow('+i+')" '+(lockedCost?'disabled ':'')+'style="width:58px;padding:2px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:5px;font-size:10px;margin-right:3px">'+['SAR','USD','MYR','OMR','AED','EUR','SGD'].map(cc=>'<option'+(((supCur||b.booked_currency||'SAR')===cc)?' selected':'')+'>'+cc+'</option>').join('')+'</select><span id="sb-cwarn-'+i+'" style="color:var(--red);font-size:9px;display:block"></span></td>'+
         '<td class="num" id="sb-diffsup-'+i+'"'+(diffSup!=null?' style="color:'+(diffSup<0?'var(--red)':'var(--green)')+';font-weight:700"':'')+'>'+(diffSup!=null?fmt(diffSup)+cur(supCur):'')+'</td>'+
         '<td class="num" id="sb-profit-'+i+'"'+(profitSar!=null?' style="color:'+(profitSar<0?'var(--red)':'var(--green)')+';font-weight:700"':'')+'>'+(profitSar!=null?fmt(profitSar)+cur(sellCur):'')+'</td>'+
-        '<td>'+inp('cancel',b.cancel_charge,true,'oninput="bRow('+i+')"')+cur(supCur)+'</td><td>'+inp('refund',(isC?Number(_refSup.toFixed(2)):0),true)+cur(supCur)+'</td><td class="num pos" id="sb-exp-'+i+'">'+fmt(isC?Number((_refSup*rate).toFixed(2)):0)+cur(sellCur)+'</td><td>'+selInp('bfrom',b.booked_from||b.supplier,'hotels_system')+'</td><td><input type="date" id="sb-cdate-'+i+'" class="dueinp" style="width:122px" value="'+esc(CHARGE_DATE_OVR[i]!=null?CHARGE_DATE_OVR[i]:bookDate)+'" title="تاريخ الدفع (إجباري) — الافتراضي تاريخ الحجز، قابل للتعديل" onchange="setChargeDate('+i+',this.value)"></td><td>'+selInp('cfrom',b.charge_from,'charged_from')+'</td>'+
+        '<td>'+inp('cancel',b.cancel_charge,true,'oninput="bRow('+i+')"')+cur(supCur)+'</td><td>'+inp('refund',(isC?Number(_refSup.toFixed(2)):0),true)+cur(supCur)+'</td><td class="num pos" id="sb-exp-'+i+'">'+fmt(isC?Number((_refSup*rate).toFixed(2)):0)+cur(sellCur)+'</td><td>'+selInp('bfrom',b.booked_from||b.supplier,'hotels_system')+'</td><td><input type="date" id="sb-cdate-'+i+'" class="dueinp" style="width:122px" value="'+esc(CHARGE_DATE_OVR[i]!=null?CHARGE_DATE_OVR[i]:bookDate)+'" title="تاريخ الدفع (اختياري) — الافتراضي تاريخ الحجز، قابل للتعديل" onchange="setChargeDate('+i+',this.value)"></td><td>'+selInp('cfrom',b.charge_from,'charged_from')+'</td>'+
         '<td><select id="sb-status-'+i+'" '+st+' onchange="bRow('+i+')"'+(lockedCost?' disabled title="مقفل — استخدمي زر «🚫 طلب إلغاء» أو «🔄 طلب تفعيل» في عمود الحفظ"':'')+'><option'+(isC?'':' selected')+'>Active</option><option'+(isC?' selected':'')+'>Cancel</option></select></td>'+
         '<td class="num">'+esc(b.currency_rate!=null?b.currency_rate:'')+'</td>'+
         '<td>'+(lockedCost?('<span title="مقفل — التعديل عبر موافقة الإدارة" style="color:#3a7bd5;font-size:14px">🔒</span>'+(isC?'<button class="btn green" style="padding:2px 6px;font-size:9px;margin-top:3px;display:block" onclick="reqReactivate('+i+',\''+esc(code)+'\')">🔄 طلب تفعيل (موافقة)</button>':'<button class="btn" style="background:#d98a00;color:#000;padding:2px 6px;font-size:9px;margin-top:3px;display:block" onclick="reqCancelBooking('+i+',\''+esc(code)+'\')">🚫 طلب إلغاء (موافقة)</button>')):'<button class="btn green" style="padding:3px 9px;font-size:11px" onclick="saveSvcBooking('+i+',\''+esc(code)+'\')">💾</button>')+'</td></tr>';
@@ -1521,8 +1535,7 @@ function buildSvcPayload(id,code){
 }
 async function saveSvcBooking(id,code){
   if(!(($('b-by').value||'').trim())){ alert('⚠️ خانة «Booked by» (بالأعلى) إجبارية — اكتبيها قبل الحفظ'); $('b-by').focus(); return; }
-  if(!((($('sb-cfrom-'+id)||{}).value||'').trim())){ alert('⚠️ خانة «Charge from» إجبارية لهذه الخدمة'); const e=$('sb-cfrom-'+id); if(e)e.focus(); return; }
-  if(!((($('sb-cdate-'+id)||{}).value||'').trim())){ alert('⚠️ خانة «تاريخ الدفع» إجبارية لهذه الخدمة — حدّدي التاريخ'); const e=$('sb-cdate-'+id); if(e)e.focus(); return; }
+  // Charge from وتاريخ الدفع اختياريان — لا يمنعان الحفظ (يظهر نقصهما في بانر أعلى الحجز)
   { const svc=(DATA.serviceLines||[]).find(x=>x.id===id); if(bIsConfReq(svc&&svc.kind) && !((($('sb-conf-'+id)||{}).value||'').trim())){ alert('⚠️ رقم التأكيد (Conf No) إجباري لحجوزات الفنادق والطيران'); const e=$('sb-conf-'+id); if(e)e.focus(); return; } }
   if(!cancelOk(id)) return;
   if(!confirm('⚠️ تأكدي من إدخال جميع المعلومات بشكل صحيح.\n\nبعد الحفظ لا يمكن تعديل التكلفة (الحجز الفعلي) إلا بموافقة الإدارة.\n\nهل تريدين حفظ هذا الحجز؟')) return;
@@ -1554,8 +1567,7 @@ async function saveAllSvc(code){
   const LK=window.B_LOCKED||new Set();
   const ids=(window.B_SVC_IDS||[]).filter(id=>!LK.has(id));   // الحجوزات المحفوظة مقفلة — تُستثنى من الحفظ، تعديلها عبر طلب موافقة
   if(!ids.length){ alert('لا حجوزات جديدة للحفظ — كل الحجوزات محفوظة/مقفلة 🔒.\n\nلأي تغيير على حجز محفوظ استخدمي أزرار الموافقة في عمود «الحفظ» (آخر الجدول):\n• ✏️ تعديل التكلفة (موافقة)\n• 🚫 طلب إلغاء (موافقة)\n• 🔄 طلب تفعيل (موافقة)'); return; }
-  for(const id of ids){ if(!((($('sb-cfrom-'+id)||{}).value||'').trim())){ alert('⚠️ خانة «Charge from» إجبارية لكل الخدمات — أكملي الناقصة'); const e=$('sb-cfrom-'+id); if(e){e.focus(); e.scrollIntoView({block:'center'});} return; } }
-  for(const id of ids){ if(!((($('sb-cdate-'+id)||{}).value||'').trim())){ alert('⚠️ خانة «تاريخ الدفع» إجبارية لكل الخدمات — حدّدي الناقصة'); const e=$('sb-cdate-'+id); if(e){e.focus(); e.scrollIntoView({block:'center'});} return; } }
+  // Charge from وتاريخ الدفع اختياريان — لا يمنعان الحفظ (يظهر نقصهما في بانر أعلى الحجز)
   for(const id of ids){ const svc=(DATA.serviceLines||[]).find(x=>x.id===id); if(bIsConfReq(svc&&svc.kind) && !((($('sb-conf-'+id)||{}).value||'').trim())){ alert('⚠️ رقم التأكيد (Conf No) إجباري لحجوزات الفنادق والطيران — أكملي الناقصة'); const e=$('sb-conf-'+id); if(e){e.focus(); e.scrollIntoView({block:'center'});} return; } }
   for(const id of ids){ if(!cancelOk(id)) return; }
   if(!confirm('⚠️ تأكدي من إدخال جميع المعلومات بشكل صحيح.\n\nبعد الحفظ لا يمكن تعديل التكلفة (الحجز الفعلي) إلا بموافقة الإدارة.\n\nمتابعة حفظ كل الحجوزات؟')) return;
