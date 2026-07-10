@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ح · اعتماد عملة كل مورّد يدوياً من رأس كشف حسابه (للمالكة فقط، تُطبَّق على كل أرقام الكشف وتسبق القواعد التلقائية)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ط · عملة المورّد: المحاسب يحدّدها أول مرة مباشرة، وأي تغيير لاحق يتطلب موافقة المالكة (المالكة تعدّل مباشرة) — تُطبَّق على كل أرقام الكشف</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2939,14 +2939,25 @@ function supCurOverride(name){ const nn=String(name||'').trim().toLowerCase(); i
 function supplierCurrency(name){ const n=String(name||''); const ov=supCurOverride(n); if(ov) return ov; for(const r of SUPPLIER_CUR_RULES) if(r.re.test(n)) return r.cur; return 'USD'; }
 async function _delSupCur(nn){ const olds=listValues('supplier_cur').filter(v=>{ const s=String(v.value||''); const i=s.lastIndexOf('='); return i>0 && s.slice(0,i).trim().toLowerCase()===nn; }); for(const o of olds){ await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_list_item',payload:{category:'supplier_cur',value:o.value}})}); } }
 async function saveSupplierCur(sup){
-  if(!isOwnerUser()){ alert('⚠️ اعتماد عملة المورّد متاح للمالكة فقط'); return; }
   const sel=document.getElementById('supcur-sel'); if(!sel)return; const cur=(sel.value||'').trim(); if(!cur){ alert('اختاري العملة'); return; }
+  const nn=String(sup).trim().toLowerCase();
+  const existing=listValues('supplier_cur').filter(v=>{ const s=String(v.value||''); const i=s.lastIndexOf('='); return i>0 && s.slice(0,i).trim().toLowerCase()===nn; });
+  const owner=isOwnerUser();
+  // محاسب + توجد عملة معتمدة سابقاً → التغيير يتطلب موافقة المالكة (لا يُطبَّق حتى الاعتماد)
+  if(!owner && existing.length){
+    if(cur===supCurOverride(sup)){ alert('هذه هي العملة المعتمدة الحالية.'); return; }
+    const oldVal=existing[0].value;
+    const ok=await reqListOps('supplier_cur','change','🪙 طلب تغيير عملة المورّد «'+sup+'» إلى '+cur+' (المعتمدة حالياً: '+supCurOverride(sup)+')',[{do:'del',category:'supplier_cur',value:oldVal},{do:'add',category:'supplier_cur',value:sup+'='+cur}]);
+    if(ok) alert('✅ أُرسل طلب تغيير عملة «'+sup+'» إلى '+cur+' لموافقة المالكة — لا يتغيّر حتى الاعتماد (يظهر في 🔔 إشعارات).');
+    return;
+  }
+  // مالكة (دائماً مباشر) أو محاسب لأول مرة (لا يوجد اعتماد سابق) → تطبيق مباشر
   try{
-    await _delSupCur(String(sup).trim().toLowerCase());   // احذف أي اعتماد سابق لنفس المورّد
+    await _delSupCur(nn);   // احذف أي اعتماد سابق لنفس المورّد
     const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_list_item',payload:{category:'supplier_cur',value:sup+'='+cur}})});
     const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
     await load(); const fl=document.getElementById('supflt'); if(fl)fl.value=sup; renderSupplierDetail();
-    alert('✅ اعتُمدت عملة «'+sup+'» = '+cur+' في كشف حسابه — طُبّقت على كل أرقام الكشف.');
+    alert('✅ اعتُمدت عملة «'+sup+'» = '+cur+(owner?'':' (إدخال أول مرة)')+' في كشف حسابه — طُبّقت على كل أرقام الكشف.');
   }catch(e){ alert('خطأ: '+e.message); }
 }
 async function clearSupplierCur(sup){
@@ -3723,6 +3734,7 @@ function renderSupplierDetail(){
   const clients=new Set(list.map(x=>x.client_code)).size;
   // عملة المورّد الموحّدة (الأرقام دقيقة، العملة من تعريف المورّد)
   const SCUR=supplierCurrency(sup);
+  const curOptsSup=[...new Set([SCUR,'OMR','SAR','USD','AED','EUR','MYR','SGD','GBP','THB',...listValues('currency').map(v=>v.value)])].filter(Boolean).map(c=>'<option'+(c===SCUR?' selected':'')+'>'+esc(c)+'</option>').join('');
   const owedT=supOwed(list); const paidT=pays.reduce((s,x)=>s+Number(x.amount||0),0); const balT=owedT-paidT;
   const curStr1=(v)=>'<b>'+fmt(v)+'</b> '+esc(SCUR);
   const balStr='<b style="color:'+(balT>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(balT)+'</b> '+esc(SCUR);
@@ -3796,16 +3808,16 @@ function renderSupplierDetail(){
       '<span>✅ المدفوع: '+curStr1(paidT)+'</span>'+
       '<span>📌 الرصيد المتبقّي: '+balStr+'</span>'+
     '</div>'+
-    // 🪙 اعتماد عملة المورّد في كشف حسابه (للمالكة فقط) — تُطبَّق على كل أرقام الكشف
+    // 🪙 عملة المورّد المعتمدة: تُدخَل أول مرة مباشرة، وأي تغيير لاحق يتطلب موافقة المالكة — تُطبَّق على كل أرقام الكشف
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;border-top:1px solid var(--line);padding-top:10px;font-size:13px">'+
-      '<span>🪙 عملة الكشف المعتمدة: <b style="color:var(--accent)">'+esc(SCUR)+'</b>'+(supCurOverride(sup)?' <span title="معتمدة يدوياً" style="font-size:10px;color:#0e9d6a">✍️ يدوية</span>':' <span style="font-size:10px;color:var(--muted)">(تلقائية)</span>')+'</span>'+
-      (isOwnerUser()?(
-        '<select id="supcur-sel" style="padding:4px 10px;border-radius:6px;border:1px solid var(--line)">'+
-          [...new Set([SCUR,'OMR','SAR','USD','AED','EUR','MYR','SGD','GBP','THB',...listValues('currency').map(v=>v.value)])].filter(Boolean).map(c=>'<option'+(c===SCUR?' selected':'')+'>'+esc(c)+'</option>').join('')+
-        '</select>'+
-        '<button class="btn" style="padding:4px 14px" onclick="saveSupplierCur('+supJs+')">✔️ اعتماد العملة</button>'+
-        (supCurOverride(sup)?'<button class="btn ghost" style="padding:4px 12px" onclick="clearSupplierCur('+supJs+')">↩️ رجوع للتلقائية</button>':'')
-      ):'<span style="font-size:11px;color:var(--muted)">🔒 تغيير العملة المعتمدة للمالكة فقط</span>')+
+      '<span>🪙 عملة الكشف المعتمدة: <b style="color:var(--accent)">'+esc(SCUR)+'</b>'+(supCurOverride(sup)?' <span title="معتمدة — التغيير يحتاج موافقة المالكة" style="font-size:10px;color:#0e9d6a">✍️ معتمدة</span>':' <span style="font-size:10px;color:var(--muted)">(تلقائية — غير معتمدة بعد)</span>')+'</span>'+
+      (function(){
+        var owner=isOwnerUser(), hasOv=!!supCurOverride(sup);
+        var selHtml='<select id="supcur-sel" style="padding:4px 10px;border-radius:6px;border:1px solid var(--line)">'+curOptsSup+'</select>';
+        if(owner) return selHtml+'<button class="btn" style="padding:4px 14px" onclick="saveSupplierCur('+supJs+')">✔️ اعتماد العملة</button>'+(hasOv?'<button class="btn ghost" style="padding:4px 12px" onclick="clearSupplierCur('+supJs+')">↩️ رجوع للتلقائية</button>':'');
+        if(hasOv) return selHtml+'<button class="btn" style="padding:4px 14px;background:#c41d88" onclick="saveSupplierCur('+supJs+')">📩 اطلب تغيير العملة</button> <span style="font-size:11px;color:var(--muted)">🔒 التغيير يحتاج موافقة المالكة</span>';
+        return selHtml+'<button class="btn" style="padding:4px 14px" onclick="saveSupplierCur('+supJs+')">✔️ اعتماد العملة (أول مرة)</button>';
+      })()+
     '</div>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-top:10px;border-top:1px solid var(--line);padding-top:10px">'+
       '<div class="fld"><label>👤 فلترة بالوكيل</label><select class="flt" onchange="spSetAgent(this.value)"><option value="">كل الوكلاء</option>'+supAgents.map(a=>'<option'+(a===spFltAgent?' selected':'')+'>'+esc(a)+'</option>').join('')+'</select></div>'+
@@ -4837,7 +4849,7 @@ function renderAttendance(){
     '</tbody></table></div></details>';
   box.innerHTML=h;
 }
-function listCatLabel(cat){ return {banks:'Banks Name (اسم بنك)',charged_from:'charged from',bc_desc:'Banks Cash — وصف',bc_det:'Banks Cash — تفصيل',bc_subdet:'Banks Cash — تفصيل فرعي'}[cat]||cat; }
+function listCatLabel(cat){ return {banks:'Banks Name (اسم بنك)',charged_from:'charged from',bc_desc:'Banks Cash — وصف',bc_det:'Banks Cash — تفصيل',bc_subdet:'Banks Cash — تفصيل فرعي',supplier_cur:'عملة المورّد المعتمدة'}[cat]||cat; }
 function listValDisplay(cat,val){ return (cat==='bc_det'||cat==='bc_subdet')?String(val||'').split(BC_SEP).join(' ← '):String(val||''); }
 async function reqListItem(category,value,label){
   const disp=listValDisplay(category,value);
