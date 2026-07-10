@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ع٢ · كشف حساب فندق: المدفوع والمستحق كلاهما لسنة 2026 فقط (تسمية واضحة) — بلا أي بيانات 2025</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-غ · تقرير «دفعة فندق» العام صار لسنة 2026 فقط ويعرف سداد البطاقة (charge from) — انتهت أرقام 2025 المضلّلة (32,356)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2287,11 +2287,15 @@ function hpPayeeClientMap(payee){
 function hpRepCard(t,v,col){ return '<div class="kpi"><div class="ttl">'+t+'</div><div class="val" style="font-size:16px;color:'+col+'">'+v+'</div></div>'; }
 // تقرير عام للمدفوع له: مجموع خام (مطابق للشيت) + سطر معادل بعملة المدفوع له بعد التحويل + فلتر تاريخ
 function hpSummaryHtml(){
-  const cur=HO_TCUR; const allCli=hpPayeeClientMap(HO_PAYEE);
-  let owed=0,nBook=0; Object.values(allCli).forEach(o=>{ owed+=o.owed; nBook+=o.n; });
-  const payArr=hpPayments(HO_PAYEE); let paid=0; payArr.forEach(x=>paid+=x.amount); const nPay=payArr.length;
-  const bal=owed-paid; const settled=hpHbMatch(HO_PAYEE).length>0;
-  return '<div class="panel" style="border:1px solid var(--accent);margin-bottom:14px"><h3 style="margin-top:0">🧾 تقرير «'+esc(HO_PAYEE)+'» العام <span style="font-size:11px;color:var(--muted)">(بعملة المورّد '+esc(cur)+' — مطابق للشيت)</span></h3>'+
+  const cur=HO_TCUR;
+  // 🗓️ نافذة 2026 فقط: المستحق والمدفوع من حجوزات/دفعات 2026 (يستبعد 2025 والأقدم)، والسداد يشمل charge from (بطاقة/بنك عبر Booking Form)
+  const yOK=(d)=>{ const m=String(d||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); };
+  const chgMap={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind==='hotel'&&s.charge_from)chgMap[s.id]=s.charge_from; });
+  let owed=0,nBook=0,paidCharge=0;
+  hpHbMatch(HO_PAYEE).forEach(h=>{ if(!yOK(h.check_in||h.arrival_date))return; const d=Number(h.final_rate_booked||0); owed+=d; nBook++; if(h._booking&&h.service_id&&chgMap[h.service_id])paidCharge+=d; });
+  const payArr=hpPayments(HO_PAYEE).filter(x=>yOK(x.date)); let paid=paidCharge; payArr.forEach(x=>paid+=x.amount); const nPay=payArr.length;
+  const bal=owed-paid; const settled=(nBook>0 && bal<=0.5);
+  return '<div class="panel" style="border:1px solid var(--accent);margin-bottom:14px"><h3 style="margin-top:0">🧾 تقرير «'+esc(HO_PAYEE)+'» — سنة 2026 فقط <span style="font-size:11px;color:var(--muted)">(بعملة المورّد '+esc(cur)+' · يشمل سداد البطاقة charge from)</span></h3>'+
     '<div class="kpis" style="grid-template-columns:repeat(5,1fr)">'+
       hpRepCard('💰 المستحق',fmt(owed)+' '+esc(cur),'var(--txt)')+
       hpRepCard('✅ إجمالي المدفوع',fmt(paid)+' '+esc(cur),'#0e9d6a')+
