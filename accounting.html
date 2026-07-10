@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ص · Booking Form: «Charge from» و«تاريخ الدفع» صارا اختياريين للحفظ + بانر أعلى الحجز يبيّن الإدخالات الناقصة لكل خدمة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ق · الإشعارات: لوحة «حجوزات ناقصة إدخالات (Charge from / تاريخ الدفع)» + عدّها في البانر الأحمر وعدّاد الإشعارات</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -937,13 +937,14 @@ function renderNotifBanner(u){
     {n:P(m=>m.kind==='refund'), l:'إرجاع مبلغ'},
     {n:P(m=>m.kind==='list_item'), l:'تعديل قائمة'},
   ];
-  const liveLoss=liveBookingLosses(), liveNB=liveNoBooking();
+  const liveLoss=liveBookingLosses(), liveNB=liveNoBooking(), liveMiss=(typeof bookingsMissingFields==='function'?bookingsMissingFields():[]);
   const reqTotal=reqCats.reduce((s,c)=>s+c.n,0);
-  const total=reqTotal+liveLoss.length+liveNB.length;
+  const total=reqTotal+liveLoss.length+liveNB.length+liveMiss.length;
   if(!total){ el.style.display='none'; el.innerHTML=''; return; }
   const parts=reqCats.filter(c=>c.n).map(c=>'<b>'+c.n+'</b> '+c.l);
   if(liveLoss.length)parts.push('<b>'+liveLoss.length+'</b> خسارة حجز');
   if(liveNB.length)parts.push('<b>'+liveNB.length+'</b> دفع بلا حجز');
+  if(liveMiss.length)parts.push('<b>'+liveMiss.length+'</b> ناقص إدخالات');
   const head = reqTotal
     ? ('🔔 <b>'+total+'</b> بانتظار قرارك — منها <b>'+reqTotal+'</b> طلب من المحاسب لا يُنفَّذ إلا بموافقتك')
     : ('🔔 <b>'+total+'</b> بانتظار اطّلاعكِ');
@@ -2562,6 +2563,25 @@ function liveNoBooking(){
   return out;
 }
 // ---- Overview of Bookings: متابعة كل حجز (بيع/مدفوع/رصيد/متوقّع/فعلي/خدمات) ----
+// حجوزات محفوظة (لها حجز فعلي) لكن ناقصة إدخالات اختيارية: Charge from / تاريخ الدفع — تظهر في الإشعارات
+function bookingsMissingFields(){
+  if(!DATA) return [];
+  const out=[];
+  (DATA.serviceLines||[]).forEach(s=>{
+    const c=(s.client_code||'').toUpperCase(); if(!c)return;
+    if(/profit/i.test(String(s.name||'')))return;
+    if(/cancel/i.test(String(s.status||'')))return;
+    const booked=(s.final_rate_booked!=null && s.final_rate_booked!=='' && Number(s.final_rate_booked)>0);
+    if(!booked) return;   // غير المحجوز يظهر في «عملاء دفعوا بلا حجز» أصلاً
+    const m=[];
+    if(!String(s.charge_from||'').trim()) m.push('Charge from');
+    if(CHARGE_DATE_OVR[s.id]==null) m.push('تاريخ الدفع');
+    if(!m.length) return;
+    const ci=clientInfo(c);
+    out.push({ code:c, name:(ci&&ci.name)||'', svc:(SVC[s.kind]||s.kind||'')+(s.name?' · '+s.name:''), miss:m });
+  });
+  return out;
+}
 function renderAlerts(){
   const box=$('alerts-box'); if(!box) return;
   const all=(DATA&&DATA.alerts)||[];
@@ -2639,6 +2659,13 @@ function renderAlerts(){
   const nbox=$('notif-box');
   if(nbox){
     let n='';
+    const pendMiss=bookingsMissingFields();
+    if(pendMiss.length){
+      n+='<div class="panel" style="border:1px solid var(--amber);background:rgba(245,158,11,.08);margin-bottom:14px"><h3 style="color:#b8860b;margin-top:0">📝 حجوزات ناقصة إدخالات — Charge from / تاريخ الدفع ('+pendMiss.length+')</h3>'+
+        '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>العميل</th><th>الخدمة</th><th>الناقص</th><th>إجراء</th></tr></thead><tbody>'+
+        pendMiss.map(a=>'<tr><td>'+esc(a.code)+'</td><td>'+esc(a.name)+'</td><td>'+esc(a.svc)+'</td><td style="color:var(--red);font-weight:700">'+a.miss.map(esc).join('، ')+'</td><td><button class="btn" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(a.code)+'\')">📋 إكمال</button></td></tr>').join('')+
+        '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ حجوزات محفوظة لكن ينقصها Charge from أو تاريخ الدفع (اختياريان). تختفي فور إكمالها.</div></div>';
+    }
     if(pendFreeze.length){
       n+='<div class="panel" style="border:1px solid #3a7bd5;background:rgba(58,123,213,.08);margin-bottom:14px"><h3 style="color:#3a7bd5;margin-top:0">🧊 طلبات تجميد حسابات ('+pendFreeze.length+') — تحتاج قرارك</h3>'+
         '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>العميل</th><th>التفاصيل</th><th>التاريخ</th><th>القرار</th></tr></thead><tbody>'+
@@ -2817,7 +2844,7 @@ function renderAlerts(){
         resolvedProfit.map(a=>{ const rs=profitReason(a.message)||esc(a.message||''); return '<tr><td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="color:var(--muted)">'+esc(rs)+'</td><td>'+esc((a.resolved_at||'').slice(0,10))+'</td></tr>'; }).join('')+
         '</tbody></table></div></details>';
     }
-    const ntot=pendProfit.length+pendFreeze.length+pendCost.length+pendCancel.length+pendReactivate.length+pendLoss.length+pendSupPay.length+pendSupEdit.length+pendCash.length+pendCashEdit.length+pendCliEntry.length+pendCliEdit.length+pendRefund.length+pendList.length;
+    const ntot=pendProfit.length+pendFreeze.length+pendCost.length+pendCancel.length+pendReactivate.length+pendLoss.length+pendSupPay.length+pendSupEdit.length+pendCash.length+pendCashEdit.length+pendCliEntry.length+pendCliEdit.length+pendRefund.length+pendList.length+pendMiss.length;
     const nc=$('nt-cnt'); if(nc) nc.innerHTML = ntot? '<span style="background:var(--red);color:#fff;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700">'+ntot+'</span>':'';
     nbox.innerHTML = n || '<div class="panel"><div style="color:var(--muted);text-align:center;padding:24px">لا توجد إشعارات 🎉</div></div>';
   }
