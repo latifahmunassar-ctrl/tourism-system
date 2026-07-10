@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ع٣ · عملة الفندق: زر «✔️ اعتماد العملة» واضح بجانب القائمة (بدل التطبيق التلقائي) — الاعتماد والتغيير بموافقتك</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-غ٢ · Sales Form: عند اختيار مصدر الحجز (مورّد/فندق) تتعبّى عملة المورّد تلقائياً حسب العملة المعتمدة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -398,7 +398,7 @@ table{font-weight:600}
           <div class="fld full"><label><span id="lbl-desc">الاسم / التفاصيل</span> <span class="hotel-req-star" style="color:var(--red);display:none">*</span> <span style="font-size:9px;color:var(--muted)">(اسم الفندق أو وصف الخدمة — كتابة يدوية)</span></label><input id="s-desc" autocomplete="off" placeholder="اكتبي اسم الفندق أو وصف الخدمة"></div>
           <div class="fld" id="fld-room" style="display:none"><label>🛏️ نوع الغرفة <span class="hotel-req-star" style="color:var(--red);display:none">*</span> <span style="font-size:9px;color:var(--muted)">(كتابة يدوية)</span></label><input id="s-room" autocomplete="off" placeholder="اكتبي نوع الغرفة (مثال: ديلوكس)"></div>
           <div class="fld" id="fld-rooms" style="display:none"><label>🚪 عدد الغرف <span class="hotel-req-star" style="color:var(--red);display:none">*</span> <span style="font-size:9px;color:var(--muted)">(للفندق)</span></label><input type="number" id="s-rooms" min="1" step="1" placeholder="مثال: 2"></div>
-          <div class="fld"><label><span id="lbl-supplier">مصدر الحجز من</span> <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">اكتبي أول الحروف للبحث</span></label><input id="s-supplier" list="s-supplier-list" autocomplete="off" placeholder="اكتبي أول حروف الاسم…"><datalist id="s-supplier-list"></datalist></div>
+          <div class="fld"><label><span id="lbl-supplier">مصدر الحجز من</span> <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">اكتبي أول الحروف للبحث</span></label><input id="s-supplier" list="s-supplier-list" autocomplete="off" placeholder="اكتبي أول حروف الاسم…" onchange="sSupplierPick()"><datalist id="s-supplier-list"></datalist></div>
           <div class="fld"><label>سعر البيع (للعميل) <span class="hotel-req-star" style="color:var(--red);display:none">*</span></label><input type="number" id="s-price" value="0" oninput="sCalc()"></div>
           <div class="fld"><label>عملة البيع (من ملف العميل)</label><select id="s-sellcur" disabled style="background:#f1f5fb;color:var(--accent);font-weight:700"><option>SAR</option><option>USD</option><option>MYR</option><option>OMR</option><option>AED</option><option>EUR</option></select></div>
           <div class="fld"><label>عملة المورّد <span class="hotel-req-star" style="color:var(--red);display:none">*</span></label><select id="s-cur" onchange="sRate()"><option>SAR</option><option>USD</option><option>MYR</option><option>OMR</option><option>AED</option><option>EUR</option></select></div>
@@ -3091,6 +3091,16 @@ function supCurOverride(name){ const nn=String(name||'').trim().toLowerCase(); i
   const it=(typeof listValues==='function'?listValues('supplier_cur'):[]).find(v=>{ const s=String(v.value||''); const i=s.lastIndexOf('='); return i>0 && s.slice(0,i).trim().toLowerCase()===nn; });
   if(!it) return ''; const s=String(it.value); return s.slice(s.lastIndexOf('=')+1).trim().toUpperCase(); }
 function supplierCurrency(name){ const n=String(name||''); const ov=supCurOverride(n); if(ov) return ov; for(const r of SUPPLIER_CUR_RULES) if(r.re.test(n)) return r.cur; return 'USD'; }
+// العملة المعتمدة لمصدر الحجز (مورّد أو فندق): عملة مورّد معتمدة → عملة فندق معتمدة (payee_currency) → القواعد → USD
+function sourceCurrency(name){ const nn=String(name||'').trim().toLowerCase(); if(!nn) return '';
+  const sc=supCurOverride(name); if(sc) return sc;
+  const hc=((DATA&&DATA.lists)||[]).find(l=>l.category==='payee_currency' && String(l.value||'').split('=')[0].trim().toLowerCase()===nn);
+  if(hc){ const c=String(hc.value).split('=')[1]; if(c) return String(c).trim().toUpperCase(); }
+  for(const r of SUPPLIER_CUR_RULES) if(r.re.test(String(name))) return r.cur; return 'USD'; }
+// تعبئة عملة المورّد تلقائياً عند اختيار مصدر الحجز في Sales Form
+function sSupplierPick(){ const src=(($('s-supplier')||{}).value||'').trim(); if(!src) return; const cur=sourceCurrency(src); const sel=$('s-cur'); if(!cur||!sel) return;
+  if(![...sel.options].some(o=>o.value===cur)){ const o=document.createElement('option'); o.text=cur; o.value=cur; sel.add(o); }
+  sel.value=cur; if(typeof sRate==='function') sRate(); }
 async function _delSupCur(nn){ const olds=listValues('supplier_cur').filter(v=>{ const s=String(v.value||''); const i=s.lastIndexOf('='); return i>0 && s.slice(0,i).trim().toLowerCase()===nn; }); for(const o of olds){ await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_list_item',payload:{category:'supplier_cur',value:o.value}})}); } }
 async function saveSupplierCur(sup){
   const sel=document.getElementById('supcur-sel'); if(!sel)return; const cur=(sel.value||'').trim(); if(!cur){ alert('اختاري العملة'); return; }
