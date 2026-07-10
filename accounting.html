@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ن · Sales Form: حقل «عدد الغرف» يظهر عند اختيار نوع الخدمة فندق، يُحفظ ويظهر في سجل خدمات العميل</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-س · Booking Form: رقم التأكيد (Conf No) إجباري للفنادق والطيران فقط (اختياري للمواصلات وغيرها) + نجمة حمراء للصفوف المطلوبة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1409,7 +1409,7 @@ function bRecall(){
           +'<button class="btn" style="background:#3a7bd5;padding:2px 6px;font-size:9px;margin-top:3px;display:block;width:100%" onclick="reqCostChange('+i+',\''+esc(code)+'\')">✏️ تعديل التكلفة (موافقة)</button>'
         : inp('booked',actual,true,'oninput="bRow('+i+')"');
       return '<tr'+((profitSar!=null&&profitSar<-0.5)?' style="background:rgba(255,107,122,.10)"':'')+'><td>'+(SVC[b.kind]||esc(b.kind||''))+'</td><td>'+esc(b.name||'')+'</td>'+
-        '<td>'+inp('conf',b.conf_no,false)+'</td>'+
+        '<td>'+inp('conf',b.conf_no,false)+(bIsConfReq(b.kind)?' <span style="color:var(--red)" title="رقم التأكيد إجباري للفنادق والطيران">*</span>':'')+'</td>'+
         '<td class="num">'+fmt(sell)+cur(sellCur)+'</td>'+
         '<td class="num" id="sb-sup-'+i+'" data-rate="'+rate+'" data-sell="'+sell+'" data-sellcur="'+esc(sellCur)+'" data-supcur="'+esc(supCur)+'">'+fmt(supPrice)+' <b style="color:var(--accent);font-size:11.5px">'+esc(supCur)+'</b></td>'+
         '<td>'+bookedCell+'<select id="sb-bcur-'+i+'" data-sf="'+esc(supCur)+'" onchange="bRow('+i+')" '+(lockedCost?'disabled ':'')+'style="width:58px;padding:2px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:5px;font-size:10px;margin-right:3px">'+['SAR','USD','MYR','OMR','AED','EUR','SGD'].map(cc=>'<option'+(((supCur||b.booked_currency||'SAR')===cc)?' selected':'')+'>'+cc+'</option>').join('')+'</select><span id="sb-cwarn-'+i+'" style="color:var(--red);font-size:9px;display:block"></span></td>'+
@@ -1501,6 +1501,8 @@ function cancelOk(id){
   if(cancel>bookVal+0.005){ alert('⛔ رسوم الإلغاء ('+fmt(cancel)+') لا يمكن أن تتجاوز قيمة الحجز الفعلي ('+fmt(bookVal)+' بعملة المورّد). صحّحي القيمة قبل الحفظ.'); const e=$('sb-cancel-'+id); if(e){e.focus(); e.scrollIntoView({block:'center'});} return false; }
   return true;
 }
+// رقم التأكيد (Conf No) إجباري للفنادق والطيران فقط — المواصلات وغيرها اختياري
+function bIsConfReq(kind){ return /فندق|hotel|طيران|flight/i.test(String(kind||'')); }
 function buildSvcPayload(id,code){
   const g=f=>$('sb-'+f+'-'+id);
   return { id, client_code:code, conf_no:g('conf').value||null, booked_currency:(g('bcur')?g('bcur').value:null), final_rate_booked:+g('booked').value||0, cancel_charge:+g('cancel').value||0, refund:+g('refund').value||0, booked_by:(($('b-by').value||'').trim()||null), booked_from:g('bfrom').value||null, charge_from:g('cfrom').value||null, status:((+g('refund').value||0)>0?'Cancel':g('status').value) };
@@ -1509,6 +1511,7 @@ async function saveSvcBooking(id,code){
   if(!(($('b-by').value||'').trim())){ alert('⚠️ خانة «Booked by» (بالأعلى) إجبارية — اكتبيها قبل الحفظ'); $('b-by').focus(); return; }
   if(!((($('sb-cfrom-'+id)||{}).value||'').trim())){ alert('⚠️ خانة «Charge from» إجبارية لهذه الخدمة'); const e=$('sb-cfrom-'+id); if(e)e.focus(); return; }
   if(!((($('sb-cdate-'+id)||{}).value||'').trim())){ alert('⚠️ خانة «تاريخ الدفع» إجبارية لهذه الخدمة — حدّدي التاريخ'); const e=$('sb-cdate-'+id); if(e)e.focus(); return; }
+  { const svc=(DATA.serviceLines||[]).find(x=>x.id===id); if(bIsConfReq(svc&&svc.kind) && !((($('sb-conf-'+id)||{}).value||'').trim())){ alert('⚠️ رقم التأكيد (Conf No) إجباري لحجوزات الفنادق والطيران'); const e=$('sb-conf-'+id); if(e)e.focus(); return; } }
   if(!cancelOk(id)) return;
   if(!confirm('⚠️ تأكدي من إدخال جميع المعلومات بشكل صحيح.\n\nبعد الحفظ لا يمكن تعديل التكلفة (الحجز الفعلي) إلا بموافقة الإدارة.\n\nهل تريدين حفظ هذا الحجز؟')) return;
   const bc=$('sb-bcur-'+id); let mism=false;
@@ -1541,6 +1544,7 @@ async function saveAllSvc(code){
   if(!ids.length){ alert('لا حجوزات جديدة للحفظ — كل الحجوزات محفوظة/مقفلة 🔒.\n\nلأي تغيير على حجز محفوظ استخدمي أزرار الموافقة في عمود «الحفظ» (آخر الجدول):\n• ✏️ تعديل التكلفة (موافقة)\n• 🚫 طلب إلغاء (موافقة)\n• 🔄 طلب تفعيل (موافقة)'); return; }
   for(const id of ids){ if(!((($('sb-cfrom-'+id)||{}).value||'').trim())){ alert('⚠️ خانة «Charge from» إجبارية لكل الخدمات — أكملي الناقصة'); const e=$('sb-cfrom-'+id); if(e){e.focus(); e.scrollIntoView({block:'center'});} return; } }
   for(const id of ids){ if(!((($('sb-cdate-'+id)||{}).value||'').trim())){ alert('⚠️ خانة «تاريخ الدفع» إجبارية لكل الخدمات — حدّدي الناقصة'); const e=$('sb-cdate-'+id); if(e){e.focus(); e.scrollIntoView({block:'center'});} return; } }
+  for(const id of ids){ const svc=(DATA.serviceLines||[]).find(x=>x.id===id); if(bIsConfReq(svc&&svc.kind) && !((($('sb-conf-'+id)||{}).value||'').trim())){ alert('⚠️ رقم التأكيد (Conf No) إجباري لحجوزات الفنادق والطيران — أكملي الناقصة'); const e=$('sb-conf-'+id); if(e){e.focus(); e.scrollIntoView({block:'center'});} return; } }
   for(const id of ids){ if(!cancelOk(id)) return; }
   if(!confirm('⚠️ تأكدي من إدخال جميع المعلومات بشكل صحيح.\n\nبعد الحفظ لا يمكن تعديل التكلفة (الحجز الفعلي) إلا بموافقة الإدارة.\n\nمتابعة حفظ كل الحجوزات؟')) return;
   const btn=$('b-saveall'); if(btn){ btn.disabled=true; btn.textContent='⏳ جاري الحفظ…'; }
