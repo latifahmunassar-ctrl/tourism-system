@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ن٤ · إصلاح رصيد TBO: كل السنوات يعود للحساب الأصلي المتراكم (hpPayeeClientMap) — منطق 2026+charge from للفنار فقط</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-س٤ · First Client Data: حقول العميل الجديد كلها إجبارية (تاريخ الحجز/الوصول · الاسم · الأشخاص · الوكيل · من/إلى · التكلفة/الربح · العملة · نوع الباقة · الموظف)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -766,21 +766,21 @@ table{font-weight:600}
     </div>
 
     <div class="fgrid">
-      <div class="fld" id="fld-bdate"><label>تاريخ الحجز</label><input type="date" id="f-bdate"></div>
-      <div class="fld"><label>تاريخ الوصول <span class="ro-hint" style="display:none;font-size:9px;color:var(--muted)">(للعرض فقط)</span></label><input type="date" id="f-adate"></div>
-      <div class="fld" id="fld-name"><label>اسم العميل <span class="ro-hint" style="display:none;font-size:9px;color:var(--muted)">(للعرض فقط)</span></label><input id="f-name"></div>
+      <div class="fld" id="fld-bdate"><label>تاريخ الحجز <span class="req-new" style="color:var(--red)">*</span></label><input type="date" id="f-bdate"></div>
+      <div class="fld"><label>تاريخ الوصول <span class="req-new" style="color:var(--red)">*</span> <span class="ro-hint" style="display:none;font-size:9px;color:var(--muted)">(للعرض فقط)</span></label><input type="date" id="f-adate"></div>
+      <div class="fld" id="fld-name"><label>اسم العميل <span class="req-new" style="color:var(--red)">*</span> <span class="ro-hint" style="display:none;font-size:9px;color:var(--muted)">(للعرض فقط)</span></label><input id="f-name"></div>
       <div class="fld new-only"><label>الجوال</label><input id="f-phone"></div>
       <div class="fld new-only"><label>👥 عدد الأشخاص <span style="color:var(--red)">*</span></label><input type="number" id="f-pax" min="1" step="1" placeholder="إجباري"></div>
-      <div class="fld" id="fld-agent"><label>الوكيل (Agent) <span class="ag-newhint" style="font-size:9px;color:var(--muted)">من القائمة</span><span class="ro-hint" style="display:none;font-size:9px;color:var(--muted)">(للعرض فقط)</span></label><select id="f-agent"></select></div>
-      <div class="fld new-only"><label>من (مسافر من) <span style="font-size:9px;color:var(--muted)">من القائمة</span></label><select id="f-from"></select></div>
-      <div class="fld new-only"><label>إلى (وجهة) <span style="font-size:9px;color:var(--muted)">من القائمة</span></label><select id="f-to"></select></div>
-      <div class="fld svc-cost"><label id="lbl-cost">التكلفة (COST)</label><input type="number" id="f-cost" value="0" oninput="calc()"></div>
-      <div class="fld svc-cost"><label id="lbl-profit">الربح (Profit)</label><input type="number" id="f-profit" value="0" oninput="calc()"></div>
+      <div class="fld" id="fld-agent"><label>الوكيل (Agent) <span class="req-new" style="color:var(--red)">*</span> <span class="ag-newhint" style="font-size:9px;color:var(--muted)">من القائمة</span><span class="ro-hint" style="display:none;font-size:9px;color:var(--muted)">(للعرض فقط)</span></label><select id="f-agent"></select></div>
+      <div class="fld new-only"><label>من (مسافر من) <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">من القائمة</span></label><select id="f-from"></select></div>
+      <div class="fld new-only"><label>إلى (وجهة) <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">من القائمة</span></label><select id="f-to"></select></div>
+      <div class="fld svc-cost"><label id="lbl-cost">التكلفة (COST) <span class="req-new" style="color:var(--red)">*</span></label><input type="number" id="f-cost" value="0" oninput="calc()"></div>
+      <div class="fld svc-cost"><label id="lbl-profit">الربح (Profit) <span class="req-new" style="color:var(--red)">*</span></label><input type="number" id="f-profit" value="0" oninput="calc()"></div>
       <div class="fld"><label id="lbl-paid">المبلغ المدفوع الآن</label><input type="number" id="f-paid" value="0" oninput="calc()"></div>
       <div class="fld" id="fld-paydate" style="display:none"><label>📅 تاريخ الدفع</label><input type="date" id="f-paydate" style="color-scheme:light;cursor:pointer"></div>
-      <div class="fld"><label>العملة</label><select id="f-cur"><option>SAR</option><option>OMR</option><option>USD</option><option>MYR</option></select></div>
-      <div class="fld new-only"><label>نوع الباكدج</label><select id="f-type"><option>Full pakage</option><option>TOUR ONLY</option><option>Transportaion</option><option>HOTEL & TOURS</option></select></div>
-      <div class="fld" id="fld-staff"><label>الموظف (Confirmed by) <span style="font-size:9px;color:var(--muted)">من القائمة</span></label><select id="f-staff"></select></div>
+      <div class="fld"><label>العملة <span class="req-new" style="color:var(--red)">*</span></label><select id="f-cur"><option>SAR</option><option>OMR</option><option>USD</option><option>MYR</option></select></div>
+      <div class="fld new-only"><label>نوع الباكدج <span style="color:var(--red)">*</span></label><select id="f-type"><option>Full pakage</option><option>TOUR ONLY</option><option>Transportaion</option><option>HOTEL & TOURS</option></select></div>
+      <div class="fld" id="fld-staff"><label>الموظف (Confirmed by) <span class="req-new" style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">من القائمة</span></label><select id="f-staff"></select></div>
       <div class="fld"><label>🏦 طريقة الإيداع</label>
         <select id="f-dest" onchange="onDestChange()"><option value="bank">💳 بنك / بطاقة</option><option value="supplier">🤝 سُلّم مباشرة للمورّد</option></select></div>
       <div class="fld" id="fld-bank"><label>مكان إيداع المبلغ <span style="font-size:9px;color:var(--muted)">(اختياري)</span></label>
@@ -4937,13 +4937,22 @@ async function save(){
             : (FMODE==='service') ? ((selectedClient?selectedClient.balance:0)+((+$('f-cost').value||0)+(+$('f-profit').value||0))-paid)
             : ((selectedClient?selectedClient.balance:0)-paid);
   if(_rem>1 && !(($('f-duedate')||{}).value)){ const fd=$('fld-duedate'); if(fd)fd.style.display='flex'; $('msg').innerHTML='<span style="color:var(--red)">⚠️ على العميل مبلغ متبقٍّ ('+fmt(_rem)+') — لازم تحديد <b>تاريخ الاستحقاق</b> قبل الحفظ</span>'; if($('f-duedate'))$('f-duedate').focus(); return; }
-  // معلومات إجبارية للعميل الجديد (يمنع حفظ عميل فاضي): اسم العميل + اسم الوكيل + وجهة السفر + قيمة الباقة + عدد الأشخاص
+  // معلومات إجبارية للعميل الجديد — كل الخانات التالية إلزامية قبل الحفظ
   if(isNew){
-    if(!($('f-name').value||'').trim()){ $('msg').innerHTML='<span style="color:var(--red)">⚠️ اسم العميل إجباري للعميل الجديد</span>'; if($('f-name'))$('f-name').focus(); return; }
-    if(!(($('f-agent')||{}).value||'').trim()){ $('msg').innerHTML='<span style="color:var(--red)">⚠️ اسم الوكيل إجباري للعميل الجديد</span>'; if($('f-agent'))$('f-agent').focus(); return; }
-    if(!(($('f-to')||{}).value||'').trim()){ $('msg').innerHTML='<span style="color:var(--red)">⚠️ وجهة السفر (السفر إلى) إجبارية للعميل الجديد</span>'; if($('f-to'))$('f-to').focus(); return; }
-    if((((+$('f-cost').value||0)+(+$('f-profit').value||0)))<=0){ $('msg').innerHTML='<span style="color:var(--red)">⚠️ قيمة الباقة إجبارية — أدخلي تكلفة و/أو ربح أكبر من صفر</span>'; if($('f-cost'))$('f-cost').focus(); return; }
-    const px=parseInt(($('f-pax')||{}).value,10); if(!(px>0)){ $('msg').innerHTML='<span style="color:var(--red)">⚠️ 👥 عدد الأشخاص إجباري — أدخلي رقماً صحيحاً (1 أو أكثر)</span>'; if($('f-pax'))$('f-pax').focus(); return; }
+    const need=(id,txt)=>{ $('msg').innerHTML='<span style="color:var(--red)">'+txt+'</span>'; const e=$(id); if(e)e.focus(); };
+    const val=(id)=>String((($(id)||{}).value)||'').trim();
+    if(!val('f-bdate')){ need('f-bdate','⚠️ تاريخ الحجز إجباري للعميل الجديد'); return; }
+    if(!val('f-adate')){ need('f-adate','⚠️ تاريخ الوصول إجباري للعميل الجديد'); return; }
+    if(!val('f-name')){ need('f-name','⚠️ اسم العميل إجباري للعميل الجديد'); return; }
+    const px=parseInt(val('f-pax'),10); if(!(px>0)){ need('f-pax','⚠️ 👥 عدد الأشخاص إجباري — رقم صحيح (1 أو أكثر)'); return; }
+    if(!val('f-agent')){ need('f-agent','⚠️ اسم الوكيل إجباري للعميل الجديد'); return; }
+    if(!val('f-from')){ need('f-from','⚠️ «مسافر من» إجباري للعميل الجديد'); return; }
+    if(!val('f-to')){ need('f-to','⚠️ «السفر إلى» إجباري للعميل الجديد'); return; }
+    if(!(+val('f-cost')>0)){ need('f-cost','⚠️ التكلفة إجبارية (أكبر من صفر)'); return; }
+    if(val('f-profit')===''){ need('f-profit','⚠️ الربح إجباري — أدخلي القيمة (ولو 0)'); return; }
+    if(!val('f-cur')){ need('f-cur','⚠️ العملة إجبارية'); return; }
+    if(!val('f-type')){ need('f-type','⚠️ نوع الباقة إجباري'); return; }
+    if(!val('f-staff')){ need('f-staff','⚠️ اسم الموظف إجباري'); return; }
   }
   const svc=(FMODE==='service');
   const p={ is_new_client:isNew, client_code:isNew?null:$('f-code').value.trim(),
