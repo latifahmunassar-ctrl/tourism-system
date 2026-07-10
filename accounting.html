@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-م · Sales Form: سعر الصرف تلقائي من قائمة العملات وغير قابل للتعديل اليدوي + تلميح الاتجاه والمعادلة + تنبيه لو الزوج ناقص</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ن · Sales Form: حقل «عدد الغرف» يظهر عند اختيار نوع الخدمة فندق، يُحفظ ويظهر في سجل خدمات العميل</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -397,6 +397,7 @@ table{font-weight:600}
           <div class="fld"><label>نوع الخدمة <span style="font-size:9px;color:var(--muted)">(من القائمة المُدارة)</span></label><select id="s-type" onchange="onSalesType()"></select></div>
           <div class="fld full"><label><span id="lbl-desc">الاسم / التفاصيل</span> <span class="hotel-req-star" style="color:var(--red);display:none">*</span> <span style="font-size:9px;color:var(--muted)">(اسم الفندق أو وصف الخدمة — كتابة يدوية)</span></label><input id="s-desc" autocomplete="off" placeholder="اكتبي اسم الفندق أو وصف الخدمة"></div>
           <div class="fld" id="fld-room" style="display:none"><label>🛏️ نوع الغرفة <span class="hotel-req-star" style="color:var(--red);display:none">*</span> <span style="font-size:9px;color:var(--muted)">(كتابة يدوية)</span></label><input id="s-room" autocomplete="off" placeholder="اكتبي نوع الغرفة (مثال: ديلوكس)"></div>
+          <div class="fld" id="fld-rooms" style="display:none"><label>🚪 عدد الغرف <span class="hotel-req-star" style="color:var(--red);display:none">*</span> <span style="font-size:9px;color:var(--muted)">(للفندق)</span></label><input type="number" id="s-rooms" min="1" step="1" placeholder="مثال: 2"></div>
           <div class="fld"><label><span id="lbl-supplier">مصدر الحجز من</span> <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">اكتبي أول الحروف للبحث</span></label><input id="s-supplier" list="s-supplier-list" autocomplete="off" placeholder="اكتبي أول حروف الاسم…"><datalist id="s-supplier-list"></datalist></div>
           <div class="fld"><label>سعر البيع (للعميل) <span class="hotel-req-star" style="color:var(--red);display:none">*</span></label><input type="number" id="s-price" value="0" oninput="sCalc()"></div>
           <div class="fld"><label>عملة البيع (من ملف العميل)</label><select id="s-sellcur" disabled style="background:#f1f5fb;color:var(--accent);font-weight:700"><option>SAR</option><option>USD</option><option>MYR</option><option>OMR</option><option>AED</option><option>EUR</option></select></div>
@@ -1331,8 +1332,8 @@ function sRecall(){
   box.style.display='block';
   let h=infoHtml(ci);
   h+='<div style="margin-top:8px;font-size:12px"><b>كل خدمات/حجوزات العميل ('+svcs.length+') — قابلة للتعديل والحذف:</b></div>';
-  if(svcs.length){ h+='<div class="tbl-wrap bf-scroll" id="srec-tbl" style="max-height:300px"><table style="font-size:11.5px"><thead><tr><th>النوع</th><th>الاسم/التفاصيل</th><th>🏷️ مصدر الحجز / المورّد</th><th>البيع (ر.س)</th><th>سعر المورد</th><th>العملة</th><th>سعر الصرف</th><th>دخول</th><th>المصدر</th><th>إجراء</th></tr></thead><tbody>'+
-    svcs.map(s=>'<tr><td>'+(SVC[s.kind]||esc(s.kind||''))+'</td><td>'+esc(s.name||'')+(s.detail?' · '+esc(s.detail):'')+'</td><td>'+(s.supplier?esc(s.supplier):'<span style="color:var(--muted)">—</span>')+'</td><td class="num">'+fmt(s.amount)+'</td><td class="num">'+fmt(Number(s.currency_rate)?Number(s.amount)/Number(s.currency_rate):Number(s.amount))+'</td><td>'+esc(s.currency||'')+'</td><td>'+esc(s.currency_rate!=null?s.currency_rate:'')+'</td><td>'+esc(s.check_in||'')+'</td><td><span class="src '+(s.source==='dashboard'?'dashboard':'sheet')+'">'+(s.source==='dashboard'?'داشبورد':'شيت')+'</span></td><td><button class="btn ghost" style="padding:2px 7px;font-size:11px" onclick="editSalesItem('+s.id+')">✏️</button> <button class="btn ghost" style="padding:2px 7px;font-size:11px" onclick="delSalesItem('+s.id+',\''+esc(code)+'\')">🗑️</button></td></tr>').join('')+'</tbody></table></div><div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'srec-tbl\',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'srec-tbl\',1)">تمرير ▶▶</button></div>'; }
+  if(svcs.length){ h+='<div class="tbl-wrap bf-scroll" id="srec-tbl" style="max-height:300px"><table style="font-size:11.5px"><thead><tr><th>النوع</th><th>الاسم/التفاصيل</th><th>🚪 الغرف</th><th>🏷️ مصدر الحجز / المورّد</th><th>البيع (ر.س)</th><th>سعر المورد</th><th>العملة</th><th>سعر الصرف</th><th>دخول</th><th>المصدر</th><th>إجراء</th></tr></thead><tbody>'+
+    svcs.map(s=>'<tr><td>'+(SVC[s.kind]||esc(s.kind||''))+'</td><td>'+esc(s.name||'')+(s.detail?' · '+esc(s.detail):'')+'</td><td class="num">'+(s.rooms_count!=null&&s.rooms_count!==''?esc(s.rooms_count):'—')+'</td><td>'+(s.supplier?esc(s.supplier):'<span style="color:var(--muted)">—</span>')+'</td><td class="num">'+fmt(s.amount)+'</td><td class="num">'+fmt(Number(s.currency_rate)?Number(s.amount)/Number(s.currency_rate):Number(s.amount))+'</td><td>'+esc(s.currency||'')+'</td><td>'+esc(s.currency_rate!=null?s.currency_rate:'')+'</td><td>'+esc(s.check_in||'')+'</td><td><span class="src '+(s.source==='dashboard'?'dashboard':'sheet')+'">'+(s.source==='dashboard'?'داشبورد':'شيت')+'</span></td><td><button class="btn ghost" style="padding:2px 7px;font-size:11px" onclick="editSalesItem('+s.id+')">✏️</button> <button class="btn ghost" style="padding:2px 7px;font-size:11px" onclick="delSalesItem('+s.id+',\''+esc(code)+'\')">🗑️</button></td></tr>').join('')+'</tbody></table></div><div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'srec-tbl\',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'srec-tbl\',1)">تمرير ▶▶</button></div>'; }
   else h+='<div style="font-size:11px;color:var(--muted)">لا خدمات لهذا العميل — أضيفي من الأعلى</div>';
   box.innerHTML=h;
 }
@@ -1340,10 +1341,10 @@ function editSalesItem(id){
   const s=(DATA.serviceLines||[]).find(x=>x.id===id); if(!s) return;
   $('s-id').value=s.id; $('s-code').value=s.client_code||'';
   fillSalesTypes(); if(typeof setSelVal==='function'){ setSelVal('s-type', s.kind||''); } else { $('s-type').value=s.kind||''; } $('s-desc').value=s.name||'';
-  fillSalesSuppliers(); sToggleDates(); $('s-supplier').value=s.supplier||''; if($('s-room'))$('s-room').value=s.detail||''; $('s-price').value=s.amount||0; $('s-sellcur').value=((clientInfo(s.client_code)||{}).cur)||s.sell_currency||'SAR'; $('s-cur').value=s.currency||'SAR'; $('s-rate').value=s.currency_rate||1; $('s-in').value=s.check_in||''; $('s-out').value=s.check_out||''; sNights(); sCalc();
+  fillSalesSuppliers(); sToggleDates(); $('s-supplier').value=s.supplier||''; if($('s-room'))$('s-room').value=s.detail||''; if($('s-rooms'))$('s-rooms').value=s.rooms_count||''; $('s-price').value=s.amount||0; $('s-sellcur').value=((clientInfo(s.client_code)||{}).cur)||s.sell_currency||'SAR'; $('s-cur').value=s.currency||'SAR'; $('s-rate').value=s.currency_rate||1; $('s-in').value=s.check_in||''; $('s-out').value=s.check_out||''; sNights(); sCalc();
   $('s-save-btn').textContent='💾 حفظ التعديل'; $('s-msg').innerHTML='<span style="color:var(--amber)">وضع التعديل — عدّلي واحفظي</span>'; window.scrollTo(0,0);
 }
-function cancelEditSales(){ $('s-id').value=''; $('s-save-btn').textContent='حفظ الخدمة'; ['s-desc','s-supplier','s-room','s-in','s-out'].forEach(i=>{const e=$(i);if(e)e.value='';}); $('s-price').value=0; $('s-rate').value=1; $('s-cur').value='SAR'; $('s-sellcur').value='SAR'; $('s-qty').value=1; if($('s-supcalc'))$('s-supcalc').value=''; $('s-msg').textContent=''; }
+function cancelEditSales(){ $('s-id').value=''; $('s-save-btn').textContent='حفظ الخدمة'; ['s-desc','s-supplier','s-room','s-rooms','s-in','s-out'].forEach(i=>{const e=$(i);if(e)e.value='';}); $('s-price').value=0; $('s-rate').value=1; $('s-cur').value='SAR'; $('s-sellcur').value='SAR'; $('s-qty').value=1; if($('s-supcalc'))$('s-supcalc').value=''; $('s-msg').textContent=''; }
 async function delSalesItem(id,code){
   if(!confirm('حذف هذه الخدمة؟')) return;
   const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_service_line',payload:{id,client_code:code}})});
@@ -1815,6 +1816,7 @@ function sToggleDates(){ const isHotel=sIsHotel(($('s-type')||{}).value);
   document.querySelectorAll('.sdate-req').forEach(e=>e.style.display=isHotel?'':'none');
   document.querySelectorAll('.hotel-req-star').forEach(e=>e.style.display=isHotel?'':'none');
   const fr=$('fld-room'); if(fr)fr.style.display=isHotel?'':'none';   // نوع الغرفة للفندق فقط
+  const frc=$('fld-rooms'); if(frc)frc.style.display=isHotel?'':'none';   // عدد الغرف للفندق فقط
   const q=$('s-qty'); if(q)q.readOnly=isHotel; }
 // عدد الليالي تلقائياً من تاريخ الدخول/الخروج
 function sNights(){ const i=$('s-in').value, o=$('s-out').value; if(i&&o){ const d=Math.round((new Date(o)-new Date(i))/86400000); if(d>0)$('s-qty').value=d; } }
@@ -1893,12 +1895,13 @@ function sBuildPayload(){
     detail:($('s-room').value||'').trim()||null,
     supplier:$('s-supplier').value||null, amount:+$('s-price').value||0,
     sell_currency:$('s-sellcur').value||'SAR', currency:$('s-cur').value||null, currency_rate:+$('s-rate').value||1,
+    rooms_count:(sIsHotel($('s-type').value)?(parseInt($('s-rooms').value,10)||null):null),
     check_in:$('s-in').value||null, check_out:$('s-out').value||null };
 }
 // هل الفورم الحالي فيه خدمة مكتوبة (ليُحتسب عند الحفظ)؟
 function sFormFilled(){ return !!((($('s-desc').value||'').trim())||(($('s-supplier').value||'').trim())||(+$('s-price').value>0)); }
 // تفريغ حقول الخدمة مع الإبقاء على كود العميل (للخدمة التالية)
-function sClearService(){ ['s-desc','s-room','s-supplier','s-in','s-out'].forEach(i=>{const e=$(i);if(e)e.value='';}); $('s-price').value=0; $('s-rate').value=1; $('s-cur').value='SAR'; $('s-qty').value=1; if($('s-supcalc'))$('s-supcalc').value=''; fillSalesTypes(); fillSalesSuppliers(); sToggleDates(); }
+function sClearService(){ ['s-desc','s-room','s-rooms','s-supplier','s-in','s-out'].forEach(i=>{const e=$(i);if(e)e.value='';}); $('s-price').value=0; $('s-rate').value=1; $('s-cur').value='SAR'; $('s-qty').value=1; if($('s-supcalc'))$('s-supcalc').value=''; fillSalesTypes(); fillSalesSuppliers(); sToggleDates(); }
 // زر «➕ أضف خدمة أخرى للطلب»
 function sAddAnother(){
   if($('s-id').value){ $('s-msg').innerHTML='<span style="color:var(--amber)">أنتِ في وضع تعديل خدمة واحدة — احفظي التعديل أولاً</span>'; return; }
