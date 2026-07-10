@@ -2569,6 +2569,7 @@ function bookingsMissingFields(){
   const out=[];
   (DATA.serviceLines||[]).forEach(s=>{
     const c=(s.client_code||'').toUpperCase(); if(!c)return;
+    if(s.source!=='dashboard') return;   // حجوزات الشيت تُدار في الشيت — لا نطالب بإدخالاتها هنا
     if(/profit/i.test(String(s.name||'')))return;
     if(/cancel/i.test(String(s.status||'')))return;
     const booked=(s.final_rate_booked!=null && s.final_rate_booked!=='' && Number(s.final_rate_booked)>0);
