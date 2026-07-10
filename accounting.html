@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ج · فلتر البنك في Banks Cash يعتمد القائمة المُدارة (لا بطاقات قديمة) — الحركات محفوظة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-د · البانر الأحمر يشمل كل طلبات المحاسب المعلّقة (تعديل عميل/كاش/دفعات موردين) — يظهر لك على أي تبويب فور رفع الطلب</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -914,21 +914,41 @@ function costReason(msg){ const m=String(msg||''); const i=m.indexOf('السبب
 function costBy(msg){ const m=String(msg||''); const i=m.indexOf('مقدّم الطلب:'); return i>=0? m.slice(i+'مقدّم الطلب:'.length).trim() : ''; }
 function renderNotifBanner(u){
   const el=$('notifbanner'); if(!el)return;
-  const pend=((DATA&&DATA.alerts)||[]).filter(a=>a.status==='pending'&&(a.type==='profit_decrease'||a.type==='freeze_request')).concat(liveBookingLosses()).concat(liveNoBooking());
-  // إشعارات «بانتظار قرارك» للمالكة فقط
-  if(pend.length && isOwnerUser()){
-    const pp=pend.filter(a=>a.type==='profit_decrease'), pd=pend.filter(a=>a.type==='freeze_request'), plo=pend.filter(a=>a.type==='booking_loss'), pnb=pend.filter(a=>a.type==='no_booking');
-    const latest=pend.slice().sort((a,b)=>((b.urgent?1:0)-(a.urgent?1:0))||String(b.created_at||'').localeCompare(String(a.created_at||'')))[0];
-    let txt;
-    if(latest.type==='freeze_request') txt='🔔 إشعار: <b>'+pend.length+'</b> إشعار بانتظار قرارك — آخرها <b>🧊 طلب تجميد حساب</b> «'+esc(latest.client_code||'')+(latest.service_name?' · '+esc(latest.service_name):'')+'»';
-    else if(latest.type==='booking_loss') txt='🔔 إشعار: <b>'+pend.length+'</b> إشعار بانتظار اطّلاعكِ — آخرها <b>📉 خسارة حجز</b> «'+esc(latest.client_code||'')+'» · <span style="color:#ffd9d9">'+esc(latest.message||'')+'</span>';
-    else if(latest.type==='no_booking') txt='🔔 إشعار: <b>'+pend.length+'</b> إشعار بانتظار اطّلاعكِ — آخرها <b>🚫 دفع بلا حجز فعلي</b> · <span style="color:#ffd9d9">'+esc(latest.message||'')+'</span>';
-    else { const reason=profitReason(latest.message)||esc(latest.message||''); txt='🔔 إشعار: <b>'+pend.length+'</b> إشعار بانتظار قرارك — آخرها <b>تخفيض ربح</b> «'+esc(latest.client_code||'')+'» · <b>السبب:</b> <span style="color:#ffd9d9">'+esc(reason)+'</span>'; }
-    const parts=[]; if(pd.length)parts.push(pd.length+' تجميد'); if(plo.length)parts.push(plo.length+' خسارة'); if(pnb.length)parts.push(pnb.length+' بلا حجز'); if(pp.length)parts.push(pp.length+' ربح');
-    const extra=(parts.length>1)?' <span style="opacity:.85;font-weight:400">('+parts.join(' · ')+')</span>':'';
-    el.style.display='block';
-    el.innerHTML='<div style="background:#7a1320;color:#fff;padding:10px 16px;font-weight:700;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>'+txt+extra+'</span><span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" style="background:#fff;color:#7a1320;padding:4px 12px;font-weight:700" onclick="openNotifs()">🔔 عرض الإشعارات</button></span></div>';
-  } else { el.style.display='none'; el.innerHTML=''; }
+  // 🔔 البانر للمالكة فقط — يشمل كل ما ينتظر قرارها: تنبيهات + طلبات المحاسب المعلّقة (تعديل عميل/كاش/دفعات موردين…) + كشوف حيّة
+  if(!isOwnerUser()){ el.style.display='none'; el.innerHTML=''; return; }
+  const pa=((DATA&&DATA.alerts)||[]).filter(a=>a.status==='pending');
+  const mvAll=(DATA&&DATA.pendingMovements)||[];
+  const isPay=(m)=>m.kind==='payment'&&(m.scope==='suppliers'||m.scope==='hotels');
+  const P=(f)=>mvAll.filter(m=>m.status==='pending'&&f(m)).length;
+  const A=(t)=>pa.filter(a=>a.type===t).length;
+  // فئات «طلبات المحاسب» التي تنتظر موافقتك (لا تنعكس إلا بقرارك)
+  const reqCats=[
+    {n:A('profit_decrease'), l:'تخفيض ربح'},
+    {n:A('freeze_request'), l:'تجميد حساب'},
+    {n:A('cost_change_request'), l:'تعديل تكلفة'},
+    {n:A('cancel_request'), l:'إلغاء حجز'},
+    {n:A('reactivate_request'), l:'إعادة تفعيل'},
+    {n:A('suppay_edit_request'), l:'تعديل دفعة مورّد'},
+    {n:A('cash_edit_request'), l:'تعديل حركة كاش'},
+    {n:P(m=>isPay(m)), l:'دفعة مورّد/فندق'},
+    {n:P(m=>m.kind==='cash'&&m.scope==='banks_cash'), l:'حركة كاش'},
+    {n:P(m=>m.kind==='client_entry'||m.kind==='client_edit'), l:'قيد/تعديل عميل'},
+    {n:P(m=>m.kind==='refund'), l:'إرجاع مبلغ'},
+    {n:P(m=>m.kind==='list_item'), l:'تعديل قائمة'},
+  ];
+  const liveLoss=liveBookingLosses(), liveNB=liveNoBooking();
+  const reqTotal=reqCats.reduce((s,c)=>s+c.n,0);
+  const total=reqTotal+liveLoss.length+liveNB.length;
+  if(!total){ el.style.display='none'; el.innerHTML=''; return; }
+  const parts=reqCats.filter(c=>c.n).map(c=>'<b>'+c.n+'</b> '+c.l);
+  if(liveLoss.length)parts.push('<b>'+liveLoss.length+'</b> خسارة حجز');
+  if(liveNB.length)parts.push('<b>'+liveNB.length+'</b> دفع بلا حجز');
+  const head = reqTotal
+    ? ('🔔 <b>'+total+'</b> بانتظار قرارك — منها <b>'+reqTotal+'</b> طلب من المحاسب لا يُنفَّذ إلا بموافقتك')
+    : ('🔔 <b>'+total+'</b> بانتظار اطّلاعكِ');
+  const breakdown = parts.length? ' <span style="opacity:.9;font-weight:400">· '+parts.join(' · ')+'</span>' : '';
+  el.style.display='block';
+  el.innerHTML='<div style="background:#7a1320;color:#fff;padding:10px 16px;font-weight:700;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>'+head+breakdown+'</span><span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" style="background:#fff;color:#7a1320;padding:4px 12px;font-weight:700" onclick="openNotifs()">🔔 عرض الإشعارات</button></span></div>';
 }
 function openTickets(){ const t=document.querySelector('.tab[data-p="tickets"]'); if(t){ tab(t); } window.scrollTo(0,0); }
 function openNotifs(){ const t=document.querySelector('.tab[data-p="notifs"]'); if(t){ tab(t); } window.scrollTo(0,0); }
