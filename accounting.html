@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ع · إصلاح: Sales Form يخزّن نوع الخدمة بالرمز القانوني (hotel/flight/…) بدل النص العربي — يصلح ظهور قيمة الحجز الفعلي في التقارير (مثل C260466)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ف · تتبّع «مُدخِل الصف» في First Client Data: كل إدخال جديد يُختَم باسم الموظف المُدخِل + عمود «🖊️ مُدخِل» بالجدول</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -367,7 +367,7 @@ table{font-weight:600}
         <div class="tbl-wrap bf-scroll" id="fcd-tbl"><table id="t-fcd"><thead><tr>
           <th>كود الدفعة</th><th>كود العميل</th><th>👥 عدد الأشخاص</th><th>العميل</th><th>الجوال</th><th>الوكالة</th><th>من</th><th>إلى</th>
           <th>تاريخ الحجز</th><th>الوصول</th><th>النوع</th><th>التكلفة</th><th>الربح</th><th>السعر</th><th>المدفوع</th>
-          <th>الرصيد</th><th>💸 المرتجع الفعلي<br><span style="font-size:9px;color:var(--muted)">من شيت Refund</span></th><th>📅 تاريخ الاستحقاق</th><th>📅 تاريخ الدفع<br><span style="font-size:9px;color:var(--muted)">قابل للتعديل</span></th><th>العملة</th><th>البنك (الإيداع)</th><th>مرجع البنك</th><th>الموظف</th><th>الحالة</th><th>ملاحظة</th><th>الإيميل</th><th>المصدر</th>
+          <th>الرصيد</th><th>💸 المرتجع الفعلي<br><span style="font-size:9px;color:var(--muted)">من شيت Refund</span></th><th>📅 تاريخ الاستحقاق</th><th>📅 تاريخ الدفع<br><span style="font-size:9px;color:var(--muted)">قابل للتعديل</span></th><th>العملة</th><th>البنك (الإيداع)</th><th>مرجع البنك</th><th>الموظف</th><th>الحالة</th><th>ملاحظة</th><th>الإيميل</th><th>المصدر</th><th>🖊️ مُدخِل<br><span style="font-size:9px;color:var(--muted)">من أضاف الصف</span></th>
         </tr></thead><tbody></tbody></table></div>
         <div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:5px 16px" onclick="hScroll('fcd-tbl',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:5px 16px" onclick="hScroll('fcd-tbl',1)">تمرير ▶▶</button></div>
       </div>
@@ -1188,7 +1188,8 @@ function renderFcd(){
     if(!hasPay||!pc) return '';
     return '<input class="dueinp" style="width:100px;border:1px solid #d98a00;background:rgba(217,138,0,.12)" placeholder="أدخلي المرجع" title="تعبئة المرجع (خانة فارغة) — تُحفظ مباشرة" onkeydown="if(event.key===\'Enter\')fillFcdBank(\''+esc(pc)+'\',\'ref\',this.value)" onblur="if(this.value.trim())fillFcdBank(\''+esc(pc)+'\',\'ref\',this.value)">'; })(),
     esc(r.confirmed_by||''),String(r.conf_status||'').toLowerCase().includes('cancel')?'<span class="pill cancel">ملغى</span>':'<span class="pill active">'+esc(r.conf_status||'')+'</span>',
-    esc(r.note||''),esc(r.client_email||''),'<span class="src '+(r.source||'sheet')+'">'+(r.source==='dashboard'?'داشبورد':'شيت')+'</span>'+(r.source==='dashboard'?' <button class="btn ghost" style="padding:1px 6px;font-size:11px" title="تعديل" onclick="fcdEdit('+r.id+')">✏️</button> <button class="btn ghost" style="padding:1px 6px;font-size:11px" title="حذف" onclick="fcdDel('+r.id+',\''+esc((r.payment_code||'')+' · '+fmt(r.package_rate))+'\')">🗑️</button>':'')+(r.client_code?(FROZEN.has(r.client_code)?' <span class="pill" style="background:#3a7bd5;color:#fff" title="حساب مجمّد">🧊 مجمّد</span>':' <button class="btn ghost" style="padding:1px 6px;font-size:10px;color:#3a7bd5;border-color:#3a7bd5" title="طلب تجميد الحساب (يُرفع للإدارة)" onclick="reqFreezeClient(\''+esc(r.client_code)+'\')">🧊 تجميد الحساب</button>'):'')
+    esc(r.note||''),esc(r.client_email||''),'<span class="src '+(r.source||'sheet')+'">'+(r.source==='dashboard'?'داشبورد':'شيت')+'</span>'+(r.source==='dashboard'?' <button class="btn ghost" style="padding:1px 6px;font-size:11px" title="تعديل" onclick="fcdEdit('+r.id+')">✏️</button> <button class="btn ghost" style="padding:1px 6px;font-size:11px" title="حذف" onclick="fcdDel('+r.id+',\''+esc((r.payment_code||'')+' · '+fmt(r.package_rate))+'\')">🗑️</button>':'')+(r.client_code?(FROZEN.has(r.client_code)?' <span class="pill" style="background:#3a7bd5;color:#fff" title="حساب مجمّد">🧊 مجمّد</span>':' <button class="btn ghost" style="padding:1px 6px;font-size:10px;color:#3a7bd5;border-color:#3a7bd5" title="طلب تجميد الحساب (يُرفع للإدارة)" onclick="reqFreezeClient(\''+esc(r.client_code)+'\')">🧊 تجميد الحساب</button>'):''),
+    (r.created_by?('<b style="font-size:10.5px;color:var(--accent)">'+esc(r.created_by)+'</b>'):'<span style="color:var(--muted)">—</span>')
   ])).join('');
   const paidRows=DATA.fcd.filter(r=>Number(r.amount_paid||0)>1);
   const nUnc=paidRows.filter(r=>!payConfirmed(r)).length;       // ناقص مرجع أو بنك (غير معتمدة)
@@ -4810,6 +4811,7 @@ async function save(){
   if(!confirm(confirmMsg))return;
   $('save-btn').disabled=true; SAVING=true;
   p.by=(CURRENT_USER&&CURRENT_USER.staff_name)||'';
+  p.created_by=p.by;   // ختم اسم المُدخِل على الصف الجديد
   let j;
   if(dest==='supplier'){
     // 🤝 تسليم مباشر للمورّد → يمرّ بموافقة الأدمن مع التفاصيل (يُقفل مستحق المورّد)
@@ -4961,7 +4963,8 @@ async function eSave(){
   if(!code || !clientInfo(code)){
     const cp={ is_new_client:!code, client_code:code||null,
       agent_name:$('e-agent').value||null, travel_from:$('e-from').value||null, travel_to:$('e-to').value||null,
-      currency:$('e-cur').value, bank_name:$('e-bank').value||null, cost:0, profit:0, amount_paid:0 };
+      currency:$('e-cur').value, bank_name:$('e-bank').value||null, cost:0, profit:0, amount_paid:0,
+      created_by:(CURRENT_USER&&CURRENT_USER.staff_name)||null };   // ختم اسم المُدخِل
     const rc=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_client_entry',payload:cp})});
     const jc=await rc.json();
     if(jc.error){ m.innerHTML='<span style="color:var(--red)">خطأ: '+esc(jc.error)+'</span>'; return; }
