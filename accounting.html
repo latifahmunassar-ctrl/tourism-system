@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ل٤ · قائمة اختيار الموظف (الصلاحيات) تعتمد حصراً على Booked By + Confirmed BY — يزيل تكرار التهجئة (Aya/Ayah)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-م٤ · «سنة 2026 فقط» صارت لكل فندق على حدة (زر خاص بالفندق) — الفنار 2026، وTBO وباقي الأنظمة كل السنوات (الرصيد المتراكم)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2176,6 +2176,12 @@ function renderHotels(){
 // ---- القسم العلوي: دفعة فندق/نظام (المدفوع له أولاً، بعملة موحّدة) + توزيع إجمالي على قائمة عملاء · تسجيل مباشر ----
 let HO_PAYEE='TBO';
 let HO_TCUR='USD';
+// «سنة 2026 فقط» لكل فندق على حدة — الفنادق المُدرجة في قائمة hotel_2026 تُعرض 2026 فقط، والباقي كل السنوات (الرصيد المتراكم)
+function hpOnly2026(payee){ const pn=(payee!=null?payee:HO_PAYEE); return ((DATA&&DATA.lists)||[]).some(l=>l.category==='hotel_2026' && String(l.value||'').trim()===pn); }
+async function hpToggle2026(on){ const existing=((DATA&&DATA.lists)||[]).filter(l=>l.category==='hotel_2026' && String(l.value||'').trim()===HO_PAYEE);
+  if(on){ if(!existing.length) await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_list_item',payload:{category:'hotel_2026',value:HO_PAYEE}})}); }
+  else { for(const e of existing){ if(e.id) await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_list_item',payload:{id:e.id}})}); } }
+  await load(); }
 const HP_CURS=['SAR','OMR','USD','MYR','AED','EUR','SGD'];
 function hpNorm(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9؀-ۿ]/g,''); }
 // 🧾 كشف حساب فندق: حجوزاته + حالة السداد (charge from بطاقة/بنك = سداد · دفعة مسجّلة · مستحق) — مصدر الإدخال Booking Form/الشيت
@@ -2192,11 +2198,12 @@ function renderHotelStatement(){
   const paidSet=new Set();
   (DATA.hotelPayments||[]).forEach(x=>{ if(Number(x.pay_supplier||0)>0.005)paidSet.add((x.client_code||'').toUpperCase()+'|'+hpNorm(x.hotel_system)); });
   (DATA.supplierPayments||[]).forEach(x=>{ if(Number(x.amount||0)>0.005)paidSet.add((x.client_code||'').toUpperCase()+'|'+hpNorm(x.supplier_name)); });
-  // فقط حجوزات سنة 2026 فما فوق — حجوزات السنوات السابقة (2025 وأقدم) لا تُجلب في الكشف
+  // «سنة 2026 فقط» لهذا الفندق تحديداً (لو مُدرج في قائمة hotel_2026)؛ غيره كل السنوات
+  const only2026=((DATA.lists||[]).some(l=>l.category==='hotel_2026' && hpNorm(l.value)===nq));
   const yOf=(h)=>{ const m=String(h.check_in||h.arrival_date||h.created_at||'').match(/(\d{4})/); return m?parseInt(m[1],10):0; };
-  const rows=hotelBookingsAll().filter(h=>(hpNorm(h.hotel_name)===nq||hpNorm(h.booked_from||'')===nq) && yOf(h)>=2026)
+  const rows=hotelBookingsAll().filter(h=>(hpNorm(h.hotel_name)===nq||hpNorm(h.booked_from||'')===nq) && (!only2026 || yOf(h)>=2026))
     .sort((a,b)=>{ const da=a._booking?1:0,db=b._booking?1:0; if(da!==db)return db-da; return String(b.check_in||b.arrival_date||'').localeCompare(String(a.check_in||a.arrival_date||'')); });
-  if(!rows.length){ box.innerHTML='<div style="color:var(--muted);padding:6px">لا حجوزات لهذا الفندق في سنة 2026.</div>'; return; }
+  if(!rows.length){ box.innerHTML='<div style="color:var(--muted);padding:6px">لا حجوزات لهذا الفندق'+(only2026?' في سنة 2026':'')+'.</div>'; return; }
   // عملة تكلفة الفندق (فندق واحد = عملة واحدة): من عملة حجوزات الداشبورد، وإلا من عملة الدفعات المسجّلة
   let hcur=''; rows.forEach(h=>{ if(!hcur && h._booking && bcur[h.service_id])hcur=bcur[h.service_id]; });
   if(!hcur){ (DATA.supplierPayments||[]).forEach(x=>{ if(!hcur && hpNorm(x.supplier_name)===nq && x.currency)hcur=x.currency; }); }
@@ -2219,15 +2226,15 @@ function renderHotelStatement(){
     return '<tr'+(state==='due'?' style="background:rgba(217,138,0,.07)"':'')+'><td>'+esc(code)+'</td><td>'+esc(h.client_name||'')+'</td><td style="font-size:11px">'+esc(h.room_type||'')+'</td><td>'+esc(h.check_in||h.arrival_date||'')+'</td><td class="num" style="font-weight:700">'+(h.rooms_count!=null&&h.rooms_count!==''?esc(h.rooms_count):'<span style="color:var(--muted)">—</span>')+'</td><td class="num">'+fmt(due)+' '+esc(hcur)+'</td><td>'+badge+'</td><td>'+esc(h.conf_no||'')+'</td><td style="font-size:10px;color:var(--muted)">'+(h._booking?'Booking Form':'الشيت')+'</td></tr>';
   }).join('');
   // 💰 إجمالي المدفوع فعلياً في 2026 فقط لهذا الفندق: دفعات مورّد مسجّلة بتاريخ 2026+ (بلا 2025) + دفعات charge_from على حجوزات 2026 (تُدفع لحظة الحجز)
-  let paid2026=0;
-  (DATA.hotelPayments||[]).forEach(x=>{ if(hpNorm(x.hotel_system)!==nq)return; const y=(String(x.pay_date||'').match(/(\d{4})/)||[])[1]; if(y&&+y>=2026)paid2026+=Number(x.pay_supplier||0); });
-  (DATA.supplierPayments||[]).forEach(x=>{ if(hpNorm(x.supplier_name)!==nq)return; const y=(String(x.payment_date||'').match(/(\d{4})/)||[])[1]; if(y&&+y>=2026)paid2026+=Number(x.amount||0); });
+  let paid2026=0; const yPay=(d)=>{ if(!only2026)return true; const y=(String(d||'').match(/(\d{4})/)||[])[1]; return y&&+y>=2026; };
+  (DATA.hotelPayments||[]).forEach(x=>{ if(hpNorm(x.hotel_system)!==nq)return; if(yPay(x.pay_date))paid2026+=Number(x.pay_supplier||0); });
+  (DATA.supplierPayments||[]).forEach(x=>{ if(hpNorm(x.supplier_name)!==nq)return; if(yPay(x.payment_date))paid2026+=Number(x.amount||0); });
   rows.forEach(h=>{ if(h._booking && h.service_id && chg[h.service_id]) paid2026+=Number(h.final_rate_booked||0); });   // دفع بالبطاقة/البنك عبر Booking Form
   box.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:13px">'+
     '<span style="background:#f6f8fc;border:1px solid var(--line);border-radius:9px;padding:5px 11px">🏨 <b>'+esc(q)+'</b></span>'+
-    '<span style="background:#f6f8fc;border:1px solid var(--line);border-radius:9px;padding:5px 11px">حجوزات 2026: <b>'+rows.length+'</b>'+(nCanc?' · ملغاة '+nCanc:'')+'</span>'+
-    '<span style="background:rgba(14,157,106,.10);border:1px solid #0e9d6a;border-radius:9px;padding:5px 11px">💰 إجمالي المدفوع (2026): <b>'+fmt(paid2026)+' '+esc(hcur)+'</b> <span style="font-size:10px;color:var(--muted)">('+nPaid+' مسدَّد)</span></span>'+
-    '<span style="background:rgba(217,138,0,.10);border:1px solid var(--amber);border-radius:9px;padding:5px 11px">⏳ مستحق 2026 (رصيد): <b>'+nDue+'</b> · <b>'+fmt(dueTot)+' '+esc(hcur)+'</b></span>'+
+    '<span style="background:#f6f8fc;border:1px solid var(--line);border-radius:9px;padding:5px 11px">حجوزات'+(only2026?' 2026':'')+': <b>'+rows.length+'</b>'+(nCanc?' · ملغاة '+nCanc:'')+'</span>'+
+    '<span style="background:rgba(14,157,106,.10);border:1px solid #0e9d6a;border-radius:9px;padding:5px 11px">💰 إجمالي المدفوع'+(only2026?' (2026)':'')+': <b>'+fmt(paid2026)+' '+esc(hcur)+'</b> <span style="font-size:10px;color:var(--muted)">('+nPaid+' مسدَّد)</span></span>'+
+    '<span style="background:rgba(217,138,0,.10);border:1px solid var(--amber);border-radius:9px;padding:5px 11px">⏳ مستحق'+(only2026?' 2026':'')+' (رصيد): <b>'+nDue+'</b> · <b>'+fmt(dueTot)+' '+esc(hcur)+'</b></span>'+
     '</div>'+
     '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">السداد يُحتسب من: 💳 charge from (بطاقة/بنك في Booking Form) أو دفعة مورّد مسجّلة. المستحق = حجوزات بلا سداد.</div>'+
     '<div class="tbl-wrap" style="max-height:440px"><table style="font-size:11.5px;white-space:nowrap"><thead><tr><th>كود</th><th>العميل</th><th>الغرفة</th><th>الدخول</th><th>🚪 عدد الغرف</th><th>المحجوز (التكلفة)</th><th>حالة السداد</th><th>Conf No</th><th>المصدر</th></tr></thead><tbody>'+trs+'</tbody></table></div>';
@@ -2301,13 +2308,13 @@ function hpRepCard(t,v,col){ return '<div class="kpi"><div class="ttl">'+t+'</di
 function hpSummaryHtml(){
   const cur=HO_TCUR;
   // 🗓️ نافذة 2026 فقط: المستحق والمدفوع من حجوزات/دفعات 2026 (يستبعد 2025 والأقدم)، والسداد يشمل charge from (بطاقة/بنك عبر Booking Form)
-  const yOK=(d)=>{ const m=String(d||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); };
+  const only2026=hpOnly2026(); const yOK=(d)=>{ if(!only2026) return true; const m=String(d||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); };
   const chgMap={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind==='hotel'&&s.charge_from)chgMap[s.id]=s.charge_from; });
   let owed=0,nBook=0,paidCharge=0;
   hpHbMatch(HO_PAYEE).forEach(h=>{ if(!yOK(h.check_in||h.arrival_date))return; const d=Number(h.final_rate_booked||0); owed+=d; nBook++; if(h._booking&&h.service_id&&chgMap[h.service_id])paidCharge+=d; });
   const payArr=hpPayments(HO_PAYEE).filter(x=>yOK(x.date)); let paid=paidCharge; payArr.forEach(x=>paid+=x.amount); const nPay=payArr.length;
   const bal=owed-paid; const settled=(nBook>0 && bal<=0.5);
-  return '<div class="panel" style="border:1px solid var(--accent);margin-bottom:14px"><h3 style="margin-top:0">🧾 تقرير «'+esc(HO_PAYEE)+'» — سنة 2026 فقط <span style="font-size:11px;color:var(--muted)">(بعملة المورّد '+esc(cur)+' · يشمل سداد البطاقة charge from)</span></h3>'+
+  return '<div class="panel" style="border:1px solid var(--accent);margin-bottom:14px"><h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>🧾 تقرير «'+esc(HO_PAYEE)+'» — '+(only2026?'سنة 2026 فقط':'كل السنوات (الرصيد المتراكم)')+' <span style="font-size:11px;color:var(--muted)">(بعملة المورّد '+esc(cur)+' · يشمل سداد البطاقة charge from)</span></span><label style="font-size:12px;font-weight:400;cursor:pointer;background:#f6f8fc;border:1px solid var(--line);border-radius:8px;padding:4px 10px" title="خاص بهذا الفندق فقط"><input type="checkbox" '+(only2026?'checked':'')+' onchange="hpToggle2026(this.checked)"> 🗓️ سنة 2026 فقط (لهذا الفندق)</label></h3>'+
     '<div class="kpis" style="grid-template-columns:repeat(5,1fr)">'+
       hpRepCard('💰 المستحق',fmt(owed)+' '+esc(cur),'var(--txt)')+
       hpRepCard('✅ إجمالي المدفوع',fmt(paid)+' '+esc(cur),'#0e9d6a')+
@@ -2399,9 +2406,9 @@ function buildHotelPay(){
   const _chgMap={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind==='hotel'&&String(s.charge_from||'').trim())_chgMap[s.id]=s.charge_from; });
   const chgPays=hpHbMatch(HO_PAYEE).filter(h=>h._booking && h.service_id && _chgMap[h.service_id] && Number(h.final_rate_booked||0)>0 && !/cancel/i.test(String(h.status||'')))
     .map(h=>({ src:'charge', id:null, date:(CHARGE_DATE_OVR[h.service_id]!=null?CHARGE_DATE_OVR[h.service_id]:(h.check_in||'')), code:(h.client_code||'').toUpperCase(), name:h.client_name||'', raw:Number(h.final_rate_booked||0), srcCur:HO_TCUR, amount:Number(h.final_rate_booked||0), bank:_chgMap[h.service_id], ref:'عبر Booking Form', note:'', pair:'', rate:'' }));
-  const recorded=hpPayments(HO_PAYEE).concat(chgPays).filter(x=>{ const m=String(x.date||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  const recorded=hpPayments(HO_PAYEE).concat(chgPays).filter(x=>{ if(!hpOnly2026()) return true; const m=String(x.date||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
   let recPaid=0; recorded.forEach(x=>recPaid+=x.amount); const nHist=recorded.filter(x=>x.src!=='sp'&&x.src!=='charge').length; const nCard=recorded.filter(x=>x.src==='charge').length;
-  h+='<div class="panel" style="margin-bottom:14px"><h3>💵 دفعات «'+esc(HO_PAYEE)+'» المسجّلة — سنة 2026 فقط ('+recorded.length+')</h3>'+
+  h+='<div class="panel" style="margin-bottom:14px"><h3>💵 دفعات «'+esc(HO_PAYEE)+'» المسجّلة — '+(hpOnly2026()?'سنة 2026 فقط':'كل السنوات')+' ('+recorded.length+')</h3>'+
     '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">الإجمالي (خام بعملات العملاء): <b>'+fmt(recPaid)+'</b>'+(nHist?' · منها '+nHist+' دفعة تاريخية (من الشيت/البنك)':'')+(nCard?' · '+nCard+' سداد عبر Booking Form (بطاقة/تحويل)':'')+' · كل دفعة سطر مستقل أمامها مرجعها 👇</div>'+
     (recorded.length?'<div class="tbl-wrap bf-scroll" style="max-height:360px"><table style="font-size:11.5px;white-space:nowrap"><thead><tr><th>التاريخ</th><th>المبلغ ('+esc(HO_TCUR)+')</th><th>بعملة البنك</th><th>العملة</th><th>سعر الصرف</th><th>🏦 مصدر / آلية الدفع</th><th>المرجع</th><th>شيت المصدر</th><th></th></tr></thead><tbody>'+
       recorded.map(x=>{ const srcLbl=x.src==='charge'?'<span style="font-size:10px;color:#0e9d6a;font-weight:700">📋 Booking Form</span>':(x.src==='detail'?'<span style="font-size:10px;color:var(--muted)">📄 Hotels PYT</span>':(x.src==='sheet'?'<span style="font-size:10px;color:var(--muted)">📄 Overview</span>':(x.src==='bank'?'<span style="font-size:10px;color:var(--muted)">📄 سجل البنك</span>':'<span style="font-size:10px;color:var(--accent)">داشبورد</span>'))); const bn=x.bank||''; const method=(/credit card|card|بطاقة/i.test(bn)||bn.indexOf('**')>=0)?'💳 بطاقة':(/open balance/i.test(bn)?'🟰 رصيد مفتوح':(/reward/i.test(bn)?'🎁 مكافآت':(bn?'🏦 تحويل بنكي':''))); const pairCur=String(x.pair||'').split('-')[0].trim(); return '<tr><td>'+esc(x.date||'')+'</td><td class="num" style="font-weight:700">'+fmt(x.amount)+' '+esc(x.srcCur||'')+'</td><td class="num">'+(x.raw?fmt(x.raw)+' '+esc(pairCur||''):'')+'</td><td>'+esc(x.pair||'')+'</td><td class="num">'+(x.rate!=null&&x.rate!==''?esc(x.rate):'')+'</td><td>'+(bn?esc(bn)+(method?' <span style="font-size:9px;color:var(--accent)">'+method+'</span>':''):'<span style="color:#9aa">—</span>')+'</td><td>'+esc(x.ref||'')+'</td><td>'+srcLbl+'</td>'+
