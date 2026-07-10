@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 9يوليو-و · اسم الموظفة المؤكِّدة في عمود مستقل ببانر Booking Form</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو · رفض حفظ معاملة بمرجع بنكي بلا اسم بنك (نموذج الإدخال + التعديل + التعبئة المباشرة)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1267,6 +1267,8 @@ function feCalc(){ const t=(+$('fe-cost').value||0)+(+$('fe-profit').value||0); 
 async function fcdEditSave(){
   const paid=+$('fe-paid').value||0; const ref=($('fe-ref').value||'').trim(); const bank=$('fe-bank').value||''; const msg=$('fe-msg');
   const cost=+$('fe-cost').value||0, profit=+$('fe-profit').value||0; const cur=(FE_ROW&&FE_ROW.currency)||'';
+  // ⛔ رفض: مرجع بنكي بلا اسم بنك
+  if(ref && !bank){ msg.innerHTML='<span style="color:var(--red);font-weight:700">⛔ لا يمكن الحفظ: مرجع بنكي بلا اسم بنك — أضيفي اسم البنك أولاً.</span>'; if($('fe-bank'))$('fe-bank').focus(); return; }
   // 📝 سبب التعديل إجباري — لا ينعكس إلا بموافقة الأدمن
   const reason=(prompt('📝 سبب تعديل بيانات/دفعة العميل (إجباري):')||'').trim();
   if(!reason){ msg.innerHTML='<span style="color:var(--red)">⚠️ سبب التعديل إجباري — أُلغي الطلب.</span>'; return; }
@@ -4495,6 +4497,8 @@ async function fillFcdBank(pc, which, value){
   const bank = which==='bank' ? (value||'') : (row.bank_name||'');
   const ref  = which==='ref'  ? (value||'') : (row.bank_ref||'');
   if(which==='bank' && !value) return;
+  // ⛔ رفض: مرجع بلا اسم بنك — أضيفي البنك أولاً
+  if(ref && !bank){ alert('⛔ لا يمكن حفظ مرجع بنكي بلا اسم بنك — أضيفي اسم البنك أولاً.'); return; }
   try{
     const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_fcd_bankref',payload:{payment_code:pc,bank_name:bank||null,bank_ref:ref||null,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
     const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
@@ -4661,6 +4665,8 @@ async function save(){
   const paid=+$('f-paid').value||0; const _ref=($('f-ref').value||'').trim();
   const dest=($('f-dest')||{}).value||'bank'; let deliveredSupplier=null, _refVal=_ref, supCur=null, supRate=1;
   if(dest==='supplier'){ deliveredSupplier=(($('f-supplier')||{}).value||'').trim(); if(!deliveredSupplier){ $('msg').innerHTML='<span style="color:var(--red)">⚠️ اختاري اسم المورّد الذي سُلّم له المبلغ مباشرة</span>'; return; } bank='🤝 سُلّم للمورّد'; _refVal='تسليم مباشر · '+deliveredSupplier; supCur=(($('f-supcur')||{}).value||'').trim()||null; const _rateRaw=(($('f-suprate')||{}).value||'').trim(); if(!_rateRaw){ $('msg').innerHTML='<span style="color:var(--red)">⚠️ سعر صرف عملة المورّد إجباري — أدخليه</span>'; if($('f-suprate'))$('f-suprate').focus(); return; } supRate=+_rateRaw; if(!(supRate>0)){ $('msg').innerHTML='<span style="color:var(--red)">⚠️ سعر الصرف غير صحيح</span>'; if($('f-suprate'))$('f-suprate').focus(); return; } }
+  // ⛔ رفض حفظ معاملة بمرجع بنكي بلا اسم بنك — لا بد من اسم البنك
+  if(dest==='bank' && _ref && !bank){ $('msg').innerHTML='<span style="color:var(--red);font-weight:700">⛔ لا يمكن حفظ المعاملة: كتبتِ <b>مرجعاً بنكياً بلا اسم بنك</b> — أضيفي اسم البنك أولاً لحفظ المعاملة.</span>'; if($('f-bank'))$('f-bank').focus(); return; }
   // البنك والمرجع اختياريان — لا يمنعان توليد الكود. لكن قاعدة صارمة: المبلغ لا يُعتبر مسدَّداً إلا بمرجع بنكي
   // فالمدفوع غير الموثّق (بلا مرجع) لا يُحتسب، ويبقى ضمن المستحقات للمطالبة
   // تاريخ الاستحقاق إجباري إذا بقي على العميل مبلغ متبقٍّ (على المدفوع المُدخَل كما يعرضه الفورم)
