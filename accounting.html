@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-م٤ · «سنة 2026 فقط» صارت لكل فندق على حدة (زر خاص بالفندق) — الفنار 2026، وTBO وباقي الأنظمة كل السنوات (الرصيد المتراكم)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ن٤ · إصلاح رصيد TBO: كل السنوات يعود للحساب الأصلي المتراكم (hpPayeeClientMap) — منطق 2026+charge from للفنار فقط</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2307,12 +2307,20 @@ function hpRepCard(t,v,col){ return '<div class="kpi"><div class="ttl">'+t+'</di
 // تقرير عام للمدفوع له: مجموع خام (مطابق للشيت) + سطر معادل بعملة المدفوع له بعد التحويل + فلتر تاريخ
 function hpSummaryHtml(){
   const cur=HO_TCUR;
-  // 🗓️ نافذة 2026 فقط: المستحق والمدفوع من حجوزات/دفعات 2026 (يستبعد 2025 والأقدم)، والسداد يشمل charge from (بطاقة/بنك عبر Booking Form)
-  const only2026=hpOnly2026(); const yOK=(d)=>{ if(!only2026) return true; const m=String(d||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); };
-  const chgMap={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind==='hotel'&&s.charge_from)chgMap[s.id]=s.charge_from; });
-  let owed=0,nBook=0,paidCharge=0;
-  hpHbMatch(HO_PAYEE).forEach(h=>{ if(!yOK(h.check_in||h.arrival_date))return; const d=Number(h.final_rate_booked||0); owed+=d; nBook++; if(h._booking&&h.service_id&&chgMap[h.service_id])paidCharge+=d; });
-  const payArr=hpPayments(HO_PAYEE).filter(x=>yOK(x.date)); let paid=paidCharge; payArr.forEach(x=>paid+=x.amount); const nPay=payArr.length;
+  const only2026=hpOnly2026();
+  let owed=0,nBook=0,paid=0,nPay=0;
+  if(only2026){
+    // 🗓️ نافذة «2026 فقط» (لهذا الفندق): حجوزات/دفعات 2026 + سداد charge from (بطاقة/بنك عبر Booking Form)
+    const yOK=(d)=>{ const m=String(d||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); };
+    const chgMap={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind==='hotel'&&s.charge_from)chgMap[s.id]=s.charge_from; });
+    let paidCharge=0;
+    hpHbMatch(HO_PAYEE).forEach(h=>{ if(!yOK(h.check_in||h.arrival_date))return; const d=Number(h.final_rate_booked||0); owed+=d; nBook++; if(h._booking&&h.service_id&&chgMap[h.service_id])paidCharge+=d; });
+    const payArr=hpPayments(HO_PAYEE).filter(x=>yOK(x.date)); paid=paidCharge; payArr.forEach(x=>paid+=x.amount); nPay=payArr.length;
+  } else {
+    // 📊 كل السنوات — الرصيد المتراكم الصحيح (نفس الحساب الأصلي: hpPayeeClientMap + hpPayments بلا تعديل)
+    const allCli=hpPayeeClientMap(HO_PAYEE); Object.values(allCli).forEach(o=>{ owed+=o.owed; nBook+=o.n; });
+    const payArr=hpPayments(HO_PAYEE); payArr.forEach(x=>paid+=x.amount); nPay=payArr.length;
+  }
   const bal=owed-paid; const settled=(nBook>0 && bal<=0.5);
   return '<div class="panel" style="border:1px solid var(--accent);margin-bottom:14px"><h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>🧾 تقرير «'+esc(HO_PAYEE)+'» — '+(only2026?'سنة 2026 فقط':'كل السنوات (الرصيد المتراكم)')+' <span style="font-size:11px;color:var(--muted)">(بعملة المورّد '+esc(cur)+' · يشمل سداد البطاقة charge from)</span></span><label style="font-size:12px;font-weight:400;cursor:pointer;background:#f6f8fc;border:1px solid var(--line);border-radius:8px;padding:4px 10px" title="خاص بهذا الفندق فقط"><input type="checkbox" '+(only2026?'checked':'')+' onchange="hpToggle2026(this.checked)"> 🗓️ سنة 2026 فقط (لهذا الفندق)</label></h3>'+
     '<div class="kpis" style="grid-template-columns:repeat(5,1fr)">'+
