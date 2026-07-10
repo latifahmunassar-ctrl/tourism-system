@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ي · دفعة المورّد بعملة مختلفة: حقل سعر صرف البنك يبدأ فاضياً (متغيّر — يُدخَل يدوياً كل دفعة، لا تعبئة تلقائية)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ك · Sales Form: حقل سعر الصرف صار قابلاً للتعديل يدوياً (سعر البنك) بدل القفل على قائمة الإدارة — يُقترح تلقائياً إن وُجد</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -401,7 +401,7 @@ table{font-weight:600}
           <div class="fld"><label>سعر البيع (للعميل) <span class="hotel-req-star" style="color:var(--red);display:none">*</span></label><input type="number" id="s-price" value="0" oninput="sCalc()"></div>
           <div class="fld"><label>عملة البيع (من ملف العميل)</label><select id="s-sellcur" disabled style="background:#f1f5fb;color:var(--accent);font-weight:700"><option>SAR</option><option>USD</option><option>MYR</option><option>OMR</option><option>AED</option><option>EUR</option></select></div>
           <div class="fld"><label>عملة المورّد <span class="hotel-req-star" style="color:var(--red);display:none">*</span></label><select id="s-cur" onchange="sRate()"><option>SAR</option><option>USD</option><option>MYR</option><option>OMR</option><option>AED</option><option>EUR</option></select></div>
-          <div class="fld"><label>سعر الصرف (تلقائي من الإدارة)</label><input type="number" id="s-rate" value="1" disabled style="background:#f1f5fb;color:var(--accent);font-weight:700"><span id="s-rate-msg" style="color:var(--red);font-size:10px"></span></div>
+          <div class="fld"><label>🏦 سعر الصرف <span style="font-size:9px;color:var(--muted)">(يُقترح تلقائياً إن وُجد — قابل للتعديل يدوياً بسعر البنك)</span></label><input type="number" id="s-rate" value="1" step="0.0001" oninput="sCalc()" style="color:var(--accent);font-weight:700"><span id="s-rate-msg" style="font-size:10px"></span></div>
           <div class="fld"><label>سعر المورد (محسوب بعملته)</label><input id="s-supcalc" disabled style="background:#f1f5fb;color:var(--accent);font-weight:700"></div>
           <div class="fld"><label>🌙 عدد الليالي <span style="font-size:9px;color:var(--muted)">(تلقائي من التواريخ)</span></label><input type="number" id="s-qty" value="1"></div>
           <div class="fld"><label>دخول <span class="sdate-req" style="color:var(--red);display:none">*</span></label><input type="date" id="s-in" onchange="sNights()"></div>
@@ -1853,10 +1853,12 @@ function lookupRate(sup,sell){
   return null;
 }
 function sRate(){
-  const r=lookupRate($('s-cur').value, $('s-sellcur').value);
   const rf=$('s-rate'), msg=$('s-rate-msg');
-  if(r!=null){ rf.value=Number(r.toFixed(6)); if(msg) msg.textContent=''; }
-  else { rf.value=''; if(msg) msg.textContent='⚠️ ما فيه سعر صرف لهذا الزوج — تُضيفه الإدارة من قائمة «the currency»'; }
+  const same=$('s-cur').value===$('s-sellcur').value;
+  if(same){ rf.value=1; if(msg){ msg.textContent=''; } sCalc(); return; }
+  const r=lookupRate($('s-cur').value, $('s-sellcur').value);
+  if(r!=null){ rf.value=Number(r.toFixed(6)); if(msg){ msg.style.color='var(--muted)'; msg.textContent='سعر مقترح — عدّليه لسعر البنك إن لزم'; } }
+  else { rf.value=''; rf.placeholder='أدخلي سعر البنك يدوياً'; if(msg){ msg.style.color='var(--muted)'; msg.textContent='أدخلي سعر الصرف يدوياً (سعر البنك المتغيّر)'; } }
   sCalc();
 }
 function sCalc(){
@@ -1881,7 +1883,7 @@ function sBuildPayload(){
     if(new Date($('s-out').value)<=new Date($('s-in').value)){ $('s-msg').innerHTML='<span style="color:var(--red)">⚠️ تاريخ الخروج لازم يكون بعد الدخول</span>'; return null; }
     sNights();
   }
-  if($('s-sellcur').value!==$('s-cur').value && !(+$('s-rate').value)){ $('s-msg').innerHTML='<span style="color:var(--red)">⚠️ ما فيه سعر صرف معتمد لهذا الزوج — تُضيفه الإدارة من قائمة «the currency» في مدخل البيانات</span>'; return null; }
+  if($('s-sellcur').value!==$('s-cur').value && !(+$('s-rate').value)){ $('s-msg').innerHTML='<span style="color:var(--red)">⚠️ أدخلي سعر الصرف يدوياً (سعر البنك) — عملة البيع تختلف عن عملة المورّد</span>'; if($('s-rate'))$('s-rate').focus(); return null; }
   return { id:($('s-id').value||null), client_code:code, kind:$('s-type').value, name:$('s-desc').value.trim()||null,
     detail:($('s-room').value||'').trim()||null,
     supplier:$('s-supplier').value||null, amount:+$('s-price').value||0,
