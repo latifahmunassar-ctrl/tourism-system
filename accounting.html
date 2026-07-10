@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-م٣ · سجل دفعات الفندق يعرض أي سداد (بطاقة/تحويل/أي وسيلة) بما فيه charge from عبر Booking Form — لسنة 2026</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ن٣ · رقم التأكيد (Conf No) من Booking Form يظهر في جدول توزيع الدفعات بجانب الفندق/الغرفة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2379,7 +2379,7 @@ function buildHotelPay(){
       (hpHbMatch(HO_PAYEE).length?'<div class="fld"><label>الحالة</label><select id="hp-stf" onchange="hpFilter()"><option value="">الكل</option><option value="paid">✅ مدفوع</option><option value="cancel">🔴 ملغي (للمتابعة)</option></select></div><div style="font-size:11px;color:var(--accent);align-self:center;max-width:240px">📅 فلتر <b>تاريخ الدخول</b> من بطاقة التقرير بالأعلى ⬆ يفلتر هذا الجدول ويُظهر دفعات العملاء تحته</div>':'<button class="btn ghost" style="padding:7px 12px" onclick="hpCheckAll(true)">☑ تحديد الظاهر</button><button class="btn ghost" style="padding:7px 12px" onclick="hpCheckAll(false)">☐ إلغاء التحديد</button>')+
     '</div>'+
     '<div class="tbl-wrap bf-scroll" style="max-height:360px"><table style="font-size:11.5px;white-space:nowrap"><thead><tr>'+(hpHbMatch(HO_PAYEE).length?
-      '<th style="text-align:center">✓</th><th>كود</th><th>العميل</th><th>الوكيل</th><th>قيمة الدفع المُسدَّد<br><span style="font-size:9px;color:var(--muted)">First Client Data</span></th><th>client balance payment</th><th>الفندق / الغرفة</th><th>دخول</th><th>🚪 عدد الغرف</th><th>قيمة الحجز قبل الإلغاء</th><th>رسوم الإلغاء</th><th>قيمة الحجز الفعلية</th><th>الحالة</th><th>🏦 مصدر الدفع + المرجع البنكي<br><span style="font-size:9px;color:var(--muted)">البنك الفعلي</span></th><th>💰 المبلغ ('+esc(HO_TCUR)+')<br><span style="font-size:9px;color:var(--muted)">يُملأ تلقائياً</span></th>':
+      '<th style="text-align:center">✓</th><th>كود</th><th>العميل</th><th>الوكيل</th><th>قيمة الدفع المُسدَّد<br><span style="font-size:9px;color:var(--muted)">First Client Data</span></th><th>client balance payment</th><th>الفندق / الغرفة</th><th>🔖 Conf No</th><th>دخول</th><th>🚪 عدد الغرف</th><th>قيمة الحجز قبل الإلغاء</th><th>رسوم الإلغاء</th><th>قيمة الحجز الفعلية</th><th>الحالة</th><th>🏦 مصدر الدفع + المرجع البنكي<br><span style="font-size:9px;color:var(--muted)">البنك الفعلي</span></th><th>💰 المبلغ ('+esc(HO_TCUR)+')<br><span style="font-size:9px;color:var(--muted)">يُملأ تلقائياً</span></th>':
       '<th>✓</th><th>كود العميل</th><th>العميل</th><th>الوكيل</th><th>عدد الحجوزات</th><th>قيمة الحجز ('+esc(HO_TCUR)+')</th><th>مدفوع سابقاً</th><th>المطلوب (المتبقّي)</th><th>ادفع الآن</th>')+'</tr></thead><tbody id="hp-dist-tbl"></tbody></table></div>'+
     '<div style="margin-top:8px;font-size:13px">'+(hpHbMatch(HO_PAYEE).length?'مجموع الموزّع: <b id="hp-dtot">0</b> '+esc(HO_TCUR)+' · المحدّدين: <b id="hp-dn">0</b> · ':'إجمالي الموزّع: <b id="hp-total">0</b> · عدد العملاء المحدّدين: <b id="hp-nsel">0</b> · ')+'<span id="hp-msg" style="color:var(--muted)"></span></div>'+
     '<button class="btn green" style="margin-top:8px" onclick="hpSubmit()">'+(hpHbMatch(HO_PAYEE).length?'✅ تسجيل الحركة مباشرة':'✅ تسجيل الدفعة الموزّعة')+'</button></div>';
@@ -2418,7 +2418,7 @@ function hpRows(){
         '<td>'+esc(c)+'</td><td>'+esc(name)+'</td><td style="font-size:10.5px;color:var(--muted)">'+esc(h.agent_name||f.agent||'')+'</td>'+
         '<td class="num" style="color:#0e9d6a">'+fmt(f.paid)+' <span style="font-size:9px;color:var(--muted)">'+esc(sym)+'</span></td>'+
         '<td class="num" style="color:'+(bal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(bal)+' <span style="font-size:9px;color:var(--muted)">'+esc(sym)+'</span></td>'+
-        '<td style="font-size:10.5px;color:var(--muted)">'+esc(hotel)+'</td><td>'+esc(h.check_in||'')+'</td>'+
+        '<td style="font-size:10.5px;color:var(--muted)">'+esc(hotel)+'</td><td style="font-weight:700">'+esc(h.conf_no||'—')+'</td><td>'+esc(h.check_in||'')+'</td>'+
         '<td class="num" style="font-weight:700">'+(h.rooms_count!=null&&h.rooms_count!==''?esc(h.rooms_count):'<span style="color:#9aa">—</span>')+'</td>'+
         '<td class="num">'+fmt(before)+'</td>'+
         '<td class="num neg">'+(cc>0.005?fmt(cc):'<span style="color:#9aa">—</span>')+'</td>'+
@@ -2426,7 +2426,7 @@ function hpRows(){
         '<td>'+(isC?'<span class="pill cancel">ملغي</span>':'<span class="pill active">✅ مدفوع</span>')+'</td>'+
         (function(){ const meth=payMethod(sbank); return '<td style="font-size:10px">'+(sbank?esc(sbank)+(meth?' <span style="font-size:9px;color:var(--accent)">'+meth+'</span>':'')+(sref?'<br><span style="font-size:9px;color:#0e9d6a">🔖 مرجع: '+esc(sref)+'</span>':''):'<span style="color:#9aa">—</span>')+'</td>'; })()+
         '<td><input type="number" class="hp-damt2" data-code="'+esc(c)+'" oninput="hpDistTotal()" placeholder="'+(frb>0?frb:'')+'" style="width:95px;padding:3px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px"></td></tr>';
-    }).join(''):'<tr><td colspan="15" style="text-align:center;color:var(--muted);padding:12px">لا توجد حجوزات</td></tr>';
+    }).join(''):'<tr><td colspan="16" style="text-align:center;color:var(--muted);padding:12px">لا توجد حجوزات</td></tr>';
   } else {
     const cli=hpPayeeClientMap(HO_PAYEE); const codes=Object.keys(cli).sort((a,b)=>cli[b].remain-cli[a].remain);
     tb.innerHTML=codes.length?codes.map(c=>{ const o=cli[c];
@@ -2507,7 +2507,7 @@ function exportHotelPayPDF(){
   const rowsOf=(bodyId,idxs)=>{ const out=[]; document.querySelectorAll('#'+bodyId+' tr').forEach(tr=>{ if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; out.push(idxs.map(i=>cellTxt(tds[i]))); }); return out; };
   const headOf=(bodyId,idxs)=>{ const tbl=document.getElementById(bodyId).closest('table'); const ths=[...tbl.querySelectorAll('thead th')].map(x=>x.innerText.replace(/\s+/g,' ').trim()); return idxs?idxs.map(i=>ths[i]||''):ths; };
   // جدول الحجوزات: نتخطّى عمود ✓ (0) وعمود المبلغ الأخير (13) — نأخذ 1..12
-  const t1idx=[1,2,3,4,5,6,7,8,9,10,11,12,13]; const t1head=headOf('hp-dist-tbl',t1idx); const t1rows=rowsOf('hp-dist-tbl',t1idx);
+  const t1idx=[1,2,3,4,5,6,7,8,9,10,11,12,13,14]; const t1head=headOf('hp-dist-tbl',t1idx); const t1rows=rowsOf('hp-dist-tbl',t1idx);
   // جدول دفعات First Client Data
   const fcdBody=document.querySelector('#hp-fcd tbody'); let t2head=[],t2rows=[];
   if(fcdBody){ const idxs=[...document.querySelectorAll('#hp-fcd thead th')].map((_,i)=>i); t2head=[...document.querySelectorAll('#hp-fcd thead th')].map(x=>x.innerText.replace(/\s+/g,' ').trim()); t2rows=[...fcdBody.querySelectorAll('tr')].filter(tr=>tr.querySelectorAll('td').length>1).map(tr=>idxs.map(i=>cellTxt(tr.querySelectorAll('td')[i]))); }
