@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ك · Sales Form: حقل سعر الصرف صار قابلاً للتعديل يدوياً (سعر البنك) بدل القفل على قائمة الإدارة — يُقترح تلقائياً إن وُجد</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ل · Sales Form: تلميح ديناميكي يوضّح اتجاه سعر الصرف (1 عملة مورّد = ؟ عملة بيع) والمعادلة (النظام يقسم) تحت الحقل</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1853,17 +1853,21 @@ function lookupRate(sup,sell){
   return null;
 }
 function sRate(){
-  const rf=$('s-rate'), msg=$('s-rate-msg');
+  const rf=$('s-rate');
   const same=$('s-cur').value===$('s-sellcur').value;
-  if(same){ rf.value=1; if(msg){ msg.textContent=''; } sCalc(); return; }
-  const r=lookupRate($('s-cur').value, $('s-sellcur').value);
-  if(r!=null){ rf.value=Number(r.toFixed(6)); if(msg){ msg.style.color='var(--muted)'; msg.textContent='سعر مقترح — عدّليه لسعر البنك إن لزم'; } }
-  else { rf.value=''; rf.placeholder='أدخلي سعر البنك يدوياً'; if(msg){ msg.style.color='var(--muted)'; msg.textContent='أدخلي سعر الصرف يدوياً (سعر البنك المتغيّر)'; } }
-  sCalc();
+  if(same){ rf.value=1; }
+  else { const r=lookupRate($('s-cur').value, $('s-sellcur').value); if(r!=null){ rf.value=Number(r.toFixed(6)); } else { rf.value=''; rf.placeholder='أدخلي سعر البنك يدوياً'; } }
+  sCalc();   // sCalc يعرض التلميح الاتجاهي والمعادلة
 }
 function sCalc(){
-  const price=+$('s-price').value||0, rate=+$('s-rate').value||0, cur=$('s-cur').value||'';
+  const price=+$('s-price').value||0, rate=+$('s-rate').value||0, cur=$('s-cur').value||'', sell=$('s-sellcur').value||'';
   if($('s-supcalc')) $('s-supcalc').value = (price&&rate)? (fmt(price/rate)+' '+cur) : '—';
+  // تلميح ديناميكي يوضّح اتجاه سعر الصرف والمعادلة (النظام يقسم)
+  const msg=$('s-rate-msg');
+  if(msg){
+    if(!cur||!sell||cur===sell){ msg.textContent=''; }
+    else { msg.style.color='var(--muted)'; msg.innerHTML='📐 اكتبي: <b>1 '+esc(cur)+' = '+(rate?rate:'؟')+' '+esc(sell)+'</b> · النظام يقسم: '+(price?fmt(price):'السعر')+' '+esc(sell)+' ÷ '+(rate?rate:'؟')+' = <b>'+(price&&rate?fmt(price/rate):'؟')+' '+esc(cur)+'</b>'; }
+  }
 }
 let SAL_CART=[]; // خدمات مُجمَّعة قبل الحفظ (طلب متعدّد الخدمات)
 // تحقّق من الحقول وبناء حمولة خدمة واحدة من الفورم (يرجّع null عند الخطأ مع إظهار الرسالة)
