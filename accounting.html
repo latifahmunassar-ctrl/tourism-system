@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-غ · تقرير «دفعة فندق» العام صار لسنة 2026 فقط ويعرف سداد البطاقة (charge from) — انتهت أرقام 2025 المضلّلة (32,356)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ف٢ · عدد الغرف: إجباري بالفندق في Sales Form + عمود في Booking Form + عمود بجانب الدخول في Hotel Overview وكشف حساب الفندق</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -494,7 +494,7 @@ table{font-weight:600}
       </div>
       <div class="panel"><h3>🏨 Hotels / Systmes PYT Overview <span class="cnt">(حجوزات TBO)</span> <span class="cnt" id="ho-cnt"></span></h3>
         <div class="tbl-wrap bf-scroll" id="ho-tbl"><table id="t-hotels"><thead><tr>
-          <th>تاريخ الوصول</th><th>اسم العميل</th><th>كود العميل</th><th>وكيل العميل</th><th>ربح البرنامج<br><span style="font-size:9px;color:var(--muted)">فعلي · Booking Form</span></th><th>حالة التأكيد</th><th>رصيد دفعة العميل</th><th>العملة</th><th>اسم الفندق</th><th>نوع الغرفة</th><th>دخول</th><th>خروج</th><th>Conf No</th><th>سعر البيع</th><th>رسوم الإلغاء</th><th>السعر المحجوز النهائي</th><th>الفرق</th><th>تاريخ الاستحقاق</th><th>الحالة</th><th>إجمالي الدفع</th><th>إجمالي المرتجع</th><th>دفعة لكل عميل</th><th>تاريخ الدفع</th><th>اسم البنك</th><th>مرجع البنك</th><th>🏦 مصدر الدفع<br><span style="font-size:9px;color:var(--muted)">من أي شيت</span></th><th>عدد الغرف</th><th>Booked by</th><th>Confirmed by</th>
+          <th>تاريخ الوصول</th><th>اسم العميل</th><th>كود العميل</th><th>وكيل العميل</th><th>ربح البرنامج<br><span style="font-size:9px;color:var(--muted)">فعلي · Booking Form</span></th><th>حالة التأكيد</th><th>رصيد دفعة العميل</th><th>العملة</th><th>اسم الفندق</th><th>نوع الغرفة</th><th>دخول</th><th>🚪 عدد الغرف</th><th>خروج</th><th>Conf No</th><th>سعر البيع</th><th>رسوم الإلغاء</th><th>السعر المحجوز النهائي</th><th>الفرق</th><th>تاريخ الاستحقاق</th><th>الحالة</th><th>إجمالي الدفع</th><th>إجمالي المرتجع</th><th>دفعة لكل عميل</th><th>تاريخ الدفع</th><th>اسم البنك</th><th>مرجع البنك</th><th>🏦 مصدر الدفع<br><span style="font-size:9px;color:var(--muted)">من أي شيت</span></th><th>Booked by</th><th>Confirmed by</th>
         </tr></thead><tbody></tbody></table></div>
         <div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:6px 18px;font-size:14px" onclick="hScroll('ho-tbl',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:6px 18px;font-size:14px" onclick="hScroll('ho-tbl',1)">تمرير ▶▶</button></div>
       </div>
@@ -1416,7 +1416,7 @@ function bRecall(){
         '<div style="margin-top:5px;font-size:10.5px;color:var(--muted)">يمكنك الحفظ الآن — «Charge from» و«تاريخ الدفع» اختياريان. (رقم التأكيد للفنادق/الطيران يبقى إلزامياً)</div>'+
         '</div>';
     }
-    h+='<div style="margin-top:8px;font-size:12px"><b>كل حجوزات العميل ('+svcs.length+') — الخلايا قابلة للتعديل:</b> <span style="color:var(--muted);font-size:11px">← اسحبي يمين/يسار أو استخدمي أزرار التمرير تحت</span></div><div class="tbl-wrap bf-scroll" id="bf-tbl" style="max-height:360px"><table style="font-size:11px"><thead><tr><th>النوع</th><th>الخدمة</th><th>Conf No</th><th>سعر البيع</th><th>سعر المورد</th><th>الحجز الفعلي</th><th>الفرق</th><th>الربح</th><th>رسوم الإلغاء</th><th>المرتجع</th><th>المرتجع المفترض</th><th>Booked from</th><th>📅 تاريخ الدفع <span style="font-size:9px;color:var(--muted)">(اختياري)</span></th><th>Charge from <span style="font-size:9px;color:var(--muted)">(اختياري)</span></th><th>الحالة</th><th>سعر الصرف</th><th>حفظ</th></tr></thead><tbody>'+
+    h+='<div style="margin-top:8px;font-size:12px"><b>كل حجوزات العميل ('+svcs.length+') — الخلايا قابلة للتعديل:</b> <span style="color:var(--muted);font-size:11px">← اسحبي يمين/يسار أو استخدمي أزرار التمرير تحت</span></div><div class="tbl-wrap bf-scroll" id="bf-tbl" style="max-height:360px"><table style="font-size:11px"><thead><tr><th>النوع</th><th>الخدمة</th><th>🚪 عدد الغرف</th><th>Conf No</th><th>سعر البيع</th><th>سعر المورد</th><th>الحجز الفعلي</th><th>الفرق</th><th>الربح</th><th>رسوم الإلغاء</th><th>المرتجع</th><th>المرتجع المفترض</th><th>Booked from</th><th>📅 تاريخ الدفع <span style="font-size:9px;color:var(--muted)">(اختياري)</span></th><th>Charge from <span style="font-size:9px;color:var(--muted)">(اختياري)</span></th><th>الحالة</th><th>سعر الصرف</th><th>حفظ</th></tr></thead><tbody>'+
     svcs.map(b=>{ const i=b.id; const st='style="width:80px;padding:3px 4px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:11px"';
       const inp=(f,v,num,extra)=>'<input id="sb-'+f+'-'+i+'" '+(num?'type="number"':'')+' value="'+esc(v!=null?v:'')+'" '+st+' '+(extra||'')+'>';
       const selInp=(f,v,cat)=>{ const cur=(v==null?'':String(v)); const vals=listValues(cat);
@@ -1442,6 +1442,7 @@ function bRecall(){
           +'<button class="btn" style="background:#3a7bd5;padding:2px 6px;font-size:9px;margin-top:3px;display:block;width:100%" onclick="reqCostChange('+i+',\''+esc(code)+'\')">✏️ تعديل التكلفة (موافقة)</button>'
         : inp('booked',actual,true,'oninput="bRow('+i+')"');
       return '<tr'+((profitSar!=null&&profitSar<-0.5)?' style="background:rgba(255,107,122,.10)"':'')+'><td>'+(SVC[b.kind]||esc(b.kind||''))+'</td><td>'+esc(b.name||'')+'</td>'+
+        '<td class="num" style="font-weight:700">'+(b.rooms_count!=null&&b.rooms_count!==''?esc(b.rooms_count):'<span style="color:var(--muted)">—</span>')+'</td>'+
         '<td>'+inp('conf',b.conf_no,false)+(bIsConfReq(b.kind)?' <span style="color:var(--red)" title="رقم التأكيد إجباري للفنادق والطيران">*</span>':'')+'</td>'+
         '<td class="num">'+fmt(sell)+cur(sellCur)+'</td>'+
         '<td class="num" id="sb-sup-'+i+'" data-rate="'+rate+'" data-sell="'+sell+'" data-sellcur="'+esc(sellCur)+'" data-supcur="'+esc(supCur)+'">'+fmt(supPrice)+' <b style="color:var(--accent);font-size:11.5px">'+esc(supCur)+'</b></td>'+
@@ -1927,6 +1928,7 @@ function sBuildPayload(){
   if(isHotelT){ // خدمة الفندق: كل الحقول إجبارية
     if(!($('s-desc').value||'').trim()){ $('s-msg').innerHTML='<span style="color:var(--red)">⚠️ اسم الفندق إجباري</span>'; $('s-desc').focus(); return null; }
     if(!(($('s-room').value||'').trim())){ $('s-msg').innerHTML='<span style="color:var(--red)">⚠️ نوع الغرفة إجباري للفندق</span>'; $('s-room').focus(); return null; }
+    if(!(parseInt(($('s-rooms')||{}).value,10)>0)){ $('s-msg').innerHTML='<span style="color:var(--red)">⚠️ عدد الغرف إجباري للفندق (أكبر من صفر)</span>'; if($('s-rooms'))$('s-rooms').focus(); return null; }
     if(!(+$('s-price').value>0)){ $('s-msg').innerHTML='<span style="color:var(--red)">⚠️ سعر البيع إجباري للفندق (أكبر من صفر)</span>'; $('s-price').focus(); return null; }
     if(!(($('s-cur').value||'').trim())){ $('s-msg').innerHTML='<span style="color:var(--red)">⚠️ عملة المورّد إجبارية للفندق</span>'; $('s-cur').focus(); return null; }
     if(!$('s-in').value || !$('s-out').value){ $('s-msg').innerHTML='<span style="color:var(--red)">⚠️ تاريخ الدخول والخروج إجباريان للفندق</span>'; (!$('s-in').value?$('s-in'):$('s-out')).focus(); return null; }
@@ -2126,7 +2128,7 @@ function hotelBookingsAll(){
       hotel_name:s.name||'', room_type:s.detail||'', check_in:s.check_in||'', check_out:s.check_out||'', conf_no:s.conf_no||'',
       selling_rate:sell, cancel_charge:Number(s.cancel_charge||0), final_rate_booked:frb, diff:(sell&&frb)?(sell-frb):null,
       due_payment_date:'', status:s.status||'', total_payment:0, refund:Number(s.refund||0), total_refund:Number(s.refund||0), payment_per_client:0,
-      payment_date:'', bank_name:s.bank_name||'', bank_ref:s.bank_ref||'', rooms_count:null, booked_by:s.booked_by||'', confirmed_by:s.confirmed_by||'', booked_from:bf, created_at:s.created_at||'' });
+      payment_date:'', bank_name:s.bank_name||'', bank_ref:s.bank_ref||'', rooms_count:s.rooms_count, booked_by:s.booked_by||'', confirmed_by:s.confirmed_by||'', booked_from:bf, created_at:s.created_at||'' });
   });
   return base;
 }
@@ -2160,13 +2162,13 @@ function renderHotels(){
     return '<tr'+(isC?' style="background:rgba(255,107,122,.08)"':'')+'>'+[
       esc(h.arrival_date||''), esc(h.client_name||''), esc(h.client_code||''), esc(h.agent_name||''),
       '<span class="num '+(pr>0.5?'pos':(pr<-0.5?'neg':''))+'">'+(pr==null?'<span style="color:#9aa">—</span>':n2(pr))+'</span>', esc(h.conf_status||''), '<span class="num">'+n2(h.client_balance)+'</span>', esc(h.currency||''),
-      esc(h.hotel_name||''), esc(h.room_type||''), esc(h.check_in||''), esc(h.check_out||''), esc(h.conf_no||''),
+      esc(h.hotel_name||''), esc(h.room_type||''), esc(h.check_in||''), (h.rooms_count!=null&&h.rooms_count!==''?'<b>'+esc(h.rooms_count)+'</b>':''), esc(h.check_out||''), esc(h.conf_no||''),
       '<span class="num">'+n2(h.selling_rate)+'</span>', '<span class="num">'+n2(h.cancel_charge)+'</span>',
       '<span class="num">'+n2(h.final_rate_booked)+'</span>', '<span class="num '+(dv< -0.5?'neg':(dv>0.5?'pos':''))+'">'+n2(h.diff)+'</span>',
       esc(h.due_payment_date||''), isC?'<span class="pill cancel">ملغى</span>':'<span class="pill active">نشط</span>',
       '<span class="num">'+n2(h.total_payment)+'</span>', '<span class="num">'+n2(h.total_refund)+'</span>', '<span class="num">'+n2(h.payment_per_client)+'</span>',
       esc(h.payment_date||''), esc(h.bank_name||''), esc(h.bank_ref||''),
-      srcCell, (h.rooms_count!=null?esc(h.rooms_count):''), esc(h.booked_by||''), esc(h.confirmed_by||'')
+      srcCell, esc(h.booked_by||''), esc(h.confirmed_by||'')
     ].map(c=>'<td>'+c+'</td>').join('')+'</tr>';
   }).join('')||rw(Array(29).fill('').map((_,i)=>i===0?'لا نتائج':''));
   $('ho-cnt').textContent=rows.length+' حجز';
@@ -2215,7 +2217,7 @@ function renderHotelStatement(){
     const badge = state==='paid'?('<span style="color:#0e9d6a;font-weight:700">✅ مسدَّد</span> <span style="font-size:10px;color:var(--muted)">'+esc(how)+'</span>')
       : state==='cancel'?'<span class="pill cancel">ملغى</span>'
       : '<span style="color:#b8860b;font-weight:700">⏳ مستحق</span>';
-    return '<tr'+(state==='due'?' style="background:rgba(217,138,0,.07)"':'')+'><td>'+esc(code)+'</td><td>'+esc(h.client_name||'')+'</td><td style="font-size:11px">'+esc(h.room_type||'')+'</td><td>'+esc(h.check_in||h.arrival_date||'')+'</td><td class="num">'+fmt(due)+' '+esc(hcur)+'</td><td>'+badge+'</td><td>'+esc(h.conf_no||'')+'</td><td style="font-size:10px;color:var(--muted)">'+(h._booking?'Booking Form':'الشيت')+'</td></tr>';
+    return '<tr'+(state==='due'?' style="background:rgba(217,138,0,.07)"':'')+'><td>'+esc(code)+'</td><td>'+esc(h.client_name||'')+'</td><td style="font-size:11px">'+esc(h.room_type||'')+'</td><td>'+esc(h.check_in||h.arrival_date||'')+'</td><td class="num" style="font-weight:700">'+(h.rooms_count!=null&&h.rooms_count!==''?esc(h.rooms_count):'<span style="color:var(--muted)">—</span>')+'</td><td class="num">'+fmt(due)+' '+esc(hcur)+'</td><td>'+badge+'</td><td>'+esc(h.conf_no||'')+'</td><td style="font-size:10px;color:var(--muted)">'+(h._booking?'Booking Form':'الشيت')+'</td></tr>';
   }).join('');
   // 💰 إجمالي المدفوع فعلياً في 2026 فقط لهذا الفندق: دفعات مورّد مسجّلة بتاريخ 2026+ (بلا 2025) + دفعات charge_from على حجوزات 2026 (تُدفع لحظة الحجز)
   let paid2026=0;
@@ -2229,7 +2231,7 @@ function renderHotelStatement(){
     '<span style="background:rgba(217,138,0,.10);border:1px solid var(--amber);border-radius:9px;padding:5px 11px">⏳ مستحق 2026 (رصيد): <b>'+nDue+'</b> · <b>'+fmt(dueTot)+' '+esc(hcur)+'</b></span>'+
     '</div>'+
     '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">السداد يُحتسب من: 💳 charge from (بطاقة/بنك في Booking Form) أو دفعة مورّد مسجّلة. المستحق = حجوزات بلا سداد.</div>'+
-    '<div class="tbl-wrap" style="max-height:440px"><table style="font-size:11.5px;white-space:nowrap"><thead><tr><th>كود</th><th>العميل</th><th>الغرفة</th><th>الدخول</th><th>المحجوز (التكلفة)</th><th>حالة السداد</th><th>Conf No</th><th>المصدر</th></tr></thead><tbody>'+trs+'</tbody></table></div>';
+    '<div class="tbl-wrap" style="max-height:440px"><table style="font-size:11.5px;white-space:nowrap"><thead><tr><th>كود</th><th>العميل</th><th>الغرفة</th><th>الدخول</th><th>🚪 عدد الغرف</th><th>المحجوز (التكلفة)</th><th>حالة السداد</th><th>Conf No</th><th>المصدر</th></tr></thead><tbody>'+trs+'</tbody></table></div>';
 }
 function hpMatch(line,payee){ const bf=hpNorm(line.booked_from), nm=hpNorm(line.name), p=hpNorm(payee); if(!p)return false; if(bf&&bf===p)return true; if(nm&&(nm===p||(p.length>3&&nm.includes(p))||(nm.length>3&&p.includes(nm))))return true; return false; }
 function hpPayees(){ const set=[...new Set((DATA.lists||[]).filter(l=>l.category==='hotels_system').map(l=>String(l.value||'').trim()).filter(Boolean))]; set.sort((a,b)=>a.localeCompare(b)); if(set.includes('TBO')){ set.splice(set.indexOf('TBO'),1); } set.unshift('TBO'); return set; }
