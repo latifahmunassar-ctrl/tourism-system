@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-هـ · تبويب الموردين يعرض الموردين المُضافين للقائمة حتى بلا حركة (بأصفار + شارة «مُضاف — بلا حركة») مثل FANAR HoTEL</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-و · قائمة البنك في دفعة المورّد تعتمد القائمة المُدارة في قسم البيانات فقط (الإدخالات القديمة محفوظة) + الموردون المُضافون بلا حركة يظهرون بأصفار</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3705,7 +3705,8 @@ function renderSupplierDetail(){
   const owedT=supOwed(list); const paidT=pays.reduce((s,x)=>s+Number(x.amount||0),0); const balT=owedT-paidT;
   const curStr1=(v)=>'<b>'+fmt(v)+'</b> '+esc(SCUR);
   const balStr='<b style="color:'+(balT>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(balT)+'</b> '+esc(SCUR);
-  const bankOpts='<option value="">— اختاري البنك —</option>'+[...new Set((DATA.fcd||[]).map(r=>r.bank_name).filter(Boolean))].sort().map(b=>'<option>'+esc(b)+'</option>').join('');
+  // قائمة البنك تعتمد القائمة المُدارة في قسم البيانات فقط (لا أسماء بنوك قديمة من الحقول)؛ الإدخالات القديمة محفوظة كما هي
+  const bankOpts='<option value="">— اختاري البنك —</option>'+listValues('banks').map(b=>'<option>'+esc(b.value)+'</option>').join('');
   const curOpts=[SCUR,...['SAR','USD','OMR','AED','EUR','MYR','SGD'].filter(c=>c!==SCUR)].map(c=>'<option>'+esc(c)+'</option>').join('');
   // لكل عميل: المستحق (مجموع الفواتير) + المدفوع (مجموع الدفعات)
   const invCli={}, payCli={}, nameCli={}, cliMainId={}, cliActual={}, cliDates={}, agentCli={};
