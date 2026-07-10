@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-و · قائمة البنك في دفعة المورّد تعتمد القائمة المُدارة في قسم البيانات فقط (الإدخالات القديمة محفوظة) + الموردون المُضافون بلا حركة يظهرون بأصفار</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ز · كل حقول إدخال البنك تعتمد القائمة المُدارة فقط (إدخال/تعديل عميل · دفعة مورّد · دفعة فندق · مرتجع · Banks Cash) — الفلاتر تبقى على البنوك ذات الحركة، والإدخالات القديمة محفوظة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1278,9 +1278,9 @@ function fcdEdit(id){
   $('fe-title').textContent='('+(r.payment_code||'')+' · '+(r.client_name||'')+')';
   $('fe-cost').value=Number(r.cost||0); $('fe-profit').value=Number(r.profit||0); $('fe-paid').value=Number(r.amount_paid||0);
   $('fe-ref').value=r.bank_ref||''; $('fe-note').value=r.note||''; $('fe-paydate').value=(r.payment_date||'').toString().slice(0,10);
-  const banks=[...new Set((DATA.fcd||[]).map(x=>x.bank_name).filter(Boolean))].sort();
+  const banks=listValues('banks').map(v=>v.value);   // القائمة المُدارة فقط (قسم البيانات)
   $('fe-bank').innerHTML='<option value="">— بدون —</option>'+banks.map(b=>'<option'+(b===r.bank_name?' selected':'')+'>'+esc(b)+'</option>').join('');
-  if(r.bank_name && !banks.includes(r.bank_name)){ const o=document.createElement('option'); o.text=r.bank_name; o.value=r.bank_name; o.selected=true; $('fe-bank').add(o); }
+  if(r.bank_name && !banks.includes(r.bank_name)){ const o=document.createElement('option'); o.text=r.bank_name; o.value=r.bank_name; o.selected=true; $('fe-bank').add(o); }   // احتفظ ببنك السجل القديم إن لم يكن في القائمة
   $('fe-msg').textContent=''; feCalc(); $('fcdeditmodal').classList.add('on');
 }
 function feCalc(){ const t=(+$('fe-cost').value||0)+(+$('fe-profit').value||0); $('fe-total').textContent=fmt(t); $('fe-bal').textContent=fmt(t-(+$('fe-paid').value||0)); }
@@ -2243,7 +2243,7 @@ function buildHotelPay(){
   const payeeOpts=payees.map(v=>'<option'+(v===HO_PAYEE?' selected':'')+'>'+esc(v)+'</option>').join('');
   const tcurOpts=HP_CURS.map(c=>'<option'+(c===HO_TCUR?' selected':'')+'>'+esc(c)+'</option>').join('');
   const payCurOpts=[HO_TCUR,...HP_CURS.filter(c=>c!==HO_TCUR)].map(c=>'<option>'+esc(c)+'</option>').join('');
-  const bankOpts='<option value="">— اختاري البنك —</option>'+[...new Set((DATA.fcd||[]).map(r=>r.bank_name).filter(Boolean))].sort().map(b=>'<option>'+esc(b)+'</option>').join('');
+  const bankOpts='<option value="">— اختاري البنك —</option>'+listValues('banks').map(b=>'<option>'+esc(b.value)+'</option>').join('');   // القائمة المُدارة فقط
   // ===== رأس الدفعة =====
   let h=hpSummaryHtml()+'<div class="panel" style="border-color:var(--green);margin-bottom:14px"><h3>💸 دفعة فندق / نظام — وزّعي الإجمالي على العملاء لين «المتبقّي = صفر»</h3>'+
     '<div style="font-size:12px;color:var(--muted);margin-bottom:6px"><b>اختاري أولاً اسم الفندق/النظام المدفوع له</b> (يحدّد وجهة الدفعة). <b>عملة المدفوع له موحّدة</b> — تختارينها مرة وتثبت لكل عملياته. أدخلي مبلغ التحويل الإجمالي وشيّكي على العملاء ووزّعي عليهم. <b>الملاحظة يدوية فقط.</b> الحركة تُسجَّل مباشرة في الحسابات.</div>'+
@@ -4230,8 +4230,7 @@ function renderPayForm(){
   const refs=(DATA.refunds||[]).filter(r=>(r.client_code||'').toUpperCase()===code);
   const totalRefunded=refs.reduce((s,r)=>s+Number(r.refund||0),0);
   const _rm=refundMaps(); const expRefTot=Number(_rm.expClient[code]||0); const expRefV=Math.max(0, expRefTot - totalRefunded); // المتوقّع المتبقّي = المتوقّع الكلّي − ما أُرجِع فعلاً
-  const allBanks=[...new Set((DATA.fcd||[]).map(r=>r.bank_name).filter(Boolean))].sort();
-  const bankOpts='<option value="">— اختاري البنك —</option>'+allBanks.map(b=>'<option>'+esc(b)+'</option>').join('');
+  const bankOpts='<option value="">— اختاري البنك —</option>'+listValues('banks').map(b=>'<option>'+esc(b.value)+'</option>').join('');   // القائمة المُدارة فقط
   // تفصيل الخدمات
   const svc=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code);
   const hotels=(DATA.hotelBookings||[]).filter(h=>(h.client_code||'').toUpperCase()===code);
@@ -4612,10 +4611,8 @@ function onCodeInput(){
   calc();
 }
 function fillBankOptions(){
-  // البنوك من قائمة «مدخل البيانات» (category=banks) + البنوك المستخدمة فعلاً؛ بلا خيار «بنك جديد» (يُضاف من مدخل البيانات فقط)
-  const fromList=listValues('banks').map(v=>v.value);
-  const fromFcd=(DATA?DATA.fcd:[]).map(r=>r.bank_name).filter(Boolean);
-  const banks=[...new Set([...fromList,...fromFcd])].sort((a,b)=>String(a).localeCompare(String(b),'ar'));
+  // البنوك من قائمة «مدخل البيانات» (category=banks) فقط؛ بلا أسماء قديمة وبلا خيار «بنك جديد» (يُضاف من مدخل البيانات فقط)
+  const banks=[...new Set(listValues('banks').map(v=>v.value))].sort((a,b)=>String(a).localeCompare(String(b),'ar'));
   $('f-bank').innerHTML='<option value="">— اختاري —</option>'+banks.map(b=>'<option>'+esc(b)+'</option>').join('');
   if($('fld-bank-other'))$('fld-bank-other').style.display='none';
 }
