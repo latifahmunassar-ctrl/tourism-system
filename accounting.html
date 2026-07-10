@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ف٢ · عدد الغرف: إجباري بالفندق في Sales Form + عمود في Booking Form + عمود بجانب الدخول في Hotel Overview وكشف حساب الفندق</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ق٢ · عدد الغرف يظهر أيضاً في سند الحجز (Booking Voucher) — عمود بين نوع الغرفة وتاريخ الدخول</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1730,7 +1730,7 @@ function vchClientData(code){
   // نُثري رقم التأكيد من acc_hotel_bookings بمطابقة تاريخ الدخول لو كان ناقصاً في service_lines.
   const confByCin={}; (DATA.hotelBookings||[]).forEach(h=>{ if((h.client_code||'').toUpperCase()===code && h.conf_no){ confByCin[String(h.check_in||'')]=h.conf_no; } });
   const hotels=(DATA.serviceLines||[]).filter(s=>s.kind==='hotel' && (s.client_code||'').toUpperCase()===code && !/cancel/i.test(s.status||''))
-    .map(s=>({ hotel:s.name||'', room:s.detail||'', cin:s.check_in||'', cout:s.check_out||'', conf:s.conf_no||confByCin[String(s.check_in||'')]||'' }))
+    .map(s=>({ hotel:s.name||'', room:s.detail||'', rooms:s.rooms_count, cin:s.check_in||'', cout:s.check_out||'', conf:s.conf_no||confByCin[String(s.check_in||'')]||'' }))
     .filter(h=>h.hotel||h.conf);
   // من قام بالحجز (booked_by) ومن نفّذ البرنامج (confirmed_by) — من service_lines ثم fcd
   const svcAll=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code);
@@ -1753,7 +1753,7 @@ function exportVoucher(kind){
   if(!c.hotels.length && !(c.flights||[]).length){ if(m)m.innerHTML='<span style="color:var(--red)">⚠️ لا توجد حجوزات فنادق أو طيران نشطة لهذا العميل</span>'; return; }
   const isInd=(kind==='individual');
   const logoHtml=isInd?(ALEZZ_LOGO?('<img src="'+ALEZZ_LOGO+'" alt="ALEZZ" style="max-height:80px;margin-bottom:6px">'):'<div style="font-size:34px;font-weight:900;letter-spacing:3px;color:#0e7a5a">AL<span style="color:#d4a017">E</span>ZZ</div><div style="font-size:12px;color:#666;letter-spacing:2px">شركة العز للسياحة والسفر</div>'):'';
-  const rowsHtml=c.hotels.map((h,i)=>'<tr><td style="text-align:center">'+(i+1)+'</td><td>'+esc(h.hotel)+'</td><td>'+esc(h.room||'—')+'</td><td>'+esc(h.cin||'—')+'</td><td>'+esc(h.cout||'—')+'</td><td style="font-weight:700">'+esc(h.conf||'—')+'</td></tr>').join('');
+  const rowsHtml=c.hotels.map((h,i)=>'<tr><td style="text-align:center">'+(i+1)+'</td><td>'+esc(h.hotel)+'</td><td>'+esc(h.room||'—')+'</td><td style="text-align:center;font-weight:700">'+((h.rooms!=null&&h.rooms!=='')?esc(h.rooms):'—')+'</td><td>'+esc(h.cin||'—')+'</td><td>'+esc(h.cout||'—')+'</td><td style="font-weight:700">'+esc(h.conf||'—')+'</td></tr>').join('');
   // جدول الطيران (يظهر فقط عند وجود رحلات): المسار/الوجهة + التاريخ + رقم الحجز
   const flightsTable=(c.flights&&c.flights.length)?('<h2 style="font-size:18px;color:#0e7a5a;margin:18px 0 4px">✈️ الطيران</h2>'+
     '<table><thead><tr><th style="width:38px">#</th><th>المسار / الوجهة</th><th>التاريخ</th><th>رقم الحجز</th></tr></thead><tbody>'+
@@ -1773,7 +1773,7 @@ function exportVoucher(kind){
     agentLine+
     '<div class="hd">'+logoHtml+'<h1>سند حجز فندقي · Booking Voucher</h1></div>'+
     clientBox+
-    (rowsHtml?('<h2 style="font-size:18px;color:#0e7a5a;margin:14px 0 4px">🏨 الفنادق</h2><table><thead><tr><th style="width:38px">#</th><th>الفندق</th><th>نوع الغرفة</th><th>تاريخ الدخول</th><th>تاريخ الخروج</th><th>رقم التأكيد (Conf No)</th></tr></thead><tbody>'+rowsHtml+'</tbody></table>'):'')+
+    (rowsHtml?('<h2 style="font-size:18px;color:#0e7a5a;margin:14px 0 4px">🏨 الفنادق</h2><table><thead><tr><th style="width:38px">#</th><th>الفندق</th><th>نوع الغرفة</th><th style="width:70px">عدد الغرف</th><th>تاريخ الدخول</th><th>تاريخ الخروج</th><th>رقم التأكيد (Conf No)</th></tr></thead><tbody>'+rowsHtml+'</tbody></table>'):'')+
     flightsTable+
     ((c.bookedBy||c.confirmedBy)?('<div style="display:flex;gap:28px;flex-wrap:wrap;font-size:15px;margin-top:14px;padding-top:10px;border-top:1px solid #e2e6ea">'+
       (c.bookedBy?('<span>📝 <b>موظف الحجز:</b> '+esc(c.bookedBy)+'</span>'):'')+
