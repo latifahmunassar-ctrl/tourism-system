@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ط · عملة المورّد: المحاسب يحدّدها أول مرة مباشرة، وأي تغيير لاحق يتطلب موافقة المالكة (المالكة تعدّل مباشرة) — تُطبَّق على كل أرقام الكشف</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ي · دفعة المورّد بعملة مختلفة: حقل سعر صرف البنك يبدأ فاضياً (متغيّر — يُدخَل يدوياً كل دفعة، لا تعبئة تلقائية)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3838,7 +3838,7 @@ function renderSupplierDetail(){
       '<div class="fgrid">'+
         '<div class="fld"><label>💰 إجمالي مبلغ التحويل (يترحّل للبنوك) <span style="color:var(--red)">*</span></label><input type="number" id="sp-gross" oninput="spTotal()" placeholder="0"></div>'+
         '<div class="fld"><label>عملة الدفع الفعلية</label><select id="sp-cur" onchange="spRate(\''+esc(SCUR)+'\')">'+curOpts+'</select></div>'+
-        '<div class="fld" id="sp-rate-fld" style="display:none"><label>سعر الصرف (1 وحدة دفع = ؟ '+esc(SCUR)+') — قابل للتعديل</label><input type="number" id="sp-rate" step="0.0001" oninput="spTotal()"></div>'+
+        '<div class="fld" id="sp-rate-fld" style="display:none"><label>🏦 سعر صرف البنك (1 وحدة دفع = ؟ '+esc(SCUR)+') <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">متغيّر — أدخليه يدوياً كل دفعة</span></label><input type="number" id="sp-rate" step="0.0001" placeholder="سعر صرف البنك (متغيّر) — أدخليه لكل دفعة" oninput="spTotal()"></div>'+
         '<div class="fld"><label>البنك <span style="color:var(--red)">*</span></label><select id="sp-bank">'+bankOpts+'</select></div>'+
         '<div class="fld"><label>المرجع البنكي <span style="color:var(--red)">*</span></label><input id="sp-ref" placeholder="RD ..."></div>'+
         '<div class="fld"><label>تاريخ الدفع</label><input type="date" id="sp-date"></div>'+
@@ -4071,8 +4071,9 @@ async function saveSupInvoice(id,val){
 }
 function spRate(scur){
   const pc=$('sp-cur').value, fld=$('sp-rate-fld'), rf=$('sp-rate');
+  // لا تعبئة تلقائية — المالكة تعتمد سعر صرف البنك المتغيّر، تُدخله يدوياً في كل دفعة
   if(pc===scur){ fld.style.display='none'; rf.value=''; }
-  else { fld.style.display=''; const r=lookupRate(pc,scur); rf.value=(r!=null)?Number(r.toFixed(6)):''; rf.placeholder=(r==null)?'أدخلي سعر الصرف يدوياً':''; }
+  else { fld.style.display=''; rf.value=''; rf.placeholder='سعر صرف البنك (متغيّر) — أدخليه لكل دفعة'; }
   spTotal();
 }
 function spTotal(){
