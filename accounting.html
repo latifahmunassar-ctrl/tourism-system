@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ك٢ · نقص الإدخالات (Charge from/تاريخ الدفع) يظهر داخل Booking Form فقط (لائحة إكمال) — للمحجوزين آخر ٥ أشهر، والقديمون مستثنون؛ أُزيل من إشعارات المالكة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ل٢ · فصل التبويبات: تبويب الموردين يعرض الموردين فقط (يستبعد الفنادق/الأنظمة)، وHotel Overview مختص بالفنادق والأنظمة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3040,7 +3040,10 @@ function supOwed(invs){ return invs.reduce((s,x)=>s+Number(x.invoice_amount||0),
 function fillSupplierFilter(){
   const dl=$('supflt-list'); if(!dl) return;
   // أسماء الموردين ذوي الحركة + الموردين المُضافين للقائمة المُدارة (حتى بلا حركة)
-  const names=[...new Set([...supInvAll().map(x=>x.supplier_name), ...listValues('suppliers').map(v=>v.value)].map(s=>String(s||'').trim()).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'ar'));
+  const _nz=(s)=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+  const _supSet=new Set(listValues('suppliers').map(v=>_nz(v.value)));
+  const _hotelOnly=new Set(listValues('hotels_system').map(v=>_nz(v.value)).filter(h=>!_supSet.has(h)));
+  const names=[...new Set([...supInvAll().map(x=>x.supplier_name), ...listValues('suppliers').map(v=>v.value)].map(s=>String(s||'').trim()).filter(Boolean))].filter(n=>!_hotelOnly.has(_nz(n))).sort((a,b)=>String(a).localeCompare(String(b),'ar'));
   dl.innerHTML=names.map(n=>'<option>'+esc(n)+'</option>').join('');
 }
 function bankCur(b){ b=String(b||''); if(/USD/i.test(b))return 'USD'; if(/MYR/i.test(b))return 'MYR'; if(/EUR/i.test(b))return 'EUR'; if(/\bSAR\b|rawafi|ريال سعودي/i.test(b))return 'SAR'; return 'OMR'; }
@@ -3756,7 +3759,11 @@ function caExport(){
 }
 function renderSuppliers(){
   const tb=document.querySelector('#t-sup tbody'); if(!tb) return;
-  const inv=supInvAll();
+  // تبويب الموردين = موردون فقط؛ نستبعد الأسماء التي هي فنادق/أنظمة (hotels_system) وليست ضمن قائمة الموردين (تظهر في Hotel Overview)
+  const _nz=(s)=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+  const _supSet=new Set(listValues('suppliers').map(v=>_nz(v.value)));
+  const _hotelOnly=new Set(listValues('hotels_system').map(v=>_nz(v.value)).filter(h=>!_supSet.has(h)));
+  const inv=supInvAll().filter(x=>!_hotelOnly.has(_nz(x.supplier_name)));
   const by={};
   inv.forEach(x=>{ const s=x.supplier_name||'?'; (by[s]=by[s]||[]).push(x); });
   const names=Object.keys(by).sort((a,b)=>by[b].length-by[a].length);
