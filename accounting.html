@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-غ٢ · Sales Form: عند اختيار مصدر الحجز (مورّد/فندق) تتعبّى عملة المورّد تلقائياً حسب العملة المعتمدة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ك٤ · Sales Form: عملة المورّد تتعبّى تلقائياً من مصدر الحجز وتُقفَل إن كانت معتمدة (مورّد/فندق) — غير معتمدة تبقى مفتوحة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1360,10 +1360,10 @@ function editSalesItem(id){
   const s=(DATA.serviceLines||[]).find(x=>x.id===id); if(!s) return;
   $('s-id').value=s.id; $('s-code').value=s.client_code||'';
   fillSalesTypes(); const _stype=salesTypeLabel(s.kind||''); if(typeof setSelVal==='function'){ setSelVal('s-type', _stype); } else { $('s-type').value=_stype; } $('s-desc').value=s.name||'';
-  fillSalesSuppliers(); sToggleDates(); $('s-supplier').value=s.supplier||''; if($('s-room'))$('s-room').value=s.detail||''; if($('s-rooms'))$('s-rooms').value=s.rooms_count||''; $('s-price').value=s.amount||0; $('s-sellcur').value=((clientInfo(s.client_code)||{}).cur)||s.sell_currency||'SAR'; $('s-cur').value=s.currency||'SAR'; $('s-rate').value=s.currency_rate||1; $('s-in').value=s.check_in||''; $('s-out').value=s.check_out||''; sNights(); sCalc();
+  fillSalesSuppliers(); sToggleDates(); $('s-supplier').value=s.supplier||''; if($('s-room'))$('s-room').value=s.detail||''; if($('s-rooms'))$('s-rooms').value=s.rooms_count||''; $('s-price').value=s.amount||0; $('s-sellcur').value=((clientInfo(s.client_code)||{}).cur)||s.sell_currency||'SAR'; if($('s-cur')){$('s-cur').disabled=false;$('s-cur').style.background='';} $('s-cur').value=s.currency||'SAR'; $('s-rate').value=s.currency_rate||1; $('s-in').value=s.check_in||''; $('s-out').value=s.check_out||''; sNights(); sCalc();
   $('s-save-btn').textContent='💾 حفظ التعديل'; $('s-msg').innerHTML='<span style="color:var(--amber)">وضع التعديل — عدّلي واحفظي</span>'; window.scrollTo(0,0);
 }
-function cancelEditSales(){ $('s-id').value=''; $('s-save-btn').textContent='حفظ الخدمة'; ['s-desc','s-supplier','s-room','s-rooms','s-in','s-out'].forEach(i=>{const e=$(i);if(e)e.value='';}); $('s-price').value=0; $('s-rate').value=1; $('s-cur').value='SAR'; $('s-sellcur').value='SAR'; $('s-qty').value=1; if($('s-supcalc'))$('s-supcalc').value=''; $('s-msg').textContent=''; }
+function cancelEditSales(){ $('s-id').value=''; $('s-save-btn').textContent='حفظ الخدمة'; ['s-desc','s-supplier','s-room','s-rooms','s-in','s-out'].forEach(i=>{const e=$(i);if(e)e.value='';}); $('s-price').value=0; $('s-rate').value=1; if($('s-cur')){$('s-cur').disabled=false;$('s-cur').style.background='';$('s-cur').value='SAR';} $('s-sellcur').value='SAR'; $('s-qty').value=1; if($('s-supcalc'))$('s-supcalc').value=''; $('s-msg').textContent=''; }
 async function delSalesItem(id,code){
   if(!confirm('حذف هذه الخدمة؟')) return;
   const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_service_line',payload:{id,client_code:code}})});
@@ -1946,7 +1946,7 @@ function sBuildPayload(){
 // هل الفورم الحالي فيه خدمة مكتوبة (ليُحتسب عند الحفظ)؟
 function sFormFilled(){ return !!((($('s-desc').value||'').trim())||(($('s-supplier').value||'').trim())||(+$('s-price').value>0)); }
 // تفريغ حقول الخدمة مع الإبقاء على كود العميل (للخدمة التالية)
-function sClearService(){ ['s-desc','s-room','s-rooms','s-supplier','s-in','s-out'].forEach(i=>{const e=$(i);if(e)e.value='';}); $('s-price').value=0; $('s-rate').value=1; $('s-cur').value='SAR'; $('s-qty').value=1; if($('s-supcalc'))$('s-supcalc').value=''; fillSalesTypes(); fillSalesSuppliers(); sToggleDates(); }
+function sClearService(){ ['s-desc','s-room','s-rooms','s-supplier','s-in','s-out'].forEach(i=>{const e=$(i);if(e)e.value='';}); $('s-price').value=0; $('s-rate').value=1; if($('s-cur')){$('s-cur').disabled=false;$('s-cur').style.background='';$('s-cur').value='SAR';} $('s-qty').value=1; if($('s-supcalc'))$('s-supcalc').value=''; fillSalesTypes(); fillSalesSuppliers(); sToggleDates(); }
 // زر «➕ أضف خدمة أخرى للطلب»
 function sAddAnother(){
   if($('s-id').value){ $('s-msg').innerHTML='<span style="color:var(--amber)">أنتِ في وضع تعديل خدمة واحدة — احفظي التعديل أولاً</span>'; return; }
@@ -3097,10 +3097,15 @@ function sourceCurrency(name){ const nn=String(name||'').trim().toLowerCase(); i
   const hc=((DATA&&DATA.lists)||[]).find(l=>l.category==='payee_currency' && String(l.value||'').split('=')[0].trim().toLowerCase()===nn);
   if(hc){ const c=String(hc.value).split('=')[1]; if(c) return String(c).trim().toUpperCase(); }
   for(const r of SUPPLIER_CUR_RULES) if(r.re.test(String(name))) return r.cur; return 'USD'; }
-// تعبئة عملة المورّد تلقائياً عند اختيار مصدر الحجز في Sales Form
-function sSupplierPick(){ const src=(($('s-supplier')||{}).value||'').trim(); if(!src) return; const cur=sourceCurrency(src); const sel=$('s-cur'); if(!cur||!sel) return;
-  if(![...sel.options].some(o=>o.value===cur)){ const o=document.createElement('option'); o.text=cur; o.value=cur; sel.add(o); }
-  sel.value=cur; if(typeof sRate==='function') sRate(); }
+// تعبئة عملة المورّد تلقائياً عند اختيار مصدر الحجز في Sales Form — وتُقفَل إن كانت العملة معتمدة (مورّد/فندق)
+function sSupplierPick(){ const sel=$('s-cur'); if(!sel) return; const src=(($('s-supplier')||{}).value||'').trim();
+  if(!src){ sel.disabled=false; sel.style.background=''; sel.title=''; return; }
+  const nn=src.toLowerCase();
+  const approved = !!supCurOverride(src) || ((DATA&&DATA.lists)||[]).some(l=>l.category==='payee_currency' && String(l.value||'').split('=')[0].trim().toLowerCase()===nn);
+  const cur=sourceCurrency(src);
+  if(cur){ if(![...sel.options].some(o=>o.value===cur)){ const o=document.createElement('option'); o.text=cur; o.value=cur; sel.add(o); } sel.value=cur; }
+  sel.disabled=approved; sel.style.background=approved?'#eef2f8':''; sel.title=approved?'🔒 عملة معتمدة للمصدر — مقفلة (تُغيَّر من اعتماد المورّد/الفندق)':'';
+  if(typeof sRate==='function') sRate(); }
 async function _delSupCur(nn){ const olds=listValues('supplier_cur').filter(v=>{ const s=String(v.value||''); const i=s.lastIndexOf('='); return i>0 && s.slice(0,i).trim().toLowerCase()===nn; }); for(const o of olds){ await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_list_item',payload:{category:'supplier_cur',value:o.value}})}); } }
 async function saveSupplierCur(sup){
   const sel=document.getElementById('supcur-sel'); if(!sel)return; const cur=(sel.value||'').trim(); if(!cur){ alert('اختاري العملة'); return; }
