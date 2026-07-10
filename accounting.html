@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-س · Booking Form: رقم التأكيد (Conf No) إجباري للفنادق والطيران فقط (اختياري للمواصلات وغيرها) + نجمة حمراء للصفوف المطلوبة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ع · إصلاح: Sales Form يخزّن نوع الخدمة بالرمز القانوني (hotel/flight/…) بدل النص العربي — يصلح ظهور قيمة الحجز الفعلي في التقارير (مثل C260466)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1323,6 +1323,17 @@ function infoHtml(ci){
 
 // ---- Sales Form ----
 const SVC={hotel:'🏨 فندق',flight:'✈️ طيران',transport:'🚐 مواصلات',visa:'🛂 تأشيرة',tour:'🗺️ جولة',compensation:'💰 تعويض',other:'خدمة'};
+// النظام يعتمد رموز أنواع إنجليزية (hotel/flight/…)؛ قائمة Sales Form عربية — نحوّل الاختيار للرمز القانوني عند الحفظ
+function salesKindCanon(v){ const s=String(v||'').trim(); const l=s.toLowerCase();
+  const map={'فندق':'hotel','طيران':'flight','مواصلات':'transport','تأشيرة':'visa','جولة':'tour','باقة كاملة':'tour','أخرى':'other','تعويض':'compensation','مورد':'supplier','مورّد':'supplier'};
+  if(map[s]) return map[s];
+  if(['hotel','flight','transport','visa','tour','supplier','additional','compensation','other'].includes(l)) return l;
+  if(/فندق|hotel/.test(l)) return 'hotel'; if(/طيران|flight/.test(l)) return 'flight';
+  if(/مواصلات|نقل|transport|transfer/.test(l)) return 'transport'; if(/تأشير|visa/.test(l)) return 'visa';
+  if(/جول|باقة|برنامج|tour|package/.test(l)) return 'tour'; if(/تعويض|compensation/.test(l)) return 'compensation';
+  if(/مورد|supplier/.test(l)) return 'supplier'; return 'other'; }
+// عكسها: من الرمز القانوني إلى تسمية قائمة Sales Form العربية (لوضع التعديل)
+function salesTypeLabel(kind){ const m={hotel:'فندق',flight:'طيران',transport:'مواصلات',visa:'تأشيرة',tour:'باقة كاملة',compensation:'أخرى',supplier:'أخرى',additional:'أخرى',other:'أخرى'}; return m[String(kind||'').toLowerCase()]||kind; }
 function sRecall(){
   const code=($('s-code').value||'').trim().toUpperCase();
   const ci=clientInfo(code), box=$('s-info');
@@ -1340,7 +1351,7 @@ function sRecall(){
 function editSalesItem(id){
   const s=(DATA.serviceLines||[]).find(x=>x.id===id); if(!s) return;
   $('s-id').value=s.id; $('s-code').value=s.client_code||'';
-  fillSalesTypes(); if(typeof setSelVal==='function'){ setSelVal('s-type', s.kind||''); } else { $('s-type').value=s.kind||''; } $('s-desc').value=s.name||'';
+  fillSalesTypes(); const _stype=salesTypeLabel(s.kind||''); if(typeof setSelVal==='function'){ setSelVal('s-type', _stype); } else { $('s-type').value=_stype; } $('s-desc').value=s.name||'';
   fillSalesSuppliers(); sToggleDates(); $('s-supplier').value=s.supplier||''; if($('s-room'))$('s-room').value=s.detail||''; if($('s-rooms'))$('s-rooms').value=s.rooms_count||''; $('s-price').value=s.amount||0; $('s-sellcur').value=((clientInfo(s.client_code)||{}).cur)||s.sell_currency||'SAR'; $('s-cur').value=s.currency||'SAR'; $('s-rate').value=s.currency_rate||1; $('s-in').value=s.check_in||''; $('s-out').value=s.check_out||''; sNights(); sCalc();
   $('s-save-btn').textContent='💾 حفظ التعديل'; $('s-msg').innerHTML='<span style="color:var(--amber)">وضع التعديل — عدّلي واحفظي</span>'; window.scrollTo(0,0);
 }
@@ -1895,7 +1906,7 @@ function sBuildPayload(){
     sNights();
   }
   if($('s-sellcur').value!==$('s-cur').value && !(+$('s-rate').value)){ $('s-msg').innerHTML='<span style="color:var(--red)">⚠️ ما فيه سعر صرف لهذا الزوج — أضيفيه في قائمة العملات «the currency» بمدخل البيانات</span>'; return null; }
-  return { id:($('s-id').value||null), client_code:code, kind:$('s-type').value, name:$('s-desc').value.trim()||null,
+  return { id:($('s-id').value||null), client_code:code, kind:salesKindCanon($('s-type').value), name:$('s-desc').value.trim()||null,
     detail:($('s-room').value||'').trim()||null,
     supplier:$('s-supplier').value||null, amount:+$('s-price').value||0,
     sell_currency:$('s-sellcur').value||'SAR', currency:$('s-cur').value||null, currency_rate:+$('s-rate').value||1,
