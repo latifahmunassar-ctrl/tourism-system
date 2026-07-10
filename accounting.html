@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو · رفض حفظ معاملة بمرجع بنكي بلا اسم بنك (نموذج الإدخال + التعديل + التعبئة المباشرة)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ب · قائمة إدخال البنك/البطاقة في Banks Cash تعتمد القائمة المُدارة فقط (الحركات القديمة محفوظة)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -651,7 +651,7 @@ table{font-weight:600}
         <h3 style="margin-top:0">➕ إضافة حركة كاش (داخل / خارج) يدوياً</h3>
         <div class="fgrid">
           <div class="fld"><label>📅 التاريخ</label><input type="date" id="bca-date" style="color-scheme:light;cursor:pointer"></div>
-          <div class="fld"><label>البنك / البطاقة <span style="color:var(--red)">*</span></label><input id="bca-bank" list="bc-bank-list" autocomplete="off" placeholder="اكتبي اسم البنك…" style="background:#fff;color:var(--txt)"></div>
+          <div class="fld"><label>البنك / البطاقة <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">من القائمة المُدارة فقط</span></label><input id="bca-bank" list="bca-banklist" autocomplete="off" placeholder="اختاري من القائمة…" style="background:#fff;color:var(--txt)"><datalist id="bca-banklist"></datalist></div>
           <div class="fld"><label>داخل (+)</label><input type="number" id="bca-in" placeholder="0"></div>
           <div class="fld"><label>خارج (−)</label><input type="number" id="bca-out" placeholder="0"></div>
           <div class="fld"><label>العملة</label><input id="bca-cur" list="bc-cur-list" autocomplete="off" placeholder="OMR / USD…" style="background:#fff;color:var(--txt)"></div>
@@ -3351,7 +3351,9 @@ function renderBanksCash(){
   bcUpdMultiBtn('desc'); bcUpdMultiBtn('details'); bcFillAddForm();
   const all=(DATA.banksCash||[]);
   const banks=[...new Set(all.map(x=>x.bank_name).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'ar'));
-  const dl=$('bc-bank-list'); if(dl)dl.innerHTML=banks.map(b=>'<option>'+esc(b)+'</option>').join('');
+  const dl=$('bc-bank-list'); if(dl)dl.innerHTML=banks.map(b=>'<option>'+esc(b)+'</option>').join('');   // الفلتر: يشمل القديم لتصفية الحركات السابقة
+  // الإدخال: القائمة المُدارة فقط (acc_lists banks) — مو من الحركات القديمة
+  const mng=listValues('banks').map(b=>b.value); const dlAdd=$('bca-banklist'); if(dlAdd)dlAdd.innerHTML=mng.map(b=>'<option>'+esc(b)+'</option>').join('');
   const curs=[...new Set(all.map(x=>bankCur(x.bank_name)).filter(Boolean))].sort();
   const cdl=$('bc-cur-list'); if(cdl)cdl.innerHTML=curs.map(c=>'<option>'+esc(c)+'</option>').join('');
   const csel=$('bc-cur'); if(csel){ const cur=csel.value; csel.innerHTML='<option value="">كل العملات</option>'+curs.map(c=>'<option'+(c===cur?' selected':'')+'>'+esc(c)+'</option>').join(''); }
