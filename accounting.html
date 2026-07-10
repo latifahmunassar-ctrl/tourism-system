@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-س٤ · First Client Data: حقول العميل الجديد كلها إجبارية (تاريخ الحجز/الوصول · الاسم · الأشخاص · الوكيل · من/إلى · التكلفة/الربح · العملة · نوع الباقة · الموظف)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ع٤ · إدخال عميل جديد بلا دفعة يمرّ بموافقة المالكة (طلب في تبويب الإشعارات) ولا ينعكس إلا بعد الاعتماد</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4972,6 +4972,7 @@ async function save(){
   // 📋 تأكيد إلزامي بالقيم قبل الإرسال (لا انعكاس إلا بموافقة الأدمن)
   const rateV=(+$('f-cost').value||0)+(+$('f-profit').value||0); const curV=p.currency||'';
   const kindTxt=isNew?'عميل جديد':(svc?'خدمة مضافة':'دفعة عميل');
+  const noPayNew = isNew && !(paid>0);   // عميل جديد بلا دفعة → يمرّ بموافقة المالكة
   const confirmMsg='📋 تأكيد '+kindTxt+' — راجعي القيم جيداً:\n\n'+
     (isNew?('• العميل: '+(p.client_name||'—')+'\n'):('• كود العميل: '+(p.client_code||'')+'\n'))+
     '• قيمة '+(svc?'الخدمة':'الباقة')+': '+fmt(rateV)+' '+curV+'\n'+
@@ -4980,19 +4981,23 @@ async function save(){
     '• تاريخ الدفع: '+(p.payment_date||'— غير محدّد —')+'\n\n'+
     (dest==='supplier'
       ?'🔒 «سُلّم للمورّد» يُرسَل لموافقة الأدمن (يُقفل مستحق المورّد لصالح العميل). تأكيد الإرسال؟'
-      :'✅ ستُسجَّل مباشرة في First Client Data. هل القيم صحيحة وتريدين الحفظ؟');
+      :(noPayNew
+        ?'🔔 هذا الإدخال بلا دفعة — سيُرسَل لموافقتكِ ولن ينعكس حتى تعتمدينه (يظهر في تبويب الإشعارات للموافقة/الرفض). تأكيد الإرسال؟'
+        :'✅ ستُسجَّل مباشرة في First Client Data. هل القيم صحيحة وتريدين الحفظ؟'));
   if(!confirm(confirmMsg))return;
   $('save-btn').disabled=true; SAVING=true;
   p.by=(CURRENT_USER&&CURRENT_USER.staff_name)||'';
   p.created_by=p.by;   // ختم اسم المُدخِل على الصف الجديد
   let j;
-  if(dest==='supplier'){
-    // 🤝 تسليم مباشر للمورّد → يمرّ بموافقة الأدمن مع التفاصيل (يُقفل مستحق المورّد)
-    p.summary='👤 '+kindTxt+' '+(isNew?('«'+(p.client_name||'')+'»'):('«'+(p.client_code||'')+'»'))+' · مدفوع '+fmt(paid)+' '+curV+' · 🤝 سُلّم للمورّد '+deliveredSupplier;
+  if(dest==='supplier' || noPayNew){
+    // يمرّ بموافقة المالكة: تسليم مباشر للمورّد، أو إدخال عميل جديد بلا دفعة — لا ينعكس إلا بعد الاعتماد
+    p.summary = (dest==='supplier')
+      ? ('👤 '+kindTxt+' '+(isNew?('«'+(p.client_name||'')+'»'):('«'+(p.client_code||'')+'»'))+' · مدفوع '+fmt(paid)+' '+curV+' · 🤝 سُلّم للمورّد '+deliveredSupplier)
+      : ('👤 إدخال عميل جديد بلا دفعة «'+(p.client_name||'')+'» · باقة '+fmt(rateV)+' '+curV+' · مدفوع 0 — بانتظار موافقتك');
     try{ const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'request_client_entry',payload:p})}); j=await r.json(); }
     catch(e){ $('save-btn').disabled=false; SAVING=false; $('msg').innerHTML='<span style="color:var(--red)">خطأ: '+esc(e.message)+'</span>'; return; }
     if(j.error){ $('save-btn').disabled=false; SAVING=false; $('msg').innerHTML='<span style="color:var(--red)">خطأ: '+esc(j.error)+'</span>'; return; }
-    $('msg').innerHTML='<span style="color:var(--green)">✅ أُرسل طلب «سُلّم للمورّد» للأدمن للموافقة بالتفاصيل — لن ينعكس حتى يعتمده</span>';
+    $('msg').innerHTML='<span style="color:var(--green)">'+(dest==='supplier'?'✅ أُرسل طلب «سُلّم للمورّد» للموافقة — لن ينعكس حتى تعتمدينه':'🔔 أُرسل الإدخال (بلا دفعة) لموافقتك — لن ينعكس حتى تعتمدينه في تبويب الإشعارات')+'</span>';
   } else {
     // 💳 بنك/بطاقة → تسجيل مباشر بلا موافقة
     try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_client_entry',payload:p})}); j=await r.json(); }
