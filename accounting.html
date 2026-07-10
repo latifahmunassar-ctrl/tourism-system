@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ب · قائمة إدخال البنك/البطاقة في Banks Cash تعتمد القائمة المُدارة فقط (الحركات القديمة محفوظة)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ج · فلتر البنك في Banks Cash يعتمد القائمة المُدارة (لا بطاقات قديمة) — الحركات محفوظة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -667,7 +667,7 @@ table{font-weight:600}
         <div style="font-size:11px;color:var(--muted);margin-top:4px">القيمة بالريال تُحسب تلقائياً = المبلغ × سعر الصرف. الحركات اليدوية لا تمسحها المزامنة.</div>
       </div>
       <div class="formbar">
-        <div class="fld" style="min-width:240px"><label>🏦 البنك / البطاقة</label><input id="bc-bank" list="bc-bank-list" autocomplete="off" oninput="renderBanksCashDetail()" placeholder="كل البنوك — أو اكتبي للبحث" style="background:#fff;color:var(--txt)"></div>
+        <div class="fld" style="min-width:240px"><label>🏦 البنك / البطاقة</label><input id="bc-bank" list="bca-banklist" autocomplete="off" oninput="renderBanksCashDetail()" placeholder="من القائمة — أو اكتبي أي اسم للبحث" style="background:#fff;color:var(--txt)"></div>
         <div class="fld"><label>💱 العملة</label><select id="bc-cur" class="flt" onchange="renderBanksCashDetail()"><option value="">كل العملات</option></select></div>
         <div class="fld"><label>📡 القناة</label><select id="bc-chan" class="flt" onchange="renderBanksCashDetail()"><option value="">كل القنوات</option></select></div>
         <div class="fld" style="min-width:200px;flex:1"><label>🔍 بحث (بنك/مرجع/وصف/ملاحظة)</label><input id="bc-q" oninput="renderBanksCashDetail()" placeholder="اكتبي…"></div>
