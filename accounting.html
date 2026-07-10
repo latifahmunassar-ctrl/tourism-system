@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-م٢ · كشف حساب فندق في Hotel Overview: مستحق · حالة السداد (💳 charge from بطاقة/بنك = سداد · دفعة مسجّلة) · رصيد لكل فندق</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ن٢ · كشف حساب فندق: يعتمد فقط حجوزات سنة 2026 فما فوق (يستبعد 2025 والأقدم) + مستحق/حالة السداد/رصيد</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2191,9 +2191,11 @@ function renderHotelStatement(){
   const paidSet=new Set();
   (DATA.hotelPayments||[]).forEach(x=>{ if(Number(x.pay_supplier||0)>0.005)paidSet.add((x.client_code||'').toUpperCase()+'|'+hpNorm(x.hotel_system)); });
   (DATA.supplierPayments||[]).forEach(x=>{ if(Number(x.amount||0)>0.005)paidSet.add((x.client_code||'').toUpperCase()+'|'+hpNorm(x.supplier_name)); });
-  const rows=hotelBookingsAll().filter(h=>hpNorm(h.hotel_name)===nq||hpNorm(h.booked_from||'')===nq)
+  // فقط حجوزات سنة 2026 فما فوق — حجوزات السنوات السابقة (2025 وأقدم) لا تُجلب في الكشف
+  const yOf=(h)=>{ const m=String(h.check_in||h.arrival_date||h.created_at||'').match(/(\d{4})/); return m?parseInt(m[1],10):0; };
+  const rows=hotelBookingsAll().filter(h=>(hpNorm(h.hotel_name)===nq||hpNorm(h.booked_from||'')===nq) && yOf(h)>=2026)
     .sort((a,b)=>{ const da=a._booking?1:0,db=b._booking?1:0; if(da!==db)return db-da; return String(b.check_in||b.arrival_date||'').localeCompare(String(a.check_in||a.arrival_date||'')); });
-  if(!rows.length){ box.innerHTML='<div style="color:var(--muted);padding:6px">لا حجوزات لهذا الفندق.</div>'; return; }
+  if(!rows.length){ box.innerHTML='<div style="color:var(--muted);padding:6px">لا حجوزات لهذا الفندق في سنة 2026.</div>'; return; }
   // عملة تكلفة الفندق (فندق واحد = عملة واحدة): من عملة حجوزات الداشبورد، وإلا من عملة الدفعات المسجّلة
   let hcur=''; rows.forEach(h=>{ if(!hcur && h._booking && bcur[h.service_id])hcur=bcur[h.service_id]; });
   if(!hcur){ (DATA.supplierPayments||[]).forEach(x=>{ if(!hcur && hpNorm(x.supplier_name)===nq && x.currency)hcur=x.currency; }); }
