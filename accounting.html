@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ك٣ · عدد الغرف يظهر أيضاً في جدول توزيع الدفعات (دفعة فندق) بجانب الدخول</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ل٣ · سجل الدفعات المسجّلة للفندق يعرض دفعات سنة 2026 فقط (يستبعد 2025 والأقدم)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2384,10 +2384,10 @@ function buildHotelPay(){
     '<div style="margin-top:8px;font-size:13px">'+(hpHbMatch(HO_PAYEE).length?'مجموع الموزّع: <b id="hp-dtot">0</b> '+esc(HO_TCUR)+' · المحدّدين: <b id="hp-dn">0</b> · ':'إجمالي الموزّع: <b id="hp-total">0</b> · عدد العملاء المحدّدين: <b id="hp-nsel">0</b> · ')+'<span id="hp-msg" style="color:var(--muted)"></span></div>'+
     '<button class="btn green" style="margin-top:8px" onclick="hpSubmit()">'+(hpHbMatch(HO_PAYEE).length?'✅ تسجيل الحركة مباشرة':'✅ تسجيل الدفعة الموزّعة')+'</button></div>';
   if(hpHbMatch(HO_PAYEE).length) h+='<div id="hp-fcd"></div>';
-  // ===== دفعات هذا المدفوع له المسجّلة — الحذف مباشر =====
-  const recorded=hpPayments(HO_PAYEE).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  // ===== دفعات هذا المدفوع له المسجّلة — سنة 2026 فقط (تستبعد 2025 والأقدم) — الحذف مباشر =====
+  const recorded=hpPayments(HO_PAYEE).filter(x=>{ const m=String(x.date||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
   let recPaid=0; recorded.forEach(x=>recPaid+=x.amount); const nHist=recorded.filter(x=>x.src!=='sp').length;
-  h+='<div class="panel" style="margin-bottom:14px"><h3>💵 دفعات «'+esc(HO_PAYEE)+'» المسجّلة ('+recorded.length+')</h3>'+
+  h+='<div class="panel" style="margin-bottom:14px"><h3>💵 دفعات «'+esc(HO_PAYEE)+'» المسجّلة — سنة 2026 فقط ('+recorded.length+')</h3>'+
     '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">الإجمالي (خام بعملات العملاء): <b>'+fmt(recPaid)+'</b>'+(nHist?' · منها '+nHist+' دفعة تاريخية (من الشيت/البنك)':'')+' · كل دفعة سطر مستقل أمامها مرجعها 👇</div>'+
     (recorded.length?'<div class="tbl-wrap bf-scroll" style="max-height:360px"><table style="font-size:11.5px;white-space:nowrap"><thead><tr><th>التاريخ</th><th>المبلغ ('+esc(HO_TCUR)+')</th><th>بعملة البنك</th><th>العملة</th><th>سعر الصرف</th><th>🏦 مصدر / آلية الدفع</th><th>المرجع</th><th>شيت المصدر</th><th></th></tr></thead><tbody>'+
       recorded.map(x=>{ const srcLbl=x.src==='detail'?'<span style="font-size:10px;color:var(--muted)">📄 Hotels PYT</span>':(x.src==='sheet'?'<span style="font-size:10px;color:var(--muted)">📄 Overview</span>':(x.src==='bank'?'<span style="font-size:10px;color:var(--muted)">📄 سجل البنك</span>':'<span style="font-size:10px;color:var(--accent)">داشبورد</span>')); const bn=x.bank||''; const method=(/credit card|card|بطاقة/i.test(bn)||bn.indexOf('**')>=0)?'💳 بطاقة':(/open balance/i.test(bn)?'🟰 رصيد مفتوح':(/reward/i.test(bn)?'🎁 مكافآت':(bn?'🏦 تحويل بنكي':''))); const pairCur=String(x.pair||'').split('-')[0].trim(); return '<tr><td>'+esc(x.date||'')+'</td><td class="num" style="font-weight:700">'+fmt(x.amount)+' '+esc(x.srcCur||'')+'</td><td class="num">'+(x.raw?fmt(x.raw)+' '+esc(pairCur||''):'')+'</td><td>'+esc(x.pair||'')+'</td><td class="num">'+(x.rate!=null&&x.rate!==''?esc(x.rate):'')+'</td><td>'+(bn?esc(bn)+(method?' <span style="font-size:9px;color:var(--accent)">'+method+'</span>':''):'<span style="color:#9aa">—</span>')+'</td><td>'+esc(x.ref||'')+'</td><td>'+srcLbl+'</td>'+
