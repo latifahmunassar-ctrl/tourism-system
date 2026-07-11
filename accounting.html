@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 11يوليو-ج · عملة معتمدة لكل بنك/بطاقة (لوحة في تبويب البنوك) — تُستخدم في كل الحسابات بدل التخمين من الاسم</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 12يوليو · تبويب الموردين — قسم توزيع الدفعات: تاريخ وصول العميل بجانب الكود + عمودان للربح (المتوقع من First Client Data · الفعلي من Booking Form)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3967,7 +3967,7 @@ function renderSupplierDetail(){
   let cliRows=Object.keys(invCli).sort((a,b)=>(cliNewestId[(b||'').toUpperCase()]||0)-(cliNewestId[(a||'').toUpperCase()]||0));
   const distDates=[...new Set(Object.values(cliDates).flat().filter(Boolean))].sort((a,b)=>String(b).localeCompare(String(a)));
   // بيانات العميل (الباكدج/المدفوع/الربح بالريال) للرصيد المستحق وربح البرنامج
-  const fcdCli={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!fcdCli[c])fcdCli[c]={pr:0,paid:0,cur:''}; fcdCli[c].pr+=Number(r.package_rate||0); fcdCli[c].paid+=Number(r.amount_paid||0); if(r.currency&&!fcdCli[c].cur)fcdCli[c].cur=r.currency; });
+  const fcdCli={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!fcdCli[c])fcdCli[c]={pr:0,paid:0,cur:'',prof:0,arr:''}; fcdCli[c].pr+=Number(r.package_rate||0); fcdCli[c].paid+=Number(r.amount_paid||0); fcdCli[c].prof+=Number(r.profit||0); if(r.currency&&!fcdCli[c].cur)fcdCli[c].cur=r.currency; const _ad=r.arrival_date?String(r.arrival_date).slice(0,10):''; if(_ad&&(!fcdCli[c].arr||_ad>fcdCli[c].arr))fcdCli[c].arr=_ad; });
   const _APM=actualProfitMaps(); // الربح الفعلي من Booking Form (service_lines)
   const ccCli={}; (DATA.serviceLines||[]).forEach(s=>{ const c=(s.client_code||'').toUpperCase(); ccCli[c]=(ccCli[c]||0)+Number(s.cancel_charge||0); }); // رسوم الإلغاء من Booking Form
   // قيمة الحجز قبل الإلغاء (BOOKING RATE = N من Final) لخدمات هذا المورّد فقط
@@ -4066,7 +4066,7 @@ function renderSupplierDetail(){
         '<div class="fld"><label>إلى تاريخ 📅</label><input type="date" id="spc-to" onchange="spcliFilter()" style="color-scheme:light;cursor:pointer"></div>'+
         '<button class="btn ghost" style="padding:7px 14px" onclick="spcliClear()">مسح الفلتر</button>'+
       '</div>'+
-      '<div class="tbl-wrap" style="max-height:300px"><table style="font-size:11.5px"><thead><tr><th>كود العميل</th><th>العميل</th><th>الوكيل</th><th>قيمة الدفع المُسدَّد<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>client balance payment</th><th>ربح البرنامج</th><th>قيمة الحجز قبل الإلغاء<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>رسوم الإلغاء<br><span style="font-size:9px;color:var(--muted)">Cancelation Charge ('+esc(SCUR)+')</span></th><th>قيمة الحجز<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>فاتورة المورّد ✏️<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>الفرق</th><th>مدفوع سابقاً</th><th>المتبقّي</th><th>ادفع الآن</th></tr></thead><tbody id="sp-dist-tbl">'+
+      '<div class="tbl-wrap" style="max-height:300px"><table style="font-size:11.5px"><thead><tr><th>كود العميل</th><th>تاريخ الوصول 📅</th><th>العميل</th><th>الوكيل</th><th>قيمة الدفع المُسدَّد<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>client balance payment</th><th>الربح المتوقع<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>الربح الفعلي<br><span style="font-size:9px;color:var(--muted)">من Booking Form</span></th><th>قيمة الحجز قبل الإلغاء<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>رسوم الإلغاء<br><span style="font-size:9px;color:var(--muted)">Cancelation Charge ('+esc(SCUR)+')</span></th><th>قيمة الحجز<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>فاتورة المورّد ✏️<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>الفرق</th><th>مدفوع سابقاً</th><th>المتبقّي</th><th>ادفع الآن</th></tr></thead><tbody id="sp-dist-tbl">'+
       (function(){
         const rowHtml=(c)=>{ const owed=invCli[c],paid=Math.max(0,owed-(cancOwed[c]||0))*allocR,bal=owed-paid; const mid=cliMainId[c];   /* رسوم الإلغاء تبقى مستحقة (غير مدفوعة تلقائياً) */ const av=cliActual[c]; const entered=(av!=null); const diff=owed-(entered?av:owed);
           const isDirect=directCodes.has((c||'').toUpperCase());   // دين مباشر للمورّد
@@ -4081,9 +4081,10 @@ function renderSupplierDetail(){
           const diffCell = entered
             ? '<td class="num" id="sdiff-'+mid+'" style="font-weight:700;color:'+(diff<-0.5?'#d11':(diff>0.5?'#0e9d6a':'inherit'))+'">'+fmt(diff)+'</td>'
             : '<td class="num" id="sdiff-'+mid+'"></td>';
-          return '<tr data-cli="'+_cli+'" data-dates="'+_dts+'" data-code="'+esc((c||'').toUpperCase())+'"><td>'+esc(c)+(cbal>0.5?' <span title="متبقّي عليه '+fmt(cbal)+' '+esc(ccur)+' — يجب المطالبة به" style="cursor:help">⚠️</span>':'')+'</td><td>'+esc(nameCli[c]||'')+cancHtml+directHtml+(cbal>0.5?'<div style="font-size:9px;color:#b8860b;font-weight:700">⚠️ متبقّي '+fmt(cbal)+' '+esc(ccur)+' — يجب المطالبة</div>':'')+'</td><td style="color:var(--muted)">'+esc(agentCli[c]||'')+'</td>'+
+          return '<tr data-cli="'+_cli+'" data-dates="'+_dts+'" data-code="'+esc((c||'').toUpperCase())+'"><td>'+esc(c)+(cbal>0.5?' <span title="متبقّي عليه '+fmt(cbal)+' '+esc(ccur)+' — يجب المطالبة به" style="cursor:help">⚠️</span>':'')+'</td><td style="color:var(--muted);font-size:10.5px;white-space:nowrap">'+esc(fc.arr||'')+'</td><td>'+esc(nameCli[c]||'')+cancHtml+directHtml+(cbal>0.5?'<div style="font-size:9px;color:#b8860b;font-weight:700">⚠️ متبقّي '+fmt(cbal)+' '+esc(ccur)+' — يجب المطالبة</div>':'')+'</td><td style="color:var(--muted)">'+esc(agentCli[c]||'')+'</td>'+
             '<td class="num" style="color:#0e9d6a;font-weight:700">'+fmt(fc.paid)+' <span style="font-size:9px;color:var(--muted)">'+esc(ccur)+'</span></td>'+
             '<td class="num" style="color:'+(cbal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(cbal)+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+esc(ccur)+'</div></td>'+
+            '<td class="num" style="font-weight:700;color:'+(fc.prof>0.5?'#0e9d6a':(fc.prof<-0.5?'#d11':'inherit'))+'">'+(Math.abs(fc.prof)>0.005?fmt(fc.prof):'<span style="color:#9aa">—</span>')+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+esc(ccur)+'</div></td>'+
             (prof==null?'<td class="num"><span style="color:#9aa">—</span></td>':'<td class="num" style="font-weight:700;color:'+(prof>0.5?'#0e9d6a':(prof<-0.5?'#d11':'inherit'))+'">'+fmt(prof)+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+esc(ccur)+'</div></td>')+
             '<td class="num">'+(rbc>0.5?fmt(rbc):'<span style="color:#9aa">—</span>')+'</td>'+
             '<td class="num neg">'+(canc>0.5?fmt(canc):'')+'</td>'+
