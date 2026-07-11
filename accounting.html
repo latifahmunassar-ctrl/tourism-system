@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>نظام حسابات Alezz</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" onerror="var s=document.createElement('script');s.src='https://unpkg.com/chart.js@4.4.1/dist/chart.umd.min.js';document.head.appendChild(s);"></script>
 <style>
   :root{--bg:#eef2f7;--card:#ffffff;--card2:#f1f5fb;--line:#d6deeb;--txt:#1a2438;--muted:#5b6b86;--accent:#2f6fe0;--green:#0e9d6a;--red:#e5484d;--amber:#c47f00;--purple:#7c5cff}
   *{box-sizing:border-box;margin:0;padding:0}
@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 10يوليو-ع٤ · إدخال عميل جديد بلا دفعة يمرّ بموافقة المالكة (طلب في تبويب الإشعارات) ولا ينعكس إلا بعد الاعتماد</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 11يوليو-أ · إصلاح تعطّل الصفحة: النظام يعمل حتى لو مكتبة الرسم البياني (Chart.js) ما حمّلت + CDN احتياطي</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1105,10 +1105,15 @@ function render(d){
   renderBanksCash();
   try{ renderCurAudit(); }catch(_){}
 
-  const labels=d.monthly.map(m=>m.month), profit=d.monthly.map(m=>m.profit);
-  if(chart)chart.destroy();
-  chart=new Chart($('chart'),{type:'bar',data:{labels,datasets:[{label:'الربح',data:profit,backgroundColor:'#2fd98a',borderRadius:5}]},
-    options:{plugins:{legend:{labels:{color:'#9fb0d0'}}},scales:{x:{ticks:{color:'#9fb0d0'},grid:{display:false}},y:{ticks:{color:'#9fb0d0'},grid:{color:'#1e2a44'}}}}});
+  // الرسم البياني اختياري — لو مكتبة Chart.js ما حمّلت (اتصال/CDN) لا يتوقّف النظام
+  try{
+    if(typeof Chart!=='undefined' && $('chart')){
+      const labels=d.monthly.map(m=>m.month), profit=d.monthly.map(m=>m.profit);
+      if(chart)chart.destroy();
+      chart=new Chart($('chart'),{type:'bar',data:{labels,datasets:[{label:'الربح',data:profit,backgroundColor:'#2fd98a',borderRadius:5}]},
+        options:{plugins:{legend:{labels:{color:'#9fb0d0'}}},scales:{x:{ticks:{color:'#9fb0d0'},grid:{display:false}},y:{ticks:{color:'#9fb0d0'},grid:{color:'#1e2a44'}}}}});
+    } else if($('chart')&&$('chart').parentElement){ $('chart').parentElement.innerHTML='<div style="color:var(--muted);text-align:center;padding:20px;font-size:12px">📊 تعذّر تحميل مكتبة الرسم البياني — باقي النظام يعمل طبيعي. حدّثي الصفحة لاحقاً.</div>'; }
+  }catch(_){}
 
   const ls=d.lastSync; $('synced').textContent = (ls? 'آخر مزامنة من الشيت: '+new Date(ls.ran_at).toLocaleString('ar')+' ('+ls.rows_synced+' صف)' : 'مربوط بقاعدة البيانات مباشرة');
   $('foot').textContent='آخر تحديث: '+new Date(d.generatedAt).toLocaleString('ar');
