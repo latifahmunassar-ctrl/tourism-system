@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 12يوليو-ج · نفس تلوين الربح الفعلي بالأحمر 🔻 لو أقل من المتوقع صار في Hotel Overview أيضاً (بالإضافة لجدول الموردين وفاتورة PDF)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 12يوليو-د · خط تقارير PDF أوضح وأبولد (وطباعة الألوان مضمونة) + شارة «⚠️ حجوزات غير مكتملة في Booking Form» بجانب اسم العميل في الموردين وHotel Overview</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2152,7 +2152,7 @@ function renderHotels(){
   for(const h of rows){ sSell+=Number(h.selling_rate||0); sBook+=Number(h.final_rate_booked||0); sRef+=Number(h.refund||0); if(/cancel/i.test(h.status||''))nc++; }
   const chip=(l,v)=>'<span style="display:inline-block;background:#f6f8fc;border:1px solid var(--line);border-radius:9px;padding:5px 11px;margin:0 4px 4px 0;font-size:12px"><b style="color:var(--accent)">'+v+'</b> '+l+'</span>';
   $('ho-sum').innerHTML=chip('حجوزات',rows.length)+chip('ملغية',nc)+chip('إجمالي البيع',fmt(sSell))+chip('إجمالي المحجوز',fmt(sBook))+chip('إجمالي المرتجع',fmt(sRef));
-  const apm=actualProfitMaps().byClient;
+  const _apmH=actualProfitMaps(); const apm=_apmH.byClient; const missH=_apmH.missClient||{};
   const expByCode={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!c)return; expByCode[c]=(expByCode[c]||0)+Number(r.profit||0); });   // الربح المتوقع من First Client Data لمقارنته بالفعلي
   const chg={},chgC={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel'||!s.charge_from)return; const cc=(s.client_code||'').toUpperCase(); const k=cc+'|'+(s.check_in||''); if(!chg[k])chg[k]=s.charge_from; if(!chgC[cc])chgC[cc]=s.charge_from; });
   const hpay={}; (DATA.hotelPayments||[]).forEach(x=>{ const cc=(x.client_code||'').toUpperCase(); if(cc&&!hpay[cc])hpay[cc]={bank:x.bank_name||'',ref:x.bank_ref||''}; });
@@ -2168,7 +2168,7 @@ function renderHotels(){
     const spBadge=sp?'<br><span style="font-size:9px;color:#0e9d6a;font-weight:700">💰 مدفوع للمورّد (مسجّل): '+fmt(sp.amt)+' '+esc(sp.cur||'')+(sp.n>1?' · '+sp.n+' دفعة':'')+(sp.bank?' · '+esc(sp.bank):'')+(sp.ref?' · 🔖 '+esc(sp.ref):'')+(sp.nw>0.5?' <span style="color:var(--accent)">+داشبورد</span>':'')+'</span>':'';
     const srcCell=(sbank?(esc(sbank)+' <span style="font-size:9px;color:var(--accent)">'+payMethod(sbank)+'</span>'+(sheet?'<br><span style="font-size:9px;color:var(--muted)">📄 '+esc(sheet)+'</span>':'')):(sheet?'<span style="font-size:10px;color:var(--muted)">📄 '+esc(sheet)+'</span>':(sp?'':'—')))+spBadge;
     return '<tr'+(isC?' style="background:rgba(255,107,122,.08)"':'')+'>'+[
-      esc(h.arrival_date||''), esc(h.client_name||''), esc(h.client_code||''), esc(h.agent_name||''),
+      esc(h.arrival_date||''), esc(h.client_name||'')+incBadgeHtml(missH[code]||0), esc(h.client_code||''), esc(h.agent_name||''),
       (pr==null?'<span class="num"><span style="color:#9aa">—</span></span>':(function(){ const _hasExp=(code in expByCode); const _e=Number(expByCode[code]||0); const _below=(_hasExp&&(_e-pr>0.5)); if(_below) return '<span class="num" title="⚠️ الربح الفعلي أقل من المتوقع ('+n2(_e)+') بمقدار '+n2(_e-pr)+'" style="font-weight:700;color:#d11;background:rgba(209,17,17,.10);padding:1px 5px;border-radius:5px;cursor:help">'+n2(pr)+' 🔻</span>'; return '<span class="num '+(pr>0.5?'pos':(pr<-0.5?'neg':''))+'">'+n2(pr)+'</span>'; })()), esc(h.conf_status||''), '<span class="num">'+n2(h.client_balance)+'</span>', esc(h.currency||''),
       esc(h.hotel_name||''), esc(h.room_type||''), esc(h.check_in||''), (h.rooms_count!=null&&h.rooms_count!==''?'<b>'+esc(h.rooms_count)+'</b>':''), esc(h.check_out||''), esc(h.conf_no||''),
       '<span class="num">'+n2(h.selling_rate)+'</span>', '<span class="num">'+n2(h.cancel_charge)+'</span>',
@@ -2547,7 +2547,7 @@ function exportHotelPayPDF(){
   if(fcdBody){ const idxs=[...document.querySelectorAll('#hp-fcd thead th')].map((_,i)=>i); t2head=[...document.querySelectorAll('#hp-fcd thead th')].map(x=>x.innerText.replace(/\s+/g,' ').trim()); t2rows=[...fcdBody.querySelectorAll('tr')].filter(tr=>tr.querySelectorAll('td').length>1).map(tr=>idxs.map(i=>cellTxt(tr.querySelectorAll('td')[i]))); }
   const tbl=(head,rows)=> '<table><thead><tr>'+head.map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+(rows.length?rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+head.length+'" style="text-align:center;color:#999">لا توجد بيانات</td></tr>')+'</tbody></table>';
   const html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>تقرير دفعات '+esc(payee)+'</title><style>'+
-    '@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#1d2b2a;margin:0;font-size:11px}'+
+    '@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#111;margin:0;font-size:12.5px;font-weight:600;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
     '.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #0e9d6a;padding-bottom:8px;margin-bottom:10px}'+
     '.logo{font-size:26px;font-weight:900;letter-spacing:3px;color:#0e9d6a}.logo span{color:#D4A843}.logo .sub{font-size:12px;font-weight:600;color:#6b7c7a;letter-spacing:0}'+
     '.ttl{text-align:left;font-size:15px;font-weight:800;color:#c41d88}.ttl small{display:block;font-size:11px;color:#6b7c7a;font-weight:400}'+
@@ -2555,8 +2555,8 @@ function exportHotelPayPDF(){
     '.kpis{display:flex;gap:14px;flex-wrap:wrap;background:#f1f8f4;border:1px solid #dcede6;border-radius:8px;padding:8px 12px;margin:6px 0;font-size:12.5px}'+
     '.kpis b{font-size:13.5px}.period{border:1px dashed #c41d88;background:#fdf2f8;border-radius:8px;padding:8px 12px;margin:6px 0;font-size:12px}.period small{color:#6b7c7a}'+
     'h4{margin:12px 0 5px;color:#0e9d6a;font-size:13px;border-right:4px solid #D4A843;padding-right:7px}'+
-    'table{width:100%;border-collapse:collapse;margin-bottom:6px}th,td{border:1px solid #ccd;padding:3px 5px;text-align:center;font-size:9.5px}'+
-    'th{background:#0e9d6a;color:#fff;font-size:9px}tbody tr:nth-child(even){background:#f6faf8}'+
+    'table{width:100%;border-collapse:collapse;margin-bottom:6px}th,td{border:1px solid #bbb;padding:4px 6px;text-align:center;font-size:11px;font-weight:600;color:#111}'+
+    'th{background:#0e9d6a;color:#fff;font-size:10.5px;font-weight:800}tbody tr:nth-child(even){background:#f6faf8}'+
     '.ft{margin-top:10px;border-top:1px solid #dcede6;padding-top:6px;font-size:10px;color:#6b7c7a;display:flex;justify-content:space-between}'+
     '</style></head><body>'+
     '<div class="hd"><div class="logo">AL<span>E</span>ZZ<div class="sub">شركة العز للسياحة والسفر</div></div>'+
@@ -3002,6 +3002,8 @@ function actualProfitMaps(){
   Object.keys(setl).forEach(c=>{ const s=setl[c]; if(!(s>0))return; if(byClient[c]!=null){ byClient[c]-=s; const ag=a2c[c]; if(ag&&byAgent[ag]!=null)byAgent[ag]-=s; } });
   return {byClient,byAgent,missClient,missAgent,refClient,flagClient,incClient,incAgent};
 }
+// شارة «حجوزات غير مكتملة»: العميل عنده خدمات مباعة (Sales Form) بلا حجز فعلي مُدخَل في Booking Form
+function incBadgeHtml(missN){ missN=Number(missN)||0; return missN>0?'<div style="font-size:9px;color:#d98a00;font-weight:800;margin-top:2px" title="عنده '+missN+' خدمة/حجز مباعة بلا سعر حجز فعلي مُدخَل في Booking Form">⚠️ حجوزات غير مكتملة في Booking Form ('+missN+')</div>':''; }
 // v=الربح الفعلي · miss=خدمات بلا حجز · inc=الحجز الفعلي أقل بكثير من التكلفة المسجّلة (ناقص بالمصدر)
 function actCell(v,miss,inc){
   miss=miss||0;
@@ -3331,12 +3333,12 @@ function exportReconPDF(){
   const tbl=(title,arr,color)=> '<h3 style="margin:12px 0 4px;color:'+color+';font-size:13px">'+title+' <span style="font-weight:400;color:#6b7c7a">('+arr.length+')</span></h3>'+(arr.length?('<table><thead><tr><th style="width:90px">التاريخ</th><th style="width:90px">داخل (+)</th><th style="width:90px">خارج (−)</th><th>البيان</th></tr></thead><tbody>'+arr.map(x=>'<tr><td>'+esc(x.date||'')+'</td><td>'+dcell(Number(x.in||0),false)+'</td><td>'+dcell(Number(x.out||0),true)+'</td><td style="text-align:right">'+esc(x.remarks||x.note||'')+'</td></tr>').join('')+'</tbody></table>'):'<p style="color:#6b7c7a;font-size:11px;margin:2px 0">— لا يوجد —</p>');
   const diffCell=(d)=> Math.abs(d)<0.01?'<b style="color:#0e9d6a">✅ مطابق</b>':'<b style="color:#c0392b">'+f(d)+'</b>';
   const html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>تقرير مطابقة كشف البنك - '+esc(r.bank)+'</title><style>'+
-    '@page{size:A4 portrait;margin:12mm}*{box-sizing:border-box}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#1d2b2a;margin:0;font-size:11px}'+
+    '@page{size:A4 portrait;margin:12mm}*{box-sizing:border-box}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#111;margin:0;font-size:12.5px;font-weight:600;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
     '.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #0e9d6a;padding-bottom:8px;margin-bottom:10px}.logo{font-size:24px;font-weight:900;letter-spacing:3px;color:#0e9d6a}.logo span{color:#D4A843}.logo .sub{font-size:11px;font-weight:600;color:#6b7c7a}'+
     '.ttl{text-align:left;font-size:14px;font-weight:800;color:#c41d88}.ttl small{display:block;font-size:11px;color:#6b7c7a;font-weight:400}'+
     '.status{display:inline-block;color:#fff;font-weight:800;font-size:15px;padding:6px 22px;border-radius:8px;margin:6px 0}'+
     '.kpis{display:flex;gap:10px;flex-wrap:wrap;background:#f1f8f4;border:1px solid #dcede6;border-radius:8px;padding:8px 12px;margin:8px 0;font-size:12px}'+
-    'table{width:100%;border-collapse:collapse;margin-bottom:4px}th,td{border:1px solid #ccd;padding:3px 5px;text-align:center;font-size:9.5px}th{background:#0e9d6a;color:#fff}tbody tr:nth-child(even){background:#f6faf8}'+
+    'table{width:100%;border-collapse:collapse;margin-bottom:4px}th,td{border:1px solid #bbb;padding:4px 6px;text-align:center;font-size:11px;font-weight:600;color:#111}th{background:#0e9d6a;color:#fff;font-weight:800;font-size:10.5px}tbody tr:nth-child(even){background:#f6faf8}'+
     '.tot th,.tot td{font-size:11px;padding:5px}'+
     '.ft{margin-top:12px;border-top:1px solid #dcede6;padding-top:6px;font-size:10px;color:#6b7c7a;display:flex;justify-content:space-between}'+
     'h3{page-break-after:avoid}</style></head><body>'+
@@ -3457,11 +3459,11 @@ function exportBankPDF(){
   let tin=0,tout=0; rows.forEach(r=>{ tin+=Number((r[2]||'').replace(/,/g,''))||0; tout+=Number((r[3]||'').replace(/,/g,''))||0; }); const net=tin-tout;
   const H=['التاريخ','🏦 الآلية','داخل (+)','خارج (−)','المرجع البنكي','العميل','كود العميل','الوكيل','كود الدفعة','📅 تاريخ الدفع','ملاحظة','المصدر'];
   const html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>كشف حساب بنك - '+esc(bank)+'</title><style>'+
-    '@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#1d2b2a;margin:0;font-size:11px}'+
+    '@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#111;margin:0;font-size:12.5px;font-weight:600;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
     '.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #0e9d6a;padding-bottom:8px;margin-bottom:10px}.logo{font-size:24px;font-weight:900;letter-spacing:3px;color:#0e9d6a}.logo span{color:#D4A843}.logo .sub{font-size:11px;font-weight:600;color:#6b7c7a}'+
     '.ttl{text-align:left;font-size:14px;font-weight:800;color:#c41d88}.ttl small{display:block;font-size:11px;color:#6b7c7a;font-weight:400}'+
     '.kpis{display:flex;gap:14px;flex-wrap:wrap;background:#f1f8f4;border:1px solid #dcede6;border-radius:8px;padding:8px 12px;margin:8px 0;font-size:12.5px}'+
-    'table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccd;padding:3px 5px;text-align:center;font-size:9.5px}th{background:#0e9d6a;color:#fff}tbody tr:nth-child(even){background:#f6faf8}'+
+    'table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:4px 6px;text-align:center;font-size:11px;font-weight:600;color:#111}th{background:#0e9d6a;color:#fff;font-weight:800;font-size:10.5px}tbody tr:nth-child(even){background:#f6faf8}'+
     '.ft{margin-top:10px;border-top:1px solid #dcede6;padding-top:6px;font-size:10px;color:#6b7c7a;display:flex;justify-content:space-between}'+
     '</style></head><body><div class="hd"><div class="logo">AL<span>E</span>ZZ<div class="sub">شركة العز للسياحة والسفر</div></div><div class="ttl">كشف حساب بنك / بطاقة<small>تاريخ الإصدار: '+esc(today)+'</small></div></div>'+
     '<div class="kpis"><span>البنك/البطاقة: <b>'+esc(bank)+'</b></span><span>العملة: <b>'+esc(cur)+'</b></span><span>الحركات: <b>'+fmt(rows.length)+'</b></span><span>داخل: <b>'+fmt(tin)+' '+esc(cur)+'</b></span><span>خارج: <b>'+fmt(tout)+' '+esc(cur)+'</b></span><span>الصافي: <b>'+fmt(net)+' '+esc(cur)+'</b></span></div>'+
@@ -4082,7 +4084,7 @@ function renderSupplierDetail(){
           const diffCell = entered
             ? '<td class="num" id="sdiff-'+mid+'" style="font-weight:700;color:'+(diff<-0.5?'#d11':(diff>0.5?'#0e9d6a':'inherit'))+'">'+fmt(diff)+'</td>'
             : '<td class="num" id="sdiff-'+mid+'"></td>';
-          return '<tr data-cli="'+_cli+'" data-dates="'+_dts+'" data-code="'+esc((c||'').toUpperCase())+'"><td>'+esc(c)+(cbal>0.5?' <span title="متبقّي عليه '+fmt(cbal)+' '+esc(ccur)+' — يجب المطالبة به" style="cursor:help">⚠️</span>':'')+'</td><td style="color:var(--muted);font-size:10.5px;white-space:nowrap">'+esc(fc.arr||'')+'</td><td>'+esc(nameCli[c]||'')+cancHtml+directHtml+(cbal>0.5?'<div style="font-size:9px;color:#b8860b;font-weight:700">⚠️ متبقّي '+fmt(cbal)+' '+esc(ccur)+' — يجب المطالبة</div>':'')+'</td><td style="color:var(--muted)">'+esc(agentCli[c]||'')+'</td>'+
+          return '<tr data-cli="'+_cli+'" data-dates="'+_dts+'" data-code="'+esc((c||'').toUpperCase())+'"><td>'+esc(c)+(cbal>0.5?' <span title="متبقّي عليه '+fmt(cbal)+' '+esc(ccur)+' — يجب المطالبة به" style="cursor:help">⚠️</span>':'')+'</td><td style="color:var(--muted);font-size:10.5px;white-space:nowrap">'+esc(fc.arr||'')+'</td><td>'+esc(nameCli[c]||'')+cancHtml+directHtml+(cbal>0.5?'<div style="font-size:9px;color:#b8860b;font-weight:700">⚠️ متبقّي '+fmt(cbal)+' '+esc(ccur)+' — يجب المطالبة</div>':'')+incBadgeHtml((_APM.missClient||{})[(c||'').toUpperCase()]||0)+'</td><td style="color:var(--muted)">'+esc(agentCli[c]||'')+'</td>'+
             '<td class="num" style="color:#0e9d6a;font-weight:700">'+fmt(fc.paid)+' <span style="font-size:9px;color:var(--muted)">'+esc(ccur)+'</span></td>'+
             '<td class="num" style="color:'+(cbal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(cbal)+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+esc(ccur)+'</div></td>'+
             '<td class="num" style="font-weight:700;color:'+(fc.prof>0.5?'#0e9d6a':(fc.prof<-0.5?'#d11':'inherit'))+'">'+(Math.abs(fc.prof)>0.005?fmt(fc.prof):'<span style="color:#9aa">—</span>')+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+esc(ccur)+'</div></td>'+
@@ -4209,7 +4211,7 @@ function exportSupplierPDF(){
   const _pN=s=>{ const n=parseFloat(String(s).replace(/[^\d.\-]/g,'')); return isNaN(n)?null:n; };
   const tbl1=(head,rows)=> '<table><thead><tr>'+head.map((x,i)=>'<th'+(i===7?' style="background:#0e7a5a"':'')+'>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+(rows.length?rows.map(r=>{ const _ep=_pN(r[6]),_ap=_pN(r[7]); const _below=(_ep!=null&&_ap!=null&&_ep-_ap>0.5); return '<tr>'+r.map((c,i)=>{ const _c=esc(String(c).replace(/🔻/g,'').trim()); if(i===7&&_below) return '<td style="background:#fde3e3;color:#c40000;font-weight:800">'+_c+' 🔻</td>'; return '<td>'+_c+'</td>'; }).join('')+'</tr>'; }).join(''):'<tr><td colspan="'+head.length+'" style="text-align:center;color:#999">لا توجد بيانات</td></tr>')+'</tbody></table>';
   const html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>كشف حساب مورّد - '+esc(sup)+'</title><style>'+
-    '@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#1d2b2a;margin:0;font-size:11px}'+
+    '@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#111;margin:0;font-size:12.5px;font-weight:600;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
     '.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #0e9d6a;padding-bottom:8px;margin-bottom:10px}'+
     '.logo{font-size:26px;font-weight:900;letter-spacing:3px;color:#0e9d6a}.logo span{color:#D4A843}.logo .sub{font-size:12px;font-weight:600;color:#6b7c7a;letter-spacing:0}'+
     '.ttl{text-align:left;font-size:15px;font-weight:800;color:#c41d88}.ttl small{display:block;font-size:11px;color:#6b7c7a;font-weight:400}'+
@@ -4217,8 +4219,8 @@ function exportSupplierPDF(){
     '.kpis{display:flex;gap:14px;flex-wrap:wrap;background:#f1f8f4;border:1px solid #dcede6;border-radius:8px;padding:8px 12px;margin:6px 0;font-size:12.5px}'+
     '.kpis b{font-size:13.5px}.period{border:1px dashed #c41d88;background:#fdf2f8;border-radius:8px;padding:8px 12px;margin:6px 0;font-size:12px}'+
     'h4{margin:12px 0 5px;color:#0e9d6a;font-size:13px;border-right:4px solid #D4A843;padding-right:7px}'+
-    'table{width:100%;border-collapse:collapse;margin-bottom:6px}th,td{border:1px solid #ccd;padding:3px 5px;text-align:center;font-size:9.5px}'+
-    'th{background:#0e9d6a;color:#fff;font-size:9px}tbody tr:nth-child(even){background:#f6faf8}'+
+    'table{width:100%;border-collapse:collapse;margin-bottom:6px}th,td{border:1px solid #bbb;padding:4px 6px;text-align:center;font-size:11px;font-weight:600;color:#111}'+
+    'th{background:#0e9d6a;color:#fff;font-size:10.5px;font-weight:800}tbody tr:nth-child(even){background:#f6faf8}'+
     '.ft{margin-top:10px;border-top:1px solid #dcede6;padding-top:6px;font-size:10px;color:#6b7c7a;display:flex;justify-content:space-between}'+
     '@media print{.noprint{display:none}}'+
     '</style></head><body>'+
