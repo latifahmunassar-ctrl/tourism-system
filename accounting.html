@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 12يوليو · تبويب الموردين — قسم توزيع الدفعات: تاريخ وصول العميل بجانب الكود + عمودان للربح (المتوقع من First Client Data · الفعلي من Booking Form)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 12يوليو-ب · الموردين/توزيع الدفعات: تاريخ الوصول + عمودا الربح (متوقع/فعلي) — والربح الفعلي يظهر بالأحمر 🔻 لو أقل من المتوقع في الشيت وفي فاتورة PDF</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4085,7 +4085,7 @@ function renderSupplierDetail(){
             '<td class="num" style="color:#0e9d6a;font-weight:700">'+fmt(fc.paid)+' <span style="font-size:9px;color:var(--muted)">'+esc(ccur)+'</span></td>'+
             '<td class="num" style="color:'+(cbal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(cbal)+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+esc(ccur)+'</div></td>'+
             '<td class="num" style="font-weight:700;color:'+(fc.prof>0.5?'#0e9d6a':(fc.prof<-0.5?'#d11':'inherit'))+'">'+(Math.abs(fc.prof)>0.005?fmt(fc.prof):'<span style="color:#9aa">—</span>')+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+esc(ccur)+'</div></td>'+
-            (prof==null?'<td class="num"><span style="color:#9aa">—</span></td>':'<td class="num" style="font-weight:700;color:'+(prof>0.5?'#0e9d6a':(prof<-0.5?'#d11':'inherit'))+'">'+fmt(prof)+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+esc(ccur)+'</div></td>')+
+            (prof==null?'<td class="num"><span style="color:#9aa">—</span></td>':(function(){ const _below=(Number(fc.prof||0)-prof>0.5); const _col=_below?'#d11':(prof>0.5?'#0e9d6a':(prof<-0.5?'#d11':'inherit')); const _bg=_below?'background:rgba(209,17,17,.10);':''; const _warn=_below?' <span title="⚠️ الربح الفعلي أقل من المتوقع بمقدار '+fmt(Number(fc.prof||0)-prof)+' '+esc(ccur)+'" style="font-size:10px;cursor:help">🔻</span>':''; return '<td class="num" style="font-weight:700;'+_bg+'color:'+_col+'">'+fmt(prof)+_warn+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+esc(ccur)+'</div></td>'; })())+
             '<td class="num">'+(rbc>0.5?fmt(rbc):'<span style="color:#9aa">—</span>')+'</td>'+
             '<td class="num neg">'+(canc>0.5?fmt(canc):'')+'</td>'+
             '<td class="num">'+fmt(bookAct)+'</td>'+ invCell + diffCell +
@@ -4204,6 +4204,9 @@ function exportSupplierPDF(){
   const t1head=headOf('sp-dist-tbl',11); const t1idx=[0,1,2,3,4,5,6,7,8,9,10]; const t1rows=rowsOf('sp-dist-tbl',t1idx);
   const t2head=headOf('sp-pay-tbl'); const t2idx=t2head.map((_,i)=>i); const t2rows=rowsOf('sp-pay-tbl',t2idx);
   const tbl=(head,rows)=> '<table><thead><tr>'+head.map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+(rows.length?rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+head.length+'" style="text-align:center;color:#999">لا توجد بيانات</td></tr>')+'</tbody></table>';
+  // جدول (١): يلوّن «الربح الفعلي» (عمود ٧) بالأحمر لو كان أقل من «الربح المتوقع» (عمود ٦) — كما في الشيت
+  const _pN=s=>{ const n=parseFloat(String(s).replace(/[^\d.\-]/g,'')); return isNaN(n)?null:n; };
+  const tbl1=(head,rows)=> '<table><thead><tr>'+head.map((x,i)=>'<th'+(i===7?' style="background:#0e7a5a"':'')+'>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+(rows.length?rows.map(r=>{ const _ep=_pN(r[6]),_ap=_pN(r[7]); const _below=(_ep!=null&&_ap!=null&&_ep-_ap>0.5); return '<tr>'+r.map((c,i)=>{ const _c=esc(String(c).replace(/🔻/g,'').trim()); if(i===7&&_below) return '<td style="background:#fde3e3;color:#c40000;font-weight:800">'+_c+' 🔻</td>'; return '<td>'+_c+'</td>'; }).join('')+'</tr>'; }).join(''):'<tr><td colspan="'+head.length+'" style="text-align:center;color:#999">لا توجد بيانات</td></tr>')+'</tbody></table>';
   const html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>كشف حساب مورّد - '+esc(sup)+'</title><style>'+
     '@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#1d2b2a;margin:0;font-size:11px}'+
     '.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #0e9d6a;padding-bottom:8px;margin-bottom:10px}'+
@@ -4223,7 +4226,7 @@ function exportSupplierPDF(){
     '<div class="meta"><span>المورّد: <b>'+esc(sup)+'</b></span><span>عملة المورّد: <b>'+esc(scur)+'</b></span>'+(filtered&&(f||t)?('<span>الفترة: <b>'+esc(f||'…')+' → '+esc(t||'…')+'</b></span>'):'')+(q?('<span>بحث: <b>'+esc(q)+'</b></span>'):'')+'</div>'+
     '<div class="kpis"><b>الملخّص العام (الكلي):</b> <span>الفواتير: <b>'+fmt(list.length)+'</b></span> · <span>العملاء: <b>'+fmt(clients)+'</b></span> · <span>المستحق: <b>'+fmt(owed)+' '+esc(scur)+'</b></span> · <span>المدفوع: <b>'+fmt(paid)+' '+esc(scur)+'</b></span> · <span>الرصيد: <b>'+fmt(bal)+' '+esc(scur)+'</b></span></div>'+
     (periodInner?('<div class="period">'+periodInner+'</div>'):'')+
-    '<h4>(١) تفاصيل فواتير العملاء'+(filtered?' — للفترة/البحث المحدّد':'')+' ('+t1rows.length+')</h4>'+tbl(t1head,t1rows)+
+    '<h4>(١) تفاصيل فواتير العملاء'+(filtered?' — للفترة/البحث المحدّد':'')+' ('+t1rows.length+') <span style="font-size:10px;font-weight:400;color:#6b7c7a">— 🔻 الربح الفعلي أقل من المتوقع</span></h4>'+tbl1(t1head,t1rows)+
     '<h4>(٢) حركة مدفوعات العملاء'+(filtered?' — للفترة/البحث المحدّد':'')+' ('+t2rows.length+')</h4>'+tbl(t2head,t2rows)+
     '<div class="ft"><span>شركة العز · ALEZZ Group</span><span>تم الإصدار آلياً من داشبورد الحسابات · '+esc(today)+'</span></div>'+
     '<script>window.onload=function(){setTimeout(function(){window.print();},350);};<\/script>'+
