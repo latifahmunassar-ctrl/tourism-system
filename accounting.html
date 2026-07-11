@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 11يوليو-أ · إصلاح تعطّل الصفحة: النظام يعمل حتى لو مكتبة الرسم البياني (Chart.js) ما حمّلت + CDN احتياطي</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 11يوليو-ب · تعديل FCD: إضافة خانة «الموظف (Confirmed by)» — تقدرين تضيفين/تعدّلين اسم الموظف لإدخال ناقص (بموافقة الأدمن)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -740,6 +740,7 @@ table{font-weight:600}
       <div class="fld"><label>البنك</label><select id="fe-bank" onchange="if(this.value==='__other')this.nextElementSibling.style.display='flex'"></select></div>
       <div class="fld"><label>مرجع البنك <span style="font-size:9px;color:#d98a00">إجباري لو فيه دفعة</span></label><input id="fe-ref"></div>
       <div class="fld"><label>📅 تاريخ الدفع</label><input type="date" id="fe-paydate" style="color-scheme:light;cursor:pointer"></div>
+      <div class="fld"><label>👤 الموظف (Confirmed by) <span style="font-size:9px;color:var(--muted)">من القائمة</span></label><select id="fe-staff"></select></div>
       <div class="fld" style="flex:1;min-width:220px"><label>ملاحظة</label><input id="fe-note"></div>
     </div>
     <div class="calc"><span>الإجمالي (تكلفة + ربح) = <b id="fe-total">0</b></span><span>المتبقّي على هذا السطر = <b id="fe-bal" style="color:var(--amber)">0</b></span></div>
@@ -1294,6 +1295,7 @@ function fcdEdit(id){
   const banks=listValues('banks').map(v=>v.value);   // القائمة المُدارة فقط (قسم البيانات)
   $('fe-bank').innerHTML='<option value="">— بدون —</option>'+banks.map(b=>'<option'+(b===r.bank_name?' selected':'')+'>'+esc(b)+'</option>').join('');
   if(r.bank_name && !banks.includes(r.bank_name)){ const o=document.createElement('option'); o.text=r.bank_name; o.value=r.bank_name; o.selected=true; $('fe-bank').add(o); }   // احتفظ ببنك السجل القديم إن لم يكن في القائمة
+  if($('fe-staff')){ $('fe-staff').innerHTML='<option value="">— اختاري الموظف —</option>'+staffNameOptions(); const cb=String(r.confirmed_by||'').trim(); if(cb){ if(![...$('fe-staff').options].some(o=>o.value===cb)){ const o=document.createElement('option'); o.text=cb; o.value=cb; $('fe-staff').add(o); } $('fe-staff').value=cb; } }
   $('fe-msg').textContent=''; feCalc(); $('fcdeditmodal').classList.add('on');
 }
 function feCalc(){ const t=(+$('fe-cost').value||0)+(+$('fe-profit').value||0); $('fe-total').textContent=fmt(t); $('fe-bal').textContent=fmt(t-(+$('fe-paid').value||0)); }
@@ -1313,7 +1315,7 @@ async function fcdEditSave(){
     '🔒 لن تتغيّر القيم إلا بموافقة الأدمن. إرسال الطلب؟';
   if(!confirm(confirmMsg))return;
   msg.style.color='var(--muted)'; msg.textContent='جارٍ إرسال الطلب للأدمن…';
-  const payload={ entry_id:FE_ID, cost:cost, profit:profit, amount_paid:paid, bank_name:bank||null, bank_ref:ref||null, payment_date:$('fe-paydate').value||null, note:($('fe-note').value||'')||null, reason:reason, by:(CURRENT_USER&&CURRENT_USER.staff_name)||'', summary:'✏️ تعديل بيانات عميل «'+((FE_ROW&&(FE_ROW.client_code||FE_ROW.payment_code))||FE_ID)+'» · باقة '+fmt(cost+profit)+' · مدفوع '+fmt(paid)+' '+cur };
+  const payload={ entry_id:FE_ID, cost:cost, profit:profit, amount_paid:paid, bank_name:bank||null, bank_ref:ref||null, payment_date:$('fe-paydate').value||null, note:($('fe-note').value||'')||null, confirmed_by:(($('fe-staff')||{}).value||'')||null, reason:reason, by:(CURRENT_USER&&CURRENT_USER.staff_name)||'', summary:'✏️ تعديل بيانات عميل «'+((FE_ROW&&(FE_ROW.client_code||FE_ROW.payment_code))||FE_ID)+'» · باقة '+fmt(cost+profit)+' · مدفوع '+fmt(paid)+' '+cur };
   try{ const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'request_client_edit',payload:payload})}); const j=await r.json(); if(j.error){ msg.innerHTML='<span style="color:var(--red)">خطأ: '+esc(j.error)+'</span>'; return; } $('fcdeditmodal').classList.remove('on'); alert('✅ أُرسل طلب التعديل للأدمن مع السبب — لن تتغيّر القيم حتى يعتمده.'); await load(); }catch(e){ msg.innerHTML='<span style="color:var(--red)">خطأ: '+esc(e.message)+'</span>'; }
 }
 // ---- استدعاء معلومات العميل (مشترك) ----
