@@ -209,7 +209,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 11يوليو-ب · تعديل FCD: إضافة خانة «الموظف (Confirmed by)» — تقدرين تضيفين/تعدّلين اسم الموظف لإدخال ناقص (بموافقة الأدمن)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 11يوليو-ج · عملة معتمدة لكل بنك/بطاقة (لوحة في تبويب البنوك) — تُستخدم في كل الحسابات بدل التخمين من الاسم</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -632,6 +632,7 @@ table{font-weight:600}
     </div>
 
     <div class="page" id="p-banks">
+      <div id="bank-cur-panel"></div>
       <div class="panel" style="margin-bottom:14px;border:1px solid var(--accent)">
         <h3 style="margin-top:0">🔍 مطابقة كشف الحساب البنكي <span style="font-size:11px;color:var(--muted);font-weight:400">— ارفعي كشف البنك الأصلي ويقارنه النظام بحركاتك</span></h3>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
@@ -3165,7 +3166,23 @@ function fillSupplierFilter(){
   const names=[...new Set([...supInvAll().map(x=>x.supplier_name), ...listValues('suppliers').map(v=>v.value)].map(s=>String(s||'').trim()).filter(Boolean))].filter(n=>!_hotelOnly.has(_nz(n))).sort((a,b)=>String(a).localeCompare(String(b),'ar'));
   dl.innerHTML=names.map(n=>'<option>'+esc(n)+'</option>').join('');
 }
-function bankCur(b){ b=String(b||''); if(/USD/i.test(b))return 'USD'; if(/MYR/i.test(b))return 'MYR'; if(/EUR/i.test(b))return 'EUR'; if(/\bSAR\b|rawafi|ريال سعودي/i.test(b))return 'SAR'; return 'OMR'; }
+// عملة معتمدة يدوياً لكل بنك/بطاقة (قائمة مُدارة category=bank_cur بصيغة «الاسم=العملة») — تسبق التخمين من الاسم
+function bankCurOverride(b){ const nn=String(b||'').trim().toLowerCase(); if(!nn) return ''; const it=(typeof listValues==='function'?listValues('bank_cur'):[]).find(v=>{ const s=String(v.value||''); const i=s.lastIndexOf('='); return i>0 && s.slice(0,i).trim().toLowerCase()===nn; }); if(!it) return ''; const s=String(it.value); return s.slice(s.lastIndexOf('=')+1).trim().toUpperCase(); }
+function bankCur(b){ b=String(b||''); const ov=bankCurOverride(b); if(ov) return ov; if(/USD/i.test(b))return 'USD'; if(/MYR/i.test(b))return 'MYR'; if(/EUR/i.test(b))return 'EUR'; if(/\bSAR\b|rawafi|ريال سعودي/i.test(b))return 'SAR'; return 'OMR'; }
+async function saveBankCur(bank,cur){ if(!isOwnerUser()){ alert('⚠️ اعتماد عملة البنك للمالكة فقط'); return; } const nn=String(bank||'').trim().toLowerCase(); if(!nn||!cur) return;
+  const olds=listValues('bank_cur').filter(v=>{ const s=String(v.value||''); const i=s.lastIndexOf('='); return i>0 && s.slice(0,i).trim().toLowerCase()===nn; });
+  for(const o of olds){ await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_list_item',payload:{category:'bank_cur',value:o.value}})}); }
+  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_list_item',payload:{category:'bank_cur',value:bank+'='+cur}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } await load(); }
+function renderBankCurPanel(){ const box=$('bank-cur-panel'); if(!box) return;
+  const banks=[...new Set(listValues('banks').map(v=>String(v.value||'').trim()).filter(Boolean))].sort((a,b)=>String(a).localeCompare(b,'ar'));
+  const CURS=['OMR','SAR','USD','MYR','AED','EUR','SGD','GBP'];
+  const owner=isOwnerUser();
+  box.innerHTML='<div class="panel" style="border-color:#2563eb;margin-bottom:12px"><h3 style="color:#2563eb;margin-top:0">💱 عملة كل بنك/بطاقة المعتمدة <span style="font-size:11px;font-weight:400;color:var(--muted)">(تُستخدم في كل الحسابات بدل التخمين)</span></h3>'+
+    (banks.length?'<div class="tbl-wrap" style="max-height:420px"><table style="font-size:12px"><thead><tr><th>البنك / البطاقة</th><th>العملة المعتمدة</th><th>الحالة</th>'+(owner?'<th>تعيين</th>':'')+'</tr></thead><tbody>'+
+    banks.map(b=>{ const ov=bankCurOverride(b); const eff=bankCur(b); const opts=[...new Set([eff,...CURS])].filter(Boolean).map(c=>'<option'+(c===eff?' selected':'')+'>'+esc(c)+'</option>').join('');
+      return '<tr><td style="font-weight:600">'+esc(b)+'</td><td style="font-weight:700;color:var(--accent)">'+esc(eff)+'</td><td>'+(ov?'<span style="color:#0e9d6a;font-size:11px">✍️ معتمدة</span>':'<span style="color:var(--muted);font-size:11px">تلقائية (من الاسم)</span>')+'</td>'+(owner?('<td><select id="bkcur-'+esc(b).replace(/[^a-zA-Z0-9]/g,"_")+'" style="padding:3px 6px">'+opts+'</select> <button class="btn" style="padding:2px 10px;font-size:11px" onclick="saveBankCur('+JSON.stringify(b).replace(/"/g,"&quot;")+',document.getElementById(\'bkcur-'+esc(b).replace(/[^a-zA-Z0-9]/g,"_")+'\').value)">✔️ اعتماد</button></td>'):'')+'</tr>'; }).join('')+
+    '</tbody></table></div>':'<div style="color:var(--muted);padding:8px">لا بنوك في القائمة المُدارة — أضيفيها من «Banks Name».</div>')+
+    (owner?'':'<div style="font-size:11px;color:var(--muted);margin-top:6px">🔒 التعيين للمالكة فقط.</div>')+'</div>'; }
 function curAgg(list){ const m={}; list.forEach(x=>{ const c=(x.currency||bankCur(x.bank_name)||'OMR'); if(!m[c])m[c]={i:0,o:0}; m[c].i+=Number(x.amount_in||0); m[c].o+=Number(x.amount_out||0); }); return m; }
 function curLine(m,key){ const ks=Object.keys(m).sort((a,b)=>(Math.abs(m[b].i-m[b].o))-(Math.abs(m[a].i-m[a].o))); const parts=ks.map(c=>{ const v=key==='net'?(m[c].i-m[c].o):m[c][key]; if(Math.abs(v)<0.005)return null; const col=key==='net'?(v>=0?'#0e9d6a':'#d11'):''; return '<span'+(col?' style="color:'+col+'"':'')+'>'+fmt(v)+' <small style="color:var(--muted)">'+esc(c)+'</small></span>'; }).filter(Boolean); return parts.join(' · ')||'0'; }
 function bankMainCur(list){ const m={}; (list||[]).forEach(x=>{ const c=x.currency||bankCur(x.bank_name); m[c]=(m[c]||0)+1; }); let best='OMR',bn=-1; for(const c in m){ if(m[c]>bn){bn=m[c];best=c;} } return best; }
@@ -3373,6 +3390,7 @@ async function deleteRecon(id){
   try{ const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_recon',payload:{id:id}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } await loadReconList(); renderReconSaved(); }catch(e){ alert('خطأ: '+e.message); }
 }
 function renderBanks(){
+  try{ renderBankCurPanel(); }catch(_){}
   fillReconBanks();
   renderReconSaved(); loadReconList().then(renderReconSaved);
   if(!DATA) return;
