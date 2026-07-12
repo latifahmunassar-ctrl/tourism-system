@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 12يوليو-هـ · إشعارات أعلى Booking Form صارت في منطقة تمرير (سكرول) مريحة بحد ٦٢٪ من الشاشة — تطلعين وتنزلين بالجدول بدون ما تطول الصفحة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 12يوليو-و · قائمة مدخلات جديدة «✈️ Booked from (طيران)» تُدار من مدخل البيانات، وتظهر في Sales Form كـ«مصدر الحجز من» عند اختيار الطيران فقط</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -298,6 +298,7 @@ table{font-weight:600}
           <div class="fld"><label>Confirmed BY <button type="button" onclick="mgrToggle('confirmed_by','Confirmed BY')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-cby"></select></div>
           <div class="fld"><label>Booked By <button type="button" onclick="mgrToggle('booked_by','Booked By')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-by"></select></div>
           <div class="fld"><label>hotels or System <button type="button" onclick="mgrToggle('hotels_system','hotels or System')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-bfrom"></select></div>
+          <div class="fld"><label>✈️ Booked from (طيران) <span style="font-size:9px;color:var(--muted)">(تظهر في Sales Form عند اختيار الطيران فقط)</span> <button type="button" onclick="mgrToggle('flight_booked_from','Booked from — طيران')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-flightbf"></select></div>
           <div class="fld"><label>charged from <button type="button" onclick="mgrToggle('charged_from','charged from')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-cfrom"></select></div>
         </div>
         <div id="listmgr" data-cat="" style="display:none;background:#f6f8fc;border:1px solid var(--accent);border-radius:10px;padding:10px;margin:8px 0">
@@ -1851,17 +1852,18 @@ function fillSalesTypes(){
 let SAL_SUP_SET=new Set(); // القيم المسموحة للمورّد حسب النوع الحالي (للتحقق من الكتابة)
 function fillSalesSuppliers(){
   const inp=$('s-supplier'), dl=$('s-supplier-list'); if(!inp||!dl) return;
-  const kind=(($('s-type')||{}).value)||''; const isHotel=sIsHotel(kind);
-  const cat=isHotel?'hotels_system':'suppliers';
+  const kind=(($('s-type')||{}).value)||''; const isHotel=sIsHotel(kind); const isFlight=sIsFlight(kind);
+  // الطيران: قائمة «Booked from» خاصة به فقط (flight_booked_from) — منفصلة عن الموردين والفنادق
+  const cat=isHotel?'hotels_system':(isFlight?'flight_booked_from':'suppliers');
   const set=new Set();
   (typeof listValues==='function'?listValues(cat):[]).forEach(x=>{ if(x&&x.value)set.add(String(x.value).trim()); });
-  // دمج الموجود فعلاً من نفس الفئة (فنادق مع الفنادق، والباقي مع الموردين)
-  (DATA&&DATA.serviceLines||[]).forEach(s=>{ if(!s.supplier)return; if(sIsHotel(s.kind)===isHotel)set.add(String(s.supplier).trim()); });
-  if(!isHotel){ (DATA&&DATA.supplierInvoices||[]).forEach(s=>{ if(s.supplier_name)set.add(String(s.supplier_name).trim()); }); (DATA&&DATA.supplierPayments||[]).forEach(s=>{ if(s.supplier_name)set.add(String(s.supplier_name).trim()); }); }
+  // دمج الموجود فعلاً من نفس النوع (فنادق مع الفنادق، الطيران مع الطيران، والباقي مع الموردين)
+  (DATA&&DATA.serviceLines||[]).forEach(s=>{ if(!s.supplier)return; if(isFlight){ if(sIsFlight(s.kind))set.add(String(s.supplier).trim()); } else if(sIsHotel(s.kind)===isHotel)set.add(String(s.supplier).trim()); });
+  if(!isHotel && !isFlight){ (DATA&&DATA.supplierInvoices||[]).forEach(s=>{ if(s.supplier_name)set.add(String(s.supplier_name).trim()); }); (DATA&&DATA.supplierPayments||[]).forEach(s=>{ if(s.supplier_name)set.add(String(s.supplier_name).trim()); }); }
   const arr=[...set].filter(Boolean).sort((a,b)=>a.localeCompare(b,'ar'));
   dl.innerHTML=arr.map(v=>'<option value="'+esc(v)+'"></option>').join('');
   SAL_SUP_SET=new Set(arr.map(v=>v.toLowerCase()));
-  inp.placeholder=isHotel?'اكتبي أول حروف الفندق/النظام…':(sIsFlight(kind)?'اكتبي أول حروف المورّد (تُحدّد لاحقاً)…':'اكتبي أول حروف المورّد…');
+  inp.placeholder=isHotel?'اكتبي أول حروف الفندق/النظام…':(isFlight?'اكتبي أول حروف جهة الطيران (Booked from)…':'اكتبي أول حروف المورّد…');
   const lbl=$('lbl-supplier'); if(lbl) lbl.textContent='مصدر الحجز من';
   // خانة الاسم/الفندق ونوع الغرفة كتابة يدوية (بلا قائمة) — فقط نحدّث التسمية
   const dlb=$('lbl-desc'); if(dlb) dlb.textContent=isHotel?'اسم الفندق':'الاسم / التفاصيل';
@@ -5050,7 +5052,7 @@ async function save(){
 }
 // ---- مدخل البيانات ----
 // قوائم منسدلة يديرها المستخدم: ربط id الحقل ← التصنيف
-const LISTCATS={'e-to':'travel_to','e-from':'country_from','e-bank':'banks','e-cby':'confirmed_by','e-by':'booked_by','e-supplier':'suppliers','e-cur':'currency','e-agent':'agents','e-kind':'kinds','e-bfrom':'hotels_system','e-cfrom':'charged_from','e-stype':'sales_service_type'};
+const LISTCATS={'e-to':'travel_to','e-from':'country_from','e-bank':'banks','e-cby':'confirmed_by','e-by':'booked_by','e-supplier':'suppliers','e-cur':'currency','e-agent':'agents','e-kind':'kinds','e-bfrom':'hotels_system','e-flightbf':'flight_booked_from','e-cfrom':'charged_from','e-stype':'sales_service_type'};
 function listValues(cat){ return ((DATA&&DATA.lists)||[]).filter(x=>x.category===cat).sort((a,b)=>String(a.value).localeCompare(String(b.value),'ar')); }
 function setSelVal(id,val){ const el=$(id); if(!el||!val) return; if(![...el.options].some(o=>o.value===val)){ const o=document.createElement('option'); o.text=val; o.value=val; el.add(o);} el.value=val; }
 function fillLists(){
