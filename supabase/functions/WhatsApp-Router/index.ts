@@ -4137,18 +4137,17 @@ Deno.serve(async (req) => {
         // أيام العمل المتوقّعة في الفترة (حسب أيام عمله المحدّدة).
         const wdSet = (s.work_days && s.work_days.length) ? new Set(s.work_days) : null;
         const expectedDays = wdSet ? windowDates.filter(d => wdSet.has(d.dow)).length : null;
-        // ⚠️ الغياب يُحسب فقط لأيام العمل **المنقضية** (قبل اليوم) بلا حضور. لا نحسب **اليوم الجاري**
-        // غياباً لأنه ما زال بإمكانها تسجيل الحضور فيه (خصوصاً الفترة المسائية للدوام المقسوم).
-        const expectedPast = wdSet ? windowDates.filter(d => wdSet.has(d.dow) && d.ds < todayStrOman).length : null;
-        const presentPast = [...days].filter(ds => ds < todayStrOman).length;
-        const absenceDays = (expectedPast != null) ? Math.max(0, expectedPast - presentPast) : null;
+        // ⚠️ الغياب = أيام العمل المجدولة **المنقضية** (قبل اليوم) بلا أي حضور — نُدرج تواريخها في السجل.
+        // لا نحسب اليوم الجاري غياباً (ما زال بإمكانها الحضور، خصوصاً الفترة المسائية للدوام المقسوم).
+        const absentDates = wdSet ? windowDates.filter(d => wdSet.has(d.dow) && d.ds < todayStrOman && !days.has(d.ds)).map(d => d.ds) : [];
+        const absenceDays = wdSet ? absentDates.length : null;
         // الالتزام = النشاط الفعلي مقابل ساعات الدوام المتوقّعة. الأساس: عدد أيام
         // العمل المتوقّعة (يعاقب الغياب) إن حُدّدت أيام العمل، وإلا أيام الحضور.
         const baseDays = (expectedDays != null) ? expectedDays : days.size;
         const expected = (shiftSec != null) ? shiftSec * baseDays : 0;
         const compliance = expected > 0 ? Math.min(100, Math.round((active / expected) * 100)) : (total > 0 ? Math.round((active / total) * 100) : 0);
         const avgLate = lateCnt ? Math.round(lateSum / lateCnt) : null;
-        return { phone: s.phone, name: s.name, status: liveStatus, check_in_at: checkIn, check_out_at: checkOut, last_activity_at: lastAct, active_seconds: active, idle_seconds: idle, total_seconds: total, days_present: days.size, messages, clients, avg_response_seconds: avgResp, compliance, shift_start: s.shift_start || null, shift_end: s.shift_end || null, shift_start2: s.shift_start2 || null, shift_end2: s.shift_end2 || null, work_days: s.work_days || null, expected_days: expectedDays, absence_days: absenceDays, expected_seconds: expected, avg_late_seconds: avgLate, schedule_based: expected > 0, confirmed_bookings: confirmedBy[s.phone] || 0, unanswered: unansweredBy[s.phone] || 0, unanswered_seen: unansweredSeenBy[s.phone] || 0,
+        return { phone: s.phone, name: s.name, status: liveStatus, check_in_at: checkIn, check_out_at: checkOut, last_activity_at: lastAct, active_seconds: active, idle_seconds: idle, total_seconds: total, days_present: days.size, messages, clients, avg_response_seconds: avgResp, compliance, shift_start: s.shift_start || null, shift_end: s.shift_end || null, shift_start2: s.shift_start2 || null, shift_end2: s.shift_end2 || null, work_days: s.work_days || null, expected_days: expectedDays, absence_days: absenceDays, absent_dates: absentDates, expected_seconds: expected, avg_late_seconds: avgLate, schedule_based: expected > 0, confirmed_bookings: confirmedBy[s.phone] || 0, unanswered: unansweredBy[s.phone] || 0, unanswered_seen: unansweredSeenBy[s.phone] || 0,
           // سجل الدخول/الخروج المفصّل لكل جلسة (ضمن الفترة المختارة) — الأحدث أولاً
           sessions: ss.map((x) => ({ work_date: x.work_date, check_in_at: x.check_in_at, check_out_at: x.check_out_at, active_seconds: x.active_seconds, idle_seconds: x.idle_seconds })).sort((a, b) => String(b.check_in_at).localeCompare(String(a.check_in_at))) };
       });
