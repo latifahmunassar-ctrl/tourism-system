@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 12يوليو-ز · Sales Form عند اختيار الطيران: حقل «مصدر الحجز» يتغيّر اسمه لـ«✈️ Booked from (طيران)» ويعرض قائمة الطيران المُدارة — تنعكس فوراً بعد الإضافة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 12يوليو-ح · Booking Form: الحجوزات المقفلة (تكلفة محفوظة) صار فيها زر «💾 حفظ Conf No» لإضافة/تعديل رقم التأكيد بدون موافقة (لا يمسّ التكلفة)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1465,7 +1465,7 @@ function bRecall(){
         '<td>'+inp('cancel',b.cancel_charge,true,'oninput="bRow('+i+')"')+cur(supCur)+'</td><td>'+inp('refund',(isC?Number(_refSup.toFixed(2)):0),true)+cur(supCur)+'</td><td class="num pos" id="sb-exp-'+i+'">'+fmt(isC?Number((_refSup*rate).toFixed(2)):0)+cur(sellCur)+'</td><td>'+selInp('bfrom',b.booked_from||b.supplier,'hotels_system')+'</td><td><input type="date" id="sb-cdate-'+i+'" class="dueinp" style="width:122px" value="'+esc(CHARGE_DATE_OVR[i]!=null?CHARGE_DATE_OVR[i]:bookDate)+'" title="تاريخ الدفع (اختياري) — الافتراضي تاريخ الحجز، قابل للتعديل" onchange="setChargeDate('+i+',this.value)"></td><td>'+selInp('cfrom',b.charge_from,'charged_from')+'</td>'+
         '<td><select id="sb-status-'+i+'" '+st+' onchange="bRow('+i+')"'+(lockedCost?' disabled title="مقفل — استخدمي زر «🚫 طلب إلغاء» أو «🔄 طلب تفعيل» في عمود الحفظ"':'')+'><option'+(isC?'':' selected')+'>Active</option><option'+(isC?' selected':'')+'>Cancel</option></select></td>'+
         '<td class="num">'+esc(b.currency_rate!=null?b.currency_rate:'')+'</td>'+
-        '<td>'+(lockedCost?('<span title="مقفل — التعديل عبر موافقة الإدارة" style="color:#3a7bd5;font-size:14px">🔒</span>'+(isC?'<button class="btn green" style="padding:2px 6px;font-size:9px;margin-top:3px;display:block" onclick="reqReactivate('+i+',\''+esc(code)+'\')">🔄 طلب تفعيل (موافقة)</button>':'<button class="btn" style="background:#d98a00;color:#000;padding:2px 6px;font-size:9px;margin-top:3px;display:block" onclick="reqCancelBooking('+i+',\''+esc(code)+'\')">🚫 طلب إلغاء (موافقة)</button>')):'<button class="btn green" style="padding:3px 9px;font-size:11px" onclick="saveSvcBooking('+i+',\''+esc(code)+'\')">💾</button>')+'</td></tr>';
+        '<td>'+(lockedCost?('<span title="مقفل — التكلفة تُعدَّل بموافقة الإدارة فقط" style="color:#3a7bd5;font-size:14px">🔒</span><button class="btn ghost" style="padding:2px 6px;font-size:9px;margin-top:3px;display:block" title="حفظ/تعديل رقم التأكيد فقط بدون موافقة (لا يمسّ التكلفة المقفلة)" onclick="saveConfOnly('+i+',\''+esc(code)+'\')">💾 حفظ Conf No</button>'+(isC?'<button class="btn green" style="padding:2px 6px;font-size:9px;margin-top:3px;display:block" onclick="reqReactivate('+i+',\''+esc(code)+'\')">🔄 طلب تفعيل (موافقة)</button>':'<button class="btn" style="background:#d98a00;color:#000;padding:2px 6px;font-size:9px;margin-top:3px;display:block" onclick="reqCancelBooking('+i+',\''+esc(code)+'\')">🚫 طلب إلغاء (موافقة)</button>')):'<button class="btn green" style="padding:3px 9px;font-size:11px" onclick="saveSvcBooking('+i+',\''+esc(code)+'\')">💾</button>')+'</td></tr>';
     }).join('')+'</tbody></table></div>'+
     '<div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:6px 18px;font-size:14px" onclick="bScroll(-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:6px 18px;font-size:14px" onclick="bScroll(1)">تمرير ▶▶</button></div>'+
     '<div style="margin-top:10px;display:flex;align-items:center;gap:10px"><button id="b-saveall" class="btn green" onclick="saveAllSvc(\''+esc(code)+'\')">💾 حفظ كل التغييرات</button><span id="b-saveall-msg" style="font-size:12px;color:var(--green)"></span></div>';
@@ -1572,6 +1572,16 @@ async function saveSvcBooking(id,code){
   await load(); bRecall();
   if(mism) alert('⚠️ العملات غير متطابقة — حُفظ بعملة الحجز الفعلي، وأُرسلت تذكرة إجبارية للإدارة (تظهر في لوحة المعلومات) لتوحيد العملة والسعر في Sales Form.');
   else if(wasLoss) alert('📉 هذا الحجز خسارة — أُرسل إشعار/تذكرة للإدارة في تبويب 🔔 إشعارات.');
+}
+// حفظ رقم التأكيد (Conf No) فقط لحجز مقفل — قيمة غير مالية، لا تحتاج موافقة ولا تمسّ التكلفة المحفوظة
+async function saveConfOnly(id,code){
+  const el=$('sb-conf-'+id); const conf=((el&&el.value)||'').trim();
+  const svc=(DATA.serviceLines||[]).find(x=>x.id===id);
+  if(bIsConfReq(svc&&svc.kind) && !conf){ alert('⚠️ اكتبي رقم التأكيد (Conf No) أولاً'); if(el)el.focus(); return; }
+  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_service_line',payload:{id:id,client_code:code,conf_no:conf||null}})});
+  const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
+  await load(); bRecall();
+  alert('✅ حُفظ رقم التأكيد (Conf No) بدون تغيير التكلفة المقفلة.');
 }
 // هل الحجز الفعلي يفوق سعر البيع (خسارة)؟ — للرسالة فقط؛ الكشف والعرض حيّ في الإشعارات (liveBookingLosses) بلا إنشاء سجلات
 async function bMaybeLossTicket(id,code){
