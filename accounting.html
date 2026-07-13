@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 13يوليو-و · قائمة بنوك التسوية (rec-bank) والبحث في تبويب البنوك صارت على القائمة المُدارة فقط (كانت تعرض القائمة القديمة الكاملة)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 13يوليو-ز · تبويب المستحقات: عمود «العملة» (نوع العملة من First Client Data) بجانب المتبقي</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -563,7 +563,7 @@ table{font-weight:600}
       </div>
       <div class="panel"><h3>مستحقات العملاء <span class="cnt" id="due-cnt"></span></h3>
         <div class="tbl-wrap"><table id="t-due"><thead><tr>
-          <th>تنبيه</th><th>العميل</th><th>الوكالة</th><th>السعر</th><th>المدفوع</th><th>المتبقي</th><th>الوصول</th><th>تاريخ السداد</th><th>الحالة</th>
+          <th>تنبيه</th><th>العميل</th><th>الوكالة</th><th>السعر</th><th>المدفوع</th><th>المتبقي</th><th>العملة<br><span style="font-size:9px;color:var(--muted)">First Client Data</span></th><th>الوصول</th><th>تاريخ السداد</th><th>الحالة</th>
         </tr></thead><tbody></tbody></table></div>
       </div>
     </div>
@@ -4836,6 +4836,8 @@ function renderDue(){
     return 0;
   });
   const _wmDue=clientWarnMaps();
+  // نوع العملة من First Client Data لكل عميل (fallback على عملة صف المستحقات)
+  const _curByCode={}; (DATA.fcd||[]).forEach(x=>{ const c=(x.client_code||'').toUpperCase(); if(x.currency && !_curByCode[c]) _curByCode[c]=String(x.currency).trim(); });
   document.querySelector('#t-due tbody').innerHTML=rows.map(r=>rw([
     r.is_overdue?'<span style="font-size:15px">⚠️</span>':'',
     esc(r.client_code)+' — '+esc(r.client_name||'')+clientNameWarn(r.client_code,_wmDue),esc(r.agent_name||''),
@@ -4845,10 +4847,11 @@ function renderDue(){
       else if(Number(r.balance||0)>1 && isOwnerUser()){ out+=' <button class="btn ghost" style="padding:1px 7px;font-size:10px;color:#7c3aed;border-color:#7c3aed" title="تسوية/شطب الرصيد الصغير — للمالكة فقط" onclick="settleDue(\''+esc(r.client_code)+'\','+Number(r.balance||0)+',\''+esc(r.currency||'')+'\')">🧹 تسوية</button>'; }
       if(Number(r.unconfirmed_paid||0)>1) out+='<br><span style="font-size:9px;color:#d98a00">⚠️ '+fmt(r.unconfirmed_paid)+' مكتوب بلا مرجع (غير معتمد)</span>';
       return out; })(),
+    '<span style="font-weight:700;color:var(--accent)">'+esc(_curByCode[(r.client_code||'').toUpperCase()]||r.currency||'')+'</span>',
     esc(r.arrival_date||''),
     '<input type="date" class="dueinp" value="'+(r.due_date||'')+'"'+((Number(r.balance||0)>1 && !r.due_date)?' style="border:1px solid #d98a00;background:rgba(217,138,0,.12)" title="عليه رصيد بدون تاريخ سداد — حدّدي التاريخ"':'')+' onchange="setDue(\''+esc(r.client_code)+'\',this.value)">',
     r.is_overdue?'<span class="pill over" title="بدء التنبيه: '+esc(r.alert_date||'')+((r.due_date&&r.alert_date===r.due_date)?' (تاريخ السداد)':' (قبل الوصول بأسبوع — تاريخ السداد قريب من الوصول)')+'">🔔 تنبيه سداد</span>':((Number(r.balance||0)>1 && !r.due_date)?'<span class="pill" style="background:#d98a00;color:#fff">بلا تاريخ سداد</span>':'<span class="pill active">'+esc(r.balance_status||'')+'</span>')
-  ])).join('')||rw(['','لا نتائج','','','','','','','']);
+  ])).join('')||rw(['','لا نتائج','','','','','','','','']);
   const nOwe=DATA.due.filter(r=>effBal(r)>1).length, nOver=DATA.due.filter(r=>effBal(r)<-1).length, nND=DATA.due.filter(r=>effBal(r)>1 && !r.due_date).length, nUnc=DATA.due.filter(r=>Number(r.unconfirmed_paid||0)>1).length, nSet=DATA.due.filter(r=>dset(r)>0).length;
   $('due-cnt').textContent=rows.length+' ظاهر · 🔴 '+nOwe+' عليه مستحق (منهم 🟠 '+nND+' بلا تاريخ سداد) · ↩️ '+nOver+' مدفوع زيادة'+(nSet?' · 🧹 '+nSet+' مُسوّى':'')+(nUnc?' · ⚠️ '+nUnc+' فيه مبلغ بلا مرجع':'');
 }
