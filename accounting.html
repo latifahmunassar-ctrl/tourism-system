@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 13يوليو-هـ · المسترجع الناقص يظهر في كشف البنك رمادياً مع تنبيه «ناقص: التاريخ/المرجع» ولا يُحتسب؛ وعند إكمال التاريخ+المرجع يصير أسود ويُحتسب ويختفي التنبيه (زر ✏️ إكمال)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 13يوليو-و · قائمة بنوك التسوية (rec-bank) والبحث في تبويب البنوك صارت على القائمة المُدارة فقط (كانت تعرض القائمة القديمة الكاملة)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3267,7 +3267,7 @@ function bankTxAll(){
   return base;
 }
 // ===== مطابقة كشف الحساب البنكي (يقرأ PDF/CSV ويقارن بحركات النظام) =====
-function fillReconBanks(){ const sel=$('rec-bank'); if(!sel)return; const cur=sel.value; const names=[...new Set(bankTxAll().map(x=>x.bank_name).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'ar')); sel.innerHTML='<option value="">— اختاري البنك —</option>'+names.map(n=>'<option>'+esc(n)+'</option>').join(''); sel.value=cur; }
+function fillReconBanks(){ const sel=$('rec-bank'); if(!sel)return; const cur=sel.value; const _mg=new Set(listValues('banks').map(v=>String(v.value||'').trim().toLowerCase()).filter(Boolean)); const names=[...new Set(bankTxAll().map(x=>x.bank_name).filter(Boolean))].filter(b=>_mg.has(String(b).trim().toLowerCase())).sort((a,b)=>String(a).localeCompare(String(b),'ar')); sel.innerHTML='<option value="">— اختاري البنك —</option>'+names.map(n=>'<option>'+esc(n)+'</option>').join(''); if(names.indexOf(cur)>=0)sel.value=cur; }
 let _pdfjsP=null;
 function loadPdfjs(){ if(window.pdfjsLib)return Promise.resolve(); if(_pdfjsP)return _pdfjsP; _pdfjsP=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'; s.onload=()=>{ try{ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }catch(e){} res(); }; s.onerror=()=>rej(new Error('تعذّر تحميل قارئ PDF (تحتاجين إنترنت)')); document.head.appendChild(s); }); return _pdfjsP; }
 function parseStmtTxns(text){
@@ -3471,7 +3471,8 @@ function renderBanks(){
 }
 function bankPick(){
   const q=($('bankq')||{}).value||''; if(!q) return;
-  const names=[...new Set(bankTxAll().map(x=>x.bank_name||'(بدون بنك)'))];
+  const _mg=new Set(listValues('banks').map(v=>String(v.value||'').trim().toLowerCase()).filter(Boolean));
+  const names=[...new Set(bankTxAll().map(x=>x.bank_name||'(بدون بنك)'))].filter(b=>_mg.has(String(b).trim().toLowerCase()));
   let hit=names.find(b=>b===q) || names.find(b=>b.toLowerCase()===q.toLowerCase()) || names.find(b=>b.toLowerCase().indexOf(q.toLowerCase())>=0);
   if(hit){ const s=$('bankflt'); if(s)s.value=hit; renderBankDetail(); window.scrollTo(0,0); }
 }
