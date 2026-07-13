@@ -2081,10 +2081,12 @@ function staffBBMap(){ const m={}; ((DATA.serviceLines||[]).concat(DATA.bookingF
 function stBasisChange(){ const a=$('st-staff'); if(a)a.value=''; const note=$('st-basis-note'); if(note)note.textContent='التجميع حسب «'+(staffBasis()==='booked'?'Booked by':'Confirmed by')+'» · نوع العمل = نوع الباقة · التاريخ = تاريخ الحجز'; stFillFilters(); renderStaff(); }
 function stFillFilters(){
   const ss=$('st-staff'), js=$('st-job'); if(!ss||!js)return;
-  const basis=staffBasis(), bbMap=basis==='booked'?staffBBMap():{};
+  // اتحاد الموظفين: confirmed_by (FCD) + booked_by (Booking Form) — ليظهر الموظف في
+  // الفلتر سواء أكّد أو حجز، مطابقةً لفصل النسبة في التقرير.
+  const bbMap=(typeof staffBBMap==='function')?staffBBMap():{};
   const staffSet=new Set(), jobSet=new Set();
-  if(basis==='booked'){ Object.values(bbMap).forEach(v=>{ if(v)staffSet.add(v); }); }
-  (DATA.fcd||[]).forEach(r=>{ if(!r.client_code)return; if(basis!=='booked'){ const s=String(r.confirmed_by||'').trim(); if(s)staffSet.add(s); } const j=String(r.package_type||'').trim(); if(j)jobSet.add(j); });
+  Object.values(bbMap).forEach(v=>{ const t=String(v||'').trim(); if(t)staffSet.add(t); });
+  (DATA.fcd||[]).forEach(r=>{ if(!r.client_code)return; const s=String(r.confirmed_by||'').trim(); if(s)staffSet.add(s); const j=String(r.package_type||'').trim(); if(j)jobSet.add(j); });
   const cs=ss.value, cj=js.value;
   ss.innerHTML='<option value="">كل الموظفين</option>'+[...staffSet].sort((a,b)=>a.localeCompare(b,'ar')).map(s=>'<option>'+esc(s)+'</option>').join(''); ss.value=cs;
   js.innerHTML='<option value="">كل أنواع العمل</option>'+[...jobSet].sort((a,b)=>a.localeCompare(b,'ar')).map(j=>'<option>'+esc(j)+'</option>').join(''); js.value=cj;
@@ -2102,7 +2104,18 @@ function renderStaff(){
   const pc={};
   rows.forEach(r=>{ const c=(r.client_code||'').toUpperCase(); const o=pc[c]||(pc[c]={confBy:'',conf:'',sold:0,profit:0,paid:0}); if(r.confirmed_by)o.confBy=r.confirmed_by; if(r.conf_status)o.conf=r.conf_status; o.sold+=Number(r.package_rate||0); o.profit+=Number(r.profit||0); o.paid+=Number(r.amount_paid||0); });
   const st={};
-  Object.entries(pc).forEach(([c,o])=>{ const staff=(basis==='booked'?(bbMap[c]||''):(String(o.confBy||'').trim()))||'غير محدد'; if(fStaff&&staff!==fStaff)return; const g=st[staff]||(st[staff]={staff,bookings:0,active:0,cancelled:0,sales:0,profit:0,actual:0,actualHas:false,collected:0,outstanding:0}); g.bookings++; if(/active/i.test(o.conf))g.active++; if(/cancel/i.test(o.conf))g.cancelled++; g.sales+=o.sold; g.profit+=o.profit; const ap=APM.byClient[c]; if(ap!=null){ g.actual+=Number(ap); g.actualHas=true; } g.collected+=o.paid; g.outstanding+=(o.sold-o.paid); });
+  // فصل النسبة: مقاييس First Client Data (حجوزات/مبيعات/ربح FCD/محصّل/متبقّي) تُنسَب
+  // لـ confirmed_by، أمّا «الربح الفعلي (Booking Form)» فيُنسَب لـ booked_by — لأن مَن
+  // حجز (booked_by) قد يكون موظفاً مختلفاً عن مَن أكّد (confirmed_by). صف واحد لكل
+  // موظف (اتحاد الاسمين). (كان يجمّعهما على موظف واحد حسب مفتاح واحد فيُنسب الربح خطأً.)
+  const bbMapS=(typeof staffBBMap==='function')?staffBBMap():{};   // العميل → booked_by (من Booking Form)
+  const ensureSt=(name)=>{ const s=name||'غير محدد'; return st[s]||(st[s]={staff:s,bookings:0,active:0,cancelled:0,sales:0,profit:0,actual:0,actualHas:false,collected:0,outstanding:0}); };
+  Object.entries(pc).forEach(([c,o])=>{
+    const cby=(String(o.confBy||'').trim())||'غير محدد';
+    if(!(fStaff&&cby!==fStaff)){ const g=ensureSt(cby); g.bookings++; if(/active/i.test(o.conf))g.active++; if(/cancel/i.test(o.conf))g.cancelled++; g.sales+=o.sold; g.profit+=o.profit; g.collected+=o.paid; g.outstanding+=(o.sold-o.paid); }
+    const ap=APM.byClient[c];
+    if(ap!=null){ const bby=(String(bbMapS[c]||'').trim())||'غير محدد'; if(!(fStaff&&bby!==fStaff)){ const g2=ensureSt(bby); g2.actual+=Number(ap); g2.actualHas=true; } }
+  });
   const list=Object.values(st).sort((a,b)=>b.profit-a.profit);
   tb.innerHTML=list.length?list.map(s=>rw([esc(s.staff),fmt(s.bookings),fmt(s.active),fmt(s.cancelled),'<span class="num">'+fmt(s.sales)+'</span>','<span class="num pos">'+fmt(s.profit)+'</span>',(s.actualHas?'<span class="num" style="font-weight:700;color:'+(s.actual<-0.5?'#d11':'#0e9d6a')+'">'+fmt(s.actual)+'</span>':'<span style="color:#9aa">—</span>'),'<span class="num">'+fmt(s.collected)+'</span>',bal(s.outstanding)])).join(''):rw(['لا نتائج للفلتر المحدّد','','','','','','','','']);
   const cnt=$('staff-cnt'); if(cnt)cnt.textContent=list.length+' موظف'+(filtered?' (مفلتر)':'');
@@ -2115,12 +2128,18 @@ function clientNameWarn(code,maps){ maps=maps||clientWarnMaps(); const c=(code||
 function renderStaffDetail(fStaff,fJob,inR,basis,bbMap){
   const box=$('staff-detail'); if(!box)return;
   if(!fStaff){ box.innerHTML=''; return; }
-  basis=basis||staffBasis(); bbMap=bbMap||(basis==='booked'?staffBBMap():{});
-  const rows=(DATA.fcd||[]).filter(r=>{ if(!r.client_code)return false; const staff=(basis==='booked'?(bbMap[(r.client_code||'').toUpperCase()]||''):(String(r.confirmed_by||'').trim())); if(staff!==fStaff)return false; if(fJob&&String(r.package_type||'').trim()!==fJob)return false; if(!inR(r.booking_date))return false; return true; })
+  // تفصيل الموظف = عملاء أكّدهم (confirmed_by) أو حجزهم (booked_by) — مطابقةً لفصل النسبة.
+  const bbmD=(typeof staffBBMap==='function')?staffBBMap():{};
+  const rows=(DATA.fcd||[]).filter(r=>{ if(!r.client_code)return false; const cU=(r.client_code||'').toUpperCase(); const cby=String(r.confirmed_by||'').trim(); const bby=String(bbmD[cU]||'').trim(); if(cby!==fStaff && bby!==fStaff)return false; if(fJob&&String(r.package_type||'').trim()!==fJob)return false; if(!inR(r.booking_date))return false; return true; })
     .sort((a,b)=>String(effPayDate(b)||b.booking_date||'').localeCompare(String(effPayDate(a)||a.booking_date||'')));
+  // فصل النسبة في الإجماليات: مقاييس FCD (مبيعات/ربح FCD/محصّل/ملغى) لعملاء أكّدهم
+  // الموظف (confirmed_by=fStaff)؛ والربح الفعلي (Booking Form) لعملاء حجزهم (booked_by=fStaff).
+  const bbmK=(typeof staffBBMap==='function')?staffBBMap():{};
   const tot={sold:0,profit:0,paid:0,bal:0,nCancel:0,cancelVal:0,nActive:0}; const cset=new Set();
-  rows.forEach(r=>{ const isC=/cancel/i.test(r.conf_status||''); tot.sold+=Number(r.package_rate||0); tot.profit+=Number(r.profit||0); tot.paid+=Number(r.amount_paid||0); tot.bal+=Number(r.balance||0); if(isC){ tot.nCancel++; tot.cancelVal+=Number(r.package_rate||0); } else tot.nActive++; cset.add((r.client_code||'').toUpperCase()); });
-  const _APMd=actualProfitMaps(); let actProf=0, actHas=false; cset.forEach(c=>{ const ap=_APMd.byClient[c]; if(ap!=null){ actProf+=Number(ap); actHas=true; } });   // الربح الفعلي من Booking Form لعملاء الموظف
+  rows.forEach(r=>{ const isC=/cancel/i.test(r.conf_status||''); const isConf=(String(r.confirmed_by||'').trim()===fStaff);
+    if(isConf){ tot.sold+=Number(r.package_rate||0); tot.profit+=Number(r.profit||0); tot.paid+=Number(r.amount_paid||0); tot.bal+=Number(r.balance||0); if(isC){ tot.nCancel++; tot.cancelVal+=Number(r.package_rate||0); } else tot.nActive++; }
+    cset.add((r.client_code||'').toUpperCase()); });
+  const _APMd=actualProfitMaps(); let actProf=0, actHas=false; cset.forEach(c=>{ if(String(bbmK[c]||'').trim()!==fStaff)return; const ap=_APMd.byClient[c]; if(ap!=null){ actProf+=Number(ap); actHas=true; } });   // الربح الفعلي من Booking Form لعملاء حجزهم الموظف
   const _sc=(t,v,c)=>'<div class="kpi"><div class="ttl">'+t+'</div><div class="val" style="font-size:16px;color:'+c+'">'+v+'</div></div>';
   box.innerHTML='<div class="panel" style="margin-top:14px;border:1px solid var(--accent)"><h3 style="margin-top:0">🧾 تفصيل أعمال «'+esc(fStaff)+'»'+(fJob?' · '+esc(fJob):'')+' <span class="cnt">'+rows.length+' عمل · '+cset.size+' عميل</span></h3>'+
     '<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:12px">'+
