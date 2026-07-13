@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 13يوليو-د · زر «✏️ مرجع» على المسترجع لإضافة المرجع البنكي، فتنعكس العملية فوراً كحركة صادرة في سجل البنك (Bank Rawafi وغيره) — بلا تكرار للتاريخية</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 13يوليو-هـ · المسترجع الناقص يظهر في كشف البنك رمادياً مع تنبيه «ناقص: التاريخ/المرجع» ولا يُحتسب؛ وعند إكمال التاريخ+المرجع يصير أسود ويُحتسب ويختفي التنبيه (زر ✏️ إكمال)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3256,12 +3256,13 @@ function bankTxAll(){
     const d=(CHARGE_DATE_OVR[s.id]!=null?CHARGE_DATE_OVR[s.id]:(_bookDate[c]||''));   // تاريخ الدفع أمام charge from (الافتراضي تاريخ الحجز)
     base.push({ id:'sl-'+s.id, bank_name:cf, amount_in:0, amount_out:amt, tx_date:d, bank_ref:'', client_code:s.client_code||'', note:'💳 دفعة حجز Booking Form: '+(s.name||SVC[s.kind]||s.kind||''), source:'dashboard', created_at:s.created_at||'', _booking:true });
   });
-  // انعكاس المسترجعات المُدخلة من الداشبورد كحركة صادرة في البنك — تظهر فور إضافة المرجع البنكي (التاريخية مسجّلة في شيت Bank Transaction فلا تُكرّر)
+  // انعكاس المسترجعات المُدخلة من الداشبورد في كشف البنك — تظهر دائماً؛ الناقصة (بلا تاريخ أو مرجع) رمادية ولا تُحتسب، والمكتملة سوداء وتُحتسب (التاريخية من الشيت موجودة في acc_bank_txn فلا تُكرّر)
   (DATA.refunds||[]).forEach(r=>{
-    if(r.source!=='dashboard')return;                         // التاريخية من الشيت موجودة أصلاً في acc_bank_txn
-    const ref=String(r.bank_ref||'').trim(); if(!ref)return;   // الشرط: تنعكس فقط بعد إضافة رقم المرجع البنكي
+    if(r.source!=='dashboard')return;
     const amt=Number(r.refund||0); if(!(amt>0))return;
-    base.push({ id:'rf-'+r.id, bank_name:r.bank_name||'', amount_in:0, amount_out:amt, tx_date:String(r.payment_date||'').slice(0,10), bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', note:'↩️ مسترجع للعميل'+(r.note?(' · '+String(r.note)):''), source:'dashboard', created_at:r.created_at||'', _refund:true });
+    const ref=String(r.bank_ref||'').trim(); const date=String(r.payment_date||'').slice(0,10);
+    const miss=[]; if(!date)miss.push('التاريخ'); if(!ref)miss.push('المرجع البنكي'); const complete=miss.length===0;
+    base.push({ id:'rf-'+r.id, _rid:r.id, bank_name:r.bank_name||'', amount_in:0, amount_out:complete?amt:0, _pendingAmount:complete?0:amt, _pending:!complete, _missing:miss, tx_date:date, bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', note:'↩️ مسترجع للعميل'+(r.note?(' · '+String(r.note)):''), source:'dashboard', created_at:r.created_at||'', _refund:true });
   });
   return base;
 }
@@ -3494,7 +3495,14 @@ function renderBankDetail(){
     '<div id="bnk-period" data-cur="'+esc(cur)+'"></div>'+
     '<div class="tbl-wrap bf-scroll" id="bnk-tbl"><table style="font-size:11px;white-space:nowrap"><thead><tr>'+H.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+
     (tx.length?tx.map(x=>{ const qd=((x.client_name||'')+' '+(x.client_code||'')+' '+(x.bank_ref||'')+' '+(x.note||'')).toLowerCase();
-      return '<tr data-q="'+esc(qd)+'" data-date="'+esc(x.tx_date||'')+'"><td>'+esc(x.tx_date||'')+'</td><td style="font-size:10px">'+esc(payMethod(x.bank_name||bank))+'</td><td class="num" style="color:#0e9d6a">'+(x.amount_in?fmt(x.amount_in):'')+'</td><td class="num neg">'+(x.amount_out?fmt(x.amount_out):'')+'</td><td>'+esc(x.bank_ref||'')+'</td><td>'+esc(x.client_name||'')+'</td><td>'+esc(x.client_code||'')+'</td><td style="color:var(--muted)">'+esc(agMap[(x.client_code||'').toUpperCase()]||'')+'</td><td>'+esc(x.payment_code||'')+'</td><td style="font-weight:600;color:var(--accent)">'+esc(payDate(x.payment_code))+'</td><td style="font-size:10px">'+esc(x.note||'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.src_sheet||'')+'</td></tr>';
+      const pend=!!x._pending; const outV=pend?(x._pendingAmount||0):x.amount_out;
+      const gray='#b7bec8';
+      const rStyle=pend?' data-pending="1" style="color:'+gray+';background:rgba(150,160,175,.06)"':'';
+      const miss='⚠️ ناقص: '+esc((x._missing||[]).join(' + '))+' — لن ينعكس على الكشف حتى إكماله';
+      const warn=pend?'<div style="font-size:9px;color:#d98a00;font-weight:800">'+miss+' <button class="btn ghost" style="padding:0 6px;font-size:9px" onclick="editRefundRef('+Number(x._rid)+')">✏️ إكمال</button></div>':'';
+      const dCell=(pend&&!x.tx_date)?'<span style="color:#d98a00;font-weight:700">— ناقص</span>':esc(x.tx_date||'');
+      const refCell=(pend&&!x.bank_ref)?'<span style="color:#d98a00;font-weight:700">— ناقص</span>':esc(x.bank_ref||'');
+      return '<tr data-q="'+esc(qd)+'" data-date="'+esc(x.tx_date||'')+'"'+rStyle+'><td>'+dCell+'</td><td style="font-size:10px">'+esc(payMethod(x.bank_name||bank))+'</td><td class="num" style="color:'+(pend?gray:'#0e9d6a')+'">'+(x.amount_in?fmt(x.amount_in):'')+'</td><td class="num'+(pend?'':' neg')+'"'+(pend?' style="color:'+gray+'"':'')+'>'+(outV?fmt(outV):'')+'</td><td>'+refCell+'</td><td>'+esc(x.client_name||'')+warn+'</td><td>'+esc(x.client_code||'')+'</td><td style="color:var(--muted)">'+esc(agMap[(x.client_code||'').toUpperCase()]||'')+'</td><td>'+esc(x.payment_code||'')+'</td><td style="font-weight:600;color:var(--accent)">'+esc(payDate(x.payment_code))+'</td><td style="font-size:10px">'+esc(x.note||'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.src_sheet||'')+'</td></tr>';
     }).join(''):'<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:10px">لا توجد حركات</td></tr>')+
     '</tbody></table></div><div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'bnk-tbl\',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'bnk-tbl\',1)">تمرير ▶▶</button></div></div>';
 }
@@ -3504,7 +3512,7 @@ function bnkFilter(){
   let n=0,ti=0,to=0;
   document.querySelectorAll('#bnk-tbl tbody tr').forEach(r=>{ const cq=r.dataset.q||''; const d=r.dataset.date||''; let ok=true;
     if(q&&cq.indexOf(q)<0)ok=false; if(f&&(!d||d<f))ok=false; if(t&&(!d||d>t))ok=false; r.style.display=ok?'':'none';
-    if(ok){ const td=r.querySelectorAll('td'); if(td.length){ n++; ti+=Number((td[2].innerText||'').replace(/,/g,''))||0; to+=Number((td[3].innerText||'').replace(/,/g,''))||0; } } });
+    if(ok && !r.dataset.pending){ const td=r.querySelectorAll('td'); if(td.length){ n++; ti+=Number((td[2].innerText||'').replace(/,/g,''))||0; to+=Number((td[3].innerText||'').replace(/,/g,''))||0; } } });
   const box=$('bnk-period'); if(box){ const cur=box.dataset.cur||''; const net=ti-to; const act=!!(q||f||t);
     box.innerHTML=act?('<div style="margin:6px 0 2px;padding:10px 12px;border:1px dashed var(--accent);border-radius:10px;background:rgba(224,33,138,.06)"><div style="font-weight:800;color:var(--accent);font-size:12.5px;margin-bottom:6px">📅 تقرير الفترة المحدّدة'+((f||t)?(' ('+esc(f||'…')+' → '+esc(t||'…')+')'):'')+(q?(' · بحث: '+esc(q)):'')+'</div><div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px"><span>عدد الحركات: <b>'+fmt(n)+'</b></span><span>✅ داخل (+): <b style="color:#0e9d6a">'+fmt(ti)+' '+esc(cur)+'</b></span><span>↘️ خارج (−): <b class="neg">'+fmt(to)+' '+esc(cur)+'</b></span><span>📌 صافي الفترة: <b style="color:'+(net>=0?'#0e9d6a':'#d11')+'">'+fmt(net)+' '+esc(cur)+'</b></span></div></div>'):''; }
 }
@@ -4628,12 +4636,18 @@ function fileToBase64(file){ return new Promise((res,rej)=>{ const fr=new FileRe
 // إضافة/تعديل المرجع البنكي لمسترجع مُدخَل من الداشبورد — تنعكس العملية كحركة صادرة في سجل البنك فور الحفظ
 async function editRefundRef(id){
   const rf=(DATA.refunds||[]).find(x=>x.id===id); if(!rf){ alert('المسترجع غير موجود'); return; }
-  const v=prompt('رقم المرجع البنكي للمسترجع\n('+(rf.client_code||'')+' — '+fmt(rf.refund)+' · '+(rf.bank_name||'')+'):', String(rf.bank_ref||''));
-  if(v==null) return; const ref=v.trim();
-  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_refund',payload:{id:id,bank_ref:ref}})});
+  const hdr='مسترجع '+(rf.client_code||'')+' — '+fmt(rf.refund)+' · '+(rf.bank_name||'')+'\n\n';
+  const ref=prompt(hdr+'١) رقم المرجع البنكي:', String(rf.bank_ref||''));
+  if(ref==null) return;
+  const date=prompt(hdr+'٢) تاريخ المسترجع (YYYY-MM-DD):', String(rf.payment_date||'').slice(0,10));
+  if(date==null) return;
+  const rv=ref.trim(), dv=(date||'').trim();
+  if(dv && !/^\d{4}-\d{2}-\d{2}$/.test(dv)){ alert('صيغة التاريخ غير صحيحة — استخدمي YYYY-MM-DD'); return; }
+  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_refund',payload:{id:id,bank_ref:rv,payment_date:dv}})});
   const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
   await load();
-  alert(ref?('✅ حُفظ المرجع البنكي — العملية تنعكس الآن في سجل «'+(rf.bank_name||'البنك')+'».'):'✅ حُذف المرجع البنكي (لن تظهر في سجل البنك حتى إضافته).');
+  const miss=[]; if(!dv)miss.push('التاريخ'); if(!rv)miss.push('المرجع البنكي');
+  alert(miss.length?('✅ حُفظ — لا تزال ناقصة: '+miss.join(' + ')+'\nتظهر رمادية في الكشف ولا تُحتسب حتى تكتمل.'):('✅ اكتمل — العملية تنعكس الآن في كشف «'+(rf.bank_name||'البنك')+'» بخط أسود وبلا تنبيه.'));
 }
 async function saveRefund(){
   const code=($('py-code').value||'').trim().toUpperCase();
