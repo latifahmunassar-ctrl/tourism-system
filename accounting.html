@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 13يوليو-ب · تبويب البنوك والبطاقات صار يعرض فقط البنوك/البطاقات المُدخلة في القائمة المُدارة (قسم البيانات) — تُستبعَد أسماء البنوك القديمة من الحركات</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 13يوليو-ج · المسترجعات المُدخلة من الداشبورد تنعكس كحركة صادرة في البنك فور إضافة المرجع البنكي (بلا تكرار للتاريخية) + إضافة Bank Rawafi للقائمة المُدارة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3255,6 +3255,13 @@ function bankTxAll(){
     const c=(s.client_code||'').toUpperCase();
     const d=(CHARGE_DATE_OVR[s.id]!=null?CHARGE_DATE_OVR[s.id]:(_bookDate[c]||''));   // تاريخ الدفع أمام charge from (الافتراضي تاريخ الحجز)
     base.push({ id:'sl-'+s.id, bank_name:cf, amount_in:0, amount_out:amt, tx_date:d, bank_ref:'', client_code:s.client_code||'', note:'💳 دفعة حجز Booking Form: '+(s.name||SVC[s.kind]||s.kind||''), source:'dashboard', created_at:s.created_at||'', _booking:true });
+  });
+  // انعكاس المسترجعات المُدخلة من الداشبورد كحركة صادرة في البنك — تظهر فور إضافة المرجع البنكي (التاريخية مسجّلة في شيت Bank Transaction فلا تُكرّر)
+  (DATA.refunds||[]).forEach(r=>{
+    if(r.source!=='dashboard')return;                         // التاريخية من الشيت موجودة أصلاً في acc_bank_txn
+    const ref=String(r.bank_ref||'').trim(); if(!ref)return;   // الشرط: تنعكس فقط بعد إضافة رقم المرجع البنكي
+    const amt=Number(r.refund||0); if(!(amt>0))return;
+    base.push({ id:'rf-'+r.id, bank_name:r.bank_name||'', amount_in:0, amount_out:amt, tx_date:String(r.payment_date||'').slice(0,10), bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', note:'↩️ مسترجع للعميل'+(r.note?(' · '+String(r.note)):''), source:'dashboard', created_at:r.created_at||'', _refund:true });
   });
   return base;
 }
