@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 12يوليو-ي · زر «حفظ كل التغييرات» يحفظ Conf No للمقفلة أيضاً + عمود «booked from» في Booking Form صار يعرض قائمة الطيران لحجز الطيران (والفنادق للفندق والموردين للباقي)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 13يوليو · تبويب الموظفين: عمود «💰 العمولة» يُحسب تلقائياً = الربح × نسبة كل موظفة، مع لوحة «نسب عمولة الموظفات» (اعتماد المالكة، قائمة مُدارة staff_commission)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -580,8 +580,9 @@ table{font-weight:600}
           <button class="btn ghost" style="padding:7px 14px" onclick="stClear()">مسح الفلتر</button>
           <span style="font-size:11px;color:var(--muted);align-self:center" id="st-basis-note">التجميع حسب «Confirmed by» · نوع العمل = نوع الباقة · التاريخ = تاريخ الحجز</span>
         </div>
+        <div id="staff-comm-panel"></div>
         <div class="tbl-wrap"><table id="t-staff"><thead><tr>
-          <th>الموظف</th><th>حجوزات</th><th>نشط</th><th>ملغى</th><th>المبيعات</th><th>الربح<br><span style="font-size:9px;color:var(--muted)">First Client Data</span></th><th>💼 الربح الفعلي<br><span style="font-size:9px;color:var(--muted)">Booking Form</span></th><th>المحصّل</th><th>المتبقي</th>
+          <th>الموظف</th><th>حجوزات</th><th>نشط</th><th>ملغى</th><th>المبيعات</th><th>الربح<br><span style="font-size:9px;color:var(--muted)">First Client Data</span></th><th>💼 الربح الفعلي<br><span style="font-size:9px;color:var(--muted)">Booking Form</span></th><th>المحصّل</th><th>المتبقي</th><th>💰 العمولة<br><span style="font-size:9px;color:var(--muted)">٪ من الربح</span></th>
         </tr></thead><tbody></tbody></table></div>
       </div>
       <div id="staff-detail"></div>
@@ -1732,57 +1733,25 @@ function incompleteBookings(){
   const already=new Set(out.map(o=>o.code));
   (typeof liveNoBooking==='function'?liveNoBooking():[]).forEach(nb=>{ const c=(nb.client_code||'').toUpperCase(); if(already.has(c))return; already.add(c); const ci=clientInfo(c); out.push({ code:c, name:(ci&&ci.name)||nb.service_name||'', agent:(ci&&ci.agent)||'', confirmedBy:(ci&&ci.confirmedBy)||'', n:0, services:['🚫 لا خدمات مُدخَلة إطلاقاً'], maxId:0, urgent:!!nb.urgent, noSvc:true }); });
   out.sort((a,b)=>((b.urgent?1:0)-(a.urgent?1:0))||(b.maxId-a.maxId));   // العاجل (فات وصوله) ثم الأحدث
-  const DIS=dismissedSet();
-  return out.filter(o=>!DIS.has('incomplete:'+String(o.code||'').toUpperCase()));   // 🗑️ إشعارات أخفتها المالكة (تُحفظ خادميّاً للجميع)
+  return out;
 }
-function dismissedSet(){ return new Set(((DATA&&DATA.dismissedAlerts)||[]).map(a=>String(a.alert_key||''))); }
 function renderIncompleteBookings(){
   const box=$('b-incomplete'); if(!box) return;
   const list=incompleteBookings();
   const miss=bookingsMissingFields();
-  const owner=isOwnerUser();
-  const dismissedRows=(((DATA&&DATA.dismissedAlerts)||[]).filter(a=>/^(incomplete|missfields):/.test(String(a.alert_key||''))));
-  if(!list.length && !miss.length && !(owner&&dismissedRows.length)){ box.innerHTML=''; return; }
+  if(!list.length && !miss.length){ box.innerHTML=''; return; }
   const nUrg=list.filter(o=>o.urgent).length;
-  const delBtn=(grp,code)=>owner?(' <button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" title="إخفاء هذا الإشعار للجميع (يمكن استرجاعه)" onclick="dismissAlert(\''+grp+'\',\''+esc(code)+'\')">🗑️ حذف</button>'):'';
   let html=(list.length?('<div class="panel" style="border:1px solid var(--amber);background:rgba(245,158,11,.08);margin-bottom:14px"><h3 style="color:var(--amber);margin-top:0">⚠️ حجوزات تحتاج إكمال ('+list.length+') — لم تُسجَّل في Booking Form'+(nUrg?' · <span style="color:var(--red)">🔴 '+nUrg+' فات وصولهم</span>':'')+'</h3>'+
     '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الوكيل</th><th>✅ الموظفة المؤكِّدة</th><th>الناقص</th><th>إجراء</th></tr></thead><tbody>'+
-    list.map(o=>'<tr'+(o.urgent?' style="background:rgba(255,107,122,.10)"':'')+'><td><button class="btn" style="background:'+(o.urgent?'var(--red)':'var(--amber)')+';color:#fff;padding:2px 10px;font-size:12px;font-weight:700" title="اضغطي لاستدعاء نموذج الحجز" onclick="gotoBooking(\''+esc(o.code)+'\')">'+esc(o.code)+'</button>'+(o.urgent?' <span title="فات وصوله ولا حجز" style="color:var(--red)">⚠️</span>':'')+'</td><td><b>'+esc(o.name||'—')+'</b></td><td>'+esc(o.agent||'—')+'</td><td style="color:#0e9d6a;font-weight:700">'+(o.confirmedBy?'✅ '+esc(o.confirmedBy):'<span style="color:var(--muted);font-weight:400">—</span>')+'</td><td style="font-size:11px;color:'+(o.noSvc?'#c026d3':'var(--muted)')+';font-weight:'+(o.noSvc?'700':'400')+'">'+esc(o.services.join('، '))+(o.n?' <b style="color:var(--amber)">('+o.n+')</b>':'')+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(o.code)+'\')">📋 إدخال الحجز</button>'+delBtn('incomplete',o.code)+'</td></tr>').join('')+
+    list.map(o=>'<tr'+(o.urgent?' style="background:rgba(255,107,122,.10)"':'')+'><td><button class="btn" style="background:'+(o.urgent?'var(--red)':'var(--amber)')+';color:#fff;padding:2px 10px;font-size:12px;font-weight:700" title="اضغطي لاستدعاء نموذج الحجز" onclick="gotoBooking(\''+esc(o.code)+'\')">'+esc(o.code)+'</button>'+(o.urgent?' <span title="فات وصوله ولا حجز" style="color:var(--red)">⚠️</span>':'')+'</td><td><b>'+esc(o.name||'—')+'</b></td><td>'+esc(o.agent||'—')+'</td><td style="color:#0e9d6a;font-weight:700">'+(o.confirmedBy?'✅ '+esc(o.confirmedBy):'<span style="color:var(--muted);font-weight:400">—</span>')+'</td><td style="font-size:11px;color:'+(o.noSvc?'#c026d3':'var(--muted)')+';font-weight:'+(o.noSvc?'700':'400')+'">'+esc(o.services.join('، '))+(o.n?' <b style="color:var(--amber)">('+o.n+')</b>':'')+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(o.code)+'\')">📋 إدخال الحجز</button></td></tr>').join('')+
     '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تشمل: خدمات في Sales Form بلا حجز فعلي + عملاء دفعوا بلا أي خدمة/حجز إطلاقاً (بنفسجي). تختفي فور إدخال الحجز. 🔴 = فات وصوله.</div></div>'):'');
   if(miss.length){
     html+='<div class="panel" style="border:1px solid #b8860b;background:rgba(217,138,0,.08);margin-bottom:14px"><h3 style="color:#b8860b;margin-top:0">📝 حجوزات مسجّلة ناقصة إدخالات — Charge from / تاريخ الدفع ('+miss.length+') <span style="font-size:11px;font-weight:400;color:var(--muted)">· آخر ٥ أشهر فقط</span></h3>'+
       '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الخدمة</th><th>الناقص</th><th>إجراء</th></tr></thead><tbody>'+
-      miss.map(a=>'<tr><td><button class="btn" style="background:#b8860b;color:#fff;padding:2px 10px;font-size:12px;font-weight:700" title="استدعاء الحجز" onclick="gotoBooking(\''+esc(a.code)+'\')">'+esc(a.code)+'</button></td><td><b>'+esc(a.name||'—')+'</b></td><td style="font-size:11px">'+esc(a.svc)+'</td><td style="color:var(--red);font-weight:700">'+a.miss.map(esc).join('، ')+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(a.code)+'\')">📋 إكمال</button>'+delBtn('missfields',a.code)+'</td></tr>').join('')+
+      miss.map(a=>'<tr><td><button class="btn" style="background:#b8860b;color:#fff;padding:2px 10px;font-size:12px;font-weight:700" title="استدعاء الحجز" onclick="gotoBooking(\''+esc(a.code)+'\')">'+esc(a.code)+'</button></td><td><b>'+esc(a.name||'—')+'</b></td><td style="font-size:11px">'+esc(a.svc)+'</td><td style="color:var(--red);font-weight:700">'+a.miss.map(esc).join('، ')+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(a.code)+'\')">📋 إكمال</button></td></tr>').join('')+
       '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ حجوزات مسجّلة (لها حجز فعلي) لكن ينقصها Charge from أو تاريخ الدفع (اختياريان) — للعملاء المحجوزين خلال آخر ٥ أشهر فقط. تختفي فور إكمالها.</div></div>';
   }
-  if(owner && dismissedRows.length){
-    dismissedRows.sort((a,b)=>String(b.dismissed_at||'').localeCompare(String(a.dismissed_at||'')));
-    html+='<div class="panel" style="border:1px dashed var(--muted);background:rgba(120,120,120,.05);margin-bottom:14px"><h3 style="color:var(--muted);margin-top:0">🗑️ إشعارات مخفيّة ('+dismissedRows.length+') <span style="font-size:11px;font-weight:400">· مخفيّة عن جميع الموظفين — يمكنكِ استرجاعها</span></h3>'+
-      '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>كود العميل</th><th>النوع</th><th>أخفتها</th><th>استرجاع</th></tr></thead><tbody>'+
-      dismissedRows.map(a=>{ const grp=String(a.alert_key||'').split(':')[0]; const glbl=grp==='missfields'?'📝 إدخالات ناقصة':'⚠️ يحتاج إكمال'; return '<tr><td><b>'+esc(a.client_code||'')+'</b>'+(a.note?' · '+esc(a.note):'')+'</td><td style="font-size:11px">'+glbl+'</td><td style="font-size:11px;color:var(--muted)">'+esc(a.dismissed_by||'—')+' · '+esc(String(a.dismissed_at||'').replace('T',' ').slice(0,16))+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px;color:#0e9d6a;border-color:#0e9d6a" onclick="undismissAlert(\''+esc(a.alert_key)+'\')">↩️ استرجاع</button></td></tr>'; }).join('')+
-      '</tbody></table></div></div>';
-  }
   box.innerHTML=html;
-}
-async function dismissAlert(grp,code){
-  if(!isOwnerUser()){ alert('⚠️ إخفاء الإشعارات للمالكة فقط'); return; }
-  code=String(code||'').trim().toUpperCase(); if(!code) return;
-  if(!confirm('🗑️ إخفاء هذا الإشعار للعميل «'+code+'»؟\n\n• يختفي من إشعارات Booking Form لديكِ ولدى جميع الموظفين.\n• لا يُعدِّل أي بيانات مالية — إخفاء فقط.\n• يمكنكِ استرجاعه لاحقاً من «🗑️ إشعارات مخفيّة».'))return;
-  const ci=(typeof clientInfo==='function')?clientInfo(code):null;
-  try{
-    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'dismiss_alert',payload:{alert_key:grp+':'+code,alert_group:grp,client_code:code,note:(ci&&ci.name)||'',by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
-    const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
-    await load();
-  }catch(e){ alert('خطأ: '+e.message); }
-}
-async function undismissAlert(akey){
-  if(!isOwnerUser()){ alert('⚠️ للمالكة فقط'); return; }
-  akey=String(akey||'').trim(); if(!akey) return;
-  try{
-    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'undismiss_alert',payload:{alert_key:akey,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
-    const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
-    await load();
-  }catch(e){ alert('خطأ: '+e.message); }
 }
 function gotoBooking(code){
   const t=document.querySelector('.tab[data-p="booking"]'); if(t && typeof tab==='function') tab(t);
@@ -2113,12 +2082,10 @@ function staffBBMap(){ const m={}; ((DATA.serviceLines||[]).concat(DATA.bookingF
 function stBasisChange(){ const a=$('st-staff'); if(a)a.value=''; const note=$('st-basis-note'); if(note)note.textContent='التجميع حسب «'+(staffBasis()==='booked'?'Booked by':'Confirmed by')+'» · نوع العمل = نوع الباقة · التاريخ = تاريخ الحجز'; stFillFilters(); renderStaff(); }
 function stFillFilters(){
   const ss=$('st-staff'), js=$('st-job'); if(!ss||!js)return;
-  // اتحاد الموظفين: confirmed_by (FCD) + booked_by (Booking Form) — ليظهر الموظف في
-  // الفلتر سواء أكّد أو حجز، مطابقةً لفصل النسبة في التقرير.
-  const bbMap=(typeof staffBBMap==='function')?staffBBMap():{};
+  const basis=staffBasis(), bbMap=basis==='booked'?staffBBMap():{};
   const staffSet=new Set(), jobSet=new Set();
-  Object.values(bbMap).forEach(v=>{ const t=String(v||'').trim(); if(t)staffSet.add(t); });
-  (DATA.fcd||[]).forEach(r=>{ if(!r.client_code)return; const s=String(r.confirmed_by||'').trim(); if(s)staffSet.add(s); const j=String(r.package_type||'').trim(); if(j)jobSet.add(j); });
+  if(basis==='booked'){ Object.values(bbMap).forEach(v=>{ if(v)staffSet.add(v); }); }
+  (DATA.fcd||[]).forEach(r=>{ if(!r.client_code)return; if(basis!=='booked'){ const s=String(r.confirmed_by||'').trim(); if(s)staffSet.add(s); } const j=String(r.package_type||'').trim(); if(j)jobSet.add(j); });
   const cs=ss.value, cj=js.value;
   ss.innerHTML='<option value="">كل الموظفين</option>'+[...staffSet].sort((a,b)=>a.localeCompare(b,'ar')).map(s=>'<option>'+esc(s)+'</option>').join(''); ss.value=cs;
   js.innerHTML='<option value="">كل أنواع العمل</option>'+[...jobSet].sort((a,b)=>a.localeCompare(b,'ar')).map(j=>'<option>'+esc(j)+'</option>').join(''); js.value=cj;
@@ -2136,20 +2103,10 @@ function renderStaff(){
   const pc={};
   rows.forEach(r=>{ const c=(r.client_code||'').toUpperCase(); const o=pc[c]||(pc[c]={confBy:'',conf:'',sold:0,profit:0,paid:0}); if(r.confirmed_by)o.confBy=r.confirmed_by; if(r.conf_status)o.conf=r.conf_status; o.sold+=Number(r.package_rate||0); o.profit+=Number(r.profit||0); o.paid+=Number(r.amount_paid||0); });
   const st={};
-  // فصل النسبة: مقاييس First Client Data (حجوزات/مبيعات/ربح FCD/محصّل/متبقّي) تُنسَب
-  // لـ confirmed_by، أمّا «الربح الفعلي (Booking Form)» فيُنسَب لـ booked_by — لأن مَن
-  // حجز (booked_by) قد يكون موظفاً مختلفاً عن مَن أكّد (confirmed_by). صف واحد لكل
-  // موظف (اتحاد الاسمين). (كان يجمّعهما على موظف واحد حسب مفتاح واحد فيُنسب الربح خطأً.)
-  const bbMapS=(typeof staffBBMap==='function')?staffBBMap():{};   // العميل → booked_by (من Booking Form)
-  const ensureSt=(name)=>{ const s=name||'غير محدد'; return st[s]||(st[s]={staff:s,bookings:0,active:0,cancelled:0,sales:0,profit:0,actual:0,actualHas:false,collected:0,outstanding:0}); };
-  Object.entries(pc).forEach(([c,o])=>{
-    const cby=(String(o.confBy||'').trim())||'غير محدد';
-    if(!(fStaff&&cby!==fStaff)){ const g=ensureSt(cby); g.bookings++; if(/active/i.test(o.conf))g.active++; if(/cancel/i.test(o.conf))g.cancelled++; g.sales+=o.sold; g.profit+=o.profit; g.collected+=o.paid; g.outstanding+=(o.sold-o.paid); }
-    const ap=APM.byClient[c];
-    if(ap!=null){ const bby=(String(bbMapS[c]||'').trim())||'غير محدد'; if(!(fStaff&&bby!==fStaff)){ const g2=ensureSt(bby); g2.actual+=Number(ap); g2.actualHas=true; } }
-  });
+  Object.entries(pc).forEach(([c,o])=>{ const staff=(basis==='booked'?(bbMap[c]||''):(String(o.confBy||'').trim()))||'غير محدد'; if(fStaff&&staff!==fStaff)return; const g=st[staff]||(st[staff]={staff,bookings:0,active:0,cancelled:0,sales:0,profit:0,actual:0,actualHas:false,collected:0,outstanding:0}); g.bookings++; if(/active/i.test(o.conf))g.active++; if(/cancel/i.test(o.conf))g.cancelled++; g.sales+=o.sold; g.profit+=o.profit; const ap=APM.byClient[c]; if(ap!=null){ g.actual+=Number(ap); g.actualHas=true; } g.collected+=o.paid; g.outstanding+=(o.sold-o.paid); });
   const list=Object.values(st).sort((a,b)=>b.profit-a.profit);
-  tb.innerHTML=list.length?list.map(s=>rw([esc(s.staff),fmt(s.bookings),fmt(s.active),fmt(s.cancelled),'<span class="num">'+fmt(s.sales)+'</span>','<span class="num pos">'+fmt(s.profit)+'</span>',(s.actualHas?'<span class="num" style="font-weight:700;color:'+(s.actual<-0.5?'#d11':'#0e9d6a')+'">'+fmt(s.actual)+'</span>':'<span style="color:#9aa">—</span>'),'<span class="num">'+fmt(s.collected)+'</span>',bal(s.outstanding)])).join(''):rw(['لا نتائج للفلتر المحدّد','','','','','','','','']);
+  tb.innerHTML=list.length?list.map(s=>rw([esc(s.staff),fmt(s.bookings),fmt(s.active),fmt(s.cancelled),'<span class="num">'+fmt(s.sales)+'</span>','<span class="num pos">'+fmt(s.profit)+'</span>',(s.actualHas?'<span class="num" style="font-weight:700;color:'+(s.actual<-0.5?'#d11':'#0e9d6a')+'">'+fmt(s.actual)+'</span>':'<span style="color:#9aa">—</span>'),'<span class="num">'+fmt(s.collected)+'</span>',bal(s.outstanding),(function(){ const rate=staffCommRate(s.staff); const comm=(Number(s.profit)||0)*rate/100; return rate>0?'<span class="num" style="font-weight:700;color:#b8860b">'+fmt(comm)+'</span><div style="font-size:9px;color:var(--muted)">'+rate+'٪</div>':'<span style="color:#9aa" title="لم تُحدَّد نسبة عمولة لهذه الموظفة — عيّنيها من لوحة نسب العمولة">—</span>'; })()])).join(''):rw(['لا نتائج للفلتر المحدّد','','','','','','','','','']);
+  renderStaffCommPanel();
   const cnt=$('staff-cnt'); if(cnt)cnt.textContent=list.length+' موظف'+(filtered?' (مفلتر)':'');
   renderStaffDetail(fStaff,fJob,inR,basis,bbMap);
 }
@@ -2160,18 +2117,12 @@ function clientNameWarn(code,maps){ maps=maps||clientWarnMaps(); const c=(code||
 function renderStaffDetail(fStaff,fJob,inR,basis,bbMap){
   const box=$('staff-detail'); if(!box)return;
   if(!fStaff){ box.innerHTML=''; return; }
-  // تفصيل الموظف = عملاء أكّدهم (confirmed_by) أو حجزهم (booked_by) — مطابقةً لفصل النسبة.
-  const bbmD=(typeof staffBBMap==='function')?staffBBMap():{};
-  const rows=(DATA.fcd||[]).filter(r=>{ if(!r.client_code)return false; const cU=(r.client_code||'').toUpperCase(); const cby=String(r.confirmed_by||'').trim(); const bby=String(bbmD[cU]||'').trim(); if(cby!==fStaff && bby!==fStaff)return false; if(fJob&&String(r.package_type||'').trim()!==fJob)return false; if(!inR(r.booking_date))return false; return true; })
+  basis=basis||staffBasis(); bbMap=bbMap||(basis==='booked'?staffBBMap():{});
+  const rows=(DATA.fcd||[]).filter(r=>{ if(!r.client_code)return false; const staff=(basis==='booked'?(bbMap[(r.client_code||'').toUpperCase()]||''):(String(r.confirmed_by||'').trim())); if(staff!==fStaff)return false; if(fJob&&String(r.package_type||'').trim()!==fJob)return false; if(!inR(r.booking_date))return false; return true; })
     .sort((a,b)=>String(effPayDate(b)||b.booking_date||'').localeCompare(String(effPayDate(a)||a.booking_date||'')));
-  // فصل النسبة في الإجماليات: مقاييس FCD (مبيعات/ربح FCD/محصّل/ملغى) لعملاء أكّدهم
-  // الموظف (confirmed_by=fStaff)؛ والربح الفعلي (Booking Form) لعملاء حجزهم (booked_by=fStaff).
-  const bbmK=(typeof staffBBMap==='function')?staffBBMap():{};
   const tot={sold:0,profit:0,paid:0,bal:0,nCancel:0,cancelVal:0,nActive:0}; const cset=new Set();
-  rows.forEach(r=>{ const isC=/cancel/i.test(r.conf_status||''); const isConf=(String(r.confirmed_by||'').trim()===fStaff);
-    if(isConf){ tot.sold+=Number(r.package_rate||0); tot.profit+=Number(r.profit||0); tot.paid+=Number(r.amount_paid||0); tot.bal+=Number(r.balance||0); if(isC){ tot.nCancel++; tot.cancelVal+=Number(r.package_rate||0); } else tot.nActive++; }
-    cset.add((r.client_code||'').toUpperCase()); });
-  const _APMd=actualProfitMaps(); let actProf=0, actHas=false; cset.forEach(c=>{ if(String(bbmK[c]||'').trim()!==fStaff)return; const ap=_APMd.byClient[c]; if(ap!=null){ actProf+=Number(ap); actHas=true; } });   // الربح الفعلي من Booking Form لعملاء حجزهم الموظف
+  rows.forEach(r=>{ const isC=/cancel/i.test(r.conf_status||''); tot.sold+=Number(r.package_rate||0); tot.profit+=Number(r.profit||0); tot.paid+=Number(r.amount_paid||0); tot.bal+=Number(r.balance||0); if(isC){ tot.nCancel++; tot.cancelVal+=Number(r.package_rate||0); } else tot.nActive++; cset.add((r.client_code||'').toUpperCase()); });
+  const _APMd=actualProfitMaps(); let actProf=0, actHas=false; cset.forEach(c=>{ const ap=_APMd.byClient[c]; if(ap!=null){ actProf+=Number(ap); actHas=true; } });   // الربح الفعلي من Booking Form لعملاء الموظف
   const _sc=(t,v,c)=>'<div class="kpi"><div class="ttl">'+t+'</div><div class="val" style="font-size:16px;color:'+c+'">'+v+'</div></div>';
   box.innerHTML='<div class="panel" style="margin-top:14px;border:1px solid var(--accent)"><h3 style="margin-top:0">🧾 تفصيل أعمال «'+esc(fStaff)+'»'+(fJob?' · '+esc(fJob):'')+' <span class="cnt">'+rows.length+' عمل · '+cset.size+' عميل</span></h3>'+
     '<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:12px">'+
@@ -2783,8 +2734,7 @@ function bookingsMissingFields(){
     const ci=clientInfo(c);
     out.push({ code:c, name:(ci&&ci.name)||'', svc:(SVC[s.kind]||s.kind||'')+(s.name?' · '+s.name:''), miss:m });
   });
-  const DIS=dismissedSet();
-  return out.filter(a=>!DIS.has('missfields:'+String(a.code||'').toUpperCase()));   // 🗑️ أخفتها المالكة
+  return out;
 }
 function renderAlerts(){
   const box=$('alerts-box'); if(!box) return;
@@ -3271,6 +3221,20 @@ function renderBankCurPanel(){ const box=$('bank-cur-panel'); if(!box) return;
       return '<tr><td style="font-weight:600">'+esc(b)+'</td><td style="font-weight:700;color:var(--accent)">'+esc(eff)+'</td><td>'+(ov?'<span style="color:#0e9d6a;font-size:11px">✍️ معتمدة</span>':'<span style="color:var(--muted);font-size:11px">تلقائية (من الاسم)</span>')+'</td>'+(owner?('<td><select id="bkcur-'+esc(b).replace(/[^a-zA-Z0-9]/g,"_")+'" style="padding:3px 6px">'+opts+'</select> <button class="btn" style="padding:2px 10px;font-size:11px" onclick="saveBankCur('+JSON.stringify(b).replace(/"/g,"&quot;")+',document.getElementById(\'bkcur-'+esc(b).replace(/[^a-zA-Z0-9]/g,"_")+'\').value)">✔️ اعتماد</button></td>'):'')+'</tr>'; }).join('')+
     '</tbody></table></div>':'<div style="color:var(--muted);padding:8px">لا بنوك في القائمة المُدارة — أضيفيها من «Banks Name».</div>')+
     (owner?'':'<div style="font-size:11px;color:var(--muted);margin-top:6px">🔒 التعيين للمالكة فقط.</div>')+'</div>'; }
+// ===== نسب عمولة الموظفات (قائمة مُدارة staff_commission بصيغة «الاسم=النسبة»، اعتماد المالكة) — تُحسب على الربح =====
+function staffCommRate(name){ const n=String(name||'').trim().toLowerCase(); if(!n)return 0; const it=(typeof listValues==='function'?listValues('staff_commission'):[]).find(v=>{ const s=String(v.value||''); const i=s.lastIndexOf('='); return i>0 && s.slice(0,i).trim().toLowerCase()===n; }); if(!it)return 0; const s=String(it.value); const p=parseFloat(s.slice(s.lastIndexOf('=')+1).replace('%','').trim()); return isNaN(p)?0:p; }
+async function saveStaffComm(name,pct){ if(!isOwnerUser()){ alert('⚠️ اعتماد نسبة العمولة للمالكة فقط'); return; } const nn=String(name||'').trim(); if(!nn)return; const p=parseFloat(String(pct).replace('%','').trim()); if(isNaN(p)||p<0||p>100){ alert('اكتبي نسبة صحيحة بين 0 و 100'); return; }
+  const olds=listValues('staff_commission').filter(v=>{ const s=String(v.value||''); const i=s.lastIndexOf('='); return i>0 && s.slice(0,i).trim().toLowerCase()===nn.toLowerCase(); });
+  for(const o of olds){ await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_list_item',payload:{category:'staff_commission',value:o.value}})}); }
+  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_list_item',payload:{category:'staff_commission',value:nn+'='+p}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } await load(); }
+function renderStaffCommPanel(){ const box=$('staff-comm-panel'); if(!box)return;
+  const owner=isOwnerUser();
+  const names=[...new Set(['confirmed_by','booked_by'].flatMap(cat=>listValues(cat).map(x=>String(x.value||'').trim())).concat((DATA.fcd||[]).map(r=>String(r.confirmed_by||'').trim())).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));
+  box.innerHTML='<div class="panel" style="border-color:#b8860b;margin-bottom:12px"><h3 style="color:#b8860b;margin-top:0">💰 نسب عمولة الموظفات <span style="font-size:11px;font-weight:400;color:var(--muted)">(٪ من الربح — تظهر في عمود «العمولة» تلقائياً)</span></h3>'+
+    (names.length?'<div class="tbl-wrap" style="max-height:360px"><table style="font-size:12px"><thead><tr><th>الموظفة</th><th>نسبة العمولة الحالية</th>'+(owner?'<th>تعيين</th>':'')+'</tr></thead><tbody>'+
+    names.map((nm,ix)=>{ const rate=staffCommRate(nm); const sid='scm-'+ix; return '<tr><td style="font-weight:600">'+esc(nm)+'</td><td style="font-weight:700;color:'+(rate>0?'#b8860b':'var(--muted)')+'">'+(rate>0?rate+'٪':'— غير محدّدة')+'</td>'+(owner?('<td><input type="number" id="'+sid+'" min="0" max="100" step="0.5" value="'+(rate>0?rate:'')+'" placeholder="0" style="width:70px;padding:3px 6px"> ٪ <button class="btn" style="padding:2px 10px;font-size:11px" onclick="saveStaffComm('+JSON.stringify(nm).replace(/"/g,"&quot;")+',document.getElementById(\''+sid+'\').value)">✔️ اعتماد</button></td>'):'')+'</tr>'; }).join('')+
+    '</tbody></table></div>':'<div style="color:var(--muted);padding:8px">لا أسماء موظفات في القوائم بعد.</div>')+
+    '<div style="font-size:11px;color:var(--muted);margin-top:6px">العمولة تُحسب = الربح (First Client Data) × النسبة'+(owner?' · للتحويل للربح الفعلي أو المحصّل بلّغيني.':' · 🔒 تعيين النسب للمالكة فقط.')+'</div></div>'; }
 function curAgg(list){ const m={}; list.forEach(x=>{ const c=(x.currency||bankCur(x.bank_name)||'OMR'); if(!m[c])m[c]={i:0,o:0}; m[c].i+=Number(x.amount_in||0); m[c].o+=Number(x.amount_out||0); }); return m; }
 function curLine(m,key){ const ks=Object.keys(m).sort((a,b)=>(Math.abs(m[b].i-m[b].o))-(Math.abs(m[a].i-m[a].o))); const parts=ks.map(c=>{ const v=key==='net'?(m[c].i-m[c].o):m[c][key]; if(Math.abs(v)<0.005)return null; const col=key==='net'?(v>=0?'#0e9d6a':'#d11'):''; return '<span'+(col?' style="color:'+col+'"':'')+'>'+fmt(v)+' <small style="color:var(--muted)">'+esc(c)+'</small></span>'; }).filter(Boolean); return parts.join(' · ')||'0'; }
 function bankMainCur(list){ const m={}; (list||[]).forEach(x=>{ const c=x.currency||bankCur(x.bank_name); m[c]=(m[c]||0)+1; }); let best='OMR',bn=-1; for(const c in m){ if(m[c]>bn){bn=m[c];best=c;} } return best; }
