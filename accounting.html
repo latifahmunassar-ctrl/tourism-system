@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 13يوليو · تبويب الموظفين: عمود «💰 العمولة» يُحسب تلقائياً = الربح × نسبة كل موظفة، مع لوحة «نسب عمولة الموظفات» (اعتماد المالكة، قائمة مُدارة staff_commission)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 13يوليو-ب · تبويب البنوك والبطاقات صار يعرض فقط البنوك/البطاقات المُدخلة في القائمة المُدارة (قسم البيانات) — تُستبعَد أسماء البنوك القديمة من الحركات</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3450,7 +3450,9 @@ function renderBanks(){
   tx.forEach(x=>{ const b=x.bank_name||'(بدون بنك)'; (byBank[b]=byBank[b]||[]).push(x); });
   // البنك صاحب آخر عملية (الأحدث) يطلع أول صف — عمليات الداشبورد الجديدة لها الأولوية ثم تاريخ الحركة
   const bankRecency=b=>{ let key=''; for(const x of (byBank[b]||[])){ const k=(x.source==='dashboard'?'2_'+(x.created_at||''):'1_'+(x.tx_date||'')); if(k>key)key=k; } return key; };
-  const names=Object.keys(byBank).sort((a,b)=> bankRecency(b).localeCompare(bankRecency(a)) || (byBank[b].length-byBank[a].length));
+  // نعرض فقط البنوك/البطاقات المُدخلة في القائمة المُدارة (قسم البيانات) — نستبعد أي اسم بنك قديم من الحركات غير موجود بالقائمة
+  const _mgBankSet=new Set(listValues('banks').map(v=>String(v.value||'').trim().toLowerCase()).filter(Boolean));
+  const names=Object.keys(byBank).filter(b=>_mgBankSet.has(String(b).trim().toLowerCase())).sort((a,b)=> bankRecency(b).localeCompare(bankRecency(a)) || (byBank[b].length-byBank[a].length));
   const sel=$('bankflt'); if(sel){ const cur=sel.value; sel.innerHTML='<option value="">— كل البنوك والبطاقات —</option>'+names.map(b=>'<option>'+esc(b)+'</option>').join(''); if(names.indexOf(cur)>=0)sel.value=cur; }
   const dl=$('banklist'); if(dl) dl.innerHTML=names.map(b=>'<option value="'+esc(b)+'"></option>').join('');
   const tb=document.querySelector('#t-bank tbody');
