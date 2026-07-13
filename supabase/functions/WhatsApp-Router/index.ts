@@ -4089,6 +4089,27 @@ Deno.serve(async (req) => {
         if (unanswered) { unansweredBy[ph] = (unansweredBy[ph] || 0) + 1; if (lop >= lm) unansweredSeenBy[ph] = (unansweredSeenBy[ph] || 0) + 1; }
       }
 
+      // ── قياس النشاط الفعلي لكل يوم (لتمييز «شغّالة فعلاً» عن «دخلت بلا عمل») ──
+      const omanDay = (iso: string) => new Date(Date.parse(iso) + 4 * 3600 * 1000).toISOString().slice(0, 10);
+      const nameToPhone = new Map(staffRows.map(s => [s.name, s.phone]));
+      // رسائل الموظفة لكل يوم + مجموعة العملاء الذين ردّت عليهم لكل يوم
+      const msgsByNameDay = new Map<string, Map<string, number>>();
+      const repliedByPhoneDay = new Map<string, Map<string, Set<string>>>();
+      for (const o of outs) {
+        const day = omanDay(o.sent_at);
+        let m = msgsByNameDay.get(o.sent_by); if (!m) { m = new Map(); msgsByNameDay.set(o.sent_by, m); }
+        m.set(day, (m.get(day) || 0) + 1);
+        const ph = nameToPhone.get(o.sent_by);
+        if (ph) { let d = repliedByPhoneDay.get(ph); if (!d) { d = new Map(); repliedByPhoneDay.set(ph, d); } let set = d.get(day); if (!set) { set = new Set(); d.set(day, set); } set.add(o.customer_phone); }
+      }
+      // إسناد العملاء للموظفين (لقطة حالية) + وارد كل (موظف، يوم)
+      const assignStaffByCust = new Map<string, string>();
+      for (const w of ((wsRes.data || []) as Array<{ phone: string; assigned_staff_phone: string | null }>)) { if (w.assigned_staff_phone) assignStaffByCust.set(w.phone, w.assigned_staff_phone); }
+      const inboundByPhoneDay = new Map<string, Map<string, Set<string>>>();
+      for (const m of ins) { const ph = assignStaffByCust.get(m.from_phone); if (!ph) continue; const day = omanDay(m.received_at); let d = inboundByPhoneDay.get(ph); if (!d) { d = new Map(); inboundByPhoneDay.set(ph, d); } let set = d.get(day); if (!set) { set = new Set(); d.set(day, set); } set.add(m.from_phone); }
+      // عملاء راسلوها ذلك اليوم ولم تُردّ عليهم نفس اليوم
+      const unansweredOn = (phone: string, day: string): number => { const inb = inboundByPhoneDay.get(phone)?.get(day); if (!inb || inb.size === 0) return 0; const rep = repliedByPhoneDay.get(phone)?.get(day) || new Set<string>(); let n = 0; for (const c of inb) if (!rep.has(c)) n++; return n; };
+
       const report = staffRows.map(s => {
         const ss = sessions.filter(x => x.staff_phone === s.phone);
         let active = 0, idle = 0; const days = new Set<string>();
@@ -4149,7 +4170,14 @@ Deno.serve(async (req) => {
         const avgLate = lateCnt ? Math.round(lateSum / lateCnt) : null;
         return { phone: s.phone, name: s.name, status: liveStatus, check_in_at: checkIn, check_out_at: checkOut, last_activity_at: lastAct, active_seconds: active, idle_seconds: idle, total_seconds: total, days_present: days.size, messages, clients, avg_response_seconds: avgResp, compliance, shift_start: s.shift_start || null, shift_end: s.shift_end || null, shift_start2: s.shift_start2 || null, shift_end2: s.shift_end2 || null, work_days: s.work_days || null, expected_days: expectedDays, absence_days: absenceDays, absent_dates: absentDates, expected_seconds: expected, avg_late_seconds: avgLate, schedule_based: expected > 0, confirmed_bookings: confirmedBy[s.phone] || 0, unanswered: unansweredBy[s.phone] || 0, unanswered_seen: unansweredSeenBy[s.phone] || 0,
           // سجل الدخول/الخروج المفصّل لكل جلسة (ضمن الفترة المختارة) — الأحدث أولاً
-          sessions: ss.map((x) => ({ work_date: x.work_date, check_in_at: x.check_in_at, check_out_at: x.check_out_at, active_seconds: x.active_seconds, idle_seconds: x.idle_seconds })).sort((a, b) => String(b.check_in_at).localeCompare(String(a.check_in_at))) };
+          sessions: ss.map((x) => {
+            const day = omanDay(x.check_in_at);
+            const msgs = msgsByNameDay.get(s.name)?.get(day) || 0;
+            const unans = unansweredOn(s.phone, day);
+            const activeThresh = shiftSec ? shiftSec * 0.5 : 3600;   // «شغّالة فعلاً» = نشاط ≥ نصف الدوام + رسالة واحدة على الأقل
+            const working = x.active_seconds >= activeThresh && msgs >= 1;
+            return { work_date: x.work_date, check_in_at: x.check_in_at, check_out_at: x.check_out_at, active_seconds: x.active_seconds, idle_seconds: x.idle_seconds, messages: msgs, unanswered: unans, day_status: working ? "active" : "weak" };
+          }).sort((a, b) => String(b.check_in_at).localeCompare(String(a.check_in_at))) };
       });
       report.sort((a, b) => b.active_seconds - a.active_seconds);
       return new Response(JSON.stringify({ ok: true, is_admin: isAdmin, range, from: fromIso, to: toIso, report }), { headers: jsonCors });
