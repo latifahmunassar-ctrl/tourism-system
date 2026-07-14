@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 13يوليو-ط · العمولة تُحسب من الربح الفعلي (Booking Form) لا المتوقّع + عمود «عمولة العميل» في تفصيل الموظفة بجانب الربح الفعلي</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 14يوليو · تصحيح شريحة Full pakage: ربح ≥ 1000 → 150 ثابت · ربح < 1000 → 10% (كانت معكوسة)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2105,7 +2105,7 @@ function commTypeKey(t){ const n=String(t||'').trim().toLowerCase().replace(/\s+
 }
 function commConfirmed(key, profit){ profit=Number(profit)||0; const pct=v=>0.10*v;
   switch(key){
-    case 'full': return profit<=1000?150:pct(profit);
+    case 'full': return profit<1000?pct(profit):150;
     case 'hotel': case 'hotels_flights': case 'air': return pct(profit);
     case 'transport': case 'tour': return 60;
     case 'flight_transport': return (profit>=500&&profit<1000)?60:pct(profit);
@@ -3270,7 +3270,7 @@ async function saveStaffComm(name,pct){ if(!isOwnerUser()){ alert('⚠️ اعت
 function renderStaffCommPanel(){ const box=$('staff-comm-panel'); if(!box)return;
   const basis=staffBasis();
   const R=[
-    ['Full pakage','ربح ≤ 1000 → 150 ر.س · ربح > 1000 → 10% من الربح'],
+    ['Full pakage','ربح ≥ 1000 → 150 ر.س ثابت · ربح < 1000 → 10% من الربح'],
     ['Hotel · hotels & flights · AIR TICKET ONLY','10% من الربح'],
     ['Transportaion · TOUR ONLY','60 ر.س ثابت'],
     ['Flight & transportaion','ربح 500–999 → 60 ر.س · غير ذلك → 10% من الربح'],
