@@ -754,6 +754,18 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 </div>
 </div>
 
+<button id="waReqFab" onclick="waReqOpen()" title="طلبات الجروبات المميّزة بنجمة" style="position:fixed;bottom:74px;left:22px;z-index:950;background:linear-gradient(135deg,#d4a843,#b8860b);color:#fff;border:none;border-radius:999px;padding:12px 20px;font-family:Tajawal,sans-serif;font-size:14px;font-weight:800;box-shadow:0 4px 16px rgba(0,0,0,.35);cursor:pointer">📥 الطلبات<span id="waReqBadge" style="display:none;background:#e0218a;border-radius:999px;padding:1px 7px;font-size:11px;margin-inline-start:6px">0</span></button>
+<div class="rfm-overlay" id="waReqOverlay" onclick="if(event.target===this)waReqClose()">
+<div class="rfm-modal" style="max-width:600px">
+<div class="rfm-head">
+<div class="rfm-title" style="color:#d4a843">📥 طلبات الجروبات (المميّزة بنجمة ⭐)</div>
+<button class="rfm-close" onclick="waReqClose()">✕</button>
+</div>
+<div class="rfm-sub">أي رسالة تميّزينها بتفاعل نجمة ⭐ في جروبات الرقم الجديد تظهر هنا كطلب عرض سياحي.</div>
+<div id="waReqList" style="max-height:62vh;overflow-y:auto"></div>
+</div>
+</div>
+
 <!-- Branded print container — populated by readyFile_generate() then printed -->
 <div id="readyFilePdf"></div>
 
@@ -3198,6 +3210,52 @@ async function waBridgeRenderOutbox() {
     }).join('');
   } catch (e) {}
 }
+
+// ── طلبات الجروبات (المميّزة بنجمة ⭐) ─────────────────────────────────────
+async function waReqCall(action, extra = {}) {
+  const r = await fetch(WA_BRIDGE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
+    body: JSON.stringify({ action, ...extra })
+  });
+  return r.json();
+}
+function waReqOpen() { document.getElementById('waReqOverlay').classList.add('open'); waReqLoad(); }
+function waReqClose() { document.getElementById('waReqOverlay').classList.remove('open'); }
+function waReqBadge(n) {
+  const b = document.getElementById('waReqBadge');
+  if (n > 0) { b.textContent = n; b.style.display = 'inline-block'; } else { b.style.display = 'none'; }
+}
+async function waReqLoad() {
+  const box = document.getElementById('waReqList');
+  box.innerHTML = '<div style="padding:14px;color:var(--muted)">⏳ تحميل الطلبات...</div>';
+  try {
+    const r = await waReqCall('group-requests');
+    const reqs = r.requests || [];
+    waReqBadge(r.new_count || 0);
+    if (!reqs.length) {
+      box.innerHTML = '<div style="padding:18px;color:var(--muted);text-align:center;line-height:1.9">ما فيه طلبات بعد.<br>ميّزي رسالة الطلب بتفاعل نجمة ⭐ في أي جروب، وبتظهر هنا تلقائياً.</div>';
+      return;
+    }
+    box.innerHTML = reqs.map(function (q) {
+      const isNew = q.status === 'new';
+      let when = q.created_at; try { when = new Date(q.created_at).toLocaleString('ar'); } catch (e) {}
+      const btn = isNew
+        ? '<button class="ebtn ebtn-nologo" style="font-size:11px;margin-top:8px" onclick="waReqMark(' + q.id + ')">✅ تم التعامل</button>'
+        : '<span style="font-size:11px;color:#25D366;font-weight:800">✓ تم</span>';
+      return '<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:' + (isNew ? 'rgba(212,168,67,.08)' : 'var(--s2)') + '">'
+        + '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:4px"><b style="font-size:13px;color:#128C7E">👥 ' + waEsc(q.group_name || '') + '</b><span style="font-size:11px;color:var(--muted);white-space:nowrap">' + waEsc(when) + '</span></div>'
+        + '<div style="font-size:11px;color:var(--muted);margin-bottom:5px">📱 ' + waEsc(q.sender_name || q.sender || '') + '</div>'
+        + '<div style="font-size:13px;color:var(--text);white-space:pre-wrap;line-height:1.8">' + waEsc(q.body || '') + '</div>'
+        + btn + '</div>';
+    }).join('');
+  } catch (e) { box.innerHTML = '<div style="padding:14px;color:#ef4444">تعذّر التحميل: ' + e.message + '</div>'; }
+}
+async function waReqMark(id) { await waReqCall('mark-request', { id: id, status: 'handled' }); waReqLoad(); }
+// light badge refresh (every 5 min — keeps data usage low)
+setInterval(function () { waReqCall('group-requests').then(function (r) { waReqBadge(r.new_count || 0); }).catch(function () {}); }, 300000);
+setTimeout(function () { waReqCall('group-requests').then(function (r) { waReqBadge(r.new_count || 0); }).catch(function () {}); }, 4000);
+
 
 // تحميل مكتبة توليد PDF عند الحاجة فقط (lazy) — ما تثقّل تحميل الصفحة.
 let _html2pdfLoading = null;
