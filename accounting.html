@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 14يوليو-ط · زر «💾 حفظ الناقص» للحجوزات المقفلة يحفظ الآن مصدر الدفع (charge from) وتاريخ الدفع ورقم التأكيد معاً — كانت charge from ما تنحفظ على المقفل</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 14يوليو-ي · الزر الكبير «💾 حفظ كل التغييرات» يحفظ الآن نواقص الحجوزات المقفلة كلها دفعة وحدة (مصدر الدفع + تاريخ الدفع + Conf No) — بلا ضغط زر لكل صف</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1617,15 +1617,22 @@ async function saveAllSvc(code){
   const LK=window.B_LOCKED||new Set();
   const ids=(window.B_SVC_IDS||[]).filter(id=>!LK.has(id));   // الحجوزات المحفوظة مقفلة — تُستثنى من حفظ التكلفة، تعديلها عبر طلب موافقة
   // الحجوزات المقفلة: نسمح بحفظ «رقم التأكيد» فقط لو تغيّر (قيمة غير مالية، بلا موافقة) — عبر زر الحفظ الكبير أيضاً
-  const _storedConf=(id)=>{ const s=(DATA.serviceLines||[]).find(x=>x.id===id); return s?String(s.conf_no||'').trim():''; };
-  const confUpdates=(window.B_SVC_IDS||[]).filter(id=>LK.has(id)).filter(id=>{ const el=$('sb-conf-'+id); if(!el)return false; return (el.value||'').trim()!==_storedConf(id); });
-  if(!ids.length && !confUpdates.length){ alert('لا تغييرات للحفظ — كل الحجوزات محفوظة/مقفلة 🔒 ولا يوجد رقم تأكيد جديد.\n\nلتعديل التكلفة أو الإلغاء استخدمي أزرار الموافقة في عمود «الحفظ» (آخر الجدول).'); return; }
+  const _stored=(id,f)=>{ const s=(DATA.serviceLines||[]).find(x=>x.id===id); return s?String(s[f]||'').trim():''; };
+  // الحجوزات المقفلة التي تغيّر فيها أي حقل غير مالي (رقم التأكيد / مصدر الدفع / تاريخ الدفع) — تُحفظ مع الزر الكبير بلا موافقة
+  const confUpdates=(window.B_SVC_IDS||[]).filter(id=>LK.has(id)).filter(id=>{
+    const ce=$('sb-conf-'+id), fe=$('sb-cfrom-'+id), de=$('sb-cdate-'+id);
+    const confCh = ce && (ce.value||'').trim()!==_stored(id,'conf_no');
+    const cfCh   = fe && (fe.value||'').trim()!==_stored(id,'charge_from');
+    const dateCh = de && (de.value||'').trim() && (CHARGE_DATE_OVR[id]==null || String(CHARGE_DATE_OVR[id]).slice(0,10)!==(de.value||'').trim());
+    return confCh || cfCh || dateCh;
+  });
+  if(!ids.length && !confUpdates.length){ alert('لا تغييرات للحفظ — كل الحجوزات محفوظة/مقفلة 🔒 ولا يوجد ناقص جديد (Conf No / مصدر الدفع / تاريخ الدفع).\n\nلتعديل التكلفة أو الإلغاء استخدمي أزرار الموافقة في عمود «الحفظ» (آخر الجدول).'); return; }
   // Charge from وتاريخ الدفع اختياريان — لا يمنعان الحفظ (يظهر نقصهما في بانر أعلى الحجز)
   for(const id of ids){ const svc=(DATA.serviceLines||[]).find(x=>x.id===id); if(bIsConfReq(svc&&svc.kind) && !((($('sb-conf-'+id)||{}).value||'').trim())){ alert('⚠️ رقم التأكيد (Conf No) إجباري لحجوزات الفنادق والطيران — أكملي الناقصة'); const e=$('sb-conf-'+id); if(e){e.focus(); e.scrollIntoView({block:'center'});} return; } }
   for(const id of ids){ if(!cancelOk(id)) return; }
   const _confirmMsg = ids.length
-    ? '⚠️ تأكدي من إدخال جميع المعلومات بشكل صحيح.\n\nبعد الحفظ لا يمكن تعديل التكلفة (الحجز الفعلي) إلا بموافقة الإدارة.\n\nمتابعة حفظ كل الحجوزات؟'+(confUpdates.length?'\n(وسيُحدَّث رقم التأكيد لـ '+confUpdates.length+' حجز مقفل بدون مسّ التكلفة)':'')
-    : 'حفظ رقم التأكيد (Conf No) لـ '+confUpdates.length+' حجز مقفل؟\nلن تتأثر التكلفة المحفوظة.';
+    ? '⚠️ تأكدي من إدخال جميع المعلومات بشكل صحيح.\n\nبعد الحفظ لا يمكن تعديل التكلفة (الحجز الفعلي) إلا بموافقة الإدارة.\n\nمتابعة حفظ كل الحجوزات؟'+(confUpdates.length?'\n(وسيُحفظ الناقص — تأكيد/مصدر دفع/تاريخ — لـ '+confUpdates.length+' حجز مقفل بدون مسّ التكلفة)':'')
+    : 'حفظ نواقص (رقم التأكيد · مصدر الدفع · تاريخ الدفع) لـ '+confUpdates.length+' حجز مقفل؟\nلن تتأثر التكلفة المحفوظة.';
   if(!confirm(_confirmMsg)) return;
   const btn=$('b-saveall'); if(btn){ btn.disabled=true; btn.textContent='⏳ جاري الحفظ…'; }
   let err='', mism=0, lossN=0;
@@ -1640,18 +1647,22 @@ async function saveAllSvc(code){
       if(await bMaybeLossTicket(id,code)) lossN++; }
     catch(e){ err=String(e); break; }
   }
-  // حفظ «رقم التأكيد» فقط للحجوزات المقفلة التي تغيّر رقمها (بلا مسّ التكلفة)
+  // حفظ نواقص الحجوزات المقفلة (رقم التأكيد + مصدر الدفع + تاريخ الدفع) بلا مسّ التكلفة
   let confN=0;
   if(!err) for(const id of confUpdates){
-    const el=$('sb-conf-'+id); const v=((el&&el.value)||'').trim();
+    const v=((($('sb-conf-'+id)||{}).value)||'').trim();
+    const cfrom=((($('sb-cfrom-'+id)||{}).value)||'').trim();
     const svc=(DATA.serviceLines||[]).find(x=>x.id===id);
     if(bIsConfReq(svc&&svc.kind) && !v) continue;   // لا نفرّغ رقم تأكيد إجباري
-    try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_service_line',payload:{id:id,client_code:code,conf_no:v||null}})}); const j=await r.json(); if(j.error){ err=j.error; break; } confN++; }
+    try{
+      { const _cd=(($('sb-cdate-'+id)||{}).value||'').trim(); if(_cd) await setChargeDate(id,_cd); }   // تاريخ الدفع
+      const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_service_line',payload:{id:id,client_code:code,conf_no:v||null,charge_from:cfrom||null}})}); const j=await r.json(); if(j.error){ err=j.error; break; } confN++;
+    }
     catch(e){ err=String(e); break; }
   }
   if(err){ alert('خطأ: '+err); if(btn){ btn.disabled=false; btn.textContent='💾 حفظ كل التغييرات'; } return; }
   await load(); bRecall();
-  const _parts=[]; if(ids.length)_parts.push(ids.length+' خدمة'); if(confN)_parts.push(confN+' رقم تأكيد (مقفلة)');
+  const _parts=[]; if(ids.length)_parts.push(ids.length+' خدمة'); if(confN)_parts.push(confN+' ناقص مقفل (تأكيد/مصدر دفع/تاريخ)');
   const m=$('b-saveall-msg'); if(m) m.textContent='✓ تم الحفظ — '+(_parts.join(' + ')||'لا تغييرات')+(mism?' — ⚠️ '+mism+' تنبيه عملة':'')+(lossN?' — 📉 '+lossN+' خسارة أُرسلت للإدارة':'');
 }
 // ---- طلب تعديل تكلفة حجز (الحجز الفعلي) بعد حفظه: يُرفع للإدارة، ولا يُطبَّق إلا بموافقتها ----
