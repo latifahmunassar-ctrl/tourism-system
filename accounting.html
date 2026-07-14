@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 14يوليو · تصحيح شريحة Full pakage: ربح ≥ 1000 → 150 ثابت · ربح < 1000 → 10% (كانت معكوسة)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 14يوليو-ب · استرجاع خيارات حذف/إخفاء إشعارات Booking Form (زر 🗑️ حذف للمالكة + قسم استرجاع ↩️) — كانت اختفت بالخطأ</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1733,23 +1733,55 @@ function incompleteBookings(){
   const already=new Set(out.map(o=>o.code));
   (typeof liveNoBooking==='function'?liveNoBooking():[]).forEach(nb=>{ const c=(nb.client_code||'').toUpperCase(); if(already.has(c))return; already.add(c); const ci=clientInfo(c); out.push({ code:c, name:(ci&&ci.name)||nb.service_name||'', agent:(ci&&ci.agent)||'', confirmedBy:(ci&&ci.confirmedBy)||'', n:0, services:['🚫 لا خدمات مُدخَلة إطلاقاً'], maxId:0, urgent:!!nb.urgent, noSvc:true }); });
   out.sort((a,b)=>((b.urgent?1:0)-(a.urgent?1:0))||(b.maxId-a.maxId));   // العاجل (فات وصوله) ثم الأحدث
-  return out;
+  const DIS=dismissedSet();
+  return out.filter(o=>!DIS.has('incomplete:'+String(o.code||'').toUpperCase()));   // 🗑️ إشعارات أخفتها المالكة (تُحفظ خادميّاً للجميع)
+}
+function dismissedSet(){ return new Set(((DATA&&DATA.dismissedAlerts)||[]).map(a=>String(a.alert_key||''))); }
+async function dismissAlert(grp,code){
+  if(!isOwnerUser()){ alert('⚠️ إخفاء الإشعارات للمالكة فقط'); return; }
+  code=String(code||'').trim().toUpperCase(); if(!code) return;
+  if(!confirm('🗑️ إخفاء هذا الإشعار للعميل «'+code+'»؟\n\n• يختفي من إشعارات Booking Form لديكِ ولدى جميع الموظفين.\n• لا يُعدِّل أي بيانات مالية — إخفاء فقط.\n• يمكنكِ استرجاعه لاحقاً من «🗑️ إشعارات مخفيّة».'))return;
+  const ci=(typeof clientInfo==='function')?clientInfo(code):null;
+  try{
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'dismiss_alert',payload:{alert_key:grp+':'+code,alert_group:grp,client_code:code,note:(ci&&ci.name)||'',by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
+    const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
+    await load();
+  }catch(e){ alert('خطأ: '+e.message); }
+}
+async function undismissAlert(akey){
+  if(!isOwnerUser()){ alert('⚠️ للمالكة فقط'); return; }
+  akey=String(akey||'').trim(); if(!akey) return;
+  try{
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'undismiss_alert',payload:{alert_key:akey,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
+    const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
+    await load();
+  }catch(e){ alert('خطأ: '+e.message); }
 }
 function renderIncompleteBookings(){
   const box=$('b-incomplete'); if(!box) return;
   const list=incompleteBookings();
   const miss=bookingsMissingFields();
-  if(!list.length && !miss.length){ box.innerHTML=''; return; }
+  const owner=isOwnerUser();
+  const dismissedRows=(((DATA&&DATA.dismissedAlerts)||[]).filter(a=>/^(incomplete|missfields):/.test(String(a.alert_key||''))));
+  if(!list.length && !miss.length && !(owner&&dismissedRows.length)){ box.innerHTML=''; return; }
+  const delBtn=(grp,code)=>owner?(' <button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" title="إخفاء هذا الإشعار للجميع (يمكن استرجاعه)" onclick="dismissAlert(\''+grp+'\',\''+esc(code)+'\')">🗑️ حذف</button>'):'';
   const nUrg=list.filter(o=>o.urgent).length;
   let html=(list.length?('<div class="panel" style="border:1px solid var(--amber);background:rgba(245,158,11,.08);margin-bottom:14px"><h3 style="color:var(--amber);margin-top:0">⚠️ حجوزات تحتاج إكمال ('+list.length+') — لم تُسجَّل في Booking Form'+(nUrg?' · <span style="color:var(--red)">🔴 '+nUrg+' فات وصولهم</span>':'')+'</h3>'+
     '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الوكيل</th><th>✅ الموظفة المؤكِّدة</th><th>الناقص</th><th>إجراء</th></tr></thead><tbody>'+
-    list.map(o=>'<tr'+(o.urgent?' style="background:rgba(255,107,122,.10)"':'')+'><td><button class="btn" style="background:'+(o.urgent?'var(--red)':'var(--amber)')+';color:#fff;padding:2px 10px;font-size:12px;font-weight:700" title="اضغطي لاستدعاء نموذج الحجز" onclick="gotoBooking(\''+esc(o.code)+'\')">'+esc(o.code)+'</button>'+(o.urgent?' <span title="فات وصوله ولا حجز" style="color:var(--red)">⚠️</span>':'')+'</td><td><b>'+esc(o.name||'—')+'</b></td><td>'+esc(o.agent||'—')+'</td><td style="color:#0e9d6a;font-weight:700">'+(o.confirmedBy?'✅ '+esc(o.confirmedBy):'<span style="color:var(--muted);font-weight:400">—</span>')+'</td><td style="font-size:11px;color:'+(o.noSvc?'#c026d3':'var(--muted)')+';font-weight:'+(o.noSvc?'700':'400')+'">'+esc(o.services.join('، '))+(o.n?' <b style="color:var(--amber)">('+o.n+')</b>':'')+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(o.code)+'\')">📋 إدخال الحجز</button></td></tr>').join('')+
+    list.map(o=>'<tr'+(o.urgent?' style="background:rgba(255,107,122,.10)"':'')+'><td><button class="btn" style="background:'+(o.urgent?'var(--red)':'var(--amber)')+';color:#fff;padding:2px 10px;font-size:12px;font-weight:700" title="اضغطي لاستدعاء نموذج الحجز" onclick="gotoBooking(\''+esc(o.code)+'\')">'+esc(o.code)+'</button>'+(o.urgent?' <span title="فات وصوله ولا حجز" style="color:var(--red)">⚠️</span>':'')+'</td><td><b>'+esc(o.name||'—')+'</b></td><td>'+esc(o.agent||'—')+'</td><td style="color:#0e9d6a;font-weight:700">'+(o.confirmedBy?'✅ '+esc(o.confirmedBy):'<span style="color:var(--muted);font-weight:400">—</span>')+'</td><td style="font-size:11px;color:'+(o.noSvc?'#c026d3':'var(--muted)')+';font-weight:'+(o.noSvc?'700':'400')+'">'+esc(o.services.join('، '))+(o.n?' <b style="color:var(--amber)">('+o.n+')</b>':'')+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(o.code)+'\')">📋 إدخال الحجز</button>'+delBtn('incomplete',o.code)+'</td></tr>').join('')+
     '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تشمل: خدمات في Sales Form بلا حجز فعلي + عملاء دفعوا بلا أي خدمة/حجز إطلاقاً (بنفسجي). تختفي فور إدخال الحجز. 🔴 = فات وصوله.</div></div>'):'');
   if(miss.length){
     html+='<div class="panel" style="border:1px solid #b8860b;background:rgba(217,138,0,.08);margin-bottom:14px"><h3 style="color:#b8860b;margin-top:0">📝 حجوزات مسجّلة ناقصة إدخالات — Charge from / تاريخ الدفع ('+miss.length+') <span style="font-size:11px;font-weight:400;color:var(--muted)">· آخر ٥ أشهر فقط</span></h3>'+
       '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>كود العميل</th><th>اسم العميل</th><th>الخدمة</th><th>الناقص</th><th>إجراء</th></tr></thead><tbody>'+
-      miss.map(a=>'<tr><td><button class="btn" style="background:#b8860b;color:#fff;padding:2px 10px;font-size:12px;font-weight:700" title="استدعاء الحجز" onclick="gotoBooking(\''+esc(a.code)+'\')">'+esc(a.code)+'</button></td><td><b>'+esc(a.name||'—')+'</b></td><td style="font-size:11px">'+esc(a.svc)+'</td><td style="color:var(--red);font-weight:700">'+a.miss.map(esc).join('، ')+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(a.code)+'\')">📋 إكمال</button></td></tr>').join('')+
+      miss.map(a=>'<tr><td><button class="btn" style="background:#b8860b;color:#fff;padding:2px 10px;font-size:12px;font-weight:700" title="استدعاء الحجز" onclick="gotoBooking(\''+esc(a.code)+'\')">'+esc(a.code)+'</button></td><td><b>'+esc(a.name||'—')+'</b></td><td style="font-size:11px">'+esc(a.svc)+'</td><td style="color:var(--red);font-weight:700">'+a.miss.map(esc).join('، ')+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="gotoBooking(\''+esc(a.code)+'\')">📋 إكمال</button>'+delBtn('missfields',a.code)+'</td></tr>').join('')+
       '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ حجوزات مسجّلة (لها حجز فعلي) لكن ينقصها Charge from أو تاريخ الدفع (اختياريان) — للعملاء المحجوزين خلال آخر ٥ أشهر فقط. تختفي فور إكمالها.</div></div>';
+  }
+  if(owner && dismissedRows.length){
+    dismissedRows.sort((a,b)=>String(b.dismissed_at||'').localeCompare(String(a.dismissed_at||'')));
+    html+='<div class="panel" style="border:1px dashed var(--muted);background:rgba(120,120,120,.05);margin-bottom:14px"><h3 style="color:var(--muted);margin-top:0">🗑️ إشعارات مخفيّة ('+dismissedRows.length+') <span style="font-size:11px;font-weight:400">· مخفيّة عن جميع الموظفين — يمكنكِ استرجاعها</span></h3>'+
+      '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>كود العميل</th><th>النوع</th><th>أخفتها</th><th>استرجاع</th></tr></thead><tbody>'+
+      dismissedRows.map(a=>{ const grp=String(a.alert_key||'').split(':')[0]; const glbl=grp==='missfields'?'📝 إدخالات ناقصة':'⚠️ يحتاج إكمال'; return '<tr><td><b>'+esc(a.client_code||'')+'</b>'+(a.note?' · '+esc(a.note):'')+'</td><td style="font-size:11px">'+glbl+'</td><td style="font-size:11px;color:var(--muted)">'+esc(a.dismissed_by||'—')+' · '+esc(String(a.dismissed_at||'').replace('T',' ').slice(0,16))+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px;color:#0e9d6a;border-color:#0e9d6a" onclick="undismissAlert(\''+esc(a.alert_key)+'\')">↩️ استرجاع</button></td></tr>'; }).join('')+
+      '</tbody></table></div></div>';
   }
   box.innerHTML=html;
 }
@@ -2774,7 +2806,8 @@ function bookingsMissingFields(){
     const ci=clientInfo(c);
     out.push({ code:c, name:(ci&&ci.name)||'', svc:(SVC[s.kind]||s.kind||'')+(s.name?' · '+s.name:''), miss:m });
   });
-  return out;
+  const DIS=dismissedSet();
+  return out.filter(a=>!DIS.has('missfields:'+String(a.code||'').toUpperCase()));   // 🗑️ أخفتها المالكة
 }
 function renderAlerts(){
   const box=$('alerts-box'); if(!box) return;
