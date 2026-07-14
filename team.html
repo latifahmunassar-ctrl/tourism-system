@@ -700,6 +700,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <button class="rfm-close" onclick="waBridgeClose()">✕</button>
 </div>
 <div class="rfm-sub">إرسال فعلي عبر بردج واتساب — للأفراد والجروبات. اختاري النوع، اكتبي النص، علّمي ✓ على الجروبات، وأرسلي.</div>
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:8px 12px"><span style="font-size:13px;font-weight:800;color:var(--text)">📱 المُرسِل:</span><select id="waBridgeAccount" onchange="waBridgeAccountChange()" style="flex:1;padding:7px;border-radius:8px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-family:Tajawal;font-size:13px;font-weight:700"><option value="601111136864">رقم العز الأساسي</option><option value="96898072933">الرقم الجديد (عُمان +968)</option></select></div>
 
 <div style="display:flex;gap:6px;margin-bottom:12px">
 <button class="wab-mode ebtn" data-mode="program" onclick="waBridgeMode('program')">📋 البرنامج الحالي</button>
@@ -2868,6 +2869,7 @@ function waGroupDelete(i){ if(!confirm('حذف هذا الجروب؟')) return; 
 
 // ── واتساب مباشر (البردج) — إرسال فعلي عبر Supabase wa-bridge ───────────────
 let waBridgeCurMode = 'news';
+let waBridgeAccount = '601111136864';
 let waBridgeOffers = [];
 let waBridgeAllGroups = [];        // [{jid,name,size}] كل الجروبات
 let waBridgeSel = new Set();        // jids المحددة
@@ -2951,7 +2953,7 @@ async function waBridgeLoadGroups() {
   const list = document.getElementById('waBridgeList');
   list.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">⏳ جاري تحميل كل الجروبات...</div>';
   try {
-    const r = await waBridgeCall('groups-all', {});
+    const r = await waBridgeCall(waBridgeAccount === '96898072933' ? 'groups-new-all' : 'groups-all', {});
     waBridgeAllGroups = (r.groups || []).map(g => ({ jid: g.jid, name: g.name || '(بدون اسم)', size: g.size }));
     waBridgeAllGroups.forEach(g => { waBridgeNames[g.jid] = g.name; });
     waBridgeGroupsLoaded = true;
@@ -3142,6 +3144,13 @@ async function waBridgeRestoreGroup(jid) {
   if (box.style.display === "block") { box.style.display = "none"; await waBridgeToggleExcludedList(); }
 }
 
+function waBridgeAccountChange() {
+  waBridgeAccount = document.getElementById("waBridgeAccount").value;
+  waBridgeSel.clear();
+  waBridgeGroupsLoaded = false;
+  waBridgeLoadGroups();
+}
+
 async function waBridgeSend() {
   const body = (document.getElementById('waBridgeBody').value || '').trim();
   const msg = document.getElementById('waBridgeMsg');
@@ -3161,7 +3170,7 @@ async function waBridgeSend() {
   if (!confirm(summary)) return;
   msg.textContent = '⏳ جاري الجدولة...'; msg.style.color = 'var(--muted)';
   const createdBy = (localStorage.getItem('alezz_staff_name') || 'team');
-  const payload = { targets, body, kind: waBridgeCurMode, created_by: createdBy };
+  const payload = { targets, body, kind: waBridgeCurMode, created_by: createdBy, account: waBridgeAccount };
   if (throttle) { payload.batch_size = batch; payload.interval_minutes = interval; }
   try {
     const r = await waBridgeCall('enqueue', payload);
