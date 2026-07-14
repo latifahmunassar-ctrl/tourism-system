@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 14يوليو-ز · تعديل First Client Data: أُضيفت العملة + تاريخ الوصول + تاريخ الحجز؛ المالكة تعدّل مباشرةً فوراً، والمحاسب يحتاج موافقتك</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 14يوليو-ح · زر «🗑️ حذف» (للمالكة فقط) على إشعارات خسائر الحجوزات في الإشعارات وTickets — إخفاء قابل للاسترجاع، لا يمسّ بيانات</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2773,9 +2773,16 @@ function liveBookingLosses(){
   const out=[];
   (DATA.serviceLines||[]).forEach(s=>{ if(s.source!=='dashboard')return; const sell=Number(s.amount||0), rate=Number(s.currency_rate||1), frb=Number(s.final_rate_booked||0); if(!(frb>0))return; const prof=sell-frb*rate; if(prof>=-0.5)return;
     const cur=s.sell_currency||'SAR';
-    out.push({ type:'booking_loss', client_code:s.client_code||'', service_name:s.name||'', created_at:s.created_at||'', _live:true, message:'📉 خسارة حجز — البيع '+fmt(sell)+' '+esc(cur)+' · الحجز الفعلي '+fmt(frb*rate)+' '+esc(cur)+' · الخسارة '+fmt(prof)+' '+esc(cur) }); });
+    out.push({ type:'booking_loss', service_id:s.id, client_code:s.client_code||'', service_name:s.name||'', created_at:s.created_at||'', _live:true, message:'📉 خسارة حجز — البيع '+fmt(sell)+' '+esc(cur)+' · الحجز الفعلي '+fmt(frb*rate)+' '+esc(cur)+' · الخسارة '+fmt(prof)+' '+esc(cur) }); });
   out.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
-  return out;
+  const DIS=(typeof dismissedSet==='function'?dismissedSet():new Set());
+  return out.filter(o=>!DIS.has('loss:'+o.service_id));   // 🗑️ خسائر أخفتها المالكة (تُحفظ خادميّاً للجميع)
+}
+// إخفاء إشعار خسارة عادية (للمالكة فقط) — إخفاء لا يمسّ أي بيانات مالية
+async function dismissLoss(sid,code,name){
+  if(!isOwnerUser()){ alert('⚠️ إخفاء الإشعارات للمالكة فقط'); return; }
+  if(!confirm('🗑️ إخفاء إشعار خسارة الحجز'+(code?' للعميل «'+code+'»':'')+'؟\n\n• يختفي من الإشعارات وتبويب Tickets لديكِ ولدى الجميع.\n• لا يُعدّل أي بيانات مالية — إخفاء فقط.\n• يمكنكِ استرجاعه لاحقاً من «🗑️ خسائر مخفيّة».'))return;
+  try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'dismiss_alert',payload:{alert_key:'loss:'+sid,alert_group:'loss',client_code:code||'',note:name||'',by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } await load(); }catch(e){ alert('خطأ: '+e.message); }
 }
 // 🚫 تنبيه حيّ: عميل دفع مبلغاً ولا يوجد له أي حجز فعلي (لا Booking Form ولا خدمات) — يُحسب تلقائياً بلا حفظ
 function liveNoBooking(){
@@ -2843,6 +2850,8 @@ function renderAlerts(){
   const resolvedRefund=mvAll.filter(m=>m.kind==='refund'&&(m.status==='approved'||m.status==='rejected')).sort((a,b)=>String(b.decided_at||b.id).localeCompare(String(a.decided_at||a.id))).slice(0,15);
   const pendList=mvAll.filter(m=>m.kind==='list_item'&&m.status==='pending').sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
   const pendLoss=liveBookingLosses();   // خسائر الحجوزات تُحسب حيّاً (كل حجز فعلي يفوق البيع) — تظهر تلقائياً بلا حفظ
+  const _owner=isOwnerUser();
+  const _dismLoss=(((DATA&&DATA.dismissedAlerts)||[]).filter(a=>/^loss:/.test(String(a.alert_key||''))));   // خسائر أخفتها المالكة (لقسم الاسترجاع)
   const pendNoBook=liveNoBooking();      // 🚫 عملاء دفعوا بلا أي حجز فعلي — تُكشَف تلقائياً
   for(const a of all){ if(a.status!=='pending') continue;
     if(a.type==='profit_decrease'){ pendProfit.push(a); continue; }
@@ -2873,9 +2882,16 @@ function renderAlerts(){
   let h='';
   if(pendLoss.length){
     h+='<div class="panel" style="border:1px solid var(--red);background:rgba(255,107,122,.08);margin-bottom:14px"><h3 style="color:var(--red);margin-top:0">📉 تذاكر خسائر حجوزات ('+pendLoss.length+')</h3>'+
-      '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>الخدمة</th><th>📉 تفاصيل الخسارة</th></tr></thead><tbody>'+
-      pendLoss.map(a=>'<tr><td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="font-size:11px;color:var(--red);font-weight:600">'+esc(a.message||'')+'</td></tr>').join('')+
+      '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>الخدمة</th><th>📉 تفاصيل الخسارة</th>'+(_owner?'<th>حذف</th>':'')+'</tr></thead><tbody>'+
+      pendLoss.map(a=>'<tr><td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="font-size:11px;color:var(--red);font-weight:600">'+esc(a.message||'')+'</td>'+(_owner?'<td><button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" title="إخفاء إشعار الخسارة (يمكن استرجاعه)" onclick="dismissLoss('+a.service_id+',\''+esc(a.client_code||'')+'\',\''+esc(String(a.service_name||'').replace(/[\x27"\\]/g,' '))+'\')">🗑️ حذف</button></td>':'')+'</tr>').join('')+
       '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تُكشَف تلقائياً لأي حجز فعلي يفوق سعر البيع، وتختفي فور تصحيح الحجز.</div></div>';
+  }
+  if(_owner && _dismLoss.length){
+    _dismLoss.sort((a,b)=>String(b.dismissed_at||'').localeCompare(String(a.dismissed_at||'')));
+    h+='<div class="panel" style="border:1px dashed var(--muted);background:rgba(120,120,120,.05);margin-bottom:14px"><h3 style="color:var(--muted);margin-top:0">🗑️ خسائر مخفيّة ('+_dismLoss.length+') <span style="font-size:11px;font-weight:400">· يمكنكِ استرجاعها</span></h3>'+
+      '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>الخدمة</th><th>أخفتها</th><th>استرجاع</th></tr></thead><tbody>'+
+      _dismLoss.map(a=>'<tr><td><b>'+esc(a.client_code||'')+'</b></td><td style="font-size:11px">'+esc(a.note||'')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(a.dismissed_by||'—')+' · '+esc(String(a.dismissed_at||'').replace('T',' ').slice(0,16))+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px;color:#0e9d6a;border-color:#0e9d6a" onclick="undismissAlert(\''+esc(a.alert_key)+'\')">↩️ استرجاع</button></td></tr>').join('')+
+      '</tbody></table></div></div>';
   }
   if(pendNoBook.length){
     h+='<div class="panel" style="border:1px solid #c026d3;background:rgba(192,38,211,.06);margin-bottom:14px"><h3 style="color:#c026d3;margin-top:0">🚫 عملاء دفعوا بلا حجز فعلي ('+pendNoBook.length+')</h3>'+
@@ -3039,8 +3055,8 @@ function renderAlerts(){
     }
     if(pendLoss.length){
       n+='<div class="panel" style="border:1px solid var(--red);background:rgba(255,107,122,.08);margin-bottom:14px"><h3 style="color:var(--red);margin-top:0">📉 خسائر حجوزات ('+pendLoss.length+') — تحتاج اطّلاعكِ</h3>'+
-        '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>الخدمة</th><th>📉 تفاصيل الخسارة</th></tr></thead><tbody>'+
-        pendLoss.map(a=>'<tr><td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="font-size:11px;color:var(--red);font-weight:600">'+esc(a.message||'')+'</td></tr>').join('')+
+        '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>الخدمة</th><th>📉 تفاصيل الخسارة</th>'+(_owner?'<th>حذف</th>':'')+'</tr></thead><tbody>'+
+        pendLoss.map(a=>'<tr><td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="font-size:11px;color:var(--red);font-weight:600">'+esc(a.message||'')+'</td>'+(_owner?'<td><button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" title="إخفاء إشعار الخسارة (يمكن استرجاعه)" onclick="dismissLoss('+a.service_id+',\''+esc(a.client_code||'')+'\',\''+esc(String(a.service_name||'').replace(/[\x27"\\]/g,' '))+'\')">🗑️ حذف</button></td>':'')+'</tr>').join('')+
         '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تظهر تلقائياً لأي حجز فعلي يفوق سعر البيع، وتختفي فور تصحيح الحجز في Booking Form.</div></div>';
     }
     if(pendProfit.length){
