@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-ن · زر «🔓 تفعيل التعديل الكامل» يرقّي عميل الشيت إلى الداشبورد (المالكة) → تعديل كامل شامل التواريخ يصمد أمام المزامنة؛ ✏️ لكل العملاء</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-س · عمود «الربح الفعلي (ر.س)» في تقرير الموظفين — يحوّل ربح أي عملة للريال (OMR×10 · USD×3.8 · MYR×0.85) وتُحسب العمولة منه لدقة الشرائح</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -583,7 +583,7 @@ table{font-weight:600}
         </div>
         <div id="staff-comm-panel"></div>
         <div class="tbl-wrap"><table id="t-staff"><thead><tr>
-          <th>الموظف</th><th>حجوزات</th><th>نشط</th><th>ملغى</th><th>المبيعات</th><th>الربح<br><span style="font-size:9px;color:var(--muted)">First Client Data</span></th><th>💼 الربح الفعلي<br><span style="font-size:9px;color:var(--muted)">Booking Form</span></th><th>المحصّل</th><th>المتبقي</th><th>💰 العمولة<br><span style="font-size:9px;color:var(--muted)">حسب الشرائح (ر.س)</span></th>
+          <th>الموظف</th><th>حجوزات</th><th>نشط</th><th>ملغى</th><th>المبيعات</th><th>الربح<br><span style="font-size:9px;color:var(--muted)">First Client Data</span></th><th>💼 الربح الفعلي<br><span style="font-size:9px;color:var(--muted)">Booking Form</span></th><th>💼 الربح الفعلي (ر.س)<br><span style="font-size:9px;color:var(--muted)">محوّل للريال</span></th><th>المحصّل</th><th>المتبقي</th><th>💰 العمولة<br><span style="font-size:9px;color:var(--muted)">من الربح الفعلي (ر.س)</span></th>
         </tr></thead><tbody></tbody></table></div>
       </div>
       <div id="staff-detail"></div>
@@ -2040,6 +2040,15 @@ function lookupRate(sup,sell){
   for(const x of list){ const e=parse(x.value); if(e&&e.pair===inv&&!isNaN(e.val)&&e.val) return 1/e.val; }       // معكوس
   return null;
 }
+// 💱 تحويل أي مبلغ إلى الريال السعودي عبر قائمة أسعار الصرف (مباشر ثم عبر USD)؛ SAR/فارغ = كما هو؛ null لو المبلغ فارغ أو تعذّر التحويل
+function toSAR(amount, cur){
+  if(amount==null||amount==='') return null;
+  amount=Number(amount)||0; cur=String(cur||'').trim().toUpperCase();
+  if(!cur||cur==='SAR') return amount;
+  let r=lookupRate(cur,'SAR'); if(r!=null) return amount*r;
+  const r1=lookupRate(cur,'USD'), r2=lookupRate('USD','SAR'); if(r1!=null&&r2!=null) return amount*r1*r2;
+  return null;
+}
 function sRate(){
   const rf=$('s-rate');
   const same=$('s-cur').value===$('s-sellcur').value;
@@ -2238,14 +2247,16 @@ function renderStaff(){
   const basis=staffBasis(), bbMap=basis==='booked'?staffBBMap():{};
   const APM=actualProfitMaps();   // الربح الفعلي من Booking Form لكل عميل
   const rows=(DATA.fcd||[]).filter(r=>{ if(!r.client_code)return false; if(fJob&&String(r.package_type||'').trim()!==fJob)return false; if(!inR(r.booking_date))return false; return true; });
-  const pc={}, commByClient={};
+  // عملة كل عميل (من First Client Data) — لتحويل الربح الفعلي إلى الريال السعودي
+  const curByClient={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(c&&r.currency&&!curByClient[c])curByClient[c]=r.currency; });
+  const pc={}, commByClient={}, apSARByClient={};
   rows.forEach(r=>{ const c=(r.client_code||'').toUpperCase(); const o=pc[c]||(pc[c]={confBy:'',conf:'',sold:0,profit:0,paid:0,pkg:'',anyActive:false}); if(r.confirmed_by)o.confBy=r.confirmed_by; if(r.conf_status)o.conf=r.conf_status; if(r.package_type&&!o.pkg)o.pkg=r.package_type; if(!/cancel/i.test(String(r.conf_status||'')))o.anyActive=true; o.sold+=Number(r.package_rate||0); o.profit+=Number(r.profit||0); o.paid+=Number(r.amount_paid||0); });
-  // العمولة لكل عميل من الربح الفعلي (Booking Form) — لا من المتوقع
-  Object.keys(pc).forEach(c=>{ const o=pc[c]; commByClient[c]=commissionCalc(o.pkg, !o.anyActive, APM.byClient[c], basis); });
+  // العمولة لكل عميل من الربح الفعلي (Booking Form) محوّلاً إلى الريال السعودي — لدقة الشرائح (ر.س)
+  Object.keys(pc).forEach(c=>{ const o=pc[c]; const apSAR=toSAR(APM.byClient[c], curByClient[c]); apSARByClient[c]=apSAR; commByClient[c]=commissionCalc(o.pkg, !o.anyActive, apSAR, basis); });
   const st={};
-  Object.entries(pc).forEach(([c,o])=>{ const staff=(basis==='booked'?(bbMap[c]||''):(String(o.confBy||'').trim()))||'غير محدد'; if(fStaff&&staff!==fStaff)return; const g=st[staff]||(st[staff]={staff,bookings:0,active:0,cancelled:0,sales:0,profit:0,actual:0,actualHas:false,collected:0,outstanding:0,commission:0}); g.bookings++; g.commission+=(commByClient[c]||0); if(/active/i.test(o.conf))g.active++; if(/cancel/i.test(o.conf))g.cancelled++; g.sales+=o.sold; g.profit+=o.profit; const ap=APM.byClient[c]; if(ap!=null){ g.actual+=Number(ap); g.actualHas=true; } g.collected+=o.paid; g.outstanding+=(o.sold-o.paid); });
+  Object.entries(pc).forEach(([c,o])=>{ const staff=(basis==='booked'?(bbMap[c]||''):(String(o.confBy||'').trim()))||'غير محدد'; if(fStaff&&staff!==fStaff)return; const g=st[staff]||(st[staff]={staff,bookings:0,active:0,cancelled:0,sales:0,profit:0,actual:0,actualHas:false,actualSAR:0,actualSARHas:false,collected:0,outstanding:0,commission:0}); g.bookings++; g.commission+=(commByClient[c]||0); if(/active/i.test(o.conf))g.active++; if(/cancel/i.test(o.conf))g.cancelled++; g.sales+=o.sold; g.profit+=o.profit; const ap=APM.byClient[c]; if(ap!=null){ g.actual+=Number(ap); g.actualHas=true; } const apS=apSARByClient[c]; if(apS!=null){ g.actualSAR+=Number(apS); g.actualSARHas=true; } g.collected+=o.paid; g.outstanding+=(o.sold-o.paid); });
   const list=Object.values(st).sort((a,b)=>b.profit-a.profit);
-  tb.innerHTML=list.length?list.map(s=>rw([esc(s.staff),fmt(s.bookings),fmt(s.active),fmt(s.cancelled),'<span class="num">'+fmt(s.sales)+'</span>','<span class="num pos">'+fmt(s.profit)+'</span>',(s.actualHas?'<span class="num" style="font-weight:700;color:'+(s.actual<-0.5?'#d11':'#0e9d6a')+'">'+fmt(s.actual)+'</span>':'<span style="color:#9aa">—</span>'),'<span class="num">'+fmt(s.collected)+'</span>',bal(s.outstanding),'<span class="num" style="font-weight:700;color:#b8860b">'+fmt(s.commission||0)+' <span style="font-size:9px;color:var(--muted)">ر.س</span></span>'])).join(''):rw(['لا نتائج للفلتر المحدّد','','','','','','','','','']);
+  tb.innerHTML=list.length?list.map(s=>rw([esc(s.staff),fmt(s.bookings),fmt(s.active),fmt(s.cancelled),'<span class="num">'+fmt(s.sales)+'</span>','<span class="num pos">'+fmt(s.profit)+'</span>',(s.actualHas?'<span class="num" style="font-weight:700;color:'+(s.actual<-0.5?'#d11':'#0e9d6a')+'">'+fmt(s.actual)+'</span>':'<span style="color:#9aa">—</span>'),(s.actualSARHas?'<span class="num" style="font-weight:700;color:'+(s.actualSAR<-0.5?'#d11':'#0e9d6a')+'">'+fmt(s.actualSAR)+' <span style="font-size:9px;color:var(--muted)">ر.س</span></span>':'<span style="color:#9aa">—</span>'),'<span class="num">'+fmt(s.collected)+'</span>',bal(s.outstanding),'<span class="num" style="font-weight:700;color:#b8860b">'+fmt(s.commission||0)+' <span style="font-size:9px;color:var(--muted)">ر.س</span></span>'])).join(''):rw(['لا نتائج للفلتر المحدّد','','','','','','','','','','']);
   renderStaffCommPanel();
   const cnt=$('staff-cnt'); if(cnt)cnt.textContent=list.length+' موظف'+(filtered?' (مفلتر)':'');
   renderStaffDetail(fStaff,fJob,inR,basis,bbMap);
@@ -2262,7 +2273,8 @@ function renderStaffDetail(fStaff,fJob,inR,basis,bbMap){
     .sort((a,b)=>String(effPayDate(b)||b.booking_date||'').localeCompare(String(effPayDate(a)||a.booking_date||'')));
   const tot={sold:0,profit:0,paid:0,bal:0,nCancel:0,cancelVal:0,nActive:0}; const cset=new Set();
   rows.forEach(r=>{ const isC=/cancel/i.test(r.conf_status||''); tot.sold+=Number(r.package_rate||0); tot.profit+=Number(r.profit||0); tot.paid+=Number(r.amount_paid||0); tot.bal+=Number(r.balance||0); if(isC){ tot.nCancel++; tot.cancelVal+=Number(r.package_rate||0); } else tot.nActive++; cset.add((r.client_code||'').toUpperCase()); });
-  const _APMd=actualProfitMaps(); let actProf=0, actHas=false; cset.forEach(c=>{ const ap=_APMd.byClient[c]; if(ap!=null){ actProf+=Number(ap); actHas=true; } });   // الربح الفعلي من Booking Form لعملاء الموظف
+  const curByClient={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(c&&r.currency&&!curByClient[c])curByClient[c]=r.currency; });
+  const _APMd=actualProfitMaps(); let actProf=0, actHas=false, actProfSAR=0, actSARHas=false; cset.forEach(c=>{ const ap=_APMd.byClient[c]; if(ap!=null){ actProf+=Number(ap); actHas=true; } const apS=toSAR(ap, curByClient[c]); if(apS!=null){ actProfSAR+=Number(apS); actSARHas=true; } });   // الربح الفعلي من Booking Form لعملاء الموظف (بعملته + محوّلاً للريال)
   const _sc=(t,v,c)=>'<div class="kpi"><div class="ttl">'+t+'</div><div class="val" style="font-size:16px;color:'+c+'">'+v+'</div></div>';
   box.innerHTML='<div class="panel" style="margin-top:14px;border:1px solid var(--accent)"><h3 style="margin-top:0">🧾 تفصيل أعمال «'+esc(fStaff)+'»'+(fJob?' · '+esc(fJob):'')+' <span class="cnt">'+rows.length+' عمل · '+cset.size+' عميل</span></h3>'+
     '<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:12px">'+
@@ -2273,10 +2285,11 @@ function renderStaffDetail(fStaff,fJob,inR,basis,bbMap){
       _sc('↩️ قيمة الملغيات',fmt(tot.cancelVal),'#ff6b7a')+
       _sc('🟢 الأرباح <span style="font-size:8px">FCD</span>',fmt(tot.profit),'#0e9d6a')+
       _sc('💼 الربح الفعلي <span style="font-size:8px">Booking</span>',actHas?fmt(actProf):'—','#0e9d6a')+
+      _sc('💼 الربح الفعلي <span style="font-size:8px">بالريال</span>',actSARHas?fmt(actProfSAR)+' <span style="font-size:9px">ر.س</span>':'—','#0e7c50')+
       _sc('💵 المحصّل',fmt(tot.paid),'#0e9d6a')+
       _sc('📌 المتبقّي',fmt(tot.bal),'#b8860b')+
     '</div>'+
-    (rows.length?'<div class="tbl-wrap bf-scroll" style="max-height:440px"><table style="font-size:11px;white-space:nowrap"><thead><tr><th>الكود</th><th>العميل</th><th>الوكيل</th><th>🧳 نوع العمل</th><th>العملة</th><th>🔢 الحركات</th><th>تاريخ الحجز</th><th>الوصول</th><th>إجمالي الباقة</th><th>الربح المتوقّع<br><span style="font-size:9px;color:var(--muted)">FCD</span></th><th>💼 الربح الفعلي<br><span style="font-size:9px;color:var(--muted)">Booking Form</span></th><th>💰 عمولة العميل<br><span style="font-size:9px;color:var(--muted)">من الربح الفعلي (ر.س)</span></th><th>المدفوع</th><th>المتبقّي</th><th>الحالة</th></tr></thead><tbody>'+
+    (rows.length?'<div class="tbl-wrap bf-scroll" style="max-height:440px"><table style="font-size:11px;white-space:nowrap"><thead><tr><th>الكود</th><th>العميل</th><th>الوكيل</th><th>🧳 نوع العمل</th><th>العملة</th><th>🔢 الحركات</th><th>تاريخ الحجز</th><th>الوصول</th><th>إجمالي الباقة</th><th>الربح المتوقّع<br><span style="font-size:9px;color:var(--muted)">FCD</span></th><th>💼 الربح الفعلي<br><span style="font-size:9px;color:var(--muted)">Booking Form</span></th><th>💼 الربح الفعلي (ر.س)<br><span style="font-size:9px;color:var(--muted)">محوّل للريال</span></th><th>💰 عمولة العميل<br><span style="font-size:9px;color:var(--muted)">من الربح الفعلي (ر.س)</span></th><th>المدفوع</th><th>المتبقّي</th><th>الحالة</th></tr></thead><tbody>'+
       (function(){ var _wm=clientWarnMaps(); var agg={};
         rows.forEach(r=>{ const c=(r.client_code||'').toUpperCase(); const o=agg[c]||(agg[c]={code:r.client_code||c,name:'',agent:'',types:{},cur:'',sold:0,profit:0,paid:0,bal:0,n:0,nCancel:0,nActive:0,bdate:'',arrival:''}); if(r.client_name&&!o.name)o.name=r.client_name; if(r.agent_name&&!o.agent)o.agent=r.agent_name; if(r.package_type)o.types[String(r.package_type).trim()]=1; if(r.currency&&!o.cur)o.cur=r.currency; o.sold+=Number(r.package_rate||0); o.profit+=Number(r.profit||0); o.paid+=Number(r.amount_paid||0); o.bal+=Number(r.balance||0); o.n++; if(/cancel/i.test(r.conf_status||''))o.nCancel++; else o.nActive++; if(r.booking_date&&(!o.bdate||String(r.booking_date).slice(0,10)>o.bdate))o.bdate=String(r.booking_date).slice(0,10); if(r.arrival_date&&!o.arrival)o.arrival=String(r.arrival_date).slice(0,10); });
         return Object.values(agg).sort((a,b)=>String(b.bdate||'').localeCompare(String(a.bdate||''))).map(o=>{ const c=(o.code||'').toUpperCase(); const ap=_APMd.byClient[c]; const allC=(o.nActive===0&&o.nCancel>0); return '<tr'+(allC?' style="background:rgba(255,107,122,.08)"':'')+'>'+
@@ -2291,7 +2304,8 @@ function renderStaffDetail(fStaff,fJob,inR,basis,bbMap){
           '<td class="num">'+fmt(o.sold)+'</td>'+
           '<td class="num" style="color:#0e9d6a;font-weight:700">'+fmt(o.profit)+'</td>'+
           '<td class="num" style="font-weight:700;color:'+(ap==null?'#9aa':(ap<-0.5?'#d11':'#0e9d6a'))+'">'+(ap==null?'—':fmt(ap))+'</td>'+
-          (function(){ var _cm=commissionCalc(Object.keys(o.types)[0]||'', allC, ap, basis); return '<td class="num" style="font-weight:700;color:#b8860b">'+((allC||!commTypeKey(Object.keys(o.types)[0]||''))?'<span style="color:#9aa">—</span>':fmt(_cm))+'</td>'; })()+
+          (function(){ var apS=toSAR(ap, o.cur); return '<td class="num" style="font-weight:700;color:'+(apS==null?'#9aa':(apS<-0.5?'#d11':'#0e7c50'))+'">'+(apS==null?'—':(fmt(apS)+' <span style="font-size:9px;color:var(--muted)">ر.س</span>'))+'</td>'; })()+
+          (function(){ var apS=toSAR(ap, o.cur); var _cm=commissionCalc(Object.keys(o.types)[0]||'', allC, apS, basis); return '<td class="num" style="font-weight:700;color:#b8860b">'+((allC||!commTypeKey(Object.keys(o.types)[0]||''))?'<span style="color:#9aa">—</span>':fmt(_cm))+'</td>'; })()+
           '<td class="num" style="color:#0e9d6a">'+fmt(o.paid)+'</td>'+
           '<td class="num" style="color:#b8860b">'+fmt(o.bal)+'</td>'+
           '<td style="font-size:10px">'+(o.nActive?'<span class="pill active">'+o.nActive+' نشط</span>':'')+(o.nCancel?' <span class="pill cancel">'+o.nCancel+' ملغى</span>':'')+'</td>'+
