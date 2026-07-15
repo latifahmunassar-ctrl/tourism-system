@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو · كشف المورّد: حجوزات «مباشر من المورّد» تظهر «مدفوع سابقاً = 0» (لا تأخذ من التوزيع النسبي للدفعات) — تبقى مستحقة بالكامل حتى تُدفع فعلاً</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-ب · كل الموردين: الحجوزات «المباشرة من المورّد» مستثناة من التوزيع النسبي (نسبة السداد تُحسب على المستحق غير المباشر فقط) + التعرّف على كل تهجئاتها</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4168,10 +4168,12 @@ function renderSupplierDetail(){
   const ccCli={}; (DATA.serviceLines||[]).forEach(s=>{ const c=(s.client_code||'').toUpperCase(); ccCli[c]=(ccCli[c]||0)+Number(s.cancel_charge||0); }); // رسوم الإلغاء من Booking Form
   // قيمة الحجز قبل الإلغاء (BOOKING RATE = N من Final) لخدمات هذا المورّد فقط
   const _supT=String(sup).trim(); const rbcCli={}; (DATA.serviceLines||[]).forEach(s=>{ const sm=String(s.supplier||'').trim(); const nm2=String(s.name||'').trim(); if(sm!==_supT && nm2!==_supT)return; const c=(s.client_code||'').toUpperCase(); const v=Number(s.rate_before_cancel||0); if(v)rbcCli[c]=(rbcCli[c]||0)+v; });
-  // توزيع المدفوع على الفواتير (المصدر ما يفصّل التوزيع لكل عميل؛ التحويل الواحد يغطّي عدة عملاء)
-  const allocR=owedT>0?Math.min(1,paidT/owedT):0;
-  // عملاء لهم حجز «direct from supplier» مع هذا المورّد = دين مباشر (يظهر «غير مدفوع» حتى السداد)
-  const directCodes=new Set(); (DATA.serviceLines||[]).forEach(s=>{ if(String(s.booked_from||'').trim()!==_supT) return; if(/from\s*supplier/i.test(String(s.charge_from||''))) directCodes.add((s.client_code||'').toUpperCase()); });  // يشمل الخطأ الإملائي «Ditect from supplier»
+  // عملاء لهم حجز «direct/from supplier» مع هذا المورّد = دين مباشر (غير مدفوع حتى السداد الفعلي) — يشمل «Ditect from supplier» و«Direct with the Suppler»
+  const directCodes=new Set(); (DATA.serviceLines||[]).forEach(s=>{ if(String(s.booked_from||'').trim()!==_supT) return; if(/direct|ditect|from\s*supplier|with\s*the\s*suppl/i.test(String(s.charge_from||''))) directCodes.add((s.client_code||'').toUpperCase()); });
+  // توزيع المدفوع على الفواتير نسبياً — لكن نستثني المستحق «المباشر من المورّد» من قاعدة النسبة (لأن دفعاتنا لا تغطّيه)
+  const _directOwed=Object.keys(invCli).filter(c=>directCodes.has((c||'').toUpperCase())).reduce((s,c)=>s+Number(invCli[c]||0),0);
+  const _owedNonDirect=Math.max(0, owedT-_directOwed);
+  const allocR=_owedNonDirect>0?Math.min(1,paidT/_owedNonDirect):0;
   // عملاء لهم حجز ملغى مع هذا المورّد — تظهر القيمة مع علامة «ملغى» حتى لو لم يأخذ المورّد شيئاً
   const cancelledCodes=new Set(); (DATA.serviceLines||[]).forEach(s=>{ if(String(s.booked_from||'').trim()!==_supT) return; if(/cancel/i.test(String(s.status||''))) cancelledCodes.add((s.client_code||'').toUpperCase()); });
   const cancVal={}; list.forEach(x=>{ if(x.cancelled){ const c=(x.client_code||'').toUpperCase(); cancVal[c]=(cancVal[c]||0)+Number(x.full_value||0); } });   // القيمة الأصلية للحجوزات الملغاة (للعلم)
