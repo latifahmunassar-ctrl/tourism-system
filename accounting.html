@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-ل · زر «🖨️ تصدير PDF» في تقرير الموظفين (هوية العز + تلوين الربح الفعلي الأحمر + تفاصيل الموظف) + تصدير Excel للفندق/المورّد</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-م · زر ✏️ يظهر لكل العملاء (شيت + داشبورد)؛ صف الشيت يعدّل فقط البنك/المرجع/تاريخ الدفع (تصمد أمام المزامنة) والبيانات المالية للعرض</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -742,6 +742,7 @@ table{font-weight:600}
 <div class="modal" id="fcdeditmodal">
   <div class="mbox">
     <h3>✏️ تعديل سطر <span id="fe-title" style="font-size:12px;color:var(--muted)"></span> <button class="btn ghost" onclick="$('fcdeditmodal').classList.remove('on')">✕</button></h3>
+    <div id="fe-sheet-note" style="display:none;font-size:12px;background:rgba(58,123,213,.10);border:1px solid #3a7bd5;color:#2b5fa5;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-weight:600">📄 هذا العميل من الشيت — تُحفَظ فقط <b>خانة البنك والمرجع وتاريخ الدفع</b> (تصمد أمام المزامنة). البيانات المالية (التكلفة/الربح/العملة/التواريخ) للعرض فقط وتُدار من الشيت.</div>
     <div class="fgrid">
       <div class="fld"><label>التكلفة / قيمة الخدمة</label><input type="number" id="fe-cost" oninput="feCalc()"></div>
       <div class="fld"><label>الربح</label><input type="number" id="fe-profit" oninput="feCalc()"></div>
@@ -1214,7 +1215,7 @@ function renderFcd(){
     if(!hasPay||!pc) return '';
     return '<input class="dueinp" style="width:100px;border:1px solid #d98a00;background:rgba(217,138,0,.12)" placeholder="أدخلي المرجع" title="تعبئة المرجع (خانة فارغة) — تُحفظ مباشرة" onkeydown="if(event.key===\'Enter\')fillFcdBank(\''+esc(pc)+'\',\'ref\',this.value)" onblur="if(this.value.trim())fillFcdBank(\''+esc(pc)+'\',\'ref\',this.value)">'; })(),
     esc(r.confirmed_by||''),String(r.conf_status||'').toLowerCase().includes('cancel')?'<span class="pill cancel">ملغى</span>':'<span class="pill active">'+esc(r.conf_status||'')+'</span>',
-    esc(r.note||''),esc(r.client_email||''),'<span class="src '+(r.source||'sheet')+'">'+(r.source==='dashboard'?'داشبورد':'شيت')+'</span>'+(r.source==='dashboard'?' <button class="btn ghost" style="padding:1px 6px;font-size:11px" title="تعديل" onclick="fcdEdit('+r.id+')">✏️</button> <button class="btn ghost" style="padding:1px 6px;font-size:11px" title="حذف" onclick="fcdDel('+r.id+',\''+esc((r.payment_code||'')+' · '+fmt(r.package_rate))+'\')">🗑️</button>':'')+(r.client_code?(FROZEN.has(r.client_code)?' <span class="pill" style="background:#3a7bd5;color:#fff" title="حساب مجمّد">🧊 مجمّد</span>':' <button class="btn ghost" style="padding:1px 6px;font-size:10px;color:#3a7bd5;border-color:#3a7bd5" title="طلب تجميد الحساب (يُرفع للإدارة)" onclick="reqFreezeClient(\''+esc(r.client_code)+'\')">🧊 تجميد الحساب</button>'):''),
+    esc(r.note||''),esc(r.client_email||''),'<span class="src '+(r.source||'sheet')+'">'+(r.source==='dashboard'?'داشبورد':'شيت')+'</span>'+' <button class="btn ghost" style="padding:1px 6px;font-size:11px" title="'+(r.source==='dashboard'?'تعديل':'تعديل البنك/المرجع/تاريخ الدفع')+'" onclick="fcdEdit('+r.id+')">✏️</button>'+(r.source==='dashboard'?' <button class="btn ghost" style="padding:1px 6px;font-size:11px" title="حذف" onclick="fcdDel('+r.id+',\''+esc((r.payment_code||'')+' · '+fmt(r.package_rate))+'\')">🗑️</button>':'')+(r.client_code?(FROZEN.has(r.client_code)?' <span class="pill" style="background:#3a7bd5;color:#fff" title="حساب مجمّد">🧊 مجمّد</span>':' <button class="btn ghost" style="padding:1px 6px;font-size:10px;color:#3a7bd5;border-color:#3a7bd5" title="طلب تجميد الحساب (يُرفع للإدارة)" onclick="reqFreezeClient(\''+esc(r.client_code)+'\')">🧊 تجميد الحساب</button>'):''),
     (r.created_by?('<b style="font-size:10.5px;color:var(--accent)">'+esc(r.created_by)+'</b>'):'<span style="color:var(--muted)">—</span>')
   ])).join('');
   const paidRows=DATA.fcd.filter(r=>Number(r.amount_paid||0)>1);
@@ -1313,6 +1314,10 @@ function fcdEdit(id){
   if($('fe-cur')){ const curs=[...new Set(['SAR','OMR','USD','MYR','AED','EUR','SGD','GBP','THB',...((typeof listValues==='function'?listValues('currency'):[]).map(v=>v.value)), String(r.currency||'').trim()].filter(Boolean))]; $('fe-cur').innerHTML=curs.map(c=>'<option'+(c===String(r.currency||'').trim()?' selected':'')+'>'+esc(c)+'</option>').join(''); }
   if($('fe-arr')) $('fe-arr').value=String(r.arrival_date||'').slice(0,10);
   if($('fe-bdate')) $('fe-bdate').value=String(r.booking_date||'').slice(0,10);
+  // صف شيت: البيانات المالية للعرض فقط (تُدار من الشيت)؛ يُسمح فقط بالبنك/المرجع/تاريخ الدفع (جداول override)
+  const isSheet=(String(r.source||'')!=='dashboard');
+  if($('fe-sheet-note')) $('fe-sheet-note').style.display=isSheet?'block':'none';
+  ['fe-cost','fe-profit','fe-paid','fe-cur','fe-arr','fe-bdate','fe-staff','fe-note'].forEach(id=>{ const el=$(id); if(el){ el.disabled=isSheet; el.style.opacity=isSheet?'0.55':''; } });
   $('fe-msg').textContent=''; feCalc(); $('fcdeditmodal').classList.add('on');
 }
 function feCalc(){ const t=(+$('fe-cost').value||0)+(+$('fe-profit').value||0); $('fe-total').textContent=fmt(t); $('fe-bal').textContent=fmt(t-(+$('fe-paid').value||0)); }
@@ -1323,6 +1328,21 @@ async function fcdEditSave(){
   const arr=(($('fe-arr')||{}).value||''); const bdate=(($('fe-bdate')||{}).value||'');
   // ⛔ رفض: مرجع بنكي بلا اسم بنك
   if(ref && !bank){ msg.innerHTML='<span style="color:var(--red);font-weight:700">⛔ لا يمكن الحفظ: مرجع بنكي بلا اسم بنك — أضيفي اسم البنك أولاً.</span>'; if($('fe-bank'))$('fe-bank').focus(); return; }
+  // ===== صف شيت: نحفظ فقط البنك/المرجع/تاريخ الدفع عبر جداول الـ override (تصمد أمام المزامنة) — بلا لمس البيانات المالية =====
+  if(FE_ROW && String(FE_ROW.source||'')!=='dashboard'){
+    const pc=String(FE_ROW.payment_code||'').trim();
+    if(!pc){ msg.innerHTML='<span style="color:var(--red)">⚠️ لا يمكن الحفظ: هذا السطر بلا كود دفعة (payment_code).</span>'; return; }
+    const paydate=($('fe-paydate').value||'');
+    msg.style.color='var(--muted)'; msg.textContent='جارٍ الحفظ…';
+    try{
+      const r1=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_fcd_bankref',payload:{payment_code:pc,bank_name:bank||null,bank_ref:ref||null,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
+      const j1=await r1.json(); if(j1.error){ msg.innerHTML='<span style="color:var(--red)">'+esc(j1.error)+'</span>'; return; }
+      const oldPD=String(FE_ROW.payment_date||'').slice(0,10);
+      if(paydate!==oldPD){ const r2=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_payment_date',payload:{payment_code:pc,payment_date:paydate||null,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j2=await r2.json(); if(j2.error){ msg.innerHTML='<span style="color:var(--red)">'+esc(j2.error)+'</span>'; return; } }
+      $('fcdeditmodal').classList.remove('on'); await load();
+    }catch(e){ msg.innerHTML='<span style="color:var(--red)">خطأ: '+esc(e.message)+'</span>'; }
+    return;
+  }
   const base={ entry_id:FE_ID, cost:cost, profit:profit, amount_paid:paid, currency:cur||null, arrival_date:arr||null, booking_date:bdate||null, bank_name:bank||null, bank_ref:ref||null, payment_date:$('fe-paydate').value||null, note:($('fe-note').value||'')||null, confirmed_by:(($('fe-staff')||{}).value||'')||null, by:(CURRENT_USER&&CURRENT_USER.staff_name)||'' };
   if(isOwnerUser()){
     // المالكة: تعديل مباشر فوري بلا موافقة
