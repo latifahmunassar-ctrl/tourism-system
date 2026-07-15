@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-ك · زر «📊 تصدير Excel» في كشف الفندق والمورّد + إصلاح خطأ كان يكسر كشف حساب المورّد (تعارض تسمية _directOwed)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-ل · زر «🖨️ تصدير PDF» في تقرير الموظفين (هوية العز + تلوين الربح الفعلي الأحمر + تفاصيل الموظف) + تصدير Excel للفندق/المورّد</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -578,6 +578,7 @@ table{font-weight:600}
           <div class="fld"><label>📅 من تاريخ</label><input type="date" id="st-from" onchange="renderStaff()" style="color-scheme:light;cursor:pointer"></div>
           <div class="fld"><label>📅 إلى تاريخ</label><input type="date" id="st-to" onchange="renderStaff()" style="color-scheme:light;cursor:pointer"></div>
           <button class="btn ghost" style="padding:7px 14px" onclick="stClear()">مسح الفلتر</button>
+          <button class="btn" style="padding:7px 14px;background:#c41d88" onclick="exportStaffPDF()">🖨️ تصدير PDF</button>
           <span style="font-size:11px;color:var(--muted);align-self:center" id="st-basis-note">التجميع حسب «Confirmed by» · نوع العمل = نوع الباقة · التاريخ = تاريخ الحجز</span>
         </div>
         <div id="staff-comm-panel"></div>
@@ -4469,6 +4470,47 @@ function exportSupplierPDF(){
     (periodInner?('<div class="period">'+periodInner+'</div>'):'')+
     '<h4>(١) تفاصيل فواتير العملاء'+(filtered?' — للفترة/البحث المحدّد':'')+' ('+t1rows.length+') <span style="font-size:10px;font-weight:400;color:#6b7c7a">— 🔻 الربح الفعلي أقل من المتوقع</span></h4>'+tbl1(t1head,t1rows)+
     '<h4>(٢) حركة مدفوعات العملاء'+(filtered?' — للفترة/البحث المحدّد':'')+' ('+t2rows.length+')</h4>'+tbl(t2head,t2rows)+
+    '<div class="ft"><span>شركة العز · ALEZZ Group</span><span>تم الإصدار آلياً من داشبورد الحسابات · '+esc(today)+'</span></div>'+
+    '<script>window.onload=function(){setTimeout(function(){window.print();},350);};<\/script>'+
+    '</body></html>';
+  const w=window.open('','_blank'); if(!w){ alert('فعّلي النوافذ المنبثقة للطباعة'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+// 🖨️ تصدير تقرير الموظفين PDF — بهوية العز، يلوّن «الربح الفعلي» أحمر لو أقل من المتوقع، مع تفاصيل الموظف المختار إن وُجدت
+function exportStaffPDF(){
+  const today=new Date().toISOString().slice(0,10);
+  const basis=(($('st-basis')||{}).value)||'confirmed'; const basisLbl=(basis==='booked')?'Booked by':'Confirmed by';
+  const staff=(($('st-staff')||{}).value)||''; const job=(($('st-job')||{}).value)||'';
+  const f=(($('st-from')||{}).value)||''; const t=(($('st-to')||{}).value)||'';
+  const mainTbl=document.getElementById('t-staff'); if(!mainTbl){ alert('لا يوجد تقرير موظفين'); return; }
+  const readTbl=(tbl)=>{ const head=[...tbl.querySelectorAll('thead th')].map(x=>x.innerText.replace(/\s+/g,' ').trim()); const rows=[]; tbl.querySelectorAll('tbody tr').forEach(tr=>{ if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; rows.push([...tds].map(td=>{ const inp=td.querySelector('input'); return inp?(inp.value||''):td.innerText.replace(/\s+/g,' ').trim(); })); }); return {head,rows}; };
+  const _pN=s=>{ const n=parseFloat(String(s).replace(/[^\d.\-]/g,'')); return isNaN(n)?null:n; };
+  // الجدول الرئيسي: عمود ٥=الربح المتوقع (FCD)، عمود ٦=الربح الفعلي (Booking) → لوّن ٦ أحمر لو أقل
+  const main=readTbl(mainTbl);
+  const mainHtml='<table><thead><tr>'+main.head.map((x,i)=>'<th'+(i===6?' style="background:#0e7a5a"':'')+'>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+
+    (main.rows.length?main.rows.map(r=>{ const _ep=_pN(r[5]),_ap=_pN(r[6]); const _below=(_ep!=null&&_ap!=null&&_ep-_ap>0.5); return '<tr>'+r.map((c,i)=>{ const _c=esc(String(c).replace(/🔻/g,'').trim()); if(i===6&&_below) return '<td style="background:#fde3e3;color:#c40000;font-weight:800">'+_c+' 🔻</td>'; return '<td>'+_c+'</td>'; }).join('')+'</tr>'; }).join(''):'<tr><td colspan="'+main.head.length+'" style="text-align:center;color:#999">لا توجد بيانات</td></tr>')+'</tbody></table>';
+  // لوحة العمولة (نص) + تفاصيل الموظف المختار (جداول) إن وُجدت
+  const commPanel=$('staff-comm-panel'); const commTxt=(commPanel&&commPanel.innerText.trim())?commPanel.innerText.trim():'';
+  const detail=$('staff-detail'); let detailHtml='';
+  if(detail){ detail.querySelectorAll('table').forEach(dt=>{ const d=readTbl(dt); if(d.rows.length){ detailHtml+='<table><thead><tr>'+d.head.map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+d.rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(String(c).replace(/🔻/g,'').trim())+'</td>').join('')+'</tr>').join('')+'</tbody></table>'; } }); }
+  const html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>تقرير الموظفين</title><style>'+
+    '@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#111;margin:0;font-size:12.5px;font-weight:600;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+    '.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #0e9d6a;padding-bottom:8px;margin-bottom:10px}'+
+    '.logo{font-size:26px;font-weight:900;letter-spacing:3px;color:#0e9d6a}.logo span{color:#D4A843}.logo .sub{font-size:12px;font-weight:600;color:#6b7c7a;letter-spacing:0}'+
+    '.ttl{text-align:left;font-size:15px;font-weight:800;color:#c41d88}.ttl small{display:block;font-size:11px;color:#6b7c7a;font-weight:400}'+
+    '.meta{display:flex;gap:24px;flex-wrap:wrap;font-size:12px;margin:8px 0}.meta b{color:#0e9d6a}'+
+    'h4{margin:12px 0 5px;color:#0e9d6a;font-size:13px;border-right:4px solid #D4A843;padding-right:7px}'+
+    'table{width:100%;border-collapse:collapse;margin-bottom:6px}th,td{border:1px solid #bbb;padding:4px 6px;text-align:center;font-size:11px;font-weight:600;color:#111}'+
+    'th{background:#0e9d6a;color:#fff;font-size:10.5px;font-weight:800}tbody tr:nth-child(even){background:#f6faf8}'+
+    '.cm{border:1px dashed #c41d88;background:#fdf2f8;border-radius:8px;padding:8px 12px;margin:6px 0;font-size:12px;white-space:pre-wrap}'+
+    '.ft{margin-top:10px;border-top:1px solid #dcede6;padding-top:6px;font-size:10px;color:#6b7c7a;display:flex;justify-content:space-between}'+
+    '</style></head><body>'+
+    '<div class="hd"><div class="logo">AL<span>E</span>ZZ<div class="sub">شركة العز للسياحة والسفر</div></div>'+
+      '<div class="ttl">تقرير الموظفين<small>تاريخ الإصدار: '+esc(today)+'</small></div></div>'+
+    '<div class="meta"><span>التجميع حسب: <b>'+esc(basisLbl)+'</b></span>'+(staff?'<span>الموظف: <b>'+esc(staff)+'</b></span>':'<span>الموظفون: <b>الكل</b></span>')+(job?'<span>نوع العمل: <b>'+esc(job)+'</b></span>':'')+((f||t)?('<span>الفترة: <b>'+esc(f||'…')+' → '+esc(t||'…')+'</b></span>'):'')+'</div>'+
+    (commTxt?('<div class="cm">'+esc(commTxt)+'</div>'):'')+
+    '<h4>تقرير الموظفين ('+main.rows.length+') <span style="font-size:10px;font-weight:400;color:#6b7c7a">— 🔻 الربح الفعلي أقل من المتوقع</span></h4>'+mainHtml+
+    (detailHtml?('<h4>تفاصيل الموظف'+(staff?' — '+esc(staff):'')+'</h4>'+detailHtml):'')+
     '<div class="ft"><span>شركة العز · ALEZZ Group</span><span>تم الإصدار آلياً من داشبورد الحسابات · '+esc(today)+'</span></div>'+
     '<script>window.onload=function(){setTimeout(function(){window.print();},350);};<\/script>'+
     '</body></html>';
