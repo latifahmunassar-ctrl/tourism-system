@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-هـ · كشف الفندق: الحجز بلا charge from = «⏳ بانتظار تحديد الدفع» — لا ينعكس أي أثر (لا مدفوع ولا مستحق) حتى تحدّدين الدفع في Booking Form، ويطلع كإشعار ناقص</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-و · الحجز بلا charge from يطلع دائماً في تنبيه «يحتاج إكمال» بـ Booking Form (حتى القديم أكثر من ٥ أشهر مثل C25111) + بانتظار تحديد الدفع في الكشف</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2839,11 +2839,14 @@ function bookingsMissingFields(){
     const booked=(s.final_rate_booked!=null && s.final_rate_booked!=='' && Number(s.final_rate_booked)>0);
     if(!booked) return;   // غير المحجوز يظهر في «عملاء دفعوا بلا حجز» أصلاً
     const bd=bookDate[c]||(s.check_in?String(s.check_in).slice(0,10):'')||(s.created_at?String(s.created_at).slice(0,10):'');
-    if(cutoff && bd && bd<cutoff) return;   // أقدم من ٥ أشهر → تجاهل
+    const missCF=!String(s.charge_from||'').trim();               // charge from فارغ = حجز بانتظار تحديد الدفع
+    const missDate=(CHARGE_DATE_OVR[s.id]==null);
+    if(!missCF && !missDate) return;
+    // قيد ٥ أشهر يُطبَّق فقط لو الناقص «تاريخ الدفع» فقط؛ أما «Charge from» الفارغ فيظهر دائماً مهما كان الحجز قديماً (لأنه يحدّد الدفع/الانعكاس على كشف المورّد)
+    if(!missCF && cutoff && bd && bd<cutoff) return;
     const m=[];
-    if(!String(s.charge_from||'').trim()) m.push('Charge from');
-    if(CHARGE_DATE_OVR[s.id]==null) m.push('تاريخ الدفع');
-    if(!m.length) return;
+    if(missCF) m.push('Charge from');
+    if(missDate) m.push('تاريخ الدفع');
     const ci=clientInfo(c);
     out.push({ code:c, name:(ci&&ci.name)||'', svc:(SVC[s.kind]||s.kind||'')+(s.name?' · '+s.name:''), miss:m });
   });
