@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-م · زر ✏️ يظهر لكل العملاء (شيت + داشبورد)؛ صف الشيت يعدّل فقط البنك/المرجع/تاريخ الدفع (تصمد أمام المزامنة) والبيانات المالية للعرض</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-ن · زر «🔓 تفعيل التعديل الكامل» يرقّي عميل الشيت إلى الداشبورد (المالكة) → تعديل كامل شامل التواريخ يصمد أمام المزامنة؛ ✏️ لكل العملاء</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -742,7 +742,7 @@ table{font-weight:600}
 <div class="modal" id="fcdeditmodal">
   <div class="mbox">
     <h3>✏️ تعديل سطر <span id="fe-title" style="font-size:12px;color:var(--muted)"></span> <button class="btn ghost" onclick="$('fcdeditmodal').classList.remove('on')">✕</button></h3>
-    <div id="fe-sheet-note" style="display:none;font-size:12px;background:rgba(58,123,213,.10);border:1px solid #3a7bd5;color:#2b5fa5;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-weight:600">📄 هذا العميل من الشيت — تُحفَظ فقط <b>خانة البنك والمرجع وتاريخ الدفع</b> (تصمد أمام المزامنة). البيانات المالية (التكلفة/الربح/العملة/التواريخ) للعرض فقط وتُدار من الشيت.</div>
+    <div id="fe-sheet-note" style="display:none;font-size:12px;background:rgba(58,123,213,.10);border:1px solid #3a7bd5;color:#2b5fa5;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-weight:600">📄 هذا العميل من الشيت — تُحفَظ فقط <b>خانة البنك والمرجع وتاريخ الدفع</b> (تصمد أمام المزامنة). البيانات المالية (التكلفة/الربح/العملة/التواريخ) للعرض فقط وتُدار من الشيت.<br><button id="fe-promote-btn" class="btn" style="margin-top:8px;background:#7c3aed;padding:6px 14px" onclick="promoteSheetClient()">🔓 تفعيل التعديل الكامل لهذا العميل</button></div>
     <div class="fgrid">
       <div class="fld"><label>التكلفة / قيمة الخدمة</label><input type="number" id="fe-cost" oninput="feCalc()"></div>
       <div class="fld"><label>الربح</label><input type="number" id="fe-profit" oninput="feCalc()"></div>
@@ -1317,6 +1317,7 @@ function fcdEdit(id){
   // صف شيت: البيانات المالية للعرض فقط (تُدار من الشيت)؛ يُسمح فقط بالبنك/المرجع/تاريخ الدفع (جداول override)
   const isSheet=(String(r.source||'')!=='dashboard');
   if($('fe-sheet-note')) $('fe-sheet-note').style.display=isSheet?'block':'none';
+  if($('fe-promote-btn')) $('fe-promote-btn').style.display=(isSheet&&isOwnerUser())?'inline-block':'none';   // الترقية للمالكة فقط
   ['fe-cost','fe-profit','fe-paid','fe-cur','fe-arr','fe-bdate','fe-staff','fe-note'].forEach(id=>{ const el=$(id); if(el){ el.disabled=isSheet; el.style.opacity=isSheet?'0.55':''; } });
   $('fe-msg').textContent=''; feCalc(); $('fcdeditmodal').classList.add('on');
 }
@@ -1363,6 +1364,22 @@ async function fcdEditSave(){
   msg.style.color='var(--muted)'; msg.textContent='جارٍ إرسال الطلب للأدمن…';
   const payload=Object.assign({}, base, { reason:reason, summary:'✏️ تعديل بيانات عميل «'+((FE_ROW&&(FE_ROW.client_code||FE_ROW.payment_code))||FE_ID)+'» · باقة '+fmt(cost+profit)+' · مدفوع '+fmt(paid)+' '+cur });
   try{ const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'request_client_edit',payload:payload})}); const j=await r.json(); if(j.error){ msg.innerHTML='<span style="color:var(--red)">خطأ: '+esc(j.error)+'</span>'; return; } $('fcdeditmodal').classList.remove('on'); alert('✅ أُرسل طلب التعديل للمالكة مع السبب — لن تتغيّر القيم حتى تعتمده.'); await load(); }catch(e){ msg.innerHTML='<span style="color:var(--red)">خطأ: '+esc(e.message)+'</span>'; }
+}
+// 🔓 ترقية عميل من الشيت إلى الداشبورد → قابل للتعديل الكامل ويصمد أمام المزامنة (المالكة فقط)
+async function promoteSheetClient(){
+  if(!isOwnerUser()){ alert('⚠️ الترقية للمالكة فقط'); return; }
+  if(!FE_ROW){ return; }
+  const pc=String(FE_ROW.payment_code||'').trim(); const cc=String(FE_ROW.client_code||'').trim();
+  if(!pc && !cc){ alert('لا يمكن الترقية: بلا كود دفعة/عميل'); return; }
+  if(!confirm('🔓 تفعيل التعديل الكامل للعميل «'+(cc||pc)+'»؟\n\n• ينتقل إلى إدارة الداشبورد ويصير قابلاً لتعديل كل الحقول (تكلفة/ربح/عملة/تواريخ...).\n• لا يعود يُحدَّث من الشيت — النسخة في الداشبورد تصبح المرجع.\n• آمن: لا يُحذف ولا يتكرّر بعد المزامنة.'))return;
+  try{
+    const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'promote_sheet_client',payload:{payment_code:pc,client_code:cc,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
+    const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
+    await load();
+    const again=(DATA.fcd||[]).find(x=>pc&&String(x.payment_code||'')===pc) || (DATA.fcd||[]).find(x=>cc&&String(x.client_code||'').toUpperCase()===cc.toUpperCase());
+    if(again){ fcdEdit(again.id); }else{ $('fcdeditmodal').classList.remove('on'); }
+    alert('✅ تم — العميل الآن قابل للتعديل الكامل مثل عملاء الداشبورد.');
+  }catch(e){ alert('خطأ: '+e.message); }
 }
 // ---- استدعاء معلومات العميل (مشترك) ----
 function clientInfo(code){
