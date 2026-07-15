@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-د · تمييز «from supplier» (مستحق) عن «Direct with the supplier» (مسدَّد مباشرةً) — يرجّع حساب TBO صحيحاً (٢٦٩ حجز مسدَّد لا مستحق)، مع بقاء «Ditect from supplier» مستحقاً</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-هـ · كشف الفندق: الحجز بلا charge from = «⏳ بانتظار تحديد الدفع» — لا ينعكس أي أثر (لا مدفوع ولا مستحق) حتى تحدّدين الدفع في Booking Form، ويطلع كإشعار ناقص</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2355,22 +2355,24 @@ function renderHotelStatement(){
   let hcur=''; rows.forEach(h=>{ if(!hcur && h._booking && bcur[h.service_id])hcur=bcur[h.service_id]; });
   if(!hcur){ (DATA.supplierPayments||[]).forEach(x=>{ if(!hcur && hpNorm(x.supplier_name)===nq && x.currency)hcur=x.currency; }); }
   if(!hcur){ (DATA.hotelPayments||[]).forEach(x=>{ if(!hcur && hpNorm(x.hotel_system)===nq && x.currency_pair)hcur=String(x.currency_pair).split(/[ -]/)[0]; }); }
-  let nPaid=0,nDue=0,nCanc=0,dueTot=0,paidTot=0;
+  let nPaid=0,nDue=0,nCanc=0,nPend=0,dueTot=0,paidTot=0;
   const trs=rows.map(h=>{
     const isC=/cancel/i.test(String(h.status||h.conf_status||''));
     const due=Number(h.final_rate_booked||0);
     const code=(h.client_code||'').toUpperCase();
-    let state,how;
+    let state,how; const _cfRaw=String(chgRaw[h.service_id]||'').trim();
     if(h._booking && h.service_id && chg[h.service_id]){ state='paid'; how='💳 '+chg[h.service_id]; }
     else if(Number(h.total_payment||0)>0.005){ state='paid'; how='دفعة مسجّلة'; }
     else if(paidSet.has(code+'|'+nq)){ state='paid'; how='دفعة مسجّلة'; }
     else if(isC){ state='cancel'; how=''; }
+    else if(h._booking && !_cfRaw){ state='pending'; how=''; }   // بلا تحديد الدفع (charge from فاضي) → لا ينعكس على الكشف حتى تحديده
     else { state='due'; how=''; }
-    if(state==='paid'){ nPaid++; paidTot+=due; } else if(state==='cancel'){ nCanc++; } else { nDue++; dueTot+=due; }
+    if(state==='paid'){ nPaid++; paidTot+=due; } else if(state==='cancel'){ nCanc++; } else if(state==='pending'){ nPend++; } else { nDue++; dueTot+=due; }
     const badge = state==='paid'?('<span style="color:#0e9d6a;font-weight:700">✅ مسدَّد</span> <span style="font-size:10px;color:var(--muted)">'+esc(how)+'</span>')
       : state==='cancel'?'<span class="pill cancel">ملغى</span>'
+      : state==='pending'?'<span style="color:#3a7bd5;font-weight:700">⏳ بانتظار تحديد الدفع</span> <span style="font-size:9px;color:var(--muted)">أكملي «Charge from» في Booking Form</span>'
       : '<span style="color:#b8860b;font-weight:700">⏳ مستحق</span>'+((h._booking&&h.service_id&&_directOwed(chgRaw[h.service_id]))?' <span style="font-size:9px;color:#d98a00;font-weight:700">↗️ مباشر من المورّد — بانتظار سدادك</span>':'');
-    return '<tr'+(state==='due'?' style="background:rgba(217,138,0,.07)"':'')+'><td>'+esc(code)+'</td><td>'+esc(h.client_name||'')+'</td><td style="font-size:11px">'+esc(h.room_type||'')+'</td><td>'+esc(h.check_in||h.arrival_date||'')+'</td><td class="num" style="font-weight:700">'+(h.rooms_count!=null&&h.rooms_count!==''?esc(h.rooms_count):'<span style="color:var(--muted)">—</span>')+'</td><td class="num">'+fmt(due)+' '+esc(hcur)+'</td><td>'+badge+'</td><td>'+esc(h.conf_no||'')+'</td><td style="font-size:10px;color:var(--muted)">'+(h._booking?'Booking Form':'الشيت')+'</td></tr>';
+    return '<tr'+(state==='due'?' style="background:rgba(217,138,0,.07)"':(state==='pending'?' style="background:rgba(58,123,213,.06)"':''))+'><td>'+esc(code)+'</td><td>'+esc(h.client_name||'')+'</td><td style="font-size:11px">'+esc(h.room_type||'')+'</td><td>'+esc(h.check_in||h.arrival_date||'')+'</td><td class="num" style="font-weight:700">'+(h.rooms_count!=null&&h.rooms_count!==''?esc(h.rooms_count):'<span style="color:var(--muted)">—</span>')+'</td><td class="num">'+fmt(due)+' '+esc(hcur)+'</td><td>'+badge+'</td><td>'+esc(h.conf_no||'')+'</td><td style="font-size:10px;color:var(--muted)">'+(h._booking?'Booking Form':'الشيت')+'</td></tr>';
   }).join('');
   // 💰 إجمالي المدفوع فعلياً في 2026 فقط لهذا الفندق: دفعات مورّد مسجّلة بتاريخ 2026+ (بلا 2025) + دفعات charge_from على حجوزات 2026 (تُدفع لحظة الحجز)
   let paid2026=0; const yPay=(d)=>{ if(!only2026)return true; const y=(String(d||'').match(/(\d{4})/)||[])[1]; return y&&+y>=2026; };
@@ -2382,8 +2384,9 @@ function renderHotelStatement(){
     '<span style="background:#f6f8fc;border:1px solid var(--line);border-radius:9px;padding:5px 11px">حجوزات'+(only2026?' 2026':'')+': <b>'+rows.length+'</b>'+(nCanc?' · ملغاة '+nCanc:'')+'</span>'+
     '<span style="background:rgba(14,157,106,.10);border:1px solid #0e9d6a;border-radius:9px;padding:5px 11px">💰 إجمالي المدفوع'+(only2026?' (2026)':'')+': <b>'+fmt(paid2026)+' '+esc(hcur)+'</b> <span style="font-size:10px;color:var(--muted)">('+nPaid+' مسدَّد)</span></span>'+
     '<span style="background:rgba(217,138,0,.10);border:1px solid var(--amber);border-radius:9px;padding:5px 11px">⏳ مستحق'+(only2026?' 2026':'')+' (رصيد): <b>'+nDue+'</b> · <b>'+fmt(dueTot)+' '+esc(hcur)+'</b></span>'+
+    (nPend?'<span style="background:rgba(58,123,213,.10);border:1px solid #3a7bd5;border-radius:9px;padding:5px 11px">⏳ بانتظار تحديد الدفع: <b>'+nPend+'</b> <span style="font-size:10px;color:var(--muted)">(لا تُحتسب — أكملي Charge from)</span></span>':'')+
     '</div>'+
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">السداد يُحتسب من: 💳 charge from (بطاقة/بنك في Booking Form) أو دفعة مورّد مسجّلة. المستحق = حجوزات بلا سداد.</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">السداد يُحتسب من: 💳 charge from (بطاقة/بنك/مباشر مع المورّد) أو دفعة مورّد مسجّلة. المستحق = «مباشر من المورّد». <b>الحجوزات بلا charge from = «بانتظار تحديد الدفع» ولا تنعكس على الكشف (لا مدفوع ولا مستحق) حتى تحديدها في Booking Form.</b></div>'+
     '<div class="tbl-wrap" style="max-height:440px"><table style="font-size:11.5px;white-space:nowrap"><thead><tr><th>كود</th><th>العميل</th><th>الغرفة</th><th>الدخول</th><th>🚪 عدد الغرف</th><th>المحجوز (التكلفة)</th><th>حالة السداد</th><th>Conf No</th><th>المصدر</th></tr></thead><tbody>'+trs+'</tbody></table></div>';
 }
 function hpMatch(line,payee){ const bf=hpNorm(line.booked_from), nm=hpNorm(line.name), p=hpNorm(payee); if(!p)return false; if(bf&&bf===p)return true; if(nm&&(nm===p||(p.length>3&&nm.includes(p))||(nm.length>3&&p.includes(nm))))return true; return false; }
