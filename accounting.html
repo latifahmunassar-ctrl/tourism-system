@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-ح · إزالة تكرار حجوزات الشيت/الداشبورد (نفس conf no) + الحجز بلا charge from = بلا أثر بأي مكان + يطلع دائماً كتنبيه ناقص في Booking Form</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-ط · كشوفات الفنادق تعتمد booked_from (من Booking Form) فقط لا اسم الفندق (حجز عبر TBO يطلع بكشف TBO فقط لا بكشف الفندق) — الشيت القديم يبقى باسم الفندق</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2333,8 +2333,10 @@ async function hpToggle2026(on){ const existing=((DATA&&DATA.lists)||[]).filter(
   await load(); }
 const HP_CURS=['SAR','OMR','USD','MYR','AED','EUR','SGD'];
 function hpNorm(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9؀-ۿ]/g,''); }
+// اسم المورّد المعتمد للكشوفات: حجز Booking Form (داشبورد) → booked_from فقط؛ حجز الشيت القديم → اسم الفندق (يحمل اسم المورّد أصلاً). قرار المالكة: الكشوفات تعتمد booked_from من Booking Form.
+function hbPayeeName(h){ return (h && h._booking) ? String(h.booked_from||'').trim() : String((h&&h.hotel_name)||'').trim(); }
 // 🧾 كشف حساب فندق: حجوزاته + حالة السداد (charge from بطاقة/بنك = سداد · دفعة مسجّلة · مستحق) — مصدر الإدخال Booking Form/الشيت
-function hotelStmtNames(){ return [...new Set(hotelBookingsAll().map(h=>String(h.hotel_name||'').trim()).filter(Boolean))].sort((a,b)=>String(a).localeCompare(b,'ar')); }
+function hotelStmtNames(){ return [...new Set(hotelBookingsAll().map(h=>hbPayeeName(h)).filter(Boolean))].sort((a,b)=>String(a).localeCompare(b,'ar')); }
 function renderHotelStatement(){
   const dl=$('hs-list'); if(dl) dl.innerHTML=hotelStmtNames().map(n=>'<option>'+esc(n)+'</option>').join('');
   const box=$('hs-detail'); if(!box) return;
@@ -2350,7 +2352,7 @@ function renderHotelStatement(){
   // «سنة 2026 فقط» لهذا الفندق تحديداً (لو مُدرج في قائمة hotel_2026)؛ غيره كل السنوات
   const only2026=((DATA.lists||[]).some(l=>l.category==='hotel_2026' && hpNorm(l.value)===nq));
   const yOf=(h)=>{ const m=String(h.check_in||h.arrival_date||h.created_at||'').match(/(\d{4})/); return m?parseInt(m[1],10):0; };
-  const rows=hotelBookingsAll().filter(h=>(hpNorm(h.hotel_name)===nq||hpNorm(h.booked_from||'')===nq) && (!only2026 || yOf(h)>=2026))
+  const rows=hotelBookingsAll().filter(h=>hpNorm(hbPayeeName(h))===nq && (!only2026 || yOf(h)>=2026))
     .sort((a,b)=>{ const da=a._booking?1:0,db=b._booking?1:0; if(da!==db)return db-da; return String(b.check_in||b.arrival_date||'').localeCompare(String(a.check_in||a.arrival_date||'')); });
   if(!rows.length){ box.innerHTML='<div style="color:var(--muted);padding:6px">لا حجوزات لهذا الفندق'+(only2026?' في سنة 2026':'')+'.</div>'; return; }
   // عملة تكلفة الفندق (فندق واحد = عملة واحدة): من عملة حجوزات الداشبورد، وإلا من عملة الدفعات المسجّلة
@@ -2391,7 +2393,7 @@ function renderHotelStatement(){
     '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">السداد يُحتسب من: 💳 charge from (بطاقة/بنك/مباشر مع المورّد) أو دفعة مورّد مسجّلة. المستحق = «مباشر من المورّد». <b>الحجوزات بلا charge from = «بانتظار تحديد الدفع» ولا تنعكس على الكشف (لا مدفوع ولا مستحق) حتى تحديدها في Booking Form.</b></div>'+
     '<div class="tbl-wrap" style="max-height:440px"><table style="font-size:11.5px;white-space:nowrap"><thead><tr><th>كود</th><th>العميل</th><th>الغرفة</th><th>الدخول</th><th>🚪 عدد الغرف</th><th>المحجوز (التكلفة)</th><th>حالة السداد</th><th>Conf No</th><th>المصدر</th></tr></thead><tbody>'+trs+'</tbody></table></div>';
 }
-function hpMatch(line,payee){ const bf=hpNorm(line.booked_from), nm=hpNorm(line.name), p=hpNorm(payee); if(!p)return false; if(bf&&bf===p)return true; if(nm&&(nm===p||(p.length>3&&nm.includes(p))||(nm.length>3&&p.includes(nm))))return true; return false; }
+function hpMatch(line,payee){ const bf=hpNorm(line.booked_from), p=hpNorm(payee); if(!p||!bf)return false; return bf===p; }   // خدمات Booking Form تُطابَق بـ booked_from فقط (لا اسم الفندق) — قرار المالكة
 function hpPayees(){ const set=[...new Set((DATA.lists||[]).filter(l=>l.category==='hotels_system').map(l=>String(l.value||'').trim()).filter(Boolean))]; set.sort((a,b)=>a.localeCompare(b)); if(set.includes('TBO')){ set.splice(set.indexOf('TBO'),1); } set.unshift('TBO'); return set; }
 // عملة المدفوع له الموحّدة: من الإدخال اليدوي (acc_lists category='payee_currency' value='Payee=CUR')؛ وإلا العملة الأغلب لحجوزاته
 function hpPayeeCur(payee){
@@ -2421,7 +2423,7 @@ async function hpSetPayeeCur(){
 }
 // تحويل مبلغ من عملة العميل إلى عملة المدفوع له (مثل MYR) عبر قائمة أسعار الصرف؛ غير المباشر يوصَل عبر USD
 function hpConv(amount,from,to){ amount=Number(amount)||0; if(!from||!to||from===to)return amount; let r=lookupRate(from,to); if(r!=null)return amount*r; const r1=lookupRate(from,'USD'), r2=lookupRate('USD',to); if(r1!=null&&r2!=null)return amount*r1*r2; return amount; }
-function hpHbMatch(payee){ return hotelBookingsAll().filter(h=>hpNorm(h.hotel_name)===hpNorm(payee)||hpNorm(h.booked_from||'')===hpNorm(payee))
+function hpHbMatch(payee){ return hotelBookingsAll().filter(h=>hpNorm(hbPayeeName(h))===hpNorm(payee))
   .sort((a,b)=>{ const da=a._booking?1:0, db=b._booking?1:0; if(da!==db) return db-da; if(da===1) return String(b.created_at||'').localeCompare(String(a.created_at||'')); return 0; }); }  // حجوزات الداشبورد الأحدث أولاً، ثم الشيت بترتيبه
 // دفعات المدفوع له (خام بعملة العميل): TBO/الفنادق من عمود «Total payment» في Overview (acc_hotel_bookings، مطابق للشيت)؛ غيرها من acc_bank_txn؛ + الجديدة (acc_supplier_payments)
 function hpPayments(payee){
