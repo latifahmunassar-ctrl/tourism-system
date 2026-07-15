@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-ج · فلتر تاريخ كشف المورّد يشمل الآن تاريخ الوصول من First Client Data — فالعملاء ذوو حجوزات النقل/بلا تاريخ دخول (مثل الجوهرة يوليو) يظهرون عند الفلترة بالشهر</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-د · تمييز «from supplier» (مستحق) عن «Direct with the supplier» (مسدَّد مباشرةً) — يرجّع حساب TBO صحيحاً (٢٦٩ حجز مسدَّد لا مستحق)، مع بقاء «Ditect from supplier» مستحقاً</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -821,7 +821,9 @@ let LG_ROLE='';   // القسم المختار في شاشة الدخول (مح�
 const $=id=>document.getElementById(id);
 const fmt=n=>Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});
 const esc=s=>(s==null?'':String(s)).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
-function payMethod(bn){ bn=String(bn||''); if(/credit card|card|بطاقة/i.test(bn)||bn.indexOf('**')>=0)return '💳 بطاقة'; if(/open balance/i.test(bn))return '🟰 رصيد مفتوح'; if(/reward|مكاف/i.test(bn))return '🎁 مكافآت'; if(/direct|ditect|مباشر|from\s*supplier|with\s*the\s*suppl/i.test(bn))return '↗️ مباشر للمورّد — غير مدفوع'; if(/not\s*booked/i.test(bn))return '⛔ غير محجوز'; if(/cash|نقد|كاش/i.test(bn))return '💵 نقدي'; return bn?'🏦 تحويل بنكي':''; }
+// «مباشر من المورّد» = دين مستحق علينا (from supplier). «Direct with the supplier/hotel» = مسدَّد مباشرةً (لا يُعدّ مستحقاً — مثل TBO مسبق الدفع)
+function _directOwed(cf){ return /ditect|from\s*supplier/i.test(String(cf||'')); }
+function payMethod(bn){ bn=String(bn||''); if(/credit card|card|بطاقة/i.test(bn)||bn.indexOf('**')>=0)return '💳 بطاقة'; if(/open balance/i.test(bn))return '🟰 رصيد مفتوح'; if(/reward|مكاف/i.test(bn))return '🎁 مكافآت'; if(_directOwed(bn))return '↗️ مباشر من المورّد — غير مدفوع'; if(/direct|مباشر|with\s*the\s*(suppl|hotel)/i.test(bn))return '↗️ مباشر مع المورّد'; if(/not\s*booked/i.test(bn))return '⛔ غير محجوز'; if(/cash|نقد|كاش/i.test(bn))return '💵 نقدي'; return bn?'🏦 تحويل بنكي':''; }
 function bal(v){v=Number(v||0);return '<span class="num '+(v>1?'neg':(v<-1?'pos':''))+'">'+fmt(v)+'</span>';}
 function rw(c){return '<tr>'+c.map(x=>'<td>'+x+'</td>').join('')+'</tr>';}
 
@@ -2338,7 +2340,7 @@ function renderHotelStatement(){
   if(!q){ box.innerHTML='<div style="color:var(--muted);font-size:12px;padding:6px">اكتبي اسم فندق لعرض كشف حسابه (الحجوزات · المستحق · حالة السداد).</div>'; return; }
   const nq=hpNorm(q);
   // charge_from + عملة التكلفة لخدمات الداشبورد (فنادق)
-  const chg={}, chgRaw={}, bcur={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const cf=String(s.charge_from||'').trim(); if(cf)chgRaw[s.id]=cf; if(cf && !/direct|ditect|from\s*supplier|with\s*the\s*(hotel|suppl)|open\s*balance|reward|not\s*booked/i.test(cf)) chg[s.id]=cf; if(s.booked_currency)bcur[s.id]=s.booked_currency; });   // «مباشر من المورّد» وشبيهاتها = لم تُدفع فعلياً → تبقى مستحقة للفندق
+  const chg={}, chgRaw={}, bcur={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const cf=String(s.charge_from||'').trim(); if(cf)chgRaw[s.id]=cf; if(cf && !_directOwed(cf)) chg[s.id]=cf; if(s.booked_currency)bcur[s.id]=s.booked_currency; });   // «مباشر من المورّد» وشبيهاتها = لم تُدفع فعلياً → تبقى مستحقة للفندق
   // مجموعة (عميل|فندق) لها دفعة مسجّلة للمورّد
   const paidSet=new Set();
   (DATA.hotelPayments||[]).forEach(x=>{ if(Number(x.pay_supplier||0)>0.005)paidSet.add((x.client_code||'').toUpperCase()+'|'+hpNorm(x.hotel_system)); });
@@ -2367,7 +2369,7 @@ function renderHotelStatement(){
     if(state==='paid'){ nPaid++; paidTot+=due; } else if(state==='cancel'){ nCanc++; } else { nDue++; dueTot+=due; }
     const badge = state==='paid'?('<span style="color:#0e9d6a;font-weight:700">✅ مسدَّد</span> <span style="font-size:10px;color:var(--muted)">'+esc(how)+'</span>')
       : state==='cancel'?'<span class="pill cancel">ملغى</span>'
-      : '<span style="color:#b8860b;font-weight:700">⏳ مستحق</span>'+((h._booking&&h.service_id&&/direct|ditect|from\s*supplier/i.test(String(chgRaw[h.service_id]||'')))?' <span style="font-size:9px;color:#d98a00;font-weight:700">↗️ مباشر من المورّد — بانتظار سدادك</span>':'');
+      : '<span style="color:#b8860b;font-weight:700">⏳ مستحق</span>'+((h._booking&&h.service_id&&_directOwed(chgRaw[h.service_id]))?' <span style="font-size:9px;color:#d98a00;font-weight:700">↗️ مباشر من المورّد — بانتظار سدادك</span>':'');
     return '<tr'+(state==='due'?' style="background:rgba(217,138,0,.07)"':'')+'><td>'+esc(code)+'</td><td>'+esc(h.client_name||'')+'</td><td style="font-size:11px">'+esc(h.room_type||'')+'</td><td>'+esc(h.check_in||h.arrival_date||'')+'</td><td class="num" style="font-weight:700">'+(h.rooms_count!=null&&h.rooms_count!==''?esc(h.rooms_count):'<span style="color:var(--muted)">—</span>')+'</td><td class="num">'+fmt(due)+' '+esc(hcur)+'</td><td>'+badge+'</td><td>'+esc(h.conf_no||'')+'</td><td style="font-size:10px;color:var(--muted)">'+(h._booking?'Booking Form':'الشيت')+'</td></tr>';
   }).join('');
   // 💰 إجمالي المدفوع فعلياً في 2026 فقط لهذا الفندق: دفعات مورّد مسجّلة بتاريخ 2026+ (بلا 2025) + دفعات charge_from على حجوزات 2026 (تُدفع لحظة الحجز)
@@ -2457,7 +2459,7 @@ function hpSummaryHtml(){
   if(only2026){
     // 🗓️ نافذة «2026 فقط» (لهذا الفندق): حجوزات/دفعات 2026 + سداد charge from (بطاقة/بنك عبر Booking Form)
     const yOK=(d)=>{ const m=String(d||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); };
-    const chgMap={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const cf=String(s.charge_from||'').trim(); if(cf && !/direct|ditect|from\s*supplier|with\s*the\s*(hotel|suppl)|open\s*balance|reward|not\s*booked/i.test(cf)) chgMap[s.id]=cf; });   // «مباشر من المورّد» لا يُحتسب سداداً
+    const chgMap={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const cf=String(s.charge_from||'').trim(); if(cf && !_directOwed(cf)) chgMap[s.id]=cf; });   // «مباشر من المورّد» لا يُحتسب سداداً
     let paidCharge=0;
     hpHbMatch(HO_PAYEE).forEach(h=>{ if(!yOK(h.check_in||h.arrival_date))return; const d=Number(h.final_rate_booked||0); owed+=d; nBook++; if(h._booking&&h.service_id&&chgMap[h.service_id])paidCharge+=d; });
     const payArr=hpPayments(HO_PAYEE).filter(x=>yOK(x.date)); paid=paidCharge; payArr.forEach(x=>paid+=x.amount); nPay=payArr.length;
@@ -2556,7 +2558,7 @@ function buildHotelPay(){
   if(hpHbMatch(HO_PAYEE).length) h+='<div id="hp-fcd"></div>';
   // ===== دفعات هذا المدفوع له المسجّلة — سنة 2026 فقط (تستبعد 2025 والأقدم) — الحذف مباشر =====
   // 💳 أي سداد عبر Booking Form (charge from: بطاقة/تحويل بنكي/أي وسيلة) يظهر أيضاً كدفعة في السجل
-  const _chgMap={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const cf=String(s.charge_from||'').trim(); if(cf && !/direct|ditect|from\s*supplier|with\s*the\s*(hotel|suppl)|open\s*balance|reward|not\s*booked/i.test(cf)) _chgMap[s.id]=cf; });   // «مباشر من المورّد» لا يُحتسب سداداً
+  const _chgMap={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const cf=String(s.charge_from||'').trim(); if(cf && !_directOwed(cf)) _chgMap[s.id]=cf; });   // «مباشر من المورّد» لا يُحتسب سداداً
   const chgPays=hpHbMatch(HO_PAYEE).filter(h=>h._booking && h.service_id && _chgMap[h.service_id] && Number(h.final_rate_booked||0)>0 && !/cancel/i.test(String(h.status||'')))
     .map(h=>({ src:'charge', id:null, date:(CHARGE_DATE_OVR[h.service_id]!=null?CHARGE_DATE_OVR[h.service_id]:(h.check_in||'')), code:(h.client_code||'').toUpperCase(), name:h.client_name||'', raw:Number(h.final_rate_booked||0), srcCur:HO_TCUR, amount:Number(h.final_rate_booked||0), bank:_chgMap[h.service_id], ref:'عبر Booking Form', note:'', pair:'', rate:'' }));
   const recorded=hpPayments(HO_PAYEE).concat(chgPays).filter(x=>{ if(!hpOnly2026()) return true; const m=String(x.date||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
@@ -2582,7 +2584,7 @@ function hpRows(){
     // البنك الفعلي + المرجع البنكي من سجل الدفعات (acc_hotel_payments) بمطابقة كود العميل
     const hpay={}; (DATA.hotelPayments||[]).forEach(x=>{ if(hpNorm(x.hotel_system)!==hpNorm(HO_PAYEE))return; const cc=(x.client_code||'').toUpperCase(); if(!cc)return; if(!hpay[cc])hpay[cc]={bank:x.bank_name||'',ref:x.bank_ref||''}; });
     const rows=hb.slice().sort((a,b)=>{ const da=a._booking?1:0, db=b._booking?1:0; if(da!==db) return db-da; if(da===1) return String(b.created_at||'').localeCompare(String(a.created_at||'')); return String(b.arrival_date||b.check_in||'').localeCompare(String(a.arrival_date||a.check_in||''))||String(b.check_in||'').localeCompare(String(a.check_in||'')); });  // حجوزات الداشبورد (الأحدث) أولاً ثم الشيت بتاريخ الوصول
-    tb.innerHTML=rows.length?rows.map(h=>{ const c=(h.client_code||'').toUpperCase(); const name=h.client_name||nm[c]||''; const frb=Number(h.final_rate_booked||0); const ref=Number(h.refund||0); const cc=Number(h.cancel_charge||0); const before=frb+ref; const isC=/cancel/i.test(h.status||''); const rt=(h.room_type&&String(h.room_type).toLowerCase()!=='undefined')?h.room_type:''; const hotel=(h.hotel_name||'')+(rt?' · '+rt:''); const f=fcd[c]||{paid:0,pr:0,cur:'',agent:''}; const sym=curSym(f.cur||'SAR'); const bal=f.pr-f.paid; const pm=hpay[c]; const sbank=(pm&&pm.bank)||chg[c+'|'+(h.check_in||'')]||chgC[c]||h.bank_name||''; const sref=(pm&&pm.ref)||h.bank_ref||''; const _realPay=!!((pm&&pm.bank)||(sbank&&!/direct|ditect|from\s*supplier|with\s*the\s*(hotel|suppl)|open\s*balance|reward|not\s*booked/i.test(String(sbank))));   // مدفوع فعلاً = دفعة مسجّلة أو charge from حقيقي (لا «مباشر من المورّد»)
+    tb.innerHTML=rows.length?rows.map(h=>{ const c=(h.client_code||'').toUpperCase(); const name=h.client_name||nm[c]||''; const frb=Number(h.final_rate_booked||0); const ref=Number(h.refund||0); const cc=Number(h.cancel_charge||0); const before=frb+ref; const isC=/cancel/i.test(h.status||''); const rt=(h.room_type&&String(h.room_type).toLowerCase()!=='undefined')?h.room_type:''; const hotel=(h.hotel_name||'')+(rt?' · '+rt:''); const f=fcd[c]||{paid:0,pr:0,cur:'',agent:''}; const sym=curSym(f.cur||'SAR'); const bal=f.pr-f.paid; const pm=hpay[c]; const sbank=(pm&&pm.bank)||chg[c+'|'+(h.check_in||'')]||chgC[c]||h.bank_name||''; const sref=(pm&&pm.ref)||h.bank_ref||''; const _realPay=!!((pm&&pm.bank)||(sbank&&!_directOwed(sbank)));   // مدفوع فعلاً = دفعة مسجّلة أو charge from حقيقي (لا «مباشر من المورّد»)
       return '<tr data-cli="'+esc((name+' '+c).toLowerCase())+'" data-code="'+esc(c)+'" data-amt="'+frb+'" data-ci="'+esc(String(h.check_in||'').slice(0,10))+'" data-st="'+(isC?'cancel':(_realPay?'paid':'due'))+'">'+
         '<td style="text-align:center"><input type="checkbox" class="hp-dchk" data-code="'+esc(c)+'" data-name="'+esc(name)+'" onchange="hpDChk(this)"></td>'+
         '<td>'+esc(c)+'</td><td>'+esc(name)+'</td><td style="font-size:10.5px;color:var(--muted)">'+esc(h.agent_name||f.agent||'')+'</td>'+
@@ -4169,7 +4171,7 @@ function renderSupplierDetail(){
   // قيمة الحجز قبل الإلغاء (BOOKING RATE = N من Final) لخدمات هذا المورّد فقط
   const _supT=String(sup).trim(); const rbcCli={}; (DATA.serviceLines||[]).forEach(s=>{ const sm=String(s.supplier||'').trim(); const nm2=String(s.name||'').trim(); if(sm!==_supT && nm2!==_supT)return; const c=(s.client_code||'').toUpperCase(); const v=Number(s.rate_before_cancel||0); if(v)rbcCli[c]=(rbcCli[c]||0)+v; });
   // عملاء لهم حجز «direct/from supplier» مع هذا المورّد = دين مباشر (غير مدفوع حتى السداد الفعلي) — يشمل «Ditect from supplier» و«Direct with the Suppler»
-  const directCodes=new Set(); (DATA.serviceLines||[]).forEach(s=>{ if(String(s.booked_from||'').trim()!==_supT) return; if(/direct|ditect|from\s*supplier|with\s*the\s*suppl/i.test(String(s.charge_from||''))) directCodes.add((s.client_code||'').toUpperCase()); });
+  const directCodes=new Set(); (DATA.serviceLines||[]).forEach(s=>{ if(String(s.booked_from||'').trim()!==_supT) return; if(_directOwed(s.charge_from)) directCodes.add((s.client_code||'').toUpperCase()); });
   // توزيع المدفوع على الفواتير نسبياً — لكن نستثني المستحق «المباشر من المورّد» من قاعدة النسبة (لأن دفعاتنا لا تغطّيه)
   const _directOwed=Object.keys(invCli).filter(c=>directCodes.has((c||'').toUpperCase())).reduce((s,c)=>s+Number(invCli[c]||0),0);
   const _owedNonDirect=Math.max(0, owedT-_directOwed);
