@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-ط · كشوفات الفنادق تعتمد booked_from (من Booking Form) فقط لا اسم الفندق (حجز عبر TBO يطلع بكشف TBO فقط لا بكشف الفندق) — الشيت القديم يبقى باسم الفندق</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-ي · زر «📊 تصدير Excel» في كشف حساب الفندق وكشف حساب المورّد (يفتح مباشرة في Excel بعربي RTL) + كشوفات تعتمد booked_from من Booking Form</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2322,6 +2322,26 @@ function renderHotels(){
   $('ho-cnt').textContent=rows.length+' حجز';
 }
 
+let HS_NAME='';   // اسم الفندق/المورّد المعروض حالياً في كشف الحساب — لتصدير Excel
+// 📊 تصدير أي كشف حساب (جدول) إلى ملف Excel — يحوّل الحقول لقيمها ويزيل الأزرار، يفتح مباشرة في Excel بدعم عربي RTL
+function exportKashfExcel(el, filename){
+  if(typeof el==='string') el=document.querySelector(el);
+  if(el && el.tagName==='TBODY') el=el.closest('table');
+  if(!el || el.tagName!=='TABLE'){ alert('لا يوجد كشف لتصديره — اختاري فندقاً/مورّداً أولاً.'); return; }
+  const clone=el.cloneNode(true);
+  clone.querySelectorAll('input,textarea').forEach(e=>{ const s=document.createElement('span'); s.textContent=(e.value||''); e.replaceWith(s); });
+  clone.querySelectorAll('select').forEach(e=>{ const s=document.createElement('span'); s.textContent=(e.value||''); e.replaceWith(s); });
+  clone.querySelectorAll('button').forEach(e=>e.remove());
+  const style='table{border-collapse:collapse;font-family:Arial,sans-serif}td,th{border:1px solid #999;padding:4px 7px;white-space:nowrap;text-align:right}th{background:#f0f0f0;font-weight:bold}';
+  const html='<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><style>'+style+'</style></head><body dir="rtl"><h3>'+esc(String(filename))+'</h3>'+clone.outerHTML+'</body></html>';
+  const blob=new Blob(['﻿'+html],{type:'application/vnd.ms-excel;charset=utf-8'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  const d=new Date(); const st=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+  a.href=url; a.download=String(filename).replace(/[\/\\?%*:|"<>]/g,'-').slice(0,60)+' '+st+'.xls';
+  document.body.appendChild(a); a.click(); setTimeout(()=>{a.remove();URL.revokeObjectURL(url);},600);
+}
+function exportHotelKashf(){ exportKashfExcel('#hs-detail table','كشف حساب '+(HS_NAME||'فندق')); }
+function exportSupplierKashf(){ const sup=(($('supflt')||{}).value||'').trim(); exportKashfExcel(document.getElementById('sp-dist-tbl'),'كشف حساب مورّد '+(sup||'')); }
 // ---- القسم العلوي: دفعة فندق/نظام (المدفوع له أولاً، بعملة موحّدة) + توزيع إجمالي على قائمة عملاء · تسجيل مباشر ----
 let HO_PAYEE='TBO';
 let HO_TCUR='USD';
@@ -2341,6 +2361,7 @@ function renderHotelStatement(){
   const dl=$('hs-list'); if(dl) dl.innerHTML=hotelStmtNames().map(n=>'<option>'+esc(n)+'</option>').join('');
   const box=$('hs-detail'); if(!box) return;
   const q=(($('hs-q')||{}).value||'').trim();
+  HS_NAME=q;
   if(!q){ box.innerHTML='<div style="color:var(--muted);font-size:12px;padding:6px">اكتبي اسم فندق لعرض كشف حسابه (الحجوزات · المستحق · حالة السداد).</div>'; return; }
   const nq=hpNorm(q);
   // charge_from + عملة التكلفة لخدمات الداشبورد (فنادق)
@@ -2389,6 +2410,7 @@ function renderHotelStatement(){
     '<span style="background:rgba(14,157,106,.10);border:1px solid #0e9d6a;border-radius:9px;padding:5px 11px">💰 إجمالي المدفوع'+(only2026?' (2026)':'')+': <b>'+fmt(paid2026)+' '+esc(hcur)+'</b> <span style="font-size:10px;color:var(--muted)">('+nPaid+' مسدَّد)</span></span>'+
     '<span style="background:rgba(217,138,0,.10);border:1px solid var(--amber);border-radius:9px;padding:5px 11px">⏳ مستحق'+(only2026?' 2026':'')+' (رصيد): <b>'+nDue+'</b> · <b>'+fmt(dueTot)+' '+esc(hcur)+'</b></span>'+
     (nPend?'<span style="background:rgba(58,123,213,.10);border:1px solid #3a7bd5;border-radius:9px;padding:5px 11px">⏳ بانتظار تحديد الدفع: <b>'+nPend+'</b> <span style="font-size:10px;color:var(--muted)">(لا تُحتسب — أكملي Charge from)</span></span>':'')+
+    '<button class="btn" style="background:#0e7c50;padding:5px 14px" onclick="exportHotelKashf()">📊 تصدير Excel</button>'+
     '</div>'+
     '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">السداد يُحتسب من: 💳 charge from (بطاقة/بنك/مباشر مع المورّد) أو دفعة مورّد مسجّلة. المستحق = «مباشر من المورّد». <b>الحجوزات بلا charge from = «بانتظار تحديد الدفع» ولا تنعكس على الكشف (لا مدفوع ولا مستحق) حتى تحديدها في Booking Form.</b></div>'+
     '<div class="tbl-wrap" style="max-height:440px"><table style="font-size:11.5px;white-space:nowrap"><thead><tr><th>كود</th><th>العميل</th><th>الغرفة</th><th>الدخول</th><th>🚪 عدد الغرف</th><th>المحجوز (التكلفة)</th><th>حالة السداد</th><th>Conf No</th><th>المصدر</th></tr></thead><tbody>'+trs+'</tbody></table></div>';
@@ -4234,7 +4256,7 @@ function renderSupplierDetail(){
   // تنبيه العملاء الذين لم يكملوا مدفوعاتهم (عليهم رصيد متبقّي يجب المطالبة به)
   const oweList=cliRows.map(c=>{ const fc=fcdCli[(c||'').toUpperCase()]||{pr:0,paid:0,cur:''}; return {code:c, name:nameCli[c]||'', bal:fc.pr-fc.paid, cur:curSym(fc.cur||'SAR')}; }).filter(o=>o.bal>0.5).sort((a,b)=>b.bal-a.bal);
   const oweBanner = oweList.length? '<div class="panel" style="margin-bottom:14px;border:1px solid #b8860b;background:rgba(184,134,11,.10)"><h3 style="margin-top:0;color:#b8860b">⚠️ عملاء لم يُكملوا مدفوعاتهم — يجب المطالبة بالمتبقّي ('+oweList.length+')</h3>'+ oweList.map(o=>'<div style="padding:6px 2px;border-bottom:1px solid rgba(184,134,11,.18);font-size:13px">⚠️ <b>'+esc(o.name)+'</b> <span style="color:var(--muted)">('+esc(o.code)+')</span> — متبقّي عليه مبلغ وقدره <b style="color:#b8860b;font-size:15px">'+fmt(o.bal)+' '+esc(o.cur)+'</b> · <span style="color:#b8860b;font-weight:700">يجب المطالبة به</span></div>').join('')+'</div>' : '';
-  let h='<div class="panel" style="margin-bottom:14px;border:1px solid var(--accent)"><h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span>🧾 '+esc(sup)+'</span><button class="btn" style="padding:6px 16px" onclick="exportSupplierPDF()">🖨️ تصدير PDF</button></h3>'+
+  let h='<div class="panel" style="margin-bottom:14px;border:1px solid var(--accent)"><h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span>🧾 '+esc(sup)+'</span><span style="display:flex;gap:8px"><button class="btn" style="background:#0e7c50;padding:6px 16px" onclick="exportSupplierKashf()">📊 تصدير Excel</button><button class="btn" style="padding:6px 16px" onclick="exportSupplierPDF()">🖨️ تصدير PDF</button></span></h3>'+
     '<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px">'+
       '<span>الفواتير: <b>'+fmt(list.length)+'</b></span>'+
       '<span>العملاء: <b>'+fmt(clients)+'</b></span>'+
