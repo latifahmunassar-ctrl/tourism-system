@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-ز · الحجز بلا charge from = بلا أثر في كل مكان (الكشف + إجمالي المستحق/المدفوع في Hotel Overview) + يطلع دائماً كتنبيه ناقص في Booking Form</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-ح · إزالة تكرار حجوزات الشيت/الداشبورد (نفس conf no) + الحجز بلا charge from = بلا أثر بأي مكان + يطلع دائماً كتنبيه ناقص في Booking Form</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2264,7 +2264,9 @@ function renderStaffDetail(fStaff,fJob,inR,basis,bbMap){
 // ---- Hotels / Systmes PYT Overview (حجوزات TBO من acc_hotel_bookings) — مطابق للشيت ----
 // حجوزات الفنادق = حجوزات الشيت + حجوزات فنادق Booking Form المُدخلة من الداشبورد (مصدر الحجز booked_from + الحجز الفعلي) — انعكاس حيّ بلا تكرار
 function hotelBookingsAll(){
-  const base=(DATA.hotelBookings||[]).slice();
+  // إزالة تكرار الشيت: أي حجز داشبورد بنفس (كود العميل + رقم التأكيد) لحجز في الشيت → الداشبورد هو المعتمد ويُسقَط صف الشيت المكرّر (وإلا يُحتسب المبلغ مرّتين)
+  const dashConf=new Set(); (DATA.serviceLines||[]).forEach(s=>{ if(s.source!=='dashboard'||!sIsHotel(s.kind))return; const cn=String(s.conf_no||'').trim().toUpperCase(); if(cn)dashConf.add((s.client_code||'').toUpperCase()+'|'+cn); });
+  const base=(DATA.hotelBookings||[]).filter(h=>{ const cn=String(h.conf_no||'').trim().toUpperCase(); if(!cn)return true; return !dashConf.has((h.client_code||'').toUpperCase()+'|'+cn); });
   const fm={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!fm[c])fm[c]={name:'',agent:'',cur:'',arr:'',conf:'',pr:0,paid:0}; const o=fm[c]; if(r.client_name&&!o.name)o.name=r.client_name; if(r.agent_name&&!o.agent)o.agent=r.agent_name; if(r.currency&&!o.cur)o.cur=r.currency; if(r.arrival_date&&!o.arr)o.arr=r.arrival_date; if(r.conf_status&&!o.conf)o.conf=r.conf_status; o.pr+=Number(r.package_rate||0); o.paid+=Number(r.amount_paid||0); });
   (DATA.serviceLines||[]).forEach(s=>{ if(s.source!=='dashboard'||!sIsHotel(s.kind))return; const bf=(s.booked_from||'').toString().trim(); const frb=Number(s.final_rate_booked||0); if(!bf||!(frb>0))return;
     const c=(s.client_code||'').toUpperCase(); const f=fm[c]||{}; const sell=Number(s.amount||0);
