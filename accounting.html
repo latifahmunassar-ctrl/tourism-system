@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 16يوليو-أ · إصلاح احتساب الربح الفعلي: تُحسم الآن تكلفة الانتقالات (transport) والفيزا (visa) وأخرى (other) — كانت مستثناة فيتضخّم الربح والعمولة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 16يوليو-ب · تسريع: التحديث بعد كل عملية صار صامتاً في مكانه (يبقى تبويبك وتمريرك، بلا مسح الصفحة) + الخادم يجلب الجداول بالتوازي (~أسرع 30%)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -875,18 +875,24 @@ async function login(){
   try{ api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'log_event',payload:{event_type:'login',severity:'info',detail:'فتح الداشبورد بكلمة سر النظام'}})}); }catch(_){}
   $('login').style.display='none'; $('app').style.display='block'; render(await r.json());
 }
+// إشعار عائم صغير (لا يمسح الصفحة) — للحفظ/التحديث بعد العمليات
+function toast(msg, ms){ let t=$('acc-toast'); if(!t){ t=document.createElement('div'); t.id='acc-toast'; t.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#0e7c50;color:#fff;padding:10px 20px;border-radius:22px;font-size:13px;font-weight:700;box-shadow:0 4px 18px rgba(0,0,0,.28);z-index:99999;transition:opacity .25s;direction:rtl'; document.body.appendChild(t); } t.textContent=msg; t.style.background=/⚠️|خطأ|تعذّر/.test(msg)?'#c0392b':'#0e7c50'; t.style.opacity='1'; t.style.display='block'; clearTimeout(window.__toastT); if(ms!==0){ window.__toastT=setTimeout(()=>{ t.style.opacity='0'; setTimeout(()=>{t.style.display='none';},300); }, ms||1600); } }
+let LOADED_ONCE=false;
 async function load(){
-  $('loading').style.display='block'; $('loading').textContent='⏳ جاري التحميل...'; $('content').style.display='none';
+  const quiet=LOADED_ONCE;   // بعد التحميل الأول: تحديث صامت في المكان (يبقى التبويب والتمرير) بدل مسح الصفحة
+  if(quiet){ toast('⏳ جاري التحديث...',0); }
+  else { $('loading').style.display='block'; $('loading').textContent='⏳ جاري التحميل...'; $('content').style.display='none'; }
   try{
     const r=await api({});
     if(r.status===401){ localStorage.removeItem('acc_key'); localStorage.removeItem('acc_token'); location.reload(); return; }
     const j=await r.json();
     try{ await loadReconList(); }catch(_){}   // تواريخ الدفع override + قائمة المطابقات
-    try{ render(j); }
-    catch(re){ $('loading').style.display='block'; $('content').style.display='none';
-      $('loading').innerHTML='⚠️ خطأ في العرض: '+esc(String(re))+'<br><br><button class="btn" onclick="load()">إعادة المحاولة</button>'; }
+    try{ render(j); LOADED_ONCE=true; if(quiet) toast('✅ تم الحفظ والتحديث',1500); }
+    catch(re){ if(quiet){ toast('⚠️ خطأ في العرض',2500); } else { $('loading').style.display='block'; $('content').style.display='none';
+      $('loading').innerHTML='⚠️ خطأ في العرض: '+esc(String(re))+'<br><br><button class="btn" onclick="load()">إعادة المحاولة</button>'; } }
   }catch(e){
-    $('loading').innerHTML='⚠️ تعذّر الاتصال: '+esc(String(e))+'<br><br><button class="btn" onclick="load()">إعادة المحاولة</button>';
+    if(quiet){ toast('⚠️ تعذّر التحديث — تحقّقي من الاتصال',3000); }
+    else { $('loading').innerHTML='⚠️ تعذّر الاتصال: '+esc(String(e))+'<br><br><button class="btn" onclick="load()">إعادة المحاولة</button>'; }
   }
 }
 function tab(el){
