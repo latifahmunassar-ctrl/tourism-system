@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 16يوليو-و · تنبيه «دفعة زائدة» في فورم الإدخال (تنبيه أحمر حيّ + تأكيد إجباري قبل الحفظ) لمنع الدفعات المكرّرة + حذف تكرار C26481/C26482</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 16يوليو-ز · انعكاس دفعات العملاء من الداشبورد تلقائياً في كشف البنك (وارد) بفلترة المرجع — بلا تكرار المسجّل بالشيت؛ يظهر C26467 والدفعات الناقصة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3512,6 +3512,18 @@ function bankTxAll(){
     const ref=String(r.bank_ref||'').trim(); const date=String(r.payment_date||'').slice(0,10);
     const miss=[]; if(!date)miss.push('التاريخ'); if(!ref)miss.push('المرجع البنكي'); const complete=miss.length===0;
     base.push({ id:'rf-'+r.id, _rid:r.id, bank_name:r.bank_name||'', amount_in:0, amount_out:complete?amt:0, _pendingAmount:complete?0:amt, _pending:!complete, _missing:miss, tx_date:date, bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', note:'↩️ مسترجع للعميل'+(r.note?(' · '+String(r.note)):''), source:'dashboard', created_at:r.created_at||'', _refund:true });
+  });
+  // 💰 انعكاس دفعات العملاء الواردة من First Client Data (المُدخلة من الداشبورد) في كشف البنك — تلقائياً، مع فلترة بالمرجع لمنع تكرار المسجّل أصلاً في شيت Bank Transaction
+  const _txnRefs=new Set(); (DATA.bankTx||[]).forEach(x=>{ const r=String(x.bank_ref||'').trim().toUpperCase(); if(r)_txnRefs.add(r); });
+  (DATA.fcd||[]).forEach(r=>{
+    if(r.source!=='dashboard')return;                                   // القديم من الشيت مسجّل أصلاً في acc_bank_txn
+    const amt=Number(r.amount_paid||0); if(!(amt>0))return;
+    const bn=String(r.bank_name||'').trim(); if(!bn)return;             // بلا بنك = لا ينعكس
+    const ref=String(r.bank_ref||'').trim();
+    if(ref && _txnRefs.has(ref.toUpperCase()))return;                   // موجودة بشيت البنك → لا تُكرّر
+    const c=(r.client_code||'').toUpperCase();
+    const d=(typeof effPayDate==='function'?effPayDate(r):'')||(_bookDate[c]||'')||String(r.booking_date||'').slice(0,10);
+    base.push({ id:'fcd-'+r.id, bank_name:bn, amount_in:amt, amount_out:0, tx_date:d, bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', note:'💰 دفعة عميل: '+(r.client_name||'')+(ref?'':' · ⚠️ بلا مرجع'), source:'dashboard', created_at:r.created_at||'', _clientPay:true });
   });
   return base;
 }
