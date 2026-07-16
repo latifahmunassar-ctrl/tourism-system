@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 16يوليو-هـ · Sales Form: الإدخال الجديد معكوس (تكتبين سعر المورّد → سعر البيع تلقائي)، وتعديل خدمة قديمة أصلي تماماً (سعر بيعها لا يتغيّر) — القديم محميّ</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 16يوليو-و · تنبيه «دفعة زائدة» في فورم الإدخال (تنبيه أحمر حيّ + تأكيد إجباري قبل الحفظ) لمنع الدفعات المكرّرة + حذف تكرار C26481/C26482</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -808,6 +808,7 @@ table{font-weight:600}
       <div class="fld" id="fld-duedate" style="border:1px solid var(--line);border-radius:8px;padding:6px 8px"><label>📅 تاريخ الاستحقاق <span class="due-req" style="display:none"><span style="color:var(--red)">*</span> <span style="font-size:9px;color:#d98a00">إجباري — على العميل مبلغ متبقٍّ</span></span></label><input type="date" id="f-duedate" style="color-scheme:light;cursor:pointer"></div>
     </div>
     <div class="calc"><span><span id="c-rate-label">سعر البيع = التكلفة + الربح =</span> <b id="c-rate">0</b></span><span><span id="c-bal-label">الرصيد = السعر − المدفوع =</span> <b id="c-bal" style="color:var(--amber)">0</b></span></div>
+    <div id="f-overpay" style="display:none;background:rgba(209,17,17,.10);border:1px solid #d11;color:#d11;border-radius:8px;padding:8px 12px;margin:6px 0;font-size:12.5px;font-weight:700"></div>
     <div id="msg"></div>
     <button class="btn green" style="width:100%" id="save-btn" onclick="save()">حفظ — وتوليد الكود تلقائياً</button>
   </div>
@@ -5329,6 +5330,10 @@ function calc(){
   }
   // تظهر دائماً في النموذج؛ تتلوّن برتقالي وتصير إجبارية عند وجود متبقٍّ
   const fd=$('fld-duedate'); if(fd){ fd.style.display='flex'; const owed=remNow>1; fd.style.borderColor=owed?'#d98a00':'var(--line)'; fd.style.background=owed?'rgba(217,138,0,.10)':'transparent'; const req=fd.querySelector('.due-req'); if(req)req.style.display=owed?'':'none'; }
+  // ⚠️ تنبيه الدفعة الزائدة: المدفوع الآن يتجاوز المتبقّي على العميل → غالباً دفعة مكرّرة
+  const over=(remNow < -1); const ow=$('f-overpay');
+  if(ow){ ow.style.display=over?'block':'none'; if(over) ow.innerHTML='⚠️ دفعة زائدة — المدفوع يتجاوز المتبقّي بمقدار <b>'+fmt(-remNow)+'</b>. تأكّدي أنها ليست <b>دفعة مكرّرة</b> لعميل دفع أصلاً.'; }
+  if($('c-bal')) $('c-bal').style.color = over?'#d11':(remNow>1?'var(--amber)':'#0e9d6a');
 }
 async function save(){
   if(SAVING) return; // منع تكرار الحفظ بنقرة ثانية قبل إغلاق النموذج
@@ -5345,6 +5350,11 @@ async function save(){
   const _rem = (FMODE==='new') ? (((+$('f-cost').value||0)+(+$('f-profit').value||0))-paid)
             : (FMODE==='service') ? ((selectedClient?selectedClient.balance:0)+((+$('f-cost').value||0)+(+$('f-profit').value||0))-paid)
             : ((selectedClient?selectedClient.balance:0)-paid);
+  // ⚠️ حاجز الدفعة الزائدة: المدفوع يتجاوز المتبقّي → غالباً دفعة مكرّرة، لازم تأكيد صريح قبل الحفظ
+  if(_rem < -1){
+    const _nm=(selectedClient&&selectedClient.name)?(' «'+selectedClient.name+'»'):'';
+    if(!confirm('⚠️ دفعة زائدة!\n\nالمدفوع يتجاوز المتبقّي على العميل'+_nm+' بمقدار '+fmt(-_rem)+'.\nغالباً هذه دفعة مكرّرة لعميل دفع أصلاً.\n\nمتأكدة تبين تحفظينها؟')){ $('msg').innerHTML='<span style="color:var(--amber);font-weight:700">أُلغي الحفظ — تحقّقي من الدفعة الزائدة</span>'; return; }
+  }
   if(_rem>1 && !(($('f-duedate')||{}).value)){ const fd=$('fld-duedate'); if(fd)fd.style.display='flex'; $('msg').innerHTML='<span style="color:var(--red)">⚠️ على العميل مبلغ متبقٍّ ('+fmt(_rem)+') — لازم تحديد <b>تاريخ الاستحقاق</b> قبل الحفظ</span>'; if($('f-duedate'))$('f-duedate').focus(); return; }
   // معلومات إجبارية للعميل الجديد — كل الخانات التالية إلزامية قبل الحفظ
   if(isNew){
