@@ -758,10 +758,10 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div class="rfm-overlay" id="waReqOverlay" onclick="if(event.target===this)waReqClose()">
 <div class="rfm-modal" style="max-width:600px">
 <div class="rfm-head">
-<div class="rfm-title" style="color:#d4a843">📥 طلبات الجروبات (المميّزة بنجمة ⭐)</div>
+<div class="rfm-title" style="color:#d4a843">📥 طلبات الجروبات (المميّزة بـ ✅)</div>
 <button class="rfm-close" onclick="waReqClose()">✕</button>
 </div>
-<div class="rfm-sub">أي رسالة تميّزينها بتفاعل نجمة ⭐ في جروبات الرقم الجديد تظهر هنا كطلب عرض سياحي.</div>
+<div class="rfm-sub">أي رسالة ترّدين عليها بعلامة ✅ في الجروبات تظهر هنا كطلب عرض سياحي.</div>
 <div id="waReqList" style="max-height:62vh;overflow-y:auto"></div>
 </div>
 </div>
@@ -3234,7 +3234,7 @@ async function waReqLoad() {
     const reqs = r.requests || [];
     waReqBadge(r.new_count || 0);
     if (!reqs.length) {
-      box.innerHTML = '<div style="padding:18px;color:var(--muted);text-align:center;line-height:1.9">ما فيه طلبات بعد.<br>ميّزي رسالة الطلب بتفاعل نجمة ⭐ في أي جروب، وبتظهر هنا تلقائياً.</div>';
+      box.innerHTML = '<div style="padding:18px;color:var(--muted);text-align:center;line-height:1.9">ما فيه طلبات بعد.<br>ردّي على رسالة الطلب بعلامة ✅ في أي جروب، وبتظهر هنا تلقائياً.</div>';
       return;
     }
     box.innerHTML = reqs.map(function (q) {
