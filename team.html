@@ -3247,10 +3247,23 @@ async function waReqLoad() {
         + '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:4px"><b style="font-size:13px;color:#128C7E">👥 ' + waEsc(q.group_name || '') + '</b><span style="font-size:11px;color:var(--muted);white-space:nowrap">' + waEsc(when) + '</span></div>'
         + '<div style="font-size:11px;color:var(--muted);margin-bottom:5px">📱 ' + waEsc(q.sender_name || q.sender || '') + '</div>'
         + '<div style="font-size:13px;color:var(--text);white-space:pre-wrap;line-height:1.8">' + waEsc(q.body || '') + '</div>'
+        + '<button class="ebtn ebtn-nologo" style="font-size:11px;margin-top:8px;background:#128C7E;color:#fff" onclick="waReqReply(&#39;' + q.group_jid + '&#39;,&#39;' + waEsc(q.group_name||'').replace(/[&#39;"\\]/g,'') + '&#39;,&#39;' + (q.account||'601111136864') + '&#39;)">📤 رد للجروب</button> '
         + btn + '</div>';
     }).join('');
   } catch (e) { box.innerHTML = '<div style="padding:14px;color:#ef4444">تعذّر التحميل: ' + e.message + '</div>'; }
 }
+function waReqReply(jid, name, account) {
+  waReqClose();
+  waBridgeAccount = account || '601111136864';
+  const sel = document.getElementById('waBridgeAccount');
+  if (sel) sel.value = waBridgeAccount;
+  waBridgeSel = new Set([jid]);
+  waBridgeNames[jid] = name || jid;
+  waBridgeGroupsLoaded = false;       // reload the picker for this sender account
+  waBridgeOpen();                     // opens the send window; loads + renders the group list
+  waBridgeUpdateCount();
+}
+
 async function waReqMark(id) { await waReqCall('mark-request', { id: id, status: 'handled' }); waReqLoad(); }
 // light badge refresh (every 5 min — keeps data usage low)
 setInterval(function () { waReqCall('group-requests').then(function (r) { waReqBadge(r.new_count || 0); }).catch(function () {}); }, 300000);
