@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 15يوليو-ع · إصلاح مطابقة عملة المورّد/البنك بتجاهل عدد المسافات (YTS holiday··THailand tour الآن يعتمد SGD في Sales Form) + عمود الربح الفعلي بالريال</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 16يوليو-أ · إصلاح احتساب الربح الفعلي: تُحسم الآن تكلفة الانتقالات (transport) والفيزا (visa) وأخرى (other) — كانت مستثناة فيتضخّم الربح والعمولة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2139,7 +2139,7 @@ async function addSales(){
 }
 
 // ---- تفصيل الحجز: كل خدمة بسطر (من acc_service_lines) ----
-const KIND={hotel:'🏨 فندق',flight:'✈️ طيران',tour:'🗺️ جولة',additional:'➕ خدمة',supplier:'🏢 مورّد (تكلفة)'};
+const KIND={hotel:'🏨 فندق',flight:'✈️ طيران',tour:'🗺️ جولة',additional:'➕ خدمة',supplier:'🏢 مورّد (تكلفة)',transport:'🚐 انتقال',visa:'📗 فيزا',other:'📦 أخرى'};
 function renderDetail(){
   if(!DATA) return;
   const q=($('dt-q').value||'').trim().toLowerCase(), pl=$('dt-pl').value;
@@ -3220,12 +3220,12 @@ function actualProfitMaps(){
   const booked={}, miss={}, prc={}, costF={}, profF={}, a2c={}, refC={}, hasCanc={};
   (DATA.serviceLines||[]).forEach(s=>{
     const c=(s.client_code||'').toUpperCase(); if(!c)return;
-    const k=s.kind; if(['hotel','flight','tour','additional','supplier'].indexOf(k)<0)return;   // شامل «باكدج كامل من مورّد»
+    const k=s.kind; if(['hotel','flight','tour','additional','supplier','transport','visa','other'].indexOf(k)<0)return;   // كل أنواع الخدمات (شامل الانتقالات/الفيزا/أخرى — تكاليف حقيقية تُحسم من الربح)
     if(/profit/i.test(String(s.name||'')))return;   // صف «re-profit» مؤشر ربح وليس تكلفة
     if(/cancel/i.test(String(s.status||'')))hasCanc[c]=true;   // عنده خدمة ملغية (تفسّر انخفاض الحجز)
     const rate=Number(s.currency_rate)||1;
     if(s.final_rate_booked!=null&&s.final_rate_booked!==''){ booked[c]=(booked[c]||0)+Number(s.final_rate_booked)*rate; }
-    else if(['tour','additional','supplier'].indexOf(k)>=0){ booked[c]=(booked[c]||0)+Number(s.amount||0); }  // amount = التكلفة لهذي الأنواع (cost tour / cost of services / cost of package)
+    else if(['tour','additional','supplier','transport','visa','other'].indexOf(k)>=0){ booked[c]=(booked[c]||0)+Number(s.amount||0); }  // amount = التكلفة لهذي الأنواع (بلا حجز فعلي) — عملة العميل
     else { miss[c]=(miss[c]||0)+1; }   // فندق/طيران بلا حجز فعلي = ناقص حقيقي (amount عندهم سعر بيع مو تكلفة)
   });
   // المرتجع الفعلي لكل عميل (من شيت المسترجعات) — يُطرح من الربح الفعلي
@@ -4832,7 +4832,7 @@ function renderPayForm(){
   // تفصيل الخدمات
   const svc=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code);
   const hotels=(DATA.hotelBookings||[]).filter(h=>(h.client_code||'').toUpperCase()===code);
-  const KN={hotel:'🏨 فندق',flight:'✈️ طيران',tour:'🗺️ جولة',additional:'➕ خدمة',supplier:'🏢 مورّد'};
+  const KN={hotel:'🏨 فندق',flight:'✈️ طيران',tour:'🗺️ جولة',additional:'➕ خدمة',supplier:'🏢 مورّد',transport:'🚐 انتقال',visa:'📗 فيزا',other:'📦 أخرى'};
   // سعر الصرف/الاسم المعتمد لكل فندق (من data Hotel، مطابق بالكود + تاريخ الدخول)
   const hRate={},hName={}; for(const s of (DATA.serviceLines||[])){ if(s.kind!=='hotel')continue; const k=(s.client_code||'')+'|'+(s.check_in||'');
     if(s.currency_rate!=null&&hRate[k]===undefined)hRate[k]=s.currency_rate; if(s.name&&hName[k]===undefined)hName[k]=s.name; }
