@@ -756,14 +756,14 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 </div>
 
 <button id="waReqFab" onclick="waReqOpen()" title="طلبات الجروبات المميّزة بنجمة" style="position:fixed;bottom:74px;left:22px;z-index:950;background:linear-gradient(135deg,#d4a843,#b8860b);color:#fff;border:none;border-radius:999px;padding:12px 20px;font-family:Tajawal,sans-serif;font-size:14px;font-weight:800;box-shadow:0 4px 16px rgba(0,0,0,.35);cursor:pointer">📥 الطلبات<span id="waReqBadge" style="display:none;background:#e0218a;border-radius:999px;padding:1px 7px;font-size:11px;margin-inline-start:6px">0</span></button>
-<div class="rfm-overlay" id="waReqOverlay" onclick="if(event.target===this)waReqClose()">
-<div class="rfm-modal" style="max-width:600px">
-<div class="rfm-head">
-<div class="rfm-title" style="color:#d4a843">📥 طلبات الجروبات (المميّزة بـ ✅)</div>
-<button class="rfm-close" onclick="waReqClose()">✕</button>
+<div id="waReqPanel" style="position:fixed;top:80px;right:20px;width:380px;max-height:76vh;display:none;flex-direction:column;background:var(--s1);border:1px solid var(--border);border-radius:14px;box-shadow:0 12px 44px rgba(0,0,0,.55);z-index:965;overflow:hidden">
+<div id="waReqHeader" style="cursor:move;display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:var(--s2);border-bottom:1px solid var(--border);user-select:none">
+<div style="font-size:14px;font-weight:900;color:#d4a843">⠿ 📥 طلبات الجروبات</div>
+<button onclick="waReqClose()" style="background:none;border:none;color:var(--muted);font-size:17px;cursor:pointer">✕</button>
 </div>
-<div class="rfm-sub">أي رسالة ترّدين عليها بعلامة ✅ في الجروبات تظهر هنا كطلب عرض سياحي.</div>
-<div id="waReqList" style="max-height:62vh;overflow-y:auto"></div>
+<div style="padding:12px 12px 14px;overflow-y:auto">
+<div style="font-size:11px;color:var(--muted);margin-bottom:8px">اسحبيها من الشريط الأعلى ⠿ لتحريكها · ترّدين ✅ على الطلب بالجروب فيظهر هنا</div>
+<div id="waReqList"></div>
 </div>
 </div>
 
@@ -3236,8 +3236,33 @@ async function waReqCall(action, extra = {}) {
   });
   return r.json();
 }
-function waReqOpen() { document.getElementById('waReqOverlay').classList.add('open'); waReqLoad(); }
-function waReqClose() { document.getElementById('waReqOverlay').classList.remove('open'); }
+(function () {
+  let dragging = false, offX = 0, offY = 0;
+  document.addEventListener('mousedown', function (e) {
+    const hdr = e.target && e.target.closest && e.target.closest('#waReqHeader');
+    if (!hdr || (e.target.tagName === 'BUTTON')) return;
+    const panel = document.getElementById('waReqPanel');
+    if (!panel) return;
+    dragging = true;
+    const rect = panel.getBoundingClientRect();
+    offX = e.clientX - rect.left; offY = e.clientY - rect.top;
+    panel.style.right = 'auto'; panel.style.left = rect.left + 'px';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', function (e) {
+    if (!dragging) return;
+    const panel = document.getElementById('waReqPanel');
+    if (!panel) return;
+    let x = e.clientX - offX, y = e.clientY - offY;
+    x = Math.max(0, Math.min(x, window.innerWidth - 120));
+    y = Math.max(0, Math.min(y, window.innerHeight - 60));
+    panel.style.left = x + 'px'; panel.style.top = y + 'px';
+  });
+  document.addEventListener('mouseup', function () { dragging = false; });
+})();
+
+function waReqOpen() { document.getElementById('waReqPanel').style.display = 'flex'; waReqLoad(); }
+function waReqClose() { document.getElementById('waReqPanel').style.display = 'none'; }
 function waReqBadge(n) {
   const b = document.getElementById('waReqBadge');
   if (n > 0) { b.textContent = n; b.style.display = 'inline-block'; } else { b.style.display = 'none'; }
