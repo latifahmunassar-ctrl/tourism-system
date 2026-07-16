@@ -2994,7 +2994,8 @@ function waBridgeRenderList() {
     html += `<div class="wab-check${on}" data-jid="${jid}" onclick="waBridgeToggle('${jid}','رقم ${digits}')"><span class="wab-box">${on ? '✓' : ''}</span><span class="wab-name">📱 إرسال للرقم ${digits}</span></div>`;
   }
   const ql = q.toLowerCase();
-  const matches = q ? waBridgeAllGroups.filter(g => g.name.toLowerCase().includes(ql)) : waBridgeAllGroups;
+  const matches = (q ? waBridgeAllGroups.filter(g => g.name.toLowerCase().includes(ql)) : waBridgeAllGroups.slice());
+  matches.sort((a, b) => (waBridgeSel.has(b.jid) ? 1 : 0) - (waBridgeSel.has(a.jid) ? 1 : 0));
   html += matches.map(g => {
     const on = waBridgeSel.has(g.jid) ? ' on' : '';
     return `<div class="wab-check${on}" data-jid="${g.jid}" onclick="waBridgeToggle('${g.jid}')"><span class="wab-box">${on ? '✓' : ''}</span><span class="wab-name">${waEsc(g.name)}</span><span class="wab-size" title="عدد الأعضاء في الجروب">${g.size ? '👥 ' + g.size : ''}</span><button class="wab-x" title="حذف من قائمة الإعلان" onclick="event.stopPropagation();waBridgeExclude('${g.jid}')">🚫</button></div>`;
