@@ -3173,9 +3173,9 @@ function waBridgePdfToggle() {
     const sar = (typeof currentFinalGroup === 'function') ? (currentFinalGroup() || 0) : 0;
     let cap;
     if (typeof currencyConversion !== 'undefined' && currencyConversion && currencyConversion.name && currencyConversion.rate) {
-      cap = '💰 السعر: ' + Math.round(sar / currencyConversion.rate).toLocaleString() + ' ' + currencyConversion.name + ' للمجموعة';
+      cap = '💰 السعر: ' + Math.round(sar / currencyConversion.rate).toLocaleString() + ' ' + currencyConversion.name;
     } else {
-      cap = '💰 السعر: ' + Number(sar).toLocaleString() + ' ريال للمجموعة';
+      cap = '💰 السعر: ' + Number(sar).toLocaleString() + ' ريال';
     }
     ta.value = cap;
     ta.placeholder = 'النص المرفق مع الـPDF (قابل للتعديل)';
