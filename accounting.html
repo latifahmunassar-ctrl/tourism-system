@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ن · تقرير المدفوع له: الحجز الملغى يُحتسب برسوم إلغائه فقط (حجز 2000 رسومه 200 → التكلفة 200 لا 2000). رسوم الإلغاء = (القيمة − المرتجع) إن وُجد مرتجع، وإلا حقل رسوم الإلغاء المُدخَل</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-هـ٢ · الحجز الملغى بلا رسوم إلغاء (رُدّ كاملاً مثل C26473) لا يُحتسب نهائياً في تكلفة الحجوزات — لا رقماً ولا عدداً. الملغى برسوم فعلية فقط يظهر برسومه. الفنار = 1,251 (بدون 219 الملغي)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2630,12 +2630,12 @@ function hpSummaryHtml(){
   //   • الرصيد = التكلفة − المدفوعات: موجب = «علينا (مستحق للمورّد)» · سالب = «لنا (دفعة مقدمة)».
   let cost=0,nActive=0,nCancel=0,cancelFee=0;
   hpHbMatch(HO_PAYEE).forEach(h=>{ if(only2026 && !yOK(h.check_in||h.arrival_date))return;
-    if(/cancel/i.test(String(h.status||''))){ nCancel++;   // 🚫 الملغى: تُحتسب رسوم الإلغاء الفعلية فقط (مثال: حجز 2000 رسوم إلغائه 200 → التكلفة 200 لا 2000)
+    if(/cancel/i.test(String(h.status||''))){   // 🚫 الملغى: تُحتسب رسوم الإلغاء الفعلية فقط (مثال: حجز 2000 رسوم إلغائه 200 → التكلفة 200 لا 2000)
       const frb=Number(h.final_rate_booked||0), rf=Number(h.refund||0), cc=Number(h.cancel_charge||0);
       // إن سُجّل مرتجع → رسوم الإلغاء = القيمة − المرتجع (الأدق، ويتجاهل cancel_charge غير الموثوق مثل C26016)؛ وإلا نعتمد حقل رسوم الإلغاء المُدخَل
       let fee = (rf>0.005) ? (frb-rf) : cc;
       fee = Math.max(0, Math.min(fee, frb));   // بين صفر وقيمة الحجز
-      if(fee>0.005){ cost+=fee; cancelFee+=fee; }
+      if(fee>0.005){ cost+=fee; cancelFee+=fee; nCancel++; }   // الملغى بلا رسوم (رُدّ كاملاً) لا يُعدّ نهائياً في التكلفة — لا رقماً ولا عدداً
       return;
     }
     cost+=Number(h.final_rate_booked||0); nActive++;
