@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ز · إشعار/تذكرة انخفاض الربح الفعلي عن المتوقع: يعرض الكل + المتوقع + الفعلي + الانخفاض كقيمة ونسبة % — مرتّبة الأكبر أولاً</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ح · الأرباح والخسائر: العملاء ناقصو الإدخالات يظهرون رماديين «⏳ غير محتسب» ولا يدخلون الإجماليات؛ فور اكتمال إدخالهم ينعكسون تلقائياً (ربح أو خسارة)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4876,17 +4876,18 @@ function renderPnl(){
     const bd=r.booking_date?String(r.booking_date).slice(0,10):''; if(bd&&(!m[c].bdate||bd>m[c].bdate))m[c].bdate=bd;
     if(String(r.conf_status||'').toLowerCase().includes('cancel'))m[c].status='Cancel';
   }
-  // الربح الفعلي = apm.byClient · التكلفة = البيع − الربح الفعلي · علامة الحجز الناقص
-  let arr=Object.values(m).map(x=>{ const c=x.code.toUpperCase(); const prof=apm.byClient[c]; const profit=(prof!=null?prof:0);
-    return {...x, profit, cost:x.rate-profit, actual:(prof!=null), inc:!!apm.incClient[c]}; });
+  // الربح الفعلي = apm.byClient · ناقص الإدخالات = بلا ربح فعلي أو حجز ناقص أو خدمات غير محجوزة → لا يُحتسب في الإجماليات
+  let arr=Object.values(m).map(x=>{ const c=x.code.toUpperCase(); const prof=apm.byClient[c]; const profit=(prof!=null?prof:0); const inc=!!apm.incClient[c]; const miss=Number(apm.missClient[c]||0);
+    return {...x, profit, cost:x.rate-profit, actual:(prof!=null), inc, miss, incomplete:(prof==null)||inc||(miss>0)}; });
   const q=($('pflt-q').value||'').trim().toLowerCase();
   if(q) arr=arr.filter(x=>x.name.toLowerCase().includes(q)||x.code.toLowerCase().includes(q));
   // 📅 فلتر المدة (تاريخ الحجز)
   const df=(($('pflt-from')||{}).value)||'', dt=(($('pflt-to')||{}).value)||'';
   if(df||dt) arr=arr.filter(x=>{ if(!x.bdate)return false; if(df&&x.bdate<df)return false; if(dt&&x.bdate>dt)return false; return true; });
-  // إجماليات حسب الفلتر: متوقع + فعلي
-  const tc=arr.reduce((s,x)=>s+x.cost,0), ts=arr.reduce((s,x)=>s+x.rate,0), tp=arr.reduce((s,x)=>s+x.profit,0), te=arr.reduce((s,x)=>s+x.exp,0);
-  const losers=arr.filter(x=>x.profit< -1);
+  // إجماليات حسب الفلتر — فقط المكتملة الإدخال (الناقصة لا تُعتمد)
+  const complete=arr.filter(x=>!x.incomplete); const nInc=arr.length-complete.length;
+  const tc=complete.reduce((s,x)=>s+x.cost,0), ts=complete.reduce((s,x)=>s+x.rate,0), tp=complete.reduce((s,x)=>s+x.profit,0), te=complete.reduce((s,x)=>s+x.exp,0);
+  const losers=complete.filter(x=>x.profit< -1);
   const lossTotal=losers.reduce((s,x)=>s+x.profit,0);
   $('pnl-sales').textContent=fmt(ts); $('pnl-cost').textContent=fmt(tc);
   if($('pnl-exp'))$('pnl-exp').textContent=fmt(te); $('pnl-profit').textContent=fmt(tp);
@@ -4899,15 +4900,17 @@ function renderPnl(){
   view.sort((a,b)=> sort==='profit'? b.profit-a.profit : sort==='margin'? ((b.rate?b.profit/b.rate:0)-(a.rate?a.profit/a.rate:0)) : a.profit-b.profit);
   document.querySelector('#t-pnl tbody').innerHTML=view.map(x=>{
     const margin=x.rate?Math.round(x.profit/x.rate*100):0, isLoss=x.profit< -1, pc=isLoss?'neg':'pos';
-    const below=(x.actual && (x.exp - x.profit > 0.5));   // الفعلي أقل من المتوقع → أحمر
-    const cells=[ (isLoss?'🔴 ':'')+esc(x.code)+(x.actual?' <span class="src dashboard" style="font-size:9px">فعلي</span>':'')+(x.inc?' <span style="color:#d11;font-size:9px">⚠ ناقص</span>':''),esc(x.name),esc(x.to),esc(x.agent),esc(x.bdate||''),
-      '<span class="num">'+fmt(x.cost)+'</span>','<span class="num">'+fmt(x.rate)+'</span>',
-      '<span class="num" style="color:#0e7c50">'+fmt(x.exp)+'</span>',
-      '<span class="num '+pc+'"'+(below?' style="background:rgba(209,17,17,.10);font-weight:700;border-radius:4px" title="الفعلي أقل من المتوقع"':'')+'>'+fmt(x.profit)+(below?' 🔻':'')+'</span>',
-      '<span class="num '+pc+'">'+margin+'%</span>',
+    const below=(!x.incomplete && x.actual && (x.exp - x.profit > 0.5));   // الفعلي أقل من المتوقع → أحمر (فقط للمكتملة)
+    const g=x.incomplete;   // ناقص الإدخالات → رمادي وغير محتسب
+    const numG=(v,col)=>'<span class="num" style="color:'+(g?'#9aa':col)+'">'+fmt(v)+'</span>';
+    const cells=[ (g?'⏳ ':(isLoss?'🔴 ':''))+esc(x.code)+(g?' <span style="color:#d98a00;font-size:9px;font-weight:700">⏳ ناقص إدخالات — غير محتسب</span>':(x.actual?' <span class="src dashboard" style="font-size:9px">فعلي</span>':'')),esc(x.name),esc(x.to),esc(x.agent),esc(x.bdate||''),
+      numG(x.cost,'inherit'),numG(x.rate,'inherit'),
+      numG(x.exp,'#0e7c50'),
+      (g?'<span class="num" style="color:#9aa">'+fmt(x.profit)+'</span>':'<span class="num '+pc+'"'+(below?' style="background:rgba(209,17,17,.10);font-weight:700;border-radius:4px" title="الفعلي أقل من المتوقع"':'')+'>'+fmt(x.profit)+(below?' 🔻':'')+'</span>'),
+      '<span class="num'+(g?'':' '+pc)+'" style="'+(g?'color:#9aa':'')+'">'+margin+'%</span>',
       x.status.toLowerCase().includes('cancel')?'<span class="pill cancel">ملغى</span>':'<span class="pill active">نشط</span>'];
-    return '<tr'+(isLoss?' style="background:rgba(255,107,122,.10)"':'')+'>'+cells.map(c=>'<td>'+c+'</td>').join('')+'</tr>';
-  }).join(''); $('pnl-cnt').textContent=view.length+' حجز'+(losers.length?' · 🔴 '+losers.length+' خاسر':'')+((df||dt)?' · 📅 مفلتر':'');
+    return '<tr style="'+(g?'opacity:.7':(isLoss?'background:rgba(255,107,122,.10)':''))+'">'+cells.map(c=>'<td>'+c+'</td>').join('')+'</tr>';
+  }).join(''); $('pnl-cnt').textContent=complete.length+' محتسب'+(nInc?' · ⏳ '+nInc+' ناقص (غير محتسب)':'')+(losers.length?' · 🔴 '+losers.length+' خاسر':'')+((df||dt)?' · 📅 مفلتر':'');
 }
 
 // ---- فورم استدعاء العميل (PAYMENT/REFUND): ملخّص + دفعات + تفصيل الحجز ----
