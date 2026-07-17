@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ك · تقرير المدفوع له أُعيد بناؤه (منطق المالكة): تكلفة الحجوزات (نشطة + رسوم إلغاء) − إجمالي المدفوعات الفعلية = الرصيد لنا/علينا · بلا ازدواج حساب (TBO: علينا 7,549 بدل رصيد وهمي 797 ألف)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ل · تقرير المدفوع له: إجمالي المدفوعات يشمل كل الأنواع (تحويلات + سداد بطاقة/بنك عبر Booking Form) بلا ازدواج (يُضاف سداد البطاقة فقط لعميل بلا تحويل مسجّل) — الفنار مدفوعات 7,507 (شامل بطاقة 707)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -852,6 +852,8 @@ const fmt=n=>Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});
 const esc=s=>(s==null?'':String(s)).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
 // «مباشر من المورّد» = دين مستحق علينا (from supplier). «Direct with the supplier/hotel» = مسدَّد مباشرةً (لا يُعدّ مستحقاً — مثل TBO مسبق الدفع)
 function _directOwed(cf){ return /ditect|from\s*supplier/i.test(String(cf||'')); }
+// 💳 charge_from يمثّل «دفعة فعلية بالبطاقة/البنك» لهذا الحجز (وليس مجرد حالة مثل Direct/Open balance/Rewards أو دين مستحق)
+function _cardBankPaid(cf){ cf=String(cf||''); if(!cf)return false; if(_directOwed(cf))return false; if(/direct\s*with|open\s*balance|reward|not\s*booked/i.test(cf))return false; return /card|بطاقة|bank|بنك|dhofar|rhb|\*\*/i.test(cf); }
 function payMethod(bn){ bn=String(bn||''); if(/credit card|card|بطاقة/i.test(bn)||bn.indexOf('**')>=0)return '💳 بطاقة'; if(/open balance/i.test(bn))return '🟰 رصيد مفتوح'; if(/reward|مكاف/i.test(bn))return '🎁 مكافآت'; if(_directOwed(bn))return '↗️ مباشر من المورّد — غير مدفوع'; if(/direct|مباشر|with\s*the\s*(suppl|hotel)/i.test(bn))return '↗️ مباشر مع المورّد'; if(/not\s*booked/i.test(bn))return '⛔ غير محجوز'; if(/cash|نقد|كاش/i.test(bn))return '💵 نقدي'; return bn?'🏦 تحويل بنكي':''; }
 function bal(v){v=Number(v||0);return '<span class="num '+(v>1?'neg':(v<-1?'pos':''))+'">'+fmt(v)+'</span>';}
 function rw(c){return '<tr>'+c.map(x=>'<td>'+x+'</td>').join('')+'</tr>';}
@@ -2631,8 +2633,19 @@ function hpSummaryHtml(){
     if(/cancel/i.test(String(h.status||''))){ const cc=Number(h.cancel_charge||0); if(cc>0.005){ cost+=cc; cancelFee+=cc; nCancel++; } return; }   // الملغى: رسوم الإلغاء فقط (صفر لو رجع المبلغ كاملاً)
     cost+=Number(h.final_rate_booked||0); nActive++;
   });
+  // إجمالي المدفوعات = كل أنواع الدفع الفعلية للمورّد بلا ازدواج:
+  //   ① تحويلات مسجّلة (hotelPayments + supplierPayments) عبر hpPayments
+  //   ② حجوزات مدفوعة ببطاقة/بنك عبر Booking Form (charge_from) — تُضاف فقط إن لم يكن للعميل تحويل مسجّل (وإلا فهي نفس الفلوس = ازدواج)
   const payArr=hpPayments(HO_PAYEE).filter(x=>!only2026 || yOK(x.date));
-  let paid=0; payArr.forEach(x=>paid+=x.amount); const nPay=payArr.length, nBook=nActive+nCancel;
+  let paid=0; payArr.forEach(x=>paid+=x.amount); let nPay=payArr.length;
+  const paidCodes=new Set(payArr.map(x=>String(x.code||'').toUpperCase()).filter(Boolean));   // عملاء لهم تحويل مسجّل
+  const cfById2={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const v=String(s.charge_from||'').trim(); if(v)cfById2[s.id]=v; });
+  hpHbMatch(HO_PAYEE).forEach(h=>{ if(!h._booking||!h.service_id)return; if(/cancel/i.test(String(h.status||'')))return; if(only2026 && !yOK(h.check_in||h.arrival_date))return;
+    if(!_cardBankPaid(cfById2[h.service_id]))return;               // ليست دفعة بطاقة/بنك فعلية
+    if(paidCodes.has(String(h.client_code||'').toUpperCase()))return;   // له تحويل مسجّل → لا تُزدوَج
+    paid+=Number(h.final_rate_booked||0); nPay++;
+  });
+  const nBook=nActive+nCancel;
   const bal=cost-paid; const advance=(bal< -0.5); const owedToSup=(bal>0.5);   // سالب = دفعة مقدمة (لنا)؛ موجب = مستحق (علينا)
   return '<div class="panel" style="border:1px solid var(--accent);margin-bottom:14px"><h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>🧾 تقرير «'+esc(HO_PAYEE)+'» — '+(only2026?'سنة 2026 فقط':'كل السنوات')+' <span style="font-size:11px;color:var(--muted)">(بعملة المورّد '+esc(cur)+' · أرقام خام بلا تحويل)</span></span><label style="font-size:12px;font-weight:400;cursor:pointer;background:#f6f8fc;border:1px solid var(--line);border-radius:8px;padding:4px 10px" title="خاص بهذا الفندق فقط"><input type="checkbox" '+(only2026?'checked':'')+' onchange="hpToggle2026(this.checked)"> 🗓️ سنة 2026 فقط (لهذا الفندق)</label></h3>'+
     '<div class="kpis" style="grid-template-columns:repeat(5,1fr)">'+
