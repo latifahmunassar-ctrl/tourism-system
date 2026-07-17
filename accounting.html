@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-م · تقرير المدفوع له: رسوم الإلغاء الفعلية = قيمة الحجز − المرتجع (لا حقل cancel_charge غير الموثوق) — TBO تكلفة 817,715 بدل 822,259 (رسوم إلغاء وهمية 4,544 صارت صفر لأنها رُدّت)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ن · تقرير المدفوع له: الحجز الملغى يُحتسب برسوم إلغائه فقط (حجز 2000 رسومه 200 → التكلفة 200 لا 2000). رسوم الإلغاء = (القيمة − المرتجع) إن وُجد مرتجع، وإلا حقل رسوم الإلغاء المُدخَل</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2630,7 +2630,14 @@ function hpSummaryHtml(){
   //   • الرصيد = التكلفة − المدفوعات: موجب = «علينا (مستحق للمورّد)» · سالب = «لنا (دفعة مقدمة)».
   let cost=0,nActive=0,nCancel=0,cancelFee=0;
   hpHbMatch(HO_PAYEE).forEach(h=>{ if(only2026 && !yOK(h.check_in||h.arrival_date))return;
-    if(/cancel/i.test(String(h.status||''))){ nCancel++; const lost=Number(h.final_rate_booked||0)-Number(h.refund||0); if(lost>0.005){ cost+=lost; cancelFee+=lost; } return; }   // الملغى: رسوم الإلغاء الفعلية = قيمة الحجز − المرتجع (صفر لو رُدّ كاملاً). لا نعتمد حقل cancel_charge لأنه أحياناً يُسجَّل = القيمة الكاملة رغم ردّ المبلغ (مثل C26016)
+    if(/cancel/i.test(String(h.status||''))){ nCancel++;   // 🚫 الملغى: تُحتسب رسوم الإلغاء الفعلية فقط (مثال: حجز 2000 رسوم إلغائه 200 → التكلفة 200 لا 2000)
+      const frb=Number(h.final_rate_booked||0), rf=Number(h.refund||0), cc=Number(h.cancel_charge||0);
+      // إن سُجّل مرتجع → رسوم الإلغاء = القيمة − المرتجع (الأدق، ويتجاهل cancel_charge غير الموثوق مثل C26016)؛ وإلا نعتمد حقل رسوم الإلغاء المُدخَل
+      let fee = (rf>0.005) ? (frb-rf) : cc;
+      fee = Math.max(0, Math.min(fee, frb));   // بين صفر وقيمة الحجز
+      if(fee>0.005){ cost+=fee; cancelFee+=fee; }
+      return;
+    }
     cost+=Number(h.final_rate_booked||0); nActive++;
   });
   // إجمالي المدفوعات = كل أنواع الدفع الفعلية للمورّد بلا ازدواج:
