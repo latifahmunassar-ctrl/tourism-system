@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-س · إصلاح: المستحق للفندق يستبعد الحجوزات الملغاة (يحسب رسوم الإلغاء فقط) — فينزل فوراً عند الإلغاء بدل ما يبقى عالياً</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ع · إصلاح: المستحق لكل الفنادق يستبعد الحجوزات الملغاة تماماً (مطابق للكشف) — فينزل فوراً عند الإلغاء ولا يتضخّم برسوم إلغاء وهمية</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2599,19 +2599,18 @@ function hpPayeeClientMap(payee){
     // خريطة charge from لكل حجز داشبورد (بالـ service_id) لتحديد: بانتظار / مستحق / مسدَّد
     const cfById={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const v=String(s.charge_from||'').trim(); if(v)cfById[s.id]=v; });
     for(const h of hb){ const c=(h.client_code||'').toUpperCase(); if(!c)continue;
-      const isCanc=/cancel/i.test(String(h.status||''));
-      const val=isCanc?Number(h.cancel_charge||0):Number(h.final_rate_booked||0);   // 🚫 الملغى → المستحق = رسوم الإلغاء فقط (صفر لو بلا رسوم)
+      if(/cancel/i.test(String(h.status||''))) continue;   // 🚫 الحجز الملغى مستبعَد تماماً من المستحق (كما في كشف الحساب)
+      const val=Number(h.final_rate_booked||0);
       const cf=(h._booking&&h.service_id)?(cfById[h.service_id]||''):'';
       // حجز داشبورد بلا charge from = «بانتظار تحديد الدفع» → لا أثر إطلاقاً (لا مستحق ولا مدفوع)
-      if(h._booking && h.service_id && !cf && !isCanc) continue;
-      if(isCanc && !(val>0)) continue;   // ملغى بلا رسوم إلغاء → لا يُحتسب في المستحق
+      if(h._booking && h.service_id && !cf) continue;
       const sc=h.currency||fcdCur[c]||'SAR'; if(!cli[c])cli[c]={code:c,name:h.client_name||nm[c]||'',agent:h.agent_name||ag[c]||'',owed:0,paid:0,n:0,cur:cur,srcCur:sc};
       cli[c].owed+=val; cli[c].n++;
-      // «from supplier» = مستحق (غير مدفوع)؛ غير ذلك (مع المورّد/بنك) = مسدَّد؛ رسوم الإلغاء = مستحقة (غير مدفوعة)
-      if(!isCanc && !(h._booking && _directOwed(cf))) cli[c].paid+=val;
+      // «from supplier» = مستحق (غير مدفوع)؛ غير ذلك (مع المورّد/بنك) = مسدَّد
+      if(!(h._booking && _directOwed(cf))) cli[c].paid+=val;
     }
   } else {
-    for(const s of (DATA.serviceLines||[])){ if(s.kind!=='hotel')continue; if(!hpMatch(s,payee))continue; const c=(s.client_code||'').toUpperCase(); if(!c)continue; const isCanc=/cancel/i.test(String(s.status||'')); const val=isCanc?Number(s.cancel_charge||0):Number(s.final_rate_booked||0); if(isCanc && !(val>0))continue; const sc=fcdCur[c]||'SAR'; if(!cli[c])cli[c]={code:c,name:nm[c]||'',agent:ag[c]||'',owed:0,paid:0,n:0,cur:cur,srcCur:sc}; cli[c].owed+=val; cli[c].n++; }
+    for(const s of (DATA.serviceLines||[])){ if(s.kind!=='hotel')continue; if(!hpMatch(s,payee))continue; if(/cancel/i.test(String(s.status||'')))continue; const c=(s.client_code||'').toUpperCase(); if(!c)continue; const sc=fcdCur[c]||'SAR'; if(!cli[c])cli[c]={code:c,name:nm[c]||'',agent:ag[c]||'',owed:0,paid:0,n:0,cur:cur,srcCur:sc}; cli[c].owed+=Number(s.final_rate_booked||0); cli[c].n++; }
     const paid=hpPaidMap(payee); Object.keys(paid).forEach(c=>{ if(!cli[c])cli[c]={code:c,name:nm[c]||'',agent:ag[c]||'',owed:0,paid:0,n:0,cur:cur,srcCur:fcdCur[c]||'SAR'}; cli[c].paid=(cli[c].paid||0)+paid[c]; });
   }
   Object.values(cli).forEach(o=>{ o.remain=o.owed-o.paid; });
