@@ -748,7 +748,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div id="waBridgeEtaMsg" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
 </div>
 
-<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:10px"><input type="checkbox" id="waBridgePdf"> 📄 إرسال كملف PDF (بدون سعر ولا شعار) — يحتاج برنامج مبني</label>
+<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:10px"><input type="checkbox" id="waBridgePdf" onchange="waBridgePdfToggle()"> 📄 إرسال كملف PDF (بدون سعر ولا شعار) — يحتاج برنامج مبني</label>
 <button class="rfm-btn-primary" style="background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;width:100%" onclick="waBridgeSend()">📤 إرسال (<span id="waBridgeSendCount">0</span>)</button>
 <div id="waBridgeMsg" style="font-size:12px;text-align:center;margin-top:8px;min-height:16px"></div>
 <div id="waBridgeOutbox" style="margin-top:10px"></div>
@@ -3166,6 +3166,24 @@ function waBridgeAccountChange() {
   waBridgeLoadGroups();
 }
 
+function waBridgePdfToggle() {
+  const on = document.getElementById('waBridgePdf').checked;
+  const ta = document.getElementById('waBridgeBody');
+  if (on) {
+    const sar = (typeof currentFinalGroup === 'function') ? (currentFinalGroup() || 0) : 0;
+    let cap;
+    if (typeof currencyConversion !== 'undefined' && currencyConversion && currencyConversion.name && currencyConversion.rate) {
+      cap = '💰 السعر: ' + Math.round(sar / currencyConversion.rate).toLocaleString() + ' ' + currencyConversion.name + ' للمجموعة';
+    } else {
+      cap = '💰 السعر: ' + Number(sar).toLocaleString() + ' ريال للمجموعة';
+    }
+    ta.value = cap;
+    ta.placeholder = 'النص المرفق مع الـPDF (قابل للتعديل)';
+  } else {
+    waBridgeMode(waBridgeCurMode);
+  }
+}
+
 async function waBridgeSend() {
   const body = (document.getElementById('waBridgeBody').value || '').trim();
   const msg = document.getElementById('waBridgeMsg');
@@ -3197,12 +3215,7 @@ async function waBridgeSend() {
       const up = await waBridgeCall('upload-pdf', { pdf_base64: b64 });
       if (!up || !up.url) throw new Error((up && up.error) || 'فشل رفع الـPDF');
       sendBody = up.url; sendSource = 'pdf';
-      const _sar = (typeof currentFinalGroup === 'function') ? (currentFinalGroup() || 0) : 0;
-      if (typeof currencyConversion !== 'undefined' && currencyConversion && currencyConversion.name && currencyConversion.rate) {
-        pdfCaption = '💰 السعر: ' + Math.round(_sar / currencyConversion.rate).toLocaleString() + ' ' + currencyConversion.name + ' للمجموعة';
-      } else {
-        pdfCaption = '💰 السعر: ' + Number(_sar).toLocaleString() + ' ريال للمجموعة';
-      }
+      pdfCaption = body;   // editable caption typed in the textarea
     } catch (e) { msg.textContent = '❌ تعذّر تجهيز الـPDF: ' + (e.message || e); msg.style.color = '#ef4444'; return; }
   }
   const payload = { targets, body: sendBody, kind: waBridgeCurMode, source: sendSource, created_by: createdBy, account: waBridgeAccount, caption: pdfCaption };
