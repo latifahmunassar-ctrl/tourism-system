@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-د · الأرباح والخسائر: عمود الربح المتوقع + الربح الفعلي + فلتر مدة (تاريخ الحجز) + ملخّص أعلى (متوقع/فعلي) يتحدّث حسب الفلتر</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-هـ · الأرباح والخسائر: تصدير PDF (هوية العز + ملخّص متوقع/فعلي) و Excel — يحترمان الفلتر الحالي (المدة/البحث)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -531,6 +531,8 @@ table{font-weight:600}
           <option value="profit">ترتيب: الأعلى ربحاً</option>
           <option value="margin">ترتيب: الهامش %</option>
         </select>
+        <button class="btn" style="background:#c41d88;padding:6px 14px" onclick="exportPnlPDF()">🖨️ PDF</button>
+        <button class="btn" style="background:#0e7c50;padding:6px 14px" onclick="exportKashfExcel('#t-pnl','تقرير الأرباح والخسائر')">📊 Excel</button>
       </div>
       <div class="panel"><h3>الربح / الخسارة لكل حجز <span class="cnt" id="pnl-cnt"></span></h3>
         <div class="tbl-wrap"><table id="t-pnl"><thead><tr>
@@ -4602,6 +4604,37 @@ function exportStaffPDF(){
     '<div class="ft"><span>شركة العز · ALEZZ Group</span><span>تم الإصدار آلياً من داشبورد الحسابات · '+esc(today)+'</span></div>'+
     '<script>window.onload=function(){setTimeout(function(){window.print();},350);};<\/script>'+
     '</body></html>';
+  const w=window.open('','_blank'); if(!w){ alert('فعّلي النوافذ المنبثقة للطباعة'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+// 🖨️ تصدير تقرير الأرباح والخسائر PDF (بهوية العز) — يحترم الفلتر الحالي + ملخّص متوقع/فعلي
+function exportPnlPDF(){
+  const today=new Date().toISOString().slice(0,10);
+  const df=(($('pflt-from')||{}).value)||'', dt=(($('pflt-to')||{}).value)||'';
+  const tbl=document.getElementById('t-pnl'); if(!tbl){ alert('لا يوجد تقرير'); return; }
+  const head=[...tbl.querySelectorAll('thead th')].map(x=>x.innerText.replace(/\s+/g,' ').trim());
+  const rows=[]; tbl.querySelectorAll('tbody tr').forEach(tr=>{ const tds=tr.querySelectorAll('td'); if(!tds.length)return; rows.push([...tds].map(td=>td.innerText.replace(/\s+/g,' ').trim())); });
+  const _pN=s=>{ const n=parseFloat(String(s).replace(/[^\d.\-]/g,'')); return isNaN(n)?null:n; };
+  // عمود ٧=المتوقع · ٨=الفعلي → لوّن ٨ أحمر لو أقل
+  const tblHtml='<table><thead><tr>'+head.map((x,i)=>'<th'+(i===8?' style="background:#0e7a5a"':(i===7?' style="background:#c41d88"':''))+'>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+
+    (rows.length?rows.map(r=>{ const _e=_pN(r[7]),_a=_pN(r[8]); const below=(_e!=null&&_a!=null&&_e-_a>0.5); return '<tr>'+r.map((c,i)=>{ const _c=esc(String(c).replace(/🔻/g,'').trim()); if(i===8&&below) return '<td style="background:#fde3e3;color:#c40000;font-weight:800">'+_c+' 🔻</td>'; return '<td>'+_c+'</td>'; }).join('')+'</tr>'; }).join(''):'<tr><td colspan="'+head.length+'" style="text-align:center;color:#999">لا بيانات</td></tr>')+'</tbody></table>';
+  const kpi=(t,v,c)=>'<span style="border:1px solid #dcede6;border-radius:8px;padding:6px 12px;background:#f6faf8">'+t+': <b style="color:'+c+'">'+v+'</b></span>';
+  const html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>الأرباح والخسائر</title><style>'+
+    '@page{size:A4 landscape;margin:9mm}*{box-sizing:border-box}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#111;margin:0;font-size:12px;font-weight:600;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+    '.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #0e9d6a;padding-bottom:8px;margin-bottom:10px}'+
+    '.logo{font-size:25px;font-weight:900;letter-spacing:3px;color:#0e9d6a}.logo span{color:#D4A843}.logo .sub{font-size:11px;font-weight:600;color:#6b7c7a;letter-spacing:0}'+
+    '.ttl{text-align:left;font-size:15px;font-weight:800;color:#c41d88}.ttl small{display:block;font-size:11px;color:#6b7c7a;font-weight:400}'+
+    '.kpis{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0;font-size:12px}'+
+    'table{width:100%;border-collapse:collapse;margin-top:6px}th,td{border:1px solid #bbb;padding:3px 5px;text-align:center;font-size:10px;font-weight:600}th{background:#0e9d6a;color:#fff;font-size:9.5px;font-weight:800}tbody tr:nth-child(even){background:#f6faf8}'+
+    '.ft{margin-top:10px;border-top:1px solid #dcede6;padding-top:6px;font-size:10px;color:#6b7c7a;display:flex;justify-content:space-between}'+
+    '</style></head><body>'+
+    '<div class="hd"><div class="logo">AL<span>E</span>ZZ<div class="sub">شركة العز للسياحة والسفر</div></div>'+
+      '<div class="ttl">تقرير الأرباح والخسائر<small>تاريخ الإصدار: '+esc(today)+((df||dt)?(' · المدة: '+esc(df||'…')+' → '+esc(dt||'…')):' · كل المدد')+'</small></div></div>'+
+    '<div class="kpis">'+kpi('💵 المبيعات',($('pnl-sales').textContent),'#0e9d6a')+kpi('📦 التكلفة',($('pnl-cost').textContent),'#111')+kpi('🎯 الربح المتوقع',($('pnl-exp').textContent),'#c41d88')+kpi('💰 الربح الفعلي',($('pnl-profit').textContent),'#0e7c50')+kpi('📈 الهامش',($('pnl-margin').textContent),'#111')+'</div>'+
+    '<div style="font-size:11px;color:#6b7c7a;margin-bottom:4px">عدد الحجوزات: <b>'+rows.length+'</b> · 🔻 = الربح الفعلي أقل من المتوقع</div>'+
+    tblHtml+
+    '<div class="ft"><span>شركة العز · ALEZZ Group</span><span>تم الإصدار آلياً · '+esc(today)+'</span></div>'+
+    '<script>window.onload=function(){setTimeout(function(){window.print();},350);};<\/script></body></html>';
   const w=window.open('','_blank'); if(!w){ alert('فعّلي النوافذ المنبثقة للطباعة'); return; }
   w.document.open(); w.document.write(html); w.document.close();
 }
