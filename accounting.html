@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ق · تقرير المدفوع له: المستحق = غير المدفوع فقط · الرصيد السالب يظهر «🟢 دفعة مقدمة (رصيد لنا)» بدل رقم سالب — الفنار: مستحق 544 + دفعة مقدمة 6,256</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ك · تقرير المدفوع له أُعيد بناؤه (منطق المالكة): تكلفة الحجوزات (نشطة + رسوم إلغاء) − إجمالي المدفوعات الفعلية = الرصيد لنا/علينا · بلا ازدواج حساب (TBO: علينا 7,549 بدل رصيد وهمي 797 ألف)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2621,42 +2621,32 @@ function hpRepCard(t,v,col){ return '<div class="kpi"><div class="ttl">'+t+'</di
 function hpSummaryHtml(){
   const cur=HO_TCUR;
   const only2026=hpOnly2026();
-  let owed=0,grossOwed=0,nBook=0,paid=0,nPay=0;
-  // 📏 قاعدة المالكة للمستحق: «المستحق» = ما لم يُدفع بعد للفندق فقط.
-  //   • الحجز المدفوع (ببطاقة/بنك) = صفر مستحق (تم الدفع خلاص).  • «مباشر من المورّد» = مستحق (لم يُدفع).
-  //   • الحجز الملغى = المستحق فيه = رسوم الإلغاء فقط (صفر لو رجع المبلغ كاملاً)، وليس قيمة الحجز.
-  if(only2026){
-    // 🗓️ نافذة «2026 فقط» (لهذا الفندق): حجوزات/دفعات 2026 + سداد charge from (بطاقة/بنك عبر Booking Form)
-    const yOK=(d)=>{ const m=String(d||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); };
-    const cfById={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const v=String(s.charge_from||'').trim(); if(v)cfById[s.id]=v; });   // charge from الخام لكل حجز داشبورد
-    let paidCharge=0;
-    hpHbMatch(HO_PAYEE).forEach(h=>{ if(!yOK(h.check_in||h.arrival_date))return;
-      const cf=(h._booking&&h.service_id)?(cfById[h.service_id]||''):'';
-      if(/cancel/i.test(String(h.status||''))){ const cc=Number(h.cancel_charge||0); if(cc>0.005){ owed+=cc; grossOwed+=cc; nBook++; } return; }   // 🚫 الملغى: المستحق = رسوم الإلغاء فقط (صفر لو رجع كامل)
-      if(h._booking && h.service_id && !cf)return;   // حجز داشبورد بلا charge from = «بانتظار تحديد الدفع» → لا أثر
-      const d=Number(h.final_rate_booked||0); grossOwed+=d; nBook++;
-      if(h._booking && _directOwed(cf)) owed+=d;   // «مباشر من المورّد» = مستحق غير مسدَّد
-      else paidCharge+=d;   // مسدَّد بالبطاقة/البنك → تم الدفع، لا يُحتسب مستحقاً
-    });
-    const payArr=hpPayments(HO_PAYEE).filter(x=>yOK(x.date)); paid=paidCharge; payArr.forEach(x=>paid+=x.amount); nPay=payArr.length;
-  } else {
-    // 📊 كل السنوات — الرصيد المتراكم (hpPayeeClientMap): المستحق = المتبقّي غير المسدَّد لكل عميل
-    const allCli=hpPayeeClientMap(HO_PAYEE); Object.values(allCli).forEach(o=>{ owed+=o.remain; grossOwed+=o.owed; paid+=o.paid; nBook+=o.n; });
-    const payArr=hpPayments(HO_PAYEE); payArr.forEach(x=>paid+=x.amount); nPay=payArr.length;
-  }
-  const bal=grossOwed-paid; const settled=(nBook>0 && bal<=0.5); const advance=(bal< -0.5);   // رصيد سالب = دفعة مقدمة/رصيد لصالحنا لدى الفندق
-  return '<div class="panel" style="border:1px solid var(--accent);margin-bottom:14px"><h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>🧾 تقرير «'+esc(HO_PAYEE)+'» — '+(only2026?'سنة 2026 فقط':'كل السنوات (الرصيد المتراكم)')+' <span style="font-size:11px;color:var(--muted)">(بعملة المورّد '+esc(cur)+' · يشمل سداد البطاقة charge from)</span></span><label style="font-size:12px;font-weight:400;cursor:pointer;background:#f6f8fc;border:1px solid var(--line);border-radius:8px;padding:4px 10px" title="خاص بهذا الفندق فقط"><input type="checkbox" '+(only2026?'checked':'')+' onchange="hpToggle2026(this.checked)"> 🗓️ سنة 2026 فقط (لهذا الفندق)</label></h3>'+
+  const yOK=(d)=>{ const m=String(d||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); };
+  // 📏 منطق المالكة (17 يوليو 2026) — تقرير مبسّط بلا ازدواج حساب:
+  //   • تكلفة الحجوزات = الحجوزات النشطة المؤكدة + رسوم الإلغاء (للملغى فقط) — القيمة الكاملة للملغى مُستبعَدة.
+  //   • إجمالي المدفوعات = سجلّ الدفعات الفعلية للمورّد فقط (المال الحقيقي) — لا يُضاف سداد charge from (يمنع ازدواج الحساب).
+  //   • الرصيد = التكلفة − المدفوعات: موجب = «علينا (مستحق للمورّد)» · سالب = «لنا (دفعة مقدمة)».
+  let cost=0,nActive=0,nCancel=0,cancelFee=0;
+  hpHbMatch(HO_PAYEE).forEach(h=>{ if(only2026 && !yOK(h.check_in||h.arrival_date))return;
+    if(/cancel/i.test(String(h.status||''))){ const cc=Number(h.cancel_charge||0); if(cc>0.005){ cost+=cc; cancelFee+=cc; nCancel++; } return; }   // الملغى: رسوم الإلغاء فقط (صفر لو رجع المبلغ كاملاً)
+    cost+=Number(h.final_rate_booked||0); nActive++;
+  });
+  const payArr=hpPayments(HO_PAYEE).filter(x=>!only2026 || yOK(x.date));
+  let paid=0; payArr.forEach(x=>paid+=x.amount); const nPay=payArr.length, nBook=nActive+nCancel;
+  const bal=cost-paid; const advance=(bal< -0.5); const owedToSup=(bal>0.5);   // سالب = دفعة مقدمة (لنا)؛ موجب = مستحق (علينا)
+  return '<div class="panel" style="border:1px solid var(--accent);margin-bottom:14px"><h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>🧾 تقرير «'+esc(HO_PAYEE)+'» — '+(only2026?'سنة 2026 فقط':'كل السنوات')+' <span style="font-size:11px;color:var(--muted)">(بعملة المورّد '+esc(cur)+' · أرقام خام بلا تحويل)</span></span><label style="font-size:12px;font-weight:400;cursor:pointer;background:#f6f8fc;border:1px solid var(--line);border-radius:8px;padding:4px 10px" title="خاص بهذا الفندق فقط"><input type="checkbox" '+(only2026?'checked':'')+' onchange="hpToggle2026(this.checked)"> 🗓️ سنة 2026 فقط (لهذا الفندق)</label></h3>'+
     '<div class="kpis" style="grid-template-columns:repeat(5,1fr)">'+
-      hpRepCard('💰 المستحق <span style="font-size:9px;color:var(--muted)">(غير المدفوع)</span>',fmt(owed)+' '+esc(cur),'var(--txt)')+
-      hpRepCard('✅ إجمالي المدفوع',fmt(paid)+' '+esc(cur),'#0e9d6a')+
+      hpRepCard('🧾 تكلفة الحجوزات <span style="font-size:9px;color:var(--muted)">(نشطة + رسوم إلغاء)</span>',fmt(cost)+' '+esc(cur),'var(--txt)')+
+      hpRepCard('✅ إجمالي المدفوعات',fmt(paid)+' '+esc(cur),'#0e9d6a')+
       (advance
-        ? hpRepCard('🟢 دفعة مقدمة <span style="font-size:9px;color:var(--muted)">(رصيد لنا لدى الفندق)</span>',fmt(-bal)+' '+esc(cur),'#0e9d6a')
-        : hpRepCard('📌 المتبقّي للدفع',fmt(bal)+' '+esc(cur),'#b8860b'))+
-      hpRepCard('🏨 عدد الحجوزات',fmt(nBook),'var(--txt)')+
-      hpRepCard('🔁 عدد العمليات',fmt(nPay),'var(--accent)')+
+        ? hpRepCard('🟢 الرصيد لنا <span style="font-size:9px;color:var(--muted)">(دفعة مقدمة)</span>',fmt(-bal)+' '+esc(cur),'#0e9d6a')
+        : (owedToSup
+          ? hpRepCard('🔴 الرصيد علينا <span style="font-size:9px;color:var(--muted)">(مستحق للمورّد)</span>',fmt(bal)+' '+esc(cur),'#d11')
+          : hpRepCard('⚖️ الرصيد <span style="font-size:9px;color:var(--muted)">(مُسوّى)</span>',fmt(0)+' '+esc(cur),'#0e9d6a')))+
+      hpRepCard('🏨 عدد الحجوزات'+(nCancel?' <span style="font-size:9px;color:var(--muted)">(+'+nCancel+' ملغي)</span>':''),fmt(nBook),'var(--txt)')+
+      hpRepCard('🔁 عدد الدفعات',fmt(nPay),'var(--accent)')+
     '</div>'+
-    '<div style="font-size:11.5px;color:var(--muted);margin-top:8px;padding:6px 10px;background:rgba(14,157,106,.08);border-radius:8px">✅ القيم أصلاً بعملة المورّد (<b>'+esc(cur)+'</b>): «السعر المحجوز» و«المدفوع» مسجّلان بعملة المورّد في الشيت (الدفعات بعملات مختلفة حُوِّلت لـ'+esc(cur)+' بسعر الصرف داخل الشيت). فالرصيد رقم نهائي بـ'+esc(cur)+' بلا تحويل إضافي.</div>'+
-    (settled?'<div style="font-size:11.5px;margin-top:6px;padding:6px 10px;background:rgba(14,157,106,.08);border-radius:8px">📌 <b>كل الحجوزات المُدخلة سابقاً مدفوعة</b> عبر التحويلات البنكية للمورّد (المدفوع = '+fmt(paid)+' '+esc(cur)+'). الرصيد <b>'+fmt(bal)+' '+esc(cur)+'</b> '+(bal<-0.5?'= رصيد دائن لنا لدى المورّد (Open balance، دفعنا زيادة)':(bal>0.5?'= متبقّي للمورّد':'= مُسوّى بالكامل'))+'.</div>':'')+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:8px;padding:6px 10px;background:rgba(14,157,106,.08);border-radius:8px">🧮 <b>الرصيد = تكلفة الحجوزات − إجمالي المدفوعات</b> = '+fmt(cost)+' − '+fmt(paid)+' = '+(advance?('<b style="color:#0e9d6a">'+fmt(-bal)+' '+esc(cur)+' لنا (دفعة مقدمة لدى المورّد)</b>'):(owedToSup?('<b style="color:#d11">'+fmt(bal)+' '+esc(cur)+' علينا (مستحق للمورّد)</b>'):'<b>مُسوّى بالكامل</b>'))+'. القيم خام بعملة المورّد ('+esc(cur)+') بلا أي تحويل. الحجوزات الملغاة تُحتسب برسوم إلغائها فقط'+(cancelFee>0.5?(' (رسوم الإلغاء المضافة: '+fmt(cancelFee)+' '+esc(cur)+')'):' (لا رسوم إلغاء)')+'.</div>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px;border-top:1px solid var(--line);padding-top:10px">'+
       '<div class="fld"><label>📅 من تاريخ</label><input type="date" id="hp-rep-from" onchange="hpReport()" style="color-scheme:light;cursor:pointer"></div>'+
       '<div class="fld"><label>📅 إلى تاريخ</label><input type="date" id="hp-rep-to" onchange="hpReport()" style="color-scheme:light;cursor:pointer"></div>'+
