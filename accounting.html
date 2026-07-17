@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ل · تقرير المدفوع له: إجمالي المدفوعات يشمل كل الأنواع (تحويلات + سداد بطاقة/بنك عبر Booking Form) بلا ازدواج (يُضاف سداد البطاقة فقط لعميل بلا تحويل مسجّل) — الفنار مدفوعات 7,507 (شامل بطاقة 707)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-م · تقرير المدفوع له: رسوم الإلغاء الفعلية = قيمة الحجز − المرتجع (لا حقل cancel_charge غير الموثوق) — TBO تكلفة 817,715 بدل 822,259 (رسوم إلغاء وهمية 4,544 صارت صفر لأنها رُدّت)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2630,7 +2630,7 @@ function hpSummaryHtml(){
   //   • الرصيد = التكلفة − المدفوعات: موجب = «علينا (مستحق للمورّد)» · سالب = «لنا (دفعة مقدمة)».
   let cost=0,nActive=0,nCancel=0,cancelFee=0;
   hpHbMatch(HO_PAYEE).forEach(h=>{ if(only2026 && !yOK(h.check_in||h.arrival_date))return;
-    if(/cancel/i.test(String(h.status||''))){ const cc=Number(h.cancel_charge||0); if(cc>0.005){ cost+=cc; cancelFee+=cc; nCancel++; } return; }   // الملغى: رسوم الإلغاء فقط (صفر لو رجع المبلغ كاملاً)
+    if(/cancel/i.test(String(h.status||''))){ nCancel++; const lost=Number(h.final_rate_booked||0)-Number(h.refund||0); if(lost>0.005){ cost+=lost; cancelFee+=lost; } return; }   // الملغى: رسوم الإلغاء الفعلية = قيمة الحجز − المرتجع (صفر لو رُدّ كاملاً). لا نعتمد حقل cancel_charge لأنه أحياناً يُسجَّل = القيمة الكاملة رغم ردّ المبلغ (مثل C26016)
     cost+=Number(h.final_rate_booked||0); nActive++;
   });
   // إجمالي المدفوعات = كل أنواع الدفع الفعلية للمورّد بلا ازدواج:
@@ -2659,7 +2659,7 @@ function hpSummaryHtml(){
       hpRepCard('🏨 عدد الحجوزات'+(nCancel?' <span style="font-size:9px;color:var(--muted)">(+'+nCancel+' ملغي)</span>':''),fmt(nBook),'var(--txt)')+
       hpRepCard('🔁 عدد الدفعات',fmt(nPay),'var(--accent)')+
     '</div>'+
-    '<div style="font-size:11.5px;color:var(--muted);margin-top:8px;padding:6px 10px;background:rgba(14,157,106,.08);border-radius:8px">🧮 <b>الرصيد = تكلفة الحجوزات − إجمالي المدفوعات</b> = '+fmt(cost)+' − '+fmt(paid)+' = '+(advance?('<b style="color:#0e9d6a">'+fmt(-bal)+' '+esc(cur)+' لنا (دفعة مقدمة لدى المورّد)</b>'):(owedToSup?('<b style="color:#d11">'+fmt(bal)+' '+esc(cur)+' علينا (مستحق للمورّد)</b>'):'<b>مُسوّى بالكامل</b>'))+'. القيم خام بعملة المورّد ('+esc(cur)+') بلا أي تحويل. الحجوزات الملغاة تُحتسب برسوم إلغائها فقط'+(cancelFee>0.5?(' (رسوم الإلغاء المضافة: '+fmt(cancelFee)+' '+esc(cur)+')'):' (لا رسوم إلغاء)')+'.</div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:8px;padding:6px 10px;background:rgba(14,157,106,.08);border-radius:8px">🧮 <b>الرصيد = تكلفة الحجوزات − إجمالي المدفوعات</b> = '+fmt(cost)+' − '+fmt(paid)+' = '+(advance?('<b style="color:#0e9d6a">'+fmt(-bal)+' '+esc(cur)+' لنا (دفعة مقدمة لدى المورّد)</b>'):(owedToSup?('<b style="color:#d11">'+fmt(bal)+' '+esc(cur)+' علينا (مستحق للمورّد)</b>'):'<b>مُسوّى بالكامل</b>'))+'. القيم خام بعملة المورّد ('+esc(cur)+') بلا أي تحويل. الحجوزات الملغاة تُحتسب برسوم إلغائها الفعلية فقط (قيمة الحجز − المرتجع)'+(cancelFee>0.5?(' = '+fmt(cancelFee)+' '+esc(cur)):' = صفر (رُدّت بالكامل)')+'.</div>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px;border-top:1px solid var(--line);padding-top:10px">'+
       '<div class="fld"><label>📅 من تاريخ</label><input type="date" id="hp-rep-from" onchange="hpReport()" style="color-scheme:light;cursor:pointer"></div>'+
       '<div class="fld"><label>📅 إلى تاريخ</label><input type="date" id="hp-rep-to" onchange="hpReport()" style="color-scheme:light;cursor:pointer"></div>'+
