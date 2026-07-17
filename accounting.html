@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ج · Sales Form معكوس دائماً (جديد + تعديل): سعر المورّد يُكتب دائماً، وسعر البيع مقفول ويُحسب تلقائياً — لا يُعدَّل يدوياً أبداً</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-د · الأرباح والخسائر: عمود الربح المتوقع + الربح الفعلي + فلتر مدة (تاريخ الحجز) + ملخّص أعلى (متوقع/فعلي) يتحدّث حسب الفلتر</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -508,15 +508,19 @@ table{font-weight:600}
 
     <!-- الأرباح والخسائر -->
     <div class="page" id="p-pnl">
-      <div class="kpis" style="grid-template-columns:repeat(5,1fr)">
+      <div class="kpis" style="grid-template-columns:repeat(6,1fr)">
         <div class="kpi k2"><div class="ttl">💵 سعر البيع الكلي</div><div class="val" id="pnl-sales">—</div></div>
         <div class="kpi k4"><div class="ttl">📦 التكلفة الكلية</div><div class="val" id="pnl-cost">—</div></div>
-        <div class="kpi k1"><div class="ttl">💰 صافي الربح</div><div class="val" id="pnl-profit">—</div></div>
+        <div class="kpi k3"><div class="ttl">🎯 الربح المتوقع<br><span style="font-size:8px;font-weight:400">First Client Data</span></div><div class="val" id="pnl-exp">—</div></div>
+        <div class="kpi k1"><div class="ttl">💰 الربح الفعلي<br><span style="font-size:8px;font-weight:400">Booking Form</span></div><div class="val" id="pnl-profit">—</div></div>
         <div class="kpi k5"><div class="ttl">🔴 حجوزات خاسرة</div><div class="val" id="pnl-losses">—</div></div>
         <div class="kpi k3"><div class="ttl">📈 متوسط الهامش</div><div class="val" id="pnl-margin">—</div></div>
       </div>
       <div class="formbar">
-        <input id="pflt-q" class="flt" placeholder="🔍 العميل أو الكود" oninput="renderPnl()" style="min-width:180px">
+        <input id="pflt-q" class="flt" placeholder="🔍 العميل أو الكود" oninput="renderPnl()" style="min-width:170px">
+        <div class="fld" style="margin:0"><label style="font-size:10px">📅 من (تاريخ الحجز)</label><input type="date" id="pflt-from" class="flt" onchange="renderPnl()" style="color-scheme:light"></div>
+        <div class="fld" style="margin:0"><label style="font-size:10px">📅 إلى</label><input type="date" id="pflt-to" class="flt" onchange="renderPnl()" style="color-scheme:light"></div>
+        <button class="btn ghost" style="padding:6px 12px" onclick="$('pflt-from').value='';$('pflt-to').value='';renderPnl()">مسح المدة</button>
         <select id="pflt-show" class="flt" onchange="renderPnl()">
           <option value="all">عرض: الكل</option>
           <option value="loss">🔴 الخاسرة فقط</option>
@@ -530,7 +534,7 @@ table{font-weight:600}
       </div>
       <div class="panel"><h3>الربح / الخسارة لكل حجز <span class="cnt" id="pnl-cnt"></span></h3>
         <div class="tbl-wrap"><table id="t-pnl"><thead><tr>
-          <th>كود العميل</th><th>العميل</th><th>الوجهة</th><th>الوكالة</th><th>التكلفة</th><th>سعر البيع</th><th>الربح/الخسارة</th><th>الهامش %</th><th>الحالة</th>
+          <th>كود العميل</th><th>العميل</th><th>الوجهة</th><th>الوكالة</th><th>تاريخ الحجز</th><th>التكلفة</th><th>سعر البيع</th><th>🎯 الربح المتوقع<br><span style="font-size:8px;color:var(--muted)">FCD</span></th><th>💰 الربح الفعلي<br><span style="font-size:8px;color:var(--muted)">Booking</span></th><th>الهامش %</th><th>الحالة</th>
         </tr></thead><tbody></tbody></table></div>
       </div>
     </div>
@@ -4812,23 +4816,29 @@ function renderPnl(){
   const apm=actualProfitMaps();
   const m={};
   for(const r of DATA.fcd){ const c=(r.client_code||'').toUpperCase(); if(!c)continue;
-    if(!m[c]) m[c]={code:r.client_code,name:'',to:'',agent:'',rate:0,status:'Active'};
+    if(!m[c]) m[c]={code:r.client_code,name:'',to:'',agent:'',rate:0,exp:0,status:'Active',bdate:''};
     m[c].rate+=Number(r.package_rate||0);
+    m[c].exp+=Number(r.profit||0);   // 🎯 الربح المتوقع من First Client Data
     if(r.client_name&&!m[c].name)m[c].name=r.client_name;
     if(r.travel_to&&!m[c].to)m[c].to=r.travel_to;
     if(r.agent_name&&!m[c].agent)m[c].agent=r.agent_name;
+    const bd=r.booking_date?String(r.booking_date).slice(0,10):''; if(bd&&(!m[c].bdate||bd>m[c].bdate))m[c].bdate=bd;
     if(String(r.conf_status||'').toLowerCase().includes('cancel'))m[c].status='Cancel';
   }
-  // الربح الفعلي = apm.byClient · التكلفة = البيع − الربح · علامة الحجز الناقص
+  // الربح الفعلي = apm.byClient · التكلفة = البيع − الربح الفعلي · علامة الحجز الناقص
   let arr=Object.values(m).map(x=>{ const c=x.code.toUpperCase(); const prof=apm.byClient[c]; const profit=(prof!=null?prof:0);
     return {...x, profit, cost:x.rate-profit, actual:(prof!=null), inc:!!apm.incClient[c]}; });
   const q=($('pflt-q').value||'').trim().toLowerCase();
   if(q) arr=arr.filter(x=>x.name.toLowerCase().includes(q)||x.code.toLowerCase().includes(q));
-  // إجماليات (على الكل) + الخاسرة
-  const tc=arr.reduce((s,x)=>s+x.cost,0), ts=arr.reduce((s,x)=>s+x.rate,0), tp=arr.reduce((s,x)=>s+x.profit,0);
+  // 📅 فلتر المدة (تاريخ الحجز)
+  const df=(($('pflt-from')||{}).value)||'', dt=(($('pflt-to')||{}).value)||'';
+  if(df||dt) arr=arr.filter(x=>{ if(!x.bdate)return false; if(df&&x.bdate<df)return false; if(dt&&x.bdate>dt)return false; return true; });
+  // إجماليات حسب الفلتر: متوقع + فعلي
+  const tc=arr.reduce((s,x)=>s+x.cost,0), ts=arr.reduce((s,x)=>s+x.rate,0), tp=arr.reduce((s,x)=>s+x.profit,0), te=arr.reduce((s,x)=>s+x.exp,0);
   const losers=arr.filter(x=>x.profit< -1);
   const lossTotal=losers.reduce((s,x)=>s+x.profit,0);
-  $('pnl-sales').textContent=fmt(ts); $('pnl-cost').textContent=fmt(tc); $('pnl-profit').textContent=fmt(tp);
+  $('pnl-sales').textContent=fmt(ts); $('pnl-cost').textContent=fmt(tc);
+  if($('pnl-exp'))$('pnl-exp').textContent=fmt(te); $('pnl-profit').textContent=fmt(tp);
   $('pnl-losses').innerHTML=losers.length+' <span class="cur">('+fmt(Math.abs(lossTotal))+')</span>';
   $('pnl-margin').textContent=(ts?Math.round(tp/ts*100):0)+'%';
   // فلتر العرض
@@ -4838,12 +4848,15 @@ function renderPnl(){
   view.sort((a,b)=> sort==='profit'? b.profit-a.profit : sort==='margin'? ((b.rate?b.profit/b.rate:0)-(a.rate?a.profit/a.rate:0)) : a.profit-b.profit);
   document.querySelector('#t-pnl tbody').innerHTML=view.map(x=>{
     const margin=x.rate?Math.round(x.profit/x.rate*100):0, isLoss=x.profit< -1, pc=isLoss?'neg':'pos';
-    const cells=[ (isLoss?'🔴 ':'')+esc(x.code)+(x.actual?' <span class="src dashboard" style="font-size:9px">فعلي</span>':'')+(x.inc?' <span style="color:#d11;font-size:9px">⚠ ناقص</span>':''),esc(x.name),esc(x.to),esc(x.agent),
+    const below=(x.actual && (x.exp - x.profit > 0.5));   // الفعلي أقل من المتوقع → أحمر
+    const cells=[ (isLoss?'🔴 ':'')+esc(x.code)+(x.actual?' <span class="src dashboard" style="font-size:9px">فعلي</span>':'')+(x.inc?' <span style="color:#d11;font-size:9px">⚠ ناقص</span>':''),esc(x.name),esc(x.to),esc(x.agent),esc(x.bdate||''),
       '<span class="num">'+fmt(x.cost)+'</span>','<span class="num">'+fmt(x.rate)+'</span>',
-      '<span class="num '+pc+'">'+fmt(x.profit)+'</span>','<span class="num '+pc+'">'+margin+'%</span>',
+      '<span class="num" style="color:#0e7c50">'+fmt(x.exp)+'</span>',
+      '<span class="num '+pc+'"'+(below?' style="background:rgba(209,17,17,.10);font-weight:700;border-radius:4px" title="الفعلي أقل من المتوقع"':'')+'>'+fmt(x.profit)+(below?' 🔻':'')+'</span>',
+      '<span class="num '+pc+'">'+margin+'%</span>',
       x.status.toLowerCase().includes('cancel')?'<span class="pill cancel">ملغى</span>':'<span class="pill active">نشط</span>'];
     return '<tr'+(isLoss?' style="background:rgba(255,107,122,.10)"':'')+'>'+cells.map(c=>'<td>'+c+'</td>').join('')+'</tr>';
-  }).join(''); $('pnl-cnt').textContent=view.length+' حجز'+(losers.length?' · 🔴 '+losers.length+' خاسر':'');
+  }).join(''); $('pnl-cnt').textContent=view.length+' حجز'+(losers.length?' · 🔴 '+losers.length+' خاسر':'')+((df||dt)?' · 📅 مفلتر':'');
 }
 
 // ---- فورم استدعاء العميل (PAYMENT/REFUND): ملخّص + دفعات + تفصيل الحجز ----
