@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ك · التحديد المتعدّد للحذف (☑️ + «حذف المحدد» + «تحديد الكل») في تبويبَي 🔔 إشعارات و🎫 Tickets — خسائر + انخفاض الربح</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ل · زر إلغاء الحجز صار بنافذة داخل الصفحة (بدل prompt المتصفح) — يشتغل حتى لو المتصفح حاجب النوافذ المنبثقة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -767,6 +767,21 @@ table{font-weight:600}
     <div class="calc"><span>الإجمالي (تكلفة + ربح) = <b id="fe-total">0</b></span><span>المتبقّي على هذا السطر = <b id="fe-bal" style="color:var(--amber)">0</b></span></div>
     <div id="fe-msg" style="font-size:12px;min-height:16px;margin:6px 0"></div>
     <button class="btn green" onclick="fcdEditSave()">💾 حفظ التعديل</button>
+  </div>
+</div>
+
+<!-- 🚫 نافذة إلغاء حجز (بدل نافذة المتصفح prompt — تشتغل حتى لو المتصفح حاجب النوافذ) -->
+<div class="modal" id="cancelmodal">
+  <div class="mbox" style="max-width:440px">
+    <h3>🚫 إلغاء حجز <span id="cx-title" style="font-size:12px;color:var(--muted)"></span> <button class="btn ghost" onclick="$('cancelmodal').classList.remove('on')">✕</button></h3>
+    <div id="cx-info" style="font-size:12.5px;color:var(--muted);margin:6px 0 12px"></div>
+    <div class="fgrid">
+      <div class="fld"><label>رسوم الإلغاء <span style="font-size:9px;color:var(--muted)">(بعملة المورّد · 0 لو بلا رسوم)</span></label><input type="number" id="cx-charge" value="0" oninput="cxCalc()"></div>
+      <div class="fld" style="flex:1;min-width:220px"><label>📝 سبب الإلغاء <span style="font-size:9px;color:var(--muted)">(اختياري)</span></label><input id="cx-reason" placeholder="سبب الإلغاء"></div>
+    </div>
+    <div class="calc"><span>المرتجع المتوقّع (الحجز − الرسوم) = <b id="cx-refund" style="color:var(--amber)">0</b></span></div>
+    <div id="cx-msg" style="font-size:12px;min-height:16px;margin:6px 0"></div>
+    <button class="btn" style="background:#d98a00;color:#000" onclick="doCancelBooking()">🚫 تأكيد الإلغاء</button>
   </div>
 </div>
 
@@ -1737,19 +1752,32 @@ async function reqCostChange(id,code){
   await load(); bRecall();
 }
 // ---- طلب إلغاء حجز محفوظ (مقفل): يُرفع للإدارة بدل الرفض التام ----
-async function reqCancelBooking(id,code){
+let CX_ID=null, CX_CODE='', CX_FINAL=0;
+function reqCancelBooking(id,code){
   const b=(DATA.serviceLines||[]).find(x=>x.id===id); if(!b){ alert('الخدمة غير موجودة'); return; }
-  const finalv=Number(b.final_rate_booked||0);
-  const v=prompt('🚫 طلب إلغاء حجز «'+(b.name||'')+'»\nقيمة الحجز الفعلي: '+finalv+' (بعملة المورّد)\n\nاكتبي رسوم الإلغاء بعملة المورّد (0 لو بلا رسوم):','0');
-  if(v==null) return;
-  const cc=Number(v); if(isNaN(cc)||cc<0){ alert('⚠️ قيمة غير صحيحة'); return; }
-  if(finalv>0 && cc>finalv+0.005){ alert('⛔ رسوم الإلغاء لا يمكن أن تتجاوز قيمة الحجز الفعلي ('+finalv+')'); return; }
-  const reason=(prompt('📝 سبب الإلغاء (اختياري):','')||'').trim();
-  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'request_cancel',payload:{service_id:id,client_code:code,service_name:b.name||'',cancel_charge:cc,reason:reason,by:((CURRENT_USER&&CURRENT_USER.staff_name)||'—')}})});
-  const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
-  if(j.dup) alert('ℹ️ يوجد طلب إلغاء معلّق لهذه الخدمة بالفعل — بانتظار قرار الإدارة.');
-  else alert('✅ أُرسل طلب الإلغاء للإدارة.\nلن يُلغى الحجز حتى الموافقة (يظهر في 🔔 إشعارات).');
-  await load(); bRecall();
+  CX_ID=id; CX_CODE=code; CX_FINAL=Number(b.final_rate_booked||0);
+  if($('cx-title')) $('cx-title').textContent='«'+(b.name||'')+'» — '+(code||'');
+  if($('cx-info')) $('cx-info').innerHTML='قيمة الحجز الفعلي: <b>'+fmt(CX_FINAL)+'</b> (بعملة المورّد). يُرسَل طلب الإلغاء للإدارة (لا يُلغى حتى الموافقة في 🔔 إشعارات).';
+  if($('cx-charge')) $('cx-charge').value=0;
+  if($('cx-reason')) $('cx-reason').value='';
+  if($('cx-msg')) $('cx-msg').textContent='';
+  cxCalc();
+  $('cancelmodal').classList.add('on');
+}
+function cxCalc(){ const cc=+($('cx-charge')||{}).value||0; if($('cx-refund')) $('cx-refund').textContent=fmt(Math.max(0, CX_FINAL-cc)); }
+async function doCancelBooking(){
+  const msg=$('cx-msg'); const cc=Number(($('cx-charge')||{}).value||0);
+  if(isNaN(cc)||cc<0){ msg.innerHTML='<span style="color:var(--red)">⚠️ قيمة رسوم الإلغاء غير صحيحة</span>'; return; }
+  if(CX_FINAL>0 && cc>CX_FINAL+0.005){ msg.innerHTML='<span style="color:var(--red)">⛔ رسوم الإلغاء لا يمكن أن تتجاوز قيمة الحجز ('+fmt(CX_FINAL)+')</span>'; return; }
+  const reason=(($('cx-reason')||{}).value||'').trim();
+  msg.style.color='var(--muted)'; msg.textContent='جارٍ إرسال طلب الإلغاء…';
+  try{
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'request_cancel',payload:{service_id:CX_ID,client_code:CX_CODE,service_name:'',cancel_charge:cc,reason:reason,by:((CURRENT_USER&&CURRENT_USER.staff_name)||'—')}})});
+    const j=await r.json(); if(j.error){ msg.innerHTML='<span style="color:var(--red)">خطأ: '+esc(j.error)+'</span>'; return; }
+    $('cancelmodal').classList.remove('on');
+    toast(j.dup?'ℹ️ يوجد طلب إلغاء معلّق لهذه الخدمة':'✅ أُرسل طلب الإلغاء — وافقي عليه في 🔔 إشعارات',2600);
+    await load(); try{ bRecall(); }catch(_){}
+  }catch(e){ msg.innerHTML='<span style="color:var(--red)">خطأ: '+esc(e.message)+'</span>'; }
 }
 async function resolveCancelReq(id,decision){
   if(decision==='approve' && !confirm('تطبيق إلغاء هذا الحجز؟')) return;
