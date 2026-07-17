@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ح · الأرباح والخسائر: العملاء ناقصو الإدخالات يظهرون رماديين «⏳ غير محتسب» ولا يدخلون الإجماليات؛ فور اكتمال إدخالهم ينعكسون تلقائياً (ربح أو خسارة)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ط · الأرباح والخسائر: فلتر «⏳ ناقصة الإدخالات فقط» و«✅ المكتملة فقط» + الناقصة رمادية غير محتسبة (الخاسرة/الرابحة تستثني الناقصة)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -525,6 +525,8 @@ table{font-weight:600}
           <option value="all">عرض: الكل</option>
           <option value="loss">🔴 الخاسرة فقط</option>
           <option value="win">🟢 الرابحة فقط</option>
+          <option value="incomplete">⏳ ناقصة الإدخالات فقط</option>
+          <option value="complete">✅ المكتملة فقط</option>
         </select>
         <select id="pflt-sort" class="flt" onchange="renderPnl()">
           <option value="loss">ترتيب: الخسارة أولاً</option>
@@ -4895,7 +4897,7 @@ function renderPnl(){
   $('pnl-margin').textContent=(ts?Math.round(tp/ts*100):0)+'%';
   // فلتر العرض
   const show=$('pflt-show').value||'all';
-  let view = show==='loss'? arr.filter(x=>x.profit< -1) : show==='win'? arr.filter(x=>x.profit>1) : arr;
+  let view = show==='loss'? arr.filter(x=>!x.incomplete&&x.profit< -1) : show==='win'? arr.filter(x=>!x.incomplete&&x.profit>1) : show==='incomplete'? arr.filter(x=>x.incomplete) : show==='complete'? arr.filter(x=>!x.incomplete) : arr;
   const sort=$('pflt-sort').value||'loss';
   view.sort((a,b)=> sort==='profit'? b.profit-a.profit : sort==='margin'? ((b.rate?b.profit/b.rate:0)-(a.rate?a.profit/a.rate:0)) : a.profit-b.profit);
   document.querySelector('#t-pnl tbody').innerHTML=view.map(x=>{
