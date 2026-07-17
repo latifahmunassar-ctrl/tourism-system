@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-و · إشعار + تذكرة تلقائيان عند نقص الربح الفعلي عن المتوقع (يبيّن مقدار الانخفاض 🔻) — يظهران في 🔔 إشعارات و🎫 Tickets ويختفيان فور التساوي</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ز · إشعار/تذكرة انخفاض الربح الفعلي عن المتوقع: يعرض الكل + المتوقع + الفعلي + الانخفاض كقيمة ونسبة % — مرتّبة الأكبر أولاً</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2994,10 +2994,10 @@ function renderAlerts(){
   const _owner=isOwnerUser();
   const _dismLoss=(((DATA&&DATA.dismissedAlerts)||[]).filter(a=>/^loss:/.test(String(a.alert_key||''))));   // خسائر أخفتها المالكة (لقسم الاسترجاع)
   const pendPD=(typeof profitBelowExpected==='function')?profitBelowExpected():[];   // 📉 انخفاض الربح الفعلي عن المتوقع
-  const _pdRow=(a,owner)=>'<tr><td><b>'+esc(a.client_code)+'</b></td><td>'+esc(a.client_name||'—')+'</td><td class="num" style="color:#0e7c50;font-weight:700">'+fmt(a.expected)+' '+esc(a.cur)+'</td><td class="num" style="color:'+(a.actual<-0.5?'#d11':'#b8860b')+'">'+fmt(a.actual)+' '+esc(a.cur)+'</td><td class="num" style="color:#d11;font-weight:800">🔻 '+fmt(a.drop)+' '+esc(a.cur)+'</td>'+(owner?'<td><button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" title="إخفاء الإشعار (يمكن استرجاعه)" onclick="dismissAlert(\'profitdrop\',\''+esc(a.client_code)+'\')">🗑️ حذف</button></td>':'')+'</tr>';
+  const _pdRow=(a,owner)=>{ const pct=(a.expected>0.5)?Math.round(a.drop/a.expected*100):null; return '<tr><td><b>'+esc(a.client_code)+'</b></td><td>'+esc(a.client_name||'—')+'</td><td class="num" style="color:#0e7c50;font-weight:700">'+fmt(a.expected)+' '+esc(a.cur)+'</td><td class="num" style="color:'+(a.actual<-0.5?'#d11':'#b8860b')+'">'+fmt(a.actual)+' '+esc(a.cur)+'</td><td class="num" style="color:#d11;font-weight:800">🔻 '+fmt(a.drop)+' '+esc(a.cur)+'</td><td class="num" style="color:#d11;font-weight:800">'+(pct!=null?pct+'%':'—')+'</td>'+(owner?'<td><button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" title="إخفاء الإشعار (يمكن استرجاعه)" onclick="dismissAlert(\'profitdrop\',\''+esc(a.client_code)+'\')">🗑️ حذف</button></td>':'')+'</tr>'; };
   const _pdPanel=(list,owner,titlePrefix)=>'<div class="panel" style="border:1px solid #d98a00;background:rgba(217,138,0,.08);margin-bottom:14px"><h3 style="color:#b8860b;margin-top:0">📉 '+titlePrefix+' انخفاض الربح الفعلي عن المتوقع ('+list.length+')</h3>'+
-    '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>العميل</th><th>🎯 المتوقع</th><th>💰 الفعلي</th><th>🔻 الانخفاض</th>'+(owner?'<th>حذف</th>':'')+'</tr></thead><tbody>'+
-    list.map(a=>_pdRow(a,owner)).join('')+'</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تُكشَف تلقائياً لأي عميل ربحه الفعلي (Booking Form) أقل من المتوقع (First Client Data)، وتختفي فور تساويهما أو تصحيح الإدخال.</div></div>';
+    '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>العميل</th><th>🎯 المتوقع</th><th>💰 الفعلي</th><th>🔻 الانخفاض (قيمة)</th><th>🔻 النسبة %</th>'+(owner?'<th>حذف</th>':'')+'</tr></thead><tbody>'+
+    list.map(a=>_pdRow(a,owner)).join('')+'</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تُكشَف تلقائياً لأي عميل ربحه الفعلي (Booking Form) أقل من المتوقع (First Client Data). النسبة = الانخفاض ÷ الربح المتوقع. تختفي فور تساويهما أو تصحيح الإدخال.</div></div>';
   const pendNoBook=liveNoBooking();      // 🚫 عملاء دفعوا بلا أي حجز فعلي — تُكشَف تلقائياً
   for(const a of all){ if(a.status!=='pending') continue;
     if(a.type==='profit_decrease'){ pendProfit.push(a); continue; }
