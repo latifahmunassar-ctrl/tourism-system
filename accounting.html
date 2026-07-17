@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-م · منع تخزين النسخة القديمة (Cache-Control) + زر الإلغاء بنافذة داخلية — جرّبي نافذة خفيّة (Incognito) لو الكاش عالق</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ن · قائمة حالة الحجز (Active/Cancel) صارت شغّالة للموظف — تغييرها يُرسل طلباً للموافقة والحجز لا يتغيّر حتى تعتمده المالكة + إلغاء/تفعيل بنوافذ داخلية</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1552,7 +1552,7 @@ function bRecall(){
         '<td class="num" id="sb-diffsup-'+i+'"'+(diffSup!=null?' style="color:'+(diffSup<0?'var(--red)':'var(--green)')+';font-weight:700"':'')+'>'+(diffSup!=null?fmt(diffSup)+cur(supCur):'')+'</td>'+
         '<td class="num" id="sb-profit-'+i+'"'+(profitSar!=null?' style="color:'+(profitSar<0?'var(--red)':'var(--green)')+';font-weight:700"':'')+'>'+(profitSar!=null?fmt(profitSar)+cur(sellCur):'')+'</td>'+
         '<td>'+inp('cancel',b.cancel_charge,true,'oninput="bRow('+i+')"')+cur(supCur)+'</td><td>'+inp('refund',(isC?Number(_refSup.toFixed(2)):0),true)+cur(supCur)+'</td><td class="num pos" id="sb-exp-'+i+'">'+fmt(isC?Number((_refSup*rate).toFixed(2)):0)+cur(sellCur)+'</td><td>'+selInp('bfrom',b.booked_from||b.supplier,(sIsFlight(b.kind)?'flight_booked_from':(sIsHotel(b.kind)?'hotels_system':'suppliers')))+'</td><td><input type="date" id="sb-cdate-'+i+'" class="dueinp" style="width:122px" value="'+esc(CHARGE_DATE_OVR[i]!=null?CHARGE_DATE_OVR[i]:bookDate)+'" title="تاريخ الدفع (اختياري) — الافتراضي تاريخ الحجز، قابل للتعديل" onchange="setChargeDate('+i+',this.value)"></td><td>'+selInp('cfrom',b.charge_from,'charged_from')+'</td>'+
-        '<td><select id="sb-status-'+i+'" '+st+' onchange="bRow('+i+')"'+(lockedCost?' disabled title="مقفل — استخدمي زر «🚫 طلب إلغاء» أو «🔄 طلب تفعيل» في عمود الحفظ"':'')+'><option'+(isC?'':' selected')+'>Active</option><option'+(isC?' selected':'')+'>Cancel</option></select></td>'+
+        '<td><select id="sb-status-'+i+'" '+st+' onchange="'+(lockedCost?'bStatusChange('+i+',\''+esc(code)+'\')':'bRow('+i+')')+'"'+(lockedCost?' data-cur="'+(isC?'Cancel':'Active')+'" title="غيّري الحالة → يُرسَل طلب للموافقة (لا يتغيّر حتى تعتمده المالكة)"':'')+'><option'+(isC?'':' selected')+'>Active</option><option'+(isC?' selected':'')+'>Cancel</option></select></td>'+
         '<td class="num">'+esc(b.currency_rate!=null?b.currency_rate:'')+'</td>'+
         '<td>'+(lockedCost?('<span title="مقفل — التكلفة تُعدَّل بموافقة الإدارة فقط" style="color:#3a7bd5;font-size:14px">🔒</span><button class="btn ghost" style="padding:2px 6px;font-size:9px;margin-top:3px;display:block" title="حفظ النواقص (رقم التأكيد · مصدر الدفع · تاريخ الدفع) بدون موافقة — لا يمسّ التكلفة المقفلة" onclick="saveConfOnly('+i+',\''+esc(code)+'\')">💾 حفظ الناقص</button>'+(isC?'<button class="btn green" style="padding:2px 6px;font-size:9px;margin-top:3px;display:block" onclick="reqReactivate('+i+',\''+esc(code)+'\')">🔄 طلب تفعيل (موافقة)</button>':'<button class="btn" style="background:#d98a00;color:#000;padding:2px 6px;font-size:9px;margin-top:3px;display:block" onclick="reqCancelBooking('+i+',\''+esc(code)+'\')">🚫 طلب إلغاء (موافقة)</button>')):'<button class="btn green" style="padding:3px 9px;font-size:11px" onclick="saveSvcBooking('+i+',\''+esc(code)+'\')">💾</button>')+'</td></tr>';
     }).join('')+'</tbody></table></div>'+
@@ -1755,6 +1755,15 @@ async function reqCostChange(id,code){
   await load(); bRecall();
 }
 // ---- طلب إلغاء حجز محفوظ (مقفل): يُرفع للإدارة بدل الرفض التام ----
+// تغيير قائمة الحالة لحجز مقفول: يُرسِل طلب إلغاء/تفعيل ويرجع القائمة لحالتها الأصلية — الفعل لا يتم إلا بموافقة المالكة
+function bStatusChange(id,code){
+  const sel=$('sb-status-'+id); if(!sel) return;
+  const cur=sel.getAttribute('data-cur')||'Active'; const nv=sel.value;
+  if(nv===cur){ return; }
+  sel.value=cur;   // رجّع الحالة الأصلية — لا يتغيّر الحجز حتى الموافقة
+  if(nv==='Cancel'){ reqCancelBooking(id,code); }
+  else { if(typeof reqReactivate==='function') reqReactivate(id,code); }
+}
 let CX_ID=null, CX_CODE='', CX_FINAL=0;
 function reqCancelBooking(id,code){
   const b=(DATA.serviceLines||[]).find(x=>x.id===id); if(!b){ alert('الخدمة غير موجودة'); return; }
@@ -1790,14 +1799,13 @@ async function resolveCancelReq(id,decision){
 }
 // ---- طلب إعادة تفعيل حجز ملغى محفوظ (عكس الإلغاء): يُرفع للإدارة ----
 async function reqReactivate(id,code){
-  const b=(DATA.serviceLines||[]).find(x=>x.id===id); if(!b){ alert('الخدمة غير موجودة'); return; }
-  const reason=(prompt('🔄 طلب إعادة تفعيل حجز «'+(b.name||'')+'» (إلغاء الإلغاء)\n\nسبب التفعيل (اختياري):','')||'').trim();
-  if(reason===null) return;
-  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'request_reactivate',payload:{service_id:id,client_code:code,service_name:b.name||'',reason:reason,by:((CURRENT_USER&&CURRENT_USER.staff_name)||'—')}})});
-  const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
-  if(j.dup) alert('ℹ️ يوجد طلب تفعيل معلّق لهذه الخدمة بالفعل — بانتظار قرار الإدارة.');
-  else alert('✅ أُرسل طلب إعادة التفعيل للإدارة.\nلن يُفعَّل الحجز حتى الموافقة (يظهر في 🔔 إشعارات).');
-  await load(); bRecall();
+  const b=(DATA.serviceLines||[]).find(x=>x.id===id); if(!b){ toast('الخدمة غير موجودة',2000); return; }
+  try{
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'request_reactivate',payload:{service_id:id,client_code:code,service_name:b.name||'',reason:'',by:((CURRENT_USER&&CURRENT_USER.staff_name)||'—')}})});
+    const j=await r.json(); if(j.error){ toast('خطأ: '+j.error,2600); return; }
+    toast(j.dup?'ℹ️ يوجد طلب تفعيل معلّق لهذه الخدمة':'✅ أُرسل طلب التفعيل — وافقي عليه في 🔔 إشعارات',2600);
+    await load(); try{ bRecall(); }catch(_){}
+  }catch(e){ toast('خطأ: '+e.message,2600); }
 }
 async function resolveReactReq(id,decision){
   if(decision==='approve' && !confirm('إعادة تفعيل هذا الحجز كاملاً؟')) return;
