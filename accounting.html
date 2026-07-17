@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ي · الإشعارات: تحديد متعدّد بمربّعات ☑️ + «حذف المحدد» دفعة واحدة (خسائر + انخفاض الربح) بدل الحذف واحد واحد + «تحديد الكل»</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ك · التحديد المتعدّد للحذف (☑️ + «حذف المحدد» + «تحديد الكل») في تبويبَي 🔔 إشعارات و🎫 Tickets — خسائر + انخفاض الربح</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3043,10 +3043,10 @@ function renderAlerts(){
   // ===== تبويب 🎫 Tickets =====
   let h='';
   if(pendLoss.length){
-    h+='<div class="panel" style="border:1px solid var(--red);background:rgba(255,107,122,.08);margin-bottom:14px"><h3 style="color:var(--red);margin-top:0">📉 تذاكر خسائر حجوزات ('+pendLoss.length+')</h3>'+
-      '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>الخدمة</th><th>📉 تفاصيل الخسارة</th>'+(_owner?'<th>حذف</th>':'')+'</tr></thead><tbody>'+
-      pendLoss.map(a=>'<tr><td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="font-size:11px;color:var(--red);font-weight:600">'+esc(a.message||'')+'</td>'+(_owner?'<td><button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" title="إخفاء إشعار الخسارة (يمكن استرجاعه)" onclick="dismissLoss('+a.service_id+',\''+esc(a.client_code||'')+'\',\''+esc(String(a.service_name||'').replace(/[\x27"\\]/g,' '))+'\')">🗑️ حذف</button></td>':'')+'</tr>').join('')+
-      '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تُكشَف تلقائياً لأي حجز فعلي يفوق سعر البيع، وتختفي فور تصحيح الحجز.</div></div>';
+    h+='<div class="panel" style="border:1px solid var(--red);background:rgba(255,107,122,.08);margin-bottom:14px"><h3 style="color:var(--red);margin-top:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span>📉 تذاكر خسائر حجوزات ('+pendLoss.length+')</span>'+(_owner?'<button class="btn" style="padding:2px 12px;font-size:11px;background:var(--red)" onclick="bulkDismissAlerts(this)">🗑️ حذف المحدد</button>':'')+'</h3>'+
+      '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr>'+(_owner?'<th style="width:26px"><input type="checkbox" title="تحديد الكل" onclick="ntfToggleAll(this)"></th>':'')+'<th>الكود</th><th>الخدمة</th><th>📉 تفاصيل الخسارة</th>'+(_owner?'<th>حذف</th>':'')+'</tr></thead><tbody>'+
+      pendLoss.map(a=>'<tr>'+(_owner?'<td style="text-align:center"><input type="checkbox" class="ntf-chk" data-key="loss:'+a.service_id+'" data-group="loss" data-code="'+esc(a.client_code||'')+'" data-note="'+esc(String(a.service_name||'').replace(/[\x27"\\]/g,' '))+'"></td>':'')+'<td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="font-size:11px;color:var(--red);font-weight:600">'+esc(a.message||'')+'</td>'+(_owner?'<td><button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" title="إخفاء إشعار الخسارة (يمكن استرجاعه)" onclick="dismissLoss('+a.service_id+',\''+esc(a.client_code||'')+'\',\''+esc(String(a.service_name||'').replace(/[\x27"\\]/g,' '))+'\')">🗑️</button></td>':'')+'</tr>').join('')+
+      '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تُكشَف تلقائياً لأي حجز فعلي يفوق سعر البيع، وتختفي فور تصحيح الحجز. ☑️ حدّدي عدّة تذاكر ثم «حذف المحدد».</div></div>';
   }
   if(pendPD.length){ h+=_pdPanel(pendPD,_owner,'تذاكر'); }
   if(_owner && _dismLoss.length){
