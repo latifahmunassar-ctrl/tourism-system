@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ط · الأرباح والخسائر: فلتر «⏳ ناقصة الإدخالات فقط» و«✅ المكتملة فقط» + الناقصة رمادية غير محتسبة (الخاسرة/الرابحة تستثني الناقصة)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ي · الإشعارات: تحديد متعدّد بمربّعات ☑️ + «حذف المحدد» دفعة واحدة (خسائر + انخفاض الربح) بدل الحذف واحد واحد + «تحديد الكل»</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1832,6 +1832,20 @@ async function dismissAlert(grp,code){
     await load();
   }catch(e){ alert('خطأ: '+e.message); }
 }
+// ☑️ تحديد/إلغاء كل مربّعات جدول واحد
+function ntfToggleAll(el){ const tbl=el.closest('table'); if(!tbl)return; tbl.querySelectorAll('.ntf-chk').forEach(c=>{ c.checked=el.checked; }); }
+// 🗑️ حذف (إخفاء) عدّة إشعارات محدّدة دفعة واحدة — ضمن نفس البطاقة
+async function bulkDismissAlerts(btn){
+  if(!isOwnerUser()){ alert('⚠️ إخفاء الإشعارات للمالكة فقط'); return; }
+  const scope=(btn&&btn.closest&&btn.closest('.panel'))||document;
+  const chks=[...scope.querySelectorAll('.ntf-chk:checked')];
+  if(!chks.length){ alert('☑️ اختاري إشعاراً واحداً على الأقل بالمربّع'); return; }
+  if(!confirm('🗑️ إخفاء '+chks.length+' إشعار المحدّدة؟\n\n• تختفي عن الجميع · لا تُعدّل أي بيانات · يمكن استرجاعها لاحقاً.'))return;
+  try{
+    for(const c of chks){ await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'dismiss_alert',payload:{alert_key:c.dataset.key,alert_group:c.dataset.group||'',client_code:c.dataset.code||'',note:c.dataset.note||'',by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); }
+    await load();
+  }catch(e){ alert('خطأ: '+e.message); }
+}
 async function undismissAlert(akey){
   if(!isOwnerUser()){ alert('⚠️ للمالكة فقط'); return; }
   akey=String(akey||'').trim(); if(!akey) return;
@@ -2996,10 +3010,10 @@ function renderAlerts(){
   const _owner=isOwnerUser();
   const _dismLoss=(((DATA&&DATA.dismissedAlerts)||[]).filter(a=>/^loss:/.test(String(a.alert_key||''))));   // خسائر أخفتها المالكة (لقسم الاسترجاع)
   const pendPD=(typeof profitBelowExpected==='function')?profitBelowExpected():[];   // 📉 انخفاض الربح الفعلي عن المتوقع
-  const _pdRow=(a,owner)=>{ const pct=(a.expected>0.5)?Math.round(a.drop/a.expected*100):null; return '<tr><td><b>'+esc(a.client_code)+'</b></td><td>'+esc(a.client_name||'—')+'</td><td class="num" style="color:#0e7c50;font-weight:700">'+fmt(a.expected)+' '+esc(a.cur)+'</td><td class="num" style="color:'+(a.actual<-0.5?'#d11':'#b8860b')+'">'+fmt(a.actual)+' '+esc(a.cur)+'</td><td class="num" style="color:#d11;font-weight:800">🔻 '+fmt(a.drop)+' '+esc(a.cur)+'</td><td class="num" style="color:#d11;font-weight:800">'+(pct!=null?pct+'%':'—')+'</td>'+(owner?'<td><button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" title="إخفاء الإشعار (يمكن استرجاعه)" onclick="dismissAlert(\'profitdrop\',\''+esc(a.client_code)+'\')">🗑️ حذف</button></td>':'')+'</tr>'; };
-  const _pdPanel=(list,owner,titlePrefix)=>'<div class="panel" style="border:1px solid #d98a00;background:rgba(217,138,0,.08);margin-bottom:14px"><h3 style="color:#b8860b;margin-top:0">📉 '+titlePrefix+' انخفاض الربح الفعلي عن المتوقع ('+list.length+')</h3>'+
-    '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>العميل</th><th>🎯 المتوقع</th><th>💰 الفعلي</th><th>🔻 الانخفاض (قيمة)</th><th>🔻 النسبة %</th>'+(owner?'<th>حذف</th>':'')+'</tr></thead><tbody>'+
-    list.map(a=>_pdRow(a,owner)).join('')+'</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تُكشَف تلقائياً لأي عميل ربحه الفعلي (Booking Form) أقل من المتوقع (First Client Data). النسبة = الانخفاض ÷ الربح المتوقع. تختفي فور تساويهما أو تصحيح الإدخال.</div></div>';
+  const _pdRow=(a,owner)=>{ const pct=(a.expected>0.5)?Math.round(a.drop/a.expected*100):null; const upc=String(a.client_code).toUpperCase(); return '<tr>'+(owner?'<td style="text-align:center"><input type="checkbox" class="ntf-chk" data-key="profitdrop:'+esc(upc)+'" data-group="profitdrop" data-code="'+esc(upc)+'"></td>':'')+'<td><b>'+esc(a.client_code)+'</b></td><td>'+esc(a.client_name||'—')+'</td><td class="num" style="color:#0e7c50;font-weight:700">'+fmt(a.expected)+' '+esc(a.cur)+'</td><td class="num" style="color:'+(a.actual<-0.5?'#d11':'#b8860b')+'">'+fmt(a.actual)+' '+esc(a.cur)+'</td><td class="num" style="color:#d11;font-weight:800">🔻 '+fmt(a.drop)+' '+esc(a.cur)+'</td><td class="num" style="color:#d11;font-weight:800">'+(pct!=null?pct+'%':'—')+'</td>'+(owner?'<td><button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" title="إخفاء الإشعار (يمكن استرجاعه)" onclick="dismissAlert(\'profitdrop\',\''+esc(a.client_code)+'\')">🗑️</button></td>':'')+'</tr>'; };
+  const _pdPanel=(list,owner,titlePrefix)=>'<div class="panel" style="border:1px solid #d98a00;background:rgba(217,138,0,.08);margin-bottom:14px"><h3 style="color:#b8860b;margin-top:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span>📉 '+titlePrefix+' انخفاض الربح الفعلي عن المتوقع ('+list.length+')</span>'+(owner?'<button class="btn" style="padding:2px 12px;font-size:11px;background:var(--red)" onclick="bulkDismissAlerts(this)">🗑️ حذف المحدد</button>':'')+'</h3>'+
+    '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr>'+(owner?'<th style="width:26px"><input type="checkbox" title="تحديد الكل" onclick="ntfToggleAll(this)"></th>':'')+'<th>الكود</th><th>العميل</th><th>🎯 المتوقع</th><th>💰 الفعلي</th><th>🔻 الانخفاض (قيمة)</th><th>🔻 النسبة %</th>'+(owner?'<th>حذف</th>':'')+'</tr></thead><tbody>'+
+    list.map(a=>_pdRow(a,owner)).join('')+'</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تُكشَف تلقائياً لأي عميل ربحه الفعلي (Booking Form) أقل من المتوقع (First Client Data). النسبة = الانخفاض ÷ الربح المتوقع. ☑️ حدّدي عدّة إشعارات ثم «حذف المحدد».</div></div>';
   const pendNoBook=liveNoBooking();      // 🚫 عملاء دفعوا بلا أي حجز فعلي — تُكشَف تلقائياً
   for(const a of all){ if(a.status!=='pending') continue;
     if(a.type==='profit_decrease'){ pendProfit.push(a); continue; }
@@ -3209,10 +3223,10 @@ function renderAlerts(){
         '</tbody></table></div></details>';
     }
     if(pendLoss.length){
-      n+='<div class="panel" style="border:1px solid var(--red);background:rgba(255,107,122,.08);margin-bottom:14px"><h3 style="color:var(--red);margin-top:0">📉 خسائر حجوزات ('+pendLoss.length+') — تحتاج اطّلاعكِ</h3>'+
-        '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>الخدمة</th><th>📉 تفاصيل الخسارة</th>'+(_owner?'<th>حذف</th>':'')+'</tr></thead><tbody>'+
-        pendLoss.map(a=>'<tr><td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="font-size:11px;color:var(--red);font-weight:600">'+esc(a.message||'')+'</td>'+(_owner?'<td><button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" title="إخفاء إشعار الخسارة (يمكن استرجاعه)" onclick="dismissLoss('+a.service_id+',\''+esc(a.client_code||'')+'\',\''+esc(String(a.service_name||'').replace(/[\x27"\\]/g,' '))+'\')">🗑️ حذف</button></td>':'')+'</tr>').join('')+
-        '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تظهر تلقائياً لأي حجز فعلي يفوق سعر البيع، وتختفي فور تصحيح الحجز في Booking Form.</div></div>';
+      n+='<div class="panel" style="border:1px solid var(--red);background:rgba(255,107,122,.08);margin-bottom:14px"><h3 style="color:var(--red);margin-top:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span>📉 خسائر حجوزات ('+pendLoss.length+') — تحتاج اطّلاعكِ</span>'+(_owner?'<button class="btn" style="padding:2px 12px;font-size:11px;background:var(--red)" onclick="bulkDismissAlerts(this)">🗑️ حذف المحدد</button>':'')+'</h3>'+
+        '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr>'+(_owner?'<th style="width:26px"><input type="checkbox" title="تحديد الكل" onclick="ntfToggleAll(this)"></th>':'')+'<th>الكود</th><th>الخدمة</th><th>📉 تفاصيل الخسارة</th>'+(_owner?'<th>حذف</th>':'')+'</tr></thead><tbody>'+
+        pendLoss.map(a=>'<tr>'+(_owner?'<td style="text-align:center"><input type="checkbox" class="ntf-chk" data-key="loss:'+a.service_id+'" data-group="loss" data-code="'+esc(a.client_code||'')+'" data-note="'+esc(String(a.service_name||'').replace(/[\x27"\\]/g,' '))+'"></td>':'')+'<td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="font-size:11px;color:var(--red);font-weight:600">'+esc(a.message||'')+'</td>'+(_owner?'<td><button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" title="إخفاء إشعار الخسارة (يمكن استرجاعه)" onclick="dismissLoss('+a.service_id+',\''+esc(a.client_code||'')+'\',\''+esc(String(a.service_name||'').replace(/[\x27"\\]/g,' '))+'\')">🗑️</button></td>':'')+'</tr>').join('')+
+        '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تظهر تلقائياً لأي حجز فعلي يفوق سعر البيع، وتختفي فور تصحيح الحجز. ☑️ حدّدي عدّة إشعارات ثم «حذف المحدد».</div></div>';
     }
     if(pendPD.length){ n+=_pdPanel(pendPD,_owner,'إشعار'); }
     if(pendProfit.length){
