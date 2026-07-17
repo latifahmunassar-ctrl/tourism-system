@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ع · إصلاح: المستحق لكل الفنادق يستبعد الحجوزات الملغاة تماماً (مطابق للكشف) — فينزل فوراً عند الإلغاء ولا يتضخّم برسوم إلغاء وهمية</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-غ · إصلاح: تقرير المدفوع له (سنة 2026 فقط) صار يطابق الكشف — يستبعد الحجوزات الملغاة و«بانتظار تحديد الدفع» من المستحق</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2625,9 +2625,15 @@ function hpSummaryHtml(){
   if(only2026){
     // 🗓️ نافذة «2026 فقط» (لهذا الفندق): حجوزات/دفعات 2026 + سداد charge from (بطاقة/بنك عبر Booking Form)
     const yOK=(d)=>{ const m=String(d||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); };
-    const chgMap={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const cf=String(s.charge_from||'').trim(); if(cf && !_directOwed(cf)) chgMap[s.id]=cf; });   // «مباشر من المورّد» لا يُحتسب سداداً
+    const cfById={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const v=String(s.charge_from||'').trim(); if(v)cfById[s.id]=v; });   // charge from الخام لكل حجز داشبورد
     let paidCharge=0;
-    hpHbMatch(HO_PAYEE).forEach(h=>{ if(!yOK(h.check_in||h.arrival_date))return; const d=Number(h.final_rate_booked||0); owed+=d; nBook++; if(h._booking&&h.service_id&&chgMap[h.service_id])paidCharge+=d; });
+    hpHbMatch(HO_PAYEE).forEach(h=>{ if(!yOK(h.check_in||h.arrival_date))return;
+      if(/cancel/i.test(String(h.status||'')))return;   // 🚫 الحجز الملغى مستبعَد تماماً من المستحق (مطابق لكشف الحساب وخريطة العملاء)
+      const cf=(h._booking&&h.service_id)?(cfById[h.service_id]||''):'';
+      if(h._booking && h.service_id && !cf)return;   // حجز داشبورد بلا charge from = «بانتظار تحديد الدفع» → لا أثر
+      const d=Number(h.final_rate_booked||0); owed+=d; nBook++;
+      if(!(h._booking && _directOwed(cf)))paidCharge+=d;   // «مباشر من المورّد» = مستحق غير مسدَّد؛ غير ذلك = مسدَّد بالبطاقة/البنك
+    });
     const payArr=hpPayments(HO_PAYEE).filter(x=>yOK(x.date)); paid=paidCharge; payArr.forEach(x=>paid+=x.amount); nPay=payArr.length;
   } else {
     // 📊 كل السنوات — الرصيد المتراكم الصحيح (نفس الحساب الأصلي: hpPayeeClientMap + hpPayments بلا تعديل)
