@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-هـ · الأرباح والخسائر: تصدير PDF (هوية العز + ملخّص متوقع/فعلي) و Excel — يحترمان الفلتر الحالي (المدة/البحث)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-و · إشعار + تذكرة تلقائيان عند نقص الربح الفعلي عن المتوقع (يبيّن مقدار الانخفاض 🔻) — يظهران في 🔔 إشعارات و🎫 Tickets ويختفيان فور التساوي</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2904,6 +2904,17 @@ function liveBookingLosses(){
   const DIS=(typeof dismissedSet==='function'?dismissedSet():new Set());
   return out.filter(o=>!DIS.has('loss:'+o.service_id));   // 🗑️ خسائر أخفتها المالكة (تُحفظ خادميّاً للجميع)
 }
+// 📉 الربح الفعلي أقل من المتوقع (لكل عميل) — إشعار + تذكرة بمقدار الانخفاض؛ يختفي تلقائياً فور تساويهما
+function profitBelowExpected(){
+  const apm=(typeof actualProfitMaps==='function')?actualProfitMaps():{byClient:{}};
+  const info={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!c)return; if(!info[c])info[c]={exp:0,name:'',code:r.client_code,cur:''}; info[c].exp+=Number(r.profit||0); if(r.client_name&&!info[c].name)info[c].name=r.client_name; if(r.currency&&!info[c].cur)info[c].cur=r.currency; });
+  const out=[];
+  Object.keys(info).forEach(c=>{ const exp=info[c].exp; const act=apm.byClient[c]; if(act==null)return; const drop=exp-act; if(drop<=0.5)return;   // الفعلي أقل من المتوقع بمقدار مؤثّر
+    out.push({ type:'profit_below', client_code:info[c].code||c, client_name:info[c].name||'', expected:exp, actual:act, drop:drop, cur:info[c].cur||'SAR' }); });
+  out.sort((a,b)=>b.drop-a.drop);
+  const DIS=(typeof dismissedSet==='function'?dismissedSet():new Set());
+  return out.filter(o=>!DIS.has('profitdrop:'+String(o.client_code).toUpperCase()));
+}
 // إخفاء إشعار خسارة عادية (للمالكة فقط) — إخفاء لا يمسّ أي بيانات مالية
 async function dismissLoss(sid,code,name){
   if(!isOwnerUser()){ alert('⚠️ إخفاء الإشعارات للمالكة فقط'); return; }
@@ -2982,6 +2993,11 @@ function renderAlerts(){
   const pendLoss=liveBookingLosses();   // خسائر الحجوزات تُحسب حيّاً (كل حجز فعلي يفوق البيع) — تظهر تلقائياً بلا حفظ
   const _owner=isOwnerUser();
   const _dismLoss=(((DATA&&DATA.dismissedAlerts)||[]).filter(a=>/^loss:/.test(String(a.alert_key||''))));   // خسائر أخفتها المالكة (لقسم الاسترجاع)
+  const pendPD=(typeof profitBelowExpected==='function')?profitBelowExpected():[];   // 📉 انخفاض الربح الفعلي عن المتوقع
+  const _pdRow=(a,owner)=>'<tr><td><b>'+esc(a.client_code)+'</b></td><td>'+esc(a.client_name||'—')+'</td><td class="num" style="color:#0e7c50;font-weight:700">'+fmt(a.expected)+' '+esc(a.cur)+'</td><td class="num" style="color:'+(a.actual<-0.5?'#d11':'#b8860b')+'">'+fmt(a.actual)+' '+esc(a.cur)+'</td><td class="num" style="color:#d11;font-weight:800">🔻 '+fmt(a.drop)+' '+esc(a.cur)+'</td>'+(owner?'<td><button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" title="إخفاء الإشعار (يمكن استرجاعه)" onclick="dismissAlert(\'profitdrop\',\''+esc(a.client_code)+'\')">🗑️ حذف</button></td>':'')+'</tr>';
+  const _pdPanel=(list,owner,titlePrefix)=>'<div class="panel" style="border:1px solid #d98a00;background:rgba(217,138,0,.08);margin-bottom:14px"><h3 style="color:#b8860b;margin-top:0">📉 '+titlePrefix+' انخفاض الربح الفعلي عن المتوقع ('+list.length+')</h3>'+
+    '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>العميل</th><th>🎯 المتوقع</th><th>💰 الفعلي</th><th>🔻 الانخفاض</th>'+(owner?'<th>حذف</th>':'')+'</tr></thead><tbody>'+
+    list.map(a=>_pdRow(a,owner)).join('')+'</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تُكشَف تلقائياً لأي عميل ربحه الفعلي (Booking Form) أقل من المتوقع (First Client Data)، وتختفي فور تساويهما أو تصحيح الإدخال.</div></div>';
   const pendNoBook=liveNoBooking();      // 🚫 عملاء دفعوا بلا أي حجز فعلي — تُكشَف تلقائياً
   for(const a of all){ if(a.status!=='pending') continue;
     if(a.type==='profit_decrease'){ pendProfit.push(a); continue; }
@@ -3016,6 +3032,7 @@ function renderAlerts(){
       pendLoss.map(a=>'<tr><td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="font-size:11px;color:var(--red);font-weight:600">'+esc(a.message||'')+'</td>'+(_owner?'<td><button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" title="إخفاء إشعار الخسارة (يمكن استرجاعه)" onclick="dismissLoss('+a.service_id+',\''+esc(a.client_code||'')+'\',\''+esc(String(a.service_name||'').replace(/[\x27"\\]/g,' '))+'\')">🗑️ حذف</button></td>':'')+'</tr>').join('')+
       '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تُكشَف تلقائياً لأي حجز فعلي يفوق سعر البيع، وتختفي فور تصحيح الحجز.</div></div>';
   }
+  if(pendPD.length){ h+=_pdPanel(pendPD,_owner,'تذاكر'); }
   if(_owner && _dismLoss.length){
     _dismLoss.sort((a,b)=>String(b.dismissed_at||'').localeCompare(String(a.dismissed_at||'')));
     h+='<div class="panel" style="border:1px dashed var(--muted);background:rgba(120,120,120,.05);margin-bottom:14px"><h3 style="color:var(--muted);margin-top:0">🗑️ خسائر مخفيّة ('+_dismLoss.length+') <span style="font-size:11px;font-weight:400">· يمكنكِ استرجاعها</span></h3>'+
@@ -3195,6 +3212,7 @@ function renderAlerts(){
         pendLoss.map(a=>'<tr><td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="font-size:11px;color:var(--red);font-weight:600">'+esc(a.message||'')+'</td>'+(_owner?'<td><button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" title="إخفاء إشعار الخسارة (يمكن استرجاعه)" onclick="dismissLoss('+a.service_id+',\''+esc(a.client_code||'')+'\',\''+esc(String(a.service_name||'').replace(/[\x27"\\]/g,' '))+'\')">🗑️ حذف</button></td>':'')+'</tr>').join('')+
         '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تظهر تلقائياً لأي حجز فعلي يفوق سعر البيع، وتختفي فور تصحيح الحجز في Booking Form.</div></div>';
     }
+    if(pendPD.length){ n+=_pdPanel(pendPD,_owner,'إشعار'); }
     if(pendProfit.length){
       n+='<div class="panel" style="border:1px solid var(--red);background:rgba(255,107,122,.07);margin-bottom:14px"><h3 style="color:var(--red);margin-top:0">🔻 إشعارات تخفيض ربح ('+pendProfit.length+') — تحتاج اطّلاعكِ</h3>'+
         '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>العميل</th><th>التفاصيل</th><th>📝 السبب المكتوب</th><th>التاريخ</th><th>إجراء</th></tr></thead><tbody>'+
@@ -3231,7 +3249,7 @@ function renderAlerts(){
         resolvedProfit.map(a=>{ const rs=profitReason(a.message)||esc(a.message||''); return '<tr><td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="color:var(--muted)">'+esc(rs)+'</td><td>'+esc((a.resolved_at||'').slice(0,10))+'</td></tr>'; }).join('')+
         '</tbody></table></div></details>';
     }
-    const ntot=pendProfit.length+pendFreeze.length+pendCost.length+pendCancel.length+pendReactivate.length+pendLoss.length+pendSupPay.length+pendSupEdit.length+pendCash.length+pendCashEdit.length+pendCliEntry.length+pendCliEdit.length+pendRefund.length+pendRefEdit.length+pendList.length;
+    const ntot=pendProfit.length+pendFreeze.length+pendCost.length+pendCancel.length+pendReactivate.length+pendLoss.length+pendPD.length+pendSupPay.length+pendSupEdit.length+pendCash.length+pendCashEdit.length+pendCliEntry.length+pendCliEdit.length+pendRefund.length+pendRefEdit.length+pendList.length;
     const nc=$('nt-cnt'); if(nc) nc.innerHTML = ntot? '<span style="background:var(--red);color:#fff;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700">'+ntot+'</span>':'';
     nbox.innerHTML = n || '<div class="panel"><div style="color:var(--muted);text-align:center;padding:24px">لا توجد إشعارات 🎉</div></div>';
   }
