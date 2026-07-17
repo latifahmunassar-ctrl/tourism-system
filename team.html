@@ -763,6 +763,10 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 </div>
 <div style="padding:12px 12px 14px;overflow-y:auto">
 <div style="font-size:11px;color:var(--muted);margin-bottom:8px">اسحبيها من الشريط الأعلى ⠿ لتحريكها · ترّدين ✅ على الطلب بالجروب فيظهر هنا</div>
+<div style="display:flex;gap:6px;margin-bottom:10px">
+<button id="waReqTabNew" onclick="waReqSwitchTab('new')" class="ebtn" style="flex:1;font-weight:800;font-size:12px;outline:2px solid #d4a843">📥 وارد (<span id="waReqNewCount">0</span>)</button>
+<button id="waReqTabSent" onclick="waReqSwitchTab('handled')" class="ebtn" style="flex:1;font-weight:800;font-size:12px">📤 صادر</button>
+</div>
 <div id="waReqList"></div>
 </div>
 </div>
@@ -3289,6 +3293,14 @@ async function waReqCall(action, extra = {}) {
   document.addEventListener('mouseup', function () { dragging = false; });
 })();
 
+let waReqTab = 'new';
+function waReqSwitchTab(t) {
+  waReqTab = t;
+  const nb = document.getElementById('waReqTabNew'), sb = document.getElementById('waReqTabSent');
+  if (nb) nb.style.outline = (t === 'new') ? '2px solid #d4a843' : 'none';
+  if (sb) sb.style.outline = (t === 'handled') ? '2px solid #128C7E' : 'none';
+  waReqLoad();
+}
 function waReqOpen() { document.getElementById('waReqPanel').style.display = 'flex'; waReqLoad(); }
 function waReqClose() { document.getElementById('waReqPanel').style.display = 'none'; }
 function waReqBadge(n) {
@@ -3300,10 +3312,12 @@ async function waReqLoad() {
   box.innerHTML = '<div style="padding:14px;color:var(--muted)">⏳ تحميل الطلبات...</div>';
   try {
     const r = await waReqCall('group-requests');
-    const reqs = r.requests || [];
+    const all = r.requests || [];
     waReqBadge(r.new_count || 0);
+    const _nc = document.getElementById('waReqNewCount'); if (_nc) _nc.textContent = r.new_count || 0;
+    const reqs = all.filter(function (q) { return waReqTab === 'handled' ? q.status !== 'new' : q.status === 'new'; });
     if (!reqs.length) {
-      box.innerHTML = '<div style="padding:18px;color:var(--muted);text-align:center;line-height:1.9">ما فيه طلبات بعد.<br>ردّي على رسالة الطلب بعلامة ✅ في أي جروب، وبتظهر هنا تلقائياً.</div>';
+      box.innerHTML = '<div style="padding:18px;color:var(--muted);text-align:center;line-height:1.9">' + (waReqTab === 'handled' ? 'ما فيه طلبات صادرة بعد.' : 'ما فيه طلبات واردة جديدة.<br>ردّي على رسالة الطلب بعلامة ✅ في الجروب.') + '</div>';
       return;
     }
     box.innerHTML = reqs.map(function (q) {
