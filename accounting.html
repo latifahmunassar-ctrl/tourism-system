@@ -214,7 +214,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 16يوليو-ز · انعكاس دفعات العملاء من الداشبورد تلقائياً في كشف البنك (وارد) بفلترة المرجع — بلا تكرار المسجّل بالشيت؛ يظهر C26467 والدفعات الناقصة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-أ · تعديل المرتجع (القيمة + التاريخ + المرجع البنكي): المالكة مباشرة، والمحاسب يحتاج موافقتك (تظهر بطلبات الإشعارات) — محقّق خادميّاً</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2984,6 +2984,7 @@ function renderAlerts(){
   const pendCliEdit=mvAll.filter(m=>m.kind==='client_edit'&&m.status==='pending').sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
   const resolvedCli=mvAll.filter(m=>(m.kind==='client_entry'||m.kind==='client_edit')&&(m.status==='approved'||m.status==='rejected')).sort((a,b)=>String(b.decided_at||b.id).localeCompare(String(a.decided_at||a.id))).slice(0,15);
   const pendRefund=mvAll.filter(m=>m.kind==='refund'&&m.status==='pending').sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
+  const pendRefEdit=mvAll.filter(m=>m.kind==='refund_edit'&&m.status==='pending').sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
   const resolvedRefund=mvAll.filter(m=>m.kind==='refund'&&(m.status==='approved'||m.status==='rejected')).sort((a,b)=>String(b.decided_at||b.id).localeCompare(String(a.decided_at||a.id))).slice(0,15);
   const pendList=mvAll.filter(m=>m.kind==='list_item'&&m.status==='pending').sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
   const pendLoss=liveBookingLosses();   // خسائر الحجوزات تُحسب حيّاً (كل حجز فعلي يفوق البيع) — تظهر تلقائياً بلا حفظ
@@ -3136,6 +3137,12 @@ function renderAlerts(){
         pendCliEdit.map(m=>{ const c=m.payload||{}; return '<tr><td style="font-size:11px">'+esc(m.summary||'')+'</td><td style="font-size:12px;font-weight:700;color:#0e9d6a">'+esc(c.reason||m.note||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(c.by||'—')+'</td><td>'+esc(String(m.created_at||'').slice(0,10))+'</td><td style="white-space:nowrap"><button class="btn green" style="padding:2px 9px;font-size:11px" onclick="resolveCliEdit('+m.id+',\'approve\')">✅ موافقة وتعديل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="resolveCliEdit('+m.id+',\'reject\')">❌ رفض</button></td></tr>'; }).join('')+
         '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">ℹ️ الموافقة تطبّق التعديل على السطر. الرفض يُبقي القيم كما هي.</div></div>';
     }
+    if(pendRefEdit.length){
+      n+='<div class="panel" style="border:1px solid #b8860b;background:rgba(184,134,11,.07);margin-bottom:14px"><h3 style="color:#b8860b;margin-top:0">↩️ طلبات تعديل مرتجعات ('+pendRefEdit.length+') — تحتاج قرارك</h3>'+
+        '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>التفاصيل</th><th>📝 السبب</th><th>مقدّم الطلب</th><th>التاريخ</th><th>القرار</th></tr></thead><tbody>'+
+        pendRefEdit.map(m=>{ const c=m.payload||{}; return '<tr><td style="font-size:11px">'+esc(m.summary||'')+'</td><td style="font-size:12px;font-weight:700;color:#b8860b">'+esc(c.reason||m.note||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(c.by||'—')+'</td><td>'+esc(String(m.created_at||'').slice(0,10))+'</td><td style="white-space:nowrap"><button class="btn green" style="padding:2px 9px;font-size:11px" onclick="resolveRefEdit('+m.id+',\'approve\')">✅ موافقة وتعديل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="resolveRefEdit('+m.id+',\'reject\')">❌ رفض</button></td></tr>'; }).join('')+
+        '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">ℹ️ الموافقة تطبّق التعديل على المرتجع (القيمة/التاريخ/المرجع). الرفض يُبقيه كما هو.</div></div>';
+    }
     if(resolvedCli.length){
       n+='<details style="margin-bottom:14px"><summary style="cursor:pointer;color:var(--green);font-weight:700;padding:6px 0">👤 قيود/تعديلات عملاء معالَجة ('+resolvedCli.length+')</summary>'+
         '<div class="tbl-wrap" style="margin-top:6px"><table style="font-size:11.5px"><thead><tr><th>التفاصيل</th><th>الحالة</th><th>التاريخ</th></tr></thead><tbody>'+
@@ -3232,7 +3239,7 @@ function renderAlerts(){
         resolvedProfit.map(a=>{ const rs=profitReason(a.message)||esc(a.message||''); return '<tr><td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="color:var(--muted)">'+esc(rs)+'</td><td>'+esc((a.resolved_at||'').slice(0,10))+'</td></tr>'; }).join('')+
         '</tbody></table></div></details>';
     }
-    const ntot=pendProfit.length+pendFreeze.length+pendCost.length+pendCancel.length+pendReactivate.length+pendLoss.length+pendSupPay.length+pendSupEdit.length+pendCash.length+pendCashEdit.length+pendCliEntry.length+pendCliEdit.length+pendRefund.length+pendList.length;
+    const ntot=pendProfit.length+pendFreeze.length+pendCost.length+pendCancel.length+pendReactivate.length+pendLoss.length+pendSupPay.length+pendSupEdit.length+pendCash.length+pendCashEdit.length+pendCliEntry.length+pendCliEdit.length+pendRefund.length+pendRefEdit.length+pendList.length;
     const nc=$('nt-cnt'); if(nc) nc.innerHTML = ntot? '<span style="background:var(--red);color:#fff;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700">'+ntot+'</span>':'';
     nbox.innerHTML = n || '<div class="panel"><div style="color:var(--muted);text-align:center;padding:24px">لا توجد إشعارات 🎉</div></div>';
   }
@@ -4911,7 +4918,7 @@ function renderPayForm(){
      const docMap={}; (REFUND_DOCS||[]).filter(x=>(x.client_code||'').toUpperCase()===code && x.status==='approved').forEach(x=>{ const k=[Number(x.refund_amount||0).toFixed(2),String(x.payment_date||'').slice(0,10),String(x.bank_ref||'')].join('|'); docMap[k]=Number(x.company_profit||0); });
      const totProfit=Object.values(docMap).reduce((s,v)=>s+Number(v||0),0);
      return '<div class="panel"><h3>💸 المرتجعات المدوّنة <span class="cnt">إجمالي: '+fmt(tot)+(totProfit>0?(' · 🏢 ربح الشركة: '+fmt(totProfit)):'')+'</span></h3><div class="tbl-wrap"><table><thead><tr><th>تاريخ المرتجع</th><th>المبلغ المرتجع</th><th>🏢 ربح الشركة (مستقطَع)</th><th>البنك</th><th>مرجع البنك</th><th>مرتجع لحساب الوكيل</th></tr></thead><tbody>'+
-       refs.map(r=>{ const k=[Number(r.refund||0).toFixed(2),String(r.payment_date||'').slice(0,10),String(r.bank_ref||'')].join('|'); const cp=docMap[k]; return '<tr><td>'+esc(r.payment_date||'')+'</td><td class="num neg">'+fmt(r.refund)+'</td><td class="num" style="color:#b8860b">'+(cp!=null&&cp>0?fmt(cp):'<span style="color:#9aa">—</span>')+'</td><td>'+esc(r.bank_name||'')+'</td><td>'+esc(r.bank_ref||'')+(r.source==='dashboard'?' <button class="btn ghost" style="padding:1px 7px;font-size:10px" onclick="editRefundRef('+r.id+')" title="إضافة/تعديل المرجع البنكي — تنعكس العملية في سجل البنك">✏️ مرجع</button>':'')+'</td><td>'+esc(r.note||'')+'</td></tr>'; }).join('')+'</tbody></table></div><div style="font-size:10.5px;color:var(--muted);margin-top:5px">«🏢 ربح الشركة (مستقطَع)» يظهر للمرتجعات المُدخَلة من الداشبورد بمستند معتمد. المرتجعات القديمة (من الشيت) بلا قيمة مفردة (—) — ربح الشركة منها يظهر إجمالاً في مؤشّر «لصالح الشركة» بالأعلى.</div></div>';})()+ (function(){ const docs=(REFUND_DOCS||[]).filter(x=>(x.client_code||'').toUpperCase()===code); if(!docs.length)return ''; return '<div class="panel" style="margin-bottom:12px"><h3>📄 مستندات المرتجعات المحفوظة <span class="cnt">'+docs.length+'</span></h3><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>المبلغ المرتجع</th><th>🏢 ربح الشركة</th><th>البنك</th><th>الحالة</th><th>المستند</th></tr></thead><tbody>'+docs.map(d=>'<tr><td>'+esc(String(d.created_at||"").slice(0,10))+'</td><td class="num neg">'+fmt(d.refund_amount||0)+' '+esc(d.currency||'')+'</td><td class="num" style="color:#b8860b">'+(Number(d.company_profit||0)>0?fmt(d.company_profit):'—')+'</td><td>'+esc(d.bank_name||'')+'</td><td>'+(d.status==='approved'?'<span class="pill active">✅ معتمد</span>':(d.status==='rejected'?'<span class="pill cancel">❌ مرفوض</span>':'<span class="pill" style="background:#b8860b;color:#fff">⏳ بانتظار</span>'))+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="openRefundDoc('+d.id+')">📄 عرض المستند</button></td></tr>').join('')+'</tbody></table></div></div>';})()+
+       refs.map(r=>{ const k=[Number(r.refund||0).toFixed(2),String(r.payment_date||'').slice(0,10),String(r.bank_ref||'')].join('|'); const cp=docMap[k]; return '<tr><td>'+esc(r.payment_date||'')+'</td><td class="num neg">'+fmt(r.refund)+'</td><td class="num" style="color:#b8860b">'+(cp!=null&&cp>0?fmt(cp):'<span style="color:#9aa">—</span>')+'</td><td>'+esc(r.bank_name||'')+'</td><td>'+esc(r.bank_ref||'')+(r.source==='dashboard'?' <button class="btn ghost" style="padding:1px 7px;font-size:10px" onclick="editRefundRef('+r.id+')" title="تعديل قيمة المرتجع + التاريخ + المرجع البنكي (المالكة مباشرة · المحاسب بموافقة المالكة)">✏️ تعديل</button>':'')+'</td><td>'+esc(r.note||'')+'</td></tr>'; }).join('')+'</tbody></table></div><div style="font-size:10.5px;color:var(--muted);margin-top:5px">«🏢 ربح الشركة (مستقطَع)» يظهر للمرتجعات المُدخَلة من الداشبورد بمستند معتمد. المرتجعات القديمة (من الشيت) بلا قيمة مفردة (—) — ربح الشركة منها يظهر إجمالاً في مؤشّر «لصالح الشركة» بالأعلى.</div></div>';})()+ (function(){ const docs=(REFUND_DOCS||[]).filter(x=>(x.client_code||'').toUpperCase()===code); if(!docs.length)return ''; return '<div class="panel" style="margin-bottom:12px"><h3>📄 مستندات المرتجعات المحفوظة <span class="cnt">'+docs.length+'</span></h3><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>المبلغ المرتجع</th><th>🏢 ربح الشركة</th><th>البنك</th><th>الحالة</th><th>المستند</th></tr></thead><tbody>'+docs.map(d=>'<tr><td>'+esc(String(d.created_at||"").slice(0,10))+'</td><td class="num neg">'+fmt(d.refund_amount||0)+' '+esc(d.currency||'')+'</td><td class="num" style="color:#b8860b">'+(Number(d.company_profit||0)>0?fmt(d.company_profit):'—')+'</td><td>'+esc(d.bank_name||'')+'</td><td>'+(d.status==='approved'?'<span class="pill active">✅ معتمد</span>':(d.status==='rejected'?'<span class="pill cancel">❌ مرفوض</span>':'<span class="pill" style="background:#b8860b;color:#fff">⏳ بانتظار</span>'))+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="openRefundDoc('+d.id+')">📄 عرض المستند</button></td></tr>').join('')+'</tbody></table></div></div>';})()+
  '<div class="panel" style="border-color:var(--green)"><h3>➕ تسجيل إرجاع للعميل</h3>'+
    (expRefV>0?('<div style="background:rgba(245,158,11,.08);border:1px solid var(--amber);border-radius:8px;padding:9px 11px;margin-bottom:10px;font-size:12.5px">🔄 المرتجع المتوقّع المتبقّي لهذا العميل: <b style="color:var(--amber)">'+fmt(expRefV)+' '+esc(cur)+'</b><br><span style="color:var(--muted);font-size:11.5px">أدخلي 🏢 ربح الشركة الذي تحتفظين به، ويُحسب «المسترجع النهائي للعميل» تلقائياً = المتوقّع − ربح الشركة. «لصالح الشركة» ينعكس في حساب الوكيل تلقائياً.</span></div>'):'')+
    '<input type="hidden" id="rf-exp" value="'+(expRefV>0?expRefV:0)+'">'+
@@ -4941,18 +4948,40 @@ function fileToBase64(file){ return new Promise((res,rej)=>{ const fr=new FileRe
 // إضافة/تعديل المرجع البنكي لمسترجع مُدخَل من الداشبورد — تنعكس العملية كحركة صادرة في سجل البنك فور الحفظ
 async function editRefundRef(id){
   const rf=(DATA.refunds||[]).find(x=>x.id===id); if(!rf){ alert('المسترجع غير موجود'); return; }
-  const hdr='مسترجع '+(rf.client_code||'')+' — '+fmt(rf.refund)+' · '+(rf.bank_name||'')+'\n\n';
-  const ref=prompt(hdr+'١) رقم المرجع البنكي:', String(rf.bank_ref||''));
+  const owner=isOwnerUser();
+  const hdr='مسترجع '+(rf.client_code||'')+' — الحالي '+fmt(rf.refund)+' · '+(rf.bank_name||'')+'\n\n';
+  const amtS=prompt(hdr+'١) قيمة المرتجع:', String(Number(rf.refund||0)));
+  if(amtS==null) return;
+  const amt=Number(amtS); if(isNaN(amt)||amt<0){ alert('⚠️ قيمة المرتجع غير صحيحة'); return; }
+  const ref=prompt(hdr+'٢) رقم المرجع البنكي:', String(rf.bank_ref||''));
   if(ref==null) return;
-  const date=prompt(hdr+'٢) تاريخ المسترجع (YYYY-MM-DD):', String(rf.payment_date||'').slice(0,10));
+  const date=prompt(hdr+'٣) تاريخ المسترجع (YYYY-MM-DD):', String(rf.payment_date||'').slice(0,10));
   if(date==null) return;
   const rv=ref.trim(), dv=(date||'').trim();
   if(dv && !/^\d{4}-\d{2}-\d{2}$/.test(dv)){ alert('صيغة التاريخ غير صحيحة — استخدمي YYYY-MM-DD'); return; }
-  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_refund',payload:{id:id,bank_ref:rv,payment_date:dv}})});
-  const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
-  await load();
-  const miss=[]; if(!dv)miss.push('التاريخ'); if(!rv)miss.push('المرجع البنكي');
-  alert(miss.length?('✅ حُفظ — لا تزال ناقصة: '+miss.join(' + ')+'\nتظهر رمادية في الكشف ولا تُحتسب حتى تكتمل.'):('✅ اكتمل — العملية تنعكس الآن في كشف «'+(rf.bank_name||'البنك')+'» بخط أسود وبلا تنبيه.'));
+  if(owner){
+    // المالكة: تعديل مباشر فوري
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_refund',payload:{id:id,refund:amt,bank_ref:rv,payment_date:dv}})});
+    const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
+    await load();
+    const miss=[]; if(!dv)miss.push('التاريخ'); if(!rv)miss.push('المرجع البنكي');
+    alert('✅ عُدّل المرتجع إلى '+fmt(amt)+(miss.length?(' — لا تزال ناقصة: '+miss.join(' + ')+'\nتظهر رمادية ولا تُحتسب حتى تكتمل.'):(' — يظهر بكشف «'+(rf.bank_name||'البنك')+'» بلا تنبيه.')));
+  } else {
+    // المحاسب: يحتاج موافقة المالكة — سبب إجباري
+    const reason=(prompt('📝 سبب تعديل المرتجع (إجباري):')||'').trim();
+    if(!reason){ alert('⚠️ سبب التعديل إجباري — أُلغي الطلب'); return; }
+    const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'request_refund_edit',payload:{refund_id:id,refund:amt,bank_ref:rv,payment_date:dv,reason:reason,client_code:rf.client_code||'',summary:'✏️ تعديل مرتجع «'+(rf.client_code||'')+'» → قيمة '+fmt(amt)+(rv?' · مرجع '+rv:'')+(dv?' · تاريخ '+dv:''),by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
+    const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
+    await load();
+    alert('✅ أُرسل طلب تعديل المرتجع للمالكة مع السبب — لن يتغيّر حتى تعتمده (يظهر في 🔔 إشعارات).');
+  }
+}
+async function resolveRefEdit(id,decision){
+  if(!isOwnerUser()){ alert('⚠️ القرار للمالكة فقط'); return; }
+  const ok=decision==='approve'? confirm('اعتماد تعديل المرتجع وتطبيقه؟') : confirm('رفض طلب تعديل المرتجع؟');
+  if(!ok)return;
+  try{ const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resolve_refund_edit',payload:{id:id,decision:decision}})});
+    const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } await load(); }catch(e){ alert('خطأ: '+e.message); }
 }
 async function saveRefund(){
   const code=($('py-code').value||'').trim().toUpperCase();
