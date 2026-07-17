@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ف · إصلاح تقرير المدفوع له: «المستحق» = غير المدفوع فقط (المدفوع بالبطاقة = صفر) · الملغى = رسوم الإلغاء فقط (صفر لو رجع كامل) — الفنار = 544 بدل 1,470</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 17يوليو-ق · تقرير المدفوع له: المستحق = غير المدفوع فقط · الرصيد السالب يظهر «🟢 دفعة مقدمة (رصيد لنا)» بدل رقم سالب — الفنار: مستحق 544 + دفعة مقدمة 6,256</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2644,12 +2644,14 @@ function hpSummaryHtml(){
     const allCli=hpPayeeClientMap(HO_PAYEE); Object.values(allCli).forEach(o=>{ owed+=o.remain; grossOwed+=o.owed; paid+=o.paid; nBook+=o.n; });
     const payArr=hpPayments(HO_PAYEE); payArr.forEach(x=>paid+=x.amount); nPay=payArr.length;
   }
-  const bal=grossOwed-paid; const settled=(nBook>0 && bal<=0.5);
+  const bal=grossOwed-paid; const settled=(nBook>0 && bal<=0.5); const advance=(bal< -0.5);   // رصيد سالب = دفعة مقدمة/رصيد لصالحنا لدى الفندق
   return '<div class="panel" style="border:1px solid var(--accent);margin-bottom:14px"><h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>🧾 تقرير «'+esc(HO_PAYEE)+'» — '+(only2026?'سنة 2026 فقط':'كل السنوات (الرصيد المتراكم)')+' <span style="font-size:11px;color:var(--muted)">(بعملة المورّد '+esc(cur)+' · يشمل سداد البطاقة charge from)</span></span><label style="font-size:12px;font-weight:400;cursor:pointer;background:#f6f8fc;border:1px solid var(--line);border-radius:8px;padding:4px 10px" title="خاص بهذا الفندق فقط"><input type="checkbox" '+(only2026?'checked':'')+' onchange="hpToggle2026(this.checked)"> 🗓️ سنة 2026 فقط (لهذا الفندق)</label></h3>'+
     '<div class="kpis" style="grid-template-columns:repeat(5,1fr)">'+
       hpRepCard('💰 المستحق <span style="font-size:9px;color:var(--muted)">(غير المدفوع)</span>',fmt(owed)+' '+esc(cur),'var(--txt)')+
       hpRepCard('✅ إجمالي المدفوع',fmt(paid)+' '+esc(cur),'#0e9d6a')+
-      hpRepCard('📌 الرصيد الصافي <span style="font-size:9px;color:var(--muted)">(− = دفعنا زيادة)</span>',fmt(bal)+' '+esc(cur),'#b8860b')+
+      (advance
+        ? hpRepCard('🟢 دفعة مقدمة <span style="font-size:9px;color:var(--muted)">(رصيد لنا لدى الفندق)</span>',fmt(-bal)+' '+esc(cur),'#0e9d6a')
+        : hpRepCard('📌 المتبقّي للدفع',fmt(bal)+' '+esc(cur),'#b8860b'))+
       hpRepCard('🏨 عدد الحجوزات',fmt(nBook),'var(--txt)')+
       hpRepCard('🔁 عدد العمليات',fmt(nPay),'var(--accent)')+
     '</div>'+
