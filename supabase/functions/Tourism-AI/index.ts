@@ -70,7 +70,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
   vietnam: [
     { canonical: "Ha Noi",      pattern: /هانوي|hanoi|ha\s*noi/i },
     { canonical: "Sapa",        pattern: /سابا|sapa|كات\s*كات|لاو\s*تشاي|تا\s*فان|فانسيبان/i },
-    { canonical: "Ha Long",     pattern: /هالون[جغ]|halong|ha\s*long/i },
+    { canonical: "Ha Long",     pattern: /ها\s*لون[جغ]|halong|ha\s*long/i },
     { canonical: "Da Nang",     pattern: /دانان[جغ]|danang|da\s*nang|ba\s*na|ماي\s*خي/i },
     { canonical: "Phu Quoc",    pattern: /فوكوك|phu\s*quoc|phuquoc/i },
     { canonical: "Nha Trang",   pattern: /نها\s*تران[جغ]|نهاتران[جغ]|نياتران[جغ]|nha\s*trang/i },
