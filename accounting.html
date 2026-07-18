@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-ج · تدقيق شامل: «مباشر من المورّد» = مستحق (لم يُدفع) في كل المسارات (العمود + إجمالي المدفوعات + قائمة التوزيع + الكشف) — لا يُحسب مسدَّداً أبداً</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-د · جدول «دفعات المسجّلة» يستبعد القيم غير المدفوعة (Direct with/from supplier · Open balance · Rewards) القادمة من Booking Form — يبقى فقط السداد الفعلي ببطاقة/بنك (مطابق لإجمالي المدفوعات)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2793,7 +2793,7 @@ function buildHotelPay(){
   if(hpHbMatch(HO_PAYEE).length) h+='<div id="hp-fcd"></div>';
   // ===== دفعات هذا المدفوع له المسجّلة — سنة 2026 فقط (تستبعد 2025 والأقدم) — الحذف مباشر =====
   // 💳 أي سداد عبر Booking Form (charge from: بطاقة/تحويل بنكي/أي وسيلة) يظهر أيضاً كدفعة في السجل
-  const _chgMap={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const cf=String(s.charge_from||'').trim(); if(cf && !_directOwed(cf)) _chgMap[s.id]=cf; });   // «مباشر من المورّد» لا يُحتسب سداداً
+  const _chgMap={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const cf=String(s.charge_from||'').trim(); if(cf && _cardBankPaid(cf)) _chgMap[s.id]=cf; });   // بند المدفوعات = سداد فعلي ببطاقة/بنك فقط. «مباشر من المورّد / Direct with supplier / Open balance / Rewards» = ليست دفعة → تُستبعَد (مطابقة لإجمالي المدفوعات)
   const chgPays=hpHbMatch(HO_PAYEE).filter(h=>h._booking && h.service_id && _chgMap[h.service_id] && Number(h.final_rate_booked||0)>0 && !/cancel/i.test(String(h.status||'')))
     .map(h=>({ src:'charge', id:null, date:(CHARGE_DATE_OVR[h.service_id]!=null?CHARGE_DATE_OVR[h.service_id]:(h.check_in||'')), code:(h.client_code||'').toUpperCase(), name:h.client_name||'', raw:Number(h.final_rate_booked||0), srcCur:HO_TCUR, amount:Number(h.final_rate_booked||0), bank:_chgMap[h.service_id], ref:'عبر Booking Form', note:'', pair:'', rate:'' }));
   const recorded=hpPayments(HO_PAYEE).concat(chgPays).filter(x=>{ if(!hpOnly2026()) return true; const m=String(x.date||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
