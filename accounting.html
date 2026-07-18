@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 18يوليو-ب · Sales Form: بعد الحفظ، لو تكلفة الخدمات المُدخلة أقل بكثير من المتفق عليها مع العميل → تنبيه «هل أدخلتِ جميع الخدمات؟» بخيار نعم/لا (المدخلات تُحفظ في كل الأحوال)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 18يوليو-ج · حاجز صارم: عند إدخال First Client Data إذا تجاوز المدفوع الإجمالي المطلوب → الحفظ ممنوع للموظفة (ترفع التكلفة/الربح أو تصحّح المبلغ، منعاً للتكرار)؛ المالكة فقط تتجاوز لدفعة مقدمة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -5545,7 +5545,7 @@ function calc(){
   const fd=$('fld-duedate'); if(fd){ fd.style.display='flex'; const owed=remNow>1; fd.style.borderColor=owed?'#d98a00':'var(--line)'; fd.style.background=owed?'rgba(217,138,0,.10)':'transparent'; const req=fd.querySelector('.due-req'); if(req)req.style.display=owed?'':'none'; }
   // ⚠️ تنبيه الدفعة الزائدة: المدفوع الآن يتجاوز المتبقّي على العميل → غالباً دفعة مكرّرة
   const over=(remNow < -1); const ow=$('f-overpay');
-  if(ow){ ow.style.display=over?'block':'none'; if(over) ow.innerHTML='⚠️ دفعة زائدة — المدفوع يتجاوز المتبقّي بمقدار <b>'+fmt(-remNow)+'</b>. تأكّدي أنها ليست <b>دفعة مكرّرة</b> لعميل دفع أصلاً.'; }
+  if(ow){ ow.style.display=over?'block':'none'; if(over) ow.innerHTML='⛔ دفعة زائدة — المدفوع يتجاوز الإجمالي المطلوب بمقدار <b>'+fmt(-remNow)+'</b>. <b>الحفظ ممنوع</b> حتى ترفعي <b>التكلفة/الربح</b> أو تصحّحي <b>المبلغ</b> (منعاً للتكرار).'; }
   if($('c-bal')) $('c-bal').style.color = over?'#d11':(remNow>1?'var(--amber)':'#0e9d6a');
 }
 async function save(){
@@ -5563,10 +5563,18 @@ async function save(){
   const _rem = (FMODE==='new') ? (((+$('f-cost').value||0)+(+$('f-profit').value||0))-paid)
             : (FMODE==='service') ? ((selectedClient?selectedClient.balance:0)+((+$('f-cost').value||0)+(+$('f-profit').value||0))-paid)
             : ((selectedClient?selectedClient.balance:0)-paid);
-  // ⚠️ حاجز الدفعة الزائدة: المدفوع يتجاوز المتبقّي → غالباً دفعة مكرّرة، لازم تأكيد صريح قبل الحفظ
+  // ⛔ حاجز صارم للدفعة الزائدة: المدفوع يتجاوز الإجمالي المطلوب → لا يُحفظ (منعاً للتكرار). الحل: رفع التكلفة/الربح أو تصحيح المبلغ. المالكة فقط تتجاوز لدفعة مقدمة حقيقية.
   if(_rem < -1){
     const _nm=(selectedClient&&selectedClient.name)?(' «'+selectedClient.name+'»'):'';
-    if(!confirm('⚠️ دفعة زائدة!\n\nالمدفوع يتجاوز المتبقّي على العميل'+_nm+' بمقدار '+fmt(-_rem)+'.\nغالباً هذه دفعة مكرّرة لعميل دفع أصلاً.\n\nمتأكدة تبين تحفظينها؟')){ $('msg').innerHTML='<span style="color:var(--amber);font-weight:700">أُلغي الحفظ — تحقّقي من الدفعة الزائدة</span>'; return; }
+    const _fix=(FMODE==='pay') ? 'صحّحي <b>المبلغ المدفوع</b>، أو أضيفي الخدمة/القيمة الجديدة أولاً (تبويب «➕ إضافة خدمة») لرفع الإجمالي المطلوب.' : 'ارفعي <b>التكلفة</b> أو <b>الربح</b> حتى يساوي الإجمالي المدفوعَ أو يزيد، أو صحّحي <b>المبلغ المدفوع</b>.';
+    if($('f-overpay')){ $('f-overpay').style.display='block'; $('f-overpay').innerHTML='⛔ المدفوع يتجاوز الإجمالي المطلوب بمقدار <b>'+fmt(-_rem)+'</b> — '+ _fix; }
+    if(!isOwnerUser()){
+      $('msg').innerHTML='<span style="color:var(--red);font-weight:700">⛔ لا يمكن الحفظ: المبلغ المدفوع يتجاوز الإجمالي المطلوب على العميل'+_nm+' بمقدار <b>'+fmt(-_rem)+'</b> (غالباً دفعة مكرّرة).<br>'+_fix+'</span>';
+      const _fc=(FMODE==='pay')?$('f-paid'):$('f-cost'); if(_fc){ _fc.focus(); _fc.scrollIntoView({block:'center'}); }
+      return;
+    }
+    // المالكة فقط: تأكيد صريح للتجاوز (دفعة مقدمة حقيقية)
+    if(!confirm('⚠️ دفعة زائدة!\n\nالمدفوع يتجاوز الإجمالي المطلوب على العميل'+_nm+' بمقدار '+fmt(-_rem)+'.\nالأفضل رفع التكلفة/الربح أو تصحيح المبلغ.\n\n(صلاحية المالكة) متأكدة تحفظينها كدفعة مقدمة؟')){ $('msg').innerHTML='<span style="color:var(--amber);font-weight:700">أُلغي الحفظ — تحقّقي من الدفعة الزائدة</span>'; return; }
   }
   if(_rem>1 && !(($('f-duedate')||{}).value)){ const fd=$('fld-duedate'); if(fd)fd.style.display='flex'; $('msg').innerHTML='<span style="color:var(--red)">⚠️ على العميل مبلغ متبقٍّ ('+fmt(_rem)+') — لازم تحديد <b>تاريخ الاستحقاق</b> قبل الحفظ</span>'; if($('f-duedate'))$('f-duedate').focus(); return; }
   // معلومات إجبارية للعميل الجديد — كل الخانات التالية إلزامية قبل الحفظ
