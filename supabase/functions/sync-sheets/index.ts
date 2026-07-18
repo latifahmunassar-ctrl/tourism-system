@@ -354,13 +354,23 @@ function findHotelHeader(rows: string[][]): { rowIdx: number; cols: Record<strin
   return null;
 }
 
-// يوحّد صيغة التاريخ إلى ISO (YYYY-MM-DD) — الشيت يخلط بين "2026-06-01" و"01-06-2026".
+// يوحّد صيغة التاريخ إلى ISO (YYYY-MM-DD) — الشيت يخلط بين "2026-06-01"، "01-06-2026"،
+// وأحياناً مقلوب "2026-30-06" (YYYY-DD-MM) الذي يمرّ كأنه ISO رغم أن الشهر > 12.
 function normalizeISODate(s: string): string {
   const t = (s || "").trim();
   if (!t) return "";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;                  // أصلاً ISO
-  const m = t.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/); // DD-MM-YYYY → ISO
-  if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);            // YYYY-?-? (قد تكون مقلوبة)
+  if (m) {
+    let a = m[2], b = m[3];                                    // a=الوسط(شهر مفترض)، b=الأخير(يوم مفترض)
+    if (+a > 12 && +b <= 12) { const tmp = a; a = b; b = tmp; } // شهر مستحيل → مقلوب YYYY-DD-MM، بدّل
+    return `${m[1]}-${a.padStart(2, "0")}-${b.padStart(2, "0")}`;
+  }
+  m = t.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/);       // DD-MM-YYYY → ISO
+  if (m) {
+    let d = m[1], mo = m[2];
+    if (+mo > 12 && +d <= 12) { const tmp = d; d = mo; mo = tmp; }
+    return `${m[3]}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
   return t;
 }
 
