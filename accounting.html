@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 18يوليو-أ · إشعارات/تذاكر انخفاض الربح الفعلي: أُضيف عمود «حالة الحجز» (✅ نشط · 🚫 ملغي · ⚠️ إلغاء جزئي) ليوضّح سبب الانخفاض لكل عميل</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 18يوليو-ب · Sales Form: بعد الحفظ، لو تكلفة الخدمات المُدخلة أقل بكثير من المتفق عليها مع العميل → تنبيه «هل أدخلتِ جميع الخدمات؟» بخيار نعم/لا (المدخلات تُحفظ في كل الأحوال)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2171,6 +2171,42 @@ function sBuildPayload(){
     rooms_count:(sIsHotel($('s-type').value)?(parseInt($('s-rooms').value,10)||null):null),
     check_in:$('s-in').value||null, check_out:$('s-out').value||null };
 }
+// 🔎 فجوة التكلفة لعميل: مجموع تكلفة الخدمات المُدخلة مقابل التكلفة المتفق عليها مع العميل (First Client Data)
+// نفس أساس actualProfitMaps: final_rate_booked×الصرف (فندق/طيران) أو amount (جولة/مورّد/انتقال/فيزا/أخرى)، بعملة العميل
+function salesCostGap(code){
+  code=(code||'').toUpperCase(); if(!code) return null;
+  let entered=0, hasCanc=false, hasBooked=false;
+  (DATA.serviceLines||[]).forEach(s=>{ if((s.client_code||'').toUpperCase()!==code)return;
+    const k=s.kind; if(['hotel','flight','tour','additional','supplier','transport','visa','other'].indexOf(k)<0)return;
+    if(/profit/i.test(String(s.name||'')))return;
+    if(/cancel/i.test(String(s.status||''))){ hasCanc=true; return; }   // الملغى لا يُعدّ تكلفة إدخال ناقصة
+    const rate=Number(s.currency_rate)||1;
+    if(s.final_rate_booked!=null&&s.final_rate_booked!==''){ entered+=Number(s.final_rate_booked)*rate; hasBooked=true; }
+    else if(['tour','additional','supplier','transport','visa','other'].indexOf(k)>=0){ entered+=Number(s.amount||0); hasBooked=true; }
+  });
+  let agreed=0; (DATA.fcd||[]).forEach(r=>{ if((r.client_code||'').toUpperCase()!==code)return; agreed+=Number(r.cost||0); });
+  return { entered, agreed, hasCanc, hasBooked, gap: agreed-entered };
+}
+// تنبيه بعد الحفظ: التكلفة المُدخلة أقل بكثير من المتفق عليها (ربما خدمة ناقصة) — لا يمنع الحفظ، خيار نعم/لا فقط
+function sMaybeWarnCost(code){
+  try{
+    const g=salesCostGap(code); if(!g) return false;
+    const cur=((clientInfo(code)||{}).cur)||'SAR';
+    // «أقل بكثير» = الفارق يتجاوز 20% من المتفق عليها و500 كحد أدنى، مع وجود خدمات مُدخلة ولا يوجد إلغاء يفسّر النقص
+    if(!(g.hasBooked && !g.hasCanc && g.agreed>0 && g.gap > Math.max(500, g.agreed*0.20))) return false;
+    $('s-msg').innerHTML='<div style="background:rgba(217,138,0,.12);border:1px solid #d98a00;border-radius:10px;padding:11px;margin-top:6px;font-size:12.5px;line-height:1.75;text-align:right">'
+      +'⚠️ <b style="color:#b8860b">تنبيه:</b> التكلفة المُدخلة من الخدمات <b>'+fmt(g.entered)+' '+esc(cur)+'</b> أقل من التكلفة المتّفق عليها مع العميل <b>'+fmt(g.agreed)+' '+esc(cur)+'</b> (فارق <b style="color:#d11">'+fmt(g.gap)+' '+esc(cur)+'</b>).<br>'
+      +'<b>هل أدخلتِ جميع خدمات البرنامج؟</b> <span style="color:#0e7c50">(المدخلات محفوظة في كل الأحوال ✓)</span>'
+      +'<div style="display:flex;gap:8px;margin-top:9px;flex-wrap:wrap">'
+      +'<button class="btn green" style="padding:5px 16px;font-size:12px" onclick="sCostAck(true)">✅ نعم، أدخلتها كلها</button>'
+      +'<button class="btn" style="padding:5px 16px;font-size:12px;background:#d98a00;color:#000" onclick="sCostAck(false)">✏️ لا، ناقصة — سأكملها</button>'
+      +'</div></div>';
+    return true;
+  }catch(_){ return false; }
+}
+function sCostAck(yes){ const m=$('s-msg'); if(!m)return; m.innerHTML = yes
+  ? '<span style="color:var(--green)">✓ تمّ التأكيد — شكراً. المدخلات محفوظة.</span>'
+  : '<span style="color:#d98a00;font-weight:700">✏️ أكملي إدخال الخدمات الناقصة لهذا العميل (المحفوظ سليم — أضيفي الباقي عبر «➕ إضافة خدمة»).</span>'; }
 // هل الفورم الحالي فيه خدمة مكتوبة (ليُحتسب عند الحفظ)؟
 function sFormFilled(){ return !!((($('s-desc').value||'').trim())||(($('s-supplier').value||'').trim())||(+$('s-price').value>0)||(+$('s-supcalc').value>0)); }
 // تفريغ حقول الخدمة مع الإبقاء على كود العميل (للخدمة التالية)
@@ -2201,7 +2237,7 @@ async function addSales(){
   if(editId){ const p=sBuildPayload(); if(!p) return;
     const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_service_line',payload:p})});
     const j=await r.json(); if(j.error){ $('s-msg').innerHTML='<span style="color:var(--red)">خطأ: '+esc(j.error)+'</span>'; return; }
-    $('s-msg').innerHTML='<span style="color:var(--green)">✓ تم تعديل الخدمة</span>'; cancelEditSales(); load(); return; }
+    const _ec=p.client_code; cancelEditSales(); await load(); if(!sMaybeWarnCost(_ec)) $('s-msg').innerHTML='<span style="color:var(--green)">✓ تم تعديل الخدمة</span>'; return; }
   // وضع الإضافة: احفظي السلة + الخدمة الحالية (إن كانت مكتوبة)
   const batch=SAL_CART.slice();
   if(sFormFilled()){ const p=sBuildPayload(); if(!p) return; delete p.id; batch.push(p); }
@@ -2210,9 +2246,10 @@ async function addSales(){
   for(const p of batch){ try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_service_line',payload:p})}); const j=await r.json(); if(j.error){ err=j.error; break; } okN++; }catch(e){ err=e.message; break; } }
   $('s-save-btn').disabled=false;
   if(err){ $('s-msg').innerHTML='<span style="color:var(--red)">حُفظ '+okN+' وتوقّف عند خطأ: '+esc(err)+'</span>'; SAL_CART=SAL_CART.slice(okN); sRenderCart(); return; }
+  const _savedCode=(batch[0]&&batch[0].client_code)||'';
   SAL_CART=[]; sRenderCart(); cancelEditSales();
-  $('s-msg').innerHTML='<span style="color:var(--green)">✓ حُفظ الطلب كامل ('+okN+' خدمة)</span>';
-  load();
+  await load();
+  if(!sMaybeWarnCost(_savedCode)) $('s-msg').innerHTML='<span style="color:var(--green)">✓ حُفظ الطلب كامل ('+okN+' خدمة)</span>';
 }
 
 // ---- تفصيل الحجز: كل خدمة بسطر (من acc_service_lines) ----
