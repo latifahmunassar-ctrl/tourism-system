@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-أ · جدول «دفعات المسجّلة» يميّز الدفعة الإجمالية «🔵 غير موزّعة» (بلا عميل) عن الموزّعة (يظهر كودها)؛ لإدخالها: دفعة فندق بلا تحديد أي عميل</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-ب · عمود «المدفوع للمورّد»: «مباشر من المورّد» (direct/ditect from supplier) = مستحق (لم يُدفع) دائماً وله الأولوية — لا يظهر مدفوعاً بالغلط</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2480,12 +2480,13 @@ function renderHotels(){
       '<span class="num">'+n2(h.selling_rate)+'</span>', '<span class="num">'+n2(h.cancel_charge)+'</span>',
       '<span class="num">'+n2(h.final_rate_booked)+'</span>', '<span class="num '+(dv< -0.5?'neg':(dv>0.5?'pos':''))+'">'+n2(h.diff)+'</span>',
       esc(h.due_payment_date||''),
-      (function(){   // 💰 المدفوع للمورّد لهذا الحجز: دفعة مسجّلة، أو مسدَّد عبر charge from (بطاقة/بنك)، أو مستحق غير مدفوع
+      (function(){   // 💰 المدفوع للمورّد لهذا الحجز — الأولوية لـ charge_from الخاص بالحجز نفسه
         if(isC) return '<span style="color:#9aa">—</span>';
+        var _bcf = chg[code+'|'+(h.check_in||'')] || '';   // charge_from لهذا الحجز تحديداً (من Booking Form)
+        // ✅ قاعدة المالكة: «مباشر من المورّد» (direct/ditect from supplier) = مستحق دائماً (لم يُدفع) — له الأولوية على أي إشارة أخرى
+        if(_directOwed(_bcf)) return '<span style="font-size:10px;color:#b8860b;font-weight:700">↗️ مستحق (لم يُدفع)</span>';
         if(sp) return '<span class="num" style="color:#0e9d6a;font-weight:700">'+fmt(sp.amt)+' '+esc(sp.cur||'')+'</span>'+(sp.n>1?'<br><span style="font-size:9px;color:var(--muted)">'+sp.n+' دفعة</span>':'');
-        var _cf=sbank||'';
-        if(_cf && !_directOwed(_cf) && !/not\s*booked/i.test(_cf) && Number(h.final_rate_booked||0)>0) return '<span class="num" style="color:#0e9d6a;font-weight:700">'+n2(h.final_rate_booked)+'</span><br><span style="font-size:9px;color:var(--accent)">'+payMethod(_cf)+'</span>';
-        if(_directOwed(_cf)) return '<span style="font-size:10px;color:#b8860b;font-weight:700">↗️ مستحق (لم يُدفع)</span>';
+        if(_bcf && !/not\s*booked/i.test(_bcf) && Number(h.final_rate_booked||0)>0) return '<span class="num" style="color:#0e9d6a;font-weight:700">'+n2(h.final_rate_booked)+'</span><br><span style="font-size:9px;color:var(--accent)">'+payMethod(_bcf)+'</span>';   // مسدَّد ببطاقة/بنك عبر Booking Form
         return '<span style="color:#9aa">⏳ لم يُدفع</span>';
       })(),
       isC?'<span class="pill cancel">ملغى</span>':'<span class="pill active">نشط</span>',
