@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 18يوليو-د · أُضيف عمود «الكود» مستقلاً في جدول المستحقات (كان مدمجاً مع الاسم)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 18يوليو-هـ · Hotels Overview: أُضيف عمود «💰 المدفوع للمورّد» يمين عمود الحالة (دفعة مسجّلة / مسدَّد ببطاقة/بنك / ↗️ مستحق لم يُدفع / ⏳)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -503,7 +503,7 @@ table{font-weight:600}
       </div>
       <div class="panel"><h3>🏨 Hotels / Systmes PYT Overview <span class="cnt">(حجوزات TBO)</span> <span class="cnt" id="ho-cnt"></span></h3>
         <div class="tbl-wrap bf-scroll" id="ho-tbl"><table id="t-hotels"><thead><tr>
-          <th>تاريخ الوصول</th><th>اسم العميل</th><th>كود العميل</th><th>وكيل العميل</th><th>ربح البرنامج<br><span style="font-size:9px;color:var(--muted)">فعلي · Booking Form</span></th><th>حالة التأكيد</th><th>رصيد دفعة العميل</th><th>العملة</th><th>اسم الفندق</th><th>نوع الغرفة</th><th>دخول</th><th>🚪 عدد الغرف</th><th>خروج</th><th>Conf No</th><th>سعر البيع</th><th>رسوم الإلغاء</th><th>السعر المحجوز النهائي</th><th>الفرق</th><th>تاريخ الاستحقاق</th><th>الحالة</th><th>إجمالي الدفع</th><th>إجمالي المرتجع</th><th>دفعة لكل عميل</th><th>تاريخ الدفع</th><th>اسم البنك</th><th>مرجع البنك</th><th>🏦 مصدر الدفع<br><span style="font-size:9px;color:var(--muted)">من أي شيت</span></th><th>Booked by</th><th>Confirmed by</th>
+          <th>تاريخ الوصول</th><th>اسم العميل</th><th>كود العميل</th><th>وكيل العميل</th><th>ربح البرنامج<br><span style="font-size:9px;color:var(--muted)">فعلي · Booking Form</span></th><th>حالة التأكيد</th><th>رصيد دفعة العميل</th><th>العملة</th><th>اسم الفندق</th><th>نوع الغرفة</th><th>دخول</th><th>🚪 عدد الغرف</th><th>خروج</th><th>Conf No</th><th>سعر البيع</th><th>رسوم الإلغاء</th><th>السعر المحجوز النهائي</th><th>الفرق</th><th>تاريخ الاستحقاق</th><th>💰 المدفوع للمورّد<br><span style="font-size:9px;color:var(--muted)">فعلي/مسدَّد</span></th><th>الحالة</th><th>إجمالي الدفع</th><th>إجمالي المرتجع</th><th>دفعة لكل عميل</th><th>تاريخ الدفع</th><th>اسم البنك</th><th>مرجع البنك</th><th>🏦 مصدر الدفع<br><span style="font-size:9px;color:var(--muted)">من أي شيت</span></th><th>Booked by</th><th>Confirmed by</th>
         </tr></thead><tbody></tbody></table></div>
         <div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:6px 18px;font-size:14px" onclick="hScroll('ho-tbl',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:6px 18px;font-size:14px" onclick="hScroll('ho-tbl',1)">تمرير ▶▶</button></div>
       </div>
@@ -2479,12 +2479,21 @@ function renderHotels(){
       esc(h.hotel_name||''), esc(h.room_type||''), esc(h.check_in||''), (h.rooms_count!=null&&h.rooms_count!==''?'<b>'+esc(h.rooms_count)+'</b>':''), esc(h.check_out||''), esc(h.conf_no||''),
       '<span class="num">'+n2(h.selling_rate)+'</span>', '<span class="num">'+n2(h.cancel_charge)+'</span>',
       '<span class="num">'+n2(h.final_rate_booked)+'</span>', '<span class="num '+(dv< -0.5?'neg':(dv>0.5?'pos':''))+'">'+n2(h.diff)+'</span>',
-      esc(h.due_payment_date||''), isC?'<span class="pill cancel">ملغى</span>':'<span class="pill active">نشط</span>',
+      esc(h.due_payment_date||''),
+      (function(){   // 💰 المدفوع للمورّد لهذا الحجز: دفعة مسجّلة، أو مسدَّد عبر charge from (بطاقة/بنك)، أو مستحق غير مدفوع
+        if(isC) return '<span style="color:#9aa">—</span>';
+        if(sp) return '<span class="num" style="color:#0e9d6a;font-weight:700">'+fmt(sp.amt)+' '+esc(sp.cur||'')+'</span>'+(sp.n>1?'<br><span style="font-size:9px;color:var(--muted)">'+sp.n+' دفعة</span>':'');
+        var _cf=sbank||'';
+        if(_cf && !_directOwed(_cf) && !/not\s*booked/i.test(_cf) && Number(h.final_rate_booked||0)>0) return '<span class="num" style="color:#0e9d6a;font-weight:700">'+n2(h.final_rate_booked)+'</span><br><span style="font-size:9px;color:var(--accent)">'+payMethod(_cf)+'</span>';
+        if(_directOwed(_cf)) return '<span style="font-size:10px;color:#b8860b;font-weight:700">↗️ مستحق (لم يُدفع)</span>';
+        return '<span style="color:#9aa">⏳ لم يُدفع</span>';
+      })(),
+      isC?'<span class="pill cancel">ملغى</span>':'<span class="pill active">نشط</span>',
       '<span class="num">'+n2(h.total_payment)+'</span>', '<span class="num">'+n2(h.total_refund)+'</span>', '<span class="num">'+n2(h.payment_per_client)+'</span>',
       esc(h.payment_date||''), esc(h.bank_name||''), esc(h.bank_ref||''),
       srcCell, esc(h.booked_by||''), esc(h.confirmed_by||'')
     ].map(c=>'<td>'+c+'</td>').join('')+'</tr>';
-  }).join('')||rw(Array(29).fill('').map((_,i)=>i===0?'لا نتائج':''));
+  }).join('')||rw(Array(30).fill('').map((_,i)=>i===0?'لا نتائج':''));
   $('ho-cnt').textContent=rows.length+' حجز';
 }
 
