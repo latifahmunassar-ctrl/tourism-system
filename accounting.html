@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-د · جدول «دفعات المسجّلة» يستبعد القيم غير المدفوعة (Direct with/from supplier · Open balance · Rewards) القادمة من Booking Form — يبقى فقط السداد الفعلي ببطاقة/بنك (مطابق لإجمالي المدفوعات)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-هـ · «مباشر من المورّد» بنوعيه (Ditect from supplier + Direct with the Suppler) = مستحق لم يُدفع في كل المسارات؛ أما Rewards و Open balance و البطاقة/البنك = دفعات فعلية تبقى ظاهرة (قرار المالكة)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -850,8 +850,10 @@ let LG_ROLE='';   // القسم المختار في شاشة الدخول (مح�
 const $=id=>document.getElementById(id);
 const fmt=n=>Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});
 const esc=s=>(s==null?'':String(s)).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
-// «مباشر من المورّد» = دين مستحق علينا (from supplier). «Direct with the supplier/hotel» = مسدَّد مباشرةً (لا يُعدّ مستحقاً — مثل TBO مسبق الدفع)
-function _directOwed(cf){ return /ditect|from\s*supplier/i.test(String(cf||'')); }
+// 🔴 «مباشر من المورّد» (بنوعيه: «Ditect from supplier» و«Direct with the Suppler») = دين مستحق علينا، لم يُدفع — لا يُحتسب دفعة (قرار المالكة 19 يوليو 2026)
+function _directOwed(cf){ cf=String(cf||''); return /ditect|from\s*supplier/i.test(cf) || (/\b(direct|ditect)\b/i.test(cf) && /suppl|hotel|مور|فندق/i.test(cf)); }
+// 🟢 دفعة فعلية = charge_from موجود وليس «مباشر من المورّد» وليس «غير محجوز» — يشمل البطاقة/البنك/المكافآت (Rewards)/الرصيد المفتوح (Open balance)
+function _isSettlement(cf){ cf=String(cf||'').trim(); if(!cf)return false; if(_directOwed(cf))return false; if(/not\s*booked/i.test(cf))return false; return true; }
 // 💳 charge_from يمثّل «دفعة فعلية بالبطاقة/البنك» لهذا الحجز (وليس مجرد حالة مثل Direct/Open balance/Rewards أو دين مستحق)
 function _cardBankPaid(cf){ cf=String(cf||''); if(!cf)return false; if(_directOwed(cf))return false; if(/direct\s*with|open\s*balance|reward|not\s*booked/i.test(cf))return false; return /card|بطاقة|bank|بنك|dhofar|rhb|\*\*/i.test(cf); }
 function payMethod(bn){ bn=String(bn||''); if(/credit card|card|بطاقة/i.test(bn)||bn.indexOf('**')>=0)return '💳 بطاقة'; if(/open balance/i.test(bn))return '🟰 رصيد مفتوح'; if(/reward|مكاف/i.test(bn))return '🎁 مكافآت'; if(_directOwed(bn))return '↗️ مباشر من المورّد — غير مدفوع'; if(/direct|مباشر|with\s*the\s*(suppl|hotel)/i.test(bn))return '↗️ مباشر مع المورّد'; if(/not\s*booked/i.test(bn))return '⛔ غير محجوز'; if(/cash|نقد|كاش/i.test(bn))return '💵 نقدي'; return bn?'🏦 تحويل بنكي':''; }
@@ -2695,7 +2697,7 @@ function hpSummaryHtml(){
   const paidCodes=new Set(payArr.map(x=>String(x.code||'').toUpperCase()).filter(Boolean));   // عملاء لهم تحويل مسجّل
   const cfById2={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const v=String(s.charge_from||'').trim(); if(v)cfById2[s.id]=v; });
   hpHbMatch(HO_PAYEE).forEach(h=>{ if(!h._booking||!h.service_id)return; if(/cancel/i.test(String(h.status||'')))return; if(only2026 && !yOK(h.check_in||h.arrival_date))return;
-    if(!_cardBankPaid(cfById2[h.service_id]))return;               // ليست دفعة بطاقة/بنك فعلية
+    if(!_isSettlement(cfById2[h.service_id]))return;               // ليست دفعة فعلية (مباشر من المورّد = مستحق)
     if(paidCodes.has(String(h.client_code||'').toUpperCase()))return;   // له تحويل مسجّل → لا تُزدوَج
     paid+=Number(h.final_rate_booked||0); nPay++;
   });
@@ -2793,7 +2795,7 @@ function buildHotelPay(){
   if(hpHbMatch(HO_PAYEE).length) h+='<div id="hp-fcd"></div>';
   // ===== دفعات هذا المدفوع له المسجّلة — سنة 2026 فقط (تستبعد 2025 والأقدم) — الحذف مباشر =====
   // 💳 أي سداد عبر Booking Form (charge from: بطاقة/تحويل بنكي/أي وسيلة) يظهر أيضاً كدفعة في السجل
-  const _chgMap={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const cf=String(s.charge_from||'').trim(); if(cf && _cardBankPaid(cf)) _chgMap[s.id]=cf; });   // بند المدفوعات = سداد فعلي ببطاقة/بنك فقط. «مباشر من المورّد / Direct with supplier / Open balance / Rewards» = ليست دفعة → تُستبعَد (مطابقة لإجمالي المدفوعات)
+  const _chgMap={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const cf=String(s.charge_from||'').trim(); if(_isSettlement(cf)) _chgMap[s.id]=cf; });   // بند المدفوعات = سداد فعلي (بطاقة/بنك/مكافآت/رصيد مفتوح). «مباشر من المورّد» بنوعيه = مستحق لم يُدفع → يُستبعَد
   const chgPays=hpHbMatch(HO_PAYEE).filter(h=>h._booking && h.service_id && _chgMap[h.service_id] && Number(h.final_rate_booked||0)>0 && !/cancel/i.test(String(h.status||'')))
     .map(h=>({ src:'charge', id:null, date:(CHARGE_DATE_OVR[h.service_id]!=null?CHARGE_DATE_OVR[h.service_id]:(h.check_in||'')), code:(h.client_code||'').toUpperCase(), name:h.client_name||'', raw:Number(h.final_rate_booked||0), srcCur:HO_TCUR, amount:Number(h.final_rate_booked||0), bank:_chgMap[h.service_id], ref:'عبر Booking Form', note:'', pair:'', rate:'' }));
   const recorded=hpPayments(HO_PAYEE).concat(chgPays).filter(x=>{ if(!hpOnly2026()) return true; const m=String(x.date||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
