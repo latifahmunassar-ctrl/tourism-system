@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 18يوليو-ج · حاجز صارم: عند إدخال First Client Data إذا تجاوز المدفوع الإجمالي المطلوب → الحفظ ممنوع للموظفة (ترفع التكلفة/الربح أو تصحّح المبلغ، منعاً للتكرار)؛ المالكة فقط تتجاوز لدفعة مقدمة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 18يوليو-د · أُضيف عمود «الكود» مستقلاً في جدول المستحقات (كان مدمجاً مع الاسم)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -574,7 +574,7 @@ table{font-weight:600}
       </div>
       <div class="panel"><h3>مستحقات العملاء <span class="cnt" id="due-cnt"></span></h3>
         <div class="tbl-wrap"><table id="t-due"><thead><tr>
-          <th>تنبيه</th><th>العميل</th><th>الوكالة</th><th>السعر</th><th>المدفوع</th><th>المتبقي</th><th>العملة<br><span style="font-size:9px;color:var(--muted)">First Client Data</span></th><th>الوصول</th><th>تاريخ السداد</th><th>الحالة</th>
+          <th>تنبيه</th><th>الكود</th><th>العميل</th><th>الوكالة</th><th>السعر</th><th>المدفوع</th><th>المتبقي</th><th>العملة<br><span style="font-size:9px;color:var(--muted)">First Client Data</span></th><th>الوصول</th><th>تاريخ السداد</th><th>الحالة</th>
         </tr></thead><tbody></tbody></table></div>
       </div>
     </div>
@@ -5345,7 +5345,8 @@ function renderDue(){
   const _curByCode={}; (DATA.fcd||[]).forEach(x=>{ const c=(x.client_code||'').toUpperCase(); if(x.currency && !_curByCode[c]) _curByCode[c]=String(x.currency).trim(); });
   document.querySelector('#t-due tbody').innerHTML=rows.map(r=>rw([
     r.is_overdue?'<span style="font-size:15px">⚠️</span>':'',
-    esc(r.client_code)+' — '+esc(r.client_name||'')+clientNameWarn(r.client_code,_wmDue),esc(r.agent_name||''),
+    '<b>'+esc(r.client_code||'')+'</b>',
+    esc(r.client_name||'')+clientNameWarn(r.client_code,_wmDue),esc(r.agent_name||''),
     '<span class="num">'+fmt(r.final_rate)+'</span>','<span class="num">'+fmt(r.amount_paid)+'</span>',
     (function(){ var s=dset(r), eb=effBal(r); var out=bal(eb);
       if(s>0){ out+='<br><span class="pill" style="background:#7c3aed;color:#fff;font-size:9px" title="مبلغ مُسوّى/مشطوب — طُرح من الرصيد والربح">🧹 مُسوّى '+fmt(s)+'</span>'; }
@@ -5356,7 +5357,7 @@ function renderDue(){
     esc(r.arrival_date||''),
     '<input type="date" class="dueinp" value="'+(r.due_date||'')+'"'+((Number(r.balance||0)>1 && !r.due_date)?' style="border:1px solid #d98a00;background:rgba(217,138,0,.12)" title="عليه رصيد بدون تاريخ سداد — حدّدي التاريخ"':'')+' onchange="setDue(\''+esc(r.client_code)+'\',this.value)">',
     r.is_overdue?'<span class="pill over" title="بدء التنبيه: '+esc(r.alert_date||'')+((r.due_date&&r.alert_date===r.due_date)?' (تاريخ السداد)':' (قبل الوصول بأسبوع — تاريخ السداد قريب من الوصول)')+'">🔔 تنبيه سداد</span>':((Number(r.balance||0)>1 && !r.due_date)?'<span class="pill" style="background:#d98a00;color:#fff">بلا تاريخ سداد</span>':'<span class="pill active">'+esc(r.balance_status||'')+'</span>')
-  ])).join('')||rw(['','لا نتائج','','','','','','','','']);
+  ])).join('')||rw(['','','لا نتائج','','','','','','','','']);
   const nOwe=DATA.due.filter(r=>effBal(r)>1).length, nOver=DATA.due.filter(r=>effBal(r)<-1).length, nND=DATA.due.filter(r=>effBal(r)>1 && !r.due_date).length, nUnc=DATA.due.filter(r=>Number(r.unconfirmed_paid||0)>1).length, nSet=DATA.due.filter(r=>dset(r)>0).length;
   $('due-cnt').textContent=rows.length+' ظاهر · 🔴 '+nOwe+' عليه مستحق (منهم 🟠 '+nND+' بلا تاريخ سداد) · ↩️ '+nOver+' مدفوع زيادة'+(nSet?' · 🧹 '+nSet+' مُسوّى':'')+(nUnc?' · ⚠️ '+nUnc+' فيه مبلغ بلا مرجع':'');
 }
