@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-ي · قائمة الفنادق في Sales Form = القائمة المُدارة فقط (بلا دمج حجوزات قديمة) — حذف/إضافة أي فندق ينعكس فوراً (روتانا صلالة المحذوفة اختفت)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-ك · «مصدر الحجز» في Sales Form يضبط الآن booked_from أيضاً (مو supplier فقط) — فتغيير المصدر ينعكس فوراً في الكشف والتقارير</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2171,7 +2171,7 @@ function sBuildPayload(){
   if($('s-sellcur').value!==$('s-cur').value && !(+$('s-rate').value)){ $('s-msg').innerHTML='<span style="color:var(--red)">⚠️ ما فيه سعر صرف لهذا الزوج — أضيفيه في قائمة العملات «the currency» بمدخل البيانات</span>'; return null; }
   return { id:($('s-id').value||null), client_code:code, kind:salesKindCanon($('s-type').value), name:$('s-desc').value.trim()||null,
     detail:($('s-room').value||'').trim()||null,
-    supplier:$('s-supplier').value||null, amount:+$('s-price').value||0,
+    supplier:$('s-supplier').value||null, booked_from:$('s-supplier').value||null,   /* 🔗 «مصدر الحجز» يضبط الحقلين معاً: supplier (Sales) + booked_from (الكشف/Booking) — فالتغيير ينعكس فوراً */ amount:+$('s-price').value||0,
     sell_currency:$('s-sellcur').value||'SAR', currency:$('s-cur').value||null, currency_rate:+$('s-rate').value||1,
     rooms_count:(sIsHotel($('s-type').value)?(parseInt($('s-rooms').value,10)||null):null),
     check_in:$('s-in').value||null, check_out:$('s-out').value||null };
