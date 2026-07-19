@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-هـ · «مباشر من المورّد» بنوعيه (Ditect from supplier + Direct with the Suppler) = مستحق لم يُدفع في كل المسارات؛ أما Rewards و Open balance و البطاقة/البنك = دفعات فعلية تبقى ظاهرة (قرار المالكة)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-و · 🏦 المرجع البنكي يُدخله المحاسب أو المالكة فقط — كل حقول المرجع البنكي مقفلة لباقي الموظفين (مُحقَّق خادميّاً: يُجرَّد المرجع من غير المخوّل)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -966,6 +966,7 @@ function applyPermissions(){
   if(u && (!activeBtn || activeBtn.style.display==='none')){ const first=[...document.querySelectorAll('.tabs .tab')].find(b=>b.style.display!=='none'); if(first)tab(first); }
   const ub=$('userbar'); if(ub) ub.innerHTML = u ? ('👤 <b>'+esc(u.staff_name)+'</b>'+(u.is_owner?' <span style="color:#0e9d6a">(كل الصلاحيات)</span>':' <span>('+(u.allowed_tabs||[]).length+' تبويب)</span>')+' <button class="btn" style="padding:3px 12px;font-size:11.5px;background:var(--red);margin-right:4px" onclick="doLogout()">🚪 خروج</button> <button class="btn ghost" style="padding:3px 10px;font-size:11px" onclick="switchUser()">🔄 تبديل مستخدم</button>') : '';
   if(u && u.is_owner) renderControl();
+  try{ applyBankRefGuard(); }catch(_){}
   renderSecBanner(u);
   renderNotifBanner(u);
 }
@@ -5680,6 +5681,15 @@ let MGR_CAT='';
 // ===== قوائم تحتاج موافقة المالكة قبل ظهورها (المحاسب يرسل طلباً؛ المالكة تضيف مباشرة) =====
 const LIST_APPROVAL_CATS=['banks','charged_from','bc_desc','bc_det','bc_subdet'];
 function isOwnerUser(){ if(PREVIEW_USER) return false; const me=(DATA&&DATA.me)||null; if(me) return (me.via==='key' || !!me.is_owner); return !!(CURRENT_USER&&CURRENT_USER.is_owner); }
+// 🏦 صلاحية إدخال المرجع البنكي: المحاسب أو المالكة فقط (يعتمد على can_bankref من الخادم — مُحقَّق خادميّاً)
+function canEnterBankRef(){ if(PREVIEW_USER) return false; const me=(DATA&&DATA.me)||null; if(me && typeof me.can_bankref!=='undefined') return !!me.can_bankref; return isOwnerUser(); }
+const BANKREF_IDS=['f-ref','fe-ref','hp-ref','sp-ref','rf-ref','bca-ref'];
+function applyBankRefGuard(){ const lock=!canEnterBankRef(); BANKREF_IDS.forEach(id=>{ const el=document.getElementById(id); if(!el)return;
+  if(lock){ if(el.dataset._brLocked!=='1'){ el.dataset._brLocked='1'; el.disabled=true; if(el.value)el.value=''; el.placeholder='🔒 يُدخله المحاسب/المالكة فقط'; el.title='المرجع البنكي يُدخله المحاسب أو المالكة فقط — قرار المالكة'; el.style.background='#eee'; el.style.cursor='not-allowed'; } }
+  else if(el.dataset._brLocked==='1'){ el.dataset._brLocked=''; el.disabled=false; el.placeholder=''; el.title=''; el.style.background=''; el.style.cursor=''; }
+}); }
+// مراقب DOM: يقفل حقول المرجع البنكي الديناميكية (مودالات/تبويبات) فور ظهورها
+try{ if(!window._brObs){ window._brObs=new MutationObserver(()=>{ try{ applyBankRefGuard(); }catch(_){}}); window._brObs.observe(document.documentElement,{childList:true,subtree:true}); } }catch(_){}
 // 👁️ معاينة كموظف (للمالكة فقط، مرئية فقط — لا تغيّر الجلسة الحقيقية)
 var PREVIEW_USER=null;
 function previewAs(name){ if(!isOwnerUser()&&!PREVIEW_USER)return; const u=staffList().find(x=>x.staff_name===name); if(!u){ alert('الموظف غير موجود'); return; } if(u.is_owner){ alert('لا حاجة لمعاينة حساب المالكة'); return; } PREVIEW_USER={staff_name:u.staff_name,is_owner:false,allowed_tabs:u.allowed_tabs||[]}; window.scrollTo(0,0); applyPermissions(); }
