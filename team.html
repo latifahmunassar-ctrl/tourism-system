@@ -205,7 +205,12 @@ body { font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--text)
 
 - { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important; }
 html, body { margin:0 !important; padding:0 !important; background:#fff !important; overflow:visible !important; height:auto !important; display:block !important; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; text-rendering:geometricPrecision; }
-.topbar, .layout, .login-overlay, .rfm-overlay { display:none !important; }
+/* كل الحاويات والنوافذ والعناصر العائمة تُخفى عند الطباعة — يبقى #pdfContent (أو
+   #readyFilePdf) فقط. أي عنصر position:fixed أُضيف هنا حتى لا يتسرّب في الـPDF
+   (بلاغ: صورة من نافذة «طلبات الشركات» كانت تظهر في الملف المُصدَّر). */
+.topbar, .layout, .login-overlay, .rfm-overlay,
+#inboxOverlay, #indivOverlay, #inboxBanner,
+#waReqFab, #waReqPanel, #scrollNav { display:none !important; }
 #pdfContent { display:block !important; }
 /* Ready-file module: only shown for printing when body has the marker class */
 body.rfm-printing #pdfContent { display:none !important; }
