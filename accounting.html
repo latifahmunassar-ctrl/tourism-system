@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-ز · 🏦 المرجع البنكي: المحاسب يضيف لخانة فارغة مباشرة، وتغييره لمرجع موجود يُرسَل طلب موافقة للمالكة (لا يتغيّر حتى الاعتماد + إشعار)؛ المالكة مباشرة؛ باقي الموظفين ممنوعون</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-ح · 🔒 صارم: أي تغيير لمعلومة محفوظة في First Client Data من غير المالكة يُرسَل طلب موافقة ولا يُطبَّق حتى الاعتماد (الربح · تاريخ الدفع · تاريخ الاستحقاق · البنك/المرجع · التعديل الكامل)؛ الحذف للمالكة فقط</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1300,6 +1300,7 @@ async function chgProfit(id){
     const r1=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'change_profit',payload:{id:id,new_profit:nw,reason:reason,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
     const j1=await r1.json(); if(j1.error){ alert('خطأ: '+j1.error); return; }
     await load();
+    if(j1.pending){ alert('🔒 '+(j1.msg||'أُرسل طلب تعديل الربح لموافقة المالكة — لن يتغيّر حتى الاعتماد')); return; }
     alert(nw<old?'✅ خُفّض الربح، وأُرسل لكِ إشعار بالسبب في تبويب 🔔 إشعارات.':'✅ زِيد الربح واعتُمد فوراً.');
   }catch(e){ alert('خطأ: '+e.message); }
 }
@@ -5389,8 +5390,9 @@ async function settleDue(code,balance,cur){
 }
 async function unsettleDue(id){ if(!confirm('التراجع عن التسوية وإرجاع الرصيد؟'))return; try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_settlement',payload:{id:id}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } await load(); }catch(e){ alert('خطأ: '+e.message); } }
 async function setDue(code,val){
-  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_client_due',payload:{client_code:code,due_date:val||null}})});
+  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_client_due',payload:{client_code:code,due_date:val||null,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
   const j=await r.json(); if(j.error){ alert('خطأ في حفظ التاريخ: '+j.error); return; }
+  if(j.pending){ alert('🔒 '+(j.msg||'أُرسل طلب تغيير تاريخ الاستحقاق لموافقة المالكة — لن يتغيّر حتى الاعتماد')); }
   load();
 }
 // تعديل تاريخ الدفع مباشرة من الشيت لأي صف (بمفتاح payment_code) — يُخزَّن في override يبقى رغم مزامنة الشيت
@@ -5414,6 +5416,7 @@ async function setPayDate(paymentCode,val){
   try{
     const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_payment_date',payload:{payment_code:paymentCode,payment_date:val||null,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
     const j=await r.json(); if(j.error){ alert('خطأ في حفظ تاريخ الدفع: '+j.error); return; }
+    if(j.pending){ alert('🔒 '+(j.msg||'أُرسل طلب تغيير تاريخ الدفع لموافقة المالكة — لن يتغيّر حتى الاعتماد')); await load(); return; }
     PAYDATE_OVR[paymentCode]=val||null;   // تحديث محلي فوري
     renderFcd();   // يحدّث البانر/العدّادات
   }catch(e){ alert('خطأ: '+e.message); }
