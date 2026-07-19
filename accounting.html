@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-ط · 🔒 عملة المورّد في Sales Form المعتمدة سابقاً غير قابلة للتغيير — القفل يُطبَّق الآن في التعديل أيضاً (كان يُفكّ عند تعديل خدمة موجودة)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-ي · قائمة الفنادق في Sales Form = القائمة المُدارة فقط (بلا دمج حجوزات قديمة) — حذف/إضافة أي فندق ينعكس فوراً (روتانا صلالة المحذوفة اختفت)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2060,8 +2060,8 @@ function fillSalesSuppliers(){
   const cat=isHotel?'hotels_system':(isFlight?'flight_booked_from':'suppliers');
   const set=new Set();
   (typeof listValues==='function'?listValues(cat):[]).forEach(x=>{ if(x&&x.value)set.add(String(x.value).trim()); });
-  // دمج الموجود فعلاً من نفس النوع (فنادق مع الفنادق، الطيران مع الطيران، والباقي مع الموردين)
-  (DATA&&DATA.serviceLines||[]).forEach(s=>{ if(!s.supplier)return; if(isFlight){ if(sIsFlight(s.kind))set.add(String(s.supplier).trim()); } else if(sIsHotel(s.kind)===isHotel)set.add(String(s.supplier).trim()); });
+  // دمج الموجود فعلاً من نفس النوع (الطيران/الموردين). 🏨 الفنادق مستثناة: قائمتها = القائمة المُدارة فقط، فالحذف/الإضافة ينعكس فوراً (قرار المالكة)
+  (DATA&&DATA.serviceLines||[]).forEach(s=>{ if(!s.supplier)return; if(isHotel)return; if(isFlight){ if(sIsFlight(s.kind))set.add(String(s.supplier).trim()); } else if(!sIsHotel(s.kind))set.add(String(s.supplier).trim()); });
   if(!isHotel && !isFlight){ (DATA&&DATA.supplierInvoices||[]).forEach(s=>{ if(s.supplier_name)set.add(String(s.supplier_name).trim()); }); (DATA&&DATA.supplierPayments||[]).forEach(s=>{ if(s.supplier_name)set.add(String(s.supplier_name).trim()); }); }
   const arr=[...set].filter(Boolean).sort((a,b)=>a.localeCompare(b,'ar'));
   dl.innerHTML=arr.map(v=>'<option value="'+esc(v)+'"></option>').join('');
