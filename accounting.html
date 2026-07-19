@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-و · 🏦 المرجع البنكي يُدخله المحاسب أو المالكة فقط — كل حقول المرجع البنكي مقفلة لباقي الموظفين (مُحقَّق خادميّاً: يُجرَّد المرجع من غير المخوّل)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-ز · 🏦 المرجع البنكي: المحاسب يضيف لخانة فارغة مباشرة، وتغييره لمرجع موجود يُرسَل طلب موافقة للمالكة (لا يتغيّر حتى الاعتماد + إشعار)؛ المالكة مباشرة؛ باقي الموظفين ممنوعون</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1376,6 +1376,7 @@ async function fcdEditSave(){
     try{
       const r1=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_fcd_bankref',payload:{payment_code:pc,bank_name:bank||null,bank_ref:ref||null,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
       const j1=await r1.json(); if(j1.error){ msg.innerHTML='<span style="color:var(--red)">'+esc(j1.error)+'</span>'; return; }
+      if(j1.pending){ $('fcdeditmodal').classList.remove('on'); alert('🔒 '+(j1.msg||'أُرسل طلب تغيير المرجع البنكي لموافقة المالكة — لن يتغيّر حتى الاعتماد')); await load(); return; }
       const oldPD=String(FE_ROW.payment_date||'').slice(0,10);
       if(paydate!==oldPD){ const r2=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_payment_date',payload:{payment_code:pc,payment_date:paydate||null,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j2=await r2.json(); if(j2.error){ msg.innerHTML='<span style="color:var(--red)">'+esc(j2.error)+'</span>'; return; } }
       $('fcdeditmodal').classList.remove('on'); await load();
@@ -5404,6 +5405,7 @@ async function fillFcdBank(pc, which, value){
   try{
     const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_fcd_bankref',payload:{payment_code:pc,bank_name:bank||null,bank_ref:ref||null,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
     const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
+    if(j.pending){ alert('🔒 '+(j.msg||'أُرسل طلب تغيير المرجع البنكي لموافقة المالكة — لن يتغيّر حتى الاعتماد')); }
     await load();
   }catch(e){ alert('خطأ: '+e.message); }
 }
