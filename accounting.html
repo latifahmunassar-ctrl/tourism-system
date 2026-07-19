@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-ك · «مصدر الحجز» في Sales Form يضبط الآن booked_from أيضاً (مو supplier فقط) — فتغيير المصدر ينعكس فوراً في الكشف والتقارير</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-ل · الكشوف تعتمد «مصدر الحجز» من Booking Form (booked_from) · حفظ الحجز المقفل صار يحفظ مصدر الحجز أيضاً (كان يُهمله فيضيع التغيير) · Sales Form يضبط المصدر عند الإضافة فقط</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1674,13 +1674,14 @@ async function saveConfOnly(id,code){
   // حفظ النواقص لحجز مقفل: رقم التأكيد + مصدر الدفع (charge from) + تاريخ الدفع — بلا مسّ التكلفة المقفلة
   const el=$('sb-conf-'+id); const conf=((el&&el.value)||'').trim();
   const cfrom=((($('sb-cfrom-'+id)||{}).value)||'').trim();
+  const bfrom=((($('sb-bfrom-'+id)||{}).value)||'').trim();   // 🔗 مصدر الحجز (booked_from) — يعتمده كشف الموردين/الفنادق · غير مالي
   const svc=(DATA.serviceLines||[]).find(x=>x.id===id);
   if(bIsConfReq(svc&&svc.kind) && !conf){ alert('⚠️ اكتبي رقم التأكيد (Conf No) أولاً'); if(el)el.focus(); return; }
   { const _cd=(($('sb-cdate-'+id)||{}).value||'').trim(); if(_cd) await setChargeDate(id,_cd); }   // تاريخ الدفع (اختياري)
-  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_service_line',payload:{id:id,client_code:code,conf_no:conf||null,charge_from:cfrom||null}})});
+  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_service_line',payload:{id:id,client_code:code,conf_no:conf||null,charge_from:cfrom||null,booked_from:bfrom||null}})});
   const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
   await load(); bRecall();
-  alert('✅ حُفظت النواقص (رقم التأكيد · مصدر الدفع · تاريخ الدفع) بدون تغيير التكلفة المقفلة.');
+  alert('✅ حُفظت النواقص (رقم التأكيد · مصدر الحجز · مصدر الدفع · تاريخ الدفع) بدون تغيير التكلفة المقفلة.');
 }
 // هل الحجز الفعلي يفوق سعر البيع (خسارة)؟ — للرسالة فقط؛ الكشف والعرض حيّ في الإشعارات (liveBookingLosses) بلا إنشاء سجلات
 async function bMaybeLossTicket(id,code){
@@ -2171,7 +2172,9 @@ function sBuildPayload(){
   if($('s-sellcur').value!==$('s-cur').value && !(+$('s-rate').value)){ $('s-msg').innerHTML='<span style="color:var(--red)">⚠️ ما فيه سعر صرف لهذا الزوج — أضيفيه في قائمة العملات «the currency» بمدخل البيانات</span>'; return null; }
   return { id:($('s-id').value||null), client_code:code, kind:salesKindCanon($('s-type').value), name:$('s-desc').value.trim()||null,
     detail:($('s-room').value||'').trim()||null,
-    supplier:$('s-supplier').value||null, booked_from:$('s-supplier').value||null,   /* 🔗 «مصدر الحجز» يضبط الحقلين معاً: supplier (Sales) + booked_from (الكشف/Booking) — فالتغيير ينعكس فوراً */ amount:+$('s-price').value||0,
+    supplier:$('s-supplier').value||null,
+    ...(($('s-id').value)?{}:{booked_from:$('s-supplier').value||null}),   /* عند الإضافة فقط: booked_from يبدأ = مصدر Sales Form. عند التعديل: لا نلمسه — Booking Form هو المرجع للكشوف */
+    amount:+$('s-price').value||0,
     sell_currency:$('s-sellcur').value||'SAR', currency:$('s-cur').value||null, currency_rate:+$('s-rate').value||1,
     rooms_count:(sIsHotel($('s-type').value)?(parseInt($('s-rooms').value,10)||null):null),
     check_in:$('s-in').value||null, check_out:$('s-out').value||null };
