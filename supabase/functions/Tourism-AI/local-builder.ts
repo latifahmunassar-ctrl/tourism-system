@@ -356,15 +356,43 @@ function monthNumber(monthName: string): number {
   return ARABIC_MONTH_TO_NUMBER[monthName.toLowerCase()] || 1;
 }
 
+// اسم المدينة الصريح فقط (بدون معالم/أحياء) — يُستخدم لفضّ الاشتباك عندما يطابق
+// أكثر من مدينة. مثال: جولة «معالم طرابزون تشمل آيا صوفيا» تطابق نمط اسطنبول
+// (لأن آيا صوفيا معلَم اسطنبولي في نمطها) وطرابزون معاً؛ فنفضّل المدينة المذكورة
+// اسمها صراحة (طرابزون). أي مدينة غير مدرجة هنا تعود للسلوك القديم (ترتيب cityDefs).
+const CITY_NAME_RE: Record<string, RegExp> = {
+  "Ha Noi": /هانوي|ha\s*noi|hanoi/i, "Sapa": /سابا|sapa/i, "Ha Long": /هالون[جغ]|ha\s*long|halong/i,
+  "Da Nang": /دانان[جغ]|da\s*nang|danang/i, "Phu Quoc": /فوكوك|phu\s*quoc|phuquoc/i,
+  "Ho Chi Minh": /هوتشي|هو\s*تشي|ho\s*chi|hochi|saigon|سايغون|سايجون/i,
+  "Nha Trang": /نها\s*تران[جغ]|نهاتران[جغ]|nha\s*trang/i, "Da Lat": /دالا[تط]|دا\s*لا[تط]|dalat|da\s*lat/i,
+  "Kuala Lumpur": /كوالا|كولا|kuala\s*lumpur/i, "Selangor": /سيلان[جغ]ور|سلان[جغ]ور|selangor/i,
+  "Langkawi": /لان?كاوي|langkawi/i, "Penang": /بينان[جغ]|بنان[جغ]|penang/i,
+  "Cameron Highlands": /كام?[يی]رون|cameron/i, "Bangkok": /بان[كق]وك|bangkok/i,
+  "Phuket": /بوكي?ت|phuket/i, "Krabi": /كرابي|krabi/i, "Chiang Mai": /شيان[جغ]|chiang\s*mai/i,
+  "Pattaya": /با?تايا|pattaya/i, "Koh Samui": /ساموي|samui/i,
+  "Istanbul": /اسطنبول|إسطنبول|إستانبول|istanbul/i, "Trabzon": /طرابزون|طربزون|trabzon/i,
+  "Uzungol": /[أا]وزن[جغ]ول|[أا]زون[جغ]ول|uzungol/i, "Ayder": /[أا]يدر|ayder/i,
+  "Rize": /ريز[ةها]|rize/i, "Bursa": /بورص[ةه]|bursa/i, "Sapanca": /سابان[جغ]ا|sapanca|معشوقية/i,
+  "Moscow": /موسكو|موسكوا|moscow/i, "St Petersburg": /بطرس|برغ|petersburg/i, "Sochi": /سوتشي|سوشي|sochi/i,
+  "Sarajevo": /سراي[يی]?فو|sarajevo/i, "Mostar": /موستار|mostar/i, "Bihać": /بيهات[شچ]|bihac|bihać/i,
+  "Bali": /بالي|bali/i, "Jakarta": /جا?ك[رز]تا?|jakarta/i, "Bandung": /باندون[جغق]|bandung/i,
+  "Puncak": /بونشاك|puncak/i, "Salalah": /صلال[ةه]|salalah/i, "Muscat": /مسق[طت]|muscat/i,
+  "Jabal Akhdar": /ج[يب]ل\s*ال[اأإآ]?خضر|jabal/i,
+};
+
 /**
  * Canonical city whose DEST_CITIES pattern matches the tour NAME, or null.
- * The most specific signal (e.g. "جولة معالم ايدر" → Ayder).
+ * The most specific signal (e.g. "جولة معالم ايدر" → Ayder). When MORE THAN
+ * one city matches (a landmark keyword in the description collides with another
+ * city's pattern — e.g. a Trabzon tour listing "آيا صوفيا" also hits Istanbul),
+ * the city named EXPLICITLY (by CITY_NAME_RE) wins over the incidental landmark.
  */
 function tourNameCity(tour: TourRow, cityDefs: CityDef[]): string | null {
-  for (const c of cityDefs) {
-    if (c.pattern.test(tour.name)) return c.canonical;
-  }
-  return null;
+  const matches = cityDefs.filter(c => c.pattern.test(tour.name));
+  if (matches.length === 0) return null;
+  if (matches.length === 1) return matches[0].canonical;
+  const named = matches.find(c => CITY_NAME_RE[c.canonical]?.test(tour.name));
+  return (named || matches[0]).canonical;
 }
 
 // مدن قريبة تُعامَل جولاتها كرحلات يوم من مدينة الإقامة: المفتاح = مدينة الإقامة، والقيمة = المدن
@@ -575,6 +603,9 @@ export function pickToursForCity(
     freeDayCount?: number;
     /** موقع فندق هذه الإقامة — لتفضيل جولات المنطقة المطابقة (هوانا vs وسط) */
     areaHint?: string;
+    /** شهر السفر (1–12) — لتسعير الترتيب موسميّاً مثل العرض تماماً. بدونه يقع
+     * الترتيب على السعر الأساسي فتتساوى جولات ذروتها مختلفة ويكسر التعادل أبجديّاً. */
+    month?: number;
   },
 ): { selected: TourRow[]; available: number; deficit: number } {
   // Real tours only (not transfer/pickup rows) belonging to this city
@@ -615,12 +646,22 @@ export function pickToursForCity(
   // days and 3 candidates [تسوق=200, جنتنج=200, يوم حر=0] picked
   // [يوم حر, تسوق] and dropped Genting entirely.
   const isFreeDayPlaceholder = (t: TourRow) => isFreeDayName(t.name);
+  // جولة المدينة نفسها (تذكر مدينة الإقامة فقط) تُقدَّم على رحلات اليوم للمدن
+  // المجاورة (التي تذكر مدينة أخرى معها، مثل «الانتقال من طرابزون الى فندق في
+  // اوزنجول وعمل جوله»). بدون هذا، لمّا تتساوى الأسعار يكسر التعادل أبجديّاً
+  // فتسبق «الانتقال…» (أ) الجولةَ النظيفة «جوله معالم…» (ج) فتُسقَط جولة المدينة
+  // الأساسية. المقيم في مدينة يجب أن يرى معالمها قبل رحلات اليوم للجيران.
+  const namesOtherCity = (t: TourRow) =>
+    cityDefs.some(c => c.canonical !== canonicalCity && (CITY_NAME_RE[c.canonical] ?? c.pattern).test(t.name));
   cityTours.sort((a, b) => {
     const af = isFreeDayPlaceholder(a) ? 1 : 0;
     const bf = isFreeDayPlaceholder(b) ? 1 : 0;
     if (af !== bf) return af - bf;
-    const pa = pickTourVariantPrice(a, paxCount, false);
-    const pb = pickTourVariantPrice(b, paxCount, false);
+    const ao = namesOtherCity(a) ? 1 : 0;
+    const bo = namesOtherCity(b) ? 1 : 0;
+    if (ao !== bo) return ao - bo;
+    const pa = pickTourVariantPrice(a, paxCount, false, options?.month || 0);
+    const pb = pickTourVariantPrice(b, paxCount, false, options?.month || 0);
     if (pa !== pb) return pa - pb;
     return a.name.localeCompare(b.name);
   });
@@ -2195,6 +2236,10 @@ export async function buildLocalProgram(
   const selectedTours: SelectedTour[] = [];
   const tourMessages: string[] = [];
   const usedCities = new Set<string>();
+  // شهر السفر للتسعير الموسمي أثناء الترتيب — نفس مصدر العرض (days[0].date) حتى
+  // يختار الترتيبُ بأسعار الموسم الفعلية لا السعر الأساسي (وإلا تتساوى جولات
+  // ذروتها مختلفة فيكسر التعادل أبجديّاً ويُسقط الأرخص فعليّاً في موسم السفر).
+  const buildMonth = days[0]?.date ? (days[0].date.getMonth() + 1) : 0;
   for (const city of request.cities) {
     if (usedCities.has(city)) continue; // dedup repeated cities (e.g. Hanoi at start and end)
     usedCities.add(city);
@@ -2212,6 +2257,7 @@ export async function buildLocalProgram(
         excludeNames: cityMod?.excludeNames,
         freeDayCount: cityMod?.freeDayCount,
         areaHint: cityHotelLoc,
+        month: buildMonth,
       },
     );
     // Day-specific overrides win over the order-based auto pick. Two-pass
