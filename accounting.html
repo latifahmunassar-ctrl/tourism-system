@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 19يوليو-ل · الكشوف تعتمد «مصدر الحجز» من Booking Form (booked_from) · حفظ الحجز المقفل صار يحفظ مصدر الحجز أيضاً (كان يُهمله فيضيع التغيير) · Sales Form يضبط المصدر عند الإضافة فقط</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 20يوليو-أ · Sales Form: صندوق حيّ يقارن «تكلفة العميل المتّفق عليها (FCD) = المُدخَل من الخدمات» · أعلى → تنبيه الموظفة «راجعي التسعيرة» + إشعار المالكة بالفرق والعملة · أقل → «هل أدخلتِ كل الخدمات؟»</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -420,6 +420,7 @@ table{font-weight:600}
         <input type="hidden" id="s-id">
         <div id="s-info" style="display:none;background:#f6f8fc;border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0;font-size:12.5px"></div>
         <div id="s-cart" style="display:none;margin:8px 0"></div>
+        <div id="s-costcmp" style="display:none;border:1px solid #0e7c50;border-radius:10px;padding:9px 12px;margin:8px 0;font-size:12.5px;background:rgba(14,157,106,.07)"></div>
         <div id="s-msg" style="font-size:12px;min-height:16px;margin:6px 0"></div>
         <button class="btn" id="s-add-btn" onclick="sAddAnother()" style="background:#eef2f8;border:1px solid var(--accent);color:var(--accent)">➕ أضف خدمة أخرى للطلب</button>
         <button class="btn green" id="s-save-btn" onclick="addSales()" style="margin-right:6px">💾 حفظ الطلب</button>
@@ -1454,7 +1455,8 @@ function salesTypeLabel(kind){ const m={hotel:'فندق',flight:'طيران',tra
 function sRecall(){
   const code=($('s-code').value||'').trim().toUpperCase();
   const ci=clientInfo(code), box=$('s-info');
-  if(!ci){ box.style.display='none'; return; }
+  if(!ci){ box.style.display='none'; try{sUpdateCostCmp();}catch(_){} return; }
+  try{sUpdateCostCmp();}catch(_){}
   if($('s-sellcur')){ $('s-sellcur').value=ci.cur||'SAR'; sRate(); }   // عملة البيع = عملة العميل (ثابتة من ملف العميل)
   const svcs=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code);
   box.style.display='block';
@@ -2149,6 +2151,7 @@ function sCalc(){
     else if(!rate){ msg.style.color='var(--red)'; msg.innerHTML='⚠️ ما فيه سعر صرف لزوج <b>'+esc(cur)+'/'+esc(sell)+'</b> — أضيفيه في قائمة العملات «the currency» بمدخل البيانات'; }
     else { msg.style.color='var(--muted)'; msg.innerHTML='📐 <b>1 '+esc(cur)+' = '+rate+' '+esc(sell)+'</b> · سعر البيع = '+(cost?fmt(cost):'التكلفة')+' × '+rate+' = <b>'+(cost?fmt(cost*rate):'؟')+' '+esc(sell)+'</b>'; }
   }
+  try{sUpdateCostCmp();}catch(_){}   // 💰 تحديث مقارنة التكلفة المتفق عليها ↔ المُدخلة
 }
 let SAL_CART=[]; // خدمات مُجمَّعة قبل الحفظ (طلب متعدّد الخدمات)
 // تحقّق من الحقول وبناء حمولة خدمة واحدة من الفورم (يرجّع null عند الخطأ مع إظهار الرسالة)
@@ -2182,39 +2185,63 @@ function sBuildPayload(){
 // 🔎 فجوة التكلفة لعميل: مجموع تكلفة الخدمات المُدخلة مقابل التكلفة المتفق عليها مع العميل (First Client Data)
 // نفس أساس actualProfitMaps: final_rate_booked×الصرف (فندق/طيران) أو amount (جولة/مورّد/انتقال/فيزا/أخرى)، بعملة العميل
 function salesCostGap(code){
+  // 📏 «التكلفة المُدخلة من الخدمات» = مجموع amount لكل خدمة (= سعر المورّد × الصرف، بعملة العميل). مقابل «المتفق عليها» = مجموع fcd.cost
   code=(code||'').toUpperCase(); if(!code) return null;
-  let entered=0, hasCanc=false, hasBooked=false;
+  let entered=0, hasCanc=false, hasSvc=false;
   (DATA.serviceLines||[]).forEach(s=>{ if((s.client_code||'').toUpperCase()!==code)return;
     const k=s.kind; if(['hotel','flight','tour','additional','supplier','transport','visa','other'].indexOf(k)<0)return;
     if(/profit/i.test(String(s.name||'')))return;
-    if(/cancel/i.test(String(s.status||''))){ hasCanc=true; return; }   // الملغى لا يُعدّ تكلفة إدخال ناقصة
-    const rate=Number(s.currency_rate)||1;
-    if(s.final_rate_booked!=null&&s.final_rate_booked!==''){ entered+=Number(s.final_rate_booked)*rate; hasBooked=true; }
-    else if(['tour','additional','supplier','transport','visa','other'].indexOf(k)>=0){ entered+=Number(s.amount||0); hasBooked=true; }
+    if(/cancel/i.test(String(s.status||''))){ hasCanc=true; return; }   // الملغى لا يُعدّ في المقارنة
+    entered+=Number(s.amount||0); hasSvc=true;
   });
   let agreed=0; (DATA.fcd||[]).forEach(r=>{ if((r.client_code||'').toUpperCase()!==code)return; agreed+=Number(r.cost||0); });
-  return { entered, agreed, hasCanc, hasBooked, gap: agreed-entered };
+  return { entered, agreed, hasCanc, hasSvc, gap: agreed-entered };
 }
-// تنبيه بعد الحفظ: التكلفة المُدخلة أقل بكثير من المتفق عليها (ربما خدمة ناقصة) — لا يمنع الحفظ، خيار نعم/لا فقط
+// تنبيه بعد الحفظ: مقارنة تكلفة الخدمات المُدخلة بالتكلفة المتفق عليها (لا يمنع الحفظ)
 function sMaybeWarnCost(code){
   try{
-    const g=salesCostGap(code); if(!g) return false;
+    const g=salesCostGap(code); if(!g || !g.hasSvc || g.hasCanc || !(g.agreed>0)) return false;
     const cur=((clientInfo(code)||{}).cur)||'SAR';
-    // «أقل بكثير» = الفارق يتجاوز 20% من المتفق عليها و500 كحد أدنى، مع وجود خدمات مُدخلة ولا يوجد إلغاء يفسّر النقص
-    if(!(g.hasBooked && !g.hasCanc && g.agreed>0 && g.gap > Math.max(500, g.agreed*0.20))) return false;
-    $('s-msg').innerHTML='<div style="background:rgba(217,138,0,.12);border:1px solid #d98a00;border-radius:10px;padding:11px;margin-top:6px;font-size:12.5px;line-height:1.75;text-align:right">'
-      +'⚠️ <b style="color:#b8860b">تنبيه:</b> التكلفة المُدخلة من الخدمات <b>'+fmt(g.entered)+' '+esc(cur)+'</b> أقل من التكلفة المتّفق عليها مع العميل <b>'+fmt(g.agreed)+' '+esc(cur)+'</b> (فارق <b style="color:#d11">'+fmt(g.gap)+' '+esc(cur)+'</b>).<br>'
-      +'<b>هل أدخلتِ جميع خدمات البرنامج؟</b> <span style="color:#0e7c50">(المدخلات محفوظة في كل الأحوال ✓)</span>'
-      +'<div style="display:flex;gap:8px;margin-top:9px;flex-wrap:wrap">'
-      +'<button class="btn green" style="padding:5px 16px;font-size:12px" onclick="sCostAck(true)">✅ نعم، أدخلتها كلها</button>'
-      +'<button class="btn" style="padding:5px 16px;font-size:12px;background:#d98a00;color:#000" onclick="sCostAck(false)">✏️ لا، ناقصة — سأكملها</button>'
-      +'</div></div>';
-    return true;
+    const over=g.entered-g.agreed;   // موجب = التكلفة الفعلية أعلى من المتفق عليها
+    // ⬆️ أعلى من المتفق → تنبيه الموظفة «راجعي التسعيرة» + إشعار المالكة
+    if(over > Math.max(10, g.agreed*0.02)){
+      $('s-msg').innerHTML='<div style="background:rgba(209,17,17,.10);border:1px solid #d11;border-radius:10px;padding:11px;margin-top:6px;font-size:12.5px;line-height:1.75;text-align:right">'
+        +'⛔ <b style="color:#d11">تنبيه:</b> التكلفة الفعلية المُدخلة <b>'+fmt(g.entered)+' '+esc(cur)+'</b> أعلى من التكلفة المتّفق عليها مع العميل <b>'+fmt(g.agreed)+' '+esc(cur)+'</b> (بزيادة <b>'+fmt(over)+' '+esc(cur)+'</b>).<br>'
+        +'<b>راجعي التسعيرة.</b> <span style="color:#0e7c50">(المدخلات محفوظة ✓ · أُرسل إشعار للمالكة)</span></div>';
+      try{ api({method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"add_alert",payload:{type:"cost_over",client_code:code,message:"التكلفة الفعلية المُدخلة ("+fmt(g.entered)+" "+cur+") أعلى من التكلفة المعطاة للعميل ("+fmt(g.agreed)+" "+cur+") بمقدار "+fmt(over)+" "+cur+" · مقدّم الإدخال: "+((CURRENT_USER&&CURRENT_USER.staff_name)||"—")}})}); }catch(_){}
+      return true;
+    }
+    // ⬇️ أقل بكثير من المتفق → هل أدخلتِ جميع الخدمات؟
+    if(g.gap > Math.max(300, g.agreed*0.15)){
+      $('s-msg').innerHTML='<div style="background:rgba(217,138,0,.12);border:1px solid #d98a00;border-radius:10px;padding:11px;margin-top:6px;font-size:12.5px;line-height:1.75;text-align:right">'
+        +'⚠️ <b style="color:#b8860b">تنبيه:</b> التكلفة المُدخلة من الخدمات <b>'+fmt(g.entered)+' '+esc(cur)+'</b> أقل من التكلفة المتّفق عليها مع العميل <b>'+fmt(g.agreed)+' '+esc(cur)+'</b> (فارق <b style="color:#d11">'+fmt(g.gap)+' '+esc(cur)+'</b>).<br>'
+        +'<b>هل أدخلتِ جميع خدمات البرنامج؟</b> <span style="color:#0e7c50">(المدخلات محفوظة في كل الأحوال ✓)</span>'
+        +'<div style="display:flex;gap:8px;margin-top:9px;flex-wrap:wrap">'
+        +'<button class="btn green" style="padding:5px 16px;font-size:12px" onclick="sCostAck(true)">✅ نعم، أدخلتها كلها</button>'
+        +'<button class="btn" style="padding:5px 16px;font-size:12px;background:#d98a00;color:#000" onclick="sCostAck(false)">✏️ لا، ناقصة — سأكملها</button>'
+        +'</div></div>';
+      return true;
+    }
+    return false;
   }catch(_){ return false; }
 }
+// 🔴🟢 مقارنة حيّة (تشمل السلة والفورم الحالي) + تحديث صندوق العرض في Sales Form
+function sCostCmpLive(){ const code=(($('s-code')||{}).value||'').trim().toUpperCase(); if(!code) return null;
+  const g=salesCostGap(code); if(!g) return null; let entered=g.entered;
+  (typeof SAL_CART!=='undefined'?SAL_CART:[]).forEach(c=>{ entered+=Number(c.amount||0); });
+  if(!(($('s-id')||{}).value) && typeof sFormFilled==='function' && sFormFilled()) entered+=Number(($('s-price')||{}).value||0);
+  return { agreed:g.agreed, entered, cur:((clientInfo(code)||{}).cur)||'SAR' }; }
+function sUpdateCostCmp(){ const box=$('s-costcmp'); if(!box) return; const c=sCostCmpLive();
+  if(!c || !(c.agreed>0)){ box.style.display='none'; return; }
+  box.style.display='block'; const diff=c.entered-c.agreed; const near=Math.abs(diff)<=Math.max(1,c.agreed*0.01);
+  const col=near?'#0e7c50':(diff>0?'#d11':'#d98a00'); const state=near?'✅ مطابقة':(diff>0?('⛔ أعلى بـ'+fmt(diff)):('⚠️ أقل بـ'+fmt(-diff)));
+  box.style.borderColor=col; box.style.background=near?'rgba(14,157,106,.07)':(diff>0?'rgba(209,17,17,.07)':'rgba(217,138,0,.09)');
+  box.innerHTML='💰 تكلفة العميل المتّفق عليها: <b>'+fmt(c.agreed)+' '+esc(c.cur)+'</b> &nbsp;<b style="font-size:15px">=</b>&nbsp; المُدخَل من الخدمات: <b style="color:'+col+'">'+fmt(c.entered)+' '+esc(c.cur)+'</b> &nbsp;·&nbsp; <span style="color:'+col+';font-weight:800">'+state+'</span>'; }
 function sCostAck(yes){ const m=$('s-msg'); if(!m)return; m.innerHTML = yes
   ? '<span style="color:var(--green)">✓ تمّ التأكيد — شكراً. المدخلات محفوظة.</span>'
   : '<span style="color:#d98a00;font-weight:700">✏️ أكملي إدخال الخدمات الناقصة لهذا العميل (المحفوظ سليم — أضيفي الباقي عبر «➕ إضافة خدمة»).</span>'; }
+// اطّلاع المالكة على تنبيه «التكلفة الفعلية أعلى» → يُغلق التنبيه
+async function resolveCostOver(id){ try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resolve_alert',payload:{id:id,resolution:'اطّلعت المالكة على تجاوز التكلفة الفعلية'}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } await load(); }catch(e){ alert('خطأ: '+e.message); } }
 // هل الفورم الحالي فيه خدمة مكتوبة (ليُحتسب عند الحفظ)؟
 function sFormFilled(){ return !!((($('s-desc').value||'').trim())||(($('s-supplier').value||'').trim())||(+$('s-price').value>0)||(+$('s-supcalc').value>0)); }
 // تفريغ حقول الخدمة مع الإبقاء على كود العميل (للخدمة التالية)
@@ -2230,6 +2257,7 @@ function sAddAnother(){
 function sRemoveCart(i){ SAL_CART.splice(i,1); sRenderCart(); }
 function sRenderCart(){
   const box=$('s-cart'); if(!box) return;
+  try{sUpdateCostCmp();}catch(_){}
   if(!SAL_CART.length){ box.style.display='none'; box.innerHTML=''; updateSaveBtn(); return; }
   box.style.display='block';
   box.innerHTML='<div class="panel" style="border:1px solid var(--accent);background:rgba(79,140,255,.06);padding:8px"><b style="font-size:12.5px">🧺 خدمات الطلب الحالي ('+SAL_CART.length+') — تُحفظ كلها عند «حفظ الطلب»</b>'+
@@ -3111,7 +3139,7 @@ function renderAlerts(){
   const box=$('alerts-box'); if(!box) return;
   const all=(DATA&&DATA.alerts)||[];
   const svcById={}; for(const s of (DATA.serviceLines||[])) svcById[s.id]=s;
-  const pend=[], pendProfit=[], pendFreeze=[], pendCost=[], pendCancel=[], pendReactivate=[], pendSupEdit=[], pendCashEdit=[];
+  const pend=[], pendProfit=[], pendFreeze=[], pendCost=[], pendCancel=[], pendReactivate=[], pendSupEdit=[], pendCashEdit=[], pendCostOver=[];
   const mvAll=(DATA&&DATA.pendingMovements)||[];
   const isPay=(m)=>m.kind==='payment'&&(m.scope==='suppliers'||m.scope==='hotels');
   const payLbl=(m)=>m.scope==='hotels'?'🏨 فندق':'🧾 مورّد';
@@ -3144,6 +3172,7 @@ function renderAlerts(){
     if(a.type==='reactivate_request'){ pendReactivate.push(a); continue; }
     if(a.type==='suppay_edit_request'){ pendSupEdit.push(a); continue; }
     if(a.type==='cash_edit_request'){ pendCashEdit.push(a); continue; }
+    if(a.type==='cost_over'){ pendCostOver.push(a); continue; }
     if(a.type==='booking_loss'){ continue; }   // النوع القديم يُتجاهَل — صار الحساب حيّاً
     const s=a.service_id?svcById[a.service_id]:null;
     // حل فعلي فقط: لمّا تتوحّد العملة (عملة المورّد = عملة الحجز الفعلي) → تُغلق تلقائياً مع توثيق
@@ -3258,6 +3287,12 @@ function renderAlerts(){
               '<button class="btn ghost" style="padding:4px 12px;font-size:11.5px" onclick="resolveRefundMv('+m.id+',\'reject\')">❌ رفض</button>'+
             '</div></div>'; }).join('')+
         '<div style="font-size:11px;color:var(--muted);margin-top:6px">ℹ️ راجعي 📎 طلب العميل (والملف الكامل عبر «↪️ افتح ملف العميل») قبل الموافقة. الموافقة تسجّل المرتجع وتخصمه من حساب العميل وتحفظ المستند المعتمد. الرفض يلغي الطلب بلا أي أثر. <b style="color:var(--red)">لا أثر للإرجاع قبل اعتمادك.</b></div></div>';
+    }
+    if(pendCostOver.length){
+      n+='<div class="panel" style="border:1px solid #d11;background:rgba(209,17,17,.07);margin-bottom:14px"><h3 style="color:#d11;margin-top:0">💸 التكلفة الفعلية أعلى من المعطاة للعميل ('+pendCostOver.length+')</h3>'+
+        '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>التفاصيل</th><th>التاريخ</th>'+(_owner?'<th>إجراء</th>':'')+'</tr></thead><tbody>'+
+        pendCostOver.map(a=>'<tr><td><b>'+esc(a.client_code||'')+'</b></td><td style="font-size:11.5px;color:#d11;font-weight:600">'+esc(a.message||'')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(String(a.created_at||'').slice(0,10))+'</td>'+(_owner?'<td><button class="btn ghost" style="padding:2px 9px;font-size:11px;color:#0e9d6a;border-color:#0e9d6a" onclick="resolveCostOver('+a.id+')">✅ اطّلعت</button></td>':'')+'</tr>').join('')+
+        '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ يظهر تلقائياً عند حفظ خدمات تكلفتها الفعلية أعلى من المتّفق عليه مع العميل — راجعي التسعيرة. «اطّلعت» تُغلق التنبيه.</div></div>';
     }
     if(pendList.length){
       n+='<div class="panel" style="border:1px solid var(--accent);background:rgba(43,108,176,.08);margin-bottom:14px"><h3 style="color:var(--accent);margin-top:0">🧾 عمليات قوائم بانتظار موافقتك ('+pendList.length+') — لا تُطبَّق إلا بعد الاعتماد</h3>'+
@@ -3386,7 +3421,7 @@ function renderAlerts(){
         resolvedProfit.map(a=>{ const rs=profitReason(a.message)||esc(a.message||''); return '<tr><td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="color:var(--muted)">'+esc(rs)+'</td><td>'+esc((a.resolved_at||'').slice(0,10))+'</td></tr>'; }).join('')+
         '</tbody></table></div></details>';
     }
-    const ntot=pendProfit.length+pendFreeze.length+pendCost.length+pendCancel.length+pendReactivate.length+pendLoss.length+pendPD.length+pendSupPay.length+pendSupEdit.length+pendCash.length+pendCashEdit.length+pendCliEntry.length+pendCliEdit.length+pendRefund.length+pendRefEdit.length+pendList.length;
+    const ntot=pendProfit.length+pendFreeze.length+pendCost.length+pendCancel.length+pendReactivate.length+pendLoss.length+pendPD.length+pendSupPay.length+pendSupEdit.length+pendCash.length+pendCashEdit.length+pendCliEntry.length+pendCliEdit.length+pendRefund.length+pendRefEdit.length+pendList.length+pendCostOver.length;
     const nc=$('nt-cnt'); if(nc) nc.innerHTML = ntot? '<span style="background:var(--red);color:#fff;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700">'+ntot+'</span>':'';
     nbox.innerHTML = n || '<div class="panel"><div style="color:var(--muted);text-align:center;padding:24px">لا توجد إشعارات 🎉</div></div>';
   }
