@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 20يوليو-أ · Sales Form: صندوق حيّ يقارن «تكلفة العميل المتّفق عليها (FCD) = المُدخَل من الخدمات» · أعلى → تنبيه الموظفة «راجعي التسعيرة» + إشعار المالكة بالفرق والعملة · أقل → «هل أدخلتِ كل الخدمات؟»</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 20يوليو-ب · Sales Form: لا تخمين تلقائي لعملة المورّد — المورّد غير المعتمد عملته يُعطي تنبيهاً أحمر «اعتمدي العملة أولاً» ويمنع حفظ الخدمة الجديدة (المالكة تعتمد يدوياً من تبويب الموردين؛ التعديل مسموح)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -409,6 +409,7 @@ table{font-weight:600}
           <div class="fld" id="fld-rooms" style="display:none"><label>🚪 عدد الغرف <span class="hotel-req-star" style="color:var(--red);display:none">*</span> <span style="font-size:9px;color:var(--muted)">(للفندق)</span></label><input type="number" id="s-rooms" min="1" step="1" placeholder="مثال: 2"></div>
           <div class="fld"><label><span id="lbl-supplier">مصدر الحجز من</span> <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">اكتبي أول الحروف للبحث</span></label><input id="s-supplier" list="s-supplier-list" autocomplete="off" placeholder="اكتبي أول حروف الاسم…" onchange="sSupplierPick()"><datalist id="s-supplier-list"></datalist></div>
           <div class="fld"><label>① عملة المورّد <span class="hotel-req-star" style="color:var(--red);display:none">*</span></label><select id="s-cur" onchange="sRate()"><option>SAR</option><option>USD</option><option>MYR</option><option>OMR</option><option>AED</option><option>EUR</option></select></div>
+          <div id="s-supcur-warn" style="display:none;grid-column:1/-1;border:1px solid #d11;background:rgba(209,17,17,.08);color:#d11;border-radius:8px;padding:8px 11px;font-size:12px;font-weight:600"></div>
           <div class="fld"><label>② 💰 سعر المورّد (التكلفة بعملته) <span style="font-size:9px;color:#0e7c50;font-weight:700">✍️ اكتبي هنا</span> <span class="hotel-req-star" style="color:var(--red);display:none">*</span></label><input type="number" id="s-supcalc" value="0" oninput="sCalc()"></div>
           <div class="fld"><label>سعر الصرف <span style="font-size:9px;color:var(--muted)">(تلقائي من قائمة العملات — غير قابل للتعديل)</span></label><input type="number" id="s-rate" value="1" disabled style="background:#f1f5fb;color:var(--accent);font-weight:700"><span id="s-rate-msg" style="font-size:10px"></span></div>
           <div class="fld"><label>③ سعر البيع للعميل <span style="font-size:9px;color:#0e7c50;font-weight:700">🔓 يطلع تلقائياً</span> <span class="hotel-req-star" style="color:var(--red);display:none">*</span></label><input type="number" id="s-price" value="0" oninput="sCalc()"></div>
@@ -2162,6 +2163,7 @@ function sBuildPayload(){
   const isHotelT=sIsHotel($('s-type').value); const supVal=($('s-supplier').value||'').trim();
   if(!supVal){ $('s-msg').innerHTML='<span style="color:var(--red)">⚠️ اختاري «مصدر الحجز من» (إجباري) من القائمة</span>'; $('s-supplier').focus(); return null; }
   if(SAL_SUP_SET.size && !SAL_SUP_SET.has(supVal.toLowerCase())){ $('s-msg').innerHTML='<span style="color:var(--red)">⚠️ «'+esc(supVal)+'» غير موجود في القائمة — اكتبي أول الحروف واختاري من المقترحات</span>'; $('s-supplier').focus(); return null; }
+  if(!($('s-id').value) && !sCurApproved(supVal)){ $('s-msg').innerHTML='<span style="color:#d11;font-weight:700">⛔ لا يمكن الحفظ: عملة المورّد «'+esc(supVal)+'» غير معتمدة. اعتمديها أولاً من تبويب 🧾 الموردين (زر «اعتماد العملة») ثم احفظي.</span>'; if($('s-supplier'))$('s-supplier').focus(); return null; }   // 🪙 لا حفظ خدمة جديدة بمورّد غير معتمد العملة (التعديل مسموح)
   if(isHotelT){ // خدمة الفندق: كل الحقول إجبارية
     if(!($('s-desc').value||'').trim()){ $('s-msg').innerHTML='<span style="color:var(--red)">⚠️ اسم الفندق إجباري</span>'; $('s-desc').focus(); return null; }
     if(!(($('s-room').value||'').trim())){ $('s-msg').innerHTML='<span style="color:var(--red)">⚠️ نوع الغرفة إجباري للفندق</span>'; $('s-room').focus(); return null; }
@@ -3595,11 +3597,16 @@ function sCurApproved(src){ src=String(src||'').trim(); if(!src) return false; c
 // 🔒 قفل حقل عملة المورّد إن كانت معتمدة (بلا تغيير القيمة) — يُطبَّق في الإضافة والتعديل معاً
 function sApplyCurLock(){ const sel=$('s-cur'); if(!sel) return false; const src=(($('s-supplier')||{}).value||'').trim(); const approved=sCurApproved(src);
   sel.disabled=approved; sel.style.background=approved?'#eef2f8':''; sel.title=approved?'🔒 عملة المورّد معتمدة سابقاً — غير قابلة للتغيير (تُعدَّل فقط من اعتماد عملة المورّد/الفندق بموافقة المالكة)':''; return approved; }
-function sSupplierPick(){ const sel=$('s-cur'); if(!sel) return; const src=(($('s-supplier')||{}).value||'').trim();
-  if(!src){ sel.disabled=false; sel.style.background=''; sel.title=''; return; }
-  const cur=sourceCurrency(src);
-  if(cur){ if(![...sel.options].some(o=>o.value===cur)){ const o=document.createElement('option'); o.text=cur; o.value=cur; sel.add(o); } sel.value=cur; }
-  sApplyCurLock();
+function sSupplierPick(){ const sel=$('s-cur'); if(!sel) return; const src=(($('s-supplier')||{}).value||'').trim(); const warnBox=$('s-supcur-warn');
+  if(!src){ sel.disabled=false; sel.style.background=''; sel.title=''; if(warnBox)warnBox.style.display='none'; return; }
+  if(sCurApproved(src)){   // ✅ عملة معتمدة يدوياً → عيّنها واقفلها
+    const cur=supCurOverride(src) || (function(){ const nn=src.toLowerCase().replace(/\s+/g,' '); const hc=((DATA&&DATA.lists)||[]).find(l=>l.category==='payee_currency'&&String(l.value||'').split('=')[0].trim().toLowerCase().replace(/\s+/g,' ')===nn); return hc?String(hc.value).split('=')[1].trim().toUpperCase():''; })();
+    if(cur){ if(![...sel.options].some(o=>o.value===cur)){ const o=document.createElement('option'); o.text=cur; o.value=cur; sel.add(o); } sel.value=cur; }
+    sApplyCurLock(); if(warnBox)warnBox.style.display='none';
+  } else {   // ⛔ غير معتمدة → لا تخمين تلقائي + تنبيه بوجوب الاعتماد
+    sel.disabled=false; sel.style.background=''; sel.title='';
+    if(warnBox){ warnBox.style.display='block'; warnBox.innerHTML='⛔ عملة المورّد «'+esc(src)+'» <b>غير معتمدة</b> — لازم تعتمدينها أولاً من تبويب <b>🧾 الموردين</b> (زر «اعتماد العملة») قبل حفظ الخدمة. لا تُخمَّن العملة تلقائياً.'; }
+  }
   if(typeof sRate==='function') sRate(); }
 async function _delSupCur(nn){ const olds=listValues('supplier_cur').filter(v=>{ const s=String(v.value||''); const i=s.lastIndexOf('='); return i>0 && s.slice(0,i).trim().toLowerCase()===nn; }); for(const o of olds){ await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_list_item',payload:{category:'supplier_cur',value:o.value}})}); } }
 async function saveSupplierCur(sup){
