@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 20يوليو-ج · تحديث تلقائي صامت كل 60ث: طلبات الموافقة الجديدة (دفعات موردين/فنادق · تعديلات) تظهر في 🔔 الإشعارات بلا إعادة تحميل يدوية — محروس (لا يقاطع الكتابة/المودال/تبويبات الإدخال)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 20يوليو-د · التحديث التلقائي للإشعارات صار فقط داخل تبويب 🔔 الإشعارات (كل 90ث) — باقي الصفحات لا تتحرّك/تومض إطلاقاً</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -933,12 +933,12 @@ async function load(){
 if(!window._acAutoRefresh){ window._acAutoRefresh=setInterval(function(){ try{
   if(!LOADED_ONCE || !CURRENT_USER) return;
   if(document.hidden) return;                                   // التبويب غير ظاهر
+  const cur=document.querySelector('.tab.on'); const t=cur?cur.dataset.p:'';
+  if(t!=='notifs') return;                                      // 🔔 التحديث التلقائي فقط في تبويب الإشعارات — باقي الصفحات لا تتحرّك
   const ae=document.activeElement; if(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return;   // تكتب الآن
   if(document.querySelector('.modal.on, #cancelmodal.on, #fcdeditmodal.on')) return;                // مودال مفتوح
-  const cur=document.querySelector('.tab.on'); const t=cur?cur.dataset.p:'';
-  if(['entry','sales','booking'].indexOf(t)>=0) return;         // تبويبات إدخال — لا تحدّث تفادياً لفقد المُدخل
   window._silentLoad=true; load();
-}catch(_){} }, 60000); }
+}catch(_){} }, 90000); }
 function tab(el){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
