@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 20يوليو-ب · Sales Form: لا تخمين تلقائي لعملة المورّد — المورّد غير المعتمد عملته يُعطي تنبيهاً أحمر «اعتمدي العملة أولاً» ويمنع حفظ الخدمة الجديدة (المالكة تعتمد يدوياً من تبويب الموردين؛ التعديل مسموح)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 20يوليو-ج · تحديث تلقائي صامت كل 60ث: طلبات الموافقة الجديدة (دفعات موردين/فنادق · تعديلات) تظهر في 🔔 الإشعارات بلا إعادة تحميل يدوية — محروس (لا يقاطع الكتابة/المودال/تبويبات الإدخال)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -913,14 +913,14 @@ function toast(msg, ms){ let t=$('acc-toast'); if(!t){ t=document.createElement(
 let LOADED_ONCE=false;
 async function load(){
   const quiet=LOADED_ONCE;   // بعد التحميل الأول: تحديث صامت في المكان (يبقى التبويب والتمرير) بدل مسح الصفحة
-  if(quiet){ toast('⏳ جاري التحديث...',0); }
+  if(quiet && !window._silentLoad){ toast('⏳ جاري التحديث...',0); }
   else { $('loading').style.display='block'; $('loading').textContent='⏳ جاري التحميل...'; $('content').style.display='none'; }
   try{
     const r=await api({});
     if(r.status===401){ localStorage.removeItem('acc_key'); localStorage.removeItem('acc_token'); location.reload(); return; }
     const j=await r.json();
     try{ await loadReconList(); }catch(_){}   // تواريخ الدفع override + قائمة المطابقات
-    try{ render(j); LOADED_ONCE=true; if(quiet) toast('✅ تم الحفظ والتحديث',1500); }
+    try{ render(j); LOADED_ONCE=true; if(quiet && !window._silentLoad) toast('✅ تم الحفظ والتحديث',1500); window._silentLoad=false; }
     catch(re){ if(quiet){ toast('⚠️ خطأ في العرض',2500); } else { $('loading').style.display='block'; $('content').style.display='none';
       $('loading').innerHTML='⚠️ خطأ في العرض: '+esc(String(re))+'<br><br><button class="btn" onclick="load()">إعادة المحاولة</button>'; } }
   }catch(e){
@@ -928,6 +928,17 @@ async function load(){
     else { $('loading').innerHTML='⚠️ تعذّر الاتصال: '+esc(String(e))+'<br><br><button class="btn" onclick="load()">إعادة المحاولة</button>'; }
   }
 }
+// 🔄 تحديث تلقائي صامت كل 60 ثانية: تظهر طلبات الموافقة الجديدة (دفعات/تعديلات) بلا إعادة تحميل يدوية.
+// محروس: لا يقاطع الكتابة، ولا مودال مفتوح، ولا تبويبات الإدخال (تفادي فقد الفورم).
+if(!window._acAutoRefresh){ window._acAutoRefresh=setInterval(function(){ try{
+  if(!LOADED_ONCE || !CURRENT_USER) return;
+  if(document.hidden) return;                                   // التبويب غير ظاهر
+  const ae=document.activeElement; if(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return;   // تكتب الآن
+  if(document.querySelector('.modal.on, #cancelmodal.on, #fcdeditmodal.on')) return;                // مودال مفتوح
+  const cur=document.querySelector('.tab.on'); const t=cur?cur.dataset.p:'';
+  if(['entry','sales','booking'].indexOf(t)>=0) return;         // تبويبات إدخال — لا تحدّث تفادياً لفقد المُدخل
+  window._silentLoad=true; load();
+}catch(_){} }, 60000); }
 function tab(el){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
