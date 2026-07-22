@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-د · شاشة إضافة الخدمة ما عادت تولّد كود عميل تلقائياً — لازم كود موجود مسبقاً (منع الأكواد الوهمية الفاضية)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-هـ · فلترة فواتير الموردين صارت بتاريخ الوصول فقط (وصول الفاتورة → وصول First Client Data) — لا تاريخ الحجز/الفاتورة إطلاقاً</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4537,7 +4537,7 @@ function renderSupplierDetail(){
   const invCli={}, payCli={}, nameCli={}, cliMainId={}, cliActual={}, cliDates={}, agentCli={};
   // أعمدة حركة الحجز — تنعكس مباشرة من Booking Form لكل عميل لهذا المورّد: قبل الإلغاء · رسوم الإلغاء · الحجز الفعلي بعد الإلغاء
   const befCli={}, cancCli={}, actCli={}, cancOwed={};
-  list.forEach(x=>{ const c=x.client_code||'?'; invCli[c]=(invCli[c]||0)+Number(x.invoice_amount||0); befCli[c]=(befCli[c]||0)+(x.cancelled?Number(x.full_value||0):0); cancCli[c]=(cancCli[c]||0)+(x.cancelled?Number(x.cancel_charge||0):0); actCli[c]=(actCli[c]||0)+(x.cancelled?Number(x.cancel_charge||0):Number(x.book_actual||0)); cancOwed[c]=(cancOwed[c]||0)+(x.cancelled?Number(x.invoice_amount||0):0);   /* مستحق الإلغاء = لا يُحتسب مدفوعاً تلقائياً */ if(x.client_name&&!nameCli[c])nameCli[c]=x.client_name; if(x.agent_name&&!agentCli[c])agentCli[c]=x.agent_name; if(!(c in cliMainId)){cliMainId[c]=x.id; cliActual[c]=(x.actual_invoice!=null&&x.actual_invoice!=='')?Number(x.actual_invoice):null;} (cliDates[c]=cliDates[c]||[]).push(x.arrival_date||x.invoice_date||''); });
+  list.forEach(x=>{ const c=x.client_code||'?'; invCli[c]=(invCli[c]||0)+Number(x.invoice_amount||0); befCli[c]=(befCli[c]||0)+(x.cancelled?Number(x.full_value||0):0); cancCli[c]=(cancCli[c]||0)+(x.cancelled?Number(x.cancel_charge||0):0); actCli[c]=(actCli[c]||0)+(x.cancelled?Number(x.cancel_charge||0):Number(x.book_actual||0)); cancOwed[c]=(cancOwed[c]||0)+(x.cancelled?Number(x.invoice_amount||0):0);   /* مستحق الإلغاء = لا يُحتسب مدفوعاً تلقائياً */ if(x.client_name&&!nameCli[c])nameCli[c]=x.client_name; if(x.agent_name&&!agentCli[c])agentCli[c]=x.agent_name; if(!(c in cliMainId)){cliMainId[c]=x.id; cliActual[c]=(x.actual_invoice!=null&&x.actual_invoice!=='')?Number(x.actual_invoice):null;} (cliDates[c]=cliDates[c]||[]).push(x.arrival_date||''); });   /* 📅 تاريخ الوصول فقط — تاريخ وصول First Client Data يُضاف لاحقاً في data-dates (لا تاريخ حجز/فاتورة) */
   pays.forEach(x=>{ if(x.client_code)payCli[x.client_code]=(payCli[x.client_code]||0)+Number(x.amount||0); });
   // ترتيب العملاء: الأحدث إدخالاً في First Client Data أولاً (أعلى رقم سطر = أحدث إدخال)
   const cliNewestId={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!c)return; const id=Number(r.id||0); if(id>(cliNewestId[c]||0))cliNewestId[c]=id; });
@@ -4689,7 +4689,8 @@ function renderSupplierDetail(){
       // الحجز الفعلي + رسوم الإلغاء لكل عميل (من service_lines)
       const bmap={}; (DATA.serviceLines||[]).forEach(s=>{ const c=(s.client_code||'').toUpperCase(); if(!bmap[c])bmap[c]={cc:0}; bmap[c].cc+=Number(s.cancel_charge||0); });
       const H=['تاريخ الوصول','اسم العميل','كود العميل','الوكيل','ربح الباكدج','حالة الباكدج','رصيد دفعة العميل','سعر الحجز','رسوم الإلغاء','مرتجع العميل/العز','العملة','فاتورة المورّد','إجمالي المدفوع','إجمالي المرتجع','دفعة العميل','رصيد العميل','تاريخ الدفع','مرجع البنك','اسم البنك','ملاحظة'];
-      const supdDates=[...new Set(list.map(x=>x.arrival_date||x.invoice_date||'').filter(Boolean))].sort((a,b)=>String(b).localeCompare(String(a)));
+      const _effArr=(x)=>String(x.arrival_date||((fcdCli[(x.client_code||'').toUpperCase()]||{}).arr)||'');   // 📅 تاريخ الوصول فقط (وصول الفاتورة → وصول First Client Data) — لا تاريخ حجز/فاتورة
+      const supdDates=[...new Set(list.map(x=>_effArr(x)).filter(Boolean))].sort((a,b)=>String(b).localeCompare(String(a)));
       return '<div class="panel"><h3>حركة المبيعات / الفواتير (<span id="supd-count">'+list.length+'</span>)</h3>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px">'+
         '<div class="fld" style="min-width:210px;flex:1"><label>🔍 بحث (اسم العميل أو الكود)</label><input id="supd-q" oninput="supdFilter()" placeholder="اكتبي اسم أو كود العميل..."></div>'+
@@ -4698,16 +4699,16 @@ function renderSupplierDetail(){
         '<button class="btn ghost" style="padding:7px 14px" onclick="supdClear()">مسح الفلتر</button>'+
       '</div>'+
       '<div class="tbl-wrap bf-scroll" id="supd-tbl"><table style="font-size:10.5px;white-space:nowrap"><thead><tr>'+H.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody>'+
-      list.sort((a,b)=>String(b.invoice_date||b.arrival_date||'').localeCompare(String(a.invoice_date||a.arrival_date||''))).map(x=>{
+      list.sort((a,b)=>_effArr(b).localeCompare(_effArr(a))).map(x=>{
         const c=(x.client_code||'').toUpperCase(); const f=fmap[c]||{pr:0,paid:0,prof:0,st:'',bank:'',ref:'',note:'',date:''}; const rf=rmap[c]||0; const cc=Number(x.cancel_charge||0);   // رسوم الإلغاء لهذا الحجز (من Booking Form)
         const booked=Number(x.invoice_amount||0);                                   // المطالبة (الملغى=رسوم الإلغاء)
         const bookedShow=Number(x.full_value||0);                                    // سعر الحجز الأصلي (قبل الإلغاء)
         const actInv=(x.actual_invoice!=null&&x.actual_invoice!=='')?Number(x.actual_invoice):booked;  // فاتورة المورّد المُدخلة
         const diff=booked-actInv;                                                    // الفرق (سالب = الفاتورة أعلى)
         const cbal=f.pr-f.paid;
-        const _dt=esc(x.arrival_date||x.invoice_date||'');
+        const _dt=esc(_effArr(x));   // 📅 الفلتر يعتمد تاريخ الوصول فقط (لا تاريخ الحجز/الفاتورة)
         const _cli=esc(((x.client_name||'')+' '+(x.client_code||'')).toLowerCase());
-        return '<tr data-cli="'+_cli+'" data-date="'+_dt+'"><td>'+esc(x.arrival_date||'')+'</td><td>'+esc(x.client_name||'')+'</td><td>'+esc(x.client_code||'')+'</td><td>'+esc(x.agent_name||'')+'</td>'+
+        return '<tr data-cli="'+_cli+'" data-date="'+_dt+'"><td>'+esc(_effArr(x))+'</td><td>'+esc(x.client_name||'')+'</td><td>'+esc(x.client_code||'')+'</td><td>'+esc(x.agent_name||'')+'</td>'+
           '<td class="num">'+fmt(f.prof)+'</td><td>'+((x.cancelled||/cancel/i.test(f.st))?'<span class="pill cancel">ملغى</span>':'<span class="pill active">نشط</span>')+'</td>'+
           '<td class="num">'+fmt(cbal)+'</td><td class="num">'+fmt(bookedShow)+'</td><td class="num">'+(cc?fmt(cc):'')+'</td><td class="num neg">'+(rf?fmt(rf):'')+'</td>'+
           '<td>'+esc(SCUR)+'</td><td class="num">'+fmt(booked)+'</td>'+
@@ -4913,8 +4914,10 @@ function updatePeriodSummary(){
   const f=(($('spc-from')||{}).value)||''; const t=(($('spc-to')||{}).value)||'';
   if(!f&&!t&&!q){ box.innerHTML=''; return; }   // بلا فلتر → بلا ملخّص فترة (المعلومات الأولية تبقى كما هي)
   const scur=supplierCurrency(sup);
+  // 📅 تاريخ الوصول فقط: وصول الفاتورة → وصول العميل من First Client Data (لا تاريخ حجز/فاتورة)
+  const _fcdArr={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); const a=r.arrival_date?String(r.arrival_date).slice(0,10):''; if(a&&(!_fcdArr[c]||a>_fcdArr[c]))_fcdArr[c]=a; });
   const inv=supInvAll().filter(x=>(x.supplier_name||'')===sup).filter(x=>{
-    const d=x.arrival_date||x.invoice_date||''; const cli=((x.client_name||'')+' '+(x.client_code||'')).toLowerCase();
+    const d=x.arrival_date||_fcdArr[(x.client_code||'').toUpperCase()]||''; const cli=((x.client_name||'')+' '+(x.client_code||'')).toLowerCase();
     if(q && cli.indexOf(q)<0) return false;
     if(f && (!d||d<f)) return false;
     if(t && (!d||d>t)) return false;
