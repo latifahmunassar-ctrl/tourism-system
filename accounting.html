@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-أ · إصلاح: رصيد المدفوع له في تصدير PDF كان يستخدم حساباً قديماً مختلفاً عن الشاشة — الآن الشاشة والـPDF نفس الدالة (hpComputeTotals) = رصيد متطابق</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ب · أُضيف زر «📊 تصدير Excel» في قسم الفنادق (المدفوع له) بجانب PDF — يصدّر الملخّص (نفس أرقام الشاشة) + كل الجداول</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2757,6 +2757,7 @@ function hpSummaryHtml(){
       '<div class="fld"><label>📅 إلى تاريخ</label><input type="date" id="hp-rep-to" onchange="hpReport()" style="color-scheme:light;cursor:pointer"></div>'+
       '<button class="btn ghost" style="padding:7px 14px" onclick="var a=document.getElementById(\'hp-rep-from\'),b=document.getElementById(\'hp-rep-to\');if(a)a.value=\'\';if(b)b.value=\'\';hpReport()">مسح الفلتر</button>'+
       '<button class="btn" style="padding:7px 14px;background:#c41d88;color:#fff" onclick="exportHotelPayPDF()">🖨️ تصدير PDF (التقرير + الجداول)</button>'+
+      '<button class="btn" style="padding:7px 14px;background:#0e7c50;color:#fff" onclick="exportHotelPayExcel()">📊 تصدير Excel</button>'+
       '<div style="font-size:11px;color:var(--muted);align-self:center">يفلتر <b>جدول الحجوزات بتاريخ الدخول</b> ويُظهر <b>جدول دفعات العملاء من First Client Data</b> · المدفوع/العمليات حسب تاريخ الدفع · المستحق حسب تاريخ الدخول</div>'+
     '</div>'+
     '<div id="hp-rep-out" style="margin-top:10px"></div></div>';
@@ -2980,6 +2981,35 @@ function exportHotelPayPDF(){
     '</body></html>';
   const w=window.open('','_blank'); if(!w){ alert('فعّلي النوافذ المنبثقة للطباعة'); return; }
   w.document.open(); w.document.write(html); w.document.close();
+}
+// 📊 تصدير تقرير المدفوع له إلى Excel: الملخّص (نفس دالة الشاشة) + كل الجداول الظاهرة
+function exportHotelPayExcel(){
+  const cur=HO_TCUR, payee=HO_PAYEE; const t=hpComputeTotals();
+  const balTxt=(t.bal>0.5)?(fmt(t.bal)+' '+cur+' علينا (مستحق للمورّد)'):(t.bal< -0.5?(fmt(-t.bal)+' '+cur+' لنا (دفعة مقدمة)'):'مُسوّى');
+  let body='<h3>تقرير المدفوع له: '+esc(payee)+' — العملة '+esc(cur)+(hpOnly2026()?' — سنة 2026 فقط':' — كل السنوات')+'</h3>'
+    +'<table><tr><th>البند</th><th>القيمة</th></tr>'
+    +'<tr><td>تكلفة الحجوزات (نشطة + رسوم إلغاء)</td><td>'+fmt(t.cost)+' '+esc(cur)+'</td></tr>'
+    +'<tr><td>إجمالي المدفوعات</td><td>'+fmt(t.paid)+' '+esc(cur)+'</td></tr>'
+    +'<tr><td>الرصيد</td><td>'+esc(balTxt)+'</td></tr>'
+    +'<tr><td>عدد الحجوزات</td><td>'+fmt(t.nBook)+'</td></tr>'
+    +'<tr><td>عدد الدفعات</td><td>'+fmt(t.nPay)+'</td></tr></table><br>';
+  // كل الجداول الظاهرة داخل قسم المدفوع له (الحجوزات + الدفعات المسجّلة + دفعات العملاء)
+  const boxEl=$('ho-pay');
+  if(boxEl){ [...boxEl.querySelectorAll('table')].forEach(table=>{
+    const clone=table.cloneNode(true);
+    clone.querySelectorAll('tr').forEach(tr=>{ if(tr.style.display==='none')tr.remove(); });
+    clone.querySelectorAll('input,textarea').forEach(e=>{ const s=document.createElement('span'); s.textContent=(e.value||''); e.replaceWith(s); });
+    clone.querySelectorAll('select').forEach(e=>{ const s=document.createElement('span'); s.textContent=(e.value||''); e.replaceWith(s); });
+    clone.querySelectorAll('button').forEach(e=>e.remove());
+    if(clone.querySelector('tbody tr')) body+=clone.outerHTML+'<br>';
+  }); }
+  const style='table{border-collapse:collapse;font-family:Arial,sans-serif;margin-bottom:12px}td,th{border:1px solid #999;padding:4px 7px;white-space:nowrap;text-align:right}th{background:#f0f0f0;font-weight:bold}h3,h4{font-family:Arial}';
+  const html='<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><style>'+style+'</style></head><body dir="rtl">'+body+'</body></html>';
+  const blob=new Blob(['﻿'+html],{type:'application/vnd.ms-excel;charset=utf-8'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  const d=new Date(); const stmp=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+  a.href=url; a.download=('تقرير '+payee).replace(/[\/\\?%*:|"<>]/g,'-').slice(0,55)+' '+stmp+'.xls';
+  document.body.appendChild(a); a.click(); setTimeout(()=>{a.remove();URL.revokeObjectURL(url);},600);
 }
 function hpRate(){ const fld=$('hp-rate-fld'), rf=$('hp-rate'), rl=$('hp-rlbl'); if(rl)rl.textContent=HO_TCUR; if(!fld||!rf)return;
   const pc=($('hp-cur')||{}).value||HO_TCUR;
