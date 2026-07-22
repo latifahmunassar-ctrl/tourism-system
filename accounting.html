@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-هـ · فلترة فواتير الموردين صارت بتاريخ الوصول فقط (وصول الفاتورة → وصول First Client Data) — لا تاريخ الحجز/الفاتورة إطلاقاً</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-و · صندوق «المتبقّي للتوزيع» صار يتمرّر يمين/يسار بسهولة (شريط تمرير بارز + أزرار تمرير) مثل بقية الجداول</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4645,7 +4645,7 @@ function renderSupplierDetail(){
         '<div class="fld"><label>إلى تاريخ 📅</label><input type="date" id="spc-to" onchange="spcliFilter()" style="color-scheme:light;cursor:pointer"></div>'+
         '<button class="btn ghost" style="padding:7px 14px" onclick="spcliClear()">مسح الفلتر</button>'+
       '</div>'+
-      '<div class="tbl-wrap" style="max-height:300px"><table style="font-size:11.5px"><thead><tr><th>كود العميل</th><th>تاريخ الوصول 📅</th><th>العميل</th><th>الوكيل</th><th>قيمة الدفع المُسدَّد<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>client balance payment</th><th>الربح المتوقع<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>الربح الفعلي<br><span style="font-size:9px;color:var(--muted)">من Booking Form</span></th><th>قيمة الحجز قبل الإلغاء<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>رسوم الإلغاء<br><span style="font-size:9px;color:var(--muted)">Cancelation Charge ('+esc(SCUR)+')</span></th><th>قيمة الحجز<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>فاتورة المورّد ✏️<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>الفرق</th><th>مدفوع سابقاً</th><th>المتبقّي</th><th>ادفع الآن</th></tr></thead><tbody id="sp-dist-tbl">'+
+      '<div class="tbl-wrap bf-scroll" id="sp-dist-wrap" style="max-height:300px"><table style="font-size:11.5px"><thead><tr><th>كود العميل</th><th>تاريخ الوصول 📅</th><th>العميل</th><th>الوكيل</th><th>قيمة الدفع المُسدَّد<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>client balance payment</th><th>الربح المتوقع<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>الربح الفعلي<br><span style="font-size:9px;color:var(--muted)">من Booking Form</span></th><th>قيمة الحجز قبل الإلغاء<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>رسوم الإلغاء<br><span style="font-size:9px;color:var(--muted)">Cancelation Charge ('+esc(SCUR)+')</span></th><th>قيمة الحجز<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>فاتورة المورّد ✏️<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>الفرق</th><th>مدفوع سابقاً</th><th>المتبقّي</th><th>ادفع الآن</th></tr></thead><tbody id="sp-dist-tbl">'+
       (function(){
         const rowHtml=(c)=>{ const owed=invCli[c]; const isDirect=directCodes.has((c||'').toUpperCase());   // دين مباشر للمورّد = غير مدفوع (لا يأخذ من التوزيع النسبي)
           const paid=isDirect?0:Math.max(0,owed-(cancOwed[c]||0))*allocR, bal=owed-paid; const mid=cliMainId[c];   /* رسوم الإلغاء تبقى مستحقة (غير مدفوعة تلقائياً) */ const av=cliActual[c]; const entered=(av!=null); const diff=owed-(entered?av:owed);
@@ -4676,6 +4676,7 @@ function renderSupplierDetail(){
         return cliRows.map(rowHtml).join('');
       })()+
       '</tbody></table></div>'+
+      '<div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'sp-dist-wrap\',-1)">◀◀ تمرير يمين/يسار</button><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'sp-dist-wrap\',1)">تمرير ▶▶</button></div>'+
       '<div style="margin-top:8px;font-size:13px">إجمالي الموزّع: <b id="sp-total">0</b> · <span id="sp-msg" style="color:var(--muted)"></span></div>'+
       '<button class="btn green" style="margin-top:8px" onclick="saveDistributedPayments('+supJs+')">💸 تسجيل الدفعات الموزّعة</button></div>'+
     payMovHtml+
