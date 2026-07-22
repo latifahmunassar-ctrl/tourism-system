@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ز · عمود «المتبقّي» في توزيع فواتير المورّد ما عاد يُحتسب من فاتورة العميل — يظهر فقط بعد تسجيل «فاتورة المورّد» الفعلية ويُحسب منها (الفاتورة − المدفوع سابقاً)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ح · تعديل «فاتورة المورّد» بعد تسجيلها يتطلب موافقة المالكة (التسجيل الأول مباشر) — طلب الموافقة يظهر في الإشعارات</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4968,7 +4968,13 @@ function editSupInv(id){
 }
 async function saveSupInvoice(id,val){
   spDiffUpdate(id);
-  try{ await fetch(FN.replace('acc-dashboard','acc-set-invoice')+'?key='+encodeURIComponent(KEY),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,actual_invoice:(val===''?null:val)})}); }catch(e){}
+  // 🧾 التسجيل لأول مرة مباشر؛ أي تعديل لقيمة مسجّلة سابقاً من غير المالكة → طلب موافقة (لا يُطبَّق حتى الاعتماد)
+  try{
+    const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_sup_invoice',payload:{id:id,actual_invoice:(val===''?null:val),by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
+    const j=await r.json();
+    if(j&&j.pending){ alert('🔒 '+(j.msg||'أُرسل طلب تعديل فاتورة المورّد لموافقة المالكة — لن يتغيّر حتى الاعتماد')); const sup=($('supflt')||{}).value||''; await load(); if($('supflt')){ $('supflt').value=sup; renderSupplierDetail(); } return; }
+    if(j&&j.error){ alert('⚠️ '+j.error); }
+  }catch(e){}
 }
 function spRate(scur){
   const pc=$('sp-cur').value, fld=$('sp-rate-fld'), rf=$('sp-rate');
