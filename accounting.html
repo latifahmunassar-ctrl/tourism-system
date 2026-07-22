@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-و · صندوق «المتبقّي للتوزيع» صار يتمرّر يمين/يسار بسهولة (شريط تمرير بارز + أزرار تمرير) مثل بقية الجداول</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ز · عمود «المتبقّي» في توزيع فواتير المورّد ما عاد يُحتسب من فاتورة العميل — يظهر فقط بعد تسجيل «فاتورة المورّد» الفعلية ويُحسب منها (الفاتورة − المدفوع سابقاً)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4648,15 +4648,17 @@ function renderSupplierDetail(){
       '<div class="tbl-wrap bf-scroll" id="sp-dist-wrap" style="max-height:300px"><table style="font-size:11.5px"><thead><tr><th>كود العميل</th><th>تاريخ الوصول 📅</th><th>العميل</th><th>الوكيل</th><th>قيمة الدفع المُسدَّد<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>client balance payment</th><th>الربح المتوقع<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>الربح الفعلي<br><span style="font-size:9px;color:var(--muted)">من Booking Form</span></th><th>قيمة الحجز قبل الإلغاء<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>رسوم الإلغاء<br><span style="font-size:9px;color:var(--muted)">Cancelation Charge ('+esc(SCUR)+')</span></th><th>قيمة الحجز<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>فاتورة المورّد ✏️<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>الفرق</th><th>مدفوع سابقاً</th><th>المتبقّي</th><th>ادفع الآن</th></tr></thead><tbody id="sp-dist-tbl">'+
       (function(){
         const rowHtml=(c)=>{ const owed=invCli[c]; const isDirect=directCodes.has((c||'').toUpperCase());   // دين مباشر للمورّد = غير مدفوع (لا يأخذ من التوزيع النسبي)
-          const paid=isDirect?0:Math.max(0,owed-(cancOwed[c]||0))*allocR, bal=owed-paid; const mid=cliMainId[c];   /* رسوم الإلغاء تبقى مستحقة (غير مدفوعة تلقائياً) */ const av=cliActual[c]; const entered=(av!=null); const diff=owed-(entered?av:owed);
-          const directHtml=(isDirect&&bal>0.5)?'<div style="font-size:9px;color:#d11;font-weight:800;margin-top:2px">🔻 مباشر من المورّد · غير مدفوع</div>':'';
+          const paid=isDirect?0:Math.max(0,owed-(cancOwed[c]||0))*allocR; const mid=cliMainId[c];   /* رسوم الإلغاء تبقى مستحقة (غير مدفوعة تلقائياً) */ const av=cliActual[c]; const entered=(av!=null); const diff=owed-(entered?av:owed);
+          // 📌 المتبقّي للمورّد لا يُحتسب من قيمة حجز العميل — يظهر فقط بعد تسجيل «فاتورة المورّد» الفعلية، ويُحسب منها (فاتورة المورّد − المدفوع سابقاً)
+          const bal=entered?(Number(av)-paid):null;
+          const directHtml=(isDirect&&bal!=null&&bal>0.5)?'<div style="font-size:9px;color:#d11;font-weight:800;margin-top:2px">🔻 مباشر من المورّد · غير مدفوع</div>':'';
           const cancHtml=cancelledCodes.has((c||'').toUpperCase())?'<div style="font-size:9px;color:#d98a00;font-weight:800;margin-top:2px">🚫 ملغى — المستحق = رسوم الإلغاء فقط</div>':'';
           const _dts=esc([...(cliDates[c]||[]), ((fcdCli[(c||'').toUpperCase()]||{}).arr||'')].filter(Boolean).join('|'));   // نضيف تاريخ وصول First Client Data لفلتر التاريخ (حجوزات النقل/بلا check_in ما لها تاريخ فاتورة)
           const _cli=esc(((nameCli[c]||'')+' '+c).toLowerCase());
           const fc=fcdCli[(c||'').toUpperCase()]||{pr:0,paid:0,cur:''}; const cbal=fc.pr-fc.paid; const prof=_APM.byClient[(c||'').toUpperCase()]; const ccur=curSym(fc.cur||'SAR'); const canc=cancCli[c]||0; const rbc=befCli[c]||0; const bookAct=actCli[c]||0;
           const invCell = entered
             ? '<td id="sinvcell-'+mid+'" data-val="'+av+'" data-booked="'+owed+'"><span class="num">'+fmt(av)+'</span> <button class="btn ghost" style="padding:1px 9px;font-size:10px;margin-right:4px" onclick="editSupInv('+mid+')">✏️ تعديل</button></td>'
-            : '<td><input type="number" id="sinv-'+mid+'" data-booked="'+owed+'" value="" placeholder="'+fmt(owed)+'" onchange="saveSupInvoice('+mid+',this.value)" style="width:85px;padding:3px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:11px"></td>';
+            : '<td><input type="number" id="sinv-'+mid+'" data-booked="'+owed+'" data-paid="'+paid+'" value="" placeholder="'+fmt(owed)+'" oninput="spDiffUpdate('+mid+')" onchange="saveSupInvoice('+mid+',this.value)" style="width:85px;padding:3px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:11px"></td>';
           const diffCell = entered
             ? '<td class="num" id="sdiff-'+mid+'" style="font-weight:700;color:'+(diff<-0.5?'#d11':(diff>0.5?'#0e9d6a':'inherit'))+'">'+fmt(diff)+'</td>'
             : '<td class="num" id="sdiff-'+mid+'"></td>';
@@ -4669,7 +4671,9 @@ function renderSupplierDetail(){
             '<td class="num neg">'+(canc>0.5?fmt(canc):'')+'</td>'+
             '<td class="num">'+fmt(bookAct)+'</td>'+ invCell + diffCell +
             '<td class="num">'+fmt(paid)+'</td>'+
-            '<td class="num" style="font-weight:700;color:'+(bal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(bal)+'</td>'+
+            (bal==null
+              ? '<td class="num" id="sbal-'+mid+'" style="color:#9aa" title="أدخلي «فاتورة المورّد» أولاً ليظهر المتبقّي">— <span style="font-size:9px">سجّلي الفاتورة</span></td>'
+              : '<td class="num" id="sbal-'+mid+'" style="font-weight:700;color:'+(bal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(bal)+'</td>')+
             '<td><input type="number" class="sp-cli" data-code="'+esc(c)+'" data-name="'+esc(nameCli[c]||'')+'" oninput="spTotal()" style="width:90px;padding:3px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px"></td></tr>';
         };
         // قائمة واحدة مرتّبة بالأحدث إدخالاً (بلا فصل بين المُدخَلة وغير المُدخَلة)
@@ -4737,6 +4741,8 @@ function spDiffUpdate(id){
   const inp=$('sinv-'+id); if(!inp)return; const booked=Number(inp.dataset.booked)||0;
   const actual=(inp.value==='')?booked:(Number(inp.value)||0); const diff=booked-actual;
   const cell=$('sdiff-'+id); if(cell){ cell.textContent=fmt(diff); cell.style.color=diff<-0.5?'#d11':(diff>0.5?'#0e9d6a':'inherit'); }
+  // 📌 المتبقّي: لا يظهر إلا بعد تسجيل «فاتورة المورّد»، ويُحسب منها (فاتورة المورّد − المدفوع سابقاً)
+  const bcell=$('sbal-'+id); if(bcell && inp.hasAttribute('data-paid')){ const paid=Number(inp.dataset.paid)||0; const entered=(inp.value!==''); if(entered){ const bal=(Number(inp.value)||0)-paid; bcell.innerHTML=fmt(bal); bcell.style.color=bal>0.5?'#b8860b':'#0e9d6a'; bcell.style.fontWeight='700'; bcell.removeAttribute('title'); } else { bcell.innerHTML='— <span style="font-size:9px">سجّلي الفاتورة</span>'; bcell.style.color='#9aa'; bcell.style.fontWeight='400'; bcell.title='أدخلي «فاتورة المورّد» أولاً ليظهر المتبقّي'; } }
 }
 function sppFilter(){
   const q=(($('spp-q')||{}).value||'').trim().toLowerCase();
