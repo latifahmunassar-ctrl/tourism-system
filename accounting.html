@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ب · أُضيف زر «📊 تصدير Excel» في قسم الفنادق (المدفوع له) بجانب PDF — يصدّر الملخّص (نفس أرقام الشاشة) + كل الجداول</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ج · زر «📊 Excel» في الموردين والأرباح والخسائر صار يصدّر الملخّص (نفس أرقام الشاشة) + الجدول — مثل تصدير الفنادق</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -539,7 +539,7 @@ table{font-weight:600}
           <option value="margin">ترتيب: الهامش %</option>
         </select>
         <button class="btn" style="background:#c41d88;padding:6px 14px" onclick="exportPnlPDF()">🖨️ PDF</button>
-        <button class="btn" style="background:#0e7c50;padding:6px 14px" onclick="exportKashfExcel('#t-pnl','تقرير الأرباح والخسائر')">📊 Excel</button>
+        <button class="btn" style="background:#0e7c50;padding:6px 14px" onclick="exportPnlExcel()">📊 Excel</button>
       </div>
       <div class="panel"><h3>الربح / الخسارة لكل حجز <span class="cnt" id="pnl-cnt"></span></h3>
         <div class="tbl-wrap"><table id="t-pnl"><thead><tr>
@@ -2566,7 +2566,24 @@ function exportKashfExcel(el, filename){
   document.body.appendChild(a); a.click(); setTimeout(()=>{a.remove();URL.revokeObjectURL(url);},600);
 }
 function exportHotelKashf(){ exportKashfExcel('#hs-detail table','كشف حساب '+(HS_NAME||'فندق')); }
-function exportSupplierKashf(){ const sup=(($('supflt')||{}).value||'').trim(); exportKashfExcel(document.getElementById('sp-dist-tbl'),'كشف حساب مورّد '+(sup||'')); }
+function exportSupplierKashf(){
+  const sup=(($('supflt')||{}).value||'').trim();
+  if(!sup){ alert('اختاري مورّداً أولاً.'); return; }
+  // ملخّص المورّد (نفس منطق renderSupplierDetail): الفواتير · العملاء · المستحق · المدفوع · الرصيد بعملة المورّد
+  const list=(typeof supInvAll==='function'?supInvAll():[]).filter(x=>(x.supplier_name||'')===sup);
+  const pays=((DATA&&DATA.supplierPayments)||[]).filter(x=>(x.supplier_name||'')===sup);
+  const SCUR=(typeof supplierCurrency==='function')?supplierCurrency(sup):'';
+  const clients=new Set(list.map(x=>x.client_code)).size;
+  const owedT=(typeof supOwed==='function')?supOwed(list):list.reduce((s,x)=>s+Number(x.invoice_amount||0),0);
+  const paidT=pays.reduce((s,x)=>s+Number(x.amount||0),0);
+  const balT=owedT-paidT;
+  const balLbl=balT>0.5?'علينا (مستحق للمورّد)':(balT<-0.5?'له رصيد مقدّم عندنا':'مُسوّى');
+  let body='<h3>كشف حساب مورّد — '+esc(sup)+'</h3>'
+    +'<table><tr><th>عدد الفواتير</th><th>عدد العملاء</th><th>💰 المستحق</th><th>✅ المدفوع</th><th>📌 الرصيد المتبقّي</th><th>الحالة</th><th>العملة</th></tr>'
+    +'<tr><td>'+fmt(list.length)+'</td><td>'+fmt(clients)+'</td><td>'+fmt(owedT)+'</td><td>'+fmt(paidT)+'</td><td>'+fmt(balT)+'</td><td>'+esc(balLbl)+'</td><td>'+esc(SCUR)+'</td></tr></table><br>';
+  const c=_cleanTableClone('#sp-dist-tbl'); if(c)body+='<h4>توزيع الفواتير على العملاء</h4>'+c.outerHTML;
+  _excelDownload(body,'كشف حساب مورّد '+sup);
+}
 // ---- القسم العلوي: دفعة فندق/نظام (المدفوع له أولاً، بعملة موحّدة) + توزيع إجمالي على قائمة عملاء · تسجيل مباشر ----
 let HO_PAYEE='TBO';
 let HO_TCUR='USD';
@@ -4838,6 +4855,27 @@ function exportStaffPDF(){
   w.document.open(); w.document.write(html); w.document.close();
 }
 // 🖨️ تصدير تقرير الأرباح والخسائر PDF (بهوية العز) — يحترم الفلتر الحالي + ملخّص متوقع/فعلي
+// 📊 أدوات تصدير Excel موحّدة (ملخّص + جدول)
+function _excelDownload(bodyHtml, filename){
+  const style='table{border-collapse:collapse;font-family:Arial,sans-serif;margin-bottom:12px}td,th{border:1px solid #999;padding:4px 7px;white-space:nowrap;text-align:right}th{background:#f0f0f0;font-weight:bold}h3,h4{font-family:Arial}';
+  const html='<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><style>'+style+'</style></head><body dir="rtl">'+bodyHtml+'</body></html>';
+  const blob=new Blob(['﻿'+html],{type:'application/vnd.ms-excel;charset=utf-8'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  const d=new Date(); const stmp=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+  a.href=url; a.download=String(filename).replace(/[\/\\?%*:|"<>]/g,'-').slice(0,55)+' '+stmp+'.xls';
+  document.body.appendChild(a); a.click(); setTimeout(()=>{a.remove();URL.revokeObjectURL(url);},600);
+}
+function _cleanTableClone(el){ if(typeof el==='string')el=document.querySelector(el); if(el&&el.tagName==='TBODY')el=el.closest('table'); if(!el||el.tagName!=='TABLE')return null; const clone=el.cloneNode(true); clone.querySelectorAll('tr').forEach(tr=>{ if(tr.style.display==='none')tr.remove(); }); clone.querySelectorAll('input,textarea').forEach(e=>{const s=document.createElement('span');s.textContent=e.value||'';e.replaceWith(s);}); clone.querySelectorAll('select').forEach(e=>{const s=document.createElement('span');s.textContent=e.value||'';e.replaceWith(s);}); clone.querySelectorAll('button').forEach(e=>e.remove()); return clone; }
+// 📊 تصدير الأرباح والخسائر Excel: الملخّص (KPIs) + الجدول
+function exportPnlExcel(){
+  const kpi=(id)=>{ const e=$(id); return e?e.textContent.replace(/\s+/g,' ').trim():''; };
+  const df=(($('pflt-from')||{}).value)||'', dt=(($('pflt-to')||{}).value)||'';
+  let body='<h3>تقرير الأرباح والخسائر'+((df||dt)?(' — الفترة '+(df||'…')+' → '+(dt||'…')):'')+'</h3>'
+    +'<table><tr><th>سعر البيع الكلي</th><th>التكلفة الكلية</th><th>الربح المتوقع</th><th>الربح الفعلي</th><th>حجوزات خاسرة</th><th>متوسط الهامش</th></tr>'
+    +'<tr><td>'+esc(kpi('pnl-sales'))+'</td><td>'+esc(kpi('pnl-cost'))+'</td><td>'+esc(kpi('pnl-exp'))+'</td><td>'+esc(kpi('pnl-profit'))+'</td><td>'+esc(kpi('pnl-losses'))+'</td><td>'+esc(kpi('pnl-margin'))+'</td></tr></table><br>';
+  const c=_cleanTableClone('#t-pnl'); if(c)body+='<h4>تفاصيل العملاء</h4>'+c.outerHTML;
+  _excelDownload(body,'تقرير الأرباح والخسائر');
+}
 function exportPnlPDF(){
   const today=new Date().toISOString().slice(0,10);
   const df=(($('pflt-from')||{}).value)||'', dt=(($('pflt-to')||{}).value)||'';
