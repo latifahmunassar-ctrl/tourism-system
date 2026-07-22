@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ج · زر «📊 Excel» في الموردين والأرباح والخسائر صار يصدّر الملخّص (نفس أرقام الشاشة) + الجدول — مثل تصدير الفنادق</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-د · شاشة إضافة الخدمة ما عادت تولّد كود عميل تلقائياً — لازم كود موجود مسبقاً (منع الأكواد الوهمية الفاضية)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -5921,17 +5921,9 @@ function eRenderSvcs(code){
 }
 async function eSave(){
   const m=$('e-msg'); let code=($('e-code').value||'').trim().toUpperCase();
-  // إنشاء العميل إذا الكود فاضي أو غير موجود
-  if(!code || !clientInfo(code)){
-    const cp={ is_new_client:!code, client_code:code||null,
-      agent_name:$('e-agent').value||null, travel_from:$('e-from').value||null, travel_to:$('e-to').value||null,
-      currency:$('e-cur').value, bank_name:$('e-bank').value||null, cost:0, profit:0, amount_paid:0,
-      created_by:(CURRENT_USER&&CURRENT_USER.staff_name)||null };   // ختم اسم المُدخِل
-    const rc=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_client_entry',payload:cp})});
-    const jc=await rc.json();
-    if(jc.error){ m.innerHTML='<span style="color:var(--red)">خطأ: '+esc(jc.error)+'</span>'; return; }
-    code=(jc.row && jc.row.client_code || code || '').toUpperCase(); $('e-code').value=code;
-  }
+  // 🚫 لا يتم توليد أكواد عملاء تلقائياً نهائياً — لازم كود عميل موجود مسبقاً (يُنشأ فقط من شاشة إضافة عميل بالبيانات الكاملة)
+  if(!code){ m.innerHTML='<span style="color:var(--red)">⛔ اكتبي كود العميل أولاً — لا يتم توليد كود تلقائياً. العميل الجديد يُضاف من شاشة «إضافة عميل» ببياناته الكاملة.</span>'; const e=$('e-code'); if(e)e.focus(); return; }
+  if(!clientInfo(code)){ m.innerHTML='<span style="color:var(--red)">⛔ الكود «'+esc(code)+'» غير موجود في First Client Data — تأكّدي منه. لا يتم إنشاء عميل جديد من هذه الشاشة.</span>'; const e=$('e-code'); if(e)e.focus(); return; }
   // إضافة سطر الخدمة بالحقول المعتمدة
   const sp={ client_code:code, kind:$('e-kind').value, supplier:$('e-supplier').value||null,
     agent_code:$('e-agentcode').value||null, bank_name:$('e-bank').value||null, currency:$('e-cur').value||null,
