@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 20يوليو-د · التحديث التلقائي للإشعارات صار فقط داخل تبويب 🔔 الإشعارات (كل 90ث) — باقي الصفحات لا تتحرّك/تومض إطلاقاً</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-أ · إصلاح: رصيد المدفوع له في تصدير PDF كان يستخدم حساباً قديماً مختلفاً عن الشاشة — الآن الشاشة والـPDF نفس الدالة (hpComputeTotals) = رصيد متطابق</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2716,39 +2716,28 @@ function hpPayeeClientMap(payee){
 }
 function hpRepCard(t,v,col){ return '<div class="kpi"><div class="ttl">'+t+'</div><div class="val" style="font-size:16px;color:'+col+'">'+v+'</div></div>'; }
 // تقرير عام للمدفوع له: مجموع خام (مطابق للشيت) + سطر معادل بعملة المدفوع له بعد التحويل + فلتر تاريخ
+// 🧮 حساب موحّد لإجماليات المدفوع له (يُستخدم في الشاشة والـPDF معاً — يضمن التطابق)
+//   • تكلفة الحجوزات = النشطة + رسوم الإلغاء الفعلية (القيمة−المرتجع) · • إجمالي المدفوعات = تحويلات + سداد بطاقة/بنك بلا ازدواج · • الرصيد = التكلفة − المدفوعات
+function hpComputeTotals(){
+  const only2026=hpOnly2026(); const yOK=(d)=>{ const m=String(d||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); };
+  let cost=0,nActive=0,nCancel=0,cancelFee=0;
+  hpHbMatch(HO_PAYEE).forEach(h=>{ if(only2026 && !yOK(h.check_in||h.arrival_date))return;
+    if(/cancel/i.test(String(h.status||''))){ const frb=Number(h.final_rate_booked||0), rf=Number(h.refund||0), cc=Number(h.cancel_charge||0); let fee=(rf>0.005)?(frb-rf):cc; fee=Math.max(0,Math.min(fee,frb)); if(fee>0.005){ cost+=fee; cancelFee+=fee; nCancel++; } return; }
+    cost+=Number(h.final_rate_booked||0); nActive++;
+  });
+  const payArr=hpPayments(HO_PAYEE).filter(x=>!only2026 || yOK(x.date));
+  let paid=0; payArr.forEach(x=>paid+=x.amount); let nPay=payArr.length;
+  const paidCodes=new Set(payArr.map(x=>String(x.code||'').toUpperCase()).filter(Boolean));
+  const cfById2={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const v=String(s.charge_from||'').trim(); if(v)cfById2[s.id]=v; });
+  hpHbMatch(HO_PAYEE).forEach(h=>{ if(!h._booking||!h.service_id)return; if(/cancel/i.test(String(h.status||'')))return; if(only2026 && !yOK(h.check_in||h.arrival_date))return; if(!_isSettlement(cfById2[h.service_id]))return; if(paidCodes.has(String(h.client_code||'').toUpperCase()))return; paid+=Number(h.final_rate_booked||0); nPay++; });
+  const nBook=nActive+nCancel; const bal=cost-paid;
+  return { cost, paid, bal, nBook, nPay, cancelFee, nActive, nCancel, only2026 };
+}
 function hpSummaryHtml(){
   const cur=HO_TCUR;
   const only2026=hpOnly2026();
-  const yOK=(d)=>{ const m=String(d||'').match(/(\d{4})/); return !!(m&&+m[1]>=2026); };
-  // 📏 منطق المالكة (17 يوليو 2026) — تقرير مبسّط بلا ازدواج حساب:
-  //   • تكلفة الحجوزات = الحجوزات النشطة المؤكدة + رسوم الإلغاء (للملغى فقط) — القيمة الكاملة للملغى مُستبعَدة.
-  //   • إجمالي المدفوعات = سجلّ الدفعات الفعلية للمورّد فقط (المال الحقيقي) — لا يُضاف سداد charge from (يمنع ازدواج الحساب).
-  //   • الرصيد = التكلفة − المدفوعات: موجب = «علينا (مستحق للمورّد)» · سالب = «لنا (دفعة مقدمة)».
-  let cost=0,nActive=0,nCancel=0,cancelFee=0;
-  hpHbMatch(HO_PAYEE).forEach(h=>{ if(only2026 && !yOK(h.check_in||h.arrival_date))return;
-    if(/cancel/i.test(String(h.status||''))){   // 🚫 الملغى: تُحتسب رسوم الإلغاء الفعلية فقط (مثال: حجز 2000 رسوم إلغائه 200 → التكلفة 200 لا 2000)
-      const frb=Number(h.final_rate_booked||0), rf=Number(h.refund||0), cc=Number(h.cancel_charge||0);
-      // إن سُجّل مرتجع → رسوم الإلغاء = القيمة − المرتجع (الأدق، ويتجاهل cancel_charge غير الموثوق مثل C26016)؛ وإلا نعتمد حقل رسوم الإلغاء المُدخَل
-      let fee = (rf>0.005) ? (frb-rf) : cc;
-      fee = Math.max(0, Math.min(fee, frb));   // بين صفر وقيمة الحجز
-      if(fee>0.005){ cost+=fee; cancelFee+=fee; nCancel++; }   // الملغى بلا رسوم (رُدّ كاملاً) لا يُعدّ نهائياً في التكلفة — لا رقماً ولا عدداً
-      return;
-    }
-    cost+=Number(h.final_rate_booked||0); nActive++;
-  });
-  // إجمالي المدفوعات = كل أنواع الدفع الفعلية للمورّد بلا ازدواج:
-  //   ① تحويلات مسجّلة (hotelPayments + supplierPayments) عبر hpPayments
-  //   ② حجوزات مدفوعة ببطاقة/بنك عبر Booking Form (charge_from) — تُضاف فقط إن لم يكن للعميل تحويل مسجّل (وإلا فهي نفس الفلوس = ازدواج)
-  const payArr=hpPayments(HO_PAYEE).filter(x=>!only2026 || yOK(x.date));
-  let paid=0; payArr.forEach(x=>paid+=x.amount); let nPay=payArr.length;
-  const paidCodes=new Set(payArr.map(x=>String(x.code||'').toUpperCase()).filter(Boolean));   // عملاء لهم تحويل مسجّل
-  const cfById2={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const v=String(s.charge_from||'').trim(); if(v)cfById2[s.id]=v; });
-  hpHbMatch(HO_PAYEE).forEach(h=>{ if(!h._booking||!h.service_id)return; if(/cancel/i.test(String(h.status||'')))return; if(only2026 && !yOK(h.check_in||h.arrival_date))return;
-    if(!_isSettlement(cfById2[h.service_id]))return;               // ليست دفعة فعلية (مباشر من المورّد = مستحق)
-    if(paidCodes.has(String(h.client_code||'').toUpperCase()))return;   // له تحويل مسجّل → لا تُزدوَج
-    paid+=Number(h.final_rate_booked||0); nPay++;
-  });
-  const nBook=nActive+nCancel;
+  const t=hpComputeTotals();
+  const cost=t.cost, paid=t.paid, cancelFee=t.cancelFee, nBook=t.nBook, nPay=t.nPay, nActive=t.nActive, nCancel=t.nCancel;
   const bal=cost-paid; const advance=(bal< -0.5); const owedToSup=(bal>0.5);   // سالب = دفعة مقدمة (لنا)؛ موجب = مستحق (علينا)
   return '<div class="panel" style="border:1px solid var(--accent);margin-bottom:14px"><h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>🧾 تقرير «'+esc(HO_PAYEE)+'» — '+(only2026?'سنة 2026 فقط':'كل السنوات')+' <span style="font-size:11px;color:var(--muted)">(بعملة المورّد '+esc(cur)+' · أرقام خام بلا تحويل)</span></span><label style="font-size:12px;font-weight:400;cursor:pointer;background:#f6f8fc;border:1px solid var(--line);border-radius:8px;padding:4px 10px" title="خاص بهذا الفندق فقط"><input type="checkbox" '+(only2026?'checked':'')+' onchange="hpToggle2026(this.checked)"> 🗓️ سنة 2026 فقط (لهذا الفندق)</label></h3>'+
     '<div class="kpis" style="grid-template-columns:repeat(5,1fr)">'+
@@ -2947,10 +2936,8 @@ function exportHotelPayPDF(){
   const cur=HO_TCUR; const payee=HO_PAYEE;
   const from=(($('hp-rep-from')||{}).value||''), to=(($('hp-rep-to')||{}).value||'');
   const q=(($('hpc-q')||{}).value||'').trim(); const st=(($('hp-stf')||{}).value||''); const filtered=!!(from||to||q||st);
-  // (أ) التقرير العام (الكلي) — نفس منطق hpSummaryHtml
-  const allCli=hpPayeeClientMap(payee); let owed=0,paid=0,nBook=0,nPay=0;
-  Object.values(allCli).forEach(o=>{ owed+=o.owed; paid+=o.paid; nBook+=o.n; if(o.paid>0.5)nPay++; });
-  const bal=owed-paid;
+  // (أ) التقرير العام — نفس دالة الشاشة تماماً (hpComputeTotals) لضمان تطابق الرصيد بين الشاشة والـPDF
+  const _t=hpComputeTotals(); const cost=_t.cost, paid=_t.paid, bal=_t.bal, nBook=_t.nBook, nPay=_t.nPay;
   // (ب) تقرير الفترة (إن وُجد نطاق تاريخ) — حسب تاريخ الدخول للمستحق وتاريخ الدفع للمدفوع
   let periodLine='';
   if(from||to){ const inR=(d)=>{ if(!d)return false; const s=String(d).slice(0,10); if(from&&s<from)return false; if(to&&s>to)return false; return true; };
@@ -2984,7 +2971,7 @@ function exportHotelPayPDF(){
     '<div class="hd"><div class="logo">AL<span>E</span>ZZ<div class="sub">شركة العز للسياحة والسفر</div></div>'+
       '<div class="ttl">تقرير المدفوع له / الفنادق<small>تاريخ الإصدار: '+esc(today)+'</small></div></div>'+
     '<div class="meta"><span>المدفوع له: <b>'+esc(payee)+'</b></span><span>العملة الموحّدة: <b>'+esc(cur)+'</b></span>'+((from||to)?('<span>تاريخ الدخول: <b>'+esc((from||'…')+' → '+(to||'…'))+'</b></span>'):'')+(q?('<span>بحث: <b>'+esc(q)+'</b></span>'):'')+(st?('<span>الحالة: <b>'+esc(st==='cancel'?'ملغي':'مدفوع')+'</b></span>'):'')+'</div>'+
-    '<div class="kpis"><b>التقرير العام (الكلي):</b> <span>المستحق: <b>'+fmt(owed)+' '+esc(cur)+'</b></span> · <span>المدفوع: <b>'+fmt(paid)+' '+esc(cur)+'</b></span> · <span>الرصيد: <b>'+fmt(bal)+' '+esc(cur)+'</b></span> · <span>الحجوزات: <b>'+fmt(nBook)+'</b></span> · <span>العمليات: <b>'+fmt(nPay)+'</b></span></div>'+
+    '<div class="kpis"><b>التقرير العام:</b> <span>تكلفة الحجوزات: <b>'+fmt(cost)+' '+esc(cur)+'</b></span> · <span>إجمالي المدفوعات: <b>'+fmt(paid)+' '+esc(cur)+'</b></span> · <span>الرصيد: <b>'+(bal>0.5?(fmt(bal)+' '+esc(cur)+' علينا (مستحق)'):(bal< -0.5?(fmt(-bal)+' '+esc(cur)+' لنا (دفعة مقدمة)'):'مُسوّى'))+'</b></span> · <span>الحجوزات: <b>'+fmt(nBook)+'</b></span> · <span>العمليات: <b>'+fmt(nPay)+'</b></span></div>'+
     periodLine+
     '<h4>(١) العملاء / الحجوزات'+(filtered?' — حسب الفلتر المحدّد':'')+' ('+t1rows.length+')</h4>'+tbl(t1head,t1rows)+
     '<h4>(٢) دفعات العملاء من First Client Data'+(filtered?' — لنفس العملاء الظاهرين':'')+' ('+t2rows.length+')</h4>'+tbl(t2head,t2rows)+
