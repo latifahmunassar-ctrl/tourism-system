@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ل · حساب المورّد: لو «مصدر الحجز» فاضٍ يعتمد اسم المورّد (خانة supplier) مع منع الازدواج — الجولات المُدخلة بلا booked_from صارت تظهر (بلاغ C26041)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-م · «فاتورة المورّد» صارت تُحفظ حتى لحجوزات Booking Form (sl-) في عمود المورّد — يظهر الفرق والمتبقّي (كانت تُحفظ لفواتير الشيت فقط)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3624,7 +3624,7 @@ function supInvAll(){
     const owedAmt=isCancel?Number(s.cancel_charge||0):fullCost;
     if(isCancel){ if(!(fullCost>0)&&!(owedAmt>0)) return; } else { if(!(owedAmt>0)) return; }
     const c=(s.client_code||'').toUpperCase();
-    base.push({ id:'sl-'+s.id, service_id:s.id, supplier_name:bf, client_code:s.client_code, client_name:nm[c]||'', agent_name:ag[c]||'', arrival_date:s.check_in||null, invoice_amount:owedAmt, full_value:fullCost, book_actual:frb, cancel_charge:Number(s.cancel_charge||0), cancelled:isCancel, invoice_currency:s.booked_currency||s.currency||null, invoice_date:s.check_in||null, actual_invoice:null, status:s.status||null, source:'dashboard', _booking:true });
+    base.push({ id:'sl-'+s.id, service_id:s.id, supplier_name:bf, client_code:s.client_code, client_name:nm[c]||'', agent_name:ag[c]||'', arrival_date:s.check_in||null, invoice_amount:owedAmt, full_value:fullCost, book_actual:frb, cancel_charge:Number(s.cancel_charge||0), cancelled:isCancel, invoice_currency:s.booked_currency||s.currency||null, invoice_date:s.check_in||null, actual_invoice:(s.actual_invoice!=null&&s.actual_invoice!=='')?Number(s.actual_invoice):null, status:s.status||null, source:'dashboard', _booking:true });
   });
   return base;
 }
