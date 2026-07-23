@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-م · «فاتورة المورّد» صارت تُحفظ حتى لحجوزات Booking Form (sl-) في عمود المورّد — يظهر الفرق والمتبقّي (كانت تُحفظ لفواتير الشيت فقط)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ن · إصلاح عمود «فاتورة المورّد» لحجوزات Booking Form: كانت معرّفات sl- بلا علامات اقتباس فتكسر إدخال القيمة/حساب الفرق — الآن تُحفظ ويظهر الفرق والمتبقّي مباشرة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4662,8 +4662,8 @@ function renderSupplierDetail(){
           const _cli=esc(((nameCli[c]||'')+' '+c).toLowerCase());
           const fc=fcdCli[(c||'').toUpperCase()]||{pr:0,paid:0,cur:''}; const cbal=fc.pr-fc.paid; const prof=_APM.byClient[(c||'').toUpperCase()]; const ccur=curSym(fc.cur||'SAR'); const canc=cancCli[c]||0; const rbc=befCli[c]||0; const bookAct=actCli[c]||0;
           const invCell = entered
-            ? '<td id="sinvcell-'+mid+'" data-val="'+av+'" data-booked="'+owed+'"><span class="num">'+fmt(av)+'</span> <button class="btn ghost" style="padding:1px 9px;font-size:10px;margin-right:4px" onclick="editSupInv('+mid+')">✏️ تعديل</button></td>'
-            : '<td><input type="number" id="sinv-'+mid+'" data-booked="'+owed+'" data-paid="'+paid+'" value="" placeholder="'+fmt(owed)+'" oninput="spDiffUpdate('+mid+')" onchange="saveSupInvoice('+mid+',this.value)" style="width:85px;padding:3px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:11px"></td>';
+            ? '<td id="sinvcell-'+mid+'" data-val="'+av+'" data-booked="'+owed+'"><span class="num">'+fmt(av)+'</span> <button class="btn ghost" style="padding:1px 9px;font-size:10px;margin-right:4px" onclick="editSupInv(\''+mid+'\')">✏️ تعديل</button></td>'
+            : '<td><input type="number" id="sinv-'+mid+'" data-booked="'+owed+'" data-paid="'+paid+'" value="" placeholder="'+fmt(owed)+'" oninput="spDiffUpdate(\''+mid+'\')" onchange="saveSupInvoice(\''+mid+'\',this.value)" style="width:85px;padding:3px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:11px"></td>';
           const diffCell = entered
             ? '<td class="num" id="sdiff-'+mid+'" style="font-weight:700;color:'+(diff<-0.5?'#d11':(diff>0.5?'#0e9d6a':'inherit'))+'">'+fmt(diff)+'</td>'
             : '<td class="num" id="sdiff-'+mid+'"></td>';
@@ -5000,7 +5000,7 @@ function editSupInv(id){
   const cell=$('sinvcell-'+id); if(!cell)return;
   const owed=Number(cell.dataset.booked)||0; const cur=cell.dataset.val||'';
   cell.removeAttribute('id');
-  cell.innerHTML='<input type="number" id="sinv-'+id+'" data-booked="'+owed+'" value="'+cur+'" onchange="saveSupInvoice('+id+',this.value)" style="width:85px;padding:3px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:11px">';
+  cell.innerHTML='<input type="number" id="sinv-'+id+'" data-booked="'+owed+'" value="'+cur+'" oninput="spDiffUpdate(\''+id+'\')" onchange="saveSupInvoice(\''+id+'\',this.value)" style="width:85px;padding:3px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:11px">';
   const i=$('sinv-'+id); if(i){ i.focus(); i.select(); }
 }
 async function saveSupInvoice(id,val){
