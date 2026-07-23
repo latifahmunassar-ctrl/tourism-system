@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ح · تعديل «فاتورة المورّد» بعد تسجيلها يتطلب موافقة المالكة (التسجيل الأول مباشر) — طلب الموافقة يظهر في الإشعارات</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ط · المستحق/المدفوع/الرصيد في «حركة المبيعات/الفواتير» يتبع فلتر التاريخ (تاريخ الوصول) — ملخّص محدّث تلقائياً</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4703,6 +4703,7 @@ function renderSupplierDetail(){
         '<div class="fld"><label>إلى تاريخ 📅</label><input type="date" id="supd-to" onchange="supdFilter()" style="color-scheme:light;cursor:pointer"></div>'+
         '<button class="btn ghost" style="padding:7px 14px" onclick="supdClear()">مسح الفلتر</button>'+
       '</div>'+
+      '<div id="supd-sum"></div>'+   /* 📊 المستحق/المدفوع/الرصيد يتبع فلتر التاريخ */
       '<div class="tbl-wrap bf-scroll" id="supd-tbl"><table style="font-size:10.5px;white-space:nowrap"><thead><tr>'+H.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody>'+
       list.sort((a,b)=>_effArr(b).localeCompare(_effArr(a))).map(x=>{
         const c=(x.client_code||'').toUpperCase(); const f=fmap[c]||{pr:0,paid:0,prof:0,st:'',bank:'',ref:'',note:'',date:''}; const rf=rmap[c]||0; const cc=Number(x.cancel_charge||0);   // رسوم الإلغاء لهذا الحجز (من Booking Form)
@@ -4736,6 +4737,7 @@ function renderSupplierDetail(){
       }).join('')+'</tbody></table></div></div>';
   })();
   box.innerHTML=h;
+  if(typeof supdSummary==='function') supdSummary('', '', '');   // 📊 اعرض ملخّص المستحق/الرصيد فور فتح المورّد (قبل أي فلتر)
 }
 function spDiffUpdate(id){
   const inp=$('sinv-'+id); if(!inp)return; const booked=Number(inp.dataset.booked)||0;
@@ -4957,7 +4959,35 @@ function supdFilter(){
     r.style.display=ok?'':'none'; if(ok)shown++;
   });
   const c=$('supd-count'); if(c)c.textContent=shown;
+  supdSummary(q,f,t);   // 📊 المستحق/المدفوع/الرصيد يتبع نفس فلتر التاريخ/البحث
 }
+// 📊 ملخّص المستحق/المدفوع/الرصيد للفواتير الظاهرة بعد فلتر التاريخ (تاريخ الوصول فقط: الفاتورة → First Client Data)
+function supdSummary(q,f,t){
+  const box=$('supd-sum'); if(!box) return;
+  const sup=(($('supflt')||{}).value||'').trim(); if(!sup){ box.innerHTML=''; return; }
+  const scur=supplierCurrency(sup);
+  const _fcdArr={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); const a=r.arrival_date?String(r.arrival_date).slice(0,10):''; if(a&&(!_fcdArr[c]||a>_fcdArr[c]))_fcdArr[c]=a; });
+  const inv=supInvAll().filter(x=>(x.supplier_name||'')===sup).filter(x=>{
+    const d=x.arrival_date||_fcdArr[(x.client_code||'').toUpperCase()]||''; const cli=((x.client_name||'')+' '+(x.client_code||'')).toLowerCase();
+    if(q && cli.indexOf(q)<0) return false;
+    if(f && (!d||d<f)) return false;
+    if(t && (!d||d>t)) return false;
+    return true; });
+  const codes=new Set(inv.map(x=>(x.client_code||'').toUpperCase()));
+  const owed=inv.reduce((s,x)=>s+Number(x.invoice_amount||0),0);
+  const paid=(DATA.supplierPayments||[]).filter(p=>(p.supplier_name||'')===sup && codes.has((p.client_code||'').toUpperCase())).reduce((s,p)=>s+Number(p.amount||0),0);
+  const bal=owed-paid; const filtered=!!(q||f||t);
+  box.innerHTML='<div style="margin:2px 0 12px;padding:9px 12px;border:1px '+(filtered?'solid var(--accent)':'dashed var(--line)')+';border-radius:10px;background:'+(filtered?'rgba(224,33,138,.06)':'transparent')+'">'+
+    '<div style="font-weight:800;color:var(--accent);margin-bottom:5px;font-size:12.5px">📊 '+(filtered?('المستحق/الرصيد حسب الفلتر'+((f||t)?(' ('+esc(f||'…')+' → '+esc(t||'…')+')'):'')):'المستحق/الرصيد (كل الفترات)')+'</div>'+
+    '<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px">'+
+      '<span>الفواتير: <b>'+fmt(inv.length)+'</b></span>'+
+      '<span>العملاء: <b>'+fmt(codes.size)+'</b></span>'+
+      '<span>💰 المستحق: <b>'+fmt(owed)+' '+esc(scur)+'</b></span>'+
+      '<span>✅ المدفوع: <b>'+fmt(paid)+' '+esc(scur)+'</b></span>'+
+      '<span>📌 الرصيد: <b style="color:'+(bal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(bal)+' '+esc(scur)+'</b></span>'+
+    '</div></div>';
+}
+function supdClear(){ ['supd-q','supd-from','supd-to'].forEach(id=>{const e=$(id);if(e)e.value='';}); supdFilter(); }
 function supdClear(){ ['supd-q','supd-from','supd-to'].forEach(id=>{const e=$(id);if(e)e.value='';}); supdFilter(); }
 function editSupInv(id){
   const cell=$('sinvcell-'+id); if(!cell)return;
