@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ك · فلترة تاريخ المورّد تعتمد تاريخ وصول العميل من First Client Data (يوحّد كل خدماته على تاريخ وصوله بدل check_in المختلف لكل خدمة) — بلاغ C26470</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ل · حساب المورّد: لو «مصدر الحجز» فاضٍ يعتمد اسم المورّد (خانة supplier) مع منع الازدواج — الجولات المُدخلة بلا booked_from صارت تظهر (بلاغ C26041)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3609,7 +3609,12 @@ const SUPPLIER_CUR_RULES=[
 function supInvAll(){
   const base=(DATA.supplierInvoices||[]).slice();
   const nm={}, ag={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(r.client_name&&!nm[c])nm[c]=r.client_name; if(r.agent_name&&!ag[c])ag[c]=r.agent_name; });
-  (DATA.serviceLines||[]).forEach(s=>{ if(s.source!=='dashboard') return; const bf=(s.booked_from||'').toString().trim(); if(!bf) return;
+  (DATA.serviceLines||[]).forEach(s=>{ if(s.source!=='dashboard') return;
+    let bf=(s.booked_from||'').toString().trim(); let _fb=false;
+    if(!bf){ const _sup=(s.supplier||'').toString().trim(); if(_sup){ bf=_sup; _fb=true; } }   // 📌 «مصدر الحجز» فاضٍ → اعتمد اسم المورّد (خانة supplier) — يعالج الجولات المُدخلة بلا booked_from
+    if(!bf) return;
+    // 🛡️ تفادي الازدواج: عند اللجوء لاسم المورّد فقط، تجاهل السطر إذا كان للعميل فاتورة بنفس المورّد في كشف الشيت (acc_supplier_invoices)
+    if(_fb){ const _cc=(s.client_code||'').toUpperCase(); const _nzb=String(bf).trim().toLowerCase().replace(/\s+/g,' '); if((DATA.supplierInvoices||[]).some(x=>String(x.client_code||'').toUpperCase()===_cc && String(x.supplier_name||'').trim().toLowerCase().replace(/\s+/g,' ')===_nzb)) return; }
     const frb=Number(s.final_rate_booked||0);
     // التكلفة الكاملة بعملة المورّد (من النظام): الحجز الفعلي إن وُجد، وإلا raw_value (القيمة الأصلية بعملة المورّد) لأنواع تكلفتها=القيمة (جولة/مورّد/إضافي). raw_value مو amount لأن amount مُحوّل لعملة العميل.
     const rawCost=(s.raw_value!=null&&s.raw_value!=='')?Number(s.raw_value):Number(s.amount||0);
@@ -4550,13 +4555,13 @@ function renderSupplierDetail(){
   // قيمة الحجز قبل الإلغاء (BOOKING RATE = N من Final) لخدمات هذا المورّد فقط
   const _supT=String(sup).trim(); const rbcCli={}; (DATA.serviceLines||[]).forEach(s=>{ const sm=String(s.supplier||'').trim(); const nm2=String(s.name||'').trim(); if(sm!==_supT && nm2!==_supT)return; const c=(s.client_code||'').toUpperCase(); const v=Number(s.rate_before_cancel||0); if(v)rbcCli[c]=(rbcCli[c]||0)+v; });
   // عملاء لهم حجز «direct/from supplier» مع هذا المورّد = دين مباشر (غير مدفوع حتى السداد الفعلي) — يشمل «Ditect from supplier» و«Direct with the Suppler»
-  const directCodes=new Set(); (DATA.serviceLines||[]).forEach(s=>{ if(String(s.booked_from||'').trim()!==_supT) return; if(_directOwed(s.charge_from)) directCodes.add((s.client_code||'').toUpperCase()); });
+  const directCodes=new Set(); (DATA.serviceLines||[]).forEach(s=>{ if(String(s.booked_from||s.supplier||'').trim()!==_supT) return; if(_directOwed(s.charge_from)) directCodes.add((s.client_code||'').toUpperCase()); });
   // توزيع المدفوع على الفواتير نسبياً — لكن نستثني المستحق «المباشر من المورّد» من قاعدة النسبة (لأن دفعاتنا لا تغطّيه)
   const _directOwedSum=Object.keys(invCli).filter(c=>directCodes.has((c||'').toUpperCase())).reduce((s,c)=>s+Number(invCli[c]||0),0);
   const _owedNonDirect=Math.max(0, owedT-_directOwedSum);
   const allocR=_owedNonDirect>0?Math.min(1,paidT/_owedNonDirect):0;
   // عملاء لهم حجز ملغى مع هذا المورّد — تظهر القيمة مع علامة «ملغى» حتى لو لم يأخذ المورّد شيئاً
-  const cancelledCodes=new Set(); (DATA.serviceLines||[]).forEach(s=>{ if(String(s.booked_from||'').trim()!==_supT) return; if(/cancel/i.test(String(s.status||''))) cancelledCodes.add((s.client_code||'').toUpperCase()); });
+  const cancelledCodes=new Set(); (DATA.serviceLines||[]).forEach(s=>{ if(String(s.booked_from||s.supplier||'').trim()!==_supT) return; if(/cancel/i.test(String(s.status||''))) cancelledCodes.add((s.client_code||'').toUpperCase()); });
   const cancVal={}; list.forEach(x=>{ if(x.cancelled){ const c=(x.client_code||'').toUpperCase(); cancVal[c]=(cancVal[c]||0)+Number(x.full_value||0); } });   // القيمة الأصلية للحجوزات الملغاة (للعلم)
   // ── فلاتر تبويب المورّد: حسب الوكيل + العمليات الملغاة/الجزئية ──
   const supAgents=[...new Set(cliRows.map(c=>agentCli[c]).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'ar'));
