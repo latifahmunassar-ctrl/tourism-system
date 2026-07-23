@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ي · تصدير PDF للمورّد صار يشمل عمود «فاتورة المورّد» المُدخلة يدوياً (بجدول تفاصيل فواتير العملاء)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ك · فلترة تاريخ المورّد تعتمد تاريخ وصول العميل من First Client Data (يوحّد كل خدماته على تاريخ وصوله بدل check_in المختلف لكل خدمة) — بلاغ C26470</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4653,7 +4653,7 @@ function renderSupplierDetail(){
           const bal=entered?(Number(av)-paid):null;
           const directHtml=(isDirect&&bal!=null&&bal>0.5)?'<div style="font-size:9px;color:#d11;font-weight:800;margin-top:2px">🔻 مباشر من المورّد · غير مدفوع</div>':'';
           const cancHtml=cancelledCodes.has((c||'').toUpperCase())?'<div style="font-size:9px;color:#d98a00;font-weight:800;margin-top:2px">🚫 ملغى — المستحق = رسوم الإلغاء فقط</div>':'';
-          const _dts=esc([...(cliDates[c]||[]), ((fcdCli[(c||'').toUpperCase()]||{}).arr||'')].filter(Boolean).join('|'));   // نضيف تاريخ وصول First Client Data لفلتر التاريخ (حجوزات النقل/بلا check_in ما لها تاريخ فاتورة)
+          const _dts=esc(((fcdCli[(c||'').toUpperCase()]||{}).arr) || (cliDates[c]||[]).filter(Boolean)[0] || '');   // 📅 تاريخ وصول العميل من First Client Data هو المعتمد (لا تاريخ check_in لكل خدمة على حدة) — يوحّد كل خدمات العميل على تاريخ وصوله
           const _cli=esc(((nameCli[c]||'')+' '+c).toLowerCase());
           const fc=fcdCli[(c||'').toUpperCase()]||{pr:0,paid:0,cur:''}; const cbal=fc.pr-fc.paid; const prof=_APM.byClient[(c||'').toUpperCase()]; const ccur=curSym(fc.cur||'SAR'); const canc=cancCli[c]||0; const rbc=befCli[c]||0; const bookAct=actCli[c]||0;
           const invCell = entered
@@ -4694,7 +4694,7 @@ function renderSupplierDetail(){
       // الحجز الفعلي + رسوم الإلغاء لكل عميل (من service_lines)
       const bmap={}; (DATA.serviceLines||[]).forEach(s=>{ const c=(s.client_code||'').toUpperCase(); if(!bmap[c])bmap[c]={cc:0}; bmap[c].cc+=Number(s.cancel_charge||0); });
       const H=['تاريخ الوصول','اسم العميل','كود العميل','الوكيل','ربح الباكدج','حالة الباكدج','رصيد دفعة العميل','سعر الحجز','رسوم الإلغاء','مرتجع العميل/العز','العملة','فاتورة المورّد','إجمالي المدفوع','إجمالي المرتجع','دفعة العميل','رصيد العميل','تاريخ الدفع','مرجع البنك','اسم البنك','ملاحظة'];
-      const _effArr=(x)=>String(x.arrival_date||((fcdCli[(x.client_code||'').toUpperCase()]||{}).arr)||'');   // 📅 تاريخ الوصول فقط (وصول الفاتورة → وصول First Client Data) — لا تاريخ حجز/فاتورة
+      const _effArr=(x)=>String(((fcdCli[(x.client_code||'').toUpperCase()]||{}).arr)||x.arrival_date||'');   // 📅 المعتمد = تاريخ وصول العميل من First Client Data، وإلا وصول الخدمة — لا تاريخ حجز/فاتورة
       const supdDates=[...new Set(list.map(x=>_effArr(x)).filter(Boolean))].sort((a,b)=>String(b).localeCompare(String(a)));
       return '<div class="panel"><h3>حركة المبيعات / الفواتير (<span id="supd-count">'+list.length+'</span>)</h3>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px">'+
@@ -4928,7 +4928,7 @@ function updatePeriodSummary(){
   // 📅 تاريخ الوصول فقط: وصول الفاتورة → وصول العميل من First Client Data (لا تاريخ حجز/فاتورة)
   const _fcdArr={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); const a=r.arrival_date?String(r.arrival_date).slice(0,10):''; if(a&&(!_fcdArr[c]||a>_fcdArr[c]))_fcdArr[c]=a; });
   const inv=supInvAll().filter(x=>(x.supplier_name||'')===sup).filter(x=>{
-    const d=x.arrival_date||_fcdArr[(x.client_code||'').toUpperCase()]||''; const cli=((x.client_name||'')+' '+(x.client_code||'')).toLowerCase();
+    const d=_fcdArr[(x.client_code||'').toUpperCase()]||x.arrival_date||''; const cli=((x.client_name||'')+' '+(x.client_code||'')).toLowerCase();
     if(q && cli.indexOf(q)<0) return false;
     if(f && (!d||d<f)) return false;
     if(t && (!d||d>t)) return false;
@@ -4970,7 +4970,7 @@ function supdSummary(q,f,t){
   const scur=supplierCurrency(sup);
   const _fcdArr={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); const a=r.arrival_date?String(r.arrival_date).slice(0,10):''; if(a&&(!_fcdArr[c]||a>_fcdArr[c]))_fcdArr[c]=a; });
   const inv=supInvAll().filter(x=>(x.supplier_name||'')===sup).filter(x=>{
-    const d=x.arrival_date||_fcdArr[(x.client_code||'').toUpperCase()]||''; const cli=((x.client_name||'')+' '+(x.client_code||'')).toLowerCase();
+    const d=_fcdArr[(x.client_code||'').toUpperCase()]||x.arrival_date||''; const cli=((x.client_name||'')+' '+(x.client_code||'')).toLowerCase();
     if(q && cli.indexOf(q)<0) return false;
     if(f && (!d||d<f)) return false;
     if(t && (!d||d>t)) return false;
