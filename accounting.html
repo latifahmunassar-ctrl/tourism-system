@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ط · المستحق/المدفوع/الرصيد في «حركة المبيعات/الفواتير» يتبع فلتر التاريخ (تاريخ الوصول) — ملخّص محدّث تلقائياً</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-ي · تصدير PDF للمورّد صار يشمل عمود «فاتورة المورّد» المُدخلة يدوياً (بجدول تفاصيل فواتير العملاء)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4790,7 +4790,9 @@ function exportSupplierPDF(){
   // قراءة الصفوف الظاهرة (تتبع الفلتر) من الجدولين
   const rowsOf=(bodyId,idxs)=>{ const out=[]; document.querySelectorAll('#'+bodyId+' tr').forEach(tr=>{ if(tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; out.push(idxs.map(i=>{ const td=tds[i]; if(!td)return ''; const inp=td.querySelector('input'); if(inp)return (inp.value||inp.getAttribute('placeholder')||''); return td.innerText.replace(/\s+/g,' ').trim(); })); }); return out; };
   const headOf=(bodyId,n)=>{ const tbl=document.getElementById(bodyId).closest('table'); const ths=[...tbl.querySelectorAll('thead th')].map(x=>x.innerText.replace(/\s+/g,' ').trim()); return n?ths.slice(0,n):ths; };
-  const t1head=headOf('sp-dist-tbl',11); const t1idx=[0,1,2,3,4,5,6,7,8,9,10]; const t1rows=rowsOf('sp-dist-tbl',t1idx);
+  const t1head=headOf('sp-dist-tbl',12); const t1idx=[0,1,2,3,4,5,6,7,8,9,10,11];   // + عمود «فاتورة المورّد» (١١)
+  // قارئ خاص لجدول التوزيع: عمود «فاتورة المورّد» يعرض القيمة المُدخلة يدوياً فقط (data-val) لا القيمة الافتراضية (placeholder)
+  const t1rows=(function(){ const out=[]; document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; out.push(t1idx.map(i=>{ const td=tds[i]; if(!td)return ''; if(i===11){ if(td.dataset&&td.dataset.val!=null&&td.dataset.val!=='')return td.dataset.val; const inp=td.querySelector('input'); if(inp&&inp.value!=='')return inp.value; return '—'; } const inp=td.querySelector('input'); if(inp)return (inp.value||inp.getAttribute('placeholder')||''); return td.innerText.replace(/\s+/g,' ').trim(); })); }); return out; })();
   const t2head=headOf('sp-pay-tbl'); const t2idx=t2head.map((_,i)=>i); const t2rows=rowsOf('sp-pay-tbl',t2idx);
   const tbl=(head,rows)=> '<table><thead><tr>'+head.map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+(rows.length?rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+head.length+'" style="text-align:center;color:#999">لا توجد بيانات</td></tr>')+'</tbody></table>';
   // جدول (١): يلوّن «الربح الفعلي» (عمود ٧) بالأحمر لو كان أقل من «الربح المتوقع» (عمود ٦) — كما في الشيت
