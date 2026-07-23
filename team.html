@@ -766,6 +766,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 
 <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;margin-bottom:10px">📷 صورة برنامج (اختياري): <input type="file" id="waBridgeImgFile" accept="image/*" style="font-size:12px;flex:1"></label>
 <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:10px"><input type="checkbox" id="waBridgePdf" onchange="waBridgePdfToggle()"> 📄 إرسال كملف PDF (بدون سعر ولا شعار) — يحتاج برنامج مبني</label>
+<div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:12px"><label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:6px"><input type="checkbox" id="waBridgeDist" onchange="waBridgeDistToggle()"> 🔀 وزّع على أكثر من رقم (بلا تكرار لنفس الجروب)</label><div id="waBridgeDistBox" style="display:none;font-size:12px;padding-inline-start:6px"><label style="display:flex;gap:6px;margin-bottom:4px"><input type="checkbox" class="wab-dist-acct" value="601111136864"> العز الأساسي</label><label style="display:flex;gap:6px;margin-bottom:4px"><input type="checkbox" class="wab-dist-acct" value="96898072933"> عُمان +968</label><label style="display:flex;gap:6px;margin-bottom:4px"><input type="checkbox" class="wab-dist-acct" value="201011346081"> موظفة مصر</label><div style="color:var(--muted);font-size:11px;margin-top:4px">اختاري رقمين+ ؛ كل جروب يُرسَل من رقم واحد عضو فيه فقط.</div></div></div>
 <button class="rfm-btn-primary" style="background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;width:100%" onclick="waBridgeSend()">📤 إرسال (<span id="waBridgeSendCount">0</span>)</button>
 <div id="waBridgeMsg" style="font-size:12px;text-align:center;margin-top:8px;min-height:16px"></div>
 <div id="waBridgeOutbox" style="margin-top:10px"></div>
@@ -3214,6 +3215,8 @@ function waBridgePdfToggle() {
   }
 }
 
+function waBridgeDistToggle() { document.getElementById('waBridgeDistBox').style.display = document.getElementById('waBridgeDist').checked ? 'block' : 'none'; }
+
 async function waBridgeSend() {
   const body = (document.getElementById('waBridgeBody').value || '').trim();
   const msg = document.getElementById('waBridgeMsg');
@@ -3267,6 +3270,24 @@ async function waBridgeSend() {
       if (!up || !up.url) throw new Error((up && up.error) || 'فشل رفع الـPDF');
       sendBody = up.url; sendSource = 'pdf';
     } catch (e) { msg.textContent = '❌ تعذّر تجهيز الـPDF: ' + (e.message || e); msg.style.color = '#ef4444'; return; }
+  }
+    const _isDist = document.getElementById('waBridgeDist') && document.getElementById('waBridgeDist').checked;
+  if (_isDist) {
+    const _accts = Array.from(document.querySelectorAll('.wab-dist-acct:checked')).map(function (c) { return c.value; });
+    if (_accts.length < 2) { msg.textContent = '⚠️ اختاري رقمين على الأقل للتوزيع.'; msg.style.color = '#ef4444'; return; }
+    msg.textContent = '⏳ جاري التوزيع...'; msg.style.color = 'var(--muted)';
+    const _dp = { accounts: _accts, targets: targets, body: sendBody, source: sendSource, caption: pdfCaption };
+    if (throttle) { _dp.batch_size = batch; _dp.interval_minutes = interval; }
+    try {
+      const _r = await waBridgeCall('distribute', _dp);
+      if (_r.ok) {
+        let _m = '✅ وُزّعت ' + _r.queued + ' رسالة — ' + Object.keys(_r.per_account).map(function (a) { return '…' + a.slice(-4) + ': ' + _r.per_account[a]; }).join(' · ');
+        if (_r.unassigned) { _m += ' · (' + _r.unassigned + ' جروب ما فيه رقم عضو)'; }
+        msg.textContent = _m; msg.style.color = '#25D366';
+        waBridgeSel = new Set(); waBridgeRenderList();
+      } else { msg.textContent = '❌ ' + (_r.error || 'فشل التوزيع'); msg.style.color = '#ef4444'; }
+    } catch (e) { msg.textContent = '❌ ' + (e.message || e); msg.style.color = '#ef4444'; }
+    return;
   }
   const payload = { targets, body: sendBody, kind: waBridgeCurMode, source: sendSource, created_by: createdBy, account: waBridgeAccount, caption: pdfCaption };
   if (throttle) { payload.batch_size = batch; payload.interval_minutes = interval; }
