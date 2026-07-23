@@ -764,6 +764,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div id="waBridgeEtaMsg" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
 </div>
 
+<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;margin-bottom:10px">📷 صورة برنامج (اختياري): <input type="file" id="waBridgeImgFile" accept="image/*" style="font-size:12px;flex:1"></label>
 <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:10px"><input type="checkbox" id="waBridgePdf" onchange="waBridgePdfToggle()"> 📄 إرسال كملف PDF (بدون سعر ولا شعار) — يحتاج برنامج مبني</label>
 <button class="rfm-btn-primary" style="background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;width:100%" onclick="waBridgeSend()">📤 إرسال (<span id="waBridgeSendCount">0</span>)</button>
 <div id="waBridgeMsg" style="font-size:12px;text-align:center;margin-top:8px;min-height:16px"></div>
@@ -3219,9 +3220,11 @@ async function waBridgeSend() {
   const targets = Array.from(waBridgeSel).map(jid => ({ jid, name: waBridgeNames[jid] || jid }));
   if (!targets.length) { msg.textContent = '⚠️ علّمي ✓ على وجهة واحدة على الأقل.'; msg.style.color = '#ef4444'; return; }
   const isPdf = !!(document.getElementById('waBridgePdf') && document.getElementById('waBridgePdf').checked);
+  const _imgInput = document.getElementById('waBridgeImgFile');
+  const imgFile = _imgInput && _imgInput.files && _imgInput.files[0];
   const hasProg = (typeof parsedData !== 'undefined' && parsedData && typeof lastProgramRaw !== 'undefined' && lastProgramRaw);
   if (isPdf && !hasProg) { msg.textContent = '⚠️ الـPDF يحتاج برنامج مبني أولاً.'; msg.style.color = '#ef4444'; return; }
-  if (!isPdf && !body) { msg.textContent = '⚠️ اكتبي نص الرسالة.'; msg.style.color = '#ef4444'; return; }
+  if (!isPdf && !imgFile && !body) { msg.textContent = '⚠️ اكتبي نص الرسالة.'; msg.style.color = '#ef4444'; return; }
   const throttle = document.getElementById('waBridgeThrottle').checked;
   const batch = Math.max(1, parseInt(document.getElementById('waBridgeBatch').value) || 10);
   const interval = Math.max(1, parseInt(document.getElementById('waBridgeInterval').value) || 5);
@@ -3236,7 +3239,16 @@ async function waBridgeSend() {
   msg.textContent = '⏳ جاري الجدولة...'; msg.style.color = 'var(--muted)';
   const createdBy = (localStorage.getItem('alezz_staff_name') || 'team');
   let sendBody = body, sendSource = createdBy, pdfCaption = null;
-  if (isPdf) {
+  if (imgFile) {
+    msg.textContent = '⏳ رفع الصورة...';
+    try {
+      const _b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(imgFile); });
+      const _ext = (imgFile.name.split('.').pop() || 'jpg');
+      const _up = await waBridgeCall('upload-media', { base64: _b64, content_type: imgFile.type || 'image/jpeg', ext: _ext });
+      if (!_up || !_up.url) throw new Error((_up && _up.error) || 'فشل رفع الصورة');
+      sendBody = _up.url; sendSource = 'image'; pdfCaption = body;
+    } catch (e) { msg.textContent = '❌ تعذّر رفع الصورة: ' + (e.message || e); msg.style.color = '#ef4444'; return; }
+  } else if (isPdf) {
     const _sar = (typeof currentFinalGroup === 'function') ? (currentFinalGroup() || 0) : 0;
     let _priceTxt;
     if (typeof currencyConversion !== 'undefined' && currencyConversion && currencyConversion.name && currencyConversion.rate) {
