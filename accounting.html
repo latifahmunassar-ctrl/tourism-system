@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 22يوليو-س · تصدير PDF للمورّد صار يشمل عمود «الفرق» أيضاً (مع «فاتورة المورّد») — وExcel يشملهما أصلاً</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 24يوليو-أ · دفعات الموردين: المالكة تُسجَّل دفعتها مباشرة (بنك + حساب المورّد) بلا انتظار موافقة، مع تأكيد ظاهر (alert) — كانت تُرسل كطلب وتختفي رسالة النجاح</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -5058,14 +5058,25 @@ async function saveDistributedPayments(sup){
     '• التاريخ: '+(date||'— غير محدّد —')+'\n'+
     '• التوزيع على العملاء:\n'+distTxt+
     (incomplete?('\n\n⚠️ تنبيه: المتبقّي للتوزيع '+fmt(pool-allocSum)+' '+scur+' لم يُوزَّع بالكامل.'):'')+
-    '\n\n🔒 بعد موافقة الأدمن لا يمكن تعديل هذه الدفعة لاحقاً.\nهل القيم (المبلغ والتاريخ والمرجع) صحيحة وتريدين الإرسال للموافقة؟';
+    (isOwnerUser()
+      ? '\n\n✅ ستُسجَّل الدفعة مباشرة في حساب المورّد والبنك. هل القيم (المبلغ والتاريخ والمرجع) صحيحة؟'
+      : '\n\n🔒 بعد موافقة الأدمن لا يمكن تعديل هذه الدفعة لاحقاً.\nهل القيم (المبلغ والتاريخ والمرجع) صحيحة وتريدين الإرسال للموافقة؟');
   if(!confirm(confirmMsg))return;
-  msg.style.color='var(--muted)'; msg.textContent='جارٍ إرسال الطلب للأدمن…';
-  // ⛔ صرامة: لا انعكاس مباشر. تُرسَل كطلب موافقة (acc_pending_movements) ولا تُسجَّل بنكياً ولا في حساب المورّد إلا باعتماد الأدمن.
+  const _owner=isOwnerUser();
+  msg.style.color='var(--muted)'; msg.textContent=_owner?'جارٍ تسجيل الدفعة…':'جارٍ إرسال الطلب للأدمن…';
   const summary='💸 دفعة مورّد «'+sup+'» · '+fmt(gross)+' '+payCur+(mismatch?(' (= '+fmt(pool)+' '+scur+')'):'')+' · موزّعة على '+lines.length+' عميل · بنك '+bank+' · مرجع '+ref;
-  const res=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_pending_movement',payload:{kind:'payment',scope:'suppliers',summary:summary,note:'',payload:{supplier_name:sup,tcur:scur,gross:gross,pay_currency:payCur,rate:rate,bank:bank,ref:ref,date:date,note:'',txn_type:'transfer',lines:lines,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}}})});
-  const j=await res.json(); if(j.error){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(j.error); return; }
-  msg.style.color='var(--green)'; msg.textContent='✅ أُرسل طلب الدفعة للأدمن للموافقة — لن ينعكس أثرها (بنك/حساب المورّد) حتى يعتمدها';
+  const res=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_pending_movement',payload:{kind:'payment',scope:'suppliers',summary:summary,note:'',payload:{supplier_name:sup,tcur:scur,gross:gross,pay_currency:payCur,rate:rate,bank:bank,ref:ref,date:date,note:'',txn_type:'transfer',lines:lines,by:(CURRENT_USER&&CURRENT_USER.staff_name)||'المالكة'}}})});
+  const j=await res.json(); if(j.error){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(j.error); alert('⚠️ تعذّر إرسال الدفعة: '+j.error); return; }
+  // 👑 المالكة: اعتماد فوري وتسجيل مباشر (بنك + حساب المورّد). غير المالكة: يبقى طلباً بانتظار الاعتماد.
+  let okMsg;
+  if(_owner && j.row && j.row.id){
+    const r2=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_movement_status',payload:{id:j.row.id,status:'approved'}})});
+    const j2=await r2.json();
+    okMsg=j2.error ? ('🔒 أُرسلت الدفعة كطلب (تعذّر التسجيل الفوري: '+j2.error+') — اعتمديها من 🔔 الإشعارات') : ('✅ تم تسجيل الدفعة مباشرة في حساب المورّد والبنك — '+fmt(gross)+' '+payCur);
+  } else {
+    okMsg='✅ أُرسل طلب الدفعة للأدمن للموافقة — لن ينعكس أثرها (بنك/حساب المورّد) حتى يعتمدها';
+  }
+  msg.style.color='var(--green)'; msg.textContent=okMsg; alert(okMsg);   // alert يضمن ظهور التأكيد قبل إعادة التحميل
   await load(); if($('supflt')){ $('supflt').value=sup; renderSupplierDetail(); }
 }
 async function resolveSupPayMv(id,decision){
