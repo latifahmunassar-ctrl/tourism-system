@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 24يوليو-أ · دفعات الموردين: المالكة تُسجَّل دفعتها مباشرة (بنك + حساب المورّد) بلا انتظار موافقة، مع تأكيد ظاهر (alert) — كانت تُرسل كطلب وتختفي رسالة النجاح</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 24يوليو-ب · جدول «الدفعات المسجّلة» في المورّد يعرض كل تحويل بنكي بإجماليه (التاريخ/القيمة المحوّلة/المرجع/البنك/العملة) بدل تقسيمه على العملاء</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4690,8 +4690,19 @@ function renderSupplierDetail(){
       '<button class="btn green" style="margin-top:8px" onclick="saveDistributedPayments('+supJs+')">💸 تسجيل الدفعات الموزّعة</button></div>'+
     payMovHtml+
     // سجل الدفعات (العميل + المرجع البنكي)
-    (pays.length?'<div class="panel" style="margin-bottom:14px"><h3>💵 الدفعات المسجّلة ('+pays.length+') <span style="font-size:11px;color:var(--muted);font-weight:400">— معتمدة ومقفلة 🔒</span></h3><div class="tbl-wrap"><table style="font-size:11.5px"><thead><tr><th>التاريخ</th><th>العميل</th><th>المبلغ</th><th>العملة</th><th>البنك</th><th>المرجع البنكي</th><th>ملاحظة</th><th>الحالة</th></tr></thead><tbody>'+
-      pays.slice().sort((a,b)=>String(b.payment_date||'').localeCompare(String(a.payment_date||''))).map(x=>'<tr><td>'+esc(x.payment_date||'')+'</td><td>'+esc(x.client_code||'')+(x.client_name?' · '+esc(x.client_name):'')+'</td><td class="num">'+fmt(x.amount)+'</td><td>'+esc(x.currency||'')+'</td><td>'+esc(x.bank_name||'')+'</td><td>'+esc(x.bank_ref||'')+'</td><td>'+esc(x.note||'')+'</td><td style="white-space:nowrap"><span title="معتمدة — مقفلة" style="color:#0e9d6a">🔒</span> <button class="btn ghost" style="padding:2px 7px;font-size:11px" onclick="reqSupPayEdit('+x.id+','+Number(x.amount||0)+',\''+esc(x.currency||'')+'\',\''+esc(x.client_code||'')+'\','+supJs+')" title="تعديل القيمة — يُرسَل طلب موافقة للأدمن مع ذكر السبب">✏️ تعديل (موافقة)</button></td></tr>').join('')+'</tbody></table></div></div>':'')+
+    (pays.length?(function(){
+      // 💵 الدفعات المسجّلة كتحويلات بنكية إجمالية (غير مقسّمة على العملاء): كل تحويل = صف واحد بمجموعه
+      // المفتاح: المرجع البنكي (إن وُجد) + التاريخ + البنك + العملة؛ الدفعات بلا مرجع تبقى منفصلة
+      const grp={}; pays.forEach(x=>{ const ref=String(x.bank_ref||'').trim(); const key=ref?(ref+'|'+(x.payment_date||'')+'|'+(x.bank_name||'')+'|'+(x.currency||'')):('__id'+x.id); const g=grp[key]||(grp[key]={date:x.payment_date||'',amount:0,cur:x.currency||'',bank:x.bank_name||'',ref:ref,note:'',n:0}); g.amount+=Number(x.amount||0); g.n++; if(x.note&&!g.note)g.note=x.note; if(x.payment_date&&(!g.date||x.payment_date>g.date))g.date=x.payment_date; });
+      const rows=Object.values(grp).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+      const tot={}; rows.forEach(g=>{ tot[g.cur]=(tot[g.cur]||0)+g.amount; });
+      const totStr=Object.entries(tot).map(([c,v])=>fmt(v)+' '+esc(c)).join(' · ');
+      return '<div class="panel" style="margin-bottom:14px"><h3>💵 الدفعات المسجّلة — تحويلات بنكية ('+rows.length+') <span style="font-size:11px;color:var(--muted);font-weight:400">— بالإجمالي المحوّل 🔒</span></h3>'+
+        '<div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">كل صف = تحويل بنكي واحد بقيمته المحوّلة كاملة (غير مقسّم على العملاء) · إجمالي التحويلات: <b style="color:var(--brand)">'+totStr+'</b></div>'+
+        '<div class="tbl-wrap"><table style="font-size:11.5px"><thead><tr><th>📅 التاريخ</th><th>💰 القيمة المحوّلة</th><th>العملة</th><th>🏦 اسم البنك</th><th>🔖 المرجع البنكي</th><th>عدد العملاء</th><th>ملاحظة</th><th>الحالة</th></tr></thead><tbody>'+
+        rows.map(g=>'<tr><td>'+esc(g.date||'—')+'</td><td class="num" style="font-weight:700;color:#0e7c50">'+fmt(g.amount)+'</td><td>'+esc(g.cur)+'</td><td>'+esc(g.bank||'—')+'</td><td style="font-weight:600">'+esc(g.ref||'—')+'</td><td class="num" style="color:var(--muted)">'+fmt(g.n)+'</td><td style="font-size:10px;color:var(--muted)">'+esc(g.note||'')+'</td><td><span title="معتمدة ومقفلة" style="color:#0e9d6a">🔒</span></td></tr>').join('')+
+        '</tbody></table></div></div>';
+    })():'')+
     (function(){
       // خرائط بيانات العميل والمرتجعات والحجز الفعلي
       const fmap={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!fmap[c])fmap[c]={pr:0,paid:0,prof:0,st:'',bank:'',ref:'',note:'',date:''}; const o=fmap[c]; o.pr+=Number(r.package_rate||0); o.paid+=Number(r.amount_paid||0); o.prof+=Number(r.profit||0); if(r.conf_status&&!o.st)o.st=r.conf_status; if(r.bank_name&&!o.bank)o.bank=r.bank_name; if(r.bank_ref&&!o.ref)o.ref=r.bank_ref; if(r.note&&!o.note)o.note=r.note; if(r.booking_date&&!o.date)o.date=r.booking_date; });
