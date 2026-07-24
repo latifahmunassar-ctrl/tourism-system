@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 24يوليو-ج · «الدفعات المسجّلة» تعرض القيمة كما خرجت من البنك (gross بعملة الحوالة من سجل البنك) لكل تحويل، غير مقسّمة على العملاء</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 24يوليو-د · زر «✏️ تعديل» لكل تحويل مورّد (البنك/المرجع البنكي/التاريخ) — المالكة مباشر، غيرها بموافقتها؛ وتنبيه أحمر للتحويلات بلا تاريخ</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4693,16 +4693,17 @@ function renderSupplierDetail(){
     (pays.length?(function(){
       // 💵 الدفعات المسجّلة كتحويلات بنكية: كل صف = تحويل واحد بقيمته «كما خرجت من البنك» (gross بعملة الحوالة من acc_bank_txn)، غير مقسّم على العملاء
       const btByRef={}; (DATA.bankTx||[]).forEach(x=>{ const r=String(x.bank_ref||'').trim().toUpperCase(); if(r&&Number(x.amount_out||0)>0&&!btByRef[r])btByRef[r]=x; });
-      const grp={}; pays.forEach(x=>{ const ref=String(x.bank_ref||'').trim(); const key=ref?ref.toUpperCase():('__id'+x.id); const g=grp[key]||(grp[key]={date:x.payment_date||'',ref:ref,bank:x.bank_name||'',supSum:0,supCur:x.currency||'',note:'',n:0}); g.supSum+=Number(x.amount||0); g.n++; if(x.note&&!g.note)g.note=x.note; if(x.payment_date&&(!g.date||x.payment_date>g.date))g.date=x.payment_date; });
+      const grp={}; pays.forEach(x=>{ const ref=String(x.bank_ref||'').trim(); const key=ref?ref.toUpperCase():('__id'+x.id); const g=grp[key]||(grp[key]={date:x.payment_date||'',ref:ref,bank:x.bank_name||'',supSum:0,supCur:x.currency||'',note:'',n:0,payIds:[]}); g.supSum+=Number(x.amount||0); g.n++; g.payIds.push(x.id); if(x.note&&!g.note)g.note=x.note; if(x.payment_date&&(!g.date||x.payment_date>g.date))g.date=x.payment_date; });
       const rows=Object.values(grp).map(g=>{ const bt=g.ref?btByRef[g.ref.toUpperCase()]:null; const fromBank=!!bt;
-        return { date:g.date, amount:fromBank?Number(bt.amount_out||0):g.supSum, cur:fromBank?bankCur(bt.bank_name||g.bank):g.supCur, bank:fromBank?(bt.bank_name||g.bank):g.bank, ref:g.ref, n:g.n, note:g.note||'', fromBank:fromBank };
+        return { date:g.date, amount:fromBank?Number(bt.amount_out||0):g.supSum, cur:fromBank?bankCur(bt.bank_name||g.bank):g.supCur, bank:fromBank?(bt.bank_name||g.bank):g.bank, ref:g.ref, n:g.n, note:g.note||'', fromBank:fromBank, payIds:g.payIds, txnId:fromBank?bt.id:null };
       }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
       const tot={}; rows.forEach(g=>{ tot[g.cur]=(tot[g.cur]||0)+g.amount; });
       const totStr=Object.entries(tot).map(([c,v])=>fmt(v)+' '+esc(c)).join(' · ');
+      const _noDate=rows.filter(g=>!g.date).length;
       return '<div class="panel" style="margin-bottom:14px"><h3>💵 الدفعات المسجّلة — تحويلات بنكية ('+rows.length+') <span style="font-size:11px;color:var(--muted);font-weight:400">— كما خرجت من البنك 🔒</span></h3>'+
-        '<div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">كل صف = تحويل بنكي واحد <b>بقيمته كما خرجت من البنك (بعملة الحوالة)</b> غير مقسّم على العملاء · إجمالي التحويلات: <b style="color:var(--brand)">'+totStr+'</b></div>'+
-        '<div class="tbl-wrap"><table style="font-size:11.5px"><thead><tr><th>📅 التاريخ</th><th>💰 القيمة المحوّلة<br><span style="font-size:9px;color:var(--muted)">كما خرجت من البنك</span></th><th>العملة</th><th>🏦 اسم البنك</th><th>🔖 المرجع البنكي</th><th>عدد العملاء</th><th>ملاحظة</th><th>الحالة</th></tr></thead><tbody>'+
-        rows.map(g=>'<tr><td>'+esc(g.date||'—')+'</td><td class="num" style="font-weight:700;color:#0e7c50">'+fmt(g.amount)+'</td><td>'+esc(g.cur)+'</td><td>'+esc(g.bank||'—')+'</td><td style="font-weight:600">'+esc(g.ref||'—')+'</td><td class="num" style="color:var(--muted)">'+fmt(g.n)+'</td><td style="font-size:10px;color:var(--muted)">'+esc(g.note||'')+'</td><td><span title="'+(g.fromBank?'من سجل البنك — كما خرجت':'مجموع بعملة المورّد (بلا حركة بنك مرتبطة)')+'" style="color:#0e9d6a">🔒</span></td></tr>').join('')+
+        '<div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">كل صف = تحويل بنكي واحد <b>بقيمته كما خرجت من البنك (بعملة الحوالة)</b> غير مقسّم على العملاء · إجمالي التحويلات: <b style="color:var(--brand)">'+totStr+'</b>'+(_noDate?' · <b style="color:#d11">⚠️ '+_noDate+' تحويل بلا تاريخ — عدّليه</b>':'')+'</div>'+
+        '<div class="tbl-wrap"><table style="font-size:11.5px"><thead><tr><th>📅 التاريخ</th><th>💰 القيمة المحوّلة<br><span style="font-size:9px;color:var(--muted)">كما خرجت من البنك</span></th><th>العملة</th><th>🏦 اسم البنك</th><th>🔖 المرجع البنكي</th><th>عدد العملاء</th><th>ملاحظة</th><th>✏️ تعديل</th></tr></thead><tbody>'+
+        rows.map(g=>'<tr'+(!g.date?' style="background:rgba(209,17,17,.06)"':'')+'><td>'+(g.date?esc(g.date):'<span style="color:#d11;font-weight:700">⚠️ بلا تاريخ</span>')+'</td><td class="num" style="font-weight:700;color:#0e7c50">'+fmt(g.amount)+'</td><td>'+esc(g.cur)+'</td><td>'+esc(g.bank||'—')+'</td><td style="font-weight:600">'+esc(g.ref||'—')+'</td><td class="num" style="color:var(--muted)">'+fmt(g.n)+'</td><td style="font-size:10px;color:var(--muted)">'+esc(g.note||'')+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="spEditTransfer(this)" data-ids="'+esc(g.payIds.join(','))+'" data-txn="'+esc(String(g.txnId||''))+'" data-ref="'+esc(g.ref||'')+'" data-bank="'+esc(g.bank||'')+'" data-date="'+esc(g.date||'')+'" data-sup="'+esc(sup)+'" title="تعديل البنك/المرجع/التاريخ'+(isOwnerUser()?'':' — بموافقة المالكة')+'">✏️ تعديل</button></td></tr>').join('')+
         '</tbody></table></div></div>';
     })():'')+
     (function(){
@@ -5139,6 +5140,42 @@ async function resolveSupPayEdit(id,decision){
     await load();
     alert(approve?'✅ اعتُمد التعديل — عُدّلت قيمة الدفعة.':'❌ رُفض الطلب — القيمة كما هي.');
   }catch(e){ alert('خطأ: '+e.message); }
+}
+// ✏️ تعديل بيانات تحويل مورّد (اسم البنك/المرجع البنكي/تاريخ الدفع) على كل صفوف التحويل + حركته البنكية — المالكة مباشر، غيرها بموافقتها
+function spEditTransfer(btn){
+  const ids=String(btn.dataset.ids||'').split(',').filter(Boolean);
+  const txn=btn.dataset.txn||'', curRef=btn.dataset.ref||'', curBank=btn.dataset.bank||'', curDate=btn.dataset.date||'', sup=btn.dataset.sup||'';
+  const canRef=(typeof canEnterBankRef==='function')?canEnterBankRef():true;
+  const bankOpts='<option value="">— اختاري البنك —</option>'+listValues('banks').map(b=>'<option'+(String(b.value)===curBank?' selected':'')+'>'+esc(b.value)+'</option>').join('')+(curBank&&!listValues('banks').some(b=>String(b.value)===curBank)?'<option selected>'+esc(curBank)+'</option>':'');
+  let m=document.getElementById('sp-tredit'); if(m)m.remove();
+  m=document.createElement('div'); m.id='sp-tredit';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center';
+  m.innerHTML='<div style="background:var(--card,#fff);color:var(--txt,#111);border-radius:14px;padding:18px 20px;width:min(440px,92vw);box-shadow:0 10px 40px rgba(0,0,0,.35)">'+
+    '<h3 style="margin:0 0 3px;color:var(--accent)">✏️ تعديل بيانات التحويل البنكي</h3>'+
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:13px">'+esc(sup)+' · '+ids.length+' عميل · '+(isOwnerUser()?'<b style="color:#0e9d6a">يُطبَّق مباشرة</b>':'<b style="color:#b8860b">يُرسَل لموافقة المالكة</b>')+'</div>'+
+    '<div class="fld" style="margin-bottom:9px"><label>🏦 اسم البنك</label><select id="tre-bank" style="width:100%">'+bankOpts+'</select></div>'+
+    '<div class="fld" style="margin-bottom:9px"><label>🔖 المرجع البنكي'+(canRef?'':' <span style="color:#d11;font-size:9px">🔒 المحاسب/المالكة فقط</span>')+'</label><input id="tre-ref" value="'+esc(curRef)+'" style="width:100%"'+(canRef?'':' disabled')+'></div>'+
+    '<div class="fld" style="margin-bottom:14px"><label>📅 تاريخ الدفع</label><input type="date" id="tre-date" value="'+esc(curDate)+'" style="width:100%;color-scheme:light"></div>'+
+    '<div id="tre-msg" style="font-size:12px;margin-bottom:8px;min-height:16px"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost" onclick="var e=document.getElementById(\'sp-tredit\');if(e)e.remove()">إلغاء</button><button class="btn green" id="tre-save">💾 حفظ</button></div>'+
+  '</div>';
+  document.body.appendChild(m);
+  $('tre-save').onclick=()=>saveSpTransferEdit(ids, txn, sup, canRef);
+}
+async function saveSpTransferEdit(ids, txn, sup, canRef){
+  const bank=($('tre-bank').value||'').trim(); const ref=($('tre-ref').value||'').trim(); const date=($('tre-date').value||'')||null;
+  const msg=$('tre-msg');
+  const payload={pay_ids:ids.map(Number),txn_id:txn?Number(txn):null,bank_name:bank||null,payment_date:date,sup:sup,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''};
+  if(canRef) payload.bank_ref=ref||null;   // المرجع يُرسَل فقط لو مخوّلة (المحاسب/المالكة)
+  msg.style.color='var(--muted)'; msg.textContent='جارٍ الحفظ…';
+  try{
+    const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'edit_sup_transfer',payload:payload})});
+    const j=await r.json();
+    if(j.error){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(j.error); return; }
+    const mm=document.getElementById('sp-tredit'); if(mm)mm.remove();
+    alert(j.pending?('🔒 '+(j.msg||'أُرسل طلب تعديل التحويل لموافقة المالكة — لن يتغيّر حتى الاعتماد')):'✅ تم تعديل بيانات التحويل (البنك/المرجع/التاريخ)');
+    const cur=($('supflt')||{}).value||''; await load(); if($('supflt')){ $('supflt').value=cur; renderSupplierDetail(); }
+  }catch(e){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(e.message); }
 }
 async function delSupplierPayment(id){
   if(!confirm('حذف هذه الدفعة؟'))return;
