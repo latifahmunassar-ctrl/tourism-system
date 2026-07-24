@@ -764,7 +764,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div id="waBridgeEtaMsg" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
 </div>
 
-<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;margin-bottom:10px">📷 صورة برنامج (اختياري): <input type="file" id="waBridgeImgFile" accept="image/*" style="font-size:12px;flex:1"></label>
+<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;margin-bottom:10px">📷 صورة برنامج (اختياري): <input type="file" id="waBridgeImgFile" accept="image/*" style="font-size:12px;flex:1"><button type="button" onclick="waBridgeClearImg()" title="إزالة الصورة المرفقة" style="background:none;border:1px solid var(--border);border-radius:6px;color:#ef4444;cursor:pointer;font-size:12px;font-weight:800;padding:3px 8px;white-space:nowrap">🗑️ إزالة الصورة</button></label>
 <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:10px"><input type="checkbox" id="waBridgePdf" onchange="waBridgePdfToggle()"> 📄 إرسال كملف PDF (بدون سعر ولا شعار) — يحتاج برنامج مبني</label>
 <div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:12px"><label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:6px"><input type="checkbox" id="waBridgeDist" onchange="waBridgeDistToggle()"> 🔀 وزّع على أكثر من رقم (بلا تكرار لنفس الجروب)</label><div id="waBridgeDistBox" style="display:none;font-size:12px;padding-inline-start:6px"><label style="display:flex;gap:6px;margin-bottom:4px"><input type="checkbox" class="wab-dist-acct" value="601111136864"> العز الأساسي</label><label style="display:flex;gap:6px;margin-bottom:4px"><input type="checkbox" class="wab-dist-acct" value="96898072933"> عُمان +968</label><label style="display:flex;gap:6px;margin-bottom:4px"><input type="checkbox" class="wab-dist-acct" value="201011346081"> موظفة مصر</label><div style="color:var(--muted);font-size:11px;margin-top:4px">اختاري رقمين+ ؛ كل جروب يُرسَل من رقم واحد عضو فيه فقط.</div></div></div>
 <button class="rfm-btn-primary" style="background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;width:100%" onclick="waBridgeSend()">📤 إرسال (<span id="waBridgeSendCount">0</span>)</button>
@@ -3054,7 +3054,7 @@ function waBridgeSelectAllShown() {
   matches.forEach(g => { waBridgeSel.add(g.jid); waBridgeNames[g.jid] = g.name; });
   waBridgeRenderList();
 }
-function waBridgeClearTargets() { waBridgeSel.clear(); waBridgeRenderList(); }
+function waBridgeClearTargets() { waBridgeSel.clear(); waBridgeClearImg(); waBridgeRenderList(); }
 
 function waBridgeUpdateCount() {
   const n = waBridgeSel.size;
@@ -3217,6 +3217,8 @@ function waBridgePdfToggle() {
 
 function waBridgeDistToggle() { document.getElementById('waBridgeDistBox').style.display = document.getElementById('waBridgeDist').checked ? 'block' : 'none'; }
 
+function waBridgeClearImg() { const f = document.getElementById('waBridgeImgFile'); if (f) { f.value = ''; } const m = document.getElementById('waBridgeMsg'); if (m) { m.textContent = '🗑️ أُزيلت الصورة'; m.style.color = 'var(--muted)'; } }
+
 async function waBridgeSend() {
   const body = (document.getElementById('waBridgeBody').value || '').trim();
   const msg = document.getElementById('waBridgeMsg');
@@ -3284,7 +3286,7 @@ async function waBridgeSend() {
         let _m = '✅ وُزّعت ' + _r.queued + ' رسالة — ' + Object.keys(_r.per_account).map(function (a) { return '…' + a.slice(-4) + ': ' + _r.per_account[a]; }).join(' · ');
         if (_r.unassigned) { _m += ' · (' + _r.unassigned + ' جروب ما فيه رقم عضو)'; }
         msg.textContent = _m; msg.style.color = '#25D366';
-        waBridgeSel = new Set(); waBridgeRenderList();
+        waBridgeSel = new Set(); waBridgeClearImg(); waBridgeRenderList();
       } else { msg.textContent = '❌ ' + (_r.error || 'فشل التوزيع'); msg.style.color = '#ef4444'; }
     } catch (e) { msg.textContent = '❌ ' + (e.message || e); msg.style.color = '#ef4444'; }
     return;
@@ -3297,7 +3299,7 @@ async function waBridgeSend() {
       let m = '✅ تمت جدولة ' + r.queued + ' رسالة';
       if (r.eta_minutes > 0) m += ' — تخلص خلال ~' + r.eta_minutes + ' دقيقة'; else m += ' — تُرسل الآن';
       msg.textContent = m; msg.style.color = '#25D366';
-      waBridgeSel.clear(); waBridgeRenderList();
+      waBridgeSel.clear(); waBridgeClearImg(); waBridgeRenderList();
       setTimeout(waBridgeRenderOutbox, 3500);
     } else { msg.textContent = '❌ ' + (r.error || 'فشل الإرسال'); msg.style.color = '#ef4444'; }
   } catch (e) { msg.textContent = '❌ ' + e.message; msg.style.color = '#ef4444'; }
