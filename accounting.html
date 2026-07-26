@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 24يوليو-هـ · تحصين خادمي: أي اعتماد/رفض أو تسجيل/حذف/تعديل دفعة مالية (مورّد/بنك/مرتجع) للمالكة فقط — الموظف يُرسِل طلباً ولا يعتمده بنفسه (سُدّت ثغرة كان الموظف يقدر يعتمد طلبه)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 26يوليو-أ · قسم الفنادق: الحجز الملغى يُظهر المستحق للفندق = رسوم الإلغاء (السعر − المرتجع) لا السعر الكامل، ويُحتسب في إجمالي المستحق (بلاغ C26487)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2625,21 +2625,25 @@ function renderHotelStatement(){
   let nPaid=0,nDue=0,nCanc=0,nPend=0,dueTot=0,paidTot=0;
   const trs=rows.map(h=>{
     const isC=/cancel/i.test(String(h.status||h.conf_status||''));
-    const due=Number(h.final_rate_booked||0);
+    // 🚫 الحجز الملغى: المستحق للفندق = رسوم الإلغاء (السعر − المرتجع)، وإلا cancel_charge — لا السعر الكامل
+    const _frbH=Number(h.final_rate_booked||0), _rfH=Number(h.refund||0), _ccH=Number(h.cancel_charge||0);
+    const cancelFee=isC?Math.max(0,Math.min((_rfH>0.005?(_frbH-_rfH):_ccH),_frbH)):0;
+    const due=isC?cancelFee:_frbH;
     const code=(h.client_code||'').toUpperCase();
     let state,how; const _cfRaw=String(chgRaw[h.service_id]||'').trim();
     if(h._booking && h.service_id && chg[h.service_id]){ state='paid'; how='💳 '+chg[h.service_id]; }
     else if(Number(h.total_payment||0)>0.005){ state='paid'; how='دفعة مسجّلة'; }
     else if(paidSet.has(code+'|'+nq)){ state='paid'; how='دفعة مسجّلة'; }
-    else if(isC){ state='cancel'; how=''; }
+    else if(isC){ state=(due>0.005)?'cancelfee':'cancel'; how=''; }   // ملغى برسوم إلغاء مستحقة أو ملغى بلا رسوم
     else if(h._booking && !_cfRaw){ state='pending'; how=''; }   // بلا تحديد الدفع (charge from فاضي) → لا ينعكس على الكشف حتى تحديده
     else { state='due'; how=''; }
-    if(state==='paid'){ nPaid++; paidTot+=due; } else if(state==='cancel'){ nCanc++; } else if(state==='pending'){ nPend++; } else { nDue++; dueTot+=due; }
+    if(state==='paid'){ nPaid++; paidTot+=due; } else if(state==='cancelfee'){ nCanc++; dueTot+=due; } else if(state==='cancel'){ nCanc++; } else if(state==='pending'){ nPend++; } else { nDue++; dueTot+=due; }
     const badge = state==='paid'?('<span style="color:#0e9d6a;font-weight:700">✅ مسدَّد</span> <span style="font-size:10px;color:var(--muted)">'+esc(how)+'</span>')
+      : state==='cancelfee'?'<span class="pill cancel">ملغى</span> <span style="color:#b8860b;font-weight:700;font-size:11px">· 🚫 رسوم إلغاء مستحقة</span>'
       : state==='cancel'?'<span class="pill cancel">ملغى</span>'
       : state==='pending'?'<span style="color:#3a7bd5;font-weight:700">⏳ بانتظار تحديد الدفع</span> <span style="font-size:9px;color:var(--muted)">أكملي «Charge from» في Booking Form</span>'
       : '<span style="color:#b8860b;font-weight:700">⏳ مستحق</span>'+((h._booking&&h.service_id&&_directOwed(chgRaw[h.service_id]))?' <span style="font-size:9px;color:#d98a00;font-weight:700">↗️ مباشر من المورّد — بانتظار سدادك</span>':'');
-    return '<tr'+(state==='due'?' style="background:rgba(217,138,0,.07)"':(state==='pending'?' style="background:rgba(58,123,213,.06)"':''))+'><td>'+esc(code)+'</td><td>'+esc(h.client_name||'')+'</td><td style="font-size:11px">'+esc(h.room_type||'')+'</td><td>'+esc(h.check_in||h.arrival_date||'')+'</td><td class="num" style="font-weight:700">'+(h.rooms_count!=null&&h.rooms_count!==''?esc(h.rooms_count):'<span style="color:var(--muted)">—</span>')+'</td><td class="num">'+fmt(due)+' '+esc(hcur)+'</td><td>'+badge+'</td><td>'+esc(h.conf_no||'')+'</td><td style="font-size:10px;color:var(--muted)">'+(h._booking?'Booking Form':'الشيت')+'</td></tr>';
+    return '<tr'+((state==='due'||state==='cancelfee')?' style="background:rgba(217,138,0,.07)"':(state==='pending'?' style="background:rgba(58,123,213,.06)"':''))+'><td>'+esc(code)+'</td><td>'+esc(h.client_name||'')+'</td><td style="font-size:11px">'+esc(h.room_type||'')+'</td><td>'+esc(h.check_in||h.arrival_date||'')+'</td><td class="num" style="font-weight:700">'+(h.rooms_count!=null&&h.rooms_count!==''?esc(h.rooms_count):'<span style="color:var(--muted)">—</span>')+'</td><td class="num">'+fmt(due)+' '+esc(hcur)+'</td><td>'+badge+'</td><td>'+esc(h.conf_no||'')+'</td><td style="font-size:10px;color:var(--muted)">'+(h._booking?'Booking Form':'الشيت')+'</td></tr>';
   }).join('');
   // 💰 إجمالي المدفوع فعلياً في 2026 فقط لهذا الفندق: دفعات مورّد مسجّلة بتاريخ 2026+ (بلا 2025) + دفعات charge_from على حجوزات 2026 (تُدفع لحظة الحجز)
   let paid2026=0; const yPay=(d)=>{ if(!only2026)return true; const y=(String(d||'').match(/(\d{4})/)||[])[1]; return y&&+y>=2026; };
