@@ -3487,7 +3487,7 @@ Deno.serve(async (req) => {
 
       let sessionsQuery = supabase
         .from("whatsapp_sessions")
-        .select("phone, profile_name, ai_enabled, last_message_at, last_outbound_at, last_outbound_body, last_opened_at, destination, assigned_staff_phone, assigned_at, assigned_by, customer_stage, label, followup_done, followup_due_date")
+        .select("phone, profile_name, ai_enabled, last_message_at, last_outbound_at, last_outbound_body, last_opened_at, destination, assigned_staff_phone, assigned_at, assigned_by, customer_stage, label, followup_done, followup_due_date, ad_referral")
         .limit(followupMode ? 2000 : sessionsLimit);
       if (followupMode) {
         sessionsQuery = sessionsQuery
@@ -3560,10 +3560,16 @@ Deno.serve(async (req) => {
             .order("received_at", { ascending: false })
         : { data: [] as Array<Record<string, unknown>> };
       const latestMsgByPhone = new Map<string, { body: string | null; received_at: string }>();
+      // أول رسالة نصّية لكل رقم (لكشف حملات الروابط المُعبّأة): latestAudits مرتّبة
+      // تنازليًا، فالتكرار الأخير لكل رقم هو الأقدم = الرسالة الأولى. نتجاهل بدائل
+      // الوسائط (📷/📎/🎤) لأنها ليست نصًّا مُعبّأً. صفر استعلامات إضافية.
+      const firstMsgByPhone = new Map<string, string>();
       for (const a of (latestAudits as Array<{ from_phone: string; body: string | null; received_at: string }> ?? [])) {
         if (!latestMsgByPhone.has(a.from_phone)) {
           latestMsgByPhone.set(a.from_phone, { body: a.body, received_at: a.received_at });
         }
+        const bb = String(a.body || "").trim();
+        if (bb && !/^[📷📄📎🎤🎥🌟📍👤]/.test(bb)) firstMsgByPhone.set(a.from_phone, bb); // آخر تكرار = الأقدم
       }
       // آخر ردّ **بشري فعلي** لكل عميل — نستبعد البوت/التلقائي فقط: طلال (AI) و«تأكيد
       // تلقائي». «النظام» = إرسال البرنامج (PDF) الذي تبنيه الموظفة وترسله عبر المنصة،
@@ -3626,6 +3632,25 @@ Deno.serve(async (req) => {
         else _task.catch(() => {});
       }
 
+      // ── مصدر قدوم العميل ──────────────────────────────────────────────────
+      // ad_referral (ميتا) = مصدر موثّق يرسله واتساب. غيره: نكشف حملات الروابط
+      // المُعبّأة (جوجل/صفحات هبوط) من نص الرسالة الأولى المميّز. الباقي = مباشر.
+      const CAMPAIGN_PREFILL_RE = /(مجموعة العز الدولية للسفر|أرغب في معرفة تفاصيل|أود الاستفسار عن خدماتكم)/;
+      const classifySource = (adRef: unknown, firstBody: string | undefined) => {
+        if (adRef && typeof adRef === "object") {
+          const url = String((adRef as Record<string, unknown>).source_url || "");
+          const platform = /instagram/i.test(url) ? "إنستقرام"
+            : /(facebook|fb\.me|wa\.me\/wamo)/i.test(url) ? "فيسبوك" : "إعلان";
+          return { kind: "ad", label: "إعلان " + platform,
+            detail: String((adRef as Record<string, unknown>).headline || "") };
+        }
+        const b = (firstBody || "").trim();
+        if (b && CAMPAIGN_PREFILL_RE.test(b)) {
+          return { kind: "campaign", label: "حملة (رابط)", detail: b.slice(0, 60) };
+        }
+        return { kind: "direct", label: "مباشر", detail: "" };
+      };
+
       const conversationsEnriched = (sessions ?? []).map((s: Record<string, unknown>) => {
         const phone = s.phone as string;
         const cls = latestByPhone.get(phone) ?? {};
@@ -3638,11 +3663,14 @@ Deno.serve(async (req) => {
         const customer_type = customerTypeByPhone.get(phone) || "NEW_CUSTOMER";
         const case_type = caseTypeByPhone.get(phone) || null;
         const customer_stage = stageByPhone.get(phone) || (s.customer_stage as string | null) || null;
+        const source = classifySource(s.ad_referral, firstMsgByPhone.get(phone));
+        const { ad_referral: _ar, ...rest } = s; // نستبعد الحمولة الخام؛ نرسل source الملخّص فقط
         return {
-          ...s,
+          ...rest,
           customer_type,
           case_type,
           customer_stage,
+          source,
           // complaint_type + priority + booking_status reflect the LATEST
           // proposal only — they describe the current state, not history.
           complaint_type: cls.complaint_type ?? null,
@@ -6386,13 +6414,22 @@ Deno.serve(async (req) => {
             }
           }
           const media_id = mediaObj ? String(mediaObj.id || "") : "";
-          // تشخيص: مرفق غير نصّي بلا وسيط — نسجّل النوع والمفاتيح لمعرفة السبب.
-          if (!isText && !media_id) { try { console.log("UNHANDLED_MEDIA type=" + t + " keys=" + Object.keys(m || {}).join(",")); } catch (_) { /* */ } }
+          // خطأ Meta لنوع غير مدعوم (view-once، حالة/منشور مُعاد توجيهه، نوع لا يُسلَّم للـAPI).
+          const metaErrTitle = (Array.isArray(m?.errors) && m.errors[0] && typeof m.errors[0] === "object")
+            ? String((m.errors[0] as Record<string, unknown>).title || "") : "";
+          // تشخيص: مرفق غير نصّي بلا وسيط — نسجّل النوع والخطأ والمفاتيح لمعرفة السبب.
+          if (!isText && !media_id) { try { console.log("UNHANDLED_MEDIA type=" + t + " err=" + metaErrTitle + " keys=" + Object.keys(m || {}).join(",")); } catch (_) { /* */ } }
           const media_mime = mediaObj ? String(mediaObj.mime_type || "") : "";
           const media_filename = mediaObj ? String(mediaObj.filename || "") : "";
           const caption = mediaObj ? String(mediaObj.caption || "") : "";
           const b = isText ? String(m?.text?.body || "") : caption;
-          const media_label = (!isText) ? (mediaLabels[t] || "📎 مرفق") : "";
+          // نوع معروف (أو فيه وسيط قابل للتنزيل) → تسمية النوع.
+          // نوع غير مدعوم بلا وسيط (view-once/حالة مُعاد توجيهها/نوع لا يُسلَّم) → رسالة واضحة للموظفة بدل «📎 مرفق» الغامض.
+          let media_label = "";
+          if (!isText) {
+            if (mediaLabels[t] || media_id) media_label = mediaLabels[t] || "📎 مرفق";
+            else media_label = "⚠️ أرسل العميل مرفقاً لا يدعمه واتساب (يُعرض مرة واحدة/مُعاد توجيهه) — اطلبي منه إعادة إرساله كصورة أو ملف PDF";
+          }
           const nm = (!isText) ? 1 : 0;
           // إعلان «اضغط للمحادثة» (إنستقرام/فيسبوك): واتساب يرسل referral مع أول رسالة.
           const referral = (m?.referral && typeof m.referral === "object") ? m.referral as Record<string, unknown> : null;

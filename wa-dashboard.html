@@ -931,6 +931,13 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           <option value="unread">🔵 غير مقروءة</option>
           <option value="read">✓ مقروءة</option>
         </select>
+        <span class="filter-label">المصدر</span>
+        <select id="filter-source-select" class="filter-select">
+          <option value="" selected>كل المصادر</option>
+          <option value="ad">📢 إعلان (ميتا)</option>
+          <option value="campaign">🔗 حملة (رابط/جوجل)</option>
+          <option value="direct">💬 مباشر</option>
+        </select>
       </div>
       <div id="custom-range-row" style="display:none; gap:8px; margin-bottom:8px; flex-wrap:wrap; align-items:center;">
         <label style="font-size:13px; color:var(--muted); font-weight:700;">من</label>
@@ -2738,6 +2745,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     let filterPending = false;  // «بانتظار ردّنا»: آخر رسالة من العميل أحدث من آخر ردّ منّا
     let filterMine = false;     // «محادثاتي فقط»: المُسنَدة للموظفة الحالية
     let filterReplyState = "";  // حالة الرد: ""|"noreply"|"seen"|"replied" (نفس ألوان الصفوف)
+    let filterSource = "";      // مصدر القدوم: ""=الكل | "ad" | "campaign" | "direct"
     // حالة الرد لمحادثة: لم يُرَد (بنفسجي) / شُوهدت بلا رد (برتقالي) / تم الرد (طبيعي).
     function replyStateOf(c) {
       const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
@@ -2797,6 +2805,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           if (!isUnanswered(lin, lout, c.last_message_body, c.last_outbound_body)) return false;
         }
         if (filterReplyState && replyStateOf(c) !== filterReplyState) return false;
+        if (filterSource && (c.source ? c.source.kind : "direct") !== filterSource) return false;
         if (complaintPhones && !complaintPhones.has(c.phone)) return false;
         if (myDest && myDest.size > 0) {
           // المبيعات يشوف: محادثة وجهتها ضمن وجهاتي، أو معيّن لي بالاسم
@@ -3196,6 +3205,15 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           : "";
         // Classification tags (from latest proposal joined onto conversation)
         const tags = [];
+        // 📍 وسم مصدر قدوم العميل (أول وسم بارز): إعلان ميتا / حملة رابط / مباشر
+        if (c.source && c.source.kind) {
+          const S = c.source;
+          const sc = S.kind === "ad" ? { bg:"#fce7f3", c:"#9d174d" }
+            : S.kind === "campaign" ? { bg:"#dcfce7", c:"#166534" }
+            : { bg:"#eef2f7", c:"#475569" };
+          const ic = S.kind === "ad" ? "📢" : S.kind === "campaign" ? "🔗" : "💬";
+          tags.push(`<span class="pill" style="background:${sc.bg};color:${sc.c};font-weight:800;" title="${escapeHtml(S.detail || S.label)}">${ic} ${escapeHtml(S.label)}</span>`);
+        }
         // تصنيف يدوي ثابت (عاجل/متابعة) — أول وسم ليبان بسرعة
         if (c.label && CONV_LABELS[c.label]) {
           const L = CONV_LABELS[c.label];
@@ -3733,7 +3751,16 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       convPhone = phone;
       trackActivity("open_conversation");
       $("conv-title").textContent = name;
-      $("conv-sub").textContent = fmtPhone(phone);
+      // ترويسة: رقم الهاتف + بادج مصدر قدوم العميل (واضح داخل المحادثة أيضاً)
+      const _cvSrc = (conversationsCache.find(c => c.phone === phone) || {}).source;
+      let _srcBadge = "";
+      if (_cvSrc && _cvSrc.kind) {
+        const sc = _cvSrc.kind === "ad" ? { bg:"#fce7f3", c:"#9d174d", ic:"📢" }
+          : _cvSrc.kind === "campaign" ? { bg:"#dcfce7", c:"#166534", ic:"🔗" }
+          : { bg:"#eef2f7", c:"#475569", ic:"💬" };
+        _srcBadge = ` <span style="background:${sc.bg};color:${sc.c};border-radius:20px;padding:2px 9px;font-size:11px;font-weight:800;" title="${escapeHtml(_cvSrc.detail || "")}">${sc.ic} ${escapeHtml(_cvSrc.label)}</span>`;
+      }
+      $("conv-sub").innerHTML = escapeHtml(fmtPhone(phone)) + _srcBadge;
       $("conv-overlay").style.display = "grid";
       highlightConvLabel((conversationsCache.find(c => c.phone === phone) || {}).label || '');
       $("conv-input").value = "";
@@ -5559,6 +5586,10 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     });
     $("filter-read-select").addEventListener("change", (e) => {
       filterRead = e.target.value;
+      applyConversationsFilter();
+    });
+    $("filter-source-select").addEventListener("change", (e) => {
+      filterSource = e.target.value;
       applyConversationsFilter();
     });
     $("custom-range-apply").addEventListener("click", () => {
