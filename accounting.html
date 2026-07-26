@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 26يوليو-أ · قسم الفنادق: الحجز الملغى يُظهر المستحق للفندق = رسوم الإلغاء (السعر − المرتجع) لا السعر الكامل، ويُحتسب في إجمالي المستحق (بلاغ C26487)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 26يوليو-ب · الربح الفعلي: تكلفة الخدمة الملغاة = رسوم الإلغاء (لا السعر الكامل الأولي) — يطابق قسمي الفنادق والموردين (قرار المالكة، بلاغ C26487)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3492,7 +3492,12 @@ function actualProfitMaps(){
     if(/profit/i.test(String(s.name||'')))return;   // صف «re-profit» مؤشر ربح وليس تكلفة
     if(/cancel/i.test(String(s.status||'')))hasCanc[c]=true;   // عنده خدمة ملغية (تفسّر انخفاض الحجز)
     const rate=Number(s.currency_rate)||1;
-    if(s.final_rate_booked!=null&&s.final_rate_booked!==''){ booked[c]=(booked[c]||0)+Number(s.final_rate_booked)*rate; }
+    if(/cancel/i.test(String(s.status||''))){   // 🚫 الملغى: التكلفة الفعلية = رسوم الإلغاء (السعر − المرتجع، وإلا cancel_charge) لا السعر الكامل — قرار المالكة
+      const _frb=Number(s.final_rate_booked||0), _rf=Number(s.refund||0), _cc=Number(s.cancel_charge||0);
+      const _fee=Math.max(0,Math.min(_rf>0.005?(_frb-_rf):_cc,_frb));
+      booked[c]=(booked[c]||0)+_fee*rate;
+    }
+    else if(s.final_rate_booked!=null&&s.final_rate_booked!==''){ booked[c]=(booked[c]||0)+Number(s.final_rate_booked)*rate; }
     else if(['tour','additional','supplier','transport','visa','other'].indexOf(k)>=0){ booked[c]=(booked[c]||0)+Number(s.amount||0); }  // amount = التكلفة لهذي الأنواع (بلا حجز فعلي) — عملة العميل
     else { miss[c]=(miss[c]||0)+1; }   // فندق/طيران بلا حجز فعلي = ناقص حقيقي (amount عندهم سعر بيع مو تكلفة)
   });
