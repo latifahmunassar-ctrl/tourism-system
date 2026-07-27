@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 27يوليو-أ · تفصيل المرتجعات صار يعرض فنادق الداشبورد (service_lines) الملغاة أيضاً — كانت تُسقَط لأنها ليست في hotelBookings (بلاغ C26473: فندقان ملغيان لم يظهرا)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 27يوليو-ب · المرتجع المتوقّع = (الحجز الفعلي − رسوم الإلغاء) × سعر الصرف بعملة البيع (كان يطرح رسوم الإلغاء بعملة المورّد من سعر البيع مباشرة) — قاعدة المالكة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -5314,18 +5314,20 @@ function renderPayForm(){
   const hRate={},hName={}; for(const s of (DATA.serviceLines||[])){ if(s.kind!=='hotel')continue; const k=(s.client_code||'')+'|'+(s.check_in||'');
     if(s.currency_rate!=null&&hRate[k]===undefined)hRate[k]=s.currency_rate; if(s.name&&hName[k]===undefined)hName[k]=s.name; }
   // جدول موحّد: فنادق (تفصيل كامل) + باقي الخدمات
+  // 🔄 المرتجع المتوقّع بعملة البيع = (الحجز الفعلي − رسوم الإلغاء) × سعر الصرف — قاعدة المالكة؛ وإن كان «السعر المحجوز» فارغاً نستخدم قيمة المرتجع المُدخلة (بعملة المورّد) × السعر
+  const _refExpSell=(frb,cx,rf,rt,status,sell)=>{ if(!/cancel/i.test(String(status||''))) return Number(sell||0); const net=Number(frb||0)>0?Math.max(0,Number(frb||0)-Number(cx||0)):Number(rf||0); return net*(Number(rt)||1); };
   const det=[]; const _hotelKeys=new Set();
   for(const h of hotels){ const k=(h.client_code||'')+'|'+(h.check_in||''); _hotelKeys.add(String(h.conf_no||'').trim().toUpperCase()+'|'+(h.check_in||''));
     det.push({type:'🏨 فندق',name:hName[k]||(h.hotel_name==='TBO'?'فندق':h.hotel_name),detail:h.room_type,
       sell:h.selling_rate,cancel:h.cancel_charge,booked:h.final_rate_booked,rate:hRate[k],
-      refund:h.refund,refundExp:(Number(h.selling_rate||0)-Number(h.cancel_charge||0))}); }
+      refund:h.refund,refundExp:_refExpSell(h.final_rate_booked,h.cancel_charge,h.refund,hRate[k],h.status,h.selling_rate)}); }
   for(const s of svc){
     if(s.kind==='hotel'){   // 🏨 فنادق الداشبورد (service_lines) — تُدرَج هنا لأنها قد لا تكون في hotelBookings (تشمل الملغاة بسعر حجز 0 ولها مرتجع)
       const key=String(s.conf_no||'').trim().toUpperCase()+'|'+(s.check_in||''); if(_hotelKeys.has(key))continue;   // مغطّى أصلاً من hotelBookings
-      det.push({type:'🏨 فندق',name:s.name,detail:s.detail,sell:s.amount,cancel:s.cancel_charge,booked:s.final_rate_booked,rate:s.currency_rate,refund:s.refund,refundExp:(Number(s.amount||0)-Number(s.cancel_charge||0))}); continue;
+      det.push({type:'🏨 فندق',name:s.name,detail:s.detail,sell:s.amount,cancel:s.cancel_charge,booked:s.final_rate_booked,rate:s.currency_rate,refund:s.refund,refundExp:_refExpSell(s.final_rate_booked,s.cancel_charge,s.refund,s.currency_rate,s.status,s.amount)}); continue;
     }
-    // الجولات/الطيران/الخدمات ما عليها رسوم إلغاء → المرتجع المحتمل = القيمة كاملة (عدا تكلفة المورّد)
-    const rExp = s.kind==='supplier' ? null : s.amount;
+    // 🔄 المرتجع المتوقّع = (الحجز الفعلي − رسوم الإلغاء) × سعر الصرف؛ المورّد (باكدج كامل) = يُحسب بمنطق آخر → —
+    const rExp = s.kind==='supplier' ? null : _refExpSell(s.final_rate_booked,s.cancel_charge,s.refund,s.currency_rate,s.status,s.amount);
     det.push({type:KN[s.kind]||esc(s.kind),name:s.name,detail:s.detail,sell:s.amount,cancel:s.cancel_charge,booked:s.final_rate_booked,rate:s.currency_rate,refund:s.refund,refundExp:rExp}); }
   const detRows=det.map(d=>'<tr><td>'+d.type+'</td><td>'+esc(d.name||'')+'</td><td>'+esc(d.detail||'')+'</td><td class="num">'+fmt(d.sell)+'</td><td class="num">'+(d.cancel!=null?fmt(d.cancel):'')+'</td><td class="num">'+(d.booked!=null?fmt(d.booked):'')+'</td><td>'+esc(d.rate!=null?d.rate:'')+'</td><td class="num">'+(d.refund!=null?fmt(d.refund):'')+'</td><td class="num pos">'+(d.refundExp!=null?fmt(d.refundExp):'')+'</td></tr>').join('');
 
