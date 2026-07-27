@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 27يوليو-ج · مستندات المرتجعات: المعتمدة تبقى محفوظة، والمرفوضة فقط يمكن للمالكة حذفها (زر حذف للمالكة فقط + تحقّق خادمي)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 27يوليو-د · مستند المرتجع يعرض كل تفاصيل الخدمات الملغاة بجميع الأعمدة (النوع/الخدمة/البيع/الحجز الفعلي/رسوم الإلغاء/سعر الصرف/المرتجع/المتوقّع)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -5441,7 +5441,7 @@ async function saveRefund(){
   const agentNm=(cinfo.find(r=>r.agent_name)||{}).agent_name||''; const destTo=(cinfo.find(r=>r.travel_to)||{}).travel_to||''; const fromTo=(cinfo.find(r=>r.travel_from)||{}).travel_from||'';
   const prc=cinfo.reduce((a,x)=>a+Number(x.package_rate||0),0);
   const paymentsSummary=cinfo.map(r=>({code:r.payment_code||'',amount:Number(r.amount_paid||0),currency:r.currency||cur,bank:r.bank_name||'',date:(effPayDate(r)||(r.booking_date?String(r.booking_date).slice(0,10):''))}));
-  const cancelSummary=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code && (/cancel/i.test(s.status||'')||Number(s.refund||0)>0)).map(s=>{ const rate=Number(s.currency_rate)||1; let expR; if(s.kind==='supplier'){ expR=prc-Number(s.final_rate_booked||0)*rate; } else { expR=Number(s.amount||0)-Number(s.cancel_charge||0)*rate; } return {kind:s.kind||'',name:s.name||'',sell:Number(s.amount||0),cancel_charge:Number(s.cancel_charge||0),expected:Math.max(0,+Number(expR).toFixed(3))}; });
+  const cancelSummary=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code && (/cancel/i.test(s.status||'')||Number(s.refund||0)>0)).map(s=>{ const rate=Number(s.currency_rate)||1; const frb=Number(s.final_rate_booked||0), cx=Number(s.cancel_charge||0), rf=Number(s.refund||0); let expR; if(s.kind==='supplier'){ expR=prc-frb*rate; } else { const net=frb>0?Math.max(0,frb-cx):rf; expR=net*rate; }   /* 🔄 المتوقّع = (الحجز الفعلي − رسوم الإلغاء) × سعر الصرف بعملة البيع */ return {kind:s.kind||'',name:s.name||'',detail:s.detail||'',sell:Number(s.amount||0),cancel_charge:cx,booked:frb,rate:rate,refund:rf,cur:s.booked_currency||s.currency||'',expected:Math.max(0,+Number(expR).toFixed(3))}; });
   // ⚠️ رسالة تنبيه + تأكيد بالقيم قبل تأكيد المرتجع (لا انعكاس إلا بموافقة الأدمن)
   const confirmMsg='⚠️ تنبيه: أنتِ على وشك إرجاع مبلغ للعميل — راجعي القيم جيداً:\n\n'+
     '• العميل: '+(cname?cname+' · ':'')+code+'\n'+
@@ -5491,7 +5491,8 @@ async function openRefundDoc(docId){
     const isPdf=/pdf/i.test(d.doc_type||'')|| /^data:application\/pdf/i.test(d.doc_base64||'');
     const docHtml=d.doc_base64?(isPdf?('<iframe src="'+d.doc_base64+'" style="width:100%;height:560px;border:1px solid #ccc"></iframe>'):('<img src="'+d.doc_base64+'" style="max-width:100%;border:1px solid #ccc">')):'<i>لا يوجد مرفق</i>';
     const paysRows=((d.payments_summary)||[]).map(x=>'<tr><td>'+esc(x.code||'')+'</td><td style="text-align:left">'+fmt(x.amount||0)+' '+esc(x.currency||'')+'</td><td>'+esc(x.bank||'')+'</td><td>'+esc(x.date||'')+'</td></tr>').join('')||'<tr><td colspan=4>—</td></tr>';
-    const canRows=((d.cancel_summary)||[]).map(x=>'<tr><td>'+esc(x.name||x.kind||'')+'</td><td style="text-align:left">'+fmt(x.sell||0)+'</td><td style="text-align:left">'+fmt(x.cancel_charge||0)+'</td><td style="text-align:left">'+fmt(x.expected||0)+'</td></tr>').join('')||'<tr><td colspan=4>—</td></tr>';
+    const SVCKN={hotel:'🏨 فندق',flight:'✈️ طيران',tour:'🗺️ جولة',additional:'➕ خدمة',supplier:'🏢 مورّد',transport:'🚐 انتقال',visa:'📗 فيزا',other:'📦 أخرى'};
+    const canRows=((d.cancel_summary)||[]).map(x=>'<tr><td>'+esc(SVCKN[x.kind]||x.kind||'')+'</td><td>'+esc(x.name||'')+'</td><td style="font-size:10px;color:#666">'+esc(x.detail||'')+'</td><td style="text-align:left">'+fmt(x.sell||0)+'</td><td style="text-align:left">'+(x.booked!=null?fmt(x.booked):'—')+'</td><td style="text-align:left">'+fmt(x.cancel_charge||0)+'</td><td style="text-align:left">'+esc(x.rate!=null&&x.rate!==''?x.rate:'—')+'</td><td style="text-align:left">'+(x.refund!=null?fmt(x.refund):'—')+' '+esc(x.cur||'')+'</td><td style="text-align:left;font-weight:700;color:#0a7">'+fmt(x.expected||0)+'</td></tr>').join('')||'<tr><td colspan=9>—</td></tr>';
     const st=d.status==='approved'?'<span style="color:#0a0">✅ معتمد</span>':(d.status==='rejected'?'<span style="color:#c00">❌ مرفوض</span>':'<span style="color:#b8860b">⏳ بانتظار الموافقة</span>');
     const w=window.open('','_blank'); if(!w){ alert('فعّلي النوافذ المنبثقة لعرض المستند'); return; }
     w.document.write('<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>مستند مرتجع '+esc(d.client_code||'')+'</title>'+
@@ -5501,7 +5502,7 @@ async function openRefundDoc(docId){
       '<div class="kv" style="margin-bottom:8px"><span>العميل: <b>'+esc(d.client_name||'')+'</b></span><span>الكود: <b>'+esc(d.client_code||'')+'</b></span><span>الحالة: '+st+'</span><span>أُنشئ بواسطة: <b>'+esc(d.created_by||'')+'</b></span><span>التاريخ: <b>'+esc((d.created_at||'').slice(0,16).replace('T',' '))+'</b></span></div>'+
       '<div class="box"><b>💸 تفاصيل الإرجاع</b><div class="kv" style="margin-top:6px"><span>المبلغ المرتجع: <b>'+fmt(d.refund_amount||0)+' '+esc(cur)+'</b></span><span>🏢 ربح الشركة: <b>'+fmt(d.company_profit||0)+' '+esc(cur)+'</b></span><span>🔄 المتوقّع الكلّي: <b>'+fmt(d.expected_refund||0)+'</b></span><span>المتبقّي المتوقّع: <b>'+fmt(d.remaining_expected||0)+'</b></span><span>البنك: <b>'+esc(d.bank_name||'')+'</b></span><span>تاريخ الحوالة: <b>'+esc(d.payment_date||'')+'</b></span><span>المرجع: <b>'+esc(d.bank_ref||'—')+'</b></span></div></div>'+
       '<div class="box"><b>💳 ملخّص دفعات العميل</b><table><thead><tr><th>كود الدفعة</th><th>المبلغ</th><th>البنك</th><th>التاريخ</th></tr></thead><tbody>'+paysRows+'</tbody></table></div>'+
-      '<div class="box"><b>🗂️ ملخّص الإلغاءات (الكنسلة)</b><table><thead><tr><th>الخدمة</th><th>البيع</th><th>رسوم الإلغاء</th><th>المتوقّع إرجاعه</th></tr></thead><tbody>'+canRows+'</tbody></table></div>'+
+      '<div class="box"><b>🗂️ تفاصيل الخدمات والحجوزات الملغاة</b><div style="overflow-x:auto"><table><thead><tr><th>النوع</th><th>الخدمة</th><th>التفاصيل</th><th>سعر البيع</th><th>الحجز الفعلي</th><th>رسوم الإلغاء</th><th>سعر الصرف</th><th>المرتجع المسجّل</th><th>المتوقّع إرجاعه</th></tr></thead><tbody>'+canRows+'</tbody></table></div></div>'+
       '<div class="box"><b>📎 طلب العميل بالإرجاع</b><div style="margin-top:8px">'+docHtml+'</div></div>'+
       '</body></html>'); w.document.close();
   }catch(e){ alert('خطأ: '+e.message); }
