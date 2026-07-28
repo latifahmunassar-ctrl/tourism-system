@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 27يوليو-د · مستند المرتجع يعرض كل تفاصيل الخدمات الملغاة بجميع الأعمدة (النوع/الخدمة/البيع/الحجز الفعلي/رسوم الإلغاء/سعر الصرف/المرتجع/المتوقّع)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 28يوليو-أ · تبويب جديد «تدقيق suppliers/Hotels»: لكل مورّد/فندق بعملته المستحق/المدفوع/الرصيد (أسود = علينا ندفع · ⚠️ زيادة دفع لو دفعنا أكثر) + فلاتر</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -242,6 +242,7 @@ table{font-weight:600}
     <button class="tab" data-p="staff" onclick="tab(this)">👥 الموظفين</button>
     <button class="tab" data-p="agents" onclick="tab(this)">🏢 الوكلاء</button>
     <button class="tab" data-p="suppliers" onclick="tab(this)">🧾 الموردين</button>
+    <button class="tab" data-p="supaudit" onclick="tab(this)">🔎 تدقيق suppliers/Hotels</button>
     <button class="tab" data-p="curaudit" onclick="tab(this)">🔍 تدقيق العملة</button>
     <button class="tab" data-p="banks" onclick="tab(this)">🏦 البنوك والبطاقات</button>
     <button class="tab" data-p="bankscash" onclick="tab(this)">💵 Banks Cash in/Out</button>
@@ -626,6 +627,20 @@ table{font-weight:600}
       </div>
     </div>
 
+    <div class="page" id="p-supaudit">
+      <div class="panel"><h3>🔎 تدقيق الموردين والفنادق <span class="cnt" id="supaudit-cnt"></span></h3>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px">لكل مورّد/فندق بعملته: إجمالي المستحق − إجمالي المدفوع = الرصيد. <b style="color:#111">الرصيد الأسود</b> = مستحق للمورّد (نحتاج ندفع)؛ <b style="color:#d11">⚠️ زيادة دفع</b> = دفعنا أكثر من المستحق.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+          <input id="supaudit-q" class="flt" placeholder="🔍 اسم المورّد/الفندق…" oninput="renderSupAudit()" style="min-width:240px">
+          <select id="supaudit-type" class="flt" onchange="renderSupAudit()"><option value="">الكل (موردين + فنادق)</option><option value="sup">الموردين فقط</option><option value="hotel">الفنادق فقط</option></select>
+          <select id="supaudit-bal" class="flt" onchange="renderSupAudit()"><option value="">كل الأرصدة</option><option value="owe">علينا (نحتاج ندفع)</option><option value="over">زيادة دفع ⚠️</option><option value="settled">مُسوّى</option></select>
+        </div>
+        <div class="tbl-wrap bf-scroll" id="t-supaudit-wrap"><table id="t-supaudit"><thead><tr>
+          <th>اسم المورّد / الفندق (Supplier)</th><th>النوع</th><th>العملة</th><th>إجمالي المستحق</th><th>إجمالي المدفوع</th><th>الرصيد</th>
+        </tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
     <div class="page" id="p-curaudit">
       <div class="panel" style="border:1px solid #0891b2">
         <h3 style="margin-top:0">🔍 تدقيق العملة — مطابقة التكلفة الفعلية بين المصدرين</h3>
@@ -946,7 +961,7 @@ function tab(el){
 }
 
 // ===== الصلاحيات / لوحة التحكم =====
-const TABS=[{k:'overview',l:'📊 لوحة المعلومات'},{k:'notifs',l:'🔔 إشعارات'},{k:'tickets',l:'🎫 Tickets'},{k:'entry',l:'📝 مدخل البيانات'},{k:'clients',l:'👤 العملاء'},{k:'sales',l:'🧳 Sales Form'},{k:'booking',l:'🏷️ Booking Form'},{k:'bookings',l:'🧾 كل الحجوزات'},{k:'detail',l:'🔎 تفصيل الحجز'},{k:'hotels',l:'🏨 Hotels Overview'},{k:'pnl',l:'💹 الأرباح والخسائر'},{k:'due',l:'⏳ المستحقات'},{k:'payments',l:'💳 الدفعات/المرتجعات'},{k:'staff',l:'👥 الموظفين'},{k:'agents',l:'🏢 الوكلاء'},{k:'suppliers',l:'🧾 الموردين'},{k:'banks',l:'🏦 البنوك والبطاقات'},{k:'bankscash',l:'💵 Banks Cash in/Out'},{k:'curaudit',l:'🔍 تدقيق العملة'}];
+const TABS=[{k:'overview',l:'📊 لوحة المعلومات'},{k:'notifs',l:'🔔 إشعارات'},{k:'tickets',l:'🎫 Tickets'},{k:'entry',l:'📝 مدخل البيانات'},{k:'clients',l:'👤 العملاء'},{k:'sales',l:'🧳 Sales Form'},{k:'booking',l:'🏷️ Booking Form'},{k:'bookings',l:'🧾 كل الحجوزات'},{k:'detail',l:'🔎 تفصيل الحجز'},{k:'hotels',l:'🏨 Hotels Overview'},{k:'pnl',l:'💹 الأرباح والخسائر'},{k:'due',l:'⏳ المستحقات'},{k:'payments',l:'💳 الدفعات/المرتجعات'},{k:'staff',l:'👥 الموظفين'},{k:'agents',l:'🏢 الوكلاء'},{k:'suppliers',l:'🧾 الموردين'},{k:'supaudit',l:'🔎 تدقيق suppliers/Hotels'},{k:'banks',l:'🏦 البنوك والبطاقات'},{k:'bankscash',l:'💵 Banks Cash in/Out'},{k:'curaudit',l:'🔍 تدقيق العملة'}];
 let CURRENT_USER=null; try{ CURRENT_USER=JSON.parse(localStorage.getItem('acc_user')||'null'); }catch(e){}
 function staffList(){ return (DATA&&DATA.staffAccess)||[]; }
 function applyPermissions(){
@@ -1168,6 +1183,7 @@ function render(d){
   ]);}).join(''); $('agents-cnt').textContent=d.agents.length+' وكيل';
   fillAgentFilter(); if($('agflt')&&$('agflt').value)renderAgentDetail();
   renderSuppliers();
+  try{ renderSupAudit(); }catch(_){}
   renderBanks();
   renderBanksCash();
   try{ renderCurAudit(); }catch(_){}
@@ -4488,6 +4504,40 @@ function caExport(){
     '</tbody></table></body></html>';
   const f=document.createElement('iframe'); f.style.position='fixed'; f.style.right='-9999px'; f.style.width='800px'; f.style.height='600px'; document.body.appendChild(f);
   f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close(); f.contentWindow.focus(); setTimeout(()=>{try{f.contentWindow.print();}catch(_){}},300);
+}
+// 🔎 تدقيق الموردين والفنادق: لكل مورّد/فندق بعملته — إجمالي المستحق / المدفوع / الرصيد (أسود = علينا ندفع · ⚠️ = زيادة دفع)
+function renderSupAudit(){
+  const tb=document.querySelector('#t-supaudit tbody'); if(!tb) return;
+  const _nz=(s)=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+  const q=((($('supaudit-q')||{}).value)||'').trim().toLowerCase();
+  const ftype=(($('supaudit-type')||{}).value)||''; const fbal=(($('supaudit-bal')||{}).value)||'';
+  const rows=[];
+  // ===== الموردون (غير الفنادق) =====
+  const _supSet=new Set(listValues('suppliers').map(v=>_nz(v.value)));
+  const _hotelOnly=new Set(listValues('hotels_system').map(v=>_nz(v.value)).filter(h=>!_supSet.has(h)));
+  const inv=supInvAll().filter(x=>!_hotelOnly.has(_nz(x.supplier_name)));
+  const by={}; inv.forEach(x=>{ const s=x.supplier_name||'?'; (by[s]=by[s]||[]).push(x); });
+  const payBy={}; (DATA.supplierPayments||[]).forEach(x=>{ const s=x.supplier_name||'?'; payBy[s]=(payBy[s]||0)+Number(x.amount||0); });
+  const supNames=new Set([...Object.keys(by), ...listValues('suppliers').map(v=>String(v.value||'').trim()).filter(Boolean)]);
+  supNames.forEach(s=>{ if(!s||s==='?')return; const list=by[s]||[]; const owed=supOwed(list); const paid=payBy[s]||0; if(!(owed>0.005)&&!(paid>0.005))return; rows.push({type:'sup',typeLbl:'🧾 مورّد',name:s,cur:supplierCurrency(s),owed,paid,bal:owed-paid}); });
+  // ===== الفنادق (عبر منطق تقرير المدفوع له لكل فندق) =====
+  const _saved=HO_PAYEE;
+  try{ (hpPayees()||[]).forEach(h=>{ HO_PAYEE=h; let t; try{ t=hpComputeTotals(); }catch(_){ t={cost:0,paid:0,bal:0}; } const owed=Number(t.cost||0), paid=Number(t.paid||0); if(!(owed>0.005)&&!(paid>0.005))return; rows.push({type:'hotel',typeLbl:'🏨 فندق',name:h,cur:(typeof hpPayeeCur==='function'?hpPayeeCur(h):''),owed,paid,bal:owed-paid}); }); }catch(_){}
+  HO_PAYEE=_saved;
+  // فلاتر
+  let list2=rows.filter(r=>{ if(ftype&&r.type!==ftype)return false; if(q&&String(r.name).toLowerCase().indexOf(q)<0)return false;
+    if(fbal==='owe'&&!(r.bal>0.5))return false; if(fbal==='over'&&!(r.bal<-0.5))return false; if(fbal==='settled'&&Math.abs(r.bal)>0.5)return false; return true; });
+  list2.sort((a,b)=>b.bal-a.bal);   // الأكثر استحقاقاً علينا أولاً
+  tb.innerHTML=list2.length?list2.map(r=>{
+    const over=(r.bal<-0.5);   // دفعنا أكثر من المستحق
+    const settled=(Math.abs(r.bal)<=0.5);
+    const balCell= over
+      ? '<b style="color:#d11">'+fmt(r.bal)+'</b> '+esc(r.cur)+' <span title="دفعنا أكثر من المستحق — راجعي" style="background:#d11;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px">⚠️ زيادة دفع</span>'
+      : (settled? '<b style="color:#0e9d6a">'+fmt(r.bal)+'</b> '+esc(r.cur)+' <span style="color:#0e9d6a;font-size:10px">⚖️ مُسوّى</span>'
+        : '<b style="color:#111">'+fmt(r.bal)+'</b> '+esc(r.cur));   // علينا ندفع للسبلاير = أسود
+    return rw([esc(r.name), r.typeLbl, esc(r.cur), '<b>'+fmt(r.owed)+'</b>', (r.paid>0.005?'<span class="num">'+fmt(r.paid)+'</span>':'—'), balCell]);
+  }).join(''):rw(['لا بيانات مطابقة','','','','','']);
+  const cnt=$('supaudit-cnt'); if(cnt)cnt.textContent=list2.length+' مورّد/فندق';
 }
 function renderSuppliers(){
   const tb=document.querySelector('#t-sup tbody'); if(!tb) return;
