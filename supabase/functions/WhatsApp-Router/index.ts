@@ -3636,19 +3636,31 @@ Deno.serve(async (req) => {
       // ad_referral (ميتا) = مصدر موثّق يرسله واتساب. غيره: نكشف حملات الروابط
       // المُعبّأة (جوجل/صفحات هبوط) من نص الرسالة الأولى المميّز. الباقي = مباشر.
       const CAMPAIGN_PREFILL_RE = /(مجموعة العز الدولية للسفر|أرغب في معرفة تفاصيل|أود الاستفسار عن خدماتكم)/;
+      // يُرجِع { kind, platform, label, detail }. platform = مفتاح آلي للفلترة
+      // الدقيقة في الداشبورد (instagram/facebook/meta/google/link/direct).
       const classifySource = (adRef: unknown, firstBody: string | undefined) => {
         if (adRef && typeof adRef === "object") {
-          const url = String((adRef as Record<string, unknown>).source_url || "");
-          const platform = /instagram/i.test(url) ? "إنستقرام"
-            : /(facebook|fb\.me|wa\.me\/wamo)/i.test(url) ? "فيسبوك" : "إعلان";
-          return { kind: "ad", label: "إعلان " + platform,
-            detail: String((adRef as Record<string, unknown>).headline || "") };
+          const r = adRef as Record<string, unknown>;
+          const url = String(r.source_url || "");
+          const stype = String(r.source_type || "");
+          const hay = (url + " " + stype).toLowerCase();
+          const platform = /instagram|ig\.me/.test(hay) ? "instagram"
+            : /facebook|fb\.me|fb\.com|messenger|m\.me/.test(hay) ? "facebook" : "meta";
+          const arLbl = platform === "instagram" ? "إنستقرام" : platform === "facebook" ? "فيسبوك" : "ميتا";
+          return { kind: "ad", platform, label: "إعلان " + arLbl, detail: String(r.headline || "") };
         }
         const b = (firstBody || "").trim();
-        if (b && CAMPAIGN_PREFILL_RE.test(b)) {
-          return { kind: "campaign", label: "حملة (رابط)", detail: b.slice(0, 60) };
+        if (b) {
+          // Google Ads → رابط wa.me من إعلان جوجل؛ يُكشَف من مُعرِّف gclid أو كلمة google
+          // في النص المُعبّأ (لو الإعلان يستخدم رسالة جاهزة مميّزة). خلاف ذلك: حملة رابط عامة.
+          if (/gclid|google|جوجل/i.test(b)) {
+            return { kind: "campaign", platform: "google", label: "Google Ads", detail: b.slice(0, 60) };
+          }
+          if (CAMPAIGN_PREFILL_RE.test(b)) {
+            return { kind: "campaign", platform: "link", label: "حملة (رابط)", detail: b.slice(0, 60) };
+          }
         }
-        return { kind: "direct", label: "مباشر", detail: "" };
+        return { kind: "direct", platform: "direct", label: "مباشر", detail: "" };
       };
 
       const conversationsEnriched = (sessions ?? []).map((s: Record<string, unknown>) => {

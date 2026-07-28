@@ -934,8 +934,12 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         <span class="filter-label">المصدر</span>
         <select id="filter-source-select" class="filter-select">
           <option value="" selected>كل المصادر</option>
-          <option value="ad">📢 إعلان (ميتا)</option>
-          <option value="campaign">🔗 حملة (رابط/جوجل)</option>
+          <option value="any_ad">📢 كل الإعلانات</option>
+          <option value="instagram">📸 إعلان إنستقرام</option>
+          <option value="facebook">👍 إعلان فيسبوك/ماسنجر</option>
+          <option value="meta">📢 إعلان ميتا (أخرى)</option>
+          <option value="google">🔍 Google Ads</option>
+          <option value="link">🔗 حملة رابط</option>
           <option value="direct">💬 مباشر</option>
         </select>
       </div>
@@ -2745,7 +2749,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     let filterPending = false;  // «بانتظار ردّنا»: آخر رسالة من العميل أحدث من آخر ردّ منّا
     let filterMine = false;     // «محادثاتي فقط»: المُسنَدة للموظفة الحالية
     let filterReplyState = "";  // حالة الرد: ""|"noreply"|"seen"|"replied" (نفس ألوان الصفوف)
-    let filterSource = "";      // مصدر القدوم: ""=الكل | "ad" | "campaign" | "direct"
+    let filterSource = "";      // مصدر القدوم: ""=الكل | "any_ad" | instagram/facebook/meta/google/link/direct
     // حالة الرد لمحادثة: لم يُرَد (بنفسجي) / شُوهدت بلا رد (برتقالي) / تم الرد (طبيعي).
     function replyStateOf(c) {
       const lin = c.last_inbound_at ? new Date(c.last_inbound_at).getTime() : 0;
@@ -2805,7 +2809,12 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           if (!isUnanswered(lin, lout, c.last_message_body, c.last_outbound_body)) return false;
         }
         if (filterReplyState && replyStateOf(c) !== filterReplyState) return false;
-        if (filterSource && (c.source ? c.source.kind : "direct") !== filterSource) return false;
+        if (filterSource) {
+          const _src = c.source || { kind: "direct", platform: "direct" };
+          const _plat = _src.platform || _src.kind || "direct";
+          if (filterSource === "any_ad") { if (_src.kind !== "ad" && _src.kind !== "campaign") return false; }
+          else if (_plat !== filterSource) return false;
+        }
         if (complaintPhones && !complaintPhones.has(c.phone)) return false;
         if (myDest && myDest.size > 0) {
           // المبيعات يشوف: محادثة وجهتها ضمن وجهاتي، أو معيّن لي بالاسم
