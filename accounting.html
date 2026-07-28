@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 28يوليو-ب · تنبيه «التكلفة أعلى من المعطاة» صار يُصحّح نفسه: لا يُعرض إلا إذا كانت التكلفة الحالية لا تزال أعلى فعلاً، ومرّة واحدة لكل عميل (بلاغ C26493 كان تنبيهاً قديماً بعد تصحيح الإدخال)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 28يوليو-ج · تفاصيل العميل (Sales Form وغيرها) تعرض «الموظفة التي أكّدت مع العميل» (confirmed_by من First Client Data)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1464,6 +1464,7 @@ function infoHtml(ci){
   if(!ci) return '';
   return '<div style="font-size:13px;margin-bottom:4px"><b style="color:var(--accent)">'+esc(ci.name)+'</b> · '+esc(ci.code)+'</div>'+
     '<div class="sub">'+esc(ci.from)+' → '+esc(ci.to)+' · '+esc(ci.agent)+' · '+esc(ci.type)+' · وصول '+esc(ci.arrival||'-')+'</div>'+
+    '<div style="margin-top:4px;font-size:12.5px">👩‍💼 الموظفة التي أكّدت مع العميل: <b style="color:var(--accent)">'+(ci.confirmedBy?esc(ci.confirmedBy):'<span style="color:#d98a00">— غير محدّدة في First Client Data</span>')+'</b> <span style="font-size:9px;color:var(--muted)">(من First Client Data)</span></div>'+
     '<div style="margin-top:5px;font-size:12px">سعر البيع: <b>'+fmt(ci.sold)+'</b> · مدفوع معتمد: <b>'+fmt(ci.paid)+'</b> · المتبقي: <b style="color:var(--amber)">'+fmt(ci.sold-ci.paid)+'</b> '+esc(ci.cur)+(Number(ci.unconfirmed||0)>1?' · <span style="color:#d98a00">⚠️ بلا مرجع (غير معتمد): <b>'+fmt(ci.unconfirmed)+'</b></span>':'')+'</div>';
 }
 
