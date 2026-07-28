@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 28يوليو-أ · تبويب جديد «تدقيق suppliers/Hotels»: لكل مورّد/فندق بعملته المستحق/المدفوع/الرصيد (أسود = علينا ندفع · ⚠️ زيادة دفع لو دفعنا أكثر) + فلاتر</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 28يوليو-ب · تنبيه «التكلفة أعلى من المعطاة» صار يُصحّح نفسه: لا يُعرض إلا إذا كانت التكلفة الحالية لا تزال أعلى فعلاً، ومرّة واحدة لكل عميل (بلاغ C26493 كان تنبيهاً قديماً بعد تصحيح الإدخال)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3243,7 +3243,14 @@ function renderAlerts(){
     if(a.type==='reactivate_request'){ pendReactivate.push(a); continue; }
     if(a.type==='suppay_edit_request'){ pendSupEdit.push(a); continue; }
     if(a.type==='cash_edit_request'){ pendCashEdit.push(a); continue; }
-    if(a.type==='cost_over'){ pendCostOver.push(a); continue; }
+    if(a.type==='cost_over'){
+      // 🔄 لا يُعرض إلا إذا كانت التكلفة الحالية لا تزال أعلى فعلاً (تُصحَّح تلقائياً بعد تعديل المدخلات)، ومرّة واحدة لكل عميل
+      const _cc=(a.client_code||'').toUpperCase();
+      const _g=(typeof salesCostGap==='function')?salesCostGap(_cc):null;
+      const _stillOver=_g && _g.hasSvc && !_g.hasCanc && (_g.agreed>0) && ((_g.entered-_g.agreed) > Math.max(10,_g.agreed*0.02));
+      if(_stillOver && !pendCostOver.some(x=>(x.client_code||'').toUpperCase()===_cc)) pendCostOver.push(a);
+      continue;
+    }
     if(a.type==='booking_loss'){ continue; }   // النوع القديم يُتجاهَل — صار الحساب حيّاً
     const s=a.service_id?svcById[a.service_id]:null;
     // حل فعلي فقط: لمّا تتوحّد العملة (عملة المورّد = عملة الحجز الفعلي) → تُغلق تلقائياً مع توثيق
