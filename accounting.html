@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 28يوليو-هـ · جدول «مستندات المرتجعات المحفوظة» صار يعرض المرجع البنكي وتاريخ الحوالة (كان يعرض اسم البنك فقط)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 28يوليو-و · رقم الجوال صار إجبارياً فعلاً في شاشة إضافة عميل جديد (كان بلا تحقّق فيُحفظ فارغاً) — نجمة + رفض الحفظ بلا جوال</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -826,7 +826,7 @@ table{font-weight:600}
       <div class="fld" id="fld-bdate"><label>تاريخ الحجز <span class="req-new" style="color:var(--red)">*</span></label><input type="date" id="f-bdate"></div>
       <div class="fld"><label>تاريخ الوصول <span class="req-new" style="color:var(--red)">*</span> <span class="ro-hint" style="display:none;font-size:9px;color:var(--muted)">(للعرض فقط)</span></label><input type="date" id="f-adate"></div>
       <div class="fld" id="fld-name"><label>اسم العميل <span class="req-new" style="color:var(--red)">*</span> <span class="ro-hint" style="display:none;font-size:9px;color:var(--muted)">(للعرض فقط)</span></label><input id="f-name"></div>
-      <div class="fld new-only"><label>الجوال</label><input id="f-phone"></div>
+      <div class="fld new-only"><label>الجوال <span class="bf-req" style="color:var(--red)">*</span></label><input id="f-phone" placeholder="إجباري"></div>
       <div class="fld new-only"><label>👥 عدد الأشخاص <span style="color:var(--red)">*</span></label><input type="number" id="f-pax" min="1" step="1" placeholder="إجباري"></div>
       <div class="fld" id="fld-agent"><label>الوكيل (Agent) <span class="req-new" style="color:var(--red)">*</span> <span class="ag-newhint" style="font-size:9px;color:var(--muted)">من القائمة</span><span class="ro-hint" style="display:none;font-size:9px;color:var(--muted)">(للعرض فقط)</span></label><select id="f-agent"></select></div>
       <div class="fld new-only"><label>من (مسافر من) <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">من القائمة</span></label><select id="f-from"></select></div>
@@ -5926,6 +5926,7 @@ async function save(){
     if(!val('f-bdate')){ need('f-bdate','⚠️ تاريخ الحجز إجباري للعميل الجديد'); return; }
     if(!val('f-adate')){ need('f-adate','⚠️ تاريخ الوصول إجباري للعميل الجديد'); return; }
     if(!val('f-name')){ need('f-name','⚠️ اسم العميل إجباري للعميل الجديد'); return; }
+    if(!val('f-phone')){ need('f-phone','⚠️ رقم الجوال إجباري للعميل الجديد'); return; }   // 📱 الجوال إجباري (قرار المالكة)
     const px=parseInt(val('f-pax'),10); if(!(px>0)){ need('f-pax','⚠️ 👥 عدد الأشخاص إجباري — رقم صحيح (1 أو أكثر)'); return; }
     if(!val('f-agent')){ need('f-agent','⚠️ اسم الوكيل إجباري للعميل الجديد'); return; }
     if(!val('f-from')){ need('f-from','⚠️ «مسافر من» إجباري للعميل الجديد'); return; }
