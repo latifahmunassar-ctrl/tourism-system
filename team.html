@@ -3514,7 +3514,8 @@ async function saveCurrentProgramOnce(pdfVariant, finalGroupPrice) {
         destination: parsedData.dest,
         pdf_variant: pdfVariant,
         total_group: finalGroupPrice,
-        persons: parsedData.persons || 1
+        persons: parsedData.persons || 1,
+        created_by: (localStorage.getItem('alezz_staff_name') || '').trim()
       })
     });
     const data = await res.json().catch(async () => {

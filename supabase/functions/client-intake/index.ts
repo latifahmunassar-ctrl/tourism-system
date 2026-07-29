@@ -629,7 +629,7 @@ Deno.serve(async (req) => {
   if (adminAction) {
     // Company-account management is OWNER-only (separate private dashboard) and
     // uses COMPANIES_ADMIN_SECRET. The staff request inbox keeps CLIENT_ADMIN_SECRET.
-    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove", "staff_report", "sec_overview", "sec_country_add", "sec_country_remove", "sec_enforce_set", "sec_device_trust", "sec_device_approve", "sec_device_remove", "sec_user_approve", "sec_user_suspend", "sec_user_remove", "sec_user_reset", "sec_user_device_approve"].includes(adminAction);
+    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove", "staff_report", "pdf_report", "sec_overview", "sec_country_add", "sec_country_remove", "sec_enforce_set", "sec_device_trust", "sec_device_approve", "sec_device_remove", "sec_user_approve", "sec_user_suspend", "sec_user_remove", "sec_user_reset", "sec_user_device_approve"].includes(adminAction);
     // صندوق طلبات الشركات (عرض/بناء/إرسال) — محمي بكلمة الشركات (AA2026) أو مفتاح المالكة فقط،
     // لا يُفتح بمفتاح موظفي الأفراد العام، فيبقى مخفيًّا عن من يشتغل على الأفراد.
     const companyInbox = ["list", "get", "approve", "update_program", "duplicate"].includes(adminAction);
@@ -918,6 +918,30 @@ Deno.serve(async (req) => {
       const report = Object.values(map).map((m: any) => ({ name: m.name, count: m.count, avg_speed_ms: m.speedN ? Math.round(m.totalMs / m.speedN) : null }))
         .sort((a: any, b: any) => b.count - a.count);
       return json({ report });
+    }
+
+    // تقرير تصدير الـ PDF: كل موظفة + عدد الملفات المصدَّرة + آخر تصدير + توزيع الأنواع.
+    // المصدر جدول programs (يُحفظ سجل عند كل تصدير PDF من المساعد السياحي).
+    if (adminAction === "pdf_report") {
+      const from = url.searchParams.get("from") || "";
+      const to = url.searchParams.get("to") || "";
+      let q = supabase.from("programs").select("created_by, pdf_variant, created_at").order("created_at", { ascending: false });
+      if (from) q = q.gte("created_at", from);
+      if (to) q = q.lte("created_at", to);
+      const { data } = await q.limit(10000);
+      const map: Record<string, any> = {};
+      let unattributed = 0;
+      for (const r of (data || []) as Array<any>) {
+        const k = String(r.created_by || "").trim();
+        if (!k) { unattributed++; continue; }   // سجلات قبل تفعيل التتبّع أو بلا اسم
+        const m = map[k] || (map[k] = { name: k, count: 0, client: 0, detailed: 0, no_price: 0, last_at: null });
+        m.count++;
+        const v = String(r.pdf_variant || "").trim();
+        if (v === "client") m.client++; else if (v === "detailed") m.detailed++; else if (v === "no_price") m.no_price++;
+        if (!m.last_at || (r.created_at && r.created_at > m.last_at)) m.last_at = r.created_at;
+      }
+      const report = Object.values(map).sort((a: any, b: any) => b.count - a.count);
+      return json({ report, unattributed });
     }
 
     // owner "view as company": mint a separate impersonation token + return it,

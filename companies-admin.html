@@ -124,6 +124,7 @@
     <button id="tabBtnCompanies" class="tabbtn on" onclick="showTab('companies')">🏢 الشركات</button>
     <button id="tabBtnStaff" class="tabbtn" onclick="showTab('staff')">👥 الموظفون</button>
     <button id="tabBtnLogins" class="tabbtn" onclick="showTab('logins')">📈 سجل الدخول</button>
+    <button id="tabBtnPdf" class="tabbtn" onclick="showTab('pdf')">📄 تصدير PDF</button>
     <button id="tabBtnSecurity" class="tabbtn" onclick="showTab('security')">🔒 الأمان</button>
   </div>
 
@@ -165,6 +166,21 @@
     <div id="loginsTable"><div class="ac-empty">جارٍ التحميل…</div></div>
   </div>
   </div><!-- /tabLogins -->
+
+  <div id="tabPdf" class="tabpane" style="display:none">
+  <div class="panel">
+    <h3>📄 تصدير ملفات PDF <small>كم ملف PDF صدّرت كل موظفة من المساعد السياحي + آخر تصدير + نوع الملفات</small></h3>
+    <div class="rep-periods">
+      <button class="rep-btn on" onclick="pdfPeriod('today',this)">اليوم</button>
+      <button class="rep-btn" onclick="pdfPeriod('week',this)">الأسبوع</button>
+      <button class="rep-btn" onclick="pdfPeriod('month',this)">الشهر</button>
+      <button class="rep-btn" onclick="pdfPeriod('all',this)">الكل</button>
+      <button class="rep-btn" onclick="pdfPeriod('custom',this)">مخصص</button>
+      <span id="pdfCustom" style="display:none">من <input type="date" id="pdfFrom"> إلى <input type="date" id="pdfTo"> <button class="ac-btn ok" onclick="pdfCustomGo()">عرض</button></span>
+    </div>
+    <div id="pdfTable"><div class="ac-empty">جارٍ التحميل…</div></div>
+  </div>
+  </div><!-- /tabPdf -->
 
   <div id="tabSecurity" class="tabpane" style="display:none">
   <div class="panel">
@@ -221,11 +237,12 @@ async function login(){
 function logout(){ localStorage.removeItem('alezz_owner_secret'); SECRET=''; location.reload(); }
 function show(){ $('loginView').style.display='none'; $('appView').style.display='block'; loadList(); loadStaff(); repPeriod('today', document.querySelector('.rep-btn')); }
 function showTab(t){
-  const panes={companies:'tabCompanies',staff:'tabStaff',logins:'tabLogins',security:'tabSecurity'};
-  const btns={companies:'tabBtnCompanies',staff:'tabBtnStaff',logins:'tabBtnLogins',security:'tabBtnSecurity'};
+  const panes={companies:'tabCompanies',staff:'tabStaff',logins:'tabLogins',pdf:'tabPdf',security:'tabSecurity'};
+  const btns={companies:'tabBtnCompanies',staff:'tabBtnStaff',logins:'tabBtnLogins',pdf:'tabBtnPdf',security:'tabBtnSecurity'};
   for(const k in panes){ $(panes[k]).style.display = (k===t?'':'none'); $(btns[k]).classList.toggle('on',k===t); }
   if(t==='staff'){ loadStaff(); repPeriod('today', document.querySelector('.rep-btn')); }
   if(t==='logins'){ loadLogins(); }
+  if(t==='pdf'){ pdfPeriod('today', document.querySelector('#tabPdf .rep-btn')); }
   if(t==='security'){ loadSecurity(); }
 }
 // ── أمان داشبورد البرامج: الدول المسموحة + سجل الدخول + تفعيل الحظر ──
@@ -413,6 +430,40 @@ async function loadReport(){
     if(!rep.length){ box.innerHTML='<div class="ac-empty">لا بيانات في هذه الفترة</div>'; return; }
     box.innerHTML='<table class="rep-table"><thead><tr><th>#</th><th>الموظف</th><th>📦 البكجات المرسلة</th><th>⚡ متوسط سرعة الإرسال</th></tr></thead><tbody>'+
       rep.map((s,i)=>`<tr><td class="rep-rank">${i+1}</td><td>${esc(s.name)}</td><td class="rep-cnt">${s.count}</td><td>${esc(fmtSpeed(s.avg_speed_ms))}</td></tr>`).join('')+'</tbody></table>';
+  }catch(_){ box.innerHTML='<div class="ac-empty">تعذّر التحميل</div>'; }
+}
+
+// ── تبويب تصدير PDF: كم ملف صدّرت كل موظفة من المساعد السياحي ──
+let PDF_RANGE={from:'',to:''};
+function pdfPeriod(p,btn){
+  document.querySelectorAll('#tabPdf .rep-btn').forEach(b=>b.classList.remove('on')); if(btn) btn.classList.add('on');
+  $('pdfCustom').style.display = p==='custom'?'inline-flex':'none';
+  if(p==='custom') return;
+  const now=new Date(); let from=null;
+  if(p==='today'){ from=new Date(now.getFullYear(),now.getMonth(),now.getDate()); }
+  else if(p==='week'){ from=new Date(now); from.setDate(now.getDate()-6); from.setHours(0,0,0,0); }
+  else if(p==='month'){ from=new Date(now); from.setDate(now.getDate()-29); from.setHours(0,0,0,0); }
+  PDF_RANGE={ from: from?from.toISOString():'', to:'' };
+  loadPdfReport();
+}
+function pdfCustomGo(){
+  const f=$('pdfFrom').value, t=$('pdfTo').value;
+  PDF_RANGE={ from: f?new Date(f+'T00:00:00').toISOString():'', to: t?new Date(t+'T23:59:59').toISOString():'' };
+  loadPdfReport();
+}
+async function loadPdfReport(){
+  const box=$('pdfTable'); if(!box) return; box.innerHTML='<div class="ac-empty">جارٍ التحميل…</div>';
+  try{
+    const qs=[]; if(PDF_RANGE.from) qs.push('from='+encodeURIComponent(PDF_RANGE.from)); if(PDF_RANGE.to) qs.push('to='+encodeURIComponent(PDF_RANGE.to));
+    const r=await fetch(BASE+'?admin_action=pdf_report'+(qs.length?'&'+qs.join('&'):''),{headers:H()});
+    if(!r.ok){ if(r.status===401){logout();return;} throw new Error(); }
+    const d=await r.json(); const rep=d.report||[]; const unattr=d.unattributed||0;
+    const note = unattr?`<div class="ac-mt" style="margin-top:10px">⚠️ ${unattr} ملف بدون اسم موظفة (صُدّر قبل تفعيل التتبّع أو بدون اسم محفوظ)</div>`:'';
+    if(!rep.length){ box.innerHTML='<div class="ac-empty">لا تصديرات في هذه الفترة</div>'+note; return; }
+    const total=rep.reduce((s,x)=>s+(x.count||0),0);
+    box.innerHTML='<table class="rep-table"><thead><tr><th>#</th><th>الموظفة</th><th>📄 عدد الملفات</th><th>👤 أفراد</th><th>📊 تفصيلي</th><th>🚫 بدون سعر</th><th>آخر تصدير</th></tr></thead><tbody>'+
+      rep.map((s,i)=>`<tr><td class="rep-rank">${i+1}</td><td>${esc(s.name)}</td><td class="rep-cnt">${s.count}</td><td>${s.client||0}</td><td>${s.detailed||0}</td><td>${s.no_price||0}</td><td>${fmtDateTime(s.last_at)}</td></tr>`).join('')+
+      '</tbody></table><div class="ac-mt" style="margin-top:10px">إجمالي الملفات المصدَّرة: <b>'+total+'</b></div>'+note;
   }catch(_){ box.innerHTML='<div class="ac-empty">تعذّر التحميل</div>'; }
 }
 

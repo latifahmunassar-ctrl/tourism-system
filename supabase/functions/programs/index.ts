@@ -118,6 +118,8 @@ Deno.serve(async (req) => {
       const pdfVariant = String(body.pdf_variant || "client").trim();
       const totalGroup = Number(body.total_group);
       const persons = Number(body.persons);
+      // اسم الموظفة اللي صدّرت الـPDF (من alezz_staff_name بالمتصفح) — لتتبّع التصدير.
+      const createdBy = String(body.created_by || "").trim().slice(0, 120) || null;
 
       if (!raw) return json(400, { error: "raw مطلوب" });
       if (!destination) return json(400, { error: "destination مطلوب" });
@@ -141,6 +143,7 @@ Deno.serve(async (req) => {
         pdf_variant: pdfVariant,
         total_group: Number.isFinite(totalGroup) ? totalGroup : null,
         persons: Number.isFinite(persons) ? persons : null,
+        created_by: createdBy,
       });
 
       if (insErr) return json(500, { error: insErr.message });
