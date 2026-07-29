@@ -188,6 +188,9 @@ Deno.serve(async (req) => {
       }
       await supa.from("user_passkeys").update({ counter: verification.authenticationInfo.newCounter, last_used_at: new Date().toISOString() }).eq("id", key.id);
       await supa.from("app_users").update({ last_login_at: new Date().toISOString() }).eq("id", user.id);
+      // سجل دخول الموظفات: نكتب حدث دخول ناجح (اسم + جهاز + وقت) — للتتبّع التاريخي
+      // بلوحة التحكم. best-effort: لا نُفشل الدخول لو تعذّر الكتابة.
+      try { await supa.from("staff_login_log").insert({ user_id: user.id, name: user.name, device_label: key.device_label || null }); } catch (_e) { /* */ }
       // المستخدم أثبت هويته بالبصمة → نسلّمه مفتاح صندوق الطلبات تلقائياً
       // (نفس CLIENT_ADMIN_SECRET) فلا يُطلب منه إدخاله يدوياً.
       return json({ ok: true, user: { name: user.name, phone: user.phone }, admin_secret: Deno.env.get("CLIENT_ADMIN_SECRET") || "" });

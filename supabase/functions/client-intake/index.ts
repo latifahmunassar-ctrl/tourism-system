@@ -629,7 +629,7 @@ Deno.serve(async (req) => {
   if (adminAction) {
     // Company-account management is OWNER-only (separate private dashboard) and
     // uses COMPANIES_ADMIN_SECRET. The staff request inbox keeps CLIENT_ADMIN_SECRET.
-    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove", "staff_report", "pdf_report", "sec_overview", "sec_country_add", "sec_country_remove", "sec_enforce_set", "sec_device_trust", "sec_device_approve", "sec_device_remove", "sec_user_approve", "sec_user_suspend", "sec_user_remove", "sec_user_reset", "sec_user_device_approve"].includes(adminAction);
+    const ownerOnly = ["companies", "company_get", "company_update", "company_edit", "impersonate", "staff_add", "staff_remove", "staff_report", "pdf_report", "staff_login_report", "sec_overview", "sec_country_add", "sec_country_remove", "sec_enforce_set", "sec_device_trust", "sec_device_approve", "sec_device_remove", "sec_user_approve", "sec_user_suspend", "sec_user_remove", "sec_user_reset", "sec_user_device_approve"].includes(adminAction);
     // صندوق طلبات الشركات (عرض/بناء/إرسال) — محمي بكلمة الشركات (AA2026) أو مفتاح المالكة فقط،
     // لا يُفتح بمفتاح موظفي الأفراد العام، فيبقى مخفيًّا عن من يشتغل على الأفراد.
     const companyInbox = ["list", "get", "approve", "update_program", "duplicate"].includes(adminAction);
@@ -942,6 +942,29 @@ Deno.serve(async (req) => {
       }
       const report = Object.values(map).sort((a: any, b: any) => b.count - a.count);
       return json({ report, unattributed });
+    }
+
+    // سجل دخول الموظفات للمساعد السياحي: عدد مرات الدخول + آخر دخول + الجهاز لكل موظفة.
+    // المصدر staff_login_log (حدث لكل دخول بصمة ناجح). الحسابات بلا دخول تظهر بعدّاد 0.
+    if (adminAction === "staff_login_report") {
+      const from = url.searchParams.get("from") || "";
+      const to = url.searchParams.get("to") || "";
+      let q = supabase.from("staff_login_log").select("name, device_label, created_at").order("created_at", { ascending: false });
+      if (from) q = q.gte("created_at", from);
+      if (to) q = q.lte("created_at", to);
+      const { data } = await q.limit(20000);
+      const map: Record<string, any> = {};
+      for (const r of (data || []) as Array<any>) {
+        const k = String(r.name || "").trim() || "(بدون اسم)";
+        const m = map[k] || (map[k] = { name: k, count: 0, last_at: null, device: null });
+        m.count++;
+        if (!m.last_at || (r.created_at && r.created_at > m.last_at)) { m.last_at = r.created_at; m.device = r.device_label || null; }
+      }
+      // أدرج الموظفات المفعّلات بلا دخول في هذه الفترة (عدّاد 0) — يُظهر من لم يدخل.
+      const { data: users } = await supabase.from("app_users").select("name").eq("status", "active");
+      for (const u of (users || []) as Array<any>) { const k = String(u.name || "").trim(); if (k && !map[k]) map[k] = { name: k, count: 0, last_at: null, device: null }; }
+      const report = Object.values(map).sort((a: any, b: any) => b.count - a.count);
+      return json({ report });
     }
 
     // owner "view as company": mint a separate impersonation token + return it,
