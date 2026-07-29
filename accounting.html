@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 28يوليو-ج · تفاصيل العميل (Sales Form وغيرها) تعرض «الموظفة التي أكّدت مع العميل» (confirmed_by من First Client Data)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 28يوليو-د · الإشعارات الشرطية تُغلق نفسها عند تصحيح المصدر: تنبيه العملة يُغلق عند توحيدها أو حذف الخدمة (يكمل تنبيه التكلفة الأعلى الذي يُصحّح نفسه)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3254,8 +3254,12 @@ function renderAlerts(){
     }
     if(a.type==='booking_loss'){ continue; }   // النوع القديم يُتجاهَل — صار الحساب حيّاً
     const s=a.service_id?svcById[a.service_id]:null;
-    // حل فعلي فقط: لمّا تتوحّد العملة (عملة المورّد = عملة الحجز الفعلي) → تُغلق تلقائياً مع توثيق
-    if(s && s.booked_currency && s.currency && String(s.booked_currency)===String(s.currency)){
+    // 🔄 إغلاق تلقائي عند تصحيح المصدر:
+    if(a.service_id && !s){
+      // الخدمة المرتبطة حُذفت → التنبيه لم يعد سارياً
+      api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resolve_alert',payload:{id:a.id,resolution:'الخدمة المرتبطة حُذفت — التنبيه لم يعد سارياً'}})});
+    } else if(s && s.booked_currency && s.currency && String(s.booked_currency)===String(s.currency)){
+      // توحّدت العملة (عملة المورّد = عملة الحجز الفعلي) → تُغلق تلقائياً مع توثيق
       api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resolve_alert',payload:{id:a.id,resolution:'تم توحيد العملة على '+s.currency+' (تعديل فعلي في Sales/Booking Form)'}})});
     } else pend.push(a);
   }
