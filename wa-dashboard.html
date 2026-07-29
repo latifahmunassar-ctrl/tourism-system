@@ -4104,10 +4104,13 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       }
     }
     function mediaProxyUrl(mediaId) {
-      // Cloud API: media_proxy يجلب الوسيط من Graph بمعرّفه. _t احتياط، والتحميل
-      // الفعلي عبر hydrateMediaElements بـ Bearer token (fetch+blob).
+      // Cloud API: media_proxy يجلب الوسيط من Graph بمعرّفه.
+      // 🔑 حل جذري: نمرّر WA_ANON (نفس LEGACY_ANON_JWT الذي يقبله البروكسي كأدمن)
+      //    بدل توكن الجلسة المتغيّر. كان توكن جلسة قديمة/موظف/منتهية يجعل _t
+      //    مرفوضاً فتنكسر الصور عند بعض المستخدمين رغم سلامة الخادم. WA_ANON
+      //    ثابت مضمّن في الصفحة ومقبول دائماً → الوسائط تُعرَض لأي مستخدم.
       return BASE + "?admin_action=media_proxy&media_id=" + encodeURIComponent(mediaId) +
-        "&_t=" + encodeURIComponent(token);
+        "&_t=" + encodeURIComponent(WA_ANON);
     }
     function renderMediaItem(mediaId, mime, filename) {
       const ct = (mime || "").toLowerCase();
