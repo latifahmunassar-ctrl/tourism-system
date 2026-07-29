@@ -3515,7 +3515,9 @@ async function saveCurrentProgramOnce(pdfVariant, finalGroupPrice) {
         pdf_variant: pdfVariant,
         total_group: finalGroupPrice,
         persons: parsedData.persons || 1,
-        created_by: (localStorage.getItem('alezz_staff_name') || '').trim()
+        // هوية الدخول الحقيقية (بصمة كل موظفة) أولاً — غير قابلة للتزوير؛
+        // القائمة اليدوية (alezz_staff_name) احتياط فقط لو غابت الهوية.
+        created_by: (localStorage.getItem('alezz_user_name') || localStorage.getItem('alezz_staff_name') || '').trim()
       })
     });
     const data = await res.json().catch(async () => {
