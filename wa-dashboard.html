@@ -2,6 +2,10 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
+  <!-- منع الكاش: يُجبر المتصفح على تحميل أحدث نسخة دائماً (لا نسخة قديمة عالقة) -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>لوحة تحكم ALEZZ Tourism</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -4109,14 +4113,16 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       const ct = (mime || "").toLowerCase();
       const url = mediaProxyUrl(mediaId);
       const id = "media_" + mediaId;
+      // تحميل مباشر عبر src (مصادقة _t في الرابط) — أمتن من fetch+blob الذي
+      // تحجبه بعض المتصفحات/الإعدادات. data-media-loaded=1 يمنع hydrate من إعادة الجلب.
       if (ct.startsWith("image/")) {
-        return `<div class="conv-media"><img id="${id}" data-media-url="${escapeHtml(url)}" data-clickable-image="1" alt="📷 صورة" title="اضغطي للتكبير" style="max-width:280px; max-height:280px; border-radius:8px; display:block; background:#f3f4f6; cursor:zoom-in;" /></div>`;
+        return `<div class="conv-media"><img id="${id}" src="${escapeHtml(url)}" data-media-url="${escapeHtml(url)}" data-media-loaded="1" data-clickable-image="1" alt="📷 صورة" title="اضغطي للتكبير" loading="lazy" style="max-width:280px; max-height:280px; border-radius:8px; display:block; background:#f3f4f6; cursor:zoom-in;" /></div>`;
       }
       if (ct.startsWith("video/")) {
-        return `<div class="conv-media"><video id="${id}" data-media-url="${escapeHtml(url)}" controls style="max-width:280px; border-radius:8px;"></video></div>`;
+        return `<div class="conv-media"><video id="${id}" src="${escapeHtml(url)}" data-media-url="${escapeHtml(url)}" data-media-loaded="1" controls preload="metadata" style="max-width:280px; border-radius:8px;"></video></div>`;
       }
       if (ct.startsWith("audio/")) {
-        return `<div class="conv-media"><audio id="${id}" data-media-url="${escapeHtml(url)}" controls></audio></div>`;
+        return `<div class="conv-media"><audio id="${id}" src="${escapeHtml(url)}" data-media-url="${escapeHtml(url)}" data-media-loaded="1" controls preload="metadata"></audio></div>`;
       }
       const label = ct === "application/pdf" ? "📄 ملف PDF" : "📎 ملف مرفق";
       const fn = filename ? (" — " + escapeHtml(filename)) : "";
