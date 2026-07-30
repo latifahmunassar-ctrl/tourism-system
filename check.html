@@ -1,0 +1,47 @@
+<!doctype html><html lang="ar" dir="rtl"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0">
+<title>فحص الاتصال بالخادم</title>
+<style>
+body{font-family:-apple-system,'Segoe UI',Tahoma,sans-serif;background:#0f172a;color:#e2e8f0;margin:0;padding:18px;font-size:16px}
+h1{font-size:20px}
+.card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:14px;margin:10px 0}
+.big{font-size:22px;font-weight:800;padding:14px;border-radius:12px;text-align:center;margin:12px 0}
+.pass{background:#052e16;color:#4ade80;border:2px solid #16a34a}
+.fail{background:#450a0a;color:#fca5a5;border:2px solid #dc2626}
+.wait{background:#422006;color:#fdba74;border:2px solid #d97706}
+.k{color:#94a3b8;font-size:13px}
+.v{font-weight:700;word-break:break-all}
+img{max-width:220px;border:2px solid #334155;border-radius:8px;display:block;margin-top:8px;background:#0b1220}
+</style></head><body>
+<h1>🔧 فحص الاتصال بخادم النظام</h1>
+<div id="verdict" class="big wait">⏳ جارٍ الفحص… انتظري ثوانٍ</div>
+<div class="card"><div class="k">١) الوصول لصفحة الخادم أصلاً (بدون توكن):</div><div class="v" id="t0">…</div></div>
+<div class="card"><div class="k">٢) جلب المحادثات (dashboard_data بترويسة):</div><div class="v" id="t1">…</div></div>
+<div class="card"><div class="k">٣) جلب صورة فاطمة (بترويسة):</div><div class="v" id="t2">…</div><img id="im" alt="" style="display:none"></div>
+<div class="card"><div class="k">حالة الشبكة بالمتصفح (navigator.onLine):</div><div class="v" id="net">…</div></div>
+<div class="card"><div class="k">المتصفح:</div><div class="v" id="ua">…</div></div>
+<script>
+const BASE="https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/WhatsApp-Router";
+const TOK="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mb3R2YWNzemxtcnF4emZqbXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2MjI5NTYsImV4cCI6MjA5MzE5ODk1Nn0.1nQmxW63BFZSK-cn4fzh8tYM7a2JO10AQ0RGQ5bcdYo";
+const set=(id,t)=>document.getElementById(id).textContent=t;
+set("net", navigator.onLine ? "متصل ✅" : "غير متصل ❌");
+set("ua", navigator.userAgent);
+let ok0=false, ok1=false, ok2=false;
+async function run(){
+  // 1) اتصال أساسي بالخادم
+  try{ const t=Date.now(); const r=await fetch(BASE+"?admin_action=ping",{method:"GET"}); ok0=true; set("t0","وصل الخادم ✅ (رمز "+r.status+"، "+(Date.now()-t)+"ms)"); }
+  catch(e){ set("t0","فشل الوصول ❌ — "+(e.message||e)); }
+  // 2) المحادثات
+  try{ const t=Date.now(); const r=await fetch(BASE+"?admin_action=dashboard_data",{headers:{Authorization:"Bearer "+TOK}}); if(!r.ok) throw new Error("رمز "+r.status); const d=await r.json(); const n=(d.conversations||[]).length; ok1=n>0; set("t1","نجح ✅ — رجع "+n+" محادثة ("+(Date.now()-t)+"ms)"); }
+  catch(e){ set("t1","فشل ❌ — "+(e.message||e)); }
+  // 3) صورة
+  try{ const t=Date.now(); const r=await fetch(BASE+"?admin_action=media_proxy&media_id=1368360641478211",{headers:{Authorization:"Bearer "+TOK}}); if(!r.ok) throw new Error("رمز "+r.status); const b=await r.blob(); ok2=b.size>0; const im=document.getElementById("im"); im.src=URL.createObjectURL(b); im.style.display="block"; set("t2","نجح ✅ — صورة "+Math.round(b.size/1024)+"KB، تظهر تحت ("+(Date.now()-t)+"ms)"); }
+  catch(e){ set("t2","فشل ❌ — "+(e.message||e)); }
+  const v=document.getElementById("verdict");
+  if(ok0&&ok1&&ok2){ v.className="big pass"; v.textContent="✅ الاتصال بالخادم سليم تماماً عندك — الصور تصل"; }
+  else if(!ok0&&!ok1&&!ok2){ v.className="big fail"; v.textContent="❌ جهازك لا يصل لخادم supabase إطلاقاً — الحجب في كروم/الجهاز أو الشبكة"; }
+  else { v.className="big fail"; v.textContent="⚠️ اتصال جزئي — التفاصيل بالأعلى، صوّري الشاشة وأرسليها"; }
+}
+run();
+</script></body></html>
