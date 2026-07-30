@@ -1791,6 +1791,13 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     // verify_jwt=false على الدالة، لكن نمرّر anon JWT صالح احتياطاً.
     const WEBAUTHN_URL = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/webauthn";
     const WA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mb3R2YWNzemxtcnF4emZqbXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2MjI5NTYsImV4cCI6MjA5MzE5ODk1Nn0.1nQmxW63BFZSK-cn4fzh8tYM7a2JO10AQ0RGQ5bcdYo";
+    // 🔧 شفاء ذاتي لتوكن الأدمن: توكن الأدمن هو WA_ANON نفسه (هذا ما يعيده admin_login).
+    //   لو التخزين فاضٍ/قديم/منتهي والدور «أدمن»، نستخدم WA_ANON مباشرة — فتشتغل قراءة
+    //   المحادثات والمرفقات (كانت ترجع 401 مع توكن جلسة خربان فتظهر الشاشة فارغة).
+    if ((localStorage.getItem(ROLE_KEY) || "admin") === "admin" && token !== WA_ANON) {
+      token = WA_ANON;
+      try { localStorage.setItem(STORAGE_KEY, WA_ANON); } catch (_e) { /* تجاهل */ }
+    }
     const wpReq = async (b) => (await fetch(WEBAUTHN_URL, { method: "POST", headers: { "Content-Type": "application/json", "apikey": WA_ANON, "Authorization": "Bearer " + WA_ANON }, body: JSON.stringify(b) })).json();
     function waDeviceToken() {
       let t = localStorage.getItem("alezz_wa_device_token");
