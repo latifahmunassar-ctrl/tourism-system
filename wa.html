@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20260730a -->
+<!-- APPVER:20260730b -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -943,6 +943,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           <option value="instagram">📸 إعلان إنستقرام</option>
           <option value="facebook">👍 إعلان فيسبوك/ماسنجر</option>
           <option value="meta">📢 إعلان ميتا (أخرى)</option>
+          <option value="tiktok">🎵 تيك توك</option>
           <option value="google">🔍 Google Ads</option>
           <option value="link">🔗 حملة رابط</option>
           <option value="direct">💬 مباشر</option>
@@ -1805,7 +1806,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260730a";
+    const APPVER = "20260730b";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -2845,7 +2846,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if (filterSource) {
           const _src = c.source || { kind: "direct", platform: "direct" };
           const _plat = _src.platform || _src.kind || "direct";
-          if (filterSource === "any_ad") { if (_src.kind !== "ad" && _src.kind !== "campaign") return false; }
+          if (filterSource === "any_ad") { if (_src.kind !== "ad" && _src.kind !== "campaign" && _src.kind !== "tiktok") return false; }
           else if (_plat !== filterSource) return false;
         }
         if (complaintPhones && !complaintPhones.has(c.phone)) return false;
@@ -3251,9 +3252,10 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if (c.source && c.source.kind) {
           const S = c.source;
           const sc = S.kind === "ad" ? { bg:"#fce7f3", c:"#9d174d" }
+            : S.kind === "tiktok" ? { bg:"#111827", c:"#22d3ee" }
             : S.kind === "campaign" ? { bg:"#dcfce7", c:"#166534" }
             : { bg:"#eef2f7", c:"#475569" };
-          const ic = S.kind === "ad" ? "📢" : S.kind === "campaign" ? "🔗" : "💬";
+          const ic = S.kind === "ad" ? "📢" : S.kind === "tiktok" ? "🎵" : S.kind === "campaign" ? "🔗" : "💬";
           tags.push(`<span class="pill" style="background:${sc.bg};color:${sc.c};font-weight:800;" title="${escapeHtml(S.detail || S.label)}">${ic} ${escapeHtml(S.label)}</span>`);
         }
         // تصنيف يدوي ثابت (عاجل/متابعة) — أول وسم ليبان بسرعة
@@ -3798,6 +3800,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       let _srcBadge = "";
       if (_cvSrc && _cvSrc.kind) {
         const sc = _cvSrc.kind === "ad" ? { bg:"#fce7f3", c:"#9d174d", ic:"📢" }
+          : _cvSrc.kind === "tiktok" ? { bg:"#111827", c:"#22d3ee", ic:"🎵" }
           : _cvSrc.kind === "campaign" ? { bg:"#dcfce7", c:"#166534", ic:"🔗" }
           : { bg:"#eef2f7", c:"#475569", ic:"💬" };
         _srcBadge = ` <span style="background:${sc.bg};color:${sc.c};border-radius:20px;padding:2px 9px;font-size:11px;font-weight:800;" title="${escapeHtml(_cvSrc.detail || "")}">${sc.ic} ${escapeHtml(_cvSrc.label)}</span>`;

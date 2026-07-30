@@ -3651,6 +3651,11 @@ Deno.serve(async (req) => {
         }
         const b = (firstBody || "").trim();
         if (b) {
+          // تيك توك: لا يرسل مصدراً تلقائياً كميتا، فنكشفه من رسالة wa.me المميّزة
+          //   التي يفتحها إعلان تيك توك (تحوي «تيك توك» أو tiktok أو الوسم TT-AD).
+          if (/تيك\s?توك|tiktok|tik\s?tok|TT-AD/i.test(b)) {
+            return { kind: "tiktok", platform: "tiktok", label: "تيك توك", detail: b.slice(0, 60) };
+          }
           // Google Ads → رابط wa.me من إعلان جوجل؛ يُكشَف من مُعرِّف gclid أو كلمة google
           // في النص المُعبّأ (لو الإعلان يستخدم رسالة جاهزة مميّزة). خلاف ذلك: حملة رابط عامة.
           if (/gclid|google|جوجل/i.test(b)) {
