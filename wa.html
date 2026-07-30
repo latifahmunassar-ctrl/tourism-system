@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- APPVER:20260730a -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1799,6 +1800,27 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       try { localStorage.setItem(STORAGE_KEY, WA_ANON); } catch (_e) { /* تجاهل */ }
     }
     const wpReq = async (b) => (await fetch(WEBAUTHN_URL, { method: "POST", headers: { "Content-Type": "application/json", "apikey": WA_ANON, "Authorization": "Bearer " + WA_ANON }, body: JSON.stringify(b) })).json();
+
+    // ── 🔄 تحديث تلقائي: يمنع نهائياً عرض نسخة قديمة عالقة في كاش المتصفح ──
+    //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
+    //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
+    //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
+    const APPVER = "20260730a";
+    (function autoUpdate() {
+      try {
+        fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
+          .then(r => r.ok ? r.text() : Promise.reject())
+          .then(txt => {
+            const m = txt.match(/APPVER:([0-9a-z.\-]+)/);
+            const fresh = m && m[1];
+            if (fresh && fresh !== APPVER && sessionStorage.getItem("wa_upd_to") !== fresh) {
+              sessionStorage.setItem("wa_upd_to", fresh); // حارس ضد الحلقة
+              location.replace(location.pathname + "?v=" + encodeURIComponent(fresh));
+            }
+          })
+          .catch(() => { /* لو فشل الفحص، الداشبورد يكمل عادي */ });
+      } catch (_e) { /* تجاهل */ }
+    })();
     function waDeviceToken() {
       let t = localStorage.getItem("alezz_wa_device_token");
       if (!t || t.length < 16) { t = (self.crypto && crypto.randomUUID) ? crypto.randomUUID() : ("wad-" + Date.now() + "-" + Math.random().toString(36).slice(2)); localStorage.setItem("alezz_wa_device_token", t); }
