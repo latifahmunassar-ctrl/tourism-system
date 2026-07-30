@@ -6019,12 +6019,14 @@ Deno.serve(async (req) => {
       type MediaRow = { media_id?: string | null; media_mime?: string | null; media_filename?: string | null };
 
       // الوارد: رسائل العميل من سجل التدقيق (مصدرنا بعد الهجرة لـ Cloud API).
+      // نجلب الأحدث (descending) ثم نرتّب تصاعدياً لاحقاً — وإلا في المحادثات
+      // الطويلة (>200) كان يجلب أقدم 200 ويُسقط رسائل اليوم فلا تظهر بالداشبورد.
       const { data: inbound } = await supabase
         .from("wa_message_audit")
         .select("id, body, received_at, media_id, media_mime, media_filename")
         .eq("from_phone", phone)
-        .order("received_at", { ascending: true })
-        .limit(200);
+        .order("received_at", { ascending: false })
+        .limit(400);
       for (const m of (inbound as Array<{ id: string; body: string | null; received_at: string } & MediaRow> | null) ?? []) {
         items.push({ ts: m.received_at, body: m.body || "", sender: "customer", sid: String(m.id),
           media_id: m.media_id || null, media_mime: m.media_mime || null, media_filename: m.media_filename || null });
@@ -6035,8 +6037,8 @@ Deno.serve(async (req) => {
         .from("wa_admin_messages")
         .select("id, body, sent_at, sent_by, media_id, media_mime, media_filename")
         .eq("customer_phone", phone)
-        .order("sent_at", { ascending: true })
-        .limit(200);
+        .order("sent_at", { ascending: false })
+        .limit(400);
       for (const m of (outbound as Array<{ id: string; body: string | null; sent_at: string; sent_by: string | null } & MediaRow> | null) ?? []) {
         items.push({ ts: m.sent_at, body: m.body || "", sender: m.sent_by || "ai", sid: String(m.id),
           media_id: m.media_id || null, media_mime: m.media_mime || null, media_filename: m.media_filename || null });

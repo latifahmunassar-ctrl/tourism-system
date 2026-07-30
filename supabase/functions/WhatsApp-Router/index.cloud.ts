@@ -4089,6 +4089,27 @@ Deno.serve(async (req) => {
         if (unanswered) { unansweredBy[ph] = (unansweredBy[ph] || 0) + 1; if (lop >= lm) unansweredSeenBy[ph] = (unansweredSeenBy[ph] || 0) + 1; }
       }
 
+      // ── قياس النشاط الفعلي لكل يوم (لتمييز «شغّالة فعلاً» عن «دخلت بلا عمل») ──
+      const omanDay = (iso: string) => new Date(Date.parse(iso) + 4 * 3600 * 1000).toISOString().slice(0, 10);
+      const nameToPhone = new Map(staffRows.map(s => [s.name, s.phone]));
+      // رسائل الموظفة لكل يوم + مجموعة العملاء الذين ردّت عليهم لكل يوم
+      const msgsByNameDay = new Map<string, Map<string, number>>();
+      const repliedByPhoneDay = new Map<string, Map<string, Set<string>>>();
+      for (const o of outs) {
+        const day = omanDay(o.sent_at);
+        let m = msgsByNameDay.get(o.sent_by); if (!m) { m = new Map(); msgsByNameDay.set(o.sent_by, m); }
+        m.set(day, (m.get(day) || 0) + 1);
+        const ph = nameToPhone.get(o.sent_by);
+        if (ph) { let d = repliedByPhoneDay.get(ph); if (!d) { d = new Map(); repliedByPhoneDay.set(ph, d); } let set = d.get(day); if (!set) { set = new Set(); d.set(day, set); } set.add(o.customer_phone); }
+      }
+      // إسناد العملاء للموظفين (لقطة حالية) + وارد كل (موظف، يوم)
+      const assignStaffByCust = new Map<string, string>();
+      for (const w of ((wsRes.data || []) as Array<{ phone: string; assigned_staff_phone: string | null }>)) { if (w.assigned_staff_phone) assignStaffByCust.set(w.phone, w.assigned_staff_phone); }
+      const inboundByPhoneDay = new Map<string, Map<string, Set<string>>>();
+      for (const m of ins) { const ph = assignStaffByCust.get(m.from_phone); if (!ph) continue; const day = omanDay(m.received_at); let d = inboundByPhoneDay.get(ph); if (!d) { d = new Map(); inboundByPhoneDay.set(ph, d); } let set = d.get(day); if (!set) { set = new Set(); d.set(day, set); } set.add(m.from_phone); }
+      // عملاء راسلوها ذلك اليوم ولم تُردّ عليهم نفس اليوم
+      const unansweredOn = (phone: string, day: string): number => { const inb = inboundByPhoneDay.get(phone)?.get(day); if (!inb || inb.size === 0) return 0; const rep = repliedByPhoneDay.get(phone)?.get(day) || new Set<string>(); let n = 0; for (const c of inb) if (!rep.has(c)) n++; return n; };
+
       const report = staffRows.map(s => {
         const ss = sessions.filter(x => x.staff_phone === s.phone);
         let active = 0, idle = 0; const days = new Set<string>();
@@ -4137,20 +4158,26 @@ Deno.serve(async (req) => {
         // أيام العمل المتوقّعة في الفترة (حسب أيام عمله المحدّدة).
         const wdSet = (s.work_days && s.work_days.length) ? new Set(s.work_days) : null;
         const expectedDays = wdSet ? windowDates.filter(d => wdSet.has(d.dow)).length : null;
-        // ⚠️ الغياب يُحسب فقط لأيام العمل **المنقضية** (قبل اليوم) بلا حضور. لا نحسب **اليوم الجاري**
-        // غياباً لأنه ما زال بإمكانها تسجيل الحضور فيه (خصوصاً الفترة المسائية للدوام المقسوم).
-        const expectedPast = wdSet ? windowDates.filter(d => wdSet.has(d.dow) && d.ds < todayStrOman).length : null;
-        const presentPast = [...days].filter(ds => ds < todayStrOman).length;
-        const absenceDays = (expectedPast != null) ? Math.max(0, expectedPast - presentPast) : null;
+        // ⚠️ الغياب = أيام العمل المجدولة **المنقضية** (قبل اليوم) بلا أي حضور — نُدرج تواريخها في السجل.
+        // لا نحسب اليوم الجاري غياباً (ما زال بإمكانها الحضور، خصوصاً الفترة المسائية للدوام المقسوم).
+        const absentDates = wdSet ? windowDates.filter(d => wdSet.has(d.dow) && d.ds < todayStrOman && !days.has(d.ds)).map(d => d.ds) : [];
+        const absenceDays = wdSet ? absentDates.length : null;
         // الالتزام = النشاط الفعلي مقابل ساعات الدوام المتوقّعة. الأساس: عدد أيام
         // العمل المتوقّعة (يعاقب الغياب) إن حُدّدت أيام العمل، وإلا أيام الحضور.
         const baseDays = (expectedDays != null) ? expectedDays : days.size;
         const expected = (shiftSec != null) ? shiftSec * baseDays : 0;
         const compliance = expected > 0 ? Math.min(100, Math.round((active / expected) * 100)) : (total > 0 ? Math.round((active / total) * 100) : 0);
         const avgLate = lateCnt ? Math.round(lateSum / lateCnt) : null;
-        return { phone: s.phone, name: s.name, status: liveStatus, check_in_at: checkIn, check_out_at: checkOut, last_activity_at: lastAct, active_seconds: active, idle_seconds: idle, total_seconds: total, days_present: days.size, messages, clients, avg_response_seconds: avgResp, compliance, shift_start: s.shift_start || null, shift_end: s.shift_end || null, shift_start2: s.shift_start2 || null, shift_end2: s.shift_end2 || null, work_days: s.work_days || null, expected_days: expectedDays, absence_days: absenceDays, expected_seconds: expected, avg_late_seconds: avgLate, schedule_based: expected > 0, confirmed_bookings: confirmedBy[s.phone] || 0, unanswered: unansweredBy[s.phone] || 0, unanswered_seen: unansweredSeenBy[s.phone] || 0,
+        return { phone: s.phone, name: s.name, status: liveStatus, check_in_at: checkIn, check_out_at: checkOut, last_activity_at: lastAct, active_seconds: active, idle_seconds: idle, total_seconds: total, days_present: days.size, messages, clients, avg_response_seconds: avgResp, compliance, shift_start: s.shift_start || null, shift_end: s.shift_end || null, shift_start2: s.shift_start2 || null, shift_end2: s.shift_end2 || null, work_days: s.work_days || null, expected_days: expectedDays, absence_days: absenceDays, absent_dates: absentDates, expected_seconds: expected, avg_late_seconds: avgLate, schedule_based: expected > 0, confirmed_bookings: confirmedBy[s.phone] || 0, unanswered: unansweredBy[s.phone] || 0, unanswered_seen: unansweredSeenBy[s.phone] || 0,
           // سجل الدخول/الخروج المفصّل لكل جلسة (ضمن الفترة المختارة) — الأحدث أولاً
-          sessions: ss.map((x) => ({ work_date: x.work_date, check_in_at: x.check_in_at, check_out_at: x.check_out_at, active_seconds: x.active_seconds, idle_seconds: x.idle_seconds })).sort((a, b) => String(b.check_in_at).localeCompare(String(a.check_in_at))) };
+          sessions: ss.map((x) => {
+            const day = omanDay(x.check_in_at);
+            const msgs = msgsByNameDay.get(s.name)?.get(day) || 0;
+            const unans = unansweredOn(s.phone, day);
+            const activeThresh = shiftSec ? shiftSec * 0.5 : 3600;   // «شغّالة فعلاً» = نشاط ≥ نصف الدوام + رسالة واحدة على الأقل
+            const working = x.active_seconds >= activeThresh && msgs >= 1;
+            return { work_date: x.work_date, check_in_at: x.check_in_at, check_out_at: x.check_out_at, active_seconds: x.active_seconds, idle_seconds: x.idle_seconds, messages: msgs, unanswered: unans, day_status: working ? "active" : "weak" };
+          }).sort((a, b) => String(b.check_in_at).localeCompare(String(a.check_in_at))) };
       });
       report.sort((a, b) => b.active_seconds - a.active_seconds);
       return new Response(JSON.stringify({ ok: true, is_admin: isAdmin, range, from: fromIso, to: toIso, report }), { headers: jsonCors });
@@ -5952,12 +5979,14 @@ Deno.serve(async (req) => {
       type MediaRow = { media_id?: string | null; media_mime?: string | null; media_filename?: string | null };
 
       // الوارد: رسائل العميل من سجل التدقيق (مصدرنا بعد الهجرة لـ Cloud API).
+      // نجلب الأحدث (descending) ثم نرتّب تصاعدياً لاحقاً — وإلا في المحادثات
+      // الطويلة (>200) كان يجلب أقدم 200 ويُسقط رسائل اليوم فلا تظهر بالداشبورد.
       const { data: inbound } = await supabase
         .from("wa_message_audit")
         .select("id, body, received_at, media_id, media_mime, media_filename")
         .eq("from_phone", phone)
-        .order("received_at", { ascending: true })
-        .limit(200);
+        .order("received_at", { ascending: false })
+        .limit(400);
       for (const m of (inbound as Array<{ id: string; body: string | null; received_at: string } & MediaRow> | null) ?? []) {
         items.push({ ts: m.received_at, body: m.body || "", sender: "customer", sid: String(m.id),
           media_id: m.media_id || null, media_mime: m.media_mime || null, media_filename: m.media_filename || null });
@@ -5968,8 +5997,8 @@ Deno.serve(async (req) => {
         .from("wa_admin_messages")
         .select("id, body, sent_at, sent_by, media_id, media_mime, media_filename")
         .eq("customer_phone", phone)
-        .order("sent_at", { ascending: true })
-        .limit(200);
+        .order("sent_at", { ascending: false })
+        .limit(400);
       for (const m of (outbound as Array<{ id: string; body: string | null; sent_at: string; sent_by: string | null } & MediaRow> | null) ?? []) {
         items.push({ ts: m.sent_at, body: m.body || "", sender: m.sent_by || "ai", sid: String(m.id),
           media_id: m.media_id || null, media_mime: m.media_mime || null, media_filename: m.media_filename || null });
@@ -6359,13 +6388,22 @@ Deno.serve(async (req) => {
             }
           }
           const media_id = mediaObj ? String(mediaObj.id || "") : "";
-          // تشخيص: مرفق غير نصّي بلا وسيط — نسجّل النوع والمفاتيح لمعرفة السبب.
-          if (!isText && !media_id) { try { console.log("UNHANDLED_MEDIA type=" + t + " keys=" + Object.keys(m || {}).join(",")); } catch (_) { /* */ } }
+          // خطأ Meta لنوع غير مدعوم (view-once، حالة/منشور مُعاد توجيهه، نوع لا يُسلَّم للـAPI).
+          const metaErrTitle = (Array.isArray(m?.errors) && m.errors[0] && typeof m.errors[0] === "object")
+            ? String((m.errors[0] as Record<string, unknown>).title || "") : "";
+          // تشخيص: مرفق غير نصّي بلا وسيط — نسجّل النوع والخطأ والمفاتيح لمعرفة السبب.
+          if (!isText && !media_id) { try { console.log("UNHANDLED_MEDIA type=" + t + " err=" + metaErrTitle + " keys=" + Object.keys(m || {}).join(",")); } catch (_) { /* */ } }
           const media_mime = mediaObj ? String(mediaObj.mime_type || "") : "";
           const media_filename = mediaObj ? String(mediaObj.filename || "") : "";
           const caption = mediaObj ? String(mediaObj.caption || "") : "";
           const b = isText ? String(m?.text?.body || "") : caption;
-          const media_label = (!isText) ? (mediaLabels[t] || "📎 مرفق") : "";
+          // نوع معروف (أو فيه وسيط قابل للتنزيل) → تسمية النوع.
+          // نوع غير مدعوم بلا وسيط (view-once/حالة مُعاد توجيهها/نوع لا يُسلَّم) → رسالة واضحة للموظفة بدل «📎 مرفق» الغامض.
+          let media_label = "";
+          if (!isText) {
+            if (mediaLabels[t] || media_id) media_label = mediaLabels[t] || "📎 مرفق";
+            else media_label = "⚠️ أرسل العميل مرفقاً لا يدعمه واتساب (يُعرض مرة واحدة/مُعاد توجيهه) — اطلبي منه إعادة إرساله كصورة أو ملف PDF";
+          }
           const nm = (!isText) ? 1 : 0;
           // إعلان «اضغط للمحادثة» (إنستقرام/فيسبوك): واتساب يرسل referral مع أول رسالة.
           const referral = (m?.referral && typeof m.referral === "object") ? m.referral as Record<string, unknown> : null;
