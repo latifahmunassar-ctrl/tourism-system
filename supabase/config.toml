@@ -31,3 +31,9 @@ verify_jwt = false
 # verification (+ device approval for staff), so platform JWT check is unneeded.
 [functions.webauthn]
 verify_jwt = false
+
+# Meta (Instagram) sends webhook events WITHOUT a JWT. The function verifies the
+# GET subscription via IG_VERIFY_TOKEN and only writes inbound messages via
+# service role, so disabling platform JWT verification is required and safe.
+[functions.instagram-webhook]
+verify_jwt = false
