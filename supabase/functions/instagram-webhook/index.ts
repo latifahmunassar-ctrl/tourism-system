@@ -11,8 +11,77 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// CORS لواجهة داشبورد الواتساب (madartrip.com) عند قراءة المحادثات.
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-admin-secret",
+  "Cache-Control": "no-store",
+};
+const json = (b: unknown, s = 200) =>
+  new Response(JSON.stringify(b), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
+
+// بوابة القراءة الإدارية: نقبل مفتاح صندوق الطلبات (CLIENT_ADMIN_SECRET) أو كلمة
+// البوابة المشتركة (APP_PASSWORD) — نفس ما يخزّنه داشبورد الواتساب في alezz_admin_secret.
+function adminOk(req: Request): boolean {
+  const got = (req.headers.get("x-admin-secret") || "").trim();
+  if (!got) return false;
+  const a = (Deno.env.get("CLIENT_ADMIN_SECRET") || "").trim();
+  const b = (Deno.env.get("APP_PASSWORD") || "").trim();
+  return (!!a && got === a) || (!!b && got === b);
+}
+
 Deno.serve(async (req) => {
   const url = new URL(req.url);
+  if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+
+  const supaRead = () => createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+
+  // ── قراءة إدارية: قائمة المحادثات / سجل محادثة واحدة (لداشبورد الواتساب) ──
+  const action = url.searchParams.get("action");
+  if (action === "conversations" || action === "conversation") {
+    if (!adminOk(req)) return json({ error: "unauthorized" }, 401);
+    const supabase = supaRead();
+    const { data: accts } = await supabase.from("ig_accounts").select("ig_account_id, username, country");
+    const acctMap: Record<string, { username: string; country: string }> = {};
+    for (const a of (accts || []) as Array<any>) acctMap[a.ig_account_id] = { username: a.username, country: a.country };
+
+    // سجل محادثة واحدة (كل الرسائل بين عميل وحساب، تصاعدياً).
+    if (action === "conversation") {
+      const sender = String(url.searchParams.get("sender") || "");
+      const acct = String(url.searchParams.get("account") || "");
+      if (!sender || !acct) return json({ error: "sender & account required" }, 400);
+      const { data: msgs } = await supabase.from("instagram_messages")
+        .select("id, sender_igsid, recipient_id, message_text, direction, sent_at, created_at")
+        .eq("ig_account_id", acct).eq("sender_igsid", sender)
+        .order("created_at", { ascending: true }).limit(500);
+      return json({ ok: true, account: { ig_account_id: acct, ...(acctMap[acct] || {}) }, sender_igsid: sender, messages: msgs || [] });
+    }
+
+    // قائمة المحادثات: تُجمَّع بـ (الحساب + المُرسِل)، الأحدث أولاً، مفصولة بالحساب/الدولة.
+    const { data: rows } = await supabase.from("instagram_messages")
+      .select("ig_account_id, sender_igsid, message_text, direction, created_at")
+      .order("created_at", { ascending: false }).limit(3000);
+    const conv: Record<string, any> = {};
+    for (const r of (rows || []) as Array<any>) {
+      const key = r.ig_account_id + "|" + r.sender_igsid;
+      let c = conv[key];
+      if (!c) {
+        const a = acctMap[r.ig_account_id] || { username: r.ig_account_id, country: "" };
+        c = conv[key] = {
+          ig_account_id: r.ig_account_id, username: a.username, country: a.country,
+          sender_igsid: r.sender_igsid, last_text: r.message_text, last_at: r.created_at,
+          last_direction: r.direction, count: 0,
+        };
+      }
+      c.count++;   // rows تنازلية: أول ما نشوف المفتاح = الأحدث (فنثبّت last_*)
+    }
+    const conversations = Object.values(conv).sort((a: any, b: any) => (a.last_at < b.last_at ? 1 : -1));
+    return json({ ok: true, accounts: accts || [], conversations });
+  }
 
   // ── GET: تحقق الاشتراك من ميتا ──
   if (req.method === "GET") {
