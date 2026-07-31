@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 28يوليو-و · رقم الجوال صار إجبارياً فعلاً في شاشة إضافة عميل جديد (كان بلا تحقّق فيُحفظ فارغاً) — نجمة + رفض الحفظ بلا جوال</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 31يوليو-أ · الخدمات الإضافية (سرير/إطلالة إضافية) المُدخلة نوعها other لكن مصدرها فندق صارت تظهر في كشف ذلك الفندق ضمن مستحقاته (كانت تختفي من كل الكشوف)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2073,6 +2073,10 @@ function renderBooking(){
 //  فندق → قائمة Hotels/System · مواصلات/جولة/تأشيرة/أخرى → قائمة الموردين · طيران → الموردين مؤقتاً (تُحدّد لاحقاً)
 // كشف النوع نصّياً (القائمة مُدارة، فقد تكون القيم عربية أو أكواد قديمة)
 function sIsHotel(k){ return /فندق|hotel/i.test(String(k||'')); }
+// 🏨 هل مصدر حجز الخدمة فندق؟ (من قائمة hotels_system) — لضمّ الخدمات الإضافية (سرير/إطلالة إضافية) المُدخلة كـ other/tour لكن مصدرها فندق إلى كشف ذلك الفندق. يُستبعَد الازدواج لأن تبويب الموردين يستبعد أسماء الفنادق أصلاً.
+let _HOTEL_NAMESET=null,_HOTEL_NAMESET_SRC=null;
+function hotelNameSet(){ const L=(DATA&&DATA.lists)||[]; if(_HOTEL_NAMESET&&_HOTEL_NAMESET_SRC===L)return _HOTEL_NAMESET; _HOTEL_NAMESET=new Set(L.filter(l=>l.category==='hotels_system').map(l=>String(l.value||'').trim().toLowerCase().replace(/\s+/g,' ')).filter(Boolean)); _HOTEL_NAMESET_SRC=L; return _HOTEL_NAMESET; }
+function sHotelSourceLine(s){ if(!s)return false; if(sIsHotel(s.kind))return true; const bf=String(s.booked_from||'').trim().toLowerCase().replace(/\s+/g,' '); return !!(bf&&hotelNameSet().has(bf)); }
 function sIsFlight(k){ return /طيران|flight/i.test(String(k||'')); }
 // تعبئة قائمة «Service Type» في فورم السيلز من القائمة المُدارة (sales_service_type) — مع افتراضي احتياطي
 function fillSalesTypes(){
@@ -2500,7 +2504,7 @@ function hotelBookingsAll(){
   const dashConf=new Set(); (DATA.serviceLines||[]).forEach(s=>{ if(s.source!=='dashboard'||!sIsHotel(s.kind))return; const cn=String(s.conf_no||'').trim().toUpperCase(); if(cn)dashConf.add((s.client_code||'').toUpperCase()+'|'+cn); });
   const base=(DATA.hotelBookings||[]).filter(h=>{ const cn=String(h.conf_no||'').trim().toUpperCase(); if(!cn)return true; return !dashConf.has((h.client_code||'').toUpperCase()+'|'+cn); });
   const fm={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!fm[c])fm[c]={name:'',agent:'',cur:'',arr:'',conf:'',pr:0,paid:0}; const o=fm[c]; if(r.client_name&&!o.name)o.name=r.client_name; if(r.agent_name&&!o.agent)o.agent=r.agent_name; if(r.currency&&!o.cur)o.cur=r.currency; if(r.arrival_date&&!o.arr)o.arr=r.arrival_date; if(r.conf_status&&!o.conf)o.conf=r.conf_status; o.pr+=Number(r.package_rate||0); o.paid+=Number(r.amount_paid||0); });
-  (DATA.serviceLines||[]).forEach(s=>{ if(s.source!=='dashboard'||!sIsHotel(s.kind))return; const bf=(s.booked_from||'').toString().trim(); const frb=Number(s.final_rate_booked||0); if(!bf||!(frb>0))return;
+  (DATA.serviceLines||[]).forEach(s=>{ if(s.source!=='dashboard'||!sHotelSourceLine(s))return; const bf=(s.booked_from||'').toString().trim(); const frb=Number(s.final_rate_booked||0); if(!bf||!(frb>0))return;
     const c=(s.client_code||'').toUpperCase(); const f=fm[c]||{}; const sell=Number(s.amount||0);
     base.push({ _booking:true, service_id:s.id, client_code:s.client_code, client_name:f.name||'', agent_name:f.agent||'',
       arrival_date:s.check_in||f.arr||'', conf_status:f.conf||'', client_balance:(f.pr||0)-(f.paid||0), currency:s.sell_currency||f.cur||'',
@@ -2735,7 +2739,7 @@ function hpPayeeClientMap(payee){
   const cli={}; const hb=hpHbMatch(payee);
   if(hb.length){
     // خريطة charge from لكل حجز داشبورد (بالـ service_id) لتحديد: بانتظار / مستحق / مسدَّد
-    const cfById={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const v=String(s.charge_from||'').trim(); if(v)cfById[s.id]=v; });
+    const cfById={}; (DATA.serviceLines||[]).forEach(s=>{ if(!sHotelSourceLine(s))return; const v=String(s.charge_from||'').trim(); if(v)cfById[s.id]=v; });
     for(const h of hb){ const c=(h.client_code||'').toUpperCase(); if(!c)continue;
       const _isC=/cancel/i.test(String(h.status||''));
       const _frb=Number(h.final_rate_booked||0), _rf=Number(h.refund||0), _cc=Number(h.cancel_charge||0);
@@ -2770,7 +2774,7 @@ function hpComputeTotals(){
   const payArr=hpPayments(HO_PAYEE).filter(x=>!only2026 || yOK(x.date));
   let paid=0; payArr.forEach(x=>paid+=x.amount); let nPay=payArr.length;
   const paidCodes=new Set(payArr.map(x=>String(x.code||'').toUpperCase()).filter(Boolean));
-  const cfById2={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel')return; const v=String(s.charge_from||'').trim(); if(v)cfById2[s.id]=v; });
+  const cfById2={}; (DATA.serviceLines||[]).forEach(s=>{ if(!sHotelSourceLine(s))return; const v=String(s.charge_from||'').trim(); if(v)cfById2[s.id]=v; });
   hpHbMatch(HO_PAYEE).forEach(h=>{ if(!h._booking||!h.service_id)return; if(/cancel/i.test(String(h.status||'')))return; if(only2026 && !yOK(h.check_in||h.arrival_date))return; if(!_isSettlement(cfById2[h.service_id]))return; if(paidCodes.has(String(h.client_code||'').toUpperCase()))return; paid+=Number(h.final_rate_booked||0); nPay++; });
   const nBook=nActive+nCancel; const bal=cost-paid;
   return { cost, paid, bal, nBook, nPay, cancelFee, nActive, nCancel, only2026 };
