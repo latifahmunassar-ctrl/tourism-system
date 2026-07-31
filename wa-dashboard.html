@@ -229,6 +229,10 @@
     body.admin-attendance-tab section { display: none; }
     body.admin-attendance-tab .ai-toggle-card { display: none; }
     body.admin-attendance-tab section.attendance-section { display: block; }
+    section.instagram-section { display: none; }
+    body.admin-instagram-tab section { display: none; }
+    body.admin-instagram-tab .ai-toggle-card { display: none; }
+    body.admin-instagram-tab section.instagram-section { display: block; }
     /* أزرار العروض السريعة داخل المحادثة */
     .offer-quickbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px 0; }
     .offer-cat-btn {
@@ -852,6 +856,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     <!-- Admin-only tab bar. Hidden in sales / monitor views. -->
     <nav class="tab-bar" id="tab-bar">
       <button class="tab-btn active" data-tab="main">📊 الرئيسية</button>
+      <button class="tab-btn" data-tab="instagram">📷 إنستقرام</button>
       <button class="tab-btn" data-tab="contacts">📇 جهات الاتصال</button>
       <button class="tab-btn" data-tab="offers">📁 مكتبة العروض</button>
       <button class="tab-btn" data-tab="invoices">🧾 الفواتير</button>
@@ -1115,6 +1120,23 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       </div>
       <div id="att-unanswered-summary" style="display:none; background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; padding:12px 16px; margin-bottom:12px;"></div>
       <div class="panel-list" id="attendance-list"><div class="empty">جاري التحميل…</div></div>
+    </section>
+
+    <!-- ── تبويب إنستقرام (عرض فقط، معزول تماماً عن منطق الواتساب) ── -->
+    <section class="instagram-section">
+      <h3>📷 محادثات إنستقرام
+        <button id="ig-refresh" class="filter-btn" style="margin-inline-start:10px; font-size:12px;">↻ تحديث</button>
+      </h3>
+      <div id="ig-layout" style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+        <div style="flex:1; min-width:280px;">
+          <div class="panel-list" id="ig-conversations"><div class="empty">جاري التحميل…</div></div>
+        </div>
+        <div style="flex:1.3; min-width:300px;">
+          <div id="ig-thread" style="border:1px solid var(--border); border-radius:12px; min-height:200px; padding:14px; background:#fafafa;">
+            <div class="empty">اختاري محادثة لعرض الرسائل</div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section class="invoices-section">
@@ -2124,13 +2146,101 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         document.body.classList.toggle("admin-offers-tab", tab === "offers");
         document.body.classList.toggle("admin-invoices-tab", tab === "invoices");
         document.body.classList.toggle("admin-attendance-tab", tab === "attendance");
+        document.body.classList.toggle("admin-instagram-tab", tab === "instagram");
         // First time opening contacts → load them
         if (tab === "invoices") loadInvoices();
         if (tab === "attendance") loadAttendance();
         if (tab === "users") loadStaffSecurity();
         if (tab === "contacts" && !contactsLoaded) loadContacts();
         if (tab === "offers") { loadOffers(); loadFollowupSettings(); loadLocations(); }
+        if (tab === "instagram") igLoadConversations();
       });
+    });
+
+    /* ══════════ إنستقرام (عرض فقط) — معزول عن منطق الواتساب ══════════ */
+    const IG_URL = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/instagram-webhook";
+    function igSecret() { return localStorage.getItem("wa_gate_secret") || ""; }
+    function igFlag(c) { return c === "OM" ? "🇴🇲" : c === "SA" ? "🇸🇦" : "🌐"; }
+    function igEsc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
+    function igFmt(iso) {
+      if (!iso) return "";
+      try { return new Date(iso).toLocaleString("ar", { timeZone: "Asia/Riyadh", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
+      catch (_) { return iso; }
+    }
+    async function igFetch(params) {
+      const r = await fetch(IG_URL + params, { headers: { "x-admin-secret": igSecret() } });
+      if (!r.ok) throw new Error("http " + r.status);
+      return r.json();
+    }
+    async function igLoadConversations() {
+      const box = document.getElementById("ig-conversations");
+      if (!box) return;
+      box.innerHTML = '<div class="empty">جاري التحميل…</div>';
+      try {
+        const d = await igFetch("?action=conversations");
+        const convs = (d && d.conversations) || [];
+        if (!convs.length) { box.innerHTML = '<div class="empty">لا توجد محادثات إنستقرام بعد</div>'; return; }
+        // تجميع بالحساب (مفصول عُماني/سعودي) مع الحفاظ على ترتيب الأحدث.
+        const groups = {};
+        const order = [];
+        for (const c of convs) {
+          const k = c.ig_account_id;
+          if (!groups[k]) { groups[k] = { username: c.username, country: c.country, items: [] }; order.push(k); }
+          groups[k].items.push(c);
+        }
+        let html = "";
+        for (const k of order) {
+          const g = groups[k];
+          html += '<div style="margin:6px 0 4px; font-weight:900; font-size:13px; color:var(--muted);">'
+            + igFlag(g.country) + " " + igEsc(g.username || k) + '</div>';
+          for (const c of g.items) {
+            html += '<div class="ig-conv" role="button" tabindex="0"'
+              + ' data-account="' + igEsc(c.ig_account_id) + '" data-sender="' + igEsc(c.sender_igsid) + '"'
+              + ' data-title="' + igEsc(igFlag(c.country) + " " + (c.username || "")) + '"'
+              + ' style="border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:8px; cursor:pointer; background:#fff;">'
+              + '<div style="font-weight:800; font-size:13px;">📷 ' + igEsc(c.sender_igsid) + '</div>'
+              + '<div style="color:#444; font-size:13px; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + igEsc(c.last_text || "") + '</div>'
+              + '<div style="color:var(--muted); font-size:11px; margin-top:3px;">' + igFmt(c.last_at) + '</div>'
+              + '</div>';
+          }
+        }
+        box.innerHTML = html;
+        box.querySelectorAll(".ig-conv").forEach(el => {
+          const open = () => igOpenThread(el.dataset.account, el.dataset.sender, el.dataset.title);
+          el.addEventListener("click", open);
+          el.addEventListener("keydown", e => { if (e.key === "Enter") open(); });
+        });
+      } catch (e) {
+        box.innerHTML = '<div class="empty">تعذّر تحميل المحادثات (' + igEsc(e.message) + ')</div>';
+      }
+    }
+    async function igOpenThread(account, sender, title) {
+      const box = document.getElementById("ig-thread");
+      if (!box) return;
+      box.innerHTML = '<div class="empty">جاري تحميل الرسائل…</div>';
+      try {
+        const d = await igFetch("?action=conversation&account=" + encodeURIComponent(account) + "&sender=" + encodeURIComponent(sender));
+        const msgs = (d && d.messages) || [];
+        let html = '<div style="font-weight:900; font-size:14px; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border);">'
+          + igEsc(title || "") + ' · 📷 ' + igEsc(sender) + '</div>';
+        if (!msgs.length) { html += '<div class="empty">لا رسائل</div>'; }
+        for (const m of msgs) {
+          const inbound = m.direction !== "outbound";
+          const align = inbound ? "flex-start" : "flex-end";
+          const bg = inbound ? "#fff" : "#dcf8c6";
+          html += '<div style="display:flex; justify-content:' + align + '; margin-bottom:8px;">'
+            + '<div style="max-width:78%; background:' + bg + '; border:1px solid var(--border); border-radius:12px; padding:8px 11px;">'
+            + '<div style="font-size:13.5px; white-space:pre-wrap; word-break:break-word;">' + igEsc(m.message_text || "") + '</div>'
+            + '<div style="font-size:10.5px; color:var(--muted); margin-top:4px; text-align:end;">' + igFmt(m.created_at) + '</div>'
+            + '</div></div>';
+        }
+        box.innerHTML = html;
+      } catch (e) {
+        box.innerHTML = '<div class="empty">تعذّر تحميل الرسائل (' + igEsc(e.message) + ')</div>';
+      }
+    }
+    document.addEventListener("click", e => {
+      if (e.target && e.target.id === "ig-refresh") igLoadConversations();
     });
     function devEnter(role) {
       if (!DEV_BYPASS || !token) return false;
