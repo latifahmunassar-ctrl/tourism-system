@@ -2159,7 +2159,6 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
 
     /* ══════════ إنستقرام (عرض فقط) — معزول عن منطق الواتساب ══════════ */
     const IG_URL = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/instagram-webhook";
-    function igSecret() { return localStorage.getItem("wa_gate_secret") || ""; }
     function igFlag(c) { return c === "OM" ? "🇴🇲" : c === "SA" ? "🇸🇦" : "🌐"; }
     function igEsc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
     function igFmt(iso) {
@@ -2167,10 +2166,34 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       try { return new Date(iso).toLocaleString("ar", { timeZone: "Asia/Riyadh", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
       catch (_) { return iso; }
     }
-    async function igFetch(params) {
-      const r = await fetch(IG_URL + params, { headers: { "x-admin-secret": igSecret() } });
+    // مفاتيح دخول محتملة يخزّنها الداشبورد حسب طريقة الدخول (كلمة مرور/بصمة/مالكة).
+    let igPrompted = false;
+    function igCandidates() {
+      return ["wa_gate_secret", "alezz_owner_secret", "alezz_admin_secret"]
+        .map(k => localStorage.getItem(k)).filter(Boolean);
+    }
+    async function igTry(params, sec) {
+      const r = await fetch(IG_URL + params, { headers: { "x-admin-secret": sec } });
+      if (r.status === 401) return null;         // مفتاح غير صالح — نجرّب غيره
       if (!r.ok) throw new Error("http " + r.status);
       return r.json();
+    }
+    async function igFetch(params) {
+      // جرّبي كل مفتاح محفوظ؛ أول مفتاح ينجح نثبّته في wa_gate_secret.
+      for (const sec of igCandidates()) {
+        const out = await igTry(params, sec);
+        if (out) { try { localStorage.setItem("wa_gate_secret", sec); } catch (_) {} return out; }
+      }
+      // لا مفتاح صالح → نطلب كلمة المرور مرة واحدة ونحفظها.
+      if (!igPrompted) {
+        igPrompted = true;
+        const entered = (window.prompt("لعرض محادثات إنستقرام، أدخلي كلمة مرور داشبورد الواتساب مرة واحدة:", "") || "").trim();
+        if (entered) {
+          const out = await igTry(params, entered);
+          if (out) { try { localStorage.setItem("wa_gate_secret", entered); } catch (_) {} return out; }
+        }
+      }
+      throw new Error("مفتاح الدخول غير صحيح — اضغطي «🔑 إعادة إدخال كلمة المرور»");
     }
     async function igLoadConversations() {
       const box = document.getElementById("ig-conversations");
@@ -2211,7 +2234,8 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           el.addEventListener("keydown", e => { if (e.key === "Enter") open(); });
         });
       } catch (e) {
-        box.innerHTML = '<div class="empty">تعذّر تحميل المحادثات (' + igEsc(e.message) + ')</div>';
+        box.innerHTML = '<div class="empty">تعذّر تحميل المحادثات — ' + igEsc(e.message)
+          + '<br><button id="ig-relogin" class="filter-btn" style="margin-top:10px;">🔑 إعادة إدخال كلمة المرور</button></div>';
       }
     }
     async function igOpenThread(account, sender, title) {
@@ -2240,7 +2264,14 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       }
     }
     document.addEventListener("click", e => {
-      if (e.target && e.target.id === "ig-refresh") igLoadConversations();
+      if (!e.target) return;
+      if (e.target.id === "ig-refresh") igLoadConversations();
+      if (e.target.id === "ig-relogin") {
+        const entered = (window.prompt("أدخلي كلمة مرور داشبورد الواتساب:", "") || "").trim();
+        if (entered) { try { localStorage.setItem("wa_gate_secret", entered); } catch (_) {} }
+        igPrompted = false;
+        igLoadConversations();
+      }
     });
     function devEnter(role) {
       if (!DEV_BYPASS || !token) return false;
