@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 31يوليو-د · زر «✏️ مرجع» على دفعات كشف المدفوع له لتعديل المرجع البنكي/البنك/التاريخ — المالكة مباشرة، والمحاسب يُرسَل لموافقتها (إشعار)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 31يوليو-هـ · طبّقنا منطق التوزيع/التعديل على تبويب الموردين: زر «📌 وزّع» لأي تحويل + شارة «غير موزّعة» تختفي بعد الربط + تعديل المرجع البنكي موجود (المالكة مباشرة/المحاسب بموافقة)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3124,44 +3124,69 @@ async function hpSubmit(){
   alert('✅ أُرسل طلب '+(isRefund?'المرتجع':'الدفعة')+' («'+HO_PAYEE+'») للأدمن للموافقة — لن ينعكس أثره على النظام حتى يعتمده (مرجع '+esc(ref)+').');
 }
 // 📌 توزيع دفعة مورّد «غير موزّعة» على العميل/العملاء — بلا إضافة مبلغ جديد (المجموع = مبلغ الدفعة)
-function hpAllocPay(id,amount,cur){
-  amount=Number(amount)||0; cur=cur||HO_TCUR;
-  const hb=hpHbMatch(HO_PAYEE); const byC={};
-  hb.forEach(h=>{ const c=(h.client_code||'').toUpperCase(); if(!c)return; const frb=Number(h.final_rate_booked||0), rf=Number(h.refund||0), ccg=Number(h.cancel_charge||0); const isC=/cancel/i.test(h.status||''); const eff=isC?Math.max(0,Math.min(rf>0.005?(frb-rf):ccg,frb)):frb; if(!byC[c])byC[c]={code:c,name:h.client_name||'',owed:0}; byC[c].owed+=eff; });
-  const clients=Object.values(byC).sort((a,b)=>b.owed-a.owed);
-  let m=document.getElementById('hp-alloc'); if(m)m.remove();
-  m=document.createElement('div'); m.id='hp-alloc';
+// 📌 مودال توزيع دفعة عام (مشترك: كشف الفنادق + تبويب الموردين) — لا يضيف/ينقص مبلغاً
+function openAllocModal(cfg){
+  const amount=Number(cfg.amount)||0, cur=cfg.cur||''; const clients=cfg.clients||[];
+  let m=document.getElementById('alloc-modal'); if(m)m.remove();
+  m=document.createElement('div'); m.id='alloc-modal';
   m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px';
   m.innerHTML='<div style="background:var(--card,#fff);color:var(--txt,#111);border-radius:14px;padding:18px 20px;width:min(580px,94vw);box-shadow:0 10px 40px rgba(0,0,0,.35)">'+
     '<h3 style="margin:0 0 3px;color:var(--accent)">📌 توزيع الدفعة على العملاء</h3>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">«'+esc(HO_PAYEE)+'» · المطلوب توزيعه: <b style="color:#0e9d6a">'+fmt(amount)+' '+esc(cur)+'</b> · <b>بلا إضافة مبلغ جديد</b> — فقط ربط بالعميل. اكتبي المبلغ أمام العميل (أو زر «كامل»).</div>'+
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">🔍 <input id="hp-alloc-q" oninput="hpAllocFilter()" placeholder="بحث بالاسم أو الكود" style="padding:3px 7px;width:200px"></div>'+
-    '<div class="tbl-wrap bf-scroll" style="max-height:320px"><table style="font-size:11.5px;white-space:nowrap"><thead><tr><th>الكود</th><th>العميل</th><th>المستحق ('+esc(cur)+')</th><th>المبلغ الموزّع</th></tr></thead><tbody id="hp-alloc-tb">'+
-    (clients.length?clients.map(c=>'<tr data-cli="'+esc((c.name+' '+c.code).toLowerCase())+'"><td style="font-weight:700">'+esc(c.code)+'</td><td>'+esc(c.name)+'</td><td class="num" style="color:#b8860b">'+fmt(c.owed)+'</td><td><input type="number" step="any" class="hp-alloc-amt" data-code="'+esc(c.code)+'" data-name="'+esc(c.name)+'" oninput="hpAllocTotal('+amount+')" placeholder="0" style="width:110px;padding:3px"> <button class="btn ghost" style="padding:1px 7px;font-size:10px" onclick="hpAllocFill(this,'+amount+')">كامل المتبقّي</button></td></tr>').join(''):'<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:12px">لا توجد حجوزات لهذا المدفوع له لربطها</td></tr>')+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">«'+esc(cfg.payee||'')+'» · المطلوب توزيعه: <b style="color:#0e9d6a">'+fmt(amount)+' '+esc(cur)+'</b> · <b>بلا إضافة مبلغ جديد</b> — فقط ربط بالعميل. اكتبي المبلغ أمام العميل (أو زر «كامل المتبقّي»).</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">🔍 <input id="alloc-q" oninput="allocFilter()" placeholder="بحث بالاسم أو الكود" style="padding:3px 7px;width:200px"></div>'+
+    '<div class="tbl-wrap bf-scroll" style="max-height:320px"><table style="font-size:11.5px;white-space:nowrap"><thead><tr><th>الكود</th><th>العميل</th><th>المتبقّي ('+esc(cur)+')</th><th>المبلغ الموزّع</th></tr></thead><tbody id="alloc-tb">'+
+    (clients.length?clients.map(c=>'<tr data-cli="'+esc((c.name+' '+c.code).toLowerCase())+'"><td style="font-weight:700">'+esc(c.code)+'</td><td>'+esc(c.name)+'</td><td class="num" style="color:#b8860b">'+fmt(c.owed)+'</td><td><input type="number" step="any" class="alloc-amt" data-code="'+esc(c.code)+'" data-name="'+esc(c.name)+'" oninput="allocTotal('+amount+')" placeholder="0" style="width:110px;padding:3px"> <button class="btn ghost" style="padding:1px 7px;font-size:10px" onclick="allocFill(this,'+amount+')">كامل المتبقّي</button></td></tr>').join(''):'<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:12px">لا يوجد عملاء لهذا المورّد لربطهم</td></tr>')+
     '</tbody></table></div>'+
-    '<div style="margin-top:8px;font-size:12.5px">الموزّع: <b id="hp-alloc-sum">0</b> / <b>'+fmt(amount)+'</b> '+esc(cur)+' · <span id="hp-alloc-diff" style="font-weight:700"></span></div>'+
-    '<div id="hp-alloc-msg" style="font-size:12px;margin:8px 0;min-height:16px"></div>'+
-    '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost" onclick="var e=document.getElementById(\'hp-alloc\');if(e)e.remove()">إلغاء</button><button class="btn green" onclick="hpAllocSave('+id+','+amount+')">💾 حفظ التوزيع</button></div>'+
+    '<div style="margin-top:8px;font-size:12.5px">الموزّع: <b id="alloc-sum">0</b> / <b>'+fmt(amount)+'</b> '+esc(cur)+' · <span id="alloc-diff" style="font-weight:700"></span></div>'+
+    '<div id="alloc-msg" style="font-size:12px;margin:8px 0;min-height:16px"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost" onclick="var e=document.getElementById(\'alloc-modal\');if(e)e.remove()">إلغاء</button><button class="btn green" id="alloc-save-btn">💾 حفظ التوزيع</button></div>'+
   '</div>';
-  document.body.appendChild(m); hpAllocTotal(amount);
+  document.body.appendChild(m);
+  document.getElementById('alloc-save-btn').onclick=()=>_allocSubmit(amount, cfg.onSave);
+  allocTotal(amount);
 }
-function hpAllocFilter(){ const q=(($('hp-alloc-q')||{}).value||'').trim().toLowerCase(); document.querySelectorAll('#hp-alloc-tb tr').forEach(r=>{ if(!r.dataset.cli)return; r.style.display=(!q||r.dataset.cli.includes(q))?'':'none'; }); }
-function hpAllocFill(btn,target){ const tr=btn.closest('tr'); const inp=tr&&tr.querySelector('.hp-alloc-amt'); if(!inp)return; let others=0; document.querySelectorAll('#hp-alloc-tb .hp-alloc-amt').forEach(i=>{ if(i!==inp)others+=Number(i.value)||0; }); inp.value=Math.max(0,Number((target-others).toFixed(3))); hpAllocTotal(target); }
-function hpAllocTotal(target){ let s=0; document.querySelectorAll('#hp-alloc-tb .hp-alloc-amt').forEach(i=>s+=Number(i.value)||0); const sEl=$('hp-alloc-sum'); if(sEl)sEl.textContent=fmt(s); const d=Number((target-s).toFixed(3)); const dEl=$('hp-alloc-diff'); if(dEl){ if(Math.abs(d)<0.005){ dEl.textContent='✅ مطابق'; dEl.style.color='#0e9d6a'; } else if(d>0){ dEl.textContent='باقٍ '+fmt(d); dEl.style.color='#b8860b'; } else { dEl.textContent='⚠️ تجاوزتِ بـ '+fmt(-d); dEl.style.color='#d11'; } } }
-async function hpAllocSave(id,target){
-  const msg=$('hp-alloc-msg');
-  const lines=[...document.querySelectorAll('#hp-alloc-tb .hp-alloc-amt')].map(i=>({client_code:i.dataset.code,client_name:i.dataset.name,amount:Number(i.value)||0})).filter(x=>x.amount>0);
+function allocFilter(){ const q=(($('alloc-q')||{}).value||'').trim().toLowerCase(); document.querySelectorAll('#alloc-tb tr').forEach(r=>{ if(!r.dataset.cli)return; r.style.display=(!q||r.dataset.cli.includes(q))?'':'none'; }); }
+function allocFill(btn,target){ const tr=btn.closest('tr'); const inp=tr&&tr.querySelector('.alloc-amt'); if(!inp)return; let others=0; document.querySelectorAll('#alloc-tb .alloc-amt').forEach(i=>{ if(i!==inp)others+=Number(i.value)||0; }); inp.value=Math.max(0,Number((target-others).toFixed(3))); allocTotal(target); }
+function allocTotal(target){ let s=0; document.querySelectorAll('#alloc-tb .alloc-amt').forEach(i=>s+=Number(i.value)||0); const sEl=$('alloc-sum'); if(sEl)sEl.textContent=fmt(s); const d=Number((target-s).toFixed(3)); const dEl=$('alloc-diff'); if(dEl){ if(Math.abs(d)<0.005){ dEl.textContent='✅ مطابق'; dEl.style.color='#0e9d6a'; } else if(d>0){ dEl.textContent='باقٍ '+fmt(d); dEl.style.color='#b8860b'; } else { dEl.textContent='⚠️ تجاوزتِ بـ '+fmt(-d); dEl.style.color='#d11'; } } }
+async function _allocSubmit(target, onSave){
+  const msg=$('alloc-msg');
+  const lines=[...document.querySelectorAll('#alloc-tb .alloc-amt')].map(i=>({client_code:i.dataset.code,client_name:i.dataset.name,amount:Number(i.value)||0})).filter(x=>x.amount>0);
   if(!lines.length){ msg.style.color='var(--red)'; msg.textContent='⚠️ وزّعي مبلغاً على عميل واحد على الأقل'; return; }
   const sum=lines.reduce((s,x)=>s+x.amount,0);
   if(Math.abs(sum-target)>0.5){ msg.style.color='var(--red)'; msg.textContent='⚠️ مجموع الموزّع '+fmt(sum)+' لا يساوي مبلغ الدفعة '+fmt(target)+' — التوزيع لا يضيف/ينقص مبلغاً'; return; }
   if(!confirm('توزيع الدفعة ('+fmt(target)+') على '+lines.length+' عميل؟\n\n'+lines.map(l=>'• '+(l.client_name||l.client_code)+': '+fmt(l.amount)).join('\n')))return;
   msg.style.color='var(--muted)'; msg.textContent='جارٍ الحفظ…';
-  try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'allocate_supplier_payment',payload:{id:id,lines:lines,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j=await r.json();
-    if(j.error){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(j.error); return; }
-    const mm=document.getElementById('hp-alloc'); if(mm)mm.remove();
+  try{ await onSave(lines); }catch(e){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(e.message); }
+}
+// كشف الفنادق: توزيع دفعة مورّد مفردة
+function hpAllocPay(id,amount,cur){
+  amount=Number(amount)||0; cur=cur||HO_TCUR;
+  const hb=hpHbMatch(HO_PAYEE); const byC={};
+  hb.forEach(h=>{ const c=(h.client_code||'').toUpperCase(); if(!c)return; const frb=Number(h.final_rate_booked||0), rf=Number(h.refund||0), ccg=Number(h.cancel_charge||0); const isC=/cancel/i.test(h.status||''); const eff=isC?Math.max(0,Math.min(rf>0.005?(frb-rf):ccg,frb)):frb; if(!byC[c])byC[c]={code:c,name:h.client_name||'',owed:0}; byC[c].owed+=eff; });
+  const clients=Object.values(byC).sort((a,b)=>b.owed-a.owed);
+  openAllocModal({payee:HO_PAYEE,amount,cur,clients,onSave:async(lines)=>{
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'allocate_supplier_payment',payload:{id:id,lines:lines,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j=await r.json();
+    if(j.error) throw new Error(j.error);
+    const mm=document.getElementById('alloc-modal'); if(mm)mm.remove();
     toast('✅ وُزّعت الدفعة على '+lines.length+' عميل');
     await load(); if(typeof buildHotelPay==='function')buildHotelPay();
-  }catch(e){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(e.message); }
+  }});
+}
+// تبويب الموردين: توزيع تحويل مورّد (قد يشمل عدة دفعات payIds) على العملاء
+function supAllocPay(btn){
+  const ids=String(btn.dataset.ids||'').split(',').filter(Boolean);
+  const amount=Number(btn.dataset.sum)||0; const cur=btn.dataset.cur||''; const sup=btn.dataset.sup||'';
+  const inv=(typeof supInvAll==='function'?supInvAll():[]).filter(x=>String(x.supplier_name||'')===sup);
+  const byC={}; inv.forEach(x=>{ const c=(x.client_code||'').toUpperCase(); if(!c)return; if(!byC[c])byC[c]={code:c,name:x.client_name||'',owed:0}; byC[c].owed+=Number(x.invoice_amount||0); });
+  (DATA.supplierPayments||[]).forEach(x=>{ if(String(x.supplier_name||'')!==sup)return; const c=(x.client_code||'').toUpperCase(); if(c&&byC[c])byC[c].owed-=Number(x.amount||0); });   // المتبقّي = الفاتورة − المدفوع سابقاً
+  const clients=Object.values(byC).sort((a,b)=>b.owed-a.owed);
+  openAllocModal({payee:sup,amount,cur,clients,onSave:async(lines)=>{
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'allocate_supplier_payment',payload:{pay_ids:ids.map(Number),lines:lines,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j=await r.json();
+    if(j.error) throw new Error(j.error);
+    const mm=document.getElementById('alloc-modal'); if(mm)mm.remove();
+    toast('✅ وُزّعت الدفعة على '+lines.length+' عميل');
+    const cur2=($('supflt')||{}).value||''; await load(); if($('supflt')){ $('supflt').value=cur2; renderSupplierDetail(); }
+  }});
 }
 async function hpDeleteRecorded(id,label){
   // سبب الحذف إجباري قبل الإكمال
@@ -4815,17 +4840,17 @@ function renderSupplierDetail(){
     (pays.length?(function(){
       // 💵 الدفعات المسجّلة كتحويلات بنكية: كل صف = تحويل واحد بقيمته «كما خرجت من البنك» (gross بعملة الحوالة من acc_bank_txn)، غير مقسّم على العملاء
       const btByRef={}; (DATA.bankTx||[]).forEach(x=>{ const r=String(x.bank_ref||'').trim().toUpperCase(); if(r&&Number(x.amount_out||0)>0&&!btByRef[r])btByRef[r]=x; });
-      const grp={}; pays.forEach(x=>{ const ref=String(x.bank_ref||'').trim(); const key=ref?ref.toUpperCase():('__id'+x.id); const g=grp[key]||(grp[key]={date:x.payment_date||'',ref:ref,bank:x.bank_name||'',supSum:0,supCur:x.currency||'',note:'',n:0,payIds:[]}); g.supSum+=Number(x.amount||0); g.n++; g.payIds.push(x.id); if(x.note&&!g.note)g.note=x.note; if(x.payment_date&&(!g.date||x.payment_date>g.date))g.date=x.payment_date; });
+      const grp={}; pays.forEach(x=>{ const ref=String(x.bank_ref||'').trim(); const key=ref?ref.toUpperCase():('__id'+x.id); const g=grp[key]||(grp[key]={date:x.payment_date||'',ref:ref,bank:x.bank_name||'',supSum:0,supCur:x.currency||'',note:'',n:0,payIds:[],nCode:0}); g.supSum+=Number(x.amount||0); g.n++; g.payIds.push(x.id); if(x.client_code)g.nCode++; if(x.note&&!g.note)g.note=x.note; if(x.payment_date&&(!g.date||x.payment_date>g.date))g.date=x.payment_date; });
       const rows=Object.values(grp).map(g=>{ const bt=g.ref?btByRef[g.ref.toUpperCase()]:null; const fromBank=!!bt;
-        return { date:g.date, amount:fromBank?Number(bt.amount_out||0):g.supSum, cur:fromBank?bankCur(bt.bank_name||g.bank):g.supCur, bank:fromBank?(bt.bank_name||g.bank):g.bank, ref:g.ref, n:g.n, note:g.note||'', fromBank:fromBank, payIds:g.payIds, txnId:fromBank?bt.id:null };
+        return { date:g.date, amount:fromBank?Number(bt.amount_out||0):g.supSum, cur:fromBank?bankCur(bt.bank_name||g.bank):g.supCur, bank:fromBank?(bt.bank_name||g.bank):g.bank, ref:g.ref, n:g.n, note:g.note||'', fromBank:fromBank, payIds:g.payIds, txnId:fromBank?bt.id:null, supSum:g.supSum, supCur:g.supCur, undist:(g.nCode===0) };
       }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
       const tot={}; rows.forEach(g=>{ tot[g.cur]=(tot[g.cur]||0)+g.amount; });
       const totStr=Object.entries(tot).map(([c,v])=>fmt(v)+' '+esc(c)).join(' · ');
       const _noDate=rows.filter(g=>!g.date).length;
       return '<div class="panel" style="margin-bottom:14px"><h3>💵 الدفعات المسجّلة — تحويلات بنكية ('+rows.length+') <span style="font-size:11px;color:var(--muted);font-weight:400">— كما خرجت من البنك 🔒</span></h3>'+
         '<div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">كل صف = تحويل بنكي واحد <b>بقيمته كما خرجت من البنك (بعملة الحوالة)</b> غير مقسّم على العملاء · إجمالي التحويلات: <b style="color:var(--brand)">'+totStr+'</b>'+(_noDate?' · <b style="color:#d11">⚠️ '+_noDate+' تحويل بلا تاريخ — عدّليه</b>':'')+'</div>'+
-        '<div class="tbl-wrap"><table style="font-size:11.5px"><thead><tr><th>📅 التاريخ</th><th>💰 القيمة المحوّلة<br><span style="font-size:9px;color:var(--muted)">كما خرجت من البنك</span></th><th>العملة</th><th>🏦 اسم البنك</th><th>🔖 المرجع البنكي</th><th>عدد العملاء</th><th>ملاحظة</th><th>✏️ تعديل</th></tr></thead><tbody>'+
-        rows.map(g=>'<tr'+(!g.date?' style="background:rgba(209,17,17,.06)"':'')+'><td>'+(g.date?esc(g.date):'<span style="color:#d11;font-weight:700">⚠️ بلا تاريخ</span>')+'</td><td class="num" style="font-weight:700;color:#0e7c50">'+fmt(g.amount)+'</td><td>'+esc(g.cur)+'</td><td>'+esc(g.bank||'—')+'</td><td style="font-weight:600">'+esc(g.ref||'—')+'</td><td class="num" style="color:var(--muted)">'+fmt(g.n)+'</td><td style="font-size:10px;color:var(--muted)">'+esc(g.note||'')+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="spEditTransfer(this)" data-ids="'+esc(g.payIds.join(','))+'" data-txn="'+esc(String(g.txnId||''))+'" data-ref="'+esc(g.ref||'')+'" data-bank="'+esc(g.bank||'')+'" data-date="'+esc(g.date||'')+'" data-sup="'+esc(sup)+'" title="تعديل البنك/المرجع/التاريخ'+(isOwnerUser()?'':' — بموافقة المالكة')+'">✏️ تعديل</button></td></tr>').join('')+
+        '<div class="tbl-wrap"><table style="font-size:11.5px"><thead><tr><th>📅 التاريخ</th><th>💰 القيمة المحوّلة<br><span style="font-size:9px;color:var(--muted)">كما خرجت من البنك</span></th><th>العملة</th><th>🏦 اسم البنك</th><th>🔖 المرجع البنكي</th><th>عدد العملاء</th><th>ملاحظة</th><th>إجراءات</th></tr></thead><tbody>'+
+        rows.map(g=>'<tr'+(!g.date?' style="background:rgba(209,17,17,.06)"':'')+'><td>'+(g.date?esc(g.date):'<span style="color:#d11;font-weight:700">⚠️ بلا تاريخ</span>')+'</td><td class="num" style="font-weight:700;color:#0e7c50">'+fmt(g.amount)+'</td><td>'+esc(g.cur)+'</td><td>'+esc(g.bank||'—')+'</td><td style="font-weight:600">'+esc(g.ref||'—')+'</td><td class="num" style="color:var(--muted)">'+fmt(g.n)+(g.undist?' <span style="font-size:9px;background:rgba(58,160,255,.14);color:#2f6fd0;font-weight:700;padding:1px 6px;border-radius:7px">🔵 غير موزّعة</span>':'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(g.note||'')+'</td><td style="white-space:nowrap"><button class="btn ghost" style="padding:2px 9px;font-size:11px;'+(g.undist?'background:#3aa0ff;color:#fff;border-color:#3aa0ff':'')+'" onclick="supAllocPay(this)" data-ids="'+esc(g.payIds.join(','))+'" data-sum="'+Number(g.supSum||0)+'" data-cur="'+esc(g.supCur||'')+'" data-sup="'+esc(sup)+'" title="توزيع/ربط هذا التحويل على العميل/العملاء (بلا إضافة مبلغ جديد)">📌 وزّع</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="spEditTransfer(this)" data-ids="'+esc(g.payIds.join(','))+'" data-txn="'+esc(String(g.txnId||''))+'" data-ref="'+esc(g.ref||'')+'" data-bank="'+esc(g.bank||'')+'" data-date="'+esc(g.date||'')+'" data-sup="'+esc(sup)+'" title="تعديل البنك/المرجع/التاريخ'+(isOwnerUser()?'':' — بموافقة المالكة')+'">✏️ تعديل</button></td></tr>').join('')+
         '</tbody></table></div></div>';
     })():'')+
     (function(){
