@@ -40,8 +40,55 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  // ── قراءة إدارية: قائمة المحادثات / سجل محادثة واحدة (لداشبورد الواتساب) ──
   const action = url.searchParams.get("action");
+
+  // ── إرسال رد إنستقرام (Send API) — نافذة الـ 24 ساعة يفرضها إنستقرام خادميّاً ──
+  if (action === "send") {
+    if (req.method !== "POST") return json({ error: "POST required" }, 405);
+    if (!adminOk(req)) return json({ error: "unauthorized" }, 401);
+    let b: any = {};
+    try { b = await req.json(); } catch (_e) { /* */ }
+    const acct = String(b.account || "").trim();          // ig_account_id (حسابنا)
+    const recipient = String(b.recipient || "").trim();    // sender_igsid (العميل)
+    const text = String(b.text || "").trim();
+    if (!acct || !recipient || !text) return json({ error: "account & recipient & text required" }, 400);
+
+    const supabase = supaRead();
+    const { data: acctRow } = await supabase.from("ig_accounts")
+      .select("ig_account_id, access_token").eq("ig_account_id", acct).maybeSingle();
+    const token = (acctRow as any)?.access_token;
+    if (!token) return json({ error: "لا يوجد توكن محفوظ لهذا الحساب" }, 400);
+
+    // Instagram Send API: POST /me/messages بتوكن الحساب.
+    const sendRes = await fetch("https://graph.instagram.com/v23.0/me/messages", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient: { id: recipient }, message: { text } }),
+    });
+    const sendJson = await sendRes.json().catch(() => ({}));
+    if (!sendRes.ok) {
+      const err = sendJson?.error || {};
+      // خطأ نافذة الـ 24 ساعة (خارج نافذة الرسائل المسموحة).
+      const outside = err?.code === 10 || /24|outside|window|allowed/i.test(err?.message || "");
+      return json({
+        error: outside
+          ? "انتهت نافذة الرد (٢٤ ساعة). لا يمكن الإرسال حتى يرسل العميل رسالة جديدة."
+          : ("تعذّر الإرسال: " + (err?.message || ("http " + sendRes.status))),
+        window_closed: outside,
+      }, 400);
+    }
+
+    // تخزين الرد كصف صادر ضمن نفس المحادثة (sender_igsid = العميل ليبقى مجمّعاً).
+    const mid = String(sendJson?.message_id || "") || null;
+    const nowIso = new Date().toISOString();
+    await supabase.from("instagram_messages").insert({
+      ig_account_id: acct, sender_igsid: recipient, recipient_id: recipient,
+      mid, message_text: text, direction: "outbound", sent_at: nowIso, raw: sendJson,
+    });
+    return json({ ok: true, message_id: mid, sent_at: nowIso });
+  }
+
+  // ── قراءة إدارية: قائمة المحادثات / سجل محادثة واحدة (لداشبورد الواتساب) ──
   if (action === "conversations" || action === "conversation") {
     if (!adminOk(req)) return json({ error: "unauthorized" }, 401);
     const supabase = supaRead();

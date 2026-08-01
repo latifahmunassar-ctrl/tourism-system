@@ -2238,18 +2238,23 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           + '<br><button id="ig-relogin" class="filter-btn" style="margin-top:10px;">🔑 إعادة إدخال كلمة المرور</button></div>';
       }
     }
+    let igCur = { account: "", sender: "", title: "" };   // المحادثة المفتوحة حالياً (للرد)
     async function igOpenThread(account, sender, title) {
       const box = document.getElementById("ig-thread");
       if (!box) return;
+      igCur = { account, sender, title: title || "" };
       box.innerHTML = '<div class="empty">جاري تحميل الرسائل…</div>';
       try {
         const d = await igFetch("?action=conversation&account=" + encodeURIComponent(account) + "&sender=" + encodeURIComponent(sender));
         const msgs = (d && d.messages) || [];
         let html = '<div style="font-weight:900; font-size:14px; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border);">'
           + igEsc(title || "") + ' · 📷 ' + igEsc(sender) + '</div>';
+        html += '<div id="ig-thread-msgs">';
         if (!msgs.length) { html += '<div class="empty">لا رسائل</div>'; }
+        let lastInbound = 0;
         for (const m of msgs) {
           const inbound = m.direction !== "outbound";
+          if (inbound) { const t = Date.parse(m.created_at || ""); if (t && t > lastInbound) lastInbound = t; }
           const align = inbound ? "flex-start" : "flex-end";
           const bg = inbound ? "#fff" : "#dcf8c6";
           html += '<div style="display:flex; justify-content:' + align + '; margin-bottom:8px;">'
@@ -2258,9 +2263,53 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
             + '<div style="font-size:10.5px; color:var(--muted); margin-top:4px; text-align:end;">' + igFmt(m.created_at) + '</div>'
             + '</div></div>';
         }
+        html += '</div>';
+        // نافذة الـ ٢٤ ساعة: تحذير ليّن لو تجاوزنا (إنستقرام يفرضها خادميّاً على أي حال).
+        const closed = lastInbound && (Date.now() - lastInbound > 24 * 3600 * 1000);
+        if (closed) {
+          html += '<div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; border-radius:10px; padding:9px 12px; font-size:12.5px; font-weight:700; margin:6px 0;">'
+            + '⏰ مرّت أكثر من ٢٤ ساعة على آخر رسالة من العميل — إنستقرام قد يمنع الإرسال حتى يرسل العميل من جديد.</div>';
+        }
+        // خانة الرد
+        html += '<div style="display:flex; gap:8px; margin-top:10px; align-items:flex-end;">'
+          + '<textarea id="ig-reply-text" rows="2" placeholder="اكتبي ردّك على إنستقرام…" style="flex:1; resize:vertical; padding:9px 11px; border:1px solid var(--border); border-radius:10px; font:inherit; font-size:13.5px;"></textarea>'
+          + '<button id="ig-reply-send" class="filter-btn" style="background:var(--accent,#0e9d6a); color:#fff; border-color:transparent; font-weight:800; padding:10px 16px;">إرسال</button>'
+          + '</div>'
+          + '<div id="ig-reply-status" style="font-size:12px; font-weight:700; margin-top:6px; min-height:16px;"></div>';
         box.innerHTML = html;
       } catch (e) {
         box.innerHTML = '<div class="empty">تعذّر تحميل الرسائل (' + igEsc(e.message) + ')</div>';
+      }
+    }
+    // إرسال رد إنستقرام عبر Backend (يجرّب المفاتيح المحفوظة).
+    async function igSendReply() {
+      const ta = document.getElementById("ig-reply-text");
+      const st = document.getElementById("ig-reply-status");
+      const btn = document.getElementById("ig-reply-send");
+      if (!ta || !igCur.account || !igCur.sender) return;
+      const text = ta.value.trim();
+      if (!text) { if (st) { st.style.color = "#b45309"; st.textContent = "اكتبي نصّ الرد أولاً"; } return; }
+      if (btn) btn.disabled = true;
+      if (st) { st.style.color = "var(--muted)"; st.textContent = "جارٍ الإرسال…"; }
+      const body = JSON.stringify({ account: igCur.account, recipient: igCur.sender, text });
+      let done = null, errMsg = "تعذّر الإرسال";
+      for (const sec of igCandidates()) {
+        try {
+          const r = await fetch(IG_URL + "?action=send", { method: "POST", headers: { "x-admin-secret": sec, "Content-Type": "application/json" }, body });
+          const j = await r.json().catch(() => ({}));
+          if (r.status === 401) continue;             // مفتاح غير صالح — جرّبي غيره
+          if (r.ok && j.ok) { done = j; break; }
+          errMsg = j.error || errMsg; break;          // خطأ فعلي (نافذة ٢٤س/غيره)
+        } catch (_e) { errMsg = "تعذّر الاتصال"; }
+      }
+      if (btn) btn.disabled = false;
+      if (done) {
+        if (ta) ta.value = "";
+        if (st) { st.style.color = "#065f46"; st.textContent = "✅ أُرسل"; }
+        igOpenThread(igCur.account, igCur.sender, igCur.title);   // إعادة تحميل لعرض الرد
+        igRefreshMain(true);                                       // تحديث القائمة الرئيسية
+      } else if (st) {
+        st.style.color = "#b91c1c"; st.textContent = "⚠️ " + errMsg;
       }
     }
     /* دمج محادثات إنستقرام في القائمة الرئيسية (عرض فقط، مستثناة من فلاتر/عدّادات الواتساب) */
@@ -2320,11 +2369,18 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     document.addEventListener("click", e => {
       if (!e.target) return;
       if (e.target.id === "ig-refresh") igLoadConversations();
+      if (e.target.id === "ig-reply-send") igSendReply();
       if (e.target.id === "ig-relogin") {
         const entered = (window.prompt("أدخلي كلمة مرور داشبورد الواتساب:", "") || "").trim();
         if (entered) { try { localStorage.setItem("wa_gate_secret", entered); } catch (_) {} }
         igPrompted = false;
         igLoadConversations();
+      }
+    });
+    // Enter لإرسال رد إنستقرام (Shift+Enter = سطر جديد).
+    document.addEventListener("keydown", e => {
+      if (e.target && e.target.id === "ig-reply-text" && e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault(); igSendReply();
       }
     });
     function devEnter(role) {
