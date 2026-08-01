@@ -2263,6 +2263,60 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         box.innerHTML = '<div class="empty">تعذّر تحميل الرسائل (' + igEsc(e.message) + ')</div>';
       }
     }
+    /* دمج محادثات إنستقرام في القائمة الرئيسية (عرض فقط، مستثناة من فلاتر/عدّادات الواتساب) */
+    let igConvCache = [];
+    async function igFetchSilent(params) {   // بلا مطالبة كلمة سر — للخلفية
+      for (const sec of igCandidates()) {
+        const out = await igTry(params, sec);
+        if (out) { try { localStorage.setItem("wa_gate_secret", sec); } catch (_) {} return out; }
+      }
+      return null;
+    }
+    let igLastFetch = 0;
+    async function igRefreshMain(force) {
+      const now = Date.now();
+      if (!force && now - igLastFetch < 20000) { igInjectRows(); return; }  // خفّف الطلبات
+      igLastFetch = now;
+      const d = await igFetchSilent("?action=conversations");
+      if (d && d.conversations) igConvCache = d.conversations;
+      igInjectRows();
+    }
+    function igOpenFromMain(account, sender, title) {
+      const btn = document.querySelector('.tab-btn[data-tab="instagram"]');
+      if (btn) btn.click();      // ينقلنا لتبويب إنستقرام (فيه عارض الرسائل)
+      igOpenThread(account, sender, title);
+    }
+    function igInjectRows() {
+      const list = document.getElementById("conversations-list");
+      if (!list) return;
+      const old = document.getElementById("ig-injected");
+      if (old) old.remove();
+      if (!igConvCache.length) return;
+      if (document.body.classList.contains("monitor-mode")) return;
+      const wrap = document.createElement("div");
+      wrap.id = "ig-injected";
+      let html = '<div style="font-weight:900;font-size:12.5px;color:#7c3aed;margin:2px 0 8px;">📷 وارد من إنستقرام</div>';
+      for (const c of igConvCache) {
+        html += '<div class="ig-main-row" role="button" tabindex="0"'
+          + ' data-account="' + igEsc(c.ig_account_id) + '" data-sender="' + igEsc(c.sender_igsid) + '"'
+          + ' data-title="' + igEsc(igFlag(c.country) + " " + (c.username || "")) + '"'
+          + ' style="border:1px solid #e9d5ff;border-inline-start:4px solid #a855f7;border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:pointer;background:#faf5ff;">'
+          + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">'
+          + '<span style="font-weight:800;font-size:11.5px;background:#f3e8ff;color:#6b21a8;padding:2px 9px;border-radius:999px;">📷 وارد إنستقرام ' + igEsc(igFlag(c.country)) + '</span>'
+          + '<span style="color:var(--muted);font-size:11px;">' + igFmt(c.last_at) + '</span></div>'
+          + '<div style="font-weight:800;font-size:13px;margin-top:5px;">' + igEsc(c.username || "") + ' · ' + igEsc(c.sender_igsid) + '</div>'
+          + '<div style="color:#444;font-size:13px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + igEsc(c.last_text || "") + '</div>'
+          + '</div>';
+      }
+      wrap.innerHTML = html;
+      list.insertBefore(wrap, list.firstChild);
+      wrap.querySelectorAll(".ig-main-row").forEach(el => {
+        const open = () => igOpenFromMain(el.dataset.account, el.dataset.sender, el.dataset.title);
+        el.addEventListener("click", open);
+        el.addEventListener("keydown", ev => { if (ev.key === "Enter") open(); });
+      });
+    }
+
     document.addEventListener("click", e => {
       if (!e.target) return;
       if (e.target.id === "ig-refresh") igLoadConversations();
@@ -3357,6 +3411,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
             : '<div class="empty">ما في محادثات مطابقة للفلاتر</div>';
           list.innerHTML = rangeHint;
         }
+        igInjectRows();   // صفوف إنستقرام تظهر حتى لو ما في محادثات واتساب مطابقة
         return;
       }
       list.innerHTML = arr.map((c) => {
@@ -3497,6 +3552,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         el.addEventListener("mouseenter", () => prefetchConversation(el.dataset.phone));
         el.addEventListener("touchstart", () => prefetchConversation(el.dataset.phone), { passive: true });
       });
+      igInjectRows();   // صفوف إنستقرام أعلى قائمة الواتساب (بعد كل رسم)
     }
 
     async function toggleConversation(phone, current, btn) {
@@ -5751,6 +5807,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         renderStaff(data.staff || []);
         renderRules(data.routing_rules || []);
         renderConversations(data.conversations || []);
+        igRefreshMain();   // كاش إنستقرام + حقن الصفوف في القائمة الرئيسية
         renderProposals(data.pending_proposals || []);
         renderReview(data.unhandled || []);
         loadComplaints();
