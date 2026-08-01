@@ -1127,16 +1127,8 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       <h3>📷 محادثات إنستقرام
         <button id="ig-refresh" class="filter-btn" style="margin-inline-start:10px; font-size:12px;">↻ تحديث</button>
       </h3>
-      <div id="ig-layout" style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
-        <div style="flex:1; min-width:280px;">
-          <div class="panel-list" id="ig-conversations"><div class="empty">جاري التحميل…</div></div>
-        </div>
-        <div style="flex:1.3; min-width:300px;">
-          <div id="ig-thread" style="border:1px solid var(--border); border-radius:12px; min-height:200px; padding:14px; background:#fafafa;">
-            <div class="empty">اختاري محادثة لعرض الرسائل</div>
-          </div>
-        </div>
-      </div>
+      <div style="font-size:12.5px; color:var(--muted); margin-bottom:8px;">اضغطي أي محادثة لعرض الرسائل والرد عليها في نافذة منبثقة.</div>
+      <div class="panel-list" id="ig-conversations"><div class="empty">جاري التحميل…</div></div>
     </section>
 
     <section class="invoices-section">
@@ -2239,17 +2231,44 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       }
     }
     let igCur = { account: "", sender: "", title: "" };   // المحادثة المفتوحة حالياً (للرد)
+    // نافذة منبثقة تُفتح فوق أي صفحة (رئيسية/تبويب) — الرد يصير مكانه بلا تنقّل.
+    function igEnsureModal() {
+      if (document.getElementById("ig-modal")) return;
+      const m = document.createElement("div");
+      m.id = "ig-modal";
+      m.style.cssText = "position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:16px;";
+      m.innerHTML =
+        '<div style="background:#fff;border-radius:16px;width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35);">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);">'
+        + '<div id="ig-modal-title" style="font-weight:900;font-size:14px;">📷 إنستقرام</div>'
+        + '<button id="ig-modal-close" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:#64748b;line-height:1;">✕</button></div>'
+        + '<div id="ig-modal-msgs" style="flex:1;overflow-y:auto;padding:14px;background:#fafafa;"><div class="empty">…</div></div>'
+        + '<div style="padding:12px;border-top:1px solid var(--border);">'
+        + '<div style="display:flex;gap:8px;align-items:flex-end;">'
+        + '<textarea id="ig-reply-text" rows="2" placeholder="اكتبي ردّك على إنستقرام…" style="flex:1;resize:vertical;padding:9px 11px;border:1px solid var(--border);border-radius:10px;font:inherit;font-size:13.5px;"></textarea>'
+        + '<button id="ig-reply-send" class="filter-btn" style="background:var(--accent,#0e9d6a);color:#fff;border-color:transparent;font-weight:800;padding:10px 16px;">إرسال</button></div>'
+        + '<div id="ig-reply-status" style="font-size:12px;font-weight:700;margin-top:6px;min-height:16px;"></div></div>'
+        + '</div>';
+      document.body.appendChild(m);
+      // إغلاق: زر ✕ أو النقر على الخلفية.
+      m.addEventListener("click", (e) => { if (e.target === m || e.target.id === "ig-modal-close") igCloseModal(); });
+    }
+    function igCloseModal() { const m = document.getElementById("ig-modal"); if (m) m.style.display = "none"; }
     async function igOpenThread(account, sender, title) {
-      const box = document.getElementById("ig-thread");
-      if (!box) return;
+      igEnsureModal();
       igCur = { account, sender, title: title || "" };
-      box.innerHTML = '<div class="empty">جاري تحميل الرسائل…</div>';
+      const modal = document.getElementById("ig-modal");
+      const msgsBox = document.getElementById("ig-modal-msgs");
+      const titleEl = document.getElementById("ig-modal-title");
+      const st = document.getElementById("ig-reply-status");
+      if (st) st.textContent = "";
+      if (titleEl) titleEl.innerHTML = igEsc(title || "") + ' · 📷 ' + igEsc(sender);
+      modal.style.display = "flex";
+      msgsBox.innerHTML = '<div class="empty">جاري تحميل الرسائل…</div>';
       try {
         const d = await igFetch("?action=conversation&account=" + encodeURIComponent(account) + "&sender=" + encodeURIComponent(sender));
         const msgs = (d && d.messages) || [];
-        let html = '<div style="font-weight:900; font-size:14px; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border);">'
-          + igEsc(title || "") + ' · 📷 ' + igEsc(sender) + '</div>';
-        html += '<div id="ig-thread-msgs">';
+        let html = "";
         if (!msgs.length) { html += '<div class="empty">لا رسائل</div>'; }
         let lastInbound = 0;
         for (const m of msgs) {
@@ -2263,22 +2282,16 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
             + '<div style="font-size:10.5px; color:var(--muted); margin-top:4px; text-align:end;">' + igFmt(m.created_at) + '</div>'
             + '</div></div>';
         }
-        html += '</div>';
-        // نافذة الـ ٢٤ ساعة: تحذير ليّن لو تجاوزنا (إنستقرام يفرضها خادميّاً على أي حال).
+        // نافذة الـ ٢٤ ساعة: تحذير ليّن (إنستقرام يفرضها خادميّاً على أي حال).
         const closed = lastInbound && (Date.now() - lastInbound > 24 * 3600 * 1000);
         if (closed) {
           html += '<div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; border-radius:10px; padding:9px 12px; font-size:12.5px; font-weight:700; margin:6px 0;">'
             + '⏰ مرّت أكثر من ٢٤ ساعة على آخر رسالة من العميل — إنستقرام قد يمنع الإرسال حتى يرسل العميل من جديد.</div>';
         }
-        // خانة الرد
-        html += '<div style="display:flex; gap:8px; margin-top:10px; align-items:flex-end;">'
-          + '<textarea id="ig-reply-text" rows="2" placeholder="اكتبي ردّك على إنستقرام…" style="flex:1; resize:vertical; padding:9px 11px; border:1px solid var(--border); border-radius:10px; font:inherit; font-size:13.5px;"></textarea>'
-          + '<button id="ig-reply-send" class="filter-btn" style="background:var(--accent,#0e9d6a); color:#fff; border-color:transparent; font-weight:800; padding:10px 16px;">إرسال</button>'
-          + '</div>'
-          + '<div id="ig-reply-status" style="font-size:12px; font-weight:700; margin-top:6px; min-height:16px;"></div>';
-        box.innerHTML = html;
+        msgsBox.innerHTML = html;
+        msgsBox.scrollTop = msgsBox.scrollHeight;
       } catch (e) {
-        box.innerHTML = '<div class="empty">تعذّر تحميل الرسائل (' + igEsc(e.message) + ')</div>';
+        msgsBox.innerHTML = '<div class="empty">تعذّر تحميل الرسائل (' + igEsc(e.message) + ')</div>';
       }
     }
     // إرسال رد إنستقرام عبر Backend (يجرّب المفاتيح المحفوظة).
@@ -2305,9 +2318,10 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       if (btn) btn.disabled = false;
       if (done) {
         if (ta) ta.value = "";
-        if (st) { st.style.color = "#065f46"; st.textContent = "✅ أُرسل"; }
-        igOpenThread(igCur.account, igCur.sender, igCur.title);   // إعادة تحميل لعرض الرد
-        igRefreshMain(true);                                       // تحديث القائمة الرئيسية
+        await igOpenThread(igCur.account, igCur.sender, igCur.title);   // إعادة تحميل لعرض الرد
+        const st2 = document.getElementById("ig-reply-status");         // بعد إعادة الرسم
+        if (st2) { st2.style.color = "#065f46"; st2.textContent = "✅ أُرسل"; }
+        igRefreshMain(true);                                            // تحديث القائمة الرئيسية
       } else if (st) {
         st.style.color = "#b91c1c"; st.textContent = "⚠️ " + errMsg;
       }
@@ -2331,9 +2345,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       igInjectRows();
     }
     function igOpenFromMain(account, sender, title) {
-      const btn = document.querySelector('.tab-btn[data-tab="instagram"]');
-      if (btn) btn.click();      // ينقلنا لتبويب إنستقرام (فيه عارض الرسائل)
-      igOpenThread(account, sender, title);
+      igOpenThread(account, sender, title);   // نافذة منبثقة فوق نفس الصفحة — بلا تنقّل
     }
     function igInjectRows() {
       const list = document.getElementById("conversations-list");
