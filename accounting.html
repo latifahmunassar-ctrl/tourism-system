@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-أ · إشعار «انخفاض الربح الفعلي عن المتوقع» صار فيه عمود «🧭 الوكيل» (اسم الوكيل من First Client Data)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ب · الإشعارات تختفي تلقائيّاً فور تصحيح مصدرها: تعارض العملة يُغلَق حتى لو صارت إحدى العملتين فارغة (سُدّت ثغرة كان يبقى فيها ظاهراً رغم التصحيح)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3330,9 +3330,11 @@ function renderAlerts(){
     if(a.service_id && !s){
       // الخدمة المرتبطة حُذفت → التنبيه لم يعد سارياً
       api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resolve_alert',payload:{id:a.id,resolution:'الخدمة المرتبطة حُذفت — التنبيه لم يعد سارياً'}})});
-    } else if(s && s.booked_currency && s.currency && String(s.booked_currency)===String(s.currency)){
-      // توحّدت العملة (عملة المورّد = عملة الحجز الفعلي) → تُغلق تلقائياً مع توثيق
-      api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resolve_alert',payload:{id:a.id,resolution:'تم توحيد العملة على '+s.currency+' (تعديل فعلي في Sales/Booking Form)'}})});
+    } else if(s && (function(){ const bc=String(s.booked_currency||'').trim(), cu=String(s.currency||'').trim();
+        // 🔄 يُغلَق تلقائياً متى ما زال التعارض: العملتان متساويتان، أو إحداهما فارغة (لم يعد فيه تعارض فعلي)
+        return (!bc || !cu || bc===cu); })()){
+      const _rc=(String(s.booked_currency||'').trim()&&String(s.currency||'').trim())?('تم توحيد العملة على '+s.currency):'زال تعارض العملة (تعديل فعلي في Sales/Booking Form)';
+      api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resolve_alert',payload:{id:a.id,resolution:_rc}})});
     } else pend.push(a);
   }
   const resolvedAll=all.filter(a=>a.status==='resolved').sort((a,b)=>String(b.resolved_at||'').localeCompare(String(a.resolved_at||'')));
