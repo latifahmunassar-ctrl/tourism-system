@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-د · إدخال حركات كشف البنك مباشرة (زر «➕ أدخلها»/«أدخلي الكل») + بيان الحركة يُحفظ فوراً في خانة المرجع البنكي، ثم مطابقة تلقائيّة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-هـ · تصنيف حوالات كشف البنك قبل إدخالها (العز الدولية/فانسي سنس/تصنيف جديد) — لكل حركة أو للكل، ويُحفظ التصنيف في الملاحظة + البيان في المرجع البنكي</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4002,20 +4002,30 @@ function renderReconReport(r){
     '</tbody></table></div>'+
     ((r.header&&(r.header.withdrawals||r.header.deposits))?'<div style="font-size:11px;color:var(--muted);margin-top:6px">ترويسة الكشف: إجمالي السحب <b>'+esc(r.header.withdrawals||'-')+'</b> · إجمالي الإيداع <b>'+esc(r.header.deposits||'-')+'</b> · الرصيد الختامي <b>'+esc(r.header.closing||'-')+'</b></div>':'');
   const tbl=(title,arr)=>{ if(!arr.length)return ''; return '<details style="margin-top:10px" open><summary style="cursor:pointer;color:#d98a00;font-weight:700">'+title+' ('+arr.length+')</summary><div class="tbl-wrap" style="margin-top:6px;max-height:280px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>داخل</th><th>خارج</th><th>البيان</th></tr></thead><tbody>'+arr.map(x=>'<tr><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc((x.remarks||x.note||'')+(x._dm?' · ⚠️ طوبق بتاريخ '+x._dm:''))+'</td></tr>').join('')+'</tbody></table></div></details>'; };
-  // 📥 «في الكشف وغير مسجّلة» — جدول بزر إدخال مباشر لكل حركة (تُسجَّل في acc_bank_txn — للمالكة فقط)
+  // 📥 «في الكشف وغير مسجّلة» — جدول بزر إدخال مباشر لكل حركة + تصنيف الحوالة قبل الإدخال (تُسجَّل في acc_bank_txn — للمالكة فقط)
   const tblStmtOnly=(arr)=>{ if(!arr.length)return ''; const canAdd=isOwnerUser(); window._reconStmtOnly=arr;
-    return '<details style="margin-top:10px" open><summary style="cursor:pointer;color:#d98a00;font-weight:700">⚠️ في الكشف وغير مسجّلة في نظامك ('+arr.length+')'+(canAdd?' — يمكنك إدخالها مباشرة 👇':'')+'</summary>'+
-    (canAdd?'<div style="margin:8px 0"><button class="btn green" style="padding:6px 16px;font-size:12px" onclick="reconAddAll(\''+esc(r.bank)+'\')">➕ أدخلي كل الحركات ('+arr.length+') دفعة واحدة</button> <span style="font-size:10px;color:var(--muted)">تُسجَّل في سجل البنك بتاريخها ومبلغها وبيانها، وتُطابَق تلقائيّاً في المرة القادمة</span></div>':'')+
-    '<div class="tbl-wrap" style="margin-top:6px;max-height:300px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>داخل</th><th>خارج</th><th>البيان <span style="font-size:9px;color:var(--muted)">→ يُحفظ كمرجع بنكي</span></th>'+(canAdd?'<th>إدراج</th>':'')+'</tr></thead><tbody>'+
-    arr.map((x,i)=>'<tr id="recadd-row-'+i+'"><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.remarks||x.note||'')+'</td>'+(canAdd?'<td><button class="btn ghost" style="padding:2px 10px;font-size:11px;background:#3aa0ff;color:#fff;border-color:#3aa0ff" onclick="reconAddOne('+i+',\''+esc(r.bank)+'\',this)">➕ أدخلها</button></td>':'')+'</tr>').join('')+'</tbody></table></div></details>'; };
+    return '<details style="margin-top:10px" open><summary style="cursor:pointer;color:#d98a00;font-weight:700">⚠️ في الكشف وغير مسجّلة في نظامك ('+arr.length+')'+(canAdd?' — صنّفيها ثم أدخليها مباشرة 👇':'')+'</summary>'+
+    (canAdd?'<div style="margin:8px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><label style="font-size:11px;font-weight:700">🏷️ تصنيف للكل:</label><select id="recadd-class-all" style="padding:4px 8px;font-size:11px">'+reconClassOptions('')+'</select><button class="btn ghost" style="padding:3px 10px;font-size:10px" onclick="reconAddNewClass()">＋ تصنيف جديد</button><button class="btn green" style="padding:6px 16px;font-size:12px" onclick="reconAddAll(\''+esc(r.bank)+'\')">➕ أدخلي الكل ('+arr.length+') بالتصنيف أعلاه</button></div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">أو صنّفي كل حركة على حدة من عمود «التصنيف» ثم «➕ أدخلها». التصنيف يُحفظ في خانة الملاحظة.</div>':'')+
+    '<div class="tbl-wrap" style="margin-top:6px;max-height:300px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>داخل</th><th>خارج</th><th>البيان <span style="font-size:9px;color:var(--muted)">→ مرجع بنكي</span></th>'+(canAdd?'<th>🏷️ التصنيف</th><th>إدراج</th>':'')+'</tr></thead><tbody>'+
+    arr.map((x,i)=>'<tr id="recadd-row-'+i+'"><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.remarks||x.note||'')+'</td>'+(canAdd?'<td><select id="recadd-class-'+i+'" style="padding:2px 6px;font-size:10px;max-width:130px">'+reconClassOptions('')+'</select></td><td><button class="btn ghost" style="padding:2px 10px;font-size:11px;background:#3aa0ff;color:#fff;border-color:#3aa0ff" onclick="reconAddOne('+i+',\''+esc(r.bank)+'\',this)">➕ أدخلها</button></td>':'')+'</tr>').join('')+'</tbody></table></div></details>'; };
   h+=tblStmtOnly(r.stmtOnly)+tbl('⚠️ في نظامك وغير موجودة بالكشف',r.sysOnly);
   window._lastReconReport=r;
   $('rec-result').innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 8px"><h4 style="margin:0">📊 تقرير المطابقة — '+esc(r.bank)+(r.from||r.to?' · '+esc(r.from||'…')+' ← '+esc(r.to||'…'):'')+'</h4><button class="btn" style="padding:6px 14px" onclick="exportReconPDF()">🖨️ تصدير التقرير مفصّل</button></div>'+h;
 }
+// 🏷️ خيارات تصنيف الحوالة — قائمة مُدارة txn_class (تبدأ بشركتيك، قابلة للإضافة)
+function reconClassList(){ const mg=listValues('txn_class').map(v=>String(v.value||'').trim()).filter(Boolean); const defs=['العز الدولية','فانسي سنس']; const all=[...new Set([...defs,...mg])]; return all; }
+function reconClassOptions(sel){ return '<option value="">— بلا تصنيف —</option>'+reconClassList().map(v=>'<option'+(v===sel?' selected':'')+'>'+esc(v)+'</option>').join(''); }
+async function reconAddNewClass(){
+  if(!isOwnerUser()){ alert('⚠️ إدارة التصنيفات للمالكة فقط'); return; }
+  const v=(prompt('🏷️ اسم التصنيف الجديد (شركة/جهة):')||'').trim(); if(!v)return;
+  if(reconClassList().some(x=>x.toLowerCase()===v.toLowerCase())){ alert('هذا التصنيف موجود مسبقاً'); return; }
+  try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_list_item',payload:{category:'txn_class',value:v}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } await load(); try{ runReconcile(); }catch(_){} toast('✅ أُضيف التصنيف «'+v+'»'); }catch(e){ alert('خطأ: '+e.message); }
+}
 // 📥 إدخال حركة من كشف البنك مباشرة إلى سجل البنك (acc_bank_txn) — للمالكة فقط (تسجيل حركة بنكية)
-async function _reconInsertTxn(x,bank){
+async function _reconInsertTxn(x,bank,cls){
   const _bayan=String(x.remarks||x.note||'').trim();   // 🔖 بيان الكشف يذهب مباشرة لخانة المرجع البنكي
-  const p={ tx_date:x.date||null, amount_out:Number(x.out||0), amount_in:Number(x.in||0), bank_name:bank, bank_ref:_bayan||null, note:'من مطابقة كشف البنك' };
+  const _note=(cls&&String(cls).trim())?('🏷️ '+String(cls).trim()):'من مطابقة كشف البنك';   // 🏷️ التصنيف في الملاحظة
+  const p={ tx_date:x.date||null, amount_out:Number(x.out||0), amount_in:Number(x.in||0), bank_name:bank, bank_ref:_bayan||null, note:_note };
   const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_bank_txn',payload:p})});
   const j=await r.json(); if(j.error) throw new Error(j.error); return j;
 }
@@ -4023,17 +4033,21 @@ async function reconAddOne(i,bank,btn){
   if(!isOwnerUser()){ alert('⚠️ تسجيل الحركات البنكية للمالكة فقط'); return; }
   const arr=window._reconStmtOnly||[]; const x=arr[i]; if(!x){ return; }
   if(x._added){ return; }
-  if(!confirm('➕ إدخال هذه الحركة إلى سجل البنك؟\n\nالتاريخ: '+(x.date||'—')+'\nداخل: '+fmt(x.in||0)+' · خارج: '+fmt(x.out||0)+'\nالبنك: '+bank+'\n🔖 المرجع البنكي (= البيان): '+(x.remarks||x.note||'—')))return;
+  const cls=(($('recadd-class-'+i)||{}).value||'').trim();
+  if(!confirm('➕ إدخال هذه الحركة إلى سجل البنك؟\n\nالتاريخ: '+(x.date||'—')+'\nداخل: '+fmt(x.in||0)+' · خارج: '+fmt(x.out||0)+'\nالبنك: '+bank+'\n🏷️ التصنيف: '+(cls||'— بلا تصنيف —')+'\n🔖 المرجع البنكي (= البيان): '+(x.remarks||x.note||'—')))return;
   if(btn){ btn.disabled=true; btn.textContent='⏳'; }
-  try{ await _reconInsertTxn(x,bank); x._added=true; if(btn){ btn.textContent='✅ أُدخلت'; btn.style.background='#0e7c50'; btn.style.borderColor='#0e7c50'; } toast('✅ أُدخلت الحركة — ستُطابَق تلقائيّاً'); await load(); }
+  try{ await _reconInsertTxn(x,bank,cls); x._added=true; if(btn){ btn.textContent='✅ أُدخلت'; btn.style.background='#0e7c50'; btn.style.borderColor='#0e7c50'; } toast('✅ أُدخلت الحركة'+(cls?(' · '+cls):'')+' — ستُطابَق تلقائيّاً'); await load(); }
   catch(e){ if(btn){ btn.disabled=false; btn.textContent='➕ أدخلها'; } alert('خطأ: '+e.message); }
 }
 async function reconAddAll(bank){
   if(!isOwnerUser()){ alert('⚠️ تسجيل الحركات البنكية للمالكة فقط'); return; }
   const arr=(window._reconStmtOnly||[]).filter(x=>!x._added); if(!arr.length){ alert('لا حركات جديدة للإدخال'); return; }
-  if(!confirm('➕ إدخال '+arr.length+' حركة دفعة واحدة إلى سجل البنك «'+bank+'»؟\n\nكلها تُسجَّل بتاريخها ومبلغها وبيانها، وتُطابَق تلقائيّاً في المرة القادمة.'))return;
+  const defCls=(($('recadd-class-all')||{}).value||'').trim();
+  // لكل حركة: تصنيفها الخاص إن اختير، وإلا التصنيف العام
+  const idxOf=(x)=>(window._reconStmtOnly||[]).indexOf(x);
+  if(!confirm('➕ إدخال '+arr.length+' حركة دفعة واحدة إلى سجل البنك «'+bank+'»؟\n\nالتصنيف الافتراضي: '+(defCls||'— بلا تصنيف —')+'\n(الحركة التي لها تصنيف خاص من عمودها يُعتمد لها.)\nكلها تُسجَّل بتاريخها ومبلغها وبيانها، وتُطابَق تلقائيّاً.'))return;
   let ok=0,fail=0;
-  for(const x of arr){ try{ await _reconInsertTxn(x,bank); x._added=true; ok++; }catch(e){ fail++; } }
+  for(const x of arr){ const own=(($('recadd-class-'+idxOf(x))||{}).value||'').trim(); const cls=own||defCls; try{ await _reconInsertTxn(x,bank,cls); x._added=true; ok++; }catch(e){ fail++; } }
   toast('✅ أُدخلت '+ok+' حركة'+(fail?(' · تعذّر '+fail):''));
   await load();
   // أعِد تشغيل المطابقة تلقائيّاً ليُحدَّث التقرير (تختفي المُدخَلة من «غير مسجّلة»)
