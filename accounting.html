@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ج · مطابقة كشف البنك: الحركات «في الكشف وغير مسجّلة» صار جنبها زر «➕ أدخلها» (وزر «أدخلي الكل») — إدخال مباشر لسجل البنك ثم مطابقة تلقائيّة (للمالكة)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-د · إدخال حركات كشف البنك مباشرة (زر «➕ أدخلها»/«أدخلي الكل») + بيان الحركة يُحفظ فوراً في خانة المرجع البنكي، ثم مطابقة تلقائيّة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4006,7 +4006,7 @@ function renderReconReport(r){
   const tblStmtOnly=(arr)=>{ if(!arr.length)return ''; const canAdd=isOwnerUser(); window._reconStmtOnly=arr;
     return '<details style="margin-top:10px" open><summary style="cursor:pointer;color:#d98a00;font-weight:700">⚠️ في الكشف وغير مسجّلة في نظامك ('+arr.length+')'+(canAdd?' — يمكنك إدخالها مباشرة 👇':'')+'</summary>'+
     (canAdd?'<div style="margin:8px 0"><button class="btn green" style="padding:6px 16px;font-size:12px" onclick="reconAddAll(\''+esc(r.bank)+'\')">➕ أدخلي كل الحركات ('+arr.length+') دفعة واحدة</button> <span style="font-size:10px;color:var(--muted)">تُسجَّل في سجل البنك بتاريخها ومبلغها وبيانها، وتُطابَق تلقائيّاً في المرة القادمة</span></div>':'')+
-    '<div class="tbl-wrap" style="margin-top:6px;max-height:300px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>داخل</th><th>خارج</th><th>البيان</th>'+(canAdd?'<th>إدراج</th>':'')+'</tr></thead><tbody>'+
+    '<div class="tbl-wrap" style="margin-top:6px;max-height:300px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>داخل</th><th>خارج</th><th>البيان <span style="font-size:9px;color:var(--muted)">→ يُحفظ كمرجع بنكي</span></th>'+(canAdd?'<th>إدراج</th>':'')+'</tr></thead><tbody>'+
     arr.map((x,i)=>'<tr id="recadd-row-'+i+'"><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.remarks||x.note||'')+'</td>'+(canAdd?'<td><button class="btn ghost" style="padding:2px 10px;font-size:11px;background:#3aa0ff;color:#fff;border-color:#3aa0ff" onclick="reconAddOne('+i+',\''+esc(r.bank)+'\',this)">➕ أدخلها</button></td>':'')+'</tr>').join('')+'</tbody></table></div></details>'; };
   h+=tblStmtOnly(r.stmtOnly)+tbl('⚠️ في نظامك وغير موجودة بالكشف',r.sysOnly);
   window._lastReconReport=r;
@@ -4014,7 +4014,8 @@ function renderReconReport(r){
 }
 // 📥 إدخال حركة من كشف البنك مباشرة إلى سجل البنك (acc_bank_txn) — للمالكة فقط (تسجيل حركة بنكية)
 async function _reconInsertTxn(x,bank){
-  const p={ tx_date:x.date||null, amount_out:Number(x.out||0), amount_in:Number(x.in||0), bank_name:bank, note:(x.remarks||x.note||'مطابقة كشف البنك')||null, bank_ref:'' };
+  const _bayan=String(x.remarks||x.note||'').trim();   // 🔖 بيان الكشف يذهب مباشرة لخانة المرجع البنكي
+  const p={ tx_date:x.date||null, amount_out:Number(x.out||0), amount_in:Number(x.in||0), bank_name:bank, bank_ref:_bayan||null, note:'من مطابقة كشف البنك' };
   const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_bank_txn',payload:p})});
   const j=await r.json(); if(j.error) throw new Error(j.error); return j;
 }
@@ -4022,7 +4023,7 @@ async function reconAddOne(i,bank,btn){
   if(!isOwnerUser()){ alert('⚠️ تسجيل الحركات البنكية للمالكة فقط'); return; }
   const arr=window._reconStmtOnly||[]; const x=arr[i]; if(!x){ return; }
   if(x._added){ return; }
-  if(!confirm('➕ إدخال هذه الحركة إلى سجل البنك؟\n\nالتاريخ: '+(x.date||'—')+'\nداخل: '+fmt(x.in||0)+' · خارج: '+fmt(x.out||0)+'\nالبنك: '+bank+'\nالبيان: '+(x.remarks||x.note||'—')))return;
+  if(!confirm('➕ إدخال هذه الحركة إلى سجل البنك؟\n\nالتاريخ: '+(x.date||'—')+'\nداخل: '+fmt(x.in||0)+' · خارج: '+fmt(x.out||0)+'\nالبنك: '+bank+'\n🔖 المرجع البنكي (= البيان): '+(x.remarks||x.note||'—')))return;
   if(btn){ btn.disabled=true; btn.textContent='⏳'; }
   try{ await _reconInsertTxn(x,bank); x._added=true; if(btn){ btn.textContent='✅ أُدخلت'; btn.style.background='#0e7c50'; btn.style.borderColor='#0e7c50'; } toast('✅ أُدخلت الحركة — ستُطابَق تلقائيّاً'); await load(); }
   catch(e){ if(btn){ btn.disabled=false; btn.textContent='➕ أدخلها'; } alert('خطأ: '+e.message); }
