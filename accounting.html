@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ز · تصنيف حوالات كشف البنك ثلاثي المستوى بنفس مسميّات النظام: القناة ← الوصف الثانوي ← التفاصيل (bc_channel/bc_ch_desc/bc_det) — لكل حركة أو للكل</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ح · مطابقة كشف البنك: زر «🗑️ حذف» للحركات الموجودة بنظامك وغير موجودة بالكشف (المُدخَلة من الداشبورد فقط؛ الشيت والمشتقّة محميّة) — للمالكة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3975,7 +3975,7 @@ function runReconcile(){
     if(!parsed.txns.length){ $('rec-result').innerHTML='<h4 style="margin:0 0 8px">🔎 تشخيص الكشف — لم يُتعرّف على أي حركة</h4>'+recDiag(parsed.raw); return; }
     const inR=(d)=>{ const s=String(d||'').slice(0,10); if(!s)return false; if(from&&s<from)return false; if(to&&s>to)return false; return true; };
     const stmt=parsed.txns.filter(x=>(!from&&!to)||inR(x.date)).map(x=>({...x,_m:false}));
-    const sys=bankTxAll().filter(x=>(x.bank_name||'')===bank && ((!from&&!to)||inR(x.tx_date))).map(x=>({date:String(x.tx_date||'').slice(0,10),out:Number(x.amount_out||0),in:Number(x.amount_in||0),note:x.note||x.bank_ref||'',_m:false}));
+    const sys=bankTxAll().filter(x=>(x.bank_name||'')===bank && ((!from&&!to)||inR(x.tx_date))).map(x=>({date:String(x.tx_date||'').slice(0,10),out:Number(x.amount_out||0),in:Number(x.amount_in||0),note:x.note||x.bank_ref||'',id:x.id,src:x.source||'',_cash:!!x._cash,_book:!!x._booking,_m:false}));
     stmt.forEach(s=>{ const cand=sys.find(y=>!y._m && y.date===s.date && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; } });
     stmt.forEach(s=>{ if(s._m)return; const cand=sys.find(y=>!y._m && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; s._dm=cand.date; } });
     const sum=(a,k)=>a.reduce((s,x)=>s+Number(x[k]||0),0);
@@ -4008,7 +4008,14 @@ function renderReconReport(r){
     (canAdd?'<div style="margin:8px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:rgba(58,160,255,.06);border-radius:8px;padding:7px 10px"><label style="font-size:11px;font-weight:700">🏷️ تصنيف للكل:</label><select id="recadd-chan-all" onchange="reconChanChange(\'all\')" style="padding:4px 8px;font-size:11px">'+reconChannelOptions('')+'</select><select id="recadd-desc-all" onchange="reconDescChange(\'all\')" disabled style="padding:4px 8px;font-size:11px">'+reconDescOptions('','')+'</select><select id="recadd-det-all" disabled style="padding:4px 8px;font-size:11px">'+reconDetOptions('','')+'</select><button class="btn green" style="padding:6px 16px;font-size:12px" onclick="reconAddAll(\''+esc(r.bank)+'\')">➕ أدخلي الكل ('+arr.length+')</button></div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">التصنيف = <b>القناة</b> ثم <b>الوصف الثانوي</b> ثم <b>التفاصيل</b> بنفس مسميّات تبويب الكاش البنكي. لإضافة قناة/وصف/تفصيل جديد استخدمي تبويب «Banks Cash → إدارة القوائم». التصنيف يُحفظ في الملاحظة والبيان في المرجع البنكي.</div>':'')+
     '<div class="tbl-wrap" style="margin-top:6px;max-height:320px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>داخل</th><th>خارج</th><th>البيان <span style="font-size:9px;color:var(--muted)">→ مرجع بنكي</span></th>'+(canAdd?'<th>🏷️ القناة</th><th>الوصف الثانوي</th><th>التفاصيل</th><th>إدراج</th>':'')+'</tr></thead><tbody>'+
     arr.map((x,i)=>'<tr id="recadd-row-'+i+'"><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.remarks||x.note||'')+'</td>'+(canAdd?'<td><select id="recadd-chan-'+i+'" onchange="reconChanChange('+i+')" style="padding:2px 5px;font-size:10px;max-width:115px">'+reconChannelOptions('')+'</select></td><td><select id="recadd-desc-'+i+'" onchange="reconDescChange('+i+')" disabled style="padding:2px 5px;font-size:10px;max-width:125px">'+reconDescOptions('','')+'</select></td><td><select id="recadd-det-'+i+'" disabled style="padding:2px 5px;font-size:10px;max-width:125px">'+reconDetOptions('','')+'</select></td><td><button class="btn ghost" style="padding:2px 10px;font-size:11px;background:#3aa0ff;color:#fff;border-color:#3aa0ff" onclick="reconAddOne('+i+',\''+esc(r.bank)+'\',this)">➕ أدخلها</button></td>':'')+'</tr>').join('')+'</tbody></table></div></details>'; };
-  h+=tblStmtOnly(r.stmtOnly)+tbl('⚠️ في نظامك وغير موجودة بالكشف',r.sysOnly);
+  // 🗑️ «في نظامك وغير موجودة بالكشف» — جدول بزر حذف للحركات المُدخَلة من الداشبورد (الشيت/المشتقّة لا تُحذف من هنا)
+  const tblSysOnly=(arr)=>{ if(!arr.length)return ''; const canDel=isOwnerUser(); window._reconSysOnly=arr;
+    const _delType=(x)=>{ const id=x.id; if(x.src!=='dashboard')return null; if(x._book)return null; /* دفعة حجز مشتقّة — لا تُحذف من هنا */ if(typeof id==='string'&&/^bc-/.test(id))return 'cash'; if(typeof id==='string'&&/^(sl|rf)-/.test(id))return null; if(id==null)return null; return 'txn'; };
+    return '<details style="margin-top:10px" open><summary style="cursor:pointer;color:#d98a00;font-weight:700">⚠️ في نظامك وغير موجودة بالكشف ('+arr.length+')'+(canDel?' — يمكنك حذف الزائد المُدخَل يدويّاً 🗑️':'')+'</summary>'+
+    (canDel?'<div style="font-size:10px;color:var(--muted);margin:6px 0">🗑️ الحذف متاح فقط للحركات المُدخَلة من الداشبورد (يدويّاً/من المطابقة). الحركات من الشيت أو دفعات الحجز المشتقّة لا تُحذف من هنا (تُعدَّل من مصدرها).</div>':'')+
+    '<div class="tbl-wrap" style="margin-top:6px;max-height:300px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>داخل</th><th>خارج</th><th>البيان</th>'+(canDel?'<th>حذف</th>':'')+'</tr></thead><tbody>'+
+    arr.map((x,i)=>{ const dt=_delType(x); return '<tr id="recdel-row-'+i+'"><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.note||'')+'</td>'+(canDel?('<td>'+(dt?'<button class="btn ghost" style="padding:2px 10px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="reconDelOne('+i+',this)">🗑️ حذف</button>':'<span style="font-size:9px;color:#9aa" title="من الشيت أو دفعة حجز مشتقّة — تُعدَّل من مصدرها">🔒 غير قابلة</span>')+'</td>'):'')+'</tr>'; }).join('')+'</tbody></table></div></details>'; };
+  h+=tblStmtOnly(r.stmtOnly)+tblSysOnly(r.sysOnly);
   window._lastReconReport=r;
   $('rec-result').innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 8px"><h4 style="margin:0">📊 تقرير المطابقة — '+esc(r.bank)+(r.from||r.to?' · '+esc(r.from||'…')+' ← '+esc(r.to||'…'):'')+'</h4><button class="btn" style="padding:6px 14px" onclick="exportReconPDF()">🖨️ تصدير التقرير مفصّل</button></div>'+h;
 }
@@ -4056,6 +4063,23 @@ async function reconAddAll(bank){
   toast('✅ أُدخلت '+ok+' حركة'+(fail?(' · تعذّر '+fail):''));
   await load();
   try{ runReconcile(); }catch(_){}
+}
+// 🗑️ حذف حركة موجودة في النظام وغير موجودة بالكشف — للمالكة فقط (حركات الداشبورد فقط)
+async function reconDelOne(i,btn){
+  if(!isOwnerUser()){ alert('⚠️ حذف الحركات البنكية للمالكة فقط'); return; }
+  const arr=window._reconSysOnly||[]; const x=arr[i]; if(!x||x._deleted){ return; }
+  if(x.src!=='dashboard'){ alert('⚠️ هذه الحركة من الشيت أو مشتقّة — تُعدَّل من مصدرها، لا تُحذف من هنا'); return; }
+  const isCash=(typeof x.id==='string'&&/^bc-/.test(x.id));
+  const realId=isCash?String(x.id).replace(/^bc-/,''):x.id;
+  if(!confirm('🗑️ حذف هذه الحركة من سجل البنك نهائيّاً؟\n\nالتاريخ: '+(x.date||'—')+'\nداخل: '+fmt(x.in||0)+' · خارج: '+fmt(x.out||0)+'\nالبيان: '+(x.note||'—')+'\n\n⚠️ غير موجودة بالكشف — تأكّدي أنها إدخال زائد/خاطئ.'))return;
+  if(btn){ btn.disabled=true; btn.textContent='⏳'; }
+  try{
+    const act=isCash?'delete_bank_cash':'delete_bank_txn';
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:act,payload:{id:realId}})});
+    const j=await r.json(); if(j.error) throw new Error(j.error);
+    x._deleted=true; if(btn){ btn.textContent='✅ حُذفت'; btn.disabled=true; btn.style.color='#0e7c50'; btn.style.borderColor='#0e7c50'; }
+    toast('✅ حُذفت الحركة'); await load(); try{ runReconcile(); }catch(_){}
+  }catch(e){ if(btn){ btn.disabled=false; btn.textContent='🗑️ حذف'; } alert('خطأ: '+e.message); }
 }
 function exportReconPDF(){
   const r=window._lastReconReport; if(!r){ alert('شغّلي «تحقّق وقارن» أولاً'); return; }
