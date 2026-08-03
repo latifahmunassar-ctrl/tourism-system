@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ي · كشف الحساب البنكي (تفاصيل البنك) صار يُرتَّب بتاريخ الحركة تنازليّاً كأي كشف بنك (كان يجمع حركات الداشبورد فوق بحسب وقت الإدخال فتتبعثر التواريخ)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ك · كاشف تكرار في «أدخلها»: تنبيه فقط (لا يمنع) عند وجود حركة بنفس البنك+المبلغ+التاريخ — شارة «⚠️ مشابهة موجودة» بالصف + تحذير قبل الإدخال، والمحاسب يقرّر</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4007,7 +4007,7 @@ function renderReconReport(r){
     return '<details style="margin-top:10px" open><summary style="cursor:pointer;color:#d98a00;font-weight:700">⚠️ في الكشف وغير مسجّلة في نظامك ('+arr.length+')'+(canAdd?' — صنّفيها ثم أدخليها مباشرة 👇':'')+'</summary>'+
     (canAdd?'<div style="margin:8px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:rgba(58,160,255,.06);border-radius:8px;padding:7px 10px"><label style="font-size:11px;font-weight:700">🏷️ تصنيف للكل:</label><select id="recadd-chan-all" onchange="reconChanChange(\'all\')" style="padding:4px 8px;font-size:11px">'+reconChannelOptions('')+'</select><select id="recadd-desc-all" onchange="reconDescChange(\'all\')" disabled style="padding:4px 8px;font-size:11px">'+reconDescOptions('','')+'</select><select id="recadd-det-all" disabled style="padding:4px 8px;font-size:11px">'+reconDetOptions('','')+'</select><button class="btn green" style="padding:6px 16px;font-size:12px" onclick="reconAddAll(\''+esc(r.bank)+'\')">➕ أدخلي الكل ('+arr.length+')</button></div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">التصنيف = <b>القناة</b> ثم <b>الوصف الثانوي</b> ثم <b>التفاصيل</b> بنفس مسميّات تبويب الكاش البنكي. لإضافة قناة/وصف/تفصيل جديد استخدمي تبويب «Banks Cash → إدارة القوائم». التصنيف يُحفظ في الملاحظة والبيان في المرجع البنكي.</div>':'')+
     '<div class="tbl-wrap" style="margin-top:6px;max-height:320px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>داخل</th><th>خارج</th><th>البيان <span style="font-size:9px;color:var(--muted)">→ مرجع بنكي</span></th>'+(canAdd?'<th>🏷️ القناة</th><th>الوصف الثانوي</th><th>التفاصيل</th><th>إدراج</th>':'')+'</tr></thead><tbody>'+
-    arr.map((x,i)=>'<tr id="recadd-row-'+i+'"><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.remarks||x.note||'')+'</td>'+(canAdd?'<td><select id="recadd-chan-'+i+'" onchange="reconChanChange('+i+')" style="padding:2px 5px;font-size:10px;max-width:115px">'+reconChannelOptions('')+'</select></td><td><select id="recadd-desc-'+i+'" onchange="reconDescChange('+i+')" disabled style="padding:2px 5px;font-size:10px;max-width:125px">'+reconDescOptions('','')+'</select></td><td><select id="recadd-det-'+i+'" disabled style="padding:2px 5px;font-size:10px;max-width:125px">'+reconDetOptions('','')+'</select></td><td><button class="btn ghost" style="padding:2px 10px;font-size:11px;background:#3aa0ff;color:#fff;border-color:#3aa0ff" onclick="reconAddOne('+i+',\''+esc(r.bank)+'\',this)">➕ أدخلها</button></td>':'')+'</tr>').join('')+'</tbody></table></div></details>'; };
+    arr.map((x,i)=>{ const _hasDup=canAdd&&(reconFindDup(x,r.bank).length>0); const _dupBadge=_hasDup?' <span style="font-size:9px;background:rgba(217,138,0,.16);color:#b8860b;font-weight:700;padding:1px 6px;border-radius:7px" title="توجد حركة بنفس البنك والمبلغ والتاريخ مسجّلة مسبقاً — راجعي قبل الإضافة">⚠️ مشابهة موجودة</span>':''; return '<tr id="recadd-row-'+i+'"'+(_hasDup?' style="background:rgba(217,138,0,.06)"':'')+'><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.remarks||x.note||'')+_dupBadge+'</td>'+(canAdd?'<td><select id="recadd-chan-'+i+'" onchange="reconChanChange('+i+')" style="padding:2px 5px;font-size:10px;max-width:115px">'+reconChannelOptions('')+'</select></td><td><select id="recadd-desc-'+i+'" onchange="reconDescChange('+i+')" disabled style="padding:2px 5px;font-size:10px;max-width:125px">'+reconDescOptions('','')+'</select></td><td><select id="recadd-det-'+i+'" disabled style="padding:2px 5px;font-size:10px;max-width:125px">'+reconDetOptions('','')+'</select></td><td><button class="btn ghost" style="padding:2px 10px;font-size:11px;background:#3aa0ff;color:#fff;border-color:#3aa0ff" onclick="reconAddOne('+i+',\''+esc(r.bank)+'\',this)">➕ أدخلها</button></td>':'')+'</tr>'; }).join('')+'</tbody></table></div></details>'; };
   // 🗑️ «في نظامك وغير موجودة بالكشف» — جدول بزر حذف للحركات المُدخَلة من الداشبورد (الشيت/المشتقّة لا تُحذف من هنا)
   const tblSysOnly=(arr)=>{ if(!arr.length)return ''; const canDel=isOwnerUser(); window._reconSysOnly=arr;
     const _delType=(x)=>{ const id=x.id; if(x.src!=='dashboard')return null; if(x._book)return null; /* دفعة حجز مشتقّة — لا تُحذف من هنا */ if(typeof id==='string'&&/^bc-/.test(id))return 'cash'; if(typeof id==='string'&&/^(sl|rf)-/.test(id))return null; if(id==null)return null; return 'txn'; };
@@ -4040,13 +4040,27 @@ async function _reconInsertTxn(x,bank,chan,desc,det){
   const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_bank_txn',payload:p})});
   const j=await r.json(); if(j.error) throw new Error(j.error); return j;
 }
+// 🔎 كاشف تكرار (تنبيه فقط، لا يمنع): يبحث عن حركة موجودة بنفس البنك + المبلغ + التاريخ (حتى لو المرجع مختلف)
+function reconFindDup(x,bank){
+  const amtOut=Number(x.out||0), amtIn=Number(x.in||0); const dt=String(x.date||'').slice(0,10);
+  const hits=(typeof bankTxAll==='function'?bankTxAll():[]).filter(y=>{
+    if(bankAlias(y.bank_name)!==bank) return false;
+    const yo=Number(y.amount_out||0), yi=Number(y.amount_in||0);
+    if(Math.abs(yo-amtOut)>0.01 || Math.abs(yi-amtIn)>0.01) return false;   // نفس المبلغ (داخل/خارج)
+    if(dt && String(y.tx_date||'').slice(0,10)!==dt) return false;           // نفس التاريخ
+    return true;
+  });
+  return hits;
+}
+function reconDupMsg(hits){ if(!hits.length)return ''; const h=hits[0]; return '\n\n⚠️ تنبيه: توجد حركة مشابهة مسجّلة مسبقاً (نفس البنك والمبلغ والتاريخ) — قد تكون مكرّرة:\n   • '+(String(h.tx_date||'').slice(0,10))+' · خارج '+fmt(h.amount_out||0)+' · داخل '+fmt(h.amount_in||0)+'\n   • مرجعها: '+(String(h.bank_ref||h.note||'—').slice(0,50))+'\n(القرار لكِ — أضيفيها فقط إن كانت حركة مختلفة فعلاً.)'; }
 async function reconAddOne(i,bank,btn){
   if(!isOwnerUser()){ alert('⚠️ تسجيل الحركات البنكية للمالكة فقط'); return; }
   const arr=window._reconStmtOnly||[]; const x=arr[i]; if(!x){ return; }
   if(x._added){ return; }
   const chan=(($('recadd-chan-'+i)||{}).value||'').trim(); const desc=(($('recadd-desc-'+i)||{}).value||'').trim(); const det=(($('recadd-det-'+i)||{}).value||'').trim();
   const clsTxt=[chan,desc,det].filter(Boolean).join(' ← ')||'— بلا تصنيف —';
-  if(!confirm('➕ إدخال هذه الحركة إلى سجل البنك؟\n\nالتاريخ: '+(x.date||'—')+'\nداخل: '+fmt(x.in||0)+' · خارج: '+fmt(x.out||0)+'\nالبنك: '+bank+'\n🏷️ التصنيف: '+clsTxt+'\n🔖 المرجع البنكي (= البيان): '+(x.remarks||x.note||'—')))return;
+  const _dup=reconFindDup(x,bank);   // 🔎 تنبيه تكرار — لا يمنع، فقط يُعلِم
+  if(!confirm('➕ إدخال هذه الحركة إلى سجل البنك؟\n\nالتاريخ: '+(x.date||'—')+'\nداخل: '+fmt(x.in||0)+' · خارج: '+fmt(x.out||0)+'\nالبنك: '+bank+'\n🏷️ التصنيف: '+clsTxt+'\n🔖 المرجع البنكي (= البيان): '+(x.remarks||x.note||'—')+reconDupMsg(_dup)))return;
   if(btn){ btn.disabled=true; btn.textContent='⏳'; }
   try{ await _reconInsertTxn(x,bank,chan,desc,det); x._added=true; if(btn){ btn.textContent='✅ أُدخلت'; btn.style.background='#0e7c50'; btn.style.borderColor='#0e7c50'; } toast('✅ أُدخلت الحركة'+(chan?(' · '+chan):'')+' — ستُطابَق تلقائيّاً'); await load(); }
   catch(e){ if(btn){ btn.disabled=false; btn.textContent='➕ أدخلها'; } alert('خطأ: '+e.message); }
@@ -4057,7 +4071,11 @@ async function reconAddAll(bank){
   const defChan=(($('recadd-chan-all')||{}).value||'').trim(); const defDesc=(($('recadd-desc-all')||{}).value||'').trim(); const defDet=(($('recadd-det-all')||{}).value||'').trim();
   const idxOf=(x)=>(window._reconStmtOnly||[]).indexOf(x);
   const defTxt=[defChan,defDesc,defDet].filter(Boolean).join(' ← ')||'— بلا تصنيف —';
-  if(!confirm('➕ إدخال '+arr.length+' حركة دفعة واحدة إلى سجل البنك «'+bank+'»؟\n\nالتصنيف الافتراضي: '+defTxt+'\n(الحركة التي لها تصنيف خاص من عمودها يُعتمد لها.)\nكلها تُسجَّل بتاريخها ومبلغها وبيانها، وتُطابَق تلقائيّاً.'))return;
+  // 🔎 تنبيه تكرار جماعي: كم حركة منها مشابهة لموجود مسبقاً
+  const dups=arr.filter(x=>reconFindDup(x,bank).length>0);
+  let dupTxt='';
+  if(dups.length){ dupTxt='\n\n⚠️ '+dups.length+' من هذه الحركات تشبه حركات مسجّلة مسبقاً (نفس البنك والمبلغ والتاريخ) — قد تكون مكرّرة:\n'+dups.slice(0,8).map(x=>'   • '+(x.date||'')+' · خارج '+fmt(x.out||0)+' · داخل '+fmt(x.in||0)).join('\n')+(dups.length>8?('\n   … و'+(dups.length-8)+' غيرها'):'')+'\n\nالقرار لكِ: أكملي إن كانت مختلفة فعلاً، أو ألغي وأدخلي الجديدة فقط يدويّاً.'; }
+  if(!confirm('➕ إدخال '+arr.length+' حركة دفعة واحدة إلى سجل البنك «'+bank+'»؟\n\nالتصنيف الافتراضي: '+defTxt+'\n(الحركة التي لها تصنيف خاص من عمودها يُعتمد لها.)\nكلها تُسجَّل بتاريخها ومبلغها وبيانها، وتُطابَق تلقائيّاً.'+dupTxt))return;
   let ok=0,fail=0;
   for(const x of arr){ const ix=idxOf(x); const oc=(($('recadd-chan-'+ix)||{}).value||'').trim(); const od=(($('recadd-desc-'+ix)||{}).value||'').trim(); const ot=(($('recadd-det-'+ix)||{}).value||'').trim(); const chan=oc||defChan; const desc=oc?od:defDesc; const det=oc?ot:defDet; try{ await _reconInsertTxn(x,bank,chan,desc,det); x._added=true; ok++; }catch(e){ fail++; } }
   toast('✅ أُدخلت '+ok+' حركة'+(fail?(' · تعذّر '+fail):''));
