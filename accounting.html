@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ك2 · دفعة العميل بلا مرجع بنكي لا تنعكس في كشف البنك أصلاً (تبقى «غير معتمدة» بالمستحقات فقط) + تصحيح تاريخ دفعة C26472</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ك3 · الكالندر يمنع أي تاريخ مستقبلي في حقول الدفع/الحركات البنكية/الكاش/المرتجع/الحجز/الحضور (max=اليوم) — الوصول/السفر/الاستحقاق تبقى مستقبلية مسموحة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -6327,7 +6327,28 @@ function applyBankRefGuard(){ const lock=!canEnterBankRef(); BANKREF_IDS.forEach
   else if(el.dataset._brLocked==='1'){ el.dataset._brLocked=''; el.disabled=false; el.placeholder=''; el.title=''; el.style.background=''; el.style.cursor=''; }
 }); }
 // مراقب DOM: يقفل حقول المرجع البنكي الديناميكية (مودالات/تبويبات) فور ظهورها
-try{ if(!window._brObs){ window._brObs=new MutationObserver(()=>{ try{ applyBankRefGuard(); }catch(_){}}); window._brObs.observe(document.documentElement,{childList:true,subtree:true}); } }catch(_){}
+try{ if(!window._brObs){ window._brObs=new MutationObserver(()=>{ try{ applyBankRefGuard(); }catch(_){ } try{ applyDateMaxGuard(); }catch(_){ }}); window._brObs.observe(document.documentElement,{childList:true,subtree:true}); } }catch(_){}
+// 📅 حاجز التواريخ المستقبلية: يمنع اختيار تاريخ بعد اليوم في حقول الدفع/الحركات البنكية/الحجز فقط (لا الوصول/السفر/الاستحقاق/الفلاتر — قرار المالكة). يضبط max=اليوم على الكالندر.
+function _todayStr(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+// حقول تُمنع مستقبليّاً (دفع/بنك/كاش/مرتجع/حجز/حضور). تُستثنى الوصول/السفر/الاستحقاق/فلاتر النطاق.
+const DATE_NOFUTURE_IDS=['f-paydate','f-bdate','fe-paydate','fe-bdate','sp-date','hp-date','bca-date','att-date','rf-date','tre-date'];
+// نمط معرّفات ديناميكية تُمنع (sb-cdate-<i> لكل حجز)
+function _dateNoFuture(el){ if(!el||el.type!=='date')return false; const id=el.id||'';
+  if(/^(f-adate|fe-arr|f-duedate|s-in|s-out)$/.test(id)) return false;                  // وصول/سفر/استحقاق = مستقبلي مسموح
+  if(/(^|[-_])(from|to)$|flt|rep-from|rep-to|spc-|supd-|bnk-(from|to)|bc-(from|to)|st-(from|to)|pflt/.test(id)) return false;  // فلاتر نطاق
+  if(DATE_NOFUTURE_IDS.indexOf(id)>=0) return true;
+  if(/^sb-cdate-/.test(id)) return true;                                                  // تاريخ دفع الحجز لكل صف
+  if(/pay.?date|paydate|tx.?date|charge.?date|refund.?date|deposit/i.test(id)) return true; // أي حقل دفع/حركة
+  return false;
+}
+function applyDateMaxGuard(){ const t=_todayStr();
+  document.querySelectorAll('input[type="date"]').forEach(el=>{ if(!_dateNoFuture(el))return;
+    if(el.getAttribute('max')!==t) el.setAttribute('max',t);
+    if(el.value && el.value>t){ el.value=t; }   // لو أُدخل مستقبلي برمجيّاً → يُقصّ لليوم
+    if(el.dataset._dmax!=='1'){ el.dataset._dmax='1'; el.addEventListener('change',function(){ if(this.value && this.value>_todayStr()){ this.value=_todayStr(); if(typeof toast==='function')toast('⚠️ لا يُسمح بتاريخ مستقبلي — عُيّن تاريخ اليوم'); } }); }
+  });
+}
+try{ applyDateMaxGuard(); }catch(_){}
 // 👁️ معاينة كموظف (للمالكة فقط، مرئية فقط — لا تغيّر الجلسة الحقيقية)
 var PREVIEW_USER=null;
 function previewAs(name){ if(!isOwnerUser()&&!PREVIEW_USER)return; const u=staffList().find(x=>x.staff_name===name); if(!u){ alert('الموظف غير موجود'); return; } if(u.is_owner){ alert('لا حاجة لمعاينة حساب المالكة'); return; } PREVIEW_USER={staff_name:u.staff_name,is_owner:false,allowed_tabs:u.allowed_tabs||[]}; window.scrollTo(0,0); applyPermissions(); }
