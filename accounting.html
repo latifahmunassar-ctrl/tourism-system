@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ف · سداد الموردين: التوزيع صار اختياريّاً — تُسجَّل الدفعة مباشرة «🔵 غير موزّعة» وتوزّعينها لاحقاً بزر «📌 وزّع» جنب القيمة (مثل الفنادق)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ص · الموردين: خيار «↩️ مرتجع من المورّد (وارد)» بجانب التحويل — مبلغ يرجّعه المورّد لحسابك، بتاريخ ومرجع بنكي وسبب إرجاع إجباري (ملاحظة)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4998,15 +4998,17 @@ function renderSupplierDetail(){
     '<div id="sp-period-summary"></div></div>'+
     oweBanner+
     // توزيع دفعة إجمالية على فواتير عملاء معيّنين (بمرجع بنكي مشترك)
-    '<div class="panel" style="border-color:var(--green);margin-bottom:14px"><h3>💸 توزيع دفعة على فواتير العملاء</h3>'+
+    '<div class="panel" style="border-color:var(--green);margin-bottom:14px"><h3>💸 دفعة / مرتجع مورّد</h3>'+
       '<div style="font-size:12px;margin-bottom:6px">عملة المورّد: <b>'+esc(SCUR)+'</b></div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;background:#f6f8fc;border-radius:8px;padding:7px 10px"><label style="font-size:12px;font-weight:700">نوع الحركة:</label><select id="sp-txntype" onchange="spTxnTypeChange()" style="padding:4px 10px;font-size:12px"><option value="transfer">💸 تحويل للمورّد (خارج)</option><option value="refund">↩️ مرتجع من المورّد (وارد)</option></select><span id="sp-txntype-hint" style="font-size:10.5px;color:var(--muted)">مبلغ يخرج من حسابك للمورّد</span></div>'+
       '<div class="fgrid">'+
-        '<div class="fld"><label>💰 إجمالي مبلغ التحويل (يترحّل للبنوك) <span style="color:var(--red)">*</span></label><input type="number" id="sp-gross" oninput="spTotal()" placeholder="0"></div>'+
+        '<div class="fld"><label id="sp-gross-lbl">💰 إجمالي مبلغ التحويل (يترحّل للبنوك) <span style="color:var(--red)">*</span></label><input type="number" id="sp-gross" oninput="spTotal()" placeholder="0"></div>'+
         '<div class="fld"><label>عملة الدفع الفعلية</label><select id="sp-cur" onchange="spRate(\''+esc(SCUR)+'\')">'+curOpts+'</select></div>'+
         '<div class="fld" id="sp-rate-fld" style="display:none"><label>🏦 سعر صرف البنك (1 وحدة دفع = ؟ '+esc(SCUR)+') <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">متغيّر — أدخليه يدوياً كل دفعة</span></label><input type="number" id="sp-rate" step="0.0001" placeholder="سعر صرف البنك (متغيّر) — أدخليه لكل دفعة" oninput="spTotal()"></div>'+
         '<div class="fld"><label>البنك <span style="color:var(--red)">*</span></label><select id="sp-bank">'+bankOpts+'</select></div>'+
         '<div class="fld"><label>المرجع البنكي <span style="color:var(--red)">*</span></label><input id="sp-ref" placeholder="RD ..."></div>'+
-        '<div class="fld"><label>تاريخ الدفع</label><input type="date" id="sp-date"></div>'+
+        '<div class="fld"><label id="sp-date-lbl">تاريخ الدفع</label><input type="date" id="sp-date"></div>'+
+        '<div class="fld" style="min-width:240px;flex:1.5"><label>📝 ملاحظة <span id="sp-note-hint" style="font-size:9px;color:var(--muted)">(سبب الإرجاع للمرتجع)</span></label><input id="sp-note" placeholder="مثال: إلغاء حجز / تصحيح مبلغ زائد…"></div>'+
       '</div>'+
       '<div style="margin:6px 0;font-size:14px;font-weight:700;padding:6px 10px;background:rgba(224,33,138,.08);border-radius:8px">المتبقّي للتوزيع (بعملة المورّد '+esc(SCUR)+'): <b id="sp-remain" style="color:#b8860b">0</b> <span id="sp-conv" style="font-size:11px;color:var(--accent)"></span></div>'+
       '<div style="font-size:11px;color:var(--muted);margin:4px 0">وزّعي المبلغ على العملاء <b>بعملة المورّد ('+esc(SCUR)+')</b>؛ لو دفعتِ بعملة ثانية حدّدي عملة الدفع وسعر الصرف فيظهر المبلغ القابل للتوزيع محوَّلاً لعملة المورّد:</div>'+
@@ -5412,9 +5414,17 @@ function spTotal(){
   const conv=$('sp-conv'); const pc=($('sp-cur')||{}).value||scur;
   if(conv){ conv.textContent=(mismatch&&rate)?('('+fmt(gross)+' '+pc+' × '+rate+' = '+fmt(pool)+' '+scur+' قابلة للتوزيع)'):''; }
 }
+// تبديل نوع الحركة (تحويل/مرتجع) — يحدّث المسميّات والتلميحات
+function spTxnTypeChange(){ const t=(($('sp-txntype')||{}).value)||'transfer'; const refund=(t==='refund');
+  const hint=$('sp-txntype-hint'); if(hint){ hint.textContent=refund?'مبلغ يرجّعه المورّد إلى حسابك (وارد)':'مبلغ يخرج من حسابك للمورّد'; hint.style.color=refund?'#0e7c50':'var(--muted)'; }
+  const gl=$('sp-gross-lbl'); if(gl)gl.innerHTML=(refund?'↩️ إجمالي المبلغ المُرتجَع (وارد)':'💰 إجمالي مبلغ التحويل (يترحّل للبنوك)')+' <span style="color:var(--red)">*</span>';
+  const dl=$('sp-date-lbl'); if(dl)dl.textContent=refund?'تاريخ المرتجع':'تاريخ الدفع';
+  const nh=$('sp-note-hint'); if(nh)nh.textContent=refund?'(سبب الإرجاع — إجباري)':'(اختيارية)';
+}
 async function saveDistributedPayments(sup){
   const scur=supplierCurrency(sup);
   const bank=$('sp-bank').value, payCur=$('sp-cur').value||scur, ref=($('sp-ref').value||'').trim(), date=$('sp-date').value||null;
+  const txnType=(($('sp-txntype')||{}).value)||'transfer'; const isRefund=(txnType==='refund'); const noteVal=(($('sp-note')||{}).value||'').trim();
   const gross=Number($('sp-gross').value)||0;
   const msg=$('sp-msg');
   const mismatch=(payCur!==scur);
@@ -5422,9 +5432,10 @@ async function saveDistributedPayments(sup){
   const pool=gross*(rate||0); // القابل للتوزيع بعملة المورّد
   const lines=[...document.querySelectorAll('.sp-cli')].map(i=>({client_code:i.dataset.code,client_name:i.dataset.name,amount:Number(i.value)||0})).filter(x=>x.amount>0); // المبالغ بعملة المورّد
   const allocSum=lines.reduce((s,x)=>s+x.amount,0);
-  if(gross<=0){ msg.style.color='var(--red)'; msg.textContent='⚠️ أدخلي إجمالي مبلغ التحويل'; return; }
+  if(gross<=0){ msg.style.color='var(--red)'; msg.textContent=isRefund?'⚠️ أدخلي إجمالي المبلغ المُرتجَع':'⚠️ أدخلي إجمالي مبلغ التحويل'; return; }
   if(!bank){ msg.style.color='var(--red)'; msg.textContent='⚠️ لازم تحديد البنك'; return; }
   if(!ref){ msg.style.color='var(--red)'; msg.textContent='⚠️ لازم إدخال المرجع البنكي'; return; }
+  if(isRefund && !noteVal){ msg.style.color='var(--red)'; msg.textContent='⚠️ سبب الإرجاع إجباري للمرتجع — اكتبيه في خانة الملاحظة'; if($('sp-note'))$('sp-note').focus(); return; }
   if(mismatch && (!rate||rate<=0)){ msg.style.color='var(--red)'; msg.textContent='⚠️ أدخلي سعر الصرف لتحويل الدفع لعملة المورّد ('+esc(scur)+')'; return; }
   // 💸 التوزيع اختياري: لو لم تُوزَّع، تُسجَّل الدفعة «غير موزّعة» ويمكن توزيعها لاحقاً بزر «📌 وزّع» جنب القيمة (مثل الفنادق)
   const undistributed=!lines.length;
@@ -5432,12 +5443,13 @@ async function saveDistributedPayments(sup){
   // 📋 رسالة تأكيد إلزامية بالقيم الداخلة (المبلغ/التاريخ/المرجع/التوزيع) قبل الإرسال
   const incomplete=!undistributed && Math.abs(pool-allocSum)>0.5;
   const distTxt=undistributed ? '   • (غير موزّعة — تُوزَّع لاحقاً بزر «📌 وزّع») : '+fmt(pool)+' '+scur : lines.map(l=>'   • '+(l.client_name||l.client_code||'—')+(l.client_code&&l.client_name?' ('+l.client_code+')':'')+': '+fmt(l.amount)+' '+scur).join('\n');
-  const confirmMsg='📋 تأكيد طلب الدفعة — راجعي القيم جيداً:\n\n'+
+  const confirmMsg='📋 تأكيد '+(isRefund?'مرتجع من المورّد':'طلب الدفعة')+' — راجعي القيم جيداً:\n\n'+
     '• المورّد: '+sup+'\n'+
-    '• مبلغ التحويل: '+fmt(gross)+' '+payCur+(mismatch?(' (= '+fmt(pool)+' '+scur+' بعد الصرف ×'+rate+')'):'')+'\n'+
+    (isRefund?'• المبلغ المُرتجَع (وارد): ':'• مبلغ التحويل: ')+fmt(gross)+' '+payCur+(mismatch?(' (= '+fmt(pool)+' '+scur+' بعد الصرف ×'+rate+')'):'')+'\n'+
     '• البنك: '+bank+'\n'+
     '• رقم المرجع البنكي: '+ref+'\n'+
-    '• التاريخ: '+(date||'— غير محدّد —')+'\n'+
+    '• '+(isRefund?'تاريخ المرتجع':'التاريخ')+': '+(date||'— غير محدّد —')+'\n'+
+    (noteVal?('• '+(isRefund?'سبب الإرجاع':'ملاحظة')+': '+noteVal+'\n'):'')+
     (undistributed?'• التوزيع: 🔵 غير موزّعة الآن (توزّعينها لاحقاً)\n':'• التوزيع على العملاء:\n'+distTxt)+
     (incomplete?('\n\n⚠️ تنبيه: المتبقّي للتوزيع '+fmt(pool-allocSum)+' '+scur+' لم يُوزَّع بالكامل.'):'')+
     (isOwnerUser()
@@ -5446,8 +5458,8 @@ async function saveDistributedPayments(sup){
   if(!confirm(confirmMsg))return;
   const _owner=isOwnerUser();
   msg.style.color='var(--muted)'; msg.textContent=_owner?'جارٍ تسجيل الدفعة…':'جارٍ إرسال الطلب للأدمن…';
-  const summary='💸 دفعة مورّد «'+sup+'» · '+fmt(gross)+' '+payCur+(mismatch?(' (= '+fmt(pool)+' '+scur+')'):'')+' · '+(undistributed?'🔵 غير موزّعة':('موزّعة على '+lines.length+' عميل'))+' · بنك '+bank+' · مرجع '+ref;
-  const res=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_pending_movement',payload:{kind:'payment',scope:'suppliers',summary:summary,note:'',payload:{supplier_name:sup,tcur:scur,gross:gross,pay_currency:payCur,rate:rate,bank:bank,ref:ref,date:date,note:'',txn_type:'transfer',lines:sendLines,by:(CURRENT_USER&&CURRENT_USER.staff_name)||'المالكة'}}})});
+  const summary=(isRefund?'↩️ مرتجع من مورّد «':'💸 دفعة مورّد «')+sup+'» · '+fmt(gross)+' '+payCur+(mismatch?(' (= '+fmt(pool)+' '+scur+')'):'')+' · '+(undistributed?'🔵 غير موزّعة':('موزّعة على '+lines.length+' عميل'))+' · بنك '+bank+' · مرجع '+ref+(noteVal?(' · '+noteVal):'');
+  const res=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_pending_movement',payload:{kind:'payment',scope:'suppliers',summary:summary,note:noteVal,payload:{supplier_name:sup,tcur:scur,gross:gross,pay_currency:payCur,rate:rate,bank:bank,ref:ref,date:date,note:noteVal,txn_type:txnType,lines:sendLines,by:(CURRENT_USER&&CURRENT_USER.staff_name)||'المالكة'}}})});
   const j=await res.json(); if(j.error){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(j.error); alert('⚠️ تعذّر إرسال الدفعة: '+j.error); return; }
   // 👑 المالكة: اعتماد فوري وتسجيل مباشر (بنك + حساب المورّد). غير المالكة: يبقى طلباً بانتظار الاعتماد.
   let okMsg;
