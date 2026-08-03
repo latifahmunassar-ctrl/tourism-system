@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ك5 · قارئ كشف البنك يلتقط أسطر الحوالات ذات المبلغ الواحد + وصف طويل (SWIFT/تحويل) — كانت تُتخطّى فتظهر غير مطابقة (مثل حوالة 4,137 ظفار)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ك6 · قارئ الكشف يُفعَّل بمجرّد وجود تواريخ YYYY-MM-DD (لا يعتمد على كلمات ترويسة) + يلتقط أسطر الحوالات ذات المبلغ الواحد — يحلّ حوالة 4,137 ظفار</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3934,7 +3934,8 @@ function parseStmtTxns(text){
   // تنسيق D — تقرير بأعمدة (Receive · Transaction · Account Name · Debit · Credit · Balance · Notes):
   // يقبل التاريخ الكامل YYYY-MM-DD أو المقصوص YYYY-MM (تقارير ضيّقة الأعمدة). لكل سطر: ثلاثة أعمدة رقمية متجاورة (مدين دائن رصيد) أحد المدين/الدائن=0.
   // أمان: يستبعد أرقام الحسابات (>9 خانات) والأوقات (بها ":") والقيم المقطوعة (...."), فلا تُؤخذ كمبالغ بالغلط.
-  if(/(debit\s+credit\s+balance|Account\s*Name|Balance\s+trans|Recieve|Receive|Opening\s+bala)/i.test(text) && /\d{4}-\d{2}/.test(text)){
+  // تنسيق D: يُفعَّل بترويسة معروفة أو بمجرّد وجود سطرين+ بتاريخ YYYY-MM-DD (تحصين — لا يعتمد على كلمات ترويسة محدّدة)
+  if((/(debit\s+credit\s+balance|Account\s*Name|Balance\s+trans|Recieve|Receive|Opening\s+bala)/i.test(text) && /\d{4}-\d{2}/.test(text)) || ((String(text).match(/\d{4}-\d{2}-\d{2}/g)||[]).length>=2)){
     const isAmt=s=>{ if(!/^-?\d[\d,]*(?:\.\d+)?$/.test(s)) return false; const intp=s.replace(/[-,]/g,'').split('.')[0]; return intp.length<=9; };
     const rowsD=[];
     for(const line of text.split('\n')){
