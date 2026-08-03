@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ق · تعديل «قيمة المبلغ المدفوع» للمورّد (زر ✏️ تعديل، للتحويل المفرد) + البنك/المرجع/التاريخ — المالكة مباشرة، والمحاسب يُرسَل لموافقتك (لا يغيّر القيمة إلا بإذنك)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ك2 · دفعة العميل بلا مرجع بنكي لا تنعكس في كشف البنك أصلاً (تبقى «غير معتمدة» بالمستحقات فقط) + تصحيح تاريخ دفعة C26472</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3918,8 +3918,8 @@ function bankTxAll(){
     if(r.source!=='dashboard')return;                                   // القديم من الشيت مسجّل أصلاً في acc_bank_txn
     const amt=Number(r.amount_paid||0); if(!(amt>0))return;
     const bn=String(r.bank_name||'').trim(); if(!bn)return;             // بلا بنك = لا ينعكس
-    const ref=String(r.bank_ref||'').trim();
-    if(ref && _txnRefs.has(ref.toUpperCase()))return;                   // موجودة بشيت البنك → لا تُكرّر
+    const ref=String(r.bank_ref||'').trim(); if(!ref)return;            // 🏦 بلا مرجع بنكي = لا تنعكس في كشف البنك (قرار المالكة) — تبقى «غير معتمدة» في المستحقات فقط
+    if(_txnRefs.has(ref.toUpperCase()))return;                          // موجودة بشيت البنك → لا تُكرّر
     const c=(r.client_code||'').toUpperCase();
     const d=(typeof effPayDate==='function'?effPayDate(r):'')||(_bookDate[c]||'')||String(r.booking_date||'').slice(0,10);
     base.push({ id:'fcd-'+r.id, bank_name:bn, amount_in:amt, amount_out:0, tx_date:d, bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', payment_code:r.payment_code||'', note:'💰 دفعة عميل: '+(r.client_name||'')+(ref?'':' · ⚠️ بلا مرجع'), source:'dashboard', created_at:r.created_at||'', _clientPay:true });
