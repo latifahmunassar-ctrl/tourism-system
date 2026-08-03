@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ك7 · بحث «نص الكشف الخام» صار يتجاهل الفواصل (بحث 4137 يلقى 4,137) + رسالة أوضح لو الكشف صورة/سكان</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ك8 · مطابقة كشف البنك: مرحلة ثالثة تطابق بالمبلغ المطلق بغضّ النظر عن الاتجاه — تحلّ حوالات SWIFT التي يُقرأ اتجاهها (داخل/خارج) بالعكس فتبقى غير مطابقة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4043,6 +4043,8 @@ function runReconcile(){
     const sys=bankTxAll().filter(x=>bankAlias(x.bank_name)===bank && ((!from&&!to)||inR(x.tx_date))).map(x=>({date:String(x.tx_date||'').slice(0,10),out:Number(x.amount_out||0),in:Number(x.amount_in||0),note:x.note||x.bank_ref||'',id:x.id,src:x.source||'',_cash:!!x._cash,_book:!!x._booking,_fcd:!!x._clientPay,code:x.client_code||'',pcode:x.payment_code||'',cname:x.client_name||'',_m:false}));
     stmt.forEach(s=>{ const cand=sys.find(y=>!y._m && y.date===s.date && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; } });
     stmt.forEach(s=>{ if(s._m)return; const cand=sys.find(y=>!y._m && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; s._dm=cand.date; } });
+    // 🔁 مرحلة ثالثة: مطابقة بالمبلغ المطلق بغضّ النظر عن الاتجاه (داخل/خارج) — تحلّ حالات قراءة اتجاه SWIFT بالعكس
+    stmt.forEach(s=>{ if(s._m)return; const sa=Number(s.out||0)+Number(s.in||0); if(sa<=0.005)return; const cand=sys.find(y=>!y._m && Math.abs((Number(y.out||0)+Number(y.in||0))-sa)<0.01); if(cand){ cand._m=true; s._m=true; s._dm=(s.date===cand.date?cand.date:('اتجاه/تاريخ · '+cand.date)); } });
     const sum=(a,k)=>a.reduce((s,x)=>s+Number(x[k]||0),0);
     const stmtOnly=stmt.filter(s=>!s._m), sysOnly=sys.filter(y=>!y._m);
     const sOut=sum(stmt,'out'), sIn=sum(stmt,'in');
