@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 3أغسطس-أ · مطابقة كشف البنك: مطابقة تقريبية لفروق التقريب/رسوم SWIFT (تُحسب «متطابقة» مع إظهار الفرق والمصدر) + تصحيح المبلغ لقيمة الكشف مباشرةً من المطابقة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 3أغسطس-ب · مطابقة كشف البنك: مطابقة تقريبية لفروق التقريب/رسوم SWIFT + عمود «🧭 المصدر» في قسم عدم المطابقة (اسم المورّد/العميل) مع زر انتقال مباشر للمراجعة + تصحيح المبلغ لقيمة الكشف</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4087,12 +4087,15 @@ function renderReconReport(r){
     const _delType=(x)=>{ const id=x.id; if(x._book)return null; if(x._fcd)return 'fcdfix'; /* 💰 دفعة عميل — تصحيح البنك بدل الحذف */ if(typeof id==='string'){ if(/^bc-/.test(id))return 'cash'; return null; /* sl-/rf- مشتقّة */ } if(id==null)return null; return 'txn'; };
     return '<details style="margin-top:10px" open><summary style="cursor:pointer;color:#d98a00;font-weight:700">⚠️ في نظامك وغير موجودة بالكشف ('+arr.length+')'+(canDel?' — احذفي الزائد أو صحّحي بنك دفعة العميل 🛠️':'')+'</summary>'+
     (canDel?'<div style="font-size:10px;color:var(--muted);margin:6px 0">🗑️ الحذف متاح للحركات الحقيقية (شيت+داشبورد؛ <b style="color:#d11">حذف الشيت نهائي</b>). 💰 <b>«دفعة عميل»</b> تعني دفعة من First Client Data ظهرت هنا لأنها <b>ليست بكشف هذا البنك</b> — غالباً بنكها المسجّل خاطئ (راحت لبنك ثانٍ): استخدمي «✏️ صحّح البنك» لنقلها للبنك الصحيح <b>بدل حذفها</b>.</div>':'')+
-    '<div class="tbl-wrap" style="margin-top:6px;max-height:300px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>داخل</th><th>خارج</th><th>البيان</th>'+(canDel?'<th>إجراء</th>':'')+'</tr></thead><tbody>'+
+    '<div class="tbl-wrap" style="margin-top:6px;max-height:300px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>داخل</th><th>خارج</th><th>البيان</th><th>🧭 المصدر</th>'+(canDel?'<th>إجراء</th>':'')+'</tr></thead><tbody>'+
     arr.map((x,i)=>{ const dt=_delType(x);
+      const lab=reconSrcLabel(x);
+      const navBtn=lab.nav?'<button class="btn ghost" style="padding:1px 8px;font-size:10px;background:#6c5ce7;color:#fff;border-color:#6c5ce7;margin-inline-start:5px;white-space:nowrap" onclick="reconGotoIdx('+i+')" title="انتقال مباشر لمراجعة المصدر">🧭 '+esc(lab.nav.lbl)+' ⤴</button>':'';
+      const srcCell='<td style="font-size:10px;min-width:150px">'+esc(lab.t)+navBtn+'</td>';
       let act='<span style="font-size:9px;color:#9aa" title="دفعة حجز/مرتجع مشتقّة — تُعدَّل من مصدرها">🔒 غير قابلة</span>';
       if(dt==='fcdfix') act='<span style="font-size:9px;background:rgba(217,138,0,.16);color:#b8860b;font-weight:700;padding:1px 6px;border-radius:7px">💰 دفعة عميل</span> <button class="btn ghost" style="padding:2px 9px;font-size:11px;background:#3aa0ff;color:#fff;border-color:#3aa0ff" title="بنكها المسجّل قد يكون خاطئ — انقلها للبنك الصحيح في First Client Data" onclick="reconFixBank('+i+',this)">✏️ صحّح البنك</button>';
       else if(dt) act='<button class="btn ghost" style="padding:2px 10px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="reconDelOne('+i+',this)">🗑️ حذف</button>';
-      return '<tr id="recdel-row-'+i+'"'+(dt==='fcdfix'?' style="background:rgba(217,138,0,.06)"':'')+'><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.note||'')+'</td>'+(canDel?('<td style="white-space:nowrap">'+act+'</td>'):'')+'</tr>'; }).join('')+'</tbody></table></div></details>'; };
+      return '<tr id="recdel-row-'+i+'"'+(dt==='fcdfix'?' style="background:rgba(217,138,0,.06)"':'')+'><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.note||'')+'</td>'+srcCell+(canDel?('<td style="white-space:nowrap">'+act+'</td>'):'')+'</tr>'; }).join('')+'</tbody></table></div></details>'; };
   // 🔵 «متطابقة بفرق تقريب بسيط» — تعرض الفرق ومصدر الحركة (من أي سجل جاءت) + زر تصحيح لقيمة الكشف للحركات البنكية/الكاش
   const tblNear=(arr)=>{ if(!arr||!arr.length)return ''; window._reconNear=arr; const canFix=isOwnerUser();
     return '<details style="margin-top:10px" open><summary style="cursor:pointer;color:#0e9d6a;font-weight:700">🔵 متطابقة بفرق تقريب بسيط ('+arr.length+') — راجعي الفرق وصحّحيه من مصدره</summary>'+
@@ -4101,7 +4104,8 @@ function renderReconReport(r){
     arr.map((x,i)=>{ const c=x._cand||{}; const sd=x._nd||(x.out>0.005?'out':'in'); const sv=(sd==='out'?x.out:x.in); const yv=(sd==='out'?c.out:c.in); const lab=reconSrcLabel(c);
       let act='<span style="font-size:9px;color:#9aa" title="عدّليها من مصدرها الأصلي">🧭 من مصدرها</span>';
       if(canFix&&lab.edit) act='<button class="btn ghost" style="padding:2px 10px;font-size:11px;background:#0e9d6a;color:#fff;border-color:#0e9d6a" onclick="reconFixAmount('+i+',this)" title="عدّل مبلغ النظام إلى قيمة الكشف">✏️ صحّح لـ '+f(sv)+'</button>';
-      return '<tr id="recnear-row-'+i+'"><td>'+esc(x.date||'')+(x._dm?' <span style="font-size:9px;color:#b8860b" title="طوبق بتاريخ '+esc(x._dm)+'">📅</span>':'')+'</td><td class="num">'+f(sv)+'</td><td class="num">'+f(yv)+'</td><td class="num" style="color:#d98a00;font-weight:700">'+(x._near>0?'+':'')+fmt(x._near)+'</td><td style="font-size:10px">'+esc(lab.t)+'</td>'+(canFix?('<td style="white-space:nowrap">'+act+'</td>'):'')+'</tr>'; }).join('')+
+      const navBtn=lab.nav?'<button class="btn ghost" style="padding:1px 8px;font-size:10px;background:#6c5ce7;color:#fff;border-color:#6c5ce7;margin-inline-start:5px;white-space:nowrap" onclick="reconGotoNearIdx('+i+')" title="انتقال مباشر لمراجعة المصدر">🧭 '+esc(lab.nav.lbl)+' ⤴</button>':'';
+      return '<tr id="recnear-row-'+i+'"><td>'+esc(x.date||'')+(x._dm?' <span style="font-size:9px;color:#b8860b" title="طوبق بتاريخ '+esc(x._dm)+'">📅</span>':'')+'</td><td class="num">'+f(sv)+'</td><td class="num">'+f(yv)+'</td><td class="num" style="color:#d98a00;font-weight:700">'+(x._near>0?'+':'')+fmt(x._near)+'</td><td style="font-size:10px;min-width:150px">'+esc(lab.t)+navBtn+'</td>'+(canFix?('<td style="white-space:nowrap">'+act+'</td>'):'')+'</tr>'; }).join('')+
     '</tbody></table></div></details>'; };
   h+=tblNear(r.nearMatched)+tblStmtOnly(r.stmtOnly)+tblSysOnly(r.sysOnly);
   window._lastReconReport=r;
@@ -4233,19 +4237,31 @@ async function reconDelOne(i,btn){
     toast('✅ حُذفت الحركة'); await load(); try{ runReconcile(); }catch(_){}
   }catch(e){ if(btn){ btn.disabled=false; btn.textContent='🗑️ حذف'; } alert('خطأ: '+e.message); }
 }
-// 🧭 وسم مصدر حركة النظام في المطابقة (من أي سجل جاءت) + هل تقبل تعديل المبلغ مباشرة من هنا
+// 🧭 وسم مصدر حركة النظام في المطابقة (من أي سجل جاءت) + وجهة تنقّل مباشرة + هل تقبل تعديل المبلغ من هنا
 function reconSrcLabel(c){
-  if(!c) return { t:'—', edit:false };
-  if(c._book)   return { t:'💳 دفعة حجز (Booking Form)'+(c.code?' · كود '+c.code:''), edit:false };
-  if(c._fcd)    return { t:'💰 دفعة عميل (First Client Data)'+(c.code?' · كود '+c.code:''), edit:false };
-  if(c._refund) return { t:'↩️ مسترجع عميل'+(c.code?' · كود '+c.code:''), edit:false };
-  if(c._cash)   return { t:'💵 كاش بنكي (Banks Cash)', edit:'cash' };
-  if(c.ssheet)  return { t:'📄 شيت: '+c.ssheet, edit:'txn' };
+  if(!c) return { t:'—', edit:false, nav:null };
+  if(c._book)   return { t:'💳 دفعة حجز (Booking Form)'+(c.code?' · كود '+c.code:''), edit:false, nav:(c.code?{k:'client',a:c.code,lbl:'العميل'}:null) };
+  if(c._fcd)    return { t:'💰 دفعة عميل (First Client Data)'+(c.code?' · كود '+c.code:''), edit:false, nav:(c.code?{k:'client',a:c.code,lbl:'العميل'}:null) };
+  if(c._refund) return { t:'↩️ مسترجع عميل'+(c.code?' · كود '+c.code:''), edit:false, nav:(c.code?{k:'client',a:c.code,lbl:'العميل'}:null) };
+  if(c._cash)   return { t:'💵 كاش بنكي (Banks Cash)', edit:'cash', nav:{k:'cash',lbl:'الكاش'} };
+  if(c.ssheet)  return { t:'📄 شيت: '+c.ssheet, edit:'txn', nav:{k:'banks',lbl:'البنك'} };
   const nt=String(c.note||'');
   const mSup=nt.match(/^(?:دفعة|توزيع)\s+([^·]+?)(?:\s*·|$)/);
-  if(mSup) return { t:'🏦 تحويل مورّد (سداد) — '+mSup[1].trim(), edit:'txn' };
-  return { t:'🏦 حركة بنكية مُدخَلة يدويّاً', edit:'txn' };
+  if(mSup){ const sup=mSup[1].trim(); return { t:'🏦 تحويل مورّد (سداد) — '+sup, edit:'txn', nav:{k:'supplier',a:sup,lbl:'المورّد'} }; }
+  return { t:'🏦 حركة بنكية مُدخَلة يدويّاً', edit:'txn', nav:{k:'banks',lbl:'البنك'} };
 }
+// 🧭 انتقال مباشر لمصدر الحركة (مورّد/عميل/كاش/بنك) لمراجعته بسلاسة من قسم عدم المطابقة
+function reconGoto(kind,arg){
+  try{
+    if(kind==='supplier'){ const t=document.querySelector('.tab[data-p="suppliers"]'); if(t&&typeof tab==='function')tab(t);
+      setTimeout(()=>{ const fl=$('supflt'); if(fl){ if(![].some.call(fl.options,function(o){return o.value===arg;})){ const o=document.createElement('option'); o.value=arg; o.textContent=arg; fl.appendChild(o); } fl.value=arg; if(typeof renderSupplierDetail==='function')renderSupplierDetail(); const box=$('supplier-detail'); if(box)box.scrollIntoView({behavior:'smooth',block:'start'}); } },90); return; }
+    if(kind==='client'){ if(typeof gotoDueClient==='function')gotoDueClient(arg); return; }
+    if(kind==='cash'){ const t=document.querySelector('.tab[data-p="bankscash"]'); if(t&&typeof tab==='function')tab(t); return; }
+    if(kind==='banks'){ const t=document.querySelector('.tab[data-p="banks"]'); if(t&&typeof tab==='function')tab(t); return; }
+  }catch(e){ console.warn('reconGoto',e); }
+}
+function reconGotoIdx(i){ const x=(window._reconSysOnly||[])[i]; if(!x)return; const lab=reconSrcLabel(x); if(lab&&lab.nav)reconGoto(lab.nav.k,lab.nav.a||''); }
+function reconGotoNearIdx(i){ const x=(window._reconNear||[])[i]; if(!x||!x._cand)return; const lab=reconSrcLabel(x._cand); if(lab&&lab.nav)reconGoto(lab.nav.k,lab.nav.a||''); }
 // ✏️ تصحيح مبلغ حركة (بنكية/كاش) إلى قيمة الكشف من شاشة المطابقة — للمالكة فقط. المشتقّة تُوجَّه لمصدرها.
 async function reconFixAmount(i,btn){
   if(!isOwnerUser()){ alert('⚠️ تصحيح المبلغ للمالكة فقط'); return; }
