@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 3أغسطس-ب · مطابقة كشف البنك: مطابقة تقريبية لفروق التقريب/رسوم SWIFT + عمود «🧭 المصدر» في قسم عدم المطابقة (اسم المورّد/العميل) مع زر انتقال مباشر للمراجعة + تصحيح المبلغ لقيمة الكشف</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 3أغسطس-ج · مطابقة كشف البنك: أُلغيت المطابقة التقريبية (مطابقة تامة فقط) · بقي عمود «🧭 المصدر» في قسم عدم المطابقة (اسم المورّد/العميل) مع زر انتقال مباشر للمراجعة والتصحيح من المصدر</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4041,20 +4041,16 @@ function runReconcile(){
     const inR=(d)=>{ const s=String(d||'').slice(0,10); if(!s)return false; if(from&&s<from)return false; if(to&&s>to)return false; return true; };
     const stmt=parsed.txns.filter(x=>(!from&&!to)||inR(x.date)).map(x=>({...x,_m:false}));
     const sys=bankTxAll().filter(x=>bankAlias(x.bank_name)===bank && ((!from&&!to)||inR(x.tx_date))).map(x=>({date:String(x.tx_date||'').slice(0,10),out:Number(x.amount_out||0),in:Number(x.amount_in||0),note:x.note||x.bank_ref||'',id:x.id,src:x.source||'',ssheet:x.src_sheet||'',_cash:!!x._cash,_book:!!x._booking,_fcd:!!x._clientPay,_refund:!!x._refund,_rid:x._rid||null,code:x.client_code||'',pcode:x.payment_code||'',cname:x.client_name||'',cur:x.currency||'',_m:false}));
-    stmt.forEach(s=>{ const cand=sys.find(y=>!y._m && y.date===s.date && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; s._cand=cand; } });
-    stmt.forEach(s=>{ if(s._m)return; const cand=sys.find(y=>!y._m && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; s._cand=cand; s._dm=cand.date; } });
+    stmt.forEach(s=>{ const cand=sys.find(y=>!y._m && y.date===s.date && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; } });
+    stmt.forEach(s=>{ if(s._m)return; const cand=sys.find(y=>!y._m && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; s._dm=cand.date; } });
     // 🔁 مرحلة ثالثة: مطابقة بالمبلغ المطلق بغضّ النظر عن الاتجاه (داخل/خارج) — تحلّ حالات قراءة اتجاه SWIFT بالعكس
-    stmt.forEach(s=>{ if(s._m)return; const sa=Number(s.out||0)+Number(s.in||0); if(sa<=0.005)return; const cand=sys.find(y=>!y._m && Math.abs((Number(y.out||0)+Number(y.in||0))-sa)<0.01); if(cand){ cand._m=true; s._m=true; s._cand=cand; s._dm=(s.date===cand.date?cand.date:('اتجاه/تاريخ · '+cand.date)); } });
-    // 🔵 مرحلة رابعة (تقريبية): نفس الاتجاه، فرق ضئيل (≤ ما بين 1.5 و0.5٪ بسقف 25) وتاريخ ±يومين — تُحسب «مطابقة بفرق تقريب» (رسوم/تقريب SWIFT) مع إظهار الفرق والمصدر للتصحيح
-    const _dd=(a,b)=>{ a=String(a||'').slice(0,10); b=String(b||'').slice(0,10); if(!/^\d{4}-\d{2}-\d{2}$/.test(a)||!/^\d{4}-\d{2}-\d{2}$/.test(b))return 999; return Math.abs((Date.parse(a)-Date.parse(b))/86400000); };
-    stmt.forEach(s=>{ if(s._m)return; const sd=s.out>0.005?'out':(s.in>0.005?'in':null); if(!sd)return; const sv=s[sd]; const tol=Math.min(25,Math.max(1.5,sv*0.005)); const cand=sys.find(y=>{ if(y._m)return false; const yv=y[sd]; if(yv<=0.005)return false; if(Math.abs(yv-sv)>tol)return false; return _dd(y.date,s.date)<=2; }); if(cand){ cand._m=true; s._m=true; s._cand=cand; s._nd=sd; s._near=Math.round((cand[sd]-sv)*100)/100; if(s.date!==cand.date)s._dm=cand.date; } });
+    stmt.forEach(s=>{ if(s._m)return; const sa=Number(s.out||0)+Number(s.in||0); if(sa<=0.005)return; const cand=sys.find(y=>!y._m && Math.abs((Number(y.out||0)+Number(y.in||0))-sa)<0.01); if(cand){ cand._m=true; s._m=true; s._dm=(s.date===cand.date?cand.date:('اتجاه/تاريخ · '+cand.date)); } });
     const sum=(a,k)=>a.reduce((s,x)=>s+Number(x[k]||0),0);
     const stmtOnly=stmt.filter(s=>!s._m), sysOnly=sys.filter(y=>!y._m);
-    const nearMatched=stmt.filter(s=>s._m && s._near!=null && Math.abs(s._near)>=0.01);
     const sOut=sum(stmt,'out'), sIn=sum(stmt,'in');
     window._recRaw=String(parsed.raw||'');   // 📋 نص الكشف الخام (لتشخيص أسطر لم تُقرأ)
     window._lastRecon={bank,from,to,file,txnCount:stmt.length,totalIn:sIn,totalOut:sOut,allOk:(stmtOnly.length===0&&sysOnly.length===0)};
-    renderReconReport({bank,from,to,header:parsed.header,stmt,sys,matched:stmt.filter(s=>s._m).length,stmtOnly,sysOnly,nearMatched,sOut,sIn,yOut:sum(sys,'out'),yIn:sum(sys,'in')});
+    renderReconReport({bank,from,to,header:parsed.header,stmt,sys,matched:stmt.filter(s=>s._m).length,stmtOnly,sysOnly,sOut,sIn,yOut:sum(sys,'out'),yIn:sum(sys,'in')});
   }).catch(e=>{ $('rec-result').innerHTML='<div style="color:var(--red);padding:10px">❌ تعذّر قراءة الملف: '+esc(String(e&&e.message||e))+'<br><span style="font-size:11px;color:var(--muted)">إذا كان PDF غير مدعوم، صدّري الكشف CSV من تطبيق البنك.</span></div>'; });
 }
 function renderReconReport(r){
@@ -4067,7 +4063,6 @@ function renderReconReport(r){
     '<div class="kpi"><div class="ttl">✅ متطابقة</div><div class="val" style="color:#0e9d6a">'+f(r.matched)+'</div></div>'+
     '<div class="kpi"><div class="ttl">⚠️ بالكشف فقط</div><div class="val" style="color:#d98a00">'+f(r.stmtOnly.length)+'</div></div>'+
     '<div class="kpi"><div class="ttl">⚠️ بنظامك فقط</div><div class="val" style="color:#d98a00">'+f(r.sysOnly.length)+'</div></div>'+
-    ((r.nearMatched&&r.nearMatched.length)?'<div class="kpi"><div class="ttl">🔵 بفرق تقريب</div><div class="val" style="color:#0e9d6a">'+f(r.nearMatched.length)+'</div></div>':'')+
     '</div>'+
     '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th></th><th>📄 الكشف</th><th>💻 نظامك</th><th>الفرق</th></tr></thead><tbody>'+
       '<tr><td><b>إجمالي الداخل (+)</b></td><td class="num">'+f(r.sIn)+'</td><td class="num">'+f(r.yIn)+'</td><td class="num" style="font-weight:700;color:'+(Math.abs(dIn)<0.01?'#0e9d6a':'#d11')+'">'+(Math.abs(dIn)<0.01?'✅':f(dIn))+'</td></tr>'+
@@ -4096,18 +4091,7 @@ function renderReconReport(r){
       if(dt==='fcdfix') act='<span style="font-size:9px;background:rgba(217,138,0,.16);color:#b8860b;font-weight:700;padding:1px 6px;border-radius:7px">💰 دفعة عميل</span> <button class="btn ghost" style="padding:2px 9px;font-size:11px;background:#3aa0ff;color:#fff;border-color:#3aa0ff" title="بنكها المسجّل قد يكون خاطئ — انقلها للبنك الصحيح في First Client Data" onclick="reconFixBank('+i+',this)">✏️ صحّح البنك</button>';
       else if(dt) act='<button class="btn ghost" style="padding:2px 10px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="reconDelOne('+i+',this)">🗑️ حذف</button>';
       return '<tr id="recdel-row-'+i+'"'+(dt==='fcdfix'?' style="background:rgba(217,138,0,.06)"':'')+'><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.note||'')+'</td>'+srcCell+(canDel?('<td style="white-space:nowrap">'+act+'</td>'):'')+'</tr>'; }).join('')+'</tbody></table></div></details>'; };
-  // 🔵 «متطابقة بفرق تقريب بسيط» — تعرض الفرق ومصدر الحركة (من أي سجل جاءت) + زر تصحيح لقيمة الكشف للحركات البنكية/الكاش
-  const tblNear=(arr)=>{ if(!arr||!arr.length)return ''; window._reconNear=arr; const canFix=isOwnerUser();
-    return '<details style="margin-top:10px" open><summary style="cursor:pointer;color:#0e9d6a;font-weight:700">🔵 متطابقة بفرق تقريب بسيط ('+arr.length+') — راجعي الفرق وصحّحيه من مصدره</summary>'+
-    '<div style="font-size:10px;color:var(--muted);margin:6px 0">طوبقت رغم فرق ضئيل (رسوم/تقريب حوالات SWIFT). عمود <b>🧭 المصدر</b> يبيّن من أي سجل جاءت الحركة. زر <b>«✏️ صحّح لقيمة الكشف»</b> يعدّل مبلغ الحركة البنكية/الكاش إلى قيمة الكشف مباشرةً وينعكس في السجل؛ أما المشتقّة (حجز/دفعة عميل/مرتجع) فتُعدَّل من مصدرها الأصلي.</div>'+
-    '<div class="tbl-wrap" style="margin-top:6px;max-height:320px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>📄 الكشف</th><th>💻 نظامك</th><th>الفرق</th><th>🧭 المصدر</th>'+(canFix?'<th>إجراء</th>':'')+'</tr></thead><tbody>'+
-    arr.map((x,i)=>{ const c=x._cand||{}; const sd=x._nd||(x.out>0.005?'out':'in'); const sv=(sd==='out'?x.out:x.in); const yv=(sd==='out'?c.out:c.in); const lab=reconSrcLabel(c);
-      let act='<span style="font-size:9px;color:#9aa" title="عدّليها من مصدرها الأصلي">🧭 من مصدرها</span>';
-      if(canFix&&lab.edit) act='<button class="btn ghost" style="padding:2px 10px;font-size:11px;background:#0e9d6a;color:#fff;border-color:#0e9d6a" onclick="reconFixAmount('+i+',this)" title="عدّل مبلغ النظام إلى قيمة الكشف">✏️ صحّح لـ '+f(sv)+'</button>';
-      const navBtn=lab.nav?'<button class="btn ghost" style="padding:1px 8px;font-size:10px;background:#6c5ce7;color:#fff;border-color:#6c5ce7;margin-inline-start:5px;white-space:nowrap" onclick="reconGotoNearIdx('+i+')" title="انتقال مباشر لمراجعة المصدر">🧭 '+esc(lab.nav.lbl)+' ⤴</button>':'';
-      return '<tr id="recnear-row-'+i+'"><td>'+esc(x.date||'')+(x._dm?' <span style="font-size:9px;color:#b8860b" title="طوبق بتاريخ '+esc(x._dm)+'">📅</span>':'')+'</td><td class="num">'+f(sv)+'</td><td class="num">'+f(yv)+'</td><td class="num" style="color:#d98a00;font-weight:700">'+(x._near>0?'+':'')+fmt(x._near)+'</td><td style="font-size:10px;min-width:150px">'+esc(lab.t)+navBtn+'</td>'+(canFix?('<td style="white-space:nowrap">'+act+'</td>'):'')+'</tr>'; }).join('')+
-    '</tbody></table></div></details>'; };
-  h+=tblNear(r.nearMatched)+tblStmtOnly(r.stmtOnly)+tblSysOnly(r.sysOnly);
+  h+=tblStmtOnly(r.stmtOnly)+tblSysOnly(r.sysOnly);
   window._lastReconReport=r;
   $('rec-result').innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 8px"><h4 style="margin:0">📊 تقرير المطابقة — '+esc(r.bank)+(r.from||r.to?' · '+esc(r.from||'…')+' ← '+esc(r.to||'…'):'')+'</h4><div style="display:flex;gap:6px"><button class="btn ghost" style="padding:6px 12px" onclick="reconShowRaw()" title="نص الكشف كما قرأه النظام — لتشخيص أسطر لم تُطابَق (مثل حوالات SWIFT)">🔎 نص الكشف الخام</button><button class="btn" style="padding:6px 14px" onclick="exportReconPDF()">🖨️ تصدير التقرير مفصّل</button></div></div>'+h;
 }
@@ -4261,25 +4245,6 @@ function reconGoto(kind,arg){
   }catch(e){ console.warn('reconGoto',e); }
 }
 function reconGotoIdx(i){ const x=(window._reconSysOnly||[])[i]; if(!x)return; const lab=reconSrcLabel(x); if(lab&&lab.nav)reconGoto(lab.nav.k,lab.nav.a||''); }
-function reconGotoNearIdx(i){ const x=(window._reconNear||[])[i]; if(!x||!x._cand)return; const lab=reconSrcLabel(x._cand); if(lab&&lab.nav)reconGoto(lab.nav.k,lab.nav.a||''); }
-// ✏️ تصحيح مبلغ حركة (بنكية/كاش) إلى قيمة الكشف من شاشة المطابقة — للمالكة فقط. المشتقّة تُوجَّه لمصدرها.
-async function reconFixAmount(i,btn){
-  if(!isOwnerUser()){ alert('⚠️ تصحيح المبلغ للمالكة فقط'); return; }
-  const arr=window._reconNear||[]; const x=arr[i]; if(!x||x._fixed)return; const c=x._cand||{}; const lab=reconSrcLabel(c);
-  const sd=x._nd||(x.out>0.005?'out':'in'); const sv=(sd==='out'?x.out:x.in); const yv=(sd==='out'?c.out:c.in);
-  if(!lab.edit){ alert('⚠️ هذه حركة مشتقّة ('+lab.t+') — عدّلي قيمتها من مصدرها الأصلي (First Client Data / Booking Form)، لا من هنا.'); return; }
-  if(!confirm('✏️ تصحيح مبلغ الحركة في نظامك إلى قيمة الكشف؟\n\nالمصدر: '+lab.t+'\nالتاريخ: '+(x.date||'—')+'\nالحالي في نظامك: '+fmt(yv)+'\nقيمة الكشف: '+fmt(sv)+'\nالفرق: '+(x._near>0?'+':'')+fmt(x._near)))return;
-  if(btn){ btn.disabled=true; btn.textContent='⏳'; }
-  try{
-    let act, payload;
-    if(lab.edit==='cash'){ act='update_bank_cash_amount'; payload={ id:String(c.id).replace(/^bc-/,''), in_raw:(sd==='in'?sv:null), out_raw:(sd==='out'?sv:null) }; if(c.rate)payload.currency_rate=c.rate; }
-    else { act='update_bank_txn_amount'; payload={ id:c.id, amount_out:(sd==='out'?sv:0), amount_in:(sd==='in'?sv:0), allow_sheet:true }; }
-    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:act,payload})});
-    const j=await r.json(); if(j.error) throw new Error(j.error);
-    x._fixed=true; if(btn){ btn.textContent='✅ صُحّح'; btn.disabled=true; btn.style.background='#0e7c50'; btn.style.borderColor='#0e7c50'; }
-    toast('✅ صُحّح المبلغ إلى قيمة الكشف'); await load(); try{ runReconcile(); }catch(_){}
-  }catch(e){ if(btn){ btn.disabled=false; btn.textContent='✏️ صحّح'; } alert('خطأ: '+e.message); }
-}
 // 💰 تصحيح بنك دفعة عميل (First Client Data) — لمّا تظهر «في نظامك ومش بالكشف» لأن بنكها المسجّل خاطئ. تُنقَل للبنك الصحيح عبر set_fcd_bankref.
 function reconFixBank(i,btn){
   if(!isOwnerUser()){ alert('⚠️ تصحيح البنك للمالكة فقط'); return; }
