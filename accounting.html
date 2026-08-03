@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ط · توحيد أسماء البنوك المختلفة (شيت/قائمة) تحت بنك واحد عبر مرادفات bank_alias — بدأنا ببنك مسقط الرئيسي (1146 حركة ظهرت، شامل حوالة النابي)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ي · كشف الحساب البنكي (تفاصيل البنك) صار يُرتَّب بتاريخ الحركة تنازليّاً كأي كشف بنك (كان يجمع حركات الداشبورد فوق بحسب وقت الإدخال فتتبعثر التواريخ)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4188,7 +4188,7 @@ function renderBankDetail(){
   const bank=($('bankflt').value||'').trim();
   const allP=$('all-banks-panel'); if(allP) allP.style.display=bank?'none':'';
   if(!bank){ box.innerHTML=''; return; }
-  const tx=bankTxAll().filter(x=>bankAlias(x.bank_name)===bank).slice().sort((a,b)=>{ const da=a.source==='dashboard'?1:0, db=b.source==='dashboard'?1:0; if(da!==db) return db-da; if(da===1) return String(b.created_at||'').localeCompare(String(a.created_at||''))||String(String(b.id)).localeCompare(String(a.id)); return String(b.tx_date||'').localeCompare(String(a.tx_date||'')); });  // الإدخالات الجديدة أولاً (بعد توحيد اسم البنك)
+  const tx=bankTxAll().filter(x=>bankAlias(x.bank_name)===bank).slice().sort((a,b)=>{ const dc=String(b.tx_date||'').localeCompare(String(a.tx_date||'')); if(dc)return dc; return String(b.created_at||'').localeCompare(String(a.created_at||''))||String(String(b.id)).localeCompare(String(a.id)); });  // 📅 كشف البنك يُرتَّب بتاريخ الحركة تنازليّاً (كأي كشف بنك)، ووقت الإدخال فاصل للتواريخ المتساوية
   const cur=bankMainCur(tx);
   const ti=tx.reduce((s,x)=>s+Number(x.amount_in||0),0), to=tx.reduce((s,x)=>s+Number(x.amount_out||0),0), net=ti-to;
   const agMap={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(c&&r.agent_name&&!agMap[c])agMap[c]=r.agent_name; });
