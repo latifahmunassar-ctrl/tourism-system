@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ل · فُكّ قفل حذف حركات الشيت في المطابقة (لا مزامنة بعد اليوم): زر حذف لكل الحركات الحقيقية (شيت+داشبورد) مع تحذير نهائي مزدوج؛ المشتقّات تبقى تُعدَّل من مصدرها</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-م · تصنيف حوالات كشف البنك أضيف له المستوى الرابع «التفصيل الفرعي» (صندوق/تحويل بنكي/اون لاين…، bc_subdet) — القناة ← الوصف ← التفاصيل ← الفرعي متسلسلة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4005,9 +4005,9 @@ function renderReconReport(r){
   // 📥 «في الكشف وغير مسجّلة» — جدول بزر إدخال مباشر لكل حركة + تصنيف الحوالة قبل الإدخال (تُسجَّل في acc_bank_txn — للمالكة فقط)
   const tblStmtOnly=(arr)=>{ if(!arr.length)return ''; const canAdd=isOwnerUser(); window._reconStmtOnly=arr;
     return '<details style="margin-top:10px" open><summary style="cursor:pointer;color:#d98a00;font-weight:700">⚠️ في الكشف وغير مسجّلة في نظامك ('+arr.length+')'+(canAdd?' — صنّفيها ثم أدخليها مباشرة 👇':'')+'</summary>'+
-    (canAdd?'<div style="margin:8px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:rgba(58,160,255,.06);border-radius:8px;padding:7px 10px"><label style="font-size:11px;font-weight:700">🏷️ تصنيف للكل:</label><select id="recadd-chan-all" onchange="reconChanChange(\'all\')" style="padding:4px 8px;font-size:11px">'+reconChannelOptions('')+'</select><select id="recadd-desc-all" onchange="reconDescChange(\'all\')" disabled style="padding:4px 8px;font-size:11px">'+reconDescOptions('','')+'</select><select id="recadd-det-all" disabled style="padding:4px 8px;font-size:11px">'+reconDetOptions('','')+'</select><button class="btn green" style="padding:6px 16px;font-size:12px" onclick="reconAddAll(\''+esc(r.bank)+'\')">➕ أدخلي الكل ('+arr.length+')</button></div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">التصنيف = <b>القناة</b> ثم <b>الوصف الثانوي</b> ثم <b>التفاصيل</b> بنفس مسميّات تبويب الكاش البنكي. لإضافة قناة/وصف/تفصيل جديد استخدمي تبويب «Banks Cash → إدارة القوائم». التصنيف يُحفظ في الملاحظة والبيان في المرجع البنكي.</div>':'')+
-    '<div class="tbl-wrap" style="margin-top:6px;max-height:320px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>داخل</th><th>خارج</th><th>البيان <span style="font-size:9px;color:var(--muted)">→ مرجع بنكي</span></th>'+(canAdd?'<th>🏷️ القناة</th><th>الوصف الثانوي</th><th>التفاصيل</th><th>إدراج</th>':'')+'</tr></thead><tbody>'+
-    arr.map((x,i)=>{ const _hasDup=canAdd&&(reconFindDup(x,r.bank).length>0); const _dupBadge=_hasDup?' <span style="font-size:9px;background:rgba(217,138,0,.16);color:#b8860b;font-weight:700;padding:1px 6px;border-radius:7px" title="توجد حركة بنفس البنك والمبلغ والتاريخ مسجّلة مسبقاً — راجعي قبل الإضافة">⚠️ مشابهة موجودة</span>':''; return '<tr id="recadd-row-'+i+'"'+(_hasDup?' style="background:rgba(217,138,0,.06)"':'')+'><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.remarks||x.note||'')+_dupBadge+'</td>'+(canAdd?'<td><select id="recadd-chan-'+i+'" onchange="reconChanChange('+i+')" style="padding:2px 5px;font-size:10px;max-width:115px">'+reconChannelOptions('')+'</select></td><td><select id="recadd-desc-'+i+'" onchange="reconDescChange('+i+')" disabled style="padding:2px 5px;font-size:10px;max-width:125px">'+reconDescOptions('','')+'</select></td><td><select id="recadd-det-'+i+'" disabled style="padding:2px 5px;font-size:10px;max-width:125px">'+reconDetOptions('','')+'</select></td><td><button class="btn ghost" style="padding:2px 10px;font-size:11px;background:#3aa0ff;color:#fff;border-color:#3aa0ff" onclick="reconAddOne('+i+',\''+esc(r.bank)+'\',this)">➕ أدخلها</button></td>':'')+'</tr>'; }).join('')+'</tbody></table></div></details>'; };
+    (canAdd?'<div style="margin:8px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:rgba(58,160,255,.06);border-radius:8px;padding:7px 10px"><label style="font-size:11px;font-weight:700">🏷️ تصنيف للكل:</label><select id="recadd-chan-all" onchange="reconChanChange(\'all\')" style="padding:4px 8px;font-size:11px">'+reconChannelOptions('')+'</select><select id="recadd-desc-all" onchange="reconDescChange(\'all\')" disabled style="padding:4px 8px;font-size:11px">'+reconDescOptions('','')+'</select><select id="recadd-det-all" onchange="reconDetChange(\'all\')" disabled style="padding:4px 8px;font-size:11px">'+reconDetOptions('','')+'</select><select id="recadd-sub-all" disabled style="padding:4px 8px;font-size:11px">'+reconSubOptions('','','')+'</select><button class="btn green" style="padding:6px 16px;font-size:12px" onclick="reconAddAll(\''+esc(r.bank)+'\')">➕ أدخلي الكل ('+arr.length+')</button></div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">التصنيف = <b>القناة</b> ← <b>الوصف الثانوي</b> ← <b>التفاصيل</b> ← <b>التفصيل الفرعي</b> (صندوق/تحويل بنكي/اون لاين…) بنفس مسميّات تبويب الكاش البنكي. لإضافة أي مستوى جديد استخدمي «Banks Cash → إدارة القوائم». التصنيف يُحفظ في الملاحظة والبيان في المرجع البنكي.</div>':'')+
+    '<div class="tbl-wrap" style="margin-top:6px;max-height:320px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>داخل</th><th>خارج</th><th>البيان <span style="font-size:9px;color:var(--muted)">→ مرجع بنكي</span></th>'+(canAdd?'<th>🏷️ القناة</th><th>الوصف الثانوي</th><th>التفاصيل</th><th>التفصيل الفرعي</th><th>إدراج</th>':'')+'</tr></thead><tbody>'+
+    arr.map((x,i)=>{ const _hasDup=canAdd&&(reconFindDup(x,r.bank).length>0); const _dupBadge=_hasDup?' <span style="font-size:9px;background:rgba(217,138,0,.16);color:#b8860b;font-weight:700;padding:1px 6px;border-radius:7px" title="توجد حركة بنفس البنك والمبلغ والتاريخ مسجّلة مسبقاً — راجعي قبل الإضافة">⚠️ مشابهة موجودة</span>':''; return '<tr id="recadd-row-'+i+'"'+(_hasDup?' style="background:rgba(217,138,0,.06)"':'')+'><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.remarks||x.note||'')+_dupBadge+'</td>'+(canAdd?'<td><select id="recadd-chan-'+i+'" onchange="reconChanChange('+i+')" style="padding:2px 5px;font-size:10px;max-width:110px">'+reconChannelOptions('')+'</select></td><td><select id="recadd-desc-'+i+'" onchange="reconDescChange('+i+')" disabled style="padding:2px 5px;font-size:10px;max-width:120px">'+reconDescOptions('','')+'</select></td><td><select id="recadd-det-'+i+'" onchange="reconDetChange('+i+')" disabled style="padding:2px 5px;font-size:10px;max-width:120px">'+reconDetOptions('','')+'</select></td><td><select id="recadd-sub-'+i+'" disabled style="padding:2px 5px;font-size:10px;max-width:120px">'+reconSubOptions('','','')+'</select></td><td><button class="btn ghost" style="padding:2px 10px;font-size:11px;background:#3aa0ff;color:#fff;border-color:#3aa0ff" onclick="reconAddOne('+i+',\''+esc(r.bank)+'\',this)">➕ أدخلها</button></td>':'')+'</tr>'; }).join('')+'</tbody></table></div></details>'; };
   // 🗑️ «في نظامك وغير موجودة بالكشف» — جدول بزر حذف للحركات المُدخَلة من الداشبورد (الشيت/المشتقّة لا تُحذف من هنا)
   const tblSysOnly=(arr)=>{ if(!arr.length)return ''; const canDel=isOwnerUser(); window._reconSysOnly=arr;
     // 🔓 يُحذف: أي حركة حقيقية (id رقمي = acc_bank_txn، أو bc- = كاش) شيت أو داشبورد. لا يُحذف: المشتقّات (دفعة عميل fcd- / حجز sl- / مرتجع rf-) لأنها ليست صفوفاً حقيقية.
@@ -4027,15 +4027,19 @@ function reconChannelOptions(sel){ return '<option value="">— اختاري ا�
 function reconDescOptions(ch,sel){ const list=(ch&&typeof bclChDescs==='function')?bclChDescs(ch):[]; return '<option value="">— (اختياري) وصف ثانوي —</option>'+list.map(v=>'<option'+(v===sel?' selected':'')+'>'+esc(v)+'</option>').join(''); }
 // خيارات التفاصيل (المستوى الثالث) لوصف معيّن (bclDets موجودة أصلاً)
 function reconDetOptions(desc,sel){ const list=(desc&&typeof bclDets==='function')?bclDets(desc):[]; return '<option value="">— (اختياري) تفاصيل —</option>'+list.map(v=>'<option'+(v===sel?' selected':'')+'>'+esc(v)+'</option>').join(''); }
-// عند تغيير القناة لصف: يُعاد بناء الوصف الثانوي + تصفير التفاصيل
-function reconChanChange(scope){ const ch=(($('recadd-chan-'+scope)||{}).value||''); const dsel=$('recadd-desc-'+scope); if(dsel){ dsel.innerHTML=reconDescOptions(ch,''); dsel.disabled=!ch; } const tsel=$('recadd-det-'+scope); if(tsel){ tsel.innerHTML=reconDetOptions('',''); tsel.disabled=true; } }
-// عند تغيير الوصف لصف: يُعاد بناء التفاصيل المربوطة به
-function reconDescChange(scope){ const desc=(($('recadd-desc-'+scope)||{}).value||''); const tsel=$('recadd-det-'+scope); if(tsel){ tsel.innerHTML=reconDetOptions(desc,''); tsel.disabled=!desc; } }
+// المستوى الرابع: التفاصيل الفرعية (bc_subdet) — صندوق/تحويل بنكي/اون لاين… تتبع الوصف+التفاصيل
+function reconSubOptions(desc,det,sel){ const list=(desc&&det&&typeof bclSubs==='function')?bclSubs(desc,det):[]; return '<option value="">— (اختياري) تفصيل فرعي —</option>'+list.map(v=>'<option'+(v===sel?' selected':'')+'>'+esc(v)+'</option>').join(''); }
+// عند تغيير القناة لصف: يُعاد بناء الوصف الثانوي + تصفير التفاصيل + الفرعية
+function reconChanChange(scope){ const ch=(($('recadd-chan-'+scope)||{}).value||''); const dsel=$('recadd-desc-'+scope); if(dsel){ dsel.innerHTML=reconDescOptions(ch,''); dsel.disabled=!ch; } const tsel=$('recadd-det-'+scope); if(tsel){ tsel.innerHTML=reconDetOptions('',''); tsel.disabled=true; } const ssel=$('recadd-sub-'+scope); if(ssel){ ssel.innerHTML=reconSubOptions('','',''); ssel.disabled=true; } }
+// عند تغيير الوصف لصف: يُعاد بناء التفاصيل + تصفير الفرعية
+function reconDescChange(scope){ const desc=(($('recadd-desc-'+scope)||{}).value||''); const tsel=$('recadd-det-'+scope); if(tsel){ tsel.innerHTML=reconDetOptions(desc,''); tsel.disabled=!desc; } const ssel=$('recadd-sub-'+scope); if(ssel){ ssel.innerHTML=reconSubOptions('','',''); ssel.disabled=true; } }
+// عند تغيير التفاصيل لصف: يُعاد بناء التفاصيل الفرعية المربوطة (bc_subdet)
+function reconDetChange(scope){ const desc=(($('recadd-desc-'+scope)||{}).value||''); const det=(($('recadd-det-'+scope)||{}).value||''); const ssel=$('recadd-sub-'+scope); if(ssel){ ssel.innerHTML=reconSubOptions(desc,det,''); ssel.disabled=!(desc&&det); } }
 // 📥 إدخال حركة من كشف البنك مباشرة إلى سجل البنك (acc_bank_txn) — للمالكة فقط (تسجيل حركة بنكية)
 // التصنيف = القناة [+ الوصف الثانوي] بنفس مسميّات النظام، يُحفظ في الملاحظة كـ «القناة ← الوصف»
-async function _reconInsertTxn(x,bank,chan,desc,det){
+async function _reconInsertTxn(x,bank,chan,desc,det,sub){
   const _bayan=String(x.remarks||x.note||'').trim();   // 🔖 بيان الكشف يذهب مباشرة لخانة المرجع البنكي
-  const _cls=[String(chan||'').trim(),String(desc||'').trim(),String(det||'').trim()].filter(Boolean).join(' ← ');
+  const _cls=[String(chan||'').trim(),String(desc||'').trim(),String(det||'').trim(),String(sub||'').trim()].filter(Boolean).join(' ← ');
   const _note=_cls?('🏷️ '+_cls):'من مطابقة كشف البنك';
   const p={ tx_date:x.date||null, amount_out:Number(x.out||0), amount_in:Number(x.in||0), bank_name:bank, bank_ref:_bayan||null, note:_note };
   const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_bank_txn',payload:p})});
@@ -4058,27 +4062,27 @@ async function reconAddOne(i,bank,btn){
   if(!isOwnerUser()){ alert('⚠️ تسجيل الحركات البنكية للمالكة فقط'); return; }
   const arr=window._reconStmtOnly||[]; const x=arr[i]; if(!x){ return; }
   if(x._added){ return; }
-  const chan=(($('recadd-chan-'+i)||{}).value||'').trim(); const desc=(($('recadd-desc-'+i)||{}).value||'').trim(); const det=(($('recadd-det-'+i)||{}).value||'').trim();
-  const clsTxt=[chan,desc,det].filter(Boolean).join(' ← ')||'— بلا تصنيف —';
+  const chan=(($('recadd-chan-'+i)||{}).value||'').trim(); const desc=(($('recadd-desc-'+i)||{}).value||'').trim(); const det=(($('recadd-det-'+i)||{}).value||'').trim(); const sub=(($('recadd-sub-'+i)||{}).value||'').trim();
+  const clsTxt=[chan,desc,det,sub].filter(Boolean).join(' ← ')||'— بلا تصنيف —';
   const _dup=reconFindDup(x,bank);   // 🔎 تنبيه تكرار — لا يمنع، فقط يُعلِم
   if(!confirm('➕ إدخال هذه الحركة إلى سجل البنك؟\n\nالتاريخ: '+(x.date||'—')+'\nداخل: '+fmt(x.in||0)+' · خارج: '+fmt(x.out||0)+'\nالبنك: '+bank+'\n🏷️ التصنيف: '+clsTxt+'\n🔖 المرجع البنكي (= البيان): '+(x.remarks||x.note||'—')+reconDupMsg(_dup)))return;
   if(btn){ btn.disabled=true; btn.textContent='⏳'; }
-  try{ await _reconInsertTxn(x,bank,chan,desc,det); x._added=true; if(btn){ btn.textContent='✅ أُدخلت'; btn.style.background='#0e7c50'; btn.style.borderColor='#0e7c50'; } toast('✅ أُدخلت الحركة'+(chan?(' · '+chan):'')+' — ستُطابَق تلقائيّاً'); await load(); }
+  try{ await _reconInsertTxn(x,bank,chan,desc,det,sub); x._added=true; if(btn){ btn.textContent='✅ أُدخلت'; btn.style.background='#0e7c50'; btn.style.borderColor='#0e7c50'; } toast('✅ أُدخلت الحركة'+(chan?(' · '+chan):'')+' — ستُطابَق تلقائيّاً'); await load(); }
   catch(e){ if(btn){ btn.disabled=false; btn.textContent='➕ أدخلها'; } alert('خطأ: '+e.message); }
 }
 async function reconAddAll(bank){
   if(!isOwnerUser()){ alert('⚠️ تسجيل الحركات البنكية للمالكة فقط'); return; }
   const arr=(window._reconStmtOnly||[]).filter(x=>!x._added); if(!arr.length){ alert('لا حركات جديدة للإدخال'); return; }
-  const defChan=(($('recadd-chan-all')||{}).value||'').trim(); const defDesc=(($('recadd-desc-all')||{}).value||'').trim(); const defDet=(($('recadd-det-all')||{}).value||'').trim();
+  const defChan=(($('recadd-chan-all')||{}).value||'').trim(); const defDesc=(($('recadd-desc-all')||{}).value||'').trim(); const defDet=(($('recadd-det-all')||{}).value||'').trim(); const defSub=(($('recadd-sub-all')||{}).value||'').trim();
   const idxOf=(x)=>(window._reconStmtOnly||[]).indexOf(x);
-  const defTxt=[defChan,defDesc,defDet].filter(Boolean).join(' ← ')||'— بلا تصنيف —';
+  const defTxt=[defChan,defDesc,defDet,defSub].filter(Boolean).join(' ← ')||'— بلا تصنيف —';
   // 🔎 تنبيه تكرار جماعي: كم حركة منها مشابهة لموجود مسبقاً
   const dups=arr.filter(x=>reconFindDup(x,bank).length>0);
   let dupTxt='';
   if(dups.length){ dupTxt='\n\n⚠️ '+dups.length+' من هذه الحركات تشبه حركات مسجّلة مسبقاً (نفس البنك والمبلغ والتاريخ) — قد تكون مكرّرة:\n'+dups.slice(0,8).map(x=>'   • '+(x.date||'')+' · خارج '+fmt(x.out||0)+' · داخل '+fmt(x.in||0)).join('\n')+(dups.length>8?('\n   … و'+(dups.length-8)+' غيرها'):'')+'\n\nالقرار لكِ: أكملي إن كانت مختلفة فعلاً، أو ألغي وأدخلي الجديدة فقط يدويّاً.'; }
   if(!confirm('➕ إدخال '+arr.length+' حركة دفعة واحدة إلى سجل البنك «'+bank+'»؟\n\nالتصنيف الافتراضي: '+defTxt+'\n(الحركة التي لها تصنيف خاص من عمودها يُعتمد لها.)\nكلها تُسجَّل بتاريخها ومبلغها وبيانها، وتُطابَق تلقائيّاً.'+dupTxt))return;
   let ok=0,fail=0;
-  for(const x of arr){ const ix=idxOf(x); const oc=(($('recadd-chan-'+ix)||{}).value||'').trim(); const od=(($('recadd-desc-'+ix)||{}).value||'').trim(); const ot=(($('recadd-det-'+ix)||{}).value||'').trim(); const chan=oc||defChan; const desc=oc?od:defDesc; const det=oc?ot:defDet; try{ await _reconInsertTxn(x,bank,chan,desc,det); x._added=true; ok++; }catch(e){ fail++; } }
+  for(const x of arr){ const ix=idxOf(x); const oc=(($('recadd-chan-'+ix)||{}).value||'').trim(); const od=(($('recadd-desc-'+ix)||{}).value||'').trim(); const ot=(($('recadd-det-'+ix)||{}).value||'').trim(); const os=(($('recadd-sub-'+ix)||{}).value||'').trim(); const chan=oc||defChan; const desc=oc?od:defDesc; const det=oc?ot:defDet; const sub=oc?os:defSub; try{ await _reconInsertTxn(x,bank,chan,desc,det,sub); x._added=true; ok++; }catch(e){ fail++; } }
   toast('✅ أُدخلت '+ok+' حركة'+(fail?(' · تعذّر '+fail):''));
   await load();
   try{ runReconcile(); }catch(_){}
