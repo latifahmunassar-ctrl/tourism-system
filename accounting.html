@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ك · كاشف تكرار في «أدخلها»: تنبيه فقط (لا يمنع) عند وجود حركة بنفس البنك+المبلغ+التاريخ — شارة «⚠️ مشابهة موجودة» بالصف + تحذير قبل الإدخال، والمحاسب يقرّر</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ل · فُكّ قفل حذف حركات الشيت في المطابقة (لا مزامنة بعد اليوم): زر حذف لكل الحركات الحقيقية (شيت+داشبورد) مع تحذير نهائي مزدوج؛ المشتقّات تبقى تُعدَّل من مصدرها</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4010,9 +4010,10 @@ function renderReconReport(r){
     arr.map((x,i)=>{ const _hasDup=canAdd&&(reconFindDup(x,r.bank).length>0); const _dupBadge=_hasDup?' <span style="font-size:9px;background:rgba(217,138,0,.16);color:#b8860b;font-weight:700;padding:1px 6px;border-radius:7px" title="توجد حركة بنفس البنك والمبلغ والتاريخ مسجّلة مسبقاً — راجعي قبل الإضافة">⚠️ مشابهة موجودة</span>':''; return '<tr id="recadd-row-'+i+'"'+(_hasDup?' style="background:rgba(217,138,0,.06)"':'')+'><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.remarks||x.note||'')+_dupBadge+'</td>'+(canAdd?'<td><select id="recadd-chan-'+i+'" onchange="reconChanChange('+i+')" style="padding:2px 5px;font-size:10px;max-width:115px">'+reconChannelOptions('')+'</select></td><td><select id="recadd-desc-'+i+'" onchange="reconDescChange('+i+')" disabled style="padding:2px 5px;font-size:10px;max-width:125px">'+reconDescOptions('','')+'</select></td><td><select id="recadd-det-'+i+'" disabled style="padding:2px 5px;font-size:10px;max-width:125px">'+reconDetOptions('','')+'</select></td><td><button class="btn ghost" style="padding:2px 10px;font-size:11px;background:#3aa0ff;color:#fff;border-color:#3aa0ff" onclick="reconAddOne('+i+',\''+esc(r.bank)+'\',this)">➕ أدخلها</button></td>':'')+'</tr>'; }).join('')+'</tbody></table></div></details>'; };
   // 🗑️ «في نظامك وغير موجودة بالكشف» — جدول بزر حذف للحركات المُدخَلة من الداشبورد (الشيت/المشتقّة لا تُحذف من هنا)
   const tblSysOnly=(arr)=>{ if(!arr.length)return ''; const canDel=isOwnerUser(); window._reconSysOnly=arr;
-    const _delType=(x)=>{ const id=x.id; if(x.src!=='dashboard')return null; if(x._book)return null; /* دفعة حجز مشتقّة — لا تُحذف من هنا */ if(typeof id==='string'&&/^bc-/.test(id))return 'cash'; if(typeof id==='string'&&/^(sl|rf)-/.test(id))return null; if(id==null)return null; return 'txn'; };
-    return '<details style="margin-top:10px" open><summary style="cursor:pointer;color:#d98a00;font-weight:700">⚠️ في نظامك وغير موجودة بالكشف ('+arr.length+')'+(canDel?' — يمكنك حذف الزائد المُدخَل يدويّاً 🗑️':'')+'</summary>'+
-    (canDel?'<div style="font-size:10px;color:var(--muted);margin:6px 0">🗑️ الحذف متاح فقط للحركات المُدخَلة من الداشبورد (يدويّاً/من المطابقة). الحركات من الشيت أو دفعات الحجز المشتقّة لا تُحذف من هنا (تُعدَّل من مصدرها).</div>':'')+
+    // 🔓 يُحذف: أي حركة حقيقية (id رقمي = acc_bank_txn، أو bc- = كاش) شيت أو داشبورد. لا يُحذف: المشتقّات (دفعة عميل fcd- / حجز sl- / مرتجع rf-) لأنها ليست صفوفاً حقيقية.
+    const _delType=(x)=>{ const id=x.id; if(x._book)return null; if(typeof id==='string'){ if(/^bc-/.test(id))return 'cash'; return null; /* fcd-/sl-/rf- مشتقّة */ } if(id==null)return null; return 'txn'; };
+    return '<details style="margin-top:10px" open><summary style="cursor:pointer;color:#d98a00;font-weight:700">⚠️ في نظامك وغير موجودة بالكشف ('+arr.length+')'+(canDel?' — يمكنك حذف الزائد يدويّاً 🗑️':'')+'</summary>'+
+    (canDel?'<div style="font-size:10px;color:var(--muted);margin:6px 0">🗑️ الحذف متاح لكل الحركات الحقيقية (شيت + داشبورد). <b style="color:#d11">حذف حركات الشيت نهائي ولا تُسترجَع</b> (لا مزامنة تعيدها) — تأكّدي قبل الحذف. دفعات العملاء/الحجوزات المشتقّة تُعدَّل من مصدرها.</div>':'')+
     '<div class="tbl-wrap" style="margin-top:6px;max-height:300px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>داخل</th><th>خارج</th><th>البيان</th>'+(canDel?'<th>حذف</th>':'')+'</tr></thead><tbody>'+
     arr.map((x,i)=>{ const dt=_delType(x); return '<tr id="recdel-row-'+i+'"><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.note||'')+'</td>'+(canDel?('<td>'+(dt?'<button class="btn ghost" style="padding:2px 10px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="reconDelOne('+i+',this)">🗑️ حذف</button>':'<span style="font-size:9px;color:#9aa" title="من الشيت أو دفعة حجز مشتقّة — تُعدَّل من مصدرها">🔒 غير قابلة</span>')+'</td>'):'')+'</tr>'; }).join('')+'</tbody></table></div></details>'; };
   h+=tblStmtOnly(r.stmtOnly)+tblSysOnly(r.sysOnly);
@@ -4086,14 +4087,21 @@ async function reconAddAll(bank){
 async function reconDelOne(i,btn){
   if(!isOwnerUser()){ alert('⚠️ حذف الحركات البنكية للمالكة فقط'); return; }
   const arr=window._reconSysOnly||[]; const x=arr[i]; if(!x||x._deleted){ return; }
-  if(x.src!=='dashboard'){ alert('⚠️ هذه الحركة من الشيت أو مشتقّة — تُعدَّل من مصدرها، لا تُحذف من هنا'); return; }
+  // 🔒 المشتقّات (دفعة عميل fcd- / حجز sl- / مرتجع rf-) لا تُحذف من هنا — تُعدَّل من مصدرها
+  if(typeof x.id==='string' && /^(sl|rf|fcd)-/.test(x.id)){ alert('⚠️ هذه حركة مشتقّة (دفعة عميل/حجز/مرتجع) — تُعدَّل من مصدرها (First Client Data / Booking Form)، لا تُحذف من هنا'); return; }
+  if(x.id==null){ alert('⚠️ هذه الحركة بلا معرّف — لا تُحذف'); return; }
   const isCash=(typeof x.id==='string'&&/^bc-/.test(x.id));
   const realId=isCash?String(x.id).replace(/^bc-/,''):x.id;
-  if(!confirm('🗑️ حذف هذه الحركة من سجل البنك نهائيّاً؟\n\nالتاريخ: '+(x.date||'—')+'\nداخل: '+fmt(x.in||0)+' · خارج: '+fmt(x.out||0)+'\nالبيان: '+(x.note||'—')+'\n\n⚠️ غير موجودة بالكشف — تأكّدي أنها إدخال زائد/خاطئ.'))return;
+  const isSheet=(x.src==='sheet');
+  const warn=isSheet
+    ? '\n\n🔴 تحذير: هذه الحركة من الشيت — الحذف نهائي ولن تُسترجَع (لا توجد مزامنة تعيدها). تأكّدي تماماً.'
+    : '\n\n⚠️ غير موجودة بالكشف — تأكّدي أنها إدخال زائد/خاطئ.';
+  if(!confirm('🗑️ حذف هذه الحركة من سجل البنك نهائيّاً؟\n\nالتاريخ: '+(x.date||'—')+'\nداخل: '+fmt(x.in||0)+' · خارج: '+fmt(x.out||0)+'\nالبيان: '+(x.note||'—')+'\nالمصدر: '+(isSheet?'الشيت':'الداشبورد')+warn))return;
+  if(isSheet && !confirm('تأكيد أخير: حذف حركة من الشيت نهائيّاً؟ (لا رجوع)'))return;
   if(btn){ btn.disabled=true; btn.textContent='⏳'; }
   try{
     const act=isCash?'delete_bank_cash':'delete_bank_txn';
-    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:act,payload:{id:realId}})});
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:act,payload:{id:realId,allow_sheet:true}})});
     const j=await r.json(); if(j.error) throw new Error(j.error);
     x._deleted=true; if(btn){ btn.textContent='✅ حُذفت'; btn.disabled=true; btn.style.color='#0e7c50'; btn.style.borderColor='#0e7c50'; }
     toast('✅ حُذفت الحركة'); await load(); try{ runReconcile(); }catch(_){}
