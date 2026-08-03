@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ع · تمييز الدفعة «دُفعت لكن تحتاج إدخال بنكي» في المستحقات (تختلف عن غير المدفوع) + تنبيه دائم بالإشعارات «دفعات مدفوعة تحتاج استكمال بنكي» (تختفي فور الاستكمال)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ف · سداد الموردين: التوزيع صار اختياريّاً — تُسجَّل الدفعة مباشرة «🔵 غير موزّعة» وتوزّعينها لاحقاً بزر «📌 وزّع» جنب القيمة (مثل الفنادق)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -5425,18 +5425,20 @@ async function saveDistributedPayments(sup){
   if(gross<=0){ msg.style.color='var(--red)'; msg.textContent='⚠️ أدخلي إجمالي مبلغ التحويل'; return; }
   if(!bank){ msg.style.color='var(--red)'; msg.textContent='⚠️ لازم تحديد البنك'; return; }
   if(!ref){ msg.style.color='var(--red)'; msg.textContent='⚠️ لازم إدخال المرجع البنكي'; return; }
-  if(!lines.length){ msg.style.color='var(--red)'; msg.textContent='وزّعي المبلغ على عميل واحد على الأقل'; return; }
   if(mismatch && (!rate||rate<=0)){ msg.style.color='var(--red)'; msg.textContent='⚠️ أدخلي سعر الصرف لتحويل الدفع لعملة المورّد ('+esc(scur)+')'; return; }
+  // 💸 التوزيع اختياري: لو لم تُوزَّع، تُسجَّل الدفعة «غير موزّعة» ويمكن توزيعها لاحقاً بزر «📌 وزّع» جنب القيمة (مثل الفنادق)
+  const undistributed=!lines.length;
+  const sendLines = undistributed ? [{client_code:null,client_name:null,amount:pool}] : lines;
   // 📋 رسالة تأكيد إلزامية بالقيم الداخلة (المبلغ/التاريخ/المرجع/التوزيع) قبل الإرسال
-  const incomplete=Math.abs(pool-allocSum)>0.5;
-  const distTxt=lines.map(l=>'   • '+(l.client_name||l.client_code||'—')+(l.client_code&&l.client_name?' ('+l.client_code+')':'')+': '+fmt(l.amount)+' '+scur).join('\n');
+  const incomplete=!undistributed && Math.abs(pool-allocSum)>0.5;
+  const distTxt=undistributed ? '   • (غير موزّعة — تُوزَّع لاحقاً بزر «📌 وزّع») : '+fmt(pool)+' '+scur : lines.map(l=>'   • '+(l.client_name||l.client_code||'—')+(l.client_code&&l.client_name?' ('+l.client_code+')':'')+': '+fmt(l.amount)+' '+scur).join('\n');
   const confirmMsg='📋 تأكيد طلب الدفعة — راجعي القيم جيداً:\n\n'+
     '• المورّد: '+sup+'\n'+
     '• مبلغ التحويل: '+fmt(gross)+' '+payCur+(mismatch?(' (= '+fmt(pool)+' '+scur+' بعد الصرف ×'+rate+')'):'')+'\n'+
     '• البنك: '+bank+'\n'+
     '• رقم المرجع البنكي: '+ref+'\n'+
     '• التاريخ: '+(date||'— غير محدّد —')+'\n'+
-    '• التوزيع على العملاء:\n'+distTxt+
+    (undistributed?'• التوزيع: 🔵 غير موزّعة الآن (توزّعينها لاحقاً)\n':'• التوزيع على العملاء:\n'+distTxt)+
     (incomplete?('\n\n⚠️ تنبيه: المتبقّي للتوزيع '+fmt(pool-allocSum)+' '+scur+' لم يُوزَّع بالكامل.'):'')+
     (isOwnerUser()
       ? '\n\n✅ ستُسجَّل الدفعة مباشرة في حساب المورّد والبنك. هل القيم (المبلغ والتاريخ والمرجع) صحيحة؟'
@@ -5444,8 +5446,8 @@ async function saveDistributedPayments(sup){
   if(!confirm(confirmMsg))return;
   const _owner=isOwnerUser();
   msg.style.color='var(--muted)'; msg.textContent=_owner?'جارٍ تسجيل الدفعة…':'جارٍ إرسال الطلب للأدمن…';
-  const summary='💸 دفعة مورّد «'+sup+'» · '+fmt(gross)+' '+payCur+(mismatch?(' (= '+fmt(pool)+' '+scur+')'):'')+' · موزّعة على '+lines.length+' عميل · بنك '+bank+' · مرجع '+ref;
-  const res=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_pending_movement',payload:{kind:'payment',scope:'suppliers',summary:summary,note:'',payload:{supplier_name:sup,tcur:scur,gross:gross,pay_currency:payCur,rate:rate,bank:bank,ref:ref,date:date,note:'',txn_type:'transfer',lines:lines,by:(CURRENT_USER&&CURRENT_USER.staff_name)||'المالكة'}}})});
+  const summary='💸 دفعة مورّد «'+sup+'» · '+fmt(gross)+' '+payCur+(mismatch?(' (= '+fmt(pool)+' '+scur+')'):'')+' · '+(undistributed?'🔵 غير موزّعة':('موزّعة على '+lines.length+' عميل'))+' · بنك '+bank+' · مرجع '+ref;
+  const res=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_pending_movement',payload:{kind:'payment',scope:'suppliers',summary:summary,note:'',payload:{supplier_name:sup,tcur:scur,gross:gross,pay_currency:payCur,rate:rate,bank:bank,ref:ref,date:date,note:'',txn_type:'transfer',lines:sendLines,by:(CURRENT_USER&&CURRENT_USER.staff_name)||'المالكة'}}})});
   const j=await res.json(); if(j.error){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(j.error); alert('⚠️ تعذّر إرسال الدفعة: '+j.error); return; }
   // 👑 المالكة: اعتماد فوري وتسجيل مباشر (بنك + حساب المورّد). غير المالكة: يبقى طلباً بانتظار الاعتماد.
   let okMsg;
