@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ك3 · الكالندر يمنع أي تاريخ مستقبلي في حقول الدفع/الحركات البنكية/الكاش/المرتجع/الحجز/الحضور (max=اليوم) — الوصول/السفر/الاستحقاق تبقى مستقبلية مسموحة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ك4 · زر «🔎 نص الكشف الخام» في تقرير المطابقة — يعرض نص الـPDF كما قرأه النظام مع بحث بالمبلغ، لتشخيص الأسطر غير المقروءة (حوالات SWIFT)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3998,6 +3998,26 @@ async function parseBankCsv(file){
   return { txns:rows, header:{}, raw:t };
 }
 function recDiag(raw){ const txt=String(raw||''); const empty=txt.replace(/\s/g,'').length<20; const sample=txt.slice(0,4000); window._recRaw=txt; return '<div style="background:rgba(217,138,0,.08);border:1px solid #d98a00;border-radius:8px;padding:12px;margin-top:6px">'+(empty?'<div style="font-weight:700;color:#d11;margin-bottom:6px">❌ الملف لا يحتوي نصاً قابلاً للقراءة — غالباً كشف مصوّر (صورة/سكان). صدّري الكشف من تطبيق البنك كـ PDF نصّي أو CSV.</div>':'<div style="font-weight:700;color:#d98a00;margin-bottom:6px">⚠️ تعذّر التعرّف على تنسيق هذا الكشف. انسخي النص التالي وأرسليه للمساعد ليضبط القارئ على بنكك:</div>')+'<textarea readonly onclick="this.select()" style="width:100%;height:160px;font-size:10px;direction:ltr;background:#f6f8fc;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:8px;white-space:pre">'+esc(sample)+'</textarea>'+(empty?'':'<button class="btn" style="margin-top:6px;padding:6px 14px" onclick="navigator.clipboard.writeText(window._recRaw||\'\').then(()=>{this.textContent=\'✅ تم النسخ — أرسليه للمساعد\'})">📋 نسخ النص الكامل</button>')+'</div>'; }
+// 🔎 عرض نص الكشف الخام (كما قرأه النظام) — لتشخيص أسطر لم تُطابَق. مع بحث سريع (مثلاً 4137)
+function reconShowRaw(){
+  const raw=String(window._recRaw||''); if(!raw){ alert('شغّلي «تحقّق وقارن» أولاً'); return; }
+  let m=document.getElementById('recraw-modal'); if(m)m.remove();
+  m=document.createElement('div'); m.id='recraw-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px';
+  m.innerHTML='<div style="background:var(--card,#fff);color:var(--txt,#111);border-radius:14px;padding:18px 20px;width:min(760px,96vw);box-shadow:0 10px 40px rgba(0,0,0,.4)">'+
+    '<h3 style="margin:0 0 8px;color:var(--accent)">🔎 نص الكشف الخام (كما قرأه النظام)</h3>'+
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">ابحثي عن المبلغ غير المطابق (مثلاً <b>4137</b>) لتشوفي كيف يظهر سطره. لو السطر مشوّه/مقطوع → انسخي النص وأرسليه للمساعد ليضبط القارئ.</div>'+
+    '<input id="recraw-q" oninput="reconRawFilter()" placeholder="🔍 بحث بالمبلغ أو الكلمة (مثال: 4137)" style="width:100%;padding:6px 9px;margin-bottom:8px">'+
+    '<textarea id="recraw-txt" readonly style="width:100%;height:320px;font-size:10.5px;direction:ltr;background:#f6f8fc;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:8px;white-space:pre-wrap;word-break:break-word"></textarea>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="btn ghost" onclick="var e=document.getElementById(\'recraw-modal\');if(e)e.remove()">إغلاق</button><button class="btn" onclick="navigator.clipboard.writeText(window._recRaw||\'\').then(()=>{this.textContent=\'✅ نُسخ الكل\'})">📋 نسخ الكل</button></div>'+
+  '</div>';
+  document.body.appendChild(m);
+  $('recraw-txt').value=raw;
+}
+function reconRawFilter(){ const q=(($('recraw-q')||{}).value||'').trim(); const raw=String(window._recRaw||''); const ta=$('recraw-txt'); if(!ta)return;
+  if(!q){ ta.value=raw; return; }
+  const lines=raw.split('\n'); const hit=lines.filter(l=>l.toLowerCase().indexOf(q.toLowerCase())>=0);
+  ta.value=hit.length?('— الأسطر المطابقة لـ «'+q+'» ('+hit.length+') —\n\n'+hit.join('\n')):('لا سطر يحتوي «'+q+'» — يعني القارئ ما وجد المبلغ في نص الكشف إطلاقاً (السطر غالباً صورة أو منسّق بشكل يمنع قراءته).'); }
 function runReconcile(){
   const bank=($('rec-bank')||{}).value||'', from=($('rec-from')||{}).value||'', to=($('rec-to')||{}).value||'';
   const file=($('rec-file')&&$('rec-file').files)?$('rec-file').files[0]:null;
@@ -4014,6 +4034,7 @@ function runReconcile(){
     const sum=(a,k)=>a.reduce((s,x)=>s+Number(x[k]||0),0);
     const stmtOnly=stmt.filter(s=>!s._m), sysOnly=sys.filter(y=>!y._m);
     const sOut=sum(stmt,'out'), sIn=sum(stmt,'in');
+    window._recRaw=String(parsed.raw||'');   // 📋 نص الكشف الخام (لتشخيص أسطر لم تُقرأ)
     window._lastRecon={bank,from,to,file,txnCount:stmt.length,totalIn:sIn,totalOut:sOut,allOk:(stmtOnly.length===0&&sysOnly.length===0)};
     renderReconReport({bank,from,to,header:parsed.header,stmt,sys,matched:stmt.filter(s=>s._m).length,stmtOnly,sysOnly,sOut,sIn,yOut:sum(sys,'out'),yIn:sum(sys,'in')});
   }).catch(e=>{ $('rec-result').innerHTML='<div style="color:var(--red);padding:10px">❌ تعذّر قراءة الملف: '+esc(String(e&&e.message||e))+'<br><span style="font-size:11px;color:var(--muted)">إذا كان PDF غير مدعوم، صدّري الكشف CSV من تطبيق البنك.</span></div>'; });
@@ -4055,7 +4076,7 @@ function renderReconReport(r){
       return '<tr id="recdel-row-'+i+'"'+(dt==='fcdfix'?' style="background:rgba(217,138,0,.06)"':'')+'><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.note||'')+'</td>'+(canDel?('<td style="white-space:nowrap">'+act+'</td>'):'')+'</tr>'; }).join('')+'</tbody></table></div></details>'; };
   h+=tblStmtOnly(r.stmtOnly)+tblSysOnly(r.sysOnly);
   window._lastReconReport=r;
-  $('rec-result').innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 8px"><h4 style="margin:0">📊 تقرير المطابقة — '+esc(r.bank)+(r.from||r.to?' · '+esc(r.from||'…')+' ← '+esc(r.to||'…'):'')+'</h4><button class="btn" style="padding:6px 14px" onclick="exportReconPDF()">🖨️ تصدير التقرير مفصّل</button></div>'+h;
+  $('rec-result').innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 8px"><h4 style="margin:0">📊 تقرير المطابقة — '+esc(r.bank)+(r.from||r.to?' · '+esc(r.from||'…')+' ← '+esc(r.to||'…'):'')+'</h4><div style="display:flex;gap:6px"><button class="btn ghost" style="padding:6px 12px" onclick="reconShowRaw()" title="نص الكشف كما قرأه النظام — لتشخيص أسطر لم تُطابَق (مثل حوالات SWIFT)">🔎 نص الكشف الخام</button><button class="btn" style="padding:6px 14px" onclick="exportReconPDF()">🖨️ تصدير التقرير مفصّل</button></div></div>'+h;
 }
 // 🏷️ تصنيف الحوالة — يعتمد تصنيف النظام الفعلي: القناة (bc_channel) ثم الوصف الثانوي المربوط بها (bc_ch_desc) — نفس تبويب الكاش البنكي
 function reconChannels(){ return [...new Set(listValues('bc_channel').map(v=>String(v.value||'').trim()).filter(Boolean))]; }
