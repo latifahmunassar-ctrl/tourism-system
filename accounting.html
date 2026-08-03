@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ح · مطابقة كشف البنك: زر «🗑️ حذف» للحركات الموجودة بنظامك وغير موجودة بالكشف (المُدخَلة من الداشبورد فقط؛ الشيت والمشتقّة محميّة) — للمالكة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ط · توحيد أسماء البنوك المختلفة (شيت/قائمة) تحت بنك واحد عبر مرادفات bank_alias — بدأنا ببنك مسقط الرئيسي (1146 حركة ظهرت، شامل حوالة النابي)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3894,7 +3894,7 @@ function bankTxAll(){
   return base;
 }
 // ===== مطابقة كشف الحساب البنكي (يقرأ PDF/CSV ويقارن بحركات النظام) =====
-function fillReconBanks(){ const sel=$('rec-bank'); if(!sel)return; const cur=sel.value; const _mg=new Set(listValues('banks').map(v=>String(v.value||'').trim().toLowerCase()).filter(Boolean)); const names=[...new Set(bankTxAll().map(x=>x.bank_name).filter(Boolean))].filter(b=>_mg.has(String(b).trim().toLowerCase())).sort((a,b)=>String(a).localeCompare(String(b),'ar')); sel.innerHTML='<option value="">— اختاري البنك —</option>'+names.map(n=>'<option>'+esc(n)+'</option>').join(''); if(names.indexOf(cur)>=0)sel.value=cur; }
+function fillReconBanks(){ const sel=$('rec-bank'); if(!sel)return; const cur=sel.value; const _mg=new Set(listValues('banks').map(v=>String(v.value||'').trim().toLowerCase()).filter(Boolean)); const names=[...new Set(bankTxAll().map(x=>bankAlias(x.bank_name)).filter(Boolean))].filter(b=>_mg.has(String(b).trim().toLowerCase())).sort((a,b)=>String(a).localeCompare(String(b),'ar')); sel.innerHTML='<option value="">— اختاري البنك —</option>'+names.map(n=>'<option>'+esc(n)+'</option>').join(''); if(names.indexOf(cur)>=0)sel.value=cur; }
 let _pdfjsP=null;
 function loadPdfjs(){ if(window.pdfjsLib)return Promise.resolve(); if(_pdfjsP)return _pdfjsP; _pdfjsP=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'; s.onload=()=>{ try{ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }catch(e){} res(); }; s.onerror=()=>rej(new Error('تعذّر تحميل قارئ PDF (تحتاجين إنترنت)')); document.head.appendChild(s); }); return _pdfjsP; }
 function parseStmtTxns(text){
@@ -3975,7 +3975,7 @@ function runReconcile(){
     if(!parsed.txns.length){ $('rec-result').innerHTML='<h4 style="margin:0 0 8px">🔎 تشخيص الكشف — لم يُتعرّف على أي حركة</h4>'+recDiag(parsed.raw); return; }
     const inR=(d)=>{ const s=String(d||'').slice(0,10); if(!s)return false; if(from&&s<from)return false; if(to&&s>to)return false; return true; };
     const stmt=parsed.txns.filter(x=>(!from&&!to)||inR(x.date)).map(x=>({...x,_m:false}));
-    const sys=bankTxAll().filter(x=>(x.bank_name||'')===bank && ((!from&&!to)||inR(x.tx_date))).map(x=>({date:String(x.tx_date||'').slice(0,10),out:Number(x.amount_out||0),in:Number(x.amount_in||0),note:x.note||x.bank_ref||'',id:x.id,src:x.source||'',_cash:!!x._cash,_book:!!x._booking,_m:false}));
+    const sys=bankTxAll().filter(x=>bankAlias(x.bank_name)===bank && ((!from&&!to)||inR(x.tx_date))).map(x=>({date:String(x.tx_date||'').slice(0,10),out:Number(x.amount_out||0),in:Number(x.amount_in||0),note:x.note||x.bank_ref||'',id:x.id,src:x.source||'',_cash:!!x._cash,_book:!!x._booking,_m:false}));
     stmt.forEach(s=>{ const cand=sys.find(y=>!y._m && y.date===s.date && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; } });
     stmt.forEach(s=>{ if(s._m)return; const cand=sys.find(y=>!y._m && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; s._dm=cand.date; } });
     const sum=(a,k)=>a.reduce((s,x)=>s+Number(x[k]||0),0);
@@ -4151,13 +4151,18 @@ async function deleteRecon(id){
   if(!confirm('حذف هذا التقرير المحفوظ وملف كشف البنك المرفق به؟'))return;
   try{ const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_recon',payload:{id:id}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } await loadReconList(); renderReconSaved(); }catch(e){ alert('خطأ: '+e.message); }
 }
+// 🏦 مرادفات البنوك: توحّد أسماء البنك المختلفة (من الشيت) تحت اسم واحد معتمد. القائمة المُدارة bank_alias بصيغة «الاسم القديم␁الاسم المعتمد».
+function bankAlias(name){ const nm=String(name||'').trim(); if(!nm)return nm;
+  const al=(typeof listValues==='function')?listValues('bank_alias'):[];
+  for(const v of al){ const p=String(v.value||'').split(''); if(p[0]&&p[1]&&p[0].trim()===nm) return p[1].trim(); }
+  return nm; }
 function renderBanks(){
   try{ renderBankCurPanel(); }catch(_){}
   fillReconBanks();
   renderReconSaved(); loadReconList().then(renderReconSaved);
   if(!DATA) return;
   const tx=bankTxAll(); const byBank={};
-  tx.forEach(x=>{ const b=x.bank_name||'(بدون بنك)'; (byBank[b]=byBank[b]||[]).push(x); });
+  tx.forEach(x=>{ const b=bankAlias(x.bank_name)||'(بدون بنك)'; (byBank[b]=byBank[b]||[]).push(x); });   // 🏦 توحيد الأسماء عبر المرادفات
   // البنك صاحب آخر عملية (الأحدث) يطلع أول صف — عمليات الداشبورد الجديدة لها الأولوية ثم تاريخ الحركة
   const bankRecency=b=>{ let key=''; for(const x of (byBank[b]||[])){ const k=(x.source==='dashboard'?'2_'+(x.created_at||''):'1_'+(x.tx_date||'')); if(k>key)key=k; } return key; };
   // نعرض فقط البنوك/البطاقات المُدخلة في القائمة المُدارة (قسم البيانات) — نستبعد أي اسم بنك قديم من الحركات غير موجود بالقائمة
@@ -4174,7 +4179,7 @@ function renderBanks(){
 function bankPick(){
   const q=($('bankq')||{}).value||''; if(!q) return;
   const _mg=new Set(listValues('banks').map(v=>String(v.value||'').trim().toLowerCase()).filter(Boolean));
-  const names=[...new Set(bankTxAll().map(x=>x.bank_name||'(بدون بنك)'))].filter(b=>_mg.has(String(b).trim().toLowerCase()));
+  const names=[...new Set(bankTxAll().map(x=>bankAlias(x.bank_name)||'(بدون بنك)'))].filter(b=>_mg.has(String(b).trim().toLowerCase()));
   let hit=names.find(b=>b===q) || names.find(b=>b.toLowerCase()===q.toLowerCase()) || names.find(b=>b.toLowerCase().indexOf(q.toLowerCase())>=0);
   if(hit){ const s=$('bankflt'); if(s)s.value=hit; renderBankDetail(); window.scrollTo(0,0); }
 }
@@ -4183,7 +4188,7 @@ function renderBankDetail(){
   const bank=($('bankflt').value||'').trim();
   const allP=$('all-banks-panel'); if(allP) allP.style.display=bank?'none':'';
   if(!bank){ box.innerHTML=''; return; }
-  const tx=bankTxAll().filter(x=>(x.bank_name||'')===bank).slice().sort((a,b)=>{ const da=a.source==='dashboard'?1:0, db=b.source==='dashboard'?1:0; if(da!==db) return db-da; if(da===1) return String(b.created_at||'').localeCompare(String(a.created_at||''))||String(String(b.id)).localeCompare(String(a.id)); return String(b.tx_date||'').localeCompare(String(a.tx_date||'')); });  // الإدخالات الجديدة أولاً
+  const tx=bankTxAll().filter(x=>bankAlias(x.bank_name)===bank).slice().sort((a,b)=>{ const da=a.source==='dashboard'?1:0, db=b.source==='dashboard'?1:0; if(da!==db) return db-da; if(da===1) return String(b.created_at||'').localeCompare(String(a.created_at||''))||String(String(b.id)).localeCompare(String(a.id)); return String(b.tx_date||'').localeCompare(String(a.tx_date||'')); });  // الإدخالات الجديدة أولاً (بعد توحيد اسم البنك)
   const cur=bankMainCur(tx);
   const ti=tx.reduce((s,x)=>s+Number(x.amount_in||0),0), to=tx.reduce((s,x)=>s+Number(x.amount_out||0),0), net=ti-to;
   const agMap={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(c&&r.agent_name&&!agMap[c])agMap[c]=r.agent_name; });
