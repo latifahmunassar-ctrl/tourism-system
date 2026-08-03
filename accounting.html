@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ك4 · زر «🔎 نص الكشف الخام» في تقرير المطابقة — يعرض نص الـPDF كما قرأه النظام مع بحث بالمبلغ، لتشخيص الأسطر غير المقروءة (حوالات SWIFT)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ك5 · قارئ كشف البنك يلتقط أسطر الحوالات ذات المبلغ الواحد + وصف طويل (SWIFT/تحويل) — كانت تُتخطّى فتظهر غير مطابقة (مثل حوالة 4,137 ظفار)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3942,7 +3942,17 @@ function parseStmtTxns(text){
       const parts=line.trim().split(/\s+/);
       let pi=-1;
       for(let i=0;i+2<parts.length;i++){ if(isAmt(parts[i])&&isAmt(parts[i+1])&&isAmt(parts[i+2])){ const a=Number(parts[i].replace(/,/g,'')),b=Number(parts[i+1].replace(/,/g,'')); if(a===0||b===0){ pi=i; break; } } }
-      if(pi<0) continue;
+      if(pi<0){
+        // 🔁 احتياطي: سطر بمبلغ واحد ووصف حوالة (SWIFT/تحويل/رسوم) بلا عمود رصيد — يُقرأ كحركة واحدة (بحارس كلمات لمنع التقاط أرقام عشوائية)
+        const lineL=line.toLowerCase();
+        const isTxn=/transfer|swft|swift|custom\s*induced|withdraw|deposit|inward|outward|charge|\bfee\b|ib\//i.test(lineL);
+        if(isTxn){ const ai=[]; for(let i=0;i<parts.length;i++){ if(isAmt(parts[i]) && !/^\d{4}-\d{2}/.test(parts[i])){ const v=Number(parts[i].replace(/,/g,'')); if(v>0.005) ai.push(i); } }
+          if(ai.length===1){ const idx=ai[0]; const amt=Number(parts[idx].replace(/,/g,''));
+            const isIn=/credit|deposit|inward|\bcr\b/i.test(lineL) && !/debit|withdraw|outward|transfer|\bdr\b/i.test(lineL);
+            const rem=parts.slice(0,idx).concat(parts.slice(idx+1)).filter(p=>!/^\d{4}-\d{2}/.test(p)).join(' ').replace(/\s+/g,' ').trim().slice(0,80);
+            rowsD.push({date:dm[1], out:isIn?0:amt, in:isIn?amt:0, bal:0, remarks:rem}); } }
+        continue;
+      }
       const out=Number(parts[pi].replace(/,/g,'')), cin=Number(parts[pi+1].replace(/,/g,''));
       const remarks=parts.slice(0,pi).filter(p=>!/^\d{4}-\d{2}/.test(p)).join(' ').replace(/Balance\s+transf\S*/ig,'').replace(/\d{1,2}:\d{2}/g,'').replace(/\.{2,}/g,'').replace(/\s+/g,' ').trim().slice(0,80);
       rowsD.push({date:dm[1], out:out>0?out:0, in:cin>0?cin:0, bal:Number(parts[pi+2].replace(/,/g,'')), remarks:remarks});
