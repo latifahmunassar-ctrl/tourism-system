@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-م · تصنيف حوالات كشف البنك أضيف له المستوى الرابع «التفصيل الفرعي» (صندوق/تحويل بنكي/اون لاين…، bc_subdet) — القناة ← الوصف ← التفاصيل ← الفرعي متسلسلة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 2أغسطس-ن · تصنيف العمليات البنكية السابقة: زر «🏷️» على كل حركة في تبويب البنوك يفتح مودال التصنيف الرباعي (قناة←وصف←تفاصيل←فرعي) ويعدّله على الحركات المسجّلة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4035,6 +4035,41 @@ function reconChanChange(scope){ const ch=(($('recadd-chan-'+scope)||{}).value||
 function reconDescChange(scope){ const desc=(($('recadd-desc-'+scope)||{}).value||''); const tsel=$('recadd-det-'+scope); if(tsel){ tsel.innerHTML=reconDetOptions(desc,''); tsel.disabled=!desc; } const ssel=$('recadd-sub-'+scope); if(ssel){ ssel.innerHTML=reconSubOptions('','',''); ssel.disabled=true; } }
 // عند تغيير التفاصيل لصف: يُعاد بناء التفاصيل الفرعية المربوطة (bc_subdet)
 function reconDetChange(scope){ const desc=(($('recadd-desc-'+scope)||{}).value||''); const det=(($('recadd-det-'+scope)||{}).value||''); const ssel=$('recadd-sub-'+scope); if(ssel){ ssel.innerHTML=reconSubOptions(desc,det,''); ssel.disabled=!(desc&&det); } }
+// 🏷️ تصنيف عملية بنكية سابقة (من تبويب البنوك) — مودال بالمستويات الأربعة، يقرأ التصنيف الحالي من الملاحظة ويعدّله
+function bankClassEdit(id){
+  if(!isOwnerUser()){ alert('⚠️ تعديل التصنيف للمالكة فقط'); return; }
+  const row=(DATA.bankTx||[]).find(x=>String(x.id)===String(id)); if(!row){ alert('الحركة غير موجودة'); return; }
+  const cur=String(row.note||''); let parts=[];
+  if(cur.indexOf('🏷️')>=0) parts=cur.replace('🏷️','').split('←').map(s=>s.trim());
+  const pc=parts[0]||'', pd=parts[1]||'', pt=parts[2]||'', ps=parts[3]||'';
+  let m=document.getElementById('bank-class-modal'); if(m)m.remove();
+  m=document.createElement('div'); m.id='bank-class-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px';
+  m.innerHTML='<div style="background:var(--card,#fff);color:var(--txt,#111);border-radius:14px;padding:18px 20px;width:min(520px,94vw);box-shadow:0 10px 40px rgba(0,0,0,.35)">'+
+    '<h3 style="margin:0 0 3px;color:var(--accent)">🏷️ تصنيف الحركة</h3>'+
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">'+esc(row.tx_date||'')+' · خارج '+fmt(row.amount_out||0)+' · داخل '+fmt(row.amount_in||0)+' · مرجع '+esc(String(row.bank_ref||'').slice(0,45))+'</div>'+
+    '<div style="display:flex;flex-direction:column;gap:8px">'+
+      '<label style="font-size:11px;font-weight:700">📡 القناة</label><select id="recadd-chan-be" onchange="reconChanChange(\'be\')" style="padding:5px 8px;font-size:12px">'+reconChannelOptions(pc)+'</select>'+
+      '<label style="font-size:11px;font-weight:700">الوصف الثانوي</label><select id="recadd-desc-be" onchange="reconDescChange(\'be\')"'+(pc?'':' disabled')+' style="padding:5px 8px;font-size:12px">'+reconDescOptions(pc,pd)+'</select>'+
+      '<label style="font-size:11px;font-weight:700">التفاصيل</label><select id="recadd-det-be" onchange="reconDetChange(\'be\')"'+(pd?'':' disabled')+' style="padding:5px 8px;font-size:12px">'+reconDetOptions(pd,pt)+'</select>'+
+      '<label style="font-size:11px;font-weight:700">التفصيل الفرعي (صندوق/تحويل بنكي/اون لاين…)</label><select id="recadd-sub-be"'+(pt?'':' disabled')+' style="padding:5px 8px;font-size:12px">'+reconSubOptions(pd,pt,ps)+'</select>'+
+    '</div>'+
+    '<div style="font-size:10px;color:var(--muted);margin-top:8px">يُحفظ في خانة الملاحظة كسلسلة. لإضافة مستوى جديد استخدمي «Banks Cash → إدارة القوائم».</div>'+
+    '<div id="bank-class-msg" style="font-size:12px;margin:8px 0;min-height:15px"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost" onclick="var e=document.getElementById(\'bank-class-modal\');if(e)e.remove()">إلغاء</button><button class="btn green" onclick="bankClassSave('+JSON.stringify(String(id))+','+(row.source==='sheet'?'true':'false')+')">💾 حفظ التصنيف</button></div>'+
+  '</div>';
+  document.body.appendChild(m);
+}
+async function bankClassSave(id,isSheet){
+  const chan=(($('recadd-chan-be')||{}).value||'').trim(); const desc=(($('recadd-desc-be')||{}).value||'').trim(); const det=(($('recadd-det-be')||{}).value||'').trim(); const sub=(($('recadd-sub-be')||{}).value||'').trim();
+  const cls=[chan,desc,det,sub].filter(Boolean).join(' ← '); const note=cls?('🏷️ '+cls):'';
+  const msg=$('bank-class-msg'); msg.style.color='var(--muted)'; msg.textContent='جارٍ الحفظ…';
+  try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_bank_txn_note',payload:{id:isNaN(Number(id))?id:Number(id),note:note,allow_sheet:!!isSheet}})}); const j=await r.json();
+    if(j.error){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(j.error); return; }
+    const mm=document.getElementById('bank-class-modal'); if(mm)mm.remove();
+    toast('✅ حُفظ التصنيف'+(cls?(' · '+chan):'')); await load(); try{ renderBankDetail(); }catch(_){}
+  }catch(e){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(e.message); }
+}
 // 📥 إدخال حركة من كشف البنك مباشرة إلى سجل البنك (acc_bank_txn) — للمالكة فقط (تسجيل حركة بنكية)
 // التصنيف = القناة [+ الوصف الثانوي] بنفس مسميّات النظام، يُحفظ في الملاحظة كـ «القناة ← الوصف»
 async function _reconInsertTxn(x,bank,chan,desc,det,sub){
@@ -4240,7 +4275,7 @@ function renderBankDetail(){
       const warn=pend?'<div style="font-size:9px;color:#d98a00;font-weight:800">'+miss+' <button class="btn ghost" style="padding:0 6px;font-size:9px" onclick="editRefundRef('+Number(x._rid)+')">✏️ إكمال</button></div>':'';
       const dCell=(pend&&!x.tx_date)?'<span style="color:#d98a00;font-weight:700">— ناقص</span>':esc(x.tx_date||'');
       const refCell=(pend&&!x.bank_ref)?'<span style="color:#d98a00;font-weight:700">— ناقص</span>':esc(x.bank_ref||'');
-      return '<tr data-q="'+esc(qd)+'" data-date="'+esc(x.tx_date||'')+'"'+rStyle+'><td>'+dCell+'</td><td style="font-size:10px">'+esc(payMethod(x.bank_name||bank))+'</td><td class="num" style="color:'+(pend?gray:'#0e9d6a')+'">'+(x.amount_in?fmt(x.amount_in):'')+'</td><td class="num'+(pend?'':' neg')+'"'+(pend?' style="color:'+gray+'"':'')+'>'+(outV?fmt(outV):'')+'</td><td>'+refCell+'</td><td>'+esc(x.client_name||'')+warn+'</td><td>'+esc(x.client_code||'')+'</td><td style="color:var(--muted)">'+esc(agMap[(x.client_code||'').toUpperCase()]||'')+'</td><td>'+esc(x.payment_code||'')+'</td><td style="font-weight:600;color:var(--accent)">'+esc(payDate(x.payment_code))+'</td><td style="font-size:10px">'+esc(x.note||'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.src_sheet||'')+'</td></tr>';
+      return '<tr data-q="'+esc(qd)+'" data-date="'+esc(x.tx_date||'')+'"'+rStyle+'><td>'+dCell+'</td><td style="font-size:10px">'+esc(payMethod(x.bank_name||bank))+'</td><td class="num" style="color:'+(pend?gray:'#0e9d6a')+'">'+(x.amount_in?fmt(x.amount_in):'')+'</td><td class="num'+(pend?'':' neg')+'"'+(pend?' style="color:'+gray+'"':'')+'>'+(outV?fmt(outV):'')+'</td><td>'+refCell+'</td><td>'+esc(x.client_name||'')+warn+'</td><td>'+esc(x.client_code||'')+'</td><td style="color:var(--muted)">'+esc(agMap[(x.client_code||'').toUpperCase()]||'')+'</td><td>'+esc(x.payment_code||'')+'</td><td style="font-weight:600;color:var(--accent)">'+esc(payDate(x.payment_code))+'</td><td style="font-size:10px">'+esc(x.note||'')+((isOwnerUser()&&typeof x.id!=='string'&&x.id!=null&&!x._pending)?' <button class="btn ghost" style="padding:0 6px;font-size:10px" title="تصنيف الحركة: قناة ← وصف ← تفاصيل ← فرعي" onclick="bankClassEdit('+x.id+')">🏷️</button>':'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.src_sheet||'')+'</td></tr>';
     }).join(''):'<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:10px">لا توجد حركات</td></tr>')+
     '</tbody></table></div><div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'bnk-tbl\',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'bnk-tbl\',1)">تمرير ▶▶</button></div></div>';
 }
