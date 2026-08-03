@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 3أغسطس-ج · مطابقة كشف البنك: أُلغيت المطابقة التقريبية (مطابقة تامة فقط) · بقي عمود «🧭 المصدر» في قسم عدم المطابقة (اسم المورّد/العميل) مع زر انتقال مباشر للمراجعة والتصحيح من المصدر</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 3أغسطس-د · مطابقة كشف البنك: حصر المقارنة تلقائيّاً على فترة الكشف (يمنع ظهور حركات السنوات القديمة كأنها «غير موجودة بالكشف» أو «رجعت») · مطابقة تامة + عمود «🧭 المصدر» وزر الانتقال</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3991,7 +3991,11 @@ function parseStmtTxns(text){
   while((m=B.exec(text))){ const d=m[1]; const iso=d.slice(6,10)+'-'+d.slice(3,5)+'-'+d.slice(0,2); const amt=Math.abs(Number(m[3].replace(/,/g,''))); const cr=m[4]==='CR'; rowsB.push({date:iso, out:cr?0:amt, in:cr?amt:0, bal:0, remarks:m[2].replace(/\s+/g,' ').trim()}); }
   return rowsB;
 }
-function parseStmtHeader(text){ const g=(re)=>{ const m=text.match(re); return m?m[1]:''; }; return { withdrawals:g(/TOTAL WITHDRAWALS[\s\S]*?([\d,]+\.\d{2,3})/), deposits:g(/TOTAL DEPOSITS[\s\S]*?([\d,]+\.\d{2,3})/), opening:g(/OPENING BALANCE[\s\S]*?([\d,]+\.\d{2,3})/), closing:g(/CLOSING BALANCE[\s\S]*?([\d,]+\.\d{2,3})/) }; }
+function parseStmtHeader(text){ const g=(re)=>{ const m=text.match(re); return m?m[1]:''; };
+  // فترة الكشف: أول زوج تاريخين DD/MM/YYYY في صف بيانات الترويسة (FROM DATE / TO DATE)
+  const md=text.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2})\/(\d{2})\/(\d{4})/);
+  const fromDate=md?(md[3]+'-'+md[2]+'-'+md[1]):'', toDate=md?(md[6]+'-'+md[5]+'-'+md[4]):'';
+  return { withdrawals:g(/TOTAL WITHDRAWALS[\s\S]*?([\d,]+\.\d{2,3})/), deposits:g(/TOTAL DEPOSITS[\s\S]*?([\d,]+\.\d{2,3})/), opening:g(/OPENING BALANCE[\s\S]*?([\d,]+\.\d{2,3})/), closing:g(/CLOSING BALANCE[\s\S]*?([\d,]+\.\d{2,3})/), fromDate, toDate }; }
 async function parseBankPdf(file){ await loadPdfjs(); const buf=await file.arrayBuffer(); const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise; let text=''; for(let p=1;p<=pdf.numPages;p++){ const page=await pdf.getPage(p); const tc=await page.getTextContent(); let lastY=null; tc.items.forEach(it=>{ const y=it.transform[5]; if(lastY!==null&&Math.abs(y-lastY)>3)text+='\n'; text+=it.str+' '; lastY=y; }); text+='\n'; } return { txns:parseStmtTxns(text), header:parseStmtHeader(text), raw:text }; }
 function splitCsvLine(l,delim){ const out=[]; let cur='',q=false; for(let i=0;i<l.length;i++){ const c=l[i]; if(c==='"'){ q=!q; } else if(c===delim && !q){ out.push(cur); cur=''; } else cur+=c; } out.push(cur); return out; }
 async function parseBankCsv(file){
@@ -4038,9 +4042,19 @@ function runReconcile(){
   $('rec-result').innerHTML='<div style="color:var(--muted);padding:10px">⏳ جاري قراءة الكشف والمقارنة…</div>';
   (/\.csv$/i.test(file.name)?parseBankCsv(file):parseBankPdf(file)).then(parsed=>{
     if(!parsed.txns.length){ $('rec-result').innerHTML='<h4 style="margin:0 0 8px">🔎 تشخيص الكشف — لم يُتعرّف على أي حركة</h4>'+recDiag(parsed.raw); return; }
-    const inR=(d)=>{ const s=String(d||'').slice(0,10); if(!s)return false; if(from&&s<from)return false; if(to&&s>to)return false; return true; };
-    const stmt=parsed.txns.filter(x=>(!from&&!to)||inR(x.date)).map(x=>({...x,_m:false}));
-    const sys=bankTxAll().filter(x=>bankAlias(x.bank_name)===bank && ((!from&&!to)||inR(x.tx_date))).map(x=>({date:String(x.tx_date||'').slice(0,10),out:Number(x.amount_out||0),in:Number(x.amount_in||0),note:x.note||x.bank_ref||'',id:x.id,src:x.source||'',ssheet:x.src_sheet||'',_cash:!!x._cash,_book:!!x._booking,_fcd:!!x._clientPay,_refund:!!x._refund,_rid:x._rid||null,code:x.client_code||'',pcode:x.payment_code||'',cname:x.client_name||'',cur:x.currency||'',_m:false}));
+    // 📅 حصر فترة المقارنة تلقائيّاً على فترة الكشف (من ترويسته أو من أقدم/أحدث حركة فيه) إن لم تحدّدها المستخدمة —
+    //    يمنع مقارنة سنوات قديمة (2025) ضد كشف فترة أحدث فتظهر مئات الحركات «غير موجودة بالكشف» بلا داعٍ
+    let _from=from, _to=to, _autoPeriod=false;
+    if(!_from && !_to){
+      const ds=parsed.txns.map(t=>String(t.date||'').slice(0,10)).filter(s=>/^\d{4}-\d{2}-\d{2}$/.test(s)).sort();
+      const hf=String((parsed.header&&parsed.header.fromDate)||'').slice(0,10), ht=String((parsed.header&&parsed.header.toDate)||'').slice(0,10);
+      _from=(ds[0]||(/^\d{4}-\d{2}-\d{2}$/.test(hf)?hf:''));   // الأساس: أقدم حركة فعلية بالكشف (موثوقة)، والترويسة احتياط
+      _to=(ds[ds.length-1]||(/^\d{4}-\d{2}-\d{2}$/.test(ht)?ht:''));
+      if(_from||_to){ _autoPeriod=true; const ef=$('rec-from'), et=$('rec-to'); if(ef&&!ef.value&&_from)ef.value=_from; if(et&&!et.value&&_to)et.value=_to; }
+    }
+    const inR=(d)=>{ const s=String(d||'').slice(0,10); if(!s)return false; if(_from&&s<_from)return false; if(_to&&s>_to)return false; return true; };
+    const stmt=parsed.txns.filter(x=>(!_from&&!_to)||inR(x.date)).map(x=>({...x,_m:false}));
+    const sys=bankTxAll().filter(x=>bankAlias(x.bank_name)===bank && ((!_from&&!_to)||inR(x.tx_date))).map(x=>({date:String(x.tx_date||'').slice(0,10),out:Number(x.amount_out||0),in:Number(x.amount_in||0),note:x.note||x.bank_ref||'',id:x.id,src:x.source||'',ssheet:x.src_sheet||'',_cash:!!x._cash,_book:!!x._booking,_fcd:!!x._clientPay,_refund:!!x._refund,_rid:x._rid||null,code:x.client_code||'',pcode:x.payment_code||'',cname:x.client_name||'',cur:x.currency||'',_m:false}));
     stmt.forEach(s=>{ const cand=sys.find(y=>!y._m && y.date===s.date && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; } });
     stmt.forEach(s=>{ if(s._m)return; const cand=sys.find(y=>!y._m && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; s._dm=cand.date; } });
     // 🔁 مرحلة ثالثة: مطابقة بالمبلغ المطلق بغضّ النظر عن الاتجاه (داخل/خارج) — تحلّ حالات قراءة اتجاه SWIFT بالعكس
@@ -4049,8 +4063,8 @@ function runReconcile(){
     const stmtOnly=stmt.filter(s=>!s._m), sysOnly=sys.filter(y=>!y._m);
     const sOut=sum(stmt,'out'), sIn=sum(stmt,'in');
     window._recRaw=String(parsed.raw||'');   // 📋 نص الكشف الخام (لتشخيص أسطر لم تُقرأ)
-    window._lastRecon={bank,from,to,file,txnCount:stmt.length,totalIn:sIn,totalOut:sOut,allOk:(stmtOnly.length===0&&sysOnly.length===0)};
-    renderReconReport({bank,from,to,header:parsed.header,stmt,sys,matched:stmt.filter(s=>s._m).length,stmtOnly,sysOnly,sOut,sIn,yOut:sum(sys,'out'),yIn:sum(sys,'in')});
+    window._lastRecon={bank,from:_from,to:_to,file,txnCount:stmt.length,totalIn:sIn,totalOut:sOut,allOk:(stmtOnly.length===0&&sysOnly.length===0)};
+    renderReconReport({bank,from:_from,to:_to,autoPeriod:_autoPeriod,header:parsed.header,stmt,sys,matched:stmt.filter(s=>s._m).length,stmtOnly,sysOnly,sOut,sIn,yOut:sum(sys,'out'),yIn:sum(sys,'in')});
   }).catch(e=>{ $('rec-result').innerHTML='<div style="color:var(--red);padding:10px">❌ تعذّر قراءة الملف: '+esc(String(e&&e.message||e))+'<br><span style="font-size:11px;color:var(--muted)">إذا كان PDF غير مدعوم، صدّري الكشف CSV من تطبيق البنك.</span></div>'; });
 }
 function renderReconReport(r){
@@ -4068,7 +4082,8 @@ function renderReconReport(r){
       '<tr><td><b>إجمالي الداخل (+)</b></td><td class="num">'+f(r.sIn)+'</td><td class="num">'+f(r.yIn)+'</td><td class="num" style="font-weight:700;color:'+(Math.abs(dIn)<0.01?'#0e9d6a':'#d11')+'">'+(Math.abs(dIn)<0.01?'✅':f(dIn))+'</td></tr>'+
       '<tr><td><b>إجمالي الخارج (−)</b></td><td class="num">'+f(r.sOut)+'</td><td class="num">'+f(r.yOut)+'</td><td class="num" style="font-weight:700;color:'+(Math.abs(dOut)<0.01?'#0e9d6a':'#d11')+'">'+(Math.abs(dOut)<0.01?'✅':f(dOut))+'</td></tr>'+
     '</tbody></table></div>'+
-    ((r.header&&(r.header.withdrawals||r.header.deposits))?'<div style="font-size:11px;color:var(--muted);margin-top:6px">ترويسة الكشف: إجمالي السحب <b>'+esc(r.header.withdrawals||'-')+'</b> · إجمالي الإيداع <b>'+esc(r.header.deposits||'-')+'</b> · الرصيد الختامي <b>'+esc(r.header.closing||'-')+'</b></div>':'');
+    ((r.header&&(r.header.withdrawals||r.header.deposits))?'<div style="font-size:11px;color:var(--muted);margin-top:6px">ترويسة الكشف: إجمالي السحب <b>'+esc(r.header.withdrawals||'-')+'</b> · إجمالي الإيداع <b>'+esc(r.header.deposits||'-')+'</b> · الرصيد الختامي <b>'+esc(r.header.closing||'-')+'</b></div>':'')+
+    (r.autoPeriod&&(r.from||r.to)?'<div style="font-size:11px;color:#0e7c50;background:rgba(14,157,106,.08);border-radius:6px;padding:5px 9px;margin-top:6px">📅 قُصرت المقارنة تلقائيّاً على فترة الكشف <b>'+esc(r.from||'…')+' ← '+esc(r.to||'…')+'</b> (فحركات النظام خارج هذه الفترة لا تظهر «غير موجودة بالكشف»). تقدرين تغيّرين الفترة من الحقلين فوق ثم «قارني» من جديد.</div>':'');
   const tbl=(title,arr)=>{ if(!arr.length)return ''; return '<details style="margin-top:10px" open><summary style="cursor:pointer;color:#d98a00;font-weight:700">'+title+' ('+arr.length+')</summary><div class="tbl-wrap" style="margin-top:6px;max-height:280px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>داخل</th><th>خارج</th><th>البيان</th></tr></thead><tbody>'+arr.map(x=>'<tr><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?f(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?f(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc((x.remarks||x.note||'')+(x._dm?' · ⚠️ طوبق بتاريخ '+x._dm:''))+'</td></tr>').join('')+'</tbody></table></div></details>'; };
   // 📥 «في الكشف وغير مسجّلة» — جدول بزر إدخال مباشر لكل حركة + تصنيف الحوالة قبل الإدخال (تُسجَّل في acc_bank_txn — للمالكة فقط)
   const tblStmtOnly=(arr)=>{ if(!arr.length)return ''; const canAdd=isOwnerUser(); window._reconStmtOnly=arr;
