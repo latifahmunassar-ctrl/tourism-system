@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ع · شاشة التوزيع تفتح من أعلى القائمة والمؤشّر بالبحث تلقائيّاً (اكتبي الكود ويطلع فوراً) — القائمة مرتّبة بالمبلغ فالأكبر فوق (C26501=816 فوق 707) </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ف · جدول التوزيع صار صفّاً لكل خدمة (غرفة / سرير إضافي…) كلٌّ بتكلفته — توزّعين الدفعة على الخدمة المحدّدة؛ اسم الخدمة يُحفظ فيتحدّث متبقّيها </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3145,8 +3145,8 @@ function openAllocModal(cfg){
     '<h3 style="margin:0 0 3px;color:var(--accent)">📌 توزيع الدفعة على العملاء <span style="font-size:11px;color:var(--muted);font-weight:400">('+clients.length+' عميل — مرّري للأسفل إن لزم)</span></h3>'+
     '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">«'+esc(cfg.payee||'')+'» · المطلوب توزيعه: <b style="color:#0e9d6a">'+fmt(amount)+' '+esc(cur)+'</b>'+(rate>0?' · 🔁 سعر صرف الدفعة: <b style="color:var(--accent)">'+esc(rate)+'</b> (= '+fmt(amount/rate)+' '+esc(costCur)+')':'')+' · <b>بلا إضافة مبلغ جديد</b> — فقط ربط بالعميل.'+(rate>0?' <b style="color:var(--accent)">اكتبي المبلغ الموزّع بالـ'+esc(cur)+' وينقلب لعملة التكلفة تلقائيّاً.</b>':' اكتبي المبلغ أمام العميل (أو زر «كامل المتبقّي»).')+'</div>'+
     '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">🔍 <input id="alloc-q" oninput="allocFilter()" placeholder="بحث بالاسم أو الكود — مثال C26501" style="padding:5px 9px;width:280px;font-size:13px"></div>'+
-    '<div class="tbl-wrap bf-scroll" style="max-height:60vh"><table style="font-size:12.5px;white-space:nowrap"><thead><tr><th>الكود</th><th>العميل</th><th>المتبقّي للمورّد ('+esc(remCur)+')</th><th>🧾 باقٍ على العميل<br><span style="font-size:9px;color:var(--muted)">First Client Data</span></th><th>المبلغ الموزّع ('+esc(cur)+')</th>'+(rate>0?'<th>= بعملة التكلفة ('+esc(costCur)+')</th>':'')+'</tr></thead><tbody id="alloc-tb">'+
-    (clients.length?clients.map(c=>'<tr data-cli="'+esc((c.name+' '+c.code).toLowerCase())+'"><td style="font-weight:700">'+esc(c.code)+'</td><td>'+esc(c.name)+'</td><td class="num"><span class="alloc-rem" data-owed="'+Number(c.owed)+'" style="color:'+(Number(c.owed)<=0.5?'#0e9d6a':'#b8860b')+';font-weight:700">'+(Number(c.owed)<=0.5?'✅ مدفوع':fmt(c.owed))+'</span></td><td class="num" style="font-weight:700;color:'+(c.cliBal==null?'#9aa':(Number(c.cliBal)>0.5?'#d11':'#0e9d6a'))+'" title="باقٍ على العميل نفسه = سعر البيع − المدفوع المعتمد">'+(c.cliBal==null?'—':(fmt(c.cliBal)+' '+esc(c.cliCur||'')))+'</td><td><input type="number" step="any" class="alloc-amt" data-code="'+esc(c.code)+'" data-name="'+esc(c.name)+'" oninput="allocTotal('+amount+')" placeholder="0" style="width:110px;padding:3px"> <button class="btn ghost" style="padding:1px 7px;font-size:10px" onclick="allocFill(this,'+amount+')">كامل المتبقّي</button></td>'+(rate>0?'<td class="num"><span class="alloc-eur" style="color:var(--accent);font-weight:700">—</span></td>':'')+'</tr>').join(''):'<tr><td colspan="'+(rate>0?6:5)+'" style="text-align:center;color:var(--muted);padding:12px">لا يوجد عملاء لهذا المورّد لربطهم</td></tr>')+
+    '<div class="tbl-wrap bf-scroll" style="max-height:60vh"><table style="font-size:12.5px;white-space:nowrap"><thead><tr><th>الكود</th><th>العميل · 🛎️ الخدمة</th><th>المتبقّي للمورّد ('+esc(remCur)+')</th><th>🧾 باقٍ على العميل<br><span style="font-size:9px;color:var(--muted)">First Client Data</span></th><th>المبلغ الموزّع ('+esc(cur)+')</th>'+(rate>0?'<th>= بعملة التكلفة ('+esc(costCur)+')</th>':'')+'</tr></thead><tbody id="alloc-tb">'+
+    (clients.length?clients.map(c=>'<tr data-cli="'+esc((c.name+' '+c.code+' '+(c.svc||'')).toLowerCase())+'"><td style="font-weight:700">'+esc(c.code)+'</td><td>'+esc(c.name)+(c.svc?'<div style="font-size:10px;color:var(--accent);font-weight:600">🛎️ '+esc(c.svc)+'</div>':'')+'</td><td class="num"><span class="alloc-rem" data-owed="'+Number(c.owed)+'" style="color:'+(Number(c.owed)<=0.5?'#0e9d6a':'#b8860b')+';font-weight:700">'+(Number(c.owed)<=0.5?'✅ مدفوع':fmt(c.owed))+'</span></td><td class="num" style="font-weight:700;color:'+(c.cliBal==null?'#9aa':(Number(c.cliBal)>0.5?'#d11':'#0e9d6a'))+'" title="باقٍ على العميل نفسه = سعر البيع − المدفوع المعتمد">'+(c.cliBal==null?'—':(fmt(c.cliBal)+' '+esc(c.cliCur||'')))+'</td><td><input type="number" step="any" class="alloc-amt" data-code="'+esc(c.code)+'" data-name="'+esc(c.name)+'" data-svc="'+esc(c.svc||'')+'" oninput="allocTotal('+amount+')" placeholder="0" style="width:110px;padding:3px"> <button class="btn ghost" style="padding:1px 7px;font-size:10px" onclick="allocFill(this,'+amount+')">كامل المتبقّي</button></td>'+(rate>0?'<td class="num"><span class="alloc-eur" style="color:var(--accent);font-weight:700">—</span></td>':'')+'</tr>').join(''):'<tr><td colspan="'+(rate>0?6:5)+'" style="text-align:center;color:var(--muted);padding:12px">لا يوجد عملاء لهذا المورّد لربطهم</td></tr>')+
     '</tbody></table></div>'+
     '<div style="margin-top:8px;font-size:12.5px">الموزّع: <b id="alloc-sum">0</b> / <b>'+fmt(amount)+'</b> '+esc(cur)+(rate>0?' <span id="alloc-sumcost" style="color:var(--accent)"></span>':'')+' · <span id="alloc-diff" style="font-weight:700"></span></div>'+
     '<div id="alloc-msg" style="font-size:12px;margin:8px 0;min-height:16px"></div>'+
@@ -3172,7 +3172,7 @@ function allocTotal(target){ let s=0; const rate=Number(window._allocRate)||0;
 async function _allocSubmit(target, onSave){
   const msg=$('alloc-msg');
   const _rate=Number(window._allocRate)||0;
-  const lines=[...document.querySelectorAll('#alloc-tb .alloc-amt')].map(i=>{ const o={client_code:i.dataset.code,client_name:i.dataset.name,amount:Number(i.value)||0}; if(_rate>0)o.currency_rate=_rate; return o; }).filter(x=>x.amount>0);
+  const lines=[...document.querySelectorAll('#alloc-tb .alloc-amt')].map(i=>{ const o={client_code:i.dataset.code,client_name:i.dataset.name,amount:Number(i.value)||0}; if(_rate>0)o.currency_rate=_rate; if(i.dataset.svc)o.svc=i.dataset.svc; return o; }).filter(x=>x.amount>0);
   if(!lines.length){ msg.style.color='var(--red)'; msg.textContent='⚠️ وزّعي مبلغاً على عميل واحد على الأقل'; return; }
   const sum=lines.reduce((s,x)=>s+x.amount,0);
   // ✅ توزيع جزئي مسموح — يُمنع فقط تجاوز مبلغ الدفعة
@@ -3205,10 +3205,23 @@ function supAllocPay(btn){
   if(cur && _scurA && String(cur).trim().toUpperCase()===String(_scurA).trim().toUpperCase()) rate=0;   // نفس عملة المورّد → لا تحويل (يمنع تشويه Polandvip)
   const inv=(typeof supInvAll==='function'?supInvAll():[]).filter(x=>String(x.supplier_name||'')===sup);
   const costCur=(rate>0?((inv.find(x=>x.invoice_currency)||{}).invoice_currency||_scurA):_scurA);   // عملة التكلفة المعروضة
-  const byC={}; inv.forEach(x=>{ const c=(x.client_code||'').toUpperCase(); if(!c)return; if(!byC[c]){ const _ci=(typeof clientInfo==='function')?clientInfo(c):null; byC[c]={code:c,name:x.client_name||'',owed:0,cliBal:_ci?(Number(_ci.sold||0)-Number(_ci.paid||0)):null,cliCur:_ci?_ci.cur:''}; } byC[c].owed+=Number(x.invoice_amount||0); });
-  (DATA.supplierPayments||[]).forEach(x=>{ if(String(x.supplier_name||'')!==sup)return; const c=(x.client_code||'').toUpperCase(); if(c&&byC[c]){ byC[c].owed-=supPaidInCur(x,_scurA); } });   // المتبقّي = الفاتورة − المدفوع سابقاً (💱 تحويل فقط عند اختلاف العملة)
-  const clients=Object.values(byC).sort((a,b)=>b.owed-a.owed);   // يظهر الجميع؛ المدفوع له بالكامل يُوسم «✅ مدفوع» بدل إخفائه (غير المدفوع أولاً)
-  openAllocModal({payee:sup,amount,cur,rate,costCur,clients,onSave:async(lines)=>{
+  // 📋 صفّ لكل خدمة (لا تجميع لكل عميل) — عشان تظهر كل خدمة بتكلفتها ويُوزَّع على الخدمة المحدّدة (غرفة/سرير إضافي…)
+  const invByC={}; inv.forEach(x=>{ const c=(x.client_code||'').toUpperCase(); if(!c||!(Number(x.invoice_amount||0)>0.005))return; (invByC[c]=invByC[c]||[]).push(x); });
+  const clients=[];
+  Object.keys(invByC).forEach(c=>{
+    const _ci=(typeof clientInfo==='function')?clientInfo(c):null; const _cb=_ci?(Number(_ci.sold||0)-Number(_ci.paid||0)):null; const _cc=_ci?_ci.cur:'';
+    const svcs=invByC[c].slice();
+    const cpays=(DATA.supplierPayments||[]).filter(p=>String(p.supplier_name||'')===sup && (p.client_code||'').toUpperCase()===c);
+    // 💸 دفعات موسومة بخدمة (🛎️ اسمها) تُخصم من تلك الخدمة؛ العامة (بلا وسم) تُوزَّع على الخدمات الأكبر أولاً
+    const svcPaid={}; let generic=0;
+    cpays.forEach(p=>{ const val=supPaidInCur(p,_scurA); const note=String(p.note||''); const m=svcs.find(x=>{ const n=String(x.svc||'').trim(); return n && note.indexOf('🛎️ '+n)>=0; }); if(m){ svcPaid[m.service_id]=(svcPaid[m.service_id]||0)+val; } else { generic+=val; } });
+    const sorted=svcs.slice().sort((a,b)=>Number(b.invoice_amount||0)-Number(a.invoice_amount||0));
+    let rem=generic; const leftById={};
+    sorted.forEach(x=>{ let left=Number(x.invoice_amount||0)-(svcPaid[x.service_id]||0); if(left<0)left=0; const cut=Math.min(rem,left); left-=cut; rem-=cut; leftById[x.service_id]=left; });
+    svcs.forEach(x=>{ clients.push({code:c,name:x.client_name||'',svc:String(x.svc||'خدمة').trim(),sid:x.service_id||'',owed:(leftById[x.service_id]!=null?leftById[x.service_id]:Number(x.invoice_amount||0)),full:Number(x.invoice_amount||0),cliBal:_cb,cliCur:_cc}); });
+  });
+  clients.sort((a,b)=>b.owed-a.owed);   // غير المدفوع أولاً؛ المدفوع بالكامل يُوسم «✅ مدفوع»
+  openAllocModal({payee:sup,amount,cur,rate,costCur,clients,perService:true,onSave:async(lines)=>{
     const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'allocate_supplier_payment',payload:{pay_ids:ids.map(Number),lines:lines,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j=await r.json();
     if(j.error) throw new Error(j.error);
     const mm=document.getElementById('alloc-modal'); if(mm)mm.remove();
@@ -3792,7 +3805,7 @@ function supInvAll(){
     const owedAmt=isCancel?Number(s.cancel_charge||0):fullCost;
     if(isCancel){ if(!(fullCost>0)&&!(owedAmt>0)) return; } else { if(!(owedAmt>0)) return; }
     const c=(s.client_code||'').toUpperCase();
-    base.push({ id:'sl-'+s.id, service_id:s.id, supplier_name:bf, client_code:s.client_code, client_name:nm[c]||'', agent_name:ag[c]||'', arrival_date:s.check_in||null, invoice_amount:owedAmt, full_value:fullCost, book_actual:frb, cancel_charge:Number(s.cancel_charge||0), cancelled:isCancel, invoice_currency:s.booked_currency||s.currency||null, invoice_date:s.check_in||null, actual_invoice:(s.actual_invoice!=null&&s.actual_invoice!=='')?Number(s.actual_invoice):null, status:s.status||null, source:'dashboard', _booking:true });
+    base.push({ id:'sl-'+s.id, service_id:s.id, supplier_name:bf, client_code:s.client_code, client_name:nm[c]||'', agent_name:ag[c]||'', arrival_date:s.check_in||null, invoice_amount:owedAmt, full_value:fullCost, book_actual:frb, cancel_charge:Number(s.cancel_charge||0), cancelled:isCancel, invoice_currency:s.booked_currency||s.currency||null, invoice_date:s.check_in||null, actual_invoice:(s.actual_invoice!=null&&s.actual_invoice!=='')?Number(s.actual_invoice):null, status:s.status||null, svc:(s.name||SVC[s.kind]||s.kind||'خدمة'), source:'dashboard', _booking:true });
   });
   return base;
 }
