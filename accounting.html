@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ف · جدول التوزيع صار صفّاً لكل خدمة (غرفة / سرير إضافي…) كلٌّ بتكلفته — توزّعين الدفعة على الخدمة المحدّدة؛ اسم الخدمة يُحفظ فيتحدّث متبقّيها </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ق · زر «وزّع» في تبويب الفنادق صار صفّاً لكل خدمة (غرفة / سرير إضافي) مثل الموردين — توزّعين على الخدمة المحدّدة </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3185,10 +3185,17 @@ async function _allocSubmit(target, onSave){
 // كشف الفنادق: توزيع دفعة مورّد مفردة
 function hpAllocPay(id,amount,cur){
   amount=Number(amount)||0; cur=cur||HO_TCUR;
-  const hb=hpHbMatch(HO_PAYEE); const byC={};
-  hb.forEach(h=>{ const c=(h.client_code||'').toUpperCase(); if(!c)return; const frb=Number(h.final_rate_booked||0), rf=Number(h.refund||0), ccg=Number(h.cancel_charge||0); const isC=/cancel/i.test(h.status||''); const eff=isC?Math.max(0,Math.min(rf>0.005?(frb-rf):ccg,frb)):frb; if(!byC[c]){ const _ci=(typeof clientInfo==='function')?clientInfo(c):null; byC[c]={code:c,name:h.client_name||'',owed:0,cliBal:_ci?(Number(_ci.sold||0)-Number(_ci.paid||0)):null,cliCur:_ci?_ci.cur:''}; } byC[c].owed+=eff; });
-  const clients=Object.values(byC).sort((a,b)=>b.owed-a.owed);
-  openAllocModal({payee:HO_PAYEE,amount,cur,clients,onSave:async(lines)=>{
+  const hb=hpHbMatch(HO_PAYEE);
+  // 📋 صفّ لكل خدمة/حجز (لا تجميع لكل عميل) — توزيع على الغرفة/السرير الإضافي… كلٌّ بتكلفته
+  const _pays=(DATA.supplierPayments||[]).filter(p=>hpNorm(p.supplier_name)===hpNorm(HO_PAYEE));
+  const clients=[];
+  hb.forEach(h=>{ const c=(h.client_code||'').toUpperCase(); if(!c)return; const frb=Number(h.final_rate_booked||0), rf=Number(h.refund||0), ccg=Number(h.cancel_charge||0); const isC=/cancel/i.test(h.status||''); const eff=isC?Math.max(0,Math.min(rf>0.005?(frb-rf):ccg,frb)):frb; if(!(eff>0.005))return;
+    const rt=(h.room_type&&String(h.room_type).toLowerCase()!=='undefined')?(' · '+h.room_type):''; const svc=(String(h.hotel_name||'خدمة').trim()+rt).trim();
+    let paidSvc=0; _pays.forEach(p=>{ if((p.client_code||'').toUpperCase()!==c)return; if(String(p.note||'').indexOf('🛎️ '+svc)>=0) paidSvc+=Number(p.amount||0); });
+    const _ci=(typeof clientInfo==='function')?clientInfo(c):null;
+    clients.push({code:c,name:h.client_name||'',svc,owed:Math.max(0,eff-paidSvc),full:eff,cliBal:_ci?(Number(_ci.sold||0)-Number(_ci.paid||0)):null,cliCur:_ci?_ci.cur:''}); });
+  clients.sort((a,b)=>b.owed-a.owed);
+  openAllocModal({payee:HO_PAYEE,amount,cur,clients,perService:true,onSave:async(lines)=>{
     const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'allocate_supplier_payment',payload:{id:id,lines:lines,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j=await r.json();
     if(j.error) throw new Error(j.error);
     const mm=document.getElementById('alloc-modal'); if(mm)mm.remove();
