@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ل · أُضيف حقل «🧭 الوكيل» في فورم تعديل بيانات العميل (First Client Data) — تغيّرين اسم الوكيل من زر «✏️ تعديل» بالمستحقات (للمالكة مباشرة، للمحاسب بموافقة) </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-م2 · حقل الوكيل بفورم تعديل العميل صار بحثاً بالكتابة (اكتبي جزءاً من الاسم فتظهر المطابقات) بدل تصفّح القائمة كلها </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -779,7 +779,7 @@ table{font-weight:600}
       <div class="fld"><label>مرجع البنك <span style="font-size:9px;color:#d98a00">إجباري لو فيه دفعة</span></label><input id="fe-ref"></div>
       <div class="fld"><label>📅 تاريخ الدفع</label><input type="date" id="fe-paydate" style="color-scheme:light;cursor:pointer"></div>
       <div class="fld"><label>👤 الموظف (Confirmed by) <span style="font-size:9px;color:var(--muted)">من القائمة</span></label><select id="fe-staff"></select></div>
-      <div class="fld"><label>🧭 الوكيل (Agent) <span style="font-size:9px;color:var(--muted)">من القائمة</span></label><select id="fe-agent"></select></div>
+      <div class="fld"><label>🧭 الوكيل (Agent) <span style="font-size:9px;color:var(--muted)">اكتبي جزءاً من الاسم</span></label><input id="fe-agent" list="fe-agent-list" autocomplete="off" placeholder="اكتبي جزءاً من اسم الوكيل…"><datalist id="fe-agent-list"></datalist></div>
       <div class="fld"><label>💱 العملة</label><select id="fe-cur"></select></div>
       <div class="fld"><label>📅 تاريخ الوصول</label><input type="date" id="fe-arr" style="color-scheme:light;cursor:pointer"></div>
       <div class="fld"><label>📅 تاريخ الحجز</label><input type="date" id="fe-bdate" style="color-scheme:light;cursor:pointer"></div>
@@ -1384,7 +1384,7 @@ function fcdEdit(id){
   if(r.bank_name && !banks.includes(r.bank_name)){ const o=document.createElement('option'); o.text=r.bank_name; o.value=r.bank_name; o.selected=true; $('fe-bank').add(o); }   // احتفظ ببنك السجل القديم إن لم يكن في القائمة
   if($('fe-staff')){ $('fe-staff').innerHTML='<option value="">— اختاري الموظف —</option>'+staffNameOptions(); const cb=String(r.confirmed_by||'').trim(); if(cb){ if(![...$('fe-staff').options].some(o=>o.value===cb)){ const o=document.createElement('option'); o.text=cb; o.value=cb; $('fe-staff').add(o); } $('fe-staff').value=cb; } }
   if($('fe-cur')){ const curs=[...new Set(['SAR','OMR','USD','MYR','AED','EUR','SGD','GBP','THB',...((typeof listValues==='function'?listValues('currency'):[]).map(v=>v.value)), String(r.currency||'').trim()].filter(Boolean))]; $('fe-cur').innerHTML=curs.map(c=>'<option'+(c===String(r.currency||'').trim()?' selected':'')+'>'+esc(c)+'</option>').join(''); }
-  if($('fe-agent')){ const ags=((DATA&&DATA.agents)||[]).map(a=>a.agent_name).filter(Boolean); const ca=String(r.agent_name||'').trim(); const opts=[...new Set(ags.concat(ca?[ca]:[]))].sort((a,b)=>String(a).localeCompare(String(b),'ar')); $('fe-agent').innerHTML='<option value="">— بدون —</option>'+opts.map(a=>'<option'+(a===ca?' selected':'')+'>'+esc(a)+'</option>').join(''); }
+  if($('fe-agent')){ const ags=((DATA&&DATA.agents)||[]).map(a=>a.agent_name).filter(Boolean); const ca=String(r.agent_name||'').trim(); const opts=[...new Set(ags.concat(ca?[ca]:[]))].sort((a,b)=>String(a).localeCompare(String(b),'ar')); const dl=$('fe-agent-list'); if(dl)dl.innerHTML=opts.map(a=>'<option value="'+esc(a)+'"></option>').join(''); $('fe-agent').value=ca; }
   if($('fe-arr')) $('fe-arr').value=String(r.arrival_date||'').slice(0,10);
   if($('fe-bdate')) $('fe-bdate').value=String(r.booking_date||'').slice(0,10);
   // صف شيت: البيانات المالية للعرض فقط (تُدار من الشيت)؛ يُسمح فقط بالبنك/المرجع/تاريخ الدفع (جداول override)
