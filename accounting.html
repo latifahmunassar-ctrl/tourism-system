@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-س · شاشة التوزيع صارت أكبر (عرض 920 + ارتفاع 60٪ + عدّاد العملاء + خانة بحث أوضح) عشان تشوفين كل العملاء بما فيهم C26501 · + كل العملاء يظهرون والمدفوع له يُوسم «✅ مدفوع»</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ع · شاشة التوزيع تفتح من أعلى القائمة والمؤشّر بالبحث تلقائيّاً (اكتبي الكود ويطلع فوراً) — القائمة مرتّبة بالمبلغ فالأكبر فوق (C26501=816 فوق 707) </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3155,6 +3155,7 @@ function openAllocModal(cfg){
   document.body.appendChild(m);
   document.getElementById('alloc-save-btn').onclick=()=>_allocSubmit(amount, cfg.onSave);
   allocTotal(amount);
+  setTimeout(()=>{ const w=m.querySelector('.tbl-wrap'); if(w)w.scrollTop=0; const q=$('alloc-q'); if(q){ try{ q.focus(); }catch(_){} } },80);   // 🔝 القائمة من الأعلى + المؤشّر بالبحث فوراً (عشان يسهل إيجاد أي عميل بلا تمرير)
 }
 function allocFilter(){ const q=(($('alloc-q')||{}).value||'').trim().toLowerCase(); document.querySelectorAll('#alloc-tb tr').forEach(r=>{ if(!r.dataset.cli)return; r.style.display=(!q||r.dataset.cli.includes(q))?'':'none'; }); }
 function allocFill(btn,target){ const tr=btn.closest('tr'); const inp=tr&&tr.querySelector('.alloc-amt'); if(!inp)return; const rate=Number(window._allocRate)||0; const rem=tr.querySelector('.alloc-rem'); const owed=rem?Number(rem.dataset.owed||0):0;
