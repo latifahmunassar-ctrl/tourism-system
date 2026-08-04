@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ط · بعد التوزيع: العميل «المباشر من المورّد» يظهر «✅ مدفوع للمورّد» ومتبقّيه 0 (مدفوعه = الدفعة الموزّعة المربوطة به محوّلة بالسعر) · + توزيع بعملة مختلفة (USD→EUR) + إلغاء التخصيص</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ي · دفعة المورّد المُدخلة من الداشبورد بلا سند بنكي تنعكس الآن في مطابقة البنك بقيمتها الدقيقة بالكسور (عالج EAGLE 10,595.61 التي كانت تظهر غير مطابقة) — بلا ازدواج (المسجّلة أصلاً بنفس المرجع تُستبعَد)</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3938,6 +3938,16 @@ function bankTxAll(){
     const d=(typeof effPayDate==='function'?effPayDate(r):'')||(_bookDate[c]||'')||String(r.booking_date||'').slice(0,10);
     base.push({ id:'fcd-'+r.id, bank_name:bn, amount_in:amt, amount_out:0, tx_date:d, bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', payment_code:r.payment_code||'', note:'💰 دفعة عميل: '+(r.client_name||'')+(ref?'':' · ⚠️ بلا مرجع'), source:'dashboard', created_at:r.created_at||'', _clientPay:true });
   });
+  // 💸 انعكاس دفعات الموردين المُدخلة من الداشبورد التي لا سند بنكي لها (مرجعها غير مسجّل في acc_bank_txn) — تظهر في مطابقة البنك بقيمتها الدقيقة بالكسور. المسجّلة أصلاً كحركة بنكية (نفس المرجع) لا تُكرّر.
+  (DATA.supplierPayments||[]).forEach(r=>{
+    if(r.source!=='dashboard')return;
+    const amt=Number(r.amount||0); if(!(Math.abs(amt)>0.005))return;
+    const bn=String(r.bank_name||'').trim(); if(!bn)return;
+    const ref=String(r.bank_ref||'').trim(); if(!ref)return;
+    if(_txnRefs.has(ref.toUpperCase()))return;                          // مسجّلة أصلاً بشيت/حركة البنك → لا تُكرّر
+    const isRef=amt<0;                                                  // سالب = مرتجع وارد من المورّد
+    base.push({ id:'sp-'+r.id, bank_name:bn, amount_in:isRef?Math.abs(amt):0, amount_out:isRef?0:amt, tx_date:String(r.payment_date||'').slice(0,10), bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', note:'💸 دفعة مورّد: '+(r.supplier_name||''), source:'dashboard', created_at:r.created_at||'', _suppay:true });
+  });
   return base;
 }
 // ===== مطابقة كشف الحساب البنكي (يقرأ PDF/CSV ويقارن بحركات النظام) =====
@@ -4068,7 +4078,7 @@ function runReconcile(){
     }
     const inR=(d)=>{ const s=String(d||'').slice(0,10); if(!s)return false; if(_from&&s<_from)return false; if(_to&&s>_to)return false; return true; };
     const stmt=parsed.txns.filter(x=>(!_from&&!_to)||inR(x.date)).map(x=>({...x,_m:false}));
-    const sys=bankTxAll().filter(x=>bankAlias(x.bank_name)===bank && ((!_from&&!_to)||inR(x.tx_date))).map(x=>({date:String(x.tx_date||'').slice(0,10),out:Number(x.amount_out||0),in:Number(x.amount_in||0),note:x.note||x.bank_ref||'',id:x.id,src:x.source||'',ssheet:x.src_sheet||'',_cash:!!x._cash,_book:!!x._booking,_fcd:!!x._clientPay,_refund:!!x._refund,_rid:x._rid||null,code:x.client_code||'',pcode:x.payment_code||'',cname:x.client_name||'',cur:x.currency||'',_m:false}));
+    const sys=bankTxAll().filter(x=>bankAlias(x.bank_name)===bank && ((!_from&&!_to)||inR(x.tx_date))).map(x=>({date:String(x.tx_date||'').slice(0,10),out:Number(x.amount_out||0),in:Number(x.amount_in||0),note:x.note||x.bank_ref||'',id:x.id,src:x.source||'',ssheet:x.src_sheet||'',_cash:!!x._cash,_book:!!x._booking,_fcd:!!x._clientPay,_refund:!!x._refund,_suppay:!!x._suppay,_rid:x._rid||null,code:x.client_code||'',pcode:x.payment_code||'',cname:x.client_name||'',cur:x.currency||'',_m:false}));
     stmt.forEach(s=>{ const cand=sys.find(y=>!y._m && y.date===s.date && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; } });
     stmt.forEach(s=>{ if(s._m)return; const cand=sys.find(y=>!y._m && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; s._dm=cand.date; } });
     // 🔁 مرحلة ثالثة: مطابقة بالمبلغ المطلق بغضّ النظر عن الاتجاه (داخل/خارج) — تحلّ حالات قراءة اتجاه SWIFT بالعكس
@@ -4258,6 +4268,7 @@ function reconSrcLabel(c){
   if(c._book)   return { t:'💳 دفعة حجز (Booking Form)'+(c.code?' · كود '+c.code:''), edit:false, nav:(c.code?{k:'client',a:c.code,lbl:'العميل'}:null) };
   if(c._fcd)    return { t:'💰 دفعة عميل (First Client Data)'+(c.code?' · كود '+c.code:''), edit:false, nav:(c.code?{k:'client',a:c.code,lbl:'العميل'}:null) };
   if(c._refund) return { t:'↩️ مسترجع عميل'+(c.code?' · كود '+c.code:''), edit:false, nav:(c.code?{k:'client',a:c.code,lbl:'العميل'}:null) };
+  if(c._suppay){ const sn=String(c.note||'').replace(/^💸\s*دفعة مورّد:\s*/,'').trim(); return { t:'💸 دفعة مورّد'+(sn?' — '+sn:''), edit:false, nav:(sn?{k:'supplier',a:sn,lbl:'المورّد'}:null) }; }
   if(c._cash)   return { t:'💵 كاش بنكي (Banks Cash)', edit:'cash', nav:{k:'cash',lbl:'الكاش'} };
   if(c.ssheet)  return { t:'📄 شيت: '+c.ssheet, edit:'txn', nav:{k:'banks',lbl:'البنك'} };
   const nt=String(c.note||'');
