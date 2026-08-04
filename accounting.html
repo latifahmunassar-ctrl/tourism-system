@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ب · مطابقة كشف البنك: إظهار الكسور الدقيقة (4,136.72 لا 4,137) + زر «✏️ صحّح المبلغ» يدويّاً لقيمة الكشف (المصدر الأساسي) في قسم عدم المطابقة + عمود «🧭 المصدر» + حصر فترة الكشف تلقائيّاً</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ج · تبويب الموردين: تعديل دفعة بنكية سابقة صار يشمل «💱 العملة المدفوعة» و«🔁 سعر الصرف» لضبط كشف المورّد · + مطابقة البنك: كسور دقيقة + «✏️ صحّح المبلغ» + «🧭 المصدر» + حصر فترة الكشف</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -5627,6 +5627,11 @@ function spEditTransfer(btn){
   const txn=btn.dataset.txn||'', curRef=btn.dataset.ref||'', curBank=btn.dataset.bank||'', curDate=btn.dataset.date||'', sup=btn.dataset.sup||'';
   const curSum=Math.abs(Number(btn.dataset.sum||0)); const single=(ids.length===1);   // 💰 تعديل المبلغ للتحويل المفرد فقط
   const canRef=(typeof canEnterBankRef==='function')?canEnterBankRef():true;
+  // 💱 العملة المدفوعة + سعر الصرف الحاليان (من سجل الدفعة — يُطبَّق التعديل على كل صفوف التحويل)
+  const _pr=(DATA.supplierPayments||[]).find(pp=>String(pp.id)===String(ids[0]))||{};
+  const curCur=_pr.currency||''; const curRate=(_pr.currency_rate!=null&&_pr.currency_rate!=='')?_pr.currency_rate:'';
+  const curList=[...new Set([curCur,'OMR','SAR','USD','AED','EUR','MYR','SGD','GBP','THB',...listValues('currency').map(v=>v.value)])].filter(Boolean);
+  const curOpts='<option value="">— بلا —</option>'+curList.map(c=>'<option'+(c===curCur?' selected':'')+'>'+esc(c)+'</option>').join('');
   const bankOpts='<option value="">— اختاري البنك —</option>'+listValues('banks').map(b=>'<option'+(String(b.value)===curBank?' selected':'')+'>'+esc(b.value)+'</option>').join('')+(curBank&&!listValues('banks').some(b=>String(b.value)===curBank)?'<option selected>'+esc(curBank)+'</option>':'');
   let m=document.getElementById('sp-tredit'); if(m)m.remove();
   m=document.createElement('div'); m.id='sp-tredit';
@@ -5635,6 +5640,8 @@ function spEditTransfer(btn){
     '<h3 style="margin:0 0 3px;color:var(--accent)">✏️ تعديل التحويل البنكي</h3>'+
     '<div style="font-size:11px;color:var(--muted);margin-bottom:13px">'+esc(sup)+' · '+ids.length+' عميل · '+(isOwnerUser()?'<b style="color:#0e9d6a">يُطبَّق مباشرة</b>':'<b style="color:#b8860b">يُرسَل لموافقة المالكة</b>')+'</div>'+
     '<div class="fld" style="margin-bottom:9px"><label>💰 قيمة المبلغ المدفوع'+(single?'':' <span style="color:#d11;font-size:9px">🔒 موزّع على عدة عملاء — يُعدَّل بإعادة التوزيع</span>')+'</label><input type="number" id="tre-amt" step="any" value="'+esc(curSum)+'" style="width:100%"'+(single?'':' disabled')+'></div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:9px"><div class="fld" style="flex:1;margin:0"><label>💱 العملة المدفوعة</label><select id="tre-cur" style="width:100%">'+curOpts+'</select></div><div class="fld" style="flex:1;margin:0"><label>🔁 سعر الصرف</label><input type="number" id="tre-rate" step="any" placeholder="—" value="'+esc(curRate)+'" style="width:100%"></div></div>'+
+    '<div style="font-size:10px;color:var(--muted);margin:-4px 0 9px">تعديل العملة/السعر يُطبَّق على سجل دفعة المورّد (لضبط كشف حسابه)؛ لا يمسّ عملة الحركة البنكية.</div>'+
     '<div class="fld" style="margin-bottom:9px"><label>🏦 اسم البنك</label><select id="tre-bank" style="width:100%">'+bankOpts+'</select></div>'+
     '<div class="fld" style="margin-bottom:9px"><label>🔖 المرجع البنكي'+(canRef?'':' <span style="color:#d11;font-size:9px">🔒 المحاسب/المالكة فقط</span>')+'</label><input id="tre-ref" value="'+esc(curRef)+'" style="width:100%"'+(canRef?'':' disabled')+'></div>'+
     '<div class="fld" style="margin-bottom:14px"><label>📅 تاريخ الدفع</label><input type="date" id="tre-date" value="'+esc(curDate)+'" style="width:100%;color-scheme:light"></div>'+
@@ -5642,22 +5649,26 @@ function spEditTransfer(btn){
     '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost" onclick="var e=document.getElementById(\'sp-tredit\');if(e)e.remove()">إلغاء</button><button class="btn green" id="tre-save">💾 حفظ</button></div>'+
   '</div>';
   document.body.appendChild(m);
-  $('tre-save').onclick=()=>saveSpTransferEdit(ids, txn, sup, canRef, single, curSum);
+  $('tre-save').onclick=()=>saveSpTransferEdit(ids, txn, sup, canRef, single, curSum, curCur, curRate);
 }
-async function saveSpTransferEdit(ids, txn, sup, canRef, single, curSum){
+async function saveSpTransferEdit(ids, txn, sup, canRef, single, curSum, curCur, curRate){
   const bank=($('tre-bank').value||'').trim(); const ref=($('tre-ref').value||'').trim(); const date=($('tre-date').value||'')||null;
   const msg=$('tre-msg');
   const payload={pay_ids:ids.map(Number),txn_id:txn?Number(txn):null,bank_name:bank||null,payment_date:date,sup:sup,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''};
   if(canRef) payload.bank_ref=ref||null;   // المرجع يُرسَل فقط لو مخوّلة (المحاسب/المالكة)
   // 💰 المبلغ: يُرسَل فقط للتحويل المفرد وإذا تغيّر فعلاً
   if(single){ const nv=Number(($('tre-amt')||{}).value); if(!isNaN(nv) && nv>0 && Math.abs(nv-Number(curSum||0))>0.005){ payload.amount=nv; } }
+  // 💱 العملة + 🔁 سعر الصرف: يُرسَلان فقط إذا تغيّرا فعلاً
+  const nCur=(($('tre-cur')||{}).value||'').trim(); if(nCur!==String(curCur||'')) payload.currency=nCur||null;
+  const rRaw=(($('tre-rate')||{}).value||'').trim(); const rNorm=(rRaw===''?'':String(Number(rRaw))); if(rNorm!==String(curRate!=null&&curRate!==''?Number(curRate):'')){ if(rRaw===''||(!isNaN(Number(rRaw))&&Number(rRaw)>0)) payload.currency_rate=(rRaw===''?null:Number(rRaw)); }
   msg.style.color='var(--muted)'; msg.textContent='جارٍ الحفظ…';
   try{
     const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'edit_sup_transfer',payload:payload})});
     const j=await r.json();
     if(j.error){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(j.error); return; }
     const mm=document.getElementById('sp-tredit'); if(mm)mm.remove();
-    alert(j.pending?('🔒 '+(j.msg||'أُرسل طلب تعديل التحويل لموافقة المالكة — لن يتغيّر حتى الاعتماد')):'✅ تم تعديل التحويل'+(payload.amount!=null?' (شامل المبلغ)':' (البنك/المرجع/التاريخ)'));
+    const _bits=[]; if(payload.amount!=null)_bits.push('المبلغ'); if('currency' in payload)_bits.push('العملة'); if('currency_rate' in payload)_bits.push('سعر الصرف'); if(payload.bank_name||('bank_ref' in payload)||payload.payment_date)_bits.push('البنك/المرجع/التاريخ');
+    alert(j.pending?('🔒 '+(j.msg||'أُرسل طلب تعديل التحويل لموافقة المالكة — لن يتغيّر حتى الاعتماد')):'✅ تم تعديل التحويل'+(_bits.length?' ('+_bits.join(' + ')+')':''));
     const cur=($('supflt')||{}).value||''; await load(); if($('supflt')){ $('supflt').value=cur; renderSupplierDetail(); }
   }catch(e){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(e.message); }
 }
