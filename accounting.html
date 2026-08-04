@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ح · توزيع دفعة بعملة مختلفة: تكتبين المبلغ الموزّع بعملة الدفعة (USD) وينقلب لعملة التكلفة (EUR) تلقائيّاً بسعر صرف الدفعة، فيتطابق مع متبقّي العميل بلا كسر الحساب · + إلغاء التخصيص + إخفاء المدفوع له</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ط · بعد التوزيع: العميل «المباشر من المورّد» يظهر «✅ مدفوع للمورّد» ومتبقّيه 0 (مدفوعه = الدفعة الموزّعة المربوطة به محوّلة بالسعر) · + توزيع بعملة مختلفة (USD→EUR) + إلغاء التخصيص</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -5042,6 +5042,8 @@ function renderSupplierDetail(){
   const _directOwedSum=Object.keys(invCli).filter(c=>directCodes.has((c||'').toUpperCase())).reduce((s,c)=>s+Number(invCli[c]||0),0);
   const _owedNonDirect=Math.max(0, owedT-_directOwedSum);
   const allocR=_owedNonDirect>0?Math.min(1,paidT/_owedNonDirect):0;
+  // 📌 دفعات موزّعة مربوطة بعميل محدّد (بعملة المورّد عبر سعر الصرف) — تُقفل مدفوع العميل «المباشر من المورّد» بدل بقائه غير مدفوع
+  const spByC={}; (DATA.supplierPayments||[]).forEach(x=>{ if(String(x.supplier_name||'')!==sup)return; const cc=(x.client_code||'').toUpperCase(); if(!cc)return; const r=Number(x.currency_rate); spByC[cc]=(spByC[cc]||0)+(r>0?Number(x.amount||0)/r:Number(x.amount||0)); });
   // عملاء لهم حجز ملغى مع هذا المورّد — تظهر القيمة مع علامة «ملغى» حتى لو لم يأخذ المورّد شيئاً
   const cancelledCodes=new Set(); (DATA.serviceLines||[]).forEach(s=>{ if(String(s.booked_from||s.supplier||'').trim()!==_supT) return; if(/cancel/i.test(String(s.status||''))) cancelledCodes.add((s.client_code||'').toUpperCase()); });
   const cancVal={}; list.forEach(x=>{ if(x.cancelled){ const c=(x.client_code||'').toUpperCase(); cancVal[c]=(cancVal[c]||0)+Number(x.full_value||0); } });   // القيمة الأصلية للحجوزات الملغاة (للعلم)
@@ -5136,11 +5138,13 @@ function renderSupplierDetail(){
       '</div>'+
       '<div class="tbl-wrap bf-scroll" id="sp-dist-wrap" style="max-height:300px"><table style="font-size:11.5px"><thead><tr><th>كود العميل</th><th>تاريخ الوصول 📅</th><th>العميل</th><th>الوكيل</th><th>قيمة الدفع المُسدَّد<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>client balance payment</th><th>الربح المتوقع<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>الربح الفعلي<br><span style="font-size:9px;color:var(--muted)">من Booking Form</span></th><th>قيمة الحجز قبل الإلغاء<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>رسوم الإلغاء<br><span style="font-size:9px;color:var(--muted)">Cancelation Charge ('+esc(SCUR)+')</span></th><th>قيمة الحجز<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>فاتورة المورّد ✏️<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>الفرق</th><th>مدفوع سابقاً</th><th>المتبقّي</th><th>ادفع الآن</th></tr></thead><tbody id="sp-dist-tbl">'+
       (function(){
-        const rowHtml=(c)=>{ const owed=invCli[c]; const isDirect=directCodes.has((c||'').toUpperCase());   // دين مباشر للمورّد = غير مدفوع (لا يأخذ من التوزيع النسبي)
-          const paid=isDirect?0:Math.max(0,owed-(cancOwed[c]||0))*allocR; const mid=cliMainId[c];   /* رسوم الإلغاء تبقى مستحقة (غير مدفوعة تلقائياً) */ const av=cliActual[c]; const entered=(av!=null); const diff=owed-(entered?av:owed);
+        const rowHtml=(c)=>{ const owed=invCli[c]; const cu=(c||'').toUpperCase(); const isDirect=directCodes.has(cu);   // دين مباشر للمورّد = غير مدفوع (لا يأخذ من التوزيع النسبي)
+          const _linked=spByC[cu]||0;   // 💱 دفعة موزّعة مربوطة بهذا العميل (بعملة المورّد)
+          const paid=isDirect?_linked:Math.max(0,owed-(cancOwed[c]||0))*allocR; const mid=cliMainId[c];   /* المباشر من المورّد: مدفوعه = الدفعة الموزّعة المربوطة به؛ غيره = التوزيع النسبي. رسوم الإلغاء تبقى مستحقة */ const av=cliActual[c]; const entered=(av!=null); const diff=owed-(entered?av:owed);
           // 📌 المتبقّي للمورّد لا يُحتسب من قيمة حجز العميل — يظهر فقط بعد تسجيل «فاتورة المورّد» الفعلية، ويُحسب منها (فاتورة المورّد − المدفوع سابقاً)
           const bal=entered?(Number(av)-paid):null;
-          const directHtml=(isDirect&&bal!=null&&bal>0.5)?'<div style="font-size:9px;color:#d11;font-weight:800;margin-top:2px">🔻 مباشر من المورّد · غير مدفوع</div>':'';
+          const _covered=(paid>=owed-0.5)&&owed>0.5;   // مدفوع للمورّد بالكامل عبر دفعة موزّعة
+          const directHtml=(isDirect&&_covered)?'<div style="font-size:9px;color:#0e9d6a;font-weight:800;margin-top:2px">✅ مدفوع للمورّد</div>':((isDirect&&!_covered&&owed>0.5)?'<div style="font-size:9px;color:#d11;font-weight:800;margin-top:2px">🔻 مباشر من المورّد · غير مدفوع'+(_linked>0.5?' (مدفوع جزئيّاً '+fmt(_linked)+')':'')+'</div>':'');
           const cancHtml=cancelledCodes.has((c||'').toUpperCase())?'<div style="font-size:9px;color:#d98a00;font-weight:800;margin-top:2px">🚫 ملغى — المستحق = رسوم الإلغاء فقط</div>':'';
           const _dts=esc(((fcdCli[(c||'').toUpperCase()]||{}).arr) || (cliDates[c]||[]).filter(Boolean)[0] || '');   // 📅 تاريخ وصول العميل من First Client Data هو المعتمد (لا تاريخ check_in لكل خدمة على حدة) — يوحّد كل خدمات العميل على تاريخ وصوله
           const _cli=esc(((nameCli[c]||'')+' '+c).toLowerCase());
