@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-م2 · حقل الوكيل بفورم تعديل العميل صار بحثاً بالكتابة (اكتبي جزءاً من الاسم فتظهر المطابقات) بدل تصفّح القائمة كلها </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ن2 · الوكيل الجديد المكتوب في فورم تعديل العميل يُضاف تلقائيّاً للقائمة المُدارة (يظهر بكل الشاشات) + الحقل يعرض القائمتين معاً </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1384,7 +1384,7 @@ function fcdEdit(id){
   if(r.bank_name && !banks.includes(r.bank_name)){ const o=document.createElement('option'); o.text=r.bank_name; o.value=r.bank_name; o.selected=true; $('fe-bank').add(o); }   // احتفظ ببنك السجل القديم إن لم يكن في القائمة
   if($('fe-staff')){ $('fe-staff').innerHTML='<option value="">— اختاري الموظف —</option>'+staffNameOptions(); const cb=String(r.confirmed_by||'').trim(); if(cb){ if(![...$('fe-staff').options].some(o=>o.value===cb)){ const o=document.createElement('option'); o.text=cb; o.value=cb; $('fe-staff').add(o); } $('fe-staff').value=cb; } }
   if($('fe-cur')){ const curs=[...new Set(['SAR','OMR','USD','MYR','AED','EUR','SGD','GBP','THB',...((typeof listValues==='function'?listValues('currency'):[]).map(v=>v.value)), String(r.currency||'').trim()].filter(Boolean))]; $('fe-cur').innerHTML=curs.map(c=>'<option'+(c===String(r.currency||'').trim()?' selected':'')+'>'+esc(c)+'</option>').join(''); }
-  if($('fe-agent')){ const ags=((DATA&&DATA.agents)||[]).map(a=>a.agent_name).filter(Boolean); const ca=String(r.agent_name||'').trim(); const opts=[...new Set(ags.concat(ca?[ca]:[]))].sort((a,b)=>String(a).localeCompare(String(b),'ar')); const dl=$('fe-agent-list'); if(dl)dl.innerHTML=opts.map(a=>'<option value="'+esc(a)+'"></option>').join(''); $('fe-agent').value=ca; }
+  if($('fe-agent')){ const ags=[...((DATA&&DATA.agents)||[]).map(a=>a.agent_name), ...((typeof listValues==='function'?listValues('agents'):[]).map(v=>v.value))].filter(Boolean); const ca=String(r.agent_name||'').trim(); const opts=[...new Set(ags.concat(ca?[ca]:[]))].sort((a,b)=>String(a).localeCompare(String(b),'ar')); const dl=$('fe-agent-list'); if(dl)dl.innerHTML=opts.map(a=>'<option value="'+esc(a)+'"></option>').join(''); $('fe-agent').value=ca; }
   if($('fe-arr')) $('fe-arr').value=String(r.arrival_date||'').slice(0,10);
   if($('fe-bdate')) $('fe-bdate').value=String(r.booking_date||'').slice(0,10);
   // صف شيت: البيانات المالية للعرض فقط (تُدار من الشيت)؛ يُسمح فقط بالبنك/المرجع/تاريخ الدفع (جداول override)
@@ -1422,7 +1422,11 @@ async function fcdEditSave(){
   if(isOwnerUser()){
     // المالكة: تعديل مباشر فوري بلا موافقة
     msg.style.color='var(--muted)'; msg.textContent='جارٍ الحفظ…';
-    try{ const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_client_entry',payload:base})}); const j=await r.json(); if(j.error){ msg.innerHTML='<span style="color:var(--red)">خطأ: '+esc(j.error)+'</span>'; return; } $('fcdeditmodal').classList.remove('on'); await load(); }catch(e){ msg.innerHTML='<span style="color:var(--red)">خطأ: '+esc(e.message)+'</span>'; }
+    try{ const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_client_entry',payload:base})}); const j=await r.json(); if(j.error){ msg.innerHTML='<span style="color:var(--red)">خطأ: '+esc(j.error)+'</span>'; return; }
+      // 🧭 الوكيل الجديد يُضاف تلقائيّاً للقائمة المُدارة (يظهر في كل الشاشات)
+      const _ag=String(base.agent_name||'').trim();
+      if(_ag && !(typeof listValues==='function'?listValues('agents'):[]).some(v=>String(v.value||'').trim().toLowerCase()===_ag.toLowerCase())){ try{ await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_list_item',payload:{category:'agents',value:_ag}})}); toast('✅ أُضيف الوكيل «'+_ag+'» للقائمة'); }catch(_){} }
+      $('fcdeditmodal').classList.remove('on'); await load(); }catch(e){ msg.innerHTML='<span style="color:var(--red)">خطأ: '+esc(e.message)+'</span>'; }
     return;
   }
   // المحاسب: يحتاج موافقة المالكة — سبب إجباري
