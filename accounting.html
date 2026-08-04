@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-د · كشف المورّد صار يستخدم سعر الصرف: الدفعة بعملة مختلفة تُحوَّل لعملة المورّد (المبلغ ÷ السعر) فيصحّ الرصيد (عالج EAGLE ALBANIA: دفعة 10,596 USD @1.158 = 9,150 EUR) · + تعديل العملة/السعر بالدفعة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-هـ · جدول توزيع دفعات الموردين صار يحوّل الدفعة لعملة المورّد بسعر الصرف فيظهر «المتبقّي» صحيحاً (كان يطرح USD من EUR فيطلع سالب خاطئ لـ C26484) · + كشف المورّد يستخدم السعر + تعديل العملة/السعر</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3186,7 +3186,7 @@ function supAllocPay(btn){
   const amount=Number(btn.dataset.sum)||0; const cur=btn.dataset.cur||''; const sup=btn.dataset.sup||'';
   const inv=(typeof supInvAll==='function'?supInvAll():[]).filter(x=>String(x.supplier_name||'')===sup);
   const byC={}; inv.forEach(x=>{ const c=(x.client_code||'').toUpperCase(); if(!c)return; if(!byC[c])byC[c]={code:c,name:x.client_name||'',owed:0}; byC[c].owed+=Number(x.invoice_amount||0); });
-  (DATA.supplierPayments||[]).forEach(x=>{ if(String(x.supplier_name||'')!==sup)return; const c=(x.client_code||'').toUpperCase(); if(c&&byC[c])byC[c].owed-=Number(x.amount||0); });   // المتبقّي = الفاتورة − المدفوع سابقاً
+  (DATA.supplierPayments||[]).forEach(x=>{ if(String(x.supplier_name||'')!==sup)return; const c=(x.client_code||'').toUpperCase(); if(c&&byC[c]){ const r=Number(x.currency_rate); byC[c].owed-=(r>0?Number(x.amount||0)/r:Number(x.amount||0)); } });   // المتبقّي = الفاتورة − المدفوع سابقاً (💱 الدفعة بعملة أخرى تُحوَّل لعملة المورّد ÷ السعر)
   const clients=Object.values(byC).sort((a,b)=>b.owed-a.owed);
   openAllocModal({payee:sup,amount,cur,clients,onSave:async(lines)=>{
     const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'allocate_supplier_payment',payload:{pay_ids:ids.map(Number),lines:lines,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j=await r.json();
