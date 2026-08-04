@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ل · إجمالي مدفوعات المورّد يُحوّل بسعر الصرف فقط عند اختلاف عملة الدفع عن عملة المورّد (كان يقسم دائماً فيشوّه — عالج Polandvip: 4,136.72 USD كان يظهر 1,126.40) · EAGLE=EUR</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-م · توزيع دفعة المورّد يقبل التوزيع الجزئي (توزّعين ما تبين والباقي يبقى رصيداً مقدّماً غير موزّع) — يُمنع فقط تجاوز مبلغ الدفعة · + إجمالي المدفوع يحوّل فقط عند اختلاف العملة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3167,15 +3167,17 @@ function allocTotal(target){ let s=0; const rate=Number(window._allocRate)||0;
     const eur=tr.querySelector('.alloc-eur'); if(eur){ eur.textContent=(Math.abs(v)>0.005?fmt(conv):'—'); }
     const rem=tr.querySelector('.alloc-rem'); if(rem){ const owed=Number(rem.dataset.owed||0); const left=owed-conv; rem.textContent=fmt(left); rem.style.color=(left< -0.005?'#d11':(left<0.005?'#0e9d6a':'#b8860b')); } });
   const sEl=$('alloc-sum'); if(sEl)sEl.textContent=fmt(s); const scEl=$('alloc-sumcost'); if(scEl&&rate>0)scEl.textContent='(= '+fmt(s/rate)+' بعملة التكلفة)';
-  const d=Number((target-s).toFixed(3)); const dEl=$('alloc-diff'); if(dEl){ if(Math.abs(d)<0.005){ dEl.textContent='✅ مطابق'; dEl.style.color='#0e9d6a'; } else if(d>0){ dEl.textContent='باقٍ '+fmt(d); dEl.style.color='#b8860b'; } else { dEl.textContent='⚠️ تجاوزتِ بـ '+fmt(-d); dEl.style.color='#d11'; } } }
+  const d=Number((target-s).toFixed(3)); const dEl=$('alloc-diff'); if(dEl){ if(Math.abs(d)<0.005){ dEl.textContent='✅ موزّع بالكامل'; dEl.style.color='#0e9d6a'; } else if(d>0){ dEl.textContent='🔵 يتبقّى '+fmt(d)+' كرصيد مقدّم (توزيع جزئي مقبول)'; dEl.style.color='#2f6fd0'; } else { dEl.textContent='⚠️ تجاوزتِ بـ '+fmt(-d); dEl.style.color='#d11'; } } }
 async function _allocSubmit(target, onSave){
   const msg=$('alloc-msg');
   const _rate=Number(window._allocRate)||0;
   const lines=[...document.querySelectorAll('#alloc-tb .alloc-amt')].map(i=>{ const o={client_code:i.dataset.code,client_name:i.dataset.name,amount:Number(i.value)||0}; if(_rate>0)o.currency_rate=_rate; return o; }).filter(x=>x.amount>0);
   if(!lines.length){ msg.style.color='var(--red)'; msg.textContent='⚠️ وزّعي مبلغاً على عميل واحد على الأقل'; return; }
   const sum=lines.reduce((s,x)=>s+x.amount,0);
-  if(Math.abs(sum-target)>0.5){ msg.style.color='var(--red)'; msg.textContent='⚠️ مجموع الموزّع '+fmt(sum)+' لا يساوي مبلغ الدفعة '+fmt(target)+' — التوزيع لا يضيف/ينقص مبلغاً'; return; }
-  if(!confirm('توزيع الدفعة ('+fmt(target)+') على '+lines.length+' عميل؟\n\n'+lines.map(l=>'• '+(l.client_name||l.client_code)+': '+fmt(l.amount)).join('\n')))return;
+  // ✅ توزيع جزئي مسموح — يُمنع فقط تجاوز مبلغ الدفعة
+  if(sum>target+0.5){ msg.style.color='var(--red)'; msg.textContent='⚠️ مجموع الموزّع '+fmt(sum)+' أكبر من مبلغ الدفعة '+fmt(target)+' — لا يمكن توزيع أكثر من المدفوع'; return; }
+  const _rem=target-sum;
+  if(!confirm('توزيع '+fmt(sum)+' على '+lines.length+' عميل؟'+(_rem>0.5?('\n🔵 يتبقّى '+fmt(_rem)+' كرصيد مقدّم غير موزّع.'):'')+'\n\n'+lines.map(l=>'• '+(l.client_name||l.client_code)+': '+fmt(l.amount)).join('\n')))return;
   msg.style.color='var(--muted)'; msg.textContent='جارٍ الحفظ…';
   try{ await onSave(lines); }catch(e){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(e.message); }
 }
