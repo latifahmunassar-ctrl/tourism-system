@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ك · مطابقة البنك: «أدخلها» ترفض الإدخال بلا تصنيف (القناة إلزامية) مع إشعار بارز وسط الشاشة «أدخلي التصنيف أوّلاً» · + المرجع البنكي إلزامي خادميّاً لدفعة المورّد · + انعكاس دفعات الموردين بلا سند</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ل · إجمالي مدفوعات المورّد يُحوّل بسعر الصرف فقط عند اختلاف عملة الدفع عن عملة المورّد (كان يقسم دائماً فيشوّه — عالج Polandvip: 4,136.72 USD كان يظهر 1,126.40) · EAGLE=EUR</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2604,7 +2604,7 @@ function exportSupplierKashf(){
   const SCUR=(typeof supplierCurrency==='function')?supplierCurrency(sup):'';
   const clients=new Set(list.map(x=>x.client_code)).size;
   const owedT=(typeof supOwed==='function')?supOwed(list):list.reduce((s,x)=>s+Number(x.invoice_amount||0),0);
-  const paidT=pays.reduce((s,x)=>{ const r=Number(x.currency_rate); return s+((r>0)?Number(x.amount||0)/r:Number(x.amount||0)); },0);   // 💱 تحويل الدفعة بعملة أخرى لعملة المورّد (÷ السعر)
+  const paidT=pays.reduce((s,x)=>s+supPaidInCur(x,SCUR),0);   // 💱 تحويل الدفعة بعملة أخرى لعملة المورّد فقط عند اختلاف العملة
   const balT=owedT-paidT;
   const balLbl=balT>0.5?'علينا (مستحق للمورّد)':(balT<-0.5?'له رصيد مقدّم عندنا':'مُسوّى');
   let body='<h3>كشف حساب مورّد — '+esc(sup)+'</h3>'
@@ -3196,11 +3196,14 @@ function hpAllocPay(id,amount,cur){
 // تبويب الموردين: توزيع تحويل مورّد (قد يشمل عدة دفعات payIds) على العملاء
 function supAllocPay(btn){
   const ids=String(btn.dataset.ids||'').split(',').filter(Boolean);
-  const amount=Number(btn.dataset.sum)||0; const cur=btn.dataset.cur||''; const sup=btn.dataset.sup||''; const rate=Number(btn.dataset.rate)||0;   // 💱 سعر صرف الدفعة (USD لكل EUR)
+  const amount=Number(btn.dataset.sum)||0; const cur=btn.dataset.cur||''; const sup=btn.dataset.sup||'';
+  const _scurA=(typeof supplierCurrency==='function')?supplierCurrency(sup):'';
+  let rate=Number(btn.dataset.rate)||0;   // 💱 سعر صرف الدفعة
+  if(cur && _scurA && String(cur).trim().toUpperCase()===String(_scurA).trim().toUpperCase()) rate=0;   // نفس عملة المورّد → لا تحويل (يمنع تشويه Polandvip)
   const inv=(typeof supInvAll==='function'?supInvAll():[]).filter(x=>String(x.supplier_name||'')===sup);
-  const costCur=(inv.find(x=>x.invoice_currency)||{}).invoice_currency||(typeof supplierCurrency==='function'?supplierCurrency(sup):'');   // عملة تكلفة الحجز (EUR)
+  const costCur=(rate>0?((inv.find(x=>x.invoice_currency)||{}).invoice_currency||_scurA):_scurA);   // عملة التكلفة المعروضة
   const byC={}; inv.forEach(x=>{ const c=(x.client_code||'').toUpperCase(); if(!c)return; if(!byC[c]){ const _ci=(typeof clientInfo==='function')?clientInfo(c):null; byC[c]={code:c,name:x.client_name||'',owed:0,cliBal:_ci?(Number(_ci.sold||0)-Number(_ci.paid||0)):null,cliCur:_ci?_ci.cur:''}; } byC[c].owed+=Number(x.invoice_amount||0); });
-  (DATA.supplierPayments||[]).forEach(x=>{ if(String(x.supplier_name||'')!==sup)return; const c=(x.client_code||'').toUpperCase(); if(c&&byC[c]){ const r=Number(x.currency_rate); byC[c].owed-=(r>0?Number(x.amount||0)/r:Number(x.amount||0)); } });   // المتبقّي = الفاتورة − المدفوع سابقاً (💱 الدفعة بعملة أخرى تُحوَّل لعملة المورّد ÷ السعر)
+  (DATA.supplierPayments||[]).forEach(x=>{ if(String(x.supplier_name||'')!==sup)return; const c=(x.client_code||'').toUpperCase(); if(c&&byC[c]){ byC[c].owed-=supPaidInCur(x,_scurA); } });   // المتبقّي = الفاتورة − المدفوع سابقاً (💱 تحويل فقط عند اختلاف العملة)
   const clients=Object.values(byC).filter(c=>Number(c.owed)>0.5).sort((a,b)=>b.owed-a.owed);   // 🚫 العميل المدفوع له بالكامل (المتبقّي≈0) لا يظهر في التوزيع
   openAllocModal({payee:sup,amount,cur,rate,costCur,clients,onSave:async(lines)=>{
     const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'allocate_supplier_payment',payload:{pay_ids:ids.map(Number),lines:lines,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j=await r.json();
@@ -3795,6 +3798,8 @@ function supCurOverride(name){ const nn=String(name||'').trim().toLowerCase().re
   const it=(typeof listValues==='function'?listValues('supplier_cur'):[]).find(v=>{ const s=String(v.value||''); const i=s.lastIndexOf('='); return i>0 && s.slice(0,i).trim().toLowerCase().replace(/\s+/g,' ')===nn; });
   if(!it) return ''; const s=String(it.value); return s.slice(s.lastIndexOf('=')+1).trim().toUpperCase(); }
 function supplierCurrency(name){ const n=String(name||''); const ov=supCurOverride(n); if(ov) return ov; for(const r of SUPPLIER_CUR_RULES) if(r.re.test(n)) return r.cur; return 'USD'; }
+// 💱 قيمة دفعة المورّد بعملة المورّد: تُحوَّل بسعر الصرف (÷) **فقط** إذا كانت عملة الدفع تختلف عن عملة المورّد (scur)؛ وإلا تُؤخذ خام (يمنع تشويه الإجمالي عند سعر صرف بلا اختلاف عملة — مثل Polandvip 4,136.72 USD لمورّد USD)
+function supPaidInCur(x, scur){ const a=Number((x&&x.amount)||0); const r=Number(x&&x.currency_rate); const c=String((x&&x.currency)||'').trim().toUpperCase(); const s=String(scur||'').trim().toUpperCase(); return (r>0 && c && s && c!==s) ? a/r : a; }
 // العملة المعتمدة لمصدر الحجز (مورّد أو فندق): عملة مورّد معتمدة → عملة فندق معتمدة (payee_currency) → القواعد → USD
 function sourceCurrency(name){ const nn=String(name||'').trim().toLowerCase().replace(/\s+/g,' '); if(!nn) return '';
   const sc=supCurOverride(name); if(sc) return sc;
@@ -5033,8 +5038,8 @@ function renderSupplierDetail(){
   // عملة المورّد الموحّدة (الأرقام دقيقة، العملة من تعريف المورّد)
   const SCUR=supplierCurrency(sup);
   const curOptsSup=[...new Set([SCUR,'OMR','SAR','USD','AED','EUR','MYR','SGD','GBP','THB',...listValues('currency').map(v=>v.value)])].filter(Boolean).map(c=>'<option'+(c===SCUR?' selected':'')+'>'+esc(c)+'</option>').join('');
-  // 💱 قيمة الدفعة بعملة المورّد: إن كان لها سعر صرف (دُفعت بعملة أخرى) نحوّلها = المبلغ ÷ السعر (نفس منطق شاشة المبيعات)؛ وإلا خام
-  const spPaidVal=(x)=>{ const r=Number(x.currency_rate); return (r>0)? Number(x.amount||0)/r : Number(x.amount||0); };
+  // 💱 قيمة الدفعة بعملة المورّد: تُحوَّل بالسعر فقط عند اختلاف عملة الدفع عن عملة المورّد (SCUR)
+  const spPaidVal=(x)=>supPaidInCur(x, SCUR);
   const owedT=supOwed(list); const paidT=pays.reduce((s,x)=>s+spPaidVal(x),0); const balT=owedT-paidT;
   const curStr1=(v)=>'<b>'+fmt(v)+'</b> '+esc(SCUR);
   const balStr='<b style="color:'+(balT>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(balT)+'</b> '+esc(SCUR);
@@ -5064,7 +5069,7 @@ function renderSupplierDetail(){
   const _owedNonDirect=Math.max(0, owedT-_directOwedSum);
   const allocR=_owedNonDirect>0?Math.min(1,paidT/_owedNonDirect):0;
   // 📌 دفعات موزّعة مربوطة بعميل محدّد (بعملة المورّد عبر سعر الصرف) — تُقفل مدفوع العميل «المباشر من المورّد» بدل بقائه غير مدفوع
-  const spByC={}; (DATA.supplierPayments||[]).forEach(x=>{ if(String(x.supplier_name||'')!==sup)return; const cc=(x.client_code||'').toUpperCase(); if(!cc)return; const r=Number(x.currency_rate); spByC[cc]=(spByC[cc]||0)+(r>0?Number(x.amount||0)/r:Number(x.amount||0)); });
+  const spByC={}; (DATA.supplierPayments||[]).forEach(x=>{ if(String(x.supplier_name||'')!==sup)return; const cc=(x.client_code||'').toUpperCase(); if(!cc)return; spByC[cc]=(spByC[cc]||0)+supPaidInCur(x,SCUR); });
   // عملاء لهم حجز ملغى مع هذا المورّد — تظهر القيمة مع علامة «ملغى» حتى لو لم يأخذ المورّد شيئاً
   const cancelledCodes=new Set(); (DATA.serviceLines||[]).forEach(s=>{ if(String(s.booked_from||s.supplier||'').trim()!==_supT) return; if(/cancel/i.test(String(s.status||''))) cancelledCodes.add((s.client_code||'').toUpperCase()); });
   const cancVal={}; list.forEach(x=>{ if(x.cancelled){ const c=(x.client_code||'').toUpperCase(); cancVal[c]=(cancVal[c]||0)+Number(x.full_value||0); } });   // القيمة الأصلية للحجوزات الملغاة (للعلم)
@@ -5310,7 +5315,7 @@ function exportSupplierPDF(){
   const list=supInvAll().filter(x=>(x.supplier_name||'')===sup);
   const pays=(DATA.supplierPayments||[]).filter(x=>(x.supplier_name||'')===sup);
   const owed=list.reduce((s,x)=>s+Number(x.invoice_amount||0),0);
-  const paid=pays.reduce((s,x)=>{ const r=Number(x.currency_rate); return s+((r>0)?Number(x.amount||0)/r:Number(x.amount||0)); },0); const bal=owed-paid;   // 💱 تحويل بعملة المورّد
+  const paid=pays.reduce((s,x)=>s+supPaidInCur(x,SCUR),0); const bal=owed-paid;   // 💱 تحويل بعملة المورّد فقط عند اختلاف العملة
   const clients=new Set(list.map(x=>x.client_code)).size;
   const f=(($('spc-from')||{}).value)||''; const t=(($('spc-to')||{}).value)||''; const q=(($('spc-q')||{}).value||'').trim();
   const filtered=!!(f||t||q);
