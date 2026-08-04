@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ن2 · الوكيل الجديد المكتوب في فورم تعديل العميل يُضاف تلقائيّاً للقائمة المُدارة (يظهر بكل الشاشات) + الحقل يعرض القائمتين معاً </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-س2 · أُضيف فلتر «📅 تاريخ الحجز (من — إلى)» في قسم «كل الحجوزات» (يفلتر بتاريخ الحجز من First Client Data) </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -387,7 +387,8 @@ table{font-weight:600}
     <div class="page" id="p-bookings">
       <div class="formbar"><input id="ovflt-q" class="flt" placeholder="🔍 كود / اسم العميل / خدمة" oninput="renderOverview()" style="min-width:240px">
         <select id="ovflt-kind" class="flt" onchange="renderOverview()"><option value="">كل الأنواع</option><option value="hotel">🏨 فندق</option><option value="flight">✈️ طيران</option><option value="tour">🗺️ جولة</option><option value="supplier">مورّد</option><option value="additional">إضافي</option><option value="transport">مواصلات</option><option value="visa">تأشيرة</option></select>
-        <select id="ovflt-pl" class="flt" onchange="renderOverview()"><option value="">الكل</option><option value="loss">🔴 خسارة فقط</option><option value="cancel">ملغى فقط</option></select></div>
+        <select id="ovflt-pl" class="flt" onchange="renderOverview()"><option value="">الكل</option><option value="loss">🔴 خسارة فقط</option><option value="cancel">ملغى فقط</option></select>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)">📅 تاريخ الحجز: <input type="date" id="ovflt-from" class="flt" onchange="renderOverview()" style="color-scheme:dark;padding:4px" title="من"> — <input type="date" id="ovflt-to" class="flt" onchange="renderOverview()" style="color-scheme:dark;padding:4px" title="إلى"><button class="btn ghost" style="padding:5px 12px" onclick="if($('ovflt-from'))$('ovflt-from').value='';if($('ovflt-to'))$('ovflt-to').value='';renderOverview()">مسح</button></span></div>
       <div class="panel"><h3>كل الحجوزات (كل الأنواع) <span class="cnt" id="ov-cnt"></span></h3>
         <div class="tbl-wrap bf-scroll" id="ov-tbl"><table id="t-ov"><thead><tr>
           <th>تاريخ</th><th>الكود</th><th>العميل</th><th>الوكالة</th><th>النوع</th><th>الخدمة</th>
@@ -5779,14 +5780,17 @@ function renderOverview(){
   let arr=(DATA.serviceLines||[]).map(s=>{ const c=(s.client_code||'').toUpperCase(); const f=fm[c]||{};
     const sell=Number(s.amount)||0; const booked=(s.final_rate_booked!=null)?Number(s.final_rate_booked):sell;
     const diff=(sell>0&&booked>0)?(sell-booked):null;
-    return {code:s.client_code||'',name:f.name||'',agent:f.agent||'',date:s.check_in||f.bdate||'',kind:s.kind||'',svc:s.name||'',sell,booked,diff,status:s.status||'',conf:s.conf_no||'',bfrom:s.booked_from||'',cfrom:s.charge_from||'',by:s.booked_by||''}; });
+    return {code:s.client_code||'',name:f.name||'',agent:f.agent||'',date:s.check_in||f.bdate||'',bdate:f.bdate||'',kind:s.kind||'',svc:s.name||'',sell,booked,diff,status:s.status||'',conf:s.conf_no||'',bfrom:s.booked_from||'',cfrom:s.charge_from||'',by:s.booked_by||''}; });
   // فواتير موردين لعملاء بلا أي خدمة (عشان ما نفوّت أحد)
   const slCodes=new Set((DATA.serviceLines||[]).map(s=>(s.client_code||'').toUpperCase()));
   for(const si of (DATA.supplierInvoices||[])){ const c=(si.client_code||'').toUpperCase(); if(c&&!slCodes.has(c)){ const f=fm[c]||{};
-    arr.push({code:si.client_code||'',name:si.client_name||f.name||'',agent:si.agent_name||f.agent||'',date:si.invoice_date||f.bdate||'',kind:'supplier',svc:si.supplier_name||'',sell:0,booked:Number(si.invoice_amount)||0,diff:null,status:'',conf:'',bfrom:'',cfrom:'',by:''}); } }
+    arr.push({code:si.client_code||'',name:si.client_name||f.name||'',agent:si.agent_name||f.agent||'',date:si.invoice_date||f.bdate||'',bdate:f.bdate||si.invoice_date||'',kind:'supplier',svc:si.supplier_name||'',sell:0,booked:Number(si.invoice_amount)||0,diff:null,status:'',conf:'',bfrom:'',cfrom:'',by:''}); } }
   const q=($('ovflt-q').value||'').trim().toLowerCase();
   const fk=$('ovflt-kind')?$('ovflt-kind').value:'';
   const fpl=$('ovflt-pl')?$('ovflt-pl').value:'';
+  // 📅 فلتر مدى تاريخ الحجز (booking date من First Client Data)
+  const _df=($('ovflt-from')||{}).value||'', _dt=($('ovflt-to')||{}).value||'';
+  if(_df||_dt) arr=arr.filter(x=>{ const b=String(x.bdate||'').slice(0,10); if(!b)return false; if(_df&&b<_df)return false; if(_dt&&b>_dt)return false; return true; });
   if(q) arr=arr.filter(x=>x.code.toLowerCase().includes(q)||x.name.toLowerCase().includes(q)||x.svc.toLowerCase().includes(q));
   if(fk) arr=arr.filter(x=>x.kind===fk);
   if(fpl==='loss') arr=arr.filter(x=>x.diff!=null&&x.diff< -0.5);
