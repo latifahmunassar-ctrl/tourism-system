@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ي · دفعة المورّد المُدخلة من الداشبورد بلا سند بنكي تنعكس الآن في مطابقة البنك بقيمتها الدقيقة بالكسور (عالج EAGLE 10,595.61 التي كانت تظهر غير مطابقة) — بلا ازدواج (المسجّلة أصلاً بنفس المرجع تُستبعَد)</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 4أغسطس-ك · مطابقة البنك: «أدخلها» ترفض الإدخال بلا تصنيف (القناة إلزامية) مع إشعار بارز وسط الشاشة «أدخلي التصنيف أوّلاً» · + المرجع البنكي إلزامي خادميّاً لدفعة المورّد · + انعكاس دفعات الموردين بلا سند</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4209,11 +4209,18 @@ function reconFindDup(x,bank){
   return hits;
 }
 function reconDupMsg(hits){ if(!hits.length)return ''; const h=hits[0]; return '\n\n⚠️ تنبيه: توجد حركة مشابهة مسجّلة مسبقاً (نفس البنك والمبلغ والتاريخ) — قد تكون مكرّرة:\n   • '+(String(h.tx_date||'').slice(0,10))+' · خارج '+fmt(h.amount_out||0)+' · داخل '+fmt(h.amount_in||0)+'\n   • مرجعها: '+(String(h.bank_ref||h.note||'—').slice(0,50))+'\n(القرار لكِ — أضيفيها فقط إن كانت حركة مختلفة فعلاً.)'; }
+// 🔔 إشعار بارز وسط الشاشة (تنبيه/منع)
+function centerNotice(msg,ms){ let n=document.getElementById('center-notice'); if(n)n.remove();
+  n=document.createElement('div'); n.id='center-notice'; n.style.cssText='position:fixed;inset:0;z-index:100001;display:flex;align-items:center;justify-content:center;pointer-events:none';
+  n.innerHTML='<div onclick="this.parentNode.remove()" style="pointer-events:auto;cursor:pointer;background:#d11;color:#fff;padding:20px 30px;border-radius:16px;font-size:17px;font-weight:800;line-height:1.7;box-shadow:0 14px 50px rgba(0,0,0,.45);max-width:440px;text-align:center">'+esc(msg)+'<div style="font-size:11px;font-weight:400;opacity:.85;margin-top:6px">(اضغطي للإغلاق)</div></div>';
+  document.body.appendChild(n); setTimeout(()=>{ const e=document.getElementById('center-notice'); if(e)e.remove(); }, ms||2600); }
 async function reconAddOne(i,bank,btn){
   if(!isOwnerUser()){ alert('⚠️ تسجيل الحركات البنكية للمالكة فقط'); return; }
   const arr=window._reconStmtOnly||[]; const x=arr[i]; if(!x){ return; }
   if(x._added){ return; }
   const chan=(($('recadd-chan-'+i)||{}).value||'').trim(); const desc=(($('recadd-desc-'+i)||{}).value||'').trim(); const det=(($('recadd-det-'+i)||{}).value||'').trim(); const sub=(($('recadd-sub-'+i)||{}).value||'').trim();
+  // 🏷️ منع الإدخال بلا تصنيف (القناة إلزامية) — إشعار وسط الشاشة + إبراز القائمة
+  if(!chan){ centerNotice('🏷️ أدخلي التصنيف أوّلاً قبل إدخال الحركة'); const sel=$('recadd-chan-'+i); if(sel){ sel.style.outline='2px solid #d11'; try{ sel.focus(); sel.scrollIntoView({behavior:'smooth',block:'center'}); }catch(_){}; setTimeout(()=>{ if(sel)sel.style.outline=''; },2800); } return; }
   const clsTxt=[chan,desc,det,sub].filter(Boolean).join(' ← ')||'— بلا تصنيف —';
   const _dup=reconFindDup(x,bank);   // 🔎 تنبيه تكرار — لا يمنع، فقط يُعلِم
   if(!confirm('➕ إدخال هذه الحركة إلى سجل البنك؟\n\nالتاريخ: '+(x.date||'—')+'\nداخل: '+fmt(x.in||0)+' · خارج: '+fmt(x.out||0)+'\nالبنك: '+bank+'\n🏷️ التصنيف: '+clsTxt+'\n🔖 المرجع البنكي (= البيان): '+(x.remarks||x.note||'—')+reconDupMsg(_dup)))return;
@@ -4226,6 +4233,9 @@ async function reconAddAll(bank){
   const arr=(window._reconStmtOnly||[]).filter(x=>!x._added); if(!arr.length){ alert('لا حركات جديدة للإدخال'); return; }
   const defChan=(($('recadd-chan-all')||{}).value||'').trim(); const defDesc=(($('recadd-desc-all')||{}).value||'').trim(); const defDet=(($('recadd-det-all')||{}).value||'').trim(); const defSub=(($('recadd-sub-all')||{}).value||'').trim();
   const idxOf=(x)=>(window._reconStmtOnly||[]).indexOf(x);
+  // 🏷️ منع الإدخال الجماعي بلا تصنيف: كل حركة لازم يكون لها قناة (خاصة أو افتراضية للكل)
+  const _noClass=arr.filter(x=>!((($('recadd-chan-'+idxOf(x))||{}).value||'').trim()||defChan));
+  if(_noClass.length){ centerNotice('🏷️ أدخلي التصنيف أوّلاً — '+_noClass.length+' حركة بلا تصنيف'+(defChan?'':' (حدّدي «تصنيف للكل» أو صنّفي كل حركة)')); return; }
   const defTxt=[defChan,defDesc,defDet,defSub].filter(Boolean).join(' ← ')||'— بلا تصنيف —';
   // 🔎 تنبيه تكرار جماعي: كم حركة منها مشابهة لموجود مسبقاً
   const dups=arr.filter(x=>reconFindDup(x,bank).length>0);
