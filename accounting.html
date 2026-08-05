@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ي · قاعدة: أي حجز بلا بنك أو مرجع بنكي يُنبَّه عليه حتى بلا دفعة فعلية (وسم 🏦 أحمر بخانة المدفوع + عدّاد بالعنوان + فلتر «بلا مرجع/بنك» يشملها) — مثل C26509 </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ك · اعتماد عملة «عموله» وجهات الطيران من تبويب الموردين: الأسماء «المُضافة بلا حركة» وجهات الطيران صارت قابلة للنقر لفتح كشفها واعتماد عملتها </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -5073,14 +5073,16 @@ function renderSuppliers(){
   // موردون مُضافون للقائمة المُدارة لكن بلا أي فاتورة/حجز بعد — نعرضهم بأصفار في نفس الجدول
   const norm=(s)=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
   const actSet=new Set(names.map(norm));
-  const inactive=[...new Set(listValues('suppliers').map(v=>String(v.value||'').trim()).filter(Boolean))].filter(s=>!actSet.has(norm(s))).sort((a,b)=>String(a).localeCompare(String(b),'ar'));
+  const _flightSrc=listValues('flight_booked_from').map(v=>String(v.value||'').trim()).filter(Boolean);   // ✈️ جهات الطيران تحتاج اعتماد عملة كذلك — نعرضها هنا لاعتمادها
+  const _flightSet=new Set(_flightSrc.map(norm));
+  const inactive=[...new Set([...listValues('suppliers').map(v=>String(v.value||'').trim()), ..._flightSrc].filter(Boolean))].filter(s=>!actSet.has(norm(s))).sort((a,b)=>String(a).localeCompare(String(b),'ar'));
   tb.innerHTML=names.map(s=>{ const list=by[s]; const clients=new Set(list.map(x=>x.client_code)).size;
     const cur=supplierCurrency(s); const owed=supOwed(list); const paid=payBy[s]||0; const bal=owed-paid;
     return rw(['<a href="#" style="color:var(--accent);font-weight:800;text-decoration:underline;cursor:pointer" onclick="$(\'supflt\').value=\''+esc(s)+'\';renderSupplierDetail();window.scrollTo(0,0);return false">'+esc(s)+'</a>', fmt(list.length), fmt(clients),
       '<b>'+fmt(owed)+'</b> '+esc(cur), (paid?'<span class="num">'+fmt(paid)+'</span>':'—'), '<b style="color:'+(bal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(bal)+'</b> '+esc(cur)]);
   }).join('')
-  + inactive.map(s=>{ const cur=supplierCurrency(s);
-      return rw(['<span style="font-weight:700;color:var(--muted)">'+esc(s)+'</span> <span style="background:#e5e7eb;color:#6b7280;font-size:9.5px;padding:1px 6px;border-radius:8px;font-weight:700">مُضاف — بلا حركة</span>', '0', '0', '<span style="color:var(--muted)">0 '+esc(cur)+'</span>', '—', '<span style="color:var(--muted)">0 '+esc(cur)+'</span>']);
+  + inactive.map(s=>{ const cur=supplierCurrency(s); const supJs=JSON.stringify(s); const isFlt=_flightSet.has(norm(s));
+      return rw(['<a href="#" style="color:var(--accent);font-weight:800;text-decoration:underline;cursor:pointer" title="افتحي الكشف لاعتماد العملة" onclick="$(\'supflt\').value='+esc(supJs).replace(/"/g,'&quot;')+';renderSupplierDetail();window.scrollTo(0,0);return false">'+esc(s)+'</a> '+(isFlt?'<span style="background:#e0f2fe;color:#0369a1;font-size:9.5px;padding:1px 6px;border-radius:8px;font-weight:700">✈️ جهة طيران · اضغطي لاعتماد العملة</span>':'<span style="background:#e5e7eb;color:#6b7280;font-size:9.5px;padding:1px 6px;border-radius:8px;font-weight:700">مُضاف — بلا حركة · اضغطي لاعتماد العملة</span>'), '0', '0', '<span style="color:var(--muted)">0 '+esc(cur)+'</span>', '—', '<span style="color:var(--muted)">0 '+esc(cur)+'</span>']);
   }).join('');
   $('sup-cnt').textContent=names.length+' مورّد بحركة'+(inactive.length?(' · '+inactive.length+' مُضاف بلا حركة'):'');
   renderSupDups();
