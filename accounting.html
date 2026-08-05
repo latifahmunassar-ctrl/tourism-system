@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ز · فلتر «🔁 اشتباه مكرر» مع عدّاده فوق جدول First Client Data — يعرض المكرَّرين مع أصلهم للمقارنة بضغطة </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ح · تجميد الحساب يُلغي وسم «تكرار مشتبه» عنه وينقص عدّاد الفلتر (التجميد = حسم التكرار)؛ ولا يوسم أصله لو صار وحيداً </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1233,8 +1233,10 @@ function dupSuspectMap(){   // client_code → {isDup, original, mates[]} لكل
     if(r.agent_name&&!o.agent)o.agent=r.agent_name;
     o.pkg+=Number(r.package_rate||0);
     const cr=String(r.created_at||''); if(cr&&(!o.first||cr<o.first))o.first=cr; });
+  const _frz=(typeof frozenCodes==='function')?frozenCodes():new Set(); const frozenUp=new Set([..._frz].map(x=>String(x||'').toUpperCase()));   // 🧊 الحسابات المجمّدة
   const groups={};
-  Object.keys(byC).forEach(c=>{ const o=byC[c]; if(!_dupNorm(o.name)||!(o.pkg>0))return; const k=_dupNorm(o.name)+'|'+_dupNorm(o.agent)+'|'+Math.round(o.pkg); (groups[k]=groups[k]||[]).push(Object.assign({code:c},o)); });
+  Object.keys(byC).forEach(c=>{ if(frozenUp.has(c))return;   // 🧊 التجميد = حسم التكرار: الحساب المجمّد لا يُحتسب مشتبهاً ولا يوسم الآخر
+    const o=byC[c]; if(!_dupNorm(o.name)||!(o.pkg>0))return; const k=_dupNorm(o.name)+'|'+_dupNorm(o.agent)+'|'+Math.round(o.pkg); (groups[k]=groups[k]||[]).push(Object.assign({code:c},o)); });
   const out={};
   Object.values(groups).forEach(g=>{ if(g.length<2)return; g.sort((a,b)=>String(a.first).localeCompare(String(b.first)));
     g.forEach((x,i)=>{ const mates=g.filter(y=>y.code!==x.code).map(m=>m.code+((m.phone&&x.phone&&_dupNorm(m.phone)!==_dupNorm(x.phone))?' (رقم مختلف)':'')); out[x.code]={isDup:i>0, original:g[0].code, mates}; }); });
@@ -1243,9 +1245,10 @@ function dupSuspectMap(){   // client_code → {isDup, original, mates[]} لكل
 function findDupClient(name,agent,pkg){   // عند الإدخال: يرجّع كود عميل موجود بنفس (الاسم+الوكيل+الباقة) أو null
   if(!_dupNorm(name)||!(Number(pkg)>0))return null;
   const k=_dupNorm(name)+'|'+_dupNorm(agent)+'|'+Math.round(Number(pkg)||0);
+  const _frz=(typeof frozenCodes==='function')?frozenCodes():new Set(); const frozenUp=new Set([..._frz].map(x=>String(x||'').toUpperCase()));   // 🧊 الحساب المجمّد لا يُعتبر تكراراً
   const byC={};
   ((DATA&&DATA.fcd)||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!c)return; const o=byC[c]||(byC[c]={name:'',agent:'',pkg:0}); if(r.client_name&&!o.name)o.name=r.client_name; if(r.agent_name&&!o.agent)o.agent=r.agent_name; o.pkg+=Number(r.package_rate||0); });
-  for(const c of Object.keys(byC)){ const o=byC[c]; if(_dupNorm(o.name)+'|'+_dupNorm(o.agent)+'|'+Math.round(o.pkg)===k) return c; }
+  for(const c of Object.keys(byC)){ if(frozenUp.has(c))continue; const o=byC[c]; if(_dupNorm(o.name)+'|'+_dupNorm(o.agent)+'|'+Math.round(o.pkg)===k) return c; }
   return null;
 }
 function renderFcd(){
