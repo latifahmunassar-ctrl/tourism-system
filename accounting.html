@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-و · كاشف التكرار: تنبيه للموظفة وقت إدخال عميل جديد بنفس (اسم العميل + الوكيل + قيمة الباقة) لعميل موجود + شارة «🔁 تكرار مشتبه» أمام اسم العميل للإدارة لتقرّر الإبقاء أو الحذف (الرقم للمقارنة لأنه قد يختلف لنفس الشخص) </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ز · فلتر «🔁 اشتباه مكرر» مع عدّاده فوق جدول First Client Data — يعرض المكرَّرين مع أصلهم للمقارنة بضغطة </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -369,6 +369,7 @@ table{font-weight:600}
           <option value="noref">🏦 بلا مرجع بنكي</option>
           <option value="nobank">🏧 بلا بنك إيداع</option>
         </select>
+        <button id="flt-dup-btn" class="btn ghost" onclick="toggleDupFilter()" style="border-color:#f0a500;color:#b8860b;font-weight:700" title="عرض العملاء المشتبه تكرارهم فقط (نفس اسم العميل + الوكيل + قيمة الباقة) مع أصلهم للمقارنة">🔁 اشتباه مكرر <span id="flt-dup-cnt" style="background:#f0a500;color:#000;border-radius:9px;padding:0 7px;font-weight:800;font-size:10px;margin-right:2px">0</span></button>
         <button class="btn ghost" onclick="clearFlt()">مسح الفلاتر</button>
       </div>
       <div id="fcd-incomplete"></div>
@@ -1213,7 +1214,8 @@ function fillFilters(){
   sel('flt-agent','كل الوكالات',agents);
   sel('flt-bank','كل البنوك (مكان الإيداع)',banks);
 }
-function clearFlt(){ $('flt-q').value=''; $('flt-agent').value=''; $('flt-bank').value=''; $('flt-due').value=''; if($('flt-miss'))$('flt-miss').value=''; renderFcd(); }
+function clearFlt(){ $('flt-q').value=''; $('flt-agent').value=''; $('flt-bank').value=''; $('flt-due').value=''; if($('flt-miss'))$('flt-miss').value=''; window.FCD_DUPONLY=false; var _db=$('flt-dup-btn'); if(_db)_db.style.background=''; renderFcd(); }
+function toggleDupFilter(){ window.FCD_DUPONLY=!window.FCD_DUPONLY; var b=$('flt-dup-btn'); if(b)b.style.background=window.FCD_DUPONLY?'rgba(240,165,0,.20)':''; renderFcd(); }
 // قاعدة صارمة: المبلغ لا يُحتسب مستلَماً إلا بوجود الشرطين معاً — مرجع بنكي + اسم بنك
 function payConfirmed(r){ return !!(((r.bank_ref||'').toString().trim())) && !!(((r.bank_name||'').toString().trim())); }
 function hasRef(r){ return !!((r.bank_ref||'').toString().trim()); }
@@ -1276,6 +1278,7 @@ function renderFcd(){
     else if(nb) out+='<span title="غير محجوز في Booking Form" style="background:#d11;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:4px">⚠️ غير محجوز</span>';
     return out; };
   const rows=DATA.fcd.filter(r=>{
+    if(window.FCD_DUPONLY && !DUP[(r.client_code||'').toUpperCase()]) return false;   // 🔁 فلتر «اشتباه مكرر»: يعرض أعضاء مجموعات التكرار (المكرَّر + أصله للمقارنة)
     if(q && !((r.client_name||'').toLowerCase().includes(q)||(r.client_code||'').toLowerCase().includes(q)||(r.payment_code||'').toLowerCase().includes(q))) return false;
     if(ag && r.agent_name!==ag) return false;
     if(bk && r.bank_name!==bk) return false;
@@ -1327,6 +1330,7 @@ function renderFcd(){
   const nNoBank=paidRows.filter(r=>!hasBank(r)).length;          // بلا اسم بنك
   let warn=''; if(nUnc){ warn=' · ⚠️ '+nUnc+' دفعة بمعلومات بنكية ناقصة (غير معتمدة)'; const parts=[]; if(nNoRef)parts.push(nNoRef+' بلا مرجع'); if(nNoBank)parts.push(nNoBank+' بلا اسم بنك'); if(parts.length)warn+=' — '+parts.join(' · '); }
   $('fcd-cnt').textContent=rows.length+(rows.length!==DATA.fcd.length?' من '+DATA.fcd.length:'')+' صف'+warn;
+  const _dupCnt=Object.values(DUP).filter(x=>x.isDup).length; const _dc=$('flt-dup-cnt'); if(_dc)_dc.textContent=_dupCnt;   // 🔁 عدد المشتبه تكرارهم بجانب الفلتر
   // ===== بانر الدفعات الناقصة (تاريخ الدفع / المرجع البنكي / بنك الإيداع) + فلترة =====
   const nNoDate=paidRows.filter(r=>!effPayDate(r)).length;
   const nAny=paidRows.filter(r=>!effPayDate(r)||!hasRef(r)||!hasBank(r)).length;
