@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ج · إصلاح جوهري: صندوق «مطابقة التكلفة» في الخدمات صار يستخدم نفس أساس محرّك الربح (السعر المحجوز الفعلي للفنادق لا حقل amount) — لا يعطي «مطابقة» كاذبة بعد اليوم </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-د · توحيد كود العميل لحروف كبيرة عند الحفظ والاستدعاء (واجهة) مع حارس خادمي دائم — يمنع ظهور «مدفوع زيادة» وهمي بسبب حرف صغير مثل c26507 / C26507 </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -6332,6 +6332,7 @@ function fillCodes(){
 }
 function onCodeInput(){
   const code=$('f-code').value.trim().toUpperCase();
+  if($('f-code').value!==code)$('f-code').value=code;   // 🔒 وحّد الحقل المرئي لكبير فوراً (يمنع حفظ كود بحرف صغير)
   const box=$('client-info');
   const rows=(DATA?DATA.fcd:[]).filter(r=>(r.client_code||'').toUpperCase()===code);
   if(!rows.length){ selectedClient=null; box.style.display='none'; box.innerHTML=''; calc(); return; }
@@ -6497,7 +6498,7 @@ async function save(){
     if(!val('f-staff')){ need('f-staff','⚠️ اسم الموظف إجباري'); return; }
   }
   const svc=(FMODE==='service');
-  const p={ is_new_client:isNew, client_code:isNew?null:$('f-code').value.trim(),
+  const p={ is_new_client:isNew, client_code:isNew?null:$('f-code').value.trim().toUpperCase(),   /* 🔒 توحيد الكود لكبير عند الحفظ (يمنع فصل c26507 عن C26507) */
     booking_date:$('f-bdate').value||null, arrival_date:$('f-adate').value||null,
     client_name:$('f-name').value||null, phone:$('f-phone').value||null,
     agent_name:(svc&&selectedClient?selectedClient.agent:$('f-agent').value)||null,
