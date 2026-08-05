@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ك · اعتماد عملة «عموله» وجهات الطيران من تبويب الموردين: الأسماء «المُضافة بلا حركة» وجهات الطيران صارت قابلة للنقر لفتح كشفها واعتماد عملتها </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ل · زر فلتر بارز «🏦 بلا بنك/مرجع» بعدّاده فوق (يشمل دفعة صفر) + استثناء الحساب المجمّد من تبويب الموظفات (إحصاء وتفصيل) — التجميد يسري على التبويبات ذات العلاقة </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -370,6 +370,7 @@ table{font-weight:600}
           <option value="nobank">🏧 بلا بنك إيداع</option>
         </select>
         <button id="flt-dup-btn" class="btn ghost" onclick="toggleDupFilter()" style="border-color:#f0a500;color:#b8860b;font-weight:700" title="عرض العملاء المشتبه تكرارهم فقط (نفس اسم العميل + الوكيل + قيمة الباقة) مع أصلهم للمقارنة">🔁 اشتباه مكرر <span id="flt-dup-cnt" style="background:#f0a500;color:#000;border-radius:9px;padding:0 7px;font-weight:800;font-size:10px;margin-right:2px">0</span></button>
+        <button id="flt-nobank-btn" class="btn ghost" onclick="toggleNoBankFilter()" style="border-color:#d11;color:#d11;font-weight:700" title="عرض الحجوزات بلا بنك أو مرجع بنكي (تشمل دفعة صفر) — اضغطي لتُدخلي البنك/المرجع في خاناتها">🏦 بلا بنك/مرجع <span id="flt-nobank-cnt" style="background:#d11;color:#fff;border-radius:9px;padding:0 7px;font-weight:800;font-size:10px;margin-right:2px">0</span></button>
         <button class="btn ghost" onclick="clearFlt()">مسح الفلاتر</button>
       </div>
       <div id="fcd-incomplete"></div>
@@ -1214,8 +1215,9 @@ function fillFilters(){
   sel('flt-agent','كل الوكالات',agents);
   sel('flt-bank','كل البنوك (مكان الإيداع)',banks);
 }
-function clearFlt(){ $('flt-q').value=''; $('flt-agent').value=''; $('flt-bank').value=''; $('flt-due').value=''; if($('flt-miss'))$('flt-miss').value=''; window.FCD_DUPONLY=false; var _db=$('flt-dup-btn'); if(_db)_db.style.background=''; renderFcd(); }
+function clearFlt(){ $('flt-q').value=''; $('flt-agent').value=''; $('flt-bank').value=''; $('flt-due').value=''; if($('flt-miss'))$('flt-miss').value=''; window.FCD_DUPONLY=false; var _db=$('flt-dup-btn'); if(_db)_db.style.background=''; window.FCD_NOBANKONLY=false; var _nb=$('flt-nobank-btn'); if(_nb)_nb.style.background=''; renderFcd(); }
 function toggleDupFilter(){ window.FCD_DUPONLY=!window.FCD_DUPONLY; var b=$('flt-dup-btn'); if(b)b.style.background=window.FCD_DUPONLY?'rgba(240,165,0,.20)':''; renderFcd(); }
+function toggleNoBankFilter(){ window.FCD_NOBANKONLY=!window.FCD_NOBANKONLY; var b=$('flt-nobank-btn'); if(b)b.style.background=window.FCD_NOBANKONLY?'rgba(209,17,17,.14)':''; renderFcd(); }
 // قاعدة صارمة: المبلغ لا يُحتسب مستلَماً إلا بوجود الشرطين معاً — مرجع بنكي + اسم بنك
 function payConfirmed(r){ return !!(((r.bank_ref||'').toString().trim())) && !!(((r.bank_name||'').toString().trim())); }
 function hasRef(r){ return !!((r.bank_ref||'').toString().trim()); }
@@ -1282,6 +1284,7 @@ function renderFcd(){
     return out; };
   const rows=DATA.fcd.filter(r=>{
     if(window.FCD_DUPONLY && !DUP[(r.client_code||'').toUpperCase()]) return false;   // 🔁 فلتر «اشتباه مكرر»: يعرض أعضاء مجموعات التكرار (المكرَّر + أصله للمقارنة)
+    if(window.FCD_NOBANKONLY && !(Number(r.package_rate||0)>0 && (!hasBank(r)||!hasRef(r)))) return false;   // 🏦 فلتر «بلا بنك/مرجع»: كل حجز ناقص بنك أو مرجع (يشمل دفعة صفر)
     if(q && !((r.client_name||'').toLowerCase().includes(q)||(r.client_code||'').toLowerCase().includes(q)||(r.payment_code||'').toLowerCase().includes(q))) return false;
     if(ag && r.agent_name!==ag) return false;
     if(bk && r.bank_name!==bk) return false;
@@ -1339,6 +1342,7 @@ function renderFcd(){
   if(nBookNoBankRef) warn+=' · 🏦 '+nBookNoBankRef+' حجز بلا بنك/مرجع (بلا دفعة)';
   $('fcd-cnt').textContent=rows.length+(rows.length!==DATA.fcd.length?' من '+DATA.fcd.length:'')+' صف'+warn;
   const _dupCnt=Object.values(DUP).filter(x=>x.isDup).length; const _dc=$('flt-dup-cnt'); if(_dc)_dc.textContent=_dupCnt;   // 🔁 عدد المشتبه تكرارهم بجانب الفلتر
+  const _nbCnt=DATA.fcd.filter(r=>Number(r.package_rate||0)>0 && (!hasBank(r)||!hasRef(r))).length; const _nc=$('flt-nobank-cnt'); if(_nc)_nc.textContent=_nbCnt;   // 🏦 عدد الحجوزات بلا بنك/مرجع بجانب الفلتر
   // ===== بانر الدفعات الناقصة (تاريخ الدفع / المرجع البنكي / بنك الإيداع) + فلترة =====
   const nNoDate=paidRows.filter(r=>!effPayDate(r)).length;
   const nAny=paidRows.filter(r=>!effPayDate(r)||!hasRef(r)||!hasBank(r)).length;
@@ -2492,7 +2496,8 @@ function renderStaff(){
   // تصفية صفوف fcd ثم تجميع لكل عميل (مثل منطق acc_v_staff_report) ثم لكل موظف
   const basis=staffBasis(), bbMap=basis==='booked'?staffBBMap():{};
   const APM=actualProfitMaps();   // الربح الفعلي من Booking Form لكل عميل
-  const rows=(DATA.fcd||[]).filter(r=>{ if(!r.client_code)return false; if(fJob&&String(r.package_type||'').trim()!==fJob)return false; if(!inR(r.booking_date))return false; return true; });
+  const _frzSt=frozenCodes(); const _frzUpSt=new Set([..._frzSt].map(x=>String(x||'').toUpperCase()));   // 🧊 الحسابات المجمّدة تُستثنى من إحصاء الموظفات (التجميد يسري على كل التبويبات ذات العلاقة)
+  const rows=(DATA.fcd||[]).filter(r=>{ if(!r.client_code)return false; if(_frzUpSt.has((r.client_code||'').toUpperCase()))return false; if(fJob&&String(r.package_type||'').trim()!==fJob)return false; if(!inR(r.booking_date))return false; return true; });
   // عملة كل عميل (من First Client Data) — لتحويل الربح الفعلي إلى الريال السعودي
   const curByClient={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(c&&r.currency&&!curByClient[c])curByClient[c]=r.currency; });
   const pc={}, commByClient={}, apSARByClient={};
@@ -2515,7 +2520,8 @@ function renderStaffDetail(fStaff,fJob,inR,basis,bbMap){
   const box=$('staff-detail'); if(!box)return;
   if(!fStaff){ box.innerHTML=''; return; }
   basis=basis||staffBasis(); bbMap=bbMap||(basis==='booked'?staffBBMap():{});
-  const rows=(DATA.fcd||[]).filter(r=>{ if(!r.client_code)return false; const staff=(basis==='booked'?(bbMap[(r.client_code||'').toUpperCase()]||''):(String(r.confirmed_by||'').trim())); if(staff!==fStaff)return false; if(fJob&&String(r.package_type||'').trim()!==fJob)return false; if(!inR(r.booking_date))return false; return true; })
+  const _frzSd=frozenCodes(); const _frzUpSd=new Set([..._frzSd].map(x=>String(x||'').toUpperCase()));   // 🧊 استثناء المجمّد من تفصيل الموظفة أيضاً
+  const rows=(DATA.fcd||[]).filter(r=>{ if(!r.client_code)return false; if(_frzUpSd.has((r.client_code||'').toUpperCase()))return false; const staff=(basis==='booked'?(bbMap[(r.client_code||'').toUpperCase()]||''):(String(r.confirmed_by||'').trim())); if(staff!==fStaff)return false; if(fJob&&String(r.package_type||'').trim()!==fJob)return false; if(!inR(r.booking_date))return false; return true; })
     .sort((a,b)=>String(effPayDate(b)||b.booking_date||'').localeCompare(String(effPayDate(a)||a.booking_date||'')));
   const tot={sold:0,profit:0,paid:0,bal:0,nCancel:0,cancelVal:0,nActive:0}; const cset=new Set();
   rows.forEach(r=>{ const isC=/cancel/i.test(r.conf_status||''); tot.sold+=Number(r.package_rate||0); tot.profit+=Number(r.profit||0); tot.paid+=Number(r.amount_paid||0); tot.bal+=Number(r.balance||0); if(isC){ tot.nCancel++; tot.cancelVal+=Number(r.package_rate||0); } else tot.nActive++; cset.add((r.client_code||'').toUpperCase()); });
