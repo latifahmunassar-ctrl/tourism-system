@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ب · «🔍 كاشف النقص» في الأرباح والخسائر — اضغطي «⏳ ناقص — وش الناقص؟» بأي صف مخفي ليطلع سبب النقص خدمةً خدمة (التقدير مقابل الحجز الفعلي والفجوة) </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ج · إصلاح جوهري: صندوق «مطابقة التكلفة» في الخدمات صار يستخدم نفس أساس محرّك الربح (السعر المحجوز الفعلي للفنادق لا حقل amount) — لا يعطي «مطابقة» كاذبة بعد اليوم </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2236,15 +2236,19 @@ function sBuildPayload(){
 function salesCostGap(code){
   // 📏 «التكلفة المُدخلة من الخدمات» = مجموع amount لكل خدمة (= سعر المورّد × الصرف، بعملة العميل). مقابل «المتفق عليها» = مجموع fcd.cost
   code=(code||'').toUpperCase(); if(!code) return null;
-  let entered=0, hasCanc=false, hasSvc=false;
+  let entered=0, hasCanc=false, hasSvc=false, hasMiss=false;
   (DATA.serviceLines||[]).forEach(s=>{ if((s.client_code||'').toUpperCase()!==code)return;
     const k=s.kind; if(['hotel','flight','tour','additional','supplier','transport','visa','other'].indexOf(k)<0)return;
     if(/profit/i.test(String(s.name||'')))return;
     if(/cancel/i.test(String(s.status||''))){ hasCanc=true; return; }   // الملغى لا يُعدّ في المقارنة
-    entered+=Number(s.amount||0); hasSvc=true;
+    // 🎯 نفس أساس actualProfitMaps بالضبط (وإلا يختلف الصندوق عن محرّك الربح ويضلّل): السعر المحجوز الفعلي×الصرف للفندق/الطيران، وإلا amount للأنواع الأخرى
+    const rate=Number(s.currency_rate)||1;
+    if(s.final_rate_booked!=null&&s.final_rate_booked!==''){ entered+=Number(s.final_rate_booked)*rate; hasSvc=true; }
+    else if(['tour','additional','supplier','transport','visa','other'].indexOf(k)>=0){ entered+=Number(s.amount||0); hasSvc=true; }
+    else { hasMiss=true; hasSvc=true; }   // فندق/طيران بلا سعر محجوز فعلي = ناقص (لا يُضاف)
   });
   let agreed=0; (DATA.fcd||[]).forEach(r=>{ if((r.client_code||'').toUpperCase()!==code)return; agreed+=Number(r.cost||0); });
-  return { entered, agreed, hasCanc, hasSvc, gap: agreed-entered };
+  return { entered, agreed, hasCanc, hasSvc, hasMiss, gap: agreed-entered };
 }
 // تنبيه بعد الحفظ: مقارنة تكلفة الخدمات المُدخلة بالتكلفة المتفق عليها (لا يمنع الحفظ)
 function sMaybeWarnCost(code){
