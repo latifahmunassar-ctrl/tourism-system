@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ط · صف الحساب المجمّد يظهر بخلفية حمراء خفيفة كاملة (أي حساب مجمّد لأي سبب) لتمييزه بسرعة في جدول First Client Data </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ي · قاعدة: أي حجز بلا بنك أو مرجع بنكي يُنبَّه عليه حتى بلا دفعة فعلية (وسم 🏦 أحمر بخانة المدفوع + عدّاد بالعنوان + فلتر «بلا مرجع/بنك» يشملها) — مثل C26509 </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1289,11 +1289,11 @@ function renderFcd(){
       if(due==='owe' && !(b>1)) return false;
       if(due==='over' && !(b<-1)) return false;
       if(due==='paid' && Math.abs(b)>1) return false; }
-    if(miss){ const paidRow=Number(r.amount_paid||0)>1; const noDate=!effPayDate(r); // النواقص تخصّ الصفوف اللي فيها دفع فعلاً
-      if(miss==='any'   && !(paidRow && (noDate || !hasRef(r) || !hasBank(r)))) return false;
-      if(miss==='nodate'&& !(paidRow && noDate))           return false;
-      if(miss==='noref' && !(paidRow && !hasRef(r)))       return false;
-      if(miss==='nobank'&& !(paidRow && !hasBank(r)))      return false; }
+    if(miss){ const paidRow=Number(r.amount_paid||0)>1; const noDate=!effPayDate(r); const booking=Number(r.package_rate||0)>0; // 🏦 نقص المرجع/البنك يشمل الحجوزات بلا دفعة (قاعدة المالكة)؛ نقص التاريخ يخصّ الدفعات الفعلية فقط
+      if(miss==='any'   && !((paidRow && noDate) || ((paidRow||booking) && (!hasRef(r) || !hasBank(r))))) return false;
+      if(miss==='nodate'&& !(paidRow && noDate))                 return false;
+      if(miss==='noref' && !((paidRow||booking) && !hasRef(r)))  return false;
+      if(miss==='nobank'&& !((paidRow||booking) && !hasBank(r))) return false; }
     return true;
   });
   // المُضاف من الداشبورد (الجديد) يُرفع للأعلى فقط — وباقي صفوف الشيت تبقى بترتيبها الأصلي تماماً (sort ثابت)
@@ -1310,10 +1310,13 @@ function renderFcd(){
     esc(r.payment_code||''),esc(r.client_code||''),(r.pax!=null&&r.pax!==''?'<span class="num" style="font-weight:700">'+esc(r.pax)+'</span>':'<span style="color:var(--muted)">—</span>'),esc(r.client_name||'')+nameWarn(r.client_code,r.package_rate),esc(r.phone||''),esc(r.agent_name||''),
     esc(r.travel_from||''),esc(r.travel_to||''),esc(r.booking_date||''),esc(r.arrival_date||''),esc(r.package_type||''),
     '<span class="num">'+fmt(r.cost)+'</span>','<span class="num pos">'+fmt(r.profit)+'</span>'+((Number(r.package_rate||0)>0&&r.payment_code)?' <button class="btn ghost" style="padding:0 5px;font-size:10px" title="تغيير الربح" onclick="chgProfit('+r.id+')">✏️</button>':'')+((DATA.profitOverrides||[]).some(o=>o.payment_code===r.payment_code)?' <span title="ربح معدّل يدوياً" style="font-size:9px;color:#f0a500">●</span>':''),'<span class="num">'+fmt(r.package_rate)+'</span>',
-    '<span class="num">'+fmt(r.amount_paid)+'</span>'+((Number(r.amount_paid||0)>1 && !payConfirmed(r))?(function(){ var hasBank=!!((r.bank_name||'').toString().trim()); var hasRef=!!((r.bank_ref||'').toString().trim());
-      // 💰 دفع فعلاً لكن السند البنكي ناقص/محذوف → «يحتاج إدخال بنكي» (لا يُحتسب مسدَّداً — يظهر كمستحق بالغلط لولا هذا التنبيه)
+    '<span class="num">'+fmt(r.amount_paid)+'</span>'+(function(){ var hasBank=!!((r.bank_name||'').toString().trim()); var hasRef=!!((r.bank_ref||'').toString().trim()); var realPay=Number(r.amount_paid||0)>1;
       var need = hasBank&&!hasRef ? 'يحتاج إدخال المرجع البنكي' : (!hasBank&&hasRef ? 'يحتاج إدخال اسم البنك' : 'يحتاج إدخال بنك ومرجع');
-      return '<br><span style="font-size:9px;background:rgba(217,138,0,.16);color:#b8860b;font-weight:700;padding:1px 5px;border-radius:6px" title="العميل دفع فعلاً لكن الدفعة غير موثّقة بنكيّاً فلا تُحتسب مسدَّدة — أكملي البيانات البنكية حتى لا يظهر كمستحق">💰 دفع — '+need+'</span>'; })():''),bal(cb[r.client_code]||0),(function(){ var c=(r.client_code||'').toUpperCase(); var rfv=refByClient[c]||0; return (rfv>0.005 && Number(r.package_rate||0)>0)?'<span class="num neg" style="font-weight:700">'+fmt(rfv)+'</span>':'<span style="color:var(--muted)">—</span>'; })(),(function(){ var c=(r.client_code||'').toUpperCase(); var dd=dueMap[c]||''; var owing=(cb[r.client_code]||0)>1; return '<input type="date" class="dueinp" value="'+esc(dd)+'"'+((owing&&!dd)?' style="border:1px solid #d98a00;background:rgba(217,138,0,.12)" title="عليه رصيد بدون تاريخ استحقاق — حدّديه"':'')+' onchange="setDue(\''+esc(r.client_code)+'\',this.value)">'; })(),(function(){ var pc=r.payment_code||''; var eff=effPayDate(r); var paidNoDate=Number(r.amount_paid||0)>1 && !eff; if(pc){ return '<input type="date" class="dueinp" value="'+esc(eff)+'"'+(paidNoDate?' style="border:1px solid #d98a00;background:rgba(217,138,0,.12)" title="دفعة بلا تاريخ — حدّدي التاريخ"':' title="تاريخ دفع المبلغ — قابل للتعديل من الداشبورد"')+' onchange="setPayDate(\''+esc(pc)+'\',this.value)">'; } return eff?esc(eff):(paidNoDate?'<span style="color:#d98a00;font-weight:700">⚠️ مطلوب</span>':'<span style="color:var(--muted)">—</span>'); })(),esc(r.currency||''),(function(){ var pc=r.payment_code||''; var bn=(r.bank_name||'').toString().trim(); var hasPay=Number(r.amount_paid||0)>1;
+      // 💰 دفع فعلاً لكن السند البنكي ناقص/محذوف → «يحتاج إدخال بنكي» (لا يُحتسب مسدَّداً — يظهر كمستحق بالغلط لولا هذا التنبيه)
+      if(realPay && !payConfirmed(r)) return '<br><span style="font-size:9px;background:rgba(217,138,0,.16);color:#b8860b;font-weight:700;padding:1px 5px;border-radius:6px" title="العميل دفع فعلاً لكن الدفعة غير موثّقة بنكيّاً فلا تُحتسب مسدَّدة — أكملي البيانات البنكية حتى لا يظهر كمستحق">💰 دفع — '+need+'</span>';
+      // 🏦 قاعدة المالكة: حتى بلا دفعة فعلية، أي حجز (باقة>0) بلا بنك أو مرجع يُنبَّه عليه لتوثيقه
+      if(!realPay && Number(r.package_rate||0)>0 && (!hasBank||!hasRef)) return '<br><span style="font-size:9px;background:rgba(209,17,17,.12);color:#d11;font-weight:700;padding:1px 5px;border-radius:6px" title="حجز بلا توثيق بنكي (لا دفعة فعلية مسجّلة) — '+need+'">🏦 '+need+'</span>';
+      return ''; })(),bal(cb[r.client_code]||0),(function(){ var c=(r.client_code||'').toUpperCase(); var rfv=refByClient[c]||0; return (rfv>0.005 && Number(r.package_rate||0)>0)?'<span class="num neg" style="font-weight:700">'+fmt(rfv)+'</span>':'<span style="color:var(--muted)">—</span>'; })(),(function(){ var c=(r.client_code||'').toUpperCase(); var dd=dueMap[c]||''; var owing=(cb[r.client_code]||0)>1; return '<input type="date" class="dueinp" value="'+esc(dd)+'"'+((owing&&!dd)?' style="border:1px solid #d98a00;background:rgba(217,138,0,.12)" title="عليه رصيد بدون تاريخ استحقاق — حدّديه"':'')+' onchange="setDue(\''+esc(r.client_code)+'\',this.value)">'; })(),(function(){ var pc=r.payment_code||''; var eff=effPayDate(r); var paidNoDate=Number(r.amount_paid||0)>1 && !eff; if(pc){ return '<input type="date" class="dueinp" value="'+esc(eff)+'"'+(paidNoDate?' style="border:1px solid #d98a00;background:rgba(217,138,0,.12)" title="دفعة بلا تاريخ — حدّدي التاريخ"':' title="تاريخ دفع المبلغ — قابل للتعديل من الداشبورد"')+' onchange="setPayDate(\''+esc(pc)+'\',this.value)">'; } return eff?esc(eff):(paidNoDate?'<span style="color:#d98a00;font-weight:700">⚠️ مطلوب</span>':'<span style="color:var(--muted)">—</span>'); })(),esc(r.currency||''),(function(){ var pc=r.payment_code||''; var bn=(r.bank_name||'').toString().trim(); var hasPay=Number(r.amount_paid||0)>1;
     if(bn) return esc(bn);
     if(!pc) return '';   // 🔒 الخانة تبقى ظاهرة دائماً طالما فيه كود دفعة (حتى بلا دفعة مسجّلة) — عشان تظهر أي حوالة ناقصة بنك وتُدخَل
     var amber=hasPay;   // دفعة فعلية بلا بنك = تحتاج انتباه (أصفر)؛ صف بلا دفعة = خانة عادية جاهزة
@@ -1331,7 +1334,9 @@ function renderFcd(){
   const nUnc=paidRows.filter(r=>!payConfirmed(r)).length;       // ناقص مرجع أو بنك (غير معتمدة)
   const nNoRef=paidRows.filter(r=>!hasRef(r)).length;            // بلا مرجع بنكي
   const nNoBank=paidRows.filter(r=>!hasBank(r)).length;          // بلا اسم بنك
+  const nBookNoBankRef=DATA.fcd.filter(r=>Number(r.amount_paid||0)<=1 && Number(r.package_rate||0)>0 && (!hasBank(r)||!hasRef(r))).length;   // 🏦 حجوزات بلا دفعة فعلية وبلا بنك/مرجع (قاعدة المالكة: نبّه حتى بلا دفعة)
   let warn=''; if(nUnc){ warn=' · ⚠️ '+nUnc+' دفعة بمعلومات بنكية ناقصة (غير معتمدة)'; const parts=[]; if(nNoRef)parts.push(nNoRef+' بلا مرجع'); if(nNoBank)parts.push(nNoBank+' بلا اسم بنك'); if(parts.length)warn+=' — '+parts.join(' · '); }
+  if(nBookNoBankRef) warn+=' · 🏦 '+nBookNoBankRef+' حجز بلا بنك/مرجع (بلا دفعة)';
   $('fcd-cnt').textContent=rows.length+(rows.length!==DATA.fcd.length?' من '+DATA.fcd.length:'')+' صف'+warn;
   const _dupCnt=Object.values(DUP).filter(x=>x.isDup).length; const _dc=$('flt-dup-cnt'); if(_dc)_dc.textContent=_dupCnt;   // 🔁 عدد المشتبه تكرارهم بجانب الفلتر
   // ===== بانر الدفعات الناقصة (تاريخ الدفع / المرجع البنكي / بنك الإيداع) + فلترة =====
