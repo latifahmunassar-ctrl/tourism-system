@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-هـ · خانتا البنك والمرجع تبقيان ظاهرتين جاهزتين للإدخال في كل صف بجدول المستحقات (حتى الصفوف بلا دفعة) — الحوالات الفعلية الناقصة تبرز بإطار أصفر عشان تُكمَّل بسرعة </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-و · كاشف التكرار: تنبيه للموظفة وقت إدخال عميل جديد بنفس (اسم العميل + الوكيل + قيمة الباقة) لعميل موجود + شارة «🔁 تكرار مشتبه» أمام اسم العميل للإدارة لتقرّر الإبقاء أو الحذف (الرقم للمقارنة لأنه قد يختلف لنفس الشخص) </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1220,6 +1220,32 @@ function hasRef(r){ return !!((r.bank_ref||'').toString().trim()); }
 function hasBank(r){ return !!((r.bank_name||'').toString().trim()); }
 // تاريخ الدفع الفعّال: override المُدخل من الداشبورد (acc_fcd_payment_dates، يبقى رغم مزامنة الشيت) ثم قيمة الصف
 function effPayDate(r){ var pc=r.payment_code||''; if(pc && PAYDATE_OVR[pc]!=null) return String(PAYDATE_OVR[pc]).slice(0,10); return String(r.payment_date||'').slice(0,10); }
+// ===== 🔁 كاشف التكرار: مفتاح = اسم العميل + الوكيل + قيمة الباقة (الرقم قد يختلف لنفس الشخص فلا يدخل المفتاح، ويُعرَض للمقارنة) =====
+function _dupNorm(s){ return String(s||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+function dupSuspectMap(){   // client_code → {isDup, original, mates[]} لكل مجموعة فيها أكثر من عميل بنفس المفتاح؛ الأقدم=الأصل والباقي=مكرَّر
+  const byC={};
+  ((DATA&&DATA.fcd)||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!c)return;
+    const o=byC[c]||(byC[c]={name:'',phone:'',agent:'',pkg:0,first:''});
+    if(r.client_name&&!o.name)o.name=r.client_name;
+    if(r.phone&&!o.phone)o.phone=r.phone;
+    if(r.agent_name&&!o.agent)o.agent=r.agent_name;
+    o.pkg+=Number(r.package_rate||0);
+    const cr=String(r.created_at||''); if(cr&&(!o.first||cr<o.first))o.first=cr; });
+  const groups={};
+  Object.keys(byC).forEach(c=>{ const o=byC[c]; if(!_dupNorm(o.name)||!(o.pkg>0))return; const k=_dupNorm(o.name)+'|'+_dupNorm(o.agent)+'|'+Math.round(o.pkg); (groups[k]=groups[k]||[]).push(Object.assign({code:c},o)); });
+  const out={};
+  Object.values(groups).forEach(g=>{ if(g.length<2)return; g.sort((a,b)=>String(a.first).localeCompare(String(b.first)));
+    g.forEach((x,i)=>{ const mates=g.filter(y=>y.code!==x.code).map(m=>m.code+((m.phone&&x.phone&&_dupNorm(m.phone)!==_dupNorm(x.phone))?' (رقم مختلف)':'')); out[x.code]={isDup:i>0, original:g[0].code, mates}; }); });
+  return out;
+}
+function findDupClient(name,agent,pkg){   // عند الإدخال: يرجّع كود عميل موجود بنفس (الاسم+الوكيل+الباقة) أو null
+  if(!_dupNorm(name)||!(Number(pkg)>0))return null;
+  const k=_dupNorm(name)+'|'+_dupNorm(agent)+'|'+Math.round(Number(pkg)||0);
+  const byC={};
+  ((DATA&&DATA.fcd)||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!c)return; const o=byC[c]||(byC[c]={name:'',agent:'',pkg:0}); if(r.client_name&&!o.name)o.name=r.client_name; if(r.agent_name&&!o.agent)o.agent=r.agent_name; o.pkg+=Number(r.package_rate||0); });
+  for(const c of Object.keys(byC)){ const o=byC[c]; if(_dupNorm(o.name)+'|'+_dupNorm(o.agent)+'|'+Math.round(o.pkg)===k) return c; }
+  return null;
+}
 function renderFcd(){
   if(!DATA) return;
   const q=($('flt-q').value||'').trim().toLowerCase(), ag=$('flt-agent').value, bk=$('flt-bank').value, due=$('flt-due').value, miss=(($('flt-miss')||{}).value)||'';
@@ -1236,12 +1262,15 @@ function renderFcd(){
   (DATA.serviceLines||[]).forEach(s=>{ const c=(s.client_code||'').toUpperCase(); if(!c)return; if(/profit/i.test(String(s.name||'')))return; if(/cancel/i.test(String(s.status||'')))return; hasSvcByClient[c]=true; if(Number(s.final_rate_booked||0)>0) bookedByClient[c]=true; });
   (DATA.bookingForm||[]).forEach(b=>{ const c=(b.client_code||'').toUpperCase(); if(c)bfByClient[c]=true; });
   const bankOpts=listValues('banks').map(b=>'<option>'+esc(b.value)+'</option>').join('');
-  const nameWarn=(c,pr)=>{ if(!(Number(pr||0)>0))return ''; c=(c||'').toUpperCase();
+  const DUP=dupSuspectMap();   // 🔁 خريطة التكرار المشتبه
+  const nameWarn=(c,pr)=>{ c=(c||'').toUpperCase();
+    let out='';
+    const dp=DUP[c]; if(dp&&dp.isDup) out+='<span title="🔁 تكرار مشتبه — نفس اسم العميل والوكيل وقيمة الباقة للعميل: '+esc(dp.mates.join('، '))+' · راجعي وقرّري الإبقاء أو الحذف" style="background:#f0a500;color:#000;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:4px">🔁 تكرار مشتبه</span>';
+    if(!(Number(pr||0)>0))return out;
     const paid=(paidByClient[c]||0)>0.005, np=!paid;
     const nbAll=paid && !hasSvcByClient[c] && !bfByClient[c];
     const nb=hasSvcByClient[c] && !bookedByClient[c];
-    if(!np&&!nb&&!nbAll)return '';
-    let out='';
+    if(!np&&!nb&&!nbAll)return out;
     if(np) out+='<span title="لم يدفع أي مبلغ" style="background:#d11;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:4px">⚠️ لم يدفع</span>';
     if(nbAll) out+='<span title="مش محجوز له — لا يوجد أي حجز في Booking Form أو الخدمات" style="background:#c026d3;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:4px">🚫 مش محجوز له</span>';
     else if(nb) out+='<span title="غير محجوز في Booking Form" style="background:#d11;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px;margin-left:4px">⚠️ غير محجوز</span>';
@@ -6516,6 +6545,9 @@ async function save(){
   if(!isNew && !p.client_code){ $('msg').innerHTML='<span style="color:var(--red)">اكتبي كود العميل الموجود</span>'; return; }
   // 📋 تأكيد إلزامي بالقيم قبل الإرسال (لا انعكاس إلا بموافقة الأدمن)
   const rateV=(+$('f-cost').value||0)+(+$('f-profit').value||0); const curV=p.currency||'';
+  // 🔁 كاشف التكرار (عميل جديد فقط): نفس اسم العميل + الوكيل + قيمة الباقة لعميل موجود → تنبيه وتأكيد
+  if(isNew){ const _dupC=findDupClient(p.client_name,p.agent_name,rateV);
+    if(_dupC){ if(!confirm('🔁 تنبيه تكرار مشتبه:\n\nمعلومات هذا العميل مُدخلة مسبقاً بنفس (اسم العميل + الوكيل + قيمة الباقة) — العميل «'+_dupC+'».\n\nهل أنتِ متأكدة من إدخالها مرة ثانية؟\n(لو أدخلتِها ستظهر للإدارة موسومة «🔁 تكرار مشتبه» لتقرّر الإبقاء أو الحذف)')) return; } }
   const kindTxt=isNew?'عميل جديد':(svc?'خدمة مضافة':'دفعة عميل');
   const noPayNew = isNew && !(paid>0);   // عميل جديد بلا دفعة → يمرّ بموافقة المالكة
   const confirmMsg='📋 تأكيد '+kindTxt+' — راجعي القيم جيداً:\n\n'+
