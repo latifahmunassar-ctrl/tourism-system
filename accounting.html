@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-أ · أُضيف عمود «💰 الربح الفعلي (ر.س)» في الأرباح والخسائر — يبقي الربح بالريال كما هو ويحوّل أي عملة أخرى للريال بسعر الصرف المعتمد </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ب · «🔍 كاشف النقص» في الأرباح والخسائر — اضغطي «⏳ ناقص — وش الناقص؟» بأي صف مخفي ليطلع سبب النقص خدمةً خدمة (التقدير مقابل الحجز الفعلي والفجوة) </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -5854,7 +5854,7 @@ function renderPnl(){
     const below=(!x.incomplete && x.actual && (x.exp - x.profit > 0.5));   // الفعلي أقل من المتوقع → أحمر (فقط للمكتملة)
     const g=x.incomplete;   // ناقص الإدخالات → رمادي وغير محتسب
     const numG=(v,col)=>'<span class="num" style="color:'+(g?'#9aa':col)+'">'+fmt(v)+'</span>';
-    const cells=[ (g?'⏳ ':(isLoss?'🔴 ':''))+esc(x.code)+(g?' <span style="color:#d98a00;font-size:9px;font-weight:700">⏳ ناقص إدخالات — غير محتسب</span>':(x.actual?' <span class="src dashboard" style="font-size:9px">فعلي</span>':'')),esc(x.name),esc(x.to),esc(x.agent),esc(x.bdate||''),
+    const cells=[ (g?'⏳ ':(isLoss?'🔴 ':''))+esc(x.code)+(g?' <span onclick="pnlWhyIncomplete(\''+esc(x.code)+'\')" title="اضغطي لمعرفة سبب اعتباره ناقصاً" style="color:#d98a00;font-size:9px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px">⏳ ناقص — 🔍 وش الناقص؟</span>':(x.actual?' <span class="src dashboard" style="font-size:9px">فعلي</span>':'')),esc(x.name),esc(x.to),esc(x.agent),esc(x.bdate||''),
       numG(x.cost,'inherit'),numG(x.rate,'inherit'),
       numG(x.exp,'#0e7c50'),
       (g?'<span class="num" style="color:#9aa">'+fmt(x.profit)+'</span>':'<span class="num '+pc+'"'+(below?' style="background:rgba(209,17,17,.10);font-weight:700;border-radius:4px" title="الفعلي أقل من المتوقع"':'')+'>'+fmt(x.profit)+(below?' 🔻':'')+'</span>'),
@@ -5863,6 +5863,48 @@ function renderPnl(){
       x.status.toLowerCase().includes('cancel')?'<span class="pill cancel">ملغى</span>':'<span class="pill active">نشط</span>'];
     return '<tr style="'+(g?'opacity:.7':(isLoss?'background:rgba(255,107,122,.10)':''))+'">'+cells.map(c=>'<td>'+c+'</td>').join('')+'</tr>';
   }).join(''); $('pnl-cnt').textContent=complete.length+' محتسب'+(nInc?' · ⏳ '+nInc+' ناقص (غير محتسب)':'')+(losers.length?' · 🔴 '+losers.length+' خاسر':'')+((df||dt)?' · 📅 مفلتر':'');
+}
+
+// 🔍 كاشف النقص: يوضّح لماذا اعتُبر حجز العميل «ناقصاً» فأُخفي ربحه — يقارن التكلفة التقديرية (First Client Data) بمجموع الخدمات المحجوزة فعليّاً خدمةً خدمة
+function pnlWhyIncomplete(code){
+  code=(code||'').toUpperCase(); if(!code) return;
+  const KN={hotel:'🏨 فندق',flight:'✈️ طيران',tour:'🗺️ جولة',additional:'➕ خدمة',supplier:'🏢 مورّد',transport:'🚐 انتقال',visa:'📗 فيزا',other:'📦 أخرى'};
+  const fcd=(DATA.fcd||[]).filter(r=>(r.client_code||'').toUpperCase()===code);
+  const name=(fcd.find(r=>r.client_name)||{}).client_name||'';
+  const cur=(fcd.find(r=>r.currency)||{}).currency||'SAR';
+  const estCost=fcd.reduce((s,r)=>s+Number(r.cost||0),0);        // التكلفة التقديرية وقت البيع
+  const pkg=fcd.reduce((s,r)=>s+Number(r.package_rate||0),0);     // سعر البيع
+  const svc=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code &&
+    ['hotel','flight','tour','additional','supplier','transport','visa','other'].indexOf(s.kind)>=0 &&
+    !/profit/i.test(String(s.name||'')));
+  let bookedTot=0, missN=0;
+  const rows=svc.map(s=>{
+    const rate=Number(s.currency_rate)||1, canc=/cancel/i.test(String(s.status||''));
+    let val=null, note='';
+    if(canc){ const _frb=Number(s.final_rate_booked||0),_rf=Number(s.refund||0),_cc=Number(s.cancel_charge||0); val=Math.max(0,Math.min(_rf>0.005?(_frb-_rf):_cc,_frb))*rate; note='ملغى (رسوم إلغاء)'; }
+    else if(s.final_rate_booked!=null&&s.final_rate_booked!==''){ val=Number(s.final_rate_booked)*rate; }
+    else if(['tour','additional','supplier','transport','visa','other'].indexOf(s.kind)>=0){ val=Number(s.amount||0); note='قيمة الخدمة (amount)'; }
+    else { missN++; note='⚠️ بلا سعر فعلي — أدخلي السعر'; }   // فندق/طيران بلا final_rate_booked
+    if(val!=null) bookedTot+=val;
+    return '<tr'+(val==null?' style="background:rgba(217,138,0,.12)"':'')+'><td>'+(KN[s.kind]||s.kind)+'</td><td>'+esc(s.name||s.detail||'')+'</td><td class="num">'+(s.final_rate_booked!=null&&s.final_rate_booked!==''?esc(s.final_rate_booked)+(rate!==1?' × '+esc(rate):''):(val!=null?'—':''))+'</td><td class="num" style="font-weight:700">'+(val!=null?fmt(val):'—')+'</td><td style="font-size:11px;color:'+(val==null?'#d98a00':'var(--muted)')+'">'+esc(note)+'</td></tr>';
+  }).join('');
+  const gap=estCost-bookedTot;
+  let diag;
+  if(missN>0) diag='<b style="color:#d98a00">يوجد '+missN+' خدمة (فندق/طيران) بلا سعر فعلي.</b> أدخلي السعر الفعلي لها من Booking Form فيُحتسب الربح تلقائيّاً.';
+  else if(gap>1500) diag='كل الخدمات مُدخلة برقم فعلي، لكن مجموعها (<b>'+fmt(bookedTot)+'</b>) أقل من التكلفة التقديرية (<b>'+fmt(estCost)+'</b>) بـ <b style="color:#d98a00">'+fmt(gap)+' '+esc(cur)+'</b>.<br>يعني إمّا <b>خدمة لم تُدخل أصلاً</b> في Booking Form (مثلاً طيران / انتقال / فيزا)، أو أن <b>الحجز طلع أرخص</b> من التقدير.<br>• لو ناقصة خدمة → أدخليها فيُقفل الفرق ويظهر الربح.<br>• لو كل شي مُدخل فعلاً → الفرق ربح إضافي حقيقي؛ عدّلي التكلفة التقديرية في First Client Data لتطابق الحجز الفعلي فيظهر الربح.';
+  else diag='لا يوجد نقص واضح — قد يكون بلا سعر بيع مسجّل أو حالة خاصة.';
+  let m=document.getElementById('why-modal'); if(m)m.remove();
+  m=document.createElement('div'); m.id='why-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:14px';
+  m.innerHTML='<div style="background:var(--card,#fff);color:var(--txt,#111);border-radius:14px;padding:18px 20px;width:min(760px,97vw);box-shadow:0 10px 40px rgba(0,0,0,.35)">'+
+    '<h3 style="margin:0 0 4px;color:var(--accent)">🔍 كاشف النقص — '+esc(code)+' <span style="font-size:12px;color:var(--muted);font-weight:400">'+esc(name)+'</span></h3>'+
+    '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;margin:8px 0 12px"><span>سعر البيع: <b>'+fmt(pkg)+' '+esc(cur)+'</b></span><span>التكلفة التقديرية: <b>'+fmt(estCost)+'</b></span><span>مجموع الحجز الفعلي: <b>'+fmt(bookedTot)+'</b></span><span>الفجوة: <b style="color:'+(gap>1500?'#d98a00':'#0e9d6a')+'">'+fmt(gap)+'</b></span></div>'+
+    '<div class="tbl-wrap"><table style="font-size:12.5px;white-space:nowrap;width:100%"><thead><tr><th>النوع</th><th>الخدمة</th><th>السعر الفعلي</th><th>بالريال/العملة</th><th>ملاحظة</th></tr></thead><tbody>'+(rows||'<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:12px">لا خدمات محجوزة مُدخلة إطلاقاً — أدخلي خدمات الحجز في Booking Form</td></tr>')+'</tbody></table></div>'+
+    '<div style="margin-top:12px;background:rgba(217,138,0,.08);border-right:3px solid #d98a00;padding:10px 12px;font-size:12.5px;line-height:1.9;border-radius:6px">'+diag+'</div>'+
+    '<div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn ghost" onclick="var e=document.getElementById(\'why-modal\');if(e)e.remove()">إغلاق</button></div>'+
+  '</div>';
+  m.addEventListener('click',e=>{ if(e.target===m)m.remove(); });
+  document.body.appendChild(m);
 }
 
 // ---- فورم استدعاء العميل (PAYMENT/REFUND): ملخّص + دفعات + تفصيل الحجز ----
