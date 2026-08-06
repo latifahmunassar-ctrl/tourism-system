@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ك3 · إصلاح: دفعة الفندق بلا تاريخ ما تختفي بصمت من كشف «سنة 2026 فقط» — تظهر دائماً (كان سبب عدم انعكاس دفعة الفنار 68 ر.ع) </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ك4 · تاريخ الدفع صار إجبارياً في فورمات دفعات الموردين والفنادق (معبّأ باليوم افتراضياً، يُرفض الحفظ لو فُرِّغ) + الباك-إند يحطّ اليوم لأي دفعة بلا تاريخ </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2926,7 +2926,7 @@ function buildHotelPay(){
       '<div class="fld" id="hp-rate-fld" style="display:none"><label>سعر الصرف (1 وحدة دفع = ؟ <span id="hp-rlbl">'+esc(HO_TCUR)+'</span>)</label><input type="number" id="hp-rate" step="0.0001" oninput="hpTotal()"></div>'+
       '<div class="fld"><label>البنك <span style="color:var(--red)">*</span></label><select id="hp-bank">'+bankOpts+'</select></div>'+
       '<div class="fld"><label>المرجع البنكي <span style="color:var(--red)">*</span></label><input id="hp-ref" placeholder="RD ..."></div>'+
-      '<div class="fld"><label>تاريخ الدفع</label><input type="date" id="hp-date"></div>'+
+      '<div class="fld"><label>تاريخ الدفع <span style="color:var(--red)">*</span></label><input type="date" id="hp-date" value="'+_todayStr()+'"></div>'+
       '<div class="fld" style="min-width:240px;flex:1.5"><label>📝 ملاحظة (يدوي فقط)</label><input id="hp-note" placeholder="تُكتب يدوياً..."></div>'+
     '</div>'+
     '<div style="margin:6px 0;font-size:14px;font-weight:700;padding:6px 10px;background:rgba(224,33,138,.08);border-radius:8px">'+(hpHbMatch(HO_PAYEE).length?'💰 مبلغ هذه الدفعة الإجمالي للمورّد (بعملة '+esc(HO_TCUR)+'): <b id="hp-remain" style="color:#0e9d6a">0</b>':'المتبقّي للتوزيع (بعملة '+esc(HO_TCUR)+'): <b id="hp-remain" style="color:#b8860b">0</b>')+' <span id="hp-conv" style="font-size:11px;color:var(--accent)"></span></div>'+
@@ -3149,6 +3149,7 @@ async function hpSubmit(){
   if(gross<=0)return err('⚠️ أدخلي إجمالي مبلغ التحويل');
   if(!bank)return err('⚠️ لازم تحديد البنك');
   if(!ref)return err('⚠️ لازم إدخال المرجع البنكي');
+  if(!date)return err('⚠️ تاريخ الدفع إجباري — حدّديه');   // 📅 لا دفعة فندق بلا تاريخ
   if(mismatch&&(!rate||rate<=0))return err('⚠️ أدخلي سعر الصرف لتحويل الدفع لعملة المدفوع له ('+HO_TCUR+')');
   // اختيار العملاء عبر الشيك ليست: إجباري للمرتجع، اختياري للتحويل
   let lines, summary;
@@ -5240,7 +5241,7 @@ function renderSupplierDetail(){
         '<div class="fld" id="sp-rate-fld" style="display:none"><label>🏦 سعر صرف البنك (1 وحدة دفع = ؟ '+esc(SCUR)+') <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">متغيّر — أدخليه يدوياً كل دفعة</span></label><input type="number" id="sp-rate" step="0.0001" placeholder="سعر صرف البنك (متغيّر) — أدخليه لكل دفعة" oninput="spTotal()"></div>'+
         '<div class="fld"><label>البنك <span style="color:var(--red)">*</span></label><select id="sp-bank">'+bankOpts+'</select></div>'+
         '<div class="fld"><label>المرجع البنكي <span style="color:var(--red)">*</span></label><input id="sp-ref" placeholder="RD ..."></div>'+
-        '<div class="fld"><label id="sp-date-lbl">تاريخ الدفع</label><input type="date" id="sp-date"></div>'+
+        '<div class="fld"><label id="sp-date-lbl">تاريخ الدفع <span style="color:var(--red)">*</span></label><input type="date" id="sp-date" value="'+_todayStr()+'"></div>'+
         '<div class="fld" style="min-width:240px;flex:1.5"><label>📝 ملاحظة <span id="sp-note-hint" style="font-size:9px;color:var(--muted)">(سبب الإرجاع للمرتجع)</span></label><input id="sp-note" placeholder="مثال: إلغاء حجز / تصحيح مبلغ زائد…"></div>'+
       '</div>'+
       '<div style="margin:6px 0;font-size:14px;font-weight:700;padding:6px 10px;background:rgba(224,33,138,.08);border-radius:8px">المتبقّي للتوزيع (بعملة المورّد '+esc(SCUR)+'): <b id="sp-remain" style="color:#b8860b">0</b> <span id="sp-conv" style="font-size:11px;color:var(--accent)"></span></div>'+
@@ -5670,6 +5671,7 @@ async function saveDistributedPayments(sup){
   if(gross<=0){ msg.style.color='var(--red)'; msg.textContent=isRefund?'⚠️ أدخلي إجمالي المبلغ المُرتجَع':'⚠️ أدخلي إجمالي مبلغ التحويل'; return; }
   if(!bank){ msg.style.color='var(--red)'; msg.textContent='⚠️ لازم تحديد البنك'; return; }
   if(!ref){ msg.style.color='var(--red)'; msg.textContent='⚠️ لازم إدخال المرجع البنكي'; return; }
+  if(!date){ msg.style.color='var(--red)'; msg.textContent='⚠️ تاريخ الدفع إجباري — حدّديه'; if($('sp-date'))$('sp-date').focus(); return; }   // 📅 لا دفعة بلا تاريخ
   if(isRefund && !noteVal){ msg.style.color='var(--red)'; msg.textContent='⚠️ سبب الإرجاع إجباري للمرتجع — اكتبيه في خانة الملاحظة'; if($('sp-note'))$('sp-note').focus(); return; }
   if(mismatch && (!rate||rate<=0)){ msg.style.color='var(--red)'; msg.textContent='⚠️ أدخلي سعر الصرف لتحويل الدفع لعملة المورّد ('+esc(scur)+')'; return; }
   // 💸 التوزيع اختياري: لو لم تُوزَّع، تُسجَّل الدفعة «غير موزّعة» ويمكن توزيعها لاحقاً بزر «📌 وزّع» جنب القيمة (مثل الفنادق)
