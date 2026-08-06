@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ع · الأرباح والخسائر: عمود «💱 عملة البيع» جنب الربح المتوقّع (يبيّن عملة بيع كل عميل: دولار/عماني/ريال…) </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ف · الأرباح والخسائر: وسم «⚠️ لم يدفع» أمام أي عميل مدفوعه صفر (غير ملغى) + عدّاد بعنوان الجدول </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -5869,8 +5869,9 @@ function renderPnl(){
   const apm=actualProfitMaps();
   const m={};
   for(const r of DATA.fcd){ const c=(r.client_code||'').toUpperCase(); if(!c)continue;
-    if(!m[c]) m[c]={code:r.client_code,name:'',to:'',agent:'',rate:0,exp:0,status:'Active',bdate:'',cur:''};
+    if(!m[c]) m[c]={code:r.client_code,name:'',to:'',agent:'',rate:0,exp:0,status:'Active',bdate:'',cur:'',paid:0};
     m[c].rate+=Number(r.package_rate||0);
+    m[c].paid+=Number(r.amount_paid||0);   // 💵 المدفوع (لتنبيه «لم يدفع»)
     m[c].exp+=Number(r.profit||0);   // 🎯 الربح المتوقع من First Client Data
     if(r.currency&&!m[c].cur)m[c].cur=r.currency;   // عملة العميل (لتحويل الربح للريال)
     if(r.client_name&&!m[c].name)m[c].name=r.client_name;
@@ -5907,7 +5908,8 @@ function renderPnl(){
     const below=(!x.incomplete && x.actual && (x.exp - x.profit > 0.5));   // الفعلي أقل من المتوقع → أحمر (فقط للمكتملة)
     const g=x.incomplete;   // ناقص الإدخالات → رمادي وغير محتسب
     const numG=(v,col)=>'<span class="num" style="color:'+(g?'#9aa':col)+'">'+fmt(v)+'</span>';
-    const cells=[ (g?'⏳ ':(isLoss?'🔴 ':''))+esc(x.code)+(g?' <span onclick="pnlWhyIncomplete(\''+esc(x.code)+'\')" title="اضغطي لمعرفة سبب اعتباره ناقصاً" style="color:#d98a00;font-size:9px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px">⏳ ناقص — 🔍 وش الناقص؟</span>':((x.actual?' <span class="src dashboard" style="font-size:9px">فعلي</span>':'')+(x.inc?' <span onclick="pnlWhyIncomplete(\''+esc(x.code)+'\')" title="الربح محسوب تلقائياً من الحجز الفعلي (مُحتسب)؛ التكلفة التقديرية أعلى بفجوة — راجعيها (عمولة/حجز أرخص/خدمة ناقصة) وعدّلي يدويّاً إن لزم" style="color:#d98a00;font-size:9px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px">⚠ راجعي الفجوة 🔍</span>':''))),esc(x.name),esc(x.to),esc(x.agent),esc(x.bdate||''),
+    const noPay=(Number(x.paid||0)<=1) && !String(x.status||'').toLowerCase().includes('cancel');   // 💵 لم يدفع (المبلغ صفر أو رمزي 1) وغير ملغى
+    const cells=[ (g?'⏳ ':(isLoss?'🔴 ':''))+esc(x.code)+(g?' <span onclick="pnlWhyIncomplete(\''+esc(x.code)+'\')" title="اضغطي لمعرفة سبب اعتباره ناقصاً" style="color:#d98a00;font-size:9px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px">⏳ ناقص — 🔍 وش الناقص؟</span>':((x.actual?' <span class="src dashboard" style="font-size:9px">فعلي</span>':'')+(x.inc?' <span onclick="pnlWhyIncomplete(\''+esc(x.code)+'\')" title="الربح محسوب تلقائياً من الحجز الفعلي (مُحتسب)؛ التكلفة التقديرية أعلى بفجوة — راجعيها (عمولة/حجز أرخص/خدمة ناقصة) وعدّلي يدويّاً إن لزم" style="color:#d98a00;font-size:9px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px">⚠ راجعي الفجوة 🔍</span>':'')))+(noPay?' <span title="لم يدفع أي مبلغ (المدفوع صفر) — تحقّقي" style="background:#d11;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:8px">⚠️ لم يدفع</span>':''),esc(x.name),esc(x.to),esc(x.agent),esc(x.bdate||''),
       numG(x.cost,'inherit'),numG(x.rate,'inherit'),
       numG(x.exp,'#0e7c50'),
       '<span style="font-weight:700;color:var(--accent)">'+esc(x.cur||'—')+'</span>',
@@ -5916,7 +5918,7 @@ function renderPnl(){
       '<span class="num'+(g?'':' '+pc)+'" style="'+(g?'color:#9aa':'')+'">'+margin+'%</span>',
       x.status.toLowerCase().includes('cancel')?'<span class="pill cancel">ملغى</span>':'<span class="pill active">نشط</span>'];
     return '<tr style="'+(g?'opacity:.7':(isLoss?'background:rgba(255,107,122,.10)':''))+'">'+cells.map(c=>'<td>'+c+'</td>').join('')+'</tr>';
-  }).join(''); const nRev=arr.filter(x=>!x.incomplete&&x.inc).length; $('pnl-cnt').textContent=complete.length+' محتسب'+(nRev?' · ⚠ '+nRev+' للمراجعة (محسوب من الفعلي)':'')+(nInc?' · ⏳ '+nInc+' ناقص (غير محتسب)':'')+(losers.length?' · 🔴 '+losers.length+' خاسر':'')+((df||dt)?' · 📅 مفلتر':'');
+  }).join(''); const nRev=arr.filter(x=>!x.incomplete&&x.inc).length; const nNoPay=arr.filter(x=>Number(x.paid||0)<=1 && !String(x.status||'').toLowerCase().includes('cancel')).length; $('pnl-cnt').textContent=complete.length+' محتسب'+(nRev?' · ⚠ '+nRev+' للمراجعة (محسوب من الفعلي)':'')+(nNoPay?' · ⚠️ '+nNoPay+' لم يدفع':'')+(nInc?' · ⏳ '+nInc+' ناقص (غير محتسب)':'')+(losers.length?' · 🔴 '+losers.length+' خاسر':'')+((df||dt)?' · 📅 مفلتر':'');
 }
 
 // 🔍 كاشف النقص: يوضّح لماذا اعتُبر حجز العميل «ناقصاً» فأُخفي ربحه — يقارن التكلفة التقديرية (First Client Data) بمجموع الخدمات المحجوزة فعليّاً خدمةً خدمة
