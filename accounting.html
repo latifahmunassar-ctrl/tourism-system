@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ك4 · تاريخ الدفع صار إجبارياً في فورمات دفعات الموردين والفنادق (معبّأ باليوم افتراضياً، يُرفض الحفظ لو فُرِّغ) + الباك-إند يحطّ اليوم لأي دفعة بلا تاريخ </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ك5 · قاعدة الموافقات: أي إدخال/دفعة/خدمة/عميل جديد يُسجَّل مباشرة بلا موافقة؛ موافقة المالكة فقط عند تعديل شيء محفوظ سابقاً في First Client Data (وسُلّم للمورّد يبقى بموافقة لأنه يُقفل مستحق المورّد) </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -6609,19 +6609,15 @@ async function save(){
     '• تاريخ الدفع: '+(p.payment_date||'— غير محدّد —')+'\n\n'+
     (dest==='supplier'
       ?'🔒 «سُلّم للمورّد» يُرسَل لموافقة الأدمن (يُقفل مستحق المورّد لصالح العميل). تأكيد الإرسال؟'
-      :(noPayNew
-        ?'🔔 هذا الإدخال بلا دفعة — سيُرسَل لموافقتكِ ولن ينعكس حتى تعتمدينه (يظهر في تبويب الإشعارات للموافقة/الرفض). تأكيد الإرسال؟'
-        :'✅ ستُسجَّل مباشرة في First Client Data. هل القيم صحيحة وتريدين الحفظ؟'));
+      :'✅ ستُسجَّل مباشرة في First Client Data. هل القيم صحيحة وتريدين الحفظ؟');   // 📌 قاعدة المالكة: أي إدخال/دفعة/خدمة جديدة مباشر بلا موافقة (الموافقة فقط عند تعديل محفوظ)
   if(!confirm(confirmMsg))return;
   $('save-btn').disabled=true; SAVING=true;
   p.by=(CURRENT_USER&&CURRENT_USER.staff_name)||'';
   p.created_by=p.by;   // ختم اسم المُدخِل على الصف الجديد
   let j;
-  if(dest==='supplier' || noPayNew){
-    // يمرّ بموافقة المالكة: تسليم مباشر للمورّد، أو إدخال عميل جديد بلا دفعة — لا ينعكس إلا بعد الاعتماد
-    p.summary = (dest==='supplier')
-      ? ('👤 '+kindTxt+' '+(isNew?('«'+(p.client_name||'')+'»'):('«'+(p.client_code||'')+'»'))+' · مدفوع '+fmt(paid)+' '+curV+' · 🤝 سُلّم للمورّد '+deliveredSupplier)
-      : ('👤 إدخال عميل جديد بلا دفعة «'+(p.client_name||'')+'» · باقة '+fmt(rateV)+' '+curV+' · مدفوع 0 — بانتظار موافقتك');
+  if(dest==='supplier'){
+    // 🤝 «سُلّم مباشرة للمورّد» فقط يمرّ بموافقة المالكة (يُقفل مستحق المورّد — عملية خاصة). أي إدخال/دفعة/خدمة جديدة أخرى = مباشر بلا موافقة (قاعدة المالكة)
+    p.summary = ('👤 '+kindTxt+' '+(isNew?('«'+(p.client_name||'')+'»'):('«'+(p.client_code||'')+'»'))+' · مدفوع '+fmt(paid)+' '+curV+' · 🤝 سُلّم للمورّد '+deliveredSupplier);
     try{ const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'request_client_entry',payload:p})}); j=await r.json(); }
     catch(e){ $('save-btn').disabled=false; SAVING=false; $('msg').innerHTML='<span style="color:var(--red)">خطأ: '+esc(e.message)+'</span>'; return; }
     if(j.error){ $('save-btn').disabled=false; SAVING=false; $('msg').innerHTML='<span style="color:var(--red)">خطأ: '+esc(j.error)+'</span>'; return; }
