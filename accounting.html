@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ف · الأرباح والخسائر: وسم «⚠️ لم يدفع» أمام أي عميل مدفوعه صفر (غير ملغى) + عدّاد بعنوان الجدول </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ص · قسم المستحقات: الحساب المجمّد يظهر موسوماً «🧊 مجمّد» بخلفية حمراء خفيفة + زر «🗑️ حذف» للمالكة فقط (يحذف صفوف الداشبورد؛ صفوف الشيت تُحذف من الشيت) </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -6236,6 +6236,7 @@ function fillDueFilters(){
 function dclear(){ $('dflt-q').value=''; $('dflt-agent').value=''; $('dflt-st').value='owe'; renderDue(); }
 function renderDue(){
   if(!DATA) return;
+  const _frzDue=frozenCodes(); const FROZUP=new Set([..._frzDue].map(x=>String(x||'').toUpperCase()));   // 🧊 الحسابات المجمّدة
   const q=($('dflt-q').value||'').trim().toLowerCase(), ag=$('dflt-agent').value, st=$('dflt-st').value||'owe';
   // 🧹 التسويات (الشطب): الرصيد الفعّال = المتبقّي − المشطوب
   const setl=settledByClient();
@@ -6292,9 +6293,9 @@ function renderDue(){
   const _wmDue=clientWarnMaps();
   // نوع العملة من First Client Data لكل عميل (fallback على عملة صف المستحقات)
   const _curByCode={}; (DATA.fcd||[]).forEach(x=>{ const c=(x.client_code||'').toUpperCase(); if(x.currency && !_curByCode[c]) _curByCode[c]=String(x.currency).trim(); });
-  document.querySelector('#t-due tbody').innerHTML=rows.map(r=>rw([
+  document.querySelector('#t-due tbody').innerHTML=rows.map(r=>{ const _frz=FROZUP.has((r.client_code||'').toUpperCase()); return rw([
     r.is_overdue?'<span style="font-size:15px">⚠️</span>':'',
-    '<b>'+esc(r.client_code||'')+'</b>',
+    '<b>'+esc(r.client_code||'')+'</b>'+(_frz?' <span class="pill" style="background:#3a7bd5;color:#fff;font-size:9px" title="حساب مجمّد">🧊 مجمّد</span>':''),
     esc(r.client_name||'')+clientNameWarn(r.client_code,_wmDue),esc(r.agent_name||''),
     '<span class="num">'+fmt(r.final_rate)+'</span>','<span class="num">'+fmt(r.amount_paid)+'</span>',
     (function(){ var s=dset(r), eb=effBal(r); var out=bal(eb);
@@ -6305,10 +6306,30 @@ function renderDue(){
     '<span style="font-weight:700;color:var(--accent)">'+esc(_curByCode[(r.client_code||'').toUpperCase()]||r.currency||'')+'</span>',
     esc(r.arrival_date||''),
     '<input type="date" class="dueinp" value="'+(r.due_date||'')+'"'+((Number(r.balance||0)>1 && !r.due_date)?' style="border:1px solid #d98a00;background:rgba(217,138,0,.12)" title="عليه رصيد بدون تاريخ سداد — حدّدي التاريخ"':'')+' onchange="setDue(\''+esc(r.client_code)+'\',this.value)">',
-    r.is_overdue?'<span class="pill over" title="بدء التنبيه: '+esc(r.alert_date||'')+((r.due_date&&r.alert_date===r.due_date)?' (تاريخ السداد)':' (قبل الوصول بأسبوع — تاريخ السداد قريب من الوصول)')+'">🔔 تنبيه سداد</span>':((Number(r.balance||0)>1 && !r.due_date)?'<span class="pill" style="background:#d98a00;color:#fff">بلا تاريخ سداد</span>':'<span class="pill active">'+esc(r.balance_status||'')+'</span>')
-  ])).join('')||rw(['','','لا نتائج','','','','','','','','']);
+    (r.is_overdue?'<span class="pill over" title="بدء التنبيه: '+esc(r.alert_date||'')+((r.due_date&&r.alert_date===r.due_date)?' (تاريخ السداد)':' (قبل الوصول بأسبوع — تاريخ السداد قريب من الوصول)')+'">🔔 تنبيه سداد</span>':((Number(r.balance||0)>1 && !r.due_date)?'<span class="pill" style="background:#d98a00;color:#fff">بلا تاريخ سداد</span>':'<span class="pill active">'+esc(r.balance_status||'')+'</span>'))+(_frz&&(typeof isOwnerUser!=='function'||isOwnerUser())?' <button class="btn ghost" style="padding:1px 8px;font-size:10px;color:var(--red);border-color:var(--red)" title="حذف الحساب المجمّد نهائياً (للمالكة فقط)" onclick="delFrozenClient(\''+esc(r.client_code||'')+'\')">🗑️ حذف</button>':'')
+  ], _frz?'style="background:rgba(209,17,17,.09)" title="🧊 حساب مجمّد"':''); }).join('')||rw(['','','لا نتائج','','','','','','','','']);
   const nOwe=DATA.due.filter(r=>effBal(r)>1).length, nOver=DATA.due.filter(r=>effBal(r)<-1).length, nND=DATA.due.filter(r=>effBal(r)>1 && !r.due_date).length, nUnc=DATA.due.filter(r=>Number(r.unconfirmed_paid||0)>1).length, nSet=DATA.due.filter(r=>dset(r)>0).length;
   $('due-cnt').textContent=rows.length+' ظاهر · 🔴 '+nOwe+' عليه مستحق (منهم 🟠 '+nND+' بلا تاريخ سداد) · ↩️ '+nOver+' مدفوع زيادة'+(nSet?' · 🧹 '+nSet+' مُسوّى':'')+(nUnc?' · ⚠️ '+nUnc+' فيه مبلغ بلا مرجع':'');
+}
+// 🗑️ حذف حساب مجمّد نهائياً من قسم المستحقات — للمالكة فقط (محقَّق خادميّاً في delete_client_entry)
+async function delFrozenClient(code){
+  code=(code||'').toUpperCase(); if(!code) return;
+  if(typeof isOwnerUser==='function' && !isOwnerUser()){ alert('⚠️ حذف الحساب للمالكة فقط'); return; }
+  if(!frozenCodes().has(code) && !frozenCodes().has(code.toLowerCase())){ alert('ℹ️ هذا الحساب غير مجمّد — الحذف من هنا للحسابات المجمّدة فقط.'); return; }
+  const all=(DATA.fcd||[]).filter(r=>(r.client_code||'').toUpperCase()===code);
+  const dashRows=all.filter(r=>r.source==='dashboard'); const sheetRows=all.filter(r=>r.source!=='dashboard');
+  if(!all.length){ alert('لا توجد بيانات لهذا العميل'); return; }
+  const nm=(all.find(r=>r.client_name)||{}).client_name||'';
+  let msg='🗑️ حذف الحساب المجمّد «'+code+'»'+(nm?' ('+nm+')':'')+' نهائياً؟\n\n';
+  msg+='• صفوف قابلة للحذف (داشبورد): '+dashRows.length+'\n';
+  if(sheetRows.length) msg+='⚠️ • صفوف من الشيت لا تُحذف من هنا: '+sheetRows.length+' (احذفيها من الشيت)\n';
+  msg+='\nلا يمكن التراجع. تأكيد الحذف؟';
+  if(!confirm(msg)) return;
+  try{
+    for(const r of dashRows){ const rr=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_client_entry',payload:{id:r.id,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j=await rr.json(); if(j.error){ alert('خطأ: '+j.error); return; } }
+    await load();
+    alert('✅ حُذف الحساب المجمّد.'+(sheetRows.length?(' بقي '+sheetRows.length+' صف من الشيت — احذفيها من الشيت.'):''));
+  }catch(e){ alert('خطأ: '+e.message); }
 }
 // 🧹 تسوية/شطب رصيد صغير — يصفّر الرصيد وينقص الربح بمقداره (موثّق ودائم)
 async function settleDue(code,balance,cur){
