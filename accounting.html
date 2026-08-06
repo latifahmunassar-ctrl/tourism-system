@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ل · زر فلتر بارز «🏦 بلا بنك/مرجع» بعدّاده فوق (يشمل دفعة صفر) + استثناء الحساب المجمّد من تبويب الموظفات (إحصاء وتفصيل) — التجميد يسري على التبويبات ذات العلاقة </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-م · الأرباح والخسائر: الربح الفعلي يُحسب ويُحتسب تلقائياً من الحجز الفعلي المُدخَل (لم يعد يُحجب بفجوة التكلفة التقديرية)؛ الصفوف ذات الفجوة تُوسم «⚠ راجعي الفجوة» للتعديل اليدوي — C26499 صار ربحه 5101 </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -5884,7 +5884,8 @@ function renderPnl(){
   }
   // الربح الفعلي = apm.byClient · ناقص الإدخالات = بلا ربح فعلي أو حجز ناقص أو خدمات غير محجوزة → لا يُحتسب في الإجماليات
   let arr=Object.values(m).map(x=>{ const c=x.code.toUpperCase(); const prof=apm.byClient[c]; const profit=(prof!=null?prof:0); const inc=!!apm.incClient[c]; const miss=Number(apm.missClient[c]||0);
-    return {...x, profit, cost:x.rate-profit, actual:(prof!=null), inc, miss, incomplete:(prof==null)||inc||(miss>0)}; });
+    // 🎯 الربح الفعلي = البيع − مجموع الحجز الفعلي المُدخَل (يُحسب تلقائياً ويُحتسب دائماً طالما فيه رقم فعلي)؛ فجوة التكلفة (inc) تنبيه للمراجعة فقط لا تحجب — المالكة تعدّل الخسائر يدويّاً
+    return {...x, profit, cost:x.rate-profit, actual:(prof!=null), inc, miss, incomplete:(prof==null)||(miss>0)}; });
   const q=($('pflt-q').value||'').trim().toLowerCase();
   if(q) arr=arr.filter(x=>x.name.toLowerCase().includes(q)||x.code.toLowerCase().includes(q));
   // 📅 فلتر المدة (تاريخ الحجز)
@@ -5909,7 +5910,7 @@ function renderPnl(){
     const below=(!x.incomplete && x.actual && (x.exp - x.profit > 0.5));   // الفعلي أقل من المتوقع → أحمر (فقط للمكتملة)
     const g=x.incomplete;   // ناقص الإدخالات → رمادي وغير محتسب
     const numG=(v,col)=>'<span class="num" style="color:'+(g?'#9aa':col)+'">'+fmt(v)+'</span>';
-    const cells=[ (g?'⏳ ':(isLoss?'🔴 ':''))+esc(x.code)+(g?' <span onclick="pnlWhyIncomplete(\''+esc(x.code)+'\')" title="اضغطي لمعرفة سبب اعتباره ناقصاً" style="color:#d98a00;font-size:9px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px">⏳ ناقص — 🔍 وش الناقص؟</span>':(x.actual?' <span class="src dashboard" style="font-size:9px">فعلي</span>':'')),esc(x.name),esc(x.to),esc(x.agent),esc(x.bdate||''),
+    const cells=[ (g?'⏳ ':(isLoss?'🔴 ':''))+esc(x.code)+(g?' <span onclick="pnlWhyIncomplete(\''+esc(x.code)+'\')" title="اضغطي لمعرفة سبب اعتباره ناقصاً" style="color:#d98a00;font-size:9px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px">⏳ ناقص — 🔍 وش الناقص؟</span>':((x.actual?' <span class="src dashboard" style="font-size:9px">فعلي</span>':'')+(x.inc?' <span onclick="pnlWhyIncomplete(\''+esc(x.code)+'\')" title="الربح محسوب تلقائياً من الحجز الفعلي (مُحتسب)؛ التكلفة التقديرية أعلى بفجوة — راجعيها (عمولة/حجز أرخص/خدمة ناقصة) وعدّلي يدويّاً إن لزم" style="color:#d98a00;font-size:9px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px">⚠ راجعي الفجوة 🔍</span>':''))),esc(x.name),esc(x.to),esc(x.agent),esc(x.bdate||''),
       numG(x.cost,'inherit'),numG(x.rate,'inherit'),
       numG(x.exp,'#0e7c50'),
       (g?'<span class="num" style="color:#9aa">'+fmt(x.profit)+'</span>':'<span class="num '+pc+'"'+(below?' style="background:rgba(209,17,17,.10);font-weight:700;border-radius:4px" title="الفعلي أقل من المتوقع"':'')+'>'+fmt(x.profit)+(below?' 🔻':'')+'</span>'),
@@ -5917,7 +5918,7 @@ function renderPnl(){
       '<span class="num'+(g?'':' '+pc)+'" style="'+(g?'color:#9aa':'')+'">'+margin+'%</span>',
       x.status.toLowerCase().includes('cancel')?'<span class="pill cancel">ملغى</span>':'<span class="pill active">نشط</span>'];
     return '<tr style="'+(g?'opacity:.7':(isLoss?'background:rgba(255,107,122,.10)':''))+'">'+cells.map(c=>'<td>'+c+'</td>').join('')+'</tr>';
-  }).join(''); $('pnl-cnt').textContent=complete.length+' محتسب'+(nInc?' · ⏳ '+nInc+' ناقص (غير محتسب)':'')+(losers.length?' · 🔴 '+losers.length+' خاسر':'')+((df||dt)?' · 📅 مفلتر':'');
+  }).join(''); const nRev=arr.filter(x=>!x.incomplete&&x.inc).length; $('pnl-cnt').textContent=complete.length+' محتسب'+(nRev?' · ⚠ '+nRev+' للمراجعة (محسوب من الفعلي)':'')+(nInc?' · ⏳ '+nInc+' ناقص (غير محتسب)':'')+(losers.length?' · 🔴 '+losers.length+' خاسر':'')+((df||dt)?' · 📅 مفلتر':'');
 }
 
 // 🔍 كاشف النقص: يوضّح لماذا اعتُبر حجز العميل «ناقصاً» فأُخفي ربحه — يقارن التكلفة التقديرية (First Client Data) بمجموع الخدمات المحجوزة فعليّاً خدمةً خدمة
