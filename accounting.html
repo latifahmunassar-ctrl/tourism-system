@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ك6 · تنبيه (لا موافقة) عند إدخال عميل بلا دفعة: إشعار «💤 عملاء دخلوا بلا دفعة» في تبويب الإشعارات + بانر بصفحة First Client Data + وسم «لم يدفع» أمام الاسم؛ يختفي فور تسجيل دفعته </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ك7 · مطابقة البنك تقبل ملف Excel (.xlsx) مباشرة — قراءة ذكية بالأعمدة (تاريخ/مدين/دائن) بلا تلوّث بأرقام الحسابات؛ كشف روافي يُطابق بالتاريخ+المبلغ بدقّة </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -678,7 +678,7 @@ table{font-weight:600}
           <div class="fld" style="min-width:220px"><label>🏦 البنك / الحساب (في نظامك)</label><select id="rec-bank"><option value="">— اختاري البنك —</option></select></div>
           <div class="fld"><label>📅 من تاريخ</label><input type="date" id="rec-from" style="color-scheme:light;cursor:pointer"></div>
           <div class="fld"><label>📅 إلى تاريخ</label><input type="date" id="rec-to" style="color-scheme:light;cursor:pointer"></div>
-          <div class="fld" style="min-width:240px"><label>⬆️ كشف البنك الأصلي (PDF / CSV)</label><input type="file" id="rec-file" accept=".pdf,.csv" style="font-size:11px;padding:6px;background:#f6f8fc;border:1px solid var(--line);border-radius:8px;color:var(--txt)"></div>
+          <div class="fld" style="min-width:240px"><label>⬆️ كشف البنك الأصلي (Excel / PDF / CSV)</label><input type="file" id="rec-file" accept=".xlsx,.xls,.pdf,.csv" style="font-size:11px;padding:6px;background:#f6f8fc;border:1px solid var(--line);border-radius:8px;color:var(--txt)"></div>
           <button class="btn green" style="padding:9px 20px" onclick="runReconcile()">🔍 تحقّق وقارن</button>
         </div>
         <div id="rec-result" style="margin-top:14px"></div>
@@ -4152,6 +4152,49 @@ async function parseBankCsv(file){
   });
   return { txns:rows, header:{}, raw:t };
 }
+// 📗 قراءة كشف Excel (.xlsx) مباشرة — فكّ ضغط ZIP + قراءة الأعمدة حسب الترويسة (Debit/Credit) بلا تلوّث بأرقام الحسابات
+async function _inflateRaw(bytes){
+  if(typeof DecompressionStream==='undefined') throw new Error('متصفّحك لا يدعم قراءة xlsx مباشرة — احفظي الكشف CSV وارفعيه');
+  const ds=new DecompressionStream('deflate-raw');
+  const ab=await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer();
+  return new Uint8Array(ab);
+}
+async function _unzipXlsx(b){
+  const dv=new DataView(b.buffer,b.byteOffset,b.byteLength); const u16=o=>dv.getUint16(o,true), u32=o=>dv.getUint32(o,true);
+  let eo=-1; for(let i=b.length-22;i>=0;i--){ if(u32(i)===0x06054b50){ eo=i; break; } }
+  if(eo<0) throw new Error('الملف ليس xlsx صالحاً');
+  const cnt=u16(eo+10), cdOff=u32(eo+16); const out={}; let p=cdOff; const td=new TextDecoder('utf-8');
+  for(let i=0;i<cnt;i++){ if(u32(p)!==0x02014b50)break;
+    const method=u16(p+10), cs=u32(p+20), nl=u16(p+28), el=u16(p+30), cl=u16(p+32), lho=u32(p+42);
+    const name=td.decode(b.slice(p+46,p+46+nl));
+    const lnl=u16(lho+26), lel=u16(lho+28); const start=lho+30+lnl+lel; const comp=b.slice(start,start+cs);
+    if(/sharedStrings\.xml$|worksheets\/.*\.xml$/.test(name)) out[name]= method===0 ? comp : await _inflateRaw(comp);
+    p+=46+nl+el+cl; }
+  return out;
+}
+async function parseBankXlsx(file){
+  const buf=new Uint8Array(await file.arrayBuffer()); const files=await _unzipXlsx(buf); const dec=new TextDecoder('utf-8');
+  const unesc=s=>String(s).replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
+  const ss=[]; const ssF=files['xl/sharedStrings.xml']; if(ssF){ dec.decode(ssF).replace(/<si>([\s\S]*?)<\/si>/g,(m,inner)=>{ let t=''; inner.replace(/<t[^>]*>([\s\S]*?)<\/t>/g,(mm,x)=>{t+=x;return'';}); ss.push(unesc(t)); return''; }); }
+  const shName=Object.keys(files).find(n=>/worksheets\/sheet1\.xml$/.test(n))||Object.keys(files).find(n=>/worksheets\/.*\.xml$/.test(n));
+  if(!shName) throw new Error('لا ورقة عمل في الملف');
+  const sx=dec.decode(files[shName]);
+  const colIdx=ref=>{ const mm=String(ref).match(/^([A-Z]+)/); if(!mm)return 0; let n=0; for(const ch of mm[1])n=n*26+(ch.charCodeAt(0)-64); return n-1; };
+  const rows=[];
+  sx.replace(/<row\b[^>]*>([\s\S]*?)<\/row>/g,(m,cells)=>{ const arr=[];
+    cells.replace(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g,(mm,attrs,inner)=>{ const rm=attrs.match(/\br="([^"]+)"/); const ci=rm?colIdx(rm[1]):arr.length; const tm=attrs.match(/\bt="([^"]*)"/); const t=tm?tm[1]:''; let val='';
+      if(inner!=null){ if(t==='inlineStr'){ const im=inner.match(/<t[^>]*>([\s\S]*?)<\/t>/); if(im)val=unesc(im[1]); } else { const vm=inner.match(/<v>([\s\S]*?)<\/v>/); if(vm)val=(t==='s')?(ss[+vm[1]]||''):unesc(vm[1]); } }
+      arr[ci]=val; return''; });
+    rows.push(arr); return''; });
+  const hIdx=rows.findIndex(r=>r&&r.some(c=>/debit/i.test(c||''))&&r.some(c=>/credit/i.test(c||'')));
+  const txns=[], rawLines=[];
+  if(hIdx>=0){ const H=rows[hIdx]||[]; const find=re=>H.findIndex(c=>re.test(String(c||'')));
+    const cDate=find(/date|recieve|receive/i), cDeb=find(/debit/i), cCred=find(/credit/i);
+    const num=v=>{ const c=String(v==null?'':v).replace(/,/g,''); return /^-?\d+(?:\.\d+)?$/.test(c)?Number(c):0; };
+    for(let i=hIdx+1;i<rows.length;i++){ const r=rows[i]||[]; const dm=String(r[cDate]||'').match(/(\d{4}-\d{2}-\d{2})/); if(!dm)continue; const deb=num(r[cDeb]), cred=num(r[cCred]); if(deb===0&&cred===0)continue; txns.push({date:dm[1],out:deb,in:cred,remarks:''}); rawLines.push(dm[1]+' · مدين '+deb+' · دائن '+cred); } }
+  if(!txns.length){ const text=rows.map(r=>(r||[]).join(' ')).join('\n'); return { txns:parseStmtTxns(text), header:parseStmtHeader(text), raw:text }; }   // احتياطي
+  return { txns, header:{}, raw:rawLines.join('\n') };
+}
 function recDiag(raw){ const txt=String(raw||''); const empty=txt.replace(/\s/g,'').length<20; const sample=txt.slice(0,4000); window._recRaw=txt; return '<div style="background:rgba(217,138,0,.08);border:1px solid #d98a00;border-radius:8px;padding:12px;margin-top:6px">'+(empty?'<div style="font-weight:700;color:#d11;margin-bottom:6px">❌ الملف لا يحتوي نصاً قابلاً للقراءة — غالباً كشف مصوّر (صورة/سكان). صدّري الكشف من تطبيق البنك كـ PDF نصّي أو CSV.</div>':'<div style="font-weight:700;color:#d98a00;margin-bottom:6px">⚠️ تعذّر التعرّف على تنسيق هذا الكشف. انسخي النص التالي وأرسليه للمساعد ليضبط القارئ على بنكك:</div>')+'<textarea readonly onclick="this.select()" style="width:100%;height:160px;font-size:10px;direction:ltr;background:#f6f8fc;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:8px;white-space:pre">'+esc(sample)+'</textarea>'+(empty?'':'<button class="btn" style="margin-top:6px;padding:6px 14px" onclick="navigator.clipboard.writeText(window._recRaw||\'\').then(()=>{this.textContent=\'✅ تم النسخ — أرسليه للمساعد\'})">📋 نسخ النص الكامل</button>')+'</div>'; }
 // 🔎 عرض نص الكشف الخام (كما قرأه النظام) — لتشخيص أسطر لم تُطابَق. مع بحث سريع (مثلاً 4137)
 function reconShowRaw(){
@@ -4180,7 +4223,7 @@ function runReconcile(){
   if(!bank){ alert('⚠️ اختاري البنك أولاً'); return; }
   if(!file){ alert('⚠️ ارفعي كشف البنك (PDF أو CSV)'); return; }
   $('rec-result').innerHTML='<div style="color:var(--muted);padding:10px">⏳ جاري قراءة الكشف والمقارنة…</div>';
-  (/\.csv$/i.test(file.name)?parseBankCsv(file):parseBankPdf(file)).then(parsed=>{
+  (/\.xlsx?$/i.test(file.name)?parseBankXlsx(file):(/\.csv$/i.test(file.name)?parseBankCsv(file):parseBankPdf(file))).then(parsed=>{
     if(!parsed.txns.length){ $('rec-result').innerHTML='<h4 style="margin:0 0 8px">🔎 تشخيص الكشف — لم يُتعرّف على أي حركة</h4>'+recDiag(parsed.raw); return; }
     // 📅 حصر فترة المقارنة تلقائيّاً على فترة الكشف (من ترويسته أو من أقدم/أحدث حركة فيه) إن لم تحدّدها المستخدمة —
     //    يمنع مقارنة سنوات قديمة (2025) ضد كشف فترة أحدث فتظهر مئات الحركات «غير موجودة بالكشف» بلا داعٍ
