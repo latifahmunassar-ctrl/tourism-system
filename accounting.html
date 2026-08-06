@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ص · قسم المستحقات: الحساب المجمّد يظهر موسوماً «🧊 مجمّد» بخلفية حمراء خفيفة + زر «🗑️ حذف» للمالكة فقط (يحذف صفوف الداشبورد؛ صفوف الشيت تُحذف من الشيت) </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ق · مطابقة البنك: حارس يكشف الكشوف بلا تواريخ يومية (عمود مقصوص) ويحذّر أن المطابقة بالمبلغ فقط غير موثوقة — يمنع مطابقة حركة قديمة بنفس المبلغ خطأً </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4163,6 +4163,7 @@ function runReconcile(){
     }
     const inR=(d)=>{ const s=String(d||'').slice(0,10); if(!s)return false; if(_from&&s<_from)return false; if(_to&&s>_to)return false; return true; };
     const stmt=parsed.txns.filter(x=>(!_from&&!_to)||inR(x.date)).map(x=>({...x,_m:false}));
+    const _noDay = stmt.length>0 && !stmt.some(s=>/^\d{4}-\d{2}-\d{2}$/.test(String(s.date||'').slice(0,10)));   // ⚠️ كشف بلا تواريخ يومية (عمود التاريخ مقصوص) → المطابقة بالمبلغ فقط وغير موثوقة
     const sys=bankTxAll().filter(x=>bankAlias(x.bank_name)===bank && ((!_from&&!_to)||inR(x.tx_date))).map(x=>({date:String(x.tx_date||'').slice(0,10),out:Number(x.amount_out||0),in:Number(x.amount_in||0),note:x.note||x.bank_ref||'',id:x.id,src:x.source||'',ssheet:x.src_sheet||'',_cash:!!x._cash,_book:!!x._booking,_fcd:!!x._clientPay,_refund:!!x._refund,_suppay:!!x._suppay,_rid:x._rid||null,code:x.client_code||'',pcode:x.payment_code||'',cname:x.client_name||'',cur:x.currency||'',_m:false}));
     stmt.forEach(s=>{ const cand=sys.find(y=>!y._m && y.date===s.date && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; } });
     stmt.forEach(s=>{ if(s._m)return; const cand=sys.find(y=>!y._m && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; s._dm=cand.date; } });
@@ -4173,7 +4174,7 @@ function runReconcile(){
     const sOut=sum(stmt,'out'), sIn=sum(stmt,'in');
     window._recRaw=String(parsed.raw||'');   // 📋 نص الكشف الخام (لتشخيص أسطر لم تُقرأ)
     window._lastRecon={bank,from:_from,to:_to,file,txnCount:stmt.length,totalIn:sIn,totalOut:sOut,allOk:(stmtOnly.length===0&&sysOnly.length===0)};
-    renderReconReport({bank,from:_from,to:_to,autoPeriod:_autoPeriod,header:parsed.header,stmt,sys,matched:stmt.filter(s=>s._m).length,stmtOnly,sysOnly,sOut,sIn,yOut:sum(sys,'out'),yIn:sum(sys,'in')});
+    renderReconReport({bank,from:_from,to:_to,autoPeriod:_autoPeriod,noDay:_noDay,header:parsed.header,stmt,sys,matched:stmt.filter(s=>s._m).length,stmtOnly,sysOnly,sOut,sIn,yOut:sum(sys,'out'),yIn:sum(sys,'in')});
   }).catch(e=>{ $('rec-result').innerHTML='<div style="color:var(--red);padding:10px">❌ تعذّر قراءة الملف: '+esc(String(e&&e.message||e))+'<br><span style="font-size:11px;color:var(--muted)">إذا كان PDF غير مدعوم، صدّري الكشف CSV من تطبيق البنك.</span></div>'; });
 }
 function renderReconReport(r){
@@ -4181,7 +4182,8 @@ function renderReconReport(r){
   const fd=(v)=>{ v=Number(v||0); return v.toLocaleString('en-US',{minimumFractionDigits:(Math.abs(v%1)>1e-9?2:0),maximumFractionDigits:2}); };  // 🔢 يُظهر الكسور (الهللات) في المطابقة — عشان لا يبدو رقمان مختلفان متطابقين بعد التدوير
   const dOut=r.sOut-r.yOut, dIn=r.sIn-r.yIn;
   const allOk=(r.stmtOnly.length===0&&r.sysOnly.length===0&&Math.abs(dOut)<0.01&&Math.abs(dIn)<0.01);
-  let h=(allOk?'<div style="background:rgba(14,157,106,.12);border:1px solid #0e9d6a;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-weight:700;color:#0e9d6a;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span>✅ تطابق تام — عدد الحركات وقيمها والإجماليات متطابقة</span><button class="btn green" id="rec-save-btn" style="padding:7px 16px" onclick="saveRecon()">💾 حفظ التقرير (مطابق)</button></div>':'<div style="background:rgba(217,138,0,.1);border:1px solid #d98a00;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-weight:700;color:#d98a00">⚠️ يوجد '+(r.stmtOnly.length+r.sysOnly.length)+' حركة غير متطابقة — راجعي التفاصيل بالأسفل</div>')+
+  const noDayWarn=r.noDay?'<div style="background:rgba(209,17,17,.10);border:1px solid #d11;border-radius:8px;padding:10px 12px;margin-bottom:10px;color:#d11;font-size:12.5px;line-height:1.8"><b>⛔ تواريخ الكشف ناقصة (بلا يوم — عمود التاريخ مقصوص «YYYY-MM»).</b><br>المطابقة تمّت <b>بالمبلغ فقط</b> بلا تاريخ، فقد تُطابق حركةً قديمةً بنفس المبلغ <b>خطأً</b> — <b>لا تعتمدي هذه النتيجة.</b><br>✅ الحل: أعيدي تصدير الكشف من تطبيق البنك <b>كـ CSV</b>، أو وسّعي عمود التاريخ ليظهر <b>YYYY-MM-DD كاملاً</b>، ثم قارني من جديد.</div>':'';
+  let h=noDayWarn+(allOk?'<div style="background:rgba(14,157,106,.12);border:1px solid #0e9d6a;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-weight:700;color:#0e9d6a;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span>✅ تطابق تام — عدد الحركات وقيمها والإجماليات متطابقة</span><button class="btn green" id="rec-save-btn" style="padding:7px 16px" onclick="saveRecon()">💾 حفظ التقرير (مطابق)</button></div>':'<div style="background:rgba(217,138,0,.1);border:1px solid #d98a00;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-weight:700;color:#d98a00">⚠️ يوجد '+(r.stmtOnly.length+r.sysOnly.length)+' حركة غير متطابقة — راجعي التفاصيل بالأسفل</div>')+
     '<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:12px">'+
     '<div class="kpi"><div class="ttl">📄 حركات الكشف</div><div class="val">'+f(r.stmt.length)+'</div></div>'+
     '<div class="kpi"><div class="ttl">💻 حركات نظامك</div><div class="val">'+f(r.sys.length)+'</div></div>'+
