@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ك5 · قاعدة الموافقات: أي إدخال/دفعة/خدمة/عميل جديد يُسجَّل مباشرة بلا موافقة؛ موافقة المالكة فقط عند تعديل شيء محفوظ سابقاً في First Client Data (وسُلّم للمورّد يبقى بموافقة لأنه يُقفل مستحق المورّد) </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ك6 · تنبيه (لا موافقة) عند إدخال عميل بلا دفعة: إشعار «💤 عملاء دخلوا بلا دفعة» في تبويب الإشعارات + بانر بصفحة First Client Data + وسم «لم يدفع» أمام الاسم؛ يختفي فور تسجيل دفعته </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1350,14 +1350,17 @@ function renderFcd(){
   if(ib){
     const cur=(($('flt-miss')||{}).value)||'';
     const chip=(val,label,count,color)=>count?('<button onclick="fcdMiss(\''+val+'\')" style="border:1px solid '+color+';background:'+(cur===val?color:'transparent')+';color:'+(cur===val?'#fff':color)+';border-radius:14px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer">'+label+' ('+count+')</button>'):'';
+    // 💤 تنبيه «عملاء دخلوا بلا دفعة» — في نفس صفحة First Client Data (تنبيه فقط، بلا موافقة)
+    const _noPay=(typeof liveNoPaymentClients==='function')?liveNoPaymentClients():[];
+    const noPayNotice=_noPay.length?'<div class="panel" style="border:1px solid #3aa0ff;background:rgba(58,160,255,.08);margin-bottom:12px;padding:9px 12px"><b style="color:#2563eb">💤 '+_noPay.length+' عميل دخل بلا دفعة</b> <span style="font-size:11px;color:var(--muted)">— تنبيه فقط (الإدخال مباشر بلا موافقة). موسومون «⚠️ لم يدفع» أمام أسمائهم بالجدول، وتفصيلهم في تبويب 🔔 الإشعارات.</span></div>':'';
     if(nAny){
-      ib.innerHTML='<div class="panel" style="border:1px solid var(--red);background:rgba(255,107,122,.07);margin-bottom:12px;padding:10px 12px">'+
+      ib.innerHTML=noPayNotice+'<div class="panel" style="border:1px solid var(--red);background:rgba(255,107,122,.07);margin-bottom:12px;padding:10px 12px">'+
         '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--red)">⚠️ دفعات ناقصة المعلومات — تحتاج معالجة:</b> '+
         chip('any','الكل',nAny,'#d11')+chip('nodate','📅 بلا تاريخ دفع',nNoDate,'#d98a00')+chip('noref','🏦 بلا مرجع بنكي',nNoRef,'#d98a00')+chip('nobank','🏧 بلا بنك إيداع',nNoBank,'#d98a00')+
         (cur?' <button onclick="fcdMiss(\'\')" style="border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:14px;padding:4px 12px;font-size:12px;cursor:pointer">✖ إلغاء الفلتر</button>':'')+
         '</div><div style="font-size:11px;color:var(--muted);margin-top:6px">اضغطي أي زر لعرض الدفعات الناقصة فقط ومعالجتها — تاريخ الدفع يُعدَّل مباشرة من العمود، والمرجع/البنك من زر ✏️ (الصفوف المُدخلة من الداشبورد).</div></div>';
     } else {
-      ib.innerHTML='<div class="panel" style="border:1px solid #0e9d6a;background:rgba(14,157,106,.06);margin-bottom:12px;padding:8px 12px;color:#0e9d6a;font-weight:700">✅ كل الدفعات موثّقة (تاريخ الدفع + المرجع البنكي + بنك الإيداع)</div>';
+      ib.innerHTML=noPayNotice+'<div class="panel" style="border:1px solid #0e9d6a;background:rgba(14,157,106,.06);margin-bottom:12px;padding:8px 12px;color:#0e9d6a;font-weight:700">✅ كل الدفعات موثّقة (تاريخ الدفع + المرجع البنكي + بنك الإيداع)</div>';
     }
   }
 }
@@ -3372,6 +3375,20 @@ function liveUnconfirmedPayments(){
   out.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
   return out;
 }
+// 💤 عملاء دخلوا بلا دفعة (باقة>0، إجمالي المدفوع≤1، غير ملغى وغير مجمّد) — تنبيه فقط (لا موافقة)
+function liveNoPaymentClients(){
+  const frz=(typeof frozenCodes==='function')?frozenCodes():new Set(); const fu=new Set([...frz].map(x=>String(x||'').toUpperCase()));
+  const DIS=(typeof dismissedSet==='function'?dismissedSet():new Set());
+  const byC={};
+  (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!c)return; const o=byC[c]||(byC[c]={code:c,name:'',pkg:0,paid:0,cur:'',bdate:'',agent:'',cancel:false,created:''});
+    if(r.client_name&&!o.name)o.name=r.client_name; o.pkg+=Number(r.package_rate||0); o.paid+=Number(r.amount_paid||0);
+    if(r.currency&&!o.cur)o.cur=r.currency; if(r.agent_name&&!o.agent)o.agent=r.agent_name;
+    const bd=String(r.booking_date||'').slice(0,10); if(bd&&(!o.bdate||bd>o.bdate))o.bdate=bd;
+    const cr=String(r.created_at||''); if(cr>o.created)o.created=cr;
+    if(/cancel/i.test(String(r.conf_status||'')))o.cancel=true; });
+  return Object.values(byC).filter(o=>!o.cancel && o.pkg>0 && o.paid<=1 && !fu.has(o.code) && !DIS.has('nopay:'+o.code))
+    .sort((a,b)=>String(b.bdate||b.created||'').localeCompare(String(a.bdate||a.created||'')));
+}
 // ---- Overview of Bookings: متابعة كل حجز (بيع/مدفوع/رصيد/متوقّع/فعلي/خدمات) ----
 // حجوزات محفوظة (لها حجز فعلي) لكن ناقصة إدخالات اختيارية: Charge from / تاريخ الدفع — تظهر في الإشعارات
 function bookingsMissingFields(){
@@ -3499,6 +3516,14 @@ function renderAlerts(){
       '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>العميل</th><th>المبلغ</th><th>الناقص</th><th>البنك</th><th>المرجع</th>'+(_owner?'<th>إجراء</th>':'')+'</tr></thead><tbody>'+
       pendUncPay.map(a=>'<tr><td><b>'+esc(a.client_code||'')+'</b></td><td>'+esc(a.service_name||'')+'</td><td class="num" style="color:#0e7c50;font-weight:700">'+fmt(a.amount)+' <span style="font-size:9px;color:var(--muted)">'+esc(a.cur)+'</span></td><td><span style="font-size:10px;background:rgba(217,138,0,.16);color:#b8860b;font-weight:700;padding:1px 6px;border-radius:6px">⚠️ '+esc(a.need)+'</span></td><td style="font-size:10px;color:var(--muted)">'+(a.bank?esc(a.bank):'<span style="color:#d11">— ناقص</span>')+'</td><td style="font-size:10px;color:var(--muted)">'+(a.ref?esc(a.ref):'<span style="color:#d11">— ناقص</span>')+'</td>'+(_owner?'<td style="white-space:nowrap"><button class="btn" style="padding:2px 9px;font-size:11px" onclick="gotoDueClient(\''+esc(a.client_code||'')+'\')">✏️ استكمال</button> <button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--red);border-color:var(--red)" title="إخفاء (يمكن استرجاعه)" onclick="dismissAlert(\'unconfpay\',\''+esc(a.payment_code||a.client_code)+'\')">🗑️</button></td>':'')+'</tr>').join('')+
       '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ العميل <b>دفع فعلاً</b> لكن الدفعة بلا (بنك و/أو مرجع بنكي) فلا تُحتسب مسدَّدة — أكملي البيانات من تبويب المستحقات حتى لا يظهر كمستحق. تختفي تلقائيّاً فور الاستكمال.</div></div>';
+  }
+  // 💤 عملاء دخلوا بلا دفعة — تنبيه فقط (لا موافقة)
+  const noPayCli=(typeof liveNoPaymentClients==='function')?liveNoPaymentClients():[];
+  if(noPayCli.length){
+    h+='<div class="panel" style="border:1px solid #3aa0ff;background:rgba(58,160,255,.07);margin-bottom:14px"><h3 style="color:#2563eb;margin-top:0">💤 عملاء دخلوا بلا دفعة ('+noPayCli.length+') <span style="font-size:11px;font-weight:400;color:var(--muted)">— تنبيه فقط، الإدخال مباشر بلا موافقة</span></h3>'+
+      '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>العميل</th><th>الوكيل</th><th>الباقة</th><th>تاريخ الحجز</th><th>إجراء</th></tr></thead><tbody>'+
+      noPayCli.map(a=>'<tr><td><b>'+esc(a.code)+'</b></td><td>'+esc(a.name||'')+'</td><td style="font-size:11px">'+esc(a.agent||'')+'</td><td class="num">'+fmt(a.pkg)+' <span style="font-size:9px;color:var(--muted)">'+esc(a.cur||'')+'</span></td><td style="font-size:11px;color:var(--muted)">'+esc(a.bdate||'')+'</td><td style="white-space:nowrap"><button class="btn" style="padding:2px 9px;font-size:11px" onclick="gotoDueClient(\''+esc(a.code)+'\')">💵 تسجيل دفعة</button>'+(_owner?' <button class="btn ghost" style="padding:2px 8px;font-size:11px;color:var(--muted)" title="إخفاء التنبيه (يمكن استرجاعه)" onclick="dismissAlert(\'nopay\',\''+esc(a.code)+'\')">🗑️</button>':'')+'</td></tr>').join('')+
+      '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">⚙️ تُكشَف تلقائياً لأي عميل مُدخَل بباقة لكن بلا أي دفعة (عدا الملغى والمجمّد). تختفي فور تسجيل دفعته. <b>تنبيه فقط — لا يحتاج موافقتك.</b></div></div>';
   }
   if(pend.length){
     h+='<div class="panel" style="border:1px solid var(--amber);background:rgba(245,158,11,.07);margin-bottom:14px"><h3 style="color:var(--amber);margin-top:0">⚠️ تذاكر بانتظار تعديل العملة ('+pend.length+')</h3>'+
