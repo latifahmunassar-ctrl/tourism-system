@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ك2 · قارئ CSV للمطابقة صار يقبل التواريخ بصيغة ISO مع وقت + المبالغ الصحيحة بأعمدة مدين/دائن (كشوف DataGrid) — احفظي كشف الإكسل CSV وارفعيه فيطابق بالتاريخ+المبلغ بدقّة </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ك3 · إصلاح: دفعة الفندق بلا تاريخ ما تختفي بصمت من كشف «سنة 2026 فقط» — تظهر دائماً (كان سبب عدم انعكاس دفعة الفنار 68 ر.ع) </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2836,7 +2836,7 @@ function hpComputeTotals(){
     if(/cancel/i.test(String(h.status||''))){ const frb=Number(h.final_rate_booked||0), rf=Number(h.refund||0), cc=Number(h.cancel_charge||0); let fee=(rf>0.005)?(frb-rf):cc; fee=Math.max(0,Math.min(fee,frb)); if(fee>0.005){ cost+=fee; cancelFee+=fee; nCancel++; } return; }
     cost+=Number(h.final_rate_booked||0); nActive++;
   });
-  const payArr=hpPayments(HO_PAYEE).filter(x=>!only2026 || yOK(x.date));
+  const payArr=hpPayments(HO_PAYEE).filter(x=>!only2026 || yOK(x.date) || !String(x.date||'').trim());   // 🗓️ الدفعات بلا تاريخ تظهر دائماً (لا تُستبعَد بصمت من فلتر السنة) — مع تنبيه لإضافة التاريخ
   let paid=0; payArr.forEach(x=>paid+=x.amount); let nPay=payArr.length;
   const paidCodes=new Set(payArr.map(x=>String(x.code||'').toUpperCase()).filter(Boolean));
   const cfById2={}; (DATA.serviceLines||[]).forEach(s=>{ if(!sHotelSourceLine(s))return; const v=String(s.charge_from||'').trim(); if(v)cfById2[s.id]=v; });
