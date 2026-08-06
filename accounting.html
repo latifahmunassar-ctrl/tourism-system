@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-م · الأرباح والخسائر: الربح الفعلي يُحسب ويُحتسب تلقائياً من الحجز الفعلي المُدخَل (لم يعد يُحجب بفجوة التكلفة التقديرية)؛ الصفوف ذات الفجوة تُوسم «⚠ راجعي الفجوة» للتعديل اليدوي — C26499 صار ربحه 5101 </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ن · صندوق مقارنة التكلفة بالسيلز فورم: تسميات أوضح (تقديرية ↔ فعلية) + زر «✔️ اعتمدي الفعلي كتكلفة» بضغطة يجعل تكلفة العميل = مجموع الحجز المُدخَل ويحدّث الربح (الباقة تبقى) </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -2333,10 +2333,26 @@ function sCostCmpLive(){ const code=(($('s-code')||{}).value||'').trim().toUpper
   return { agreed:g.agreed, entered, cur:((clientInfo(code)||{}).cur)||'SAR' }; }
 function sUpdateCostCmp(){ const box=$('s-costcmp'); if(!box) return; const c=sCostCmpLive();
   if(!c || !(c.agreed>0)){ box.style.display='none'; return; }
+  const code=(($('s-code')||{}).value||'').trim().toUpperCase();
   box.style.display='block'; const diff=c.entered-c.agreed; const near=Math.abs(diff)<=Math.max(1,c.agreed*0.01);
-  const col=near?'#0e7c50':(diff>0?'#d11':'#d98a00'); const state=near?'✅ مطابقة':(diff>0?('⛔ أعلى بـ'+fmt(diff)):('⚠️ أقل بـ'+fmt(-diff)));
+  const col=near?'#0e7c50':(diff>0?'#d11':'#d98a00'); const state=near?'✅ مطابقة':(diff>0?('⛔ الفعلي أعلى بـ'+fmt(diff)):('⚠️ الفعلي أقل بـ'+fmt(-diff)+' (حجز أرخص أو خدمة ناقصة)'));
   box.style.borderColor=col; box.style.background=near?'rgba(14,157,106,.07)':(diff>0?'rgba(209,17,17,.07)':'rgba(217,138,0,.09)');
-  box.innerHTML='💰 تكلفة العميل المتّفق عليها: <b>'+fmt(c.agreed)+' '+esc(c.cur)+'</b> &nbsp;<b style="font-size:15px">=</b>&nbsp; المُدخَل من الخدمات: <b style="color:'+col+'">'+fmt(c.entered)+' '+esc(c.cur)+'</b> &nbsp;·&nbsp; <span style="color:'+col+';font-weight:800">'+state+'</span>'; }
+  // زر اعتماد الفعلي كتكلفة (للمالكة فقط، عند وجود فرق مؤثّر وعميل واحد قابل للتعديل)
+  var canAdopt = !near && code && (typeof isOwnerUser!=='function'||isOwnerUser());
+  var adoptBtn = canAdopt ? ' <button class="btn" style="padding:3px 12px;font-size:11px;background:#0e7c50;color:#fff;margin-right:8px" onclick="sAdoptActualCost(\''+esc(code)+'\')" title="اجعل تكلفة العميل = الفعلي المُدخَل (يُحدّث الربح تلقائياً، الباقة تبقى)">✔️ اعتمدي الفعلي ('+fmt(c.entered)+') كتكلفة</button>' : '';
+  box.innerHTML='💰 التكلفة التقديرية (وقت التسجيل): <b>'+fmt(c.agreed)+' '+esc(c.cur)+'</b> &nbsp;<b style="font-size:15px">↔</b>&nbsp; التكلفة الفعلية (الحجز المُدخَل): <b style="color:'+col+'">'+fmt(c.entered)+' '+esc(c.cur)+'</b> &nbsp;·&nbsp; <span style="color:'+col+';font-weight:800">'+state+'</span>'+adoptBtn; }
+// ✔️ اعتماد التكلفة الفعلية (مجموع الحجز المُدخَل) كتكلفة العميل — يُحدّث الربح تلقائياً والباقة تبقى (للمالكة)
+async function sAdoptActualCost(code){
+  code=(code||'').toUpperCase(); if(!code) return;
+  if(typeof isOwnerUser==='function' && !isOwnerUser()){ alert('⚠️ اعتماد التكلفة للمالكة فقط'); return; }
+  const g=salesCostGap(code); if(!g){ alert('لا خدمات محسوبة'); return; }
+  const rows=(DATA.fcd||[]).filter(r=>(r.client_code||'').toUpperCase()===code && Number(r.package_rate||0)>0 && r.source==='dashboard');
+  if(!rows.length){ alert('⚠️ لا يوجد صف حجز قابل للتعديل من الداشبورد (صفوف الشيت تُعدَّل من مصدرها).'); return; }
+  if(rows.length>1){ alert('⚠️ لهذا العميل أكثر من صف حجز — عدّلي التكلفة يدويّاً لكل صف.'); return; }
+  const r=rows[0]; const pkg=Number(r.package_rate||0); const newCost=Number(Number(g.entered).toFixed(2)); const newProfit=Number((pkg-newCost).toFixed(2));
+  if(!confirm('اعتماد التكلفة الفعلية للعميل «'+code+'»:\n\nالتكلفة: '+fmt(r.cost)+' ← '+fmt(newCost)+'\nالربح: '+fmt(r.profit)+' ← '+fmt(newProfit)+'\nالباقة تبقى '+fmt(pkg)+'.\n\nتأكيد؟')) return;
+  try{ const rr=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_client_entry',payload:{id:r.id,cost:newCost,profit:newProfit,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j=await rr.json(); if(j.error){ alert('خطأ: '+j.error); return; } await load(); if(typeof toast==='function')toast('✅ التكلفة الآن = الفعلي المُدخَل'); }catch(e){ alert('خطأ: '+e.message); }
+}
 function sCostAck(yes){ const m=$('s-msg'); if(!m)return; m.innerHTML = yes
   ? '<span style="color:var(--green)">✓ تمّ التأكيد — شكراً. المدخلات محفوظة.</span>'
   : '<span style="color:#d98a00;font-weight:700">✏️ أكملي إدخال الخدمات الناقصة لهذا العميل (المحفوظ سليم — أضيفي الباقي عبر «➕ إضافة خدمة»).</span>'; }
