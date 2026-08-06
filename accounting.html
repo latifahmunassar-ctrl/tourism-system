@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-س · تصحيح: صندوق مقارنة التكلفة بالسيلز فورم يحسب «تكلفة التسعير المُدخَلة هنا» (amount) لا التكلفة الفعلية (تلك مكانها Booking Form)؛ أُزيل زر «اعتمدي الفعلي» — الربح الفعلي يبقى من الحجز الفعلي بالأرباح والخسائر </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ع · الأرباح والخسائر: عمود «💱 عملة البيع» جنب الربح المتوقّع (يبيّن عملة بيع كل عميل: دولار/عماني/ريال…) </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -547,7 +547,7 @@ table{font-weight:600}
       </div>
       <div class="panel"><h3>الربح / الخسارة لكل حجز <span class="cnt" id="pnl-cnt"></span></h3>
         <div class="tbl-wrap"><table id="t-pnl"><thead><tr>
-          <th>كود العميل</th><th>العميل</th><th>الوجهة</th><th>الوكالة</th><th>تاريخ الحجز</th><th>التكلفة</th><th>سعر البيع</th><th>🎯 الربح المتوقع<br><span style="font-size:8px;color:var(--muted)">FCD</span></th><th>💰 الربح الفعلي<br><span style="font-size:8px;color:var(--muted)">Booking</span></th><th>💰 الربح الفعلي (ر.س)<br><span style="font-size:8px;color:var(--muted)">محوّل للريال</span></th><th>الهامش %</th><th>الحالة</th>
+          <th>كود العميل</th><th>العميل</th><th>الوجهة</th><th>الوكالة</th><th>تاريخ الحجز</th><th>التكلفة</th><th>سعر البيع</th><th>🎯 الربح المتوقع<br><span style="font-size:8px;color:var(--muted)">FCD</span></th><th>💱 عملة البيع</th><th>💰 الربح الفعلي<br><span style="font-size:8px;color:var(--muted)">Booking</span></th><th>💰 الربح الفعلي (ر.س)<br><span style="font-size:8px;color:var(--muted)">محوّل للريال</span></th><th>الهامش %</th><th>الحالة</th>
         </tr></thead><tbody></tbody></table></div>
       </div>
     </div>
@@ -5910,6 +5910,7 @@ function renderPnl(){
     const cells=[ (g?'⏳ ':(isLoss?'🔴 ':''))+esc(x.code)+(g?' <span onclick="pnlWhyIncomplete(\''+esc(x.code)+'\')" title="اضغطي لمعرفة سبب اعتباره ناقصاً" style="color:#d98a00;font-size:9px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px">⏳ ناقص — 🔍 وش الناقص؟</span>':((x.actual?' <span class="src dashboard" style="font-size:9px">فعلي</span>':'')+(x.inc?' <span onclick="pnlWhyIncomplete(\''+esc(x.code)+'\')" title="الربح محسوب تلقائياً من الحجز الفعلي (مُحتسب)؛ التكلفة التقديرية أعلى بفجوة — راجعيها (عمولة/حجز أرخص/خدمة ناقصة) وعدّلي يدويّاً إن لزم" style="color:#d98a00;font-size:9px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px">⚠ راجعي الفجوة 🔍</span>':''))),esc(x.name),esc(x.to),esc(x.agent),esc(x.bdate||''),
       numG(x.cost,'inherit'),numG(x.rate,'inherit'),
       numG(x.exp,'#0e7c50'),
+      '<span style="font-weight:700;color:var(--accent)">'+esc(x.cur||'—')+'</span>',
       (g?'<span class="num" style="color:#9aa">'+fmt(x.profit)+'</span>':'<span class="num '+pc+'"'+(below?' style="background:rgba(209,17,17,.10);font-weight:700;border-radius:4px" title="الفعلي أقل من المتوقع"':'')+'>'+fmt(x.profit)+(below?' 🔻':'')+'</span>'),
       (function(){ if(g||!x.actual){ return '<span class="num" style="color:#9aa">—</span>'; } var ps=toSAR(x.profit,x.cur); if(ps==null){ return '<span class="num" style="color:#9aa" title="لا سعر صرف معتمد لـ'+esc(x.cur||'')+'">— <span style="font-size:9px">('+esc(x.cur||'')+')</span></span>'; } return '<span class="num" style="font-weight:700;color:'+(ps< -0.5?'#d11':'#0e7c50')+'">'+fmt(ps)+' <span style="font-size:9px;color:var(--muted)">ر.س</span></span>'; })(),
       '<span class="num'+(g?'':' '+pc)+'" style="'+(g?'color:#9aa':'')+'">'+margin+'%</span>',
