@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ق · مطابقة البنك: حارس يكشف الكشوف بلا تواريخ يومية (عمود مقصوص) ويحذّر أن المطابقة بالمبلغ فقط غير موثوقة — يمنع مطابقة حركة قديمة بنفس المبلغ خطأً </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ك2 · قارئ CSV للمطابقة صار يقبل التواريخ بصيغة ISO مع وقت + المبالغ الصحيحة بأعمدة مدين/دائن (كشوف DataGrid) — احفظي كشف الإكسل CSV وارفعيه فيطابق بالتاريخ+المبلغ بدقّة </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4112,12 +4112,17 @@ async function parseBankCsv(file){
   const delim = t.indexOf('\t')>=0 ? '\t' : (((t.match(/;/g)||[]).length>(t.match(/,/g)||[]).length) ? ';' : ',');
   t.split(/\r?\n/).forEach(l=>{ if(!l.trim())return;
     const fields=splitCsvLine(l,delim).map(s=>s.trim().replace(/^"|"$/g,''));
+    // 📅 التاريخ: حقل يبدأ بـ YYYY-MM-DD (يقبل وقت T10:44 بعده) أو DD/MM/YYYY أو DD-MM-YYYY
     let iso=null;
-    for(const f of fields){ const dm=f.match(/^\d{2}[-\/]\d{2}[-\/]\d{4}$|^\d{4}-\d{2}-\d{2}$/); if(dm){ let d=dm[0]; if(/\d{2}[-\/]\d{2}[-\/]\d{4}/.test(d)){ const p=d.split(/[-\/]/); d=p[2]+'-'+p[1]+'-'+p[0]; } iso=d; break; } }
+    for(const f of fields){ let mm=f.match(/^(\d{4}-\d{2}-\d{2})/); if(mm){ iso=mm[1]; break; } mm=f.match(/^(\d{2})[-\/](\d{2})[-\/](\d{4})/); if(mm){ iso=mm[3]+'-'+mm[2]+'-'+mm[1]; break; } }
     if(!iso)return;
-    const nums=[]; fields.forEach(f=>{ const c=f.replace(/,/g,''); if(/^-?\d+\.\d{2,3}$/.test(c)) nums.push(Number(c)); });
-    if(nums.length>=2){ const debit=nums[0], credit=nums[1]; rows.push({date:iso, out:debit<0?-debit:(credit===0?Math.abs(debit):0), in:credit>0?credit:0, remarks:l.slice(0,60)}); }
-    else if(nums.length===1){ const v=nums[0]; rows.push({date:iso, out:v<0?-v:0, in:v>0?v:0, remarks:l.slice(0,60)}); }
+    // 🔢 الأرقام: صحيحة أو عشرية (نستبعد أرقام مرجعية طويلة >12 خانة). نحتفظ بالعشرية وحدها للاحتياطي
+    const allNums=[], decNums=[]; fields.forEach(f=>{ const c=f.replace(/,/g,''); if(/^-?\d+(?:\.\d+)?$/.test(c) && c.replace(/[-.]/g,'').length<=12){ const v=Number(c); allNums.push(v); if(/\./.test(c)) decNums.push(v); } });
+    // 🎯 نمط مدين/دائن/رصيد: زوج متجاور أحدهما صفر تماماً = عمودا Debit/Credit (يعالج المبالغ الصحيحة مثل 2120 و0)
+    let dc=null; for(let k=0;k+1<allNums.length;k++){ if((allNums[k]===0)!==(allNums[k+1]===0)){ dc={debit:allNums[k],credit:allNums[k+1]}; break; } }
+    if(dc){ rows.push({date:iso, out:dc.debit>0?dc.debit:0, in:dc.credit>0?dc.credit:0, remarks:l.slice(0,70)}); }
+    else if(decNums.length>=2){ const debit=decNums[0], credit=decNums[1]; rows.push({date:iso, out:debit<0?-debit:(credit===0?Math.abs(debit):0), in:credit>0?credit:0, remarks:l.slice(0,70)}); }
+    else if(decNums.length===1){ const v=decNums[0]; rows.push({date:iso, out:v<0?-v:0, in:v>0?v:0, remarks:l.slice(0,70)}); }
   });
   return { txns:rows, header:{}, raw:t };
 }
