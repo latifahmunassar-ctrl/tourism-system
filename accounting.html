@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ل · كاشف العملة صار فئتين: (أ) عملتان مختلفتان بسعر خاطئ = تصحيح بضغطة · (ب) نفس العملة وسعر≠1 = التسمية غالباً خاطئة (مثل طيران رينغيت مكتوب USD) مراجعة يدوية؛ يمسك حالة الطيران التي فاتته سابقاً </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-م · إدخال اسم البنك إجباري عند حفظ العميل + منع اختلاف العملة عن عملة البنك المعتمدة (bank_cur): يعبّئ العملة تلقائياً عند اختيار البنك ويرفض المخالفة برسالة (مثل روافي=SAR يرفض إدخال دولار)؛ في مدخل البيانات وتعديل FCD </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -296,7 +296,7 @@ table{font-weight:600}
           <div class="fld"><label>الكود (Code)</label><input id="e-agentcode"></div>
           <div class="fld"><label>country from <button type="button" onclick="mgrToggle('country_from','country from')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-from"></select></div>
           <div class="fld"><label>Travel To <button type="button" onclick="mgrToggle('travel_to','Travel To')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-to"></select></div>
-          <div class="fld"><label>Banks Name <button type="button" onclick="mgrToggle('banks','Banks Name')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-bank"></select></div>
+          <div class="fld"><label>Banks Name <span style="color:var(--red)">*</span> <button type="button" onclick="mgrToggle('banks','Banks Name')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-bank" onchange="bankCurAutoFill('e-bank','e-cur')"></select></div>
           <div class="fld"><label>the currency <button type="button" onclick="mgrToggle('currency','the currency')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-cur"></select></div>
           <div class="fld"><label>service Type <button type="button" onclick="mgrToggle('kinds','service Type')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-kind"></select></div>
           <div class="fld"><label>🧾 Service Type <span style="font-size:9px;color:var(--muted)">(تظهر في Sales Form فقط)</span> <button type="button" onclick="mgrToggle('sales_service_type','Service Type — Sales Form')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-stype"></select></div>
@@ -781,7 +781,7 @@ table{font-weight:600}
       <div class="fld"><label>التكلفة / قيمة الخدمة</label><input type="number" id="fe-cost" oninput="feCalc()"></div>
       <div class="fld"><label>الربح</label><input type="number" id="fe-profit" oninput="feCalc()"></div>
       <div class="fld"><label>المبلغ المدفوع</label><input type="number" id="fe-paid" oninput="feCalc()"></div>
-      <div class="fld"><label>البنك</label><select id="fe-bank" onchange="if(this.value==='__other')this.nextElementSibling.style.display='flex'"></select></div>
+      <div class="fld"><label>البنك</label><select id="fe-bank" onchange="if(this.value==='__other')this.nextElementSibling.style.display='flex';bankCurAutoFill('fe-bank','fe-cur')"></select></div>
       <div class="fld"><label>مرجع البنك <span style="font-size:9px;color:#d98a00">إجباري لو فيه دفعة</span></label><input id="fe-ref"></div>
       <div class="fld"><label>📅 تاريخ الدفع</label><input type="date" id="fe-paydate" style="color-scheme:light;cursor:pointer"></div>
       <div class="fld"><label>👤 الموظف (Confirmed by) <span style="font-size:9px;color:var(--muted)">من القائمة</span></label><select id="fe-staff"></select></div>
@@ -1457,6 +1457,9 @@ async function fcdEditSave(){
   const arr=(($('fe-arr')||{}).value||''); const bdate=(($('fe-bdate')||{}).value||'');
   // ⛔ رفض: مرجع بنكي بلا اسم بنك
   if(ref && !bank){ msg.innerHTML='<span style="color:var(--red);font-weight:700">⛔ لا يمكن الحفظ: مرجع بنكي بلا اسم بنك — أضيفي اسم البنك أولاً.</span>'; if($('fe-bank'))$('fe-bank').focus(); return; }
+  // 💱 منع اختلاف العملة عن عملة البنك المعتمدة
+  const _mmE=bankCurMismatch(bank,cur);
+  if(_mmE){ msg.innerHTML='<span style="color:var(--red);font-weight:700">⛔ حساب «'+esc(_mmE.bank)+'» بعملة '+esc(_mmE.bankCur)+' — القيمة يجب أن تكون بالـ'+esc(_mmE.bankCur)+' (اخترتِ '+esc(_mmE.entered)+').</span>'; if($('fe-cur'))$('fe-cur').focus(); return; }
   // ===== صف شيت: نحفظ فقط البنك/المرجع/تاريخ الدفع عبر جداول الـ override (تصمد أمام المزامنة) — بلا لمس البيانات المالية =====
   if(FE_ROW && String(FE_ROW.source||'')!=='dashboard'){
     const pc=String(FE_ROW.payment_code||'').trim();
@@ -3982,6 +3985,12 @@ async function saveBankCur(bank,cur){ if(!isOwnerUser()){ alert('⚠️ اعتم
   const olds=listValues('bank_cur').filter(v=>{ const s=String(v.value||''); const i=s.lastIndexOf('='); return i>0 && s.slice(0,i).trim().toLowerCase()===nn; });
   for(const o of olds){ await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_list_item',payload:{category:'bank_cur',value:o.value}})}); }
   const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_list_item',payload:{category:'bank_cur',value:bank+'='+cur}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } await load(); }
+// 🔒 عملة البنك المعتمدة صراحةً فقط (قائمة bank_cur) — أساس منع اختلاف العملة (لا الافتراضي من الاسم)
+function bankCurAssigned(b){ return bankCurOverride(b)||''; }
+// فحص: هل العملة المدخلة تخالف عملة البنك المعتمدة؟ يرجع {bank,bankCur,entered} أو null (بلا بنك/بلا عملة معتمدة = لا منع)
+function bankCurMismatch(bank,cur){ const b=String(bank||'').trim(); if(!b) return null; const bcur=bankCurAssigned(b); if(!bcur) return null; const c=String(cur||'').trim().toUpperCase(); if(c && c!==bcur) return {bank:b,bankCur:bcur,entered:c}; return null; }
+// تعبئة حقل العملة تلقائياً بعملة البنك المعتمدة عند اختيار البنك (يمنع الخطأ من الأساس)
+function bankCurAutoFill(bankSelId,curSelId){ const bs=$(bankSelId), cs=$(curSelId); if(!bs||!cs) return; const bcur=bankCurAssigned(bs.value||''); if(!bcur) return; if(![...cs.options].some(o=>String(o.value)===bcur)){ const o=document.createElement('option'); o.value=bcur; o.text=bcur; cs.add(o); } cs.value=bcur; }
 function renderBankCurPanel(){ const box=$('bank-cur-panel'); if(!box) return;
   const banks=[...new Set(listValues('banks').map(v=>String(v.value||'').trim()).filter(Boolean))].sort((a,b)=>String(a).localeCompare(b,'ar'));
   const CURS=['OMR','SAR','USD','MYR','AED','EUR','SGD','GBP'];
@@ -7022,6 +7031,12 @@ async function eSave(){
   // 🚫 لا يتم توليد أكواد عملاء تلقائياً نهائياً — لازم كود عميل موجود مسبقاً (يُنشأ فقط من شاشة إضافة عميل بالبيانات الكاملة)
   if(!code){ m.innerHTML='<span style="color:var(--red)">⛔ اكتبي كود العميل أولاً — لا يتم توليد كود تلقائياً. العميل الجديد يُضاف من شاشة «إضافة عميل» ببياناته الكاملة.</span>'; const e=$('e-code'); if(e)e.focus(); return; }
   if(!clientInfo(code)){ m.innerHTML='<span style="color:var(--red)">⛔ الكود «'+esc(code)+'» غير موجود في First Client Data — تأكّدي منه. لا يتم إنشاء عميل جديد من هذه الشاشة.</span>'; const e=$('e-code'); if(e)e.focus(); return; }
+  // 🏦 إدخال اسم البنك إجباري لحفظ بيانات العميل (طلب المالكة)
+  const eBank=($('e-bank').value||'').trim();
+  if(!eBank){ m.innerHTML='<span style="color:var(--red)">⛔ اختاري «اسم البنك» أولاً — إدخال البنك إجباري لحفظ بيانات العميل.</span>'; const e=$('e-bank'); if(e)e.focus(); return; }
+  // 💱 منع اختلاف العملة عن عملة البنك المعتمدة (bank_cur)
+  const mm=bankCurMismatch(eBank,$('e-cur').value);
+  if(mm){ m.innerHTML='<span style="color:var(--red)">⛔ حساب «'+esc(mm.bank)+'» بعملة <b>'+esc(mm.bankCur)+'</b> — القيمة المدخلة يجب أن تكون بالـ<b>'+esc(mm.bankCur)+'</b> (اخترتِ '+esc(mm.entered)+'). صحّحي العملة.</span>'; const e=$('e-cur'); if(e)e.focus(); return; }
   // إضافة سطر الخدمة بالحقول المعتمدة
   const sp={ client_code:code, kind:$('e-kind').value, supplier:$('e-supplier').value||null,
     agent_code:$('e-agentcode').value||null, bank_name:$('e-bank').value||null, currency:$('e-cur').value||null,
