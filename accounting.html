@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-م · إدخال اسم البنك إجباري عند حفظ العميل + منع اختلاف العملة عن عملة البنك المعتمدة (bank_cur): يعبّئ العملة تلقائياً عند اختيار البنك ويرفض المخالفة برسالة (مثل روافي=SAR يرفض إدخال دولار)؛ في مدخل البيانات وتعديل FCD </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ن · المستحقات: العميل المدفوع زيادة (مثل C26506 −99.83) يظهر الآن في جدول العرض الافتراضي بصفّه الأخضر ➕ (كان مخفيّاً بالفلتر ويظهر بالبانر العلوي فقط) </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -569,7 +569,7 @@ table{font-weight:600}
         <input id="dflt-q" class="flt" placeholder="🔍 اسم العميل أو الكود" oninput="renderDue()" style="min-width:200px">
         <select id="dflt-agent" class="flt" onchange="renderDue()"><option value="">كل الوكالات</option></select>
         <select id="dflt-st" class="flt" onchange="renderDue()">
-          <option value="owe">🔴 عليه مستحق (لم يدفع)</option>
+          <option value="owe">🔴 عليه مستحق + ➕ دفع زيادة</option>
           <option value="nodate">🟠 عليه رصيد بدون تاريخ سداد</option>
           <option value="overpaid">↩️ مدفوع زيادة (مرتجع للعميل)</option>
           <option value="overdue">⚠️ متأخر (حان السداد)</option>
@@ -6516,7 +6516,7 @@ function renderDue(){
     if(q && !((r.client_name||'').toLowerCase().includes(q)||(r.client_code||'').toLowerCase().includes(q))) return false;
     if(ag && r.agent_name!==ag) return false;
     const b=effBal(r);
-    if(st==='owe' && !(b>1)) return false;
+    if(st==='owe' && !(b>1) && !(b< -1)) return false;   // العرض الافتراضي يشمل «عليه مستحق» + «دفع زيادة» (صفّه الأخضر ➕) ليظهر بالجدول لا بالبانر فقط
     if(st==='nodate' && !(b>1 && !r.due_date)) return false;
     if(st==='overpaid' && !(b< -1)) return false;
     if(st==='overdue' && !(r.is_overdue && b>1)) return false;
