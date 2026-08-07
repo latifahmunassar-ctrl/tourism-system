@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ج · تبويب جديد «💳 Visa Card»: يجمّع كل حركات البطاقة الائتمانية، يُظهر الأجنبية الناقصة قيمتها العمانية، تُدخلينها أنتِ/المحاسب من رسالة البنك فتنعكس في مطابقة كشف البطاقة تلقائياً </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-د · Visa Card: عمود «🧭 المصدر» يبيّن من أي قسم جاءت كل حركة بطاقة (الموردين/الحجوزات/Banks Cash/دفعة عميل/شيت البنك) </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4073,7 +4073,9 @@ function cardTxns(){ const om=cardOmrMap();
     const dir=Number(x.amount_out||0)>0.005?'out':(Number(x.amount_in||0)>0.005?'in':''); const orig=dir==='out'?Number(x.amount_out||0):Number(x.amount_in||0);
     const cur=String(x.currency||'').toUpperCase().trim(); const key=String(x.id); const ov=om[key]; const isForeign=cur&&cur!=='OMR';
     let omr,status; if(ov!=null){ omr=ov; status='done'; } else if(!isForeign){ omr=orig; status='omr'; } else { omr=null; status='missing'; }
-    return { key, date:String(x.tx_date||'').slice(0,10), bank:x.bank_name||'', note:x.note||'', name:x.client_name||'', orig, cur:cur||'OMR', dir, omr, status, ref:x.bank_ref||'' };
+    // 🧭 المصدر: من أي قسم جاءت الحركة (حسب علامة المصدر أو بادئة المعرّف)
+    const idk=String(x.id||''); const src = x._suppay?'🏢 المورّدين' : x._booking?'🏷️ الحجوزات (Booking Form)' : x._cash?'💵 Banks Cash' : x._clientPay?'👤 دفعة عميل (First Client Data)' : x._refund?'↩️ مرتجع' : /^sl-/.test(idk)?'🏷️ الحجوزات' : /^sp-/.test(idk)?'🏢 المورّدين' : /^bc-/.test(idk)?'💵 Banks Cash' : /^fcd-/.test(idk)?'👤 دفعة عميل' : '📄 شيت Bank Transaction';
+    return { key, date:String(x.tx_date||'').slice(0,10), bank:x.bank_name||'', note:x.note||'', name:x.client_name||'', orig, cur:cur||'OMR', dir, omr, status, ref:x.bank_ref||'', src };
   }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
 }
 async function saveCardOmr(txnKey,val){ const key=String(txnKey); const omr=parseFloat(String(val==null?'':val).replace(/,/g,''));
@@ -4094,8 +4096,8 @@ function renderVisaCard(){ const box=$('p-visacard'); if(!box) return;
     '<div style="font-size:12.5px;color:var(--muted);line-height:1.8;margin-bottom:8px">البطاقة تُخصم بالعماني دائماً. الحركات الأجنبية (MYR/USD) تحتاج <b>إدخال المبلغ العماني المخصوم فعليّاً</b> من رسالة البنك — أنتِ أو المحاسب — لتنعكس في مطابقة كشف البطاقة. الحركات العمانية تتطابق تلقائياً.</div>'+
     '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px;margin-bottom:10px"><span>الإجمالي: <b>'+rows.length+'</b></span><span style="color:#d11">⚠️ ناقصة العماني: <b>'+missN+'</b></span><span style="color:#0e9d6a">✅ مكتملة: <b>'+doneN+'</b></span>'+
     ' <button id="visa-missbtn" class="btn ghost" onclick="toggleVisaMiss()" style="border-color:#d11;color:#d11;font-weight:700;padding:3px 12px'+(VISA_MISSONLY?';background:rgba(209,17,17,.14)':'')+'">⚠️ الناقصة فقط</button></div>'+
-    '<div class="tbl-wrap bf-scroll" style="max-height:520px"><table style="font-size:12px;white-space:nowrap"><thead><tr><th>التاريخ</th><th>البطاقة</th><th>الوصف</th><th>المبلغ الأصلي</th><th>العملة</th><th>الاتجاه</th><th>💰 العماني المخصوم</th><th>الحالة</th></tr></thead><tbody>'+
-    (rows.length?rows.map(r=>'<tr'+(r.status==='missing'?' style="background:rgba(209,17,17,.05)"':'')+'><td>'+esc(r.date||'')+'</td><td style="font-size:11px">'+esc(r.bank)+'</td><td style="font-size:11px;color:var(--muted);max-width:240px;white-space:normal">'+esc(r.note)+'</td><td class="num" style="font-weight:700">'+fmt(r.orig)+'</td><td>'+esc(r.cur)+'</td><td>'+(r.dir==='out'?'<span style="color:#d11">خارج</span>':'<span style="color:#0e9d6a">داخل</span>')+'</td><td>'+(r.status==='omr'?('<span class="num">'+fmt(r.omr)+'</span> <span style="font-size:9px;color:var(--muted)">= الأصلي</span>'):inp(r))+'</td><td>'+badge(r.status)+'</td></tr>').join(''):'<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px">لا حركات بطاقة'+(VISA_MISSONLY?' ناقصة':'')+'</td></tr>')+
+    '<div class="tbl-wrap bf-scroll" style="max-height:520px"><table style="font-size:12px;white-space:nowrap"><thead><tr><th>التاريخ</th><th>🧭 المصدر</th><th>البطاقة</th><th>الوصف</th><th>المبلغ الأصلي</th><th>العملة</th><th>الاتجاه</th><th>💰 العماني المخصوم</th><th>الحالة</th></tr></thead><tbody>'+
+    (rows.length?rows.map(r=>'<tr'+(r.status==='missing'?' style="background:rgba(209,17,17,.05)"':'')+'><td>'+esc(r.date||'')+'</td><td style="font-size:11px;font-weight:700;color:var(--accent)">'+esc(r.src||'')+'</td><td style="font-size:11px">'+esc(r.bank)+'</td><td style="font-size:11px;color:var(--muted);max-width:240px;white-space:normal">'+esc(r.note)+'</td><td class="num" style="font-weight:700">'+fmt(r.orig)+'</td><td>'+esc(r.cur)+'</td><td>'+(r.dir==='out'?'<span style="color:#d11">خارج</span>':'<span style="color:#0e9d6a">داخل</span>')+'</td><td>'+(r.status==='omr'?('<span class="num">'+fmt(r.omr)+'</span> <span style="font-size:9px;color:var(--muted)">= الأصلي</span>'):inp(r))+'</td><td>'+badge(r.status)+'</td></tr>').join(''):'<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px">لا حركات بطاقة'+(VISA_MISSONLY?' ناقصة':'')+'</td></tr>')+
     '</tbody></table></div></div>';
 }
 // ===== مطابقة كشف الحساب البنكي (يقرأ PDF/CSV ويقارن بحركات النظام) =====
