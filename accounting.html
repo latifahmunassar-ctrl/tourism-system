@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ك · كاشف «سعر صرف لا يوافق عملة بيع العميل» في تبويب تدقيق العملة (تنبيه أحمر + زر «صحّح» و«صحّح الكل» للمالكة، يُحدّث السعر والمبلغ فقط دون لمس الحجز الفعلي) </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ل · كاشف العملة صار فئتين: (أ) عملتان مختلفتان بسعر خاطئ = تصحيح بضغطة · (ب) نفس العملة وسعر≠1 = التسمية غالباً خاطئة (مثل طيران رينغيت مكتوب USD) مراجعة يدوية؛ يمسك حالة الطيران التي فاتته سابقاً </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -5167,36 +5167,48 @@ function fxRate(from,to){ from=String(from||'').toUpperCase().trim(); to=String(
   for(const base of ['OMR','SAR','USD']){ const r1=(from===base)?1:(m[from+'|'+base]!=null?m[from+'|'+base]:(m[base+'|'+from]!=null?1/m[base+'|'+from]:null)); const r2=(base===to)?1:(m[base+'|'+to]!=null?m[base+'|'+to]:(m[to+'|'+base]!=null?1/m[to+'|'+base]:null)); if(r1!=null&&r2!=null) return r1*r2; }
   return null;
 }
-// 🔎 كشف: خدمات سعر صرفها لا يوافق عملة بيع العميل (مثل عميل USD وخدمة بسعر MYR→OMR) — يُعبّر عن التكلفة بعملة خاطئة
+// 🔎 كشف اختلال العملة في الخدمات — فئتان:
+//   (أ) عملة الحجز ≠ عملة البيع وسعر الصرف يبعد كثيراً عن سعر الزوج المُدار → الصحيح معروف، تصحيح بضغطة.
+//   (ب) عملة الحجز = عملة البيع لكن سعر الصرف ≠ 1 → التسمية غالباً خاطئة (مثل طيران رينغيت مسمّى USD)، الصحيح غير معروف → مراجعة يدوية.
 function curMismatches(){ const out=[];
   (DATA.serviceLines||[]).forEach(s=>{
     if(s.source!=='dashboard')return; if(/cancel/i.test(String(s.status||'')))return;
     const bc=String(s.booked_currency||s.currency||'').toUpperCase().trim(), sc=String(s.sell_currency||'').toUpperCase().trim();
-    if(!bc||!sc||bc===sc)return;   // نفس العملة أو ناقصة = لا حكم
-    const exp=fxRate(bc,sc); if(exp==null)return; const stored=Number(s.currency_rate); if(!isFinite(stored)||stored<=0)return;
-    if(Math.abs(stored-exp)/exp<=0.20)return;   // ضمن السماحية 20% = سليم
-    const frb=(s.final_rate_booked!=null&&s.final_rate_booked!=='')?Number(s.final_rate_booked):null;
-    const curAmt=Number(s.amount||0); const newAmt=frb!=null?+(frb*exp).toFixed(2):(stored>0?+(curAmt*exp/stored).toFixed(2):curAmt);
-    out.push({id:s.id, code:(s.client_code||'').toUpperCase(), kind:s.kind, conf:s.conf_no||'', bc, sc, stored, exp:+exp.toFixed(4), curAmt, newAmt});
+    if(!bc||!sc)return; const stored=Number(s.currency_rate); if(!isFinite(stored)||stored<=0)return;
+    const frb=(s.final_rate_booked!=null&&s.final_rate_booked!=='')?Number(s.final_rate_booked):null; const curAmt=Number(s.amount||0);
+    if(bc!==sc){   // فئة (أ)
+      const exp=fxRate(bc,sc); if(exp==null)return; if(Math.abs(stored-exp)/exp<=0.20)return;
+      const newAmt=frb!=null?+(frb*exp).toFixed(2):(stored>0?+(curAmt*exp/stored).toFixed(2):curAmt);
+      out.push({id:s.id, code:(s.client_code||'').toUpperCase(), kind:s.kind, conf:s.conf_no||'', bc, sc, stored, exp:+exp.toFixed(4), curAmt, newAmt, cat:'A', fixable:true});
+    } else {   // فئة (ب): نفس العملة والسعر ≠ 1
+      if(Math.abs(stored-1)<=0.02)return;
+      out.push({id:s.id, code:(s.client_code||'').toUpperCase(), kind:s.kind, conf:s.conf_no||'', bc, sc, stored, exp:null, curAmt, newAmt:null, cat:'B', fixable:false});
+    }
   });
   return out;
 }
 function renderCurMismatch(){ const box=$('ca-mismatch'); if(!box)return; const ms=curMismatches();
   if(!ms.length){ box.innerHTML=''; return; }
   const owner=(typeof isOwnerUser==='function')?isOwnerUser():true;
-  box.innerHTML='<div class="panel" style="border:2px solid #d11;background:rgba(209,17,17,.05)"><h3 style="margin-top:0;color:#d11">⚠️ خدمات سعر صرفها لا يوافق عملة بيع العميل ('+ms.length+')</h3>'+
-    '<div style="font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:10px">سعر الصرف المحفوظ يحوّل لعملة غير عملة بيع العميل (مثلاً عميل بالدولار وسعر صرف رينغيت→عماني) فتظهر التكلفة بعملة خاطئة. «صحّح» يُحدّث <b>سعر الصرف والمبلغ فقط</b> لعملة العميل — <b>لا يتغيّر الحجز الفعلي (frb)</b>، والربح يصير أدقّ.</div>'+
-    (owner?'<button class="btn" style="background:#d11;color:#fff;padding:6px 16px;margin-bottom:10px" onclick="caFixAll()">✅ صحّح الكل ('+ms.length+')</button>':'<div style="font-size:11px;color:var(--muted);margin-bottom:8px">🔒 التصحيح للمالكة فقط</div>')+
-    '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>الخدمة</th><th>عملة الحجز</th><th>عملة البيع</th><th>سعر الصرف الحالي</th><th>الصحيح</th><th>المبلغ الحالي</th><th>بعد التصحيح</th>'+(owner?'<th>إجراء</th>':'')+'</tr></thead><tbody>'+
-    ms.map(m=>'<tr><td><b>'+esc(m.code)+'</b></td><td>'+esc((SVC[m.kind]||m.kind)+(m.conf?' · '+m.conf:''))+'</td><td>'+esc(m.bc)+'</td><td style="font-weight:700;color:var(--accent)">'+esc(m.sc)+'</td><td class="num" style="color:#d11;font-weight:700">'+m.stored+'</td><td class="num" style="color:#0e9d6a;font-weight:700">'+m.exp+'</td><td class="num">'+fmt(m.curAmt)+'</td><td class="num" style="font-weight:700">'+fmt(m.newAmt)+' '+esc(m.sc)+'</td>'+(owner?'<td><button class="btn ghost" style="padding:2px 10px;font-size:11px;color:#0e9d6a;border-color:#0e9d6a" onclick="caFixRate('+m.id+','+m.exp+','+m.newAmt+',\''+esc(m.bc)+'\')">✔️ صحّح</button></td>':'')+'</tr>').join('')+
-    '</tbody></table></div></div>';
+  const A=ms.filter(m=>m.fixable), B=ms.filter(m=>!m.fixable);
+  const rowA=m=>'<tr><td><b>'+esc(m.code)+'</b></td><td>'+esc((SVC[m.kind]||m.kind)+(m.conf?' · '+m.conf:''))+'</td><td>'+esc(m.bc)+'</td><td style="font-weight:700;color:var(--accent)">'+esc(m.sc)+'</td><td class="num" style="color:#d11;font-weight:700">'+m.stored+'</td><td class="num" style="color:#0e9d6a;font-weight:700">'+m.exp+'</td><td class="num">'+fmt(m.curAmt)+'</td><td class="num" style="font-weight:700">'+fmt(m.newAmt)+' '+esc(m.sc)+'</td>'+(owner?'<td><button class="btn ghost" style="padding:2px 10px;font-size:11px;color:#0e9d6a;border-color:#0e9d6a" onclick="caFixRate('+m.id+','+m.exp+','+m.newAmt+',\''+esc(m.bc)+'\')">✔️ صحّح</button></td>':'')+'</tr>';
+  const rowB=m=>'<tr><td><b>'+esc(m.code)+'</b></td><td>'+esc((SVC[m.kind]||m.kind)+(m.conf?' · '+m.conf:''))+'</td><td>'+esc(m.bc)+' = '+esc(m.sc)+'</td><td class="num" style="color:#d11;font-weight:700">'+m.stored+'</td><td class="num">'+fmt(m.curAmt)+'</td><td style="font-size:10.5px;color:#d98a00;font-weight:700">التسمية غالباً خاطئة — عملة الحجز ليست '+esc(m.bc)+'</td>'+(owner?'<td><button class="btn ghost" style="padding:2px 10px;font-size:11px;color:#0891b2;border-color:#0891b2" onclick="gotoDueClient(\''+esc(m.code)+'\')">🔎 افتحي العميل</button></td>':'')+'</tr>';
+  let h='';
+  if(A.length){ h+='<div class="panel" style="border:2px solid #d11;background:rgba(209,17,17,.05)"><h3 style="margin-top:0;color:#d11">⚠️ سعر صرف لا يوافق عملة بيع العميل — قابل للتصحيح ('+A.length+')</h3>'+
+    '<div style="font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:10px">عملة الحجز تختلف عن عملة البيع وسعر الصرف بعيد عن الصحيح (مثلاً عميل بالدولار وسعر رينغيت→عماني). «صحّح» يُحدّث <b>سعر الصرف والمبلغ فقط</b> لعملة العميل — <b>لا يتغيّر الحجز الفعلي (frb)</b>.</div>'+
+    (owner?'<button class="btn" style="background:#d11;color:#fff;padding:6px 16px;margin-bottom:10px" onclick="caFixAll()">✅ صحّح الكل ('+A.length+')</button>':'<div style="font-size:11px;color:var(--muted);margin-bottom:8px">🔒 التصحيح للمالكة فقط</div>')+
+    '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>الخدمة</th><th>عملة الحجز</th><th>عملة البيع</th><th>السعر الحالي</th><th>الصحيح</th><th>المبلغ الحالي</th><th>بعد التصحيح</th>'+(owner?'<th>إجراء</th>':'')+'</tr></thead><tbody>'+A.map(rowA).join('')+'</tbody></table></div></div>'; }
+  if(B.length){ h+='<div class="panel" style="border:2px solid #d98a00;background:rgba(217,138,0,.06)"><h3 style="margin-top:0;color:#d98a00">🔎 عملة الحجز = عملة البيع لكن سعر الصرف ≠ 1 — مراجعة يدوية ('+B.length+')</h3>'+
+    '<div style="font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:10px">إذا كانت عملة الحجز نفس عملة البيع فالمفروض سعر الصرف = 1. وجود سعر آخر يعني <b>عملة الحجز مسمّاة خطأً</b> (مثل تذاكر بالرينغيت مكتوبة USD). الصحيح غير معلوم آلياً — راجعي العملة الحقيقية للحجز ثم صحّحيها من Sales/Booking Form (كما فعلنا مع طيران C26506).</div>'+
+    '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>الخدمة</th><th>العملة</th><th>سعر الصرف</th><th>المبلغ</th><th>الملاحظة</th>'+(owner?'<th>إجراء</th>':'')+'</tr></thead><tbody>'+B.map(rowB).join('')+'</tbody></table></div></div>'; }
+  box.innerHTML=h;
 }
 async function caFixRate(id,rate,amt,bc){ if(!(typeof isOwnerUser==='function'?isOwnerUser():true)){ alert('التصحيح للمالكة فقط'); return; }
   if(!confirm('تصحيح سعر الصرف إلى '+rate+' والمبلغ إلى '+fmt(amt)+' '+bc+'؟\n(لا يتغيّر الحجز الفعلي ولا يُلمس أي رقم آخر)'))return;
   try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_service_line',payload:{id:id,currency:bc,currency_rate:rate,amount:amt}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } await load(); }catch(e){ alert('خطأ: '+e.message); }
 }
 async function caFixAll(){ if(!(typeof isOwnerUser==='function'?isOwnerUser():true)){ alert('التصحيح للمالكة فقط'); return; }
-  const ms=curMismatches(); if(!ms.length)return;
+  const ms=curMismatches().filter(m=>m.fixable); if(!ms.length)return;   // فئة (أ) فقط — التلقائية تعرف الصحيح
   if(!confirm('تصحيح سعر الصرف لكل الخدمات ('+ms.length+') إلى عملة بيع كل عميل؟\nيُحدَّث سعر الصرف والمبلغ فقط — دون تغيير الحجز الفعلي (frb).'))return;
   let ok=0,fail=0;
   for(const m of ms){ try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_service_line',payload:{id:m.id,currency:m.bc,currency_rate:m.exp,amount:m.newAmt}})}); const j=await r.json(); if(j.error)fail++; else ok++; }catch(e){ fail++; } }
