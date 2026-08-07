@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 5أغسطس-ك8 · مطابقة البنك: الحوالة بتاريخ مختلف قريب تبقى «غير مطابقة» مع تنبيه «📅 احتمال فرق تاريخ — بنظامك بنفس المبلغ بتاريخ كذا (فرق N يوم)» لتقرّري بنفسك (لا مطابقة تلقائية) </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-أ · إصلاح: فلتر «بلا بنك إيداع/بلا مرجع» في First Client Data يطابق عدّاده (الدفعات الفعلية فقط)؛ الحجوزات بلا دفعة لها زر «🏦 بلا بنك/مرجع» المنفصل بعدّاده — لا تعارض بعد اليوم </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1292,11 +1292,11 @@ function renderFcd(){
       if(due==='owe' && !(b>1)) return false;
       if(due==='over' && !(b<-1)) return false;
       if(due==='paid' && Math.abs(b)>1) return false; }
-    if(miss){ const paidRow=Number(r.amount_paid||0)>1; const noDate=!effPayDate(r); const booking=Number(r.package_rate||0)>0; // 🏦 نقص المرجع/البنك يشمل الحجوزات بلا دفعة (قاعدة المالكة)؛ نقص التاريخ يخصّ الدفعات الفعلية فقط
-      if(miss==='any'   && !((paidRow && noDate) || ((paidRow||booking) && (!hasRef(r) || !hasBank(r))))) return false;
-      if(miss==='nodate'&& !(paidRow && noDate))                 return false;
-      if(miss==='noref' && !((paidRow||booking) && !hasRef(r)))  return false;
-      if(miss==='nobank'&& !((paidRow||booking) && !hasBank(r))) return false; }
+    if(miss){ const paidRow=Number(r.amount_paid||0)>1; const noDate=!effPayDate(r); // فلتر «نواقص الدفعات» يخصّ الدفعات الفعلية فقط (يطابق عدّاداته)؛ الحجوزات بلا دفعة لها زر «🏦 بلا بنك/مرجع» المنفصل
+      if(miss==='any'   && !(paidRow && (noDate || !hasRef(r) || !hasBank(r)))) return false;
+      if(miss==='nodate'&& !(paidRow && noDate))     return false;
+      if(miss==='noref' && !(paidRow && !hasRef(r))) return false;
+      if(miss==='nobank'&& !(paidRow && !hasBank(r)))return false; }
     return true;
   });
   // المُضاف من الداشبورد (الجديد) يُرفع للأعلى فقط — وباقي صفوف الشيت تبقى بترتيبها الأصلي تماماً (sort ثابت)
