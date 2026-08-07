@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ح · Visa Card: استنتاج المصدر من اسم الفندق/المورّد في الملاحظة أيضاً (حركات FANAR من الشيت صارت «🏨 الفنادق» بدل «شيت البنك») </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ط · Visa Card: عمود «🧭 المصدر» صار قابلاً للنقر — ينقلك مباشرة لتبويب المصدر (فندق/مورّد/حجوزات/عميل/كاش/بنك) مع فلترة الاسم </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4085,7 +4085,15 @@ function cardTxns(){ const om=cardOmrMap();
     const idk=String(x.id||''); const ssh=String(x.src_sheet||'');
     const shLbl = /booking/i.test(ssh)?'🏷️ الحجوزات (Booking Form)' : /cash/i.test(ssh)?'💵 Banks Cash' : /supplier|مورّد|مورد/i.test(ssh)?'🏢 المورّدين' : /hotel|فندق/i.test(ssh)?'🏨 الفنادق' : (_sectionFromNote(x.note) || (ssh?('📄 '+ssh):'📄 شيت البنك'));
     const src = x._suppay?(isHotelPayee(x.payee)?'🏨 الفنادق':'🏢 المورّدين') : x._booking?(isHotelPayee(x.bank_name)?'🏨 الفنادق':'🏷️ الحجوزات (Booking Form)') : x._cash?'💵 Banks Cash' : x._clientPay?'👤 دفعة عميل (First Client Data)' : x._refund?'↩️ مرتجع' : /^sl-/.test(idk)?'🏷️ الحجوزات' : /^sp-/.test(idk)?(isHotelPayee(x.payee)?'🏨 الفنادق':'🏢 المورّدين') : /^bc-/.test(idk)?'💵 Banks Cash' : /^fcd-/.test(idk)?'👤 دفعة عميل' : shLbl;
-    return { key, date:String(x.tx_date||'').slice(0,10), bank:x.bank_name||'', note:x.note||'', name:x.client_name||'', orig, cur:cur||'OMR', dir, omr, status, ref:x.bank_ref||'', src };
+    // 🔗 وجهة النقر: من رمز المصدر → التبويب المناسب (مع فلترة الاسم/الكود حيث أمكن)
+    let nav={k:'banks',a:''};
+    if(/🏨/.test(src)) nav={k:'hotels',a:x.payee||x.bank_name||''};
+    else if(/🏢/.test(src)) nav={k:'supplier',a:x.payee||''};
+    else if(/🏷️/.test(src)) nav={k:'booking',a:x.client_code||x.client_name||''};
+    else if(/💵/.test(src)) nav={k:'cash',a:''};
+    else if(/👤/.test(src)) nav={k:'client',a:x.client_code||''};
+    else if(/↩️/.test(src)) nav={k:'payments',a:''};
+    return { key, date:String(x.tx_date||'').slice(0,10), bank:x.bank_name||'', note:x.note||'', name:x.client_name||'', orig, cur:cur||'OMR', dir, omr, status, ref:x.bank_ref||'', src, nav };
   }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
 }
 async function saveCardOmr(txnKey,val){ const key=String(txnKey); const omr=parseFloat(String(val==null?'':val).replace(/,/g,''));
@@ -4100,6 +4108,7 @@ function toggleVisaMiss(){ VISA_MISSONLY=!VISA_MISSONLY; const b=$('visa-missbtn
 function renderVisaCard(){ const box=$('p-visacard'); if(!box) return;
   let rows=cardTxns(); const missN=rows.filter(r=>r.status==='missing').length; const doneN=rows.filter(r=>r.status==='done').length;
   if(VISA_MISSONLY) rows=rows.filter(r=>r.status==='missing');
+  window._visaRows=rows;   // للنقر على المصدر (visaGoto بالفهرس، يتجنّب مشاكل الاقتباس بالأسماء)
   const badge=s=> s==='missing'?'<span style="background:#d11;color:#fff;font-size:9px;font-weight:800;padding:1px 7px;border-radius:8px">⚠️ ناقص العماني</span>' : s==='done'?'<span style="background:#0e9d6a;color:#fff;font-size:9px;font-weight:700;padding:1px 7px;border-radius:8px">✅ مكتمل</span>' : '<span style="background:#e0f2fe;color:#0369a1;font-size:9px;font-weight:700;padding:1px 7px;border-radius:8px">عماني أصلاً</span>';
   const inp=r=>'<input type="number" step="any" value="'+(r.omr!=null?r.omr:'')+'" placeholder="العماني المخصوم" onblur="saveCardOmr(\''+esc(r.key)+'\',this.value)" style="width:120px;padding:3px'+(r.status==='missing'?';border:1px solid #d11;background:rgba(209,17,17,.08)':'')+'">';
   box.innerHTML='<div class="panel" style="margin-bottom:12px"><h3 style="margin-top:0">💳 Visa Card — حركات البطاقة الائتمانية وقيمها بالريال العماني</h3>'+
@@ -4107,7 +4116,7 @@ function renderVisaCard(){ const box=$('p-visacard'); if(!box) return;
     '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px;margin-bottom:10px"><span>الإجمالي: <b>'+rows.length+'</b></span><span style="color:#d11">⚠️ ناقصة العماني: <b>'+missN+'</b></span><span style="color:#0e9d6a">✅ مكتملة: <b>'+doneN+'</b></span>'+
     ' <button id="visa-missbtn" class="btn ghost" onclick="toggleVisaMiss()" style="border-color:#d11;color:#d11;font-weight:700;padding:3px 12px'+(VISA_MISSONLY?';background:rgba(209,17,17,.14)':'')+'">⚠️ الناقصة فقط</button></div>'+
     '<div class="tbl-wrap bf-scroll" style="max-height:520px"><table style="font-size:12px;white-space:nowrap"><thead><tr><th>التاريخ</th><th>🧭 المصدر</th><th>البطاقة</th><th>الوصف</th><th>المبلغ الأصلي</th><th>العملة</th><th>الاتجاه</th><th>💰 العماني المخصوم</th><th>الحالة</th></tr></thead><tbody>'+
-    (rows.length?rows.map(r=>'<tr'+(r.status==='missing'?' style="background:rgba(209,17,17,.05)"':'')+'><td>'+esc(r.date||'')+'</td><td style="font-size:11px;font-weight:700;color:var(--accent)">'+esc(r.src||'')+'</td><td style="font-size:11px">'+esc(r.bank)+'</td><td style="font-size:11px;color:var(--muted);max-width:240px;white-space:normal">'+esc(r.note)+'</td><td class="num" style="font-weight:700">'+fmt(r.orig)+'</td><td>'+esc(r.cur)+'</td><td>'+(r.dir==='out'?'<span style="color:#d11">خارج</span>':'<span style="color:#0e9d6a">داخل</span>')+'</td><td>'+(r.status==='omr'?('<span class="num">'+fmt(r.omr)+'</span> <span style="font-size:9px;color:var(--muted)">= الأصلي</span>'):inp(r))+'</td><td>'+badge(r.status)+'</td></tr>').join(''):'<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px">لا حركات بطاقة'+(VISA_MISSONLY?' ناقصة':'')+'</td></tr>')+
+    (rows.length?rows.map((r,ri)=>'<tr'+(r.status==='missing'?' style="background:rgba(209,17,17,.05)"':'')+'><td>'+esc(r.date||'')+'</td><td style="font-size:11px;font-weight:700"><a href="#" onclick="visaGoto('+ri+');return false" title="انتقلي للمصدر" style="color:var(--accent);text-decoration:underline;text-underline-offset:2px;cursor:pointer">'+esc(r.src||'')+' ↗</a></td><td style="font-size:11px">'+esc(r.bank)+'</td><td style="font-size:11px;color:var(--muted);max-width:240px;white-space:normal">'+esc(r.note)+'</td><td class="num" style="font-weight:700">'+fmt(r.orig)+'</td><td>'+esc(r.cur)+'</td><td>'+(r.dir==='out'?'<span style="color:#d11">خارج</span>':'<span style="color:#0e9d6a">داخل</span>')+'</td><td>'+(r.status==='omr'?('<span class="num">'+fmt(r.omr)+'</span> <span style="font-size:9px;color:var(--muted)">= الأصلي</span>'):inp(r))+'</td><td>'+badge(r.status)+'</td></tr>').join(''):'<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px">لا حركات بطاقة'+(VISA_MISSONLY?' ناقصة':'')+'</td></tr>')+
     '</tbody></table></div></div>';
 }
 // ===== مطابقة كشف الحساب البنكي (يقرأ PDF/CSV ويقارن بحركات النظام) =====
@@ -4532,8 +4541,15 @@ function reconGoto(kind,arg){
     if(kind==='client'){ if(typeof gotoDueClient==='function')gotoDueClient(arg); return; }
     if(kind==='cash'){ const t=document.querySelector('.tab[data-p="bankscash"]'); if(t&&typeof tab==='function')tab(t); return; }
     if(kind==='banks'){ const t=document.querySelector('.tab[data-p="banks"]'); if(t&&typeof tab==='function')tab(t); return; }
+    if(kind==='payments'){ const t=document.querySelector('.tab[data-p="payments"]'); if(t&&typeof tab==='function')tab(t); return; }
+    if(kind==='hotels'){ const t=document.querySelector('.tab[data-p="hotels"]'); if(t&&typeof tab==='function')tab(t);
+      setTimeout(()=>{ const q=$('ho-q'); if(q&&arg){ q.value=arg; if(typeof renderHotels==='function')renderHotels(); } },90); return; }
+    if(kind==='booking'){ const t=document.querySelector('.tab[data-p="bookings"]'); if(t&&typeof tab==='function')tab(t);
+      setTimeout(()=>{ const q=$('ovflt-q'); if(q&&arg){ q.value=arg; if(typeof renderOverview==='function')renderOverview(); } },90); return; }
   }catch(e){ console.warn('reconGoto',e); }
 }
+// 🔗 نقر مصدر حركة البطاقة → الانتقال للتبويب المصدر (بالفهرس، من window._visaRows)
+function visaGoto(i){ const r=(window._visaRows||[])[i]; if(!r||!r.nav||!r.nav.k)return; reconGoto(r.nav.k, r.nav.a||''); }
 function reconGotoIdx(i){ const x=(window._reconSysOnly||[])[i]; if(!x)return; const lab=reconSrcLabel(x); if(lab&&lab.nav)reconGoto(lab.nav.k,lab.nav.a||''); }
 // ✏️ تصحيح مبلغ حركة (بنكية/كاش) يدويّاً إلى قيمة الكشف — للمالكة فقط. تكتب المالكة القيمة الصحيحة كما في كشف البنك (المصدر الأساسي). المشتقّة تُعدَّل من مصدرها.
 async function reconEditAmount(i,btn){
