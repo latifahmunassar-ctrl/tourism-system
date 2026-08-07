@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ب · مطابقة كشف البطاقة الائتمانية (بنك مسقط): قراءة مخصّصة تعتمد المبلغ المخصوم بالريال العماني (Amount in Card Currency) مع اتجاهه، وتعرض العملة الأصلية — يحل «الكل غير متطابق» والمطابقات الكاذبة </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ج · تبويب جديد «💳 Visa Card»: يجمّع كل حركات البطاقة الائتمانية، يُظهر الأجنبية الناقصة قيمتها العمانية، تُدخلينها أنتِ/المحاسب من رسالة البنك فتنعكس في مطابقة كشف البطاقة تلقائياً </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -246,6 +246,7 @@ table{font-weight:600}
     <button class="tab" data-p="curaudit" onclick="tab(this)">🔍 تدقيق العملة</button>
     <button class="tab" data-p="banks" onclick="tab(this)">🏦 البنوك والبطاقات</button>
     <button class="tab" data-p="bankscash" onclick="tab(this)">💵 Banks Cash in/Out</button>
+    <button class="tab" data-p="visacard" onclick="tab(this)">💳 Visa Card</button>
     <button class="tab" data-p="control" onclick="tab(this)" style="display:none">🔐 لوحة التحكم</button>
   </div>
 
@@ -748,6 +749,7 @@ table{font-weight:600}
     </div>
 
     <div class="page" id="p-control"></div>
+    <div class="page" id="p-visacard"></div>
 
     <div class="foot" id="foot"></div>
   </div>
@@ -965,7 +967,7 @@ function tab(el){
 }
 
 // ===== الصلاحيات / لوحة التحكم =====
-const TABS=[{k:'overview',l:'📊 لوحة المعلومات'},{k:'notifs',l:'🔔 إشعارات'},{k:'tickets',l:'🎫 Tickets'},{k:'entry',l:'📝 مدخل البيانات'},{k:'clients',l:'👤 العملاء'},{k:'sales',l:'🧳 Sales Form'},{k:'booking',l:'🏷️ Booking Form'},{k:'bookings',l:'🧾 كل الحجوزات'},{k:'detail',l:'🔎 تفصيل الحجز'},{k:'hotels',l:'🏨 Hotels Overview'},{k:'pnl',l:'💹 الأرباح والخسائر'},{k:'due',l:'⏳ المستحقات'},{k:'payments',l:'💳 الدفعات/المرتجعات'},{k:'staff',l:'👥 الموظفين'},{k:'agents',l:'🏢 الوكلاء'},{k:'suppliers',l:'🧾 الموردين'},{k:'supaudit',l:'🔎 تدقيق suppliers/Hotels'},{k:'banks',l:'🏦 البنوك والبطاقات'},{k:'bankscash',l:'💵 Banks Cash in/Out'},{k:'curaudit',l:'🔍 تدقيق العملة'}];
+const TABS=[{k:'overview',l:'📊 لوحة المعلومات'},{k:'notifs',l:'🔔 إشعارات'},{k:'tickets',l:'🎫 Tickets'},{k:'entry',l:'📝 مدخل البيانات'},{k:'clients',l:'👤 العملاء'},{k:'sales',l:'🧳 Sales Form'},{k:'booking',l:'🏷️ Booking Form'},{k:'bookings',l:'🧾 كل الحجوزات'},{k:'detail',l:'🔎 تفصيل الحجز'},{k:'hotels',l:'🏨 Hotels Overview'},{k:'pnl',l:'💹 الأرباح والخسائر'},{k:'due',l:'⏳ المستحقات'},{k:'payments',l:'💳 الدفعات/المرتجعات'},{k:'staff',l:'👥 الموظفين'},{k:'agents',l:'🏢 الوكلاء'},{k:'suppliers',l:'🧾 الموردين'},{k:'supaudit',l:'🔎 تدقيق suppliers/Hotels'},{k:'banks',l:'🏦 البنوك والبطاقات'},{k:'bankscash',l:'💵 Banks Cash in/Out'},{k:'visacard',l:'💳 Visa Card'},{k:'curaudit',l:'🔍 تدقيق العملة'}];
 let CURRENT_USER=null; try{ CURRENT_USER=JSON.parse(localStorage.getItem('acc_user')||'null'); }catch(e){}
 function staffList(){ return (DATA&&DATA.staffAccess)||[]; }
 function applyPermissions(){
@@ -1190,6 +1192,7 @@ function render(d){
   try{ renderSupAudit(); }catch(_){}
   renderBanks();
   renderBanksCash();
+  try{ renderVisaCard(); }catch(_){}
   try{ renderCurAudit(); }catch(_){}
 
   // الرسم البياني اختياري — لو مكتبة Chart.js ما حمّلت (اتصال/CDN) لا يتوقّف النظام
@@ -4015,7 +4018,7 @@ function bankMainCur(list){ const m={}; (list||[]).forEach(x=>{ const c=x.curren
 function bankTxAll(){
   const base=(DATA.bankTx||[]).slice();
   (DATA.banksCash||[]).forEach(x=>{ if(x.source!=='dashboard')return; const inA=Number(x.in_raw||0), outA=Number(x.out_raw||0); if(!(inA>0)&&!(outA>0))return;
-    base.push({ id:'bc-'+x.id, bank_name:x.bank_name||'', amount_in:inA, amount_out:outA, tx_date:x.tx_date||'', bank_ref:x.bank_ref||'', client_code:'', note:[x.description,x.details,x.more_details,x.note].filter(Boolean).join(' · '), source:'dashboard', created_at:x.created_at||'', _cash:true });
+    base.push({ id:'bc-'+x.id, bank_name:x.bank_name||'', amount_in:inA, amount_out:outA, tx_date:x.tx_date||'', bank_ref:x.bank_ref||'', client_code:'', currency:x.currency||'', note:[x.description,x.details,x.more_details,x.note].filter(Boolean).join(' · '), source:'dashboard', created_at:x.created_at||'', _cash:true });
   });
   // انعكاس دفعات Booking Form عبر البطاقات — للمُدخَل من الداشبورد فقط (التاريخية مسجّلة في شيت Bank Transaction، فلا تُكرّر)
   const _bookDate={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(c&&r.booking_date){ const x=String(r.booking_date).slice(0,10); if(!_bookDate[c]||x<_bookDate[c])_bookDate[c]=x; } });
@@ -4027,7 +4030,7 @@ function bankTxAll(){
     const amt=Number(s.final_rate_booked||0); if(!(amt>0))return;   // قيمة الحجز الفعلي (عملة البطاقة)
     const c=(s.client_code||'').toUpperCase();
     const d=(CHARGE_DATE_OVR[s.id]!=null?CHARGE_DATE_OVR[s.id]:(_bookDate[c]||''));   // تاريخ الدفع أمام charge from (الافتراضي تاريخ الحجز)
-    base.push({ id:'sl-'+s.id, bank_name:cf, amount_in:0, amount_out:amt, tx_date:d, bank_ref:'', client_code:s.client_code||'', note:'💳 دفعة حجز Booking Form: '+(s.name||SVC[s.kind]||s.kind||''), source:'dashboard', created_at:s.created_at||'', _booking:true });
+    base.push({ id:'sl-'+s.id, bank_name:cf, amount_in:0, amount_out:amt, tx_date:d, bank_ref:'', client_code:s.client_code||'', currency:s.currency||'', note:'💳 دفعة حجز Booking Form: '+(s.name||SVC[s.kind]||s.kind||''), source:'dashboard', created_at:s.created_at||'', _booking:true });
   });
   // انعكاس المسترجعات المُدخلة من الداشبورد في كشف البنك — تظهر دائماً؛ الناقصة (بلا تاريخ أو مرجع) رمادية ولا تُحتسب، والمكتملة سوداء وتُحتسب (التاريخية من الشيت موجودة في acc_bank_txn فلا تُكرّر)
   (DATA.refunds||[]).forEach(r=>{
@@ -4047,7 +4050,7 @@ function bankTxAll(){
     if(_txnRefs.has(ref.toUpperCase()))return;                          // موجودة بشيت البنك → لا تُكرّر
     const c=(r.client_code||'').toUpperCase();
     const d=(typeof effPayDate==='function'?effPayDate(r):'')||(_bookDate[c]||'')||String(r.booking_date||'').slice(0,10);
-    base.push({ id:'fcd-'+r.id, bank_name:bn, amount_in:amt, amount_out:0, tx_date:d, bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', payment_code:r.payment_code||'', note:'💰 دفعة عميل: '+(r.client_name||'')+(ref?'':' · ⚠️ بلا مرجع'), source:'dashboard', created_at:r.created_at||'', _clientPay:true });
+    base.push({ id:'fcd-'+r.id, bank_name:bn, amount_in:amt, amount_out:0, tx_date:d, bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', payment_code:r.payment_code||'', currency:r.currency||'', note:'💰 دفعة عميل: '+(r.client_name||'')+(ref?'':' · ⚠️ بلا مرجع'), source:'dashboard', created_at:r.created_at||'', _clientPay:true });
   });
   // 💸 انعكاس دفعات الموردين المُدخلة من الداشبورد التي لا سند بنكي لها (مرجعها غير مسجّل في acc_bank_txn) — تظهر في مطابقة البنك بقيمتها الدقيقة بالكسور. المسجّلة أصلاً كحركة بنكية (نفس المرجع) لا تُكرّر.
   (DATA.supplierPayments||[]).forEach(r=>{
@@ -4057,9 +4060,43 @@ function bankTxAll(){
     const ref=String(r.bank_ref||'').trim(); if(!ref)return;
     if(_txnRefs.has(ref.toUpperCase()))return;                          // مسجّلة أصلاً بشيت/حركة البنك → لا تُكرّر
     const isRef=amt<0;                                                  // سالب = مرتجع وارد من المورّد
-    base.push({ id:'sp-'+r.id, bank_name:bn, amount_in:isRef?Math.abs(amt):0, amount_out:isRef?0:amt, tx_date:String(r.payment_date||'').slice(0,10), bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', note:'💸 دفعة مورّد: '+(r.supplier_name||''), source:'dashboard', created_at:r.created_at||'', _suppay:true });
+    base.push({ id:'sp-'+r.id, bank_name:bn, amount_in:isRef?Math.abs(amt):0, amount_out:isRef?0:amt, tx_date:String(r.payment_date||'').slice(0,10), bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', currency:r.currency||'', note:'💸 دفعة مورّد: '+(r.supplier_name||''), source:'dashboard', created_at:r.created_at||'', _suppay:true });
   });
   return base;
+}
+// ===== 💳 Visa Card: القيمة العمانية المخصومة لكل حركة بطاقة (لمطابقة كشف البطاقة) — تُخزَّن في acc_lists category=card_omr بصيغة «مفتاح=العماني» =====
+function cardOmrMap(){ const m={}; (typeof listValues==='function'?listValues('card_omr'):[]).forEach(v=>{ const s=String(v.value||''); const i=s.lastIndexOf('='); if(i>0){ const k=s.slice(0,i).trim(); const val=parseFloat(s.slice(i+1)); if(k&&!isNaN(val))m[k]=val; } }); return m; }
+function isCardBank(n){ return /credit\s*card|بطاقة\s*ائتمان|فيزا|visa/i.test(String(n||'')); }
+// حركات البطاقة مع قيمتها العمانية وحالتها
+function cardTxns(){ const om=cardOmrMap();
+  return bankTxAll().filter(x=>isCardBank(x.bank_name)).map(x=>{
+    const dir=Number(x.amount_out||0)>0.005?'out':(Number(x.amount_in||0)>0.005?'in':''); const orig=dir==='out'?Number(x.amount_out||0):Number(x.amount_in||0);
+    const cur=String(x.currency||'').toUpperCase().trim(); const key=String(x.id); const ov=om[key]; const isForeign=cur&&cur!=='OMR';
+    let omr,status; if(ov!=null){ omr=ov; status='done'; } else if(!isForeign){ omr=orig; status='omr'; } else { omr=null; status='missing'; }
+    return { key, date:String(x.tx_date||'').slice(0,10), bank:x.bank_name||'', note:x.note||'', name:x.client_name||'', orig, cur:cur||'OMR', dir, omr, status, ref:x.bank_ref||'' };
+  }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+}
+async function saveCardOmr(txnKey,val){ const key=String(txnKey); const omr=parseFloat(String(val==null?'':val).replace(/,/g,''));
+  try{ const olds=(typeof listValues==='function'?listValues('card_omr'):[]).filter(v=>{ const s=String(v.value||''); const i=s.lastIndexOf('='); return i>0 && s.slice(0,i).trim()===key; });
+    for(const o of olds){ await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_list_item',payload:{category:'card_omr',value:o.value}})}); }
+    if(!isNaN(omr)&&omr>0){ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_list_item',payload:{category:'card_omr',value:key+'='+omr}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } }
+    await load(); renderVisaCard();
+  }catch(e){ alert('خطأ: '+e.message); }
+}
+let VISA_MISSONLY=false;
+function toggleVisaMiss(){ VISA_MISSONLY=!VISA_MISSONLY; const b=$('visa-missbtn'); if(b)b.style.background=VISA_MISSONLY?'rgba(209,17,17,.14)':''; renderVisaCard(); }
+function renderVisaCard(){ const box=$('p-visacard'); if(!box) return;
+  let rows=cardTxns(); const missN=rows.filter(r=>r.status==='missing').length; const doneN=rows.filter(r=>r.status==='done').length;
+  if(VISA_MISSONLY) rows=rows.filter(r=>r.status==='missing');
+  const badge=s=> s==='missing'?'<span style="background:#d11;color:#fff;font-size:9px;font-weight:800;padding:1px 7px;border-radius:8px">⚠️ ناقص العماني</span>' : s==='done'?'<span style="background:#0e9d6a;color:#fff;font-size:9px;font-weight:700;padding:1px 7px;border-radius:8px">✅ مكتمل</span>' : '<span style="background:#e0f2fe;color:#0369a1;font-size:9px;font-weight:700;padding:1px 7px;border-radius:8px">عماني أصلاً</span>';
+  const inp=r=>'<input type="number" step="any" value="'+(r.omr!=null?r.omr:'')+'" placeholder="العماني المخصوم" onblur="saveCardOmr(\''+esc(r.key)+'\',this.value)" style="width:120px;padding:3px'+(r.status==='missing'?';border:1px solid #d11;background:rgba(209,17,17,.08)':'')+'">';
+  box.innerHTML='<div class="panel" style="margin-bottom:12px"><h3 style="margin-top:0">💳 Visa Card — حركات البطاقة الائتمانية وقيمها بالريال العماني</h3>'+
+    '<div style="font-size:12.5px;color:var(--muted);line-height:1.8;margin-bottom:8px">البطاقة تُخصم بالعماني دائماً. الحركات الأجنبية (MYR/USD) تحتاج <b>إدخال المبلغ العماني المخصوم فعليّاً</b> من رسالة البنك — أنتِ أو المحاسب — لتنعكس في مطابقة كشف البطاقة. الحركات العمانية تتطابق تلقائياً.</div>'+
+    '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px;margin-bottom:10px"><span>الإجمالي: <b>'+rows.length+'</b></span><span style="color:#d11">⚠️ ناقصة العماني: <b>'+missN+'</b></span><span style="color:#0e9d6a">✅ مكتملة: <b>'+doneN+'</b></span>'+
+    ' <button id="visa-missbtn" class="btn ghost" onclick="toggleVisaMiss()" style="border-color:#d11;color:#d11;font-weight:700;padding:3px 12px'+(VISA_MISSONLY?';background:rgba(209,17,17,.14)':'')+'">⚠️ الناقصة فقط</button></div>'+
+    '<div class="tbl-wrap bf-scroll" style="max-height:520px"><table style="font-size:12px;white-space:nowrap"><thead><tr><th>التاريخ</th><th>البطاقة</th><th>الوصف</th><th>المبلغ الأصلي</th><th>العملة</th><th>الاتجاه</th><th>💰 العماني المخصوم</th><th>الحالة</th></tr></thead><tbody>'+
+    (rows.length?rows.map(r=>'<tr'+(r.status==='missing'?' style="background:rgba(209,17,17,.05)"':'')+'><td>'+esc(r.date||'')+'</td><td style="font-size:11px">'+esc(r.bank)+'</td><td style="font-size:11px;color:var(--muted);max-width:240px;white-space:normal">'+esc(r.note)+'</td><td class="num" style="font-weight:700">'+fmt(r.orig)+'</td><td>'+esc(r.cur)+'</td><td>'+(r.dir==='out'?'<span style="color:#d11">خارج</span>':'<span style="color:#0e9d6a">داخل</span>')+'</td><td>'+(r.status==='omr'?('<span class="num">'+fmt(r.omr)+'</span> <span style="font-size:9px;color:var(--muted)">= الأصلي</span>'):inp(r))+'</td><td>'+badge(r.status)+'</td></tr>').join(''):'<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px">لا حركات بطاقة'+(VISA_MISSONLY?' ناقصة':'')+'</td></tr>')+
+    '</tbody></table></div></div>';
 }
 // ===== مطابقة كشف الحساب البنكي (يقرأ PDF/CSV ويقارن بحركات النظام) =====
 function fillReconBanks(){ const sel=$('rec-bank'); if(!sel)return; const cur=sel.value; const _mg=new Set(listValues('banks').map(v=>String(v.value||'').trim().toLowerCase()).filter(Boolean)); const names=[...new Set(bankTxAll().map(x=>bankAlias(x.bank_name)).filter(Boolean))].filter(b=>_mg.has(String(b).trim().toLowerCase())).sort((a,b)=>String(a).localeCompare(String(b),'ar')); sel.innerHTML='<option value="">— اختاري البنك —</option>'+names.map(n=>'<option>'+esc(n)+'</option>').join(''); if(names.indexOf(cur)>=0)sel.value=cur; }
@@ -4252,7 +4289,11 @@ function runReconcile(){
     const inR=(d)=>{ const s=String(d||'').slice(0,10); if(!s)return false; if(_from&&s<_from)return false; if(_to&&s>_to)return false; return true; };
     const stmt=parsed.txns.filter(x=>(!_from&&!_to)||inR(x.date)).map(x=>({...x,_m:false}));
     const _noDay = stmt.length>0 && !stmt.some(s=>/^\d{4}-\d{2}-\d{2}$/.test(String(s.date||'').slice(0,10)));   // ⚠️ كشف بلا تواريخ يومية (عمود التاريخ مقصوص) → المطابقة بالمبلغ فقط وغير موثوقة
-    const _mapSys=x=>({date:String(x.tx_date||'').slice(0,10),out:Number(x.amount_out||0),in:Number(x.amount_in||0),note:x.note||x.bank_ref||'',id:x.id,src:x.source||'',ssheet:x.src_sheet||'',_cash:!!x._cash,_book:!!x._booking,_fcd:!!x._clientPay,_refund:!!x._refund,_suppay:!!x._suppay,_rid:x._rid||null,code:x.client_code||'',pcode:x.payment_code||'',cname:x.client_name||'',cur:x.currency||'',_m:false});
+    const _cardOmr=(typeof cardOmrMap==='function')?cardOmrMap():{};   // 💳 القيمة العمانية المخصومة لحركات البطاقة الأجنبية
+    const _mapSys=x=>{ let out=Number(x.amount_out||0), inn=Number(x.amount_in||0);
+      // للبطاقة الأجنبية: استبدل المبلغ الأصلي بالعماني المخصوم المُدخَل (ليطابق كشف البطاقة بالعماني)
+      if((typeof isCardBank==='function'&&isCardBank(x.bank_name)) && _cardOmr[String(x.id)]!=null){ const o=Number(_cardOmr[String(x.id)]); if(out>0.005)out=o; else if(inn>0.005)inn=o; }
+      return {date:String(x.tx_date||'').slice(0,10),out,in:inn,note:x.note||x.bank_ref||'',id:x.id,src:x.source||'',ssheet:x.src_sheet||'',_cash:!!x._cash,_book:!!x._booking,_fcd:!!x._clientPay,_refund:!!x._refund,_suppay:!!x._suppay,_rid:x._rid||null,code:x.client_code||'',pcode:x.payment_code||'',cname:x.client_name||'',cur:x.currency||'',_m:false}; };
     const _allSys=bankTxAll().filter(x=>bankAlias(x.bank_name)===bank).map(_mapSys);
     const sys=_allSys.filter(y=>(!_from&&!_to)||inR(y.date));
     // 📅 نافذة تسامح ±6 أيام حول فترة الكشف — لحركات النظام المؤرّخة قرب الفترة فقط (فرق تاريخ الترحيل البنكي)؛ تُستخدم لمطابقة المتبقّي بالكشف ولا تظهر كـ«بنظامك فقط»
