@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ز · Visa Card: دفعات الفنادق (مثل FANAR) تُصنَّف مصدرها «🏨 الفنادق» بدل «المورّدين» (تُعرَف من قائمة الفنادق) </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ح · Visa Card: استنتاج المصدر من اسم الفندق/المورّد في الملاحظة أيضاً (حركات FANAR من الشيت صارت «🏨 الفنادق» بدل «شيت البنك») </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4073,13 +4073,17 @@ function isCardBank(n){ return /credit\s*card|بطاقة\s*ائتمان|فيزا
 function isHotelPayee(name){ const nn=String(name||'').toLowerCase().replace(/[^a-z0-9؀-ۿ]/g,''); if(!nn)return false; return ((DATA&&DATA.lists)||[]).some(l=>l.category==='hotels_system' && String(l.value||'').toLowerCase().replace(/[^a-z0-9؀-ۿ]/g,'')===nn); }
 // حركات البطاقة مع قيمتها العمانية وحالتها
 function cardTxns(){ const om=cardOmrMap();
+  const _nz=s=>String(s||'').toLowerCase().replace(/[^a-z0-9؀-ۿ]/g,'');   // تطبيع لمطابقة الاسم داخل الملاحظة
+  const _hotelsN=((DATA&&DATA.lists)||[]).filter(l=>l.category==='hotels_system').map(l=>_nz(l.value)).filter(h=>h.length>4);
+  const _supsN=((DATA&&DATA.lists)||[]).filter(l=>l.category==='suppliers').map(l=>_nz(l.value)).filter(s=>s.length>4);
+  const _sectionFromNote=t=>{ const nt=_nz(t); if(!nt)return ''; if(_hotelsN.some(h=>nt.includes(h)))return '🏨 الفنادق'; if(_supsN.some(s=>nt.includes(s)))return '🏢 المورّدين'; return ''; };
   return bankTxAll().filter(x=>isCardBank(x.bank_name)).map(x=>{
     const dir=Number(x.amount_out||0)>0.005?'out':(Number(x.amount_in||0)>0.005?'in':''); const orig=dir==='out'?Number(x.amount_out||0):Number(x.amount_in||0);
     const cur=String(x.currency||'').toUpperCase().trim(); const key=String(x.id); const ov=om[key]; const isForeign=cur&&cur!=='OMR';
     let omr,status; if(ov!=null){ omr=ov; status='done'; } else if(!isForeign){ omr=orig; status='omr'; } else { omr=null; status='missing'; }
-    // 🧭 المصدر الحقيقي: للمُدخَل من الداشبورد حسب العلامة؛ ولحركات الشيت حسب src_sheet (المصدر الأصلي قبل تسجيله بالكشف البنكي: BOOKING FORM / Banks Cash …)
+    // 🧭 المصدر الحقيقي: للمُدخَل من الداشبورد حسب العلامة؛ ولحركات الشيت حسب src_sheet ثم الاستنتاج من الملاحظة (اسم فندق/مورّد) — قبل تسجيله بالكشف البنكي
     const idk=String(x.id||''); const ssh=String(x.src_sheet||'');
-    const shLbl = /booking/i.test(ssh)?'🏷️ الحجوزات (Booking Form)' : /cash/i.test(ssh)?'💵 Banks Cash' : /supplier|مورّد|مورد/i.test(ssh)?'🏢 المورّدين' : /hotel|فندق/i.test(ssh)?'🏨 الفنادق' : (ssh?('📄 '+ssh):'📄 شيت البنك');
+    const shLbl = /booking/i.test(ssh)?'🏷️ الحجوزات (Booking Form)' : /cash/i.test(ssh)?'💵 Banks Cash' : /supplier|مورّد|مورد/i.test(ssh)?'🏢 المورّدين' : /hotel|فندق/i.test(ssh)?'🏨 الفنادق' : (_sectionFromNote(x.note) || (ssh?('📄 '+ssh):'📄 شيت البنك'));
     const src = x._suppay?(isHotelPayee(x.payee)?'🏨 الفنادق':'🏢 المورّدين') : x._booking?(isHotelPayee(x.bank_name)?'🏨 الفنادق':'🏷️ الحجوزات (Booking Form)') : x._cash?'💵 Banks Cash' : x._clientPay?'👤 دفعة عميل (First Client Data)' : x._refund?'↩️ مرتجع' : /^sl-/.test(idk)?'🏷️ الحجوزات' : /^sp-/.test(idk)?(isHotelPayee(x.payee)?'🏨 الفنادق':'🏢 المورّدين') : /^bc-/.test(idk)?'💵 Banks Cash' : /^fcd-/.test(idk)?'👤 دفعة عميل' : shLbl;
     return { key, date:String(x.tx_date||'').slice(0,10), bank:x.bank_name||'', note:x.note||'', name:x.client_name||'', orig, cur:cur||'OMR', dir, omr, status, ref:x.bank_ref||'', src };
   }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
