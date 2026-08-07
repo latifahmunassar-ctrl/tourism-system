@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-د · Visa Card: عمود «🧭 المصدر» يبيّن من أي قسم جاءت كل حركة بطاقة (الموردين/الحجوزات/Banks Cash/دفعة عميل/شيت البنك) </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-هـ · الطيران: خيارات «charge from» بطاقات وبنوك فقط (أُزيل «direct from supplier») — فتُحتسب دفعات الطيران سحباً من البطاقة/البنك وتظهر بالمطابقة / Visa Card </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1622,7 +1622,9 @@ function bRecall(){
     h+='<div style="margin-top:8px;font-size:12px"><b>كل حجوزات العميل ('+svcs.length+') — الخلايا قابلة للتعديل:</b> <span style="color:var(--muted);font-size:11px">← اسحبي يمين/يسار أو استخدمي أزرار التمرير تحت</span></div><div class="tbl-wrap bf-scroll" id="bf-tbl" style="max-height:360px"><table style="font-size:11px"><thead><tr><th>النوع</th><th>الخدمة</th><th>🚪 عدد الغرف</th><th>Conf No</th><th>سعر البيع</th><th>سعر المورد</th><th>الحجز الفعلي</th><th>الفرق</th><th>الربح</th><th>رسوم الإلغاء</th><th>المرتجع</th><th>المرتجع المفترض</th><th>Booked from</th><th>📅 تاريخ الدفع <span style="font-size:9px;color:var(--muted)">(اختياري)</span></th><th>Charge from <span style="font-size:9px;color:var(--muted)">(اختياري)</span></th><th>الحالة</th><th>سعر الصرف</th><th>حفظ</th></tr></thead><tbody>'+
     svcs.map(b=>{ const i=b.id; const st='style="width:80px;padding:3px 4px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:11px"';
       const inp=(f,v,num,extra)=>'<input id="sb-'+f+'-'+i+'" '+(num?'type="number"':'')+' value="'+esc(v!=null?v:'')+'" '+st+' '+(extra||'')+'>';
-      const selInp=(f,v,cat)=>{ const cur=(v==null?'':String(v)); const vals=listValues(cat);
+      const selInp=(f,v,cat)=>{ const cur=(v==null?'':String(v)); let vals=listValues(cat);
+        // ✈️ الطيران: خيارات «charge from» بطاقات وبنوك فقط — يُستبعَد «دفع مباشر للمورّد» (الطيران يُدفع بالبطاقة/البنك، فتُحتسب سحباً وتظهر بالمطابقة)
+        if(f==='cfrom' && typeof sIsFlight==='function' && sIsFlight(b.kind)){ vals=vals.filter(x=>!/direct|from\s*supplier|with\s*the\s*suppl|مباشر|المورّد|المورد/i.test(String(x.value||''))); }
         let o='<option value=""></option>'+vals.map(x=>'<option'+(x.value===cur?' selected':'')+'>'+esc(x.value)+'</option>').join('');
         if(cur && !vals.some(x=>x.value===cur)) o+='<option selected>'+esc(cur)+'</option>';
         return '<select id="sb-'+f+'-'+i+'" '+st+'>'+o+'</select>'; };
