@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-أ · إصلاح: فلتر «بلا بنك إيداع/بلا مرجع» في First Client Data يطابق عدّاده (الدفعات الفعلية فقط)؛ الحجوزات بلا دفعة لها زر «🏦 بلا بنك/مرجع» المنفصل بعدّاده — لا تعارض بعد اليوم </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ب · مطابقة كشف البطاقة الائتمانية (بنك مسقط): قراءة مخصّصة تعتمد المبلغ المخصوم بالريال العماني (Amount in Card Currency) مع اتجاهه، وتعرض العملة الأصلية — يحل «الكل غير متطابق» والمطابقات الكاذبة </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4066,6 +4066,20 @@ function fillReconBanks(){ const sel=$('rec-bank'); if(!sel)return; const cur=se
 let _pdfjsP=null;
 function loadPdfjs(){ if(window.pdfjsLib)return Promise.resolve(); if(_pdfjsP)return _pdfjsP; _pdfjsP=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'; s.onload=()=>{ try{ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }catch(e){} res(); }; s.onerror=()=>rej(new Error('تعذّر تحميل قارئ PDF (تحتاجين إنترنت)')); document.head.appendChild(s); }); return _pdfjsP; }
 function parseStmtTxns(text){
+  // 💳 تنسيق E — كشف بطاقة بنك مسقط الائتمانية (My Transactions): تاريخان dd/MM/yyyy + عملة الشراء + مبلغ الشراء + Amount in Card Currency (المخصوم بالريال العماني بإشارة). المطابقة على المخصوم بالعماني (وهو ما يخزّنه نظامك للبطاقة). يُفحَص أولاً لأنه فيه تاريخان مثل صيغة بنك مسقط العادية فيُخلط.
+  if(/Amount in Card|Card Currency|Transaction Currency/i.test(text) && (String(text).match(/\d{2}\/\d{2}\/\d{4}/g)||[]).length>=2){
+    const rowsE=[];
+    for(const line of text.split('\n')){
+      const dm=line.match(/(\d{2})\/(\d{2})\/(\d{4})/); if(!dm)continue;   // تاريخ الحركة (الأول)
+      const iso=dm[3]+'-'+dm[2]+'-'+dm[1];
+      const nums=(line.replace(/\d{2}\/\d{2}\/\d{4}/g,' ').match(/-?[\d,]+\.\d+/g)||[]).map(s=>Number(s.replace(/,/g,'')));   // العمودان الرقميان (بكسور) فقط
+      if(!nums.length)continue;
+      const card=nums[nums.length-1]; if(Math.abs(card)<0.005)continue;   // آخر رقم = Amount in Card Currency (OMR بإشارة: سالب=شراء/خارج، موجب=سداد/داخل)
+      const curM=line.match(/\b(MYR|USD|OMR|SAR|AED|EUR|THB|SGD|GBP)\b/); const oth=(nums.length>=2?nums[nums.length-2]:card);
+      rowsE.push({date:iso, out:card<0?Math.abs(card):0, in:card>0?card:0, bal:0, remarks:(curM&&curM[1]!=='OMR'?('أصلي '+curM[1]+' '+oth+' · '):'')+'💳 بطاقة'});
+    }
+    if(rowsE.length) return rowsE;
+  }
   // تنسيق D — تقرير بأعمدة (Receive · Transaction · Account Name · Debit · Credit · Balance · Notes):
   // يقبل التاريخ الكامل YYYY-MM-DD أو المقصوص YYYY-MM (تقارير ضيّقة الأعمدة). لكل سطر: ثلاثة أعمدة رقمية متجاورة (مدين دائن رصيد) أحد المدين/الدائن=0.
   // أمان: يستبعد أرقام الحسابات (>9 خانات) والأوقات (بها ":") والقيم المقطوعة (...."), فلا تُؤخذ كمبالغ بالغلط.
