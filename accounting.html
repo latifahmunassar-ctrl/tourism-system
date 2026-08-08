@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-س · الأرباح: بجانب الربح الفعلي يظهر الفرق عن المتوقع صراحةً — «900 🔻 (−100 عن المتوقع)» نقص، و«🔺 (+N عن المتوقع)» زيادة؛ الرقم نفسه هو ربحك الفعلي لا النقص </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ع · إصلاح قارئ كشف الـPDF: تجميع خانات كل حركة حسب موضعها (Y) بدل الترتيب التسلسلي — كان يُسقط صفوفاً (مثل الـ528 العُمانية) فتظهر «غير مطابقة»؛ الآن يقرأ كل الحركات وتتطابق </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -4213,7 +4213,13 @@ function parseStmtHeader(text){ const g=(re)=>{ const m=text.match(re); return m
   const md=text.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2})\/(\d{2})\/(\d{4})/);
   const fromDate=md?(md[3]+'-'+md[2]+'-'+md[1]):'', toDate=md?(md[6]+'-'+md[5]+'-'+md[4]):'';
   return { withdrawals:g(/TOTAL WITHDRAWALS[\s\S]*?([\d,]+\.\d{2,3})/), deposits:g(/TOTAL DEPOSITS[\s\S]*?([\d,]+\.\d{2,3})/), opening:g(/OPENING BALANCE[\s\S]*?([\d,]+\.\d{2,3})/), closing:g(/CLOSING BALANCE[\s\S]*?([\d,]+\.\d{2,3})/), fromDate, toDate }; }
-async function parseBankPdf(file){ await loadPdfjs(); const buf=await file.arrayBuffer(); const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise; let text=''; for(let p=1;p<=pdf.numPages;p++){ const page=await pdf.getPage(p); const tc=await page.getTextContent(); let lastY=null; tc.items.forEach(it=>{ const y=it.transform[5]; if(lastY!==null&&Math.abs(y-lastY)>3)text+='\n'; text+=it.str+' '; lastY=y; }); text+='\n'; } return { txns:parseStmtTxns(text), header:parseStmtHeader(text), raw:text }; }
+async function parseBankPdf(file){ await loadPdfjs(); const buf=await file.arrayBuffer(); const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise; let text='';
+  for(let p=1;p<=pdf.numPages;p++){ const page=await pdf.getPage(p); const tc=await page.getTextContent();
+    // 🧩 تجميع العناصر في صفوف حسب الإحداثي Y (أقرب صف ضمن سماحية) ثم ترتيبها أفقياً حسب X — يصمد أمام تفكّك أعمدة كشوف البطاقة (كان الترتيب التسلسلي يفكّك الصف فتُسقَط حركات مثل صفوف OMR المحلية)
+    const rws=[]; tc.items.forEach(it=>{ const y=it.transform[5], x=it.transform[4]; let r=null,best=3.2; for(const rr of rws){ const dy=Math.abs(rr.y-y); if(dy<=best){ best=dy; r=rr; } } if(!r){ r={y,items:[]}; rws.push(r); } r.items.push({x,s:it.str}); });
+    rws.sort((a,b)=>b.y-a.y); rws.forEach(r=>{ r.items.sort((a,b)=>a.x-b.x); text+=r.items.map(i=>i.s).join(' ')+'\n'; });
+  }
+  return { txns:parseStmtTxns(text), header:parseStmtHeader(text), raw:text }; }
 function splitCsvLine(l,delim){ const out=[]; let cur='',q=false; for(let i=0;i<l.length;i++){ const c=l[i]; if(c==='"'){ q=!q; } else if(c===delim && !q){ out.push(cur); cur=''; } else cur+=c; } out.push(cur); return out; }
 async function parseBankCsv(file){
   const t=await file.text(); const rows=[];
