@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ن · المستحقات: العميل المدفوع زيادة (مثل C26506 −99.83) يظهر الآن في جدول العرض الافتراضي بصفّه الأخضر ➕ (كان مخفيّاً بالفلتر ويظهر بالبانر العلوي فقط) </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-س · الأرباح: بجانب الربح الفعلي يظهر الفرق عن المتوقع صراحةً — «900 🔻 (−100 عن المتوقع)» نقص، و«🔺 (+N عن المتوقع)» زيادة؛ الرقم نفسه هو ربحك الفعلي لا النقص </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -6150,7 +6150,9 @@ function renderPnl(){
       numG(x.cost,'inherit'),numG(x.rate,'inherit'),
       numG(x.exp,'#0e7c50'),
       '<span style="font-weight:700;color:var(--accent)">'+esc(x.cur||'—')+'</span>',
-      (g?'<span class="num" style="color:#9aa">'+fmt(x.profit)+'</span>':'<span class="num '+pc+'"'+(below?' style="background:rgba(209,17,17,.10);font-weight:700;border-radius:4px" title="الفعلي أقل من المتوقع"':'')+'>'+fmt(x.profit)+(below?' 🔻':'')+'</span>'),
+      (g?'<span class="num" style="color:#9aa">'+fmt(x.profit)+'</span>':'<span class="num '+pc+'"'+(below?' style="background:rgba(209,17,17,.10);font-weight:700;border-radius:4px" title="الفعلي أقل من المتوقع — الرقم هو ربحك الفعلي، والقوس يوضّح كم نقص عن المتوقع"':'')+'>'+fmt(x.profit)+'</span>'+
+        (x.actual && below ? ' <span style="font-size:10px;color:#d11;font-weight:700" title="الفرق عن الربح المتوقع (المتوقع '+fmt(x.exp)+' − الفعلي '+fmt(x.profit)+')">🔻 (−'+fmt(x.exp-x.profit)+' عن المتوقع)</span>'
+          : (x.actual && (x.profit-x.exp>0.5) ? ' <span style="font-size:10px;color:#0e7c50;font-weight:700" title="أعلى من المتوقع">🔺 (+'+fmt(x.profit-x.exp)+' عن المتوقع)</span>' : ''))),
       (function(){ if(g||!x.actual){ return '<span class="num" style="color:#9aa">—</span>'; } var ps=toSAR(x.profit,x.cur); if(ps==null){ return '<span class="num" style="color:#9aa" title="لا سعر صرف معتمد لـ'+esc(x.cur||'')+'">— <span style="font-size:9px">('+esc(x.cur||'')+')</span></span>'; } return '<span class="num" style="font-weight:700;color:'+(ps< -0.5?'#d11':'#0e7c50')+'">'+fmt(ps)+' <span style="font-size:9px;color:var(--muted)">ر.س</span></span>'; })(),
       '<span class="num'+(g?'':' '+pc)+'" style="'+(g?'color:#9aa':'')+'">'+margin+'%</span>',
       x.status.toLowerCase().includes('cancel')?'<span class="pill cancel">ملغى</span>':'<span class="pill active">نشط</span>'];
