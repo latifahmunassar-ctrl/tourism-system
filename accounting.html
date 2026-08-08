@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ع · إصلاح قارئ كشف الـPDF: تجميع خانات كل حركة حسب موضعها (Y) بدل الترتيب التسلسلي — كان يُسقط صفوفاً (مثل الـ528 العُمانية) فتظهر «غير مطابقة»؛ الآن يقرأ كل الحركات وتتطابق </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ف · كاشف العملة صار ٣ فئات: أ) سعر صرف خاطئ · ب) نفس العملة وسعر≠1 (يدوي) · ج «جديدة») عملة بيع الخدمة تخالف عملة حساب العميل (مثل خدمة SAR لعميل OMR بعد تغيير عملته) + زر «صحّح للعميل» بضغطة </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -5186,18 +5186,30 @@ function fxRate(from,to){ from=String(from||'').toUpperCase().trim(); to=String(
 //   (أ) عملة الحجز ≠ عملة البيع وسعر الصرف يبعد كثيراً عن سعر الزوج المُدار → الصحيح معروف، تصحيح بضغطة.
 //   (ب) عملة الحجز = عملة البيع لكن سعر الصرف ≠ 1 → التسمية غالباً خاطئة (مثل طيران رينغيت مسمّى USD)، الصحيح غير معروف → مراجعة يدوية.
 function curMismatches(){ const out=[];
+  // عملة حساب كل عميل من First Client Data
+  const fcdCur={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(c && r.currency && !fcdCur[c]) fcdCur[c]=String(r.currency).toUpperCase().trim(); });
   (DATA.serviceLines||[]).forEach(s=>{
     if(s.source!=='dashboard')return; if(/cancel/i.test(String(s.status||'')))return;
     const bc=String(s.booked_currency||s.currency||'').toUpperCase().trim(), sc=String(s.sell_currency||'').toUpperCase().trim();
-    if(!bc||!sc)return; const stored=Number(s.currency_rate); if(!isFinite(stored)||stored<=0)return;
-    const frb=(s.final_rate_booked!=null&&s.final_rate_booked!=='')?Number(s.final_rate_booked):null; const curAmt=Number(s.amount||0);
+    const stored=Number(s.currency_rate); const frb=(s.final_rate_booked!=null&&s.final_rate_booked!=='')?Number(s.final_rate_booked):null; const curAmt=Number(s.amount||0);
+    const code=(s.client_code||'').toUpperCase(); const fc=fcdCur[code]||'';
+    // فئة (ج): عملة بيع الخدمة تخالف عملة حساب العميل (مثل بيع SAR لعميل OMR) — نعرف الصحيح (عملة العميل)
+    if(sc && fc && sc!==fc && curAmt>0.005){
+      const scToFc=fxRate(sc,fc); const bkc=bc||fc; const newRate=(bkc===fc)?1:fxRate(bkc,fc);
+      if(scToFc!=null){
+        const newAmt=+(curAmt*scToFc).toFixed(2);   // المبلغ الحالي (بعملة البيع) × صرفها لعملة العميل — آمن ومتّسق مع frb×السعر
+        out.push({id:s.id, code, kind:s.kind, conf:s.conf_no||'', bc:sc, sc:fc, stored:(isFinite(stored)?stored:null), exp:(newRate!=null?+newRate.toFixed(4):null), curAmt, newAmt, cat:'C', fixable:true, bookedCur:bkc, newSell:fc, newRate:(newRate!=null?+newRate.toFixed(4):(isFinite(stored)?stored:1))});
+        return;   // فئة (ج) أولوية — تصحيحها يوحّد العملة للعميل
+      }
+    }
+    if(!bc||!sc)return; if(!isFinite(stored)||stored<=0)return;
     if(bc!==sc){   // فئة (أ)
       const exp=fxRate(bc,sc); if(exp==null)return; if(Math.abs(stored-exp)/exp<=0.20)return;
       const newAmt=frb!=null?+(frb*exp).toFixed(2):(stored>0?+(curAmt*exp/stored).toFixed(2):curAmt);
-      out.push({id:s.id, code:(s.client_code||'').toUpperCase(), kind:s.kind, conf:s.conf_no||'', bc, sc, stored, exp:+exp.toFixed(4), curAmt, newAmt, cat:'A', fixable:true});
+      out.push({id:s.id, code, kind:s.kind, conf:s.conf_no||'', bc, sc, stored, exp:+exp.toFixed(4), curAmt, newAmt, cat:'A', fixable:true, bookedCur:bc, newSell:sc, newRate:+exp.toFixed(4)});
     } else {   // فئة (ب): نفس العملة والسعر ≠ 1
       if(Math.abs(stored-1)<=0.02)return;
-      out.push({id:s.id, code:(s.client_code||'').toUpperCase(), kind:s.kind, conf:s.conf_no||'', bc, sc, stored, exp:null, curAmt, newAmt:null, cat:'B', fixable:false});
+      out.push({id:s.id, code, kind:s.kind, conf:s.conf_no||'', bc, sc, stored, exp:null, curAmt, newAmt:null, cat:'B', fixable:false});
     }
   });
   return out;
@@ -5205,28 +5217,36 @@ function curMismatches(){ const out=[];
 function renderCurMismatch(){ const box=$('ca-mismatch'); if(!box)return; const ms=curMismatches();
   if(!ms.length){ box.innerHTML=''; return; }
   const owner=(typeof isOwnerUser==='function')?isOwnerUser():true;
-  const A=ms.filter(m=>m.fixable), B=ms.filter(m=>!m.fixable);
-  const rowA=m=>'<tr><td><b>'+esc(m.code)+'</b></td><td>'+esc((SVC[m.kind]||m.kind)+(m.conf?' · '+m.conf:''))+'</td><td>'+esc(m.bc)+'</td><td style="font-weight:700;color:var(--accent)">'+esc(m.sc)+'</td><td class="num" style="color:#d11;font-weight:700">'+m.stored+'</td><td class="num" style="color:#0e9d6a;font-weight:700">'+m.exp+'</td><td class="num">'+fmt(m.curAmt)+'</td><td class="num" style="font-weight:700">'+fmt(m.newAmt)+' '+esc(m.sc)+'</td>'+(owner?'<td><button class="btn ghost" style="padding:2px 10px;font-size:11px;color:#0e9d6a;border-color:#0e9d6a" onclick="caFixRate('+m.id+','+m.exp+','+m.newAmt+',\''+esc(m.bc)+'\')">✔️ صحّح</button></td>':'')+'</tr>';
+  const A=ms.filter(m=>m.cat==='A'), C=ms.filter(m=>m.cat==='C'), B=ms.filter(m=>m.cat==='B');
+  const rowA=m=>'<tr><td><b>'+esc(m.code)+'</b></td><td>'+esc((SVC[m.kind]||m.kind)+(m.conf?' · '+m.conf:''))+'</td><td>'+esc(m.bc)+'</td><td style="font-weight:700;color:var(--accent)">'+esc(m.sc)+'</td><td class="num" style="color:#d11;font-weight:700">'+m.stored+'</td><td class="num" style="color:#0e9d6a;font-weight:700">'+m.exp+'</td><td class="num">'+fmt(m.curAmt)+'</td><td class="num" style="font-weight:700">'+fmt(m.newAmt)+' '+esc(m.sc)+'</td>'+(owner?'<td><button class="btn ghost" style="padding:2px 10px;font-size:11px;color:#0e9d6a;border-color:#0e9d6a" onclick="caFixRate('+m.id+','+m.newRate+','+m.newAmt+',\''+esc(m.bookedCur)+'\',\''+esc(m.newSell)+'\')">✔️ صحّح</button></td>':'')+'</tr>';
+  const rowC=m=>'<tr><td><b>'+esc(m.code)+'</b></td><td>'+esc((SVC[m.kind]||m.kind)+(m.conf?' · '+m.conf:''))+'</td><td style="color:#d11;font-weight:700">'+esc(m.bc)+'</td><td style="font-weight:700;color:var(--accent)">'+esc(m.sc)+'</td><td class="num">'+fmt(m.curAmt)+' '+esc(m.bc)+'</td><td class="num" style="font-weight:700;color:#0e9d6a">'+fmt(m.newAmt)+' '+esc(m.sc)+'</td>'+(owner?'<td><button class="btn ghost" style="padding:2px 10px;font-size:11px;color:#0e9d6a;border-color:#0e9d6a" onclick="caFixRate('+m.id+','+m.newRate+','+m.newAmt+',\''+esc(m.bookedCur)+'\',\''+esc(m.newSell)+'\')">✔️ صحّح للعميل</button></td>':'')+'</tr>';
   const rowB=m=>'<tr><td><b>'+esc(m.code)+'</b></td><td>'+esc((SVC[m.kind]||m.kind)+(m.conf?' · '+m.conf:''))+'</td><td>'+esc(m.bc)+' = '+esc(m.sc)+'</td><td class="num" style="color:#d11;font-weight:700">'+m.stored+'</td><td class="num">'+fmt(m.curAmt)+'</td><td style="font-size:10.5px;color:#d98a00;font-weight:700">التسمية غالباً خاطئة — عملة الحجز ليست '+esc(m.bc)+'</td>'+(owner?'<td><button class="btn ghost" style="padding:2px 10px;font-size:11px;color:#0891b2;border-color:#0891b2" onclick="gotoDueClient(\''+esc(m.code)+'\')">🔎 افتحي العميل</button></td>':'')+'</tr>';
   let h='';
   if(A.length){ h+='<div class="panel" style="border:2px solid #d11;background:rgba(209,17,17,.05)"><h3 style="margin-top:0;color:#d11">⚠️ سعر صرف لا يوافق عملة بيع العميل — قابل للتصحيح ('+A.length+')</h3>'+
     '<div style="font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:10px">عملة الحجز تختلف عن عملة البيع وسعر الصرف بعيد عن الصحيح (مثلاً عميل بالدولار وسعر رينغيت→عماني). «صحّح» يُحدّث <b>سعر الصرف والمبلغ فقط</b> لعملة العميل — <b>لا يتغيّر الحجز الفعلي (frb)</b>.</div>'+
     (owner?'<button class="btn" style="background:#d11;color:#fff;padding:6px 16px;margin-bottom:10px" onclick="caFixAll()">✅ صحّح الكل ('+A.length+')</button>':'<div style="font-size:11px;color:var(--muted);margin-bottom:8px">🔒 التصحيح للمالكة فقط</div>')+
     '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>الخدمة</th><th>عملة الحجز</th><th>عملة البيع</th><th>السعر الحالي</th><th>الصحيح</th><th>المبلغ الحالي</th><th>بعد التصحيح</th>'+(owner?'<th>إجراء</th>':'')+'</tr></thead><tbody>'+A.map(rowA).join('')+'</tbody></table></div></div>'; }
+  if(C.length){ h+='<div class="panel" style="border:2px solid #7c3aed;background:rgba(124,92,255,.05)"><h3 style="margin-top:0;color:#7c3aed">💱 عملة بيع الخدمة تخالف عملة حساب العميل — قابل للتصحيح ('+C.length+')</h3>'+
+    '<div style="font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:10px">الخدمة مسعّرة بعملة غير عملة حساب العميل في First Client Data (مثل خدمة بالريال السعودي وحساب العميل بالعماني). يحصل عند <b>تغيير عملة العميل بعد الإدخال</b> (لا يُعاد الحساب تلقائياً — حماية للبيانات القديمة). «صحّح للعميل» يحوّل المبلغ وعملة البيع لعملة العميل بضغطة — بلا مساس بالحجز الفعلي.</div>'+
+    (owner?'<button class="btn" style="background:#7c3aed;color:#fff;padding:6px 16px;margin-bottom:10px" onclick="caFixAll(\'C\')">✅ صحّح الكل للعميل ('+C.length+')</button>':'<div style="font-size:11px;color:var(--muted);margin-bottom:8px">🔒 التصحيح للمالكة فقط</div>')+
+    '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>الخدمة</th><th>عملة البيع الحالية</th><th>عملة حساب العميل</th><th>المبلغ الحالي</th><th>بعد التصحيح</th>'+(owner?'<th>إجراء</th>':'')+'</tr></thead><tbody>'+C.map(rowC).join('')+'</tbody></table></div></div>'; }
   if(B.length){ h+='<div class="panel" style="border:2px solid #d98a00;background:rgba(217,138,0,.06)"><h3 style="margin-top:0;color:#d98a00">🔎 عملة الحجز = عملة البيع لكن سعر الصرف ≠ 1 — مراجعة يدوية ('+B.length+')</h3>'+
     '<div style="font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:10px">إذا كانت عملة الحجز نفس عملة البيع فالمفروض سعر الصرف = 1. وجود سعر آخر يعني <b>عملة الحجز مسمّاة خطأً</b> (مثل تذاكر بالرينغيت مكتوبة USD). الصحيح غير معلوم آلياً — راجعي العملة الحقيقية للحجز ثم صحّحيها من Sales/Booking Form (كما فعلنا مع طيران C26506).</div>'+
     '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الكود</th><th>الخدمة</th><th>العملة</th><th>سعر الصرف</th><th>المبلغ</th><th>الملاحظة</th>'+(owner?'<th>إجراء</th>':'')+'</tr></thead><tbody>'+B.map(rowB).join('')+'</tbody></table></div></div>'; }
   box.innerHTML=h;
 }
-async function caFixRate(id,rate,amt,bc){ if(!(typeof isOwnerUser==='function'?isOwnerUser():true)){ alert('التصحيح للمالكة فقط'); return; }
-  if(!confirm('تصحيح سعر الصرف إلى '+rate+' والمبلغ إلى '+fmt(amt)+' '+bc+'؟\n(لا يتغيّر الحجز الفعلي ولا يُلمس أي رقم آخر)'))return;
-  try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_service_line',payload:{id:id,currency:bc,currency_rate:rate,amount:amt}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } await load(); }catch(e){ alert('خطأ: '+e.message); }
+async function caFixRate(id,rate,amt,bc,sc){ if(!(typeof isOwnerUser==='function'?isOwnerUser():true)){ alert('التصحيح للمالكة فقط'); return; }
+  const cur=sc||bc;
+  if(!confirm('تصحيح المبلغ إلى '+fmt(amt)+' '+cur+' (سعر '+rate+')؟\n(لا يتغيّر الحجز الفعلي ولا يُلمس أي رقم آخر)'))return;
+  const pay={id:id,currency:bc,currency_rate:rate,amount:amt}; if(sc)pay.sell_currency=sc;
+  try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_service_line',payload:pay})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } await load(); }catch(e){ alert('خطأ: '+e.message); }
 }
-async function caFixAll(){ if(!(typeof isOwnerUser==='function'?isOwnerUser():true)){ alert('التصحيح للمالكة فقط'); return; }
-  const ms=curMismatches().filter(m=>m.fixable); if(!ms.length)return;   // فئة (أ) فقط — التلقائية تعرف الصحيح
-  if(!confirm('تصحيح سعر الصرف لكل الخدمات ('+ms.length+') إلى عملة بيع كل عميل؟\nيُحدَّث سعر الصرف والمبلغ فقط — دون تغيير الحجز الفعلي (frb).'))return;
+async function caFixAll(catFilter){ if(!(typeof isOwnerUser==='function'?isOwnerUser():true)){ alert('التصحيح للمالكة فقط'); return; }
+  const cat=catFilter||'A';
+  const ms=curMismatches().filter(m=>m.fixable && m.cat===cat); if(!ms.length)return;
+  if(!confirm('تصحيح كل الخدمات ('+ms.length+') '+(cat==='C'?'إلى عملة حساب كل عميل':'لسعر الصرف الصحيح')+'؟\nيُحدَّث السعر والمبلغ'+(cat==='C'?' وعملة البيع':'')+' فقط — دون تغيير الحجز الفعلي (frb).'))return;
   let ok=0,fail=0;
-  for(const m of ms){ try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_service_line',payload:{id:m.id,currency:m.bc,currency_rate:m.exp,amount:m.newAmt}})}); const j=await r.json(); if(j.error)fail++; else ok++; }catch(e){ fail++; } }
+  for(const m of ms){ try{ const pay={id:m.id,currency:m.bookedCur,currency_rate:m.newRate,amount:m.newAmt}; if(m.cat==='C')pay.sell_currency=m.newSell; const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_service_line',payload:pay})}); const j=await r.json(); if(j.error)fail++; else ok++; }catch(e){ fail++; } }
   alert('✅ تم تصحيح '+ok+' خدمة'+(fail?(' · ⚠️ فشل '+fail):'')+'.'); await load();
 }
 function renderCurAudit(){
