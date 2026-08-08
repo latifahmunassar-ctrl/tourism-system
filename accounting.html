@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ف · كاشف العملة صار ٣ فئات: أ) سعر صرف خاطئ · ب) نفس العملة وسعر≠1 (يدوي) · ج «جديدة») عملة بيع الخدمة تخالف عملة حساب العميل (مثل خدمة SAR لعميل OMR بعد تغيير عملته) + زر «صحّح للعميل» بضغطة </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ص · Booking Form: «direct from supplier» يختفي نهائياً من charge from لحجوزات الطيران (حتى لو محفوظ مسبقاً) — يُترك فارغاً لاختيار بطاقة/بنك؛ الطيران يُدفع بالبطاقة</span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -1627,10 +1627,13 @@ function bRecall(){
     svcs.map(b=>{ const i=b.id; const st='style="width:80px;padding:3px 4px;background:#f6f8fc;border:1px solid var(--line);color:var(--txt);border-radius:6px;font-size:11px"';
       const inp=(f,v,num,extra)=>'<input id="sb-'+f+'-'+i+'" '+(num?'type="number"':'')+' value="'+esc(v!=null?v:'')+'" '+st+' '+(extra||'')+'>';
       const selInp=(f,v,cat)=>{ const cur=(v==null?'':String(v)); let vals=listValues(cat);
-        // ✈️ الطيران: خيارات «charge from» بطاقات وبنوك فقط — يُستبعَد «دفع مباشر للمورّد» (الطيران يُدفع بالبطاقة/البنك، فتُحتسب سحباً وتظهر بالمطابقة)
-        if(f==='cfrom' && typeof sIsFlight==='function' && sIsFlight(b.kind)){ vals=vals.filter(x=>!/direct|from\s*supplier|with\s*the\s*suppl|مباشر|المورّد|المورد/i.test(String(x.value||''))); }
+        // ✈️ الطيران: خيارات «charge from» بطاقات وبنوك فقط — يُستبعَد «دفع مباشر للمورّد» تماماً (الطيران يُدفع بالبطاقة/البنك، فتُحتسب سحباً وتظهر بالمطابقة)
+        const _flightDir=(f==='cfrom' && typeof sIsFlight==='function' && sIsFlight(b.kind));
+        const _isDir=x=>/direct|from\s*supplier|with\s*the\s*suppl|مباشر|المورّد|المورد/i.test(String(x||''));
+        if(_flightDir){ vals=vals.filter(x=>!_isDir(x.value)); }
         let o='<option value=""></option>'+vals.map(x=>'<option'+(x.value===cur?' selected':'')+'>'+esc(x.value)+'</option>').join('');
-        if(cur && !vals.some(x=>x.value===cur)) o+='<option selected>'+esc(cur)+'</option>';
+        // لا تُعِد إضافة القيمة المحفوظة إن كانت «مباشر من المورّد» لحجز طيران — تختفي نهائياً وتُترك الخانة فارغة لتختار بطاقة/بنك
+        if(cur && !vals.some(x=>x.value===cur) && !(_flightDir && _isDir(cur))) o+='<option selected>'+esc(cur)+'</option>';
         return '<select id="sb-'+f+'-'+i+'" '+st+'>'+o+'</select>'; };
       const rate=Number(b.currency_rate)||1;
       const sell=Number(b.amount)||0;                       // سعر البيع (ر.س)
