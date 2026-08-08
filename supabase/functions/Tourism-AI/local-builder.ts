@@ -193,6 +193,18 @@ function subAreaTokens(location: string): string[] {
   const STOP = new Set(["منطقه", "منطقة", "مدينه", "مدينة", "صلاله", "صلالة", "في", "فندق", "ال"]);
   return normalizeArabic(sub).split(/\s+/).filter(w => w && !STOP.has(w));
 }
+// أزواج المناطق الفرعية المتنافِسة داخل نفس المدينة (صلالة: هوانا ↔ وسط المدينة).
+// لإقامة داخل منطقة واحدة، الجولة التي تذكر المنطقة المقابلة (مثل «الانتقال من فندق
+// في هوانا الى فندق في وسط المدينه») ليست جولة يومية صحيحة — بل انتقال بين فندقين،
+// وكونها أرخص (330 مقابل 380) كانت تُنتقى بدل جولات هوانا الصافية. نستبعدها.
+const SUBAREA_OPPOSITE: Record<string, string> = { "هوانا": "وسط", "وسط": "هوانا" };
+// موقع اصطناعي من منطقة الطلب (subAreaByCity) لتفضيل الجولات/الانتقالات حين لا يوجد
+// فندق منتقى (برنامج «بدون فنادق»). subAreaTokens تحتاج صيغة موقع فندق (فاصلة + « - »)،
+// فتمرير «هوانا» وحدها يُعيد []. هذا يبني `x, هوانا -` فتخرج التوكنات صحيحة. بلا منطقة
+// يعيد "" فلا يتغيّر شيء (يسقط على السلوك الافتراضي).
+function areaHintFromSub(area: string | undefined): string {
+  return area ? `x, ${area} -` : "";
+}
 // يُبقي فقط الصفوف التي يحتوي اسمها أيّ كلمة منطقة (إن وُجدت مطابقات)؛ وإلا يُرجع
 // القائمة كما هي (احتياط: لا نُفرّغها لو ما فيه صف خاص بالمنطقة).
 function preferAreaMatch<T extends { name: string }>(rows: T[], tokens: string[]): T[] {
@@ -637,6 +649,19 @@ export function pickToursForCity(
       && _aTokens.some(tok => normalizeArabic(t.name).includes(tok)),
     );
     cityTours = preferAreaMatch(cityTours.concat(_areaExtra), _aTokens);
+    // استبعاد جولات المنطقة المنافِسة: صف «الانتقال من فندق في هوانا الى وسط المدينه»
+    // يحوي «هوانا» فيعبر فلتر المنطقة، وكونه أرخص (330) يُنتقى بدل جولة هوانا الصافية
+    // (380). لإقامة داخل منطقة واحدة نُسقط أي جولة تذكر المنطقة المقابلة لمنطقة الفندق
+    // — ما لم تُفرّغ القائمة (احتياط: نُبقيها حينها كما هي).
+    const _otherArea = new Set<string>();
+    for (const tok of _aTokens) { const opp = SUBAREA_OPPOSITE[tok]; if (opp) _otherArea.add(opp); }
+    if (_otherArea.size) {
+      const _pure = cityTours.filter(t => {
+        const n = normalizeArabic(t.name);
+        return ![..._otherArea].some(w => n.includes(w));
+      });
+      if (_pure.length) cityTours = _pure;
+    }
   }
 
   // Sort: paid sightseeing tours BEFORE "يوم حر" rows, then by price asc,
@@ -1147,6 +1172,7 @@ export type Day = {
   date: Date;              // date of this day
   fromCity?: string;        // for transit days
   toCity?: string;          // for transit days
+  area?: string;            // المنطقة الفرعية لإقامة هذا اليوم (صلالة: هوانا/وسط) لتسعير جولاتها
 };
 
 const ARABIC_MONTHS_OUT = [
@@ -1187,7 +1213,7 @@ export function arrangeDays(request: TripRequest): Day[] {
   const startDate = resolveStartDate(request);
 
   // Prefer the ordered list so repeated cities are kept as separate stays
-  const orderedStays: Array<{ city: string; nights: number }> =
+  const orderedStays: Array<{ city: string; nights: number; area?: string }> =
     request.cityStaysOrdered && request.cityStaysOrdered.length > 0
       ? request.cityStaysOrdered.filter(s => s.nights > 0)
       : (request.cities.length > 0 ? request.cities : Object.keys(request.nightsByCity))
@@ -1196,7 +1222,7 @@ export function arrangeDays(request: TripRequest): Day[] {
 
   let dayNum = 1;
   for (let i = 0; i < orderedStays.length; i++) {
-    const { city, nights } = orderedStays[i];
+    const { city, nights, area } = orderedStays[i];
 
     for (let n = 0; n < nights; n++) {
       const date = addDays(startDate, dayNum - 1);
@@ -1211,7 +1237,7 @@ export function arrangeDays(request: TripRequest): Day[] {
       } else {
         type = "stay";
       }
-      days.push({ number: dayNum, type, city, date, fromCity, toCity });
+      days.push({ number: dayNum, type, city, date, fromCity, toCity, area });
       dayNum++;
     }
   }
@@ -1238,7 +1264,7 @@ export type SelectedTour = { day: number; city: string; tour: TourRow };
 // kind defaults to "flight" when omitted; "train" routes are rendered with
 // the Arabic label "قطار" instead of "داخلي/دولي" in FLIGHTS section.
 export type SelectedFlight = { day: number; flight: FlightRow; kind?: "flight" | "train" };
-export type SelectedTransfer = { day: number; row: TourRow; kind: "Pickup" | "Drop" };
+export type SelectedTransfer = { day: number; row: TourRow; kind: "Pickup" | "Drop" | "Transfer" };
 
 export type ProgramData = {
   request: TripRequest;
@@ -1581,14 +1607,15 @@ export function formatProgram(data: ProgramData): string {
   const isAllScope = data.extraBedScope === "all";
   const scopeList = Array.isArray(data.extraBedScope) ? data.extraBedScope : [];
   const extraBedTotal = hotels.reduce((s, sh) => {
-    // صلالة: السرير الإضافي 150 ريال/ليلة لأي فندق (بأي تصنيف). غيرها: 4-5★ فقط (5★=120 / 4★=100).
+    // صلالة: السرير الإضافي 170 ريال/ليلة لأي فندق (بأي تصنيف) — عمود «Exra bed /Sofa Bed»
+    // في تبويب Oman بالشيت (4★=170 و5★=170، محدَّث 2026-08-08). غيرها: 4-5★ فقط (5★=120 / 4★=100).
     const isSalalah = sh.city === "Salalah";
     if (!isSalalah && (sh.hotel.stars < 4 || sh.hotel.stars > 5)) return s;
     const inScope = isAllScope
       || scopeList.includes(sh.city)
       || scopeList.some(c => sh.city.toLowerCase() === String(c).toLowerCase());
     if (!inScope) return s;
-    const nightly = isSalalah ? 150 : (sh.hotel.stars >= 5 ? 120 : 100);
+    const nightly = isSalalah ? 170 : (sh.hotel.stars >= 5 ? 120 : 100);
     return s + nightly * sh.nights;
   }, 0);
   const hotelsTotal = hotelsBase + extraBedTotal;
@@ -2244,18 +2271,42 @@ export async function buildLocalProgram(
     if (usedCities.has(city)) continue; // dedup repeated cities (e.g. Hanoi at start and end)
     usedCities.add(city);
     // Only pure "stay" days qualify for tours. Arrival/transit/departure are excluded.
-    const cityStayDays = days.filter(d => d.city === city && d.type === "stay");
-    const stayDayNumbers = cityStayDays.map(d => d.number);
-    if (stayDayNumbers.length === 0) continue;
+    const cityStayDays = days.filter(d => d.city === city && d.type === "stay")
+      .sort((a, b) => a.number - b.number);
+    if (cityStayDays.length === 0) continue;
     const cityMod = perCityMods.get(city);
-    // موقع فندق هذه المدينة → جولات المنطقة المطابقة (هوانا/وسط) بأسعارها الصحيحة.
-    const cityHotelLoc = hotelsList.find(h => h.city === city)?.hotel?.location || "";
+
+    // مقاطع المنطقة: أيام إقامة متتالية بنفس المنطقة الفرعية. مدينة بمنطقة واحدة
+    // (الغالبية) = مقطع واحد بسلوك سابق تماماً. صلالة «٣ هوانا + ٣ وسط» = مقطعان،
+    // كلٌّ يُسعَّر بجولات منطقته. الترتيب زمني فتُسنَد جولات كل منطقة لأيامها.
+    const segments: Array<{ area: string; dayNums: number[] }> = [];
+    for (const d of cityStayDays) {
+      const a = d.area || "";
+      const last = segments[segments.length - 1];
+      if (last && last.area === a) last.dayNums.push(d.number);
+      else segments.push({ area: a, dayNums: [d.number] });
+    }
+    const multiArea = segments.length > 1;
+    // فنادق هذه المدينة بترتيب الإقامة — لمطابقة كل مقطع بفندقه الفعلي فتتبع الجولاتُ
+    // موقعَ الفندق الحقيقي (حتى لو تدرّج لمنطقة أخرى لعدم توفّر الفئة المطلوبة).
+    const cityHotels = hotelsList.filter(h => h.city === city);
+
+    for (let si = 0; si < segments.length; si++) {
+    const seg = segments[si];
+    const stayDayNumbers = seg.dayNums;
+    // موقع فندق هذه الإقامة الفعلي → جولات المنطقة المطابقة (هوانا/وسط) بأسعارها
+    // الصحيحة؛ وبلا فندق (برنامج «بدون فنادق») يسقط على منطقة الطلب لهذا المقطع.
+    const cityHotelLoc = cityHotels[si]?.hotel?.location
+      || areaHintFromSub(seg.area || request.subAreaByCity?.[city]);
+    // «يوم حر» = آخر يوم في المدينة → المقطع الأخير فقط حتى لا يتكرّر عبر المقاطع.
+    const segFreeDayCount = (!multiArea || si === segments.length - 1)
+      ? (cityMod?.freeDayCount || 0) : 0;
     const { selected, available, deficit } = pickToursForCity(
       allTours, cityDefs, city, stayDayNumbers.length, request.adults || 2,
       {
         pinnedTours: cityMod?.pinnedTours,
         excludeNames: cityMod?.excludeNames,
-        freeDayCount: cityMod?.freeDayCount,
+        freeDayCount: segFreeDayCount,
         areaHint: cityHotelLoc,
         month: buildMonth,
       },
@@ -2302,6 +2353,7 @@ export async function buildLocalProgram(
         `في مدينة ${cityArabicNames[city] || city} عندنا ${available} جولة فقط:\n${list}\nلكن إقامتك ${stayDayNumbers.length} ليالي. يوجد ${deficit} يوم/أيام بدون جولة.`
       );
     }
+    }   // نهاية حلقة مقاطع المنطقة
   }
 
   // 3. FLIGHTS — for each transit day, find a flight to attach.
@@ -2421,7 +2473,8 @@ export async function buildLocalProgram(
   const dest = request.destination!;
   // Day 1 = international arrival → always airport pickup. مرّر منطقة فندق أول
   // إقامة فيُختار استقبال المنطقة المطابقة (هوانا 100 vs وسط 50).
-  const firstHotelLoc = hotelsList.find(h => h.city === firstCity)?.hotel?.location || "";
+  const firstHotelLoc = hotelsList.find(h => h.city === firstCity)?.hotel?.location
+    || areaHintFromSub(stayOrder[0]?.area || request.subAreaByCity?.[firstCity]);
   const arrPickup = findArrivalPickup(allTours, firstCity, dest, cityDefs, "airport", request.transport, firstHotelLoc);
   if (arrPickup) selectedTransfers.push({ day: 1, row: arrPickup, kind: "Pickup" });
   // Inter-city transit days. The pickup type for the destination city
@@ -2434,10 +2487,20 @@ export async function buildLocalProgram(
   };
   for (const d of days) {
     if (d.type === "transit" && d.fromCity && d.toCity) {
-      // Intra-city transit (Bali Kuta → Bali Seminyak): no airport drop, no
-      // pickup, no flight. The employee organizes the area-to-area ride on
-      // their own; the sheet usually doesn't model these moves at all.
-      if (d.fromCity === d.toCity) continue;
+      // Intra-city transit (نفس المدينة: تغيير فندق — موريشيوس ٥+٤، بالي كوتا→
+      // سيمنياك…): لا مطار ولا طيران. لو الشيت فيه صف انتقال «من فندق … إلى فندق
+      // آخر» لهذه الوجهة نضيفه بتكلفته الفعلية (كان يظهر «يوم حر» بصفر). التمييز:
+      // صف انتقال (isTransferTour) يذكر «فندق» مرتين — يستبعد جولات الشيت الأخرى
+      // (جولات صلالة «الانتقال … وعمل جوله» ليست transfer فتُستبعَد). وإلا نتخطّى.
+      if (d.fromCity === d.toCity) {
+        const h2h = allTours.filter(t =>
+          t.type === dest && isTransferTour(t.name)
+          && (normalizeArabic(t.name).match(/فندق/g) || []).length >= 2
+          && (request.transport !== "private" || !/مشترك[ةه]?|shared|ليموزين/iu.test(t.name)),
+        ).sort((a, b) => (parseFloat(String(a.price)) || 0) - (parseFloat(String(b.price)) || 0));
+        if (h2h.length) selectedTransfers.push({ day: d.number, row: h2h[0], kind: "Transfer" });
+        continue;
+      }
       const arrivalType = transitKind(d.number);
       const hasFlightThisLeg = selectedFlights.some(f => f.day === d.number);
       let fromAirportDrop = findInterCityTransfer(allTours, d.fromCity, d.toCity, dest, cityDefs, arrivalType, request.transport);
@@ -2547,7 +2610,9 @@ export async function buildLocalProgram(
     }
   }
   // Departure drop (last day) — uses the last STAY's city, not last unique
-  const lastHotelLoc = hotelsList.length ? hotelsList[hotelsList.length - 1].hotel.location : "";
+  const lastHotelLoc = hotelsList.length
+    ? hotelsList[hotelsList.length - 1].hotel.location
+    : areaHintFromSub(stayOrder[stayOrder.length - 1]?.area || request.subAreaByCity?.[lastCity]);
   const depDrop = findDepartureDrop(allTours, lastCity, dest, cityDefs, request.transport, lastHotelLoc);
   if (depDrop) {
     selectedTransfers.push({ day: days.length, row: depDrop, kind: "Drop" });
