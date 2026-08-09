@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ص · Booking Form: «direct from supplier» يختفي نهائياً من charge from لحجوزات الطيران (حتى لو محفوظ مسبقاً) — يُترك فارغاً لاختيار بطاقة/بنك؛ الطيران يُدفع بالبطاقة</span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ق · بحث المورّد صار مرناً: يتجاهل فروق المسافات/الأحرف ويقبل جزء الاسم — كان «YTS holiday» لا يطابق «YTS holiday  THailand tour» (مسافة مزدوجة) فيختفي الكشف كامل؛ الآن يظهر </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -5376,9 +5376,13 @@ function spSetCancel(v){ spFltCancel=v; renderSupplierDetail(); }
 function spClearFilters(){ spFltAgent=''; spFltCancel=''; renderSupplierDetail(); }
 function renderSupplierDetail(){
   const box=$('supplier-detail'); if(!box) return;
-  const sup=($('supflt').value||'').trim();
-  const allP=$('all-suppliers-panel'); if(allP) allP.style.display=sup?'none':'';  // أخفِ جدول كل الموردين عند اختيار مورّد
-  if(!sup){ box.innerHTML=''; return; }
+  const supRaw=($('supflt').value||'').trim();
+  const allP=$('all-suppliers-panel'); if(allP) allP.style.display=supRaw?'none':'';  // أخفِ جدول كل الموردين عند اختيار مورّد
+  if(!supRaw){ box.innerHTML=''; return; }
+  // 🔎 حلّ الاسم الحقيقي للمورّد — يعالج فروق المسافات/الأحرف عند الكتابة اليدوية (مثل المسافة المزدوجة في «YTS holiday  THailand tour») أو كتابة جزء من الاسم
+  const _nzn=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+  const _supNames=[...new Set(supInvAll().map(x=>x.supplier_name).filter(Boolean))];
+  const sup=_supNames.find(n=>_nzn(n)===_nzn(supRaw)) || _supNames.find(n=>supRaw.length>=3 && _nzn(n).indexOf(_nzn(supRaw))>=0) || supRaw;
   const list=supInvAll().filter(x=>(x.supplier_name||'')===sup);
   const pays=(DATA.supplierPayments||[]).filter(x=>(x.supplier_name||'')===sup);
   const clients=new Set(list.map(x=>x.client_code)).size;
