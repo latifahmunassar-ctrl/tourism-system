@@ -60,21 +60,50 @@ Deno.serve(async (req) => {
     if (!token) return json({ error: "لا يوجد توكن محفوظ لهذا الحساب" }, 400);
 
     // Instagram Send API: POST /me/messages بتوكن الحساب.
-    const sendRes = await fetch("https://graph.instagram.com/v23.0/me/messages", {
-      method: "POST",
-      headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
-      body: JSON.stringify({ recipient: { id: recipient }, message: { text } }),
-    });
-    const sendJson = await sendRes.json().catch(() => ({}));
+    // نحاول الإرسال العادي أولاً (داخل نافذة الـ ٢٤ ساعة). لو رفض إنستقرام
+    // بسبب انتهاء النافذة، نعيد المحاولة تلقائياً بوسم HUMAN_AGENT الذي يمدّ
+    // نافذة الرد إلى ٧ أيام للردود البشرية على استفسارات العملاء
+    // (يتطلب تفعيل ميزة Human Agent / صلاحية human_agent في تطبيق ميتا).
+    const IG_SEND_URL = "https://graph.instagram.com/v23.0/me/messages";
+    const igPost = async (humanAgent: boolean) => {
+      const payload: Record<string, unknown> = humanAgent
+        ? { recipient: { id: recipient }, message: { text }, messaging_type: "MESSAGE_TAG", tag: "HUMAN_AGENT" }
+        : { recipient: { id: recipient }, message: { text } };
+      const res = await fetch(IG_SEND_URL, {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const j = await res.json().catch(() => ({}));
+      return { res, j };
+    };
+    // هل الخطأ سببه خروج عن نافذة الرسائل المسموحة (٢٤ ساعة)؟
+    const isWindowErr = (e: any) =>
+      e?.code === 10 || /outside|window|allowed|24|two.?day|48/i.test(e?.message || "");
+
+    let sendRes: Response, sendJson: any;
+    let usedHumanAgent = false;
+    ({ res: sendRes, j: sendJson } = await igPost(false));
+    if (!sendRes.ok && isWindowErr(sendJson?.error || {})) {
+      // انتهت نافذة الـ ٢٤ ساعة — أعِد المحاولة بوسم Human Agent (حتى ٧ أيام).
+      usedHumanAgent = true;
+      ({ res: sendRes, j: sendJson } = await igPost(true));
+    }
     if (!sendRes.ok) {
       const err = sendJson?.error || {};
-      // خطأ نافذة الـ 24 ساعة (خارج نافذة الرسائل المسموحة).
-      const outside = err?.code === 10 || /24|outside|window|allowed/i.test(err?.message || "");
+      const emsg = String(err?.message || "");
+      // خطأ صلاحية Human Agent غير مفعّلة (يحتاج App Review / Advanced Access).
+      const permIssue = usedHumanAgent &&
+        /permission|human_agent|not have|approved|advanced access|standard access|#200|#10\b.*tag/i.test(emsg);
+      const outside = isWindowErr(err);
       return json({
-        error: outside
-          ? "انتهت نافذة الرد (٢٤ ساعة). لا يمكن الإرسال حتى يرسل العميل رسالة جديدة."
-          : ("تعذّر الإرسال: " + (err?.message || ("http " + sendRes.status))),
+        error: permIssue
+          ? ("ميزة Human Agent غير مفعّلة في تطبيق ميتا — فعّليها لتمديد الرد إلى ٧ أيام (" + emsg + ")")
+          : outside
+            ? "انتهت نافذة الرد (٧ أيام). لا يمكن الإرسال حتى يرسل العميل رسالة جديدة."
+            : ("تعذّر الإرسال: " + (emsg || ("http " + sendRes.status))),
         window_closed: outside,
+        needs_human_agent: permIssue,
       }, 400);
     }
 

@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20260809a -->
+<!-- APPVER:20260809b -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1828,7 +1828,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260809a";
+    const APPVER = "20260809b";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -2268,11 +2268,11 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
             + '<div class="meta">' + igFmt(m.created_at) + '</div>';
           bd.appendChild(row);
         }
-        // نافذة الـ ٢٤ ساعة: تحذير ليّن (إنستقرام يفرضها خادميّاً على أي حال).
-        if (lastInbound && (Date.now() - lastInbound > 24 * 3600 * 1000)) {
+        // نافذة الرد: مع وسم Human Agent تمتد إلى ٧ أيام (يفرضها إنستقرام خادميّاً).
+        if (lastInbound && (Date.now() - lastInbound > 7 * 24 * 3600 * 1000)) {
           const w = document.createElement("div");
           w.style.cssText = "background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;padding:9px 12px;font-size:12.5px;font-weight:700;margin:8px 0;";
-          w.textContent = "⏰ مرّت أكثر من ٢٤ ساعة على آخر رسالة من العميل — إنستقرام قد يمنع الإرسال حتى يرسل العميل من جديد.";
+          w.textContent = "⏰ مرّت أكثر من ٧ أيام على آخر رسالة من العميل — إنستقرام قد يمنع الإرسال حتى يرسل العميل من جديد.";
           bd.appendChild(w);
         }
         bd.scrollTop = bd.scrollHeight;
