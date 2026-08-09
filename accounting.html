@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ق · بحث المورّد صار مرناً: يتجاهل فروق المسافات/الأحرف ويقبل جزء الاسم — كان «YTS holiday» لا يطابق «YTS holiday  THailand tour» (مسافة مزدوجة) فيختفي الكشف كامل؛ الآن يظهر </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ك2 · First Client Data: عند اختيار البنك تظهر شاشة تنبيه صغيرة بعملة الحساب المعتمدة (روافي=السعودي · مسقط=العماني...) لتذكير الموظفة بإدخال القيمة بالعملة الصحيحة؛ تُغلقها وتكمل </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -296,7 +296,7 @@ table{font-weight:600}
           <div class="fld"><label>الكود (Code)</label><input id="e-agentcode"></div>
           <div class="fld"><label>country from <button type="button" onclick="mgrToggle('country_from','country from')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-from"></select></div>
           <div class="fld"><label>Travel To <button type="button" onclick="mgrToggle('travel_to','Travel To')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-to"></select></div>
-          <div class="fld"><label>Banks Name <span style="color:var(--red)">*</span> <button type="button" onclick="mgrToggle('banks','Banks Name')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-bank" onchange="bankCurAutoFill('e-bank','e-cur')"></select></div>
+          <div class="fld"><label>Banks Name <span style="color:var(--red)">*</span> <button type="button" onclick="mgrToggle('banks','Banks Name')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-bank" onchange="bankCurAutoFill('e-bank','e-cur');bankCurNudge('e-bank')"></select></div>
           <div class="fld"><label>the currency <button type="button" onclick="mgrToggle('currency','the currency')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-cur"></select></div>
           <div class="fld"><label>service Type <button type="button" onclick="mgrToggle('kinds','service Type')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-kind"></select></div>
           <div class="fld"><label>🧾 Service Type <span style="font-size:9px;color:var(--muted)">(تظهر في Sales Form فقط)</span> <button type="button" onclick="mgrToggle('sales_service_type','Service Type — Sales Form')" style="font-size:10px;padding:1px 6px;margin-right:4px;cursor:pointer;background:#eef2f8;border:1px solid var(--line);border-radius:6px;color:var(--accent)">⚙️ إدارة</button></label><select id="e-stype"></select></div>
@@ -781,7 +781,7 @@ table{font-weight:600}
       <div class="fld"><label>التكلفة / قيمة الخدمة</label><input type="number" id="fe-cost" oninput="feCalc()"></div>
       <div class="fld"><label>الربح</label><input type="number" id="fe-profit" oninput="feCalc()"></div>
       <div class="fld"><label>المبلغ المدفوع</label><input type="number" id="fe-paid" oninput="feCalc()"></div>
-      <div class="fld"><label>البنك</label><select id="fe-bank" onchange="if(this.value==='__other')this.nextElementSibling.style.display='flex';bankCurAutoFill('fe-bank','fe-cur')"></select></div>
+      <div class="fld"><label>البنك</label><select id="fe-bank" onchange="if(this.value==='__other')this.nextElementSibling.style.display='flex';bankCurAutoFill('fe-bank','fe-cur');bankCurNudge('fe-bank')"></select></div>
       <div class="fld"><label>مرجع البنك <span style="font-size:9px;color:#d98a00">إجباري لو فيه دفعة</span></label><input id="fe-ref"></div>
       <div class="fld"><label>📅 تاريخ الدفع</label><input type="date" id="fe-paydate" style="color-scheme:light;cursor:pointer"></div>
       <div class="fld"><label>👤 الموظف (Confirmed by) <span style="font-size:9px;color:var(--muted)">من القائمة</span></label><select id="fe-staff"></select></div>
@@ -3994,6 +3994,21 @@ function bankCurAssigned(b){ return bankCurOverride(b)||''; }
 function bankCurMismatch(bank,cur){ const b=String(bank||'').trim(); if(!b) return null; const bcur=bankCurAssigned(b); if(!bcur) return null; const c=String(cur||'').trim().toUpperCase(); if(c && c!==bcur) return {bank:b,bankCur:bcur,entered:c}; return null; }
 // تعبئة حقل العملة تلقائياً بعملة البنك المعتمدة عند اختيار البنك (يمنع الخطأ من الأساس)
 function bankCurAutoFill(bankSelId,curSelId){ const bs=$(bankSelId), cs=$(curSelId); if(!bs||!cs) return; const bcur=bankCurAssigned(bs.value||''); if(!bcur) return; if(![...cs.options].some(o=>String(o.value)===bcur)){ const o=document.createElement('option'); o.value=bcur; o.text=bcur; cs.add(o); } cs.value=bcur; }
+// 🏦 تنبيه صغير عند اختيار البنك: يذكّر بعملة الحساب المعتمدة (مثل روافي=السعودي · مسقط=العماني) — تُغلقه الموظفة وتكمل بسلاسة
+const CUR_AR={SAR:'الريال السعودي',OMR:'الريال العماني',USD:'الدولار الأمريكي',MYR:'الرينغيت الماليزي',AED:'الدرهم الإماراتي',EUR:'اليورو',SGD:'الدولار السنغافوري',GBP:'الجنيه الإسترليني',THB:'الباهت التايلندي'};
+function bankCurNudge(bankSelId){ const bs=$(bankSelId); if(!bs) return; const bank=(bs.value||'').trim(); if(!bank||bank==='__other') return;
+  const cur=(typeof bankCurAssigned==='function')?bankCurAssigned(bank):''; if(!cur) return;   // بنك بلا عملة معتمدة (كاش/مرجعي) → بلا تنبيه
+  const arName=CUR_AR[cur]||cur; const old=document.getElementById('bankcur-nudge'); if(old)old.remove();
+  const ov=document.createElement('div'); ov.id='bankcur-nudge'; ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100000;display:flex;align-items:center;justify-content:center';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;padding:22px 26px;max-width:370px;text-align:center;box-shadow:0 12px 44px rgba(0,0,0,.32);border-top:5px solid #0e7c50">'+
+    '<div style="font-size:34px;margin-bottom:4px">🏦</div>'+
+    '<div style="font-size:15px;font-weight:800;color:#0e7c50;margin-bottom:8px">حساب «'+esc(bank)+'»</div>'+
+    '<div style="font-size:14px;line-height:2;color:#222">هذا الحساب بعملة <b style="color:#0e7c50;font-size:17px">'+esc(arName)+'</b> ('+esc(cur)+')<br>✅ تأكّدي من إدخال القيمة بالـ<b>'+esc(arName)+'</b></div>'+
+    '<button id="bankcur-nudge-ok" style="margin-top:16px;background:#0e7c50;color:#fff;border:0;border-radius:22px;padding:9px 34px;font-size:14px;font-weight:700;cursor:pointer">تمام ✓</button>'+
+    '</div>';
+  ov.onclick=e=>{ if(e.target===ov)ov.remove(); }; document.body.appendChild(ov);
+  const okb=document.getElementById('bankcur-nudge-ok'); if(okb){ okb.onclick=()=>ov.remove(); okb.focus(); }
+}
 function renderBankCurPanel(){ const box=$('bank-cur-panel'); if(!box) return;
   const banks=[...new Set(listValues('banks').map(v=>String(v.value||'').trim()).filter(Boolean))].sort((a,b)=>String(a).localeCompare(b,'ar'));
   const CURS=['OMR','SAR','USD','MYR','AED','EUR','SGD','GBP'];
