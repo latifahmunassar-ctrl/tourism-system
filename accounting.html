@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ك2 · First Client Data: عند اختيار البنك تظهر شاشة تنبيه صغيرة بعملة الحساب المعتمدة (روافي=السعودي · مسقط=العماني...) لتذكير الموظفة بإدخال القيمة بالعملة الصحيحة؛ تُغلقها وتكمل </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ك3 · كاشف تباين البنك (منع تكرار مشكلة KYRIAD): ينبّه أعلى تبويب البنوك لأي دفعة على بنك يخالف حركتها البنكية + زر «صحّح» ينقل الحركة لبنك الدفعة الصحيح تلقائياً </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -673,6 +673,7 @@ table{font-weight:600}
     </div>
 
     <div class="page" id="p-banks">
+      <div id="bank-paydesync"></div>
       <div id="bank-cur-panel"></div>
       <div class="panel" style="margin-bottom:14px;border:1px solid var(--accent)">
         <h3 style="margin-top:0">🔍 مطابقة كشف الحساب البنكي <span style="font-size:11px;color:var(--muted);font-weight:400">— ارفعي كشف البنك الأصلي ويقارنه النظام بحركاتك</span></h3>
@@ -4009,6 +4010,27 @@ function bankCurNudge(bankSelId){ const bs=$(bankSelId); if(!bs) return; const b
   ov.onclick=e=>{ if(e.target===ov)ov.remove(); }; document.body.appendChild(ov);
   const okb=document.getElementById('bankcur-nudge-ok'); if(okb){ okb.onclick=()=>ov.remove(); okb.focus(); }
 }
+// 🛡️ كاشف تباين البنك: حركة بنكية مصدرها دفعة مورّد، لكن بنك الحركة ≠ بنك الدفعة (يحصل لو عُدّل بنك الدفعة ولم تنتقل حركتها) — يمنع تكرار مشكلة KYRIAD
+function bankPayDesync(){ const out=[]; const nz=s=>String(s||'').toLowerCase().replace(/[^a-z0-9؀-ۿ]/g,'');
+  (DATA.bankTx||[]).forEach(bt=>{ if(bt.source!=='dashboard')return; const note=String(bt.note||''); if(!/دفعة|توزيع/.test(note))return;
+    const amt=Number(bt.amount_out||0)||Number(bt.amount_in||0); if(!(amt>0.005))return; const ref=String(bt.bank_ref||'').trim();
+    const sp=(DATA.supplierPayments||[]).find(p=>Math.abs(Math.abs(Number(p.amount||0))-amt)<0.01 && String(p.bank_ref||'').trim()===ref && nz(note).indexOf(nz(p.supplier_name))>=0);
+    if(sp && nz(sp.bank_name)!==nz(bt.bank_name)){ out.push({txnId:bt.id, txnBank:bt.bank_name||'', payBank:sp.bank_name||'', amt, supplier:sp.supplier_name||'', date:String(bt.tx_date||'').slice(0,10)}); }
+  });
+  return out;
+}
+function renderBankPayDesync(){ const box=$('bank-paydesync'); if(!box) return; const ds=bankPayDesync();
+  if(!ds.length){ box.innerHTML=''; return; } const owner=(typeof isOwnerUser==='function')?isOwnerUser():true;
+  box.innerHTML='<div class="panel" style="border:2px solid #d11;background:rgba(209,17,17,.06);margin-bottom:12px"><h3 style="margin-top:0;color:#d11">🛡️ تباين بنك: دفعة على بنك ≠ حركتها البنكية ('+ds.length+')</h3>'+
+    '<div style="font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:10px">هذي الحركة سُجّلت دفعتها على بنك، لكن حركتها البنكية على بنك آخر (غالباً عُدّل بنك الدفعة ولم تنتقل الحركة معها) — فتظهر «غير مطابقة» في كشف البنك الخطأ. «صحّح» ينقل الحركة لبنك الدفعة الصحيح.</div>'+
+    '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>المبلغ</th><th>المورّد/الفندق</th><th>بنك الحركة (الحالي)</th><th>بنك الدفعة (الصحيح)</th><th>التاريخ</th>'+(owner?'<th>إجراء</th>':'')+'</tr></thead><tbody>'+
+    ds.map(x=>'<tr><td class="num" style="font-weight:700">'+fmt(x.amt)+'</td><td>'+esc(x.supplier)+'</td><td style="color:#d11;font-weight:700">'+esc(x.txnBank)+'</td><td style="color:#0e9d6a;font-weight:700">'+esc(x.payBank)+'</td><td>'+esc(x.date||'—')+'</td>'+(owner?'<td><button class="btn ghost" style="padding:2px 10px;font-size:11px;color:#0e9d6a;border-color:#0e9d6a" onclick="fixBankTxnBank('+x.txnId+',\''+esc(x.payBank)+'\')">✔️ صحّح</button></td>':'')+'</tr>').join('')+
+    '</tbody></table></div></div>';
+}
+async function fixBankTxnBank(txnId,bank){ if(!(typeof isOwnerUser==='function'?isOwnerUser():true)){ alert('التصحيح للمالكة فقط'); return; }
+  if(!confirm('نقل الحركة البنكية إلى «'+bank+'» (بنك الدفعة الصحيح)؟'))return;
+  try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_bank_txn_bank',payload:{id:txnId,bank_name:bank}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } toast('✅ نُقلت الحركة لبنك الدفعة'); await load(); }catch(e){ alert('خطأ: '+e.message); }
+}
 function renderBankCurPanel(){ const box=$('bank-cur-panel'); if(!box) return;
   const banks=[...new Set(listValues('banks').map(v=>String(v.value||'').trim()).filter(Boolean))].sort((a,b)=>String(a).localeCompare(b,'ar'));
   const CURS=['OMR','SAR','USD','MYR','AED','EUR','SGD','GBP'];
@@ -4718,6 +4740,7 @@ function bankAlias(name){ const nm=String(name||'').trim(); if(!nm)return nm;
   return nm; }
 function renderBanks(){
   try{ renderBankCurPanel(); }catch(_){}
+  try{ renderBankPayDesync(); }catch(_){}
   fillReconBanks();
   renderReconSaved(); loadReconList().then(renderReconSaved);
   if(!DATA) return;
