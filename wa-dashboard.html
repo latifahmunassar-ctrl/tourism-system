@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20260730b -->
+<!-- APPVER:20260809a -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1828,7 +1828,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260730b";
+    const APPVER = "20260809a";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -2331,35 +2331,44 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     function igOpenFromMain(account, sender, title) {
       igOpenThread(account, sender, title);   // نافذة منبثقة فوق نفس الصفحة — بلا تنقّل
     }
-    function igInjectRows() {
-      const list = document.getElementById("conversations-list");
-      if (!list) return;
-      const old = document.getElementById("ig-injected");
-      if (old) old.remove();
-      if (!igConvCache.length) return;
-      if (document.body.classList.contains("monitor-mode")) return;
-      const wrap = document.createElement("div");
-      wrap.id = "ig-injected";
-      let html = '<div style="font-weight:900;font-size:12.5px;color:#7c3aed;margin:2px 0 8px;">📷 وارد من إنستقرام</div>';
-      for (const c of igConvCache) {
-        html += '<div class="ig-main-row" role="button" tabindex="0"'
-          + ' data-account="' + igEsc(c.ig_account_id) + '" data-sender="' + igEsc(c.sender_igsid) + '"'
-          + ' data-title="' + igEsc(igFlag(c.country) + " " + (c.username || "")) + '"'
-          + ' style="border:1px solid #e9d5ff;border-inline-start:4px solid #a855f7;border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:pointer;background:#faf5ff;">'
-          + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">'
-          + '<span style="font-weight:800;font-size:11.5px;background:#f3e8ff;color:#6b21a8;padding:2px 9px;border-radius:999px;">📷 وارد إنستقرام ' + igEsc(igFlag(c.country)) + '</span>'
-          + '<span style="color:var(--muted);font-size:11px;">' + igFmt(c.last_at) + '</span></div>'
-          + '<div style="font-weight:800;font-size:13px;margin-top:5px;">' + igEsc(c.username || "") + ' · ' + igEsc(c.sender_igsid) + '</div>'
-          + '<div style="color:#444;font-size:13px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + igEsc(c.last_text || "") + '</div>'
-          + '</div>';
-      }
-      wrap.innerHTML = html;
-      list.insertBefore(wrap, list.firstChild);
-      wrap.querySelectorAll(".ig-main-row").forEach(el => {
+    // HTML صف محادثة إنستقرام واحد — يُدمَج داخل قائمة الواتساب نفسها
+    // (مرتّبة بالوقت مع الواتساب، بلا قسم منفصل). يحمل data-ig-ts للترتيب.
+    function igRowHtml(c) {
+      const ts = c.last_at ? new Date(c.last_at).getTime() : 0;
+      return '<div class="ig-main-row" role="button" tabindex="0" data-ig-ts="' + ts + '"'
+        + ' data-account="' + igEsc(c.ig_account_id) + '" data-sender="' + igEsc(c.sender_igsid) + '"'
+        + ' data-title="' + igEsc(igFlag(c.country) + " " + (c.username || "")) + '"'
+        + ' style="border:1px solid #e9d5ff;border-inline-start:4px solid #a855f7;border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:pointer;background:#faf5ff;">'
+        + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">'
+        + '<span style="font-weight:800;font-size:11.5px;background:#f3e8ff;color:#6b21a8;padding:2px 9px;border-radius:999px;">📷 إنستقرام ' + igEsc(igFlag(c.country)) + '</span>'
+        + '<span style="color:var(--muted);font-size:11px;">🕐 ' + igFmt(c.last_at) + '</span></div>'
+        + '<div style="font-weight:800;font-size:13px;margin-top:5px;">' + igEsc(c.username || "") + ' · ' + igEsc(c.sender_igsid) + '</div>'
+        + '<div style="color:#444;font-size:13px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + igEsc(c.last_text || "") + '</div>'
+        + '</div>';
+    }
+    // ربط النقر على صفوف إنستقرام داخل أي حاوية (بعد رسم القائمة المدموجة).
+    function bindIgRows(scope) {
+      (scope || document).querySelectorAll(".ig-main-row").forEach(el => {
+        if (el._igBound) return; el._igBound = true;
         const open = () => igOpenFromMain(el.dataset.account, el.dataset.sender, el.dataset.title);
         el.addEventListener("click", open);
         el.addEventListener("keydown", ev => { if (ev.key === "Enter") open(); });
       });
+    }
+    // صفوف إنستقرام الجاهزة للدمج ({t, html}) — تُستثنى في وضع المراقبة.
+    function igMergeRows() {
+      if (!igConvCache.length) return [];
+      if (document.body.classList.contains("monitor-mode")) return [];
+      return igConvCache.map(c => ({
+        t: c.last_at ? new Date(c.last_at).getTime() : 0,
+        ig: true,
+        html: igRowHtml(c),
+      }));
+    }
+    // بعد وصول محادثات إنستقرام في الخلفية: أعِد رسم القائمة المدموجة.
+    function igInjectRows() {
+      if (Array.isArray(conversationsCache)) applyConversationsFilter();
+      else renderConversationRows([]);
     }
 
     document.addEventListener("click", e => {
@@ -3447,6 +3456,13 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       const list = $("conversations-list");
       $("c-badge").textContent = arr.length;
       if (!arr.length) {
+        // لا محادثات واتساب مطابقة — لكن قد توجد محادثات إنستقرام تُعرض وحدها.
+        const igOnly = igMergeRows();
+        if (igOnly.length) {
+          list.innerHTML = igOnly.sort((a, b) => b.t - a.t).map(r => r.html).join("");
+          bindIgRows(list);
+          return;
+        }
         if (document.body.classList.contains("monitor-mode")) {
           list.innerHTML = '<div class="empty">ولا محادثة عليها شكوى</div>';
         } else {
@@ -3456,10 +3472,9 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
             : '<div class="empty">ما في محادثات مطابقة للفلاتر</div>';
           list.innerHTML = rangeHint;
         }
-        igInjectRows();   // صفوف إنستقرام تظهر حتى لو ما في محادثات واتساب مطابقة
         return;
       }
-      list.innerHTML = arr.map((c) => {
+      const waRows = arr.map((c) => {
         const ph = fmtPhone(c.phone);
         const inherit = c.ai_enabled === null || c.ai_enabled === undefined;
         // Effective state: force flags trump everything; otherwise explicit
@@ -3558,7 +3573,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         const assignedLine = c.assigned_staff_phone
           ? `<span class="conv-assigned">👤 المسؤول: ${escapeHtml(staffNameFor(c.assigned_staff_phone))}${c.assigned_by ? " (" + escapeHtml(c.assigned_by === "auto" ? "تلقائي" : "نقل") + ")" : ""}</span>`
           : `<span class="conv-assigned unassigned">👤 غير معيّن — يحتاج تخصيص موظف</span>`;
-        return `
+        const _rowHtml = `
           <div class="row${urgentRow}${stateRow}" data-phone="${escapeHtml(c.phone)}">
             <div class="label conv-clickable" data-action="open-conv" data-phone="${escapeHtml(c.phone)}" data-name="${escapeHtml(c.profile_name || ph)}">
               <span class="dot ${dotCls}"></span>
@@ -3578,7 +3593,13 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
               <button class="toggle-btn inherit" data-action="reset" data-phone="${escapeHtml(c.phone)}" title="استخدم الإعداد العام" style="min-width:auto;padding:6px 10px">↺</button>
             </div>
           </div>`;
-      }).join("");
+        return { t: c.last_message_at ? new Date(c.last_message_at).getTime() : 0, ig: false, html: _rowHtml };
+      });
+      // دمج صفوف الواتساب مع إنستقرام في قائمة واحدة مرتّبة بالوقت (الأحدث فوق)،
+      // بلا تقسيم — أي رسالة جديدة (واتساب أو إنستقرام) ترجع فوق تلقائياً.
+      const merged = waRows.concat(igMergeRows()).sort((a, b) => b.t - a.t);
+      list.innerHTML = merged.map(r => r.html).join("");
+      bindIgRows(list);
       // Bind toggle buttons
       list.querySelectorAll("[data-action=toggle]").forEach((b) => {
         b.addEventListener("click", (e) => { e.stopPropagation(); toggleConversation(b.dataset.phone, b.dataset.current, b); });
@@ -3597,7 +3618,6 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         el.addEventListener("mouseenter", () => prefetchConversation(el.dataset.phone));
         el.addEventListener("touchstart", () => prefetchConversation(el.dataset.phone), { passive: true });
       });
-      igInjectRows();   // صفوف إنستقرام أعلى قائمة الواتساب (بعد كل رسم)
     }
 
     async function toggleConversation(phone, current, btn) {
