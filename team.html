@@ -2249,7 +2249,9 @@ function computeTransferTourLineTotal(parts, meta, tagLabel) {
         if (nm && nm.length) t = parseInt(nm[nm.length - 1].replace(/[^\d]/g, ''), 10) || 0;
       }
     }
-    if (!(t > 0)) warns.push(`${tagLabel}: لم يُفسَر سعر السطر — تأكد من الإجمالي أو صيغة 6 أعمدة (سعر | أشخاص | إجمالي).`);
+    // «اليوم الحر» سعره صفر بشكل طبيعي — لا نُنبّه عليه كسطر بلا سعر.
+    const isFreeDay = /\bحر\b|يوم\s*حر|free/i.test(String(p[2] || '')) || /يوم\s*حر/.test(String(p[1] || ''));
+    if (!(t > 0) && !isFreeDay) warns.push(`${tagLabel}: لم يُفسَر سعر السطر — تأكد من الإجمالي أو صيغة 6 أعمدة (سعر | أشخاص | إجمالي).`);
     return { total: t, warns };
   };
 
