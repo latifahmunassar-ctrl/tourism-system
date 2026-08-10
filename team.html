@@ -2134,11 +2134,26 @@ function isHomewardAirportFarewellTransfer(transferLine) {
 }
 
 function finalHomewardFarewellDay(transfersLines) {
+  // يوم آخر استقبال (Pickup) في البرنامج: وصول لمدينة جديدة = الرحلة مستمرة.
+  // انتقال «Drop» بصياغة «العودة للديار» يقع في نفس يوم استقبال لاحق أو قبله
+  // هو في الحقيقة نقلة طيران داخلية (يغادر مدينة → يصل مدينة أخرى) وليس نهاية
+  // البرنامج — مثال بانكوك→كوه ساموي حيث سطر التوصيل مكتوب «العودة بالسلامة».
+  // بدون هذا الاستثناء كانت كل جولات المدينة التالية تُحذف بالخطأ.
+  let lastPickupDay = 0;
+  for (const l of transfersLines) {
+    const p = l.split('|').map(x => String(x ?? '').trim());
+    if (String(p[2] || '').toLowerCase().includes('pickup')) {
+      lastPickupDay = Math.max(lastPickupDay, parseTransferDayNum(p[0]));
+    }
+  }
   let maxD = 0;
   for (const l of transfersLines) {
     if (!isHomewardAirportFarewellTransfer(l)) continue;
     const p = l.split('|').map(x => String(x ?? '').trim());
-    maxD = Math.max(maxD, parseTransferDayNum(p[0]));
+    const d = parseTransferDayNum(p[0]);
+    // يتبعه (أو يزامنه) استقبال في مدينة ⇒ نقلة داخلية لا توديع نهائي ⇒ تجاهله.
+    if (d <= lastPickupDay) continue;
+    maxD = Math.max(maxD, d);
   }
   return maxD;
 }
