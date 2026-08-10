@@ -90,7 +90,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Krabi",        pattern: /كرابي|krabi/i },
     { canonical: "Chiang Mai",   pattern: /شيان[جغ]?\s*ماي|شانغماي|chiang\s*mai|chiangmai/i },
     { canonical: "Pattaya",      pattern: /با?تايا|pattaya/i },
-    { canonical: "Koh Samui",    pattern: /كو\s*سا?\s*موي|كوسوموي|كوسموي|كوه?\s*ساموي|koh?\s*samui|kohsamui|samui/i },
+    { canonical: "Koh Samui",    pattern: /كو\s*سا?\s*موي|كوسوموي|كوسموي|كوه?\s*ساموي|ساموي|koh?\s*samui|kohsamui|samui/i },
   ],
   Turky: [
     { canonical: "Istanbul",   pattern: /اسطنبول|إسطنبول|إستانبول|istanbul|آيا\s*صوفيا|البازار|تقسيم|taksim|اورتاكوي|اميرجان|اولوس\s*بار|ال[أا]ميرات|الفيالاند|فيالاند|vialand|فينيسيا|venezia/i },
@@ -357,6 +357,80 @@ function buildTripContextFromProgram(programText: string): string | null {
   const cityPart = cityStays.map(s => `${s.nights} ${s.city}`).join(" + ");
   const monthPart = month ? ` ${month}` : "";
   return `${days} ايام ${dest} ${cityPart} ل ${adults} شخص${monthPart}`;
+}
+
+/**
+ * Distribution-change follow-up rewrite.
+ *
+ * The employee reshapes an already-built program by typing a NEW city/nights
+ * split in chat (e.g. "٢ بانكوك ٤ كوساموي"). On its own that message carries
+ * no trip-length or "مع جولات" context, so the build path returns an empty
+ * clarification with ZERO tours (the exact bug the owner hit). We splice the
+ * new split into the ORIGINAL full-build message — preserving days, stars,
+ * transport, tours, SIM and date — and let the caller rebuild from that, so
+ * it behaves exactly like pressing "build" in the form with the new split.
+ *
+ * Returns the rewritten request text, or null when the latest message is NOT
+ * a bare multi-city distribution edit (a real modification, a full new build,
+ * or anything unrelated) — in which case the normal path handles it untouched.
+ */
+function rewriteDistributionEdit(
+  messages: Array<{ role: string; content: unknown }>,
+  lastProgram: string | null,
+  cityDefs: Array<{ canonical: string; pattern: RegExp }>,
+  arabicName: Record<string, string>,
+): string | null {
+  if (!lastProgram) return null;
+  const userMsgs = messages
+    .filter(m => m.role === "user")
+    .map(m => typeof m.content === "string" ? m.content : "");
+  if (userMsgs.length < 2) return null; // need a prior build AND this edit
+  const a2l = (s: string) => String(s || "").replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)));
+  const dayRe = /(\d{1,2})\s*(?:يوم|أيام|ايام|days?)/i;
+  const parsePairs = (txt: string) => {
+    const out: Array<{ canonical: string; nights: number; idx: number; len: number }> = [];
+    for (const def of cityDefs) {
+      const cp = def.pattern.source;
+      const re = new RegExp(
+        `(?:(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتهى]?|ليلتين|ليه|نايت|night)?\\s*(?:${cp}))` +
+        `|(?:(?:${cp})\\s*(?:=|:|-|بـ|في|عن|لمدة|ل)?\\s*(\\d{1,2})\\s*(?:ليال[يى]?|ليل[ةتهى]?|نايت|night))`,
+        "ig",
+      );
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(txt)) !== null) {
+        const n = parseInt(m[1] || m[2] || "0", 10);
+        if (n > 0 && n <= 30) out.push({ canonical: def.canonical, nights: n, idx: m.index, len: m[0].length });
+        if (m.index === re.lastIndex) re.lastIndex++;
+      }
+    }
+    return out.sort((a, b) => a.idx - b.idx);
+  };
+  const lastN = a2l(userMsgs[userMsgs.length - 1]);
+  if (dayRe.test(lastN)) return null; // already a full build → normal path
+  const newPairs = parsePairs(lastN);
+  // Require a genuine multi-city split so we never hijack a single-city tweak
+  // ("غير فندق بانكوك") or a partial one-city night change (ambiguous total).
+  if (newPairs.length < 2) return null;
+  // Original full-build message = most recent PRIOR message with a day signal.
+  let orig = "";
+  for (let i = userMsgs.length - 2; i >= 0; i--) {
+    if (dayRe.test(a2l(userMsgs[i]))) { orig = a2l(userMsgs[i]); break; }
+  }
+  if (!orig) return null;
+  // Strip the OLD distribution pairs from the original, right-to-left so the
+  // indices stay valid, then tidy the leftover separators.
+  const oldPairs = parsePairs(orig);
+  let stripped = orig;
+  for (const p of [...oldPairs].sort((a, b) => b.idx - a.idx)) {
+    stripped = stripped.slice(0, p.idx) + stripped.slice(p.idx + p.len);
+  }
+  stripped = stripped
+    .replace(/،\s*(?=،)/g, "")
+    .replace(/،\s*،+/g, "، ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  const newDist = newPairs.map(p => `${p.nights} ${arabicName[p.canonical] || p.canonical}`).join("، ");
+  return dayRe.test(stripped) ? stripped.replace(dayRe, `$1، ${newDist}`) : `${stripped}، ${newDist}`;
 }
 
 /**
@@ -969,7 +1043,7 @@ async function buildDataContext(
       [/بوكيت|phuket|بوكت/i,                             "Phuket"],
       [/شانغماي|شيانغ\s*ماي|شانج\s*ماي|chiang\s*mai|chiangmai/i, "Chiang Mai"],
       [/بتايا|باتايا|pattaya/i,                          "Pattaya"],
-      [/كو\s*سا?\s*موي|كوسوموي|كوسموي|كوه?\s*ساموي|koh?\s*samui|kohsamui|samui/i, "Koh Samui"],
+      [/كو\s*سا?\s*موي|كوسوموي|كوسموي|كوه?\s*ساموي|ساموي|koh?\s*samui|kohsamui|samui/i, "Koh Samui"],
       // Malaysia
       // Selangor first — أكثر تخصيصاً (Sunway و مدينة الألعاب السنوية ومعامل العسل
       // كلها في Selangor، وليست في KL رغم القرب الجغرافي)
@@ -2792,27 +2866,6 @@ Deno.serve(async (req) => {
     // Claude either.
     if (detectedDest && DEST_CITIES[detectedDest]) {
       const cityDefs = DEST_CITIES[detectedDest];
-      let tripRequest = parseTripRequest(messages, cityDefs);
-      // Fallback: if the joined user-text doesn't have a recognized trip
-      // signal (e.g., user wrote "ليالي" not "أيام", or used Arabic-Indic
-      // digits the joinMessages filter doesn't normalize) BUT we have a
-      // built program in history, reconstruct trip details from the program
-      // and re-parse. This is what makes tour-modification follow-ups work
-      // even when the original phrasing was off-pattern.
-      if (!canBuildLocally(tripRequest) && lastAssistantProgram) {
-        const synthCtx = buildTripContextFromProgram(lastAssistantProgram);
-        if (synthCtx) {
-          // Parse against synth + ONLY the latest user message. Including
-          // earlier user messages would double-count cities/nights — the
-          // synth already restates everything from the program.
-          const lastUser = messages[messages.length - 1];
-          const synthMessages: Array<{ role: string; content: unknown }> = [
-            { role: "user", content: synthCtx },
-            ...(lastUser?.role === "user" ? [lastUser] : []),
-          ];
-          tripRequest = parseTripRequest(synthMessages, cityDefs);
-        }
-      }
       const cityArabicNames: Record<string, string> = {
         "Ha Noi": "هانوي", "Sapa": "سابا", "Ha Long": "هالونج",
         "Da Nang": "دانانج", "Phu Quoc": "فوكوك", "Ho Chi Minh": "هوتشي مينه",
@@ -2827,6 +2880,35 @@ Deno.serve(async (req) => {
         "Sarajevo": "سراييفو", "Mostar": "موستار", "Bihać": "بيهاتش",
         "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
       };
+      // Distribution-change follow-up: employee typed a NEW city/nights split
+      // in chat to reshape an existing program (e.g. "٢ بانكوك ٤ كوساموي").
+      // Splice it into the original full request so days/stars/transport/
+      // tours/SIM/date carry over, then build fresh — like pressing "build".
+      const distEditRewrite = rewriteDistributionEdit(messages, lastAssistantProgram, cityDefs, cityArabicNames);
+      let tripRequest = distEditRewrite
+        ? parseTripRequest([{ role: "user", content: distEditRewrite }], cityDefs)
+        : parseTripRequest(messages, cityDefs);
+      // Fallback: if the joined user-text doesn't have a recognized trip
+      // signal (e.g., user wrote "ليالي" not "أيام", or used Arabic-Indic
+      // digits the joinMessages filter doesn't normalize) BUT we have a
+      // built program in history, reconstruct trip details from the program
+      // and re-parse. This is what makes tour-modification follow-ups work
+      // even when the original phrasing was off-pattern. Skip it when a
+      // distribution edit already produced a complete request.
+      if (!canBuildLocally(tripRequest) && lastAssistantProgram && !distEditRewrite) {
+        const synthCtx = buildTripContextFromProgram(lastAssistantProgram);
+        if (synthCtx) {
+          // Parse against synth + ONLY the latest user message. Including
+          // earlier user messages would double-count cities/nights — the
+          // synth already restates everything from the program.
+          const lastUser = messages[messages.length - 1];
+          const synthMessages: Array<{ role: string; content: unknown }> = [
+            { role: "user", content: synthCtx },
+            ...(lastUser?.role === "user" ? [lastUser] : []),
+          ];
+          tripRequest = parseTripRequest(synthMessages, cityDefs);
+        }
+      }
       const destAr: Record<string, string> = {
         vietnam: "فيتنام", Malaysia: "ماليزيا", thailand: "تايلاند",
         Turky: "تركيا", russia: "روسيا", Bosnia: "البوسنة", indonesia: "إندونيسيا",
@@ -3073,11 +3155,14 @@ Deno.serve(async (req) => {
               };
             },
             cityArabicNames,
-            collectHotelHistoryByCity(messages, cityDefs),
+            // A distribution-edit rebuild is a FRESH build (like the form's
+            // "build" button) — no hotel-history exclusions from the old split.
+            distEditRewrite ? collectHotelHistoryByCity([], cityDefs) : collectHotelHistoryByCity(messages, cityDefs),
             // Set of tour names in the latest program — fed to buildLocalProgram
             // so the "أخرى" swap target excludes tours that are already on
             // another day. Without this, a swap can clobber a non-modded day.
             (() => {
+              if (distEditRewrite) return undefined;
               if (!lastAssistantProgram) return undefined;
               const m = lastAssistantProgram.match(/TOURS:\s*\n([\s\S]+?)(?=\n[A-Z_]+:|\Z)/);
               if (!m) return undefined;

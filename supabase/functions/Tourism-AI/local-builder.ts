@@ -116,6 +116,19 @@ function destFromLocation(location: string): string {
   return String(location || "").split(" - ").pop()?.trim() || "";
 }
 
+// توحيد تهجئة أسماء المدن في النص المعروض للعميل فقط — لا يمسّ منطق المطابقة
+// (الذي يعتمد tour.name الأصلي). الشيت يكتب كوه ساموي بصيغ غير منتظمة
+// («كوسا موي» بمسافة، «كوسوموي»، «كوسموي») فتظهر مشوّشة في البرنامج؛ نعرضها
+// دائماً «كوه ساموي». لإضافة مدينة مستقبلاً: صف جديد {pat, to}.
+const DISPLAY_SPELLING_FIXES: Array<{ pat: RegExp; to: string }> = [
+  { pat: /كوسوموي|كوسموي|كو\s*سا?\s*موي/gu, to: "كوه ساموي" },
+];
+function normalizeDisplayName(s: string): string {
+  let out = String(s || "");
+  for (const { pat, to } of DISPLAY_SPELLING_FIXES) out = out.replace(pat, to);
+  return out;
+}
+
 /**
  * Match hotel city against a canonical city name. Hotels in the sheet have
  * messy city values like "Phu Quoc Island,ỉ", "ha.noi", "Cameron.Highland".
@@ -1541,7 +1554,7 @@ export function formatProgram(data: ProgramData): string {
     const note = vType
       ? (oversized ? ` (${vType} — تتسع ${cap}، أضف سيارة)` : ` (${vType})`)
       : (oversized ? ` (سيارة تتسع ${cap})` : "");
-    out += `اليوم ${t.day} | ${t.row.name.trim()}${note} | ${t.kind} | ${formatNumber(lineTotal)} ريال\n`;
+    out += `اليوم ${t.day} | ${normalizeDisplayName(t.row.name.trim())}${note} | ${t.kind} | ${formatNumber(lineTotal)} ريال\n`;
   }
   out += "\n";
 
@@ -1564,7 +1577,7 @@ export function formatProgram(data: ProgramData): string {
     toursTotal += price;
     const isFree = isFreeDayRow(tt.tour.name);
     const tourType = isFree ? "حر" : "ثقافية";
-    const cleanName = tt.tour.name.replace(/\s*[\r\n]+\s*/g, " ").replace(/\s{2,}/g, " ").trim();
+    const cleanName = normalizeDisplayName(tt.tour.name.replace(/\s*[\r\n]+\s*/g, " ").replace(/\s{2,}/g, " ").trim());
     // نوع السيارة المختار حسب الأشخاص (صلالة فقط عبر شرط النوع العربي بين قوسين).
     const vType = isFree ? "" : vehicleTypeFromLabel(pickTourVariantLabel(tt.tour, adults, false));
     const nameWithV = vType ? `${cleanName} (${vType})` : cleanName;

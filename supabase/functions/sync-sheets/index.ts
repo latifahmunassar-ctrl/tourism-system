@@ -57,7 +57,7 @@ const SECTION_CITY_DEFS: Record<string, Array<{ canonical: string; pattern: RegE
     { canonical: "Krabi",        pattern: /كرابي|krabi/i },
     { canonical: "Chiang Mai",   pattern: /شيان[جغ]?\s*ماي|شانغماي|chiang\s*mai|chiangmai/i },
     { canonical: "Pattaya",      pattern: /با?تايا|pattaya/i },
-    { canonical: "Koh Samui",    pattern: /كو\s*سا?\s*موي|كوسوموي|كوسموي|كوه?\s*ساموي|koh?\s*samui|kohsamui|samui/i },
+    { canonical: "Koh Samui",    pattern: /كو\s*سا?\s*موي|كوسوموي|كوسموي|كوه?\s*ساموي|ساموي|koh?\s*samui|kohsamui|samui/i },
   ],
   Turky: [
     { canonical: "Istanbul",   pattern: /اسطنبول|إسطنبول|إستانبول|istanbul/i },
