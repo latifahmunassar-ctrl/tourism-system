@@ -525,13 +525,17 @@ Deno.serve(async (req) => {
     }
 
     if (action === "search") {
-      // بحث باسم الشركة عبر كل القاعدة (+ رقم/إنستقرام/مدينة).
+      // بحث باسم الشركة عبر كل القاعدة (+ رقم/إنستقرام/مدينة)، متسامح مع تهجئات العربي.
       const q = (url.searchParams.get("q") || "").trim().replace(/[%,()]/g, " ").trim();
       if (!q) return json({ ok: true, rows: [] });
       const like = `%${q}%`;
+      const clauses = [`name.ilike.${like}`, `whatsapp_number.ilike.${like}`, `instagram_handle.ilike.${like}`, `city.ilike.${like}`];
+      // مطابقة على الاسم المطبّع (يوحّد ة↔ه، أإآ↔ا، ىي، ويزيل التشكيل/الكلمات العامة) لتفادي فروق التهجئة.
+      const qn = normName(q);
+      if (qn) clauses.push(`name_normalized.ilike.%${qn}%`);
       const { data, error } = await supabase.from("discovered_companies").select("*")
         .neq("status", "hidden")
-        .or(`name.ilike.${like},whatsapp_number.ilike.${like},instagram_handle.ilike.${like},city.ilike.${like}`)
+        .or(clauses.join(","))
         .order("whatsapp_confidence", { ascending: true }).order("created_at", { ascending: false }).limit(500);
       if (error) return json({ ok: false, error: error.message }, 500);
       return json({ ok: true, rows: data || [] });
