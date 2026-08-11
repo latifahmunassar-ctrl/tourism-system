@@ -127,6 +127,7 @@
     <button id="tabBtnPdf" class="tabbtn" onclick="showTab('pdf')">📄 تصدير PDF</button>
     <button id="tabBtnSlog" class="tabbtn" onclick="showTab('slog')">🕐 سجل دخول الموظفات</button>
     <button id="tabBtnSecurity" class="tabbtn" onclick="showTab('security')">🔒 الأمان</button>
+    <button id="tabBtnDiscovery" class="tabbtn" onclick="showTab('discovery')">🔎 اكتشاف شركات</button>
   </div>
 
   <div id="tabCompanies" class="tabpane">
@@ -204,6 +205,10 @@
     <div id="secBody" style="padding:14px"><div class="ac-empty">جارٍ التحميل…</div></div>
   </div>
   </div><!-- /tabSecurity -->
+
+  <div id="tabDiscovery" class="tabpane" style="display:none">
+    <iframe id="discoveryFrame" title="اكتشاف شركات" style="width:100%;height:82vh;border:1px solid var(--line);border-radius:14px;background:#fff"></iframe>
+  </div><!-- /tabDiscovery -->
 </div>
 
 <script>
@@ -253,14 +258,15 @@ async function login(){
 function logout(){ localStorage.removeItem('alezz_owner_secret'); SECRET=''; location.reload(); }
 function show(){ $('loginView').style.display='none'; $('appView').style.display='block'; loadList(); loadStaff(); repPeriod('today', document.querySelector('.rep-btn')); }
 function showTab(t){
-  const panes={companies:'tabCompanies',staff:'tabStaff',logins:'tabLogins',pdf:'tabPdf',slog:'tabSlog',security:'tabSecurity'};
-  const btns={companies:'tabBtnCompanies',staff:'tabBtnStaff',logins:'tabBtnLogins',pdf:'tabBtnPdf',slog:'tabBtnSlog',security:'tabBtnSecurity'};
+  const panes={companies:'tabCompanies',staff:'tabStaff',logins:'tabLogins',pdf:'tabPdf',slog:'tabSlog',security:'tabSecurity',discovery:'tabDiscovery'};
+  const btns={companies:'tabBtnCompanies',staff:'tabBtnStaff',logins:'tabBtnLogins',pdf:'tabBtnPdf',slog:'tabBtnSlog',security:'tabBtnSecurity',discovery:'tabBtnDiscovery'};
   for(const k in panes){ $(panes[k]).style.display = (k===t?'':'none'); $(btns[k]).classList.toggle('on',k===t); }
   if(t==='staff'){ loadStaff(); repPeriod('today', document.querySelector('.rep-btn')); }
   if(t==='logins'){ loadLogins(); }
   if(t==='pdf'){ pdfPeriod('today', document.querySelector('#tabPdf .rep-btn')); }
   if(t==='slog'){ slogPeriod('all', document.querySelector('#tabSlog .rep-btn:nth-child(4)')); }
   if(t==='security'){ loadSecurity(); }
+  if(t==='discovery'){ const f=$('discoveryFrame'); if(!f.getAttribute('src')) f.src='companies-discovery.html'; } // تحميل كسول
 }
 // ── أمان داشبورد البرامج: الدول المسموحة + سجل الدخول + تفعيل الحظر ──
 function secFlash(t,ok){const m=$('secMsg');if(!m)return;m.textContent=t;m.className='ac-msg '+(ok?'ok':'err');m.style.display='block';setTimeout(()=>{m.style.display='none'},2600);}
