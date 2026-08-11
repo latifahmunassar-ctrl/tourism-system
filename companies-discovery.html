@@ -157,7 +157,9 @@
       <button class="tbtn" id="tabDest" onclick="setFilter(FILTER==='dest'?'all':'dest')" style="display:none">الوجهة فقط</button>
       <span class="rcount" id="rcount"></span>
       <span class="sp"></span>
-      <button class="tbtn csv" onclick="exportCSV()">⬇️ تصدير CSV</button>
+      <button class="tbtn csv" onclick="exportExcel()">⬇️ Excel</button>
+      <button class="tbtn csv" onclick="exportPDF()">🖨️ PDF</button>
+      <button class="tbtn" onclick="exportCSV()">⬇️ CSV</button>
     </div>
     <div class="rtoolbar" id="approveBar" style="display:none;background:#f7faf8">
       <label style="font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">
@@ -412,8 +414,69 @@ function exportCSV(){
     let v = r[c]; if(v==null) v=''; v=String(v).replace(/"/g,'""'); return /[",\n]/.test(v)?`"${v}"`:v;
   }).join(','))).join('\r\n');
   const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'});
+  dl(blob, exportName('csv'));
+}
+
+function dl(blob, name){
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-  a.download = 'discovered_companies.csv'; a.click(); URL.revokeObjectURL(a.href);
+  a.download = name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 1500);
+}
+function exportName(ext){
+  const tag = VIEW==='kept' ? 'المعتمدة' : 'شركات';
+  const d = new Date(); const ds = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  return `${tag}-${ds}.${ext}`;
+}
+const CONF_AR = {confirmed:'مؤكّد', likely:'مُرجّح'};
+// أعمدة التصدير المشتركة
+const EXP_COLS = [
+  ['name','اسم الشركة'],['whatsapp_number','رقم الواتساب'],['whatsapp_confidence','مستوى التأكد'],
+  ['phone_landline','هاتف أرضي'],['website','الموقع'],['instagram_handle','إنستقرام'],
+  ['city','المدينة'],['country','الدولة'],['status','الحالة']
+];
+function cellVal(r,key){
+  let v = r[key];
+  if(key==='whatsapp_confidence') v = CONF_AR[v]||'';
+  else if(key==='instagram_handle') v = v ? '@'+v : '';
+  else if(key==='status') v = v==='kept'?'معتمدة':(v==='hidden'?'مخفية':'جديدة');
+  return v==null ? '' : String(v);
+}
+
+// Excel حقيقي (جدول HTML بامتداد .xls — يفتح مباشرة في إكسل بترميز عربي سليم)
+function exportExcel(){
+  const rows = visibleRows();
+  if(!rows.length){ alert('لا توجد بيانات للتصدير'); return; }
+  const th = EXP_COLS.map(c=>`<th style="background:#0e9d6a;color:#fff;padding:6px;border:1px solid #bbb">${c[1]}</th>`).join('');
+  const trs = rows.map(r=>'<tr>'+EXP_COLS.map(c=>`<td style="padding:5px;border:1px solid #ccc;mso-number-format:'\\@'">${cellVal(r,c[0]).replace(/</g,'&lt;')}</td>`).join('')+'</tr>').join('');
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body><table dir="rtl" border="1"><tr>${th}</tr>${trs}</table></body></html>`;
+  dl(new Blob(['\ufeff'+html], {type:'application/vnd.ms-excel;charset=utf-8'}), exportName('xls'));
+}
+
+// PDF عبر نافذة طباعة (احفظي كـ PDF من حوار الطباعة)
+function exportPDF(){
+  const rows = visibleRows();
+  if(!rows.length){ alert('لا توجد بيانات للتصدير'); return; }
+  const title = (VIEW==='kept'?'الشركات المعتمدة':'الشركات المكتشَفة') + ' — ' + rows.length + ' شركة';
+  const th = EXP_COLS.map(c=>`<th>${c[1]}</th>`).join('');
+  const trs = rows.map(r=>'<tr>'+EXP_COLS.map(c=>`<td>${cellVal(r,c[0]).replace(/</g,'&lt;')}</td>`).join('')+'</tr>').join('');
+  const doc = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${title}</title>
+  <style>
+    body{font-family:Tahoma,"Segoe UI",sans-serif;color:#1d2b2a;padding:18px;margin:0}
+    .hd{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #0e9d6a;padding-bottom:10px;margin-bottom:12px}
+    .hd .lg{font-weight:900;letter-spacing:3px;font-size:22px;color:#0e9d6a}.hd .lg span{color:#D4A843}
+    h2{font-size:15px;margin:0;color:#1d2b2a}
+    table{width:100%;border-collapse:collapse;font-size:11px}
+    th{background:#0e9d6a;color:#fff;padding:7px 6px;text-align:right}
+    td{padding:5px 6px;border-bottom:1px solid #e0e0e0;text-align:right}
+    tr:nth-child(even) td{background:#f5faf7}
+    @page{size:A4 landscape;margin:12mm}
+  </style></head><body>
+    <div class="hd"><div class="lg">AL<span>E</span>ZZ</div><h2>${title}</h2></div>
+    <table><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>
+    <script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script>
+  </body></html>`;
+  const w = window.open('', '_blank');
+  if(!w){ alert('اسمحي للنوافذ المنبثقة لهذا الموقع ثم أعيدي المحاولة'); return; }
+  w.document.write(doc); w.document.close();
 }
 
 // عند فتح الصفحة: استأنف المهمة الجارية، أو اعرض نتائج آخر مهمة مكتملة.
