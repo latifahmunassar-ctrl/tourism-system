@@ -42,6 +42,7 @@
   .tbtn{background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 14px;cursor:pointer;font:inherit;font-weight:700;color:var(--muted)}
   .tbtn.on{background:var(--brand);color:#fff;border-color:var(--brand)}
   .tbtn.csv{background:#e9f7f1;color:var(--brand);border-color:#b8e0d0;font-weight:800}
+  #jobPicker{background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font:inherit;font-weight:700;color:var(--muted);max-width:280px}
   .rcount{font-size:12.5px;color:var(--muted)}
   .tblwrap{overflow-x:auto}
   table{width:100%;border-collapse:collapse;font-size:13.5px;min-width:760px}
@@ -151,6 +152,7 @@
     <div class="rtoolbar">
       <button class="tbtn on" id="viewJob" onclick="setView('job')">نتائج البحث</button>
       <button class="tbtn" id="viewKept" onclick="setView('kept')">⭐ المعتمدة <span id="keptCount"></span></button>
+      <select id="jobPicker" onchange="pickJob(this.value)" title="الأبحاث السابقة"><option value="">🕘 الأبحاث السابقة</option></select>
       <span style="width:1px;height:22px;background:var(--line)"></span>
       <button class="tbtn" id="tabDest" onclick="setFilter(FILTER==='dest'?'all':'dest')" style="display:none">الوجهة فقط</button>
       <span class="rcount" id="rcount"></span>
@@ -216,6 +218,7 @@ async function startSearch(){
   goBtn.disabled = false; goBtn.textContent='ابدأ البحث';
   if(!res.ok){ alert('تعذّر البدء: '+(res.error||'')); return; }
   JOB = res.job_id; localStorage.setItem('disc_job', JOB);
+  loadJobs();
   HAS_DEST = !!destination;
   document.getElementById('tabDest').style.display = HAS_DEST?'inline-block':'none';
   if(HAS_DEST) setFilter('dest');
@@ -284,6 +287,39 @@ async function loadKept(){
 async function refreshKeptCount(){
   const c = await api('counts');
   if(c.ok) document.getElementById('keptCount').textContent = c.kept ? '('+c.kept+')' : '';
+}
+
+const CNAME = {SA:'السعودية',OM:'عُمان',AE:'الإمارات',KW:'الكويت',QA:'قطر',BH:'البحرين'};
+function jobLabel(j){
+  const p = j.params||{};
+  const country = CNAME[p.country] || p.country || '';
+  const scope = p.scope==='specific' ? ((p.cities||[]).slice(0,3).join('،')+((p.cities||[]).length>3?'…':'')) : 'كل المدن';
+  const dest = p.destination ? (' · '+p.destination) : '';
+  let ds='';
+  if(j.created_at){ const d=new Date(j.created_at); ds=(d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+  const st = j.status==='running'?'⏳':j.status==='done'?'✅':j.status==='stopped'?'■':j.status==='error'?'⚠️':'';
+  return `${st} ${country} · ${scope}${dest} · ${j.inserted||0} شركة · ${ds}`;
+}
+async function loadJobs(){
+  const r = await api('jobs');
+  if(!r.ok) return;
+  const sel = document.getElementById('jobPicker');
+  sel.innerHTML = '<option value="">🕘 الأبحاث السابقة</option>' +
+    (r.jobs||[]).map(j=>`<option value="${j.id}" ${j.id===JOB?'selected':''}>${jobLabel(j)}</option>`).join('');
+}
+async function pickJob(id){
+  if(!id) return;
+  JOB = id; localStorage.setItem('disc_job', id);
+  VIEW = 'job'; SEL.clear();
+  document.getElementById('viewJob').classList.add('on');
+  document.getElementById('viewKept').classList.remove('on');
+  document.getElementById('btnKeepAll').style.display='inline-block';
+  document.getElementById('btnKeepSel').style.display='inline-block';
+  document.getElementById('btnUnkeep').style.display='none';
+  const s = await api('status', { qs:'job='+encodeURIComponent(id) });
+  document.getElementById('progPanel').style.display='block';
+  if(s.ok) renderProgress(s);
+  await loadResults();
 }
 
 function setView(v){
@@ -397,6 +433,7 @@ function exportCSV(){
     document.getElementById('progPanel').style.display='block';
     loadResults();
   }
+  loadJobs();
 })();
 </script>
 </body>

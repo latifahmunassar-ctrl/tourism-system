@@ -538,6 +538,14 @@ Deno.serve(async (req) => {
       return json({ ok: true, reset: true });
     }
 
+    if (action === "jobs") {
+      // قائمة الأبحاث السابقة (للاختيار من الواجهة).
+      const { data } = await supabase.from("discovery_jobs")
+        .select("id,params,inserted,found,status,created_at")
+        .order("created_at", { ascending: false }).limit(100);
+      return json({ ok: true, jobs: data || [] });
+    }
+
     if (action === "del_job") {
       // حذف مهمة بحث واحدة وصفوفها (لا يمسّ بقية الأبحاث/المعتمدة).
       const b = await req.json().catch(() => ({}));
