@@ -180,6 +180,7 @@
       <span class="rcount" id="selCount"></span>
       <span class="sp"></span>
       <button class="tbtn" id="btnKeepSel" onclick="approve('sel')" style="background:#e9f7f1;color:var(--brand);border-color:#b8e0d0;font-weight:800">✓ اعتمد المحدد</button>
+      <button class="tbtn" id="btnKeepFiltered" onclick="approve('filtered')" style="background:#e9f7f1;color:var(--brand);border-color:#b8e0d0;font-weight:800">✓ اعتمد المفلتَر</button>
       <button class="tbtn" id="btnKeepAll" onclick="approve('all')" style="background:var(--brand);color:#fff;border-color:var(--brand)">✓ اعتمد كل نتائج البحث</button>
       <button class="tbtn" id="btnUnkeep" onclick="unapprove()" style="display:none;background:#fbeaea;color:var(--err);border-color:#f0caca">✕ إزالة الاعتماد للمحدد</button>
     </div>
@@ -365,6 +366,7 @@ function setView(v){
   // في وضع المعتمدة: زر «إزالة الاعتماد» بدل «اعتمد الكل».
   document.getElementById('btnKeepAll').style.display = v==='kept'?'none':'inline-block';
   document.getElementById('btnKeepSel').style.display = v==='kept'?'none':'inline-block';
+  document.getElementById('btnKeepFiltered').style.display = v==='kept'?'none':'inline-block';
   document.getElementById('btnUnkeep').style.display  = v==='kept'?'inline-block':'none';
   if(v==='kept') loadKept(); else loadResults();
 }
@@ -387,6 +389,7 @@ function updateSelUI(){
 async function approve(which){
   let body;
   if(which==='all'){ if(!JOB){ alert('لا يوجد بحث'); return; } body={ all:true, job:JOB, status:'kept' }; }
+  else if(which==='filtered'){ const ids=visibleRows().map(r=>r.id); if(!ids.length){ alert('لا نتائج مفلتَرة'); return; } if(!confirm('اعتماد '+ids.length+' شركة (الظاهرة بعد الفلترة)؟')) return; body={ ids, status:'kept' }; }
   else { if(!SEL.size){ alert('حدّدي صفوفاً أولاً'); return; } body={ ids:[...SEL], status:'kept' }; }
   const r = await api('mark', { body });
   if(!r.ok){ alert('تعذّر الاعتماد: '+(r.error||'')); return; }
