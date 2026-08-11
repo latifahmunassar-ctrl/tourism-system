@@ -42,7 +42,8 @@
   .tbtn{background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 14px;cursor:pointer;font:inherit;font-weight:700;color:var(--muted)}
   .tbtn.on{background:var(--brand);color:#fff;border-color:var(--brand)}
   .tbtn.csv{background:#e9f7f1;color:var(--brand);border-color:#b8e0d0;font-weight:800}
-  #jobPicker{background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font:inherit;font-weight:700;color:var(--muted);max-width:280px}
+  #jobPicker,.fsel{background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font:inherit;font-weight:700;color:var(--muted)}
+  #jobPicker{max-width:280px}.fsel{max-width:170px}
   .qbox{background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 12px;font:inherit;min-width:220px;color:var(--ink)}
   .qbox:focus{outline:none;border-color:var(--brand2)}
   .rcount{font-size:12.5px;color:var(--muted)}
@@ -156,6 +157,14 @@
       <button class="tbtn on" id="viewJob" onclick="setView('job')">نتائج البحث</button>
       <button class="tbtn" id="viewKept" onclick="setView('kept')">⭐ المعتمدة <span id="keptCount"></span></button>
       <select id="jobPicker" onchange="pickJob(this.value)" title="الأبحاث السابقة"><option value="">🕘 الأبحاث السابقة</option></select>
+      <select id="cityFilter" class="fsel" onchange="onCityFilter(this.value)" title="فلترة بالمدينة"><option value="">📍 كل المدن</option></select>
+      <select id="confFilter" class="fsel" onchange="onConfFilter(this.value)" title="فلترة بمستوى التأكد">
+        <option value="">☎️ كل الأرقام</option>
+        <option value="confirmed">🟢 مؤكّد</option>
+        <option value="likely">🟡 مُرجّح</option>
+        <option value="landline">⛔ أرضي فقط</option>
+        <option value="none">بلا رقم</option>
+      </select>
       <span style="width:1px;height:22px;background:var(--line)"></span>
       <button class="tbtn" id="tabDest" onclick="setFilter(FILTER==='dest'?'all':'dest')" style="display:none">الوجهة فقط</button>
       <span class="rcount" id="rcount"></span>
@@ -207,6 +216,8 @@ let VIEW = 'job';           // 'job' = نتائج البحث الحالي · 'ke
 let SEL = new Set();        // معرّفات الصفوف المحدّدة
 let SEARCHING = false;      // وضع البحث بالاسم (نتائج من كل القاعدة)
 let searchTimer = null;
+let FCITY = '';             // فلتر المدينة
+let FCONF = '';             // فلتر مستوى التأكد
 
 function toggleCities(){ document.getElementById('citiesFld').style.display = document.getElementById('scope').value==='specific'?'flex':'none'; }
 
@@ -395,13 +406,29 @@ async function unapprove(){
 function visibleRows(){
   let rows = ROWS.slice();
   if(FILTER==='dest') rows = rows.filter(r=>r.destination_match);
+  if(FCITY) rows = rows.filter(r=>r.city===FCITY);
+  if(FCONF==='confirmed' || FCONF==='likely') rows = rows.filter(r=>r.whatsapp_confidence===FCONF);
+  else if(FCONF==='landline') rows = rows.filter(r=>!r.whatsapp_number && r.phone_landline);
+  else if(FCONF==='none') rows = rows.filter(r=>!r.whatsapp_number && !r.phone_landline);
   // confirmed قبل likely ثم الأحدث (الخادم يرتّب، وهذا تأكيد).
   const rank = c => c==='confirmed'?0 : c==='likely'?1 : 2;
   rows.sort((a,b)=> rank(a.whatsapp_confidence)-rank(b.whatsapp_confidence) || (b.id-a.id));
   return rows;
 }
+function onCityFilter(v){ FCITY=v; renderTable(); }
+function onConfFilter(v){ FCONF=v; renderTable(); }
+function populateCityFilter(){
+  const sel=document.getElementById('cityFilter'); if(!sel) return;
+  const cities=[...new Set(ROWS.map(r=>r.city).filter(Boolean))].sort();
+  const sig=cities.join('|');
+  if(sel._sig===sig) return;                 // لا تعيد البناء بلا داعٍ (يحفظ الاختيار)
+  sel._sig=sig;
+  sel.innerHTML='<option value="">📍 كل المدن</option>'+cities.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  sel.value = cities.includes(FCITY)?FCITY:''; FCITY=sel.value;
+}
 
 function renderTable(){
+  populateCityFilter();
   const rows = visibleRows();
   const tb = document.getElementById('tbody');
   document.getElementById('rcount').textContent = rows.length ? (rows.length+' شركة') : '';
