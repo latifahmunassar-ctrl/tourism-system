@@ -43,6 +43,8 @@
   .tbtn.on{background:var(--brand);color:#fff;border-color:var(--brand)}
   .tbtn.csv{background:#e9f7f1;color:var(--brand);border-color:#b8e0d0;font-weight:800}
   #jobPicker{background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font:inherit;font-weight:700;color:var(--muted);max-width:280px}
+  .qbox{background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 12px;font:inherit;min-width:220px;color:var(--ink)}
+  .qbox:focus{outline:none;border-color:var(--brand2)}
   .rcount{font-size:12.5px;color:var(--muted)}
   .tblwrap{overflow-x:auto}
   table{width:100%;border-collapse:collapse;font-size:13.5px;min-width:760px}
@@ -150,6 +152,7 @@
   <div class="panel">
     <h3>الشركات المكتشَفة</h3>
     <div class="rtoolbar">
+      <input id="q" class="qbox" placeholder="🔎 بحث باسم الشركة…" oninput="onSearchInput()" autocomplete="off">
       <button class="tbtn on" id="viewJob" onclick="setView('job')">نتائج البحث</button>
       <button class="tbtn" id="viewKept" onclick="setView('kept')">⭐ المعتمدة <span id="keptCount"></span></button>
       <select id="jobPicker" onchange="pickJob(this.value)" title="الأبحاث السابقة"><option value="">🕘 الأبحاث السابقة</option></select>
@@ -202,6 +205,8 @@ let FILTER = 'all';
 let HAS_DEST = false;
 let VIEW = 'job';           // 'job' = نتائج البحث الحالي · 'kept' = المعتمدة عبر كل الأبحاث
 let SEL = new Set();        // معرّفات الصفوف المحدّدة
+let SEARCHING = false;      // وضع البحث بالاسم (نتائج من كل القاعدة)
+let searchTimer = null;
 
 function toggleCities(){ document.getElementById('citiesFld').style.display = document.getElementById('scope').value==='specific'?'flex':'none'; }
 
@@ -311,6 +316,7 @@ async function loadJobs(){
 }
 async function pickJob(id){
   if(!id) return;
+  clearSearch();
   JOB = id; localStorage.setItem('disc_job', id);
   VIEW = 'job'; SEL.clear();
   document.getElementById('viewJob').classList.add('on');
@@ -324,7 +330,24 @@ async function pickJob(id){
   await loadResults();
 }
 
+function onSearchInput(){
+  const q = document.getElementById('q').value.trim();
+  clearTimeout(searchTimer);
+  if(!q){ SEARCHING=false; return VIEW==='kept'?loadKept():loadResults(); }
+  SEARCHING = true;
+  searchTimer = setTimeout(()=>doSearch(q), 300);
+}
+async function doSearch(q){
+  const r = await api('search', { qs:'q='+encodeURIComponent(q) });
+  if(!r.ok) return;
+  ROWS = r.rows||[]; SEL.clear();
+  renderTable();
+  document.getElementById('rcount').textContent = 'بحث بالاسم: '+ROWS.length+' نتيجة';
+}
+function clearSearch(){ const el=document.getElementById('q'); if(el) el.value=''; SEARCHING=false; }
+
 function setView(v){
+  clearSearch();
   VIEW = v; SEL.clear();
   document.getElementById('viewJob').classList.toggle('on', v==='job');
   document.getElementById('viewKept').classList.toggle('on', v==='kept');
@@ -356,13 +379,17 @@ async function approve(which){
   else { if(!SEL.size){ alert('حدّدي صفوفاً أولاً'); return; } body={ ids:[...SEL], status:'kept' }; }
   const r = await api('mark', { body });
   if(!r.ok){ alert('تعذّر الاعتماد: '+(r.error||'')); return; }
-  SEL.clear(); await loadResults();
+  SEL.clear();
+  if(SEARCHING) doSearch(document.getElementById('q').value.trim()); else await loadResults();
+  refreshKeptCount();
 }
 async function unapprove(){
   if(!SEL.size){ alert('حدّدي صفوفاً أولاً'); return; }
   const r = await api('mark', { body:{ ids:[...SEL], status:'new' } });
   if(!r.ok){ alert('تعذّر: '+(r.error||'')); return; }
-  SEL.clear(); await loadKept();
+  SEL.clear();
+  if(SEARCHING) doSearch(document.getElementById('q').value.trim()); else await loadKept();
+  refreshKeptCount();
 }
 
 function visibleRows(){

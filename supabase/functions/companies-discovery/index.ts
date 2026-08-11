@@ -517,6 +517,19 @@ Deno.serve(async (req) => {
       return json({ ok: true, updated: (data || []).length, status });
     }
 
+    if (action === "search") {
+      // بحث باسم الشركة عبر كل القاعدة (+ رقم/إنستقرام/مدينة).
+      const q = (url.searchParams.get("q") || "").trim().replace(/[%,()]/g, " ").trim();
+      if (!q) return json({ ok: true, rows: [] });
+      const like = `%${q}%`;
+      const { data, error } = await supabase.from("discovered_companies").select("*")
+        .neq("status", "hidden")
+        .or(`name.ilike.${like},whatsapp_number.ilike.${like},instagram_handle.ilike.${like},city.ilike.${like}`)
+        .order("whatsapp_confidence", { ascending: true }).order("created_at", { ascending: false }).limit(500);
+      if (error) return json({ ok: false, error: error.message }, 500);
+      return json({ ok: true, rows: data || [] });
+    }
+
     if (action === "counts") {
       // عدّاد المعتمدة (لعرضه في الواجهة).
       const { count } = await supabase.from("discovered_companies").select("id", { count: "exact", head: true }).eq("status", "kept");
