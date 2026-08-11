@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ل4 · تنبيه فجوة التكلفة صار يقارن تكلفة التسعير المُدخلة (amount) بدل الحجز الفعلي (frb) — فيختفي تلقائياً فور تعديل التسعير ليطابق (مثل C26519 بعد تصحيحه) </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ل5 · تنبيه فجوة التكلفة: عمودان جديدان — 👩‍💼 اسم الموظف الذي أدخل البيانات (confirmed_by) و💱 نوع العملة منفصلان </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -3334,13 +3334,15 @@ function liveBookingLosses(){
 // ⚠️ إدخال مشبوه: مجموع تكلفة الخدمات المُدخلة (amount = التسعير، بعملة العميل) أقل من التكلفة المسجّلة في First Client Data — غالباً إدخال ناقص/خاطئ. إشعار + تذكرة؛ يختفي تلقائياً فور تعديل التسعير ليطابق (أو بزر «تم الاطلاع»).
 function costGapAlerts(){
   const DIS=(typeof dismissedSet==='function'?dismissedSet():new Set());
-  const fcdCost={},name={},cur={},agent={};
-  (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!c||r.source!=='dashboard')return; fcdCost[c]=(fcdCost[c]||0)+Number(r.cost||0); if(r.client_name&&!name[c])name[c]=r.client_name; if(r.currency&&!cur[c])cur[c]=r.currency; if(r.agent_name&&!agent[c])agent[c]=r.agent_name; });
+  const fcdCost={},name={},cur={},agent={},staff={};
+  (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(!c||r.source!=='dashboard')return; fcdCost[c]=(fcdCost[c]||0)+Number(r.cost||0); if(r.client_name&&!name[c])name[c]=r.client_name; if(r.currency&&!cur[c])cur[c]=r.currency; if(r.agent_name&&!agent[c])agent[c]=r.agent_name; if(!staff[c]){ const st=(r.confirmed_by||r.booked_by||'').toString().trim(); if(st)staff[c]=st; } });
+  // احتياط: اسم الموظف من سطر الخدمة (booked_by/confirmed_by) إن لم يوجد في FCD
+  (DATA.serviceLines||[]).forEach(s=>{ const c=(s.client_code||'').toUpperCase(); if(!c||staff[c])return; const st=(s.booked_by||s.confirmed_by||'').toString().trim(); if(st)staff[c]=st; });
   const booked={},hasSvc={},hasCanc={};
   (DATA.serviceLines||[]).forEach(s=>{ const c=(s.client_code||'').toUpperCase(); if(!c)return; hasSvc[c]=true; if(/cancel/i.test(String(s.status||'')))hasCanc[c]=true; if(/profit/i.test(String(s.name||'')))return; booked[c]=(booked[c]||0)+Number(s.amount||0); });   // amount = تكلفة التسعير المُدخلة بعملة العميل (نفس ما يقارنه صندوق السيلز فورم فيطابق سلوكه)
   const out=[];
   Object.keys(fcdCost).forEach(c=>{ if(!hasSvc[c]||hasCanc[c])return; const rec=fcdCost[c], bk=booked[c]||0, gap=rec-bk;
-    if(gap>100){ const key='costgap:'+c; if(DIS.has(key))return; const big=(gap>1000 && bk<rec*0.6); out.push({code:c, name:name[c]||'', agent:agent[c]||'', cur:cur[c]||'SAR', recorded:rec, booked:bk, gap, ratio:rec?Math.round(bk/rec*100):0, big, key}); } });
+    if(gap>100){ const key='costgap:'+c; if(DIS.has(key))return; const big=(gap>1000 && bk<rec*0.6); out.push({code:c, name:name[c]||'', agent:agent[c]||'', staff:staff[c]||'', cur:cur[c]||'SAR', recorded:rec, booked:bk, gap, ratio:rec?Math.round(bk/rec*100):0, big, key}); } });
   return out.sort((a,b)=>b.gap-a.gap);
 }
 async function dismissCostGap(code,btn){ if(!(typeof isOwnerUser==='function'?isOwnerUser():true)){ alert('للمالكة فقط'); return; }
@@ -3351,8 +3353,8 @@ async function dismissCostGap(code,btn){ if(!(typeof isOwnerUser==='function'?is
 function costGapPanelHtml(cg,owner){ if(!cg.length)return ''; const nBig=cg.filter(x=>x.big).length;
   return '<div class="panel" style="border:2px solid #d98a00;background:rgba(217,138,0,.07);margin-bottom:14px"><h3 style="color:#d98a00;margin-top:0">⚠️ تكلفة الخدمات المُدخلة أقل من المسجّلة — راجعي ('+cg.length+(nBig?' · منها 🔴 '+nBig+' فجوة كبيرة':'')+')</h3>'+
     '<div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">مجموع تكلفة الخدمات المُدخلة (التسعير) أقل من التكلفة المسجّلة في First Client Data — يشمل الفوارق البسيطة لتقرّري بنفسك. 🔴 = فجوة كبيرة (غالباً ناقص/خطأ) · 🟡 = فرق بسيط (غالباً عمولة/تقريب). <b>يختفي تلقائياً</b> فور تعديل التسعير ليطابق، أو اضغطي «✓ تم الاطلاع» لو الإدخال صحيح كما هو.</div>'+
-    '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الشدّة</th><th>الكود</th><th>العميل</th><th>الوكيل</th><th>المسجّلة</th><th>المُدخلة</th><th>%</th><th>الفجوة</th>'+(owner?'<th>إجراء</th>':'')+'</tr></thead><tbody>'+
-    cg.map(x=>'<tr'+(x.big?' style="background:rgba(209,17,17,.05)"':'')+'><td style="text-align:center">'+(x.big?'🔴':'🟡')+'</td><td><b>'+esc(x.code)+'</b></td><td>'+esc(x.name)+'</td><td style="font-size:11px">'+esc(x.agent||'—')+'</td><td class="num">'+fmt(x.recorded)+' '+esc(x.cur)+'</td><td class="num" style="color:#d11;font-weight:700">'+fmt(x.booked)+'</td><td class="num" style="color:'+(x.ratio<60?'#d11':'#b8860b')+';font-weight:700">'+x.ratio+'%</td><td class="num" style="font-weight:800;color:#d98a00">'+fmt(x.gap)+'</td>'+(owner?'<td><button class="btn ghost" style="padding:2px 10px;font-size:11px;color:#0e9d6a;border-color:#0e9d6a" onclick="dismissCostGap(\''+esc(x.code)+'\',this)">✓ تم الاطلاع</button></td>':'')+'</tr>').join('')+
+    '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الشدّة</th><th>الكود</th><th>العميل</th><th>👩‍💼 الموظف</th><th>الوكيل</th><th>💱 العملة</th><th>المسجّلة</th><th>المُدخلة</th><th>%</th><th>الفجوة</th>'+(owner?'<th>إجراء</th>':'')+'</tr></thead><tbody>'+
+    cg.map(x=>'<tr'+(x.big?' style="background:rgba(209,17,17,.05)"':'')+'><td style="text-align:center">'+(x.big?'🔴':'🟡')+'</td><td><b>'+esc(x.code)+'</b></td><td>'+esc(x.name)+'</td><td style="font-size:11px;font-weight:600;color:var(--accent)">'+(x.staff?esc(x.staff):'<span style="color:#d98a00">— غير محدّد</span>')+'</td><td style="font-size:11px">'+esc(x.agent||'—')+'</td><td style="font-weight:700;color:var(--accent)">'+esc(x.cur)+'</td><td class="num">'+fmt(x.recorded)+'</td><td class="num" style="color:#d11;font-weight:700">'+fmt(x.booked)+'</td><td class="num" style="color:'+(x.ratio<60?'#d11':'#b8860b')+';font-weight:700">'+x.ratio+'%</td><td class="num" style="font-weight:800;color:#d98a00">'+fmt(x.gap)+'</td>'+(owner?'<td><button class="btn ghost" style="padding:2px 10px;font-size:11px;color:#0e9d6a;border-color:#0e9d6a" onclick="dismissCostGap(\''+esc(x.code)+'\',this)">✓ تم الاطلاع</button></td>':'')+'</tr>').join('')+
     '</tbody></table></div></div>';
 }
 // 📉 الربح الفعلي أقل من المتوقع (لكل عميل) — إشعار + تذكرة بمقدار الانخفاض؛ يختفي تلقائياً فور تساويهما
