@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>اكتشاف شركات | ALEZZ</title>
+<style>
+  :root{--brand:#0e9d6a;--brand2:#c41d88;--gold:#D4A843;--accent:#e0218a;--bg:#f1f8f4;--panel:#fff;--panel2:#f7faf8;--line:#dcede6;--ink:#1d2b2a;--muted:#6b7c7a;--ok:#15803d;--warn:#b45309;--err:#b91c1c;--wa:#25d366;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+  .top{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+  .top .logo{font-weight:900;letter-spacing:3px;font-size:19px}.top .logo span{color:var(--gold)}
+  .top .rt{display:flex;gap:8px;align-items:center;font-size:12.5px}
+  .top a{text-decoration:none}
+  .top button{background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:9px;padding:7px 12px;cursor:pointer;font:inherit}
+  .wrap{max-width:1180px;margin:18px auto;padding:0 16px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 2px 14px rgba(0,0,0,.04);margin-bottom:16px}
+  .panel h3{margin:0;padding:13px 16px;font-size:14px;background:#f2faf6;border-bottom:1px solid var(--line);color:var(--brand);border-radius:14px 14px 0 0}
+  .form{padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;align-items:end}
+  .fld{display:flex;flex-direction:column;gap:6px}
+  .fld label{font-size:12.5px;color:var(--muted);font-weight:700}
+  .fld input,.fld select{padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fcfdfd;color:var(--ink)}
+  .fld input:focus,.fld select:focus{outline:none;border-color:var(--brand2)}
+  .hint{font-size:11px;color:var(--muted)}
+  .go-btn{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:11px;padding:12px 22px;font:inherit;font-weight:900;cursor:pointer;font-size:15px;white-space:nowrap}
+  .go-btn:disabled{opacity:.5;cursor:not-allowed}
+  .adv-toggle{grid-column:1/-1;font-size:12px;color:var(--brand2);cursor:pointer;font-weight:700;user-select:none}
+  /* progress */
+  #prog{display:none;padding:16px}
+  .pbar{height:12px;background:#e9f1ed;border-radius:20px;overflow:hidden;margin:10px 0}
+  .pbar>i{display:block;height:100%;background:linear-gradient(90deg,var(--brand),var(--brand2));width:0;transition:width .4s}
+  .pstats{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:12px}
+  @media(max-width:640px){.pstats{grid-template-columns:repeat(2,1fr)}}
+  .pstat{border:1px solid var(--line);border-radius:11px;padding:11px;text-align:center;background:var(--panel2)}
+  .pstat .n{font-size:22px;font-weight:900;line-height:1}.pstat .l{font-size:11px;color:var(--muted);margin-top:5px}
+  .pstat.f .n{color:var(--ink)}.pstat.i .n{color:var(--ok)}.pstat.d .n{color:var(--warn)}.pstat.q .n{color:var(--brand2)}
+  .plabel{font-size:13px;color:var(--muted)}.plabel b{color:var(--ink)}
+  .perr{margin-top:10px;background:#fee2e2;color:var(--err);border-radius:9px;padding:8px 11px;font-size:12.5px;display:none}
+  /* results */
+  .rtoolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .rtoolbar .sp{flex:1}
+  .tbtn{background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 14px;cursor:pointer;font:inherit;font-weight:700;color:var(--muted)}
+  .tbtn.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .tbtn.csv{background:#e9f7f1;color:var(--brand);border-color:#b8e0d0;font-weight:800}
+  .rcount{font-size:12.5px;color:var(--muted)}
+  .tblwrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;min-width:760px}
+  th,td{padding:11px 12px;text-align:right;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{color:var(--muted);font-size:12px;font-weight:800;background:#f7faf8;position:sticky;top:0}
+  tbody tr:hover{background:#f7faf8}
+  .cname{font-weight:800}.cmeta{color:var(--muted);font-size:11.5px;margin-top:2px}
+  .bdg{font-size:10px;font-weight:800;padding:2px 9px;border-radius:20px;white-space:nowrap}
+  .bdg.confirmed{background:#dcfce7;color:var(--ok)}.bdg.likely{background:#fef3c7;color:var(--warn)}
+  .bdg.dest{background:#ede9fe;color:#6d28d9;margin-inline-start:5px}
+  a.lnk{color:var(--brand);text-decoration:none}a.lnk:hover{text-decoration:underline}
+  .wa-btn{display:inline-flex;align-items:center;gap:5px;background:var(--wa);color:#fff;border:none;border-radius:9px;padding:7px 12px;font:inherit;font-weight:800;font-size:12.5px;cursor:pointer;text-decoration:none}
+  .wa-btn.dim{background:#e5e7eb;color:#888;pointer-events:none}
+  .empty{text-align:center;color:var(--muted);padding:40px 10px}
+  .note{margin:0 16px 16px;background:#fff7e6;border:1px solid #f0dcae;color:#8a6d1f;border-radius:11px;padding:11px 14px;font-size:12.5px;line-height:1.7}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="logo">AL<span>E</span>ZZ — 🔎 اكتشاف شركات</div>
+  <div class="rt">
+    <button type="button" onclick="if(history.length>1){history.back()}else{window.close()}">← رجوع</button>
+    <button type="button" onclick="loadResults()">↻ تحديث الجدول</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- نموذج البحث -->
+  <div class="panel">
+    <h3>بحث جديد</h3>
+    <div class="form" id="form">
+      <div class="fld">
+        <label>الدولة</label>
+        <select id="country">
+          <option value="SA">🇸🇦 السعودية</option>
+          <option value="OM">🇴🇲 عُمان</option>
+          <option value="AE">🇦🇪 الإمارات</option>
+          <option value="KW">🇰🇼 الكويت</option>
+          <option value="QA">🇶🇦 قطر</option>
+          <option value="BH">🇧🇭 البحرين</option>
+        </select>
+      </div>
+      <div class="fld">
+        <label>النشاط</label>
+        <select id="activity"><option value="travel">شركات سفر وسياحة</option></select>
+        <span class="hint">قابل للتوسعة لاحقاً</span>
+      </div>
+      <div class="fld">
+        <label>النطاق</label>
+        <select id="scope" onchange="toggleCities()">
+          <option value="all">جميع المدن</option>
+          <option value="specific">مدن محددة</option>
+        </select>
+      </div>
+      <div class="fld" id="citiesFld" style="display:none">
+        <label>المدن (افصل بفاصلة)</label>
+        <input id="cities" placeholder="الرياض, جدة, الدمام">
+      </div>
+      <div class="fld">
+        <label>الوجهة (اختياري)</label>
+        <input id="destination" placeholder="مثال: تايلاند">
+        <span class="hint">يفلتر من يبيع هذه الوجهة</span>
+      </div>
+      <div class="fld">
+        <label>العدد المطلوب</label>
+        <input id="target" type="number" value="500" min="1" max="5000">
+      </div>
+      <div class="adv-toggle" onclick="var k=document.getElementById('kwFld');k.style.display=k.style.display==='none'?'flex':'none'">⚙️ كلمات مفتاحية مخصّصة (اختياري)</div>
+      <div class="fld" id="kwFld" style="display:none;grid-column:1/-1">
+        <label>الكلمات المفتاحية (افصل بفاصلة — اتركه فارغاً للافتراضي)</label>
+        <input id="keywords" placeholder="شركة سياحة وسفر, وكالة سفر, مكتب حج وعمرة, travel agency">
+      </div>
+      <div class="fld" style="align-self:end">
+        <button class="go-btn" id="goBtn" onclick="startSearch()">ابدأ البحث</button>
+      </div>
+    </div>
+    <div class="note">
+      المصدر: <b>Google Places API الرسمي</b> فقط (بدون scraping). كل استعلام = 60 نتيجة كحد أقصى، فالنظام يوزّع تلقائياً على (المدن × الكلمات المفتاحية). الأولوية للواتساب: <b>مؤكّد</b> (من موقع الشركة) ثم <b>مُرجّح</b> (جوال من Places)، والأرضي يُستبعَد في عمود منفصل.
+    </div>
+  </div>
+
+  <!-- التقدّم -->
+  <div class="panel" id="progPanel" style="display:none">
+    <h3>التقدّم</h3>
+    <div id="prog" style="display:block">
+      <div class="plabel">الاستعلام الحالي: <b id="pcur">—</b> <span id="pstate"></span></div>
+      <div class="pbar"><i id="pfill"></i></div>
+      <div class="pstats">
+        <div class="pstat q"><div class="n" id="pq">0/0</div><div class="l">الاستعلامات (مدينة×كلمة)</div></div>
+        <div class="pstat f"><div class="n" id="pf">0</div><div class="l">نتائج ظهرت</div></div>
+        <div class="pstat i"><div class="n" id="pi">0</div><div class="l">شركات مُضافة</div></div>
+        <div class="pstat d"><div class="n" id="pd">0</div><div class="l">مكرر محذوف</div></div>
+      </div>
+      <div class="perr" id="perr"></div>
+      <div style="margin-top:12px;display:flex;gap:9px">
+        <button class="tbtn" id="stopBtn" onclick="stopSearch()" style="display:none">■ إيقاف</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- النتائج -->
+  <div class="panel">
+    <h3>الشركات المكتشَفة</h3>
+    <div class="rtoolbar">
+      <button class="tbtn on" id="tabAll" onclick="setFilter('all')">الكل</button>
+      <button class="tbtn" id="tabDest" onclick="setFilter('dest')" style="display:none">المطابقون للوجهة فقط</button>
+      <span class="rcount" id="rcount"></span>
+      <span class="sp"></span>
+      <button class="tbtn csv" onclick="exportCSV()">⬇️ تصدير CSV</button>
+    </div>
+    <div class="tblwrap">
+      <table id="tbl">
+        <thead><tr>
+          <th>اسم الشركة</th><th>رقم الواتساب</th><th>الموقع</th><th>إنستقرام</th><th></th>
+        </tr></thead>
+        <tbody id="tbody"><tr><td colspan="5" class="empty">لا توجد نتائج بعد — ابدأ بحثاً جديداً.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const BASE = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/companies-discovery";
+// بوابة اختيارية: إذا فعّلتِ السر DISCOVERY_KEY لاحقاً، احفظيه هنا مرة واحدة:
+//   localStorage.setItem('disc_key','...')
+function H(){ const h={'Content-Type':'application/json'}; const k=localStorage.getItem('disc_key'); if(k) h['x-admin-secret']=k; return h; }
+async function api(action, opts={}){
+  const method = opts.body ? 'POST' : 'GET';
+  const qs = opts.qs ? ('&'+opts.qs) : '';
+  const r = await fetch(`${BASE}?action=${action}${qs}`, { method, headers:H(), body: opts.body?JSON.stringify(opts.body):undefined });
+  return r.json();
+}
+
+let JOB = localStorage.getItem('disc_job') || null;
+let POLL = null;
+let ROWS = [];
+let FILTER = 'all';
+let HAS_DEST = false;
+
+function toggleCities(){ document.getElementById('citiesFld').style.display = document.getElementById('scope').value==='specific'?'flex':'none'; }
+
+function digits(s){ return String(s||'').replace(/[^\d]/g,''); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function startSearch(){
+  const country = document.getElementById('country').value;
+  const scope = document.getElementById('scope').value;
+  const cities = document.getElementById('cities').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const destination = document.getElementById('destination').value.trim();
+  const target = parseInt(document.getElementById('target').value) || 500;
+  const keywords = document.getElementById('keywords').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const goBtn = document.getElementById('goBtn'); goBtn.disabled = true; goBtn.textContent='… يبدأ';
+  const res = await api('start', { body:{ country, scope, cities, destination, target, keywords, activity:'travel' } });
+  goBtn.disabled = false; goBtn.textContent='ابدأ البحث';
+  if(!res.ok){ alert('تعذّر البدء: '+(res.error||'')); return; }
+  JOB = res.job_id; localStorage.setItem('disc_job', JOB);
+  HAS_DEST = !!destination;
+  document.getElementById('tabDest').style.display = HAS_DEST?'inline-block':'none';
+  if(HAS_DEST) setFilter('dest');
+  document.getElementById('progPanel').style.display='block';
+  document.getElementById('stopBtn').style.display='inline-block';
+  startPolling();
+}
+
+function startPolling(){
+  if(POLL) clearInterval(POLL);
+  let ticks = 0;
+  POLL = setInterval(async ()=>{
+    if(!JOB) return;
+    const s = await api('status', { qs:'job='+encodeURIComponent(JOB) });
+    if(!s.ok){ return; }
+    renderProgress(s);
+    // استئناف تلقائي إذا توقفت الدفعة الخلفية (running لكن آخر تحديث قديم).
+    if(s.status==='running' && s.updated_at){
+      const age = Date.now() - new Date(s.updated_at).getTime();
+      if(age > 13000) api('resume', { body:{ job:JOB } });
+    }
+    // حدّث الجدول كل ~3 نبضات.
+    if(ticks % 3 === 0) loadResults();
+    ticks++;
+    if(s.status==='done' || s.status==='stopped' || s.status==='error'){
+      clearInterval(POLL); POLL=null;
+      document.getElementById('stopBtn').style.display='none';
+      loadResults();
+    }
+  }, 2600);
+}
+
+function renderProgress(s){
+  document.getElementById('pcur').textContent = s.current_label || '—';
+  document.getElementById('pq').textContent = (s.cursor||0)+'/'+(s.queue_len||0);
+  document.getElementById('pf').textContent = s.found||0;
+  document.getElementById('pi').textContent = s.inserted||0;
+  document.getElementById('pd').textContent = s.duplicates||0;
+  const pct = s.queue_len ? Math.min(100, Math.round((s.cursor/s.queue_len)*100)) : 0;
+  document.getElementById('pfill').style.width = pct+'%';
+  const st = document.getElementById('pstate');
+  st.textContent = s.status==='running'?'(جارٍ…)':s.status==='done'?'✅ اكتمل':s.status==='stopped'?'■ متوقّف':s.status==='error'?'⚠️ خطأ':'';
+  const pe = document.getElementById('perr');
+  if(s.error){ pe.style.display='block'; pe.textContent='ملاحظة: '+s.error; } else pe.style.display='none';
+}
+
+async function stopSearch(){ if(!JOB) return; await api('stop', { body:{ job:JOB } }); }
+
+async function loadResults(){
+  if(!JOB){ return; }
+  const r = await api('results', { qs:'job='+encodeURIComponent(JOB) });
+  if(!r.ok) return;
+  ROWS = r.rows||[];
+  if(ROWS.some(x=>x.destination_match)) { HAS_DEST = true; document.getElementById('tabDest').style.display='inline-block'; }
+  renderTable();
+}
+
+function setFilter(f){
+  FILTER = f;
+  document.getElementById('tabAll').classList.toggle('on', f==='all');
+  document.getElementById('tabDest').classList.toggle('on', f==='dest');
+  renderTable();
+}
+
+function visibleRows(){
+  let rows = ROWS.slice();
+  if(FILTER==='dest') rows = rows.filter(r=>r.destination_match);
+  // confirmed قبل likely ثم الأحدث (الخادم يرتّب، وهذا تأكيد).
+  const rank = c => c==='confirmed'?0 : c==='likely'?1 : 2;
+  rows.sort((a,b)=> rank(a.whatsapp_confidence)-rank(b.whatsapp_confidence) || (b.id-a.id));
+  return rows;
+}
+
+function renderTable(){
+  const rows = visibleRows();
+  const tb = document.getElementById('tbody');
+  document.getElementById('rcount').textContent = rows.length ? (rows.length+' شركة') : '';
+  if(!rows.length){ tb.innerHTML = '<tr><td colspan="5" class="empty">لا توجد نتائج بعد.</td></tr>'; return; }
+  tb.innerHTML = rows.map(r=>{
+    const wa = r.whatsapp_number ? digits(r.whatsapp_number) : '';
+    const conf = r.whatsapp_confidence==='confirmed' ? '<span class="bdg confirmed">مؤكّد</span>'
+               : r.whatsapp_confidence==='likely' ? '<span class="bdg likely">مُرجّح</span>' : '';
+    const dest = r.destination_match ? `<span class="bdg dest" title="${esc(r.destination_evidence||'')}">✓ ${esc(r.destination_evidence||'الوجهة')}</span>` : '';
+    const waCell = wa
+      ? `<div>${esc(r.whatsapp_number)}</div><div class="cmeta">${conf} ${r.whatsapp_source==='website'?'من الموقع':'جوال Places'}</div>`
+      : (r.phone_landline ? `<div class="cmeta">أرضي: ${esc(r.phone_landline)}</div>` : '<span class="cmeta">—</span>');
+    const site = r.website ? `<a class="lnk" href="${esc(r.website)}" target="_blank" rel="noopener">${esc(r.domain||'الموقع')}↗</a>` : '<span class="cmeta">—</span>';
+    const ig = r.instagram_handle ? `<a class="lnk" href="https://instagram.com/${esc(r.instagram_handle)}" target="_blank" rel="noopener">@${esc(r.instagram_handle)}</a>` : '<span class="cmeta">—</span>';
+    const waBtn = wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" rel="noopener">💬 واتساب</a>` : `<span class="wa-btn dim">لا رقم</span>`;
+    return `<tr>
+      <td><div class="cname">${esc(r.name||'—')} ${dest}</div><div class="cmeta">${esc(r.city||'')} · ${esc(r.country||'')}</div></td>
+      <td>${waCell}</td>
+      <td>${site}</td>
+      <td>${ig}</td>
+      <td>${waBtn}</td>
+    </tr>`;
+  }).join('');
+}
+
+function exportCSV(){
+  const rows = visibleRows();
+  if(!rows.length){ alert('لا توجد بيانات للتصدير'); return; }
+  const cols = ['name','whatsapp_number','whatsapp_confidence','whatsapp_source','phone_landline','website','domain','instagram_handle','city','country','destination_match','destination_evidence','source_query'];
+  const head = ['اسم الشركة','رقم الواتساب','ثقة الواتساب','مصدر الواتساب','هاتف أرضي','الموقع','النطاق','إنستقرام','المدينة','الدولة','مطابقة الوجهة','دليل الوجهة','الاستعلام'];
+  const csv = [head.join(',')].concat(rows.map(r=>cols.map(c=>{
+    let v = r[c]; if(v==null) v=''; v=String(v).replace(/"/g,'""'); return /[",\n]/.test(v)?`"${v}"`:v;
+  }).join(','))).join('\r\n');
+  const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'discovered_companies.csv'; a.click(); URL.revokeObjectURL(a.href);
+}
+
+// استئناف تلقائي عند فتح الصفحة: هل هناك مهمة قيد التشغيل؟
+(async function initResume(){
+  const a = await api('active');
+  if(a.ok && a.job){
+    JOB = a.job.id; localStorage.setItem('disc_job', JOB);
+    document.getElementById('progPanel').style.display='block';
+    document.getElementById('stopBtn').style.display='inline-block';
+    startPolling();
+  } else if(JOB){
+    loadResults();
+  }
+})();
+</script>
+</body>
+</html>

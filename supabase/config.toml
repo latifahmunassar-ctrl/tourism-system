@@ -37,3 +37,9 @@ verify_jwt = false
 # service role, so disabling platform JWT verification is required and safe.
 [functions.instagram-webhook]
 verify_jwt = false
+
+# Company-discovery tool (owner-only). The discovery page calls it with no JWT;
+# it gates internally on the optional DISCOVERY_KEY (x-admin-secret) and only
+# ever writes to its own new tables (discovered_companies / discovery_jobs).
+[functions.companies-discovery]
+verify_jwt = false
