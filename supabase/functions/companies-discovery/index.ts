@@ -538,6 +538,16 @@ Deno.serve(async (req) => {
       return json({ ok: true, reset: true });
     }
 
+    if (action === "del_job") {
+      // حذف مهمة بحث واحدة وصفوفها (لا يمسّ بقية الأبحاث/المعتمدة).
+      const b = await req.json().catch(() => ({}));
+      const jobId = b.job || url.searchParams.get("job");
+      if (!jobId) return json({ ok: false, error: "job مطلوب" }, 400);
+      await supabase.from("discovered_companies").delete().eq("job_id", jobId);
+      await supabase.from("discovery_jobs").delete().eq("id", jobId);
+      return json({ ok: true });
+    }
+
     if (action === "active") {
       // آخر مهمة (أياً كانت حالتها) — تُستأنف إن كانت running، وإلا تُعرض نتائجها.
       const { data } = await supabase.from("discovery_jobs")
