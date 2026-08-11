@@ -275,25 +275,26 @@ async function placesPage(apiKey: string, textQuery: string, regionCode: string,
 // ── معالجة استعلام واحد (مدينة × كلمة) ───────────────────────────────────────
 async function runQuery(
   supabase: any, apiKey: string, job: any, city: string, keyword: string,
-  seen: { names: Set<string>; domains: Set<string>; insta: Set<string> }, remaining: number,
+  seen: { placeIds: Set<string>; names: Set<string>; domains: Set<string>; insta: Set<string> }, remaining: number,
 ): Promise<{ found: number; inserted: number; duplicates: number }> {
   const country: string = job.params.country;
   const destKw: string[] = job.params.destination ? destKeywordsFor(job.params.destination) : [];
   const textQuery = `${keyword} ${city}`;
   const label = `${city} × ${keyword}`;
 
-  // 1) اجمع نتائج Places (حتى 60)، وتوقّف مبكراً عند بلوغ المتبقّي من الهدف.
+  // 1) اجمع نتائج Places الجديدة فقط (تخطَّ place_id المعروف من أي بحث سابق) حتى 60/استعلام.
   let raw: any[] = [];
   let token: string | undefined = undefined;
   for (let page = 0; page < MAX_PAGES; page++) {
     const { places, nextPageToken } = await placesPage(apiKey, textQuery, country, token);
-    raw.push(...places);
+    for (const pl of places) if (pl.id && !seen.placeIds.has(pl.id)) raw.push(pl);
     if (!nextPageToken) break;
-    if (remaining > 0 && raw.length >= remaining) break; // لا تجلب صفحات زائدة عن الحاجة
+    if (remaining > 0 && raw.length >= remaining) break; // وجدنا ما يكفي من الجديد
     token = nextPageToken;
   }
-  // احترم العدد المطلوب بدقّة (يقلّل استهلاك الـAPI وإثراء المواقع).
+  // احترم العدد المطلوب بدقّة (يقلّل الإثراء).
   if (remaining > 0 && raw.length > remaining) raw = raw.slice(0, remaining);
+  for (const pl of raw) seen.placeIds.add(pl.id); // لا يُعاد ضمن نفس الدفعة
 
   // 2) أثرِ المواقع بتزامن 5.
   const enriched = new Array(raw.length);
@@ -361,10 +362,33 @@ async function scheduleResume(jobId: string): Promise<void> {
   try { await fetch(url, { method: "POST", headers, body: JSON.stringify({ job: jobId }) }); } catch (_) { /* الواجهة تستأنف احتياطياً */ }
 }
 
+// ذاكرة عابرة لكل الأبحاث: مفاتيح التكرار من كامل الجدول (place_id + اسم|هاتف + نطاق + إنستقرام)،
+// مُصفّحة (PostgREST يحدّ الصفحة بـ1000). فأي بحث قادم يتخطّى كل شركة ظهرت سابقاً.
+async function loadGlobalSeen(supabase: any) {
+  const seen = { placeIds: new Set<string>(), names: new Set<string>(), domains: new Set<string>(), insta: new Set<string>() };
+  const PAGE = 1000;
+  for (let from = 0, i = 0; i < 60; i++, from += PAGE) {
+    const { data } = await supabase.from("discovered_companies")
+      .select("place_id,name_normalized,whatsapp_number,phone_landline,domain,instagram_handle")
+      .range(from, from + PAGE - 1);
+    const rows = data || [];
+    for (const r of rows) {
+      if (r.place_id) seen.placeIds.add(r.place_id);
+      const nk = r.name_normalized ? `${r.name_normalized}|${last9(r.whatsapp_number || r.phone_landline || "")}` : "";
+      if (nk) seen.names.add(nk);
+      if (r.domain) seen.domains.add(r.domain);
+      if (r.instagram_handle) seen.insta.add(r.instagram_handle.toLowerCase());
+    }
+    if (rows.length < PAGE) break;
+  }
+  return seen;
+}
+
 // ── دفعة خلفية قابلة للاستئناف ────────────────────────────────────────────────
 async function runBatch(supabase: any, apiKey: string, jobId: string): Promise<void> {
   const t0 = Date.now();
   let processed = 0;
+  const seen = await loadGlobalSeen(supabase); // ذاكرة عابرة لكل الأبحاث (مرة واحدة لكل دفعة)
   try {
     while (true) {
       const { data: job } = await supabase.from("discovery_jobs").select("*").eq("id", jobId).single();
@@ -376,17 +400,6 @@ async function runBatch(supabase: any, apiKey: string, jobId: string): Promise<v
 
       const { city, keyword } = queue[job.cursor];
       await supabase.from("discovery_jobs").update({ current_label: `${city} × ${keyword}`, updated_at: new Date().toISOString() }).eq("id", jobId);
-
-      // حمّل مفاتيح التكرار الحالية لهذه المهمة.
-      const seen = { names: new Set<string>(), domains: new Set<string>(), insta: new Set<string>() };
-      const { data: existing } = await supabase.from("discovered_companies")
-        .select("name_normalized,whatsapp_number,phone_landline,domain,instagram_handle").eq("job_id", jobId);
-      for (const r of existing || []) {
-        const nk = r.name_normalized ? `${r.name_normalized}|${last9(r.whatsapp_number || r.phone_landline || "")}` : "";
-        if (nk) seen.names.add(nk);
-        if (r.domain) seen.domains.add(r.domain);
-        if (r.instagram_handle) seen.insta.add(r.instagram_handle.toLowerCase());
-      }
 
       let res = { found: 0, inserted: 0, duplicates: 0 };
       const remaining = Math.max(0, job.target - job.inserted);
@@ -479,14 +492,35 @@ Deno.serve(async (req) => {
     if (action === "results") {
       const jobId = url.searchParams.get("job");
       const onlyDest = url.searchParams.get("only_dest") === "1";
-      let q = supabase.from("discovered_companies").select("*");
-      if (jobId) q = q.eq("job_id", jobId);
+      const keptAll = url.searchParams.get("kept") === "1"; // القائمة المعتمدة عبر كل الأبحاث
+      let q = supabase.from("discovered_companies").select("*").neq("status", "hidden");
+      if (keptAll) q = q.eq("status", "kept");
+      else if (jobId) q = q.eq("job_id", jobId);
       if (onlyDest) q = q.eq("destination_match", true);
       // confirmed قبل likely، ثم الأحدث.
-      q = q.order("whatsapp_confidence", { ascending: true }).order("created_at", { ascending: false }).limit(2000);
+      q = q.order("whatsapp_confidence", { ascending: true }).order("created_at", { ascending: false }).limit(5000);
       const { data, error } = await q;
       if (error) return json({ ok: false, error: error.message }, 500);
       return json({ ok: true, rows: data || [] });
+    }
+
+    if (action === "mark") {
+      // اعتماد/إلغاء اعتماد صفوف: {ids:[…]} أو {all:true, job} — status: kept|new|hidden.
+      const b = await req.json().catch(() => ({}));
+      const status = ["kept", "new", "hidden"].includes(b.status) ? b.status : "kept";
+      let q = supabase.from("discovered_companies").update({ status });
+      if (Array.isArray(b.ids) && b.ids.length) q = q.in("id", b.ids);
+      else if (b.all && b.job) q = q.eq("job_id", b.job);
+      else return json({ ok: false, error: "لا يوجد تحديد (ids أو all+job)" }, 400);
+      const { data, error } = await q.select("id");
+      if (error) return json({ ok: false, error: error.message }, 500);
+      return json({ ok: true, updated: (data || []).length, status });
+    }
+
+    if (action === "counts") {
+      // عدّاد المعتمدة (لعرضه في الواجهة).
+      const { count } = await supabase.from("discovered_companies").select("id", { count: "exact", head: true }).eq("status", "kept");
+      return json({ ok: true, kept: count || 0 });
     }
 
     if (action === "stop") {

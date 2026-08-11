@@ -52,6 +52,7 @@
   .bdg{font-size:10px;font-weight:800;padding:2px 9px;border-radius:20px;white-space:nowrap}
   .bdg.confirmed{background:#dcfce7;color:var(--ok)}.bdg.likely{background:#fef3c7;color:var(--warn)}
   .bdg.dest{background:#ede9fe;color:#6d28d9;margin-inline-start:5px}
+  .bdg.kept{background:#fef9e7;color:#b8860b;margin-inline-start:5px}
   a.lnk{color:var(--brand);text-decoration:none}a.lnk:hover{text-decoration:underline}
   .wa-btn{display:inline-flex;align-items:center;gap:5px;background:var(--wa);color:#fff;border:none;border-radius:9px;padding:7px 12px;font:inherit;font-weight:800;font-size:12.5px;cursor:pointer;text-decoration:none}
   .wa-btn.dim{background:#e5e7eb;color:#888;pointer-events:none}
@@ -148,18 +149,30 @@
   <div class="panel">
     <h3>الشركات المكتشَفة</h3>
     <div class="rtoolbar">
-      <button class="tbtn on" id="tabAll" onclick="setFilter('all')">الكل</button>
-      <button class="tbtn" id="tabDest" onclick="setFilter('dest')" style="display:none">المطابقون للوجهة فقط</button>
+      <button class="tbtn on" id="viewJob" onclick="setView('job')">نتائج البحث</button>
+      <button class="tbtn" id="viewKept" onclick="setView('kept')">⭐ المعتمدة <span id="keptCount"></span></button>
+      <span style="width:1px;height:22px;background:var(--line)"></span>
+      <button class="tbtn" id="tabDest" onclick="setFilter(FILTER==='dest'?'all':'dest')" style="display:none">الوجهة فقط</button>
       <span class="rcount" id="rcount"></span>
       <span class="sp"></span>
       <button class="tbtn csv" onclick="exportCSV()">⬇️ تصدير CSV</button>
     </div>
+    <div class="rtoolbar" id="approveBar" style="display:none;background:#f7faf8">
+      <label style="font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="selAll" onchange="toggleSelAll(this.checked)"> تحديد الظاهر
+      </label>
+      <span class="rcount" id="selCount"></span>
+      <span class="sp"></span>
+      <button class="tbtn" id="btnKeepSel" onclick="approve('sel')" style="background:#e9f7f1;color:var(--brand);border-color:#b8e0d0;font-weight:800">✓ اعتمد المحدد</button>
+      <button class="tbtn" id="btnKeepAll" onclick="approve('all')" style="background:var(--brand);color:#fff;border-color:var(--brand)">✓ اعتمد كل نتائج البحث</button>
+      <button class="tbtn" id="btnUnkeep" onclick="unapprove()" style="display:none;background:#fbeaea;color:var(--err);border-color:#f0caca">✕ إزالة الاعتماد للمحدد</button>
+    </div>
     <div class="tblwrap">
       <table id="tbl">
         <thead><tr>
-          <th>اسم الشركة</th><th>رقم الواتساب</th><th>الموقع</th><th>إنستقرام</th><th></th>
+          <th style="width:34px"></th><th>اسم الشركة</th><th>رقم الواتساب</th><th>الموقع</th><th>إنستقرام</th><th></th>
         </tr></thead>
-        <tbody id="tbody"><tr><td colspan="5" class="empty">لا توجد نتائج بعد — ابدأ بحثاً جديداً.</td></tr></tbody>
+        <tbody id="tbody"><tr><td colspan="6" class="empty">لا توجد نتائج بعد — ابدأ بحثاً جديداً.</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -183,6 +196,8 @@ let POLL = null;
 let ROWS = [];
 let FILTER = 'all';
 let HAS_DEST = false;
+let VIEW = 'job';           // 'job' = نتائج البحث الحالي · 'kept' = المعتمدة عبر كل الأبحاث
+let SEL = new Set();        // معرّفات الصفوف المحدّدة
 
 function toggleCities(){ document.getElementById('citiesFld').style.display = document.getElementById('scope').value==='specific'?'flex':'none'; }
 
@@ -250,19 +265,66 @@ function renderProgress(s){
 async function stopSearch(){ if(!JOB) return; await api('stop', { body:{ job:JOB } }); }
 
 async function loadResults(){
+  if(VIEW==='kept') return loadKept();
   if(!JOB){ return; }
   const r = await api('results', { qs:'job='+encodeURIComponent(JOB) });
   if(!r.ok) return;
-  ROWS = r.rows||[];
+  ROWS = r.rows||[]; SEL.clear();
   if(ROWS.some(x=>x.destination_match)) { HAS_DEST = true; document.getElementById('tabDest').style.display='inline-block'; }
-  renderTable();
+  renderTable(); refreshKeptCount();
+}
+
+async function loadKept(){
+  const r = await api('results', { qs:'kept=1' });
+  if(!r.ok) return;
+  ROWS = r.rows||[]; SEL.clear();
+  renderTable(); refreshKeptCount();
+}
+
+async function refreshKeptCount(){
+  const c = await api('counts');
+  if(c.ok) document.getElementById('keptCount').textContent = c.kept ? '('+c.kept+')' : '';
+}
+
+function setView(v){
+  VIEW = v; SEL.clear();
+  document.getElementById('viewJob').classList.toggle('on', v==='job');
+  document.getElementById('viewKept').classList.toggle('on', v==='kept');
+  // في وضع المعتمدة: زر «إزالة الاعتماد» بدل «اعتمد الكل».
+  document.getElementById('btnKeepAll').style.display = v==='kept'?'none':'inline-block';
+  document.getElementById('btnKeepSel').style.display = v==='kept'?'none':'inline-block';
+  document.getElementById('btnUnkeep').style.display  = v==='kept'?'inline-block':'none';
+  if(v==='kept') loadKept(); else loadResults();
 }
 
 function setFilter(f){
   FILTER = f;
-  document.getElementById('tabAll').classList.toggle('on', f==='all');
   document.getElementById('tabDest').classList.toggle('on', f==='dest');
   renderTable();
+}
+
+function toggleSel(id, on){ if(on) SEL.add(id); else SEL.delete(id); updateSelUI(); }
+function toggleSelAll(on){
+  const rows = visibleRows();
+  if(on) rows.forEach(r=>SEL.add(r.id)); else SEL.clear();
+  renderTable();
+}
+function updateSelUI(){
+  document.getElementById('selCount').textContent = SEL.size ? (SEL.size+' محدّدة') : '';
+}
+async function approve(which){
+  let body;
+  if(which==='all'){ if(!JOB){ alert('لا يوجد بحث'); return; } body={ all:true, job:JOB, status:'kept' }; }
+  else { if(!SEL.size){ alert('حدّدي صفوفاً أولاً'); return; } body={ ids:[...SEL], status:'kept' }; }
+  const r = await api('mark', { body });
+  if(!r.ok){ alert('تعذّر الاعتماد: '+(r.error||'')); return; }
+  SEL.clear(); await loadResults();
+}
+async function unapprove(){
+  if(!SEL.size){ alert('حدّدي صفوفاً أولاً'); return; }
+  const r = await api('mark', { body:{ ids:[...SEL], status:'new' } });
+  if(!r.ok){ alert('تعذّر: '+(r.error||'')); return; }
+  SEL.clear(); await loadKept();
 }
 
 function visibleRows(){
@@ -278,12 +340,16 @@ function renderTable(){
   const rows = visibleRows();
   const tb = document.getElementById('tbody');
   document.getElementById('rcount').textContent = rows.length ? (rows.length+' شركة') : '';
-  if(!rows.length){ tb.innerHTML = '<tr><td colspan="5" class="empty">لا توجد نتائج بعد.</td></tr>'; return; }
+  document.getElementById('approveBar').style.display = rows.length ? 'flex' : 'none';
+  const selAll = document.getElementById('selAll'); if(selAll) selAll.checked = rows.length>0 && rows.every(r=>SEL.has(r.id));
+  updateSelUI();
+  if(!rows.length){ tb.innerHTML = '<tr><td colspan="6" class="empty">لا توجد نتائج بعد.</td></tr>'; return; }
   tb.innerHTML = rows.map(r=>{
     const wa = r.whatsapp_number ? digits(r.whatsapp_number) : '';
     const conf = r.whatsapp_confidence==='confirmed' ? '<span class="bdg confirmed">مؤكّد</span>'
                : r.whatsapp_confidence==='likely' ? '<span class="bdg likely">مُرجّح</span>' : '';
     const dest = r.destination_match ? `<span class="bdg dest" title="${esc(r.destination_evidence||'')}">✓ ${esc(r.destination_evidence||'الوجهة')}</span>` : '';
+    const kept = r.status==='kept' ? '<span class="bdg kept">⭐ معتمدة</span>' : '';
     const waCell = wa
       ? `<div>${esc(r.whatsapp_number)}</div><div class="cmeta">${conf} ${r.whatsapp_source==='website'?'من الموقع':'جوال Places'}</div>`
       : (r.phone_landline ? `<div class="cmeta">أرضي: ${esc(r.phone_landline)}</div>` : '<span class="cmeta">—</span>');
@@ -291,7 +357,8 @@ function renderTable(){
     const ig = r.instagram_handle ? `<a class="lnk" href="https://instagram.com/${esc(r.instagram_handle)}" target="_blank" rel="noopener">@${esc(r.instagram_handle)}</a>` : '<span class="cmeta">—</span>';
     const waBtn = wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" rel="noopener">💬 واتساب</a>` : `<span class="wa-btn dim">لا رقم</span>`;
     return `<tr>
-      <td><div class="cname">${esc(r.name||'—')} ${dest}</div><div class="cmeta">${esc(r.city||'')} · ${esc(r.country||'')}</div></td>
+      <td><input type="checkbox" ${SEL.has(r.id)?'checked':''} onchange="toggleSel(${r.id}, this.checked)"></td>
+      <td><div class="cname">${esc(r.name||'—')} ${dest} ${kept}</div><div class="cmeta">${esc(r.city||'')} · ${esc(r.country||'')}</div></td>
       <td>${waCell}</td>
       <td>${site}</td>
       <td>${ig}</td>
@@ -303,8 +370,8 @@ function renderTable(){
 function exportCSV(){
   const rows = visibleRows();
   if(!rows.length){ alert('لا توجد بيانات للتصدير'); return; }
-  const cols = ['name','whatsapp_number','whatsapp_confidence','whatsapp_source','phone_landline','website','domain','instagram_handle','city','country','destination_match','destination_evidence','source_query'];
-  const head = ['اسم الشركة','رقم الواتساب','ثقة الواتساب','مصدر الواتساب','هاتف أرضي','الموقع','النطاق','إنستقرام','المدينة','الدولة','مطابقة الوجهة','دليل الوجهة','الاستعلام'];
+  const cols = ['name','whatsapp_number','whatsapp_confidence','whatsapp_source','phone_landline','website','domain','instagram_handle','city','country','destination_match','destination_evidence','source_query','status'];
+  const head = ['اسم الشركة','رقم الواتساب','ثقة الواتساب','مصدر الواتساب','هاتف أرضي','الموقع','النطاق','إنستقرام','المدينة','الدولة','مطابقة الوجهة','دليل الوجهة','الاستعلام','الحالة'];
   const csv = [head.join(',')].concat(rows.map(r=>cols.map(c=>{
     let v = r[c]; if(v==null) v=''; v=String(v).replace(/"/g,'""'); return /[",\n]/.test(v)?`"${v}"`:v;
   }).join(','))).join('\r\n');
