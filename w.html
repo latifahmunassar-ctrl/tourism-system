@@ -2240,9 +2240,54 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     }
     // المحادثة المفتوحة حالياً في نافذة الواتساب نفسها. غير null = وضع إنستقرام.
     let igActiveThread = null;
-    // نفتح محادثة إنستقرام داخل نفس نافذة الواتساب (#conv-overlay) — تجربة موحّدة.
+    let igThreadTimer = null;   // استطلاع الرسائل الجديدة أثناء فتح النافذة
+    let igThreadCount = -1;     // عدد الرسائل المعروضة حالياً (لكشف الجديد)
+    // رسم رسائل المحادثة داخل #conv-body بنفس أنماط الواتساب.
+    function igRenderThread(msgs) {
+      const bd = $("conv-body");
+      if (!bd) return;
+      const atBottom = (bd.scrollHeight - bd.scrollTop - bd.clientHeight) < 60;  // تابعي القاع لو كنتِ فيه
+      bd.innerHTML = "";
+      if (!msgs.length) { bd.innerHTML = '<div class="empty">لا رسائل</div>'; return; }
+      let lastInbound = 0;
+      for (const m of msgs) {
+        const inbound = m.direction !== "outbound";
+        if (inbound) { const t = Date.parse(m.created_at || ""); if (t && t > lastInbound) lastInbound = t; }
+        const row = document.createElement("div");
+        row.className = inbound ? "conv-msg user" : "conv-msg bot admin";   // نفس أنماط الواتساب
+        row.innerHTML = (inbound ? '' : '<span class="sender-pill">أنا</span>')
+          + '<div class="bubble">' + escapeHtml(m.message_text || "") + '</div>'
+          + '<div class="meta">' + igFmt(m.created_at) + '</div>';
+        bd.appendChild(row);
+      }
+      // نافذة الرد: مع وسم Human Agent تمتد إلى ٧ أيام (يفرضها إنستقرام خادميّاً).
+      if (lastInbound && (Date.now() - lastInbound > 7 * 24 * 3600 * 1000)) {
+        const w = document.createElement("div");
+        w.style.cssText = "background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;padding:9px 12px;font-size:12.5px;font-weight:700;margin:8px 0;";
+        w.textContent = "⏰ مرّت أكثر من ٧ أيام على آخر رسالة من العميل — إنستقرام قد يمنع الإرسال حتى يرسل العميل من جديد.";
+        bd.appendChild(w);
+      }
+      if (atBottom) bd.scrollTop = bd.scrollHeight;
+    }
+    // استطلاع صامت للرسائل الجديدة (استقبال حيّ زي الواتساب) — لا يُعيد الرسم إلا عند جديد.
+    async function igPollThread() {
+      if (!igActiveThread) return;
+      const { account, sender } = igActiveThread;
+      let d = null;
+      const params = "?action=conversation&account=" + encodeURIComponent(account) + "&sender=" + encodeURIComponent(sender);
+      for (const sec of igCandidates()) { const out = await igTry(params, sec); if (out) { d = out; break; } }
+      if (!d || !igActiveThread || igActiveThread.account !== account || igActiveThread.sender !== sender) return;
+      const msgs = (d.messages) || [];
+      if (msgs.length === igThreadCount) return;   // لا جديد
+      igThreadCount = msgs.length;
+      igRenderThread(msgs);
+    }
+    function igStopThreadPoll() { if (igThreadTimer) { clearInterval(igThreadTimer); igThreadTimer = null; } }
+    function igStartThreadPoll() { igStopThreadPoll(); igThreadTimer = setInterval(igPollThread, 8000); }
+    // نفتح محادثة إنستقرام داخل نفس نافذة الواتساب (#conv-overlay) — تجربة موحّدة + استقبال حيّ.
     async function igOpenThread(account, sender, title) {
       igActiveThread = { account, sender, title: title || "" };
+      igThreadCount = -1;
       convPhone = null;                       // نمنع استطلاع الواتساب لهذه النافذة
       try { stopConvPolling(); } catch (_e) {}
       document.body.classList.add("ig-conv");  // يخفي أدوات الواتساب الخاصة (CSS)
@@ -2255,27 +2300,9 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       try {
         const d = await igFetch("?action=conversation&account=" + encodeURIComponent(account) + "&sender=" + encodeURIComponent(sender));
         const msgs = (d && d.messages) || [];
-        bd.innerHTML = "";
-        if (!msgs.length) bd.innerHTML = '<div class="empty">لا رسائل</div>';
-        let lastInbound = 0;
-        for (const m of msgs) {
-          const inbound = m.direction !== "outbound";
-          if (inbound) { const t = Date.parse(m.created_at || ""); if (t && t > lastInbound) lastInbound = t; }
-          const row = document.createElement("div");
-          row.className = inbound ? "conv-msg user" : "conv-msg bot admin";   // نفس أنماط الواتساب
-          row.innerHTML = (inbound ? '' : '<span class="sender-pill">أنا</span>')
-            + '<div class="bubble">' + escapeHtml(m.message_text || "") + '</div>'
-            + '<div class="meta">' + igFmt(m.created_at) + '</div>';
-          bd.appendChild(row);
-        }
-        // نافذة الرد: مع وسم Human Agent تمتد إلى ٧ أيام (يفرضها إنستقرام خادميّاً).
-        if (lastInbound && (Date.now() - lastInbound > 7 * 24 * 3600 * 1000)) {
-          const w = document.createElement("div");
-          w.style.cssText = "background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;padding:9px 12px;font-size:12.5px;font-weight:700;margin:8px 0;";
-          w.textContent = "⏰ مرّت أكثر من ٧ أيام على آخر رسالة من العميل — إنستقرام قد يمنع الإرسال حتى يرسل العميل من جديد.";
-          bd.appendChild(w);
-        }
-        bd.scrollTop = bd.scrollHeight;
+        igThreadCount = msgs.length;
+        igRenderThread(msgs);
+        igStartThreadPoll();                   // استقبال حيّ للرسائل الجديدة
       } catch (e) {
         bd.innerHTML = '<div class="empty" style="color:var(--err)">تعذّر تحميل الرسائل (' + escapeHtml(e.message) + ')</div>';
       }
@@ -4048,6 +4075,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
 
     async function openConversation(phone, name) {
       igActiveThread = null;                          // نافذة واتساب حقيقية — أخرجي من وضع إنستقرام
+      igStopThreadPoll();
       document.body.classList.remove("ig-conv");
       // ⏱️ تسجيل الحضور إلزامي: الموظفة ما تقدر تفتح محادثة إلا بعد ضغط «بدء الدوام».
       // (المالكة/الأدمن ليست staff فلا تُمنع.) بما إن الدوام فترتين، تضغطه في كل فترة.
@@ -4557,6 +4585,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       $("conv-overlay").style.display = "none";
       convPhone = "";
       igActiveThread = null;                          // خروج من وضع إنستقرام
+      igStopThreadPoll();
       document.body.classList.remove("ig-conv");
       closeOfferMenu();
       stopConvPolling();
