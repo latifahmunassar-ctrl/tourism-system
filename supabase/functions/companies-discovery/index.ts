@@ -505,9 +505,13 @@ Deno.serve(async (req) => {
     }
 
     if (action === "active") {
-      // آخر مهمة قيد التشغيل (لاستئناف تلقائي عند فتح الصفحة).
-      const { data } = await supabase.from("discovery_jobs").select("id,status,updated_at").eq("status", "running").order("created_at", { ascending: false }).limit(1);
-      return json({ ok: true, job: (data && data[0]) || null });
+      // آخر مهمة (أياً كانت حالتها) — تُستأنف إن كانت running، وإلا تُعرض نتائجها.
+      const { data } = await supabase.from("discovery_jobs")
+        .select("id,status,updated_at,cursor,found,inserted,duplicates,target,current_label,queue")
+        .order("created_at", { ascending: false }).limit(1);
+      const j = (data && data[0]) || null;
+      if (j) { j.queue_len = (j.queue || []).length; delete j.queue; }
+      return json({ ok: true, job: j });
     }
 
     return json({ ok: false, error: "action غير معروف" }, 400);

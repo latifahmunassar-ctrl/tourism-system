@@ -313,15 +313,21 @@ function exportCSV(){
   a.download = 'discovered_companies.csv'; a.click(); URL.revokeObjectURL(a.href);
 }
 
-// استئناف تلقائي عند فتح الصفحة: هل هناك مهمة قيد التشغيل؟
+// عند فتح الصفحة: استأنف المهمة الجارية، أو اعرض نتائج آخر مهمة مكتملة.
 (async function initResume(){
   const a = await api('active');
   if(a.ok && a.job){
     JOB = a.job.id; localStorage.setItem('disc_job', JOB);
     document.getElementById('progPanel').style.display='block';
-    document.getElementById('stopBtn').style.display='inline-block';
-    startPolling();
+    if(a.job.status==='running'){
+      document.getElementById('stopBtn').style.display='inline-block';
+      startPolling();
+    } else {
+      renderProgress(a.job);
+      loadResults();
+    }
   } else if(JOB){
+    document.getElementById('progPanel').style.display='block';
     loadResults();
   }
 })();
