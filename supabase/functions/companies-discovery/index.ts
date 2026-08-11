@@ -493,15 +493,22 @@ Deno.serve(async (req) => {
       const jobId = url.searchParams.get("job");
       const onlyDest = url.searchParams.get("only_dest") === "1";
       const keptAll = url.searchParams.get("kept") === "1"; // القائمة المعتمدة عبر كل الأبحاث
-      let q = supabase.from("discovered_companies").select("*").neq("status", "hidden");
-      if (keptAll) q = q.eq("status", "kept");
-      else if (jobId) q = q.eq("job_id", jobId);
-      if (onlyDest) q = q.eq("destination_match", true);
-      // confirmed قبل likely، ثم الأحدث.
-      q = q.order("whatsapp_confidence", { ascending: true }).order("created_at", { ascending: false }).limit(5000);
-      const { data, error } = await q;
-      if (error) return json({ ok: false, error: error.message }, 500);
-      return json({ ok: true, rows: data || [] });
+      const build = () => {
+        let q = supabase.from("discovered_companies").select("*").neq("status", "hidden");
+        if (keptAll) q = q.eq("status", "kept");
+        else if (jobId) q = q.eq("job_id", jobId);
+        if (onlyDest) q = q.eq("destination_match", true);
+        return q.order("whatsapp_confidence", { ascending: true }).order("created_at", { ascending: false });
+      };
+      // ترقيم صفحات لتجاوز حد 1000 لكل طلب (قائمة المعتمدة قد تتجاوزه).
+      const all: any[] = []; const PAGE = 1000;
+      for (let from = 0, i = 0; i < 12; i++, from += PAGE) {
+        const { data, error } = await build().range(from, from + PAGE - 1);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        all.push(...(data || []));
+        if ((data || []).length < PAGE) break;
+      }
+      return json({ ok: true, rows: all });
     }
 
     if (action === "mark") {
