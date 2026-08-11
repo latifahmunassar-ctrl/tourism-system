@@ -116,6 +116,26 @@ function igFromUrl(u: string): string | null {
   } catch { return null; }
 }
 
+// تيك توك: يُلتقط من موقع الشركة (رابط tiktok.com/@handle).
+const RESERVED_TT = new Set(["tag", "music", "video", "discover", "foryou", "following", "explore", "live", "effect", "search", "about", "legal", "upload", "trending"]);
+function extractTiktok(html: string): string | null {
+  const re = /tiktok\.com\/@([A-Za-z0-9._]{2,30})/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const h = m[1].replace(/\.$/, "");
+    if (!RESERVED_TT.has(h.toLowerCase()) && !/\.(php|html?|js|css)$/i.test(h)) return h;
+  }
+  return null;
+}
+function ttFromUrl(u: string): string | null {
+  try {
+    const p = new URL(u);
+    if (!/(^|\.)tiktok\.com$/i.test(p.hostname.replace(/^www\./, ""))) return null;
+    const seg = (p.pathname.split("/").filter(Boolean)[0] || "").replace(/^@/, "").replace(/\.$/, "");
+    return (seg && !RESERVED_TT.has(seg.toLowerCase())) ? seg : null;
+  } catch { return null; }
+}
+
 function digitsOnly(s: string): string { return String(s || "").replace(/[^\d]/g, ""); }
 
 // استخراج رقم واتساب من روابط الموقع: wa.me / api.whatsapp.com / whatsapp://send
@@ -202,20 +222,22 @@ function absLinks(html: string, base: string): string[] {
 
 // إثراء موقع شركة واحدة: إنستقرام + واتساب من الموقع + فلتر الوجهة (حد 4 صفحات).
 async function enrichSite(websiteUri: string, destKw: string[]): Promise<{
-  instagram: string | null; whatsappSite: string | null; destMatch: boolean; destEvidence: string | null;
+  instagram: string | null; tiktok: string | null; whatsappSite: string | null; destMatch: boolean; destEvidence: string | null;
 }> {
-  const res = { instagram: null as string | null, whatsappSite: null as string | null, destMatch: false, destEvidence: null as string | null };
+  const res = { instagram: null as string | null, tiktok: null as string | null, whatsappSite: null as string | null, destMatch: false, destEvidence: null as string | null };
   if (!websiteUri) return res;
-  // إذا كان «الموقع» رابط إنستقرام/فيسبوك: خذ المعرّف من الرابط ولا تجلب الصفحة (تعطي رموزاً لا معرّفات).
+  // إذا كان «الموقع» رابط إنستقرام/فيسبوك/تيك توك: خذ المعرّف من الرابط ولا تجلب الصفحة.
   const whost = (domainOf(websiteUri) || "");
   if (/(^|\.)instagram\.com$/i.test(whost) || /(^|\.)facebook\.com$/i.test(whost)) {
     res.instagram = igFromUrl(websiteUri);
     return res;
   }
+  if (/(^|\.)tiktok\.com$/i.test(whost)) { res.tiktok = ttFromUrl(websiteUri); return res; }
   const home = await fetchText(websiteUri);
   if (!home) return res;
   let text = home.html;
   res.instagram = extractInstagram(home.html);
+  res.tiktok = extractTiktok(home.html);
   res.whatsappSite = extractWhatsapp(home.html);
 
   const links = absLinks(home.html, home.url);
@@ -234,6 +256,7 @@ async function enrichSite(websiteUri: string, destKw: string[]): Promise<{
     const p = await fetchText(u);
     if (!p) continue;
     if (!res.instagram) res.instagram = extractInstagram(p.html);
+    if (!res.tiktok) res.tiktok = extractTiktok(p.html);
     if (!res.whatsappSite) res.whatsappSite = extractWhatsapp(p.html);
     text += "\n" + p.html;
   }
@@ -333,7 +356,7 @@ async function runQuery(
     rows.push({
       job_id: job.id, place_id: pl.id, name, name_normalized: nn,
       website, domain, whatsapp_number, whatsapp_confidence, whatsapp_source, phone_landline,
-      instagram_handle: e.instagram, city, country,
+      instagram_handle: e.instagram, tiktok_handle: e.tiktok, city, country,
       destination_match: e.destMatch, destination_evidence: e.destEvidence,
       source_query: label, status: "new",
     });
@@ -382,6 +405,42 @@ async function loadGlobalSeen(supabase: any) {
     if (rows.length < PAGE) break;
   }
   return seen;
+}
+
+// ── فحص مُعاد للمواقع الموجودة: يسحب تيك توك + يكمّل إنستقرام (بلا Google/تكلفة) ──
+async function recrawlBatch(supabase: any, jobId: string): Promise<void> {
+  const t0 = Date.now();
+  try {
+    while (true) {
+      const { data: job } = await supabase.from("discovery_jobs").select("*").eq("id", jobId).single();
+      if (!job || job.status !== "running") return;
+      const queue: number[] = job.queue || [];
+      if (job.cursor >= queue.length) { await supabase.from("discovery_jobs").update({ status: "done", current_label: `اكتمل الفحص · تيك توك+${job.inserted}`, updated_at: new Date().toISOString() }).eq("id", jobId); return; }
+      if ((Date.now() - t0) > BATCH_MS) { await scheduleResume(jobId); return; }
+
+      const CHUNK = 20;
+      const ids = queue.slice(job.cursor, job.cursor + CHUNK);
+      const { data: comps } = await supabase.from("discovered_companies").select("id,website,instagram_handle,tiktok_handle").in("id", ids);
+      let tk = 0, ig = 0;
+      await pool(comps || [], WEBSITE_CONCURRENCY, async (c: any) => {
+        if (!c.website) return;
+        const e = await enrichSite(c.website, []); // بلا فلتر وجهة → homepage + اتصل بنا فقط
+        const patch: any = {};
+        if (e.tiktok && !c.tiktok_handle) { patch.tiktok_handle = e.tiktok; tk++; }
+        if (e.instagram && !c.instagram_handle) { patch.instagram_handle = e.instagram; ig++; }
+        if (Object.keys(patch).length) await supabase.from("discovered_companies").update(patch).eq("id", c.id);
+      });
+      await supabase.from("discovery_jobs").update({
+        cursor: job.cursor + ids.length,
+        inserted: job.inserted + tk,          // نعدّ حسابات تيك توك المُضافة
+        duplicates: job.duplicates + ig,      // نعيد استخدام العدّاد لعدد إنستقرام المُكمَّل
+        current_label: `فحص المواقع ${Math.min(job.cursor + CHUNK, queue.length)}/${queue.length}`,
+        updated_at: new Date().toISOString(),
+      }).eq("id", jobId).eq("cursor", job.cursor);
+    }
+  } catch (e) {
+    await supabase.from("discovery_jobs").update({ status: "error", error: String(e).slice(0, 300), updated_at: new Date().toISOString() }).eq("id", jobId);
+  }
 }
 
 // ── دفعة خلفية قابلة للاستئناف ────────────────────────────────────────────────
@@ -466,16 +525,41 @@ Deno.serve(async (req) => {
     }
 
     if (action === "resume") {
-      if (!apiKey) return json({ ok: false, error: "مفتاح Google Places غير مضبوط" }, 400);
       const b = await req.json().catch(() => ({}));
       const jobId = b.job || url.searchParams.get("job");
       if (!jobId) return json({ ok: false, error: "job مطلوب" }, 400);
-      const { data: job } = await supabase.from("discovery_jobs").select("id,status").eq("id", jobId).single();
+      const { data: job } = await supabase.from("discovery_jobs").select("id,status,params").eq("id", jobId).single();
       if (!job) return json({ ok: false, error: "المهمة غير موجودة" }, 404);
       if (job.status !== "running") return json({ ok: true, note: "not running", status: job.status });
-      // @ts-ignore EdgeRuntime
-      EdgeRuntime.waitUntil(runBatch(supabase, apiKey, jobId));
+      if (job.params && job.params.type === "recrawl") {
+        // @ts-ignore EdgeRuntime
+        EdgeRuntime.waitUntil(recrawlBatch(supabase, jobId));
+      } else {
+        if (!apiKey) return json({ ok: false, error: "مفتاح Google Places غير مضبوط" }, 400);
+        // @ts-ignore EdgeRuntime
+        EdgeRuntime.waitUntil(runBatch(supabase, apiKey, jobId));
+      }
       return json({ ok: true, resumed: true });
+    }
+
+    if (action === "recrawl") {
+      // فحص مُعاد للمواقع الموجودة (كل الشركات ذات website): يسحب تيك توك + يكمّل إنستقرام.
+      const idsAll: number[] = [];
+      const PAGE = 1000;
+      for (let from = 0, i = 0; i < 20; i++, from += PAGE) {
+        const { data } = await supabase.from("discovered_companies").select("id").not("website", "is", null).range(from, from + PAGE - 1);
+        const rows = data || [];
+        for (const r of rows) idsAll.push(r.id);
+        if (rows.length < PAGE) break;
+      }
+      if (!idsAll.length) return json({ ok: false, error: "لا مواقع للفحص" }, 400);
+      const { data: job, error } = await supabase.from("discovery_jobs").insert({
+        params: { type: "recrawl", country: "SA" }, queue: idsAll, target: idsAll.length, status: "running", current_label: "يبدأ الفحص…",
+      }).select("id").single();
+      if (error) return json({ ok: false, error: error.message }, 500);
+      // @ts-ignore EdgeRuntime
+      EdgeRuntime.waitUntil(recrawlBatch(supabase, job.id));
+      return json({ ok: true, job_id: job.id, sites: idsAll.length });
     }
 
     if (action === "status") {
@@ -567,7 +651,8 @@ Deno.serve(async (req) => {
       const { data } = await supabase.from("discovery_jobs")
         .select("id,params,inserted,found,status,created_at")
         .order("created_at", { ascending: false }).limit(100);
-      return json({ ok: true, jobs: data || [] });
+      const jobs = (data || []).filter((j: any) => !(j.params && j.params.type === "recrawl")); // استبعد مهام الفحص
+      return json({ ok: true, jobs });
     }
 
     if (action === "del_job") {
@@ -583,10 +668,11 @@ Deno.serve(async (req) => {
     if (action === "active") {
       // آخر مهمة (أياً كانت حالتها) — تُستأنف إن كانت running، وإلا تُعرض نتائجها.
       const { data } = await supabase.from("discovery_jobs")
-        .select("id,status,updated_at,cursor,found,inserted,duplicates,target,current_label,queue")
-        .order("created_at", { ascending: false }).limit(1);
-      const j = (data && data[0]) || null;
-      if (j) { j.queue_len = (j.queue || []).length; delete j.queue; }
+        .select("id,status,updated_at,cursor,found,inserted,duplicates,target,current_label,queue,params")
+        .order("created_at", { ascending: false }).limit(10);
+      // استبعد مهام الفحص (recrawl) — نتائجها تنتمي للبحث الأصلي، فالصفحة تعرض آخر بحث حقيقي.
+      const j = (data || []).find((x: any) => !(x.params && x.params.type === "recrawl")) || null;
+      if (j) { j.queue_len = (j.queue || []).length; delete j.queue; delete j.params; }
       return json({ ok: true, job: j });
     }
 

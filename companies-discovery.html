@@ -187,7 +187,7 @@
     <div class="tblwrap">
       <table id="tbl">
         <thead><tr>
-          <th style="width:34px"></th><th>اسم الشركة</th><th>رقم الواتساب</th><th>الموقع</th><th>إنستقرام</th><th></th>
+          <th style="width:34px"></th><th>اسم الشركة</th><th>رقم الواتساب</th><th>الموقع</th><th>إنستقرام / تيك توك</th><th></th>
         </tr></thead>
         <tbody id="tbody"><tr><td colspan="6" class="empty">لا توجد نتائج بعد — ابدأ بحثاً جديداً.</td></tr></tbody>
       </table>
@@ -449,7 +449,9 @@ function renderTable(){
       ? `<div>${esc(r.whatsapp_number)}</div><div class="cmeta">${conf} ${r.whatsapp_source==='website'?'من الموقع':'جوال Places'}</div>`
       : (r.phone_landline ? `<div class="cmeta">أرضي: ${esc(r.phone_landline)}</div>` : '<span class="cmeta">—</span>');
     const site = r.website ? `<a class="lnk" href="${esc(r.website)}" target="_blank" rel="noopener">${esc(r.domain||'الموقع')}↗</a>` : '<span class="cmeta">—</span>';
-    const ig = r.instagram_handle ? `<a class="lnk" href="https://instagram.com/${esc(r.instagram_handle)}" target="_blank" rel="noopener">@${esc(r.instagram_handle)}</a>` : '<span class="cmeta">—</span>';
+    const igL = r.instagram_handle ? `<a class="lnk" href="https://instagram.com/${esc(r.instagram_handle)}" target="_blank" rel="noopener">📷 @${esc(r.instagram_handle)}</a>` : '';
+    const ttL = r.tiktok_handle ? `<a class="lnk" href="https://tiktok.com/@${esc(r.tiktok_handle)}" target="_blank" rel="noopener" style="color:#111">🎵 @${esc(r.tiktok_handle)}</a>` : '';
+    const ig = (igL||ttL) ? [igL,ttL].filter(Boolean).join('<br>') : '<span class="cmeta">—</span>';
     const waBtn = wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" rel="noopener">💬 واتساب</a>` : `<span class="wa-btn dim">لا رقم</span>`;
     return `<tr>
       <td><input type="checkbox" ${SEL.has(r.id)?'checked':''} onchange="toggleSel(${r.id}, this.checked)"></td>
@@ -465,8 +467,8 @@ function renderTable(){
 function exportCSV(){
   const rows = visibleRows();
   if(!rows.length){ alert('لا توجد بيانات للتصدير'); return; }
-  const cols = ['name','whatsapp_number','whatsapp_confidence','whatsapp_source','phone_landline','website','domain','instagram_handle','city','country','destination_match','destination_evidence','source_query','status'];
-  const head = ['اسم الشركة','رقم الواتساب','ثقة الواتساب','مصدر الواتساب','هاتف أرضي','الموقع','النطاق','إنستقرام','المدينة','الدولة','مطابقة الوجهة','دليل الوجهة','الاستعلام','الحالة'];
+  const cols = ['name','whatsapp_number','whatsapp_confidence','whatsapp_source','phone_landline','website','domain','instagram_handle','tiktok_handle','city','country','destination_match','destination_evidence','source_query','status'];
+  const head = ['اسم الشركة','رقم الواتساب','ثقة الواتساب','مصدر الواتساب','هاتف أرضي','الموقع','النطاق','إنستقرام','تيك توك','المدينة','الدولة','مطابقة الوجهة','دليل الوجهة','الاستعلام','الحالة'];
   const csv = [head.join(',')].concat(rows.map(r=>cols.map(c=>{
     let v = r[c]; if(v==null) v=''; v=String(v).replace(/"/g,'""'); return /[",\n]/.test(v)?`"${v}"`:v;
   }).join(','))).join('\r\n');
@@ -487,13 +489,13 @@ const CONF_AR = {confirmed:'مؤكّد', likely:'مُرجّح'};
 // أعمدة التصدير المشتركة
 const EXP_COLS = [
   ['name','اسم الشركة'],['whatsapp_number','رقم الواتساب'],['whatsapp_confidence','مستوى التأكد'],
-  ['phone_landline','هاتف أرضي'],['website','الموقع'],['instagram_handle','إنستقرام'],
+  ['phone_landline','هاتف أرضي'],['website','الموقع'],['instagram_handle','إنستقرام'],['tiktok_handle','تيك توك'],
   ['city','المدينة'],['country','الدولة'],['status','الحالة']
 ];
 function cellVal(r,key){
   let v = r[key];
   if(key==='whatsapp_confidence') v = CONF_AR[v]||'';
-  else if(key==='instagram_handle') v = v ? '@'+v : '';
+  else if(key==='instagram_handle' || key==='tiktok_handle') v = v ? '@'+v : '';
   else if(key==='status') v = v==='kept'?'معتمدة':(v==='hidden'?'مخفية':'جديدة');
   return v==null ? '' : String(v);
 }
