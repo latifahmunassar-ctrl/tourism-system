@@ -350,6 +350,17 @@ async function runQuery(
   return { found: raw.length, inserted: insertedCount, duplicates };
 }
 
+// تكمِلة ذاتية: تستدعي resume على نفس الدالة (الذي يجدول دفعة جديدة ويرجع فوراً)،
+// فتتسلسل الدفعات تلقائياً بلا تداخل وبلا حاجة لمُستأنِف خارجي.
+async function scheduleResume(jobId: string): Promise<void> {
+  const base = (Deno.env.get("SUPABASE_URL") || "").replace(/\/$/, "");
+  const url = `${base}/functions/v1/companies-discovery?action=resume`;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const key = (Deno.env.get("DISCOVERY_KEY") || "").trim();
+  if (key) headers["x-admin-secret"] = key;
+  try { await fetch(url, { method: "POST", headers, body: JSON.stringify({ job: jobId }) }); } catch (_) { /* الواجهة تستأنف احتياطياً */ }
+}
+
 // ── دفعة خلفية قابلة للاستئناف ────────────────────────────────────────────────
 async function runBatch(supabase: any, apiKey: string, jobId: string): Promise<void> {
   const t0 = Date.now();
@@ -361,7 +372,7 @@ async function runBatch(supabase: any, apiKey: string, jobId: string): Promise<v
       const queue: any[] = job.queue || [];
       if (job.cursor >= queue.length) { await supabase.from("discovery_jobs").update({ status: "done", current_label: "اكتمل", updated_at: new Date().toISOString() }).eq("id", jobId); return; }
       if (job.inserted >= job.target) { await supabase.from("discovery_jobs").update({ status: "done", current_label: `اكتمل — بلغ الهدف ${job.target}`, updated_at: new Date().toISOString() }).eq("id", jobId); return; }
-      if (processed >= BATCH_QUERIES || (Date.now() - t0) > BATCH_MS) return; // انتهت الدفعة — سيُستأنف
+      if (processed >= BATCH_QUERIES || (Date.now() - t0) > BATCH_MS) { await scheduleResume(jobId); return; } // انتهت الدفعة — تُكمِل نفسها
 
       const { city, keyword } = queue[job.cursor];
       await supabase.from("discovery_jobs").update({ current_label: `${city} × ${keyword}`, updated_at: new Date().toISOString() }).eq("id", jobId);
