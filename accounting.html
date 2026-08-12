@@ -217,7 +217,7 @@ table{font-weight:600}
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="userbar" style="font-size:12px;color:var(--muted)"></span>
-      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ل7 · تعديل التحويل البنكي: حقل المبلغ صار قابلاً للتعديل حتى للموزّع على عدة سجلات (يُوزَّع الإجمالي الجديد نسبيّاً + يُحدَّث البنك) + إظهار الإجمالي الحقيقي بدل 0 </span>
+      <span style="background:#0e9d6a;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">✅ نسخة 6أغسطس-ل8 · الكسور (الهللات) تظهر الآن في كل الكشوف عند وجودها (fmt) والأرقام الصحيحة تبقى نظيفة — كانت تُدوَّر فتختفي 0.34 وشبيهاتها </span>
       <button class="btn green" onclick="openForm()">➕ إدخال جديد</button>
       <button class="btn ghost" onclick="load()">🔄 تحديث</button>
     </div>
@@ -873,7 +873,7 @@ let KEY = localStorage.getItem('acc_key')||'', TOKEN = localStorage.getItem('acc
 let DEVICE_TOKEN=localStorage.getItem('acc_device')||''; if(!DEVICE_TOKEN){ DEVICE_TOKEN=(self.crypto&&crypto.randomUUID?crypto.randomUUID():('d'+Date.now()+Math.round(Math.random()*1e9)))+'-'+(self.crypto&&crypto.randomUUID?crypto.randomUUID():Math.round(Math.random()*1e9)); localStorage.setItem('acc_device',DEVICE_TOKEN); }
 let LG_ROLE='';   // القسم المختار في شاشة الدخول (محاسبة/مبيعات/حجوزات/إدارة) — للعرض فقط
 const $=id=>document.getElementById(id);
-const fmt=n=>Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});
+const fmt=n=>{ n=Number(n||0); return n.toLocaleString('en-US',{minimumFractionDigits:(Math.abs(n%1)>1e-9?2:0),maximumFractionDigits:2}); };   // 🔢 يُظهر الكسور (الهللات) عند وجودها والأرقام الصحيحة تبقى نظيفة — عشان لا تختفي الكسور في الكشوف (درس فرق 0.28)
 const esc=s=>(s==null?'':String(s)).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
 // 🔴 «مباشر من المورّد» (بنوعيه: «Ditect from supplier» و«Direct with the Suppler») = دين مستحق علينا، لم يُدفع — لا يُحتسب دفعة (قرار المالكة 19 يوليو 2026)
 function _directOwed(cf){ cf=String(cf||''); return /ditect|from\s*supplier/i.test(cf) || (/\b(direct|ditect)\b/i.test(cf) && /suppl|hotel|مور|فندق/i.test(cf)); }
