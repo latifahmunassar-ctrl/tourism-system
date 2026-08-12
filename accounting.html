@@ -5016,6 +5016,35 @@ function bcApply(opts){
   return a;
 }
 function bcFiltered(){ const a=bcApply(); a.sort((x,y)=>{ const dx=x.source==='dashboard'?1:0, dy=y.source==='dashboard'?1:0; if(dx!==dy) return dy-dx; if(dx===1) return String(y.created_at||'').localeCompare(String(x.created_at||''))||(Number(y.id||0)-Number(x.id||0)); return String(y.tx_date||'').localeCompare(String(x.tx_date||'')); }); return a; }  // الإدخالات اليدوية الجديدة أولاً ثم الشيت بتاريخ الحركة
+// 🔁 كاشف التحويلات الداخلية بين الحسابات — يمسك القناة الفعلية «transafare between account» + مرادفاتها (عربي/إنجليزي، وأخطاء إملائية شائعة)
+function _isXferRow(r){ const s=(String(r.channel||'')+' '+String(r.description||'')+' '+String(r.details||'')).toLowerCase(); return /between\s*accoun|trans[a-z]*f[a-z]*re?|transfer|تحويل\s*بين|حوال[ةه]\s*داخل|داخل[ية]*\s*بين|حساب\s*ل?\s*حساب/.test(s); }
+// حوالات خرجت من حساب (تحويل داخلي) بلا طرف «داخل» مقابل مطابق (نفس المبلغ+العملة) في أي حساب — أي: متوقّع وصولها ولم تُسجَّل بعد
+function xferPendingArrivals(){
+  const all=(DATA&&DATA.banksCash)||[]; const xf=all.filter(_isXferRow);
+  const _cur=r=>String(r.currency||bankCur(r.bank_name)||'').toUpperCase(); const _amt=v=>Math.round(Number(v||0)*1000)/1000;
+  const ins=xf.filter(r=>Number(r.in_raw||0)>0).map(r=>({amt:_amt(r.in_raw),cur:_cur(r),used:false}));
+  const outs=xf.filter(r=>Number(r.out_raw||0)>0).sort((a,b)=>String(a.tx_date||'').localeCompare(String(b.tx_date||'')));
+  const pend=[];
+  for(const o of outs){ const amt=_amt(o.out_raw), cur=_cur(o); const m=ins.find(x=>!x.used && x.amt===amt && x.cur===cur); if(m)m.used=true; else pend.push(o); }
+  return pend;
+}
+// ➕ «سجّلي وصولها»: يعبّي فورم إضافة حركة الكاش بالطرف الداخل (نفس المبلغ/العملة/القناة) — تختار المالكة الحساب المستقبِل ثم تحفظ (بلا أي إنشاء تلقائي)
+function xferRegisterArrival(id){
+  const r=((DATA&&DATA.banksCash)||[]).find(x=>String(x.id)===String(id)); if(!r)return;
+  const S=(k,v)=>{ const e=$(k); if(e)e.value=(v==null?'':v); };
+  S('bca-in', Number(r.out_raw||0)||''); S('bca-out',''); S('bca-cur', r.currency||bankCur(r.bank_name)||''); S('bca-rate', r.currency_rate||'');
+  S('bca-date', String(r.tx_date||'').slice(0,10)); S('bca-bank','');   // ← تختار المالكة الحساب المستقبِل
+  const ch=$('bca-channel'); if(ch){ ch.value=r.channel||''; if(typeof bcFillDescByChannel==='function')bcFillDescByChannel(); }
+  const ds=$('bca-desc'); if(ds && r.description){ ds.value=r.description; if(typeof bcFillAddDetails==='function')bcFillAddDetails(); }
+  const dt=$('bca-details'); if(dt && r.details){ dt.value=r.details; if(typeof bcFillAddMore==='function')bcFillAddMore(); }
+  const mo=$('bca-more'); if(mo && r.more_details){ mo.value=r.more_details; }
+  S('bca-note','تأكيد وصول حوالة داخلية — خرجت من «'+(r.bank_name||'')+'» بتاريخ '+String(r.tx_date||'').slice(0,10)+(r.bank_ref?(' · مرجع '+r.bank_ref):''));
+  const msg=$('bc-add-msg'); if(msg){ msg.textContent='✍️ اختاري «الحساب المستقبِل» ثم احفظي — المبلغ معبّأ من الحوالة الخارجة'; msg.style.color='#0e7c50'; }
+  const bnk=$('bca-bank'); if(bnk){ bnk.scrollIntoView({behavior:'smooth',block:'center'}); setTimeout(()=>{try{bnk.focus();}catch(e){}},350); }
+}
+async function xferDismiss(id,btn){ if(btn)btn.disabled=true;
+  try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'dismiss_alert',payload:{alert_key:'xferin:'+id,alert_group:'xferin',by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); if(btn)btn.disabled=false; return; } if(typeof toast==='function')toast('✅ تم الاطلاع — أُخفي التنبيه'); await load(); }catch(e){ alert('خطأ: '+e.message); if(btn)btn.disabled=false; }
+}
 function renderBanksCashDetail(){
   const box=$('bankscash-detail'); if(!box||!DATA) return;
   const a=bcFiltered();
@@ -5024,7 +5053,24 @@ function renderBanksCashDetail(){
   a.forEach(x=>{ const c=bankCur(x.bank_name); byCur[c]=byCur[c]||{i:0,o:0}; byCur[c].i+=Number(x.in_raw||0); byCur[c].o+=Number(x.out_raw||0); });
   const ncur=Object.keys(byCur).length;
   const H=['📅 تاريخ الدفع','داخل (+)','خارج (−)','العملة','سعر الصرف','داخل (ر.س)','خارج (ر.س)','البنك / البطاقة','المرجع','📡 القناة','الوصف','التفاصيل','📝 تفاصيل أكثر','ملاحظة','المصدر',''];
-  let html='<div class="panel" style="margin-bottom:14px;border:1px solid var(--accent)">'+
+  // 🔁 تنبيه: حوالات داخلية خرجت ولم يُسجَّل طرفها الداخل بعد — تنبيه فقط + زر تأكيد يدوي (لا إنشاء تلقائي)
+  const _DISx=(typeof dismissedSet==='function'?dismissedSet():new Set());
+  const _pendXfer=xferPendingArrivals().filter(o=>!_DISx.has('xferin:'+o.id));
+  const _xferHtml=(!_pendXfer.length)?'':('<div class="panel" style="margin-bottom:14px;border:1px solid #d98a00;background:rgba(217,138,0,.08)">'+
+    '<h3 style="color:#b8860b;margin-top:0">🔁 حوالات داخلية بانتظار تأكيد وصولها ('+_pendXfer.length+')</h3>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">تحويلات خرجت من حساب تحت قناة «تحويل بين الحسابات» ولم يُسجَّل لها طرف <b>داخل</b> مقابل بنفس المبلغ في أي حساب. راجعي كل واحدة و«سجّلي وصولها» في الحساب المستقبِل، أو «تم الاطلاع» لو مو حوالة داخلية. <b>لا شيء يُنشأ تلقائياً.</b></div>'+
+    '<div class="tbl-wrap"><table style="font-size:11.5px;white-space:nowrap"><thead><tr><th>📅 تاريخ الخروج</th><th>من حساب</th><th>💰 المبلغ المتوقّع وصوله</th><th>العملة</th><th>الوصف / التفاصيل</th><th>المرجع</th><th>إجراء</th></tr></thead><tbody>'+
+    _pendXfer.map(o=>{ const cur=(o.currency||bankCur(o.bank_name)||''); return '<tr>'+
+      '<td>'+esc(String(o.tx_date||'').slice(0,10))+'</td>'+
+      '<td style="font-weight:700">'+esc(o.bank_name||'')+'</td>'+
+      '<td class="num" style="font-weight:800;color:#b8860b">'+fmt(Number(o.out_raw||0))+'</td>'+
+      '<td style="font-weight:700">'+esc(cur)+'</td>'+
+      '<td style="font-size:10.5px;color:var(--muted)">'+esc([o.description,o.details].filter(Boolean).join(' · '))+'</td>'+
+      '<td style="font-size:10px">'+esc(o.bank_ref||'—')+'</td>'+
+      '<td><button class="btn" style="padding:3px 10px;font-size:11px;background:#0e7c50" onclick="xferRegisterArrival(\''+esc(String(o.id))+'\')">➕ سجّلي وصولها</button> <button class="btn ghost" style="padding:3px 10px;font-size:11px" onclick="xferDismiss(\''+esc(String(o.id))+'\',this)">✖️ تم الاطلاع</button></td>'+
+    '</tr>'; }).join('')+
+    '</tbody></table></div></div>');
+  let html=_xferHtml+'<div class="panel" style="margin-bottom:14px;border:1px solid var(--accent)">'+
     '<h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span>💵 Banks Cash in / Out</span><span class="cnt">'+fmt(a.length)+' حركة</span></h3>'+
     '<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px">'+
       '<span>✅ داخل: <b style="color:#0e9d6a">'+curLine(byCur,'i')+'</b></span>'+
@@ -5049,7 +5095,7 @@ function renderBanksCashDetail(){
     }
   }
   // 🔁 تحويلات داخلية بانتظار الرقم المرجعي: الحوالة الداخلة (قناة تحويل بين الحسابات · داخل>0 · بلا مرجع)
-  const isXfer=(r)=>/transfer/i.test(String(r.channel||''));
+  const isXfer=(r)=>_isXferRow(r);
   const xferInPending=new Set(); const xferPendKeys=new Set();
   a.forEach(r=>{ if(isXfer(r) && Number(r.in_raw||0)>0 && !String(r.bank_ref||'').trim()){ xferInPending.add(r.id); xferPendKeys.add(String(r.details||'')+'|'+Number(r.in_raw||0)); } });
   html+='<div class="panel"><div class="tbl-wrap bf-scroll" id="bc-tbl"><table style="font-size:11px;white-space:nowrap"><thead><tr>'+H.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+
