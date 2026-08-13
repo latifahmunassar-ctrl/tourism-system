@@ -1445,6 +1445,45 @@ async function pickCheapestDouble(hidx){
     applyHotelRawChange(newRaw, `🛏️ ${region}: «${h.name}» — غرفة لشخصين ${(h.stars||curStars)}★ بأرخص سعر (${(h.price_per_night||0).toLocaleString()} ريال/ليلة) × ${hRooms(hidx)} غرفة.${changedStar?' ⚠️ ما توفّرت غرفة لشخصين بنفس الفئة، فاخترتُ الأقرب.':''} عدّلي العدد لو تبين.`);
   } catch(e){ addMessage('sys','خطأ أثناء جلب غرفة الشخصين: ' + (e && e.message ? e.message : e)); }
 }
+// تغيير فئة النجوم لفندق مدينة معيّنة → أرخص فندق بتلك المدينة بهذه الفئة حصراً
+// (يحافظ على نفس الإشغال الحالي؛ لو ما توفّر بنفس الإشغال يختار الأقرب مع تنبيه).
+async function changeHotelStars(hidx, newStars){
+  try {
+    newStars = parseInt(newStars, 10);
+    const lines = parseHotelLinesFromRaw(lastProgramRaw);
+    const oldLine = lines[hidx];
+    if(!oldLine){ addMessage('sys','تعذّر: لم أجد سطر الفندق.'); return; }
+    const p = oldLine.split('|').map(x=>x.trim());
+    const region = p[1]||'';
+    const curStars = parseInt((arabicDigitsToLatin(p[2]||'').match(/\d+/)||['0'])[0],10);
+    if(newStars === curStars) return;
+    const occN = parseInt((arabicDigitsToLatin(String(p[3]||'')).match(/يتسع\s*(\d+)/)||[])[1]||'0',10) || 0;
+    const dest = getLine(lastProgramRaw,'DEST')||'';
+    const date = getLine(lastProgramRaw,'DATE_FROM')||'';
+    addMessage('sys', `🔎 أبحث عن أرخص فندق ${newStars}★ في ${region}${occN?` (غرفة ${occN})`:''}…`);
+    const res = await fetch(SUPABASE_URL, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
+      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy:(occN || metaPersons() || 2), current:p[0]||'', date })
+    });
+    const data = await res.json();
+    const atStar = (data.hotels || []).filter(h => +h.stars === newStars); // الفئة حصراً
+    let cand = occN ? atStar.filter(h => +h.capacity === occN) : atStar; // نفس الإشغال
+    const relaxedOcc = occN && !cand.length && atStar.length;
+    if(!cand.length) cand = atStar; // ما فيه بنفس الإشغال → أي غرفة بنفس الفئة
+    if(!cand.length){ addMessage('sys',`ما فيه فندق ${newStars}★ في ${region}. جرّبي فئة ثانية.`); return; }
+    cand.sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
+    const h = cand[0]; // الأرخص
+    const newLine = [
+      h.name, p[1]||'', (h.stars||newStars)+' نجوم', h.room_type||'',
+      (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
+      p[6] || (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : '')
+    ].join(' | ');
+    const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
+    if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); return; }
+    applyHotelRawChange(newRaw, `⭐ ${region}: أرخص ${newStars}★ = «${h.name}» (${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxedOcc?' ⚠️ ما توفّرت غرفة بنفس الإشغال، فاخترتُ الأقرب.':''}`);
+  } catch(e){ addMessage('sys','خطأ أثناء تغيير الفئة: ' + (e && e.message ? e.message : e)); }
+}
 // ── نوع الغرفة: استبدال / إضافة نوع آخر من نفس الفندق ──
 function _stripCapR(s){ return String(s||'').replace(/\s*\(يتسع[^)]*\)/g,'').trim().toLowerCase(); }
 function applyHotelRawChange(newRaw, msg){
@@ -2661,7 +2700,10 @@ const roomCell = `<td class="rtw-cell" data-hidx="${hidx}" data-name="${hswEsc(p
   + `<div class="hsw-menu"></div></td>`;
 const rooms = hRooms(hidx);
 const roomsCell = `<td><select class="rooms-sel" onchange="setHotelRooms(${hidx}, this.value)">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${n===rooms?' selected':''}>${n}</option>`).join('')}</select></td>`;
-let row = `<tr><td>${p[1]||''}</td>${nameCell}<td>${p[2]||''}</td>${roomCell}<td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td>${roomsCell}<td class="price-cell">${((totalLine*rooms) + (extraTotal||0)).toLocaleString()} ريال</td><td>${bedTxt}</td></tr>`;
+// خلية النجوم — منسدلة: تغيير الفئة يجيب أرخص فندق بالمدينة بتلك الفئة حصراً
+const starOpts = [3,4,5]; if(stars && !starOpts.includes(stars)) starOpts.unshift(stars);
+const starsCell = `<td><select class="rooms-sel" title="غيّري فئة النجوم → أرخص فندق بهذه المدينة بهذه الفئة حصراً" onchange="changeHotelStars(${hidx}, this.value)">${starOpts.map(s=>`<option value="${s}"${s===stars?' selected':''}>${s}★</option>`).join('')}</select></td>`;
+let row = `<tr><td>${p[1]||''}</td>${nameCell}${starsCell}${roomCell}<td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td>${roomsCell}<td class="price-cell">${((totalLine*rooms) + (extraTotal||0)).toLocaleString()} ريال</td><td>${bedTxt}</td></tr>`;
 // صفوف الغرف الإضافية (ADDROOM) — عدد غير محدود، كل غرفة بزر حذف خاص
 parseAddRooms(l).forEach((ar, j) => {
   const arCap = ar.occ ? ` (يتسع ${ar.occ})` : '';
