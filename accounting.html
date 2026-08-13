@@ -622,6 +622,7 @@ table{font-weight:600}
     <div class="page" id="p-suppliers">
       <div class="formbar"><label style="font-weight:700;margin-left:8px">🧾 اكتبي اسم المورّد للبحث السريع:</label><input id="supflt" list="supflt-list" class="flt" onchange="renderSupplierDetail()" autocomplete="off" placeholder="اكتبي اسم المورّد…" style="min-width:320px;background:#fff;color:var(--txt)"><datalist id="supflt-list"></datalist><button class="btn ghost" style="padding:7px 14px" onclick="$('supflt').value='';renderSupplierDetail()">مسح</button></div>
       <div id="sup-dups"></div>
+      <div id="sup-alias"></div>
       <div id="supplier-detail"></div>
       <div class="panel" id="all-suppliers-panel"><h3>كل الموردين <span class="cnt" id="sup-cnt"></span></h3>
         <div class="tbl-wrap bf-scroll" id="t-sup-wrap"><table id="t-sup"><thead><tr>
@@ -3902,6 +3903,9 @@ const SUPPLIER_CUR_RULES=[
   {re:/bosnia|bosina|بوسن/i, cur:'EUR'},
 ];
 // فواتير الموردين = فواتير الشيت + حجوزات Booking Form المُدخلة من الداشبورد (باسم «مصدر الحجز» booked_from وقيمة الحجز الفعلي) — انعكاس حيّ بلا تكرار
+// 🔗 توحيد اسم المورّد عبر «ربط الأسماء» (acc_lists category=supplier_alias بصيغة «الاسم المكرّر=>الاسم المعتمد») — يجعل اسمين لمورّد واحد يُعامَلان كمورّد واحد
+function _supNzName(s){ return String(s||'').trim().toLowerCase().replace(/[ًٌٍَُِّْـ]/g,'').replace(/[يىیۍ]/g,'ي').replace(/[كک]/g,'ك').replace(/ة/g,'ه').replace(/\s+/g,' '); }
+function supCanon(name){ let n=String(name||'').trim(); if(!n)return n; const map={}; (typeof listValues==='function'?listValues('supplier_alias'):[]).forEach(it=>{ const s=String(it.value||''); const i=s.indexOf('=>'); if(i<=0)return; const f=_supNzName(s.slice(0,i)); const t=s.slice(i+2).trim(); if(f&&t)map[f]=t; }); let g=0; while(g++<6){ const t=map[_supNzName(n)]; if(t && _supNzName(t)!==_supNzName(n)) n=t; else break; } return n; }
 function supInvAll(){
   const nm={}, ag={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(r.client_name&&!nm[c])nm[c]=r.client_name; if(r.agent_name&&!ag[c])ag[c]=r.agent_name; });
   // تطبيع الاسم للمطابقة: يوحّد المسافات + تباين الأحرف العربية (ي/ى/ی · ك/ک · ة/ه · التشكيل/التطويل) ليطابق «مصدر الحجز» في البوكينج مع اسم المورّد في الشيت
@@ -3912,6 +3916,7 @@ function supInvAll(){
     let bf=(s.booked_from||'').toString().trim();
     if(!bf){ const _sup=(s.supplier||'').toString().trim(); if(_sup) bf=_sup; }   // 📌 «مصدر الحجز» فاضٍ → اعتمد اسم المورّد (خانة supplier) — يعالج الجولات المُدخلة بلا booked_from
     if(!bf) return;
+    bf=supCanon(bf);   // 🔗 توحيد الاسم لو مربوط باسم آخر
     const frb=Number(s.final_rate_booked||0);
     // التكلفة الكاملة بعملة المورّد (من النظام): الحجز الفعلي إن وُجد، وإلا raw_value (القيمة الأصلية بعملة المورّد) لأنواع تكلفتها=القيمة (جولة/مورّد/إضافي). raw_value مو amount لأن amount مُحوّل لعملة العميل.
     const rawCost=(s.raw_value!=null&&s.raw_value!=='')?Number(s.raw_value):Number(s.amount||0);
@@ -3925,7 +3930,7 @@ function supInvAll(){
     bookedKeys.add(c+'|'+_nz(bf));
   });
   // 2) أسطر شيت Supplier Record القديمة — تُستبعَد إذا وُجد حجز Booking Form لنفس (العميل+المورّد)، لأن البوكينج هو المعتمد؛ فتنعكس القيمة المصحّحة ولا تظهر قيمة الشيت القديمة/المكرّرة
-  const sheet=(DATA.supplierInvoices||[]).filter(x=>!bookedKeys.has(String(x.client_code||'').toUpperCase()+'|'+_nz(x.supplier_name)));
+  const sheet=(DATA.supplierInvoices||[]).map(x=>{ const cn=supCanon(x.supplier_name); return cn!==x.supplier_name?Object.assign({},x,{supplier_name:cn}):x; }).filter(x=>!bookedKeys.has(String(x.client_code||'').toUpperCase()+'|'+_nz(x.supplier_name)));
   return sheet.concat(slRows);
 }
 // عملة مُعتمدة يدوياً لكل مورّد (تُخزَّن في القائمة المُدارة category=supplier_cur بصيغة «الاسم=العملة») — تسبق القواعد الثابتة
@@ -5484,6 +5489,7 @@ function renderSuppliers(){
   }).join('');
   $('sup-cnt').textContent=names.length+' مورّد بحركة'+(inactive.length?(' · '+inactive.length+' مُضاف بلا حركة'):'');
   renderSupDups();
+  try{ renderSupAlias(); }catch(e){}
   fillSupplierFilter(); if($('supflt')&&$('supflt').value)renderSupplierDetail();
 }
 // ⚠️ كاشف الفواتير المكرّرة: نفس (المورّد + كود العميل + المبلغ) أكثر من مرة
@@ -5500,6 +5506,28 @@ function renderSupDups(){
     dups.map(g=>{ const x=g[0]; const extra=(g.length-1)*Number(x.invoice_amount||0); return '<tr><td><b>'+esc(x.supplier_name||'')+'</b></td><td>'+esc(x.client_code||'')+'</td><td style="font-size:11px">'+esc(x.client_name||'')+'</td><td class="num">'+fmt(x.invoice_amount||0)+'</td><td class="num" style="color:#d98a00;font-weight:700">×'+g.length+'</td><td class="num neg">'+fmt(extra)+'</td></tr>'; }).join('')+
     '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">ℹ️ نفس (المورّد + كود العميل + المبلغ) متكرّر. لو تكرار خاطئ → احذفي الصف الزائد من تبويب «Supplier Record» في الشيت ثم زامني. <b style="color:#d98a00">لو هما حجزان مختلفان بنفس المبلغ فهو صحيح — تجاهليه.</b></div></div>';
 }
+// 🔗 ربط أسماء الموردين: أسماء خام (قبل التوحيد) من الفواتير + Booking Form + الدفعات — لتختار المالكة الاسمين وتربطهما
+function supNamesRawList(){ const s=new Set(); (DATA.supplierInvoices||[]).forEach(x=>{ if(x.supplier_name)s.add(String(x.supplier_name).trim()); }); (DATA.serviceLines||[]).forEach(x=>{ if(x.source!=='dashboard')return; const bf=(x.booked_from||'').toString().trim()||(x.supplier||'').toString().trim(); if(bf)s.add(bf); }); (DATA.supplierPayments||[]).forEach(x=>{ if(x.supplier_name)s.add(String(x.supplier_name).trim()); }); return [...s].filter(Boolean).sort((a,b)=>String(a).localeCompare(String(b),'ar')); }
+function renderSupAlias(){ const box=$('sup-alias'); if(!box)return;
+  const names=supNamesRawList(); const opts='<option value="">— اختاري —</option>'+names.map(n=>'<option>'+esc(n)+'</option>').join('');
+  const aliases=(typeof listValues==='function'?listValues('supplier_alias'):[]);
+  box.innerHTML='<div class="panel" style="margin-bottom:12px;border:1px solid var(--accent)"><h3 style="margin-top:0">🔗 ربط أسماء الموردين <span class="cnt">اسمان لمورّد واحد</span></h3>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">لو نفس المورّد مكتوب باسمين مختلفين (مثلاً في Booking Form «fanar salalah hotel» وفي الشيت «النابي») اربطيهما هنا، فيعتبرهما النظام مورّداً واحداً، وتنعكس قيمة Booking Form في كشفه وتختفي القيمة القديمة. <b>لا يمسّ أي بيانات مخزّنة.</b></div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:8px">'+
+      '<div class="fld" style="min-width:230px"><label>الاسم المكرّر (يُدمج)</label><select id="alias-from">'+opts+'</select></div>'+
+      '<div style="align-self:center;font-weight:800;font-size:16px">←</div>'+
+      '<div class="fld" style="min-width:230px"><label>الاسم المعتمد (يبقى ويظهر)</label><select id="alias-to">'+opts+'</select></div>'+
+      '<button class="btn" onclick="addSupAlias()">🔗 اربطي</button>'+
+    '</div>'+
+    (aliases.length?'<div class="tbl-wrap"><table style="font-size:12px;width:auto;white-space:nowrap"><thead><tr><th>الاسم المكرّر</th><th></th><th>الاسم المعتمد</th><th></th></tr></thead><tbody>'+
+      aliases.map(a=>{ const s=String(a.value||''); const i=s.indexOf('=>'); const f=i>0?s.slice(0,i):s; const t=i>0?s.slice(i+2):''; return '<tr><td>'+esc(f)+'</td><td>←</td><td><b>'+esc(t)+'</b></td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="delSupAlias('+Number(a.id)+')">🗑️ فكّ الربط</button></td></tr>'; }).join('')+
+      '</tbody></table></div>':'<div style="font-size:11px;color:var(--muted)">لا روابط بعد.</div>')+
+  '</div>'; }
+async function addSupAlias(){ const f=(($('alias-from')||{}).value||'').trim(), t=(($('alias-to')||{}).value||'').trim();
+  if(!f||!t){ alert('اختاري الاسمين'); return; } if(_supNzName(f)===_supNzName(t)){ alert('الاسمان متطابقان'); return; }
+  if(!confirm('ربط «'+f+'» ليُعامَل كأنه «'+t+'» (مورّد واحد)؟\nتنعكس قيمة Booking Form في كشفه.'))return;
+  try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_list_item',payload:{category:'supplier_alias',value:f+'=>'+t}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } if(typeof toast==='function')toast('✅ تم الربط'); await load(); }catch(e){ alert('خطأ: '+e.message); } }
+async function delSupAlias(id){ if(!confirm('فكّ هذا الربط؟'))return; try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_list_item',payload:{id:id}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } if(typeof toast==='function')toast('✅ فُكّ الربط'); await load(); }catch(e){ alert('خطأ: '+e.message); } }
 let spFltAgent='', spFltCancel='';
 function spSetAgent(v){ spFltAgent=v; renderSupplierDetail(); }
 function spSetCancel(v){ spFltCancel=v; renderSupplierDetail(); }
@@ -5511,8 +5539,9 @@ function renderSupplierDetail(){
   if(!supRaw){ box.innerHTML=''; return; }
   // 🔎 حلّ الاسم الحقيقي للمورّد — يعالج فروق المسافات/الأحرف عند الكتابة اليدوية (مثل المسافة المزدوجة في «YTS holiday  THailand tour») أو كتابة جزء من الاسم
   const _nzn=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+  const _supRawC=supCanon(supRaw);   // 🔗 لو الاسم مربوط باسم معتمد آخر، ابحثي بالمعتمد
   const _supNames=[...new Set(supInvAll().map(x=>x.supplier_name).filter(Boolean))];
-  const sup=_supNames.find(n=>_nzn(n)===_nzn(supRaw)) || _supNames.find(n=>supRaw.length>=3 && _nzn(n).indexOf(_nzn(supRaw))>=0) || supRaw;
+  const sup=_supNames.find(n=>_nzn(n)===_nzn(_supRawC)) || _supNames.find(n=>_supRawC.length>=3 && _nzn(n).indexOf(_nzn(_supRawC))>=0) || _supRawC;
   const list=supInvAll().filter(x=>(x.supplier_name||'')===sup);
   const pays=(DATA.supplierPayments||[]).filter(x=>(x.supplier_name||'')===sup);
   const clients=new Set(list.map(x=>x.client_code)).size;
