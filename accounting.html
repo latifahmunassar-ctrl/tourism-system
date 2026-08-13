@@ -3903,14 +3903,15 @@ const SUPPLIER_CUR_RULES=[
 ];
 // فواتير الموردين = فواتير الشيت + حجوزات Booking Form المُدخلة من الداشبورد (باسم «مصدر الحجز» booked_from وقيمة الحجز الفعلي) — انعكاس حيّ بلا تكرار
 function supInvAll(){
-  const base=(DATA.supplierInvoices||[]).slice();
   const nm={}, ag={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(r.client_name&&!nm[c])nm[c]=r.client_name; if(r.agent_name&&!ag[c])ag[c]=r.agent_name; });
+  // تطبيع الاسم للمطابقة: يوحّد المسافات + تباين الأحرف العربية (ي/ى/ی · ك/ک · ة/ه · التشكيل/التطويل) ليطابق «مصدر الحجز» في البوكينج مع اسم المورّد في الشيت
+  const _nz=s=>String(s||'').trim().toLowerCase().replace(/[ًٌٍَُِّْـ]/g,'').replace(/[يىیۍ]/g,'ي').replace(/[كک]/g,'ك').replace(/ة/g,'ه').replace(/\s+/g,' ');
+  // 1) أسطر Booking Form (المصدر المعتمد) — أي تصحيح في البوكينج ينعكس مباشرة
+  const slRows=[]; const bookedKeys=new Set();
   (DATA.serviceLines||[]).forEach(s=>{ if(s.source!=='dashboard') return;
-    let bf=(s.booked_from||'').toString().trim(); let _fb=false;
-    if(!bf){ const _sup=(s.supplier||'').toString().trim(); if(_sup){ bf=_sup; _fb=true; } }   // 📌 «مصدر الحجز» فاضٍ → اعتمد اسم المورّد (خانة supplier) — يعالج الجولات المُدخلة بلا booked_from
+    let bf=(s.booked_from||'').toString().trim();
+    if(!bf){ const _sup=(s.supplier||'').toString().trim(); if(_sup) bf=_sup; }   // 📌 «مصدر الحجز» فاضٍ → اعتمد اسم المورّد (خانة supplier) — يعالج الجولات المُدخلة بلا booked_from
     if(!bf) return;
-    // 🛡️ تفادي الازدواج: عند اللجوء لاسم المورّد فقط، تجاهل السطر إذا كان للعميل فاتورة بنفس المورّد في كشف الشيت (acc_supplier_invoices)
-    if(_fb){ const _cc=(s.client_code||'').toUpperCase(); const _nzb=String(bf).trim().toLowerCase().replace(/\s+/g,' '); if((DATA.supplierInvoices||[]).some(x=>String(x.client_code||'').toUpperCase()===_cc && String(x.supplier_name||'').trim().toLowerCase().replace(/\s+/g,' ')===_nzb)) return; }
     const frb=Number(s.final_rate_booked||0);
     // التكلفة الكاملة بعملة المورّد (من النظام): الحجز الفعلي إن وُجد، وإلا raw_value (القيمة الأصلية بعملة المورّد) لأنواع تكلفتها=القيمة (جولة/مورّد/إضافي). raw_value مو amount لأن amount مُحوّل لعملة العميل.
     const rawCost=(s.raw_value!=null&&s.raw_value!=='')?Number(s.raw_value):Number(s.amount||0);
@@ -3920,9 +3921,12 @@ function supInvAll(){
     const owedAmt=isCancel?Number(s.cancel_charge||0):fullCost;
     if(isCancel){ if(!(fullCost>0)&&!(owedAmt>0)) return; } else { if(!(owedAmt>0)) return; }
     const c=(s.client_code||'').toUpperCase();
-    base.push({ id:'sl-'+s.id, service_id:s.id, supplier_name:bf, client_code:s.client_code, client_name:nm[c]||'', agent_name:ag[c]||'', arrival_date:s.check_in||null, invoice_amount:owedAmt, full_value:fullCost, book_actual:frb, cancel_charge:Number(s.cancel_charge||0), cancelled:isCancel, invoice_currency:s.booked_currency||s.currency||null, invoice_date:s.check_in||null, actual_invoice:(s.actual_invoice!=null&&s.actual_invoice!=='')?Number(s.actual_invoice):null, status:s.status||null, svc:(s.name||SVC[s.kind]||s.kind||'خدمة'), source:'dashboard', _booking:true });
+    slRows.push({ id:'sl-'+s.id, service_id:s.id, supplier_name:bf, client_code:s.client_code, client_name:nm[c]||'', agent_name:ag[c]||'', arrival_date:s.check_in||null, invoice_amount:owedAmt, full_value:fullCost, book_actual:frb, cancel_charge:Number(s.cancel_charge||0), cancelled:isCancel, invoice_currency:s.booked_currency||s.currency||null, invoice_date:s.check_in||null, actual_invoice:(s.actual_invoice!=null&&s.actual_invoice!=='')?Number(s.actual_invoice):null, status:s.status||null, svc:(s.name||SVC[s.kind]||s.kind||'خدمة'), source:'dashboard', _booking:true });
+    bookedKeys.add(c+'|'+_nz(bf));
   });
-  return base;
+  // 2) أسطر شيت Supplier Record القديمة — تُستبعَد إذا وُجد حجز Booking Form لنفس (العميل+المورّد)، لأن البوكينج هو المعتمد؛ فتنعكس القيمة المصحّحة ولا تظهر قيمة الشيت القديمة/المكرّرة
+  const sheet=(DATA.supplierInvoices||[]).filter(x=>!bookedKeys.has(String(x.client_code||'').toUpperCase()+'|'+_nz(x.supplier_name)));
+  return sheet.concat(slRows);
 }
 // عملة مُعتمدة يدوياً لكل مورّد (تُخزَّن في القائمة المُدارة category=supplier_cur بصيغة «الاسم=العملة») — تسبق القواعد الثابتة
 function supCurOverride(name){ const nn=String(name||'').trim().toLowerCase().replace(/\s+/g,' '); if(!nn) return '';   // تطبيع المسافات: «holiday··tour» = «holiday·tour»
