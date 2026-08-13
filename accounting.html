@@ -2679,6 +2679,28 @@ function exportSupplierKashf(){
   const pr=_domTableRows('#sp-pay-tbl'); if(pr.length){ rows.push([]); rows.push(['حركة مدفوعات العملاء']); pr.forEach(r=>rows.push(r)); }
   _xlsxDownload([{name:'كشف مورّد '+sup, rows}], 'كشف حساب مورّد '+sup);
 }
+// ⚖️ تصدير مقارنة «فاتورة المورّد» بالدفعات لكل عميل في ملف واحد — للمقارنة السريعة (فاتورة − مدفوع = الفرق)
+function exportSupplierCompare(){
+  const sup=(($('supflt')||{}).value||'').trim(); if(!sup){ alert('اختاري مورّداً أولاً.'); return; }
+  const SCUR=(typeof supplierCurrency==='function')?supplierCurrency(sup):'';
+  const list=(typeof supInvAll==='function'?supInvAll():[]).filter(x=>supKey(x.supplier_name)===supKey(sup));
+  const pays=((DATA&&DATA.supplierPayments)||[]).filter(x=>supKey(x.supplier_name)===supKey(sup));
+  const byc={};
+  const _get=c=>byc[c]||(byc[c]={name:'',booked:0,inv:0,invHas:false,paid:0});
+  list.forEach(x=>{ const c=(x.client_code||'?'); const o=_get(c); o.booked+=Number(x.invoice_amount||0); if(x.actual_invoice!=null&&String(x.actual_invoice).trim()!==''){ o.inv+=(Number(x.actual_invoice)||0); o.invHas=true; } if(x.client_name&&!o.name)o.name=x.client_name; });
+  pays.forEach(x=>{ const c=(x.client_code||'?'); const o=_get(c); o.paid+=supPaidInCur(x,SCUR); if(x.client_name&&!o.name)o.name=x.client_name; });
+  const codes=Object.keys(byc).sort((a,b)=>String(a).localeCompare(String(b)));
+  const rows=[];
+  rows.push(['⚖️ مقارنة فاتورة المورّد بالدفعات — '+sup+' (بعملة '+SCUR+')']); rows.push([]);
+  rows.push(['كود العميل','العميل','قيمة الحجز','🧾 فاتورة المورّد','💵 المدفوع','الفرق (فاتورة − مدفوع)','الحالة']);
+  let tB=0,tI=0,tP=0;
+  codes.forEach(c=>{ const o=byc[c]; const base=o.invHas?o.inv:o.booked; const diff=base-o.paid; tB+=o.booked; tI+=(o.invHas?o.inv:0); tP+=o.paid;
+    const st=(Math.abs(diff)<0.5)?'مُسوّى':(diff>0?'متبقّي علينا':'مدفوع زيادة');
+    rows.push([ (c==='?'?'—':c), (c==='?'?'(دفعات غير موزّعة على عملاء)':o.name), o.booked, (o.invHas?o.inv:''), o.paid, diff, st ]); });
+  rows.push([]);
+  rows.push(['الإجمالي','', tB, tI, tP, ((tI||tB)-tP), '']);
+  _xlsxDownload([{name:'مقارنة '+sup, rows}], 'مقارنة فاتورة ودفعات '+sup);
+}
 // ---- القسم العلوي: دفعة فندق/نظام (المدفوع له أولاً، بعملة موحّدة) + توزيع إجمالي على قائمة عملاء · تسجيل مباشر ----
 let HO_PAYEE='TBO';
 let HO_TCUR='USD';
@@ -5636,7 +5658,7 @@ function renderSupplierDetail(){
   // تنبيه العملاء الذين لم يكملوا مدفوعاتهم (عليهم رصيد متبقّي يجب المطالبة به)
   const oweList=cliRows.map(c=>{ const fc=fcdCli[(c||'').toUpperCase()]||{pr:0,paid:0,cur:''}; return {code:c, name:nameCli[c]||'', bal:fc.pr-fc.paid, cur:curSym(fc.cur||'SAR')}; }).filter(o=>o.bal>0.5).sort((a,b)=>b.bal-a.bal);
   const oweBanner = oweList.length? '<div class="panel" style="margin-bottom:14px;border:1px solid #b8860b;background:rgba(184,134,11,.10)"><h3 style="margin-top:0;color:#b8860b">⚠️ عملاء لم يُكملوا مدفوعاتهم — يجب المطالبة بالمتبقّي ('+oweList.length+')</h3>'+ oweList.map(o=>'<div style="padding:6px 2px;border-bottom:1px solid rgba(184,134,11,.18);font-size:13px">⚠️ <b>'+esc(o.name)+'</b> <span style="color:var(--muted)">('+esc(o.code)+')</span> — متبقّي عليه مبلغ وقدره <b style="color:#b8860b;font-size:15px">'+fmt(o.bal)+' '+esc(o.cur)+'</b> · <span style="color:#b8860b;font-weight:700">يجب المطالبة به</span></div>').join('')+'</div>' : '';
-  let h='<div class="panel" style="margin-bottom:14px;border:1px solid var(--accent)"><h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span>🧾 '+esc(sup)+'</span><span style="display:flex;gap:8px"><button class="btn" style="background:#0e7c50;padding:6px 16px" onclick="exportSupplierKashf()">📊 تصدير Excel</button><button class="btn" style="padding:6px 16px" onclick="exportSupplierPDF()">🖨️ تصدير PDF</button></span></h3>'+
+  let h='<div class="panel" style="margin-bottom:14px;border:1px solid var(--accent)"><h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span>🧾 '+esc(sup)+'</span><span style="display:flex;gap:8px"><button class="btn" style="background:#0e7c50;padding:6px 16px" onclick="exportSupplierKashf()">📊 تصدير Excel</button><button class="btn" style="background:#c41d88;padding:6px 16px" onclick="exportSupplierCompare()">⚖️ مقارنة فاتورة/دفعات</button><button class="btn" style="padding:6px 16px" onclick="exportSupplierPDF()">🖨️ تصدير PDF</button></span></h3>'+
     '<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px">'+
       '<span>الفواتير: <b>'+fmt(list.length)+'</b></span>'+
       '<span>العملاء: <b>'+fmt(clients)+'</b></span>'+
