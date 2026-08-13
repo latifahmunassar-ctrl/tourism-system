@@ -2662,8 +2662,8 @@ function exportSupplierKashf(){
   const sup=(($('supflt')||{}).value||'').trim();
   if(!sup){ alert('اختاري مورّداً أولاً.'); return; }
   // ملخّص المورّد (نفس منطق renderSupplierDetail): الفواتير · العملاء · المستحق · المدفوع · الرصيد بعملة المورّد
-  const list=(typeof supInvAll==='function'?supInvAll():[]).filter(x=>(x.supplier_name||'')===sup);
-  const pays=((DATA&&DATA.supplierPayments)||[]).filter(x=>(x.supplier_name||'')===sup);
+  const list=(typeof supInvAll==='function'?supInvAll():[]).filter(x=>supKey(x.supplier_name)===supKey(sup));
+  const pays=((DATA&&DATA.supplierPayments)||[]).filter(x=>supKey(x.supplier_name)===supKey(sup));
   const SCUR=(typeof supplierCurrency==='function')?supplierCurrency(sup):'';
   const clients=new Set(list.map(x=>x.client_code)).size;
   const owedT=(typeof supOwed==='function')?supOwed(list):list.reduce((s,x)=>s+Number(x.invoice_amount||0),0);
@@ -3906,6 +3906,8 @@ const SUPPLIER_CUR_RULES=[
 // 🔗 توحيد اسم المورّد عبر «ربط الأسماء» (acc_lists category=supplier_alias بصيغة «الاسم المكرّر=>الاسم المعتمد») — يجعل اسمين لمورّد واحد يُعامَلان كمورّد واحد
 function _supNzName(s){ return String(s||'').trim().toLowerCase().replace(/[ًٌٍَُِّْـ]/g,'').replace(/[يىیۍ]/g,'ي').replace(/[كک]/g,'ك').replace(/ة/g,'ه').replace(/\s+/g,' '); }
 function supCanon(name){ let n=String(name||'').trim(); if(!n)return n; const map={}; (typeof listValues==='function'?listValues('supplier_alias'):[]).forEach(it=>{ const s=String(it.value||''); const i=s.indexOf('=>'); if(i<=0)return; const f=_supNzName(s.slice(0,i)); const t=s.slice(i+2).trim(); if(f&&t)map[f]=t; }); let g=0; while(g++<6){ const t=map[_supNzName(n)]; if(t && _supNzName(t)!==_supNzName(n)) n=t; else break; } return n; }
+// 🔑 مفتاح تجميع المورّد: بعد توحيد الاسم (alias)، يزيل المسافات والرموز/الأقواس ويوحّد تباين الأحرف العربية — فيطابق نفس المورّد المكتوب بصيغ متقاربة (مثل «Salalah Tours( Al Nabi )» = «Salalah Tours (Al Nabi)»)؛ يمنع انقسام كشف المورّد بسبب فرق مسافة/حرف
+function supKey(name){ return supCanon(name).toLowerCase().replace(/[ًٌٍَُِّْـ]/g,'').replace(/[يىیۍ]/g,'ي').replace(/[كک]/g,'ك').replace(/ة/g,'ه').replace(/[^a-z0-9؀-ۿ]/g,''); }
 function supInvAll(){
   const nm={}, ag={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(r.client_name&&!nm[c])nm[c]=r.client_name; if(r.agent_name&&!ag[c])ag[c]=r.agent_name; });
   // تطبيع الاسم للمطابقة: يوحّد المسافات + تباين الأحرف العربية (ي/ى/ی · ك/ک · ة/ه · التشكيل/التطويل) ليطابق «مصدر الحجز» في البوكينج مع اسم المورّد في الشيت
@@ -3927,10 +3929,10 @@ function supInvAll(){
     if(isCancel){ if(!(fullCost>0)&&!(owedAmt>0)) return; } else { if(!(owedAmt>0)) return; }
     const c=(s.client_code||'').toUpperCase();
     slRows.push({ id:'sl-'+s.id, service_id:s.id, supplier_name:bf, client_code:s.client_code, client_name:nm[c]||'', agent_name:ag[c]||'', arrival_date:s.check_in||null, invoice_amount:owedAmt, full_value:fullCost, book_actual:frb, cancel_charge:Number(s.cancel_charge||0), cancelled:isCancel, invoice_currency:s.booked_currency||s.currency||null, invoice_date:s.check_in||null, actual_invoice:(s.actual_invoice!=null&&s.actual_invoice!=='')?Number(s.actual_invoice):null, status:s.status||null, svc:(s.name||SVC[s.kind]||s.kind||'خدمة'), source:'dashboard', _booking:true });
-    bookedKeys.add(c+'|'+_nz(bf));
+    bookedKeys.add(c+'|'+supKey(bf));
   });
   // 2) أسطر شيت Supplier Record القديمة — تُستبعَد إذا وُجد حجز Booking Form لنفس (العميل+المورّد)، لأن البوكينج هو المعتمد؛ فتنعكس القيمة المصحّحة ولا تظهر قيمة الشيت القديمة/المكرّرة
-  const sheet=(DATA.supplierInvoices||[]).map(x=>{ const cn=supCanon(x.supplier_name); return cn!==x.supplier_name?Object.assign({},x,{supplier_name:cn}):x; }).filter(x=>!bookedKeys.has(String(x.client_code||'').toUpperCase()+'|'+_nz(x.supplier_name)));
+  const sheet=(DATA.supplierInvoices||[]).map(x=>{ const cn=supCanon(x.supplier_name); return cn!==x.supplier_name?Object.assign({},x,{supplier_name:cn}):x; }).filter(x=>!bookedKeys.has(String(x.client_code||'').toUpperCase()+'|'+supKey(x.supplier_name)));
   return sheet.concat(slRows);
 }
 // عملة مُعتمدة يدوياً لكل مورّد (تُخزَّن في القائمة المُدارة category=supplier_cur بصيغة «الاسم=العملة») — تسبق القواعد الثابتة
@@ -4000,7 +4002,7 @@ function fillSupplierFilter(){
   const _nz=(s)=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
   const _supSet=new Set(listValues('suppliers').map(v=>_nz(v.value)));
   const _hotelOnly=new Set(listValues('hotels_system').map(v=>_nz(v.value)).filter(h=>!_supSet.has(h)));
-  const names=[...new Set([...supInvAll().map(x=>x.supplier_name), ...listValues('suppliers').map(v=>v.value)].map(s=>String(s||'').trim()).filter(Boolean))].filter(n=>!_hotelOnly.has(_nz(n))).sort((a,b)=>String(a).localeCompare(String(b),'ar'));
+  const _seen={}; const names=[...new Set([...supInvAll().map(x=>x.supplier_name), ...listValues('suppliers').map(v=>v.value)].map(s=>String(s||'').trim()).filter(Boolean))].filter(n=>!_hotelOnly.has(_nz(n))).filter(n=>{ const k=supKey(n); if(_seen[k])return false; _seen[k]=1; return true; }).sort((a,b)=>String(a).localeCompare(String(b),'ar'));   // 🔑 صيغة واحدة لكل مورّد (يمنع تكرار الاسم المتقارب)
   dl.innerHTML=names.map(n=>'<option>'+esc(n)+'</option>').join('');
 }
 // عملة معتمدة يدوياً لكل بنك/بطاقة (قائمة مُدارة category=bank_cur بصيغة «الاسم=العملة») — تسبق التخمين من الاسم
@@ -5469,18 +5471,19 @@ function renderSuppliers(){
   const _supSet=new Set(listValues('suppliers').map(v=>_nz(v.value)));
   const _hotelOnly=new Set(listValues('hotels_system').map(v=>_nz(v.value)).filter(h=>!_supSet.has(h)));
   const inv=supInvAll().filter(x=>!_hotelOnly.has(_nz(x.supplier_name)));
-  const by={};
-  inv.forEach(x=>{ const s=x.supplier_name||'?'; (by[s]=by[s]||[]).push(x); });
-  const names=Object.keys(by).sort((a,b)=>by[b].length-by[a].length);
-  const payBy={}; (DATA.supplierPayments||[]).forEach(x=>{ const s=x.supplier_name||'?'; payBy[s]=(payBy[s]||0)+Number(x.amount||0); });
+  const by={}, disp={};
+  inv.forEach(x=>{ const k=supKey(x.supplier_name)||'?'; (by[k]=by[k]||[]).push(x); if(!disp[k])disp[k]=(x.supplier_name||'?'); });   // 🔑 تجميع بالمفتاح الموحّد: صيغ الاسم المتقاربة = مورّد واحد
+  const keys=Object.keys(by).sort((a,b)=>by[b].length-by[a].length);
+  const names=keys.map(k=>disp[k]);
+  const payBy={}; (DATA.supplierPayments||[]).forEach(x=>{ const k=supKey(x.supplier_name)||'?'; payBy[k]=(payBy[k]||0)+Number(x.amount||0); });
   // موردون مُضافون للقائمة المُدارة لكن بلا أي فاتورة/حجز بعد — نعرضهم بأصفار في نفس الجدول
   const norm=(s)=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
-  const actSet=new Set(names.map(norm));
+  const actSet=new Set(keys);
   const _flightSrc=listValues('flight_booked_from').map(v=>String(v.value||'').trim()).filter(Boolean);   // ✈️ جهات الطيران تحتاج اعتماد عملة كذلك — نعرضها هنا لاعتمادها
   const _flightSet=new Set(_flightSrc.map(norm));
-  const inactive=[...new Set([...listValues('suppliers').map(v=>String(v.value||'').trim()), ..._flightSrc].filter(Boolean))].filter(s=>!actSet.has(norm(s))).sort((a,b)=>String(a).localeCompare(String(b),'ar'));
-  tb.innerHTML=names.map(s=>{ const list=by[s]; const clients=new Set(list.map(x=>x.client_code)).size;
-    const cur=supplierCurrency(s); const owed=supOwed(list); const paid=payBy[s]||0; const bal=owed-paid;
+  const inactive=[...new Set([...listValues('suppliers').map(v=>String(v.value||'').trim()), ..._flightSrc].filter(Boolean))].filter(s=>!actSet.has(supKey(s))).sort((a,b)=>String(a).localeCompare(String(b),'ar'));
+  tb.innerHTML=keys.map(k=>{ const s=disp[k]; const list=by[k]; const clients=new Set(list.map(x=>x.client_code)).size;
+    const cur=supplierCurrency(s); const owed=supOwed(list); const paid=payBy[k]||0; const bal=owed-paid;
     return rw(['<a href="#" style="color:var(--accent);font-weight:800;text-decoration:underline;cursor:pointer" onclick="$(\'supflt\').value=\''+esc(s)+'\';renderSupplierDetail();window.scrollTo(0,0);return false">'+esc(s)+'</a>', fmt(list.length), fmt(clients),
       '<b>'+fmt(owed)+'</b> '+esc(cur), (paid?'<span class="num">'+fmt(paid)+'</span>':'—'), '<b style="color:'+(bal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(bal)+'</b> '+esc(cur)]);
   }).join('')
@@ -5542,8 +5545,8 @@ function renderSupplierDetail(){
   const _supRawC=supCanon(supRaw);   // 🔗 لو الاسم مربوط باسم معتمد آخر، ابحثي بالمعتمد
   const _supNames=[...new Set(supInvAll().map(x=>x.supplier_name).filter(Boolean))];
   const sup=_supNames.find(n=>_nzn(n)===_nzn(_supRawC)) || _supNames.find(n=>_supRawC.length>=3 && _nzn(n).indexOf(_nzn(_supRawC))>=0) || _supRawC;
-  const list=supInvAll().filter(x=>(x.supplier_name||'')===sup);
-  const pays=(DATA.supplierPayments||[]).filter(x=>(x.supplier_name||'')===sup);
+  const list=supInvAll().filter(x=>supKey(x.supplier_name)===supKey(sup));   // 🔑 تجميع بالمفتاح الموحّد: يضمّ كل صيغ اسم المورّد المتقاربة (فرق مسافة/حرف) في كشف واحد
+  const pays=(DATA.supplierPayments||[]).filter(x=>supKey(x.supplier_name)===supKey(sup));
   const clients=new Set(list.map(x=>x.client_code)).size;
   // عملة المورّد الموحّدة (الأرقام دقيقة، العملة من تعريف المورّد)
   const SCUR=supplierCurrency(sup);
@@ -5828,8 +5831,8 @@ function exportSupplierPDF(){
   const scur=supplierCurrency(sup);
   const today=new Date().toISOString().slice(0,10);
   // الملخّص العام (الكلي) من كل بيانات المورّد
-  const list=supInvAll().filter(x=>(x.supplier_name||'')===sup);
-  const pays=(DATA.supplierPayments||[]).filter(x=>(x.supplier_name||'')===sup);
+  const list=supInvAll().filter(x=>supKey(x.supplier_name)===supKey(sup));   // 🔑 تجميع بالمفتاح الموحّد: يضمّ كل صيغ اسم المورّد المتقاربة (فرق مسافة/حرف) في كشف واحد
+  const pays=(DATA.supplierPayments||[]).filter(x=>supKey(x.supplier_name)===supKey(sup));
   const owed=list.reduce((s,x)=>s+Number(x.invoice_amount||0),0);
   const paid=pays.reduce((s,x)=>s+supPaidInCur(x,SCUR),0); const bal=owed-paid;   // 💱 تحويل بعملة المورّد فقط عند اختلاف العملة
   const clients=new Set(list.map(x=>x.client_code)).size;
