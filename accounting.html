@@ -5531,10 +5531,11 @@ async function addSupAlias(){ const f=(($('alias-from')||{}).value||'').trim(), 
   if(!confirm('ربط «'+f+'» ليُعامَل كأنه «'+t+'» (مورّد واحد)؟\nتنعكس قيمة Booking Form في كشفه.'))return;
   try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_list_item',payload:{category:'supplier_alias',value:f+'=>'+t}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } if(typeof toast==='function')toast('✅ تم الربط'); await load(); }catch(e){ alert('خطأ: '+e.message); } }
 async function delSupAlias(id){ if(!confirm('فكّ هذا الربط؟'))return; try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_list_item',payload:{id:id}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } if(typeof toast==='function')toast('✅ فُكّ الربط'); await load(); }catch(e){ alert('خطأ: '+e.message); } }
-let spFltAgent='', spFltCancel='';
+let spFltAgent='', spFltCancel='', spFltNoInv=false;
 function spSetAgent(v){ spFltAgent=v; renderSupplierDetail(); }
 function spSetCancel(v){ spFltCancel=v; renderSupplierDetail(); }
-function spClearFilters(){ spFltAgent=''; spFltCancel=''; renderSupplierDetail(); }
+function spSetNoInv(v){ spFltNoInv=!!v; renderSupplierDetail(); }
+function spClearFilters(){ spFltAgent=''; spFltCancel=''; spFltNoInv=false; renderSupplierDetail(); }
 function renderSupplierDetail(){
   const box=$('supplier-detail'); if(!box) return;
   const supRaw=($('supflt').value||'').trim();
@@ -5599,10 +5600,13 @@ function renderSupplierDetail(){
   const spHasCancel=(c)=>{ const cu=(c||'').toUpperCase(); return !!_cancFull[c]||!!_cancPart[c]||cancelledCodes.has(cu)||(cancCli[c]>0)||(cancVal[cu]>0); };
   const spIsPartial=(c)=>{ const cu=(c||'').toUpperCase(); return (!!_cancPart[c]||(cancCli[c]>0)) ; };   // صار لها رسوم إلغاء = إلغاء جزئي
   const cliRowsTotal=cliRows.length;
+  // 🔴 عدد العملاء الناقصة فواتيرهم (بلا «فاتورة مورّد» مُدخَلة) — للفلتر السريع
+  const noInvCount=cliRows.filter(c=>cliActual[c]==null).length;
   if(spFltAgent) cliRows=cliRows.filter(c=>(agentCli[c]||'')===spFltAgent);
   if(spFltCancel==='any') cliRows=cliRows.filter(c=>spHasCancel(c));
   else if(spFltCancel==='partial') cliRows=cliRows.filter(c=>spIsPartial(c));
   else if(spFltCancel==='full') cliRows=cliRows.filter(c=>spHasCancel(c)&&!spIsPartial(c));
+  if(spFltNoInv) cliRows=cliRows.filter(c=>cliActual[c]==null);   // 🔴 «الناقصة فقط»: العملاء بلا فاتورة مورّد مُدخَلة
   const supJs="'"+String(sup).replace(/\\/g,'').replace(/'/g,"\\'")+"'";
   // جدول حركة مدفوعات العملاء أنفسهم (من First Client Data) — يُعرض مباشرة تحت جدول التوزيع
   const payMovHtml = (function(){
@@ -5655,8 +5659,9 @@ function renderSupplierDetail(){
         '<option value="full"'+(spFltCancel==='full'?' selected':'')+'>⬛ ملغاة بالكامل</option>'+
         '<option value="partial"'+(spFltCancel==='partial'?' selected':'')+'>🟠 إلغاء جزئي (رسوم إلغاء)</option>'+
       '</select></div>'+
-      ((spFltAgent||spFltCancel)?'<button class="btn ghost" style="padding:7px 14px" onclick="spClearFilters()">🧹 مسح الفلاتر</button>':'')+
-      '<span style="font-size:12px;color:var(--muted)">معروض: <b>'+cliRows.length+'</b> من '+cliRowsTotal+' عميل</span>'+
+      '<button class="btn'+(spFltNoInv?'':' ghost')+'" style="padding:7px 14px;'+(spFltNoInv?'background:#d98a00;color:#fff;border-color:#d98a00':'')+'" onclick="spSetNoInv('+(spFltNoInv?'false':'true')+')" title="اعرضي فقط العملاء اللي ما أُدخلت لهم فاتورة مورّد بعد — عشان تدخّلينها بسهولة">🔴 الناقصة فقط (بلا فاتورة)'+(noInvCount?' · '+noInvCount:'')+'</button>'+
+      ((spFltAgent||spFltCancel||spFltNoInv)?'<button class="btn ghost" style="padding:7px 14px" onclick="spClearFilters()">🧹 مسح الفلاتر</button>':'')+
+      '<span style="font-size:12px;color:var(--muted)">معروض: <b>'+cliRows.length+'</b> من '+cliRowsTotal+' عميل'+(spFltNoInv?' · <b style="color:#d98a00">الناقصة فقط</b>':'')+'</span>'+
     '</div>'+
     '<div id="sp-period-summary"></div></div>'+
     oweBanner+
