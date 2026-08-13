@@ -3932,7 +3932,7 @@ function supInvAll(){
     bookedKeys.add(c+'|'+supKey(bf));
   });
   // 2) أسطر شيت Supplier Record القديمة — تُستبعَد إذا وُجد حجز Booking Form لنفس (العميل+المورّد)، لأن البوكينج هو المعتمد؛ فتنعكس القيمة المصحّحة ولا تظهر قيمة الشيت القديمة/المكرّرة
-  const sheet=(DATA.supplierInvoices||[]).map(x=>{ const cn=supCanon(x.supplier_name); return cn!==x.supplier_name?Object.assign({},x,{supplier_name:cn}):x; }).filter(x=>!bookedKeys.has(String(x.client_code||'').toUpperCase()+'|'+supKey(x.supplier_name)));
+  const sheet=(DATA.supplierInvoices||[]).map(x=>{ const cn=supCanon(x.supplier_name); return cn!==x.supplier_name?Object.assign({},x,{supplier_name:cn}):x; }).filter(x=>{ const hasInv=(x.actual_invoice!=null&&String(x.actual_invoice).trim()!==''); return hasInv || !bookedKeys.has(String(x.client_code||'').toUpperCase()+'|'+supKey(x.supplier_name)); });   // 🛡️ لا تُخفِ سطر شيت فيه «فاتورة مورّد» مُدخَلة يدوياً حتى لو وُجد حجز Booking Form (يحفظ إدخال المالكة)
   return sheet.concat(slRows);
 }
 // عملة مُعتمدة يدوياً لكل مورّد (تُخزَّن في القائمة المُدارة category=supplier_cur بصيغة «الاسم=العملة») — تسبق القواعد الثابتة
@@ -6102,8 +6102,11 @@ async function saveSupInvoice(id,val){
     const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_sup_invoice',payload:{id:id,actual_invoice:(val===''?null:val),by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
     const j=await r.json();
     if(j&&j.pending){ alert('🔒 '+(j.msg||'أُرسل طلب تعديل فاتورة المورّد لموافقة المالكة — لن يتغيّر حتى الاعتماد')); const sup=($('supflt')||{}).value||''; await load(); if($('supflt')){ $('supflt').value=sup; renderSupplierDetail(); } return; }
-    if(j&&j.error){ alert('⚠️ '+j.error); }
-  }catch(e){}
+    if(j&&j.error){ alert('⚠️ '+j.error); return; }
+    // ✅ حفظ مباشر ناجح — تأكيد مرئي + إعادة تحميل ليظهر محفوظاً (كان ينقص التأكيد فيُظنّ أنه لم يُحفظ)
+    if(typeof toast==='function')toast('✅ حُفظت فاتورة المورّد'+(val===''?' (أُفرِغت)':' = '+val));
+    const sup=($('supflt')||{}).value||''; await load(); if($('supflt')){ $('supflt').value=sup; renderSupplierDetail(); }
+  }catch(e){ alert('⚠️ تعذّر حفظ فاتورة المورّد — تأكّدي من الاتصال ثم أعيدي الإدخال.\n'+((e&&e.message)||e)); }
 }
 function spRate(scur){
   const pc=$('sp-cur').value, fld=$('sp-rate-fld'), rf=$('sp-rate');
