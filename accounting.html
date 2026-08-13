@@ -2672,8 +2672,9 @@ function exportSupplierKashf(){
   const balLbl=balT>0.5?'علينا (مستحق للمورّد)':(balT<-0.5?'له رصيد مقدّم عندنا':'مُسوّى');
   const rows=[];
   rows.push(['كشف حساب مورّد — '+sup]); rows.push([]);
-  rows.push(['عدد الفواتير','عدد العملاء','المستحق','المدفوع','الرصيد المتبقّي','الحالة','العملة']);
-  rows.push([fmt(list.length), fmt(clients), fmt(owedT), fmt(paidT), fmt(balT), balLbl, SCUR]);
+  const invEnteredTotal=list.reduce((s,x)=>s+((x.actual_invoice!=null&&String(x.actual_invoice).trim()!=='')?(Number(x.actual_invoice)||0):0),0);
+  rows.push(['عدد الفواتير','عدد العملاء','إجمالي الحجوزات (المستحق)','🧾 إجمالي فاتورة المورّد','المدفوع','الرصيد المتبقّي','الحالة','العملة']);
+  rows.push([fmt(list.length), fmt(clients), fmt(owedT), fmt(invEnteredTotal), fmt(paidT), fmt(balT), balLbl, SCUR]);
   const dr=_domTableRows('#sp-dist-tbl'); if(dr.length){ rows.push([]); rows.push(['توزيع الفواتير على العملاء']); dr.forEach(r=>rows.push(r)); }
   const pr=_domTableRows('#sp-pay-tbl'); if(pr.length){ rows.push([]); rows.push(['حركة مدفوعات العملاء']); pr.forEach(r=>rows.push(r)); }
   _xlsxDownload([{name:'كشف مورّد '+sup, rows}], 'كشف حساب مورّد '+sup);
@@ -5555,6 +5556,9 @@ function renderSupplierDetail(){
   // 💱 قيمة الدفعة بعملة المورّد: تُحوَّل بالسعر فقط عند اختلاف عملة الدفع عن عملة المورّد (SCUR)
   const spPaidVal=(x)=>supPaidInCur(x, SCUR);
   const owedT=supOwed(list); const paidT=pays.reduce((s,x)=>s+spPaidVal(x),0); const balT=owedT-paidT;
+  // 🧾 إجمالي «فاتورة المورّد» = مجموع الفواتير المُدخَلة يدويّاً (actual_invoice) عبر كل خدمات المورّد
+  const invEnteredTotal=list.reduce((s,x)=>s+((x.actual_invoice!=null&&String(x.actual_invoice).trim()!=='')?(Number(x.actual_invoice)||0):0),0);
+  const invEnteredCount=list.filter(x=>x.actual_invoice!=null&&String(x.actual_invoice).trim()!=='').length;
   const curStr1=(v)=>'<b>'+fmt(v)+'</b> '+esc(SCUR);
   const balStr='<b style="color:'+(balT>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(balT)+'</b> '+esc(SCUR);
   // قائمة البنك تعتمد القائمة المُدارة في قسم البيانات فقط (لا أسماء بنوك قديمة من الحقول)؛ الإدخالات القديمة محفوظة كما هي
@@ -5636,7 +5640,8 @@ function renderSupplierDetail(){
     '<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px">'+
       '<span>الفواتير: <b>'+fmt(list.length)+'</b></span>'+
       '<span>العملاء: <b>'+fmt(clients)+'</b></span>'+
-      '<span>💰 المستحق: '+curStr1(owedT)+'</span>'+
+      '<span>💰 إجمالي الحجوزات (المستحق): '+curStr1(owedT)+'</span>'+
+      '<span>🧾 إجمالي فاتورة المورّد: <b>'+fmt(invEnteredTotal)+'</b> '+esc(SCUR)+' <span style="font-size:10px;color:var(--muted)">('+invEnteredCount+' مُدخَلة يدويّاً'+(invEnteredCount<list.length?(' من '+list.length):'')+')</span></span>'+
       '<span>✅ المدفوع: '+curStr1(paidT)+'</span>'+
       '<span>📌 الرصيد المتبقّي: '+balStr+'</span>'+
     '</div>'+
@@ -5872,7 +5877,7 @@ function exportSupplierPDF(){
     '<div class="hd"><div class="logo">AL<span>E</span>ZZ<div class="sub">شركة العز للسياحة والسفر</div></div>'+
       '<div class="ttl">كشف حساب مورّد / فاتورة<small>تاريخ الإصدار: '+esc(today)+'</small></div></div>'+
     '<div class="meta"><span>المورّد: <b>'+esc(sup)+'</b></span><span>عملة المورّد: <b>'+esc(scur)+'</b></span>'+(filtered&&(f||t)?('<span>الفترة: <b>'+esc(f||'…')+' → '+esc(t||'…')+'</b></span>'):'')+(q?('<span>بحث: <b>'+esc(q)+'</b></span>'):'')+'</div>'+
-    '<div class="kpis"><b>الملخّص العام (الكلي):</b> <span>الفواتير: <b>'+fmt(list.length)+'</b></span> · <span>العملاء: <b>'+fmt(clients)+'</b></span> · <span>المستحق: <b>'+fmt(owed)+' '+esc(scur)+'</b></span> · <span>المدفوع: <b>'+fmt(paid)+' '+esc(scur)+'</b></span> · <span>الرصيد: <b>'+fmt(bal)+' '+esc(scur)+'</b></span></div>'+
+    '<div class="kpis"><b>الملخّص العام (الكلي):</b> <span>الفواتير: <b>'+fmt(list.length)+'</b></span> · <span>العملاء: <b>'+fmt(clients)+'</b></span> · <span>إجمالي الحجوزات: <b>'+fmt(owed)+' '+esc(scur)+'</b></span> · <span>🧾 إجمالي فاتورة المورّد: <b>'+fmt(list.reduce(function(s,x){return s+((x.actual_invoice!=null&&String(x.actual_invoice).trim()!=='')?(Number(x.actual_invoice)||0):0);},0))+' '+esc(scur)+'</b></span> · <span>المدفوع: <b>'+fmt(paid)+' '+esc(scur)+'</b></span> · <span>الرصيد: <b>'+fmt(bal)+' '+esc(scur)+'</b></span></div>'+
     (periodInner?('<div class="period">'+periodInner+'</div>'):'')+
     '<h4>(١) تفاصيل فواتير العملاء'+(filtered?' — للفترة/البحث المحدّد':'')+' ('+t1rows.length+') <span style="font-size:10px;font-weight:400;color:#6b7c7a">— 🔻 الربح الفعلي أقل من المتوقع</span></h4>'+tbl1(t1head,t1rows)+
     '<h4>(٢) حركة مدفوعات العملاء'+(filtered?' — للفترة/البحث المحدّد':'')+' ('+t2rows.length+')</h4>'+tbl(t2head,t2rows)+
