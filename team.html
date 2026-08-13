@@ -1427,7 +1427,7 @@ async function pickCheapestDouble(hidx){
       body: JSON.stringify({ action:'list_hotels', dest, region, occupancy:2, current:p[0]||'', date })
     });
     const data = await res.json();
-    const cand = (data.hotels || []).filter(h => h.fits); // غرف إشغالها شخصين
+    const cand = (data.hotels || []).filter(h => +h.capacity === 2); // غرف إشغالها شخصين بالضبط (لا الغرف الأكبر)
     let byStar = curStars ? cand.filter(h => +h.stars === curStars) : cand;
     const changedStar = curStars && !byStar.length && cand.length;
     if(!byStar.length) byStar = cand; // fallback: أقرب فئة لو ما فيه بنفس النجوم
