@@ -702,7 +702,7 @@ table{font-weight:600}
         <h3 style="margin-top:0">➕ إضافة حركة كاش (داخل / خارج) يدوياً</h3>
         <div class="fgrid">
           <div class="fld"><label>📅 التاريخ</label><input type="date" id="bca-date" style="color-scheme:light;cursor:pointer"></div>
-          <div class="fld"><label>البنك / البطاقة <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">من القائمة المُدارة فقط</span></label><input id="bca-bank" list="bca-banklist" autocomplete="off" placeholder="اختاري من القائمة…" style="background:#fff;color:var(--txt)"><datalist id="bca-banklist"></datalist></div>
+          <div class="fld"><label>البنك / البطاقة <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">من القائمة المُدارة فقط</span></label><input id="bca-bank" list="bca-banklist" autocomplete="off" oninput="if(typeof bcXferBankPick==='function')bcXferBankPick()" placeholder="اختاري من القائمة…" style="background:#fff;color:var(--txt)"><datalist id="bca-banklist"></datalist></div>
           <div class="fld"><label>داخل (+)</label><input type="number" id="bca-in" placeholder="0"></div>
           <div class="fld"><label>خارج (−)</label><input type="number" id="bca-out" placeholder="0"></div>
           <div class="fld"><label>العملة</label><input id="bca-cur" list="bc-cur-list" autocomplete="off" placeholder="OMR / USD…" style="background:#fff;color:var(--txt)"></div>
@@ -5018,6 +5018,22 @@ function bcApply(opts){
 function bcFiltered(){ const a=bcApply(); a.sort((x,y)=>{ const dx=x.source==='dashboard'?1:0, dy=y.source==='dashboard'?1:0; if(dx!==dy) return dy-dx; if(dx===1) return String(y.created_at||'').localeCompare(String(x.created_at||''))||(Number(y.id||0)-Number(x.id||0)); return String(y.tx_date||'').localeCompare(String(x.tx_date||'')); }); return a; }  // الإدخالات اليدوية الجديدة أولاً ثم الشيت بتاريخ الحركة
 // 🔁 كاشف التحويلات الداخلية بين الحسابات — يمسك القناة الفعلية «transafare between account» + مرادفاتها (عربي/إنجليزي، وأخطاء إملائية شائعة)
 function _isXferRow(r){ const s=(String(r.channel||'')+' '+String(r.description||'')+' '+String(r.details||'')).toLowerCase(); return /between\s*accoun|trans[a-z]*f[a-z]*re?|transfer|تحويل\s*بين|حوال[ةه]\s*داخل|داخل[ية]*\s*بين|حساب\s*ل?\s*حساب/.test(s); }
+// 🌐 سعر صرف مباشر (أون لاين، بلا مفتاح) لتقدير المبلغ المتوقّع وصوله في التحويل بين عملتين — تخزين مؤقت + تدهور آمن؛ التقدير للاسترشاد فقط والمالكة تُدخِل الرقم الحقيقي
+let FX_LIVE=null, FX_LIVE_FETCHING=false, FX_LIVE_FAIL=false;
+async function fetchFxLive(force){ if(FX_LIVE_FETCHING)return; if(FX_LIVE && !force && (Date.now()-(FX_LIVE.ts||0)<2*3600*1000))return; FX_LIVE_FETCHING=true; if(force)FX_LIVE=null; FX_LIVE_FAIL=false;
+  try{ const r=await fetch('https://open.er-api.com/v6/latest/USD',{cache:'no-store'}); const j=await r.json(); if(j&&j.rates&&j.rates.USD){ FX_LIVE={base:'USD', rates:j.rates, ts:Date.now()}; } else { FX_LIVE_FAIL=true; } }
+  catch(e){ FX_LIVE_FAIL=true; }
+  FX_LIVE_FETCHING=false;
+  try{ if(typeof renderBanksCashDetail==='function' && $('bankscash-detail'))renderBanksCashDetail(); }catch(e){}
+}
+function fxLiveConv(amt, from, to){ amt=Number(amt||0); from=String(from||'').toUpperCase(); to=String(to||'').toUpperCase(); if(!amt||!from||!to)return null; if(from===to)return amt; if(!FX_LIVE||!FX_LIVE.rates)return null; const R=FX_LIVE.rates; const rf=R[from], rt=R[to]; if(!rf||!rt)return null; return amt/rf*rt; }
+// اختيار الحساب المستقبِل أثناء «سجّلي وصولها»: يقدّر «داخل» بسعر الصرف المباشر لو اختلفت العملة (قابل للتعديل — المالكة تُدخِل الحقيقي)
+let _xferPrefill=null;
+function bcXferBankPick(){ if(!_xferPrefill)return; const bank=(($('bca-bank')||{}).value||'').trim(); if(!bank)return; const destCur=String(bankCur(bank)||'').toUpperCase(); if(!destCur)return; const src=_xferPrefill; const inEl=$('bca-in'), curEl=$('bca-cur'), msg=$('bc-add-msg');
+  if(destCur===src.cur){ if(inEl)inEl.value=src.amt||''; if(curEl)curEl.value=src.cur; if(msg){ msg.textContent='✅ نفس العملة — المبلغ '+fmt(src.amt)+' '+src.cur+'. راجعي واحفظي.'; msg.style.color='#0e7c50'; } return; }
+  if(curEl)curEl.value=destCur; const est=fxLiveConv(src.amt, src.cur, destCur);
+  if(est!=null){ const e2=Math.round(est*1000)/1000; if(inEl)inEl.value=e2; if(msg){ msg.innerHTML='🌐 <b style="color:#2f6fd0">تقديري ≈ '+fmt(e2)+' '+esc(destCur)+'</b> <span style="color:var(--muted)">(بسعر الصرف الآن، من '+fmt(src.amt)+' '+esc(src.cur)+')</span> · <b style="color:#b8860b">عدّلي «داخل» للرقم الحقيقي الذي وصل ثم احفظي.</b>'; msg.style.color='#0e7c50'; } fetchFxLive(); }
+  else { if(inEl)inEl.value=''; if(msg){ msg.innerHTML='<b style="color:#b8860b">تعذّر جلب سعر الصرف الآن — أدخلي «داخل» بالمبلغ الحقيقي ('+esc(destCur)+') يدوياً.</b>'; msg.style.color='#b8860b'; } fetchFxLive(); } }
 // حوالات خرجت من حساب (تحويل داخلي) بلا طرف «داخل» مقابل مطابق (نفس المبلغ+العملة) في أي حساب — أي: متوقّع وصولها ولم تُسجَّل بعد
 function xferPendingArrivals(){
   const all=(DATA&&DATA.banksCash)||[]; const xf=all.filter(_isXferRow);
@@ -5035,6 +5051,7 @@ function xferPendingArrivals(){
 // ➕ «سجّلي وصولها»: يعبّي فورم إضافة حركة الكاش بالطرف الداخل (نفس المبلغ/العملة/القناة) — تختار المالكة الحساب المستقبِل ثم تحفظ (بلا أي إنشاء تلقائي)
 function xferRegisterArrival(id){
   const r=((DATA&&DATA.banksCash)||[]).find(x=>String(x.id)===String(id)); if(!r)return;
+  _xferPrefill={amt:Number(r.out_raw||0), cur:String(r.currency||bankCur(r.bank_name)||'').toUpperCase(), id:r.id}; fetchFxLive();   // 🌐 لتقدير «داخل» بالسعر المباشر عند اختيار الحساب المستقبِل
   const S=(k,v)=>{ const e=$(k); if(e)e.value=(v==null?'':v); };
   S('bca-in', Number(r.out_raw||0)||''); S('bca-out',''); S('bca-cur', r.currency||bankCur(r.bank_name)||''); S('bca-rate', r.currency_rate||'');
   S('bca-date', String(r.tx_date||'').slice(0,10)); S('bca-bank','');   // ← تختار المالكة الحساب المستقبِل
@@ -5060,15 +5077,24 @@ function renderBanksCashDetail(){
   // 🔁 تنبيه: حوالات داخلية خرجت ولم يُسجَّل طرفها الداخل بعد — تنبيه فقط + زر تأكيد يدوي (لا إنشاء تلقائي)
   const _DISx=(typeof dismissedSet==='function'?dismissedSet():new Set());
   const _pendXfer=xferPendingArrivals().filter(o=>!_DISx.has('xferin:'+o.id));
+  const _allCurs=[...new Set(a.concat((DATA&&DATA.banksCash)||[]).map(x=>String(bankCur(x.bank_name)||'').toUpperCase()).filter(Boolean))];
+  // 🌐 لو فيه حوالة بعملة تختلف عن عملة حساب آخر → نجلب سعر الصرف المباشر لعرض المتوقّع وصوله (تقديري)
+  const _needFx=_pendXfer.some(o=>{ const sc=String(o.currency||bankCur(o.bank_name)||'').toUpperCase(); return _allCurs.some(c=>c&&c!==sc); });
+  if(_needFx && !FX_LIVE && !FX_LIVE_FETCHING) fetchFxLive();
+  const _fxStatus=FX_LIVE?('<span style="font-size:10px;color:#2f6fd0">🌐 سعر مباشر ✓</span> <button class="btn ghost" style="padding:1px 8px;font-size:10px" onclick="fetchFxLive(true)">🔄 حدّثي السعر</button>'):(FX_LIVE_FETCHING?'<span style="font-size:10px;color:#b8860b">⏳ جاري جلب السعر…</span>':'<button class="btn ghost" style="padding:1px 8px;font-size:10px" onclick="fetchFxLive(true)">🌐 اجلبي السعر المباشر</button>');
+  const _estCell=(o)=>{ const sc=String(o.currency||bankCur(o.bank_name)||'').toUpperCase(); const tg=_allCurs.filter(c=>c&&c!==sc); if(!tg.length)return '<span style="color:#9aa">— نفس العملة</span>';
+    if(!FX_LIVE)return FX_LIVE_FETCHING?'<span style="color:#b8860b">⏳ جاري جلب السعر…</span>':'<span style="color:#b8860b">اضغطي «اجلبي السعر»</span>';
+    return tg.map(t=>{ const e=fxLiveConv(Number(o.out_raw||0),sc,t); return e==null?('<span style="color:#9aa">'+esc(t)+' —</span>'):('<span style="color:#2f6fd0;font-style:italic;font-weight:700">≈ '+fmt(Math.round(e*1000)/1000)+' '+esc(t)+'</span>'); }).join('<br>'); };
   const _xferHtml=(!_pendXfer.length)?'':('<div class="panel" style="margin-bottom:14px;border:1px solid #d98a00;background:rgba(217,138,0,.08)">'+
-    '<h3 style="color:#b8860b;margin-top:0">🔁 حوالات داخلية بانتظار تأكيد وصولها ('+_pendXfer.length+')</h3>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">تحويلات خرجت من حساب تحت قناة «تحويل بين الحسابات» ولم يُسجَّل لها طرف <b>داخل</b> مقابل بنفس المبلغ في أي حساب. راجعي كل واحدة و«سجّلي وصولها» في الحساب المستقبِل، أو «تم الاطلاع» لو مو حوالة داخلية. <b>لا شيء يُنشأ تلقائياً.</b></div>'+
-    '<div class="tbl-wrap"><table style="font-size:11.5px;white-space:nowrap"><thead><tr><th>📅 تاريخ الخروج</th><th>من حساب</th><th>💰 المبلغ المتوقّع وصوله</th><th>العملة</th><th>الوصف / التفاصيل</th><th>المرجع</th><th>إجراء</th></tr></thead><tbody>'+
+    '<h3 style="color:#b8860b;margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span>🔁 حوالات داخلية بانتظار تأكيد وصولها ('+_pendXfer.length+')</span>'+_fxStatus+'</h3>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">تحويلات خرجت من حساب ولم يُسجَّل لها طرف <b>داخل</b> مقابل. عمود <b style="color:#2f6fd0">🌐 المتوقّع وصوله</b> تقديري بسعر الصرف المباشر — <b>ليس نهائياً</b>. اضغطي «سجّلي وصولها» وأدخلي <b>الرقم الحقيقي</b> الذي وصل، أو «تم الاطلاع» لو مو حوالة داخلية. <b>لا شيء يُنشأ تلقائياً.</b></div>'+
+    '<div class="tbl-wrap"><table style="font-size:11.5px;white-space:nowrap"><thead><tr><th>📅 تاريخ الخروج</th><th>من حساب</th><th>💸 الخارج</th><th>العملة</th><th>🌐 المتوقّع وصوله<br><span style="font-size:9px;color:#2f6fd0">تقديري · سعر الآن</span></th><th>الوصف / التفاصيل</th><th>المرجع</th><th>إجراء</th></tr></thead><tbody>'+
     _pendXfer.map(o=>{ const cur=(o.currency||bankCur(o.bank_name)||''); return '<tr>'+
       '<td>'+esc(String(o.tx_date||'').slice(0,10))+'</td>'+
       '<td style="font-weight:700">'+esc(o.bank_name||'')+'</td>'+
       '<td class="num" style="font-weight:800;color:#b8860b">'+fmt(Number(o.out_raw||0))+'</td>'+
       '<td style="font-weight:700">'+esc(cur)+'</td>'+
+      '<td class="num">'+_estCell(o)+'</td>'+
       '<td style="font-size:10.5px;color:var(--muted)">'+esc([o.description,o.details].filter(Boolean).join(' · '))+'</td>'+
       '<td style="font-size:10px">'+esc(o.bank_ref||'—')+'</td>'+
       '<td><button class="btn" style="padding:3px 10px;font-size:11px;background:#0e7c50" onclick="xferRegisterArrival(\''+esc(String(o.id))+'\')">➕ سجّلي وصولها</button> <button class="btn ghost" style="padding:3px 10px;font-size:11px" onclick="xferDismiss(\''+esc(String(o.id))+'\',this)">✖️ تم الاطلاع</button></td>'+
@@ -5161,7 +5187,7 @@ async function addBankCash(){
     const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'request_cash_add',payload:p})});
     const d=await r.json();
     if(d.error){ if(msg)msg.textContent='❌ '+d.error; return; }
-    ['bca-in','bca-out','bca-ref','bca-channel','bca-desc','bca-details','bca-more','bca-note'].forEach(i=>{const e=$(i);if(e)e.value='';});
+    ['bca-in','bca-out','bca-ref','bca-channel','bca-desc','bca-details','bca-more','bca-note'].forEach(i=>{const e=$(i);if(e)e.value='';}); _xferPrefill=null;
     if(msg)msg.textContent='✅ أُرسلت للأدمن للموافقة — لن تنعكس على النظام حتى يعتمدها';
     await load();
   }catch(e){ if(msg)msg.textContent='❌ '+e.message; }
