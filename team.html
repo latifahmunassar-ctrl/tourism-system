@@ -368,6 +368,8 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 .rtw-b.add{background:#0e9d6a;color:#fff}
 .rtw-badge{display:inline-block;background:#fff3cd;color:#7a5b00;border:1px solid #ffc107;border-radius:20px;font-size:10px;font-weight:800;padding:2px 8px}
 .rtw-rm{background:#5a1620;color:#ff9aa2;border:1px solid #7a2330;border-radius:7px;padding:2px 8px;font-size:11px;font-weight:800;cursor:pointer;margin-inline-start:4px}
+.dblrm-btn{display:block;margin-top:6px;background:#123a2b;color:#7de3b0;border:1px solid #1f5c43;border-radius:8px;padding:4px 9px;font-size:11px;font-weight:800;cursor:pointer;width:100%}
+.dblrm-btn:hover{background:#1a4d39}
 .rtw-extra{color:#F0C96A}
 .bed-stp{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:9px;overflow:hidden}
 .bed-stp button{border:none;background:var(--bg);color:var(--gold);width:26px;height:26px;font-size:15px;font-weight:900;cursor:pointer;line-height:1}
@@ -1398,6 +1400,50 @@ function hswSwapRaw(raw, hidx, newLine){
     }).join('\n');
     return head + nb;
   });
+}
+// عدد أشخاص المجموعة من META (… | N اشخاص)
+function metaPersons(){
+  const meta = arabicDigitsToLatin(getLine(lastProgramRaw,'META')||'');
+  const m = meta.match(/(\d+)\s*(?:اشخاص|أشخاص|شخص|بالغين|افراد|أفراد)/);
+  return m ? Math.max(1, parseInt(m[1],10)) : 0;
+}
+// زر «غرفتين لشخصين (أرخص)» — يستبدل غرفة المجموعة بأرخص فندق بالمدينة فيه غرفة إشغال 2
+// بنفس فئة النجوم، ويضبط عدد الغرف تلقائياً = ceil(العدد÷2) (قابل للتعديل بالعدّاد).
+async function pickCheapestDouble(hidx){
+  try {
+    const lines = parseHotelLinesFromRaw(lastProgramRaw);
+    const oldLine = lines[hidx];
+    if(!oldLine){ addMessage('sys','تعذّر: لم أجد سطر الفندق.'); return; }
+    const p = oldLine.split('|').map(x=>x.trim());
+    const region = p[1]||'';
+    const curStars = parseInt((arabicDigitsToLatin(p[2]||'').match(/\d+/)||['0'])[0],10);
+    const dest = getLine(lastProgramRaw,'DEST')||'';
+    const date = getLine(lastProgramRaw,'DATE_FROM')||'';
+    const persons = metaPersons();
+    addMessage('sys', `🔎 أبحث عن أرخص غرفة لشخصين ${curStars?curStars+'★ ':''}في ${region}…`);
+    const res = await fetch(SUPABASE_URL, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
+      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy:2, current:p[0]||'', date })
+    });
+    const data = await res.json();
+    const cand = (data.hotels || []).filter(h => h.fits); // غرف إشغالها شخصين
+    let byStar = curStars ? cand.filter(h => +h.stars === curStars) : cand;
+    const changedStar = curStars && !byStar.length && cand.length;
+    if(!byStar.length) byStar = cand; // fallback: أقرب فئة لو ما فيه بنفس النجوم
+    if(!byStar.length){ addMessage('sys',`ما فيه غرفة لشخصين في ${region}. جرّبي فندقاً أو فئة مختلفة.`); return; }
+    byStar.sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
+    const h = byStar[0]; // الأرخص
+    const newLine = [
+      h.name, p[1]||'', (h.stars||curStars||'')+' نجوم', h.room_type||'',
+      (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
+      p[6] || (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : '')
+    ].join(' | ');
+    const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
+    if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); return; }
+    if(persons >= 2) hotelRooms[hidx] = Math.ceil(persons/2); // العدد التلقائي (قابل للتعديل)
+    applyHotelRawChange(newRaw, `🛏️ ${region}: «${h.name}» — غرفة لشخصين ${(h.stars||curStars)}★ بأرخص سعر (${(h.price_per_night||0).toLocaleString()} ريال/ليلة) × ${hRooms(hidx)} غرفة.${changedStar?' ⚠️ ما توفّرت غرفة لشخصين بنفس الفئة، فاخترتُ الأقرب.':''} عدّلي العدد لو تبين.`);
+  } catch(e){ addMessage('sys','خطأ أثناء جلب غرفة الشخصين: ' + (e && e.message ? e.message : e)); }
 }
 // ── نوع الغرفة: استبدال / إضافة نوع آخر من نفس الفندق ──
 function _stripCapR(s){ return String(s||'').replace(/\s*\(يتسع[^)]*\)/g,'').trim().toLowerCase(); }
@@ -2606,7 +2652,9 @@ const occN = parseInt((arabicDigitsToLatin(String(p[3]||'')).match(/يتسع\s*(
 const _df = (getLine(lastProgramRaw,'DATE_FROM')||'');
 const nameCell = `<td class="hsw-cell" data-hidx="${hidx}" data-region="${hswEsc(p[1]||'')}" data-name="${hswEsc(p[0]||'')}" data-nightly="${nightly}" data-nights="${nights}" data-occ="${occN}">`
   + `<div class="hsw-cur" onclick="hswToggle(this)"><span class="hsw-name"><strong>${p[0]||''}${extraCount ? ' + Extra bed / Sofa Bed' : ''}</strong></span><span class="hsw-chev">▼</span></div>`
-  + `<div class="hsw-menu"></div></td>`;
+  + `<div class="hsw-menu"></div>`
+  + `<button type="button" class="dblrm-btn" onclick="event.stopPropagation();pickCheapestDouble(${hidx})" title="استبدل بأرخص فندق فيه غرفة لشخصين بنفس فئة النجوم، والعدد يُحسب تلقائياً (العدد÷2) ويبقى قابلاً للتعديل">🛏️ غرفتين لشخصين (أرخص)</button>`
+  + `</td>`;
 // خلية نوع الغرفة — قابلة للاستبدال/الإضافة من نفس الفندق
 const roomCell = `<td class="rtw-cell" data-hidx="${hidx}" data-name="${hswEsc(p[0]||'')}" data-region="${hswEsc(p[1]||'')}" data-room="${hswEsc(p[3]||'')}" data-nights="${nights}" data-date="${hswEsc(_df)}">`
   + `<div class="hsw-cur" onclick="rtwToggle(this)"><span class="hsw-name">${p[3]||''}</span><span class="hsw-chev">▼</span></div>`
