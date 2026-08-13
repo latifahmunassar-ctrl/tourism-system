@@ -5022,10 +5022,14 @@ function _isXferRow(r){ const s=(String(r.channel||'')+' '+String(r.description|
 function xferPendingArrivals(){
   const all=(DATA&&DATA.banksCash)||[]; const xf=all.filter(_isXferRow);
   const _cur=r=>String(r.currency||bankCur(r.bank_name)||'').toUpperCase(); const _amt=v=>Math.round(Number(v||0)*1000)/1000;
-  const ins=xf.filter(r=>Number(r.in_raw||0)>0).map(r=>({amt:_amt(r.in_raw),cur:_cur(r),used:false}));
+  const insAll=xf.filter(r=>Number(r.in_raw||0)>0);
+  // 🔗 ربط صريح: أي طرف «داخل» يحمل الوسم #xfer<رقم> يؤكّد الطرف الخارج بذلك الرقم — يعمل حتى لو اختلفت العملة/المبلغ (تحويل دولار→عماني مثلاً)
+  const linked=new Set(); insAll.forEach(r=>{ const mm=(String(r.note||'')+' '+String(r.details||'')+' '+String(r.more_details||'')).match(/#xfer(\d+)/g); if(mm)mm.forEach(x=>linked.add(x.replace('#xfer',''))); });
+  const ins=insAll.map(r=>({amt:_amt(r.in_raw),cur:_cur(r),used:false}));
   const outs=xf.filter(r=>Number(r.out_raw||0)>0).sort((a,b)=>String(a.tx_date||'').localeCompare(String(b.tx_date||'')));
   const pend=[];
-  for(const o of outs){ const amt=_amt(o.out_raw), cur=_cur(o); const m=ins.find(x=>!x.used && x.amt===amt && x.cur===cur); if(m)m.used=true; else pend.push(o); }
+  for(const o of outs){ if(linked.has(String(o.id)))continue;   // ✅ مؤكّد بربط صريح
+    const amt=_amt(o.out_raw), cur=_cur(o); const m=ins.find(x=>!x.used && x.amt===amt && x.cur===cur); if(m)m.used=true; else pend.push(o); }   // احتياطي: مطابقة نفس المبلغ+العملة (تحويلات نفس العملة القديمة)
   return pend;
 }
 // ➕ «سجّلي وصولها»: يعبّي فورم إضافة حركة الكاش بالطرف الداخل (نفس المبلغ/العملة/القناة) — تختار المالكة الحساب المستقبِل ثم تحفظ (بلا أي إنشاء تلقائي)
@@ -5038,8 +5042,8 @@ function xferRegisterArrival(id){
   const ds=$('bca-desc'); if(ds && r.description){ ds.value=r.description; if(typeof bcFillAddDetails==='function')bcFillAddDetails(); }
   const dt=$('bca-details'); if(dt && r.details){ dt.value=r.details; if(typeof bcFillAddMore==='function')bcFillAddMore(); }
   const mo=$('bca-more'); if(mo && r.more_details){ mo.value=r.more_details; }
-  S('bca-note','تأكيد وصول حوالة داخلية — خرجت من «'+(r.bank_name||'')+'» بتاريخ '+String(r.tx_date||'').slice(0,10)+(r.bank_ref?(' · مرجع '+r.bank_ref):''));
-  const msg=$('bc-add-msg'); if(msg){ msg.textContent='✍️ اختاري «الحساب المستقبِل» ثم احفظي — المبلغ معبّأ من الحوالة الخارجة'; msg.style.color='#0e7c50'; }
+  S('bca-note','تأكيد وصول حوالة داخلية — خرجت من «'+(r.bank_name||'')+'» بتاريخ '+String(r.tx_date||'').slice(0,10)+(r.bank_ref?(' · مرجع '+r.bank_ref):'')+' #xfer'+r.id);   // 🔗 الوسم #xfer<رقم> يربط هذا الطرف الداخل بالحوالة الخارجة — لا تحذفيه (به يختفي التنبيه حتى لو اختلفت العملة)
+  const msg=$('bc-add-msg'); if(msg){ msg.innerHTML='✍️ اختاري «الحساب المستقبِل» ثم احفظي — المبلغ معبّأ من الحوالة الخارجة.<br><b style="color:#b8860b">لو الحساب المستقبِل بعملة مختلفة (دولار→عماني مثلاً): غيّري «داخل» و«العملة» للمبلغ الفعلي الذي وصل — التنبيه يختفي بالربط لا بالمبلغ.</b>'; msg.style.color='#0e7c50'; }
   const bnk=$('bca-bank'); if(bnk){ bnk.scrollIntoView({behavior:'smooth',block:'center'}); setTimeout(()=>{try{bnk.focus();}catch(e){}},350); }
 }
 async function xferDismiss(id,btn){ if(btn)btn.disabled=true;
