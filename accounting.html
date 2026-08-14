@@ -6146,14 +6146,23 @@ function exportSupplierCustom(kind){
   const ths=[...table.querySelectorAll('thead th')].map(x=>(x.innerText||x.textContent||'').replace(/\s+/g,' ').trim());
   const wantPay=!!document.querySelector('.rcolpay:checked');
   const head=idxs.map(i=>ths[i]||'');
-  const cellTxt=td=>{ if(!td)return ''; const inp=td.querySelector('input'); if(inp)return (inp.value||inp.getAttribute('placeholder')||''); return (td.innerText||td.textContent||'').replace(/\s+/g,' ').trim(); };
+  // 🧹 قيم نظيفة للتصدير: أرقام صافية للأعمدة الرقمية (بلا زر «✏️ تعديل» ولا عملة) + اسم نظيف بلا شارات — ليسهل الجمع في Google Sheets
+  const NUMC=new Set([4,5,6,7,8,9,10,11,12,13,14]);
+  const cleanNum=s=>{ const m=String(s==null?'':s).replace(/[,\s]/g,'').match(/-?\d+(?:\.\d+)?/); return m?m[0]:''; };
+  const cellTxt=(td,ci)=>{ if(!td)return '';
+    if(ci===11){ if(td.dataset&&td.dataset.val!=null&&td.dataset.val!=='') return cleanNum(td.dataset.val); const inp=td.querySelector('input'); return inp?cleanNum(inp.value||''):''; }   // فاتورة المورّد: القيمة المُدخَلة فقط (لا placeholder ولا زر) لدقّة الجمع
+    const inp=td.querySelector('input');
+    let txt; if(inp){ txt=(inp.value||inp.getAttribute('placeholder')||''); } else { const c=td.cloneNode(true); c.querySelectorAll('button').forEach(b=>b.remove()); txt=(c.innerText||c.textContent||'').replace(/\s+/g,' ').trim(); }
+    if(NUMC.has(ci)) return cleanNum(txt);
+    if(ci===2) txt=txt.split(/[🔻⚠️🔵✅🚫ℹ️]/)[0].trim();   // اسم العميل بلا شارات
+    return txt; };
   const rows=[];
-  document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList&&tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; rows.push(idxs.map(i=>cellTxt(tds[i]))); });
+  document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList&&tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; rows.push(idxs.map(i=>cellTxt(tds[i],i))); });
   if(!rows.length){ alert('لا توجد صفوف ظاهرة — عدّلي الفلتر/الفترة.'); return; }
   const f=(($('spc-from')||{}).value)||'', t=(($('spc-to')||{}).value)||'';
   // 💵 قسم «الدفعات المسجّلة — تحويلات بنكية» (من جدول سداد المستحقات): كل صف = تحويل بقيمته كما خرجت من البنك، بتاريخه — حسب الفترة، لا القيم الموزّعة
   let payHead=[], payRows=[], payTotStr='';
-  if(wantPay){ const tr=_supTransfers(sup,f,t); payHead=['📅 التاريخ','💰 القيمة المحوّلة (كما خرجت من البنك)','العملة','🏦 البنك','🔖 المرجع','عدد العملاء','ملاحظة']; const tot={}; tr.forEach(g=>{ payRows.push([g.date||'—', fmt(g.amount), g.cur||'', g.bank||'', g.ref||'—', String(g.n), (g.undist?'🔵 غير موزّعة ':'')+(g.note||'')]); tot[g.cur]=(tot[g.cur]||0)+Number(g.amount||0); }); payTotStr=Object.entries(tot).map(([c,v])=>fmt(v)+' '+c).join(' · '); }
+  if(wantPay){ const tr=_supTransfers(sup,f,t); payHead=['📅 التاريخ','💰 القيمة المحوّلة (كما خرجت من البنك)','العملة','🏦 البنك','🔖 المرجع','عدد العملاء','ملاحظة']; const tot={}; tr.forEach(g=>{ payRows.push([g.date||'—', String(Math.round(Number(g.amount||0)*1000)/1000), g.cur||'', g.bank||'', g.ref||'—', String(g.n), (g.undist?'🔵 غير موزّعة ':'')+(g.note||'')]); tot[g.cur]=(tot[g.cur]||0)+Number(g.amount||0); }); payTotStr=Object.entries(tot).map(([c,v])=>fmt(v)+' '+c).join(' · '); }
   const psTxt=(($('sp-period-summary')||{}).innerText||'').replace(/\s+/g,' ').trim();
   const title='تقرير مخصّص — '+sup+((f||t)?(' ('+(f||'…')+' → '+(t||'…')+')'):'');
   if(kind==='excel'){
