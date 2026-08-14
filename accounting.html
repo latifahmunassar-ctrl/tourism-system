@@ -6056,28 +6056,33 @@ function updatePeriodSummary(){
   const sup=($('supflt')||{}).value||''; if(!sup){ box.innerHTML=''; return; }
   const q=(($('spc-q')||{}).value||'').trim().toLowerCase();
   const f=(($('spc-from')||{}).value)||''; const t=(($('spc-to')||{}).value)||'';
-  if(!f&&!t&&!q){ box.innerHTML=''; return; }   // بلا فلتر → بلا ملخّص فترة (المعلومات الأولية تبقى كما هي)
+  const noinv=!!(($('spc-noinv')||{}).checked);
+  if(!f&&!t&&!q&&!noinv){ box.innerHTML=''; return; }   // بلا أي فلتر → بلا ملخّص فترة (المعلومات الأولية تبقى كما هي)
   const scur=supplierCurrency(sup);
   // 📅 تاريخ الوصول فقط: وصول الفاتورة → وصول العميل من First Client Data (لا تاريخ حجز/فاتورة)
   const _fcdArr={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); const a=r.arrival_date?String(r.arrival_date).slice(0,10):''; if(a&&(!_fcdArr[c]||a>_fcdArr[c]))_fcdArr[c]=a; });
-  const inv=supInvAll().filter(x=>(x.supplier_name||'')===sup).filter(x=>{
+  let inv=supInvAll().filter(x=>supKey(x.supplier_name)===supKey(sup)).filter(x=>{   // 🔑 مفتاح موحّد ليطابق كل صيغ الاسم
     const d=_fcdArr[(x.client_code||'').toUpperCase()]||x.arrival_date||''; const cli=((x.client_name||'')+' '+(x.client_code||'')).toLowerCase();
     if(q && cli.indexOf(q)<0) return false;
     if(f && (!d||d<f)) return false;
     if(t && (!d||d>t)) return false;
     return true; });
+  if(noinv){ const hasInvC={}; inv.forEach(x=>{ if(x.actual_invoice!=null&&String(x.actual_invoice).trim()!=='') hasInvC[(x.client_code||'').toUpperCase()]=true; }); inv=inv.filter(x=>!hasInvC[(x.client_code||'').toUpperCase()]); }   // 🔴 الناقصة فقط: عملاء بلا أي فاتورة مُدخَلة
   const codes=new Set(inv.map(x=>(x.client_code||'').toUpperCase()));
   const owed=inv.reduce((s,x)=>s+Number(x.invoice_amount||0),0);
-  const paid=(DATA.supplierPayments||[]).filter(p=>(p.supplier_name||'')===sup && codes.has((p.client_code||'').toUpperCase())).reduce((s,p)=>s+Number(p.amount||0),0);
-  const bal=owed-paid;
+  const invEntered=inv.reduce((s,x)=>s+((x.actual_invoice!=null&&String(x.actual_invoice).trim()!=='')?(Number(x.actual_invoice)||0):0),0);   // 🧾 إجمالي فاتورة المورّد المُدخَلة يدويّاً في الفترة
+  const invCnt=inv.filter(x=>x.actual_invoice!=null&&String(x.actual_invoice).trim()!=='').length;
+  const paid=(DATA.supplierPayments||[]).filter(p=>supKey(p.supplier_name)===supKey(sup) && codes.has((p.client_code||'').toUpperCase())).reduce((s,p)=>s+supPaidInCur(p,scur),0);   // 💱 محوّل لعملة المورّد
+  const base=(invEntered>0?invEntered:owed); const bal=base-paid;
   box.innerHTML='<div style="margin-top:10px;padding:10px 12px;border:1px dashed var(--accent);border-radius:10px;background:rgba(224,33,138,.06)">'+
-    '<div style="font-weight:800;color:var(--accent);margin-bottom:6px;font-size:12.5px">📅 ملخّص الفترة المحدّدة'+((f||t)?(' ('+esc(f||'…')+' → '+esc(t||'…')+')'):'')+'</div>'+
+    '<div style="font-weight:800;color:var(--accent);margin-bottom:6px;font-size:12.5px">📅 ملخّص الفترة المحدّدة'+((f||t)?(' ('+esc(f||'…')+' → '+esc(t||'…')+')'):'')+(noinv?' · <span style="color:#b8860b">🔴 الناقصة فقط</span>':'')+'</div>'+
     '<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px">'+
       '<span>الفواتير: <b>'+fmt(inv.length)+'</b></span>'+
       '<span>العملاء: <b>'+fmt(codes.size)+'</b></span>'+
-      '<span>💰 المستحق: <b>'+fmt(owed)+' '+esc(scur)+'</b></span>'+
-      '<span>✅ المدفوع: <b>'+fmt(paid)+' '+esc(scur)+'</b></span>'+
-      '<span>📌 الرصيد: <b style="color:'+(bal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(bal)+' '+esc(scur)+'</b></span>'+
+      '<span>💰 إجمالي الحجوزات: <b>'+fmt(owed)+' '+esc(scur)+'</b></span>'+
+      '<span>🧾 إجمالي فاتورة المورّد: <b>'+fmt(invEntered)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+invCnt+' من '+inv.length+')</span></span>'+
+      '<span>✅ إجمالي المدفوعات: <b>'+fmt(paid)+' '+esc(scur)+'</b></span>'+
+      '<span>📌 المتبقّي: <b style="color:'+(bal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(bal)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+(invEntered>0?'فاتورة':'حجوزات')+' − مدفوع)</span></span>'+
     '</div></div>';
 }
 function spcliClear(){ ['spc-q','spc-from','spc-to'].forEach(id=>{const e=$(id);if(e)e.value='';}); const nv=$('spc-noinv'); if(nv)nv.checked=false; spcliFilter(); }
