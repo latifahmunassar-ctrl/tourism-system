@@ -6072,13 +6072,14 @@ function updatePeriodSummary(){
   const owed=inv.reduce((s,x)=>s+Number(x.invoice_amount||0),0);
   const invEntered=inv.reduce((s,x)=>s+((x.actual_invoice!=null&&String(x.actual_invoice).trim()!=='')?(Number(x.actual_invoice)||0):0),0);   // 🧾 إجمالي فاتورة المورّد المُدخَلة يدويّاً في الفترة
   const invCnt=inv.filter(x=>x.actual_invoice!=null&&String(x.actual_invoice).trim()!=='').length;
-  // 💵 كل مدفوعات المورّد التي تاريخ دفعها داخل الفترة (تشمل الموزّعة وغير الموزّعة على عملاء) — لا تُقيَّد بعملاء الفترة
+  // 💵 مدفوعات المورّد ذات الصلة بالفترة: مؤرّخة داخل الفترة (تاريخ الدفع) **أو** لعميل يصل داخل الفترة — فلا تفوت الدفعات المجمّعة التي تاريخها يختلف عن تاريخ وصول الحجز
   const payRows=(DATA.supplierPayments||[]).filter(p=>supKey(p.supplier_name)===supKey(sup)).filter(p=>{
     if(q){ const cl=((p.client_name||'')+' '+(p.client_code||'')).toLowerCase(); if(cl.indexOf(q)<0) return false; }
+    if(!f&&!t) return true;   // بلا فلتر تاريخ → كل دفعات المورّد (المطابقة للبحث)
     const pd=String(p.payment_date||p.ref_date||'').slice(0,10);
-    if(f && (!pd||pd<f)) return false;
-    if(t && (!pd||pd>t)) return false;
-    return true; });
+    const byDate=(!f||(pd&&pd>=f))&&(!t||(pd&&pd<=t));
+    const byClient=codes.has((p.client_code||'').toUpperCase());   // عميل يصل داخل الفترة
+    return byDate||byClient; });
   const paid=payRows.reduce((s,p)=>s+supPaidInCur(p,scur),0);   // 💱 محوّل لعملة المورّد
   const base=(invEntered>0?invEntered:owed); const bal=base-paid;
   box.innerHTML='<div style="margin-top:10px;padding:10px 12px;border:1px dashed var(--accent);border-radius:10px;background:rgba(224,33,138,.06)">'+
@@ -6088,10 +6089,10 @@ function updatePeriodSummary(){
       '<span>العملاء: <b>'+fmt(codes.size)+'</b></span>'+
       '<span>💰 إجمالي الحجوزات: <b>'+fmt(owed)+' '+esc(scur)+'</b></span>'+
       '<span>🧾 إجمالي فاتورة المورّد: <b>'+fmt(invEntered)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+invCnt+' من '+inv.length+')</span></span>'+
-      '<span>✅ إجمالي المدفوعات: <b>'+fmt(paid)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+payRows.length+' دفعة · حسب تاريخ الدفع)</span></span>'+
+      '<span>✅ إجمالي المدفوعات: <b>'+fmt(paid)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+payRows.length+' دفعة)</span></span>'+
       '<span>📌 المتبقّي: <b style="color:'+(bal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(bal)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+(invEntered>0?'فاتورة':'حجوزات')+' − مدفوع)</span></span>'+
     '</div>'+
-    '<div style="font-size:10.5px;color:var(--muted);margin-top:6px">📅 الحجوزات والفواتير حسب <b>تاريخ الوصول</b> · المدفوعات حسب <b>تاريخ الدفع</b> داخل نفس الفترة (تشمل الدفعات غير الموزّعة على عملاء).</div>';
+    '<div style="font-size:10.5px;color:var(--muted);margin-top:6px">📅 الحجوزات والفواتير حسب <b>تاريخ الوصول</b> · المدفوعات = <b>مدفوعة خلال الفترة</b> أو <b>لعميل يصل خلالها</b> (فلا تفوت الدفعات المجمّعة التي تاريخها يختلف عن الوصول، وتشمل غير الموزّعة).</div>';
 }
 function spcliClear(){ ['spc-q','spc-from','spc-to'].forEach(id=>{const e=$(id);if(e)e.value='';}); const nv=$('spc-noinv'); if(nv)nv.checked=false; spcliFilter(); }
 function supdFilter(){
