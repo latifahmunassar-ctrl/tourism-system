@@ -6163,8 +6163,10 @@ function exportSupplierCustom(kind){
     if(NUMC.has(ci)) return cleanNum(txt);
     if(ci===2) txt=txt.split(/[🔻⚠️🔵✅🚫ℹ️]/)[0].trim();   // اسم العميل بلا شارات
     return txt; };
-  const rows=[];
-  document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList&&tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; rows.push(idxs.map(i=>cellTxt(tds[i],i))); });
+  const _ro=[];
+  document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList&&tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; const arr=String(cellTxt(tds[1],1)||'').slice(0,10); _ro.push({r:idxs.map(i=>cellTxt(tds[i],i)), d:arr}); });
+  _ro.sort((a,b)=>{ const A=a.d||'9999-99-99', B=b.d||'9999-99-99'; return A<B?-1:(A>B?1:0); });   // ⬆️ ترتيب تصاعدي بتاريخ الوصول (الأقدم فالأحدث)
+  const rows=_ro.map(o=>o.r);
   if(!rows.length){ alert('لا توجد صفوف ظاهرة — عدّلي الفلتر/الفترة.'); return; }
   const f=(($('spc-from')||{}).value)||'', t=(($('spc-to')||{}).value)||'';
   // 💵 قسم «الدفعات المسجّلة — تحويلات بنكية» (من جدول سداد المستحقات): كل صف = تحويل بقيمته كما خرجت من البنك، بتاريخه — حسب الفترة، لا القيم الموزّعة
