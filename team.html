@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-08-salalah-bed-170';
+  var BUILD = '2026-08-14-daycity-nohotels';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2779,10 +2779,24 @@ if (toursLines.length) {
 const _tDay = l => (String(l).split('|')[0]||'').trim();
 const _tCnt = {}, _tSum = {}, _tLast = {};
 toursLines.forEach((l,i)=>{ const d=_tDay(l); _tCnt[d]=(_tCnt[d]||0)+1; _tSum[d]=(_tSum[d]||0)+computeTransferTourLineTotal(l.split('|').map(x=>x.trim()), xferTourMeta, '🗺️ جولة').total; _tLast[d]=i; });
-// مدينة كل يوم (من الفنادق) — نمرّرها لليوم الحر عشان تطلع جولات منطقته
+// مدينة كل يوم — نمرّرها لليوم الحر عشان تطلع جولات منطقته.
+// المصدر الأساسي: أسطر الفنادق. وإن كان البرنامج «بدون فنادق» نستنتج
+// مدينة كل يوم من نص الجولات/الانتقالات نفسها ثم نعبّئ الأيام الحرّة.
 const _dayCity = {}; let _dcn = 1;
 hotelsLines.forEach(hl => { const _c=(hl.split('|')[1]||'').trim(); const _n=hotelLineTotals(hl).nights||0; for(let _k=0;_k<_n;_k++) _dayCity[_dcn+_k]=_c; _dcn+=_n; });
 if(hotelsLines.length) _dayCity[_dcn] = (hotelsLines[hotelsLines.length-1].split('|')[1]||'').trim();
+if(!hotelsLines.length){
+  const _destName = getLine(lastProgramRaw,'DEST') || '';
+  const _cityList = ((typeof BF_CITIES!=='undefined' && BF_CITIES[_destName]) || []).slice();
+  const _norm = s => String(s||'').replace(/[\sـ]/g,'');   // بلا مسافات/تطويل
+  const _detectCity = txt => { const t=_norm(txt); let best=''; for(const c of _cityList){ const nc=_norm(c); if(nc && t.includes(nc) && nc.length>_norm(best).length) best=c; } return best; };
+  const _allLines = toursLines.concat(transfersLines || []);
+  let _maxDay = 0;
+  _allLines.forEach(l=>{ const d=parseInt((String(l).split('|')[0]||'').replace(/[^\d]/g,''),10); if(d){ if(d>_maxDay)_maxDay=d; const c=_detectCity(l); if(c && !_dayCity[d]) _dayCity[d]=c; } });
+  // تعبئة الأيام بلا مدينة (الحرّة): forward-fill ثم backward-fill
+  let _last=''; for(let d=1; d<=_maxDay; d++){ if(_dayCity[d]) _last=_dayCity[d]; else if(_last) _dayCity[d]=_last; }
+  let _next=''; for(let d=_maxDay; d>=1; d--){ if(_dayCity[d]) _next=_dayCity[d]; else if(_next) _dayCity[d]=_next; }
+}
 html += `<div class="section-card tsw-host">
 <div class="section-card-header"><div class="section-card-title">🗺️ الجولات السياحية</div><div class="section-total">${toursTotal.toLocaleString()} ريال</div></div>
 <table class="pricing-table">
