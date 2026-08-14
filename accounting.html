@@ -5711,7 +5711,7 @@ function renderSupplierDetail(){
         '<div class="fld" style="min-width:210px;flex:1"><label>🔍 بحث (اسم العميل أو الكود)</label><input id="spc-q" oninput="spcliFilter()" placeholder="اكتبي اسم أو كود العميل..."></div>'+
         '<div class="fld"><label>من تاريخ (الوصول) 📅</label><input type="date" id="spc-from" onchange="spcliFilter()" style="color-scheme:light;cursor:pointer"></div>'+
         '<div class="fld"><label>إلى تاريخ 📅</label><input type="date" id="spc-to" onchange="spcliFilter()" style="color-scheme:light;cursor:pointer"></div>'+
-        '<label style="align-self:center;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;color:#b8860b;background:rgba(217,138,0,.08);border:1px solid #e5c07b;border-radius:8px;padding:8px 12px;white-space:nowrap"><input type="checkbox" id="spc-noinv" onchange="spcliFilter()" style="width:16px;height:16px;cursor:pointer"> 🔴 الناقصة فقط (بلا فاتورة)</label>'+
+        '<label style="align-self:center;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;color:#b8860b;background:rgba(217,138,0,.08);border:1px solid #e5c07b;border-radius:8px;padding:8px 12px;white-space:nowrap"><input type="checkbox" id="spc-noinv" onchange="spcliFilter()" style="width:16px;height:16px;cursor:pointer"> 🔴 الناقصة فقط (بلا فاتورة) · <span style="background:#d98a00;color:#fff;border-radius:8px;padding:1px 8px;font-size:12px" title="عدد الفواتير الناقصة ضمن الفلتر الحالي (يتحدّث مع التاريخ)"><b id="spc-noinv-count">0</b></span></label>'+
         '<button class="btn ghost" style="padding:7px 14px" onclick="spcliClear()">مسح الفلتر</button>'+
       '</div>'+
       '<details style="margin-bottom:8px;border:1px solid var(--accent);border-radius:8px;padding:6px 10px;background:rgba(224,33,138,.04)"><summary style="cursor:pointer;font-weight:700;color:var(--accent);font-size:12.5px">📋 تقرير مخصّص للفترة — اختاري الأعمدة ثم صدّري (Excel / PDF)</summary>'+
@@ -5844,7 +5844,7 @@ function renderSupplierDetail(){
   })();
   box.innerHTML=h;
   if(typeof supdSummary==='function') supdSummary('', '', '');   // 📊 اعرض ملخّص المستحق/الرصيد فور فتح المورّد (قبل أي فلتر)
-  try{ if(typeof spcliFilter==='function' && (($('spc-q')||{}).value || ($('spc-from')||{}).value || ($('spc-to')||{}).value)) spcliFilter(); }catch(e){}   // 🔁 أعِد تطبيق فلتر التاريخ/البحث بعد إعادة الرسم — ليتراكب مع «الناقصة فقط» (ناقص + داخل الفترة معاً)
+  try{ if(typeof spcliFilter==='function') spcliFilter(); }catch(e){}   // 🔁 أعِد تطبيق الفلتر + هيّئ عدّاد الناقصة بعد كل رسم
 }
 function spDiffUpdate(id){
   const inp=$('sinv-'+id); if(!inp)return; const booked=Number(inp.dataset.booked)||0;
@@ -5880,6 +5880,9 @@ function spcliFilter(){
     if(noinv && ok && r.dataset.noinv!=='1') ok=false;   // اعرض فقط العملاء بلا فاتورة مورّد
     r.style.display=ok?'':'none';
   });
+  // 🔴 عدّاد الفواتير الناقصة ضمن الفلتر الحالي (يستبعد شرط «الناقصة فقط» نفسه ليعدّ الناقص من كل الظاهر بالتاريخ/البحث)
+  let noInvN=0; document.querySelectorAll('#sp-dist-tbl tr').forEach(r=>{ if(r.classList.contains('sp-sep')||!r.dataset.code)return; const cli=r.dataset.cli||''; const dts=(r.dataset.dates||'').split('|').filter(Boolean); let inScope=(!q||cli.indexOf(q)>=0); if(inScope&&(f||t))inScope=dts.some(d=>(!f||d>=f)&&(!t||d<=t)); if(inScope && r.dataset.noinv==='1')noInvN++; });
+  const _nc=$('spc-noinv-count'); if(_nc)_nc.textContent=noInvN;
   sppFilter(); // جدول حركة مدفوعات العملاء يتبع نفس فلتر الجدول الأول
   updatePeriodSummary(); // ملخّص الفترة المحدّدة (إضافي فوق التفاصيل)
 }
