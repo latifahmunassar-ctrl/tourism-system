@@ -5731,6 +5731,7 @@ function renderSupplierDetail(){
           '<button class="btn ghost" style="padding:4px 12px;font-size:11px" onclick="rcolPreset(\'invpay\')">🧾 فاتورة + دفعات فقط</button>'+
           '<span style="flex:1"></span>'+
           '<button class="btn" style="padding:5px 14px;background:#0e7c50" onclick="exportSupplierCustom(\'excel\')">📊 تصدير Excel</button>'+
+          '<button class="btn" style="padding:5px 14px;background:#188038" onclick="exportSupplierCustom(\'gsheet\')">📗 فتح في Google Sheets</button>'+
           '<button class="btn" style="padding:5px 14px;background:#c41d88" onclick="exportSupplierCustom(\'pdf\')">🖨️ تصدير PDF</button>'+
         '</div></details>'+
       '<div class="tbl-wrap bf-scroll" id="sp-dist-wrap" style="max-height:300px"><table style="font-size:11.5px"><thead><tr><th>كود العميل</th><th>تاريخ الوصول 📅</th><th>العميل</th><th>الوكيل</th><th>قيمة الدفع المُسدَّد<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>client balance payment</th><th>الربح المتوقع<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>الربح الفعلي<br><span style="font-size:9px;color:var(--muted)">من Booking Form</span></th><th>قيمة الحجز قبل الإلغاء<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>رسوم الإلغاء<br><span style="font-size:9px;color:var(--muted)">Cancelation Charge ('+esc(SCUR)+')</span></th><th>قيمة الحجز<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>فاتورة المورّد ✏️<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>الفرق</th><th>مدفوع سابقاً</th><th>المتبقّي</th><th>ادفع الآن</th></tr></thead><tbody id="sp-dist-tbl">'+
@@ -6133,6 +6134,16 @@ function exportSupplierCustom(kind){
   if(kind==='excel'){
     const out=[[title]]; if(psTxt){ out.push([]); out.push([psTxt]); } out.push([]); out.push(head); rows.forEach(r=>out.push(r));
     _xlsxDownload([{name:'تقرير '+sup, rows:out}], 'تقرير مخصّص '+sup); return;
+  }
+  if(kind==='gsheet'){
+    // 📗 نسخ البيانات كـ TSV ثم فتح Google Sheet جديد لتلصقها المالكة (فتح مباشر في درايف يحتاج ربط حساب Google)
+    const clean=v=>String(v==null?'':v).replace(/[\t\r\n]+/g,' ');
+    const tsv=[[title]].concat(psTxt?[[clean(psTxt)]]:[]).concat([head]).concat(rows).map(r=>r.map(clean).join('\t')).join('\n');
+    let ok=false; try{ const ta=document.createElement('textarea'); ta.value=tsv; ta.style.position='fixed'; ta.style.top='-9999px'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select(); ok=document.execCommand('copy'); ta.remove(); }catch(e){ ok=false; }
+    window.open('https://sheets.new','_blank');
+    if(typeof toast==='function') toast(ok?'✅ نُسخت بيانات التقرير — الصقيها في الشيت الجديد (Cmd+V)':'⚠️ افتحت شيت جديد — إن لم تُنسخ البيانات فصدّري Excel والصقيه');
+    else alert(ok?'✅ نُسخت البيانات — افتحت لك Google Sheet جديد، الصقيها فيه بـ Cmd+V (أو Ctrl+V)':'⚠️ تعذّر النسخ التلقائي — افتحت Google Sheet، صدّري Excel والصقي');
+    return;
   }
   const w=window.open('','_blank'); if(!w){ alert('فعّلي النوافذ المنبثقة للطباعة.'); return; }
   const html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>'+esc(title)+'</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#111;font-size:12px;margin:0}.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #0e9d6a;padding-bottom:6px;margin-bottom:8px}.logo{font-size:22px;font-weight:900;letter-spacing:2px;color:#0e9d6a}.logo span{color:#D4A843}.ttl{font-size:14px;font-weight:800;color:#c41d88}.note{background:#f1f8f4;border:1px solid #dcede6;padding:8px 10px;border-radius:8px;margin:8px 0;font-size:12px}table{width:100%;border-collapse:collapse;margin-top:6px}th,td{border:1px solid #bbb;padding:4px 6px;text-align:center;font-size:11px}th{background:#0e9d6a;color:#fff;font-size:10.5px}tbody tr:nth-child(even){background:#f6faf8}</style></head><body>'+
