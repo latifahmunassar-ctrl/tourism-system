@@ -5822,6 +5822,7 @@ function renderSupplierDetail(){
   })();
   box.innerHTML=h;
   if(typeof supdSummary==='function') supdSummary('', '', '');   // 📊 اعرض ملخّص المستحق/الرصيد فور فتح المورّد (قبل أي فلتر)
+  try{ if(typeof spcliFilter==='function' && (($('spc-q')||{}).value || ($('spc-from')||{}).value || ($('spc-to')||{}).value)) spcliFilter(); }catch(e){}   // 🔁 أعِد تطبيق فلتر التاريخ/البحث بعد إعادة الرسم — ليتراكب مع «الناقصة فقط» (ناقص + داخل الفترة معاً)
 }
 function spDiffUpdate(id){
   const inp=$('sinv-'+id); if(!inp)return; const booked=Number(inp.dataset.booked)||0;
