@@ -5974,6 +5974,26 @@ function exportStaffPDF(){
   const w=window.open('','_blank'); if(!w){ alert('فعّلي النوافذ المنبثقة للطباعة'); return; }
   w.document.open(); w.document.write(html); w.document.close();
 }
+// 📗 نافذة «فتح في Google Sheets»: البيانات جاهزة + نسخ مؤكّد + فتح شيت جديد
+function _gsheetModal(tsv){
+  let ov=document.getElementById('gsheet-ov');
+  if(!ov){ ov=document.createElement('div'); ov.id='gsheet-ov'; ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center'; document.body.appendChild(ov); }
+  ov.innerHTML='<div style="background:#fff;color:#111;border-radius:12px;padding:18px;max-width:660px;width:92%;max-height:88vh;overflow:auto;direction:rtl;box-shadow:0 10px 40px rgba(0,0,0,.3)">'+
+    '<h3 style="margin:0 0 8px;color:#188038">📗 فتح التقرير في Google Sheets</h3>'+
+    '<div style="font-size:12.5px;color:#555;margin-bottom:10px;line-height:1.7">١) اضغطي <b>«📋 نسخ البيانات»</b> · ٢) اضغطي <b>«📗 افتحي Google Sheets»</b> · ٣) في الشيت الجديد اضغطي على الخلية الأولى ثم <b>Cmd+V</b> (لصق).</div>'+
+    '<textarea id="gsheet-ta" readonly onclick="this.select()" style="width:100%;height:170px;font-family:monospace;font-size:11px;border:1px solid #ccc;border-radius:8px;padding:8px;background:#fafafa;color:#111"></textarea>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">'+
+      '<button class="btn" style="background:#0e7c50" onclick="_gsheetCopy()">📋 نسخ البيانات</button>'+
+      '<button class="btn" style="background:#188038" onclick="_gsheetOpen()">📗 افتحي Google Sheets جديد</button>'+
+      '<span style="flex:1"></span>'+
+      '<button class="btn ghost" onclick="_gsheetClose()">إغلاق</button>'+
+    '</div></div>';
+  const ta=document.getElementById('gsheet-ta'); ta.value=tsv;
+  try{ ta.focus(); ta.select(); document.execCommand('copy'); if(typeof toast==='function')toast('✅ نُسخت البيانات — افتحي الشيت والصقي'); }catch(e){}
+}
+function _gsheetCopy(){ const ta=document.getElementById('gsheet-ta'); if(!ta)return; ta.focus(); ta.select(); try{ ta.setSelectionRange(0, ta.value.length); }catch(e){} let ok=false; try{ ok=document.execCommand('copy'); }catch(e){} if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(ta.value).catch(()=>{}); } if(typeof toast==='function')toast(ok?'✅ نُسخت البيانات — افتحي Google Sheets والصقي (Cmd+V)':'⚠️ حدّدي النص كله واضغطي Cmd+C'); }
+function _gsheetOpen(){ window.open('https://sheets.new','_blank'); }
+function _gsheetClose(){ const o=document.getElementById('gsheet-ov'); if(o)o.remove(); }
 // 🖨️ تصدير تقرير الأرباح والخسائر PDF (بهوية العز) — يحترم الفلتر الحالي + ملخّص متوقع/فعلي
 // 📊 أدوات تصدير Excel موحّدة (ملخّص + جدول)
 function _excelDownload(bodyHtml, filename){
@@ -6136,14 +6156,10 @@ function exportSupplierCustom(kind){
     _xlsxDownload([{name:'تقرير '+sup, rows:out}], 'تقرير مخصّص '+sup); return;
   }
   if(kind==='gsheet'){
-    // 📗 نسخ البيانات كـ TSV ثم فتح Google Sheet جديد لتلصقها المالكة (فتح مباشر في درايف يحتاج ربط حساب Google)
+    // 📗 نافذة مضمونة: البيانات جاهزة كـ TSV + زر نسخ مؤكّد + زر فتح شيت جديد (بدل النسخ الخفي الذي قد يفشل)
     const clean=v=>String(v==null?'':v).replace(/[\t\r\n]+/g,' ');
     const tsv=[[title]].concat(psTxt?[[clean(psTxt)]]:[]).concat([head]).concat(rows).map(r=>r.map(clean).join('\t')).join('\n');
-    let ok=false; try{ const ta=document.createElement('textarea'); ta.value=tsv; ta.style.position='fixed'; ta.style.top='-9999px'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select(); ok=document.execCommand('copy'); ta.remove(); }catch(e){ ok=false; }
-    window.open('https://sheets.new','_blank');
-    if(typeof toast==='function') toast(ok?'✅ نُسخت بيانات التقرير — الصقيها في الشيت الجديد (Cmd+V)':'⚠️ افتحت شيت جديد — إن لم تُنسخ البيانات فصدّري Excel والصقيه');
-    else alert(ok?'✅ نُسخت البيانات — افتحت لك Google Sheet جديد، الصقيها فيه بـ Cmd+V (أو Ctrl+V)':'⚠️ تعذّر النسخ التلقائي — افتحت Google Sheet، صدّري Excel والصقي');
-    return;
+    _gsheetModal(tsv); return;
   }
   const w=window.open('','_blank'); if(!w){ alert('فعّلي النوافذ المنبثقة للطباعة.'); return; }
   const html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>'+esc(title)+'</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#111;font-size:12px;margin:0}.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #0e9d6a;padding-bottom:6px;margin-bottom:8px}.logo{font-size:22px;font-weight:900;letter-spacing:2px;color:#0e9d6a}.logo span{color:#D4A843}.ttl{font-size:14px;font-weight:800;color:#c41d88}.note{background:#f1f8f4;border:1px solid #dcede6;padding:8px 10px;border-radius:8px;margin:8px 0;font-size:12px}table{width:100%;border-collapse:collapse;margin-top:6px}th,td{border:1px solid #bbb;padding:4px 6px;text-align:center;font-size:11px}th{background:#0e9d6a;color:#fff;font-size:10.5px}tbody tr:nth-child(even){background:#f6faf8}</style></head><body>'+
