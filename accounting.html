@@ -5711,6 +5711,7 @@ function renderSupplierDetail(){
         '<div class="fld" style="min-width:210px;flex:1"><label>🔍 بحث (اسم العميل أو الكود)</label><input id="spc-q" oninput="spcliFilter()" placeholder="اكتبي اسم أو كود العميل..."></div>'+
         '<div class="fld"><label>من تاريخ (الوصول) 📅</label><input type="date" id="spc-from" onchange="spcliFilter()" style="color-scheme:light;cursor:pointer"></div>'+
         '<div class="fld"><label>إلى تاريخ 📅</label><input type="date" id="spc-to" onchange="spcliFilter()" style="color-scheme:light;cursor:pointer"></div>'+
+        '<label style="align-self:center;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;color:#b8860b;background:rgba(217,138,0,.08);border:1px solid #e5c07b;border-radius:8px;padding:8px 12px;white-space:nowrap"><input type="checkbox" id="spc-noinv" onchange="spcliFilter()" style="width:16px;height:16px;cursor:pointer"> 🔴 الناقصة فقط (بلا فاتورة)</label>'+
         '<button class="btn ghost" style="padding:7px 14px" onclick="spcliClear()">مسح الفلتر</button>'+
       '</div>'+
       '<div class="tbl-wrap bf-scroll" id="sp-dist-wrap" style="max-height:300px"><table style="font-size:11.5px"><thead><tr><th>كود العميل</th><th>تاريخ الوصول 📅</th><th>العميل</th><th>الوكيل</th><th>قيمة الدفع المُسدَّد<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>client balance payment</th><th>الربح المتوقع<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>الربح الفعلي<br><span style="font-size:9px;color:var(--muted)">من Booking Form</span></th><th>قيمة الحجز قبل الإلغاء<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>رسوم الإلغاء<br><span style="font-size:9px;color:var(--muted)">Cancelation Charge ('+esc(SCUR)+')</span></th><th>قيمة الحجز<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>فاتورة المورّد ✏️<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>الفرق</th><th>مدفوع سابقاً</th><th>المتبقّي</th><th>ادفع الآن</th></tr></thead><tbody id="sp-dist-tbl">'+
@@ -5732,7 +5733,7 @@ function renderSupplierDetail(){
           const diffCell = entered
             ? '<td class="num" id="sdiff-'+mid+'" style="font-weight:700;color:'+(diff<-0.5?'#d11':(diff>0.5?'#0e9d6a':'inherit'))+'">'+fmt(diff)+'</td>'
             : '<td class="num" id="sdiff-'+mid+'"></td>';
-          return '<tr data-cli="'+_cli+'" data-dates="'+_dts+'" data-code="'+esc((c||'').toUpperCase())+'"><td>'+esc(c)+(cbal>0.5?' <span title="متبقّي عليه '+fmt(cbal)+' '+esc(ccur)+' — يجب المطالبة به" style="cursor:help">⚠️</span>':'')+'</td><td style="color:var(--muted);font-size:10.5px;white-space:nowrap">'+esc(fc.arr||'')+'</td><td>'+esc(nameCli[c]||'')+cancHtml+directHtml+(cbal>0.5?'<div style="font-size:9px;color:#b8860b;font-weight:700">⚠️ متبقّي '+fmt(cbal)+' '+esc(ccur)+' — يجب المطالبة</div>':'')+incBadgeHtml((_APM.missClient||{})[(c||'').toUpperCase()]||0)+supSrcBadge(c)+'</td><td style="color:var(--muted)">'+esc(agentCli[c]||'')+'</td>'+
+          return '<tr data-cli="'+_cli+'" data-dates="'+_dts+'" data-code="'+esc((c||'').toUpperCase())+'" data-noinv="'+(cliActual[c]==null?'1':'0')+'"><td>'+esc(c)+(cbal>0.5?' <span title="متبقّي عليه '+fmt(cbal)+' '+esc(ccur)+' — يجب المطالبة به" style="cursor:help">⚠️</span>':'')+'</td><td style="color:var(--muted);font-size:10.5px;white-space:nowrap">'+esc(fc.arr||'')+'</td><td>'+esc(nameCli[c]||'')+cancHtml+directHtml+(cbal>0.5?'<div style="font-size:9px;color:#b8860b;font-weight:700">⚠️ متبقّي '+fmt(cbal)+' '+esc(ccur)+' — يجب المطالبة</div>':'')+incBadgeHtml((_APM.missClient||{})[(c||'').toUpperCase()]||0)+supSrcBadge(c)+'</td><td style="color:var(--muted)">'+esc(agentCli[c]||'')+'</td>'+
             '<td class="num" style="color:#0e9d6a;font-weight:700">'+fmt(fc.paid)+' <span style="font-size:9px;color:var(--muted)">'+esc(ccur)+'</span></td>'+
             '<td class="num" style="color:'+(cbal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(cbal)+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+esc(ccur)+'</div></td>'+
             '<td class="num" style="font-weight:700;color:'+(fc.prof>0.5?'#0e9d6a':(fc.prof<-0.5?'#d11':'inherit'))+'">'+(Math.abs(fc.prof)>0.005?fmt(fc.prof):'<span style="color:#9aa">—</span>')+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+esc(ccur)+'</div></td>'+
@@ -5847,13 +5848,15 @@ function sppFilter(){
 function spcliFilter(){
   const q=(($('spc-q')||{}).value||'').trim().toLowerCase();
   const f=(($('spc-from')||{}).value)||''; const t=(($('spc-to')||{}).value)||'';
-  const act=!!(q||f||t);
+  const noinv=!!(($('spc-noinv')||{}).checked);   // 🔴 الناقصة فقط (بلا فاتورة مورّد) — client-side ليتراكب مع التاريخ/البحث
+  const act=!!(q||f||t||noinv);
   document.querySelectorAll('#sp-dist-tbl tr').forEach(r=>{
     if(r.classList.contains('sp-sep')){ r.style.display=act?'none':''; return; }
     const cli=r.dataset.cli||''; const dts=(r.dataset.dates||'').split('|').filter(Boolean);
     let ok=true;
     if(q && cli.indexOf(q)<0) ok=false;
     if((f||t) && ok){ ok=dts.some(d=>(!f||d>=f)&&(!t||d<=t)); }
+    if(noinv && ok && r.dataset.noinv!=='1') ok=false;   // اعرض فقط العملاء بلا فاتورة مورّد
     r.style.display=ok?'':'none';
   });
   sppFilter(); // جدول حركة مدفوعات العملاء يتبع نفس فلتر الجدول الأول
@@ -6077,7 +6080,7 @@ function updatePeriodSummary(){
       '<span>📌 الرصيد: <b style="color:'+(bal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(bal)+' '+esc(scur)+'</b></span>'+
     '</div></div>';
 }
-function spcliClear(){ ['spc-q','spc-from','spc-to'].forEach(id=>{const e=$(id);if(e)e.value='';}); spcliFilter(); }
+function spcliClear(){ ['spc-q','spc-from','spc-to'].forEach(id=>{const e=$(id);if(e)e.value='';}); const nv=$('spc-noinv'); if(nv)nv.checked=false; spcliFilter(); }
 function supdFilter(){
   const q=(($('supd-q')||{}).value||'').trim().toLowerCase();
   const f=(($('supd-from')||{}).value)||''; const t=(($('supd-to')||{}).value)||'';
