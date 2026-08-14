@@ -5725,6 +5725,7 @@ function renderSupplierDetail(){
           '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="13" checked> 💵 المدفوعات</label>'+
           '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="14" checked> 📌 المتبقّي</label>'+
           '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="7"> الربح الفعلي</label>'+
+          '<label style="cursor:pointer;font-weight:700;color:#0e7c50"><input type="checkbox" class="rcolpay" value="pay" checked> 💵 المدفوعات الفعلية + 📅 تاريخ كل دفعة</label>'+
         '</div>'+
         '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
           '<button class="btn ghost" style="padding:4px 12px;font-size:11px" onclick="rcolPreset(\'all\')">☑ الكل</button>'+
@@ -6136,17 +6137,23 @@ function updatePeriodSummary(){
 }
 function spcliClear(){ ['spc-q','spc-from','spc-to'].forEach(id=>{const e=$(id);if(e)e.value='';}); const nv=$('spc-noinv'); if(nv)nv.checked=false; spcliFilter(); }
 // 📋 تقرير مخصّص: اختيار الأعمدة + تصدير Excel/PDF للصفوف الظاهرة حسب الفلتر الحالي (التاريخ/البحث/الناقصة)
-function rcolPreset(k){ document.querySelectorAll('.rcol').forEach(c=>{ if(k==='all')c.checked=true; else if(k==='invpay')c.checked=(c.value==='11'||c.value==='13'||c.value==='14'); }); }
+function rcolPreset(k){ document.querySelectorAll('.rcol').forEach(c=>{ if(k==='all')c.checked=true; else if(k==='invpay')c.checked=(c.value==='11'||c.value==='14'); }); const pay=document.querySelector('.rcolpay'); if(pay)pay.checked=(k==='all'||k==='invpay'); }
 function exportSupplierCustom(kind){
   const sup=(($('supflt')||{}).value||'').trim(); if(!sup){ alert('اختاري مورّداً أولاً.'); return; }
   const sel=[...document.querySelectorAll('.rcol:checked')].map(c=>Number(c.value)).filter(n=>!isNaN(n)&&n!==0&&n!==2).sort((a,b)=>a-b);
   const idxs=[0,2].concat(sel);   // كود العميل + العميل دائماً + الأعمدة المختارة
   const bodyEl=document.getElementById('sp-dist-tbl'); const table=bodyEl&&bodyEl.closest('table'); if(!table){ alert('افتحي كشف المورّد أولاً.'); return; }
   const ths=[...table.querySelectorAll('thead th')].map(x=>(x.innerText||x.textContent||'').replace(/\s+/g,' ').trim());
+  const wantPay=!!document.querySelector('.rcolpay:checked');
+  const _scur=(typeof supplierCurrency==='function')?supplierCurrency(sup):'';
   const head=idxs.map(i=>ths[i]||'');
+  if(wantPay) head.push('💵 المدفوعات الفعلية ('+_scur+')','📅 تاريخ كل دفعة');
+  // 💵 المدفوعات الفعلية لكل عميل من دفعات المورّد (المبلغ الحقيقي المدفوع، لا الحصّة الموزّعة) — محوّلة لعملة المورّد ومرتّبة بالتاريخ
+  const payByC={};
+  if(wantPay){ (DATA.supplierPayments||[]).filter(p=>supKey(p.supplier_name)===supKey(sup)).forEach(p=>{ const c=(p.client_code||'').toUpperCase(); if(!c)return; (payByC[c]=payByC[c]||[]).push({amt:supPaidInCur(p,_scur),date:String(p.payment_date||p.ref_date||'').slice(0,10)}); }); Object.values(payByC).forEach(a=>a.sort((x,y)=>String(x.date).localeCompare(String(y.date)))); }
   const cellTxt=td=>{ if(!td)return ''; const inp=td.querySelector('input'); if(inp)return (inp.value||inp.getAttribute('placeholder')||''); return (td.innerText||td.textContent||'').replace(/\s+/g,' ').trim(); };
   const rows=[];
-  document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList&&tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; rows.push(idxs.map(i=>cellTxt(tds[i]))); });
+  document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList&&tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; const r=idxs.map(i=>cellTxt(tds[i])); if(wantPay){ const code=String((tr.dataset&&tr.dataset.code)||'').toUpperCase(); const ps=payByC[code]||[]; r.push(ps.length?ps.map(x=>fmt(x.amt)).join(' · '):'—', ps.length?ps.map(x=>x.date||'—').join(' · '):'—'); } rows.push(r); });
   if(!rows.length){ alert('لا توجد صفوف ظاهرة — عدّلي الفلتر/الفترة.'); return; }
   const f=(($('spc-from')||{}).value)||'', t=(($('spc-to')||{}).value)||'';
   const psTxt=(($('sp-period-summary')||{}).innerText||'').replace(/\s+/g,' ').trim();
