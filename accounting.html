@@ -5725,7 +5725,7 @@ function renderSupplierDetail(){
           '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="13" checked> 💵 المدفوعات</label>'+
           '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="14" checked> 📌 المتبقّي</label>'+
           '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="7"> الربح الفعلي</label>'+
-          '<label style="cursor:pointer;font-weight:700;color:#0e7c50"><input type="checkbox" class="rcolpay" value="pay" checked> 💵 المدفوعات الفعلية + 📅 تاريخ كل دفعة</label>'+
+          '<label style="cursor:pointer;font-weight:700;color:#0e7c50"><input type="checkbox" class="rcolpay" value="pay" checked> 💵 الدفعات المسجّلة (تحويلات بنكية بتاريخها + قيمتها كما خرجت من البنك)</label>'+
         '</div>'+
         '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
           '<button class="btn ghost" style="padding:4px 12px;font-size:11px" onclick="rcolPreset(\'all\')">☑ الكل</button>'+
@@ -6145,38 +6145,50 @@ function exportSupplierCustom(kind){
   const bodyEl=document.getElementById('sp-dist-tbl'); const table=bodyEl&&bodyEl.closest('table'); if(!table){ alert('افتحي كشف المورّد أولاً.'); return; }
   const ths=[...table.querySelectorAll('thead th')].map(x=>(x.innerText||x.textContent||'').replace(/\s+/g,' ').trim());
   const wantPay=!!document.querySelector('.rcolpay:checked');
-  const _scur=(typeof supplierCurrency==='function')?supplierCurrency(sup):'';
   const head=idxs.map(i=>ths[i]||'');
-  if(wantPay) head.push('💵 المدفوعات الفعلية ('+_scur+')','📅 تاريخ كل دفعة');
-  // 💵 المدفوعات الفعلية لكل عميل من دفعات المورّد (المبلغ الحقيقي المدفوع، لا الحصّة الموزّعة) — محوّلة لعملة المورّد ومرتّبة بالتاريخ
-  const payByC={};
-  if(wantPay){ (DATA.supplierPayments||[]).filter(p=>supKey(p.supplier_name)===supKey(sup)).forEach(p=>{ const c=(p.client_code||'').toUpperCase(); if(!c)return; (payByC[c]=payByC[c]||[]).push({amt:supPaidInCur(p,_scur),date:String(p.payment_date||p.ref_date||'').slice(0,10)}); }); Object.values(payByC).forEach(a=>a.sort((x,y)=>String(x.date).localeCompare(String(y.date)))); }
   const cellTxt=td=>{ if(!td)return ''; const inp=td.querySelector('input'); if(inp)return (inp.value||inp.getAttribute('placeholder')||''); return (td.innerText||td.textContent||'').replace(/\s+/g,' ').trim(); };
   const rows=[];
-  document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList&&tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; const r=idxs.map(i=>cellTxt(tds[i])); if(wantPay){ const code=String((tr.dataset&&tr.dataset.code)||'').toUpperCase(); const ps=payByC[code]||[]; r.push(ps.length?ps.map(x=>fmt(x.amt)).join(' · '):'—', ps.length?ps.map(x=>x.date||'—').join(' · '):'—'); } rows.push(r); });
+  document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList&&tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; rows.push(idxs.map(i=>cellTxt(tds[i]))); });
   if(!rows.length){ alert('لا توجد صفوف ظاهرة — عدّلي الفلتر/الفترة.'); return; }
   const f=(($('spc-from')||{}).value)||'', t=(($('spc-to')||{}).value)||'';
+  // 💵 قسم «الدفعات المسجّلة — تحويلات بنكية» (من جدول سداد المستحقات): كل صف = تحويل بقيمته كما خرجت من البنك، بتاريخه — حسب الفترة، لا القيم الموزّعة
+  let payHead=[], payRows=[], payTotStr='';
+  if(wantPay){ const tr=_supTransfers(sup,f,t); payHead=['📅 التاريخ','💰 القيمة المحوّلة (كما خرجت من البنك)','العملة','🏦 البنك','🔖 المرجع','عدد العملاء','ملاحظة']; const tot={}; tr.forEach(g=>{ payRows.push([g.date||'—', fmt(g.amount), g.cur||'', g.bank||'', g.ref||'—', String(g.n), (g.undist?'🔵 غير موزّعة ':'')+(g.note||'')]); tot[g.cur]=(tot[g.cur]||0)+Number(g.amount||0); }); payTotStr=Object.entries(tot).map(([c,v])=>fmt(v)+' '+c).join(' · '); }
   const psTxt=(($('sp-period-summary')||{}).innerText||'').replace(/\s+/g,' ').trim();
   const title='تقرير مخصّص — '+sup+((f||t)?(' ('+(f||'…')+' → '+(t||'…')+')'):'');
   if(kind==='excel'){
     const out=[[title]]; if(psTxt){ out.push([]); out.push([psTxt]); } out.push([]); out.push(head); rows.forEach(r=>out.push(r));
+    if(wantPay){ out.push([]); out.push(['💵 الدفعات المسجّلة — تحويلات بنكية (كما خرجت من البنك · غير موزّعة على العملاء)']); out.push(payHead); payRows.forEach(r=>out.push(r)); out.push(['الإجمالي','', payTotStr]); }
     _xlsxDownload([{name:'تقرير '+sup, rows:out}], 'تقرير مخصّص '+sup); return;
   }
   if(kind==='gsheet'){
     // 📗 نافذة مضمونة: البيانات جاهزة كـ TSV + زر نسخ مؤكّد + زر فتح شيت جديد (بدل النسخ الخفي الذي قد يفشل)
     const clean=v=>String(v==null?'':v).replace(/[\t\r\n]+/g,' ');
-    const tsv=[[title]].concat(psTxt?[[clean(psTxt)]]:[]).concat([head]).concat(rows).map(r=>r.map(clean).join('\t')).join('\n');
+    let arr=[[title]].concat(psTxt?[[clean(psTxt)]]:[]).concat([head]).concat(rows);
+    if(wantPay){ arr=arr.concat([[]]).concat([['💵 الدفعات المسجّلة — تحويلات بنكية (كما خرجت من البنك)']]).concat([payHead]).concat(payRows).concat([['الإجمالي','',payTotStr]]); }
+    const tsv=arr.map(r=>r.map(clean).join('\t')).join('\n');
     _gsheetModal(tsv); return;
   }
   const w=window.open('','_blank'); if(!w){ alert('فعّلي النوافذ المنبثقة للطباعة.'); return; }
-  const html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>'+esc(title)+'</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#111;font-size:12px;margin:0}.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #0e9d6a;padding-bottom:6px;margin-bottom:8px}.logo{font-size:22px;font-weight:900;letter-spacing:2px;color:#0e9d6a}.logo span{color:#D4A843}.ttl{font-size:14px;font-weight:800;color:#c41d88}.note{background:#f1f8f4;border:1px solid #dcede6;padding:8px 10px;border-radius:8px;margin:8px 0;font-size:12px}table{width:100%;border-collapse:collapse;margin-top:6px}th,td{border:1px solid #bbb;padding:4px 6px;text-align:center;font-size:11px}th{background:#0e9d6a;color:#fff;font-size:10.5px}tbody tr:nth-child(even){background:#f6faf8}</style></head><body>'+
+  const payTbl=wantPay?('<h4 style="color:#0e7c50;margin:14px 0 4px">💵 الدفعات المسجّلة — تحويلات بنكية <span style="font-size:10px;font-weight:400;color:#6b7c7a">(كما خرجت من البنك · غير موزّعة على العملاء · الإجمالي: '+esc(payTotStr)+')</span></h4>'+
+    '<table><thead><tr>'+payHead.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+(payRows.length?payRows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+payHead.length+'" style="color:#999">لا توجد تحويلات في الفترة</td></tr>')+'</tbody></table>'):'';
+  const html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>'+esc(title)+'</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#111;font-size:12px;margin:0}.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #0e9d6a;padding-bottom:6px;margin-bottom:8px}.logo{font-size:22px;font-weight:900;letter-spacing:2px;color:#0e9d6a}.logo span{color:#D4A843}.ttl{font-size:14px;font-weight:800;color:#c41d88}h4{border-right:4px solid #D4A843;padding-right:7px}.note{background:#f1f8f4;border:1px solid #dcede6;padding:8px 10px;border-radius:8px;margin:8px 0;font-size:12px}table{width:100%;border-collapse:collapse;margin-top:6px}th,td{border:1px solid #bbb;padding:4px 6px;text-align:center;font-size:11px}th{background:#0e9d6a;color:#fff;font-size:10.5px}tbody tr:nth-child(even){background:#f6faf8}</style></head><body>'+
     '<div class="hd"><div class="logo">AL<span>E</span>ZZ</div><div class="ttl">'+esc(title)+'</div></div>'+
     (psTxt?'<div class="note">'+esc(psTxt)+'</div>':'')+
     '<table><thead><tr>'+head.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+
     rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join('')+
-    '</tbody></table><div style="margin-top:8px;font-size:10px;color:#6b7c7a">شركة العز · ALEZZ Group</div>'+
+    '</tbody></table>'+payTbl+'<div style="margin-top:8px;font-size:10px;color:#6b7c7a">شركة العز · ALEZZ Group</div>'+
     '<script>window.onload=function(){setTimeout(function(){window.print();},350);};<\/script></body></html>';
   w.document.open(); w.document.write(html); w.document.close();
+}
+// 💵 تحويلات المورّد المسجّلة (سداد المستحقات): كل صف = تحويل بنكي بقيمته «كما خرجت من البنك» (غير موزّع) — مطابق لجدول الكشف، مفلتر بتاريخ التحويل ضمن [f,t]
+function _supTransfers(sup,f,t){
+  const pays=(DATA.supplierPayments||[]).filter(p=>supKey(p.supplier_name)===supKey(sup));
+  const btByRef={}; (DATA.bankTx||[]).forEach(x=>{ const r=String(x.bank_ref||'').trim().toUpperCase(); if(r&&Number(x.amount_out||0)>0&&!btByRef[r])btByRef[r]=x; });
+  const grp={}; pays.forEach(x=>{ const ref=String(x.bank_ref||'').trim(); const key=ref?ref.toUpperCase():('__id'+x.id); const g=grp[key]||(grp[key]={date:x.payment_date||'',ref:ref,bank:x.bank_name||'',supSum:0,supCur:x.currency||'',n:0,note:'',nCode:0}); g.supSum+=Number(x.amount||0); g.n++; if(x.client_code)g.nCode++; if(x.note&&!g.note)g.note=x.note; if(x.payment_date&&(!g.date||x.payment_date>g.date))g.date=x.payment_date; });
+  let rows=Object.values(grp).map(g=>{ const bt=g.ref?btByRef[g.ref.toUpperCase()]:null; const fromBank=!!bt; return { date:g.date, amount:fromBank?Number(bt.amount_out||0):g.supSum, cur:fromBank?bankCur(bt.bank_name||g.bank):g.supCur, bank:fromBank?(bt.bank_name||g.bank):g.bank, ref:g.ref, n:g.n, note:g.note||'', undist:(g.nCode===0) }; });
+  if(f||t) rows=rows.filter(g=>{ const d=String(g.date||'').slice(0,10); return (!f||(d&&d>=f))&&(!t||(d&&d<=t)); });
+  return rows.sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
 }
 function supdFilter(){
   const q=(($('supd-q')||{}).value||'').trim().toLowerCase();
