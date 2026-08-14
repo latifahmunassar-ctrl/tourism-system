@@ -5714,6 +5714,25 @@ function renderSupplierDetail(){
         '<label style="align-self:center;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;color:#b8860b;background:rgba(217,138,0,.08);border:1px solid #e5c07b;border-radius:8px;padding:8px 12px;white-space:nowrap"><input type="checkbox" id="spc-noinv" onchange="spcliFilter()" style="width:16px;height:16px;cursor:pointer"> 🔴 الناقصة فقط (بلا فاتورة)</label>'+
         '<button class="btn ghost" style="padding:7px 14px" onclick="spcliClear()">مسح الفلتر</button>'+
       '</div>'+
+      '<details style="margin-bottom:8px;border:1px solid var(--accent);border-radius:8px;padding:6px 10px;background:rgba(224,33,138,.04)"><summary style="cursor:pointer;font-weight:700;color:var(--accent);font-size:12.5px">📋 تقرير مخصّص للفترة — اختاري الأعمدة ثم صدّري (Excel / PDF)</summary>'+
+        '<div style="font-size:11px;color:var(--muted);margin:6px 0">يصدّر <b>الصفوف الظاهرة حسب فلترك الحالي</b> (التاريخ + البحث + الناقصة فقط). «كود العميل» و«العميل» يظهران دائماً.</div>'+
+        '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-bottom:8px">'+
+          '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="1" checked> تاريخ الوصول</label>'+
+          '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="3" checked> الوكيل</label>'+
+          '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="10" checked> قيمة الحجز</label>'+
+          '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="11" checked> 🧾 فاتورة المورّد</label>'+
+          '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="12"> الفرق</label>'+
+          '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="13" checked> 💵 المدفوعات</label>'+
+          '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="14" checked> 📌 المتبقّي</label>'+
+          '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="7"> الربح الفعلي</label>'+
+        '</div>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+          '<button class="btn ghost" style="padding:4px 12px;font-size:11px" onclick="rcolPreset(\'all\')">☑ الكل</button>'+
+          '<button class="btn ghost" style="padding:4px 12px;font-size:11px" onclick="rcolPreset(\'invpay\')">🧾 فاتورة + دفعات فقط</button>'+
+          '<span style="flex:1"></span>'+
+          '<button class="btn" style="padding:5px 14px;background:#0e7c50" onclick="exportSupplierCustom(\'excel\')">📊 تصدير Excel</button>'+
+          '<button class="btn" style="padding:5px 14px;background:#c41d88" onclick="exportSupplierCustom(\'pdf\')">🖨️ تصدير PDF</button>'+
+        '</div></details>'+
       '<div class="tbl-wrap bf-scroll" id="sp-dist-wrap" style="max-height:300px"><table style="font-size:11.5px"><thead><tr><th>كود العميل</th><th>تاريخ الوصول 📅</th><th>العميل</th><th>الوكيل</th><th>قيمة الدفع المُسدَّد<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>client balance payment</th><th>الربح المتوقع<br><span style="font-size:9px;color:var(--muted)">من First Client Data</span></th><th>الربح الفعلي<br><span style="font-size:9px;color:var(--muted)">من Booking Form</span></th><th>قيمة الحجز قبل الإلغاء<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>رسوم الإلغاء<br><span style="font-size:9px;color:var(--muted)">Cancelation Charge ('+esc(SCUR)+')</span></th><th>قيمة الحجز<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>فاتورة المورّد ✏️<br><span style="font-size:9px;color:var(--muted)">('+esc(SCUR)+')</span></th><th>الفرق</th><th>مدفوع سابقاً</th><th>المتبقّي</th><th>ادفع الآن</th></tr></thead><tbody id="sp-dist-tbl">'+
       (function(){
         const rowHtml=(c)=>{ const owed=invCli[c]; const cu=(c||'').toUpperCase(); const isDirect=directCodes.has(cu);   // دين مباشر للمورّد = غير مدفوع (لا يأخذ من التوزيع النسبي)
@@ -6095,6 +6114,36 @@ function updatePeriodSummary(){
     '<div style="font-size:10.5px;color:var(--muted);margin-top:6px">📅 الحجوزات والفواتير حسب <b>تاريخ الوصول</b> · المدفوعات = <b>مدفوعة خلال الفترة</b> أو <b>لعميل يصل خلالها</b> (فلا تفوت الدفعات المجمّعة التي تاريخها يختلف عن الوصول، وتشمل غير الموزّعة).</div>';
 }
 function spcliClear(){ ['spc-q','spc-from','spc-to'].forEach(id=>{const e=$(id);if(e)e.value='';}); const nv=$('spc-noinv'); if(nv)nv.checked=false; spcliFilter(); }
+// 📋 تقرير مخصّص: اختيار الأعمدة + تصدير Excel/PDF للصفوف الظاهرة حسب الفلتر الحالي (التاريخ/البحث/الناقصة)
+function rcolPreset(k){ document.querySelectorAll('.rcol').forEach(c=>{ if(k==='all')c.checked=true; else if(k==='invpay')c.checked=(c.value==='11'||c.value==='13'||c.value==='14'); }); }
+function exportSupplierCustom(kind){
+  const sup=(($('supflt')||{}).value||'').trim(); if(!sup){ alert('اختاري مورّداً أولاً.'); return; }
+  const sel=[...document.querySelectorAll('.rcol:checked')].map(c=>Number(c.value)).filter(n=>!isNaN(n)&&n!==0&&n!==2).sort((a,b)=>a-b);
+  const idxs=[0,2].concat(sel);   // كود العميل + العميل دائماً + الأعمدة المختارة
+  const bodyEl=document.getElementById('sp-dist-tbl'); const table=bodyEl&&bodyEl.closest('table'); if(!table){ alert('افتحي كشف المورّد أولاً.'); return; }
+  const ths=[...table.querySelectorAll('thead th')].map(x=>(x.innerText||x.textContent||'').replace(/\s+/g,' ').trim());
+  const head=idxs.map(i=>ths[i]||'');
+  const cellTxt=td=>{ if(!td)return ''; const inp=td.querySelector('input'); if(inp)return (inp.value||inp.getAttribute('placeholder')||''); return (td.innerText||td.textContent||'').replace(/\s+/g,' ').trim(); };
+  const rows=[];
+  document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList&&tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; rows.push(idxs.map(i=>cellTxt(tds[i]))); });
+  if(!rows.length){ alert('لا توجد صفوف ظاهرة — عدّلي الفلتر/الفترة.'); return; }
+  const f=(($('spc-from')||{}).value)||'', t=(($('spc-to')||{}).value)||'';
+  const psTxt=(($('sp-period-summary')||{}).innerText||'').replace(/\s+/g,' ').trim();
+  const title='تقرير مخصّص — '+sup+((f||t)?(' ('+(f||'…')+' → '+(t||'…')+')'):'');
+  if(kind==='excel'){
+    const out=[[title]]; if(psTxt){ out.push([]); out.push([psTxt]); } out.push([]); out.push(head); rows.forEach(r=>out.push(r));
+    _xlsxDownload([{name:'تقرير '+sup, rows:out}], 'تقرير مخصّص '+sup); return;
+  }
+  const w=window.open('','_blank'); if(!w){ alert('فعّلي النوافذ المنبثقة للطباعة.'); return; }
+  const html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>'+esc(title)+'</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#111;font-size:12px;margin:0}.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #0e9d6a;padding-bottom:6px;margin-bottom:8px}.logo{font-size:22px;font-weight:900;letter-spacing:2px;color:#0e9d6a}.logo span{color:#D4A843}.ttl{font-size:14px;font-weight:800;color:#c41d88}.note{background:#f1f8f4;border:1px solid #dcede6;padding:8px 10px;border-radius:8px;margin:8px 0;font-size:12px}table{width:100%;border-collapse:collapse;margin-top:6px}th,td{border:1px solid #bbb;padding:4px 6px;text-align:center;font-size:11px}th{background:#0e9d6a;color:#fff;font-size:10.5px}tbody tr:nth-child(even){background:#f6faf8}</style></head><body>'+
+    '<div class="hd"><div class="logo">AL<span>E</span>ZZ</div><div class="ttl">'+esc(title)+'</div></div>'+
+    (psTxt?'<div class="note">'+esc(psTxt)+'</div>':'')+
+    '<table><thead><tr>'+head.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+
+    rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join('')+
+    '</tbody></table><div style="margin-top:8px;font-size:10px;color:#6b7c7a">شركة العز · ALEZZ Group</div>'+
+    '<script>window.onload=function(){setTimeout(function(){window.print();},350);};<\/script></body></html>';
+  w.document.open(); w.document.write(html); w.document.close();
+}
 function supdFilter(){
   const q=(($('supd-q')||{}).value||'').trim().toLowerCase();
   const f=(($('supd-from')||{}).value)||''; const t=(($('supd-to')||{}).value)||'';
