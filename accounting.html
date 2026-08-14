@@ -4298,7 +4298,8 @@ function parseStmtHeader(text){ const g=(re)=>{ const m=text.match(re); return m
   // فترة الكشف: أول زوج تاريخين DD/MM/YYYY في صف بيانات الترويسة (FROM DATE / TO DATE)
   const md=text.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2})\/(\d{2})\/(\d{4})/);
   const fromDate=md?(md[3]+'-'+md[2]+'-'+md[1]):'', toDate=md?(md[6]+'-'+md[5]+'-'+md[4]):'';
-  return { withdrawals:g(/TOTAL WITHDRAWALS[\s\S]*?([\d,]+\.\d{2,3})/), deposits:g(/TOTAL DEPOSITS[\s\S]*?([\d,]+\.\d{2,3})/), opening:g(/OPENING BALANCE[\s\S]*?([\d,]+\.\d{2,3})/), closing:g(/CLOSING BALANCE[\s\S]*?([\d,]+\.\d{2,3})/), fromDate, toDate }; }
+  const curCode=(g(/ACCOUNT\s*CURRENCY[\s\S]{0,40}?\b(USD|OMR|SAR|AED|EUR|GBP|MYR|THB|SGD)\b/i)||'').toUpperCase();   // 💱 عملة الحساب من الترويسة — لحارس مطابقة العملة
+  return { withdrawals:g(/TOTAL WITHDRAWALS[\s\S]*?([\d,]+\.\d{2,3})/), deposits:g(/TOTAL DEPOSITS[\s\S]*?([\d,]+\.\d{2,3})/), opening:g(/OPENING BALANCE[\s\S]*?([\d,]+\.\d{2,3})/), closing:g(/CLOSING BALANCE[\s\S]*?([\d,]+\.\d{2,3})/), currency:curCode, fromDate, toDate }; }
 async function parseBankPdf(file){ await loadPdfjs(); const buf=await file.arrayBuffer(); const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise; let text='';
   for(let p=1;p<=pdf.numPages;p++){ const page=await pdf.getPage(p); const tc=await page.getTextContent();
     // 🧩 تجميع العناصر في صفوف حسب الإحداثي Y (أقرب صف ضمن سماحية) ثم ترتيبها أفقياً حسب X — يصمد أمام تفكّك أعمدة كشوف البطاقة (كان الترتيب التسلسلي يفكّك الصف فتُسقَط حركات مثل صفوف OMR المحلية)
@@ -4399,6 +4400,13 @@ function runReconcile(){
   $('rec-result').innerHTML='<div style="color:var(--muted);padding:10px">⏳ جاري قراءة الكشف والمقارنة…</div>';
   (/\.xlsx?$/i.test(file.name)?parseBankXlsx(file):(/\.csv$/i.test(file.name)?parseBankCsv(file):parseBankPdf(file))).then(parsed=>{
     if(!parsed.txns.length){ $('rec-result').innerHTML='<h4 style="margin:0 0 8px">🔎 تشخيص الكشف — لم يُتعرّف على أي حركة</h4>'+recDiag(parsed.raw); return; }
+    // 💱 حارس العملة: يرفض المطابقة (بتنبيه) لو عملة الكشف تختلف عن عملة الحساب المختار — يمنع مقارنة كشف دولاري بحساب عماني مثلاً
+    const _stmtCur=String((parsed.header&&parsed.header.currency)||'').toUpperCase();
+    const _bankCur=(typeof bankCur==='function')?String(bankCur(bank)||'').toUpperCase():'';
+    if(_stmtCur && _bankCur && _stmtCur!==_bankCur){
+      $('rec-result').innerHTML='<div style="border:1px solid var(--red);background:rgba(255,107,122,.10);border-radius:10px;padding:12px;color:var(--red);font-weight:700">⛔ عملة الكشف المُدخَل <b>'+esc(_stmtCur)+'</b> لا تطابق عملة الحساب المختار «'+esc(bank)+'» ('+esc(_bankCur)+').<br><span style="font-weight:400;color:var(--txt)">غالباً اخترتِ الحساب الخطأ. كشف بعملة مختلفة لن يتطابق. اختاري الحساب المطابق للكشف ثم أعيدي المقارنة.</span></div>';
+      if(!confirm('⛔ عملة الكشف ('+_stmtCur+') ≠ عملة الحساب المختار «'+bank+'» ('+_bankCur+').\n\nغالباً الحساب خطأ — الكشف الدولاري لا يُطابَق بحساب عماني.\n\nهل تريدين المتابعة رغم اختلاف العملة؟')) return;   // رفض افتراضي؛ متابعة فقط بتأكيد صريح
+    }
     // 📅 حصر فترة المقارنة تلقائيّاً على فترة الكشف (من ترويسته أو من أقدم/أحدث حركة فيه) إن لم تحدّدها المستخدمة —
     //    يمنع مقارنة سنوات قديمة (2025) ضد كشف فترة أحدث فتظهر مئات الحركات «غير موجودة بالكشف» بلا داعٍ
     let _from=from, _to=to, _autoPeriod=false;
