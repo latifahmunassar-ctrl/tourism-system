@@ -6131,7 +6131,8 @@ function updatePeriodSummary(){
   const invCnt=inv.filter(x=>x.actual_invoice!=null&&String(x.actual_invoice).trim()!=='').length;
   // 🏦 الرصيد المتبقّي الكلّي (كل السنوات · كل العملاء) = كل الحجوزات − كل المدفوعات لهذا المورّد — للمرجع بجانب متبقّي الفترة
   const _allInv=supInvAll().filter(x=>supKey(x.supplier_name)===supKey(sup));
-  const _allOwed=_allInv.reduce((s,x)=>s+((x.actual_invoice!=null&&String(x.actual_invoice).trim()!=='')?(Number(x.actual_invoice)||0):0),0);   // 🧾 إجمالي فاتورة المورّد الكلّية (من الفاتورة المُدخَلة، لا قيمة الحجز)
+  // 🏦 الرصيد الكلّي: الفاتورة إن وُجدت وإلا قيمة الحجز (نفس منطق الملخّص العلوي supOwed) — لأن الفاتورة غير مُدخَلة لكل العملاء عبر السنين، فالفاتورة-فقط تعطي رصيداً سالباً وهمياً
+  const _allOwed=(typeof supOwed==='function')?supOwed(_allInv):_allInv.reduce((s,x)=>s+((x.actual_invoice!=null&&String(x.actual_invoice).trim()!=='')?(Number(x.actual_invoice)||0):Number(x.invoice_amount||0)),0);
   const _allPaid=(DATA.supplierPayments||[]).filter(p=>supKey(p.supplier_name)===supKey(sup)).reduce((s,p)=>s+supPaidInCur(p,scur),0);
   const _allBal=_allOwed-_allPaid;
   // 💵 مدفوعات المورّد ذات الصلة بالفترة: مؤرّخة داخل الفترة (تاريخ الدفع) **أو** لعميل يصل داخل الفترة — فلا تفوت الدفعات المجمّعة التي تاريخها يختلف عن تاريخ وصول الحجز
@@ -6154,7 +6155,7 @@ function updatePeriodSummary(){
       '<span>🧾 إجمالي فاتورة المورّد: <b>'+fmt(invEntered)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+invCnt+' من '+inv.length+')</span></span>'+
       '<span>✅ إجمالي المدفوعات: <b>'+fmt(paid)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+payRows.length+' دفعة)</span></span>'+
       '<span>📌 المتبقّي الإجمالي (كل الفترة): <b style="color:'+(balAll > _allBal + 0.5 ? '#d93535' : (balAll>0.5?'#b8860b':'#0e9d6a'))+';font-size:14px">'+fmt(balAll)+' '+esc(scur)+'</b>'+(Math.abs(balAll-_allBal)>0.5?' <span style="background:#c0392b;color:#fff;font-size:9.5px;font-weight:800;padding:2px 9px;border-radius:9px;box-shadow:0 1px 3px rgba(192,57,43,.35)" title="متبقّي هذه الفترة يختلف عن الرصيد الكلّي مع المورّد — غالباً بسبب مدفوعات أو حجوزات خارج الفترة. راجعي.">⚠️ يختلف عن الرصيد الكلّي (فرق '+fmt(Math.abs(balAll-_allBal))+' '+esc(scur)+')</span>':' <span style="background:#0e9d6a;color:#fff;font-size:9.5px;font-weight:700;padding:2px 9px;border-radius:9px">✅ مطابق للكلّي</span>')+' <span style="font-size:10px;color:var(--muted)">(فاتورة المورّد − المدفوعات = '+fmt(invEntered)+' − '+fmt(paid)+(Math.abs(balAll-balBooked)>0.5?(' · حسب قيمة الحجز: '+fmt(balBooked)):'')+')</span></span>'+
-      '<span style="border-inline-start:2px solid var(--accent);padding-inline-start:10px">🏦 الرصيد المتبقّي الكلّي <span style="font-size:9px;color:var(--muted)">(كل السنوات)</span>: <b style="color:'+(_allBal>0.5?'#b8860b':'#0e9d6a')+';font-size:14px">'+fmt(_allBal)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+fmt(_allOwed)+' − '+fmt(_allPaid)+')</span></span>'+
+      '<span style="border-inline-start:2px solid var(--accent);padding-inline-start:10px">🏦 الرصيد المتبقّي الكلّي <span style="font-size:9px;color:var(--muted)">(كل السنوات)</span>: <b style="color:'+(_allBal>0.5?'#b8860b':'#0e9d6a')+';font-size:14px">'+fmt(_allBal)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+fmt(_allOwed)+' − '+fmt(_allPaid)+' · المستحق = الفاتورة إن وُجدت وإلا قيمة الحجز)</span></span>'+
     '</div>'+
     '<div style="font-size:10.5px;color:var(--muted);margin-top:6px">📅 الحجوزات والفواتير حسب <b>تاريخ الوصول</b> · المدفوعات = <b>مدفوعة خلال الفترة</b> أو <b>لعميل يصل خلالها</b> (فلا تفوت الدفعات المجمّعة التي تاريخها يختلف عن الوصول، وتشمل غير الموزّعة).</div>';
 }
