@@ -5907,7 +5907,7 @@ function exportSupplierPDF(){
   const list=supInvAll().filter(x=>supKey(x.supplier_name)===supKey(sup));   // 🔑 تجميع بالمفتاح الموحّد: يضمّ كل صيغ اسم المورّد المتقاربة (فرق مسافة/حرف) في كشف واحد
   const pays=(DATA.supplierPayments||[]).filter(x=>supKey(x.supplier_name)===supKey(sup));
   const owed=list.reduce((s,x)=>s+Number(x.invoice_amount||0),0);
-  const paid=pays.reduce((s,x)=>s+supPaidInCur(x,SCUR),0); const bal=owed-paid;   // 💱 تحويل بعملة المورّد فقط عند اختلاف العملة
+  const paid=pays.reduce((s,x)=>s+supPaidInCur(x,scur),0); const bal=owed-paid;   // 💱 تحويل بعملة المورّد فقط عند اختلاف العملة
   const clients=new Set(list.map(x=>x.client_code)).size;
   const f=(($('spc-from')||{}).value)||''; const t=(($('spc-to')||{}).value)||''; const q=(($('spc-q')||{}).value||'').trim();
   const filtered=!!(f||t||q);
