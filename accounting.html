@@ -2914,15 +2914,16 @@ function hpReport(){
   const hb=hpHbMatch(HO_PAYEE); let owed=0,paid=0,nBook=0,owedMyr=0,paidMyr=0,nPay=0;
   if(hb.length){ for(const h of hb){ const sc=h.currency||'SAR'; if(inR(h.check_in)){ const o=hbOwedEff(h); owed+=o; owedMyr+=hpConv(o,sc,cur); nBook++; } const p=Number(h.total_payment||0); if(p>0.005&&inR(h.payment_date)){ paid+=p; paidMyr+=hpConv(p,sc,cur); nPay++; } } }
   else { for(const s of (DATA.serviceLines||[])){ if(s.kind!=='hotel')continue; if(!hpMatch(s,HO_PAYEE))continue; if(!inR(s.check_in))continue; const sc=fcdCur[(s.client_code||'').toUpperCase()]||'SAR'; const o=hbOwedEff(s); owed+=o; owedMyr+=hpConv(o,sc,cur); nBook++; } hpPayments(HO_PAYEE).filter(x=>inR(x.date)).forEach(x=>{ paid+=x.amount; paidMyr+=hpConv(x.amount,x.srcCur,cur); nPay++; }); }
-  const lbl=(from||'…')+' → '+(to||'…');
+  const lbl=(from||'…')+' → '+(to||'…'); const bal=owed-paid;   // 📌 المتبقّي الإجمالي للفترة = المستحق − المدفوع
   out.innerHTML='<div style="background:rgba(224,33,138,.06);border-radius:10px;padding:10px"><div style="font-weight:700;margin-bottom:8px">📅 تقرير الفترة المحدّدة ('+esc(lbl)+')</div>'+
-    '<div class="kpis" style="grid-template-columns:repeat(4,1fr)">'+
+    '<div class="kpis" style="grid-template-columns:repeat(5,1fr)">'+
       hpRepCard('💰 المستحق (الفترة)',fmt(owed),'var(--txt)')+
       hpRepCard('✅ المدفوع (الفترة)',fmt(paid),'#0e9d6a')+
+      hpRepCard('📌 المتبقّي الإجمالي <span style="font-size:9px;color:var(--muted)">(مستحق − مدفوع)</span>',fmt(bal)+' '+esc(cur),(bal>0.5?'#b8860b':(bal< -0.5?'#0e9d6a':'#0e9d6a')))+
       hpRepCard('🏨 حجوزات الفترة',fmt(nBook),'var(--txt)')+
       hpRepCard('🔁 عمليات الفترة',fmt(nPay),'var(--accent)')+
     '</div>'+
-    '<div style="font-size:11px;color:var(--muted);margin-top:6px">القيم بعملة المورّد '+esc(cur)+' (المدفوع حسب تاريخ الدفع · المستحق حسب تاريخ الدخول)</div></div>';
+    '<div style="font-size:11px;color:var(--muted);margin-top:6px">القيم بعملة المورّد '+esc(cur)+' · <b>المتبقّي الإجمالي = '+fmt(owed)+' − '+fmt(paid)+' = '+fmt(bal)+' '+esc(cur)+'</b>'+(bal>0.5?' (مستحق للمورّد)':(bal< -0.5?' (دفعة مقدمة لنا)':' (مُسوّى)'))+' · المدفوع حسب تاريخ الدفع · المستحق حسب تاريخ الدخول</div></div>';
 }
 // قسم مرتجعات المورّد — اللي يرجعها الفندق لنا (من الإلغاءات)؛ لا علاقة له بمدفوعات/مرتجعات العملاء
 function hpOweBanner(payee){
@@ -6146,7 +6147,7 @@ function updatePeriodSummary(){
       '<span>💰 إجمالي الحجوزات: <b>'+fmt(owed)+' '+esc(scur)+'</b></span>'+
       '<span>🧾 إجمالي فاتورة المورّد: <b>'+fmt(invEntered)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+invCnt+' من '+inv.length+')</span></span>'+
       '<span>✅ إجمالي المدفوعات: <b>'+fmt(paid)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+payRows.length+' دفعة)</span></span>'+
-      '<span>📌 المتبقّي: <b style="color:'+(bal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(bal)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+(invEntered>0?'فاتورة':'حجوزات')+' − مدفوع)</span></span>'+
+      '<span>📌 المتبقّي الإجمالي: <b style="color:'+(bal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(bal)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+(invEntered>0?'فاتورة':'حجوزات')+' − مدفوع)</span></span>'+
     '</div>'+
     '<div style="font-size:10.5px;color:var(--muted);margin-top:6px">📅 الحجوزات والفواتير حسب <b>تاريخ الوصول</b> · المدفوعات = <b>مدفوعة خلال الفترة</b> أو <b>لعميل يصل خلالها</b> (فلا تفوت الدفعات المجمّعة التي تاريخها يختلف عن الوصول، وتشمل غير الموزّعة).</div>';
 }
