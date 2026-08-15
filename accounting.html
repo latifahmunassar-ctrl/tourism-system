@@ -5919,6 +5919,12 @@ function exportSupplierPDF(){
   // قارئ خاص لجدول التوزيع: عمود «فاتورة المورّد» يعرض القيمة المُدخلة يدوياً فقط (data-val) لا القيمة الافتراضية (placeholder)
   const t1rows=(function(){ const out=[]; document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; out.push(t1idx.map(i=>{ const td=tds[i]; if(!td)return ''; if(i===11){ if(td.dataset&&td.dataset.val!=null&&td.dataset.val!=='')return td.dataset.val; const inp=td.querySelector('input'); if(inp&&inp.value!=='')return inp.value; return '—'; } const inp=td.querySelector('input'); if(inp)return (inp.value||inp.getAttribute('placeholder')||''); return td.innerText.replace(/\s+/g,' ').trim(); })); }); return out; })();
   const t2head=headOf('sp-pay-tbl'); const t2idx=t2head.map((_,i)=>i); const t2rows=rowsOf('sp-pay-tbl',t2idx);
+  // جدول (٣): السدادات — التحويلات البنكية المسجّلة (نفس مصدر «سداد المستحقات»)، بنفس فلتر الفترة
+  const _xfers=_supTransfers(sup,f,t);
+  const t3head=['📅 التاريخ','💰 القيمة المحوّلة','العملة','🏦 البنك','🔖 المرجع','عدد العملاء','ملاحظة'];
+  const t3rows=_xfers.map(g=>[g.date||'—',String(Math.round(Number(g.amount||0)*1000)/1000),g.cur||'',g.bank||'',g.ref||'—',String(g.n),(g.undist?'🔵 غير موزّعة ':'')+(g.note||'')]);
+  const _xTot={}; _xfers.forEach(g=>{ _xTot[g.cur]=(_xTot[g.cur]||0)+Number(g.amount||0); });
+  const t3totStr=Object.entries(_xTot).map(([c,v])=>fmt(v)+' '+c).join(' · ');
   const tbl=(head,rows)=> '<table><thead><tr>'+head.map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+(rows.length?rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+head.length+'" style="text-align:center;color:#999">لا توجد بيانات</td></tr>')+'</tbody></table>';
   // جدول (١): يلوّن «الربح الفعلي» (عمود ٧) بالأحمر لو كان أقل من «الربح المتوقع» (عمود ٦) — كما في الشيت
   const _pN=s=>{ const n=parseFloat(String(s).replace(/[^\d.\-]/g,'')); return isNaN(n)?null:n; };
@@ -5944,6 +5950,7 @@ function exportSupplierPDF(){
     (periodInner?('<div class="period">'+periodInner+'</div>'):'')+
     '<h4>(١) تفاصيل فواتير العملاء'+(filtered?' — للفترة/البحث المحدّد':'')+' ('+t1rows.length+') <span style="font-size:10px;font-weight:400;color:#6b7c7a">— 🔻 الربح الفعلي أقل من المتوقع</span></h4>'+tbl1(t1head,t1rows)+
     '<h4>(٢) حركة مدفوعات العملاء'+(filtered?' — للفترة/البحث المحدّد':'')+' ('+t2rows.length+')</h4>'+tbl(t2head,t2rows)+
+    '<h4>(٣) جدول السدادات — التحويلات البنكية المسجّلة'+((f||t)?' — للفترة المحدّدة':'')+' ('+t3rows.length+')'+(t3totStr?(' <span style="font-size:10px;font-weight:400;color:#6b7c7a">— الإجمالي المحوّل: '+esc(t3totStr)+'</span>'):'')+'</h4>'+tbl(t3head,t3rows)+
     '<div class="ft"><span>شركة العز · ALEZZ Group</span><span>تم الإصدار آلياً من داشبورد الحسابات · '+esc(today)+'</span></div>'+
     '<script>window.onload=function(){setTimeout(function(){window.print();},350);};<\/script>'+
     '</body></html>';
