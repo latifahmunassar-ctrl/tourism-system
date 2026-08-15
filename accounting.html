@@ -6138,7 +6138,8 @@ function updatePeriodSummary(){
     const byClient=codes.has((p.client_code||'').toUpperCase());   // عميل يصل داخل الفترة
     return byDate||byClient; });
   const paid=payRows.reduce((s,p)=>s+supPaidInCur(p,scur),0);   // 💱 محوّل لعملة المورّد
-  const base=(invEntered>0?invEntered:owed); const bal=base-paid;
+  const balAll=owed-paid;   // 📌 المتبقّي الإجمالي للفترة كلها = كل الحجوزات − المدفوعات (يشمل كل عملاء الفترة حتى غير المُفوتَرين)
+  const balInv=(invEntered>0?invEntered:owed)-paid;   // متبقّي حسب الفاتورة المُدخَلة فقط
   box.innerHTML='<div style="margin-top:10px;padding:10px 12px;border:1px dashed var(--accent);border-radius:10px;background:rgba(224,33,138,.06)">'+
     '<div style="font-weight:800;color:var(--accent);margin-bottom:6px;font-size:12.5px">📅 ملخّص الفترة المحدّدة'+((f||t)?(' ('+esc(f||'…')+' → '+esc(t||'…')+')'):'')+(noinv?' · <span style="color:#b8860b">🔴 الناقصة فقط</span>':'')+'</div>'+
     '<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px">'+
@@ -6147,7 +6148,7 @@ function updatePeriodSummary(){
       '<span>💰 إجمالي الحجوزات: <b>'+fmt(owed)+' '+esc(scur)+'</b></span>'+
       '<span>🧾 إجمالي فاتورة المورّد: <b>'+fmt(invEntered)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+invCnt+' من '+inv.length+')</span></span>'+
       '<span>✅ إجمالي المدفوعات: <b>'+fmt(paid)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+payRows.length+' دفعة)</span></span>'+
-      '<span>📌 المتبقّي الإجمالي: <b style="color:'+(bal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(bal)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+(invEntered>0?'فاتورة':'حجوزات')+' − مدفوع)</span></span>'+
+      '<span>📌 المتبقّي الإجمالي (كل الفترة): <b style="color:'+(balAll>0.5?'#b8860b':'#0e9d6a')+';font-size:14px">'+fmt(balAll)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">(كل الحجوزات − المدفوعات = '+fmt(owed)+' − '+fmt(paid)+(Math.abs(balAll-balInv)>0.5?(' · حسب الفاتورة المُدخَلة: '+fmt(balInv)):'')+')</span></span>'+
     '</div>'+
     '<div style="font-size:10.5px;color:var(--muted);margin-top:6px">📅 الحجوزات والفواتير حسب <b>تاريخ الوصول</b> · المدفوعات = <b>مدفوعة خلال الفترة</b> أو <b>لعميل يصل خلالها</b> (فلا تفوت الدفعات المجمّعة التي تاريخها يختلف عن الوصول، وتشمل غير الموزّعة).</div>';
 }
