@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-14-daycity-nohotels';
+  var BUILD = '2026-08-16-addroom-samtype';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1522,7 +1522,9 @@ function rtwRender(cell, rooms){
     const isCur = _stripCapR(r.room_type) === _stripCapR(curRoom);
     const cap = r.occupancy ? ` (يتسع ${r.occupancy})` : '';
     const total = (r.price_per_night||0)*nights;
-    const acts = isCur ? '<span class="hsw-chk">✓ الحالية</span>'
+    const acts = isCur
+      ? `<div class="rtw-acts"><span class="hsw-chk">✓ الحالية</span>`
+        + `<button class="rtw-b add" onclick="rtwAdd(this.closest('.rtw-cell'),${i})">➕ إضافة غرفة (نفس النوع)</button></div>`
       : `<div class="rtw-acts"><button class="rtw-b rep" onclick="rtwReplace(this.closest('.rtw-cell'),${i})">↺ استبدال</button>`
         + `<button class="rtw-b add" onclick="rtwAdd(this.closest('.rtw-cell'),${i})">➕ إضافة غرفة</button></div>`;
     return `<div class="hsw-opt ${isCur?'sel':''}"><div class="hsw-l"><div class="hsw-n">${hswEsc(r.room_type)}${cap}</div>${acts}</div>`
