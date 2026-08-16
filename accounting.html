@@ -688,6 +688,7 @@ table{font-weight:600}
         <div id="rec-result" style="margin-top:14px"></div>
       </div>
       <div id="rec-saved"></div>
+      <div id="future-txn-alert"></div>
       <div class="formbar"><label style="font-weight:700;margin-left:8px">🏦 اختاري البنك / البطاقة:</label><select id="bankflt" class="flt" onchange="renderBankDetail()" style="min-width:300px"><option value="">— كل البنوك والبطاقات —</option></select>
         <input id="bankq" list="banklist" class="flt" placeholder="🔍 أو اكتبي اسم البنك..." onchange="bankPick()" style="min-width:260px;margin-right:8px"><datalist id="banklist"></datalist></div>
       <div id="bank-detail"></div>
@@ -4793,7 +4794,42 @@ function bankAlias(name){ const nm=String(name||'').trim(); if(!nm)return nm;
   const al=(typeof listValues==='function')?listValues('bank_alias'):[];
   for(const v of al){ const p=String(v.value||'').split(''); if(p[0]&&p[1]&&p[0].trim()===nm) return p[1].trim(); }
   return nm; }
+// 🚫 حاجز: تنبيه الحركات البنكية المؤرّخة بعد اليوم (غالباً انقلاب يوم↔شهر عند المزامنة) — تضخّم الرصيد ولا تظهر في مطابقة الكشف
+function renderFutureTxnAlert(){
+  const box=$('future-txn-alert'); if(!box) return;
+  if(!DATA){ box.innerHTML=''; return; }
+  const today=new Date().toISOString().slice(0,10);
+  const tx=(typeof bankTxAll==='function'?bankTxAll():(DATA.bankTx||[]));
+  const fut=tx.filter(x=>{ const d=String(x.tx_date||'').slice(0,10); return /^\d{4}-\d{2}-\d{2}$/.test(d) && d>today; })
+    .sort((a,b)=>String(b.tx_date).localeCompare(String(a.tx_date)));
+  if(!fut.length){ box.innerHTML=''; return; }
+  const netFut=fut.reduce((s,x)=>s+Number(x.amount_in||0)-Number(x.amount_out||0),0);
+  const rows=fut.map(x=>{ const idStr=String(x.id); const isCash=/^bc-/.test(idStr); const isDerived=/^(sl|rf|fcd|sp)-/.test(idStr);
+    const realId=isCash?idStr.replace(/^bc-/,''):idStr; const canDel=(!isDerived)&&(isCash||/^\d+$/.test(idStr)); const isSheet=(x.source==='sheet');
+    const inV=Number(x.amount_in||0), outV=Number(x.amount_out||0);
+    return '<tr><td style="color:#d11;font-weight:800">'+esc(String(x.tx_date||'').slice(0,10))+'</td>'+
+      '<td>'+esc((typeof bankAlias==='function'?bankAlias(x.bank_name):'')||x.bank_name||'')+'</td>'+
+      '<td class="num" style="color:#0e9d6a">'+(inV>0.005?fmt(inV):'')+'</td><td class="num neg">'+(outV>0.005?fmt(outV):'')+'</td>'+
+      '<td style="font-size:10px;color:var(--muted)">'+esc(String(x.bank_ref||'').slice(0,22))+'</td>'+
+      '<td style="font-size:10px;color:var(--muted)">'+esc(String(x.note||'').slice(0,30))+'</td>'+
+      '<td>'+(canDel?('<button class="btn ghost" style="padding:2px 9px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="delFutureTxn(\''+esc(realId)+'\','+(isCash?'true':'false')+','+(isSheet?'true':'false')+',this)">🗑️ احذفي</button>'):'<span style="font-size:10px;color:var(--muted)">من مصدرها '+(isDerived?'(دفعة/حجز)':'')+'</span>')+'</td></tr>';
+  }).join('');
+  box.innerHTML='<div class="panel" style="border:2px solid #d11;background:rgba(209,17,17,.05);margin-bottom:12px">'+
+    '<h3 style="margin-top:0;color:#d11">🚫 حركات بنكية بتاريخ مستقبلي ('+fut.length+') — غالباً تاريخ مغلوط (انقلاب يوم↔شهر)</h3>'+
+    '<div style="font-size:12px;color:var(--txt);margin-bottom:8px">هذه مؤرّخة <b>بعد اليوم ('+esc(today)+')</b> فتضخّم الرصيد ولا تظهر في مطابقة الكشف. صافيها <b style="color:'+(netFut>=0?'#0e9d6a':'#d11')+'">'+fmt(netFut)+'</b>. راجعيها واحذفي الخاطئ يدويّاً (قرارك). المشتقّة (دفعة/حجز) تُصحَّح من مصدرها.</div>'+
+    '<div class="tbl-wrap" style="max-height:280px"><table style="font-size:11px"><thead><tr><th>📅 التاريخ</th><th>البنك</th><th>داخل</th><th>خارج</th><th>المرجع</th><th>البيان</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+}
+async function delFutureTxn(id,isCash,isSheet,btn){
+  if(!confirm('🗑️ حذف هذه الحركة المستقبلية نهائيّاً؟'+(isSheet?'\n\n⚠️ من الشيت — الحذف نهائي، وقد ترجع مع المزامنة إن لم يُصحَّح الشيت.':'')))return;
+  if(btn){ btn.disabled=true; btn.textContent='⏳'; }
+  try{ const act=isCash?'delete_bank_cash':'delete_bank_txn';
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:act,payload:{id:(/^\d+$/.test(String(id))?Number(id):id),allow_sheet:true}})});
+    const j=await r.json(); if(j.error) throw new Error(j.error);
+    if(typeof toast==='function')toast('✅ حُذفت الحركة المستقبلية'); await load();
+  }catch(e){ if(btn){ btn.disabled=false; btn.textContent='🗑️ احذفي'; } alert('خطأ: '+e.message); }
+}
 function renderBanks(){
+  try{ renderFutureTxnAlert(); }catch(_){}
   try{ renderBankCurPanel(); }catch(_){}
   try{ renderBankPayDesync(); }catch(_){}
   fillReconBanks();
@@ -6161,7 +6197,7 @@ function updatePeriodSummary(){
       '<span>💰 إجمالي الحجوزات: <b>'+fmt(owed)+' '+esc(scur)+'</b></span>'+
       '<span>🧾 إجمالي فاتورة المورّد: <b>'+fmt(invEntered)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+invCnt+' من '+inv.length+')</span></span>'+
       '<span>✅ إجمالي المدفوعات: <b>'+fmt(paid)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+payRows.length+' دفعة)</span></span>'+
-      '<span>📌 المتبقّي الإجمالي (كل الفترة): <b style="color:'+(balAll > _allBal + 0.5 ? '#d93535' : (balAll>0.5?'#b8860b':'#0e9d6a'))+';font-size:14px">'+fmt(balAll)+' '+esc(scur)+'</b>'+(Math.abs(balAll-_allBal)>0.5?' <span style="background:#c0392b;color:#fff;font-size:9.5px;font-weight:800;padding:2px 9px;border-radius:9px;box-shadow:0 1px 3px rgba(192,57,43,.35)" title="متبقّي هذه الفترة يختلف عن الرصيد الكلّي مع المورّد — غالباً بسبب مدفوعات أو حجوزات خارج الفترة. راجعي.">⚠️ يختلف عن الرصيد الكلّي (فرق '+fmt(Math.abs(balAll-_allBal))+' '+esc(scur)+')</span>':' <span style="background:#0e9d6a;color:#fff;font-size:9.5px;font-weight:700;padding:2px 9px;border-radius:9px">✅ مطابق للكلّي</span>')+' <span style="font-size:10px;color:var(--muted)">(فاتورة المورّد − المدفوعات = '+fmt(invEntered)+' − '+fmt(paid)+(Math.abs(balAll-balBooked)>0.5?(' · حسب قيمة الحجز: '+fmt(balBooked)):'')+')</span></span>'+
+      '<span>📌 المتبقّي الإجمالي (كل الفترة): <b style="color:'+(balAll>0.5?'#b8860b':'#0e9d6a')+';font-size:14px">'+fmt(balAll)+' '+esc(scur)+'</b>'+(Math.abs(balAll-_allBal)>0.5?' <span style="background:#c0392b;color:#fff;font-size:9.5px;font-weight:800;padding:2px 9px;border-radius:9px;box-shadow:0 1px 3px rgba(192,57,43,.35)" title="متبقّي هذه الفترة يختلف عن الرصيد الكلّي مع المورّد — غالباً بسبب مدفوعات أو حجوزات خارج الفترة. راجعي.">⚠️ يختلف عن الرصيد الكلّي (فرق '+fmt(Math.abs(balAll-_allBal))+' '+esc(scur)+')</span>':' <span style="background:#0e9d6a;color:#fff;font-size:9.5px;font-weight:700;padding:2px 9px;border-radius:9px">✅ مطابق للكلّي</span>')+' <span style="font-size:10px;color:var(--muted)">(فاتورة المورّد − المدفوعات = '+fmt(invEntered)+' − '+fmt(paid)+(Math.abs(balAll-balBooked)>0.5?(' · حسب قيمة الحجز: '+fmt(balBooked)):'')+')</span></span>'+
       '<span style="border-inline-start:2px solid var(--accent);padding-inline-start:10px">🏦 الرصيد المتبقّي الكلّي <span style="font-size:9px;color:var(--muted)">(كل السنوات)</span>: <b style="color:'+(_allBal>0.5?'#b8860b':'#0e9d6a')+';font-size:14px">'+fmt(_allBal)+' '+esc(scur)+'</b> <span style="font-size:10px;color:var(--muted)">('+fmt(_allOwed)+' − '+fmt(_allPaid)+' · المستحق = الفاتورة إن وُجدت وإلا قيمة الحجز)</span></span>'+
     '</div>'+
     '<div style="font-size:10.5px;color:var(--muted);margin-top:6px">📅 الحجوزات والفواتير حسب <b>تاريخ الوصول</b> · المدفوعات = <b>مدفوعة خلال الفترة</b> أو <b>لعميل يصل خلالها</b> (فلا تفوت الدفعات المجمّعة التي تاريخها يختلف عن الوصول، وتشمل غير الموزّعة).</div>';
