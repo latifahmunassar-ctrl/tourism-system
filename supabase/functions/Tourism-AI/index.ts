@@ -2470,7 +2470,7 @@ function parseMonthFromDate(s: string): number {
 // ── list_tours: جولات نفس مدينة الجولة الحالية (لقائمة تبديل الجولة) ──────────
 // المدخل: { action:"list_tours", dest:"فيتنام", current:"<اسم الجولة الحالية>", pax:3 }
 const TOUR_NON_TOUR_PREFIXES = [
-  "استقبال", "الاستقبال", "استقيال", "الاستقيال", "توديع", "التوديع", "التوجه", "توصيل", "توصیل",
+  "استقبال", "الاستقبال", "استقيال", "الاستقيال", "توديع", "التوديع", "التوجه", "توصيل", "توصیل", "التوصيل", "التوصیل",
   "العوده", "العودة", "العود", "الانتقال", "انتقال", "السائق", "حضور السائق",
   "ذهاب من", "الذهاب من", "للذهاب", "انتهاء", "يوم حر", "يوم تنقّل", "يوم تنقل",
 ];
@@ -2501,19 +2501,20 @@ async function handleListTours(body: {
     if (destKey) q = q.eq("type", destKey);
     const { data, error } = await q;
     if (error) throw error;
-    // نعرض **كل** جولات الوجهة للاختيار (كل المدن)، لا نقصرها على مدينة اليوم — طلب المالكة.
-    // نستبعد فقط الانتقالات/الأيام الحرة. وترتّب جولات مدينة اليوم أولاً ثم الباقي بالسعر.
+    // نعرض جولات **مدينة اليوم/المنطقة المختارة فقط** — لا جولات مدن أخرى (طلب المالكة).
+    // نطابق المدينة بنمط اسمها في اسم الجولة، ونستبعد الانتقالات/الأيام الحرة.
     const rows = ((data || []) as TourRow[])
-      .filter(t => !isNonTourRow(t.name));          // جولات فقط — لا انتقالات/أيام حرة
+      .filter(t => !isNonTourRow(t.name))            // جولات فقط — لا انتقالات/أيام حرة
+      .filter(t => curCity.pattern.test(t.name));    // مدينة اليوم فقط — لا مدن أخرى
     const seen = new Set<string>();
     const tours: Array<{ name: string; type: string; price: number; _cur: boolean }> = [];
     for (const t of rows) {
       const key = (t.name || "").trim();
       if (!key || seen.has(key)) continue;
       seen.add(key);
-      tours.push({ name: t.name, type: t.type, price: pickTourVariantPrice(t, pax, false, month), _cur: curCity.pattern.test(t.name) });
+      tours.push({ name: t.name, type: t.type, price: pickTourVariantPrice(t, pax, false, month), _cur: true });
     }
-    tours.sort((a, b) => (Number(b._cur) - Number(a._cur)) || (a.price - b.price));
+    tours.sort((a, b) => a.price - b.price);
     return new Response(JSON.stringify({ tours }), { headers: CORS_HEADERS });
   } catch (e) {
     return new Response(JSON.stringify({ tours: [], error: String((e as Error).message) }),
