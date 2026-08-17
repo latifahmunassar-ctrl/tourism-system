@@ -4896,7 +4896,7 @@ function renderBankDetail(){
       const live=isC?(rb.amount+pOut-pIn):(rb.amount+pIn-pOut); const moved=(pn>0);
       return '<div style="margin-top:8px;padding:8px 12px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.35);border-radius:8px">'+
         '<span style="font-weight:800;color:#7c3aed">💠 الرصيد الفعلي '+(moved?'<span style="font-size:9px">(محدّث تلقائياً)</span>':'')+':</span> <b style="color:#7c3aed;font-size:15px">'+fmt(live)+' '+esc(cur)+'</b>'+btn+
-        '<div style="font-size:10.5px;color:var(--muted);margin-top:3px">الأساس: <b>'+fmt(rb.amount)+'</b> بتاريخ '+esc(rb.date)+(moved?(' + '+pn+' حركة بعده ('+(isC?'شراء '+fmt(pOut)+' − سداد '+fmt(pIn):'داخل '+fmt(pIn)+' − خارج '+fmt(pOut))+')'):' — لا حركات بعده'):'')+'</div>'+hint+'</div>';
+        '<div style="font-size:10.5px;color:var(--muted);margin-top:3px">الأساس: <b>'+fmt(rb.amount)+'</b> بتاريخ '+esc(rb.date)+(moved?(' + '+pn+' حركة بعده ('+(isC?'شراء '+fmt(pOut)+' − سداد '+fmt(pIn):'داخل '+fmt(pIn)+' − خارج '+fmt(pOut))+')'):' — لا حركات بعده')+'</div>'+hint+'</div>';
     })()+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:10px 0"><div class="fld" style="min-width:200px;flex:1"><label>🔍 بحث (عميل/مرجع/ملاحظة)</label><input id="bnk-q" oninput="bnkFilter()" placeholder="اكتبي..."></div><div class="fld"><label>من تاريخ 📅</label><input type="date" id="bnk-from" onchange="bnkFilter()" style="color-scheme:light;cursor:pointer"></div><div class="fld"><label>إلى تاريخ 📅</label><input type="date" id="bnk-to" onchange="bnkFilter()" style="color-scheme:light;cursor:pointer"></div><button class="btn ghost" style="padding:7px 14px" onclick="bnkClear()">مسح</button></div>'+
     '<div id="bnk-period" data-cur="'+esc(cur)+'"></div>'+
