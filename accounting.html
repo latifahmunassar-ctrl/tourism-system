@@ -4037,6 +4037,20 @@ async function saveBankCur(bank,cur){ if(!isOwnerUser()){ alert('⚠️ اعتم
   const olds=listValues('bank_cur').filter(v=>{ const s=String(v.value||''); const i=s.lastIndexOf('='); return i>0 && s.slice(0,i).trim().toLowerCase()===nn; });
   for(const o of olds){ await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_list_item',payload:{category:'bank_cur',value:o.value}})}); }
   const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_list_item',payload:{category:'bank_cur',value:bank+'='+cur}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } await load(); }
+// 💠 الرصيد الفعلي (يدوي من البنك/التطبيق) — بند إضافي مستقل: عرض فقط، لا يمسّ أي حساب أو تكلفة. مفيد خصوصاً للبطاقات (رصيدها المحاسبي غير معبّر). القائمة bank_real_balance بصيغة «اسم البنك=المبلغ@التاريخ»
+function bankRealBal(bank){ const nn=(typeof bankAlias==='function'?bankAlias(bank):bank)||bank; const nz=s=>String(s||'').trim().toLowerCase();
+  const it=(typeof listValues==='function'?listValues('bank_real_balance'):[]).find(v=>{ const s=String(v.value||''); const i=s.indexOf('='); return i>0 && nz(s.slice(0,i))===nz(nn); });
+  if(!it) return null; const s=String(it.value); const rest=s.slice(s.indexOf('=')+1); const p=rest.split('@'); const amt=parseFloat(p[0]); if(isNaN(amt))return null; return { amount:amt, date:(p[1]||'').trim(), raw:it.value, key:nn }; }
+async function saveBankRealBal(bank){ if(!isOwnerUser()){ alert('⚠️ تحديث الرصيد الفعلي للمالكة فقط'); return; }
+  const nn=(typeof bankAlias==='function'?bankAlias(bank):bank)||bank; const cur=bankRealBal(bank);
+  const amtS=prompt('💠 الرصيد الفعلي للحساب «'+nn+'» — كما يظهر في البنك/التطبيق (بعملة الحساب):\n(للبطاقة: المبلغ المستحق عليك)', cur?String(cur.amount):'');
+  if(amtS===null) return; const amt=parseFloat(String(amtS).replace(/[^\d.\-]/g,'')); if(isNaN(amt)){ alert('⚠️ رقم غير صحيح'); return; }
+  const today=new Date().toISOString().slice(0,10); const dS=prompt('📅 تاريخ هذا الرصيد (YYYY-MM-DD):', (cur&&cur.date)?cur.date:today); if(dS===null) return; const dt=(/^\d{4}-\d{2}-\d{2}$/.test((dS||'').trim())?dS.trim():today);
+  try{ const nz=s=>String(s||'').trim().toLowerCase(); const olds=(listValues('bank_real_balance')||[]).filter(v=>{ const s=String(v.value||''); const i=s.indexOf('='); return i>0 && nz(s.slice(0,i))===nz(nn); });
+    for(const o of olds){ await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_list_item',payload:{category:'bank_real_balance',value:o.value}})}); }
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_list_item',payload:{category:'bank_real_balance',value:nn+'='+amt+'@'+dt}})}); const j=await r.json(); if(j.error) throw new Error(j.error);
+    if(typeof toast==='function')toast('✅ حُفظ الرصيد الفعلي'); await load();
+  }catch(e){ alert('خطأ: '+e.message); } }
 // 🔒 عملة البنك المعتمدة صراحةً فقط (قائمة bank_cur) — أساس منع اختلاف العملة (لا الافتراضي من الاسم)
 function bankCurAssigned(b){ return bankCurOverride(b)||''; }
 // فحص: هل العملة المدخلة تخالف عملة البنك المعتمدة؟ يرجع {bank,bankCur,entered} أو null (بلا بنك/بلا عملة معتمدة = لا منع)
@@ -4872,7 +4886,13 @@ function renderBankDetail(){
   const H=['التاريخ','🏦 الآلية','داخل (+)','خارج (−)','المرجع البنكي','العميل','كود العميل','الوكيل','كود الدفعة','📅 تاريخ الدفع','ملاحظة','المصدر'];
   box.innerHTML='<div class="panel" style="margin-bottom:14px;border:1px solid var(--accent)"><h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span>🏦 '+esc(bank)+' <span style="font-size:12px;color:var(--muted)">('+esc(cur)+')</span></span><button class="btn" style="padding:6px 16px" onclick="exportBankPDF()">🖨️ تصدير PDF</button></h3>'+
     '<div style="font-weight:800;color:var(--brand);font-size:12.5px;margin-bottom:4px">📊 التقرير العام — كامل حركة الحساب</div>'+
-    '<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px"><span>عدد الحركات: <b>'+fmt(tx.length)+'</b></span><span>✅ داخل (+): <b style="color:#0e9d6a">'+fmt(ti)+' '+esc(cur)+'</b></span><span>↘️ خارج (−): <b class="neg">'+fmt(to)+' '+esc(cur)+'</b></span><span>📌 الصافي: <b style="color:'+(net>=0?'#0e9d6a':'#d11')+'">'+fmt(net)+' '+esc(cur)+'</b></span></div>'+
+    '<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px"><span>عدد الحركات: <b>'+fmt(tx.length)+'</b></span><span>✅ داخل (+): <b style="color:#0e9d6a">'+fmt(ti)+' '+esc(cur)+'</b></span><span>↘️ خارج (−): <b class="neg">'+fmt(to)+' '+esc(cur)+'</b></span><span>📌 الصافي <span style="font-size:9px;color:var(--muted)">(محاسبي)</span>: <b style="color:'+(net>=0?'#0e9d6a':'#d11')+'">'+fmt(net)+' '+esc(cur)+'</b></span></div>'+
+    (function(){ const rb=(typeof bankRealBal==='function'?bankRealBal(bank):null); const isCard=(typeof isCardBank==='function'&&isCardBank(bank)); const _own=(typeof isOwnerUser!=='function'||isOwnerUser());
+      const btn=_own?(' <button class="btn ghost" style="padding:2px 10px;font-size:11px;color:#7c3aed;border-color:#7c3aed" onclick="saveBankRealBal(\''+esc(bank).replace(/'/g,"\\'")+'\')">'+(rb?'✏️ تحديث':'➕ أدخلي')+'</button>'):'';
+      const body=rb?('<b style="color:#7c3aed;font-size:15px">'+fmt(rb.amount)+' '+esc(cur)+'</b>'+(rb.date?' <span style="font-size:10px;color:var(--muted)">بتاريخ '+esc(rb.date)+'</span>':'')):'<span style="color:var(--muted)">— لم يُدخَل بعد</span>';
+      const hint=isCard?'<div style="font-size:10.5px;color:var(--muted);margin-top:3px">💡 للبطاقة: «الصافي المحاسبي» أعلاه غير معبّر (حركاتها تكاليف حجوزات). الرصيد الفعلي يُقرأ من تطبيق/كشف البنك ويُدخَل هنا يدويّاً.</div>':'';
+      return '<div style="margin-top:8px;padding:8px 12px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.35);border-radius:8px"><span style="font-weight:800;color:#7c3aed">💠 الرصيد الفعلي (من البنك):</span> '+body+btn+hint+'</div>';
+    })()+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:10px 0"><div class="fld" style="min-width:200px;flex:1"><label>🔍 بحث (عميل/مرجع/ملاحظة)</label><input id="bnk-q" oninput="bnkFilter()" placeholder="اكتبي..."></div><div class="fld"><label>من تاريخ 📅</label><input type="date" id="bnk-from" onchange="bnkFilter()" style="color-scheme:light;cursor:pointer"></div><div class="fld"><label>إلى تاريخ 📅</label><input type="date" id="bnk-to" onchange="bnkFilter()" style="color-scheme:light;cursor:pointer"></div><button class="btn ghost" style="padding:7px 14px" onclick="bnkClear()">مسح</button></div>'+
     '<div id="bnk-period" data-cur="'+esc(cur)+'"></div>'+
     '<div class="tbl-wrap bf-scroll" id="bnk-tbl"><table style="font-size:11px;white-space:nowrap"><thead><tr>'+H.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+
