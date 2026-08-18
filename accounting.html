@@ -4323,7 +4323,17 @@ async function parseBankPdf(file){ await loadPdfjs(); const buf=await file.array
   for(let p=1;p<=pdf.numPages;p++){ const page=await pdf.getPage(p); const tc=await page.getTextContent();
     // 🧩 تجميع العناصر في صفوف حسب الإحداثي Y (أقرب صف ضمن سماحية) ثم ترتيبها أفقياً حسب X — يصمد أمام تفكّك أعمدة كشوف البطاقة (كان الترتيب التسلسلي يفكّك الصف فتُسقَط حركات مثل صفوف OMR المحلية)
     const rws=[]; tc.items.forEach(it=>{ const y=it.transform[5], x=it.transform[4]; let r=null,best=3.2; for(const rr of rws){ const dy=Math.abs(rr.y-y); if(dy<=best){ best=dy; r=rr; } } if(!r){ r={y,items:[]}; rws.push(r); } r.items.push({x,s:it.str}); });
-    rws.sort((a,b)=>b.y-a.y); rws.forEach(r=>{ r.items.sort((a,b)=>a.x-b.x); text+=r.items.map(i=>i.s).join(' ')+'\n'; });
+    rws.sort((a,b)=>b.y-a.y);
+    // 🎯 دمج أسطر «البيان» (بلا زوج تاريخين) في أقرب صف تاريخ عموديّاً (Y) — عشان بيان/مرجع كل حركة يلتصق بحركتها الصحيحة تماماً كما في الكشف (كشوف بنك مسقط تلفّ البيان فوق/تحت سطر التاريخ فكان يلتصق بالحركة المجاورة)
+    const _rowTxt=r=>r.items.slice().sort((a,b)=>a.x-b.x).map(i=>i.s).join(' ');
+    const _isDate=r=>/(\d{2}[\/\-]\d{2}[\/\-]\d{4})[\s\S]{0,8}(\d{2}[\/\-]\d{2}[\/\-]\d{4})/.test(_rowTxt(r));
+    const _dRows=rws.filter(_isDate);
+    if(_dRows.length>=3){
+      rws.filter(r=>!_isDate(r)).forEach(nr=>{ let best=null,bd=1e9; for(const dr of _dRows){ const dd=Math.abs(dr.y-nr.y); if(dd<bd){ bd=dd; best=dr; } } if(best) best.items.push(...nr.items); });
+      _dRows.forEach(r=>{ r.items.sort((a,b)=>a.x-b.x); text+=r.items.map(i=>i.s).join(' ')+'\n'; });
+    } else {
+      rws.forEach(r=>{ r.items.sort((a,b)=>a.x-b.x); text+=r.items.map(i=>i.s).join(' ')+'\n'; });
+    }
   }
   return { txns:parseStmtTxns(text), header:parseStmtHeader(text), raw:text }; }
 function splitCsvLine(l,delim){ const out=[]; let cur='',q=false; for(let i=0;i<l.length;i++){ const c=l[i]; if(c==='"'){ q=!q; } else if(c===delim && !q){ out.push(cur); cur=''; } else cur+=c; } out.push(cur); return out; }
