@@ -4331,8 +4331,9 @@ async function parseBankPdf(file){ await loadPdfjs(); const buf=await file.array
     if(_dRows.length>=3){
       // 📏 حدّ مسافة نسبي: يُدمَج سطر البيان فقط إن كان قريباً جدّاً من حركته (~نصف تباعد الحركات) — يمنع اندماج ترويسة الصفحة/عنوان الأعمدة مع أول حركة، ويبقي أسطر البيان الملتفّة
       const _ys=_dRows.map(r=>r.y).sort((a,b)=>b-a); const _g=[]; for(let i=1;i<_ys.length;i++)_g.push(_ys[i-1]-_ys[i]); _g.sort((a,b)=>a-b); const _med=_g.length?_g[Math.floor(_g.length/2)]:40; const _TH=Math.max(12,_med*0.55);
-      rws.filter(r=>!_isDate(r)).forEach(nr=>{ let best=null,bd=1e9; for(const dr of _dRows){ const dd=Math.abs(dr.y-nr.y); if(dd<bd){ bd=dd; best=dr; } } if(best&&bd<=_TH) best.items.push(...nr.items); });
-      _dRows.forEach(r=>{ r.items.sort((a,b)=>a.x-b.x); text+=r.items.map(i=>i.s).join(' ')+'\n'; });
+      const _merged=new Set();
+      rws.filter(r=>!_isDate(r)).forEach(nr=>{ let best=null,bd=1e9; for(const dr of _dRows){ const dd=Math.abs(dr.y-nr.y); if(dd<bd){ bd=dd; best=dr; } } if(best&&bd<=_TH){ best.items.push(...nr.items); _merged.add(nr); } });
+      rws.forEach(r=>{ if(_merged.has(r))return; r.items.sort((a,b)=>a.x-b.x); text+=r.items.map(i=>i.s).join(' ')+'\n'; });   // 🧷 نُبقي الأسطر غير المدموجة (ترويسات الصفحة/الأعمدة) — لا نُسقطها، وإلا يفشل التعرّف على صيغة بعض الكشوف (مثل «Amount in Card» للبطاقة)
     } else {
       rws.forEach(r=>{ r.items.sort((a,b)=>a.x-b.x); text+=r.items.map(i=>i.s).join(' ')+'\n'; });
     }
