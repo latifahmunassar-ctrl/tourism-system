@@ -141,7 +141,10 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     // Town, but the tour names cite the attraction/town — not "كيب تاون" — so we
     // fold the landmarks into the pattern the way Istanbul embeds آيا صوفيا/فيالاند.
     { canonical: "Cape Town",    pattern: /كيب\s*تاون|cape\s*town|جزيرة\s*روبن|روبن|كيرستنبوش|kirstenbosch|robben|هيرموناس|الحيتان|whale|قفص\s*القرش|غانسباي|shark|الزيبلاين|زيبلاين|غرابو|أكويلا|اكويلا|aquila|الأوركيد|الاوركيد|المزارع/i },
-    { canonical: "Hermanus",     pattern: /(?:هارمونس|هارمانوس|هيرمانوس|هرمانوس)|hermanus/i },
+    // Hermanus/Overberg coast: نطابق اسم البلدة (بكل تهجئاتها) + أنشطتها الشاطئية
+    // (مشاهدة الحيتان، الغوص في قفص القرش بغانسباي) كي لا تُقفَل أيام هارمانوس بلا
+    // جولات. تبقى هذه الأنشطة متاحة لكيب تاون أيضاً (رحلة يوم) لأن نمطها يشملها.
+    { canonical: "Hermanus",     pattern: /(?:هارمونس|هارمانوس|هيرمانوس|هيرموناس|هرمانوس)|hermanus|الحيتان|whale|قفص\s*القرش|القرش|غانسباي|shark/i },
     { canonical: "Johannesburg", pattern: /جوهانسبر[جغ]|جوهانسبورغ|johannesburg|joburg/i },
     { canonical: "Pretoria",     pattern: /بريتوريا|pretoria/i },
     { canonical: "Sun City",     pattern: /سن\s*سيتي|sun\s*city/i },
