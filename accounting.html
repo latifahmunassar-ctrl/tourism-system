@@ -4292,7 +4292,10 @@ function parseStmtTxns(text){
     const rowsC=[]; let prevBal=null;
     while((m=C.exec(clean))){
       const post=m[1], body=m[2];
-      const nums=(body.match(/[\d,]+\.\d{2,3}/g)||[]).map(n=>Number(n.replace(/,/g,'')));
+      // 🩹 المبلغ والرصيد على «سطر التاريخ» فقط — لا من البيان الملتفّ على سطرين (يحوي مبالغ أجنبية/مراجع مثل «840.999.000@0.00395395» تُربك القراءة). آخر رقمين بسطر التاريخ = المبلغ ثم الرصيد.
+      const _dl=String(body).split('\n')[0]||'';
+      let nums=(_dl.match(/[\d,]+\.\d{2,3}/g)||[]).map(n=>Number(n.replace(/,/g,'')));
+      if(nums.length<2){ nums=(body.match(/[\d,]+\.\d{2,3}/g)||[]).map(n=>Number(n.replace(/,/g,''))); }   // احتياط لو انقسم السطر
       if(nums.length<2) continue;
       const bal=nums[nums.length-1], amt=nums[nums.length-2];
       const iso=post.slice(6,10)+'-'+post.slice(3,5)+'-'+post.slice(0,2);
