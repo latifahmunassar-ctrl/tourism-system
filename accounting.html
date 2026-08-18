@@ -1460,6 +1460,8 @@ async function fcdEditSave(){
   const arr=(($('fe-arr')||{}).value||''); const bdate=(($('fe-bdate')||{}).value||'');
   // ⛔ رفض: مرجع بنكي بلا اسم بنك
   if(ref && !bank){ msg.innerHTML='<span style="color:var(--red);font-weight:700">⛔ لا يمكن الحفظ: مرجع بنكي بلا اسم بنك — أضيفي اسم البنك أولاً.</span>'; if($('fe-bank'))$('fe-bank').focus(); return; }
+  // 📅 تاريخ الدفع إجباري عند وجود دفعة فعلية — يمنع الدفعات بلا تاريخ (كانت تلخبط المطابقة والفترات: دفعة أغسطس بلا تاريخ ظهرت بشهر خطأ)
+  if(paid>1 && !((($('fe-paydate')||{}).value)||'').trim()){ msg.innerHTML='<span style="color:var(--red);font-weight:700">⛔ لا يمكن الحفظ: دفعة بقيمة '+fmt(paid)+' بلا تاريخ دفع — «📅 تاريخ الدفع» إجباري.</span>'; if($('fe-paydate')){ $('fe-paydate').focus(); $('fe-paydate').style.border='2px solid var(--red)'; } return; }
   // 💱 منع اختلاف العملة عن عملة البنك المعتمدة
   const _mmE=bankCurMismatch(bank,cur);
   if(_mmE){ msg.innerHTML='<span style="color:var(--red);font-weight:700">⛔ حساب «'+esc(_mmE.bank)+'» بعملة '+esc(_mmE.bankCur)+' — القيمة يجب أن تكون بالـ'+esc(_mmE.bankCur)+' (اخترتِ '+esc(_mmE.entered)+').</span>'; if($('fe-cur'))$('fe-cur').focus(); return; }
@@ -7295,6 +7297,8 @@ async function save(){
   if(dest==='supplier'){ deliveredSupplier=(($('f-supplier')||{}).value||'').trim(); if(!deliveredSupplier){ $('msg').innerHTML='<span style="color:var(--red)">⚠️ اختاري اسم المورّد الذي سُلّم له المبلغ مباشرة</span>'; return; } bank='🤝 سُلّم للمورّد'; _refVal='تسليم مباشر · '+deliveredSupplier; supCur=(($('f-supcur')||{}).value||'').trim()||null; const _rateRaw=(($('f-suprate')||{}).value||'').trim(); if(!_rateRaw){ $('msg').innerHTML='<span style="color:var(--red)">⚠️ سعر صرف عملة المورّد إجباري — أدخليه</span>'; if($('f-suprate'))$('f-suprate').focus(); return; } supRate=+_rateRaw; if(!(supRate>0)){ $('msg').innerHTML='<span style="color:var(--red)">⚠️ سعر الصرف غير صحيح</span>'; if($('f-suprate'))$('f-suprate').focus(); return; } }
   // ⛔ رفض حفظ معاملة بمرجع بنكي بلا اسم بنك — لا بد من اسم البنك
   if(dest==='bank' && _ref && !bank){ $('msg').innerHTML='<span style="color:var(--red);font-weight:700">⛔ لا يمكن حفظ المعاملة: كتبتِ <b>مرجعاً بنكياً بلا اسم بنك</b> — أضيفي اسم البنك أولاً لحفظ المعاملة.</span>'; if($('f-bank'))$('f-bank').focus(); return; }
+  // 📅 تاريخ الدفع إجباري عند وجود دفعة فعلية — يمنع الدفعات بلا تاريخ (كانت تظهر بفترة/شهر خطأ في المطابقة)
+  if(paid>1 && !((($('f-paydate')||{}).value)||'').trim()){ $('msg').innerHTML='<span style="color:var(--red);font-weight:700">⛔ لا يمكن الحفظ: دفعة بقيمة '+fmt(paid)+' بلا تاريخ دفع — «📅 تاريخ الدفع» إجباري.</span>'; if($('f-paydate')){ try{ $('f-paydate').focus(); }catch(_){} } return; }
   // البنك والمرجع اختياريان — لا يمنعان توليد الكود. لكن قاعدة صارمة: المبلغ لا يُعتبر مسدَّداً إلا بمرجع بنكي
   // فالمدفوع غير الموثّق (بلا مرجع) لا يُحتسب، ويبقى ضمن المستحقات للمطالبة
   // تاريخ الاستحقاق إجباري إذا بقي على العميل مبلغ متبقٍّ (على المدفوع المُدخَل كما يعرضه الفورم)
