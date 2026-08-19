@@ -5792,9 +5792,10 @@ function renderSupplierDetail(){
       '<div style="font-size:12px;margin-bottom:6px">عملة المورّد: <b>'+esc(SCUR)+'</b></div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;background:#f6f8fc;border-radius:8px;padding:7px 10px"><label style="font-size:12px;font-weight:700">نوع الحركة:</label><select id="sp-txntype" onchange="spTxnTypeChange()" style="padding:4px 10px;font-size:12px"><option value="transfer">💸 تحويل للمورّد (خارج)</option><option value="refund">↩️ مرتجع من المورّد (وارد)</option></select><span id="sp-txntype-hint" style="font-size:10.5px;color:var(--muted)">مبلغ يخرج من حسابك للمورّد</span></div>'+
       '<div class="fgrid">'+
-        '<div class="fld"><label id="sp-gross-lbl">💰 إجمالي مبلغ التحويل (يترحّل للبنوك) <span style="color:var(--red)">*</span></label><input type="number" id="sp-gross" oninput="spTotal()" placeholder="0"></div>'+
+        '<div class="fld"><label id="sp-gross-lbl">💰 إجمالي مبلغ التحويل (يترحّل للبنوك) <span style="color:var(--red)">*</span></label><input type="number" id="sp-gross" oninput="spFromPayeeAmt()" placeholder="0"></div>'+
         '<div class="fld"><label>عملة الدفع الفعلية</label><select id="sp-cur" onchange="spRate(\''+esc(SCUR)+'\')">'+curOpts+'</select></div>'+
-        '<div class="fld" id="sp-rate-fld" style="display:none"><label>🏦 سعر صرف البنك (1 وحدة دفع = ؟ '+esc(SCUR)+') <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">متغيّر — أدخليه يدوياً كل دفعة</span></label><input type="number" id="sp-rate" step="0.0001" placeholder="سعر صرف البنك (متغيّر) — أدخليه لكل دفعة" oninput="spTotal()"></div>'+
+        '<div class="fld" id="sp-payeeamt-fld" style="display:none"><label>💵 المبلغ المطلوب من المورّد (بـ<span id="sp-palbl">'+esc(SCUR)+'</span>) <span style="font-size:9px;color:#0e9d6a">← أدخليه والسعر يُحسب تلقائيّاً</span></label><input type="number" id="sp-payee-amt" step="0.001" oninput="spFromPayeeAmt()" placeholder="0"></div>'+
+        '<div class="fld" id="sp-rate-fld" style="display:none"><label>🏦 سعر صرف البنك (1 وحدة دفع = ؟ '+esc(SCUR)+') <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">تلقائي من المبلغ أعلاه أو يدوي</span></label><input type="number" id="sp-rate" step="0.0001" placeholder="يُحسب من «المبلغ المطلوب» أو أدخليه يدوياً" oninput="spTotal()"></div>'+
         '<div class="fld"><label>البنك <span style="color:var(--red)">*</span></label><select id="sp-bank">'+bankOpts+'</select></div>'+
         '<div class="fld"><label>المرجع البنكي <span style="color:var(--red)">*</span></label><input id="sp-ref" placeholder="RD ..."></div>'+
         '<div class="fld"><label id="sp-date-lbl">تاريخ الدفع <span style="color:var(--red)">*</span></label><input type="date" id="sp-date" value="'+_todayStr()+'"></div>'+
@@ -6383,11 +6384,13 @@ async function saveSupInvoice(id,val){
 }
 function spRate(scur){
   const pc=$('sp-cur').value, fld=$('sp-rate-fld'), rf=$('sp-rate');
-  // لا تعبئة تلقائية — المالكة تعتمد سعر صرف البنك المتغيّر، تُدخله يدوياً في كل دفعة
-  if(pc===scur){ fld.style.display='none'; rf.value=''; }
-  else { fld.style.display=''; rf.value=''; rf.placeholder='سعر صرف البنك (متغيّر) — أدخليه لكل دفعة'; }
+  const paf=$('sp-payeeamt-fld'), pal=$('sp-palbl'); if(pal)pal.textContent=scur;
+  if(pc===scur){ fld.style.display='none'; rf.value=''; if(paf)paf.style.display='none'; if($('sp-payee-amt'))$('sp-payee-amt').value=''; }
+  else { fld.style.display=''; rf.value=''; rf.placeholder='يُحسب من «المبلغ المطلوب» أو أدخليه يدوياً'; if(paf)paf.style.display=''; }
   spTotal();
 }
+// 💵 «المبلغ المطلوب من المورّد» (بعملته) → سعر الصرف تلقائيّاً = المطلوب ÷ المدفوع (أدق من إدخال السعر يدويّاً)
+function spFromPayeeAmt(){ const g=Number(($('sp-gross')||{}).value)||0; const pa=Number(($('sp-payee-amt')||{}).value)||0; const rf=$('sp-rate'); if(rf && g>0 && pa>0){ rf.value=Number((pa/g).toFixed(6)); } spTotal(); }
 function spTotal(){
   const scur=supplierCurrency(($('supflt')||{}).value||'');
   let t=0; document.querySelectorAll('.sp-cli').forEach(i=>t+=Number(i.value)||0);   // الموزّع بعملة المورّد
