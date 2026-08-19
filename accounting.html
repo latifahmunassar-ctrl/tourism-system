@@ -4931,7 +4931,12 @@ function renderBankDetail(){
   if(!bank){ box.innerHTML=''; return; }
   const tx=bankTxAll().filter(x=>bankAlias(x.bank_name)===bank).slice().sort((a,b)=>{ const dc=String(b.tx_date||'').localeCompare(String(a.tx_date||'')); if(dc)return dc; return String(b.created_at||'').localeCompare(String(a.created_at||''))||String(String(b.id)).localeCompare(String(a.id)); });  // 📅 كشف البنك يُرتَّب بتاريخ الحركة تنازليّاً (كأي كشف بنك)، ووقت الإدخال فاصل للتواريخ المتساوية
   const cur=bankMainCur(tx);
-  const ti=tx.reduce((s,x)=>s+Number(x.amount_in||0),0), to=tx.reduce((s,x)=>s+Number(x.amount_out||0),0), net=ti-to;
+  // 💳 حساب البطاقة بالعماني: الحركة بعملة أجنبية تُعرض بقيمتها العمانية المخصومة (card_omr المُدخَلة في تبويب «فيزا كارد») مع ملاحظة بعملتها الأصلية بجانبها
+  const _om=(typeof cardOmrMap==='function')?cardOmrMap():{};
+  const _isCardAcct=(typeof isCardBank==='function'&&isCardBank(bank));
+  const _acctCur=String(cur||'').toUpperCase();
+  const cardAdj=(x)=>{ let i=Number(x.amount_in||0), o=Number(x.amount_out||0); const rc=String(x.currency||'').toUpperCase(); const foreign=!!(_isCardAcct&&rc&&_acctCur&&rc!==_acctCur); const hasOmr=(_om[String(x.id)]!=null); const rawVal=(o>0.005?o:i); if(_isCardAcct&&hasOmr){ const v=Number(_om[String(x.id)]); if(o>0.005)o=v; else if(i>0.005)i=v; } return {in:i,out:o,foreign,rawCur:rc,rawVal,hasOmr}; };
+  let ti=0,to=0; tx.forEach(x=>{ const a=cardAdj(x); ti+=a.in; to+=a.out; }); const net=ti-to;
   const agMap={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(c&&r.agent_name&&!agMap[c])agMap[c]=r.agent_name; });
   // تاريخ دفع كل حركة من First Client Data بمطابقة كود الدفعة (مع override المُدخل من الداشبورد)
   const fcdDateByCode={}; (DATA.fcd||[]).forEach(r=>{ if(r.payment_code && !fcdDateByCode[r.payment_code]) fcdDateByCode[r.payment_code]=String(r.payment_date||'').slice(0,10); });
@@ -4955,14 +4960,19 @@ function renderBankDetail(){
     '<div id="bnk-period" data-cur="'+esc(cur)+'"></div>'+
     '<div class="tbl-wrap bf-scroll" id="bnk-tbl"><table style="font-size:11px;white-space:nowrap"><thead><tr>'+H.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+
     (tx.length?tx.map(x=>{ const qd=((x.client_name||'')+' '+(x.client_code||'')+' '+(x.bank_ref||'')+' '+(x.note||'')).toLowerCase();
-      const pend=!!x._pending; const outV=pend?(x._pendingAmount||0):x.amount_out;
+      const adj=cardAdj(x);
+      const pend=!!x._pending; const outV=pend?(x._pendingAmount||0):adj.out; const inV=adj.in;
       const gray='#b7bec8';
-      const rStyle=pend?' data-pending="1" style="color:'+gray+';background:rgba(150,160,175,.06)"':'';
+      const curBadge=adj.foreign?(adj.hasOmr
+        ? '<span style="font-size:8.5px;background:rgba(14,157,106,.15);color:#0e7c50;font-weight:700;padding:0 5px;border-radius:6px;margin-inline-end:4px" title="القيمة المعروضة عمانية (مخصومة). الأصل: '+fmt(adj.rawVal)+' '+esc(adj.rawCur)+'">🔁 أصلها '+fmt(adj.rawVal)+' '+esc(adj.rawCur)+'</span>'
+        : '<span style="font-size:8.5px;background:rgba(217,138,0,.18);color:#b8860b;font-weight:700;padding:0 5px;border-radius:6px;margin-inline-end:4px" title="حركة بعملة '+esc(adj.rawCur)+' والحساب بالعماني. أدخلي قيمتها العمانية المخصومة في تبويب «فيزا كارد» لتظهر بالعماني وتُطابق كشف البطاقة">⚠️ بالـ'+esc(adj.rawCur)+' — أدخلي العماني في فيزا كارد</span>')
+        :'';
+      const rStyle=pend?' data-pending="1" style="color:'+gray+';background:rgba(150,160,175,.06)"':(adj.foreign&&!adj.hasOmr?' style="background:rgba(217,138,0,.05)"':'');
       const miss='⚠️ ناقص: '+esc((x._missing||[]).join(' + '))+' — لن ينعكس على الكشف حتى إكماله';
       const warn=pend?'<div style="font-size:9px;color:#d98a00;font-weight:800">'+miss+' <button class="btn ghost" style="padding:0 6px;font-size:9px" onclick="editRefundRef('+Number(x._rid)+')">✏️ إكمال</button></div>':'';
       const dCell=(pend&&!x.tx_date)?'<span style="color:#d98a00;font-weight:700">— ناقص</span>':esc(x.tx_date||'');
       const refCell=(pend&&!x.bank_ref)?'<span style="color:#d98a00;font-weight:700">— ناقص</span>':esc(x.bank_ref||'');
-      return '<tr data-q="'+esc(qd)+'" data-date="'+esc(x.tx_date||'')+'"'+rStyle+'><td>'+dCell+'</td><td style="font-size:10px">'+esc(payMethod(x.bank_name||bank))+'</td><td class="num" style="color:'+(pend?gray:'#0e9d6a')+'">'+(x.amount_in?fmt(x.amount_in):'')+'</td><td class="num'+(pend?'':' neg')+'"'+(pend?' style="color:'+gray+'"':'')+'>'+(outV?fmt(outV):'')+'</td><td>'+refCell+'</td><td>'+esc(x.client_name||'')+warn+'</td><td>'+esc(x.client_code||'')+'</td><td style="color:var(--muted)">'+esc(agMap[(x.client_code||'').toUpperCase()]||'')+'</td><td>'+esc(x.payment_code||'')+'</td><td style="font-weight:600;color:var(--accent)">'+esc(payDate(x.payment_code))+'</td><td style="font-size:10px">'+esc(x.note||'')+((isOwnerUser()&&typeof x.id!=='string'&&x.id!=null&&!x._pending)?' <button class="btn ghost" style="padding:0 6px;font-size:10px" title="تصنيف الحركة: قناة ← وصف ← تفاصيل ← فرعي" onclick="bankClassEdit('+x.id+')">🏷️</button>':'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.src_sheet||'')+'</td></tr>';
+      return '<tr data-q="'+esc(qd)+'" data-date="'+esc(x.tx_date||'')+'"'+rStyle+'><td>'+dCell+'</td><td style="font-size:10px">'+esc(payMethod(x.bank_name||bank))+'</td><td class="num" style="color:'+(pend?gray:'#0e9d6a')+'">'+(inV?fmt(inV):'')+'</td><td class="num'+(pend?'':' neg')+'"'+(pend?' style="color:'+gray+'"':'')+'>'+(outV?fmt(outV):'')+'</td><td>'+refCell+'</td><td>'+esc(x.client_name||'')+warn+'</td><td>'+esc(x.client_code||'')+'</td><td style="color:var(--muted)">'+esc(agMap[(x.client_code||'').toUpperCase()]||'')+'</td><td>'+esc(x.payment_code||'')+'</td><td style="font-weight:600;color:var(--accent)">'+esc(payDate(x.payment_code))+'</td><td style="font-size:10px">'+curBadge+esc(x.note||'')+((isOwnerUser()&&typeof x.id!=='string'&&x.id!=null&&!x._pending)?' <button class="btn ghost" style="padding:0 6px;font-size:10px" title="تصنيف الحركة: قناة ← وصف ← تفاصيل ← فرعي" onclick="bankClassEdit('+x.id+')">🏷️</button>':'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.src_sheet||'')+'</td></tr>';
     }).join(''):'<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:10px">لا توجد حركات</td></tr>')+
     '</tbody></table></div><div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'bnk-tbl\',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'bnk-tbl\',1)">تمرير ▶▶</button></div></div>';
 }
