@@ -4528,7 +4528,7 @@ function renderReconReport(r){
       const srcCell='<td style="font-size:10px;min-width:150px">'+esc(lab.t)+navBtn+'</td>';
       let act='<span style="font-size:9px;color:#9aa" title="دفعة حجز/مرتجع مشتقّة — تُعدَّل من مصدرها">🔒 غير قابلة</span>';
       if(dt==='fcdfix') act='<span style="font-size:9px;background:rgba(217,138,0,.16);color:#b8860b;font-weight:700;padding:1px 6px;border-radius:7px">💰 دفعة عميل</span> <button class="btn ghost" style="padding:2px 9px;font-size:11px;background:#3aa0ff;color:#fff;border-color:#3aa0ff" title="بنكها المسجّل قد يكون خاطئ — انقلها للبنك الصحيح في First Client Data" onclick="reconFixBank('+i+',this)">✏️ صحّح البنك</button>';
-      else if(dt) act='<button class="btn ghost" style="padding:2px 9px;font-size:11px;background:#0e9d6a;color:#fff;border-color:#0e9d6a" title="صحّحي المبلغ في نظامك إلى القيمة المكتوبة في كشف البنك (المصدر الأساسي)" onclick="reconEditAmount('+i+',this)">✏️ صحّح المبلغ</button> <button class="btn ghost" style="padding:2px 10px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="reconDelOne('+i+',this)">🗑️ حذف</button>';
+      else if(dt) act='<button class="btn ghost" style="padding:2px 9px;font-size:11px;background:#0e9d6a;color:#fff;border-color:#0e9d6a" title="صحّحي المبلغ في نظامك إلى القيمة المكتوبة في كشف البنك (المصدر الأساسي)" onclick="reconEditAmount('+i+',this)">✏️ صحّح المبلغ</button>'+(dt==='txn'?' <button class="btn ghost" style="padding:2px 9px;font-size:11px;background:#6c5ce7;color:#fff;border-color:#6c5ce7" title="انقلي الحركة إلى تاريخها الصحيح كما في كشف البنك — المرجع والمبلغ يبقيان كما هما تماماً (لدقّة كشف الاحتيال)" onclick="reconEditDate('+i+',this)">✏️ صحّح التاريخ</button>':'')+' <button class="btn ghost" style="padding:2px 10px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="reconDelOne('+i+',this)">🗑️ حذف</button>';
       return '<tr id="recdel-row-'+i+'"'+(dt==='fcdfix'?' style="background:rgba(217,138,0,.06)"':(x._near?' style="background:rgba(58,160,255,.06)"':''))+'><td>'+esc(x.date||'')+'</td><td class="num">'+(x.in>0.005?fd(x.in):'')+'</td><td class="num neg">'+(x.out>0.005?fd(x.out):'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(x.note||'')+(x._near?'<br><span style="font-size:9px;background:rgba(58,160,255,.16);color:#2563eb;font-weight:700;padding:1px 6px;border-radius:7px" title="توجد حركة بنفس المبلغ بالكشف بتاريخ قريب — غالباً هي نفسها بفرق تاريخ ترحيل بنكي. إن كانت هي فصحّحي تاريخها في نظامك، أو تجاهليها.">📅 احتمال فرق تاريخ — '+esc(x._near)+'</span>':'')+'</td>'+srcCell+(canDel?('<td style="white-space:nowrap">'+act+'</td>'):'')+'</tr>'; }).join('')+'</tbody></table></div></details>'; };
   h+=tblStmtOnly(r.stmtOnly)+tblSysOnly(r.sysOnly);
   window._lastReconReport=r;
@@ -4722,6 +4722,34 @@ async function reconEditAmount(i,btn){
     x._amtFixed=true; if(btn){ btn.textContent='✅ صُحّح'; btn.disabled=true; btn.style.background='#0e7c50'; btn.style.borderColor='#0e7c50'; btn.style.color='#fff'; }
     toast('✅ صُحّح المبلغ إلى '+nv+' — سيُطابَق الآن'); await load(); try{ runReconcile(); }catch(_){}
   }catch(e){ if(btn){ btn.disabled=false; btn.textContent='✏️ صحّح المبلغ'; } alert('خطأ: '+e.message); }
+}
+// 📅 تصحيح تاريخ حركة بنكية حقيقية (acc_bank_txn) — لمّا تظهر «في نظامك ومش بالكشف» لأن تاريخها مقروء خطأ من المزامنة (مثل value date أمريكية شهر/يوم قُرئت يوم/شهر).
+// لا يوجد إجراء update_bank_txn_date؛ فنعيد الإدخال بنفس المرجع والمبلغ والبنك تماماً بتاريخ صحيح. نضيف أولاً ثم نحذف (تفادياً لفقد الحركة لو فشلت خطوة).
+async function reconEditDate(i,btn){
+  if(!isOwnerUser()){ alert('⚠️ تصحيح التاريخ للمالكة فقط'); return; }
+  const x=(window._reconSysOnly||[])[i]; if(!x||x._dateFixed)return;
+  if(!(typeof x.id==='number'||/^\d+$/.test(String(x.id||'')))){ alert('⚠️ تصحيح التاريخ متاح للحركات البنكية الحقيقية فقط (acc_bank_txn). الحركات المشتقّة (دفعة/مرتجع) تُعدَّل من مصدرها.'); return; }
+  const row=(DATA.bankTx||[]).find(y=>String(y.id)===String(x.id));
+  if(!row){ alert('⚠️ لم أجد الحركة الأصلية في البيانات — حدّثي الصفحة (Cmd+Shift+R) ثم أعيدي.'); return; }
+  const cur=String(row.tx_date||'').slice(0,10);
+  const v=prompt('📅 التاريخ الصحيح كما في كشف البنك (بصيغة سنة-شهر-يوم):\n\n• المرجع: '+(row.bank_ref||row.note||'—')+'\n• داخل: '+fmt(Number(row.amount_in||0))+'   ·   خارج: '+fmt(Number(row.amount_out||0))+'\n• التاريخ الحالي: '+(cur||'—')+'\n\n⚠️ المرجع والمبلغ يبقيان كما هما تماماً — يتغيّر التاريخ فقط.', cur);
+  if(v==null)return;
+  const nd=String(v).trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(nd)){ alert('⚠️ صيغة غير صحيحة. اكتبي التاريخ هكذا تماماً: 2026-04-08'); return; }
+  if(nd===cur)return;
+  if(!confirm('تأكيد نقل الحركة إلى '+nd+'؟\n\n• المرجع (يبقى كما هو): '+(row.bank_ref||'—')+'\n• المبلغ يبقى كما هو (داخل '+fmt(Number(row.amount_in||0))+' · خارج '+fmt(Number(row.amount_out||0))+')\n• يتغيّر التاريخ فقط: '+(cur||'—')+' ← '+nd)) return;
+  if(btn){ btn.disabled=true; btn.textContent='⏳'; }
+  try{
+    // 1) نضيف النسخة الجديدة أولاً بنفس المرجع/المبلغ/البنك بالضبط
+    const ar=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_bank_txn',payload:{tx_date:nd,amount_in:Number(row.amount_in||0),amount_out:Number(row.amount_out||0),bank_name:row.bank_name||'',bank_ref:row.bank_ref||'',note:row.note||''}})});
+    const aj=await ar.json(); if(aj.error||!aj.ok) throw new Error(aj.error||'تعذّرت إضافة النسخة الجديدة');
+    // 2) نحذف القديمة — لو فشل الحذف: تنبيه بوجود نسخة قديمة (تكرار قابل للحذف) بلا فقد بيانات
+    const dr=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_bank_txn',payload:{id:row.id,allow_sheet:true}})});
+    const dj=await dr.json();
+    if(dj.error){ alert('⚠️ أُضيفت النسخة الصحيحة ('+nd+') لكن تعذّر حذف القديمة ('+cur+'):\n'+dj.error+'\nاحذفي القديمة يدويّاً من تبويب البنوك لتفادي التكرار.'); }
+    x._dateFixed=true; if(btn){ btn.textContent='✅ صُحّح'; btn.disabled=true; btn.style.background='#0e7c50'; btn.style.borderColor='#0e7c50'; btn.style.color='#fff'; }
+    toast('✅ نُقلت الحركة إلى '+nd+' (نفس المرجع والمبلغ) — ستُطابَق الآن'); await load(); try{ runReconcile(); }catch(_){}
+  }catch(e){ if(btn){ btn.disabled=false; btn.textContent='✏️ صحّح التاريخ'; } alert('خطأ: '+e.message); }
 }
 // 💰 تصحيح بنك دفعة عميل (First Client Data) — لمّا تظهر «في نظامك ومش بالكشف» لأن بنكها المسجّل خاطئ. تُنقَل للبنك الصحيح عبر set_fcd_bankref.
 function reconFixBank(i,btn){
