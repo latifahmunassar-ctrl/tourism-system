@@ -5678,6 +5678,9 @@ function renderSupplierDetail(){
   const invEnteredCount=list.filter(x=>x.actual_invoice!=null&&String(x.actual_invoice).trim()!=='').length;
   const curStr1=(v)=>'<b>'+fmt(v)+'</b> '+esc(SCUR);
   const balStr='<b style="color:'+(balT>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(balT)+'</b> '+esc(SCUR);
+  // 🧾 رصيد ثانٍ = حسب «إجمالي فاتورة المورّد» المُدخَلة يدويّاً (بدل قيمة الحجز في النظام) — قرار المالكة
+  const balInv=invEnteredTotal-paidT;
+  const balInvStr='<b style="color:'+(Math.abs(balInv)<0.5?'#0e9d6a':(balInv>0?'#b8860b':'#d11'))+'">'+fmt(balInv)+'</b> '+esc(SCUR);
   // قائمة البنك تعتمد القائمة المُدارة في قسم البيانات فقط (لا أسماء بنوك قديمة من الحقول)؛ الإدخالات القديمة محفوظة كما هي
   const bankOpts='<option value="">— اختاري البنك —</option>'+listValues('banks').map(b=>'<option>'+esc(b.value)+'</option>').join('');
   const curOpts=[SCUR,...['SAR','USD','OMR','AED','EUR','MYR','SGD'].filter(c=>c!==SCUR)].map(c=>'<option>'+esc(c)+'</option>').join('');
@@ -5760,7 +5763,8 @@ function renderSupplierDetail(){
       '<span>💰 إجمالي الحجوزات (المستحق): '+curStr1(owedT)+'</span>'+
       '<span>🧾 إجمالي فاتورة المورّد: <b>'+fmt(invEnteredTotal)+'</b> '+esc(SCUR)+' <span style="font-size:10px;color:var(--muted)">('+invEnteredCount+' مُدخَلة يدويّاً'+(invEnteredCount<list.length?(' من '+list.length):'')+')</span></span>'+
       '<span>✅ المدفوع: '+curStr1(paidT)+'</span>'+
-      '<span>📌 الرصيد المتبقّي: '+balStr+'</span>'+
+      '<span>📌 الرصيد المتبقّي <span style="font-size:9px;color:#0e9d6a;font-weight:700">(حسب فاتورة المورّد)</span>: '+balInvStr+'</span>'+
+      '<span>📊 الرصيد <span style="font-size:9px;color:var(--muted)">(حسب قيم النظام/الحجوزات)</span>: '+balStr+'</span>'+
     '</div>'+
     // 🪙 عملة المورّد المعتمدة: تُدخَل أول مرة مباشرة، وأي تغيير لاحق يتطلب موافقة المالكة — تُطبَّق على كل أرقام الكشف
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;border-top:1px solid var(--line);padding-top:10px;font-size:13px">'+
