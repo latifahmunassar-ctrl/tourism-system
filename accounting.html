@@ -6522,6 +6522,7 @@ function spEditTransfer(btn){
   // 💱 العملة المدفوعة + سعر الصرف الحاليان (من سجل الدفعة — يُطبَّق التعديل على كل صفوف التحويل)
   const _pr=(DATA.supplierPayments||[]).find(pp=>String(pp.id)===String(ids[0]))||{};
   const curCur=_pr.currency||''; const curRate=(_pr.currency_rate!=null&&_pr.currency_rate!=='')?_pr.currency_rate:'';
+  const _scur=(typeof supplierCurrency==='function')?(supplierCurrency(sup)||curCur):curCur;   // عملة المورّد المعتمدة (للحقل الجديد «المطلوب»)
   const curList=[...new Set([curCur,'OMR','SAR','USD','AED','EUR','MYR','SGD','GBP','THB',...listValues('currency').map(v=>v.value)])].filter(Boolean);
   const curOpts='<option value="">— بلا —</option>'+curList.map(c=>'<option'+(c===curCur?' selected':'')+'>'+esc(c)+'</option>').join('');
   const bankOpts='<option value="">— اختاري البنك —</option>'+listValues('banks').map(b=>'<option'+(String(b.value)===curBank?' selected':'')+'>'+esc(b.value)+'</option>').join('')+(curBank&&!listValues('banks').some(b=>String(b.value)===curBank)?'<option selected>'+esc(curBank)+'</option>':'');
@@ -6531,8 +6532,9 @@ function spEditTransfer(btn){
   m.innerHTML='<div style="background:var(--card,#fff);color:var(--txt,#111);border-radius:14px;padding:18px 20px;width:min(440px,92vw);box-shadow:0 10px 40px rgba(0,0,0,.35)">'+
     '<h3 style="margin:0 0 3px;color:var(--accent)">✏️ تعديل التحويل البنكي</h3>'+
     '<div style="font-size:11px;color:var(--muted);margin-bottom:13px">'+esc(sup)+' · '+ids.length+' عميل · '+(isOwnerUser()?'<b style="color:#0e9d6a">يُطبَّق مباشرة</b>':'<b style="color:#b8860b">يُرسَل لموافقة المالكة</b>')+'</div>'+
-    '<div class="fld" style="margin-bottom:9px"><label>💰 قيمة المبلغ المدفوع'+(single?'':' <span style="color:#b8860b;font-size:9px">🔁 موزّع على '+ids.length+' سجل — تعديل الإجمالي يُوزَّع نسبيّاً عليها</span>')+'</label><input type="number" id="tre-amt" step="any" value="'+esc(curSum)+'" style="width:100%"></div>'+
-    '<div style="display:flex;gap:8px;margin-bottom:9px"><div class="fld" style="flex:1;margin:0"><label>💱 العملة المدفوعة</label><select id="tre-cur" style="width:100%">'+curOpts+'</select></div><div class="fld" style="flex:1;margin:0"><label>🔁 سعر الصرف</label><input type="number" id="tre-rate" step="any" placeholder="—" value="'+esc(curRate)+'" style="width:100%"></div></div>'+
+    '<div class="fld" style="margin-bottom:9px"><label>💰 قيمة المبلغ المدفوع (الخارج من البنك)'+(single?'':' <span style="color:#b8860b;font-size:9px">🔁 موزّع على '+ids.length+' سجل — تعديل الإجمالي يُوزَّع نسبيّاً عليها</span>')+'</label><input type="number" id="tre-amt" step="any" value="'+esc(curSum)+'" oninput="treFromPayeeAmt()" style="width:100%"></div>'+
+    '<div class="fld" style="margin-bottom:9px"><label>💵 المبلغ المطلوب من المورّد (بـ'+esc(_scur)+') <span style="font-size:9px;color:#0e9d6a">← أدخليه والسعر يُحسب تلقائيّاً</span></label><input type="number" id="tre-payee-amt" step="any" oninput="treFromPayeeAmt()" placeholder="اختياري — للحساب التلقائي" style="width:100%"></div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:9px"><div class="fld" style="flex:1;margin:0"><label>💱 العملة المدفوعة</label><select id="tre-cur" style="width:100%">'+curOpts+'</select></div><div class="fld" style="flex:1;margin:0"><label>🔁 سعر الصرف <span style="font-size:9px;color:var(--muted)">تلقائي أو يدوي</span></label><input type="number" id="tre-rate" step="any" placeholder="—" value="'+esc(curRate)+'" style="width:100%"></div></div>'+
     '<div style="font-size:10px;color:var(--muted);margin:-4px 0 9px">تعديل العملة/السعر يُطبَّق على سجل دفعة المورّد (لضبط كشف حسابه)؛ لا يمسّ عملة الحركة البنكية.</div>'+
     '<div class="fld" style="margin-bottom:9px"><label>🏦 اسم البنك</label><select id="tre-bank" style="width:100%">'+bankOpts+'</select></div>'+
     '<div class="fld" style="margin-bottom:9px"><label>🔖 المرجع البنكي'+(canRef?'':' <span style="color:#d11;font-size:9px">🔒 المحاسب/المالكة فقط</span>')+'</label><input id="tre-ref" value="'+esc(curRef)+'" style="width:100%"'+(canRef?'':' disabled')+'></div>'+
@@ -6543,6 +6545,8 @@ function spEditTransfer(btn){
   document.body.appendChild(m);
   $('tre-save').onclick=()=>saveSpTransferEdit(ids, txn, sup, canRef, single, curSum, curCur, curRate);
 }
+// 💵 حقل «المطلوب من المورّد» في نافذة التعديل → السعر تلقائيّاً = المطلوب ÷ المدفوع (نفس اتجاه فورم الإدخال: القابل للتوزيع = المدفوع × السعر)
+function treFromPayeeAmt(){ const g=Number(($('tre-amt')||{}).value)||0; const pa=Number(($('tre-payee-amt')||{}).value)||0; const rf=$('tre-rate'); if(rf && g>0 && pa>0){ rf.value=Number((pa/g).toFixed(6)); } }
 async function saveSpTransferEdit(ids, txn, sup, canRef, single, curSum, curCur, curRate){
   const bank=($('tre-bank').value||'').trim(); const ref=($('tre-ref').value||'').trim(); const date=($('tre-date').value||'')||null;
   const msg=$('tre-msg');
