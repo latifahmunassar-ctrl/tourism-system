@@ -770,6 +770,9 @@ function flightCityMatches(a: string, b: string): boolean {
 // مثال: أوزنجول/آيدر/ريزه تُخدَم بمطار طرابزون، فالطيران من اسطنبول إليها = اسطنبول→طرابزون.
 const AIRPORT_REGION: Array<{ airport: string; pattern: RegExp }> = [
   { airport: "Trabzon", pattern: /uzungol|[أا]وزنجول|[أا]وزونغول|ayder|[أآا]يدر|rize|ريز[ها]?/i },
+  // فيتنام: ها لونج وسابا بلا مطار — تُخدَمان بمطار هانوي، فالطيران منهما = من/إلى هانوي.
+  { airport: "Ha Noi", pattern: /ha\s*long|halong|هالون[جغ]|ها\s*لون[جغ]/i },
+  { airport: "Ha Noi", pattern: /\bsapa\b|سابا/i },
 ];
 function flightAirportCity(city: string): string {
   const hit = AIRPORT_REGION.find(r => r.pattern.test(city));
@@ -1463,7 +1466,10 @@ export function formatProgram(data: ProgramData): string {
   out += `DATE_FROM:${formatArabicDate(startDate)}\n`;
   out += `DATE_TO:${formatArabicDate(endDate)}\n`;
   out += `CLIENT:${adults === 2 ? "شخصان بالغان" : `${adults} بالغين`}${childSuffix}\n`;
-  out += `CLIENT_CODE:ALZ-2026-001\n\n`;
+  // كود العميل يُترك فارغاً — الموظف يُدخله لاحقاً، والنظام يولّد الكود النظامي
+  // الفريد عند الحفظ. ❌ لا نطبع كوداً ثابتاً (كان ALZ-2026-001 يتكرر على كل
+  // البرامج فيرجع الاسترجاع بكود العميل برنامجاً خاطئاً).
+  out += `CLIENT_CODE:\n\n`;
 
   // ── HOTELS ───────────────────────────────────────────────────────────
   out += "HOTELS:\n";

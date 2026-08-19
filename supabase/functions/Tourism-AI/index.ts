@@ -1126,6 +1126,7 @@ function buildSystemPrompt(dataContext: string, frontendFormat: string): string 
 النمط (أ) — بناء برنامج كامل:
   - يبدأ مباشرةً بـ "DEST:" (الـ token الأوّل بحرف D)
   - يحوي كل الأقسام: DEST، META، DATE_FROM، DATE_TO، CLIENT، CLIENT_CODE، HOTELS، FLIGHTS، TRANSFERS، TOURS، SUMMARY
+  - ⚠️ **CLIENT_CODE: اتركه فارغاً دائماً** (اكتب السطر «CLIENT_CODE:» بلا أي قيمة). ❌ ممنوع منعاً باتاً كتابة أي كود مثل «ALZ-2026-001» أو اختراع كود؛ كود العميل يُدخله الموظف لاحقاً، والنظام يولّد الكود النظامي الفريد عند الحفظ.
   - ينتهي بسطر CHAT: واحد فقط مع جملة قصيرة جداً (1-2 جملة)
 
 النمط (ب) — سؤال أو رفض قصير:
@@ -2223,7 +2224,7 @@ META:[عدد الايام] ايام | [عدد الليالي] ليالي | [ال
 DATE_FROM:[تاريخ البداية]
 DATE_TO:[تاريخ النهاية]
 CLIENT:[وصف العميل]
-CLIENT_CODE:ALZ-2026-001
+CLIENT_CODE:
 
 HOTELS:
 [اسم الفندق] | [المنطقة] | [النجوم] نجوم | [نوع الغرفة] | [السعر] ريال/ليلة | [عدد الليالي] ليالي | [ما يشمل]
@@ -3325,7 +3326,27 @@ Deno.serve(async (req) => {
       messages,
     });
 
-    return new Response(JSON.stringify(response), { headers: CORS_HEADERS });
+    // احترازياً: النموذج يُصرّ أحياناً على طبع كود عميل ثابت (مثل ALZ-2026-001)
+    // لكل برنامج رغم القالب الفارغ — نُفرّغه حتميّاً هنا. كود العميل يُدخله الموظف،
+    // والنظام يولّد الكود النظامي الفريد عند الحفظ. هذا يمنع تكرار نفس كود العميل
+    // على مئات البرامج (فيرجع الاسترجاع بكود العميل برنامجاً خاطئاً).
+    // نعمل على نسخة عميقة لأن كائن رد الـSDK قد يكون مجمّداً (التعديل المباشر يفشل صامتاً).
+    let outBody: string;
+    try {
+      const cloned = JSON.parse(JSON.stringify(response)) as { content?: Array<{ type?: string; text?: string }> };
+      if (Array.isArray(cloned.content)) {
+        for (const blk of cloned.content) {
+          if (blk && blk.type === "text" && typeof blk.text === "string") {
+            blk.text = blk.text.replace(/^([ \t]*CLIENT_CODE:).*$/im, "$1");
+          }
+        }
+      }
+      outBody = JSON.stringify(cloned);
+    } catch (_e) {
+      outBody = JSON.stringify(response);   // fallback: لا نُفشل الرد
+    }
+
+    return new Response(outBody, { headers: CORS_HEADERS });
 
   } catch (error) {
     return new Response(
