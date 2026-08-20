@@ -1494,7 +1494,7 @@ async function fcdEditSave(){
         if(_rk && paid>0 && Math.abs(paid-_oldPaid)>0.005){ const _raw=(DATA.bankTx||[]).find(x=>String(x.bank_ref||'').trim().toUpperCase()===_rk);
           if(_raw){ const _isIn=Number(_raw.amount_in||0)>0.005; const _ra=_isIn?Number(_raw.amount_in||0):Number(_raw.amount_out||0);
             if(Math.abs(_ra-_oldPaid)<0.02){ const _sr=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_bank_txn_amount',payload:{id:_raw.id,amount_in:_isIn?paid:0,amount_out:_isIn?0:paid,allow_sheet:true}})}); const _sj=await _sr.json(); if(!_sj.error&&typeof toast==='function')toast('🔄 زُومِنت الحركة البنكية المطابقة — انعكس في الكشف'); } } } }catch(_e){}
-      $('fcdeditmodal').classList.remove('on'); await load(); }catch(e){ msg.innerHTML='<span style="color:var(--red)">خطأ: '+esc(e.message)+'</span>'; }
+      $('fcdeditmodal').classList.remove('on'); await load(); reconAutoRefresh(); }catch(e){ msg.innerHTML='<span style="color:var(--red)">خطأ: '+esc(e.message)+'</span>'; }
     return;
   }
   // المحاسب: يحتاج موافقة المالكة — سبب إجباري
@@ -4438,6 +4438,8 @@ function reconRawFilter(){ const q=(($('recraw-q')||{}).value||'').trim(); const
   const nz=s=>String(s||'').toLowerCase().replace(/[,\s]/g,'');   // تطبيع: يتجاهل الفواصل والمسافات (فبحث 4137 يلقى 4,137)
   const qn=nz(q); const lines=raw.split('\n'); const hit=lines.filter(l=>l.toLowerCase().indexOf(q.toLowerCase())>=0 || nz(l).indexOf(qn)>=0);
   ta.value=hit.length?('— الأسطر المطابقة لـ «'+q+'» ('+hit.length+') —\n\n'+hit.join('\n')):('لا سطر يحتوي «'+q+'» (حتى مع تجاهل الفواصل).\nيعني المبلغ غير موجود في نص الكشف المُستخرَج — الكشف غالباً صورة/سكان (بلا طبقة نص)، أو منسّق بشكل يمنع قراءة الرقم.\n\nالحل: صدّري الكشف من تطبيق ظفار كـ CSV، أو اضغطي «📋 نسخ الكل» وأرسلي النص للمساعد.'); }
+// 🔄 المرحلة 1: إعادة تشغيل المطابقة تلقائيّاً بعد أي تعديل مالي — فقط إن كانت المطابقة مُفعّلة (بنك مختار + ملف مرفوع)، فلا تزعج خارج سياق المطابقة. يمنع بقاء نتيجة مطابقة قديمة بعد تغيّر البيانات.
+function reconAutoRefresh(){ try{ const b=($('rec-bank')||{}).value; const f=($('rec-file')&&$('rec-file').files&&$('rec-file').files.length); if(b&&f&&typeof runReconcile==='function'){ runReconcile(); } }catch(_){} }
 function runReconcile(){
   const bank=($('rec-bank')||{}).value||'', from=($('rec-from')||{}).value||'', to=($('rec-to')||{}).value||'';
   const file=($('rec-file')&&$('rec-file').files)?$('rec-file').files[0]:null;
@@ -6613,9 +6615,11 @@ async function saveSpTransferEdit(ids, txn, sup, canRef, single, curSum, curCur,
       try{
         const _rk=String(ref||'').trim().toUpperCase();
         if(_rk){ const _raw=(DATA.bankTx||[]).find(x=>String(x.bank_ref||'').trim().toUpperCase()===_rk);
-          if(_raw){ const _isIn=Number(_raw.amount_in||0)>0.005; const _ra=_isIn?Number(_raw.amount_in||0):Number(_raw.amount_out||0); const _nv=Number(payload.amount);
-            if(_nv>0 && Math.abs(_ra-Number(curSum||0))<0.02 && Math.abs(_nv-_ra)>0.005){
-              const _sr=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_bank_txn_amount',payload:{id:_raw.id,amount_in:_isIn?_nv:0,amount_out:_isIn?0:_nv,allow_sheet:true}})});
+          if(_raw){ const _isIn=Number(_raw.amount_in||0)>0.005; const _ra=_isIn?Number(_raw.amount_in||0):Number(_raw.amount_out||0);
+            // 🔢 مقارنة بالقيمة المطلقة (المرتجع سالب في الدفعة لكن موجب داخل بالبنك) — يحافظ على اتجاه الحركة (داخل/خارج) ويحدّث المقدار فقط
+            const _oldAbs=Math.abs(Number(curSum||0)), _newAbs=Math.abs(Number(payload.amount||0));
+            if(_newAbs>0 && Math.abs(_ra-_oldAbs)<0.02 && Math.abs(_newAbs-_ra)>0.005){
+              const _sr=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_bank_txn_amount',payload:{id:_raw.id,amount_in:_isIn?_newAbs:0,amount_out:_isIn?0:_newAbs,allow_sheet:true}})});
               const _sj=await _sr.json(); if(!_sj.error)_synced=true;
             }
           }
@@ -6625,7 +6629,7 @@ async function saveSpTransferEdit(ids, txn, sup, canRef, single, curSum, curCur,
     const _bits=[]; if(payload.amount!=null)_bits.push('المبلغ'); if('currency' in payload)_bits.push('العملة'); if('currency_rate' in payload)_bits.push('سعر الصرف'); if(payload.bank_name||('bank_ref' in payload)||payload.payment_date)_bits.push('البنك/المرجع/التاريخ');
     alert(j.pending?('🔒 '+(j.msg||'أُرسل طلب تعديل التحويل لموافقة المالكة — لن يتغيّر حتى الاعتماد')):'✅ تم تعديل التحويل'+(_bits.length?' ('+_bits.join(' + ')+')':'')+(_synced?'\n🔄 وزُومِنت الحركة البنكية المطابقة — انعكس في كشف البنك (أعيدي «قارني» للتحديث).':''));
     const cur=($('supflt')||{}).value||''; await load(); if($('supflt')){ $('supflt').value=cur; renderSupplierDetail(); }
-    if(_synced){ try{ if(typeof runReconcile==='function' && window._recRaw){ runReconcile(); } }catch(_){} }
+    reconAutoRefresh();   // 🔄 تُعاد المطابقة تلقائيّاً إن كانت مُفعّلة (لا تبقى نتيجة قديمة)
   }catch(e){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(e.message); }
 }
 // 🔵 إلغاء تخصيص دفعة مورّد — تصير «غير موزّعة» حتى تُوزَّع من جديد (للمالكة فقط)
@@ -6661,6 +6665,7 @@ async function supDeleteGroup(idsCsv){
   }
   if(ok&&typeof toast==='function')toast('✅ حُذف '+ok+' — انعكس في الكشف');
   await load(); if($('supflt')){ $('supflt').value=sup; renderSupplierDetail(); }
+  reconAutoRefresh();   // 🔄 تُعاد المطابقة تلقائيّاً بعد الحذف
 }
 function renderOverview(){
   if(!DATA) return;
