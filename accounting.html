@@ -4604,12 +4604,18 @@ async function _reconInsertTxn(x,bank,chan,desc,det,sub){
 // 🔎 كاشف تكرار (تنبيه فقط، لا يمنع): يبحث عن حركة موجودة بنفس البنك + المبلغ + التاريخ (حتى لو المرجع مختلف)
 function reconFindDup(x,bank){
   const amtOut=Number(x.out||0), amtIn=Number(x.in||0); const dt=String(x.date||'').slice(0,10);
+  // 🔖 معرّف جوهري من المرجع (رقم طويل بعد BMCT/SD/LFT…) — لمسك نفس الحركة بتاريخ مختلف (التواريخ المقلوبة)
+  const coreOf=r=>{ const m=String(r||'').toUpperCase().match(/(?:BMCT|SD|LFT|FT|IRM|BDAF|IB_TT_CHARGES|OUR_CHRG)\D*?(\d{6,})/); return m?m[1]:null; };
+  const xCore=coreOf(x.remarks||x.note||'');
   const hits=(typeof bankTxAll==='function'?bankTxAll():[]).filter(y=>{
     if(bankAlias(y.bank_name)!==bank) return false;
     const yo=Number(y.amount_out||0), yi=Number(y.amount_in||0);
-    if(Math.abs(yo-amtOut)>0.01 || Math.abs(yi-amtIn)>0.01) return false;   // نفس المبلغ (داخل/خارج)
-    if(dt && String(y.tx_date||'').slice(0,10)!==dt) return false;           // نفس التاريخ
-    return true;
+    if(Math.abs(yo-amtOut)>0.01 || Math.abs(yi-amtIn)>0.01) return false;   // نفس المبلغ (داخل/خارج) — إلزامي
+    const ydt=String(y.tx_date||'').slice(0,10);
+    if(dt && ydt===dt) return true;                                          // نفس التاريخ + المبلغ
+    const yCore=coreOf(y.bank_ref||y.note||'');
+    if(xCore && yCore && xCore===yCore) return true;                         // نفس المبلغ + نفس المرجع الجوهري بأي تاريخ = نفس الحركة (تاريخ مقلوب)
+    return false;
   });
   return hits;
 }
@@ -4643,12 +4649,15 @@ async function reconAddAll(bank){
   if(_noClass.length){ centerNotice('🏷️ أدخلي التصنيف أوّلاً — '+_noClass.length+' حركة بلا تصنيف'+(defChan?'':' (حدّدي «تصنيف للكل» أو صنّفي كل حركة)')); return; }
   const defTxt=[defChan,defDesc,defDet,defSub].filter(Boolean).join(' ← ')||'— بلا تصنيف —';
   // 🔎 تنبيه تكرار جماعي: كم حركة منها مشابهة لموجود مسبقاً
+  // 🔒 المرحلة 2: نتخطّى المكرّر تلقائيّاً (نفس البنك+المبلغ+التاريخ موجود مسبقاً) ونُدخل الجديد فقط — منعاً للتكرار الجماعي (كان أكبر مصدر للنسخ المكرّرة)
   const dups=arr.filter(x=>reconFindDup(x,bank).length>0);
+  const fresh=arr.filter(x=>reconFindDup(x,bank).length===0);
+  if(!fresh.length){ centerNotice('⏭️ كل الحركات موجودة مسبقاً في نظامك — لا جديد للإدخال (تفادينا التكرار الجماعي)'); return; }
   let dupTxt='';
-  if(dups.length){ dupTxt='\n\n⚠️ '+dups.length+' من هذه الحركات تشبه حركات مسجّلة مسبقاً (نفس البنك والمبلغ والتاريخ) — قد تكون مكرّرة:\n'+dups.slice(0,8).map(x=>'   • '+(x.date||'')+' · خارج '+fmt(x.out||0)+' · داخل '+fmt(x.in||0)).join('\n')+(dups.length>8?('\n   … و'+(dups.length-8)+' غيرها'):'')+'\n\nالقرار لكِ: أكملي إن كانت مختلفة فعلاً، أو ألغي وأدخلي الجديدة فقط يدويّاً.'; }
-  if(!confirm('➕ إدخال '+arr.length+' حركة دفعة واحدة إلى سجل البنك «'+bank+'»؟\n\nالتصنيف الافتراضي: '+defTxt+'\n(الحركة التي لها تصنيف خاص من عمودها يُعتمد لها.)\nكلها تُسجَّل بتاريخها ومبلغها وبيانها، وتُطابَق تلقائيّاً.'+dupTxt))return;
+  if(dups.length){ dupTxt='\n\n⏭️ سأتخطّى '+dups.length+' حركة موجودة مسبقاً (نفس البنك والمبلغ والتاريخ) منعاً للتكرار:\n'+dups.slice(0,6).map(x=>'   • '+(x.date||'')+' · خارج '+fmt(x.out||0)+' · داخل '+fmt(x.in||0)).join('\n')+(dups.length>6?('\n   … و'+(dups.length-6)+' غيرها'):'')+'\n(لو وحدة منها مختلفة فعلاً، أدخليها يدويّاً بزر «➕ أدخلها».)'; }
+  if(!confirm('➕ إدخال '+fresh.length+' حركة جديدة'+(dups.length?(' فقط (وتخطّي '+dups.length+' مكرّرة)'):'')+' إلى سجل البنك «'+bank+'»؟\n\nالتصنيف الافتراضي: '+defTxt+'\n(الحركة التي لها تصنيف خاص من عمودها يُعتمد لها.)\nكلها تُسجَّل بتاريخها ومبلغها وبيانها، وتُطابَق تلقائيّاً.'+dupTxt))return;
   let ok=0,fail=0;
-  for(const x of arr){ const ix=idxOf(x); const oc=(($('recadd-chan-'+ix)||{}).value||'').trim(); const od=(($('recadd-desc-'+ix)||{}).value||'').trim(); const ot=(($('recadd-det-'+ix)||{}).value||'').trim(); const os=(($('recadd-sub-'+ix)||{}).value||'').trim(); const chan=oc||defChan; const desc=oc?od:defDesc; const det=oc?ot:defDet; const sub=oc?os:defSub; try{ await _reconInsertTxn(x,bank,chan,desc,det,sub); x._added=true; ok++; }catch(e){ fail++; } }
+  for(const x of fresh){ const ix=idxOf(x); const oc=(($('recadd-chan-'+ix)||{}).value||'').trim(); const od=(($('recadd-desc-'+ix)||{}).value||'').trim(); const ot=(($('recadd-det-'+ix)||{}).value||'').trim(); const os=(($('recadd-sub-'+ix)||{}).value||'').trim(); const chan=oc||defChan; const desc=oc?od:defDesc; const det=oc?ot:defDet; const sub=oc?os:defSub; try{ await _reconInsertTxn(x,bank,chan,desc,det,sub); x._added=true; ok++; }catch(e){ fail++; } }
   toast('✅ أُدخلت '+ok+' حركة'+(fail?(' · تعذّر '+fail):''));
   await load();
   try{ runReconcile(); }catch(_){}
