@@ -1489,6 +1489,11 @@ async function fcdEditSave(){
       // 🧭 الوكيل الجديد يُضاف تلقائيّاً للقائمة المُدارة (يظهر في كل الشاشات)
       const _ag=String(base.agent_name||'').trim();
       if(_ag && !(typeof listValues==='function'?listValues('agents'):[]).some(v=>String(v.value||'').trim().toLowerCase()===_ag.toLowerCase())){ try{ await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_list_item',payload:{category:'agents',value:_ag}})}); toast('✅ أُضيف الوكيل «'+_ag+'» للقائمة'); }catch(_){} }
+      // 🔄 مزامنة تلقائية للجذر: حدّث الحركة البنكية الخام المطابقة (نفس المرجع، كانت مساوية للمبلغ القديم) لينعكس تعديل المبلغ فوراً في كشف البنك
+      try{ const _oldPaid=Number((FE_ROW&&FE_ROW.amount_paid)||0); const _rk=String(ref||'').trim().toUpperCase();
+        if(_rk && paid>0 && Math.abs(paid-_oldPaid)>0.005){ const _raw=(DATA.bankTx||[]).find(x=>String(x.bank_ref||'').trim().toUpperCase()===_rk);
+          if(_raw){ const _isIn=Number(_raw.amount_in||0)>0.005; const _ra=_isIn?Number(_raw.amount_in||0):Number(_raw.amount_out||0);
+            if(Math.abs(_ra-_oldPaid)<0.02){ const _sr=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_bank_txn_amount',payload:{id:_raw.id,amount_in:_isIn?paid:0,amount_out:_isIn?0:paid,allow_sheet:true}})}); const _sj=await _sr.json(); if(!_sj.error&&typeof toast==='function')toast('🔄 زُومِنت الحركة البنكية المطابقة — انعكس في الكشف'); } } } }catch(_e){}
       $('fcdeditmodal').classList.remove('on'); await load(); }catch(e){ msg.innerHTML='<span style="color:var(--red)">خطأ: '+esc(e.message)+'</span>'; }
     return;
   }
@@ -6602,9 +6607,25 @@ async function saveSpTransferEdit(ids, txn, sup, canRef, single, curSum, curCur,
     const j=await r.json();
     if(j.error){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(j.error); return; }
     const mm=document.getElementById('sp-tredit'); if(mm)mm.remove();
+    // 🔄 مزامنة تلقائية للجذر: عند تغيير المبلغ، حدّث الحركة البنكية الخام المطابقة (نفس المرجع، وكانت مساوية للمبلغ القديم = نفس العملة) لينعكس التعديل فوراً في كشف البنك — يحلّ «عدّلت وما انعكس»
+    let _synced=false;
+    if(payload.amount!=null && !j.pending){
+      try{
+        const _rk=String(ref||'').trim().toUpperCase();
+        if(_rk){ const _raw=(DATA.bankTx||[]).find(x=>String(x.bank_ref||'').trim().toUpperCase()===_rk);
+          if(_raw){ const _isIn=Number(_raw.amount_in||0)>0.005; const _ra=_isIn?Number(_raw.amount_in||0):Number(_raw.amount_out||0); const _nv=Number(payload.amount);
+            if(_nv>0 && Math.abs(_ra-Number(curSum||0))<0.02 && Math.abs(_nv-_ra)>0.005){
+              const _sr=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_bank_txn_amount',payload:{id:_raw.id,amount_in:_isIn?_nv:0,amount_out:_isIn?0:_nv,allow_sheet:true}})});
+              const _sj=await _sr.json(); if(!_sj.error)_synced=true;
+            }
+          }
+        }
+      }catch(_e){}
+    }
     const _bits=[]; if(payload.amount!=null)_bits.push('المبلغ'); if('currency' in payload)_bits.push('العملة'); if('currency_rate' in payload)_bits.push('سعر الصرف'); if(payload.bank_name||('bank_ref' in payload)||payload.payment_date)_bits.push('البنك/المرجع/التاريخ');
-    alert(j.pending?('🔒 '+(j.msg||'أُرسل طلب تعديل التحويل لموافقة المالكة — لن يتغيّر حتى الاعتماد')):'✅ تم تعديل التحويل'+(_bits.length?' ('+_bits.join(' + ')+')':''));
+    alert(j.pending?('🔒 '+(j.msg||'أُرسل طلب تعديل التحويل لموافقة المالكة — لن يتغيّر حتى الاعتماد')):'✅ تم تعديل التحويل'+(_bits.length?' ('+_bits.join(' + ')+')':'')+(_synced?'\n🔄 وزُومِنت الحركة البنكية المطابقة — انعكس في كشف البنك (أعيدي «قارني» للتحديث).':''));
     const cur=($('supflt')||{}).value||''; await load(); if($('supflt')){ $('supflt').value=cur; renderSupplierDetail(); }
+    if(_synced){ try{ if(typeof runReconcile==='function' && window._recRaw){ runReconcile(); } }catch(_){} }
   }catch(e){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(e.message); }
 }
 // 🔵 إلغاء تخصيص دفعة مورّد — تصير «غير موزّعة» حتى تُوزَّع من جديد (للمالكة فقط)
