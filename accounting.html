@@ -1569,6 +1569,17 @@ function sRecall(){
   const svcs=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code);
   box.style.display='block';
   let h=infoHtml(ci);
+  // 💱 كاشف اختلاف العملة داخل السيلز فورم — يظهر الزر فعّالاً فقط عند وجود خدمة بعملة تخالف عملة حساب العميل (First Client Data)؛ يختفي (✅) بعد التصحيح
+  { const _fc=String(ci.cur||'').toUpperCase();
+    const _mis=svcs.filter(s=>{ const sc=String(s.sell_currency||'').toUpperCase(); return sc&&_fc&&sc!==_fc&&Number(s.amount||0)>0.005&&(typeof fxRate==='function'&&fxRate(sc,_fc)!=null); });
+    if(_mis.length){ const _own=(typeof isOwnerUser==='function')?isOwnerUser():true;
+      h+='<div style="margin-top:8px;padding:8px 12px;background:rgba(124,92,255,.08);border:1px solid #7c3aed;border-radius:8px;font-size:12px">💱 <b style="color:#7c3aed">'+_mis.length+' خدمة</b> بعملة بيع تخالف عملة حساب العميل (<b>'+esc(ci.cur)+'</b> في First Client Data) — '+
+        (_own?'<button class="btn" style="background:#7c3aed;color:#fff;padding:4px 14px;font-size:12px;margin-right:4px" onclick="sFixClientCurrency(\''+esc(code)+'\')">✔️ صحّح العملة لـ'+esc(ci.cur)+'</button>':'<span style="color:var(--muted);font-size:11px">🔒 التصحيح للمالكة فقط</span>')+
+        '<div style="font-size:10px;color:var(--muted);margin-top:4px">يحوّل المبلغ وعملة البيع والصرف تلقائيّاً — بلا مساس بالحجز الفعلي (frb).</div></div>';
+    } else if(String(ci.cur||'').trim()){
+      h+='<div style="margin-top:8px;font-size:11px;color:#0e9d6a">✅ عملة كل الخدمات مطابقة لحساب العميل ('+esc(ci.cur)+')</div>';
+    }
+  }
   h+='<div style="margin-top:8px;font-size:12px"><b>كل خدمات/حجوزات العميل ('+svcs.length+') — قابلة للتعديل والحذف:</b></div>';
   if(svcs.length){ h+='<div class="tbl-wrap bf-scroll" id="srec-tbl" style="max-height:300px"><table style="font-size:11.5px"><thead><tr><th>النوع</th><th>الاسم/التفاصيل</th><th>🚪 الغرف</th><th>🏷️ مصدر الحجز / المورّد</th><th>البيع (ر.س)</th><th>سعر المورد</th><th>العملة</th><th>سعر الصرف</th><th>دخول</th><th>المصدر</th><th>إجراء</th></tr></thead><tbody>'+
     svcs.map(s=>'<tr><td>'+(SVC[s.kind]||esc(s.kind||''))+'</td><td>'+esc(s.name||'')+(s.detail?' · '+esc(s.detail):'')+'</td><td class="num">'+(s.rooms_count!=null&&s.rooms_count!==''?esc(s.rooms_count):'—')+'</td><td>'+(s.supplier?esc(s.supplier):'<span style="color:var(--muted)">—</span>')+'</td><td class="num">'+fmt(s.amount)+'</td><td class="num">'+fmt(Number(s.currency_rate)?Number(s.amount)/Number(s.currency_rate):Number(s.amount))+'</td><td>'+esc(s.currency||'')+'</td><td>'+esc(s.currency_rate!=null?s.currency_rate:'')+'</td><td>'+esc(s.check_in||'')+'</td><td><span class="src '+(s.source==='dashboard'?'dashboard':'sheet')+'">'+(s.source==='dashboard'?'داشبورد':'شيت')+'</span></td><td><button class="btn ghost" style="padding:2px 7px;font-size:11px" onclick="editSalesItem('+s.id+')">✏️</button> <button class="btn ghost" style="padding:2px 7px;font-size:11px" onclick="delSalesItem('+s.id+',\''+esc(code)+'\')">🗑️</button></td></tr>').join('')+'</tbody></table></div><div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'srec-tbl\',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'srec-tbl\',1)">تمرير ▶▶</button></div>'; }
@@ -5571,6 +5582,20 @@ async function caFixAll(catFilter){ if(!(typeof isOwnerUser==='function'?isOwner
   let ok=0,fail=0;
   for(const m of ms){ try{ const pay={id:m.id,currency:m.bookedCur,currency_rate:m.newRate,amount:m.newAmt}; if(m.cat==='C')pay.sell_currency=m.newSell; const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_service_line',payload:pay})}); const j=await r.json(); if(j.error)fail++; else ok++; }catch(e){ fail++; } }
   alert('✅ تم تصحيح '+ok+' خدمة'+(fail?(' · ⚠️ فشل '+fail):'')+'.'); await load();
+}
+// 💱 تصحيح عملة خدمات عميل واحد من داخل السيلز فورم — نفس منطق «تدقيق العملة» فئة (ج): يحوّل المبلغ وعملة البيع والصرف لعملة حساب العميل، دون تغيير الحجز الفعلي (frb). بعد load() يختفي الزر تلقائيّاً (لا يبقى اختلاف).
+async function sFixClientCurrency(code){ code=(code||'').trim().toUpperCase();
+  if(!(typeof isOwnerUser==='function'?isOwnerUser():true)){ alert('التصحيح للمالكة فقط'); return; }
+  const ci=(typeof clientInfo==='function')?clientInfo(code):null; if(!ci){ return; } const fc=String(ci.cur||'').toUpperCase(); if(!fc)return;
+  const targets=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code).filter(s=>{ const sc=String(s.sell_currency||'').toUpperCase(); return sc&&sc!==fc&&Number(s.amount||0)>0.005&&fxRate(sc,fc)!=null; });
+  if(!targets.length){ return; }
+  if(!confirm('تصحيح عملة '+targets.length+' خدمة إلى «'+fc+'»؟\nيُحوَّل المبلغ وعملة البيع وسعر الصرف تلقائيّاً — دون تغيير الحجز الفعلي (frb).'))return;
+  let ok=0,fail=0;
+  for(const s of targets){ const sc=String(s.sell_currency||'').toUpperCase(); const bc=String(s.currency||'').toUpperCase()||fc;
+    const scToFc=fxRate(sc,fc); const newRate=(bc===fc)?1:fxRate(bc,fc); if(scToFc==null||newRate==null){ fail++; continue; }
+    const newAmt=+(Number(s.amount||0)*scToFc).toFixed(2);
+    try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_service_line',payload:{id:s.id,currency:bc,currency_rate:+newRate.toFixed(4),amount:newAmt,sell_currency:fc}})}); const j=await r.json(); if(j.error)fail++; else ok++; }catch(e){ fail++; } }
+  alert('✅ تم تصحيح '+ok+' خدمة إلى '+fc+(fail?(' · ⚠️ فشل '+fail):'')+'.'); await load();
 }
 function renderCurAudit(){
   if(!DATA) return;
