@@ -505,6 +505,8 @@ table{font-weight:600}
           <option value="">كل الحالات</option>
           <option value="active">🟢 نشط فقط</option>
           <option value="cancel">🔴 ملغى فقط</option>
+          <option value="unpaid">💰 مستحقة للفندق (لم تُدفع)</option>
+          <option value="paid">✅ مدفوعة للفندق</option>
         </select>
         <div id="ho-sum" style="margin-right:auto"></div>
       </div>
@@ -2613,6 +2615,15 @@ function renderHotels(){
   if(q) rows=rows.filter(h=>[h.client_code,h.client_name,h.hotel_name,h.conf_no,h.agent_name].some(x=>String(x||'').toLowerCase().includes(q)));
   if(st==='cancel') rows=rows.filter(h=>/cancel/i.test(h.status||''));
   if(st==='active') rows=rows.filter(h=>!/cancel/i.test(h.status||''));
+  // 💰 فلتر حالة الدفع للفندق (مستحق لم يُدفع / مدفوع) — يطابق تماماً منطق عمود «المدفوع للمورّد» أدناه
+  if(st==='unpaid'||st==='paid'){
+    const _fchg={}; (DATA.serviceLines||[]).forEach(s=>{ if(s.kind!=='hotel'||!s.charge_from)return; const cc=(s.client_code||'').toUpperCase(); const k=cc+'|'+(s.check_in||''); if(!_fchg[k])_fchg[k]=s.charge_from; });
+    const _fpaid={}; const _fadd=(cc,sys,amt)=>{ cc=(cc||'').toUpperCase(); if(!cc||amt<=0.005)return; _fpaid[cc+'|'+hpNorm(sys)]=true; };
+    (DATA.hotelPayments||[]).forEach(x=>_fadd(x.client_code,x.hotel_system,Number(x.pay_supplier||0)));
+    (DATA.supplierPayments||[]).forEach(x=>_fadd(x.client_code,x.supplier_name,Number(x.amount||0)));
+    const _hotelPaid=h=>{ if(/cancel/i.test(h.status||''))return 'cancel'; const code=(h.client_code||'').toUpperCase(); const _bcf=_fchg[code+'|'+(h.check_in||'')]||''; if(_directOwed(_bcf))return 'due'; if(_fpaid[code+'|'+hpNorm(h.hotel_name)]||_fpaid[code+'|'+hpNorm(h.booked_from||'')])return 'paid'; if(_bcf && !/not\s*booked/i.test(_bcf) && Number(h.final_rate_booked||0)>0)return 'paid'; return 'due'; };
+    rows=rows.filter(h=>_hotelPaid(h)===(st==='unpaid'?'due':'paid'));
+  }
   rows.sort((a,b)=>{ const da=a._booking?1:0, db=b._booking?1:0; if(da!==db) return db-da; if(da===1) return String(b.created_at||'').localeCompare(String(a.created_at||'')); return String(b.arrival_date||'').localeCompare(String(a.arrival_date||'')); });  // حجوزات الداشبورد (الأحدث) أولاً ثم الشيت بتاريخ الوصول
   let sSell=0,sBook=0,sRef=0,nc=0;
   for(const h of rows){ sSell+=Number(h.selling_rate||0); sBook+=Number(h.final_rate_booked||0); sRef+=Number(h.refund||0); if(/cancel/i.test(h.status||''))nc++; }
