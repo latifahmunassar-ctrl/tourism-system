@@ -1269,24 +1269,64 @@ async function loadProfitMargins(dest){
     profitMarginsDest = dest;
   }catch(e){ profitMargins = []; }
 }
+// ── مطابقة الموسم حسب تاريخ بداية البرنامج (DATE_FROM) ──
+// المواسم مخزّنة «يوم/شهر» (مثل 15/07). نحوّلها لعدد شهر*100+يوم للمقارنة، مع دعم
+// التفاف نهاية السنة (27/12 → 05/01: من > إلى فتُقبل إن كان التاريخ ≥ من أو ≤ إلى).
+function _seasonMMDD(ddmm){
+  const m = String(ddmm||'').match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+  if(!m) return null; const day=+m[1], mon=+m[2];
+  if(!day || !mon) return null; return mon*100 + day;
+}
+function _programMMDD(){
+  const s = getLine(lastProgramRaw,'DATE_FROM') || '';
+  let mm = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/); if(mm) return (+mm[2])*100 + (+mm[3]);          // ISO
+  mm = s.match(/(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*\d{2,4})?/); if(mm) return (+mm[2])*100 + (+mm[1]); // يوم/شهر
+  const d = (typeof parseArabicDate==='function') ? parseArabicDate(s) : null;                    // «19 مايو 2026»
+  if(d && !isNaN(d.getTime())) return (d.getMonth()+1)*100 + d.getDate();
+  return null;
+}
+function _seasonMatches(m, md){
+  if(md==null) return false;
+  const f=_seasonMMDD(m.season_from), t=_seasonMMDD(m.season_to);
+  if(f==null || t==null) return false;
+  return f<=t ? (md>=f && md<=t) : (md>=f || md<=t);
+}
 function applyAutoProfit(){
   const inp = document.getElementById('profitInput');
   if(!inp || !profitMargins.length) return;
   const cost = (basePrice || 0) + extraCostsTotal();   // التكلفة الإجمالية قبل الربح
-  const tier = profitMargins.find(m => cost >= +m.cost_min && cost <= +m.cost_max);
-  if(!tier){
+  const tiers = profitMargins.filter(m => cost >= +m.cost_min && cost <= +m.cost_max);
+  if(!tiers.length){
     // خارج كل النطاقات → بدون ربح تلقائي + تنبيه (مرة واحدة لكل تكلفة)
     const msg = `⚠️ التكلفة الإجمالية (${cost.toLocaleString()} ريال) خارج نطاقات جدول الأرباح لهذه الوجهة — اكتب هامش الربح يدوياً.`;
     if(msg !== lastAutoProfitMsg){ addMessage('sys', msg); lastAutoProfitMsg = msg; }
     return;
   }
+  // بُعد الموسم: لو الوجهة موسمية نطابق تاريخ البداية؛ وإلا نأخذ الشريحة كما هي.
+  const seasonal = tiers.some(m => m.season_from);
+  let tier = null;
+  if(seasonal){
+    const md = _programMMDD();
+    if(md != null) tier = tiers.find(m => _seasonMatches(m, md));
+    if(!tier) tier = tiers.find(m => !m.season_from);   // صف بلا موسم = طوال السنة (احتياط)
+    if(!tier){
+      const msg = (md == null)
+        ? '⚠️ حدّدي تاريخ بداية البرنامج ليُحسب الربح حسب الموسم، أو اكتبي هامش الربح يدوياً.'
+        : `⚠️ تاريخ البرنامج خارج مواسم جدول الأرباح لهذه الوجهة — اكتبي هامش الربح يدوياً.`;
+      if(msg !== lastAutoProfitMsg){ addMessage('sys', msg); lastAutoProfitMsg = msg; }
+      return;
+    }
+  } else {
+    tier = tiers[0];
+  }
   const profit = customerType === 'company' ? (+tier.profit_company || 0) : (+tier.profit_individual || 0);
   inp.value = profit;
   updateProfit();
-  // الشريحة موجودة لكن ربح هذا النوع غير مُدخَل في الشيت (خانة فاضية) → نبّه بدل صفر صامت.
+  // الشريحة/الموسم موجود لكن ربح هذا النوع غير مُدخَل في الشيت (خانة فاضية) → نبّه بدل صفر صامت.
   if(profit === 0){
     const typeAr = customerType === 'company' ? 'الشركات' : 'الأفراد';
-    const msg2 = `⚠️ ربح ${typeAr} لشريحة ${(+tier.cost_min).toLocaleString()}–${(+tier.cost_max).toLocaleString()} غير مُدخَل في شيت هذه الوجهة — أضِفه في الشيت وزامن، أو اكتب الربح يدوياً.`;
+    const seasonAr = tier.season_from ? ` وموسم ${tier.season_from}–${tier.season_to}` : '';
+    const msg2 = `⚠️ ربح ${typeAr} لشريحة ${(+tier.cost_min).toLocaleString()}–${(+tier.cost_max).toLocaleString()}${seasonAr} غير مُدخَل في شيت هذه الوجهة — أضِفه في الشيت وزامن، أو اكتب الربح يدوياً.`;
     if(msg2 !== lastAutoProfitMsg){ addMessage('sys', msg2); lastAutoProfitMsg = msg2; }
   } else {
     lastAutoProfitMsg = '';

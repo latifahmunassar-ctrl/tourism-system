@@ -1020,43 +1020,91 @@ function extractSuggestions(
 }
 
 // ── Handler ────────────────────────────────────────────────────────────────
-// ── استخراج جدول الأرباح: نطاق التكلفة → ربح «شركات» وربح «آفراد».
-// الأعمدة تختلف بين الشيتات، فنحدّدها بالعنوان: عمود «شركات» + المجاور «آفراد»،
-// وعمود النطاق هو الذي قبل «شركات» مباشرةً (يحوي "N-M").
+// ── استخراج جدول الأرباح الموسمي: (شريحة التكلفة × موسم × شركات/أفراد).
+// الشكل في الشيت: صف عناوين فيه «شركات» مكرّرة ثم «آفراد» مكرّرة، وتحته صف تواريخ
+// (مثل 15/07-15/08)، وعمود «اذا كانت التكلفة» يحوي النطاق "N-M". لكل شريحة نُخرج
+// صفاً لكل موسم يجمع ربح الشركات وربح الأفراد لذلك الموسم (نُطابق البلوكين بالتاريخ).
+// متوافق مع الشيتات القديمة (شركات/أفراد بلا صف تواريخ → موسم فارغ = طوال السنة).
 function extractProfitMargins(rows: string[][], destination: string): Array<{
-  destination: string; cost_min: number; cost_max: number; profit_company: number; profit_individual: number;
+  destination: string; season_from: string | null; season_to: string | null;
+  cost_min: number; cost_max: number; profit_company: number; profit_individual: number;
 }> {
   const toLatin = (s: string) => (s || "").replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)));
   const norm = (s: string) =>
     (s || "").replace(/[إأآا]/g, "ا").replace(/[ةه]/g, "ه").replace(/\s+/g, "").toLowerCase().trim();
-  let headerRow = -1, companyCol = -1, individualCol = -1, rangeCol = -1;
-  for (let i = 0; i < Math.min(rows.length, 20); i++) {
-    const cells = rows[i] || [];
-    for (let j = 0; j < cells.length; j++) {
-      if (norm(cells[j]) === "شركات" || norm(cells[j]) === "الشركات") {
-        for (let k = Math.max(0, j - 1); k <= j + 2; k++) {
-          const cc = norm(cells[k] || "");
-          if (cc === "افراد" || cc === "الافراد") { individualCol = k; break; }
-        }
-        if (individualCol >= 0) { headerRow = i; companyCol = j; rangeCol = j - 1; break; }
-      }
-    }
-    if (headerRow >= 0) break;
+  const dateRe = /(\d{1,2})\s*\/\s*(\d{1,2})\s*[-–—]\s*(\d{1,2})\s*\/\s*(\d{1,2})/;
+  const pad = (n: string) => (n.length < 2 ? "0" + n : n);
+
+  // 1) صف العناوين: يحوي «شركات» و«آفراد».
+  let headerRow = -1;
+  for (let i = 0; i < Math.min(rows.length, 25); i++) {
+    const c = (rows[i] || []).map(norm);
+    if (c.some(x => x === "شركات" || x === "الشركات") && c.some(x => x === "افراد" || x === "الافراد")) { headerRow = i; break; }
   }
-  if (headerRow < 0 || rangeCol < 0) return [];
-  const out: Array<{ destination: string; cost_min: number; cost_max: number; profit_company: number; profit_individual: number }> = [];
-  for (let i = headerRow + 1; i < rows.length; i++) {
+  if (headerRow < 0) return [];
+
+  // 2) نوع كل عمود (شركات/أفراد) مع «التعبئة لليمين» للخلايا المدموجة/الفارغة داخل البلوك.
+  const hcells = rows[headerRow] || [];
+  const typeByCol: Array<"company" | "individual" | null> = [];
+  let last: "company" | "individual" | null = null;
+  for (let j = 0; j < hcells.length; j++) {
+    const n = norm(hcells[j]);
+    if (n === "شركات" || n === "الشركات") last = "company";
+    else if (n === "افراد" || n === "الافراد") last = "individual";
+    typeByCol[j] = last;
+  }
+  const firstTypedCol = typeByCol.findIndex(t => t !== null);
+  if (firstTypedCol < 0) return [];
+
+  // 3) صف التواريخ (قد يكون بعد صف العناوين بصف أو صفين). null = لا مواسم (شكل قديم).
+  let dateRow = -1;
+  for (let r = headerRow + 1; r <= headerRow + 4 && r < rows.length; r++) {
+    if ((rows[r] || []).some((c, j) => typeByCol[j] && dateRe.test(toLatin(c || "")))) { dateRow = r; break; }
+  }
+
+  // 4) بناء الأعمدة المصنّفة مع موسمها.
+  const cols: Array<{ j: number; type: "company" | "individual"; from: string | null; to: string | null; key: string }> = [];
+  for (let j = firstTypedCol; j < typeByCol.length; j++) {
+    const t = typeByCol[j];
+    if (!t) continue;
+    let from: string | null = null, to: string | null = null;
+    if (dateRow >= 0) {
+      const m = toLatin((rows[dateRow] || [])[j] || "").match(dateRe);
+      if (m) { from = `${pad(m[1])}/${pad(m[2])}`; to = `${pad(m[3])}/${pad(m[4])}`; }
+    }
+    cols.push({ j, type: t, from, to, key: `${from || ""}|${to || ""}` });
+  }
+  const companies = cols.filter(c => c.type === "company");
+  const individuals = cols.filter(c => c.type === "individual");
+  if (!companies.length || !individuals.length) return [];
+
+  // 5) عمود التكلفة: العنوان «اذا كانت التكلفة»، وإلا العمود الذي قبل أول عمود مصنّف.
+  let costCol = -1;
+  for (const r of [headerRow - 1, headerRow, headerRow + 1]) {
+    (rows[r] || []).forEach((c, j) => { if (norm(c).includes("التكلفه")) costCol = j; });
+  }
+  if (costCol < 0) costCol = firstTypedCol - 1;
+  if (costCol < 0) return [];
+
+  // 6) صفوف الشرائح: لكل موسم من الشركات نطابق فرد نفس الموسم (وإلا بالترتيب) ونُخرج صفاً.
+  const out: Array<{ destination: string; season_from: string | null; season_to: string | null; cost_min: number; cost_max: number; profit_company: number; profit_individual: number }> = [];
+  const startRow = (dateRow >= 0 ? dateRow : headerRow) + 1;
+  for (let i = startRow; i < rows.length; i++) {
     const cells = rows[i] || [];
-    const m = toLatin((cells[rangeCol] || "").trim()).match(/(\d+)\s*-\s*(\d+)/);
-    if (!m) continue;
-    const cmin = parseInt(m[1], 10), cmax = parseInt(m[2], 10);
-    const pc = parsePrice((cells[companyCol] || "").trim());
-    const pi = parsePrice((cells[individualCol] || "").trim());
-    if (cmax > 0) out.push({
-      destination,
-      cost_min: cmin, cost_max: cmax,
-      profit_company: isNaN(pc) ? 0 : pc,
-      profit_individual: isNaN(pi) ? 0 : pi,
+    const cr = toLatin((cells[costCol] || "").trim()).match(/(\d+)\s*-\s*(\d+)/);
+    if (!cr) continue;
+    const cmin = parseInt(cr[1], 10), cmax = parseInt(cr[2], 10);
+    if (!(cmax > 0)) continue;
+    companies.forEach((cc, idx) => {
+      let ic = individuals.find(x => x.key === cc.key);
+      if (!ic) ic = individuals[idx] || individuals[0];
+      const pc = parsePrice((cells[cc.j] || "").trim());
+      const pi = parsePrice((cells[ic.j] || "").trim());
+      out.push({
+        destination, season_from: cc.from, season_to: cc.to,
+        cost_min: cmin, cost_max: cmax,
+        profit_company: isNaN(pc) ? 0 : pc, profit_individual: isNaN(pi) ? 0 : pi,
+      });
     });
   }
   return out;
@@ -1471,13 +1519,10 @@ Deno.serve(async (req) => {
           if (error) debugInfo?.rejects.push(`[${tab}] suggestions insert: ${error.message}`);
         }
 
-        // جدول الأرباح (نطاق التكلفة → شركات/أفراد) — full-replace per destination.
-        const margins = extractProfitMargins(rows, tab);
-        if (margins.length > 0) {
-          await supabase.from("profit_margins").delete().eq("destination", tab);
-          const { error } = await supabase.from("profit_margins").insert(margins);
-          if (error) debugInfo?.rejects.push(`[${tab}] profit_margins insert: ${error.message}`);
-        }
+        // جدول الأرباح الموسمي: لم يعد يُكتب هنا — صار يُقرأ مباشرة من الشيت عبر
+        // دالة Tourism-AI (action=profit_margins) بلا جدول قاعدة بيانات، لدعم
+        // بُعد الموسم دون تعديل مخطّط قاعدة البيانات. (extractProfitMargins مُبقاة
+        // للمرجعية فقط.)
 
         details[tab] = { hotels: hotels.length, tours: tours.length, flights: flights.length, trains: trains.length, suggestions: suggestions.length, margins: margins.length };
         totalHotels  += hotels.length;

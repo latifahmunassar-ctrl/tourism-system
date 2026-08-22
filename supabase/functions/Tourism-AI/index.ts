@@ -2562,25 +2562,107 @@ async function handleTourVariants(body: { dest?: string; name?: string }): Promi
   }
 }
 
-// ── profit_margins: جدول الأرباح لوجهة (نطاق التكلفة → شركات/أفراد) ──────────
+// ── profit_margins: جدول الأرباح الموسمي لوجهة — يُقرأ مباشرة من شيت الوجهة
+//    (بلا جدول قاعدة بيانات): شريحة تكلفة × موسم × شركات/أفراد. ──────────────────
+const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius "];
+
+async function pmGoogleToken(sa: { client_email: string; private_key: string }): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const enc = (o: object) => btoa(JSON.stringify(o)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  const header = enc({ alg: "RS256", typ: "JWT" });
+  const payload = enc({ iss: sa.client_email, scope: "https://www.googleapis.com/auth/spreadsheets.readonly", aud: "https://oauth2.googleapis.com/token", exp: now + 3600, iat: now });
+  const signingInput = `${header}.${payload}`;
+  const keyBody = sa.private_key.replace(/\\n/g, "\n").replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "").replace(/\s/g, "");
+  const binaryKey = Uint8Array.from(atob(keyBody), c => c.charCodeAt(0));
+  const cryptoKey = await crypto.subtle.importKey("pkcs8", binaryKey, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+  const rawSig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", cryptoKey, new TextEncoder().encode(signingInput));
+  const sig = btoa(String.fromCharCode(...new Uint8Array(rawSig))).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  const r = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: `${signingInput}.${sig}` }) });
+  const d = await r.json();
+  if (!d.access_token) throw new Error(`Google auth: ${JSON.stringify(d)}`);
+  return d.access_token;
+}
+async function pmReadSheet(token: string, ssid: string, range: string): Promise<string[][]> {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${ssid}/values/${encodeURIComponent(range)}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const data = await res.json();
+  if (data.error) throw new Error(`Sheets [${range}]: ${data.error.message}`);
+  return data.values || [];
+}
+function pmPrice(raw: string): number { return parseFloat((raw || "").replace(/,/g, "").replace(/[^\d.]/g, "")); }
+
+// نفس منطق القارئ الموسمي في sync-sheets (شركات×N مواسم + آفراد×N مواسم).
+function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number; profit_company: number; profit_individual: number; season_from: string | null; season_to: string | null }> {
+  const toLatin = (s: string) => (s || "").replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)));
+  const norm = (s: string) => (s || "").replace(/[إأآا]/g, "ا").replace(/[ةه]/g, "ه").replace(/\s+/g, "").toLowerCase().trim();
+  const dateRe = /(\d{1,2})\s*\/\s*(\d{1,2})\s*[-–—]\s*(\d{1,2})\s*\/\s*(\d{1,2})/;
+  const pad = (n: string) => (n.length < 2 ? "0" + n : n);
+  let headerRow = -1;
+  for (let i = 0; i < Math.min(rows.length, 25); i++) {
+    const c = (rows[i] || []).map(norm);
+    if (c.some(x => x === "شركات" || x === "الشركات") && c.some(x => x === "افراد" || x === "الافراد")) { headerRow = i; break; }
+  }
+  if (headerRow < 0) return [];
+  const hcells = rows[headerRow] || [];
+  const typeByCol: Array<"company" | "individual" | null> = [];
+  let last: "company" | "individual" | null = null;
+  for (let j = 0; j < hcells.length; j++) {
+    const n = norm(hcells[j]);
+    if (n === "شركات" || n === "الشركات") last = "company";
+    else if (n === "افراد" || n === "الافراد") last = "individual";
+    typeByCol[j] = last;
+  }
+  const firstTyped = typeByCol.findIndex(t => t !== null);
+  if (firstTyped < 0) return [];
+  let dateRow = -1;
+  for (let r = headerRow + 1; r <= headerRow + 4 && r < rows.length; r++) {
+    if ((rows[r] || []).some((c, j) => typeByCol[j] && dateRe.test(toLatin(c || "")))) { dateRow = r; break; }
+  }
+  const cols: Array<{ j: number; type: "company" | "individual"; from: string | null; to: string | null; key: string }> = [];
+  for (let j = firstTyped; j < typeByCol.length; j++) {
+    const t = typeByCol[j]; if (!t) continue;
+    let from: string | null = null, to: string | null = null;
+    if (dateRow >= 0) { const m = toLatin((rows[dateRow] || [])[j] || "").match(dateRe); if (m) { from = `${pad(m[1])}/${pad(m[2])}`; to = `${pad(m[3])}/${pad(m[4])}`; } }
+    cols.push({ j, type: t, from, to, key: `${from || ""}|${to || ""}` });
+  }
+  const companies = cols.filter(c => c.type === "company");
+  const individuals = cols.filter(c => c.type === "individual");
+  if (!companies.length || !individuals.length) return [];
+  let costCol = -1;
+  for (const r of [headerRow - 1, headerRow, headerRow + 1]) (rows[r] || []).forEach((c, j) => { if (norm(c).includes("التكلفه")) costCol = j; });
+  if (costCol < 0) costCol = firstTyped - 1;
+  if (costCol < 0) return [];
+  const out: Array<{ cost_min: number; cost_max: number; profit_company: number; profit_individual: number; season_from: string | null; season_to: string | null }> = [];
+  const startRow = (dateRow >= 0 ? dateRow : headerRow) + 1;
+  for (let i = startRow; i < rows.length; i++) {
+    const cells = rows[i] || [];
+    const cr = toLatin((cells[costCol] || "").trim()).match(/(\d+)\s*-\s*(\d+)/);
+    if (!cr) continue;
+    const cmin = parseInt(cr[1], 10), cmax = parseInt(cr[2], 10);
+    if (!(cmax > 0)) continue;
+    companies.forEach((cc, idx) => {
+      let ic = individuals.find(x => x.key === cc.key); if (!ic) ic = individuals[idx] || individuals[0];
+      out.push({ cost_min: cmin, cost_max: cmax, profit_company: pmPrice((cells[cc.j] || "").trim()) || 0, profit_individual: pmPrice((cells[ic.j] || "").trim()) || 0, season_from: cc.from, season_to: cc.to });
+    });
+  }
+  return out;
+}
+
 async function handleProfitMargins(body: { dest?: string }): Promise<Response> {
   try {
     const destAr = String(body.dest || "").trim();
     const destKey = destAr ? detectDestination([{ role: "user", content: destAr }]) : null;
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-    let q = supabase.from("profit_margins")
-      .select("cost_min,cost_max,profit_company,profit_individual")
-      .order("cost_min");
-    if (destKey) q = q.eq("destination", destKey);
-    const { data, error } = await q;
-    if (error) throw error;
-    return new Response(JSON.stringify({ margins: data || [] }), { headers: CORS_HEADERS });
+    if (!destKey) return new Response(JSON.stringify({ margins: [] }), { headers: CORS_HEADERS });
+    const tabRaw = PM_DEST_TABS.find(t => t.trim() === destKey) || destKey;
+    const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
+    const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
+    const token = await pmGoogleToken(sa);
+    const quotedTab = /[\s'"]/.test(tabRaw) ? `'${tabRaw.replace(/'/g, "''")}'` : tabRaw;
+    const rows = await pmReadSheet(token, ssid, `${quotedTab}!A1:CZ500`);
+    const margins = pmExtract(rows).sort((a, b) => a.cost_min - b.cost_min);
+    return new Response(JSON.stringify({ margins }), { headers: CORS_HEADERS });
   } catch (e) {
-    return new Response(JSON.stringify({ margins: [], error: String((e as Error).message) }),
-      { status: 200, headers: CORS_HEADERS });
+    return new Response(JSON.stringify({ margins: [], error: String((e as Error).message) }), { status: 200, headers: CORS_HEADERS });
   }
 }
 
