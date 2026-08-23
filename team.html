@@ -1277,12 +1277,23 @@ function _seasonMMDD(ddmm){
   if(!m) return null; const day=+m[1], mon=+m[2];
   if(!day || !mon) return null; return mon*100 + day;
 }
+function _arMonthNum(s){
+  const AR={'يناير':1,'فبراير':2,'مارس':3,'ابريل':4,'مايو':5,'يونيو':6,'يوليو':7,'اغسطس':8,'سبتمبر':9,'اكتوبر':10,'نوفمبر':11,'ديسمبر':12};
+  const t=String(s||'').replace(/[إأآ]/g,'ا');
+  for(const k in AR){ if(t.indexOf(k)>=0) return AR[k]; }
+  return null;
+}
 function _programMMDD(){
-  const s = getLine(lastProgramRaw,'DATE_FROM') || '';
+  // الموسم يحتاج الشهر (واليوم إن وُجد). نطبّع الأرقام العربية ونجرّب عدة صيغ،
+  // ونرجع لـ META للشهر لو البرنامج شهري بلا يوم (مثل «شهر ٩»).
+  const toL = s => String(s||'').replace(/[٠-٩]/g,c=>'٠١٢٣٤٥٦٧٨٩'.indexOf(c));
+  const s = toL(getLine(lastProgramRaw,'DATE_FROM') || '');
   let mm = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/); if(mm) return (+mm[2])*100 + (+mm[3]);          // ISO
-  mm = s.match(/(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*\d{2,4})?/); if(mm) return (+mm[2])*100 + (+mm[1]); // يوم/شهر
-  const d = (typeof parseArabicDate==='function') ? parseArabicDate(s) : null;                    // «19 مايو 2026»
-  if(d && !isNaN(d.getTime())) return (d.getMonth()+1)*100 + d.getDate();
+  mm = s.match(/\b(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*\d{2,4})?/); if(mm) return (+mm[2])*100 + (+mm[1]); // يوم/شهر
+  const monD = _arMonthNum(s);                                                                     // «١٩ سبتمبر ٢٠٢٦» أو «سبتمبر»
+  if(monD){ const day = (s.match(/\b(\d{1,2})\b/)||[])[1]; return monD*100 + (day ? +day : 15); }
+  const metaMon = _arMonthNum(toL(getLine(lastProgramRaw,'META') || ''));                          // احتياط: شهر META
+  if(metaMon) return metaMon*100 + 15;
   return null;
 }
 function _seasonMatches(m, md){
