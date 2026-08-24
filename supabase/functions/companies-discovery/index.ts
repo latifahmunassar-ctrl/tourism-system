@@ -50,17 +50,21 @@ const COUNTRY_CITIES: Record<string, string[]> = {
   KW: ["مدينة الكويت","حولي","الفروانية","الأحمدي","الجهراء","السالمية","الفحيحيل"],
   QA: ["الدوحة","الوكرة","الريان","الخور","مسيعيد","أم صلال"],
   BH: ["المنامة","المحرق","الرفاع","مدينة عيسى","مدينة حمد","سترة"],
+  YE: ["صنعاء","عدن","تعز","الحديدة","المكلا","إب","ذمار","سيئون","حجة","مأرب"],
 };
-const COUNTRY_NAME: Record<string, string> = { SA:"السعودية", OM:"عُمان", AE:"الإمارات", KW:"الكويت", QA:"قطر", BH:"البحرين" };
+const COUNTRY_NAME: Record<string, string> = { SA:"السعودية", OM:"عُمان", AE:"الإمارات", KW:"الكويت", QA:"قطر", BH:"البحرين", YE:"اليمن" };
 
 // تصنيف الهاتف حسب الدولة (رمز الدولة + بادئات الجوال/الأرضي على أول رقم وطني).
-const PHONE_RULES: Record<string, { cc: string; mobile: string[]; landline: string[] }> = {
+// mobileLen (اختياري): طول الرقم الوطني للجوال — يلزم حيث تتقاطع بادئة الجوال مع
+// مفتاح أرضي (اليمن: الجوال ٩ خانات يبدأ بـ٧، ومفتاح صعدة/حجّة/عمران الأرضي ٧ أيضاً بطول ٧).
+const PHONE_RULES: Record<string, { cc: string; mobile: string[]; landline: string[]; mobileLen?: number }> = {
   SA: { cc:"966", mobile:["5"], landline:["1","2"] },
   OM: { cc:"968", mobile:["7","9"], landline:["2"] },
   AE: { cc:"971", mobile:["5"], landline:["2","3","4","6","7","9"] },
   KW: { cc:"965", mobile:["5","6","9"], landline:["2"] },
   QA: { cc:"974", mobile:["3","5","6","7"], landline:["4"] },
   BH: { cc:"973", mobile:["3"], landline:["1"] },
+  YE: { cc:"967", mobile:["7"], landline:["1","2","3","4","5","6"], mobileLen:9 },
 };
 
 // كلمات الوجهة (اختياري): مفتاح عربي مبسّط → قائمة كلمات (عربي + إنجليزي).
@@ -181,7 +185,11 @@ function classifyPhone(intl: string, country: string): { type: string; e164: str
   const nat = d.slice(rule.cc.length);
   const first = nat[0] || "";
   if (rule.landline.includes(first)) return { type: "landline", e164 };
-  if (rule.mobile.includes(first)) return { type: "mobile", e164 };
+  if (rule.mobile.includes(first)) {
+    // حيث تتقاطع بادئة الجوال مع مفتاح أرضي، الطول هو الفاصل.
+    if (rule.mobileLen && nat.length !== rule.mobileLen) return { type: "landline", e164 };
+    return { type: "mobile", e164 };
+  }
   return { type: "unknown", e164 };
 }
 
