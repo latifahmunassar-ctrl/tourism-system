@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-25-makkah-viewroom';
+  var BUILD = '2026-08-25-makkah-view2';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1441,7 +1441,8 @@ async function applyHaramToAllHotels(val){
       // «إطلالة على الحرم» تخصّ الغرفة لا الفندق فقط → فضّل الغرف التي نوعها يذكر الإطلالة/الحرم
       // (مثل «Classic Room Partial Haram View») بدل «Standard Room» الأرخص بلا إطلالة.
       if(val==='إطلالة على الحرم'){
-        const view = pool.filter(h=>/haram\s*view|إطلال|كعب|kaaba|(?:على\s*)?الحرم|حرم/i.test(String(h.room_type||'')));
+        // غرفة بإطلالة فعلية: نوعها يذكر «Haram/Kaaba/إطلالة/الحرم/الكعبة» (يشمل «Partial Haram Plaza View»)
+        const view = pool.filter(h=>/haram|kaaba|إطلال|كعب|الحرم|حرم|الكعب/i.test(String(h.room_type||'')));
         if(view.length) pool = view;
       }
       pool = pool.slice().sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
