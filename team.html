@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-25-makkah-transport';
+  var BUILD = '2026-08-25-makkah-transport2';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1456,7 +1456,10 @@ function mkCitiesFromProgram(){
   const out = [];
   for(const l of parseHotelLinesFromRaw(lastProgramRaw)){
     const p = String(l).split('|').map(x=>x.trim());
-    const city = p[1]||''; const nights = parseInt((p[5]||'').replace(/[^\d]/g,''))||1;
+    const city = p[1]||'';
+    // ⚠️ حقل الليالي يحوي التواريخ («3 ليالي (من 26 أغسطس 2026…)») — نأخذ أول رقم فقط،
+    // لا نحذف كل غير الأرقام (وإلا يصير الرقم هائلاً وحلقة لا نهائية تُعلّق الصفحة).
+    const nm = (p[5]||'').match(/\d+/); const nights = Math.min(60, nm ? (parseInt(nm[0])||1) : 1);
     let key = city;
     if(/مكة|مكه|makkah/i.test(city)) key='Makkah';
     else if(/مدين|madinah/i.test(city)) key='Al Madinah';
@@ -1498,7 +1501,7 @@ async function mkApplyTransport(){
       body: JSON.stringify({ action:'makkah_transport_plan', pax, sequence:seq, nights, modes:MK_MODES })});
     rows = (await res.json()).rows || [];
   }catch(e){ addMessage('sys','تعذّر تحديث التنقّلات: '+(e&&e.message||e)); return; }
-  const totalDays = nights.reduce((a,b)=>a+b,0) + 1;
+  const totalDays = Math.min(90, nights.reduce((a,b)=>a+(parseInt(b)||0),0) + 1);   // حد أمان ضد أي حلقة
   const isTransfer = n => /نقل|تذكرة قطار|يوم حر|يوم تنقّل|استرخاء/.test(String(n||''));
   // احتفظ بالجولات الحقيقية (غير الانتقالات) على أيامها
   const keep = {};
