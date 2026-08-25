@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-25-makkah-transport3';
+  var BUILD = '2026-08-25-makkah-traincol';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1513,21 +1513,41 @@ async function mkApplyTransport(){
   const keep = {};
   const tm = (new RegExp('TOURS:([\\s\\S]*?)(?=\\n(?:'+DOC_SECTION_HEAD_RE+'):)','m')).exec(lastProgramRaw);
   if(tm){ tm[1].split('\n').forEach(l=>{ if(!l.includes('|'))return; const p=l.split('|').map(x=>x.trim()); const dm=(p[0]||'').match(/(\d+)/); if(dm && !isTransfer(p[1])) (keep[+dm[1]]=keep[+dm[1]]||[]).push(l.trim()); }); }
+  // النقلات (سيارة/محطة) → قسم المسار TOURS · تذاكر القطار → قسم FLIGHTS (سعر الفرد × العدد).
   const plan = {};
-  rows.forEach(r=>{ (plan[r.day]=plan[r.day]||[]).push(`اليوم ${r.day} | ${r.name} | ${r.kind} | ${Number(r.price).toLocaleString()} ريال`); });
+  rows.filter(r=>r.kind!=='قطار').forEach(r=>{ (plan[r.day]=plan[r.day]||[]).push(`اليوم ${r.day} | ${r.name} | نقل | ${Number(r.price).toLocaleString()} ريال`); });
   const body = [];
   for(let d=1; d<=totalDays; d++){
     if(plan[d]) body.push(...plan[d]);
     else if(keep[d]) body.push(...keep[d]);
     else body.push(`اليوم ${d} | يوم حر — استرخاء في الفندق | حر | 0 ريال`);
   }
-  const newRaw = lastProgramRaw.replace(new RegExp('(TOURS:)([\\s\\S]*?)(?=\\n(?:'+DOC_SECTION_HEAD_RE+'):)','m'), 'TOURS:\n'+body.join('\n')+'\n');
+  // سطور الطيران: أبقِ الطيران الحقيقي (غير القطار) + أضف تذاكر القطار.
+  const flightLines = [];
+  (parseSection(lastProgramRaw,'FLIGHTS')||[]).forEach(l=>{ if(l.includes('|') && !/قطار/.test((l.split('|')[1]||''))) flightLines.push(l.trim()); });
+  rows.filter(r=>r.kind==='قطار').forEach(r=>{
+    const per = pax>0 ? Math.round(r.price/pax) : r.price;
+    const route = ((r.name.match(/\(([^)]+)\)/)||[])[1] || r.name.replace(/تذكرة قطار الحرمين/,'').trim()).trim();
+    flightLines.push(`${route} | قطار | ${per} ريال/شخص | ${pax} أشخاص | ${Number(r.price).toLocaleString()} ريال`);
+  });
+  let newRaw = mkSetSection(lastProgramRaw, 'TOURS', body);
+  newRaw = mkSetSection(newRaw, 'FLIGHTS', flightLines);
   if(newRaw !== lastProgramRaw){
     for(let i=history.length-1;i>=0;i--){ if(history[i].role==='assistant'){ history[i].content=newRaw; break; } }
     try{ buildReview(newRaw); }catch(e){ addMessage('sys','خطأ في عرض الانتقالات: '+(e&&e.message||e)); }
     const ticket = rows.filter(r=>/تذكرة قطار/.test(r.name)).reduce((s,r)=>s+r.price,0);
-    if(ticket>0) addMessage('sys',`🚆 حُسبت تذاكر قطار الحرمين: ${Number(ticket).toLocaleString()} ريال (${pax} أشخاص).`);
+    if(ticket>0) addMessage('sys',`🚆 تذاكر قطار الحرمين في قسم «الطيران والقطار»: ${Number(ticket).toLocaleString()} ريال (${pax} أشخاص).`);
   } else renderMakkahTransportBar();
+}
+// يستبدل/يُدرج قسماً في الخام (FLIGHTS قد يكون غائباً في برامج «بدون طيران»).
+function mkSetSection(raw, sec, lines){
+  const bodyTxt = (lines||[]).join('\n');
+  const re = new RegExp('('+sec+':)([\\s\\S]*?)(?=\\n(?:'+DOC_SECTION_HEAD_RE+'):)','m');
+  if(re.test(raw)) return raw.replace(re, sec+':\n'+bodyTxt+'\n');
+  if(!bodyTxt) return raw;
+  const m = raw.match(/\n(TRANSFERS:|TOURS:|SUMMARY:)/);
+  if(!m) return raw + '\n'+sec+':\n'+bodyTxt+'\n';
+  return raw.slice(0, m.index) + '\n'+sec+':\n'+bodyTxt + raw.slice(m.index);
 }
 function hswRender(cell, hotels){
   cell._hotels = hotels;
