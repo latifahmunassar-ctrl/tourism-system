@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-25-makkah-dest';
+  var BUILD = '2026-08-25-makkah-haram';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1018,6 +1018,8 @@ let currencyConversion = null;       // { name, rate, originalSAR, converted } w
 let currencyAwaiting = null;         // 'rate' | 'confirm' | null
 let currencyPending = null;          // { name, rate, originalSAR, converted } during the flow
 let lastProgramRaw = '';
+let HARAM_FILTER = '';   // فلتر قرب الحرم لبرامج مكة (بجانب/قريب/إطلالة/موصى به)
+const HARAM_OPTIONS = ['بجانب الحرم','قريب من الحرم','إطلالة على الحرم','موصى به'];
 let lastSavedCode = '';
 
 const SYSTEM = `انت مساعد متخصص في بناء البرامج السياحية. مهم جداً: أي أرقام إجماليات يجب أن تكون محسوبة بدقة من تفاصيل الشيت نفسها، ولا تكتب أي إجمالي إلا بعد التحقق:
@@ -1372,16 +1374,32 @@ async function hswFetch(cell){
   const region = cell.dataset.region || '';
   // إشغال الغرفة الحالية (لا عدد البالغين) — عشان البدائل تطابق نفس سعة الغرفة المعروضة.
   const occ = (+cell.dataset.occ) || (parsedData && parsedData.adults) || 2;
+  const isMakkah = /مكة|مكه/.test(dest||'');
   try{
     const res = await fetch(SUPABASE_URL, {
       method:'POST',
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
-      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: occ, current: cell.dataset.name || '', date: getLine(lastProgramRaw, 'DATE_FROM') || '' })
+      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: occ, current: cell.dataset.name || '', date: getLine(lastProgramRaw, 'DATE_FROM') || '', haram: isMakkah ? HARAM_FILTER : '' })
     });
     const data = await res.json();
     cell.dataset.loaded = '1';
+    cell._isMakkah = isMakkah;
+    cell._haramNote = data.haram_note || '';
     hswRender(cell, data.hotels || []);
   }catch(e){ menu.innerHTML = '<div class="hsw-loading">تعذّر جلب الفنادق</div>'; }
+}
+// شرائح فلتر قرب الحرم أعلى قائمة الفندق (مكة/المدينة فقط)
+function hswHaramBar(cell){
+  const chip = (label)=>`<span onclick="hswSetHaram(this,'${label.replace(/'/g,"")}')" style="cursor:pointer;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid ${HARAM_FILTER===label?'#0e9d6a':'#d7dee6'};background:${HARAM_FILTER===label?'#0e9d6a':'#fff'};color:${HARAM_FILTER===label?'#fff':'#445'}">${label}</span>`;
+  const clear = HARAM_FILTER?`<span onclick="hswSetHaram(this,'')" style="cursor:pointer;font-size:11px;color:#b91c1c;padding:4px 8px">✕ إلغاء</span>`:'';
+  const note = cell._haramNote?`<div style="font-size:11px;color:#b45309;margin-top:5px">⚠️ ${hswEsc(cell._haramNote)}</div>`:'';
+  return `<div style="padding:8px 10px;border-bottom:1px solid #eef2f6"><div style="font-size:11px;color:#889;margin-bottom:6px">🕌 قرب الحرم:</div><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">${HARAM_OPTIONS.map(chip).join('')}${clear}</div>${note}</div>`;
+}
+function hswSetHaram(el, val){
+  HARAM_FILTER = val;
+  // أعِد تحميل قائمة الفندق المفتوحة حالياً بالفلتر الجديد
+  const cell = el.closest('.hsw-cell');
+  if(cell){ cell.dataset.loaded=''; hswFetch(cell); }
 }
 function hswRender(cell, hotels){
   cell._hotels = hotels;
@@ -1389,10 +1407,11 @@ function hswRender(cell, hotels){
   const nights = +cell.dataset.nights || 0;
   const curName = cell.dataset.name;
   const curNightly = +cell.dataset.nightly || 0;
-  if(!hotels.length){ menu.innerHTML = '<div class="hsw-loading">ما فيه فنادق بهذه المنطقة</div>'; return; }
+  const bar = cell._isMakkah ? hswHaramBar(cell) : '';
+  if(!hotels.length){ menu.innerHTML = bar + '<div class="hsw-loading">ما فيه فنادق بهذه المنطقة</div>'; return; }
   const title = `<div class="hsw-title">فنادق ${hswEsc(cell.dataset.region)} — المطابق للعدد أولاً (مظلّل) ثم الباقي · السعة واضحة</div>`;
   let sepShown = false;
-  menu.innerHTML = title + hotels.map((h,i)=>{
+  menu.innerHTML = bar + title + hotels.map((h,i)=>{
     const isCur = h.name === curName;
     const total = (h.price_per_night||0) * nights;
     const diff = (h.price_per_night||0) - curNightly;
@@ -1404,7 +1423,7 @@ function hswRender(cell, hotels){
     if(!isCur && !h.fits && !sepShown){ sepShown = true; sep = `<div class="hsw-sep">— باقي فنادق المنطقة (سعة مختلفة عن العدد) —</div>`; }
     return sep + `<div class="hsw-opt ${cls}" data-idx="${i}">`
       + `<div class="hsw-l"><div class="hsw-n">${hswEsc(h.name)}${isCur?' <span class="hsw-chk">✓</span>':''}</div>`
-      + `<div class="hsw-m">⭐${h.stars} · ${hswEsc(h.room_type||'')}${cap?' · '+cap:''}${h.includes_breakfast?' · إفطار':''}</div></div>`
+      + `<div class="hsw-m">⭐${h.stars} · ${hswEsc(h.room_type||'')}${cap?' · '+cap:''}${h.includes_breakfast?' · إفطار':''}${(h.haram_tags&&h.haram_tags.length)?' · 🕌 '+hswEsc(h.haram_tags.join('، ')):''}</div></div>`
       + `<div class="hsw-price">${(h.price_per_night||0).toLocaleString()} ريال ${dTxt?`<span class="hsw-delta ${dCls}">${dTxt}</span>`:''}<small>×${nights} = ${total.toLocaleString()}</small></div>`
       + `</div>`;
   }).join('');

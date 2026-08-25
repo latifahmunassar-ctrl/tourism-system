@@ -2256,6 +2256,53 @@ TOTAL_GROUP:[رقم فقط] | [عدد] اشخاص
 
 CHAT:[جملتين ودية للموظف باللهجة السعودية]`;
 
+// ── قرب الحرم (مكة/المدينة): يُقرأ من عمود التصنيف في شيت مكة مباشرة (بلا DB).
+//    كل فندق قد يحمل أكثر من تصنيف: بجانب الحرم / قريب من الحرم / إطلالة على الحرم / موصى به.
+function normHotelName(s: string): string {
+  return String(s || "").toLowerCase().replace(/[إأآا]/g, "ا").replace(/[ةه]/g, "ه").replace(/[^a-z0-9؀-ۿ]+/g, "");
+}
+function parseHaramTags(text: string): string[] {
+  const t = String(text || "").replace(/\s+/g, " ");
+  const out: string[] = [];
+  if (/بجانب\s*الحرم/.test(t)) out.push("بجانب الحرم");
+  if (/قريب\s*من\s*الحرم/.test(t)) out.push("قريب من الحرم");
+  if (/[اإ]طلال[ةه]?\s*(?:عل[يى])?\s*الحرم/.test(t)) out.push("إطلالة على الحرم");
+  if (/موص[يى]\s*به/.test(t)) out.push("موصى به");
+  return out;
+}
+let _haramCache: { at: number; map: Record<string, string[]> } | null = null;
+async function loadHaramProximity(): Promise<Record<string, string[]>> {
+  if (_haramCache && (Date.now() - _haramCache.at) < 300000) return _haramCache.map; // كاش 5 دقائق
+  const map: Record<string, string[]> = {};
+  try {
+    const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
+    const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
+    const token = await pmGoogleToken(sa);
+    const rows = await pmReadSheet(token, ssid, "'Makkah '!A1:CZ500");
+    let nameCol = -1;
+    for (let i = 0; i < Math.min(rows.length, 15) && nameCol < 0; i++) {
+      (rows[i] || []).forEach((c, j) => { if (/^(hotel|hotels|hotel\s*name|الفندق|اسم\s*الفندق)$/i.test(String(c || "").trim())) nameCol = j; });
+    }
+    const tagRe = /الحرم|موص[يى]/;
+    const counts: Record<number, number> = {};
+    for (const r of rows) (r || []).forEach((c, j) => { if (tagRe.test(String(c || ""))) counts[j] = (counts[j] || 0) + 1; });
+    let proxCol = -1, best = 0;
+    for (const j in counts) if (counts[j] > best) { best = counts[j]; proxCol = +j; }
+    if (nameCol < 0 || proxCol < 0) { _haramCache = { at: Date.now(), map }; return map; }
+    for (const r of rows) {
+      const nm = String((r || [])[nameCol] || "").trim();
+      const px = String((r || [])[proxCol] || "").trim();
+      if (!nm || !px) continue;
+      const tags = parseHaramTags(px);
+      if (!tags.length) continue;
+      const k = normHotelName(nm);
+      map[k] = Array.from(new Set([...(map[k] || []), ...tags]));
+    }
+  } catch (_) { /* بلا فلتر عند التعذّر */ }
+  _haramCache = { at: Date.now(), map };
+  return map;
+}
+
 // ── list_hotels: فنادق مدينة معيّنة (لقائمة تبديل الفندق في الداشبورد) ──────
 // المدخل: { action:"list_hotels", dest:"ماليزيا", region:"كوالالمبور", occupancy:2 }
 // نُطابق اسم المدينة العربي عبر DEST_CITIES → canonical إنجليزي → عمود location.
@@ -2274,11 +2321,12 @@ function travelDateToISO(s: string): string | null {
 }
 
 async function handleListHotels(body: {
-  dest?: string; region?: string; occupancy?: number | string; current?: string; date?: string;
+  dest?: string; region?: string; occupancy?: number | string; current?: string; date?: string; haram?: string;
 }): Promise<Response> {
   try {
     const destAr = String(body.dest || "").trim();
     const region = String(body.region || "").trim();
+    const haramSel = String(body.haram || "").trim();   // فلتر قرب الحرم (مكة/المدينة)
     const current = String(body.current || "").trim();   // اسم الفندق الحالي (لتقييد المنطقة الفرعية)
     const occ = parseInt(String(body.occupancy ?? "").replace(/[^\d]/g, ""), 10) || 0;
     const destKey = destAr ? detectDestination([{ role: "user", content: destAr }]) : null;
@@ -2377,6 +2425,8 @@ async function handleListHotels(body: {
       return true;
     });
 
+    // تصنيف قرب الحرم (مكة/المدينة فقط) — يُقرأ من شيت مكة مباشرة.
+    const haramMap = (destKey === "Makkah") ? await loadHaramProximity() : {};
     const hotels = rows.map(h => {
       const cap = capOf(h);
       return {
@@ -2388,6 +2438,7 @@ async function handleListHotels(body: {
         occupancy: h.occupancy || "",            // نص الإشغال كما في الشيت
         capacity: cap,                            // أقصى عدد تتسعه الغرفة (رقم)
         fits: !cap || !threshold || cap >= threshold,  // مطابق للعدد المطلوب؟
+        haram_tags: (destKey === "Makkah") ? (haramMap[normHotelName(String(h.name || ""))] || []) : undefined,
       };
     });
     // المطابق للعدد أولاً (يُعرض بلون فاتح)، ثم الأعلى نجوماً، ثم الأرخص.
@@ -2395,6 +2446,12 @@ async function handleListHotels(body: {
       (a.fits === b.fits ? 0 : (a.fits ? -1 : 1))
       || (b.stars - a.stars)
       || (a.price_per_night - b.price_per_night));
+    // فلتر قرب الحرم: أظهر المطابق فقط؛ وإن ما فيه مطابق → الكل + تنبيه (الأقرب المتاح).
+    if (haramSel && destKey === "Makkah") {
+      const sel = hotels.filter(h => (h.haram_tags || []).includes(haramSel));
+      if (sel.length) return new Response(JSON.stringify({ hotels: sel, haram: haramSel }), { headers: CORS_HEADERS });
+      return new Response(JSON.stringify({ hotels, haram: haramSel, haram_note: `لا يوجد فندق «${haramSel}» بهذه المدينة/الشروط — هذي كل الخيارات المتاحة.` }), { headers: CORS_HEADERS });
+    }
     return new Response(JSON.stringify({ hotels }), { headers: CORS_HEADERS });
   } catch (e) {
     return new Response(
