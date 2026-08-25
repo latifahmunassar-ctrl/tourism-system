@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-25-makkah-view2';
+  var BUILD = '2026-08-25-makkah-diag';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1432,6 +1432,7 @@ async function applyHaramToAllHotels(val){
       const res = await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},
         body: JSON.stringify({ action:'list_hotels', dest, region, occupancy:occ, current:curName, date, haram:val })});
       const data = await res.json();
+      addMessage('sys', `🔎 [${region}] نتائج=${(data.hotels||[]).length}${data.haram_note?' · لا مطابق':''}${data.error?' · خطأ:'+data.error:''}`);
       if(data.haram_note){ unmatched.push(region); continue; }     // ما فيه مطابق → أبقِ الحالي
       const hotels = (data.hotels||[]);
       if(!hotels.length) continue;
@@ -1447,6 +1448,7 @@ async function applyHaramToAllHotels(val){
       }
       pool = pool.slice().sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
       const pick = pool[0];
+      addMessage('sys', `🔎 [${region}] الحالي=${curName} → المختار=${pick?pick.name+' / '+pick.room_type:'—'}`);
       if(!pick || ((pick.name||'').trim()===curName && (pick.room_type||'').trim()===curRoom)) continue;  // نفس الفندق ونفس الغرفة
       const newLine = [pick.name, p[1]||'', (pick.stars||p[2]||'')+' نجوم', pick.room_type||p[3]||'', (pick.price_per_night||0)+' ريال/ليلة', p[5]||'', p[6]||''].join(' | ');
       raw = hswSwapRaw(raw, hidx, newLine); changed++;
