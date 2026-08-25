@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-25-makkah-cheapest';
+  var BUILD = '2026-08-25-makkah-transport';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1020,6 +1020,7 @@ let currencyPending = null;          // { name, rate, originalSAR, converted } d
 let lastProgramRaw = '';
 let HARAM_FILTER = '';   // فلتر قرب الحرم لبرامج مكة (بجانب/قريب/إطلالة/موصى به)
 const HARAM_OPTIONS = ['بجانب الحرم','قريب من الحرم','إطلالة على الحرم','موصى به'];
+let MK_MODES = [];       // وسيلة كل مقطع تنقّل لبرنامج مكة ('train'|'car')
 let lastSavedCode = '';
 
 const SYSTEM = `انت مساعد متخصص في بناء البرامج السياحية. مهم جداً: أي أرقام إجماليات يجب أن تكون محسوبة بدقة من تفاصيل الشيت نفسها، ولا تكتب أي إجمالي إلا بعد التحقق:
@@ -1448,6 +1449,74 @@ async function applyHaramToAllHotels(val){
   let msg = `🕌 «${val}»: بُدّل ${changed} فندق`;
   if(unmatched.length) msg += ` · ما فيه مطابق في (${[...new Set(unmatched)].join('، ')}) فبقيت كما هي`;
   addMessage('sys', msg);
+}
+
+// ── شريط وسيلة التنقّل لبرنامج مكة (قطار الحرمين / سيارة لكل مقطع) ──────────────
+function mkCitiesFromProgram(){
+  const out = [];
+  for(const l of parseHotelLinesFromRaw(lastProgramRaw)){
+    const p = String(l).split('|').map(x=>x.trim());
+    const city = p[1]||''; const nights = parseInt((p[5]||'').replace(/[^\d]/g,''))||1;
+    let key = city;
+    if(/مكة|مكه|makkah/i.test(city)) key='Makkah';
+    else if(/مدين|madinah/i.test(city)) key='Al Madinah';
+    else if(/الطائف|الطايف|taif/i.test(city)) key='Taif';
+    out.push({ city, key, nights });
+  }
+  return out;
+}
+function renderMakkahTransportBar(){
+  const panel = document.getElementById('reviewPanel'); if(!panel) return;
+  const old = document.getElementById('mkTransportBar'); if(old) old.remove();
+  if(!/مكة|مكه/.test(getLine(lastProgramRaw,'DEST')||'')) return;
+  const cities = mkCitiesFromProgram(); if(!cities.length) return;
+  const seq = ['airport', ...cities.map(c=>c.key), 'airport'];
+  if(MK_MODES.length !== seq.length-1) MK_MODES = seq.slice(0,-1).map((_,i)=> (i===0 || i===seq.length-2) ? 'car' : 'train');
+  const AR = { airport:'المطار', Makkah:'مكة', 'Al Madinah':'المدينة', Taif:'الطائف' };
+  const btn = (i,mode,label)=>`<button onclick="mkSetMode(${i},'${mode}')" style="cursor:pointer;font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:16px;border:1.5px solid ${MK_MODES[i]===mode?'#1a5fb4':'#d7dee6'};background:${MK_MODES[i]===mode?'#1a5fb4':'#fff'};color:${MK_MODES[i]===mode?'#fff':'#445'}">${label}</button>`;
+  const legs = seq.slice(0,-1).map((from,i)=>{
+    const to = seq[i+1];
+    return `<div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #e5e9f0;border-radius:10px;padding:6px 9px">
+      <span style="font-size:11.5px;color:#334;font-weight:700;white-space:nowrap">${AR[from]||from} ← ${AR[to]||to}</span>
+      ${btn(i,'train','🚆 قطار')}${btn(i,'car','🚗 سيارة')}</div>`;
+  }).join('');
+  const bar = document.createElement('div');
+  bar.id = 'mkTransportBar';
+  bar.style.cssText = 'background:#eef6ff;border:1px solid #cfe0f5;border-radius:12px;padding:11px 14px;margin-bottom:12px';
+  bar.innerHTML = `<div style="font-size:12.5px;font-weight:800;color:#1a5fb4;margin-bottom:8px">🚆 وسيلة التنقّل (تذكرة القطار تُحسب × عدد الأشخاص):</div><div style="display:flex;flex-wrap:wrap;gap:9px">${legs}</div>`;
+  panel.insertBefore(bar, panel.firstChild);
+}
+async function mkSetMode(i, mode){ MK_MODES[i] = mode; await mkApplyTransport(); }
+async function mkApplyTransport(){
+  const cities = mkCitiesFromProgram(); if(!cities.length) return;
+  const seq = ['airport', ...cities.map(c=>c.key), 'airport'];
+  const nights = cities.map(c=>c.nights);
+  const pax = (typeof parsedData!=='undefined' && parsedData && parsedData.adults) || (typeof metaPersons==='function' && metaPersons()) || 2;
+  let rows = [];
+  try{
+    const res = await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},
+      body: JSON.stringify({ action:'makkah_transport_plan', pax, sequence:seq, nights, modes:MK_MODES })});
+    rows = (await res.json()).rows || [];
+  }catch(e){ addMessage('sys','تعذّر تحديث التنقّلات: '+(e&&e.message||e)); return; }
+  const totalDays = nights.reduce((a,b)=>a+b,0) + 1;
+  const isTransfer = n => /نقل|تذكرة قطار|يوم حر|يوم تنقّل|استرخاء/.test(String(n||''));
+  // احتفظ بالجولات الحقيقية (غير الانتقالات) على أيامها
+  const keep = {};
+  const tm = (new RegExp('TOURS:([\\s\\S]*?)(?=\\n(?:'+DOC_SECTION_HEAD_RE+'):)','m')).exec(lastProgramRaw);
+  if(tm){ tm[1].split('\n').forEach(l=>{ if(!l.includes('|'))return; const p=l.split('|').map(x=>x.trim()); const dm=(p[0]||'').match(/(\d+)/); if(dm && !isTransfer(p[1])) (keep[+dm[1]]=keep[+dm[1]]||[]).push(l.trim()); }); }
+  const plan = {};
+  rows.forEach(r=>{ (plan[r.day]=plan[r.day]||[]).push(`اليوم ${r.day} | ${r.name} | ${r.kind} | ${Number(r.price).toLocaleString()} ريال`); });
+  const body = [];
+  for(let d=1; d<=totalDays; d++){
+    if(plan[d]) body.push(...plan[d]);
+    else if(keep[d]) body.push(...keep[d]);
+    else body.push(`اليوم ${d} | يوم حر — استرخاء في الفندق | حر | 0 ريال`);
+  }
+  const newRaw = lastProgramRaw.replace(new RegExp('(TOURS:)([\\s\\S]*?)(?=\\n(?:'+DOC_SECTION_HEAD_RE+'):)','m'), 'TOURS:\n'+body.join('\n')+'\n');
+  if(newRaw !== lastProgramRaw){
+    for(let i=history.length-1;i>=0;i--){ if(history[i].role==='assistant'){ history[i].content=newRaw; break; } }
+    buildReview(newRaw);
+  } else renderMakkahTransportBar();
 }
 function hswRender(cell, hotels){
   cell._hotels = hotels;
@@ -2999,7 +3068,8 @@ ${summaryHTML}
 </div>`;
 
 document.getElementById('reviewPanel').innerHTML = html;
-renderHaramBar();   // شريط قرب الحرم فوق برنامج مكة
+renderHaramBar();              // شريط قرب الحرم فوق برنامج مكة
+renderMakkahTransportBar();    // شريط وسيلة التنقّل (قطار/سيارة) فوق برنامج مكة
 renderExtraCostsList();
 // هامش الربح التلقائي: يجلب جدول أرباح الوجهة ويملأ الربح حسب التكلفة + نوع العميل.
 autoProfitForProgram(dest);
