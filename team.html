@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-25-makkah-worship';
+  var BUILD = '2026-08-25-makkah-viewroom';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1435,11 +1435,18 @@ async function applyHaramToAllHotels(val){
       if(data.haram_note){ unmatched.push(region); continue; }     // ما فيه مطابق → أبقِ الحالي
       const hotels = (data.hotels||[]);
       if(!hotels.length) continue;
-      // دائماً الأرخص المطابق للتصنيف (مع مراعاة سعة المجموعة إن توفّرت) — قرار المالكة.
-      const fit = hotels.filter(h=>h.fits!==false);
-      const pool = (fit.length ? fit : hotels).slice().sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
+      const curRoom = (p[3]||'').trim();
+      let pool = hotels.filter(h=>h.fits!==false);
+      if(!pool.length) pool = hotels.slice();
+      // «إطلالة على الحرم» تخصّ الغرفة لا الفندق فقط → فضّل الغرف التي نوعها يذكر الإطلالة/الحرم
+      // (مثل «Classic Room Partial Haram View») بدل «Standard Room» الأرخص بلا إطلالة.
+      if(val==='إطلالة على الحرم'){
+        const view = pool.filter(h=>/haram\s*view|إطلال|كعب|kaaba|(?:على\s*)?الحرم|حرم/i.test(String(h.room_type||'')));
+        if(view.length) pool = view;
+      }
+      pool = pool.slice().sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
       const pick = pool[0];
-      if(!pick || (pick.name||'').trim()===curName) continue;       // الأرخص هو الحالي أصلاً
+      if(!pick || ((pick.name||'').trim()===curName && (pick.room_type||'').trim()===curRoom)) continue;  // نفس الفندق ونفس الغرفة
       const newLine = [pick.name, p[1]||'', (pick.stars||p[2]||'')+' نجوم', pick.room_type||p[3]||'', (pick.price_per_night||0)+' ريال/ليلة', p[5]||'', p[6]||''].join(' | ');
       raw = hswSwapRaw(raw, hidx, newLine); changed++;
     }catch(e){ /* تجاهل هذا الفندق */ }
