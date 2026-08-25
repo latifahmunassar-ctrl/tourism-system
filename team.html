@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-25-makkah-haram';
+  var BUILD = '2026-08-25-makkah-harambar';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1400,6 +1400,52 @@ function hswSetHaram(el, val){
   // أعِد تحميل قائمة الفندق المفتوحة حالياً بالفلتر الجديد
   const cell = el.closest('.hsw-cell');
   if(cell){ cell.dataset.loaded=''; hswFetch(cell); }
+}
+// ── شريط قرب الحرم الثابت فوق برنامج مكة (يفلتر كل الفنادق دفعة واحدة) ──
+function renderHaramBar(){
+  const panel = document.getElementById('reviewPanel'); if(!panel) return;
+  const old = document.getElementById('haramBar'); if(old) old.remove();
+  if(!/مكة|مكه/.test(getLine(lastProgramRaw,'DEST')||'')) return;
+  const chip = (label)=>`<span onclick="applyHaramToAllHotels('${label.replace(/'/g,'')}')" style="cursor:pointer;font-size:12.5px;font-weight:700;padding:6px 13px;border-radius:20px;border:1.5px solid ${HARAM_FILTER===label?'#0e9d6a':'#d7dee6'};background:${HARAM_FILTER===label?'#0e9d6a':'#fff'};color:${HARAM_FILTER===label?'#fff':'#334'}">${label}</span>`;
+  const clear = HARAM_FILTER?`<span onclick="applyHaramToAllHotels('')" style="cursor:pointer;font-size:12px;color:#b91c1c;padding:6px 10px">✕ إلغاء الفلتر</span>`:'';
+  const bar = document.createElement('div');
+  bar.id = 'haramBar';
+  bar.style.cssText = 'background:#f0f9f4;border:1px solid #cfe9db;border-radius:12px;padding:11px 14px;margin-bottom:12px';
+  bar.innerHTML = `<div style="font-size:12.5px;font-weight:800;color:#0e7a52;margin-bottom:8px">🕌 فلترة فنادق مكة والمدينة حسب قرب الحرم:</div><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">${HARAM_OPTIONS.map(chip).join('')}${clear}</div>`;
+  panel.insertBefore(bar, panel.firstChild);
+}
+// يعيد اختيار كل فنادق مكة/المدينة في البرنامج حسب التصنيف المختار (مع الإبقاء عند عدم التطابق).
+async function applyHaramToAllHotels(val){
+  HARAM_FILTER = val;
+  if(!val){ renderHaramBar(); return; }        // إلغاء الفلتر: لا نبدّل الفنادق، فقط نحدّث الشريط
+  const dest = getLine(lastProgramRaw,'DEST'); const date = getLine(lastProgramRaw,'DATE_FROM')||'';
+  const occ = (typeof parsedData!=='undefined' && parsedData && parsedData.adults) || 2;
+  const lines = parseHotelLinesFromRaw(lastProgramRaw);
+  let raw = lastProgramRaw, changed = 0; const unmatched = [];
+  for(let hidx=0; hidx<lines.length; hidx++){
+    const p = String(lines[hidx]).split('|').map(x=>x.trim());
+    const region = p[1]||'', curName = p[0]||'', curStars = parseInt(p[2])||0;
+    try{
+      const res = await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},
+        body: JSON.stringify({ action:'list_hotels', dest, region, occupancy:occ, current:curName, date, haram:val })});
+      const data = await res.json();
+      if(data.haram_note){ unmatched.push(region); continue; }     // ما فيه مطابق → أبقِ الحالي
+      const hotels = (data.hotels||[]);
+      if(!hotels.length) continue;
+      if(hotels.some(h=>(h.name||'').trim()===curName)) continue;   // الحالي مطابق أصلاً
+      const pick = hotels.find(h=>h.stars===curStars && h.fits!==false) || hotels.find(h=>h.fits!==false) || hotels[0];
+      if(!pick || (pick.name||'').trim()===curName) continue;
+      const newLine = [pick.name, p[1]||'', (pick.stars||p[2]||'')+' نجوم', pick.room_type||p[3]||'', (pick.price_per_night||0)+' ريال/ليلة', p[5]||'', p[6]||''].join(' | ');
+      raw = hswSwapRaw(raw, hidx, newLine); changed++;
+    }catch(e){ /* تجاهل هذا الفندق */ }
+  }
+  if(raw!==lastProgramRaw){
+    for(let i=history.length-1;i>=0;i--){ if(history[i].role==='assistant'){ history[i].content=raw; break; } }
+    buildReview(raw);
+  } else { renderHaramBar(); }
+  let msg = `🕌 «${val}»: بُدّل ${changed} فندق`;
+  if(unmatched.length) msg += ` · ما فيه مطابق في (${[...new Set(unmatched)].join('، ')}) فبقيت كما هي`;
+  addMessage('sys', msg);
 }
 function hswRender(cell, hotels){
   cell._hotels = hotels;
@@ -2951,6 +2997,7 @@ ${summaryHTML}
 </div>`;
 
 document.getElementById('reviewPanel').innerHTML = html;
+renderHaramBar();   // شريط قرب الحرم فوق برنامج مكة
 renderExtraCostsList();
 // هامش الربح التلقائي: يجلب جدول أرباح الوجهة ويملأ الربح حسب التكلفة + نوع العميل.
 autoProfitForProgram(dest);
