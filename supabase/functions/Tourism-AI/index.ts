@@ -2668,7 +2668,8 @@ function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number
   let headerRow = -1;
   for (let i = 0; i < Math.min(rows.length, 25); i++) {
     const c = (rows[i] || []).map(norm);
-    if (c.some(x => x === "شركات" || x === "الشركات") && c.some(x => x === "افراد" || x === "الافراد")) { headerRow = i; break; }
+    // يكفي وجود أحد النوعين (بعض الوجهات «أفراد فقط» مثل مكة — بلا عمود شركات).
+    if (c.some(x => x === "شركات" || x === "الشركات") || c.some(x => x === "افراد" || x === "الافراد")) { headerRow = i; break; }
   }
   if (headerRow < 0) return [];
   const hcells = rows[headerRow] || [];
@@ -2686,16 +2687,24 @@ function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number
   for (let r = headerRow + 1; r <= headerRow + 4 && r < rows.length; r++) {
     if ((rows[r] || []).some((c, j) => typeByCol[j] && dateRe.test(toLatin(c || "")))) { dateRow = r; break; }
   }
+  const labeledSet = new Set(["شركات", "الشركات", "افراد", "الافراد"]);
   const cols: Array<{ j: number; type: "company" | "individual"; from: string | null; to: string | null; key: string }> = [];
   for (let j = firstTyped; j < typeByCol.length; j++) {
     const t = typeByCol[j]; if (!t) continue;
     let from: string | null = null, to: string | null = null;
-    if (dateRow >= 0) { const m = toLatin((rows[dateRow] || [])[j] || "").match(dateRe); if (m) { from = `${pad(m[1])}/${pad(m[2])}`; to = `${pad(m[3])}/${pad(m[4])}`; } }
+    if (dateRow >= 0) {
+      // موسمي: العمود صالح فقط لو له مدى تاريخ (يحدّ «التعبئة لليمين» عند نهاية البلوك).
+      const m = toLatin((rows[dateRow] || [])[j] || "").match(dateRe);
+      if (!m) continue;
+      from = `${pad(m[1])}/${pad(m[2])}`; to = `${pad(m[3])}/${pad(m[4])}`;
+    } else if (!labeledSet.has(norm(hcells[j]))) {
+      continue;   // غير موسمي: فقط الأعمدة المعنونة مباشرة (شركات/آفراد)
+    }
     cols.push({ j, type: t, from, to, key: `${from || ""}|${to || ""}` });
   }
   const companies = cols.filter(c => c.type === "company");
   const individuals = cols.filter(c => c.type === "individual");
-  if (!companies.length || !individuals.length) return [];
+  if (!companies.length && !individuals.length) return [];
   let costCol = -1;
   for (const r of [headerRow - 1, headerRow, headerRow + 1]) (rows[r] || []).forEach((c, j) => { if (norm(c).includes("التكلفه")) costCol = j; });
   if (costCol < 0) costCol = firstTyped - 1;
@@ -2708,9 +2717,17 @@ function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number
     if (!cr) continue;
     const cmin = parseInt(cr[1], 10), cmax = parseInt(cr[2], 10);
     if (!(cmax > 0)) continue;
-    companies.forEach((cc, idx) => {
-      let ic = individuals.find(x => x.key === cc.key); if (!ic) ic = individuals[idx] || individuals[0];
-      out.push({ cost_min: cmin, cost_max: cmax, profit_company: pmPrice((cells[cc.j] || "").trim()) || 0, profit_individual: pmPrice((cells[ic.j] || "").trim()) || 0, season_from: cc.from, season_to: cc.to });
+    // نمرّ على النوع الموجود (أو الشركات إن وُجدت) ونطابق النوع الآخر بالموسم؛
+    // عند غياب أحد النوعين (مكة أفراد فقط) نستخدم قيمة النوع المتاح للاثنين.
+    const primary = companies.length ? companies : individuals;
+    primary.forEach((cc, idx) => {
+      const comp = companies.find(x => x.key === cc.key) || companies[idx];
+      const ind = individuals.find(x => x.key === cc.key) || individuals[idx];
+      const pcRaw = comp ? pmPrice((cells[comp.j] || "").trim()) : NaN;
+      const piRaw = ind ? pmPrice((cells[ind.j] || "").trim()) : NaN;
+      const pc = isNaN(pcRaw) ? (isNaN(piRaw) ? 0 : piRaw) : pcRaw;
+      const pi = isNaN(piRaw) ? (isNaN(pcRaw) ? 0 : pcRaw) : piRaw;
+      out.push({ cost_min: cmin, cost_max: cmax, profit_company: pc, profit_individual: pi, season_from: cc.from, season_to: cc.to });
     });
   }
   return out;
@@ -2780,6 +2797,62 @@ async function handleMakkahTransport(): Promise<Response> {
   }
 }
 
+// ── makkah_transport_plan: يولّد صفوف تنقّل مكة الصحيحة حسب التسلسل + الوسيلة + الأشخاص.
+//    sequence: ["airport","Makkah","Al Madinah","airport"] · nights:[3,3] · modes: وسيلة كل مقطع.
+//    train = تذكرة (54×الأشخاص) + نقلات السيارة حول المحطة · car = نقل مباشر واحد.
+async function handleMakkahTransportPlan(body: { pax?: number; sequence?: string[]; nights?: (number | string)[]; modes?: string[] }): Promise<Response> {
+  try {
+    const pax = Math.max(1, parseInt(String(body.pax)) || 2);
+    const seq = Array.isArray(body.sequence) ? body.sequence.map(String) : [];
+    const nights = Array.isArray(body.nights) ? body.nights.map(n => parseInt(String(n)) || 0) : [];
+    const modes = Array.isArray(body.modes) ? body.modes.map(String) : [];
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data } = await supabase.from("tours").select("name,price").eq("type", "Makkah");
+    const nid = (s: string) => String(s || "").replace(/[إأآا]/g, "ا").replace(/[ةه]/g, "ه").replace(/ـ/g, "").replace(/\s+/g, "");
+    const cat = (data || []).map((t: any) => ({ name: String(t.name).trim(), n: nid(t.name), price: Number(t.price) || 0 }));
+    // نقرأ تذكرة القطار (نفس منطق makkah_transport)
+    let trainTicket = 54;
+    try {
+      const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!); const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
+      const rows = await pmReadSheet(await pmGoogleToken(sa), ssid, "'Makkah '!A1:CZ500");
+      let rc = -1; for (let i = 0; i < Math.min(rows.length, 10); i++) (rows[i] || []).forEach((c, j) => { if (/قطار\s*الحرمين/.test(String(c || ""))) rc = j; });
+      if (rc >= 0) { let f = false; for (const r of rows) { if (f) break; for (let j = rc + 1; j <= rc + 3; j++) { const v = parseFloat(String((r || [])[j] || "").replace(/[^\d.]/g, "")); if (v > 0 && v < 2000) { trainTicket = v; f = true; break; } } } }
+    } catch (_) { /* 54 */ }
+    // مطابقة مرتّبة: الاسم يحوي كل الرموز بالترتيب، ويستبعد المرفوض.
+    const tok: Record<string, string> = { Makkah: "مكه", "Al Madinah": "المدينه", Madinah: "المدينه", Taif: "طايف", airport: "مطار" };
+    const find = (order: string[], not: string[] = []): { name: string; price: number } | null => {
+      for (const c of cat) {
+        if (not.some(x => c.n.includes(nid(x)))) continue;
+        let pos = 0, ok = true;
+        for (const t of order) { const i = c.n.indexOf(nid(t), pos); if (i < 0) { ok = false; break; } pos = i + nid(t).length; }
+        if (ok) return { name: c.name, price: c.price };
+      }
+      return null;
+    };
+    const arName: Record<string, string> = { Makkah: "مكة المكرمة", "Al Madinah": "المدينة المنورة", Madinah: "المدينة المنورة", Taif: "الطائف", airport: "مطار جدة" };
+    const isCity = (s: string) => s !== "airport";
+    const out: Array<{ day: number; name: string; kind: string; price: number }> = [];
+    for (let k = 0; k < seq.length - 1; k++) {
+      const from = seq[k], to = seq[k + 1], mode = modes[k] || "car";
+      const day = k === 0 ? 1 : 1 + nights.slice(0, k).reduce((a, b) => a + b, 0);
+      if (mode === "train") {
+        out.push({ day, name: `تذكرة قطار الحرمين (${arName[from]} → ${arName[to]})`, kind: "قطار", price: trainTicket * pax });
+        if (isCity(from)) { const h = find(["فندق", tok[from], "محطه"]); if (h) out.push({ day, name: h.name, kind: "نقل", price: h.price }); }
+        if (isCity(to)) { const h = find(["محطه", "الفندق", tok[to]]); if (h) out.push({ day, name: h.name, kind: "نقل", price: h.price }); }
+      } else {
+        // نقل مباشر from→to
+        let d = find([tok[from], "الي", tok[to]], ["محطه"]);
+        if (!d && isCity(from) && isCity(to)) { const rev = find([tok[to], "الي", tok[from]], ["محطه"]); if (rev) d = { name: `نقل من ${arName[from]} الى ${arName[to]}`, price: rev.price }; }
+        if (d) out.push({ day, name: d.name, kind: "نقل", price: d.price });
+      }
+    }
+    const total = out.reduce((s, r) => s + r.price, 0);
+    return new Response(JSON.stringify({ rows: out, total, train_ticket: trainTicket, pax }), { headers: CORS_HEADERS });
+  } catch (e) {
+    return new Response(JSON.stringify({ rows: [], total: 0, error: String((e as Error).message) }), { status: 200, headers: CORS_HEADERS });
+  }
+}
+
 // ── Handler ────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
@@ -2796,6 +2869,7 @@ Deno.serve(async (req) => {
     if (reqBody && reqBody.action === "tour_variants") return await handleTourVariants(reqBody);
     if (reqBody && reqBody.action === "profit_margins") return await handleProfitMargins(reqBody);
     if (reqBody && reqBody.action === "makkah_transport") return await handleMakkahTransport();
+    if (reqBody && reqBody.action === "makkah_transport_plan") return await handleMakkahTransportPlan(reqBody);
     if (reqBody && reqBody.action === "currencies") return await handleCurrencies();
     const { messages, max_tokens = 1200, system: clientSystem } = reqBody;
 
