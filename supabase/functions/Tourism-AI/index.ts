@@ -2751,6 +2751,35 @@ async function handleCurrencies(): Promise<Response> {
   }
 }
 
+// ── makkah_transport: كتالوج انتقالات مكة + سعر تذكرة قطار الحرمين ──────────
+//    (لشريط اختيار قطار/سيارة فوق برنامج مكة — طبقة آمنة لا تلمس البنّاء).
+async function handleMakkahTransport(): Promise<Response> {
+  try {
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data } = await supabase.from("tours").select("name,price").eq("type", "Makkah");
+    const transfers = (data || [])
+      .filter((t: any) => /نقل|محطه|قطار/.test(String(t.name || "")))
+      .map((t: any) => ({ name: String(t.name).trim(), price: Number(t.price) || 0 }));
+    // سعر تذكرة قطار الحرمين من عمود «قطار الحرمين» في الشيت (العمود المجاور = السعر).
+    let trainTicket = 54;
+    try {
+      const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
+      const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
+      const token = await pmGoogleToken(sa);
+      const rows = await pmReadSheet(token, ssid, "'Makkah '!A1:CZ500");
+      let routeCol = -1;
+      for (let i = 0; i < Math.min(rows.length, 10); i++) (rows[i] || []).forEach((c, j) => { if (/قطار\s*الحرمين/.test(String(c || ""))) routeCol = j; });
+      if (routeCol >= 0) {
+        let found = false;
+        for (const r of rows) { if (found) break; for (let j = routeCol + 1; j <= routeCol + 3; j++) { const v = parseFloat(String((r || [])[j] || "").replace(/[^\d.]/g, "")); if (v > 0 && v < 2000) { trainTicket = v; found = true; break; } } }
+      }
+    } catch (_) { /* افتراضي 54 */ }
+    return new Response(JSON.stringify({ transfers, train_ticket: trainTicket }), { headers: CORS_HEADERS });
+  } catch (e) {
+    return new Response(JSON.stringify({ transfers: [], train_ticket: 54, error: String((e as Error).message) }), { status: 200, headers: CORS_HEADERS });
+  }
+}
+
 // ── Handler ────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
@@ -2766,6 +2795,7 @@ Deno.serve(async (req) => {
     if (reqBody && reqBody.action === "list_tours") return await handleListTours(reqBody);
     if (reqBody && reqBody.action === "tour_variants") return await handleTourVariants(reqBody);
     if (reqBody && reqBody.action === "profit_margins") return await handleProfitMargins(reqBody);
+    if (reqBody && reqBody.action === "makkah_transport") return await handleMakkahTransport();
     if (reqBody && reqBody.action === "currencies") return await handleCurrencies();
     const { messages, max_tokens = 1200, system: clientSystem } = reqBody;
 
