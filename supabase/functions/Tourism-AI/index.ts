@@ -2829,21 +2829,29 @@ async function handleMakkahTransportPlan(body: { pax?: number; sequence?: string
       }
       return null;
     };
-    const arName: Record<string, string> = { Makkah: "مكة المكرمة", "Al Madinah": "المدينة المنورة", Madinah: "المدينة المنورة", Taif: "الطائف", airport: "مطار جدة" };
-    const isCity = (s: string) => s !== "airport";
+    const arName: Record<string, string> = { Makkah: "مكة المكرمة", "Al Madinah": "المدينة المنورة", Madinah: "المدينة المنورة", Taif: "الطائف", airport: "مطار جدة", madinah_airport: "مطار المدينة" };
+    const isCity = (s: string) => s !== "airport" && s !== "madinah_airport";
+    // ملاحظة نوع السيارة أمام كل نقل بالسيارة (كل انتقالات مكة سيدان 1-4).
+    const carNote = pax > 4 ? "🚗 سيارة سيدان خاصة (تتسع 4 — أضف سيارة)" : "🚗 سيارة سيدان خاصة";
+    const withCar = (nm: string) => `${String(nm).replace(/\s*\(\s*سيدان\s*\)\s*/g, " ").trim()} — ${carNote}`;
     const out: Array<{ day: number; name: string; kind: string; price: number }> = [];
     for (let k = 0; k < seq.length - 1; k++) {
-      const from = seq[k], to = seq[k + 1], mode = modes[k] || "car";
+      const from = seq[k], to = seq[k + 1];
+      const mode = (to === "madinah_airport") ? "car" : (modes[k] || "car");   // لا قطار الى مطار المدينة
       const day = k === 0 ? 1 : 1 + nights.slice(0, k).reduce((a, b) => a + b, 0);
       if (mode === "train") {
         out.push({ day, name: `تذكرة قطار الحرمين (${arName[from]} → ${arName[to]})`, kind: "قطار", price: trainTicket * pax });
-        if (isCity(from)) { const h = find(["فندق", tok[from], "محطه"]); if (h) out.push({ day, name: h.name, kind: "نقل", price: h.price }); }
-        if (isCity(to)) { const h = find(["محطه", "الفندق", tok[to]]); if (h) out.push({ day, name: h.name, kind: "نقل", price: h.price }); }
+        if (isCity(from)) { const h = find(["فندق", tok[from], "محطه"]); if (h) out.push({ day, name: withCar(h.name), kind: "نقل", price: h.price }); }
+        if (isCity(to)) { const h = find(["محطه", "الفندق", tok[to]]); if (h) out.push({ day, name: withCar(h.name), kind: "نقل", price: h.price }); }
+      } else if (to === "madinah_airport") {
+        // نقل مباشر من المدينة الى مطار المدينة (يستبعد جدة/المحطة)
+        const d = find(["مطار", "المدينه"], ["جده", "محطه", "قطار"]);
+        if (d) out.push({ day, name: withCar(d.name), kind: "نقل", price: d.price });
       } else {
         // نقل مباشر from→to
         let d = find([tok[from], "الي", tok[to]], ["محطه"]);
         if (!d && isCity(from) && isCity(to)) { const rev = find([tok[to], "الي", tok[from]], ["محطه"]); if (rev) d = { name: `نقل من ${arName[from]} الى ${arName[to]}`, price: rev.price }; }
-        if (d) out.push({ day, name: d.name, kind: "نقل", price: d.price });
+        if (d) out.push({ day, name: withCar(d.name), kind: "نقل", price: d.price });
       }
     }
     const total = out.reduce((s, r) => s + r.price, 0);
