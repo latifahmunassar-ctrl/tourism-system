@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-25-makkah-traincol';
+  var BUILD = '2026-08-25-makkah-worship';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1520,7 +1520,7 @@ async function mkApplyTransport(){
   for(let d=1; d<=totalDays; d++){
     if(plan[d]) body.push(...plan[d]);
     else if(keep[d]) body.push(...keep[d]);
-    else body.push(`اليوم ${d} | يوم حر — استرخاء في الفندق | حر | 0 ريال`);
+    else body.push(`اليوم ${d} | يوم حر في الحرم للعبادة | حر | 0 ريال`);   // أيام العبادة الحرة (مكة/المدينة)
   }
   // سطور الطيران: أبقِ الطيران الحقيقي (غير القطار) + أضف تذاكر القطار.
   const flightLines = [];
