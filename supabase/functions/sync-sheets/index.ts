@@ -26,7 +26,7 @@ const CORS_HEADERS = {
   "Content-Type": "application/json",
 };
 
-const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius "];
+const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah "];
 
 // Per-destination canonical-city patterns — MUST stay in sync with DEST_CITIES
 // in Tourism-AI/index.ts (same canonical names the builder groups by). Used
@@ -1524,7 +1524,7 @@ Deno.serve(async (req) => {
         // بُعد الموسم دون تعديل مخطّط قاعدة البيانات. (extractProfitMargins مُبقاة
         // للمرجعية فقط.)
 
-        details[tab] = { hotels: hotels.length, tours: tours.length, flights: flights.length, trains: trains.length, suggestions: suggestions.length, margins: margins.length };
+        details[tab] = { hotels: hotels.length, tours: tours.length, flights: flights.length, trains: trains.length, suggestions: suggestions.length };
         totalHotels  += hotels.length;
         totalTours   += tours.length;
         totalFlights += flights.length;

@@ -213,6 +213,8 @@ function parseDestination(text: string): string | null {
     [/عُمان|عمان|سلطنة\s*عمان|oman|صلال[ةه]|salalah/i, "Oman"],
     [/جنوب\s*(?:ال)?[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبر[جغ]|johannesburg|(?:هارمونس|هارمانوس|هيرمانوس|هرمانوس)|hermanus|بريتوريا|pretoria|سن\s*سيتي|sun\s*city|كروجر|kruger/i, "South Africa"],
     [/موريشيوس|موريش[سي]|mauritius|بورت\s*لويس|port\s*louis/i, "mauritius"],
+    // مكة/العمرة (مكة + المدينة المنورة + جدة + الطائف) — يطابق index.ts
+    [/مكة|مكه|makkah|mecca|العمرة|عمرة|الحرمين|المدينة\s*المنورة|المنوّ?رة|al\s*madinah|madinah|medina/i, "Makkah"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;
@@ -586,6 +588,18 @@ const BALI_AREAS: Array<{ pat: RegExp; name: string }> = [
   { pat: /جيمبران|جيمباران|jimbaran/iu, name: "Jimbaran" },
   { pat: /نوسا\s*دوا|nusa\s*dua/iu, name: "Nusa Dua" },
 ];
+// صلالة لها منطقتان بأسعار مختلفة: «هوانا» (أغلى) و«وسط المدينة». نوسم كل إقامة
+// بمنطقتها ليبني المُنشئ جولات/انتقالات كل إقامة بأسعار منطقتها — يشمل برامج تجمع
+// «٣ هوانا + ٣ وسط». هوانا أولاً (الأكثر تحديداً).
+const SALALAH_AREAS: Array<{ pat: RegExp; name: string }> = [
+  { pat: /هوانا|هوان[هة]|hawana/iu, name: "هوانا" },
+  { pat: /وسط/u, name: "وسط" },
+];
+// المدن ذات المناطق الفرعية المُسعّرة تفاضليّاً (يُوسَم كل stay بمنطقته).
+const SUBAREA_DEFS: Record<string, Array<{ pat: RegExp; name: string }>> = {
+  Bali: BALI_AREAS,
+  Salalah: SALALAH_AREAS,
+};
 
 function parseCityStaysOrdered(text: string, cityDefs: CityDef[]): CityStay[] {
   const t = normalizeNightWords(arabicDigitsToLatin(text));
@@ -615,15 +629,16 @@ function parseCityStaysOrdered(text: string, cityDefs: CityDef[]): CityStay[] {
   // Sort by position so we get the order the employee wrote them
   hits.sort((a, b) => a.pos - b.pos);
 
-  // Attach Bali sub-area hints to nearby Bali stays. We collect all area
-  // mentions in the text, then for each Bali hit pick the closest UNUSED
-  // area mention within a small window (so the employee writing "4 بالي
-  // كوتا + 2 سيمنياك" gets two Bali stays tagged "Kuta" and "Seminyak"
-  // in that order).
-  const baliHits = hits.filter(h => h.city === "Bali");
-  if (baliHits.length > 0) {
+  // Attach sub-area hints (Bali: Kuta/Seminyak…، صلالة: هوانا/وسط) to nearby
+  // stays of the SAME city. We collect all area mentions in the text, then for
+  // each hit pick the closest UNUSED mention within a small window — so
+  // "4 بالي كوتا + 2 سيمنياك" أو "3 صلاله هوانا و 3 صلاله وسط" يوسم كل إقامة
+  // بمنطقتها بالترتيب.
+  for (const [areaCity, areaDefs] of Object.entries(SUBAREA_DEFS)) {
+    const cityHits = hits.filter(h => h.city === areaCity);
+    if (cityHits.length === 0) continue;
     const areaMentions: Array<{ name: string; pos: number; used: boolean }> = [];
-    for (const area of BALI_AREAS) {
+    for (const area of areaDefs) {
       const re = new RegExp(area.pat.source, "giu");
       let m: RegExpExecArray | null;
       while ((m = re.exec(t)) !== null) {
@@ -631,19 +646,19 @@ function parseCityStaysOrdered(text: string, cityDefs: CityDef[]): CityStay[] {
         if (m.index === re.lastIndex) re.lastIndex++;
       }
     }
-    // Sort by position and greedily match each Bali hit to its nearest
-    // unused area mention within 40 chars (covers "4 ليالي بالي كوتا").
+    // Sort by position and greedily match each hit to its nearest unused area
+    // mention within 40 chars (covers "4 ليالي بالي كوتا" / "3 صلاله هوانا").
     areaMentions.sort((a, b) => a.pos - b.pos);
-    for (const baliHit of baliHits) {
+    for (const h of cityHits) {
       let best: { idx: number; dist: number } | null = null;
       for (let i = 0; i < areaMentions.length; i++) {
         if (areaMentions[i].used) continue;
-        const dist = Math.abs(areaMentions[i].pos - baliHit.pos);
+        const dist = Math.abs(areaMentions[i].pos - h.pos);
         if (dist > 40) continue;
         if (best === null || dist < best.dist) best = { idx: i, dist };
       }
       if (best !== null) {
-        baliHit.area = areaMentions[best.idx].name;
+        h.area = areaMentions[best.idx].name;
         areaMentions[best.idx].used = true;
       }
     }
@@ -1080,7 +1095,9 @@ export function parseTripRequest(
     // every word order — Saudi-dialect ordering varies a lot.
     transportOnly: (() => {
       const t = text;
-      if (/بدون\s*(?:ال)?فنادق|بدون\s*(?:ال)?فندق|بدون\s*(?:ال)?طيران|بدون\s*(?:ال)?حجز/iu.test(t)) return true;
+      // «بدون/بلا/دون/من غير» + فنادق/فندق/طيران/حجز. نتجنّب «غير» المفردة كيلا
+      // تتعارض مع تعديل «غيّر الفندق» (تبديل فندق، ليس إلغاءه).
+      if (/(?:بدون|بلا|دون|من\s*غير)\s*(?:ال)?(?:فنادق|فندق|طيران|حجز)/iu.test(t)) return true;
       // Any combination of {تنقلات/نقل/مواصلات/جولات} with "فقط" within ~30 chars
       if (/(?:تنقلات|تنقل|نقل|مواصلات|جولات)[^\n]{0,30}فقط/iu.test(t)) return true;
       if (/فقط[^\n]{0,30}(?:تنقلات|تنقل|نقل|مواصلات|جولات)/iu.test(t)) return true;

@@ -50,6 +50,9 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     [/عُمان|عمان|سلطنة\s*عمان|oman|صلال[ةه]|salalah/i, "Oman"],
     [/جنوب\s*(?:ال)?[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبر[جغ]|johannesburg|(?:هارمونس|هارمانوس|هيرمانوس|هرمانوس)|hermanus|بريتوريا|pretoria|سن\s*سيتي|sun\s*city|كروجر|kruger/i, "South Africa"],
     [/موريشيوس|موريش[سي]|mauritius|بورت\s*لويس|port\s*louis/i, "mauritius"],
+    // مكة/العمرة (برامج داخلية: مكة + المدينة المنورة + جدة + الطائف). «المدينة» وحدها
+    // عامة فنطلب «المنورة»؛ وجدة/الطائف لا تُشغّل الوجهة وحدها (مدن سعودية عامة).
+    [/مكة|مكه|makkah|mecca|العمرة|عمرة|الحرمين|المدينة\s*المنورة|المنوّ?رة|al\s*madinah|madinah|medina/i, "Makkah"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;
@@ -67,6 +70,14 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
 //   • ة/ه/ـة all accepted (بورصة/بورصه)
 //   • Latin alts always allowed (with optional spacing/hyphenation)
 const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>> = {
+  Makkah: [
+    // كانونيكال يطابق مدينة الفندق في hotels.location (Makkah / Al Madinah)،
+    // وأنماط عربية تطابق أسماء جولات النقل (city='')؛ جدة/الطائف نقاط عبور.
+    { canonical: "Makkah",     pattern: /مكة|مكه|makkah|mecca/i },
+    { canonical: "Al Madinah", pattern: /المدينة|المدينه|المنورة|المنوره|al\s*madinah|madinah|medina/i },
+    { canonical: "Jeddah",     pattern: /جدة|جده|jeddah|jedda|jed\b/i },
+    { canonical: "Taif",       pattern: /الطائف|الطايف|طائف|طايف|taif/i },
+  ],
   vietnam: [
     { canonical: "Ha Noi",      pattern: /هانوي|hanoi|ha\s*noi/i },
     { canonical: "Sapa",        pattern: /سابا|sapa|كات\s*كات|لاو\s*تشاي|تا\s*فان|فانسيبان/i },
@@ -2564,7 +2575,7 @@ async function handleTourVariants(body: { dest?: string; name?: string }): Promi
 
 // ── profit_margins: جدول الأرباح الموسمي لوجهة — يُقرأ مباشرة من شيت الوجهة
 //    (بلا جدول قاعدة بيانات): شريحة تكلفة × موسم × شركات/أفراد. ──────────────────
-const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius "];
+const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah "];
 
 async function pmGoogleToken(sa: { client_email: string; private_key: string }): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
