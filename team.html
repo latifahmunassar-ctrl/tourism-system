@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-25-makkah-transport2';
+  var BUILD = '2026-08-25-makkah-transport3';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1021,6 +1021,8 @@ let lastProgramRaw = '';
 let HARAM_FILTER = '';   // فلتر قرب الحرم لبرامج مكة (بجانب/قريب/إطلالة/موصى به)
 const HARAM_OPTIONS = ['بجانب الحرم','قريب من الحرم','إطلالة على الحرم','موصى به'];
 let MK_MODES = [];       // وسيلة كل مقطع تنقّل لبرنامج مكة ('train'|'car')
+let MK_LAST_SIG = '';    // بصمة آخر تركيب طُبّق (مدن+ليالي+وسائل) — يمنع التكرار
+function mkSig(cities){ return JSON.stringify((cities||[]).map(c=>c.key+'/'+c.nights)) + '|' + MK_MODES.join(','); }
 let lastSavedCode = '';
 
 const SYSTEM = `انت مساعد متخصص في بناء البرامج السياحية. مهم جداً: أي أرقام إجماليات يجب أن تكون محسوبة بدقة من تفاصيل الشيت نفسها، ولا تكتب أي إجمالي إلا بعد التحقق:
@@ -1488,12 +1490,15 @@ function renderMakkahTransportBar(){
   bar.style.cssText = 'background:#eef6ff;border:1px solid #cfe0f5;border-radius:12px;padding:11px 14px;margin-bottom:12px';
   bar.innerHTML = `<div style="font-size:12.5px;font-weight:800;color:#1a5fb4;margin-bottom:8px">🚆 وسيلة التنقّل (تذكرة القطار تُحسب × عدد الأشخاص):</div><div style="display:flex;flex-wrap:wrap;gap:9px">${legs}</div>`;
   panel.insertBefore(bar, panel.firstChild);
+  // تطبيق تلقائي مرة واحدة لكل (مدن+وسائل) — عشان تظهر تذكرة القطار والانتقالات الصحيحة بلا ضغط.
+  if(mkSig(cities) !== MK_LAST_SIG) setTimeout(()=>mkApplyTransport(), 0);
 }
 async function mkSetMode(i, mode){ MK_MODES[i] = mode; await mkApplyTransport(); }
 async function mkApplyTransport(){
   const cities = mkCitiesFromProgram(); if(!cities.length) return;
   const seq = ['airport', ...cities.map(c=>c.key), 'airport'];
   const nights = cities.map(c=>c.nights);
+  MK_LAST_SIG = mkSig(cities);   // علّم البصمة فوراً (يمنع إعادة التطبيق التلقائي)
   const pax = (typeof parsedData!=='undefined' && parsedData && parsedData.adults) || (typeof metaPersons==='function' && metaPersons()) || 2;
   let rows = [];
   try{
@@ -1501,6 +1506,7 @@ async function mkApplyTransport(){
       body: JSON.stringify({ action:'makkah_transport_plan', pax, sequence:seq, nights, modes:MK_MODES })});
     rows = (await res.json()).rows || [];
   }catch(e){ addMessage('sys','تعذّر تحديث التنقّلات: '+(e&&e.message||e)); return; }
+  if(!rows.length){ addMessage('sys','⚠️ تعذّر تركيب انتقالات مكة (لا نتائج من الخادم) — بقيت كما هي.'); return; }
   const totalDays = Math.min(90, nights.reduce((a,b)=>a+(parseInt(b)||0),0) + 1);   // حد أمان ضد أي حلقة
   const isTransfer = n => /نقل|تذكرة قطار|يوم حر|يوم تنقّل|استرخاء/.test(String(n||''));
   // احتفظ بالجولات الحقيقية (غير الانتقالات) على أيامها
@@ -1518,7 +1524,9 @@ async function mkApplyTransport(){
   const newRaw = lastProgramRaw.replace(new RegExp('(TOURS:)([\\s\\S]*?)(?=\\n(?:'+DOC_SECTION_HEAD_RE+'):)','m'), 'TOURS:\n'+body.join('\n')+'\n');
   if(newRaw !== lastProgramRaw){
     for(let i=history.length-1;i>=0;i--){ if(history[i].role==='assistant'){ history[i].content=newRaw; break; } }
-    buildReview(newRaw);
+    try{ buildReview(newRaw); }catch(e){ addMessage('sys','خطأ في عرض الانتقالات: '+(e&&e.message||e)); }
+    const ticket = rows.filter(r=>/تذكرة قطار/.test(r.name)).reduce((s,r)=>s+r.price,0);
+    if(ticket>0) addMessage('sys',`🚆 حُسبت تذاكر قطار الحرمين: ${Number(ticket).toLocaleString()} ريال (${pax} أشخاص).`);
   } else renderMakkahTransportBar();
 }
 function hswRender(cell, hotels){
