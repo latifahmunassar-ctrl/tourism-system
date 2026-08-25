@@ -934,6 +934,7 @@ function extractSuggestions(
     Turky:    "Istanbul",
     indonesia: "Jakarta",
     Oman:     "صلالة",
+    Makkah:   "جدة",   // برامج العمرة تدخل/تخرج عبر جدة (بلا سطر مطار في عمود الاقتراحات)
   };
   for (let i = headerRow + 1; i < rows.length; i++) {
     const rawCell = (rows[i][colIdx] || "").trim();
