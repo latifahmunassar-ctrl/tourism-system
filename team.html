@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-25-makkah-diag';
+  var BUILD = '2026-08-25-makkah-depair';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1022,7 +1022,8 @@ let HARAM_FILTER = '';   // فلتر قرب الحرم لبرامج مكة (بج
 const HARAM_OPTIONS = ['بجانب الحرم','قريب من الحرم','إطلالة على الحرم','موصى به'];
 let MK_MODES = [];       // وسيلة كل مقطع تنقّل لبرنامج مكة ('train'|'car')
 let MK_LAST_SIG = '';    // بصمة آخر تركيب طُبّق (مدن+ليالي+وسائل) — يمنع التكرار
-function mkSig(cities){ return JSON.stringify((cities||[]).map(c=>c.key+'/'+c.nights)) + '|' + MK_MODES.join(','); }
+let MK_DEP_AIR = 'jeddah';  // مطار المغادرة إن انتهى البرنامج بالمدينة: 'jeddah' | 'madinah'
+function mkSig(cities){ return JSON.stringify((cities||[]).map(c=>c.key+'/'+c.nights)) + '|' + MK_MODES.join(',') + '|' + MK_DEP_AIR; }
 let lastSavedCode = '';
 
 const SYSTEM = `انت مساعد متخصص في بناء البرامج السياحية. مهم جداً: أي أرقام إجماليات يجب أن تكون محسوبة بدقة من تفاصيل الشيت نفسها، ولا تكتب أي إجمالي إلا بعد التحقق:
@@ -1489,11 +1490,15 @@ function renderMakkahTransportBar(){
   if(MK_MODES.length !== seq.length-1) MK_MODES = seq.slice(0,-1).map((_,i)=> (i===0 || i===seq.length-2) ? 'car' : 'train');
   const AR = { airport:'المطار', Makkah:'مكة', 'Al Madinah':'المدينة', Taif:'الطائف' };
   const btn = (i,mode,label)=>`<button onclick="mkSetMode(${i},'${mode}')" style="cursor:pointer;font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:16px;border:1.5px solid ${MK_MODES[i]===mode?'#1a5fb4':'#d7dee6'};background:${MK_MODES[i]===mode?'#1a5fb4':'#fff'};color:${MK_MODES[i]===mode?'#fff':'#445'}">${label}</button>`;
+  const airBtn = (air,label)=>`<button onclick="mkSetDepAir('${air}')" style="cursor:pointer;font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;border:1.5px solid ${MK_DEP_AIR===air?'#0e9d6a':'#d7dee6'};background:${MK_DEP_AIR===air?'#0e9d6a':'#fff'};color:${MK_DEP_AIR===air?'#fff':'#445'}">${label}</button>`;
   const legs = seq.slice(0,-1).map((from,i)=>{
     const to = seq[i+1];
+    // مقطع المغادرة (الأخير) من المدينة بالسيارة → أظهِر خيار المطار: جدة / مطار المدينة
+    const depAirChips = (i===seq.length-2 && from==='Al Madinah' && MK_MODES[i]==='car')
+      ? `<span style="font-size:11px;color:#889">↩ المطار:</span>${airBtn('jeddah','🛫 جدة')}${airBtn('madinah','🛫 مطار المدينة')}` : '';
     return `<div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #e5e9f0;border-radius:10px;padding:6px 9px">
       <span style="font-size:11.5px;color:#334;font-weight:700;white-space:nowrap">${AR[from]||from} ← ${AR[to]||to}</span>
-      ${btn(i,'train','🚆 قطار')}${btn(i,'car','🚗 سيارة')}</div>`;
+      ${btn(i,'train','🚆 قطار')}${btn(i,'car','🚗 سيارة')}${depAirChips}</div>`;
   }).join('');
   const bar = document.createElement('div');
   bar.id = 'mkTransportBar';
@@ -1504,9 +1509,13 @@ function renderMakkahTransportBar(){
   if(mkSig(cities) !== MK_LAST_SIG) setTimeout(()=>mkApplyTransport(), 0);
 }
 async function mkSetMode(i, mode){ MK_MODES[i] = mode; await mkApplyTransport(); }
+async function mkSetDepAir(air){ MK_DEP_AIR = air; await mkApplyTransport(); }
 async function mkApplyTransport(){
   const cities = mkCitiesFromProgram(); if(!cities.length) return;
-  const seq = ['airport', ...cities.map(c=>c.key), 'airport'];
+  // مطار المغادرة: لو انتهى البرنامج بالمدينة واختير «مطار المدينة» → madinah_airport، وإلا جدة.
+  const lastKey = cities[cities.length-1].key;
+  const depAirport = (MK_DEP_AIR==='madinah' && lastKey==='Al Madinah') ? 'madinah_airport' : 'airport';
+  const seq = ['airport', ...cities.map(c=>c.key), depAirport];
   const nights = cities.map(c=>c.nights);
   MK_LAST_SIG = mkSig(cities);   // علّم البصمة فوراً (يمنع إعادة التطبيق التلقائي)
   const pax = (typeof parsedData!=='undefined' && parsedData && parsedData.adults) || (typeof metaPersons==='function' && metaPersons()) || 2;
