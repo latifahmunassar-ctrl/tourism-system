@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-25-makkah-pdf'
+  var BUILD = '2026-08-26-finalize-code'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -494,6 +494,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
     <button type="button" class="pdf-menu-item" onclick="pdfMenuPick('no_price')">🚫 بدون سعر <small>— بدون لوغو</small></button>
   </div>
 </div>
+<button type="button" class="ebtn ebtn-pdf" id="finalizeCodeBtn" style="background:linear-gradient(135deg,#0b3d91,#0e9d6a);border:none;color:#fff;font-weight:800" onclick="finalizeProgramCode()" title="جمّد النسخة الحالية بكل تعديلاتها وولّد كود استرجاع دائم — بدون إرسال للعميل">✅ اعتمد النسخة النهائية — ولّد الكود</button>
 <button class="ebtn ebtn-nologo" id="currencyBtn" onclick="toggleCurrencyPicker()">💱 تحويل عملة</button>
 <select id="currencyPicker" onchange="onCurrencyPick()" style="display:none; padding:7px 10px; border-radius:8px; border:1px solid var(--border); background:var(--s2); color:var(--text); font-family:'Tajawal',sans-serif; font-size:12px; font-weight:700; cursor:pointer;"><option value="">💱 بدون تحويل (ريال)</option></select>
 <span id="currencyResult" style="display:none; font-size:13px; font-weight:900; color:var(--gold); background:var(--s2); border:1px solid rgba(212,168,67,0.35); border-radius:8px; padding:6px 12px; white-space:nowrap;"></span>
@@ -3911,6 +3912,29 @@ async function saveCurrentProgramOnce(pdfVariant, finalGroupPrice) {
     addMessage('sys', 'فشل حفظ البرنامج: ' + String((e && e.message) ? e.message : e));
   }
   return '';
+}
+
+// اعتماد النسخة النهائية: يجمّد النسخة الحالية (بكل تعديلاتها) ويولّد كود استرجاع
+// دائم — بدون إرسال للعميل. أي تعديل لاحق يمسح الكود (buildReview) فتُعيد الاعتماد
+// لنسخة جديدة بكود جديد. هكذا لحظة «خلصت» بيد المالكة بالضبط، والكود يطابق النسخة.
+async function finalizeProgramCode() {
+  if (!parsedData || !lastProgramRaw || !/TOTAL_GROUP:/.test(lastProgramRaw)) {
+    addMessage('sys', 'ابنِ البرنامج وسعّره أولاً ثم اعتمد النسخة النهائية.');
+    return;
+  }
+  const btn = document.getElementById('finalizeCodeBtn');
+  const old = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ يُعتمد…'; }
+  try {
+    const already = lastSavedCode;
+    const code = await saveCurrentProgramOnce('client', currentFinalGroup());
+    if (code) {
+      addMessage('sys', (already ? 'هذه النسخة معتمدة مسبقاً. ' : '✅ تم اعتماد النسخة النهائية. ')
+        + 'كود الاسترجاع: ' + code + ' — استخدميه لاحقاً لاستدعاء هذه النسخة بالضبط. أي تعديل بعده يتطلب اعتماداً جديداً.');
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = old; }
+  }
 }
 
 function handleRetrieveKey(e) {
