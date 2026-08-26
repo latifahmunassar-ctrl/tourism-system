@@ -5899,7 +5899,6 @@ function renderSupplierDetail(){
       '<div style="font-size:11px;color:var(--muted);margin:4px 0">وزّعي المبلغ على العملاء <b>بعملة المورّد ('+esc(SCUR)+')</b>؛ لو دفعتِ بعملة ثانية حدّدي عملة الدفع وسعر الصرف فيظهر المبلغ القابل للتوزيع محوَّلاً لعملة المورّد:</div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px">'+
         '<div class="fld" style="min-width:210px;flex:1"><label>🔍 بحث (اسم العميل أو الكود)</label><input id="spc-q" oninput="spcliFilter()" placeholder="اكتبي اسم أو كود العميل..."></div>'+
-        '<div class="fld" style="min-width:250px"><label>📌 حدّدي عملاء (يثبتون) — يعرض المحدّدين فقط</label><div style="display:flex;gap:5px"><input id="spc-pick" list="spc-pick-list" placeholder="اكتبي/اختاري كود العميل ثم ➕" onkeydown="if(event.key===\'Enter\'){event.preventDefault();spcPickAdd();}" style="flex:1"><datalist id="spc-pick-list"></datalist><button class="btn" style="background:#ea580c;color:#fff;padding:0 14px;white-space:nowrap" onclick="spcPickAdd()">➕ ثبّت</button></div></div>'+
         '<div class="fld"><label>من تاريخ (الوصول) 📅</label><input type="date" id="spc-from" onchange="spcliFilter()" style="color-scheme:light;cursor:pointer"></div>'+
         '<div class="fld"><label>إلى تاريخ 📅</label><input type="date" id="spc-to" onchange="spcliFilter()" style="color-scheme:light;cursor:pointer"></div>'+
         '<label style="align-self:center;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;color:#b8860b;background:rgba(217,138,0,.08);border:1px solid #e5c07b;border-radius:8px;padding:8px 12px;white-space:nowrap"><input type="checkbox" id="spc-noinv" onchange="spcliFilter()" style="width:16px;height:16px;cursor:pointer"> 🔴 الناقصة فقط (بلا فاتورة) · <span style="background:#d98a00;color:#fff;border-radius:8px;padding:1px 8px;font-size:12px" title="عدد الفواتير الناقصة ضمن الفلتر الحالي (يتحدّث مع التاريخ)"><b id="spc-noinv-count">0</b></span></label>'+
@@ -5947,7 +5946,7 @@ function renderSupplierDetail(){
           const diffCell = entered
             ? '<td class="num" id="sdiff-'+mid+'" style="font-weight:700;color:'+(diff<-0.5?'#d11':(diff>0.5?'#0e9d6a':'inherit'))+'">'+fmt(diff)+'</td>'
             : '<td class="num" id="sdiff-'+mid+'"></td>';
-          return '<tr data-cli="'+_cli+'" data-dates="'+_dts+'" data-code="'+esc((c||'').toUpperCase())+'" data-noinv="'+(cliActual[c]==null?'1':'0')+'" data-cancel="'+(spHasCancel(c)?'1':'0')+'"><td>'+esc(c)+(cbal>0.5?' <span title="متبقّي عليه'+fmt(cbal)+' '+esc(ccur)+' — يجب المطالبة به" style="cursor:help">⚠️</span>':'')+'</td><td style="color:var(--muted);font-size:10.5px;white-space:nowrap">'+esc(fc.arr||'')+'</td><td>'+esc(nameCli[c]||'')+cancHtml+directHtml+(cbal>0.5?'<div style="font-size:9px;color:#b8860b;font-weight:700">⚠️ متبقّي '+fmt(cbal)+' '+esc(ccur)+' — يجب المطالبة</div>':'')+incBadgeHtml((_APM.missClient||{})[(c||'').toUpperCase()]||0)+supSrcBadge(c)+'</td><td style="color:var(--muted)">'+esc(agentCli[c]||'')+'</td>'+
+          return '<tr data-cli="'+_cli+'" data-dates="'+_dts+'" data-code="'+esc((c||'').toUpperCase())+'" data-noinv="'+(cliActual[c]==null?'1':'0')+'" data-cancel="'+(spHasCancel(c)?'1':'0')+'"><td><input type="checkbox" class="spc-rowchk" data-code="'+esc((c||'').toUpperCase())+'" onchange="spcChk(this)" title="حدّدي لعرضه في «المحدّدين فقط»" style="width:15px;height:15px;cursor:pointer;vertical-align:middle;margin-left:6px">'+esc(c)+(cbal>0.5?' <span title="متبقّي عليه'+fmt(cbal)+' '+esc(ccur)+' — يجب المطالبة به" style="cursor:help">⚠️</span>':'')+'</td><td style="color:var(--muted);font-size:10.5px;white-space:nowrap">'+esc(fc.arr||'')+'</td><td>'+esc(nameCli[c]||'')+cancHtml+directHtml+(cbal>0.5?'<div style="font-size:9px;color:#b8860b;font-weight:700">⚠️ متبقّي '+fmt(cbal)+' '+esc(ccur)+' — يجب المطالبة</div>':'')+incBadgeHtml((_APM.missClient||{})[(c||'').toUpperCase()]||0)+supSrcBadge(c)+'</td><td style="color:var(--muted)">'+esc(agentCli[c]||'')+'</td>'+
             '<td class="num" style="color:#0e9d6a;font-weight:700">'+fmt(fc.paid)+' <span style="font-size:9px;color:var(--muted)">'+esc(ccur)+'</span></td>'+
             '<td class="num" style="color:'+(cbal>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(cbal)+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+esc(ccur)+'</div></td>'+
             '<td class="num" style="font-weight:700;color:'+(fc.prof>0.5?'#0e9d6a':(fc.prof<-0.5?'#d11':'inherit'))+'">'+(Math.abs(fc.prof)>0.005?fmt(fc.prof):'<span style="color:#9aa">—</span>')+'<div style="font-size:9px;color:var(--muted);font-weight:400">'+esc(ccur)+'</div></td>'+
@@ -6036,9 +6035,9 @@ function renderSupplierDetail(){
       }).join('')+'</tbody></table></div></div>';
   })();
   box.innerHTML=h;
-  if(SP_PICKED_SUP!==supRaw){ SP_PICKED=[]; SP_PICKED_SUP=supRaw; }   // 📌 صفِّر المحدّدين عند تغيير المورّد
-  try{ if(typeof spcPickFillList==='function') spcPickFillList(); }catch(e){}   // 📋 عبّئ قائمة أكواد هذا المورّد للاختيار
-  try{ if(typeof spcPickRender==='function') spcPickRender(); }catch(e){}       // 🔁 أعِد رسم شرائح المحدّدين بعد إعادة بناء الشريط
+  if(SP_PICKED_SUP!==supRaw){ SP_PICKED=[]; SP_ONLY=false; SP_PICKED_SUP=supRaw; }   // 📌 صفِّر المحدّدين عند تغيير المورّد
+  try{ document.querySelectorAll('.spc-rowchk').forEach(c=>{ c.checked=SP_PICKED.includes((c.dataset.code||'').toUpperCase()); }); }catch(e){}   // ↩️ استعد حالة صناديق الاختيار بعد إعادة البناء
+  try{ if(typeof spcPickBar==='function') spcPickBar(); }catch(e){}       // 🔁 أعِد رسم شريط المحدّدين
   if(typeof supdSummary==='function') supdSummary('', '', '');   // 📊 اعرض ملخّص المستحق/الرصيد فور فتح المورّد (قبل أي فلتر)
   try{ if(typeof spcliFilter==='function') spcliFilter(); }catch(e){}   // 🔁 أعِد تطبيق الفلتر + هيّئ عدّاد الناقصة بعد كل رسم
 }
@@ -6062,28 +6061,25 @@ function sppFilter(){
     r.style.display=ok?'':'none';
   });
 }
-// 📌 اختيار متعدّد لعملاء كشف المورّد — يثبّتون كـchips ويُعرَض المحدّدون فقط في التقرير
-let SP_PICKED=[], SP_PICKED_SUP='';
-function spcPickAdd(){ const inp=$('spc-pick'); if(!inp)return; const raw=(inp.value||'').trim(); if(!raw)return;
-  const code=raw.split(/[\s—|]/)[0].trim().toUpperCase(); if(!code)return;
-  if(!SP_PICKED.includes(code)) SP_PICKED.push(code);
-  inp.value=''; spcPickRender(); spcliFilter(); }
-function spcPickRemove(code){ SP_PICKED=SP_PICKED.filter(x=>x!==String(code).toUpperCase()); spcPickRender(); spcliFilter(); }
-function spcPickClear(){ SP_PICKED=[]; spcPickRender(); spcliFilter(); }
-function spcPickRender(){ const box=$('spc-picked-box'); if(!box)return;
+// 📌 تحديد عملاء بصناديق اختيار في كشف المورّد — يُعرَض المحدّدون فقط عند تفعيل «اعرض المحدّدين فقط»
+let SP_PICKED=[], SP_PICKED_SUP='', SP_ONLY=false;
+function spcChk(el){ const c=(el&&el.dataset.code||'').toUpperCase(); if(!c)return;
+  if(el.checked){ if(!SP_PICKED.includes(c))SP_PICKED.push(c); } else { SP_PICKED=SP_PICKED.filter(x=>x!==c); }
+  if(!SP_PICKED.length) SP_ONLY=false;
+  spcPickBar(); if(SP_ONLY) spcliFilter(); }
+function spcOnlyToggle(){ if(!SP_PICKED.length){ SP_ONLY=false; } else { SP_ONLY=!SP_ONLY; } spcPickBar(); spcliFilter(); }
+function spcPickClear(){ SP_PICKED=[]; SP_ONLY=false; document.querySelectorAll('.spc-rowchk').forEach(c=>c.checked=false); spcPickBar(); spcliFilter(); }
+function spcPickBar(){ const box=$('spc-picked-box'); if(!box)return;
   if(!SP_PICKED.length){ box.innerHTML=''; return; }
-  box.innerHTML='<span style="font-size:11.5px;color:var(--muted);font-weight:700">📌 المحدّدون ('+SP_PICKED.length+') — يُعرَض هؤلاء فقط:</span> '+
-    SP_PICKED.map(c=>'<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(234,88,12,.10);border:1px solid #ea580c66;color:#ea580c;border-radius:12px;padding:2px 9px;margin:3px 3px 0 0;font-size:11.5px;font-weight:700">'+esc(c)+' <span style="cursor:pointer;font-weight:900" title="إزالة" onclick="spcPickRemove(\''+esc(c)+'\')">✕</span></span>').join('')+
-    ' <button class="btn ghost" style="padding:2px 12px;font-size:11px" onclick="spcPickClear()">مسح المحدّدين</button>'; }
-function spcPickFillList(){ const dl=$('spc-pick-list'); if(!dl)return; const seen=new Set(); let h='';
-  document.querySelectorAll('#sp-dist-tbl tr[data-code]').forEach(r=>{ const c=(r.dataset.code||'').toUpperCase(); if(!c||seen.has(c))return; seen.add(c); const nm=(r.children&&r.children[2]?r.children[2].textContent:'').trim().replace(/\s+/g,' ').slice(0,26); h+='<option value="'+esc(c)+'">'+esc(nm)+'</option>'; });
-  dl.innerHTML=h; }
+  box.innerHTML='<span style="font-size:12.5px;font-weight:700;color:#ea580c">📌 حدّدتِ '+SP_PICKED.length+' عميل</span> '+
+    '<button class="btn" style="background:'+(SP_ONLY?'#0e7c50':'#ea580c')+';color:#fff;padding:3px 15px;font-size:12px;margin:0 5px" onclick="spcOnlyToggle()">'+(SP_ONLY?'👁️ إظهار الكل':'🔎 اعرض المحدّدين فقط')+'</button>'+
+    '<button class="btn ghost" style="padding:3px 12px;font-size:11px" onclick="spcPickClear()">مسح التحديد</button>'; }
 function spcliFilter(){
   const q=(($('spc-q')||{}).value||'').trim().toLowerCase();
   const f=(($('spc-from')||{}).value)||''; const t=(($('spc-to')||{}).value)||'';
   const noinv=!!(($('spc-noinv')||{}).checked);   // 🔴 الناقصة فقط (بلا فاتورة مورّد) — client-side ليتراكب مع التاريخ/البحث
   const canc=!!(($('spc-cancel')||{}).checked);   // 🚫 الملغية فقط
-  const picked=(SP_PICKED&&SP_PICKED.length)?SP_PICKED:null;   // 📌 عملاء محدّدون يدويّاً — يُعرَض هؤلاء فقط
+  const picked=(SP_ONLY && SP_PICKED&&SP_PICKED.length)?SP_PICKED:null;   // 📌 يُعرَض المحدّدون فقط عند تفعيل «اعرض المحدّدين فقط»
   const act=!!(q||f||t||noinv||canc||picked);
   document.querySelectorAll('#sp-dist-tbl tr').forEach(r=>{
     if(r.classList.contains('sp-sep')){ r.style.display=act?'none':''; return; }
@@ -6370,7 +6366,7 @@ function updatePeriodSummary(){
     '</div>'+
     '<div style="font-size:10.5px;color:var(--muted);margin-top:6px">📅 الحجوزات والفواتير حسب <b>تاريخ الوصول</b> · المدفوعات = <b>مدفوعة خلال الفترة</b> أو <b>لعميل يصل خلالها</b> (فلا تفوت الدفعات المجمّعة التي تاريخها يختلف عن الوصول، وتشمل غير الموزّعة).</div>';
 }
-function spcliClear(){ ['spc-q','spc-from','spc-to'].forEach(id=>{const e=$(id);if(e)e.value='';}); const nv=$('spc-noinv'); if(nv)nv.checked=false; const cv=$('spc-cancel'); if(cv)cv.checked=false; SP_PICKED=[]; if(typeof spcPickRender==='function')spcPickRender(); spcliFilter(); }
+function spcliClear(){ ['spc-q','spc-from','spc-to'].forEach(id=>{const e=$(id);if(e)e.value='';}); const nv=$('spc-noinv'); if(nv)nv.checked=false; const cv=$('spc-cancel'); if(cv)cv.checked=false; SP_PICKED=[]; SP_ONLY=false; document.querySelectorAll('.spc-rowchk').forEach(c=>c.checked=false); if(typeof spcPickBar==='function')spcPickBar(); spcliFilter(); }
 // 📋 تقرير مخصّص: اختيار الأعمدة + تصدير Excel/PDF للصفوف الظاهرة حسب الفلتر الحالي (التاريخ/البحث/الناقصة)
 function rcolPreset(k){ document.querySelectorAll('.rcol').forEach(c=>{ if(k==='all')c.checked=true; else if(k==='invpay')c.checked=(c.value==='11'||c.value==='14'); }); const pay=document.querySelector('.rcolpay'); if(pay)pay.checked=(k==='all'||k==='invpay'); }
 function exportSupplierCustom(kind){
