@@ -3126,7 +3126,7 @@ function exportHotelPayPDF(){
     else { for(const s of (DATA.serviceLines||[])){ if(s.kind!=='hotel'||!hpMatch(s,payee)||!inR(s.check_in))continue; po+=hbOwedEff(s); pn++; } hpPayments(payee).filter(x=>inR(x.date)).forEach(x=>{ pp+=x.amount; px++; }); }
     periodLine='<div class="period"><b>تقرير الفترة ('+esc((from||'…')+' → '+(to||'…'))+'):</b> المستحق <b>'+fmt(po)+' '+esc(cur)+'</b> · المدفوع <b>'+fmt(pp)+' '+esc(cur)+'</b> · حجوزات <b>'+fmt(pn)+'</b> · عمليات <b>'+fmt(px)+'</b> <small>(المستحق حسب تاريخ الدخول · المدفوع حسب تاريخ الدفع)</small></div>'; }
   // قراءة الصفوف الظاهرة من الجدولين (تتبع الفلتر)
-  const cellTxt=(td)=>{ if(!td)return ''; const inp=td.querySelector('input'); if(inp)return (inp.value||inp.getAttribute('placeholder')||''); return td.innerText.replace(/\s+/g,' ').trim(); };
+  const cellTxt=(td)=>{ if(!td)return ''; const inp=td.querySelector('input:not([type=checkbox])'); if(inp)return (inp.value||inp.getAttribute('placeholder')||''); return td.innerText.replace(/\s+/g,' ').trim(); };
   const rowsOf=(bodyId,idxs)=>{ const out=[]; document.querySelectorAll('#'+bodyId+' tr').forEach(tr=>{ if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; out.push(idxs.map(i=>cellTxt(tds[i]))); }); return out; };
   const headOf=(bodyId,idxs)=>{ const tbl=document.getElementById(bodyId).closest('table'); const ths=[...tbl.querySelectorAll('thead th')].map(x=>x.innerText.replace(/\s+/g,' ').trim()); return idxs?idxs.map(i=>ths[i]||''):ths; };
   // جدول الحجوزات: نتخطّى عمود ✓ (0) وعمود المبلغ الأخير (input) — نأخذ من «كود» حتى «مصدر الدفع» (شامل عمود الربح الفعلي المُضاف عند 6)
@@ -5911,6 +5911,7 @@ function renderSupplierDetail(){
         '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-bottom:8px">'+
           '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="1" checked> تاريخ الوصول</label>'+
           '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="3" checked> الوكيل</label>'+
+          '<label style="cursor:pointer;font-weight:700;color:#b8860b"><input type="checkbox" class="rcol" value="5"> 💳 مستحقات العميل الباقية</label>'+
           '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="10" checked> قيمة الحجز</label>'+
           '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="11" checked> 🧾 فاتورة المورّد</label>'+
           '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="12"> الفرق</label>'+
@@ -6120,11 +6121,11 @@ function exportSupplierPDF(){
   const filtered=!!(f||t||q);
   const _sl=(typeof _spSumLines==='function')?_spSumLines():[]; const periodInner=_sl.length?('<div style="font-weight:800;color:#c41d88;margin-bottom:4px">📊 ملخّص التقرير</div>'+_sl.map(l=>'<div>'+esc(l)+'</div>').join('')):'';   // 📊 ملخّص PDF من الصناديق المؤشَّرة
   // قراءة الصفوف الظاهرة (تتبع الفلتر) من الجدولين
-  const rowsOf=(bodyId,idxs)=>{ const out=[]; document.querySelectorAll('#'+bodyId+' tr').forEach(tr=>{ if(tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; out.push(idxs.map(i=>{ const td=tds[i]; if(!td)return ''; const inp=td.querySelector('input'); if(inp)return (inp.value||inp.getAttribute('placeholder')||''); return td.innerText.replace(/\s+/g,' ').trim(); })); }); return out; };
+  const rowsOf=(bodyId,idxs)=>{ const out=[]; document.querySelectorAll('#'+bodyId+' tr').forEach(tr=>{ if(tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; out.push(idxs.map(i=>{ const td=tds[i]; if(!td)return ''; const inp=td.querySelector('input:not([type=checkbox])'); if(inp)return (inp.value||inp.getAttribute('placeholder')||''); return td.innerText.replace(/\s+/g,' ').trim(); })); }); return out; };
   const headOf=(bodyId,n)=>{ const tbl=document.getElementById(bodyId).closest('table'); const ths=[...tbl.querySelectorAll('thead th')].map(x=>x.innerText.replace(/\s+/g,' ').trim()); return n?ths.slice(0,n):ths; };
   const t1head=headOf('sp-dist-tbl',13); const t1idx=[0,1,2,3,4,5,6,7,8,9,10,11,12];   // + «فاتورة المورّد» (١١) + «الفرق» (١٢)
   // قارئ خاص لجدول التوزيع: عمود «فاتورة المورّد» يعرض القيمة المُدخلة يدوياً فقط (data-val) لا القيمة الافتراضية (placeholder)
-  const t1rows=(function(){ const out=[]; document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; if(SP_PICKED.length && !SP_PICKED.includes((tr.dataset.code||'').toUpperCase()))return;   /* 📌 صدّري المحدّدين فقط عند وجود تحديد */ const tds=tr.querySelectorAll('td'); if(!tds.length)return; out.push(t1idx.map(i=>{ const td=tds[i]; if(!td)return ''; if(i===11){ if(td.dataset&&td.dataset.val!=null&&td.dataset.val!=='')return td.dataset.val; const inp=td.querySelector('input'); if(inp&&inp.value!=='')return inp.value; return '—'; } const inp=td.querySelector('input'); if(inp)return (inp.value||inp.getAttribute('placeholder')||''); return td.innerText.replace(/\s+/g,' ').trim(); })); }); return out; })();
+  const t1rows=(function(){ const out=[]; document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; if(SP_PICKED.length && !SP_PICKED.includes((tr.dataset.code||'').toUpperCase()))return;   /* 📌 صدّري المحدّدين فقط عند وجود تحديد */ const tds=tr.querySelectorAll('td'); if(!tds.length)return; out.push(t1idx.map(i=>{ const td=tds[i]; if(!td)return ''; if(i===11){ if(td.dataset&&td.dataset.val!=null&&td.dataset.val!=='')return td.dataset.val; const inp=td.querySelector('input:not([type=checkbox])'); if(inp&&inp.value!=='')return inp.value; return '—'; } const inp=td.querySelector('input:not([type=checkbox])'); if(inp)return (inp.value||inp.getAttribute('placeholder')||''); return td.innerText.replace(/\s+/g,' ').trim(); })); }); return out; })();
   const t2head=headOf('sp-pay-tbl'); const t2idx=t2head.map((_,i)=>i); const t2rows=rowsOf('sp-pay-tbl',t2idx);
   // جدول (٣): السدادات — التحويلات البنكية المسجّلة (نفس مصدر «سداد المستحقات»)، بنفس فلتر الفترة
   const _xfers=_supTransfers(sup,f,t);
@@ -6171,7 +6172,7 @@ function exportStaffPDF(){
   const staff=(($('st-staff')||{}).value)||''; const job=(($('st-job')||{}).value)||'';
   const f=(($('st-from')||{}).value)||''; const t=(($('st-to')||{}).value)||'';
   const mainTbl=document.getElementById('t-staff'); if(!mainTbl){ alert('لا يوجد تقرير موظفين'); return; }
-  const readTbl=(tbl)=>{ const head=[...tbl.querySelectorAll('thead th')].map(x=>x.innerText.replace(/\s+/g,' ').trim()); const rows=[]; tbl.querySelectorAll('tbody tr').forEach(tr=>{ if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; rows.push([...tds].map(td=>{ const inp=td.querySelector('input'); return inp?(inp.value||''):td.innerText.replace(/\s+/g,' ').trim(); })); }); return {head,rows}; };
+  const readTbl=(tbl)=>{ const head=[...tbl.querySelectorAll('thead th')].map(x=>x.innerText.replace(/\s+/g,' ').trim()); const rows=[]; tbl.querySelectorAll('tbody tr').forEach(tr=>{ if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; rows.push([...tds].map(td=>{ const inp=td.querySelector('input:not([type=checkbox])'); return inp?(inp.value||''):td.innerText.replace(/\s+/g,' ').trim(); })); }); return {head,rows}; };
   const _pN=s=>{ const n=parseFloat(String(s).replace(/[^\d.\-]/g,'')); return isNaN(n)?null:n; };
   // الجدول الرئيسي: عمود ٥=الربح المتوقع (FCD)، عمود ٦=الربح الفعلي (Booking) → لوّن ٦ أحمر لو أقل
   const main=readTbl(mainTbl);
@@ -6399,8 +6400,8 @@ function exportSupplierCustom(kind){
   const NUMC=new Set([4,5,6,7,8,9,10,11,12,13,14]);
   const cleanNum=s=>{ const m=String(s==null?'':s).replace(/[,\s]/g,'').match(/-?\d+(?:\.\d+)?/); return m?m[0]:''; };
   const cellTxt=(td,ci)=>{ if(!td)return '';
-    if(ci===11){ if(td.dataset&&td.dataset.val!=null&&td.dataset.val!=='') return cleanNum(td.dataset.val); const inp=td.querySelector('input'); return inp?cleanNum(inp.value||''):''; }   // فاتورة المورّد: القيمة المُدخَلة فقط (لا placeholder ولا زر) لدقّة الجمع
-    const inp=td.querySelector('input');
+    if(ci===11){ if(td.dataset&&td.dataset.val!=null&&td.dataset.val!=='') return cleanNum(td.dataset.val); const inp=td.querySelector('input:not([type=checkbox])'); return inp?cleanNum(inp.value||''):''; }   // فاتورة المورّد: القيمة المُدخَلة فقط (لا placeholder ولا زر) لدقّة الجمع
+    const inp=td.querySelector('input:not([type=checkbox])');
     let txt; if(inp){ txt=(inp.value||inp.getAttribute('placeholder')||''); } else { const c=td.cloneNode(true); c.querySelectorAll('button').forEach(b=>b.remove()); txt=(c.innerText||c.textContent||'').replace(/\s+/g,' ').trim(); }
     if(NUMC.has(ci)) return cleanNum(txt);
     if(ci===2) txt=txt.split(/[🔻⚠️🔵✅🚫ℹ️]/)[0].trim();   // اسم العميل بلا شارات
@@ -6437,7 +6438,7 @@ function exportSupplierCustom(kind){
     '<div class="hd"><div class="logo">AL<span>E</span>ZZ</div><div class="ttl">'+esc(title)+'</div></div>'+
     (sumLines.length?'<div class="note"><b>📊 ملخّص التقرير:</b> '+sumLines.map(esc).join(' · ')+'</div>':'')+
     '<table><thead><tr>'+head.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+
-    rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join('')+
+    rows.map(r=>'<tr>'+r.map((c,ci)=>{ const oi=idxs[ci]; let st=''; if(oi===7||oi===12){ const n=parseFloat(String(c).replace(/[^0-9.\-]/g,'')); if(!isNaN(n)&&Math.abs(n)>0.005) st=' style="color:'+(n<0?'#d11':'#0e9d6a')+';font-weight:800"'; } return '<td'+st+'>'+esc(c)+'</td>'; }).join('')+'</tr>').join('')+
     '</tbody></table>'+payTbl+'<div style="margin-top:8px;font-size:10px;color:#6b7c7a">شركة العز · ALEZZ Group</div>'+
     '<script>window.onload=function(){setTimeout(function(){window.print();},350);};<\/script></body></html>';
   w.document.open(); w.document.write(html); w.document.close();
