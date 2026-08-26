@@ -2811,13 +2811,29 @@ async function handleMakkahTransportPlan(body: { pax?: number; sequence?: string
     const nid = (s: string) => String(s || "").replace(/[إأآا]/g, "ا").replace(/[ةه]/g, "ه").replace(/ـ/g, "").replace(/\s+/g, "");
     const cat = (data || []).map((t: any) => ({ name: String(t.name).trim(), n: nid(t.name), price: Number(t.price) || 0 }));
     // نقرأ تذكرة القطار (نفس منطق makkah_transport)
-    let trainTicket = 54;
+    // أسعار تذاكر القطار تختلف حسب المسار (جدة↔مكة، مكة↔المدينة…) — نبني خريطة مسار→سعر.
+    let defTicket = 54;
+    const trainMap: Record<string, number> = {};
     try {
       const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!); const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
       const rows = await pmReadSheet(await pmGoogleToken(sa), ssid, "'Makkah '!A1:CZ500");
       let rc = -1; for (let i = 0; i < Math.min(rows.length, 10); i++) (rows[i] || []).forEach((c, j) => { if (/قطار\s*الحرمين/.test(String(c || ""))) rc = j; });
-      if (rc >= 0) { let f = false; for (const r of rows) { if (f) break; for (let j = rc + 1; j <= rc + 3; j++) { const v = parseFloat(String((r || [])[j] || "").replace(/[^\d.]/g, "")); if (v > 0 && v < 2000) { trainTicket = v; f = true; break; } } } }
-    } catch (_) { /* 54 */ }
+      if (rc >= 0) {
+        const classify = (t: string) => /مطار/.test(t) ? "airport" : (/مكه|مكة/.test(t) ? "Makkah" : (/مدين/.test(t) ? "Al Madinah" : ""));
+        for (const r of rows) {
+          const txt = String((r || [])[rc] || "");
+          const m = txt.match(/من\s+([\s\S]+?)\s+ال[ىيئ]\s*محط[\s\S]+?في\s+([\s\S]+)/);
+          if (!m) continue;
+          let price = NaN;
+          for (let j = rc + 1; j <= rc + 3; j++) { const v = parseFloat(String((r || [])[j] || "").replace(/[^\d.]/g, "")); if (v > 0 && v < 3000) { price = v; break; } }
+          if (isNaN(price)) continue;
+          const o = classify(m[1]), d = classify(m[2]);
+          if (o && d) { trainMap[`${o}>${d}`] = price; if (!(`${d}>${o}` in trainMap)) trainMap[`${d}>${o}`] = price; }
+          if (defTicket === 54) defTicket = price;   // أول سعر = افتراضي
+        }
+      }
+    } catch (_) { /* افتراضي */ }
+    const trainPriceFor = (from: string, to: string) => trainMap[`${from}>${to}`] || trainMap[`${to}>${from}`] || defTicket;
     // مطابقة مرتّبة: الاسم يحوي كل الرموز بالترتيب، ويستبعد المرفوض.
     const tok: Record<string, string> = { Makkah: "مكه", "Al Madinah": "المدينه", Madinah: "المدينه", Taif: "طايف", airport: "مطار" };
     const find = (order: string[], not: string[] = []): { name: string; price: number } | null => {
@@ -2840,7 +2856,7 @@ async function handleMakkahTransportPlan(body: { pax?: number; sequence?: string
       const mode = (to === "madinah_airport") ? "car" : (modes[k] || "car");   // لا قطار الى مطار المدينة
       const day = k === 0 ? 1 : 1 + nights.slice(0, k).reduce((a, b) => a + b, 0);
       if (mode === "train") {
-        out.push({ day, name: `تذكرة قطار الحرمين (${arName[from]} → ${arName[to]})`, kind: "قطار", price: trainTicket * pax });
+        out.push({ day, name: `تذكرة قطار الحرمين (${arName[from]} → ${arName[to]})`, kind: "قطار", price: trainPriceFor(from, to) * pax });
         if (isCity(from)) { const h = find(["فندق", tok[from], "محطه"]); if (h) out.push({ day, name: withCar(h.name), kind: "نقل", price: h.price }); }
         if (isCity(to)) { const h = find(["محطه", "الفندق", tok[to]]); if (h) out.push({ day, name: withCar(h.name), kind: "نقل", price: h.price }); }
       } else if (to === "madinah_airport") {
@@ -2855,7 +2871,7 @@ async function handleMakkahTransportPlan(body: { pax?: number; sequence?: string
       }
     }
     const total = out.reduce((s, r) => s + r.price, 0);
-    return new Response(JSON.stringify({ rows: out, total, train_ticket: trainTicket, pax }), { headers: CORS_HEADERS });
+    return new Response(JSON.stringify({ rows: out, total, train_ticket: defTicket, train_map: trainMap, pax }), { headers: CORS_HEADERS });
   } catch (e) {
     return new Response(JSON.stringify({ rows: [], total: 0, error: String((e as Error).message) }), { status: 200, headers: CORS_HEADERS });
   }
