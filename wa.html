@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20260809b -->
+<!-- APPVER:20260826a -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1345,7 +1345,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
                 <option value="">— اختر —</option>
                 <option>فيتنام</option><option>ماليزيا</option><option>تايلاند</option>
                 <option>تركيا</option><option>روسيا</option><option>البوسنة</option>
-                <option>إندونيسيا</option><option>عُمان</option><option>جنوب أفريقيا</option><option>موريشيوس</option>
+                <option>إندونيسيا</option><option>عُمان</option><option>جنوب أفريقيا</option><option>موريشيوس</option><option>مكة المكرمة</option>
               </select>
             </label>
             <label style="display:flex; flex-direction:column; gap:3px;">تاريخ السفر
@@ -1828,7 +1828,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260809b";
+    const APPVER = "20260826a";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -2382,6 +2382,18 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         el.addEventListener("keydown", ev => { if (ev.key === "Enter") open(); });
       });
     }
+    // وقت آخر نشاط لمحادثة واتساب = الأحدث بين كل طوابعها (وارد/صادر/آخر رسالة).
+    // مهم للدمج الزمني: رسالة واتساب جديدة تحدّث last_inbound_at فترجع المحادثة فوق
+    // حتى لو last_message_at لم يُحدَّث فوراً.
+    function waActivityT(c) {
+      let t = 0;
+      const fields = ["last_message_at", "last_inbound_at", "last_human_outbound_at", "last_outbound_at", "last_activity_at", "updated_at"];
+      for (const f of fields) {
+        const v = c[f];
+        if (v) { const p = new Date(v).getTime(); if (p && p > t) t = p; }
+      }
+      return t;
+    }
     // صفوف إنستقرام الجاهزة للدمج ({t, html}) — تُستثنى في وضع المراقبة.
     function igMergeRows() {
       if (!igConvCache.length) return [];
@@ -2601,7 +2613,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     // قائمة الوجهات اللي يتعرفها النظام — مطابقة لـ DESTINATION_HINTS
     // في الـ Edge Function. تخليها هنا تضمن إن الـ dropdown يعرض نفس
     // الأسماء اللي تكتشف من رسائل العملاء.
-    const KNOWN_DESTINATIONS = ["ماليزيا", "تركيا", "إندونيسيا", "فيتنام", "تايلاند", "البوسنة", "روسيا", "جنوب أفريقيا", "موريشيوس"];
+    const KNOWN_DESTINATIONS = ["ماليزيا", "تركيا", "إندونيسيا", "فيتنام", "تايلاند", "البوسنة", "روسيا", "جنوب أفريقيا", "موريشيوس", "مكة المكرمة"];
 
     // Generic chips renderer reused by add-form + edit modal.
     function renderDestChips(containerEl, list, onRemove) {
@@ -3620,7 +3632,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
               <button class="toggle-btn inherit" data-action="reset" data-phone="${escapeHtml(c.phone)}" title="استخدم الإعداد العام" style="min-width:auto;padding:6px 10px">↺</button>
             </div>
           </div>`;
-        return { t: c.last_message_at ? new Date(c.last_message_at).getTime() : 0, ig: false, html: _rowHtml };
+        return { t: waActivityT(c), ig: false, html: _rowHtml };
       });
       // دمج صفوف الواتساب مع إنستقرام في قائمة واحدة مرتّبة بالوقت (الأحدث فوق)،
       // بلا تقسيم — أي رسالة جديدة (واتساب أو إنستقرام) ترجع فوق تلقائياً.
