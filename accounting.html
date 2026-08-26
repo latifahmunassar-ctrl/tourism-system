@@ -6066,7 +6066,7 @@ let SP_PICKED=[], SP_PICKED_SUP='', SP_ONLY=false;
 function spcChk(el){ const c=(el&&el.dataset.code||'').toUpperCase(); if(!c)return;
   if(el.checked){ if(!SP_PICKED.includes(c))SP_PICKED.push(c); } else { SP_PICKED=SP_PICKED.filter(x=>x!==c); }
   if(!SP_PICKED.length) SP_ONLY=false;
-  spcPickBar(); if(SP_ONLY) spcliFilter(); }
+  spcPickBar(); spcliFilter(); }   /* دائماً: يحدّث الملخّص + يطبّق «المحدّدين فقط» إن كان مفعّلاً */
 function spcOnlyToggle(){ if(!SP_PICKED.length){ SP_ONLY=false; } else { SP_ONLY=!SP_ONLY; } spcPickBar(); spcliFilter(); }
 function spcPickClear(){ SP_PICKED=[]; SP_ONLY=false; document.querySelectorAll('.spc-rowchk').forEach(c=>c.checked=false); spcPickBar(); spcliFilter(); }
 function spcPickBar(){ const box=$('spc-picked-box'); if(!box)return;
@@ -6321,11 +6321,12 @@ function updatePeriodSummary(){
   const q=(($('spc-q')||{}).value||'').trim().toLowerCase();
   const f=(($('spc-from')||{}).value)||''; const t=(($('spc-to')||{}).value)||'';
   const noinv=!!(($('spc-noinv')||{}).checked);
-  if(!f&&!t&&!q&&!noinv){ box.innerHTML=''; return; }   // بلا أي فلتر → بلا ملخّص فترة (المعلومات الأولية تبقى كما هي)
+  if(!f&&!t&&!q&&!noinv && !(SP_PICKED&&SP_PICKED.length)){ box.innerHTML=''; return; }   // بلا أي فلتر ولا تحديد عملاء → بلا ملخّص فترة
   const scur=supplierCurrency(sup);
   // 📅 تاريخ الوصول فقط: وصول الفاتورة → وصول العميل من First Client Data (لا تاريخ حجز/فاتورة)
   const _fcdArr={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); const a=r.arrival_date?String(r.arrival_date).slice(0,10):''; if(a&&(!_fcdArr[c]||a>_fcdArr[c]))_fcdArr[c]=a; });
   let inv=supInvAll().filter(x=>supKey(x.supplier_name)===supKey(sup)).filter(x=>{   // 🔑 مفتاح موحّد ليطابق كل صيغ الاسم
+    if(SP_PICKED&&SP_PICKED.length && !SP_PICKED.includes((x.client_code||'').toUpperCase())) return false;   // 📌 المحدّدون فقط
     const d=_fcdArr[(x.client_code||'').toUpperCase()]||x.arrival_date||''; const cli=((x.client_name||'')+' '+(x.client_code||'')).toLowerCase();
     if(q && cli.indexOf(q)<0) return false;
     if(f && (!d||d<f)) return false;
@@ -6344,6 +6345,7 @@ function updatePeriodSummary(){
   const _allBal=_allOwed-_allPaid;
   // 💵 مدفوعات المورّد ذات الصلة بالفترة: مؤرّخة داخل الفترة (تاريخ الدفع) **أو** لعميل يصل داخل الفترة — فلا تفوت الدفعات المجمّعة التي تاريخها يختلف عن تاريخ وصول الحجز
   const payRows=(DATA.supplierPayments||[]).filter(p=>supKey(p.supplier_name)===supKey(sup)).filter(p=>{
+    if(SP_PICKED&&SP_PICKED.length && !SP_PICKED.includes((p.client_code||'').toUpperCase())) return false;   // 📌 المحدّدون فقط
     if(q){ const cl=((p.client_name||'')+' '+(p.client_code||'')).toLowerCase(); if(cl.indexOf(q)<0) return false; }
     if(!f&&!t) return true;   // بلا فلتر تاريخ → كل دفعات المورّد (المطابقة للبحث)
     const pd=String(p.payment_date||p.ref_date||'').slice(0,10);
@@ -6354,7 +6356,7 @@ function updatePeriodSummary(){
   const balAll=invEntered-paid;   // 📌 المتبقّي الإجمالي للفترة = إجمالي فاتورة المورّد − المدفوعات (من الفاتورة، لا من قيمة الحجز الفعلي)
   const balBooked=owed-paid;   // للمرجع فقط: حسب قيمة الحجز الفعلي
   box.innerHTML='<div style="margin-top:10px;padding:10px 12px;border:1px dashed var(--accent);border-radius:10px;background:rgba(224,33,138,.06)">'+
-    '<div style="font-weight:800;color:var(--accent);margin-bottom:6px;font-size:12.5px">📅 ملخّص الفترة المحدّدة'+((f||t)?(' ('+esc(f||'…')+' → '+esc(t||'…')+')'):'')+(noinv?' · <span style="color:#b8860b">🔴 الناقصة فقط</span>':'')+'</div>'+
+    '<div style="font-weight:800;color:var(--accent);margin-bottom:6px;font-size:12.5px">📅 ملخّص '+((SP_PICKED&&SP_PICKED.length)?('العملاء المحدّدين ('+SP_PICKED.length+')'):'الفترة المحدّدة')+((f||t)?(' ('+esc(f||'…')+' → '+esc(t||'…')+')'):'')+(noinv?' · <span style="color:#b8860b">🔴 الناقصة فقط</span>':'')+'</div>'+
     '<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px">'+
       '<span>الفواتير: <b>'+fmt(inv.length)+'</b></span>'+
       '<span>العملاء: <b>'+fmt(codes.size)+'</b></span>'+
