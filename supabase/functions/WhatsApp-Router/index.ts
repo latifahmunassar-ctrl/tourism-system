@@ -41,6 +41,16 @@ const JSON_HEADERS = { "Content-Type": "application/json" };
 // بأنفسنا في الخلفية عبر EdgeRuntime.waitUntil حتى نرسل لعدّة أرقام موظفين).
 const OK_RESPONSE = () => new Response("OK", { status: 200, headers: { "Content-Type": "text/plain" } });
 
+// نافذة «خارج ساعات العمل» بتوقيت عُمان (UTC+4، بلا توقيت صيفي): من الساعة 1 ليلاً
+// حتى 9 صباحاً. خلالها لا موظفين متاحين، فلا يرسل طلال رداً يوحي بردّ بشري خلال
+// دقائق («أكون معك»)؛ بدلاً منه رسالة صادقة أن الرد سيصل أول الصباح.
+function isOmanQuietHours(): boolean {
+  const omanHour = (new Date().getUTCHours() + 4) % 24;   // عُمان = UTC+4
+  return omanHour >= 1 && omanHour < 9;                   // [1:00 , 9:00)
+}
+const OMAN_OFF_HOURS_MSG =
+  "أهلاً أستاذي 🌙 فريقنا خارج ساعات العمل حالياً، ونرد على استفسارك أول الصباح بإذن الله 🙏";
+
 // ترجمة الحدود: Meta يعطي الرقم أرقاماً فقط "96891171630"؛ نوحّده إلى صيغة
 // Twilio الداخلية "whatsapp:+96891171630" حتى يبقى كل المنطق الأسفل متطابقاً.
 function metaFromToInternal(raw: string): string {
@@ -1651,7 +1661,9 @@ async function handleMessage(args: {
     .limit(1)
     .maybeSingle();
   if (pending) {
-    await sendCustomerReply(supabase, from, "لحظات استاذي واكون معك");
+    // بين 1 ليلاً و9 صباحاً بتوقيت عُمان: لا نوحي بردّ خلال دقائق (لا موظفين).
+    await sendCustomerReply(supabase, from,
+      isOmanQuietHours() ? OMAN_OFF_HOURS_MSG : "لحظات استاذي واكون معك");
   } else {
     // No pending — normal flow.
     //   ON mode      → FAQ match auto-sent; no match → silent escalation.
@@ -1995,7 +2007,8 @@ async function runTravelAgentTurn(args: {
   if (!agent) {
     // Claude unavailable — fallback to a polite holding message + flag for staff.
     await sendWhatsapp(from,
-      "تمام أخوي وصلني طلبك راح يجهز لك موظف من المبيعات وارسلك التفاصيل بعد لحظات 🌹");
+      isOmanQuietHours() ? OMAN_OFF_HOURS_MSG
+        : "تمام أخوي وصلني طلبك راح يجهز لك موظف من المبيعات وارسلك التفاصيل بعد لحظات 🌹");
     await supabase.from("whatsapp_sessions")
       .update({ stage: "in_agent", last_message_at: new Date().toISOString() })
       .eq("phone", from);
