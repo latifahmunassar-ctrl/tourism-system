@@ -5899,12 +5899,14 @@ function renderSupplierDetail(){
       '<div style="font-size:11px;color:var(--muted);margin:4px 0">وزّعي المبلغ على العملاء <b>بعملة المورّد ('+esc(SCUR)+')</b>؛ لو دفعتِ بعملة ثانية حدّدي عملة الدفع وسعر الصرف فيظهر المبلغ القابل للتوزيع محوَّلاً لعملة المورّد:</div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px">'+
         '<div class="fld" style="min-width:210px;flex:1"><label>🔍 بحث (اسم العميل أو الكود)</label><input id="spc-q" oninput="spcliFilter()" placeholder="اكتبي اسم أو كود العميل..."></div>'+
+        '<div class="fld" style="min-width:250px"><label>📌 حدّدي عملاء (يثبتون) — يعرض المحدّدين فقط</label><div style="display:flex;gap:5px"><input id="spc-pick" list="spc-pick-list" placeholder="اكتبي/اختاري كود العميل ثم ➕" onkeydown="if(event.key===\'Enter\'){event.preventDefault();spcPickAdd();}" style="flex:1"><datalist id="spc-pick-list"></datalist><button class="btn" style="background:#ea580c;color:#fff;padding:0 14px;white-space:nowrap" onclick="spcPickAdd()">➕ ثبّت</button></div></div>'+
         '<div class="fld"><label>من تاريخ (الوصول) 📅</label><input type="date" id="spc-from" onchange="spcliFilter()" style="color-scheme:light;cursor:pointer"></div>'+
         '<div class="fld"><label>إلى تاريخ 📅</label><input type="date" id="spc-to" onchange="spcliFilter()" style="color-scheme:light;cursor:pointer"></div>'+
         '<label style="align-self:center;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;color:#b8860b;background:rgba(217,138,0,.08);border:1px solid #e5c07b;border-radius:8px;padding:8px 12px;white-space:nowrap"><input type="checkbox" id="spc-noinv" onchange="spcliFilter()" style="width:16px;height:16px;cursor:pointer"> 🔴 الناقصة فقط (بلا فاتورة) · <span style="background:#d98a00;color:#fff;border-radius:8px;padding:1px 8px;font-size:12px" title="عدد الفواتير الناقصة ضمن الفلتر الحالي (يتحدّث مع التاريخ)"><b id="spc-noinv-count">0</b></span></label>'+
         '<label style="align-self:center;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;color:#c0392b;background:rgba(192,57,43,.08);border:1px solid #e6a09a;border-radius:8px;padding:8px 12px;white-space:nowrap"><input type="checkbox" id="spc-cancel" onchange="spcliFilter()" style="width:16px;height:16px;cursor:pointer"> 🚫 الملغية فقط · <span style="background:#c0392b;color:#fff;border-radius:8px;padding:1px 8px;font-size:12px" title="عدد الحجوزات الملغاة ضمن الفلتر الحالي (يتحدّث مع التاريخ)"><b id="spc-cancel-count">0</b></span></label>'+
         '<button class="btn ghost" style="padding:7px 14px" onclick="spcliClear()">مسح الفلتر</button>'+
       '</div>'+
+      '<div id="spc-picked-box" style="margin:2px 0 8px"></div>'+
       '<details style="margin-bottom:8px;border:1px solid var(--accent);border-radius:8px;padding:6px 10px;background:rgba(224,33,138,.04)"><summary style="cursor:pointer;font-weight:700;color:var(--accent);font-size:12.5px">📋 تقرير مخصّص للفترة — اختاري الأعمدة ثم صدّري (Excel / PDF)</summary>'+
         '<div style="font-size:11px;color:var(--muted);margin:6px 0">يصدّر <b>الصفوف الظاهرة حسب فلترك الحالي</b> (التاريخ + البحث + الناقصة فقط). «كود العميل» و«العميل» يظهران دائماً.</div>'+
         '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-bottom:8px">'+
@@ -6034,6 +6036,9 @@ function renderSupplierDetail(){
       }).join('')+'</tbody></table></div></div>';
   })();
   box.innerHTML=h;
+  if(SP_PICKED_SUP!==supRaw){ SP_PICKED=[]; SP_PICKED_SUP=supRaw; }   // 📌 صفِّر المحدّدين عند تغيير المورّد
+  try{ if(typeof spcPickFillList==='function') spcPickFillList(); }catch(e){}   // 📋 عبّئ قائمة أكواد هذا المورّد للاختيار
+  try{ if(typeof spcPickRender==='function') spcPickRender(); }catch(e){}       // 🔁 أعِد رسم شرائح المحدّدين بعد إعادة بناء الشريط
   if(typeof supdSummary==='function') supdSummary('', '', '');   // 📊 اعرض ملخّص المستحق/الرصيد فور فتح المورّد (قبل أي فلتر)
   try{ if(typeof spcliFilter==='function') spcliFilter(); }catch(e){}   // 🔁 أعِد تطبيق الفلتر + هيّئ عدّاد الناقصة بعد كل رسم
 }
@@ -6057,17 +6062,35 @@ function sppFilter(){
     r.style.display=ok?'':'none';
   });
 }
+// 📌 اختيار متعدّد لعملاء كشف المورّد — يثبّتون كـchips ويُعرَض المحدّدون فقط في التقرير
+let SP_PICKED=[], SP_PICKED_SUP='';
+function spcPickAdd(){ const inp=$('spc-pick'); if(!inp)return; const raw=(inp.value||'').trim(); if(!raw)return;
+  const code=raw.split(/[\s—|]/)[0].trim().toUpperCase(); if(!code)return;
+  if(!SP_PICKED.includes(code)) SP_PICKED.push(code);
+  inp.value=''; spcPickRender(); spcliFilter(); }
+function spcPickRemove(code){ SP_PICKED=SP_PICKED.filter(x=>x!==String(code).toUpperCase()); spcPickRender(); spcliFilter(); }
+function spcPickClear(){ SP_PICKED=[]; spcPickRender(); spcliFilter(); }
+function spcPickRender(){ const box=$('spc-picked-box'); if(!box)return;
+  if(!SP_PICKED.length){ box.innerHTML=''; return; }
+  box.innerHTML='<span style="font-size:11.5px;color:var(--muted);font-weight:700">📌 المحدّدون ('+SP_PICKED.length+') — يُعرَض هؤلاء فقط:</span> '+
+    SP_PICKED.map(c=>'<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(234,88,12,.10);border:1px solid #ea580c66;color:#ea580c;border-radius:12px;padding:2px 9px;margin:3px 3px 0 0;font-size:11.5px;font-weight:700">'+esc(c)+' <span style="cursor:pointer;font-weight:900" title="إزالة" onclick="spcPickRemove(\''+esc(c)+'\')">✕</span></span>').join('')+
+    ' <button class="btn ghost" style="padding:2px 12px;font-size:11px" onclick="spcPickClear()">مسح المحدّدين</button>'; }
+function spcPickFillList(){ const dl=$('spc-pick-list'); if(!dl)return; const seen=new Set(); let h='';
+  document.querySelectorAll('#sp-dist-tbl tr[data-code]').forEach(r=>{ const c=(r.dataset.code||'').toUpperCase(); if(!c||seen.has(c))return; seen.add(c); const nm=(r.children&&r.children[2]?r.children[2].textContent:'').trim().replace(/\s+/g,' ').slice(0,26); h+='<option value="'+esc(c)+'">'+esc(nm)+'</option>'; });
+  dl.innerHTML=h; }
 function spcliFilter(){
   const q=(($('spc-q')||{}).value||'').trim().toLowerCase();
   const f=(($('spc-from')||{}).value)||''; const t=(($('spc-to')||{}).value)||'';
   const noinv=!!(($('spc-noinv')||{}).checked);   // 🔴 الناقصة فقط (بلا فاتورة مورّد) — client-side ليتراكب مع التاريخ/البحث
   const canc=!!(($('spc-cancel')||{}).checked);   // 🚫 الملغية فقط
-  const act=!!(q||f||t||noinv||canc);
+  const picked=(SP_PICKED&&SP_PICKED.length)?SP_PICKED:null;   // 📌 عملاء محدّدون يدويّاً — يُعرَض هؤلاء فقط
+  const act=!!(q||f||t||noinv||canc||picked);
   document.querySelectorAll('#sp-dist-tbl tr').forEach(r=>{
     if(r.classList.contains('sp-sep')){ r.style.display=act?'none':''; return; }
     const cli=r.dataset.cli||''; const dts=(r.dataset.dates||'').split('|').filter(Boolean);
     let ok=true;
-    if(q && cli.indexOf(q)<0) ok=false;
+    if(picked && !picked.includes((r.dataset.code||'').toUpperCase())) ok=false;   // 📌 خارج المحدّدين → إخفاء
+    if(q && ok && cli.indexOf(q)<0) ok=false;
     if((f||t) && ok){ ok=dts.some(d=>(!f||d>=f)&&(!t||d<=t)); }
     if(noinv && ok && r.dataset.noinv!=='1') ok=false;   // اعرض فقط العملاء بلا فاتورة مورّد
     if(canc && ok && r.dataset.cancel!=='1') ok=false;   // اعرض فقط الحجوزات الملغاة
@@ -6347,7 +6370,7 @@ function updatePeriodSummary(){
     '</div>'+
     '<div style="font-size:10.5px;color:var(--muted);margin-top:6px">📅 الحجوزات والفواتير حسب <b>تاريخ الوصول</b> · المدفوعات = <b>مدفوعة خلال الفترة</b> أو <b>لعميل يصل خلالها</b> (فلا تفوت الدفعات المجمّعة التي تاريخها يختلف عن الوصول، وتشمل غير الموزّعة).</div>';
 }
-function spcliClear(){ ['spc-q','spc-from','spc-to'].forEach(id=>{const e=$(id);if(e)e.value='';}); const nv=$('spc-noinv'); if(nv)nv.checked=false; const cv=$('spc-cancel'); if(cv)cv.checked=false; spcliFilter(); }
+function spcliClear(){ ['spc-q','spc-from','spc-to'].forEach(id=>{const e=$(id);if(e)e.value='';}); const nv=$('spc-noinv'); if(nv)nv.checked=false; const cv=$('spc-cancel'); if(cv)cv.checked=false; SP_PICKED=[]; if(typeof spcPickRender==='function')spcPickRender(); spcliFilter(); }
 // 📋 تقرير مخصّص: اختيار الأعمدة + تصدير Excel/PDF للصفوف الظاهرة حسب الفلتر الحالي (التاريخ/البحث/الناقصة)
 function rcolPreset(k){ document.querySelectorAll('.rcol').forEach(c=>{ if(k==='all')c.checked=true; else if(k==='invpay')c.checked=(c.value==='11'||c.value==='14'); }); const pay=document.querySelector('.rcolpay'); if(pay)pay.checked=(k==='all'||k==='invpay'); }
 function exportSupplierCustom(kind){
