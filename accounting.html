@@ -6117,7 +6117,7 @@ function exportSupplierPDF(){
   const headOf=(bodyId,n)=>{ const tbl=document.getElementById(bodyId).closest('table'); const ths=[...tbl.querySelectorAll('thead th')].map(x=>x.innerText.replace(/\s+/g,' ').trim()); return n?ths.slice(0,n):ths; };
   const t1head=headOf('sp-dist-tbl',13); const t1idx=[0,1,2,3,4,5,6,7,8,9,10,11,12];   // + «فاتورة المورّد» (١١) + «الفرق» (١٢)
   // قارئ خاص لجدول التوزيع: عمود «فاتورة المورّد» يعرض القيمة المُدخلة يدوياً فقط (data-val) لا القيمة الافتراضية (placeholder)
-  const t1rows=(function(){ const out=[]; document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; out.push(t1idx.map(i=>{ const td=tds[i]; if(!td)return ''; if(i===11){ if(td.dataset&&td.dataset.val!=null&&td.dataset.val!=='')return td.dataset.val; const inp=td.querySelector('input'); if(inp&&inp.value!=='')return inp.value; return '—'; } const inp=td.querySelector('input'); if(inp)return (inp.value||inp.getAttribute('placeholder')||''); return td.innerText.replace(/\s+/g,' ').trim(); })); }); return out; })();
+  const t1rows=(function(){ const out=[]; document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; if(SP_PICKED.length && !SP_PICKED.includes((tr.dataset.code||'').toUpperCase()))return;   /* 📌 صدّري المحدّدين فقط عند وجود تحديد */ const tds=tr.querySelectorAll('td'); if(!tds.length)return; out.push(t1idx.map(i=>{ const td=tds[i]; if(!td)return ''; if(i===11){ if(td.dataset&&td.dataset.val!=null&&td.dataset.val!=='')return td.dataset.val; const inp=td.querySelector('input'); if(inp&&inp.value!=='')return inp.value; return '—'; } const inp=td.querySelector('input'); if(inp)return (inp.value||inp.getAttribute('placeholder')||''); return td.innerText.replace(/\s+/g,' ').trim(); })); }); return out; })();
   const t2head=headOf('sp-pay-tbl'); const t2idx=t2head.map((_,i)=>i); const t2rows=rowsOf('sp-pay-tbl',t2idx);
   // جدول (٣): السدادات — التحويلات البنكية المسجّلة (نفس مصدر «سداد المستحقات»)، بنفس فلتر الفترة
   const _xfers=_supTransfers(sup,f,t);
@@ -6388,7 +6388,7 @@ function exportSupplierCustom(kind){
     if(ci===2) txt=txt.split(/[🔻⚠️🔵✅🚫ℹ️]/)[0].trim();   // اسم العميل بلا شارات
     return txt; };
   const _ro=[];
-  document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList&&tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; const arr=String(cellTxt(tds[1],1)||'').slice(0,10); _ro.push({r:idxs.map(i=>cellTxt(tds[i],i)), d:arr}); });
+  document.querySelectorAll('#sp-dist-tbl tr').forEach(tr=>{ if(tr.classList&&tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; if(SP_PICKED.length && !SP_PICKED.includes((tr.dataset.code||'').toUpperCase()))return;   /* 📌 صدّري المحدّدين فقط عند وجود تحديد */ const tds=tr.querySelectorAll('td'); if(!tds.length)return; const arr=String(cellTxt(tds[1],1)||'').slice(0,10); _ro.push({r:idxs.map(i=>cellTxt(tds[i],i)), d:arr}); });
   _ro.sort((a,b)=>{ const A=a.d||'9999-99-99', B=b.d||'9999-99-99'; return A<B?-1:(A>B?1:0); });   // ⬆️ ترتيب تصاعدي بتاريخ الوصول (الأقدم فالأحدث)
   const rows=_ro.map(o=>o.r);
   if(!rows.length){ alert('لا توجد صفوف ظاهرة — عدّلي الفلتر/الفترة.'); return; }
