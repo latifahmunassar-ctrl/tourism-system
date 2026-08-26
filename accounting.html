@@ -5919,6 +5919,13 @@ function renderSupplierDetail(){
           '<label style="cursor:pointer"><input type="checkbox" class="rcol" value="7"> الربح الفعلي</label>'+
           '<label style="cursor:pointer;font-weight:700;color:#0e7c50"><input type="checkbox" class="rcolpay" value="pay" checked> 💵 الدفعات المسجّلة (تحويلات بنكية بتاريخها + قيمتها كما خرجت من البنك)</label>'+
         '</div>'+
+        '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-bottom:8px;border-top:1px dashed var(--accent);padding-top:8px;align-items:center"><span style="font-weight:800;color:var(--accent)">📊 ملخّص التقرير (يظهر أعلى الملف):</span>'+
+          '<label style="cursor:pointer"><input type="checkbox" class="rsum" value="book" checked> 💰 إجمالي الحجوزات</label>'+
+          '<label style="cursor:pointer"><input type="checkbox" class="rsum" value="inv" checked> 🧾 إجمالي فاتورة المورّد</label>'+
+          '<label style="cursor:pointer"><input type="checkbox" class="rsum" value="paid" checked> ✅ إجمالي المدفوعات</label>'+
+          '<label style="cursor:pointer"><input type="checkbox" class="rsum" value="rem" checked> 📌 المتبقّي الإجمالي</label>'+
+          '<label style="cursor:pointer"><input type="checkbox" class="rsum" value="allbal"> 🏦 الرصيد المتبقّي الكلّي</label>'+
+        '</div>'+
         '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
           '<button class="btn ghost" style="padding:4px 12px;font-size:11px" onclick="rcolPreset(\'all\')">☑ الكل</button>'+
           '<button class="btn ghost" style="padding:4px 12px;font-size:11px" onclick="rcolPreset(\'invpay\')">🧾 فاتورة + دفعات فقط</button>'+
@@ -6111,7 +6118,7 @@ function exportSupplierPDF(){
   const clients=new Set(list.map(x=>x.client_code)).size;
   const f=(($('spc-from')||{}).value)||''; const t=(($('spc-to')||{}).value)||''; const q=(($('spc-q')||{}).value||'').trim();
   const filtered=!!(f||t||q);
-  const pe=$('sp-period-summary'); const periodInner=(pe&&pe.innerHTML.trim())?pe.innerHTML:'';
+  const _sl=(typeof _spSumLines==='function')?_spSumLines():[]; const periodInner=_sl.length?('<div style="font-weight:800;color:#c41d88;margin-bottom:4px">📊 ملخّص التقرير</div>'+_sl.map(l=>'<div>'+esc(l)+'</div>').join('')):'';   // 📊 ملخّص PDF من الصناديق المؤشَّرة
   // قراءة الصفوف الظاهرة (تتبع الفلتر) من الجدولين
   const rowsOf=(bodyId,idxs)=>{ const out=[]; document.querySelectorAll('#'+bodyId+' tr').forEach(tr=>{ if(tr.classList.contains('sp-sep'))return; if(tr.style.display==='none')return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; out.push(idxs.map(i=>{ const td=tds[i]; if(!td)return ''; const inp=td.querySelector('input'); if(inp)return (inp.value||inp.getAttribute('placeholder')||''); return td.innerText.replace(/\s+/g,' ').trim(); })); }); return out; };
   const headOf=(bodyId,n)=>{ const tbl=document.getElementById(bodyId).closest('table'); const ths=[...tbl.querySelectorAll('thead th')].map(x=>x.innerText.replace(/\s+/g,' ').trim()); return n?ths.slice(0,n):ths; };
@@ -6321,7 +6328,7 @@ function updatePeriodSummary(){
   const q=(($('spc-q')||{}).value||'').trim().toLowerCase();
   const f=(($('spc-from')||{}).value)||''; const t=(($('spc-to')||{}).value)||'';
   const noinv=!!(($('spc-noinv')||{}).checked);
-  if(!f&&!t&&!q&&!noinv && !(SP_PICKED&&SP_PICKED.length)){ box.innerHTML=''; return; }   // بلا أي فلتر ولا تحديد عملاء → بلا ملخّص فترة
+  if(!f&&!t&&!q&&!noinv && !(SP_PICKED&&SP_PICKED.length)){ box.innerHTML=''; window._SP_SUM=null; return; }   // بلا أي فلتر ولا تحديد عملاء → بلا ملخّص فترة
   const scur=supplierCurrency(sup);
   // 📅 تاريخ الوصول فقط: وصول الفاتورة → وصول العميل من First Client Data (لا تاريخ حجز/فاتورة)
   const _fcdArr={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); const a=r.arrival_date?String(r.arrival_date).slice(0,10):''; if(a&&(!_fcdArr[c]||a>_fcdArr[c]))_fcdArr[c]=a; });
@@ -6355,6 +6362,7 @@ function updatePeriodSummary(){
   const paid=payRows.reduce((s,p)=>s+supPaidInCur(p,scur),0);   // 💱 محوّل لعملة المورّد
   const balAll=invEntered-paid;   // 📌 المتبقّي الإجمالي للفترة = إجمالي فاتورة المورّد − المدفوعات (من الفاتورة، لا من قيمة الحجز الفعلي)
   const balBooked=owed-paid;   // للمرجع فقط: حسب قيمة الحجز الفعلي
+  window._SP_SUM={book:owed, inv:invEntered, paid:paid, rem:balAll, allbal:_allBal, scur:scur, invCnt:invCnt, invTot:inv.length, payCnt:payRows.length, clients:codes.size};   // 📊 إجماليات الملخّص لبناء تصدير قابل للتخصيص
   box.innerHTML='<div style="margin-top:10px;padding:10px 12px;border:1px dashed var(--accent);border-radius:10px;background:rgba(224,33,138,.06)">'+
     '<div style="font-weight:800;color:var(--accent);margin-bottom:6px;font-size:12.5px">📅 ملخّص '+((SP_PICKED&&SP_PICKED.length)?('العملاء المحدّدين ('+SP_PICKED.length+')'):'الفترة المحدّدة')+((f||t)?(' ('+esc(f||'…')+' → '+esc(t||'…')+')'):'')+(noinv?' · <span style="color:#b8860b">🔴 الناقصة فقط</span>':'')+'</div>'+
     '<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px">'+
@@ -6371,6 +6379,14 @@ function updatePeriodSummary(){
 function spcliClear(){ ['spc-q','spc-from','spc-to'].forEach(id=>{const e=$(id);if(e)e.value='';}); const nv=$('spc-noinv'); if(nv)nv.checked=false; const cv=$('spc-cancel'); if(cv)cv.checked=false; SP_PICKED=[]; SP_ONLY=false; document.querySelectorAll('.spc-rowchk').forEach(c=>c.checked=false); if(typeof spcPickBar==='function')spcPickBar(); spcliFilter(); }
 // 📋 تقرير مخصّص: اختيار الأعمدة + تصدير Excel/PDF للصفوف الظاهرة حسب الفلتر الحالي (التاريخ/البحث/الناقصة)
 function rcolPreset(k){ document.querySelectorAll('.rcol').forEach(c=>{ if(k==='all')c.checked=true; else if(k==='invpay')c.checked=(c.value==='11'||c.value==='14'); }); const pay=document.querySelector('.rcolpay'); if(pay)pay.checked=(k==='all'||k==='invpay'); }
+// 📊 أسطر ملخّص التصدير من صناديق «ملخّص التقرير» المؤشَّرة (من الإجماليات المخزّنة _SP_SUM)
+function _spSumLines(){ const s=window._SP_SUM; if(!s)return []; const on=v=>{const c=document.querySelector('.rsum[value="'+v+'"]'); return c?c.checked:false;}; const cur=s.scur||''; const L=[];
+  if(on('book')) L.push('💰 إجمالي الحجوزات: '+fmt(s.book)+' '+cur);
+  if(on('inv')) L.push('🧾 إجمالي فاتورة المورّد: '+fmt(s.inv)+' '+cur+' ('+s.invCnt+' من '+s.invTot+')');
+  if(on('paid')) L.push('✅ إجمالي المدفوعات: '+fmt(s.paid)+' '+cur+' ('+s.payCnt+' دفعة)');
+  if(on('rem')) L.push('📌 المتبقّي الإجمالي: '+fmt(s.rem)+' '+cur);
+  if(on('allbal')) L.push('🏦 الرصيد المتبقّي الكلّي (كل السنوات): '+fmt(s.allbal)+' '+cur);
+  return L; }
 function exportSupplierCustom(kind){
   const sup=(($('supflt')||{}).value||'').trim(); if(!sup){ alert('اختاري مورّداً أولاً.'); return; }
   const sel=[...document.querySelectorAll('.rcol:checked')].map(c=>Number(c.value)).filter(n=>!isNaN(n)&&n!==0&&n!==2).sort((a,b)=>a-b);
@@ -6400,15 +6416,16 @@ function exportSupplierCustom(kind){
   if(wantPay){ const tr=_supTransfers(sup,f,t); payHead=['📅 التاريخ','💰 القيمة المحوّلة (كما خرجت من البنك)','العملة','🏦 البنك','🔖 المرجع','عدد العملاء','ملاحظة']; const tot={}; tr.forEach(g=>{ payRows.push([g.date||'—', String(Math.round(Number(g.amount||0)*1000)/1000), g.cur||'', g.bank||'', g.ref||'—', String(g.n), (g.undist?'🔵 غير موزّعة ':'')+(g.note||'')]); tot[g.cur]=(tot[g.cur]||0)+Number(g.amount||0); }); payTotStr=Object.entries(tot).map(([c,v])=>fmt(v)+' '+c).join(' · '); }
   const psTxt=(($('sp-period-summary')||{}).innerText||'').replace(/\s+/g,' ').trim();
   const title='تقرير مخصّص — '+sup+((f||t)?(' ('+(f||'…')+' → '+(t||'…')+')'):'');
+  const sumLines=_spSumLines();   // 📊 أسطر الملخّص المختارة
   if(kind==='excel'){
-    const out=[[title]]; if(psTxt){ out.push([]); out.push([psTxt]); } out.push([]); out.push(head); rows.forEach(r=>out.push(r));
+    const out=[[title]]; if(sumLines.length){ out.push([]); out.push(['📊 ملخّص التقرير']); sumLines.forEach(l=>out.push([l])); } out.push([]); out.push(head); rows.forEach(r=>out.push(r));
     if(wantPay){ out.push([]); out.push(['💵 الدفعات المسجّلة — تحويلات بنكية (كما خرجت من البنك · غير موزّعة على العملاء)']); out.push(payHead); payRows.forEach(r=>out.push(r)); out.push(['الإجمالي','', payTotStr]); }
     _xlsxDownload([{name:'تقرير '+sup, rows:out}], 'تقرير مخصّص '+sup); return;
   }
   if(kind==='gsheet'){
     // 📗 نافذة مضمونة: البيانات جاهزة كـ TSV + زر نسخ مؤكّد + زر فتح شيت جديد (بدل النسخ الخفي الذي قد يفشل)
     const clean=v=>String(v==null?'':v).replace(/[\t\r\n]+/g,' ');
-    let arr=[[title]].concat(psTxt?[[clean(psTxt)]]:[]).concat([head]).concat(rows);
+    let arr=[[title]].concat(sumLines.length?([['📊 ملخّص التقرير']].concat(sumLines.map(l=>[clean(l)]))):[]).concat([head]).concat(rows);
     if(wantPay){ arr=arr.concat([[]]).concat([['💵 الدفعات المسجّلة — تحويلات بنكية (كما خرجت من البنك)']]).concat([payHead]).concat(payRows).concat([['الإجمالي','',payTotStr]]); }
     const tsv=arr.map(r=>r.map(clean).join('\t')).join('\n');
     _gsheetModal(tsv); return;
@@ -6418,7 +6435,7 @@ function exportSupplierCustom(kind){
     '<table><thead><tr>'+payHead.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+(payRows.length?payRows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+payHead.length+'" style="color:#999">لا توجد تحويلات في الفترة</td></tr>')+'</tbody></table>'):'';
   const html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>'+esc(title)+'</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#111;font-size:12px;margin:0}.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #0e9d6a;padding-bottom:6px;margin-bottom:8px}.logo{font-size:22px;font-weight:900;letter-spacing:2px;color:#0e9d6a}.logo span{color:#D4A843}.ttl{font-size:14px;font-weight:800;color:#c41d88}h4{border-right:4px solid #D4A843;padding-right:7px}.note{background:#f1f8f4;border:1px solid #dcede6;padding:8px 10px;border-radius:8px;margin:8px 0;font-size:12px}table{width:100%;border-collapse:collapse;margin-top:6px}th,td{border:1px solid #bbb;padding:4px 6px;text-align:center;font-size:11px}th{background:#0e9d6a;color:#fff;font-size:10.5px}tbody tr:nth-child(even){background:#f6faf8}</style></head><body>'+
     '<div class="hd"><div class="logo">AL<span>E</span>ZZ</div><div class="ttl">'+esc(title)+'</div></div>'+
-    (psTxt?'<div class="note">'+esc(psTxt)+'</div>':'')+
+    (sumLines.length?'<div class="note"><b>📊 ملخّص التقرير:</b> '+sumLines.map(esc).join(' · ')+'</div>':'')+
     '<table><thead><tr>'+head.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+
     rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join('')+
     '</tbody></table>'+payTbl+'<div style="margin-top:8px;font-size:10px;color:#6b7c7a">شركة العز · ALEZZ Group</div>'+
