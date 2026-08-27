@@ -332,12 +332,16 @@ Deno.serve(async (req: Request) => {
       const sum = lines.reduce((s: number, l: any) => s + Number(l.amount || 0), 0);
       // ✅ توزيع جزئي مسموح: المجموع لا يتجاوز مبلغ الدفعة؛ المتبقّي يبقى سطراً «غير موزّعاً» (رصيد مقدّم) — يُمنع فقط تجاوز المبلغ (لا توزيع أكثر من المدفوع)
       if (sum > orig + 0.5) return J({ error: 'مجموع التوزيع (' + sum + ') أكبر من مبلغ الدفعة (' + orig + ') — لا يمكن توزيع أكثر من المدفوع' }, 400);
-      const { error: de } = await supabase.from('acc_supplier_payments').delete().in('id', ids);
-      if (de) return J({ error: de.message }, 400);
-      const rows = lines.map((l: any) => ({ supplier_name: base.supplier_name, client_code: String(l.client_code).trim().toUpperCase(), client_name: l.client_name || null, amount: Number(l.amount), currency: base.currency, currency_rate: ((l.currency_rate != null && l.currency_rate !== '') ? Number(l.currency_rate) : base.currency_rate), payment_date: _pdate, bank_name: base.bank_name, bank_ref: base.bank_ref, note: (base.note ? base.note + ' · ' : '') +'موزّعة على عميل' + ((l.svc && String(l.svc).trim()) ? (' · 🛎️ ' + String(l.svc).trim()) : '') }));   // 💱 سعر صرف الدفعة + 🛎️ اسم الخدمة (لمطابقة المتبقّي لكل خدمة)
-      const _rem = orig - sum;   // 🔵 المتبقّي غير الموزّع يبقى كرصيد مقدّم (يحفظ إجمالي الدفعة)
-      if (_rem > 0.5) rows.push({ supplier_name: base.supplier_name, client_code: null, client_name: null, amount: _rem, currency: base.currency, currency_rate: base.currency_rate, payment_date: _pdate, bank_name: base.bank_name, bank_ref: base.bank_ref, note: (base.note ? base.note + ' · ' : '') +'🔵 غير موزّعة (رصيد مقدّم متبقّي)' } as any);
-      const { data: ins, error: ie } = await supabase.from('acc_supplier_payments').insert(rows).select();
+      // 🆕 FIP: لا حذف ولا تجزئة — الدفعة تبقى خام. التوزيع يُكتب في جدول التخصيص المنفصل acc_payment_allocations.
+      void _pdate;
+      // 1) الدفعة الأساسية تصبح «مجمّعة» (client_code=null) — الإسناد للعملاء عبر جدول التخصيص لا بتجزئة الدفعة
+      const { error: ue } = await supabase.from('acc_supplier_payments').update({ client_code: null, client_name: null }).in('id', ids);
+      if (ue) return J({ error: ue.message }, 400);
+      // 2) امسح تخصيصات هذه الدفعة السابقة (إعادة توزيع نظيفة)
+      await supabase.from('acc_payment_allocations').delete().eq('payment_id', base.id);
+      // 3) اكتب التخصيصات الجديدة (رابط الدفعة الخام بالعملاء) — الباقي غير الموزّع = مبلغ الدفعة − مجموع التخصيصات (يُحسب في الواجهة)
+      const allocRows = lines.map((l: any) => ({ payment_id: base.id, client_code: String(l.client_code).trim().toUpperCase(), client_name: l.client_name || null, amount: Number(l.amount), service: ((l.svc && String(l.svc).trim()) ? String(l.svc).trim() : null), currency: base.currency, currency_rate: ((l.currency_rate != null && l.currency_rate !== '') ? Number(l.currency_rate) : base.currency_rate), created_by: p.by || 'المالكة' }));
+      const { data: ins, error: ie } = await supabase.from('acc_payment_allocations').insert(allocRows).select();
       if (ie) return J({ error: ie.message }, 400);
       try { await audit({ event_type: 'reallocate', severity: 'info', staff_name: p.by || 'المالكة', action: 'allocate_supplier_payment', detail: 'توزيع دفعة «' + base.supplier_name + '» ' + orig + ' ' + (base.currency || '') + ' على ' + lines.length + ' عميل', ok: true }); } catch (_) {}
       return J({ ok: true, rows: ins });
@@ -518,7 +522,7 @@ Deno.serve(async (req: Request) => {
       supabase.from('acc_sync_logs').select('*').order('ran_at', { ascending: false }).limit(1),
     ]);
     // ⚡ تحسين أداء: الجداول الثمانية كانت تُجلب بالتسلسل (يتراكم الزمن) — الآن بالتوازي (نفس البيانات تماماً)
-    const [banksCash, staffAccessRaw, auditRes, secRes, profitOverrides, settlements, deletedClients, dismissedAlerts] = await Promise.all([
+    const [banksCash, staffAccessRaw, auditRes, secRes, profitOverrides, settlements, deletedClients, dismissedAlerts, allocations] = await Promise.all([
       fetchAll(supabase, 'acc_banks_cash'),
       fetchAll(supabase, 'acc_staff_access'),
       supabase.from('acc_audit_log').select('*').order('ts', { ascending: false }).limit(300),
@@ -527,6 +531,7 @@ Deno.serve(async (req: Request) => {
       fetchAll(supabase, 'acc_settlements', null),
       fetchAll(supabase, 'acc_deleted_clients', null),
       fetchAll(supabase, 'acc_dismissed_alerts', null),
+      fetchAll(supabase, 'acc_payment_allocations'),
     ]);
     // pin/role يُضمّنان هنا لكن filterForStaff يُصفّر staffAccess بالكامل لغير المالك، فيصلان للمالكة فقط
     const staffAccess = staffAccessRaw.map((u: any) => ({ id: u.id, staff_name: u.staff_name, is_owner: u.is_owner, allowed_tabs: u.allowed_tabs || [], active: u.active, has_pin: !!(u.pin && String(u.pin).length), pin: u.pin || '', role: u.role || '' }));
@@ -542,7 +547,7 @@ Deno.serve(async (req: Request) => {
     for (const r of rows) { if (!r.booking_date) continue; const m = String(r.booking_date).slice(0, 7); monthly[m] = monthly[m] || { profit: 0, count: 0 }; monthly[m].profit += Number(r.profit || 0); monthly[m].count += 1; }
     const monthlyArr = Object.entries(monthly).sort().map(([month, v]) => ({ month, ...v }));
     const me = (key === ACCESS_KEY) ? { staff_name: 'المالكة', is_owner: true, allowed_tabs: ALL_TABS, via: 'key', role: callerRole, can_bankref: callerBankRef } : (sess ? { staff_name: sess.staff_name, is_owner: !!sess.is_owner, allowed_tabs: sess.allowed_tabs || [], via: 'token', role: callerRole, can_bankref: callerBankRef } : { staff_name: '', is_owner: false, allowed_tabs: [], via: 'token', role: '', can_bankref: false });
-    const payload: any = { kpis: { totalProfit, bookings: rows.length, outstanding, overdue, clients: new Set(rows.map((r: any) => r.client_code)).size }, overview: rows, due, staff, agents, fcd, bf: bfMap, bookingForm: bfRows, sales, serviceLines: svc, hotelBookings: hotels, refunds, lists, supplierInvoices: supInv, bankTx, banksCash, alerts, supplierPayments: supPay, pendingMovements: pendingMv, hotelPayments: hotelPay, staffAccess, auditLog, securityCount, profitOverrides, settlements, deletedClients, dismissedAlerts, monthly: monthlyArr, lastSync: logsArr.data?.[0] || null, generatedAt: new Date().toISOString(), me };
+    const payload: any = { kpis: { totalProfit, bookings: rows.length, outstanding, overdue, clients: new Set(rows.map((r: any) => r.client_code)).size }, overview: rows, due, staff, agents, fcd, bf: bfMap, bookingForm: bfRows, sales, serviceLines: svc, hotelBookings: hotels, refunds, lists, supplierInvoices: supInv, bankTx, banksCash, alerts, supplierPayments: supPay, pendingMovements: pendingMv, hotelPayments: hotelPay, staffAccess, auditLog, securityCount, profitOverrides, settlements, deletedClients, dismissedAlerts, allocations, monthly: monthlyArr, lastSync: logsArr.data?.[0] || null, generatedAt: new Date().toISOString(), me };
     if (sess && !sess.is_owner) filterForStaff(payload, sess.allowed_tabs || []);
     return J(payload);
   } catch (e) { return J({ error: String(e) }, 500); }
