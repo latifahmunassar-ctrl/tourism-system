@@ -4502,10 +4502,10 @@ function runReconcile(){
     const _bf=_from?_shiftD(_from,-6):'', _bt=_to?_shiftD(_to,6):'';
     const inBuf=(d)=>{ const s=String(d||'').slice(0,10); if(!s)return false; if(_bf&&s<_bf)return false; if(_bt&&s>_bt)return false; return true; };
     const sysBuf=(_from||_to)?_allSys.filter(y=>!inR(y.date)&&inBuf(y.date)):[];
-    stmt.forEach(s=>{ const cand=sys.find(y=>!y._m && y.date===s.date && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; } });
-    stmt.forEach(s=>{ if(s._m)return; const cand=sys.find(y=>!y._m && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; s._dm=cand.date; } });
+    stmt.forEach(s=>{ const cand=sys.find(y=>!y._m && y.date===s.date && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; s._sysSrc=cand.src; } });
+    stmt.forEach(s=>{ if(s._m)return; const cand=sys.find(y=>!y._m && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; s._dm=cand.date; s._sysSrc=cand.src; } });
     // 🔁 مرحلة ثالثة: مطابقة بالمبلغ المطلق بغضّ النظر عن الاتجاه (داخل/خارج) — تحلّ حالات قراءة اتجاه SWIFT بالعكس
-    stmt.forEach(s=>{ if(s._m)return; const sa=Number(s.out||0)+Number(s.in||0); if(sa<=0.005)return; const cand=sys.find(y=>!y._m && Math.abs((Number(y.out||0)+Number(y.in||0))-sa)<0.01); if(cand){ cand._m=true; s._m=true; s._dm=(s.date===cand.date?cand.date:('اتجاه/تاريخ · '+cand.date)); } });
+    stmt.forEach(s=>{ if(s._m)return; const sa=Number(s.out||0)+Number(s.in||0); if(sa<=0.005)return; const cand=sys.find(y=>!y._m && Math.abs((Number(y.out||0)+Number(y.in||0))-sa)<0.01); if(cand){ cand._m=true; s._m=true; s._dm=(s.date===cand.date?cand.date:('اتجاه/تاريخ · '+cand.date)); s._sysSrc=cand.src; } });
     // 💡 المرحلة الرابعة (تنبيه لا مطابقة تلقائية — قرار المالكة): المتبقّي بالكشف لو له نظير بنفس المبلغ بتاريخ قريب بنظامك (±6 أيام) → يبقى «غير مطابق» مع ملاحظة «احتمال فرق تاريخ» ليقرّر بنفسه
     const _dayDiff=(a,b)=>{ if(!/^\d{4}-\d{2}-\d{2}$/.test(a)||!/^\d{4}-\d{2}-\d{2}$/.test(b))return null; return Math.round(Math.abs(new Date(a+'T00:00:00Z')-new Date(b+'T00:00:00Z'))/86400000); };
     stmt.forEach(s=>{ if(s._m)return; const cand=sysBuf.find(y=>!y._nearUsed && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ const dd=_dayDiff(s.date,cand.date); const _tail=(dd!=null?(' — فرق '+dd+' يوم'+(dd<=3?' (قريب جداً — غالباً فرق تاريخ ترحيل)':'')):''); s._near='بنظامك بنفس المبلغ بتاريخ '+cand.date+_tail; cand._nearUsed=true; cand._near='بالكشف بنفس المبلغ بتاريخ '+s.date+_tail; } });   // 🔁 تنبيه متماثل: نُعلِّم حركة النظام القريبة أيضاً لتظهر بالجهة الثانية
@@ -4521,9 +4521,11 @@ function renderReconReport(r){
   const f=(v)=>fmt(Number(v||0));
   const fd=(v)=>{ v=Number(v||0); return v.toLocaleString('en-US',{minimumFractionDigits:(Math.abs(v%1)>1e-9?2:0),maximumFractionDigits:2}); };  // 🔢 يُظهر الكسور (الهللات) في المطابقة — عشان لا يبدو رقمان مختلفان متطابقين بعد التدوير
   const dOut=r.sOut-r.yOut, dIn=r.sIn-r.yIn;
-  const allOk=(r.stmtOnly.length===0&&r.sysOnly.length===0&&Math.abs(dOut)<0.01&&Math.abs(dIn)<0.01);
+  const intMatched=(r.stmt||[]).filter(s=>s._m && s._sysSrc==='dashboard');   // 🔒 حركات كشف طابقت سجلات داخلية (source=dashboard) لا بنك حقيقي (sheet)
+  const allOk=(r.stmtOnly.length===0&&r.sysOnly.length===0&&Math.abs(dOut)<0.01&&Math.abs(dIn)<0.01&&intMatched.length===0);
   const noDayWarn=r.noDay?'<div style="background:rgba(209,17,17,.10);border:1px solid #d11;border-radius:8px;padding:10px 12px;margin-bottom:10px;color:#d11;font-size:12.5px;line-height:1.8"><b>⛔ تواريخ الكشف ناقصة (بلا يوم — عمود التاريخ مقصوص «YYYY-MM»).</b><br>المطابقة تمّت <b>بالمبلغ فقط</b> بلا تاريخ، فقد تُطابق حركةً قديمةً بنفس المبلغ <b>خطأً</b> — <b>لا تعتمدي هذه النتيجة.</b><br>✅ الحل: أعيدي تصدير الكشف من تطبيق البنك <b>كـ CSV</b>، أو وسّعي عمود التاريخ ليظهر <b>YYYY-MM-DD كاملاً</b>، ثم قارني من جديد.</div>':'';
-  let h=noDayWarn+(allOk?'<div style="background:rgba(14,157,106,.12);border:1px solid #0e9d6a;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-weight:700;color:#0e9d6a;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span>✅ تطابق تام — عدد الحركات وقيمها والإجماليات متطابقة</span><button class="btn green" id="rec-save-btn" style="padding:7px 16px" onclick="saveRecon()">💾 حفظ التقرير (مطابق)</button></div>':'<div style="background:rgba(217,138,0,.1);border:1px solid #d98a00;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-weight:700;color:#d98a00">⚠️ يوجد '+(r.stmtOnly.length+r.sysOnly.length)+' حركة غير متطابقة — راجعي التفاصيل بالأسفل</div>')+
+  const intWarn=intMatched.length?('<div style="background:rgba(217,138,0,.12);border:1px solid #d98a00;border-radius:8px;padding:10px 12px;margin-bottom:10px;color:#b8860b;font-size:12.5px;line-height:1.85"><b>⚠️ '+intMatched.length+' حركة طابقت حركات داخلية</b> (أُنشئت من التبويبات — <b>مو مستوردة من البنك الحقيقي</b>). هذه <b>ليست تأكيداً بنكيّاً</b>؛ تأكّدي أن لها حركة فعلية في كشف البنك. الحالة: <b>يحتاج مراجعة</b>، لا «تطابق تام».</div>'):'';
+  let h=noDayWarn+intWarn+(allOk?'<div style="background:rgba(14,157,106,.12);border:1px solid #0e9d6a;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-weight:700;color:#0e9d6a;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span>✅ تطابق تام — عدد الحركات وقيمها والإجماليات متطابقة</span><button class="btn green" id="rec-save-btn" style="padding:7px 16px" onclick="saveRecon()">💾 حفظ التقرير (مطابق)</button></div>':((r.stmtOnly.length+r.sysOnly.length)>0?'<div style="background:rgba(217,138,0,.1);border:1px solid #d98a00;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-weight:700;color:#d98a00">⚠️ يوجد '+(r.stmtOnly.length+r.sysOnly.length)+' حركة غير متطابقة — راجعي التفاصيل بالأسفل</div>':''))+
     '<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:12px">'+
     '<div class="kpi"><div class="ttl">📄 حركات الكشف</div><div class="val">'+f(r.stmt.length)+'</div></div>'+
     '<div class="kpi"><div class="ttl">💻 حركات نظامك</div><div class="val">'+f(r.sys.length)+'</div></div>'+
@@ -4828,7 +4830,8 @@ function exportReconPDF(){
   const r=window._lastReconReport; if(!r){ alert('شغّلي «تحقّق وقارن» أولاً'); return; }
   const today=new Date().toISOString().slice(0,10); const f=(v)=>fmt(Number(v||0));
   const dOut=r.sOut-r.yOut, dIn=r.sIn-r.yIn;
-  const allOk=(r.stmtOnly.length===0&&r.sysOnly.length===0&&Math.abs(dOut)<0.01&&Math.abs(dIn)<0.01);
+  const intMatched=(r.stmt||[]).filter(s=>s._m && s._sysSrc==='dashboard');   // 🔒 حركات كشف طابقت سجلات داخلية (source=dashboard) لا بنك حقيقي (sheet)
+  const allOk=(r.stmtOnly.length===0&&r.sysOnly.length===0&&Math.abs(dOut)<0.01&&Math.abs(dIn)<0.01&&intMatched.length===0);
   const statusTxt=allOk?'✅ مطابق':'⚠️ غير مطابق'; const statusBg=allOk?'#0e9d6a':'#d98a00';
   const matchedRows=r.stmt.filter(s=>s._m);
   const dcell=(v,neg)=> (v>0.005?'<span style="color:'+(neg?'#c0392b':'#0e9d6a')+'">'+f(v)+'</span>':'');
