@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20260826a -->
+<!-- APPVER:20260827a -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1828,7 +1828,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260826a";
+    const APPVER = "20260827a";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4527,14 +4527,28 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     function adBannerHtml(ref) {
       if (!ref || typeof ref !== "object") return "";
       const src = ref.source_type === "post" ? "منشور" : "إعلان";
-      const head = ref.headline ? escapeHtml(String(ref.headline)) : "";
-      const bdy = ref.body ? escapeHtml(String(ref.body)) : "";
+      // ننظّف محارف الاتجاه الخفية (U+2066..2069، U+200E/F) التي تُدرجها ميتا في نص الإعلان.
+      const clean = s => String(s || "").replace(/[⁦-⁩‎‏]/g, "");
+      const head = ref.headline ? escapeHtml(clean(ref.headline)) : "";
+      const bdyRaw = clean(ref.body).trim();
+      const bdy = bdyRaw ? escapeHtml(bdyRaw) : "";
+      // معاينة سريعة بأول سطر من نص الإعلان (يعرف الموظف أي إعلان فوراً بلا فتح).
+      const firstLine = bdyRaw.split("\n").map(x => x.trim()).find(Boolean) || "";
+      const preview = firstLine ? escapeHtml(firstLine.slice(0, 45)) : "";
       const url = ref.source_url ? String(ref.source_url) : "";
-      const link = url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:#1e40af; font-weight:700; word-break:break-all;">🔗 ${escapeHtml(url)}</a>` : "";
-      const details = (`${head ? `<div style="margin-top:4px; font-weight:700;">${head}</div>` : ""}${bdy ? `<div style="margin-top:2px; color:#9d174d;">${bdy}</div>` : ""}${link ? `<div style="margin-top:4px;">${link}</div>` : ""}`) || `<div style="margin-top:4px; color:#9d174d;">لا تفاصيل إضافية</div>`;
-      // شريط مختصر (سطر واحد) — يتوسّع بالضغط لعرض المحتوى ويرجع.
+      const vurl = ref.video_url ? String(ref.video_url) : "";
+      const openUrl = url || vurl;
+      const thumb = ref.thumbnail_url ? String(ref.thumbnail_url) : "";
+      const isVideo = String(ref.media_type || "") === "video";
+      // صورة الإعلان (thumbnail) — تجعل الموظف يرى الإعلان فعلاً لا مجرد رابط.
+      const img = thumb
+        ? `<a href="${escapeHtml(openUrl || thumb)}" target="_blank" rel="noopener" style="display:block; margin-top:6px;"><img src="${escapeHtml(thumb)}" alt="صورة الإعلان" style="max-width:100%; max-height:240px; border-radius:8px; border:1px solid #fbcfe8;" onerror="this.style.display='none'"/>${isVideo ? '<div style="font-size:11px; color:#be185d; margin-top:2px;">🎬 إعلان فيديو — اضغطي لفتح الأصلي</div>' : ''}</a>`
+        : "";
+      const link = openUrl ? `<div style="margin-top:6px;"><a href="${escapeHtml(openUrl)}" target="_blank" rel="noopener" style="color:#1e40af; font-weight:700; word-break:break-all;">🔗 فتح الإعلان الأصلي ↗</a></div>` : "";
+      const details = (`${head ? `<div style="margin-top:4px; font-weight:800;">${head}</div>` : ""}${img}${bdy ? `<div style="margin-top:6px; color:#9d174d; white-space:pre-wrap; line-height:1.75;">${bdy}</div>` : ""}${link}`) || `<div style="margin-top:4px; color:#9d174d;">لا تفاصيل إضافية</div>`;
+      // شريط مختصر يعرض أول سطر من الإعلان — يتوسّع بالضغط لعرض الإعلان كاملاً (صورة + نص).
       return `<div style="position:sticky; top:0; z-index:2; margin:0 0 6px; padding:5px 10px; background:#fdf2f8; border:1px solid #fbcfe8; border-right:4px solid #c41d88; border-radius:8px; font-size:12px; color:#831843;">
-        <div onclick="(function(b){var d=b.nextElementSibling;var open=d.style.display==='none';d.style.display=open?'block':'none';var c=b.querySelector('.adcv');if(c)c.textContent=open?'▴ إخفاء':'▾ التفاصيل';})(this)" style="cursor:pointer; font-weight:800; display:flex; align-items:center; gap:8px;"><span>📢 جاء من ${src} على إنستقرام/فيسبوك</span><span class="adcv" style="margin-right:auto; font-weight:700; color:#be185d; font-size:11px;">▾ التفاصيل</span></div>
+        <div onclick="(function(b){var d=b.nextElementSibling;var open=d.style.display==='none';d.style.display=open?'block':'none';var c=b.querySelector('.adcv');if(c)c.textContent=open?'▴ إخفاء':'▾ عرض الإعلان';})(this)" style="cursor:pointer; font-weight:800; display:flex; align-items:center; gap:8px;"><span>📢 جاء من ${src}${preview ? `: ${preview}…` : " على إنستقرام/فيسبوك"}</span><span class="adcv" style="margin-right:auto; font-weight:700; color:#be185d; font-size:11px;">▾ عرض الإعلان</span></div>
         <div style="display:none;">${details}</div>
       </div>`;
     }
