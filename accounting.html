@@ -4185,8 +4185,14 @@ function _fipNormalizePayments(){
   });
   DATA.supplierPayments = expanded;   // الإسناد يستخدم المفكوك
 }
-function bankTxAll(){
-  const base=(DATA.bankTx||[]).slice();
+function bankTxAll(forRecon){
+  // 🆕 forRecon (المطابقة فقط — قرار المالكة: المطابقة بالقيم المُدخَلة تماماً): تُحذف الحركة الداخلية المجمّعة التي لها دفعة مُدخَلة بنفس المرجع (تظهر قيمتك المُدخَلة بدل الانعكاس)، والقمع يبقى ضد الكشف الحقيقي (sheet) فقط. الوضع العام (بلا وسيط) لا يتغيّر إطلاقاً — يحمي أرصدة كل البنوك من الازدواج.
+  const _dropRefs=new Set();
+  if(forRecon){
+    (DATA.supplierPaymentsRaw||DATA.supplierPayments||[]).forEach(r=>{ if(r.source!=='dashboard')return; const rf=String(r.bank_ref||'').trim().toUpperCase(); if(rf)_dropRefs.add(rf); });
+    (DATA.fcd||[]).forEach(r=>{ if(r.source!=='dashboard')return; const rf=String(r.bank_ref||'').trim().toUpperCase(); if(rf&&Number(r.amount_paid||0)>0)_dropRefs.add(rf); });
+  }
+  const base=(DATA.bankTx||[]).filter(x=>{ if(!forRecon||x.source!=='dashboard')return true; const rf=String(x.bank_ref||'').trim().toUpperCase(); return !(rf&&_dropRefs.has(rf)); });
   (DATA.banksCash||[]).forEach(x=>{ if(x.source!=='dashboard')return; const inA=Number(x.in_raw||0), outA=Number(x.out_raw||0); if(!(inA>0)&&!(outA>0))return;
     base.push({ id:'bc-'+x.id, bank_name:x.bank_name||'', amount_in:inA, amount_out:outA, tx_date:x.tx_date||'', bank_ref:x.bank_ref||'', client_code:'', currency:x.currency||'', note:[x.description,x.details,x.more_details,x.note].filter(Boolean).join(' · '), source:'dashboard', created_at:x.created_at||'', _cash:true });
   });
@@ -4211,7 +4217,7 @@ function bankTxAll(){
     base.push({ id:'rf-'+r.id, _rid:r.id, bank_name:r.bank_name||'', amount_in:0, amount_out:complete?amt:0, _pendingAmount:complete?0:amt, _pending:!complete, _missing:miss, tx_date:date, bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', note:'↩️ مسترجع للعميل'+(r.note?(' · '+String(r.note)):''), source:'dashboard', created_at:r.created_at||'', _refund:true });
   });
   // 💰 انعكاس دفعات العملاء الواردة من First Client Data (المُدخلة من الداشبورد) في كشف البنك — تلقائياً، مع فلترة بالمرجع لمنع تكرار المسجّل أصلاً في شيت Bank Transaction
-  const _txnRefs=new Set(); (DATA.bankTx||[]).forEach(x=>{ const r=String(x.bank_ref||'').trim().toUpperCase(); if(r)_txnRefs.add(r); });
+  const _txnRefs=new Set(); (DATA.bankTx||[]).forEach(x=>{ if(forRecon && x.source!=='sheet')return; const r=String(x.bank_ref||'').trim().toUpperCase(); if(r)_txnRefs.add(r); });   // 🆕 forRecon: القمع ضد الكشف الحقيقي (sheet) فقط — فتظهر القيم المُدخَلة كما هي
   (DATA.fcd||[]).forEach(r=>{
     if(r.source!=='dashboard')return;                                   // القديم من الشيت مسجّل أصلاً في acc_bank_txn
     const amt=Number(r.amount_paid||0); if(!(amt>0))return;
@@ -4515,7 +4521,7 @@ function runReconcile(){
       // للبطاقة الأجنبية: استبدل المبلغ الأصلي بالعماني المخصوم المُدخَل (ليطابق كشف البطاقة بالعماني)
       if((typeof isCardBank==='function'&&isCardBank(x.bank_name)) && _cardOmr[String(x.id)]!=null){ const o=Number(_cardOmr[String(x.id)]); if(out>0.005)out=o; else if(inn>0.005)inn=o; }
       return {date:String(x.tx_date||'').slice(0,10),out,in:inn,note:x.note||x.bank_ref||'',id:x.id,src:x.source||'',ssheet:x.src_sheet||'',_cash:!!x._cash,_book:!!x._booking,_fcd:!!x._clientPay,_refund:!!x._refund,_suppay:!!x._suppay,_rid:x._rid||null,code:x.client_code||'',pcode:x.payment_code||'',cname:x.client_name||'',cur:x.currency||'',_m:false}; };
-    const _allSys=bankTxAll().filter(x=>bankAlias(x.bank_name)===bank).map(_mapSys);
+    const _allSys=bankTxAll(true).filter(x=>bankAlias(x.bank_name)===bank).map(_mapSys);   // 🆕 المطابقة بالقيم المُدخَلة تماماً (تُسقط الانعكاس الداخلي المكرّر)
     const sys=_allSys.filter(y=>(!_from&&!_to)||inR(y.date));
     // 📅 نافذة تسامح ±6 أيام حول فترة الكشف — لحركات النظام المؤرّخة قرب الفترة فقط (فرق تاريخ الترحيل البنكي)؛ تُستخدم لمطابقة المتبقّي بالكشف ولا تظهر كـ«بنظامك فقط»
     const _shiftD=(ds,n)=>{ if(!/^\d{4}-\d{2}-\d{2}$/.test(ds))return ds; const dt=new Date(ds+'T00:00:00Z'); dt.setUTCDate(dt.getUTCDate()+n); return dt.toISOString().slice(0,10); };
@@ -4536,8 +4542,10 @@ function runReconcile(){
     const _dashRefs=new Set((DATA.bankTx||[]).filter(x=>x.source==='dashboard'&&bankAlias(x.bank_name)===bank).map(x=>String(x.bank_ref||'').trim().toUpperCase()).filter(Boolean));
     const hiddenInt=[];
     const _pushHidden=(dt,amt,code,ref,note,kind)=>{ if(!(Math.abs(amt)>0.005))return; hiddenInt.push({date:dt||'',amount:Math.abs(amt),code:code||'',ref:ref||'',note:note||'',kind:kind}); };   // 🔍 بلا قيد زمني — الحركات المخفية إشكال نزاهة تظهر دائماً لهذا البنك
-    (DATA.supplierPaymentsRaw||DATA.supplierPayments||[]).forEach(p=>{ if(p.source!=='dashboard'||bankAlias(p.bank_name)!==bank)return; const ref=String(p.bank_ref||'').trim().toUpperCase(); if(!ref||!_dashRefs.has(ref))return; _pushHidden(String(p.payment_date||'').slice(0,10),Number(p.amount||0),p.client_code,p.bank_ref,p.note,'💸 مورّد'); });   /* 🆕 FIP: الخام */
-    (DATA.fcd||[]).forEach(r=>{ if(r.source!=='dashboard'||bankAlias(r.bank_name)!==bank)return; const ref=String(r.bank_ref||'').trim().toUpperCase(); if(!ref||!_dashRefs.has(ref))return; _pushHidden(String(r.payment_date||r.booking_date||'').slice(0,10),Number(r.amount_paid||0),r.client_code,r.bank_ref,'','💰 عميل'); });
+    // 🆕 المطابقة بالقيم المُدخَلة: الداخل ضمن فترة الكشف يظهر في الجدولين الرئيسيين (متماثل)؛ اللوحات الجانبية تحتفظ فقط بما هو خارج الفترة (شبكة أمان بلا قيد زمني، بلا تكرار)
+    const _inPeriod=(dt)=>{ const s=String(dt||'').slice(0,10); return /^\d{4}-\d{2}-\d{2}$/.test(s)&&inR(s); };
+    (DATA.supplierPaymentsRaw||DATA.supplierPayments||[]).forEach(p=>{ if(p.source!=='dashboard'||bankAlias(p.bank_name)!==bank)return; const ref=String(p.bank_ref||'').trim().toUpperCase(); if(!ref||!_dashRefs.has(ref))return; const _pd=String(p.payment_date||'').slice(0,10); if(_inPeriod(_pd))return; _pushHidden(_pd,Number(p.amount||0),p.client_code,p.bank_ref,p.note,'💸 مورّد'); });   /* 🆕 FIP: الخام */
+    (DATA.fcd||[]).forEach(r=>{ if(r.source!=='dashboard'||bankAlias(r.bank_name)!==bank)return; const ref=String(r.bank_ref||'').trim().toUpperCase(); if(!ref||!_dashRefs.has(ref))return; const _pd=String(r.payment_date||r.booking_date||'').slice(0,10); if(_inPeriod(_pd))return; _pushHidden(_pd,Number(r.amount_paid||0),r.client_code,r.bank_ref,'','💰 عميل'); });
     hiddenInt.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));   // الأحدث أولاً
     // 🆕 المطابقة بالقيم المُدخَلة تماماً (قرار المالكة): كل قيمة تُطابَق بذاتها — لا تجميع ولا تغطية. اللي لا يطابق سطرَ كشف بمبلغه = «غير مطابق» يظهر بالأحمر لتصحّحه يدويّاً
     const _stmtAbs=stmt.map(s=>Math.max(Math.abs(Number(s.out||0)),Math.abs(Number(s.in||0)))).filter(a=>a>0.005);
