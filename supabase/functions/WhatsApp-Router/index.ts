@@ -1368,8 +1368,20 @@ async function handleNewLeadIntake(args: {
         .select("destination, persons, total_group, raw").eq("code", adCode).maybeSingle();
       const pr = prog as { destination?: string; persons?: number; total_group?: number; raw?: string } | null;
       if (pr && pr.raw) {
-        const msg = await formatAdProgramMessage(supabase, pr, from);
-        await sendCustomerReply(supabase, from, msg);
+        // هل فيه ملف PDF مربوط بهذا الكود؟ (جهّزته المالكة بالداشبورد) → نرسله كمرفق.
+        // وإلا نرسل تفاصيل نصّية (المرحلة ١) كبديل آمن.
+        let pdfUrl = "";
+        try {
+          const { data: pdfRow } = await supabase.from("wa_settings").select("value").eq("key", "ad_pdf:" + adCode).maybeSingle();
+          pdfUrl = String((pdfRow as { value?: { url?: string } } | null)?.value?.url || "");
+        } catch (_e) { /* */ }
+        if (pdfUrl) {
+          await sendCustomerReply(supabase, from,
+            "هلا وغلا 🌟 تفضّل تفاصيل العرض بالمرفق. حاب تعدّل أو تغيّر أي شي بالبرنامج؟ أنا جاهز 👍", pdfUrl);
+        } else {
+          const msg = await formatAdProgramMessage(supabase, pr, from);
+          await sendCustomerReply(supabase, from, msg);
+        }
         await supabase.from("whatsapp_sessions").update({
           intake_data: { ...prevData, ad_program_shown: true, ad_program_code: adCode, destination: pr.destination || prevData.destination },
           destination: pr.destination || null,
@@ -5110,6 +5122,26 @@ Deno.serve(async (req) => {
       const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       await supabase.from("wa_settings").upsert({ key: "invoice_company", value: company }, { onConflict: "key" });
       return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // ربط ملف PDF (جاهز، بعملة ثابتة) بكود برنامج للإعلانات: طلال يرسله لأي عميل
+  // يجي من إعلان يحمل هذا الكود. المفتاح wa_settings = "ad_pdf:<CODE>".
+  if (url.searchParams.get("admin_action") === "set_ad_pdf") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const p = await req.json();
+      const code = String(p.code || "").trim().toUpperCase();
+      const pdfUrl = String(p.url || "").trim();
+      if (!code || !pdfUrl) return new Response(JSON.stringify({ error: "code & url required" }), { status: 400, headers: jsonCors });
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await supabase.from("wa_settings").upsert(
+        { key: "ad_pdf:" + code, value: { url: pdfUrl, saved_at: new Date().toISOString() } },
+        { onConflict: "key" },
+      );
+      return new Response(JSON.stringify({ ok: true, code }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }

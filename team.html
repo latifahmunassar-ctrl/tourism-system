@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-26-finalize-code'
+  var BUILD = '2026-08-27-ad-pdf-link'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -492,6 +492,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
     <button type="button" class="pdf-menu-item" onclick="pdfMenuPick('client')">👤 أفراد <small>— للعميل (لوغو + سعر)</small></button>
     <button type="button" class="pdf-menu-item" onclick="pdfMenuPick('detailed')">📊 تفصيلي <small>— لوغو + تفصيل الأسعار</small></button>
     <button type="button" class="pdf-menu-item" onclick="pdfMenuPick('no_price')">🚫 بدون سعر <small>— بدون لوغو</small></button>
+    <button type="button" class="pdf-menu-item" onclick="prepareAdPdf()" style="border-top:1px solid var(--border);margin-top:4px;padding-top:10px;color:#0b3d91">🔗 اربط ملف الإعلان بالكود <small>— طلال يرسله لعملاء الإعلان</small></button>
   </div>
 </div>
 <button type="button" class="ebtn ebtn-pdf" id="finalizeCodeBtn" style="background:linear-gradient(135deg,#0b3d91,#0e9d6a);border:none;color:#fff;font-weight:800" onclick="finalizeProgramCode()" title="جمّد النسخة الحالية بكل تعديلاتها وولّد كود استرجاع دائم — بدون إرسال للعميل">✅ اعتمد النسخة النهائية — ولّد الكود</button>
@@ -4699,6 +4700,29 @@ ${showDetailed ? `
 // زر «📄 تصدير PDF» الموحّد: يفتح قائمة اختيار النوع (أفراد/تفصيلي/بدون سعر).
 function pdfMenuToggle(e){ if(e){ e.stopPropagation(); } const m=document.getElementById('pdfExportMenu'); if(!m) return; m.style.display = (m.style.display==='none'||!m.style.display) ? 'block' : 'none'; }
 function pdfMenuPick(mode){ const m=document.getElementById('pdfExportMenu'); if(m) m.style.display='none'; exportPDF(mode); }
+// ── اربط ملف الإعلان بالكود: يحفظ البرنامج (يعطي كود) + يولّد PDF بسعر (بالعملة
+//    المختارة حالياً) + يرفعه + يربطه بالكود. طلال يرسل هذا الملف لأي عميل يجي من
+//    إعلان يحمل نفس الكود في الكابشن. (المرحلة ٢ — ملف بدل النص.)
+async function prepareAdPdf(){
+  const menu=document.getElementById('pdfExportMenu'); if(menu) menu.style.display='none';
+  const hasProg = (typeof parsedData!=='undefined' && parsedData && typeof lastProgramRaw!=='undefined' && lastProgramRaw);
+  if(!hasProg){ alert('ابني البرنامج أولاً.'); return; }
+  const curNote = (typeof currencyConversion!=='undefined' && currencyConversion && currencyConversion.name)
+    ? ('بعملة: '+currencyConversion.name) : 'بالريال السعودي';
+  if(!confirm('سيُجهّز ملف الإعلان (PDF) '+curNote+' ويُربَط بكود البرنامج.\nطلال بيرسل هذا الملف لأي عميل يجي من إعلان يحمل نفس الكود.\n\nمتابعة؟')) return;
+  try{
+    const finalGroup = (typeof currentFinalGroup==='function') ? (currentFinalGroup()||0) : 0;
+    const code = await saveCurrentProgramOnce('client', finalGroup);
+    if(!code){ alert('تعذّر توليد كود البرنامج.'); return; }
+    const blob = await generatePdfBlob('client');   // بسعر + لوغو
+    const b64 = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(blob); });
+    const up = await waBridgeCall('upload-pdf', { pdf_base64: b64 });
+    if(!up || !up.url) throw new Error((up&&up.error)||'فشل رفع الملف');
+    const link = await waBridgeCall('set-ad-pdf', { code, url: up.url });
+    if(!link || !link.ok) throw new Error((link&&link.error)||'فشل ربط الكود');
+    alert('✅ تم!\nكود البرنامج: '+code+'\n\nحطّي هذا الكود في كابشن الإعلان، وطلال بيرسل هذا الملف تلقائياً لأي عميل يجي منه.');
+  }catch(e){ alert('❌ '+(e&&e.message?e.message:e)); }
+}
 document.addEventListener('click', function(e){ const insideWrap = e.target && e.target.closest && e.target.closest('.pdf-export-wrap'); if(!insideWrap){ const m=document.getElementById('pdfExportMenu'); if(m) m.style.display='none'; } });
 async function exportPDF(mode) {
   if (!parsedData) return;
