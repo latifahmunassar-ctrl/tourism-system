@@ -51,6 +51,73 @@ function isOmanQuietHours(): boolean {
 const OMAN_OFF_HOURS_MSG =
   "أهلاً أستاذي 🌙 فريقنا خارج ساعات العمل حالياً، ونرد على استفسارك أول الصباح بإذن الله 🙏";
 
+// ── إعلان فيه كود برنامج جاهز (المرحلة ١: نص منسّق بعملة العميل) ───────────
+// يستخرج كوداً نظامياً (مثل OM-2026-069) من نص الإعلان (الكابشن/العنوان).
+function extractProgramCode(text: string): string {
+  const m = String(text || "").match(/\b([A-Za-z]{2,3}-20\d{2}-\d{1,4})\b/);
+  return m ? m[1].toUpperCase() : "";
+}
+// عملة العميل حسب مقدمة رقمه (أسعار الصرف من جدول currencies — نفس ما يستخدمه الداشبورد).
+// السعر الأساس في البرامج بالريال السعودي؛ التحويل = السعر ÷ rate.
+async function customerCurrency(
+  supabase: ReturnType<typeof createClient>, from: string,
+): Promise<{ code: string; name: string; rate: number }> {
+  const digits = String(from || "").replace(/\D/g, "");
+  let code = "";
+  if (/^968/.test(digits)) code = "OMR";
+  else if (/^971/.test(digits)) code = "UAE";
+  if (!code) return { code: "SAR", name: "ريال سعودي", rate: 1 };   // السعودية وغيرها = الأساس
+  try {
+    const { data } = await supabase.from("currencies").select("code, name_ar, rate").eq("code", code).maybeSingle();
+    const r = data as { name_ar?: string; rate?: number } | null;
+    if (r && Number(r.rate) > 0) return { code, name: r.name_ar || code, rate: Number(r.rate) };
+  } catch (_e) { /* */ }
+  return { code: "SAR", name: "ريال سعودي", rate: 1 };   // fallback آمن — لا نخترع سعراً بعملة بلا سعر صرف
+}
+// يبني رسالة العرض للعميل من برنامج محفوظ (raw + السعر بعملة العميل).
+async function formatAdProgramMessage(
+  supabase: ReturnType<typeof createClient>,
+  prog: { destination?: string; persons?: number; total_group?: number; raw?: string },
+  from: string,
+): Promise<string> {
+  const raw = String(prog.raw || "");
+  const line = (tag: string) => (raw.match(new RegExp("^" + tag + ":\\s*([^\\n]+)", "m")) || [])[1] || "";
+  const section = (tag: string) => {
+    const m = raw.match(new RegExp(tag + ":([\\s\\S]*?)(?=\\n[A-Z_]+:|$)", "m"));
+    return m ? m[1] : "";
+  };
+  const destRaw = String(prog.destination || line("DEST") || "").trim();
+  const destMap: Record<string, string> = {
+    "Oman": "عُمان", "South Africa": "جنوب أفريقيا", "Malaysia": "ماليزيا",
+    "mauritius": "موريشيوس", "Mauritius": "موريشيوس",
+  };
+  const dest = destMap[destRaw] || destRaw;
+  const meta = line("META");                                   // "5 أيام | 4 ليالي | ..."
+  const daysNights = meta.split("|").slice(0, 2).map((s) => s.trim()).filter(Boolean).join(" / ");
+  const persons = Number(prog.persons) || 0;
+  const tours = [...section("TOURS").matchAll(/^\s*اليوم\s*\d+\s*\|\s*([^|]+)\|/gm)]
+    .map((m) => m[1].trim())
+    .filter((t) => t && !/يوم\s*حر|تنقّل|تنقل|استقبال|توديع|توصيل|العوده|العودة/.test(t))
+    .slice(0, 5);
+  const hotels = [...section("HOTELS").matchAll(/^\s*([^|\n]+)\|[^|]*\|\s*([^|]*نجوم)/gm)]
+    .map((m) => `${m[1].trim()} (${m[2].trim()})`).slice(0, 4);
+  const hasFlights = /FLIGHTS:\s*\n\s*[^\sA-Z]/.test(raw + "\n");
+  const cur = await customerCurrency(supabase, from);
+  const sar = Number(prog.total_group) || 0;
+  const groupPrice = cur.rate > 0 ? Math.round(sar / cur.rate) : sar;
+  const perPerson = persons > 0 ? Math.round(groupPrice / persons) : 0;
+  const fmt = (n: number) => n.toLocaleString("en-US");
+  const parts: string[] = ["هلا وغلا 🌟 هذي تفاصيل العرض اللي شفته:", ""];
+  if (dest) parts.push(`🗺️ الوجهة: ${dest}`);
+  if (daysNights) parts.push(`📅 المدة: ${daysNights}`);
+  if (hotels.length) parts.push(`🏨 الفنادق: ${hotels.join("، ")}`);
+  if (hasFlights) parts.push("✈️ يشمل طيران");
+  if (tours.length) parts.push(`✨ يشمل: ${tours.join(" • ")}`);
+  if (groupPrice > 0) parts.push("", `💰 السعر: ${fmt(groupPrice)} ${cur.name}${persons ? ` لـ${persons} أشخاص` : ""}${perPerson ? ` (${fmt(perPerson)} للشخص)` : ""}`);
+  parts.push("", "حاب تعدّل أو تغيّر أي شي بالبرنامج؟ أنا جاهز 👍");
+  return parts.join("\n");
+}
+
 // ترجمة الحدود: Meta يعطي الرقم أرقاماً فقط "96891171630"؛ نوحّده إلى صيغة
 // Twilio الداخلية "whatsapp:+96891171630" حتى يبقى كل المنطق الأسفل متطابقاً.
 function metaFromToInternal(raw: string): string {
@@ -1272,7 +1339,7 @@ async function handleNewLeadIntake(args: {
       .not("body", "is", null).order("received_at", { ascending: false }).limit(30),
     supabase.from("wa_admin_messages").select("body, sent_at").eq("customer_phone", from)
       .order("sent_at", { ascending: false }).limit(30),
-    supabase.from("whatsapp_sessions").select("intake_data").eq("phone", from).maybeSingle(),
+    supabase.from("whatsapp_sessions").select("intake_data, ad_referral").eq("phone", from).maybeSingle(),
   ]);
   type Row = { body?: string | null; received_at?: string; sent_at?: string };
   const msgs: Array<{ ts: string; who: string; body: string }> = [];
@@ -1286,6 +1353,33 @@ async function handleNewLeadIntake(args: {
   const isOmani = /^whatsapp:\+?968/.test(String(from));
   // هل سبق أن ردّ طلال في هذه المحادثة؟ (لتفادي تكرار التعريف/الترحيب كل رسالة)
   let alreadyGreeted = ((outboundRes.data || []) as Row[]).some(m => !!m.body);
+
+  // ── إعلان فيه كود برنامج جاهز: نعرض البرنامج نفسه (بعملة العميل) بدل أسئلة الاستقبال ──
+  // يشتغل مرة واحدة أول ما يجي العميل من إعلان يحمل كوداً في الكابشن/العنوان.
+  // لو ما فيه كود بالإعلان (أو البرنامج غير موجود) → نكمل الاستقبال الطبيعي مثل كل مرة.
+  const adRef = (sessRes.data as { ad_referral?: Record<string, unknown> | null } | null)?.ad_referral || null;
+  const prevData = (prev || {}) as Record<string, unknown>;
+  if (adRef && !prevData.ad_program_shown) {
+    const adCode = extractProgramCode(
+      String((adRef as Record<string, unknown>).body || "") + " " + String((adRef as Record<string, unknown>).headline || ""),
+    );
+    if (adCode) {
+      const { data: prog } = await supabase.from("programs")
+        .select("destination, persons, total_group, raw").eq("code", adCode).maybeSingle();
+      const pr = prog as { destination?: string; persons?: number; total_group?: number; raw?: string } | null;
+      if (pr && pr.raw) {
+        const msg = await formatAdProgramMessage(supabase, pr, from);
+        await sendCustomerReply(supabase, from, msg);
+        await supabase.from("whatsapp_sessions").update({
+          intake_data: { ...prevData, ad_program_shown: true, ad_program_code: adCode, destination: pr.destination || prevData.destination },
+          destination: pr.destination || null,
+          last_message_at: new Date().toISOString(),
+        }).eq("phone", from);
+        return;   // عرضنا البرنامج — رسالة العميل الجاية يكمل فيها الاستقبال الطبيعي ثم يُقفل «زميلنا يوافيك»
+      }
+      // كود موجود بالإعلان لكن البرنامج غير محفوظ → نكمل استقبالاً طبيعياً.
+    }
+  }
 
   if (!apiKey) {
     await supabase.from("whatsapp_sessions").update({ last_message_at: new Date().toISOString() }).eq("phone", from);
