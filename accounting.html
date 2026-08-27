@@ -4576,7 +4576,7 @@ function renderReconReport(r){
   const _hidHasStmt=(r.hiddenInt||[]).filter(x=>x._inStmt);
   const phantomH=_hidPhantom.length?('<div style="margin-bottom:12px;border:2px solid #d11;border-radius:10px;background:rgba(209,17,17,.06)"><div style="font-weight:800;color:#d11;padding:9px 12px">🔴 في نظامك وغير مطابقة للكشف البنكي ('+_hidPhantom.length+') — قيمة مُدخَلة لا يقابلها سطر في الكشف</div><div style="padding:0 12px 10px"><div style="font-size:11px;color:var(--muted);margin-bottom:6px">قيم مسجّلة في نظامك بمبلغها كما أدخلتِه، و<b>لا يوجد لها خصم/إيداع مطابق بنفس المبلغ في الكشف</b>. غالباً <b>إدخال خاطئ</b> (مبلغ غلط أو تقسيم) — <b>راجعيها وصحّحيها يدويّاً</b>. تظهر دائماً — <b>غير مقيّدة بفترة الكشف.</b></div><div class="tbl-wrap"><table style="font-size:11.5px"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>العميل</th><th>المرجع</th></tr></thead><tbody>'+_hidPhantom.map(_hidRow).join('')+'</tbody></table></div></div></div>'):'';
   const hidH=phantomH+(_hidHasStmt.length?('<details style="margin-bottom:12px;border:1px solid #7c3aed;border-radius:10px;background:rgba(124,92,255,.05)"><summary style="cursor:pointer;font-weight:800;color:#7c3aed;padding:9px 12px">🔍 قيم داخلية في نظامك لها نظير بنفس المبلغ في الكشف ('+_hidHasStmt.length+')</summary><div style="padding:6px 12px 10px"><div style="font-size:11px;color:var(--muted);margin-bottom:6px">مسجّلة في نظامك بمبلغ يطابق سطراً في الكشف — <b>غالباً حقيقية</b>. <b>غير مقيّدة بفترة الكشف.</b></div><div class="tbl-wrap"><table style="font-size:11.5px"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>العميل</th><th>المرجع</th></tr></thead><tbody>'+_hidHasStmt.map(_hidRow).join('')+'</tbody></table></div></div></details>'):'');
-  let h=noDayWarn+intWarn+hidH+(allOk?'<div style="background:rgba(14,157,106,.12);border:1px solid #0e9d6a;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-weight:700;color:#0e9d6a;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span>✅ تطابق تام — عدد الحركات وقيمها والإجماليات متطابقة</span><button class="btn green" id="rec-save-btn" style="padding:7px 16px" onclick="saveRecon()">💾 حفظ التقرير (مطابق)</button></div>':((r.stmtOnly.length+r.sysOnly.length)>0?'<div style="background:rgba(217,138,0,.1);border:1px solid #d98a00;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-weight:700;color:#d98a00">⚠️ يوجد '+(r.stmtOnly.length+r.sysOnly.length)+' حركة غير متطابقة — راجعي التفاصيل بالأسفل</div>':''))+
+  let h=noDayWarn+intWarn+hidH+(allOk?'<div style="background:rgba(14,157,106,.12);border:1px solid #0e9d6a;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-weight:700;color:#0e9d6a;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span>✅ تطابق تام — عدد الحركات وقيمها والإجماليات متطابقة</span><button class="btn green" id="rec-save-btn" style="padding:7px 16px" onclick="saveRecon()">✅ اعتمد واحفظ التقرير</button></div>':((r.stmtOnly.length+r.sysOnly.length)>0?'<div style="background:rgba(217,138,0,.1);border:1px solid #d98a00;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-weight:700;color:#d98a00">⚠️ يوجد '+(r.stmtOnly.length+r.sysOnly.length)+' حركة غير متطابقة — راجعي التفاصيل بالأسفل</div>':''))+
     '<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:12px">'+
     '<div class="kpi"><div class="ttl">📄 حركات الكشف</div><div class="val">'+f(r.stmt.length)+'</div></div>'+
     '<div class="kpi"><div class="ttl">💻 حركات نظامك</div><div class="val">'+f(r.sys.length)+'</div></div>'+
@@ -4877,8 +4877,8 @@ async function reconFixBankSave(pc){
     await load(); try{ runReconcile(); }catch(_){}
   }catch(e){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(e.message); }
 }
-function exportReconPDF(){
-  const r=window._lastReconReport; if(!r){ alert('شغّلي «تحقّق وقارن» أولاً'); return; }
+function exportReconPDF(returnHtml){
+  const r=window._lastReconReport; if(!r){ if(returnHtml)return ''; alert('شغّلي «تحقّق وقارن» أولاً'); return; }
   const today=new Date().toISOString().slice(0,10); const f=(v)=>fmt(Number(v||0));
   const dOut=r.sOut-r.yOut, dIn=r.sIn-r.yIn;
   const intMatched=(r.stmt||[]).filter(s=>s._m && s._sysSrc==='dashboard');   // 🔒 حركات كشف طابقت سجلات داخلية (source=dashboard) لا بنك حقيقي (sheet)
@@ -4912,7 +4912,8 @@ function exportReconPDF(){
     tbl('⚠️ في الكشف وغير مسجّلة في النظام',r.stmtOnly,'#d98a00')+
     tbl('⚠️ في النظام وغير موجودة بالكشف',r.sysOnly,'#d98a00')+
     '<div class="ft"><span>شركة العز · ALEZZ Group</span><span>تم الإصدار آلياً · '+esc(today)+'</span></div>'+
-    '<script>window.onload=function(){setTimeout(function(){window.print();},350);};<\/script></body></html>';
+    (returnHtml?'':'<script>window.onload=function(){setTimeout(function(){window.print();},350);};<\/script>')+'</body></html>';
+  if(returnHtml) return html;   // 🆕 يُرجع تقرير التفاصيل ليُحفَظ في أرشيف المطابقات
   const w=window.open('','_blank'); if(!w){ alert('فعّلي النوافذ المنبثقة'); return; } w.document.open(); w.document.write(html); w.document.close();
 }
 function fileToB64(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>{ const s=String(fr.result||''); res(s.slice(s.indexOf(',')+1)); }; fr.onerror=()=>rej(new Error('تعذّر قراءة الملف')); fr.readAsDataURL(file); }); }
@@ -4922,12 +4923,14 @@ async function saveRecon(){
   if(!c.allOk){ alert('الحفظ متاح فقط عند التطابق التام'); return; }
   if(btn){ btn.disabled=true; btn.textContent='⏳ جاري الحفظ...'; }
   try{
-    const b64=await fileToB64(c.file);
-    const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save_recon',payload:{bank_name:c.bank,period_from:c.from||null,period_to:c.to||null,txn_count:c.txnCount,total_in:c.totalIn,total_out:c.totalOut,status:'مطابق',file_name:(c.file&&c.file.name)||'statement.pdf',pdf_base64:b64,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
-    const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); if(btn){btn.disabled=false;btn.textContent='💾 حفظ التقرير (مطابق)';} return; }
+    // 🆕 نحفظ تقرير التفاصيل (المطابقة) لا الكشف الخام — ليبيّن تفاصيل التطابق عند الرجوع إليه
+    let b64, fname; try{ const _rh=exportReconPDF(true); if(_rh&&_rh.length>50){ b64=btoa(unescape(encodeURIComponent(_rh))); fname='تقرير-مطابقة-'+String(c.bank||'').replace(/[^\w؀-ۿ]+/g,'-')+'-'+(c.from||'')+'_'+(c.to||'')+'.html'; } }catch(_){}
+    if(!b64){ b64=await fileToB64(c.file); fname=(c.file&&c.file.name)||'statement.pdf'; }   // احتياط
+    const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save_recon',payload:{bank_name:c.bank,period_from:c.from||null,period_to:c.to||null,txn_count:c.txnCount,total_in:c.totalIn,total_out:c.totalOut,status:'مطابق',file_name:fname,pdf_base64:b64,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
+    const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); if(btn){btn.disabled=false;btn.textContent='✅ اعتمد واحفظ التقرير';} return; }
     if(btn){ btn.textContent='✅ تم الحفظ بنجاح'; }
     await loadReconList(); renderReconSaved();
-  }catch(e){ alert('خطأ: '+e.message); if(btn){btn.disabled=false;btn.textContent='💾 حفظ التقرير (مطابق)';} }
+  }catch(e){ alert('خطأ: '+e.message); if(btn){btn.disabled=false;btn.textContent='✅ اعتمد واحفظ التقرير';} }
 }
 function renderReconSaved(){
   const el=$('rec-saved'); if(!el)return; const list=RECON_LIST||[];
@@ -4941,7 +4944,11 @@ async function openReconPdf(id){
   try{
     const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'get_recon_pdf',payload:{id:id}})});
     const j=await r.json(); if(j.error||!j.pdf_base64){ alert('تعذّر فتح الملف'+(j.error?': '+j.error:'')); return; }
-    const bin=atob(j.pdf_base64); const arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+    const bin=atob(j.pdf_base64);
+    if(/^\s*<(!doctype|html)/i.test(bin.slice(0,60))){   // 🆕 تقرير تفاصيل المطابقة (HTML) — يُفتح مباشرة
+      const html=decodeURIComponent(escape(bin)); const w=window.open('','_blank'); if(!w){ alert('فعّلي النوافذ المنبثقة'); return; } w.document.open(); w.document.write(html); w.document.close(); return;
+    }
+    const arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
     const blob=new Blob([arr],{type:'application/pdf'}); const u=URL.createObjectURL(blob); window.open(u,'_blank');
   }catch(e){ alert('خطأ: '+e.message); }
 }
