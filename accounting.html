@@ -4541,7 +4541,14 @@ function runReconcile(){
     hiddenInt.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));   // الأحدث أولاً
     // 🆕 نزاهة المطابقة: هل للحركة الداخلية المخفية نظيرٌ في الكشف الحقيقي المُحمّل؟ اللي بلا نظير = رقم داخلي غير مؤكّد (يُبرز بالأحمر)
     const _stmtAbs=stmt.map(s=>Math.max(Math.abs(Number(s.out||0)),Math.abs(Number(s.in||0)))).filter(a=>a>0.005);
-    hiddenInt.forEach(x=>{ x._inStmt=_stmtAbs.some(a=>Math.abs(a-Math.abs(Number(x.amount||0)))<0.01); });
+    // 🧩 وعي المجموع: القطع التي تشترك بنفس المرجع وتجمع سطرَ كشف واحد (مثل 707+6,093=6,800) = مغطّاة، لا وهمية — فالبنك خصمها كتلةً واحدة والنظام قسّمها
+    const _hidByRef={}; hiddenInt.forEach(x=>{ const rf=String(x.ref||'').trim().toUpperCase(); if(!rf)return; _hidByRef[rf]=(_hidByRef[rf]||0)+Math.abs(Number(x.amount||0)); });
+    hiddenInt.forEach(x=>{
+      const _self=_stmtAbs.some(a=>Math.abs(a-Math.abs(Number(x.amount||0)))<0.01);
+      const rf=String(x.ref||'').trim().toUpperCase(); const gsum=rf?_hidByRef[rf]:0;
+      const _grp=!!rf && Math.abs(gsum-Math.abs(Number(x.amount||0)))>0.01 && _stmtAbs.some(a=>Math.abs(a-gsum)<0.01);   // مغطّاة عبر مجموع مرجعها (قطعة من إجمالي مطابق)
+      x._inStmt=_self||_grp; x._viaGroup=!_self&&_grp; x._grpSum=gsum;
+    });
     window._recRaw=String(parsed.raw||'');   // 📋 نص الكشف الخام (لتشخيص أسطر لم تُقرأ)
     window._lastRecon={bank,from:_from,to:_to,file,txnCount:stmt.length,totalIn:sIn,totalOut:sOut,allOk:(stmtOnly.length===0&&sysOnly.length===0)};
     renderReconReport({bank,from:_from,to:_to,autoPeriod:_autoPeriod,noDay:_noDay,header:parsed.header,stmt,sys,hiddenInt,matched:stmt.filter(s=>s._m).length,stmtOnly,sysOnly,sOut,sIn,yOut:sum(sys,'out'),yIn:sum(sys,'in')});
@@ -4557,7 +4564,7 @@ function renderReconReport(r){
   const noDayWarn=r.noDay?'<div style="background:rgba(209,17,17,.10);border:1px solid #d11;border-radius:8px;padding:10px 12px;margin-bottom:10px;color:#d11;font-size:12.5px;line-height:1.8"><b>⛔ تواريخ الكشف ناقصة (بلا يوم — عمود التاريخ مقصوص «YYYY-MM»).</b><br>المطابقة تمّت <b>بالمبلغ فقط</b> بلا تاريخ، فقد تُطابق حركةً قديمةً بنفس المبلغ <b>خطأً</b> — <b>لا تعتمدي هذه النتيجة.</b><br>✅ الحل: أعيدي تصدير الكشف من تطبيق البنك <b>كـ CSV</b>، أو وسّعي عمود التاريخ ليظهر <b>YYYY-MM-DD كاملاً</b>، ثم قارني من جديد.</div>':'';
   const intWarn=intMatched.length?('<div style="background:rgba(217,138,0,.12);border:1px solid #d98a00;border-radius:8px;padding:10px 12px;margin-bottom:10px;color:#b8860b;font-size:12.5px;line-height:1.85"><b>⚠️ '+intMatched.length+' حركة طابقت حركات داخلية</b> (أُنشئت من التبويبات — <b>مو مستوردة من البنك الحقيقي</b>). هذه <b>ليست تأكيداً بنكيّاً</b>؛ تأكّدي أن لها حركة فعلية في كشف البنك. الحالة: <b>يحتاج مراجعة</b>، لا «تطابق تام».</div>'):'';
   // 🆕 نزاهة: افصل المخفية — الأحمر (بلا نظير في الكشف = رقم داخلي غير مؤكّد، إدخال مشتبه) عن البنفسجي (له نظير بالكشف = غالباً حقيقي مخفي)
-  const _hidRow=(x)=>'<tr><td>'+esc(x.date||'')+'</td><td>'+esc(x.kind||'')+'</td><td class="num">'+fd(x.amount)+'</td><td>'+esc(x.code||'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(String(x.ref||'').slice(0,30))+'</td></tr>';
+  const _hidRow=(x)=>'<tr><td>'+esc(x.date||'')+'</td><td>'+esc(x.kind||'')+'</td><td class="num">'+fd(x.amount)+'</td><td>'+esc(x.code||'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(String(x.ref||'').slice(0,30))+(x._viaGroup?'<br><span style="color:#0e7c50;font-size:9px">🧩 قطعة من إجمالي '+fd(x._grpSum)+' مطابق بالكشف</span>':'')+'</td></tr>';
   const _hidPhantom=(r.hiddenInt||[]).filter(x=>!x._inStmt);
   const _hidHasStmt=(r.hiddenInt||[]).filter(x=>x._inStmt);
   const phantomH=_hidPhantom.length?('<div style="margin-bottom:12px;border:2px solid #d11;border-radius:10px;background:rgba(209,17,17,.06)"><div style="font-weight:800;color:#d11;padding:9px 12px">🔴 في نظامك ولا يقابلها شيء في الكشف البنكي المُحمّل ('+_hidPhantom.length+') — أرقام داخلية غير مؤكّدة</div><div style="padding:0 12px 10px"><div style="font-size:11px;color:var(--muted);margin-bottom:6px">قيم مسجّلة في نظامك، مطويّة تحت حركة داخلية بنفس المرجع، و<b>لا يوجد لها خصم/إيداع مطابق في الكشف الذي حمّلتِه</b>. راجعيها — قد تكون <b>إدخالاً خاطئاً</b> (رقم مضخّم أو مكرّر). <b>تظهر دائماً — غير مقيّدة بفترة الكشف.</b></div><div class="tbl-wrap"><table style="font-size:11.5px"><thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>العميل</th><th>المرجع</th></tr></thead><tbody>'+_hidPhantom.map(_hidRow).join('')+'</tbody></table></div></div></div>'):'';
