@@ -43,3 +43,6 @@ verify_jwt = false
 # ever writes to its own new tables (discovered_companies / discovery_jobs).
 [functions.companies-discovery]
 verify_jwt = false
+
+[functions.acc-dashboard]
+verify_jwt = false
