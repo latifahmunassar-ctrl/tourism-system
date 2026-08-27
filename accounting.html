@@ -4308,7 +4308,9 @@ function parseStmtTxns(text){
       if(!nums.length)continue;
       const card=nums[nums.length-1]; if(Math.abs(card)<0.005)continue;   // آخر رقم = Amount in Card Currency (OMR بإشارة: سالب=شراء/خارج، موجب=سداد/داخل)
       const curM=line.match(/\b(MYR|USD|OMR|SAR|AED|EUR|THB|SGD|GBP)\b/); const oth=(nums.length>=2?nums[nums.length-2]:card);
-      rowsE.push({date:iso, out:card<0?Math.abs(card):0, in:card>0?card:0, bal:0, remarks:(curM&&curM[1]!=='OMR'?('أصلي '+curM[1]+' '+oth+' · '):'')+'💳 بطاقة'});
+      // 🏪 مصدر السحب: اسم التاجر/الجهة كما في الكشف — نجرّده من التواريخ والأرقام والعملات وأرقام البطاقة/المرجع
+      const merch=line.replace(/\d{2}\/\d{2}\/\d{4}/g,' ').replace(/-?[\d,]+\.\d+/g,' ').replace(/\d{4,}/g,' ').replace(/\b(MYR|USD|OMR|SAR|AED|EUR|THB|SGD|GBP)\b/gi,' ').replace(/[*#|]+/g,' ').replace(/\s+/g,' ').trim();
+      rowsE.push({date:iso, out:card<0?Math.abs(card):0, in:card>0?card:0, bal:0, src:merch, remarks:(merch?'🏪 '+merch+' · ':'')+(curM&&curM[1]!=='OMR'?('أصلي '+curM[1]+' '+oth+' · '):'')+'💳 بطاقة'});
     }
     if(rowsE.length) return rowsE;
   }
