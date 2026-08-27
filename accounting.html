@@ -1158,7 +1158,7 @@ async function ctlToggleActive(name,toActive){ const u=staffList().find(x=>x.sta
 async function ctlDelete(name){ if(!confirm('حذف الموظف «'+name+'» وكل صلاحياته؟'))return; await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_staff_access',payload:{staff_name:name}})}); await load(); }
 
 function render(d){
-  DATA=d; $('loading').style.display='none'; $('content').style.display='block';
+  DATA=d; try{ _fipNormalizePayments(); }catch(_){}   /* 🆕 FIP: الدفعة الخام للبنك، والتوزيع يُفكّ افتراضيّاً للإسناد (يطابق الصفوف المقسومة القديمة) */ $('loading').style.display='none'; $('content').style.display='block';
   try{ applyPermissions(); }catch(e){ console.warn('perm',e); }
   const _apTot=Object.values(actualProfitMaps().byClient).reduce((s,v)=>s+Number(v||0),0);   // الربح الفعلي الموحّد (نفس مصدر الوكلاء/Booking Form)
   $('kp-profit').innerHTML=fmt(_apTot)+' <span class="cur">SAR</span>';
@@ -4112,7 +4112,7 @@ function bankCurNudge(bankSelId){ const bs=$(bankSelId); if(!bs) return; const b
 function bankPayDesync(){ const out=[]; const nz=s=>String(s||'').toLowerCase().replace(/[^a-z0-9؀-ۿ]/g,'');
   (DATA.bankTx||[]).forEach(bt=>{ if(bt.source!=='dashboard')return; const note=String(bt.note||''); if(!/دفعة|توزيع/.test(note))return;
     const amt=Number(bt.amount_out||0)||Number(bt.amount_in||0); if(!(amt>0.005))return; const ref=String(bt.bank_ref||'').trim();
-    const sp=(DATA.supplierPayments||[]).find(p=>Math.abs(Math.abs(Number(p.amount||0))-amt)<0.01 && String(p.bank_ref||'').trim()===ref && nz(note).indexOf(nz(p.supplier_name))>=0);
+    const sp=(DATA.supplierPaymentsRaw||DATA.supplierPayments||[]).find(p=>Math.abs(Math.abs(Number(p.amount||0))-amt)<0.01 && String(p.bank_ref||'').trim()===ref && nz(note).indexOf(nz(p.supplier_name))>=0);   /* 🆕 FIP: الخام (مبلغ الدفعة الكامل يطابق الحركة) */
     if(sp && nz(sp.bank_name)!==nz(bt.bank_name)){ out.push({txnId:bt.id, txnBank:bt.bank_name||'', payBank:sp.bank_name||'', amt, supplier:sp.supplier_name||'', date:String(bt.tx_date||'').slice(0,10)}); }
   });
   return out;
@@ -4165,6 +4165,26 @@ function curAgg(list){ const m={}; list.forEach(x=>{ const c=(x.currency||bankCu
 function curLine(m,key){ const ks=Object.keys(m).sort((a,b)=>(Math.abs(m[b].i-m[b].o))-(Math.abs(m[a].i-m[a].o))); const parts=ks.map(c=>{ const v=key==='net'?(m[c].i-m[c].o):m[c][key]; if(Math.abs(v)<0.005)return null; const col=key==='net'?(v>=0?'#0e9d6a':'#d11'):''; return '<span'+(col?' style="color:'+col+'"':'')+'>'+fmt(v)+' <small style="color:var(--muted)">'+esc(c)+'</small></span>'; }).filter(Boolean); return parts.join(' · ')||'0'; }
 function bankMainCur(list){ const m={}; (list||[]).forEach(x=>{ const c=x.currency||bankCur(x.bank_name); m[c]=(m[c]||0)+1; }); let best='OMR',bn=-1; for(const c in m){ if(m[c]>bn){bn=m[c];best=c;} } return best; }
 // حركات البنوك = حركات الشيت (acc_bank_txn) + إدخالات Banks Cash المُدخلة من الداشبورد (داخل/خارج لكل بنك) — انعكاس حيّ بلا تكرار
+// 🆕 FIP: تطبيع الدفعات — supplierPaymentsRaw = الخام (للبنك)؛ supplierPayments = مفكوك التوزيع (للإسناد، يطابق الصفوف المقسومة القديمة تماماً)
+function _fipNormalizePayments(){
+  if(!DATA) return;
+  DATA.supplierPaymentsRaw = DATA.supplierPayments || [];   // الخام: للبنك والمطابقة
+  const allocs = DATA.allocations || [];
+  if(!allocs.length){ return; }   // بلا تخصيصات → لا تغيير (الدفعات القديمة تبقى كما هي)
+  const byPay={}; allocs.forEach(a=>{ const pid=a.payment_id; if(pid==null)return; (byPay[pid]=byPay[pid]||[]).push(a); });
+  const expanded=[];
+  (DATA.supplierPaymentsRaw).forEach(p=>{
+    const al=byPay[p.id];
+    if(!al || !al.length){ expanded.push(p); return; }   // بلا تخصيص → كما هي
+    const orig=Number(p.amount||0); let sum=0;
+    al.forEach(a=>{ const amt=Number(a.amount||0); sum+=amt;
+      expanded.push(Object.assign({}, p, { client_code:a.client_code||null, client_name:a.client_name||null, amount:amt, currency_rate:(a.currency_rate!=null?a.currency_rate:p.currency_rate), note:(p.note?p.note+' · ':'')+'موزّعة على عميل'+(a.service?(' · 🛎️ '+a.service):''), _fromAlloc:true }));
+    });
+    const rem=+(orig-sum).toFixed(2);
+    if(rem>0.5){ expanded.push(Object.assign({}, p, { client_code:null, client_name:null, amount:rem, note:(p.note?p.note+' · ':'')+'🔵 غير موزّعة (رصيد مقدّم متبقّي)', _fromAlloc:true })); }
+  });
+  DATA.supplierPayments = expanded;   // الإسناد يستخدم المفكوك
+}
 function bankTxAll(){
   const base=(DATA.bankTx||[]).slice();
   (DATA.banksCash||[]).forEach(x=>{ if(x.source!=='dashboard')return; const inA=Number(x.in_raw||0), outA=Number(x.out_raw||0); if(!(inA>0)&&!(outA>0))return;
@@ -4203,7 +4223,7 @@ function bankTxAll(){
     base.push({ id:'fcd-'+r.id, bank_name:bn, amount_in:amt, amount_out:0, tx_date:d, bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', payment_code:r.payment_code||'', currency:r.currency||'', note:'💰 دفعة عميل: '+(r.client_name||'')+(ref?'':' · ⚠️ بلا مرجع'), source:'dashboard', created_at:r.created_at||'', _clientPay:true });
   });
   // 💸 انعكاس دفعات الموردين المُدخلة من الداشبورد التي لا سند بنكي لها (مرجعها غير مسجّل في acc_bank_txn) — تظهر في مطابقة البنك بقيمتها الدقيقة بالكسور. المسجّلة أصلاً كحركة بنكية (نفس المرجع) لا تُكرّر.
-  (DATA.supplierPayments||[]).forEach(r=>{
+  (DATA.supplierPaymentsRaw||DATA.supplierPayments||[]).forEach(r=>{   /* 🆕 FIP: الخام (لا المفكوك) — الدفعة الخام هي التي تنعكس في البنك */
     if(r.source!=='dashboard')return;
     const amt=Number(r.amount||0); if(!(Math.abs(amt)>0.005))return;
     const bn=String(r.bank_name||'').trim(); if(!bn)return;
@@ -4516,7 +4536,7 @@ function runReconcile(){
     const _dashRefs=new Set((DATA.bankTx||[]).filter(x=>x.source==='dashboard'&&bankAlias(x.bank_name)===bank).map(x=>String(x.bank_ref||'').trim().toUpperCase()).filter(Boolean));
     const hiddenInt=[];
     const _pushHidden=(dt,amt,code,ref,note,kind)=>{ if(!(Math.abs(amt)>0.005))return; hiddenInt.push({date:dt||'',amount:Math.abs(amt),code:code||'',ref:ref||'',note:note||'',kind:kind}); };   // 🔍 بلا قيد زمني — الحركات المخفية إشكال نزاهة تظهر دائماً لهذا البنك
-    (DATA.supplierPayments||[]).forEach(p=>{ if(p.source!=='dashboard'||bankAlias(p.bank_name)!==bank)return; const ref=String(p.bank_ref||'').trim().toUpperCase(); if(!ref||!_dashRefs.has(ref))return; _pushHidden(String(p.payment_date||'').slice(0,10),Number(p.amount||0),p.client_code,p.bank_ref,p.note,'💸 مورّد'); });
+    (DATA.supplierPaymentsRaw||DATA.supplierPayments||[]).forEach(p=>{ if(p.source!=='dashboard'||bankAlias(p.bank_name)!==bank)return; const ref=String(p.bank_ref||'').trim().toUpperCase(); if(!ref||!_dashRefs.has(ref))return; _pushHidden(String(p.payment_date||'').slice(0,10),Number(p.amount||0),p.client_code,p.bank_ref,p.note,'💸 مورّد'); });   /* 🆕 FIP: الخام */
     (DATA.fcd||[]).forEach(r=>{ if(r.source!=='dashboard'||bankAlias(r.bank_name)!==bank)return; const ref=String(r.bank_ref||'').trim().toUpperCase(); if(!ref||!_dashRefs.has(ref))return; _pushHidden(String(r.payment_date||r.booking_date||'').slice(0,10),Number(r.amount_paid||0),r.client_code,r.bank_ref,'','💰 عميل'); });
     hiddenInt.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));   // الأحدث أولاً
     window._recRaw=String(parsed.raw||'');   // 📋 نص الكشف الخام (لتشخيص أسطر لم تُقرأ)
