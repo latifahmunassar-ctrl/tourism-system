@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20260828a -->
+<!-- APPVER:20260828b -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1416,6 +1416,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         <input type="file" id="attach-input" accept="image/*,video/*,audio/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx" style="display:none;" />
         <button type="button" id="attach-btn" title="إرفاق ملف (صورة/PDF/فيديو، حد أقصى 100MB)" style="background:transparent; border:1px solid var(--border); border-radius:8px; padding:8px 12px; cursor:pointer; font-size:18px;">📎</button>
         <button type="button" id="invoice-btn" title="إنشاء فاتورة وإرسالها للعميل" style="background:transparent; border:1px solid var(--border); border-radius:8px; padding:8px 12px; cursor:pointer; font-size:18px;">🧾</button>
+        <button type="button" id="adprog-btn" title="أرسل ملف برنامج بالكود للعميل (من الإعلان)" style="background:transparent; border:1px solid var(--border); border-radius:8px; padding:8px 12px; cursor:pointer; font-size:18px;">📢</button>
         <button type="button" id="emoji-btn" title="إضافة إيموجي" style="background:transparent; border:1px solid var(--border); border-radius:8px; padding:8px 12px; cursor:pointer; font-size:18px;">😊</button>
         <button id="conv-send">إرسال</button>
         <div id="emoji-picker-wrap" style="display:none; position:absolute; bottom:60px; left:10px; z-index:1000; box-shadow:0 8px 24px rgba(0,0,0,.18); border-radius:12px; overflow:hidden;">
@@ -1841,7 +1842,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260828a";
+    const APPVER = "20260828b";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4975,6 +4976,38 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         btn.disabled = false;
       }
     });
+
+    // 📢 أرسل ملف برنامج بالكود للعميل — الموظف يلصق الكود من الإعلان → يُرسَل الملف
+    // المربوط (من المساعد السياحي) للعميل مباشرة، ويظهر في المحادثة.
+    async function sendAdProgramByCode() {
+      if (!convPhone) { return; }
+      const code = (prompt("الصقي كود البرنامج من الإعلان لإرسال ملفه للعميل (مثل OM-2026-069):", "") || "").trim().toUpperCase();
+      if (!code) return;
+      const btn = $("adprog-btn"); if (btn) btn.disabled = true;
+      try {
+        const lres = await fetch(BASE + "?admin_action=list_ad_pdfs", { headers: { Authorization: "Bearer " + token } });
+        const ldata = await lres.json();
+        const item = ((ldata && ldata.items) || []).find(i => i.code === code);
+        if (!item || !item.url) {
+          alert("⚠️ الكود «" + code + "» ما له ملف مربوط.\nاربطيه أول من المساعد السياحي بزر «🔗 اربط ملف الإعلان بالكود».");
+          return;
+        }
+        const sres = await fetch(BASE + "?admin_action=send_admin_message", {
+          method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: convPhone, body: "تفضّل تفاصيل العرض 🌟 حاب تعدّل أو تغيّر أي شي بالبرنامج؟ أنا جاهز 👍", media_url: item.url, sent_by: "admin" }),
+        });
+        if (sres.status === 403) {
+          const e = await sres.json().catch(() => ({}));
+          if (e.error === "attendance_required") { attendToast(e.message || "⏱️ سجّلي الحضور «بدء الدوام» أولاً"); return; }
+        }
+        if (!sres.ok) throw new Error("HTTP " + sres.status);
+        setTimeout(() => loadConversationHistory(), 3000);
+        alert("✅ أُرسل ملف البرنامج " + code + " للعميل.");
+      } catch (e) {
+        alert("❌ " + (e && e.message ? e.message : e));
+      } finally { if (btn) btn.disabled = false; }
+    }
+    $("adprog-btn").addEventListener("click", sendAdProgramByCode);
 
     // ── مكتبة العروض ─────────────────────────────────────────────────────
     // التصنيفات ثابتة: عمان والسعودية فقط (أزرار ثابتة في كل محادثة).
