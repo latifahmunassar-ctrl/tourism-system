@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20260828b -->
+<!-- APPVER:20260828c -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -495,7 +495,7 @@
     .conv-footer {
       display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border);
       position: relative;   /* anchor للـ emoji-picker اللي يطلع فوق */
-      align-items: stretch;
+      align-items: stretch; flex-wrap: wrap;   /* لا تنقص الأزرار على الشاشات الضيّقة */
     }
     .conv-footer textarea {
       flex: 1; background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
@@ -1416,7 +1416,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         <input type="file" id="attach-input" accept="image/*,video/*,audio/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx" style="display:none;" />
         <button type="button" id="attach-btn" title="إرفاق ملف (صورة/PDF/فيديو، حد أقصى 100MB)" style="background:transparent; border:1px solid var(--border); border-radius:8px; padding:8px 12px; cursor:pointer; font-size:18px;">📎</button>
         <button type="button" id="invoice-btn" title="إنشاء فاتورة وإرسالها للعميل" style="background:transparent; border:1px solid var(--border); border-radius:8px; padding:8px 12px; cursor:pointer; font-size:18px;">🧾</button>
-        <button type="button" id="adprog-btn" title="أرسل ملف برنامج بالكود للعميل (من الإعلان)" style="background:transparent; border:1px solid var(--border); border-radius:8px; padding:8px 12px; cursor:pointer; font-size:18px;">📢</button>
+        <button type="button" id="adprog-btn" title="أرسل ملف برنامج بالكود للعميل (من الإعلان)" style="background:#fdf2f8; border:1px solid #fbcfe8; color:#9d174d; border-radius:8px; padding:8px 12px; cursor:pointer; font-size:13px; font-weight:800; white-space:nowrap;">📢 برنامج بالكود</button>
         <button type="button" id="emoji-btn" title="إضافة إيموجي" style="background:transparent; border:1px solid var(--border); border-radius:8px; padding:8px 12px; cursor:pointer; font-size:18px;">😊</button>
         <button id="conv-send">إرسال</button>
         <div id="emoji-picker-wrap" style="display:none; position:absolute; bottom:60px; left:10px; z-index:1000; box-shadow:0 8px 24px rgba(0,0,0,.18); border-radius:12px; overflow:hidden;">
@@ -1842,7 +1842,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260828b";
+    const APPVER = "20260828c";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
