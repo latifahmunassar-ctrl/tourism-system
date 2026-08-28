@@ -5147,6 +5147,47 @@ Deno.serve(async (req) => {
     }
   }
 
+  // قائمة برامج الإعلانات المربوطة (كود → ملف PDF) لعرضها/إدارتها في داشبورد الواتساب.
+  if (url.searchParams.get("admin_action") === "list_ad_pdfs") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data } = await supabase.from("wa_settings").select("key, value").like("key", "ad_pdf:%").order("key");
+      const rows = ((data || []) as Array<{ key: string; value: { url?: string; saved_at?: string } | null }>).map((r) => ({
+        code: String(r.key).replace(/^ad_pdf:/, ""),
+        url: String(r.value?.url || ""),
+        saved_at: r.value?.saved_at || null,
+        destination: "",
+      }));
+      // أضِف الوجهة من جدول البرامج (لكل كود) للتمييز السريع.
+      const codes = rows.map((r) => r.code).filter(Boolean);
+      if (codes.length) {
+        const { data: progs } = await supabase.from("programs").select("code, destination").in("code", codes);
+        const byCode: Record<string, string> = {};
+        for (const p of (progs || []) as Array<{ code: string; destination: string }>) byCode[p.code] = p.destination || "";
+        for (const r of rows) r.destination = byCode[r.code] || "";
+      }
+      return new Response(JSON.stringify({ ok: true, items: rows }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // إلغاء ربط ملف إعلان بكود (يحذف المفتاح wa_settings).
+  if (url.searchParams.get("admin_action") === "delete_ad_pdf") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const p = await req.json();
+      const code = String(p.code || "").trim().toUpperCase();
+      if (!code) return new Response(JSON.stringify({ error: "code required" }), { status: 400, headers: jsonCors });
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await supabase.from("wa_settings").delete().eq("key", "ad_pdf:" + code);
+      return new Response(JSON.stringify({ ok: true, code }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
   // صورة بيانات الدفع (حسابات بنكية) من طرق الدفع المحفوظة (wa_offers) كـ base64 —
   // تُضمَّن في الفاتورة عند الدفع بالريال العماني (cat=pay_oman افتراضياً).
   if (url.searchParams.get("admin_action") === "invoice_pay_image") {

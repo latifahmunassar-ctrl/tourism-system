@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20260827a -->
+<!-- APPVER:20260828a -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -233,6 +233,10 @@
     body.admin-instagram-tab section { display: none; }
     body.admin-instagram-tab .ai-toggle-card { display: none; }
     body.admin-instagram-tab section.instagram-section { display: block; }
+    section.adprograms-section { display: none; }
+    body.admin-adprograms-tab section { display: none; }
+    body.admin-adprograms-tab .ai-toggle-card { display: none; }
+    body.admin-adprograms-tab section.adprograms-section { display: block; }
     /* وضع إنستقرام داخل نافذة الواتساب: نخفي أدوات الواتساب الخاصة فقط */
     body.ig-conv #conv-labels,
     body.ig-conv #offer-quickbar,
@@ -865,6 +869,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     <nav class="tab-bar" id="tab-bar">
       <button class="tab-btn active" data-tab="main">📊 الرئيسية</button>
       <button class="tab-btn" data-tab="instagram">📷 إنستقرام</button>
+      <button class="tab-btn" data-tab="adprograms">📢 برامج الإعلانات</button>
       <button class="tab-btn" data-tab="contacts">📇 جهات الاتصال</button>
       <button class="tab-btn" data-tab="offers">📁 مكتبة العروض</button>
       <button class="tab-btn" data-tab="invoices">🧾 الفواتير</button>
@@ -1137,6 +1142,14 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       </h3>
       <div style="font-size:12.5px; color:var(--muted); margin-bottom:8px;">اضغطي أي محادثة لعرض الرسائل والرد عليها في نافذة منبثقة.</div>
       <div class="panel-list" id="ig-conversations"><div class="empty">جاري التحميل…</div></div>
+    </section>
+
+    <section class="adprograms-section">
+      <h3>📢 برامج الإعلانات
+        <button id="adp-refresh" class="filter-btn" style="margin-inline-start:10px; font-size:12px;">↻ تحديث</button>
+      </h3>
+      <div style="font-size:12.5px; color:var(--muted); margin-bottom:8px;">هذي الأكواد اللي طلال يرسل ملفاتها تلقائياً لعملاء الإعلانات. الربط يصير من المساعد السياحي (زر «🔗 اربط ملف الإعلان بالكود»)؛ هنا تشوفينها، تفتحين الملف، وتلغين الربط.</div>
+      <div class="panel-list" id="adprograms-list"><div class="empty">جاري التحميل…</div></div>
     </section>
 
     <section class="invoices-section">
@@ -1828,7 +1841,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260827a";
+    const APPVER = "20260828a";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -2147,6 +2160,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         document.body.classList.toggle("admin-invoices-tab", tab === "invoices");
         document.body.classList.toggle("admin-attendance-tab", tab === "attendance");
         document.body.classList.toggle("admin-instagram-tab", tab === "instagram");
+        document.body.classList.toggle("admin-adprograms-tab", tab === "adprograms");
         // First time opening contacts → load them
         if (tab === "invoices") loadInvoices();
         if (tab === "attendance") loadAttendance();
@@ -2154,8 +2168,52 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if (tab === "contacts" && !contactsLoaded) loadContacts();
         if (tab === "offers") { loadOffers(); loadFollowupSettings(); loadLocations(); }
         if (tab === "instagram") igLoadConversations();
+        if (tab === "adprograms") loadAdPrograms();
       });
     });
+
+    /* ══════════ برامج الإعلانات (كود → ملف PDF يرسله طلال) ══════════ */
+    async function loadAdPrograms() {
+      const box = document.getElementById("adprograms-list");
+      if (!box) return;
+      box.innerHTML = '<div class="empty">جاري التحميل…</div>';
+      try {
+        const res = await fetch(BASE + "?admin_action=list_ad_pdfs", { headers: { Authorization: "Bearer " + token } });
+        const data = await res.json();
+        const items = (data && data.items) || [];
+        if (!items.length) {
+          box.innerHTML = '<div class="empty">ما فيه أكواد مربوطة بعد.<br><span style="font-size:12px; color:var(--muted);">اربطي برنامجاً من المساعد السياحي بزر «🔗 اربط ملف الإعلان بالكود».</span></div>';
+          return;
+        }
+        box.innerHTML = items.map(function (it) {
+          const d = it.saved_at ? new Date(it.saved_at).toLocaleDateString("ar") : "";
+          const dest = it.destination ? (" · " + escapeHtml(it.destination)) : "";
+          return '<div class="row" style="align-items:center;">'
+            + '<div class="label-text" style="flex:1;">'
+            + '<span class="primary" style="font-weight:900;">🏷️ ' + escapeHtml(it.code) + dest + '</span>'
+            + '<span class="secondary">🕐 رُبط: ' + escapeHtml(d) + '</span>'
+            + '</div>'
+            + '<div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">'
+            + (it.url ? '<a href="' + escapeHtml(it.url) + '" target="_blank" rel="noopener" class="filter-btn" style="text-decoration:none;">📎 فتح الملف ↗</a>' : '<span style="color:var(--err); font-size:12px;">⚠️ بلا ملف</span>')
+            + '<button class="filter-btn adp-unlink" data-code="' + escapeHtml(it.code) + '" style="color:#b91c1c;">🗑️ إلغاء الربط</button>'
+            + '</div></div>';
+        }).join("");
+        box.querySelectorAll(".adp-unlink").forEach(function (b) {
+          b.addEventListener("click", function () { unlinkAdProgram(b.dataset.code); });
+        });
+      } catch (e) {
+        box.innerHTML = '<div class="empty" style="color:var(--err)">تعذّر التحميل</div>';
+      }
+    }
+    async function unlinkAdProgram(code) {
+      if (!confirm("إلغاء ربط ملف الكود " + code + "؟\nطلال ما راح يرسل الملف بعدها لعملاء هذا الإعلان.")) return;
+      try {
+        const res = await fetch(BASE + "?admin_action=delete_ad_pdf", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ code: code }) });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || "فشل");
+        loadAdPrograms();
+      } catch (e) { alert("❌ " + (e.message || e)); }
+    }
 
     /* ══════════ إنستقرام (عرض فقط) — معزول عن منطق الواتساب ══════════ */
     const IG_URL = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/instagram-webhook";
@@ -2413,6 +2471,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     document.addEventListener("click", e => {
       if (!e.target) return;
       if (e.target.id === "ig-refresh") igLoadConversations();
+      if (e.target.id === "adp-refresh") loadAdPrograms();
       if (e.target.id === "ig-relogin") {
         const entered = (window.prompt("أدخلي كلمة مرور داشبورد الواتساب:", "") || "").trim();
         if (entered) { try { localStorage.setItem("wa_gate_secret", entered); } catch (_) {} }
