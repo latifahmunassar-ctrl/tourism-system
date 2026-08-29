@@ -68,6 +68,18 @@
   }
   @keyframes pop{0%{transform:scale(.8)} 60%{transform:scale(1.22)} 100%{transform:scale(1)}}
   .hint{font-size:13.5px; color:#a7b4b1; font-weight:500; margin-top:6px;}
+  .sendbtn{
+    margin-top:22px; width:100%; max-width:300px; border:none; cursor:pointer;
+    font-family:inherit; font-weight:800; font-size:18px; color:#fff;
+    padding:15px 20px; border-radius:16px;
+    background:linear-gradient(135deg,var(--gold) 0%,var(--goldDeep) 100%);
+    box-shadow:0 10px 24px rgba(166,124,27,.4); transition:all .18s ease;
+    letter-spacing:.3px;
+  }
+  .sendbtn:disabled{opacity:.4; cursor:default; box-shadow:none; filter:grayscale(.4);}
+  .sendbtn:not(:disabled):active{transform:scale(.97);}
+  .sendbtn.ready{animation:btnpop .35s ease;}
+  @keyframes btnpop{0%{transform:scale(.9)} 60%{transform:scale(1.05)} 100%{transform:scale(1)}}
   .thanks{display:none; padding:10px 0 4px;}
   .thanks .big{font-size:52px; margin-bottom:12px; animation:pop .5s ease;}
   .thanks h2{font-size:22px; color:var(--deep); font-weight:900; margin-bottom:8px;}
@@ -94,7 +106,8 @@
         <span class="star" data-v="2" style="--i:1">★</span>
         <span class="star" data-v="1" style="--i:0">★</span>
       </div>
-      <div class="hint">اضغطي على النجمة لإرسال تقييمك ✨</div>
+      <div class="hint" id="hint">اختاري عدد النجوم ✨</div>
+      <button class="sendbtn" id="sendbtn" disabled>أرسل تقييمك</button>
       <div class="warn" id="warn">⚠️ لم يتم ضبط رابط جوجل بعد. تواصلي مع الإدارة.</div>
     </div>
     <div class="thanks" id="thanks">
@@ -108,22 +121,32 @@
 <script>
 (function(){
   var stars=[].slice.call(document.querySelectorAll(".star"));
+  var btn=document.getElementById("sendbtn");
+  var hint=document.getElementById("hint");
+  var selected=0;                         // التقييم المختار (0 = لا شيء بعد)
   function paint(v){ stars.forEach(function(s){ s.classList.toggle("on",(+s.dataset.v)<=v); }); }
+  // اختيار النجوم فقط — بلا أي تحويل. تقدر تغيّرين اختيارك كم ما تبين.
   stars.forEach(function(s){
     var v=+s.dataset.v;
     s.addEventListener("mouseenter",function(){ paint(v); });
-    s.addEventListener("mouseleave",function(){ if(!s._locked) paint(0); });
-    s.addEventListener("click",function(){ choose(v); });
+    s.addEventListener("mouseleave",function(){ paint(selected); });
+    s.addEventListener("click",function(){
+      selected=v; paint(v);
+      btn.disabled=false; btn.classList.add("ready");
+      hint.textContent = "اخترتِ "+v+" من 5 — عدّلي أو اضغطي أرسل";
+      setTimeout(function(){ btn.classList.remove("ready"); }, 350);
+    });
   });
-  function choose(v){
-    paint(v); stars.forEach(function(s){ s._locked=true; });
+  // زر الإرسال هو الوحيد اللي يحوّل لجوجل.
+  btn.addEventListener("click",function(){
+    if(selected<1) return;
     if(!GOOGLE_REVIEW_URL || GOOGLE_REVIEW_URL.indexOf("PUT_GOOGLE")===0){
       document.getElementById("warn").style.display="block"; return;
     }
     document.getElementById("rate").style.display="none";
     document.getElementById("thanks").style.display="block";
     setTimeout(function(){ window.location.href=GOOGLE_REVIEW_URL; }, 950);
-  }
+  });
 })();
 </script>
 </body>
