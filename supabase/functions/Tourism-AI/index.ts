@@ -2797,6 +2797,64 @@ async function handleMakkahTransport(): Promise<Response> {
   }
 }
 
+// ── makkah_flights: أسعار الطيران الدولي (مسقط↔جدة) لكل شركة/اتجاه/تاريخ من شيت مكة.
+//    البلوك: صف رؤوس الشركات (OMAR/Salam Air ways) → صف المسار (Muscat-Jeddah / Jeddah-Muscat)
+//    → صف فرعي (Date | Original price | Final Price) → صفوف البيانات لكل تاريخ.
+//    كل شركة = 3 أعمدة: [التاريخ] عمود الشركة، [Original]=+1، [Final]=+2.
+async function handleMakkahFlights(): Promise<Response> {
+  const AR = { oman: "الطيران العماني", salam: "طيران السلام" };
+  const shell = () => ({ airlines: AR, route: { out: "مسقط ✈️ جدة", ret: "جدة ✈️ مسقط" },
+    prices: { oman: { out: {} as Record<string, unknown>, ret: {} as Record<string, unknown> },
+              salam: { out: {} as Record<string, unknown>, ret: {} as Record<string, unknown> } }, dates: [] as string[] });
+  try {
+    const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
+    const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
+    const rows = await pmReadSheet(await pmGoogleToken(sa), ssid, "'Makkah '!A1:CZ500");
+    // صف رؤوس الشركات = يحوي خلية OMAR/Oman وخلية Salam معاً.
+    let hdr = -1;
+    for (let i = 0; i < Math.min(rows.length, 15); i++) {
+      const r = rows[i] || [];
+      if (r.some((c) => /oman|omar/i.test(String(c || ""))) && r.some((c) => /salam/i.test(String(c || "")))) { hdr = i; break; }
+    }
+    const out = shell();
+    if (hdr < 0) return new Response(JSON.stringify(out), { headers: CORS_HEADERS });
+    const routeRow = rows[hdr + 1] || [];
+    const blocks: Array<{ airline: "oman" | "salam"; dir: "out" | "ret"; col: number }> = [];
+    (rows[hdr] || []).forEach((c, j) => {
+      const name = String(c || "");
+      const airline = /oman|omar/i.test(name) ? "oman" : (/salam/i.test(name) ? "salam" : null);
+      if (!airline) return;
+      const route = String(routeRow[j] || "");
+      const dir = /jed\w*\s*-\s*mus/i.test(route) ? "ret" : (/mus\w*\s*-\s*jed/i.test(route) ? "out" : null);
+      if (!dir) return;
+      blocks.push({ airline, dir, col: j });
+    });
+    const norm = (s: string) => {
+      const m = String(s || "").match(/(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{2,4})/);
+      if (!m) return "";
+      let y = m[3]; if (y.length === 2) y = "20" + y;
+      return `${m[1].padStart(2, "0")}/${m[2].padStart(2, "0")}/${y}`;
+    };
+    const dateSet = new Set<string>();
+    for (const b of blocks) {
+      for (let i = hdr + 2; i < rows.length; i++) {
+        const r = rows[i] || [];
+        const dk = norm(String(r[b.col] || ""));               // التاريخ في عمود الشركة
+        if (!dk) continue;
+        const final = parseFloat(String(r[b.col + 2] || "").replace(/[^\d.]/g, ""));   // Final Price = +2
+        const orig = parseFloat(String(r[b.col + 1] || "").replace(/[^\d.]/g, ""));    // Original = +1
+        if (!(final > 0)) continue;
+        (out.prices as Record<string, Record<string, Record<string, unknown>>>)[b.airline][b.dir][dk] = { final, original: isNaN(orig) ? null : orig };
+        dateSet.add(dk);
+      }
+    }
+    out.dates = [...dateSet];
+    return new Response(JSON.stringify(out), { headers: CORS_HEADERS });
+  } catch (e) {
+    return new Response(JSON.stringify({ ...shell(), error: String((e as Error).message) }), { status: 200, headers: CORS_HEADERS });
+  }
+}
+
 // ── makkah_transport_plan: يولّد صفوف تنقّل مكة الصحيحة حسب التسلسل + الوسيلة + الأشخاص.
 //    sequence: ["airport","Makkah","Al Madinah","airport"] · nights:[3,3] · modes: وسيلة كل مقطع.
 //    train = تذكرة (54×الأشخاص) + نقلات السيارة حول المحطة · car = نقل مباشر واحد.
@@ -2894,6 +2952,7 @@ Deno.serve(async (req) => {
     if (reqBody && reqBody.action === "profit_margins") return await handleProfitMargins(reqBody);
     if (reqBody && reqBody.action === "makkah_transport") return await handleMakkahTransport();
     if (reqBody && reqBody.action === "makkah_transport_plan") return await handleMakkahTransportPlan(reqBody);
+    if (reqBody && reqBody.action === "makkah_flights") return await handleMakkahFlights();
     if (reqBody && reqBody.action === "currencies") return await handleCurrencies();
     const { messages, max_tokens = 1200, system: clientSystem } = reqBody;
 

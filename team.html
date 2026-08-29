@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-27-ad-pdf-link'
+  var BUILD = '2026-08-29-makkah-intl-flight'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1026,6 +1026,9 @@ let MK_MODES = [];       // وسيلة كل مقطع تنقّل لبرنامج �
 let MK_LAST_SIG = '';    // بصمة آخر تركيب طُبّق (مدن+ليالي+وسائل) — يمنع التكرار
 let MK_DEP_AIR = 'jeddah';  // مطار المغادرة إن انتهى البرنامج بالمدينة: 'jeddah' | 'madinah'
 function mkSig(cities){ return JSON.stringify((cities||[]).map(c=>c.key+'/'+c.nights)) + '|' + MK_MODES.join(',') + '|' + MK_DEP_AIR; }
+let MK_FLIGHT_MODE = 'cheapest';  // طيران مكة الدولي: cheapest|oman|salam|none
+let MK_FLIGHT_DATA = null;        // كاش أسعار الطيران (يُجلب مرة)
+let MK_FLIGHT_SIG = '';           // بصمة آخر تطبيق طيران (mode+تواريخ+أشخاص)
 let lastSavedCode = '';
 
 const SYSTEM = `انت مساعد متخصص في بناء البرامج السياحية. مهم جداً: أي أرقام إجماليات يجب أن تكون محسوبة بدقة من تفاصيل الشيت نفسها، ولا تكتب أي إجمالي إلا بعد التحقق:
@@ -1570,6 +1573,87 @@ function mkSetSection(raw, sec, lines){
   const m = raw.match(/\n(TRANSFERS:|TOURS:|SUMMARY:)/);
   if(!m) return raw + '\n'+sec+':\n'+bodyTxt+'\n';
   return raw.slice(0, m.index) + '\n'+sec+':\n'+bodyTxt + raw.slice(m.index);
+}
+
+// ── الطيران الدولي (مسقط↔جدة) لبرامج مكة: الأرخص لكل اتجاه، أو شركة مثبّتة، أو بدون ──
+function mkPax(){ return (typeof parsedData!=='undefined' && parsedData && parsedData.adults) || (typeof metaPersons==='function' && metaPersons()) || 2; }
+// تاريخ البرنامج (عربي «26 أغسطس 2026» / يوم/شهر/سنة / ISO) → {d,mo,y}
+function _progDateDMY(tag){
+  const toL=s=>String(s||'').replace(/[٠-٩]/g,c=>'٠١٢٣٤٥٦٧٨٩'.indexOf(c));
+  const s=toL(getLine(lastProgramRaw,tag)||'');
+  let m=s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/); if(m) return {d:+m[3],mo:+m[2],y:+m[1]};
+  m=s.match(/(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{2,4})/); if(m) return {d:+m[1],mo:+m[2],y:+(String(m[3]).length===2?'20'+m[3]:m[3])};
+  const mo=_arMonthNum(s); if(mo){ const d=(s.match(/\b(\d{1,2})\b/)||[])[1]; const y=(s.match(/\b(20\d{2})\b/)||[])[1]; return {d:d?+d:1,mo,y:y?+y:new Date().getFullYear()}; }
+  return null;
+}
+function _dmyKey(o){ return o ? `${String(o.d).padStart(2,'0')}/${String(o.mo).padStart(2,'0')}/${o.y}` : ''; }
+function _dmyNum(k){ const m=String(k).match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? (+m[3])*10000+(+m[2])*100+(+m[1]) : 0; }
+// أقرب تاريخ متاح في الشيت لتاريخ البرنامج (لو غير موجود بالضبط)
+function _nearestDate(keys, want){
+  if(!keys.length) return '';
+  const wk=_dmyKey(want); if(wk && keys.indexOf(wk)>=0) return wk;
+  const wn = want ? _dmyNum(_dmyKey(want)) : 0;
+  if(!wn) return keys[0];
+  return keys.slice().sort((a,b)=> Math.abs(_dmyNum(a)-wn) - Math.abs(_dmyNum(b)-wn))[0];
+}
+function mkFlightModeLabel(){ return {cheapest:'الأرخص',oman:'الطيران العماني',salam:'طيران السلام',none:'بدون طيران'}[MK_FLIGHT_MODE]; }
+async function mkSetFlight(mode){ MK_FLIGHT_MODE = mode; MK_FLIGHT_SIG=''; await mkFlightApply(); renderMakkahFlightBar(); }
+function renderMakkahFlightBar(){
+  const panel = document.getElementById('reviewPanel'); if(!panel) return;
+  const old = document.getElementById('mkFlightBar'); if(old) old.remove();
+  if(!/مكة|مكه/.test(getLine(lastProgramRaw,'DEST')||'')) return;
+  const opt = (mode,label)=>`<button onclick="mkSetFlight('${mode}')" style="cursor:pointer;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:16px;border:1.5px solid ${MK_FLIGHT_MODE===mode?'#7c3aed':'#d7dee6'};background:${MK_FLIGHT_MODE===mode?'#7c3aed':'#fff'};color:${MK_FLIGHT_MODE===mode?'#fff':'#445'}">${label}</button>`;
+  const bar = document.createElement('div');
+  bar.id = 'mkFlightBar';
+  bar.style.cssText = 'background:#f5f0ff;border:1px solid #e0d4fb;border-radius:12px;padding:11px 14px;margin-bottom:12px';
+  bar.innerHTML = `<div style="font-size:12.5px;font-weight:800;color:#7c3aed;margin-bottom:8px">✈️ الطيران الدولي (مسقط ↔ جدة — يُحسب × عدد الأشخاص):</div>`
+    + `<div style="display:flex;flex-wrap:wrap;gap:9px">${opt('cheapest','🏷️ الأرخص')}${opt('oman','🛫 الطيران العماني')}${opt('salam','🛫 طيران السلام')}${opt('none','🚫 بدون طيران')}</div>`;
+  panel.insertBefore(bar, panel.firstChild);
+  // تطبيق تلقائي مرة واحدة لكل (وضع+تواريخ+أشخاص) — عشان يُضاف الأرخص تلقائياً.
+  const sig = MK_FLIGHT_MODE+'|'+_dmyKey(_progDateDMY('DATE_FROM'))+'|'+_dmyKey(_progDateDMY('DATE_TO'))+'|'+mkPax();
+  if(sig !== MK_FLIGHT_SIG) setTimeout(()=>mkFlightApply(), 0);
+}
+async function mkFlightApply(){
+  if(!/مكة|مكه/.test(getLine(lastProgramRaw,'DEST')||'')) return;
+  if(!MK_FLIGHT_DATA){
+    try{
+      const res = await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY}, body: JSON.stringify({action:'makkah_flights'})});
+      MK_FLIGHT_DATA = await res.json();
+    }catch(e){ addMessage('sys','تعذّر جلب أسعار الطيران: '+(e&&e.message||e)); return; }
+  }
+  const D = MK_FLIGHT_DATA; const pax = mkPax();
+  const depD=_progDateDMY('DATE_FROM'), retD=_progDateDMY('DATE_TO');
+  MK_FLIGHT_SIG = MK_FLIGHT_MODE+'|'+_dmyKey(depD)+'|'+_dmyKey(retD)+'|'+pax;
+  // أبقِ كل سطور الطيران غير الدولية (قطار/داخلي) وأزل الدولي القديم (يحوي «مسقط»)
+  const lines = (parseSection(lastProgramRaw,'FLIGHTS')||[]).filter(l=> l.includes('|') && !/مسقط/.test((l.split('|')[0]||'')));
+  let note='';
+  if(MK_FLIGHT_MODE!=='none' && D && D.prices){
+    const pick=(dir,want)=>{
+      const cand=['oman','salam'].map(a=>{
+        const table=(D.prices[a]||{})[dir]||{}; const keys=Object.keys(table);
+        const nd=_nearestDate(keys,want); if(!nd||!table[nd]) return null;
+        return { airline:a, date:nd, final:table[nd].final };
+      }).filter(Boolean);
+      if(!cand.length) return null;
+      if(MK_FLIGHT_MODE==='oman') return cand.find(c=>c.airline==='oman')||null;
+      if(MK_FLIGHT_MODE==='salam') return cand.find(c=>c.airline==='salam')||null;
+      return cand.sort((a,b)=>a.final-b.final)[0];   // الأرخص لهذا الاتجاه
+    };
+    for(const lg of [{dir:'out',type:'ذهاب',want:depD,route:'مسقط ← جدة'},{dir:'ret',type:'عودة',want:retD,route:'جدة ← مسقط'}]){
+      const sel=pick(lg.dir,lg.want);
+      if(!sel){ note+=`⚠️ لا سعر ${lg.type}. `; continue; }
+      const per=Math.round(sel.final); const total=per*pax; const air=(D.airlines||{})[sel.airline]||sel.airline;
+      lines.push(`${lg.route} (${air} · ${sel.date}) | ${lg.type} | ${per} ريال/شخص | ${pax} أشخاص | ${Number(total).toLocaleString()} ريال`);
+    }
+  }
+  const newRaw = mkSetSection(lastProgramRaw,'FLIGHTS',lines);
+  if(newRaw !== lastProgramRaw){
+    for(let i=history.length-1;i>=0;i--){ if(history[i].role==='assistant'){ history[i].content=newRaw; break; } }
+    try{ buildReview(newRaw); }catch(e){ addMessage('sys','خطأ في عرض الطيران: '+(e&&e.message||e)); }
+    if(MK_FLIGHT_MODE==='none') addMessage('sys','🚫 أُزيل الطيران الدولي من البرنامج.');
+    else{ const t=lines.filter(l=>/مسقط/.test(l.split('|')[0])).reduce((s,l)=>s+(parseInt(String(l.split('|')[4]||'').replace(/[^\d]/g,''))||0),0);
+      addMessage('sys',`✈️ الطيران الدولي (${mkFlightModeLabel()}): ${Number(t).toLocaleString()} ريال (${pax} أشخاص).${note?' '+note:''}`); }
+  } else if(note) addMessage('sys',note);
 }
 function hswRender(cell, hotels){
   cell._hotels = hotels;
@@ -3123,6 +3207,7 @@ ${summaryHTML}
 document.getElementById('reviewPanel').innerHTML = html;
 renderHaramBar();              // شريط قرب الحرم فوق برنامج مكة
 renderMakkahTransportBar();    // شريط وسيلة التنقّل (قطار/سيارة) فوق برنامج مكة
+renderMakkahFlightBar();       // شريط الطيران الدولي (مسقط↔جدة: الأرخص/شركة/بدون) فوق برنامج مكة
 renderExtraCostsList();
 // هامش الربح التلقائي: يجلب جدول أرباح الوجهة ويملأ الربح حسب التكلفة + نوع العميل.
 autoProfitForProgram(dest);

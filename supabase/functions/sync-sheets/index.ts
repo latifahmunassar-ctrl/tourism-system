@@ -1185,7 +1185,17 @@ Deno.serve(async (req) => {
       const rows = await readSheetRange(tk, ssid, `${quotedTab}!A1:CZ500`);
       const tourHeader = findTourHeader(rows);
       const matches: Array<{ row: number; cells: Array<{ col: number; text: string }> }> = [];
-      if (q) {
+      // ?rows=A-B → dump those row indices fully (تشخيص أعمدة بلا كلمة مفتاحية)
+      const rowsParam = (new URL(req.url).searchParams.get("rows") || "").trim();
+      if (rowsParam) {
+        const mm = rowsParam.match(/^(\d+)-(\d+)$/);
+        const lo = mm ? parseInt(mm[1], 10) : parseInt(rowsParam, 10);
+        const hi = mm ? parseInt(mm[2], 10) : lo;
+        for (let i = lo; i <= hi && i < rows.length; i++) {
+          const row = rows[i] || [];
+          matches.push({ row: i, cells: row.map((c, j) => ({ col: j, text: (c || "").trim() })).filter(c => c.text) });
+        }
+      } else if (q) {
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i] || [];
           if (!row.some(c => (c || "").includes(q))) continue;
