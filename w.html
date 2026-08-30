@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20260828c -->
+<!-- APPVER:20260830a -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1358,7 +1358,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
                 <option value="">— اختر —</option>
                 <option>فيتنام</option><option>ماليزيا</option><option>تايلاند</option>
                 <option>تركيا</option><option>روسيا</option><option>البوسنة</option>
-                <option>إندونيسيا</option><option>عُمان</option><option>جنوب أفريقيا</option><option>موريشيوس</option><option>مكة المكرمة</option>
+                <option>إندونيسيا</option><option>عُمان</option><option>جنوب أفريقيا</option><option>موريشيوس</option><option value="العمرة">العمرة (مكة + المدينة)</option>
               </select>
             </label>
             <label style="display:flex; flex-direction:column; gap:3px;">تاريخ السفر
@@ -1842,7 +1842,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260828c";
+    const APPVER = "20260830a";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -2673,7 +2673,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     // قائمة الوجهات اللي يتعرفها النظام — مطابقة لـ DESTINATION_HINTS
     // في الـ Edge Function. تخليها هنا تضمن إن الـ dropdown يعرض نفس
     // الأسماء اللي تكتشف من رسائل العملاء.
-    const KNOWN_DESTINATIONS = ["ماليزيا", "تركيا", "إندونيسيا", "فيتنام", "تايلاند", "البوسنة", "روسيا", "جنوب أفريقيا", "موريشيوس", "مكة المكرمة"];
+    const KNOWN_DESTINATIONS = ["ماليزيا", "تركيا", "إندونيسيا", "فيتنام", "تايلاند", "البوسنة", "روسيا", "جنوب أفريقيا", "موريشيوس", "العمرة"];
 
     // Generic chips renderer reused by add-form + edit modal.
     function renderDestChips(containerEl, list, onRemove) {
@@ -4200,6 +4200,8 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     // المطارات + توزيع المدن من نفس مصدر النظام السياحي: client-intake?suggestions=<dest>.
     // لا استخراج تلقائي. الحفظ يكتب في booking_brief عبر الراوتر. لا يلمس الرسائل.
     const BF_INTAKE = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake";
+    // العمرة = مكة + المدينة: أي تهجئة (مكة/مكه/عمرة/الحرم/makkah…) → قيمة القائمة «العمرة».
+    function bfCanonDest(d){ const s=String(d||'').trim(); return /مكة|مكه|عمرة|عمره|الحرم|makkah|mecca|umrah/i.test(s) ? "العمرة" : s; }
     const BF_AIRPORT_AR = {Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي",Salalah:"صلالة"};
     function bfAirAr(a){ return BF_AIRPORT_AR[a] || a; }
     function bfPairOf(s){ return (s.arrival_airport||"") + "|" + (s.departure_airport||""); }
@@ -4229,7 +4231,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if (!r.ok || d.error) throw new Error(d.error || ("HTTP " + r.status));
         if (phone !== convPhone) return;
         const b = d.brief || {};
-        if (b.destination) setv("bf-destination", b.destination);
+        if (b.destination) setv("bf-destination", bfCanonDest(b.destination));
         if (b.date_from) setv("bf-date_from", b.date_from);
         if (b.pax != null) setv("bf-pax", b.pax);
         if (b.children != null) setv("bf-children", b.children);
@@ -4372,7 +4374,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if (!r.ok) return;
         const b = (await r.json()).brief;
         if (!b || phone !== convPhone) return;   // تجاهل لو بدّل المستخدم المحادثة
-        setv("bf-destination", b.destination);
+        setv("bf-destination", bfCanonDest(b.destination));
         setv("bf-date_from", b.date_from); setv("bf-pax", b.pax); setv("bf-children", b.children);
         setv("bf-days", b.days); setv("bf-sim_count", b.sim_count);
         setv("bf-hotel_stars", b.hotel_stars == null ? "" : String(b.hotel_stars));
