@@ -6343,8 +6343,13 @@ function _xlsxDownload(sheets, filename){
   a.href=url; a.download=String(filename).replace(/[\/\\?%*:|"<>]/g,'-').slice(0,55)+' '+stmp+'.xlsx';
   document.body.appendChild(a); a.click(); setTimeout(()=>{a.remove();URL.revokeObjectURL(url);},600); }
 // استخراج صفوف جدول DOM (ترويسة + جسم): يتجاهل الصفوف المخفية وفواصل sp-sep، ويحوّل الحقول لقيمها/placeholder، ويحذف الأزرار
+// 🧹 خلية نظيفة للتصدير: الرقمية → رقم صافٍ (بلا ر.س/✏️/⚠️/فواصل) ليجمعه Excel/Numbers؛ النصية → تُنزَع رموز الواجهة فقط (تبقى الأكواد وأسماء العملة)
+function _cleanCell(s){ s=String(s==null?'':s).replace(/\s+/g,' ').trim(); if(!s)return '';
+  const numTry=s.replace(/[✏️⚠️🔻🔺💵🤝🚫🔵✅ℹ️📌🏪↗⤴🧭💳💰↩️🔁]/g,'').replace(/ر\.?\s?[سعإ]|ريال\s*عماني|ريال|عماني|تعديل|سجّلي الفاتورة|ناقص مرجع/g,'').replace(/\b(SAR|OMR|USD|MYR|SGD|AED|EUR|THB|GBP)\b/g,'').replace(/\s+/g,' ').trim();
+  if(/^-?[\d,]+(?:\.\d+)?$/.test(numTry)) return numTry.replace(/,/g,'');   // رقمي صافٍ (بلا فواصل)
+  return s.replace(/[✏️⚠️🔻🔺🚫🔵✅ℹ️📌🏪↗⤴🧭🔁]/g,'').replace(/\s*تعديل\s*/g,' ').replace(/\s+/g,' ').trim()||s; }
 function _domTableRows(tblEl){ if(typeof tblEl==='string')tblEl=document.querySelector(tblEl); if(tblEl&&tblEl.tagName==='TBODY')tblEl=tblEl.closest('table'); if(!tblEl||tblEl.tagName!=='TABLE')return []; const out=[];
-  const cellTxt=td=>{ if(!td)return ''; const inp=td.querySelector('input,textarea,select'); if(inp)return (inp.value||(inp.getAttribute&&inp.getAttribute('placeholder'))||''); return (td.innerText||td.textContent||'').replace(/\s+/g,' ').trim(); };
+  const cellTxt=td=>{ if(!td)return ''; const inp=td.querySelector('input,textarea,select'); if(inp)return _cleanCell(inp.value||(inp.getAttribute&&inp.getAttribute('placeholder'))||''); return _cleanCell((td.innerText||td.textContent||'')); };
   tblEl.querySelectorAll('thead tr').forEach(tr=>{ const cells=[...tr.children].map(th=>(th.innerText||th.textContent||'').replace(/\s+/g,' ').trim()); if(cells.some(x=>x!==''))out.push(cells); });
   tblEl.querySelectorAll('tbody tr').forEach(tr=>{ if(tr.style.display==='none')return; if(tr.classList&&tr.classList.contains('sp-sep'))return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; out.push([...tds].map(cellTxt)); });
   return out; }
