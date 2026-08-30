@@ -43,7 +43,7 @@ const DEST_KEY: Record<string, string> = {
   "عُمان": "Oman", "عمان": "Oman", "سلطنة عمان": "Oman",
   "جنوب أفريقيا": "South Africa", "جنوب افريقيا": "South Africa",
   "موريشيوس": "mauritius", "موريشس": "mauritius",
-  "مكة": "Makkah", "مكة المكرمة": "Makkah", "مكه": "Makkah", "العمرة": "Makkah",
+  "مكة": "Makkah", "مكة المكرمة": "Makkah", "مكه": "Makkah", "العمرة": "Makkah", "عمرة": "Makkah", "عمره": "Makkah",
 };
 
 function randToken(len = 24): string {

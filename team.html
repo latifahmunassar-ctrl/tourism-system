@@ -1383,7 +1383,7 @@ async function hswFetch(cell){
   const region = cell.dataset.region || '';
   // إشغال الغرفة الحالية (لا عدد البالغين) — عشان البدائل تطابق نفس سعة الغرفة المعروضة.
   const occ = (+cell.dataset.occ) || (parsedData && parsedData.adults) || 2;
-  const isMakkah = /مكة|مكه/.test(dest||'');
+  const isMakkah = /مكة|مكه|عمرة/.test(dest||'');
   try{
     const res = await fetch(SUPABASE_URL, {
       method:'POST',
@@ -1414,7 +1414,7 @@ function hswSetHaram(el, val){
 function renderHaramBar(){
   const panel = document.getElementById('reviewPanel'); if(!panel) return;
   const old = document.getElementById('haramBar'); if(old) old.remove();
-  if(!/مكة|مكه/.test(getLine(lastProgramRaw,'DEST')||'')) return;
+  if(!/مكة|مكه|عمرة/.test(getLine(lastProgramRaw,'DEST')||'')) return;
   const chip = (label)=>`<span onclick="applyHaramToAllHotels('${label.replace(/'/g,'')}')" style="cursor:pointer;font-size:12.5px;font-weight:700;padding:6px 13px;border-radius:20px;border:1.5px solid ${HARAM_FILTER===label?'#0e9d6a':'#d7dee6'};background:${HARAM_FILTER===label?'#0e9d6a':'#fff'};color:${HARAM_FILTER===label?'#fff':'#334'}">${label}</span>`;
   const clear = HARAM_FILTER?`<span onclick="applyHaramToAllHotels('')" style="cursor:pointer;font-size:12px;color:#b91c1c;padding:6px 10px">✕ إلغاء الفلتر</span>`:'';
   const bar = document.createElement('div');
@@ -1489,7 +1489,7 @@ function mkCitiesFromProgram(){
 function renderMakkahTransportBar(){
   const panel = document.getElementById('reviewPanel'); if(!panel) return;
   const old = document.getElementById('mkTransportBar'); if(old) old.remove();
-  if(!/مكة|مكه/.test(getLine(lastProgramRaw,'DEST')||'')) return;
+  if(!/مكة|مكه|عمرة/.test(getLine(lastProgramRaw,'DEST')||'')) return;
   const cities = mkCitiesFromProgram(); if(!cities.length) return;
   const seq = ['airport', ...cities.map(c=>c.key), 'airport'];
   if(MK_MODES.length !== seq.length-1) MK_MODES = seq.slice(0,-1).map((_,i)=> (i===0 || i===seq.length-2) ? 'car' : 'train');
@@ -1601,7 +1601,7 @@ async function mkSetFlight(mode){ MK_FLIGHT_MODE = mode; MK_FLIGHT_SIG=''; await
 function renderMakkahFlightBar(){
   const panel = document.getElementById('reviewPanel'); if(!panel) return;
   const old = document.getElementById('mkFlightBar'); if(old) old.remove();
-  if(!/مكة|مكه/.test(getLine(lastProgramRaw,'DEST')||'')) return;
+  if(!/مكة|مكه|عمرة/.test(getLine(lastProgramRaw,'DEST')||'')) return;
   const opt = (mode,label)=>`<button onclick="mkSetFlight('${mode}')" style="cursor:pointer;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:16px;border:1.5px solid ${MK_FLIGHT_MODE===mode?'#7c3aed':'#d7dee6'};background:${MK_FLIGHT_MODE===mode?'#7c3aed':'#fff'};color:${MK_FLIGHT_MODE===mode?'#fff':'#445'}">${label}</button>`;
   const bar = document.createElement('div');
   bar.id = 'mkFlightBar';
@@ -1614,7 +1614,7 @@ function renderMakkahFlightBar(){
   if(sig !== MK_FLIGHT_SIG) setTimeout(()=>mkFlightApply(), 0);
 }
 async function mkFlightApply(){
-  if(!/مكة|مكه/.test(getLine(lastProgramRaw,'DEST')||'')) return;
+  if(!/مكة|مكه|عمرة/.test(getLine(lastProgramRaw,'DEST')||'')) return;
   if(!MK_FLIGHT_DATA){
     try{
       const res = await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY}, body: JSON.stringify({action:'makkah_flights'})});
@@ -2104,7 +2104,7 @@ const BF_CITIES = {
   "عُمان":["صلالة - وسط المدينة","صلالة - هوانا"],
   "جنوب أفريقيا":["كيب تاون","هارمانوس"],
   "موريشيوس":["موريشيوس"],
-  "مكة المكرمة":["مكة المكرمة","المدينة المنورة","جدة","الطائف"],
+  "العمرة":["مكة المكرمة","المدينة المنورة","جدة","الطائف"],
 };
 // يحوّل أي تهجئة للوجهة (همزة/تشكيل/إنجليزي) إلى مفتاح BF_CITIES المطابق، حتى لا
 // تفشل تعبئة الفورم عند ضبط bf-dest من طلب محفوظ (مثال: "اندونيسيا" بلا همزة أو
@@ -2118,9 +2118,9 @@ function bfResolveDest(d){
   const EN = { indonesia:'إندونيسيا', vietnam:'فيتنام', malaysia:'ماليزيا',
     thailand:'تايلاند', turky:'تركيا', turkey:'تركيا', russia:'روسيا',
     bosnia:'البوسنة', oman:'عُمان', southafrica:'جنوب أفريقيا', mauritius:'موريشيوس',
-    makkah:'مكة المكرمة', mecca:'مكة المكرمة' };
+    makkah:'العمرة', mecca:'العمرة', umrah:'العمرة' };
   if (EN[n]) return EN[n];
-  if (/مكة|مكه|عمرة|المدينةالمنورة|المنورة/.test(n)) return 'مكة المكرمة';  // مكة/العمرة → مفتاح BF_CITIES
+  if (/مكة|مكه|عمرة|المدينةالمنورة|المنورة/.test(n)) return 'العمرة';  // مكة/العمرة → مفتاح BF_CITIES
   return Object.keys(BF_CITIES).find(k => norm(k) === n) || raw;
 }
 const BF_INTAKE = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake";
