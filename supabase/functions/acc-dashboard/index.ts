@@ -320,10 +320,10 @@ Deno.serve(async (req: Request) => {
     if (action === 'undo_autofill_invoices') {
       if (!((key === ACCESS_KEY) || (sess && !!sess.is_owner))) return J({ error: 'التراجع للمالكة فقط' }, 403);
       const label = String(p.batch_label || '').trim(); if (!label) return J({ error: 'no batch_label' }, 400);
-      const { data: recs, error: e0 } = await supabase.from('acc_autofill_invoices').select('service_id,old_value').eq('batch_label', label);
+      const { data: recs, error: e0 } = await supabase.from('acc_autofill_invoices').select('service_id,old_value,target_table').eq('batch_label', label);
       if (e0) return J({ error: e0.message }, 400);
       let n = 0;
-      for (const r of (recs || [])) { const { error } = await supabase.from('acc_service_lines').update({ actual_invoice: (r.old_value == null || String(r.old_value).trim() === '') ? null : Number(r.old_value) }).eq('id', r.service_id); if (!error) n++; }
+      for (const r of (recs || [])) { const tbl = (r.target_table === 'supplier_invoices') ? 'acc_supplier_invoices' : 'acc_service_lines'; const { error } = await supabase.from(tbl).update({ actual_invoice: (r.old_value == null || String(r.old_value).trim() === '') ? null : Number(r.old_value) }).eq('id', r.service_id); if (!error) n++; }
       await supabase.from('acc_autofill_invoices').delete().eq('batch_label', label);
       try { await audit({ event_type: 'undo_autofill', severity: 'info', staff_name: p.by || 'المالكة', action: 'undo_autofill_invoices', detail: 'تراجع عن ملء تلقائي للفواتير — دفعة ' + label + ' (' + n + ' صف)', ok: true }); } catch (_) {}
       return J({ ok: true, reverted: n });
