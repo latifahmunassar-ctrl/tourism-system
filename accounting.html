@@ -2693,6 +2693,15 @@ function exportHotelKashf(){ exportKashfExcel('#hs-detail table','كشف حسا�
 function _supdVisibleTotals(){ let book=0,inv=0,n=0,minD='',maxD=''; const cli=new Set(); document.querySelectorAll('#sp-dist-tbl tr').forEach(r=>{ if(r.classList.contains('sp-sep')||!r.dataset.code||r.style.display==='none')return; n++; cli.add((r.dataset.code||'').toUpperCase()); const tds=r.querySelectorAll('td'); const bk=tds[10]; if(bk){ const v=parseFloat(String(bk.innerText||bk.textContent||'').replace(/[^\d.-]/g,'')); if(!isNaN(v))book+=v; } const ic=tds[11]; if(ic&&ic.dataset&&ic.dataset.val!=null&&String(ic.dataset.val).trim()!=='')inv+=Number(ic.dataset.val)||0; String(r.dataset.dates||'').split('|').forEach(d=>{ const s=String(d||'').slice(0,10); if(/^\d{4}-\d{2}-\d{2}$/.test(s)){ if(!minD||s<minD)minD=s; if(!maxD||s>maxD)maxD=s; } }); }); return {book,inv,n,clients:cli.size,minD,maxD}; }
 // 📅 نص التاريخ الذي يشمله التقرير: فترة محدّدة (يذكرها) أو كل المدة (يذكر من أقدم إلى أحدث تاريخ فعلي)
 function _supdPeriodStr(){ const f=(($('spc-from')||{}).value)||'', t=(($('spc-to')||{}).value)||''; const vt=_supdVisibleTotals(); const span=(vt.minD||vt.maxD)?('من '+(vt.minD||'…')+' إلى '+(vt.maxD||'…')):'لا توجد تواريخ'; return (f||t)?('📅 الفترة المحدّدة: '+(f||'البداية')+' ← '+(t||'النهاية')+' · الحجوزات فعليّاً بين ('+span+')'):('📅 كل المدة — '+span); }
+// ↩️ التراجع عن الملء التلقائي للفواتير — يعيدها فارغة كما كانت (النسخة الاحتياطية بالخادم)
+async function undoAutofill(batches){
+  if(!Array.isArray(batches)||!batches.length){ alert('لا توجد دفعة للتراجع'); return; }
+  if(!confirm('↩️ التراجع عن الملء التلقائي؟\n\nستُعاد كل الفواتير المُقدّرة إلى «فارغة» (كما كانت قبل الملء تماماً). الفواتير المُدخَلة يدويّاً لا تتأثّر.\n\nتأكيد؟'))return;
+  try{ let total=0;
+    for(const b of batches){ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'undo_autofill_invoices',payload:{batch_label:b,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } total+=(j.reverted||0); }
+    alert('✅ تمّ التراجع — أُعيدت '+total+' فاتورة إلى فارغة.'); await load();
+  }catch(e){ alert('خطأ: '+e.message); }
+}
 function exportSupplierKashf(){
   const sup=(($('supflt')||{}).value||'').trim();
   if(!sup){ alert('اختاري مورّداً أولاً.'); return; }
@@ -5919,6 +5928,11 @@ function renderSupplierDetail(){
   // تنبيه العملاء الذين لم يكملوا مدفوعاتهم (عليهم رصيد متبقّي يجب المطالبة به)
   const oweList=cliRows.map(c=>{ const fc=fcdCli[(c||'').toUpperCase()]||{pr:0,paid:0,cur:''}; return {code:c, name:nameCli[c]||'', bal:fc.pr-fc.paid, cur:curSym(fc.cur||'SAR')}; }).filter(o=>o.bal>0.5).sort((a,b)=>b.bal-a.bal);
   const oweBanner = oweList.length? '<div class="panel" style="margin-bottom:14px;border:1px solid #b8860b;background:rgba(184,134,11,.10)"><h3 style="margin-top:0;color:#b8860b">⚠️ عملاء لم يُكملوا مدفوعاتهم — يجب المطالبة بالمتبقّي ('+oweList.length+')</h3>'+ oweList.map(o=>'<div style="padding:6px 2px;border-bottom:1px solid rgba(184,134,11,.18);font-size:13px">⚠️ <b>'+esc(o.name)+'</b> <span style="color:var(--muted)">('+esc(o.code)+')</span> — متبقّي عليه مبلغ وقدره <b style="color:#b8860b;font-size:15px">'+fmt(o.bal)+' '+esc(o.cur)+'</b> · <span style="color:#b8860b;font-weight:700">يجب المطالبة به</span></div>').join('')+'</div>' : '';
+  // 🤖 فواتير مُقدّرة تلقائيّاً (=قيمة الحجز) لهذا المورّد — بانر + زر تراجع
+  const _afList=((DATA.autofillInvoices)||[]).filter(a=>supKey(a.supplier_name)===supKey(sup));
+  const _afBatches=[...new Set(_afList.map(a=>String(a.batch_label||'')).filter(Boolean))];
+  const _afTot=_afList.reduce((s,a)=>s+Number(a.new_value||0),0);
+  const _afBanner=_afList.length?('<div style="margin-top:10px;border:1px dashed #7c3aed;background:rgba(124,92,255,.07);border-radius:8px;padding:8px 12px;font-size:12.5px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span>🤖 <b>'+_afList.length+'</b> فاتورة <b>مُقدّرة تلقائيّاً</b> (= قيمة الحجز، بمجموع '+fmt(_afTot)+' '+esc(SCUR)+') — ليست فواتير حقيقية بعد، قابلة للتراجع.</span>'+(isOwnerUser()?('<button class="btn" style="background:#7c3aed;padding:5px 14px;font-size:12px" onclick=\'undoAutofill('+JSON.stringify(_afBatches)+')\'>↩️ تراجع عن الملء التلقائي</button>'):'')+'</div>'):'';
   let h='<div class="panel" style="margin-bottom:14px;border:1px solid var(--accent)"><h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span>🧾 '+esc(sup)+'</span><span style="display:flex;gap:8px"><button class="btn" style="background:#0e7c50;padding:6px 16px" onclick="exportSupplierKashf()">📊 تصدير Excel</button><button class="btn" style="background:#c41d88;padding:6px 16px" onclick="exportSupplierCompare()">⚖️ مقارنة فاتورة/دفعات</button><button class="btn" style="padding:6px 16px" onclick="exportSupplierPDF()">🖨️ تصدير PDF</button></span></h3>'+
     '<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px">'+
       '<span>الفواتير: <b>'+fmt(list.length)+'</b></span>'+
@@ -5928,7 +5942,7 @@ function renderSupplierDetail(){
       '<span>✅ المدفوع: '+curStr1(paidT)+'</span>'+
       '<span>📌 الرصيد المتبقّي <span style="font-size:9px;color:#0e9d6a;font-weight:700">(حسب فاتورة المورّد)</span>: '+balInvStr+'</span>'+
       '<span>📊 الرصيد <span style="font-size:9px;color:var(--muted)">(حسب قيم النظام/الحجوزات)</span>: '+balStr+'</span>'+
-    '</div>'+
+    '</div>'+_afBanner+
     // 🪙 عملة المورّد المعتمدة: تُدخَل أول مرة مباشرة، وأي تغيير لاحق يتطلب موافقة المالكة — تُطبَّق على كل أرقام الكشف
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;border-top:1px solid var(--line);padding-top:10px;font-size:13px">'+
       '<span>🪙 عملة الكشف المعتمدة: <b style="color:var(--accent)">'+esc(SCUR)+'</b>'+(supCurOverride(sup)?' <span title="معتمدة — التغيير يحتاج موافقة المالكة" style="font-size:10px;color:#0e9d6a">✍️ معتمدة</span>':' <span style="font-size:10px;color:var(--muted)">(تلقائية — غير معتمدة بعد)</span>')+'</span>'+
