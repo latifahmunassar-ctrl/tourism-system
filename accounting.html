@@ -845,7 +845,7 @@ table{font-weight:600}
       <div class="fld new-only"><label>إلى (وجهة) <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">من القائمة</span></label><select id="f-to"></select></div>
       <div class="fld svc-cost"><label id="lbl-cost">التكلفة (COST) <span class="req-new" style="color:var(--red)">*</span></label><input type="number" id="f-cost" value="0" oninput="calc()"></div>
       <div class="fld svc-cost"><label id="lbl-profit">الربح (Profit) <span class="req-new" style="color:var(--red)">*</span></label><input type="number" id="f-profit" value="0" oninput="calc()"></div>
-      <div class="fld"><label id="lbl-paid">المبلغ المدفوع الآن</label><input type="number" id="f-paid" value="0" oninput="calc()"></div>
+      <div class="fld"><label id="lbl-paid">المبلغ المدفوع الآن</label><input type="number" id="f-paid" value="0" oninput="calc();try{supSyncOnPaid()}catch(_){}"></div>
       <div class="fld" id="fld-paydate" style="display:none"><label>📅 تاريخ الدفع</label><input type="date" id="f-paydate" style="color-scheme:light;cursor:pointer"></div>
       <div class="fld"><label>العملة <span class="req-new" style="color:var(--red)">*</span></label><select id="f-cur"><option>SAR</option><option>OMR</option><option>USD</option><option>MYR</option></select></div>
       <div class="fld new-only"><label>نوع الباكدج <span style="color:var(--red)">*</span></label><select id="f-type"><option>Full pakage</option><option>TOUR ONLY</option><option>Transportaion</option><option>HOTEL & TOURS</option></select></div>
@@ -857,7 +857,8 @@ table{font-weight:600}
       <div class="fld" id="fld-bank-other" style="display:none"><label>اسم بنك جديد</label><input id="f-bank-other"></div>
       <div class="fld" id="fld-supplier" style="display:none"><label>🤝 اسم المورّد <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">سُلّم له المبلغ مباشرة</span></label><select id="f-supplier" onchange="onSupplierPick()"><option value="">— اختاري المورّد —</option></select></div>
       <div class="fld" id="fld-supcur" style="display:none"><label>عملة المورّد المعتمدة <span style="font-size:9px;color:var(--muted)">🔒 تلقائية</span></label><input id="f-supcur" readonly style="background:#eef2f8;font-weight:700;color:var(--accent)"></div>
-      <div class="fld" id="fld-suprate" style="display:none"><label>سعر الصرف التقريبي <span style="color:var(--red)">*</span> <span style="font-size:9px;color:#d98a00">إجباري · قابل للتعديل</span></label><input type="number" id="f-suprate" step="0.0001" placeholder="أدخلي سعر الصرف" oninput="supConvCalc()"></div>
+      <div class="fld" id="fld-supamt" style="display:none"><label>💱 المبلغ المدفوع بعملة المورّد <span style="font-size:9px;color:#0e7c50">أدخليه ← السعر تلقائي</span></label><input type="number" id="f-supamt" step="any" placeholder="كم دفعتِ بعملة المورّد؟" oninput="supRateFromAmt()"></div>
+      <div class="fld" id="fld-suprate" style="display:none"><label>سعر الصرف <span style="font-size:9px;color:#0e7c50">يُحسب تلقائيّاً من المبلغين · قابل للتعديل</span></label><input type="number" id="f-suprate" step="0.0001" placeholder="تلقائي" oninput="supAmtFromRate()"></div>
       <div class="fld full" id="fld-supconv" style="display:none"><div style="font-size:12px;color:var(--accent);font-weight:700" id="f-supconv"></div></div>
       <div class="fld" id="fld-ref"><label>مرجع البنك / الإيداع <span style="font-size:9px;color:#d98a00">بدونه = غير معتمد</span></label><input id="f-ref"></div>
       <div class="fld" id="fld-duedate" style="border:1px solid var(--line);border-radius:8px;padding:6px 8px"><label>📅 تاريخ الاستحقاق <span class="due-req" style="display:none"><span style="color:var(--red)">*</span> <span style="font-size:9px;color:#d98a00">إجباري — على العميل مبلغ متبقٍّ</span></span></label><input type="date" id="f-duedate" style="color-scheme:light;cursor:pointer"></div>
@@ -7393,7 +7394,7 @@ async function setChargeDate(serviceId,val){
 }
 
 // ---- form ----
-function openForm(){ SAVING=false; const sb=$('save-btn'); if(sb)sb.disabled=false; $('modal').classList.add('on'); $('msg').textContent=''; if($('f-pax'))$('f-pax').value=''; $('f-bdate').value=new Date().toISOString().slice(0,10); $('f-adate').value=''; fillBankOptions(); if($('f-dest'))$('f-dest').value='bank'; onDestChange(); fillModalLists(); fillCodes(); setMode('new'); calc(); }
+function openForm(){ SAVING=false; const sb=$('save-btn'); if(sb)sb.disabled=false; $('modal').classList.add('on'); $('msg').textContent=''; if($('f-pax'))$('f-pax').value=''; if($('f-supamt'))$('f-supamt').value=''; $('f-bdate').value=new Date().toISOString().slice(0,10); $('f-adate').value=''; fillBankOptions(); if($('f-dest'))$('f-dest').value='bank'; onDestChange(); fillModalLists(); fillCodes(); setMode('new'); calc(); }
 // تعبئة قوائم نموذج الإدخال من القوائم المُدارة (الوكلاء / من / إلى) — اختيار فقط، لا إدخال يدوي
 function fillModalLists(){
   const lv=(cat)=>[...new Set(((DATA&&DATA.lists)||[]).filter(l=>l.category===cat).map(l=>String(l.value||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));
@@ -7465,7 +7466,7 @@ function onDestChange(){
   if($('fld-bank'))$('fld-bank').style.display=sup?'none':'';
   if($('fld-bank-other'))$('fld-bank-other').style.display=(sup||($('f-bank')||{}).value!=='__other')?'none':'flex';
   if($('fld-ref'))$('fld-ref').style.display=sup?'none':'';
-  ['fld-supplier','fld-supcur','fld-suprate','fld-supconv'].forEach(id=>{ const e=$(id); if(e)e.style.display=sup?(id==='fld-supconv'?'block':''):'none'; });
+  ['fld-supplier','fld-supcur','fld-supamt','fld-suprate','fld-supconv'].forEach(id=>{ const e=$(id); if(e)e.style.display=sup?(id==='fld-supconv'?'block':''):'none'; });
   if(sup){ const sel=$('f-supplier'); if(sel){ const cur=sel.value; sel.innerHTML='<option value="">— اختاري المورّد —</option>'+supplierNamesList().map(n=>'<option>'+esc(n)+'</option>').join(''); sel.value=cur; } onSupplierPick(); }
 }
 // عند اختيار المورّد: عملته المعتمدة (مقفلة) + سعر صرف افتراضي من عملة العميل
@@ -7481,9 +7482,14 @@ function onSupplierPick(){
   supConvCalc();
 }
 function supConvCalc(){
-  const paid=+($('f-paid')||{}).value||0; const rate=+($('f-suprate')||{}).value||0; const scur=($('f-supcur')||{}).value||''; const ccur=($('f-cur')||{}).value||'';
-  const el=$('f-supconv'); if(el) el.textContent=scur?('💡 ينعكس في حساب المورّد: '+fmt(paid)+' '+ccur+' × '+rate+' = '+fmt(paid*rate)+' '+scur):'';
+  const paid=+($('f-paid')||{}).value||0; const rate=+($('f-suprate')||{}).value||0; const samt=+($('f-supamt')||{}).value||0; const scur=($('f-supcur')||{}).value||''; const ccur=($('f-cur')||{}).value||'';
+  const conv=samt>0?samt:(paid*rate);
+  const el=$('f-supconv'); if(el) el.textContent=scur?('💡 ينعكس في حساب المورّد: '+fmt(paid)+' '+ccur+' = '+fmt(conv)+' '+scur+(rate>0?(' · سعر الصرف '+rate):'')):'';
 }
+// 🆕 تسليم مباشر: أدخلي المبلغ بعملة المورّد ← السعر تلقائي (والعكس)
+function supRateFromAmt(){ const paid=+($('f-paid')||{}).value||0; const samt=+($('f-supamt')||{}).value||0; if(paid>0&&samt>0&&$('f-suprate'))$('f-suprate').value=Number((samt/paid).toFixed(6)); supConvCalc(); }
+function supAmtFromRate(){ const paid=+($('f-paid')||{}).value||0; const rate=+($('f-suprate')||{}).value||0; if(paid>0&&rate>0&&$('f-supamt'))$('f-supamt').value=Number((paid*rate).toFixed(4)); supConvCalc(); }
+function supSyncOnPaid(){ const samt=+($('f-supamt')||{}).value||0; if(samt>0)supRateFromAmt(); else supAmtFromRate(); }
 function closeForm(){ $('modal').classList.remove('on'); }
 let FMODE='new';
 let SAVING=false; // قفل ضد الحفظ المزدوج (نفس العميل يُضاف مرتين)
