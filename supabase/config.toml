@@ -46,3 +46,6 @@ verify_jwt = false
 
 [functions.acc-dashboard]
 verify_jwt = false
+
+[functions.acc-recon]
+verify_jwt = false
