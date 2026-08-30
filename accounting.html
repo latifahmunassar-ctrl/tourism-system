@@ -5914,7 +5914,7 @@ function renderSupplierDetail(){
       '<span>الفواتير: <b>'+fmt(list.length)+'</b></span>'+
       '<span>العملاء: <b>'+fmt(clients)+'</b></span>'+
       '<span>💰 إجمالي الحجوزات (المستحق): '+curStr1(owedT)+'</span>'+
-      '<span>🧾 إجمالي فاتورة المورّد: <b>'+fmt(invEnteredTotal)+'</b> '+esc(SCUR)+' <span style="font-size:10px;color:var(--muted)">('+invEnteredCount+' مُدخَلة يدويّاً'+(invEnteredCount<list.length?(' من '+list.length):'')+')</span></span>'+
+      '<span>🧾 إجمالي فاتورة المورّد: <b id="sp-inv-total">'+fmt(invEnteredTotal)+'</b> '+esc(SCUR)+' <span style="font-size:10px;color:var(--muted)">(<span id="sp-inv-total-note">'+invEnteredCount+' مُدخَلة يدويّاً'+(invEnteredCount<list.length?(' من '+list.length):'')+'</span>)</span></span>'+
       '<span>✅ المدفوع: '+curStr1(paidT)+'</span>'+
       '<span>📌 الرصيد المتبقّي <span style="font-size:9px;color:#0e9d6a;font-weight:700">(حسب فاتورة المورّد)</span>: '+balInvStr+'</span>'+
       '<span>📊 الرصيد <span style="font-size:9px;color:var(--muted)">(حسب قيم النظام/الحجوزات)</span>: '+balStr+'</span>'+
@@ -6169,6 +6169,10 @@ function spcliFilter(){
   let noInvN=0, cancN=0; document.querySelectorAll('#sp-dist-tbl tr').forEach(r=>{ if(r.classList.contains('sp-sep')||!r.dataset.code)return; const cli=r.dataset.cli||''; const dts=(r.dataset.dates||'').split('|').filter(Boolean); let inScope=(!q||cli.indexOf(q)>=0); if(inScope&&(f||t))inScope=dts.some(d=>(!f||d>=f)&&(!t||d<=t)); if(!inScope)return; if(r.dataset.noinv==='1')noInvN++; if(r.dataset.cancel==='1')cancN++; });
   const _nc=$('spc-noinv-count'); if(_nc)_nc.textContent=noInvN;
   const _cc=$('spc-cancel-count'); if(_cc)_cc.textContent=cancN;
+  // 🧾 «إجمالي فاتورة المورّد» يتبع الفلتر: مجموع الفواتير المُدخَلة (data-val) للصفوف الظاهرة فقط — ليطابق المُصدَّر لـEXCEL
+  (function(){ let invT=0,invN=0,totN=0; document.querySelectorAll('#sp-dist-tbl tr').forEach(r=>{ if(r.classList.contains('sp-sep')||!r.dataset.code||r.style.display==='none')return; totN++; const ic=r.querySelectorAll('td')[11]; if(ic&&ic.dataset&&ic.dataset.val!=null&&String(ic.dataset.val).trim()!==''){ invT+=Number(ic.dataset.val)||0; invN++; } });
+    const el=$('sp-inv-total'); if(el)el.textContent=fmt(invT);
+    const nt=$('sp-inv-total-note'); if(nt)nt.textContent=invN+' مُدخَلة يدويّاً'+(invN<totN?(' من '+totN):'')+(act?' · ضمن الفلتر':''); })();
   sppFilter(); // جدول حركة مدفوعات العملاء يتبع نفس فلتر الجدول الأول
   updatePeriodSummary(); // ملخّص الفترة المحدّدة (إضافي فوق التفاصيل)
 }
@@ -6349,7 +6353,7 @@ function _cleanCell(s){ s=String(s==null?'':s).replace(/\s+/g,' ').trim(); if(!s
   if(/^-?[\d,]+(?:\.\d+)?$/.test(numTry)) return numTry.replace(/,/g,'');   // رقمي صافٍ (بلا فواصل)
   return s.replace(/[✏️⚠️🔻🔺🚫🔵✅ℹ️📌🏪↗⤴🧭🔁]/g,'').replace(/\s*تعديل\s*/g,' ').replace(/\s+/g,' ').trim()||s; }
 function _domTableRows(tblEl){ if(typeof tblEl==='string')tblEl=document.querySelector(tblEl); if(tblEl&&tblEl.tagName==='TBODY')tblEl=tblEl.closest('table'); if(!tblEl||tblEl.tagName!=='TABLE')return []; const out=[];
-  const cellTxt=td=>{ if(!td)return ''; const inp=td.querySelector('input,textarea,select'); if(inp)return _cleanCell(inp.value||(inp.getAttribute&&inp.getAttribute('placeholder'))||''); return _cleanCell((td.innerText||td.textContent||'')); };
+  const cellTxt=td=>{ if(!td)return ''; const inp=td.querySelector('input,textarea,select'); if(inp){ const isNum=(inp.type==='number'); return _cleanCell(isNum?(inp.value||''):(inp.value||(inp.getAttribute&&inp.getAttribute('placeholder'))||'')); }   /* 🧮 الحقل الرقمي غير المُدخَل يُصدَّر فارغاً (لا قيمة تلميح) — ليطابق «إجمالي فاتورة المورّد» (المُدخَل يدويّاً فقط) */ return _cleanCell((td.innerText||td.textContent||'')); };
   tblEl.querySelectorAll('thead tr').forEach(tr=>{ const cells=[...tr.children].map(th=>(th.innerText||th.textContent||'').replace(/\s+/g,' ').trim()); if(cells.some(x=>x!==''))out.push(cells); });
   tblEl.querySelectorAll('tbody tr').forEach(tr=>{ if(tr.style.display==='none')return; if(tr.classList&&tr.classList.contains('sp-sep'))return; const tds=tr.querySelectorAll('td'); if(!tds.length)return; out.push([...tds].map(cellTxt)); });
   return out; }
