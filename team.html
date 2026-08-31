@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-30-makkah-transport-refresh'
+  var BUILD = '2026-08-31-flight-timing'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1638,7 +1638,7 @@ async function mkFlightApply(){
       const cand=['oman','salam'].map(a=>{
         const table=(D.prices[a]||{})[dir]||{}; const keys=Object.keys(table);
         const nd=_nearestDate(keys,want); if(!nd||!table[nd]) return null;
-        return { airline:a, date:nd, final:table[nd].final };
+        return { airline:a, date:nd, final:table[nd].final, timing:table[nd].timing||'' };
       }).filter(Boolean);
       if(!cand.length) return null;
       if(MK_FLIGHT_MODE==='oman') return cand.find(c=>c.airline==='oman')||null;
@@ -1649,7 +1649,8 @@ async function mkFlightApply(){
       const sel=pick(lg.dir,lg.want);
       if(!sel){ note+=`⚠️ لا سعر ${lg.type}. `; continue; }
       const per=Math.round(sel.final); const total=per*pax; const air=(D.airlines||{})[sel.airline]||sel.airline;
-      lines.push(`${lg.route} (${air} · ${sel.date}) | ${lg.type} | ${per} ريال/شخص | ${pax} أشخاص | ${Number(total).toLocaleString()} ريال`);
+      const tim = sel.timing ? ' · ⏰ '+sel.timing : '';
+      lines.push(`${lg.route} (${air} · ${sel.date}${tim}) | ${lg.type} | ${per} ريال/شخص | ${pax} أشخاص | ${Number(total).toLocaleString()} ريال`);
     }
   }
   const newRaw = mkSetSection(lastProgramRaw,'FLIGHTS',lines);

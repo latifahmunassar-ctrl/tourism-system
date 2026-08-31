@@ -2843,8 +2843,9 @@ async function handleMakkahFlights(): Promise<Response> {
         if (!dk) continue;
         const final = parseFloat(String(r[b.col + 2] || "").replace(/[^\d.]/g, ""));   // Final Price = +2
         const orig = parseFloat(String(r[b.col + 1] || "").replace(/[^\d.]/g, ""));    // Original = +1
+        const timing = String(r[b.col + 3] || "").trim();                             // Timing = +3 (وقت الإقلاع/الوصول)
         if (!(final > 0)) continue;
-        (out.prices as Record<string, Record<string, Record<string, unknown>>>)[b.airline][b.dir][dk] = { final, original: isNaN(orig) ? null : orig };
+        (out.prices as Record<string, Record<string, Record<string, unknown>>>)[b.airline][b.dir][dk] = { final, original: isNaN(orig) ? null : orig, timing };
         dateSet.add(dk);
       }
     }
