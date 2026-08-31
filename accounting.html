@@ -1191,7 +1191,7 @@ function render(d){
     actCell(_apm.byAgent[a.agent_name]!=null?_apm.byAgent[a.agent_name]:null, _apm.missAgent[a.agent_name]||0, _apm.incAgent[a.agent_name]||0),
     (exp?'<span class="num">'+fmt(exp)+'</span>':'<span class="num" style="color:#9aa">—</span>'),
     (act?'<span class="num neg">'+fmt(act)+'</span>':'<span class="num" style="color:#9aa">—</span>'),
-    (exp?'<span class="num" style="font-weight:700;color:'+(held>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(held)+'</span>':'<span class="num" style="color:#9aa">—</span>'),
+    (exp?'<span class="num" style="font-weight:700;color:'+(held>0.5?'#b8860b':'#0e9d6a')+'">'+fmt(Math.max(0,held))+'</span>':'<span class="num" style="color:#9aa">—</span>'),
     '<span class="num">'+fmt(a.account_balance)+'</span>'
   ]);}).join(''); $('agents-cnt').textContent=d.agents.length+' وكيل';
   fillAgentFilter(); if($('agflt')&&$('agflt').value)renderAgentDetail();
@@ -3963,7 +3963,7 @@ function renderAgentDetail(){
     '<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">'+
       '<span>💸 المرتجع المتوقّع <small style="color:var(--muted)">(Booking Form)</small>: <b>'+fmt(expRef)+'</b></span>'+
       '<span>المرتجع الفعلي <small style="color:var(--muted)">(شيت المرتجعات)</small>: <b class="neg">'+fmt(actRef)+'</b></span>'+
-      '<span>متبقّي لصالح الشركة <small style="color:var(--muted)">(لم يُرجَع — للاستخدام مستقبلاً)</small>: <b style="color:#b8860b">'+fmt(heldRef)+'</b></span>'+
+      '<span>متبقّي لصالح الشركة <small style="color:var(--muted)">(لم يُرجَع — للاستخدام مستقبلاً)</small>: <b style="color:#b8860b">'+fmt(Math.max(0,heldRef))+'</b>'+(heldRef< -0.5?' <small style="color:#0e9d6a">✅ أُرجع بالكامل — لا رصيد محتجز</small>':'')+'</span>'+
     '</div></div>'+
     '<div class="panel"><h3>تفصيل حساب الوكيل ('+arr.length+' عميل)</h3>'+
     '<div class="tbl-wrap bf-scroll" id="agd-tbl"><table style="font-size:11.5px"><thead><tr><th>كود</th><th>العميل</th><th>من</th><th>إلى</th><th>الحالة</th><th>العملة</th><th>نوع الباكدج</th><th>سعر الباكدج</th><th>المدفوع</th><th>رصيد العميل</th><th>الربح المتوقّع</th><th>الربح الفعلي</th><th>مرتجع متوقّع</th><th>مرتجع فعلي</th><th>البنك</th><th>مرجع</th><th>ملاحظات</th></tr></thead><tbody>'+
