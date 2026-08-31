@@ -1159,7 +1159,7 @@ async function ctlToggleActive(name,toActive){ const u=staffList().find(x=>x.sta
 async function ctlDelete(name){ if(!confirm('حذف الموظف «'+name+'» وكل صلاحياته؟'))return; await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_staff_access',payload:{staff_name:name}})}); await load(); }
 
 function render(d){
-  DATA=d; try{ _fipNormalizePayments(); }catch(_){}   /* 🆕 FIP: الدفعة الخام للبنك، والتوزيع يُفكّ افتراضيّاً للإسناد (يطابق الصفوف المقسومة القديمة) */ $('loading').style.display='none'; $('content').style.display='block';
+  DATA=d; try{ applyBankOverrides(); }catch(_){}   /* 🆕 يطبّق تجاوزات البنك/المرجع (acc_fcd_bank_overrides) على البيانات الطازجة قبل أي حساب — يمنع ظهور دفعة معتمَدة كـ«ناقصة مرجع» */ try{ _fipNormalizePayments(); }catch(_){}   /* 🆕 FIP: الدفعة الخام للبنك، والتوزيع يُفكّ افتراضيّاً للإسناد (يطابق الصفوف المقسومة القديمة) */ $('loading').style.display='none'; $('content').style.display='block';
   try{ applyPermissions(); }catch(e){ console.warn('perm',e); }
   const _apTot=Object.values(actualProfitMaps().byClient).reduce((s,v)=>s+Number(v||0),0);   // الربح الفعلي الموحّد (نفس مصدر الوكلاء/Booking Form)
   $('kp-profit').innerHTML=fmt(_apTot)+' <span class="cur">SAR</span>';
