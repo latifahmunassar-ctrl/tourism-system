@@ -209,7 +209,7 @@ html, body { margin:0 !important; padding:0 !important; background:#fff !importa
    #readyFilePdf) فقط. أي عنصر position:fixed أُضيف هنا حتى لا يتسرّب في الـPDF
    (بلاغ: صورة من نافذة «طلبات الشركات» كانت تظهر في الملف المُصدَّر). */
 .topbar, .layout, .login-overlay, .rfm-overlay,
-#inboxOverlay, #indivOverlay, #inboxBanner, #prOverlay,
+#inboxOverlay, #indivOverlay, #inboxBanner,
 #waReqFab, #waReqPanel, #scrollNav { display:none !important; }
 #pdfContent { display:block !important; }
 /* Ready-file module: only shown for printing when body has the marker class */
@@ -460,7 +460,6 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <button id="waBridgeFab" onclick="waBridgeOpen()" title="واتساب مباشر — إرسال للجروبات" style="position:fixed;bottom:22px;left:22px;z-index:950;background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;border:none;border-radius:999px;padding:12px 20px;font-family:Tajawal,sans-serif;font-size:14px;font-weight:800;box-shadow:0 4px 16px rgba(0,0,0,.35);cursor:pointer">📲 واتساب مباشر</button>
   <script>/* منفذ للأدمن فقط: يظهر إذا دور الواتساب (نفس الدومين madartrip) = admin */
   (function(){ try{ var el=document.getElementById('waDashLink'); if(el && (localStorage.getItem('alezz_dashboard_role')||'')==='admin') el.style.display='inline-flex'; }catch(e){} })();</script>
-  <button class="logout-btn" type="button" onclick="prOpen()" title="جهات ترحّب باستضافتنا مقابل تغطية إعلامية — فنادق وهيئات سياحة ووسطاء">🤝 علاقات عامة</button>
   <button class="logout-btn" type="button" onclick="trustDevice()" title="اطلبي توثيق هذا الجهاز ليدخل من أي دولة">🔓 توثيق الجهاز</button>
   <button class="logout-btn" type="button" onclick="logout()">تسجيل خروج</button>
 </div>
