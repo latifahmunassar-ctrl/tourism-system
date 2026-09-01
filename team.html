@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-08-31-flight-timing'
+  var BUILD = '2026-09-01-currency-code'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -209,7 +209,7 @@ html, body { margin:0 !important; padding:0 !important; background:#fff !importa
    #readyFilePdf) فقط. أي عنصر position:fixed أُضيف هنا حتى لا يتسرّب في الـPDF
    (بلاغ: صورة من نافذة «طلبات الشركات» كانت تظهر في الملف المُصدَّر). */
 .topbar, .layout, .login-overlay, .rfm-overlay,
-#inboxOverlay, #indivOverlay, #inboxBanner,
+#inboxOverlay, #indivOverlay, #inboxBanner, #prOverlay,
 #waReqFab, #waReqPanel, #scrollNav { display:none !important; }
 #pdfContent { display:block !important; }
 /* Ready-file module: only shown for printing when body has the marker class */
@@ -460,6 +460,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <button id="waBridgeFab" onclick="waBridgeOpen()" title="واتساب مباشر — إرسال للجروبات" style="position:fixed;bottom:22px;left:22px;z-index:950;background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;border:none;border-radius:999px;padding:12px 20px;font-family:Tajawal,sans-serif;font-size:14px;font-weight:800;box-shadow:0 4px 16px rgba(0,0,0,.35);cursor:pointer">📲 واتساب مباشر</button>
   <script>/* منفذ للأدمن فقط: يظهر إذا دور الواتساب (نفس الدومين madartrip) = admin */
   (function(){ try{ var el=document.getElementById('waDashLink'); if(el && (localStorage.getItem('alezz_dashboard_role')||'')==='admin') el.style.display='inline-flex'; }catch(e){} })();</script>
+  <button class="logout-btn" type="button" onclick="prOpen()" title="جهات ترحّب باستضافتنا مقابل تغطية إعلامية — فنادق وهيئات سياحة ووسطاء">🤝 علاقات عامة</button>
   <button class="logout-btn" type="button" onclick="trustDevice()" title="اطلبي توثيق هذا الجهاز ليدخل من أي دولة">🔓 توثيق الجهاز</button>
   <button class="logout-btn" type="button" onclick="logout()">تسجيل خروج</button>
 </div>
@@ -1133,6 +1134,24 @@ async function toggleCurrencyPicker(){
   const sel = document.getElementById('currencyPicker');
   sel.style.display = (sel.style.display === 'none') ? '' : 'none';
 }
+// يثبّت العملة داخل خام البرنامج (CURRENCY:اسم|سعر) ليُحفَظ مع الكود ويُستعاد عند
+// الاستدعاء، ويصفّر الكود المحفوظ حتى يتولّد كود جديد يحمل العملة الجديدة عند الاعتماد.
+function writeCurrencyToRaw(name, rate){
+  if(typeof lastProgramRaw !== 'string' || !lastProgramRaw) return;
+  let raw = lastProgramRaw.replace(/\nCURRENCY:[^\n]*/g,'');   // أزل أي سطر عملة قديم
+  if(name && rate > 0){
+    const dm = raw.match(/DEST:[^\n]*/);
+    raw = dm ? raw.replace(dm[0], dm[0] + '\nCURRENCY:' + name + '|' + rate)
+             : ('CURRENCY:' + name + '|' + rate + '\n' + raw);
+  }
+  if(raw !== lastProgramRaw){
+    lastProgramRaw = raw;
+    for(let i=history.length-1;i>=0;i--){ if(history[i].role==='assistant'){ history[i].content = raw; break; } }
+  }
+  // تغيير العملة = نسخة جديدة للبرنامج → صفّر الكود ليُولَّد جديد عند «اعتمد النسخة النهائية»
+  lastSavedCode = '';
+  const pill = document.getElementById('savedCodePill'); if(pill) pill.style.display = 'none';
+}
 function onCurrencyPick(){
   const sel = document.getElementById('currencyPicker');
   const box = document.getElementById('currencyResult');
@@ -1142,11 +1161,13 @@ function onCurrencyPick(){
   if(!sel.value || !(rate > 0)){
     currencyConversion = null;
     box.style.display = 'none';
+    writeCurrencyToRaw('', 0);   // إزالة العملة + تصفير الكود
     return;
   }
   const finalGroupPrice = currentFinalGroup();
   currencyConversion = { name, rate, originalSAR: finalGroupPrice, converted: finalGroupPrice / rate };
   refreshCurrencyBox();
+  writeCurrencyToRaw(name, rate);   // تثبيت العملة بالبرنامج + تصفير الكود
 }
 function refreshCurrencyBox(){
   const box = document.getElementById('currencyResult');
@@ -1211,7 +1232,8 @@ function handleCurrencyMessage(text) {
       currencyConversion = { ...currencyPending };
       currencyAwaiting = null;
       currencyPending = null;
-      addMessage('sys', `✅ تم. التحويل سيظهر في PDF "للعميل" و"التفصيلي" تلقائياً. (PDF بدون سعر لا يتأثر.)`);
+      writeCurrencyToRaw(currencyConversion.name, currencyConversion.rate);   // ثبّتها بالبرنامج + كود جديد
+      addMessage('sys', `✅ تم. التحويل سيظهر في PDF "للعميل" و"التفصيلي" تلقائياً، ومحفوظ مع الكود. (PDF بدون سعر لا يتأثر.)`);
     } else {
       currencyAwaiting = null;
       currencyPending = null;
@@ -2359,7 +2381,7 @@ const m = raw.match(new RegExp(key + ':(.+)'));
 return m ? m[1].trim() : '';
 }
 
-const DOC_SECTION_HEAD_RE = 'DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|SUMMARY|CHAT';
+const DOC_SECTION_HEAD_RE = 'DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|CURRENCY|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|SUMMARY|CHAT';
 
 /** تسعيرة شريحة الاتصال من الشيت (Sim card) — موحّدة لكل الوجهات: 50 ريال لكل شريحة (Per Pax في الشيت). */
 const SIM_CARD_UNIT_PRICE_SAR = 50;
@@ -2619,7 +2641,7 @@ function parseHotelLinesFromRaw(raw) {
 }
 
 function parseSection(raw, tag) {
-const m = raw.match(new RegExp(tag + ':([\\s\\S]+?)(?=\\n(?:DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|SUMMARY|CHAT):)'));
+const m = raw.match(new RegExp(tag + ':([\\s\\S]+?)(?=\\n(?:DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|CURRENCY|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|SUMMARY|CHAT):)'));
 return m ? m[1].trim().split('\n').filter(l => l.includes('|')) : [];
 }
 
@@ -2975,6 +2997,22 @@ currencyAwaiting = null;
 currencyPending = null;
 // صفّر اختيار العملة في الواجهة (برنامج جديد = بدون تحويل افتراضياً)
 { const _cpk = document.getElementById('currencyPicker'); if(_cpk){ _cpk.value=''; _cpk.style.display='none'; } const _crb = document.getElementById('currencyResult'); if(_crb) _crb.style.display='none'; }
+// استعادة العملة المثبّتة بالبرنامج المحفوظ (CURRENCY:اسم|سعر) — عشان الاستدعاء/الاعتماد
+// يرجع بنفس العملة المعتمدة لا بالريال (تُخزَّن في الخام عند تغيير العملة).
+try {
+  const _cm = (raw.match(/CURRENCY:([^\n]+)/) || [])[1];
+  if (_cm) {
+    const _p = _cm.split('|'); const _cn = (_p[0] || '').trim(); const _cr = parseFloat(_p[1]);
+    if (_cn && _cr > 0) {
+      currencyConversion = { name: _cn, rate: _cr, originalSAR: 0, converted: 0 };
+      setTimeout(() => { try {
+        const _pk = document.getElementById('currencyPicker');
+        if (_pk) { const _o = [...(_pk.options || [])].find(o => o.dataset && o.dataset.name === _cn); if (_o) { _pk.value = _o.value; _pk.style.display = ''; } }
+        refreshCurrencyBox();
+      } catch (_) {} }, 0);
+    }
+  }
+} catch (_) {}
 // تصفير التكاليف الإضافية اليدوية فقط عند تغيير الوجهة (رحلة لبلد آخر) حتى لا
 // تتسرب من رحلة لأخرى. تعديلات نفس البرنامج (مثل "اضف شرائح" أو تبديل فندق)
 // تحافظ عليها بدل ما تمسحها.
