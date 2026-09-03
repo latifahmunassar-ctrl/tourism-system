@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-01-currency-code'
+  var BUILD = '2026-09-03-pdf-bidi'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -4252,6 +4252,10 @@ function stripPricesText(t) {
   return s;
 }
 const safeText = (t) => (showDetailed ? String(t || '').trim() : stripPricesText(t));
+// html2canvas يكسر ترتيب/مسافات النص اللاتيني (أسماء فنادق مكة الإنجليزية) داخل سياق
+// RTL. نعزل أي نص فيه حروف لاتينية بـ dir=ltr + unicode-bidi:isolate فيُرسَم صحيحاً؛
+// النص العربي يُترك كما هو (تغليفه بـ ltr يكسره).
+const bidiText = (t) => { const s = safeText(t); return /[A-Za-z]/.test(String(s)) ? `<span dir="ltr" style="unicode-bidi:isolate">${s}</span>` : s; };
 
 // تُحتسب لاحقاً بعد تجهيز تواريخ الفنادق
 let hotelStays = [];
@@ -4713,13 +4717,13 @@ ${(hotelsLines.length || extrasCards('hotels')) ? `<div class="pdf-section-title
 ${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l); const rooms = hRooms(idx); const extraBedCount = hBeds(idx, extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest)); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const _arRooms = parseAddRooms(l); const _arTotal = _arRooms.reduce((a,r)=>a+(r.price*(nights||0)),0); const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; return `
 <div class="pdf-keep" style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;">
 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;">
-  <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:12px;line-height:1.6;word-break:break-word;overflow-wrap:anywhere;">🏨 ${safeText(p[0]||'')}${extraBedCount ? ' + Extra bed / Sofa Bed' : ''}</div>
+  <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:12px;line-height:1.6;word-break:break-word;overflow-wrap:anywhere;">🏨 ${bidiText((p[0]||'') + (extraBedCount ? ' + Extra bed / Sofa Bed' : ''))}</div>
   ${showDetailed ? `<div style="font-weight:900;color:#0d1f4a;font-size:18px;white-space:nowrap;">${((totalLine*rooms) + (extraBedTotal||0) + _arTotal).toLocaleString()} ريال</div>` : ``}
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;font-size:20px;font-weight:800;color:#0d1f4a;line-height:1.8;word-break:break-word;overflow-wrap:anywhere;">
-<span>📍 المدينة: ${safeText(p[1]||'')}</span>
+<span>📍 المدينة: ${bidiText(p[1]||'')}</span>
 <span>⭐ النجوم: ${safeText(p[2]||'')}</span>
-<span>🛏️ الغرفة: ${safeText(p[3]||'')}</span>
+<span>🛏️ الغرفة: ${bidiText(p[3]||'')}</span>
 <span>🏨 عدد الغرف: ${rooms}</span>
 <span>📅 الإقامة: ${stayText}</span>
 ${(sd.checkInText && sd.checkOutText) ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText} | 🔴 الخروج: ${sd.checkOutText}</span>` : (sd.checkInText ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText}</span>` : ``)}
