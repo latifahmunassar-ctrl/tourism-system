@@ -292,12 +292,15 @@ export function pickCheapestHotel(
   // rooms that explicitly mention a child slot (but don't require it —
   // the adult capacity match is the deciding factor).
   const childrenCount = Math.max(0, request.children || 0);
+  // فنادق العمرة (مكة/المدينة) room-based بلا عمود إشغال — occupancy فارغ لكل الصفوف.
+  // تُعامَل كـ«تناسب أي عدد» (عدد الغرف ونوع الغرفة يحدّدان السعة)، فلا تُرفَض لعدم
+  // تطابق الإشغال. للوجهات الأخرى الإشغال دائماً موجود فهذا الملاذ لا يؤثّر عليها.
+  const hasOcc = (h: HotelRow) => extractAdultsCount(h.occupancy || "") > 0;
+  const noOccCandidates = (): HotelRow[] => allHotels.filter(h => baseFilter(h) && !hasOcc(h));
   const findCandidates = (): HotelRow[] => {
     if (strictOnly) {
-      return allHotels.filter(h => {
-        if (!baseFilter(h)) return false;
-        return extractAdultsCount(h.occupancy || "") === adults;
-      });
+      const strict = allHotels.filter(h => baseFilter(h) && extractAdultsCount(h.occupancy || "") === adults);
+      return strict.length > 0 ? strict : noOccCandidates();
     }
     const adultsByCap = (cap: number) => allHotels.filter(h => {
       if (!baseFilter(h)) return false;
@@ -317,7 +320,7 @@ export function pickCheapestHotel(
       }
       return atCap;
     }
-    return [];
+    return noOccCandidates();   // ملاذ أخير: فنادق بلا عمود إشغال (العمرة) تناسب أي عدد
   };
   let candidates = findCandidates();
   // التاريخ خارج كل المواسم المُسعّرة (مثلاً صلالة سبتمبر-ديسمبر غير مُسعّر) →
