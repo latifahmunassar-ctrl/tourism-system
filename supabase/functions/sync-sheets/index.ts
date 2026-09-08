@@ -26,7 +26,7 @@ const CORS_HEADERS = {
   "Content-Type": "application/json",
 };
 
-const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah "];
+const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England "];
 
 // Per-destination canonical-city patterns — MUST stay in sync with DEST_CITIES
 // in Tourism-AI/index.ts (same canonical names the builder groups by). Used
@@ -526,7 +526,14 @@ function findTourHeader(rows: string[][]): TourHeader | null {
     for (let s = 0; s < xs.length; s++) { let c = 0; for (let e = s; e < xs.length && xs[e] - xs[s] <= 7; e++) c++; if (c > best) best = c; }
     return best;
   };
-  candidates.sort((a, b) => (clusterSize(b.priceCols) - clusterSize(a.priceCols)) || (b.priceCols.length - a.priceCols.length));
+  // فضّل الصف الذي فيه عمود سعر يسبقه عمود اسم (firstPriceCol>0) على صفّ عنوان عام
+  // مثل «Tour Fees» في العمود 0 (لا يترك مكاناً لعمود الاسم → England: الاسم بعمود 1
+  // والسعر «1-3 Pax Sedan» بعمود 2، بينما «Tour Fees» عنوان قسم بالعمود 0).
+  const nameSpace = (c: { priceCols: { col: number }[] }) => (Math.min(...c.priceCols.map(p => p.col)) > 0 ? 0 : 1);
+  candidates.sort((a, b) =>
+    (nameSpace(a) - nameSpace(b)) ||
+    (clusterSize(b.priceCols) - clusterSize(a.priceCols)) ||
+    (b.priceCols.length - a.priceCols.length));
 
   for (const cand of candidates) {
     let { i, priceCols, currencyCol } = cand;

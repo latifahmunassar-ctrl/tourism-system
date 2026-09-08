@@ -50,6 +50,7 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     [/عُمان|عمان|سلطنة\s*عمان|oman|صلال[ةه]|salalah/i, "Oman"],
     [/جنوب\s*(?:ال)?[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبر[جغ]|johannesburg|(?:هارمونس|هارمانوس|هيرمانوس|هرمانوس)|hermanus|بريتوريا|pretoria|سن\s*سيتي|sun\s*city|كروجر|kruger/i, "South Africa"],
     [/موريشيوس|موريش[سي]|mauritius|بورت\s*لويس|port\s*louis/i, "mauritius"],
+    [/[إا]ن[جك]لترا|بريطانيا|بريطاني|لندن|england|london|المملكة\s*المتحدة/i, "England"],
     // مكة/العمرة (برامج داخلية: مكة + المدينة المنورة + جدة + الطائف). «المدينة» وحدها
     // عامة فنطلب «المنورة»؛ وجدة/الطائف لا تُشغّل الوجهة وحدها (مدن سعودية عامة).
     [/مكة|مكه|makkah|mecca|العمرة|عمرة|الحرمين|المدينة\s*المنورة|المنوّ?رة|al\s*madinah|madinah|medina/i, "Makkah"],
@@ -164,6 +165,10 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
   // موريشيوس = جزيرة/موقع واحد؛ canonical واحد يطابق فنادقها (مدينتها «mauritius») ومعالمها.
   mauritius: [
     { canonical: "Mauritius", pattern: /موريشيوس|mauritius|بورت\s*لويس|port\s*louis|بلاك\s*ريفر|black\s*river|بلومارين|blue\s*(?:bay|marine)|معالم\s*المدين|غورج/i },
+  ],
+  // إنجلترا = لندن (كل الفنادق لندن)؛ canonical واحد يطابق فنادقها ومعالمها (الريف، سفاري، اللافندر…).
+  England: [
+    { canonical: "London", pattern: /لندن|london|[إا]ن[جك]لترا|england|الريف\s*الانجليزي|countryside|سفاري|safari|لافندر|lavender|مزرع|windsor|وندسور|oxford|أكسفورد|bicester|بايسستر|معالم/i },
   ],
 };
 
@@ -2632,7 +2637,7 @@ async function handleTourVariants(body: { dest?: string; name?: string }): Promi
 
 // ── profit_margins: جدول الأرباح الموسمي لوجهة — يُقرأ مباشرة من شيت الوجهة
 //    (بلا جدول قاعدة بيانات): شريحة تكلفة × موسم × شركات/أفراد. ──────────────────
-const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah "];
+const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England "];
 
 async function pmGoogleToken(sa: { client_email: string; private_key: string }): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
