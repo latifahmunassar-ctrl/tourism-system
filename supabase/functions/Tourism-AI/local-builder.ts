@@ -1634,12 +1634,13 @@ export function formatProgram(data: ProgramData): string {
     // صلالة: السرير الإضافي 170 ريال/ليلة لأي فندق (بأي تصنيف) — عمود «Exra bed /Sofa Bed»
     // في تبويب Oman بالشيت (4★=170 و5★=170، محدَّث 2026-08-08). غيرها: 4-5★ فقط (5★=120 / 4★=100).
     const isSalalah = sh.city === "Salalah";
-    if (!isSalalah && (sh.hotel.stars < 4 || sh.hotel.stars > 5)) return s;
+    const isEngland = sh.city === "London";   // إنجلترا: السرير 150/ليلة (عمود Extra Bed بالشيت)
+    if (!isSalalah && !isEngland && (sh.hotel.stars < 4 || sh.hotel.stars > 5)) return s;
     const inScope = isAllScope
       || scopeList.includes(sh.city)
       || scopeList.some(c => sh.city.toLowerCase() === String(c).toLowerCase());
     if (!inScope) return s;
-    const nightly = isSalalah ? 170 : (sh.hotel.stars >= 5 ? 120 : 100);
+    const nightly = isSalalah ? 170 : (isEngland ? 150 : (sh.hotel.stars >= 5 ? 120 : 100));
     return s + nightly * sh.nights;
   }, 0);
   const hotelsTotal = hotelsBase + extraBedTotal;
