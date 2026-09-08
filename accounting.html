@@ -711,7 +711,7 @@ table{font-weight:600}
           <div class="fld"><label>خارج (−)</label><input type="number" id="bca-out" placeholder="0"></div>
           <div class="fld"><label>العملة</label><input id="bca-cur" list="bc-cur-list" autocomplete="off" placeholder="OMR / USD…" style="background:#fff;color:var(--txt)"></div>
           <div class="fld"><label>سعر الصرف (1 وحدة = ؟ ر.س)</label><input type="number" id="bca-rate" step="0.0001" placeholder="مثال 9.5"></div>
-          <div class="fld"><label>المرجع البنكي</label><input id="bca-ref"></div>
+          <div class="fld"><label>المرجع البنكي <span style="color:var(--red)">*</span> <span style="font-size:9px;color:#d98a00">إجباري</span></label><input id="bca-ref"></div>
           <div class="fld"><label>📡 القناة <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">أول الإدخال — تفلتر الوصف</span></label><select id="bca-channel" onchange="bcFillDescByChannel()" style="background:#fff;color:var(--txt)"></select></div>
           <div class="fld"><label>الوصف <span style="color:var(--red)">*</span></label><select id="bca-desc" onchange="bcFillAddDetails()" style="background:#fff;color:var(--txt)"></select></div>
           <div class="fld"><label>التفاصيل (تتبع الوصف) <span style="color:var(--red)">*</span></label><select id="bca-details" onchange="bcFillAddMore()" style="background:#fff;color:var(--txt)"></select></div>
@@ -5448,6 +5448,7 @@ async function addBankCash(){
   const bank=(($('bca-bank')||{}).value||'').trim(); const msg=$('bc-add-msg');
   if(!bank){ if(msg)msg.textContent='⚠️ لازم تحددي البنك'; return; }
   if(!$('bca-in').value && !$('bca-out').value){ if(msg)msg.textContent='⚠️ أدخلي مبلغ داخل أو خارج'; return; }
+  if(!(($('bca-ref')||{}).value||'').trim()){ if(msg)msg.textContent='⚠️ المرجع البنكي إجباري لحركة الكاش (داخل/خارج)'; if($('bca-ref'))$('bca-ref').focus(); return; }   // 🏦 المرجع إجباري — قرار المالكة
   // اختيار إجباري متسلسل من القوائم الموجودة فقط (ممنوع الإدخال اليدوي — كلها منسدلة)
   const _channel=(($('bca-channel')||{}).value||'').trim(); const _desc=(($('bca-desc')||{}).value||'').trim(); const _det=(($('bca-details')||{}).value||'').trim(); const _more=(($('bca-more')||{}).value||'').trim();
   if(!_channel){ if(msg)msg.textContent='⚠️ لازم اختيار القناة من القائمة'; return; }

@@ -222,6 +222,7 @@ Deno.serve(async (req: Request) => {
     }
     if (action === 'request_cash_add') {
       if (!p.bank_name) return J({ error: 'لازم تحديد البنك' }, 400);
+      if (!String(p.bank_ref || '').trim()) return J({ error: 'المرجع البنكي إجباري لحركة الكاش (داخل/خارج)' }, 400);   // 🏦 المرجع إجباري — قرار المالكة
       const { data, error } = await supabase.from('acc_pending_movements').insert({ kind: 'cash', scope: 'banks_cash', status: 'pending', summary: p.summary || null, note: p.note || null, payload: p }).select().single();
       if (error) return J({ error: error.message }, 400);
       return J({ ok: true, row: data });
