@@ -1351,6 +1351,12 @@ async function handleNewLeadIntake(args: {
   const today = new Date().toISOString().slice(0, 10);
   // رقم عُماني (+968)؟ — سؤال مطار المغادرة للعمرة (صلالة/مسقط) حصريّ لهم.
   const isOmani = /^whatsapp:\+?968/.test(String(from));
+  // هل الطلب عمرة؟ (نستخدم نموذجاً أقوى Sonnet للعمرة لدقّة تسلسل الأسئلة).
+  const _umrahRe = /عمرة|عُمرة|عمره|الحرمين|الحرم\b|مكة|مكه|المدينة\s*المنورة/;
+  const _adRefU = (sessRes.data as { ad_referral?: { body?: string; headline?: string } | null } | null)?.ad_referral;
+  const isUmrah = _umrahRe.test(transcript)
+    || _umrahRe.test(String((prev as { destination?: string })?.destination || ""))
+    || _umrahRe.test(String(_adRefU?.body || "") + " " + String(_adRefU?.headline || ""));
   // هل سبق أن ردّ طلال في هذه المحادثة؟ (لتفادي تكرار التعريف/الترحيب كل رسالة)
   let alreadyGreeted = ((outboundRes.data || []) as Row[]).some(m => !!m.body);
 
@@ -1473,7 +1479,7 @@ ${returning
   try {
     const anthropic = new Anthropic({ apiKey });
     const res = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001", max_tokens: 500, system: sys,
+      model: isUmrah ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001", max_tokens: 500, system: sys,
       messages: [{ role: "user", content: transcript || "(أول رسالة من العميل)" }],
     });
     let txt = ""; for (const b of res.content) if ((b as { type?: string }).type === "text") txt += (b as { text?: string }).text || "";
