@@ -2501,7 +2501,7 @@ function commTypeKey(t){ const n=String(t||'').trim().toLowerCase().replace(/\s+
 }
 function commConfirmed(key, profit){ profit=Number(profit)||0; const pct=v=>0.10*v;
   switch(key){
-    case 'full': return profit<1000?pct(profit):150;
+    case 'full': return profit<800?pct(profit):100;
     case 'hotel': case 'hotels_flights': case 'air': return pct(profit);
     case 'transport': case 'tour': return 60;
     case 'flight_transport': return (profit>=500&&profit<1000)?60:pct(profit);
@@ -4169,7 +4169,7 @@ async function saveStaffComm(name,pct){ if(!isOwnerUser()){ alert('⚠️ اعت
 function renderStaffCommPanel(){ const box=$('staff-comm-panel'); if(!box)return;
   const basis=staffBasis();
   const R=[
-    ['Full pakage','ربح ≥ 1000 → 150 ر.س ثابت · ربح < 1000 → 10% من الربح'],
+    ['Full pakage','ربح ≥ 800 → 100 ر.س ثابت · ربح < 800 → 10% من الربح'],
     ['Hotel · hotels & flights · AIR TICKET ONLY','10% من الربح'],
     ['Transportaion · TOUR ONLY','60 ر.س ثابت'],
     ['Flight & transportaion','ربح 500–999 → 60 ر.س · غير ذلك → 10% من الربح'],
