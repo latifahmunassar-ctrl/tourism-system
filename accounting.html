@@ -2594,7 +2594,7 @@ function renderStaffDetail(fStaff,fJob,inR,basis,bbMap){
           '<td class="num" style="color:#0e9d6a;font-weight:700">'+fmt(o.profit)+'</td>'+
           '<td class="num" style="font-weight:700;color:'+(ap==null?'#9aa':(ap<-0.5?'#d11':'#0e9d6a'))+'">'+(ap==null?'—':fmt(ap))+'</td>'+
           (function(){ var apS=toSAR(ap, o.cur); return '<td class="num" style="font-weight:700;color:'+(apS==null?'#9aa':(apS<-0.5?'#d11':'#0e7c50'))+'">'+(apS==null?'—':(fmt(apS)+' <span style="font-size:9px;color:var(--muted)">ر.س</span>'))+'</td>'; })()+
-          (function(){ var apS=toSAR(ap, o.cur); var _cm=commissionCalc(Object.keys(o.types)[0]||'', allC, apS, basis); return '<td class="num" style="font-weight:700;color:#b8860b">'+((allC||!commTypeKey(Object.keys(o.types)[0]||''))?'<span style="color:#9aa">—</span>':fmt(_cm))+'</td>'; })()+
+          (function(){ var apS=toSAR(ap, o.cur); var _tk=commTypeKey(Object.keys(o.types)[0]||''); var _cm=commissionCalc(Object.keys(o.types)[0]||'', allC, apS, basis); var _lowT=(!allC && _tk==='transport' && apS!=null && apS<500); return '<td class="num" style="font-weight:700;color:#b8860b">'+((allC||!_tk)?'<span style="color:#9aa">—</span>':(fmt(_cm)+(_lowT?' <span title="الربح أقل من 500 ر.س — عمولة المواصلات ثابتة 60 لكن الربح منخفض" style="font-size:8px;background:rgba(217,138,0,.16);color:#b8860b;font-weight:700;padding:1px 5px;border-radius:6px;white-space:nowrap">⚠️ ربح منخفض</span>':'')))+'</td>'; })()+
           '<td class="num" style="color:#0e9d6a">'+fmt(o.paid)+'</td>'+
           '<td class="num" style="color:#b8860b">'+fmt(o.bal)+'</td>'+
           '<td style="font-size:10px">'+(o.nActive?'<span class="pill active">'+o.nActive+' نشط</span>':'')+(o.nCancel?' <span class="pill cancel">'+o.nCancel+' ملغى</span>':'')+'</td>'+
@@ -4171,7 +4171,8 @@ function renderStaffCommPanel(){ const box=$('staff-comm-panel'); if(!box)return
   const R=[
     ['Full pakage','ربح ≥ 800 → 100 ر.س ثابت · ربح < 800 → 10% من الربح'],
     ['Hotel · hotels & flights · AIR TICKET ONLY','10% من الربح'],
-    ['Transportaion · TOUR ONLY','60 ر.س ثابت'],
+    ['Transportaion','ربح ≥ 500 → 60 ر.س · < 500 → 60 ر.س مع إشارة ⚠️ ربح منخفض'],
+    ['TOUR ONLY','60 ر.س ثابت'],
     ['Flight & transportaion','ربح 500–999 → 60 ر.س · غير ذلك → 10% من الربح'],
     ['HOTEL & TOURS','ربح ≥ 1000 → 60 ر.س · ربح < 1000 → 10% من الربح'],
     ['train tickets · VISA · Other works · بلا نوع','لا عمولة'],
