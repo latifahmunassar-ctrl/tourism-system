@@ -8,7 +8,7 @@ const SVC_FIELDS = ['kind','name','detail','supplier','amount','currency_rate','
 const ALL_TABS = ['overview','notifs','tickets','entry','clients','sales','booking','bookings','detail','hotels','pnl','due','payments','staff','agents','suppliers','banks','bankscash','control'];
 const TAB_DATA: Record<string, string[]> = { overview: ['kpis','overview','monthly','due','fcd'], notifs: ['alerts','pendingMovements','overview','serviceLines','fcd'], tickets: ['serviceLines','fcd','overview'], entry: ['lists','fcd','serviceLines','supplierInvoices'], clients: ['fcd','due','overview','serviceLines'], sales: ['sales','fcd'], booking: ['bookingForm','bf','serviceLines','fcd'], bookings: ['overview','serviceLines','fcd'], detail: ['overview','serviceLines','fcd','hotelBookings','supplierInvoices','supplierPayments','allocations','bankTx'], hotels: ['hotelBookings','hotelPayments','supplierInvoices','supplierPayments','allocations'], pnl: ['overview','monthly','kpis','bf','fcd'], due: ['due','fcd'], payments: ['refunds','fcd','bankTx','due','overview'], staff: ['staff'], agents: ['agents'], suppliers: ['supplierInvoices','supplierPayments','allocations','autofillInvoices','fcd'], banks: ['bankTx','banksCash','fcd'], bankscash: ['banksCash'], control: ['staffAccess','auditLog','securityCount'] };
 const BASE_KEYS = ['lists','profitOverrides','settlements','deletedClients','lastSync','generatedAt','me'];
-const ARR_KEYS = ['overview','due','staff','agents','fcd','bookingForm','sales','serviceLines','hotelBookings','refunds','supplierInvoices','bankTx','banksCash','alerts','supplierPayments','allocations','autofillInvoices','pendingMovements','hotelPayments','staffAccess','auditLog','profitOverrides','settlements','deletedClients','monthly','lists'];
+const ARR_KEYS = ['overview','due','staff','agents','fcd','bookingForm','sales','serviceLines','hotelBookings','refunds','supplierInvoices','bankTx','banksCash','alerts','supplierPayments','allocations','autofillInvoices','clientDue','pendingMovements','hotelPayments','staffAccess','auditLog','profitOverrides','settlements','deletedClients','monthly','lists'];
 function filterForStaff(resp: any, allowedTabs: string[]) { const allow = new Set(BASE_KEYS); for (const t of (allowedTabs || [])) (TAB_DATA[t] || []).forEach((k) => allow.add(k)); for (const k of ARR_KEYS) { if (!allow.has(k)) resp[k] = []; } if (!allow.has('bf')) resp.bf = {}; if (!allow.has('kpis')) resp.kpis = { totalProfit: 0, bookings: 0, outstanding: 0, overdue: 0, clients: 0 }; resp.staffAccess = []; resp.auditLog = []; resp.securityCount = 0; return resp; }
 
 Deno.serve(async (req: Request) => {
@@ -534,7 +534,7 @@ Deno.serve(async (req: Request) => {
       supabase.from('acc_sync_logs').select('*').order('ran_at', { ascending: false }).limit(1),
     ]);
     // ⚡ تحسين أداء: الجداول الثمانية كانت تُجلب بالتسلسل (يتراكم الزمن) — الآن بالتوازي (نفس البيانات تماماً)
-    const [banksCash, staffAccessRaw, auditRes, secRes, profitOverrides, settlements, deletedClients, dismissedAlerts, allocations, autofillInvoices] = await Promise.all([
+    const [banksCash, staffAccessRaw, auditRes, secRes, profitOverrides, settlements, deletedClients, dismissedAlerts, allocations, autofillInvoices, clientDue] = await Promise.all([
       fetchAll(supabase, 'acc_banks_cash'),
       fetchAll(supabase, 'acc_staff_access'),
       supabase.from('acc_audit_log').select('*').order('ts', { ascending: false }).limit(300),
@@ -545,6 +545,7 @@ Deno.serve(async (req: Request) => {
       fetchAll(supabase, 'acc_dismissed_alerts', null),
       fetchAll(supabase, 'acc_payment_allocations'),
       fetchAll(supabase, 'acc_autofill_invoices'),
+      fetchAll(supabase, 'acc_client_due', null),
     ]);
     // pin/role يُضمّنان هنا لكن filterForStaff يُصفّر staffAccess بالكامل لغير المالك، فيصلان للمالكة فقط
     const staffAccess = staffAccessRaw.map((u: any) => ({ id: u.id, staff_name: u.staff_name, is_owner: u.is_owner, allowed_tabs: u.allowed_tabs || [], active: u.active, has_pin: !!(u.pin && String(u.pin).length), pin: u.pin || '', role: u.role || '' }));
@@ -560,7 +561,7 @@ Deno.serve(async (req: Request) => {
     for (const r of rows) { if (!r.booking_date) continue; const m = String(r.booking_date).slice(0, 7); monthly[m] = monthly[m] || { profit: 0, count: 0 }; monthly[m].profit += Number(r.profit || 0); monthly[m].count += 1; }
     const monthlyArr = Object.entries(monthly).sort().map(([month, v]) => ({ month, ...v }));
     const me = (key === ACCESS_KEY) ? { staff_name: 'المالكة', is_owner: true, allowed_tabs: ALL_TABS, via: 'key', role: callerRole, can_bankref: callerBankRef } : (sess ? { staff_name: sess.staff_name, is_owner: !!sess.is_owner, allowed_tabs: sess.allowed_tabs || [], via: 'token', role: callerRole, can_bankref: callerBankRef } : { staff_name: '', is_owner: false, allowed_tabs: [], via: 'token', role: '', can_bankref: false });
-    const payload: any = { kpis: { totalProfit, bookings: rows.length, outstanding, overdue, clients: new Set(rows.map((r: any) => r.client_code)).size }, overview: rows, due, staff, agents, fcd, bf: bfMap, bookingForm: bfRows, sales, serviceLines: svc, hotelBookings: hotels, refunds, lists, supplierInvoices: supInv, bankTx, banksCash, alerts, supplierPayments: supPay, pendingMovements: pendingMv, hotelPayments: hotelPay, staffAccess, auditLog, securityCount, profitOverrides, settlements, deletedClients, dismissedAlerts, allocations, autofillInvoices, monthly: monthlyArr, lastSync: logsArr.data?.[0] || null, generatedAt: new Date().toISOString(), me };
+    const payload: any = { kpis: { totalProfit, bookings: rows.length, outstanding, overdue, clients: new Set(rows.map((r: any) => r.client_code)).size }, overview: rows, due, staff, agents, fcd, bf: bfMap, bookingForm: bfRows, sales, serviceLines: svc, hotelBookings: hotels, refunds, lists, supplierInvoices: supInv, bankTx, banksCash, alerts, supplierPayments: supPay, pendingMovements: pendingMv, hotelPayments: hotelPay, staffAccess, auditLog, securityCount, profitOverrides, settlements, deletedClients, dismissedAlerts, allocations, autofillInvoices, clientDue, monthly: monthlyArr, lastSync: logsArr.data?.[0] || null, generatedAt: new Date().toISOString(), me };
     if (sess && !sess.is_owner) filterForStaff(payload, sess.allowed_tabs || []);
     return J(payload);
   } catch (e) { return J({ error: String(e) }, 500); }

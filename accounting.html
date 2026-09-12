@@ -3550,7 +3550,9 @@ function cliEditDiff(m){
   const cut=(v)=>{ v=String(v==null?'':v); return v.length>28?(v.slice(0,28)+'…'):v; };
   const chg=(lbl,o,n,isNum)=>{ if(n===undefined||n===null||n==='')return; const oo=(o===undefined||o===null||o==='')?null:o; const same=isNum?(Number(oo||0)===Number(n||0)):(String(oo==null?'':oo)===String(n)); if(same)return; const of=(oo==null)?'—':(isNum?fmt(oo):esc(cut(oo))); const nf=isNum?fmt(n):esc(cut(n)); rows.push('<div>'+lbl+': <span style="color:#d11;text-decoration:line-through">'+of+'</span> ← <b style="color:#0e9d6a">'+nf+'</b></div>'); };
   if(c._due_only){
-    const d=((DATA&&DATA.due)||[]).find(x=>String(x.client_code||'').toUpperCase()===String(c.client_code||'').toUpperCase())||{};
+    const _cc=String(c.client_code||'').toUpperCase();
+    const d=((DATA&&DATA.clientDue)||[]).find(x=>String(x.client_code||'').toUpperCase()===_cc)   // 🎯 المصدر الفعلي acc_client_due (يشمل كل العملاء)
+          ||((DATA&&DATA.due)||[]).find(x=>String(x.client_code||'').toUpperCase()===_cc)||{};
     chg('📅 تاريخ الاستحقاق', D(d.due_date), D(c.due_date));
     if('alarm_date' in c) chg('⏰ تاريخ التنبيه', D(d.alarm_date), D(c.alarm_date));
   } else if(c._profit_only){
