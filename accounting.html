@@ -483,7 +483,7 @@ table{font-weight:600}
       </div>
       <div class="panel"><h3>تفصيل كل الحجوزات والخدمات <span class="cnt" id="dt-cnt"></span></h3>
         <div class="tbl-wrap bf-scroll" id="dt-tbl"><table id="t-detail"><thead><tr>
-          <th>النوع</th><th>تاريخ الحجز</th><th>كود العميل</th><th>اسم العميل</th><th>الوكيل</th><th>الفندق / المسار / الخدمة</th><th>نوع الغرفة / التفاصيل</th><th>دخول</th><th>خروج</th><th>سعر البيع</th><th>رسوم الإلغاء</th><th>السعر المحجوز</th><th>إرجاع للعميل</th><th>الفرق ±</th><th>Booked by</th><th>Confirmed by</th><th>Conf No</th><th>ملاحظة</th><th>ربح/خسارة</th>
+          <th>النوع</th><th>تاريخ الحجز</th><th>كود العميل</th><th>اسم العميل</th><th>الوكيل</th><th>الفندق / المسار / الخدمة</th><th>نوع الغرفة / التفاصيل</th><th>دخول</th><th>خروج</th><th>سعر البيع<br><span style="font-size:9px;color:var(--muted)">عملة الوكيل</span></th><th>🪙 سعر المورد<br><span style="font-size:9px;color:var(--muted)">البيع÷الصرف · عملة المورّد</span></th><th>رسوم الإلغاء</th><th>السعر المحجوز<br><span style="font-size:9px;color:var(--muted)">فعلي · عملة المورّد</span></th><th>إرجاع للعميل</th><th>الفرق ±<br><span style="font-size:9px;color:var(--muted)">سعر المورد − المحجوز</span></th><th>Booked by</th><th>Confirmed by</th><th>Conf No</th><th>ملاحظة</th><th>ربح/خسارة</th>
         </tr></thead><tbody></tbody></table></div>
         <div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:6px 18px;font-size:14px" onclick="hScroll('dt-tbl',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:6px 18px;font-size:14px" onclick="hScroll('dt-tbl',1)">تمرير ▶▶</button></div>
       </div>
@@ -2440,17 +2440,21 @@ function renderDetail(){
   for(const h of (DATA.hotelBookings||[])){ const k=(h.client_code||'')+'|'+(h.check_in||''); if(h.room_type&&!roomMap[k])roomMap[k]=h.room_type; }
   // كل الخدمات بكل الأنواع (فندق/طيران/جولة/مورّد/إضافي/…) — نفس مصدر Booking Form
   let items=(DATA.serviceLines||[]).map(s=>{
-    const sell=Number(s.amount)||0, booked=(s.final_rate_booked!=null)?Number(s.final_rate_booked):null;
-    const diff=(sell>0&&booked!=null&&booked>0)?(sell-booked):null;
+    const sell=Number(s.amount)||0, rate=Number(s.currency_rate)||1;
+    const supPrice=rate?sell/rate:sell;                        // 🪙 سعر المورد = البيع ÷ الصرف (بعملة المورّد)
+    const booked=(s.final_rate_booked!=null)?Number(s.final_rate_booked):null;
+    const diff=(booked!=null&&booked>0)?(supPrice-booked):null;   // ✅ الفرق بعملة المورّد = سعر المورد − الحجز الفعلي (نفس العملة)
+    const sellCur=s.sell_currency||'';
+    const supCur=(s.currency&&String(s.currency).trim())||((typeof supplierCurrency==='function'&&(s.booked_from||s.supplier))?supplierCurrency(s.booked_from||s.supplier):'')||sellCur||'';
     const k=(s.client_code||'')+'|'+(s.check_in||'');
     return {type:(SVC[s.kind]||esc(s.kind||'')),code:s.client_code,name:nameMap[s.client_code]||'',agent:agentMap[s.client_code]||'',
       svc:s.name||'',detail:(s.kind==='hotel'?(roomMap[k]||s.detail||''):(s.detail||'')),ci:s.check_in||'',co:s.check_out||'',
-      sell:sell,cancel:s.cancel_charge,booked:s.final_rate_booked,refund:s.refund,diff:diff,
+      sell:sell,sellCur:sellCur,sup:(sell>0?supPrice:null),supCur:supCur,cancel:s.cancel_charge,booked:s.final_rate_booked,refund:s.refund,diff:diff,
       by:s.booked_by,conf:s.confirmed_by,cno:s.conf_no,note:s.charge_from||'',bdate:bdate[s.client_code]||''};});
   // عملاء لهم فاتورة مورّد بدون أي سطر خدمة (مثل C25014)
   const slCodes=new Set((DATA.serviceLines||[]).map(s=>(s.client_code||'').toUpperCase()));
   for(const si of (DATA.supplierInvoices||[])){ const c=(si.client_code||'').toUpperCase(); if(c&&!slCodes.has(c)){
-    items.push({type:'مورّد',code:si.client_code,name:si.client_name||nameMap[si.client_code]||'',agent:si.agent_name||agentMap[si.client_code]||'',svc:si.supplier_name||'',detail:'',ci:'',co:'',sell:null,cancel:null,booked:(Number(si.invoice_amount)||null),refund:null,diff:null,by:'',conf:'',cno:'',note:si.invoice_currency||'',bdate:si.invoice_date||''}); } }
+    items.push({type:'مورّد',code:si.client_code,name:si.client_name||nameMap[si.client_code]||'',agent:si.agent_name||agentMap[si.client_code]||'',svc:si.supplier_name||'',detail:'',ci:'',co:'',sell:null,sellCur:'',sup:null,supCur:si.invoice_currency||'',cancel:null,booked:(Number(si.invoice_amount)||null),refund:null,diff:null,by:'',conf:'',cno:'',note:si.invoice_currency||'',bdate:si.invoice_date||''}); } }
   if(q) items=items.filter(x=>(x.code||'').toLowerCase().includes(q)||(x.name||'').toLowerCase().includes(q)||(x.svc||'').toLowerCase().includes(q)||(x.cno||'').toLowerCase().includes(q));
   if(pl==='loss') items=items.filter(x=>Number(x.diff||0)< -0.5);
   if(pl==='profit') items=items.filter(x=>Number(x.diff||0)>0.5);
@@ -2461,12 +2465,14 @@ function renderDetail(){
     return '<tr'+(isLoss?' style="background:rgba(255,107,122,.10)"':'')+'>'+[
       x.type, esc(x.bdate||''), esc(x.code||''), esc(x.name||'')+clientNameWarn(x.code,_wm), esc(x.agent||''),
       esc(x.svc||''), esc(x.detail||''), esc(x.ci||''), esc(x.co||''),
-      '<span class="num">'+fmt(x.sell)+'</span>', x.cancel!=null?'<span class="num">'+fmt(x.cancel)+'</span>':'',
-      x.booked!=null?'<span class="num">'+fmt(x.booked)+'</span>':'', x.refund!=null?'<span class="num">'+fmt(x.refund)+'</span>':'', hasDiff?'<span class="num '+(dv<-0.5?'neg':'pos')+'">'+fmt(x.diff)+'</span>':'',
+      x.sell!=null?'<span class="num">'+fmt(x.sell)+(x.sellCur?' <span style="font-size:8px;color:var(--muted)">'+esc(x.sellCur)+'</span>':'')+'</span>':'',
+      x.sup!=null?'<span class="num">'+fmt(x.sup)+(x.supCur?' <span style="font-size:8px;color:var(--accent)">'+esc(x.supCur)+'</span>':'')+'</span>':'',
+      x.cancel!=null?'<span class="num">'+fmt(x.cancel)+'</span>':'',
+      x.booked!=null?'<span class="num">'+fmt(x.booked)+(x.supCur?' <span style="font-size:8px;color:var(--accent)">'+esc(x.supCur)+'</span>':'')+'</span>':'', x.refund!=null?'<span class="num">'+fmt(x.refund)+'</span>':'', hasDiff?'<span class="num '+(dv<-0.5?'neg':'pos')+'">'+fmt(x.diff)+(x.supCur?' <span style="font-size:8px;color:var(--muted)">'+esc(x.supCur)+'</span>':'')+'</span>':'',
       esc(x.by||''), esc(x.conf||''), esc(x.cno||''), esc(x.note||''),
       hasDiff?(isLoss?'<span class="pill cancel">خسارة</span>':'<span class="pill active">ربح/توفير</span>'):''
     ].map(c=>'<td>'+c+'</td>').join('')+'</tr>';
-  }).join('')||rw(Array(19).fill('').map((_,i)=>i===0?'لا نتائج':''));
+  }).join('')||rw(Array(20).fill('').map((_,i)=>i===0?'لا نتائج':''));
   $('dt-cnt').textContent=items.length+' خدمة';
 }
 // ---- تقرير الموظفين مع فلترة (التجميع: Confirmed by أو Booked by · نوع العمل · تاريخ الحجز) ----
