@@ -242,7 +242,8 @@ Deno.serve(async (req: Request) => {
         let inSar = num(c.in_sar), outSar = num(c.out_sar);
         if (inSar == null && inRaw != null && rate != null) inSar = inRaw * rate;
         if (outSar == null && outRaw != null && rate != null) outSar = outRaw * rate;
-        const { data: row, error: ie } = await supabase.from('acc_banks_cash').insert({ tx_date: c.tx_date || null, in_raw: inRaw, out_raw: outRaw, bank_name: c.bank_name, bank_ref: c.bank_ref || null, channel: c.channel || null, description: c.description || null, details: c.details || null, more_details: c.more_details || null, note: c.note || null, currency: c.currency || null, currency_rate: rate, in_sar: inSar, out_sar: outSar, source: 'dashboard' }).select().single();
+        const omrVal = (c.omr_value != null && String(c.omr_value).trim() !== '') ? num(c.omr_value) : null;   // 💠 القيمة العمانية الفعلية للسحب الأجنبي (اختياري)
+        const { data: row, error: ie } = await supabase.from('acc_banks_cash').insert({ tx_date: c.tx_date || null, in_raw: inRaw, out_raw: outRaw, bank_name: c.bank_name, bank_ref: c.bank_ref || null, channel: c.channel || null, description: c.description || null, details: c.details || null, more_details: c.more_details || null, note: c.note || null, currency: c.currency || null, currency_rate: rate, in_sar: inSar, out_sar: outSar, omr_value: omrVal, source: 'dashboard' }).select().single();
         if (ie) return J({ error: ie.message }, 400);
         result = { bank_cash: row?.id };
       }

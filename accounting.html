@@ -709,8 +709,9 @@ table{font-weight:600}
           <div class="fld"><label>البنك / البطاقة <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">من القائمة المُدارة فقط</span></label><input id="bca-bank" list="bca-banklist" autocomplete="off" oninput="if(typeof bcXferBankPick==='function')bcXferBankPick()" placeholder="اختاري من القائمة…" style="background:#fff;color:var(--txt)"><datalist id="bca-banklist"></datalist></div>
           <div class="fld"><label>داخل (+)</label><input type="number" id="bca-in" placeholder="0"></div>
           <div class="fld"><label>خارج (−)</label><input type="number" id="bca-out" placeholder="0"></div>
-          <div class="fld"><label>العملة</label><input id="bca-cur" list="bc-cur-list" autocomplete="off" placeholder="OMR / USD…" style="background:#fff;color:var(--txt)"></div>
+          <div class="fld"><label>العملة</label><input id="bca-cur" list="bc-cur-list" autocomplete="off" oninput="bcaOmrRate()" placeholder="OMR / USD…" style="background:#fff;color:var(--txt)"></div>
           <div class="fld"><label>سعر الصرف (1 وحدة = ؟ ر.س)</label><input type="number" id="bca-rate" step="0.0001" placeholder="مثال 9.5"></div>
+          <div class="fld" style="min-width:240px"><label>💠 السحب بالعماني الفعلي <span style="font-size:9px;color:#d98a00">للعملة الأجنبية — من الكشف</span></label><input type="number" id="bca-omr" step="0.001" placeholder="القيمة العمانية المخصومة (اتركيها فارغة = معلّقة)" oninput="bcaOmrRate()"><span id="bca-omr-rate" style="font-size:10px;color:var(--accent);display:block;margin-top:2px"></span></div>
           <div class="fld"><label>المرجع البنكي <span style="color:var(--red)">*</span> <span style="font-size:9px;color:#d98a00">إجباري</span></label><input id="bca-ref"></div>
           <div class="fld"><label>📡 القناة <span style="color:var(--red)">*</span> <span style="font-size:9px;color:var(--muted)">أول الإدخال — تفلتر الوصف</span></label><select id="bca-channel" onchange="bcFillDescByChannel()" style="background:#fff;color:var(--txt)"></select></div>
           <div class="fld"><label>الوصف <span style="color:var(--red)">*</span></label><select id="bca-desc" onchange="bcFillAddDetails()" style="background:#fff;color:var(--txt)"></select></div>
@@ -4235,7 +4236,7 @@ function bankTxAll(forRecon){
   }
   const base=(DATA.bankTx||[]).filter(x=>{ if(!forRecon||x.source!=='dashboard')return true; const rf=String(x.bank_ref||'').trim().toUpperCase(); return !(rf&&_dropRefs.has(rf)); });
   (DATA.banksCash||[]).forEach(x=>{ if(x.source!=='dashboard')return; const inA=Number(x.in_raw||0), outA=Number(x.out_raw||0); if(!(inA>0)&&!(outA>0))return;
-    base.push({ id:'bc-'+x.id, bank_name:x.bank_name||'', amount_in:inA, amount_out:outA, tx_date:x.tx_date||'', bank_ref:x.bank_ref||'', client_code:'', currency:x.currency||'', note:[x.description,x.details,x.more_details,x.note].filter(Boolean).join(' · '), source:'dashboard', created_at:x.created_at||'', _cash:true });
+    base.push({ id:'bc-'+x.id, bank_name:x.bank_name||'', amount_in:inA, amount_out:outA, tx_date:x.tx_date||'', bank_ref:x.bank_ref||'', client_code:'', currency:x.currency||'', omr_value:(x.omr_value!=null&&x.omr_value!==''?x.omr_value:null), note:[x.description,x.details,x.more_details,x.note].filter(Boolean).join(' · '), source:'dashboard', created_at:x.created_at||'', _cash:true });
   });
   // انعكاس دفعات Booking Form عبر البطاقات — للمُدخَل من الداشبورد فقط (التاريخية مسجّلة في شيت Bank Transaction، فلا تُكرّر)
   const _bookDate={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(c&&r.booking_date){ const x=String(r.booking_date).slice(0,10); if(!_bookDate[c]||x<_bookDate[c])_bookDate[c]=x; } });
@@ -4292,9 +4293,9 @@ function cardTxns(){ const om=cardOmrMap();
   const _hotelsN=((DATA&&DATA.lists)||[]).filter(l=>l.category==='hotels_system').map(l=>_nz(l.value)).filter(h=>h.length>4);
   const _supsN=((DATA&&DATA.lists)||[]).filter(l=>l.category==='suppliers').map(l=>_nz(l.value)).filter(s=>s.length>4);
   const _sectionFromNote=t=>{ const nt=_nz(t); if(!nt)return ''; if(_hotelsN.some(h=>nt.includes(h)))return '🏨 الفنادق'; if(_supsN.some(s=>nt.includes(s)))return '🏢 المورّدين'; return ''; };
-  return bankTxAll().filter(x=>isCardBank(x.bank_name)).map(x=>{
+  return bankTxAll().filter(x=>{ const bc=String((typeof bankCur==='function'?bankCur(x.bank_name):'OMR')||'OMR').toUpperCase(); const c=String(x.currency||'').toUpperCase().trim(); return isCardBank(x.bank_name) || (x._cash && c && c!==bc); }).map(x=>{   // البطاقات + حركات Cash in/Out الأجنبية الجديدة فقط
     const dir=Number(x.amount_out||0)>0.005?'out':(Number(x.amount_in||0)>0.005?'in':''); const orig=dir==='out'?Number(x.amount_out||0):Number(x.amount_in||0);
-    const cur=String(x.currency||'').toUpperCase().trim(); const key=String(x.id); const ov=om[key]; const isForeign=cur&&cur!=='OMR';
+    const cur=String(x.currency||'').toUpperCase().trim(); const key=String(x.id); const ov=(om[key]!=null)?om[key]:((x.omr_value!=null&&x.omr_value!=='')?Number(x.omr_value):null); const _bc=String((typeof bankCur==='function'?bankCur(x.bank_name):'OMR')||'OMR').toUpperCase(); const isForeign=cur&&cur!==_bc;
     let omr,status; if(ov!=null){ omr=ov; status='done'; } else if(!isForeign){ omr=orig; status='omr'; } else { omr=null; status='missing'; }
     // 🧭 المصدر الحقيقي: للمُدخَل من الداشبورد حسب العلامة؛ ولحركات الشيت حسب src_sheet ثم الاستنتاج من الملاحظة (اسم فندق/مورّد) — قبل تسجيله بالكشف البنكي
     const idk=String(x.id||''); const ssh=String(x.src_sheet||'');
@@ -4326,8 +4327,8 @@ function renderVisaCard(){ const box=$('p-visacard'); if(!box) return;
   window._visaRows=rows;   // للنقر على المصدر (visaGoto بالفهرس، يتجنّب مشاكل الاقتباس بالأسماء)
   const badge=s=> s==='missing'?'<span style="background:#d11;color:#fff;font-size:9px;font-weight:800;padding:1px 7px;border-radius:8px">⚠️ ناقص العماني</span>' : s==='done'?'<span style="background:#0e9d6a;color:#fff;font-size:9px;font-weight:700;padding:1px 7px;border-radius:8px">✅ مكتمل</span>' : '<span style="background:#e0f2fe;color:#0369a1;font-size:9px;font-weight:700;padding:1px 7px;border-radius:8px">عماني أصلاً</span>';
   const inp=r=>'<input type="number" step="any" value="'+(r.omr!=null?r.omr:'')+'" placeholder="العماني المخصوم" onblur="saveCardOmr(\''+esc(r.key)+'\',this.value)" style="width:120px;padding:3px'+(r.status==='missing'?';border:1px solid #d11;background:rgba(209,17,17,.08)':'')+'">';
-  box.innerHTML='<div class="panel" style="margin-bottom:12px"><h3 style="margin-top:0">💳 Visa Card — حركات البطاقة الائتمانية وقيمها بالريال العماني</h3>'+
-    '<div style="font-size:12.5px;color:var(--muted);line-height:1.8;margin-bottom:8px">البطاقة تُخصم بالعماني دائماً. الحركات الأجنبية (MYR/USD) تحتاج <b>إدخال المبلغ العماني المخصوم فعليّاً</b> من رسالة البنك — أنتِ أو المحاسب — لتنعكس في مطابقة كشف البطاقة. الحركات العمانية تتطابق تلقائياً.</div>'+
+  box.innerHTML='<div class="panel" style="margin-bottom:12px"><h3 style="margin-top:0">💳 Visa Card — كل الحركات بعملة غير عملة البنك (بطاقات وبنوك) وقيمها بالعماني</h3>'+
+    '<div style="font-size:12.5px;color:var(--muted);line-height:1.8;margin-bottom:8px">أي حركة بعملة <b>مختلفة عن عملة الحساب</b> (MYR/USD…) تظهر هنا وتحتاج <b>إدخال المبلغ العماني المخصوم فعليّاً</b> من كشف/رسالة البنك — أنتِ أو المحاسب. حتى تُدخَل، تبقى معلّقة: تظهر في الكشف لكن <b>لا تؤثر على الرصيد</b>. الحركات بنفس عملة الحساب تتطابق تلقائياً.</div>'+
     '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px;margin-bottom:10px"><span>الإجمالي: <b>'+rows.length+'</b></span><span style="color:#d11">⚠️ ناقصة العماني: <b>'+missN+'</b></span><span style="color:#0e9d6a">✅ مكتملة: <b>'+doneN+'</b></span>'+
     ' <button id="visa-missbtn" class="btn ghost" onclick="toggleVisaMiss()" style="border-color:#d11;color:#d11;font-weight:700;padding:3px 12px'+(VISA_MISSONLY?';background:rgba(209,17,17,.14)':'')+'">⚠️ الناقصة فقط</button></div>'+
     '<div class="tbl-wrap bf-scroll" style="max-height:520px"><table style="font-size:12px;white-space:nowrap"><thead><tr><th>التاريخ</th><th>🧭 المصدر</th><th>البطاقة</th><th>الوصف</th><th>المبلغ الأصلي</th><th>العملة</th><th>الاتجاه</th><th>💰 العماني المخصوم</th><th>الحالة</th></tr></thead><tbody>'+
@@ -5076,8 +5077,10 @@ function renderBankDetail(){
   const _om=(typeof cardOmrMap==='function')?cardOmrMap():{};
   const _isCardAcct=(typeof isCardBank==='function'&&isCardBank(bank));
   const _acctCur=String(cur||'').toUpperCase();
-  const cardAdj=(x)=>{ let i=Number(x.amount_in||0), o=Number(x.amount_out||0); const rc=String(x.currency||'').toUpperCase(); const foreign=!!(_isCardAcct&&rc&&_acctCur&&rc!==_acctCur); const hasOmr=(_om[String(x.id)]!=null); const rawVal=(o>0.005?o:i); if(_isCardAcct&&hasOmr){ const v=Number(_om[String(x.id)]); if(o>0.005)o=v; else if(i>0.005)i=v; } return {in:i,out:o,foreign,rawCur:rc,rawVal,hasOmr}; };
-  let ti=0,to=0; tx.forEach(x=>{ const a=cardAdj(x); ti+=a.in; to+=a.out; }); const net=ti-to;
+  // 🪙 أي حركة بعملة غير عملة البنك = أجنبية (لكل البنوك، لا البطاقات فقط). العماني الفعلي من card_omr (فيزا كارد) أو من الحقل omr_value (نموذج الكاش). الأجنبي بلا عماني = معلّق: يظهر لكن لا يؤثر على الرصيد.
+  const _omrOf=(x)=>{ const v=_om[String(x.id)]; if(v!=null)return Number(v); if(x.omr_value!=null&&x.omr_value!=='')return Number(x.omr_value); return null; };
+  const cardAdj=(x)=>{ let i=Number(x.amount_in||0), o=Number(x.amount_out||0); const rc=String(x.currency||'').toUpperCase(); const foreign=!!(rc&&_acctCur&&rc!==_acctCur&&(_isCardAcct||x._cash)); const omrV=_omrOf(x); const hasOmr=(omrV!=null); const rawVal=(o>0.005?o:i); if(foreign&&hasOmr){ if(o>0.005)o=omrV; else if(i>0.005)i=omrV; } const pendingFx=foreign&&!hasOmr; return {in:i,out:o,foreign,rawCur:rc,rawVal,hasOmr,pendingFx}; };   // النطاق: البطاقات (كالسابق) + حركات Cash in/Out الجديدة فقط — لا يمسّ التاريخي من الشيت
+  let ti=0,to=0; tx.forEach(x=>{ const a=cardAdj(x); if(a.pendingFx)return; ti+=a.in; to+=a.out; }); const net=ti-to;   // ⏳ الأجنبي المعلّق (بلا عماني) لا يدخل الصافي
   const agMap={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(c&&r.agent_name&&!agMap[c])agMap[c]=r.agent_name; });
   // تاريخ دفع كل حركة من First Client Data بمطابقة كود الدفعة (مع override المُدخل من الداشبورد)
   const fcdDateByCode={}; (DATA.fcd||[]).forEach(r=>{ if(r.payment_code && !fcdDateByCode[r.payment_code]) fcdDateByCode[r.payment_code]=String(r.payment_date||'').slice(0,10); });
@@ -5091,7 +5094,7 @@ function renderBankDetail(){
       const hint='<div style="font-size:10.5px;color:var(--muted);margin-top:3px">💡 يُحسب مثل الحساب العادي = الأساس + الداخل − الخارج (بعد تاريخ الأساس). أدخلي «الأساس» من آخر رسالة/رصيد للبنك، وحدّثيه عند كل رصيد جديد.</div>';
       if(!rb) return '<div style="margin-top:8px;padding:8px 12px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.35);border-radius:8px"><span style="font-weight:800;color:#7c3aed">💠 الرصيد الفعلي (من البنك):</span> <span style="color:var(--muted)">— أدخلي الأساس مرّة وحدة ويتحدّث لحاله</span>'+btn+hint+'</div>';
       const _om=(typeof cardOmrMap==='function'?cardOmrMap():{}); let pOut=0,pIn=0,pn=0;
-      (tx||[]).forEach(x=>{ const dt=String(x.tx_date||'').slice(0,10); if(!dt||!(dt>rb.date))return; let o=Number(x.amount_out||0),i=Number(x.amount_in||0); if(isC&&_om[String(x.id)]!=null){const v=Number(_om[String(x.id)]);if(o>0.005)o=v;else if(i>0.005)i=v;} pOut+=o;pIn+=i;pn++; });
+      (tx||[]).forEach(x=>{ const dt=String(x.tx_date||'').slice(0,10); if(!dt||!(dt>rb.date))return; const rc=String(x.currency||'').toUpperCase(); const omrV=(_om[String(x.id)]!=null)?Number(_om[String(x.id)]):((x.omr_value!=null&&x.omr_value!=='')?Number(x.omr_value):null); const foreign=!!(rc&&_acctCur&&rc!==_acctCur&&(isC||x._cash)); if(foreign&&omrV==null)return; /* ⏳ أجنبي معلّق (بطاقة أو كاش جديد): لا يؤثر على الرصيد الفعلي */ let o=Number(x.amount_out||0),i=Number(x.amount_in||0); if(foreign&&omrV!=null){if(o>0.005)o=omrV;else if(i>0.005)i=omrV;} pOut+=o;pIn+=i;pn++; });
       const live=rb.amount+pIn-pOut; const moved=(pn>0);   // 🔄 كل الحسابات (بما فيها البطاقات) تُعامَل كحساب عادي: الداخل يزيد الرصيد، الخارج/الشراء ينقصه
       return '<div style="margin-top:8px;padding:8px 12px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.35);border-radius:8px">'+
         '<span style="font-weight:800;color:#7c3aed">💠 الرصيد الفعلي '+(moved?'<span style="font-size:9px">(محدّث تلقائياً)</span>':'')+':</span> <b style="color:#7c3aed;font-size:15px">'+fmt(live)+' '+esc(cur)+'</b>'+btn+
@@ -5102,11 +5105,12 @@ function renderBankDetail(){
     '<div class="tbl-wrap bf-scroll" id="bnk-tbl"><table style="font-size:11px;white-space:nowrap"><thead><tr>'+H.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+
     (tx.length?tx.map(x=>{ const qd=((x.client_name||'')+' '+(x.client_code||'')+' '+(x.bank_ref||'')+' '+(x.note||'')).toLowerCase();
       const adj=cardAdj(x);
-      const pend=!!x._pending; const outV=pend?(x._pendingAmount||0):adj.out; const inV=adj.in;
+      const pendFx=!!adj.pendingFx;   // ⏳ أجنبي بلا عماني = معلّق (ظاهر لكن خارج الرصيد)
+      const pend=(!!x._pending)||pendFx; const outV=(x._pending)?(x._pendingAmount||0):adj.out; const inV=adj.in;
       const gray='#b7bec8';
       const curBadge=adj.foreign?(adj.hasOmr
         ? '<span style="font-size:8.5px;background:rgba(14,157,106,.15);color:#0e7c50;font-weight:700;padding:0 5px;border-radius:6px;margin-inline-end:4px" title="القيمة المعروضة عمانية (مخصومة). الأصل: '+fmt(adj.rawVal)+' '+esc(adj.rawCur)+'">🔁 أصلها '+fmt(adj.rawVal)+' '+esc(adj.rawCur)+'</span>'
-        : '<span style="font-size:8.5px;background:rgba(217,138,0,.18);color:#b8860b;font-weight:700;padding:0 5px;border-radius:6px;margin-inline-end:4px" title="حركة بعملة '+esc(adj.rawCur)+' والحساب بالعماني. أدخلي قيمتها العمانية المخصومة في تبويب «فيزا كارد» لتظهر بالعماني وتُطابق كشف البطاقة">⚠️ بالـ'+esc(adj.rawCur)+' — أدخلي العماني في فيزا كارد</span>')
+        : '<span style="font-size:8.5px;background:rgba(217,138,0,.18);color:#b8860b;font-weight:700;padding:0 5px;border-radius:6px;margin-inline-end:4px" title="حركة بعملة '+esc(adj.rawCur)+' وعملة البنك مختلفة. القيمة معروضة لكن لا تؤثر على الرصيد حتى تُدخَل قيمتها العمانية المخصومة (من نموذج الكاش أو تبويب «فيزا كارد»)">⏳ بالـ'+esc(adj.rawCur)+' — بانتظار القيمة بالعماني</span>')
         :'';
       const rStyle=pend?' data-pending="1" style="color:'+gray+';background:rgba(150,160,175,.06)"':(adj.foreign&&!adj.hasOmr?' style="background:rgba(217,138,0,.05)"':'');
       const miss='⚠️ ناقص: '+esc((x._missing||[]).join(' + '))+' — لن ينعكس على الكشف حتى إكماله';
@@ -5465,6 +5469,8 @@ function renderBanksCashDetail(){
   bcRefreshOpenMulti();
 }
 function bcClear(){ ['bc-bank','bc-q','bc-from','bc-to','bc-desc-search','bc-details-search'].forEach(id=>{const e=$(id);if(e)e.value='';}); const c=$('bc-cur');if(c)c.value=''; bcSelDesc.clear(); bcSelDetails.clear(); bcUpdMultiBtn('desc'); bcUpdMultiBtn('details'); ['bc-desc-panel','bc-details-panel'].forEach(id=>{const p=$(id);if(p)p.style.display='none';}); renderBanksCashDetail(); }
+// 💠 عرض سعر الصرف الفعلي عند إدخال القيمة العمانية للسحب الأجنبي (المبلغ الأجنبي ÷ العماني)
+function bcaOmrRate(){ const el=$('bca-omr-rate'); if(!el)return; const out=Number(($('bca-out')||{}).value||0), inn=Number(($('bca-in')||{}).value||0); const amt=out>0?out:inn; const omr=Number(($('bca-omr')||{}).value||0); const cur=((($('bca-cur')||{}).value||'').trim().toUpperCase())||'الأجنبية'; if(amt>0&&omr>0&&cur!=='OMR'){ el.textContent='سعر الصرف الفعلي: 1 OMR = '+(amt/omr).toFixed(4)+' '+cur+'  ·  1 '+cur+' = '+(omr/amt).toFixed(4)+' OMR'; el.style.color='var(--green)'; } else if(omr>0&&cur==='OMR'){ el.textContent='العملة عمانية — لا حاجة لقيمة إضافية'; el.style.color='var(--muted)'; } else { el.textContent=''; } }
 async function addBankCash(){
   const bank=(($('bca-bank')||{}).value||'').trim(); const msg=$('bc-add-msg');
   if(!bank){ if(msg)msg.textContent='⚠️ لازم تحددي البنك'; return; }
@@ -5476,7 +5482,7 @@ async function addBankCash(){
   if(!_desc){ if(msg)msg.textContent='⚠️ لازم اختيار الوصف من القائمة'; return; }
   if(bclDets(_desc).length && !_det){ if(msg)msg.textContent='⚠️ لازم اختيار التفاصيل من القائمة'; return; }
   if(_desc && _det && bclSubs(_desc,_det).length && !_more){ if(msg)msg.textContent='⚠️ لازم اختيار «تفاصيل أكثر» من القائمة'; return; }
-  const p={ tx_date:$('bca-date').value||null, in_raw:$('bca-in').value||null, out_raw:$('bca-out').value||null, bank_name:bank, bank_ref:$('bca-ref').value||null, channel:_channel||null, description:$('bca-desc').value||null, details:$('bca-details').value||null, more_details:_more||null, note:$('bca-note').value||null, currency:(($('bca-cur').value||'').trim())||null, currency_rate:$('bca-rate').value||null };
+  const p={ tx_date:$('bca-date').value||null, in_raw:$('bca-in').value||null, out_raw:$('bca-out').value||null, bank_name:bank, bank_ref:$('bca-ref').value||null, channel:_channel||null, description:$('bca-desc').value||null, details:$('bca-details').value||null, more_details:_more||null, note:$('bca-note').value||null, currency:(($('bca-cur').value||'').trim())||null, currency_rate:$('bca-rate').value||null, omr_value:(($('bca-omr')||{}).value||'').trim()||null };
   // 📋 تأكيد إلزامي بالقيم قبل الإرسال (الإضافة لا تنعكس إلا بموافقة الأدمن)
   const cur=p.currency||''; const inV=Number(p.in_raw||0), outV=Number(p.out_raw||0);
   const confirmMsg='📋 تأكيد إضافة حركة كاش — راجعي القيم جيداً:\n\n'+
@@ -5496,7 +5502,7 @@ async function addBankCash(){
     const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'request_cash_add',payload:p})});
     const d=await r.json();
     if(d.error){ if(msg)msg.textContent='❌ '+d.error; return; }
-    ['bca-in','bca-out','bca-ref','bca-channel','bca-desc','bca-details','bca-more','bca-note'].forEach(i=>{const e=$(i);if(e)e.value='';}); _xferPrefill=null;
+    ['bca-in','bca-out','bca-ref','bca-channel','bca-desc','bca-details','bca-more','bca-note','bca-omr'].forEach(i=>{const e=$(i);if(e)e.value='';}); { const _re=$('bca-omr-rate'); if(_re)_re.textContent=''; } _xferPrefill=null;
     if(msg)msg.textContent='✅ أُرسلت للأدمن للموافقة — لن تنعكس على النظام حتى يعتمدها';
     await load();
   }catch(e){ if(msg)msg.textContent='❌ '+e.message; }
