@@ -3555,6 +3555,11 @@ function cliEditDiff(m){
           ||((DATA&&DATA.due)||[]).find(x=>String(x.client_code||'').toUpperCase()===_cc)||{};
     chg('📅 تاريخ الاستحقاق', D(d.due_date), D(c.due_date));
     if('alarm_date' in c) chg('⏰ تاريخ التنبيه', D(d.alarm_date), D(c.alarm_date));
+  } else if(c._paydate_only){
+    const pc=String(c.payment_code||'');
+    let oldD=(typeof PAYDATE_OVR!=='undefined' && PAYDATE_OVR[pc]!=null)?String(PAYDATE_OVR[pc]).slice(0,10):'';   // التاريخ الفعّال القديم (override إن وُجد)
+    if(!oldD){ const r=((DATA&&DATA.fcd)||[]).find(x=>String(x.payment_code||'')===pc)||{}; oldD=D(r.payment_date); }
+    chg('📅 تاريخ الدفع'+(pc?(' ('+esc(pc)+')'):''), oldD, D(c.payment_date));
   } else if(c._profit_only){
     chg('📈 الربح', c._old_profit, c.new_profit, true);
   } else {
