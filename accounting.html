@@ -3544,6 +3544,32 @@ function bookingsMissingFields(){
   const DIS=dismissedSet();
   return out.filter(a=>!DIS.has('missfields:'+String(a.code||'').toUpperCase()));   // 🗑️ أخفتها المالكة
 }
+// 📋 تفصيل التغيير المطلوب في طلب تعديل عميل: يعرض القيمة القديمة ← الجديدة لكل حقل تغيّر (خاصة تاريخ الاستحقاق)
+function cliEditDiff(m){
+  const c=(m&&m.payload)||{}; const rows=[]; const D=(v)=>String(v||'').slice(0,10);
+  const cut=(v)=>{ v=String(v==null?'':v); return v.length>28?(v.slice(0,28)+'…'):v; };
+  const chg=(lbl,o,n,isNum)=>{ if(n===undefined||n===null||n==='')return; const oo=(o===undefined||o===null||o==='')?null:o; const same=isNum?(Number(oo||0)===Number(n||0)):(String(oo==null?'':oo)===String(n)); if(same)return; const of=(oo==null)?'—':(isNum?fmt(oo):esc(cut(oo))); const nf=isNum?fmt(n):esc(cut(n)); rows.push('<div>'+lbl+': <span style="color:#d11;text-decoration:line-through">'+of+'</span> ← <b style="color:#0e9d6a">'+nf+'</b></div>'); };
+  if(c._due_only){
+    const d=((DATA&&DATA.due)||[]).find(x=>String(x.client_code||'').toUpperCase()===String(c.client_code||'').toUpperCase())||{};
+    chg('📅 تاريخ الاستحقاق', D(d.due_date), D(c.due_date));
+    if('alarm_date' in c) chg('⏰ تاريخ التنبيه', D(d.alarm_date), D(c.alarm_date));
+  } else if(c._profit_only){
+    chg('📈 الربح', c._old_profit, c.new_profit, true);
+  } else {
+    const r=((DATA&&DATA.fcd)||[]).find(x=>String(x.id)===String(c.entry_id))||{};
+    chg('💰 التكلفة', r.cost, c.cost, true);
+    chg('📈 الربح', r.profit, c.profit, true);
+    chg('💵 المدفوع', r.amount_paid, c.amount_paid, true);
+    chg('💱 العملة', r.currency, c.currency);
+    chg('📅 تاريخ الدفع', D(r.payment_date), D(c.payment_date));
+    chg('📅 تاريخ الوصول', D(r.arrival_date), D(c.arrival_date));
+    chg('🗓️ تاريخ الحجز', D(r.booking_date), D(c.booking_date));
+    chg('🏦 البنك', r.bank_name, c.bank_name);
+    chg('🏷️ المرجع البنكي', r.bank_ref, c.bank_ref);
+    chg('✅ المؤكِّد', r.confirmed_by, c.confirmed_by);
+  }
+  return rows.length? '<div style="margin-top:4px;font-size:10.5px;line-height:1.85;background:rgba(14,157,106,.06);border-radius:6px;padding:4px 7px">'+rows.join('')+'</div>' : '';
+}
 function renderAlerts(){
   const box=$('alerts-box'); if(!box) return;
   const all=(DATA&&DATA.alerts)||[];
@@ -3756,7 +3782,7 @@ function renderAlerts(){
     if(pendCliEdit.length){
       n+='<div class="panel" style="border:1px solid #0e9d6a;background:rgba(14,157,106,.07);margin-bottom:14px"><h3 style="color:#0e9d6a;margin-top:0">✏️ طلبات تعديل بيانات/دفعات عملاء ('+pendCliEdit.length+') — تحتاج قرارك</h3>'+
         '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>التفاصيل</th><th>📝 السبب</th><th>مقدّم الطلب</th><th>التاريخ</th><th>القرار</th></tr></thead><tbody>'+
-        pendCliEdit.map(m=>{ const c=m.payload||{}; return '<tr><td style="font-size:11px">'+esc(m.summary||'')+'</td><td style="font-size:12px;font-weight:700;color:#0e9d6a">'+esc(c.reason||m.note||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(c.by||'—')+'</td><td>'+esc(String(m.created_at||'').slice(0,10))+'</td><td style="white-space:nowrap"><button class="btn green" style="padding:2px 9px;font-size:11px" onclick="resolveCliEdit('+m.id+',\'approve\')">✅ موافقة وتعديل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="resolveCliEdit('+m.id+',\'reject\')">❌ رفض</button></td></tr>'; }).join('')+
+        pendCliEdit.map(m=>{ const c=m.payload||{}; return '<tr><td style="font-size:11px">'+esc(m.summary||'')+cliEditDiff(m)+'</td><td style="font-size:12px;font-weight:700;color:#0e9d6a">'+esc(c.reason||m.note||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(c.by||'—')+'</td><td>'+esc(String(m.created_at||'').slice(0,10))+'</td><td style="white-space:nowrap"><button class="btn green" style="padding:2px 9px;font-size:11px" onclick="resolveCliEdit('+m.id+',\'approve\')">✅ موافقة وتعديل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="resolveCliEdit('+m.id+',\'reject\')">❌ رفض</button></td></tr>'; }).join('')+
         '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">ℹ️ الموافقة تطبّق التعديل على السطر. الرفض يُبقي القيم كما هي.</div></div>';
     }
     if(pendRefEdit.length){
