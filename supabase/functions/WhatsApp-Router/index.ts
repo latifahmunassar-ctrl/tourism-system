@@ -1413,9 +1413,20 @@ async function handleNewLeadIntake(args: {
   const adRef = (sessRes.data as { ad_referral?: Record<string, unknown> | null } | null)?.ad_referral || null;
   const prevData = (prev || {}) as Record<string, unknown>;
   if (adRef && !prevData.ad_program_shown) {
-    const adCode = extractProgramCode(
+    // (١) الكود من الكابشن/العنوان. (٢) وإلا: ربط الإعلان بمُعرّفه source_id (للإعلانات
+    //     المُطلَقة بلا كود — تُربَط مرة من الداشبورد فتشتغل تلقائياً لكل عملائها).
+    let adCode = extractProgramCode(
       String((adRef as Record<string, unknown>).body || "") + " " + String((adRef as Record<string, unknown>).headline || ""),
     );
+    if (!adCode) {
+      const srcId = String((adRef as Record<string, unknown>).source_id || "").trim();
+      if (srcId) {
+        try {
+          const { data: linkRow } = await supabase.from("wa_settings").select("value").eq("key", "ad_link:" + srcId).maybeSingle();
+          adCode = String((linkRow as { value?: { code?: string } } | null)?.value?.code || "").trim().toUpperCase();
+        } catch (_e) { /* */ }
+      }
+    }
     if (adCode) {
       const { data: prog } = await supabase.from("programs")
         .select("destination, persons, total_group, raw").eq("code", adCode).maybeSingle();
@@ -5246,6 +5257,26 @@ Deno.serve(async (req) => {
       const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       await supabase.from("wa_settings").delete().eq("key", "ad_pdf:" + code);
       return new Response(JSON.stringify({ ok: true, code }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // ربط إعلان (بمُعرّفه source_id) بكود برنامج — للإعلانات المُطلَقة بلا كود في الكابشن.
+  // طلال يرسل ملف/تفاصيل ذلك الكود تلقائياً لأي عميل يجي من هذا الإعلان. wa_settings = "ad_link:<source_id>".
+  if (url.searchParams.get("admin_action") === "set_ad_link") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const p = await req.json();
+      const sourceId = String(p.source_id || "").trim();
+      const code = String(p.code || "").trim().toUpperCase();
+      if (!sourceId || !code) return new Response(JSON.stringify({ error: "source_id & code required" }), { status: 400, headers: jsonCors });
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await supabase.from("wa_settings").upsert(
+        { key: "ad_link:" + sourceId, value: { code, saved_at: new Date().toISOString() } },
+        { onConflict: "key" },
+      );
+      return new Response(JSON.stringify({ ok: true, source_id: sourceId, code }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }

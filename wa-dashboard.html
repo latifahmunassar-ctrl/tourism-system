@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20260908a -->
+<!-- APPVER:20260913b -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1842,7 +1842,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260908a";
+    const APPVER = "20260913b";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4586,6 +4586,18 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           .finally(() => clearTimeout(tm));
       });
     }
+    // ربط الإعلان الحالي ببرنامج بمُعرّفه (source_id) — طلال يرسله تلقائياً لعملاء هذا الإعلان.
+    async function linkAdToProgram(sourceId) {
+      if (!sourceId) return;
+      const code = (prompt("الصقي كود البرنامج لربطه بهذا الإعلان (طلال بيرسله تلقائياً لأي عميل يجي منه، بدون كود في الكابشن):", "") || "").trim().toUpperCase();
+      if (!code) return;
+      try {
+        const res = await fetch(BASE + "?admin_action=set_ad_link", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ source_id: sourceId, code: code }) });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || "فشل الربط");
+        alert("✅ رُبط هذا الإعلان بالبرنامج " + code + ".\nمن الحين طلال بيرسل الملف تلقائياً لأي عميل يجي من هذا الإعلان.\n(تأكدي إن الكود مربوط بملف من المساعد السياحي.)");
+      } catch (e) { alert("❌ " + (e && e.message ? e.message : e)); }
+    }
     function adBannerHtml(ref) {
       if (!ref || typeof ref !== "object") return "";
       const src = ref.source_type === "post" ? "منشور" : "إعلان";
@@ -4607,7 +4619,10 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         ? `<a href="${escapeHtml(openUrl || thumb)}" target="_blank" rel="noopener" style="display:block; margin-top:6px;"><img src="${escapeHtml(thumb)}" alt="صورة الإعلان" style="max-width:100%; max-height:240px; border-radius:8px; border:1px solid #fbcfe8;" onerror="this.style.display='none'"/>${isVideo ? '<div style="font-size:11px; color:#be185d; margin-top:2px;">🎬 إعلان فيديو — اضغطي لفتح الأصلي</div>' : ''}</a>`
         : "";
       const link = openUrl ? `<div style="margin-top:6px;"><a href="${escapeHtml(openUrl)}" target="_blank" rel="noopener" style="color:#1e40af; font-weight:700; word-break:break-all;">🔗 فتح الإعلان الأصلي ↗</a></div>` : "";
-      const details = (`${head ? `<div style="margin-top:4px; font-weight:800;">${head}</div>` : ""}${img}${bdy ? `<div style="margin-top:6px; color:#9d174d; white-space:pre-wrap; line-height:1.75;">${bdy}</div>` : ""}${link}`) || `<div style="margin-top:4px; color:#9d174d;">لا تفاصيل إضافية</div>`;
+      // زر ربط هذا الإعلان ببرنامج (بمُعرّفه) — للإعلانات المُطلَقة بلا كود في الكابشن.
+      const srcId = ref.source_id ? String(ref.source_id) : "";
+      const linkBtn = srcId ? `<div style="margin-top:8px;"><button onclick="linkAdToProgram('${escapeHtml(srcId)}')" style="background:#0b3d91; color:#fff; border:none; border-radius:8px; padding:7px 12px; font-weight:800; cursor:pointer; font-size:12px;">🔗 اربط هذا الإعلان ببرنامج</button></div>` : "";
+      const details = (`${head ? `<div style="margin-top:4px; font-weight:800;">${head}</div>` : ""}${img}${bdy ? `<div style="margin-top:6px; color:#9d174d; white-space:pre-wrap; line-height:1.75;">${bdy}</div>` : ""}${link}${linkBtn}`) || `<div style="margin-top:4px; color:#9d174d;">لا تفاصيل إضافية</div>`;
       // شريط مختصر يعرض أول سطر من الإعلان — يتوسّع بالضغط لعرض الإعلان كاملاً (صورة + نص).
       return `<div style="position:sticky; top:0; z-index:2; margin:0 0 6px; padding:5px 10px; background:#fdf2f8; border:1px solid #fbcfe8; border-right:4px solid #c41d88; border-radius:8px; font-size:12px; color:#831843;">
         <div onclick="(function(b){var d=b.nextElementSibling;var open=d.style.display==='none';d.style.display=open?'block':'none';var c=b.querySelector('.adcv');if(c)c.textContent=open?'▴ إخفاء':'▾ عرض الإعلان';})(this)" style="cursor:pointer; font-weight:800; display:flex; align-items:center; gap:8px;"><span>📢 جاء من ${src}${preview ? `: ${preview}…` : " على إنستقرام/فيسبوك"}</span><span class="adcv" style="margin-right:auto; font-weight:700; color:#be185d; font-size:11px;">▾ عرض الإعلان</span></div>
