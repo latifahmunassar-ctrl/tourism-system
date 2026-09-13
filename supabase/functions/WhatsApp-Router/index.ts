@@ -1432,26 +1432,32 @@ async function handleNewLeadIntake(args: {
         .select("destination, persons, total_group, raw").eq("code", adCode).maybeSingle();
       const pr = prog as { destination?: string; persons?: number; total_group?: number; raw?: string } | null;
       if (pr && pr.raw) {
-        // هل فيه ملف PDF مربوط بهذا الكود؟ (جهّزته المالكة بالداشبورد) → نرسله كمرفق.
-        // وإلا نرسل تفاصيل نصّية (المرحلة ١) كبديل آمن.
-        let pdfUrl = "";
-        try {
-          const { data: pdfRow } = await supabase.from("wa_settings").select("value").eq("key", "ad_pdf:" + adCode).maybeSingle();
-          pdfUrl = String((pdfRow as { value?: { url?: string } } | null)?.value?.url || "");
-        } catch (_e) { /* */ }
-        if (pdfUrl) {
-          await sendCustomerReply(supabase, from,
-            "هلا وغلا 🌟 تفضّل تفاصيل العرض بالمرفق. حاب تعدّل أو تغيّر أي شي بالبرنامج؟ أنا جاهز 👍", pdfUrl);
-        } else {
-          const msg = await formatAdProgramMessage(supabase, pr, from);
-          await sendCustomerReply(supabase, from, msg);
+        // ⚠️ لا نرسل الملف تلقائياً على أول رسالة — طلال يحيّي ويسأل بشكل طبيعي أولاً.
+        //    نرسل ملف العرض **فقط لمّا يطلبه العميل صراحةً** (ابي العرض / ارسل تفاصيل العرض / شو متوفر…).
+        const _curMsg = String(args.body || "");
+        const wantsOfferFile = /العرض|عرضكم|الباق[ةه]|الباكج|تفاصيل|شو\s*متوفر|وش\s*متوفر|ابي\s*اشوف|ودي\s*اشوف|ارسل.*(?:عرض|تفاصيل|ملف)|رسل.*(?:عرض|تفاصيل)/i.test(_curMsg);
+        if (wantsOfferFile) {
+          // «حاضر» + الملف + تنويه أن الأسعار تختلف بالتاريخ وعدد الأفراد.
+          const caption = "حاضر 🌟 تفضّل ملف العرض اللي طلبته. علماً أن الأسعار قد تختلف حسب التاريخ اللي تختاره وحسب عدد الأفراد. لو حاب تعدّل أو تسأل عن أي شي أنا جاهز 👍";
+          let pdfUrl = "";
+          try {
+            const { data: pdfRow } = await supabase.from("wa_settings").select("value").eq("key", "ad_pdf:" + adCode).maybeSingle();
+            pdfUrl = String((pdfRow as { value?: { url?: string } } | null)?.value?.url || "");
+          } catch (_e) { /* */ }
+          if (pdfUrl) {
+            await sendCustomerReply(supabase, from, caption, pdfUrl);
+          } else {
+            const msg = await formatAdProgramMessage(supabase, pr, from);
+            await sendCustomerReply(supabase, from, msg + "\n\nعلماً أن الأسعار قد تختلف حسب التاريخ وعدد الأفراد.");
+          }
+          await supabase.from("whatsapp_sessions").update({
+            intake_data: { ...prevData, ad_program_shown: true, ad_program_code: adCode, destination: pr.destination || prevData.destination },
+            destination: pr.destination || null,
+            last_message_at: new Date().toISOString(),
+          }).eq("phone", from);
+          return;   // أرسلنا العرض — الرسالة الجاية يكمل فيها الاستقبال الطبيعي.
         }
-        await supabase.from("whatsapp_sessions").update({
-          intake_data: { ...prevData, ad_program_shown: true, ad_program_code: adCode, destination: pr.destination || prevData.destination },
-          destination: pr.destination || null,
-          last_message_at: new Date().toISOString(),
-        }).eq("phone", from);
-        return;   // عرضنا البرنامج — رسالة العميل الجاية يكمل فيها الاستقبال الطبيعي ثم يُقفل «زميلنا يوافيك»
+        // العميل ما طلب العرض بعد → نكمل استقبالاً طبيعياً (ترحيب + أسئلة)، والوجهة تُكتشَف من الإعلان.
       }
       // كود موجود بالإعلان لكن البرنامج غير محفوظ → نكمل استقبالاً طبيعياً.
     }
