@@ -2827,7 +2827,8 @@ async function handleMakkahFlights(): Promise<Response> {
     const out = shell();
     if (hdr < 0) return new Response(JSON.stringify(out), { headers: CORS_HEADERS });
     const routeRow = rows[hdr + 1] || [];
-    const blocks: Array<{ airline: "oman" | "salam"; dir: "out" | "ret"; col: number }> = [];
+    const subRow = rows[hdr + 2] || [];   // عناوين فرعية: Date / Original price / Final Price / Final Price (SAR) / Timing
+    const heads: Array<{ airline: "oman" | "salam"; dir: "out" | "ret"; start: number }> = [];
     (rows[hdr] || []).forEach((c, j) => {
       const name = String(c || "");
       const airline = /oman|omar/i.test(name) ? "oman" : (/salam/i.test(name) ? "salam" : null);
@@ -2835,7 +2836,25 @@ async function handleMakkahFlights(): Promise<Response> {
       const route = String(routeRow[j] || "");
       const dir = /jed\w*\s*-\s*mus/i.test(route) ? "ret" : (/mus\w*\s*-\s*jed/i.test(route) ? "out" : null);
       if (!dir) return;
-      blocks.push({ airline, dir, col: j });
+      heads.push({ airline, dir, start: j });
+    });
+    // نطاق أعمدة كل بلوك = من بدايته حتى بداية البلوك التالي؛ نحدّد الأعمدة **بالاسم**
+    // (لأن الذهاب ٤ أعمدة والعودة ٥ أعمدة بسبب عمود «Final Price (SAR)»).
+    const starts = heads.map(h => h.start).sort((a, b) => a - b);
+    const blocks = heads.map(h => {
+      const next = starts.find(s => s > h.start);
+      const end = next != null ? next : h.start + 6;
+      let dateCol = -1, timingCol = -1, finalCol = -1, finalSarCol = -1;
+      for (let j = h.start; j < end; j++) {
+        const hd = String(subRow[j] || "").trim().toLowerCase();
+        if (!hd) continue;
+        if (/final\s*price\s*\(?\s*sar/.test(hd)) finalSarCol = j;        // Final Price (SAR) ← المعتمد
+        else if (/final\s*price/.test(hd)) { if (finalCol < 0) finalCol = j; }
+        else if (/timing|وقت/.test(hd)) timingCol = j;
+        else if (/date|تاريخ/.test(hd)) dateCol = j;
+      }
+      if (dateCol < 0) dateCol = h.start;
+      return { airline: h.airline, dir: h.dir, dateCol, finalCol, finalSarCol, timingCol };
     });
     const norm = (s: string) => {
       const m = String(s || "").match(/(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{2,4})/);
@@ -2847,13 +2866,15 @@ async function handleMakkahFlights(): Promise<Response> {
     for (const b of blocks) {
       for (let i = hdr + 2; i < rows.length; i++) {
         const r = rows[i] || [];
-        const dk = norm(String(r[b.col] || ""));               // التاريخ في عمود الشركة
+        const dk = norm(String(r[b.dateCol] || ""));
         if (!dk) continue;
-        const final = parseFloat(String(r[b.col + 2] || "").replace(/[^\d.]/g, ""));   // Final Price = +2
-        const orig = parseFloat(String(r[b.col + 1] || "").replace(/[^\d.]/g, ""));    // Original = +1
-        const timing = String(r[b.col + 3] || "").trim();                             // Timing = +3 (وقت الإقلاع/الوصول)
-        if (!(final > 0)) continue;
-        (out.prices as Record<string, Record<string, Record<string, unknown>>>)[b.airline][b.dir][dk] = { final, original: isNaN(orig) ? null : orig, timing };
+        // نعتمد «Final Price (SAR)» إن كانت له قيمة، وإلا «Final Price».
+        const sarV = b.finalSarCol >= 0 ? parseFloat(String(r[b.finalSarCol] || "").replace(/[^\d.]/g, "")) : NaN;
+        const finV = b.finalCol >= 0 ? parseFloat(String(r[b.finalCol] || "").replace(/[^\d.]/g, "")) : NaN;
+        const price = (sarV > 0) ? sarV : finV;
+        const timing = b.timingCol >= 0 ? String(r[b.timingCol] || "").trim() : "";
+        if (!(price > 0)) continue;
+        (out.prices as Record<string, Record<string, Record<string, unknown>>>)[b.airline][b.dir][dk] = { final: price, original: null, timing };
         dateSet.add(dk);
       }
     }
