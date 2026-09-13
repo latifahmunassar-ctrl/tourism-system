@@ -1397,6 +1397,16 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
             <div style="font-size:12px; color:#475569; font-weight:700; margin-bottom:4px;">توزيع المدن (من النظام السياحي)</div>
             <div id="bf-sug-hint" style="font-size:12px; color:#b45309;">اختر الوجهة والمطار وعدد الأيام لعرض التوزيع الجاهز.</div>
             <div id="bf-sug-list" style="display:flex; flex-direction:column; gap:6px; margin-top:4px;"></div>
+            <!-- توزيع مخصّص: لو ما فيه اقتراح جاهز يطابق (مثل عمرة ١٠ أيام) تكتب الموظفة التوزيع يدوياً -->
+            <div style="margin-top:8px; border-top:1px dashed #d7dee6; padding-top:7px;">
+              <div style="font-size:12px; color:#475569; font-weight:700; margin-bottom:4px;">✏️ توزيع مخصّص (لو ما فيه اقتراح جاهز)</div>
+              <div style="display:flex; gap:6px; align-items:stretch;">
+                <input id="bf-custom-dist" type="text" placeholder="مثال: 5 مكة + 4 المدينة"
+                  style="flex:1; padding:7px; border:1px solid #d7dee6; border-radius:7px; font-size:13px;">
+                <button type="button" id="bf-custom-use" style="padding:7px 12px; border:0; border-radius:7px; background:#0b5d4e; color:#fff; font-weight:700; cursor:pointer; white-space:nowrap;">استخدم</button>
+              </div>
+              <div style="font-size:11px; color:#94a3b8; margin-top:3px;">افصلي كل مدينة بعلامة + ، واكتبي عدد الليالي قبل اسم المدينة.</div>
+            </div>
             <div id="bf-chosen-wrap" style="display:none; margin-top:6px; font-size:12px; color:#0b5d4e;">المختار: <b id="bf-chosen-dist"></b></div>
           </div>
           <label style="display:flex; flex-direction:column; gap:3px; margin-top:8px; font-size:13px;">ملاحظات
@@ -1842,7 +1852,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260913b";
+    const APPVER = "20260913c";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4351,10 +4361,32 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if ($("bf-chosen-wrap")) { $("bf-chosen-wrap").style.display = ""; $("bf-chosen-dist").textContent = bfChosenDist; }
       }
     }
+    // ✏️ توزيع مخصّص يدوي — لأي عدد أيام ما له اقتراح جاهز (مثل عمرة ١٠ أيام).
+    function bfUseCustomDist(){
+      const el = $("bf-custom-dist"); if (!el) return;
+      const txt = String(el.value||"").trim();
+      const m = $("bf-msg");
+      const cn = bfParseDist(txt);
+      if (!txt || !cn.length){
+        if (m){ m.style.color = "#dc2626"; m.textContent = "⛔ اكتبي التوزيع بصيغة: عدد الليالي ثم اسم المدينة، مفصولة بـ + (مثال: 5 مكة + 4 المدينة)"; }
+        return;
+      }
+      bfChosenDist = txt;
+      bfChosenCN = cn;
+      bfChosenPair = "";  // المطار يُؤخذ من المنسدلة عند الحفظ
+      // ألغِ تظليل بطاقات الاقتراح
+      const list = $("bf-sug-list"); if (list) list.querySelectorAll(".bf-sugcard").forEach(x => x.style.background = "#fff");
+      if ($("bf-chosen-wrap")){ $("bf-chosen-wrap").style.display = ""; $("bf-chosen-dist").textContent = bfChosenDist; }
+      if (m){ const tot = cn.reduce((a,c)=>a+(+c.nights||0),0); m.style.color = "#0b5d4e"; m.textContent = "✅ اعتُمد التوزيع المخصّص: " + bfChosenDist + " (" + tot + " ليلة)"; }
+    }
+    if ($("bf-custom-use")) $("bf-custom-use").addEventListener("click", bfUseCustomDist);
+    if ($("bf-custom-dist")) $("bf-custom-dist").addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); bfUseCustomDist(); } });
+
     async function loadBrief(phone) {
       const setv = (id, v) => { const el = $(id); if (el) el.value = (v == null ? "" : v); };
       bfChosenDist = ""; bfChosenCN = null; bfChosenPair = "";
       if ($("bf-chosen-wrap")) $("bf-chosen-wrap").style.display = "none";
+      if ($("bf-custom-dist")) $("bf-custom-dist").value = "";
       if ($("bf-sug-list")) $("bf-sug-list").innerHTML = "";
       if ($("bf-airport")) $("bf-airport").innerHTML = '<option value="">— اختر الوجهة أولاً —</option>';
       if ($("bf-phone")) $("bf-phone").textContent = fmtPhone(phone);
@@ -4425,7 +4457,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       if (!(parseInt(payload.pax) >= 1)) missReq.push("عدد الأشخاص");
       if (!(parseInt(payload.days) >= 1)) missReq.push("عدد الأيام");
       if (!isDomestic && (!payload.arrival_airport || !payload.departure_airport)) missReq.push("مطار القدوم/المغادرة");
-      if (!payload.distribution) missReq.push("توزيع المدن (اضغطي بطاقة الاقتراح)");
+      if (!payload.distribution) missReq.push("توزيع المدن (اضغطي بطاقة اقتراح أو اكتبي توزيعاً مخصّصاً)");
       if (missReq.length) {
         const m = $("bf-msg"); if (m) { m.style.color = "#dc2626"; m.textContent = "⛔ لا يمكن الحفظ — أكملي أولاً: " + missReq.join("، "); }
         return false;
@@ -4480,6 +4512,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     if ($("bf-destination")) $("bf-destination").addEventListener("change", async e => {
       bfChosenDist = ""; bfChosenCN = null; bfChosenPair = "";
       if ($("bf-chosen-wrap")) $("bf-chosen-wrap").style.display = "none";
+      if ($("bf-custom-dist")) $("bf-custom-dist").value = "";
       await bfLoadSugs(e.target.value); bfRenderSugs();
     });
     if ($("bf-airport")) $("bf-airport").addEventListener("change", bfRenderSugs);
