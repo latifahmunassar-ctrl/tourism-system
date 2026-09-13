@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-08-england-bed'
+  var BUILD = '2026-09-13-profit-warn'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1390,6 +1390,12 @@ function setCustomerType(t){
 }
 async function autoProfitForProgram(dest){
   await loadProfitMargins(dest);
+  // لا يوجد جدول أرباح لهذه الوجهة → نبّه بدل ترك الربح صفراً بصمت.
+  if(dest && !profitMargins.length){
+    const msg = `⚠️ ما فيه جدول أرباح لوجهة «${dest}» في الشيت — أضِفه (شرائح التكلفة + الأرباح) وزامن، أو اكتب هامش الربح يدوياً في خانة «هامش الربح».`;
+    if(msg !== lastAutoProfitMsg){ addMessage('sys', msg); lastAutoProfitMsg = msg; }
+    return;
+  }
   applyAutoProfit();
 }
 
