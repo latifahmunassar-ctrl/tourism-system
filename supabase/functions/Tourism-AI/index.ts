@@ -2749,7 +2749,9 @@ async function handleProfitMargins(body: { dest?: string }): Promise<Response> {
     const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
     const token = await pmGoogleToken(sa);
     const quotedTab = /[\s'"]/.test(tabRaw) ? `'${tabRaw.replace(/'/g, "''")}'` : tabRaw;
-    const rows = await pmReadSheet(token, ssid, `${quotedTab}!A1:CZ500`);
+    // نطاق واسع (حتى العمود HZ): جدول أرباح بعض الوجهات (مثل مكة) يقع في أعمدة بعيدة
+    // (GK-GP) بعد CZ، فلا يُقرأ لو حصرنا المدى.
+    const rows = await pmReadSheet(token, ssid, `${quotedTab}!A1:HZ500`);
     const margins = pmExtract(rows).sort((a, b) => a.cost_min - b.cost_min);
     return new Response(JSON.stringify({ margins }), { headers: CORS_HEADERS });
   } catch (e) {
