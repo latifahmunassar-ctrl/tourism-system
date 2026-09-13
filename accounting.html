@@ -1235,6 +1235,24 @@ function hasRef(r){ return !!((r.bank_ref||'').toString().trim()); }
 function hasBank(r){ return !!((r.bank_name||'').toString().trim()); }
 // تاريخ الدفع الفعّال: override المُدخل من الداشبورد (acc_fcd_payment_dates، يبقى رغم مزامنة الشيت) ثم قيمة الصف
 function effPayDate(r){ var pc=r.payment_code||''; if(pc && PAYDATE_OVR[pc]!=null) return String(PAYDATE_OVR[pc]).slice(0,10); return String(r.payment_date||'').slice(0,10); }
+// 🔄 SSOT: عند تغيير تاريخ الدفع، انقلي الحركة البنكية المطابقة (نفس المرجع) لنفس التاريخ تلقائيّاً — نفس المرجع/المبلغ/البنك (إضافة ثم حذف؛ لا يوجد update_bank_txn_date). للمالكة فقط.
+async function syncBankTxnDate(ref, newDate){
+  try{
+    if(typeof isOwnerUser==='function' && !isOwnerUser()) return false;
+    const rk=String(ref||'').trim().toUpperCase(); const nd=String(newDate||'').slice(0,10);
+    if(!rk || !/^\d{4}-\d{2}-\d{2}$/.test(nd)) return false;
+    const rows=(DATA.bankTx||[]).filter(x=>String(x.bank_ref||'').trim().toUpperCase()===rk && (typeof x.id==='number'||/^\d+$/.test(String(x.id||''))));
+    if(!rows.length) return false;
+    let moved=0;
+    for(const row of rows){ const cur=String(row.tx_date||'').slice(0,10); if(cur===nd) continue;
+      const ar=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_bank_txn',payload:{tx_date:nd,amount_in:Number(row.amount_in||0),amount_out:Number(row.amount_out||0),bank_name:row.bank_name||'',bank_ref:row.bank_ref||'',note:row.note||''}})});
+      const aj=await ar.json(); if(aj.error||!aj.ok) continue;
+      await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_bank_txn',payload:{id:row.id,allow_sheet:true}})});
+      moved++;
+    }
+    return moved>0;
+  }catch(_){ return false; }
+}
 // ===== 🔁 كاشف التكرار: مفتاح = اسم العميل + الوكيل + قيمة الباقة (الرقم قد يختلف لنفس الشخص فلا يدخل المفتاح، ويُعرَض للمقارنة) =====
 function _dupNorm(s){ return String(s||'').toLowerCase().replace(/\s+/g,' ').trim(); }
 function dupSuspectMap(){   // client_code → {isDup, original, mates[]} لكل مجموعة فيها أكثر من عميل بنفس المفتاح؛ الأقدم=الأصل والباقي=مكرَّر
@@ -1480,8 +1498,11 @@ async function fcdEditSave(){
       const j1=await r1.json(); if(j1.error){ msg.innerHTML='<span style="color:var(--red)">'+esc(j1.error)+'</span>'; return; }
       if(j1.pending){ $('fcdeditmodal').classList.remove('on'); alert('🔒 '+(j1.msg||'أُرسل طلب تغيير المرجع البنكي لموافقة المالكة — لن يتغيّر حتى الاعتماد')); await load(); return; }
       const oldPD=String(FE_ROW.payment_date||'').slice(0,10);
-      if(paydate!==oldPD){ const r2=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_payment_date',payload:{payment_code:pc,payment_date:paydate||null,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j2=await r2.json(); if(j2.error){ msg.innerHTML='<span style="color:var(--red)">'+esc(j2.error)+'</span>'; return; } }
-      $('fcdeditmodal').classList.remove('on'); await load();
+      let _bankSynced=false;
+      if(paydate!==oldPD){ const r2=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_payment_date',payload:{payment_code:pc,payment_date:paydate||null,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j2=await r2.json(); if(j2.error){ msg.innerHTML='<span style="color:var(--red)">'+esc(j2.error)+'</span>'; return; }
+        if(!j2.pending && paydate){ try{ _bankSynced=await syncBankTxnDate(ref||FE_ROW.bank_ref, paydate); }catch(_){} }   // 🔄 SSOT: انعكاس تلقائي على كشف البنك
+      }
+      $('fcdeditmodal').classList.remove('on'); if(_bankSynced)toast('🔄 وزُومِن تاريخ الحركة البنكية المطابقة في كشف البنك إلى '+paydate); await load();
     }catch(e){ msg.innerHTML='<span style="color:var(--red)">خطأ: '+esc(e.message)+'</span>'; }
     return;
   }
