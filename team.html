@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-13-profit-warn'
+  var BUILD = '2026-09-13-kaaba-view'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1021,7 +1021,7 @@ let currencyAwaiting = null;         // 'rate' | 'confirm' | null
 let currencyPending = null;          // { name, rate, originalSAR, converted } during the flow
 let lastProgramRaw = '';
 let HARAM_FILTER = '';   // فلتر قرب الحرم لبرامج مكة (بجانب/قريب/إطلالة/موصى به)
-const HARAM_OPTIONS = ['بجانب الحرم','قريب من الحرم','إطلالة على الحرم','موصى به'];
+const HARAM_OPTIONS = ['بجانب الحرم','قريب من الحرم','إطلالة على الحرم','إطلالة على الكعبة','موصى به'];
 let MK_MODES = [];       // وسيلة كل مقطع تنقّل لبرنامج مكة ('train'|'car')
 let MK_LAST_SIG = '';    // بصمة آخر تركيب طُبّق (مدن+ليالي+وسائل) — يمنع التكرار
 let MK_DEP_AIR = 'jeddah';  // مطار المغادرة إن انتهى البرنامج بالمدينة: 'jeddah' | 'madinah'
