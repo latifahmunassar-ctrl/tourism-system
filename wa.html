@@ -1867,7 +1867,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260913e";
+    const APPVER = "20260913f";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4424,6 +4424,11 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     function bfSum(){
       let s = 0; document.querySelectorAll("#bf-cityRows .bfx-n").forEach(i => s += (+i.value||0));
       if ($("bf-nsum")) $("bf-nsum").textContent = s;
+      // تلوين حيّ: أخضر لو المجموع = المتوقّع (أيام − 1)، أحمر لو مختلف
+      const daysN = +($("bf-days") ? $("bf-days").value : 0) || 0;
+      const expN = Math.max(0, daysN - 1);
+      const el = $("bf-nsum");
+      if (el) el.style.color = (daysN >= 1 && s !== expN) ? "#dc2626" : "#0b5d4e";
     }
     function bfExpected(){
       const d = +($("bf-days") ? $("bf-days").value : 0) || 0;
@@ -4513,6 +4518,20 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           const m = $("bf-msg"); if (m) { m.style.color = "#dc2626"; m.textContent = "⛔ فيه صف مدينة بلا اختيار — اختاري المدينة في كل صف قبل الحفظ (أو احذفي الصف)."; }
           return false;
         }
+        // مجموع الليالي لازم يساوي عدد الأيام − 1 (رحلة 10 أيام = 9 ليالي).
+        const daysN = parseInt(val("bf-days")) || 0;
+        const sumN = (mm.cn || []).reduce((a, c) => a + (+c.nights || 0), 0);
+        const expN = Math.max(0, daysN - 1);
+        if (daysN >= 1 && sumN !== expN) {
+          const m = $("bf-msg");
+          if (m) {
+            m.style.color = "#dc2626";
+            m.textContent = sumN < expN
+              ? `⛔ عدد الليالي ناقص: وزّعتِ ${sumN} ليلة والمطلوب ${expN} ليلة (عدد الأيام ${daysN} − 1). أكملي التوزيع قبل الإرسال.`
+              : `⛔ عدد الليالي أكثر من المطلوب: وزّعتِ ${sumN} ليلة والمطلوب ${expN} ليلة (عدد الأيام ${daysN} − 1). عدّلي التوزيع.`;
+          }
+          return false;
+        }
       }
       const payload = {
         contact_phone: convPhone,
@@ -4595,7 +4614,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       await bfLoadSugs(e.target.value); bfRenderSugs();
     });
     if ($("bf-airport")) $("bf-airport").addEventListener("change", bfRenderSugs);
-    if ($("bf-days")) $("bf-days").addEventListener("input", () => { bfRenderSugs(); bfExpected(); });
+    if ($("bf-days")) $("bf-days").addEventListener("input", () => { bfRenderSugs(); bfExpected(); bfSum(); });
     if ($("bf-save")) $("bf-save").addEventListener("click", saveBrief);
     if ($("bf-transfer")) $("bf-transfer").addEventListener("click", transferBrief);
     if ($("bf-extract")) $("bf-extract").addEventListener("click", bfExtract);
