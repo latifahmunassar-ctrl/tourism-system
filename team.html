@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-14-group-programs'
+  var BUILD = '2026-09-14-group-programs-b'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2166,7 +2166,8 @@ function grpTotals(g, adults, children){
   const a=(Number(g.adult_price)||0)*adults, c=(Number(g.child_price)||0)*children;
   return { adultLine:a, childLine:c, total:a+c };
 }
-function grpDayLines(itin){ return String(itin||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean); }
+// يقبل فواصل الأيام: سطر جديد (Alt+Enter) أو الرمز | — لتسهيل الإدخال في خلية واحدة.
+function grpDayLines(itin){ return String(itin||'').split(/\r?\n|\s*\|\s*/).map(s=>s.trim()).filter(Boolean); }
 
 async function grpLoad(){
   const dSel=document.getElementById('grp-dest');
