@@ -2284,7 +2284,7 @@ async function loadHaramProximity(): Promise<Record<string, string[]>> {
     const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
     const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
     const token = await pmGoogleToken(sa);
-    const rows = await pmReadSheet(token, ssid, "'Makkah '!A1:CZ500");
+    const rows = await pmReadSheet(token, ssid, "'Makkah '!A1:HZ500");
     let nameCol = -1;
     for (let i = 0; i < Math.min(rows.length, 15) && nameCol < 0; i++) {
       (rows[i] || []).forEach((c, j) => { if (/^(hotel|hotels|hotel\s*name|الفندق|اسم\s*الفندق)$/i.test(String(c || "").trim())) nameCol = j; });
@@ -2791,7 +2791,7 @@ async function handleMakkahTransport(): Promise<Response> {
       const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
       const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
       const token = await pmGoogleToken(sa);
-      const rows = await pmReadSheet(token, ssid, "'Makkah '!A1:CZ500");
+      const rows = await pmReadSheet(token, ssid, "'Makkah '!A1:HZ500");
       let routeCol = -1;
       for (let i = 0; i < Math.min(rows.length, 10); i++) (rows[i] || []).forEach((c, j) => { if (/قطار\s*الحرمين/.test(String(c || ""))) routeCol = j; });
       if (routeCol >= 0) {
@@ -2817,7 +2817,7 @@ async function handleMakkahFlights(): Promise<Response> {
   try {
     const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
     const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
-    const rows = await pmReadSheet(await pmGoogleToken(sa), ssid, "'Makkah '!A1:CZ500");
+    const rows = await pmReadSheet(await pmGoogleToken(sa), ssid, "'Makkah '!A1:HZ500");
     // صف رؤوس الشركات = يحوي خلية OMAR/Oman وخلية Salam معاً.
     let hdr = -1;
     for (let i = 0; i < Math.min(rows.length, 15); i++) {
@@ -2883,7 +2883,7 @@ async function handleMakkahTransportPlan(body: { pax?: number; sequence?: string
     const trainMap: Record<string, number> = {};
     try {
       const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!); const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
-      const rows = await pmReadSheet(await pmGoogleToken(sa), ssid, "'Makkah '!A1:CZ500");
+      const rows = await pmReadSheet(await pmGoogleToken(sa), ssid, "'Makkah '!A1:HZ500");
       let rc = -1; for (let i = 0; i < Math.min(rows.length, 10); i++) (rows[i] || []).forEach((c, j) => { if (/قطار\s*الحرمين/.test(String(c || ""))) rc = j; });
       if (rc >= 0) {
         const classify = (t: string) => /مطار/.test(t) ? "airport" : (/مكه|مكة/.test(t) ? "Makkah" : (/مدين/.test(t) ? "Al Madinah" : ""));
