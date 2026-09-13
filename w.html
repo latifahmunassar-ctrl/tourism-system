@@ -685,6 +685,18 @@
     .wa-gate-btn { width:100%; padding:13px; border-radius:12px; border:none; background:linear-gradient(135deg,#0b5d4e,#0e9d6a); color:#fff; font:inherit; font-size:15px; font-weight:900; cursor:pointer; }
     .wa-gate-btn:disabled { opacity:0.6; cursor:not-allowed; }
     .wa-gate-err { color:#ffb4b4; font-size:13px; font-weight:700; margin-top:9px; min-height:18px; }
+    /* توزيع المدن — تخصيص (نفس المساعد السياحي) */
+    .bfx-seg { display:flex; gap:7px; flex-wrap:wrap; }
+    .bfx-seg label { flex:1; min-width:60px; border:1px solid #d7dee6; border-radius:10px; padding:8px; text-align:center; cursor:pointer; margin:0; background:#fff; font-weight:700; font-size:12px; color:#475569; }
+    .bfx-seg input { display:none; }
+    .bfx-seg label.on { border-color:#0e9d6a; background:rgba(14,157,106,.12); color:#0b5d4e; }
+    .bfx-crow { display:grid; grid-template-columns:1fr 96px 32px; gap:7px; margin-bottom:7px; align-items:center; }
+    .bfx-crow select.bfx-city { padding:7px; border:1px solid #d7dee6; border-radius:9px; font:inherit; font-size:13px; background:#fff; }
+    .bfx-nights { display:flex; align-items:center; border:1px solid #d7dee6; border-radius:10px; overflow:hidden; background:#fff; }
+    .bfx-nights button { border:none; background:#eef2f6; color:#0b5d4e; font-size:16px; width:28px; height:38px; cursor:pointer; }
+    .bfx-nights input { border:none; text-align:center; background:transparent; padding:0; width:100%; height:38px; font:inherit; }
+    .bfx-delc { border:none; background:rgba(248,113,113,.13); color:#ef4444; border-radius:9px; height:38px; cursor:pointer; font-size:15px; }
+    .bfx-addcity { background:#fff; color:#b45309; border:1px dashed rgba(180,83,9,.4); border-radius:10px; padding:8px; width:100%; cursor:pointer; font-weight:700; font-size:12px; font-family:inherit; }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script>
@@ -1392,22 +1404,25 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
               <input id="bf-currency" readonly style="padding:7px; border:1px solid #e3e8ee; border-radius:7px; background:#f1f5f9; color:#475569;">
             </label>
           </div>
-          <!-- توزيع المدن: من اقتراحات النظام السياحي (client-intake) حسب المطار + الأيام -->
+          <!-- توزيع المدن: نفس واجهة المساعد السياحي — اقتراحات جاهزة أو تخصيص بعدّاد ليالي لكل مدينة -->
           <div style="margin-top:8px;">
-            <div style="font-size:12px; color:#475569; font-weight:700; margin-bottom:4px;">توزيع المدن (من النظام السياحي)</div>
-            <div id="bf-sug-hint" style="font-size:12px; color:#b45309;">اختر الوجهة والمطار وعدد الأيام لعرض التوزيع الجاهز.</div>
-            <div id="bf-sug-list" style="display:flex; flex-direction:column; gap:6px; margin-top:4px;"></div>
-            <!-- توزيع مخصّص: لو ما فيه اقتراح جاهز يطابق (مثل عمرة ١٠ أيام) تكتب الموظفة التوزيع يدوياً -->
-            <div style="margin-top:8px; border-top:1px dashed #d7dee6; padding-top:7px;">
-              <div style="font-size:12px; color:#475569; font-weight:700; margin-bottom:4px;">✏️ توزيع مخصّص (لو ما فيه اقتراح جاهز)</div>
-              <div style="display:flex; gap:6px; align-items:stretch;">
-                <input id="bf-custom-dist" type="text" placeholder="مثال: 5 مكة + 4 المدينة"
-                  style="flex:1; padding:7px; border:1px solid #d7dee6; border-radius:7px; font-size:13px;">
-                <button type="button" id="bf-custom-use" style="padding:7px 12px; border:0; border-radius:7px; background:#0b5d4e; color:#fff; font-weight:700; cursor:pointer; white-space:nowrap;">استخدم</button>
-              </div>
-              <div style="font-size:11px; color:#94a3b8; margin-top:3px;">افصلي كل مدينة بعلامة + ، واكتبي عدد الليالي قبل اسم المدينة.</div>
+            <div style="font-size:12px; color:#475569; font-weight:700; margin-bottom:4px;">توزيع المدن</div>
+            <div class="bfx-seg" id="bf-modeSeg">
+              <label class="on"><input type="radio" name="bf-mode" value="ready" checked>📋 اقتراحات جاهزة</label>
+              <label><input type="radio" name="bf-mode" value="manual">✏️ تخصيص</label>
             </div>
-            <div id="bf-chosen-wrap" style="display:none; margin-top:6px; font-size:12px; color:#0b5d4e;">المختار: <b id="bf-chosen-dist"></b></div>
+            <!-- وضع الاقتراحات الجاهزة -->
+            <div id="bf-readyMode" style="margin-top:8px;">
+              <div id="bf-sug-hint" style="font-size:12px; color:#b45309;">اختر الوجهة والمطار وعدد الأيام لعرض التوزيع الجاهز.</div>
+              <div id="bf-sug-list" style="display:flex; flex-direction:column; gap:6px; margin-top:4px;"></div>
+              <div id="bf-chosen-wrap" style="display:none; margin-top:6px; font-size:12px; color:#0b5d4e;">المختار: <b id="bf-chosen-dist"></b></div>
+            </div>
+            <!-- وضع التخصيص اليدوي: صفوف مدن + عدّاد ليالي -->
+            <div id="bf-manualMode" style="display:none; margin-top:8px;">
+              <div id="bf-cityRows"></div>
+              <button type="button" class="bfx-addcity" id="bf-addcity">+ أضف مدينة</button>
+              <div style="font-size:12px; color:#64748b; margin-top:8px;">مجموع الليالي: <b id="bf-nsum">0</b> — المتوقّع: <b id="bf-nexp">0</b> ليلة</div>
+            </div>
           </div>
           <label style="display:flex; flex-direction:column; gap:3px; margin-top:8px; font-size:13px;">ملاحظات
             <textarea id="bf-notes" rows="2" style="padding:7px; border:1px solid #d7dee6; border-radius:7px; resize:vertical;"></textarea>
@@ -1852,7 +1867,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260913c";
+    const APPVER = "20260913d";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4361,32 +4376,77 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if ($("bf-chosen-wrap")) { $("bf-chosen-wrap").style.display = ""; $("bf-chosen-dist").textContent = bfChosenDist; }
       }
     }
-    // ✏️ توزيع مخصّص يدوي — لأي عدد أيام ما له اقتراح جاهز (مثل عمرة ١٠ أيام).
-    function bfUseCustomDist(){
-      const el = $("bf-custom-dist"); if (!el) return;
-      const txt = String(el.value||"").trim();
-      const m = $("bf-msg");
-      const cn = bfParseDist(txt);
-      if (!txt || !cn.length){
-        if (m){ m.style.color = "#dc2626"; m.textContent = "⛔ اكتبي التوزيع بصيغة: عدد الليالي ثم اسم المدينة، مفصولة بـ + (مثال: 5 مكة + 4 المدينة)"; }
-        return;
-      }
-      bfChosenDist = txt;
-      bfChosenCN = cn;
-      bfChosenPair = "";  // المطار يُؤخذ من المنسدلة عند الحفظ
-      // ألغِ تظليل بطاقات الاقتراح
-      const list = $("bf-sug-list"); if (list) list.querySelectorAll(".bf-sugcard").forEach(x => x.style.background = "#fff");
-      if ($("bf-chosen-wrap")){ $("bf-chosen-wrap").style.display = ""; $("bf-chosen-dist").textContent = bfChosenDist; }
-      if (m){ const tot = cn.reduce((a,c)=>a+(+c.nights||0),0); m.style.color = "#0b5d4e"; m.textContent = "✅ اعتُمد التوزيع المخصّص: " + bfChosenDist + " (" + tot + " ليلة)"; }
+    // ===== توزيع مخصّص تفاعلي — نفس المساعد السياحي (صفوف مدن + عدّاد ليالي) =====
+    const BF_CITIES = {
+      "فيتنام":["هانوي","سابا","ها لونج","دانانج","فوكوك","نها ترانج","دالات","هوتشي مينه"],
+      "ماليزيا":["كوالالمبور","سيلانجور","لانكاوي","بينانج","كاميرون هايلاند"],
+      "تايلاند":["بانكوك","بوكيت","كرابي","شيانغ ماي","باتايا","كوساموي"],
+      "تركيا":["اسطنبول","طرابزون","أوزنجول","أيدر","ريزا","بورصة","سابانجا"],
+      "روسيا":["موسكو","سانت بطرسبرغ","سوتشي"],
+      "البوسنة":["سراييفو","موستار","بيهاتش"],
+      "إندونيسيا":["بالي","بالي - كوتا","بالي - سيمنياك","بالي - أوبود","بالي - جيمباران","بالي - نوسا دوا","جاكرتا","باندونغ","بونشاك"],
+      "عُمان":["صلالة - وسط المدينة","صلالة - هوانا"],
+      "جنوب أفريقيا":["كيب تاون","هارمانوس"],
+      "موريشيوس":["موريشيوس"],
+      "العمرة":["مكة المكرمة","المدينة المنورة","جدة","الطائف"],
+      "إنجلترا":["لندن"],
+    };
+    function bfMode(){ return (document.querySelector('input[name=bf-mode]:checked')||{}).value || "ready"; }
+    function bfSetMode(m){
+      const seg = $("bf-modeSeg");
+      if (seg) seg.querySelectorAll("label").forEach(l => l.classList.toggle("on", l.querySelector("input").value === m));
+      if ($("bf-readyMode"))  $("bf-readyMode").style.display  = (m === "ready")  ? "" : "none";
+      if ($("bf-manualMode")) $("bf-manualMode").style.display = (m === "manual") ? "" : "none";
+      // عند دخول التخصيص لأول مرة بلا صفوف → أضف صفاً واحداً ليبدأ منه
+      if (m === "manual" && $("bf-cityRows") && !$("bf-cityRows").children.length) bfAddCity();
     }
-    if ($("bf-custom-use")) $("bf-custom-use").addEventListener("click", bfUseCustomDist);
-    if ($("bf-custom-dist")) $("bf-custom-dist").addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); bfUseCustomDist(); } });
+    function bfCityOptions(){
+      const d = $("bf-destination") ? $("bf-destination").value : "";
+      const l = BF_CITIES[d] || [];
+      return '<option value="">اختر مدينة…</option>' + l.map(c => `<option>${c}</option>`).join("");
+    }
+    function bfAddCity(city, nights){
+      city = city || ""; nights = nights || 2;
+      const div = document.createElement("div"); div.className = "bfx-crow";
+      div.innerHTML = `<select class="bfx-city">${bfCityOptions()}</select>
+        <div class="bfx-nights"><button type="button">−</button><input class="bfx-n" type="number" min="1" max="30" value="${nights}"><button type="button">+</button></div>
+        <button type="button" class="bfx-delc">×</button>`;
+      $("bf-cityRows").appendChild(div);
+      if (city){ const sel = div.querySelector(".bfx-city"); sel.value = city; }
+      const inp = div.querySelector(".bfx-n");
+      const btns = div.querySelectorAll(".bfx-nights button");
+      btns[0].onclick = () => { inp.value = Math.max(1,(+inp.value||0)-1); bfSum(); };
+      btns[1].onclick = () => { inp.value = Math.min(30,(+inp.value||0)+1); bfSum(); };
+      inp.oninput = bfSum;
+      div.querySelector(".bfx-delc").onclick = () => { div.remove(); bfSum(); };
+      bfSum();
+    }
+    function bfSum(){
+      let s = 0; document.querySelectorAll("#bf-cityRows .bfx-n").forEach(i => s += (+i.value||0));
+      if ($("bf-nsum")) $("bf-nsum").textContent = s;
+    }
+    function bfExpected(){
+      const d = +($("bf-days") ? $("bf-days").value : 0) || 0;
+      if ($("bf-nexp")) $("bf-nexp").textContent = Math.max(0, d - 1);
+    }
+    // يبني نص التوزيع + مصفوفة [{city,nights}] من صفوف التخصيص
+    function bfManualDist(){
+      const rows = [...document.querySelectorAll("#bf-cityRows .bfx-crow")].map(r => ({
+        city: (r.querySelector(".bfx-city").value || "").trim(),
+        nights: +r.querySelector(".bfx-n").value || 0,
+      })).filter(r => r.city && r.nights > 0);
+      return { dist: rows.map(r => r.nights + " " + r.city).join(" + "), cn: rows };
+    }
+    if ($("bf-modeSeg")) $("bf-modeSeg").querySelectorAll("input[name=bf-mode]").forEach(r => r.addEventListener("change", () => bfSetMode(r.value)));
+    if ($("bf-addcity")) $("bf-addcity").addEventListener("click", () => bfAddCity());
 
     async function loadBrief(phone) {
       const setv = (id, v) => { const el = $(id); if (el) el.value = (v == null ? "" : v); };
       bfChosenDist = ""; bfChosenCN = null; bfChosenPair = "";
       if ($("bf-chosen-wrap")) $("bf-chosen-wrap").style.display = "none";
-      if ($("bf-custom-dist")) $("bf-custom-dist").value = "";
+      if ($("bf-cityRows")) $("bf-cityRows").innerHTML = "";
+      const rReady = document.querySelector('input[name=bf-mode][value=ready]'); if (rReady) rReady.checked = true;
+      bfSetMode("ready"); bfSum(); bfExpected();
       if ($("bf-sug-list")) $("bf-sug-list").innerHTML = "";
       if ($("bf-airport")) $("bf-airport").innerHTML = '<option value="">— اختر الوجهة أولاً —</option>';
       if ($("bf-phone")) $("bf-phone").textContent = fmtPhone(phone);
@@ -4416,6 +4476,11 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           bfChosenDist = b.distribution;
           bfChosenCN = Array.isArray(b.cities_nights) ? b.cities_nights : bfParseDist(b.distribution);
           if ($("bf-chosen-wrap")) { $("bf-chosen-wrap").style.display = ""; $("bf-chosen-dist").textContent = b.distribution; }
+          // عبّئ صفوف التخصيص بنفس التوزيع حتى يبقى قابلاً للتعديل لو بدّلت الموظفة للوضع اليدوي
+          if ($("bf-cityRows") && Array.isArray(bfChosenCN) && bfChosenCN.length) {
+            $("bf-cityRows").innerHTML = "";
+            bfChosenCN.forEach(c => bfAddCity(c.city, +c.nights || 1));
+          }
         }
         bfBadge(b.status);
         if (b.destination) {
@@ -4437,6 +4502,9 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       const pairRaw = bfChosenPair || val("bf-airport");
       const pair = (pairRaw && pairRaw !== "ALL") ? pairRaw : "";
       const [arr, dep] = pair ? pair.split("|") : ["", ""];
+      // التوزيع: من وضع التخصيص (صفوف المدن) لو مفعّل، وإلا من الاقتراح الجاهز المختار.
+      let effDist = bfChosenDist || "", effCN = bfChosenCN || null;
+      if (bfMode() === "manual") { const mm = bfManualDist(); effDist = mm.dist; effCN = mm.cn; }
       const payload = {
         contact_phone: convPhone,
         destination: val("bf-destination"),
@@ -4445,8 +4513,8 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         arrival_airport: arr || "", departure_airport: dep || "",
         sim_count: val("bf-sim_count"), hotel_stars: val("bf-hotel_stars"),
         notes: val("bf-notes"), currency: val("bf-currency"),
-        distribution: bfChosenDist || "",
-        cities_nights: bfChosenCN || null,
+        distribution: effDist || "",
+        cities_nights: effCN || null,
       };
       // وجهة محلية (داخل عُمان: صلالة/مسقط/الجبل الأخضر) — رحلة بريّة بلا طيران،
       // فلا نطلب مطار القدوم/المغادرة (وإلا يُرفض الطلب ولا يُبنى).
@@ -4457,7 +4525,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       if (!(parseInt(payload.pax) >= 1)) missReq.push("عدد الأشخاص");
       if (!(parseInt(payload.days) >= 1)) missReq.push("عدد الأيام");
       if (!isDomestic && (!payload.arrival_airport || !payload.departure_airport)) missReq.push("مطار القدوم/المغادرة");
-      if (!payload.distribution) missReq.push("توزيع المدن (اضغطي بطاقة اقتراح أو اكتبي توزيعاً مخصّصاً)");
+      if (!payload.distribution) missReq.push("توزيع المدن (اختاري اقتراحاً جاهزاً أو أضيفي المدن من «تخصيص»)");
       if (missReq.length) {
         const m = $("bf-msg"); if (m) { m.style.color = "#dc2626"; m.textContent = "⛔ لا يمكن الحفظ — أكملي أولاً: " + missReq.join("، "); }
         return false;
@@ -4512,11 +4580,13 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     if ($("bf-destination")) $("bf-destination").addEventListener("change", async e => {
       bfChosenDist = ""; bfChosenCN = null; bfChosenPair = "";
       if ($("bf-chosen-wrap")) $("bf-chosen-wrap").style.display = "none";
-      if ($("bf-custom-dist")) $("bf-custom-dist").value = "";
+      // مدن التخصيص تتبع الوجهة: صفّرها وابدأ بصف واحد بقائمة مدن الوجهة الجديدة
+      if ($("bf-cityRows")) { $("bf-cityRows").innerHTML = ""; if (bfMode() === "manual") bfAddCity(); }
+      bfSum();
       await bfLoadSugs(e.target.value); bfRenderSugs();
     });
     if ($("bf-airport")) $("bf-airport").addEventListener("change", bfRenderSugs);
-    if ($("bf-days")) $("bf-days").addEventListener("input", bfRenderSugs);
+    if ($("bf-days")) $("bf-days").addEventListener("input", () => { bfRenderSugs(); bfExpected(); });
     if ($("bf-save")) $("bf-save").addEventListener("click", saveBrief);
     if ($("bf-transfer")) $("bf-transfer").addEventListener("click", transferBrief);
     if ($("bf-extract")) $("bf-extract").addEventListener("click", bfExtract);
