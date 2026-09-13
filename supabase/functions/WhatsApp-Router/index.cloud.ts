@@ -6398,11 +6398,17 @@ Deno.serve(async (req) => {
           const caption = mediaObj ? String(mediaObj.caption || "") : "";
           const b = isText ? String(m?.text?.body || "") : caption;
           // نوع معروف (أو فيه وسيط قابل للتنزيل) → تسمية النوع.
-          // نوع غير مدعوم بلا وسيط (view-once/حالة مُعاد توجيهها/نوع لا يُسلَّم) → رسالة واضحة للموظفة بدل «📎 مرفق» الغامض.
+          // نوع غير مدعوم بلا وسيط → واتساب Cloud API لا يسلّم الوسيط إطلاقاً
+          // (عرض مرة واحدة/مُعاد توجيه/unsupported). رسالة واضحة + النوع الفعلي.
           let media_label = "";
           if (!isText) {
             if (mediaLabels[t] || media_id) media_label = mediaLabels[t] || "📎 مرفق";
-            else media_label = "⚠️ أرسل العميل مرفقاً لا يدعمه واتساب (يُعرض مرة واحدة/مُعاد توجيهه) — اطلبي منه إعادة إرساله كصورة أو ملف PDF";
+            else {
+              const diag = [t ? `النوع: ${t}` : "", metaErrTitle ? `(${metaErrTitle})` : ""].filter(Boolean).join(" ");
+              media_label = "⚠️ أرسل العميل مرفقاً لا يصل عبر واتساب (غالباً «عرض مرة واحدة» أو مُعاد توجيه)"
+                + (diag ? ` — ${diag}` : "")
+                + ". اطلبي منه إعادة إرساله كصورة عادية (بدون خاصية «عرض مرة واحدة») أو ملف PDF.";
+            }
           }
           const nm = (!isText) ? 1 : 0;
           // إعلان «اضغط للمحادثة» (إنستقرام/فيسبوك): واتساب يرسل referral مع أول رسالة.

@@ -35,6 +35,49 @@ const TOURISM_AI_URL = `https://${PROJECT_REF}.supabase.co/functions/v1/Tourism-
 
 const GRAPH_VERSION = "v22.0";
 
+// ── تخزين وسائط العميل الواردة بشكل دائم ─────────────────────────────────────
+// واتساب (Meta) يحذف الوسائط من خوادمه بعد فترة. كنا نخزّن المعرّف فقط (media_id)
+// ونجلب الوسيط عند الطلب — فبعد حذف Meta له يرجع 400 «media not found» ولا يظهر
+// المرفق بالداشبورد أبداً (شكوى «المرفقات ما تظهر» المتكرّرة). الحل: نحفظ نسخة
+// دائمة في باكت whatsapp-attachments مفتاحها media_id — عند الاستلام (warm) وعند
+// أول عرض (cache) — ونعرض من نسختنا حتى بعد حذف Meta للأصل.
+const MEDIA_BUCKET = "whatsapp-attachments";
+const inboundMediaKey = (mediaId: string) => `inbound/${mediaId}`;
+
+// ينزّل الوسيط من Meta ويرجع البايتات + النوع (أو null عند الفشل/انتهاء الصلاحية).
+async function fetchMetaMedia(mediaId: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  const TOKEN = (Deno.env.get("WHATSAPP_ACCESS_TOKEN") || "").trim();
+  if (!TOKEN || !mediaId) return null;
+  try {
+    const metaRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${mediaId}`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+    if (!metaRes.ok) return null;
+    const metaJson = await metaRes.json();
+    const fileUrl = metaJson?.url;
+    const mime = String(metaJson?.mime_type || "application/octet-stream");
+    if (!fileUrl) return null;
+    const fileRes = await fetch(fileUrl, { headers: { Authorization: `Bearer ${TOKEN}` } });
+    if (!fileRes.ok) return null;
+    const bytes = new Uint8Array(await fileRes.arrayBuffer());
+    return { bytes, mime };
+  } catch (_e) { return null; }
+}
+
+// أفضل جهد: ينزّل الوسيط الطازج ويخزّنه دائماً في الباكت. لا يرمي أبداً — يُستدعى
+// في الخلفية (EdgeRuntime.waitUntil) عند استلام كل رسالة وسائط.
+async function warmInboundMedia(mediaId: string): Promise<void> {
+  if (!mediaId) return;
+  try {
+    const store = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const got = await fetchMetaMedia(mediaId);
+    if (!got) return;
+    await store.storage.from(MEDIA_BUCKET).upload(inboundMediaKey(mediaId), got.bytes, {
+      contentType: got.mime, upsert: true,
+    });
+  } catch (_e) { /* أفضل جهد — لا يكسر الاستقبال */ }
+}
+
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 // نرد على ويبهوك Meta بـ 200 سريع (الرسائل الصادرة نرسلها عبر Graph REST
@@ -5892,21 +5935,26 @@ Deno.serve(async (req) => {
     try {
       const mediaId = (url.searchParams.get("media_id") || "").trim();
       if (mediaId) {
-        // Cloud API: media id → رابط مؤقت من Graph → تنزيل بالتوكن وتمريره.
-        const TOKEN = (Deno.env.get("WHATSAPP_ACCESS_TOKEN") || "").trim();
-        if (!TOKEN) return new Response("no token", { status: 500, headers: corsHeaders });
-        const metaRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${mediaId}`, {
-          headers: { Authorization: `Bearer ${TOKEN}` },
-        });
-        if (!metaRes.ok) return new Response("media not found", { status: metaRes.status, headers: corsHeaders });
-        const metaJson = await metaRes.json();
-        const fileUrl = metaJson?.url;
-        const mime = metaJson?.mime_type || "application/octet-stream";
-        if (!fileUrl) return new Response("no url", { status: 404, headers: corsHeaders });
-        const fileRes = await fetch(fileUrl, { headers: { Authorization: `Bearer ${TOKEN}` } });
-        if (!fileRes.ok || !fileRes.body) return new Response("download failed", { status: fileRes.status, headers: corsHeaders });
-        return new Response(fileRes.body, {
-          headers: { ...corsHeaders, "Content-Type": mime, "Cache-Control": "private, max-age=3600" },
+        const store = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const key = inboundMediaKey(mediaId);
+        // 1) من نسختنا الدائمة إن وُجدت — يعمل حتى بعد حذف Meta للوسيط (السبب
+        //    الجذري لاختفاء المرفقات القديمة).
+        try {
+          const { data: blob } = await store.storage.from(MEDIA_BUCKET).download(key);
+          if (blob) {
+            const mimeStored = blob.type || "application/octet-stream";
+            const buf = new Uint8Array(await blob.arrayBuffer());
+            return new Response(buf, {
+              headers: { ...corsHeaders, "Content-Type": mimeStored, "Cache-Control": "private, max-age=86400" },
+            });
+          }
+        } catch (_e) { /* لا نسخة محفوظة — نجلب من Meta تحت */ }
+        // 2) من Meta (الوسيط ما زال طازجاً) + نخزّن نسخة دائمة للمستقبل.
+        const got = await fetchMetaMedia(mediaId);
+        if (!got) return new Response("media not found", { status: 404, headers: corsHeaders });
+        try { await store.storage.from(MEDIA_BUCKET).upload(key, got.bytes, { contentType: got.mime, upsert: true }); } catch (_e) { /* أفضل جهد */ }
+        return new Response(got.bytes, {
+          headers: { ...corsHeaders, "Content-Type": got.mime, "Cache-Control": "private, max-age=3600" },
         });
       }
       return new Response("missing media_id", { status: 400, headers: corsHeaders });
@@ -6642,11 +6690,22 @@ Deno.serve(async (req) => {
           const caption = mediaObj ? String(mediaObj.caption || "") : "";
           const b = isText ? String(m?.text?.body || "") : caption;
           // نوع معروف (أو فيه وسيط قابل للتنزيل) → تسمية النوع.
-          // نوع غير مدعوم بلا وسيط (view-once/حالة مُعاد توجيهها/نوع لا يُسلَّم) → رسالة واضحة للموظفة بدل «📎 مرفق» الغامض.
+          // نوع غير مدعوم بلا وسيط → واتساب Cloud API لا يسلّم الوسيط إطلاقاً في
+          // هذه الحالات، فلا يوجد ما نُنزّله (ليس خللاً في الداشبورد):
+          //   • صورة/فيديو «عرض مرة واحدة» (view once) — الأكثر شيوعاً: العميل يرسل
+          //     الجواز/إيصال الدفع بخاصية العرض-مرة-واحدة للخصوصية.
+          //   • type=unsupported (ميزة أحدث من نسخة الـAPI، استطلاع، تفاعل…).
+          // نعطي الموظفة رسالة واضحة قابلة للتنفيذ + نُرفق النوع/الخطأ الفعلي كي
+          // نميّز نهائياً «قيد واتساب» عن أي خلل حقيقي إن تكرّرت الشكوى.
           let media_label = "";
           if (!isText) {
             if (mediaLabels[t] || media_id) media_label = mediaLabels[t] || "📎 مرفق";
-            else media_label = "⚠️ أرسل العميل مرفقاً لا يدعمه واتساب (يُعرض مرة واحدة/مُعاد توجيهه) — اطلبي منه إعادة إرساله كصورة أو ملف PDF";
+            else {
+              const diag = [t ? `النوع: ${t}` : "", metaErrTitle ? `(${metaErrTitle})` : ""].filter(Boolean).join(" ");
+              media_label = "⚠️ أرسل العميل مرفقاً لا يصل عبر واتساب (غالباً «عرض مرة واحدة» أو مُعاد توجيه)"
+                + (diag ? ` — ${diag}` : "")
+                + ". اطلبي منه إعادة إرساله كصورة عادية (بدون خاصية «عرض مرة واحدة») أو ملف PDF.";
+            }
           }
           const nm = (!isText) ? 1 : 0;
           // إعلان «اضغط للمحادثة» (إنستقرام/فيسبوك): واتساب يرسل referral مع أول رسالة.
@@ -6677,6 +6736,13 @@ Deno.serve(async (req) => {
     // ثم تُمرّر للمنطق — أو placeholder لو وسائط بلا نص.
     const processOne = async (item: Incoming): Promise<void> => {
       const { from, body, numMedia, profileName, media_id, media_mime, media_filename, media_label, referral } = item;
+      // نحفظ نسخة دائمة من الوسيط فوراً وهو طازج (خلفيّاً كي لا نؤخّر رد الويبهوك)،
+      // فلا يختفي المرفق عندما يحذفه Meta لاحقاً. أفضل جهد — لا يعطّل الاستقبال.
+      if (media_id) {
+        // @ts-ignore EdgeRuntime injected by Supabase
+        if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") EdgeRuntime.waitUntil(warmInboundMedia(media_id));
+        else warmInboundMedia(media_id);
+      }
       // أعمدة الوسائط تُضاف فقط عند وجود معرّف (لعرض الملف بالداشبورد عبر media_proxy).
       const mediaCols: Record<string, unknown> = media_id
         ? { media_id, media_mime: media_mime || null, media_filename: media_filename || null }
