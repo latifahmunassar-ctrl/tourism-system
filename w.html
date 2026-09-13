@@ -1867,7 +1867,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260913d";
+    const APPVER = "20260913e";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4431,11 +4431,14 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     }
     // يبني نص التوزيع + مصفوفة [{city,nights}] من صفوف التخصيص
     function bfManualDist(){
-      const rows = [...document.querySelectorAll("#bf-cityRows .bfx-crow")].map(r => ({
+      const all = [...document.querySelectorAll("#bf-cityRows .bfx-crow")].map(r => ({
         city: (r.querySelector(".bfx-city").value || "").trim(),
         nights: +r.querySelector(".bfx-n").value || 0,
-      })).filter(r => r.city && r.nights > 0);
-      return { dist: rows.map(r => r.nights + " " + r.city).join(" + "), cn: rows };
+      }));
+      const rows = all.filter(r => r.city && r.nights > 0);
+      // صفوف فيها ليالٍ لكن بلا اختيار مدينة — لا تُسقط بصمت، ننبّه الموظفة
+      const incomplete = all.filter(r => !r.city && r.nights > 0).length;
+      return { dist: rows.map(r => r.nights + " " + r.city).join(" + "), cn: rows, incomplete };
     }
     if ($("bf-modeSeg")) $("bf-modeSeg").querySelectorAll("input[name=bf-mode]").forEach(r => r.addEventListener("change", () => bfSetMode(r.value)));
     if ($("bf-addcity")) $("bf-addcity").addEventListener("click", () => bfAddCity());
@@ -4504,7 +4507,13 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       const [arr, dep] = pair ? pair.split("|") : ["", ""];
       // التوزيع: من وضع التخصيص (صفوف المدن) لو مفعّل، وإلا من الاقتراح الجاهز المختار.
       let effDist = bfChosenDist || "", effCN = bfChosenCN || null;
-      if (bfMode() === "manual") { const mm = bfManualDist(); effDist = mm.dist; effCN = mm.cn; }
+      if (bfMode() === "manual") {
+        const mm = bfManualDist(); effDist = mm.dist; effCN = mm.cn;
+        if (mm.incomplete) {   // صف فيه ليالٍ بلا مدينة → لا نحفظ توزيعاً ناقصاً بصمت
+          const m = $("bf-msg"); if (m) { m.style.color = "#dc2626"; m.textContent = "⛔ فيه صف مدينة بلا اختيار — اختاري المدينة في كل صف قبل الحفظ (أو احذفي الصف)."; }
+          return false;
+        }
+      }
       const payload = {
         contact_phone: convPhone,
         destination: val("bf-destination"),

@@ -6063,12 +6063,19 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
       const { data: existing } = await supabase
-        .from("booking_brief").select("id, confirm_sent_at").eq("contact_phone", contact_phone)
+        .from("booking_brief").select("id, confirm_sent_at, distribution, days, date_from").eq("contact_phone", contact_phone)
         .in("status", ["incomplete", "complete"])
         .order("created_at", { ascending: false }).limit(1).maybeSingle();
       // نرسل التأكيد عند كل حفظ مكتمل، لكن نمنع التكرار خلال 60 ثانية (نقرة مزدوجة).
-      const lastConfirm = (existing as { confirm_sent_at?: string | null } | null)?.confirm_sent_at;
-      const recentlyConfirmed = !!lastConfirm && (Date.now() - new Date(lastConfirm).getTime() < 60000);
+      // إلا لو تغيّر جوهر الطلب (التوزيع/الأيام/التاريخ) → نعيد الإرسال بالمعلومة المصحّحة،
+      // حتى لا يبقى العميل على نسخة قديمة (مثال: أضافت الموظفة مدينة ثانية بعد أول حفظ).
+      const ex = existing as { confirm_sent_at?: string | null; distribution?: string | null; days?: number | null; date_from?: string | null } | null;
+      const lastConfirm = ex?.confirm_sent_at;
+      const sameCore =
+        String(ex?.distribution || "").trim() === String(fields.distribution || "").trim() &&
+        String(ex?.days ?? "") === String(fields.days ?? "") &&
+        String(ex?.date_from || "") === String(fields.date_from || "");
+      const recentlyConfirmed = !!lastConfirm && (Date.now() - new Date(lastConfirm).getTime() < 60000) && sameCore;
       const now = new Date().toISOString();
       let row: { id: string; status: string } | null = null;
       if (existing && (existing as { id?: string }).id) {
