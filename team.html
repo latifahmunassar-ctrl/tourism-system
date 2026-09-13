@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-13-pdf-latin-spaces'
+  var BUILD = '2026-09-14-group-programs'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -520,6 +520,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div class="fp-tabs">
 <div class="fp-tab active" data-tab="build" onclick="fpTab('build')">📋 بناء تسعيرة</div>
 <div class="fp-tab" data-tab="mods" onclick="fpTab('mods')">💬 تعديلات <span class="badge">شات</span></div>
+<div class="fp-tab" data-tab="groups" onclick="fpTab('groups')">🚌 برامج الجروبات</div>
 </div>
 
 <div id="tab-build" style="display:flex">
@@ -632,6 +633,28 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <textarea class="chat-input" id="chatInput" placeholder="اكتب تعديلك على البرنامج هنا..." rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
 <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
 </div>
+</div>
+
+<!-- ═══ تبويب برامج الجروبات (معزول: مصدره تبويب Groups بالشيت، مسار ثابت غير قابل للتعديل) ═══ -->
+<div id="tab-groups" style="display:none">
+  <div class="bf-sec">
+    <h3>🚌 برامج الجروبات</h3>
+    <div class="bf-sub">برامج جروبات جاهزة بمسار ثابت مربوط بتواريخ محددة — تُقرأ من تبويب «Groups» بالشيت.</div>
+    <div class="bf-field"><label>الوجهة <span class="bf-req">*</span></label>
+      <select id="grp-dest" onchange="grpOnDest()"><option value="">— جارٍ التحميل… —</option></select>
+    </div>
+    <div class="bf-field"><label>تاريخ المغادرة <span class="bf-req">*</span></label>
+      <select id="grp-date" onchange="grpOnDate()"><option value="">— اختر الوجهة أولاً —</option></select>
+    </div>
+    <div class="bf-row">
+      <div class="bf-field"><label>عدد البالغين <span class="bf-req">*</span></label><input id="grp-adults" type="number" min="1" max="60" value="2"></div>
+      <div class="bf-field"><label>عدد الأطفال</label><input id="grp-children" type="number" min="0" max="40" value="0"></div>
+    </div>
+    <div class="bf-hint" id="grp-priceHint" style="margin-bottom:8px"></div>
+    <button class="bf-build-btn" id="grp-showBtn" onclick="grpShow()">👁️ اعرض برنامج الجروب</button>
+    <div class="bf-hint" style="text-align:center;margin-top:9px">المسار ثابت غير قابل للتعديل — للعرض والإرسال فقط.</div>
+    <div class="bf-hint" id="grp-msg" style="text-align:center;margin-top:6px;color:#b45309"></div>
+  </div>
 </div>
 </div>
 </div>
@@ -2126,6 +2149,151 @@ function fpTab(t){
   document.querySelectorAll('.fp-tab').forEach(x=>x.classList.toggle('active', x.dataset.tab===t));
   document.getElementById('tab-build').style.display = t==='build' ? 'flex' : 'none';
   document.getElementById('tab-mods').style.display  = t==='mods'  ? 'flex' : 'none';
+  const g = document.getElementById('tab-groups'); if(g) g.style.display = t==='groups' ? 'block' : 'none';
+  if(t==='groups' && !GRP_LOADED) grpLoad();
+}
+
+// ═══════════ برامج الجروبات (معزول تماماً — مصدره تبويب Groups بالشيت) ═══════════
+let GRP_LOADED = false;     // حُمِّلت بيانات الجروبات؟
+let GRP_DATA = [];          // كل صفوف الجروبات
+let GRP_DEST_ROWS = [];     // صفوف الوجهة المختارة (لربط قائمة التواريخ)
+let GRP_CURRENT = null;     // الجروب المعروض حالياً
+function grpEsc(s){ return String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
+function grpNum(n){ return (Number(n)||0).toLocaleString('en-US'); }
+function grpMsg(t, err){ const m=document.getElementById('grp-msg'); if(m){ m.style.color = err?'#c0392b':'#0e5a40'; m.textContent = t||''; } }
+function grpFileName(g){ return ('جروب-'+(g.destination||'')+'-'+(g.date||'')).replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,'-'); }
+function grpTotals(g, adults, children){
+  const a=(Number(g.adult_price)||0)*adults, c=(Number(g.child_price)||0)*children;
+  return { adultLine:a, childLine:c, total:a+c };
+}
+function grpDayLines(itin){ return String(itin||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean); }
+
+async function grpLoad(){
+  const dSel=document.getElementById('grp-dest');
+  try{
+    const res=await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},body:JSON.stringify({action:'groups_list'})});
+    const data=await res.json(); GRP_DATA=Array.isArray(data.groups)?data.groups:[];
+  }catch(e){ GRP_DATA=[]; }
+  GRP_LOADED=true;
+  const dests=[...new Set(GRP_DATA.map(g=>String(g.destination||'').trim()).filter(Boolean))];
+  if(!dests.length){
+    dSel.innerHTML='<option value="">— لا توجد جروبات —</option>';
+    grpMsg('لا توجد بيانات جروبات بعد. أنشئي تبويب «Groups» بالشيت وأضيفي صفوف الجروبات.', true);
+    return;
+  }
+  dSel.innerHTML='<option value="">اختر الوجهة…</option>'+dests.map(d=>`<option>${grpEsc(d)}</option>`).join('');
+  grpMsg('');
+}
+function grpOnDest(){
+  const dest=document.getElementById('grp-dest').value;
+  const dSel=document.getElementById('grp-date');
+  GRP_CURRENT=null; document.getElementById('grp-priceHint').textContent='';
+  if(!dest){ dSel.innerHTML='<option value="">— اختر الوجهة أولاً —</option>'; return; }
+  GRP_DEST_ROWS=GRP_DATA.filter(g=>String(g.destination||'').trim()===dest);
+  dSel.innerHTML=GRP_DEST_ROWS.length
+    ? '<option value="">اختر تاريخ المغادرة…</option>'+GRP_DEST_ROWS.map((g,i)=>`<option value="${i}">${grpEsc(g.date||'')}${g.title?(' — '+grpEsc(g.title)):''}</option>`).join('')
+    : '<option value="">— لا تواريخ لهذه الوجهة —</option>';
+}
+function grpOnDate(){
+  const v=document.getElementById('grp-date').value;
+  GRP_CURRENT=(v==='')?null:(GRP_DEST_ROWS[+v]||null);
+  const h=document.getElementById('grp-priceHint');
+  if(GRP_CURRENT){ const cur=grpEsc(GRP_CURRENT.currency||'ر.س'); h.textContent=`سعر البالغ ${grpNum(GRP_CURRENT.adult_price)} ${cur} · الطفل ${grpNum(GRP_CURRENT.child_price)} ${cur}`; }
+  else h.textContent='';
+}
+function grpShow(){
+  if(!GRP_CURRENT){ grpMsg('اختاري الوجهة والتاريخ أولاً.', true); return; }
+  const adults=parseInt(document.getElementById('grp-adults').value)||0;
+  const children=parseInt(document.getElementById('grp-children').value)||0;
+  if(adults<1){ grpMsg('عدد البالغين لازم 1 على الأقل.', true); return; }
+  grpMsg('');
+  const panel=document.getElementById('reviewPanel'); if(panel) panel.innerHTML=grpRenderProgram(GRP_CURRENT, adults, children);
+}
+function grpContentHtml(g, adults, children){
+  const cur=grpEsc(g.currency||'ر.س'); const t=grpTotals(g, adults, children);
+  const days=grpDayLines(g.itinerary);
+  const itinHtml=days.length
+    ? '<ol style="margin:0;padding-inline-start:20px;line-height:1.9;">'+days.map(d=>`<li style="margin-bottom:4px;">${grpEsc(d)}</li>`).join('')+'</ol>'
+    : '<div style="color:#94a3b8;">—</div>';
+  const block=(title,body)=>body?`<div style="margin-top:14px;"><div style="font-weight:900;color:#1a3a8f;font-size:16px;margin-bottom:6px;">${title}</div><div style="line-height:1.8;white-space:pre-wrap;">${grpEsc(body)}</div></div>`:'';
+  return `<div style="border:1.5px solid #d0deff;border-radius:12px;padding:18px 20px;">
+    <div style="font-size:22px;font-weight:900;color:#1a3a8f;">🚌 ${grpEsc(g.title||('جروب '+(g.destination||'')))}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-weight:800;color:#0d1f4a;font-size:15px;">
+      <span>📍 ${grpEsc(g.destination||'')}</span>
+      <span>🗓️ ${grpEsc(g.date||'')}</span>
+      ${g.days?`<span>📅 ${grpEsc(String(g.days))} أيام</span>`:''}
+      <span>👥 ${adults} بالغ${children?(' + '+children+' طفل'):''}</span>
+    </div>
+    <div style="margin-top:14px;"><div style="font-weight:900;color:#1a3a8f;font-size:16px;margin-bottom:6px;">🗺️ مسار الجولات (ثابت)</div>${itinHtml}</div>
+    ${block('🏨 الفنادق', g.hotels)}
+    ${block('✅ يشمل', g.includes)}
+    ${block('❌ لا يشمل', g.excludes)}
+    ${block('📝 ملاحظات', g.notes)}
+    <div style="margin-top:16px;border-top:2px solid #eef;padding-top:12px;font-weight:800;color:#0d1f4a;line-height:2;">
+      <div>سعر البالغ: ${grpNum(g.adult_price)} ${cur} × ${adults} = <b>${grpNum(t.adultLine)} ${cur}</b></div>
+      ${children?`<div>سعر الطفل: ${grpNum(g.child_price)} ${cur} × ${children} = <b>${grpNum(t.childLine)} ${cur}</b></div>`:''}
+      <div style="font-size:18px;color:#1a3a8f;margin-top:6px;">الإجمالي: <b>${grpNum(t.total)} ${cur}</b></div>
+    </div>
+  </div>`;
+}
+function grpRenderProgram(g, adults, children){
+  const btn='display:inline-flex;align-items:center;gap:6px;border:0;border-radius:9px;padding:9px 14px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;';
+  return `<div style="padding:14px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+      <button onclick="grpPdf()" style="${btn}background:#1a3a8f;color:#fff;">⤓ تصدير PDF</button>
+      <button onclick="grpShare()" style="${btn}background:#0e9d6a;color:#fff;">🚌 إرسال / مشاركة</button>
+      <button onclick="grpCopyText()" style="${btn}background:#eef2f6;color:#334155;">📋 نسخ النص</button>
+    </div>
+    ${grpContentHtml(g, adults, children)}
+  </div>`;
+}
+function grpBuildPdfHtml(g, adults, children){
+  return `<div style="width:210mm;background:#fff;padding:16mm 14mm;font-family:'Tajawal',sans-serif;direction:rtl;color:#0d1f4a;">
+    <div style="text-align:center;margin-bottom:16px;"><img src="${LOGO_IMG}" style="height:72px;"/></div>
+    ${grpContentHtml(g, adults, children)}
+    <div style="text-align:center;margin-top:20px;color:#64748b;font-size:12px;">مجموعة العز الدولية للسفر والسياحة</div>
+  </div>`;
+}
+async function grpMakeBlob(){
+  const adults=parseInt(document.getElementById('grp-adults').value)||0;
+  const children=parseInt(document.getElementById('grp-children').value)||0;
+  return await generatePdfBlob(null, grpBuildPdfHtml(GRP_CURRENT, adults, children));
+}
+async function grpPdf(){
+  if(!GRP_CURRENT) return; grpMsg('⏳ يُجهّز الـPDF…');
+  try{
+    const blob=await grpMakeBlob(); const fname=grpFileName(GRP_CURRENT)+'.pdf';
+    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),15000); grpMsg('✅ نُزّل ملف الـPDF.');
+  }catch(e){ grpMsg('فشل تجهيز الـPDF: '+(e&&e.message?e.message:e), true); }
+}
+async function grpShare(){
+  if(!GRP_CURRENT) return; grpMsg('⏳ يُجهّز الملف للمشاركة…');
+  let blob; try{ blob=await grpMakeBlob(); }catch(e){ grpMsg('فشل: '+(e&&e.message?e.message:e), true); return; }
+  const fname=grpFileName(GRP_CURRENT)+'.pdf'; const file=new File([blob],fname,{type:'application/pdf'});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file],title:'برنامج جروب — مجموعة العز'}); grpMsg('✅ فُتحت المشاركة — اختاري الجهة وأرسلي.'); return; }
+    catch(e){ if(e&&e.name==='AbortError'){ grpMsg(''); return; } }
+  }
+  const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),15000); grpMsg('✅ نُزّل الملف — أرفقيه (📎) في واتساب وأرسلي.');
+}
+function grpCopyText(){
+  if(!GRP_CURRENT) return; const g=GRP_CURRENT;
+  const adults=parseInt(document.getElementById('grp-adults').value)||0;
+  const children=parseInt(document.getElementById('grp-children').value)||0;
+  const cur=g.currency||'ر.س'; const t=grpTotals(g,adults,children); const L=[];
+  L.push('🚌 '+(g.title||('جروب '+(g.destination||''))));
+  L.push('📍 '+(g.destination||'')+'  🗓️ '+(g.date||'')+(g.days?('  📅 '+g.days+' أيام'):''));
+  L.push('👥 '+adults+' بالغ'+(children?(' + '+children+' طفل'):''));
+  L.push(''); L.push('🗺️ مسار الجولات:');
+  grpDayLines(g.itinerary).forEach((d,i)=>L.push((i+1)+'. '+d));
+  if(g.hotels){ L.push(''); L.push('🏨 الفنادق: '+g.hotels); }
+  if(g.includes){ L.push(''); L.push('✅ يشمل: '+g.includes); }
+  if(g.excludes){ L.push(''); L.push('❌ لا يشمل: '+g.excludes); }
+  if(g.notes){ L.push(''); L.push('📝 '+g.notes); }
+  L.push(''); L.push('💰 الإجمالي: '+grpNum(t.total)+' '+cur);
+  navigator.clipboard.writeText(L.join('\n')).then(()=>grpMsg('✅ نُسخ نص البرنامج.'),()=>grpMsg('تعذّر النسخ.', true));
 }
 const BF_CITIES = {
   "فيتنام":["هانوي","سابا","ها لونج","دانانج","فوكوك","نها ترانج","دالات","هوتشي مينه"],
@@ -3939,10 +4107,12 @@ function loadHtml2Pdf(){
 }
 
 // يولّد ملف PDF فعلي (Blob) من نفس قالب #pdfContent المستخدم في الطباعة.
-async function generatePdfBlob(mode){
+async function generatePdfBlob(mode, customHtml){
   await loadHtml2Pdf();
-  buildPDF(mode);                                  // يملأ #pdfContent (بدون شبكة)
   const el = document.getElementById('pdfContent');
+  // customHtml (اختياري): محتوى جاهز يُلتقط كما هو (يستخدمه تبويب الجروبات المعزول)؛
+  // بدونه المسار الحالي كما هو — buildPDF يملأ #pdfContent من حالة التسعير.
+  if (customHtml != null) el.innerHTML = customHtml; else buildPDF(mode);
   if (!el || !el.innerHTML.trim()) throw new Error('لا يوجد محتوى لتوليد الـPDF.');
   // نخفي العنصر داخل غلاف (max-height:0 + overflow:hidden) مع إبقاء أنماطه نظيفة
   // ومرئية. مهم جدًّا: لو وضعنا الإخفاء (left:-99999px أو opacity:0) على العنصر

@@ -2812,6 +2812,69 @@ async function handleMakkahTransport(): Promise<Response> {
 //    البلوك: صف رؤوس الشركات (OMAR/Salam Air ways) → صف المسار (Muscat-Jeddah / Jeddah-Muscat)
 //    → صف فرعي (Date | Original price | Final Price) → صفوف البيانات لكل تاريخ.
 //    كل شركة = 3 أعمدة: [التاريخ] عمود الشركة، [Original]=+1، [Final]=+2.
+// ── برامج الجروبات (تبويب Groups بالشيت) — معزول تماماً عن محرّك التسعير ──────
+// كل صف = رحلة جروب جاهزة (مسار ثابت مربوط بتاريخ). نقرأ بأسماء الأعمدة فترتيبها
+// لا يهم وتقدر المالكة تضيف أعمدة لاحقاً بلا كسر (نفس فلسفة القراءة بالاسم في الفنادق).
+async function handleGroups(): Promise<Response> {
+  const empty = () => new Response(JSON.stringify({ groups: [] }), { headers: CORS_HEADERS });
+  try {
+    const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
+    const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
+    const rows = await pmReadSheet(await pmGoogleToken(sa), ssid, "'Groups'!A1:Z500");
+    if (!rows.length) return empty();
+    const norm = (s: unknown) => String(s || "").replace(/[إأآا]/g, "ا").replace(/[ةه]/g, "ه").replace(/\s+/g, " ").trim().toLowerCase();
+    // صف الرؤوس = أول صف فيه خلية «وجهة» وخلية «تاريخ».
+    let hdr = -1;
+    for (let i = 0; i < Math.min(rows.length, 10); i++) {
+      const r = (rows[i] || []).map(norm);
+      if (r.some(c => /وجهه|destination/.test(c)) && r.some(c => /تاريخ|date/.test(c))) { hdr = i; break; }
+    }
+    if (hdr < 0) return empty();
+    const H = (rows[hdr] || []).map(norm);
+    // نطابق كل حقل بعمود عبر اسمه (الأخصّ أولاً حتى لا يبتلع «يشمل» عمودَ «لا يشمل»).
+    const find = (re: RegExp) => H.findIndex(c => re.test(c));
+    const col = {
+      dest:     find(/وجهه|destination/),
+      title:    find(/عنوان|اسم.*جروب|title/),
+      date:     find(/تاريخ|date/),
+      days:     find(/ايام|مده|days|duration/),
+      adult:    find(/سعر.*بالغ|بالغ|adult/),
+      child:    find(/سعر.*طفل|طفل|child/),
+      currency: find(/عمله|currency/),
+      excludes: find(/لا\s*يشمل|exclude/),
+      includes: H.findIndex(c => /يشمل|include/.test(c) && !/لا\s*يشمل/.test(c)),
+      itinerary:find(/مسار|جولات|برنامج|itinerary/),
+      hotels:   find(/فنادق|فندق|hotel/),
+      notes:    find(/ملاحظ|notes/),
+    };
+    const cell = (r: string[], i: number) => (i >= 0 ? String(r[i] ?? "").trim() : "");
+    const numOf = (s: string) => { const n = parseFloat(String(s || "").replace(/[^\d.]/g, "")); return isFinite(n) ? n : 0; };
+    const groups: Array<Record<string, unknown>> = [];
+    for (let i = hdr + 1; i < rows.length; i++) {
+      const r = rows[i] || [];
+      const dest = cell(r, col.dest); const date = cell(r, col.date);
+      if (!dest && !date) continue;      // صف فارغ
+      groups.push({
+        destination: dest,
+        title: cell(r, col.title),
+        date,
+        days: numOf(cell(r, col.days)) || null,
+        adult_price: numOf(cell(r, col.adult)),
+        child_price: numOf(cell(r, col.child)),
+        currency: cell(r, col.currency) || "ر.س",
+        itinerary: cell(r, col.itinerary),
+        hotels: cell(r, col.hotels),
+        includes: cell(r, col.includes),
+        excludes: cell(r, col.excludes),
+        notes: cell(r, col.notes),
+      });
+    }
+    return new Response(JSON.stringify({ groups }), { headers: CORS_HEADERS });
+  } catch (e) {
+    return new Response(JSON.stringify({ groups: [], error: (e as Error).message }), { headers: CORS_HEADERS });
+  }
+}
+
 async function handleMakkahFlights(): Promise<Response> {
   const AR = { oman: "الطيران العماني", salam: "طيران السلام" };
   const shell = () => ({ airlines: AR, route: { out: "مسقط ✈️ جدة", ret: "جدة ✈️ مسقط" },
@@ -2986,6 +3049,7 @@ Deno.serve(async (req) => {
     if (reqBody && reqBody.action === "makkah_transport") return await handleMakkahTransport();
     if (reqBody && reqBody.action === "makkah_transport_plan") return await handleMakkahTransportPlan(reqBody);
     if (reqBody && reqBody.action === "makkah_flights") return await handleMakkahFlights();
+    if (reqBody && reqBody.action === "groups_list") return await handleGroups();
     if (reqBody && reqBody.action === "currencies") return await handleCurrencies();
     const { messages, max_tokens = 1200, system: clientSystem } = reqBody;
 
