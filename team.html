@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-14-group-programs-g'
+  var BUILD = '2026-09-14-group-programs-h'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2327,7 +2327,10 @@ async function grpExport(variant){
   grpMsg('⏳ يُجهّز ملف ('+lbl+')…');
   let blob; try{ blob=await grpMakeBlob(variant); }catch(e){ grpMsg('فشل تجهيز الـPDF: '+(e&&e.message?e.message:e), true); return; }
   const s=grpState(); const fname=grpFileName(GRP_CURRENT,s.date)+'-'+lbl+'.pdf'; const file=new File([blob],fname,{type:'application/pdf'});
-  if(navigator.canShare && navigator.canShare({files:[file]})){
+  // على الجوال فقط نفتح مشاركة الجهاز (لإرساله بالواتساب)؛ على الكمبيوتر ننزّل الملف
+  // مباشرة — لأن navigator.share بالماك يفتح قائمة النظام (AirDrop/Mail) بدل التنزيل.
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent||'') || ((navigator.maxTouchPoints||0) > 1 && matchMedia('(pointer:coarse)').matches);
+  if(isMobile && navigator.canShare && navigator.canShare({files:[file]})){
     try{ await navigator.share({files:[file],title:'برنامج جروب ('+lbl+')'}); grpMsg('✅ فُتحت المشاركة.'); return; }
     catch(e){ if(e&&e.name==='AbortError'){ grpMsg(''); return; } }
   }
