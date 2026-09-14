@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-14-group-programs-e'
+  var BUILD = '2026-09-14-group-programs-f'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2311,6 +2311,9 @@ function grpBuildPdfHtml(){
     <div class="pdf-section-title">🗺️ مسار الجولات (ثابت)</div>
     ${dayCards}
     ${incHtml?`<div class="pdf-section-title" style="margin-top:24px;">✅ الأسعار تشمل</div>${incHtml}`:''}
+  </div>
+  <div style="page-break-before:always;padding:0;margin:0;width:210mm;">
+    <img src="${FILLER_IMG}" alt="" style="width:210mm;height:auto;display:block;margin:0;padding:0;"/>
   </div>`;
 }
 async function grpMakeBlob(){ return await generatePdfBlob(null, grpBuildPdfHtml()); }
