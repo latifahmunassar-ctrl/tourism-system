@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-14-group-programs-b'
+  var BUILD = '2026-09-14-group-programs-c'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -639,16 +639,18 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div id="tab-groups" style="display:none">
   <div class="bf-sec">
     <h3>🚌 برامج الجروبات</h3>
-    <div class="bf-sub">برامج جروبات جاهزة بمسار ثابت مربوط بتواريخ محددة — تُقرأ من تبويب «Groups» بالشيت.</div>
-    <div class="bf-field"><label>الوجهة <span class="bf-req">*</span></label>
+    <div class="bf-sub">برامج جروبات جاهزة بمسار ثابت مربوط بتواريخ — كل برنامج = تبويب بالشيت اسمه فيه «(Group)».</div>
+    <div class="bf-field"><label>البرنامج / الوجهة <span class="bf-req">*</span></label>
       <select id="grp-dest" onchange="grpOnDest()"><option value="">— جارٍ التحميل… —</option></select>
     </div>
     <div class="bf-field"><label>تاريخ المغادرة <span class="bf-req">*</span></label>
-      <select id="grp-date" onchange="grpOnDate()"><option value="">— اختر الوجهة أولاً —</option></select>
+      <select id="grp-date" onchange="grpOnDate()"><option value="">— اختر البرنامج أولاً —</option></select>
     </div>
     <div class="bf-row">
-      <div class="bf-field"><label>عدد البالغين <span class="bf-req">*</span></label><input id="grp-adults" type="number" min="1" max="60" value="2"></div>
-      <div class="bf-field"><label>عدد الأطفال</label><input id="grp-children" type="number" min="0" max="40" value="0"></div>
+      <div class="bf-field"><label>عدد المسافرين (Pax) <span class="bf-req">*</span></label><input id="grp-pax" type="number" min="1" max="20" value="2" oninput="grpOnDate()"></div>
+      <div class="bf-field"><label>نوع العميل</label>
+        <select id="grp-ptype" onchange="grpOnDate()"><option value="individual">أفراد</option><option value="company">شركات</option></select>
+      </div>
     </div>
     <div class="bf-hint" id="grp-priceHint" style="margin-bottom:8px"></div>
     <button class="bf-build-btn" id="grp-showBtn" onclick="grpShow()">👁️ اعرض برنامج الجروب</button>
@@ -2153,91 +2155,107 @@ function fpTab(t){
   if(t==='groups' && !GRP_LOADED) grpLoad();
 }
 
-// ═══════════ برامج الجروبات (معزول تماماً — مصدره تبويب Groups بالشيت) ═══════════
+// ═══════════ برامج الجروبات (معزول تماماً — كل برنامج = تبويب «(Group)» بالشيت) ═══════════
 let GRP_LOADED = false;     // حُمِّلت بيانات الجروبات؟
-let GRP_DATA = [];          // كل صفوف الجروبات
-let GRP_DEST_ROWS = [];     // صفوف الوجهة المختارة (لربط قائمة التواريخ)
-let GRP_CURRENT = null;     // الجروب المعروض حالياً
+let GRP_PROGRAMS = [];      // كل برامج الجروبات (من groups_list)
+let GRP_CURRENT = null;     // البرنامج المختار حالياً
 function grpEsc(s){ return String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
 function grpNum(n){ return (Number(n)||0).toLocaleString('en-US'); }
 function grpMsg(t, err){ const m=document.getElementById('grp-msg'); if(m){ m.style.color = err?'#c0392b':'#0e5a40'; m.textContent = t||''; } }
-function grpFileName(g){ return ('جروب-'+(g.destination||'')+'-'+(g.date||'')).replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,'-'); }
-function grpTotals(g, adults, children){
-  const a=(Number(g.adult_price)||0)*adults, c=(Number(g.child_price)||0)*children;
-  return { adultLine:a, childLine:c, total:a+c };
+function grpFileName(g,date){ return ('جروب-'+(g.program||'')+'-'+(date||'')).replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,'-'); }
+function grpDateMonth(d){ let m=String(d||'').match(/^(\d{4})-(\d{1,2})-/); if(m) return +m[2]; m=String(d||'').match(/^(\d{1,2})\/(\d{1,2})\//); if(m) return +m[2]; return 0; }
+// يحدّد الموسم من شهر تاريخ المغادرة
+function grpSeasonFor(g, date){
+  const mo=grpDateMonth(date);
+  return (g.seasons||[]).find(s=>Array.isArray(s.months)&&s.months.includes(mo)) || (g.seasons||[])[0] || null;
 }
-// يقبل فواصل الأيام: سطر جديد (Alt+Enter) أو الرمز | — لتسهيل الإدخال في خلية واحدة.
-function grpDayLines(itin){ return String(itin||'').split(/\r?\n|\s*\|\s*/).map(s=>s.trim()).filter(Boolean); }
+// يحسب التسعير: تكلفة (Pax×الموسم) + ربح (افراد/شركات مرة واحدة) = الإجمالي
+function grpCompute(g, date, pax, ptype){
+  const season=grpSeasonFor(g, date);
+  const entry=(g.prices||[]).find(p=>+p.pax===+pax);
+  const cost=(entry && season) ? Number(entry.prices[season.label]||0) : 0;
+  const profit=(ptype==='company') ? Number(g.profitCompany||0) : Number(g.profitIndividual||0);
+  return { season, cost, profit, total: cost>0 ? (cost+profit) : 0, ok: cost>0 };
+}
 
 async function grpLoad(){
   const dSel=document.getElementById('grp-dest');
   try{
     const res=await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},body:JSON.stringify({action:'groups_list'})});
-    const data=await res.json(); GRP_DATA=Array.isArray(data.groups)?data.groups:[];
-  }catch(e){ GRP_DATA=[]; }
+    const data=await res.json(); GRP_PROGRAMS=Array.isArray(data.groups)?data.groups:[];
+  }catch(e){ GRP_PROGRAMS=[]; }
   GRP_LOADED=true;
-  const dests=[...new Set(GRP_DATA.map(g=>String(g.destination||'').trim()).filter(Boolean))];
-  if(!dests.length){
-    dSel.innerHTML='<option value="">— لا توجد جروبات —</option>';
-    grpMsg('لا توجد بيانات جروبات بعد. أنشئي تبويب «Groups» بالشيت وأضيفي صفوف الجروبات.', true);
+  if(!GRP_PROGRAMS.length){
+    dSel.innerHTML='<option value="">— لا توجد برامج جروبات —</option>';
+    grpMsg('لا توجد برامج جروبات. أنشئي تبويباً بالشيت اسمه فيه «(Group)» بصيغة برنامج الجروب.', true);
     return;
   }
-  dSel.innerHTML='<option value="">اختر الوجهة…</option>'+dests.map(d=>`<option>${grpEsc(d)}</option>`).join('');
+  dSel.innerHTML='<option value="">اختر البرنامج…</option>'+GRP_PROGRAMS.map((g,i)=>`<option value="${i}">${grpEsc(g.program||('برنامج '+(i+1)))}</option>`).join('');
   grpMsg('');
 }
 function grpOnDest(){
-  const dest=document.getElementById('grp-dest').value;
+  const v=document.getElementById('grp-dest').value;
   const dSel=document.getElementById('grp-date');
-  GRP_CURRENT=null; document.getElementById('grp-priceHint').textContent='';
-  if(!dest){ dSel.innerHTML='<option value="">— اختر الوجهة أولاً —</option>'; return; }
-  GRP_DEST_ROWS=GRP_DATA.filter(g=>String(g.destination||'').trim()===dest);
-  dSel.innerHTML=GRP_DEST_ROWS.length
-    ? '<option value="">اختر تاريخ المغادرة…</option>'+GRP_DEST_ROWS.map((g,i)=>`<option value="${i}">${grpEsc(g.date||'')}${g.title?(' — '+grpEsc(g.title)):''}</option>`).join('')
-    : '<option value="">— لا تواريخ لهذه الوجهة —</option>';
+  GRP_CURRENT=(v==='')?null:(GRP_PROGRAMS[+v]||null);
+  document.getElementById('grp-priceHint').textContent='';
+  if(!GRP_CURRENT){ dSel.innerHTML='<option value="">— اختر البرنامج أولاً —</option>'; return; }
+  const dates=GRP_CURRENT.dates||[];
+  dSel.innerHTML=dates.length
+    ? '<option value="">اختر تاريخ المغادرة…</option>'+dates.map(d=>`<option>${grpEsc(d)}</option>`).join('')
+    : '<option value="">— لا تواريخ لهذا البرنامج —</option>';
 }
 function grpOnDate(){
-  const v=document.getElementById('grp-date').value;
-  GRP_CURRENT=(v==='')?null:(GRP_DEST_ROWS[+v]||null);
-  const h=document.getElementById('grp-priceHint');
-  if(GRP_CURRENT){ const cur=grpEsc(GRP_CURRENT.currency||'ر.س'); h.textContent=`سعر البالغ ${grpNum(GRP_CURRENT.adult_price)} ${cur} · الطفل ${grpNum(GRP_CURRENT.child_price)} ${cur}`; }
-  else h.textContent='';
+  const h=document.getElementById('grp-priceHint'); if(!h) return;
+  if(!GRP_CURRENT){ h.textContent=''; return; }
+  const date=document.getElementById('grp-date').value;
+  const pax=parseInt(document.getElementById('grp-pax').value)||0;
+  const ptype=document.getElementById('grp-ptype').value;
+  if(!date || pax<1){ h.textContent=''; return; }
+  const c=grpCompute(GRP_CURRENT, date, pax, ptype);
+  if(!c.ok){ h.style.color='#c0392b'; h.textContent='⚠️ لا يوجد سعر لعدد '+pax+' مسافر في هذا الموسم — عبّي الخانة بالشيت.'; return; }
+  h.style.color='#0e5a40';
+  h.textContent='الموسم: '+(c.season?c.season.label:'—')+' · التكلفة '+grpNum(c.cost)+' + ربح '+grpNum(c.profit)+' = '+grpNum(c.total)+' ر.س';
 }
 function grpShow(){
-  if(!GRP_CURRENT){ grpMsg('اختاري الوجهة والتاريخ أولاً.', true); return; }
-  const adults=parseInt(document.getElementById('grp-adults').value)||0;
-  const children=parseInt(document.getElementById('grp-children').value)||0;
-  if(adults<1){ grpMsg('عدد البالغين لازم 1 على الأقل.', true); return; }
+  if(!GRP_CURRENT){ grpMsg('اختاري البرنامج أولاً.', true); return; }
+  const date=document.getElementById('grp-date').value;
+  const pax=parseInt(document.getElementById('grp-pax').value)||0;
+  const ptype=document.getElementById('grp-ptype').value;
+  if(!date){ grpMsg('اختاري تاريخ المغادرة.', true); return; }
+  if(pax<1){ grpMsg('عدد المسافرين لازم 1 على الأقل.', true); return; }
+  const c=grpCompute(GRP_CURRENT, date, pax, ptype);
+  if(!c.ok){ grpMsg('لا يوجد سعر لعدد '+pax+' مسافر في موسم '+(c.season?c.season.label:'—')+' — عبّي الخانة بالشيت.', true); return; }
   grpMsg('');
-  const panel=document.getElementById('reviewPanel'); if(panel) panel.innerHTML=grpRenderProgram(GRP_CURRENT, adults, children);
+  const panel=document.getElementById('reviewPanel'); if(panel) panel.innerHTML=grpRenderProgram(GRP_CURRENT, date, pax, ptype, c);
 }
-function grpContentHtml(g, adults, children){
-  const cur=grpEsc(g.currency||'ر.س'); const t=grpTotals(g, adults, children);
-  const days=grpDayLines(g.itinerary);
-  const itinHtml=days.length
-    ? '<ol style="margin:0;padding-inline-start:20px;line-height:1.9;">'+days.map(d=>`<li style="margin-bottom:4px;">${grpEsc(d)}</li>`).join('')+'</ol>'
+function grpContentHtml(g, date, pax, ptype, c){
+  const cur='ر.س';
+  const itinHtml=(g.itinerary&&g.itinerary.length)
+    ? '<ol style="margin:0;padding-inline-start:20px;line-height:1.9;">'+g.itinerary.map(d=>`<li style="margin-bottom:5px;">${grpEsc(d)}</li>`).join('')+'</ol>'
     : '<div style="color:#94a3b8;">—</div>';
-  const block=(title,body)=>body?`<div style="margin-top:14px;"><div style="font-weight:900;color:#1a3a8f;font-size:16px;margin-bottom:6px;">${title}</div><div style="line-height:1.8;white-space:pre-wrap;">${grpEsc(body)}</div></div>`:'';
+  const incHtml=(g.includes&&g.includes.length)
+    ? '<ul style="margin:0;padding-inline-start:18px;line-height:1.8;">'+g.includes.map(x=>`<li>${grpEsc(String(x).replace(/^●\s*/,''))}</li>`).join('')+'</ul>'
+    : '';
+  const perPerson = pax>0 ? Math.round(c.total/pax) : 0;
   return `<div style="border:1.5px solid #d0deff;border-radius:12px;padding:18px 20px;">
-    <div style="font-size:22px;font-weight:900;color:#1a3a8f;">🚌 ${grpEsc(g.title||('جروب '+(g.destination||'')))}</div>
+    <div style="font-size:22px;font-weight:900;color:#1a3a8f;">🚌 ${grpEsc(g.program||'')}</div>
     <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-weight:800;color:#0d1f4a;font-size:15px;">
-      <span>📍 ${grpEsc(g.destination||'')}</span>
-      <span>🗓️ ${grpEsc(g.date||'')}</span>
-      ${g.days?`<span>📅 ${grpEsc(String(g.days))} أيام</span>`:''}
-      <span>👥 ${adults} بالغ${children?(' + '+children+' طفل'):''}</span>
+      <span>🗓️ ${grpEsc(date)}</span>
+      ${g.itinerary&&g.itinerary.length?`<span>📅 ${g.itinerary.length} أيام</span>`:''}
+      <span>👥 ${pax} مسافر</span>
+      <span>🏷️ ${ptype==='company'?'شركات':'أفراد'}</span>
+      ${c.season?`<span>🍂 ${grpEsc(c.season.label)}</span>`:''}
     </div>
     <div style="margin-top:14px;"><div style="font-weight:900;color:#1a3a8f;font-size:16px;margin-bottom:6px;">🗺️ مسار الجولات (ثابت)</div>${itinHtml}</div>
-    ${block('🏨 الفنادق', g.hotels)}
-    ${block('✅ يشمل', g.includes)}
-    ${block('❌ لا يشمل', g.excludes)}
-    ${block('📝 ملاحظات', g.notes)}
+    ${incHtml?`<div style="margin-top:14px;"><div style="font-weight:900;color:#1a3a8f;font-size:16px;margin-bottom:6px;">✅ الأسعار تشمل</div>${incHtml}</div>`:''}
     <div style="margin-top:16px;border-top:2px solid #eef;padding-top:12px;font-weight:800;color:#0d1f4a;line-height:2;">
-      <div>سعر البالغ: ${grpNum(g.adult_price)} ${cur} × ${adults} = <b>${grpNum(t.adultLine)} ${cur}</b></div>
-      ${children?`<div>سعر الطفل: ${grpNum(g.child_price)} ${cur} × ${children} = <b>${grpNum(t.childLine)} ${cur}</b></div>`:''}
-      <div style="font-size:18px;color:#1a3a8f;margin-top:6px;">الإجمالي: <b>${grpNum(t.total)} ${cur}</b></div>
+      <div>التكلفة (${pax} مسافر · ${c.season?grpEsc(c.season.label):'—'}): <b>${grpNum(c.cost)} ${cur}</b></div>
+      <div>+ ربح (${ptype==='company'?'شركات':'أفراد'}): <b>${grpNum(c.profit)} ${cur}</b></div>
+      <div style="font-size:18px;color:#1a3a8f;margin-top:6px;">الإجمالي: <b>${grpNum(c.total)} ${cur}</b>${pax>1?` <span style="font-size:13px;color:#64748b;">(≈ ${grpNum(perPerson)} للفرد)</span>`:''}</div>
     </div>
   </div>`;
 }
-function grpRenderProgram(g, adults, children){
+function grpRenderProgram(g, date, pax, ptype, c){
   const btn='display:inline-flex;align-items:center;gap:6px;border:0;border-radius:9px;padding:9px 14px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;';
   return `<div style="padding:14px;">
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
@@ -2245,25 +2263,28 @@ function grpRenderProgram(g, adults, children){
       <button onclick="grpShare()" style="${btn}background:#0e9d6a;color:#fff;">🚌 إرسال / مشاركة</button>
       <button onclick="grpCopyText()" style="${btn}background:#eef2f6;color:#334155;">📋 نسخ النص</button>
     </div>
-    ${grpContentHtml(g, adults, children)}
+    ${grpContentHtml(g, date, pax, ptype, c)}
   </div>`;
 }
-function grpBuildPdfHtml(g, adults, children){
+function grpState(){
+  const date=document.getElementById('grp-date').value;
+  const pax=parseInt(document.getElementById('grp-pax').value)||0;
+  const ptype=document.getElementById('grp-ptype').value;
+  return { date, pax, ptype, c: grpCompute(GRP_CURRENT, date, pax, ptype) };
+}
+function grpBuildPdfHtml(){
+  const s=grpState();
   return `<div style="width:210mm;background:#fff;padding:16mm 14mm;font-family:'Tajawal',sans-serif;direction:rtl;color:#0d1f4a;">
     <div style="text-align:center;margin-bottom:16px;"><img src="${LOGO_IMG}" style="height:72px;"/></div>
-    ${grpContentHtml(g, adults, children)}
+    ${grpContentHtml(GRP_CURRENT, s.date, s.pax, s.ptype, s.c)}
     <div style="text-align:center;margin-top:20px;color:#64748b;font-size:12px;">مجموعة العز الدولية للسفر والسياحة</div>
   </div>`;
 }
-async function grpMakeBlob(){
-  const adults=parseInt(document.getElementById('grp-adults').value)||0;
-  const children=parseInt(document.getElementById('grp-children').value)||0;
-  return await generatePdfBlob(null, grpBuildPdfHtml(GRP_CURRENT, adults, children));
-}
+async function grpMakeBlob(){ return await generatePdfBlob(null, grpBuildPdfHtml()); }
 async function grpPdf(){
   if(!GRP_CURRENT) return; grpMsg('⏳ يُجهّز الـPDF…');
   try{
-    const blob=await grpMakeBlob(); const fname=grpFileName(GRP_CURRENT)+'.pdf';
+    const blob=await grpMakeBlob(); const s=grpState(); const fname=grpFileName(GRP_CURRENT,s.date)+'.pdf';
     const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),15000); grpMsg('✅ نُزّل ملف الـPDF.');
   }catch(e){ grpMsg('فشل تجهيز الـPDF: '+(e&&e.message?e.message:e), true); }
@@ -2271,7 +2292,7 @@ async function grpPdf(){
 async function grpShare(){
   if(!GRP_CURRENT) return; grpMsg('⏳ يُجهّز الملف للمشاركة…');
   let blob; try{ blob=await grpMakeBlob(); }catch(e){ grpMsg('فشل: '+(e&&e.message?e.message:e), true); return; }
-  const fname=grpFileName(GRP_CURRENT)+'.pdf'; const file=new File([blob],fname,{type:'application/pdf'});
+  const s=grpState(); const fname=grpFileName(GRP_CURRENT,s.date)+'.pdf'; const file=new File([blob],fname,{type:'application/pdf'});
   if(navigator.canShare && navigator.canShare({files:[file]})){
     try{ await navigator.share({files:[file],title:'برنامج جروب — مجموعة العز'}); grpMsg('✅ فُتحت المشاركة — اختاري الجهة وأرسلي.'); return; }
     catch(e){ if(e&&e.name==='AbortError'){ grpMsg(''); return; } }
@@ -2280,20 +2301,13 @@ async function grpShare(){
   setTimeout(()=>URL.revokeObjectURL(url),15000); grpMsg('✅ نُزّل الملف — أرفقيه (📎) في واتساب وأرسلي.');
 }
 function grpCopyText(){
-  if(!GRP_CURRENT) return; const g=GRP_CURRENT;
-  const adults=parseInt(document.getElementById('grp-adults').value)||0;
-  const children=parseInt(document.getElementById('grp-children').value)||0;
-  const cur=g.currency||'ر.س'; const t=grpTotals(g,adults,children); const L=[];
-  L.push('🚌 '+(g.title||('جروب '+(g.destination||''))));
-  L.push('📍 '+(g.destination||'')+'  🗓️ '+(g.date||'')+(g.days?('  📅 '+g.days+' أيام'):''));
-  L.push('👥 '+adults+' بالغ'+(children?(' + '+children+' طفل'):''));
+  if(!GRP_CURRENT) return; const g=GRP_CURRENT; const s=grpState(); const c=s.c; const cur='ر.س'; const L=[];
+  L.push('🚌 '+(g.program||''));
+  L.push('🗓️ '+s.date+(g.itinerary&&g.itinerary.length?('  📅 '+g.itinerary.length+' أيام'):'')+'  👥 '+s.pax+' مسافر');
   L.push(''); L.push('🗺️ مسار الجولات:');
-  grpDayLines(g.itinerary).forEach((d,i)=>L.push((i+1)+'. '+d));
-  if(g.hotels){ L.push(''); L.push('🏨 الفنادق: '+g.hotels); }
-  if(g.includes){ L.push(''); L.push('✅ يشمل: '+g.includes); }
-  if(g.excludes){ L.push(''); L.push('❌ لا يشمل: '+g.excludes); }
-  if(g.notes){ L.push(''); L.push('📝 '+g.notes); }
-  L.push(''); L.push('💰 الإجمالي: '+grpNum(t.total)+' '+cur);
+  (g.itinerary||[]).forEach(d=>L.push(d));
+  if(g.includes&&g.includes.length){ L.push(''); L.push('✅ الأسعار تشمل:'); g.includes.forEach(x=>L.push('- '+String(x).replace(/^●\s*/,''))); }
+  L.push(''); L.push('💰 الإجمالي: '+grpNum(c.total)+' '+cur+(s.pax>1?(' (≈ '+grpNum(Math.round(c.total/s.pax))+' للفرد)'):''));
   navigator.clipboard.writeText(L.join('\n')).then(()=>grpMsg('✅ نُسخ نص البرنامج.'),()=>grpMsg('تعذّر النسخ.', true));
 }
 const BF_CITIES = {

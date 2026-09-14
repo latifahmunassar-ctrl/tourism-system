@@ -2812,64 +2812,100 @@ async function handleMakkahTransport(): Promise<Response> {
 //    البلوك: صف رؤوس الشركات (OMAR/Salam Air ways) → صف المسار (Muscat-Jeddah / Jeddah-Muscat)
 //    → صف فرعي (Date | Original price | Final Price) → صفوف البيانات لكل تاريخ.
 //    كل شركة = 3 أعمدة: [التاريخ] عمود الشركة، [Original]=+1، [Final]=+2.
-// ── برامج الجروبات (تبويب Groups بالشيت) — معزول تماماً عن محرّك التسعير ──────
-// كل صف = رحلة جروب جاهزة (مسار ثابت مربوط بتاريخ). نقرأ بأسماء الأعمدة فترتيبها
-// لا يهم وتقدر المالكة تضيف أعمدة لاحقاً بلا كسر (نفس فلسفة القراءة بالاسم في الفنادق).
+// ── برامج الجروبات — معزول تماماً عن محرّك التسعير ────────────────────────────
+// كل برنامج جروب = تبويب مستقل بالشيت اسمه فيه «(Group)» (مثل تبويبات الوجهات).
+// بنية التبويب (كما صمّمتها المالكة): المسار يوم بيوم (عمود المسار) + قائمة «الأسعار
+// تشمل» + جدول تسعير [Pax | Price لكل موسم | شركات | افراد] + قائمة تواريخ المغادرة.
+// المعادلة: Price = تكلفة كلية للحجز بحجم Pax حسب الموسم؛ السعر النهائي = التكلفة +
+// ربح (افراد/شركات) يُضاف مرة واحدة للمجموعة؛ الموسم يتحدّد من شهر تاريخ المغادرة.
+function parseGroupTab(tab: string, rows: string[][]): Record<string, unknown> | null {
+  const norm = (s: unknown) => String(s || "").replace(/[إأآا]/g, "ا").replace(/[ةه]/g, "ه").replace(/\s+/g, " ").trim().toLowerCase();
+  const numOf = (s: unknown) => { const n = parseFloat(String(s ?? "").replace(/[^\d.]/g, "")); return isFinite(n) ? n : 0; };
+  const MON: Record<string, number> = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,sept:9,oct:10,nov:11,dec:12 };
+  const dateRe = /(\d{4})-(\d{1,2})-(\d{1,2})|(\d{1,2})\/(\d{1,2})\/(\d{2,4})/;
+
+  // (١) المسار: العمود الأول، أي صف يبدأ برقم يوم «01:» … «7:».
+  const itinerary: string[] = [];
+  for (const r of rows) { const c = String((r && r[0]) || "").trim(); if (/^\s*\d{1,2}\s*[:：]/.test(c)) itinerary.push(c); }
+
+  // (٢) «الأسعار تشمل»: نلقى عمود العنوان ثم نجمع بنوده تحته.
+  let incCol = -1, incHdr = -1;
+  outer: for (let i = 0; i < Math.min(rows.length, 6); i++) {
+    const r = rows[i] || [];
+    // العنوان قد يكون «الأسعار تشمل» (بالتاء) أو «يشمل» — نطابق الجذر «شمل» ونستثني «لا تشمل/لا يشمل».
+    for (let j = 0; j < r.length; j++) { const h = norm(r[j]); if (/(?:ت|ي)شمل|شامل|include/.test(h) && !/لا\s*(?:ت|ي)شمل/.test(h)) { incCol = j; incHdr = i; break outer; } }
+  }
+  const includes: string[] = [];
+  if (incCol >= 0) for (let i = incHdr + 1; i < rows.length; i++) { const c = String((rows[i] && rows[i][incCol]) || "").trim(); if (c) includes.push(c); }
+
+  // (٣) جدول التسعير: صف فيه خلية «Pax».
+  let paxRow = -1, paxCol = -1;
+  for (let i = 0; i < Math.min(rows.length, 10); i++) { const r = rows[i] || []; for (let j = 0; j < r.length; j++) if (norm(r[j]) === "pax") { paxRow = i; paxCol = j; break; } if (paxRow >= 0) break; }
+  const seasons: Array<{ label: string; col: number; months: number[] }> = [];
+  const prices: Array<{ pax: number; prices: Record<string, number> }> = [];
+  let profitCompany = 0, profitIndividual = 0;
+  if (paxRow >= 0) {
+    const hdr = rows[paxRow] || [];
+    let compCol = -1, indCol = -1;
+    for (let j = 0; j < hdr.length; j++) { const h = norm(hdr[j]); if (/شركات|compan/.test(h)) compCol = j; if (/افراد|individual/.test(h)) indCol = j; }
+    // صف المواسم = paxRow+1؛ أعمدة الأسعار بين Pax ونهاية جدول الأسعار (قبل عمودَي الربح).
+    const seasonRow = rows[paxRow + 1] || [];
+    const endCol = compCol >= 0 ? compCol : (indCol >= 0 ? indCol : hdr.length);
+    for (let j = paxCol + 1; j < endCol; j++) {
+      const lbl = String(seasonRow[j] || "").trim();
+      if (!lbl) continue;
+      const toks = (lbl.toLowerCase().match(/[a-z]+/g) || []).map(t => MON[t]).filter(Boolean);
+      const months: number[] = [];
+      if (toks.length) { const a = toks[0], b = toks[toks.length - 1]; for (let m = a, guard = 0; guard <= 12; m = (m % 12) + 1, guard++) { months.push(m); if (m === b) break; } }
+      seasons.push({ label: lbl, col: j, months });
+    }
+    for (let i = paxRow + 2; i < rows.length; i++) {
+      const r = rows[i] || []; const pv = String(r[paxCol] || "").trim();
+      if (!/^\d+$/.test(pv)) continue;
+      const byS: Record<string, number> = {};
+      for (const s of seasons) { const v = numOf(r[s.col]); if (v > 0) byS[s.label] = v; }
+      if (compCol >= 0 && !profitCompany) { const v = numOf(r[compCol]); if (v > 0) profitCompany = v; }
+      if (indCol >= 0 && !profitIndividual) { const v = numOf(r[indCol]); if (v > 0) profitIndividual = v; }
+      prices.push({ pax: parseInt(pv), prices: byS });
+    }
+  }
+
+  // (٤) تواريخ المغادرة: العمود الأكثر احتواءً على تواريخ.
+  const colDates: Record<number, string[]> = {};
+  for (const r of rows) for (let j = 0; j < (r || []).length; j++) { const m = String(r[j] || "").match(dateRe); if (m) (colDates[j] = colDates[j] || []).push(m[0]); }
+  let dateCol = -1, best = 0;
+  for (const j in colDates) if (colDates[j].length > best) { best = colDates[j].length; dateCol = +j; }
+  const dates = dateCol >= 0 ? colDates[dateCol] : [];
+
+  const program = tab.replace(/\(\s*group\s*\)/i, "").trim() || tab.trim();
+  if (!itinerary.length && !prices.length) return null;
+  return { program, tab, itinerary, includes, seasons, prices, profitCompany, profitIndividual, dates };
+}
+
 async function handleGroups(): Promise<Response> {
-  const empty = () => new Response(JSON.stringify({ groups: [] }), { headers: CORS_HEADERS });
   try {
     const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
     const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
-    const rows = await pmReadSheet(await pmGoogleToken(sa), ssid, "'Groups'!A1:Z500");
-    if (!rows.length) return empty();
-    const norm = (s: unknown) => String(s || "").replace(/[إأآا]/g, "ا").replace(/[ةه]/g, "ه").replace(/\s+/g, " ").trim().toLowerCase();
-    // صف الرؤوس = أول صف فيه خلية «وجهة» وخلية «تاريخ».
-    let hdr = -1;
-    for (let i = 0; i < Math.min(rows.length, 10); i++) {
-      const r = (rows[i] || []).map(norm);
-      if (r.some(c => /وجهه|destination/.test(c)) && r.some(c => /تاريخ|date/.test(c))) { hdr = i; break; }
-    }
-    if (hdr < 0) return empty();
-    const H = (rows[hdr] || []).map(norm);
-    // نطابق كل حقل بعمود عبر اسمه (الأخصّ أولاً حتى لا يبتلع «يشمل» عمودَ «لا يشمل»).
-    const find = (re: RegExp) => H.findIndex(c => re.test(c));
-    const col = {
-      dest:     find(/وجهه|destination/),
-      title:    find(/عنوان|اسم.*جروب|title/),
-      date:     find(/تاريخ|date/),
-      days:     find(/ايام|مده|days|duration/),
-      adult:    find(/سعر.*بالغ|بالغ|adult/),
-      child:    find(/سعر.*طفل|طفل|child/),
-      currency: find(/عمله|currency/),
-      excludes: find(/لا\s*يشمل|exclude/),
-      includes: H.findIndex(c => /يشمل|include/.test(c) && !/لا\s*يشمل/.test(c)),
-      itinerary:find(/مسار|جولات|برنامج|itinerary/),
-      hotels:   find(/فنادق|فندق|hotel/),
-      notes:    find(/ملاحظ|notes/),
-    };
-    const cell = (r: string[], i: number) => (i >= 0 ? String(r[i] ?? "").trim() : "");
-    const numOf = (s: string) => { const n = parseFloat(String(s || "").replace(/[^\d.]/g, "")); return isFinite(n) ? n : 0; };
+    const token = await pmGoogleToken(sa);
+    // تبويبات الجروبات = أي تبويب اسمه فيه «(Group)».
+    let titles: string[] = [];
+    try {
+      const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${ssid}?fields=sheets.properties.title`;
+      const mres = await fetch(metaUrl, { headers: { Authorization: `Bearer ${token}` } });
+      const mdata = await mres.json();
+      titles = (mdata?.sheets || []).map((s: { properties?: { title?: string } }) => s?.properties?.title || "").filter(Boolean);
+    } catch (_) { /* */ }
+    const groupTabs = titles.filter(t => /\(\s*group/i.test(t));
     const groups: Array<Record<string, unknown>> = [];
-    for (let i = hdr + 1; i < rows.length; i++) {
-      const r = rows[i] || [];
-      const dest = cell(r, col.dest); const date = cell(r, col.date);
-      if (!dest && !date) continue;      // صف فارغ
-      groups.push({
-        destination: dest,
-        title: cell(r, col.title),
-        date,
-        days: numOf(cell(r, col.days)) || null,
-        adult_price: numOf(cell(r, col.adult)),
-        child_price: numOf(cell(r, col.child)),
-        currency: cell(r, col.currency) || "ر.س",
-        itinerary: cell(r, col.itinerary),
-        hotels: cell(r, col.hotels),
-        includes: cell(r, col.includes),
-        excludes: cell(r, col.excludes),
-        notes: cell(r, col.notes),
-      });
+    for (const tab of groupTabs) {
+      try {
+        const quoted = `'${tab.replace(/'/g, "''")}'`;
+        const rows = await pmReadSheet(token, ssid, `${quoted}!A1:Z200`);
+        const g = parseGroupTab(tab, rows);
+        if (g) groups.push(g);
+      } catch (_) { /* تبويب واحد فاشل لا يكسر البقية */ }
     }
-    return new Response(JSON.stringify({ groups }), { headers: CORS_HEADERS });
+    return new Response(JSON.stringify({ groups, groupTabs }), { headers: CORS_HEADERS });
   } catch (e) {
     return new Response(JSON.stringify({ groups: [], error: (e as Error).message }), { headers: CORS_HEADERS });
   }
