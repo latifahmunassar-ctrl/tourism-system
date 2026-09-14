@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-14-group-programs-i'
+  var BUILD = '2026-09-14-group-programs-j'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2322,24 +2322,24 @@ function grpBuildPdfHtml(variant){
     <img src="${FILLER_IMG}" alt="" style="width:210mm;height:auto;display:block;margin:0;padding:0;"/>
   </div>`;
 }
+// blob للإرسال المباشر عبر الواتساب (بايتات فعلية — html2pdf)
 async function grpMakeBlob(variant){ return await generatePdfBlob(null, grpBuildPdfHtml(variant)); }
-// تصدير بنسختين: 'individual' (بشعار العز) أو 'company' (بدون شعار). يشارك على الجوال
-// عبر مشاركة الجهاز، وينزّل على الكمبيوتر.
-async function grpExport(variant){
-  if(!GRP_CURRENT) return;
+// تصدير بنسختين ('individual'/'company') عبر **معاينة الطباعة** (نفس التسعير):
+// نملأ #pdfContent ثم window.print() فتظهر المعاينة وتختار المالكة «حفظ كـPDF» أو إلغاء.
+function grpExport(variant){
+  if(!GRP_CURRENT){ grpMsg('اعرضي برنامج الجروب أولاً.', true); return; }
   const lbl = (variant==='company') ? 'شركات' : 'أفراد';
-  grpMsg('⏳ يُجهّز ملف ('+lbl+')…');
-  let blob; try{ blob=await grpMakeBlob(variant); }catch(e){ grpMsg('فشل تجهيز الـPDF: '+(e&&e.message?e.message:e), true); return; }
-  const s=grpState(); const fname=grpFileName(GRP_CURRENT,s.date)+'-'+lbl+'.pdf'; const file=new File([blob],fname,{type:'application/pdf'});
-  // على الجوال فقط نفتح مشاركة الجهاز (لإرساله بالواتساب)؛ على الكمبيوتر ننزّل الملف
-  // مباشرة — لأن navigator.share بالماك يفتح قائمة النظام (AirDrop/Mail) بدل التنزيل.
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent||'') || ((navigator.maxTouchPoints||0) > 1 && matchMedia('(pointer:coarse)').matches);
-  if(isMobile && navigator.canShare && navigator.canShare({files:[file]})){
-    try{ await navigator.share({files:[file],title:'برنامج جروب ('+lbl+')'}); grpMsg('✅ فُتحت المشاركة.'); return; }
-    catch(e){ if(e&&e.name==='AbortError'){ grpMsg(''); return; } }
-  }
-  const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),15000); grpMsg('✅ نُزّل ملف ('+lbl+').');
+  const el=document.getElementById('pdfContent');
+  if(!el){ grpMsg('تعذّر تجهيز المعاينة.', true); return; }
+  el.innerHTML = grpBuildPdfHtml(variant);        // يظهر فقط في معاينة الطباعة (@media print)
+  const s=grpState();
+  const origTitle=document.title;
+  document.title=grpFileName(GRP_CURRENT,s.date)+'-'+lbl;   // اسم الملف المقترح في نافذة الحفظ
+  const restore=()=>{ document.title=origTitle; };
+  window.addEventListener('afterprint', restore, {once:true});
+  setTimeout(restore, 60000);
+  grpMsg('👁️ تُفتح المعاينة ('+lbl+') — راجعي ثم «حفظ كـPDF» أو إلغاء.');
+  setTimeout(()=>{ try{ window.print(); }catch(e){ grpMsg('تعذّر فتح المعاينة: '+(e&&e.message?e.message:e), true); } }, 300);
 }
 // نص الجروب للواتساب (يُستخدم للنسخ وللإرسال المباشر عبر الجسر)
 function grpWhatsappText(){
