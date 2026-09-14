@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-14-group-programs-h'
+  var BUILD = '2026-09-14-group-programs-i'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2259,6 +2259,10 @@ function grpContentHtml(g, date, pax, ptype, c){
 function grpRenderProgram(g, date, pax, ptype, c){
   const btn='display:inline-flex;align-items:center;gap:6px;border:0;border-radius:9px;padding:9px 14px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;';
   return `<div style="padding:14px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+      <button onclick="grpSendIndiv()" style="${btn}background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;" title="أرسل ملف الجروب للعميل عبر واتساب — من طلب فرد مفتوح">📤 إرسال للعميل (واتساب)</button>
+      <button onclick="grpOpenBridge()" style="${btn}background:linear-gradient(135deg,#128C7E,#075E54);color:#fff;" title="إرسال مباشر للشركات/الجروبات عبر جسر الواتساب المعتاد">📲 واتساب مباشر (شركات)</button>
+    </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
       <button onclick="grpExport('individual')" style="${btn}background:#1a3a8f;color:#fff;" title="بشعار ومعلومات العز — للعميل الفرد">👤 تصدير للأفراد</button>
       <button onclick="grpExport('company')" style="${btn}background:#0e9d6a;color:#fff;" title="بدون شعار ولا تفاصيل العز — للشركات">🏢 تصدير للشركات</button>
@@ -2337,15 +2341,29 @@ async function grpExport(variant){
   const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),15000); grpMsg('✅ نُزّل ملف ('+lbl+').');
 }
-function grpCopyText(){
-  if(!GRP_CURRENT) return; const g=GRP_CURRENT; const s=grpState(); const c=s.c; const cur='ر.س'; const L=[];
+// نص الجروب للواتساب (يُستخدم للنسخ وللإرسال المباشر عبر الجسر)
+function grpWhatsappText(){
+  if(!GRP_CURRENT) return ''; const g=GRP_CURRENT; const s=grpState(); const c=s.c; const cur='ر.س'; const L=[];
   L.push('🚌 '+(g.program||''));
   L.push('🗓️ '+s.date+(g.itinerary&&g.itinerary.length?('  📅 '+g.itinerary.length+' أيام'):'')+'  👥 '+s.pax+' مسافر');
   L.push(''); L.push('🗺️ مسار الجولات:');
   (g.itinerary||[]).forEach(d=>L.push(d));
   if(g.includes&&g.includes.length){ L.push(''); L.push('✅ الأسعار تشمل:'); g.includes.forEach(x=>L.push('- '+String(x).replace(/^●\s*/,''))); }
   L.push(''); L.push('💰 الإجمالي: '+grpNum(c.total)+' '+cur+(s.pax>1?(' (≈ '+grpNum(Math.round(c.total/s.pax))+' للفرد)'):''));
-  navigator.clipboard.writeText(L.join('\n')).then(()=>grpMsg('✅ نُسخ نص البرنامج.'),()=>grpMsg('تعذّر النسخ.', true));
+  return L.join('\n');
+}
+function grpCopyText(){
+  if(!GRP_CURRENT) return;
+  navigator.clipboard.writeText(grpWhatsappText()).then(()=>grpMsg('✅ نُسخ نص البرنامج.'),()=>grpMsg('تعذّر النسخ.', true));
+}
+// 📲 إرسال مباشر للشركات عبر جسر الواتساب المعتاد — يفتح نفس نافذة «واتساب مباشر»
+// ويعبّي نص برنامج الجروب جاهزاً، فتختار المالكة جروب الشركة وترسل.
+function grpOpenBridge(){
+  if(!GRP_CURRENT){ grpMsg('اعرضي برنامج الجروب أولاً.', true); return; }
+  if(typeof waBridgeOpen!=='function'){ grpMsg('جسر الواتساب غير متاح.', true); return; }
+  waBridgeOpen();
+  // بعد فتح الجسر واكتمال تهيئته، عبّي مربع النص ببرنامج الجروب.
+  setTimeout(()=>{ const ta=document.getElementById('waBridgeBody'); if(ta){ ta.value=grpWhatsappText(); ta.dispatchEvent(new Event('input')); } }, 200);
 }
 const BF_CITIES = {
   "فيتنام":["هانوي","سابا","ها لونج","دانانج","فوكوك","نها ترانج","دالات","هوتشي مينه"],
@@ -5877,6 +5895,36 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       const hint=/132000|re-?engag|24|outside|window|session|recipient/i.test(m)?'\n\n(غالباً مرّ أكثر من 24 ساعة على آخر رسالة من العميل — أرسلي من لوحة الواتساب أو خلّيه يرسل رسالة أولاً.)':'';
       alert('تعذّر الإرسال: '+m+hint);
     }finally{ if(btn){btn.disabled=false;btn.textContent=old;} }
+  };
+  // 📤 إرسال برنامج الجروب للعميل عبر واتساب — نفس مسار «إرسال للعميل» بالتسعير
+  // (send_individual)، لكن الملف = PDF الجروب (نسخة الأفراد). يحتاج طلب فرد مفتوح.
+  window.grpSendIndiv=async function(){
+    if(typeof indivState==='undefined' || !indivState){ alert('افتحي طلب فرد أولاً من «👤 طلبات الأفراد» ليُرسل الجروب لذاك العميل.'); return; }
+    if(typeof GRP_CURRENT==='undefined' || !GRP_CURRENT){ alert('اعرضي برنامج الجروب أولاً (اختاري البرنامج والتاريخ والعدد ثم «اعرض»).'); return; }
+    const note=prompt('✍️ ملاحظة تُرسل مع الملف للعميل (اختياري):','تفضّل أستاذي، برنامج الجروب جاهز 🌟\nوأنا موجود لأي استفسار، وفي انتظار تأكيدك 🙏');
+    if(note===null) return;
+    if(typeof grpMsg==='function') grpMsg('⏳ يُجهّز ويُرسل للعميل…');
+    try{
+      const blob=await grpMakeBlob('individual');
+      const b64=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(String(fr.result).split(',')[1]);fr.onerror=rej;fr.readAsDataURL(blob);});
+      const s=grpState();
+      const _prog=(GRP_CURRENT.program||'Trip'); const _progEn=/^[\x00-\x7F ]+$/.test(_prog)?_prog:'Group';
+      const fname=('Alezz_Group_'+_progEn).replace(/[^\x00-\x7F]/g,'').replace(/\s+/g,'_').replace(/_+/g,'_').slice(0,50)+'.pdf';
+      const caption='🚌 '+(GRP_CURRENT.program||'')+(s.date?(' — '+s.date):'')+(note?('\n'+note):'');
+      const r=await fetch(IB_BASE+'?admin_action=send_individual',{method:'POST',headers:ibH(),body:JSON.stringify({
+        id:indivState.id, phone:indivState.phone, pdf_base64:b64, filename:fname, note:caption,
+        program:grpWhatsappText(), price:(s.c&&s.c.total)||null, currency:'ريال', sent_by:(typeof ibStaffName==='function'?ibStaffName():'')
+      })});
+      const d=await r.json();
+      if(!r.ok||!d.ok){ throw new Error((d&&d.detail&&(d.detail.message||JSON.stringify(d.detail)))||(d&&d.error)||('HTTP '+r.status)); }
+      if(typeof grpMsg==='function') grpMsg('✅ أُرسل برنامج الجروب للعميل على واتساب.');
+      indivState=null;
+      try{ indivRender(await indivList()); }catch(_){}
+    }catch(e){
+      const m=String(e.message||e);
+      const hint=/132000|re-?engag|24|outside|window|session|recipient/i.test(m)?'\n\n(غالباً مرّ أكثر من ٢٤ ساعة على آخر رسالة من العميل — أرسلي من لوحة الواتساب أو خليه يرسل رسالة أولاً.)':'';
+      if(typeof grpMsg==='function') grpMsg('تعذّر الإرسال: '+m+hint, true); else alert('تعذّر الإرسال: '+m+hint);
+    }
   };
   window.indivSaveOnly=async function(){
     if(!indivState){alert('افتح طلب فرد أولاً من «👤 طلبات الأفراد».');return;}
