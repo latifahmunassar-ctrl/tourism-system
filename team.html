@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-14-group-programs-d'
+  var BUILD = '2026-09-14-group-programs-e'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2274,11 +2274,43 @@ function grpState(){
   return { date, pax, ptype, c: grpCompute(GRP_CURRENT, date, pax, ptype) };
 }
 function grpBuildPdfHtml(){
-  const s=grpState();
-  return `<div style="width:210mm;background:#fff;padding:16mm 14mm;font-family:'Tajawal',sans-serif;direction:rtl;color:#0d1f4a;">
-    <div style="text-align:center;margin-bottom:16px;"><img src="${LOGO_IMG}" style="height:72px;"/></div>
-    ${grpContentHtml(GRP_CURRENT, s.date, s.pax, s.ptype, s.c)}
-    <div style="text-align:center;margin-top:20px;color:#64748b;font-size:12px;">مجموعة العز الدولية للسفر والسياحة</div>
+  const s=grpState(); const g=GRP_CURRENT; const c=s.c; const cur='ر.س';
+  const days=(g.itinerary||[]);
+  // كل يوم بطاقة مؤطّرة بنفس ستايل بطاقات الفنادق في قالب الوجهات
+  const dayCards=days.map(d=>{
+    const nl=String(d).indexOf('\n');
+    const head=nl>=0?String(d).slice(0,nl).trim():String(d).trim();
+    const body=nl>=0?String(d).slice(nl+1).trim():'';
+    return `<div class="pdf-keep" style="border:1.5px solid #d0deff;border-radius:10px;padding:14px 18px;margin-bottom:12px;">
+      <div style="font-weight:900;font-size:20px;color:#1a3a8f;line-height:1.5;${body?'margin-bottom:8px;':''}">🗓️ ${grpEsc(head)}</div>
+      ${body?`<div style="font-size:16px;color:#0d1f4a;line-height:1.9;">${grpEsc(body)}</div>`:''}
+    </div>`;
+  }).join('');
+  const incHtml=(g.includes&&g.includes.length)
+    ? `<div class="pdf-keep" style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;">
+        <ul style="margin:0;padding-inline-start:20px;line-height:2;font-size:16px;color:#0d1f4a;">${g.includes.map(x=>`<li>${grpEsc(String(x).replace(/^●\s*/,''))}</li>`).join('')}</ul>
+      </div>` : '';
+  return `
+  <div class="pdf-cover">
+    <img class="pdf-cover-airplane" src="${FILLER_IMG}" alt=""/>
+    <div class="pdf-logo-box"><img class="pdf-logo-img" src="${LOGO_IMG}" alt="مجموعة العز الدولية للسفر والسياحة"/></div>
+    <div class="pdf-title">🚌 برنامج جروب سياحي</div>
+    <div class="pdf-dest-name"><span dir="ltr" style="unicode-bidi:isolate;white-space:pre-wrap;display:inline-block;">${grpEsc(g.program||'')}</span></div>
+    <div class="pdf-cities">👥 ${s.pax} مسافر · ${s.ptype==='company'?'شركات':'أفراد'}${c.season?(' · '+grpEsc(c.season.label)):''}</div>
+    <div class="pdf-date-price-row">
+      <div class="pdf-price-box"><div class="pdf-price-label">💰 السعر الإجمالي (${s.pax} مسافر)</div><div class="pdf-price-val">${grpNum(c.total)} ${cur}</div></div>
+      <div class="pdf-dates-card"><div class="pdf-dates-label">📅 تاريخ المغادرة</div><div class="pdf-dates">${grpEsc(s.date)}</div></div>
+    </div>
+    <div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:10px 14px;margin-bottom:10px;color:#fff;font-size:13px;font-weight:700;">
+      ⏱️ ${days.length} أيام · مسار ثابت غير قابل للتعديل
+    </div>
+    <div class="pdf-disclaimer">⚠️ هذا عرض سعر ولا يعني بالضرورة توفّر المقاعد لحظتها</div>
+    <img class="pdf-cover-suitcase" src="${SUITCASE_IMG}" alt=""/>
+  </div>
+  <div class="pdf-section" style="page-break-before:always;">
+    <div class="pdf-section-title">🗺️ مسار الجولات (ثابت)</div>
+    ${dayCards}
+    ${incHtml?`<div class="pdf-section-title" style="margin-top:24px;">✅ الأسعار تشمل</div>${incHtml}`:''}
   </div>`;
 }
 async function grpMakeBlob(){ return await generatePdfBlob(null, grpBuildPdfHtml()); }
