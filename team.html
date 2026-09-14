@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-14-group-programs-f'
+  var BUILD = '2026-09-14-group-programs-g'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2260,8 +2260,8 @@ function grpRenderProgram(g, date, pax, ptype, c){
   const btn='display:inline-flex;align-items:center;gap:6px;border:0;border-radius:9px;padding:9px 14px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;';
   return `<div style="padding:14px;">
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-      <button onclick="grpPdf()" style="${btn}background:#1a3a8f;color:#fff;">⤓ تصدير PDF</button>
-      <button onclick="grpShare()" style="${btn}background:#0e9d6a;color:#fff;">🚌 إرسال / مشاركة</button>
+      <button onclick="grpExport('individual')" style="${btn}background:#1a3a8f;color:#fff;" title="بشعار ومعلومات العز — للعميل الفرد">👤 تصدير للأفراد</button>
+      <button onclick="grpExport('company')" style="${btn}background:#0e9d6a;color:#fff;" title="بدون شعار ولا تفاصيل العز — للشركات">🏢 تصدير للشركات</button>
       <button onclick="grpCopyText()" style="${btn}background:#eef2f6;color:#334155;">📋 نسخ النص</button>
     </div>
     ${grpContentHtml(g, date, pax, ptype, c)}
@@ -2273,7 +2273,9 @@ function grpState(){
   const ptype=document.getElementById('grp-ptype').value;
   return { date, pax, ptype, c: grpCompute(GRP_CURRENT, date, pax, ptype) };
 }
-function grpBuildPdfHtml(){
+function grpBuildPdfHtml(variant){
+  // variant: 'individual' = بشعار العز (افتراضي) · 'company' = بدون شعار وتفاصيل العز
+  const showLogo = variant !== 'company';
   const s=grpState(); const g=GRP_CURRENT; const c=s.c; const cur='ر.س';
   const days=(g.itinerary||[]);
   // كل يوم بطاقة مؤطّرة بنفس ستايل بطاقات الفنادق في قالب الوجهات
@@ -2293,7 +2295,7 @@ function grpBuildPdfHtml(){
   return `
   <div class="pdf-cover">
     <img class="pdf-cover-airplane" src="${FILLER_IMG}" alt=""/>
-    <div class="pdf-logo-box"><img class="pdf-logo-img" src="${LOGO_IMG}" alt="مجموعة العز الدولية للسفر والسياحة"/></div>
+    ${showLogo?`<div class="pdf-logo-box"><img class="pdf-logo-img" src="${LOGO_IMG}" alt="مجموعة العز الدولية للسفر والسياحة"/></div>`:''}
     <div class="pdf-title">🚌 برنامج جروب سياحي</div>
     <div class="pdf-dest-name"><span dir="ltr" style="unicode-bidi:isolate;white-space:pre-wrap;display:inline-block;">${grpEsc(g.program||'')}</span></div>
     <div class="pdf-cities">👥 ${s.pax} مسافر · ${s.ptype==='company'?'شركات':'أفراد'}${c.season?(' · '+grpEsc(c.season.label)):''}</div>
@@ -2316,25 +2318,21 @@ function grpBuildPdfHtml(){
     <img src="${FILLER_IMG}" alt="" style="width:210mm;height:auto;display:block;margin:0;padding:0;"/>
   </div>`;
 }
-async function grpMakeBlob(){ return await generatePdfBlob(null, grpBuildPdfHtml()); }
-async function grpPdf(){
-  if(!GRP_CURRENT) return; grpMsg('⏳ يُجهّز الـPDF…');
-  try{
-    const blob=await grpMakeBlob(); const s=grpState(); const fname=grpFileName(GRP_CURRENT,s.date)+'.pdf';
-    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),15000); grpMsg('✅ نُزّل ملف الـPDF.');
-  }catch(e){ grpMsg('فشل تجهيز الـPDF: '+(e&&e.message?e.message:e), true); }
-}
-async function grpShare(){
-  if(!GRP_CURRENT) return; grpMsg('⏳ يُجهّز الملف للمشاركة…');
-  let blob; try{ blob=await grpMakeBlob(); }catch(e){ grpMsg('فشل: '+(e&&e.message?e.message:e), true); return; }
-  const s=grpState(); const fname=grpFileName(GRP_CURRENT,s.date)+'.pdf'; const file=new File([blob],fname,{type:'application/pdf'});
+async function grpMakeBlob(variant){ return await generatePdfBlob(null, grpBuildPdfHtml(variant)); }
+// تصدير بنسختين: 'individual' (بشعار العز) أو 'company' (بدون شعار). يشارك على الجوال
+// عبر مشاركة الجهاز، وينزّل على الكمبيوتر.
+async function grpExport(variant){
+  if(!GRP_CURRENT) return;
+  const lbl = (variant==='company') ? 'شركات' : 'أفراد';
+  grpMsg('⏳ يُجهّز ملف ('+lbl+')…');
+  let blob; try{ blob=await grpMakeBlob(variant); }catch(e){ grpMsg('فشل تجهيز الـPDF: '+(e&&e.message?e.message:e), true); return; }
+  const s=grpState(); const fname=grpFileName(GRP_CURRENT,s.date)+'-'+lbl+'.pdf'; const file=new File([blob],fname,{type:'application/pdf'});
   if(navigator.canShare && navigator.canShare({files:[file]})){
-    try{ await navigator.share({files:[file],title:'برنامج جروب — مجموعة العز'}); grpMsg('✅ فُتحت المشاركة — اختاري الجهة وأرسلي.'); return; }
+    try{ await navigator.share({files:[file],title:'برنامج جروب ('+lbl+')'}); grpMsg('✅ فُتحت المشاركة.'); return; }
     catch(e){ if(e&&e.name==='AbortError'){ grpMsg(''); return; } }
   }
   const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),15000); grpMsg('✅ نُزّل الملف — أرفقيه (📎) في واتساب وأرسلي.');
+  setTimeout(()=>URL.revokeObjectURL(url),15000); grpMsg('✅ نُزّل ملف ('+lbl+').');
 }
 function grpCopyText(){
   if(!GRP_CURRENT) return; const g=GRP_CURRENT; const s=grpState(); const c=s.c; const cur='ر.س'; const L=[];
