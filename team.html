@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-14-group-programs-c'
+  var BUILD = '2026-09-14-group-programs-d'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2226,6 +2226,7 @@ function grpShow(){
   const c=grpCompute(GRP_CURRENT, date, pax, ptype);
   if(!c.ok){ grpMsg('لا يوجد سعر لعدد '+pax+' مسافر في موسم '+(c.season?c.season.label:'—')+' — عبّي الخانة بالشيت.', true); return; }
   grpMsg('');
+  const eo=document.getElementById('emptyOutput'); if(eo) eo.style.display='none';   // أخفِ الـplaceholder
   const panel=document.getElementById('reviewPanel'); if(panel) panel.innerHTML=grpRenderProgram(GRP_CURRENT, date, pax, ptype, c);
 }
 function grpContentHtml(g, date, pax, ptype, c){
