@@ -215,6 +215,7 @@ function parseDestination(text: string): string | null {
     [/موريشيوس|موريش[سي]|mauritius|بورت\s*لويس|port\s*louis/i, "mauritius"],
     [/[إا]ن[جك]لترا|بريطانيا|بريطاني|لندن|england|london|المملكة\s*المتحدة/i, "England"],
     [/الصين|صيني?|china|شان[غج]هاي|شنغهاي|shanghai|بكين|beijing|سوجهو|سوجو|suzhou|هان[غج]تشو|hangzhou|هون[غج]\s*كون[غج]|hong\s*kong/i, "China"],
+    [/هولندا|هولندي|netherlands?|holland|امستردام|امستردم|amsterdam/i, "Netherland"],
     // مكة/العمرة (مكة + المدينة المنورة + جدة + الطائف) — يطابق index.ts
     [/مكة|مكه|makkah|mecca|العمرة|عمرة|الحرمين|المدينة\s*المنورة|المنوّ?رة|al\s*madinah|madinah|medina/i, "Makkah"],
   ];
