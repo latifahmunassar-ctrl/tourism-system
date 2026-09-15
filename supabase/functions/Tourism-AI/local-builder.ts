@@ -427,6 +427,7 @@ function tourNameCity(tour: TourRow, cityDefs: CityDef[]): string | null {
 // القريبة التي تُضاف جولاتها لقائمتها. مثال: هارمونس قريبة من كيب تاون → جولاتها تظهر في قائمة كيب تاون.
 const NEARBY_TOUR_CITIES: Record<string, string[]> = {
   "Cape Town": ["Hermanus"],
+  "Shanghai": ["Suzhou"],   // سوجو رحلة يوم من شانغهاي: جولاتها تظهر بشانغهاي، دون فنادقها
 };
 
 /**

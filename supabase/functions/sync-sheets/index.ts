@@ -88,8 +88,8 @@ const SECTION_CITY_DEFS: Record<string, Array<{ canonical: string; pattern: RegE
     { canonical: "Salalah",  pattern: /صلال[ةه]|salalah/i },
   ],
   China: [
-    // سوجو (Suzhou) رحلة يوم من شانغهاي → جولاتها ضمن شانغهاي (ليست مدينة إقامة مستقلة).
-    { canonical: "Shanghai",  pattern: /شان[غج]هاي|شنغهاي|shanghai|سوجهو|سوجو|سوزو|سوتشو|suzhou/i },
+    { canonical: "Shanghai",  pattern: /شان[غج]هاي|شنغهاي|shanghai/i },
+    { canonical: "Suzhou",    pattern: /سوجهو|سوجو|سوزو|سوتشو|suzhou/i },
     { canonical: "Beijing",   pattern: /بكين|بيجين[غج]?|beijing/i },
     { canonical: "Hangzhou",  pattern: /هان[غج]تشو|هان[غج]شتوا?|هان[غج]زو|hangzhou/i },
     { canonical: "Hong Kong", pattern: /هون[غج]\s*كون[غج]|hong\s*kong|hongkong/i },

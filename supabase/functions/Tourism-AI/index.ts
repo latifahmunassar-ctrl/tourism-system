@@ -175,8 +175,9 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
   // الصين — الجولات فيها عمود City لكن أسماء الجولات عربية؛ canonical يطابق اسم مدينة
   // الفندق (بالإنجليزي في location) + أنماط الجولات العربية (شانغهاي/بكين/سوجو/هانغتشو/هونغ كونغ).
   China: [
-    // سوجو (Suzhou) رحلة يوم من شانغهاي → جولاتها ضمن شانغهاي (ليست مدينة إقامة مستقلة).
-    { canonical: "Shanghai",  pattern: /شان[غج]هاي|شنغهاي|shanghai|سوجهو|سوجو|سوزو|سوتشو|suzhou/i },
+    { canonical: "Shanghai",  pattern: /شان[غج]هاي|شنغهاي|shanghai/i },
+    // سوجو (Suzhou) مدينة مستقلة للفنادق؛ جولاتها تظهر كرحلة يوم من شانغهاي عبر NEARBY_TOUR_CITIES (لا فنادقها).
+    { canonical: "Suzhou",    pattern: /سوجهو|سوجو|سوزو|سوتشو|suzhou/i },
     { canonical: "Beijing",   pattern: /بكين|بيجين[غج]?|beijing/i },
     { canonical: "Hangzhou",  pattern: /هان[غج]تشو|هان[غج]شتوا?|هان[غج]زو|hangzhou/i },
     { canonical: "Hong Kong", pattern: /هون[غج]\s*كون[غج]|hong\s*kong|hongkong/i },
@@ -185,6 +186,13 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
   Netherland: [
     { canonical: "Amsterdam", pattern: /هولندا|هولندي|[اأإآ]مستردام|[اأإآ]مستردم|netherland|holland|amsterdam|جبن|الكمار|خودا|زان?س|ماركن|جيثورن|رورموند|لاهاي|اوترخت|طواحين|اوتلت|فولندام|volendam|معالم/i },
   ],
+};
+
+// مدن قريبة تُعامَل جولاتها كرحلات يوم من مدينة الإقامة (جولات فقط، لا فنادق) — يطابق
+// NEARBY_TOUR_CITIES في local-builder.ts. مثال: سوجو رحلة يوم من شانغهاي، هارمونس من كيب تاون.
+const NEARBY_TOUR_CITIES: Record<string, string[]> = {
+  "Cape Town": ["Hermanus"],
+  "Shanghai": ["Suzhou"],
 };
 
 /**
@@ -2599,9 +2607,12 @@ async function handleListTours(body: {
     if (error) throw error;
     // نعرض جولات **مدينة اليوم/المنطقة المختارة فقط** — لا جولات مدن أخرى (طلب المالكة).
     // نطابق المدينة بنمط اسمها في اسم الجولة، ونستبعد الانتقالات/الأيام الحرة.
+    // مدن قريبة تُعامَل جولاتها كرحلات يوم من مدينة اليوم (سوجو من شانغهاي) — جولات فقط لا فنادق.
+    const nearbyCanon = NEARBY_TOUR_CITIES[curCity.canonical] || [];
+    const tourMatchers = [curCity, ...cityDefs.filter(c => nearbyCanon.includes(c.canonical))];
     const rows = ((data || []) as TourRow[])
       .filter(t => !isNonTourRow(t.name))            // جولات فقط — لا انتقالات/أيام حرة
-      .filter(t => curCity.pattern.test(t.name));    // مدينة اليوم فقط — لا مدن أخرى
+      .filter(t => tourMatchers.some(c => c.pattern.test(t.name)));   // مدينة اليوم + مدنها القريبة
     const seen = new Set<string>();
     const tours: Array<{ name: string; type: string; price: number; _cur: boolean }> = [];
     for (const t of rows) {
