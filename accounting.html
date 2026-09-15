@@ -722,6 +722,7 @@ table{font-weight:600}
         <div style="margin-top:8px;display:flex;gap:10px;align-items:center"><button class="btn" onclick="addBankCash()">💾 حفظ الحركة</button><span id="bc-add-msg" style="font-size:12px"></span></div>
         <div style="font-size:11px;color:var(--muted);margin-top:4px">القيمة بالريال تُحسب تلقائياً = المبلغ × سعر الصرف. الحركات اليدوية لا تمسحها المزامنة.</div>
       </div>
+      <div id="bc-pending"></div>
       <div class="formbar">
         <div class="fld" style="min-width:240px"><label>🏦 البنك / البطاقة</label><input id="bc-bank" list="bca-banklist" autocomplete="off" oninput="renderBanksCashDetail()" placeholder="من القائمة — أو اكتبي أي اسم للبحث" style="background:#fff;color:var(--txt)"></div>
         <div class="fld"><label>💱 العملة</label><select id="bc-cur" class="flt" onchange="renderBanksCashDetail()"><option value="">كل العملات</option></select></div>
@@ -5362,7 +5363,43 @@ function renderBanksCash(){
   // 📡 فلتر القناة — من القنوات المُدخَلة في الحركات
   const chans=[...new Set(all.map(x=>x.channel).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'ar'));
   const chsel=$('bc-chan'); if(chsel){ const cv=chsel.value; chsel.innerHTML='<option value="">كل القنوات</option>'+chans.map(c=>'<option'+(c===cv?' selected':'')+'>'+esc(c)+'</option>').join(''); }
+  renderBankCashPending();
   renderBanksCashDetail();
+}
+// 🕒 عملياتي المعلّقة: حركات كاش أرسلها المستخدم الحالي وتنتظر موافقة المالكة — قابلة للتعديل/السحب، تختفي عند الاعتماد
+function renderBankCashPending(){
+  const box=$('bc-pending'); if(!box)return;
+  const me=(CURRENT_USER&&CURRENT_USER.staff_name)||'';
+  const mine=((DATA&&DATA.pendingMovements)||[]).filter(m=>m.kind==='cash'&&m.scope==='banks_cash'&&m.status==='pending'&&(!me||String((m.payload||{}).by||'')===me)).sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
+  if(!mine.length){ box.innerHTML=''; return; }
+  window._bcPend=mine;
+  box.innerHTML='<div class="panel" style="border:1px solid #d98a00;background:rgba(217,138,0,.07);margin:12px 0"><h3 style="color:#b8860b;margin-top:0">🕒 عملياتي المعلّقة ('+mine.length+') — بانتظار موافقة المالكة</h3>'+
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">هذه الحركات أرسلتِها ولم تُعتمد بعد — يمكنك <b>تعديلها</b> أو <b>سحبها</b> قبل الاعتماد. تختفي تلقائيّاً فور موافقة المالكة.</div>'+
+    '<div class="tbl-wrap"><table style="font-size:12px;white-space:nowrap"><thead><tr><th>التاريخ</th><th>البنك</th><th>داخل (+)</th><th>خارج (−)</th><th>العملة</th><th>المرجع</th><th>الوصف</th><th>إجراء</th></tr></thead><tbody>'+
+    mine.map((m,i)=>{ const c=m.payload||{}; const inV=Number(c.in_raw||0),outV=Number(c.out_raw||0);
+      return '<tr><td>'+esc(String(c.tx_date||'').slice(0,10)||'—')+'</td><td><b>'+esc(c.bank_name||'')+'</b></td><td class="num" style="color:#0e9d6a">'+(inV>0?fmt(inV):'')+'</td><td class="num neg">'+(outV>0?fmt(outV):'')+'</td><td>'+esc(c.currency||'')+'</td><td>'+esc(c.bank_ref||'—')+'</td><td style="font-size:10px;color:var(--muted);white-space:normal;max-width:220px">'+esc([c.description,c.details,c.more_details,c.note].filter(Boolean).join(' · '))+'</td>'+
+      '<td style="white-space:nowrap"><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="editBankCashPending('+i+')">✏️ تعديل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="withdrawBankCashPending('+m.id+')">🗑️ سحب</button></td></tr>'; }).join('')+
+    '</tbody></table></div></div>';
+}
+// ✏️ تعديل معلّقة: نعبّئ النموذج بقيمها ونسحب الطلب القديم — تعدّلين وتعيدين الإرسال (يُنشئ طلباً جديداً بانتظار الموافقة)
+async function editBankCashPending(i){
+  const m=(window._bcPend||[])[i]; if(!m)return; const c=m.payload||{};
+  if(!confirm('تعديل هذه الحركة المعلّقة؟\nسنعبّئ النموذج بقيمها ونسحب الطلب القديم — عدّلي ثم أعيدي «حفظ الحركة» لإرسال طلب محدّث.'))return;
+  const S=(id,v)=>{const e=$(id);if(e)e.value=(v==null?'':v);};
+  S('bca-bank',c.bank_name); S('bca-date',String(c.tx_date||'').slice(0,10)); S('bca-in',c.in_raw); S('bca-out',c.out_raw); S('bca-cur',c.currency); S('bca-rate',c.currency_rate); S('bca-omr',c.omr_value); S('bca-ref',c.bank_ref); S('bca-note',c.note);
+  try{ if(typeof bcFillDescByChannel==='function'){ S('bca-channel',c.channel); bcFillDescByChannel(); S('bca-desc',c.description); if(typeof bcFillAddDetails==='function'){ bcFillAddDetails(); S('bca-details',c.details); if(typeof bcFillAddMore==='function'){ bcFillAddMore(); S('bca-more',c.more_details); } } } }catch(_){}
+  try{ if(typeof bcaOmrRate==='function')bcaOmrRate(); }catch(_){}
+  await withdrawBankCashPending(m.id, true);
+  const msg=$('bc-add-msg'); if(msg){ msg.style.color='#b8860b'; msg.textContent='✏️ عدّلي القيم ثم اضغطي «حفظ الحركة» لإرسال الطلب المحدّث'; }
+  try{ $('bca-bank').scrollIntoView({behavior:'smooth',block:'center'}); }catch(_){}
+}
+async function withdrawBankCashPending(id, silent){
+  if(!silent && !confirm('سحب هذا الطلب المعلّق؟ لن يظهر للمالكة ولن يُسجَّل شيء.'))return;
+  try{
+    const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'withdraw_cash_add',payload:{id:Number(id),by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
+    const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
+    if(!silent){ toast('🗑️ سُحب الطلب المعلّق'); await load(); }
+  }catch(e){ if(!silent)alert('خطأ: '+e.message); }
 }
 function bcApply(opts){
   opts=opts||{}; let a=((DATA&&DATA.banksCash)||[]).slice();

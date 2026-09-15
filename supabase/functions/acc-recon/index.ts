@@ -227,6 +227,19 @@ Deno.serve(async (req: Request) => {
       if (error) return J({ error: error.message }, 400);
       return J({ ok: true, row: data });
     }
+    if (action === 'withdraw_cash_add') {   // 🗑️ سحب طلب حركة كاش معلّق (مقدّم الطلب أو المالكة) — لا يُسجَّل شيء
+      if (!p.id) return J({ error: 'no id' }, 400);
+      const { data: mv, error: me } = await supabase.from('acc_pending_movements').select('kind,scope,status,payload').eq('id', p.id).single();
+      if (me || !mv) return J({ error: 'الطلب غير موجود' }, 400);
+      if (mv.kind !== 'cash' || mv.scope !== 'banks_cash') return J({ error: 'نوع غير متوافق' }, 400);
+      if (mv.status !== 'pending') return J({ error: 'لا يمكن سحب طلب مُعالَج مسبقاً' }, 400);
+      const owner = callerIsOwner;
+      const submitter = String((mv.payload || {}).by || '');
+      if (!owner && String(p.by || '') !== submitter) return J({ error: 'يمكنك سحب طلباتك أنت فقط' }, 403);
+      const { error } = await supabase.from('acc_pending_movements').delete().eq('id', p.id).eq('status', 'pending');
+      if (error) return J({ error: error.message }, 400);
+      return J({ ok: true });
+    }
     if (action === 'resolve_cash_add') {
       if (!callerIsOwner) return J({ error: 'الاعتماد/الرفض للمالكة فقط' }, 403);
       if (!p.id) return J({ error: 'no id' }, 400);
