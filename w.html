@@ -1867,7 +1867,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260915b";
+    const APPVER = "20260915c";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4227,7 +4227,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     const BF_INTAKE = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake";
     // العمرة = مكة + المدينة: أي تهجئة (مكة/مكه/عمرة/الحرم/makkah…) → قيمة القائمة «العمرة».
     function bfCanonDest(d){ const s=String(d||'').trim(); return /مكة|مكه|عمرة|عمره|الحرم|makkah|mecca|umrah/i.test(s) ? "العمرة" : s; }
-    const BF_AIRPORT_AR = {Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي",Salalah:"صلالة"};
+    const BF_AIRPORT_AR = {Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي",Salalah:"صلالة",Shanghai:"شنغهاي",Beijing:"بكين",Hangzhou:"هانغتشو","Hong Kong":"هونغ كونغ"};
     function bfAirAr(a){ return BF_AIRPORT_AR[a] || a; }
     function bfPairOf(s){ return (s.arrival_airport||"") + "|" + (s.departure_airport||""); }
     function bfPairLabel(pv){ const [a,b]=pv.split("|"); return a===b ? ("القدوم والمغادرة: "+bfAirAr(a)) : ("القدوم: "+bfAirAr(a)+" — المغادرة: "+bfAirAr(b)); }
