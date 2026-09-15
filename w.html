@@ -1867,7 +1867,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260915a";
+    const APPVER = "20260915b";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4390,7 +4390,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       "موريشيوس":["موريشيوس"],
       "العمرة":["مكة المكرمة","المدينة المنورة","جدة","الطائف"],
       "إنجلترا":["لندن"],
-      "الصين":["شنغهاي","بكين","سوجو","هانغتشو","هونغ كونغ"],
+      "الصين":["شنغهاي","بكين","هانغتشو","هونغ كونغ"],
     };
     function bfMode(){ return (document.querySelector('input[name=bf-mode]:checked')||{}).value || "ready"; }
     function bfSetMode(m){
