@@ -3375,6 +3375,7 @@ Deno.serve(async (req) => {
         "Moscow": "موسكو", "St Petersburg": "سانت بطرسبرغ", "Sochi": "سوتشي",
         "Sarajevo": "سراييفو", "Mostar": "موستار", "Bihać": "بيهاتش",
         "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
+        "Shanghai": "شنغهاي", "Beijing": "بكين", "Hangzhou": "هانغتشو", "Hong Kong": "هونغ كونغ", "London": "لندن",
       };
       // Distribution-change follow-up: employee typed a NEW city/nights split
       // in chat to reshape an existing program (e.g. "٢ بانكوك ٤ كوساموي").

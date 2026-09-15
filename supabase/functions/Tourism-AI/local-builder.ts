@@ -2639,7 +2639,24 @@ export async function buildLocalProgram(
   const lastHotelLoc = hotelsList.length
     ? hotelsList[hotelsList.length - 1].hotel.location
     : areaHintFromSub(stayOrder[stayOrder.length - 1]?.area || request.subAreaByCity?.[lastCity]);
-  const depDrop = findDepartureDrop(allTours, lastCity, dest, cityDefs, request.transport, lastHotelLoc);
+  let depDrop = findDepartureDrop(allTours, lastCity, dest, cityDefs, request.transport, lastHotelLoc);
+  // المغادرة الدولية دائماً إلى المطار: لو المدينة الأخيرة ما لها إلا انتقال «محطة قطار»
+  // (مثل الصين: انتقال المطار لشانغهاي فقط، وبكين/هانغتشو محطة قطار فقط) بينما الوجهة
+  // تستخدم مطارات دولية للمغادرة، نحوّل التوديع إلى مغادرة **مطار** المدينة الأخيرة
+  // بنفس سعر انتقال المطار في الوجهة. القطار السريع يبقى للتنقّل بين المدن فقط.
+  if (depDrop && /محط[هة]|قطار|station|train/iu.test(depDrop.name) && !/مطار|airport/iu.test(depDrop.name)) {
+    const airportDep = allTours.find(t =>
+      t.type === dest
+      && !/استقبال|الاستقبال|pickup/iu.test(t.name)
+      && /توديع|التوديع|التوجه|التوجة|الخروج|توصيل|drop/iu.test(t.name)
+      && /مطار|airport/iu.test(t.name)
+      && !/محط[هة]|قطار|station|train/iu.test(t.name),
+    );
+    if (airportDep) {
+      const lastAr = cityArabicNames[lastCity] || lastCity;
+      depDrop = { ...depDrop, name: `التوجه من الفندق في ${lastAr} الى المطار الدولي للمغادرة`, price: airportDep.price };
+    }
+  }
   if (depDrop) {
     selectedTransfers.push({ day: days.length, row: depDrop, kind: "Drop" });
   } else if (mainHub && normCity(lastCity) !== normCity(mainHub)) {
