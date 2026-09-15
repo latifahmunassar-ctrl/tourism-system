@@ -109,6 +109,26 @@ function detectSectionCity(name: string, destination: string): string | null {
   return null;
 }
 
+// وجهات يُشتق فيها مطار القدوم/المغادرة من أول/آخر مدينة بالتوزيع (بوابات متعددة).
+const ENDPOINT_AIRPORT_DESTS = new Set<string>(["China"]);
+// يستخرج مطار (أول مدينة) و(آخر مدينة) من نص التوزيع مثل «٤ بكين - ٣ شانغهاي»
+// → { arr:"Beijing", dep:"Shanghai" }. يستخدم أنماط مدن الوجهة نفسها.
+function endpointAirportsFromDist(distribution: string, destination: string): { arr: string; dep: string } | null {
+  const defs = SECTION_CITY_DEFS[destination] || [];
+  // تحويل الأرقام العربية داخلياً (toLatinDigits محلية داخل extractSuggestions فلا نصلها هنا).
+  const latin = String(distribution || "").replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)));
+  const segs = latin.split(/[-–—]/).map(s => s.trim()).filter(Boolean);
+  if (!segs.length) return null;
+  const cityOf = (seg: string): string | null => {
+    const name = seg.replace(/^\s*\d+\s*/, "").trim();
+    for (const { canonical, pattern } of defs) if (pattern.test(name)) return canonical;
+    return null;
+  };
+  const first = cityOf(segs[0]);
+  const last = cityOf(segs[segs.length - 1]);
+  return (first && last) ? { arr: first, dep: last } : null;
+}
+
 const HOTEL_HEADER_KEYWORDS = [
   "hotel", "city", "star", "room", "rate", "include",
   "currency", "from", "to", "note", "no_header", "sr",
@@ -1011,8 +1031,16 @@ function extractSuggestions(
     // arrival and departure are the same single airport.
     if (pendingDay) {
       const hub = DEFAULT_AIRPORT[destination] || "";
-      const arr = arrival || hub;
-      const dep = departure || hub;
+      // وجهات متعددة البوابات (الصين: يُدخَل/يُخرَج عبر شانغهاي أو بكين حسب أول/آخر مدينة):
+      // اشتقّ مطار الوصول = أول مدينة بالتوزيع، والمغادرة = آخر مدينة — بدل هَبٍّ واحد ثابت.
+      let arr = arrival || "";
+      let dep = departure || "";
+      if (!arr && !dep && ENDPOINT_AIRPORT_DESTS.has(destination)) {
+        const ep = endpointAirportsFromDist(rawCell, destination);
+        if (ep) { arr = ep.arr; dep = ep.dep; }
+      }
+      arr = arr || hub;
+      dep = dep || hub;
       if (arr && dep) {
         out.push({
           destination,
