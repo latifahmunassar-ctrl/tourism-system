@@ -91,7 +91,7 @@ const SECTION_CITY_DEFS: Record<string, Array<{ canonical: string; pattern: RegE
     { canonical: "Shanghai",  pattern: /شان[غج]هاي|شنغهاي|shanghai/i },
     { canonical: "Beijing",   pattern: /بكين|بيجين[غج]?|beijing/i },
     { canonical: "Suzhou",    pattern: /سوجهو|سوجو|سوزو|سوتشو|suzhou/i },
-    { canonical: "Hangzhou",  pattern: /هان[غج]تشو|هان[غج]شتوا|هان[غج]زو|hangzhou/i },
+    { canonical: "Hangzhou",  pattern: /هان[غج]تشو|هان[غج]شتوا?|هان[غج]زو|hangzhou/i },
     { canonical: "Hong Kong", pattern: /هون[غج]\s*كون[غج]|hong\s*kong|hongkong/i },
   ],
 };
@@ -949,6 +949,7 @@ function extractSuggestions(
     indonesia: "Jakarta",
     Oman:     "صلالة",
     Makkah:   "جدة",   // برامج العمرة تدخل/تخرج عبر جدة (بلا سطر مطار في عمود الاقتراحات)
+    China:    "Shanghai",  // برامج الصين تبدأ/تنتهي غالباً بشنغهاي (عمود الاقتراحات بلا سطر مطار)
   };
   for (let i = headerRow + 1; i < rows.length; i++) {
     const rawCell = (rows[i][colIdx] || "").trim();

@@ -177,7 +177,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Shanghai",  pattern: /شان[غج]هاي|شنغهاي|shanghai/i },
     { canonical: "Beijing",   pattern: /بكين|بيجين[غج]?|beijing/i },
     { canonical: "Suzhou",    pattern: /سوجهو|سوجو|سوزو|سوتشو|suzhou/i },
-    { canonical: "Hangzhou",  pattern: /هان[غج]تشو|هان[غج]شتوا|هان[غج]زو|hangzhou/i },
+    { canonical: "Hangzhou",  pattern: /هان[غج]تشو|هان[غج]شتوا?|هان[غج]زو|hangzhou/i },
     { canonical: "Hong Kong", pattern: /هون[غج]\s*كون[غج]|hong\s*kong|hongkong/i },
   ],
 };
