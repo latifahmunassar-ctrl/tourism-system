@@ -1309,6 +1309,7 @@ const DESTINATION_AR_NAMES: Record<string, string> = {
   "South Africa": "جنوب أفريقيا",
   mauritius: "موريشيوس",
   England: "إنجلترا",
+  China: "الصين",
   Makkah: "العمرة",
 };
 

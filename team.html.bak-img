@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-14-group-programs-j'
+  var BUILD = '2026-07-09-mauritius';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -368,8 +368,6 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 .rtw-b.add{background:#0e9d6a;color:#fff}
 .rtw-badge{display:inline-block;background:#fff3cd;color:#7a5b00;border:1px solid #ffc107;border-radius:20px;font-size:10px;font-weight:800;padding:2px 8px}
 .rtw-rm{background:#5a1620;color:#ff9aa2;border:1px solid #7a2330;border-radius:7px;padding:2px 8px;font-size:11px;font-weight:800;cursor:pointer;margin-inline-start:4px}
-.dblrm-btn{display:block;margin-top:6px;background:#123a2b;color:#7de3b0;border:1px solid #1f5c43;border-radius:8px;padding:4px 9px;font-size:11px;font-weight:800;cursor:pointer;width:100%}
-.dblrm-btn:hover{background:#1a4d39}
 .rtw-extra{color:#F0C96A}
 .bed-stp{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:9px;overflow:hidden}
 .bed-stp button{border:none;background:var(--bg);color:var(--gold);width:26px;height:26px;font-size:15px;font-weight:900;cursor:pointer;line-height:1}
@@ -492,10 +490,8 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
     <button type="button" class="pdf-menu-item" onclick="pdfMenuPick('client')">👤 أفراد <small>— للعميل (لوغو + سعر)</small></button>
     <button type="button" class="pdf-menu-item" onclick="pdfMenuPick('detailed')">📊 تفصيلي <small>— لوغو + تفصيل الأسعار</small></button>
     <button type="button" class="pdf-menu-item" onclick="pdfMenuPick('no_price')">🚫 بدون سعر <small>— بدون لوغو</small></button>
-    <button type="button" class="pdf-menu-item" onclick="prepareAdPdf()" style="border-top:1px solid var(--border);margin-top:4px;padding-top:10px;color:#0b3d91">🔗 اربط ملف الإعلان بالكود <small>— طلال يرسله لعملاء الإعلان</small></button>
   </div>
 </div>
-<button type="button" class="ebtn ebtn-pdf" id="finalizeCodeBtn" style="background:linear-gradient(135deg,#0b3d91,#0e9d6a);border:none;color:#fff;font-weight:800" onclick="finalizeProgramCode()" title="جمّد النسخة الحالية بكل تعديلاتها وولّد كود استرجاع دائم — بدون إرسال للعميل">✅ اعتمد النسخة النهائية — ولّد الكود</button>
 <button class="ebtn ebtn-nologo" id="currencyBtn" onclick="toggleCurrencyPicker()">💱 تحويل عملة</button>
 <select id="currencyPicker" onchange="onCurrencyPick()" style="display:none; padding:7px 10px; border-radius:8px; border:1px solid var(--border); background:var(--s2); color:var(--text); font-family:'Tajawal',sans-serif; font-size:12px; font-weight:700; cursor:pointer;"><option value="">💱 بدون تحويل (ريال)</option></select>
 <span id="currencyResult" style="display:none; font-size:13px; font-weight:900; color:var(--gold); background:var(--s2); border:1px solid rgba(212,168,67,0.35); border-radius:8px; padding:6px 12px; white-space:nowrap;"></span>
@@ -520,7 +516,6 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div class="fp-tabs">
 <div class="fp-tab active" data-tab="build" onclick="fpTab('build')">📋 بناء تسعيرة</div>
 <div class="fp-tab" data-tab="mods" onclick="fpTab('mods')">💬 تعديلات <span class="badge">شات</span></div>
-<div class="fp-tab" data-tab="groups" onclick="fpTab('groups')">🚌 برامج الجروبات</div>
 </div>
 
 <div id="tab-build" style="display:flex">
@@ -633,30 +628,6 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <textarea class="chat-input" id="chatInput" placeholder="اكتب تعديلك على البرنامج هنا..." rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
 <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
 </div>
-</div>
-
-<!-- ═══ تبويب برامج الجروبات (معزول: مصدره تبويب Groups بالشيت، مسار ثابت غير قابل للتعديل) ═══ -->
-<div id="tab-groups" style="display:none">
-  <div class="bf-sec">
-    <h3>🚌 برامج الجروبات</h3>
-    <div class="bf-sub">برامج جروبات جاهزة بمسار ثابت مربوط بتواريخ — كل برنامج = تبويب بالشيت اسمه فيه «(Group)».</div>
-    <div class="bf-field"><label>البرنامج / الوجهة <span class="bf-req">*</span></label>
-      <select id="grp-dest" onchange="grpOnDest()"><option value="">— جارٍ التحميل… —</option></select>
-    </div>
-    <div class="bf-field"><label>تاريخ المغادرة <span class="bf-req">*</span></label>
-      <select id="grp-date" onchange="grpOnDate()"><option value="">— اختر البرنامج أولاً —</option></select>
-    </div>
-    <div class="bf-row">
-      <div class="bf-field"><label>عدد المسافرين (Pax) <span class="bf-req">*</span></label><input id="grp-pax" type="number" min="1" max="20" value="2" oninput="grpOnDate()"></div>
-      <div class="bf-field"><label>نوع العميل</label>
-        <select id="grp-ptype" onchange="grpOnDate()"><option value="individual">أفراد</option><option value="company">شركات</option></select>
-      </div>
-    </div>
-    <div class="bf-hint" id="grp-priceHint" style="margin-bottom:8px"></div>
-    <button class="bf-build-btn" id="grp-showBtn" onclick="grpShow()">👁️ اعرض برنامج الجروب</button>
-    <div class="bf-hint" style="text-align:center;margin-top:9px">المسار ثابت غير قابل للتعديل — للعرض والإرسال فقط.</div>
-    <div class="bf-hint" id="grp-msg" style="text-align:center;margin-top:6px;color:#b45309"></div>
-  </div>
 </div>
 </div>
 </div>
@@ -793,9 +764,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div id="waBridgeEtaMsg" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
 </div>
 
-<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;margin-bottom:10px">📷 صورة برنامج (اختياري): <input type="file" id="waBridgeImgFile" accept="image/*" style="font-size:12px;flex:1"><button type="button" onclick="waBridgeClearImg()" title="إزالة الصورة المرفقة" style="background:none;border:1px solid var(--border);border-radius:6px;color:#ef4444;cursor:pointer;font-size:12px;font-weight:800;padding:3px 8px;white-space:nowrap">🗑️ إزالة الصورة</button></label>
 <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:10px"><input type="checkbox" id="waBridgePdf" onchange="waBridgePdfToggle()"> 📄 إرسال كملف PDF (بدون سعر ولا شعار) — يحتاج برنامج مبني</label>
-<div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:12px"><label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:6px"><input type="checkbox" id="waBridgeDist" onchange="waBridgeDistToggle()"> 🔀 وزّع على أكثر من رقم (بلا تكرار لنفس الجروب)</label><div id="waBridgeDistBox" style="display:none;font-size:12px;padding-inline-start:6px"><label style="display:flex;gap:6px;margin-bottom:4px"><input type="checkbox" class="wab-dist-acct" value="601111136864"> العز الأساسي</label><label style="display:flex;gap:6px;margin-bottom:4px"><input type="checkbox" class="wab-dist-acct" value="96898072933"> عُمان +968</label><label style="display:flex;gap:6px;margin-bottom:4px"><input type="checkbox" class="wab-dist-acct" value="201011346081"> موظفة مصر</label><div style="color:var(--muted);font-size:11px;margin-top:4px">اختاري رقمين+ ؛ كل جروب يُرسَل من رقم واحد عضو فيه فقط.</div></div></div>
 <button class="rfm-btn-primary" style="background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;width:100%" onclick="waBridgeSend()">📤 إرسال (<span id="waBridgeSendCount">0</span>)</button>
 <div id="waBridgeMsg" style="font-size:12px;text-align:center;margin-top:8px;min-height:16px"></div>
 <div id="waBridgeOutbox" style="margin-top:10px"></div>
@@ -1045,21 +1014,6 @@ let currencyConversion = null;       // { name, rate, originalSAR, converted } w
 let currencyAwaiting = null;         // 'rate' | 'confirm' | null
 let currencyPending = null;          // { name, rate, originalSAR, converted } during the flow
 let lastProgramRaw = '';
-let HARAM_FILTER = '';   // فلتر قرب الحرم لبرامج مكة (بجانب/قريب/إطلالة/موصى به)
-const HARAM_OPTIONS = ['بجانب الحرم','قريب من الحرم','إطلالة على الحرم','إطلالة على الكعبة','موصى به'];
-let MK_MODES = [];       // وسيلة كل مقطع تنقّل لبرنامج مكة ('train'|'car')
-let MK_LAST_SIG = '';    // بصمة آخر تركيب طُبّق (مدن+ليالي+وسائل) — يمنع التكرار
-let MK_DEP_AIR = 'jeddah';  // مطار المغادرة إن انتهى البرنامج بالمدينة: 'jeddah' | 'madinah'
-// بصمة هوية البرنامج (تاريخ + أسماء الفنادق) — تُضمَّن في mkSig حتى لا يتخطّى
-// التطبيق التلقائي برنامجاً جديداً له نفس المدن/الوسيلة (كان يترك انتقالات قديمة).
-function mkProgFP(){
-  try { return (getLine(lastProgramRaw,'DATE_FROM')||'') + '#' + parseHotelLinesFromRaw(lastProgramRaw).map(l=>String(l).split('|')[0].trim()).join(','); }
-  catch(_){ return getLine(lastProgramRaw,'DATE_FROM')||''; }
-}
-function mkSig(cities){ return mkProgFP() + '|' + JSON.stringify((cities||[]).map(c=>c.key+'/'+c.nights)) + '|' + MK_MODES.join(',') + '|' + MK_DEP_AIR; }
-let MK_FLIGHT_MODE = 'cheapest';  // طيران مكة الدولي: cheapest|oman|salam|none
-let MK_FLIGHT_DATA = null;        // كاش أسعار الطيران (يُجلب مرة)
-let MK_FLIGHT_SIG = '';           // بصمة آخر تطبيق طيران (mode+تواريخ+أشخاص)
 let lastSavedCode = '';
 
 const SYSTEM = `انت مساعد متخصص في بناء البرامج السياحية. مهم جداً: أي أرقام إجماليات يجب أن تكون محسوبة بدقة من تفاصيل الشيت نفسها، ولا تكتب أي إجمالي إلا بعد التحقق:
@@ -1087,7 +1041,7 @@ META:[عدد الايام] ايام | [عدد الليالي] ليالي | [ال
 DATE_FROM:[تاريخ البداية مثل 19 مايو 2026]
 DATE_TO:[تاريخ النهاية مثل 25 مايو 2026]
 CLIENT:[وصف العميل مثل زوجين]
-CLIENT_CODE:
+CLIENT_CODE:ALZ-2026-001
 
 HOTELS:
 [اسم الفندق] | [المنطقة] | [النجوم] نجوم | [نوع الغرفة] | [السعر] ريال/ليلة | [عدد الليالي] ليالي | [ما يشمل]
@@ -1158,24 +1112,6 @@ async function toggleCurrencyPicker(){
   const sel = document.getElementById('currencyPicker');
   sel.style.display = (sel.style.display === 'none') ? '' : 'none';
 }
-// يثبّت العملة داخل خام البرنامج (CURRENCY:اسم|سعر) ليُحفَظ مع الكود ويُستعاد عند
-// الاستدعاء، ويصفّر الكود المحفوظ حتى يتولّد كود جديد يحمل العملة الجديدة عند الاعتماد.
-function writeCurrencyToRaw(name, rate){
-  if(typeof lastProgramRaw !== 'string' || !lastProgramRaw) return;
-  let raw = lastProgramRaw.replace(/\nCURRENCY:[^\n]*/g,'');   // أزل أي سطر عملة قديم
-  if(name && rate > 0){
-    const dm = raw.match(/DEST:[^\n]*/);
-    raw = dm ? raw.replace(dm[0], dm[0] + '\nCURRENCY:' + name + '|' + rate)
-             : ('CURRENCY:' + name + '|' + rate + '\n' + raw);
-  }
-  if(raw !== lastProgramRaw){
-    lastProgramRaw = raw;
-    for(let i=history.length-1;i>=0;i--){ if(history[i].role==='assistant'){ history[i].content = raw; break; } }
-  }
-  // تغيير العملة = نسخة جديدة للبرنامج → صفّر الكود ليُولَّد جديد عند «اعتمد النسخة النهائية»
-  lastSavedCode = '';
-  const pill = document.getElementById('savedCodePill'); if(pill) pill.style.display = 'none';
-}
 function onCurrencyPick(){
   const sel = document.getElementById('currencyPicker');
   const box = document.getElementById('currencyResult');
@@ -1185,13 +1121,11 @@ function onCurrencyPick(){
   if(!sel.value || !(rate > 0)){
     currencyConversion = null;
     box.style.display = 'none';
-    writeCurrencyToRaw('', 0);   // إزالة العملة + تصفير الكود
     return;
   }
   const finalGroupPrice = currentFinalGroup();
   currencyConversion = { name, rate, originalSAR: finalGroupPrice, converted: finalGroupPrice / rate };
   refreshCurrencyBox();
-  writeCurrencyToRaw(name, rate);   // تثبيت العملة بالبرنامج + تصفير الكود
 }
 function refreshCurrencyBox(){
   const box = document.getElementById('currencyResult');
@@ -1256,8 +1190,7 @@ function handleCurrencyMessage(text) {
       currencyConversion = { ...currencyPending };
       currencyAwaiting = null;
       currencyPending = null;
-      writeCurrencyToRaw(currencyConversion.name, currencyConversion.rate);   // ثبّتها بالبرنامج + كود جديد
-      addMessage('sys', `✅ تم. التحويل سيظهر في PDF "للعميل" و"التفصيلي" تلقائياً، ومحفوظ مع الكود. (PDF بدون سعر لا يتأثر.)`);
+      addMessage('sys', `✅ تم. التحويل سيظهر في PDF "للعميل" و"التفصيلي" تلقائياً. (PDF بدون سعر لا يتأثر.)`);
     } else {
       currencyAwaiting = null;
       currencyPending = null;
@@ -1299,10 +1232,7 @@ history.push({ role: 'assistant', content: raw });
 // header.
 const chatMatch = raw.match(/CHAT:([\s\S]+)/);
 addMessage('sys', chatMatch ? chatMatch[1].trim() : 'تم بناء البرنامج!');
-// زامن عدد الأشخاص في الفورمة مع البرنامج المبني قبل العرض — buildReview يحسب
-// الطيران/النقل من الفورمة، فلو بقيت قيمة قديمة (2) يطلع الطيران لعدد خاطئ رغم
-// أن الطلب فيه 3. (نفس ما يفعله فتح برنامج محفوظ في syncFormPeopleFromProgram.)
-if (raw.includes('DEST:')) { syncFormPeopleFromProgram(raw); buildReview(raw); }
+if (raw.includes('DEST:')) buildReview(raw);
 } catch (e) {
 removeTyping(typingId);
 addMessage('sys', 'حدث خطأ في الاتصال، حاول مرة ثانية.');
@@ -1332,75 +1262,24 @@ async function loadProfitMargins(dest){
     profitMarginsDest = dest;
   }catch(e){ profitMargins = []; }
 }
-// ── مطابقة الموسم حسب تاريخ بداية البرنامج (DATE_FROM) ──
-// المواسم مخزّنة «يوم/شهر» (مثل 15/07). نحوّلها لعدد شهر*100+يوم للمقارنة، مع دعم
-// التفاف نهاية السنة (27/12 → 05/01: من > إلى فتُقبل إن كان التاريخ ≥ من أو ≤ إلى).
-function _seasonMMDD(ddmm){
-  const m = String(ddmm||'').match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
-  if(!m) return null; const day=+m[1], mon=+m[2];
-  if(!day || !mon) return null; return mon*100 + day;
-}
-function _arMonthNum(s){
-  const AR={'يناير':1,'فبراير':2,'مارس':3,'ابريل':4,'مايو':5,'يونيو':6,'يوليو':7,'اغسطس':8,'سبتمبر':9,'اكتوبر':10,'نوفمبر':11,'ديسمبر':12};
-  const t=String(s||'').replace(/[إأآ]/g,'ا');
-  for(const k in AR){ if(t.indexOf(k)>=0) return AR[k]; }
-  return null;
-}
-function _programMMDD(){
-  // الموسم يحتاج الشهر (واليوم إن وُجد). نطبّع الأرقام العربية ونجرّب عدة صيغ،
-  // ونرجع لـ META للشهر لو البرنامج شهري بلا يوم (مثل «شهر ٩»).
-  const toL = s => String(s||'').replace(/[٠-٩]/g,c=>'٠١٢٣٤٥٦٧٨٩'.indexOf(c));
-  const s = toL(getLine(lastProgramRaw,'DATE_FROM') || '');
-  let mm = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/); if(mm) return (+mm[2])*100 + (+mm[3]);          // ISO
-  mm = s.match(/\b(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*\d{2,4})?/); if(mm) return (+mm[2])*100 + (+mm[1]); // يوم/شهر
-  const monD = _arMonthNum(s);                                                                     // «١٩ سبتمبر ٢٠٢٦» أو «سبتمبر»
-  if(monD){ const day = (s.match(/\b(\d{1,2})\b/)||[])[1]; return monD*100 + (day ? +day : 15); }
-  const metaMon = _arMonthNum(toL(getLine(lastProgramRaw,'META') || ''));                          // احتياط: شهر META
-  if(metaMon) return metaMon*100 + 15;
-  return null;
-}
-function _seasonMatches(m, md){
-  if(md==null) return false;
-  const f=_seasonMMDD(m.season_from), t=_seasonMMDD(m.season_to);
-  if(f==null || t==null) return false;
-  return f<=t ? (md>=f && md<=t) : (md>=f || md<=t);
-}
 function applyAutoProfit(){
   const inp = document.getElementById('profitInput');
   if(!inp || !profitMargins.length) return;
   const cost = (basePrice || 0) + extraCostsTotal();   // التكلفة الإجمالية قبل الربح
-  const tiers = profitMargins.filter(m => cost >= +m.cost_min && cost <= +m.cost_max);
-  if(!tiers.length){
+  const tier = profitMargins.find(m => cost >= +m.cost_min && cost <= +m.cost_max);
+  if(!tier){
     // خارج كل النطاقات → بدون ربح تلقائي + تنبيه (مرة واحدة لكل تكلفة)
     const msg = `⚠️ التكلفة الإجمالية (${cost.toLocaleString()} ريال) خارج نطاقات جدول الأرباح لهذه الوجهة — اكتب هامش الربح يدوياً.`;
     if(msg !== lastAutoProfitMsg){ addMessage('sys', msg); lastAutoProfitMsg = msg; }
     return;
   }
-  // بُعد الموسم: لو الوجهة موسمية نطابق تاريخ البداية؛ وإلا نأخذ الشريحة كما هي.
-  const seasonal = tiers.some(m => m.season_from);
-  let tier = null;
-  if(seasonal){
-    const md = _programMMDD();
-    if(md != null) tier = tiers.find(m => _seasonMatches(m, md));
-    if(!tier) tier = tiers.find(m => !m.season_from);   // صف بلا موسم = طوال السنة (احتياط)
-    if(!tier){
-      const msg = (md == null)
-        ? '⚠️ حدّدي تاريخ بداية البرنامج ليُحسب الربح حسب الموسم، أو اكتبي هامش الربح يدوياً.'
-        : `⚠️ تاريخ البرنامج خارج مواسم جدول الأرباح لهذه الوجهة — اكتبي هامش الربح يدوياً.`;
-      if(msg !== lastAutoProfitMsg){ addMessage('sys', msg); lastAutoProfitMsg = msg; }
-      return;
-    }
-  } else {
-    tier = tiers[0];
-  }
   const profit = customerType === 'company' ? (+tier.profit_company || 0) : (+tier.profit_individual || 0);
   inp.value = profit;
   updateProfit();
-  // الشريحة/الموسم موجود لكن ربح هذا النوع غير مُدخَل في الشيت (خانة فاضية) → نبّه بدل صفر صامت.
+  // الشريحة موجودة لكن ربح هذا النوع غير مُدخَل في الشيت (خانة فاضية) → نبّه بدل صفر صامت.
   if(profit === 0){
     const typeAr = customerType === 'company' ? 'الشركات' : 'الأفراد';
-    const seasonAr = tier.season_from ? ` وموسم ${tier.season_from}–${tier.season_to}` : '';
-    const msg2 = `⚠️ ربح ${typeAr} لشريحة ${(+tier.cost_min).toLocaleString()}–${(+tier.cost_max).toLocaleString()}${seasonAr} غير مُدخَل في شيت هذه الوجهة — أضِفه في الشيت وزامن، أو اكتب الربح يدوياً.`;
+    const msg2 = `⚠️ ربح ${typeAr} لشريحة ${(+tier.cost_min).toLocaleString()}–${(+tier.cost_max).toLocaleString()} غير مُدخَل في شيت هذه الوجهة — أضِفه في الشيت وزامن، أو اكتب الربح يدوياً.`;
     if(msg2 !== lastAutoProfitMsg){ addMessage('sys', msg2); lastAutoProfitMsg = msg2; }
   } else {
     lastAutoProfitMsg = '';
@@ -1415,12 +1294,6 @@ function setCustomerType(t){
 }
 async function autoProfitForProgram(dest){
   await loadProfitMargins(dest);
-  // لا يوجد جدول أرباح لهذه الوجهة → نبّه بدل ترك الربح صفراً بصمت.
-  if(dest && !profitMargins.length){
-    const msg = `⚠️ ما فيه جدول أرباح لوجهة «${dest}» في الشيت — أضِفه (شرائح التكلفة + الأرباح) وزامن، أو اكتب هامش الربح يدوياً في خانة «هامش الربح».`;
-    if(msg !== lastAutoProfitMsg){ addMessage('sys', msg); lastAutoProfitMsg = msg; }
-    return;
-  }
   applyAutoProfit();
 }
 
@@ -1441,278 +1314,16 @@ async function hswFetch(cell){
   const region = cell.dataset.region || '';
   // إشغال الغرفة الحالية (لا عدد البالغين) — عشان البدائل تطابق نفس سعة الغرفة المعروضة.
   const occ = (+cell.dataset.occ) || (parsedData && parsedData.adults) || 2;
-  const isMakkah = /مكة|مكه|عمرة/.test(dest||'');
   try{
     const res = await fetch(SUPABASE_URL, {
       method:'POST',
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
-      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: occ, current: cell.dataset.name || '', date: getLine(lastProgramRaw, 'DATE_FROM') || '', haram: isMakkah ? HARAM_FILTER : '' })
+      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: occ, current: cell.dataset.name || '', date: getLine(lastProgramRaw, 'DATE_FROM') || '' })
     });
     const data = await res.json();
     cell.dataset.loaded = '1';
-    cell._isMakkah = isMakkah;
-    cell._haramNote = data.haram_note || '';
     hswRender(cell, data.hotels || []);
   }catch(e){ menu.innerHTML = '<div class="hsw-loading">تعذّر جلب الفنادق</div>'; }
-}
-// شرائح فلتر قرب الحرم أعلى قائمة الفندق (مكة/المدينة فقط)
-function hswHaramBar(cell){
-  const chip = (label)=>`<span onclick="hswSetHaram(this,'${label.replace(/'/g,"")}')" style="cursor:pointer;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid ${HARAM_FILTER===label?'#0e9d6a':'#d7dee6'};background:${HARAM_FILTER===label?'#0e9d6a':'#fff'};color:${HARAM_FILTER===label?'#fff':'#445'}">${label}</span>`;
-  const clear = HARAM_FILTER?`<span onclick="hswSetHaram(this,'')" style="cursor:pointer;font-size:11px;color:#b91c1c;padding:4px 8px">✕ إلغاء</span>`:'';
-  const note = cell._haramNote?`<div style="font-size:11px;color:#b45309;margin-top:5px">⚠️ ${hswEsc(cell._haramNote)}</div>`:'';
-  return `<div style="padding:8px 10px;border-bottom:1px solid #eef2f6"><div style="font-size:11px;color:#889;margin-bottom:6px">🕌 قرب الحرم:</div><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">${HARAM_OPTIONS.map(chip).join('')}${clear}</div>${note}</div>`;
-}
-function hswSetHaram(el, val){
-  HARAM_FILTER = val;
-  // أعِد تحميل قائمة الفندق المفتوحة حالياً بالفلتر الجديد
-  const cell = el.closest('.hsw-cell');
-  if(cell){ cell.dataset.loaded=''; hswFetch(cell); }
-}
-// ── شريط قرب الحرم الثابت فوق برنامج مكة (يفلتر كل الفنادق دفعة واحدة) ──
-function renderHaramBar(){
-  const panel = document.getElementById('reviewPanel'); if(!panel) return;
-  const old = document.getElementById('haramBar'); if(old) old.remove();
-  if(!/مكة|مكه|عمرة/.test(getLine(lastProgramRaw,'DEST')||'')) return;
-  const chip = (label)=>`<span onclick="applyHaramToAllHotels('${label.replace(/'/g,'')}')" style="cursor:pointer;font-size:12.5px;font-weight:700;padding:6px 13px;border-radius:20px;border:1.5px solid ${HARAM_FILTER===label?'#0e9d6a':'#d7dee6'};background:${HARAM_FILTER===label?'#0e9d6a':'#fff'};color:${HARAM_FILTER===label?'#fff':'#334'}">${label}</span>`;
-  const clear = HARAM_FILTER?`<span onclick="applyHaramToAllHotels('')" style="cursor:pointer;font-size:12px;color:#b91c1c;padding:6px 10px">✕ إلغاء الفلتر</span>`:'';
-  const bar = document.createElement('div');
-  bar.id = 'haramBar';
-  bar.style.cssText = 'background:#f0f9f4;border:1px solid #cfe9db;border-radius:12px;padding:11px 14px;margin-bottom:12px';
-  bar.innerHTML = `<div style="font-size:12.5px;font-weight:800;color:#0e7a52;margin-bottom:8px">🕌 فلترة فنادق مكة والمدينة حسب قرب الحرم:</div><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">${HARAM_OPTIONS.map(chip).join('')}${clear}</div>`;
-  panel.insertBefore(bar, panel.firstChild);
-}
-// يعيد اختيار كل فنادق مكة/المدينة في البرنامج حسب التصنيف المختار (مع الإبقاء عند عدم التطابق).
-async function applyHaramToAllHotels(val){
-  HARAM_FILTER = val;
-  if(!val){ renderHaramBar(); return; }        // إلغاء الفلتر: لا نبدّل الفنادق، فقط نحدّث الشريط
-  const dest = getLine(lastProgramRaw,'DEST'); const date = getLine(lastProgramRaw,'DATE_FROM')||'';
-  const occ = (typeof parsedData!=='undefined' && parsedData && parsedData.adults) || 2;
-  const lines = parseHotelLinesFromRaw(lastProgramRaw);
-  let raw = lastProgramRaw, changed = 0; const unmatched = [];
-  for(let hidx=0; hidx<lines.length; hidx++){
-    const p = String(lines[hidx]).split('|').map(x=>x.trim());
-    const region = p[1]||'', curName = p[0]||'', curStars = parseInt(p[2])||0;
-    try{
-      const res = await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},
-        body: JSON.stringify({ action:'list_hotels', dest, region, occupancy:occ, current:curName, date, haram:val })});
-      const data = await res.json();
-      addMessage('sys', `🔎 [${region}] نتائج=${(data.hotels||[]).length}${data.haram_note?' · لا مطابق':''}${data.error?' · خطأ:'+data.error:''}`);
-      if(data.haram_note){ unmatched.push(region); continue; }     // ما فيه مطابق → أبقِ الحالي
-      const hotels = (data.hotels||[]);
-      if(!hotels.length) continue;
-      const curRoom = (p[3]||'').trim();
-      let pool = hotels.filter(h=>h.fits!==false);
-      if(!pool.length) pool = hotels.slice();
-      // «إطلالة على الحرم» تخصّ الغرفة لا الفندق فقط → فضّل الغرف التي نوعها يذكر الإطلالة/الحرم
-      // (مثل «Classic Room Partial Haram View») بدل «Standard Room» الأرخص بلا إطلالة.
-      if(val==='إطلالة على الحرم'){
-        // غرفة بإطلالة فعلية: نوعها يذكر «Haram/Kaaba/إطلالة/الحرم/الكعبة» (يشمل «Partial Haram Plaza View»)
-        const view = pool.filter(h=>/haram|kaaba|إطلال|كعب|الحرم|حرم|الكعب/i.test(String(h.room_type||'')));
-        if(view.length) pool = view;
-      }
-      pool = pool.slice().sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
-      const pick = pool[0];
-      addMessage('sys', `🔎 [${region}] الحالي=${curName} → المختار=${pick?pick.name+' / '+pick.room_type:'—'}`);
-      if(!pick || ((pick.name||'').trim()===curName && (pick.room_type||'').trim()===curRoom)) continue;  // نفس الفندق ونفس الغرفة
-      const newLine = [pick.name, p[1]||'', (pick.stars||p[2]||'')+' نجوم', pick.room_type||p[3]||'', (pick.price_per_night||0)+' ريال/ليلة', p[5]||'', p[6]||''].join(' | ');
-      raw = hswSwapRaw(raw, hidx, newLine); changed++;
-    }catch(e){ /* تجاهل هذا الفندق */ }
-  }
-  if(raw!==lastProgramRaw){
-    for(let i=history.length-1;i>=0;i--){ if(history[i].role==='assistant'){ history[i].content=raw; break; } }
-    buildReview(raw);
-  } else { renderHaramBar(); }
-  let msg = `🕌 «${val}»: بُدّل ${changed} فندق`;
-  if(unmatched.length) msg += ` · ما فيه مطابق في (${[...new Set(unmatched)].join('، ')}) فبقيت كما هي`;
-  addMessage('sys', msg);
-}
-
-// ── شريط وسيلة التنقّل لبرنامج مكة (قطار الحرمين / سيارة لكل مقطع) ──────────────
-function mkCitiesFromProgram(){
-  const out = [];
-  for(const l of parseHotelLinesFromRaw(lastProgramRaw)){
-    const p = String(l).split('|').map(x=>x.trim());
-    const city = p[1]||'';
-    // ⚠️ حقل الليالي يحوي التواريخ («3 ليالي (من 26 أغسطس 2026…)») — نأخذ أول رقم فقط،
-    // لا نحذف كل غير الأرقام (وإلا يصير الرقم هائلاً وحلقة لا نهائية تُعلّق الصفحة).
-    const nm = (p[5]||'').match(/\d+/); const nights = Math.min(60, nm ? (parseInt(nm[0])||1) : 1);
-    let key = city;
-    if(/مكة|مكه|makkah/i.test(city)) key='Makkah';
-    else if(/مدين|madinah/i.test(city)) key='Al Madinah';
-    else if(/الطائف|الطايف|taif/i.test(city)) key='Taif';
-    out.push({ city, key, nights });
-  }
-  return out;
-}
-function renderMakkahTransportBar(){
-  const panel = document.getElementById('reviewPanel'); if(!panel) return;
-  const old = document.getElementById('mkTransportBar'); if(old) old.remove();
-  if(!/مكة|مكه|عمرة/.test(getLine(lastProgramRaw,'DEST')||'')) return;
-  const cities = mkCitiesFromProgram(); if(!cities.length) return;
-  const seq = ['airport', ...cities.map(c=>c.key), 'airport'];
-  if(MK_MODES.length !== seq.length-1) MK_MODES = seq.slice(0,-1).map((_,i)=> (i===0 || i===seq.length-2) ? 'car' : 'train');
-  const AR = { airport:'المطار', Makkah:'مكة', 'Al Madinah':'المدينة', Taif:'الطائف' };
-  const btn = (i,mode,label)=>`<button onclick="mkSetMode(${i},'${mode}')" style="cursor:pointer;font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:16px;border:1.5px solid ${MK_MODES[i]===mode?'#1a5fb4':'#d7dee6'};background:${MK_MODES[i]===mode?'#1a5fb4':'#fff'};color:${MK_MODES[i]===mode?'#fff':'#445'}">${label}</button>`;
-  const airBtn = (air,label)=>`<button onclick="mkSetDepAir('${air}')" style="cursor:pointer;font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;border:1.5px solid ${MK_DEP_AIR===air?'#0e9d6a':'#d7dee6'};background:${MK_DEP_AIR===air?'#0e9d6a':'#fff'};color:${MK_DEP_AIR===air?'#fff':'#445'}">${label}</button>`;
-  const legs = seq.slice(0,-1).map((from,i)=>{
-    const to = seq[i+1];
-    // مقطع المغادرة (الأخير) من المدينة بالسيارة → أظهِر خيار المطار: جدة / مطار المدينة
-    const depAirChips = (i===seq.length-2 && from==='Al Madinah' && MK_MODES[i]==='car')
-      ? `<span style="font-size:11px;color:#889">↩ المطار:</span>${airBtn('jeddah','🛫 جدة')}${airBtn('madinah','🛫 مطار المدينة')}` : '';
-    return `<div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #e5e9f0;border-radius:10px;padding:6px 9px">
-      <span style="font-size:11.5px;color:#334;font-weight:700;white-space:nowrap">${AR[from]||from} ← ${AR[to]||to}</span>
-      ${btn(i,'train','🚆 قطار')}${btn(i,'car','🚗 سيارة')}${depAirChips}</div>`;
-  }).join('');
-  const bar = document.createElement('div');
-  bar.id = 'mkTransportBar';
-  bar.style.cssText = 'background:#eef6ff;border:1px solid #cfe0f5;border-radius:12px;padding:11px 14px;margin-bottom:12px';
-  bar.innerHTML = `<div style="font-size:12.5px;font-weight:800;color:#1a5fb4;margin-bottom:8px">🚆 وسيلة التنقّل (تذكرة القطار تُحسب × عدد الأشخاص):</div><div style="display:flex;flex-wrap:wrap;gap:9px">${legs}</div>`;
-  panel.insertBefore(bar, panel.firstChild);
-  // تطبيق تلقائي مرة واحدة لكل (مدن+وسائل) — عشان تظهر تذكرة القطار والانتقالات الصحيحة بلا ضغط.
-  if(mkSig(cities) !== MK_LAST_SIG) setTimeout(()=>mkApplyTransport(), 0);
-}
-async function mkSetMode(i, mode){ MK_MODES[i] = mode; await mkApplyTransport(); }
-async function mkSetDepAir(air){ MK_DEP_AIR = air; await mkApplyTransport(); }
-async function mkApplyTransport(){
-  const cities = mkCitiesFromProgram(); if(!cities.length) return;
-  // مطار المغادرة: لو انتهى البرنامج بالمدينة واختير «مطار المدينة» → madinah_airport، وإلا جدة.
-  const lastKey = cities[cities.length-1].key;
-  const depAirport = (MK_DEP_AIR==='madinah' && lastKey==='Al Madinah') ? 'madinah_airport' : 'airport';
-  const seq = ['airport', ...cities.map(c=>c.key), depAirport];
-  const nights = cities.map(c=>c.nights);
-  MK_LAST_SIG = mkSig(cities);   // علّم البصمة فوراً (يمنع إعادة التطبيق التلقائي)
-  const pax = (typeof parsedData!=='undefined' && parsedData && parsedData.adults) || (typeof metaPersons==='function' && metaPersons()) || 2;
-  let rows = [];
-  try{
-    const res = await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},
-      body: JSON.stringify({ action:'makkah_transport_plan', pax, sequence:seq, nights, modes:MK_MODES })});
-    rows = (await res.json()).rows || [];
-  }catch(e){ addMessage('sys','تعذّر تحديث التنقّلات: '+(e&&e.message||e)); return; }
-  if(!rows.length){ addMessage('sys','⚠️ تعذّر تركيب انتقالات مكة (لا نتائج من الخادم) — بقيت كما هي.'); return; }
-  const totalDays = Math.min(90, nights.reduce((a,b)=>a+(parseInt(b)||0),0) + 1);   // حد أمان ضد أي حلقة
-  const isTransfer = n => /نقل|تذكرة قطار|يوم حر|يوم تنقّل|استرخاء/.test(String(n||''));
-  // احتفظ بالجولات الحقيقية (غير الانتقالات) على أيامها
-  const keep = {};
-  const tm = (new RegExp('TOURS:([\\s\\S]*?)(?=\\n(?:'+DOC_SECTION_HEAD_RE+'):)','m')).exec(lastProgramRaw);
-  if(tm){ tm[1].split('\n').forEach(l=>{ if(!l.includes('|'))return; const p=l.split('|').map(x=>x.trim()); const dm=(p[0]||'').match(/(\d+)/); if(dm && !isTransfer(p[1])) (keep[+dm[1]]=keep[+dm[1]]||[]).push(l.trim()); }); }
-  // النقلات (سيارة/محطة) → قسم المسار TOURS · تذاكر القطار → قسم FLIGHTS (سعر الفرد × العدد).
-  const plan = {};
-  rows.filter(r=>r.kind!=='قطار').forEach(r=>{ (plan[r.day]=plan[r.day]||[]).push(`اليوم ${r.day} | ${r.name} | نقل | ${Number(r.price).toLocaleString()} ريال`); });
-  const body = [];
-  for(let d=1; d<=totalDays; d++){
-    if(plan[d]) body.push(...plan[d]);
-    else if(keep[d]) body.push(...keep[d]);
-    else body.push(`اليوم ${d} | يوم حر في الحرم للعبادة | حر | 0 ريال`);   // أيام العبادة الحرة (مكة/المدينة)
-  }
-  // سطور الطيران: أبقِ الطيران الحقيقي (غير القطار) + أضف تذاكر القطار.
-  const flightLines = [];
-  (parseSection(lastProgramRaw,'FLIGHTS')||[]).forEach(l=>{ if(l.includes('|') && !/قطار/.test((l.split('|')[1]||''))) flightLines.push(l.trim()); });
-  rows.filter(r=>r.kind==='قطار').forEach(r=>{
-    const per = pax>0 ? Math.round(r.price/pax) : r.price;
-    // السهم ← عشان يظهر الاتجاه صح في RTL (من مكة يمين إلى المدينة يسار).
-    const route = ((r.name.match(/\(([^)]+)\)/)||[])[1] || r.name.replace(/تذكرة قطار الحرمين/,'').trim()).trim().replace(/[→]/g,'←');
-    flightLines.push(`${route} | قطار | ${per} ريال/شخص | ${pax} أشخاص | ${Number(r.price).toLocaleString()} ريال`);
-  });
-  let newRaw = mkSetSection(lastProgramRaw, 'TOURS', body);
-  newRaw = mkSetSection(newRaw, 'FLIGHTS', flightLines);
-  if(newRaw !== lastProgramRaw){
-    for(let i=history.length-1;i>=0;i--){ if(history[i].role==='assistant'){ history[i].content=newRaw; break; } }
-    try{ buildReview(newRaw); }catch(e){ addMessage('sys','خطأ في عرض الانتقالات: '+(e&&e.message||e)); }
-    const ticket = rows.filter(r=>/تذكرة قطار/.test(r.name)).reduce((s,r)=>s+r.price,0);
-    if(ticket>0) addMessage('sys',`🚆 تذاكر قطار الحرمين في قسم «الطيران والقطار»: ${Number(ticket).toLocaleString()} ريال (${pax} أشخاص).`);
-  } else renderMakkahTransportBar();
-}
-// يستبدل/يُدرج قسماً في الخام (FLIGHTS قد يكون غائباً في برامج «بدون طيران»).
-function mkSetSection(raw, sec, lines){
-  const bodyTxt = (lines||[]).join('\n');
-  const re = new RegExp('('+sec+':)([\\s\\S]*?)(?=\\n(?:'+DOC_SECTION_HEAD_RE+'):)','m');
-  if(re.test(raw)) return raw.replace(re, sec+':\n'+bodyTxt+'\n');
-  if(!bodyTxt) return raw;
-  const m = raw.match(/\n(TRANSFERS:|TOURS:|SUMMARY:)/);
-  if(!m) return raw + '\n'+sec+':\n'+bodyTxt+'\n';
-  return raw.slice(0, m.index) + '\n'+sec+':\n'+bodyTxt + raw.slice(m.index);
-}
-
-// ── الطيران الدولي (مسقط↔جدة) لبرامج مكة: الأرخص لكل اتجاه، أو شركة مثبّتة، أو بدون ──
-function mkPax(){ return (typeof parsedData!=='undefined' && parsedData && parsedData.adults) || (typeof metaPersons==='function' && metaPersons()) || 2; }
-// تاريخ البرنامج (عربي «26 أغسطس 2026» / يوم/شهر/سنة / ISO) → {d,mo,y}
-function _progDateDMY(tag){
-  const toL=s=>String(s||'').replace(/[٠-٩]/g,c=>'٠١٢٣٤٥٦٧٨٩'.indexOf(c));
-  const s=toL(getLine(lastProgramRaw,tag)||'');
-  let m=s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/); if(m) return {d:+m[3],mo:+m[2],y:+m[1]};
-  m=s.match(/(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{2,4})/); if(m) return {d:+m[1],mo:+m[2],y:+(String(m[3]).length===2?'20'+m[3]:m[3])};
-  const mo=_arMonthNum(s); if(mo){ const d=(s.match(/\b(\d{1,2})\b/)||[])[1]; const y=(s.match(/\b(20\d{2})\b/)||[])[1]; return {d:d?+d:1,mo,y:y?+y:new Date().getFullYear()}; }
-  return null;
-}
-function _dmyKey(o){ return o ? `${String(o.d).padStart(2,'0')}/${String(o.mo).padStart(2,'0')}/${o.y}` : ''; }
-function _dmyNum(k){ const m=String(k).match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? (+m[3])*10000+(+m[2])*100+(+m[1]) : 0; }
-// أقرب تاريخ متاح في الشيت لتاريخ البرنامج (لو غير موجود بالضبط)
-function _nearestDate(keys, want){
-  if(!keys.length) return '';
-  const wk=_dmyKey(want); if(wk && keys.indexOf(wk)>=0) return wk;
-  const wn = want ? _dmyNum(_dmyKey(want)) : 0;
-  if(!wn) return keys[0];
-  return keys.slice().sort((a,b)=> Math.abs(_dmyNum(a)-wn) - Math.abs(_dmyNum(b)-wn))[0];
-}
-function mkFlightModeLabel(){ return {cheapest:'الأرخص',oman:'الطيران العماني',salam:'طيران السلام',none:'بدون طيران'}[MK_FLIGHT_MODE]; }
-async function mkSetFlight(mode){ MK_FLIGHT_MODE = mode; MK_FLIGHT_SIG=''; await mkFlightApply(); renderMakkahFlightBar(); }
-function renderMakkahFlightBar(){
-  const panel = document.getElementById('reviewPanel'); if(!panel) return;
-  const old = document.getElementById('mkFlightBar'); if(old) old.remove();
-  if(!/مكة|مكه|عمرة/.test(getLine(lastProgramRaw,'DEST')||'')) return;
-  const opt = (mode,label)=>`<button onclick="mkSetFlight('${mode}')" style="cursor:pointer;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:16px;border:1.5px solid ${MK_FLIGHT_MODE===mode?'#7c3aed':'#d7dee6'};background:${MK_FLIGHT_MODE===mode?'#7c3aed':'#fff'};color:${MK_FLIGHT_MODE===mode?'#fff':'#445'}">${label}</button>`;
-  const bar = document.createElement('div');
-  bar.id = 'mkFlightBar';
-  bar.style.cssText = 'background:#f5f0ff;border:1px solid #e0d4fb;border-radius:12px;padding:11px 14px;margin-bottom:12px';
-  bar.innerHTML = `<div style="font-size:12.5px;font-weight:800;color:#7c3aed;margin-bottom:8px">✈️ الطيران الدولي (مسقط ↔ جدة — يُحسب × عدد الأشخاص):</div>`
-    + `<div style="display:flex;flex-wrap:wrap;gap:9px">${opt('cheapest','🏷️ الأرخص')}${opt('oman','🛫 الطيران العماني')}${opt('salam','🛫 طيران السلام')}${opt('none','🚫 بدون طيران')}</div>`;
-  panel.insertBefore(bar, panel.firstChild);
-  // تطبيق تلقائي مرة واحدة لكل (وضع+تواريخ+أشخاص) — عشان يُضاف الأرخص تلقائياً.
-  const sig = mkProgFP()+'|'+MK_FLIGHT_MODE+'|'+_dmyKey(_progDateDMY('DATE_FROM'))+'|'+_dmyKey(_progDateDMY('DATE_TO'))+'|'+mkPax();
-  if(sig !== MK_FLIGHT_SIG) setTimeout(()=>mkFlightApply(), 0);
-}
-async function mkFlightApply(){
-  if(!/مكة|مكه|عمرة/.test(getLine(lastProgramRaw,'DEST')||'')) return;
-  if(!MK_FLIGHT_DATA){
-    try{
-      const res = await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY}, body: JSON.stringify({action:'makkah_flights'})});
-      MK_FLIGHT_DATA = await res.json();
-    }catch(e){ addMessage('sys','تعذّر جلب أسعار الطيران: '+(e&&e.message||e)); return; }
-  }
-  const D = MK_FLIGHT_DATA; const pax = mkPax();
-  const depD=_progDateDMY('DATE_FROM'), retD=_progDateDMY('DATE_TO');
-  MK_FLIGHT_SIG = mkProgFP()+'|'+MK_FLIGHT_MODE+'|'+_dmyKey(depD)+'|'+_dmyKey(retD)+'|'+pax;
-  // أبقِ كل سطور الطيران غير الدولية (قطار/داخلي) وأزل الدولي القديم (يحوي «مسقط»)
-  const lines = (parseSection(lastProgramRaw,'FLIGHTS')||[]).filter(l=> l.includes('|') && !/مسقط/.test((l.split('|')[0]||'')));
-  let note='';
-  if(MK_FLIGHT_MODE!=='none' && D && D.prices){
-    const pick=(dir,want)=>{
-      const cand=['oman','salam'].map(a=>{
-        const table=(D.prices[a]||{})[dir]||{}; const keys=Object.keys(table);
-        const nd=_nearestDate(keys,want); if(!nd||!table[nd]) return null;
-        return { airline:a, date:nd, final:table[nd].final, timing:table[nd].timing||'' };
-      }).filter(Boolean);
-      if(!cand.length) return null;
-      if(MK_FLIGHT_MODE==='oman') return cand.find(c=>c.airline==='oman')||null;
-      if(MK_FLIGHT_MODE==='salam') return cand.find(c=>c.airline==='salam')||null;
-      return cand.sort((a,b)=>a.final-b.final)[0];   // الأرخص لهذا الاتجاه
-    };
-    for(const lg of [{dir:'out',type:'ذهاب',want:depD,route:'مسقط ← جدة'},{dir:'ret',type:'عودة',want:retD,route:'جدة ← مسقط'}]){
-      const sel=pick(lg.dir,lg.want);
-      if(!sel){ note+=`⚠️ لا سعر ${lg.type}. `; continue; }
-      const per=Math.round(sel.final); const total=per*pax; const air=(D.airlines||{})[sel.airline]||sel.airline;
-      const tim = sel.timing ? ' · ⏰ '+sel.timing : '';
-      lines.push(`${lg.route} (${air} · ${sel.date}${tim}) | ${lg.type} | ${per} ريال/شخص | ${pax} أشخاص | ${Number(total).toLocaleString()} ريال`);
-    }
-  }
-  const newRaw = mkSetSection(lastProgramRaw,'FLIGHTS',lines);
-  if(newRaw !== lastProgramRaw){
-    for(let i=history.length-1;i>=0;i--){ if(history[i].role==='assistant'){ history[i].content=newRaw; break; } }
-    try{ buildReview(newRaw); }catch(e){ addMessage('sys','خطأ في عرض الطيران: '+(e&&e.message||e)); }
-    if(MK_FLIGHT_MODE==='none') addMessage('sys','🚫 أُزيل الطيران الدولي من البرنامج.');
-    else{ const t=lines.filter(l=>/مسقط/.test(l.split('|')[0])).reduce((s,l)=>s+(parseInt(String(l.split('|')[4]||'').replace(/[^\d]/g,''))||0),0);
-      addMessage('sys',`✈️ الطيران الدولي (${mkFlightModeLabel()}): ${Number(t).toLocaleString()} ريال (${pax} أشخاص).${note?' '+note:''}`); }
-  } else if(note) addMessage('sys',note);
 }
 function hswRender(cell, hotels){
   cell._hotels = hotels;
@@ -1720,11 +1331,10 @@ function hswRender(cell, hotels){
   const nights = +cell.dataset.nights || 0;
   const curName = cell.dataset.name;
   const curNightly = +cell.dataset.nightly || 0;
-  const bar = cell._isMakkah ? hswHaramBar(cell) : '';
-  if(!hotels.length){ menu.innerHTML = bar + '<div class="hsw-loading">ما فيه فنادق بهذه المنطقة</div>'; return; }
+  if(!hotels.length){ menu.innerHTML = '<div class="hsw-loading">ما فيه فنادق بهذه المنطقة</div>'; return; }
   const title = `<div class="hsw-title">فنادق ${hswEsc(cell.dataset.region)} — المطابق للعدد أولاً (مظلّل) ثم الباقي · السعة واضحة</div>`;
   let sepShown = false;
-  menu.innerHTML = bar + title + hotels.map((h,i)=>{
+  menu.innerHTML = title + hotels.map((h,i)=>{
     const isCur = h.name === curName;
     const total = (h.price_per_night||0) * nights;
     const diff = (h.price_per_night||0) - curNightly;
@@ -1736,7 +1346,7 @@ function hswRender(cell, hotels){
     if(!isCur && !h.fits && !sepShown){ sepShown = true; sep = `<div class="hsw-sep">— باقي فنادق المنطقة (سعة مختلفة عن العدد) —</div>`; }
     return sep + `<div class="hsw-opt ${cls}" data-idx="${i}">`
       + `<div class="hsw-l"><div class="hsw-n">${hswEsc(h.name)}${isCur?' <span class="hsw-chk">✓</span>':''}</div>`
-      + `<div class="hsw-m">⭐${h.stars} · ${hswEsc(h.room_type||'')}${cap?' · '+cap:''}${h.includes_breakfast?' · إفطار':''}${(h.haram_tags&&h.haram_tags.length)?' · 🕌 '+hswEsc(h.haram_tags.join('، ')):''}</div></div>`
+      + `<div class="hsw-m">⭐${h.stars} · ${hswEsc(h.room_type||'')}${cap?' · '+cap:''}${h.includes_breakfast?' · إفطار':''}</div></div>`
       + `<div class="hsw-price">${(h.price_per_night||0).toLocaleString()} ريال ${dTxt?`<span class="hsw-delta ${dCls}">${dTxt}</span>`:''}<small>×${nights} = ${total.toLocaleString()}</small></div>`
       + `</div>`;
   }).join('');
@@ -1787,89 +1397,6 @@ function hswSwapRaw(raw, hidx, newLine){
     return head + nb;
   });
 }
-// عدد أشخاص المجموعة من META (… | N اشخاص)
-function metaPersons(){
-  const meta = arabicDigitsToLatin(getLine(lastProgramRaw,'META')||'');
-  const m = meta.match(/(\d+)\s*(?:اشخاص|أشخاص|شخص|بالغين|افراد|أفراد)/);
-  return m ? Math.max(1, parseInt(m[1],10)) : 0;
-}
-// زر «غرفتين لشخصين (أرخص)» — يستبدل غرفة المجموعة بأرخص فندق بالمدينة فيه غرفة إشغال 2
-// بنفس فئة النجوم، ويضبط عدد الغرف تلقائياً = ceil(العدد÷2) (قابل للتعديل بالعدّاد).
-async function pickCheapestDouble(hidx){
-  try {
-    const lines = parseHotelLinesFromRaw(lastProgramRaw);
-    const oldLine = lines[hidx];
-    if(!oldLine){ addMessage('sys','تعذّر: لم أجد سطر الفندق.'); return; }
-    const p = oldLine.split('|').map(x=>x.trim());
-    const region = p[1]||'';
-    const curStars = parseInt((arabicDigitsToLatin(p[2]||'').match(/\d+/)||['0'])[0],10);
-    const dest = getLine(lastProgramRaw,'DEST')||'';
-    const date = getLine(lastProgramRaw,'DATE_FROM')||'';
-    const persons = metaPersons();
-    addMessage('sys', `🔎 أبحث عن أرخص غرفة لشخصين ${curStars?curStars+'★ ':''}في ${region}…`);
-    const res = await fetch(SUPABASE_URL, {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
-      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy:2, current:p[0]||'', date })
-    });
-    const data = await res.json();
-    const cand = (data.hotels || []).filter(h => +h.capacity === 2); // غرف إشغالها شخصين بالضبط (لا الغرف الأكبر)
-    let byStar = curStars ? cand.filter(h => +h.stars === curStars) : cand;
-    const changedStar = curStars && !byStar.length && cand.length;
-    if(!byStar.length) byStar = cand; // fallback: أقرب فئة لو ما فيه بنفس النجوم
-    if(!byStar.length){ addMessage('sys',`ما فيه غرفة لشخصين في ${region}. جرّبي فندقاً أو فئة مختلفة.`); return; }
-    byStar.sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
-    const h = byStar[0]; // الأرخص
-    const newLine = [
-      h.name, p[1]||'', (h.stars||curStars||'')+' نجوم', h.room_type||'',
-      (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
-      p[6] || (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : '')
-    ].join(' | ');
-    const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
-    if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); return; }
-    if(persons >= 2) hotelRooms[hidx] = Math.ceil(persons/2); // العدد التلقائي (قابل للتعديل)
-    applyHotelRawChange(newRaw, `🛏️ ${region}: «${h.name}» — غرفة لشخصين ${(h.stars||curStars)}★ بأرخص سعر (${(h.price_per_night||0).toLocaleString()} ريال/ليلة) × ${hRooms(hidx)} غرفة.${changedStar?' ⚠️ ما توفّرت غرفة لشخصين بنفس الفئة، فاخترتُ الأقرب.':''} عدّلي العدد لو تبين.`);
-  } catch(e){ addMessage('sys','خطأ أثناء جلب غرفة الشخصين: ' + (e && e.message ? e.message : e)); }
-}
-// تغيير فئة النجوم لفندق مدينة معيّنة → أرخص فندق بتلك المدينة بهذه الفئة حصراً
-// (يحافظ على نفس الإشغال الحالي؛ لو ما توفّر بنفس الإشغال يختار الأقرب مع تنبيه).
-async function changeHotelStars(hidx, newStars){
-  try {
-    newStars = parseInt(newStars, 10);
-    const lines = parseHotelLinesFromRaw(lastProgramRaw);
-    const oldLine = lines[hidx];
-    if(!oldLine){ addMessage('sys','تعذّر: لم أجد سطر الفندق.'); return; }
-    const p = oldLine.split('|').map(x=>x.trim());
-    const region = p[1]||'';
-    const curStars = parseInt((arabicDigitsToLatin(p[2]||'').match(/\d+/)||['0'])[0],10);
-    if(newStars === curStars) return;
-    const occN = parseInt((arabicDigitsToLatin(String(p[3]||'')).match(/يتسع\s*(\d+)/)||[])[1]||'0',10) || 0;
-    const dest = getLine(lastProgramRaw,'DEST')||'';
-    const date = getLine(lastProgramRaw,'DATE_FROM')||'';
-    addMessage('sys', `🔎 أبحث عن أرخص فندق ${newStars}★ في ${region}${occN?` (غرفة ${occN})`:''}…`);
-    const res = await fetch(SUPABASE_URL, {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
-      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy:(occN || metaPersons() || 2), current:p[0]||'', date })
-    });
-    const data = await res.json();
-    const atStar = (data.hotels || []).filter(h => +h.stars === newStars); // الفئة حصراً
-    let cand = occN ? atStar.filter(h => +h.capacity === occN) : atStar; // نفس الإشغال
-    const relaxedOcc = occN && !cand.length && atStar.length;
-    if(!cand.length) cand = atStar; // ما فيه بنفس الإشغال → أي غرفة بنفس الفئة
-    if(!cand.length){ addMessage('sys',`ما فيه فندق ${newStars}★ في ${region}. جرّبي فئة ثانية.`); return; }
-    cand.sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
-    const h = cand[0]; // الأرخص
-    const newLine = [
-      h.name, p[1]||'', (h.stars||newStars)+' نجوم', h.room_type||'',
-      (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
-      p[6] || (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : '')
-    ].join(' | ');
-    const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
-    if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); return; }
-    applyHotelRawChange(newRaw, `⭐ ${region}: أرخص ${newStars}★ = «${h.name}» (${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxedOcc?' ⚠️ ما توفّرت غرفة بنفس الإشغال، فاخترتُ الأقرب.':''}`);
-  } catch(e){ addMessage('sys','خطأ أثناء تغيير الفئة: ' + (e && e.message ? e.message : e)); }
-}
 // ── نوع الغرفة: استبدال / إضافة نوع آخر من نفس الفندق ──
 function _stripCapR(s){ return String(s||'').replace(/\s*\(يتسع[^)]*\)/g,'').trim().toLowerCase(); }
 function applyHotelRawChange(newRaw, msg){
@@ -1908,9 +1435,7 @@ function rtwRender(cell, rooms){
     const isCur = _stripCapR(r.room_type) === _stripCapR(curRoom);
     const cap = r.occupancy ? ` (يتسع ${r.occupancy})` : '';
     const total = (r.price_per_night||0)*nights;
-    const acts = isCur
-      ? `<div class="rtw-acts"><span class="hsw-chk">✓ الحالية</span>`
-        + `<button class="rtw-b add" onclick="rtwAdd(this.closest('.rtw-cell'),${i})">➕ إضافة غرفة (نفس النوع)</button></div>`
+    const acts = isCur ? '<span class="hsw-chk">✓ الحالية</span>'
       : `<div class="rtw-acts"><button class="rtw-b rep" onclick="rtwReplace(this.closest('.rtw-cell'),${i})">↺ استبدال</button>`
         + `<button class="rtw-b add" onclick="rtwAdd(this.closest('.rtw-cell'),${i})">➕ إضافة غرفة</button></div>`;
     return `<div class="hsw-opt ${isCur?'sel':''}"><div class="hsw-l"><div class="hsw-n">${hswEsc(r.room_type)}${cap}</div>${acts}</div>`
@@ -2151,219 +1676,6 @@ function fpTab(t){
   document.querySelectorAll('.fp-tab').forEach(x=>x.classList.toggle('active', x.dataset.tab===t));
   document.getElementById('tab-build').style.display = t==='build' ? 'flex' : 'none';
   document.getElementById('tab-mods').style.display  = t==='mods'  ? 'flex' : 'none';
-  const g = document.getElementById('tab-groups'); if(g) g.style.display = t==='groups' ? 'block' : 'none';
-  if(t==='groups' && !GRP_LOADED) grpLoad();
-}
-
-// ═══════════ برامج الجروبات (معزول تماماً — كل برنامج = تبويب «(Group)» بالشيت) ═══════════
-let GRP_LOADED = false;     // حُمِّلت بيانات الجروبات؟
-let GRP_PROGRAMS = [];      // كل برامج الجروبات (من groups_list)
-let GRP_CURRENT = null;     // البرنامج المختار حالياً
-function grpEsc(s){ return String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
-function grpNum(n){ return (Number(n)||0).toLocaleString('en-US'); }
-function grpMsg(t, err){ const m=document.getElementById('grp-msg'); if(m){ m.style.color = err?'#c0392b':'#0e5a40'; m.textContent = t||''; } }
-function grpFileName(g,date){ return ('جروب-'+(g.program||'')+'-'+(date||'')).replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,'-'); }
-function grpDateMonth(d){ let m=String(d||'').match(/^(\d{4})-(\d{1,2})-/); if(m) return +m[2]; m=String(d||'').match(/^(\d{1,2})\/(\d{1,2})\//); if(m) return +m[2]; return 0; }
-// يحدّد الموسم من شهر تاريخ المغادرة
-function grpSeasonFor(g, date){
-  const mo=grpDateMonth(date);
-  return (g.seasons||[]).find(s=>Array.isArray(s.months)&&s.months.includes(mo)) || (g.seasons||[])[0] || null;
-}
-// يحسب التسعير: تكلفة (Pax×الموسم) + ربح (افراد/شركات مرة واحدة) = الإجمالي
-function grpCompute(g, date, pax, ptype){
-  const season=grpSeasonFor(g, date);
-  const entry=(g.prices||[]).find(p=>+p.pax===+pax);
-  const cost=(entry && season) ? Number(entry.prices[season.label]||0) : 0;
-  const profit=(ptype==='company') ? Number(g.profitCompany||0) : Number(g.profitIndividual||0);
-  return { season, cost, profit, total: cost>0 ? (cost+profit) : 0, ok: cost>0 };
-}
-
-async function grpLoad(){
-  const dSel=document.getElementById('grp-dest');
-  try{
-    const res=await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},body:JSON.stringify({action:'groups_list'})});
-    const data=await res.json(); GRP_PROGRAMS=Array.isArray(data.groups)?data.groups:[];
-  }catch(e){ GRP_PROGRAMS=[]; }
-  GRP_LOADED=true;
-  if(!GRP_PROGRAMS.length){
-    dSel.innerHTML='<option value="">— لا توجد برامج جروبات —</option>';
-    grpMsg('لا توجد برامج جروبات. أنشئي تبويباً بالشيت اسمه فيه «(Group)» بصيغة برنامج الجروب.', true);
-    return;
-  }
-  dSel.innerHTML='<option value="">اختر البرنامج…</option>'+GRP_PROGRAMS.map((g,i)=>`<option value="${i}">${grpEsc(g.program||('برنامج '+(i+1)))}</option>`).join('');
-  grpMsg('');
-}
-function grpOnDest(){
-  const v=document.getElementById('grp-dest').value;
-  const dSel=document.getElementById('grp-date');
-  GRP_CURRENT=(v==='')?null:(GRP_PROGRAMS[+v]||null);
-  document.getElementById('grp-priceHint').textContent='';
-  if(!GRP_CURRENT){ dSel.innerHTML='<option value="">— اختر البرنامج أولاً —</option>'; return; }
-  const dates=GRP_CURRENT.dates||[];
-  dSel.innerHTML=dates.length
-    ? '<option value="">اختر تاريخ المغادرة…</option>'+dates.map(d=>`<option>${grpEsc(d)}</option>`).join('')
-    : '<option value="">— لا تواريخ لهذا البرنامج —</option>';
-}
-function grpOnDate(){
-  const h=document.getElementById('grp-priceHint'); if(!h) return;
-  if(!GRP_CURRENT){ h.textContent=''; return; }
-  const date=document.getElementById('grp-date').value;
-  const pax=parseInt(document.getElementById('grp-pax').value)||0;
-  const ptype=document.getElementById('grp-ptype').value;
-  if(!date || pax<1){ h.textContent=''; return; }
-  const c=grpCompute(GRP_CURRENT, date, pax, ptype);
-  if(!c.ok){ h.style.color='#c0392b'; h.textContent='⚠️ لا يوجد سعر لعدد '+pax+' مسافر في هذا الموسم — عبّي الخانة بالشيت.'; return; }
-  h.style.color='#0e5a40';
-  h.textContent='الموسم: '+(c.season?c.season.label:'—')+' · التكلفة '+grpNum(c.cost)+' + ربح '+grpNum(c.profit)+' = '+grpNum(c.total)+' ر.س';
-}
-function grpShow(){
-  if(!GRP_CURRENT){ grpMsg('اختاري البرنامج أولاً.', true); return; }
-  const date=document.getElementById('grp-date').value;
-  const pax=parseInt(document.getElementById('grp-pax').value)||0;
-  const ptype=document.getElementById('grp-ptype').value;
-  if(!date){ grpMsg('اختاري تاريخ المغادرة.', true); return; }
-  if(pax<1){ grpMsg('عدد المسافرين لازم 1 على الأقل.', true); return; }
-  const c=grpCompute(GRP_CURRENT, date, pax, ptype);
-  if(!c.ok){ grpMsg('لا يوجد سعر لعدد '+pax+' مسافر في موسم '+(c.season?c.season.label:'—')+' — عبّي الخانة بالشيت.', true); return; }
-  grpMsg('');
-  const eo=document.getElementById('emptyOutput'); if(eo) eo.style.display='none';   // أخفِ الـplaceholder
-  const panel=document.getElementById('reviewPanel'); if(panel) panel.innerHTML=grpRenderProgram(GRP_CURRENT, date, pax, ptype, c);
-}
-function grpContentHtml(g, date, pax, ptype, c){
-  const cur='ر.س';
-  const itinHtml=(g.itinerary&&g.itinerary.length)
-    ? '<ol style="margin:0;padding-inline-start:20px;line-height:1.9;">'+g.itinerary.map(d=>`<li style="margin-bottom:5px;">${grpEsc(d)}</li>`).join('')+'</ol>'
-    : '<div style="color:#94a3b8;">—</div>';
-  const incHtml=(g.includes&&g.includes.length)
-    ? '<ul style="margin:0;padding-inline-start:18px;line-height:1.8;">'+g.includes.map(x=>`<li>${grpEsc(String(x).replace(/^●\s*/,''))}</li>`).join('')+'</ul>'
-    : '';
-  const perPerson = pax>0 ? Math.round(c.total/pax) : 0;
-  return `<div style="border:1.5px solid #d0deff;border-radius:12px;padding:18px 20px;">
-    <div style="font-size:22px;font-weight:900;color:#1a3a8f;">🚌 ${grpEsc(g.program||'')}</div>
-    <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-weight:800;color:#0d1f4a;font-size:15px;">
-      <span>🗓️ ${grpEsc(date)}</span>
-      ${g.itinerary&&g.itinerary.length?`<span>📅 ${g.itinerary.length} أيام</span>`:''}
-      <span>👥 ${pax} مسافر</span>
-      <span>🏷️ ${ptype==='company'?'شركات':'أفراد'}</span>
-      ${c.season?`<span>🍂 ${grpEsc(c.season.label)}</span>`:''}
-    </div>
-    <div style="margin-top:14px;"><div style="font-weight:900;color:#1a3a8f;font-size:16px;margin-bottom:6px;">🗺️ مسار الجولات (ثابت)</div>${itinHtml}</div>
-    ${incHtml?`<div style="margin-top:14px;"><div style="font-weight:900;color:#1a3a8f;font-size:16px;margin-bottom:6px;">✅ الأسعار تشمل</div>${incHtml}</div>`:''}
-    <div style="margin-top:16px;border-top:2px solid #eef;padding-top:12px;font-weight:800;color:#0d1f4a;line-height:2;">
-      <div>التكلفة (${pax} مسافر · ${c.season?grpEsc(c.season.label):'—'}): <b>${grpNum(c.cost)} ${cur}</b></div>
-      <div>+ ربح (${ptype==='company'?'شركات':'أفراد'}): <b>${grpNum(c.profit)} ${cur}</b></div>
-      <div style="font-size:18px;color:#1a3a8f;margin-top:6px;">الإجمالي: <b>${grpNum(c.total)} ${cur}</b>${pax>1?` <span style="font-size:13px;color:#64748b;">(≈ ${grpNum(perPerson)} للفرد)</span>`:''}</div>
-    </div>
-  </div>`;
-}
-function grpRenderProgram(g, date, pax, ptype, c){
-  const btn='display:inline-flex;align-items:center;gap:6px;border:0;border-radius:9px;padding:9px 14px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;';
-  return `<div style="padding:14px;">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-      <button onclick="grpSendIndiv()" style="${btn}background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;" title="أرسل ملف الجروب للعميل عبر واتساب — من طلب فرد مفتوح">📤 إرسال للعميل (واتساب)</button>
-      <button onclick="grpOpenBridge()" style="${btn}background:linear-gradient(135deg,#128C7E,#075E54);color:#fff;" title="إرسال مباشر للشركات/الجروبات عبر جسر الواتساب المعتاد">📲 واتساب مباشر (شركات)</button>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-      <button onclick="grpExport('individual')" style="${btn}background:#1a3a8f;color:#fff;" title="بشعار ومعلومات العز — للعميل الفرد">👤 تصدير للأفراد</button>
-      <button onclick="grpExport('company')" style="${btn}background:#0e9d6a;color:#fff;" title="بدون شعار ولا تفاصيل العز — للشركات">🏢 تصدير للشركات</button>
-      <button onclick="grpCopyText()" style="${btn}background:#eef2f6;color:#334155;">📋 نسخ النص</button>
-    </div>
-    ${grpContentHtml(g, date, pax, ptype, c)}
-  </div>`;
-}
-function grpState(){
-  const date=document.getElementById('grp-date').value;
-  const pax=parseInt(document.getElementById('grp-pax').value)||0;
-  const ptype=document.getElementById('grp-ptype').value;
-  return { date, pax, ptype, c: grpCompute(GRP_CURRENT, date, pax, ptype) };
-}
-function grpBuildPdfHtml(variant){
-  // variant: 'individual' = بشعار العز (افتراضي) · 'company' = بدون شعار وتفاصيل العز
-  const showLogo = variant !== 'company';
-  const s=grpState(); const g=GRP_CURRENT; const c=s.c; const cur='ر.س';
-  const days=(g.itinerary||[]);
-  // كل يوم بطاقة مؤطّرة بنفس ستايل بطاقات الفنادق في قالب الوجهات
-  const dayCards=days.map(d=>{
-    const nl=String(d).indexOf('\n');
-    const head=nl>=0?String(d).slice(0,nl).trim():String(d).trim();
-    const body=nl>=0?String(d).slice(nl+1).trim():'';
-    return `<div class="pdf-keep" style="border:1.5px solid #d0deff;border-radius:10px;padding:14px 18px;margin-bottom:12px;">
-      <div style="font-weight:900;font-size:20px;color:#1a3a8f;line-height:1.5;${body?'margin-bottom:8px;':''}">🗓️ ${grpEsc(head)}</div>
-      ${body?`<div style="font-size:16px;color:#0d1f4a;line-height:1.9;">${grpEsc(body)}</div>`:''}
-    </div>`;
-  }).join('');
-  const incHtml=(g.includes&&g.includes.length)
-    ? `<div class="pdf-keep" style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;">
-        <ul style="margin:0;padding-inline-start:20px;line-height:2;font-size:16px;color:#0d1f4a;">${g.includes.map(x=>`<li>${grpEsc(String(x).replace(/^●\s*/,''))}</li>`).join('')}</ul>
-      </div>` : '';
-  return `
-  <div class="pdf-cover">
-    <img class="pdf-cover-airplane" src="${FILLER_IMG}" alt=""/>
-    ${showLogo?`<div class="pdf-logo-box"><img class="pdf-logo-img" src="${LOGO_IMG}" alt="مجموعة العز الدولية للسفر والسياحة"/></div>`:''}
-    <div class="pdf-title">🚌 برنامج جروب سياحي</div>
-    <div class="pdf-dest-name"><span dir="ltr" style="unicode-bidi:isolate;white-space:pre-wrap;display:inline-block;">${grpEsc(g.program||'')}</span></div>
-    <div class="pdf-cities">👥 ${s.pax} مسافر · ${s.ptype==='company'?'شركات':'أفراد'}${c.season?(' · '+grpEsc(c.season.label)):''}</div>
-    <div class="pdf-date-price-row">
-      <div class="pdf-price-box"><div class="pdf-price-label">💰 السعر الإجمالي (${s.pax} مسافر)</div><div class="pdf-price-val">${grpNum(c.total)} ${cur}</div></div>
-      <div class="pdf-dates-card"><div class="pdf-dates-label">📅 تاريخ المغادرة</div><div class="pdf-dates">${grpEsc(s.date)}</div></div>
-    </div>
-    <div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:10px 14px;margin-bottom:10px;color:#fff;font-size:13px;font-weight:700;">
-      ⏱️ ${days.length} أيام · مسار ثابت غير قابل للتعديل
-    </div>
-    <div class="pdf-disclaimer">⚠️ هذا عرض سعر ولا يعني بالضرورة توفّر المقاعد لحظتها</div>
-    <img class="pdf-cover-suitcase" src="${SUITCASE_IMG}" alt=""/>
-  </div>
-  <div class="pdf-section" style="page-break-before:always;">
-    <div class="pdf-section-title">🗺️ مسار الجولات (ثابت)</div>
-    ${dayCards}
-    ${incHtml?`<div class="pdf-section-title" style="margin-top:24px;">✅ الأسعار تشمل</div>${incHtml}`:''}
-  </div>
-  <div style="page-break-before:always;padding:0;margin:0;width:210mm;">
-    <img src="${FILLER_IMG}" alt="" style="width:210mm;height:auto;display:block;margin:0;padding:0;"/>
-  </div>`;
-}
-// blob للإرسال المباشر عبر الواتساب (بايتات فعلية — html2pdf)
-async function grpMakeBlob(variant){ return await generatePdfBlob(null, grpBuildPdfHtml(variant)); }
-// تصدير بنسختين ('individual'/'company') عبر **معاينة الطباعة** (نفس التسعير):
-// نملأ #pdfContent ثم window.print() فتظهر المعاينة وتختار المالكة «حفظ كـPDF» أو إلغاء.
-function grpExport(variant){
-  if(!GRP_CURRENT){ grpMsg('اعرضي برنامج الجروب أولاً.', true); return; }
-  const lbl = (variant==='company') ? 'شركات' : 'أفراد';
-  const el=document.getElementById('pdfContent');
-  if(!el){ grpMsg('تعذّر تجهيز المعاينة.', true); return; }
-  el.innerHTML = grpBuildPdfHtml(variant);        // يظهر فقط في معاينة الطباعة (@media print)
-  const s=grpState();
-  const origTitle=document.title;
-  document.title=grpFileName(GRP_CURRENT,s.date)+'-'+lbl;   // اسم الملف المقترح في نافذة الحفظ
-  const restore=()=>{ document.title=origTitle; };
-  window.addEventListener('afterprint', restore, {once:true});
-  setTimeout(restore, 60000);
-  grpMsg('👁️ تُفتح المعاينة ('+lbl+') — راجعي ثم «حفظ كـPDF» أو إلغاء.');
-  setTimeout(()=>{ try{ window.print(); }catch(e){ grpMsg('تعذّر فتح المعاينة: '+(e&&e.message?e.message:e), true); } }, 300);
-}
-// نص الجروب للواتساب (يُستخدم للنسخ وللإرسال المباشر عبر الجسر)
-function grpWhatsappText(){
-  if(!GRP_CURRENT) return ''; const g=GRP_CURRENT; const s=grpState(); const c=s.c; const cur='ر.س'; const L=[];
-  L.push('🚌 '+(g.program||''));
-  L.push('🗓️ '+s.date+(g.itinerary&&g.itinerary.length?('  📅 '+g.itinerary.length+' أيام'):'')+'  👥 '+s.pax+' مسافر');
-  L.push(''); L.push('🗺️ مسار الجولات:');
-  (g.itinerary||[]).forEach(d=>L.push(d));
-  if(g.includes&&g.includes.length){ L.push(''); L.push('✅ الأسعار تشمل:'); g.includes.forEach(x=>L.push('- '+String(x).replace(/^●\s*/,''))); }
-  L.push(''); L.push('💰 الإجمالي: '+grpNum(c.total)+' '+cur+(s.pax>1?(' (≈ '+grpNum(Math.round(c.total/s.pax))+' للفرد)'):''));
-  return L.join('\n');
-}
-function grpCopyText(){
-  if(!GRP_CURRENT) return;
-  navigator.clipboard.writeText(grpWhatsappText()).then(()=>grpMsg('✅ نُسخ نص البرنامج.'),()=>grpMsg('تعذّر النسخ.', true));
-}
-// 📲 إرسال مباشر للشركات عبر جسر الواتساب المعتاد — يفتح نفس نافذة «واتساب مباشر»
-// ويعبّي نص برنامج الجروب جاهزاً، فتختار المالكة جروب الشركة وترسل.
-function grpOpenBridge(){
-  if(!GRP_CURRENT){ grpMsg('اعرضي برنامج الجروب أولاً.', true); return; }
-  if(typeof waBridgeOpen!=='function'){ grpMsg('جسر الواتساب غير متاح.', true); return; }
-  waBridgeOpen();
-  // بعد فتح الجسر واكتمال تهيئته، عبّي مربع النص ببرنامج الجروب.
-  setTimeout(()=>{ const ta=document.getElementById('waBridgeBody'); if(ta){ ta.value=grpWhatsappText(); ta.dispatchEvent(new Event('input')); } }, 200);
 }
 const BF_CITIES = {
   "فيتنام":["هانوي","سابا","ها لونج","دانانج","فوكوك","نها ترانج","دالات","هوتشي مينه"],
@@ -2372,13 +1684,10 @@ const BF_CITIES = {
   "تركيا":["اسطنبول","طرابزون","أوزنجول","أيدر","ريزا","بورصة","سابانجا"],
   "روسيا":["موسكو","سانت بطرسبرغ","سوتشي"],
   "البوسنة":["سراييفو","موستار","بيهاتش"],
-  "إندونيسيا":["بالي","بالي - كوتا","بالي - سيمنياك","بالي - أوبود","بالي - جيمباران","بالي - نوسا دوا","جاكرتا","باندونغ","بونشاك"],
+  "إندونيسيا":["بالي","جاكرتا","باندونغ","بونشاك"],
   "عُمان":["صلالة - وسط المدينة","صلالة - هوانا"],
   "جنوب أفريقيا":["كيب تاون","هارمانوس"],
   "موريشيوس":["موريشيوس"],
-  "العمرة":["مكة المكرمة","المدينة المنورة","جدة","الطائف"],
-  "إنجلترا":["لندن"],
-  "الصين":["شنغهاي","بكين","سوجو","هانغتشو","هونغ كونغ"],
 };
 // يحوّل أي تهجئة للوجهة (همزة/تشكيل/إنجليزي) إلى مفتاح BF_CITIES المطابق، حتى لا
 // تفشل تعبئة الفورم عند ضبط bf-dest من طلب محفوظ (مثال: "اندونيسيا" بلا همزة أو
@@ -2391,13 +1700,8 @@ function bfResolveDest(d){
   const n = norm(raw);
   const EN = { indonesia:'إندونيسيا', vietnam:'فيتنام', malaysia:'ماليزيا',
     thailand:'تايلاند', turky:'تركيا', turkey:'تركيا', russia:'روسيا',
-    bosnia:'البوسنة', oman:'عُمان', southafrica:'جنوب أفريقيا', mauritius:'موريشيوس',
-    makkah:'العمرة', mecca:'العمرة', umrah:'العمرة', england:'إنجلترا', london:'إنجلترا', uk:'إنجلترا',
-    china:'الصين', shanghai:'الصين', beijing:'الصين', suzhou:'الصين', hangzhou:'الصين', hongkong:'الصين' };
+    bosnia:'البوسنة', oman:'عُمان', southafrica:'جنوب أفريقيا', mauritius:'موريشيوس' };
   if (EN[n]) return EN[n];
-  if (/مكة|مكه|عمرة|المدينةالمنورة|المنورة/.test(n)) return 'العمرة';  // مكة/العمرة → مفتاح BF_CITIES
-  if (/[إا]ن[جك]لترا|بريطانيا|لندن/.test(n)) return 'إنجلترا';         // إنجلترا/لندن → مفتاح BF_CITIES
-  if (/الصين|صيني|شن?غهاي|شان[غج]هاي|بكين|سوجو|هان[غج]تشو|هون[غج]كون[غج]/.test(n)) return 'الصين';
   return Object.keys(BF_CITIES).find(k => norm(k) === n) || raw;
 }
 const BF_INTAKE = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake";
@@ -2629,7 +1933,7 @@ const m = raw.match(new RegExp(key + ':(.+)'));
 return m ? m[1].trim() : '';
 }
 
-const DOC_SECTION_HEAD_RE = 'DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|CURRENCY|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|SUMMARY|CHAT';
+const DOC_SECTION_HEAD_RE = 'DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|SUMMARY|CHAT';
 
 /** تسعيرة شريحة الاتصال من الشيت (Sim card) — موحّدة لكل الوجهات: 50 ريال لكل شريحة (Per Pax في الشيت). */
 const SIM_CARD_UNIT_PRICE_SAR = 50;
@@ -2828,26 +2132,11 @@ function isHomewardAirportFarewellTransfer(transferLine) {
 }
 
 function finalHomewardFarewellDay(transfersLines) {
-  // يوم آخر استقبال (Pickup) في البرنامج: وصول لمدينة جديدة = الرحلة مستمرة.
-  // انتقال «Drop» بصياغة «العودة للديار» يقع في نفس يوم استقبال لاحق أو قبله
-  // هو في الحقيقة نقلة طيران داخلية (يغادر مدينة → يصل مدينة أخرى) وليس نهاية
-  // البرنامج — مثال بانكوك→كوه ساموي حيث سطر التوصيل مكتوب «العودة بالسلامة».
-  // بدون هذا الاستثناء كانت كل جولات المدينة التالية تُحذف بالخطأ.
-  let lastPickupDay = 0;
-  for (const l of transfersLines) {
-    const p = l.split('|').map(x => String(x ?? '').trim());
-    if (String(p[2] || '').toLowerCase().includes('pickup')) {
-      lastPickupDay = Math.max(lastPickupDay, parseTransferDayNum(p[0]));
-    }
-  }
   let maxD = 0;
   for (const l of transfersLines) {
     if (!isHomewardAirportFarewellTransfer(l)) continue;
     const p = l.split('|').map(x => String(x ?? '').trim());
-    const d = parseTransferDayNum(p[0]);
-    // يتبعه (أو يزامنه) استقبال في مدينة ⇒ نقلة داخلية لا توديع نهائي ⇒ تجاهله.
-    if (d <= lastPickupDay) continue;
-    maxD = Math.max(maxD, d);
+    maxD = Math.max(maxD, parseTransferDayNum(p[0]));
   }
   return maxD;
 }
@@ -2889,7 +2178,7 @@ function parseHotelLinesFromRaw(raw) {
 }
 
 function parseSection(raw, tag) {
-const m = raw.match(new RegExp(tag + ':([\\s\\S]+?)(?=\\n(?:DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|CURRENCY|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|SUMMARY|CHAT):)'));
+const m = raw.match(new RegExp(tag + ':([\\s\\S]+?)(?=\\n(?:DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|SUMMARY|CHAT):)'));
 return m ? m[1].trim().split('\n').filter(l => l.includes('|')) : [];
 }
 
@@ -2943,9 +2232,7 @@ function computeTransferTourLineTotal(parts, meta, tagLabel) {
         if (nm && nm.length) t = parseInt(nm[nm.length - 1].replace(/[^\d]/g, ''), 10) || 0;
       }
     }
-    // «اليوم الحر» سعره صفر بشكل طبيعي — لا نُنبّه عليه كسطر بلا سعر.
-    const isFreeDay = /\bحر\b|يوم\s*حر|free/i.test(String(p[2] || '')) || /يوم\s*حر/.test(String(p[1] || ''));
-    if (!(t > 0) && !isFreeDay) warns.push(`${tagLabel}: لم يُفسَر سعر السطر — تأكد من الإجمالي أو صيغة 6 أعمدة (سعر | أشخاص | إجمالي).`);
+    if (!(t > 0)) warns.push(`${tagLabel}: لم يُفسَر سعر السطر — تأكد من الإجمالي أو صيغة 6 أعمدة (سعر | أشخاص | إجمالي).`);
     return { total: t, warns };
   };
 
@@ -3075,11 +2362,9 @@ function hotelLineTotals(line) {
     }
   }
   const stars = parseInt(String(p[2] || '').replace(/[^\d]/g, ''), 10) || 0;
-  // صلالة: السرير الإضافي 170 ريال/ليلة لأي فندق (بأي تصنيف) — مطابق لعمود
-  // «Exra bed /Sofa Bed» في تبويب Oman بالشيت (محدَّث 2026-08-08). غيرها: 5★=120 / 4★=100.
+  // صلالة: السرير الإضافي 150 ريال/ليلة لأي فندق (بأي تصنيف). غيرها: 5★=120 / 4★=100.
   const _isSalalah = /صلال/.test(String(p[1] || ''));
-  const _isEngland = /london|لندن/i.test(String(p[1] || ''));   // إنجلترا: السرير 150/ليلة (عمود Extra Bed بالشيت)
-  const extraBedPricePerNight = _isSalalah ? 170 : (_isEngland ? 150 : (stars >= 5 ? 120 : (stars === 4 ? 100 : 0)));
+  const extraBedPricePerNight = _isSalalah ? 150 : (stars >= 5 ? 120 : (stars === 4 ? 100 : 0));
   const extraBedCount = 0;
   const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * nights * extraBedCount) : 0;
   return { p, nightly, nights, totalLine, stars, extraBedCount, extraBedPricePerNight, extraBedTotal };
@@ -3246,22 +2531,6 @@ currencyAwaiting = null;
 currencyPending = null;
 // صفّر اختيار العملة في الواجهة (برنامج جديد = بدون تحويل افتراضياً)
 { const _cpk = document.getElementById('currencyPicker'); if(_cpk){ _cpk.value=''; _cpk.style.display='none'; } const _crb = document.getElementById('currencyResult'); if(_crb) _crb.style.display='none'; }
-// استعادة العملة المثبّتة بالبرنامج المحفوظ (CURRENCY:اسم|سعر) — عشان الاستدعاء/الاعتماد
-// يرجع بنفس العملة المعتمدة لا بالريال (تُخزَّن في الخام عند تغيير العملة).
-try {
-  const _cm = (raw.match(/CURRENCY:([^\n]+)/) || [])[1];
-  if (_cm) {
-    const _p = _cm.split('|'); const _cn = (_p[0] || '').trim(); const _cr = parseFloat(_p[1]);
-    if (_cn && _cr > 0) {
-      currencyConversion = { name: _cn, rate: _cr, originalSAR: 0, converted: 0 };
-      setTimeout(() => { try {
-        const _pk = document.getElementById('currencyPicker');
-        if (_pk) { const _o = [...(_pk.options || [])].find(o => o.dataset && o.dataset.name === _cn); if (_o) { _pk.value = _o.value; _pk.style.display = ''; } }
-        refreshCurrencyBox();
-      } catch (_) {} }, 0);
-    }
-  }
-} catch (_) {}
 // تصفير التكاليف الإضافية اليدوية فقط عند تغيير الوجهة (رحلة لبلد آخر) حتى لا
 // تتسرب من رحلة لأخرى. تعديلات نفس البرنامج (مثل "اضف شرائح" أو تبديل فندق)
 // تحافظ عليها بدل ما تمسحها.
@@ -3317,19 +2586,14 @@ const occN = parseInt((arabicDigitsToLatin(String(p[3]||'')).match(/يتسع\s*(
 const _df = (getLine(lastProgramRaw,'DATE_FROM')||'');
 const nameCell = `<td class="hsw-cell" data-hidx="${hidx}" data-region="${hswEsc(p[1]||'')}" data-name="${hswEsc(p[0]||'')}" data-nightly="${nightly}" data-nights="${nights}" data-occ="${occN}">`
   + `<div class="hsw-cur" onclick="hswToggle(this)"><span class="hsw-name"><strong>${p[0]||''}${extraCount ? ' + Extra bed / Sofa Bed' : ''}</strong></span><span class="hsw-chev">▼</span></div>`
-  + `<div class="hsw-menu"></div>`
-  + `<button type="button" class="dblrm-btn" onclick="event.stopPropagation();pickCheapestDouble(${hidx})" title="استبدل بأرخص فندق فيه غرفة لشخصين بنفس فئة النجوم، والعدد يُحسب تلقائياً (العدد÷2) ويبقى قابلاً للتعديل">🛏️ غرفتين لشخصين (أرخص)</button>`
-  + `</td>`;
+  + `<div class="hsw-menu"></div></td>`;
 // خلية نوع الغرفة — قابلة للاستبدال/الإضافة من نفس الفندق
 const roomCell = `<td class="rtw-cell" data-hidx="${hidx}" data-name="${hswEsc(p[0]||'')}" data-region="${hswEsc(p[1]||'')}" data-room="${hswEsc(p[3]||'')}" data-nights="${nights}" data-date="${hswEsc(_df)}">`
   + `<div class="hsw-cur" onclick="rtwToggle(this)"><span class="hsw-name">${p[3]||''}</span><span class="hsw-chev">▼</span></div>`
   + `<div class="hsw-menu"></div></td>`;
 const rooms = hRooms(hidx);
 const roomsCell = `<td><select class="rooms-sel" onchange="setHotelRooms(${hidx}, this.value)">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${n===rooms?' selected':''}>${n}</option>`).join('')}</select></td>`;
-// خلية النجوم — منسدلة: تغيير الفئة يجيب أرخص فندق بالمدينة بتلك الفئة حصراً
-const starOpts = [3,4,5]; if(stars && !starOpts.includes(stars)) starOpts.unshift(stars);
-const starsCell = `<td><select class="rooms-sel" title="غيّري فئة النجوم → أرخص فندق بهذه المدينة بهذه الفئة حصراً" onchange="changeHotelStars(${hidx}, this.value)">${starOpts.map(s=>`<option value="${s}"${s===stars?' selected':''}>${s}★</option>`).join('')}</select></td>`;
-let row = `<tr><td>${p[1]||''}</td>${nameCell}${starsCell}${roomCell}<td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td>${roomsCell}<td class="price-cell">${((totalLine*rooms) + (extraTotal||0)).toLocaleString()} ريال</td><td>${bedTxt}</td></tr>`;
+let row = `<tr><td>${p[1]||''}</td>${nameCell}<td>${p[2]||''}</td>${roomCell}<td class="price-cell">${nightly.toLocaleString()} ريال</td><td>${nights||'—'} ليالي</td>${roomsCell}<td class="price-cell">${((totalLine*rooms) + (extraTotal||0)).toLocaleString()} ريال</td><td>${bedTxt}</td></tr>`;
 // صفوف الغرف الإضافية (ADDROOM) — عدد غير محدود، كل غرفة بزر حذف خاص
 parseAddRooms(l).forEach((ar, j) => {
   const arCap = ar.occ ? ` (يتسع ${ar.occ})` : '';
@@ -3405,24 +2669,10 @@ if (toursLines.length) {
 const _tDay = l => (String(l).split('|')[0]||'').trim();
 const _tCnt = {}, _tSum = {}, _tLast = {};
 toursLines.forEach((l,i)=>{ const d=_tDay(l); _tCnt[d]=(_tCnt[d]||0)+1; _tSum[d]=(_tSum[d]||0)+computeTransferTourLineTotal(l.split('|').map(x=>x.trim()), xferTourMeta, '🗺️ جولة').total; _tLast[d]=i; });
-// مدينة كل يوم — نمرّرها لليوم الحر عشان تطلع جولات منطقته.
-// المصدر الأساسي: أسطر الفنادق. وإن كان البرنامج «بدون فنادق» نستنتج
-// مدينة كل يوم من نص الجولات/الانتقالات نفسها ثم نعبّئ الأيام الحرّة.
+// مدينة كل يوم (من الفنادق) — نمرّرها لليوم الحر عشان تطلع جولات منطقته
 const _dayCity = {}; let _dcn = 1;
 hotelsLines.forEach(hl => { const _c=(hl.split('|')[1]||'').trim(); const _n=hotelLineTotals(hl).nights||0; for(let _k=0;_k<_n;_k++) _dayCity[_dcn+_k]=_c; _dcn+=_n; });
 if(hotelsLines.length) _dayCity[_dcn] = (hotelsLines[hotelsLines.length-1].split('|')[1]||'').trim();
-if(!hotelsLines.length){
-  const _destName = getLine(lastProgramRaw,'DEST') || '';
-  const _cityList = ((typeof BF_CITIES!=='undefined' && BF_CITIES[_destName]) || []).slice();
-  const _norm = s => String(s||'').replace(/[\sـ]/g,'');   // بلا مسافات/تطويل
-  const _detectCity = txt => { const t=_norm(txt); let best=''; for(const c of _cityList){ const nc=_norm(c); if(nc && t.includes(nc) && nc.length>_norm(best).length) best=c; } return best; };
-  const _allLines = toursLines.concat(transfersLines || []);
-  let _maxDay = 0;
-  _allLines.forEach(l=>{ const d=parseInt((String(l).split('|')[0]||'').replace(/[^\d]/g,''),10); if(d){ if(d>_maxDay)_maxDay=d; const c=_detectCity(l); if(c && !_dayCity[d]) _dayCity[d]=c; } });
-  // تعبئة الأيام بلا مدينة (الحرّة): forward-fill ثم backward-fill
-  let _last=''; for(let d=1; d<=_maxDay; d++){ if(_dayCity[d]) _last=_dayCity[d]; else if(_last) _dayCity[d]=_last; }
-  let _next=''; for(let d=_maxDay; d>=1; d--){ if(_dayCity[d]) _next=_dayCity[d]; else if(_next) _dayCity[d]=_next; }
-}
 html += `<div class="section-card tsw-host">
 <div class="section-card-header"><div class="section-card-title">🗺️ الجولات السياحية</div><div class="section-total">${toursTotal.toLocaleString()} ريال</div></div>
 <table class="pricing-table">
@@ -3499,9 +2749,6 @@ ${summaryHTML}
 </div>`;
 
 document.getElementById('reviewPanel').innerHTML = html;
-renderHaramBar();              // شريط قرب الحرم فوق برنامج مكة
-renderMakkahTransportBar();    // شريط وسيلة التنقّل (قطار/سيارة) فوق برنامج مكة
-renderMakkahFlightBar();       // شريط الطيران الدولي (مسقط↔جدة: الأرخص/شركة/بدون) فوق برنامج مكة
 renderExtraCostsList();
 // هامش الربح التلقائي: يجلب جدول أرباح الوجهة ويملأ الربح حسب التكلفة + نوع العميل.
 autoProfitForProgram(dest);
@@ -3805,7 +3052,7 @@ function waBridgeSelectAllShown() {
   matches.forEach(g => { waBridgeSel.add(g.jid); waBridgeNames[g.jid] = g.name; });
   waBridgeRenderList();
 }
-function waBridgeClearTargets() { waBridgeSel.clear(); waBridgeClearImg(); waBridgeRenderList(); }
+function waBridgeClearTargets() { waBridgeSel.clear(); waBridgeRenderList(); }
 
 function waBridgeUpdateCount() {
   const n = waBridgeSel.size;
@@ -3966,21 +3213,15 @@ function waBridgePdfToggle() {
   }
 }
 
-function waBridgeDistToggle() { document.getElementById('waBridgeDistBox').style.display = document.getElementById('waBridgeDist').checked ? 'block' : 'none'; }
-
-function waBridgeClearImg() { const f = document.getElementById('waBridgeImgFile'); if (f) { f.value = ''; } const m = document.getElementById('waBridgeMsg'); if (m) { m.textContent = '🗑️ أُزيلت الصورة'; m.style.color = 'var(--muted)'; } }
-
 async function waBridgeSend() {
   const body = (document.getElementById('waBridgeBody').value || '').trim();
   const msg = document.getElementById('waBridgeMsg');
   const targets = Array.from(waBridgeSel).map(jid => ({ jid, name: waBridgeNames[jid] || jid }));
-  if (!targets.length && !(document.getElementById('waBridgeDist') && document.getElementById('waBridgeDist').checked)) { msg.textContent = '⚠️ علّمي ✓ على وجهة واحدة على الأقل (أو فعّلي التوزيع لكل الجروبات).'; msg.style.color = '#ef4444'; return; }
+  if (!targets.length) { msg.textContent = '⚠️ علّمي ✓ على وجهة واحدة على الأقل.'; msg.style.color = '#ef4444'; return; }
   const isPdf = !!(document.getElementById('waBridgePdf') && document.getElementById('waBridgePdf').checked);
-  const _imgInput = document.getElementById('waBridgeImgFile');
-  const imgFile = _imgInput && _imgInput.files && _imgInput.files[0];
   const hasProg = (typeof parsedData !== 'undefined' && parsedData && typeof lastProgramRaw !== 'undefined' && lastProgramRaw);
   if (isPdf && !hasProg) { msg.textContent = '⚠️ الـPDF يحتاج برنامج مبني أولاً.'; msg.style.color = '#ef4444'; return; }
-  if (!isPdf && !imgFile && !body) { msg.textContent = '⚠️ اكتبي نص الرسالة.'; msg.style.color = '#ef4444'; return; }
+  if (!isPdf && !body) { msg.textContent = '⚠️ اكتبي نص الرسالة.'; msg.style.color = '#ef4444'; return; }
   const throttle = document.getElementById('waBridgeThrottle').checked;
   const batch = Math.max(1, parseInt(document.getElementById('waBridgeBatch').value) || 10);
   const interval = Math.max(1, parseInt(document.getElementById('waBridgeInterval').value) || 5);
@@ -3995,16 +3236,7 @@ async function waBridgeSend() {
   msg.textContent = '⏳ جاري الجدولة...'; msg.style.color = 'var(--muted)';
   const createdBy = (localStorage.getItem('alezz_staff_name') || 'team');
   let sendBody = body, sendSource = createdBy, pdfCaption = null;
-  if (imgFile) {
-    msg.textContent = '⏳ رفع الصورة...';
-    try {
-      const _b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(imgFile); });
-      const _ext = (imgFile.name.split('.').pop() || 'jpg');
-      const _up = await waBridgeCall('upload-media', { base64: _b64, content_type: imgFile.type || 'image/jpeg', ext: _ext });
-      if (!_up || !_up.url) throw new Error((_up && _up.error) || 'فشل رفع الصورة');
-      sendBody = _up.url; sendSource = 'image'; pdfCaption = body;
-    } catch (e) { msg.textContent = '❌ تعذّر رفع الصورة: ' + (e.message || e); msg.style.color = '#ef4444'; return; }
-  } else if (isPdf) {
+  if (isPdf) {
     const _sar = (typeof currentFinalGroup === 'function') ? (currentFinalGroup() || 0) : 0;
     let _priceTxt;
     if (typeof currencyConversion !== 'undefined' && currencyConversion && currencyConversion.name && currencyConversion.rate) {
@@ -4024,24 +3256,6 @@ async function waBridgeSend() {
       sendBody = up.url; sendSource = 'pdf';
     } catch (e) { msg.textContent = '❌ تعذّر تجهيز الـPDF: ' + (e.message || e); msg.style.color = '#ef4444'; return; }
   }
-    const _isDist = document.getElementById('waBridgeDist') && document.getElementById('waBridgeDist').checked;
-  if (_isDist) {
-    const _accts = Array.from(document.querySelectorAll('.wab-dist-acct:checked')).map(function (c) { return c.value; });
-    if (_accts.length < 2) { msg.textContent = '⚠️ اختاري رقمين على الأقل للتوزيع.'; msg.style.color = '#ef4444'; return; }
-    msg.textContent = '⏳ جاري التوزيع...'; msg.style.color = 'var(--muted)';
-    const _dp = { accounts: _accts, targets: targets, body: sendBody, source: sendSource, caption: pdfCaption };
-    if (throttle) { _dp.batch_size = batch; _dp.interval_minutes = interval; }
-    try {
-      const _r = await waBridgeCall('distribute', _dp);
-      if (_r.ok) {
-        let _m = '✅ وُزّعت ' + _r.queued + ' رسالة — ' + Object.keys(_r.per_account).map(function (a) { return '…' + a.slice(-4) + ': ' + _r.per_account[a]; }).join(' · ');
-        if (_r.unassigned) { _m += ' · (' + _r.unassigned + ' جروب ما فيه رقم عضو)'; }
-        msg.textContent = _m; msg.style.color = '#25D366';
-        waBridgeSel = new Set(); waBridgeClearImg(); waBridgeRenderList();
-      } else { msg.textContent = '❌ ' + (_r.error || 'فشل التوزيع'); msg.style.color = '#ef4444'; }
-    } catch (e) { msg.textContent = '❌ ' + (e.message || e); msg.style.color = '#ef4444'; }
-    return;
-  }
   const payload = { targets, body: sendBody, kind: waBridgeCurMode, source: sendSource, created_by: createdBy, account: waBridgeAccount, caption: pdfCaption };
   if (throttle) { payload.batch_size = batch; payload.interval_minutes = interval; }
   try {
@@ -4050,7 +3264,7 @@ async function waBridgeSend() {
       let m = '✅ تمت جدولة ' + r.queued + ' رسالة';
       if (r.eta_minutes > 0) m += ' — تخلص خلال ~' + r.eta_minutes + ' دقيقة'; else m += ' — تُرسل الآن';
       msg.textContent = m; msg.style.color = '#25D366';
-      waBridgeSel.clear(); waBridgeClearImg(); waBridgeRenderList();
+      waBridgeSel.clear(); waBridgeRenderList();
       setTimeout(waBridgeRenderOutbox, 3500);
     } else { msg.textContent = '❌ ' + (r.error || 'فشل الإرسال'); msg.style.color = '#ef4444'; }
   } catch (e) { msg.textContent = '❌ ' + e.message; msg.style.color = '#ef4444'; }
@@ -4180,12 +3394,10 @@ function loadHtml2Pdf(){
 }
 
 // يولّد ملف PDF فعلي (Blob) من نفس قالب #pdfContent المستخدم في الطباعة.
-async function generatePdfBlob(mode, customHtml){
+async function generatePdfBlob(mode){
   await loadHtml2Pdf();
+  buildPDF(mode);                                  // يملأ #pdfContent (بدون شبكة)
   const el = document.getElementById('pdfContent');
-  // customHtml (اختياري): محتوى جاهز يُلتقط كما هو (يستخدمه تبويب الجروبات المعزول)؛
-  // بدونه المسار الحالي كما هو — buildPDF يملأ #pdfContent من حالة التسعير.
-  if (customHtml != null) el.innerHTML = customHtml; else buildPDF(mode);
   if (!el || !el.innerHTML.trim()) throw new Error('لا يوجد محتوى لتوليد الـPDF.');
   // نخفي العنصر داخل غلاف (max-height:0 + overflow:hidden) مع إبقاء أنماطه نظيفة
   // ومرئية. مهم جدًّا: لو وضعنا الإخفاء (left:-99999px أو opacity:0) على العنصر
@@ -4267,10 +3479,7 @@ async function saveCurrentProgramOnce(pdfVariant, finalGroupPrice) {
         destination: parsedData.dest,
         pdf_variant: pdfVariant,
         total_group: finalGroupPrice,
-        persons: parsedData.persons || 1,
-        // هوية الدخول الحقيقية (بصمة كل موظفة) أولاً — غير قابلة للتزوير؛
-        // القائمة اليدوية (alezz_staff_name) احتياط فقط لو غابت الهوية.
-        created_by: (localStorage.getItem('alezz_user_name') || localStorage.getItem('alezz_staff_name') || '').trim()
+        persons: parsedData.persons || 1
       })
     });
     const data = await res.json().catch(async () => {
@@ -4294,29 +3503,6 @@ async function saveCurrentProgramOnce(pdfVariant, finalGroupPrice) {
     addMessage('sys', 'فشل حفظ البرنامج: ' + String((e && e.message) ? e.message : e));
   }
   return '';
-}
-
-// اعتماد النسخة النهائية: يجمّد النسخة الحالية (بكل تعديلاتها) ويولّد كود استرجاع
-// دائم — بدون إرسال للعميل. أي تعديل لاحق يمسح الكود (buildReview) فتُعيد الاعتماد
-// لنسخة جديدة بكود جديد. هكذا لحظة «خلصت» بيد المالكة بالضبط، والكود يطابق النسخة.
-async function finalizeProgramCode() {
-  if (!parsedData || !lastProgramRaw || !/TOTAL_GROUP:/.test(lastProgramRaw)) {
-    addMessage('sys', 'ابنِ البرنامج وسعّره أولاً ثم اعتمد النسخة النهائية.');
-    return;
-  }
-  const btn = document.getElementById('finalizeCodeBtn');
-  const old = btn ? btn.textContent : '';
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ يُعتمد…'; }
-  try {
-    const already = lastSavedCode;
-    const code = await saveCurrentProgramOnce('client', currentFinalGroup());
-    if (code) {
-      addMessage('sys', (already ? 'هذه النسخة معتمدة مسبقاً. ' : '✅ تم اعتماد النسخة النهائية. ')
-        + 'كود الاسترجاع: ' + code + ' — استخدميه لاحقاً لاستدعاء هذه النسخة بالضبط. أي تعديل بعده يتطلب اعتماداً جديداً.');
-    }
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = old; }
-  }
 }
 
 function handleRetrieveKey(e) {
@@ -4504,15 +3690,6 @@ function stripPricesText(t) {
   return s;
 }
 const safeText = (t) => (showDetailed ? String(t || '').trim() : stripPricesText(t));
-// html2canvas يكسر ترتيب/مسافات النص اللاتيني (أسماء فنادق مكة الإنجليزية) داخل سياق
-// RTL. نعزل أي نص فيه حروف لاتينية بـ dir=ltr + unicode-bidi:isolate فيُرسَم صحيحاً.
-// ⚠️ مع word-break:break-word/overflow-wrap:anywhere في الحاويات كان html2canvas
-// يُسقط المسافات بين الكلمات («StandardRoom» بدل «Standard Room»). العلاج:
-//   • white-space:pre-wrap → يحفظ المسافات مع بقاء الالتفاف عند الحاجة.
-//   • display:inline-block + overflow-wrap:break-word → يُرسم النص كوحدة مستقلة
-//     يُقاس بمعزل عن سياق RTL، فلا تنهار المسافات، ويكسر الكلمة الطويلة فقط عند اللزوم.
-// النص العربي يُترك كما هو (تغليفه بـ ltr يكسره).
-const bidiText = (t) => { const s = safeText(t); return /[A-Za-z]/.test(String(s)) ? `<span dir="ltr" style="unicode-bidi:isolate;white-space:pre-wrap;display:inline-block;overflow-wrap:break-word;max-width:100%;vertical-align:top;">${s}</span>` : s; };
 
 // تُحتسب لاحقاً بعد تجهيز تواريخ الفنادق
 let hotelStays = [];
@@ -4847,7 +4024,7 @@ ${flightsLines.map(l => {
   })() : '';
   return `
 <div class="pdf-keep" style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;display:flex;align-items:center;gap:14px;">
-  <span style="font-size:30px;">${kind.includes('قطار')?'🚄':'✈️'}</span>
+  <span style="font-size:30px;">✈️</span>
   <div style="flex:1;">
     ${showRoute ? `<div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:6px;line-height:1.3;">${safeText(routeText)}</div>` : ''}
     <div style="font-size:18px;font-weight:700;color:#444;">${safeText(p[1]||'')}</div>
@@ -4906,22 +4083,22 @@ itineraryHTML += `
 const dayActs = byDay[d] || [];
 if (dayActs.length === 0) {
 itineraryHTML += `
-<div style="display:flex;align-items:flex-start;gap:16px;padding:16px 0;">
-<span style="font-size:34px;line-height:1.9;">🏨</span>
-<div style="flex:1;min-width:0;">
-<div style="font-size:22px;font-weight:900;color:#0d1f4a;line-height:1.9;word-break:break-word;overflow-wrap:anywhere;">يوم حر — استرخاء في الفندق</div>
+<div style="display:flex;align-items:center;gap:16px;padding:14px 0;">
+<span style="font-size:34px;">🏨</span>
+<div style="flex:1;">
+<span style="font-size:24px;font-weight:900;color:#0d1f4a;line-height:1.5;">يوم حر — استرخاء في الفندق</span>
 </div>
-<span style="font-size:16px;font-weight:800;padding:7px 14px;border-radius:8px;background:#fef3c7;color:#92400e;white-space:nowrap;margin-top:4px;">يوم حر</span>
+<span style="font-size:16px;font-weight:800;padding:7px 14px;border-radius:8px;background:#fef3c7;color:#92400e;white-space:nowrap;">يوم حر</span>
 </div>`;
 } else {
 dayActs.forEach(act => {
 itineraryHTML += `
-<div style="display:flex;align-items:flex-start;gap:16px;padding:16px 0;border-bottom:1px solid #f0f5ff;">
-<span style="font-size:34px;line-height:1.9;">${act.icon}</span>
-<div style="flex:1;min-width:0;">
-<div style="font-size:22px;font-weight:900;color:#0d1f4a;line-height:1.9;word-break:break-word;overflow-wrap:anywhere;">${act.text}</div>
+<div style="display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid #f0f5ff;">
+<span style="font-size:34px;">${act.icon}</span>
+<div style="flex:1;">
+<span style="font-size:24px;font-weight:900;color:#0d1f4a;line-height:1.5;">${act.text}</span>
 </div>
-<span style="font-size:16px;font-weight:800;padding:7px 14px;border-radius:8px;background:#e8f0ff;color:#1a3a8f;white-space:nowrap;margin-top:4px;">${act.badge}</span>
+<span style="font-size:16px;font-weight:800;padding:7px 14px;border-radius:8px;background:#e8f0ff;color:#1a3a8f;white-space:nowrap;">${act.badge}</span>
 </div>`;
 });
 }
@@ -4974,19 +4151,19 @@ ${(hotelsLines.length || extrasCards('hotels')) ? `<div class="pdf-section-title
 ${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l); const rooms = hRooms(idx); const extraBedCount = hBeds(idx, extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest)); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const _arRooms = parseAddRooms(l); const _arTotal = _arRooms.reduce((a,r)=>a+(r.price*(nights||0)),0); const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; return `
 <div class="pdf-keep" style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;">
 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;">
-  <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:12px;line-height:1.6;word-break:break-word;overflow-wrap:anywhere;">🏨 ${bidiText((p[0]||'') + (extraBedCount ? ' + Extra bed / Sofa Bed' : ''))}</div>
+  <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:12px;line-height:1.3;">🏨 ${safeText(p[0]||'')}${extraBedCount ? ' + Extra bed / Sofa Bed' : ''}</div>
   ${showDetailed ? `<div style="font-weight:900;color:#0d1f4a;font-size:18px;white-space:nowrap;">${((totalLine*rooms) + (extraBedTotal||0) + _arTotal).toLocaleString()} ريال</div>` : ``}
 </div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;font-size:20px;font-weight:800;color:#0d1f4a;line-height:1.8;word-break:break-word;overflow-wrap:anywhere;">
-<span>📍 المدينة: ${bidiText(p[1]||'')}</span>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:20px;font-weight:800;color:#0d1f4a;line-height:1.5;">
+<span>📍 المدينة: ${safeText(p[1]||'')}</span>
 <span>⭐ النجوم: ${safeText(p[2]||'')}</span>
-<span>🛏️ الغرفة: ${bidiText(p[3]||'')}</span>
+<span>🛏️ الغرفة: ${safeText(p[3]||'')}</span>
 <span>🏨 عدد الغرف: ${rooms}</span>
 <span>📅 الإقامة: ${stayText}</span>
 ${(sd.checkInText && sd.checkOutText) ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText} | 🔴 الخروج: ${sd.checkOutText}</span>` : (sd.checkInText ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText}</span>` : ``)}
 ${extraBedCount ? `<span>🛋️ سرير إضافي / Sofa Bed: <b>${extraBedCount}</b>${showDetailed ? ` — ${extraBedPricePerNight} ريال/ليلة × ${nights||'—'} ليالي × ${extraBedCount} = ${(extraBedTotal||0).toLocaleString()} ريال` : ''}</span>` : ``}
 ${showDetailed ? `<span>💵 تفصيل السعر: ${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي × ${rooms} غرفة = ${(totalLine*rooms).toLocaleString()} ريال</span>` : ``}
-${_arRooms.map((ar,j)=>`<span style="grid-column:1/-1;color:#b45309;font-weight:900;">➕ غرفة إضافية ${j+1}: <span dir="ltr" style="unicode-bidi:isolate;white-space:pre-wrap;display:inline-block;overflow-wrap:break-word;max-width:100%;vertical-align:top;">${safeText(ar.room_type)}</span>${ar.occ?` (يتسع ${ar.occ})`:''}${showDetailed ? ` — ${ar.price.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي = ${(ar.price*(nights||0)).toLocaleString()} ريال` : ''}</span>`).join('')}
+${_arRooms.map((ar,j)=>`<span style="grid-column:1/-1;color:#b45309;font-weight:900;">➕ غرفة إضافية ${j+1}: <span dir="ltr" style="unicode-bidi:isolate">${safeText(ar.room_type)}</span>${ar.occ?` (يتسع ${ar.occ})`:''}${showDetailed ? ` — ${ar.price.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي = ${(ar.price*(nights||0)).toLocaleString()} ريال` : ''}</span>`).join('')}
 <span style="grid-column:1/-1;">✅ يشمل: ${safeText(String(p[6]||'').replace(/^\s*ما\s*يشمل\s*:?\s*/u,'').trim())}</span>
 </div>
 </div>`; }).join('')}${extrasCards('hotels')}` : ''}
@@ -5022,7 +4199,7 @@ ${(showDetailed && (hotelsLines.length || transfersLines.length || toursLines.le
     <div class="pdf-keep" style="border:1px solid #eef0f8;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;gap:12px;">
       <div style="font-weight:800;color:#0d1f4a;font-size:16px;line-height:1.6;">
         ${p[1]||''} | ${p[0]||''}${extraBedCount ? ' + Extra bed' : ''} <span style="opacity:0.8">(${p[2]||''})</span> · 🏨 ${rooms} غرفة<br>
-        <span style="opacity:0.85;">${p[3]||''}</span> — <span style="opacity:0.85;">${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي × ${rooms} غرفة = ${(totalLine*rooms).toLocaleString()} ريال${extraBedCount ? (` + سرير إضافي ${(extraBedTotal||0).toLocaleString()} ريال`) : ''}</span>${_arRooms.map((ar,j)=>`<br/><span style="color:#b45309;font-weight:900;">➕ غرفة إضافية ${j+1}: <span dir="ltr" style="unicode-bidi:isolate;white-space:pre-wrap;display:inline-block;overflow-wrap:break-word;max-width:100%;vertical-align:top;">${ar.room_type}</span>${ar.occ?` (يتسع ${ar.occ})`:''} — ${ar.price.toLocaleString()} ريال/ليلة × ${nights||'—'} = ${(ar.price*(nights||0)).toLocaleString()} ريال</span>`).join('')}
+        <span style="opacity:0.85;">${p[3]||''}</span> — <span style="opacity:0.85;">${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي × ${rooms} غرفة = ${(totalLine*rooms).toLocaleString()} ريال${extraBedCount ? (` + سرير إضافي ${(extraBedTotal||0).toLocaleString()} ريال`) : ''}</span>${_arRooms.map((ar,j)=>`<br/><span style="color:#b45309;font-weight:900;">➕ غرفة إضافية ${j+1}: <span dir="ltr" style="unicode-bidi:isolate">${ar.room_type}</span>${ar.occ?` (يتسع ${ar.occ})`:''} — ${ar.price.toLocaleString()} ريال/ليلة × ${nights||'—'} = ${(ar.price*(nights||0)).toLocaleString()} ريال</span>`).join('')}
       </div>
       <div style="font-weight:900;color:#0d1f4a;white-space:nowrap;">${lineGrand.toLocaleString()} ريال</div>
     </div>`; }).join('')}` : ''}
@@ -5090,29 +4267,6 @@ ${showDetailed ? `
 // زر «📄 تصدير PDF» الموحّد: يفتح قائمة اختيار النوع (أفراد/تفصيلي/بدون سعر).
 function pdfMenuToggle(e){ if(e){ e.stopPropagation(); } const m=document.getElementById('pdfExportMenu'); if(!m) return; m.style.display = (m.style.display==='none'||!m.style.display) ? 'block' : 'none'; }
 function pdfMenuPick(mode){ const m=document.getElementById('pdfExportMenu'); if(m) m.style.display='none'; exportPDF(mode); }
-// ── اربط ملف الإعلان بالكود: يحفظ البرنامج (يعطي كود) + يولّد PDF بسعر (بالعملة
-//    المختارة حالياً) + يرفعه + يربطه بالكود. طلال يرسل هذا الملف لأي عميل يجي من
-//    إعلان يحمل نفس الكود في الكابشن. (المرحلة ٢ — ملف بدل النص.)
-async function prepareAdPdf(){
-  const menu=document.getElementById('pdfExportMenu'); if(menu) menu.style.display='none';
-  const hasProg = (typeof parsedData!=='undefined' && parsedData && typeof lastProgramRaw!=='undefined' && lastProgramRaw);
-  if(!hasProg){ alert('ابني البرنامج أولاً.'); return; }
-  const curNote = (typeof currencyConversion!=='undefined' && currencyConversion && currencyConversion.name)
-    ? ('بعملة: '+currencyConversion.name) : 'بالريال السعودي';
-  if(!confirm('سيُجهّز ملف الإعلان (PDF) '+curNote+' ويُربَط بكود البرنامج.\nطلال بيرسل هذا الملف لأي عميل يجي من إعلان يحمل نفس الكود.\n\nمتابعة؟')) return;
-  try{
-    const finalGroup = (typeof currentFinalGroup==='function') ? (currentFinalGroup()||0) : 0;
-    const code = await saveCurrentProgramOnce('client', finalGroup);
-    if(!code){ alert('تعذّر توليد كود البرنامج.'); return; }
-    const blob = await generatePdfBlob('client');   // بسعر + لوغو
-    const b64 = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(blob); });
-    const up = await waBridgeCall('upload-pdf', { pdf_base64: b64 });
-    if(!up || !up.url) throw new Error((up&&up.error)||'فشل رفع الملف');
-    const link = await waBridgeCall('set-ad-pdf', { code, url: up.url });
-    if(!link || !link.ok) throw new Error((link&&link.error)||'فشل ربط الكود');
-    alert('✅ تم!\nكود البرنامج: '+code+'\n\nحطّي هذا الكود في كابشن الإعلان، وطلال بيرسل هذا الملف تلقائياً لأي عميل يجي منه.');
-  }catch(e){ alert('❌ '+(e&&e.message?e.message:e)); }
-}
 document.addEventListener('click', function(e){ const insideWrap = e.target && e.target.closest && e.target.closest('.pdf-export-wrap'); if(!insideWrap){ const m=document.getElementById('pdfExportMenu'); if(m) m.style.display='none'; } });
 async function exportPDF(mode) {
   if (!parsedData) return;
@@ -5877,7 +5031,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       const currency=(typeof currencyConversion!=='undefined'&&currencyConversion)?currencyConversion.name:'ريال';
       // اسم الملف إنجليزي نظيف (واتساب يلخبط الأسماء العربية في الملف نفسه)،
       // واسم الوجهة بالعربي يظهر سليم في نص الرسالة (caption) أسفل الملف.
-      const _DEST_EN={'عمان':'Oman','عُمان':'Oman','ماليزيا':'Malaysia','تايلند':'Thailand','تايلاند':'Thailand','فيتنام':'Vietnam','تركيا':'Turkey','روسيا':'Russia','جورجيا':'Georgia','اذربيجان':'Azerbaijan','أذربيجان':'Azerbaijan','مصر':'Egypt','المالديف':'Maldives','مالديف':'Maldives','اندونيسيا':'Indonesia','إندونيسيا':'Indonesia','بالي':'Bali','سريلانكا':'SriLanka','الامارات':'UAE','الإمارات':'UAE','دبي':'Dubai','البوسنة':'Bosnia','المغرب':'Morocco','جنوب أفريقيا':'SouthAfrica','جنوب افريقيا':'SouthAfrica','موريشيوس':'Mauritius','مكة المكرمة':'Makkah','مكة':'Makkah','العمرة':'Umrah','إنجلترا':'England','انجلترا':'England','بريطانيا':'England','لندن':'London','الصين':'China','الصّين':'China','صين':'China'};
+      const _DEST_EN={'عمان':'Oman','عُمان':'Oman','ماليزيا':'Malaysia','تايلند':'Thailand','تايلاند':'Thailand','فيتنام':'Vietnam','تركيا':'Turkey','روسيا':'Russia','جورجيا':'Georgia','اذربيجان':'Azerbaijan','أذربيجان':'Azerbaijan','مصر':'Egypt','المالديف':'Maldives','مالديف':'Maldives','اندونيسيا':'Indonesia','إندونيسيا':'Indonesia','بالي':'Bali','سريلانكا':'SriLanka','الامارات':'UAE','الإمارات':'UAE','دبي':'Dubai','البوسنة':'Bosnia','المغرب':'Morocco','جنوب أفريقيا':'SouthAfrica','جنوب افريقيا':'SouthAfrica','موريشيوس':'Mauritius'};
       const _destAr=String(indivState.dest||'').trim();
       const _destEn=_DEST_EN[_destAr]||(/^[\x00-\x7F]+$/.test(_destAr)?_destAr:'Trip');
       const fname=('Alezz_Travel_'+_destEn+'_Offer').replace(/[^\x00-\x7F]/g,'').replace(/\s+/g,'_').replace(/_+/g,'_').slice(0,60)+'.pdf';
@@ -5898,36 +5052,6 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       const hint=/132000|re-?engag|24|outside|window|session|recipient/i.test(m)?'\n\n(غالباً مرّ أكثر من 24 ساعة على آخر رسالة من العميل — أرسلي من لوحة الواتساب أو خلّيه يرسل رسالة أولاً.)':'';
       alert('تعذّر الإرسال: '+m+hint);
     }finally{ if(btn){btn.disabled=false;btn.textContent=old;} }
-  };
-  // 📤 إرسال برنامج الجروب للعميل عبر واتساب — نفس مسار «إرسال للعميل» بالتسعير
-  // (send_individual)، لكن الملف = PDF الجروب (نسخة الأفراد). يحتاج طلب فرد مفتوح.
-  window.grpSendIndiv=async function(){
-    if(typeof indivState==='undefined' || !indivState){ alert('افتحي طلب فرد أولاً من «👤 طلبات الأفراد» ليُرسل الجروب لذاك العميل.'); return; }
-    if(typeof GRP_CURRENT==='undefined' || !GRP_CURRENT){ alert('اعرضي برنامج الجروب أولاً (اختاري البرنامج والتاريخ والعدد ثم «اعرض»).'); return; }
-    const note=prompt('✍️ ملاحظة تُرسل مع الملف للعميل (اختياري):','تفضّل أستاذي، برنامج الجروب جاهز 🌟\nوأنا موجود لأي استفسار، وفي انتظار تأكيدك 🙏');
-    if(note===null) return;
-    if(typeof grpMsg==='function') grpMsg('⏳ يُجهّز ويُرسل للعميل…');
-    try{
-      const blob=await grpMakeBlob('individual');
-      const b64=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(String(fr.result).split(',')[1]);fr.onerror=rej;fr.readAsDataURL(blob);});
-      const s=grpState();
-      const _prog=(GRP_CURRENT.program||'Trip'); const _progEn=/^[\x00-\x7F ]+$/.test(_prog)?_prog:'Group';
-      const fname=('Alezz_Group_'+_progEn).replace(/[^\x00-\x7F]/g,'').replace(/\s+/g,'_').replace(/_+/g,'_').slice(0,50)+'.pdf';
-      const caption='🚌 '+(GRP_CURRENT.program||'')+(s.date?(' — '+s.date):'')+(note?('\n'+note):'');
-      const r=await fetch(IB_BASE+'?admin_action=send_individual',{method:'POST',headers:ibH(),body:JSON.stringify({
-        id:indivState.id, phone:indivState.phone, pdf_base64:b64, filename:fname, note:caption,
-        program:grpWhatsappText(), price:(s.c&&s.c.total)||null, currency:'ريال', sent_by:(typeof ibStaffName==='function'?ibStaffName():'')
-      })});
-      const d=await r.json();
-      if(!r.ok||!d.ok){ throw new Error((d&&d.detail&&(d.detail.message||JSON.stringify(d.detail)))||(d&&d.error)||('HTTP '+r.status)); }
-      if(typeof grpMsg==='function') grpMsg('✅ أُرسل برنامج الجروب للعميل على واتساب.');
-      indivState=null;
-      try{ indivRender(await indivList()); }catch(_){}
-    }catch(e){
-      const m=String(e.message||e);
-      const hint=/132000|re-?engag|24|outside|window|session|recipient/i.test(m)?'\n\n(غالباً مرّ أكثر من ٢٤ ساعة على آخر رسالة من العميل — أرسلي من لوحة الواتساب أو خليه يرسل رسالة أولاً.)':'';
-      if(typeof grpMsg==='function') grpMsg('تعذّر الإرسال: '+m+hint, true); else alert('تعذّر الإرسال: '+m+hint);
-    }
   };
   window.indivSaveOnly=async function(){
     if(!indivState){alert('افتح طلب فرد أولاً من «👤 طلبات الأفراد».');return;}

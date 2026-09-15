@@ -44,6 +44,7 @@ const DEST_KEY: Record<string, string> = {
   "جنوب أفريقيا": "South Africa", "جنوب افريقيا": "South Africa",
   "موريشيوس": "mauritius", "موريشس": "mauritius",
   "إنجلترا": "England", "انجلترا": "England", "انكلترا": "England", "بريطانيا": "England", "لندن": "England", "England": "England", "London": "England",
+  "الصين": "China", "الصّين": "China", "صين": "China", "China": "China", "شنغهاي": "China", "شانغهاي": "China", "بكين": "China", "هونغ كونغ": "China",
   "مكة": "Makkah", "مكة المكرمة": "Makkah", "مكه": "Makkah", "العمرة": "Makkah", "عمرة": "Makkah", "عمره": "Makkah",
 };
 

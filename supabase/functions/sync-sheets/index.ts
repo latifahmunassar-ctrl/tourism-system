@@ -26,7 +26,7 @@ const CORS_HEADERS = {
   "Content-Type": "application/json",
 };
 
-const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England "];
+const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China "];
 
 // Per-destination canonical-city patterns — MUST stay in sync with DEST_CITIES
 // in Tourism-AI/index.ts (same canonical names the builder groups by). Used
@@ -86,6 +86,13 @@ const SECTION_CITY_DEFS: Record<string, Array<{ canonical: string; pattern: RegE
   ],
   Oman: [
     { canonical: "Salalah",  pattern: /صلال[ةه]|salalah/i },
+  ],
+  China: [
+    { canonical: "Shanghai",  pattern: /شان[غج]هاي|شنغهاي|shanghai/i },
+    { canonical: "Beijing",   pattern: /بكين|بيجين[غج]?|beijing/i },
+    { canonical: "Suzhou",    pattern: /سوجهو|سوجو|سوزو|سوتشو|suzhou/i },
+    { canonical: "Hangzhou",  pattern: /هان[غج]تشو|هان[غج]شتوا|هان[غج]زو|hangzhou/i },
+    { canonical: "Hong Kong", pattern: /هون[غج]\s*كون[غج]|hong\s*kong|hongkong/i },
   ],
 };
 

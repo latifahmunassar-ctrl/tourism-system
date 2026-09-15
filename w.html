@@ -1370,7 +1370,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
                 <option value="">— اختر —</option>
                 <option>فيتنام</option><option>ماليزيا</option><option>تايلاند</option>
                 <option>تركيا</option><option>روسيا</option><option>البوسنة</option>
-                <option>إندونيسيا</option><option>عُمان</option><option>جنوب أفريقيا</option><option>موريشيوس</option><option value="العمرة">العمرة (مكة + المدينة)</option><option>إنجلترا</option>
+                <option>إندونيسيا</option><option>عُمان</option><option>جنوب أفريقيا</option><option>موريشيوس</option><option value="العمرة">العمرة (مكة + المدينة)</option><option>إنجلترا</option><option>الصين</option>
               </select>
             </label>
             <label style="display:flex; flex-direction:column; gap:3px;">تاريخ السفر
@@ -2698,7 +2698,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     // قائمة الوجهات اللي يتعرفها النظام — مطابقة لـ DESTINATION_HINTS
     // في الـ Edge Function. تخليها هنا تضمن إن الـ dropdown يعرض نفس
     // الأسماء اللي تكتشف من رسائل العملاء.
-    const KNOWN_DESTINATIONS = ["ماليزيا", "تركيا", "إندونيسيا", "فيتنام", "تايلاند", "البوسنة", "روسيا", "جنوب أفريقيا", "موريشيوس", "العمرة", "إنجلترا"];
+    const KNOWN_DESTINATIONS = ["ماليزيا", "تركيا", "إندونيسيا", "فيتنام", "تايلاند", "البوسنة", "روسيا", "جنوب أفريقيا", "موريشيوس", "العمرة", "إنجلترا", "الصين"];
 
     // Generic chips renderer reused by add-form + edit modal.
     function renderDestChips(containerEl, list, onRemove) {
@@ -4390,6 +4390,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       "موريشيوس":["موريشيوس"],
       "العمرة":["مكة المكرمة","المدينة المنورة","جدة","الطائف"],
       "إنجلترا":["لندن"],
+      "الصين":["شنغهاي","بكين","سوجو","هانغتشو","هونغ كونغ"],
     };
     function bfMode(){ return (document.querySelector('input[name=bf-mode]:checked')||{}).value || "ready"; }
     function bfSetMode(m){
