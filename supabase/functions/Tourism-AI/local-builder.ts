@@ -2503,7 +2503,22 @@ export async function buildLocalProgram(
   // إقامة فيُختار استقبال المنطقة المطابقة (هوانا 100 vs وسط 50).
   const firstHotelLoc = hotelsList.find(h => h.city === firstCity)?.hotel?.location
     || areaHintFromSub(stayOrder[0]?.area || request.subAreaByCity?.[firstCity]);
-  const arrPickup = findArrivalPickup(allTours, firstCity, dest, cityDefs, "airport", request.transport, firstHotelLoc);
+  let arrPickup = findArrivalPickup(allTours, firstCity, dest, cityDefs, "airport", request.transport, firstHotelLoc);
+  // الوصول الدولي دائماً من المطار: لو المدينة الأولى ما لها إلا استقبال «محطة قطار»
+  // (الصين: استقبال المطار لشانغهاي فقط، وبكين محطة قطار) بينما الوجهة تستخدم مطارات
+  // دولية، نحوّل الاستقبال إلى **مطار** المدينة الأولى بسعر استقبال المطار في الوجهة.
+  if (arrPickup && /محط[هة]|قطار|station|train/iu.test(arrPickup.name) && !/مطار|airport/iu.test(arrPickup.name)) {
+    const airportArr = allTours.find(t =>
+      t.type === dest
+      && /استقبال|الاستقبال|pickup/iu.test(t.name)
+      && /مطار|airport/iu.test(t.name)
+      && !/محط[هة]|قطار|station|train/iu.test(t.name),
+    );
+    if (airportArr) {
+      const firstAr = cityArabicNames[firstCity] || firstCity;
+      arrPickup = { ...arrPickup, name: `استقبال من المطار الدولي في ${firstAr} والتوجه الى الفندق`, price: airportArr.price };
+    }
+  }
   if (arrPickup) selectedTransfers.push({ day: 1, row: arrPickup, kind: "Pickup" });
   // Inter-city transit days. The pickup type for the destination city
   // depends on HOW the group arrives — by train (qatar) or by flight.
