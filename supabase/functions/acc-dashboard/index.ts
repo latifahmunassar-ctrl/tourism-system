@@ -331,7 +331,7 @@ Deno.serve(async (req: Request) => {
     // 📌 توزيع/إعادة ربط دفعة مورّد بالعميل/العملاء — لا يضيف/ينقص مبلغاً (المجموع = مجموع الدفعات الأصلية) — للمالكة فقط
     // يقبل id مفرد أو pay_ids (تحويل مجمّع بعدة دفعات) — يحذف الأصل ويعيد الإدراج موزّعاً بنفس البنك/المرجع/التاريخ/العملة
     if (action === 'allocate_supplier_payment') {
-      if (!((key === ACCESS_KEY) || (sess && !!sess.is_owner))) return J({ error: 'توزيع دفعة المورّد للمالكة فقط' }, 403);
+      if (!callerBankRef) return J({ error: 'توزيع دفعة المورّد للمالكة أو المحاسب فقط' }, 403);   // 🔓 قرار المالكة: التوزيع متاح للمحاسب أيضاً (موردين/فنادق) — لا يضيف مبلغاً جديداً، فقط ربط دفعة موجودة بالعملاء
       const ids = Array.isArray(p.pay_ids) ? p.pay_ids.map((x: any) => Number(x)).filter((x: number) => !isNaN(x)) : (p.id != null ? [Number(p.id)] : []);
       if (!ids.length) return J({ error: 'no id' }, 400);
       const lines = Array.isArray(p.lines) ? p.lines.filter((l: any) => l && l.client_code && Number(l.amount) > 0) : [];
@@ -360,7 +360,7 @@ Deno.serve(async (req: Request) => {
     }
     // 🔵 إلغاء تخصيص دفعة مورّد — تُصبح «غير موزّعة» (client_code=null) حتى تُوزَّع لاحقاً. للمالكة فقط. لا يمسّ المبلغ/البنك/المرجع.
     if (action === 'unallocate_supplier_payment') {
-      if (!((key === ACCESS_KEY) || (sess && !!sess.is_owner))) return J({ error: 'إلغاء تخصيص الدفعة للمالكة فقط' }, 403);
+      if (!callerBankRef) return J({ error: 'إلغاء تخصيص الدفعة للمالكة أو المحاسب فقط' }, 403);   // 🔓 نفس صلاحية التوزيع (مالكة أو محاسب)
       const ids = Array.isArray(p.pay_ids) ? p.pay_ids.map((x: any) => Number(x)).filter((x: number) => !isNaN(x)) : (p.id != null ? [Number(p.id)] : []);
       if (!ids.length) return J({ error: 'no id' }, 400);
       const { data, error } = await supabase.from('acc_supplier_payments').update({ client_code: null, client_name: null }).in('id', ids).select('id');
