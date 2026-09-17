@@ -240,6 +240,16 @@ Deno.serve(async (req: Request) => {
       if (error) return J({ error: error.message }, 400);
       return J({ ok: true });
     }
+    if (action === 'withdraw_pending') {   // 🗑️ سحب أي طلب معلّق (مقدّم الطلب أو المالكة) — قبل الاعتماد، بلا أثر. يشمل كل الأقسام (دفعات موردين/فنادق/تعديلات/كاش/مرتجعات)
+      if (!p.id) return J({ error: 'no id' }, 400);
+      const { data: mv, error: me } = await supabase.from('acc_pending_movements').select('status,payload').eq('id', p.id).single();
+      if (me || !mv) return J({ error: 'الطلب غير موجود' }, 400);
+      if (mv.status !== 'pending') return J({ error: 'لا يمكن سحب طلب مُعالَج مسبقاً' }, 400);
+      if (!callerIsOwner && String(p.by || '') !== String((mv.payload || {}).by || '')) return J({ error: 'يمكنك سحب طلباتك أنت فقط' }, 403);
+      const { error } = await supabase.from('acc_pending_movements').delete().eq('id', p.id).eq('status', 'pending');
+      if (error) return J({ error: error.message }, 400);
+      return J({ ok: true });
+    }
     if (action === 'resolve_cash_add') {
       if (!callerIsOwner) return J({ error: 'الاعتماد/الرفض للمالكة فقط' }, 403);
       if (!p.id) return J({ error: 'no id' }, 400);

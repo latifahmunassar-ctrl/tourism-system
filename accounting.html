@@ -491,6 +491,7 @@ table{font-weight:600}
 
     <!-- Hotels / Systmes PYT Overview -->
     <div class="page" id="p-hotels">
+      <div id="hp-pending"></div>
       <div id="ho-pay"></div>
       <div class="panel" style="border-color:#0e7a5a;margin-bottom:12px"><h3 style="color:#0e7a5a;margin-top:0">🧾 كشف حساب فندق — مستحق · حالة السداد · رصيد</h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
@@ -557,6 +558,7 @@ table{font-weight:600}
 
     <!-- الدفعات / المرتجعات (فورم استدعاء بالكود) -->
     <div class="page" id="p-payments">
+      <div id="ref-pending"></div>
       <div class="formbar">
         <input id="py-code" class="flt" list="codes5" placeholder="🔎 اكتبي كود العميل لاستدعاء ملفه (مثل C26016)" oninput="renderPayForm()" style="min-width:340px">
         <datalist id="codes5"></datalist>
@@ -623,6 +625,7 @@ table{font-weight:600}
 
     <div class="page" id="p-suppliers">
       <div class="formbar"><label style="font-weight:700;margin-left:8px">🧾 اكتبي اسم المورّد للبحث السريع:</label><input id="supflt" list="supflt-list" class="flt" onchange="renderSupplierDetail()" autocomplete="off" placeholder="اكتبي اسم المورّد…" style="min-width:320px;background:#fff;color:var(--txt)"><datalist id="supflt-list"></datalist><button class="btn ghost" style="padding:7px 14px" onclick="$('supflt').value='';renderSupplierDetail()">مسح</button></div>
+      <div id="sup-pending"></div>
       <div id="sup-dups"></div>
       <div id="sup-alias"></div>
       <div id="supplier-detail"></div>
@@ -2663,6 +2666,7 @@ function hotelBookingsAll(){
   return base;
 }
 function renderHotels(){
+  try{ renderMyPendingPanel('hp-pending','عملياتي المعلّقة — الفنادق', m=>m.scope==='hotels'); }catch(_){}
   if(!DATA||!$('t-hotels')) return;
   const q=($('ho-q').value||'').trim().toLowerCase(), st=$('ho-st').value;
   const n2=v=>(v==null||v==='')?'':Number(v).toLocaleString('en-US',{maximumFractionDigits:2});
@@ -5366,6 +5370,26 @@ function renderBanksCash(){
   renderBankCashPending();
   renderBanksCashDetail();
 }
+// 🕒 عملياتي المعلّقة (عام لكل الأقسام): يعرض طلبات المستخدم الحالي المنتظرة موافقة المالكة — قابلة للسحب/إعادة الإدخال معدّلة، تختفي عند الاعتماد
+function _myPending(filterFn){
+  const me=(CURRENT_USER&&CURRENT_USER.staff_name)||'';
+  return ((DATA&&DATA.pendingMovements)||[]).filter(m=>m.status==='pending' && (!me||String((m.payload||{}).by||'')===me) && filterFn(m)).sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
+}
+function _pendKindLabel(m){ if(m.kind==='payment')return m.scope==='hotels'?'🏨 دفعة فندق':'🧾 دفعة مورّد'; if(m.kind==='client_edit')return (m.scope==='suppliers'?'✏️ تعديل تحويل':'✏️ تعديل'); if(m.kind==='refund')return '↩️ مرتجع'; if(m.kind==='cash')return '💵 كاش'; return esc(m.kind||''); }
+function renderMyPendingPanel(containerId, title, filterFn){
+  const box=$(containerId); if(!box)return;
+  const mine=_myPending(filterFn);
+  if(!mine.length){ box.innerHTML=''; return; }
+  box.innerHTML='<div class="panel" style="border:1px solid #d98a00;background:rgba(217,138,0,.07);margin:12px 0"><h3 style="color:#b8860b;margin-top:0">🕒 '+esc(title)+' ('+mine.length+') — بانتظار موافقة المالكة</h3>'+
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">هذه العمليات أرسلتِها ولم تُعتمد بعد — يمكنك <b>سحبها</b> وإعادة إدخالها معدّلة قبل الاعتماد. تختفي تلقائيّاً فور موافقة المالكة.</div>'+
+    '<div class="tbl-wrap"><table style="font-size:12px;white-space:nowrap"><thead><tr><th>النوع</th><th>التفاصيل</th><th>التاريخ</th><th>إجراء</th></tr></thead><tbody>'+
+    mine.map(m=>'<tr><td style="font-size:11px;white-space:nowrap">'+_pendKindLabel(m)+'</td><td style="font-size:11px;color:var(--muted);white-space:normal;max-width:380px">'+esc(m.summary||m.note||'')+((typeof cliEditDiff==='function'&&m.kind==='client_edit')?cliEditDiff(m):'')+'</td><td>'+esc(String(m.created_at||'').slice(0,10))+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="withdrawPending('+m.id+')">🗑️ سحب/تعديل</button></td></tr>').join('')+
+    '</tbody></table></div></div>';
+}
+async function withdrawPending(id){
+  if(!confirm('سحب هذا الطلب المعلّق؟ لن يظهر للمالكة، وتقدرين تعيدين إدخاله معدّلاً.'))return;
+  try{ const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'withdraw_pending',payload:{id:Number(id),by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } toast('🗑️ سُحب الطلب المعلّق'); await load(); }catch(e){ alert('خطأ: '+e.message); }
+}
 // 🕒 عملياتي المعلّقة: حركات كاش أرسلها المستخدم الحالي وتنتظر موافقة المالكة — قابلة للتعديل/السحب، تختفي عند الاعتماد
 function renderBankCashPending(){
   const box=$('bc-pending'); if(!box)return;
@@ -5946,6 +5970,7 @@ function spSetCancel(v){ spFltCancel=v; renderSupplierDetail(); }
 function spSetNoInv(v){ spFltNoInv=!!v; renderSupplierDetail(); }
 function spClearFilters(){ spFltAgent=''; spFltCancel=''; spFltNoInv=false; renderSupplierDetail(); }
 function renderSupplierDetail(){
+  try{ renderMyPendingPanel('sup-pending','عملياتي المعلّقة — الموردين', m=>m.scope==='suppliers'); }catch(_){}
   const box=$('supplier-detail'); if(!box) return;
   const supRaw=($('supflt').value||'').trim();
   const allP=$('all-suppliers-panel'); if(allP) allP.style.display=supRaw?'none':'';  // أخفِ جدول كل الموردين عند اختيار مورّد
@@ -7133,6 +7158,7 @@ function pnlWhyIncomplete(code){
 // ---- فورم استدعاء العميل (PAYMENT/REFUND): ملخّص + دفعات + تفصيل الحجز ----
 function renderPayForm(){
   if(!DATA) return;
+  try{ renderMyPendingPanel('ref-pending','عملياتي المعلّقة — المرتجعات/الدفعات', m=>m.kind==='refund'||m.scope==='refunds'); }catch(_){}
   const code=($('py-code').value||'').trim().toUpperCase(), box=$('pay-box');
   if(!code){ box.innerHTML='<div class="panel"><div style="color:var(--muted);text-align:center;padding:30px">اكتبي كود العميل فوق لاستدعاء ملفه الكامل</div></div>'; return; }
   const pays=(DATA.fcd||[]).filter(r=>(r.client_code||'').toUpperCase()===code);
