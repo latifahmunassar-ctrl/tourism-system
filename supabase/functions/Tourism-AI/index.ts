@@ -2850,9 +2850,16 @@ function parseGroupTab(tab: string, rows: string[][]): Record<string, unknown> |
   const MON: Record<string, number> = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,sept:9,oct:10,nov:11,dec:12 };
   const dateRe = /(\d{4})-(\d{1,2})-(\d{1,2})|(\d{1,2})\/(\d{1,2})\/(\d{2,4})/;
 
-  // (١) المسار: العمود الأول، أي صف يبدأ برقم يوم «01:» … «7:».
+  // (١) المسار: نلقى **عمود** أيام المسار تلقائياً (أي صف يبدأ برقم يوم «01:»…«7:»)
+  // — قد يكون العمود A أو أي عمود آخر لو لُصق التبويب بإزاحة أعمدة. نختار العمود
+  // الأكثر احتواءً على صفوف الأيام، ثم نجمع أيامه بالترتيب.
+  const dayRe = /^\s*\d{1,2}\s*[:：]/;
+  const colDayCount: Record<number, number> = {};
+  for (const r of rows) for (let j = 0; j < (r || []).length; j++) if (dayRe.test(String(r[j] || "").trim())) colDayCount[j] = (colDayCount[j] || 0) + 1;
+  let itinCol = -1, bestDays = 0;
+  for (const j in colDayCount) if (colDayCount[j] > bestDays) { bestDays = colDayCount[j]; itinCol = +j; }
   const itinerary: string[] = [];
-  for (const r of rows) { const c = String((r && r[0]) || "").trim(); if (/^\s*\d{1,2}\s*[:：]/.test(c)) itinerary.push(c); }
+  if (itinCol >= 0) for (const r of rows) { const c = String((r && r[itinCol]) || "").trim(); if (dayRe.test(c)) itinerary.push(c); }
 
   // (٢) «الأسعار تشمل»: نلقى عمود العنوان ثم نجمع بنوده تحته.
   let incCol = -1, incHdr = -1;
