@@ -944,6 +944,21 @@ async function login(){
 // إشعار عائم صغير (لا يمسح الصفحة) — للحفظ/التحديث بعد العمليات
 function toast(msg, ms){ let t=$('acc-toast'); if(!t){ t=document.createElement('div'); t.id='acc-toast'; t.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#0e7c50;color:#fff;padding:10px 20px;border-radius:22px;font-size:13px;font-weight:700;box-shadow:0 4px 18px rgba(0,0,0,.28);z-index:99999;transition:opacity .25s;direction:rtl'; document.body.appendChild(t); } t.textContent=msg; t.style.background=/⚠️|خطأ|تعذّر/.test(msg)?'#c0392b':'#0e7c50'; t.style.opacity='1'; t.style.display='block'; clearTimeout(window.__toastT); if(ms!==0){ window.__toastT=setTimeout(()=>{ t.style.opacity='0'; setTimeout(()=>{t.style.display='none';},300); }, ms||1600); } }
 let LOADED_ONCE=false;
+// 🔄 تحديث تلقائي دوري (كل 4 دقائق): يُخفي التنبيهات/التذاكر التي أغلقتها المالكة عند المحاسب بلا تحديث يدوي — يتخطّى إن كان المستخدم يكتب أو نافذة مفتوحة (لا يقطع أي عمل)
+let _autoRefreshTimer=null;
+function startAutoRefresh(){
+  if(_autoRefreshTimer)return;
+  _autoRefreshTimer=setInterval(function(){
+    try{
+      if(!DATA||!LOADED_ONCE)return;
+      const lg=$('login'); if(lg && lg.style.display!=='none')return;            // شاشة الدخول
+      const ae=document.activeElement; if(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))return;   // المستخدم يكتب — لا نقاطعه
+      if(document.querySelector('.modal.on'))return;                              // نافذة (تعديل/إلغاء/عميل…) مفتوحة
+      const _ov=['alloc-modal','sp-tredit','bankcur-nudge','bank-class-modal','recfix-modal','recraw-modal','gsheet-ov','why-modal']; if(_ov.some(id=>document.getElementById(id)))return;   // نوافذ ديناميكية مفتوحة
+      window._silentLoad=true; load();                                           // تحديث صامت في المكان (يبقى التبويب والتمرير)
+    }catch(_){}
+  }, 240000);
+}
 async function load(){
   const quiet=LOADED_ONCE;   // بعد التحميل الأول: تحديث صامت في المكان (يبقى التبويب والتمرير) بدل مسح الصفحة
   if(quiet && !window._silentLoad){ toast('⏳ جاري التحديث...',0); }
@@ -953,7 +968,7 @@ async function load(){
     if(r.status===401){ localStorage.removeItem('acc_key'); localStorage.removeItem('acc_token'); location.reload(); return; }
     const j=await r.json();
     try{ await loadReconList(); }catch(_){}   // تواريخ الدفع override + قائمة المطابقات
-    try{ render(j); LOADED_ONCE=true; if(quiet && !window._silentLoad) toast('✅ تم الحفظ والتحديث',1500); window._silentLoad=false; }
+    try{ render(j); LOADED_ONCE=true; if(quiet && !window._silentLoad) toast('✅ تم الحفظ والتحديث',1500); window._silentLoad=false; try{ startAutoRefresh(); }catch(_){} }
     catch(re){ if(quiet){ toast('⚠️ خطأ في العرض',2500); } else { $('loading').style.display='block'; $('content').style.display='none';
       $('loading').innerHTML='⚠️ خطأ في العرض: '+esc(String(re))+'<br><br><button class="btn" onclick="load()">إعادة المحاولة</button>'; } }
   }catch(e){
