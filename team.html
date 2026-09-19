@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-15-china-d'
+  var BUILD = '2026-09-19-grp-arabic'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2161,6 +2161,28 @@ let GRP_PROGRAMS = [];      // كل برامج الجروبات (من groups_lis
 let GRP_CURRENT = null;     // البرنامج المختار حالياً
 function grpEsc(s){ return String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
 function grpNum(n){ return (Number(n)||0).toLocaleString('en-US'); }
+// ترجمة اسم برنامج الجروب (المشتَق من اسم التبويب الإنجليزي) لأسماء بلدان عربية للعرض.
+const GRP_AR_WORDS={italy:'إيطاليا',italian:'إيطاليا',itlay:'إيطاليا',austria:'النمسا',switzerland:'سويسرا',swiss:'سويسرا',france:'فرنسا',french:'فرنسا',spain:'إسبانيا',spanish:'إسبانيا',england:'إنجلترا',britain:'بريطانيا',uk:'المملكة المتحدة',amsterdam:'أمستردام',paris:'باريس',rome:'روما',netherlands:'هولندا',netherland:'هولندا',holland:'هولندا',hungary:'المجر',slovakia:'سلوفاكيا',czech:'التشيك',belgium:'بلجيكا',portugal:'البرتغال',germany:'ألمانيا',classical:'الكلاسيكية',symphony:'السيمفونية',holidays:'العطلات',holiday:'العطلة',andalusian:'أندلسية',story:'قصة',spirit:'الروح',imperial:'الإمبراطورية',capitals:'العواصم',roaming:'جولة في',morocco:'المغرب',japan:'اليابان',kyoto:'كيوتو',china:'الصين'};
+// أسماء كاملة معتمدة (ترتيب عربي سليم) — تُفحص أولاً؛ البقية تُترجم كلمة-بكلمة.
+const GRP_AR_FULL={
+  'amsterdam and paris':'أمستردام وباريس','spain, switzerland and rome':'إسبانيا وسويسرا وروما',
+  'classical italy and switzerland':'إيطاليا الكلاسيكية وسويسرا','italian holidays':'العطلات الإيطالية',
+  'classical symphony':'السيمفونية الكلاسيكية','itlay + austria classical symphony':'السيمفونية الكلاسيكية — إيطاليا والنمسا',
+  'italy + austria + switzerland + france':'إيطاليا والنمسا وسويسرا وفرنسا','austria + hungary + slovakia + czech':'النمسا والمجر وسلوفاكيا والتشيك',
+  'a time to remember':'وقت لا يُنسى','roaming the united kingdom':'جولة في المملكة المتحدة',
+  'imperial capitals':'العواصم الإمبراطورية','an andalusian story':'قصة أندلسية',
+  'french and swiss spirit':'الروح الفرنسية والسويسرية','surprising morocco':'مفاجآت المغرب',
+  'capitals of japan and kyoto':'عواصم اليابان وكيوتو','england':'إنجلترا','spain':'إسبانيا',
+};
+function grpArabicName(name){
+  const key=String(name||'').toLowerCase().replace(/\s*\+\s*/g,' + ').replace(/\s+/g,' ').trim();
+  if(GRP_AR_FULL[key]) return GRP_AR_FULL[key];
+  let s=' '+String(name||'')+' ';
+  for(const k in GRP_AR_WORDS){ s=s.replace(new RegExp('([\\s+,&]|^)'+k+'(?=[\\s+,&]|$)','gi'),'$1'+GRP_AR_WORDS[k]); }
+  s=s.replace(/\s*&\s*/g,' و').replace(/\s+and\s+/gi,' و').replace(/\s*,\s*/g,'، ').replace(/\s*\+\s*/g,' + ');
+  return s.replace(/\s+/g,' ').trim() || String(name||'');
+}
+function grpDisp(g){ return g.programAr || grpArabicName(g.program||''); }
 function grpMsg(t, err){ const m=document.getElementById('grp-msg'); if(m){ m.style.color = err?'#c0392b':'#0e5a40'; m.textContent = t||''; } }
 function grpFileName(g,date){ return ('جروب-'+(g.program||'')+'-'+(date||'')).replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,'-'); }
 function grpDateMonth(d){ let m=String(d||'').match(/^(\d{4})-(\d{1,2})-/); if(m) return +m[2]; m=String(d||'').match(/^(\d{1,2})\/(\d{1,2})\//); if(m) return +m[2]; return 0; }
@@ -2183,6 +2205,7 @@ async function grpLoad(){
   try{
     const res=await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},body:JSON.stringify({action:'groups_list'})});
     const data=await res.json(); GRP_PROGRAMS=Array.isArray(data.groups)?data.groups:[];
+    GRP_PROGRAMS.forEach(g=>{ g.programAr=grpArabicName(g.program||''); });
   }catch(e){ GRP_PROGRAMS=[]; }
   GRP_LOADED=true;
   if(!GRP_PROGRAMS.length){
@@ -2190,7 +2213,7 @@ async function grpLoad(){
     grpMsg('لا توجد برامج جروبات. أنشئي تبويباً بالشيت اسمه فيه «(Group)» بصيغة برنامج الجروب.', true);
     return;
   }
-  dSel.innerHTML='<option value="">اختر البرنامج…</option>'+GRP_PROGRAMS.map((g,i)=>`<option value="${i}">${grpEsc(g.program||('برنامج '+(i+1)))}</option>`).join('');
+  dSel.innerHTML='<option value="">اختر البرنامج…</option>'+GRP_PROGRAMS.map((g,i)=>`<option value="${i}">${grpEsc(grpDisp(g)||('برنامج '+(i+1)))}</option>`).join('');
   grpMsg('');
 }
 function grpOnDest(){
@@ -2239,7 +2262,7 @@ function grpContentHtml(g, date, pax, ptype, c){
     : '';
   const perPerson = pax>0 ? Math.round(c.total/pax) : 0;
   return `<div style="border:1.5px solid #d0deff;border-radius:12px;padding:18px 20px;">
-    <div style="font-size:22px;font-weight:900;color:#1a3a8f;">🚌 ${grpEsc(g.program||'')}</div>
+    <div style="font-size:22px;font-weight:900;color:#1a3a8f;">🚌 ${grpEsc(grpDisp(g))}</div>
     <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-weight:800;color:#0d1f4a;font-size:15px;">
       <span>🗓️ ${grpEsc(date)}</span>
       ${g.itinerary&&g.itinerary.length?`<span>📅 ${g.itinerary.length} أيام</span>`:''}
@@ -2301,7 +2324,7 @@ function grpBuildPdfHtml(variant){
     <img class="pdf-cover-airplane" src="${FILLER_IMG}" alt=""/>
     ${showLogo?`<div class="pdf-logo-box"><img class="pdf-logo-img" src="${LOGO_IMG}" alt="مجموعة العز الدولية للسفر والسياحة"/></div>`:''}
     <div class="pdf-title">🚌 برنامج جروب سياحي</div>
-    <div class="pdf-dest-name"><span dir="ltr" style="unicode-bidi:isolate;white-space:pre-wrap;display:inline-block;">${grpEsc(g.program||'')}</span></div>
+    <div class="pdf-dest-name">${grpEsc(grpDisp(g))}</div>
     <div class="pdf-cities">👥 ${s.pax} مسافر · ${s.ptype==='company'?'شركات':'أفراد'}${c.season?(' · '+grpEsc(c.season.label)):''}</div>
     <div class="pdf-date-price-row">
       <div class="pdf-price-box"><div class="pdf-price-label">💰 السعر الإجمالي (${s.pax} مسافر)</div><div class="pdf-price-val">${grpNum(c.total)} ${cur}</div></div>
@@ -2344,7 +2367,7 @@ function grpExport(variant){
 // نص الجروب للواتساب (يُستخدم للنسخ وللإرسال المباشر عبر الجسر)
 function grpWhatsappText(){
   if(!GRP_CURRENT) return ''; const g=GRP_CURRENT; const s=grpState(); const c=s.c; const cur='ر.س'; const L=[];
-  L.push('🚌 '+(g.program||''));
+  L.push('🚌 '+grpDisp(g));
   L.push('🗓️ '+s.date+(g.itinerary&&g.itinerary.length?('  📅 '+g.itinerary.length+' أيام'):'')+'  👥 '+s.pax+' مسافر');
   L.push(''); L.push('🗺️ مسار الجولات:');
   (g.itinerary||[]).forEach(d=>L.push(d));
