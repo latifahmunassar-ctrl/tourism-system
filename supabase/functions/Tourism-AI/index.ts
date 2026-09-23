@@ -2673,7 +2673,7 @@ async function pmGoogleToken(sa: { client_email: string; private_key: string }):
   const now = Math.floor(Date.now() / 1000);
   const enc = (o: object) => btoa(JSON.stringify(o)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
   const header = enc({ alg: "RS256", typ: "JWT" });
-  const payload = enc({ iss: sa.client_email, scope: "https://www.googleapis.com/auth/spreadsheets.readonly", aud: "https://oauth2.googleapis.com/token", exp: now + 3600, iat: now });
+  const payload = enc({ iss: sa.client_email, scope: "https://www.googleapis.com/auth/spreadsheets", aud: "https://oauth2.googleapis.com/token", exp: now + 3600, iat: now });
   const signingInput = `${header}.${payload}`;
   const keyBody = sa.private_key.replace(/\\n/g, "\n").replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "").replace(/\s/g, "");
   const binaryKey = Uint8Array.from(atob(keyBody), c => c.charCodeAt(0));
@@ -2910,9 +2910,40 @@ function parseGroupTab(tab: string, rows: string[][]): Record<string, unknown> |
   for (const j in colDates) if (colDates[j].length > best) { best = colDates[j].length; dateCol = +j; }
   const dates = dateCol >= 0 ? colDates[dateCol] : [];
 
+
+  // (٥) الفنادق المتوقعة: صف عنوانه «Hotels»، تحته صف المدن ثم بدائل الفنادق.
+  //     النجوم = عدد النجمات الملحقة باسم الفندق (ERGIFE**** → 4).
+  let hotRow = -1, hotCol = -1;
+  for (let i = 0; i < rows.length && hotRow < 0; i++) {
+    const r = rows[i] || [];
+    for (let j = 0; j < r.length; j++) if (/^\s*hotels?\s*$/i.test(String(r[j] || ""))) { hotRow = i; hotCol = j; break; }
+  }
+  const hotels: Array<{ city: string; options: Array<{ name: string; stars: number }> }> = [];
+  if (hotRow >= 0) {
+    const cityRow = rows[hotRow + 1] || [];
+    const cols: Array<{ j: number; city: string }> = [];
+    for (let j = hotCol; j < cityRow.length; j++) {
+      const c = String(cityRow[j] || "").replace(/\s+/g, " ").trim();
+      if (c) cols.push({ j, city: c });
+    }
+    for (const col of cols) {
+      const options: Array<{ name: string; stars: number }> = [];
+      for (let i = hotRow + 2; i < rows.length; i++) {
+        const raw = String((rows[i] && rows[i][col.j]) || "").trim();
+        if (!raw) continue;
+        if (/^\s*hotels?\s*$/i.test(raw) || /^المصدر\s*:/.test(raw)) break;   // نهاية الكتلة
+        const m = raw.match(/^(.*?)\s*(\*+)\s*$/);
+        const name = (m ? m[1] : raw).replace(/\s+/g, " ").trim();
+        const stars = m ? m[2].length : 0;
+        if (name) options.push({ name, stars });
+      }
+      if (options.length) hotels.push({ city: col.city, options });
+    }
+  }
+
   const program = tab.replace(/\(\s*group\s*\)/i, "").trim() || tab.trim();
   if (!itinerary.length && !prices.length) return null;
-  return { program, tab, itinerary, includes, seasons, prices, profitCompany, profitIndividual, dates };
+  return { program, tab, itinerary, includes, hotels, seasons, prices, profitCompany, profitIndividual, dates };
 }
 
 async function handleGroups(): Promise<Response> {
@@ -3118,6 +3149,46 @@ Deno.serve(async (req) => {
     if (reqBody && reqBody.action === "makkah_transport") return await handleMakkahTransport();
     if (reqBody && reqBody.action === "makkah_transport_plan") return await handleMakkahTransportPlan(reqBody);
     if (reqBody && reqBody.action === "makkah_flights") return await handleMakkahFlights();
+
+    // ── groups_sa: بريد حساب الخدمة (معرّف عام، لازم لمنح صلاحية التحرير) ──
+    if (reqBody && reqBody.action === "groups_sa") {
+      const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
+      return new Response(JSON.stringify({ email: sa.client_email }), { headers: CORS_HEADERS });
+    }
+    // ── groups_write_hotels: يكتب كتلة الفنادق في تبويب جروب ──
+    // body: { tab, values: string[][], startCol }  — يُلحق أسفل المحتوى الحالي، لا يستبدل شيئاً.
+    if (reqBody && reqBody.action === "groups_write_hotels") {
+      try {
+        const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
+        const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
+        const token = await pmGoogleToken(sa);
+        const tab = String(reqBody.tab || "");
+        const values = reqBody.values as string[][];
+        if (!tab || !Array.isArray(values)) return new Response(JSON.stringify({ ok:false, error:"tab/values مطلوبة" }), { headers: CORS_HEADERS });
+        const quoted = `'${tab.replace(/'/g, "''")}'`;
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${ssid}/values/${encodeURIComponent(quoted + "!A1")}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+        const r = await fetch(url, { method:"POST", headers:{ Authorization:`Bearer ${token}`, "Content-Type":"application/json" }, body: JSON.stringify({ values }) });
+        const j = await r.json();
+        return new Response(JSON.stringify({ ok: r.ok, status: r.status, updates: j.updates, error: j.error?.message }), { headers: CORS_HEADERS });
+      } catch (e) {
+        return new Response(JSON.stringify({ ok:false, error:(e as Error).message }), { headers: CORS_HEADERS });
+      }
+    }
+
+    // ── groups_clear_range: مسح نطاق محدد (لتنظيف اختبار أو إعادة كتابة كتلة) ──
+    if (reqBody && reqBody.action === "groups_clear_range") {
+      try {
+        const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
+        const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
+        const token = await pmGoogleToken(sa);
+        const quoted = `'${String(reqBody.tab).replace(/'/g, "''")}'`;
+        const rng = `${quoted}!${reqBody.range}`;
+        const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${ssid}/values/${encodeURIComponent(rng)}:clear`,
+          { method:"POST", headers:{ Authorization:`Bearer ${token}`, "Content-Type":"application/json" }, body:"{}" });
+        const j = await r.json();
+        return new Response(JSON.stringify({ ok:r.ok, cleared:j.clearedRange, error:j.error?.message }), { headers: CORS_HEADERS });
+      } catch (e) { return new Response(JSON.stringify({ ok:false, error:(e as Error).message }), { headers: CORS_HEADERS }); }
+    }
     if (reqBody && reqBody.action === "groups_list") return await handleGroups();
     if (reqBody && reqBody.action === "currencies") return await handleCurrencies();
     const { messages, max_tokens = 1200, system: clientSystem } = reqBody;

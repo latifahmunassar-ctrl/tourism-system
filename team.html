@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-19-grp-arabic'
+  var BUILD = '2026-09-23-grp-hotels'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2260,6 +2260,18 @@ function grpContentHtml(g, date, pax, ptype, c){
   const incHtml=(g.includes&&g.includes.length)
     ? '<ul style="margin:0;padding-inline-start:18px;line-height:1.8;">'+g.includes.map(x=>`<li>${grpEsc(String(x).replace(/^●\s*/,''))}</li>`).join('')+'</ul>'
     : '';
+  // 🏨 الفنادق المتوقعة — مصدرها كتلة «Hotels» في تبويب الجروب بالشيت.
+  // النجوم مأخوذة من النجمات الملحقة باسم الفندق (ERGIFE**** → ٤ نجوم).
+  const hotHtml=(g.hotels&&g.hotels.length)
+    ? '<div style="display:flex;flex-wrap:wrap;gap:10px;">'+g.hotels.map(h=>
+        `<div style="flex:1 1 220px;min-width:200px;border:1px solid #e3ebfa;border-radius:10px;padding:10px 12px;background:#fbfcff;">
+           <div style="font-weight:900;color:#1a3a8f;font-size:13.5px;margin-bottom:5px;">📍 ${grpEsc(h.city)}</div>
+           ${(h.options||[]).map(o=>
+             `<div style="font-size:12.5px;line-height:1.75;color:#0d1f4a;">
+                ${o.stars?`<span style="color:#d4a843;letter-spacing:1px;">${'★'.repeat(o.stars)}</span> `:''}${grpEsc(o.name)}${o.stars?` <span style="color:#64748b;font-size:11px;">(${o.stars} نجوم)</span>`:''}
+              </div>`).join('')}
+         </div>`).join('')+'</div>'
+    : '';
   const perPerson = pax>0 ? Math.round(c.total/pax) : 0;
   return `<div style="border:1.5px solid #d0deff;border-radius:12px;padding:18px 20px;">
     <div style="font-size:22px;font-weight:900;color:#1a3a8f;">🚌 ${grpEsc(grpDisp(g))}</div>
@@ -2271,6 +2283,7 @@ function grpContentHtml(g, date, pax, ptype, c){
       ${c.season?`<span>🍂 ${grpEsc(c.season.label)}</span>`:''}
     </div>
     <div style="margin-top:14px;"><div style="font-weight:900;color:#1a3a8f;font-size:16px;margin-bottom:6px;">🗺️ مسار الجولات (ثابت)</div>${itinHtml}</div>
+    ${hotHtml?`<div style="margin-top:14px;"><div style="font-weight:900;color:#1a3a8f;font-size:16px;margin-bottom:6px;">🏨 الفنادق المتوقعة</div>${hotHtml}<div style="margin-top:6px;font-size:11.5px;color:#64748b;">الفندق النهائي يُحدَّد عند التأكيد من ضمن الخيارات أعلاه أو ما يماثلها في التصنيف.</div></div>`:''}
     ${incHtml?`<div style="margin-top:14px;"><div style="font-weight:900;color:#1a3a8f;font-size:16px;margin-bottom:6px;">✅ الأسعار تشمل</div>${incHtml}</div>`:''}
     <div style="margin-top:16px;border-top:2px solid #eef;padding-top:12px;font-weight:800;color:#0d1f4a;line-height:2;">
       <div>التكلفة (${pax} مسافر · ${c.season?grpEsc(c.season.label):'—'}): <b>${grpNum(c.cost)} ${cur}</b></div>
@@ -2319,6 +2332,18 @@ function grpBuildPdfHtml(variant){
     ? `<div class="pdf-keep" style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;">
         <ul style="margin:0;padding-inline-start:20px;line-height:2;font-size:16px;color:#0d1f4a;">${g.includes.map(x=>`<li>${grpEsc(String(x).replace(/^●\s*/,''))}</li>`).join('')}</ul>
       </div>` : '';
+  // 🏨 الفنادق المتوقعة — بطاقة لكل مدينة، والنجوم بجانب كل فندق
+  const hotPdf=(g.hotels&&g.hotels.length)
+    ? g.hotels.map(h=>
+        `<div class="pdf-keep" style="border:1.5px solid #d0deff;border-radius:10px;padding:14px 18px;margin-bottom:12px;">
+           <div style="font-weight:900;font-size:19px;color:#1a3a8f;margin-bottom:8px;">📍 ${grpEsc(h.city)}</div>
+           ${(h.options||[]).map(o=>
+             `<div style="font-size:16px;color:#0d1f4a;line-height:2;">
+                ${o.stars?`<span style="color:#d4a843;letter-spacing:2px;">${'★'.repeat(o.stars)}</span> `:''}${grpEsc(o.name)}${o.stars?` <span style="color:#64748b;font-size:14px;">(${o.stars} نجوم)</span>`:''}
+              </div>`).join('')}
+         </div>`).join('')
+      + `<div style="font-size:14px;color:#64748b;line-height:1.8;margin-top:4px;">الفندق النهائي يُحدَّد عند التأكيد من ضمن الخيارات أعلاه أو ما يماثلها في التصنيف.</div>`
+    : '';
   return `
   <div class="pdf-cover">
     <img class="pdf-cover-airplane" src="${FILLER_IMG}" alt=""/>
@@ -2339,6 +2364,7 @@ function grpBuildPdfHtml(variant){
   <div class="pdf-section" style="page-break-before:always;">
     <div class="pdf-section-title">🗺️ مسار الجولات (ثابت)</div>
     ${dayCards}
+    ${hotPdf?`<div class="pdf-section-title" style="margin-top:24px;">🏨 الفنادق المتوقعة</div>${hotPdf}`:''}
     ${incHtml?`<div class="pdf-section-title" style="margin-top:24px;">✅ الأسعار تشمل</div>${incHtml}`:''}
   </div>
   <div style="page-break-before:always;padding:0;margin:0;width:210mm;">
@@ -2371,6 +2397,12 @@ function grpWhatsappText(){
   L.push('🗓️ '+s.date+(g.itinerary&&g.itinerary.length?('  📅 '+g.itinerary.length+' أيام'):'')+'  👥 '+s.pax+' مسافر');
   L.push(''); L.push('🗺️ مسار الجولات:');
   (g.itinerary||[]).forEach(d=>L.push(d));
+  if(g.hotels&&g.hotels.length){
+    L.push(''); L.push('🏨 الفنادق المتوقعة:');
+    g.hotels.forEach(h=>{ L.push('📍 '+h.city);
+      (h.options||[]).forEach(o=>L.push('  • '+o.name+(o.stars?(' — '+o.stars+' نجوم'):''))); });
+    L.push('(الفندق النهائي يُحدَّد عند التأكيد من ضمن هذه الخيارات أو ما يماثلها بالتصنيف)');
+  }
   if(g.includes&&g.includes.length){ L.push(''); L.push('✅ الأسعار تشمل:'); g.includes.forEach(x=>L.push('- '+String(x).replace(/^●\s*/,''))); }
   L.push(''); L.push('💰 الإجمالي: '+grpNum(c.total)+' '+cur+(s.pax>1?(' (≈ '+grpNum(Math.round(c.total/s.pax))+' للفرد)'):''));
   return L.join('\n');
