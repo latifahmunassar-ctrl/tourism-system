@@ -3603,6 +3603,10 @@ function cliEditDiff(m){
     chg('📅 تاريخ الدفع'+(pc?(' ('+esc(pc)+')'):''), oldD, D(c.payment_date));
   } else if(c._profit_only){
     chg('📈 الربح', c._old_profit, c.new_profit, true);
+  } else if(c._sup_invoice_only){
+    // 🧾 تعديل «فاتورة المورّد» المسجّلة — القيمة السابقة (وقت الطلب) ← المطلوبة
+    if(c.supplier_name||c.client_code) rows.push('<div style="color:var(--muted)">🧾 نوع التعديل: <b>فاتورة المورّد</b>'+(c.supplier_name?(' — '+esc(cut(c.supplier_name))):'')+(c.client_code?(' · '+esc(c.client_code)):'')+'</div>');
+    chg('🧾 قيمة فاتورة المورّد', c.old_value, c.actual_invoice, true);
   } else {
     const r=((DATA&&DATA.fcd)||[]).find(x=>String(x.id)===String(c.entry_id))||{};
     chg('💰 التكلفة', r.cost, c.cost, true);
