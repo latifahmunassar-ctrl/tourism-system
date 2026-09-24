@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-24-grp-cancel'
+  var BUILD = '2026-09-24-grp-dates'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2252,6 +2252,19 @@ function grpShow(){
   const eo=document.getElementById('emptyOutput'); if(eo) eo.style.display='none';   // أخفِ الـplaceholder
   const panel=document.getElementById('reviewPanel'); if(panel) panel.innerHTML=grpRenderProgram(GRP_CURRENT, date, pax, ptype, c);
 }
+
+// 🗓️ تنسيق التواريخ المتاحة: تجميع بالشهر العربي مع تمييز التاريخ المختار.
+const GRP_MON_AR=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+function grpDateGroups(dates){
+  const by={};
+  (dates||[]).forEach(d=>{
+    const m=String(d).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    let key='أخرى', day=String(d);
+    if(m){ key=GRP_MON_AR[+m[2]-1]+' '+m[1]; day=String(+m[3]); }
+    (by[key]=by[key]||[]).push({raw:String(d), day});
+  });
+  return Object.keys(by).map(k=>({month:k, days:by[k]}));
+}
 function grpContentHtml(g, date, pax, ptype, c){
   const cur='ر.س';
   const itinHtml=(g.itinerary&&g.itinerary.length)
@@ -2272,6 +2285,15 @@ function grpContentHtml(g, date, pax, ptype, c){
               </div>`).join('')}
          </div>`).join('')+'</div>'
     : '';
+  // 🗓️ التواريخ المتاحة لهذه الرحلة — من عمود التواريخ بتبويب الجروب
+  const dtHtml=(g.dates&&g.dates.length)
+    ? grpDateGroups(g.dates).map(gr=>
+        `<div style="margin-bottom:6px;">
+           <div style="font-size:12px;font-weight:900;color:#1a3a8f;margin-bottom:3px;">${grpEsc(gr.month)}</div>
+           <div style="display:flex;flex-wrap:wrap;gap:5px;">${gr.days.map(d=>
+             `<span style="display:inline-block;border:1px solid ${d.raw===date?'#1a3a8f':'#d0deff'};background:${d.raw===date?'#1a3a8f':'#fbfcff'};color:${d.raw===date?'#fff':'#0d1f4a'};border-radius:7px;padding:2px 9px;font-size:12.5px;font-weight:700;">${grpEsc(d.day)}</span>`).join('')}</div>
+         </div>`).join('')
+    : '';
   // 📄 سياسة الإلغاء — مصدرها عمود «سياسات الحجز والإلغاء» في تبويب الجروب بالشيت
   const cancHtml=(g.cancellation&&g.cancellation.length)
     ? '<ul style="margin:0;padding-inline-start:18px;line-height:1.85;font-size:12.5px;color:#0d1f4a;">'
@@ -2289,6 +2311,7 @@ function grpContentHtml(g, date, pax, ptype, c){
     </div>
     <div style="margin-top:14px;"><div style="font-weight:900;color:#1a3a8f;font-size:16px;margin-bottom:6px;">🗺️ مسار الجولات (ثابت)</div>${itinHtml}</div>
     ${hotHtml?`<div style="margin-top:14px;"><div style="font-weight:900;color:#1a3a8f;font-size:16px;margin-bottom:6px;">🏨 الفنادق المتوقعة</div>${hotHtml}<div style="margin-top:6px;font-size:11.5px;color:#64748b;">الفندق النهائي يُحدَّد عند التأكيد من ضمن الخيارات أعلاه أو ما يماثلها في التصنيف.</div></div>`:''}
+    ${dtHtml?`<div style="margin-top:14px;"><div style="font-weight:900;color:#1a3a8f;font-size:16px;margin-bottom:6px;">🗓️ التواريخ المتاحة لهذه الرحلة</div><div style="border:1px solid #d0deff;border-radius:10px;padding:11px 13px;background:#fbfcff;">${dtHtml}<div style="margin-top:5px;font-size:11.5px;color:#64748b;">التاريخ المظلّل هو المختار لهذا العرض · إجمالي ${g.dates.length} تاريخ مغادرة</div></div></div>`:''}
     ${cancHtml?`<div style="margin-top:14px;"><div style="font-weight:900;color:#b45309;font-size:16px;margin-bottom:6px;">📄 سياسة الحجز والإلغاء</div><div style="border:1px solid #fcd9c2;background:#fff8f2;border-radius:10px;padding:11px 13px;">${cancHtml}</div></div>`:''}
     ${incHtml?`<div style="margin-top:14px;"><div style="font-weight:900;color:#1a3a8f;font-size:16px;margin-bottom:6px;">✅ الأسعار تشمل</div>${incHtml}</div>`:''}
     <div style="margin-top:16px;border-top:2px solid #eef;padding-top:12px;font-weight:800;color:#0d1f4a;line-height:2;">
@@ -2322,7 +2345,7 @@ function grpState(){
 function grpBuildPdfHtml(variant){
   // variant: 'individual' = بشعار العز (افتراضي) · 'company' = بدون شعار وتفاصيل العز
   const showLogo = variant !== 'company';
-  const s=grpState(); const g=GRP_CURRENT; const c=s.c; const cur='ر.س';
+  const s=grpState(); const s0=s; const g=GRP_CURRENT; const c=s.c; const cur='ر.س';
   const days=(g.itinerary||[]);
   // كل يوم بطاقة مؤطّرة بنفس ستايل بطاقات الفنادق في قالب الوجهات
   const dayCards=days.map(d=>{
@@ -2350,6 +2373,17 @@ function grpBuildPdfHtml(variant){
          </div>`).join('')
       + `<div style="font-size:14px;color:#64748b;line-height:1.8;margin-top:4px;">الفندق النهائي يُحدَّد عند التأكيد من ضمن الخيارات أعلاه أو ما يماثلها في التصنيف.</div>`
     : '';
+  // 🗓️ التواريخ المتاحة بالـPDF
+  const datesPdf=(g.dates&&g.dates.length)
+    ? `<div class="pdf-keep" style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;">
+        ${grpDateGroups(g.dates).map(gr=>
+          `<div style="margin-bottom:9px;">
+             <div style="font-size:16px;font-weight:900;color:#1a3a8f;margin-bottom:5px;">${grpEsc(gr.month)}</div>
+             <div style="display:flex;flex-wrap:wrap;gap:6px;">${gr.days.map(d=>
+               `<span style="display:inline-block;border:1.5px solid ${d.raw===s0.date?'#1a3a8f':'#d0deff'};background:${d.raw===s0.date?'#1a3a8f':'#fff'};color:${d.raw===s0.date?'#fff':'#0d1f4a'};border-radius:8px;padding:3px 12px;font-size:15px;font-weight:800;">${grpEsc(d.day)}</span>`).join('')}</div>
+           </div>`).join('')}
+        <div style="font-size:14px;color:#64748b;line-height:1.8;">التاريخ المظلّل هو المختار لهذا العرض · إجمالي ${g.dates.length} تاريخ مغادرة متاح.</div>
+      </div>` : '';
   // 📄 سياسة الحجز والإلغاء بالـPDF
   const cancPdf=(g.cancellation&&g.cancellation.length)
     ? `<div class="pdf-keep" style="border:1.5px solid #fcd9c2;background:#fff8f2;border-radius:10px;padding:16px 18px;">
@@ -2376,6 +2410,7 @@ function grpBuildPdfHtml(variant){
     <div class="pdf-section-title">🗺️ مسار الجولات (ثابت)</div>
     ${dayCards}
     ${hotPdf?`<div class="pdf-section-title" style="margin-top:24px;">🏨 الفنادق المتوقعة</div>${hotPdf}`:''}
+    ${datesPdf?`<div class="pdf-section-title" style="margin-top:24px;">🗓️ التواريخ المتاحة لهذه الرحلة</div>${datesPdf}`:''}
     ${cancPdf?`<div class="pdf-section-title" style="margin-top:24px;">📄 سياسة الحجز والإلغاء</div>${cancPdf}`:''}
     ${incHtml?`<div class="pdf-section-title" style="margin-top:24px;">✅ الأسعار تشمل</div>${incHtml}`:''}
   </div>
@@ -2414,6 +2449,10 @@ function grpWhatsappText(){
     g.hotels.forEach(h=>{ L.push('📍 '+h.city);
       (h.options||[]).forEach(o=>L.push('  • '+o.name+(o.stars?(' — '+o.stars+' نجوم'):''))); });
     L.push('(الفندق النهائي يُحدَّد عند التأكيد من ضمن هذه الخيارات أو ما يماثلها بالتصنيف)');
+  }
+  if(g.dates&&g.dates.length){
+    L.push(''); L.push('🗓️ التواريخ المتاحة لهذه الرحلة ('+g.dates.length+' تاريخ):');
+    grpDateGroups(g.dates).forEach(gr=>L.push('• '+gr.month+': '+gr.days.map(d=>d.day).join(' · ')));
   }
   if(g.cancellation&&g.cancellation.length){
     L.push(''); L.push('📄 سياسة الحجز والإلغاء:');
