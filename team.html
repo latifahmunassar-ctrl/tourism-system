@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-24-grp-code'
+  var BUILD = '2026-09-24-grp-code2'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -474,6 +474,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <input id="programCodeInput" class="profit-input" style="width:220px;min-width:0" placeholder="كود النظام (MY-2026-001) أو عميل (ALZ-2026-001)" autocomplete="off" onkeydown="handleRetrieveKey(event)">
 <button type="button" class="ebtn ebtn-nologo" onclick="searchByCode()">🔎 استرجاع</button>
 <button type="button" class="ebtn ebtn-pdf" onclick="readyFile_open()" title="حوّل برنامج سياحي جاهز (من مورد/شركة أخرى) إلى ملف عرض احترافي بهوية مجموعة العز">📄 ملف جاهز (أفراد)</button>
+<button type="button" class="ebtn ebtn-pdf" id="grpFinalizeTopBtn" style="display:none;background:linear-gradient(135deg,#0b3d91,#0e9d6a);border:none;color:#fff;font-weight:800" onclick="grpFinalizeCode()" title="جمّد نسخة برنامج الجروب الحالية وولّد كود استرجاع دائم — بدون إرسال">✅ اعتمد برنامج الجروب — ولّد الكود</button>
 <span id="savedCodePill" style="display:none;background:#0b3d91;color:#fff;padding:8px 12px;border-radius:999px;font-weight:900;font-size:12px;">CODE: —</span>
 </div>
 </div>
@@ -2150,6 +2151,7 @@ function vswApplyAllTours(v){
 
 // ── Build-form (يسار) → يركّب نفس نص الموظف ويغذّي sendMessage بلا أي مساس بمحرّك التسعير ──
 function fpTab(t){
+  if(t!=='groups'){ const _b=document.getElementById('grpFinalizeTopBtn'); if(_b) _b.style.display='none'; }
   document.querySelectorAll('.fp-tab').forEach(x=>x.classList.toggle('active', x.dataset.tab===t));
   document.getElementById('tab-build').style.display = t==='build' ? 'flex' : 'none';
   document.getElementById('tab-mods').style.display  = t==='mods'  ? 'flex' : 'none';
@@ -2220,6 +2222,7 @@ async function grpLoad(){
 }
 function grpOnDest(){
   GRP_SAVED_CODE=''; const _p=document.getElementById('grpCodePill'); if(_p) _p.style.display='none';
+  const _t=document.getElementById('savedCodePill'); if(_t) _t.style.display='none';
   const v=document.getElementById('grp-dest').value;
   const dSel=document.getElementById('grp-date');
   GRP_CURRENT=(v==='')?null:(GRP_PROGRAMS[+v]||null);
@@ -2232,6 +2235,7 @@ function grpOnDest(){
 }
 function grpOnDate(){
   GRP_SAVED_CODE=''; const _p=document.getElementById('grpCodePill'); if(_p) _p.style.display='none';
+  const _t=document.getElementById('savedCodePill'); if(_t) _t.style.display='none';
   const h=document.getElementById('grp-priceHint'); if(!h) return;
   if(!GRP_CURRENT){ h.textContent=''; return; }
   const date=document.getElementById('grp-date').value;
@@ -2259,6 +2263,7 @@ function grpShow(){
   grpMsg('');
   const eo=document.getElementById('emptyOutput'); if(eo) eo.style.display='none';   // أخفِ الـplaceholder
   const panel=document.getElementById('reviewPanel'); if(panel) panel.innerHTML=grpRenderProgram(GRP_CURRENT, date, pax, ptype, c);
+  grpTopBtnSync();
 }
 
 // 🗓️ تنسيق التواريخ المتاحة: تجميع بالشهر العربي مع تمييز التاريخ المختار.
@@ -2349,6 +2354,19 @@ function grpRenderProgram(g, date, pax, ptype, c){
   </div>`;
 }
 
+
+// يُظهر زر الاعتماد وشريحة الكود في الشريط العلوي (نفس مكانهما بالبرامج
+// العادية) عند عرض برنامج جروب، ويُخفيهما عند مغادرة التبويب.
+function grpTopBtnSync(){
+  const b=document.getElementById('grpFinalizeTopBtn');
+  const pill=document.getElementById('savedCodePill');
+  const on=!!GRP_CURRENT;
+  if(b) b.style.display = on ? 'inline-flex' : 'none';
+  if(pill){
+    if(GRP_SAVED_CODE){ pill.textContent='CODE: '+GRP_SAVED_CODE; pill.style.display='inline-flex'; }
+    else if(on){ pill.style.display='none'; }
+  }
+}
 // ═══ اعتماد برنامج الجروب: لقطة مجمّدة + كود استرجاع دائم ═══
 // يُحفظ بنفس جدول البرامج (programs) لتعمل خانة «استرجاع» نفسها، ويُوسَم
 // بـGRPPROG:1 ليعرف الاسترجاع أنه برنامج جروب فيرسمه بقالب الجروب لا بمولّد
@@ -2402,6 +2420,8 @@ async function grpFinalizeCode(){
       GRP_SAVED_CODE=data.code;
       const pill=document.getElementById('grpCodePill');
       if(pill){ pill.textContent='CODE: '+data.code; pill.style.display='inline-flex'; }
+      const top=document.getElementById('savedCodePill');
+      if(top){ top.textContent='CODE: '+data.code; top.style.display='inline-flex'; }
       const inp=document.getElementById('programCodeInput'); if(inp) inp.value=data.code;
       grpMsg('✅ تم اعتماد النسخة النهائية. كود الاسترجاع: '+data.code+' — أي تغيير بالتاريخ أو العدد يتطلب اعتماداً جديداً.');
     } else {
