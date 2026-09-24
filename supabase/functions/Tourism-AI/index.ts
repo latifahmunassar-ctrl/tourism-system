@@ -2922,9 +2922,18 @@ function parseGroupTab(tab: string, rows: string[][]): Record<string, unknown> |
   if (hotRow >= 0) {
     const cityRow = rows[hotRow + 1] || [];
     const cols: Array<{ j: number; city: string }> = [];
-    for (let j = hotCol; j < cityRow.length; j++) {
+    // إشارة قاطعة: العمود يُعدّ «مدينة فنادق» فقط إذا كان تحته اسم فندق منتهٍ
+    // بنجمات (****). بدون هذا القيد تُسحب أعمدة بعيدة — كعمود سياسة الإلغاء —
+    // كأنها مدن، فتتضخّم قائمة الفنادق بنص ليس فندقاً.
+    const STARRED = /\*{2,}\s*$/;
+    for (let j = hotCol; j < Math.max(cityRow.length, hotCol + 30); j++) {
       const c = String(cityRow[j] || "").replace(/\s+/g, " ").trim();
-      if (c) cols.push({ j, city: c });
+      if (!c) continue;
+      let starred = false;
+      for (let i = hotRow + 2; i < Math.min(rows.length, hotRow + 14); i++) {
+        if (STARRED.test(String((rows[i] && rows[i][j]) || ""))) { starred = true; break; }
+      }
+      if (starred) cols.push({ j, city: c });
     }
     for (const col of cols) {
       const options: Array<{ name: string; stars: number }> = [];
@@ -2941,9 +2950,28 @@ function parseGroupTab(tab: string, rows: string[][]): Record<string, unknown> |
     }
   }
 
+
+  // (٦) سياسة الإلغاء: العمود الذي يحمل عنواناً فيه «سياسات الحجز والإلغاء» أو
+  //     «Cancellation Policy»؛ نجمع كل سطوره غير الفارغة أسفل العنوان.
+  let cnCol = -1, cnRow = -1;
+  for (let i = 0; i < rows.length && cnCol < 0; i++) {
+    const r = rows[i] || [];
+    for (let j = 0; j < r.length; j++) {
+      const v = String(r[j] || "");
+      if (/سياس[اة]ت?\s*الحجز|cancellation\s*polic/i.test(v)) { cnCol = j; cnRow = i; break; }
+    }
+  }
+  const cancellation: string[] = [];
+  if (cnCol >= 0) {
+    for (let i = cnRow + 1; i < rows.length; i++) {
+      const c = String((rows[i] && rows[i][cnCol]) || "").replace(/\s+/g, " ").trim();
+      if (c) cancellation.push(c);
+    }
+  }
+
   const program = tab.replace(/\(\s*group\s*\)/i, "").trim() || tab.trim();
   if (!itinerary.length && !prices.length) return null;
-  return { program, tab, itinerary, includes, hotels, seasons, prices, profitCompany, profitIndividual, dates };
+  return { program, tab, itinerary, includes, hotels, cancellation, seasons, prices, profitCompany, profitIndividual, dates };
 }
 
 async function handleGroups(): Promise<Response> {
@@ -2964,7 +2992,7 @@ async function handleGroups(): Promise<Response> {
     for (const tab of groupTabs) {
       try {
         const quoted = `'${tab.replace(/'/g, "''")}'`;
-        const rows = await pmReadSheet(token, ssid, `${quoted}!A1:Z200`);
+        const rows = await pmReadSheet(token, ssid, `${quoted}!A1:BZ200`);
         const g = parseGroupTab(tab, rows);
         if (g) groups.push(g);
       } catch (_) { /* تبويب واحد فاشل لا يكسر البقية */ }
@@ -3150,6 +3178,33 @@ Deno.serve(async (req) => {
     if (reqBody && reqBody.action === "makkah_transport_plan") return await handleMakkahTransportPlan(reqBody);
     if (reqBody && reqBody.action === "makkah_flights") return await handleMakkahFlights();
 
+
+    // ── groups_raw: صفوف تبويب جروب خامّاً (تشخيص وتحديد الخلايا) ──
+    if (reqBody && reqBody.action === "groups_raw") {
+      try {
+        const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
+        const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
+        const token = await pmGoogleToken(sa);
+        const quoted = `'${String(reqBody.tab).replace(/'/g, "''")}'`;
+        const rows = await pmReadSheet(token, ssid, `${quoted}!${reqBody.range || "A1:Z40"}`);
+        return new Response(JSON.stringify({ ok: true, rows }), { headers: CORS_HEADERS });
+      } catch (e) { return new Response(JSON.stringify({ ok:false, error:(e as Error).message }), { headers: CORS_HEADERS }); }
+    }
+    // ── groups_set_values: كتابة نطاق محدد (تحديث لا إلحاق) ──
+    if (reqBody && reqBody.action === "groups_set_values") {
+      try {
+        const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
+        const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
+        const token = await pmGoogleToken(sa);
+        const quoted = `'${String(reqBody.tab).replace(/'/g, "''")}'`;
+        const rng = `${quoted}!${reqBody.range}`;
+        const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${ssid}/values/${encodeURIComponent(rng)}?valueInputOption=RAW`,
+          { method:"PUT", headers:{ Authorization:`Bearer ${token}`, "Content-Type":"application/json" },
+            body: JSON.stringify({ values: reqBody.values }) });
+        const j = await r.json();
+        return new Response(JSON.stringify({ ok:r.ok, updatedRange:j.updatedRange, updatedCells:j.updatedCells, error:j.error?.message }), { headers: CORS_HEADERS });
+      } catch (e) { return new Response(JSON.stringify({ ok:false, error:(e as Error).message }), { headers: CORS_HEADERS }); }
+    }
     // ── groups_sa: بريد حساب الخدمة (معرّف عام، لازم لمنح صلاحية التحرير) ──
     if (reqBody && reqBody.action === "groups_sa") {
       const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
