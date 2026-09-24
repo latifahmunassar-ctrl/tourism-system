@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-24-grp-code2'
+  var BUILD = '2026-09-24-grp-currency'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -474,6 +474,8 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <input id="programCodeInput" class="profit-input" style="width:220px;min-width:0" placeholder="كود النظام (MY-2026-001) أو عميل (ALZ-2026-001)" autocomplete="off" onkeydown="handleRetrieveKey(event)">
 <button type="button" class="ebtn ebtn-nologo" onclick="searchByCode()">🔎 استرجاع</button>
 <button type="button" class="ebtn ebtn-pdf" onclick="readyFile_open()" title="حوّل برنامج سياحي جاهز (من مورد/شركة أخرى) إلى ملف عرض احترافي بهوية مجموعة العز">📄 ملف جاهز (أفراد)</button>
+<button class="ebtn ebtn-nologo" id="grpCurrencyBtn" style="display:none" onclick="grpToggleCurrency()" title="حوّل سعر برنامج الجروب لعملة أخرى — واعتمد كوداً جديداً بها">💱 تحويل عملة</button>
+<select id="grpCurrencyPicker" onchange="grpOnCurrencyPick()" style="display:none; padding:7px 10px; border-radius:8px; border:1px solid var(--border); background:var(--s2); color:var(--text); font-family:'Tajawal',sans-serif; font-size:12px; font-weight:700; cursor:pointer;"><option value="">💱 بدون تحويل (ريال)</option></select>
 <button type="button" class="ebtn ebtn-pdf" id="grpFinalizeTopBtn" style="display:none;background:linear-gradient(135deg,#0b3d91,#0e9d6a);border:none;color:#fff;font-weight:800" onclick="grpFinalizeCode()" title="جمّد نسخة برنامج الجروب الحالية وولّد كود استرجاع دائم — بدون إرسال">✅ اعتمد برنامج الجروب — ولّد الكود</button>
 <span id="savedCodePill" style="display:none;background:#0b3d91;color:#fff;padding:8px 12px;border-radius:999px;font-weight:900;font-size:12px;">CODE: —</span>
 </div>
@@ -1063,7 +1065,8 @@ let MK_FLIGHT_DATA = null;        // كاش أسعار الطيران (يُجل�
 let MK_FLIGHT_SIG = '';           // بصمة آخر تطبيق طيران (mode+تواريخ+أشخاص)
 let lastSavedCode = '';
 let GRP_SAVED_CODE = '';
-let GRP_SIG = '';   // كود اعتماد برنامج الجروب — يُصفَّر عند أي تغيير باختيار البرنامج/التاريخ/العدد/النوع
+let GRP_SIG = '';
+let GRP_CURRENCY = null;   // { name, rate } — عملة برنامج الجروب المختارة   // كود اعتماد برنامج الجروب — يُصفَّر عند أي تغيير باختيار البرنامج/التاريخ/العدد/النوع
 
 const SYSTEM = `انت مساعد متخصص في بناء البرامج السياحية. مهم جداً: أي أرقام إجماليات يجب أن تكون محسوبة بدقة من تفاصيل الشيت نفسها، ولا تكتب أي إجمالي إلا بعد التحقق:
 - إجمالي الفنادق = مجموع (سعر/ليلة × عدد الليالي) لكل فندق.
@@ -2151,7 +2154,7 @@ function vswApplyAllTours(v){
 
 // ── Build-form (يسار) → يركّب نفس نص الموظف ويغذّي sendMessage بلا أي مساس بمحرّك التسعير ──
 function fpTab(t){
-  if(t!=='groups'){ const _b=document.getElementById('grpFinalizeTopBtn'); if(_b) _b.style.display='none'; }
+  if(t!=='groups'){ ['grpFinalizeTopBtn','grpCurrencyBtn','grpCurrencyPicker'].forEach(id=>{ const _e=document.getElementById(id); if(_e) _e.style.display='none'; }); }
   document.querySelectorAll('.fp-tab').forEach(x=>x.classList.toggle('active', x.dataset.tab===t));
   document.getElementById('tab-build').style.display = t==='build' ? 'flex' : 'none';
   document.getElementById('tab-mods').style.display  = t==='mods'  ? 'flex' : 'none';
@@ -2279,7 +2282,7 @@ function grpDateGroups(dates){
   return Object.keys(by).map(k=>({month:k, days:by[k]}));
 }
 function grpContentHtml(g, date, pax, ptype, c){
-  const cur='ر.س';
+  const cur=grpCurName();
   const itinHtml=(g.itinerary&&g.itinerary.length)
     ? '<ol style="margin:0;padding-inline-start:20px;line-height:1.9;">'+g.itinerary.map(d=>`<li style="margin-bottom:5px;">${grpEsc(d)}</li>`).join('')+'</ol>'
     : '<div style="color:#94a3b8;">—</div>';
@@ -2328,9 +2331,10 @@ function grpContentHtml(g, date, pax, ptype, c){
     ${incHtml?`<div style="margin-top:14px;"><div style="font-weight:900;color:#0e9d6a;font-size:16px;margin-bottom:6px;">✅ ماذا يشمل البرنامج</div><div style="border:1px solid #bfe0d5;background:#f4fbf8;border-radius:10px;padding:11px 13px;">${incHtml}</div></div>`:''}
     ${cancHtml?`<div style="margin-top:14px;"><div style="font-weight:900;color:#b45309;font-size:16px;margin-bottom:6px;">📄 سياسة الحجز والإلغاء</div><div style="border:1px solid #fcd9c2;background:#fff8f2;border-radius:10px;padding:11px 13px;">${cancHtml}</div></div>`:''}
     <div style="margin-top:16px;border-top:2px solid #eef;padding-top:12px;font-weight:800;color:#0d1f4a;line-height:2;">
-      <div>التكلفة (${pax} مسافر · ${c.season?grpEsc(c.season.label):'—'}): <b>${grpNum(c.cost)} ${cur}</b></div>
-      <div>+ ربح (${ptype==='company'?'شركات':'أفراد'}): <b>${grpNum(c.profit)} ${cur}</b></div>
-      <div style="font-size:18px;color:#1a3a8f;margin-top:6px;">الإجمالي: <b>${grpNum(c.total)} ${cur}</b>${pax>1?` <span style="font-size:13px;color:#64748b;">(≈ ${grpNum(perPerson)} للفرد)</span>`:''}</div>
+      <div>التكلفة (${pax} مسافر · ${c.season?grpEsc(c.season.label):'—'}): <b>${grpMoney(c.cost)}</b></div>
+      <div>+ ربح (${ptype==='company'?'شركات':'أفراد'}): <b>${grpMoney(c.profit)}</b></div>
+      <div style="font-size:18px;color:#1a3a8f;margin-top:6px;">الإجمالي: <b>${grpMoney(c.total)}</b>${pax>1?` <span style="font-size:13px;color:#64748b;">(≈ ${grpMoney(perPerson)} للفرد)</span>`:''}</div>
+      ${GRP_CURRENCY?`<div style="margin-top:6px;font-size:12px;color:#64748b;">سعر الصرف المثبَّت: 1 ${grpEsc(GRP_CURRENCY.name)} = ${GRP_CURRENCY.rate} ريال · الأصل ${grpNum(c.total)} ر.س</div>`:''}
     </div>
   </div>`;
 }
@@ -2362,10 +2366,47 @@ function grpTopBtnSync(){
   const pill=document.getElementById('savedCodePill');
   const on=!!GRP_CURRENT;
   if(b) b.style.display = on ? 'inline-flex' : 'none';
+  const cb=document.getElementById('grpCurrencyBtn'); if(cb) cb.style.display = on ? 'inline-flex' : 'none';
+  if(!on){ const cp=document.getElementById('grpCurrencyPicker'); if(cp) cp.style.display='none'; }
   if(pill){
     if(GRP_SAVED_CODE){ pill.textContent='CODE: '+GRP_SAVED_CODE; pill.style.display='inline-flex'; }
     else if(on){ pill.style.display='none'; }
   }
+}
+
+// ═══ تحويل عملة برنامج الجروب (نفس منطق بناء التسعيرة) ═══
+// العملة جزء من النسخة: تغييرها يصفّر الكود فيلزم اعتماد جديد، وتُثبَّت في
+// النص الخام (CURRENCY:اسم|سعر) لتُستعاد كما هي عند الاستدعاء بالكود.
+function grpCur(v){ return GRP_CURRENCY ? (v / GRP_CURRENCY.rate) : v; }
+function grpCurName(){ return GRP_CURRENCY ? GRP_CURRENCY.name : 'ر.س'; }
+function grpMoney(v){
+  const n = grpCur(v);
+  return n.toLocaleString(undefined,{maximumFractionDigits: GRP_CURRENCY ? 2 : 0}) + ' ' + grpCurName();
+}
+async function grpToggleCurrency(){
+  if(!GRP_CURRENT){ grpMsg('اعرضي برنامج الجروب أولاً.', true); return; }
+  await loadCurrencies();
+  if(!availableCurrencies.length){ grpMsg('ما فيه عملات مُزامَنة — تأكدي من شيت currency وزامني.', true); return; }
+  const sel=document.getElementById('grpCurrencyPicker');
+  if(sel.options.length<=1){
+    sel.innerHTML='<option value="">💱 بدون تحويل (ريال)</option>'+
+      availableCurrencies.map(c=>`<option value="${c.code}" data-rate="${c.rate}" data-name="${c.name_ar}">${c.name_ar} (1 = ${c.rate} ريال)</option>`).join('');
+  }
+  sel.style.display = (sel.style.display==='none') ? '' : 'none';
+}
+function grpOnCurrencyPick(){
+  const sel=document.getElementById('grpCurrencyPicker');
+  const opt=sel.options[sel.selectedIndex];
+  const rate=parseFloat((opt&&opt.dataset.rate)||'0');
+  const name=(opt&&opt.dataset.name)||'';
+  GRP_CURRENCY = (sel.value && rate>0) ? { name, rate } : null;
+  // العملة جزء من النسخة → كود جديد مطلوب
+  GRP_SAVED_CODE='';
+  const p1=document.getElementById('grpCodePill'); if(p1) p1.style.display='none';
+  const p2=document.getElementById('savedCodePill'); if(p2) p2.style.display='none';
+  grpMsg(GRP_CURRENCY ? ('💱 العملة: '+name+' (1 = '+rate+' ريال) — اعتمدي النسخة لتوليد كود جديد بها.')
+                      : 'رجعت الأسعار للريال — اعتمدي النسخة لتوليد كود جديد.');
+  grpShow();   // أعِد الرسم بالعملة الجديدة
 }
 // ═══ اعتماد برنامج الجروب: لقطة مجمّدة + كود استرجاع دائم ═══
 // يُحفظ بنفس جدول البرامج (programs) لتعمل خانة «استرجاع» نفسها، ويُوسَم
@@ -2380,6 +2421,7 @@ function grpBuildRaw(g, date, pax, ptype, c){
   L.push('GRP_PAX:'+pax);
   L.push('GRP_PTYPE:'+ptype);
   L.push('GRP_SEASON:'+(c.season?c.season.label:''));
+  if(GRP_CURRENCY) L.push('CURRENCY:'+GRP_CURRENCY.name+'|'+GRP_CURRENCY.rate);
   L.push('GRP_COST:'+c.cost);
   L.push('GRP_PROFIT:'+c.profit);
   L.push('TOTAL_GROUP:'+c.total+' | '+pax+' مسافر');
@@ -2449,6 +2491,10 @@ function grpRestoreFromRaw(raw, code){
             total:+((get('TOTAL_GROUP')||'').split('|')[0])||0,
             season:{label:get('GRP_SEASON')} };
   const pax=+get('GRP_PAX')||1, ptype=get('GRP_PTYPE')||'individual', date=get('GRP_DATE');
+  const curLine=get('CURRENCY');
+  if(curLine){ const pr=curLine.split('|'); const rt=parseFloat(pr[1]||'0');
+    GRP_CURRENCY = (pr[0] && rt>0) ? { name:pr[0].trim(), rate:rt } : null; }
+  else GRP_CURRENCY = null;
   GRP_CURRENT=g; GRP_SAVED_CODE=code||''; GRP_SIG='';
   const eo=document.getElementById('emptyOutput'); if(eo) eo.style.display='none';
   const panel=document.getElementById('reviewPanel');
@@ -2465,7 +2511,7 @@ function grpState(){
 function grpBuildPdfHtml(variant){
   // variant: 'individual' = بشعار العز (افتراضي) · 'company' = بدون شعار وتفاصيل العز
   const showLogo = variant !== 'company';
-  const s=grpState(); const s0=s; const g=GRP_CURRENT; const c=s.c; const cur='ر.س';
+  const s=grpState(); const s0=s; const g=GRP_CURRENT; const c=s.c; const cur=grpCurName();
   const days=(g.itinerary||[]);
   // كل يوم بطاقة مؤطّرة بنفس ستايل بطاقات الفنادق في قالب الوجهات
   const dayCards=days.map(d=>{
@@ -2517,7 +2563,7 @@ function grpBuildPdfHtml(variant){
     <div class="pdf-dest-name">${grpEsc(grpDisp(g))}</div>
     <div class="pdf-cities">👥 ${s.pax} مسافر · ${s.ptype==='company'?'شركات':'أفراد'}${c.season?(' · '+grpEsc(c.season.label)):''}</div>
     <div class="pdf-date-price-row">
-      <div class="pdf-price-box"><div class="pdf-price-label">💰 السعر الإجمالي (${s.pax} مسافر)</div><div class="pdf-price-val">${grpNum(c.total)} ${cur}</div></div>
+      <div class="pdf-price-box"><div class="pdf-price-label">💰 السعر الإجمالي (${s.pax} مسافر)</div><div class="pdf-price-val">${grpMoney(c.total)}</div>${GRP_CURRENCY?`<div style="font-size:12px;opacity:.85;margin-top:3px">1 ${grpEsc(GRP_CURRENCY.name)} = ${GRP_CURRENCY.rate} ريال</div>`:''}</div>
       <div class="pdf-dates-card"><div class="pdf-dates-label">📅 تاريخ المغادرة</div><div class="pdf-dates">${grpEsc(s.date)}</div></div>
     </div>
     <div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:10px 14px;margin-bottom:10px;color:#fff;font-size:13px;font-weight:700;">
@@ -2559,7 +2605,7 @@ function grpExport(variant){
 }
 // نص الجروب للواتساب (يُستخدم للنسخ وللإرسال المباشر عبر الجسر)
 function grpWhatsappText(){
-  if(!GRP_CURRENT) return ''; const g=GRP_CURRENT; const s=grpState(); const c=s.c; const cur='ر.س'; const L=[];
+  if(!GRP_CURRENT) return ''; const g=GRP_CURRENT; const s=grpState(); const c=s.c; const cur=grpCurName(); const L=[];
   L.push('🚌 '+grpDisp(g));
   L.push('🗓️ '+s.date+(g.itinerary&&g.itinerary.length?('  📅 '+g.itinerary.length+' أيام'):'')+'  👥 '+s.pax+' مسافر');
   L.push(''); L.push('🗺️ مسار الجولات:');
@@ -2579,7 +2625,8 @@ function grpWhatsappText(){
     L.push(''); L.push('📄 سياسة الحجز والإلغاء:');
     g.cancellation.forEach(x=>L.push('- '+String(x).replace(/^•\s*/,'')));
   }
-  L.push(''); L.push('💰 الإجمالي: '+grpNum(c.total)+' '+cur+(s.pax>1?(' (≈ '+grpNum(Math.round(c.total/s.pax))+' للفرد)'):''));
+  L.push(''); L.push('💰 الإجمالي: '+grpMoney(c.total)+(s.pax>1?(' (≈ '+grpMoney(Math.round(c.total/s.pax))+' للفرد)'):''));
+  if(GRP_CURRENCY) L.push('(سعر الصرف المثبَّت: 1 '+GRP_CURRENCY.name+' = '+GRP_CURRENCY.rate+' ريال · الأصل '+grpNum(c.total)+' ر.س)');
   return L.join('\n');
 }
 function grpCopyText(){
