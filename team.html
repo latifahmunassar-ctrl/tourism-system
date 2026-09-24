@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-24-grp-includes'
+  var BUILD = '2026-09-24-grp-code'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1061,6 +1061,8 @@ let MK_FLIGHT_MODE = 'cheapest';  // طيران مكة الدولي: cheapest|om
 let MK_FLIGHT_DATA = null;        // كاش أسعار الطيران (يُجلب مرة)
 let MK_FLIGHT_SIG = '';           // بصمة آخر تطبيق طيران (mode+تواريخ+أشخاص)
 let lastSavedCode = '';
+let GRP_SAVED_CODE = '';
+let GRP_SIG = '';   // كود اعتماد برنامج الجروب — يُصفَّر عند أي تغيير باختيار البرنامج/التاريخ/العدد/النوع
 
 const SYSTEM = `انت مساعد متخصص في بناء البرامج السياحية. مهم جداً: أي أرقام إجماليات يجب أن تكون محسوبة بدقة من تفاصيل الشيت نفسها، ولا تكتب أي إجمالي إلا بعد التحقق:
 - إجمالي الفنادق = مجموع (سعر/ليلة × عدد الليالي) لكل فندق.
@@ -2217,6 +2219,7 @@ async function grpLoad(){
   grpMsg('');
 }
 function grpOnDest(){
+  GRP_SAVED_CODE=''; const _p=document.getElementById('grpCodePill'); if(_p) _p.style.display='none';
   const v=document.getElementById('grp-dest').value;
   const dSel=document.getElementById('grp-date');
   GRP_CURRENT=(v==='')?null:(GRP_PROGRAMS[+v]||null);
@@ -2228,6 +2231,7 @@ function grpOnDest(){
     : '<option value="">— لا تواريخ لهذا البرنامج —</option>';
 }
 function grpOnDate(){
+  GRP_SAVED_CODE=''; const _p=document.getElementById('grpCodePill'); if(_p) _p.style.display='none';
   const h=document.getElementById('grp-priceHint'); if(!h) return;
   if(!GRP_CURRENT){ h.textContent=''; return; }
   const date=document.getElementById('grp-date').value;
@@ -2241,6 +2245,10 @@ function grpOnDate(){
 }
 function grpShow(){
   if(!GRP_CURRENT){ grpMsg('اختاري البرنامج أولاً.', true); return; }
+  // بصمة النسخة: أي تغيير بالبرنامج/التاريخ/العدد/النوع = نسخة جديدة تحتاج اعتماداً جديداً
+  const _sig=[GRP_CURRENT.tab,document.getElementById('grp-date').value,document.getElementById('grp-pax').value,document.getElementById('grp-ptype').value].join('|');
+  if(GRP_SIG && GRP_SIG!==_sig){ GRP_SAVED_CODE=''; }
+  GRP_SIG=_sig;
   const date=document.getElementById('grp-date').value;
   const pax=parseInt(document.getElementById('grp-pax').value)||0;
   const ptype=document.getElementById('grp-ptype').value;
@@ -2328,6 +2336,10 @@ function grpRenderProgram(g, date, pax, ptype, c){
       <button onclick="grpSendIndiv()" style="${btn}background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;" title="أرسل ملف الجروب للعميل عبر واتساب — من طلب فرد مفتوح">📤 إرسال للعميل (واتساب)</button>
       <button onclick="grpOpenBridge()" style="${btn}background:linear-gradient(135deg,#128C7E,#075E54);color:#fff;" title="إرسال مباشر للشركات/الجروبات عبر جسر الواتساب المعتاد">📲 واتساب مباشر (شركات)</button>
     </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:center;">
+      <button id="grpFinalizeBtn" onclick="grpFinalizeCode()" style="${btn}background:linear-gradient(135deg,#0b3d91,#0e9d6a);color:#fff;" title="جمّد هذه النسخة (البرنامج والتاريخ والعدد والسعر) وولّد كود استرجاع دائم — بدون إرسال">✅ اعتمد برنامج الجروب — ولّد الكود</button>
+      <span id="grpCodePill" style="display:${GRP_SAVED_CODE?'inline-flex':'none'};align-items:center;background:#0b3d91;color:#fff;padding:8px 12px;border-radius:999px;font-weight:900;font-size:12px;">CODE: ${grpEsc(GRP_SAVED_CODE||'—')}</span>
+    </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
       <button onclick="grpExport('individual')" style="${btn}background:#1a3a8f;color:#fff;" title="بشعار ومعلومات العز — للعميل الفرد">👤 تصدير للأفراد</button>
       <button onclick="grpExport('company')" style="${btn}background:#0e9d6a;color:#fff;" title="بدون شعار ولا تفاصيل العز — للشركات">🏢 تصدير للشركات</button>
@@ -2335,6 +2347,94 @@ function grpRenderProgram(g, date, pax, ptype, c){
     </div>
     ${grpContentHtml(g, date, pax, ptype, c)}
   </div>`;
+}
+
+// ═══ اعتماد برنامج الجروب: لقطة مجمّدة + كود استرجاع دائم ═══
+// يُحفظ بنفس جدول البرامج (programs) لتعمل خانة «استرجاع» نفسها، ويُوسَم
+// بـGRPPROG:1 ليعرف الاسترجاع أنه برنامج جروب فيرسمه بقالب الجروب لا بمولّد
+// البرامج العادي. النص الخام يحمل كل ما يظهر بالـPDF حتى تُستعاد النسخة كما هي.
+function grpBuildRaw(g, date, pax, ptype, c){
+  const L=[];
+  L.push('GRPPROG:1');
+  L.push('GRP_TAB:'+(g.tab||''));
+  L.push('DEST:'+grpDisp(g));
+  L.push('GRP_DATE:'+date);
+  L.push('GRP_PAX:'+pax);
+  L.push('GRP_PTYPE:'+ptype);
+  L.push('GRP_SEASON:'+(c.season?c.season.label:''));
+  L.push('GRP_COST:'+c.cost);
+  L.push('GRP_PROFIT:'+c.profit);
+  L.push('TOTAL_GROUP:'+c.total+' | '+pax+' مسافر');
+  L.push('GRP_DATES:'+((g.dates||[]).join(' , ')));
+  L.push('ITIN:');
+  (g.itinerary||[]).forEach(d=>L.push('  '+String(d).replace(/\n/g,' ⏎ ')));
+  L.push('GRP_HOTELS:');
+  (g.hotels||[]).forEach(h=>{
+    L.push('  '+h.city);
+    (h.options||[]).forEach(o=>L.push('    - '+o.name+' | '+(o.stars||0)));
+  });
+  L.push('GRP_INCLUDES:');
+  (g.includes||[]).forEach(x=>L.push('  '+String(x).replace(/^●\s*/,'')));
+  L.push('GRP_CANCEL:');
+  (g.cancellation||[]).forEach(x=>L.push('  '+String(x).replace(/^•\s*/,'')));
+  return L.join('\n');
+}
+async function grpFinalizeCode(){
+  if(!GRP_CURRENT){ grpMsg('اعرضي برنامج الجروب أولاً.', true); return; }
+  const st=grpState();
+  if(!st.date){ grpMsg('اختاري تاريخ المغادرة.', true); return; }
+  if(!(st.pax>0)){ grpMsg('عدد المسافرين لازم 1 على الأقل.', true); return; }
+  if(!st.c || !st.c.ok){ grpMsg('لا يوجد سعر لهذا العدد — لا يمكن الاعتماد.', true); return; }
+  if(GRP_SAVED_CODE){ grpMsg('هذه النسخة معتمدة مسبقاً — الكود: '+GRP_SAVED_CODE); return; }
+  const btn=document.getElementById('grpFinalizeBtn'); const old=btn?btn.textContent:'';
+  if(btn){ btn.disabled=true; btn.textContent='⏳ يُعتمد…'; }
+  try{
+    const raw=grpBuildRaw(GRP_CURRENT, st.date, st.pax, st.ptype, st.c);
+    const res=await fetch(PROGRAMS_URL,{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},
+      // البادئة تُشتق من أول حرفين لاتينيين للوجهة؛ أسماء الجروبات عربية فتُنتج «XX».
+      // نمرّر «GRoup» ليصير كود الجروب GR-2026-### وهو مفهوم للموظفة والفاتورة.
+      body:JSON.stringify({ raw, destination:'GRoup '+grpDisp(GRP_CURRENT), pdf_variant:st.ptype==='company'?'company':'client',
+        total_group:st.c.total, persons:st.pax,
+        created_by:(localStorage.getItem('alezz_user_name')||localStorage.getItem('alezz_staff_name')||'').trim() })});
+    const data=await res.json().catch(()=>({}));
+    if(res.ok && data.ok && data.code){
+      GRP_SAVED_CODE=data.code;
+      const pill=document.getElementById('grpCodePill');
+      if(pill){ pill.textContent='CODE: '+data.code; pill.style.display='inline-flex'; }
+      const inp=document.getElementById('programCodeInput'); if(inp) inp.value=data.code;
+      grpMsg('✅ تم اعتماد النسخة النهائية. كود الاسترجاع: '+data.code+' — أي تغيير بالتاريخ أو العدد يتطلب اعتماداً جديداً.');
+    } else {
+      grpMsg((data&&data.error)?('فشل الاعتماد: '+String(data.error)):('فشل الاعتماد (HTTP '+res.status+')'), true);
+    }
+  }catch(e){ grpMsg('فشل الاعتماد: '+String((e&&e.message)?e.message:e), true); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent=old; } }
+}
+// استرجاع برنامج جروب من نصّه الخام (يُستدعى من searchByCode عند وسم GRPPROG)
+function grpRestoreFromRaw(raw, code){
+  const get=t=>{ const m=raw.match(new RegExp('^'+t+':([^\\n]*)','m')); return m?m[1].trim():''; };
+  const blk=t=>{ const m=raw.match(new RegExp('^'+t+':\\s*\\n([\\s\\S]*?)(?=\\n[A-Z_]+:|$)','m'));
+                 return m?m[1].split('\n').map(x=>x.replace(/^\s{2}/,'')).filter(x=>x.trim()):[]; };
+  const hot=[]; blk('GRP_HOTELS').forEach(l=>{
+    const m=l.match(/^\s{2}-\s*(.*?)\s*\|\s*(\d+)\s*$/);
+    if(m){ if(hot.length) hot[hot.length-1].options.push({name:m[1],stars:+m[2]}); }
+    else hot.push({city:l.trim(),options:[]});
+  });
+  const g={ tab:get('GRP_TAB'), program:get('DEST'),
+    itinerary:blk('ITIN').map(x=>x.replace(/ ⏎ /g,'\n')),
+    hotels:hot, includes:blk('GRP_INCLUDES'), cancellation:blk('GRP_CANCEL'),
+    dates:(get('GRP_DATES')||'').split(' , ').map(x=>x.trim()).filter(Boolean),
+    programAr:get('DEST') };
+  const c={ ok:true, cost:+get('GRP_COST')||0, profit:+get('GRP_PROFIT')||0,
+            total:+((get('TOTAL_GROUP')||'').split('|')[0])||0,
+            season:{label:get('GRP_SEASON')} };
+  const pax=+get('GRP_PAX')||1, ptype=get('GRP_PTYPE')||'individual', date=get('GRP_DATE');
+  GRP_CURRENT=g; GRP_SAVED_CODE=code||''; GRP_SIG='';
+  const eo=document.getElementById('emptyOutput'); if(eo) eo.style.display='none';
+  const panel=document.getElementById('reviewPanel');
+  if(panel) panel.innerHTML='<div style="padding:14px;"><div style="background:#eef6ff;border:1px solid #cfe2ff;border-radius:10px;padding:10px 13px;margin-bottom:10px;font-weight:800;color:#0b3d91;font-size:13px;">📄 نسخة مُعتمدة مُستعادة بالكود '+grpEsc(code||'')+' — كما اعتُمدت بالضبط.</div>'
+    + grpContentHtml(g, date, pax, ptype, c) + '</div>';
+  return true;
 }
 function grpState(){
   const date=document.getElementById('grp-date').value;
@@ -4514,6 +4614,15 @@ async function searchByCode() {
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.ok && data.program?.raw) {
+      // برنامج جروب؟ يُرسم بقالب الجروب لا بمولّد البرامج العادي.
+      if (/^GRPPROG:/m.test(data.program.raw)) {
+        grpRestoreFromRaw(data.program.raw, data.program.code || code);
+        const pill0 = document.getElementById('savedCodePill');
+        if (pill0) { pill0.textContent = 'CODE: ' + (data.program.code || code); pill0.style.display = 'inline-flex'; }
+        if (input) input.value = code;
+        addMessage('sys', '✅ استُرجع برنامج جروب معتمد بالكود ' + (data.program.code || code) + '.');
+        return;
+      }
       syncFormPeopleFromProgram(data.program.raw);
       buildReview(data.program.raw);
       lastSavedCode = data.program.code || code;

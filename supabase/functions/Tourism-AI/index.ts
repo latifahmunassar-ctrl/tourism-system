@@ -2863,7 +2863,9 @@ function parseGroupTab(tab: string, rows: string[][]): Record<string, unknown> |
 
   // (٢) «الأسعار تشمل»: نلقى عمود العنوان ثم نجمع بنوده تحته.
   let incCol = -1, incHdr = -1;
-  outer: for (let i = 0; i < Math.min(rows.length, 6); i++) {
+  // البحث حتى الصف 20: عنوان «الأسعار تشمل» يقع في الصف 7 أو 8 في 6 تبويبات
+  // فكان الحد القديم (6) يُسقط بنودها كلها ويُخفي القسم من البرنامج والـPDF.
+  outer: for (let i = 0; i < Math.min(rows.length, 20); i++) {
     const r = rows[i] || [];
     // العنوان قد يكون «الأسعار تشمل» (بالتاء) أو «يشمل» — نطابق الجذر «شمل» ونستثني «لا تشمل/لا يشمل».
     for (let j = 0; j < r.length; j++) { const h = norm(r[j]); if (/(?:ت|ي)شمل|شامل|include/.test(h) && !/لا\s*(?:ت|ي)شمل/.test(h)) { incCol = j; incHdr = i; break outer; } }
