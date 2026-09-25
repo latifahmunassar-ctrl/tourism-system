@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-25-roomcap'
+  var BUILD = '2026-09-25-roomcap2'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1894,6 +1894,39 @@ function applyHotelRawChange(newRaw, msg){
   for (let i = history.length - 1; i >= 0; i--){ if(history[i].role==='assistant'){ history[i].content=newRaw; break; } }
   buildReview(newRaw);
   if(msg) addMessage('sys', msg);
+}
+// البرامج المبنية/المعدَّلة قبل إصلاح 2026-09-25 محفوظ نصّها بلا شارة سعة،
+// وإعادة البناء وحدها ترجّعها. بدل إجبار الموظفة على إعادة البناء، نكمل
+// الناقص بعد رسم الجدول: طلب list_room_types لكل فندق ينقصه الشارة، ثم
+// مطابقة نوع الغرفة وحقن «(يتسع N)» في الخلية فقط — النص الخام لا يُمسّ
+// (أي تعديل لاحق للسطر يمرّ على _roomWithCap فيثبّتها).
+const _capCache = new Map();
+async function _fillMissingCaps(){
+  const cells = [...document.querySelectorAll('.rtw-cell')].filter(c=>{
+    const n = c.querySelector('.hsw-name');
+    return n && n.textContent && !/\(يتسع/.test(n.textContent);
+  });
+  if(!cells.length) return;
+  const dest = getLine(lastProgramRaw,'DEST') || '';
+  for(const cell of cells){
+    const hotel = cell.dataset.name || '';
+    const region = cell.dataset.region || '';
+    if(!hotel) continue;
+    const key = dest+'|'+region+'|'+hotel;
+    try{
+      if(!_capCache.has(key)){
+        const res = await fetch(SUPABASE_URL, { method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},
+          body: JSON.stringify({ action:'list_room_types', dest, region, hotel, date:cell.dataset.date||'' }) });
+        _capCache.set(key, ((await res.json()).rooms) || []);
+      }
+      const rooms = _capCache.get(key) || [];
+      const nameEl = cell.querySelector('.hsw-name');
+      const cur = _stripCapR(nameEl.textContent);
+      const hit = rooms.find(r => _stripCapR(r.room_type) === cur);
+      if(hit && hit.occupancy) nameEl.textContent = nameEl.textContent.trim() + ` (يتسع ${hit.occupancy} أشخاص)`;
+    }catch(e){ /* تعذّر الجلب → اترك الخلية كما هي */ }
+  }
 }
 function rtwToggle(curEl){
   const cell = curEl.closest('.rtw-cell'); if(!cell) return;
@@ -3786,6 +3819,7 @@ ${summaryHTML}
 </div>`;
 
 document.getElementById('reviewPanel').innerHTML = html;
+ _fillMissingCaps();   // أكمل شارة «يتسع» للبرامج المبنية قبل إصلاح 2026-09-25
 renderHaramBar();              // شريط قرب الحرم فوق برنامج مكة
 renderMakkahTransportBar();    // شريط وسيلة التنقّل (قطار/سيارة) فوق برنامج مكة
 renderMakkahFlightBar();       // شريط الطيران الدولي (مسقط↔جدة: الأرخص/شركة/بدون) فوق برنامج مكة
