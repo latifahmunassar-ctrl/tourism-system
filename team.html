@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-24-grp-currency'
+  var BUILD = '2026-09-25-roomcap'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1520,7 +1520,7 @@ async function applyHaramToAllHotels(val){
       const pick = pool[0];
       addMessage('sys', `🔎 [${region}] الحالي=${curName} → المختار=${pick?pick.name+' / '+pick.room_type:'—'}`);
       if(!pick || ((pick.name||'').trim()===curName && (pick.room_type||'').trim()===curRoom)) continue;  // نفس الفندق ونفس الغرفة
-      const newLine = [pick.name, p[1]||'', (pick.stars||p[2]||'')+' نجوم', pick.room_type||p[3]||'', (pick.price_per_night||0)+' ريال/ليلة', p[5]||'', p[6]||''].join(' | ');
+      const newLine = [pick.name, p[1]||'', (pick.stars||p[2]||'')+' نجوم', _roomWithCap(pick, p[3]), (pick.price_per_night||0)+' ريال/ليلة', p[5]||'', p[6]||''].join(' | ');
       raw = hswSwapRaw(raw, hidx, newLine); changed++;
     }catch(e){ /* تجاهل هذا الفندق */ }
   }
@@ -1767,7 +1767,7 @@ function hswPick(cell, idx){
       h.name,
       p[1] || '',
       (h.stars || p[2] || '') + ' نجوم',
-      h.room_type || p[3] || '',
+      _roomWithCap(h, p[3]),
       (h.price_per_night || 0) + ' ريال/ليلة',
       p[5] || '',
       p[6] || (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : '')
@@ -1827,7 +1827,7 @@ async function pickCheapestDouble(hidx){
     byStar.sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
     const h = byStar[0]; // الأرخص
     const newLine = [
-      h.name, p[1]||'', (h.stars||curStars||'')+' نجوم', h.room_type||'',
+      h.name, p[1]||'', (h.stars||curStars||'')+' نجوم', _roomWithCap(h, ''),
       (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
       p[6] || (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : '')
     ].join(' | ');
@@ -1867,7 +1867,7 @@ async function changeHotelStars(hidx, newStars){
     cand.sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
     const h = cand[0]; // الأرخص
     const newLine = [
-      h.name, p[1]||'', (h.stars||newStars)+' نجوم', h.room_type||'',
+      h.name, p[1]||'', (h.stars||newStars)+' نجوم', _roomWithCap(h, ''),
       (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
       p[6] || (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : '')
     ].join(' | ');
@@ -1878,6 +1878,17 @@ async function changeHotelStars(hidx, newStars){
 }
 // ── نوع الغرفة: استبدال / إضافة نوع آخر من نفس الفندق ──
 function _stripCapR(s){ return String(s||'').replace(/\s*\(يتسع[^)]*\)/g,'').trim().toLowerCase(); }
+// اسم الغرفة مع شارة السعة. الباني يضيفها عند بناء البرنامج، لكن كل مسارات
+// تبديل الفندق (التبديل اليدوي · تغيير النجوم · أرخص غرفتين · تبديل جماعي)
+// كانت تعيد بناء السطر من h.room_type الخام فتسقط الشارة ولا ترجع أبداً.
+// المصدر: h.capacity (مشتقّ خادميّاً) ثم h.occupancy نصّاً.
+function _roomWithCap(h, fallback){
+  const rt = String((h && h.room_type) || fallback || '').trim();
+  if(!rt) return '';
+  if(/\(يتسع/.test(rt)) return rt;
+  const n = parseInt(String((h && (h.capacity || h.occupancy)) || '').match(/\d+/)?.[0] || '', 10) || 0;
+  return n > 0 ? `${rt} (يتسع ${n} أشخاص)` : rt;
+}
 function applyHotelRawChange(newRaw, msg){
   if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التعديل — لم يتغيّر البرنامج.'); return; }
   for (let i = history.length - 1; i >= 0; i--){ if(history[i].role==='assistant'){ history[i].content=newRaw; break; } }
@@ -1926,9 +1937,8 @@ function rtwRender(cell, rooms){
 function _rtwReplaceLine(oldLine, r){
   const ars = parseAddRooms(oldLine);               // احفظ كل الغرف الإضافية لو موجودة
   const p = stripAddRoom(oldLine).split('|').map(x=>x.trim());
-  const cap = r.occupancy ? ` (يتسع ${r.occupancy} أشخاص)` : '';
   const meals = r.meals ? ('ما يشمل: ' + r.meals) : (r.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6]||''));
-  let line = [p[0]||'', p[1]||'', p[2]||'', (r.room_type||'')+cap, (r.price_per_night||0)+' ريال/ليلة', p[5]||'', meals].join(' | ');
+  let line = [p[0]||'', p[1]||'', p[2]||'', _roomWithCap(r, ''), (r.price_per_night||0)+' ريال/ليلة', p[5]||'', meals].join(' | ');
   line += ars.map(a=>addRoomSeg(a)).join('');
   return line;
 }
