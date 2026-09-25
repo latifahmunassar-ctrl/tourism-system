@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-25-pdfcap'
+  var BUILD = '2026-09-25-meals'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1770,7 +1770,7 @@ function hswPick(cell, idx){
       _roomWithCap(h, p[3]),
       (h.price_per_night || 0) + ' ريال/ليلة',
       p[5] || '',
-      p[6] || (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : '')
+      (h.meals ? ('ما يشمل: ' + h.meals) : (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6] || '')))
     ].join(' | ');
     const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
     if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر تطبيق التبديل — لم يتغيّر البرنامج.'); return; }
@@ -1829,7 +1829,7 @@ async function pickCheapestDouble(hidx){
     const newLine = [
       h.name, p[1]||'', (h.stars||curStars||'')+' نجوم', _roomWithCap(h, ''),
       (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
-      p[6] || (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : '')
+      (h.meals ? ('ما يشمل: ' + h.meals) : (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6] || '')))
     ].join(' | ');
     const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
     if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); return; }
@@ -1869,7 +1869,7 @@ async function changeHotelStars(hidx, newStars){
     const newLine = [
       h.name, p[1]||'', (h.stars||newStars)+' نجوم', _roomWithCap(h, ''),
       (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
-      p[6] || (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : '')
+      (h.meals ? ('ما يشمل: ' + h.meals) : (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6] || '')))
     ].join(' | ');
     const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
     if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); return; }
@@ -1901,6 +1901,21 @@ function applyHotelRawChange(newRaw, msg){
 // مطابقة نوع الغرفة وحقن «(يتسع N)» في الخلية فقط — النص الخام لا يُمسّ
 // (أي تعديل لاحق للسطر يمرّ على _roomWithCap فيثبّتها).
 const _capCache = new Map();
+// الوجبات المصحَّحة لسطر فندق. عمود Include في شيت مكة موقعه FQ وكان خارج
+// نطاق القراءة قبل 2026-09-25، فالبرامج الأقدم خُزّنت بـ«بدون وجبات» رغم أن
+// الشيت يقول «إفطار مشمول». الشيت هو المرجع، فنُظهر قيمته عند الاختلاف.
+// (بموافقة المالكة 2026-09-25 — تصحيح عرض فقط، النص الخام لا يُمسّ.)
+function _lineMealsTxt(p){
+  const raw = String((p && p[6]) || '').replace(/^\s*ما\s*يشمل\s*:?\s*/u,'').trim();
+  try{
+    const dest = getLine(lastProgramRaw,'DEST') || '';
+    const rooms = _capCache.get(dest+'|'+((p&&p[1])||'')+'|'+((p&&p[0])||'')) || [];
+    const hit = rooms.find(r => _stripCapR(r.room_type) === _stripCapR((p&&p[3])||''));
+    if(!hit) return raw;
+    const fresh = String(hit.meals || (hit.includes_breakfast ? 'إفطار مشمول' : '')).trim();
+    return fresh || raw;
+  }catch(e){ return raw; }
+}
 function _roomNameOnly(s){ return String(s||'').replace(/\s*\(يتسع[^)]*\)/g,'').trim(); }
 // سعة الغرفة لسطر فندق: من نص السطر أولاً، وإلا من _capCache الذي عبّأه
 // _fillMissingCaps عند رسم جدول المراجعة. يخدم الـPDF الذي يُبنى تزامنياً.
@@ -1916,10 +1931,8 @@ function _lineCapN(p){
 }
 
 async function _fillMissingCaps(){
-  const cells = [...document.querySelectorAll('.rtw-cell')].filter(c=>{
-    const n = c.querySelector('.hsw-name');
-    return n && n.textContent && !/\(يتسع/.test(n.textContent);
-  });
+  // نجلب لكل صفوف الفنادق (لا للناقص فقط): الكاش يخدم تصحيح الوجبات كذلك.
+  const cells = [...document.querySelectorAll('.rtw-cell')];
   if(!cells.length) return;
   const dest = getLine(lastProgramRaw,'DEST') || '';
   for(const cell of cells){
@@ -1938,7 +1951,8 @@ async function _fillMissingCaps(){
       const nameEl = cell.querySelector('.hsw-name');
       const cur = _stripCapR(nameEl.textContent);
       const hit = rooms.find(r => _stripCapR(r.room_type) === cur);
-      if(hit && hit.occupancy) nameEl.textContent = nameEl.textContent.trim() + ` (يتسع ${hit.occupancy} أشخاص)`;
+      if(hit && hit.occupancy && !/\(يتسع/.test(nameEl.textContent))
+        nameEl.textContent = nameEl.textContent.trim() + ` (يتسع ${hit.occupancy} أشخاص)`;
     }catch(e){ /* تعذّر الجلب → اترك الخلية كما هي */ }
   }
 }
@@ -5332,7 +5346,7 @@ ${(sd.checkInText && sd.checkOutText) ? `<span style="font-size:16px;line-height
 ${extraBedCount ? `<span>🛋️ سرير إضافي / Sofa Bed: <b>${extraBedCount}</b>${showDetailed ? ` — ${extraBedPricePerNight} ريال/ليلة × ${nights||'—'} ليالي × ${extraBedCount} = ${(extraBedTotal||0).toLocaleString()} ريال` : ''}</span>` : ``}
 ${showDetailed ? `<span>💵 تفصيل السعر: ${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي × ${rooms} غرفة = ${(totalLine*rooms).toLocaleString()} ريال</span>` : ``}
 ${_arRooms.map((ar,j)=>`<span style="grid-column:1/-1;color:#b45309;font-weight:900;">➕ غرفة إضافية ${j+1}: <span dir="ltr" style="unicode-bidi:isolate;white-space:pre-wrap;display:inline-block;overflow-wrap:break-word;max-width:100%;vertical-align:top;">${safeText(ar.room_type)}</span>${ar.occ?` (يتسع ${ar.occ})`:''}${showDetailed ? ` — ${ar.price.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي = ${(ar.price*(nights||0)).toLocaleString()} ريال` : ''}</span>`).join('')}
-<span style="grid-column:1/-1;">✅ يشمل: ${safeText(String(p[6]||'').replace(/^\s*ما\s*يشمل\s*:?\s*/u,'').trim())}</span>
+<span style="grid-column:1/-1;">✅ يشمل: ${safeText(_lineMealsTxt(p))}</span>
 </div>
 </div>`; }).join('')}${extrasCards('hotels')}` : ''}
 
