@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-25-roomcap2'
+  var BUILD = '2026-09-25-pdfcap'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1901,6 +1901,20 @@ function applyHotelRawChange(newRaw, msg){
 // مطابقة نوع الغرفة وحقن «(يتسع N)» في الخلية فقط — النص الخام لا يُمسّ
 // (أي تعديل لاحق للسطر يمرّ على _roomWithCap فيثبّتها).
 const _capCache = new Map();
+function _roomNameOnly(s){ return String(s||'').replace(/\s*\(يتسع[^)]*\)/g,'').trim(); }
+// سعة الغرفة لسطر فندق: من نص السطر أولاً، وإلا من _capCache الذي عبّأه
+// _fillMissingCaps عند رسم جدول المراجعة. يخدم الـPDF الذي يُبنى تزامنياً.
+function _lineCapN(p){
+  const m = String((p && p[3]) || '').match(/يتسع\s*(\d+)/);
+  if(m) return parseInt(m[1],10) || 0;
+  try{
+    const dest = getLine(lastProgramRaw,'DEST') || '';
+    const rooms = _capCache.get(dest+'|'+((p&&p[1])||'')+'|'+((p&&p[0])||'')) || [];
+    const hit = rooms.find(r => _stripCapR(r.room_type) === _stripCapR((p&&p[3])||''));
+    return (hit && hit.occupancy) ? (parseInt(hit.occupancy,10)||0) : 0;
+  }catch(e){ return 0; }
+}
+
 async function _fillMissingCaps(){
   const cells = [...document.querySelectorAll('.rtw-cell')].filter(c=>{
     const n = c.querySelector('.hsw-name');
@@ -5310,7 +5324,8 @@ ${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPri
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;font-size:20px;font-weight:800;color:#0d1f4a;line-height:1.8;word-break:break-word;overflow-wrap:anywhere;">
 <span>📍 المدينة: ${bidiText(p[1]||'')}</span>
 <span>⭐ النجوم: ${safeText(p[2]||'')}</span>
-<span>🛏️ الغرفة: ${bidiText(p[3]||'')}</span>
+<span>🛏️ الغرفة: ${bidiText(_roomNameOnly(p[3]||''))}</span>
+${_lineCapN(p) ? `<span>👥 تتسع لـ: ${_lineCapN(p)} أشخاص</span>` : ``}
 <span>🏨 عدد الغرف: ${rooms}</span>
 <span>📅 الإقامة: ${stayText}</span>
 ${(sd.checkInText && sd.checkOutText) ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText} | 🔴 الخروج: ${sd.checkOutText}</span>` : (sd.checkInText ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText}</span>` : ``)}
@@ -5352,7 +5367,7 @@ ${(showDetailed && (hotelsLines.length || transfersLines.length || toursLines.le
     <div class="pdf-keep" style="border:1px solid #eef0f8;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;gap:12px;">
       <div style="font-weight:800;color:#0d1f4a;font-size:16px;line-height:1.6;">
         ${p[1]||''} | ${p[0]||''}${extraBedCount ? ' + Extra bed' : ''} <span style="opacity:0.8">(${p[2]||''})</span> · 🏨 ${rooms} غرفة<br>
-        <span style="opacity:0.85;">${p[3]||''}</span> — <span style="opacity:0.85;">${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي × ${rooms} غرفة = ${(totalLine*rooms).toLocaleString()} ريال${extraBedCount ? (` + سرير إضافي ${(extraBedTotal||0).toLocaleString()} ريال`) : ''}</span>${_arRooms.map((ar,j)=>`<br/><span style="color:#b45309;font-weight:900;">➕ غرفة إضافية ${j+1}: <span dir="ltr" style="unicode-bidi:isolate;white-space:pre-wrap;display:inline-block;overflow-wrap:break-word;max-width:100%;vertical-align:top;">${ar.room_type}</span>${ar.occ?` (يتسع ${ar.occ})`:''} — ${ar.price.toLocaleString()} ريال/ليلة × ${nights||'—'} = ${(ar.price*(nights||0)).toLocaleString()} ريال</span>`).join('')}
+        <span style="opacity:0.85;">${_roomNameOnly(p[3]||'')}${_lineCapN(p)?` (يتسع ${_lineCapN(p)} أشخاص)`:''}</span> — <span style="opacity:0.85;">${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي × ${rooms} غرفة = ${(totalLine*rooms).toLocaleString()} ريال${extraBedCount ? (` + سرير إضافي ${(extraBedTotal||0).toLocaleString()} ريال`) : ''}</span>${_arRooms.map((ar,j)=>`<br/><span style="color:#b45309;font-weight:900;">➕ غرفة إضافية ${j+1}: <span dir="ltr" style="unicode-bidi:isolate;white-space:pre-wrap;display:inline-block;overflow-wrap:break-word;max-width:100%;vertical-align:top;">${ar.room_type}</span>${ar.occ?` (يتسع ${ar.occ})`:''} — ${ar.price.toLocaleString()} ريال/ليلة × ${nights||'—'} = ${(ar.price*(nights||0)).toLocaleString()} ريال</span>`).join('')}
       </div>
       <div style="font-weight:900;color:#0d1f4a;white-space:nowrap;">${lineGrand.toLocaleString()} ريال</div>
     </div>`; }).join('')}` : ''}
