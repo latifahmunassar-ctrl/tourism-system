@@ -97,6 +97,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Langkawi",         pattern: /لا?[نتغ]*\s*كاوي|langkawi/i },
     { canonical: "Penang",           pattern: /بينان[جغ]|بنان[جغ]|penang/i },
     { canonical: "Cameron Highlands",pattern: /كام?[يی]رون|cameron|هايلاند|مرتفعات\s*الكام?[يی]?رون/i },
+    { canonical: "Malacca",          pattern: /ملاك[اة]?|ملق[اة]|malacca|melaka/i },
   ],
   thailand: [
     { canonical: "Bangkok",      pattern: /بان[كق]وك|bangkok/i },
@@ -773,7 +774,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     "Da Nang": "دانانج", "Phu Quoc": "فوكوك", "Ho Chi Minh": "هوتشي مينه",
     "Nha Trang": "نها ترانج", "Da Lat": "دالات",
     "Kuala Lumpur": "كوالالمبور", "Selangor": "سيلانجور",
-    "Langkawi": "لانكاوي", "Penang": "بينانج", "Cameron Highlands": "كاميرون هايلاند",
+    "Langkawi": "لانكاوي", "Penang": "بينانج", "Cameron Highlands": "كاميرون هايلاند", "Malacca": "ملاكا",
     "Bangkok": "بانكوك", "Phuket": "بوكيت", "Krabi": "كرابي", "Salalah": "صلالة", "Muscat": "مسقط", "Jabal Akhdar": "الجبل الأخضر",
     "Chiang Mai": "شيانغ ماي", "Pattaya": "باتايا", "Koh Samui": "كوه ساموي",
     "Istanbul": "اسطنبول", "Trabzon": "طرابزون", "Uzungol": "أوزنجول",
@@ -916,30 +917,53 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
   return null;  // Not a known local edit → fall through to Claude
 }
 
+// Supabase/PostgREST يسقّف أي استعلام بألف صف صامتاً. بعد توسّع شيت مكة
+// (٦٩٨ سجل سعر لوحده) تجاوز جدول hotels الألف، فكان الباني يفقد آخر السجلات
+// بلا أي خطأ — والترتيب نجوم↓ ثم سعر↑ يعني المقطوع هو الأرخص في الأقل نجوماً.
+// هذه تقرأ على دفعات حتى تنتهي الصفوف.
+async function fetchAllRows<T>(
+  build: () => { range: (a: number, b: number) => PromiseLike<{ data: unknown[] | null; error: unknown }> },
+): Promise<T[]> {
+  const PAGE = 1000;
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await build().range(from, from + PAGE - 1);
+    if (error || !data) break;
+    out.push(...(data as T[]));
+    if (data.length < PAGE) break;
+  }
+  return out;
+}
+
 async function buildDataContext(
   supabase: ReturnType<typeof createClient>,
   destinationFilter: string | null = null,
   cityFilter: string[] | null = null,
 ): Promise<string> {
-  const hotelQuery = supabase.from("hotels").select("*").order("stars", { ascending: false }).order("price_per_night");
-  const tourQuery  = supabase.from("tours").select("*").order("price");
-  const flightQuery = supabase.from("flights").select("*");
-  if (destinationFilter) {
-    hotelQuery.ilike("location", `% - ${destinationFilter}`);
-    tourQuery.eq("type", destinationFilter);
-    flightQuery.eq("destination", destinationFilter);
-  }
+  const mkHotelQuery = () => {
+    const q = supabase.from("hotels").select("*").order("stars", { ascending: false }).order("price_per_night");
+    if (destinationFilter) q.ilike("location", `% - ${destinationFilter}`);
+    return q;
+  };
+  const mkTourQuery = () => {
+    const q = supabase.from("tours").select("*").order("price");
+    if (destinationFilter) q.eq("type", destinationFilter);
+    return q;
+  };
+  const mkFlightQuery = () => {
+    const q = supabase.from("flights").select("*");
+    if (destinationFilter) q.eq("destination", destinationFilter);
+    return q;
+  };
 
-  const [hotelsRes, toursRes, flightsRes, trainsRes] = await Promise.all([
-    hotelQuery,
-    tourQuery,
-    flightQuery,
-    supabase.from("trains").select("*"),
+  const [hotelsAll, toursAll, flights, trains] = await Promise.all([
+    fetchAllRows<Record<string, unknown>>(mkHotelQuery as never),
+    fetchAllRows<Record<string, unknown>>(mkTourQuery as never),
+    fetchAllRows<Record<string, unknown>>(mkFlightQuery as never),
+    fetchAllRows<Record<string, unknown>>((() => supabase.from("trains").select("*")) as never),
   ]);
-  let hotels = hotelsRes.data;
-  let tours = toursRes.data;
-  const flights = flightsRes.data;
-  const trains = trainsRes.error ? [] : (trainsRes.data ?? []);
+  let hotels: Record<string, unknown>[] | null = hotelsAll;
+  let tours: Record<string, unknown>[] | null = toursAll;
 
   // City-level filter: when the employee picked specific cities, we drop
   // hotels and tours that aren't in those cities. Hotels are matched on the
@@ -2336,6 +2360,25 @@ async function loadHaramProximity(): Promise<Record<string, string[]>> {
 }
 
 // ── list_hotels: فنادق مدينة معيّنة (لقائمة تبديل الفندق في الداشبورد) ──────
+// سعة الغرفة من اسمها — ملاذ لفنادق العمرة (مكة/المدينة) لأن تبويب Makkah
+// في الشيت أعمدته Hotel/City/Fetures/star/Room type ثم From-To-Rate، بلا عمود
+// Occupancy إطلاقاً. الاسم نفسه يصرّح بالسعة («Deluxe Quad Room»)، فنقرأها منه
+// بدل تركها صفراً فتختفي شارة «يتسع». تُستعمل للعرض فقط ولا تدخل في اختيار
+// الفندق: نموذج العمرة room-based (عدد الغرف يحدّد السعة) فأربعة أشخاص قد
+// يأخذون غرفتين توين. الأسماء المبهمة (family/‏Fairmont Room) تُترك صفراً — لا نخمّن.
+function capFromRoomType(rt: string): number {
+  const t = String(rt || "").toLowerCase();
+  const n = t.match(/(\d+)\s*(?:pax|adults?|persons?|أشخاص|شخص)/);
+  if (n) return parseInt(n[1], 10);
+  if (/\bquint|خماسي/.test(t)) return 5;
+  if (/\bquad|quadruple|رباعي/.test(t)) return 4;
+  if (/\btriple|\btrpl|ثلاثي/.test(t)) return 3;
+  if (/\btwin|\bdouble|\bking|\bqueen|مزدوج|ثنائي/.test(t)) return 2;
+  if (/\bsingle|فردي/.test(t)) return 1;
+  return 0;
+}
+
+
 // المدخل: { action:"list_hotels", dest:"ماليزيا", region:"كوالالمبور", occupancy:2 }
 // نُطابق اسم المدينة العربي عبر DEST_CITIES → canonical إنجليزي → عمود location.
 // تاريخ السفر (DATE_FROM عربي مثل "4 أبريل 2026" أو ISO) → ISO، لفلترة التسعير الموسمي.
@@ -2367,14 +2410,14 @@ async function handleListHotels(body: {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    let q = supabase.from("hotels")
-      .select("name,stars,location,price_per_night,room_type,includes_breakfast,occupancy,date_from,date_to");
-    if (destKey) q = q.ilike("location", `% - ${destKey}`);
-    const { data, error } = await q
-      .order("stars", { ascending: false })
-      .order("price_per_night");
-    if (error) throw error;
-    let rows = (data || []) as Array<Record<string, unknown>>;
+    const mkQ = () => {
+      const q = supabase.from("hotels")
+        .select("name,stars,location,price_per_night,room_type,includes_breakfast,occupancy,date_from,date_to")
+        .order("stars", { ascending: false })
+        .order("price_per_night");
+      return destKey ? q.ilike("location", `% - ${destKey}`) : q;
+    };
+    let rows = await fetchAllRows<Record<string, unknown>>(mkQ as never);
 
     // طابق المدينة عبر نمط هذه المنطقة بالضبط — فنادق نفس المدينة فقط، لا غيرها إطلاقاً.
     // ملاحظة: عمود location يستخدم نقاطاً أحياناً ("kuala.lumpur") فنوحّد الفواصل أولاً.
@@ -2468,7 +2511,7 @@ async function handleListHotels(body: {
         price_per_night: Number(h.price_per_night) || 0,
         includes_breakfast: !!h.includes_breakfast,
         occupancy: h.occupancy || "",            // نص الإشغال كما في الشيت
-        capacity: cap,                            // أقصى عدد تتسعه الغرفة (رقم)
+        capacity: cap || capFromRoomType(String(h.room_type || "")),  // أقصى عدد تتسعه الغرفة (رقم)
         fits: !cap || !threshold || cap >= threshold,  // مطابق للعدد المطلوب؟
         haram_tags: (destKey === "Makkah") ? (haramMap[normHotelName(String(h.name || ""))] || []) : undefined,
       };
@@ -2509,12 +2552,13 @@ async function handleListRoomTypes(body: {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    let q = supabase.from("hotels")
-      .select("name,stars,location,price_per_night,room_type,includes_breakfast,meals,occupancy,date_from,date_to");
-    if (destKey) q = q.ilike("location", `% - ${destKey}`);
-    const { data, error } = await q.order("price_per_night");
-    if (error) throw error;
-    let rows = (data || []) as Array<Record<string, unknown>>;
+    const mkQ = () => {
+      const q = supabase.from("hotels")
+        .select("name,stars,location,price_per_night,room_type,includes_breakfast,meals,occupancy,date_from,date_to")
+        .order("price_per_night");
+      return destKey ? q.ilike("location", `% - ${destKey}`) : q;
+    };
+    let rows = await fetchAllRows<Record<string, unknown>>(mkQ as never);
 
     // نفس الفندق بالاسم بالضبط
     rows = rows.filter(h => String(h.name || "").trim() === hotelName);
@@ -2545,7 +2589,7 @@ async function handleListRoomTypes(body: {
     const rooms = rows.map(h => ({
       room_type: h.room_type || "",
       price_per_night: Number(h.price_per_night) || 0,
-      occupancy: parseInt(String(h.occupancy || "").match(/\d+/)?.[0] || "0", 10) || 0,
+      occupancy: parseInt(String(h.occupancy || "").match(/\d+/)?.[0] || "0", 10) || capFromRoomType(String(h.room_type || "")),
       stars: Number(h.stars) || 0,
       includes_breakfast: !!h.includes_breakfast,
       meals: String(h.meals || ""),
@@ -3188,7 +3232,16 @@ Deno.serve(async (req) => {
         const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
         const token = await pmGoogleToken(sa);
         const quoted = `'${String(reqBody.tab).replace(/'/g, "''")}'`;
-        const rows = await pmReadSheet(token, ssid, `${quoted}!${reqBody.range || "A1:Z40"}`);
+        // raw=1 → القيم الخام (UNFORMATTED): تكشف الأرقام التي يعرضها الشيت كتواريخ
+        const rows = reqBody.raw
+          ? await (async () => {
+              const u = `https://sheets.googleapis.com/v4/spreadsheets/${ssid}/values/${encodeURIComponent(quoted + "!" + (reqBody.range || "A1:Z40"))}?valueRenderOption=UNFORMATTED_VALUE`;
+              const r = await fetch(u, { headers: { Authorization: `Bearer ${token}` } });
+              const d = await r.json();
+              if (d.error) throw new Error(d.error.message);
+              return (d.values || []).map((row: unknown[]) => row.map(v => String(v ?? "")));
+            })()
+          : await pmReadSheet(token, ssid, `${quoted}!${reqBody.range || "A1:Z40"}`);
         return new Response(JSON.stringify({ ok: true, rows }), { headers: CORS_HEADERS });
       } catch (e) { return new Response(JSON.stringify({ ok:false, error:(e as Error).message }), { headers: CORS_HEADERS }); }
     }
@@ -3518,7 +3571,7 @@ Deno.serve(async (req) => {
         "Da Nang": "دانانج", "Phu Quoc": "فوكوك", "Ho Chi Minh": "هوتشي مينه",
         "Nha Trang": "نها ترانج", "Da Lat": "دالات",
         "Kuala Lumpur": "كوالالمبور", "Selangor": "سيلانجور",
-        "Langkawi": "لانكاوي", "Penang": "بينانج", "Cameron Highlands": "كاميرون هايلاند",
+        "Langkawi": "لانكاوي", "Penang": "بينانج", "Cameron Highlands": "كاميرون هايلاند", "Malacca": "ملاكا",
         "Bangkok": "بانكوك", "Phuket": "بوكيت", "Krabi": "كرابي", "Salalah": "صلالة", "Muscat": "مسقط", "Jabal Akhdar": "الجبل الأخضر",
         "Chiang Mai": "شيانغ ماي", "Pattaya": "باتايا", "Koh Samui": "كوه ساموي",
         "Istanbul": "اسطنبول", "Trabzon": "طرابزون", "Uzungol": "أوزنجول",
@@ -3789,18 +3842,13 @@ Deno.serve(async (req) => {
             cityDefs,
             async () => {
               const dest = detectedDest;
-              const [hRes, tRes, fRes, trRes] = await Promise.all([
-                supabase.from("hotels").select("*").ilike("location", `% - ${dest}`),
-                supabase.from("tours").select("*").eq("type", dest),
-                supabase.from("flights").select("*").eq("destination", dest),
-                supabase.from("trains").select("*").eq("destination", dest),
+              const [h, t, f, tr] = await Promise.all([
+                fetchAllRows<HotelRow>((() => supabase.from("hotels").select("*").ilike("location", `% - ${dest}`)) as never),
+                fetchAllRows<TourRow>((() => supabase.from("tours").select("*").eq("type", dest)) as never),
+                fetchAllRows<FlightRow>((() => supabase.from("flights").select("*").eq("destination", dest)) as never),
+                fetchAllRows<FlightRow>((() => supabase.from("trains").select("*").eq("destination", dest)) as never),
               ]);
-              return {
-                hotels: (hRes.data || []) as HotelRow[],
-                tours: (tRes.data || []) as TourRow[],
-                flights: (fRes.data || []) as FlightRow[],
-                trains: (trRes.error ? [] : (trRes.data || [])) as FlightRow[],
-              };
+              return { hotels: h, tours: t, flights: f, trains: tr };
             },
             cityArabicNames,
             // A distribution-edit rebuild is a FRESH build (like the form's
