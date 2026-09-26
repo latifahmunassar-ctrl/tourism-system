@@ -2529,6 +2529,24 @@ export async function buildLocalProgram(
     const sf = selectedFlights.find(f => f.day === dayNum);
     return sf?.kind === "train" ? "train" : "airport";
   };
+  // «مواصلات فقط»: لا نختار طيراناً (العميل يحجزه بنفسه)، لكن القفزة الجوية بين
+  // جزيرتين (بينانج↔لنكاوي) لها نقل برّي بالطرفين (فندق→مطار المغادرة + مطار
+  // الوصول→فندق) لازم يُحتسب، وإلا تظهر «يوم تنقّل ٠». نعلّم أيام هذه القفزات هنا
+  // (بلا تكلفة طيران) ليُعامَل المقطع معاملة الطيران في احتساب انتقالات المطار.
+  const flightLegDays = new Set<number>();
+  if (request.transportOnly) {
+    for (const d of days) {
+      if (d.type !== "transit" || !d.fromCity || !d.toCity || d.fromCity === d.toCity) continue;
+      const hasFlight = !!(findFlight(allFlights, d.fromCity, d.toCity) || findFlight(allFlights, d.toCity, d.fromCity));
+      const roadRow = findInterCityTransfer(allTours, d.fromCity, d.toCity, dest, cityDefs, "airport", request.transport)
+        || findInterCityTransfer(allTours, d.toCity, d.fromCity, dest, cityDefs, "airport", request.transport);
+      const hasRoad = !!roadRow && !/مطار|airport/iu.test(roadRow.name);
+      // قفزة جوية = يوجد خط طيران للزوج، أو لا يوجد طريق برّي والمدينتان لهما مطار.
+      if (hasFlight || (!hasRoad && cityHasFlights(d.fromCity) && cityHasFlights(d.toCity))) {
+        flightLegDays.add(d.number);
+      }
+    }
+  }
   for (const d of days) {
     if (d.type === "transit" && d.fromCity && d.toCity) {
       // Intra-city transit (نفس المدينة: تغيير فندق — موريشيوس ٥+٤، بالي كوتا→
@@ -2546,7 +2564,7 @@ export async function buildLocalProgram(
         continue;
       }
       const arrivalType = transitKind(d.number);
-      const hasFlightThisLeg = selectedFlights.some(f => f.day === d.number);
+      const hasFlightThisLeg = selectedFlights.some(f => f.day === d.number) || flightLegDays.has(d.number);
       let fromAirportDrop = findInterCityTransfer(allTours, d.fromCity, d.toCity, dest, cityDefs, arrivalType, request.transport);
       // A road leg (no flight) must NOT use an airport-drop row — the customer
       // isn't flying, so "go from the hotel to the airport" is bogus. Drop any
@@ -2614,7 +2632,7 @@ export async function buildLocalProgram(
       // additional "استقبال في مطار هانوي" line is bogus — the customer
       // never went through an airport.
       const flightForDay = selectedFlights.find(f => f.day === d.number);
-      if (flightForDay) {
+      if (flightForDay || flightLegDays.has(d.number)) {
         // طيران داخلي: أضف «توديع مدينة الانطلاق → مطارها» قبل الطيران، ما لم يكن
         // أُضيف انتقال مباشر from→to (fromAirportDrop) يغطّي جهة المغادرة (مثل مسار
         // الـhub). يكمّل سلسلة الانتقالات: «توديع صلالة → المطار» قبل طيران صلالة→مسقط.
@@ -2634,7 +2652,7 @@ export async function buildLocalProgram(
           .replace(/\p{M}/gu, "").replace(/[\(\)\.\-_,]/g, " ")
           .replace(/\s+/g, " ").trim();
         const flightLandsAtHub =
-          mainHub &&
+          flightForDay && mainHub &&
           normCityKey(flightForDay.flight.to_city).includes(normCityKey(mainHub)) &&
           normCityKey(d.toCity) !== normCityKey(mainHub);
         if (flightLandsAtHub) {
