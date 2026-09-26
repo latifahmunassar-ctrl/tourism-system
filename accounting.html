@@ -954,7 +954,7 @@ function startAutoRefresh(){
       const lg=$('login'); if(lg && lg.style.display!=='none')return;            // شاشة الدخول
       const ae=document.activeElement; if(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))return;   // المستخدم يكتب — لا نقاطعه
       if(document.querySelector('.modal.on'))return;                              // نافذة (تعديل/إلغاء/عميل…) مفتوحة
-      const _ov=['alloc-modal','sp-tredit','bankcur-nudge','bank-class-modal','recfix-modal','recraw-modal','gsheet-ov','why-modal']; if(_ov.some(id=>document.getElementById(id)))return;   // نوافذ ديناميكية مفتوحة
+      const _ov=['alloc-modal','sp-tredit','bankcur-nudge','bank-class-modal','recfix-modal','recraw-modal','gsheet-ov','why-modal','cashedit-modal']; if(_ov.some(id=>document.getElementById(id)))return;   // نوافذ ديناميكية مفتوحة
       window._silentLoad=true; load();                                           // تحديث صامت في المكان (يبقى التبويب والتمرير)
     }catch(_){}
   }, 240000);
@@ -3632,6 +3632,7 @@ function renderAlerts(){
   const payLbl=(m)=>m.scope==='hotels'?'🏨 فندق':'🧾 مورّد';
   const pendSupPay=mvAll.filter(m=>isPay(m)&&m.status==='pending').sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
   const resolvedSupPay=mvAll.filter(m=>isPay(m)&&(m.status==='approved'||m.status==='rejected')).sort((a,b)=>String(b.decided_at||b.id).localeCompare(String(a.decided_at||a.id))).slice(0,15);
+  const pendCashEditFull=mvAll.filter(m=>m.kind==='cash_edit'&&m.status==='pending').sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
   const pendCash=mvAll.filter(m=>m.kind==='cash'&&m.scope==='banks_cash'&&m.status==='pending').sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
   const resolvedCash=mvAll.filter(m=>m.kind==='cash'&&m.scope==='banks_cash'&&(m.status==='approved'||m.status==='rejected')).sort((a,b)=>String(b.decided_at||b.id).localeCompare(String(a.decided_at||a.id))).slice(0,15);
   const pendCliEntry=mvAll.filter(m=>m.kind==='client_entry'&&m.status==='pending').sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
@@ -3875,6 +3876,14 @@ function renderAlerts(){
         pendCashEdit.map(a=>'<tr><td><b>'+esc(a.service_name||'')+'</b></td><td class="num">'+fmt(a.req_old)+'</td><td class="num" style="color:#2563c4;font-weight:700">'+fmt(a.req_value)+'</td><td style="font-size:12px;font-weight:700;color:#2563c4">'+(costReason(a.message)?esc(costReason(a.message)):'<span style="color:var(--muted)">—</span>')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(costBy(a.message)||'—')+'</td><td>'+esc((a.created_at||'').slice(0,10))+'</td><td style="white-space:nowrap"><button class="btn" style="background:#2563c4;padding:2px 9px;font-size:11px" onclick="resolveCashEdit('+a.id+',\'approve\')">✅ موافقة وتعديل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="resolveCashEdit('+a.id+',\'reject\')">❌ رفض</button></td></tr>').join('')+
         '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">ℹ️ الموافقة تطبّق القيمة الجديدة على حركة الكاش. الرفض يُبقيها كما هي.</div></div>';
     }
+    if(pendCashEditFull.length){
+      const _L={tx_date:'📅 التاريخ',bank_name:'🏦 البنك',in_raw:'داخل(+)',out_raw:'خارج(−)',currency:'العملة',currency_rate:'سعر الصرف',bank_ref:'🔖 المرجع',channel:'القناة',description:'الوصف',details:'التفاصيل',more_details:'تفاصيل أكثر',note:'ملاحظة'};
+      const _diff=(pl)=>{ const ch=pl.changes||{},old=pl.old||{}; const rows=Object.keys(ch).filter(k=>String(old[k]==null?'':old[k])!==String(ch[k]==null?'':ch[k])).map(k=>'<div>'+(_L[k]||k)+': <span style="color:#d11;text-decoration:line-through">'+esc(old[k]==null||old[k]===''?'—':String(old[k]))+'</span> ← <b style="color:#0e9d6a">'+esc(ch[k]==null||ch[k]===''?'—':String(ch[k]))+'</b></div>'); return rows.length?'<div style="font-size:10.5px;line-height:1.85;background:rgba(37,99,196,.06);border-radius:6px;padding:4px 7px">'+rows.join('')+'</div>':''; };
+      n+='<div class="panel" style="border:1px solid #2563c4;background:rgba(37,99,196,.07);margin-bottom:14px"><h3 style="color:#2563c4;margin-top:0">✏️ طلبات تعديل حركات كاش — كل الحقول ('+pendCashEditFull.length+') — تحتاج قرارك</h3>'+
+        '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الحركة</th><th>التغييرات (السابق ← الجديد)</th><th>📝 السبب</th><th>مقدّم الطلب</th><th>التاريخ</th><th>القرار</th></tr></thead><tbody>'+
+        pendCashEditFull.map(m=>{ const pl=m.payload||{}; return '<tr><td style="font-size:11px"><b>'+esc(pl.bank_name||'')+'</b></td><td>'+_diff(pl)+'</td><td style="font-size:12px;font-weight:700;color:#2563c4">'+esc(pl.reason||m.note||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(pl.by||'—')+'</td><td>'+esc(String(m.created_at||'').slice(0,10))+'</td><td style="white-space:nowrap"><button class="btn" style="background:#2563c4;padding:2px 9px;font-size:11px" onclick="resolveCashEditFull('+m.id+',\'approve\')">✅ موافقة وتعديل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="resolveCashEditFull('+m.id+',\'reject\')">❌ رفض</button></td></tr>'; }).join('')+
+        '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">ℹ️ الموافقة تطبّق كل التغييرات على حركة الكاش (كل الحقول). الرفض يُبقيها كما هي. <b style="color:#2563c4">لا تتغيّر الحركة قبل اعتمادك.</b></div></div>';
+    }
     if(pendSupEdit.length){
       n+='<div class="panel" style="border:1px solid #c41d88;background:rgba(196,29,136,.07);margin-bottom:14px"><h3 style="color:#c41d88;margin-top:0">✏️ طلبات تعديل قيمة دفعات موردين ('+pendSupEdit.length+') — تحتاج قرارك</h3>'+
         '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>المورّد / العميل</th><th>القيمة الحالية</th><th>القيمة المطلوبة</th><th>📝 السبب</th><th>مقدّم الطلب</th><th>التاريخ</th><th>القرار</th></tr></thead><tbody>'+
@@ -3948,7 +3957,7 @@ function renderAlerts(){
         resolvedProfit.map(a=>{ const rs=profitReason(a.message)||esc(a.message||''); return '<tr><td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="color:var(--muted)">'+esc(rs)+'</td><td>'+esc((a.resolved_at||'').slice(0,10))+'</td></tr>'; }).join('')+
         '</tbody></table></div></details>';
     }
-    const ntot=pendProfit.length+pendFreeze.length+pendCost.length+pendCancel.length+pendReactivate.length+pendLoss.length+pendPD.length+pendSupPay.length+pendSupEdit.length+pendCash.length+pendCashEdit.length+pendCliEntry.length+pendCliEdit.length+pendRefund.length+pendRefEdit.length+pendList.length+pendCostOver.length;
+    const ntot=pendProfit.length+pendFreeze.length+pendCost.length+pendCancel.length+pendReactivate.length+pendLoss.length+pendPD.length+pendSupPay.length+pendSupEdit.length+pendCash.length+pendCashEdit.length+pendCashEditFull.length+pendCliEntry.length+pendCliEdit.length+pendRefund.length+pendRefEdit.length+pendList.length+pendCostOver.length;
     const nc=$('nt-cnt'); if(nc) nc.innerHTML = ntot? '<span style="background:var(--red);color:#fff;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700">'+ntot+'</span>':'';
     nbox.innerHTML = n || '<div class="panel"><div style="color:var(--muted);text-align:center;padding:24px">لا توجد إشعارات 🎉</div></div>';
   }
@@ -5404,7 +5413,7 @@ function _myPending(filterFn){
   const me=(CURRENT_USER&&CURRENT_USER.staff_name)||'';
   return ((DATA&&DATA.pendingMovements)||[]).filter(m=>m.status==='pending' && (!me||String((m.payload||{}).by||'')===me) && filterFn(m)).sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
 }
-function _pendKindLabel(m){ if(m.kind==='payment')return m.scope==='hotels'?'🏨 دفعة فندق':'🧾 دفعة مورّد'; if(m.kind==='client_edit')return (m.scope==='suppliers'?'✏️ تعديل تحويل':'✏️ تعديل'); if(m.kind==='refund')return '↩️ مرتجع'; if(m.kind==='cash')return '💵 كاش'; return esc(m.kind||''); }
+function _pendKindLabel(m){ if(m.kind==='payment')return m.scope==='hotels'?'🏨 دفعة فندق':'🧾 دفعة مورّد'; if(m.kind==='client_edit')return (m.scope==='suppliers'?'✏️ تعديل تحويل':'✏️ تعديل'); if(m.kind==='cash_edit')return '✏️ تعديل حركة كاش'; if(m.kind==='refund')return '↩️ مرتجع'; if(m.kind==='cash')return '💵 كاش'; return esc(m.kind||''); }
 function renderMyPendingPanel(containerId, title, filterFn){
   const box=$(containerId); if(!box)return;
   const mine=_myPending(filterFn);
@@ -5606,7 +5615,7 @@ function renderBanksCashDetail(){
         '<td style="font-size:10px">'+esc(x.more_details||'')+'</td>'+
         '<td style="font-size:10px">'+esc(x.note||'')+'</td>'+
         '<td style="font-size:10px;color:var(--muted)">'+(isDash?'يدوي':'شيت')+'</td>'+
-        '<td style="white-space:nowrap">'+(isDash?'<span title="معتمدة — مقفلة" style="color:#0e9d6a">🔒</span> <button class="btn ghost" style="padding:2px 7px;font-size:11px" onclick="reqCashEdit('+x.id+','+Number(x.in_raw||0)+','+Number(x.out_raw||0)+',\''+esc(x.currency||'')+'\')" title="تعديل القيمة — يُرسَل طلب موافقة للأدمن مع ذكر السبب">✏️ تعديل (موافقة)</button>':'')+'</td></tr>';
+        '<td style="white-space:nowrap">'+(isDash?'<span title="معتمدة — مقفلة" style="color:#0e9d6a">🔒</span> <button class="btn ghost" style="padding:2px 7px;font-size:11px" onclick="cashEditModal('+x.id+')" title="تعديل أي حقل (التاريخ/المرجع/القيمة/الوصف…) — '+(isOwnerUser()?'يُطبَّق مباشرة':'يُرسَل لموافقة المالكة')+'">✏️ تعديل'+(isOwnerUser()?'':' (موافقة)')+'</button>':'')+'</td></tr>';
     }).join(''):'<tr><td colspan="15" style="text-align:center;color:var(--muted);padding:10px">لا توجد حركات</td></tr>')+
     '</tbody></table></div><div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'bc-tbl\',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'bc-tbl\',1)">تمرير ▶▶</button></div></div>';
   box.innerHTML=html;
@@ -5675,6 +5684,62 @@ async function reqCashEdit(id,inRaw,outRaw,cur){
     if(j.dup){ alert('ℹ️ يوجد طلب تعديل معلّق لهذه الحركة بالفعل.'); return; }
     await load();
     alert('✅ أُرسل طلب تعديل القيمة للأدمن مع السبب — لن تتغيّر القيمة حتى يعتمده.');
+  }catch(e){ alert('خطأ: '+e.message); }
+}
+// ✏️ تعديل كامل لحركة كاش (أي حقل) — المالكة مباشر، المحاسب بموافقة المالكة النهائية
+function cashEditModal(id){
+  const x=((DATA&&DATA.banksCash)||[]).find(r=>String(r.id)===String(id)); if(!x){ alert('الحركة غير موجودة'); return; }
+  const owner=isOwnerUser();
+  const curList=[...new Set([x.currency,'OMR','SAR','USD','AED','EUR','MYR','SGD','GBP','THB',...listValues('currency').map(v=>v.value)])].filter(Boolean);
+  const curOpts=curList.map(c=>'<option'+(c===(x.currency||'')?' selected':'')+'>'+esc(c)+'</option>').join('');
+  const bankOpts=listValues('banks').map(b=>'<option'+(String(b.value)===(x.bank_name||'')?' selected':'')+'>'+esc(b.value)+'</option>').join('')+((x.bank_name&&!listValues('banks').some(b=>String(b.value)===x.bank_name))?'<option selected>'+esc(x.bank_name)+'</option>':'');
+  let m=document.getElementById('cashedit-modal'); if(m)m.remove();
+  m=document.createElement('div'); m.id='cashedit-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center';
+  m.innerHTML='<div style="background:var(--card,#fff);color:var(--txt,#111);border-radius:14px;padding:18px 20px;width:min(500px,94vw);max-height:92vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.35)">'+
+    '<h3 style="margin:0 0 3px;color:var(--accent)">✏️ تعديل حركة الكاش</h3>'+
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">'+(owner?'<b style="color:#0e9d6a">يُطبَّق مباشرة</b>':'<b style="color:#b8860b">يُرسَل لموافقة المالكة النهائية</b>')+' · كل الحقول قابلة للتعديل</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:9px"><div class="fld" style="flex:1;margin:0"><label>📅 التاريخ</label><input type="date" id="ce-date" value="'+esc(String(x.tx_date||'').slice(0,10))+'" style="width:100%;color-scheme:light"></div><div class="fld" style="flex:1;margin:0"><label>🏦 البنك/الحساب</label><select id="ce-bank" style="width:100%">'+bankOpts+'</select></div></div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:9px"><div class="fld" style="flex:1;margin:0"><label>داخل (+)</label><input type="number" id="ce-in" step="any" value="'+esc(x.in_raw!=null?x.in_raw:'')+'" style="width:100%"></div><div class="fld" style="flex:1;margin:0"><label>خارج (−)</label><input type="number" id="ce-out" step="any" value="'+esc(x.out_raw!=null?x.out_raw:'')+'" style="width:100%"></div><div class="fld" style="flex:1;margin:0"><label>العملة</label><select id="ce-cur" style="width:100%">'+curOpts+'</select></div></div>'+
+    '<div class="fld" style="margin-bottom:9px"><label>🔁 سعر الصرف <span style="font-size:9px;color:var(--muted)">(اختياري)</span></label><input type="number" id="ce-rate" step="any" value="'+esc(x.currency_rate!=null?x.currency_rate:'')+'" style="width:100%"></div>'+
+    '<div class="fld" style="margin-bottom:9px"><label>🔖 المرجع البنكي</label><input id="ce-ref" value="'+esc(x.bank_ref||'')+'" style="width:100%"></div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:9px"><div class="fld" style="flex:1;margin:0"><label>القناة</label><input id="ce-chan" value="'+esc(x.channel||'')+'" style="width:100%"></div><div class="fld" style="flex:1;margin:0"><label>الوصف</label><input id="ce-desc" value="'+esc(x.description||'')+'" style="width:100%"></div></div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:9px"><div class="fld" style="flex:1;margin:0"><label>التفاصيل</label><input id="ce-det" value="'+esc(x.details||'')+'" style="width:100%"></div><div class="fld" style="flex:1;margin:0"><label>تفاصيل أكثر</label><input id="ce-more" value="'+esc(x.more_details||'')+'" style="width:100%"></div></div>'+
+    '<div class="fld" style="margin-bottom:9px"><label>ملاحظة</label><input id="ce-note" value="'+esc(x.note||'')+'" style="width:100%"></div>'+
+    (owner?'':'<div class="fld" style="margin-bottom:9px"><label>📝 سبب التعديل <span style="color:#d11;font-size:9px">إجباري</span></label><input id="ce-reason" placeholder="سبب التعديل" style="width:100%"></div>')+
+    '<div id="ce-msg" style="font-size:12px;margin-bottom:8px;min-height:16px"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost" onclick="var e=document.getElementById(\'cashedit-modal\');if(e)e.remove()">إلغاء</button><button class="btn green" id="ce-save" onclick="saveCashEdit('+id+')">💾 حفظ</button></div>'+
+  '</div>';
+  document.body.appendChild(m);
+}
+async function saveCashEdit(id){
+  const g=k=>{ const e=document.getElementById('ce-'+k); return e?e.value:undefined; };
+  const changes={ tx_date:g('date')||null, bank_name:g('bank'), in_raw:(g('in')===''?null:g('in')), out_raw:(g('out')===''?null:g('out')), currency:g('cur'), currency_rate:(g('rate')===''?null:g('rate')), bank_ref:g('ref'), channel:g('chan'), description:g('desc'), details:g('det'), more_details:g('more'), note:g('note') };
+  const owner=isOwnerUser(); const reason=owner?'':((g('reason')||'').trim());
+  const mm=document.getElementById('ce-msg');
+  if(!owner && !reason){ if(mm)mm.innerHTML='<span style="color:var(--red)">سبب التعديل إجباري</span>'; return; }
+  const btn=document.getElementById('ce-save'); if(btn){ btn.disabled=true; btn.textContent='⏳'; }
+  try{
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'edit_bank_cash',payload:{id:id,changes:changes,reason:reason,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
+    const j=await r.json(); if(j.error){ if(btn){btn.disabled=false;btn.textContent='💾 حفظ';} if(mm)mm.innerHTML='<span style="color:var(--red)">'+esc(j.error)+'</span>'; return; }
+    const mo=document.getElementById('cashedit-modal'); if(mo)mo.remove();
+    await load();
+    alert(j.pending?(j.dup?'ℹ️ يوجد طلب تعديل معلّق لهذه الحركة بالفعل.':'✅ أُرسل طلب التعديل للمالكة — لن يُطبّق حتى تعتمده.'):'✅ عُدّلت حركة الكاش مباشرة.');
+  }catch(e){ if(btn){btn.disabled=false;btn.textContent='💾 حفظ';} if(mm)mm.innerHTML='<span style="color:var(--red)">'+esc(e.message)+'</span>'; }
+}
+async function resolveCashEditFull(id,decision){
+  const approve=(decision==='approve');
+  const mv=((DATA&&DATA.pendingMovements)||[]).find(m=>m.id===id)||{}; const pl=mv.payload||{}; const ch=pl.changes||{}; const old=pl.old||{};
+  if(approve){
+    const L={tx_date:'التاريخ',bank_name:'البنك',in_raw:'داخل',out_raw:'خارج',currency:'العملة',currency_rate:'سعر الصرف',bank_ref:'المرجع',channel:'القناة',description:'الوصف',details:'التفاصيل',more_details:'تفاصيل أكثر',note:'ملاحظة'};
+    const lines=Object.keys(ch).map(k=>'• '+(L[k]||k)+': '+(old[k]==null||old[k]===''?'—':old[k])+' ← '+(ch[k]==null||ch[k]===''?'—':ch[k])).join('\n');
+    if(!confirm('📋 اعتماد تعديل حركة الكاش وتطبيقه؟\n\n'+lines+'\n\n🔒 يُطبَّق فعلياً على سجل الكاش.'))return;
+  } else { if(!confirm('رفض طلب تعديل حركة الكاش؟ تبقى القيم كما هي.'))return; }
+  try{
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_movement_status',payload:{id:id,status:approve?'approved':'rejected'}})});
+    const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
+    await load();
+    alert(approve?'✅ طُبّق تعديل حركة الكاش.':'❌ رُفض الطلب — بلا تغيير.');
   }catch(e){ alert('خطأ: '+e.message); }
 }
 async function resolveCashMv(id,decision){
