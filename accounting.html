@@ -3864,8 +3864,9 @@ function renderAlerts(){
     }
     if(pendCash.length){
       n+='<div class="panel" style="border:1px solid #2563c4;background:rgba(37,99,196,.07);margin-bottom:14px"><h3 style="color:#2563c4;margin-top:0">💵 حركات كاش (إدخال/إخراج) بانتظار الموافقة ('+pendCash.length+') — لا تنعكس إلا بقرارك</h3>'+
-        '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>البنك</th><th>داخل (+)</th><th>خارج (−)</th><th>التفاصيل</th><th>مقدّم الطلب</th><th>التاريخ</th><th>القرار</th></tr></thead><tbody>'+
-        pendCash.map(m=>{ const c=m.payload||{}; const inV=Number(c.in_raw||0),outV=Number(c.out_raw||0),cur=c.currency||''; return '<tr><td><b>'+esc(c.bank_name||'')+'</b></td><td class="num" style="color:#0e9d6a">'+(inV>0?fmt(inV)+' '+esc(cur):'')+'</td><td class="num neg">'+(outV>0?fmt(outV)+' '+esc(cur):'')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(((c.description||'')+(c.details?' · '+c.details:'')+(c.bank_ref?' · مرجع '+c.bank_ref:''))||m.summary||'')+'</td><td style="font-size:11px">'+esc(c.by||'—')+'</td><td>'+esc(String(c.tx_date||m.created_at||'').slice(0,10))+'</td><td style="white-space:nowrap"><button class="btn" style="background:#2563c4;padding:2px 9px;font-size:11px" onclick="resolveCashMv('+m.id+',\'approve\')">✅ موافقة وتسجيل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="resolveCashMv('+m.id+',\'reject\')">❌ رفض</button></td></tr>'; }).join('')+
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:9px;background:rgba(37,99,196,.06);border-radius:8px;padding:7px 11px"><button class="btn" style="background:#2563c4;padding:6px 15px;font-size:12px" onclick="resolveCashMvBulk(\'approve\')">✅ موافقة على المحدّدة (<span id="cashmv-selcount">0</span>)</button><button class="btn ghost" style="padding:6px 13px;font-size:12px;color:var(--red);border-color:var(--red)" onclick="resolveCashMvBulk(\'reject\')">❌ رفض المحدّدة</button><label style="font-size:11.5px;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:5px"><input type="checkbox" id="cashmv-all" onchange="cashmvToggleAll(this)" style="width:15px;height:15px;cursor:pointer"> تحديد الكل</label><span style="font-size:10.5px;color:var(--muted)">حدّدي عدة حركات ثم وافقي/ارفضيها دفعة واحدة</span></div>'+
+        '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th><input type="checkbox" onchange="cashmvToggleAll(this)" style="width:15px;height:15px;cursor:pointer"></th><th>البنك</th><th>داخل (+)</th><th>خارج (−)</th><th>التفاصيل</th><th>مقدّم الطلب</th><th>التاريخ</th><th>القرار</th></tr></thead><tbody>'+
+        pendCash.map(m=>{ const c=m.payload||{}; const inV=Number(c.in_raw||0),outV=Number(c.out_raw||0),cur=c.currency||''; return '<tr><td><input type="checkbox" class="cashmv-chk" value="'+m.id+'" onchange="cashmvUpdCount()" style="width:15px;height:15px;cursor:pointer"></td><td><b>'+esc(c.bank_name||'')+'</b></td><td class="num" style="color:#0e9d6a">'+(inV>0?fmt(inV)+' '+esc(cur):'')+'</td><td class="num neg">'+(outV>0?fmt(outV)+' '+esc(cur):'')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(((c.description||'')+(c.details?' · '+c.details:'')+(c.bank_ref?' · مرجع '+c.bank_ref:''))||m.summary||'')+'</td><td style="font-size:11px">'+esc(c.by||'—')+'</td><td>'+esc(String(c.tx_date||m.created_at||'').slice(0,10))+'</td><td style="white-space:nowrap"><button class="btn" style="background:#2563c4;padding:2px 9px;font-size:11px" onclick="resolveCashMv('+m.id+',\'approve\')">✅ موافقة وتسجيل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="resolveCashMv('+m.id+',\'reject\')">❌ رفض</button></td></tr>'; }).join('')+
         '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">ℹ️ الموافقة تسجّل الحركة في سجل الكاش البنكي. الرفض يلغيها بلا أي أثر. <b style="color:#2563c4">لا أثر للحركة قبل اعتمادك.</b></div></div>';
     }
     if(pendCashEdit.length){
@@ -5694,6 +5695,21 @@ async function resolveCashMv(id,decision){
     await load();
     alert(approve?'✅ اعتُمدت حركة الكاش وسُجّلت فعلياً.':'❌ رُفض الطلب — بلا أي أثر.');
   }catch(e){ alert('خطأ: '+e.message); }
+}
+// ☑️ تحديد متعدد لحركات الكاش المعلّقة + موافقة/رفض جماعي (بدل معالجة كل حركة على حدة)
+function cashmvToggleAll(el){ document.querySelectorAll('.cashmv-chk').forEach(c=>{ c.checked=el.checked; }); const a=document.getElementById('cashmv-all'); if(a&&a!==el)a.checked=el.checked; cashmvUpdCount(); }
+function cashmvUpdCount(){ const n=document.querySelectorAll('.cashmv-chk:checked').length; const e=document.getElementById('cashmv-selcount'); if(e)e.textContent=n; }
+async function resolveCashMvBulk(decision){
+  const approve=(decision==='approve');
+  const ids=[...document.querySelectorAll('.cashmv-chk:checked')].map(c=>Number(c.value)).filter(Boolean);
+  if(!ids.length){ alert('اختاري حركة واحدة على الأقل أولاً (ضعي ✔️ أمام الحركات).'); return; }
+  if(!confirm((approve?'✅ اعتماد وتسجيل ':'❌ رفض ')+ids.length+' حركة كاش دفعة واحدة؟'+(approve?'\n\n🔒 بعد الاعتماد لا تُعدَّل إلا بطلب موافقة. تُسجَّل فعلياً في سجل الكاش.':'\n\nتُلغى بلا أي أثر.')))return;
+  let ok=0, err=0, lastErr='';
+  for(const id of ids){
+    try{ const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resolve_cash_add',payload:{id:id,decision:approve?'approve':'reject',by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j=await r.json(); if(j.error){ err++; lastErr=j.error; } else ok++; }catch(e){ err++; lastErr=e.message; }
+  }
+  await load();
+  alert((approve?'✅ اعتُمدت ':'❌ رُفضت ')+ok+' حركة'+(err?(' · تعذّر '+err+(lastErr?(' ('+lastErr+')'):'')):'')+'.');
 }
 async function resolveCashEdit(id,decision){
   const approve=(decision==='approve');
