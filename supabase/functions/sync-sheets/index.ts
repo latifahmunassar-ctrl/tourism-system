@@ -198,13 +198,17 @@ async function getGoogleAccessToken(serviceAccount: {
 async function readSheetRange(
   token: string,
   spreadsheetId: string,
-  range: string
+  range: string,
+  unformatted = false
 ): Promise<string[][]> {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`;
+  // unformatted=true يعيد القيم الخام: خلايا الأسعار المُنسَّقة «تاريخ» في شيت مكة
+  // كانت تُقرأ «21 Jan» بدل 5500. الأرقام التسلسلية للتواريخ يفكّها serialToISO.
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`
+            + (unformatted ? "?valueRenderOption=UNFORMATTED_VALUE" : "");
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   const data = await res.json();
   if (data.error) throw new Error(`Sheets API [${range}]: ${data.error.message}`);
-  return data.values || [];
+  return (data.values || []).map((r: unknown[]) => r.map(v => String(v ?? "")));
 }
 
 // ── ALEZZ Chat sheet sync (separate spreadsheet) ──────────────────────────
@@ -349,7 +353,7 @@ const HEADER_ALIASES: Record<string, RegExp> = {
   dateTo:     /^(to|date\s*to|valid\s*to|الى|إلى|الى\s*تاريخ|نهاية|check\s*out)$/i,
 };
 
-function findHotelHeader(rows: string[][]): { rowIdx: number; cols: Record<string, number> } | null {
+function findHotelHeader(rows: string[][]): { rowIdx: number; cols: Record<string, number>; rateCols: number[] } | null {
   for (let i = 0; i < rows.length; i++) {
     const cells = rows[i].map(x => (x || "").trim());
     // Step 1: find the Hotel name column first.
@@ -378,7 +382,13 @@ function findHotelHeader(rows: string[][]): { rowIdx: number; cols: Record<strin
     }
     // Header row must have at least name + city + stars + rate
     if (map.city !== undefined && map.stars !== undefined && map.rate !== undefined) {
-      return { rowIdx: i, cols: map };
+      // اجمع كل أعمدة السعر (نطاقات تواريخ متعددة From/To/Rate مكرّرة) — بعض التبويبات
+      // (ماليزيا) تترك أول نطاق فارغاً، فنستخدم أول عمود سعر غير فارغ لكل صف.
+      const rateCols: number[] = [];
+      for (let j = nameCol; j < cells.length; j++) {
+        if (cells[j] && HEADER_ALIASES.rate.test(cells[j])) rateCols.push(j);
+      }
+      return { rowIdx: i, cols: map, rateCols };
     }
   }
   return null;
@@ -386,9 +396,24 @@ function findHotelHeader(rows: string[][]): { rowIdx: number; cols: Record<strin
 
 // يوحّد صيغة التاريخ إلى ISO (YYYY-MM-DD) — الشيت يخلط بين "2026-06-01"، "01-06-2026"،
 // وأحياناً مقلوب "2026-30-06" (YYYY-DD-MM) الذي يمرّ كأنه ISO رغم أن الشهر > 12.
+const MON_ABBR: Record<string, number> = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,sept:9,oct:10,nov:11,dec:12 };
+// الرقم التسلسلي لتواريخ Google Sheets (1 = 1899-12-31) → ISO
+function serialToISO(n: number): string {
+  if (!(n > 59 && n < 80000)) return "";              // خارج نطاق تاريخ معقول
+  const ms = Date.UTC(1899, 11, 30) + n * 86400000;
+  return new Date(ms).toISOString().slice(0, 10);
+}
 function normalizeISODate(s: string): string {
   const t = (s || "").trim();
   if (!t) return "";
+  // رقم تسلسلي (القراءة الخام) — أكثر صيغة في شيت مكة
+  if (/^\d+(\.\d+)?$/.test(t)) { const iso = serialToISO(parseFloat(t)); if (iso) return iso; }
+  // «5-Sep» / «10 Sep» — بلا سنة: تُعامَل كتاريخ سنوي متكرر (اليوم والشهر فقط)،
+  // فنثبّت سنة مرجعية 2000 ويُقارَن لاحقاً بالشهر واليوم لا بالسنة.
+  const md = t.match(/^(\d{1,2})\s*[-\/ ]\s*([A-Za-z]{3,4})\.?$/);
+  if (md) { const mo = MON_ABBR[md[2].toLowerCase()]; if (mo) return `2000-${String(mo).padStart(2,"0")}-${md[1].padStart(2,"0")}`; }
+  const dm = t.match(/^([A-Za-z]{3,4})\.?\s*[-\/ ]\s*(\d{1,2})$/);
+  if (dm) { const mo = MON_ABBR[dm[1].toLowerCase()]; if (mo) return `2000-${String(mo).padStart(2,"0")}-${dm[2].padStart(2,"0")}`; }
   let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);            // YYYY-?-? (قد تكون مقلوبة)
   if (m) {
     let a = m[2], b = m[3];                                    // a=الوسط(شهر مفترض)، b=الأخير(يوم مفترض)
@@ -430,12 +455,27 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
     let city         = get(row, "city");
     const starsRaw   = get(row, "stars");
     const roomType   = get(row, "room");
-    const priceStr   = get(row, "rate");
+    let priceStr   = get(row, "rate");
     let includeStr = get(row, "include");
     const currencyStr = get(row, "currency");
     let occupancyStr = get(row, "occupancy");
-    const dateFromRaw = normalizeISODate(get(row, "dateFrom"));   // موسم: من تاريخ
-    const dateToRaw   = normalizeISODate(get(row, "dateTo"));     // موسم: إلى تاريخ
+    let dateFromRaw = normalizeISODate(get(row, "dateFrom"));   // موسم: من تاريخ
+    let dateToRaw   = normalizeISODate(get(row, "dateTo"));     // موسم: إلى تاريخ
+    // شيت متعدّد نطاقات التواريخ (From/To/Rate مكرّرة، مثل ماليزيا) — لو أول عمود سعر
+    // فارغ، خذ أوّل نطاق فيه سعر، ومعه تاريخَي ذلك النطاق (From=rate-2, To=rate-1).
+    if (!(parseFloat(priceStr.replace(/[^\d.]/g, "")) > 0) && header.rateCols && header.rateCols.length > 1) {
+      for (const rc of header.rateCols) {
+        const v = (row[rc] ?? "").toString().trim();
+        if (parseFloat(v.replace(/[^\d.]/g, "")) > 0) {
+          priceStr = v;
+          const f = (row[rc - 2] ?? "").toString().trim();
+          const t = (row[rc - 1] ?? "").toString().trim();
+          if (f) dateFromRaw = normalizeISODate(f);
+          if (t) dateToRaw = normalizeISODate(t);
+          break;
+        }
+      }
+    }
     // Fallback: many sheets accidentally put the "N adults + M child" value
     // in the `Include` column instead of the `تتسع`/occupancy one. If the
     // occupancy cell is blank but Include looks like an occupancy string
@@ -491,20 +531,36 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
     else if (/break\s*fast|breakfast|إفطار/i.test(mealsRaw)) mealsAr = "إفطار مشمول";
     else mealsAr = mealsRaw; // fallback to raw text
 
-    hotels.push({
+    const baseRec = {
       name:               hotelName,
       stars,
       location:           `${city} - ${destination}`,
-      price_per_night:    price,
       room_type:          roomType || "",
       includes_breakfast: /break\s*fast|breakfast|إفطار/i.test(mealsRaw) && !/no\s*break\s*fast|no\s*breakfast|بدون\s*إفطار/i.test(mealsRaw),
       meals:              mealsAr,
       currency:           cleanCurrency(currencyStr || "SAR"),
       occupancy:          occupancyStr,
-      date_from:          dateFromRaw,
-      date_to:            dateToRaw,
       last_synced_at:     new Date().toISOString(),
-    });
+    };
+    hotels.push({ ...baseRec, price_per_night: price, date_from: dateFromRaw, date_to: dateToRaw });
+
+    // ── نطاقات تسعير إضافية على نفس الصف ──────────────────────────────
+    // شيت مكة يكرّر ثلاثية From/To/Rate عشرات المرات أفقياً (حتى العمود DZ).
+    // كان يُقرأ أول نطاق فقط فتضيع بقية المواسم. نمسح بقية الصف بحثاً عن كل
+    // ثلاثية تالية ونُصدر سجلاً لكل نطاق له سعر صالح.
+    const hdrRow = rows[header.rowIdx] || [];
+    for (let j = 0; j + 2 < hdrRow.length; j++) {
+      const h1 = String(hdrRow[j] || "").trim().toLowerCase();
+      const h2 = String(hdrRow[j + 1] || "").trim().toLowerCase();
+      const h3 = String(hdrRow[j + 2] || "").trim().toLowerCase();
+      if (!(/^from$/.test(h1) && /^to$/.test(h2) && /^rate$/.test(h3))) continue;
+      const f = normalizeISODate(String(row[j] || "").trim());
+      const t = normalizeISODate(String(row[j + 1] || "").trim());
+      const p = parsePrice(String(row[j + 2] || "").trim());
+      if (!f || !t || isNaN(p) || p <= 0) continue;
+      if (f === dateFromRaw && t === dateToRaw) continue;      // النطاق الأساسي مُضاف
+      hotels.push({ ...baseRec, price_per_night: p, date_from: f, date_to: t });
+    }
   }
 
   return hotels;
@@ -1492,7 +1548,10 @@ Deno.serve(async (req) => {
         // Google Sheets requires single-quotes around tab names that contain
         // spaces or other special chars (e.g. 'Malaysia '!A1:Z500).
         const quotedTab = /[\s'"]/.test(tabRaw) ? `'${tabRaw.replace(/'/g, "''")}'` : tabRaw;
-        const rows = await readSheetRange(token, spreadsheetId, `${quotedTab}!A1:CZ500`);
+        // تبويب مكة عرضه ٢٠٨ أعمدة: ٤١ ثلاثية From/To/Rate ثم FQ=Include و FR=تتسع.
+        // أي نطاق أضيق يقصّ عمود الإشغال فتختفي شارة «يتسع» من التسعيرة.
+        // unformatted=true ضروري: أسعار مكة مُنسَّقة كتواريخ («21 Jan» = 5500).
+        const rows = await readSheetRange(token, spreadsheetId, `${quotedTab}!A1:GZ500`, true);
 
         // Optional dump for diagnostic — show ALL columns so we can see flight cols if present
         if (dumpTab && tab.toLowerCase() === dumpTab.toLowerCase() && debugInfo) {
