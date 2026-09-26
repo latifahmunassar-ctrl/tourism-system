@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20260926a -->
+<!-- APPVER:20260926b -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1867,7 +1867,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260915c";
+    const APPVER = "20260926b";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4559,6 +4559,42 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         const m = $("bf-msg"); if (m) { m.style.color = "#dc2626"; m.textContent = "⛔ لا يمكن الحفظ — أكملي أولاً: " + missReq.join("، "); }
         return false;
       }
+      // ── حارس تطابق الوجهة مع توزيع المدن ─────────────────────────────────
+      // سبب الإضافة: طلب 2026-09-16 لعميل سعودي حُفظ بوجهة «عُمان» وتوزيع
+      // «٤ صلالة في هوانا» بينما العميل طلب مكة. الحقلان يدويان ولا رابط
+      // بينهما، فالخطأ لا يُكتشف إلا بعد أيام. هنا ننبّه وقت الإدخال.
+      // تحذير لا منع: الضغط مرة ثانية يحفظ كما هو (قد تكون رحلة مختلطة فعلاً).
+      const DEST_CITIES = [
+        ['العمرة',      /مك[ةه]|المدين[ةه]\s*المنور|جد[ةه]|makk|madin|jedd/i],
+        ['عُمان',        /صلال|مسق[طت]|هوانا|نزوى|صور|الجبل\s*الأخضر|salalah|muscat/i],
+        ['تايلند',      /بانكوك|بوكيت|باتايا|شنغماي|شيانغ|كرابي|سمو[يي]|bangkok|phuket|pattaya/i],
+        ['ماليزيا',     /كوالالمبور|لنكاوي|بينانج|جنتن[جق]|ملاكا|kuala|langkawi|penang/i],
+        ['فيتنام',      /هانوي|هوشي|دانان[جق]|ها\s*لون[جق]|سابا|هوي\s*آن|فوكوك|نها\s*ترانج|hanoi|danang/i],
+        ['إندونيسيا',   /بالي|جاكرتا|لومبوك|باندون[جق]|bali|jakarta/i],
+        ['تركيا',       /اسطنبول|إسطنبول|طرابزون|انطاليا|أنطاليا|بورصة|سبانجا|كابادوكيا|istanbul|trabzon/i],
+        ['أذربيجان',    /باكو|قبالا|قوبا|baku|gabala/i],
+        ['جورجيا',      /تبليسي|باتومي|tbilisi|batumi/i],
+        ['البوسنة',     /سراييفو|موستار|sarajevo|mostar/i],
+        ['روسيا',       /موسكو|سانت\s*بطرسبر|moscow|petersburg/i],
+        ['جنوب أفريقيا',/كيب\s*تاون|جوهانسبر|cape\s*town|johannesburg/i],
+        ['الصين',       /بكين|شنغهاي|قوانزو|beijing|shanghai|guangzhou/i],
+        ['إنجلترا',     /لندن|مانشستر|london|manchester/i],
+      ];
+      const _destTxt = String(payload.destination || '');
+      const _distTxt = String(payload.distribution || '');
+      const _destHit = DEST_CITIES.find(([n, re]) => re.test(_destTxt) || _destTxt.includes(n));
+      const _distHit = DEST_CITIES.find(([, re]) => re.test(_distTxt));
+      if (_destHit && _distHit && _destHit[0] !== _distHit[0] && !window._bbMismatchAck) {
+        window._bbMismatchAck = true;
+        const m = $("bf-msg");
+        if (m) {
+          m.style.color = "#dc2626";
+          m.textContent = `⚠️ الوجهة «${_destTxt}» لكن التوزيع يذكر مدن ${_distHit[0]} («${_distTxt}»). `
+            + `تأكدي من طلب العميل. لو صحيح اضغطي حفظ مرة ثانية.`;
+        }
+        return false;
+      }
+      window._bbMismatchAck = false;
       const btn = $("bf-save"); const old = btn.textContent; btn.disabled = true; btn.textContent = "جاري الحفظ…";
       const msg = $("bf-msg"); msg.style.color = "#64748b"; msg.textContent = "";
       let okSaved = false;
