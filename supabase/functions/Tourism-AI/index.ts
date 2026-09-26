@@ -194,6 +194,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
 const NEARBY_TOUR_CITIES: Record<string, string[]> = {
   "Cape Town": ["Hermanus"],
   "Shanghai": ["Suzhou"],
+  "Kuala Lumpur": ["Malacca"],   // ملاكا رحلة يوم من كوالالمبور (جولتها تظهر بكوالالمبور بلا إقامة)
 };
 
 /**

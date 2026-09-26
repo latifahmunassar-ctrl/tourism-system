@@ -428,6 +428,7 @@ function tourNameCity(tour: TourRow, cityDefs: CityDef[]): string | null {
 const NEARBY_TOUR_CITIES: Record<string, string[]> = {
   "Cape Town": ["Hermanus"],
   "Shanghai": ["Suzhou"],   // سوجو رحلة يوم من شانغهاي: جولاتها تظهر بشانغهاي، دون فنادقها
+  "Kuala Lumpur": ["Malacca"],   // ملاكا رحلة يوم من كوالالمبور: جولتها تظهر بكوالالمبور بلا إقامة
 };
 
 /**
