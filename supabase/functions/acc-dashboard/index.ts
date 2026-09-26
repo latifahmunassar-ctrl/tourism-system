@@ -452,6 +452,7 @@ Deno.serve(async (req: Request) => {
     }
     // ✏️ تعديل كامل لحركة كاش (أي حقل): المالكة تطبّق مباشرة، المحاسب يُنشئ طلب موافقة (كل الحقول). لا يمسّ الحركة إلا بعد اعتماد المالكة.
     if (action === 'edit_bank_cash') {
+      const callerIsOwner = (key === ACCESS_KEY) || (sess && !!sess.is_owner);
       if (!callerBankRef) return J({ error: 'تعديل حركة الكاش للمحاسب أو المالكة فقط' }, 403);
       if (!p.id) return J({ error: 'no id' }, 400);
       const { data: row, error: e0 } = await supabase.from('acc_banks_cash').select('*').eq('id', p.id).single();
