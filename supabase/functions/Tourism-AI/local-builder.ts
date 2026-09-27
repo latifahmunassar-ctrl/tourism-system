@@ -636,10 +636,25 @@ export function pickToursForCity(
     /** شهر السفر (1–12) — لتسعير الترتيب موسميّاً مثل العرض تماماً. بدونه يقع
      * الترتيب على السعر الأساسي فتتساوى جولات ذروتها مختلفة ويكسر التعادل أبجديّاً. */
     month?: number;
+    /** المدن المطلوبة في البرنامج (canonical). جولة/انتقال تذكر مدينة **غير مطلوبة**
+     * (رحلة يوم اختيارية مثل الطائف) تُستبعَد — إلا لو انتقال مطار (مطار جدة للوصول). */
+    requestedCities?: string[];
   },
 ): { selected: TourRow[]; available: number; deficit: number } {
   // Real tours only (not transfer/pickup rows) belonging to this city
   const isTransfer = isTransferTour;
+  // استبعاد رحلات المدن غير المطلوبة (مثل الطائف لعمرة مكة+المدينة فقط): أي صف يذكر
+  // مدينة من مدن الوجهة ليست ضمن المطلوبة، وليس انتقال «مطار» → يُسقَط (ما طلبها العميل).
+  const _reqSet = new Set((options?.requestedCities || []).map(c => c));
+  const _mentionsUnrequested = (name: string): boolean => {
+    if (!_reqSet.size) return false;
+    if (/مطار|airport/iu.test(name)) return false;   // انتقالات المطار (جدة للوصول) مطلوبة دائماً
+    for (const def of cityDefs) {
+      if (_reqSet.has(def.canonical) || def.canonical === canonicalCity) continue;
+      if (def.pattern.test(name)) return true;        // يذكر مدينة غير مطلوبة (الطائف)
+    }
+    return false;
+  };
 
   const exclude = options?.excludeNames || new Set<string>();
   const pinned = options?.pinnedTours || [];
@@ -651,6 +666,7 @@ export function pickToursForCity(
     !isTransfer(t.name)
     && tourBelongsToCity(t, cityDefs, canonicalCity)
     && !isExcluded(t.name)
+    && !_mentionsUnrequested(t.name)
     && !pinnedNames.has(t.name.trim().toLowerCase()),
   );
   // اختيار جولات المنطقة المطابقة لفندق الإقامة (صلالة: هوانا 380 vs وسط 330).
@@ -2338,6 +2354,7 @@ export async function buildLocalProgram(
         freeDayCount: segFreeDayCount,
         areaHint: cityHotelLoc,
         month: buildMonth,
+        requestedCities: request.cities,
       },
     );
     // Day-specific overrides win over the order-based auto pick. Two-pass
