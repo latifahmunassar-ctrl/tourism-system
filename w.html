@@ -1867,7 +1867,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260926b";
+    const APPVER = "20260927a";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4271,10 +4271,41 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           if (aSel) { const opts = [...aSel.options].filter(o => o.value); if (opts.length === 1) aSel.value = opts[0].value; }
           if (typeof bfRenderSugs === "function") bfRenderSugs();
         }
-        if (msg) { msg.style.color = "#6d28d9"; msg.textContent = "✨ عُبّئت من المحادثة — اختاري مطار القدوم/المغادرة (لو متعدد) وراجعي قبل الحفظ."; }
+        // مقارنة بين وجهتين: خزّن الوجهة الثانية، واعرض زر «طلب الوجهة الثانية» لحفظها كطلب منفصل.
+        window._bfDest2 = b.destination2 ? bfCanonDest(b.destination2) : "";
+        if (msg) {
+          msg.style.color = "#6d28d9";
+          if (window._bfDest2) {
+            msg.innerHTML = "✨ عُبّئت الوجهة الأولى (<b>" + (b.destination||'') + "</b>). العميل يقارن وجهتين — احفظي هذي، ثم اضغطي: "
+              + "<button type='button' onclick='bfSwitchToDest2()' style='margin-inline-start:6px;padding:4px 10px;border:0;border-radius:8px;background:#0e9d6a;color:#fff;font-weight:700;cursor:pointer'>➕ طلب الوجهة الثانية (" + window._bfDest2 + ")</button>";
+          } else {
+            msg.textContent = "✨ عُبّئت من المحادثة — اختاري مطار القدوم/المغادرة (لو متعدد) وراجعي قبل الحفظ.";
+          }
+        }
       } catch (e) {
         if (msg) { msg.style.color = "#dc2626"; msg.textContent = "تعذّر القراءة من المحادثة: " + (e.message || e); }
       } finally { if (btn) { btn.disabled = false; btn.textContent = old; } }
+    }
+    // يبدّل الفورمة للوجهة الثانية (المقارنة) — نفس العدد/التاريخ/الأيام، توزيع جديد.
+    // الموظفة تحفظه كطلب فرد منفصل ثانٍ (نفس محرّك الحفظ).
+    async function bfSwitchToDest2() {
+      const d2 = window._bfDest2; if (!d2) return;
+      const setv = (id, v) => { const el = $(id); if (el) el.value = (v == null ? "" : v); };
+      setv("bf-destination", d2);
+      // صفّر التوزيع والمطار (خاصّان بالوجهة السابقة) وأعد جلب اقتراحات الوجهة الثانية.
+      bfChosenDist = ""; bfChosenCN = null; bfChosenPair = "";
+      if ($("bf-chosen-wrap")) $("bf-chosen-wrap").style.display = "none";
+      if ($("bf-cityRows")) { $("bf-cityRows").innerHTML = ""; }
+      const rReady = document.querySelector('input[name=bf-mode][value=ready]'); if (rReady) rReady.checked = true;
+      if (typeof bfSetMode === "function") bfSetMode("ready");
+      if (typeof bfLoadSugs === "function") {
+        await bfLoadSugs(d2);
+        const aSel = $("bf-airport");
+        if (aSel) { const opts = [...aSel.options].filter(o => o.value); if (opts.length === 1) aSel.value = opts[0].value; }
+        if (typeof bfRenderSugs === "function") bfRenderSugs();
+      }
+      const msg = $("bf-msg");
+      if (msg) { msg.style.color = "#0e5a40"; msg.textContent = "✅ بُدّلت للوجهة الثانية (" + d2 + ") — اختاري التوزيع/المطار واحفظيها كطلب منفصل."; }
     }
     function bfBadge(status) {
       const el = $("bf-status-badge");
