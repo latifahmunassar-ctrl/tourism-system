@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-26-malacca'
+  var BUILD = '2026-09-27-makkah-train-default'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1556,7 +1556,14 @@ function renderMakkahTransportBar(){
   if(!/مكة|مكه|عمرة/.test(getLine(lastProgramRaw,'DEST')||'')) return;
   const cities = mkCitiesFromProgram(); if(!cities.length) return;
   const seq = ['airport', ...cities.map(c=>c.key), 'airport'];
-  if(MK_MODES.length !== seq.length-1) MK_MODES = seq.slice(0,-1).map((_,i)=> (i===0 || i===seq.length-2) ? 'car' : 'train');
+  // الوضع الافتراضي: الوصول (مطار→أول مدينة) سيارة (وصول بالعفش)؛ التنقّل بين مكة والمدينة
+  // قطار الحرمين؛ المغادرة (آخر مدينة→مطار) قطار لو من **المدينة** (المدينة→جدة بالحرمين
+  // هو الطبيعي)، وسيارة لو من مكة. الموظفة تقدر تبدّل أي مقطع من الشريط.
+  if(MK_MODES.length !== seq.length-1) MK_MODES = seq.slice(0,-1).map((from,i)=>{
+    if(i===0) return 'car';                                   // الوصول: مطار→أول مدينة
+    if(seq[i+1]==='airport') return (from==='Al Madinah') ? 'train' : 'car';  // المغادرة
+    return 'train';                                           // بين مكة والمدينة
+  });
   const AR = { airport:'المطار', Makkah:'مكة', 'Al Madinah':'المدينة', Taif:'الطائف' };
   const btn = (i,mode,label)=>`<button onclick="mkSetMode(${i},'${mode}')" style="cursor:pointer;font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:16px;border:1.5px solid ${MK_MODES[i]===mode?'#1a5fb4':'#d7dee6'};background:${MK_MODES[i]===mode?'#1a5fb4':'#fff'};color:${MK_MODES[i]===mode?'#fff':'#445'}">${label}</button>`;
   const airBtn = (air,label)=>`<button onclick="mkSetDepAir('${air}')" style="cursor:pointer;font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;border:1.5px solid ${MK_DEP_AIR===air?'#0e9d6a':'#d7dee6'};background:${MK_DEP_AIR===air?'#0e9d6a':'#fff'};color:${MK_DEP_AIR===air?'#fff':'#445'}">${label}</button>`;
