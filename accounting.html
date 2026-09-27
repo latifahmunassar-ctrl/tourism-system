@@ -3607,6 +3607,15 @@ function cliEditDiff(m){
     // 🧾 تعديل «فاتورة المورّد» المسجّلة — القيمة السابقة (وقت الطلب) ← المطلوبة
     if(c.supplier_name||c.client_code) rows.push('<div style="color:var(--muted)">🧾 نوع التعديل: <b>فاتورة المورّد</b>'+(c.supplier_name?(' — '+esc(cut(c.supplier_name))):'')+(c.client_code?(' · '+esc(c.client_code)):'')+'</div>');
     chg('🧾 قيمة فاتورة المورّد', c.old_value, c.actual_invoice, true);
+  } else if(c._sup_transfer_only){
+    // 💸 تعديل بيانات تحويل مورّد — القيمة الحالية (من سجل الدفعة) ← المطلوبة
+    const pid=(c.pay_ids&&c.pay_ids[0]); const o=((DATA&&DATA.supplierPayments)||[]).find(x=>String(x.id)===String(pid))||{};
+    rows.push('<div style="color:var(--muted)">💸 نوع التعديل: <b>بيانات تحويل مورّد</b>'+(c.sup?(' — '+esc(cut(c.sup))):'')+'</div>');
+    chg('🏦 البنك', o.bank_name, c.bank_name);
+    chg('🏷️ المرجع البنكي', o.bank_ref, c.bank_ref);
+    chg('📅 تاريخ الدفع', D(o.payment_date), D(c.payment_date));
+    chg('🔁 سعر الصرف', o.currency_rate, c.currency_rate, true);
+    if(rows.length<=1) rows.push('<div style="color:var(--muted)">لا تغيير في القيم — راجعي التفاصيل</div>');
   } else {
     const r=((DATA&&DATA.fcd)||[]).find(x=>String(x.id)===String(c.entry_id))||{};
     chg('💰 التكلفة', r.cost, c.cost, true);
