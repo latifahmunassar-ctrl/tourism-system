@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-27-varied-note'
+  var BUILD = '2026-09-27-varied-note-b'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -6295,7 +6295,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
   window.grpSendIndiv=async function(){
     if(typeof indivState==='undefined' || !indivState){ alert('افتحي طلب فرد أولاً من «👤 طلبات الأفراد» ليُرسل الجروب لذاك العميل.'); return; }
     if(typeof GRP_CURRENT==='undefined' || !GRP_CURRENT){ alert('اعرضي برنامج الجروب أولاً (اختاري البرنامج والتاريخ والعدد ثم «اعرض»).'); return; }
-    const note=prompt('✍️ ملاحظة تُرسل مع الملف للعميل (اختياري):','تفضّل أستاذي، برنامج الجروب جاهز 🌟\nوأنا موجود لأي استفسار، وفي انتظار تأكيدك 🙏');
+    const note=prompt('✍️ ملاحظة تُرسل مع الملف للعميل (اختياري):', _indivNote(indivState.phone));
     if(note===null) return;
     if(typeof grpMsg==='function') grpMsg('⏳ يُجهّز ويُرسل للعميل…');
     try{
@@ -6311,6 +6311,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       })});
       const d=await r.json();
       if(!r.ok||!d.ok){ throw new Error((d&&d.detail&&(d.detail.message||JSON.stringify(d.detail)))||(d&&d.error)||('HTTP '+r.status)); }
+      _indivBumpCount(indivState.phone);   // عدّاد الإرسال لنفس العميل (نص العرض التالي يتغيّر)
       if(typeof grpMsg==='function') grpMsg('✅ أُرسل برنامج الجروب للعميل على واتساب.');
       indivState=null;
       try{ indivRender(await indivList()); }catch(_){}
