@@ -6291,7 +6291,8 @@ function renderSupplierDetail(){
           const paid=isDirect?_linked:Math.max(0,owed-(cancOwed[c]||0))*allocR; const mid=cliMainId[c];   /* المباشر من المورّد: مدفوعه = الدفعة الموزّعة المربوطة به؛ غيره = التوزيع النسبي. رسوم الإلغاء تبقى مستحقة */ const av=cliActual[c]; const entered=(av!=null); const diff=owed-(entered?av:owed);
           // 📌 المتبقّي للمورّد لا يُحتسب من قيمة حجز العميل — يظهر فقط بعد تسجيل «فاتورة المورّد» الفعلية، ويُحسب منها (فاتورة المورّد − المدفوع سابقاً)
           const bal=entered?(Number(av)-paid):null;
-          const _covered=(paid>=owed-0.5)&&owed>0.5;   // مدفوع للمورّد بالكامل عبر دفعة موزّعة
+          const _payBasis=(av!=null&&String(av).trim()!=='')?Number(av):owed;   // 🧾 الأساس المعتمد = فاتورة المورّد المُدخَلة إن وُجدت، وإلا قيمة الحجز — فلو دُفعت الفاتورة كاملة يُعتبر مدفوعاً حتى لو أقل من الحجز
+          const _covered=(paid>=_payBasis-0.5)&&_payBasis>0.5;   // مدفوع للمورّد بالكامل (حسب فاتورة المورّد)
           const directHtml=(isDirect&&_covered)?'<div style="font-size:9px;color:#0e9d6a;font-weight:800;margin-top:2px">✅ مدفوع للمورّد</div>':((isDirect&&!_covered&&owed>0.5)?'<div style="font-size:9px;color:#d11;font-weight:800;margin-top:2px">🔻 مباشر من المورّد · غير مدفوع'+(_linked>0.5?' (مدفوع جزئيّاً '+fmt(_linked)+')':'')+'</div>':'');
           const cancHtml=cancelledCodes.has((c||'').toUpperCase())?'<div style="font-size:9px;color:#d98a00;font-weight:800;margin-top:2px">🚫 ملغى — المستحق = رسوم الإلغاء فقط</div>':'';
           const _dts=esc(((fcdCli[(c||'').toUpperCase()]||{}).arr) || (cliDates[c]||[]).filter(Boolean)[0] || '');   // 📅 تاريخ وصول العميل من First Client Data هو المعتمد (لا تاريخ check_in لكل خدمة على حدة) — يوحّد كل خدمات العميل على تاريخ وصوله
