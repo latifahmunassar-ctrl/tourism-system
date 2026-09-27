@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-27-makkah-train-default'
+  var BUILD = '2026-09-27-varied-note'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -6226,10 +6226,34 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     document.getElementById('indTabIn').classList.toggle('active',which==='in');
     document.getElementById('indTabSent').classList.toggle('active',which==='sent');
   };
+  // نص إرسال البرنامج للعميل — يتنوّع عشان ما يحس آلي، ويتغيّر للعرض الثاني/الثالث.
+  // نعدّ كم مرة أرسلنا لنفس الرقم (بالمتصفّح) ونختار صيغة مناسبة (أول عرض vs عرض آخر).
+  function _indivNote(phone, kind){
+    const key='alezz_sendcount_'+String(phone||'').replace(/\D/g,'');
+    let n=0; try{ n=parseInt(localStorage.getItem(key)||'0')||0; }catch(_){}
+    const firstMsgs=[
+      'تفضّل أستاذي، صار برنامجك جاهز 🌟\nوأنا موجود لأي استفسار، وبانتظار تأكيدك 🙏',
+      'حاضر أستاذي 🌟 هذا برنامجك جاهز بين يديك.\nاطّلع عليه وأنا في خدمتك لأي تعديل أو سؤال 🙏',
+      'يعطيك العافية أستاذي 🌟 جهّزنا لك البرنامج.\nراجعه على راحتك وأنا موجود لأي استفسار 👍',
+      'تفضّل أستاذي 🌟 برنامجك صار جاهز.\nلو حاب أي تعديل أو عندك سؤال أنا حاضر 🙏',
+    ];
+    const againMsgs=[
+      'تفضّل أستاذي، هذا عرض آخر 🌟\nاطّلع عليه، وإذا عندك أي استفسار أنا موجود 🙏',
+      'حاضر أستاذي 🌟 جهّزت لك خياراً ثانياً.\nشوفه وقارن، وأنا في خدمتك لأي سؤال 👍',
+      'هذا عرض بديل أستاذي 🌟\nاطّلع عليه على راحتك، ولو تبي تعديل أنا حاضر 🙏',
+      'تفضّل أستاذي، خيار إضافي لك 🌟\nراجعه وإذا احتجت أي توضيح أنا موجود 🙏',
+    ];
+    const pool = n>0 ? againMsgs : firstMsgs;
+    return pool[n % pool.length];
+  }
+  function _indivBumpCount(phone){
+    const key='alezz_sendcount_'+String(phone||'').replace(/\D/g,'');
+    try{ localStorage.setItem(key, String((parseInt(localStorage.getItem(key)||'0')||0)+1)); }catch(_){}
+  }
   window.indivSend=async function(){
     if(!indivState){alert('افتح طلب فرد أولاً من «👤 طلبات الأفراد».');return;}
     if(typeof lastProgramRaw==='undefined' || !lastProgramRaw || !/TOTAL_GROUP:/.test(lastProgramRaw)){alert('ابنِ البرنامج وسعّره أولاً.');return;}
-    const note=prompt('✍️ ملاحظة تُرسل مع الملف للعميل (اختياري):','تفضّل أستاذي، صار برنامجك جاهز 🌟\nوأنا موجود في حال أي استفسار آخر، وفي انتظار تأكيدك 🙏');
+    const note=prompt('✍️ ملاحظة تُرسل مع الملف للعميل (اختياري):', _indivNote(indivState.phone));
     if(note===null) return;
     const btn=document.getElementById('indivSendBtn'); const old=btn?btn.textContent:'';
     if(btn){btn.disabled=true;btn.textContent='⏳ يُجهّز ويُرسل…';}
@@ -6255,6 +6279,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       })});
       const d=await r.json();
       if(!r.ok||!d.ok){ throw new Error((d&&d.detail&&(d.detail.message||JSON.stringify(d.detail)))||d.error||('HTTP '+r.status)); }
+      _indivBumpCount(indivState.phone);   // عدّاد الإرسال لنفس العميل (نص العرض التالي يتغيّر)
       alert('✅ تم إرسال الـ PDF للعميل على واتساب!');
       indivState=null; if(btn) btn.style.display='none';
       // ينتقل الطلب فورًا من «الواردة» إلى «المرسلة» ويُنظَّف الوارد + العدّاد.
