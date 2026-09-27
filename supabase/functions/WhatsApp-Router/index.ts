@@ -78,6 +78,34 @@ async function warmInboundMedia(mediaId: string): Promise<void> {
   } catch (_e) { /* أفضل جهد — لا يكسر الاستقبال */ }
 }
 
+// يقرأ صورة أرسلها العميل (غالباً صورة عرض سياحي من إعلاناتنا) عبر Claude vision
+// ويستخرج وصفاً موجزاً بالعربي (الوجهة/المدن/الأيام/السعر إن ظهر) ليعرف طلال محتواها
+// فلا يسأل عن الوجهة وهي واضحة بالصورة. يرجّع "" لو ما قدر يقرأ أو الصورة ليست عرضاً.
+async function describeCustomerImage(mediaId: string): Promise<string> {
+  try {
+    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!apiKey || !mediaId) return "";
+    const got = await fetchMetaMedia(mediaId);
+    if (!got) return "";
+    const mime = /jpe?g|png|webp|gif/i.test(got.mime) ? got.mime : "image/jpeg";
+    // base64 من البايتات
+    let bin = ""; const b = got.bytes; for (let i = 0; i < b.length; i++) bin += String.fromCharCode(b[i]);
+    const b64 = btoa(bin);
+    const anthropic = new Anthropic({ apiKey });
+    const res = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001", max_tokens: 200,
+      system: "أنت تقرأ صورة أرسلها عميل لوكالة سفر. غالباً صورة عرض سياحي (وجهة/مدن/عدد أيام/سعر). استخرج بإيجاز شديد بالعربي: الوجهة والمدن وعدد الأيام والسعر إن ظهرت. لو الصورة عرض سفر أعِد سطراً واحداً مثل: «عرض: تايلاند (بانكوك وبوكيت) — 9 أيام — يبدأ من 256 ر.ع». لو الصورة ليست عرض سفر (جواز/إيصال/شيء آخر) أعِد كلمة واحدة: «غير_عرض». بلا أي شرح إضافي.",
+      messages: [{ role: "user", content: [
+        { type: "image", source: { type: "base64", media_type: mime as "image/jpeg", data: b64 } },
+        { type: "text", text: "وش محتوى هذه الصورة؟" },
+      ] }],
+    });
+    let txt = ""; for (const blk of res.content) if ((blk as { type?: string }).type === "text") txt += (blk as { text?: string }).text || "";
+    txt = txt.trim();
+    return /غير_?عرض|not|ليست/i.test(txt) ? "" : txt.slice(0, 300);
+  } catch (_e) { return ""; }
+}
+
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 // نرد على ويبهوك Meta بـ 200 سريع (الرسائل الصادرة نرسلها عبر Graph REST
@@ -1515,6 +1543,7 @@ ${returning
 - ⚠️ لو طلب العميل **التحدث مع شخص/موظف**، أو قال إنه ما يبي رد آلي/تلقائي، أو إنه هو نفسه مكتب/شركة سفر → لا تكمل أسئلة الاستقبال، اجعل complete=true وردّ رسالة واحدة فقط: «حاضر، بيتواصل معك زميلنا مباشرة 🌟».
 - مثال صحيح: «كم عدد المسافرين؟» — مثال خاطئ (ممنوع): «تايلند اختيار حلو! كم عدد المسافرين؟».
 - اسأل عن معلومة ناقصة واحدة فقط في كل رد (الأهم أولاً: الوجهة ثم العدد ثم التاريخ ثم الأعمار ثم مدينة الوصول/المغادرة).
+- 📷📷 **العميل أرسل صورة عرض (يظهر بالسجل كـ«أرسل العميل صورة هذا العرض: …»):** الوجهة والمدن وعدد الأيام **معروفة من الصورة** → ❌❌ ممنوع تسأل «وين تسافرون» أو عن الوجهة؛ استخدمها مباشرة. رحّب واسأل **فقط الناقص**: «حياك الله 🌟 حاضر بخصوص عرض [الوجهة] — كم عدد المسافرين؟ ومتى تاريخ السفر؟». لو العرض فيه عدد أيام محدّد اعتبره المدة (لا تسأل عنها).
 - ✈️✈️ **طلب «تذاكر سفر فقط» (بدون برنامج) — قاعدة مهمة:** لو طلب العميل **تذاكر طيران/سفر لحالها** (مثل «شوف لي أسعار تذاكر»، «تذاكر ذهاب وعودة»، «كم سعر التذكرة»، «أبي أطلع من X إلى Y تذاكر») دون أن يذكر برنامجاً/فندقاً/جولات:
   • **الخطوة ١ (استيثاق):** اسأله **سؤالاً واحداً فقط** ولا تجمع غيره: «قصدك تذاكر سفر لحالها من غير برنامج سياحي؟». (complete=false)
   • **الخطوة ٢ — لو أكّد إنه تذاكر فقط** (ايوه/نعم/صح/بس تذاكر/أجل): اعتذر بلطف **ولا تجمع أي معلومات**: «أعتذر منك أستاذي 🌹 تذاكر السفر لحالها بدون برنامج ما نقدّمها لهذه الوجهة حالياً — لازم تكون ضمن برنامج سياحي». **أبقِ complete=false** (لو رجع يطلب برنامج نكمل معه).
@@ -6839,10 +6868,21 @@ Deno.serve(async (req) => {
             phone: from, profile_name: profileName || null, stage: "new", last_message_at: nowIso, intake_active: true, ...refCols,
           });
         }
+        // 📷 صورة من العميل: نقرأها بالرؤية (غالباً صورة عرض سياحي)؛ لو طلعت عرضاً
+        // نشغّل الاستقبال بوصفها كنص فيعرف طلال الوجهة ويسأل عن الباقي (التاريخ/العدد).
+        const isImage = /^image\//i.test(String(media_mime || "")) || /image/i.test(String(media_label || ""));
+        let offerDesc = "";
+        if (isImage && media_id) { try { offerDesc = await describeCustomerImage(media_id); } catch (_e) { /* */ } }
+        const auditBody = offerDesc ? ("📷 صورة عرض من العميل — " + offerDesc) : (media_label || "📎 مرفق من العميل");
         await supabase.from("wa_message_audit").insert({
-          from_phone: from, body: media_label || "📎 مرفق من العميل",
+          from_phone: from, body: auditBody,
           status: "completed", completed_at: nowIso, ...mediaCols,
         });
+        // لو الصورة عرض سفر واضح → مرّرها للاستقبال كنص ليرد طلال (بلا سؤال الوجهة).
+        if (offerDesc) {
+          try { await handleMessage({ supabase, from, profileName, body: "أرسل العميل صورة هذا العرض: " + offerDesc }); } catch (e) { console.error("image-intake error", e); }
+          if (referral) { try { await supabase.from("whatsapp_sessions").update({ ad_referral: referral }).eq("phone", from); } catch (_e) { /* */ } }
+        }
         return;
       }
       // نص (أو نص+caption لوسيط): نسجّل سطر التدقيق + معرّف الوسيط إن وُجد.
