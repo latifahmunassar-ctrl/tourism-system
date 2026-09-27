@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-27-varied-note-b'
+  var BUILD = '2026-09-27-grp-restore-currency'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2244,6 +2244,7 @@ function fpTab(t){
 let GRP_LOADED = false;     // حُمِّلت بيانات الجروبات؟
 let GRP_PROGRAMS = [];      // كل برامج الجروبات (من groups_list)
 let GRP_CURRENT = null;     // البرنامج المختار حالياً
+let GRP_RESTORED = null;    // حالة برنامج جروب مُسترجَع بالكود {date,pax,ptype,c} — لأن g لا يحمل prices فنستخدم c المحسوب مسبقاً
 function grpEsc(s){ return String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
 function grpNum(n){ return (Number(n)||0).toLocaleString('en-US'); }
 // ترجمة اسم برنامج الجروب (المشتَق من اسم التبويب الإنجليزي) لأسماء بلدان عربية للعرض.
@@ -2307,6 +2308,7 @@ function grpOnDest(){
   const v=document.getElementById('grp-dest').value;
   const dSel=document.getElementById('grp-date');
   GRP_CURRENT=(v==='')?null:(GRP_PROGRAMS[+v]||null);
+  GRP_RESTORED=null;   // اختيار برنامج من الفورمة يخرجنا من وضع الاسترجاع
   document.getElementById('grp-priceHint').textContent='';
   if(!GRP_CURRENT){ dSel.innerHTML='<option value="">— اختر البرنامج أولاً —</option>'; return; }
   const dates=GRP_CURRENT.dates||[];
@@ -2330,6 +2332,7 @@ function grpOnDate(){
 }
 function grpShow(){
   if(!GRP_CURRENT){ grpMsg('اختاري البرنامج أولاً.', true); return; }
+  GRP_RESTORED=null;   // بناء طازج من الفورمة — لسنا في وضع الاسترجاع
   // بصمة النسخة: أي تغيير بالبرنامج/التاريخ/العدد/النوع = نسخة جديدة تحتاج اعتماداً جديداً
   const _sig=[GRP_CURRENT.tab,document.getElementById('grp-date').value,document.getElementById('grp-pax').value,document.getElementById('grp-ptype').value].join('|');
   if(GRP_SIG && GRP_SIG!==_sig){ GRP_SAVED_CODE=''; }
@@ -2484,7 +2487,8 @@ function grpOnCurrencyPick(){
   const p2=document.getElementById('savedCodePill'); if(p2) p2.style.display='none';
   grpMsg(GRP_CURRENCY ? ('💱 العملة: '+name+' (1 = '+rate+' ريال) — اعتمدي النسخة لتوليد كود جديد بها.')
                       : 'رجعت الأسعار للريال — اعتمدي النسخة لتوليد كود جديد.');
-  grpShow();   // أعِد الرسم بالعملة الجديدة
+  if(GRP_RESTORED) grpRestoreRender();   // برنامج مُسترجَع: أعِد رسم البطاقة بالعملة الجديدة
+  else grpShow();                        // برنامج مختار: أعِد البناء الكامل
 }
 // ═══ اعتماد برنامج الجروب: لقطة مجمّدة + كود استرجاع دائم ═══
 // يُحفظ بنفس جدول البرامج (programs) لتعمل خانة «استرجاع» نفسها، ويُوسَم
@@ -2574,13 +2578,26 @@ function grpRestoreFromRaw(raw, code){
     GRP_CURRENCY = (pr[0] && rt>0) ? { name:pr[0].trim(), rate:rt } : null; }
   else GRP_CURRENCY = null;
   GRP_CURRENT=g; GRP_SAVED_CODE=code||''; GRP_SIG='';
-  const eo=document.getElementById('emptyOutput'); if(eo) eo.style.display='none';
-  const panel=document.getElementById('reviewPanel');
-  if(panel) panel.innerHTML='<div style="padding:14px;"><div style="background:#eef6ff;border:1px solid #cfe2ff;border-radius:10px;padding:10px 13px;margin-bottom:10px;font-weight:800;color:#0b3d91;font-size:13px;">📄 نسخة مُعتمدة مُستعادة بالكود '+grpEsc(code||'')+' — كما اعتُمدت بالضبط.</div>'
-    + grpContentHtml(g, date, pax, ptype, c) + '</div>';
+  GRP_RESTORED={ date, pax, ptype, c };   // حالة الاسترجاع — يستخدمها زر العملة والاعتماد
+  grpRestoreRender();
+  // أظهِر زرّي «تحويل عملة» و«اعتماد كود جديد» للبرنامج المُسترجَع (نفس البرامج العادية).
+  const cb=document.getElementById('grpCurrencyBtn'); if(cb) cb.style.display='inline-flex';
+  const fb=document.getElementById('grpFinalizeTopBtn'); if(fb) fb.style.display='inline-flex';
   return true;
 }
+// يرسم بطاقة البرنامج المُسترجَع بالعملة الحالية (بانر «نسخة مُستعادة» + المحتوى).
+function grpRestoreRender(){
+  if(!GRP_RESTORED||!GRP_CURRENT) return;
+  const {date,pax,ptype,c}=GRP_RESTORED;
+  const eo=document.getElementById('emptyOutput'); if(eo) eo.style.display='none';
+  const panel=document.getElementById('reviewPanel'); if(!panel) return;
+  const codeTxt = GRP_SAVED_CODE ? (' بالكود '+grpEsc(GRP_SAVED_CODE)+' — كما اعتُمدت بالضبط') : ' — عدّلي العملة ثم اعتمدي كوداً جديداً';
+  panel.innerHTML='<div style="padding:14px;"><div style="background:#eef6ff;border:1px solid #cfe2ff;border-radius:10px;padding:10px 13px;margin-bottom:10px;font-weight:800;color:#0b3d91;font-size:13px;">📄 نسخة مُعتمدة مُستعادة'+codeTxt+'.</div>'
+    + grpContentHtml(GRP_CURRENT, date, pax, ptype, c) + '</div>';
+}
 function grpState(){
+  // برنامج مُسترجَع بالكود: نستخدم القيم المُثبَّتة و c المحسوب (لأن g لا يحمل prices).
+  if(GRP_RESTORED) return GRP_RESTORED;
   const date=document.getElementById('grp-date').value;
   const pax=parseInt(document.getElementById('grp-pax').value)||0;
   const ptype=document.getElementById('grp-ptype').value;
