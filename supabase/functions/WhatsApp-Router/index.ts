@@ -6227,14 +6227,19 @@ Deno.serve(async (req) => {
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
-      // ⚠️ الطلب الثاني لنفس العميل بوجهة **مختلفة** = طلب مستقل جديد (مقارنة وجهتين)،
-      //    لا تحديث للأول. نطابق الطلب القائم بنفس **الوجهة** فقط؛ فلو اختلفت الوجهة
-      //    لا يُطابَق شيء → يُنشأ صف جديد ويظهر كطلب ثانٍ بالصندوق. (بلا وجهة = مسودة
-      //    ناقصة، نطابق بالرقم فقط لتحديثها.)
+      // ⚠️ أي **طلب جديد مختلف** لنفس العميل = صف مستقل جديد (بلا استبدال) — سواء اختلفت
+      //    الوجهة (مقارنة وجهتين) أو نفس الوجهة بتوزيع/تاريخ مختلف (رحلة أخرى). نُحدّث الصف
+      //    القائم **فقط** لو تطابق الجوهر (نفس الوجهة + نفس التوزيع + نفس التاريخ) = إعادة
+      //    حفظ/تصحيح لنفس الطلب. غير ذلك → INSERT صف جديد يظهر بالصندوق. (بلا وجهة =
+      //    مسودة ناقصة، نطابق بالرقم فقط لتحديثها.)
+      const _dist = String((fields as { distribution?: string }).distribution || "").trim();
+      const _dfrom = String((fields as { date_from?: string | null }).date_from || "").trim();
       let _exQ = supabase
         .from("booking_brief").select("id, confirm_sent_at, distribution, days, date_from").eq("contact_phone", contact_phone)
         .in("status", ["incomplete", "complete"]);
       if (destination) _exQ = _exQ.eq("destination", destination);
+      if (destination && _dist) _exQ = _exQ.eq("distribution", _dist);       // توزيع مختلف = طلب مستقل
+      if (destination && _dist && _dfrom) _exQ = _exQ.eq("date_from", _dfrom); // تاريخ مختلف = طلب مستقل
       const { data: existing } = await _exQ
         .order("created_at", { ascending: false }).limit(1).maybeSingle();
       // نرسل التأكيد عند كل حفظ مكتمل، لكن نمنع التكرار خلال 60 ثانية (نقرة مزدوجة).
