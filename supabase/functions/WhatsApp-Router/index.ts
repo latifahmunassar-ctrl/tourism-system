@@ -1464,7 +1464,13 @@ async function handleNewLeadIntake(args: {
       const { data: prog } = await supabase.from("programs")
         .select("destination, persons, total_group, raw").eq("code", adCode).maybeSingle();
       const pr = prog as { destination?: string; persons?: number; total_group?: number; raw?: string } | null;
-      if (pr && pr.raw) {
+      // ⚖️ الإعلان قد يكون **كاروسيل فيه عدة عروض** مربوطاً بكود واحد. لا نفترض أن هذا
+      //    الكود هو مقصود العميل: لو ذكر العميل (بكلامه أو صورته) وجهة **تختلف** عن وجهة
+      //    البرنامج المربوط → نتجاهل البرنامج المربوط ونعتمد على كلام/صورة العميل.
+      const _custDest = detectDestination([{ role: "user", content: String(args.body || "") }]);
+      const _linkedDest = pr?.destination ? detectDestination([{ role: "user", content: String(pr.destination) }]) : null;
+      const _mismatch = !!_custDest && !!_linkedDest && _custDest !== _linkedDest;
+      if (pr && pr.raw && !_mismatch) {
         // ⚠️ لا نرسل الملف تلقائياً على أول رسالة — طلال يحيّي ويسأل بشكل طبيعي أولاً.
         //    نرسل ملف العرض **فقط لمّا يطلبه العميل صراحةً** (ابي العرض / ارسل تفاصيل العرض / شو متوفر…).
         const _curMsg = String(args.body || "");
