@@ -1475,7 +1475,26 @@ async function handleNewLeadIntake(args: {
         //    نرسل ملف العرض **فقط لمّا يطلبه العميل صراحةً** (ابي العرض / ارسل تفاصيل العرض / شو متوفر…).
         const _curMsg = String(args.body || "");
         const wantsOfferFile = /العرض|عرضكم|الباق[ةه]|الباكج|تفاصيل|شو\s*متوفر|وش\s*متوفر|ابي\s*اشوف|ودي\s*اشوف|ارسل.*(?:عرض|تفاصيل|ملف)|رسل.*(?:عرض|تفاصيل)/i.test(_curMsg);
-        if (wantsOfferFile) {
+        // 🔎 قاعدة المالكة: طلال **يستوثق أولاً** أي عرض يقصده العميل قبل إرسال الملف —
+        //    «تقصد عرض [الوجهة]؟» — ويرسل الملف **فقط بعد ما يؤكّد العميل (ايوه)**.
+        //    نعلّم الجلسة بعرض معلّق (ad_offer_pending) بعد سؤال الاستيثاق.
+        const _pending = String(prevData.ad_offer_pending || "");
+        const _confirmedOffer = _pending === adCode && isAffirmative(_curMsg);
+        if (wantsOfferFile && !_pending && !_confirmedOffer) {
+          // أول طلب للعرض → استوثق بالوجهة/الوصف بدل الإرسال المباشر.
+          const _destAr = String(pr.destination || "").trim();
+          const _q = _destAr
+            ? `حاضر 🌟 تقصد عرض ${_destAr} اللي شفته بالإعلان؟ أكّد لي «ايوه» وأرسل لك التفاصيل كاملة 👍`
+            : "حاضر 🌟 تقصد العرض اللي شفته بالإعلان؟ أكّد لي «ايوه» وأرسل لك التفاصيل 👍";
+          await sendCustomerReply(supabase, from, _q);
+          try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: _q, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+          await supabase.from("whatsapp_sessions").update({
+            intake_data: { ...prevData, ad_offer_pending: adCode },
+            last_message_at: new Date().toISOString(),
+          }).eq("phone", from);
+          return;   // ننتظر تأكيد العميل قبل إرسال الملف.
+        }
+        if (wantsOfferFile || _confirmedOffer) {
           // «حاضر» + الملف + تنويه أن الأسعار تختلف بالتاريخ وعدد الأفراد.
           const caption = "حاضر 🌟 تفضّل ملف العرض اللي طلبته. علماً أن الأسعار قد تختلف حسب التاريخ اللي تختاره وحسب عدد الأفراد. لو حاب تعدّل أو تسأل عن أي شي أنا جاهز 👍";
           let pdfUrl = "";
