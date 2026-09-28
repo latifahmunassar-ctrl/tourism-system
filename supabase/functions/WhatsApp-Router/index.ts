@@ -1373,6 +1373,56 @@ async function isAiEnabledForSession(
   return true;   // PREVIEW or ON, no override → run
 }
 
+// يحلّ كود الإعلان المربوط (من الكابشن أو ad_link:source_id) → يجيب البرنامج + رابط
+// الـPDF. يرجّع null لو ما فيه إعلان/كود/برنامج. يُستخدم للإرسال عند تأكيد العميل.
+async function resolveLinkedAdOffer(
+  supabase: ReturnType<typeof createClient>,
+  adRef: Record<string, unknown> | null,
+): Promise<{ code: string; pdfUrl: string; pr: { destination?: string; persons?: number; total_group?: number; raw?: string } } | null> {
+  if (!adRef) return null;
+  let adCode = extractProgramCode(String(adRef.body || "") + " " + String(adRef.headline || ""));
+  if (!adCode) {
+    const srcId = String(adRef.source_id || "").trim();
+    if (srcId) {
+      try {
+        const { data: linkRow } = await supabase.from("wa_settings").select("value").eq("key", "ad_link:" + srcId).maybeSingle();
+        adCode = String((linkRow as { value?: { code?: string } } | null)?.value?.code || "").trim().toUpperCase();
+      } catch (_e) { /* */ }
+    }
+  }
+  if (!adCode) return null;
+  const { data: prog } = await supabase.from("programs")
+    .select("destination, persons, total_group, raw").eq("code", adCode).maybeSingle();
+  const pr = prog as { destination?: string; persons?: number; total_group?: number; raw?: string } | null;
+  if (!pr || !pr.raw) return null;
+  let pdfUrl = "";
+  try {
+    const { data: pdfRow } = await supabase.from("wa_settings").select("value").eq("key", "ad_pdf:" + adCode).maybeSingle();
+    pdfUrl = String((pdfRow as { value?: { url?: string } } | null)?.value?.url || "");
+  } catch (_e) { /* */ }
+  return { code: adCode, pdfUrl, pr };
+}
+// يرسل ملف العرض المربوط للعميل (PDF أو تفاصيل نصّاً عند فشل الملف) ويسجّله بالمحادثة.
+async function sendLinkedAdOfferFile(
+  supabase: ReturnType<typeof createClient>,
+  from: string,
+  offer: { code: string; pdfUrl: string; pr: { destination?: string; raw?: string } },
+): Promise<void> {
+  const caption = "تفضّل أستاذي ملف العرض بناءً على معلوماتك 🌟 علماً أن الأسعار قد تختلف حسب التاريخ وعدد الأفراد. لو حاب تعدّل أو تسأل عن أي شي أنا جاهز 👍";
+  let sentOk = false;
+  if (offer.pdfUrl) {
+    const sid = await sendCustomerReply(supabase, from, caption, offer.pdfUrl);
+    sentOk = !!sid;
+    if (sentOk) { try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: "📎 ملف العرض (PDF) — " + caption, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ } }
+  }
+  if (!sentOk) {
+    const msg = await formatAdProgramMessage(supabase, offer.pr, from);
+    const txt = msg + "\n\nعلماً أن الأسعار قد تختلف حسب التاريخ وعدد الأفراد.";
+    await sendCustomerReply(supabase, from, txt);
+    try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: txt, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+  }
+}
+
 // ── استقبال العملاء الجدد (طلال) ─────────────────────────────────────────
 // يجمع المعلومات الأساسية بمحادثة طبيعية (وجهة/عدد/تاريخ/أعمار/مدينة الوصول
 // والمغادرة) ويرد تلقائياً، ثم يتوقّف عند الاكتمال ليتسلّمها الموظف. يخص
@@ -1624,7 +1674,7 @@ ${returning
      (هـ) **أعمار الأطفال** فقط لو ذكر أطفالاً.
      ❌❌ ممنوع في العمرة تسأل عن: الوجهة، ولا المطار لغير العُماني. ⛔⛔ **إلزامي قبل الإقفال: عدد الليالي/الأيام في مكة (وفي المدينة إن أضافها).** ❌❌ ممنوع منعاً باتاً تقفل (complete=true) قبل ما تعرف **كم ليلة/يوم في مكة** — حتى لو العميل من إعلان أو قال «كامل البرنامج»؛ لازم تسأله «كم ليلة تبون في مكة؟» (وكم في المدينة إن اختارها). ⛔ **استثناءان لا تسأل فيهما عن الليالي:** (١) أعطى **مدى تاريخي** (من–إلى) أو عدد ليالٍ إجمالي **واختار مكة فقط** → كل الليالي بمكة تلقائياً، مكتمل. (٢) أعطى توزيعاً صريحاً. عند اكتمال (العدد + التاريخ + **عدد الليالي/التوزيع** + المطار إن عُماني) اشكره وأقفل.
 - لو كان كلام العميل شكوى أو سؤال عام (مو حجز)، لا تضغط بأسئلة الاستقبال — ردّ بلطف إن زميلنا بيتواصل معه، واجعل complete=true.
-- 📋📋 **تلخيص وتأكيد قبل الإقفال (إلزامي لمّا تكتمل المعلومات):** ❌ لا تقفل مباشرة. أول لخّص للعميل ما جمعته منه في رسالة واحدة واطلب تأكيده، بصيغة: «تمام أستاذي 🌟 عشان أجهّز لك العرض أتأكد: [الوجهة/العمرة] · [عدد الأشخاص] · [التاريخ] · [توزيع الليالي/المدة] — المعلومات صحيحة كذا؟ 👍». **واجعل complete=false** (ننتظر تأكيده). • لمّا يؤكّد العميل (ايوه/صح/تمام/نعم) → اشكره «تمام 🌟 معلوماتك وصلت، بجهّز لك العرض وأرسله قريباً» واجعل complete=true. • لو صحّح معلومة → عدّلها وأعد التلخيص باختصار.
+- 📋📋 **تلخيص وتأكيد قبل الإقفال (إلزامي لمّا تكتمل المعلومات):** ❌ لا تقفل مباشرة. أول لخّص للعميل ما جمعته منه في رسالة واحدة واطلب تأكيده، بصيغة: «تمام أستاذي 🌟 عشان أجهّز لك العرض أتأكد: [الوجهة/العمرة] · [عدد الأشخاص] · [التاريخ] · [توزيع الليالي/المدة] — المعلومات صحيحة كذا؟ 👍». **واجعل complete=false** (ننتظر تأكيده). • لمّا يؤكّد العميل (ايوه/صح/تمام/نعم) → اشكره «تمام 🌟 بجهّز لك العرض وأرسله لك الحين» واجعل complete=true (النظام يرسل ملف العرض تلقائياً بعدها). • لو **صحّح معلومة واضحة** (مثل «لا ٣ ليالي» أو «العدد ٤») → عدّلها وأعد التلخيص باختصار (complete=false). • ⚠️ لو **اعترض/صحّح بشيء غامض ما فهمته** (طلب غير واضح أو خارج نطاقك) → لا تخمّن، قل «حاضر أستاذي 🌹 بحوّل ملاحظتك لزميلنا المختص وراح يرد عليك قريباً» واجعل complete=true.
 - لمّا يؤكّد العميل صحة التلخيص: اشكره بالضبط "شكراً 🌟 معلوماتك وصلت، زميلنا بيجهّز لك أفضل عرض ويتواصل معك قريباً" واجعل complete=true.
 اليوم: ${today}. المعلومات المجموعة سابقاً: ${JSON.stringify(prev)}.
 أعد JSON فقط: {"messages":["رسالة واحدة قصيرة"],"fields":{"destination":"","pax":null,"date":"","ages":"","cities":""},"complete":false}
@@ -1655,8 +1705,24 @@ ${returning
     try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: msg, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* best-effort */ }
   }
   const upd: Record<string, unknown> = { last_message_at: new Date().toISOString() };
-  if (out.fields && typeof out.fields === "object") upd.intake_data = { ...(prev as Record<string, unknown>), ...out.fields };
-  if (out.complete === true) upd.intake_active = false;
+  let _mergedData = { ...(prev as Record<string, unknown>) };
+  if (out.fields && typeof out.fields === "object") { _mergedData = { ..._mergedData, ...out.fields }; upd.intake_data = _mergedData; }
+  if (out.complete === true) {
+    upd.intake_active = false;
+    // 🎯 العميل من إعلان **وأكّد** معلوماته (رسالته تأكيد صريح: ايوه/صح/تمام) → أرسل
+    //    له ملف العرض المربوط تلقائياً، مرة واحدة. ❌ لا نرسل لو الإقفال كان **تصعيداً**
+    //    (اعتراض غامض حُوّل للزميل) — رسالة التصعيد ليست تأكيداً فلا يُرسَل العرض.
+    if (adRef && !prevData.ad_program_shown && isAffirmative(String(args.body || ""))) {
+      try {
+        const _offer = await resolveLinkedAdOffer(supabase, adRef as Record<string, unknown>);
+        if (_offer) {
+          await sendLinkedAdOfferFile(supabase, from, _offer);
+          _mergedData = { ..._mergedData, ad_program_shown: true, ad_program_code: _offer.code };
+          upd.intake_data = _mergedData;
+        }
+      } catch (_e) { /* أفضل جهد — لا نكسر الإقفال */ }
+    }
+  }
   await supabase.from("whatsapp_sessions").update(upd).eq("phone", from);
 }
 
