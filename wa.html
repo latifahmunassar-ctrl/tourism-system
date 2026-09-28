@@ -1867,7 +1867,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260927a";
+    const APPVER = "20260928a";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -5197,9 +5197,25 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     // المربوط (من المساعد السياحي) للعميل مباشرة، ويظهر في المحادثة.
     async function sendAdProgramByCode() {
       if (!convPhone) { return; }
-      const code = (prompt("الصقي كود البرنامج من الإعلان لإرسال ملفه للعميل (مثل OM-2026-069):", "") || "").trim().toUpperCase();
-      if (!code) return;
       const btn = $("adprog-btn"); if (btn) btn.disabled = true;
+      // نجيب كود عرض هذا العميل تلقائياً من إعلانه (ad_referral)؛ لو ما لقينا نطلبه يدوياً.
+      let code = "";
+      try {
+        const rr = await fetch(BASE + "?admin_action=resolve_ad_offer", {
+          method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: convPhone }),
+        });
+        const rd = await rr.json().catch(() => ({}));
+        if (rd && rd.code) {
+          const dst = rd.destination ? (" (" + rd.destination + ")") : "";
+          if (!confirm("أرسل عرض هذا العميل من إعلانه: " + rd.code + dst + "؟")) { if (btn) btn.disabled = false; return; }
+          code = String(rd.code).trim().toUpperCase();
+        }
+      } catch (_e) { /* نكمل للطلب اليدوي */ }
+      if (!code) {
+        code = (prompt("الصقي كود البرنامج من الإعلان لإرسال ملفه للعميل (مثل OM-2026-069):", "") || "").trim().toUpperCase();
+      }
+      if (!code) { if (btn) btn.disabled = false; return; }
       try {
         const lres = await fetch(BASE + "?admin_action=list_ad_pdfs", { headers: { Authorization: "Bearer " + token } });
         const ldata = await lres.json();

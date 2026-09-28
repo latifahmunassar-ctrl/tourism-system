@@ -5382,6 +5382,24 @@ Deno.serve(async (req) => {
   }
 
   // قائمة برامج الإعلانات المربوطة (كود → ملف PDF) لعرضها/إدارتها في داشبورد الواتساب.
+  // يجيب كود عرض الإعلان المربوط لعميل محدّد (من ad_referral على جلسته) — يستخدمه
+  // زر «📢 برنامج بالكود» ليملأ الكود تلقائياً بدل ما تلصقه الموظفة.
+  if (url.searchParams.get("admin_action") === "resolve_ad_offer") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const p = req.method === "POST" ? await req.json() : Object.fromEntries(url.searchParams);
+      const rawPhone = String(p.phone || "").trim();
+      const phone = rawPhone.startsWith("whatsapp:") ? rawPhone : ("whatsapp:+" + rawPhone.replace(/[^0-9]/g, ""));
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: sess } = await supabase.from("whatsapp_sessions").select("ad_referral, intake_data").eq("phone", phone).maybeSingle();
+      const adRef = (sess as { ad_referral?: Record<string, unknown> | null } | null)?.ad_referral || null;
+      const offer = await resolveLinkedAdOffer(supabase, adRef);
+      return new Response(JSON.stringify({ ok: true, code: offer?.code || "", destination: offer?.pr?.destination || "", has_pdf: !!offer?.pdfUrl }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
   if (url.searchParams.get("admin_action") === "list_ad_pdfs") {
     if (!(await checkAuthOrSession(req))) return unauthorized();
     try {
