@@ -6155,9 +6155,15 @@ Deno.serve(async (req) => {
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
-      const { data: existing } = await supabase
+      // ⚠️ الطلب الثاني لنفس العميل بوجهة **مختلفة** = طلب مستقل جديد (مقارنة وجهتين)،
+      //    لا تحديث للأول. نطابق الطلب القائم بنفس **الوجهة** فقط؛ فلو اختلفت الوجهة
+      //    لا يُطابَق شيء → يُنشأ صف جديد ويظهر كطلب ثانٍ بالصندوق. (بلا وجهة = مسودة
+      //    ناقصة، نطابق بالرقم فقط لتحديثها.)
+      let _exQ = supabase
         .from("booking_brief").select("id, confirm_sent_at, distribution, days, date_from").eq("contact_phone", contact_phone)
-        .in("status", ["incomplete", "complete"])
+        .in("status", ["incomplete", "complete"]);
+      if (destination) _exQ = _exQ.eq("destination", destination);
+      const { data: existing } = await _exQ
         .order("created_at", { ascending: false }).limit(1).maybeSingle();
       // نرسل التأكيد عند كل حفظ مكتمل، لكن نمنع التكرار خلال 60 ثانية (نقرة مزدوجة).
       // إلا لو تغيّر جوهر الطلب (التوزيع/الأيام/التاريخ) → نعيد الإرسال بالمعلومة المصحّحة،
