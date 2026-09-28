@@ -1440,7 +1440,12 @@ async function handleNewLeadIntake(args: {
   // لو ما فيه كود بالإعلان (أو البرنامج غير موجود) → نكمل الاستقبال الطبيعي مثل كل مرة.
   const adRef = (sessRes.data as { ad_referral?: Record<string, unknown> | null } | null)?.ad_referral || null;
   const prevData = (prev || {}) as Record<string, unknown>;
-  if (adRef && !prevData.ad_program_shown) {
+  // 🖼️ لو العميل أرسل **صورة عرض بنفسه** (قرأها طلال بالرؤية) → هذا العرض هو المقصود،
+  //    لا برنامج الإعلان المربوط (الإعلانات العامة/الكاروسيل مربوطة بكود واحد قد يختلف
+  //    عن العرض الذي أرسله العميل — فلا نرسل الصين بينما هو أرسل تايلاند). نتخطّى بلوك
+  //    الإعلان ونكمل الاستقبال بناءً على صورته.
+  const _sentOwnOfferImage = /^أرسل العميل صورة هذا العرض/.test(String(args.body || ""));
+  if (adRef && !prevData.ad_program_shown && !_sentOwnOfferImage) {
     // (١) الكود من الكابشن/العنوان. (٢) وإلا: ربط الإعلان بمُعرّفه source_id (للإعلانات
     //     المُطلَقة بلا كود — تُربَط مرة من الداشبورد فتشتغل تلقائياً لكل عملائها).
     let adCode = extractProgramCode(
