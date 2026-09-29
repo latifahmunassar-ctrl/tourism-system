@@ -1529,12 +1529,13 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       <input id="newconv-name" placeholder="اسم العميل (يُدرج بالقالب مكان {{1}})" style="width:100%; margin-bottom:8px;" />
       <details style="margin:6px 0 10px;">
         <summary style="cursor:pointer; font-weight:700; font-size:13px; color:var(--muted);">⚙️ إعداد القالب (مرة وحدة)</summary>
+        <p style="font-size:12px; color:var(--muted); margin:8px 0 6px;">النظام يُنشئ قالب الترحيب على Meta تلقائياً بمجرد وصول أي رسالة عميل. تقدرين تسرّعينه بالأزرار التالية:</p>
         <div style="display:flex; gap:6px; margin-top:8px;">
-          <input id="newconv-template-sid" placeholder="Template ContentSid (HX…)" style="flex:1;" />
+          <input id="newconv-template-sid" placeholder="اسم القالب على Meta (alezz_greeting)" style="flex:1;" />
           <button id="newconv-template-save" class="filter-btn" type="button">حفظ</button>
         </div>
         <div style="display:flex; gap:6px; margin-top:6px;">
-          <button id="newconv-template-create" class="filter-btn" type="button">✨ أنشئ قالب تلقائياً</button>
+          <button id="newconv-template-create" class="filter-btn" type="button">✨ أنشئ القالب الآن</button>
           <button id="newconv-template-check" class="filter-btn" type="button">🔄 حالة الموافقة</button>
         </div>
         <div id="newconv-template-status" style="font-size:12px; color:var(--muted); margin-top:4px;"></div>
@@ -1867,7 +1868,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20260929b";
+    const APPVER = "20260929c";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })

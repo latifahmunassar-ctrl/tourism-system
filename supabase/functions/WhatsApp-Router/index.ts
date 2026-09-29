@@ -995,6 +995,78 @@ async function sendWhatsappTemplate(
   } catch { return null; }
 }
 
+// اكتشاف مُعرّف حساب واتساب للأعمال (WABA) اللازم لإنشاء/إدارة القوالب على Meta.
+// نجرّب بالترتيب: (١) متغيّر بيئة صريح، (٢) حقل whatsapp_business_account على عقدة
+// رقم الهاتف، (٣) granular_scopes من debug_token. نرجّع المُعرّف وطريقة اكتشافه
+// (how) وأي تشخيص مفيد عند الفشل.
+// نُخزّن WABA id المُلتقَط من الويبهوك (entry.id) لتفادي كتابة DB متكرّرة.
+let _capturedWaba = "";
+
+// يضمن وجود قالب ترحيب معتمد على Meta. يُستدعى مرة عند التقاط WABA من الويبهوك.
+// لو القالب محفوظ بالفعل باسم Meta صحيح (ليس فارغاً وليس ContentSid قديم HX…)
+// يخرج فوراً. وإلا ينشئ القالب ويحفظ اسمه. كله best-effort داخل try/catch حتى
+// لا يؤثّر على مسار معالجة الرسائل الحسّاس.
+async function ensureGreetingTemplate(
+  supabase: ReturnType<typeof createClient>, waba: string,
+): Promise<void> {
+  try {
+    const token = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
+    if (!token || !waba) return;
+    const { data } = await supabase.from("wa_settings").select("value").eq("key", "greeting_template_sid").maybeSingle();
+    const cur = String((data as { value?: unknown } | null)?.value || "").trim();
+    // اسم Meta صحيح موجود؟ (ليس فارغاً وليس ContentSid تويليو HX…) → لا شيء نفعله.
+    if (cur && !/^HX/i.test(cur)) return;
+    const name = "alezz_greeting";
+    const language = "ar";
+    const body = "مرحباً {{1}} 🌟\nشكراً لتواصلك مع وكالة العز للسياحة والسفر. يسعدنا خدمتك — وش الوجهة اللي تفكّر فيها، وكم عدد المسافرين والتاريخ المتوقع؟";
+    const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${waba}/message_templates`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name, language, category: "UTILITY", components: [{ type: "BODY", text: body, example: { body_text: [["العميل"]] } }] }),
+    });
+    const j = await res.json().catch(() => ({}));
+    const errCode = (j as { error?: { code?: number; message?: string } })?.error?.code;
+    const already = errCode === 100 && /already exists|name.*exist/i.test(String((j as { error?: { message?: string } })?.error?.message || ""));
+    if (res.ok || already) {
+      await supabase.from("wa_settings").upsert([
+        { key: "greeting_template_sid", value: name, updated_at: new Date().toISOString() },
+        { key: "greeting_template_lang", value: language, updated_at: new Date().toISOString() },
+        { key: "whatsapp_waba_id", value: waba, updated_at: new Date().toISOString() },
+      ]);
+      console.log("ensureGreetingTemplate: template ensured", name, already ? "(existed)" : "(created)");
+    } else {
+      console.warn("ensureGreetingTemplate failed", JSON.stringify((j as { error?: unknown })?.error ?? j).slice(0, 200));
+    }
+  } catch (e) { console.warn("ensureGreetingTemplate error", (e as Error).message); }
+}
+
+async function discoverWabaId(token: string, phoneNumberId: string): Promise<{ waba: string | null; how: string; diag: string }> {
+  const envWaba = (Deno.env.get("WHATSAPP_BUSINESS_ACCOUNT_ID") || "").trim();
+  if (envWaba) return { waba: envWaba, how: "env", diag: "" };
+  let diag = "";
+  // (٢) حقل على عقدة رقم الهاتف
+  try {
+    const r = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}?fields=whatsapp_business_account{id,name}&access_token=${encodeURIComponent(token)}`);
+    const j = await r.json();
+    const id = (j as { whatsapp_business_account?: { id?: string } })?.whatsapp_business_account?.id;
+    if (id) return { waba: String(id), how: "phone_field", diag: "" };
+    diag += "phone_field:" + JSON.stringify(j).slice(0, 200) + " ";
+  } catch (e) { diag += "phone_field_err:" + (e as Error).message + " "; }
+  // (٣) debug_token → granular_scopes → target_ids
+  try {
+    const r = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/debug_token?input_token=${encodeURIComponent(token)}&access_token=${encodeURIComponent(token)}`);
+    const j = await r.json();
+    const scopes = (j as { data?: { granular_scopes?: Array<{ scope?: string; target_ids?: string[] }> } })?.data?.granular_scopes || [];
+    for (const s of scopes) {
+      if (String(s?.scope || "").includes("whatsapp_business") && Array.isArray(s?.target_ids) && s.target_ids.length) {
+        return { waba: String(s.target_ids[0]), how: "debug_token", diag: "" };
+      }
+    }
+    diag += "debug_token:" + JSON.stringify(scopes).slice(0, 200) + " ";
+  } catch (e) { diag += "debug_token_err:" + (e as Error).message + " "; }
+  return { waba: null, how: "none", diag };
+}
+
 function staffList(envVar: string): string[] {
   return (Deno.env.get(envVar) || "")
     .split(",")
@@ -1697,6 +1769,28 @@ ${returning
   let outMsgs: string[] = [];
   if (Array.isArray(out.messages)) outMsgs = (out.messages as unknown[]).map(x => String(x || "").trim()).filter(Boolean);
   else if (out.reply) outMsgs = [String(out.reply).trim()];
+
+  // ── حارس الأعمار (خادميّ، لا يعتمد على التزام النموذج) ─────────────────
+  // بعد معرفة عدد المسافرين لازم نعرف: كلهم بالغين ولا فيهم أطفال؟ (السعر
+  // يختلف بعمر الطفل). النموذج (Haiku) أحياناً يتخطّى هالسؤال ويكمل للتاريخ/
+  // المدن — فنفرضه خادميّاً: لو العدد معروف والأعمار فاضية وما تأكّد إنهم
+  // بالغين وما سبق سألنا، نستبدل رد النموذج بسؤال الأطفال ونمنع الإقفال.
+  const _gm = { ...(prev as Record<string, unknown>), ...((out.fields && typeof out.fields === "object") ? out.fields as Record<string, unknown> : {}) };
+  const _paxNum = Number(_gm.pax);
+  const _paxKnown = Number.isFinite(_paxNum) && _paxNum > 0;
+  const _agesEmpty = !String(_gm.ages || "").trim();
+  const _askedChildren = _gm.asked_children === true;
+  // تأكيد صريح إنهم بالغين (في نص المحادثة كاملاً) → لا داعي للسؤال.
+  const _adultsConfirmed = /كل(?:هم|نا)?\s*(?:كبار|بالغين)|جميعهم?\s*بالغين|بالغين\s*فقط|(?:ما|بدون|بلا|مافي|ما\s*في)\s*(?:فيه\s*)?(?:أطفال|اطفال|عيال|صغار)/.test(transcript);
+  // هل رد النموذج نفسه يسأل عن الأطفال/الكبار؟ (لا نكرّر فوقه)
+  const _outAsksAges = /بالغين|كبار|أطفال|اطفال|عيال|صغار|أعمار|اعمار/.test(outMsgs.join(" "));
+  let _ageGateFired = false;
+  if (_paxKnown && _agesEmpty && !_adultsConfirmed && !_askedChildren && !_outAsksAges) {
+    // صياغة مباشرة تسأل: كلهم بالغين ولا فيهم أطفال؟ (بلا سؤال عمر أي بالغ)
+    outMsgs = [`تمام 🌟 الـ${_paxNum} كلهم بالغين ولا معكم أطفال؟ 👶 (أسأل لأن سعر الأطفال يختلف حسب أعمارهم)`];
+    _ageGateFired = true;
+  }
+
   for (const raw of outMsgs.slice(0, 3)) {
     const msg = stripBannedPhrases(raw);
     if (!msg) continue; // لو الرسالة كانت كلها عبارات ممنوعة، تجاهلها
@@ -1706,8 +1800,12 @@ ${returning
   }
   const upd: Record<string, unknown> = { last_message_at: new Date().toISOString() };
   let _mergedData = { ...(prev as Record<string, unknown>) };
-  if (out.fields && typeof out.fields === "object") { _mergedData = { ..._mergedData, ...out.fields }; upd.intake_data = _mergedData; }
-  if (out.complete === true) upd.intake_active = false;
+  if (out.fields && typeof out.fields === "object") { _mergedData = { ..._mergedData, ...out.fields }; }
+  // بمجرد ما نسأل عن الأطفال (سواء النموذج أو الحارس) نثبّت العلم فلا نكرّره.
+  if (_ageGateFired || _outAsksAges || _adultsConfirmed) _mergedData.asked_children = true;
+  upd.intake_data = _mergedData;
+  // ❌ لا نقفل الاستقبال إذا الحارس لسّه يسأل عن الأطفال (العدد معروف والأعمار مجهولة).
+  if (out.complete === true && !_ageGateFired) upd.intake_active = false;
   await supabase.from("whatsapp_sessions").update(upd).eq("phone", from);
 }
 
@@ -5969,19 +6067,22 @@ Deno.serve(async (req) => {
       if (!rawPhone) return new Response(JSON.stringify({ error: "missing phone" }), { status: 400, headers: jsonCors });
       const phone = normalizeWhatsappPhone(rawPhone);
       const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-      const { data: tRow } = await supabase.from("wa_settings").select("value").eq("key", "greeting_template_sid").maybeSingle();
-      const contentSid = (typeof (tRow as { value?: unknown } | null)?.value === "string" ? (tRow as { value: string }).value : "")
+      const { data: tRows } = await supabase.from("wa_settings").select("key, value").in("key", ["greeting_template_sid", "greeting_template_lang"]);
+      const tArr = (tRows || []) as Array<{ key: string; value: string }>;
+      const contentSid = (tArr.find(r => r.key === "greeting_template_sid")?.value || "")
         || (Deno.env.get("WHATSAPP_GREETING_TEMPLATE_SID") || "");
+      const templateLang = tArr.find(r => r.key === "greeting_template_lang")?.value || "ar";
       if (!contentSid) {
-        return new Response(JSON.stringify({ error: "لا يوجد قالب ترحيب محفوظ — احفظي ContentSid أولاً" }), { status: 400, headers: jsonCors });
+        return new Response(JSON.stringify({ error: "لا يوجد قالب ترحيب محفوظ — أنشئي/احفظي القالب أولاً" }), { status: 400, headers: jsonCors });
       }
+      // القالب فيه {{1}} إلزامي → لازم نمرّر قيمة دائماً حتى لو ما فيه اسم،
+      // وإلا ترفض Meta (عدد المتغيّرات لا يطابق). البديل: «عميلنا العزيز».
       const vars: Record<string, string> = {};
       if (p.vars && typeof p.vars === "object") {
         for (const [k, v] of Object.entries(p.vars)) vars[String(k)] = String(v);
-      } else if (name) {
-        vars["1"] = name;
       }
-      const twilioSid = await sendWhatsappTemplate(phone, contentSid, vars);
+      if (!vars["1"]) vars["1"] = name || "عميلنا العزيز";
+      const twilioSid = await sendWhatsappTemplate(phone, contentSid, vars, templateLang);
       const now = new Date().toISOString();
       await supabase.from("whatsapp_sessions").upsert({
         phone,
@@ -6003,9 +6104,10 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Admin/staff: create a WhatsApp greeting template via Twilio Content API,
-  // submit it for WhatsApp approval, and save its ContentSid to wa_settings.
-  //   POST ?admin_action=create_greeting_template  body {body?, category?}
+  // Admin/staff: create a WhatsApp greeting template on **Meta** (Cloud API) —
+  // نفس منصّة الإرسال. ننشئ القالب على WABA ونحفظ **اسمه** في greeting_template_sid
+  // (لأن الإرسال عبر Graph يستخدم الاسم لا ContentSid). Meta تعتمده خلال دقائق/ساعات.
+  //   POST ?admin_action=create_greeting_template  body {body?, category?, name?, language?, waba_id?}
   if (url.searchParams.get("admin_action") === "create_greeting_template") {
     if (!(await checkAuthOrSession(req))) return unauthorized();
     try {
@@ -6013,68 +6115,109 @@ Deno.serve(async (req) => {
       const body = String(p.body || "").trim()
         || "مرحباً {{1}} 🌟\nشكراً لتواصلك مع وكالة العز للسياحة والسفر. يسعدنا خدمتك — وش الوجهة اللي تفكّر فيها، وكم عدد المسافرين والتاريخ المتوقع؟";
       const category = String(p.category || "").toUpperCase() === "MARKETING" ? "MARKETING" : "UTILITY";
-      const tSid = Deno.env.get("TWILIO_ACCOUNT_SID");
-      const tTok = Deno.env.get("TWILIO_AUTH_TOKEN");
-      if (!tSid || !tTok) throw new Error("Twilio credentials missing");
-      const auth = "Basic " + btoa(`${tSid}:${tTok}`);
-      const friendly = "alezz_greeting_" + Date.now();
-      const hasVar = /\{\{\s*1\s*\}\}/.test(body);
-      const createBody: Record<string, unknown> = {
-        friendly_name: friendly,
-        language: "ar",
-        types: { "twilio/text": { body } },
-      };
-      if (hasVar) createBody.variables = { "1": "العميل" };
-      const cRes = await fetch("https://content.twilio.com/v1/Content", {
-        method: "POST",
-        headers: { Authorization: auth, "Content-Type": "application/json" },
-        body: JSON.stringify(createBody),
-      });
-      const cText = await cRes.text();
-      if (!cRes.ok) throw new Error("create: " + cRes.status + " " + cText.slice(0, 300));
-      const created = JSON.parse(cText);
-      const contentSid = String(created.sid || "");
-      // Submit for WhatsApp approval.
-      const aRes = await fetch(`https://content.twilio.com/v1/Content/${contentSid}/ApprovalRequests/whatsapp`, {
-        method: "POST",
-        headers: { Authorization: auth, "Content-Type": "application/json" },
-        body: JSON.stringify({ name: friendly.toLowerCase(), category }),
-      });
-      const aText = await aRes.text();
-      let approval: unknown = null;
-      try { approval = JSON.parse(aText); } catch { approval = aText.slice(0, 300); }
-      const approvalStatus = (approval as { whatsapp?: { status?: string }; status?: string } | null)?.whatsapp?.status
-        || (approval as { status?: string } | null)?.status
-        || (aRes.ok ? "received" : "submit_failed");
-      // Save the ContentSid so start_conversation can use it immediately.
+      // اسم القالب: أحرف صغيرة/أرقام/شرطة سفلية فقط (شرط Meta). ثابت افتراضياً
+      // ليشير إليه start_conversation دائماً.
+      const name = (String(p.name || "alezz_greeting").toLowerCase().replace(/[^a-z0-9_]/g, "_")).slice(0, 60) || "alezz_greeting";
+      const language = String(p.language || "ar").trim() || "ar";
+      const token = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
+      const phoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
+      if (!token || !phoneNumberId) throw new Error("Cloud API credentials missing (WHATSAPP_ACCESS_TOKEN/PHONE_NUMBER_ID)");
       const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-      await supabase.from("wa_settings").upsert([{ key: "greeting_template_sid", value: contentSid, updated_at: new Date().toISOString() }]);
-      return new Response(JSON.stringify({ ok: true, content_sid: contentSid, category, approval_status: approvalStatus, approval }), { headers: jsonCors });
+      // اكتشاف WABA (أو من الجسم مباشرة)
+      let waba = String(p.waba_id || "").trim();
+      let how = "body";
+      if (!waba) { const d = await discoverWabaId(token, phoneNumberId); waba = d.waba || ""; how = d.how; if (!waba) throw new Error("تعذّر اكتشاف WABA — أضيفي WHATSAPP_BUSINESS_ACCOUNT_ID كسر، أو مرّري waba_id. " + d.diag); }
+      const hasVar = /\{\{\s*1\s*\}\}/.test(body);
+      const bodyComponent: Record<string, unknown> = { type: "BODY", text: body };
+      if (hasVar) bodyComponent.example = { body_text: [["العميل"]] };
+      const createRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${waba}/message_templates`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ name, language, category, components: [bodyComponent] }),
+      });
+      const cText = await createRes.text();
+      let created: unknown = null;
+      try { created = JSON.parse(cText); } catch { created = cText.slice(0, 300); }
+      // «موجود مسبقاً» ليس فشلاً — نعتبره ناجحاً ونقرأ حالته.
+      const errCode = (created as { error?: { code?: number; message?: string } } | null)?.error?.code;
+      const alreadyExists = errCode === 100 && /already exists|name.*exist/i.test(String((created as { error?: { message?: string } } | null)?.error?.message || ""));
+      if (!createRes.ok && !alreadyExists) {
+        throw new Error("create: " + createRes.status + " " + JSON.stringify((created as { error?: unknown })?.error ?? created).slice(0, 300));
+      }
+      const status = (created as { status?: string } | null)?.status || (alreadyExists ? "EXISTS" : "PENDING");
+      // نحفظ الاسم + اللغة + WABA ليستخدمها start_conversation والتحقق.
+      await supabase.from("wa_settings").upsert([
+        { key: "greeting_template_sid", value: name, updated_at: new Date().toISOString() },
+        { key: "greeting_template_lang", value: language, updated_at: new Date().toISOString() },
+        { key: "whatsapp_waba_id", value: waba, updated_at: new Date().toISOString() },
+      ]);
+      return new Response(JSON.stringify({ ok: true, content_sid: name, template_name: name, language, category, waba, waba_how: how, approval_status: String(status).toLowerCase() }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }
   }
 
-  // Admin/staff: check WhatsApp approval status of the saved greeting template.
+  // Admin/staff: probe Graph to discover the WABA id (business traversal) and
+  // list existing message templates. تشخيصيّ — يساعد على معرفة مُعرّف WABA
+  // وإن كان هناك قالب معتمد أصلاً. يحفظ WABA في wa_settings عند العثور عليه.
+  if (url.searchParams.get("admin_action") === "discover_waba") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const token = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
+      const phoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
+      if (!token || !phoneNumberId) throw new Error("Cloud API credentials missing");
+      const g = async (path: string) => {
+        try { const r = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${path}${path.includes("?") ? "&" : "?"}access_token=${encodeURIComponent(token)}`); return await r.json(); }
+        catch (e) { return { _err: (e as Error).message }; }
+      };
+      const probes: Record<string, unknown> = {};
+      probes.phone = await g(`${phoneNumberId}?fields=id,display_phone_number,verified_name`);
+      probes.me = await g(`me?fields=id,name`);
+      const meId = String((probes.me as { id?: string })?.id || "me");
+      const wabaIds: string[] = [];
+      const collect = (o: unknown) => { for (const w of ((o as { data?: Array<{ id?: string }> })?.data || [])) if (w?.id) wabaIds.push(String(w.id)); };
+      // حواف WABA على مستخدم النظام (Alezz Bot) — تعمل بصلاحية whatsapp_business_management.
+      probes.su_shared = await g(`${meId}/shared_whatsapp_business_accounts?fields=id,name`); collect(probes.su_shared);
+      probes.su_owned = await g(`${meId}/owned_whatsapp_business_accounts?fields=id,name`); collect(probes.su_owned);
+      probes.su_assigned = await g(`${meId}/assigned_whatsapp_business_accounts?fields=id,name`); collect(probes.su_assigned);
+      // كملاذ أخير: تصفية debug_token target_ids
+      probes.dbg = await g(`debug_token?input_token=${encodeURIComponent(token)}`);
+      // للـ WABA الأول: اعرض قوالبه
+      let templates: unknown = null;
+      if (wabaIds[0]) {
+        templates = await g(`${wabaIds[0]}/message_templates?fields=name,status,category,language&limit=50`);
+        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        await supabase.from("wa_settings").upsert([{ key: "whatsapp_waba_id", value: wabaIds[0], updated_at: new Date().toISOString() }]);
+      }
+      return new Response(JSON.stringify({ ok: true, waba_ids: wabaIds, templates, probes }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // Admin/staff: check the **Meta** approval status of the saved greeting template
+  // (by name). يرجّع approved/pending/rejected + سبب الرفض إن وُجد.
   if (url.searchParams.get("admin_action") === "template_status") {
     if (!(await checkAuthOrSession(req))) return unauthorized();
     try {
       const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-      const { data } = await supabase.from("wa_settings").select("value").eq("key", "greeting_template_sid").maybeSingle();
-      const contentSid = typeof (data as { value?: unknown } | null)?.value === "string" ? (data as { value: string }).value : "";
-      if (!contentSid) return new Response(JSON.stringify({ content_sid: "", status: "none" }), { headers: jsonCors });
-      const tSid = Deno.env.get("TWILIO_ACCOUNT_SID");
-      const tTok = Deno.env.get("TWILIO_AUTH_TOKEN");
-      const auth = "Basic " + btoa(`${tSid}:${tTok}`);
-      const r = await fetch(`https://content.twilio.com/v1/Content/${contentSid}/ApprovalRequests`, {
-        headers: { Authorization: auth },
-      });
+      const { data } = await supabase.from("wa_settings").select("key, value").in("key", ["greeting_template_sid", "whatsapp_waba_id"]);
+      const rows = (data || []) as Array<{ key: string; value: string }>;
+      const name = rows.find(r => r.key === "greeting_template_sid")?.value || "";
+      let waba = rows.find(r => r.key === "whatsapp_waba_id")?.value || "";
+      if (!name) return new Response(JSON.stringify({ content_sid: "", status: "none" }), { headers: jsonCors });
+      const token = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
+      const phoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
+      if (!token || !phoneNumberId) throw new Error("Cloud API credentials missing");
+      if (!waba) { const d = await discoverWabaId(token, phoneNumberId); waba = d.waba || ""; if (!waba) throw new Error("تعذّر اكتشاف WABA — " + d.diag); }
+      const r = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${waba}/message_templates?name=${encodeURIComponent(name)}&fields=name,status,category,language,rejected_reason&access_token=${encodeURIComponent(token)}`);
       const txt = await r.text();
       let parsed: unknown = null;
       try { parsed = JSON.parse(txt); } catch { parsed = txt.slice(0, 300); }
-      const status = (parsed as { whatsapp?: { status?: string } } | null)?.whatsapp?.status || "unknown";
-      const rejection = (parsed as { whatsapp?: { rejection_reason?: string } } | null)?.whatsapp?.rejection_reason || "";
-      return new Response(JSON.stringify({ content_sid: contentSid, status, rejection_reason: rejection, raw: parsed }), { headers: jsonCors });
+      const tpl = (parsed as { data?: Array<{ status?: string; rejected_reason?: string }> } | null)?.data?.[0];
+      const status = String(tpl?.status || "unknown").toLowerCase();  // approved | pending | rejected
+      const rejection = tpl?.rejected_reason && tpl.rejected_reason !== "NONE" ? tpl.rejected_reason : "";
+      return new Response(JSON.stringify({ content_sid: name, status, rejection_reason: rejection, raw: parsed }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }
@@ -6882,6 +7025,16 @@ Deno.serve(async (req) => {
       video: "🎥 فيديو", sticker: "🌟 ملصق", location: "📍 موقع", contacts: "👤 جهة اتصال",
     };
     for (const entry of (payload?.entry ?? [])) {
+      // entry.id = مُعرّف حساب واتساب للأعمال (WABA) في كل ويبهوك من Meta.
+      // نلتقطه مرة (رسائل أو statuses) لإعداد/إدارة القوالب لاحقاً بلا تدخّل يدوي.
+      const _wabaId = String((entry as { id?: string })?.id || "");
+      if (_wabaId && _wabaId !== _capturedWaba) {
+        _capturedWaba = _wabaId;
+        try { await supabase.from("wa_settings").upsert([{ key: "whatsapp_waba_id", value: _wabaId, updated_at: new Date().toISOString() }]); } catch (_e) { /* best-effort */ }
+        // إعداد ذاتي: أنشئ قالب الترحيب على Meta مرة واحدة بمجرد معرفة WABA
+        // (best-effort — لا يعطّل معالجة الرسالة إن فشل).
+        await ensureGreetingTemplate(supabase, _wabaId);
+      }
       for (const change of (entry?.changes ?? [])) {
         const value = change?.value;
         const messages = value?.messages;
