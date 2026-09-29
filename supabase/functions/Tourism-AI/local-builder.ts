@@ -845,7 +845,10 @@ export function findArrivalPickup(
   const isPrimaryPickup = (n: string) => {
     // طبّع الألف فيُلتقط "آستقبال" (شيت عُمان) كـ استقبال.
     const firstWord = normalizeArabic(n.replace(/^[\d\.\s]+/, "").trim().split(/\s+/)[0] || "");
-    return /^(?:استقبال|الاستقبال|استقيال|الاستقيال)$/u.test(firstWord);  // نتحمّل خطأ «استقيال»
+    if (/^(?:استقبال|الاستقبال|استقيال|الاستقيال)$/u.test(firstWord)) return true;  // نتحمّل خطأ «استقيال»
+    // صيغة بديلة للاستقبال (الصين): «التوجه من المطار/المحطة … الى (ال)فندق» = وصول → فندق.
+    const nn = normalizeArabic(n);
+    return /(?:من|من\s+)(?:المطار|مطار|المحط[هة]|محط[هة]|القطار)[^\n]*ال[يى]\s*(?:ال)?فندق/u.test(nn);
   };
   let candidates = allTours.filter(t => {
     if (t.type !== destination) return false;
