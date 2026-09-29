@@ -1507,10 +1507,14 @@ async function sendLinkedAdOfferFile(
     if (sentOk) { try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: "📎 ملف العرض (PDF) — " + caption, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ } }
   }
   if (!sentOk) {
-    const msg = await formatAdProgramMessage(supabase, offer.pr, from);
-    const txt = msg + "\n\nعلماً أن الأسعار قد تختلف حسب التاريخ وعدد الأفراد.";
-    await sendCustomerReply(supabase, from, txt);
-    try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: txt, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+    // ❌ لا نرسل نصّاً مبتوراً كأنه «العرض» (يطلع محرج). العرض لازم يكون ملف
+    // PDF فخم من المساعد السياحي. لمّا ما فيه PDF مربوط بالكود (لم يُجهَّز بعد)
+    // نرسل رسالة انتظار مؤدّبة، ونترك ملاحظة داخلية للموظف يجهّز الملف.
+    const hold = "هلا وغلا 🌟 عرضك بيوصلك بالتفصيل الكامل (ملف العرض) من زميلنا المختص خلال وقت قصير بإذن الله. وإذا عندك تاريخ معيّن أو عدد المسافرين، بلّغني عشان يرتّبونه لك بأدقّ صورة 👍";
+    await sendCustomerReply(supabase, from, hold);
+    try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: hold, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+    // تنبيه داخلي: هذا الكود ما له ملف PDF مجهّز — لازم «تجهيز ملف الإعلان» بالمساعد.
+    try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: `⚠️ داخلي: العميل من إعلان كود ${offer.code} لكن ما فيه ملف PDF مجهّز له. جهّزي «ملف الإعلان (PDF)» من المساعد السياحي لهذا الكود ثم أعيدي الإرسال.`, sent_by: "نظام", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
   }
 }
 
@@ -1655,10 +1659,12 @@ async function handleNewLeadIntake(args: {
             if (sentOk) { try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: "📎 ملف العرض (PDF) — " + caption, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ } }
           }
           if (!sentOk) {
-            const msg = await formatAdProgramMessage(supabase, pr, from);
-            const txt = msg + "\n\nعلماً أن الأسعار قد تختلف حسب التاريخ وعدد الأفراد.";
-            await sendCustomerReply(supabase, from, txt);
-            try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: txt, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+            // ❌ لا نرسل نصّاً مبتوراً كأنه «العرض». لا PDF مجهّز → رسالة انتظار
+            // مؤدّبة + تنبيه داخلي للموظف يجهّز «ملف الإعلان (PDF)» من المساعد.
+            const hold = "هلا وغلا 🌟 عرضك بيوصلك بالتفصيل الكامل (ملف العرض) من زميلنا المختص خلال وقت قصير بإذن الله. وإذا عندك تاريخ معيّن أو عدد المسافرين، بلّغني عشان يرتّبونه لك بأدقّ صورة 👍";
+            await sendCustomerReply(supabase, from, hold);
+            try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: hold, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+            try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: `⚠️ داخلي: العميل من إعلان كود ${adCode} لكن ما فيه ملف PDF مجهّز له. جهّزي «ملف الإعلان (PDF)» من المساعد السياحي لهذا الكود ثم أعيدي الإرسال.`, sent_by: "نظام", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
           }
           await supabase.from("whatsapp_sessions").update({
             intake_data: { ...prevData, ad_program_shown: true, ad_program_code: adCode, destination: pr.destination || prevData.destination },
