@@ -5624,7 +5624,7 @@ function renderBanksCashDetail(){
         '<td style="font-size:10px">'+esc(x.more_details||'')+'</td>'+
         '<td style="font-size:10px">'+esc(x.note||'')+'</td>'+
         '<td style="font-size:10px;color:var(--muted)">'+(isDash?'يدوي':'شيت')+'</td>'+
-        '<td style="white-space:nowrap">'+(isDash?'<span title="معتمدة — مقفلة" style="color:#0e9d6a">🔒</span> <button class="btn ghost" style="padding:2px 7px;font-size:11px" onclick="cashEditModal('+x.id+')" title="تعديل أي حقل (التاريخ/المرجع/القيمة/الوصف…) — '+(isOwnerUser()?'يُطبَّق مباشرة':'يُرسَل لموافقة المالكة')+'">✏️ تعديل'+(isOwnerUser()?'':' (موافقة)')+'</button>':'')+'</td></tr>';
+        '<td style="white-space:nowrap"><button class="btn ghost" style="padding:2px 7px;font-size:11px" onclick="cashEditModal('+x.id+')" title="تعديل التاريخ/المرجع/القيمة/الوصف — '+(isOwnerUser()?'يُطبَّق مباشرة':'يُرسَل لموافقة المالكة')+'">✏️ تعديل'+(isOwnerUser()?'':' (موافقة)')+'</button>'+(isDash?' <span title="مُدخَل من الداشبورد" style="color:#0e9d6a;font-size:9px">🖊️</span>':' <span title="من الشيت السابق — قابل للتعديل (تاريخ/مرجع/قيمة)" style="color:var(--muted);font-size:9px">📄 شيت</span>')+'</td></tr>';
     }).join(''):'<tr><td colspan="15" style="text-align:center;color:var(--muted);padding:10px">لا توجد حركات</td></tr>')+
     '</tbody></table></div><div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'bc-tbl\',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'bc-tbl\',1)">تمرير ▶▶</button></div></div>';
   box.innerHTML=html;
