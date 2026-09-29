@@ -341,19 +341,33 @@ function extractDate(text: string): string | null {
 }
 
 // نستعير DEST_CITIES من Tourism-AI مبسطاً — لائحة كلمات وجهات كافية للتصنيف
+// خريطة **شاملة** لكل مدن/وجهات الوكالة → اسم الدولة الصحيح. الغرض: منع
+// النموذج من اختلاق اسم دولة خاطئ نهائياً (كان يقول «الإمارات» ومدنه صينية).
+// كل مدينة تشير لدولتها بشكل قاطع؛ الترتيب من الأخص للأعم.
 const DESTINATION_HINTS: Array<[RegExp, string]> = [
-  // الصين ومدنها (شنغهاي/هانغتشو/سوجو/بكين/هونغ كونغ/جوانزو) — مهم لتصحيح
-  // اختلاق النموذج لاسم دولة خاطئ («الإمارات») والمدن صينية.
-  [/الصين|china|شنغهاي|شنغاي|شانغهاي|shanghai|هان[غ]?[تش]?شو|hangzhou|سوجو|سوزهو|suzhou|بكين|beijing|هون[غجك]\s*كون[غجك]|hong\s*kong|[جق]وان?[غج]?زو|guangzhou/i, "الصين"],
-  [/فيتنام|hanoi|هانوي|halong|sapa|danang|phuquoc/i, "فيتنام"],
-  [/ماليزيا|مليزيا|malaysia|كوالا|langkawi|penang/i, "ماليزيا"],
-  [/إندونيسيا|اندونيسيا|indonesia|بالي|جاكرتا/i, "إندونيسيا"],
-  [/تركيا|turkey|اسطنبول|طرابزون|بورصة/i, "تركيا"],
-  [/تايلاند|تايلند|thailand|بانكوك|بوكيت|باتايا/i, "تايلاند"],
-  [/البوسنة|البوسنه|bosnia|سراييفو/i, "البوسنة"],
-  [/روسيا|russia|موسكو|سوتشي/i, "روسيا"],
-  [/جنوب\s*[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبرغ/i, "جنوب أفريقيا"],
+  [/الصين|china|شنغهاي|شنغاي|شانغهاي|shanghai|هان[غ]?[تش]?شو|hangzhou|سوجو|سوزهو|suzhou|بكين|beijing|هون[غجك]\s*كون[غجك]|hong\s*kong|[جق]وان?[غج]?زو|guangzhou|قوانزو|تشنغدو|chengdu|قويلين|guilin/i, "الصين"],
+  [/فيتنام|vietnam|hanoi|هانوي|halong|ها\s*لونج|sapa|سابا|danang|دانانغ|phuquoc|فو\s*كووك|هوشي|ho\s*chi|نها\s*ترانج|nha\s*trang|هوي\s*ان|hoi\s*an/i, "فيتنام"],
+  [/ماليزيا|مليزيا|malaysia|كوالا|kuala|langkawi|لنكاوي|لنكاوى|penang|بينانج|بينانغ|جنتنج|genting|ملاكا|malacca/i, "ماليزيا"],
+  [/إندونيسيا|اندونيسيا|indonesia|بالي|bali|جاكرتا|jakarta|لومبوك|lombok|بندونق|bandung/i, "إندونيسيا"],
+  [/تركيا|turkey|turkiye|اسطنبول|إسطنبول|istanbul|طرابزون|trabzon|بورصة|bursa|انطاليا|أنطاليا|antalya|كابادوكيا|cappadocia|سبانجا|sapanca|يلوا|yalova/i, "تركيا"],
+  [/تايلاند|تايلند|thailand|بانكوك|bangkok|بوكيت|phuket|باتايا|pattaya|شنغماي|chiang\s*mai|كرابي|krabi|كوسموي|samui/i, "تايلاند"],
+  [/البوسنة|البوسنه|bosnia|سراييفو|sarajevo|موستار|mostar|ياهورينا/i, "البوسنة"],
+  [/روسيا|russia|موسكو|moscow|سوتشي|sochi|بطرسبرغ|petersburg|بطرسبورغ/i, "روسيا"],
+  [/جنوب\s*[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبرغ|johannesburg|hermanus|هيرمانوس|صن\s*سيتي|sun\s*city/i, "جنوب أفريقيا"],
   [/موريش[يو]س|mauritius/i, "موريشيوس"],
+  [/المالديف|maldives|مالديف/i, "المالديف"],
+  [/[أا]ذربيجان|azerbaijan|باكو|baku|قابالا|gabala/i, "أذربيجان"],
+  [/جورجيا|georgia|تبليسي|tbilisi|باتومي|batumi/i, "جورجيا"],
+  [/سريلانكا|sri\s*lanka|كولومبو|colombo/i, "سريلانكا"],
+  [/مصر|egypt|القاهرة|cairo|شرم|sharm|الغردقة|hurghada/i, "مصر"],
+  [/[إا]يطاليا|italy|روما|rome|ميلان|milan|البندقية|venice|فلورنسا|florence/i, "إيطاليا"],
+  [/[إا]سبانيا|spain|مدريد|madrid|برشلونة|barcelona/i, "إسبانيا"],
+  [/فرنسا|france|باريس|paris/i, "فرنسا"],
+  [/هولندا|netherland|أمستردام|امستردام|amsterdam/i, "هولندا"],
+  [/بريطانيا|إنجلترا|انجلترا|england|britain|لندن|london|مانشستر|manchester/i, "إنجلترا"],
+  [/الإمارات|الامارات|uae|emirates|دبي|dubai|أبوظبي|ابوظبي|abu\s*dhabi|الشارقة|sharjah/i, "الإمارات"],
+  [/عمرة|عُمرة|عمره|الحرمين|مكة|مكه|makkah|mecca|المدينة\s*المنورة|madinah|medina/i, "العمرة"],
+  [/سلطنة\s*عمان|صلال[ةه]|salalah|مسقط|muscat|نزوى|صور\b/i, "عُمان"],
 ];
 
 function extractDestination(text: string): string | null {
@@ -1776,21 +1790,33 @@ ${returning
   if (Array.isArray(out.messages)) outMsgs = (out.messages as unknown[]).map(x => String(x || "").trim()).filter(Boolean);
   else if (out.reply) outMsgs = [String(out.reply).trim()];
 
-  // ── تصحيح الوجهة (خادميّ): النموذج أحياناً يخترع اسم دولة خاطئ رغم أن المدن
-  // تدل على وجهة أخرى (مثال حقيقي: «الإمارات» بينما المدن شنغهاي/سوجو = الصين).
-  // نستنتج الوجهة الصحيحة من المدن + الوجهة المُدخَلة + السجل، فنصحّح الحقل
-  // المخزّن والرسالة الصادرة (نستبدل الاسم المخترَع بالصحيح).
+  // ── تصحيح الوجهة (خادميّ — منع مطلق للاختلاق): النموذج قد يخترع اسم دولة
+  // خاطئ رغم أن المدن تدل على وجهة أخرى (مثال حقيقي: «الإمارات» بينما المدن
+  // شنغهاي/سوجو = الصين). القاعدة: **المدن هي المرجع القاطع** للوجهة، لا اسم
+  // الدولة الذي يكتبه النموذج (قد يكون مهلوساً). نستنتج الدولة من **المدن
+  // وحدها**، فإن اختلفت عمّا سمّاه النموذج نصحّح الحقل المخزّن **والرسالة
+  // الصادرة** (نستبدل الاسم المخترَع بالصحيح) قبل الإرسال.
   {
     const _f = (out.fields && typeof out.fields === "object") ? out.fields as Record<string, unknown> : null;
     const _prevRec = (prev || {}) as Record<string, unknown>;
     const _citiesStr = String((_f?.cities) ?? _prevRec.cities ?? "");
     const _destStr = String((_f?.destination) ?? _prevRec.destination ?? "");
-    const _detected = extractDestination(_citiesStr + " " + _destStr + " " + transcript);
     const _claimed = _destStr.split("(")[0].trim();  // اسم الدولة قبل أي قوس
+    // المرجع القاطع = المدن وحدها. لا ندخل _destStr في الاستنتاج حتى لا يعيد
+    // النموذج المهلوس فرض نفسه. عند غياب المدن، نستأنس بالسجل فقط.
+    const _detFromCities = extractDestination(_citiesStr);
+    const _detected = _detFromCities || extractDestination(transcript);
+    const _claimedDet = _claimed ? extractDestination(_claimed) : null;
+    // شرط التصحيح: عرفنا الوجهة الصحيحة، والنموذج سمّى دولة **مختلفة** عنها.
     if (_detected && _claimed && _claimed.length >= 3
-        && extractDestination(_claimed) !== _detected && !_claimed.includes(_detected)) {
+        && _claimedDet !== _detected && !_claimed.includes(_detected)) {
       if (_f) _f.destination = _citiesStr ? `${_detected} (${_citiesStr})` : _detected;
+      // استبدل الاسم المخترَع بالصحيح في كل رسالة صادرة.
       outMsgs = outMsgs.map(m => m.split(_claimed).join(_detected));
+      console.log("destination-guard: corrected", _claimed, "→", _detected, "(cities:", _citiesStr + ")");
+    } else if (_detFromCities && _f && (!_claimed || _claimedDet !== _detFromCities)) {
+      // شبكة أمان: المدن معروفة والوجهة المخزّنة فاضية/غامضة → اضبطها من المدن.
+      _f.destination = `${_detFromCities} (${_citiesStr})`;
     }
   }
 
