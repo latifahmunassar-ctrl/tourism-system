@@ -5533,6 +5533,41 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Admin/staff: **إرسال** عرض الإعلان لعميل عند الطلب (زر يدوي من الداشبورد).
+  // يحل الكود من إعلان العميل (أو code صريح بالجسم)، ويرسل الملف/التفاصيل عبر
+  // sendLinkedAdOfferFile. يتطلّب نافذة 24 ساعة مفتوحة (رسالة حرة) وإلا ترفض Meta.
+  //   POST ?admin_action=send_ad_offer  body {phone, code?}
+  if (url.searchParams.get("admin_action") === "send_ad_offer") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const p = await req.json();
+      const rawPhone = String(p.phone || "").trim();
+      if (!rawPhone) return new Response(JSON.stringify({ error: "missing phone" }), { status: 400, headers: jsonCors });
+      const phone = rawPhone.startsWith("whatsapp:") ? rawPhone : ("whatsapp:+" + rawPhone.replace(/[^0-9]/g, ""));
+      const overrideCode = String(p.code || "").trim().toUpperCase();
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      let offer: { code: string; pdfUrl: string; pr: { destination?: string; raw?: string } } | null = null;
+      if (overrideCode) {
+        // بناء عرض من كود صريح: البرنامج + ملف الإعلان إن وُجد.
+        const { data: prog } = await supabase.from("programs").select("destination, raw").eq("code", overrideCode).maybeSingle();
+        const pr = prog as { destination?: string; raw?: string } | null;
+        if (!pr || !pr.raw) return new Response(JSON.stringify({ error: "الكود غير موجود بجدول البرامج: " + overrideCode }), { status: 404, headers: jsonCors });
+        let pdfUrl = "";
+        try { const { data: pdfRow } = await supabase.from("wa_settings").select("value").eq("key", "ad_pdf:" + overrideCode).maybeSingle(); pdfUrl = String((pdfRow as { value?: { url?: string } } | null)?.value?.url || ""); } catch (_e) { /* */ }
+        offer = { code: overrideCode, pdfUrl, pr };
+      } else {
+        const { data: sess } = await supabase.from("whatsapp_sessions").select("ad_referral").eq("phone", phone).maybeSingle();
+        const adRef = (sess as { ad_referral?: Record<string, unknown> | null } | null)?.ad_referral || null;
+        offer = await resolveLinkedAdOffer(supabase, adRef);
+      }
+      if (!offer) return new Response(JSON.stringify({ error: "ما فيه عرض مربوط بهذا العميل — مرّري code صريح" }), { status: 404, headers: jsonCors });
+      await sendLinkedAdOfferFile(supabase, phone, offer);
+      return new Response(JSON.stringify({ ok: true, phone, code: offer.code, destination: offer.pr?.destination || "", sent_as: offer.pdfUrl ? "pdf" : "text" }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
   if (url.searchParams.get("admin_action") === "list_ad_pdfs") {
     if (!(await checkAuthOrSession(req))) return unauthorized();
     try {
