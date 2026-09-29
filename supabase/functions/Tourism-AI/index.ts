@@ -181,7 +181,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Suzhou",    pattern: /سوجهو|سوجو|سوزو|سوتشو|suzhou/i },
     { canonical: "Beijing",   pattern: /بكين|بيجين[غج]?|beijing/i },
     { canonical: "Hangzhou",  pattern: /هان[غج]تشو|هان[غج]شتوا?|هان[غج]زو|hangzhou/i },
-    { canonical: "Hong Kong", pattern: /هون[غج]\s*كون[غج]|hong\s*kong|hongkong/i },
+    { canonical: "Hong Kong", pattern: /هون[غجك]\s*كون[غجك]|hong\s*kong|hongkong/i },
     { canonical: "Guangzhou", pattern: /[جق]وان?[غج]?زو[اى]?|[جق]وانجو|guangzhou|canton|كانتون/i },
   ],
   // هولندا = أمستردام مدينة أساس واحدة + رحلات يومية؛ نمط واسع يطابق أسماء الجولات.
