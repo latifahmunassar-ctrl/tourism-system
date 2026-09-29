@@ -2642,6 +2642,14 @@ export async function buildLocalProgram(
           fromAirportDrop = { ...hubRow, name: `التوجه من ${fromAr} إلى ${toAr} بسيارة خاصة` };
         }
       }
+      // ✈️ يوم **طيران** لكن انتقال المغادرة المختار «محطة قطار» (الصين: انتقالات بكين
+      //    مصاغة لمحطة القطار السريع) → أعِد تسميته «المطار الدولي» لأن العميل مسافر جوّاً.
+      if (fromAirportDrop && (selectedFlights.find(f => f.day === d.number)?.kind !== "train")
+          && hasFlightThisLeg && /محط[هة]|قطار|station|train/iu.test(fromAirportDrop.name)
+          && !/مطار|airport/iu.test(fromAirportDrop.name)) {
+        const _fromAr = cityArabicNames[d.fromCity] || d.fromCity;
+        fromAirportDrop = { ...fromAirportDrop, name: `التوجه من الفندق في ${_fromAr} الى المطار الدولي` };
+      }
       if (fromAirportDrop) selectedTransfers.push({ day: d.number, row: fromAirportDrop, kind: "Drop" });
       // Only add an airport pickup when this transit is actually a flight
       // (or train). Road transits like Sapa → Hanoi use a single door-to-
@@ -2656,7 +2664,12 @@ export async function buildLocalProgram(
         // نمرّر موقع فندق مدينة الانطلاق لاختيار توديع المنطقة الصحيحة (هوانا/وسط).
         if (!fromAirportDrop) {
           const originLoc = hotelsList.find(h => h.city === d.fromCity)?.hotel?.location || "";
-          const originDep = findDepartureDrop(allTours, d.fromCity, dest, cityDefs, request.transport, originLoc);
+          let originDep = findDepartureDrop(allTours, d.fromCity, dest, cityDefs, request.transport, originLoc);
+          // ✈️ توديع يوم الطيران: لو الصف المختار «محطة قطار» (الصين) أعِد تسميته «المطار الدولي».
+          if (originDep && /محط[هة]|قطار|station|train/iu.test(originDep.name) && !/مطار|airport/iu.test(originDep.name)) {
+            const _fromAr = cityArabicNames[d.fromCity] || d.fromCity;
+            originDep = { ...originDep, name: `التوجه من الفندق في ${_fromAr} الى المطار الدولي` };
+          }
           if (originDep) selectedTransfers.push({ day: d.number, row: originDep, kind: "Drop" });
         }
         // Hub-flight case: flight lands at the destination's preferred hub
