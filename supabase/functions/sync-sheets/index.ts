@@ -93,6 +93,7 @@ const SECTION_CITY_DEFS: Record<string, Array<{ canonical: string; pattern: RegE
     { canonical: "Beijing",   pattern: /بكين|بيجين[غج]?|beijing/i },
     { canonical: "Hangzhou",  pattern: /هان[غج]تشو|هان[غج]شتوا?|هان[غج]زو|hangzhou/i },
     { canonical: "Hong Kong", pattern: /هون[غج]\s*كون[غج]|hong\s*kong|hongkong/i },
+    { canonical: "Guangzhou", pattern: /[جق]وان?[غج]?زو[اى]?|[جق]وانجو|guangzhou|canton|كانتون/i },
   ],
   Netherland: [
     { canonical: "Amsterdam", pattern: /هولندا|هولندي|[اأإآ]مستردام|[اأإآ]مستردم|netherland|holland|amsterdam|جبن|الكمار|خودا|زان?س|ماركن|جيثورن|رورموند|لاهاي|اوترخت|طواحين|اوتلت|فولندام|volendam/i },
@@ -757,7 +758,13 @@ function extractFlights(rows: string[][], destination: string, debug?: { rejects
   // لذلك نجمع كل المرشّحين ثم نختار الثلاثيّة المتقاربة بالأعمدة.
   const FROM_RE  = /^(flight\s*)?from$|^من$/i;
   const TO_RE    = /^(flight\s*)?to$|^الى$|^إلى$/i;
-  const PRICE_RE = /(^|\s)(price\s*)?per\s*pax|^pax\s*price$|سعر\s*الشخص|سعر\s*للشخص/i;
+  // سعر الطيران قد يكون «per pax» أو «Rate» (شيت الصين). «Rate» عام (عمود الفنادق
+  // يحمله أيضاً)، لذا نقبله **فقط** لثلاثيّة معنونة صراحةً «Flight from/To» (أدناه)،
+  // لا للأعمدة المجرّدة (from/to = تواريخ الفنادق) حتى لا نلتقط عمود Rate للفنادق.
+  const PRICE_RE     = /(^|\s)(price\s*)?per\s*pax|^pax\s*price$|سعر\s*الشخص|سعر\s*للشخص/i;
+  const PRICE_OR_RATE_RE = /(^|\s)(price\s*)?per\s*pax|^pax\s*price$|سعر\s*الشخص|سعر\s*للشخص|^rate$|^السعر$/i;
+  const FLIGHT_FROM_RE = /^flight\s*from$/i;   // معنون صراحةً «Flight from»
+  const FLIGHT_TO_RE   = /^flight\s*to$/i;
 
   let header: { fromCol: number; toCol: number; priceCol: number } | null = null;
   for (let i = 0; i < rows.length; i++) {
@@ -765,14 +772,32 @@ function extractFlights(rows: string[][], destination: string, debug?: { rejects
     const froms: number[]  = [];
     const tos: number[]    = [];
     const prices: number[] = [];
+    const flightFroms: number[] = [];
+    const flightTos: number[]   = [];
+    const ratePrices: number[]  = [];   // per pax أو Rate (للثلاثيّة المعنونة flight فقط)
     for (let j = 0; j < cells.length; j++) {
       if (!cells[j]) continue;
       if (FROM_RE.test(cells[j]))  froms.push(j);
       if (TO_RE.test(cells[j]))    tos.push(j);
       if (PRICE_RE.test(cells[j])) prices.push(j);
+      if (FLIGHT_FROM_RE.test(cells[j])) flightFroms.push(j);
+      if (FLIGHT_TO_RE.test(cells[j]))   flightTos.push(j);
+      if (PRICE_OR_RATE_RE.test(cells[j])) ratePrices.push(j);
     }
-    // اختر ثلاثيّة (from, to, price) كلّها متقاربة (within 4 cols)
-    for (const f of froms) {
+    // (١) أولوية: ثلاثيّة معنونة صراحةً «Flight from / Flight To / (Rate|per pax)».
+    for (const f of flightFroms) {
+      for (const t of flightTos) {
+        if (t <= f || t - f > 2) continue;
+        for (const p of ratePrices) {
+          if (p <= t || p - t > 3) continue;
+          header = { fromCol: f, toCol: t, priceCol: p }; break;
+        }
+        if (header) break;
+      }
+      if (header) break;
+    }
+    // (٢) fallback: أعمدة from/to مجرّدة + سعر «per pax» فقط (لا Rate — تفادياً لعمود الفنادق).
+    if (!header) for (const f of froms) {
       for (const t of tos) {
         if (t <= f || t - f > 2) continue;
         for (const p of prices) {

@@ -51,7 +51,7 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     [/جنوب\s*(?:ال)?[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبر[جغ]|johannesburg|(?:هارمونس|هارمانوس|هيرمانوس|هرمانوس)|hermanus|بريتوريا|pretoria|سن\s*سيتي|sun\s*city|كروجر|kruger/i, "South Africa"],
     [/موريشيوس|موريش[سي]|mauritius|بورت\s*لويس|port\s*louis/i, "mauritius"],
     [/[إا]ن[جك]لترا|بريطانيا|بريطاني|لندن|england|london|المملكة\s*المتحدة/i, "England"],
-    [/الصين|صيني?|china|شان[غج]هاي|شنغهاي|shanghai|بكين|beijing|سوجهو|سوجو|suzhou|هان[غج]تشو|hangzhou|هون[غج]\s*كون[غج]|hong\s*kong/i, "China"],
+    [/الصين|صيني?|china|شان[غج]هاي|شنغهاي|shanghai|بكين|beijing|سوجهو|سوجو|suzhou|هان[غج]تشو|hangzhou|هون[غج]\s*كون[غج]|hong\s*kong|[جق]وان?[غج]?زو|guangzhou|canton/i, "China"],
     [/هولندا|هولندي|netherlands?|holland|[اأإآ]مستردام|[اأإآ]مستردم|amsterdam/i, "Netherland"],
     // مكة/العمرة (برامج داخلية: مكة + المدينة المنورة + جدة + الطائف). «المدينة» وحدها
     // عامة فنطلب «المنورة»؛ وجدة/الطائف لا تُشغّل الوجهة وحدها (مدن سعودية عامة).
@@ -182,6 +182,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Beijing",   pattern: /بكين|بيجين[غج]?|beijing/i },
     { canonical: "Hangzhou",  pattern: /هان[غج]تشو|هان[غج]شتوا?|هان[غج]زو|hangzhou/i },
     { canonical: "Hong Kong", pattern: /هون[غج]\s*كون[غج]|hong\s*kong|hongkong/i },
+    { canonical: "Guangzhou", pattern: /[جق]وان?[غج]?زو[اى]?|[جق]وانجو|guangzhou|canton|كانتون/i },
   ],
   // هولندا = أمستردام مدينة أساس واحدة + رحلات يومية؛ نمط واسع يطابق أسماء الجولات.
   Netherland: [
@@ -3580,7 +3581,7 @@ Deno.serve(async (req) => {
         "Moscow": "موسكو", "St Petersburg": "سانت بطرسبرغ", "Sochi": "سوتشي",
         "Sarajevo": "سراييفو", "Mostar": "موستار", "Bihać": "بيهاتش",
         "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
-        "Shanghai": "شنغهاي", "Beijing": "بكين", "Hangzhou": "هانغتشو", "Hong Kong": "هونغ كونغ", "London": "لندن", "Amsterdam": "أمستردام",
+        "Shanghai": "شنغهاي", "Beijing": "بكين", "Hangzhou": "هانغتشو", "Hong Kong": "هونغ كونغ", "London": "لندن", "Amsterdam": "أمستردام", "Guangzhou": "جوانزو",
       };
       // Distribution-change follow-up: employee typed a NEW city/nights split
       // in chat to reshape an existing program (e.g. "٢ بانكوك ٤ كوساموي").
