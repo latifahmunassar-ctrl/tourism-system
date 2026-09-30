@@ -1560,8 +1560,8 @@ async function sendLinkedAdOfferFile(
     const hold = "هلا وغلا 🌟 عرضك بيوصلك بالتفصيل الكامل (ملف العرض) من زميلنا المختص خلال وقت قصير بإذن الله. وإذا عندك تاريخ معيّن أو عدد المسافرين، بلّغني عشان يرتّبونه لك بأدقّ صورة 👍";
     await sendCustomerReply(supabase, from, hold);
     try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: hold, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
-    // تنبيه داخلي: هذا الكود ما له ملف PDF مجهّز — لازم «تجهيز ملف الإعلان» بالمساعد.
-    try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: `⚠️ داخلي: العميل من إعلان كود ${offer.code} لكن ما فيه ملف PDF مجهّز له. جهّزي «ملف الإعلان (PDF)» من المساعد السياحي لهذا الكود ثم أعيدي الإرسال.`, sent_by: "نظام", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+    // ملاحظة: لا نُدخل تنبيهاً داخلياً في خيط المحادثة (يربك ويبدو موجّهاً للعميل).
+    console.warn(`ad-offer no PDF for code ${offer.code} — needs prepareAdPdf`);
   }
 }
 
@@ -1713,7 +1713,7 @@ async function handleNewLeadIntake(args: {
             const hold = "هلا وغلا 🌟 عرضك بيوصلك بالتفصيل الكامل (ملف العرض) من زميلنا المختص خلال وقت قصير بإذن الله. وإذا عندك تاريخ معيّن أو عدد المسافرين، بلّغني عشان يرتّبونه لك بأدقّ صورة 👍";
             await sendCustomerReply(supabase, from, hold);
             try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: hold, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
-            try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: `⚠️ داخلي: العميل من إعلان كود ${adCode} لكن ما فيه ملف PDF مجهّز له. جهّزي «ملف الإعلان (PDF)» من المساعد السياحي لهذا الكود ثم أعيدي الإرسال.`, sent_by: "نظام", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+            console.warn(`ad-offer no PDF for code ${adCode} — needs prepareAdPdf`);
           }
           await supabase.from("whatsapp_sessions").update({
             intake_data: { ...prevData, ad_program_shown: true, ad_program_code: adCode, destination: pr.destination || prevData.destination },
