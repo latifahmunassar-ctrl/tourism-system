@@ -1493,7 +1493,48 @@ async function resolveLinkedAdOffer(
   } catch (_e) { /* */ }
   return { code: adCode, pdfUrl, pr };
 }
-// يرسل ملف العرض المربوط للعميل (PDF أو تفاصيل نصّاً عند فشل الملف) ويسجّله بالمحادثة.
+// يرفع الـPDF لواتساب (media id) ثم يرسله document — زي مسار الفواتير. أوثق من
+// الإرسال بالرابط (Meta تجلب البايتات منّا لا العكس)، ويسجّل media_id فيظهر
+// الملف كأيقونة PDF قابلة للفتح في الداشبورد. يرجّع true عند النجاح.
+async function sendAdPdfByUpload(
+  supabase: ReturnType<typeof createClient>,
+  from: string, pdfUrl: string, caption: string, code: string,
+): Promise<boolean> {
+  try {
+    const TOKEN = (Deno.env.get("WHATSAPP_ACCESS_TOKEN") || "").trim();
+    const PHONE_ID = (Deno.env.get("WHATSAPP_PHONE_NUMBER_ID") || "").trim();
+    if (!TOKEN || !PHONE_ID) return false;
+    const to = internalToGraph(from);
+    const pdfRes = await fetch(pdfUrl);
+    if (!pdfRes.ok) { console.error("ad pdf fetch failed", pdfRes.status, pdfUrl); return false; }
+    const bytes = new Uint8Array(await pdfRes.arrayBuffer());
+    const filename = `عرض-${code}.pdf`;
+    const fd = new FormData();
+    fd.append("messaging_product", "whatsapp");
+    fd.append("type", "application/pdf");
+    fd.append("file", new Blob([bytes], { type: "application/pdf" }), "offer.pdf");
+    const upRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${PHONE_ID}/media`, {
+      method: "POST", headers: { Authorization: `Bearer ${TOKEN}` }, body: fd,
+    });
+    const upJson = await upRes.json();
+    if (!upRes.ok || !upJson.id) { console.error("ad pdf upload failed", JSON.stringify(upJson).slice(0, 200)); return false; }
+    const cap = caption.slice(0, 1000);
+    const msgBody = { messaging_product: "whatsapp", to, type: "document", document: { id: upJson.id, filename, ...(cap ? { caption: cap } : {}) } };
+    const sendRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${PHONE_ID}/messages`, {
+      method: "POST", headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify(msgBody),
+    });
+    const sendJson = await sendRes.json();
+    if (!sendRes.ok) { console.error("ad pdf send failed", JSON.stringify(sendJson?.error ?? sendJson).slice(0, 200)); return false; }
+    try {
+      await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: (cap ? cap + "\n" : "") + "📄 [ملف العرض PDF]", sent_by: "طلال", sent_at: new Date().toISOString(), media_id: upJson.id, media_mime: "application/pdf", media_filename: filename });
+      const _ts = new Date().toISOString();
+      await supabase.from("whatsapp_sessions").update({ last_message_at: _ts, last_outbound_at: _ts, last_outbound_body: "📄 ملف العرض" }).eq("phone", from);
+    } catch (_e) { /* best-effort */ }
+    return true;
+  } catch (e) { console.error("sendAdPdfByUpload error", (e as Error).message); return false; }
+}
+
+// يرسل ملف العرض المربوط للعميل (PDF مرفوع لواتساب) ويسجّله بالمحادثة.
 async function sendLinkedAdOfferFile(
   supabase: ReturnType<typeof createClient>,
   from: string,
@@ -1502,9 +1543,15 @@ async function sendLinkedAdOfferFile(
   const caption = "تفضّل أستاذي ملف العرض 🌟 وإذا عندك تاريخ معيّن أو تفاصيل ثانية حاب تضيفها بلّغني عشان أرتّب لك برنامج بناءً عليه. علماً أن الأسعار قد تختلف حسب التاريخ وعدد الأفراد 👍";
   let sentOk = false;
   if (offer.pdfUrl) {
-    const sid = await sendCustomerReply(supabase, from, caption, offer.pdfUrl);
-    sentOk = !!sid;
-    if (sentOk) { try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: "📎 ملف العرض (PDF) — " + caption, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ } }
+    // (١) رفع الـPDF لواتساب (media id) → يصل العميل ويظهر كأيقونة PDF بالداشبورد.
+    sentOk = await sendAdPdfByUpload(supabase, from, offer.pdfUrl, caption, offer.code);
+    // (٢) بديل موثوق لو فشل الرفع (عابر): إرسال بالرابط المباشر — يصل العميل
+    //     (لكن بلا أيقونة بالداشبورد). أفضل من رسالة الانتظار.
+    if (!sentOk) {
+      const sid = await sendCustomerReply(supabase, from, caption, offer.pdfUrl);
+      sentOk = !!sid;
+      if (sentOk) { try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: "📎 ملف العرض (PDF) — " + caption, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ } }
+    }
   }
   if (!sentOk) {
     // ❌ لا نرسل نصّاً مبتوراً كأنه «العرض» (يطلع محرج). العرض لازم يكون ملف
@@ -1651,12 +1698,14 @@ async function handleNewLeadIntake(args: {
           } catch (_e) { /* */ }
           let sentOk = false;
           if (pdfUrl) {
-            // نرسل الملف + الكابشن؛ لو فشل إرسال الوسيط (رابط غير قابل للجلب من واتساب)
-            // لا نترك العميل بلا شيء → نرسل تفاصيل العرض نصّاً كبديل.
-            const sid = await sendCustomerReply(supabase, from, caption, pdfUrl);
-            sentOk = !!sid;
-            // سجّل الإرسال في خيط المحادثة ليظهر «ملف العرض» بالداشبورد.
-            if (sentOk) { try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: "📎 ملف العرض (PDF) — " + caption, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ } }
+            // (١) رفع الـPDF لواتساب (media id) → يظهر كأيقونة بالداشبورد.
+            sentOk = await sendAdPdfByUpload(supabase, from, pdfUrl, caption, adCode);
+            // (٢) بديل موثوق: إرسال بالرابط المباشر لو فشل الرفع (عابر).
+            if (!sentOk) {
+              const sid = await sendCustomerReply(supabase, from, caption, pdfUrl);
+              sentOk = !!sid;
+              if (sentOk) { try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: "📎 ملف العرض (PDF) — " + caption, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ } }
+            }
           }
           if (!sentOk) {
             // ❌ لا نرسل نصّاً مبتوراً كأنه «العرض». لا PDF مجهّز → رسالة انتظار
