@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-01-transport-toggle'
+  var BUILD = '2026-10-01-transport-toggle-b'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -3318,7 +3318,7 @@ function parseHotelLinesFromRaw(raw) {
 }
 
 function parseSection(raw, tag) {
-const m = raw.match(new RegExp(tag + ':([\\s\\S]+?)(?=\\n(?:DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|CURRENCY|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|SUMMARY|CHAT):)'));
+const m = raw.match(new RegExp(tag + ':([\\s\\S]+?)(?=\\n(?:DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|CURRENCY|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|TRANSPORT_OPTIONS|SUMMARY|CHAT):)'));
 return m ? m[1].trim().split('\n').filter(l => l.includes('|')) : [];
 }
 
