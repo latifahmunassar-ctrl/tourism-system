@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-01-transport-toggle-b'
+  var BUILD = '2026-10-01-transport-title'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -3774,8 +3774,13 @@ return row;
 }
 
 if (flightsLines.length) {
-const flightSectionTitle = flightsLines.some(l => String(l.split('|')[1] || '').includes('قطار'))
-  ? '✈️ الطيران والقطار'
+// عنوان القسم يتبع الوسيلة الفعلية: كله قطار→«القطار»، كله طيران→«الطيران»،
+// مختلط (مقطع قطار ومقطع طيران)→«الطيران والقطار».
+const _kinds = flightsLines.map(l => String(l.split('|')[1] || '').trim());
+const _anyTrain  = _kinds.some(k => k.includes('قطار'));
+const _anyFlight = _kinds.some(k => k && !k.includes('قطار'));
+const flightSectionTitle = (_anyTrain && _anyFlight) ? '✈️🚆 الطيران والقطار'
+  : _anyTrain ? '🚆 القطار'
   : '✈️ الطيران';
 html += `<div class="section-card">
 <div class="section-card-header"><div class="section-card-title">${flightSectionTitle}</div><div class="section-total">${flightsTotal.toLocaleString()} ريال</div></div>
@@ -5250,8 +5255,13 @@ function renderFlightsPDF() {
   let internalIdx = 0;
   const destPickupOcc = {};
   const seenRoutes = new Set();
-  const pdfFlightTitle = flightsLines.some(l => String(l.split('|')[1] || '').includes('قطار'))
-    ? '✈️ الطيران والقطار'
+  // العنوان يتبع الوسيلة الفعلية: كله قطار→«القطار»، كله طيران→«الطيران»،
+  // مختلط (مقطع قطار ومقطع طيران)→«الطيران والقطار».
+  const _pk = flightsLines.map(l => String(l.split('|')[1] || '').trim());
+  const _pTrain  = _pk.some(k => k.includes('قطار'));
+  const _pFlight = _pk.some(k => k && !k.includes('قطار'));
+  const pdfFlightTitle = (_pTrain && _pFlight) ? '✈️🚆 الطيران والقطار'
+    : _pTrain ? '🚆 القطار'
     : '✈️ الطيران';
   return `
 <div class="pdf-section-title" style="margin-top:${hotelsLines.length ? 24 : 0}px;">${pdfFlightTitle}</div>
@@ -5447,7 +5457,7 @@ ${showDetailed ? `
   <div style="font-weight:900;color:#1a3a8f;font-size:18px;margin-bottom:10px;">📌 إجماليات الخدمات (قبل الربح)</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-weight:900;color:#0d1f4a;font-size:16px;line-height:1.8;">
     <div>🏨 الفنادق: ${hotelsTotal.toLocaleString()} ريال</div>
-    <div>✈️ الطيران: ${flightsTotal.toLocaleString()} ريال</div>
+    <div>${(()=>{const k=flightsLines.map(l=>String(l.split('|')[1]||'').trim());const t=k.some(x=>x.includes('قطار'));const f=k.some(x=>x&&!x.includes('قطار'));return (t&&f)?'✈️🚆 الطيران والقطار':t?'🚆 القطار':'✈️ الطيران';})()}: ${flightsTotal.toLocaleString()} ريال</div>
     <div>🚗 الانتقالات: ${transfersTotal.toLocaleString()} ريال</div>
     <div>🗺️ الجولات: ${toursTotal.toLocaleString()} ريال</div>
     ${simTotal ? `<div>📶 شرائح الاتصال: ${simTotal.toLocaleString()} ريال</div>` : ``}
