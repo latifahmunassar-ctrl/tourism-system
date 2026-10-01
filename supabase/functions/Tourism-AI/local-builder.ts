@@ -858,7 +858,11 @@ export function findArrivalPickup(
     if (t.type !== destination) return false;
     const n = t.name;
     if (!isPrimaryPickup(n)) return false;                                              // (a)
-    if (!tourNameMatchesCity(n, city, cityDefs)) return false;
+    // استبعد ذكر المدينة كـ«منشأ» فقط («القادمه من بكين») — مدينة الاستقبال الحقيقية
+    // هي موقع الاستقبال («في X»)، لا المدينة التي جاء منها القطار. بدون هذا يُربَط
+    // استقبال هانغتشو «القادمه من بكين» خطأً بوصول بكين في الاتجاه العكسي (هانغتشو→بكين).
+    const nCity = n.replace(/(?:القادم[ةه]?|قادم[ةه]?|القادمين)\s+من\s+[^\s،,.]+(?:\s+[^\s،,.]+){0,1}/gu, " ");
+    if (!tourNameMatchesCity(nCity, city, cityDefs)) return false;
     const hotelCity = extractRowHotelCity(n);
     if (hotelCity && !tourNameMatchesCity(hotelCity, city, cityDefs)) return false;     // (b)
     return true;
