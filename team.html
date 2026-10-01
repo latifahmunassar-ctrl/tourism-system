@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-09-29-guangzhou-b'
+  var BUILD = '2026-10-01-transport-toggle'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1308,7 +1308,12 @@ addMessage('sys', chatMatch ? chatMatch[1].trim() : 'تم بناء البرنا�
 // زامن عدد الأشخاص في الفورمة مع البرنامج المبني قبل العرض — buildReview يحسب
 // الطيران/النقل من الفورمة، فلو بقيت قيمة قديمة (2) يطلع الطيران لعدد خاطئ رغم
 // أن الطلب فيه 3. (نفس ما يفعله فتح برنامج محفوظ في syncFormPeopleFromProgram.)
-if (raw.includes('DEST:')) { syncFormPeopleFromProgram(raw); buildReview(raw); }
+if (raw.includes('DEST:')) {
+  // بناء جديد: صفّر تحويلات الطيران واحفظ رسائل البناء لإعادة التوليد عند التبديل.
+  TP_FLIGHT_LEGS = new Set();
+  TP_LAST_MSGS = history.slice(0, -1);   // حتى الرسالة الأخيرة من المستخدم (قبل رد المساعد)
+  syncFormPeopleFromProgram(raw); buildReview(raw);
+}
 } catch (e) {
 removeTyping(typingId);
 addMessage('sys', 'حدث خطأ في الاتصال، حاول مرة ثانية.');
@@ -1531,6 +1536,58 @@ async function applyHaramToAllHotels(val){
   let msg = `🕌 «${val}»: بُدّل ${changed} فندق`;
   if(unmatched.length) msg += ` · ما فيه مطابق في (${[...new Set(unmatched)].join('، ')}) فبقيت كما هي`;
   addMessage('sys', msg);
+}
+
+// ── شريط وسيلة التنقّل بين المدن (قطار ↔ طيران) — عام لكل الوجهات ──────────────
+// يظهر فقط للمقاطع اللي عندها قطار وطيران معاً (TRANSPORT_OPTIONS من الباني).
+// الافتراضي قطار؛ التبديل للطيران يعيد بناء البرنامج بـflightLegs فتُحدَّث
+// التذكرة والانتقالات (محطة ↔ مطار) والإجماليات.
+let TP_FLIGHT_LEGS = new Set();   // مفاتيح المقاطع المُحوّلة للطيران
+let TP_LAST_MSGS = null;          // رسائل البناء لإعادة التوليد مع flightLegs
+function tpParseOptions(raw){
+  const m = String(raw||'').match(/TRANSPORT_OPTIONS:\n([\s\S]*?)(?=\n[A-Z_]+:|\n\s*\n|\n*$)/);
+  if(!m) return [];
+  return m[1].split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+    const f = l.split(/\s+\|\s+/);
+    if(f.length < 6) return null;
+    const num = s => parseInt(String(s||'').replace(/[^\d]/g,''))||0;
+    return { key:f[0].trim(), label:f[1].trim(), day:f[2].trim(),
+             trainP:num(f[3].split('=')[1]), flightP:num(f[4].split('=')[1]),
+             mode:(f[5].split('=')[1]||'train').trim() };
+  }).filter(Boolean);
+}
+function renderTransportBar(){
+  const panel = document.getElementById('reviewPanel'); if(!panel) return;
+  const old = document.getElementById('tpTransportBar'); if(old) old.remove();
+  const opts = tpParseOptions(lastProgramRaw); if(!opts.length) return;
+  const btn=(key,mode,label,active)=>`<button onclick="tpSetMode('${String(key).replace(/'/g,"\\'")}','${mode}')" style="cursor:pointer;font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:16px;border:1.5px solid ${active?'#1a5fb4':'#d7dee6'};background:${active?'#1a5fb4':'#fff'};color:${active?'#fff':'#445'}">${label}</button>`;
+  const legs = opts.map(o=>{
+    const isFlight = TP_FLIGHT_LEGS.has(o.key);
+    return `<div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #e5e9f0;border-radius:10px;padding:6px 9px">
+      <span style="font-size:11.5px;color:#334;font-weight:700;white-space:nowrap">${o.label}</span>
+      ${btn(o.key,'train','🚆 قطار '+o.trainP,!isFlight)}${btn(o.key,'flight','✈️ طيران '+o.flightP,isFlight)}</div>`;
+  }).join('');
+  const bar=document.createElement('div');
+  bar.id='tpTransportBar';
+  bar.style.cssText='background:#eef6ff;border:1px solid #cfe0f5;border-radius:12px;padding:11px 14px;margin-bottom:12px';
+  bar.innerHTML=`<div style="font-size:12.5px;font-weight:800;color:#1a5fb4;margin-bottom:8px">🚆✈️ وسيلة التنقّل بين المدن (الافتراضي قطار — التذكرة × عدد الأشخاص):</div><div style="display:flex;flex-wrap:wrap;gap:9px">${legs}</div>`;
+  panel.insertBefore(bar, panel.firstChild);
+}
+async function tpSetMode(key, mode){
+  if(mode==='flight') TP_FLIGHT_LEGS.add(key); else TP_FLIGHT_LEGS.delete(key);
+  await tpRebuild();
+}
+async function tpRebuild(){
+  if(!TP_LAST_MSGS){ addMessage('sys','ابنِ البرنامج أولاً قبل تبديل وسيلة النقل.'); return; }
+  const bar=document.getElementById('tpTransportBar'); if(bar) bar.style.opacity='0.5';
+  try{
+    const res=await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},
+      body:JSON.stringify({messages:TP_LAST_MSGS, flightLegs:[...TP_FLIGHT_LEGS], system:SYSTEM, max_tokens:4000})});
+    const data=await res.json();
+    const raw=data.content?.[0]?.text||'';
+    if(raw.includes('DEST:')){ syncFormPeopleFromProgram(raw); buildReview(raw); }
+    else { addMessage('sys','تعذّر تحديث وسيلة النقل — حاولي مرة ثانية.'); if(bar) bar.style.opacity='1'; }
+  }catch(e){ addMessage('sys','تعذّر تحديث وسيلة النقل: '+(e&&e.message||e)); if(bar) bar.style.opacity='1'; }
 }
 
 // ── شريط وسيلة التنقّل لبرنامج مكة (قطار الحرمين / سيارة لكل مقطع) ──────────────
@@ -3875,6 +3932,7 @@ document.getElementById('reviewPanel').innerHTML = html;
 renderHaramBar();              // شريط قرب الحرم فوق برنامج مكة
 renderMakkahTransportBar();    // شريط وسيلة التنقّل (قطار/سيارة) فوق برنامج مكة
 renderMakkahFlightBar();       // شريط الطيران الدولي (مسقط↔جدة: الأرخص/شركة/بدون) فوق برنامج مكة
+renderTransportBar();          // شريط قطار↔طيران بين المدن (لغير مكة) — للمقاطع ذات الخيارين
 renderExtraCostsList();
 // هامش الربح التلقائي: يجلب جدول أرباح الوجهة ويملأ الربح حسب التكلفة + نوع العميل.
 autoProfitForProgram(dest);

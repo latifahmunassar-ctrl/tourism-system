@@ -98,6 +98,13 @@ export type TripRequest = {
    * HOTELS and FLIGHTS blocks and prices nothing for accommodation.
    */
   transportOnly: boolean;
+  /**
+   * Per-leg transport override from the dashboard toggle: canonical "FromCity|ToCity"
+   * pairs that should use a FLIGHT instead of the default train (only meaningful
+   * when BOTH a train and a flight exist for that pair). Empty/undefined =
+   * default (train-first). Direction-insensitive (both orders are honored).
+   */
+  flightLegs?: string[];
   /** Travel month in Arabic ("يونيو") or numeric "6" */
   month: string | null;
   /** Travel year */

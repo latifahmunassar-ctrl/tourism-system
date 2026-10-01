@@ -3836,6 +3836,12 @@ Deno.serve(async (req) => {
         }
       }
 
+      // توجل الداشبورد: مقاطع يُراد نقلها بالطيران بدل القطار الافتراضي
+      // (مفاتيح "FromCity|ToCity"). يأتي في جسم الطلب من team.html عند التبديل.
+      if (reqBody && Array.isArray(reqBody.flightLegs)) {
+        tripRequest.flightLegs = (reqBody.flightLegs as unknown[]).map(String);
+      }
+
       // CASE B: full info present → build program locally
       if (canBuildLocally(tripRequest)) {
         try {

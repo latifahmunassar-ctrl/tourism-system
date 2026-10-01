@@ -1325,6 +1325,8 @@ export type ProgramData = {
   simCount: number;
   extraBedScope: TripRequest["extraBed"]["scope"];
   cityArabicNames: Record<string, string>;
+  /** مقاطع يتوفّر لها قطار وطيران معاً (لتوجل الداشبورد). */
+  switchableLegs?: Array<{ day: number; fromCity: string; toCity: string; trainPrice: number; flightPrice: number; mode: "train" | "flight" }>;
 };
 
 const DESTINATION_AR_NAMES: Record<string, string> = {
@@ -1553,6 +1555,19 @@ export function formatProgram(data: ProgramData): string {
   }
   const flightsTotal = flightsBase + extraTicketsTotal;
   out += "\n";
+
+  // ── TRANSPORT_OPTIONS ─ مقاطع يتوفّر لها قطار وطيران معاً (توجل الداشبورد) ─
+  // سطر لكل مقطع: مفتاح الزوج | التسمية العربية | اليوم | سعر القطار | سعر الطيران | الوضع الحالي.
+  // الواجهة تعرض توجل «🚆 قطار / ✈️ طيران» وتُعيد البناء بـflightLegs عند التبديل.
+  if (Array.isArray(data.switchableLegs) && data.switchableLegs.length > 0) {
+    out += "TRANSPORT_OPTIONS:\n";
+    for (const l of data.switchableLegs) {
+      const fromAr = data.cityArabicNames[l.fromCity] || l.fromCity;
+      const toAr = data.cityArabicNames[l.toCity] || l.toCity;
+      out += `${l.fromCity}|${l.toCity} | ${fromAr} → ${toAr} | يوم ${l.day} | train=${formatNumber(l.trainPrice)} | flight=${formatNumber(l.flightPrice)} | mode=${l.mode}\n`;
+    }
+    out += "\n";
+  }
 
   // ── SIM ──────────────────────────────────────────────────────────────
   if (simCount > 0) {
@@ -2458,6 +2473,13 @@ export async function buildLocalProgram(
     }
     return false;
   };
+  // المقاطع القابلة للتبديل (قطار↔طيران): كلاهما متوفّر لنفس الزوج. نجمعها
+  // لإخراجها (TRANSPORT_OPTIONS) فيعرف شريط الداشبورد أين يُظهر التوجل.
+  const switchableLegs: Array<{ day: number; fromCity: string; toCity: string; trainFlight: FlightRow; flightRow: FlightRow; mode: "train" | "flight" }> = [];
+  const legOverrideFlight = (from: string, to: string): boolean => {
+    const ov = request.flightLegs || [];
+    return ov.includes(`${from}|${to}`) || ov.includes(`${to}|${from}`);
+  };
   for (const d of days) {
     if (request.transportOnly) break; // transport-only: skip flight picking
     if (d.type !== "transit" || !d.fromCity || !d.toCity) continue;
@@ -2466,8 +2488,17 @@ export async function buildLocalProgram(
     if (d.fromCity === d.toCity) continue;
     // Trains take precedence when a direct one exists for this city pair
     // (Russia: Moscow ↔ Saint Petersburg by Sapsan; cheaper + faster than
-    // a flight). Only direct trains — no train hubbing.
-    const train = findFlight(allTrains, d.fromCity, d.toCity);
+    // a flight). Only direct trains — no train hubbing. ⚠️ لكن لو هذا المقطع
+    // مُتجاوَز صراحةً للطيران من توجل الداشبورد (flightLegs)، نتخطّى القطار.
+    const trainRow = findFlight(allTrains, d.fromCity, d.toCity);
+    const flightRowDirect = findFlight(allFlights, d.fromCity, d.toCity)
+      || (() => { const r = findFlight(allFlights, d.toCity, d.fromCity); return r ? { ...r, from_city: r.to_city, to_city: r.from_city } : null; })();
+    // سجّل المقطع كقابل للتبديل لو توفّر الاثنان.
+    if (trainRow && flightRowDirect) {
+      switchableLegs.push({ day: d.number, fromCity: d.fromCity, toCity: d.toCity, trainFlight: trainRow, flightRow: flightRowDirect, mode: legOverrideFlight(d.fromCity, d.toCity) ? "flight" : "train" });
+    }
+    const forceFlight = legOverrideFlight(d.fromCity, d.toCity);
+    const train = forceFlight ? null : trainRow;
     if (train) {
       selectedFlights.push({ day: d.number, flight: train, kind: "train" });
       continue;
@@ -2772,6 +2803,7 @@ export async function buildLocalProgram(
     simCount: request.sim || 0,
     extraBedScope: request.extraBed.scope,
     cityArabicNames,
+    switchableLegs: switchableLegs.map(l => ({ day: l.day, fromCity: l.fromCity, toCity: l.toCity, trainPrice: Number(l.trainFlight.price_per_pax) || 0, flightPrice: Number(l.flightRow.price_per_pax) || 0, mode: l.mode })),
   };
 
   let program = formatProgram(programData);
