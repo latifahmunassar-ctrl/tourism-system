@@ -348,7 +348,7 @@ const HEADER_ALIASES: Record<string, RegExp> = {
   rate:       /^(rate|price|nightly|night\s*rate|سعر|السعر|تكلفة|التكلفة)$/i,
   currency:   /^(currency|عملة|العملة)$/i,
   occupancy:  /^(occupancy|capacity|pax|اشغال|الإشغال|اشخاص|الأشخاص|استيعاب|تتسع|يتسع|سعة|تسع)$/i,
-  include:    /^(include|includes|breakfast|meals|شامل|يشمل|الإفطار)$/i,
+  include:    /^(include|includes|included|breakfast|meal|meals|board|basis|شامل|يشمل|الإفطار|الافطار|إفطار|افطار|الوجبات|وجبات|الوجبة)$/i,
   // أعمدة الموسم/التاريخ (تسعير موسمي مثل خريف صلالة) — From/To في شيت عُمان.
   dateFrom:   /^(from|date\s*from|valid\s*from|من|من\s*تاريخ|بداية|check\s*in)$/i,
   dateTo:     /^(to|date\s*to|valid\s*to|الى|إلى|الى\s*تاريخ|نهاية|check\s*out)$/i,
