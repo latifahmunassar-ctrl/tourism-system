@@ -784,6 +784,10 @@ function flightCityMatches(a: string, b: string): boolean {
   const y = normFlightCity(b);
   if (!x || !y) return false;
   if (x.includes(y) || y.includes(x)) return true;
+  // بديل تقريبي للأخطاء الإملائية فقط (Istanbol≈Istanbul). ⚠️ يشترط تطابق
+  // أول حرف حتى لا يخلط مدينتين مختلفتين متشابهتين الأحرف: Guangzhou↔Hangzhou
+  // تشابههما ٠.٧٥ لكنهما مدينتان مختلفتان (جوانزو ≠ هانغتشو) — أول حرف g≠h يمنع.
+  if (x[0] !== y[0]) return false;
   return bigramSim(x, y) >= 0.6;
 }
 

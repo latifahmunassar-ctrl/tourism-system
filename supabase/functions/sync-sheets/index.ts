@@ -1296,6 +1296,18 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify(data, null, 2), { headers: CORS_HEADERS });
   }
 
+  // ?dump_trains=DEST / ?dump_flights=DEST → return rows for that destination (debug)
+  const dumpTrainsDest = new URL(req.url).searchParams.get("dump_trains");
+  if (dumpTrainsDest) {
+    const { data, error } = await supabase.from("trains").select("from_city,to_city,price_per_pax").eq("destination", dumpTrainsDest);
+    return new Response(JSON.stringify({ data, error: error?.message }, null, 2), { headers: CORS_HEADERS });
+  }
+  const dumpFlightsDest = new URL(req.url).searchParams.get("dump_flights");
+  if (dumpFlightsDest) {
+    const { data, error } = await supabase.from("flights").select("from_city,to_city,price_per_pax").eq("destination", dumpFlightsDest);
+    return new Response(JSON.stringify({ data, error: error?.message }, null, 2), { headers: CORS_HEADERS });
+  }
+
   // ?dump_rows=TAB&q=KEYWORD → raw sheet rows whose any cell contains KEYWORD,
   // each cell tagged with its column index, plus the detected tour header.
   // Debug for "I added a tour/row but it didn't sync" — shows whether the row
