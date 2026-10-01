@@ -520,7 +520,19 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
     if (isNaN(price) || price <= 0) { reject(i, `invalid price '${priceStr}'`, row); continue; }
 
     // ترجمة النص الإنجليزي لما يشمل الفندق إلى وصف عربي مختصر
-    const mealsRaw = (includeStr || "").trim();
+    let mealsRaw = (includeStr || "").trim();
+    // كثير من الشيتات (ومنها الصين) تضع نوع الإقامة داخل **اسم الغرفة**
+    // ("... Bed and Breakfast" / "Double Room Room Only") وتترك عمود الوجبات
+    // فارغاً. لو عمود الوجبات لا يذكر وجبات، نستنتج الإفطار من اسم الغرفة.
+    const _rt = String(roomType || "");
+    const _mealKw = /break\s*fast|breakfast|إفطار|افطار|all\s*inclusive|half\s*board|full\s*board|غداء|عشاء|وجبات|بدون/i;
+    if (!_mealKw.test(mealsRaw)) {
+      if (/bed\s*(?:and|&|\+)?\s*breakfast|\bb\s*&\s*b\b|breakfast\s*included|incl\.?\s*breakfast|with\s*breakfast|شامل\s*(?:ال)?إفطار|مع\s*(?:ال)?إفطار/i.test(_rt)) {
+        mealsRaw = "breakfast";
+      } else if (/room\s*only|no\s*breakfast|without\s*breakfast|بدون\s*(?:ال)?إفطار/i.test(_rt)) {
+        mealsRaw = "no breakfast";
+      }
+    }
     const ml = mealsRaw.toLowerCase();
     let mealsAr = "";
     if (!mealsRaw) mealsAr = "";
