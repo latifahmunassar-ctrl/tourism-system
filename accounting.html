@@ -5122,9 +5122,12 @@ async function deleteRecon(id){
   try{ const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_recon',payload:{id:id}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } await loadReconList(); renderReconSaved(); }catch(e){ alert('خطأ: '+e.message); }
 }
 // 🏦 مرادفات البنوك: توحّد أسماء البنك المختلفة (من الشيت) تحت اسم واحد معتمد. القائمة المُدارة bank_alias بصيغة «الاسم القديم␁الاسم المعتمد».
-function bankAlias(name){ const nm=String(name||'').trim(); if(!nm)return nm;
+function bankAlias(name){ let nm=String(name||'').trim(); if(!nm)return nm;
+  // 🔗 توحيد تلقائي لفروق المسافات في اسم البنك: «(OMR) 101…» = «(OMR)101…» وأي مسافات مكرّرة — حتى لا يُعتبر نفس البنك بنكين فتنقسم حركاته في المطابقة
+  const _bkNorm=(s)=>String(s||'').replace(/\s+/g,' ').replace(/\)\s*(\d)/g,')$1').trim();
+  nm=_bkNorm(nm);
   const al=(typeof listValues==='function')?listValues('bank_alias'):[];
-  for(const v of al){ const p=String(v.value||'').split(''); if(p[0]&&p[1]&&p[0].trim()===nm) return p[1].trim(); }
+  for(const v of al){ const p=String(v.value||'').split(''); if(p[0]&&p[1]&&_bkNorm(p[0])===nm) return p[1].trim(); }
   return nm; }
 // 🚫 حاجز: تنبيه الحركات البنكية المؤرّخة بعد اليوم (غالباً انقلاب يوم↔شهر عند المزامنة) — تضخّم الرصيد ولا تظهر في مطابقة الكشف
 function renderFutureTxnAlert(){
