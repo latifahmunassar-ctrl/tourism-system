@@ -4378,6 +4378,7 @@ function bankTxAll(forRecon){
     base.push({ id:'fcd-'+r.id, bank_name:bn, amount_in:amt, amount_out:0, tx_date:d, bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', payment_code:r.payment_code||'', currency:r.currency||'', note:'💰 دفعة عميل: '+(r.client_name||'')+(ref?'':' · ⚠️ بلا مرجع'), source:'dashboard', created_at:r.created_at||'', _clientPay:true });
   });
   // 💸 انعكاس دفعات الموردين المُدخلة من الداشبورد التي لا سند بنكي لها (مرجعها غير مسجّل في acc_bank_txn) — تظهر في مطابقة البنك بقيمتها الدقيقة بالكسور. المسجّلة أصلاً كحركة بنكية (نفس المرجع) لا تُكرّر.
+  const _spSeen=new Set();   // لتجميع التحويلات الموزّعة بلا حركة بنكية في سطر واحد (المطابقة)
   (DATA.supplierPaymentsRaw||DATA.supplierPayments||[]).forEach(r=>{   /* 🆕 FIP: الخام (لا المفكوك) — الدفعة الخام هي التي تنعكس في البنك */
     if(r.source!=='dashboard')return;
     const amt=Number(r.amount||0); if(!(Math.abs(amt)>0.005))return;
@@ -4387,6 +4388,13 @@ function bankTxAll(forRecon){
     const _pc=String(r.currency||'').toUpperCase().trim(); const _bc=String((typeof bankCur==='function'?bankCur(bn):'')||'').toUpperCase().trim();
     if(forRecon && _pc && _bc && _pc!==_bc && _dashTxnRefs.has(ref.toUpperCase()))return;   // 💱 عملة المورّد تختلف عن البنك ولها حركة بنكية بقيمة البنك → اعرضي الحركة البنكية (بعملة البنك) لا قيمة المورّد
     if(forRecon && (_spRefCount[ref.toUpperCase()]||0)>1 && _dashTxnRefs.has(ref.toUpperCase()))return;   // 🧾 تحويل واحد موزّع على عدة عملاء وله حركة بنكية حقيقية → تظهر الحركة الواحدة لا صفوف التوزيع (يمنع معاملات وهمية في المطابقة)
+    if(forRecon && (_spRefCount[ref.toUpperCase()]||0)>1 && !_dashTxnRefs.has(ref.toUpperCase())){   // 🧾 تحويل موزّع بلا حركة بنكية → ادمج صفوفه في سطر واحد (المجموع) ليطابق سطر الكشف الواحد بدل صفوف متعدّدة
+      const RU=ref.toUpperCase(); if(_spSeen.has(RU))return; _spSeen.add(RU);
+      let _sum=0,_n=0; (DATA.supplierPaymentsRaw||DATA.supplierPayments||[]).forEach(p=>{ if(p.source==='dashboard' && String(p.bank_ref||'').trim().toUpperCase()===RU){ _sum+=Number(p.amount||0); _n++; } });
+      const _isR=_sum<0;
+      base.push({ id:'sp-grp-'+RU, bank_name:bn, amount_in:_isR?Math.abs(_sum):0, amount_out:_isR?0:Math.abs(_sum), tx_date:String(r.payment_date||'').slice(0,10), bank_ref:ref, client_code:'', client_name:'', currency:r.currency||'', payee:r.supplier_name||'', note:'💸 دفعة '+(isHotelPayee(r.supplier_name)?'فندق':'مورّد')+': '+(r.supplier_name||'')+' · تحويل موزّع على '+_n+' عملاء', source:'dashboard', created_at:r.created_at||'', _suppay:true });
+      return;
+    }
     const isRef=amt<0;                                                  // سالب = مرتجع وارد من المورّد
     base.push({ id:'sp-'+r.id, bank_name:bn, amount_in:isRef?Math.abs(amt):0, amount_out:isRef?0:amt, tx_date:String(r.payment_date||'').slice(0,10), bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', currency:r.currency||'', payee:r.supplier_name||'', note:'💸 دفعة '+(isHotelPayee(r.supplier_name)?'فندق':'مورّد')+': '+(r.supplier_name||''), source:'dashboard', created_at:r.created_at||'', _suppay:true });
   });
