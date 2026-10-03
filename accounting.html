@@ -4693,8 +4693,8 @@ function runReconcile(){
     const _swapDM=(ds)=>{ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ds||'')); if(!m)return null; const mo=m[3]; if(Number(mo)<1||Number(mo)>12)return null; return m[1]+'-'+mo+'-'+m[2]; };
     const _bf15=_from?_shiftD(_from,-15):'', _bt15=_to?_shiftD(_to,15):'';
     const _nearWin=(d)=>{ const s=String(d||'').slice(0,10); if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return false; if(_bf15&&s<_bf15)return false; if(_bt15&&s>_bt15)return false; return true; };
-    const sysBuf=_allSys.filter(y=>{ if(inR(y.date))return false; const sw=_swapDM(y.date); return _nearWin(y.date) || (sw&&inR(sw)); });
-    void _bf; void _bt; void inBuf;
+    const sysBuf=[];   // 🔒 حصر تام: المطابقة حصراً ضمن تواريخ الفترة المطلوبة — لا حركات خارجها إطلاقاً (تنبيه فرق التاريخ يبقى للحركات داخل الفترة فقط)
+    void _bf; void _bt; void inBuf; void _swapDM; void _bf15; void _bt15; void _nearWin;
     stmt.forEach(s=>{ const cand=sys.find(y=>!y._m && y.date===s.date && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; s._sysSrc=cand.src; } });
     // 🔒 مطابقة صريحة (قرار المالكة 26 سبتمبر): المطابقة فقط بنفس التاريخ + نفس المبلغ (المرحلة الأولى أعلاه).
     // أُلغيت المطابقة التقريبية: (٢) بالمبلغ بأي تاريخ، و(٣) بالمبلغ المطلق بعكس الاتجاه — حتى تظهر التكرارات وفروق التواريخ صراحةً في التقرير (كلٌّ بجهته) بدل ابتلاعها. التنبيه بفرق التاريخ يبقى أدناه (تلميح لا مطابقة).
