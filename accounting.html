@@ -4334,8 +4334,10 @@ function _fipNormalizePayments(){
 function bankTxAll(forRecon){
   // 🆕 forRecon (المطابقة فقط — قرار المالكة: المطابقة بالقيم المُدخَلة تماماً): تُحذف الحركة الداخلية المجمّعة التي لها دفعة مُدخَلة بنفس المرجع (تظهر قيمتك المُدخَلة بدل الانعكاس)، والقمع يبقى ضد الكشف الحقيقي (sheet) فقط. الوضع العام (بلا وسيط) لا يتغيّر إطلاقاً — يحمي أرصدة كل البنوك من الازدواج.
   const _dropRefs=new Set();
+  // 🔢 عدد دفعات المورّد لكل مرجع: >1 = تحويل واحد موزّع على عدة عملاء (يجب أن يظهر كحركة بنكية واحدة لا صفوف متعدّدة)
+  const _spRefCount={}; (DATA.supplierPaymentsRaw||DATA.supplierPayments||[]).forEach(r=>{ if(r.source!=='dashboard')return; const rf=String(r.bank_ref||'').trim().toUpperCase(); if(rf)_spRefCount[rf]=(_spRefCount[rf]||0)+1; });
   if(forRecon){
-    (DATA.supplierPaymentsRaw||DATA.supplierPayments||[]).forEach(r=>{ if(r.source!=='dashboard')return; const rf=String(r.bank_ref||'').trim().toUpperCase(); if(!rf)return; const _pc=String(r.currency||'').toUpperCase().trim(); const _bc=String((typeof bankCur==='function'?bankCur(r.bank_name):'')||'').toUpperCase().trim(); if(!_pc||!_bc||_pc===_bc)_dropRefs.add(rf); });   // 💱 عملة المورّد=عملة البنك → اعرضي القيمة المُدخَلة؛ تختلف → أبقي الحركة البنكية (قيمتها الحقيقية بعملة البنك)
+    (DATA.supplierPaymentsRaw||DATA.supplierPayments||[]).forEach(r=>{ if(r.source!=='dashboard')return; const rf=String(r.bank_ref||'').trim().toUpperCase(); if(!rf)return; const _pc=String(r.currency||'').toUpperCase().trim(); const _bc=String((typeof bankCur==='function'?bankCur(r.bank_name):'')||'').toUpperCase().trim(); if((!_pc||!_bc||_pc===_bc) && (_spRefCount[rf]||0)<=1)_dropRefs.add(rf); });   // 💱 عملة المورّد=عملة البنك ودفعة مفردة → اعرضي القيمة المُدخَلة؛ العملة مختلفة أو تحويل موزّع → أبقِ الحركة البنكية الواحدة
     (DATA.fcd||[]).forEach(r=>{ if(r.source!=='dashboard')return; const rf=String(r.bank_ref||'').trim().toUpperCase(); if(rf&&Number(r.amount_paid||0)>0)_dropRefs.add(rf); });
   }
   const base=(DATA.bankTx||[]).filter(x=>{ if(!forRecon||x.source!=='dashboard')return true; const rf=String(x.bank_ref||'').trim().toUpperCase(); return !(rf&&_dropRefs.has(rf)); });
@@ -4384,6 +4386,7 @@ function bankTxAll(forRecon){
     if(_txnRefs.has(ref.toUpperCase()))return;                          // مسجّلة أصلاً بشيت/حركة البنك → لا تُكرّر
     const _pc=String(r.currency||'').toUpperCase().trim(); const _bc=String((typeof bankCur==='function'?bankCur(bn):'')||'').toUpperCase().trim();
     if(forRecon && _pc && _bc && _pc!==_bc && _dashTxnRefs.has(ref.toUpperCase()))return;   // 💱 عملة المورّد تختلف عن البنك ولها حركة بنكية بقيمة البنك → اعرضي الحركة البنكية (بعملة البنك) لا قيمة المورّد
+    if(forRecon && (_spRefCount[ref.toUpperCase()]||0)>1 && _dashTxnRefs.has(ref.toUpperCase()))return;   // 🧾 تحويل واحد موزّع على عدة عملاء وله حركة بنكية حقيقية → تظهر الحركة الواحدة لا صفوف التوزيع (يمنع معاملات وهمية في المطابقة)
     const isRef=amt<0;                                                  // سالب = مرتجع وارد من المورّد
     base.push({ id:'sp-'+r.id, bank_name:bn, amount_in:isRef?Math.abs(amt):0, amount_out:isRef?0:amt, tx_date:String(r.payment_date||'').slice(0,10), bank_ref:ref, client_code:r.client_code||'', client_name:r.client_name||'', currency:r.currency||'', payee:r.supplier_name||'', note:'💸 دفعة '+(isHotelPayee(r.supplier_name)?'فندق':'مورّد')+': '+(r.supplier_name||''), source:'dashboard', created_at:r.created_at||'', _suppay:true });
   });
