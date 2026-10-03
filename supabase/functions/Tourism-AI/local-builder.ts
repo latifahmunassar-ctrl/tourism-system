@@ -2614,9 +2614,18 @@ export async function buildLocalProgram(
       // صف انتقال (isTransferTour) يذكر «فندق» مرتين — يستبعد جولات الشيت الأخرى
       // (جولات صلالة «الانتقال … وعمل جوله» ليست transfer فتُستبعَد). وإلا نتخطّى.
       if (d.fromCity === d.toCity) {
+        // صف انتقال «من فندق إلى فندق آخر». نقبل صيغتين: «فندق» مرتين («من فندق
+        // X إلى فندق Y»)، أو «فندق» مرة + دلالة تغيير («من فندق لاخر»/«آخر»/
+        // «تغيير الفندق»). نستبعد انتقالات المطار/المحطة (تذكر فندق مرة أيضاً).
+        const isHotelToHotel = (name: string): boolean => {
+          const nn = normalizeArabic(name);
+          if (/مطار|airport|محط[هة]|station|train|قطار/.test(nn)) return false;
+          const fnd = (nn.match(/فندق/g) || []).length;
+          if (fnd >= 2) return true;
+          return fnd >= 1 && /لاخر|لآخر|اخر|آخر|الثاني|ثاني|تغيير/.test(nn);
+        };
         const h2h = allTours.filter(t =>
-          t.type === dest && isTransferTour(t.name)
-          && (normalizeArabic(t.name).match(/فندق/g) || []).length >= 2
+          t.type === dest && isTransferTour(t.name) && isHotelToHotel(t.name)
           && (request.transport !== "private" || !/مشترك[ةه]?|shared|ليموزين/iu.test(t.name)),
         ).sort((a, b) => (parseFloat(String(a.price)) || 0) - (parseFloat(String(b.price)) || 0));
         if (h2h.length) selectedTransfers.push({ day: d.number, row: h2h[0], kind: "Transfer" });
