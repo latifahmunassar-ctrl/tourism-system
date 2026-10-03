@@ -4689,8 +4689,11 @@ function runReconcile(){
     const _shiftD=(ds,n)=>{ if(!/^\d{4}-\d{2}-\d{2}$/.test(ds))return ds; const dt=new Date(ds+'T00:00:00Z'); dt.setUTCDate(dt.getUTCDate()+n); return dt.toISOString().slice(0,10); };
     const _bf=_from?_shiftD(_from,-6):'', _bt=_to?_shiftD(_to,6):'';
     const inBuf=(d)=>{ const s=String(d||'').slice(0,10); if(!s)return false; if(_bf&&s<_bf)return false; if(_bt&&s>_bt)return false; return true; };
-    // 🔒 حصر الفترة + التقاط انقلاب التاريخ: نأخذ حركات النظام خارج الفترة كمرشّحات فقط؛ لا يظهر منها (في «نظامك فقط») إلا ما طابقت قيمته سطراً غير مطابق في الكشف (= انقلاب تاريخ، لتصلحيه)، وتُستبعد بقية الحركات خارج الفترة تماماً.
-    const sysBuf=_allSys.filter(y=>!inR(y.date));
+    // 🔒 حصر الفترة + التقاط انقلاب التاريخ الحقيقي فقط: مرشّح خارج الفترة يُقبل فقط إذا كان (أ) تأخير ترحيل قريب (±15 يوم من حدود الفترة) أو (ب) تبديل يوم↔شهر يقع داخل الفترة (انقلاب حقيقي). وبهذا لا تدخل حركات سنة أخرى بقيمة متشابهة صدفةً.
+    const _swapDM=(ds)=>{ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ds||'')); if(!m)return null; const mo=m[3]; if(Number(mo)<1||Number(mo)>12)return null; return m[1]+'-'+mo+'-'+m[2]; };
+    const _bf15=_from?_shiftD(_from,-15):'', _bt15=_to?_shiftD(_to,15):'';
+    const _nearWin=(d)=>{ const s=String(d||'').slice(0,10); if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return false; if(_bf15&&s<_bf15)return false; if(_bt15&&s>_bt15)return false; return true; };
+    const sysBuf=_allSys.filter(y=>{ if(inR(y.date))return false; const sw=_swapDM(y.date); return _nearWin(y.date) || (sw&&inR(sw)); });
     void _bf; void _bt; void inBuf;
     stmt.forEach(s=>{ const cand=sys.find(y=>!y._m && y.date===s.date && ((s.out>0.005&&Math.abs(y.out-s.out)<0.01)||(s.in>0.005&&Math.abs(y.in-s.in)<0.01))); if(cand){ cand._m=true; s._m=true; s._sysSrc=cand.src; } });
     // 🔒 مطابقة صريحة (قرار المالكة 26 سبتمبر): المطابقة فقط بنفس التاريخ + نفس المبلغ (المرحلة الأولى أعلاه).
