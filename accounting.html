@@ -4454,7 +4454,7 @@ function renderVisaCard(){ const box=$('p-visacard'); if(!box) return;
     '</tbody></table></div></div>';
 }
 // ===== مطابقة كشف الحساب البنكي (يقرأ PDF/CSV ويقارن بحركات النظام) =====
-function fillReconBanks(){ const sel=$('rec-bank'); if(!sel)return; const cur=sel.value; const _mg=new Set(listValues('banks').map(v=>bankAlias(String(v.value||'').trim()).toLowerCase()).filter(Boolean));   // 🔗 وحّدي أسماء القائمة المُدارة بنفس bankAlias حتى لا يسقط بنك بسبب فرق مسافة const names=[...new Set(bankTxAll().map(x=>bankAlias(x.bank_name)).filter(Boolean))].filter(b=>_mg.has(String(b).trim().toLowerCase())).sort((a,b)=>String(a).localeCompare(String(b),'ar')); sel.innerHTML='<option value="">— اختاري البنك —</option>'+names.map(n=>'<option>'+esc(n)+'</option>').join(''); if(names.indexOf(cur)>=0)sel.value=cur; }
+function fillReconBanks(){ const sel=$('rec-bank'); if(!sel)return; const cur=sel.value; const _mg=new Set(listValues('banks').map(v=>bankAlias(String(v.value||'').trim()).toLowerCase()).filter(Boolean)); const names=[...new Set(bankTxAll().map(x=>bankAlias(x.bank_name)).filter(Boolean))].filter(b=>_mg.has(String(b).trim().toLowerCase())).sort((a,b)=>String(a).localeCompare(String(b),'ar')); sel.innerHTML='<option value="">— اختاري البنك —</option>'+names.map(n=>'<option>'+esc(n)+'</option>').join(''); if(names.indexOf(cur)>=0)sel.value=cur; }
 let _pdfjsP=null;
 function loadPdfjs(){ if(window.pdfjsLib)return Promise.resolve(); if(_pdfjsP)return _pdfjsP; _pdfjsP=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'; s.onload=()=>{ try{ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }catch(e){} res(); }; s.onerror=()=>rej(new Error('تعذّر تحميل قارئ PDF (تحتاجين إنترنت)')); document.head.appendChild(s); }); return _pdfjsP; }
 function parseStmtTxns(text){
@@ -5190,7 +5190,7 @@ function renderBanks(){
 }
 function bankPick(){
   const q=($('bankq')||{}).value||''; if(!q) return;
-  const _mg=new Set(listValues('banks').map(v=>bankAlias(String(v.value||'').trim()).toLowerCase()).filter(Boolean));   // 🔗 وحّدي أسماء القائمة المُدارة بنفس bankAlias حتى لا يسقط بنك بسبب فرق مسافة
+  const _mg=new Set(listValues('banks').map(v=>bankAlias(String(v.value||'').trim()).toLowerCase()).filter(Boolean));
   const names=[...new Set(bankTxAll().map(x=>bankAlias(x.bank_name)||'(بدون بنك)'))].filter(b=>_mg.has(String(b).trim().toLowerCase()));
   let hit=names.find(b=>b===q) || names.find(b=>b.toLowerCase()===q.toLowerCase()) || names.find(b=>b.toLowerCase().indexOf(q.toLowerCase())>=0);
   if(hit){ const s=$('bankflt'); if(s)s.value=hit; renderBankDetail(); window.scrollTo(0,0); }
