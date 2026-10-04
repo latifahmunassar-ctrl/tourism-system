@@ -30,6 +30,9 @@ export type HotelRow = {
   includes_breakfast?: boolean;
   date_from?: string;     // ISO or "1/6/2026"
   date_to?: string;
+  /** علم داخلي: تاريخ السفر خارج فترات هذا الفندق المُسعّرة، فالسعر المعروض
+   *  أقرب فترة متاحة (تقريبي). يُضاف في pickCheapestHotel ويُظهِر ملاحظة. */
+  _approxDate?: boolean;
 };
 
 export type TourRow = {
@@ -362,7 +365,13 @@ export function pickCheapestHotel(
     if (ac_a !== ac_b) return ac_a - ac_b;
     return a.name.localeCompare(b.name);
   });
-  return candidates[0];
+  const chosen = candidates[0];
+  // تاريخ السفر خارج فترات هذا الفندق المُسعّرة → السعر المختار من أقرب فترة
+  // (تقريبي). نُعلّم نسخة حتى لا نلمس الصف المشترك، وتظهر ملاحظة للعميل.
+  if (dateForCheck && !hotelCoversDate(chosen, dateForCheck)) {
+    return { ...chosen, _approxDate: true };
+  }
+  return chosen;
 }
 
 const ARABIC_MONTH_TO_NUMBER: Record<string, number> = {
@@ -1512,9 +1521,14 @@ export function formatProgram(data: ProgramData): string {
   // ── HOTELS ───────────────────────────────────────────────────────────
   out += "HOTELS:\n";
   for (const sh of hotels) {
-    const meals = sh.hotel.meals
+    let meals = sh.hotel.meals
       ? `ما يشمل: ${sh.hotel.meals}`
       : (sh.hotel.includes_breakfast ? "إفطار مشمول" : "بدون وجبات");
+    // سعر تقريبي: تاريخ السفر خارج فترات الفندق المُسعّرة → نضيف ملاحظة واضحة
+    // تظهر في المراجعة والـPDF ضمن حقل «ما يشمل».
+    if (sh.hotel._approxDate) {
+      meals += " · ⚠️ سعر تقريبي — لا يوجد سعر مؤكّد لهذه الفترة في هذا الفندق، والمعروض أقرب سعر متاح";
+    }
     const cityAr = cityArabicNames[sh.city] || sh.city;
     // Append "(يتسع N أشخاص)" to the room_type field whenever the DB row
     // declares an occupancy — makes capacity legible at a glance instead of
@@ -2819,6 +2833,9 @@ export async function buildLocalProgram(
   // Compose CHAT notes. Occupancy upsize comes first (more important — affects
   // pricing & client expectations); tour-deficit second; default if neither.
   const chatParts: string[] = [];
+  // تنبيه «خارج المواسم المُسعّرة» المفصّل موجود أصلاً ضمن occupancyUpsizeNotes
+  // (يُدفَع في منطق اختيار الفندق)، والملاحظة المختصرة «سعر تقريبي» تظهر على سطر
+  // الفندق في الـPDF ضمن «يشمل». فلا نكرّر ملاحظة CHAT إضافية هنا.
   if (occupancyUpsizeNotes.length > 0) chatParts.push(occupancyUpsizeNotes.join(" "));
   if (tourMessages.length > 0) {
     chatParts.push(`${tourMessages.join(" | ")} حابب تكرّر جولة معيّنة؟ بلّغني الرقم.`);

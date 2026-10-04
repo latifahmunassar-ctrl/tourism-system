@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-01-includes'
+  var BUILD = '2026-10-04-approx-price'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1971,14 +1971,19 @@ const _capCache = new Map();
 // (بموافقة المالكة 2026-09-25 — تصحيح عرض فقط، النص الخام لا يُمسّ.)
 function _lineMealsTxt(p){
   const raw = String((p && p[6]) || '').replace(/^\s*ما\s*يشمل\s*:?\s*/u,'').trim();
+  // احتفظي بملاحظة «سعر تقريبي» حتى لو صُحّحت الوجبات من الكاش (الكاش فيه وجبات
+  // الفندق الأساسية بلا الملاحظة، والملاحظة خاصة بهذه الفترة/البناء).
+  const approxM = raw.match(/⚠️\s*سعر تقريبي[^|]*/u);
+  const approxNote = approxM ? approxM[0].trim() : '';
+  const withNote = (s) => (approxNote && !/سعر تقريبي/.test(String(s))) ? (String(s) + ' · ' + approxNote) : String(s);
   try{
     const dest = getLine(lastProgramRaw,'DEST') || '';
     const rooms = _capCache.get(dest+'|'+((p&&p[1])||'')+'|'+((p&&p[0])||'')) || [];
     const hit = rooms.find(r => _stripCapR(r.room_type) === _stripCapR((p&&p[3])||''));
-    if(!hit) return raw;
+    if(!hit) return withNote(raw);
     const fresh = String(hit.meals || (hit.includes_breakfast ? 'إفطار مشمول' : '')).trim();
-    return fresh || raw;
-  }catch(e){ return raw; }
+    return withNote(fresh || raw);
+  }catch(e){ return withNote(raw); }
 }
 function _roomNameOnly(s){ return String(s||'').replace(/\s*\(يتسع[^)]*\)/g,'').trim(); }
 // سعة الغرفة لسطر فندق: من نص السطر أولاً، وإلا من _capCache الذي عبّأه
