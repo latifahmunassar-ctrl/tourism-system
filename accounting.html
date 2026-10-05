@@ -5674,9 +5674,7 @@ function renderBanksCashDetail(){
         '<td style="font-size:10px">'+esc(x.more_details||'')+'</td>'+
         '<td style="font-size:10px">'+esc(x.note||'')+'</td>'+
         '<td style="font-size:10px;color:var(--muted)">'+(x._fromBankTxn?'↩️ مطابقة':(isDash?'يدوي':'شيت'))+'</td>'+
-        (x._fromBankTxn
-          ? '<td style="white-space:nowrap"><span title="حركة أُدخلت من مطابقة البنك ومخزّنة في تبويب «البنوك والبطاقات» — تظهر هنا للعرض؛ عدّليها من هناك" style="font-size:10px;color:#2563c4;font-weight:700">↩️ من المطابقة (في البنوك)</span></td></tr>'
-          : '<td style="white-space:nowrap"><button class="btn ghost" style="padding:2px 7px;font-size:11px" onclick="cashEditModal('+x.id+')" title="تعديل التاريخ/المرجع/القيمة/الوصف — '+(isOwnerUser()?'يُطبَّق مباشرة':'يُرسَل لموافقة المالكة')+'">✏️ تعديل'+(isOwnerUser()?'':' (موافقة)')+'</button>'+(isDash?' <span title="مُدخَل من الداشبورد" style="color:#0e9d6a;font-size:9px">🖊️</span>':' <span title="من الشيت السابق — قابل للتعديل (تاريخ/مرجع/قيمة)" style="color:var(--muted);font-size:9px">📄 شيت</span>')+'</td></tr>');
+        '<td style="white-space:nowrap"><button class="btn ghost" style="padding:2px 7px;font-size:11px" onclick="cashEditModal('+JSON.stringify(String(x.id))+')" title="تعديل التاريخ/المرجع/القيمة/الوصف — '+(isOwnerUser()?'يُطبَّق مباشرة':'يُرسَل لموافقة المالكة')+'">✏️ تعديل'+(isOwnerUser()?'':' (موافقة)')+'</button>'+(x._fromBankTxn?' <span title="من مطابقة البنك (مخزّنة في جدول البنوك) — قابلة للتعديل من هنا" style="color:#2563c4;font-size:9px">↩️ مطابقة</span>':(isDash?' <span title="مُدخَل من الداشبورد" style="color:#0e9d6a;font-size:9px">🖊️</span>':' <span title="من الشيت السابق — قابل للتعديل (تاريخ/مرجع/قيمة)" style="color:var(--muted);font-size:9px">📄 شيت</span>'))+'</td></tr>';
     }).join(''):'<tr><td colspan="15" style="text-align:center;color:var(--muted);padding:10px">لا توجد حركات</td></tr>')+
     '</tbody></table></div><div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'bc-tbl\',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'bc-tbl\',1)">تمرير ▶▶</button></div></div>';
   box.innerHTML=html;
@@ -5749,7 +5747,7 @@ async function reqCashEdit(id,inRaw,outRaw,cur){
 }
 // ✏️ تعديل كامل لحركة كاش (أي حقل) — المالكة مباشر، المحاسب بموافقة المالكة النهائية
 function cashEditModal(id){
-  const x=((DATA&&DATA.banksCash)||[]).find(r=>String(r.id)===String(id)); if(!x){ alert('الحركة غير موجودة'); return; }
+  const x=((DATA&&DATA.banksCash)||[]).concat(typeof _reconCashRows==='function'?_reconCashRows():[]).find(r=>String(r.id)===String(id)); if(!x){ alert('الحركة غير موجودة'); return; }
   const owner=isOwnerUser();
   const curList=[...new Set([x.currency,'OMR','SAR','USD','AED','EUR','MYR','SGD','GBP','THB',...listValues('currency').map(v=>v.value)])].filter(Boolean);
   const curOpts=curList.map(c=>'<option'+(c===(x.currency||'')?' selected':'')+'>'+esc(c)+'</option>').join('');
@@ -5766,14 +5764,15 @@ function cashEditModal(id){
     '<div class="fld" style="margin-bottom:9px"><label>🔖 المرجع البنكي</label><input id="ce-ref" value="'+esc(x.bank_ref||'')+'" style="width:100%"></div>'+
     '<div style="display:flex;gap:8px;margin-bottom:9px"><div class="fld" style="flex:1;margin:0"><label>القناة</label><input id="ce-chan" value="'+esc(x.channel||'')+'" style="width:100%"></div><div class="fld" style="flex:1;margin:0"><label>الوصف</label><input id="ce-desc" value="'+esc(x.description||'')+'" style="width:100%"></div></div>'+
     '<div style="display:flex;gap:8px;margin-bottom:9px"><div class="fld" style="flex:1;margin:0"><label>التفاصيل</label><input id="ce-det" value="'+esc(x.details||'')+'" style="width:100%"></div><div class="fld" style="flex:1;margin:0"><label>تفاصيل أكثر</label><input id="ce-more" value="'+esc(x.more_details||'')+'" style="width:100%"></div></div>'+
-    '<div class="fld" style="margin-bottom:9px"><label>ملاحظة</label><input id="ce-note" value="'+esc(x.note||'')+'" style="width:100%"></div>'+
+    '<div class="fld" style="margin-bottom:9px"><label>ملاحظة'+(x._fromBankTxn?' <span style="font-size:9px;color:var(--muted)">(التصنيف أعلاه؛ هنا ملاحظة حرة فقط)</span>':'')+'</label><input id="ce-note" value="'+(x._fromBankTxn?'':esc(x.note||''))+'" style="width:100%"></div>'+
     (owner?'':'<div class="fld" style="margin-bottom:9px"><label>📝 سبب التعديل <span style="color:#d11;font-size:9px">إجباري</span></label><input id="ce-reason" placeholder="سبب التعديل" style="width:100%"></div>')+
     '<div id="ce-msg" style="font-size:12px;margin-bottom:8px;min-height:16px"></div>'+
-    '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost" onclick="var e=document.getElementById(\'cashedit-modal\');if(e)e.remove()">إلغاء</button><button class="btn green" id="ce-save" onclick="saveCashEdit('+id+')">💾 حفظ</button></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost" onclick="var e=document.getElementById(\'cashedit-modal\');if(e)e.remove()">إلغاء</button><button class="btn green" id="ce-save" onclick="saveCashEdit('+JSON.stringify(String(id))+')">💾 حفظ</button></div>'+
   '</div>';
   document.body.appendChild(m);
 }
 async function saveCashEdit(id){
+  id=String(id); const isBtx=id.indexOf('btc-')===0; const realId=isBtx?Number(id.slice(4)):(isNaN(Number(id))?id:Number(id));
   const g=k=>{ const e=document.getElementById('ce-'+k); return e?e.value:undefined; };
   const changes={ tx_date:g('date')||null, bank_name:g('bank'), in_raw:(g('in')===''?null:g('in')), out_raw:(g('out')===''?null:g('out')), currency:g('cur'), currency_rate:(g('rate')===''?null:g('rate')), bank_ref:g('ref'), channel:g('chan'), description:g('desc'), details:g('det'), more_details:g('more'), note:g('note') };
   const owner=isOwnerUser(); const reason=owner?'':((g('reason')||'').trim());
@@ -5781,7 +5780,7 @@ async function saveCashEdit(id){
   if(!owner && !reason){ if(mm)mm.innerHTML='<span style="color:var(--red)">سبب التعديل إجباري</span>'; return; }
   const btn=document.getElementById('ce-save'); if(btn){ btn.disabled=true; btn.textContent='⏳'; }
   try{
-    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'edit_bank_cash',payload:{id:id,changes:changes,reason:reason,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:(isBtx?'edit_bank_txn_full':'edit_bank_cash'),payload:{id:realId,changes:changes,reason:reason,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
     const j=await r.json(); if(j.error){ if(btn){btn.disabled=false;btn.textContent='💾 حفظ';} if(mm)mm.innerHTML='<span style="color:var(--red)">'+esc(j.error)+'</span>'; return; }
     const mo=document.getElementById('cashedit-modal'); if(mo)mo.remove();
     await load();

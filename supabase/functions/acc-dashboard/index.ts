@@ -488,6 +488,41 @@ Deno.serve(async (req: Request) => {
       if (ie) return J({ error: ie.message }, 400);
       return J({ ok: true, pending: true });
     }
+    if (action === 'edit_bank_txn_full') {
+      // ✏️ تعديل حركة مخزّنة في acc_bank_txn (مثل حركات مطابقة البنك الظاهرة في تبويب الكاش). التصنيف (قناة/وصف/تفاصيل/فرعي) يُعاد ترميزه في الملاحظة «🏷️ A ← B ← C ← D». المالكة: مباشر؛ المحاسب: طلب معلّق.
+      const callerIsOwner = (key === ACCESS_KEY) || (sess && !!sess.is_owner);
+      if (!callerBankRef) return J({ error: 'تعديل الحركة للمحاسب أو المالكة فقط' }, 403);
+      if (!p.id) return J({ error: 'no id' }, 400);
+      const { data: row, error: e0 } = await supabase.from('acc_bank_txn').select('*').eq('id', p.id).single();
+      if (e0 || !row) return J({ error: 'الحركة غير موجودة' }, 400);
+      const ch = p.changes || {};
+      const _cls = [ch.channel, ch.description, ch.details, ch.more_details].map((x: any) => String(x == null ? '' : x).trim()).filter(Boolean).join(' ← ');
+      const _free = String(ch.note == null ? '' : ch.note).trim();
+      const _hasCls = ('channel' in ch) || ('description' in ch) || ('details' in ch) || ('more_details' in ch) || ('note' in ch);
+      const newNote = _cls ? ('🏷️ ' + _cls + (_free && _free.indexOf('🏷️') < 0 ? (' · ' + _free) : '')) : (_free || null);
+      const upd: any = {};
+      if ('tx_date' in ch) upd.tx_date = (ch.tx_date === '' || ch.tx_date == null) ? null : String(ch.tx_date).slice(0, 10);
+      if ('bank_name' in ch) upd.bank_name = (ch.bank_name === '' || ch.bank_name == null) ? null : String(ch.bank_name);
+      if ('bank_ref' in ch) upd.bank_ref = (ch.bank_ref === '' || ch.bank_ref == null) ? null : String(ch.bank_ref);
+      if ('in_raw' in ch) upd.amount_in = (ch.in_raw === '' || ch.in_raw == null) ? 0 : Number(ch.in_raw);
+      if ('out_raw' in ch) upd.amount_out = (ch.out_raw === '' || ch.out_raw == null) ? 0 : Number(ch.out_raw);
+      if ('currency' in ch) upd.currency = (ch.currency === '' || ch.currency == null) ? null : String(ch.currency);
+      if (_hasCls) upd.note = newNote;
+      if (!Object.keys(upd).length) return J({ error: 'لا تغييرات' }, 400);
+      if (callerIsOwner) {
+        const { error: ue } = await supabase.from('acc_bank_txn').update(upd).eq('id', p.id);
+        if (ue) return J({ error: ue.message }, 400);
+        return J({ ok: true, applied: true });
+      }
+      const reason = String(p.reason || '').trim();
+      if (!reason) return J({ error: 'سبب التعديل إجباري' }, 400);
+      const old: any = {}; for (const k of Object.keys(upd)) old[k] = row[k];
+      const { data: dupmv } = await supabase.from('acc_pending_movements').select('id').eq('kind', 'cash_edit').eq('status', 'pending').contains('payload', { bank_txn_id: p.id }).limit(1);
+      if (dupmv && dupmv.length) return J({ ok: true, pending: true, dup: true });
+      const { error: ie2 } = await supabase.from('acc_pending_movements').insert({ kind: 'cash_edit', scope: 'bank_txn', status: 'pending', summary: '✏️ تعديل حركة (من المطابقة) — ' + (row.bank_name || '') + (row.note ? (' · ' + String(row.note).slice(0, 40)) : ''), note: reason, payload: { bank_txn_id: p.id, upd, old, reason, by: p.by || '', bank_name: row.bank_name } });
+      if (ie2) return J({ error: ie2.message }, 400);
+      return J({ ok: true, pending: true });
+    }
     if (action === 'add_bank_cash') { if (!p.bank_name) return J({ error: 'لازم تحديد البنك' }, 400); if (!callerBankRef && p.bank_ref) { p.bank_ref = null; }   /* 🏦 المرجع البنكي: المحاسب/المالكة فقط — يُجرَّد لغيرهم */ const inRaw = p.in_raw === '' || p.in_raw == null ? null : Number(p.in_raw); const outRaw = p.out_raw === '' || p.out_raw == null ? null : Number(p.out_raw); const rate = p.currency_rate === '' || p.currency_rate == null ? null : Number(p.currency_rate); let inSar = p.in_sar === '' || p.in_sar == null ? null : Number(p.in_sar); let outSar = p.out_sar === '' || p.out_sar == null ? null : Number(p.out_sar); if (inSar == null && inRaw != null && rate != null) inSar = inRaw * rate; if (outSar == null && outRaw != null && rate != null) outSar = outRaw * rate; const { data, error } = await supabase.from('acc_banks_cash').insert({ tx_date: p.tx_date || null, in_raw: inRaw, out_raw: outRaw, bank_name: p.bank_name, bank_ref: p.bank_ref || null, channel: p.channel || null, description: p.description || null, details: p.details || null, more_details: p.more_details || null, note: p.note || null, currency: p.currency || null, currency_rate: rate, in_sar: inSar, out_sar: outSar, source: 'dashboard' }).select().single(); if (error) return J({ error: error.message }, 400); return J({ ok: true, row: data }); }
     if (action === 'delete_bank_cash') { if (!p.id) return J({ error: 'no id' }, 400); let q = supabase.from('acc_banks_cash').delete().eq('id', p.id); if (!(p.allow_sheet && ((key === ACCESS_KEY) || (sess && !!sess.is_owner)))) q = q.eq('source','dashboard'); /* 🔓 حذف الشيت للمالكة فقط عند allow_sheet */ const { error } = await q; if (error) return J({ error: error.message }, 400); return J({ ok: true }); }
     if (action === 'add_service_line') { if (!p.client_code) return J({ error: 'no client_code' }, 400); const rec: any = { client_code: p.client_code, source: 'dashboard' }; for (const f of SVC_FIELDS) if (f in p) rec[f] = p[f] === '' ? null : p[f]; if ('amount' in p) rec.raw_value = p.amount; const { data, error } = await supabase.from('acc_service_lines').insert(rec).select().single(); if (error) return J({ error: error.message }, 400); await supabase.from('acc_service_lines').update({ source: 'dashboard' }).eq('client_code', p.client_code); return J({ ok: true, row: data }); }
@@ -540,6 +575,11 @@ Deno.serve(async (req: Request) => {
           const tid = pl.target_id; if (!tid) return J({ error: 'no target_id' }, 400);
           const { error } = await supabase.from('acc_supplier_payments').delete().eq('id', tid);
           if (error) return J({ error: error.message }, 400); result = { deleted_payment: tid };
+        } else if (mv.kind === 'cash_edit' && pl.bank_txn_id) {
+          // 🏦 اعتماد تعديل حركة من المطابقة (مخزّنة في acc_bank_txn)
+          const upd = pl.upd || {}; if (!Object.keys(upd).length) return J({ error: 'طلب تعديل غير صالح' }, 400);
+          const { error: bue } = await supabase.from('acc_bank_txn').update(upd).eq('id', pl.bank_txn_id);
+          if (bue) return J({ error: bue.message }, 400); result = { bank_txn_edited: pl.bank_txn_id };
         } else if (mv.kind === 'cash_edit') {
           // ✏️ اعتماد تعديل حركة كاش كامل (كل الحقول) — يُطبّق التغييرات المخزّنة على acc_banks_cash مع إعادة حساب in_sar/out_sar
           const id = pl.id; const ch = pl.changes || {}; if (!id || !Object.keys(ch).length) return J({ error: 'طلب تعديل كاش غير صالح' }, 400);
