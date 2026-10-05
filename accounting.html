@@ -4841,14 +4841,15 @@ async function bankClassSave(id,isSheet){
     toast('✅ حُفظ التصنيف'+(cls?(' · '+chan):'')); await load(); try{ renderBankDetail(); }catch(_){}
   }catch(e){ msg.style.color='var(--red)'; msg.textContent='خطأ: '+esc(e.message); }
 }
-// 📥 إدخال حركة من كشف البنك مباشرة إلى سجل البنك (acc_bank_txn) — للمالكة فقط (تسجيل حركة بنكية)
-// التصنيف = القناة [+ الوصف الثانوي] بنفس مسميّات النظام، يُحفظ في الملاحظة كـ «القناة ← الوصف»
+// 📥 إدخال حركة من كشف البنك مباشرة إلى تبويب «Cash in / Out» (acc_banks_cash) — للمالكة فقط
+// التصنيف (القناة ← الوصف ← التفاصيل ← الفرعي) يُحفظ في حقوله الحقيقية فتظهر الحركة في الكاش بتصنيفها الكامل
 async function _reconInsertTxn(x,bank,chan,desc,det,sub){
   const _bayan=String(x.remarks||x.note||'').trim();   // 🔖 بيان الكشف يذهب مباشرة لخانة المرجع البنكي
   const _cls=[String(chan||'').trim(),String(desc||'').trim(),String(det||'').trim(),String(sub||'').trim()].filter(Boolean).join(' ← ');
   const _note=_cls?('🏷️ '+_cls):'من مطابقة كشف البنك';
-  const p={ tx_date:x.date||null, amount_out:Number(x.out||0), amount_in:Number(x.in||0), bank_name:bank, bank_ref:_bayan||null, note:_note };
-  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_bank_txn',payload:p})});
+  const _cur=(typeof bankCur==='function'?(bankCur(bank)||''):'')||'';   // 🪙 عملة الكشف = عملة البنك
+  const p={ tx_date:x.date||null, out_raw:(Number(x.out||0)||null), in_raw:(Number(x.in||0)||null), bank_name:bank, bank_ref:_bayan||null, channel:String(chan||'').trim()||null, description:String(desc||'').trim()||null, details:String(det||'').trim()||null, more_details:String(sub||'').trim()||null, note:_note, currency:_cur||null, currency_rate:1 };
+  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_bank_cash',payload:p})});
   const j=await r.json(); if(j.error) throw new Error(j.error); return j;
 }
 // 🔎 كاشف تكرار (تنبيه فقط، لا يمنع): يبحث عن حركة موجودة بنفس البنك + المبلغ + التاريخ (حتى لو المرجع مختلف)
@@ -4884,7 +4885,7 @@ async function reconAddOne(i,bank,btn){
   if(!chan){ centerNotice('🏷️ أدخلي التصنيف أوّلاً قبل إدخال الحركة'); const sel=$('recadd-chan-'+i); if(sel){ sel.style.outline='2px solid #d11'; try{ sel.focus(); sel.scrollIntoView({behavior:'smooth',block:'center'}); }catch(_){}; setTimeout(()=>{ if(sel)sel.style.outline=''; },2800); } return; }
   const clsTxt=[chan,desc,det,sub].filter(Boolean).join(' ← ')||'— بلا تصنيف —';
   const _dup=reconFindDup(x,bank);   // 🔎 تنبيه تكرار — لا يمنع، فقط يُعلِم
-  if(!confirm('➕ إدخال هذه الحركة إلى سجل البنك؟\n\nالتاريخ: '+(x.date||'—')+'\nداخل: '+fmt(x.in||0)+' · خارج: '+fmt(x.out||0)+'\nالبنك: '+bank+'\n🏷️ التصنيف: '+clsTxt+'\n🔖 المرجع البنكي (= البيان): '+(x.remarks||x.note||'—')+reconDupMsg(_dup)))return;
+  if(!confirm('➕ إدخال هذه الحركة إلى تبويب الكاش (Cash in/Out)؟\n\nالتاريخ: '+(x.date||'—')+'\nداخل: '+fmt(x.in||0)+' · خارج: '+fmt(x.out||0)+'\nالبنك: '+bank+'\n🏷️ التصنيف: '+clsTxt+'\n🔖 المرجع البنكي (= البيان): '+(x.remarks||x.note||'—')+reconDupMsg(_dup)))return;
   if(btn){ btn.disabled=true; btn.textContent='⏳'; }
   try{ await _reconInsertTxn(x,bank,chan,desc,det,sub); x._added=true; if(btn){ btn.textContent='✅ أُدخلت'; btn.style.background='#0e7c50'; btn.style.borderColor='#0e7c50'; } toast('✅ أُدخلت الحركة'+(chan?(' · '+chan):'')+' — ستُطابَق تلقائيّاً'); await load(); }
   catch(e){ if(btn){ btn.disabled=false; btn.textContent='➕ أدخلها'; } alert('خطأ: '+e.message); }
@@ -4905,7 +4906,7 @@ async function reconAddAll(bank){
   if(!fresh.length){ centerNotice('⏭️ كل الحركات موجودة مسبقاً في نظامك — لا جديد للإدخال (تفادينا التكرار الجماعي)'); return; }
   let dupTxt='';
   if(dups.length){ dupTxt='\n\n⏭️ سأتخطّى '+dups.length+' حركة موجودة مسبقاً (نفس البنك والمبلغ والتاريخ) منعاً للتكرار:\n'+dups.slice(0,6).map(x=>'   • '+(x.date||'')+' · خارج '+fmt(x.out||0)+' · داخل '+fmt(x.in||0)).join('\n')+(dups.length>6?('\n   … و'+(dups.length-6)+' غيرها'):'')+'\n(لو وحدة منها مختلفة فعلاً، أدخليها يدويّاً بزر «➕ أدخلها».)'; }
-  if(!confirm('➕ إدخال '+fresh.length+' حركة جديدة'+(dups.length?(' فقط (وتخطّي '+dups.length+' مكرّرة)'):'')+' إلى سجل البنك «'+bank+'»؟\n\nالتصنيف الافتراضي: '+defTxt+'\n(الحركة التي لها تصنيف خاص من عمودها يُعتمد لها.)\nكلها تُسجَّل بتاريخها ومبلغها وبيانها، وتُطابَق تلقائيّاً.'+dupTxt))return;
+  if(!confirm('➕ إدخال '+fresh.length+' حركة جديدة'+(dups.length?(' فقط (وتخطّي '+dups.length+' مكرّرة)'):'')+' إلى تبويب الكاش (Cash in/Out) «'+bank+'»؟\n\nالتصنيف الافتراضي: '+defTxt+'\n(الحركة التي لها تصنيف خاص من عمودها يُعتمد لها.)\nكلها تُسجَّل بتاريخها ومبلغها وبيانها، وتُطابَق تلقائيّاً.'+dupTxt))return;
   let ok=0,fail=0;
   for(const x of fresh){ const ix=idxOf(x); const oc=(($('recadd-chan-'+ix)||{}).value||'').trim(); const od=(($('recadd-desc-'+ix)||{}).value||'').trim(); const ot=(($('recadd-det-'+ix)||{}).value||'').trim(); const os=(($('recadd-sub-'+ix)||{}).value||'').trim(); const chan=oc||defChan; const desc=oc?od:defDesc; const det=oc?ot:defDet; const sub=oc?os:defSub; try{ await _reconInsertTxn(x,bank,chan,desc,det,sub); x._added=true; ok++; }catch(e){ fail++; } }
   toast('✅ أُدخلت '+ok+' حركة'+(fail?(' · تعذّر '+fail):''));
