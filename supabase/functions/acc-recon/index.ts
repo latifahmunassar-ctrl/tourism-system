@@ -6,6 +6,22 @@ const LIST_COLS = 'id,bank_name,period_from,period_to,txn_count,total_in,total_o
 const RDOC_META = 'id,movement_id,client_code,client_name,currency,refund_amount,company_profit,expected_refund,remaining_expected,payment_date,bank_name,bank_ref,status,created_by,created_at,approved_at,doc_name,doc_type';
 const num = (v: any) => (v === '' || v == null) ? null : Number(v);
 const E_NF = 'الطلب غير موجود', E_TY = 'نوع غير صحيح', E_DONE = 'الطلب معالَج مسبقاً';
+// 🔁 قيمة الحركة البنكية بعملة البنك = مجموع مبالغ صفوف التحويل (الأجنبي) ÷ سعر الصرف عند اختلاف العملة؛ وإلا المبلغ كما هو.
+// تُستدعى عند تعديل المبلغ/العملة/سعر الصرف لإبقاء الحركة البنكية متزامنة مع دفعة المورّد (يمنع عدم التزامن عند تغيير سعر الصرف).
+async function bankCurAmount(supabase: any, ids: number[], bankNameHint: string): Promise<{ amount_out: number; amount_in: number }> {
+  const { data: rows2 } = await supabase.from('acc_supplier_payments').select('amount,currency,currency_rate,bank_name').in('id', ids);
+  let totalForeign = 0, totalSigned = 0;
+  for (const rx of (rows2 || [])) { const a = Number(rx.amount || 0); totalForeign += Math.abs(a); totalSigned += a; }
+  const first: any = (rows2 && rows2[0]) || {};
+  const payCur = String(first.currency || '').toUpperCase().trim();
+  const bm = String(first.bank_name || bankNameHint || '').toUpperCase().match(/\b(OMR|USD|SAR|AED|EUR|GBP|MYR|TRY|RUB|AZN)\b/);
+  const bankCur = bm ? bm[1] : '';
+  const rate = Number(first.currency_rate || 0);
+  let bankAmt = totalForeign;
+  if (payCur && bankCur && payCur !== bankCur && rate > 0) bankAmt = Math.round((totalForeign / rate) * 1000) / 1000;   // 💱 عملة مختلفة → حوّل للبنك بقسمة سعر الصرف
+  const isRef = totalSigned < 0;   // سالب = مرتجع وارد
+  return { amount_out: isRef ? 0 : bankAmt, amount_in: isRef ? bankAmt : 0 };
+}
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   const url = new URL(req.url);
@@ -128,7 +144,7 @@ Deno.serve(async (req: Request) => {
           }
         }
       }
-      if (txnId) { const t: any = {}; if (hasBank) t.bank_name = p.bank_name || null; if (hasRef) t.bank_ref = p.bank_ref || null; if (hasDate) t.tx_date = p.payment_date || null; if (hasAmt) { const isRef = (signedAmt != null && signedAmt < 0); t.amount_out = isRef ? 0 : (newTotal as number); t.amount_in = isRef ? (newTotal as number) : 0; } if (Object.keys(t).length) await supabase.from('acc_bank_txn').update(t).eq('id', txnId); }
+      if (txnId) { const t: any = {}; if (hasBank) t.bank_name = p.bank_name || null; if (hasRef) t.bank_ref = p.bank_ref || null; if (hasDate) t.tx_date = p.payment_date || null; if (hasAmt || hasRate || hasCur) { const ba = await bankCurAmount(supabase, ids, p.bank_name || ''); t.amount_out = ba.amount_out; t.amount_in = ba.amount_in; } if (Object.keys(t).length) await supabase.from('acc_bank_txn').update(t).eq('id', txnId); }
       return J({ ok: true });
     }
     if (action === 'set_fcd_bankref') {
@@ -412,7 +428,7 @@ Deno.serve(async (req: Request) => {
           const hasAmtC = ('amount' in c) && c.amount != null;
           const upd: any = {}; if ('bank_name' in c) upd.bank_name = c.bank_name || null; if ('bank_ref' in c) upd.bank_ref = c.bank_ref || null; if ('payment_date' in c) upd.payment_date = c.payment_date || null; if (hasAmtC) upd.amount = Number(c.amount); if ('currency' in c) upd.currency = c.currency || null; if ('currency_rate' in c) upd.currency_rate = (c.currency_rate == null || c.currency_rate === '') ? null : Number(c.currency_rate);
           if (ids.length && Object.keys(upd).length) { const { error: se } = await supabase.from('acc_supplier_payments').update(upd).in('id', ids); if (se) return J({ error: se.message }, 400); }
-          if (c.txn_id) { const t: any = {}; if ('bank_name' in c) t.bank_name = c.bank_name || null; if ('bank_ref' in c) t.bank_ref = c.bank_ref || null; if ('payment_date' in c) t.tx_date = c.payment_date || null; if (hasAmtC) { const isRef = Number(c.amount) < 0; t.amount_out = isRef ? 0 : Math.abs(Number(c.amount)); t.amount_in = isRef ? Math.abs(Number(c.amount)) : 0; } if (Object.keys(t).length) await supabase.from('acc_bank_txn').update(t).eq('id', c.txn_id); }
+          if (c.txn_id) { const t: any = {}; if ('bank_name' in c) t.bank_name = c.bank_name || null; if ('bank_ref' in c) t.bank_ref = c.bank_ref || null; if ('payment_date' in c) t.tx_date = c.payment_date || null; if (hasAmtC || ('currency_rate' in c) || ('currency' in c)) { const ba = await bankCurAmount(supabase, ids, c.bank_name || ''); t.amount_out = ba.amount_out; t.amount_in = ba.amount_in; } if (Object.keys(t).length) await supabase.from('acc_bank_txn').update(t).eq('id', c.txn_id); }
           await supabase.from('acc_pending_movements').update({ status: 'approved', decided_at: new Date().toISOString(), result: { sup_transfer: ids.length } }).eq('id', p.id);
           return J({ ok: true, decision, result: { sup_transfer: ids.length } });
         }
