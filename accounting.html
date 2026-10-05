@@ -5503,8 +5503,27 @@ async function withdrawBankCashPending(id, silent){
     if(!silent){ toast('🗑️ سُحب الطلب المعلّق'); await load(); }
   }catch(e){ if(!silent)alert('خطأ: '+e.message); }
 }
+// ↩️ حركات مُدخَلة من «مطابقة البنوك» ومخزّنة في جدول البنوك (acc_bank_txn) — تُعرَض أيضاً في تبويب الكاش لأنها حركات كاش مصنّفة (بلا نقل/حذف، وبلا أي أثر على الرصيد: تبقى محسوبة مرة واحدة في bankTxAll). التصنيف يُقرأ من الملاحظة «🏷️ قناة ← وصف ← تفاصيل ← فرعي».
+function _reconCashRows(){
+  if(!DATA||!DATA.bankTx)return [];
+  const up=s=>String(s||'').trim().toUpperCase();
+  const spRefs=new Set((DATA.supplierPaymentsRaw||DATA.supplierPayments||[]).filter(x=>x.source==='dashboard').map(x=>up(x.bank_ref)).filter(Boolean));
+  const fcdRefs=new Set((DATA.fcd||[]).filter(x=>x.source==='dashboard').map(x=>up(x.bank_ref)).filter(Boolean));
+  const out=[];
+  (DATA.bankTx||[]).forEach(x=>{
+    if(x.source!=='dashboard')return;
+    const note=String(x.note||''); const ref=up(x.bank_ref);
+    const isRecon = note.trim().indexOf('🏷️')===0 || note.indexOf('من مطابقة كشف البنك')>=0;
+    if(!isRecon)return;
+    if((ref&&(spRefs.has(ref)||fcdRefs.has(ref))) || /دفعة|💰|↩️|💸|مرتجع/.test(note))return;   // دفعة مرتبطة — ليست حركة كاش مستقلة
+    let chan='',desc='',det='',sub='';
+    if(note.trim().indexOf('🏷️')===0){ const parts=note.replace(/^🏷️\s*/,'').split('←').map(s=>s.trim()); chan=parts[0]||''; desc=parts[1]||''; det=parts[2]||''; sub=parts[3]||''; }
+    out.push({ id:'btc-'+x.id, _fromBankTxn:true, _btId:x.id, tx_date:x.tx_date||'', in_raw:(Number(x.amount_in||0)||null), out_raw:(Number(x.amount_out||0)||null), bank_name:x.bank_name||'', bank_ref:x.bank_ref||'', channel:chan, description:desc, details:det, more_details:sub, note:note, currency:(typeof bankCur==='function'?bankCur(x.bank_name):'')||'', currency_rate:1, in_sar:null, out_sar:null, source:'dashboard', created_at:x.created_at||'' });
+  });
+  return out;
+}
 function bcApply(opts){
-  opts=opts||{}; let a=((DATA&&DATA.banksCash)||[]).slice();
+  opts=opts||{}; let a=((DATA&&DATA.banksCash)||[]).concat(_reconCashRows());
   const bank=(($('bc-bank')||{}).value||'').trim();
   const cur=(($('bc-cur')||{}).value||'').trim();
   const chan=(($('bc-chan')||{}).value||'').trim();
@@ -5654,8 +5673,10 @@ function renderBanksCashDetail(){
         '<td style="font-size:10px">'+esc(x.details||'')+'</td>'+
         '<td style="font-size:10px">'+esc(x.more_details||'')+'</td>'+
         '<td style="font-size:10px">'+esc(x.note||'')+'</td>'+
-        '<td style="font-size:10px;color:var(--muted)">'+(isDash?'يدوي':'شيت')+'</td>'+
-        '<td style="white-space:nowrap"><button class="btn ghost" style="padding:2px 7px;font-size:11px" onclick="cashEditModal('+x.id+')" title="تعديل التاريخ/المرجع/القيمة/الوصف — '+(isOwnerUser()?'يُطبَّق مباشرة':'يُرسَل لموافقة المالكة')+'">✏️ تعديل'+(isOwnerUser()?'':' (موافقة)')+'</button>'+(isDash?' <span title="مُدخَل من الداشبورد" style="color:#0e9d6a;font-size:9px">🖊️</span>':' <span title="من الشيت السابق — قابل للتعديل (تاريخ/مرجع/قيمة)" style="color:var(--muted);font-size:9px">📄 شيت</span>')+'</td></tr>';
+        '<td style="font-size:10px;color:var(--muted)">'+(x._fromBankTxn?'↩️ مطابقة':(isDash?'يدوي':'شيت'))+'</td>'+
+        (x._fromBankTxn
+          ? '<td style="white-space:nowrap"><span title="حركة أُدخلت من مطابقة البنك ومخزّنة في تبويب «البنوك والبطاقات» — تظهر هنا للعرض؛ عدّليها من هناك" style="font-size:10px;color:#2563c4;font-weight:700">↩️ من المطابقة (في البنوك)</span></td></tr>'
+          : '<td style="white-space:nowrap"><button class="btn ghost" style="padding:2px 7px;font-size:11px" onclick="cashEditModal('+x.id+')" title="تعديل التاريخ/المرجع/القيمة/الوصف — '+(isOwnerUser()?'يُطبَّق مباشرة':'يُرسَل لموافقة المالكة')+'">✏️ تعديل'+(isOwnerUser()?'':' (موافقة)')+'</button>'+(isDash?' <span title="مُدخَل من الداشبورد" style="color:#0e9d6a;font-size:9px">🖊️</span>':' <span title="من الشيت السابق — قابل للتعديل (تاريخ/مرجع/قيمة)" style="color:var(--muted);font-size:9px">📄 شيت</span>')+'</td></tr>');
     }).join(''):'<tr><td colspan="15" style="text-align:center;color:var(--muted);padding:10px">لا توجد حركات</td></tr>')+
     '</tbody></table></div><div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'bc-tbl\',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:5px 16px" onclick="hScroll(\'bc-tbl\',1)">تمرير ▶▶</button></div></div>';
   box.innerHTML=html;
