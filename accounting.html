@@ -2423,6 +2423,54 @@ async function resolveCostOver(id){ try{ const r=await api({method:'POST',header
 function costoverUpdCount(){ const n=document.querySelectorAll('.costover-chk:checked').length; document.querySelectorAll('.costover-selcount').forEach(e=>e.textContent=n); }
 function costoverToggleAll(el){ document.querySelectorAll('.costover-chk').forEach(c=>{ c.checked=el.checked; }); costoverUpdCount(); }
 async function resolveCostOverBulk(){ const ids=[...document.querySelectorAll('.costover-chk:checked')].map(c=>c.value); if(!ids.length){ alert('لم تحدّدي أي تنبيه'); return; } if(!confirm('✅ وضع «اطّلعت» على '+ids.length+' تنبيه؟ ستختفي المحدّدة من القائمة.')) return; for(const id of ids){ try{ await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resolve_alert',payload:{id:Number(id),resolution:'اطّلعت المالكة على تجاوز التكلفة الفعلية'}})}); }catch(e){} } await load(); }
+// ===== 🩺 فاحص صحّة التزامن بين الدفعات والكشف البنكي — يلتقط الحركات اليتيمة وعدم تطابق القيم والتكرار =====
+function bankSyncHealth(){
+  if(!DATA) return {orphans:[],desyncs:[],dups:[]};
+  const up=s=>String(s||'').trim().toUpperCase();
+  const sp=(DATA.supplierPaymentsRaw||DATA.supplierPayments||[]).filter(x=>x.source==='dashboard');
+  const fcd=(DATA.fcd||[]).filter(x=>x.source==='dashboard');
+  const spByRef={}; sp.forEach(x=>{ const r=up(x.bank_ref); if(r)(spByRef[r]=spByRef[r]||[]).push(x); });
+  const fcdRefs=new Set(fcd.map(x=>up(x.bank_ref)).filter(Boolean));
+  const btx=(DATA.bankTx||[]).filter(x=>x.source==='dashboard');
+  const orphans=[],desyncs=[],dups=[];
+  // 🔴 حركة بنكية يتيمة: ملاحظتها تدلّ أنها انعكاس دفعة (دفعة/مرتجع من) لكن لا توجد دفعة بنفس المرجع (حُذفت الدفعة ولم تُحذف هي)
+  btx.forEach(x=>{ const note=String(x.note||''); const ref=up(x.bank_ref);
+    const isPayRefl=/دفعة\s*(مورّد|مورد|فندق|عميل)|مرتجع\s*من|💸|💰/.test(note);
+    if(!isPayRefl||!ref) return;
+    if(!spByRef[ref] && !fcdRefs.has(ref)) orphans.push(x);
+  });
+  // ⚠️ عدم تطابق القيمة: دفعة مورّد لها حركة بنكية بنفس المرجع، لكن قيمة الحركة ≠ المتوقّع (الأجنبي ÷ سعر الصرف عند اختلاف العملة)
+  Object.keys(spByRef).forEach(ref=>{ const rows=spByRef[ref]; const first=rows[0];
+    const bt=btx.filter(x=>up(x.bank_ref)===ref); if(bt.length!==1) return;   // الحالة المفردة فقط (الموزّع يُترك)
+    const totalF=rows.reduce((s,x)=>s+Math.abs(Number(x.amount||0)),0);
+    const signed=rows.reduce((s,x)=>s+Number(x.amount||0),0);
+    const payCur=up(first.currency), bc=up((typeof bankCur==='function'?bankCur(first.bank_name):'')||''), rate=Number(first.currency_rate||0);
+    let expect=totalF; if(payCur&&bc&&payCur!==bc&&rate>0) expect=Math.round(totalF/rate*1000)/1000;
+    const b=bt[0]; const cur=Math.abs(Number(b.amount_in||0))+Math.abs(Number(b.amount_out||0));
+    if(Math.abs(cur-expect)>0.02) desyncs.push({id:b.id,ref,expect,current:+cur.toFixed(3),supplier:first.supplier_name||'',isRef:signed<0,date:String(b.tx_date||'').slice(0,10)});
+  });
+  // 🔁 تكرار محتمل: حركتان بنكيتان (داشبورد) بنفس المبلغ+التاريخ+الاتجاه+البنك
+  const seen={}; btx.forEach(x=>{ const amt=Math.abs(Number(x.amount_in||0))||Math.abs(Number(x.amount_out||0)); if(amt<0.005)return; const dir=Number(x.amount_in||0)>0.005?'in':'out'; const k=dir+'|'+amt.toFixed(2)+'|'+String(x.tx_date||'').slice(0,10)+'|'+(typeof bankAlias==='function'?bankAlias(x.bank_name):x.bank_name); (seen[k]=seen[k]||[]).push(x); });
+  Object.values(seen).forEach(g=>{ if(g.length>1) dups.push(g); });
+  return {orphans,desyncs,dups};
+}
+function bankSyncHealthPanel(owner){
+  if(!owner) return '';
+  const H=bankSyncHealth(); const nO=H.orphans.length, nD=H.desyncs.length, nU=H.dups.length;
+  if(!nO&&!nD&&!nU) return '';
+  const fmt2=v=>Number(v||0).toLocaleString('en-US',{maximumFractionDigits:3});
+  let h='<div class="panel" style="border:1px solid #d11;background:rgba(209,17,17,.06);margin-bottom:14px"><h3 style="color:#d11;margin-top:0">🩺 فاحص صحّة التزامن (الدفعات ↔ الكشف البنكي) — '+(nO+nD+nU)+' تنبيه</h3>'+
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">يلتقط تلقائياً أي خلل بين الدفعات والكشف البنكي. كل بند له زرّ إصلاح (قرارك — لا تصحيح تلقائي).</div>';
+  if(nO){ h+='<details open style="margin-bottom:8px"><summary style="cursor:pointer;color:#d11;font-weight:800">🔴 حركات بنكية يتيمة ('+nO+') — دفعتها محذوفة ولم تُحذف</summary><div class="tbl-wrap" style="margin-top:6px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>داخل</th><th>خارج</th><th>البنك</th><th>البيان</th><th>إجراء</th></tr></thead><tbody>'+
+    H.orphans.map(x=>'<tr><td>'+esc(String(x.tx_date||'').slice(0,10))+'</td><td class="num" style="color:#0e9d6a">'+(Number(x.amount_in||0)>0?fmt2(x.amount_in):'')+'</td><td class="num neg">'+(Number(x.amount_out||0)>0?fmt2(x.amount_out):'')+'</td><td>'+esc(x.bank_name||'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(String(x.note||x.bank_ref||'').slice(0,40))+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px;color:#d11;border-color:#d11" onclick="fixOrphanBtx('+x.id+')">🗑️ احذف اليتيمة</button></td></tr>').join('')+'</tbody></table></div></details>'; }
+  if(nD){ h+='<details open style="margin-bottom:8px"><summary style="cursor:pointer;color:#b8860b;font-weight:800">⚠️ عدم تطابق القيمة ('+nD+') — الحركة البنكية ≠ قيمة الدفعة</summary><div class="tbl-wrap" style="margin-top:6px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>المورّد</th><th>الحالي</th><th>الصحيح</th><th>المرجع</th><th>إجراء</th></tr></thead><tbody>'+
+    H.desyncs.map(x=>'<tr><td>'+esc(x.date)+'</td><td>'+esc(x.supplier)+'</td><td class="num" style="color:#d11">'+fmt2(x.current)+'</td><td class="num" style="color:#0e9d6a;font-weight:700">'+fmt2(x.expect)+'</td><td style="font-size:10px">'+esc(String(x.ref).slice(0,24))+'</td><td><button class="btn green" style="padding:2px 9px;font-size:11px" onclick="fixDesyncBtx('+x.id+','+x.expect+','+(x.isRef?1:0)+')">🔧 صحّح إلى '+fmt2(x.expect)+'</button></td></tr>').join('')+'</tbody></table></div></details>'; }
+  if(nU){ h+='<details style="margin-bottom:4px"><summary style="cursor:pointer;color:#7c3aed;font-weight:800">🔁 تكرار محتمل ('+nU+' مجموعة) — راجعيها</summary><div style="font-size:10px;color:var(--muted);margin:4px 0">حركتان أو أكثر بنفس المبلغ والتاريخ والاتجاه والبنك — قد تكون مكرّرة. راجعيها في تبويب البنوك/الكاش واحذفي الزائدة.</div><div class="tbl-wrap"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>المبلغ</th><th>الاتجاه</th><th>البنك</th><th>عدد</th><th>البيانات</th></tr></thead><tbody>'+
+    H.dups.map(g=>{ const x=g[0]; const amt=Math.abs(Number(x.amount_in||0))||Math.abs(Number(x.amount_out||0)); const dir=Number(x.amount_in||0)>0.005?'داخل':'خارج'; return '<tr><td>'+esc(String(x.tx_date||'').slice(0,10))+'</td><td class="num">'+fmt2(amt)+'</td><td>'+dir+'</td><td>'+esc(x.bank_name||'')+'</td><td class="num" style="color:#7c3aed;font-weight:700">'+g.length+'</td><td style="font-size:9.5px;color:var(--muted)">'+esc(g.map(y=>String(y.note||y.bank_ref||'').slice(0,20)).join(' · ').slice(0,70))+'</td></tr>'; }).join('')+'</tbody></table></div></details>'; }
+  return h+'</div>';
+}
+async function fixOrphanBtx(id){ if(!confirm('🗑️ حذف هذه الحركة البنكية اليتيمة؟ (دفعتها محذوفة — لا يقابلها دفعة في النظام)'))return; try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_bank_txn',payload:{id:Number(id),allow_sheet:true}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } toast('🗑️ حُذفت الحركة اليتيمة'); await load(); }catch(e){ alert('خطأ: '+e.message); } }
+async function fixDesyncBtx(id,amt,isRef){ amt=Number(amt); if(!confirm('🔧 تصحيح قيمة الحركة البنكية إلى '+amt+'؟'))return; try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_bank_txn_amount',payload:{id:Number(id),amount_in:(isRef?amt:0),amount_out:(isRef?0:amt)}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } toast('🔧 صُحّحت القيمة'); await load(); }catch(e){ alert('خطأ: '+e.message); } }
 // هل الفورم الحالي فيه خدمة مكتوبة (ليُحتسب عند الحفظ)؟
 function sFormFilled(){ return !!((($('s-desc').value||'').trim())||(($('s-supplier').value||'').trim())||(+$('s-price').value>0)||(+$('s-supcalc').value>0)); }
 // تفريغ حقول الخدمة مع الإبقاء على كود العميل (للخدمة التالية)
@@ -3771,6 +3819,7 @@ function renderAlerts(){
   const nbox=$('notif-box');
   if(nbox){
     let n='';
+    n+=bankSyncHealthPanel(_owner);    // 🩺 فاحص صحّة التزامن (يتيمة/عدم تطابق/تكرار بين الدفعات والكشف)
     n+=costGapPanelHtml(cg,_owner);   // ⚠️ إشعار «تكلفة فعلية أقل بكثير من المسجّلة»
     if(pendFreeze.length){
       n+='<div class="panel" style="border:1px solid #3a7bd5;background:rgba(58,123,213,.08);margin-bottom:14px"><h3 style="color:#3a7bd5;margin-top:0">🧊 طلبات تجميد حسابات ('+pendFreeze.length+') — تحتاج قرارك</h3>'+
