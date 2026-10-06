@@ -5623,6 +5623,51 @@ Deno.serve(async (req) => {
     }
   }
 
+  // فحص صحّة ويبهوك واتساب: يتأكد أن التطبيق مشترك في ويبهوك الـWABA (وإلا لا
+  // تصل رسائل العملاء). ?resubscribe=1 يعيد الاشتراك.  GET ?admin_action=webhook_health
+  if (url.searchParams.get("admin_action") === "webhook_health") {
+    if (!(await checkAuthOrSession(req))) return unauthorized();
+    try {
+      const token = (Deno.env.get("WHATSAPP_ACCESS_TOKEN") || "").trim();
+      const phoneNumberId = (Deno.env.get("WHATSAPP_PHONE_NUMBER_ID") || "").trim();
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data } = await supabase.from("wa_settings").select("value").eq("key", "whatsapp_waba_id").maybeSingle();
+      let waba = String((data as { value?: unknown } | null)?.value || "").replace(/"/g, "");
+      // تمرير WABA يدوياً (من WhatsApp Manager) يتجاوز المحفوظ ويُحفَظ للمرّات القادمة.
+      const wabaParam = (url.searchParams.get("waba") || "").replace(/[^0-9]/g, "");
+      if (wabaParam) {
+        waba = wabaParam;
+        try { await supabase.from("wa_settings").upsert([{ key: "whatsapp_waba_id", value: waba, updated_at: new Date().toISOString() }]); } catch (_e) { /* */ }
+      }
+      const g = async (path: string, method = "GET") => {
+        try {
+          const r = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${path}${path.includes("?") ? "&" : "?"}access_token=${encodeURIComponent(token)}`, { method });
+          return { status: r.status, body: await r.json().catch(() => null) };
+        } catch (e) { return { err: (e as Error).message }; }
+      };
+      const out: Record<string, unknown> = { waba_from_settings: waba, has_token: !!token, phone_number_id: phoneNumberId };
+      out.phone = await g(`${phoneNumberId}?fields=id,display_phone_number,verified_name,account_mode,status,quality_rating,webhook_configuration`);
+      // لو ما فيه WABA محفوظ، جرّب discoverWabaId
+      if (!waba) { const dsc = await discoverWabaId(token, phoneNumberId); waba = dsc.waba || ""; out.waba_discovered = waba || dsc.diag; }
+      if (waba) {
+        out.subscribed_apps = await g(`${waba}/subscribed_apps`);
+        out.waba_phone_numbers = await g(`${waba}/phone_numbers?fields=id,display_phone_number,verified_name`);
+        if (url.searchParams.get("resubscribe") === "1") {
+          // (أ) اشتراك عادي.
+          out.resubscribe = await g(`${waba}/subscribed_apps`, "POST");
+          // (ب) ضبط override الويبهوك صراحةً مع verify token الصحيح — يعيد تفعيل
+          //     التسليم لو كان الـoverride غير مُفعَّل/التوكن قديم (السبب الأرجح).
+          const cb = `https://${PROJECT_REF}.supabase.co/functions/v1/WhatsApp-Router`;
+          const vt = (Deno.env.get("WHATSAPP_VERIFY_TOKEN") || "").trim();
+          out.set_override = await g(`${waba}/subscribed_apps?override_callback_uri=${encodeURIComponent(cb)}&verify_token=${encodeURIComponent(vt)}`, "POST");
+        }
+      }
+      return new Response(JSON.stringify(out, null, 2), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
   if (url.searchParams.get("admin_action") === "list_ad_pdfs") {
     if (!(await checkAuthOrSession(req))) return unauthorized();
     try {
@@ -7170,10 +7215,10 @@ Deno.serve(async (req) => {
       const _wabaId = String((entry as { id?: string })?.id || "");
       if (_wabaId && _wabaId !== _capturedWaba) {
         _capturedWaba = _wabaId;
+        // التقاط WABA (upsert سريع فقط). ⚠️ لا ننادي أي Graph API هنا: نداء
+        // بلا مهلة كان يعلّق المهمة الخلفية فتتوقف معالجة الرسالة (التسجيل +
+        // handleMessage) ولا تصل رسائل العملاء. إعداد القالب يتم من webhook_health.
         try { await supabase.from("wa_settings").upsert([{ key: "whatsapp_waba_id", value: _wabaId, updated_at: new Date().toISOString() }]); } catch (_e) { /* best-effort */ }
-        // إعداد ذاتي: أنشئ قالب الترحيب على Meta مرة واحدة بمجرد معرفة WABA
-        // (best-effort — لا يعطّل معالجة الرسالة إن فشل).
-        await ensureGreetingTemplate(supabase, _wabaId);
       }
       for (const change of (entry?.changes ?? [])) {
         const value = change?.value;
