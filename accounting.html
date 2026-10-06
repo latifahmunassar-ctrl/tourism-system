@@ -3857,8 +3857,9 @@ function renderAlerts(){
     }
     if(pendCliEdit.length){
       n+='<div class="panel" style="border:1px solid #0e9d6a;background:rgba(14,157,106,.07);margin-bottom:14px"><h3 style="color:#0e9d6a;margin-top:0">✏️ طلبات تعديل بيانات/دفعات عملاء ('+pendCliEdit.length+') — تحتاج قرارك</h3>'+
-        '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>التفاصيل</th><th>📝 السبب</th><th>مقدّم الطلب</th><th>التاريخ</th><th>القرار</th></tr></thead><tbody>'+
-        pendCliEdit.map(m=>{ const c=m.payload||{}; return '<tr><td style="font-size:11px">'+esc(m.summary||'')+cliEditDiff(m)+'</td><td style="font-size:12px;font-weight:700;color:#0e9d6a">'+esc(c.reason||m.note||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(c.by||'—')+'</td><td>'+esc(String(m.created_at||'').slice(0,10))+'</td><td style="white-space:nowrap"><button class="btn green" style="padding:2px 9px;font-size:11px" onclick="resolveCliEdit('+m.id+',\'approve\')">✅ موافقة وتعديل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="resolveCliEdit('+m.id+',\'reject\')">❌ رفض</button></td></tr>'; }).join('')+
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:9px;background:rgba(14,157,106,.06);border-radius:8px;padding:7px 11px"><button class="btn green" style="padding:6px 15px;font-size:12px" onclick="resolveCliEditBulk(\'approve\')">✅ موافقة على المحدّد (<span class="cliedit-selcount">0</span>)</button><button class="btn ghost" style="padding:6px 13px;font-size:12px;color:var(--red);border-color:var(--red)" onclick="resolveCliEditBulk(\'reject\')">❌ رفض المحدّد</button><label style="font-size:11.5px;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:5px"><input type="checkbox" onchange="cliEditToggleAll(this)" style="width:15px;height:15px;cursor:pointer"> تحديد الكل</label><span style="font-size:10.5px;color:var(--muted)">حدّدي عدة طلبات ثم وافقي/ارفضيها دفعة واحدة</span></div>'+
+        '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th><input type="checkbox" onchange="cliEditToggleAll(this)" style="width:15px;height:15px;cursor:pointer"></th><th>التفاصيل</th><th>📝 السبب</th><th>مقدّم الطلب</th><th>التاريخ</th><th>القرار</th></tr></thead><tbody>'+
+        pendCliEdit.map(m=>{ const c=m.payload||{}; return '<tr><td><input type="checkbox" class="cliedit-chk" value="'+m.id+'" onchange="cliEditUpdCount()" style="width:15px;height:15px;cursor:pointer"></td><td style="font-size:11px">'+esc(m.summary||'')+cliEditDiff(m)+'</td><td style="font-size:12px;font-weight:700;color:#0e9d6a">'+esc(c.reason||m.note||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(c.by||'—')+'</td><td>'+esc(String(m.created_at||'').slice(0,10))+'</td><td style="white-space:nowrap"><button class="btn green" style="padding:2px 9px;font-size:11px" onclick="resolveCliEdit('+m.id+',\'approve\')">✅ موافقة وتعديل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="resolveCliEdit('+m.id+',\'reject\')">❌ رفض</button></td></tr>'; }).join('')+
         '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">ℹ️ الموافقة تطبّق التعديل على السطر. الرفض يُبقي القيم كما هي.</div></div>';
     }
     if(pendRefEdit.length){
@@ -5868,6 +5869,22 @@ async function resolveCliEdit(id,decision){
     await load();
     alert(approve?'✅ اعتُمد التعديل — طُبّق على السطر.':'❌ رُفض الطلب — القيم كما هي.');
   }catch(e){ alert('خطأ: '+e.message); }
+}
+// 🔢 تحديد متعدّد لطلبات «تعديل بيانات/دفعات عملاء» — موافقة/رفض دفعة واحدة
+function cliEditUpdCount(){ const n=document.querySelectorAll('.cliedit-chk:checked').length; document.querySelectorAll('.cliedit-selcount').forEach(e=>e.textContent=n); }
+function cliEditToggleAll(el){ document.querySelectorAll('.cliedit-chk').forEach(c=>{ c.checked=el.checked; }); cliEditUpdCount(); }
+async function resolveCliEditBulk(decision){
+  const approve=(decision==='approve');
+  const ids=[...document.querySelectorAll('.cliedit-chk:checked')].map(c=>c.value);
+  if(!ids.length){ alert('لم تحدّدي أي طلب'); return; }
+  if(!confirm((approve?'✅ اعتماد وتطبيق ':'❌ رفض ')+ids.length+' طلب تعديل دفعة واحدة؟'+(approve?'':' (تبقى القيم كما هي)')))return;
+  let ok=0,fail=0;
+  for(const id of ids){
+    try{ const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resolve_client_edit',payload:{id:Number(id),decision:approve?'approve':'reject',by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})}); const j=await r.json(); if(j.error)fail++; else ok++; }
+    catch(e){ fail++; }
+  }
+  await load();
+  alert('تمّت المعالجة: ✅ '+ok+(fail?(' · ❌ فشل '+fail):''));
 }
 // ===== 🔍 تدقيق العملة: مطابقة تكلفة Booking Form بتفصيل الخدمات =====
 function caData(){
