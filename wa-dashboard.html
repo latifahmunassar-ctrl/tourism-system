@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20261007b -->
+<!-- APPVER:20261007c -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1870,7 +1870,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20261007b";
+    const APPVER = "20261007c";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4688,6 +4688,22 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     function bfFmtDate(iso){
       try { const [y,m,dd]=String(iso).split("-"); const mn=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"]; return (+dd)+" "+mn[(+m)-1]+" "+y; } catch(_){ return iso; }
     }
+    // ترجمة أسماء برامج الجروبات للعربي (العرض فقط؛ القيمة تبقى الاسم الأصلي للربط).
+    const BF_GRP_AR = {
+      "amsterdam and paris": "أمستردام وباريس",
+      "spain, switzerland and rome": "إسبانيا وسويسرا وروما",
+      "classical italy and switzerland": "إيطاليا وسويسرا الكلاسيكية",
+      "itlay+austria classical symphony": "إيطاليا والنمسا — سيمفونية كلاسيكية",
+      "italy+austria+switzerland+france": "إيطاليا والنمسا وسويسرا وفرنسا",
+      "austria+hungary+slovakia+czech": "النمسا والمجر وسلوفاكيا والتشيك",
+      "england": "إنجلترا",
+      "spain": "إسبانيا",
+      "italian holidays": "العطلات الإيطالية",
+    };
+    function bfGrpAr(name){
+      const k = String(name).toLowerCase().replace(/\s*\+\s*/g, "+").replace(/\s+/g, " ").trim();
+      return BF_GRP_AR[k] || name;   // لو مترجم → عربي، وإلا الاسم كما هو (مثل «الروح الفرنسية والسويسرية»)
+    }
     async function bfLoadGroups(){
       try {
         const r = await fetch(BF_TAI, { method:"POST", headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+BF_TAI_KEY, "apikey":BF_TAI_KEY }, body: JSON.stringify({ action:"groups_list" }) });
@@ -4700,7 +4716,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           if (!name) return;
           BF_GROUPS[name] = { dates: Array.isArray(g.dates) ? g.dates.slice() : [] };
           const opt = document.createElement("option");
-          opt.value = name; opt.textContent = name;
+          opt.value = name; opt.textContent = bfGrpAr(name);
           og.appendChild(opt);
         });
       } catch(_) { /* أفضل جهد */ }
