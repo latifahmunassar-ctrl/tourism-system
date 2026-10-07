@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-07-umrah-detect-strong'
+  var BUILD = '2026-10-07-group-routing'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -6529,6 +6529,28 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     const _isb=document.getElementById('indivSendBtn'); if(_isb) _isb.style.display='';
     const _isv=document.getElementById('indivSaveBtn'); if(_isv) _isv.style.display='';
     const _csb=document.getElementById('inboxSendBtn'); if(_csb) _csb.style.display='none';
+    // 🚌 طلب جروب: وجهته تطابق برنامج جروب → وجّهه للوحة «برامج الجروبات» للتسعير
+    //    (تسعير الجروب ثابت بالشيت، لا يُبنى بالباني الفردي). يُطابَق بالاسم العربي
+    //    (نفس ترجمة grpArabicName في الطرفين) ثم يُختار البرنامج + التاريخ + العدد ويُعرَض.
+    try {
+      if (typeof GRP_PROGRAMS !== 'undefined') {
+        if (!GRP_LOADED && typeof grpLoad === 'function') { try { await grpLoad(); } catch(_){} }
+        const _destB = String(b.destination||'').trim();
+        const _gi = (GRP_PROGRAMS||[]).findIndex(g => (g.programAr || (typeof grpArabicName==='function'?grpArabicName(g.program||''):'')) === _destB);
+        if (_gi >= 0) {
+          if (typeof fpTab === 'function') fpTab('groups');
+          const dSel=document.getElementById('grp-dest'); if(dSel){ dSel.value=String(_gi); if(typeof grpOnDest==='function') grpOnDest(); }
+          const dtSel=document.getElementById('grp-date'); if(dtSel && b.date_from){ const o=[...dtSel.options].find(x=>x.value===b.date_from); if(o) dtSel.value=o.value; }
+          const pxEl=document.getElementById('grp-pax'); if(pxEl && b.pax) pxEl.value=b.pax;
+          const ptEl=document.getElementById('grp-ptype'); if(ptEl) ptEl.value='individual';
+          if(typeof grpOnDate==='function') grpOnDate();
+          if(typeof grpShow==='function') grpShow();
+          if(typeof grpMsg==='function') grpMsg('🚌 طلب جروب للعميل — اختيرَ البرنامج والتاريخ والعدد تلقائياً، راجعي التسعير ثم جهّزي العرض.');
+          window.scrollTo({top:0,behavior:'smooth'});
+          return;
+        }
+      }
+    } catch(_){ /* لو فشل التوجيه نكمل بالمسار العادي */ }
     // ✅ برنامج معتمد محفوظ سابقاً → حمّله كما هو (لا تعيد البناء حتى لا يتغيّر
     // المقترح ولا الأسعار). يخص الطلبات اللي سبق بُنيت وأُرسلت/حُفظت.
     // ⚠️ لكن لا نحمّل برنامجاً محفوظاً مكسوراً «بلا فنادق» (قسم HOTELS متبوع بسطر فاضي) — نعيد بناءه.

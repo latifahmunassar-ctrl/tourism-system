@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20261007f -->
+<!-- APPVER:20261007g -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1870,7 +1870,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20261007f";
+    const APPVER = "20261007g";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4694,21 +4694,26 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     function bfFmtDate(iso){
       try { const [y,m,dd]=String(iso).split("-"); const mn=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"]; return (+dd)+" "+mn[(+m)-1]+" "+y; } catch(_){ return iso; }
     }
-    // ترجمة أسماء برامج الجروبات للعربي (العرض فقط؛ القيمة تبقى الاسم الأصلي للربط).
-    const BF_GRP_AR = {
-      "amsterdam and paris": "أمستردام وباريس",
-      "spain, switzerland and rome": "إسبانيا وسويسرا وروما",
-      "classical italy and switzerland": "إيطاليا وسويسرا الكلاسيكية",
-      "itlay+austria classical symphony": "إيطاليا والنمسا — سيمفونية كلاسيكية",
-      "italy+austria+switzerland+france": "إيطاليا والنمسا وسويسرا وفرنسا",
-      "austria+hungary+slovakia+czech": "النمسا والمجر وسلوفاكيا والتشيك",
-      "england": "إنجلترا",
-      "spain": "إسبانيا",
-      "italian holidays": "العطلات الإيطالية",
+    // ترجمة أسماء برامج الجروبات للعربي — **نفس خرائط team.html بالضبط** (GRP_AR_FULL/WORDS)
+    // حتى يتطابق الاسم المحفوظ مع ما يعرضه المساعد السياحي، فيُربَط الطلب بالجروب للتسعير.
+    const GRP_AR_WORDS={italy:'إيطاليا',italian:'إيطاليا',itlay:'إيطاليا',austria:'النمسا',switzerland:'سويسرا',swiss:'سويسرا',france:'فرنسا',french:'فرنسا',spain:'إسبانيا',spanish:'إسبانيا',england:'إنجلترا',britain:'بريطانيا',uk:'المملكة المتحدة',amsterdam:'أمستردام',paris:'باريس',rome:'روما',netherlands:'هولندا',netherland:'هولندا',holland:'هولندا',hungary:'المجر',slovakia:'سلوفاكيا',czech:'التشيك',belgium:'بلجيكا',portugal:'البرتغال',germany:'ألمانيا',classical:'الكلاسيكية',symphony:'السيمفونية',holidays:'العطلات',holiday:'العطلة',andalusian:'أندلسية',story:'قصة',spirit:'الروح',imperial:'الإمبراطورية',capitals:'العواصم',roaming:'جولة في',morocco:'المغرب',japan:'اليابان',kyoto:'كيوتو',china:'الصين'};
+    const GRP_AR_FULL={
+      'amsterdam and paris':'أمستردام وباريس','spain, switzerland and rome':'إسبانيا وسويسرا وروما',
+      'classical italy and switzerland':'إيطاليا الكلاسيكية وسويسرا','italian holidays':'العطلات الإيطالية',
+      'classical symphony':'السيمفونية الكلاسيكية','itlay + austria classical symphony':'السيمفونية الكلاسيكية — إيطاليا والنمسا',
+      'italy + austria + switzerland + france':'إيطاليا والنمسا وسويسرا وفرنسا','austria + hungary + slovakia + czech':'النمسا والمجر وسلوفاكيا والتشيك',
+      'a time to remember':'وقت لا يُنسى','roaming the united kingdom':'جولة في المملكة المتحدة',
+      'imperial capitals':'العواصم الإمبراطورية','an andalusian story':'قصة أندلسية',
+      'french and swiss spirit':'الروح الفرنسية والسويسرية','surprising morocco':'مفاجآت المغرب',
+      'capitals of japan and kyoto':'عواصم اليابان وكيوتو','england':'إنجلترا','spain':'إسبانيا',
     };
     function bfGrpAr(name){
-      const k = String(name).toLowerCase().replace(/\s*\+\s*/g, "+").replace(/\s+/g, " ").trim();
-      return BF_GRP_AR[k] || name;   // لو مترجم → عربي، وإلا الاسم كما هو (مثل «الروح الفرنسية والسويسرية»)
+      const key=String(name||'').toLowerCase().replace(/\s*\+\s*/g,' + ').replace(/\s+/g,' ').trim();
+      if(GRP_AR_FULL[key]) return GRP_AR_FULL[key];
+      let s=' '+String(name||'')+' ';
+      for(const k in GRP_AR_WORDS){ s=s.replace(new RegExp('([\\s+,&]|^)'+k+'(?=[\\s+,&]|$)','gi'),'$1'+GRP_AR_WORDS[k]); }
+      s=s.replace(/\s*&\s*/g,' و').replace(/\s+and\s+/gi,' و').replace(/\s*,\s*/g,'، ').replace(/\s*\+\s*/g,' + ');
+      return s.replace(/\s+/g,' ').trim() || String(name||'');
     }
     async function bfLoadGroups(){
       try {
