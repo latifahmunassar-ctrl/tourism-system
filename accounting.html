@@ -5236,7 +5236,7 @@ function renderBanks(){
   // البنك صاحب آخر عملية (الأحدث) يطلع أول صف — عمليات الداشبورد الجديدة لها الأولوية ثم تاريخ الحركة
   const bankRecency=b=>{ let key=''; for(const x of (byBank[b]||[])){ const k=(x.source==='dashboard'?'2_'+(x.created_at||''):'1_'+(x.tx_date||'')); if(k>key)key=k; } return key; };
   // نعرض فقط البنوك/البطاقات المُدخلة في القائمة المُدارة (قسم البيانات) — نستبعد أي اسم بنك قديم من الحركات غير موجود بالقائمة
-  const _mgBankSet=new Set(listValues('banks').map(v=>String(v.value||'').trim().toLowerCase()).filter(Boolean));
+  const _mgBankSet=new Set(listValues('banks').map(v=>bankAlias(String(v.value||'').trim()).toLowerCase()).filter(Boolean));   // 🏦 تطبيع بـ bankAlias ليطابق مفاتيح byBank (يصلح اختفاء Bank Dhofar USD بسبب فرق المسافة قبل رقم الحساب)
   const names=Object.keys(byBank).filter(b=>_mgBankSet.has(String(b).trim().toLowerCase())).sort((a,b)=> bankRecency(b).localeCompare(bankRecency(a)) || (byBank[b].length-byBank[a].length));
   const sel=$('bankflt'); if(sel){ const cur=sel.value; sel.innerHTML='<option value="">— كل البنوك والبطاقات —</option>'+names.map(b=>'<option>'+esc(b)+'</option>').join(''); if(names.indexOf(cur)>=0)sel.value=cur; }
   const dl=$('banklist'); if(dl) dl.innerHTML=names.map(b=>'<option value="'+esc(b)+'"></option>').join('');
