@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20261007e -->
+<!-- APPVER:20261007f -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1870,7 +1870,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20261007e";
+    const APPVER = "20261007f";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4590,7 +4590,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       const missReq = [];
       if (!payload.destination) missReq.push("الوجهة");
       if (!(parseInt(payload.pax) >= 1)) missReq.push("عدد الأشخاص");
-      if (!(parseInt(payload.days) >= 1)) missReq.push("عدد الأيام");
+      if (!isGroup && !(parseInt(payload.days) >= 1)) missReq.push("عدد الأيام");
       if (!isDomestic && !isGroup && (!payload.arrival_airport || !payload.departure_airport)) missReq.push("مطار القدوم/المغادرة");
       if (!isGroup && !payload.distribution) missReq.push("توزيع المدن (اختاري اقتراحاً جاهزاً أو أضيفي المدن من «تخصيص»)");
       if (missReq.length) {
@@ -4721,7 +4721,8 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           const name = String(g.program || g.tab || "").replace(/\s*\(\s*Group\s*\)\s*$/i, "").trim();
           if (!name) return;
           const ar = bfGrpAr(name);
-          BF_GROUPS[name] = { dates: Array.isArray(g.dates) ? g.dates.slice() : [], ar };
+          const days = Array.isArray(g.itinerary) ? g.itinerary.length : 0;  // عدد أيام البرنامج (مسجّل بالنظام)
+          BF_GROUPS[name] = { dates: Array.isArray(g.dates) ? g.dates.slice() : [], ar, days };
           BF_GROUPS_AR[ar] = name;
           const opt = document.createElement("option");
           opt.value = name; opt.textContent = ar;
@@ -4749,6 +4750,12 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       if (distSec) distSec.style.display = isGrp ? "none" : "";
       const aSel = $("bf-airport");
       if (aSel && aSel.closest("label")) aSel.closest("label").style.display = isGrp ? "none" : "";
+      // عدد الأيام: للجروب محدّد مسبقاً → يُملأ تلقائياً من النظام ويُقفل للتعديل.
+      const dInp = $("bf-days");
+      if (dInp) {
+        if (isGrp && g.days > 0) { dInp.value = g.days; dInp.readOnly = true; dInp.style.background = "#f1f5f9"; }
+        else { dInp.readOnly = false; dInp.style.background = ""; }
+      }
     }
     if ($("bf-date-group")) $("bf-date-group").addEventListener("change", e => { const inp = $("bf-date_from"); if (inp) inp.value = e.target.value; });
     bfLoadGroups();
