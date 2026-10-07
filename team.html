@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-04-approx-price'
+  var BUILD = '2026-10-07-umrah-includes'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5505,12 +5505,22 @@ ${itineraryHTML}
 <div class="pdf-includes" style="background:#eafaf1;border:1px solid #bfe8d0;border-radius:14px;padding:16px 20px;margin-bottom:18px;">
   <div style="font-size:20px;font-weight:900;color:#0e7c4a;margin-bottom:8px;">✅ يشمل البرنامج</div>
   <ul style="margin:0;padding:0;line-height:2;font-weight:800;color:#13433a;font-size:16px;list-style:none;">
-    ${hotelsLines.length ? '<li>🏨 الإقامة في الفنادق الموضّحة أعلاه (حسب الفئة والإفطار المذكور).</li>' : ''}
-    ${flightsLines.some(l=>{const k=String(l.split('|')[1]||'');return k && !k.includes('قطار');}) ? '<li>✈️ الطيران الداخلي بين المدن.</li>' : ''}
-    ${flightsLines.some(l=>String(l.split('|')[1]||'').includes('قطار')) ? '<li>🚆 القطار بين المدن.</li>' : ''}
-    ${transfersLines.length ? '<li>🚗 المواصلات بسيارة مكيّفة حديثة خاصة — الاستقبال والتوديع وجميع التنقّلات بين المدن.</li>' : ''}
-    ${toursLines.length ? '<li>🗺️ الجولات السياحية الموضّحة بالبرنامج.</li>' : ''}
-    ${(parseInt((arabicDigitsToLatin(String(simText||'')).match(/\d+/)||['0'])[0])||0) ? '<li>📶 شرائح اتصال (إنترنت).</li>' : ''}
+    ${(()=>{
+      // العمرة: لا جولات سياحية ولا طيران داخلي (التنقّل مكة↔المدينة بالقطار/السيارة ضمن
+      // التنقّلات). «يشمل» يعكس الخدمات الفعلية فقط — بلا أي إضافة غير موجودة بالبرنامج.
+      const _isUmrah = /عمرة|عمره|مكة|مكه|المدين[ةه]\s*المنور[ةه]|الحرم/.test(String(dest||''));
+      const _hasFlight = flightsLines.some(l=>{const k=String(l.split('|')[1]||'');return k && !k.includes('قطار');});
+      const _hasTrain  = flightsLines.some(l=>String(l.split('|')[1]||'').includes('قطار'));
+      const _hasSim = (parseInt((arabicDigitsToLatin(String(simText||'')).match(/\d+/)||['0'])[0])||0) > 0;
+      const li = [];
+      if (hotelsLines.length) li.push('<li>🏨 الإقامة في الفنادق الموضّحة أعلاه (حسب الفئة والإفطار المذكور).</li>');
+      if (_hasFlight && !_isUmrah) li.push('<li>✈️ الطيران الداخلي بين المدن.</li>');
+      if (_hasTrain) li.push('<li>🚆 القطار بين المدن.</li>');
+      if (transfersLines.length) li.push('<li>🚗 المواصلات بسيارة مكيّفة حديثة خاصة — الاستقبال والتوديع وجميع التنقّلات بين المدن.</li>');
+      if (toursLines.length && !_isUmrah) li.push('<li>🗺️ الجولات السياحية الموضّحة بالبرنامج.</li>');
+      if (_hasSim) li.push('<li>📶 شرائح اتصال (إنترنت).</li>');
+      return li.join('');
+    })()}
   </ul>
 </div>
 <div class="pdf-excludes">
