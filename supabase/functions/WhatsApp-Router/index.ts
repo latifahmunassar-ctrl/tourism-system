@@ -2064,6 +2064,13 @@ ${returning
     _nightsGateFired = true;
   }
 
+  // للعمرة: نستخدم «المعتمرين» لا «المسافرين» عند سؤال العدد (طلب المالكة).
+  if (_isUmrahPax) {
+    outMsgs = outMsgs.map(m => String(m)
+      .replace(/عدد\s*المسافرين/g, "عدد المعتمرين")
+      .replace(/المسافرين\s*معكم/g, "المعتمرين معكم")
+      .replace(/كم\s*عدد\s*المسافرين/g, "كم عدد المعتمرين"));
+  }
   for (const raw of outMsgs.slice(0, 3)) {
     const msg = stripBannedPhrases(raw);
     if (!msg) continue; // لو الرسالة كانت كلها عبارات ممنوعة، تجاهلها
@@ -2084,7 +2091,14 @@ ${returning
   if (!String(_mergedData.destination || "").trim() && _destLabel) _mergedData.destination = _destLabel;
   upd.intake_data = _mergedData;
   // ❌ لا نقفل الاستقبال إذا الحارس لسّه يسأل عن العدد/الأطفال/الليالي/شهر العسل.
-  if (out.complete === true && !_ageGateFired && !_nightsGateFired && !_hmPaxGateFired && !_paxGateFired) upd.intake_active = false;
+  // ⚠️ ولا نقفله ما دامت **الأساسيات ناقصة** (وجهة + عدد + تاريخ [+ ليالي للعمرة]) —
+  //    حتى لو قفل النموذج مبكراً (complete=true). السبب: في وضع PREVIEW، الاستقبال
+  //    المُغلق يكبح كل الردود التالية (العميل يبقى بلا رد = «طلال يقف»). نبقيه مفتوحاً
+  //    فيكمل طلال جمع الناقص برسائل العميل القادمة.
+  const _dateKnown = !!String(_mergedData.date || "").trim()
+    || /\d{1,2}\s*[\/\-]\s*\d{1,2}|\d{1,2}\s*(?:يناير|فبراير|مارس|إبريل|أبريل|مايو|يونيو|يوليو|أغسطس|سبتمبر|أكتوبر|نوفمبر|ديسمبر)|شهر\s*\d{1,2}|نهاي[ةه]\s*\d{1,2}|بداي[ةه]\s*\d{1,2}/.test(transcript);
+  const _essentialsMissing = !_destKnown || !_paxKnown || !_dateKnown || (_isUmrahPax && !_nightsKnown);
+  if (out.complete === true && !_ageGateFired && !_nightsGateFired && !_hmPaxGateFired && !_paxGateFired && !_essentialsMissing) upd.intake_active = false;
   await supabase.from("whatsapp_sessions").update(upd).eq("phone", from);
 }
 
