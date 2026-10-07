@@ -7259,13 +7259,31 @@ Deno.serve(async (req) => {
       }
       const ksaToday = ksaNow.toISOString().slice(0, 10);
       const { data: due } = await supabase.from("whatsapp_sessions")
-        .select("phone, profile_name")
+        .select("phone, profile_name, last_outbound_at")
         .lte("followup_due_date", ksaToday)
         .eq("followup_done", false)
         .not("followup_due_date", "is", null)
         .limit(80);
-      let sent = 0, failed = 0;
-      for (const s of ((due || []) as Array<{ phone: string; profile_name: string | null }>)) {
+      let sent = 0, failed = 0, skippedActive = 0;
+      for (const s of ((due || []) as Array<{ phone: string; profile_name: string | null; last_outbound_at: string | null }>)) {
+        // ❌ لا نرسل متابعة «عسى البرنامج عجبك؟» لو العميل **ردّ بعد ما أرسلنا له**
+        //    (يطلب تعديلاً أو يستفسر) — رسالته ما زالت بانتظار رد، والمتابعة الآلية
+        //    تُربكه (شوهد: العميل أرسل «وايضا طيران العماني» ثم جاءته «طمّنّي» فاستغرب).
+        //    المتابعة للعملاء الصامتين فقط (آخر شيء بالمحادثة هو إرسالنا).
+        try {
+          const { data: _lastIn } = await supabase.from("wa_message_audit")
+            .select("received_at").eq("from_phone", s.phone)
+            .order("received_at", { ascending: false }).limit(1).maybeSingle();
+          const _inMs = (_lastIn as { received_at?: string } | null)?.received_at
+            ? new Date(String((_lastIn as { received_at?: string }).received_at)).getTime() : 0;
+          const _outMs = s.last_outbound_at ? new Date(String(s.last_outbound_at)).getTime() : 0;
+          if (_inMs && _inMs > _outMs) {
+            // العميل ردّ بعد آخر إرسال منّا → نشط/بانتظار رد؛ نتخطّى ونعلّمها done.
+            await supabase.from("whatsapp_sessions").update({ followup_done: true }).eq("phone", s.phone);
+            skippedActive++;
+            continue;
+          }
+        } catch (_e) { /* أفضل جهد — لو فشل الفحص نكمل بالسلوك المعتاد */ }
         // ❌ بلا اسم العميل ولا أي كلمة مُضافة (لا «أستاذي» ولا غيرها) — نرسل نص
         //    المتابعة كما هو فقط، لتفادي ظهور اسم بروفايل غريب يفضح أنه رد آلي.
         const followupBody = `طمّنّي 🌟 عسى البرنامج اللي أرسلناه لك عجبك، وإذا تبي أي تعديل أو عندك استفسار أنا حاضر لخدمتك.`;
@@ -7288,7 +7306,7 @@ Deno.serve(async (req) => {
         // علّمها done دائماً (نجاح أو فشل) لتفادي إعادة المحاولة كل ساعة.
         await supabase.from("whatsapp_sessions").update({ followup_done: true }).eq("phone", s.phone);
       }
-      return new Response(JSON.stringify({ ok: true, sent, failed, due: (due || []).length }), { headers: jsonCors });
+      return new Response(JSON.stringify({ ok: true, sent, failed, skippedActive, due: (due || []).length }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }
