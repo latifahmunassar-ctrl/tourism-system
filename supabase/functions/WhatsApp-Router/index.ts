@@ -769,7 +769,13 @@ function stripBannedPhrases(text: string): string {
     /(?:ما\s*شاء\s*الله|الله\s+يعطيك\s+العافية|الله\s+يسعدك|تسلم)\b/g,
     /أنا\s+هنا\s+لتجميع\s+معلوماتك/g, /أنا\s+هنا\s+لمساعدتك/g,
     /شكراً\s+على\s+(?:المعلومة|التواصل)/g,
+    // عبارات افتراضية/وعدية غير مناسبة بالعمرة (المالكة: «حاضر/أبشر» فقط).
+    // ملاحظة: \b لا يعمل مع الحروف العربية في JS، فنعتمد على اللاحقة الصريحة.
+    /(?:أبشر|ابشر)\s+نساعدك\s+ب?عمرت(?:كم|كن|كما|ك)?/g,
+    /مبارك(?:ة)?\s+ب?عمرت(?:كم|كن|كما|ك)?/g,
   ];
+  // «أبشر بعمرتكم» → «أبشر» (نُبقي الأدب ونحذف الافتراض).
+  t = t.replace(/(أبشر|ابشر)\s+ب?عمرت(?:كم|كن|كما|ك)?/g, "$1");
   for (const re of banned) t = t.replace(re, " ");
   // تنظيف ما تبقّى من فراغات/علامات بعد الحذف.
   t = t.replace(/[ \t]{2,}/g, " ")               // فراغات مزدوجة
@@ -1138,6 +1144,79 @@ async function checkStalledMessages(
     `\n\nراجعوها ورودوا على العملاء يدوياً 🙏`;
   for (const admin of admins) {
     try { await sendStaffNotice(admin, notice); } catch (_) {}
+  }
+}
+
+// ── Watchdog: detect a TOTAL inbound outage ──────────────────────────────
+// حادثة ٥-٦ أكتوبر ٢٠٢٦: توقّف استقبال رسائل العملاء بالكامل (تصل من Meta
+// لكن لا تُسجَّل) ومرّت أيام قبل ما ننتبه. هذا الفحص يرصد الصمت الكامل:
+// لو ما وصلت أي رسالة واردة منذ مدة طويلة خلال ساعات العمل، ينبّه المالكة
+// عبر CallMeBot (قناة مستقلة تماماً عن Meta — نفس رقم تنبيهات الأمان في
+// acc_config) حتى لو كان عطل Meta نفسه يمنع الإرسال عبر الواتساب الرسمي.
+// مربوط بالكرون run_watchdog. يفحص آخر received_at في wa_message_audit،
+// ويمنع التكرار عبر مفتاح inbound_silence_alert_at في wa_settings.
+const INBOUND_SILENCE_THRESHOLD_MS = 3 * 60 * 60 * 1000; // ٣ ساعات صمت
+const INBOUND_SILENCE_REALERT_MS = 3 * 60 * 60 * 1000;   // لا تكرّر التنبيه قبل ٣ ساعات
+async function checkInboundSilence(
+  supabase: ReturnType<typeof createClient>,
+): Promise<void> {
+  try {
+    // بوابة ساعات العمل بتوقيت عُمان (UTC+4): ٨ صباحاً–١١ مساءً محلي = ٤–١٩ UTC.
+    const utcHour = new Date().getUTCHours();
+    if (utcHour < 4 || utcHour >= 19) return;
+
+    // آخر رسالة واردة فعلاً (wa_message_audit كلها واردة).
+    const { data: last } = await supabase
+      .from("wa_message_audit")
+      .select("received_at")
+      .not("received_at", "is", null)
+      .order("received_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const lastMs = last?.received_at ? new Date(String(last.received_at)).getTime() : 0;
+    const silentMs = Date.now() - lastMs;
+    if (silentMs < INBOUND_SILENCE_THRESHOLD_MS) return; // الاستقبال يعمل
+
+    // منع التكرار: لا تنبّه لو نبّهنا مؤخراً.
+    const { data: alertRow } = await supabase
+      .from("wa_settings")
+      .select("value")
+      .eq("key", "inbound_silence_alert_at")
+      .maybeSingle();
+    const lastAlertMs = alertRow?.value ? new Date(String(alertRow.value)).getTime() : 0;
+    if (Date.now() - lastAlertMs < INBOUND_SILENCE_REALERT_MS) return;
+
+    // قناة التنبيه المستقلة: CallMeBot (نفس رقم تنبيهات الأمان في acc_config).
+    const { data: cfg } = await supabase
+      .from("acc_config")
+      .select("key,value")
+      .in("key", ["callmebot_phone", "callmebot_apikey"]);
+    const m: Record<string, string> = {};
+    (cfg as Array<{ key: string; value: string }> | null || [])
+      .forEach((r) => { m[r.key] = r.value; });
+    const phone = m.callmebot_phone;
+    const apikey = m.callmebot_apikey;
+    if (!phone || !apikey) return; // ما في قناة تنبيه → لا شيء نسويه
+
+    const hrs = (silentMs / 3600000).toFixed(1);
+    const msg =
+      `⚠️ تنبيه واتساب العمل: ما وصلت أي رسالة عميل منذ ${hrs} ساعة.\n` +
+      `قد يكون استقبال الواتساب متوقّف (عطل تسليم من Meta أو توكن).\n` +
+      `افحصي اللوحة، أو شغّلي webhook_health للتأكد.`;
+    await fetch(
+      "https://api.callmebot.com/whatsapp.php?phone=" + encodeURIComponent(phone) +
+      "&apikey=" + encodeURIComponent(apikey) +
+      "&text=" + encodeURIComponent(msg),
+    );
+
+    // ختم وقت التنبيه لمنع التكرار.
+    await supabase.from("wa_settings").upsert([{
+      key: "inbound_silence_alert_at",
+      value: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }]);
+  } catch (err) {
+    console.error("checkInboundSilence error", err);
   }
 }
 
@@ -1767,7 +1846,7 @@ ${returning
   ? `- هذا عميل **سبق تعامل معنا وعاد بطلب وجهة جديدة**. ابدأ أول رد بترحيب بعودته بطريقة تُشعره أنك تعرفه (لا كأنها أول مرة): "حياك الله من جديد 🌟 سعدنا برجوعك! معك طلال" (كرسالة قصيرة لحالها) ثم اسأل عن أول معلومة ناقصة للرحلة الجديدة برسالة ثانية قصيرة.\n- ⚠️ تجاهل تفاصيل أي رحلة قديمة في السياق؛ هذا طلب رحلة جديدة — اجمع معلوماتها من جديد.`
   : alreadyGreeted
     ? `- ⚠️⚠️ أنت **في منتصف المحادثة** وسبق أن عرّفت بنفسك ورحّبت. ❌ ممنوع منعاً باتاً تعرّف بنفسك («معك طلال») أو ترحّب («حياك الله / وعليكم السلام / حياك من جديد») مرة ثانية. أكمل **مباشرة** بسؤال أول معلومة ناقصة برسالة **واحدة** قصيرة.\n  • **استثناء وحيد**: لو سأل العميل صراحةً «مين أنت / إنت مين / مع مين أتكلم / إنت بوت؟» → ردّ فقط: «معك طلال من خدمة العملاء 🌟» ثم أكمل سؤالك.`
-    : `- أول رد: رحّب وعرّف بنفسك واسأل أول معلومة ناقصة **في رسالة واحدة طبيعية** (لا رسالتين منفصلتين). التعريف **مرة واحدة فقط** طوال المحادثة. ${adRef ? "⚠️⚠️ **العميل جاء من إعلان محدّد** — ❌ ممنوع تسأله «وين حابين تسافرون» بالترحيب؛ الوجهة معروفة من إعلانه (مكة/عمرة = مكة والمدينة). رحّب واسأل أول معلومة **غير الوجهة** (مثل عدد المسافرين)، مثال: «حياك الله 🌟 معك طلال، أبشر نساعدك بعمرتك — كم عدد المعتمرين معك؟»." : "مثال: «حياك الله 🌟 معك طلال من خدمة العملاء، وين حابين تسافرون؟»."}`}
+    : `- أول رد: رحّب وعرّف بنفسك واسأل أول معلومة ناقصة **في رسالة واحدة طبيعية** (لا رسالتين منفصلتين). التعريف **مرة واحدة فقط** طوال المحادثة. ${isUmrah ? "⚠️ **طلب عمرة** — الوجهة معروفة (مكة والمدينة)، ❌ ممنوع تسأل «وين حابين تسافرون»؛ رحّب واسأل أول ناقص غير الوجهة (مثل عدد المعتمرين)، مثال: «حياك الله 🌟 معك طلال من خدمة العملاء، كم عدد المعتمرين معكم؟». ❌❌ ممنوع تقول «أبشر بعمرتكم» أو «مبارك عمرتكم» أو أي عبارة تَعِد/تفترض — استخدم **«حاضر» أو «أبشر» أو «حياك الله»** فقط ثم السؤال مباشرة." : adRef ? "⚠️⚠️ **العميل جاء من إعلان.** • لو عرفت الوجهة (من **صورة عرض أرسلها**، أو **ذكرها بكلامه**، أو كان الإعلان عن **عرض/وجهة واحدة محددة**) → ❌❌ ممنوع تسأل «وين تسافرون»؛ استخدم الوجهة مباشرة واسأل أول ناقص (عدد المسافرين). • لو كان الإعلان **عدة عروض (كاروسيل)** ولم يحدّد العميل أيّها بعد → اسأله **أي عرض/وجهة يقصد** (لا «وين تسافرون» العامة)، مثال: «حياك الله 🌟 معك طلال — أي وجهة من عروضنا شدّت انتباهك؟». ❌ لا تفترض أبداً أن الإعلان عن مكة/عمرة ما لم يُذكر ذلك صراحة." : "مثال: «حياك الله 🌟 معك طلال من خدمة العملاء، وين حابين تسافرون؟»."}`}
 - ⚠️ ممنوع منعاً باتاً أي مدح أو تعليق أو عبارة حماس/تأكيد قبل سؤالك. لا تقل نهائياً: «حلو / ممتاز / جميل / رائع / اختيار موفق / تمام تمام / تمام نمرة واحدة / نمرة واحدة / حلو الاختيار / ما شاء الله». ❌ لا تبدأ ردك بأي مجاملة أو تأكيد — ابدأ مباشرة بـ«حياك الله/أبشر/حاضر» (للأدب فقط) ثم السؤال، أو بالسؤال مباشرة. كن مباشراً ومحترفاً.
 - ردودك قصيرة جداً: سؤال واحد مختصر، بلا ملخصات ولا علامات ✓ ولا كلام زائد.
 - ⚠️ نوّع صياغتك ولا تجعلها قالباً آلياً: ❌ لا تبدأ **كل** رسالة بنفس الكلمة (حاضر/أبشر)، ولا تختم **كل** رسالة بـ🌟، ولا تكرر «شكراً على المعلومة/التواصل» كل مرة. تكلّم طبيعي ومتنوّع مثل موظف بشري.
@@ -1782,6 +1861,8 @@ ${returning
   • ⚠️ لو ذكر العميل من البداية برنامجاً/فندقاً/جولات **مع** التذاكر → هذا طلب برنامج عادي، **تجاهل هذه القاعدة** واجمع المعلومات مباشرة.
   • ⛔⛔ **هذه القاعدة للتذاكر (الطيران) فقط — لا تنطبق أبداً على الفنادق.**
 - 🏨🏨 **حجز الفندق فقط = خدمة نقدّمها (لا ترفضها إطلاقاً):** لو طلب العميل **حجز فندق فقط** (مثل «أريد فقط حجز فندق»، «ما أريد تذاكر أبي فندق»، «بس فندق في مكة/المدينة»، «بكم سعر الفندق»، «حجز فندق بس») → ❌❌ **ممنوع منعاً باتاً تعتذر أو تقول «ما نقدّمه»** — نحن **نحجز الفنادق** (خصوصاً فنادق مكة والمدينة للعمرة). عامله كطلب عادي واجمع **الناقص فقط**: ⚠️ **لو الوجهة/المدينة معروفة (من الإعلان أو عمرة أو سبق ذكرها) لا تسأل عنها إطلاقاً** — ❌ ممنوع «وين تبون الفندق/أي مدينة». اجمع (عدد الأشخاص + التواريخ + فئة/تفضيل الفندق) وأقفل بـ«تمام أستاذي 🌟 معلوماتك وصلت، زميلنا المختص راح يوافيك بأفضل خيارات الفنادق قريباً» (complete=true). لو كان **عمرة/إعلان مكة**، الفندق في مكة/المدينة معروف — اجمع عدد المعتمرين + التواريخ + توزيع الليالي مكة/المدينة، **بلا سؤال عن الوجهة**.
+- 💑 **شهر العسل = شخصان (٢):** لو ذكر العميل «شهر عسل / هني مون / honeymoon / عرسنا / متزوجين جدد» فالمسافرون **اثنان بالبداهة**. ❌ لا تسأل «كم عدد المسافرين» من الصفر — بل **أكّد**: «مبارك شهر العسل 🌟 أفهم إنكم شخصين (٢)، صح؟» وخزّن pax=2، وهما **بالغان** (لا تسأل عن أطفال).
+- 🔢 **سؤال واحد كل رد، والترتيب: الوجهة ← عدد المسافرين ← الأطفال/الأعمار ← التاريخ.** ❌❌ ممنوع تدمج سؤالين في رسالة واحدة (مثل «متى السفر وكم عددكم؟») — العميل يجيب عن واحد فقط فتضيع المعلومة الثانية. اسأل **عدد المسافرين قبل التاريخ**، وما تنتقل لسؤال تالٍ قبل ما تاخذ جواب الحالي. المعلومات اللازمة لتسليم الطلب للموظف: **الوجهة + ترتيب/مدن الوجهة + عدد المسافرين + التاريخ + هل فيهم أطفال (وأعمارهم)** — لا تقفل قبل اكتمالها.
 - ⚠️ قاعدة الأعمار الصارمة:
   • 👶👶 **بعد ما يعطيك عدد المسافرين، لازم تعرف: هل فيهم أطفال ولا كلهم بالغين؟** لو أعطاك **رقماً فقط** بلا توضيح (مثل «كلنا ٤»، «٤ أشخاص»، «خمسة») ولا فيه ذكر أطفال/عيال → اسأله صراحة **مرة واحدة**: «تمام، الأربعة كلهم بالغين ولا فيه أطفال؟ 👶» (أو «العدد كامل بالغين ولا معكم أطفال؟»). ❌ لا تتجاوز هذا افتراضاً أنهم بالغين.
   • لو ذكر العميل **أطفال/عيال/رضيع** (أو ردّ إن فيه أطفال) → اسأل عن **أعمار الأطفال فقط فوراً** (مثل: كم أعمار الأطفال؟) لأن السعر يعتمد على عمر الطفل. خزّن أعمار الأطفال في ages وعددهم في children.
@@ -1816,7 +1897,7 @@ ${returning
      (ب) **تاريخ السفر** — لو أعطى **مدى** (من–إلى) فالمدة محسومة تلقائياً، ❌ لا تسأل عن عددها.
      ${isOmani ? "(ج) **مطار المغادرة**: «الإقلاع من مطار صلالة أو مطار مسقط؟» (حصريّاً للعُماني)." : "(ج) لا تسأل عن المطار (العميل غير عُماني)."}
      (د) ${isAdOfferInquiry
-    ? "🕋 ⛔⛔ **العميل يسأل عن عرض مكة المحدّد من الإعلان — العرض ثابت ومعرّف مسبقاً (مدنه/توزيعه/فندقه معروف).** ❌❌❌ ممنوع منعاً باتاً تسأله «تبي مكة لحالها ولا تضيف المدينة» ولا «كم ليلة في مكة/المدينة» ولا أي إعادة هيكلة — هو يسأل عن **عرض جاهز** لا يصمّم رحلة. اكتفِ بجمع: عدد المعتمرين + التاريخ" + (isOmani ? " + مطار المغادرة (صلالة/مسقط)" : "") + "، وأرسل له ملف العرض/طمئنه أن زميلنا بيرسل تفاصيل العرض قريباً."
+    ? "🕋 **العميل جاء من إعلان مكة — الوجهة معروفة (عمرة) فلا تسأل عنها.** لكن إعلان مكة عرضٌ تعريفيّ وليس باقة بعدد ليالٍ ثابت: التسعير يحتاج المدة. اجمع: عدد المعتمرين + التاريخ" + (isOmani ? " + مطار المغادرة (صلالة/مسقط)" : "") + " + **عدد الليالي/الأيام** (⛔ إلزامي). اسأل **مرة واحدة** «كم ليلة تنوون في مكة؟ وإن حاب نضيف المدينة المنورة بلّغني كم ليلة فيها». ❌ لا تقفل قبل معرفة عدد الليالي (إلا إن أعطى مدى تاريخي من–إلى فالمدة محسومة). بعد اكتمالها طمئنه أن زميلنا بيجهّز له العرض."
     : "🕋 **مكة لحالها ولا مع المدينة؟ اسأل هذا (إن لم يحدّد العميل):** «تبي مكة لحالها ولا حاب أضيف لك المدينة المنورة؟». • لو **مكة فقط**: ⛔⛔ لو العميل **أعطى مدى تاريخي (من–إلى) أو عدد ليالٍ إجمالي** فالمدة معروفة، و«مكة فقط» يعني **كل الليالي في مكة تلقائياً** → ❌❌❌ ممنوع تسأل «كم ليلة في مكة» (الجواب = كل المدة)؛ اعتبر التوزيع مكتملاً. اسأل «كم ليلة في مكة؟» **فقط** لو المدة غير معروفة. • لو **الاثنتين** → اسأل التوزيع «كم ليلة في مكة وكم في المدينة؟». ولو أعطى التوزيع من البداية (مثل «3 مكة 2 المدينة») فمكتمل ولا تسأل. ⚠️ المدة بـ«الليالي/الأيام» فقط — ❌❌ ممنوع كلمة «سنة» أو «سنوات» إطلاقاً."}
      (هـ) **أعمار الأطفال** فقط لو ذكر أطفالاً.
      ❌❌ ممنوع في العمرة تسأل عن: الوجهة، ولا المطار لغير العُماني. ⛔⛔ **إلزامي قبل الإقفال: عدد الليالي/الأيام في مكة (وفي المدينة إن أضافها).** ❌❌ ممنوع منعاً باتاً تقفل (complete=true) قبل ما تعرف **كم ليلة/يوم في مكة** — حتى لو العميل من إعلان أو قال «كامل البرنامج»؛ لازم تسأله «كم ليلة تبون في مكة؟» (وكم في المدينة إن اختارها). ⛔ **استثناءان لا تسأل فيهما عن الليالي:** (١) أعطى **مدى تاريخي** (من–إلى) أو عدد ليالٍ إجمالي **واختار مكة فقط** → كل الليالي بمكة تلقائياً، مكتمل. (٢) أعطى توزيعاً صريحاً. عند اكتمال (العدد + التاريخ + **عدد الليالي/التوزيع** + المطار إن عُماني) اشكره وأقفل.
@@ -1824,7 +1905,8 @@ ${returning
 - 📢📢 **العميل من إعلان ويطلب العرض — أرسل العرض فوراً (لا تجمع معلومات قبله):** لو طلب العميل العرض (عروض/العرض/شو متوفر/ابي اشوف) → استوثق «تقصد عرض [الوجهة] اللي شفته بالإعلان؟» ولمّا يؤكّد **يُرسَل ملف العرض مباشرة** (النظام يرسله). ❌❌ ممنوع تجمع منه تاريخ/عدد/ليالي **قبل** إرسال العرض؛ العرض جاهز ويُرسَل أولاً. **بعد إرسال الملف** ادعُه لإضافة تفاصيله: «إذا عندك تاريخ معيّن أو تفاصيل ثانية حاب تضيفها بلّغني عشان أرتّب لك برنامج بناءً عليه 👍». • إن أعطاك بعدها تاريخاً/عدداً/تفاصيل → اجمعها بهدوء (بلا فورمة إلزامية) وطمئنه أن زميلنا بيجهّز له البرنامج المخصّص. • ⚠️ لو **اعترض بشيء غامض ما فهمته** → «حاضر أستاذي 🌹 بحوّل ملاحظتك لزميلنا المختص وراح يرد عليك قريباً».
 - لمّا يؤكّد العميل صحة التلخيص: اشكره بالضبط "شكراً 🌟 معلوماتك وصلت، زميلنا بيجهّز لك أفضل عرض ويتواصل معك قريباً" واجعل complete=true.
 اليوم: ${today}. المعلومات المجموعة سابقاً: ${JSON.stringify(prev)}.
-أعد JSON فقط: {"messages":["رسالة واحدة قصيرة"],"fields":{"destination":"","pax":null,"date":"","ages":"","cities":""},"complete":false}
+أعد JSON فقط: {"messages":["رسالة واحدة قصيرة"],"fields":{"destination":"","pax":null,"date":"","ages":"","cities":"","nights":""},"complete":false}
+• nights = عدد الليالي/الأيام أو التوزيع (مثل «٤ ليالي» أو «٣ مكة ٢ المدينة»). للعمرة **إلزامي** لأن السعر بالليلة. لو أعطى العميل مدى تاريخي (من–إلى) احسب الليالي وضعها هنا. وإلا "".
 حيث messages عادةً **رسالة واحدة فقط** — الإنسان الحقيقي يرسل رسالة وحدة لا رسالتين متتاليتين بنفس الثانية. ❌ لا تقسّم ردك إلى رسالتين.`;
   let out: { reply?: string; messages?: unknown; fields?: Record<string, unknown>; complete?: boolean } | null = null;
   try {
@@ -1885,8 +1967,66 @@ ${returning
   const _paxKnown = Number.isFinite(_paxNum) && _paxNum > 0;
   const _agesEmpty = !String(_gm.ages || "").trim();
   const _askedChildren = _gm.asked_children === true;
+
+  // ── حارس سؤال الوجهة (خادميّ) ───────────────────────────────────────────
+  // ❌ ممنوع نسأل «وين تسافرون» إذا الوجهة معروفة أصلاً: العميل أرسل صورة عرض،
+  // أو ذكر وجهة/مدينة، أو مخزّنة سابقاً، أو الطلب عمرة. الإعلانات متعددة العروض
+  // (كاروسيل) عندها adRef بلا وجهة محددة، والنموذج أحياناً يسأل «وين تسافرون»
+  // حتى بعد ما يذكر العميل وجهته (رسائل متلاحقة) — فنكبح السؤال خادميّاً ونسأل
+  // أول ناقص (العدد ثم التاريخ) بدله.
+  const _destStored = String(_gm.destination || "").trim();
+  let _destLabel = _destStored || (isUmrah ? "العمرة" : "") || (extractDestination(transcript) || "");
+  if (!_destLabel && _sentOwnOfferImage) {
+    // نص الصورة داخل الرسالة: «أرسل العميل صورة هذا العرض: عرض: <الوجهة> (...)».
+    const _od = String(args.body || "").replace(/^أرسل العميل صورة هذا العرض:\s*/, "");
+    _destLabel = extractDestination(_od) || (_od.match(/عرض:\s*([^\n(—\-|]+)/)?.[1] || "").trim();
+  }
+  const _destKnown = !!_destLabel || _sentOwnOfferImage;
+  const _outAsksDest = /وين\s*(?:حابين\s*|ودكم\s*|ناوين\s*)?(?:ت?سافر(?:ون|وا|وين)?|ودك(?:م)?|تبون|رايحين|قاصدين)|أي[نّ]?\s*وجه[ةه]|اي\s*وجه[ةه]|وين\s*(?:الوجهة|بتروحون)|which\s+destination/i.test(outMsgs.join(" "));
+  // رحلة شهر عسل → المسافرون شخصان (٢) بالبداهة؛ نؤكّد بدل ما نسأل من الصفر.
+  const _honeymoon = /شهر\s*ال?عسل|هني\s*مون|honeymoon|عرسنا|متزوجين\s*جدد/i.test(transcript);
+  let _destGateFired = false;
+  if (_destKnown && _outAsksDest) {
+    const _g = alreadyGreeted ? "" : "حياك الله 🌟 معك طلال، ";
+    const _forOffer = _destLabel ? `بخصوص ${/عرض|العمرة/.test(_destLabel) ? _destLabel : "عرض " + _destLabel}` : "بخصوص طلبك";
+    if (!_paxKnown && _honeymoon) outMsgs = [`${_g}${_forOffer} — مبارك شهر العسل 🌟 أفهم إنكم شخصين (٢)، صح؟ ومتى موعد السفر تقريباً؟`];
+    else if (!_paxKnown) outMsgs = [`${_g}${_forOffer} — كم عدد المسافرين معكم؟`];
+    else outMsgs = [`${_g}${_forOffer} — متى موعد السفر تقريباً؟`];
+    _destGateFired = true;
+  }
+
+  // ── حارس تأكيد عدد مسافري شهر العسل (خادميّ) ───────────────────────────
+  // طلب المالكة: شهر العسل = شخصان (٢)، ولازم طلال **يؤكّد** العدد صراحةً بدل
+  // ما يفترضه بصمت أو ينتقل للتاريخ. نفرضه إذا لم يذكر ردّ النموذج العدد بعد.
+  const _askedHmPax = _gm.asked_hm_pax === true;
+  const _outConfirmsPax = /شخصين|اثنين|٢|\b2\b|عدد\s*المسافر/.test(outMsgs.join(" "));
+  // هل ذكر العميل عدداً صريحاً؟ (لو نعم لا نؤكّد — معروف أصلاً).
+  const _paxStated = /\d+\s*(?:شخص|أشخاص|اشخاص|نفر|بالغ|كبار|معتمر|راكب|فرد)|(?:ثلاث|أربع|اربع|خمس|ست|سبع|ثمان|تسع|عشر)[ةه]?\s*(?:أشخاص|اشخاص|نفر|بالغين|أفراد)/.test(transcript);
+  let _hmPaxGateFired = false;
+  // شهر عسل بلا عدد صريح → أكّد شخصين (٢) صراحةً، حتى لو استنتج النموذج العدد بصمت.
+  if (_honeymoon && !_askedHmPax && !_destGateFired && !_outConfirmsPax && !_paxStated && (!_paxKnown || _paxNum === 2)) {
+    const _g2 = alreadyGreeted ? "" : "حياك الله 🌟 معك طلال، ";
+    const _forHm = _destLabel ? ` إلى ${_destLabel.replace(/^عرض\s*/, "")}` : "";
+    outMsgs = [`${_g2}مبارك شهر العسل 🌟 أفهم إنها رحلة شخصين (٢)${_forHm}، صح؟`];
+    _hmPaxGateFired = true;
+  }
+
+  // ── حارس عدد المسافرين (خادميّ) ─────────────────────────────────────────
+  // بعد معرفة الوجهة لازم نعرف العدد قبل التاريخ/الباقي. النموذج أحياناً يسأل
+  // سؤالين مع بعض («موعد السفر وعدد المسافرين») فيجيب العميل عن واحد فقط ويبقى
+  // العدد مجهولاً؛ أو ينتقل للتاريخ بلا عدد. نفرض سؤال العدد **وحده** متى كانت
+  // الوجهة معروفة والعدد مجهولاً ولم يسأله النموذج في هذا الرد.
+  const _outAsksPax = /كم\s*(?:هو\s*)?(?:عدد|العدد)?\s*(?:المسافر|الأشخاص|الاشخاص|المعتمر|الركاب|شخص|الأفراد|الاعضاء|الأعضاء)|عدد\s*(?:المسافر|المعتمر|الأشخاص|الاشخاص)|كم\s*(?:شخص|نفر|معتمر|فرد|واحد)|معكم\s*كم|الرحلة\s*لكم/.test(outMsgs.join(" "));
+  const _isUmrahPax = isUmrah || /عمرة|مكة|مكه|المدينة\s*المنورة|الحرم/.test(_destLabel);
+  let _paxGateFired = false;
+  if (_destKnown && !_paxKnown && alreadyGreeted && !_honeymoon && !_destGateFired && !_hmPaxGateFired && !_outAsksPax) {
+    outMsgs = [_isUmrahPax ? "تمام 🌟 كم عدد المعتمرين معكم؟" : "تمام 🌟 كم عدد المسافرين معكم؟"];
+    _paxGateFired = true;
+  }
+
   // تأكيد صريح إنهم بالغين (في نص المحادثة كاملاً) → لا داعي للسؤال.
-  const _adultsConfirmed = /كل(?:هم|نا)?\s*(?:كبار|بالغين)|جميعهم?\s*بالغين|بالغين\s*فقط|(?:ما|بدون|بلا|مافي|ما\s*في)\s*(?:فيه\s*)?(?:أطفال|اطفال|عيال|صغار)/.test(transcript);
+  // شهر العسل = بالغَان، فلا نسأل عن الأطفال.
+  const _adultsConfirmed = _honeymoon || /كل(?:هم|نا)?\s*(?:كبار|بالغين)|جميعهم?\s*بالغين|بالغين\s*فقط|(?:ما|بدون|بلا|مافي|ما\s*في)\s*(?:فيه\s*)?(?:أطفال|اطفال|عيال|صغار)/.test(transcript);
   // هل رد النموذج نفسه يسأل عن الأطفال/الكبار؟ (لا نكرّر فوقه)
   const _outAsksAges = /بالغين|كبار|أطفال|اطفال|عيال|صغار|أعمار|اعمار/.test(outMsgs.join(" "));
   let _ageGateFired = false;
@@ -1894,6 +2034,26 @@ ${returning
     // صياغة مباشرة تسأل: كلهم بالغين ولا فيهم أطفال؟ (بلا سؤال عمر أي بالغ)
     outMsgs = [`تمام 🌟 الـ${_paxNum} كلهم بالغين ولا معكم أطفال؟ 👶 (أسأل لأن سعر الأطفال يختلف حسب أعمارهم)`];
     _ageGateFired = true;
+  }
+
+  // ── حارس ليالي العمرة (خادميّ) ──────────────────────────────────────────
+  // تسعير العمرة بالليلة، فلازم نعرف عدد الليالي (كم ليلة في مكة/المدينة).
+  // مسار «عرض الإعلان» (isAdOfferInquiry) كان يأمر النموذج يتخطّى سؤال الليالي
+  // باعتبار العرض ثابتاً — فيقفل بلا مدة. نفرض السؤال خادميّاً للعمرة متى كانت
+  // المدة مجهولة (بعد حسم الأعمار، سؤال واحد كل مرة). يُستثنى: أعطى مدى تاريخي
+  // (من–إلى) أو عدد ليالٍ/أيام صريح → المدة معروفة.
+  const _nightsVal = String(_gm.nights || "").trim();
+  const _nightsKnown = !!_nightsVal
+    || /\d+\s*(?:ليل|ليال|ايام|أيام|يوم)/.test(transcript)
+    || /(?:من|from)\s*\d{1,2}[^\d]{0,14}(?:إلى|الى|لـ|ل|-|–|to)\s*\d{1,2}/i.test(transcript);
+  const _askedNights = _gm.asked_nights === true;
+  const _outAsksNights = /كم\s*(?:ليل|يوم|ليال)|عدد\s*(?:الليال|الأيام|الايام)|كم\s*مدة|كم\s*تقضون/.test(outMsgs.join(" "));
+  // نسأل الليالي فقط بعد حسم الأعمار (ما يفترض يفوت سؤالين بنفس الرد).
+  const _agesResolved = !_ageGateFired && (_askedChildren || !_agesEmpty || _adultsConfirmed);
+  let _nightsGateFired = false;
+  if (isUmrah && _paxKnown && _agesResolved && !_nightsKnown && !_askedNights && !_outAsksNights) {
+    outMsgs = ["كم ليلة تنوون تقضون في مكة؟ 🕋 (وإن حاب نضيف لك المدينة المنورة بلّغني كم ليلة فيها)"];
+    _nightsGateFired = true;
   }
 
   for (const raw of outMsgs.slice(0, 3)) {
@@ -1908,9 +2068,15 @@ ${returning
   if (out.fields && typeof out.fields === "object") { _mergedData = { ..._mergedData, ...out.fields }; }
   // بمجرد ما نسأل عن الأطفال (سواء النموذج أو الحارس) نثبّت العلم فلا نكرّره.
   if (_ageGateFired || _outAsksAges || _adultsConfirmed) _mergedData.asked_children = true;
+  // وكذلك سؤال ليالي العمرة — نثبّته فلا نكرّره.
+  if (_nightsGateFired || _outAsksNights) _mergedData.asked_nights = true;
+  // تأكيد عدد مسافري شهر العسل — نثبّته فلا نكرّره.
+  if (_hmPaxGateFired || _outConfirmsPax) _mergedData.asked_hm_pax = true;
+  // تثبيت الوجهة لو عُرفت من صورة العرض ولم يملأها النموذج (تظهر بالداشبورد + تمنع سؤالها).
+  if (!String(_mergedData.destination || "").trim() && _destLabel) _mergedData.destination = _destLabel;
   upd.intake_data = _mergedData;
-  // ❌ لا نقفل الاستقبال إذا الحارس لسّه يسأل عن الأطفال (العدد معروف والأعمار مجهولة).
-  if (out.complete === true && !_ageGateFired) upd.intake_active = false;
+  // ❌ لا نقفل الاستقبال إذا الحارس لسّه يسأل عن العدد/الأطفال/الليالي/شهر العسل.
+  if (out.complete === true && !_ageGateFired && !_nightsGateFired && !_hmPaxGateFired && !_paxGateFired) upd.intake_active = false;
   await supabase.from("whatsapp_sessions").update(upd).eq("phone", from);
 }
 
@@ -1919,8 +2085,9 @@ async function handleMessage(args: {
   from: string;
   profileName: string;
   body: string;
+  msgReceivedAt?: string;
 }): Promise<void> {
-  const { supabase, from, profileName, body } = args;
+  const { supabase, from, profileName, body, msgReceivedAt } = args;
   const text = body.trim();
 
   // 0) Staff guard + admin response interception. If this message comes
@@ -1948,6 +2115,23 @@ async function handleMessage(args: {
     // dashboard instead.
     await sendWhatsapp(from, STAFF_WARNING_MESSAGE);
     return;
+  }
+
+  // 0.5) دمج الرسائل المتلاحقة (debounce) ─────────────────────────────────
+  // العميل كثير يرسل رسالتين-ثلاث بسرعة («السلام عليكم» ثم «عندكم فيتنام شهر
+  // عسل»). بدون دمج: كل رسالة تُعالَج على حدة، فيُبنى الرد على الأولى **قبل**
+  // تسجيل الثانية → طلال يسأل «وين تسافرون» رغم ذكرها وجهتها بالرسالة التالية.
+  // الحل: ننتظر قليلاً؛ لو وصلت رسالة أحدث نتوقّف ونترك معالجها يرد بالنص
+  // الكامل — فيرد طلال مرة واحدة على الدفعة كلها (ويشوف الوجهة/شهر العسل/العدد).
+  if (msgReceivedAt) {
+    await new Promise((r) => setTimeout(r, 6500));
+    const { data: _newer } = await supabase
+      .from("wa_message_audit")
+      .select("received_at")
+      .eq("from_phone", from)
+      .gt("received_at", msgReceivedAt)
+      .limit(1);
+    if (_newer && _newer.length) return; // رسالة أحدث وصلت → معالجها بيرد بالدفعة كاملة
   }
 
   // 1) اجلب أو أنشئ الجلسة. لازم يكون قبل التحقق من التحية عشان العميل
@@ -6416,7 +6600,70 @@ Deno.serve(async (req) => {
     try {
       const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       await checkStalledMessages(supabase);
+      await checkInboundSilence(supabase);
       return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // تشخيص/اختبار حارس صمت الاستقبال. يرجّع حالة الإعداد والصمت الحالي.
+  // مع ?test=1 يُرسل تنبيه CallMeBot فوراً (يتجاوز العتبة/ساعات العمل/التكرار)
+  // للتأكد أن قناة التنبيه المستقلة ورقم الأمان مضبوطين.
+  if (url.searchParams.get("admin_action") === "check_inbound_silence") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: last } = await supabase
+        .from("wa_message_audit")
+        .select("received_at, from_phone")
+        .not("received_at", "is", null)
+        .order("received_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const lastTs = (last as { received_at?: string } | null)?.received_at || null;
+      const silentHours = lastTs
+        ? ((Date.now() - new Date(String(lastTs)).getTime()) / 3600000)
+        : null;
+      const { data: cfg } = await supabase
+        .from("acc_config")
+        .select("key,value")
+        .in("key", ["callmebot_phone", "callmebot_apikey"]);
+      const m: Record<string, string> = {};
+      (cfg as Array<{ key: string; value: string }> | null || [])
+        .forEach((r) => { m[r.key] = r.value; });
+      const configured = Boolean(m.callmebot_phone && m.callmebot_apikey);
+
+      let testSent = false;
+      let testError: string | null = null;
+      if (url.searchParams.get("test") === "1") {
+        if (!configured) {
+          testError = "callmebot_phone/callmebot_apikey غير مضبوطة في acc_config";
+        } else {
+          try {
+            const msg = "✅ اختبار تنبيه الأمان: حارس صمت استقبال الواتساب يعمل. "
+              + "لو توقّف الاستقبال خلال ساعات العمل بيوصلك تنبيه هنا.";
+            const r = await fetch(
+              "https://api.callmebot.com/whatsapp.php?phone=" + encodeURIComponent(m.callmebot_phone) +
+              "&apikey=" + encodeURIComponent(m.callmebot_apikey) +
+              "&text=" + encodeURIComponent(msg),
+            );
+            testSent = r.ok;
+            if (!r.ok) testError = "CallMeBot HTTP " + r.status;
+          } catch (err) {
+            testError = (err as Error).message;
+          }
+        }
+      }
+      return new Response(JSON.stringify({
+        ok: true,
+        last_inbound_at: lastTs,
+        silent_hours: silentHours === null ? null : Number(silentHours.toFixed(2)),
+        threshold_hours: INBOUND_SILENCE_THRESHOLD_MS / 3600000,
+        callmebot_configured: configured,
+        test_sent: testSent,
+        test_error: testError,
+      }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }
@@ -7351,11 +7598,12 @@ Deno.serve(async (req) => {
       const { data: auditRow } = await supabase
         .from("wa_message_audit")
         .insert({ from_phone: from, body: String(body).slice(0, 500), status: "received", ...mediaCols })
-        .select("id")
+        .select("id, received_at")
         .single();
       const auditId = (auditRow as { id?: string } | null)?.id ?? null;
+      const msgReceivedAt = (auditRow as { received_at?: string } | null)?.received_at ?? null;
       try {
-        await handleMessage({ supabase, from, profileName, body });
+        await handleMessage({ supabase, from, profileName, body, msgReceivedAt: msgReceivedAt || undefined });
         // خزّن مصدر الإعلان على الجلسة بعد إنشائها/تحديثها في handleMessage.
         if (referral) { try { await supabase.from("whatsapp_sessions").update({ ad_referral: referral }).eq("phone", from); } catch (_e) { /* */ } }
         if (auditId) {
