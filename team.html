@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-07-grp-bidi-currency'
+  var BUILD = '2026-10-07-fonts-ready'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -4697,6 +4697,9 @@ async function generatePdfBlob(mode, customHtml){
       if (im.decode) return im.decode().catch(() => {});
       return new Promise(r => { im.onload = im.onerror = r; });
     }));
+    // ⚠️ انتظر تحميل الخطوط قبل الالتقاط — html2canvas بخط بديل (غير محمّل) يتداخل
+    //    النص العربي ويُسقط المسافات. document.fonts.ready يضمن خط Tajawal جاهزاً.
+    try { if (document.fonts && document.fonts.ready) { await document.fonts.ready; await new Promise(r=>setTimeout(r,60)); } } catch (_) { /* */ }
   } catch (_) { /* أفضل جهد */ }
   try {
     return await window.html2pdf().set({
