@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-07-umrah-includes-bidi'
+  var BUILD = '2026-10-07-makkah-baggage'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -3810,7 +3810,7 @@ const breakdown = (kids + infants > 0 && pax === adults + kids + infants)
   : '';
 return `<tr><td><strong>${p[0]||''}</strong></td><td><span class="type-badge ${tc}">${p[1]||''}</span></td><td class="price-cell">${p[2]||''}</td><td>${pax} ${paxNoun}${breakdown}</td><td class="price-cell">${(total||parseMoney(p[4])).toLocaleString()} ريال</td><td><button type="button" class="del-flight" data-line="${hswEsc(l)}" onclick="removeFlightLine(this)" title="حذف الرحلة (لو العميل حاجزها بنفسه)">🗑️ حذف</button></td></tr>`;
 }).join('')}</tbody>
-</table></div>`;
+</table>${(/عمرة|عمره|مكة|مكه|المدين[ةه]\s*المنور[ةه]|الحرم/.test(String(dest||'')) && _anyFlight) ? `<div style="margin-top:10px;padding:10px 13px;border:1.5px dashed #c9b37a;background:#fdf8ec;border-radius:9px;font-size:13px;font-weight:800;color:#6b4e00;">🧳 وزن الأمتعة المسموح لكل مسافر: حقيبة يد ١×٨ كجم + حقيبة مسجّلة ١×٢٠ كجم</div>` : ''}</div>`;
 }
 
 if (transfersLines.length) {
@@ -5286,6 +5286,8 @@ function renderFlightsPDF() {
   const _pk = flightsLines.map(l => String(l.split('|')[1] || '').trim());
   const _pTrain  = _pk.some(k => k.includes('قطار'));
   const _pFlight = _pk.some(k => k && !k.includes('قطار'));
+  // برامج مكة/العمرة: وزن أمتعة الطيران الدولي (مسقط↔جدة) = حقيبة يد ٨ كجم + مسجّلة ٢٠ كجم.
+  const _isMakkahFlt = /عمرة|عمره|مكة|مكه|المدين[ةه]\s*المنور[ةه]|الحرم/.test(String(dest||''));
   const pdfFlightTitle = (_pTrain && _pFlight) ? '✈️🚆 الطيران والقطار'
     : _pTrain ? '🚆 القطار'
     : '✈️ الطيران';
@@ -5332,6 +5334,7 @@ ${flightsLines.map(l => {
   </div>
 </div>`;
 }).join('')}
+${(_isMakkahFlt && _pFlight) ? `<div class="pdf-keep" style="border:1.5px dashed #c9b37a;background:#fdf8ec;border-radius:10px;padding:12px 16px;margin-bottom:12px;font-size:15px;font-weight:800;color:#6b4e00;">🧳 وزن الأمتعة المسموح لكل مسافر: حقيبة يد ١×٨ كجم + حقيبة مسجّلة ١×٢٠ كجم</div>` : ''}
 ${flightExtrasHtml}
 `;
 }
