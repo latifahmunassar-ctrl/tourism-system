@@ -1651,6 +1651,7 @@ async function sendLinkedAdOfferFile(
 async function handleNewLeadIntake(args: {
   supabase: ReturnType<typeof createClient>; from: string; body: string;
   returning?: boolean;
+  referral?: { body?: string; headline?: string; source_id?: string } | null;
 }): Promise<void> {
   const { supabase, from } = args;
   const returning = args.returning === true;
@@ -1695,7 +1696,10 @@ async function handleNewLeadIntake(args: {
   const isOmani = /^whatsapp:\+?968/.test(String(from));
   // هل الطلب عمرة؟ (نستخدم نموذجاً أقوى Sonnet للعمرة لدقّة تسلسل الأسئلة).
   const _umrahRe = /عمرة|عُمرة|عمره|الحرمين|الحرم\b|مكة|مكه|المدينة\s*المنورة/;
-  const _adRefU = (sessRes.data as { ad_referral?: { body?: string; headline?: string } | null } | null)?.ad_referral;
+  // ⚠️ على أول رسالة من إعلان، ad_referral لم يُخزَّن بعد على الجلسة (يُخزَّن بعد
+  //    handleMessage) — فنستخدم referral المُمرَّر مباشرةً كأولوية، وإلا المخزَّن.
+  const _adRefU = args.referral
+    || (sessRes.data as { ad_referral?: { body?: string; headline?: string } | null } | null)?.ad_referral;
   const isUmrah = _umrahRe.test(transcript)
     || _umrahRe.test(String((prev as { destination?: string })?.destination || ""))
     || _umrahRe.test(String(_adRefU?.body || "") + " " + String(_adRefU?.headline || ""));
@@ -1709,7 +1713,8 @@ async function handleNewLeadIntake(args: {
   // ── إعلان فيه كود برنامج جاهز: نعرض البرنامج نفسه (بعملة العميل) بدل أسئلة الاستقبال ──
   // يشتغل مرة واحدة أول ما يجي العميل من إعلان يحمل كوداً في الكابشن/العنوان.
   // لو ما فيه كود بالإعلان (أو البرنامج غير موجود) → نكمل الاستقبال الطبيعي مثل كل مرة.
-  const adRef = (sessRes.data as { ad_referral?: Record<string, unknown> | null } | null)?.ad_referral || null;
+  const adRef = (args.referral as Record<string, unknown> | null)
+    || (sessRes.data as { ad_referral?: Record<string, unknown> | null } | null)?.ad_referral || null;
   const prevData = (prev || {}) as Record<string, unknown>;
   // 🖼️ لو العميل أرسل **صورة عرض بنفسه** (قرأها طلال بالرؤية) → هذا العرض هو المقصود،
   //    لا برنامج الإعلان المربوط (الإعلانات العامة/الكاروسيل مربوطة بكود واحد قد يختلف
@@ -2019,8 +2024,11 @@ ${returning
   const _outAsksPax = /كم\s*(?:هو\s*)?(?:عدد|العدد)?\s*(?:المسافر|الأشخاص|الاشخاص|المعتمر|الركاب|شخص|الأفراد|الاعضاء|الأعضاء)|عدد\s*(?:المسافر|المعتمر|الأشخاص|الاشخاص)|كم\s*(?:شخص|نفر|معتمر|فرد|واحد)|معكم\s*كم|الرحلة\s*لكم/.test(outMsgs.join(" "));
   const _isUmrahPax = isUmrah || /عمرة|مكة|مكه|المدينة\s*المنورة|الحرم/.test(_destLabel);
   let _paxGateFired = false;
-  if (_destKnown && !_paxKnown && alreadyGreeted && !_honeymoon && !_destGateFired && !_hmPaxGateFired && !_outAsksPax) {
-    outMsgs = [_isUmrahPax ? "تمام 🌟 كم عدد المعتمرين معكم؟" : "تمام 🌟 كم عدد المسافرين معكم؟"];
+  // ملاحظة: لا نشترط alreadyGreeted — لو الوجهة معروفة والعدد مجهول ولم يسأل النموذج
+  // العدد (حتى لو كان هذا أول رد، كإعلان مكة) نفرض السؤال مع ترحيب، فلا «يقف» طلال.
+  if (_destKnown && !_paxKnown && !_honeymoon && !_destGateFired && !_hmPaxGateFired && !_outAsksPax) {
+    const _gp = alreadyGreeted ? "تمام 🌟 " : "حياك الله 🌟 معك طلال، ";
+    outMsgs = [_isUmrahPax ? `${_gp}كم عدد المعتمرين معكم؟` : `${_gp}كم عدد المسافرين معكم؟`];
     _paxGateFired = true;
   }
 
@@ -2086,8 +2094,10 @@ async function handleMessage(args: {
   profileName: string;
   body: string;
   msgReceivedAt?: string;
+  referral?: { body?: string; headline?: string; source_id?: string } | null;
 }): Promise<void> {
   const { supabase, from, profileName, body, msgReceivedAt } = args;
+  const _referral = args.referral || null;
   const text = body.trim();
 
   // 0) Staff guard + admin response interception. If this message comes
@@ -2215,7 +2225,7 @@ async function handleMessage(args: {
   const isFreshLead = s?.intake_active === true
     || (s != null && s.intake_active == null && s.stage === "new" && !s.last_outbound_at && !s.last_outbound_body);
   if (isFreshLead) {
-    await handleNewLeadIntake({ supabase, from, body: text });
+    await handleNewLeadIntake({ supabase, from, body: text, referral: _referral });
     return;
   }
 
@@ -2229,7 +2239,7 @@ async function handleMessage(args: {
     await supabase.from("whatsapp_sessions")
       .update({ intake_active: true, intake_data: { destination: detectedDest }, destination: detectedDest })
       .eq("phone", from);
-    await handleNewLeadIntake({ supabase, from, body: text });
+    await handleNewLeadIntake({ supabase, from, body: text, referral: _referral });
     return;
   }
 
@@ -7607,7 +7617,7 @@ Deno.serve(async (req) => {
         });
         // لو الصورة عرض سفر واضح → مرّرها للاستقبال كنص ليرد طلال (بلا سؤال الوجهة).
         if (offerDesc) {
-          try { await handleMessage({ supabase, from, profileName, body: "أرسل العميل صورة هذا العرض: " + offerDesc }); } catch (e) { console.error("image-intake error", e); }
+          try { await handleMessage({ supabase, from, profileName, body: "أرسل العميل صورة هذا العرض: " + offerDesc, referral: (referral as { body?: string; headline?: string; source_id?: string } | null) }); } catch (e) { console.error("image-intake error", e); }
           if (referral) { try { await supabase.from("whatsapp_sessions").update({ ad_referral: referral }).eq("phone", from); } catch (_e) { /* */ } }
         }
         return;
@@ -7621,7 +7631,7 @@ Deno.serve(async (req) => {
       const auditId = (auditRow as { id?: string } | null)?.id ?? null;
       const msgReceivedAt = (auditRow as { received_at?: string } | null)?.received_at ?? null;
       try {
-        await handleMessage({ supabase, from, profileName, body, msgReceivedAt: msgReceivedAt || undefined });
+        await handleMessage({ supabase, from, profileName, body, msgReceivedAt: msgReceivedAt || undefined, referral: (referral as { body?: string; headline?: string; source_id?: string } | null) });
         // خزّن مصدر الإعلان على الجلسة بعد إنشائها/تحديثها في handleMessage.
         if (referral) { try { await supabase.from("whatsapp_sessions").update({ ad_referral: referral }).eq("phone", from); } catch (_e) { /* */ } }
         if (auditId) {
