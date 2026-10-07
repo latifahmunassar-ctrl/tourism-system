@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-07-umrah-includes'
+  var BUILD = '2026-10-07-umrah-includes-bidi'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -4628,6 +4628,27 @@ async function generatePdfBlob(mode, customHtml){
   // بدونه المسار الحالي كما هو — buildPDF يملأ #pdfContent من حالة التسعير.
   if (customHtml != null) el.innerHTML = customHtml; else buildPDF(mode);
   if (!el || !el.innerHTML.trim()) throw new Error('لا يوجد محتوى لتوليد الـPDF.');
+  // ── إصلاح bidi للنقطة الختامية (html2canvas فقط) ──────────────────────
+  // html2canvas يخطئ بموضع النقطة الختامية في سطر عربي (تظهر «بين.المدن»).
+  // نحذف النقطة من نهاية بنود التعداد <li> (لا تحتاجها نقاط التعداد)، ونُلحق
+  // علامة RTL بعد أي علامة ترقيم ختامية في بقية النصوص العربية لتثبيت موضعها.
+  try {
+    el.querySelectorAll('li').forEach(li => {
+      // احذف النقطة الختامية فقط لو العنصر ينتهي بها نصّاً (لا يكسر العناصر المتداخلة).
+      if (li.lastChild && li.lastChild.nodeType === 3) {
+        li.lastChild.nodeValue = li.lastChild.nodeValue.replace(/[.．]\s*$/,'');
+      }
+    });
+    const _rtl = /[؀-ۿ]/;
+    const _w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let _n;
+    while ((_n = _w.nextNode())) {
+      const _t = _n.nodeValue;
+      if (_rtl.test(_t) && /[.!؟،؛:]\s*$/.test(_t) && _t.indexOf('‏') === -1) {
+        _n.nodeValue = _t.replace(/(\s*)$/, '‏$1');
+      }
+    }
+  } catch (_) { /* أفضل جهد */ }
   // نخفي العنصر داخل غلاف (max-height:0 + overflow:hidden) مع إبقاء أنماطه نظيفة
   // ومرئية. مهم جدًّا: لو وضعنا الإخفاء (left:-99999px أو opacity:0) على العنصر
   // نفسه، يستنسخه html2pdf مخفيًّا فتطلع صفحة فارغة (3KB). الغلاف يخفيه بصريًّا
@@ -5512,13 +5533,15 @@ ${itineraryHTML}
       const _hasFlight = flightsLines.some(l=>{const k=String(l.split('|')[1]||'');return k && !k.includes('قطار');});
       const _hasTrain  = flightsLines.some(l=>String(l.split('|')[1]||'').includes('قطار'));
       const _hasSim = (parseInt((arabicDigitsToLatin(String(simText||'')).match(/\d+/)||['0'])[0])||0) > 0;
+      // ملاحظة: بلا نقطة ختامية — html2canvas يخطئ بموضع النقطة في سطر RTL (تظهر
+      // «بين.المدن») فنحذفها من بنود التعداد.
       const li = [];
-      if (hotelsLines.length) li.push('<li>🏨 الإقامة في الفنادق الموضّحة أعلاه (حسب الفئة والإفطار المذكور).</li>');
-      if (_hasFlight && !_isUmrah) li.push('<li>✈️ الطيران الداخلي بين المدن.</li>');
-      if (_hasTrain) li.push('<li>🚆 القطار بين المدن.</li>');
-      if (transfersLines.length) li.push('<li>🚗 المواصلات بسيارة مكيّفة حديثة خاصة — الاستقبال والتوديع وجميع التنقّلات بين المدن.</li>');
-      if (toursLines.length && !_isUmrah) li.push('<li>🗺️ الجولات السياحية الموضّحة بالبرنامج.</li>');
-      if (_hasSim) li.push('<li>📶 شرائح اتصال (إنترنت).</li>');
+      if (hotelsLines.length) li.push('<li>🏨 الإقامة في الفنادق الموضّحة أعلاه (حسب الفئة والإفطار المذكور)</li>');
+      if (_hasFlight && !_isUmrah) li.push('<li>✈️ الطيران الداخلي بين المدن</li>');
+      if (_hasTrain) li.push('<li>🚆 القطار بين المدن</li>');
+      if (transfersLines.length) li.push('<li>🚗 المواصلات بسيارة مكيّفة حديثة خاصة — الاستقبال والتوديع وجميع التنقّلات بين المدن</li>');
+      if (toursLines.length && !_isUmrah) li.push('<li>🗺️ الجولات السياحية الموضّحة بالبرنامج</li>');
+      if (_hasSim) li.push('<li>📶 شرائح اتصال (إنترنت)</li>');
       return li.join('');
     })()}
   </ul>
