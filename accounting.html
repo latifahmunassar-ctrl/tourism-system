@@ -2424,8 +2424,19 @@ function costoverUpdCount(){ const n=document.querySelectorAll('.costover-chk:ch
 function costoverToggleAll(el){ document.querySelectorAll('.costover-chk').forEach(c=>{ c.checked=el.checked; }); costoverUpdCount(); }
 async function resolveCostOverBulk(){ const ids=[...document.querySelectorAll('.costover-chk:checked')].map(c=>c.value); if(!ids.length){ alert('لم تحدّدي أي تنبيه'); return; } if(!confirm('✅ وضع «اطّلعت» على '+ids.length+' تنبيه؟ ستختفي المحدّدة من القائمة.')) return; for(const id of ids){ try{ await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resolve_alert',payload:{id:Number(id),resolution:'اطّلعت المالكة على تجاوز التكلفة الفعلية'}})}); }catch(e){} } await load(); }
 // ===== 🩺 فاحص صحّة التزامن بين الدفعات والكشف البنكي — يلتقط الحركات اليتيمة وعدم تطابق القيم والتكرار =====
+// 📅 أدوات كشف التاريخ المقلوب — تُقارن التاريخ المخزَّن بتاريخ المرجع البنكي (Time:/F-/settlement)
+const _FDMON={JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12};
+function _fdValid(y,m,dd){ const t=new Date(Date.UTC(y,m-1,dd)); return t.getUTCFullYear()===y && (t.getUTCMonth()+1)===m && t.getUTCDate()===dd; }
+function _fdP(y,m,dd){ return y+'-'+String(m).padStart(2,'0')+'-'+String(dd).padStart(2,'0'); }
+function _fdSwap(s){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s||'')); if(!m)return null; const y=+m[1],mo=+m[2],dd=+m[3]; return _fdValid(y,dd,mo)?_fdP(y,dd,mo):null; }
+function _fdRefDate(ref,note){ const r=String(ref||''), blob=r+' '+String(note||'');
+  let m=/Time\s*:\s*(\d{1,2})\s*([A-Za-z]{3})\s*(\d{4})/.exec(blob); if(m){ const dd=+m[1],mo=_FDMON[m[2].toUpperCase()],y=+m[3]; if(mo&&_fdValid(y,mo,dd))return _fdP(y,mo,dd); }
+  m=/\bF\s*-\s*(\d{2})(\d{2})(\d{2})\b/.exec(r); if(m){ const dd=+m[1],mo=+m[2],y=2000+(+m[3]); if(_fdValid(y,mo,dd))return _fdP(y,mo,dd); }
+  m=/settlement for (\d{2})-(\d{2})-(\d{4})/.exec(blob); if(m){ const dd=+m[1],mo=+m[2],y=+m[3]; if(_fdValid(y,mo,dd))return _fdP(y,mo,dd); }
+  return null;
+}
 function bankSyncHealth(){
-  if(!DATA) return {orphans:[],desyncs:[],dups:[]};
+  if(!DATA) return {orphans:[],desyncs:[],dups:[],flips:[]};
   const up=s=>String(s||'').trim().toUpperCase();
   const sp=(DATA.supplierPaymentsRaw||DATA.supplierPayments||[]).filter(x=>x.source==='dashboard');
   const fcd=(DATA.fcd||[]).filter(x=>x.source==='dashboard');
@@ -2452,15 +2463,20 @@ function bankSyncHealth(){
   // 🔁 تكرار محتمل: حركتان بنكيتان (داشبورد) بنفس المبلغ+التاريخ+الاتجاه+البنك
   const seen={}; btx.forEach(x=>{ const amt=Math.abs(Number(x.amount_in||0))||Math.abs(Number(x.amount_out||0)); if(amt<0.005)return; const dir=Number(x.amount_in||0)>0.005?'in':'out'; const k=dir+'|'+amt.toFixed(2)+'|'+String(x.tx_date||'').slice(0,10)+'|'+(typeof bankAlias==='function'?bankAlias(x.bank_name):x.bank_name); (seen[k]=seen[k]||[]).push(x); });
   Object.values(seen).forEach(g=>{ if(g.length>1) dups.push(g); });
-  return {orphans,desyncs,dups};
+  // 📅 تاريخ مقلوب مؤكّد: تاريخ الحركة المخزَّن، قلبه (يوم↔شهر) = تاريخ المرجع البنكي (Time:/F-/settlement)
+  const flips=[];
+  (DATA.bankTx||[]).forEach(x=>{ const stored=String(x.tx_date||'').slice(0,10); if(!/^\d{4}-\d{2}-\d{2}$/.test(stored))return; const sw=_fdSwap(stored); if(!sw)return; const rd=_fdRefDate(x.bank_ref,x.note); if(rd && rd===sw && rd!==stored) flips.push({id:x.id,stored,correct:rd,bank:x.bank_name||'',ref:String(x.bank_ref||x.note||'').slice(0,34),amt:(Math.abs(Number(x.amount_in||0))||Math.abs(Number(x.amount_out||0)))}); });
+  return {orphans,desyncs,dups,flips};
 }
 function bankSyncHealthPanel(owner){
   if(!owner) return '';
-  const H=bankSyncHealth(); const nO=H.orphans.length, nD=H.desyncs.length, nU=H.dups.length;
-  if(!nO&&!nD&&!nU) return '';
+  const H=bankSyncHealth(); const nO=H.orphans.length, nD=H.desyncs.length, nU=H.dups.length, nF=H.flips.length;
+  if(!nO&&!nD&&!nU&&!nF) return '';
   const fmt2=v=>Number(v||0).toLocaleString('en-US',{maximumFractionDigits:3});
-  let h='<div class="panel" style="border:1px solid #d11;background:rgba(209,17,17,.06);margin-bottom:14px"><h3 style="color:#d11;margin-top:0">🩺 فاحص صحّة التزامن (الدفعات ↔ الكشف البنكي) — '+(nO+nD+nU)+' تنبيه</h3>'+
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">يلتقط تلقائياً أي خلل بين الدفعات والكشف البنكي. كل بند له زرّ إصلاح (قرارك — لا تصحيح تلقائي).</div>';
+  let h='<div class="panel" style="border:1px solid #d11;background:rgba(209,17,17,.06);margin-bottom:14px"><h3 style="color:#d11;margin-top:0">🩺 فاحص صحّة التزامن (الدفعات ↔ الكشف البنكي) — '+(nO+nD+nU+nF)+' تنبيه</h3>'+
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">يلتقط تلقائياً أي خلل بين الدفعات والكشف البنكي (يشمل التواريخ المقلوبة فور ظهورها). كل بند له زرّ إصلاح.</div>';
+  if(nF){ h+='<details open style="margin-bottom:8px"><summary style="cursor:pointer;color:#c0392b;font-weight:800">📅 تواريخ مقلوبة مؤكّدة ('+nF+') — قلبها = تاريخ المرجع البنكي <button class="btn" style="padding:3px 12px;font-size:11px;background:#0e9d6a;margin-right:8px" onclick="event.preventDefault();fixFlipAll()">🔧 صحّح الكل ('+nF+')</button></summary><div class="tbl-wrap" style="margin-top:6px"><table style="font-size:11px"><thead><tr><th>البنك</th><th>المبلغ</th><th>المخزَّن (خطأ)</th><th>الصحيح</th><th>المرجع</th><th>إجراء</th></tr></thead><tbody>'+
+    H.flips.map(x=>'<tr><td style="font-size:10px">'+esc(x.bank)+'</td><td class="num">'+fmt2(x.amt)+'</td><td class="num" style="color:#d11;text-decoration:line-through">'+esc(x.stored)+'</td><td class="num" style="color:#0e9d6a;font-weight:700">'+esc(x.correct)+'</td><td style="font-size:10px">'+esc(x.ref)+'</td><td><button class="btn green" style="padding:2px 9px;font-size:11px" onclick="fixFlipDate('+x.id+',\''+esc(x.correct)+'\')">🔧 صحّح</button></td></tr>').join('')+'</tbody></table></div></details>'; }
   if(nO){ h+='<details open style="margin-bottom:8px"><summary style="cursor:pointer;color:#d11;font-weight:800">🔴 حركات بنكية يتيمة ('+nO+') — دفعتها محذوفة ولم تُحذف</summary><div class="tbl-wrap" style="margin-top:6px"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>داخل</th><th>خارج</th><th>البنك</th><th>البيان</th><th>إجراء</th></tr></thead><tbody>'+
     H.orphans.map(x=>'<tr><td>'+esc(String(x.tx_date||'').slice(0,10))+'</td><td class="num" style="color:#0e9d6a">'+(Number(x.amount_in||0)>0?fmt2(x.amount_in):'')+'</td><td class="num neg">'+(Number(x.amount_out||0)>0?fmt2(x.amount_out):'')+'</td><td>'+esc(x.bank_name||'')+'</td><td style="font-size:10px;color:var(--muted)">'+esc(String(x.note||x.bank_ref||'').slice(0,40))+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px;color:#d11;border-color:#d11" onclick="fixOrphanBtx('+x.id+')">🗑️ احذف اليتيمة</button></td></tr>').join('')+'</tbody></table></div></details>'; }
   if(nD){ h+='<details style="margin-bottom:8px"><summary style="cursor:pointer;color:#b8860b;font-weight:800">⚠️ عدم تطابق القيمة ('+nD+') — راجعيها فقط</summary><div style="font-size:10px;color:var(--muted);margin:4px 0">قيمة الحركة البنكية تختلف عن قيمة الدفعة (الأجنبي ÷ سعر الصرف). <b>راجعي أيّهما يطابق كشف البنك الفعلي</b> ثم عدّلي يدوياً من تبويب الكاش/البنوك — لا تصحيح تلقائي حتى لا تُفسد قيمة بنكية حقيقية.</div><div class="tbl-wrap"><table style="font-size:11px"><thead><tr><th>التاريخ</th><th>المورّد</th><th>قيمة الحركة البنكية</th><th>قيمة الدفعة (÷السعر)</th><th>المرجع</th></tr></thead><tbody>'+
@@ -2471,6 +2487,8 @@ function bankSyncHealthPanel(owner){
 }
 async function fixOrphanBtx(id){ if(!confirm('🗑️ حذف هذه الحركة البنكية اليتيمة؟ (دفعتها محذوفة — لا يقابلها دفعة في النظام)'))return; try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_bank_txn',payload:{id:Number(id),allow_sheet:true}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } toast('🗑️ حُذفت الحركة اليتيمة'); await load(); }catch(e){ alert('خطأ: '+e.message); } }
 async function fixDesyncBtx(id,amt,isRef){ amt=Number(amt); if(!confirm('🔧 تصحيح قيمة الحركة البنكية إلى '+amt+'؟'))return; try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_bank_txn_amount',payload:{id:Number(id),amount_in:(isRef?amt:0),amount_out:(isRef?0:amt)}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } toast('🔧 صُحّحت القيمة'); await load(); }catch(e){ alert('خطأ: '+e.message); } }
+async function fixFlipDate(id,correct){ if(!confirm('📅 تصحيح التاريخ المقلوب إلى '+correct+'؟ (قلبه يطابق المرجع البنكي)'))return; try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_bank_txn_date',payload:{id:Number(id),tx_date:correct}})}); const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; } toast('📅 صُحّح التاريخ'); await load(); }catch(e){ alert('خطأ: '+e.message); } }
+async function fixFlipAll(){ const H=bankSyncHealth(); const list=H.flips||[]; if(!list.length){ alert('لا تواريخ مقلوبة'); return; } if(!confirm('🔧 تصحيح كل التواريخ المقلوبة المؤكّدة ('+list.length+') إلى تاريخ المرجع البنكي دفعة واحدة؟'))return; let ok=0,fail=0; for(const x of list){ try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_bank_txn_date',payload:{id:Number(x.id),tx_date:x.correct}})}); const j=await r.json(); if(j.error)fail++; else ok++; }catch(e){ fail++; } } await load(); alert('📅 تمّت المعالجة: ✅ '+ok+(fail?(' · ❌ فشل '+fail):'')); }
 // هل الفورم الحالي فيه خدمة مكتوبة (ليُحتسب عند الحفظ)؟
 function sFormFilled(){ return !!((($('s-desc').value||'').trim())||(($('s-supplier').value||'').trim())||(+$('s-price').value>0)||(+$('s-supcalc').value>0)); }
 // تفريغ حقول الخدمة مع الإبقاء على كود العميل (للخدمة التالية)
