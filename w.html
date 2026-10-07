@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20261007d -->
+<!-- APPVER:20261007e -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1407,7 +1407,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
             </label>
           </div>
           <!-- توزيع المدن: نفس واجهة المساعد السياحي — اقتراحات جاهزة أو تخصيص بعدّاد ليالي لكل مدينة -->
-          <div style="margin-top:8px;">
+          <div style="margin-top:8px;" id="bf-distSection">
             <div style="font-size:12px; color:#475569; font-weight:700; margin-bottom:4px;">توزيع المدن</div>
             <div class="bfx-seg" id="bf-modeSeg">
               <label class="on"><input type="radio" name="bf-mode" value="ready" checked>📋 اقتراحات جاهزة</label>
@@ -1870,7 +1870,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20261007d";
+    const APPVER = "20261007e";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4543,13 +4543,15 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     }
     async function saveBrief() {
       const val = id => ($(id) ? $(id).value.trim() : "");
+      // برنامج جروب = مسار ثابت: لا يحتاج مطاراً ولا توزيع مدن.
+      const isGroup = bfIsGroup(val("bf-destination"));
       // المطار من الاقتراح المختار (أدقّ)، وإلا من المنسدلة إن كانت مطاراً محدداً.
       const pairRaw = bfChosenPair || val("bf-airport");
       const pair = (pairRaw && pairRaw !== "ALL") ? pairRaw : "";
       const [arr, dep] = pair ? pair.split("|") : ["", ""];
       // التوزيع: من وضع التخصيص (صفوف المدن) لو مفعّل، وإلا من الاقتراح الجاهز المختار.
       let effDist = bfChosenDist || "", effCN = bfChosenCN || null;
-      if (bfMode() === "manual") {
+      if (!isGroup && bfMode() === "manual") {
         const mm = bfManualDist(); effDist = mm.dist; effCN = mm.cn;
         if (mm.incomplete) {   // صف فيه ليالٍ بلا مدينة → لا نحفظ توزيعاً ناقصاً بصمت
           const m = $("bf-msg"); if (m) { m.style.color = "#dc2626"; m.textContent = "⛔ فيه صف مدينة بلا اختيار — اختاري المدينة في كل صف قبل الحفظ (أو احذفي الصف)."; }
@@ -4589,8 +4591,8 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       if (!payload.destination) missReq.push("الوجهة");
       if (!(parseInt(payload.pax) >= 1)) missReq.push("عدد الأشخاص");
       if (!(parseInt(payload.days) >= 1)) missReq.push("عدد الأيام");
-      if (!isDomestic && (!payload.arrival_airport || !payload.departure_airport)) missReq.push("مطار القدوم/المغادرة");
-      if (!payload.distribution) missReq.push("توزيع المدن (اختاري اقتراحاً جاهزاً أو أضيفي المدن من «تخصيص»)");
+      if (!isDomestic && !isGroup && (!payload.arrival_airport || !payload.departure_airport)) missReq.push("مطار القدوم/المغادرة");
+      if (!isGroup && !payload.distribution) missReq.push("توزيع المدن (اختاري اقتراحاً جاهزاً أو أضيفي المدن من «تخصيص»)");
       if (missReq.length) {
         const m = $("bf-msg"); if (m) { m.style.color = "#dc2626"; m.textContent = "⛔ لا يمكن الحفظ — أكملي أولاً: " + missReq.join("، "); }
         return false;
@@ -4728,11 +4730,13 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       } catch(_) { /* أفضل جهد */ }
     }
     // يبدّل حقل التاريخ: برنامج جروب → قائمة تواريخ جاهزة؛ غيره → تاريخ حر.
+    // وللجروب (مسار ثابت) نخفي المطار وتوزيع المدن (لا يلزمان للحفظ).
     function bfApplyGroupDates(val){
       const inp = $("bf-date_from"), sel = $("bf-date-group");
       if (!inp || !sel) return;
       const g = BF_GROUPS[val];
-      if (g && g.dates && g.dates.length) {
+      const isGrp = !!(g && g.dates && g.dates.length);
+      if (isGrp) {
         sel.innerHTML = '<option value="">— اختر تاريخ انطلاق الجروب —</option>' + g.dates.map(dt => `<option value="${dt}">${bfFmtDate(dt)}</option>`).join("");
         sel.value = g.dates.includes(inp.value) ? inp.value : "";
         if (!g.dates.includes(inp.value)) inp.value = "";
@@ -4740,6 +4744,11 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       } else {
         sel.style.display = "none"; inp.style.display = "";
       }
+      // المطار + توزيع المدن: مخفيان للجروب (مسار ومدن ثابتة بالبرنامج).
+      const distSec = $("bf-distSection");
+      if (distSec) distSec.style.display = isGrp ? "none" : "";
+      const aSel = $("bf-airport");
+      if (aSel && aSel.closest("label")) aSel.closest("label").style.display = isGrp ? "none" : "";
     }
     if ($("bf-date-group")) $("bf-date-group").addEventListener("change", e => { const inp = $("bf-date_from"); if (inp) inp.value = e.target.value; });
     bfLoadGroups();
