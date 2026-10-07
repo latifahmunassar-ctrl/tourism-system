@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-07-makkah-baggage'
+  var BUILD = '2026-10-07-umrah-detect-strong'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -3810,7 +3810,7 @@ const breakdown = (kids + infants > 0 && pax === adults + kids + infants)
   : '';
 return `<tr><td><strong>${p[0]||''}</strong></td><td><span class="type-badge ${tc}">${p[1]||''}</span></td><td class="price-cell">${p[2]||''}</td><td>${pax} ${paxNoun}${breakdown}</td><td class="price-cell">${(total||parseMoney(p[4])).toLocaleString()} ريال</td><td><button type="button" class="del-flight" data-line="${hswEsc(l)}" onclick="removeFlightLine(this)" title="حذف الرحلة (لو العميل حاجزها بنفسه)">🗑️ حذف</button></td></tr>`;
 }).join('')}</tbody>
-</table>${(/عمرة|عمره|مكة|مكه|المدين[ةه]\s*المنور[ةه]|الحرم/.test(String(dest||'')) && _anyFlight) ? `<div style="margin-top:10px;padding:10px 13px;border:1.5px dashed #c9b37a;background:#fdf8ec;border-radius:9px;font-size:13px;font-weight:800;color:#6b4e00;">🧳 وزن الأمتعة المسموح لكل مسافر: حقيبة يد ١×٨ كجم + حقيبة مسجّلة ١×٢٠ كجم</div>` : ''}</div>`;
+</table>${((()=>{const r=/عمرة|عمره|مكة|مكه|المدين[ةه]|جد[ةه]|الحرم|makkah|madinah|mecca|jeddah/i;return r.test(String(dest||''))||hotelsLines.some(l=>r.test(String(l.split('|')[1]||'')))||flightsLines.some(l=>/مسقط/.test(String(l.split('|')[0]||''))&&/جد[ةه]/.test(String(l.split('|')[0]||'')));})() && _anyFlight) ? `<div style="margin-top:10px;padding:10px 13px;border:1.5px dashed #c9b37a;background:#fdf8ec;border-radius:9px;font-size:13px;font-weight:800;color:#6b4e00;">🧳 وزن الأمتعة المسموح لكل مسافر: حقيبة يد ١×٨ كجم + حقيبة مسجّلة ١×٢٠ كجم</div>` : ''}</div>`;
 }
 
 if (transfersLines.length) {
@@ -5287,7 +5287,11 @@ function renderFlightsPDF() {
   const _pTrain  = _pk.some(k => k.includes('قطار'));
   const _pFlight = _pk.some(k => k && !k.includes('قطار'));
   // برامج مكة/العمرة: وزن أمتعة الطيران الدولي (مسقط↔جدة) = حقيبة يد ٨ كجم + مسجّلة ٢٠ كجم.
-  const _isMakkahFlt = /عمرة|عمره|مكة|مكه|المدين[ةه]\s*المنور[ةه]|الحرم/.test(String(dest||''));
+  // كشف قوي: الوجهة أو مدن الفنادق أو مسار الطيران (مسقط↔جدة).
+  const _umReF = /عمرة|عمره|مكة|مكه|المدين[ةه]|جد[ةه]|الحرم|makkah|madinah|mecca|jeddah/i;
+  const _isMakkahFlt = _umReF.test(String(dest||''))
+    || hotelsLines.some(l => _umReF.test(String(l.split('|')[1]||'')))
+    || flightsLines.some(l => /مسقط/.test(String(l.split('|')[0]||'')) && /جد[ةه]/.test(String(l.split('|')[0]||'')));
   const pdfFlightTitle = (_pTrain && _pFlight) ? '✈️🚆 الطيران والقطار'
     : _pTrain ? '🚆 القطار'
     : '✈️ الطيران';
@@ -5532,7 +5536,11 @@ ${itineraryHTML}
     ${(()=>{
       // العمرة: لا جولات سياحية ولا طيران داخلي (التنقّل مكة↔المدينة بالقطار/السيارة ضمن
       // التنقّلات). «يشمل» يعكس الخدمات الفعلية فقط — بلا أي إضافة غير موجودة بالبرنامج.
-      const _isUmrah = /عمرة|عمره|مكة|مكه|المدين[ةه]\s*المنور[ةه]|الحرم/.test(String(dest||''));
+      // كشف العمرة قوي: الوجهة أو مدن الفنادق (مكة/المدينة/جدة) أو مسار الطيران الدولي (مسقط↔جدة).
+      const _umRe = /عمرة|عمره|مكة|مكه|المدين[ةه]|جد[ةه]|الحرم|makkah|madinah|mecca|jeddah/i;
+      const _isUmrah = _umRe.test(String(dest||''))
+        || hotelsLines.some(l => _umRe.test(String(l.split('|')[1]||'')))
+        || flightsLines.some(l => /مسقط/.test(String(l.split('|')[0]||'')) && /جد[ةه]/.test(String(l.split('|')[0]||'')));
       const _hasFlight = flightsLines.some(l=>{const k=String(l.split('|')[1]||'');return k && !k.includes('قطار');});
       const _hasTrain  = flightsLines.some(l=>String(l.split('|')[1]||'').includes('قطار'));
       const _hasSim = (parseInt((arabicDigitsToLatin(String(simText||'')).match(/\d+/)||['0'])[0])||0) > 0;
