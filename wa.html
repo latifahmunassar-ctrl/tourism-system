@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20261007a -->
+<!-- APPVER:20261007b -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1371,11 +1371,12 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
                 <option>فيتنام</option><option>ماليزيا</option><option>تايلاند</option>
                 <option>تركيا</option><option>روسيا</option><option>البوسنة</option>
                 <option>إندونيسيا</option><option>عُمان</option><option>جنوب أفريقيا</option><option>موريشيوس</option><option value="العمرة">العمرة (مكة + المدينة)</option><option>إنجلترا</option><option>الصين</option>
-                <optgroup label="🚌 وجهات برامج الجروبات (أوروبا)"><option>إيطاليا</option><option>سويسرا</option><option>فرنسا</option><option>إسبانيا</option><option>النمسا</option><option>المجر</option><option>التشيك</option><option>سلوفاكيا</option><option>هولندا</option></optgroup>
+                <optgroup id="bf-grp-optgroup" label="🚌 برامج الجروبات"></optgroup>
               </select>
             </label>
             <label style="display:flex; flex-direction:column; gap:3px;">تاريخ السفر
               <input type="date" id="bf-date_from" style="padding:7px; border:1px solid #d7dee6; border-radius:7px;">
+              <select id="bf-date-group" style="display:none; padding:7px; border:1px solid #c9b37a; background:#fdf8ec; border-radius:7px;"></select>
             </label>
             <label style="display:flex; flex-direction:column; gap:3px;">عدد البالغين
               <input type="number" min="1" id="bf-pax" style="padding:7px; border:1px solid #d7dee6; border-radius:7px;">
@@ -1869,7 +1870,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20261007a";
+    const APPVER = "20261007b";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4260,6 +4261,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         const b = d.brief || {};
         if (b.destination) setv("bf-destination", bfCanonDest(b.destination));
         if (b.date_from) setv("bf-date_from", b.date_from);
+        if (typeof bfApplyGroupDates === "function") bfApplyGroupDates($("bf-destination") ? $("bf-destination").value : "");
         if (b.pax != null) setv("bf-pax", b.pax);
         if (b.children != null) setv("bf-children", b.children);
         if (b.days != null) setv("bf-days", b.days);
@@ -4510,6 +4512,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if (!b || phone !== convPhone) return;   // تجاهل لو بدّل المستخدم المحادثة
         setv("bf-destination", bfCanonDest(b.destination));
         setv("bf-date_from", b.date_from); setv("bf-pax", b.pax); setv("bf-children", b.children);
+        if (typeof bfApplyGroupDates === "function") bfApplyGroupDates($("bf-destination") ? $("bf-destination").value : "");
         setv("bf-days", b.days); setv("bf-sim_count", b.sim_count);
         setv("bf-hotel_stars", b.hotel_stars == null ? "" : String(b.hotel_stars));
         setv("bf-notes", b.notes);
@@ -4675,13 +4678,66 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       // عند الفتح: نزّل الفورم لمجال الرؤية ليبان فورًا.
       if (willOpen) setTimeout(() => { try { $("brief-toggle").scrollIntoView({ behavior: "smooth", block: "start" }); } catch (_) {} }, 60);
     });
+    // ── برامج الجروبات: تواريخ انطلاق محدّدة مسبقاً ───────────────────────
+    // عند اختيار برنامج جروب من قائمة الوجهة نعرض تواريخ انطلاق الجروب الجاهزة
+    // (قائمة منسدلة بدل تاريخ حر). المصدر: groups_list من Tourism-AI.
+    const BF_TAI = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/Tourism-AI";
+    const BF_TAI_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mb3R2YWNzemxtcnF4emZqbXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2MjI5NTYsImV4cCI6MjA5MzE5ODk1Nn0.1nQmxW63BFZSK-cn4fzh8tYM7a2JO10AQ0RGQ5bcdYo";
+    let BF_GROUPS = {};   // {اسم البرنامج: {dates:[...]}}
+    function bfIsGroup(v){ return !!(v && BF_GROUPS[v]); }
+    function bfFmtDate(iso){
+      try { const [y,m,dd]=String(iso).split("-"); const mn=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"]; return (+dd)+" "+mn[(+m)-1]+" "+y; } catch(_){ return iso; }
+    }
+    async function bfLoadGroups(){
+      try {
+        const r = await fetch(BF_TAI, { method:"POST", headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+BF_TAI_KEY, "apikey":BF_TAI_KEY }, body: JSON.stringify({ action:"groups_list" }) });
+        const d = await r.json();
+        const groups = (d && d.groups) || [];
+        const og = $("bf-grp-optgroup"); if (!og) return;
+        og.innerHTML = ""; BF_GROUPS = {};
+        groups.forEach(g => {
+          const name = String(g.program || g.tab || "").replace(/\s*\(\s*Group\s*\)\s*$/i, "").trim();
+          if (!name) return;
+          BF_GROUPS[name] = { dates: Array.isArray(g.dates) ? g.dates.slice() : [] };
+          const opt = document.createElement("option");
+          opt.value = name; opt.textContent = name;
+          og.appendChild(opt);
+        });
+      } catch(_) { /* أفضل جهد */ }
+    }
+    // يبدّل حقل التاريخ: برنامج جروب → قائمة تواريخ جاهزة؛ غيره → تاريخ حر.
+    function bfApplyGroupDates(val){
+      const inp = $("bf-date_from"), sel = $("bf-date-group");
+      if (!inp || !sel) return;
+      const g = BF_GROUPS[val];
+      if (g && g.dates && g.dates.length) {
+        sel.innerHTML = '<option value="">— اختر تاريخ انطلاق الجروب —</option>' + g.dates.map(dt => `<option value="${dt}">${bfFmtDate(dt)}</option>`).join("");
+        sel.value = g.dates.includes(inp.value) ? inp.value : "";
+        if (!g.dates.includes(inp.value)) inp.value = "";
+        sel.style.display = ""; inp.style.display = "none";
+      } else {
+        sel.style.display = "none"; inp.style.display = "";
+      }
+    }
+    if ($("bf-date-group")) $("bf-date-group").addEventListener("change", e => { const inp = $("bf-date_from"); if (inp) inp.value = e.target.value; });
+    bfLoadGroups();
+
     if ($("bf-destination")) $("bf-destination").addEventListener("change", async e => {
+      const v = e.target.value;
       bfChosenDist = ""; bfChosenCN = null; bfChosenPair = "";
       if ($("bf-chosen-wrap")) $("bf-chosen-wrap").style.display = "none";
       // مدن التخصيص تتبع الوجهة: صفّرها وابدأ بصف واحد بقائمة مدن الوجهة الجديدة
       if ($("bf-cityRows")) { $("bf-cityRows").innerHTML = ""; if (bfMode() === "manual") bfAddCity(); }
+      bfApplyGroupDates(v);
       bfSum();
-      await bfLoadSugs(e.target.value); bfRenderSugs();
+      // برنامج جروب: تواريخ ومسار ثابت → لا اقتراحات مدن/مطار.
+      if (bfIsGroup(v)) {
+        const aSel = $("bf-airport"); if (aSel) aSel.innerHTML = '<option value="">— برنامج جروب (مسار ثابت) —</option>';
+        if ($("bf-sug-list")) $("bf-sug-list").innerHTML = "";
+        if ($("bf-sug-hint")) { $("bf-sug-hint").style.display = ""; $("bf-sug-hint").textContent = "🚌 برنامج جروب بتواريخ انطلاق محددة — اختر التاريخ المناسب من القائمة."; }
+        return;
+      }
+      await bfLoadSugs(v); bfRenderSugs();
     });
     if ($("bf-airport")) $("bf-airport").addEventListener("change", bfRenderSugs);
     if ($("bf-days")) $("bf-days").addEventListener("input", () => { bfRenderSugs(); bfExpected(); bfSum(); });
