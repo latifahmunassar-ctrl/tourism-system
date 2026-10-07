@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-07-group-routing'
+  var BUILD = '2026-10-07-grp-bidi-currency'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2308,6 +2308,9 @@ let GRP_PROGRAMS = [];      // كل برامج الجروبات (من groups_lis
 let GRP_CURRENT = null;     // البرنامج المختار حالياً
 let GRP_RESTORED = null;    // حالة برنامج جروب مُسترجَع بالكود {date,pax,ptype,c} — لأن g لا يحمل prices فنستخدم c المحسوب مسبقاً
 function grpEsc(s){ return String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
+// عزل bidi للنص اللاتيني داخل قالب عربي (مثل bidiText في buildPDF): html2canvas
+// يراكب اللاتيني مع العربي ويُسقط المسافات بلا هذا العزل. يُطبَّق على أسماء الفنادق/المدن.
+function grpBidi(s){ const t=grpEsc(s); return /[A-Za-z]/.test(String(s||'')) ? `<span dir="ltr" style="unicode-bidi:isolate;display:inline-block;">${t}</span>` : t; }
 function grpNum(n){ return (Number(n)||0).toLocaleString('en-US'); }
 // ترجمة اسم برنامج الجروب (المشتَق من اسم التبويب الإنجليزي) لأسماء بلدان عربية للعرض.
 const GRP_AR_WORDS={italy:'إيطاليا',italian:'إيطاليا',itlay:'إيطاليا',austria:'النمسا',switzerland:'سويسرا',swiss:'سويسرا',france:'فرنسا',french:'فرنسا',spain:'إسبانيا',spanish:'إسبانيا',england:'إنجلترا',britain:'بريطانيا',uk:'المملكة المتحدة',amsterdam:'أمستردام',paris:'باريس',rome:'روما',netherlands:'هولندا',netherland:'هولندا',holland:'هولندا',hungary:'المجر',slovakia:'سلوفاكيا',czech:'التشيك',belgium:'بلجيكا',portugal:'البرتغال',germany:'ألمانيا',classical:'الكلاسيكية',symphony:'السيمفونية',holidays:'العطلات',holiday:'العطلة',andalusian:'أندلسية',story:'قصة',spirit:'الروح',imperial:'الإمبراطورية',capitals:'العواصم',roaming:'جولة في',morocco:'المغرب',japan:'اليابان',kyoto:'كيوتو',china:'الصين'};
@@ -2552,6 +2555,31 @@ function grpOnCurrencyPick(){
   if(GRP_RESTORED) grpRestoreRender();   // برنامج مُسترجَع: أعِد رسم البطاقة بالعملة الجديدة
   else grpShow();                        // برنامج مختار: أعِد البناء الكامل
 }
+// يطبّق عملة العميل تلقائياً على تسعير الجروب حسب رقم هاتفه (٩٦٨→عماني…) — يُستخدم
+// عند توجيه طلب فرد جروب للتسعير، فيطلع السعر جاهزاً بعملة العميل للإرسال.
+async function grpApplyCustomerCurrency(phone){
+  try {
+    if(!GRP_CURRENT) return;
+    const code = (typeof indivCurrencyCode==='function') ? indivCurrencyCode(phone) : '';
+    if(!code || code==='SAR') return;                 // الريال = الأساس بلا تحويل
+    if(typeof loadCurrencies==='function') await loadCurrencies();
+    const ALIAS={ AED:['UAE','AED'], OMR:['OMR','Oman','عمان','عُمان'] };
+    const wanted = ALIAS[code] || [code];
+    const cur = (availableCurrencies||[]).find(c => wanted.includes(c.code) || wanted.includes(c.name_ar));
+    if(!cur || !(parseFloat(cur.rate)>0)) return;
+    GRP_CURRENCY = { name: cur.name_ar, rate: parseFloat(cur.rate) };
+    const sel=document.getElementById('grpCurrencyPicker');
+    if(sel){
+      if(sel.options.length<=1){
+        sel.innerHTML='<option value="">💱 بدون تحويل (ريال)</option>'+ (availableCurrencies||[]).map(c=>`<option value="${c.code}" data-rate="${c.rate}" data-name="${c.name_ar}">${c.name_ar} (1 = ${c.rate} ريال)</option>`).join('');
+      }
+      sel.value = cur.code;
+    }
+    const cb=document.getElementById('grpCurrencyBtn'); if(cb) cb.style.display='inline-flex';
+    GRP_SAVED_CODE='';
+    grpShow();   // أعِد الرسم بالعملة الجديدة
+  } catch(_){ /* أفضل جهد */ }
+}
 // ═══ اعتماد برنامج الجروب: لقطة مجمّدة + كود استرجاع دائم ═══
 // يُحفظ بنفس جدول البرامج (programs) لتعمل خانة «استرجاع» نفسها، ويُوسَم
 // بـGRPPROG:1 ليعرف الاسترجاع أنه برنامج جروب فيرسمه بقالب الجروب لا بمولّد
@@ -2688,10 +2716,10 @@ function grpBuildPdfHtml(variant){
   const hotPdf=(g.hotels&&g.hotels.length)
     ? g.hotels.map(h=>
         `<div class="pdf-keep" style="border:1.5px solid #d0deff;border-radius:10px;padding:14px 18px;margin-bottom:12px;">
-           <div style="font-weight:900;font-size:19px;color:#1a3a8f;margin-bottom:8px;">📍 ${grpEsc(h.city)}</div>
+           <div style="font-weight:900;font-size:19px;color:#1a3a8f;margin-bottom:8px;">📍 ${grpBidi(h.city)}</div>
            ${(h.options||[]).map(o=>
              `<div style="font-size:16px;color:#0d1f4a;line-height:2;">
-                ${o.stars?`<span style="color:#d4a843;letter-spacing:2px;">${'★'.repeat(o.stars)}</span> `:''}${grpEsc(o.name)}${o.stars?` <span style="color:#64748b;font-size:14px;">(${o.stars} نجوم)</span>`:''}
+                ${o.stars?`<span style="color:#d4a843;letter-spacing:2px;">${'★'.repeat(o.stars)}</span> `:''}${grpBidi(o.name)}${o.stars?` <span style="color:#64748b;font-size:14px;">(${o.stars} نجوم)</span>`:''}
               </div>`).join('')}
          </div>`).join('')
       + `<div style="font-size:14px;color:#64748b;line-height:1.8;margin-top:4px;">الفندق النهائي يُحدَّد عند التأكيد من ضمن الخيارات أعلاه أو ما يماثلها في التصنيف.</div>`
@@ -6545,7 +6573,9 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
           const ptEl=document.getElementById('grp-ptype'); if(ptEl) ptEl.value='individual';
           if(typeof grpOnDate==='function') grpOnDate();
           if(typeof grpShow==='function') grpShow();
-          if(typeof grpMsg==='function') grpMsg('🚌 طلب جروب للعميل — اختيرَ البرنامج والتاريخ والعدد تلقائياً، راجعي التسعير ثم جهّزي العرض.');
+          // 💱 عملة العميل تلقائياً (عماني→عماني…) ليطلع السعر جاهزاً للإرسال.
+          if(typeof grpApplyCustomerCurrency==='function') { try{ await grpApplyCustomerCurrency(b.contact_phone); }catch(_){} }
+          if(typeof grpMsg==='function') grpMsg('🚌 طلب جروب للعميل — اختيرَ البرنامج والتاريخ والعدد وعملة العميل تلقائياً، راجعي التسعير ثم جهّزي العرض.');
           window.scrollTo({top:0,behavior:'smooth'});
           return;
         }
