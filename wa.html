@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20261007c -->
+<!-- APPVER:20261007d -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1870,7 +1870,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20261007c";
+    const APPVER = "20261007d";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4259,7 +4259,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if (!r.ok || d.error) throw new Error(d.error || ("HTTP " + r.status));
         if (phone !== convPhone) return;
         const b = d.brief || {};
-        if (b.destination) setv("bf-destination", bfCanonDest(b.destination));
+        if (b.destination) { const _d0 = bfCanonDest(b.destination); setv("bf-destination", (typeof bfGrpFromAr === "function" && bfGrpFromAr(_d0)) || _d0); }
         if (b.date_from) setv("bf-date_from", b.date_from);
         if (typeof bfApplyGroupDates === "function") bfApplyGroupDates($("bf-destination") ? $("bf-destination").value : "");
         if (b.pax != null) setv("bf-pax", b.pax);
@@ -4510,7 +4510,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if (!r.ok) return;
         const b = (await r.json()).brief;
         if (!b || phone !== convPhone) return;   // تجاهل لو بدّل المستخدم المحادثة
-        setv("bf-destination", bfCanonDest(b.destination));
+        { const _d0 = bfCanonDest(b.destination); setv("bf-destination", (typeof bfGrpFromAr === "function" && bfGrpFromAr(_d0)) || _d0); }
         setv("bf-date_from", b.date_from); setv("bf-pax", b.pax); setv("bf-children", b.children);
         if (typeof bfApplyGroupDates === "function") bfApplyGroupDates($("bf-destination") ? $("bf-destination").value : "");
         setv("bf-days", b.days); setv("bf-sim_count", b.sim_count);
@@ -4572,7 +4572,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       }
       const payload = {
         contact_phone: convPhone,
-        destination: val("bf-destination"),
+        destination: bfDestForSave(val("bf-destination")),
         pax: val("bf-pax"), children: val("bf-children"), days: val("bf-days"),
         date_from: val("bf-date_from"),
         arrival_airport: arr || "", departure_airport: dep || "",
@@ -4683,8 +4683,12 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     // (قائمة منسدلة بدل تاريخ حر). المصدر: groups_list من Tourism-AI.
     const BF_TAI = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/Tourism-AI";
     const BF_TAI_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mb3R2YWNzemxtcnF4emZqbXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2MjI5NTYsImV4cCI6MjA5MzE5ODk1Nn0.1nQmxW63BFZSK-cn4fzh8tYM7a2JO10AQ0RGQ5bcdYo";
-    let BF_GROUPS = {};   // {اسم البرنامج: {dates:[...]}}
+    let BF_GROUPS = {};     // {اسم البرنامج الإنجليزي: {dates, ar}}
+    let BF_GROUPS_AR = {};  // {الاسم العربي: الاسم الإنجليزي} — لعكس التحميل
     function bfIsGroup(v){ return !!(v && BF_GROUPS[v]); }
+    function bfGrpFromAr(ar){ return BF_GROUPS_AR[String(ar||"").trim()] || null; }
+    // الاسم الذي يُحفَظ في الطلب = العربي للجروب (وإلا القيمة كما هي).
+    function bfDestForSave(v){ return bfIsGroup(v) ? (BF_GROUPS[v].ar || v) : v; }
     function bfFmtDate(iso){
       try { const [y,m,dd]=String(iso).split("-"); const mn=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"]; return (+dd)+" "+mn[(+m)-1]+" "+y; } catch(_){ return iso; }
     }
@@ -4710,13 +4714,15 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         const d = await r.json();
         const groups = (d && d.groups) || [];
         const og = $("bf-grp-optgroup"); if (!og) return;
-        og.innerHTML = ""; BF_GROUPS = {};
+        og.innerHTML = ""; BF_GROUPS = {}; BF_GROUPS_AR = {};
         groups.forEach(g => {
           const name = String(g.program || g.tab || "").replace(/\s*\(\s*Group\s*\)\s*$/i, "").trim();
           if (!name) return;
-          BF_GROUPS[name] = { dates: Array.isArray(g.dates) ? g.dates.slice() : [] };
+          const ar = bfGrpAr(name);
+          BF_GROUPS[name] = { dates: Array.isArray(g.dates) ? g.dates.slice() : [], ar };
+          BF_GROUPS_AR[ar] = name;
           const opt = document.createElement("option");
-          opt.value = name; opt.textContent = bfGrpAr(name);
+          opt.value = name; opt.textContent = ar;
           og.appendChild(opt);
         });
       } catch(_) { /* أفضل جهد */ }
