@@ -1729,7 +1729,7 @@ function bRecall(){
         '<td>'+inp('cancel',b.cancel_charge,true,'oninput="bRow('+i+')"')+cur(supCur)+'</td><td>'+inp('refund',(isC?Number(_refSup.toFixed(2)):0),true)+cur(supCur)+'</td><td class="num pos" id="sb-exp-'+i+'">'+fmt(isC?Number((_refSup*rate).toFixed(2)):0)+cur(sellCur)+'</td><td>'+selInp('bfrom',b.booked_from||b.supplier,(sIsFlight(b.kind)?'flight_booked_from':(sIsHotel(b.kind)?'hotels_system':'suppliers')))+'</td><td><input type="date" id="sb-cdate-'+i+'" class="dueinp" style="width:122px" value="'+esc(CHARGE_DATE_OVR[i]!=null?CHARGE_DATE_OVR[i]:bookDate)+'" title="تاريخ الدفع (اختياري) — الافتراضي تاريخ الحجز، قابل للتعديل" onchange="setChargeDate('+i+',this.value)"></td><td>'+selInp('cfrom',b.charge_from,'charged_from')+'</td>'+
         '<td><select id="sb-status-'+i+'" '+st+' onchange="'+(lockedCost?'bStatusChange('+i+',\''+esc(code)+'\')':'bRow('+i+')')+'"'+(lockedCost?' data-cur="'+(isC?'Cancel':'Active')+'" title="غيّري الحالة → يُرسَل طلب للموافقة (لا يتغيّر حتى تعتمده المالكة)"':'')+'><option'+(isC?'':' selected')+'>Active</option><option'+(isC?' selected':'')+'>Cancel</option></select></td>'+
         '<td class="num">'+esc(b.currency_rate!=null?b.currency_rate:'')+'</td>'+
-        '<td>'+(lockedCost?('<span title="مقفل — التكلفة تُعدَّل بموافقة الإدارة فقط" style="color:#3a7bd5;font-size:14px">🔒</span><button class="btn ghost" style="padding:2px 6px;font-size:9px;margin-top:3px;display:block" title="حفظ النواقص (رقم التأكيد · مصدر الدفع · تاريخ الدفع) بدون موافقة — لا يمسّ التكلفة المقفلة" onclick="saveConfOnly('+i+',\''+esc(code)+'\')">💾 حفظ الناقص</button>'+(isC?'<button class="btn green" style="padding:2px 6px;font-size:9px;margin-top:3px;display:block" onclick="reqReactivate('+i+',\''+esc(code)+'\')">🔄 طلب تفعيل (موافقة)</button>':'<button class="btn" style="background:#d98a00;color:#000;padding:2px 6px;font-size:9px;margin-top:3px;display:block" onclick="reqCancelBooking('+i+',\''+esc(code)+'\')">🚫 طلب إلغاء (موافقة)</button>')):'<button class="btn green" style="padding:3px 9px;font-size:11px" onclick="saveSvcBooking('+i+',\''+esc(code)+'\')">💾</button>')+'</td></tr>';
+        '<td>'+(lockedCost?('<span title="مقفل — التكلفة تُعدَّل بموافقة الإدارة فقط" style="color:#3a7bd5;font-size:14px">🔒</span><button class="btn ghost" style="padding:2px 6px;font-size:9px;margin-top:3px;display:block" title="حفظ النواقص (رقم التأكيد · مصدر الدفع · تاريخ الدفع) بدون موافقة — لا يمسّ التكلفة المقفلة" onclick="saveConfOnly('+i+',\''+esc(code)+'\')">💾 حفظ الناقص</button>'+(isAccountantUser()?'<button class="btn" style="background:#b8860b;color:#fff;padding:2px 6px;font-size:9px;margin-top:3px;display:block" title="حفظ/تعديل/إضافة رسوم الإلغاء مباشرة (للمحاسب والمالكة) — بلا مسّ التكلفة المقفلة" onclick="saveCancelCharge('+i+',\''+esc(code)+'\')">💾 رسوم الإلغاء</button>':'')+(isC?'<button class="btn green" style="padding:2px 6px;font-size:9px;margin-top:3px;display:block" onclick="reqReactivate('+i+',\''+esc(code)+'\')">🔄 طلب تفعيل (موافقة)</button>':'<button class="btn" style="background:#d98a00;color:#000;padding:2px 6px;font-size:9px;margin-top:3px;display:block" onclick="reqCancelBooking('+i+',\''+esc(code)+'\')">🚫 طلب إلغاء (موافقة)</button>')):'<button class="btn green" style="padding:3px 9px;font-size:11px" onclick="saveSvcBooking('+i+',\''+esc(code)+'\')">💾</button>')+'</td></tr>';
     }).join('')+'</tbody></table></div>'+
     '<div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:6px 18px;font-size:14px" onclick="bScroll(-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:6px 18px;font-size:14px" onclick="bScroll(1)">تمرير ▶▶</button></div>'+
     '<div style="margin-top:10px;display:flex;align-items:center;gap:10px"><button id="b-saveall" class="btn green" onclick="saveAllSvc(\''+esc(code)+'\')">💾 حفظ كل التغييرات</button><span id="b-saveall-msg" style="font-size:12px;color:var(--green)"></span></div>';
@@ -1850,6 +1850,25 @@ async function saveConfOnly(id,code){
   const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
   await load(); bRecall();
   alert('✅ حُفظت النواقص (رقم التأكيد · مصدر الحجز · مصدر الدفع · تاريخ الدفع) بدون تغيير التكلفة المقفلة.');
+}
+// 👤 المحاسب أو المالكة؟ (can_bankref = المالكة أو دور محاسب — من الاستجابة me)
+function isAccountantUser(){ try{ if(typeof isOwnerUser==='function'&&isOwnerUser())return true; return !!(DATA&&DATA.me&&(DATA.me.can_bankref||/محاسب|accountant/i.test(String(DATA.me.role||'')))); }catch(e){ return false; } }
+// 💾 حفظ/تعديل/إضافة رسوم الإلغاء مباشرة على حجز مقفل — للمحاسب والمالكة (قرار المالكة: صلاحية رسوم الإلغاء للمحاسب) — بلا موافقة، بلا مسّ التكلفة المقفلة
+async function saveCancelCharge(id,code){
+  if(!isAccountantUser()){ alert('⚠️ تعديل رسوم الإلغاء للمحاسب أو المالكة فقط'); return; }
+  const cc=Number((($('sb-cancel-'+id)||{}).value)||0);
+  if(isNaN(cc)||cc<0){ alert('⚠️ قيمة رسوم الإلغاء غير صحيحة'); return; }
+  if(!cancelOk(id)) return;   // لا تتجاوز قيمة الحجز الفعلي
+  const svc=(DATA.serviceLines||[]).find(x=>x.id===id);
+  const actual=Number((($('sb-booked-'+id)||{}).value))||Number((svc&&svc.final_rate_booked)||0);
+  const refund=Math.max(0,(actual>0.005?actual:0)-cc);   // المرتجع للمورّد (عملة المورّد) = الحجز الفعلي − الرسوم
+  const payload={id:id,client_code:code,cancel_charge:cc,refund:refund};
+  if(cc>0) payload.status='Cancel';   // رسوم إلغاء > 0 → الحجز ملغى
+  if(!confirm('💾 حفظ رسوم الإلغاء = '+fmt(cc)+' (بعملة المورّد)؟'+(cc>0?('\nسيُعلَّم الحجز «ملغى» والمرتجع '+fmt(refund)+'.'):'')))return;
+  const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_service_line',payload:payload})});
+  const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
+  await load(); bRecall();
+  alert('✅ حُفظت رسوم الإلغاء ('+fmt(cc)+') — المرتجع '+fmt(refund)+' بعملة المورّد.');
 }
 // هل الحجز الفعلي يفوق سعر البيع (خسارة)؟ — للرسالة فقط؛ الكشف والعرض حيّ في الإشعارات (liveBookingLosses) بلا إنشاء سجلات
 async function bMaybeLossTicket(id,code){
