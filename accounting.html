@@ -1252,6 +1252,10 @@ function toggleNoBankFilter(){ window.FCD_NOBANKONLY=!window.FCD_NOBANKONLY; var
 function payConfirmed(r){ return !!(((r.bank_ref||'').toString().trim())) && !!(((r.bank_name||'').toString().trim())); }
 function hasRef(r){ return !!((r.bank_ref||'').toString().trim()); }
 function hasBank(r){ return !!((r.bank_name||'').toString().trim()); }
+// 📅 سنة العملية — من تاريخ الحجز ثم كود العميل (C26→2026) ثم تاريخ الوصول
+function fcdOpYear(r){ const bd=String((r&&r.booking_date)||'').slice(0,4); if(/^\d{4}$/.test(bd))return +bd; const m=/^C(\d{2})/.exec(String((r&&r.client_code)||'').toUpperCase()); if(m)return 2000+(+m[1]); const ad=String((r&&r.arrival_date)||'').slice(0,4); if(/^\d{4}$/.test(ad))return +ad; return null; }
+// 🔔 تنبيه «بلا تاريخ دفع» يخصّ 2026 وما فوق فقط (قرار المالكة: عمليات 2025 وأقدم تُستثنى من هذا التنبيه تحديداً)
+function fcdNoDateAlert(r){ const y=fcdOpYear(r); return (y==null||y>=2026); }
 // تاريخ الدفع الفعّال: override المُدخل من الداشبورد (acc_fcd_payment_dates، يبقى رغم مزامنة الشيت) ثم قيمة الصف
 function effPayDate(r){ var pc=r.payment_code||''; if(pc && PAYDATE_OVR[pc]!=null) return String(PAYDATE_OVR[pc]).slice(0,10); return String(r.payment_date||'').slice(0,10); }
 // 🔄 SSOT: عند تغيير تاريخ الدفع، انقلي الحركة البنكية المطابقة (نفس المرجع) لنفس التاريخ تلقائيّاً — نفس المرجع/المبلغ/البنك (إضافة ثم حذف؛ لا يوجد update_bank_txn_date). للمالكة فقط.
@@ -1341,8 +1345,8 @@ function renderFcd(){
       if(due==='over' && !(b<-1)) return false;
       if(due==='paid' && Math.abs(b)>1) return false; }
     if(miss){ const paidRow=Number(r.amount_paid||0)>1; const noDate=!effPayDate(r); // فلتر «نواقص الدفعات» يخصّ الدفعات الفعلية فقط (يطابق عدّاداته)؛ الحجوزات بلا دفعة لها زر «🏦 بلا بنك/مرجع» المنفصل
-      if(miss==='any'   && !(paidRow && (noDate || !hasRef(r) || !hasBank(r)))) return false;
-      if(miss==='nodate'&& !(paidRow && noDate))     return false;
+      if(miss==='any'   && !(paidRow && ((noDate&&fcdNoDateAlert(r)) || !hasRef(r) || !hasBank(r)))) return false;
+      if(miss==='nodate'&& !(paidRow && noDate && fcdNoDateAlert(r)))     return false;
       if(miss==='noref' && !(paidRow && !hasRef(r))) return false;
       if(miss==='nobank'&& !(paidRow && !hasBank(r)))return false; }
     return true;
@@ -1392,8 +1396,8 @@ function renderFcd(){
   const _dupCnt=Object.values(DUP).filter(x=>x.isDup).length; const _dc=$('flt-dup-cnt'); if(_dc)_dc.textContent=_dupCnt;   // 🔁 عدد المشتبه تكرارهم بجانب الفلتر
   const _nbCnt=DATA.fcd.filter(r=>Number(r.package_rate||0)>0 && (!hasBank(r)||!hasRef(r))).length; const _nc=$('flt-nobank-cnt'); if(_nc)_nc.textContent=_nbCnt;   // 🏦 عدد الحجوزات بلا بنك/مرجع بجانب الفلتر
   // ===== بانر الدفعات الناقصة (تاريخ الدفع / المرجع البنكي / بنك الإيداع) + فلترة =====
-  const nNoDate=paidRows.filter(r=>!effPayDate(r)).length;
-  const nAny=paidRows.filter(r=>!effPayDate(r)||!hasRef(r)||!hasBank(r)).length;
+  const nNoDate=paidRows.filter(r=>!effPayDate(r)&&fcdNoDateAlert(r)).length;   // 📅 بلا تاريخ دفع — 2026+ فقط
+  const nAny=paidRows.filter(r=>(!effPayDate(r)&&fcdNoDateAlert(r))||!hasRef(r)||!hasBank(r)).length;
   const ib=$('fcd-incomplete');
   if(ib){
     const cur=(($('flt-miss')||{}).value)||'';
