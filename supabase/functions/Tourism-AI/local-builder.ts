@@ -99,6 +99,26 @@ function hotelCoversDate(hotel: HotelRow, travelDateISO: string | null): boolean
   return true;
 }
 
+// يختار صف نفس الفندق من **أقرب فترة سابقة** للتاريخ (وإلا أقرب فترة لاحقة) — يُستخدم
+// للسعر التقريبي حين لا تُغطّي أي فترة تاريخَ السفر (طلب المالكة: «سعر من فترة سابقة»).
+function pickNearestPeriodRow(rows: HotelRow[], travelDateISO: string): HotelRow | null {
+  const travel = parseAnyDate(travelDateISO);
+  if (!travel || rows.length === 0) return null;
+  const withDate = rows.map(r => {
+    const from = r.date_from ? parseAnyDate(r.date_from) : null;
+    const to = r.date_to ? parseAnyDate(r.date_to) : null;
+    return { r, from, ref: (to || from) };   // نهاية الفترة (أو بدايتها) للمقارنة
+  }).filter(x => x.ref) as Array<{ r: HotelRow; from: Date | null; ref: Date }>;
+  if (withDate.length === 0) return null;
+  // فترات سابقة (انتهت قبل تاريخ السفر) → أحدثها (الأقرب للسفر).
+  const past = withDate.filter(x => x.ref < travel).sort((a, b) => b.ref.getTime() - a.ref.getTime());
+  if (past.length) return past[0].r;
+  // وإلا أقرب فترة لاحقة (الأبكر بعد السفر).
+  const future = withDate.filter(x => (x.from || x.ref) > travel)
+    .sort((a, b) => (a.from || a.ref).getTime() - (b.from || b.ref).getTime());
+  return future.length ? future[0].r : null;
+}
+
 function parseAnyDate(s: string): Date | null {
   if (!s) return null;
   // ISO YYYY-MM-DD
@@ -366,10 +386,15 @@ export function pickCheapestHotel(
     return a.name.localeCompare(b.name);
   });
   const chosen = candidates[0];
-  // تاريخ السفر خارج فترات هذا الفندق المُسعّرة → السعر المختار من أقرب فترة
-  // (تقريبي). نُعلّم نسخة حتى لا نلمس الصف المشترك، وتظهر ملاحظة للعميل.
+  // تاريخ السفر خارج فترات هذا الفندق المُسعّرة → نأخذ سعر **أقرب فترة سابقة**
+  // لنفس الفندق/الغرفة (وإلا أقرب لاحقة)، تقريبيّاً، مع ملاحظة للعميل. نُعلّم نسخة
+  // حتى لا نلمس الصف المشترك.
   if (dateForCheck && !hotelCoversDate(chosen, dateForCheck)) {
-    return { ...chosen, _approxDate: true };
+    const sameHotel = allHotels.filter(h =>
+      h.name === chosen.name && h.room_type === chosen.room_type &&
+      (h.occupancy || "") === (chosen.occupancy || "") && (h.date_from || h.date_to));
+    const near = pickNearestPeriodRow(sameHotel, dateForCheck);
+    return { ...(near || chosen), _approxDate: true };
   }
   return chosen;
 }
@@ -1527,7 +1552,7 @@ export function formatProgram(data: ProgramData): string {
     // سعر تقريبي: تاريخ السفر خارج فترات الفندق المُسعّرة → نضيف ملاحظة واضحة
     // تظهر في المراجعة والـPDF ضمن حقل «ما يشمل».
     if (sh.hotel._approxDate) {
-      meals += " · ⚠️ سعر تقريبي — لا يوجد سعر مؤكّد لهذه الفترة في هذا الفندق، والمعروض أقرب سعر متاح";
+      meals += " · ⚠️ سعر تقريبي — لا يوجد سعر مؤكّد لهذه الفترة في هذا الفندق، والمعروض سعر أقرب فترة متاحة";
     }
     const cityAr = cityArabicNames[sh.city] || sh.city;
     // Append "(يتسع N أشخاص)" to the room_type field whenever the DB row
