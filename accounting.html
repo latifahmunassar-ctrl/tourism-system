@@ -3624,6 +3624,7 @@ function liveUnconfirmedPayments(){
     const amt=Number(r.amount_paid||0); if(!(amt>1)) return;
     if(/cancel/i.test(String(r.conf_status||''))) return;
     if(payConfirmed(r)) return;   // معتمدة (لها بنك + مرجع) → لا تنبيه
+    if(typeof fcdNoDateAlert==='function' && !fcdNoDateAlert(r)) return;   // 🔔 تنبيه المراجع/الدفعات غير المعتمدة: 2026+ فقط (استثناء 2025 وأقدم)
     const hasBank=!!((r.bank_name||'').toString().trim()); const hasRef=!!((r.bank_ref||'').toString().trim());
     const need = (hasBank&&!hasRef)?'يحتاج المرجع البنكي':(!hasBank&&hasRef?'يحتاج اسم البنك':'يحتاج البنك والمرجع');
     const key='unconfpay:'+String(r.payment_code||r.id);
