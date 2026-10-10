@@ -395,7 +395,7 @@ table{font-weight:600}
       <div class="panel"><h3>كل الحجوزات (كل الأنواع) <span class="cnt" id="ov-cnt"></span></h3>
         <div class="tbl-wrap bf-scroll" id="ov-tbl"><table id="t-ov"><thead><tr>
           <th>تاريخ</th><th>الكود</th><th>العميل</th><th>الوكالة</th><th>النوع</th><th>الخدمة</th>
-          <th>البيع</th><th>سعر الحجز</th><th>الفرق</th><th>الحالة</th><th>Conf No</th><th>booked from</th><th>charged from</th><th>booked by</th>
+          <th>🪙 سعر المورد<br><span style="font-size:9px;color:var(--muted)">البيع÷الصرف · عملة المورّد</span></th><th>سعر الحجز<br><span style="font-size:9px;color:var(--muted)">عملة المورّد</span></th><th>الفرق<br><span style="font-size:9px;color:var(--muted)">سعر المورد − الحجز</span></th><th>الحالة</th><th>Conf No</th><th>booked from</th><th>charged from</th><th>booked by</th>
         </tr></thead><tbody></tbody></table></div>
         <div style="display:flex;gap:8px;justify-content:center;margin-top:8px"><button class="btn ghost" style="padding:6px 18px;font-size:14px" onclick="hScroll('ov-tbl',-1)">◀◀ تمرير</button><button class="btn ghost" style="padding:6px 18px;font-size:14px" onclick="hScroll('ov-tbl',1)">تمرير ▶▶</button></div>
       </div>
@@ -7300,12 +7300,13 @@ function renderOverview(){
   // كل سطور الخدمات (كل الأنواع)
   let arr=(DATA.serviceLines||[]).map(s=>{ const c=(s.client_code||'').toUpperCase(); const f=fm[c]||{};
     const sell=Number(s.amount)||0; const booked=(s.final_rate_booked!=null)?Number(s.final_rate_booked):sell;
-    const diff=(sell>0&&booked>0)?(sell-booked):null;
-    return {code:s.client_code||'',name:f.name||'',agent:f.agent||'',date:s.check_in||f.bdate||'',bdate:f.bdate||'',kind:s.kind||'',svc:s.name||'',sell,booked,diff,status:s.status||'',conf:s.conf_no||'',bfrom:s.booked_from||'',cfrom:s.charge_from||'',by:s.booked_by||''}; });
+    const rate=Number(s.currency_rate)||1; const supPrice=rate?(sell/rate):sell;   // 🪙 سعر المورد (عملة المورّد) = البيع ÷ سعر الصرف
+    const diff=(supPrice>0&&booked>0)?(supPrice-booked):null;   // الفرق بعملة المورّد = سعر المورد − سعر الحجز (لا طرح عملتين مختلفتين)
+    return {code:s.client_code||'',name:f.name||'',agent:f.agent||'',date:s.check_in||f.bdate||'',bdate:f.bdate||'',kind:s.kind||'',svc:s.name||'',sell,supPrice,booked,diff,status:s.status||'',conf:s.conf_no||'',bfrom:s.booked_from||'',cfrom:s.charge_from||'',by:s.booked_by||''}; });
   // فواتير موردين لعملاء بلا أي خدمة (عشان ما نفوّت أحد)
   const slCodes=new Set((DATA.serviceLines||[]).map(s=>(s.client_code||'').toUpperCase()));
   for(const si of (DATA.supplierInvoices||[])){ const c=(si.client_code||'').toUpperCase(); if(c&&!slCodes.has(c)){ const f=fm[c]||{};
-    arr.push({code:si.client_code||'',name:si.client_name||f.name||'',agent:si.agent_name||f.agent||'',date:si.invoice_date||f.bdate||'',bdate:f.bdate||si.invoice_date||'',kind:'supplier',svc:si.supplier_name||'',sell:0,booked:Number(si.invoice_amount)||0,diff:null,status:'',conf:'',bfrom:'',cfrom:'',by:''}); } }
+    arr.push({code:si.client_code||'',name:si.client_name||f.name||'',agent:si.agent_name||f.agent||'',date:si.invoice_date||f.bdate||'',bdate:f.bdate||si.invoice_date||'',kind:'supplier',svc:si.supplier_name||'',sell:0,supPrice:Number(si.invoice_amount)||0,booked:Number(si.invoice_amount)||0,diff:null,status:'',conf:'',bfrom:'',cfrom:'',by:''}); } }
   const q=($('ovflt-q').value||'').trim().toLowerCase();
   const fk=$('ovflt-kind')?$('ovflt-kind').value:'';
   const fpl=$('ovflt-pl')?$('ovflt-pl').value:'';
@@ -7323,7 +7324,7 @@ function renderOverview(){
     return '<tr'+((d!=null&&d< -0.5)?' style="background:rgba(255,107,122,.10)"':'')+'>'+[
       esc(x.date||''),esc(x.code),esc(x.name)+clientNameWarn(x.code,_wm),esc(x.agent),
       (SVC[x.kind]||esc(x.kind||'')),esc(x.svc),
-      '<span class="num">'+fmt(x.sell)+'</span>','<span class="num">'+fmt(x.booked)+'</span>',
+      '<span class="num">'+fmt(x.supPrice)+'</span>','<span class="num">'+fmt(x.booked)+'</span>',
       d!=null?'<span class="num" style="color:'+(d<0?'var(--red)':'var(--green)')+';font-weight:700">'+fmt(d)+'</span>':'<span style="color:var(--muted)">—</span>',
       isC?'<span class="pill cancel">ملغى</span>':'<span class="pill active">نشط</span>',
       esc(x.conf),esc(x.bfrom),esc(x.cfrom),esc(x.by)
