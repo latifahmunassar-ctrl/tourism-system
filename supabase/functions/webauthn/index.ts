@@ -196,6 +196,22 @@ Deno.serve(async (req) => {
       return json({ ok: true, user: { name: user.name, phone: user.phone }, admin_secret: Deno.env.get("CLIENT_ADMIN_SECRET") || "" });
     }
 
+    // ── تسجيل استخدام فعلي للمساعد السياحي (كل جلسة/زيارة، لا البصمة فقط) ──
+    // يستدعيه team.html عند فتح التطبيق بجلسة محفوظة (بلا إعادة بصمة)، فيعكس
+    // العدّاد الاستخدام الحقيقي لا عدد مرات البصمة. نطابق الحساب بالاسم للتأكد
+    // من الهوية والحالة: الاسم غير المعروف لا يُحتسب، والموقوفة لا تُحتسب
+    // وتُعاد لها suspended=true ليُخرجها العميل من جلسته المحفوظة. best-effort.
+    if (action === "log_visit") {
+      const name = String(body.name || "").trim();
+      if (!name) return json({ ok: false });
+      const { data: urows } = await supa.from("app_users").select("id, status").eq("name", name).limit(1);
+      const u = urows && urows[0];
+      if (!u) return json({ ok: false });
+      if (u.status !== "active") return json({ ok: false, suspended: true });
+      try { await supa.from("staff_login_log").insert({ user_id: u.id, name, device_label: String(body.device_label || "").slice(0, 60) || null }); } catch (_e) { /* */ }
+      return json({ ok: true });
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // مسار موظفي داشبورد الواتساب (wa_staff) — منفصل عن app_users أعلاه.
     // البصمة هنا تُصدر توكن جلسة حقيقي (wa_staff_sessions) وتفرض اعتماد

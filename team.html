@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-08-umrah-intl-flight'
+  var BUILD = '2026-10-10-usage-counter'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -937,7 +937,7 @@ async function passkeyLogin(){
     if(!start.options) throw new Error(start.error||'تعذّر بدء الدخول');
     const resp = await startAuthentication({ optionsJSON: start.options });
     const fin = await waPost({ action:'auth_finish', challengeId:start.challengeId, response:resp, device_token:getDeviceToken() });
-    if(fin.ok){ sessionStorage.setItem(AUTH_KEY,'1'); if(fin.user&&fin.user.name) localStorage.setItem('alezz_user_name',fin.user.name); if(fin.admin_secret) localStorage.setItem('alezz_admin_secret', fin.admin_secret); showApp(); }
+    if(fin.ok){ sessionStorage.setItem(AUTH_KEY,'1'); if(fin.user&&fin.user.name) localStorage.setItem('alezz_user_name',fin.user.name); if(fin.admin_secret) localStorage.setItem('alezz_admin_secret', fin.admin_secret); try{ localStorage.setItem('alezz_last_visit_log', String(Date.now())); }catch(_){} showApp(); }
     else throw new Error(fin.error||'فشل الدخول بالبصمة');
   }catch(e){ err.textContent = (e&&e.name==='NotAllowedError')?'أُلغيت البصمة' : (e.message||'تعذّر الدخول بالبصمة'); }
   finally{ btn.disabled=false; btn.textContent=ot; }
@@ -961,9 +961,27 @@ async function staffRegister(){
   else alert(d.error||'تعذّر التسجيل');
 }
 
+// تسجيل استخدام فعلي: يُستدعى عند فتح التطبيق بجلسة محفوظة (بلا إعادة بصمة)
+// فيزيد عدّاد لوحة الإدارة مع كل استخدام حقيقي، لا مع البصمة فقط. مكبوح بـ٢ ساعة
+// لئلا تضخّم إعادة تحميل الصفحة العدّاد. ولو الخادم ردّ أن الحساب موقوف → نُخرج
+// الجلسة المحفوظة فوراً (فيصير إيقاف الموظفة ساري حتى على جلسة مفتوحة سابقاً).
+async function logVisit(){
+  try{
+    const name = localStorage.getItem('alezz_user_name') || '';
+    if(!name) return;
+    const now = Date.now();
+    const last = parseInt(localStorage.getItem('alezz_last_visit_log')||'0',10) || 0;
+    if (now - last < 2*60*60*1000) return; // كبح ٢ ساعة
+    localStorage.setItem('alezz_last_visit_log', String(now));
+    const r = await fetch(WEBAUTHN_URL, { method:'POST', headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}, body:JSON.stringify({ action:'log_visit', name, device_label: navigator.userAgent.slice(0,60) }) });
+    const d = await r.json().catch(()=>null);
+    if (d && d.suspended) { localStorage.removeItem('alezz_last_visit_log'); logout(); }
+  }catch(_){}
+}
+
 // On load
 window.addEventListener('DOMContentLoaded', () => {
-  if (isAuthed()) showApp(); else showLogin();
+  if (isAuthed()) { showApp(); logVisit(); } else showLogin();
   document.getElementById('loginInput')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') doLogin();
   });
