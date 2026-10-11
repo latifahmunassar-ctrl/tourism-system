@@ -7519,7 +7519,28 @@ function renderPayForm(){
    '</div>'+
    (expRefV>0?'<div id="rf-finhint" style="font-size:12.5px;margin:4px 0;color:var(--green)">💸 المسترجع النهائي للعميل: <b>'+fmt(expRefV)+'</b></div>':'')+
    '<div id="rf-msg" style="font-size:12px;min-height:16px;margin:6px 0"></div>'+
-   '<button class="btn green" onclick="saveRefund()">💸 تنفيذ الإرجاع</button></div>';
+   '<button class="btn green" onclick="saveRefund()">💸 تنفيذ الإرجاع</button> <button class="btn" style="background:#c41d88" onclick="exportRefundReviewPDF(\''+esc(code)+'\')" title="تصدير ملخّص المرتجع المقترح PDF للمراجعة والموافقة قبل التنفيذ (بلا إرجاع فعلي)">📄 تصدير PDF للمراجعة (قبل الإرجاع)</button></div>';
+}
+// 📄 ملخّص مرتجع مقترح (PDF) للمراجعة والموافقة قبل التنفيذ — لا ينفّذ الإرجاع، لا يشترط إدخال المرتجع الفعلي
+function exportRefundReviewPDF(code){
+  code=String(code||'').trim().toUpperCase();
+  const g=id=>{ const e=$(id); return e?String(e.value||'').trim():''; };
+  const amt=Number(g('rf-amt'))||0, profit=Number(g('rf-profit'))||0, exp=Number(g('rf-exp'))||0;
+  const bank=g('rf-bank'), date=g('rf-date'), ref=g('rf-ref'), note=g('rf-note');
+  if(!(amt>0)&&!(exp>0)){ const m=$('rf-msg'); if(m)m.innerHTML='<span style="color:var(--red)">⚠️ أدخلي المبلغ المرتجع أولاً قبل التصدير</span>'; return; }
+  const row=(DATA.fcd||[]).find(r=>(r.client_code||'').toUpperCase()===code)||{};
+  const name=row.client_name||'', agent=row.agent_name||'', cur=row.currency||'SAR', today=new Date().toISOString().slice(0,10);
+  const logoHtml=(typeof ALEZZ_LOGO!=='undefined'&&ALEZZ_LOGO)?('<img src="'+ALEZZ_LOGO+'" alt="ALEZZ" style="max-height:80px;margin-bottom:6px">'):'<div style="font-size:34px;font-weight:900;letter-spacing:3px;color:#0e7a5a">AL<span style="color:#d4a017">E</span>ZZ</div><div style="font-size:12px;color:#666;letter-spacing:2px">شركة العز للسياحة والسفر</div>';
+  const rows=[['👤 العميل',esc(name||'—')+' ('+esc(code)+')'],agent?['🏢 الوكيل',esc(agent)]:null,exp>0?['🔄 المرتجع المتوقّع المتبقّي',fmt(exp)+' '+esc(cur)]:null,profit>0?['🏢 ربح الشركة (مستقطَع)',fmt(profit)+' '+esc(cur)]:null,['💸 المبلغ المرتجع للعميل','<b style="color:#c0392b">'+fmt(amt)+' '+esc(cur)+'</b>'],bank?['🏦 البنك (تخرج منه الحوالة)',esc(bank)]:null,date?['📅 تاريخ الحوالة المقترح',esc(date)]:null,ref?['🔖 مرجع الحوالة',esc(ref)]:null,note?['📝 ملاحظة',esc(note)]:null].filter(Boolean).map(r=>'<tr><th style="width:40%;background:#f6f8fa;color:#0e7a5a;text-align:right">'+r[0]+'</th><td>'+r[1]+'</td></tr>').join('');
+  const html='<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>طلب موافقة مرتجع '+esc(code)+'</title>'+
+    '<style>@page{margin:0}body{font-family:Tahoma,Arial;padding:16mm 14mm;color:#222;max-width:760px;margin:auto;font-size:16px}h1{font-size:23px;margin:8px 0;color:#c0392b}table{border-collapse:collapse;width:100%;font-size:16px;margin-top:12px}th,td{border:1px solid #cbd2d9;padding:11px 13px;text-align:right}.hd{text-align:center;border-bottom:2px solid #0e7a5a;padding-bottom:12px;margin-bottom:10px}.note{background:#fff8e6;border:1px solid #f0d890;border-radius:8px;padding:10px 14px;margin:14px 0;font-size:13px}.sign{margin-top:46px;display:flex;justify-content:space-between;font-size:14px}@media print{.noprint{display:none}}</style></head><body>'+
+    '<div class="noprint" style="text-align:left;margin-bottom:10px"><button onclick="window.print()" style="padding:8px 20px;font-size:15px;cursor:pointer;background:#0e7a5a;color:#fff;border:none;border-radius:6px">🖨️ طباعة / حفظ PDF</button></div>'+
+    '<div class="hd">'+logoHtml+'<h1>↩️ طلب موافقة على مرتجع — للمراجعة قبل التنفيذ</h1><div style="font-size:12px;color:#666">تاريخ الإصدار: '+today+'</div></div>'+
+    '<table>'+rows+'</table>'+
+    '<div class="note">⚠️ هذا <b>طلب للمراجعة والموافقة</b> — لم يُنفَّذ المرتجع بعد. يُعتمد قبل إرجاع المبلغ للعميل.</div>'+
+    '<div class="sign"><span>اعتماد المالكة: ______________________</span><span>التاريخ: ____________</span></div>'+
+    '<'+'script>window.onload=function(){setTimeout(function(){window.focus();window.print();},350);};<'+'/script></body></html>';
+  const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close(); } else { const m=$('rf-msg'); if(m)m.innerHTML='<span style="color:var(--red)">⚠️ اسمحي بالنوافذ المنبثقة لعرض التقرير</span>'; }
 }
 
 // مزامنة ربح الشركة ↔ المسترجع النهائي (المتوقّع − الربح = المسترجع)
