@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-10-usage-counter'
+  var BUILD = '2026-10-11-approx-note-screen-only'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -3821,7 +3821,12 @@ parseAddRooms(l).forEach((ar, j) => {
 });
 return row;
 }).join('')}</tbody>
-</table></div>`;
+</table>${(()=>{
+  // ⚠️ تنبيه السعر التقريبي — **على الشاشة فقط** (ليقرّر الموظف الإرسال)، ويُحذف من
+  //    ملف العميل في buildPDF. طلب المالكة: الملاحظة بالشاشة لا بالملف.
+  const _ap = hotelsLines.map((l) => { const pp = String(l).split('|').map(x=>x.trim()); return /⚠️\s*سعر تقريبي/u.test(String(l)) ? { name: pp[0]||'', city: pp[1]||'' } : null; }).filter(Boolean);
+  return _ap.length ? `<div style="margin:12px 2px 2px;padding:11px 14px;border:2px dashed #f59e0b;background:#fff7ed;border-radius:10px;font-size:13.5px;font-weight:800;color:#92400e;line-height:1.75;">⚠️ <u>سعر تقريبي — تظهر لك على الشاشة فقط ولا تُطبع في ملف العميل</u><br>لا يوجد سعر مؤكّد لهذه الفترة في: ${_ap.map(x=>`«${x.name}»${x.city?` (${x.city})`:''}`).join('، ')}. المعروض سعر أقرب فترة متاحة — <b>قرّري الإرسال أو راجعي السعر قبل العرض على العميل.</b></div>` : '';
+})()}</div>`;
 }
 
 if (flightsLines.length) {
@@ -5520,7 +5525,7 @@ ${(sd.checkInText && sd.checkOutText) ? `<span style="font-size:16px;line-height
 ${extraBedCount ? `<span>🛋️ سرير إضافي / Sofa Bed: <b>${extraBedCount}</b>${showDetailed ? ` — ${extraBedPricePerNight} ريال/ليلة × ${nights||'—'} ليالي × ${extraBedCount} = ${(extraBedTotal||0).toLocaleString()} ريال` : ''}</span>` : ``}
 ${showDetailed ? `<span>💵 تفصيل السعر: ${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي × ${rooms} غرفة = ${(totalLine*rooms).toLocaleString()} ريال</span>` : ``}
 ${_arRooms.map((ar,j)=>`<span style="grid-column:1/-1;color:#b45309;font-weight:900;">➕ غرفة إضافية ${j+1}: <span dir="ltr" style="unicode-bidi:isolate;white-space:pre-wrap;display:inline-block;overflow-wrap:break-word;max-width:100%;vertical-align:top;">${safeText(ar.room_type)}</span>${ar.occ?` (يتسع ${ar.occ})`:''}${showDetailed ? ` — ${ar.price.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي = ${(ar.price*(nights||0)).toLocaleString()} ريال` : ''}</span>`).join('')}
-<span style="grid-column:1/-1;">✅ يشمل: ${safeText(_lineMealsTxt(p))}</span>
+<span style="grid-column:1/-1;">✅ يشمل: ${safeText(_lineMealsTxt(p).replace(/\s*·?\s*⚠️\s*سعر تقريبي[^|]*/u, '').trim())}</span>
 </div>
 </div>`; }).join('')}${extrasCards('hotels')}` : ''}
 
