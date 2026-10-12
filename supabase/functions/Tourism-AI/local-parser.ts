@@ -225,6 +225,8 @@ function parseDestination(text: string): string | null {
     [/هولندا|هولندي|netherlands?|holland|امستردام|امستردم|amsterdam/i, "Netherland"],
     // مكة/العمرة (مكة + المدينة المنورة + جدة + الطائف) — يطابق index.ts
     [/مكة|مكه|makkah|mecca|العمرة|عمرة|الحرمين|المدينة\s*المنورة|المنوّ?رة|al\s*madinah|madinah|medina/i, "Makkah"],
+    // مصر — القاهرة حالياً مدينة الأساس؛ يطابق index.ts
+    [/مصر|egypt|القاهر[ةه]|cairo|[أا]هرامات|الجيز[ةه]|giza|الاقصر|الأقصر|luxor|[أا]سوان|aswan|شرم\s*الشيخ|sharm|الغردق[ةه]|hurghada/i, "Egypt"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;

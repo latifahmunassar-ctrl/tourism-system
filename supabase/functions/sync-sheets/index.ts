@@ -26,7 +26,7 @@ const CORS_HEADERS = {
   "Content-Type": "application/json",
 };
 
-const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland"];
+const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt"];
 
 // Per-destination canonical-city patterns — MUST stay in sync with DEST_CITIES
 // in Tourism-AI/index.ts (same canonical names the builder groups by). Used
@@ -97,6 +97,11 @@ const SECTION_CITY_DEFS: Record<string, Array<{ canonical: string; pattern: RegE
   ],
   Netherland: [
     { canonical: "Amsterdam", pattern: /هولندا|هولندي|[اأإآ]مستردام|[اأإآ]مستردم|netherland|holland|amsterdam|جبن|الكمار|خودا|زان?س|ماركن|جيثورن|رورموند|لاهاي|اوترخت|طواحين|اوتلت|فولندام|volendam/i },
+  ],
+  // مصر = القاهرة مدينة واحدة (أحياء فرعية: الزمالك/كورنيش النيل/مدينة نصر…)؛
+  // الجولات أسماؤها عربية (استقبال المطار، جولات القاهرة/الأهرامات) city='' فتُطابَق بالاسم.
+  Egypt: [
+    { canonical: "Cairo", pattern: /القاهر[ةه]|قاهر[ةه]|cairo|الجيز[ةه]|جيز[ةه]|giza|[أا]هرام|pyramid|سفنك?س|sphinx|خان\s*الخليلي|قلعة\s*صلاح|المتحف|النيل|nile|الزمالك|zamalek|مصر|egypt/i },
   ],
 };
 

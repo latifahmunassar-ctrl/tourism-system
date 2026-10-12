@@ -56,6 +56,8 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     // مكة/العمرة (برامج داخلية: مكة + المدينة المنورة + جدة + الطائف). «المدينة» وحدها
     // عامة فنطلب «المنورة»؛ وجدة/الطائف لا تُشغّل الوجهة وحدها (مدن سعودية عامة).
     [/مكة|مكه|makkah|mecca|العمرة|عمرة|الحرمين|المدينة\s*المنورة|المنوّ?رة|al\s*madinah|madinah|medina/i, "Makkah"],
+    // مصر — القاهرة حالياً مدينة الأساس؛ أدرجنا مدن مصر الكبرى للكشف المتين (لو وُسّعت لاحقاً).
+    [/مصر|egypt|القاهر[ةه]|cairo|[أا]هرامات|الجيز[ةه]|giza|الاقصر|الأقصر|luxor|[أا]سوان|aswan|شرم\s*الشيخ|sharm|الغردق[ةه]|hurghada/i, "Egypt"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;
@@ -187,6 +189,11 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
   // هولندا = أمستردام مدينة أساس واحدة + رحلات يومية؛ نمط واسع يطابق أسماء الجولات.
   Netherland: [
     { canonical: "Amsterdam", pattern: /هولندا|هولندي|[اأإآ]مستردام|[اأإآ]مستردم|netherland|holland|amsterdam|جبن|الكمار|خودا|زان?س|ماركن|جيثورن|رورموند|لاهاي|اوترخت|طواحين|اوتلت|فولندام|volendam|معالم/i },
+  ],
+  // مصر = القاهرة مدينة واحدة؛ canonical يطابق مدينة الفندق (Cairo في location) وأسماء الجولات العربية
+  // (الأهرامات/الجيزة/خان الخليلي/النيل/قلعة صلاح الدين) إضافةً لأحياء القاهرة.
+  Egypt: [
+    { canonical: "Cairo", pattern: /القاهر[ةه]|قاهر[ةه]|cairo|الجيز[ةه]|جيز[ةه]|giza|[أا]هرام|pyramid|سفنك?س|sphinx|خان\s*الخليلي|قلعة\s*صلاح|المتحف|النيل|nile|الزمالك|zamalek|مصر|egypt|معالم/i },
   ],
 };
 
@@ -784,6 +791,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     "Moscow": "موسكو", "St Petersburg": "سانت بطرسبرغ", "Sochi": "سوتشي",
     "Sarajevo": "سراييفو", "Mostar": "موستار", "Bihać": "بيهاتش",
     "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
+    "Cairo": "القاهرة",
   };
   const formatBedScope = (cities: string[]): string => cities.flatMap(c => {
     const ar = CITY_AR[c];
@@ -2713,7 +2721,7 @@ async function handleTourVariants(body: { dest?: string; name?: string }): Promi
 
 // ── profit_margins: جدول الأرباح الموسمي لوجهة — يُقرأ مباشرة من شيت الوجهة
 //    (بلا جدول قاعدة بيانات): شريحة تكلفة × موسم × شركات/أفراد. ──────────────────
-const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland"];
+const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt"];
 
 async function pmGoogleToken(sa: { client_email: string; private_key: string }): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
@@ -3581,7 +3589,7 @@ Deno.serve(async (req) => {
         "Moscow": "موسكو", "St Petersburg": "سانت بطرسبرغ", "Sochi": "سوتشي",
         "Sarajevo": "سراييفو", "Mostar": "موستار", "Bihać": "بيهاتش",
         "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
-        "Shanghai": "شنغهاي", "Beijing": "بكين", "Hangzhou": "هانغتشو", "Hong Kong": "هونغ كونغ", "London": "لندن", "Amsterdam": "أمستردام", "Guangzhou": "جوانزو",
+        "Shanghai": "شنغهاي", "Beijing": "بكين", "Hangzhou": "هانغتشو", "Hong Kong": "هونغ كونغ", "London": "لندن", "Amsterdam": "أمستردام", "Guangzhou": "جوانزو", "Cairo": "القاهرة",
       };
       // Distribution-change follow-up: employee typed a NEW city/nights split
       // in chat to reshape an existing program (e.g. "٢ بانكوك ٤ كوساموي").

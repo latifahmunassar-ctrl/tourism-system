@@ -1377,6 +1377,7 @@ const DESTINATION_AR_NAMES: Record<string, string> = {
   China: "الصين",
   Netherland: "هولندا",
   Makkah: "العمرة",
+  Egypt: "مصر",
 };
 
 function formatNumber(n: number): string {

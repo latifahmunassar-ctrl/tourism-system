@@ -47,6 +47,7 @@ const DEST_KEY: Record<string, string> = {
   "الصين": "China", "الصّين": "China", "صين": "China", "China": "China", "شنغهاي": "China", "شانغهاي": "China", "بكين": "China", "هونغ كونغ": "China",
   "هولندا": "Netherland", "امستردام": "Netherland", "أمستردام": "Netherland", "Netherland": "Netherland", "Holland": "Netherland",
   "مكة": "Makkah", "مكة المكرمة": "Makkah", "مكه": "Makkah", "العمرة": "Makkah", "عمرة": "Makkah", "عمره": "Makkah",
+  "مصر": "Egypt", "القاهرة": "Egypt", "القاهره": "Egypt", "Egypt": "Egypt", "Cairo": "Egypt",
 };
 
 function randToken(len = 24): string {

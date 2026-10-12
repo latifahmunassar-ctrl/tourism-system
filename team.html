@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-11-approx-note-screen-only'
+  var BUILD = '2026-10-12-egypt-cairo'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2859,6 +2859,7 @@ const BF_CITIES = {
   "العمرة":["مكة المكرمة","المدينة المنورة","جدة","الطائف"],
   "إنجلترا":["لندن"],
   "الصين":["شنغهاي","بكين","هانغتشو","هونغ كونغ","جوانزو"],
+  "مصر":["القاهرة"],
 };
 // يحوّل أي تهجئة للوجهة (همزة/تشكيل/إنجليزي) إلى مفتاح BF_CITIES المطابق، حتى لا
 // تفشل تعبئة الفورم عند ضبط bf-dest من طلب محفوظ (مثال: "اندونيسيا" بلا همزة أو
@@ -2873,11 +2874,13 @@ function bfResolveDest(d){
     thailand:'تايلاند', turky:'تركيا', turkey:'تركيا', russia:'روسيا',
     bosnia:'البوسنة', oman:'عُمان', southafrica:'جنوب أفريقيا', mauritius:'موريشيوس',
     makkah:'العمرة', mecca:'العمرة', umrah:'العمرة', england:'إنجلترا', london:'إنجلترا', uk:'إنجلترا',
-    china:'الصين', shanghai:'الصين', beijing:'الصين', suzhou:'الصين', hangzhou:'الصين', hongkong:'الصين' };
+    china:'الصين', shanghai:'الصين', beijing:'الصين', suzhou:'الصين', hangzhou:'الصين', hongkong:'الصين',
+    egypt:'مصر', cairo:'مصر' };
   if (EN[n]) return EN[n];
   if (/مكة|مكه|عمرة|المدينةالمنورة|المنورة/.test(n)) return 'العمرة';  // مكة/العمرة → مفتاح BF_CITIES
   if (/[إا]ن[جك]لترا|بريطانيا|لندن/.test(n)) return 'إنجلترا';         // إنجلترا/لندن → مفتاح BF_CITIES
   if (/الصين|صيني|شن?غهاي|شان[غج]هاي|بكين|سوجو|هان[غج]تشو|هون[غج]كون[غج]/.test(n)) return 'الصين';
+  if (/مصر|القاهر[ةه]|الاهرامات|الأهرامات|الجيز[ةه]/.test(n)) return 'مصر';  // مصر/القاهرة → مفتاح BF_CITIES
   return Object.keys(BF_CITIES).find(k => norm(k) === n) || raw;
 }
 const BF_INTAKE = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake";
