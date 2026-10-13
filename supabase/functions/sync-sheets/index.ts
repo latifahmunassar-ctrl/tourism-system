@@ -352,7 +352,9 @@ const HEADER_ALIASES: Record<string, RegExp> = {
   room:       /^(room|room\s*type|الغرفة|نوع\s*الغرفة)$/i,
   rate:       /^(rate|price|nightly|night\s*rate|سعر|السعر|تكلفة|التكلفة)$/i,
   currency:   /^(currency|عملة|العملة)$/i,
-  occupancy:  /^(occupancy|capacity|pax|اشغال|الإشغال|اشخاص|الأشخاص|استيعاب|تتسع|يتسع|سعة|تسع)$/i,
+  // عمود الإشغال: كلمة مفتاحية صريحة، أو خانة رأس كُتب فيها قيمة الإشغال نفسها
+  // («2 adults + 2 child») — يحدث حين يُعاد هيكلة الشيت فيُستبدل عنوان «تتسع» بقيمة.
+  occupancy:  /^(occupancy|capacity|pax|اشغال|الإشغال|اشخاص|الأشخاص|استيعاب|تتسع|يتسع|سعة|تسع)$|^\s*\d+\s*adults?\b/i,
   include:    /^(include|includes|included|breakfast|meal|meals|board|basis|شامل|يشمل|الإفطار|الافطار|إفطار|افطار|الوجبات|وجبات|الوجبة)$/i,
   // أعمدة الموسم/التاريخ (تسعير موسمي مثل خريف صلالة) — From/To في شيت عُمان.
   dateFrom:   /^(from|date\s*from|valid\s*from|من|من\s*تاريخ|بداية|check\s*in)$/i,

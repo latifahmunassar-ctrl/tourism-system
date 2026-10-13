@@ -51,7 +51,9 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     [/جنوب\s*(?:ال)?[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبر[جغ]|johannesburg|(?:هارمونس|هارمانوس|هيرمانوس|هرمانوس)|hermanus|بريتوريا|pretoria|سن\s*سيتي|sun\s*city|كروجر|kruger/i, "South Africa"],
     [/موريشيوس|موريش[سي]|mauritius|بورت\s*لويس|port\s*louis/i, "mauritius"],
     [/[إا]ن[جك]لترا|بريطانيا|بريطاني|لندن|england|london|المملكة\s*المتحدة/i, "England"],
-    [/الصين|صيني?|china|شان[غج]هاي|شنغهاي|shanghai|بكين|beijing|سوجهو|سوجو|suzhou|هان[غج]تشو|hangzhou|هون[غج]\s*كون[غج]|hong\s*kong|[جق]وان?[غج]?زو|guangzhou|canton/i, "China"],
+    // ⚠️ «صين» وحدها كانت تطابق داخل «شخصين» (شخص+ين) فتُلتقَط الصين خطأً لأي وجهة
+    // بعدها بالقائمة (مصر/العمرة…). الحل: «صيني…» تتطلب ياءً، و«صين» المجرّدة محاطة بحدود.
+    [/الصين|صيني|(?<![ء-ي])صين(?![ء-ي])|china|شان[غج]هاي|شنغهاي|shanghai|بكين|beijing|سوجهو|سوجو|suzhou|هان[غج]تشو|hangzhou|هون[غج]\s*كون[غج]|hong\s*kong|[جق]وان?[غج]?زو|guangzhou|canton/i, "China"],
     [/هولندا|هولندي|netherlands?|holland|[اأإآ]مستردام|[اأإآ]مستردم|amsterdam/i, "Netherland"],
     // مكة/العمرة (برامج داخلية: مكة + المدينة المنورة + جدة + الطائف). «المدينة» وحدها
     // عامة فنطلب «المنورة»؛ وجدة/الطائف لا تُشغّل الوجهة وحدها (مدن سعودية عامة).
