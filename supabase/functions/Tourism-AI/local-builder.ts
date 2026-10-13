@@ -26,6 +26,7 @@ export type HotelRow = {
   price_per_night: number;
   currency: string;
   occupancy: string;
+  area?: string;          // الحي داخل المدينة (عمود L بالشيت؛ القاهرة: الزمالك/كورنيش النيل…) — يُطبع في البي دي اف
   meals?: string;
   includes_breakfast?: boolean;
   date_from?: string;     // ISO or "1/6/2026"
@@ -1563,7 +1564,12 @@ export function formatProgram(data: ProgramData): string {
     const roomTypeWithOcc = occN > 0
       ? `${sh.hotel.room_type} (يتسع ${occN} أشخاص)`
       : sh.hotel.room_type;
-    out += `${sh.hotel.name} | ${cityAr} | ${sh.hotel.stars} نجوم | ${roomTypeWithOcc} | ${formatNumber(sh.hotel.price_per_night)} ريال/ليلة | ${sh.nights} ${sh.nights === 1 ? "ليلة" : "ليالي"} (من ${formatArabicDate(sh.rangeFrom)} إلى ${formatArabicDate(sh.rangeTo)}) | ${meals}\n`;
+    // الحي (عمود L): يُلحَق كوسم ختامي | AREA:<الحي> لا يكسر الحقول السبعة، ويقرأه
+    // البي دي اف ودروب ليست مصر. فارغ لمعظم الوجهات فلا يُضاف.
+    const areaSeg = (sh.hotel.area && String(sh.hotel.area).trim())
+      ? ` | AREA:${String(sh.hotel.area).trim()}`
+      : "";
+    out += `${sh.hotel.name} | ${cityAr} | ${sh.hotel.stars} نجوم | ${roomTypeWithOcc} | ${formatNumber(sh.hotel.price_per_night)} ريال/ليلة | ${sh.nights} ${sh.nights === 1 ? "ليلة" : "ليالي"} (من ${formatArabicDate(sh.rangeFrom)} إلى ${formatArabicDate(sh.rangeTo)}) | ${meals}${areaSeg}\n`;
   }
   out += "\n";
 

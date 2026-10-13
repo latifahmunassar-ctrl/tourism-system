@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-13-egypt-area-picker'
+  var BUILD = '2026-10-13-egypt-area-in-pdf'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1855,7 +1855,7 @@ function hswPick(cell, idx){
       (h.price_per_night || 0) + ' ريال/ليلة',
       p[5] || '',
       (h.meals ? ('ما يشمل: ' + h.meals) : (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6] || '')))
-    ].join(' | ');
+    ].join(' | ') + _areaSeg(h.area);
     const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
     if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر تطبيق التبديل — لم يتغيّر البرنامج.'); return; }
     // مزامنة البرنامج المعروض مع history حتى تعمل تعديلات الشات اللاحقة.
@@ -1914,7 +1914,7 @@ async function pickCheapestDouble(hidx){
       h.name, p[1]||'', (h.stars||curStars||'')+' نجوم', _roomWithCap(h, ''),
       (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
       (h.meals ? ('ما يشمل: ' + h.meals) : (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6] || '')))
-    ].join(' | ');
+    ].join(' | ') + _areaSeg(h.area);
     const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
     if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); return; }
     if(persons >= 2) hotelRooms[hidx] = Math.ceil(persons/2); // العدد التلقائي (قابل للتعديل)
@@ -1954,7 +1954,7 @@ async function changeHotelStars(hidx, newStars){
       h.name, p[1]||'', (h.stars||newStars)+' نجوم', _roomWithCap(h, ''),
       (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
       (h.meals ? ('ما يشمل: ' + h.meals) : (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6] || '')))
-    ].join(' | ');
+    ].join(' | ') + _areaSeg(h.area);
     const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
     if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); return; }
     applyHotelRawChange(newRaw, `⭐ ${region}: أرخص ${newStars}★ = «${h.name}» (${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxedOcc?' ⚠️ ما توفّرت غرفة بنفس الإشغال، فاخترتُ الأقرب.':''}`);
@@ -1970,6 +1970,10 @@ const _CAIRO_AREA_AR = {
   'maadi':'المعادي','heliopolis':'مصر الجديدة','giza':'الجيزة','dokki':'الدقي','mohandessin':'المهندسين'
 };
 function _areaAr(a){ const k=String(a||'').toLowerCase().replace(/\s+/g,' ').trim(); return _CAIRO_AREA_AR[k] || a; }
+// الحي مخزَّن في سطر الفندق كوسم ختامي «| AREA:<الحي>» (لا يكسر الحقول السبعة).
+// يُقرأ للعرض في البي دي اف ولمزامنة دروب ليست الحي؛ يُحدَّث عند كل تبديل فندق من h.area.
+function _lineArea(line){ const m=String(line||'').match(/\|\s*AREA:([^|]+)/); return m ? m[1].trim() : ''; }
+function _areaSeg(area){ const a=String(area||'').trim(); return a ? ` | AREA:${a}` : ''; }
 
 // يملأ كل دروب ليست أحياء القاهرة: يجلب فنادق القاهرة مرة واحدة، يستخرج الأحياء
 // المتوفّرة، ويحدّد الحي الحالي لكل فندق (يُطابَق بالاسم). مصر فقط — غيرها لا .egy-area-sel.
@@ -1988,7 +1992,8 @@ async function hydrateEgyptAreas(){
     const areas = [...new Set(hotels.map(h=>String(h.area||'').trim()).filter(Boolean))];
     const nameToArea = {}; hotels.forEach(h=>{ if(h.area) nameToArea[String(h.name||'').trim()] = String(h.area).trim(); });
     sels.forEach(sel=>{
-      const cur = nameToArea[sel.dataset.curname||''] || '';
+      // الحي الحالي: من وسم AREA في السطر (الأدقّ) ثم مطابقة الاسم كاحتياط.
+      const cur = (sel.dataset.curarea||'').trim() || nameToArea[sel.dataset.curname||''] || '';
       if(!areas.length){ sel.innerHTML = '<option value="">🏙️ لا أحياء بالشيت</option>'; return; }
       const opts = ['<option value="">🏙️ كل الأحياء</option>']
         .concat(areas.map(a=>`<option value="${hswEsc(a)}"${a===cur?' selected':''}>${hswEsc(_areaAr(a))}</option>`));
@@ -2026,7 +2031,7 @@ async function changeHotelArea(hidx, area){
       h.name, p[1]||'', (h.stars||'')+' نجوم', _roomWithCap(h, ''),
       (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
       (h.meals ? ('ما يشمل: ' + h.meals) : (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6] || '')))
-    ].join(' | ');
+    ].join(' | ') + _areaSeg(h.area || area);
     const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
     if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); return; }
     applyHotelRawChange(newRaw, `🏙️ ${area?`«${_areaAr(area)}»`:region}: أرخص فندق = «${h.name}» ${(h.stars?h.stars+'★ ':'')}(${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxed?' ⚠️ ما توفّرت غرفة تطابق العدد، فاخترتُ الأقرب.':''}`);
@@ -2160,7 +2165,7 @@ function _rtwReplaceLine(oldLine, r){
   const ars = parseAddRooms(oldLine);               // احفظ كل الغرف الإضافية لو موجودة
   const p = stripAddRoom(oldLine).split('|').map(x=>x.trim());
   const meals = r.meals ? ('ما يشمل: ' + r.meals) : (r.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6]||''));
-  let line = [p[0]||'', p[1]||'', p[2]||'', _roomWithCap(r, ''), (r.price_per_night||0)+' ريال/ليلة', p[5]||'', meals].join(' | ');
+  let line = [p[0]||'', p[1]||'', p[2]||'', _roomWithCap(r, ''), (r.price_per_night||0)+' ريال/ليلة', p[5]||'', meals].join(' | ') + _areaSeg(_lineArea(oldLine)); // نفس الفندق → نحافظ على حيّه
   line += ars.map(a=>addRoomSeg(a)).join('');
   return line;
 }
@@ -3876,7 +3881,7 @@ const nameCell = `<td class="hsw-cell" data-hidx="${hidx}" data-region="${hswEsc
   + `<div class="hsw-cur" onclick="hswToggle(this)"><span class="hsw-name"><strong>${p[0]||''}${extraCount ? ' + Extra bed / Sofa Bed' : ''}</strong></span><span class="hsw-chev">▼</span></div>`
   + `<div class="hsw-menu"></div>`
   // 🇪🇬 مصر: دروب ليست الحي (أحياء القاهرة من عمود L) — اختيار حي يجيب أرخص فندق فيه حسب العدد.
-  + (_destIsEgypt(dest) ? `<select class="egy-area-sel" data-hidx="${hidx}" data-region="${hswEsc(p[1]||'')}" data-occ="${occN}" data-curname="${hswEsc(p[0]||'')}" title="اختاري الحي → أرخص فندق في ذاك الحي حسب عدد الأشخاص" onchange="changeHotelArea(${hidx}, this.value)"><option value="">🏙️ الحي… (جارٍ التحميل)</option></select>` : '')
+  + (_destIsEgypt(dest) ? `<select class="egy-area-sel" data-hidx="${hidx}" data-region="${hswEsc(p[1]||'')}" data-occ="${occN}" data-curname="${hswEsc(p[0]||'')}" data-curarea="${hswEsc(_lineArea(l))}" title="اختاري الحي → أرخص فندق في ذاك الحي حسب عدد الأشخاص" onchange="changeHotelArea(${hidx}, this.value)"><option value="">🏙️ الحي… (جارٍ التحميل)</option></select>` : '')
   + `<button type="button" class="dblrm-btn" onclick="event.stopPropagation();pickCheapestDouble(${hidx})" title="استبدل بأرخص فندق فيه غرفة لشخصين بنفس فئة النجوم، والعدد يُحسب تلقائياً (العدد÷2) ويبقى قابلاً للتعديل">🛏️ غرفتين لشخصين (أرخص)</button>`
   + `</td>`;
 // خلية نوع الغرفة — قابلة للاستبدال/الإضافة من نفس الفندق
@@ -4153,7 +4158,8 @@ function buildWhatsappText(){
     const p = String(l).split('|').map(x=>x.trim());
     const name=p[0]||'', city=p[1]||'', stars=(p[2]||'').match(/\d+/), nights=(p[5]||'').replace(/\(.*?\)/g,'').trim();
     if(!name && !city) return '';
-    return `• ${city}${stars?` ⭐${stars[0]}`:''}: ${name}${nights?` — ${nights}`:''}`;
+    const area=_lineArea(l); const areaTxt = area ? ` — ${_areaAr(area)}` : '';
+    return `• ${city}${areaTxt}${stars?` ⭐${stars[0]}`:''}: ${name}${nights?` — ${nights}`:''}`;
   }).filter(Boolean);
 
   // البرنامج اليومي: دمج الانتقالات + الجولات حسب اليوم (بدون أسعار)
@@ -5596,6 +5602,7 @@ ${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPri
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;font-size:20px;font-weight:800;color:#0d1f4a;line-height:1.8;word-break:break-word;overflow-wrap:anywhere;">
 <span>📍 المدينة: ${bidiText(p[1]||'')}</span>
+${_lineArea(l) ? `<span>🏙️ الحي / المنطقة: ${bidiText(_areaAr(_lineArea(l)))}</span>` : ``}
 <span>⭐ النجوم: ${safeText(p[2]||'')}</span>
 <span>🛏️ الغرفة: ${bidiText(_roomNameOnly(p[3]||''))}</span>
 ${_lineCapN(p) ? `<span>👥 تتسع لـ: ${_lineCapN(p)} أشخاص</span>` : ``}
@@ -5639,7 +5646,7 @@ ${(showDetailed && (hotelsLines.length || transfersLines.length || toursLines.le
   ${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l); const rooms = hRooms(idx); const extraBedCount = hBeds(idx, extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest)); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const _arRooms = parseAddRooms(l); const _arTotal = _arRooms.reduce((a,r)=>a+(r.price*(nights||0)),0); const lineGrand = ((totalLine || 0) * rooms) + (extraBedTotal || 0) + _arTotal; return `
     <div class="pdf-keep" style="border:1px solid #eef0f8;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;gap:12px;">
       <div style="font-weight:800;color:#0d1f4a;font-size:16px;line-height:1.6;">
-        ${p[1]||''} | ${p[0]||''}${extraBedCount ? ' + Extra bed' : ''} <span style="opacity:0.8">(${p[2]||''})</span> · 🏨 ${rooms} غرفة<br>
+        ${p[1]||''}${_lineArea(l)?` — ${_areaAr(_lineArea(l))}`:''} | ${p[0]||''}${extraBedCount ? ' + Extra bed' : ''} <span style="opacity:0.8">(${p[2]||''})</span> · 🏨 ${rooms} غرفة<br>
         <span style="opacity:0.85;">${_roomNameOnly(p[3]||'')}${_lineCapN(p)?` (يتسع ${_lineCapN(p)} أشخاص)`:''}</span> — <span style="opacity:0.85;">${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي × ${rooms} غرفة = ${(totalLine*rooms).toLocaleString()} ريال${extraBedCount ? (` + سرير إضافي ${(extraBedTotal||0).toLocaleString()} ريال`) : ''}</span>${_arRooms.map((ar,j)=>`<br/><span style="color:#b45309;font-weight:900;">➕ غرفة إضافية ${j+1}: <span dir="ltr" style="unicode-bidi:isolate;white-space:pre-wrap;display:inline-block;overflow-wrap:break-word;max-width:100%;vertical-align:top;">${ar.room_type}</span>${ar.occ?` (يتسع ${ar.occ})`:''} — ${ar.price.toLocaleString()} ريال/ليلة × ${nights||'—'} = ${(ar.price*(nights||0)).toLocaleString()} ريال</span>`).join('')}
       </div>
       <div style="font-weight:900;color:#0d1f4a;white-space:nowrap;">${lineGrand.toLocaleString()} ريال</div>
