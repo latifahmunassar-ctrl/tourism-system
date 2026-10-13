@@ -2406,13 +2406,14 @@ function travelDateToISO(s: string): string | null {
 }
 
 async function handleListHotels(body: {
-  dest?: string; region?: string; occupancy?: number | string; current?: string; date?: string; haram?: string;
+  dest?: string; region?: string; occupancy?: number | string; current?: string; date?: string; haram?: string; area?: string;
 }): Promise<Response> {
   try {
     const destAr = String(body.dest || "").trim();
     const region = String(body.region || "").trim();
     const haramSel = String(body.haram || "").trim();   // فلتر قرب الحرم (مكة/المدينة)
     const current = String(body.current || "").trim();   // اسم الفندق الحالي (لتقييد المنطقة الفرعية)
+    const areaSel = String(body.area || "").trim();      // فلتر الحي/المنطقة الفرعية (عمود area — مثل أحياء القاهرة)
     const occ = parseInt(String(body.occupancy ?? "").replace(/[^\d]/g, ""), 10) || 0;
     const destKey = destAr ? detectDestination([{ role: "user", content: destAr }]) : null;
 
@@ -2422,7 +2423,7 @@ async function handleListHotels(body: {
     );
     const mkQ = () => {
       const q = supabase.from("hotels")
-        .select("name,stars,location,price_per_night,room_type,includes_breakfast,occupancy,date_from,date_to")
+        .select("name,stars,location,area,price_per_night,room_type,includes_breakfast,occupancy,date_from,date_to")
         .order("stars", { ascending: false })
         .order("price_per_night");
       return destKey ? q.ilike("location", `% - ${destKey}`) : q;
@@ -2484,6 +2485,14 @@ async function handleListHotels(body: {
       if (curArea) rows = rows.filter(h => subAreaOf(String(h.location || "")) === curArea);
     }
 
+    // فلتر الحي الصريح (عمود area) — مثل أحياء القاهرة (الزمالك/كورنيش النيل…).
+    // يُطابَق بلا حساسية حالة/فراغات. لو مرّر الموظف حياً محدداً نُرجِع فنادقه فقط.
+    if (areaSel) {
+      const an = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+      const target = an(areaSel);
+      rows = rows.filter(h => an(String(h.area || "")) === target);
+    }
+
     // فلترة الموسم حسب التاريخ المطلوب: نُبقي فقط صف السعر الذي يغطّي التاريخ
     // (التواريخ ISO فالمقارنة النصية = الزمنية). الصفوف بلا تاريخ تبقى دائماً.
     const travelISO = travelDateToISO(String(body.date || ""));
@@ -2521,6 +2530,7 @@ async function handleListHotels(body: {
         price_per_night: Number(h.price_per_night) || 0,
         includes_breakfast: !!h.includes_breakfast,
         occupancy: h.occupancy || "",            // نص الإشغال كما في الشيت
+        area: h.area || "",                       // الحي/المنطقة الفرعية (أحياء القاهرة…)
         capacity: cap || capFromRoomType(String(h.room_type || "")),  // أقصى عدد تتسعه الغرفة (رقم)
         fits: !cap || !threshold || cap >= threshold,  // مطابق للعدد المطلوب؟
         haram_tags: (destKey === "Makkah") ? (haramMap[normHotelName(String(h.name || ""))] || []) : undefined,

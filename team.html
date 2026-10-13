@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-12-egypt-cairo'
+  var BUILD = '2026-10-13-egypt-area-picker'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -370,6 +370,8 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 .rtw-rm{background:#5a1620;color:#ff9aa2;border:1px solid #7a2330;border-radius:7px;padding:2px 8px;font-size:11px;font-weight:800;cursor:pointer;margin-inline-start:4px}
 .dblrm-btn{display:block;margin-top:6px;background:#123a2b;color:#7de3b0;border:1px solid #1f5c43;border-radius:8px;padding:4px 9px;font-size:11px;font-weight:800;cursor:pointer;width:100%}
 .dblrm-btn:hover{background:#1a4d39}
+.egy-area-sel{display:block;margin-top:6px;width:100%;background:#1a2f4a;color:#9fd0ff;border:1px solid #2d4d74;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:800;cursor:pointer}
+.egy-area-sel:hover{background:#21406a}
 .rtw-extra{color:#F0C96A}
 .bed-stp{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:9px;overflow:hidden}
 .bed-stp button{border:none;background:var(--bg);color:var(--gold);width:26px;height:26px;font-size:15px;font-weight:900;cursor:pointer;line-height:1}
@@ -1957,6 +1959,78 @@ async function changeHotelStars(hidx, newStars){
     if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); return; }
     applyHotelRawChange(newRaw, `⭐ ${region}: أرخص ${newStars}★ = «${h.name}» (${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxedOcc?' ⚠️ ما توفّرت غرفة بنفس الإشغال، فاخترتُ الأقرب.':''}`);
   } catch(e){ addMessage('sys','خطأ أثناء تغيير الفئة: ' + (e && e.message ? e.message : e)); }
+}
+// ── 🇪🇬 مصر: دروب ليست أحياء القاهرة في صف الفندق ──────────────────────────
+// الوجهة مصر؟ (الكشف من سطر DEST بالبرنامج)
+function _destIsEgypt(d){ return /مصر|egypt|القاهر/i.test(String(d||'')); }
+// تحويل اسم الحي الإنجليزي (عمود L بالشيت) إلى عربي للعرض فقط — fallback للاسم الخام.
+const _CAIRO_AREA_AR = {
+  'zamalek':'الزمالك','nile corniche':'كورنيش النيل','nasr city':'مدينة نصر',
+  'el tahrir':'التحرير','tahrir':'التحرير','cairo':'وسط القاهرة','downtown':'وسط البلد',
+  'maadi':'المعادي','heliopolis':'مصر الجديدة','giza':'الجيزة','dokki':'الدقي','mohandessin':'المهندسين'
+};
+function _areaAr(a){ const k=String(a||'').toLowerCase().replace(/\s+/g,' ').trim(); return _CAIRO_AREA_AR[k] || a; }
+
+// يملأ كل دروب ليست أحياء القاهرة: يجلب فنادق القاهرة مرة واحدة، يستخرج الأحياء
+// المتوفّرة، ويحدّد الحي الحالي لكل فندق (يُطابَق بالاسم). مصر فقط — غيرها لا .egy-area-sel.
+async function hydrateEgyptAreas(){
+  try{
+    const sels = document.querySelectorAll('.egy-area-sel');
+    if(!sels.length) return;
+    const dest = getLine(lastProgramRaw,'DEST')||'';
+    const region = sels[0].dataset.region || 'القاهرة';
+    const date = getLine(lastProgramRaw,'DATE_FROM')||'';
+    const res = await fetch(SUPABASE_URL, { method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
+      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: metaPersons()||2, date }) });
+    const data = await res.json();
+    const hotels = data.hotels || [];
+    const areas = [...new Set(hotels.map(h=>String(h.area||'').trim()).filter(Boolean))];
+    const nameToArea = {}; hotels.forEach(h=>{ if(h.area) nameToArea[String(h.name||'').trim()] = String(h.area).trim(); });
+    sels.forEach(sel=>{
+      const cur = nameToArea[sel.dataset.curname||''] || '';
+      if(!areas.length){ sel.innerHTML = '<option value="">🏙️ لا أحياء بالشيت</option>'; return; }
+      const opts = ['<option value="">🏙️ كل الأحياء</option>']
+        .concat(areas.map(a=>`<option value="${hswEsc(a)}"${a===cur?' selected':''}>${hswEsc(_areaAr(a))}</option>`));
+      sel.innerHTML = opts.join('');
+    });
+  }catch(_e){ /* صامت: تبقى القائمة بخيارها الافتراضي */ }
+}
+
+// اختيار حي → أرخص فندق في ذاك الحي حسب عدد الأشخاص (يبدّل سطر الفندق).
+async function changeHotelArea(hidx, area){
+  try{
+    area = String(area||'').trim();
+    const lines = parseHotelLinesFromRaw(lastProgramRaw);
+    const oldLine = lines[hidx];
+    if(!oldLine){ addMessage('sys','تعذّر: لم أجد سطر الفندق.'); return; }
+    const p = oldLine.split('|').map(x=>x.trim());
+    const region = p[1]||'';
+    const occN = parseInt((arabicDigitsToLatin(String(p[3]||'')).match(/يتسع\s*(\d+)/)||[])[1]||'0',10) || 0;
+    const dest = getLine(lastProgramRaw,'DEST')||'';
+    const date = getLine(lastProgramRaw,'DATE_FROM')||'';
+    const occReq = occN || metaPersons() || 2;
+    addMessage('sys', `🔎 أبحث عن أرخص فندق${area?` في «${_areaAr(area)}»`:` في ${region}`} حسب العدد…`);
+    const res = await fetch(SUPABASE_URL, { method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
+      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: occReq, date, area }) });
+    const data = await res.json();
+    const cand = (data.hotels || []);
+    let fitting = cand.filter(h => h.fits);
+    const relaxed = !fitting.length && cand.length;
+    if(!fitting.length) fitting = cand; // لا مطابق للعدد → كل فنادق الحي (أقرب متاح)
+    if(!fitting.length){ addMessage('sys',`ما فيه فنادق${area?` في «${_areaAr(area)}»`:''}. جرّبي حي ثاني.`); return; }
+    fitting.sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
+    const h = fitting[0]; // الأرخص
+    const newLine = [
+      h.name, p[1]||'', (h.stars||'')+' نجوم', _roomWithCap(h, ''),
+      (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
+      (h.meals ? ('ما يشمل: ' + h.meals) : (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6] || '')))
+    ].join(' | ');
+    const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
+    if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); return; }
+    applyHotelRawChange(newRaw, `🏙️ ${area?`«${_areaAr(area)}»`:region}: أرخص فندق = «${h.name}» ${(h.stars?h.stars+'★ ':'')}(${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxed?' ⚠️ ما توفّرت غرفة تطابق العدد، فاخترتُ الأقرب.':''}`);
+  }catch(e){ addMessage('sys','خطأ أثناء تغيير الحي: ' + (e && e.message ? e.message : e)); }
 }
 // ── نوع الغرفة: استبدال / إضافة نوع آخر من نفس الفندق ──
 function _stripCapR(s){ return String(s||'').replace(/\s*\(يتسع[^)]*\)/g,'').trim().toLowerCase(); }
@@ -3801,6 +3875,8 @@ const _df = (getLine(lastProgramRaw,'DATE_FROM')||'');
 const nameCell = `<td class="hsw-cell" data-hidx="${hidx}" data-region="${hswEsc(p[1]||'')}" data-name="${hswEsc(p[0]||'')}" data-nightly="${nightly}" data-nights="${nights}" data-occ="${occN}">`
   + `<div class="hsw-cur" onclick="hswToggle(this)"><span class="hsw-name"><strong>${p[0]||''}${extraCount ? ' + Extra bed / Sofa Bed' : ''}</strong></span><span class="hsw-chev">▼</span></div>`
   + `<div class="hsw-menu"></div>`
+  // 🇪🇬 مصر: دروب ليست الحي (أحياء القاهرة من عمود L) — اختيار حي يجيب أرخص فندق فيه حسب العدد.
+  + (_destIsEgypt(dest) ? `<select class="egy-area-sel" data-hidx="${hidx}" data-region="${hswEsc(p[1]||'')}" data-occ="${occN}" data-curname="${hswEsc(p[0]||'')}" title="اختاري الحي → أرخص فندق في ذاك الحي حسب عدد الأشخاص" onchange="changeHotelArea(${hidx}, this.value)"><option value="">🏙️ الحي… (جارٍ التحميل)</option></select>` : '')
   + `<button type="button" class="dblrm-btn" onclick="event.stopPropagation();pickCheapestDouble(${hidx})" title="استبدل بأرخص فندق فيه غرفة لشخصين بنفس فئة النجوم، والعدد يُحسب تلقائياً (العدد÷2) ويبقى قابلاً للتعديل">🛏️ غرفتين لشخصين (أرخص)</button>`
   + `</td>`;
 // خلية نوع الغرفة — قابلة للاستبدال/الإضافة من نفس الفندق
@@ -3993,6 +4069,7 @@ ${summaryHTML}
 
 document.getElementById('reviewPanel').innerHTML = html;
  _fillMissingCaps();   // أكمل شارة «يتسع» للبرامج المبنية قبل إصلاح 2026-09-25
+hydrateEgyptAreas();           // 🇪🇬 تعبئة دروب ليست أحياء القاهرة في صفوف الفنادق (مصر)
 renderHaramBar();              // شريط قرب الحرم فوق برنامج مكة
 renderMakkahTransportBar();    // شريط وسيلة التنقّل (قطار/سيارة) فوق برنامج مكة
 renderMakkahFlightBar();       // شريط الطيران الدولي (مسقط↔جدة: الأرخص/شركة/بدون) فوق برنامج مكة

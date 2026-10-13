@@ -386,6 +386,16 @@ function findHotelHeader(rows: string[][]): { rowIdx: number; cols: Record<strin
         }
       }
     }
+    // عمود «City» ثانٍ = الحي/المنطقة الفرعية (مثل مصر: عمود K=«Cairo» + عمود L=الحي
+    // «الزمالك/كورنيش النيل/مدينة نصر»). نلتقط أول عمود يطابق نمط المدينة **بعد** عمود
+    // المدينة الأول ويقع **قبل** عمود النجوم (حتى لا نخلطه بعمود آخر). اختياري تماماً:
+    // التبويبات بعمود مدينة واحد تبقى area غير معرّف فلا يتغيّر سلوكها.
+    if (map.city !== undefined) {
+      const starLimit = map.stars !== undefined ? map.stars : cells.length;
+      for (let j = map.city + 1; j < starLimit; j++) {
+        if (cells[j] && HEADER_ALIASES.city.test(cells[j])) { map.area = j; break; }
+      }
+    }
     // Header row must have at least name + city + stars + rate
     if (map.city !== undefined && map.stars !== undefined && map.rate !== undefined) {
       // اجمع كل أعمدة السعر (نطاقات تواريخ متعددة From/To/Rate مكرّرة) — بعض التبويبات
@@ -549,10 +559,16 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
     else if (/break\s*fast|breakfast|إفطار/i.test(mealsRaw)) mealsAr = "إفطار مشمول";
     else mealsAr = mealsRaw; // fallback to raw text
 
+    // الحي/المنطقة الفرعية (عمود «City» الثاني). فارغ لمعظم الوجهات.
+    // نتجاهل قيمة الحي لو ساوت اسم المدينة نفسه (مثل صف «Cairo/Cairo»).
+    const areaRaw = get(row, "area");
+    const area = (areaRaw && areaRaw.toLowerCase() !== city.toLowerCase()) ? areaRaw : "";
+
     const baseRec = {
       name:               hotelName,
       stars,
       location:           `${city} - ${destination}`,
+      area,
       room_type:          roomType || "",
       includes_breakfast: /break\s*fast|breakfast|إفطار/i.test(mealsRaw) && !/no\s*break\s*fast|no\s*breakfast|بدون\s*إفطار/i.test(mealsRaw),
       meals:              mealsAr,
