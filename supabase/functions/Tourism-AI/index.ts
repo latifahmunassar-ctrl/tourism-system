@@ -2499,9 +2499,21 @@ async function handleListHotels(body: {
     // (التواريخ ISO فالمقارنة النصية = الزمنية). الصفوف بلا تاريخ تبقى دائماً.
     const travelISO = travelDateToISO(String(body.date || ""));
     if (travelISO) {
+      // مواسم متكرّرة (مصر/تايلند/إندونيسيا تخزّن السنة البديلة 2000) → طابق
+      // باليوم/الشهر فقط (MM-DD)، مع دعم الموسم العابر لرأس السنة. الوجهات
+      // بسنوات حقيقية تبقى بالمقارنة النصية الكاملة (ISO = ترتيب زمني).
+      const mmdd = (iso: string) => iso.slice(5);               // "MM-DD"
+      const isRecur = (iso: string) => { const y = parseInt(iso.slice(0, 4), 10); return y > 0 && y <= 2000; };
+      const tmd = mmdd(travelISO);
       const dated = rows.filter(h => {
         const df = String(h.date_from || ""), dt = String(h.date_to || "");
         if (!df && !dt) return true;
+        if (isRecur(df) || isRecur(dt)) {
+          const f = df ? mmdd(df) : null, t2 = dt ? mmdd(dt) : null;
+          if (f && t2) return f <= t2 ? (tmd >= f && tmd <= t2) : (tmd >= f || tmd <= t2);
+          if (f) return tmd >= f;
+          return t2 ? tmd <= t2 : true;
+        }
         if (df && travelISO < df) return false;
         if (dt && travelISO > dt) return false;
         return true;
@@ -2588,9 +2600,21 @@ async function handleListRoomTypes(body: {
     // صفّ التاريخ المطلوب فقط (الموسم) — صفوف بلا تاريخ تبقى دائماً
     const travelISO = travelDateToISO(String(body.date || ""));
     if (travelISO) {
+      // مواسم متكرّرة (مصر/تايلند/إندونيسيا تخزّن السنة البديلة 2000) → طابق
+      // باليوم/الشهر فقط (MM-DD)، مع دعم الموسم العابر لرأس السنة. الوجهات
+      // بسنوات حقيقية تبقى بالمقارنة النصية الكاملة (ISO = ترتيب زمني).
+      const mmdd = (iso: string) => iso.slice(5);               // "MM-DD"
+      const isRecur = (iso: string) => { const y = parseInt(iso.slice(0, 4), 10); return y > 0 && y <= 2000; };
+      const tmd = mmdd(travelISO);
       const dated = rows.filter(h => {
         const df = String(h.date_from || ""), dt = String(h.date_to || "");
         if (!df && !dt) return true;
+        if (isRecur(df) || isRecur(dt)) {
+          const f = df ? mmdd(df) : null, t2 = dt ? mmdd(dt) : null;
+          if (f && t2) return f <= t2 ? (tmd >= f && tmd <= t2) : (tmd >= f || tmd <= t2);
+          if (f) return tmd >= f;
+          return t2 ? tmd <= t2 : true;
+        }
         if (df && travelISO < df) return false;
         if (dt && travelISO > dt) return false;
         return true;

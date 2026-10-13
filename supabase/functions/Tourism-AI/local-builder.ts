@@ -89,12 +89,33 @@ function extractChildrenCount(occupancy: string): number {
  * Travel date is a YYYY-MM-DD string. Hotel dates can be "1/6/2026" or
  * "01-06-2026" or ISO. Permissive parsing.
  */
+// مواسم متكرّرة سنوياً: مصر/تايلند/إندونيسيا تخزّن فترات التسعير بسنة بديلة (2000)
+// أي «كل سنة في هذا اليوم/الشهر» بلا سنة محدّدة. نطابقها باليوم/الشهر فقط (نتجاهل
+// السنة) وإلا كل فنادقها تفشل لأي تاريخ 2026 فيُختار أرخص سعر عبر السنة (موسم
+// خاطئ) + تحذير تقريبي كاذب. الوجهات بسنوات حقيقية (2026/2027) تبقى بالمقارنة
+// العادية بالتاريخ الكامل.
+function isRecurringSeasonDate(d: Date | null): boolean {
+  return !!d && d.getFullYear() <= 2000;
+}
+function monthDayIndex(d: Date): number { return (d.getMonth() + 1) * 100 + d.getDate(); } // MMDD
+
 function hotelCoversDate(hotel: HotelRow, travelDateISO: string | null): boolean {
   if (!travelDateISO) return true; // no travel date → don't filter
   const travel = parseAnyDate(travelDateISO);
   if (!travel) return true;
   const from = hotel.date_from ? parseAnyDate(hotel.date_from) : null;
   const to = hotel.date_to ? parseAnyDate(hotel.date_to) : null;
+  // موسم متكرّر (سنة بديلة) → طابق باليوم/الشهر فقط، مع دعم المواسم العابرة
+  // لرأس السنة (٢٦ ديسمبر → ٤ يناير): from > to يعني أن الفترة تلتفّ حول نهاية السنة.
+  if (isRecurringSeasonDate(from) || isRecurringSeasonDate(to)) {
+    const t = monthDayIndex(travel);
+    const f = from ? monthDayIndex(from) : null;
+    const tt = to ? monthDayIndex(to) : null;
+    if (f == null && tt == null) return true;
+    if (f != null && tt != null) return f <= tt ? (t >= f && t <= tt) : (t >= f || t <= tt);
+    if (f != null) return t >= f;
+    return t <= (tt as number);
+  }
   if (from && travel < from) return false;
   if (to && travel > to) return false;
   return true;

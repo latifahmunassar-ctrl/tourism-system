@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-13-egypt-area-in-pdf'
+  var BUILD = '2026-10-13-egypt-apt-type-recurring-season'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1963,6 +1963,9 @@ async function changeHotelStars(hidx, newStars){
 // ── 🇪🇬 مصر: دروب ليست أحياء القاهرة في صف الفندق ──────────────────────────
 // الوجهة مصر؟ (الكشف من سطر DEST بالبرنامج)
 function _destIsEgypt(d){ return /مصر|egypt|القاهر/i.test(String(d||'')); }
+// نوع الإقامة: شقة سكنية؟ (الاسم يحوي Apartment/Apartments/شقة). يميّز الشقق عن
+// الفنادق عند تغيير الحي: الشقة تبقى شقة والفندق يبقى فندقاً (لا نقفز بينهما).
+function _isApartment(n){ return /apartment|شقة|شقه/i.test(String(n||'')); }
 // تحويل اسم الحي الإنجليزي (عمود L بالشيت) إلى عربي للعرض فقط — fallback للاسم الخام.
 const _CAIRO_AREA_AR = {
   'zamalek':'الزمالك','nile corniche':'كورنيش النيل','nasr city':'مدينة نصر',
@@ -1990,10 +1993,11 @@ async function hydrateEgyptAreas(){
     const data = await res.json();
     const hotels = data.hotels || [];
     const areas = [...new Set(hotels.map(h=>String(h.area||'').trim()).filter(Boolean))];
-    const nameToArea = {}; hotels.forEach(h=>{ if(h.area) nameToArea[String(h.name||'').trim()] = String(h.area).trim(); });
     sels.forEach(sel=>{
-      // الحي الحالي: من وسم AREA في السطر (الأدقّ) ثم مطابقة الاسم كاحتياط.
-      const cur = (sel.dataset.curarea||'').trim() || nameToArea[sel.dataset.curname||''] || '';
+      // الحي الحالي = وسم AREA في السطر حصراً. لا نخمّن بالاسم: أسماء مثل
+      // «Apartment» مكرّرة بأحياء مختلفة (فارغ ٦٠٠ ريال · كورنيش النيل ١١٥٠)،
+      // فالتخمين بالاسم كان يُلصق «كورنيش النيل» بالشقة الفارغة خطأً.
+      const cur = (sel.dataset.curarea||'').trim();
       if(!areas.length){ sel.innerHTML = '<option value="">🏙️ لا أحياء بالشيت</option>'; return; }
       const opts = ['<option value="">🏙️ كل الأحياء</option>']
         .concat(areas.map(a=>`<option value="${hswEsc(a)}"${a===cur?' selected':''}>${hswEsc(_areaAr(a))}</option>`));
@@ -2020,11 +2024,16 @@ async function changeHotelArea(hidx, area){
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
       body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: occReq, date, area }) });
     const data = await res.json();
-    const cand = (data.hotels || []);
+    let cand = (data.hotels || []);
+    // حافظي على نوع الإقامة: لو الحالي شقة سكنية نُبقي الشقق فقط، ولو فندق نُبقي
+    // الفنادق فقط — فتغيير حي الشقة يجيب أرخص شقة في الحي (لا فندقاً)، والعكس.
+    const curIsApt = _isApartment(p[0]||'');
+    const sameType = cand.filter(h => _isApartment(h.name) === curIsApt);
+    if(sameType.length) cand = sameType;
     let fitting = cand.filter(h => h.fits);
     const relaxed = !fitting.length && cand.length;
     if(!fitting.length) fitting = cand; // لا مطابق للعدد → كل فنادق الحي (أقرب متاح)
-    if(!fitting.length){ addMessage('sys',`ما فيه فنادق${area?` في «${_areaAr(area)}»`:''}. جرّبي حي ثاني.`); return; }
+    if(!fitting.length){ addMessage('sys',`ما فيه ${curIsApt?'شقق':'فنادق'}${area?` في «${_areaAr(area)}»`:''}. جرّبي حي ثاني.`); return; }
     fitting.sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
     const h = fitting[0]; // الأرخص
     const newLine = [
