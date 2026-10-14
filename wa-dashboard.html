@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20261012a -->
+<!-- APPVER:20261014a -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1870,7 +1870,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20261012a";
+    const APPVER = "20261014a";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4259,7 +4259,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if (!r.ok || d.error) throw new Error(d.error || ("HTTP " + r.status));
         if (phone !== convPhone) return;
         const b = d.brief || {};
-        if (b.destination) { const _d0 = bfCanonDest(b.destination); setv("bf-destination", (typeof bfGrpFromAr === "function" && bfGrpFromAr(_d0)) || _d0); }
+        if (b.destination) { const _d0 = bfCanonDest(b.destination); setv("bf-destination", (typeof bfGrpFromAr === "function" && bfGrpFromAr(_d0)) || _d0); bfRefreshCityRows(); }
         if (b.date_from) setv("bf-date_from", b.date_from);
         if (typeof bfApplyGroupDates === "function") bfApplyGroupDates($("bf-destination") ? $("bf-destination").value : "");
         if (b.pax != null) setv("bf-pax", b.pax);
@@ -4441,6 +4441,16 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       const d = $("bf-destination") ? $("bf-destination").value : "";
       const l = BF_CITIES[d] || [];
       return '<option value="">اختر مدينة…</option>' + l.map(c => `<option>${c}</option>`).join("");
+    }
+    // يُحدِّث خيارات المدن في صفوف «تخصيص» الموجودة بعد تغيير الوجهة برمجيًا (setv لا
+    // يُطلق حدث change) — وإلا صفٌّ أُضيف والوجهة فاضية يبقى بقائمة مدن فارغة فلا يُمكن
+    // اختيار المدينة رغم ضبط الوجهة لاحقًا («عبّي من المحادثة»). نحافظ على الاختيار لو صالحًا.
+    function bfRefreshCityRows(){
+      document.querySelectorAll("#bf-cityRows .bfx-city").forEach(sel => {
+        const cur = sel.value;
+        sel.innerHTML = bfCityOptions();
+        if (cur) sel.value = cur;
+      });
     }
     function bfAddCity(city, nights){
       city = city || ""; nights = nights || 2;
