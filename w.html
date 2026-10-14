@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20261014a -->
+<!-- APPVER:20261014b -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1424,6 +1424,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
               <div id="bf-cityRows"></div>
               <button type="button" class="bfx-addcity" id="bf-addcity">+ أضف مدينة</button>
               <div style="font-size:12px; color:#64748b; margin-top:8px;">مجموع الليالي: <b id="bf-nsum">0</b> — المتوقّع: <b id="bf-nexp">0</b> ليلة</div>
+              <div id="bf-nwarn" style="display:none; margin-top:6px; padding:7px 9px; border-radius:7px; font-size:12px; font-weight:700; background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;"></div>
             </div>
           </div>
           <label style="display:flex; flex-direction:column; gap:3px; margin-top:8px; font-size:13px;">ملاحظات
@@ -1870,7 +1871,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20261014a";
+    const APPVER = "20261014b";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4264,7 +4265,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if (typeof bfApplyGroupDates === "function") bfApplyGroupDates($("bf-destination") ? $("bf-destination").value : "");
         if (b.pax != null) setv("bf-pax", b.pax);
         if (b.children != null) setv("bf-children", b.children);
-        if (b.days != null) setv("bf-days", b.days);
+        if (b.days != null) { setv("bf-days", b.days); bfExpected(); bfSum(); }
         if (b.sim_count != null) setv("bf-sim_count", b.sim_count);
         if (b.hotel_stars) setv("bf-hotel_stars", String(b.hotel_stars));
         if (b.notes) setv("bf-notes", b.notes);
@@ -4471,11 +4472,28 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     function bfSum(){
       let s = 0; document.querySelectorAll("#bf-cityRows .bfx-n").forEach(i => s += (+i.value||0));
       if ($("bf-nsum")) $("bf-nsum").textContent = s;
-      // تلوين حيّ: أخضر لو المجموع = المتوقّع (أيام − 1)، أحمر لو مختلف
+      // المتوقّع (أيام − 1) — نحدّثه هنا أيضاً حتى يبقى صحيحاً لو عُبّئت الأيام برمجياً.
       const daysN = +($("bf-days") ? $("bf-days").value : 0) || 0;
       const expN = Math.max(0, daysN - 1);
+      if ($("bf-nexp")) $("bf-nexp").textContent = expN;
+      // تلوين حيّ: أخضر لو المجموع = المتوقّع، أحمر لو مختلف.
       const el = $("bf-nsum");
       if (el) el.style.color = (daysN >= 1 && s !== expN) ? "#dc2626" : "#0b5d4e";
+      // تنبيه صريح عند تجاوز/نقص عدد الليالي المسموح (= الأيام − 1).
+      const w = $("bf-nwarn");
+      if (w){
+        if (daysN >= 1 && s > expN){
+          w.style.display = "";
+          w.textContent = `⚠️ تجاوزتِ عدد الليالي المسموح: ${s} ليلة والمتوقّع ${expN} (رحلة ${daysN} أيام = ${daysN}−1). قلّلي ${s - expN} ليلة.`;
+        } else if (daysN >= 1 && s < expN && s > 0){
+          w.style.display = "";
+          w.style.background = "#fffbeb"; w.style.color = "#92400e"; w.style.borderColor = "#fde68a";
+          w.textContent = `ℹ️ ناقص ${expN - s} ليلة عن المتوقّع (${expN} ليلة لرحلة ${daysN} أيام).`;
+        } else {
+          w.style.display = "none";
+          w.style.background = "#fef2f2"; w.style.color = "#b91c1c"; w.style.borderColor = "#fecaca";
+        }
+      }
     }
     function bfExpected(){
       const d = +($("bf-days") ? $("bf-days").value : 0) || 0;
@@ -4524,7 +4542,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         { const _d0 = bfCanonDest(b.destination); setv("bf-destination", (typeof bfGrpFromAr === "function" && bfGrpFromAr(_d0)) || _d0); }
         setv("bf-date_from", b.date_from); setv("bf-pax", b.pax); setv("bf-children", b.children);
         if (typeof bfApplyGroupDates === "function") bfApplyGroupDates($("bf-destination") ? $("bf-destination").value : "");
-        setv("bf-days", b.days); setv("bf-sim_count", b.sim_count);
+        setv("bf-days", b.days); setv("bf-sim_count", b.sim_count); bfExpected(); bfSum();
         setv("bf-hotel_stars", b.hotel_stars == null ? "" : String(b.hotel_stars));
         setv("bf-notes", b.notes);
         if (b.currency) $("bf-currency").value = b.currency;
