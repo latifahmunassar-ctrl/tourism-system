@@ -7510,14 +7510,14 @@ function renderPayForm(){
      '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">⚠️ لن تتم عملية الإرجاع إلا بإرفاق طلب/تفويض العميل بالإرجاع — يُحفظ ضمن مستند المرتجع المعتمد.</div>'+
    '</div>'+
    '<div class="fgrid">'+
-   (expRefV>0?'<div class="fld"><label>🏢 ربح الشركة (تحتفظين به)</label><input type="number" id="rf-profit" value="0" oninput="rfCalc()"></div>':'')+
+   '<div class="fld"><label>🏢 ربح الشركة (تحتفظين به)</label><input type="number" id="rf-profit" value="0" oninput="rfCalc()"></div>'+
    '<div class="fld"><label>المبلغ المرتجع'+(expRefV>0?' (المسترجع النهائي للعميل)':'')+' <span style="color:var(--red)">*</span></label><input type="number" id="rf-amt" value="'+(expRefV>0?expRefV:0)+'" oninput="rfAmtEdit()"></div>'+
    '<div class="fld"><label>البنك (طلعت منه الحوالة) <span style="color:var(--red)">*</span></label><select id="rf-bank">'+bankOpts+'</select></div>'+
    '<div class="fld"><label>تاريخ الحوالة (الدفعة) <span style="color:var(--red)">*</span></label><input type="date" id="rf-date"></div>'+
    '<div class="fld"><label>مرجع الحوالة</label><input id="rf-ref"></div>'+
    '<div class="fld full"><label>ملاحظة</label><input id="rf-note"></div>'+
    '</div>'+
-   (expRefV>0?'<div id="rf-finhint" style="font-size:12.5px;margin:4px 0;color:var(--green)">💸 المسترجع النهائي للعميل: <b>'+fmt(expRefV)+'</b></div>':'')+
+   '<div id="rf-finhint" style="font-size:12.5px;margin:4px 0;color:var(--green)">💸 المسترجع النهائي للعميل: <b>'+fmt(expRefV>0?expRefV:0)+'</b></div>'+
    '<div id="rf-msg" style="font-size:12px;min-height:16px;margin:6px 0"></div>'+
    '<button class="btn green" onclick="saveRefund()">💸 تنفيذ الإرجاع</button> <button class="btn" style="background:#c41d88" onclick="exportRefundReviewPDF(\''+esc(code)+'\')" title="تصدير ملخّص المرتجع المقترح PDF للمراجعة والموافقة قبل التنفيذ (بلا إرجاع فعلي)">📄 تصدير PDF للمراجعة (قبل الإرجاع)</button></div>';
 }
@@ -7563,9 +7563,9 @@ function exportRefundReviewPDF(code){
 }
 
 // مزامنة ربح الشركة ↔ المسترجع النهائي (المتوقّع − الربح = المسترجع)
-function rfCalc(){ const exp=+(($('rf-exp')||{}).value)||0; const pr=+(($('rf-profit')||{}).value)||0; const fin=Math.max(0,exp-pr); const a=$('rf-amt'); if(a)a.value=+fin.toFixed(3); rfHint(fin,pr,exp); }
+function rfCalc(){ const exp=+(($('rf-exp')||{}).value)||0; const pr=+(($('rf-profit')||{}).value)||0; if(exp>0){ const fin=Math.max(0,exp-pr); const a=$('rf-amt'); if(a)a.value=+fin.toFixed(3); rfHint(fin,pr,exp); } else { rfHint(+(($('rf-amt')||{}).value)||0,pr,exp); } }   /* exp=0: لا مرتجع متوقّع محسوب → المبلغ يُدخَل يدويّاً، وربح الشركة مستقلّ */
 function rfAmtEdit(){ const exp=+(($('rf-exp')||{}).value)||0; const a=+(($('rf-amt')||{}).value)||0; if(exp>0){ const pr=Math.max(0,exp-a); const pe=$('rf-profit'); if(pe)pe.value=+pr.toFixed(3); rfHint(a,pr,exp); } }
-function rfHint(fin,pr,exp){ const h=$('rf-finhint'); if(h)h.innerHTML='💸 المسترجع النهائي للعميل: <b>'+fmt(fin)+'</b>'+(exp>0&&pr>0?(' · 🏢 لصالح الشركة: <b>'+fmt(pr)+'</b>'):''); }
+function rfHint(fin,pr,exp){ const h=$('rf-finhint'); if(h)h.innerHTML='💸 المسترجع النهائي للعميل: <b>'+fmt(fin)+'</b>'+(pr>0?(' · 🏢 لصالح الشركة: <b>'+fmt(pr)+'</b>'):''); }
 function fileToBase64(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result)); fr.onerror=()=>rej(new Error('تعذّر قراءة الملف')); fr.readAsDataURL(file); }); }
 // إضافة/تعديل المرجع البنكي لمسترجع مُدخَل من الداشبورد — تنعكس العملية كحركة صادرة في سجل البنك فور الحفظ
 async function editRefundRef(id){
