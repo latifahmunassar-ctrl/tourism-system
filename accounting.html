@@ -2658,8 +2658,11 @@ function commissionForRow(r, basis){
 }
 // عمولة العميل من الربح الفعلي (Booking Form) — actualProfit قد يكون null (بلا حجز فعلي بعد) → لا عمولة
 function commissionCalc(pkgType, isCancelled, actualProfit, basis){
-  if(isCancelled) return 0;
   const key=commTypeKey(pkgType); if(!key) return 0;
+  if(isCancelled){   // 🔴 الملغى الكامل: العمولة على الربح الفعلي المحتجَز فقط (قرار المالكة) — لا عمولة إن لم يتبقَّ ربح فعلي
+    if(actualProfit==null || Number(actualProfit)<=0) return 0;
+    return commConfirmed(key, Number(actualProfit)||0);
+  }
   if(basis==='booked') return 35;
   if(actualProfit==null) return 0;
   return commConfirmed(key, Number(actualProfit)||0);
@@ -2747,7 +2750,7 @@ function renderStaffDetail(fStaff,fJob,inR,basis,bbMap){
           '<td class="num" style="color:#0e9d6a;font-weight:700">'+fmt(o.profit)+'</td>'+
           '<td class="num" style="font-weight:700;color:'+(ap==null?'#9aa':(ap<-0.5?'#d11':'#0e9d6a'))+'">'+(ap==null?'—':fmt(ap))+'</td>'+
           (function(){ var apS=toSAR(ap, o.cur); return '<td class="num" style="font-weight:700;color:'+(apS==null?'#9aa':(apS<-0.5?'#d11':'#0e7c50'))+'">'+(apS==null?'—':(fmt(apS)+' <span style="font-size:9px;color:var(--muted)">ر.س</span>'))+'</td>'; })()+
-          (function(){ var apS=toSAR(ap, o.cur); var _tk=commTypeKey(Object.keys(o.types)[0]||''); var _cm=commissionCalc(Object.keys(o.types)[0]||'', allC, apS, basis); var _lowT=(!allC && _tk==='transport' && apS!=null && apS<500); return '<td class="num" style="font-weight:700;color:#b8860b">'+((allC||!_tk)?'<span style="color:#9aa">—</span>':(fmt(_cm)+(_lowT?' <span title="الربح أقل من 500 ر.س — عمولة المواصلات ثابتة 60 لكن الربح منخفض" style="font-size:8px;background:rgba(217,138,0,.16);color:#b8860b;font-weight:700;padding:1px 5px;border-radius:6px;white-space:nowrap">⚠️ ربح منخفض</span>':'')))+'</td>'; })()+
+          (function(){ var apS=toSAR(ap, o.cur); var _tk=commTypeKey(Object.keys(o.types)[0]||''); var _cm=commissionCalc(Object.keys(o.types)[0]||'', allC, apS, basis); var _lowT=(!allC && _tk==='transport' && apS!=null && apS<500); return '<td class="num" style="font-weight:700;color:#b8860b">'+((!_tk||(allC&&!(_cm>0)))?'<span style="color:#9aa">—</span>':(fmt(_cm)+(allC?' <span title="عمولة على الربح الفعلي المحتجَز رغم الإلغاء" style="font-size:8px;background:rgba(184,134,11,.16);color:#b8860b;font-weight:700;padding:1px 5px;border-radius:6px;white-space:nowrap">🔴 على المحتجَز</span>':'')+(_lowT?' <span title="الربح أقل من 500 ر.س — عمولة المواصلات ثابتة 60 لكن الربح منخفض" style="font-size:8px;background:rgba(217,138,0,.16);color:#b8860b;font-weight:700;padding:1px 5px;border-radius:6px;white-space:nowrap">⚠️ ربح منخفض</span>':'')))+'</td>'; })()+
           '<td class="num" style="color:#0e9d6a">'+fmt(o.paid)+'</td>'+
           '<td class="num" style="color:#b8860b">'+fmt(o.bal)+'</td>'+
           '<td style="font-size:10px">'+(o.nActive?'<span class="pill active">'+o.nActive+' نشط</span>':'')+(o.nCancel?' <span class="pill cancel">'+o.nCancel+' ملغى</span>':'')+'</td>'+
@@ -4408,7 +4411,7 @@ function renderStaffCommPanel(){ const box=$('staff-comm-panel'); if(!box)return
     (basis==='booked'
       ? '<div style="padding:8px 10px;background:rgba(14,157,106,.10);border-radius:8px;font-weight:700">👤 «Booked by» (من أدخل الحجز): <b>35 ر.س ثابت</b> لكل حجز (للأنواع المشمولة فقط).</div>'
       : '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>نوع الباقة</th><th>عمولة المؤكِّدة</th></tr></thead><tbody>'+R.map(r=>'<tr><td style="font-weight:600">'+esc(r[0])+'</td><td>'+esc(r[1])+'</td></tr>').join('')+'</tbody></table></div>')+
-    '<div style="font-size:10.5px;color:var(--muted);margin-top:6px">«الربح» = <b>الربح الفعلي (Booking Form)</b> لا المتوقّع · العمولة النهائية = مجموع عمولات حجوزات الموظفة · الملغاة والأنواع غير المشمولة (والتي بلا ربح فعلي بعد) = صفر · المبالغ بالريال السعودي.</div></div></details>'; }
+    '<div style="font-size:10.5px;color:var(--muted);margin-top:6px">«الربح» = <b>الربح الفعلي (Booking Form)</b> لا المتوقّع · العمولة النهائية = مجموع عمولات حجوزات الموظفة · 🔴 <b>الملغى</b>: العمولة على <b>الربح الفعلي المحتجَز</b> (المُقرّر في المرتجع) إن وُجد، وإلا صفر · الأنواع غير المشمولة = صفر · المبالغ بالريال السعودي.</div></div></details>'; }
 function curAgg(list){ const m={}; list.forEach(x=>{ const c=(x.currency||bankCur(x.bank_name)||'OMR'); if(!m[c])m[c]={i:0,o:0}; m[c].i+=Number(x.amount_in||0); m[c].o+=Number(x.amount_out||0); }); return m; }
 function curLine(m,key){ const ks=Object.keys(m).sort((a,b)=>(Math.abs(m[b].i-m[b].o))-(Math.abs(m[a].i-m[a].o))); const parts=ks.map(c=>{ const v=key==='net'?(m[c].i-m[c].o):m[c][key]; if(Math.abs(v)<0.005)return null; const col=key==='net'?(v>=0?'#0e9d6a':'#d11'):''; return '<span'+(col?' style="color:'+col+'"':'')+'>'+fmt(v)+' <small style="color:var(--muted)">'+esc(c)+'</small></span>'; }).filter(Boolean); return parts.join(' · ')||'0'; }
 function bankMainCur(list){ const m={}; (list||[]).forEach(x=>{ const c=x.currency||bankCur(x.bank_name); m[c]=(m[c]||0)+1; }); let best='OMR',bn=-1; for(const c in m){ if(m[c]>bn){bn=m[c];best=c;} } return best; }
