@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-13-egypt-apt-type-recurring-season'
+  var BUILD = '2026-10-15-indiv-send-dest-guard'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -6549,6 +6549,16 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
   window.indivSend=async function(){
     if(!indivState){alert('افتح طلب فرد أولاً من «👤 طلبات الأفراد».');return;}
     if(typeof lastProgramRaw==='undefined' || !lastProgramRaw || !/TOTAL_GROUP:/.test(lastProgramRaw)){alert('ابنِ البرنامج وسعّره أولاً.');return;}
+    // 🛡️ تأكيد أن البرنامج المعروض يخص وجهة هذا العميل — لا برنامج عميل سابق بقي في
+    //    lastProgramRaw (كان برنامج مصر لعميل يُرسَل لعميل طلب إسبانيا). نطبّع الوجهتين
+    //    عبر bfResolveDest (يوحّد التهجئة/الإنجليزي/القاهرة→مصر) ونقارن.
+    const _progDest=((lastProgramRaw.match(/(?:^|\n)DEST:\s*([^\n|]+)/)||[])[1]||'').trim();
+    const _reqDest=String(indivState.dest||'').trim();
+    const _rz=(x)=>{ try{ return String((typeof bfResolveDest==='function'?bfResolveDest(x):x)||'').replace(/\s+/g,'').toLowerCase(); }catch(_){ return String(x||'').replace(/\s+/g,'').toLowerCase(); } };
+    if(_progDest && _reqDest && _rz(_progDest)!==_rz(_reqDest)){
+      alert('⚠️ البرنامج المعروض لوجهة «'+_progDest+'» بينما طلب هذا العميل «'+_reqDest+'».\n\nأعيدي بناء البرنامج لهذا العميل قبل الإرسال — لا تُرسلي برنامج عميل آخر.');
+      return;
+    }
     const note=prompt('✍️ ملاحظة تُرسل مع الملف للعميل (اختياري):', _indivNote(indivState.phone));
     if(note===null) return;
     const btn=document.getElementById('indivSendBtn'); const old=btn?btn.textContent:'';
@@ -6677,6 +6687,10 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     if(!b){alert('تعذّر فتح الطلب');return;}
     // اربط الطلب بحالة الإرسال وأظهر زر «إرسال للعميل» (وأخفِ زر الشركة)
     indivState={id:b.id, phone:b.contact_phone, name:b.customer_name||'', dest:b.destination};
+    // 🛡️ امسح أثر برنامج العميل السابق فورًا عند فتح طلب جديد، وإلا يبقى في
+    //    lastProgramRaw فيُرسَل بالخطأ لهذا العميل (خصوصًا طلبات الجروب التي
+    //    توجَّه للوحة الجروبات وترجع مبكرًا دون إعادة بناء الباني الفردي).
+    try{ if(typeof lastProgramRaw!=='undefined') lastProgramRaw=''; }catch(_){}
     const _isb=document.getElementById('indivSendBtn'); if(_isb) _isb.style.display='';
     const _isv=document.getElementById('indivSaveBtn'); if(_isv) _isv.style.display='';
     const _csb=document.getElementById('inboxSendBtn'); if(_csb) _csb.style.display='none';
@@ -6699,6 +6713,10 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
           // 💱 عملة العميل تلقائياً (عماني→عماني…) ليطلع السعر جاهزاً للإرسال.
           if(typeof grpApplyCustomerCurrency==='function') { try{ await grpApplyCustomerCurrency(b.contact_phone); }catch(_){} }
           if(typeof grpMsg==='function') grpMsg('🚌 طلب جروب للعميل — اختيرَ البرنامج والتاريخ والعدد وعملة العميل تلقائياً، راجعي التسعير ثم جهّزي العرض.');
+          // 🛡️ طلب جروب يُرسَل بزر الجروب (grpSendIndiv) لا بزر الإرسال الفردي — نخفي
+          //    الأخير حتى لا يُرسِل برنامج عميل سابق بقي في lastProgramRaw بالخطأ.
+          { const _h1=document.getElementById('indivSendBtn'); if(_h1) _h1.style.display='none';
+            const _h2=document.getElementById('indivSaveBtn'); if(_h2) _h2.style.display='none'; }
           window.scrollTo({top:0,behavior:'smooth'});
           return;
         }
