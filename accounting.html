@@ -7450,7 +7450,9 @@ function renderPayForm(){
   const cur=pick('currency')||'SAR';
   const refs=(DATA.refunds||[]).filter(r=>(r.client_code||'').toUpperCase()===code);
   const totalRefunded=refs.reduce((s,r)=>s+Number(r.refund||0),0);
-  const _rm=refundMaps(); const expRefTot=Number(_rm.expClient[code]||0); const expRefV=Math.max(0, expRefTot - totalRefunded); // المتوقّع المتبقّي = المتوقّع الكلّي − ما أُرجِع فعلاً
+  const _rm=refundMaps(); const expRefTot=Number(_rm.expClient[code]||0);
+  const _paidRemain=Math.max(0, paid - totalRefunded);   // لا يُرجَع للعميل أكثر مما دفعه فعلاً (ناقص ما أُرجِع)
+  const expRefV=Math.min(Math.max(0, expRefTot - totalRefunded), _paidRemain); // المتوقّع المتبقّي محدوداً بالمدفوع ⇒ بلا رسوم إلغاء = كامل المبلغ المدفوع
   const bankOpts='<option value="">— اختاري البنك —</option>'+listValues('banks').map(b=>'<option>'+esc(b.value)+'</option>').join('');   // القائمة المُدارة فقط
   // تفصيل الخدمات
   const svc=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code);
