@@ -698,6 +698,14 @@ export function pickToursForCity(
     /** المدن المطلوبة في البرنامج (canonical). جولة/انتقال تذكر مدينة **غير مطلوبة**
      * (رحلة يوم اختيارية مثل الطائف) تُستبعَد — إلا لو انتقال مطار (مطار جدة للوصول). */
     requestedCities?: string[];
+    /** مدن المبيت (فيها أيام إقامة). جولة منسوبة لهذه المدينة لكنها رحلة نهارية
+     * لمدينة مبيت **أخرى** (مثل جولة اغافاي الصحراوية من مراكش لعميل بات باغافاي)
+     * تُسقَط كتكرار؛ تبقى متاحة فقط لمن لا يبيت في تلك المدينة. */
+    overnightStayCities?: string[];
+    /** وجهات لها فنادق في هذه الوجهة (مدن إقامة حقيقية). رحلة نهارية لمدينة منها
+     * (اغافاي) تُستثنى من فلتر «غير المطلوبة» فتُعرض لمن لا يبيت بها؛ أما مدينة بلا
+     * فنادق (الطائف) فتبقى مستبعَدة. */
+    hotelCities?: string[];
   },
 ): { selected: TourRow[]; available: number; deficit: number } {
   // Real tours only (not transfer/pickup rows) belonging to this city
@@ -705,12 +713,47 @@ export function pickToursForCity(
   // استبعاد رحلات المدن غير المطلوبة (مثل الطائف لعمرة مكة+المدينة فقط): أي صف يذكر
   // مدينة من مدن الوجهة ليست ضمن المطلوبة، وليس انتقال «مطار» → يُسقَط (ما طلبها العميل).
   const _reqSet = new Set((options?.requestedCities || []).map(c => c));
+  const _hotelCitySet = new Set(options?.hotelCities || []);
+  const _canonDef = cityDefs.find(c => c.canonical === canonicalCity);
+  // رحلة نهارية **تنطلق من هذه المدينة**؟ أي «من <المدينة> ...» (الانطلاق/التوجه من
+  // مراكش باتجاه أغافاي). يميّز الرحلة الحقيقية عن جولة مدينة ذُكر فيها اسم مدينة
+  // أخرى سهواً (صف «معالم الرباط» بمحتوى مراكش لا يبدأ بـ«من مراكش» فلا يُعتبر رحلة).
+  const _departsFromHere = (name: string): boolean => {
+    if (!_canonDef) return false;
+    const re = /(?:^|[\s(،.])من\s+(?:صحراء\s+)?([^\s،.]+(?:\s+[^\s،.]+){0,1})/gu;
+    let mm: RegExpExecArray | null;
+    while ((mm = re.exec(name)) !== null) {
+      if (_canonDef.pattern.test(mm[1])) return true;
+    }
+    return false;
+  };
   const _mentionsUnrequested = (name: string): boolean => {
     if (!_reqSet.size) return false;
     if (/مطار|airport/iu.test(name)) return false;   // انتقالات المطار (جدة للوصول) مطلوبة دائماً
     for (const def of cityDefs) {
       if (_reqSet.has(def.canonical) || def.canonical === canonicalCity) continue;
-      if (def.pattern.test(name)) return true;        // يذكر مدينة غير مطلوبة (الطائف)
+      if (!def.pattern.test(name)) continue;
+      // يذكر مدينة غير مطلوبة. نستبقيها فقط لو كانت **رحلة نهارية تنطلق من هذه
+      // المدينة** إلى وجهة إقامة حقيقية لها فنادق (جولة مراكش→اغافاي لمن لا يبيت
+      // باغافاي). رحلة لمدينة بلا فنادق (الطائف)، أو جولة ذكرت مدينة أخرى بلا انطلاق
+      // منها (صف «معالم الرباط» المُساء وسمه) → تُسقَط. (الاستبعاد عند المبيت على
+      // _mentionsOtherStayCity.)
+      if (_hotelCitySet.has(def.canonical) && _departsFromHere(name)) continue;
+      return true;
+    }
+    return false;
+  };
+  // رحلة نهارية مكرّرة: جولة منسوبة لهذه المدينة لكنها تذكر مدينة **مبيت أخرى**
+  // (العميل ينام فيها) = لا داعي لتكرارها كرحلة يوم من هنا. تُسقَط. جولة اغافاي
+  // الصحراوية من مراكش تبقى متاحة لمن لا يبيت باغافاي (اغافاي ليست مدينة مبيت).
+  const _stayCitySet = new Set(options?.overnightStayCities || []);
+  const _mentionsOtherStayCity = (name: string): boolean => {
+    if (_stayCitySet.size === 0) return false;
+    if (/مطار|airport/iu.test(name)) return false;   // انتقالات المطار مطلوبة دائماً
+    for (const def of cityDefs) {
+      if (def.canonical === canonicalCity) continue;  // مدينتها نفسها لا تُسقِطها
+      if (!_stayCitySet.has(def.canonical)) continue; // فقط مدن المبيت الأخرى
+      if (def.pattern.test(name)) return true;        // رحلة نهارية لوجهة ينام فيها
     }
     return false;
   };
@@ -726,6 +769,7 @@ export function pickToursForCity(
     && tourBelongsToCity(t, cityDefs, canonicalCity)
     && !isExcluded(t.name)
     && !_mentionsUnrequested(t.name)
+    && !_mentionsOtherStayCity(t.name)
     && !pinnedNames.has(t.name.trim().toLowerCase()),
   );
   // اختيار جولات المنطقة المطابقة لفندق الإقامة (صلالة: هوانا 380 vs وسط 330).
@@ -737,6 +781,7 @@ export function pickToursForCity(
     const _inCity = new Set(cityTours.map(t => t.name));
     const _areaExtra = allTours.filter(t =>
       !isTransfer(t.name) && !isExcluded(t.name)
+      && !_mentionsOtherStayCity(t.name)
       && !pinnedNames.has(t.name.trim().toLowerCase())
       && !_inCity.has(t.name)
       && _aTokens.some(tok => normalizeArabic(t.name).includes(tok)),
@@ -1232,11 +1277,35 @@ export function findInterCityTransfer(
       if (!m) return "other";
       return /فندق|hotel/i.test(m[1]) ? "hotel" : "airport";
     };
+    // A genuine one-way inter-city transfer ENDS at toCity. A same-day
+    // round-trip EXCURSION ("الانطلاق من مراكش ... صحراء أغافاي ... العودة
+    // إلى مراكش") leaks into this transfer pool because it carries a return
+    // verb ("العودة") and names fromCity as its origin — but it loops back
+    // to fromCity the same day, so it must NOT be used as the move INTO a
+    // city where the customer sleeps. Detect "returns to <fromCity>" so the
+    // sort prefers the clean one-way transfer ("التوجه من X الى Y") when
+    // both exist. Precise: the return verb must point AT fromCity (الى X),
+    // so a real return leg phrased "العودة من Agafay الى Marrakech" (whose
+    // destination is toCity, not fromCity) is never mis-flagged.
+    const returnsToFrom = (n: string): boolean => {
+      if (!fromDef) return false;
+      const m = n.match(/(?:العوده|العودة|الرجوع|رجوع)\s*(?:الى|إلى|الي)\s+([^\s،.]+(?:\s+[^\s،.]+){0,2})/u);
+      if (!m) return false;
+      return fromDef.pattern.test(m[1]);
+    };
     fromDrop.sort((a, b) => {
       // (1) prefer rows that explicitly mention toCity
       const aHasTo = toDef ? toDef.pattern.test(a.name) : false;
       const bHasTo = toDef ? toDef.pattern.test(b.name) : false;
       if (aHasTo !== bHasTo) return aHasTo ? -1 : 1;
+      // (1.2) a clean one-way transfer beats a same-day round-trip excursion
+      // that loops back to fromCity. Without this, the Agafay day-excursion
+      // row ("...العودة إلى مراكش") could win the Marrakech→Agafay move and
+      // the itinerary would wrongly say the customer returns to Marrakech
+      // on check-in day instead of staying overnight in Agafay.
+      const aRet = returnsToFrom(a.name);
+      const bRet = returnsToFrom(b.name);
+      if (aRet !== bRet) return aRet ? 1 : -1;
       // (1.5) "to hotel" beats "to airport" when both exist. Reason: this
       // function is called for transit days that END at a hotel stay (the
       // customer sleeps in toCity that night). A "to airport" row only
@@ -2409,6 +2478,24 @@ export async function buildLocalProgram(
   // يختار الترتيبُ بأسعار الموسم الفعلية لا السعر الأساسي (وإلا تتساوى جولات
   // ذروتها مختلفة فيكسر التعادل أبجديّاً ويُسقط الأرخص فعليّاً في موسم السفر).
   const buildMonth = days[0]?.date ? (days[0].date.getMonth() + 1) : 0;
+  // مدن المبيت الفعلية (فيها أيام إقامة «stay»). تُستخدم لاستبعاد الرحلة النهارية
+  // لوجهة ينام فيها العميل أصلاً: لو بات في اغافاي، جولة «الانطلاق من مراكش ...
+  // صحراء أغافاي ... العودة إلى مراكش» (منسوبة لمراكش) مكرّرة فتُسقَط من جولات
+  // مراكش ويُختار غيرها. جولة اغافاي-من-مراكش تبقى متاحة فقط لمن لا يبيت باغافاي.
+  const overnightStayCities = [...new Set(
+    days.filter(d => d.type === "stay" && d.city).map(d => d.city as string),
+  )];
+  // وجهات لها فنادق فعلاً في هذه الوجهة (مدن إقامة حقيقية مثل اغافاي). رحلة نهارية
+  // لمدينة منها تُعرض لمن لا يبيت بها (قاعدة المالكة: جولة مراكش→اغافاي تُضاف فقط
+  // لمن لا مبيت له في اغافاي). مدينة بلا فنادق (الطائف لعمرة مكة) تبقى مُستبعَدة.
+  const hotelCitiesSet = new Set<string>();
+  for (const h of allHotels) {
+    const loc = h.location || "";
+    for (const def of cityDefs) {
+      if (def.pattern.test(loc)) { hotelCitiesSet.add(def.canonical); break; }
+    }
+  }
+  const hotelCities = [...hotelCitiesSet];
   for (const city of request.cities) {
     if (usedCities.has(city)) continue; // dedup repeated cities (e.g. Hanoi at start and end)
     usedCities.add(city);
@@ -2452,6 +2539,8 @@ export async function buildLocalProgram(
         areaHint: cityHotelLoc,
         month: buildMonth,
         requestedCities: request.cities,
+        overnightStayCities,
+        hotelCities,
       },
     );
     // Day-specific overrides win over the order-based auto pick. Two-pass
