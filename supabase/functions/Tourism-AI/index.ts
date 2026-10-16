@@ -60,6 +60,8 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     [/مكة|مكه|makkah|mecca|العمرة|عمرة|الحرمين|المدينة\s*المنورة|المنوّ?رة|al\s*madinah|madinah|medina/i, "Makkah"],
     // مصر — القاهرة حالياً مدينة الأساس؛ أدرجنا مدن مصر الكبرى للكشف المتين (لو وُسّعت لاحقاً).
     [/مصر|egypt|القاهر[ةه]|cairo|[أا]هرامات|الجيز[ةه]|giza|الاقصر|الأقصر|luxor|[أا]سوان|aswan|شرم\s*الشيخ|sharm|الغردق[ةه]|hurghada/i, "Egypt"],
+    // المغرب — مدن: مراكش/الدار البيضاء/طنجة/أكادير/اغافاي/الصويرة/الرباط.
+    [/المغرب|مغرب|morocco|مراكش|marrakech|marrakesh|الدار\s*البيضا|الدارالبيضا|casablanca|طنج[ةه]|tanger|tangier|[أا][كغ]ادير|agadir|[أا]غافاي|agafay|الصوير[ةه]|essaouira|الرباط|rabat/i, "Morroco"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;
@@ -196,6 +198,17 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
   // (الأهرامات/الجيزة/خان الخليلي/النيل/قلعة صلاح الدين) إضافةً لأحياء القاهرة.
   Egypt: [
     { canonical: "Cairo", pattern: /القاهر[ةه]|قاهر[ةه]|cairo|الجيز[ةه]|جيز[ةه]|giza|[أا]هرام|pyramid|سفنك?س|sphinx|خان\s*الخليلي|قلعة\s*صلاح|المتحف|النيل|nile|الزمالك|zamalek|مصر|egypt|معالم/i },
+  ],
+  // المغرب — canonical يطابق مدينة الفندق (hotels.location) + أسماء الجولات العربية
+  // (استقبال/توديع مطار + معالم المدن). الرباط: جولات/انتقالات بلا فنادق (تُطابَق بالاسم).
+  Morroco: [
+    { canonical: "Marrakech",  pattern: /مراكش|marrakech|marrakesh/i },
+    { canonical: "Casablanca", pattern: /الدار\s*البيضا|الدارالبيضا|دار\s*البيضا|كازابلانكا|casablanca/i },
+    { canonical: "Tanger",     pattern: /طنج[ةها]|tanger|tangier/i },
+    { canonical: "Agadir",     pattern: /[أا][كغ]ادير|agadir/i },
+    { canonical: "Agafay",     pattern: /[أا]غا?فاي|agafay/i },
+    { canonical: "Essaouira",  pattern: /الصوير[ةه]|الصويرا|essaouira/i },
+    { canonical: "Rabat",      pattern: /الرباط|rabat/i },
   ],
 };
 
@@ -794,6 +807,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     "Sarajevo": "سراييفو", "Mostar": "موستار", "Bihać": "بيهاتش",
     "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
     "Cairo": "القاهرة",
+    "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط",
   };
   const formatBedScope = (cities: string[]): string => cities.flatMap(c => {
     const ar = CITY_AR[c];
@@ -2757,7 +2771,7 @@ async function handleTourVariants(body: { dest?: string; name?: string }): Promi
 
 // ── profit_margins: جدول الأرباح الموسمي لوجهة — يُقرأ مباشرة من شيت الوجهة
 //    (بلا جدول قاعدة بيانات): شريحة تكلفة × موسم × شركات/أفراد. ──────────────────
-const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt"];
+const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco"];
 
 async function pmGoogleToken(sa: { client_email: string; private_key: string }): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
@@ -3516,7 +3530,7 @@ Deno.serve(async (req) => {
         const destAr: Record<string, string> = {
           vietnam: "فيتنام", Malaysia: "ماليزيا", thailand: "تايلاند",
           Turky: "تركيا", russia: "روسيا", Bosnia: "البوسنة", indonesia: "إندونيسيا",
-          Oman: "عمان",
+          Oman: "عمان", Morroco: "المغرب",
         };
         const cityAr: Record<string, string> = {
           "Ha Noi": "هانوي", "Ho Chi Minh": "هوتشي مينه",
@@ -3626,6 +3640,7 @@ Deno.serve(async (req) => {
         "Sarajevo": "سراييفو", "Mostar": "موستار", "Bihać": "بيهاتش",
         "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
         "Shanghai": "شنغهاي", "Beijing": "بكين", "Hangzhou": "هانغتشو", "Hong Kong": "هونغ كونغ", "London": "لندن", "Amsterdam": "أمستردام", "Guangzhou": "جوانزو", "Cairo": "القاهرة",
+        "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط",
       };
       // Distribution-change follow-up: employee typed a NEW city/nights split
       // in chat to reshape an existing program (e.g. "٢ بانكوك ٤ كوساموي").
@@ -3659,6 +3674,7 @@ Deno.serve(async (req) => {
       const destAr: Record<string, string> = {
         vietnam: "فيتنام", Malaysia: "ماليزيا", thailand: "تايلاند",
         Turky: "تركيا", russia: "روسيا", Bosnia: "البوسنة", indonesia: "إندونيسيا",
+        Morroco: "المغرب",
       };
 
       // CASE A: distribution missing → ask locally (no Claude, $0)

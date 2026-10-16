@@ -160,7 +160,7 @@ async function formatAdProgramMessage(
   const destRaw = String(prog.destination || line("DEST") || "").trim();
   const destMap: Record<string, string> = {
     "Oman": "عُمان", "South Africa": "جنوب أفريقيا", "Malaysia": "ماليزيا",
-    "mauritius": "موريشيوس", "Mauritius": "موريشيوس", "China": "الصين", "Egypt": "مصر",
+    "mauritius": "موريشيوس", "Mauritius": "موريشيوس", "China": "الصين", "Egypt": "مصر", "Morroco": "المغرب",
   };
   const dest = destMap[destRaw] || destRaw;
   const meta = line("META");                                   // "5 أيام | 4 ليالي | ..."
@@ -381,6 +381,7 @@ const DESTINATION_HINTS: Array<[RegExp, string]> = [
   [/جورجيا|georgia|تبليسي|tbilisi|باتومي|batumi/i, "جورجيا"],
   [/سريلانكا|sri\s*lanka|كولومبو|colombo/i, "سريلانكا"],
   [/مصر|egypt|القاهرة|cairo|شرم|sharm|الغردقة|hurghada/i, "مصر"],
+  [/المغرب|مغرب|morocco|مراكش|marrakech|الدار\s*البيضا|الدارالبيضا|casablanca|طنج[ةه]|tanger|[أا][كغ]ادير|agadir|[أا]غافاي|agafay|الصوير[ةه]|essaouira|الرباط|rabat/i, "المغرب"],
   [/[إا]يطاليا|italy|روما|rome|ميلان|milan|البندقية|venice|فلورنسا|florence/i, "إيطاليا"],
   [/[إا]سبانيا|spain|مدريد|madrid|برشلونة|barcelona/i, "إسبانيا"],
   [/فرنسا|france|باريس|paris/i, "فرنسا"],
@@ -7082,7 +7083,7 @@ Deno.serve(async (req) => {
 أعد JSON فقط بلا أي شرح بهذا الشكل بالضبط:
 {"destination":"","destination2":"","date_from":"","pax":null,"children":null,"days":null,"sim_count":null,"hotel_stars":"","notes":""}
 القواعد:
-- destination: واحدة فقط من [فيتنام، ماليزيا، تايلاند، تركيا، روسيا، البوسنة، إندونيسيا، عُمان، جنوب أفريقيا، موريشيوس، إنجلترا، الصين، مصر، العمرة] إن طابقت وجهة مذكورة، وإلا "". 🕋 مهم: أي طلب عمرة/عُمرة/حج/زيارة الحرم/مكة/مكه/المدينة المنورة/الحرمين → destination = "العمرة" (وجهة العمرة تشمل مكة والمدينة معاً). 🇪🇬 أي ذكر لمصر/القاهرة/الأهرامات/الجيزة/خان الخليلي → destination = "مصر".
+- destination: واحدة فقط من [فيتنام، ماليزيا، تايلاند، تركيا، روسيا، البوسنة، إندونيسيا، عُمان، جنوب أفريقيا، موريشيوس، إنجلترا، الصين، مصر، المغرب، العمرة] إن طابقت وجهة مذكورة، وإلا "". 🕋 مهم: أي طلب عمرة/عُمرة/حج/زيارة الحرم/مكة/مكه/المدينة المنورة/الحرمين → destination = "العمرة" (وجهة العمرة تشمل مكة والمدينة معاً). 🇪🇬 أي ذكر لمصر/القاهرة/الأهرامات/الجيزة/خان الخليلي → destination = "مصر". 🇲🇦 أي ذكر للمغرب/مراكش/الدار البيضاء/طنجة/أكادير/الصويرة/الرباط → destination = "المغرب".
 - ⚖️ destination2: **لو العميل يقارن أو متردّد بين وجهتين** (مثل «فيتنام أو تايلند»، «أيهما أرخص X ولا Y»، «قارن لي بين X وY») → ضع الوجهة الأولى في destination والثانية في destination2 (كلاهما من نفس القائمة أعلاه). لو وجهة واحدة فقط → destination2 = "". لا تضع نفس الوجهة في الحقلين.
 - date_from: تاريخ السفر YYYY-MM-DD إن أمكن استنتاجه (حوّل العبارات النسبية حسب تاريخ اليوم)، وإلا "".
 - pax بالغين، children أطفال، sim_count شرائح: أرقام أو null.

@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-15-indiv-send-dest-guard'
+  var BUILD = '2026-10-16-morocco'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2948,6 +2948,7 @@ const BF_CITIES = {
   "إنجلترا":["لندن"],
   "الصين":["شنغهاي","بكين","هانغتشو","هونغ كونغ","جوانزو"],
   "مصر":["القاهرة"],
+  "المغرب":["مراكش","الدار البيضاء","طنجة","أكادير","الصويرة","اغافاي"],
 };
 // يحوّل أي تهجئة للوجهة (همزة/تشكيل/إنجليزي) إلى مفتاح BF_CITIES المطابق، حتى لا
 // تفشل تعبئة الفورم عند ضبط bf-dest من طلب محفوظ (مثال: "اندونيسيا" بلا همزة أو
@@ -2963,7 +2964,8 @@ function bfResolveDest(d){
     bosnia:'البوسنة', oman:'عُمان', southafrica:'جنوب أفريقيا', mauritius:'موريشيوس',
     makkah:'العمرة', mecca:'العمرة', umrah:'العمرة', england:'إنجلترا', london:'إنجلترا', uk:'إنجلترا',
     china:'الصين', shanghai:'الصين', beijing:'الصين', suzhou:'الصين', hangzhou:'الصين', hongkong:'الصين',
-    egypt:'مصر', cairo:'مصر' };
+    egypt:'مصر', cairo:'مصر',
+    morocco:'المغرب', marrakech:'المغرب', marrakesh:'المغرب', casablanca:'المغرب', tanger:'المغرب', tangier:'المغرب', agadir:'المغرب', agafay:'المغرب', essaouira:'المغرب', rabat:'المغرب' };
   if (EN[n]) return EN[n];
   if (/مكة|مكه|عمرة|المدينةالمنورة|المنورة/.test(n)) return 'العمرة';  // مكة/العمرة → مفتاح BF_CITIES
   if (/[إا]ن[جك]لترا|بريطانيا|لندن/.test(n)) return 'إنجلترا';         // إنجلترا/لندن → مفتاح BF_CITIES
@@ -2976,7 +2978,7 @@ let BF_SUGS = [];        // all ready suggestions for current destination
 let bfShownRows = [];    // suggestions currently rendered as cards
 let bfChosen = null;     // chosen distribution string (ready mode)
 function bfEsc(s){ return String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
-const BF_AIRPORT_AR = {Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي",Salalah:"صلالة",Shanghai:"شنغهاي",Beijing:"بكين",Hangzhou:"هانغتشو","Hong Kong":"هونغ كونغ",Guangzhou:"جوانزو"};
+const BF_AIRPORT_AR = {Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي",Salalah:"صلالة",Shanghai:"شنغهاي",Beijing:"بكين",Hangzhou:"هانغتشو","Hong Kong":"هونغ كونغ",Guangzhou:"جوانزو",Marrakech:"مراكش",Casablanca:"الدار البيضاء",Tanger:"طنجة",Agadir:"أكادير",Agafay:"اغافاي",Essaouira:"الصويرة",Rabat:"الرباط"};
 function bfAirAr(a){ return BF_AIRPORT_AR[a] || a; }
 function bfPairOf(s){ return s.arrival_airport + '|' + s.departure_airport; }
 function bfCurPair(){

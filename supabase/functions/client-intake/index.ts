@@ -48,6 +48,7 @@ const DEST_KEY: Record<string, string> = {
   "هولندا": "Netherland", "امستردام": "Netherland", "أمستردام": "Netherland", "Netherland": "Netherland", "Holland": "Netherland",
   "مكة": "Makkah", "مكة المكرمة": "Makkah", "مكه": "Makkah", "العمرة": "Makkah", "عمرة": "Makkah", "عمره": "Makkah",
   "مصر": "Egypt", "القاهرة": "Egypt", "القاهره": "Egypt", "Egypt": "Egypt", "Cairo": "Egypt",
+  "المغرب": "Morroco", "مغرب": "Morroco", "Morocco": "Morroco", "Morroco": "Morroco", "مراكش": "Morroco", "الدار البيضاء": "Morroco", "الدار البيضا": "Morroco", "طنجة": "Morroco", "أكادير": "Morroco", "اكادير": "Morroco", "الصويرة": "Morroco", "اغافاي": "Morroco", "الرباط": "Morroco",
 };
 
 function randToken(len = 24): string {

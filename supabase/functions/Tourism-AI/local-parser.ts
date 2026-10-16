@@ -228,6 +228,8 @@ function parseDestination(text: string): string | null {
     [/مكة|مكه|makkah|mecca|العمرة|عمرة|الحرمين|المدينة\s*المنورة|المنوّ?رة|al\s*madinah|madinah|medina/i, "Makkah"],
     // مصر — القاهرة حالياً مدينة الأساس؛ يطابق index.ts
     [/مصر|egypt|القاهر[ةه]|cairo|[أا]هرامات|الجيز[ةه]|giza|الاقصر|الأقصر|luxor|[أا]سوان|aswan|شرم\s*الشيخ|sharm|الغردق[ةه]|hurghada/i, "Egypt"],
+    // المغرب — مدن: مراكش/الدار البيضاء/طنجة/أكادير/اغافاي/الصويرة/الرباط.
+    [/المغرب|مغرب|morocco|مراكش|marrakech|marrakesh|الدار\s*البيضا|الدارالبيضا|casablanca|طنج[ةه]|tanger|tangier|[أا][كغ]ادير|agadir|[أا]غافاي|agafay|الصوير[ةه]|essaouira|الرباط|rabat/i, "Morroco"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;

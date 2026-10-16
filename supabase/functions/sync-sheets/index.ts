@@ -26,7 +26,7 @@ const CORS_HEADERS = {
   "Content-Type": "application/json",
 };
 
-const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt"];
+const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco"];
 
 // Per-destination canonical-city patterns — MUST stay in sync with DEST_CITIES
 // in Tourism-AI/index.ts (same canonical names the builder groups by). Used
@@ -103,6 +103,18 @@ const SECTION_CITY_DEFS: Record<string, Array<{ canonical: string; pattern: RegE
   Egypt: [
     { canonical: "Cairo", pattern: /القاهر[ةه]|قاهر[ةه]|cairo|الجيز[ةه]|جيز[ةه]|giza|[أا]هرام|pyramid|سفنك?س|sphinx|خان\s*الخليلي|قلعة\s*صلاح|المتحف|النيل|nile|الزمالك|zamalek|مصر|egypt/i },
   ],
+  // المغرب — الجولات أسماؤها عربية (استقبال/توديع مطار + جولات معالم المدن) بلا عمود
+  // City فتُطابَق بالاسم. الأحياء/المدن في توزيع المدن: مراكش/اغافاي/أكادير/الدار
+  // البيضاء/الرباط. الصويرة وطنجة لهما فنادق كذلك.
+  Morroco: [
+    { canonical: "Marrakech",  pattern: /مراكش|marrakech|marrakesh/i },
+    { canonical: "Casablanca", pattern: /الدار\s*البيضا|الدارالبيضا|دار\s*البيضا|كازابلانكا|casablanca/i },
+    { canonical: "Tanger",     pattern: /طنج[ةها]|tanger|tangier/i },
+    { canonical: "Agadir",     pattern: /[أا][كغ]ادير|agadir/i },
+    { canonical: "Agafay",     pattern: /[أا]غا?فاي|agafay/i },
+    { canonical: "Essaouira",  pattern: /الصوير[ةه]|الصويرا|essaouira/i },
+    { canonical: "Rabat",      pattern: /الرباط|rabat/i },
+  ],
 };
 
 // Match a price-less tour-block row against the destination's city patterns.
@@ -116,7 +128,7 @@ function detectSectionCity(name: string, destination: string): string | null {
 }
 
 // وجهات يُشتق فيها مطار القدوم/المغادرة من أول/آخر مدينة بالتوزيع (بوابات متعددة).
-const ENDPOINT_AIRPORT_DESTS = new Set<string>(["China"]);
+const ENDPOINT_AIRPORT_DESTS = new Set<string>(["China", "Morroco"]);
 // يستخرج مطار (أول مدينة) و(آخر مدينة) من نص التوزيع مثل «٤ بكين - ٣ شانغهاي»
 // → { arr:"Beijing", dep:"Shanghai" }. يستخدم أنماط مدن الوجهة نفسها.
 function endpointAirportsFromDist(distribution: string, destination: string): { arr: string; dep: string } | null {
@@ -990,7 +1002,10 @@ function extractSuggestions(
   for (let i = 0; i < Math.min(rows.length, 10); i++) {
     for (let j = 0; j < (rows[i] || []).length; j++) {
       const cell = (rows[i][j] || "").trim();
-      if (/اقتراحات/.test(cell) && /(?:توزيع|مدن)/.test(cell)) {
+      // رأس عمود الاقتراحات: إمّا يذكر «اقتراحات» (+توزيع/مدن)، أو عبارة «توزيع
+      // المدن» المجرّدة (شيت المغرب يكتبها بلا «اقتراحات»). الشكل الثاني مُقيَّد
+      // بـ«توزيع» متبوعة بـ«مدن/المدن» حتى لا يلتقط عمود City للفنادق.
+      if ((/اقتراحات/.test(cell) && /(?:توزيع|مدن)/.test(cell)) || /توزيع\s*ال?مدن/.test(cell)) {
         colIdx = j;
         headerRow = i;
         break;
@@ -1025,6 +1040,12 @@ function extractSuggestions(
       "اسطنبول": "Istanbul", "إسطنبول": "Istanbul",
       "طرابزون": "Trabzon", "طربزون": "Trabzon",
       "اوزنجول": "Uzungol", "ازونجول": "Uzungol", "ايدر": "Ayder",
+    },
+    Morroco: {
+      "مراكش": "Marrakech", "الدار البيضا": "Casablanca", "الدارالبيضا": "Casablanca",
+      "دار البيضا": "Casablanca", "كازابلانكا": "Casablanca", "طنجة": "Tanger", "طنجه": "Tanger",
+      "اكادير": "Agadir", "أكادير": "Agadir", "اغادير": "Agadir", "اغافاي": "Agafay", "أغافاي": "Agafay",
+      "الصويرة": "Essaouira", "الصويره": "Essaouira", "الرباط": "Rabat",
     },
     Oman: {
       // مطارات عُمان بالعربي مع توحيد الإملاء (صلاله/Salalah → صلالة)
@@ -1089,6 +1110,7 @@ function extractSuggestions(
     Oman:     "صلالة",
     Makkah:   "جدة",   // برامج العمرة تدخل/تخرج عبر جدة (بلا سطر مطار في عمود الاقتراحات)
     China:    "Shanghai",  // برامج الصين تبدأ/تنتهي غالباً بشنغهاي (عمود الاقتراحات بلا سطر مطار)
+    Morroco:  "Marrakech", // المغرب متعدّد البوابات؛ الوصول/المغادرة يُشتقّان من أول/آخر مدينة بالتوزيع، وإلا مراكش
   };
   for (let i = headerRow + 1; i < rows.length; i++) {
     const rawCell = (rows[i][colIdx] || "").trim();
