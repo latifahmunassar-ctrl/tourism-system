@@ -7463,8 +7463,9 @@ function renderPayForm(){
   const totalRefunded=refs.reduce((s,r)=>s+Number(r.refund||0),0);
   const _rm=refundMaps(); const expRefTot=Number(_rm.expClient[code]||0);
   const _paidRemain=Math.max(0, paid - totalRefunded);   // لا يُرجَع للعميل أكثر مما دفعه فعلاً (ناقص ما أُرجِع)
-  const expRefV=Math.min(Math.max(0, expRefTot - totalRefunded), _paidRemain); // المتوقّع المتبقّي محدوداً بالمدفوع ⇒ بلا رسوم إلغاء = كامل المبلغ المدفوع
-  const refundableF = expRefV>0 ? expRefV : _paidRemain;                 // القابل للإرجاع (بلا رسوم إلغاء ⇒ كامل المدفوع المتبقّي)
+  const _cancFee=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code && (/cancel/i.test(String(s.status||''))||Number(s.refund||0)>0)).reduce((a,s)=>a+Number(s.cancel_charge||0)*(Number(s.currency_rate)||1),0);   // 🚫 رسوم الإلغاء بعملة العميل
+  // القابل للإرجاع = المبلغ المدفوع فعلاً − رسوم الإلغاء − ما سبق إرجاعه (لا يعتمد سعر بيع الخدمة) — قرار المالكة: المرتجع من المدفوع
+  const refundableF = Math.max(0, paid - totalRefunded - _cancFee);
   const profDefault = Math.max(0, Math.min(profit, refundableF));        // 🏢 الافتراضي = الربح المتوقّع من البرنامج (قابل للتعديل)
   const amtDefault  = Math.max(0, refundableF - profDefault);            // المسترجع النهائي = القابل للإرجاع − ربح الشركة
   const bankOpts='<option value="">— اختاري البنك —</option>'+listValues('banks').map(b=>'<option>'+esc(b.value)+'</option>').join('');   // القائمة المُدارة فقط
@@ -7557,8 +7558,8 @@ function exportRefundReviewPDF(code){
   const cancRows=cancSvcs.map(s=>{ const sell=Number(s.amount||0); const rt=Number(s.currency_rate)||1; const feeC=Number(s.cancel_charge||0)*rt; const e=Math.max(0,sell-feeC); cancSellTot+=sell; cancFeeTot+=feeC; cancExpTot+=e; return '<tr><td>'+esc((SVC&&SVC[s.kind])||s.name||s.kind||'خدمة')+'</td><td class="num">'+fmt(sell)+'</td><td class="num">'+fmt(feeC)+'</td><td class="num" style="color:#c0392b;font-weight:700">'+fmt(e)+'</td></tr>'; }).join('');
   // مرتجعات سابقة
   const prevRef=(DATA.refunds||[]).filter(r=>(r.client_code||'').toUpperCase()===code).reduce((s,r)=>s+Number(r.refund||0),0);
-  // 🔄 القابل للإرجاع: المتوقّع المحسوب، وإلا المبلغ المكنسل، وإلا كامل المدفوع ناقص ما أُرجِع — بلا رسوم إلغاء ⇒ كامل المدفوع
-  const refundable = exp>0 ? exp : (cancExpTot>0 ? cancExpTot : Math.max(0, totalPaid - prevRef));
+  // 🔄 القابل للإرجاع = المبلغ المدفوع فعلاً − رسوم الإلغاء − ما سبق إرجاعه (لا يعتمد سعر بيع الخدمة)
+  const refundable = Math.max(0, totalPaid - prevRef - cancFeeTot);
   if(!(amt>0)) amt = Math.max(0, refundable - profit);   // لم تُدخَل القيمة بعد → الافتراضي = القابل للإرجاع − ربح الشركة
   if(!(amt>0) && !(refundable>0)){ const m=$('rf-msg'); if(m)m.innerHTML='<span style="color:var(--red)">⚠️ لا دفعات ولا مرتجع متوقّع لهذا العميل — لا يمكن إصدار التقرير</span>'; return; }
   const logoHtml=(typeof ALEZZ_LOGO!=='undefined'&&ALEZZ_LOGO)?('<img src="'+ALEZZ_LOGO+'" alt="ALEZZ" style="max-height:80px;margin-bottom:6px">'):'<div style="font-size:34px;font-weight:900;letter-spacing:3px;color:#0e7a5a">AL<span style="color:#d4a017">E</span>ZZ</div><div style="font-size:12px;color:#666;letter-spacing:2px">شركة العز للسياحة والسفر</div>';
