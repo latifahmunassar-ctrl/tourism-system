@@ -3703,6 +3703,11 @@ function cliEditDiff(m){
   } else if(c._sup_invoice_only){
     // 🧾 تعديل «فاتورة المورّد» المسجّلة — القيمة السابقة (وقت الطلب) ← المطلوبة
     if(c.supplier_name||c.client_code) rows.push('<div style="color:var(--muted)">🧾 نوع التعديل: <b>فاتورة المورّد</b>'+(c.supplier_name?(' — '+esc(cut(c.supplier_name))):'')+(c.client_code?(' · '+esc(c.client_code)):'')+'</div>');
+    if(c.client_code){   // 📅 موعد الوصول + 🏢 اسم الوكيل من بيانات العميل (First Client Data)
+      const _fr=((DATA&&DATA.fcd)||[]).filter(x=>String(x.client_code||'').toUpperCase()===String(c.client_code||'').toUpperCase());
+      const _ag=(_fr.find(x=>x.agent_name)||{}).agent_name||'', _arr=(_fr.find(x=>x.arrival_date)||{}).arrival_date||'';
+      if(_arr||_ag) rows.push('<div style="color:var(--muted)">'+(_arr?('📅 موعد الوصول: <b>'+esc(D(_arr))+'</b>'):'')+((_arr&&_ag)?' · ':'')+(_ag?('🏢 الوكيل: <b>'+esc(_ag)+'</b>'):'')+'</div>');
+    }
     chg('🧾 قيمة فاتورة المورّد', c.old_value, c.actual_invoice, true);
   } else if(c._sup_transfer_only){
     // 💸 تعديل بيانات تحويل مورّد — القيمة الحالية (من سجل الدفعة) ← المطلوبة
