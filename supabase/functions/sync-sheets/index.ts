@@ -108,7 +108,7 @@ const SECTION_CITY_DEFS: Record<string, Array<{ canonical: string; pattern: RegE
   // البيضاء/الرباط. الصويرة وطنجة لهما فنادق كذلك.
   Morroco: [
     { canonical: "Marrakech",  pattern: /مراكش|marrakech|marrakesh/i },
-    { canonical: "Casablanca", pattern: /الدار\s*البيضا|الدارالبيضا|دار\s*البيضا|كازابلانكا|casablanca/i },
+    { canonical: "Casablanca", pattern: /الدار\s*البيضاء?|الدارالبيضاء?|دار\s*البيضاء?|كازابلانكا|casablanca/i },
     { canonical: "Tanger",     pattern: /طنج[ةها]|tanger|tangier/i },
     { canonical: "Agadir",     pattern: /[أا][كغ]ادير|agadir/i },
     { canonical: "Agafay",     pattern: /[أا]غا?فاي|agafay/i },
@@ -1043,6 +1043,7 @@ function extractSuggestions(
     },
     Morroco: {
       "مراكش": "Marrakech", "الدار البيضا": "Casablanca", "الدارالبيضا": "Casablanca",
+      "الدار البيضاء": "Casablanca", "الدارالبيضاء": "Casablanca", "دار البيضاء": "Casablanca",
       "دار البيضا": "Casablanca", "كازابلانكا": "Casablanca", "طنجة": "Tanger", "طنجه": "Tanger",
       "اكادير": "Agadir", "أكادير": "Agadir", "اغادير": "Agadir", "اغافاي": "Agafay", "أغافاي": "Agafay",
       "الصويرة": "Essaouira", "الصويره": "Essaouira", "الرباط": "Rabat",

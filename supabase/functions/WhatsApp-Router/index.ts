@@ -381,7 +381,7 @@ const DESTINATION_HINTS: Array<[RegExp, string]> = [
   [/جورجيا|georgia|تبليسي|tbilisi|باتومي|batumi/i, "جورجيا"],
   [/سريلانكا|sri\s*lanka|كولومبو|colombo/i, "سريلانكا"],
   [/مصر|egypt|القاهرة|cairo|شرم|sharm|الغردقة|hurghada/i, "مصر"],
-  [/المغرب|مغرب|morocco|مراكش|marrakech|الدار\s*البيضا|الدارالبيضا|casablanca|طنج[ةه]|tanger|[أا][كغ]ادير|agadir|[أا]غافاي|agafay|الصوير[ةه]|essaouira|الرباط|rabat/i, "المغرب"],
+  [/المغرب|مغرب|morocco|مراكش|marrakech|الدار\s*البيضاء?|الدارالبيضاء?|casablanca|طنج[ةه]|tanger|[أا][كغ]ادير|agadir|[أا]غافاي|agafay|الصوير[ةه]|essaouira|الرباط|rabat/i, "المغرب"],
   [/[إا]يطاليا|italy|روما|rome|ميلان|milan|البندقية|venice|فلورنسا|florence/i, "إيطاليا"],
   [/[إا]سبانيا|spain|مدريد|madrid|برشلونة|barcelona/i, "إسبانيا"],
   [/فرنسا|france|باريس|paris/i, "فرنسا"],

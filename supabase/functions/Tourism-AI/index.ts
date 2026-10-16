@@ -61,7 +61,7 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     // مصر — القاهرة حالياً مدينة الأساس؛ أدرجنا مدن مصر الكبرى للكشف المتين (لو وُسّعت لاحقاً).
     [/مصر|egypt|القاهر[ةه]|cairo|[أا]هرامات|الجيز[ةه]|giza|الاقصر|الأقصر|luxor|[أا]سوان|aswan|شرم\s*الشيخ|sharm|الغردق[ةه]|hurghada/i, "Egypt"],
     // المغرب — مدن: مراكش/الدار البيضاء/طنجة/أكادير/اغافاي/الصويرة/الرباط.
-    [/المغرب|مغرب|morocco|مراكش|marrakech|marrakesh|الدار\s*البيضا|الدارالبيضا|casablanca|طنج[ةه]|tanger|tangier|[أا][كغ]ادير|agadir|[أا]غافاي|agafay|الصوير[ةه]|essaouira|الرباط|rabat/i, "Morroco"],
+    [/المغرب|مغرب|morocco|مراكش|marrakech|marrakesh|الدار\s*البيضاء?|الدارالبيضاء?|casablanca|طنج[ةه]|tanger|tangier|[أا][كغ]ادير|agadir|[أا]غافاي|agafay|الصوير[ةه]|essaouira|الرباط|rabat/i, "Morroco"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;
@@ -203,7 +203,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
   // (استقبال/توديع مطار + معالم المدن). الرباط: جولات/انتقالات بلا فنادق (تُطابَق بالاسم).
   Morroco: [
     { canonical: "Marrakech",  pattern: /مراكش|marrakech|marrakesh/i },
-    { canonical: "Casablanca", pattern: /الدار\s*البيضا|الدارالبيضا|دار\s*البيضا|كازابلانكا|casablanca/i },
+    { canonical: "Casablanca", pattern: /الدار\s*البيضاء?|الدارالبيضاء?|دار\s*البيضاء?|كازابلانكا|casablanca/i },
     { canonical: "Tanger",     pattern: /طنج[ةها]|tanger|tangier/i },
     { canonical: "Agadir",     pattern: /[أا][كغ]ادير|agadir/i },
     { canonical: "Agafay",     pattern: /[أا]غا?فاي|agafay/i },

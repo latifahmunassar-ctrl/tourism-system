@@ -462,7 +462,7 @@ const CITY_NAME_RE: Record<string, RegExp> = {
   "Bali": /بالي|bali/i, "Jakarta": /جا?ك[رز]تا?|jakarta/i, "Bandung": /باندون[جغق]|bandung/i,
   "Puncak": /بونشاك|puncak/i, "Salalah": /صلال[ةه]|salalah/i, "Muscat": /مسق[طت]|muscat/i,
   "Jabal Akhdar": /ج[يب]ل\s*ال[اأإآ]?خضر|jabal/i,
-  "Marrakech": /مراكش|marrakech|marrakesh/i, "Casablanca": /الدار\s*البيضا|الدارالبيضا|دار\s*البيضا|كازابلانكا|casablanca/i,
+  "Marrakech": /مراكش|marrakech|marrakesh/i, "Casablanca": /الدار\s*البيضاء?|الدارالبيضاء?|دار\s*البيضاء?|كازابلانكا|casablanca/i,
   "Tanger": /طنج[ةها]|tanger|tangier/i, "Agadir": /[أا][كغ]ادير|agadir/i, "Agafay": /[أا]غا?فاي|agafay/i,
   "Essaouira": /الصوير[ةه]|الصويرا|essaouira/i, "Rabat": /الرباط|rabat/i,
 };
