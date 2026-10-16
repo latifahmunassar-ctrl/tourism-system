@@ -7526,6 +7526,11 @@ function renderPayForm(){
      '<input type="file" id="rf-doc" accept="image/*,application/pdf" style="font-size:12px">'+
      '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">⚠️ لن تتم عملية الإرجاع إلا بإرفاق طلب/تفويض العميل بالإرجاع — يُحفظ ضمن مستند المرتجع المعتمد.</div>'+
    '</div>'+
+   '<div style="background:rgba(14,157,106,.06);border:1px dashed var(--green);border-radius:8px;padding:9px 11px;margin-bottom:10px">'+
+     '<label style="font-size:12.5px;font-weight:700;display:block;margin-bottom:5px">🏢 طلب الإرجاع من الشركة (اعتماد داخلي) <span style="font-size:10px;color:var(--muted)">اختياري</span></label>'+
+     '<input type="file" id="rf-cdoc" accept="image/*,application/pdf" style="font-size:12px">'+
+     '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">📌 ارفقي مستند طلب الإرجاع الصادر عن الشركة (PDF أو صورة) للتأكّد أنه طلب حقيقي — يُحفظ ويظهر في تقرير/مستند المرتجع بجانب طلب العميل.</div>'+
+   '</div>'+
    '<div class="fgrid">'+
    '<div class="fld"><label>🏢 ربح الشركة (تحتفظين به · يُعتمد في الربح الفعلي) <span style="font-size:10px;color:var(--muted)">✏️ قابل للتعديل</span></label><input type="number" id="rf-profit" value="'+profDefault+'" oninput="rfCalc()"></div>'+
    '<div class="fld"><label>المبلغ المرتجع'+(refundableF>0?' (المسترجع النهائي للعميل)':'')+' <span style="color:var(--red)">*</span></label><input type="number" id="rf-amt" value="'+amtDefault+'" oninput="rfAmtEdit()"></div>'+
@@ -7641,6 +7646,9 @@ async function saveRefund(){
   const fileEl=$('rf-doc'); const file=fileEl&&fileEl.files&&fileEl.files[0];
   if(!file){ m.innerHTML='<span style="color:var(--red)">⚠️ لازم ترفقي طلب/صورة العميل بالإرجاع قبل التنفيذ (PDF أو صورة)</span>'; if(fileEl)fileEl.focus(); return; }
   if(file.size>8*1024*1024){ m.innerHTML='<span style="color:var(--red)">⚠️ حجم الملف كبير (الحد 8MB) — اضغطي الصورة أو استخدمي PDF أصغر</span>'; return; }
+  // 🏢 مستند طلب الإرجاع من الشركة (اختياري)
+  const cFileEl=$('rf-cdoc'); const cFile=cFileEl&&cFileEl.files&&cFileEl.files[0];
+  if(cFile && cFile.size>8*1024*1024){ m.innerHTML='<span style="color:var(--red)">⚠️ حجم مستند الشركة كبير (الحد 8MB)</span>'; return; }
   const ci=clientInfo(code)||{}; const cname=ci.name||''; const cur=ci.cur||'';
   // ملخّصات تُحفظ ضمن المستند: دفعات العميل + الخدمات الملغاة + إجمالي/متبقّي المتوقّع
   const totalRefunded=(DATA.refunds||[]).filter(r=>(r.client_code||'').toUpperCase()===code).reduce((a,r)=>a+Number(r.refund||0),0);
@@ -7653,7 +7661,8 @@ async function saveRefund(){
   // ⚠️ رسالة تنبيه + تأكيد بالقيم قبل تأكيد المرتجع (لا انعكاس إلا بموافقة الأدمن)
   const confirmMsg='⚠️ تنبيه: أنتِ على وشك إرجاع مبلغ للعميل — راجعي القيم جيداً:\n\n'+
     '• العميل: '+(cname?cname+' · ':'')+code+'\n'+
-    '• 📎 المرفق: '+(file.name||'مستند')+'\n'+
+    '• 📎 طلب العميل: '+(file.name||'مستند')+'\n'+
+    (cFile?('• 🏢 طلب الشركة: '+(cFile.name||'مستند')+'\n'):'')+
     (expV>0?('• 🔄 المرتجع المتوقّع المتبقّي: '+fmt(expV)+' '+cur+'\n• 🏢 ربح الشركة المحتفظ به: '+fmt(keptProfit)+' '+cur+'\n'):'')+
     '• 💸 المسترجع النهائي للعميل: '+fmt(amt)+' '+cur+'\n'+
     '• البنك (طلعت منه الحوالة): '+bank+'\n'+
@@ -7663,19 +7672,21 @@ async function saveRefund(){
   if(!confirm(confirmMsg))return;
   m.style.color='var(--muted)'; m.textContent='جارٍ قراءة المرفق وإرسال الطلب للأدمن…';
   let docB64; try{ docB64=await fileToBase64(file); }catch(e){ m.innerHTML='<span style="color:var(--red)">خطأ في قراءة المرفق: '+esc(e.message)+'</span>'; return; }
+  let cdocB64=null; if(cFile){ try{ cdocB64=await fileToBase64(cFile); }catch(e){ m.innerHTML='<span style="color:var(--red)">خطأ في قراءة مستند الشركة: '+esc(e.message)+'</span>'; return; } }
   const summary='💸 إرجاع للعميل «'+(cname?cname+' · ':'')+code+'» · '+fmt(amt)+' '+cur+(keptProfit>0?(' · 🏢 ربح الشركة '+fmt(keptProfit)):'')+' · بنك '+bank+(ref?(' · مرجع '+ref):'')+' · 📎 بمستند';
   const p={client_code:code,client_name:cname,refund:amt,bank_name:bank,payment_date:date,bank_ref:ref||null,note:note||null,currency:cur,
     agent_name:agentNm||null,travel_to:destTo||null,travel_from:fromTo||null,
     company_profit:keptProfit,expected_refund:expectedTotal,remaining_expected:expV,
     payments_summary:paymentsSummary,cancel_summary:cancelSummary,
     doc_base64:docB64,doc_name:file.name||null,doc_type:file.type||null,
+    company_doc_base64:cdocB64,company_doc_name:(cFile&&cFile.name)||null,company_doc_type:(cFile&&cFile.type)||null,
     summary:summary,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''};
   try{
     const r=await apiRecon({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'request_refund_add',payload:p})});
     const j=await r.json();
     if(j.error){ m.innerHTML='<span style="color:var(--red)">خطأ: '+esc(j.error)+'</span>'; return; }
     m.innerHTML='<span style="color:var(--green)">✅ أُرسل طلب الإرجاع مع المستند للأدمن للموافقة — لن ينعكس حتى يعتمده</span>';
-    ['rf-amt','rf-ref','rf-note'].forEach(i=>{const e=$(i);if(e)e.value=(i==='rf-amt'?'0':'');}); if($('rf-doc'))$('rf-doc').value='';
+    ['rf-amt','rf-ref','rf-note'].forEach(i=>{const e=$(i);if(e)e.value=(i==='rf-amt'?'0':'');}); if($('rf-doc'))$('rf-doc').value=''; if($('rf-cdoc'))$('rf-cdoc').value='';
     setTimeout(load,1400);
   }catch(e){ m.innerHTML='<span style="color:var(--red)">خطأ: '+esc(e.message)+'</span>'; }
 }
@@ -7698,6 +7709,8 @@ async function openRefundDoc(docId){
     const d=j.doc; const cur=d.currency||'';
     const isPdf=/pdf/i.test(d.doc_type||'')|| /^data:application\/pdf/i.test(d.doc_base64||'');
     const docHtml=d.doc_base64?(isPdf?('<iframe src="'+d.doc_base64+'" style="width:100%;height:560px;border:1px solid #ccc"></iframe>'):('<img src="'+d.doc_base64+'" style="max-width:100%;border:1px solid #ccc">')):'<i>لا يوجد مرفق</i>';
+    const cIsPdf=/pdf/i.test(d.company_doc_type||'')|| /^data:application\/pdf/i.test(d.company_doc_base64||'');
+    const cDocHtml=d.company_doc_base64?(cIsPdf?('<iframe src="'+d.company_doc_base64+'" style="width:100%;height:560px;border:1px solid #ccc"></iframe>'):('<img src="'+d.company_doc_base64+'" style="max-width:100%;border:1px solid #ccc">')):'';
     const paysRows=((d.payments_summary)||[]).map(x=>'<tr><td>'+esc(x.code||'')+'</td><td style="text-align:left">'+fmt(x.amount||0)+' '+esc(x.currency||'')+'</td><td>'+esc(x.bank||'')+'</td><td>'+esc(x.date||'')+'</td></tr>').join('')||'<tr><td colspan=4>—</td></tr>';
     const SVCKN={hotel:'🏨 فندق',flight:'✈️ طيران',tour:'🗺️ جولة',additional:'➕ خدمة',supplier:'🏢 مورّد',transport:'🚐 انتقال',visa:'📗 فيزا',other:'📦 أخرى'};
     const canRows=((d.cancel_summary)||[]).map(x=>'<tr><td>'+esc(SVCKN[x.kind]||x.kind||'')+'</td><td>'+esc(x.name||'')+'</td><td style="font-size:10px;color:#666">'+esc(x.detail||'')+'</td><td style="text-align:left">'+fmt(x.sell||0)+'</td><td style="text-align:left">'+(x.booked!=null?fmt(x.booked):'—')+'</td><td style="text-align:left">'+fmt(x.cancel_charge||0)+'</td><td style="text-align:left">'+esc(x.rate!=null&&x.rate!==''?x.rate:'—')+'</td><td style="text-align:left">'+(x.refund!=null?fmt(x.refund):'—')+' '+esc(x.cur||'')+'</td><td style="text-align:left;font-weight:700;color:#0a7">'+fmt(x.expected||0)+'</td></tr>').join('')||'<tr><td colspan=9>—</td></tr>';
@@ -7712,6 +7725,7 @@ async function openRefundDoc(docId){
       '<div class="box"><b>💳 ملخّص دفعات العميل</b><table><thead><tr><th>كود الدفعة</th><th>المبلغ</th><th>البنك</th><th>التاريخ</th></tr></thead><tbody>'+paysRows+'</tbody></table></div>'+
       '<div class="box"><b>🗂️ تفاصيل الخدمات والحجوزات الملغاة</b><div style="overflow-x:auto"><table><thead><tr><th>النوع</th><th>الخدمة</th><th>التفاصيل</th><th>سعر البيع</th><th>الحجز الفعلي</th><th>رسوم الإلغاء</th><th>سعر الصرف</th><th>المرتجع المسجّل</th><th>المتوقّع إرجاعه</th></tr></thead><tbody>'+canRows+'</tbody></table></div></div>'+
       '<div class="box"><b>📎 طلب العميل بالإرجاع</b><div style="margin-top:8px">'+docHtml+'</div></div>'+
+      (cDocHtml?('<div class="box" style="border-color:#0a7"><b>🏢 طلب الإرجاع من الشركة (اعتماد داخلي)</b><div style="margin-top:8px">'+cDocHtml+'</div></div>'):'')+
       '</body></html>'); w.document.close();
   }catch(e){ alert('خطأ: '+e.message); }
 }
