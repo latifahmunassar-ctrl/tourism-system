@@ -527,6 +527,10 @@ const TRANSFER_PREFIXES = [
   "التوجه", "التوجة", "توجه", "توجة", "التوصيل", "توصيل", "توصیل", "يتم توصيل", "يتم توصیل",
   "العوده", "العودة", "العود",
   "الانتقال", "انتقال", "النقل",
+  // «يوم تنقّل من X الى Y» — الصيغة التي يطبعها النظام كبديل، وتكتبها المالكة أحياناً
+  // في الشيت كصف انتقال مسعّر (مراكش↔طنجة). نعرّفها كبادئة انتقال حتى يُلتقط صفّها
+  // بسعره بدل توليد بديل بصفر. (الحارس /لعمل جول|معالم|جول N/ يحمي الجولات.)
+  "يوم تنقل", "يوم تنقّل", "تنقل", "تنقّل", "التنقل",
   "حضور السائق", "السائق",
   "ذهاب من", "الذهاب من", "للذهاب",
   "انتهاء", "انتهاء جوله", "انتهاء جولة",
@@ -1079,7 +1083,7 @@ export function findDepartureDrop(
     if (t.type !== destination) return false;
     const n = t.name;
     if (/استقبال|الاستقبال|pickup/iu.test(n)) return false;
-    if (!/توديع|التوديع|التوجه|التوجة|توج[ةه]|الذهاب|الخروج|توصيل|التوصيل|للعوده|للعودة|العوده|العودة|انتقال|drop/iu.test(n)) return false;
+    if (!/توديع|التوديع|التوجه|التوجة|توج[ةه]|الذهاب|الخروج|توصيل|التوصيل|للعوده|للعودة|العوده|العودة|تنق[ّ]?ل|انتقال|drop/iu.test(n)) return false;
     const rowFrom = extractRowFromCity(n);
     if (!rowFrom) return false;
     if (!tourNameMatchesCity(rowFrom, city, cityDefs)) return false;
@@ -1176,7 +1180,7 @@ export function findInterCityTransfer(
   // the row text happens to name one specific flight destination).
   const baseFilter = (n: string): boolean => {
     if (/^\s*(?:الاستقبال|استقبال|pickup)(?=\s|$)/iu.test(n)) return false;                  // (b)
-    if (!/توديع|التوديع|التوجه|التوجة|توج[ةه]|الذهاب|العوده|العودة|للعوده|للعودة|توصيل|التوصيل|الخروج|النقل|نقل|الانتقال|انتقال|drop/iu.test(n)) return false;
+    if (!/توديع|التوديع|التوجه|التوجة|توج[ةه]|الذهاب|العوده|العودة|للعوده|للعودة|توصيل|التوصيل|الخروج|النقل|نقل|تنق[ّ]?ل|الانتقال|انتقال|drop/iu.test(n)) return false;
     const isAirportRow = /مطار|airport/iu.test(n) && !/قطار|محط[هة]|station|train/iu.test(n);
     const isTrainRow   = /قطار|محط[هة]|station|train/iu.test(n);
     if (transitKind === "train"   && !isTrainRow) return false;
