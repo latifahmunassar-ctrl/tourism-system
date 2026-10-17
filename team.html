@@ -1545,7 +1545,7 @@ async function applyHaramToAllHotels(val){
       const pick = pool[0];
       addMessage('sys', `🔎 [${region}] الحالي=${curName} → المختار=${pick?pick.name+' / '+pick.room_type:'—'}`);
       if(!pick || ((pick.name||'').trim()===curName && (pick.room_type||'').trim()===curRoom)) continue;  // نفس الفندق ونفس الغرفة
-      const newLine = [pick.name, p[1]||'', (pick.stars||p[2]||'')+' نجوم', _roomWithCap(pick, p[3]), (pick.price_per_night||0)+' ريال/ليلة', p[5]||'', p[6]||''].join(' | ');
+      const newLine = [pick.name, p[1]||'', (pick.stars||p[2]||'')+' نجوم', _roomWithCap(pick, p[3]), (pick.price_per_night||0)+' ريال/ليلة', p[5]||'', p[6]||''].join(' | ') + _linkSeg(pick.link);
       raw = hswSwapRaw(raw, hidx, newLine); changed++;
     }catch(e){ /* تجاهل هذا الفندق */ }
   }
@@ -1855,7 +1855,7 @@ function hswPick(cell, idx){
       (h.price_per_night || 0) + ' ريال/ليلة',
       p[5] || '',
       (h.meals ? ('ما يشمل: ' + h.meals) : (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6] || '')))
-    ].join(' | ') + _areaSeg(h.area);
+    ].join(' | ') + _areaSeg(h.area) + _linkSeg(h.link);
     const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
     if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر تطبيق التبديل — لم يتغيّر البرنامج.'); return; }
     // مزامنة البرنامج المعروض مع history حتى تعمل تعديلات الشات اللاحقة.
@@ -1914,7 +1914,7 @@ async function pickCheapestDouble(hidx){
       h.name, p[1]||'', (h.stars||curStars||'')+' نجوم', _roomWithCap(h, ''),
       (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
       (h.meals ? ('ما يشمل: ' + h.meals) : (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6] || '')))
-    ].join(' | ') + _areaSeg(h.area);
+    ].join(' | ') + _areaSeg(h.area) + _linkSeg(h.link);
     const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
     if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); return; }
     if(persons >= 2) hotelRooms[hidx] = Math.ceil(persons/2); // العدد التلقائي (قابل للتعديل)
@@ -1954,7 +1954,7 @@ async function changeHotelStars(hidx, newStars){
       h.name, p[1]||'', (h.stars||newStars)+' نجوم', _roomWithCap(h, ''),
       (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
       (h.meals ? ('ما يشمل: ' + h.meals) : (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6] || '')))
-    ].join(' | ') + _areaSeg(h.area);
+    ].join(' | ') + _areaSeg(h.area) + _linkSeg(h.link);
     const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
     if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); return; }
     applyHotelRawChange(newRaw, `⭐ ${region}: أرخص ${newStars}★ = «${h.name}» (${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxedOcc?' ⚠️ ما توفّرت غرفة بنفس الإشغال، فاخترتُ الأقرب.':''}`);
@@ -1977,6 +1977,11 @@ function _areaAr(a){ const k=String(a||'').toLowerCase().replace(/\s+/g,' ').tri
 // يُقرأ للعرض في البي دي اف ولمزامنة دروب ليست الحي؛ يُحدَّث عند كل تبديل فندق من h.area.
 function _lineArea(line){ const m=String(line||'').match(/\|\s*AREA:([^|]+)/); return m ? m[1].trim() : ''; }
 function _areaSeg(area){ const a=String(area||'').trim(); return a ? ` | AREA:${a}` : ''; }
+// رابط صفحة الفندق مخزَّن كوسم ختامي «| LINK:<url>» (لا يكسر الحقول السبعة). يُقرأ
+// ليُعرض «اضغط هنا لمشاهدة الفندق» قابلاً للنقر في ملف العميل فقط، ويُحدَّث عند تبديل الفندق.
+// الرابط آخر السطر فنأخذ كل ما بعد LINK: (قد يحوي = & # ? لكن لا يحوي | إطلاقاً).
+function _lineLink(line){ const m=String(line||'').match(/\|\s*LINK:\s*([^|]+)/); const u=m?m[1].trim():''; return /^https?:\/\//i.test(u)?u:''; }
+function _linkSeg(url){ const u=String(url||'').trim(); return /^https?:\/\//i.test(u) ? ` | LINK:${u}` : ''; }
 
 // يملأ كل دروب ليست أحياء القاهرة: يجلب فنادق القاهرة مرة واحدة، يستخرج الأحياء
 // المتوفّرة، ويحدّد الحي الحالي لكل فندق (يُطابَق بالاسم). مصر فقط — غيرها لا .egy-area-sel.
@@ -2040,7 +2045,7 @@ async function changeHotelArea(hidx, area){
       h.name, p[1]||'', (h.stars||'')+' نجوم', _roomWithCap(h, ''),
       (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
       (h.meals ? ('ما يشمل: ' + h.meals) : (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6] || '')))
-    ].join(' | ') + _areaSeg(h.area || area);
+    ].join(' | ') + _areaSeg(h.area || area) + _linkSeg(h.link);
     const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
     if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); return; }
     applyHotelRawChange(newRaw, `🏙️ ${area?`«${_areaAr(area)}»`:region}: أرخص فندق = «${h.name}» ${(h.stars?h.stars+'★ ':'')}(${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxed?' ⚠️ ما توفّرت غرفة تطابق العدد، فاخترتُ الأقرب.':''}`);
@@ -2174,7 +2179,7 @@ function _rtwReplaceLine(oldLine, r){
   const ars = parseAddRooms(oldLine);               // احفظ كل الغرف الإضافية لو موجودة
   const p = stripAddRoom(oldLine).split('|').map(x=>x.trim());
   const meals = r.meals ? ('ما يشمل: ' + r.meals) : (r.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6]||''));
-  let line = [p[0]||'', p[1]||'', p[2]||'', _roomWithCap(r, ''), (r.price_per_night||0)+' ريال/ليلة', p[5]||'', meals].join(' | ') + _areaSeg(_lineArea(oldLine)); // نفس الفندق → نحافظ على حيّه
+  let line = [p[0]||'', p[1]||'', p[2]||'', _roomWithCap(r, ''), (r.price_per_night||0)+' ريال/ليلة', p[5]||'', meals].join(' | ') + _areaSeg(_lineArea(oldLine)) + _linkSeg(_lineLink(oldLine)); // نفس الفندق → نحافظ على حيّه ورابطه
   line += ars.map(a=>addRoomSeg(a)).join('');
   return line;
 }
@@ -5651,6 +5656,7 @@ ${extraBedCount ? `<span>🛋️ سرير إضافي / Sofa Bed: <b>${extraBedCo
 ${showDetailed ? `<span>💵 تفصيل السعر: ${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي × ${rooms} غرفة = ${(totalLine*rooms).toLocaleString()} ريال</span>` : ``}
 ${_arRooms.map((ar,j)=>`<span style="grid-column:1/-1;color:#b45309;font-weight:900;">➕ غرفة إضافية ${j+1}: <span dir="ltr" style="unicode-bidi:isolate;white-space:pre-wrap;display:inline-block;overflow-wrap:break-word;max-width:100%;vertical-align:top;">${safeText(ar.room_type)}</span>${ar.occ?` (يتسع ${ar.occ})`:''}${showDetailed ? ` — ${ar.price.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي = ${(ar.price*(nights||0)).toLocaleString()} ريال` : ''}</span>`).join('')}
 <span style="grid-column:1/-1;">✅ يشمل: ${safeText(_lineMealsTxt(p).replace(/\s*·?\s*⚠️\s*سعر تقريبي[^|]*/u, '').trim())}</span>
+${_lineLink(l) ? `<span style="grid-column:1/-1;margin-top:6px;"><a href="${hswEsc(_lineLink(l))}" style="color:#1a56db;font-weight:900;text-decoration:underline;font-size:19px;">🔗 اضغط هنا لمشاهدة الفندق</a></span>` : ``}
 </div>
 </div>`; }).join('')}${extrasCards('hotels')}` : ''}
 

@@ -27,6 +27,7 @@ export type HotelRow = {
   currency: string;
   occupancy: string;
   area?: string;          // الحي داخل المدينة (عمود L بالشيت؛ القاهرة: الزمالك/كورنيش النيل…) — يُطبع في البي دي اف
+  link?: string;          // رابط صفحة الفندق (booking.com…) — يُعرض كرابط مختصر قابل للنقر في ملف العميل
   meals?: string;
   includes_breakfast?: boolean;
   date_from?: string;     // ISO or "1/6/2026"
@@ -1667,7 +1668,12 @@ export function formatProgram(data: ProgramData): string {
     const areaSeg = (sh.hotel.area && String(sh.hotel.area).trim())
       ? ` | AREA:${String(sh.hotel.area).trim()}`
       : "";
-    out += `${sh.hotel.name} | ${cityAr} | ${sh.hotel.stars} نجوم | ${roomTypeWithOcc} | ${formatNumber(sh.hotel.price_per_night)} ريال/ليلة | ${sh.nights} ${sh.nights === 1 ? "ليلة" : "ليالي"} (من ${formatArabicDate(sh.rangeFrom)} إلى ${formatArabicDate(sh.rangeTo)}) | ${meals}${areaSeg}\n`;
+    // رابط صفحة الفندق: وسم ختامي | LINK:<url> على غرار AREA — لا يكسر الحقول السبعة،
+    // ويقرأه البي دي اف ليعرض «اضغط هنا لمشاهدة الفندق» قابلاً للنقر. (الرابط بلا «|».)
+    const linkSeg = (sh.hotel.link && /^https?:\/\//i.test(String(sh.hotel.link).trim()))
+      ? ` | LINK:${String(sh.hotel.link).trim()}`
+      : "";
+    out += `${sh.hotel.name} | ${cityAr} | ${sh.hotel.stars} نجوم | ${roomTypeWithOcc} | ${formatNumber(sh.hotel.price_per_night)} ريال/ليلة | ${sh.nights} ${sh.nights === 1 ? "ليلة" : "ليالي"} (من ${formatArabicDate(sh.rangeFrom)} إلى ${formatArabicDate(sh.rangeTo)}) | ${meals}${areaSeg}${linkSeg}\n`;
   }
   out += "\n";
 

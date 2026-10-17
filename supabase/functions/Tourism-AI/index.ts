@@ -2439,7 +2439,7 @@ async function handleListHotels(body: {
     );
     const mkQ = () => {
       const q = supabase.from("hotels")
-        .select("name,stars,location,area,price_per_night,room_type,includes_breakfast,occupancy,date_from,date_to")
+        .select("name,stars,location,area,link,price_per_night,room_type,includes_breakfast,occupancy,date_from,date_to")
         .order("stars", { ascending: false })
         .order("price_per_night");
       return destKey ? q.ilike("location", `% - ${destKey}`) : q;
@@ -2559,6 +2559,7 @@ async function handleListHotels(body: {
         includes_breakfast: !!h.includes_breakfast,
         occupancy: h.occupancy || "",            // نص الإشغال كما في الشيت
         area: h.area || "",                       // الحي/المنطقة الفرعية (أحياء القاهرة…)
+        link: h.link || "",                       // رابط صفحة الفندق (يُعرض في ملف العميل)
         capacity: cap || capFromRoomType(String(h.room_type || "")),  // أقصى عدد تتسعه الغرفة (رقم)
         fits: !cap || !threshold || cap >= threshold,  // مطابق للعدد المطلوب؟
         haram_tags: (destKey === "Makkah") ? (haramMap[normHotelName(String(h.name || ""))] || []) : undefined,
@@ -2602,7 +2603,7 @@ async function handleListRoomTypes(body: {
     );
     const mkQ = () => {
       const q = supabase.from("hotels")
-        .select("name,stars,location,price_per_night,room_type,includes_breakfast,meals,occupancy,date_from,date_to")
+        .select("name,stars,location,link,price_per_night,room_type,includes_breakfast,meals,occupancy,date_from,date_to")
         .order("price_per_night");
       return destKey ? q.ilike("location", `% - ${destKey}`) : q;
     };

@@ -371,6 +371,8 @@ const HEADER_ALIASES: Record<string, RegExp> = {
   // أعمدة الموسم/التاريخ (تسعير موسمي مثل خريف صلالة) — From/To في شيت عُمان.
   dateFrom:   /^(from|date\s*from|valid\s*from|من|من\s*تاريخ|بداية|check\s*in)$/i,
   dateTo:     /^(to|date\s*to|valid\s*to|الى|إلى|الى\s*تاريخ|نهاية|check\s*out)$/i,
+  // رابط صفحة الفندق (booking.com…) — يُعرض كرابط مختصر قابل للنقر في ملف العميل.
+  link:       /^(links?|url|رابط|الرابط|رابط\s*الفندق)$/i,
 };
 
 function findHotelHeader(rows: string[][]): { rowIdx: number; cols: Record<string, number>; rateCols: number[] } | null {
@@ -578,11 +580,16 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
     const areaRaw = get(row, "area");
     const area = (areaRaw && areaRaw.toLowerCase() !== city.toLowerCase()) ? areaRaw : "";
 
+    // رابط صفحة الفندق — نقبل فقط رابطاً صريحاً http(s) (نتجاهل أي نص آخر في الخانة).
+    const linkRaw = (get(row, "link") || "").trim();
+    const link = /^https?:\/\//i.test(linkRaw) ? linkRaw : "";
+
     const baseRec = {
       name:               hotelName,
       stars,
       location:           `${city} - ${destination}`,
       area,
+      link,
       room_type:          roomType || "",
       includes_breakfast: /break\s*fast|breakfast|إفطار/i.test(mealsRaw) && !/no\s*break\s*fast|no\s*breakfast|بدون\s*إفطار/i.test(mealsRaw),
       meals:              mealsAr,
