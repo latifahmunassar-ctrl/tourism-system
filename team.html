@@ -4800,6 +4800,61 @@ function loadHtml2Pdf(){
   return _html2pdfLoading;
 }
 
+// html2pdf يحوّل الصفحة إلى صورة (html2canvas) فتضيع روابط <a> ويصير النص غير قابل
+// للنقر. هنا نضيف **تعليقات روابط حقيقية** على ملف الـPDF تغطّي كل كرت فندق يحمل
+// data-hotel-link، فيصير الكرت كله قابلاً للضغط. نحاكي ترقيم صفحات html2pdf (css+legacy):
+// فواصل page-break-before الصريحة + تجنّب قطع عناصر .pdf-keep، لنضع كل تعليق في صفحته الصحيحة.
+function _pdfAddHotelLinks(pdf, el){
+  const cards = Array.from(el.querySelectorAll('[data-hotel-link]'));
+  if(!cards.length) return 0;
+  const elRect = el.getBoundingClientRect();
+  const widthPx = el.offsetWidth || elRect.width;
+  if(!widthPx) return 0;
+  const pxPerMm = widthPx / 210;                 // عرض العنصر = 210مم (A4)
+  const pageHeightPx = 297 * pxPerMm;            // ارتفاع صفحة A4
+  const totalPx = el.scrollHeight;
+  // فواصل الصفحات الصريحة (page-break-before:always أو .pdf-page-break)
+  const forced = [];
+  el.querySelectorAll('*').forEach(n=>{
+    let bb=''; try{ const cs=getComputedStyle(n); bb=cs.breakBefore||cs.pageBreakBefore||''; }catch(_){}
+    if(bb==='always'||bb==='page'||n.classList.contains('pdf-page-break')){
+      const t=n.getBoundingClientRect().top-elRect.top;
+      if(t>1 && t<totalPx-1) forced.push(t);
+    }
+  });
+  forced.sort((a,b)=>a-b);
+  // عناصر لا تُقطع بين صفحتين (break-inside:avoid) — {top,bottom}
+  const keep = Array.from(el.querySelectorAll('.pdf-keep,.pdf-policy,.pdf-excludes,.pdf-cover'))
+    .map(n=>{ const r=n.getBoundingClientRect(); return { top:r.top-elRect.top, bottom:r.bottom-elRect.top }; })
+    .filter(k=>k.bottom>k.top).sort((a,b)=>a.top-b.top);
+  // بناء بدايات الصفحات بالبكسل (محاكاة تقطيع html2pdf)
+  const pageStarts=[]; let start=0, fi=0, guard=0;
+  while(start < totalPx-1 && guard++<400){
+    pageStarts.push(start);
+    let end = start + pageHeightPx;
+    while(fi<forced.length && forced[fi] <= start+1) fi++;
+    if(fi<forced.length && forced[fi] < end-1){ end = forced[fi]; fi++; }
+    else if(end < totalPx){
+      for(const k of keep){ if(k.top>start+1 && k.top<end-1 && k.bottom>end+1){ end=k.top; break; } }
+    }
+    if(end<=start) end=start+pageHeightPx;       // أمان ضد الحلقة اللانهائية
+    start=end;
+  }
+  const np = (pdf.internal && pdf.internal.getNumberOfPages) ? pdf.internal.getNumberOfPages() : pageStarts.length;
+  const pageOf = y => { let p=0; for(let i=0;i<pageStarts.length;i++){ if(y>=pageStarts[i]-0.5) p=i; else break; } return p; };
+  let added=0;
+  for(const c of cards){
+    const url=c.getAttribute('data-hotel-link'); if(!url) continue;
+    const r=c.getBoundingClientRect();
+    const topPx=r.top-elRect.top, leftPx=r.left-elRect.left;
+    const p=Math.min(Math.max(pageOf(topPx),0), np-1);
+    const yMm=(topPx-pageStarts[p])/pxPerMm;
+    const xMm=leftPx/pxPerMm, wMm=r.width/pxPerMm, hMm=r.height/pxPerMm;
+    try{ pdf.setPage(p+1); pdf.link(xMm, yMm, wMm, hMm, { url }); added++; }catch(_){}
+  }
+  return added;
+}
+
 // يولّد ملف PDF فعلي (Blob) من نفس قالب #pdfContent المستخدم في الطباعة.
 async function generatePdfBlob(mode, customHtml){
   await loadHtml2Pdf();
@@ -4854,13 +4909,20 @@ async function generatePdfBlob(mode, customHtml){
     try { if (document.fonts && document.fonts.ready) { await document.fonts.ready; await new Promise(r=>setTimeout(r,60)); } } catch (_) { /* */ }
   } catch (_) { /* أفضل جهد */ }
   try {
-    return await window.html2pdf().set({
+    // سلسلة worker: نولّد الـPDF حتى مرحلة jsPDF، نضيف تعليقات روابط الفنادق على
+    // النسخة نفسها، ثم نُخرج Blob مباشرة (pdf.output) بلا إعادة توليد — حتى لا تضيع
+    // التعليقات. القياس يتم وel لا يزال داخل الغلاف فالإحداثيات مطابقة للمرسوم.
+    const worker = window.html2pdf().set({
       margin: 0,
       image: { type: 'jpeg', quality: 0.95 },
       html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['css', 'legacy'] }
-    }).from(el).outputPdf('blob');
+    }).from(el).toPdf();
+    return await worker.get('pdf').then(pdf => {
+      try { _pdfAddHotelLinks(pdf, el); } catch(_) { /* الروابط أفضل جهد */ }
+      return pdf.output('blob');
+    });
   } finally {
     el.setAttribute('style', prevStyle);            // يرجع display:none من الـCSS
     if (next) parent.insertBefore(el, next); else parent.appendChild(el);
@@ -5637,8 +5699,8 @@ ${showDetailed ? `
 ${(hotelsLines.length || flightsLines.length || simText || extraCosts.length) ? `
 <div class="pdf-section" style="page-break-before:always;">
 ${(hotelsLines.length || extrasCards('hotels')) ? `<div class="pdf-section-title">🏨 الفنادق</div>
-${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l); const rooms = hRooms(idx); const extraBedCount = hBeds(idx, extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest)); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const _arRooms = parseAddRooms(l); const _arTotal = _arRooms.reduce((a,r)=>a+(r.price*(nights||0)),0); const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; return `
-<div class="pdf-keep" style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;">
+${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPricePerNight, stars } = hotelLineTotals(l); const rooms = hRooms(idx); const extraBedCount = hBeds(idx, extraBedCountForHotelLine(extraBedByCity, p?.[1], stars, dest)); const extraBedTotal = extraBedCount > 0 ? (extraBedPricePerNight * (nights||0) * extraBedCount) : 0; const _arRooms = parseAddRooms(l); const _arTotal = _arRooms.reduce((a,r)=>a+(r.price*(nights||0)),0); const stayText = safeText(p[5]||''); const sd = hotelStays[idx] || {}; const _hLink = _lineLink(l); return `
+<div class="pdf-keep" style="border:1.5px solid #d0deff;border-radius:10px;padding:16px 18px;margin-bottom:12px;"${_hLink?` data-hotel-link="${hswEsc(_hLink)}"`:''}>
 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;">
   <div style="font-weight:900;font-size:24px;color:#1a3a8f;margin-bottom:12px;line-height:1.6;word-break:break-word;overflow-wrap:anywhere;">🏨 ${bidiText((p[0]||'') + (extraBedCount ? ' + Extra bed / Sofa Bed' : ''))}</div>
   ${showDetailed ? `<div style="font-weight:900;color:#0d1f4a;font-size:18px;white-space:nowrap;">${((totalLine*rooms) + (extraBedTotal||0) + _arTotal).toLocaleString()} ريال</div>` : ``}
