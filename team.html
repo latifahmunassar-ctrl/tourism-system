@@ -3848,6 +3848,33 @@ let html = `
 </div>
 </div>`;
 
+// 🚗 تنبيه تكلفة التنقلات الطويلة — **أعلى الشاشة** (buildReview) ليراه الموظف أولاً،
+//    ولا يُطبع في ملف العميل (buildPDF منفصل). طلب المالكة: نبّه عند مسارات مراكش↔طنجة
+//    والدار البيضاء↔أكادير (من أغلى تنقلات المغرب) ليقترح على العميل وجهة أقل تكلفة.
+html += (()=>{
+  const EXP_ROUTES = [
+    { re:(t)=>/(?:الدار\s*البيضا|دار\s*البيضا|كازابلانكا)/u.test(t) && /(?:اكادير|أكادير|آكادير|اگادير)/u.test(t), label:'الدار البيضاء ↔ أكادير' },
+    { re:(t)=>/مراكش/u.test(t) && /طنج[ةه]/u.test(t), label:'مراكش ↔ طنجة' },
+  ];
+  const _hits = [];
+  (transfersLines||[]).forEach(l => {
+    const p = String(l).split('|').map(x=>x.trim());
+    const detail = p[1] || '';
+    for (const r of EXP_ROUTES) {
+      if (r.re(detail)) {
+        const { total } = computeTransferTourLineTotal(p, xferTourMeta, '🚗 انتقال');
+        const mm = detail.match(/من\s+(.+?)\s+(?:الى|الي|إلى)\s+(.+)/u);
+        const fromTo = mm ? `${mm[1].trim()} إلى ${mm[2].trim()}` : detail;
+        _hits.push({ fromTo, total, label:r.label });
+        break;
+      }
+    }
+  });
+  if (!_hits.length) return '';
+  const _rows = _hits.map(h=>`<li>مسار <b>«${h.fromTo}»</b> رفع سعر البرنامج بمقدار <b>${(h.total||0).toLocaleString()} ريال</b> <span style="opacity:.8">(${h.label} — من أغلى تنقلات المغرب)</span></li>`).join('');
+  return `<div style="margin:4px 2px 14px;padding:12px 15px;border:2px dashed #f59e0b;background:#fff7ed;border-radius:11px;font-size:13.5px;font-weight:800;color:#92400e;line-height:1.85;">🚗 <u>تنبيه تكلفة التنقل — يظهر لك على الشاشة فقط ولا يُطبع في ملف العميل</u><ul style="margin:6px 0 2px;padding-inline-start:20px">${_rows}</ul>💡 يُفضّل نصح العميل باختيار وجهة أقرب أو أقل تكلفة لتخفيض السعر.</div>`;
+})();
+
 // تنبيه: سعة الغرف أقل من عدد الأشخاص المطلوب — عشان الموظف يضيف سريراً/غرفة إضافية
 const _roomCaps = hotelsLines.map(l => { const pp = String(l).split('|'); return parseInt((arabicDigitsToLatin(String(pp[3]||'')).match(/يتسع\s*(\d+)/)||[])[1]||'',10) || 0; }).filter(c => c > 0);
 const _minCap = _roomCaps.length ? Math.min(..._roomCaps) : 0;
@@ -3983,32 +4010,7 @@ const delBtn = isExtraCar ? ` <button type="button" data-line="${hswEsc(l)}" onc
 const sumRow = (_xCnt[_d]>1 && _xLast[_d]===_i) ? `<tr class="day-cars"><td colspan="6">🚗 ${_d}: ${_xCnt[_d]} سيارات في نفس اليوم</td><td class="price-cell">${(_xSum[_d]||0).toLocaleString()} ريال</td></tr>` : '';
 return `<tr><td>${p[0]||''}</td><td>${p[1]||''}${delBtn}</td><td><span class="type-badge ${tc}">${tl}</span></td><td class="price-cell">${p[3]||''}</td><td>${paxCell}</td>${vCell}<td class="price-cell">${lineTT.toLocaleString()} ريال</td></tr>${sumRow}`;
 }).join('')}</tbody>
-</table>${(()=>{
-  // ⚠️ تنبيه تكلفة التنقلات الطويلة — **على الشاشة فقط** (buildReview)، ولا يُطبع في
-  //    ملف العميل (buildPDF منفصل). طلب المالكة: نبّه الموظف عند مسارات مراكش↔طنجة
-  //    والدار البيضاء↔أكادير (من أغلى تنقلات المغرب) ليقترح على العميل وجهة أقل تكلفة.
-  const EXP_ROUTES = [
-    { re:(t)=>/(?:الدار\s*البيضا|دار\s*البيضا|كازابلانكا)/u.test(t) && /(?:اكادير|أكادير|آكادير|اگادير)/u.test(t), label:'الدار البيضاء ↔ أكادير' },
-    { re:(t)=>/مراكش/u.test(t) && /طنج[ةه]/u.test(t), label:'مراكش ↔ طنجة' },
-  ];
-  const _hits = [];
-  transfersLines.forEach(l => {
-    const p = l.split('|').map(x=>x.trim());
-    const detail = p[1] || '';
-    for (const r of EXP_ROUTES) {
-      if (r.re(detail)) {
-        const { total } = computeTransferTourLineTotal(p, xferTourMeta, '🚗 انتقال');
-        const mm = detail.match(/من\s+(.+?)\s+(?:الى|الي|إلى)\s+(.+)/u);
-        const fromTo = mm ? `${mm[1].trim()} إلى ${mm[2].trim()}` : detail;
-        _hits.push({ fromTo, total, label:r.label });
-        break;
-      }
-    }
-  });
-  if (!_hits.length) return '';
-  const _rows = _hits.map(h=>`<li>مسار <b>«${h.fromTo}»</b> رفع سعر البرنامج بمقدار <b>${(h.total||0).toLocaleString()} ريال</b> <span style="opacity:.8">(${h.label} — من أغلى تنقلات المغرب)</span></li>`).join('');
-  return `<div style="margin:12px 2px 2px;padding:11px 14px;border:2px dashed #f59e0b;background:#fff7ed;border-radius:10px;font-size:13.5px;font-weight:800;color:#92400e;line-height:1.85;">🚗 <u>تنبيه تكلفة التنقل — يظهر لك على الشاشة فقط ولا يُطبع في ملف العميل</u><ul style="margin:6px 0 2px;padding-inline-start:20px">${_rows}</ul>💡 يُفضّل نصح العميل باختيار وجهة أقرب أو أقل تكلفة لتخفيض السعر.</div>`;
-})()}</div>`;
+</table></div>`;
 }
 
 if (toursLines.length) {
