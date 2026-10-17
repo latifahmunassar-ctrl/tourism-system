@@ -5321,6 +5321,9 @@ function renderBankDetail(){
   const _omrOf=(x)=>{ const v=_om[String(x.id)]; if(v!=null)return Number(v); if(x.omr_value!=null&&x.omr_value!=='')return Number(x.omr_value); return null; };
   const cardAdj=(x)=>{ let i=Number(x.amount_in||0), o=Number(x.amount_out||0); const rc=String(x.currency||'').toUpperCase(); const foreign=!!(rc&&_acctCur&&rc!==_acctCur&&(_isCardAcct||x._cash)); const omrV=_omrOf(x); const hasOmr=(omrV!=null); const rawVal=(o>0.005?o:i); if(foreign&&hasOmr){ if(o>0.005)o=omrV; else if(i>0.005)i=omrV; } const pendingFx=foreign&&!hasOmr; return {in:i,out:o,foreign,rawCur:rc,rawVal,hasOmr,pendingFx}; };   // النطاق: البطاقات (كالسابق) + حركات Cash in/Out الجديدة فقط — لا يمسّ التاريخي من الشيت
   let ti=0,to=0; tx.forEach(x=>{ const a=cardAdj(x); if(a.pendingFx)return; ti+=a.in; to+=a.out; }); const net=ti-to;   // ⏳ الأجنبي المعلّق (بلا عماني) لا يدخل الصافي
+  // 💠 الرصيد المتبقّي لكامل الفترة = الأساس الفعلي + (داخل − خارج) بعده إن وُجد، وإلا الصافي المحاسبي
+  let _allBal=net, _allBalIsReal=false; { const _rbX=(typeof bankRealBal==='function'?bankRealBal(bank):null);
+    if(_rbX){ let pO=0,pI=0; (tx||[]).forEach(x=>{ const dt=String(x.tx_date||'').slice(0,10); if(!dt||!(dt>_rbX.date))return; const rc=String(x.currency||'').toUpperCase(); const omrV=(_om[String(x.id)]!=null)?Number(_om[String(x.id)]):((x.omr_value!=null&&x.omr_value!=='')?Number(x.omr_value):null); const foreign=!!(rc&&_acctCur&&rc!==_acctCur&&(_isCardAcct||x._cash)); if(foreign&&omrV==null)return; let o=Number(x.amount_out||0),i=Number(x.amount_in||0); if(foreign&&omrV!=null){if(o>0.005)o=omrV;else if(i>0.005)i=omrV;} pO+=o;pI+=i; }); _allBal=_rbX.amount+pI-pO; _allBalIsReal=true; } }
   const agMap={}; (DATA.fcd||[]).forEach(r=>{ const c=(r.client_code||'').toUpperCase(); if(c&&r.agent_name&&!agMap[c])agMap[c]=r.agent_name; });
   // تاريخ دفع كل حركة من First Client Data بمطابقة كود الدفعة (مع override المُدخل من الداشبورد)
   const fcdDateByCode={}; (DATA.fcd||[]).forEach(r=>{ if(r.payment_code && !fcdDateByCode[r.payment_code]) fcdDateByCode[r.payment_code]=String(r.payment_date||'').slice(0,10); });
@@ -5341,6 +5344,7 @@ function renderBankDetail(){
         '<div style="font-size:10.5px;color:var(--muted);margin-top:3px">الأساس: <b>'+fmt(rb.amount)+'</b> بتاريخ '+esc(rb.date)+(moved?(' + '+pn+' حركة بعده (داخل '+fmt(pIn)+' − خارج '+fmt(pOut)+')'):' — لا حركات بعده')+'</div>'+hint+'</div>';
     })()+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:10px 0"><div class="fld" style="min-width:200px;flex:1"><label>🔍 بحث (عميل/مرجع/ملاحظة)</label><input id="bnk-q" oninput="bnkFilter()" placeholder="اكتبي..."></div><div class="fld"><label>من تاريخ 📅</label><input type="date" id="bnk-from" onchange="bnkFilter()" style="color-scheme:light;cursor:pointer"></div><div class="fld"><label>إلى تاريخ 📅</label><input type="date" id="bnk-to" onchange="bnkFilter()" style="color-scheme:light;cursor:pointer"></div><button class="btn ghost" style="padding:7px 14px" onclick="bnkClear()">مسح</button></div>'+
+    '<div id="bnk-alltotals" data-allin="'+ti+'" data-allout="'+to+'" data-net="'+net+'" data-bal="'+_allBal+'" data-balreal="'+(_allBalIsReal?'1':'0')+'" data-cur="'+esc(cur)+'" style="display:none"></div>'+
     '<div id="bnk-period" data-cur="'+esc(cur)+'"></div>'+
     '<div class="tbl-wrap bf-scroll" id="bnk-tbl"><table style="font-size:11px;white-space:nowrap"><thead><tr>'+H.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+
     (tx.length?tx.map(x=>{ const qd=((x.client_name||'')+' '+(x.client_code||'')+' '+(x.bank_ref||'')+' '+(x.note||'')).toLowerCase();
@@ -5378,6 +5382,12 @@ function exportBankPDF(){
   const cur=bankMainCur(bankTxAll().filter(x=>(x.bank_name||'')===bank));
   const rows=[]; document.querySelectorAll('#bnk-tbl tbody tr').forEach(tr=>{ if(tr.style.display==='none')return; const td=tr.querySelectorAll('td'); if(!td.length)return; rows.push([...td].map(c=>c.innerText.replace(/\s+/g,' ').trim())); });
   let tin=0,tout=0; rows.forEach(r=>{ tin+=Number((r[2]||'').replace(/,/g,''))||0; tout+=Number((r[3]||'').replace(/,/g,''))||0; }); const net=tin-tout;
+  // 📊 إجماليات كامل الفترة + الرصيد المتبقّي (من بطاقة البنك — كل الحركات، لا الفترة المبحوثة)
+  const _AT=($('bnk-alltotals')||{dataset:{}}).dataset||{};
+  const allIn=Number(_AT.allin||tin), allOut=Number(_AT.allout||tout), allNet=Number(_AT.net||net), allBal=Number(_AT.bal||net), balReal=(_AT.balreal==='1');
+  // هل فُلتِرت الفترة؟ (بحث/تاريخ) — لتحديد إظهار كتلة الفترة المحدّدة
+  const _fFrom=(($('bnk-from')||{}).value)||'', _fTo=(($('bnk-to')||{}).value)||'', _fQ=(($('bnk-q')||{}).value||'').trim();
+  const periodFiltered=!!(_fFrom||_fTo||_fQ);
   const H=['التاريخ','🏦 الآلية','داخل (+)','خارج (−)','المرجع البنكي','العميل','كود العميل','الوكيل','كود الدفعة','📅 تاريخ الدفع','ملاحظة','المصدر'];
   const html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>كشف حساب بنك - '+esc(bank)+'</title><style>'+
     '@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font-family:"Segoe UI",Tahoma,sans-serif;color:#111;margin:0;font-size:12.5px;font-weight:600;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
@@ -5387,7 +5397,9 @@ function exportBankPDF(){
     'table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:4px 6px;text-align:center;font-size:11px;font-weight:600;color:#111}th{background:#0e9d6a;color:#fff;font-weight:800;font-size:10.5px}tbody tr:nth-child(even){background:#f6faf8}'+
     '.ft{margin-top:10px;border-top:1px solid #dcede6;padding-top:6px;font-size:10px;color:#6b7c7a;display:flex;justify-content:space-between}'+
     '</style></head><body><div class="hd"><div class="logo">AL<span>E</span>ZZ<div class="sub">شركة العز للسياحة والسفر</div></div><div class="ttl">كشف حساب بنك / بطاقة<small>تاريخ الإصدار: '+esc(today)+'</small></div></div>'+
-    '<div class="kpis"><span>البنك/البطاقة: <b>'+esc(bank)+'</b></span><span>العملة: <b>'+esc(cur)+'</b></span><span>الحركات: <b>'+fmt(rows.length)+'</b></span><span>داخل: <b>'+fmt(tin)+' '+esc(cur)+'</b></span><span>خارج: <b>'+fmt(tout)+' '+esc(cur)+'</b></span><span>الصافي: <b>'+fmt(net)+' '+esc(cur)+'</b></span></div>'+
+    '<div class="kpis"><span>البنك/البطاقة: <b>'+esc(bank)+'</b></span><span>العملة: <b>'+esc(cur)+'</b></span></div>'+
+    '<div class="kpis" style="background:#eef6ff;border-color:#cfe2f7"><span style="font-weight:800;color:#2b5fa5">📊 كامل الفترة (كل الحساب):</span><span>إجمالي الداخل (+): <b>'+fmt(allIn)+' '+esc(cur)+'</b></span><span>إجمالي الخارج (−): <b>'+fmt(allOut)+' '+esc(cur)+'</b></span><span>💠 الرصيد المتبقّي'+(balReal?'':' <small style="font-weight:400">(صافي محاسبي)</small>')+': <b>'+fmt(allBal)+' '+esc(cur)+'</b></span></div>'+
+    '<div class="kpis"><span style="font-weight:800;color:#c41d88">'+(periodFiltered?'📅 الفترة المحدّدة':'📅 الفترة المعروضة (كل الحركات)')+(_fFrom||_fTo?(' ('+esc(_fFrom||'…')+' → '+esc(_fTo||'…')+')'):'')+':</span><span>الحركات: <b>'+fmt(rows.length)+'</b></span><span>داخل: <b>'+fmt(tin)+' '+esc(cur)+'</b></span><span>خارج: <b>'+fmt(tout)+' '+esc(cur)+'</b></span><span>الصافي: <b>'+fmt(net)+' '+esc(cur)+'</b></span></div>'+
     '<table><thead><tr>'+H.map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+(rows.length?rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="12">لا حركات</td></tr>')+'</tbody></table>'+
     '<div class="ft"><span>شركة العز · ALEZZ Group</span><span>تم الإصدار آلياً · '+esc(today)+'</span></div>'+
     '<script>window.onload=function(){setTimeout(function(){window.print();},350);};<\/script></body></html>';
