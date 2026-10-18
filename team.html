@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-16-morocco'
+  var BUILD = '2026-10-18-bali-villa'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2051,6 +2051,57 @@ async function changeHotelArea(hidx, area){
     applyHotelRawChange(newRaw, `🏙️ ${area?`«${_areaAr(area)}»`:region}: أرخص فندق = «${h.name}» ${(h.stars?h.stars+'★ ':'')}(${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxed?' ⚠️ ما توفّرت غرفة تطابق العدد، فاخترتُ الأقرب.':''}`);
   }catch(e){ addMessage('sys','خطأ أثناء تغيير الحي: ' + (e && e.message ? e.message : e)); }
 }
+// ── 🇮🇩 بالي: اختيار «فيلا» أو «فيلا مع مسبح خاص» → أرخص سكن مطابق بنفس المنطقة ──
+// المدينة بالي؟ (الفلل خاصّية بالي فقط). الكشف من حقل المدينة p[1] في سطر الفندق.
+function _regionIsBali(r){ return /بالي|bali/i.test(String(r||'')); }
+// kind: 'villa' = أي فيلا · 'pool' = فيلا فيها مسبح خاص (villa + pool معاً).
+// يقلّد changeHotelArea: يجلب فنادق نفس المنطقة الفرعية (عبر current)، يفلتر الفلل،
+// يأخذ الأرخص (يفضّل اللي يتّسع للعدد)، يبدّل السطر ويعيد الحساب. ما فيه فيلا → تنبيه
+// وإرجاع القائمة لوضعها الافتراضي بلا تبديل.
+async function changeHotelVilla(hidx, kind){
+  const sel = document.querySelector(`.villa-sel[onchange*="changeHotelVilla(${hidx},"]`);
+  const resetSel = () => { if(sel) sel.value = ''; };
+  try{
+    kind = String(kind||'').trim();
+    if(!kind){ return; }
+    const lines = parseHotelLinesFromRaw(lastProgramRaw);
+    const oldLine = lines[hidx];
+    if(!oldLine){ addMessage('sys','تعذّر: لم أجد سطر الفندق.'); resetSel(); return; }
+    const p = oldLine.split('|').map(x=>x.trim());
+    const region = p[1]||'';
+    const occN = parseInt((arabicDigitsToLatin(String(p[3]||'')).match(/يتسع\s*(\d+)/)||[])[1]||'0',10) || 0;
+    const dest = getLine(lastProgramRaw,'DEST')||'';
+    const date = getLine(lastProgramRaw,'DATE_FROM')||'';
+    const occReq = occN || metaPersons() || 2;
+    const label = kind==='pool' ? 'فيلا مع مسبح خاص' : 'فيلا';
+    addMessage('sys', `🔎 أبحث عن أرخص ${label} في ${region}…`);
+    const res = await fetch(SUPABASE_URL, { method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
+      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: occReq, current:p[0]||'', date }) });
+    const data = await res.json();
+    const isVilla = rt => /villa|فيلا/i.test(String(rt||''));
+    const hasPool = rt => /pool|مسبح/i.test(String(rt||''));
+    // فيلا = أي فيلا · فيلا بمسبح = فيلا + مسبح معاً (لا نقبل Pool Suite/Pool View بلا فيلا).
+    let cand = (data.hotels || []).filter(h => kind==='pool'
+      ? (isVilla(h.room_type) && hasPool(h.room_type))
+      : isVilla(h.room_type));
+    if(!cand.length){ addMessage('sys',`ما فيه ${label} في ${region}. جرّبي منطقة ثانية أو تبديل الفندق يدوياً.`); resetSel(); return; }
+    let fitting = cand.filter(h => h.fits);
+    const relaxed = !fitting.length && cand.length;
+    if(!fitting.length) fitting = cand; // لا يتّسع للعدد → أرخص فيلا متاحة (أقرب)
+    fitting.sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
+    const h = fitting[0]; // الأرخص
+    const newLine = [
+      h.name, p[1]||'', (h.stars||p[2]||'')+' نجوم', _roomWithCap(h, ''),
+      (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
+      (h.meals ? ('ما يشمل: ' + h.meals) : (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6] || '')))
+    ].join(' | ') + _areaSeg(h.area) + _linkSeg(h.link);
+    const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
+    if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); resetSel(); return; }
+    applyHotelRawChange(newRaw, `🏡 ${region}: أرخص ${label} = «${h.name}» ${(h.stars?h.stars+'★ ':'')}(${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxed?' ⚠️ ما توفّرت فيلا تطابق العدد، فاخترتُ الأقرب.':''}`);
+    // القائمة مجرّد زرّ إجراء — ترجع لوضعها الافتراضي بعد إعادة الرسم (buildReview يعيد بناء الصف أصلاً).
+  }catch(e){ addMessage('sys','خطأ أثناء جلب الفيلا: ' + (e && e.message ? e.message : e)); resetSel(); }
+}
 // ── نوع الغرفة: استبدال / إضافة نوع آخر من نفس الفندق ──
 function _stripCapR(s){ return String(s||'').replace(/\s*\(يتسع[^)]*\)/g,'').trim().toLowerCase(); }
 // اسم الغرفة مع شارة السعة. الباني يضيفها عند بناء البرنامج، لكن كل مسارات
@@ -3928,9 +3979,11 @@ const nameCell = `<td class="hsw-cell" data-hidx="${hidx}" data-region="${hswEsc
   + `<button type="button" class="dblrm-btn" onclick="event.stopPropagation();pickCheapestDouble(${hidx})" title="استبدل بأرخص فندق فيه غرفة لشخصين بنفس فئة النجوم، والعدد يُحسب تلقائياً (العدد÷2) ويبقى قابلاً للتعديل">🛏️ غرفتين لشخصين (أرخص)</button>`
   + `</td>`;
 // خلية نوع الغرفة — قابلة للاستبدال/الإضافة من نفس الفندق
+// 🇮🇩 بالي: دروب ليست «نوع السكن» تحت نوع الغرفة — يجيب أرخص فيلا/فيلا بمسبح خاص بنفس المنطقة.
+const villaSel = _regionIsBali(p[1]||'') ? `<select class="villa-sel" title="اختاري نوع السكن → أرخص فيلا بنفس المنطقة" onchange="changeHotelVilla(${hidx}, this.value)"><option value="">🏡 نوع السكن…</option><option value="villa">فيلا</option><option value="pool">فيلا مع مسبح خاص</option></select>` : '';
 const roomCell = `<td class="rtw-cell" data-hidx="${hidx}" data-name="${hswEsc(p[0]||'')}" data-region="${hswEsc(p[1]||'')}" data-room="${hswEsc(p[3]||'')}" data-nights="${nights}" data-date="${hswEsc(_df)}">`
   + `<div class="hsw-cur" onclick="rtwToggle(this)"><span class="hsw-name">${p[3]||''}</span><span class="hsw-chev">▼</span></div>`
-  + `<div class="hsw-menu"></div></td>`;
+  + `<div class="hsw-menu"></div>${villaSel}</td>`;
 const rooms = hRooms(hidx);
 const roomsCell = `<td><select class="rooms-sel" onchange="setHotelRooms(${hidx}, this.value)">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${n===rooms?' selected':''}>${n}</option>`).join('')}</select></td>`;
 // خلية النجوم — منسدلة: تغيير الفئة يجيب أرخص فندق بالمدينة بتلك الفئة حصراً
