@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-18-bali-villa'
+  var BUILD = '2026-10-18-bali-villa2'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2086,11 +2086,19 @@ async function changeHotelVilla(hidx, kind){
       ? (isVilla(h.room_type) && hasPool(h.room_type))
       : isVilla(h.room_type));
     if(!cand.length){ addMessage('sys',`ما فيه ${label} في ${region}. جرّبي منطقة ثانية أو تبديل الفندق يدوياً.`); resetSel(); return; }
-    let fitting = cand.filter(h => h.fits);
-    const relaxed = !fitting.length && cand.length;
-    if(!fitting.length) fitting = cand; // لا يتّسع للعدد → أرخص فيلا متاحة (أقرب)
-    fitting.sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
-    const h = fitting[0]; // الأرخص
+    // تطابق الإشغال بالضبط أولاً (طلب المالكة): لا نجيب فيلا سعتها لعدد أكبر لمجرّد
+    // أنها أرخص. نختار أرخص فيلا سعتها = العدد المحدَّد تماماً، وإلا نتدرّج: أكبر سعة
+    // تتّسع للعدد (أقرب لأعلى) ثم أي فيلا، مع تنبيه.
+    const target = occReq;
+    let exact = cand.filter(h => +h.capacity === target);        // السعة = العدد بالضبط
+    let fitting = cand.filter(h => h.fits);                        // تتّسع للعدد (سعة ≥ العدد)
+    let pick, relaxed = false;
+    if(exact.length){ pick = exact; }
+    else if(fitting.length){ pick = fitting; relaxed = true; }     // ما فيه بالضبط → أقرب يتّسع
+    else { pick = cand; relaxed = true; }                          // ولا وحدة تتّسع → أي فيلا
+    pick.sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
+    const h = pick[0]; // الأرخص ضمن الفئة المختارة
+    const hCap = +h.capacity || 0;
     const newLine = [
       h.name, p[1]||'', (h.stars||p[2]||'')+' نجوم', _roomWithCap(h, ''),
       (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
@@ -2098,7 +2106,7 @@ async function changeHotelVilla(hidx, kind){
     ].join(' | ') + _areaSeg(h.area) + _linkSeg(h.link);
     const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
     if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); resetSel(); return; }
-    applyHotelRawChange(newRaw, `🏡 ${region}: أرخص ${label} = «${h.name}» ${(h.stars?h.stars+'★ ':'')}(${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxed?' ⚠️ ما توفّرت فيلا تطابق العدد، فاخترتُ الأقرب.':''}`);
+    applyHotelRawChange(newRaw, `🏡 ${region}: أرخص ${label} لـ${target} ${target>2?'أشخاص':'شخصين'} = «${h.name}» ${(h.stars?h.stars+'★ ':'')}(${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxed?` ⚠️ ما فيه فيلا سعتها ${target} بالضبط، فاخترتُ الأقرب (سعة ${hCap||'؟'}).`:''}`);
     // القائمة مجرّد زرّ إجراء — ترجع لوضعها الافتراضي بعد إعادة الرسم (buildReview يعيد بناء الصف أصلاً).
   }catch(e){ addMessage('sys','خطأ أثناء جلب الفيلا: ' + (e && e.message ? e.message : e)); resetSel(); }
 }
