@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-18-bali-villa2'
+  var BUILD = '2026-10-19-bali-villa3'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -2089,9 +2089,11 @@ async function changeHotelVilla(hidx, kind){
     // تطابق الإشغال بالضبط أولاً (طلب المالكة): لا نجيب فيلا سعتها لعدد أكبر لمجرّد
     // أنها أرخص. نختار أرخص فيلا سعتها = العدد المحدَّد تماماً، وإلا نتدرّج: أكبر سعة
     // تتّسع للعدد (أقرب لأعلى) ثم أي فيلا، مع تنبيه.
-    const target = occReq;
+    // العدد المرجعي = عدد أشخاص البرنامج (META) لا إشغال الغرفة الحالية — وإلا بعد
+    // أول تبديل لفيلا سعتها ٤ يقرأ «٤» من الغرفة الجديدة ويعيد اختيار نفس الفيلا.
+    const target = metaPersons() || occN || 2;
     let exact = cand.filter(h => +h.capacity === target);        // السعة = العدد بالضبط
-    let fitting = cand.filter(h => h.fits);                        // تتّسع للعدد (سعة ≥ العدد)
+    let fitting = cand.filter(h => +h.capacity >= target);        // تتّسع للعدد (سعة ≥ العدد) — عميلياً لا h.fits
     let pick, relaxed = false;
     if(exact.length){ pick = exact; }
     else if(fitting.length){ pick = fitting; relaxed = true; }     // ما فيه بالضبط → أقرب يتّسع
