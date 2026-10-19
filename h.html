@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Madar Trip</title>
+<style>
+ :root{--bg:#f7f8fa;--fg:#1f2430;--muted:#6b7280;--brand:#0b57d0}
+ @media (prefers-color-scheme:dark){:root{--bg:#11141a;--fg:#e8eaf0;--muted:#9aa3b2}}
+ html,body{height:100%}
+ body{margin:0;background:var(--bg);color:var(--fg);
+      font-family:-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;
+      display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}
+ .box{max-width:420px}
+ .sp{width:34px;height:34px;margin:0 auto 18px;border:3px solid rgba(128,128,128,.25);
+     border-top-color:var(--brand);border-radius:50%;animation:s .9s linear infinite}
+ @keyframes s{to{transform:rotate(360deg)}}
+ p{margin:0 0 14px;font-size:17px}
+ small{color:var(--muted);font-size:13px}
+ a{color:var(--brand);font-size:15px}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="sp" id="sp"></div>
+  <p id="msg">جاري فتح صفحة الفندق…</p>
+  <p><a id="f" rel="noreferrer" href="#" style="display:none">اضغط هنا إن لم تُفتح تلقائياً</a></p>
+  <small>Madar Trip</small>
+</div>
+<script>
+(function(){
+  var ALLOW = [
+    /^https:\/\/(www\.|secure\.)?booking\.com\//i,
+    /^https:\/\/(www\.)?trip\.com\//i,
+    /^https:\/\/(www\.)?agoda\.com\//i,
+    /^https:\/\/(www\.)?google\.com\/maps\//i,
+    /^https:\/\/maps\.app\.goo\.gl\//i
+  ];
+  function fail(t){
+    document.getElementById('sp').style.display='none';
+    document.getElementById('msg').textContent=t;
+  }
+  var raw='';
+  try{ raw = new URLSearchParams(location.search).get('u') || ''; }catch(e){}
+  if(!raw){ return fail('لا يوجد رابط.'); }
+  var u = raw;
+  try{ u = decodeURIComponent(raw); }catch(e){}
+  var ok=false,i;
+  for(i=0;i<ALLOW.length;i++){ if(ALLOW[i].test(u)){ ok=true; break; } }
+  if(!ok){ return fail('رابط غير مسموح.'); }
+  var a=document.getElementById('f');
+  a.href=u; a.style.display='inline';
+  location.replace(u);
+})();
+</script>
+</body>
+</html>
