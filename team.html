@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-19-bali-villa3'
+  var BUILD = '2026-10-19-bali-villa4'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -997,6 +997,11 @@ let basePrice = 0;
 // عدد الغرف لكل فندق (الافتراضي 1). يُضرب في تكلفة الفندق.
 // يُحفظ عبر كل إعادة بناء (تعديلات/سرير إضافي/تبديل فندق) ما دامت نفس المدن، ويُصفّر فقط لبرنامج مختلف.
 let hotelRooms = [];
+// 🇮🇩 بالي: وضع فلتر «نوع السكن» لكل صف فندق ('' / 'villa' / 'pool').
+// يُبقي قائمة أسماء الفنادق (hswRender) محصورة على الفلل عند اختيار نوع فيلا،
+// ويرجّعها لكل الفنادق عند «عادي». يستمر عبر إعادة بناء الجدول (مفهرس كـ hotelRooms).
+let villaMode = [];
+function vMode(i){ return villaMode[i] || ''; }
 let _lastHotelCities = [];
 function hRooms(i){ const n = parseInt(hotelRooms[i], 10); return (n >= 1 && n <= 10) ? n : 1; }
 function setHotelRooms(i, n){ hotelRooms[i] = Math.max(1, Math.min(10, parseInt(n,10)||1)); if (typeof lastProgramRaw === 'string' && lastProgramRaw) buildReview(lastProgramRaw); }
@@ -1804,17 +1809,29 @@ async function mkFlightApply(){
       addMessage('sys',`✈️ الطيران الدولي (${mkFlightModeLabel()}): ${Number(t).toLocaleString()} ريال (${pax} أشخاص).${note?' '+note:''}`); }
   } else if(note) addMessage('sys',note);
 }
+// فلتر «نوع السكن» لقائمة أسماء الفنادق: فيلا → الغرف فيها villa/فيلا؛ فيلا بمسبح →
+// villa + pool/مسبح؛ غير ذلك ('' أو 'normal') → كل الفنادق.
+function _villaFilter(hotels, mode){
+  if(mode === 'villa') return hotels.filter(h => /villa|فيلا/i.test(String(h.room_type||'')));
+  if(mode === 'pool')  return hotels.filter(h => /villa|فيلا/i.test(String(h.room_type||'')) && /pool|مسبح/i.test(String(h.room_type||'')));
+  return hotels;
+}
 function hswRender(cell, hotels){
-  cell._hotels = hotels;
+  cell._allHotels = hotels;   // القائمة الكاملة (للرجوع لوضع عادي بلا إعادة جلب)
+  const mode = vMode(+cell.dataset.hidx);
+  hotels = _villaFilter(hotels, mode);
+  cell._hotels = hotels;      // القائمة المعروضة (الفهرس يطابق hswPick)
   const menu = cell.querySelector('.hsw-menu');
   const nights = +cell.dataset.nights || 0;
   const curName = cell.dataset.name;
   const curNightly = +cell.dataset.nightly || 0;
   const bar = cell._isMakkah ? hswHaramBar(cell) : '';
-  if(!hotels.length){ menu.innerHTML = bar + '<div class="hsw-loading">ما فيه فنادق بهذه المنطقة</div>'; return; }
+  const vlabel = mode==='pool' ? 'فيلا مع مسبح خاص' : (mode==='villa' ? 'فيلا' : '');
+  const vbar = vlabel ? `<div class="hsw-title" style="background:#fff6fb;color:#C41D88;border-bottom:1px solid #f0d6e6">🏡 معروض فقط: ${vlabel} — اختاري بحرية · رجوع من «نوع السكن ← عادي»</div>` : '';
+  if(!hotels.length){ menu.innerHTML = bar + vbar + `<div class="hsw-loading">${vlabel?('ما فيه '+vlabel+' بهذه المنطقة'):'ما فيه فنادق بهذه المنطقة'}</div>`; return; }
   const title = `<div class="hsw-title">فنادق ${hswEsc(cell.dataset.region)} — المطابق للعدد أولاً (مظلّل) ثم الباقي · السعة واضحة</div>`;
   let sepShown = false;
-  menu.innerHTML = bar + title + hotels.map((h,i)=>{
+  menu.innerHTML = bar + vbar + title + hotels.map((h,i)=>{
     const isCur = h.name === curName;
     const total = (h.price_per_night||0) * nights;
     const diff = (h.price_per_night||0) - curNightly;
@@ -2063,7 +2080,13 @@ async function changeHotelVilla(hidx, kind){
   const resetSel = () => { if(sel) sel.value = ''; };
   try{
     kind = String(kind||'').trim();
-    if(!kind){ return; }
+    if(!kind){ return; }                          // الخيار الافتراضي (placeholder) — لا شيء
+    if(kind === 'normal'){                          // «عادي» → ارفع الفلتر وأرجِع كل الفنادق
+      villaMode[hidx] = 'normal';
+      addMessage('sys','↩️ رجعت قائمة الفنادق لكل الخيارات (وضع عادي).');
+      if(typeof lastProgramRaw==='string' && lastProgramRaw) buildReview(lastProgramRaw);
+      return;
+    }
     const lines = parseHotelLinesFromRaw(lastProgramRaw);
     const oldLine = lines[hidx];
     if(!oldLine){ addMessage('sys','تعذّر: لم أجد سطر الفندق.'); resetSel(); return; }
@@ -2086,6 +2109,7 @@ async function changeHotelVilla(hidx, kind){
       ? (isVilla(h.room_type) && hasPool(h.room_type))
       : isVilla(h.room_type));
     if(!cand.length){ addMessage('sys',`ما فيه ${label} في ${region}. جرّبي منطقة ثانية أو تبديل الفندق يدوياً.`); resetSel(); return; }
+    villaMode[hidx] = kind;   // فعّل فلتر قائمة الفنادق على هذا النوع (يبقى بعد إعادة الرسم)
     // تطابق الإشغال بالضبط أولاً (طلب المالكة): لا نجيب فيلا سعتها لعدد أكبر لمجرّد
     // أنها أرخص. نختار أرخص فيلا سعتها = العدد المحدَّد تماماً، وإلا نتدرّج: أكبر سعة
     // تتّسع للعدد (أقرب لأعلى) ثم أي فيلا، مع تنبيه.
@@ -2107,9 +2131,14 @@ async function changeHotelVilla(hidx, kind){
       (h.meals ? ('ما يشمل: ' + h.meals) : (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6] || '')))
     ].join(' | ') + _areaSeg(h.area) + _linkSeg(h.link);
     const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
-    if(newRaw === lastProgramRaw){ addMessage('sys','تعذّر التطبيق — لم يتغيّر البرنامج.'); resetSel(); return; }
-    applyHotelRawChange(newRaw, `🏡 ${region}: أرخص ${label} لـ${target} ${target>2?'أشخاص':'شخصين'} = «${h.name}» ${(h.stars?h.stars+'★ ':'')}(${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxed?` ⚠️ ما فيه فيلا سعتها ${target} بالضبط، فاخترتُ الأقرب (سعة ${hCap||'؟'}).`:''}`);
-    // القائمة مجرّد زرّ إجراء — ترجع لوضعها الافتراضي بعد إعادة الرسم (buildReview يعيد بناء الصف أصلاً).
+    if(newRaw === lastProgramRaw){
+      // الأرخص المطابق هو نفس الفندق الحالي — لا تبديل، لكن فعّل الفلتر على القائمة.
+      addMessage('sys', `🏡 ${region}: «${h.name}» هو بالفعل أرخص ${label} لـ${target} ${target>2?'أشخاص':'شخصين'}. قائمة الفنادق محصورة الآن على ${label}.`);
+      if(typeof lastProgramRaw==='string' && lastProgramRaw) buildReview(lastProgramRaw);
+      return;
+    }
+    applyHotelRawChange(newRaw, `🏡 ${region}: أرخص ${label} لـ${target} ${target>2?'أشخاص':'شخصين'} = «${h.name}» ${(h.stars?h.stars+'★ ':'')}(${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxed?` ⚠️ ما فيه فيلا سعتها ${target} بالضبط، فاخترتُ الأقرب (سعة ${hCap||'؟'}).`:''} · قائمة الفنادق محصورة الآن على ${label} (غيّري بحرية، وللرجوع: «نوع السكن ← عادي»).`);
+    // بعد إعادة الرسم، الـ select يعكس villaMode، وقائمة أسماء الفنادق تنفلتر على النوع.
   }catch(e){ addMessage('sys','خطأ أثناء جلب الفيلا: ' + (e && e.message ? e.message : e)); resetSel(); }
 }
 // ── نوع الغرفة: استبدال / إضافة نوع آخر من نفس الفندق ──
@@ -3780,6 +3809,7 @@ const _newHotelCities = hotelsLines.map(l => (String(l).split('|')[1] || '').tri
 if (hotelRooms.length !== hotelsLines.length || JSON.stringify(_newHotelCities) !== JSON.stringify(_lastHotelCities)) {
   hotelRooms = hotelsLines.map(() => 1);
   hotelBeds = [];   // إعادة الضبط للافتراضي عند تغيّر هيكل البرنامج
+  villaMode = hotelsLines.map(() => '');  // إعادة ضبط فلتر «نوع السكن» لبرنامج جديد
 }
 _lastHotelCities = _newHotelCities;
 const flightsLines = parseSection(raw, 'FLIGHTS');
@@ -3990,7 +4020,8 @@ const nameCell = `<td class="hsw-cell" data-hidx="${hidx}" data-region="${hswEsc
   + `</td>`;
 // خلية نوع الغرفة — قابلة للاستبدال/الإضافة من نفس الفندق
 // 🇮🇩 بالي: دروب ليست «نوع السكن» تحت نوع الغرفة — يجيب أرخص فيلا/فيلا بمسبح خاص بنفس المنطقة.
-const villaSel = _regionIsBali(p[1]||'') ? `<select class="villa-sel" title="اختاري نوع السكن → أرخص فيلا بنفس المنطقة" onchange="changeHotelVilla(${hidx}, this.value)"><option value="">🏡 نوع السكن…</option><option value="villa">فيلا</option><option value="pool">فيلا مع مسبح خاص</option></select>` : '';
+const _vm = vMode(hidx);
+const villaSel = _regionIsBali(p[1]||'') ? `<select class="villa-sel" title="اختاري نوع السكن → أرخص فيلا بنفس المنطقة، وقائمة الفنادق تنحصر على الفلل" onchange="changeHotelVilla(${hidx}, this.value)"><option value=""${_vm?'':' selected'}>🏡 نوع السكن…</option><option value="normal"${_vm==='normal'?' selected':''}>عادي (كل الفنادق)</option><option value="villa"${_vm==='villa'?' selected':''}>فيلا</option><option value="pool"${_vm==='pool'?' selected':''}>فيلا مع مسبح خاص</option></select>` : '';
 const roomCell = `<td class="rtw-cell" data-hidx="${hidx}" data-name="${hswEsc(p[0]||'')}" data-region="${hswEsc(p[1]||'')}" data-room="${hswEsc(p[3]||'')}" data-nights="${nights}" data-date="${hswEsc(_df)}">`
   + `<div class="hsw-cur" onclick="rtwToggle(this)"><span class="hsw-name">${p[3]||''}</span><span class="hsw-chev">▼</span></div>`
   + `<div class="hsw-menu"></div>${villaSel}</td>`;
