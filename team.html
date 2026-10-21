@@ -3099,19 +3099,32 @@ async function bfLoadSuggestions(){
     const d = await res.json(); BF_SUGS = d.suggestions || [];
   }catch(e){ BF_SUGS = []; }
   // أزواج المطارات المتاحة لهذه الوجهة — الخانة ظاهرة دائماً ليحدّد الموظف القدوم/المغادرة صراحةً
-  const aSel = document.getElementById('bf-airport');
-  const pairs = [...new Set(BF_SUGS.map(bfPairOf))];
-  if(!pairs.length){
-    aSel.innerHTML = '<option value="">لا مطارات لهذه الوجهة — استخدم «تخصيص»</option>';
-  } else {
-    aSel.innerHTML = '<option value="ALL">🌐 كل المطارات (كل الاقتراحات)</option>' + pairs.map(p=>{
-      const [a,b] = p.split('|');
-      const lbl = a===b ? `القدوم والمغادرة: ${bfAirAr(a)}` : `القدوم: ${bfAirAr(a)} — المغادرة: ${bfAirAr(b)}`;
-      return `<option value="${bfEsc(p)}">${bfEsc(lbl)}</option>`;
-    }).join('');
-  }
+  bfRenderAirportOptions();
   if(!BF_SUGS.length){ hint.innerHTML = 'لا توجد اقتراحات جاهزة لهذه الوجهة — استخدم «تخصيص».'; }
   else { hint.textContent = 'اضغط «عرض الخيارات» لعرض التوزيع المطابق لعدد الأيام.'; }
+}
+// يبني قائمة المطارات مع **عدد الاقتراحات الجاهزة** جنب كل خيار حسب عدد الأيام المختار:
+// «القدوم: كذا — المغادرة: كذا (٢)» — فالموظف يختار اللي قدامه رقم ويتجنّب (٠). يُعاد
+// تشغيلها عند تغيير الأيام (مع حفظ الاختيار). العدد يُحسب من BF_SUGS المحمّلة لهذه الوجهة.
+function _bfArNum(n){ return String(n).replace(/\d/g, d=>'٠١٢٣٤٥٦٧٨٩'[+d]); }
+function bfRenderAirportOptions(){
+  const aSel = document.getElementById('bf-airport');
+  if(!aSel) return;
+  const prev = aSel.value;
+  const days = +(document.getElementById('bf-days')||{}).value || 0;
+  const pairs = [...new Set(BF_SUGS.map(bfPairOf))];
+  if(!pairs.length){ aSel.innerHTML = '<option value="">لا مطارات لهذه الوجهة — استخدم «تخصيص»</option>'; return; }
+  const allN = days ? BF_SUGS.filter(s=>+s.days===days).length : BF_SUGS.length;
+  let html = `<option value="ALL">🌐 كل المطارات (${_bfArNum(allN)})</option>`;
+  html += pairs.map(p=>{
+    const [a,b] = p.split('|');
+    const lbl = a===b ? `القدوم والمغادرة: ${bfAirAr(a)}` : `القدوم: ${bfAirAr(a)} — المغادرة: ${bfAirAr(b)}`;
+    const n = days ? BF_SUGS.filter(s=>bfPairOf(s)===p && +s.days===days).length
+                   : BF_SUGS.filter(s=>bfPairOf(s)===p).length;
+    return `<option value="${bfEsc(p)}">${bfEsc(lbl)} (${_bfArNum(n)})</option>`;
+  }).join('');
+  aSel.innerHTML = html;
+  if(prev && [...aSel.options].some(o=>o.value===prev)) aSel.value = prev;   // حافظ على الاختيار
 }
 function bfDaysAvail(){ const p=bfCurPair(); return [...new Set(BF_SUGS.filter(s=>bfPairOf(s)===p).map(s=>+s.days))].sort((a,b)=>a-b).join('، '); }
 function bfShowOptions(){
@@ -3287,6 +3300,7 @@ function bfInit(){
   Object.keys(BF_CITIES).forEach(d=>{ const o=document.createElement('option'); o.value=d; o.textContent=d; sel.appendChild(o); });
   document.getElementById('bf-days').addEventListener('input', ()=>{
     bfExpected();
+    bfRenderAirportOptions();   // حدّث عدد الاقتراحات جنب كل مطار حسب الأيام الجديدة
     // تغيير الأيام يُبطل أي توزيع جاهز معروض
     bfChosen = null;
     document.getElementById('bf-sugList').innerHTML = '';
