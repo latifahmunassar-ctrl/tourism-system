@@ -147,6 +147,32 @@ function endpointAirportsFromDist(distribution: string, destination: string): { 
   return (first && last) ? { arr: first, dep: last } : null;
 }
 
+// توزيعات مدن مغربية **منخفضة التنقلات** مُنسَّقة (طلب المالكة ٢١ أكتوبر ٢٠٢٦، ١٠–١٥ يوم).
+// تُضاف حتميّاً لاقتراحات المغرب في كل مزامنة (المزامنة تمسح وتعيد البناء من الشيت، فلو
+// أُضيفت في القاعدة فقط لانمسحت). تستعمل الأطراف الرخيصة فقط (اغافاي/الدار البيضا↔الرباط/
+// مراكش↔الدار البيضا/أكادير↔مراكش) فلا تُفعّل تنبيه ≥٢٠٠٠. مطارات القدوم/المغادرة تُشتقّ
+// من أول/آخر مدينة. التكرار يُزال بالمطابقة (لو أضافتها المالكة للشيت لاحقاً فلا ازدواج).
+const MOROCCO_EXTRA_DISTS: Array<{ days: number; dist: string }> = [
+  { days: 10, dist: "٤ مراكش - ٣ الدار البيضا - ٢ الرباط" },
+  { days: 10, dist: "٣ مراكش - ٢ اغافاي - ٢ مراكش - ٢ الدار البيضا" },
+  { days: 10, dist: "٢ أكادير - ٣ مراكش - ٢ اغافاي - ٢ مراكش" },
+  { days: 11, dist: "٥ مراكش - ٣ الدار البيضا - ٢ الرباط" },
+  { days: 11, dist: "٣ مراكش - ٢ اغافاي - ٢ مراكش - ٣ الدار البيضا" },
+  { days: 11, dist: "٢ أكادير - ٣ مراكش - ٢ الدار البيضا - ٣ الرباط" },
+  { days: 12, dist: "٤ مراكش - ٢ اغافاي - ٢ مراكش - ٣ الدار البيضا" },
+  { days: 12, dist: "٣ مراكش - ٢ اغافاي - ٢ مراكش - ٢ الدار البيضا - ٢ الرباط" },
+  { days: 12, dist: "٢ أكادير - ٣ مراكش - ٢ اغافاي - ٢ مراكش - ٢ الدار البيضا" },
+  { days: 13, dist: "٣ أكادير - ٣ مراكش - ٣ الدار البيضا - ٣ الرباط" },
+  { days: 13, dist: "٤ مراكش - ٢ اغافاي - ٢ مراكش - ٢ الدار البيضا - ٢ الرباط" },
+  { days: 13, dist: "٢ أكادير - ٣ مراكش - ٢ اغافاي - ٢ مراكش - ٣ الدار البيضا" },
+  { days: 14, dist: "٣ أكادير - ٤ مراكش - ٣ الدار البيضا - ٣ الرباط" },
+  { days: 14, dist: "٣ مراكش - ٢ اغافاي - ٢ مراكش - ٣ الدار البيضا - ٣ الرباط" },
+  { days: 14, dist: "٢ أكادير - ٣ مراكش - ٢ اغافاي - ٢ مراكش - ٢ الدار البيضا - ٢ الرباط" },
+  { days: 15, dist: "٣ أكادير - ٤ مراكش - ٤ الدار البيضا - ٣ الرباط" },
+  { days: 15, dist: "٤ مراكش - ٢ اغافاي - ٢ مراكش - ٣ الدار البيضا - ٣ الرباط" },
+  { days: 15, dist: "٣ أكادير - ٣ مراكش - ٢ اغافاي - ٢ مراكش - ٢ الدار البيضا - ٢ الرباط" },
+];
+
 const HOTEL_HEADER_KEYWORDS = [
   "hotel", "city", "star", "room", "rate", "include",
   "currency", "from", "to", "note", "no_header", "sr",
@@ -1745,6 +1771,23 @@ Deno.serve(async (req) => {
         // live in a hard-coded seed via ?seed_malaysia=1), DON'T delete — that
         // would wipe the seed on every sync and force a manual re-seed.
         const suggestions = extractSuggestions(rows, tab);
+        // المغرب: أضِف التوزيعات منخفضة التنقلات المُنسَّقة (بلا ازدواج مع الشيت).
+        if (tab === "Morroco") {
+          const _latin = (s: string) => String(s).replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)));
+          const keyOf = (days: number, arr: string, dep: string, dist: string) =>
+            `${days}|${arr}|${dep}|${_latin(String(dist)).replace(/\s+/g, " ").trim()}`;
+          const seen = new Set(suggestions.map(s =>
+            keyOf(s.days as number, String(s.arrival_airport), String(s.departure_airport), String(s.distribution))));
+          for (const e of MOROCCO_EXTRA_DISTS) {
+            const ep = endpointAirportsFromDist(e.dist, "Morroco");
+            const arr = ep?.arr || "Marrakech";
+            const dep = ep?.dep || "Marrakech";
+            const k = keyOf(e.days, arr, dep, e.dist);
+            if (seen.has(k)) continue;
+            seen.add(k);
+            suggestions.push({ destination: "Morroco", arrival_airport: arr, departure_airport: dep, days: e.days, label: null, distribution: e.dist });
+          }
+        }
         if (suggestions.length > 0) {
           await supabase.from("package_suggestions").delete().eq("destination", tab);
           const { error } = await supabase.from("package_suggestions").insert(suggestions);
