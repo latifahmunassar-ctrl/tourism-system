@@ -466,6 +466,7 @@ const CITY_NAME_RE: Record<string, RegExp> = {
   "Marrakech": /مراكش|marrakech|marrakesh/i, "Casablanca": /الدار\s*البيضاء?|الدارالبيضاء?|دار\s*البيضاء?|كازابلانكا|casablanca/i,
   "Tanger": /طنج[ةها]|tanger|tangier/i, "Agadir": /[أا][كغ]ادير|agadir/i, "Agafay": /[أا]غا?فاي|agafay/i,
   "Essaouira": /الصوير[ةه]|الصويرا|essaouira/i, "Rabat": /الرباط|rabat/i,
+  "Fes": /فاس|فآس|fès|fes|fez/i,
 };
 
 /**

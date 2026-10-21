@@ -61,7 +61,7 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     // مصر — القاهرة حالياً مدينة الأساس؛ أدرجنا مدن مصر الكبرى للكشف المتين (لو وُسّعت لاحقاً).
     [/مصر|egypt|القاهر[ةه]|cairo|[أا]هرامات|الجيز[ةه]|giza|الاقصر|الأقصر|luxor|[أا]سوان|aswan|شرم\s*الشيخ|sharm|الغردق[ةه]|hurghada/i, "Egypt"],
     // المغرب — مدن: مراكش/الدار البيضاء/طنجة/أكادير/اغافاي/الصويرة/الرباط.
-    [/المغرب|مغرب|morocco|مراكش|marrakech|marrakesh|الدار\s*البيضاء?|الدارالبيضاء?|casablanca|طنج[ةه]|tanger|tangier|[أا][كغ]ادير|agadir|[أا]غافاي|agafay|الصوير[ةه]|essaouira|الرباط|rabat/i, "Morroco"],
+    [/المغرب|مغرب|morocco|مراكش|marrakech|marrakesh|الدار\s*البيضاء?|الدارالبيضاء?|casablanca|طنج[ةه]|tanger|tangier|[أا][كغ]ادير|agadir|[أا]غافاي|agafay|الصوير[ةه]|essaouira|الرباط|rabat|فاس|fès|fes|fez/i, "Morroco"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;
@@ -209,6 +209,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Agafay",     pattern: /[أا]غا?فاي|agafay/i },
     { canonical: "Essaouira",  pattern: /الصوير[ةه]|الصويرا|essaouira/i },
     { canonical: "Rabat",      pattern: /الرباط|rabat/i },
+    { canonical: "Fes",        pattern: /فاس|فآس|fès|fes|fez/i },
   ],
 };
 
@@ -807,7 +808,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     "Sarajevo": "سراييفو", "Mostar": "موستار", "Bihać": "بيهاتش",
     "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
     "Cairo": "القاهرة",
-    "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط",
+    "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط", "Fes": "فاس",
   };
   const formatBedScope = (cities: string[]): string => cities.flatMap(c => {
     const ar = CITY_AR[c];
@@ -3266,6 +3267,70 @@ async function handleMakkahTransportPlan(body: { pax?: number; sequence?: string
   }
 }
 
+// رابط صفحة الفندق: المسار المحلي (المغرب) يُلحق «| LINK:<url>» حتميّاً في
+// local-builder، أمّا مسار الذكاء (بقية الوجهات: فيتنام، جنوب أفريقيا…) فالنموذج
+// لا يعرف الرابط أصلاً (لا في السياق ولا في صيغة سطر HOTELS). فنحقنه هنا حتميّاً
+// بعد توليد البرنامج: نستخرج أسماء الفنادق من قسم HOTELS، نجلب روابطها من قاعدة
+// البيانات (اسم الفندق فريد لرابط واحد)، ونُلحق «| LINK:<url>» بنهاية كل سطر.
+// team.html يقرأ هذا الوسم (_lineLink) ويعرض «اضغط هنا لمشاهدة الفندق» قابلاً للنقر في PDF.
+function _normHotelName(s: string): string {
+  return String(s || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+async function injectHotelLinks(
+  supabase: ReturnType<typeof createClient>,
+  text: string,
+): Promise<string> {
+  // حدّد قسم HOTELS فقط
+  const start = text.indexOf("HOTELS:");
+  if (start < 0) return text;
+  const after = text.slice(start + "HOTELS:".length);
+  const nextSec = after.search(/\n[A-Z_]+:/);
+  const blockEnd = nextSec >= 0 ? start + "HOTELS:".length + nextSec : text.length;
+  const block = text.slice(start, blockEnd);
+
+  // اجمع أسماء الفنادق من الأسطر التي تبدو كسطر فندق (تحوي «ريال/ليلة»)
+  const names = new Set<string>();
+  for (const raw of block.split("\n")) {
+    const line = raw.trim();
+    if (!line.includes("|") || !/ريال\s*\/\s*ليلة/.test(line)) continue;
+    if (/\|\s*LINK:/.test(line)) continue; // رابط موجود مسبقاً
+    const nm = line.split("|")[0].trim();
+    if (nm) names.add(nm);
+  }
+  if (!names.size) return text;
+
+  // اجلب الروابط (اسم → رابط) — الاسم فريد لرابط واحد في كل القاعدة
+  const linkMap = new Map<string, string>();
+  try {
+    const { data } = await supabase
+      .from("hotels")
+      .select("name,link")
+      .in("name", [...names])
+      .neq("link", "");
+    for (const row of (data || []) as Array<{ name?: string; link?: string }>) {
+      const u = String(row.link || "").trim();
+      if (/^https?:\/\//i.test(u)) linkMap.set(_normHotelName(row.name || ""), u);
+    }
+  } catch (_e) {
+    return text; // عند أي خطأ: لا نُفشل البرنامج، نعيده كما هو
+  }
+  if (!linkMap.size) return text;
+
+  // أعِد كتابة أسطر الفنادق داخل قسم HOTELS فقط
+  const newBlock = block.split("\n").map((raw) => {
+    const line = raw.trim();
+    if (!line.includes("|") || !/ريال\s*\/\s*ليلة/.test(line)) return raw;
+    if (/\|\s*LINK:/.test(line)) return raw;
+    const nm = _normHotelName(line.split("|")[0]);
+    const url = linkMap.get(nm);
+    if (!url) return raw;
+    return raw.replace(/\s*$/, "") + ` | LINK:${url}`;
+  }).join("\n");
+
+  return text.slice(0, start) + newBlock + text.slice(blockEnd);
+}
+
 // ── Handler ────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
@@ -3641,7 +3706,7 @@ Deno.serve(async (req) => {
         "Sarajevo": "سراييفو", "Mostar": "موستار", "Bihać": "بيهاتش",
         "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
         "Shanghai": "شنغهاي", "Beijing": "بكين", "Hangzhou": "هانغتشو", "Hong Kong": "هونغ كونغ", "London": "لندن", "Amsterdam": "أمستردام", "Guangzhou": "جوانزو", "Cairo": "القاهرة",
-        "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط",
+        "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط", "Fes": "فاس",
       };
       // Distribution-change follow-up: employee typed a NEW city/nights split
       // in chat to reshape an existing program (e.g. "٢ بانكوك ٤ كوساموي").
@@ -4087,6 +4152,8 @@ Deno.serve(async (req) => {
         for (const blk of cloned.content) {
           if (blk && blk.type === "text" && typeof blk.text === "string") {
             blk.text = blk.text.replace(/^([ \t]*CLIENT_CODE:).*$/im, "$1");
+            // حقن روابط الفنادق حتميّاً (مسار الذكاء لا يعرف الرابط) — PDF قابل للنقر
+            try { blk.text = await injectHotelLinks(supabase, blk.text); } catch (_e) { /* لا نُفشل الرد */ }
           }
         }
       }
