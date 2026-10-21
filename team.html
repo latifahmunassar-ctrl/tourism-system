@@ -3094,7 +3094,8 @@ async function bfLoadSuggestions(){
   if(!dest){ hint.textContent = 'اختر الوجهة وعدد الأيام ثم اضغط «عرض الخيارات».'; hint.style.display=''; return; }
   hint.textContent = 'جارٍ جلب الاقتراحات…'; hint.style.display='';
   try{
-    const res = await fetch(BF_INTAKE + '?suggestions=' + encodeURIComponent(dest));
+    // rank=transfers: شاشة التسعير تطلب وسم تكلفة التنقلات (المغرب) — نموذج العميل لا يطلبه
+    const res = await fetch(BF_INTAKE + '?suggestions=' + encodeURIComponent(dest) + '&rank=transfers');
     const d = await res.json(); BF_SUGS = d.suggestions || [];
   }catch(e){ BF_SUGS = []; }
   // أزواج المطارات المتاحة لهذه الوجهة — الخانة ظاهرة دائماً ليحدّد الموظف القدوم/المغادرة صراحةً
@@ -3140,8 +3141,13 @@ function bfShowOptions(){
     const [a,b]=bfPairOf(s).split('|');
     const route = a===b ? bfAirAr(a) : `${bfAirAr(a)} → ${bfAirAr(b)}`;
     const tag = isAll ? `<span class="bf-sug-lab">✈️ ${bfEsc(route)}</span>` : (s.label?`<span class="bf-sug-lab">${bfEsc(s.label)}</span>`:'');
+    // وسم تكلفة التنقلات (المغرب): الأرخص-١/٢/٣ · متوسط · الأغلى-١/٢… — أخضر للأرخص، كهرماني للأغلى
+    const _tb = s.transferBadge || '';
+    const _tbColor = /الأرخص/.test(_tb) ? '#15803d' : (/الأغلى/.test(_tb) ? '#b45309' : '#6b7280');
+    const _tbBg    = /الأرخص/.test(_tb) ? '#dcfce7' : (/الأغلى/.test(_tb) ? '#fef3c7' : '#f3f4f6');
+    const badge = _tb ? `<span style="font-weight:800;font-size:11.5px;color:${_tbColor};background:${_tbBg};border-radius:7px;padding:2px 7px;margin-inline-start:6px;white-space:nowrap">(${bfEsc(_tb)})</span>` : '';
     return `<div class="bf-sug" data-i="${i}">
-      <div><span class="bf-sug-d">${s.days} أيام</span>${tag}</div>
+      <div><span class="bf-sug-d">${s.days} أيام</span>${tag}${badge}</div>
       <div class="bf-sug-dist">${bfEsc(arabicDigitsToLatin(s.distribution))}</div>
     </div>`;
   }).join('');
@@ -3945,30 +3951,25 @@ let html = `
 </div>`;
 
 // 🚗 تنبيه تكلفة التنقلات الطويلة — **أعلى الشاشة** (buildReview) ليراه الموظف أولاً،
-//    ولا يُطبع في ملف العميل (buildPDF منفصل). طلب المالكة: نبّه عند مسارات مراكش↔طنجة
-//    والدار البيضاء↔أكادير (من أغلى تنقلات المغرب) ليقترح على العميل وجهة أقل تكلفة.
+//    ولا يُطبع في ملف العميل (buildPDF منفصل). ديناميكي: يُبرِز كل انتقال بين مدينتين تكلفته
+//    ≥ 2000 ريال باسم المسار والمبلغ ليقترح الموظف وجهة أقل تكلفة. حاليّاً المغرب فقط (٢١ أكتوبر ٢٠٢٦).
 html += (()=>{
-  const EXP_ROUTES = [
-    { re:(t)=>/(?:الدار\s*البيضا|دار\s*البيضا|كازابلانكا)/u.test(t) && /(?:اكادير|أكادير|آكادير|اگادير)/u.test(t), label:'الدار البيضاء ↔ أكادير' },
-    { re:(t)=>/مراكش/u.test(t) && /طنج[ةه]/u.test(t), label:'مراكش ↔ طنجة' },
-  ];
+  if (!/مغرب|morocco/i.test(String(dest||''))) return '';   // المغرب فقط حاليّاً
+  const THRESH = 2000;
   const _hits = [];
   (transfersLines||[]).forEach(l => {
     const p = String(l).split('|').map(x=>x.trim());
     const detail = p[1] || '';
-    for (const r of EXP_ROUTES) {
-      if (r.re(detail)) {
-        const { total } = computeTransferTourLineTotal(p, xferTourMeta, '🚗 انتقال');
-        const mm = detail.match(/من\s+(.+?)\s+(?:الى|الي|إلى)\s+(.+)/u);
-        const fromTo = mm ? `${mm[1].trim()} إلى ${mm[2].trim()}` : detail;
-        _hits.push({ fromTo, total, label:r.label });
-        break;
-      }
-    }
+    // فقط الانتقال بين مدينتين («... من X الى Y ...»)؛ الاستقبال/التوديع بلا «الى» يُتجاهل
+    const mm = detail.match(/من\s+(.+?)\s+(?:الى|الي|إلى)\s+(.+)/u);
+    if (!mm) return;
+    const { total } = computeTransferTourLineTotal(p, xferTourMeta, '🚗 انتقال');
+    if ((total||0) < THRESH) return;
+    _hits.push({ fromTo:`${mm[1].trim()} إلى ${mm[2].trim()}`, total });
   });
   if (!_hits.length) return '';
-  const _rows = _hits.map(h=>`<li>مسار <b>«${h.fromTo}»</b> رفع سعر البرنامج بمقدار <b>${(h.total||0).toLocaleString()} ريال</b> <span style="opacity:.8">(${h.label} — من أغلى تنقلات المغرب)</span></li>`).join('');
-  return `<div style="margin:4px 2px 14px;padding:12px 15px;border:2px dashed #f59e0b;background:#fff7ed;border-radius:11px;font-size:13.5px;font-weight:800;color:#92400e;line-height:1.85;">🚗 <u>تنبيه تكلفة التنقل — يظهر لك على الشاشة فقط ولا يُطبع في ملف العميل</u><ul style="margin:6px 0 2px;padding-inline-start:20px">${_rows}</ul>💡 يُفضّل نصح العميل باختيار وجهة أقرب أو أقل تكلفة لتخفيض السعر.</div>`;
+  const _rows = _hits.map(h=>`<li>مسار <b>«${h.fromTo}»</b> رفع سعر البرنامج بمقدار <b>${(h.total||0).toLocaleString()} ريال</b></li>`).join('');
+  return `<div style="margin:4px 2px 14px;padding:12px 15px;border:2px dashed #f59e0b;background:#fff7ed;border-radius:11px;font-size:13.5px;font-weight:800;color:#92400e;line-height:1.85;">🚗 <u>تنبيه تكلفة التنقل — يظهر لك على الشاشة فقط ولا يُطبع في ملف العميل</u><div style="font-weight:700;opacity:.85;margin:2px 0 4px">انتقالات تكلفتها ٢٠٠٠ ريال فأكثر رفعت سعر البرنامج:</div><ul style="margin:6px 0 2px;padding-inline-start:20px">${_rows}</ul>💡 يُفضّل نصح العميل باختيار وجهة أقرب أو أقل تكلفة لتخفيض السعر.</div>`;
 })();
 
 // تنبيه: سعة الغرف أقل من عدد الأشخاص المطلوب — عشان الموظف يضيف سريراً/غرفة إضافية

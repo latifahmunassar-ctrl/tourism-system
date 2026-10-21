@@ -207,7 +207,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Tanger",     pattern: /طنج[ةها]|tanger|tangier/i },
     { canonical: "Agadir",     pattern: /[أا][كغ]ادير|agadir/i },
     { canonical: "Agafay",     pattern: /[أا]غا?فاي|agafay/i },
-    { canonical: "Essaouira",  pattern: /الصوير[ةه]|الصويرا|essaouira/i },
+    { canonical: "Essaouira",  pattern: /(?<!ت)(?:ال)?صوير[ةه]|صويرا|essaouira/i },
     { canonical: "Rabat",      pattern: /الرباط|rabat/i },
     { canonical: "Fes",        pattern: /فاس|فآس|fès|fes|fez/i },
   ],

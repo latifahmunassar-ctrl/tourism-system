@@ -51,6 +51,84 @@ const DEST_KEY: Record<string, string> = {
   "المغرب": "Morroco", "مغرب": "Morroco", "Morocco": "Morroco", "Morroco": "Morroco", "مراكش": "Morroco", "الدار البيضاء": "Morroco", "الدار البيضا": "Morroco", "طنجة": "Morroco", "أكادير": "Morroco", "اكادير": "Morroco", "الصويرة": "Morroco", "اغافاي": "Morroco", "الرباط": "Morroco",
 };
 
+// ── تصنيف توزيعات المغرب حسب تكلفة التنقلات بين المدن (شاشة التسعير فقط) ──────
+// المالكة (٢١ أكتوبر ٢٠٢٦): جنب كل توزيع جاهز للمغرب، وسم يرتّبه حسب رخص التنقلات
+// داخل نفس عدد الأيام: الأرخص-١/٢/٣ ثم متوسط (الرابع) ثم الأغلى-١/٢… كل ما ارتفع السعر.
+// يُحسب حتميّاً من أسعار الانتقالات في جدول tours، ويُعاد فقط عند تمرير rank=transfers
+// (لا يظهر في نموذج العميل العام). يُجمع تنقّل المدينة↔المدينة فقط (استقبال/توديع المطار ثابت).
+const _MC_CANON: Array<[string, RegExp]> = [
+  ["Casablanca", /بيضا/],
+  ["Marrakech",  /مراكش/],
+  ["Tanger",     /طنج/],
+  ["Agadir",     /كادير|غادير/],
+  ["Agafay",     /غافاي|غفاي/],
+  ["Essaouira",  /صوير/],
+  ["Rabat",      /رباط/],
+  ["Fes",        /فاس/],
+];
+function _mcCanon(s: string): string | null {
+  const t = String(s || "");
+  for (const [c, re] of _MC_CANON) if (re.test(t)) return c;
+  return null;
+}
+function _arDigits(s: string | number): string {
+  return String(s).replace(/\d/g, (d) => "٠١٢٣٤٥٦٧٨٩"[+d]);
+}
+async function attachMoroccoTransferBadges(
+  supabase: ReturnType<typeof createClient>,
+  suggestions: Array<Record<string, unknown>>,
+): Promise<Array<Record<string, unknown>>> {
+  // مصفوفة أسعار الانتقال بين المدن (نتجاهل صفوف المطار «مطار …»)
+  const { data: tr } = await supabase
+    .from("tours")
+    .select("name,price")
+    .ilike("type", "%morroco%")
+    .like("name", "التوجه%");
+  const matrix = new Map<string, number>();
+  for (const row of (tr || []) as Array<{ name?: string; price?: number | string }>) {
+    const name = String(row.name || "");
+    if (/مطار/.test(name)) continue; // استقبال/توديع مطار — ليس تنقّلاً بين مدينتين
+    const mm = name.match(/من\s+(.+?)\s+(?:الى|الي|إلى)\s+(.+)/u);
+    if (!mm) continue;
+    const from = _mcCanon(mm[1]); const to = _mcCanon(mm[2]);
+    if (!from || !to || from === to) continue;
+    const price = Number(row.price) || 0;
+    if (price > 0) matrix.set(`${from}|${to}`, price);
+  }
+  // كلفة تنقّلات كل توزيع = مجموع أطراف المدن المتتالية
+  const citiesOf = (dist: string): string[] =>
+    String(dist || "").split(/[+\-]/).map((seg) =>
+      _mcCanon(seg.replace(/[٠-٩\d]+/g, " ").replace(/ليالي|ليلة|ليال|ليله|أيام|يوم/g, " ").trim()),
+    ).filter((c): c is string => !!c);
+  const withCost = suggestions.map((s) => {
+    const seq = citiesOf(String(s.distribution || ""));
+    let cost = 0;
+    for (let i = 0; i < seq.length - 1; i++) cost += matrix.get(`${seq[i]}|${seq[i + 1]}`) || 0;
+    return { s, cost };
+  });
+  // رتّب داخل كل بند أيام تصاعديّاً وامنح الوسم (بند من خيار واحد لا يُوسَم)
+  const byDays = new Map<number, typeof withCost>();
+  for (const w of withCost) {
+    const d = Number((w.s as { days?: number }).days) || 0;
+    (byDays.get(d) || byDays.set(d, []).get(d)!).push(w);
+  }
+  for (const group of byDays.values()) {
+    if (group.length < 2) continue; // لا شيء نقارنه
+    group.sort((a, b) => a.cost - b.cost);
+    group.forEach((w, idx) => {
+      let badge: string;
+      if (idx === 0) badge = "الأرخص -١";
+      else if (idx === 1) badge = "الأرخص -٢";
+      else if (idx === 2) badge = "الأرخص -٣";
+      else if (idx === 3) badge = "متوسط";
+      else badge = `الأغلى -${_arDigits(idx - 3)}`;
+      (w.s as Record<string, unknown>).transferBadge = badge;
+      (w.s as Record<string, unknown>).transferCost = w.cost;
+    });
+  }
+  return suggestions;
+}
+
 function randToken(len = 24): string {
   const bytes = new Uint8Array(len);
   crypto.getRandomValues(bytes);
@@ -422,6 +500,11 @@ Deno.serve(async (req) => {
           departure_airport: dep || s.departure_airport,
         };
       });
+    }
+    // شاشة التسعير (team.html) تمرّر rank=transfers → نرفق وسم تكلفة التنقلات للمغرب فقط.
+    // نموذج العميل العام لا يمرّره، فرده يبقى بلا أي تسعير.
+    if (key === "Morroco" && url.searchParams.get("rank") === "transfers") {
+      try { suggestions = await attachMoroccoTransferBadges(supabase, suggestions); } catch (_e) { /* لا نُفشل الرد */ }
     }
     return json({ suggestions });
   }
