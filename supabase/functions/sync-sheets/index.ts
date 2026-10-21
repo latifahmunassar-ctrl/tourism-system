@@ -580,9 +580,23 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
     const areaRaw = get(row, "area");
     const area = (areaRaw && areaRaw.toLowerCase() !== city.toLowerCase()) ? areaRaw : "";
 
-    // رابط صفحة الفندق — نقبل فقط رابطاً صريحاً http(s) (نتجاهل أي نص آخر في الخانة).
+    // رابط صفحة الفندق — نختصره إلى صيغة قصيرة «h.html?b=<مسار بوكينج>» حتى لا يتقصّ
+    // في عارضات الـPDF/واتساب فيرتدّ العميل لصفحة بوكينج العامة. نقبل: رابط h.html?u=
+    // (مُشفّر)، أو رابط بوكينج مباشر — ونستخرج مسار الفندق فقط. أي رابط http آخر يبقى
+    // كما هو، وأي رابط قصير مُختصَر مسبقاً يمرّ دون تغيير (idempotent).
     const linkRaw = (get(row, "link") || "").trim();
-    const link = /^https?:\/\//i.test(linkRaw) ? linkRaw : "";
+    let link = "";
+    if (/^https?:\/\//i.test(linkRaw)) {
+      let bookingUrl = "";
+      const um = linkRaw.match(/[?&]u=([^&]+)/);
+      if (/madartrip\.com\/h\.html/i.test(linkRaw) && um) {
+        try { bookingUrl = decodeURIComponent(um[1]); } catch { bookingUrl = um[1]; }
+      } else if (/booking\.com/i.test(linkRaw)) {
+        bookingUrl = linkRaw;
+      }
+      const pm = bookingUrl.match(/booking\.com\/(hotel\/[^?#\s]+)/i);
+      link = pm ? `https://madartrip.com/h.html?b=${pm[1]}` : linkRaw;
+    }
 
     const baseRec = {
       name:               hotelName,
