@@ -2433,6 +2433,19 @@ function travelDateToISO(s: string): string | null {
   return null;
 }
 
+// بالي: المنطقة الفرعية مخزّنة في location («Bali -Seminyak - indonesia») لا في عمود area.
+// نشتقّها بالعربي لتُحفظ في سطر الفندق (AREA) وتُعرض في الـPDF وتبقى عند تبديل الفندق.
+function _baliSubArea(location: string): string {
+  const cityPart = String(location || "").split(" - ")[0];
+  if (!/^\s*bali\b/i.test(cityPart)) return "";
+  const sub = cityPart.replace(/^\s*bali\b\s*-?\s*/i, "").trim();
+  const SUB: Record<string, string> = {
+    "seminyak": "سيمنياك", "ubud": "أوبود", "kuta": "كوتا",
+    "nusa dua": "نوسا دوا", "nusadua": "نوسا دوا", "jimbaran": "جيمباران",
+    "canggu": "تشانغو", "sanur": "سانور",
+  };
+  return sub ? (SUB[sub.toLowerCase()] || sub) : "";
+}
 async function handleListHotels(body: {
   dest?: string; region?: string; occupancy?: number | string; current?: string; date?: string; haram?: string; area?: string; kind?: string;
 }): Promise<Response> {
@@ -2579,7 +2592,7 @@ async function handleListHotels(body: {
         price_per_night: Number(h.price_per_night) || 0,
         includes_breakfast: !!h.includes_breakfast,
         occupancy: h.occupancy || "",            // نص الإشغال كما في الشيت
-        area: h.area || "",                       // الحي/المنطقة الفرعية (أحياء القاهرة…)
+        area: (String(h.area || "").trim()) || _baliSubArea(String(h.location || "")),  // الحي/المنطقة (القاهرة…)؛ لبالي نشتقّها من location
         link: h.link || "",                       // رابط صفحة الفندق (يُعرض في ملف العميل)
         kind: hotelKind(String(h.hotel_type || "")),  // نوع السكن: فندق/محمية
         hotel_type: h.hotel_type || "",           // القيمة الخام من عمود Hotel Type

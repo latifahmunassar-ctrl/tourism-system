@@ -1674,9 +1674,22 @@ export function formatProgram(data: ProgramData): string {
       : sh.hotel.room_type;
     // الحي (عمود L): يُلحَق كوسم ختامي | AREA:<الحي> لا يكسر الحقول السبعة، ويقرأه
     // البي دي اف ودروب ليست مصر. فارغ لمعظم الوجهات فلا يُضاف.
-    const areaSeg = (sh.hotel.area && String(sh.hotel.area).trim())
+    let areaSeg = (sh.hotel.area && String(sh.hotel.area).trim())
       ? ` | AREA:${String(sh.hotel.area).trim()}`
       : "";
+    // بالي: المدينة تُعرَض «بالي» فقط، لكن المنطقة (كوتا/سيمنياك/أوبود/نوسا دوا/جيمباران)
+    // مخزّنة في location («Bali -Seminyak - indonesia») لا في عمود area. نستخرجها ونُخرجها
+    // كوسم AREA بالعربي ليعرضها ملف العميل («الحي/المنطقة: سيمنياك») جنب اسم الفندق.
+    if (!areaSeg && String(sh.city) === "Bali") {
+      const sub = String(sh.hotel.location || "").split(" - ")[0].replace(/^\s*bali\b\s*-?\s*/i, "").trim();
+      const SUB_AR: Record<string, string> = {
+        "seminyak": "سيمنياك", "ubud": "أوبود", "kuta": "كوتا",
+        "nusa dua": "نوسا دوا", "nusadua": "نوسا دوا", "jimbaran": "جيمباران",
+        "canggu": "تشانغو", "sanur": "سانور",
+      };
+      const subAr = sub ? (SUB_AR[sub.toLowerCase()] || sub) : "";
+      if (subAr) areaSeg = ` | AREA:${subAr}`;
+    }
     // رابط صفحة الفندق: وسم ختامي | LINK:<url> على غرار AREA — لا يكسر الحقول السبعة،
     // ويقرأه البي دي اف ليعرض «اضغط هنا لمشاهدة الفندق» قابلاً للنقر. (الرابط بلا «|».)
     const linkSeg = (sh.hotel.link && /^https?:\/\//i.test(String(sh.hotel.link).trim()))
