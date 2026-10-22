@@ -2105,12 +2105,13 @@ async function changeAccKind(hidx, kind){
     if(!cand.length){ addMessage('sys',`ما فيه «${kind}» في ${region}. جرّبي مدينة ثانية أو «نوع السكن: الكل».`); if(sel) sel.value=''; accMode[hidx]=''; return; }
     accMode[hidx] = kind;                                  // احصر قائمة التبديل على النوع
     const target = metaPersons() || occN || 2;
-    const exact = cand.filter(h => +h.capacity === target);
-    const fitting = cand.filter(h => +h.capacity >= target);
-    let pick, relaxed = false;
-    if(exact.length){ pick = exact; } else if(fitting.length){ pick = fitting; relaxed = true; } else { pick = cand; relaxed = true; }
-    pick.sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
-    const h = pick[0];
+    // الأرخص دائماً: نفضّل السكن الذي يتّسع للعدد (سعة ≥ المطلوب أو سعة مجهولة)، ونأخذ
+    // الأرخص بينها. لو ولا واحد يتّسع، نأخذ الأرخص مطلقاً مع تنبيه.
+    const fits = cand.filter(h => !(+h.capacity) || +h.capacity >= target);
+    const pool = fits.length ? fits : cand;
+    const relaxed = !fits.length;
+    pool.sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
+    const h = pool[0];
     const newLine = [
       h.name, p[1]||'', (h.stars||p[2]||'')+' نجوم', _roomWithCap(h, ''),
       (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
