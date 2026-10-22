@@ -2075,12 +2075,55 @@ async function changeHotelArea(hidx, area){
 // ── 🇮🇩 بالي: اختيار «فيلا» أو «فيلا مع مسبح خاص» → أرخص سكن مطابق بنفس المنطقة ──
 // المدينة بالي؟ (الفلل خاصّية بالي فقط). الكشف من حقل المدينة p[1] في سطر الفندق.
 function _regionIsBali(r){ return /بالي|bali/i.test(String(r||'')); }
-// 🇿🇦 جنوب أفريقيا: يضبط فلتر «نوع السكن» للصف (فندق/محمية/الكل). لا يبدّل الفندق تلقائيّاً —
-// فقط يحصر قائمة تبديل الفندق (hswFetch→list_hotels kind). لو القائمة مفتوحة يُعيد تحميلها.
-function changeAccKind(hidx, kind){
-  accMode[hidx] = (kind === 'all') ? '' : kind;   // 'all'/'' = بلا فلتر
-  const cell = document.querySelector(`.hsw-cell[data-hidx="${hidx}"]`);
-  if(cell){ cell.dataset.loaded = ''; if(cell.classList.contains('open')) hswFetch(cell); }  // أبطِل الكاش ليُعاد التحميل مفلتراً
+// 🇿🇦 جنوب أفريقيا: اختيار «محمية»/«فندق» → يبدّل الفندق تلقائيّاً لأرخص سكن من النوع المختار
+// بنفس المدينة (مثل فلتر الفلل في بالي)، ويحصر قائمة التبديل على ذلك النوع. «الكل» يرفع الفلتر
+// ويُبقي الفندق الحالي. ما فيه النوع في تلك المدينة → تنبيه وإرجاع للوضع السابق.
+async function changeAccKind(hidx, kind){
+  const sel = document.querySelector(`.villa-sel[onchange*="changeAccKind(${hidx},"]`);
+  try{
+    kind = String(kind||'').trim();
+    if(kind === '' || kind === 'all'){                    // الكل → ارفع الفلتر، أبقِ الفندق
+      accMode[hidx] = '';
+      if(typeof lastProgramRaw==='string' && lastProgramRaw) buildReview(lastProgramRaw);
+      return;
+    }
+    const lines = parseHotelLinesFromRaw(lastProgramRaw);
+    const oldLine = lines[hidx];
+    if(!oldLine){ addMessage('sys','تعذّر: لم أجد سطر الفندق.'); if(sel) sel.value=''; return; }
+    const p = oldLine.split('|').map(x=>x.trim());
+    const region = p[1]||'';
+    const occN = parseInt((arabicDigitsToLatin(String(p[3]||'')).match(/يتسع\s*(\d+)/)||[])[1]||'0',10) || 0;
+    const dest = getLine(lastProgramRaw,'DEST')||'';
+    const date = getLine(lastProgramRaw,'DATE_FROM')||'';
+    const occReq = occN || metaPersons() || 2;
+    addMessage('sys', `🔎 أبحث عن أرخص ${kind} في ${region}…`);
+    const res = await fetch(SUPABASE_URL, { method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
+      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: occReq, current:p[0]||'', date, kind }) });
+    const data = await res.json();
+    const cand = data.hotels || [];
+    if(!cand.length){ addMessage('sys',`ما فيه «${kind}» في ${region}. جرّبي مدينة ثانية أو «نوع السكن: الكل».`); if(sel) sel.value=''; accMode[hidx]=''; return; }
+    accMode[hidx] = kind;                                  // احصر قائمة التبديل على النوع
+    const target = metaPersons() || occN || 2;
+    const exact = cand.filter(h => +h.capacity === target);
+    const fitting = cand.filter(h => +h.capacity >= target);
+    let pick, relaxed = false;
+    if(exact.length){ pick = exact; } else if(fitting.length){ pick = fitting; relaxed = true; } else { pick = cand; relaxed = true; }
+    pick.sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
+    const h = pick[0];
+    const newLine = [
+      h.name, p[1]||'', (h.stars||p[2]||'')+' نجوم', _roomWithCap(h, ''),
+      (h.price_per_night||0)+' ريال/ليلة', p[5]||'',
+      (h.meals ? ('ما يشمل: ' + h.meals) : (h.includes_breakfast ? 'ما يشمل: إفطار مشمول' : (p[6] || '')))
+    ].join(' | ') + _areaSeg(h.area) + _linkSeg(h.link);
+    const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
+    if(newRaw === lastProgramRaw){
+      addMessage('sys', `🏨 ${region}: «${h.name}» هو بالفعل أرخص ${kind}. القائمة محصورة الآن على ${kind}.`);
+      if(typeof lastProgramRaw==='string' && lastProgramRaw) buildReview(lastProgramRaw);
+      return;
+    }
+    applyHotelRawChange(newRaw, `🏨 ${region}: أرخص ${kind} لـ${target} ${target>2?'أشخاص':'شخصين'} = «${h.name}» ${(h.stars?h.stars+'★ ':'')}(${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxed?' ⚠️ اخترتُ الأقرب للعدد.':''} · القائمة محصورة الآن على ${kind} (للرجوع: «نوع السكن: الكل»).`);
+  }catch(e){ addMessage('sys','خطأ أثناء جلب «'+kind+'»: ' + (e && e.message ? e.message : e)); if(sel) sel.value=''; }
 }
 // kind: 'villa' = أي فيلا · 'pool' = فيلا فيها مسبح خاص (villa + pool معاً).
 // يقلّد changeHotelArea: يجلب فنادق نفس المنطقة الفرعية (عبر current)، يفلتر الفلل،
