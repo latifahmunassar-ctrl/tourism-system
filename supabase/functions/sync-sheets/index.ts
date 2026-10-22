@@ -26,7 +26,7 @@ const CORS_HEADERS = {
   "Content-Type": "application/json",
 };
 
-const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco"];
+const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "  Sri lanka"];
 
 // Per-destination canonical-city patterns — MUST stay in sync with DEST_CITIES
 // in Tourism-AI/index.ts (same canonical names the builder groups by). Used
@@ -34,6 +34,13 @@ const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "
 // city's tour block (e.g. "جولات وانتقالات اسطنبول" → Istanbul), so every tour
 // under that header inherits the city even when its own name never mentions it.
 const SECTION_CITY_DEFS: Record<string, Array<{ canonical: string; pattern: RegExp }>> = {
+  "Sri lanka": [
+    { canonical: "Colombo",      pattern: /كولومبو|colombo/i },
+    { canonical: "Negombo",      pattern: /ني[جغ]ومبو|negombo/i },
+    { canonical: "Kandy",        pattern: /كاندي|kandy/i },
+    { canonical: "Nuwara Eliya", pattern: /نوارا\s*ا?يليا|نوارا|nuwara/i },
+    { canonical: "Bentota",      pattern: /بنتوتا|bentota/i },
+  ],
   vietnam: [
     { canonical: "Ha Noi",      pattern: /هانوي|hanoi|ha\s*noi/i },
     { canonical: "Sapa",        pattern: /سابا|sapa|كات\s*كات|لاو\s*تشاي|تا\s*فان|فانسيبان/i },
@@ -1133,6 +1140,7 @@ function extractSuggestions(
     Makkah:   "جدة",   // برامج العمرة تدخل/تخرج عبر جدة (بلا سطر مطار في عمود الاقتراحات)
     China:    "Shanghai",  // برامج الصين تبدأ/تنتهي غالباً بشنغهاي (عمود الاقتراحات بلا سطر مطار)
     Morroco:  "Marrakech", // المغرب متعدّد البوابات؛ الوصول/المغادرة يُشتقّان من أول/آخر مدينة بالتوزيع، وإلا مراكش
+    "Sri lanka": "Colombo", // سيرلانكا مطار واحد (كولومبو) — القدوم/المغادرة = كولومبو دائماً
   };
   for (let i = headerRow + 1; i < rows.length; i++) {
     const rawCell = (rows[i][colIdx] || "").trim();

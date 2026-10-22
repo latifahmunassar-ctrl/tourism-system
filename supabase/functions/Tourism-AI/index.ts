@@ -62,6 +62,7 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     [/مصر|egypt|القاهر[ةه]|cairo|[أا]هرامات|الجيز[ةه]|giza|الاقصر|الأقصر|luxor|[أا]سوان|aswan|شرم\s*الشيخ|sharm|الغردق[ةه]|hurghada/i, "Egypt"],
     // المغرب — مدن: مراكش/الدار البيضاء/طنجة/أكادير/اغافاي/الصويرة/الرباط.
     [/المغرب|مغرب|morocco|مراكش|marrakech|marrakesh|الدار\s*البيضاء?|الدارالبيضاء?|casablanca|طنج[ةه]|tanger|tangier|[أا][كغ]ادير|agadir|[أا]غافاي|agafay|الصوير[ةه]|essaouira|الرباط|rabat|فاس|fès|fes|fez/i, "Morroco"],
+    [/سيرلانكا|سريلانكا|سري\s*لانكا|sri\s*lanka|srilanka|كولومبو|colombo|كاندي|kandy|ني[جغ]ومبو|negombo|نوارا|nuwara|بنتوتا|bentota/i, "Sri lanka"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;
@@ -210,6 +211,13 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Essaouira",  pattern: /(?<!ت)(?:ال)?صوير[ةه]|صويرا|essaouira/i },
     { canonical: "Rabat",      pattern: /الرباط|rabat/i },
     { canonical: "Fes",        pattern: /فاس|فآس|fès|fes|fez/i },
+  ],
+  "Sri lanka": [
+    { canonical: "Colombo",      pattern: /كولومبو|colombo/i },
+    { canonical: "Negombo",      pattern: /ني[جغ]ومبو|negombo/i },
+    { canonical: "Kandy",        pattern: /كاندي|kandy/i },
+    { canonical: "Nuwara Eliya", pattern: /نوارا\s*ا?يليا|نوارا|nuwara/i },
+    { canonical: "Bentota",      pattern: /بنتوتا|bentota/i },
   ],
 };
 
@@ -809,6 +817,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
     "Cairo": "القاهرة",
     "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط", "Fes": "فاس",
+    "Colombo": "كولومبو", "Negombo": "نيجومبو", "Kandy": "كاندي", "Nuwara Eliya": "نوارا ايليا", "Bentota": "بنتوتا",
   };
   const formatBedScope = (cities: string[]): string => cities.flatMap(c => {
     const ar = CITY_AR[c];
@@ -3707,6 +3716,7 @@ Deno.serve(async (req) => {
         "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
         "Shanghai": "شنغهاي", "Beijing": "بكين", "Hangzhou": "هانغتشو", "Hong Kong": "هونغ كونغ", "London": "لندن", "Amsterdam": "أمستردام", "Guangzhou": "جوانزو", "Cairo": "القاهرة",
         "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط", "Fes": "فاس",
+        "Colombo": "كولومبو", "Negombo": "نيجومبو", "Kandy": "كاندي", "Nuwara Eliya": "نوارا ايليا", "Bentota": "بنتوتا",
       };
       // Distribution-change follow-up: employee typed a NEW city/nights split
       // in chat to reshape an existing program (e.g. "٢ بانكوك ٤ كوساموي").
