@@ -3385,6 +3385,52 @@ Deno.serve(async (req) => {
     if (reqBody && reqBody.action === "makkah_transport_plan") return await handleMakkahTransportPlan(reqBody);
     if (reqBody && reqBody.action === "makkah_flights") return await handleMakkahFlights();
 
+    // ── rank_suggestions: يرتّب توزيعات الوجهة حسب **التكلفة الإجمالية** للتاريخ المختار ──
+    // يبني كل توزيع محليّاً (بيانات الوجهة تُجلب مرة وحدة وتُمرّر للبناء) ويقرأ TOTAL_GROUP،
+    // فالوسم «الأرخص -N» **ديناميكي حسب التاريخ** (أسعار الفنادق موسمية). cityArabicNames={}
+    // لأن الإجمالي لا يعتمد على أسماء العرض. حاليّاً يُستدعى لإندونيسيا من الواجهة.
+    if (reqBody && reqBody.action === "rank_suggestions") {
+      try {
+        const destAr = String(reqBody.dest || "").trim();
+        const destKey = destAr ? detectDestination([{ role: "user", content: destAr }]) : null;
+        const days = parseInt(String(reqBody.days ?? ""), 10) || 0;
+        const date = String(reqBody.date || "").trim();
+        const pax = parseInt(String(reqBody.pax ?? ""), 10) || 2;
+        if (!destKey || !days) return new Response(JSON.stringify({ suggestions: [] }), { headers: CORS_HEADERS });
+        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const cityDefs = DEST_CITIES[destKey] || [];
+        const [hotels, tours, flights, trains] = await Promise.all([
+          fetchAllRows<HotelRow>((() => supabase.from("hotels").select("*").ilike("location", `% - ${destKey}`)) as never),
+          fetchAllRows<TourRow>((() => supabase.from("tours").select("*").eq("type", destKey)) as never),
+          fetchAllRows<FlightRow>((() => supabase.from("flights").select("*").eq("destination", destKey)) as never),
+          fetchAllRows<FlightRow>((() => supabase.from("trains").select("*").eq("destination", destKey)) as never),
+        ]);
+        const fetchData = async () => ({ hotels, tours, flights, trains: trains as unknown as [] });
+        const { data: sugs } = await supabase.from("package_suggestions")
+          .select("distribution,arrival_airport,departure_airport").eq("destination", destKey).eq("days", days);
+        const results: Array<{ distribution: string; arrival_airport: string; departure_airport: string; total: number }> = [];
+        for (const s of (sugs || []) as Array<{ distribution: string; arrival_airport: string; departure_airport: string }>) {
+          const text = `${destAr}، ${days} أيام، ${s.distribution}، ${pax} ${pax === 1 ? "شخص" : "أشخاص"}، فنادق 5 نجوم، مع جولات وانتقالات، بتاريخ ${date}`;
+          try {
+            const req = parseTripRequest([{ role: "user", content: text }], cityDefs);
+            (req as { adults: number }).adults = pax;
+            if (!canBuildLocally(req)) continue;
+            const r = await buildLocalProgram(req, cityDefs, fetchData as never, {});
+            if (!r.ok) continue;
+            const m = r.program.match(/TOTAL_GROUP:\s*([\d,٬]+)/);
+            const total = m ? parseInt(m[1].replace(/[,٬]/g, ""), 10) : 0;
+            if (total > 0) results.push({ distribution: s.distribution, arrival_airport: s.arrival_airport, departure_airport: s.departure_airport, total });
+          } catch (_e) { /* تخطَّ التوزيع الذي يفشل بناؤه */ }
+        }
+        results.sort((a, b) => a.total - b.total);
+        const arNum = (n: number) => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[+d]);
+        const ranked = results.map((r, i) => ({ ...r, badge: `الأرخص -${arNum(i + 1)}` }));
+        return new Response(JSON.stringify({ suggestions: ranked, date, pax }), { headers: CORS_HEADERS });
+      } catch (e) {
+        return new Response(JSON.stringify({ suggestions: [], error: (e as Error).message }), { headers: CORS_HEADERS });
+      }
+    }
+
 
     // ── groups_raw: صفوف تبويب جروب خامّاً (تشخيص وتحديد الخلايا) ──
     if (reqBody && reqBody.action === "groups_raw") {

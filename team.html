@@ -3183,6 +3183,32 @@ function bfRenderAirportOptions(){
   if(prev && [...aSel.options].some(o=>o.value===prev)) aSel.value = prev;   // حافظ على الاختيار
 }
 function bfDaysAvail(){ const p=bfCurPair(); return [...new Set(BF_SUGS.filter(s=>bfPairOf(s)===p).map(s=>+s.days))].sort((a,b)=>a-b).join('، '); }
+// وسم «الأرخص -N» بالتكلفة الإجمالية (فنادق التاريخ + جولات + تنقلات) — ديناميكي حسب
+// التاريخ. يستدعي rank_suggestions في السيرفر (يبني كل توزيع محليّاً). إندونيسيا حاليّاً.
+async function bfFetchRanking(){
+  const dest = document.getElementById('bf-dest').value||'';
+  if(!/إندونيسيا|اندونيسيا/.test(dest)) return;                 // إندونيسيا فقط حاليّاً
+  const list = document.getElementById('bf-sugList'); if(!list) return;
+  const days = +document.getElementById('bf-days').value||0;
+  const date = (document.getElementById('bf-date')||{}).value||'';
+  const pax = +(document.getElementById('bf-adults')||{}).value||2;
+  const ranks = list.querySelectorAll('.bf-rank'); if(!ranks.length || !days) return;
+  if(!date){ ranks.forEach(s=>s.innerHTML=`<span style="font-size:11px;color:#b45309;margin-inline-start:6px">⚠️ أدخل تاريخ السفر لحساب الأرخص</span>`); return; }
+  ranks.forEach(s=>s.innerHTML=`<span style="font-size:10.5px;color:#8a97a5;margin-inline-start:6px">⏳ أحسب التكلفة…</span>`);
+  try{
+    const res = await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},body:JSON.stringify({action:'rank_suggestions',dest,days,date,pax})});
+    const data = await res.json();
+    const norm = s => String(s||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\s+/g,'').trim();
+    const map = {}; (data.suggestions||[]).forEach(x=>{ map[norm(x.distribution)] = x; });
+    list.querySelectorAll('.bf-sug').forEach(el=>{
+      const sp = el.querySelector('.bf-rank'); if(!sp) return;
+      const info = map[norm(el.dataset.dist||'')];
+      sp.innerHTML = info
+        ? `<span style="font-weight:800;font-size:11.5px;color:#15803d;background:#dcfce7;border-radius:7px;padding:2px 8px;margin-inline-start:6px;white-space:nowrap">💰 ${bfEsc(info.badge)} · ${Number(info.total).toLocaleString()} ريال</span>`
+        : '';
+    });
+  }catch(e){ ranks.forEach(s=>s.innerHTML=''); }
+}
 function bfShowOptions(){
   bfChosen = null;
   const days = +document.getElementById('bf-days').value||0;
@@ -3215,11 +3241,12 @@ function bfShowOptions(){
     const _tbColor = /الأرخص/.test(_tb) ? '#15803d' : (/الأغلى/.test(_tb) ? '#b45309' : '#6b7280');
     const _tbBg    = /الأرخص/.test(_tb) ? '#dcfce7' : (/الأغلى/.test(_tb) ? '#fef3c7' : '#f3f4f6');
     const badge = _tb ? `<span style="font-weight:800;font-size:11.5px;color:${_tbColor};background:${_tbBg};border-radius:7px;padding:2px 7px;margin-inline-start:6px;white-space:nowrap">(${bfEsc(_tb)})</span>` : '';
-    return `<div class="bf-sug" data-i="${i}">
-      <div><span class="bf-sug-d">${s.days} أيام</span>${tag}${badge}</div>
+    return `<div class="bf-sug" data-i="${i}" data-dist="${hswEsc(s.distribution)}">
+      <div><span class="bf-sug-d">${s.days} أيام</span>${tag}${badge}<span class="bf-rank"></span></div>
       <div class="bf-sug-dist">${bfEsc(arabicDigitsToLatin(s.distribution))}</div>
     </div>`;
   }).join('');
+  bfFetchRanking();   // وسم «الأرخص -N» بالتكلفة الإجمالية للتاريخ (إندونيسيا حاليّاً)
   const els = [...list.querySelectorAll('.bf-sug')];
   els.forEach(el=>el.onclick=()=>{
     els.forEach(x=>x.classList.remove('sel')); el.classList.add('sel');
@@ -3363,6 +3390,8 @@ function bfInit(){
     const h = document.getElementById('bf-sugHint');
     h.textContent = 'اضغط «عرض الخيارات» لعرض التوزيع المطابق لعدد الأيام.'; h.style.display='';
   });
+  // تغيير التاريخ/الأشخاص → أعِد حساب وسم «الأرخص» (ديناميكي حسب الفترة) لو الخيارات معروضة
+  ['bf-date','bf-adults'].forEach(id=>{ const e=document.getElementById(id); if(e) e.addEventListener('change', ()=>{ if(document.querySelectorAll('#bf-sugList .bf-sug').length) bfFetchRanking(); }); });
   bfExpected(); bfAddCity();
 }
 if(document.readyState!=='loading') bfInit();
