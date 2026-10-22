@@ -48,7 +48,7 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     [/(?:ال)?بوسن[ةه]|bosnia|سراييفو|sarayevo|sarajevo|موستار|mostar|بيهاتش|bihać|bihac/i, "Bosnia"],
     [/تايلاند|تايلند|thailand|بانكوك|bangkok|بوكيت|بوكت|phuket|كرابي|krabi|شيانغ|chiang|باتايا|بتايا|pattaya|ساموي|samui/i, "thailand"],
     [/عُمان(?!ي)|عمان(?!ي)|سلطنة\s*عمان|\boman\b|صلال[ةه]|salalah/i, "Oman"],
-    [/جنوب\s*(?:ال)?[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبر[جغ]|johannesburg|(?:هارمونس|هارمانوس|هيرمانوس|هرمانوس)|hermanus|بريتوريا|pretoria|سن\s*سيتي|sun\s*city|كروجر|kruger/i, "South Africa"],
+    [/جنوب\s*(?:ال)?[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبر[جغ]|johannesburg|(?:هارمونس|هارمانوس|هيرمانوس|هرمانوس)|hermanus|بريتوريا|pretoria|سن\s*سيتي|sun\s*city|كروجر|kruger|جاردن\s*رو[تط]|قاردن\s*رو[تط]|garden\s*route/i, "South Africa"],
     [/موريشيوس|موريش[سي]|mauritius|بورت\s*لويس|port\s*louis/i, "mauritius"],
     [/[إا]ن[جك]لترا|بريطانيا|بريطاني|لندن|england|london|المملكة\s*المتحدة/i, "England"],
     // ⚠️ «صين» وحدها كانت تطابق داخل «شخصين» (شخص+ين) فتُلتقَط الصين خطأً لأي وجهة
@@ -171,6 +171,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Pretoria",     pattern: /بريتوريا|pretoria/i },
     { canonical: "Sun City",     pattern: /سن\s*سيتي|sun\s*city/i },
     { canonical: "Kruger",       pattern: /كروجر|كروغر|kruger/i },
+    { canonical: "Garden Route", pattern: /جاردن\s*رو[تط]|قاردن\s*رو[تط]|garden\s*route/i },
   ],
   // موريشيوس = جزيرة/موقع واحد؛ canonical واحد يطابق فنادقها (مدينتها «mauritius») ومعالمها.
   mauritius: [
@@ -816,6 +817,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     "Sarajevo": "سراييفو", "Mostar": "موستار", "Bihać": "بيهاتش",
     "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
     "Cairo": "القاهرة",
+    "Cape Town": "كيب تاون", "Hermanus": "هارمانوس", "Garden Route": "جاردن روت", "Johannesburg": "جوهانسبرغ", "Pretoria": "بريتوريا", "Sun City": "سن سيتي", "Kruger": "كروجر",
     "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط", "Fes": "فاس",
     "Colombo": "كولومبو", "Negombo": "نيجومبو", "Kandy": "كاندي", "Nuwara Eliya": "نوارا ايليا", "Bentota": "بنتوتا",
   };
@@ -3715,6 +3717,7 @@ Deno.serve(async (req) => {
         "Sarajevo": "سراييفو", "Mostar": "موستار", "Bihać": "بيهاتش",
         "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
         "Shanghai": "شنغهاي", "Beijing": "بكين", "Hangzhou": "هانغتشو", "Hong Kong": "هونغ كونغ", "London": "لندن", "Amsterdam": "أمستردام", "Guangzhou": "جوانزو", "Cairo": "القاهرة",
+        "Cape Town": "كيب تاون", "Hermanus": "هارمانوس", "Garden Route": "جاردن روت", "Johannesburg": "جوهانسبرغ", "Pretoria": "بريتوريا", "Sun City": "سن سيتي", "Kruger": "كروجر",
         "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط", "Fes": "فاس",
         "Colombo": "كولومبو", "Negombo": "نيجومبو", "Kandy": "كاندي", "Nuwara Eliya": "نوارا ايليا", "Bentota": "بنتوتا",
       };
