@@ -218,7 +218,7 @@ function parseDestination(text: string): string | null {
     [/البوسنة|البوسنه|bosnia|سراييفو|sarajevo|موستار|mostar|بيهاتش|bihać|bihac/i, "Bosnia"],
     [/تايلاند|تايلند|thailand|بانكوك|bangkok|بوكيت|بوكت|phuket|كرابي|krabi|شيانغ|chiang|باتايا|بتايا|pattaya|ساموي|samui/i, "thailand"],
     [/عُمان(?!ي)|عمان(?!ي)|سلطنة\s*عمان|\boman\b|صلال[ةه]|salalah/i, "Oman"],
-    [/جنوب\s*(?:ال)?[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبر[جغ]|johannesburg|(?:هارمونس|هارمانوس|هيرمانوس|هرمانوس)|hermanus|بريتوريا|pretoria|سن\s*سيتي|sun\s*city|كروجر|kruger|جاردن\s*رو[تط]|قاردن\s*رو[تط]|garden\s*route/i, "South Africa"],
+    [/جنوب\s*(?:ال)?[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبر[جغ]|johannesburg|(?:هارمونس|هارمانوس|هيرمانوس|هرمانوس)|hermanus|بريتوريا|pretoria|سن\s*سيتي|sun\s*city|كروجر|kruger|جارد[نت]\s*رو[تط]|قارد[نت]\s*رو[تط]|garden\s*route/i, "South Africa"],
     [/موريشيوس|موريش[سي]|mauritius|بورت\s*لويس|port\s*louis/i, "mauritius"],
     [/[إا]ن[جك]لترا|بريطانيا|بريطاني|لندن|england|london|المملكة\s*المتحدة/i, "England"],
     // ⚠️ «صين» المجرّدة كانت تطابق داخل «شخصين» فتُلتقَط الصين خطأً — نفس إصلاح index.ts.
