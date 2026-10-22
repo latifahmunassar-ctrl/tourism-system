@@ -1592,8 +1592,16 @@ export function pickTourVariantLabel(tour: TourRow, paxCount: number, isShared: 
 // («1- 3 Pax Sedan (سيدان )» → «سيدان»)؛ باقي الوجهات بلا قوس عربي تُرجع "" فلا
 // تتأثر إطلاقاً (التحديد محصور على صلالة بهذا الشرط دون حاجة لفحص الوجهة).
 export function vehicleTypeFromLabel(label: string): string {
-  const ar = String(label || "").match(/\(([^)]*[؀-ۿ][^)]*)\)/u);
-  return ar ? ar[1].replace(/\s+/g, " ").trim() : "";
+  const s = String(label || "");
+  // (١) نوع عربي بين قوسين (صلالة: «سيدان»/«دفع رباعي»/«باص»).
+  const ar = s.match(/\(([^)]*[؀-ۿ][^)]*)\)/u);
+  if (ar) return ar[1].replace(/\s+/g, " ").trim();
+  // (٢) نوع إنجليزي (سيرلانكا: «Pax 1-2 (sedan)» / «(SUV)» / «( Van)») → عربي.
+  if (/\bsedan\b/i.test(s)) return "سيدان";
+  if (/\bsuv\b/i.test(s)) return "دفع رباعي (SUV)";
+  if (/\bvan\b/i.test(s)) return "فان";
+  if (/\b(bus|coach)\b/i.test(s)) return "باص";
+  return "";
 }
 
 // أقصى سعة ركاب للصف (من شرائح "pax A-B")؛ 0 إذا ما فيه نطاقات معرّفة.
