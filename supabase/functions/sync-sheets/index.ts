@@ -1667,7 +1667,9 @@ Deno.serve(async (req) => {
         // تبويب مكة عرضه ٢٠٨ أعمدة: ٤١ ثلاثية From/To/Rate ثم FQ=Include و FR=تتسع.
         // أي نطاق أضيق يقصّ عمود الإشغال فتختفي شارة «يتسع» من التسعيرة.
         // unformatted=true ضروري: أسعار مكة مُنسَّقة كتواريخ («21 Jan» = 5500).
-        const rows = await readSheetRange(token, spreadsheetId, `${quotedTab}!A1:GZ500`, true);
+        // نطاق الصفوف 1500: عمود «توزيع المدن» للمغرب يطول مع تعدّد الاقتراحات/الأيام
+        // (يتجاوز 500). الـAPI يقصّ للبيانات الفعلية فلا يؤثّر على بقية التبويبات.
+        const rows = await readSheetRange(token, spreadsheetId, `${quotedTab}!A1:GZ1500`, true);
 
         // Optional dump for diagnostic — show ALL columns so we can see flight cols if present
         if (dumpTab && tab.toLowerCase() === dumpTab.toLowerCase() && debugInfo) {
