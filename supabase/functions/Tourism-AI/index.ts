@@ -3410,7 +3410,7 @@ Deno.serve(async (req) => {
           .select("distribution,arrival_airport,departure_airport").eq("destination", destKey).eq("days", days);
         const results: Array<{ distribution: string; arrival_airport: string; departure_airport: string; total: number }> = [];
         for (const s of (sugs || []) as Array<{ distribution: string; arrival_airport: string; departure_airport: string }>) {
-          const text = `${destAr}، ${days} أيام، ${s.distribution}، ${pax} ${pax === 1 ? "شخص" : "أشخاص"}، فنادق 5 نجوم، مع جولات وانتقالات، بتاريخ ${date}`;
+          const text = `${destAr}، ${days} أيام، ${s.distribution}، ${pax} ${pax === 1 ? "شخص" : "أشخاص"}، فنادق 5 نجوم، مع جولات وانتقالات، ${pax} شرائح اتصال، بتاريخ ${date}`;
           try {
             const req = parseTripRequest([{ role: "user", content: text }], cityDefs);
             (req as { adults: number }).adults = pax;

@@ -1452,6 +1452,7 @@ function setCustomerType(t){
   if(cBtn) cBtn.classList.toggle('on', t === 'company');
   if(iBtn) iBtn.classList.toggle('on', t === 'individual');
   applyAutoProfit();
+  if(typeof bfFetchRanking==='function' && document.querySelectorAll('#bf-sugList .bf-sug').length) bfFetchRanking();  // الربح يعتمد على نوع العميل → أعِد الترتيب
 }
 async function autoProfitForProgram(dest){
   await loadProfitMargins(dest);
@@ -3196,18 +3197,37 @@ async function bfFetchRanking(){
   if(!date){ ranks.forEach(s=>s.innerHTML=`<span style="font-size:11px;color:#b45309;margin-inline-start:6px">⚠️ أدخل تاريخ السفر لحساب الأرخص</span>`); return; }
   ranks.forEach(s=>s.innerHTML=`<span style="font-size:10.5px;color:#8a97a5;margin-inline-start:6px">⏳ أحسب التكلفة…</span>`);
   try{
+    try{ await loadProfitMargins(dest); }catch(_){}        // جدول الأرباح لهذه الوجهة (لحساب السعر النهائي)
     const res = await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},body:JSON.stringify({action:'rank_suggestions',dest,days,date,pax})});
     const data = await res.json();
     const norm = s => String(s||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\s+/g,'').trim();
+    // السعر النهائي = التكلفة (فنادق+جولات+تنقلات+شرائح) + هامش الربح (حسب الشريحة/الموسم/نوع العميل)
+    // فيطابق السعر الظاهر بالشاشة. لو لا جدول أرباح/خارج النطاق → نعرض التكلفة ونوضّح.
+    const mmdd = _bfDateMMDD();
+    const withProfit = (cost)=>{ const p=_rankProfit(cost, mmdd); return p==null ? {final:cost, hasProfit:false} : {final:cost+p, hasProfit:true}; };
     const map = {}; (data.suggestions||[]).forEach(x=>{ map[norm(x.distribution)] = x; });
     list.querySelectorAll('.bf-sug').forEach(el=>{
       const sp = el.querySelector('.bf-rank'); if(!sp) return;
       const info = map[norm(el.dataset.dist||'')];
-      sp.innerHTML = info
-        ? `<span style="font-weight:800;font-size:11.5px;color:#15803d;background:#dcfce7;border-radius:7px;padding:2px 8px;margin-inline-start:6px;white-space:nowrap">💰 ${bfEsc(info.badge)} · ${Number(info.total).toLocaleString()} ريال</span>`
-        : '';
+      if(!info){ sp.innerHTML=''; return; }
+      const wp = withProfit(Number(info.total));
+      const note = wp.hasProfit ? '' : ' <span style="font-weight:600;opacity:.8">(تكلفة)</span>';
+      sp.innerHTML = `<span style="font-weight:800;font-size:11.5px;color:#15803d;background:#dcfce7;border-radius:7px;padding:2px 8px;margin-inline-start:6px;white-space:nowrap">💰 ${bfEsc(info.badge)} · ${wp.final.toLocaleString()} ريال${note}</span>`;
     });
   }catch(e){ ranks.forEach(s=>s.innerHTML=''); }
+}
+function _bfDateMMDD(){ const s=String((document.getElementById('bf-date')||{}).value||''); const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? (+m[2])*100 + (+m[3]) : null; }
+// هامش الربح لتكلفة معيّنة (نفس منطق applyAutoProfit: شريحة التكلفة + الموسم + نوع العميل).
+// يرجّع null لو لا جدول أرباح أو التكلفة/التاريخ خارج النطاق (فنعرض التكلفة الخام).
+function _rankProfit(cost, mmdd){
+  if(!profitMargins.length) return null;
+  const tiers = profitMargins.filter(m => cost >= +m.cost_min && cost <= +m.cost_max);
+  if(!tiers.length) return null;
+  const seasonal = tiers.some(m => m.season_from);
+  let tier;
+  if(seasonal){ if(mmdd!=null) tier=tiers.find(m=>_seasonMatches(m,mmdd)); if(!tier) tier=tiers.find(m=>!m.season_from); if(!tier) return null; }
+  else tier = tiers[0];
+  return customerType==='company' ? (+tier.profit_company||0) : (+tier.profit_individual||0);
 }
 function bfShowOptions(){
   bfChosen = null;
