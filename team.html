@@ -1002,6 +1002,10 @@ let hotelRooms = [];
 // ويرجّعها لكل الفنادق عند «عادي». يستمر عبر إعادة بناء الجدول (مفهرس كـ hotelRooms).
 let villaMode = [];
 function vMode(i){ return villaMode[i] || ''; }
+// 🇿🇦 جنوب أفريقيا: وضع فلتر «نوع السكن» لكل صف فندق ('' = الكل / 'فندق' / 'محمية').
+// يحصر قائمة أسماء الفنادق (hswFetch→list_hotels kind) على النوع المختار. يُقرأ من عمود Hotel Type.
+let accMode = [];
+function aMode(i){ return accMode[i] || ''; }
 let _lastHotelCities = [];
 function hRooms(i){ const n = parseInt(hotelRooms[i], 10); return (n >= 1 && n <= 10) ? n : 1; }
 function setHotelRooms(i, n){ hotelRooms[i] = Math.max(1, Math.min(10, parseInt(n,10)||1)); if (typeof lastProgramRaw === 'string' && lastProgramRaw) buildReview(lastProgramRaw); }
@@ -1482,7 +1486,7 @@ async function hswFetch(cell){
     const res = await fetch(SUPABASE_URL, {
       method:'POST',
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
-      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: occ, current: cell.dataset.name || '', date: getLine(lastProgramRaw, 'DATE_FROM') || '', haram: isMakkah ? HARAM_FILTER : '' })
+      body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: occ, current: cell.dataset.name || '', date: getLine(lastProgramRaw, 'DATE_FROM') || '', haram: isMakkah ? HARAM_FILTER : '', kind: aMode(+cell.dataset.hidx) })
     });
     const data = await res.json();
     cell.dataset.loaded = '1';
@@ -2071,6 +2075,13 @@ async function changeHotelArea(hidx, area){
 // ── 🇮🇩 بالي: اختيار «فيلا» أو «فيلا مع مسبح خاص» → أرخص سكن مطابق بنفس المنطقة ──
 // المدينة بالي؟ (الفلل خاصّية بالي فقط). الكشف من حقل المدينة p[1] في سطر الفندق.
 function _regionIsBali(r){ return /بالي|bali/i.test(String(r||'')); }
+// 🇿🇦 جنوب أفريقيا: يضبط فلتر «نوع السكن» للصف (فندق/محمية/الكل). لا يبدّل الفندق تلقائيّاً —
+// فقط يحصر قائمة تبديل الفندق (hswFetch→list_hotels kind). لو القائمة مفتوحة يُعيد تحميلها.
+function changeAccKind(hidx, kind){
+  accMode[hidx] = (kind === 'all') ? '' : kind;   // 'all'/'' = بلا فلتر
+  const cell = document.querySelector(`.hsw-cell[data-hidx="${hidx}"]`);
+  if(cell){ cell.dataset.loaded = ''; if(cell.classList.contains('open')) hswFetch(cell); }  // أبطِل الكاش ليُعاد التحميل مفلتراً
+}
 // kind: 'villa' = أي فيلا · 'pool' = فيلا فيها مسبح خاص (villa + pool معاً).
 // يقلّد changeHotelArea: يجلب فنادق نفس المنطقة الفرعية (عبر current)، يفلتر الفلل،
 // يأخذ الأرخص (يفضّل اللي يتّسع للعدد)، يبدّل السطر ويعيد الحساب. ما فيه فيلا → تنبيه
@@ -3830,7 +3841,8 @@ const _newHotelCities = hotelsLines.map(l => (String(l).split('|')[1] || '').tri
 if (hotelRooms.length !== hotelsLines.length || JSON.stringify(_newHotelCities) !== JSON.stringify(_lastHotelCities)) {
   hotelRooms = hotelsLines.map(() => 1);
   hotelBeds = [];   // إعادة الضبط للافتراضي عند تغيّر هيكل البرنامج
-  villaMode = hotelsLines.map(() => '');  // إعادة ضبط فلتر «نوع السكن» لبرنامج جديد
+  villaMode = hotelsLines.map(() => '');  // إعادة ضبط فلتر «نوع السكن» (بالي) لبرنامج جديد
+  accMode   = hotelsLines.map(() => '');  // إعادة ضبط فلتر «نوع السكن» (جنوب أفريقيا) لبرنامج جديد
 }
 _lastHotelCities = _newHotelCities;
 const flightsLines = parseSection(raw, 'FLIGHTS');
@@ -4038,9 +4050,13 @@ const nameCell = `<td class="hsw-cell" data-hidx="${hidx}" data-region="${hswEsc
 // 🇮🇩 بالي: دروب ليست «نوع السكن» تحت نوع الغرفة — يجيب أرخص فيلا/فيلا بمسبح خاص بنفس المنطقة.
 const _vm = vMode(hidx);
 const villaSel = _regionIsBali(p[1]||'') ? `<select class="villa-sel" title="اختاري نوع السكن → أرخص فيلا بنفس المنطقة، وقائمة الفنادق تنحصر على الفلل" onchange="changeHotelVilla(${hidx}, this.value)"><option value=""${_vm?'':' selected'}>🏡 نوع السكن…</option><option value="normal"${_vm==='normal'?' selected':''}>عادي (كل الفنادق)</option><option value="villa"${_vm==='villa'?' selected':''}>فيلا</option><option value="pool"${_vm==='pool'?' selected':''}>فيلا مع مسبح خاص</option></select>` : '';
+// 🇿🇦 جنوب أفريقيا: قائمة «نوع السكن» تحت نوع الغرفة — تحصر قائمة تبديل الفندق على فندق/محمية.
+const _isSA = /جنوب\s*أفريقيا|south\s*africa/i.test(String(dest||''));
+const _am = aMode(hidx);
+const accSel = _isSA ? `<select class="villa-sel" title="نوع السكن → قائمة تبديل الفندق تنحصر على النوع المختار" onchange="changeAccKind(${hidx}, this.value)"><option value=""${_am===''?' selected':''}>🏨 نوع السكن: الكل</option><option value="فندق"${_am==='فندق'?' selected':''}>فندق فقط</option><option value="محمية"${_am==='محمية'?' selected':''}>محمية فقط</option></select>` : '';
 const roomCell = `<td class="rtw-cell" data-hidx="${hidx}" data-name="${hswEsc(p[0]||'')}" data-region="${hswEsc(p[1]||'')}" data-room="${hswEsc(p[3]||'')}" data-nights="${nights}" data-date="${hswEsc(_df)}">`
   + `<div class="hsw-cur" onclick="rtwToggle(this)"><span class="hsw-name">${p[3]||''}</span><span class="hsw-chev">▼</span></div>`
-  + `<div class="hsw-menu"></div>${villaSel}</td>`;
+  + `<div class="hsw-menu"></div>${villaSel}${accSel}</td>`;
 const rooms = hRooms(hidx);
 const roomsCell = `<td><select class="rooms-sel" onchange="setHotelRooms(${hidx}, this.value)">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${n===rooms?' selected':''}>${n}</option>`).join('')}</select></td>`;
 // خلية النجوم — منسدلة: تغيير الفئة يجيب أرخص فندق بالمدينة بتلك الفئة حصراً

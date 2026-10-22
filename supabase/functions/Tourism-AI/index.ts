@@ -2434,7 +2434,7 @@ function travelDateToISO(s: string): string | null {
 }
 
 async function handleListHotels(body: {
-  dest?: string; region?: string; occupancy?: number | string; current?: string; date?: string; haram?: string; area?: string;
+  dest?: string; region?: string; occupancy?: number | string; current?: string; date?: string; haram?: string; area?: string; kind?: string;
 }): Promise<Response> {
   try {
     const destAr = String(body.dest || "").trim();
@@ -2442,6 +2442,7 @@ async function handleListHotels(body: {
     const haramSel = String(body.haram || "").trim();   // فلتر قرب الحرم (مكة/المدينة)
     const current = String(body.current || "").trim();   // اسم الفندق الحالي (لتقييد المنطقة الفرعية)
     const areaSel = String(body.area || "").trim();      // فلتر الحي/المنطقة الفرعية (عمود area — مثل أحياء القاهرة)
+    const kindSel = String(body.kind || "").trim();      // فلتر نوع السكن: «فندق» أو «محمية» (عمود Hotel Type)
     const occ = parseInt(String(body.occupancy ?? "").replace(/[^\d]/g, ""), 10) || 0;
     const destKey = destAr ? detectDestination([{ role: "user", content: destAr }]) : null;
 
@@ -2451,7 +2452,7 @@ async function handleListHotels(body: {
     );
     const mkQ = () => {
       const q = supabase.from("hotels")
-        .select("name,stars,location,area,link,price_per_night,room_type,includes_breakfast,occupancy,date_from,date_to")
+        .select("name,stars,location,area,link,hotel_type,price_per_night,room_type,includes_breakfast,occupancy,date_from,date_to")
         .order("stars", { ascending: false })
         .order("price_per_night");
       return destKey ? q.ilike("location", `% - ${destKey}`) : q;
@@ -2559,6 +2560,14 @@ async function handleListHotels(body: {
       return true;
     });
 
+    // نوع السكن: «محمية» لو عمود Hotel Type يذكر Reserve/Lodge/Game/Safari/Camp أو
+    // «محمية» عربيّاً، وإلا «فندق» (الافتراضي، ويشمل الفارغ لبقية الوجهات).
+    const hotelKind = (ht: string) =>
+      /reserve|lodge|game|safari|camp|محمي[ةه]|نُزُل|نزل|معسكر|سفاري/i.test(String(ht || "")) ? "محمية" : "فندق";
+    if (kindSel === "فندق" || kindSel === "محمية") {
+      rows = rows.filter(h => hotelKind(String(h.hotel_type || "")) === kindSel);
+    }
+
     // تصنيف قرب الحرم (مكة/المدينة فقط) — يُقرأ من شيت مكة مباشرة.
     const haramMap = (destKey === "Makkah") ? await loadHaramProximity() : {};
     const hotels = rows.map(h => {
@@ -2572,6 +2581,8 @@ async function handleListHotels(body: {
         occupancy: h.occupancy || "",            // نص الإشغال كما في الشيت
         area: h.area || "",                       // الحي/المنطقة الفرعية (أحياء القاهرة…)
         link: h.link || "",                       // رابط صفحة الفندق (يُعرض في ملف العميل)
+        kind: hotelKind(String(h.hotel_type || "")),  // نوع السكن: فندق/محمية
+        hotel_type: h.hotel_type || "",           // القيمة الخام من عمود Hotel Type
         capacity: cap || capFromRoomType(String(h.room_type || "")),  // أقصى عدد تتسعه الغرفة (رقم)
         fits: !cap || !threshold || cap >= threshold,  // مطابق للعدد المطلوب؟
         haram_tags: (destKey === "Makkah") ? (haramMap[normHotelName(String(h.name || ""))] || []) : undefined,

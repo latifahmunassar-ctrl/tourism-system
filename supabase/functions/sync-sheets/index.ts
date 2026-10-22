@@ -380,6 +380,7 @@ const HEADER_ALIASES: Record<string, RegExp> = {
   dateTo:     /^(to|date\s*to|valid\s*to|الى|إلى|الى\s*تاريخ|نهاية|check\s*out)$/i,
   // رابط صفحة الفندق (booking.com…) — يُعرض كرابط مختصر قابل للنقر في ملف العميل.
   link:       /^(links?|url|رابط|الرابط|رابط\s*الفندق)$/i,
+  hotel_type: /^(hotel\s*type|نوع\s*السكن|نوع\s*الفندق|accommodation(\s*type)?)$/i,
 };
 
 function findHotelHeader(rows: string[][]): { rowIdx: number; cols: Record<string, number>; rateCols: number[] } | null {
@@ -611,6 +612,7 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
       location:           `${city} - ${destination}`,
       area,
       link,
+      hotel_type:         (get(row, "hotel_type") || "").trim(),
       room_type:          roomType || "",
       includes_breakfast: /break\s*fast|breakfast|إفطار/i.test(mealsRaw) && !/no\s*break\s*fast|no\s*breakfast|بدون\s*إفطار/i.test(mealsRaw),
       meals:              mealsAr,
