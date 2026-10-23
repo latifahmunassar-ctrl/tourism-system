@@ -232,7 +232,9 @@ Deno.serve(async (req) => {
       }
       case "settings.save": {
         const key = String(p.key || "");
-        if (!["talal_system_prompt"].includes(key)) return json({ ok: false, error: "مفتاح غير مسموح" }, 400);
+        if (!["talal_system_prompt", "admin_whatsapp", "admin_whatsapp_link"].includes(key)) {
+          return json({ ok: false, error: "مفتاح غير مسموح" }, 400);
+        }
         const { error } = await sb.from("b2b_settings").upsert({ key, value: String(p.value ?? "") });
         if (error) throw error;
         return json({ ok: true });

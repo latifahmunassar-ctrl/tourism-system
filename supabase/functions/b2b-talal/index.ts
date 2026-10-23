@@ -146,18 +146,24 @@ Deno.serve(async (req) => {
           // 3) رد سارة التلقائي (إن كان مفعّلاً للمحادثة)
           if (conv.auto_reply !== false && type === "text" && body) {
             try {
-              const { data: setting } = await supabase.from("b2b_settings")
-                .select("value").eq("key", "talal_system_prompt").maybeSingle();
-              const systemPrompt = setting?.value
-                || "أنتِ «سارة» مندوبة شراكات في العز الدولية للسفر والسياحة. رحّبي بالشركة واسألي عن اسمها واسم المسؤول، وأفيدي أن مسؤول الشراكات سيتواصل قريباً. لا تستخدمي Markdown ولا نجوم ولا عناوين — نص عادي فقط.";
+              const { data: rows } = await supabase.from("b2b_settings")
+                .select("key, value").in("key", ["talal_system_prompt", "admin_whatsapp", "admin_whatsapp_link"]);
+              const settings: Record<string, string> = Object.fromEntries((rows || []).map((r: any) => [r.key, r.value || ""]));
+              // متغيّرات الـ prompt: {admin_whatsapp} و {admin_whatsapp_link} من b2b_settings
+              const systemPrompt = (settings.talal_system_prompt
+                || "أنتِ «سارة» مندوبة شراكات في العز الدولية للسفر والسياحة. رحّبي بالشركة واسألي عن اسمها واسم المسؤول، وأفيدي أن مسؤول الشراكات سيتواصل قريباً. لا تستخدمي Markdown ولا نجوم ولا عناوين — نص عادي فقط.")
+                .replaceAll("{admin_whatsapp}", settings.admin_whatsapp || "")
+                .replaceAll("{admin_whatsapp_link}", settings.admin_whatsapp_link || "");
 
-              // سياق: آخر ١٠ رسائل للمحادثة (in→user, out→assistant)
+              // سياق: آخر ١٠ رسائل للمحادثة (in→user, out→assistant) — الأحدث ثم نعكس للترتيب الزمني
               const { data: recent } = await supabase.from("b2b_messages")
                 .select("direction, body").eq("conversation_id", conv.id)
-                .order("created_at", { ascending: true }).limit(10);
-              const history = (recent || [])
+                .order("created_at", { ascending: false }).limit(10);
+              const history = (recent || []).reverse()
                 .filter((r: any) => (r.body || "").trim())
                 .map((r: any) => ({ role: r.direction === "out" ? "assistant" : "user", content: r.body }));
+              // Anthropic يشترط أن تبدأ المحادثة برسالة user
+              while (history.length && history[0].role !== "user") history.shift();
               if (!history.length || history[history.length - 1].role !== "user") {
                 history.push({ role: "user", content: body });
               }
