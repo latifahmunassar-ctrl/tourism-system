@@ -3272,13 +3272,10 @@ function bfShowOptions(){
     const [a,b]=bfPairOf(s).split('|');
     const route = a===b ? bfAirAr(a) : `${bfAirAr(a)} → ${bfAirAr(b)}`;
     const tag = isAll ? `<span class="bf-sug-lab">✈️ ${bfEsc(route)}</span>` : (s.label?`<span class="bf-sug-lab">${bfEsc(s.label)}</span>`:'');
-    // وسم تكلفة التنقلات (المغرب): الأرخص-١/٢/٣ · متوسط · الأغلى-١/٢… — أخضر للأرخص، كهرماني للأغلى
-    const _tb = s.transferBadge || '';
-    const _tbColor = /الأرخص/.test(_tb) ? '#15803d' : (/الأغلى/.test(_tb) ? '#b45309' : '#6b7280');
-    const _tbBg    = /الأرخص/.test(_tb) ? '#dcfce7' : (/الأغلى/.test(_tb) ? '#fef3c7' : '#f3f4f6');
-    const badge = _tb ? `<span style="font-weight:800;font-size:11.5px;color:${_tbColor};background:${_tbBg};border-radius:7px;padding:2px 7px;margin-inline-start:6px;white-space:nowrap">(${bfEsc(_tb)})</span>` : '';
+    // المغرب على نفس القاعدة الجديدة الآن: الوسم القديم (تنقلات فقط، ثابت، s.transferBadge) أُلغي
+    // لصالح وسم «الأرخص -N» الديناميكي بالتكلفة الكاملة (bfFetchRanking → .bf-rank) لكل الوجهات.
     return `<div class="bf-sug" data-i="${i}" data-dist="${hswEsc(s.distribution)}">
-      <div><span class="bf-sug-d">${s.days} أيام</span>${tag}${badge}<span class="bf-rank"></span></div>
+      <div><span class="bf-sug-d">${s.days} أيام</span>${tag}<span class="bf-rank"></span></div>
       <div class="bf-sug-dist">${bfEsc(arabicDigitsToLatin(s.distribution))}</div>
     </div>`;
   }).join('');
