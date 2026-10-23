@@ -3185,10 +3185,10 @@ function bfRenderAirportOptions(){
 }
 function bfDaysAvail(){ const p=bfCurPair(); return [...new Set(BF_SUGS.filter(s=>bfPairOf(s)===p).map(s=>+s.days))].sort((a,b)=>a-b).join('، '); }
 // وسم «الأرخص -N» بالتكلفة الإجمالية (فنادق التاريخ + جولات + تنقلات) — ديناميكي حسب
-// التاريخ. يستدعي rank_suggestions في السيرفر (يبني كل توزيع محليّاً). إندونيسيا حاليّاً.
+// التاريخ. يستدعي rank_suggestions في السيرفر (يبني كل توزيع محليّاً). معمَّم على كل الوجهات.
 async function bfFetchRanking(){
   const dest = document.getElementById('bf-dest').value||'';
-  if(!/إندونيسيا|اندونيسيا/.test(dest)) return;                 // إندونيسيا فقط حاليّاً
+  if(!dest) return;                 // معمَّم على كل الوجهات؛ السيرفر يتخطّى ما لا يُبنى محليّاً ويرجّع فارغاً
   const list = document.getElementById('bf-sugList'); if(!list) return;
   const days = +document.getElementById('bf-days').value||0;
   const date = (document.getElementById('bf-date')||{}).value||'';
@@ -3282,7 +3282,7 @@ function bfShowOptions(){
       <div class="bf-sug-dist">${bfEsc(arabicDigitsToLatin(s.distribution))}</div>
     </div>`;
   }).join('');
-  bfFetchRanking();   // وسم «الأرخص -N» بالتكلفة الإجمالية للتاريخ (إندونيسيا حاليّاً)
+  bfFetchRanking();   // وسم «الأرخص -N» بالتكلفة الإجمالية للتاريخ (كل الوجهات)
   const els = [...list.querySelectorAll('.bf-sug')];
   els.forEach(el=>el.onclick=()=>{
     els.forEach(x=>x.classList.remove('sel')); el.classList.add('sel');
