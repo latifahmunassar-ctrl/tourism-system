@@ -7528,6 +7528,41 @@ Deno.serve(async (req) => {
     // العميل أن رسالته ما وصلت.
     const payload = await req.json();
 
+    // ── توجيه B2B (رقم الشركات +968 7554 2288 = phone_number_id 1323027874234661) ──
+    // Meta يسلّم ويبهوك كل رقم على حدة. لو الحمولة لرقم B2B فقط، نوجّهها كاملة
+    // (رسائل + حالات) لـ b2b-talal في الخلفية ونرد 200 — ولا تمرّ بمسار طلال السياحي.
+    // ⚠️ كل الفرع داخل try/catch: أي فشل هنا يُبتلع ويُكمل المسار القديم كما هو،
+    // فلا يتأثر عملاء رقم السياحة (9117 1630) إطلاقاً. وأي رقم آخر (أو غياب
+    // phone_number_id) يترك isB2b=false فيمرّ بنفس المسار القديم دون أي تغيير.
+    try {
+      let isB2b = false;
+      for (const _en of (payload?.entry ?? [])) {
+        for (const _ch of (_en?.changes ?? [])) {
+          if (String(_ch?.value?.metadata?.phone_number_id || "") === "1323027874234661") { isB2b = true; break; }
+        }
+        if (isB2b) break;
+      }
+      if (isB2b) {
+        const _fwd = async () => {
+          try {
+            const _jwt = Deno.env.get("LEGACY_ANON_JWT") || "";
+            await fetch(`https://${PROJECT_REF}.supabase.co/functions/v1/b2b-talal`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${_jwt}`, apikey: _jwt },
+              body: JSON.stringify(payload),
+            });
+          } catch (_e) { /* best-effort — لا يؤثّر على أحد */ }
+        };
+        // @ts-ignore EdgeRuntime injected by Supabase
+        if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") EdgeRuntime.waitUntil(_fwd());
+        else _fwd();
+        return OK_RESPONSE();
+      }
+    } catch (_e) {
+      // فشل كشف/توجيه B2B → تجاهُل تام ومتابعة المسار السياحي القديم بلا تغيير.
+      try { console.log("b2b-route-skip:", (_e as Error)?.message || _e); } catch (_) { /* */ }
+    }
+
     type Incoming = { from: string; body: string; numMedia: number; profileName: string;
       media_id: string; media_mime: string; media_filename: string; media_label: string;
       referral: Record<string, unknown> | null };
