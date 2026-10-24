@@ -147,7 +147,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v9';
+const FS_VER='v10';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -237,12 +237,18 @@ function miniTable(obj,C){ const ks=Object.keys(obj).filter(k=>k); if(!ks.length
 function renderSales(){
   const C=cur();
   // جدول مطابقة لكل بند: تقرير الموظفة ↔ تقرير REWA ↔ الفرق ↔ ملاحظة (نفس الشيت)
-  const chDefs=[['المكنة (البطاقة)','sl-machine','sl-rmachine','d-machine','sl-nmachine'],['نقدي','sl-cash','sl-rcash','d-cash','sl-ncash'],['آجل','sl-credit','sl-rcredit','d-credit','sl-ncredit']];
+  const chDefs=[['المكنة (البطاقة)','sl-machine','sl-rmachine','d-machine','sl-nmachine'],['نقدي','sl-cash','sl-rcash','d-cash','sl-ncash']];
   const reconRows=chDefs.map(c=>'<tr><td style="font-weight:700">'+c[0]+'</td>'+
     '<td><input id="'+c[1]+'" type="number" value="0" oninput="slDiff()" style="width:90px"></td>'+
     '<td><input id="'+c[2]+'" type="number" value="0" oninput="slDiff()" style="width:90px"></td>'+
     '<td class="num"><b id="'+c[3]+'">0</b></td>'+
     '<td><input id="'+c[4]+'" placeholder="ملاحظة" style="width:150px;font-size:11px"></td></tr>').join('');
+  // صف الآجل: الموظفة = مجموع الآجل لكل عميل (أسفل) · REWA يدوي
+  const creditRow='<tr><td style="font-weight:700">آجل</td>'+
+    '<td class="num"><b id="sl-credit-d">0</b><div class="mini" style="color:var(--accent2)">⬇️ أدخلي بالأسفل</div><input type="hidden" id="sl-credit" value="0"></td>'+
+    '<td><input id="sl-rcredit" type="number" value="0" oninput="slDiff()" style="width:90px"></td>'+
+    '<td class="num"><b id="d-credit">0</b></td>'+
+    '<td><input id="sl-ncredit" placeholder="ملاحظة" style="width:150px;font-size:11px"></td></tr>';
   // صف التحويل البنكي: الموظفة = مجموع التحويلات (أسفل) · REWA يدوي
   const transferRow='<tr><td style="font-weight:700">تحويل بنكي</td>'+
     '<td class="num"><b id="sl-transfer-d">0</b><div class="mini" style="color:var(--accent2)">⬇️ أدخلي بالأسفل</div><input type="hidden" id="sl-transfer" value="0"></td>'+
@@ -254,12 +260,15 @@ function renderSales(){
       fin('التاريخ','sl-date','date',today())+
       fsel('الفرع','sl-branch','branch')+
     '</div>'+
-    '<div class="tbl-wrap" style="margin-top:10px"><table><thead><tr><th>البند</th><th>📝 تقرير الموظفة</th><th>🏧 تقرير REWA</th><th>الفرق</th><th>ملاحظة</th></tr></thead><tbody>'+reconRows+transferRow+
+    '<div class="tbl-wrap" style="margin-top:10px"><table><thead><tr><th>البند</th><th>📝 تقرير الموظفة</th><th>🏧 تقرير REWA</th><th>الفرق</th><th>ملاحظة</th></tr></thead><tbody>'+reconRows+creditRow+transferRow+
       '<tr style="font-weight:800;background:var(--panel2)"><td>الإجمالي</td><td class="num"><span id="sl-total-d">0</span></td><td class="num"><span id="sl-rtotal-d">0</span></td><td class="num"><b id="sl-tdiff">0</b></td><td></td></tr>'+
     '</tbody></table></div>'+
     '<div style="margin-top:12px;border:1px solid var(--accent);border-radius:10px;padding:10px;background:rgba(224,33,138,.05)"><div class="row-between"><h4 style="margin:0;color:var(--accent2)">💳 تفاصيل التحويلات البنكية (الموظفة) — أدخلي المبلغ والبنك هنا 👇</h4><button class="btn sm" onclick="slAddTransferRow()">➕ تحويل آخر</button></div>'+
       '<div id="sl-transfer-rows" style="margin-top:8px">'+slTransferRowHtml(_slTrIdx++)+'</div>'+
       '<div class="sub">كل تحويل: المبلغ + البنك المحوَّل إليه (من القائمة). المجموع يظهر تلقائيّاً في «تحويل بنكي» بالأعلى ويُطابَق مع REWA. اضغطي «➕ تحويل آخر» لأكثر من تحويل.</div></div>'+
+    '<div style="margin-top:12px;border:1px solid #b8860b;border-radius:10px;padding:10px;background:rgba(184,134,11,.06)"><div class="row-between"><h4 style="margin:0;color:#d4a843">🧾 تفاصيل الآجل (باسم العميل) — أدخلي المبلغ والعميل هنا 👇</h4><button class="btn sm" style="background:#b8860b" onclick="slAddCreditRow()">➕ آجل آخر</button></div>'+
+      '<div id="sl-credit-rows" style="margin-top:8px">'+slCreditRowHtml(_slCrIdx++)+'</div>'+
+      '<div class="sub">كل سطر: المبلغ + اسم العميل (من قائمة عملاء الآجل). المجموع يظهر في «آجل» بالأعلى، ويُضاف تلقائيّاً كفاتورة في حساب العميل. العميل الجديد يُضاف من تبويب «👤 عملاء الآجل».</div></div>'+
     '<input type="hidden" id="sl-total" value="0"><input type="hidden" id="sl-rtotal" value="0">'+
     '<div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));max-width:500px;margin-top:10px">'+
       fin('المرتجعات','sl-returns','number','0')+
@@ -302,9 +311,10 @@ function renderSales(){
   '</div></div>';
   const cc=(emp,rewa,note)=>{ const d=n(emp)-n(rewa); const dl=(Math.abs(d)>=0.005)?'<div class="mini" style="color:#ff6b7a">Δ '+fmt(d)+'</div>':''; return '<td class="num">'+fmt(emp)+'<div class="mini" style="color:#9aa">REWA '+fmt(rewa)+'</div>'+dl+noteLine(note)+'</td>'; };
   const tcell=(x)=>{ const trs=Array.isArray(x.transfers)?x.transfers:[]; const emp=n(x.bank_transfer),rewa=n(x.rewa_transfer),d=emp-rewa; const dl=(Math.abs(d)>=0.005)?'<div class="mini" style="color:#ff6b7a">Δ '+fmt(d)+'</div>':''; const list=trs.map(t=>'<div class="mini" style="color:#9aa">🏦 '+esc(t.bank||'—')+': '+fmt(t.amount)+'</div>').join(''); return '<td class="num">'+fmt(emp)+list+'<div class="mini" style="color:#9aa">REWA '+fmt(rewa)+'</div>'+dl+noteLine(x.note_transfer)+'</td>'; };
+  const crcell=(x)=>{ const crs=Array.isArray(x.credits)?x.credits:[]; const emp=n(x.credit_sales),rewa=n(x.rewa_credit),d=emp-rewa; const dl=(Math.abs(d)>=0.005)?'<div class="mini" style="color:#ff6b7a">Δ '+fmt(d)+'</div>':''; const list=crs.map(t=>'<div class="mini" style="color:#9aa">👤 '+esc(t.customer||'—')+': '+fmt(t.amount)+'</div>').join(''); return '<td class="num">'+fmt(emp)+list+'<div class="mini" style="color:#9aa">REWA '+fmt(rewa)+'</div>'+dl+noteLine(x.note_credit)+'</td>'; };
   const rows=fRows.map(x=>{ const net=rate>0?n(x.total)/(1+(n(x.tax_rate)||taxRate())/100):n(x.total); const gd=n(x.total)-n(x.rewa_total);
     return '<tr><td>'+esc(x.sale_date||'')+'</td><td>'+esc(x.branch||'')+'</td>'+
-      cc(x.machine,x.rewa_machine,x.note_machine)+cc(x.cash,x.rewa_cash,x.note_cash)+cc(x.credit_sales,x.rewa_credit,x.note_credit)+tcell(x)+
+      cc(x.machine,x.rewa_machine,x.note_machine)+cc(x.cash,x.rewa_cash,x.note_cash)+crcell(x)+tcell(x)+
       '<td class="num" style="font-weight:800">'+fmt(x.total)+'</td><td class="num mut">'+fmt(x.rewa_total)+'</td><td class="num" style="font-weight:800;color:'+(Math.abs(gd)<0.005?'#2fd196':'#ff6b7a')+'">'+fmt(gd)+'</td>'+
       '<td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button></td></tr>'; }).join('');
   const anyF=!!(F.from||F.to||F.branch||F.pm);
@@ -314,9 +324,15 @@ function renderSales(){
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة<br><span class="mini">موظفة/REWA</span></th><th>نقدي<br><span class="mini">موظفة/REWA</span></th><th>آجل<br><span class="mini">موظفة/REWA</span></th><th>تحويل<br><span class="mini">موظفة/REWA</span></th><th>إجمالي الموظفة</th><th>إجمالي REWA</th><th>الفرق</th><th>المرتجعات</th><th>صافي بدون ضريبة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="13" class="mut" style="text-align:center;padding:14px">لا نتائج للفلتر المحدّد</td></tr>')+'</tbody></table></div></div>';
 }
 function slDiff(){
-  const ch=[['sl-machine','sl-rmachine','d-machine'],['sl-cash','sl-rcash','d-cash'],['sl-credit','sl-rcredit','d-credit']];
+  const ch=[['sl-machine','sl-rmachine','d-machine'],['sl-cash','sl-rcash','d-cash']];
   let te=0,tr=0;
   ch.forEach(c=>{ const e=n(($(c[0])||{}).value), r=n(($(c[1])||{}).value); te+=e; tr+=r; const d=e-r; const el=$(c[2]); if(el){ el.textContent=fmt(d); el.style.color=Math.abs(d)<0.005?'#2fd196':'#ff6b7a'; } });
+  // الآجل (مجموع أسطر العملاء) مقابل REWA
+  let crAmt=0; document.querySelectorAll('#sl-credit-rows .sl-cr-row').forEach(row=>{ const i=row.dataset.i; crAmt+=n(($('cr-amt-'+i)||{}).value); });
+  if($('sl-credit'))$('sl-credit').value=+crAmt.toFixed(3);
+  if($('sl-credit-d'))$('sl-credit-d').textContent=fmt(crAmt);
+  const rcr=n(($('sl-rcredit')||{}).value); const dcr=crAmt-rcr; const dce=$('d-credit'); if(dce){ dce.textContent=fmt(dcr); dce.style.color=Math.abs(dcr)<0.005?'#2fd196':'#ff6b7a'; }
+  te+=crAmt; tr+=rcr;
   // التحويلات البنكية (مجموع الأسطر) مقابل REWA
   let trAmt=0; document.querySelectorAll('#sl-transfer-rows .sl-tr-row').forEach(row=>{ const i=row.dataset.i; trAmt+=n(($('tr-amt-'+i)||{}).value); });
   if($('sl-transfer'))$('sl-transfer').value=+trAmt.toFixed(3);
@@ -342,13 +358,18 @@ async function saveSale(){
   // تفاصيل التحويلات البنكية (بنك لكل تحويل)
   const transfers=[]; document.querySelectorAll('#sl-transfer-rows .sl-tr-row').forEach(row=>{ const i=row.dataset.i; const amt=n(($('tr-amt-'+i)||{}).value); if(amt>0){ transfers.push({amount:amt,bank:($('tr-bank-'+i)||{}).value||null,note:($('tr-note-'+i)||{}).value||null}); } });
   data.transfers = transfers.length?transfers:null;
+  // تفاصيل الآجل (عميل لكل سطر) — تُضاف كفواتير في حساب العميل
+  const credits=[], creditTxns=[]; const _custName={}; ((DATA&&DATA.credit_customers)||[]).forEach(c=>_custName[c.id]=c.name);
+  document.querySelectorAll('#sl-credit-rows .sl-cr-row').forEach(row=>{ const i=row.dataset.i; const amt=n(($('cr-amt-'+i)||{}).value); if(amt>0){ const cid=($('cr-cust-'+i)||{}).value||''; const nt=($('cr-note-'+i)||{}).value||null; credits.push({amount:amt,customer:cid?(_custName[cid]||''):null,customer_id:cid?Number(cid):null,note:nt}); if(cid)creditTxns.push({customer_id:Number(cid),txn_date:d,invoice_amount:amt,note:(nt||('آجل مبيعات '+d+(b?(' · '+b):'')))}); } });
+  data.credits = credits.length?credits:null;
   // اجمعي مصاريف هذا اليوم (قبل الحفظ لأن إعادة الرسم تمسح الصفوف)
   const expRows=[]; document.querySelectorAll('#sl-exp-rows .sl-exp-row').forEach(r=>{ const i=r.dataset.i; const amt=n(($('se-amt-'+i)||{}).value); if(amt>0){ expRows.push({exp_date:d,branch:b,category:($('se-cat-'+i)||{}).value||null,amount:amt,pay_method:($('se-pm-'+i)||{}).value||null,note:($('se-note-'+i)||{}).value||null}); } });
   try{
     const j=await api('POST','insert',{table:'daily_sales',data});
     if(j&&j.error){ toast('⚠️ خطأ بالمبيعات: '+j.error,true); return; }
     let okN=0; for(const e of expRows){ const je=await api('POST','insert',{table:'expenses',data:e}); if(je&&je.error){ toast('⚠️ خطأ بمصروف: '+je.error,true); } else okN++; }
-    toast('✅ تم الحفظ'+(okN?(' + '+okN+' مصروف'):''));
+    let okC=0; for(const t of creditTxns){ const jt=await api('POST','insert',{table:'credit_txn',data:t}); if(jt&&jt.error){ toast('⚠️ خطأ بآجل عميل: '+jt.error,true); } else okC++; }
+    toast('✅ تم الحفظ'+(okN?(' + '+okN+' مصروف'):'')+(okC?(' + '+okC+' آجل عميل'):''));
     formToggle('sales-form');
     await loadAll();
   }catch(e){ toast('⚠️ تعذّر الحفظ: '+(e&&e.message||e),true); }
@@ -370,6 +391,15 @@ function slTransferRowHtml(i){ return '<div class="sl-tr-row" data-i="'+i+'" sty
   '<input id="tr-note-'+i+'" placeholder="ملاحظة" style="padding:6px 8px">'+
   '<button class="btn red sm" onclick="this.closest(\'.sl-tr-row\').remove();slDiff()">✕</button></div>'; }
 function slAddTransferRow(){ const c=$('sl-transfer-rows'); if(!c)return; c.insertAdjacentHTML('beforeend', slTransferRowHtml(_slTrIdx++)); }
+// سطر آجل (مبلغ + عميل من قائمة عملاء الآجل + ملاحظة)
+let _slCrIdx=0;
+function custOpts(){ return '<option value="">— اختاري العميل —</option>'+((DATA&&DATA.credit_customers)||[]).map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join(''); }
+function slCreditRowHtml(i){ return '<div class="sl-cr-row" data-i="'+i+'" style="display:grid;grid-template-columns:.9fr 1.5fr 1.3fr auto;gap:6px;margin-bottom:6px;align-items:center">'+
+  '<input id="cr-amt-'+i+'" type="number" value="0" placeholder="المبلغ" oninput="slDiff()" style="padding:6px 8px">'+
+  '<select id="cr-cust-'+i+'" style="padding:6px 8px">'+custOpts()+'</select>'+
+  '<input id="cr-note-'+i+'" placeholder="ملاحظة" style="padding:6px 8px">'+
+  '<button class="btn red sm" onclick="this.closest(\'.sl-cr-row\').remove();slDiff()">✕</button></div>'; }
+function slAddCreditRow(){ const c=$('sl-credit-rows'); if(!c)return; c.insertAdjacentHTML('beforeend', slCreditRowHtml(_slCrIdx++)); }
 
 // ===== 🔄 مطابقة REWA =====
 function renderRewa(){
