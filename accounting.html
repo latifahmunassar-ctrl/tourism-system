@@ -7549,19 +7549,21 @@ function renderPayForm(){
   const det=[]; const _hotelKeys=new Set();
   for(const h of hotels){ const k=(h.client_code||'')+'|'+(h.check_in||''); _hotelKeys.add(String(h.conf_no||'').trim().toUpperCase()+'|'+(h.check_in||''));
     det.push({type:'🏨 فندق',name:hName[k]||(h.hotel_name==='TBO'?'فندق':h.hotel_name),detail:h.room_type,
-      sell:h.selling_rate,cancel:h.cancel_charge,booked:h.final_rate_booked,rate:hRate[k],
+      sell:h.selling_rate,cancel:h.cancel_charge,booked:h.final_rate_booked,rate:hRate[k],supCur:(h.booked_currency||h.currency||''),
       canc:(/cancel/i.test(String(h.status||''))||Number(h.refund||0)>0),
       refund:h.refund,refundExp:_refExpSell(h.final_rate_booked,h.cancel_charge,h.refund,hRate[k],h.status,h.selling_rate)}); }
   for(const s of svc){
     if(s.kind==='hotel'){   // 🏨 فنادق الداشبورد (service_lines) — تُدرَج هنا لأنها قد لا تكون في hotelBookings (تشمل الملغاة بسعر حجز 0 ولها مرتجع)
       const key=String(s.conf_no||'').trim().toUpperCase()+'|'+(s.check_in||''); if(_hotelKeys.has(key))continue;   // مغطّى أصلاً من hotelBookings
-      det.push({type:'🏨 فندق',name:s.name,detail:s.detail,sell:s.amount,cancel:s.cancel_charge,booked:s.final_rate_booked,rate:s.currency_rate,canc:(/cancel/i.test(String(s.status||''))||Number(s.refund||0)>0),refund:s.refund,refundExp:_refExpSell(s.final_rate_booked,s.cancel_charge,s.refund,s.currency_rate,s.status,s.amount)}); continue;
+      det.push({type:'🏨 فندق',name:s.name,detail:s.detail,sell:s.amount,cancel:s.cancel_charge,booked:s.final_rate_booked,rate:s.currency_rate,supCur:(s.booked_currency||s.currency||''),canc:(/cancel/i.test(String(s.status||''))||Number(s.refund||0)>0),refund:s.refund,refundExp:_refExpSell(s.final_rate_booked,s.cancel_charge,s.refund,s.currency_rate,s.status,s.amount)}); continue;
     }
     // 🔄 المرتجع المتوقّع = (الحجز الفعلي − رسوم الإلغاء) × سعر الصرف؛ المورّد (باكدج كامل) = يُحسب بمنطق آخر → —
     const rExp = s.kind==='supplier' ? null : _refExpSell(s.final_rate_booked,s.cancel_charge,s.refund,s.currency_rate,s.status,s.amount);
-    det.push({type:KN[s.kind]||esc(s.kind),name:s.name,detail:s.detail,sell:s.amount,cancel:s.cancel_charge,booked:s.final_rate_booked,rate:s.currency_rate,canc:(/cancel/i.test(String(s.status||''))||Number(s.refund||0)>0),refund:s.refund,refundExp:rExp}); }
+    det.push({type:KN[s.kind]||esc(s.kind),name:s.name,detail:s.detail,sell:s.amount,cancel:s.cancel_charge,booked:s.final_rate_booked,rate:s.currency_rate,supCur:(s.booked_currency||s.currency||''),canc:(/cancel/i.test(String(s.status||''))||Number(s.refund||0)>0),refund:s.refund,refundExp:rExp}); }
   // يعرض كل الخدمات (تفاصيل الحجز الكامل)؛ المرتجع المتوقّع = 0 للنشطة و(سعر البيع − رسوم الإلغاء) للملغاة
-  const detRows=det.map(d=>'<tr'+(d.canc?' style="background:rgba(217,138,0,.06)"':'')+'><td>'+d.type+(d.canc?' <span style="font-size:9px;color:#d98a00;font-weight:700">🚫 ملغاة</span>':'')+'</td><td>'+esc(d.name||'')+'</td><td>'+esc(d.detail||'')+'</td><td class="num">'+fmt(d.sell)+'</td><td class="num">'+(d.cancel!=null?fmt(d.cancel):'')+'</td><td class="num">'+(d.booked!=null?fmt(d.booked):'')+'</td><td>'+esc(d.rate!=null?d.rate:'')+'</td><td class="num">'+(d.refund!=null?fmt(d.refund):'')+'</td><td class="num pos">'+(d.refundExp!=null?fmt(d.refundExp):'')+'</td></tr>').join('');
+  // 💱 يُظهر عملة كل قيمة بالرمز: البيع والمرتجع المتوقّع بعملة العميل · الرسوم والمحجوز والمرتجع المسجّل بعملة المورّد
+  const _ccur=(v,c)=> (v==null)?'':(fmt(v)+(c?(' <span style="font-size:8.5px;color:#9aa;font-weight:600">'+esc(c)+'</span>'):''));
+  const detRows=det.map(d=>{ const sc=cur, pc=d.supCur||''; return '<tr'+(d.canc?' style="background:rgba(217,138,0,.06)"':'')+'><td>'+d.type+(d.canc?' <span style="font-size:9px;color:#d98a00;font-weight:700">🚫 ملغاة</span>':'')+'</td><td>'+esc(d.name||'')+'</td><td>'+esc(d.detail||'')+'</td><td class="num">'+_ccur(d.sell,sc)+'</td><td class="num">'+_ccur(d.cancel,pc)+'</td><td class="num">'+_ccur(d.booked,pc)+'</td><td>'+esc(d.rate!=null?d.rate:'')+'</td><td class="num">'+_ccur(d.refund,pc)+'</td><td class="num pos">'+_ccur(d.refundExp,sc)+'</td></tr>'; }).join('');
 
   box.innerHTML=
    '<div class="panel" style="margin-bottom:12px"><h3>👤 '+esc(pick('client_name'))+' <span class="cnt">'+esc(code)+'</span></h3>'+
@@ -7579,7 +7581,7 @@ function renderPayForm(){
    '<div class="panel" style="margin-bottom:12px"><h3>💳 الدفعات</h3><div class="tbl-wrap"><table><thead><tr><th>كود الدفعة</th><th>المبلغ المدفوع</th><th>العملة</th><th>البنك</th><th>تاريخ الدفع</th></tr></thead><tbody>'+
      pays.map(r=>'<tr><td>'+esc(r.payment_code||'')+'</td><td class="num">'+fmt(r.amount_paid)+'</td><td>'+esc(r.currency||'')+'</td><td>'+esc(r.bank_name||'')+'</td><td>'+esc(effPayDate(r)||r.booking_date||'')+'</td></tr>').join('')+
    '</tbody></table></div></div>'+
-   (detRows?'<div class="panel" style="margin-bottom:12px"><h3>🧾 تفصيل الحجوزات والخدمات</h3><div class="tbl-wrap"><table><thead><tr><th>النوع</th><th>الفندق / الخدمة</th><th>التفاصيل</th><th>سعر البيع</th><th>رسوم الإلغاء</th><th>السعر المحجوز</th><th>سعر الصرف المعتمد</th><th>المرتجع المسجّل</th><th>المرتجع المتوقّع</th></tr></thead><tbody>'+detRows+'</tbody></table></div></div>':'')+
+   (detRows?'<div class="panel" style="margin-bottom:12px"><h3>🧾 تفصيل الحجوزات والخدمات</h3><div class="tbl-wrap"><table><thead><tr><th>النوع</th><th>الفندق / الخدمة</th><th>التفاصيل</th><th>سعر البيع<br><span style="font-size:8.5px;color:var(--muted)">عملة العميل</span></th><th>رسوم الإلغاء<br><span style="font-size:8.5px;color:var(--muted)">عملة المورّد</span></th><th>السعر المحجوز<br><span style="font-size:8.5px;color:var(--muted)">عملة المورّد</span></th><th>سعر الصرف المعتمد</th><th>المرتجع المسجّل<br><span style="font-size:8.5px;color:var(--muted)">عملة المورّد</span></th><th>المرتجع المتوقّع<br><span style="font-size:8.5px;color:var(--muted)">عملة العميل</span></th></tr></thead><tbody>'+detRows+'</tbody></table></div><div style="font-size:10.5px;color:var(--muted);margin-top:5px">💱 <b>سعر البيع</b> و<b>المرتجع المتوقّع</b> بعملة العميل («'+esc(cur)+'») · <b>رسوم الإلغاء</b> و<b>السعر المحجوز</b> و<b>المرتجع المسجّل</b> بعملة المورّد — الرمز مكتوب بجانب كل قيمة.</div></div>':'')+
    (function(){const refs=(DATA.refunds||[]).filter(r=>(r.client_code||'').toUpperCase()===code); if(!refs.length)return '';
      const tot=refs.reduce((s,r)=>s+Number(r.refund||0),0);
      // ربح الشركة المستقطَع لكل مرتجع: من مستند المرتجع المعتمد المطابق (المبلغ+التاريخ+المرجع)
