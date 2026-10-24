@@ -147,7 +147,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v18';
+const FS_VER='v19';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -371,9 +371,10 @@ function renderSales(){
     '<div id="cd-cashinfo" style="margin-top:10px;padding:10px 12px;border:1px solid #3aa0ff;border-radius:8px;background:rgba(58,160,255,.08);font-size:13px"><span class="mut">اختاري الفرع لعرض النقد المتوفّر بالصندوق</span></div>'+
     '<div class="sub" style="margin-top:6px">يظهر ضمن «🏦 البنوك والإيداعات ← إيداعات الصندوق».</div><div id="cd-msg" class="msg"></div>'+
     '<button class="btn green" onclick="saveCashDep()">💾 حفظ الإيداع</button> <button class="btn ghost" onclick="formToggle(\'cashdep-form\')">إغلاق</button></div>';
-  $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات + مصاريف اليوم</button><button class="btn" style="background:#3aa0ff" onclick="formToggle(\'cashdep-form\')">🏧 إيداع صندوق</button><button class="btn" style="background:#0e9d6a" onclick="exportSalesPDF()">📄 تصدير PDF</button></div></div></div>'+form+cashDepForm+filterBar+
+  $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات + مصاريف اليوم</button><button class="btn" style="background:#3aa0ff" onclick="formToggle(\'cashdep-form\')">🏧 إيداع صندوق</button><button class="btn" style="background:#0e9d6a" onclick="exportSalesPDF()">📄 تصدير PDF</button></div></div></div>'+form+cashDepForm+
     summ('📊 ملخّص الفترة'+(anyF?' المفلترة':''),fA,false,{from:F.from,to:F.to,branch:F.branch})+
     summ('🗂️ ملخّص عام (كل السجلات)',gA,true,null)+
+    filterBar+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة<br><span class="mini">موظفة/REWA</span></th><th>نقدي<br><span class="mini">موظفة/REWA</span></th><th>آجل<br><span class="mini">موظفة/REWA</span></th><th>تحويل<br><span class="mini">موظفة/REWA</span></th><th>🏧 الإيداعات<br><span class="mini">+ البنك</span></th><th>إجمالي الموظفة</th><th>إجمالي REWA</th><th>الفرق</th><th>المرتجعات</th><th>صافي بدون ضريبة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="14" class="mut" style="text-align:center;padding:14px">لا نتائج للفلتر المحدّد</td></tr>')+'</tbody></table></div></div>';
 }
 function slDiff(){
