@@ -147,7 +147,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v17';
+const FS_VER='v18';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -306,8 +306,12 @@ function renderSales(){
   const s=DATA.daily_sales||[];
   const rate=taxRate()/100;
   // 🔎 الفلاتر
-  const F={from:window._slFrom||'',to:window._slTo||'',branch:window._slBranch||'',pm:window._slPM||''};
-  const inR=x=>{ const d=String(x.sale_date||'').slice(0,10); if(F.from&&d<F.from)return false; if(F.to&&d>F.to)return false; if(F.branch&&x.branch!==F.branch)return false; return true; };
+  const F={from:window._slFrom||'',to:window._slTo||'',branch:window._slBranch||'',pm:window._slPM||'',onlyDep:!!window._slOnlyDep,onlyDiff:!!window._slOnlyDiff};
+  const _depKeys=new Set((DATA.atm_deposit||[]).map(dp=>String(dp.dep_date||'').slice(0,10)+'|'+(dp.branch||'')));
+  const inR=x=>{ const d=String(x.sale_date||'').slice(0,10); if(F.from&&d<F.from)return false; if(F.to&&d>F.to)return false; if(F.branch&&x.branch!==F.branch)return false;
+    if(F.onlyDep && !_depKeys.has(d+'|'+(x.branch||'')))return false;
+    if(F.onlyDiff && Math.abs(n(x.total)-n(x.rewa_total))<0.005)return false;
+    return true; };
   const fRows=s.filter(inR);
   // تجميع
   const agg=rs=>{ const a={em:{machine:0,cash:0,credit:0,transfer:0},rw:{machine:0,cash:0,credit:0,transfer:0},total:0,rtotal:0,returns:0,net:0,n:rs.length};
@@ -338,7 +342,11 @@ function renderSales(){
     '<div class="fld"><label>📅 إلى تاريخ</label><input type="date" value="'+esc(F.to)+'" onchange="window._slTo=this.value;renderSales()"></div>'+
     '<div class="fld"><label>🏬 الفرع</label><select onchange="window._slBranch=this.value;renderSales()">'+brOpts+'</select></div>'+
     '<div class="fld"><label>💳 نوع الدفع</label><select onchange="window._slPM=this.value;renderSales()">'+pmOpts+'</select></div>'+
-    '<div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._slFrom=\'\';window._slTo=\'\';window._slBranch=\'\';window._slPM=\'\';renderSales()">مسح الفلاتر</button></div>'+
+    '<div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._slFrom=\'\';window._slTo=\'\';window._slBranch=\'\';window._slPM=\'\';window._slOnlyDep=false;window._slOnlyDiff=false;renderSales()">مسح الفلاتر</button></div>'+
+  '</div>'+
+  '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">'+
+    '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:#3aa0ff;font-weight:700"><input type="checkbox"'+(F.onlyDep?' checked':'')+' onchange="window._slOnlyDep=this.checked;renderSales()"> 🏧 أيام الإيداعات فقط</label>'+
+    '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:#ff6b7a;font-weight:700"><input type="checkbox"'+(F.onlyDiff?' checked':'')+' onchange="window._slOnlyDiff=this.checked;renderSales()"> ⚠️ أيام الفروقات فقط (الموظفة ≠ REWA)</label>'+
   '</div></div>';
   const cc=(emp,rewa,note)=>{ const d=n(emp)-n(rewa); const dl=(Math.abs(d)>=0.005)?'<div class="mini" style="color:#ff6b7a">Δ '+fmt(d)+'</div>':''; return '<td class="num">'+fmt(emp)+'<div class="mini" style="color:#9aa">REWA '+fmt(rewa)+'</div>'+dl+noteLine(note)+'</td>'; };
   const tcell=(x)=>{ const trs=Array.isArray(x.transfers)?x.transfers:[]; const emp=n(x.bank_transfer),rewa=n(x.rewa_transfer),d=emp-rewa; const dl=(Math.abs(d)>=0.005)?'<div class="mini" style="color:#ff6b7a">Δ '+fmt(d)+'</div>':''; const list=trs.map(t=>'<div class="mini" style="color:#9aa">🏦 '+esc(t.bank||'—')+': '+fmt(t.amount)+'</div>').join(''); return '<td class="num">'+fmt(emp)+list+'<div class="mini" style="color:#9aa">REWA '+fmt(rewa)+'</div>'+dl+noteLine(x.note_transfer)+'</td>'; };
