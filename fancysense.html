@@ -85,6 +85,7 @@ tbody tr:hover{background:rgba(224,33,138,.06)}
 <div class="wrap">
   <div class="page on" id="p-dash"></div>
   <div class="page" id="p-sales"></div>
+  <div class="page" id="p-expenses"></div>
   <div class="page" id="p-rewa"></div>
   <div class="page" id="p-credit"></div>
   <div class="page" id="p-banks"></div>
@@ -133,7 +134,7 @@ async function crud(action,table,data,id){
 function showApp(){ $('gate').classList.add('hidden'); $('app').classList.remove('hidden'); loadAll(); }
 
 // ---- التبويبات ----
-const TABS=[['dash','📊 لوحة'],['sales','🧾 المبيعات اليومية'],['rewa','🔄 مطابقة REWA'],['credit','👤 عملاء الآجل'],['banks','🏦 البنوك والإيداعات'],['inv','📦 منتجات ناقصة'],['settings','⚙️ إعدادات']];
+const TABS=[['dash','📊 لوحة'],['sales','🧾 المبيعات اليومية'],['expenses','💸 مصاريف يومية'],['rewa','🔄 مطابقة REWA'],['credit','👤 عملاء الآجل'],['banks','🏦 البنوك والإيداعات'],['inv','📦 منتجات ناقصة'],['settings','⚙️ إعدادات']];
 function buildTabs(){ $('tabs').innerHTML=TABS.map((t,i)=>'<div class="tab'+(i===0?' on':'')+'" data-p="'+t[0]+'" onclick="switchTab(this)">'+t[1]+'</div>').join(''); }
 function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on')); el.classList.add('on'); const p=el.dataset.p; document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('on')); $('p-'+p).classList.add('on'); }
 
@@ -142,7 +143,43 @@ function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'%';
-  renderDash(); renderSales(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
+  renderDash(); renderSales(); renderExpenses(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
+}
+
+// ===== 💸 مصاريف يومية =====
+function renderExpenses(){
+  const C=cur();
+  const form='<div id="exp-form" class="panel hidden" style="border-color:var(--accent)"><h3>➕ تسجيل مصروف</h3><div class="fgrid">'+
+    fin('التاريخ','ex-date','date',today())+
+    fsel('الفرع','ex-branch','branch')+
+    fsel('البند (الفئة)','ex-cat','expense_cat')+
+    fin('المبلغ','ex-amt','number','0')+
+    fsel('طريقة الدفع','ex-pm','payment_method')+
+    '<div class="fld full"><label>ملاحظة</label><input id="ex-note"></div>'+
+    '</div><div class="sub" style="margin-top:6px">الفئات تُدار من تبويب ⚙️ إعدادات.</div><div id="ex-msg" class="msg"></div>'+
+    '<button class="btn green" onclick="saveExp()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'exp-form\')">إلغاء</button></div>';
+  const e=DATA.expenses||[];
+  // فلتر الشهر
+  const months=[...new Set(e.map(x=>String(x.exp_date||'').slice(0,7)).filter(Boolean))].sort().reverse();
+  const selM=window._fsExpMonth||(months[0]||'');
+  const rows=selM?e.filter(x=>String(x.exp_date||'').slice(0,7)===selM):e;
+  const totExp=rows.reduce((a,x)=>a+n(x.amount),0);
+  const byCat={}; rows.forEach(x=>{ byCat[x.category||'—']=(byCat[x.category||'—']||0)+n(x.amount); });
+  const tr=e.map(x=>'<tr><td>'+esc(x.exp_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td><span class="pill" style="background:rgba(224,33,138,.15);color:var(--accent2)">'+esc(x.category||'—')+'</span></td><td class="num neg" style="font-weight:800">'+fmt(x.amount)+'</td><td>'+esc(x.pay_method||'')+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'expenses\','+x.id+')">حذف</button></td></tr>').join('');
+  $('p-expenses').innerHTML=
+    '<div class="panel"><div class="row-between"><h3 style="margin:0">💸 المصاريف اليومية <span class="sub">('+e.length+' سطر)</span></h3>'+
+      '<div style="display:flex;gap:8px;align-items:end"><div class="fld" style="min-width:140px"><label>الشهر</label><select onchange="window._fsExpMonth=this.value;renderExpenses()">'+(months.length?months.map(m=>'<option'+(m===selM?' selected':'')+'>'+m+'</option>').join(''):'<option>—</option>')+'</select></div>'+
+      '<button class="btn" onclick="formToggle(\'exp-form\')">➕ إضافة مصروف</button></div></div>'+
+      '<div class="kpis" style="margin-top:12px">'+kpi('إجمالي المصاريف'+(selM?(' ('+selM+')'):''),fmt(totExp)+' '+C,'neg')+'</div>'+
+      (Object.keys(byCat).length?('<div style="max-width:420px">'+miniTable(byCat,C)+'</div>'):'')+
+    '</div>'+form+
+    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>البند</th><th>المبلغ</th><th>طريقة الدفع</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(tr||'<tr><td colspan="7" class="mut" style="text-align:center;padding:14px">لا مصاريف مسجّلة بعد</td></tr>')+'</tbody></table></div></div>';
+}
+async function saveExp(){
+  const d=$('ex-date').value; if(!d){ $('ex-msg').innerHTML='<span class="neg">أدخلي التاريخ</span>'; return; }
+  const amt=n($('ex-amt').value); if(amt<=0){ $('ex-msg').innerHTML='<span class="neg">أدخلي المبلغ</span>'; return; }
+  const data={exp_date:d,branch:$('ex-branch').value||null,category:$('ex-cat').value||null,amount:amt,pay_method:$('ex-pm').value||null,note:$('ex-note').value||null};
+  if(await crud('insert','expenses',data)){ formToggle('exp-form'); }
 }
 
 // ===== 📊 لوحة =====
@@ -156,6 +193,8 @@ function renderDash(){
   rows.forEach(x=>{ tot+=n(x.total); ret+=n(x.returns); byBranch[x.branch]=(byBranch[x.branch]||0)+n(x.total);
     byPM.machine+=n(x.machine); byPM.cash+=n(x.cash); byPM.credit_sales+=n(x.credit_sales); byPM.bank_transfer+=n(x.bank_transfer); });
   const rate=taxRate()/100; const net=rate>0?tot/(1+rate):tot; const vat=tot-net; const afterRet=tot-ret;
+  const exp=(DATA.expenses||[]).filter(x=>!selM||String(x.exp_date||'').slice(0,7)===selM).reduce((a,x)=>a+n(x.amount),0);
+  const netProfit=afterRet-exp;
   const C=cur();
   $('p-dash').innerHTML=
     '<div class="panel"><div class="row-between"><h3 style="margin:0">📊 ملخّص المبيعات</h3>'+
@@ -167,6 +206,8 @@ function renderDash(){
       kpi('صافي المبيعات (بدون ضريبة)',fmt(net)+' '+C)+
       kpi('المرتجعات',fmt(ret)+' '+C,'neg')+
       kpi('صافي بعد المرتجعات',fmt(afterRet)+' '+C,'pos')+
+      kpi('المصاريف',fmt(exp)+' '+C,'neg')+
+      kpi('صافي بعد المصاريف',fmt(netProfit)+' '+C,netProfit>=0?'pos':'neg')+
       kpi('عدد الأيام المسجّلة',fmt(rows.length))+
     '</div>'+
     '<div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">'+
@@ -185,13 +226,13 @@ function renderSales(){
     '<div class="fgrid">'+
       fin('التاريخ','sl-date','date',today())+
       fsel('الفرع','sl-branch','branch')+
-      fin('المكنة (البطاقة)','sl-machine','number','0','oninput="slTotal()"')+
-      fin('نقدي','sl-cash','number','0','oninput="slTotal()"')+
-      fin('آجل','sl-credit','number','0','oninput="slTotal()"')+
-      fin('تحويل بنكي','sl-transfer','number','0','oninput="slTotal()"')+
+      fch('المكنة (البطاقة)','sl-machine','sl-nmachine')+
+      fch('نقدي','sl-cash','sl-ncash')+
+      fch('آجل','sl-credit','sl-ncredit')+
+      fch('تحويل بنكي','sl-transfer','sl-ntransfer')+
       fin('الإجمالي (شامل الضريبة)','sl-total','number','0')+
       fin('المرتجعات','sl-returns','number','0')+
-      '<div class="fld full"><label>ملاحظة</label><input id="sl-note"></div>'+
+      '<div class="fld full"><label>ملاحظة عامة لليوم</label><input id="sl-note"></div>'+
     '</div>'+
     '<div class="sub" style="margin-top:6px">الإجمالي يُحسب تلقائيّاً = المكنة + نقدي + آجل + تحويل بنكي (قابل للتعديل). نسبة الضريبة الحالية '+taxRate()+'% تُحفظ مع السطر.</div>'+
     '<div id="sl-msg" class="msg"></div>'+
@@ -199,7 +240,7 @@ function renderSales(){
   const s=DATA.daily_sales||[];
   const rate=taxRate()/100;
   const rows=s.map(x=>{ const net=rate>0?n(x.total)/(1+(n(x.tax_rate)||taxRate())/100):n(x.total);
-    return '<tr><td>'+esc(x.sale_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td class="num">'+fmt(x.machine)+'</td><td class="num">'+fmt(x.cash)+'</td><td class="num">'+fmt(x.credit_sales)+'</td><td class="num">'+fmt(x.bank_transfer)+'</td><td class="num" style="font-weight:800">'+fmt(x.total)+'</td><td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button></td></tr>'; }).join('');
+    return '<tr><td>'+esc(x.sale_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td class="num">'+fmt(x.machine)+noteLine(x.note_machine)+'</td><td class="num">'+fmt(x.cash)+noteLine(x.note_cash)+'</td><td class="num">'+fmt(x.credit_sales)+noteLine(x.note_credit)+'</td><td class="num">'+fmt(x.bank_transfer)+noteLine(x.note_transfer)+'</td><td class="num" style="font-weight:800">'+fmt(x.total)+'</td><td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button></td></tr>'; }).join('');
   $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات</button></div></div>'+form+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة</th><th>نقدي</th><th>آجل</th><th>تحويل بنكي</th><th>الإجمالي</th><th>المرتجعات</th><th>صافي بدون ضريبة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="11" class="mut" style="text-align:center;padding:14px">لا مبيعات مسجّلة بعد</td></tr>')+'</tbody></table></div></div>';
 }
@@ -208,7 +249,7 @@ async function saveSale(){
   const d=$('sl-date').value, b=$('sl-branch').value;
   if(!d){ $('sl-msg').innerHTML='<span class="neg">أدخلي التاريخ</span>'; return; }
   if(!b){ $('sl-msg').innerHTML='<span class="neg">اختاري الفرع</span>'; return; }
-  const data={sale_date:d,branch:b,machine:n($('sl-machine').value),cash:n($('sl-cash').value),credit_sales:n($('sl-credit').value),bank_transfer:n($('sl-transfer').value),total:n($('sl-total').value),returns:n($('sl-returns').value),tax_rate:taxRate(),note:$('sl-note').value||null};
+  const data={sale_date:d,branch:b,machine:n($('sl-machine').value),cash:n($('sl-cash').value),credit_sales:n($('sl-credit').value),bank_transfer:n($('sl-transfer').value),total:n($('sl-total').value),returns:n($('sl-returns').value),tax_rate:taxRate(),note:$('sl-note').value||null,note_machine:$('sl-nmachine').value||null,note_cash:$('sl-ncash').value||null,note_credit:$('sl-ncredit').value||null,note_transfer:$('sl-ntransfer').value||null};
   if(await crud('insert','daily_sales',data)){ formToggle('sales-form'); }
 }
 
@@ -307,7 +348,8 @@ function renderSettings(){
     '</div><div id="st-msg" class="msg"></div><button class="btn green" onclick="saveSettings()">💾 حفظ الإعدادات</button></div>'+
     listPanel('الفروع','branch','ادخلي اسم الفرع')+
     listPanel('البنوك','bank','ادخلي اسم/رقم البنك')+
-    listPanel('طرق الدفع','payment_method','ادخلي طريقة الدفع');
+    listPanel('طرق الدفع','payment_method','ادخلي طريقة الدفع')+
+    listPanel('فئات المصاريف','expense_cat','ادخلي فئة المصروف');
 }
 function listPanel(title,cat,ph){
   const items=(DATA.lists||[]).filter(l=>l.category===cat);
@@ -328,6 +370,9 @@ async function delRow(table,id){ if(confirm('حذف السطر؟ لا يمكن �
 // ---- مولّدات حقول ----
 function fin(label,id,type,val,extra){ return '<div class="fld"><label>'+label+'</label><input id="'+id+'" type="'+type+'"'+(val!=null&&val!==''?' value="'+esc(val)+'"':(type==='number'?' value="0"':''))+' '+(extra||'')+'></div>'; }
 function fsel(label,id,cat){ return '<div class="fld"><label>'+label+'</label><select id="'+id+'">'+opts(cat)+'</select></div>'; }
+// بند بمبلغ + ملاحظة تحته (لإظهار الفارق لكل بند)
+function fch(label,idAmt,idNote){ return '<div class="fld"><label>'+label+'</label><input id="'+idAmt+'" type="number" value="0" oninput="slTotal()"><input id="'+idNote+'" placeholder="ملاحظة البند (فارق؟)" style="font-size:11px;padding:5px 8px;margin-top:4px"></div>'; }
+function noteLine(t){ return t?'<div class="mini" style="color:#d98a00">📝 '+esc(t)+'</div>':''; }
 
 // ---- بدء ----
 buildTabs();

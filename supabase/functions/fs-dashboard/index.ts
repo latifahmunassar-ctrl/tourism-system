@@ -10,10 +10,12 @@ const TABLES: Record<string, string> = {
   config: 'fs_config', lists: 'fs_lists', daily_sales: 'fs_daily_sales',
   rewa_recon: 'fs_rewa_recon', credit_customers: 'fs_credit_customers', credit_txn: 'fs_credit_txn',
   bank_txn: 'fs_bank_txn', atm_deposit: 'fs_atm_deposit', inventory_short: 'fs_inventory_short',
+  expenses: 'fs_expenses',
 };
 // الأعمدة المسموح كتابتها لكل جدول (حارس ضد الحقول الغريبة)
 const FIELDS: Record<string, string[]> = {
-  daily_sales: ['sale_date','branch','machine','cash','credit_sales','bank_transfer','total','tax_rate','returns','note','created_by'],
+  daily_sales: ['sale_date','branch','machine','cash','credit_sales','bank_transfer','total','tax_rate','returns','note','note_machine','note_cash','note_credit','note_transfer','created_by'],
+  expenses: ['exp_date','branch','category','amount','pay_method','note','created_by'],
   rewa_recon: ['recon_date','period','branch','payment_method','rewa_total','sheet_total','note','created_by'],
   credit_customers: ['name','phone','note'],
   credit_txn: ['customer_id','txn_date','doc_no','invoice_amount','paid_amount','returned_amount','note'],
@@ -42,7 +44,7 @@ Deno.serve(async (req: Request) => {
 
   // ===== GET: كل البيانات =====
   if (req.method === 'GET') {
-    const [config, lists, daily_sales, rewa_recon, credit_customers, credit_txn, bank_txn, atm_deposit, inventory_short] = await Promise.all([
+    const [config, lists, daily_sales, rewa_recon, credit_customers, credit_txn, bank_txn, atm_deposit, inventory_short, expenses] = await Promise.all([
       supabase.from('fs_config').select('*'),
       supabase.from('fs_lists').select('*').order('sort').order('value'),
       supabase.from('fs_daily_sales').select('*').order('sale_date', { ascending: false }).order('created_at', { ascending: false }),
@@ -52,11 +54,12 @@ Deno.serve(async (req: Request) => {
       supabase.from('fs_bank_txn').select('*').order('actual_date', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('fs_atm_deposit').select('*').order('dep_date', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('fs_inventory_short').select('*').order('created_at', { ascending: false }),
+      supabase.from('fs_expenses').select('*').order('exp_date', { ascending: false }).order('created_at', { ascending: false }),
     ]);
     const cfg: any = {}; (config.data || []).forEach((r: any) => cfg[r.key] = r.value);
     return J({ config: cfg, lists: lists.data || [], daily_sales: daily_sales.data || [], rewa_recon: rewa_recon.data || [],
       credit_customers: credit_customers.data || [], credit_txn: credit_txn.data || [], bank_txn: bank_txn.data || [],
-      atm_deposit: atm_deposit.data || [], inventory_short: inventory_short.data || [] });
+      atm_deposit: atm_deposit.data || [], inventory_short: inventory_short.data || [], expenses: expenses.data || [] });
   }
 
   // ===== POST: عمليات =====
