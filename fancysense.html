@@ -147,7 +147,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v14';
+const FS_VER='v15';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -156,7 +156,7 @@ function render(){
 // ===== 💸 مصاريف يومية =====
 function renderExpenses(){
   const C=cur();
-  const form='<div id="exp-form" class="panel hidden" style="border-color:var(--accent)"><h3>➕ تسجيل مصروف</h3><div class="fgrid">'+
+  const form='<div id="exp-form" class="panel hidden" style="border-color:var(--accent)"><div class="row-between"><h3 style="margin:0">➕ تسجيل مصروف</h3><button class="btn ghost sm" onclick="formToggle(\'exp-form\')" title="إغلاق">✕ إغلاق</button></div><div class="fgrid">'+
     fin('التاريخ','ex-date','date',today())+
     fsel('الفرع','ex-branch','branch')+
     fsel('البند (الفئة)','ex-cat','expense_cat')+
@@ -489,7 +489,7 @@ function exportSalesPDF(){
 // ===== 🔄 مطابقة REWA =====
 function renderRewa(){
   const C=cur();
-  const form='<div id="rewa-form" class="panel hidden" style="border-color:var(--accent)"><h3>➕ تسجيل مطابقة</h3><div class="fgrid">'+
+  const form='<div id="rewa-form" class="panel hidden" style="border-color:var(--accent)"><div class="row-between"><h3 style="margin:0">➕ تسجيل مطابقة</h3><button class="btn ghost sm" onclick="formToggle(\'rewa-form\')" title="إغلاق">✕ إغلاق</button></div><div class="fgrid">'+
     fin('التاريخ','rw-date','date',today())+
     fin('الفترة (شهر)','rw-period','month','')+
     fsel('الفرع/الموقع','rw-branch','branch')+
@@ -511,10 +511,10 @@ async function saveRewa(){
 // ===== 👤 عملاء الآجل =====
 function renderCredit(){
   const C=cur();
-  const custForm='<div id="cust-form" class="panel hidden" style="border-color:var(--accent)"><h3>➕ عميل آجل جديد</h3><div class="fgrid">'+
+  const custForm='<div id="cust-form" class="panel hidden" style="border-color:var(--accent)"><div class="row-between"><h3 style="margin:0">➕ عميل آجل جديد</h3><button class="btn ghost sm" onclick="formToggle(\'cust-form\')" title="إغلاق">✕ إغلاق</button></div><div class="fgrid">'+
     fin('اسم العميل','cu-name','text','')+fin('الجوال','cu-phone','text','')+'<div class="fld full"><label>ملاحظة</label><input id="cu-note"></div>'+
     '</div><div id="cu-msg" class="msg"></div><button class="btn green" onclick="saveCust()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'cust-form\')">إلغاء</button></div>';
-  const txForm='<div id="ctx-form" class="panel hidden" style="border-color:var(--accent2)"><h3>➕ حركة آجل (فاتورة/سداد/مرتجع)</h3><div class="fgrid">'+
+  const txForm='<div id="ctx-form" class="panel hidden" style="border-color:var(--accent2)"><div class="row-between"><h3 style="margin:0">➕ حركة آجل (فاتورة/سداد/مرتجع)</h3><button class="btn ghost sm" onclick="formToggle(\'ctx-form\')" title="إغلاق">✕ إغلاق</button></div><div class="fgrid">'+
     '<div class="fld"><label>العميل</label><select id="ct-cust">'+(DATA.credit_customers||[]).map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join('')+'</select></div>'+
     fin('التاريخ','ct-date','date',today())+fin('رقم المستند','ct-doc','text','')+
     fin('قيمة الفاتورة','ct-inv','number','0')+fin('المسدّد','ct-paid','number','0')+fin('المرتجع','ct-ret','number','0')+
@@ -537,13 +537,13 @@ async function saveCtx(){ const cid=$('ct-cust').value; if(!cid){$('ct-msg').inn
 // ===== 🏦 البنوك والإيداعات =====
 function renderBanks(){
   const C=cur();
-  const bForm='<div id="bank-form" class="panel hidden" style="border-color:var(--accent)"><h3>➕ حركة بنك</h3><div class="fgrid">'+
+  const bForm='<div id="bank-form" class="panel hidden" style="border-color:var(--accent)"><div class="row-between"><h3 style="margin:0">➕ حركة بنك</h3><button class="btn ghost sm" onclick="formToggle(\'bank-form\')" title="إغلاق">✕ إغلاق</button></div><div class="fgrid">'+
     fin('تاريخ الحركة الفعلي','bk-adate','date',today())+fin('تاريخ الإقفال','bk-cdate','date','')+
     '<div class="fld"><label>النوع</label><select id="bk-dir"><option value="in">وارد (+)</option><option value="out">صادر (−)</option></select></div>'+
     fin('القيمة','bk-amt','number','0')+fsel('البنك','bk-bank','bank')+
     '<div class="fld full"><label>ملاحظة</label><input id="bk-note"></div>'+
     '</div><div id="bk-msg" class="msg"></div><button class="btn green" onclick="saveBank()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'bank-form\')">إلغاء</button></div>';
-  const aForm='<div id="atm-form" class="panel hidden" style="border-color:var(--accent2)"><h3>➕ إيداع صندوق (كاش)</h3><div class="fgrid">'+
+  const aForm='<div id="atm-form" class="panel hidden" style="border-color:var(--accent2)"><div class="row-between"><h3 style="margin:0">➕ إيداع صندوق (كاش)</h3><button class="btn ghost sm" onclick="formToggle(\'atm-form\')" title="إغلاق">✕ إغلاق</button></div><div class="fgrid">'+
     fin('التاريخ','at-date','date',today())+fsel('الفرع','at-branch','branch')+fin('المبلغ','at-amt','number','0')+fsel('البنك المودَع فيه','at-bank','bank')+
     '<div class="fld full"><label>ملاحظة</label><input id="at-note"></div>'+
     '</div><div id="at-msg" class="msg"></div><button class="btn green" onclick="saveAtm()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'atm-form\')">إلغاء</button></div>';
@@ -561,7 +561,7 @@ async function saveAtm(){ const data={dep_date:$('at-date').value||null,branch:$
 
 // ===== 📦 منتجات ناقصة =====
 function renderInv(){
-  const form='<div id="inv-form" class="panel hidden" style="border-color:var(--accent)"><h3>➕ فرق جرد</h3><div class="fgrid">'+
+  const form='<div id="inv-form" class="panel hidden" style="border-color:var(--accent)"><div class="row-between"><h3 style="margin:0">➕ فرق جرد</h3><button class="btn ghost sm" onclick="formToggle(\'inv-form\')" title="إغلاق">✕ إغلاق</button></div><div class="fgrid">'+
     fin('الكود','iv-code','text','')+fin('الكمية بالفاتورة','iv-qi','number','0')+fin('السعر','iv-price','number','0')+fin('الكمية الفعلية','iv-qa','number','0')+
     '<div class="fld full"><label>ملاحظة</label><input id="iv-note"></div>'+
     '</div><div id="iv-msg" class="msg"></div><button class="btn green" onclick="saveInv()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'inv-form\')">إلغاء</button></div>';
