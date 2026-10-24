@@ -148,7 +148,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v21';
+const FS_VER='v22';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -158,30 +158,55 @@ function render(){
 function renderMatch(){
   const C=cur();
   const F={from:window._mFrom||'',to:window._mTo||''};
+  const onlyDiff=!!window._mOnlyDiff;
   const inr=(d)=>{ d=String(d||'').slice(0,10); if(F.from&&d<F.from)return false; if(F.to&&d>F.to)return false; return true; };
-  // جانب فانسي سنس: ما يُفترض يصل للبنك لكل تاريخ = المكنة(POS) + إيداع الصندوق + التحويل
-  const fsBy={};
-  (DATA.daily_sales||[]).forEach(x=>{ const d=String(x.sale_date||'').slice(0,10); if(!inr(d))return; const o=fsBy[d]=fsBy[d]||{card:0,dep:0,tr:0}; o.card+=n(x.machine); o.tr+=n(x.bank_transfer); });
-  (DATA.atm_deposit||[]).forEach(x=>{ const d=String(x.dep_date||'').slice(0,10); if(!inr(d))return; const o=fsBy[d]=fsBy[d]||{card:0,dep:0,tr:0}; o.dep+=n(x.amount); });
-  // جانب العز: in/out لكل تاريخ
-  const azBy={}; (DATA.acc_fancy||[]).forEach(x=>{ const d=String(x.tx_date||'').slice(0,10); if(!inr(d))return; const o=azBy[d]=azBy[d]||{in:0,out:0}; o.in+=n(x.in_raw); o.out+=n(x.out_raw); });
-  const dates=[...new Set([...Object.keys(fsBy),...Object.keys(azBy)])].sort().reverse();
-  // إجماليات
-  let fCard=0,fDep=0,fTr=0,azIn=0,azOut=0;
-  Object.values(fsBy).forEach(o=>{ fCard+=o.card; fDep+=o.dep; fTr+=o.tr; });
-  Object.values(azBy).forEach(o=>{ azIn+=o.in; azOut+=o.out; });
-  const fBank=fCard+fDep+fTr; const diffIn=fBank-azIn;
-  // جدول تفصيلي لكل تاريخ
-  const trows=dates.map(d=>{ const f=fsBy[d]||{card:0,dep:0,tr:0}; const a=azBy[d]||{in:0,out:0}; const fb=f.card+f.dep+f.tr; const df=fb-a.in; const hasDiff=Math.abs(df)>=0.005;
-    return '<tr'+(hasDiff?' style="background:rgba(229,72,77,.08)"':'')+'><td>'+esc(d)+'</td><td class="num">'+fmt(f.card)+'</td><td class="num">'+fmt(f.dep)+'</td><td class="num">'+fmt(f.tr)+'</td><td class="num" style="font-weight:800">'+fmt(fb)+'</td><td class="num" style="color:#3aa0ff;font-weight:800">'+fmt(a.in)+'</td><td class="num" style="font-weight:800;color:'+(hasDiff?'#ff6b7a':'#2fd196')+'">'+fmt(df)+'</td><td class="num neg">'+fmt(a.out)+'</td></tr>'; }).join('');
+  // قوننة اسم الفرع (يوحّد مسمّيات فانسي والعز) → كيوسك / شوب / عمان / غير محدّد
+  const brCanon=(s)=>{ s=String(s||''); if(/معرض|معارض/.test(s))return 'معارض'; if(/kiosk|كيوسك/i.test(s))return 'كيوسك'; if(/shop|شوب|store|محل/i.test(s))return 'شوب'; if(/salah|صلال/i.test(s)||/عمان(?![يى])/.test(s)||/(^|[^a-z])oman([^a-z]|$)/i.test(s))return 'عمان'; return 'غير محدّد'; };   /* معارض نشاط منفصل · «عمانى» جنسية ليست فرع عمان */
+  // تصنيف حركة العز من حقل التفصيل → {الفرع, النوع, المبلغ}؛ تُستبعد صفوف التجربة
+  const azClass=(x)=>{ if(/^\s*test\s*$/i.test(String(x.details||'')))return null; const t=[x.details,x.description,x.more_details].map(v=>String(v||'')).join(' '); const out=n(x.out_raw),inc=n(x.in_raw); let type; if(out>0)type='مصروفات'; else if(/اجل|آجل/.test(t))type='آجل'; else if(/صندوق/.test(t))type='صندوق'; else if(/تحويل/.test(t))type='تحويل'; else type='مكنة'; return {branch:brCanon(t),type:type,amount:out>0?out:inc}; };
+  const TYPES=['مكنة','صندوق','تحويل','آجل','مصروفات'];
+  const TI={'مكنة':'🏧','صندوق':'📥','تحويل':'🔄','آجل':'📒','مصروفات':'💸'};
+  const BR=['كيوسك','شوب','عمان','معارض','غير محدّد'];
+  const matchable=(br)=>br==='كيوسك'||br==='شوب';
+  // تجميع: fsM[date][branch][type] و azM[date][branch][type]
+  const fsM={},azM={};
+  const add=(M,d,br,t,v)=>{ if(!d)return; M[d]=M[d]||{}; M[d][br]=M[d][br]||{}; M[d][br][t]=(M[d][br][t]||0)+n(v); };
+  (DATA.daily_sales||[]).forEach(x=>{ const d=String(x.sale_date||'').slice(0,10); if(!inr(d))return; const br=brCanon(x.branch); add(fsM,d,br,'مكنة',x.machine); add(fsM,d,br,'آجل',x.credit_sales); let tr=n(x.bank_transfer); if(!tr&&Array.isArray(x.transfers))tr=x.transfers.reduce((a,t)=>a+n(t&&t.amount),0); add(fsM,d,br,'تحويل',tr); });
+  (DATA.atm_deposit||[]).forEach(x=>{ const d=String(x.dep_date||'').slice(0,10); if(!inr(d))return; add(fsM,d,brCanon(x.branch),'صندوق',x.amount); });
+  (DATA.expenses||[]).forEach(x=>{ const d=String(x.exp_date||'').slice(0,10); if(!inr(d))return; add(fsM,d,brCanon(x.branch),'مصروفات',x.amount); });
+  (DATA.acc_fancy||[]).forEach(x=>{ const d=String(x.tx_date||'').slice(0,10); if(!inr(d))return; const c=azClass(x); if(!c)return; add(azM,d,c.branch,c.type,c.amount); });
+  const get=(M,d,br,t)=>(((M[d]||{})[br]||{})[t])||0;
+  const dates=[...new Set([...Object.keys(fsM),...Object.keys(azM)])].sort().reverse();
+  const grandF={},grandA={}; TYPES.forEach(t=>{grandF[t]=0;grandA[t]=0;});
+  // بناء كتل لكل تاريخ (3 صفوف لكل فرع: فانسي / العز / الفرق)
+  const blocks=[];
+  dates.forEach(d=>{
+    const brs=BR.filter(br=> (fsM[d]&&fsM[d][br]) || (azM[d]&&azM[d][br]) );
+    let dateHasDiff=false;
+    const brHtml=brs.map(br=>{
+      const fv=TYPES.map(t=>get(fsM,d,br,t)), av=TYPES.map(t=>get(azM,d,br,t)), dv=fv.map((v,i)=>v-av[i]);
+      TYPES.forEach((t,i)=>{grandF[t]+=fv[i];grandA[t]+=av[i];});
+      const fTot=fv.reduce((a,b)=>a+b,0),aTot=av.reduce((a,b)=>a+b,0);
+      const cc=(v)=>'<td class="num">'+(Math.abs(v)>=0.005?fmt(v):'<span class="mut">·</span>')+'</td>';
+      // أحمر فقط عند فرق حقيقي: فرع قابل للمطابقة والجانبان لهما قيمة (يتجنّب إنذار POS المجمّع)
+      const dc=(v,f,a)=>{ const hd=Math.abs(v)>=0.005; const red=hd&&matchable(br)&&f>0.005&&a>0.005; if(red)dateHasDiff=true; return '<td class="num" style="font-weight:700;color:'+(red?'#ff6b7a':(hd?'#e0a83a':'#2fd196'))+(red?';background:rgba(229,72,77,.08)':'')+'">'+(hd?fmt(v):'✓')+'</td>'; };
+      return '<tr><td style="font-weight:700">🏪 '+esc(br)+' — فانسي</td>'+fv.map(cc).join('')+'<td class="num" style="font-weight:800">'+fmt(fTot)+'</td></tr>'+
+        '<tr><td style="font-weight:700;color:#3aa0ff">🏦 '+esc(br)+' — العز</td>'+av.map(cc).join('')+'<td class="num" style="font-weight:800;color:#3aa0ff">'+fmt(aTot)+'</td></tr>'+
+        '<tr style="border-bottom:2px solid rgba(128,128,128,.25)"><td style="color:var(--muted);font-weight:700">⚖️ الفرق'+(matchable(br)?'':' ⏳')+'</td>'+dv.map((v,i)=>dc(v,fv[i],av[i])).join('')+dc(fTot-aTot,fTot,aTot)+'</tr>';
+    }).join('');
+    if(onlyDiff && !dateHasDiff)return;
+    blocks.push('<tr><td colspan="7" style="background:rgba(58,160,255,.12);font-weight:800;padding:7px 10px">📅 '+esc(d)+'</td></tr>'+brHtml);
+  });
+  // ملخّص حسب النوع
+  const gF=TYPES.reduce((a,t)=>a+grandF[t],0),gA=TYPES.reduce((a,t)=>a+grandA[t],0);
+  const sumRows=TYPES.map(t=>{ const dv=grandF[t]-grandA[t]; const hd=Math.abs(dv)>=0.5; return '<tr><td>'+TI[t]+' '+t+'</td><td class="num">'+fmt(grandF[t])+'</td><td class="num" style="color:#3aa0ff">'+fmt(grandA[t])+'</td><td class="num" style="font-weight:700;color:'+(hd?'#ff6b7a':'#2fd196')+'">'+(hd?fmt(dv):'✓')+'</td></tr>'; }).join('')+
+    '<tr style="font-weight:800;border-top:2px solid rgba(128,128,128,.4)"><td>الإجمالي</td><td class="num">'+fmt(gF)+'</td><td class="num" style="color:#3aa0ff">'+fmt(gA)+'</td><td class="num" style="color:'+(Math.abs(gF-gA)>=0.5?'#ff6b7a':'#2fd196')+'">'+fmt(gF-gA)+'</td></tr>';
+  const thead='<thead><tr><th>التاريخ / الفرع</th>'+TYPES.map(t=>'<th>'+TI[t]+' '+t+'</th>').join('')+'<th>الإجمالي</th></tr></thead>';
   $('p-match').innerHTML=
-    '<div class="panel" style="border:1px solid var(--amber);background:rgba(217,138,0,.07)"><div style="font-weight:700;color:#e0a83a">📌 للعرض والمطابقة فقط — لا إدخال</div><div class="sub" style="margin-top:3px">يطابق ما سجّلته الموظفة في فانسي سنس (المكنة POS + إيداع الصندوق + التحويل) مع سجلات فانسي سنس في <b>كاش إن/آوت نظام العز</b>. الفرق قد يكون بسبب فرق يوم في وصول الإيداع للبنك.</div></div>'+
-    '<div class="panel"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));max-width:520px"><div class="fld"><label>📅 من تاريخ</label><input type="date" value="'+esc(F.from)+'" onchange="window._mFrom=this.value;renderMatch()"></div><div class="fld"><label>📅 إلى تاريخ</label><input type="date" value="'+esc(F.to)+'" onchange="window._mTo=this.value;renderMatch()"></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._mFrom=\'\';window._mTo=\'\';renderMatch()">مسح</button></div></div></div>'+
-    '<div class="panel"><h3 style="margin:0 0 10px">📊 ملخّص المطابقة</h3><div class="kpis">'+
-      kpi('💳 المكنة (POS) — فانسي',fmt(fCard)+' '+C)+kpi('🏧 إيداع الصندوق — فانسي',fmt(fDep)+' '+C)+kpi('🏦 التحويلات — فانسي',fmt(fTr)+' '+C)+
-      kpi('= الوارد للبنك (فانسي)',fmt(fBank)+' '+C)+kpi('🔵 الوارد بكاش العز',fmt(azIn)+' '+C)+kpi('الفرق',fmt(diffIn)+' '+C,Math.abs(diffIn)<0.5?'pos':'neg')+
-    '</div><div class="sub">الصادر من كاش العز (مصاريف فانسي): <b class="neg">'+fmt(azOut)+' '+C+'</b></div></div>'+
-    '<div class="panel"><h3>🔎 المطابقة التفصيلية لكل يوم</h3><div class="tbl-wrap bf-scroll" style="max-height:520px"><table><thead><tr><th>التاريخ</th><th>فانسي: المكنة</th><th>فانسي: إيداع</th><th>فانسي: تحويل</th><th>فانسي: الوارد للبنك</th><th>🔵 العز: الوارد</th><th>الفرق</th><th>العز: الصادر</th></tr></thead><tbody>'+(trows||'<tr><td colspan="8" class="mut" style="text-align:center;padding:14px">لا بيانات</td></tr>')+'</tbody></table></div><div class="sub" style="margin-top:5px">الصفوف الحمراء = فرق بين فانسي سنس والعز لذاك اليوم (تحتاج مراجعة).</div></div>';
+    '<div class="panel" style="border:1px solid var(--amber);background:rgba(217,138,0,.07)"><div style="font-weight:700;color:#e0a83a">📌 للعرض والمطابقة فقط — لا إدخال ولا تأثير على بنوك العز</div><div class="sub" style="margin-top:3px">يطابق ما سجّلته الموظفة في فانسي سنس مع سجلات فانسي في <b>كاش إن/آوت العز</b>، حسب <b>الفرع ونوع الحركة</b>. 📥 الصندوق مفصّل بالفرع في العز فيُطابَق مباشرة. 🏧 المكنة (POS) يسجّلها العز <b>مجمّعة بلا فرع</b> → تظهر تحت «غير محدّد». 🎪 «معارض» = بوثات المعارض (نشاط منفصل). ⏳ «عمان» و«معارض» و«غير محدّد» بلا إنذار فرق (مبيعات فانسي لم تُضف بعد / حركة مجمّعة).</div></div>'+
+    '<div class="panel"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));max-width:720px"><div class="fld"><label>📅 من تاريخ</label><input type="date" value="'+esc(F.from)+'" onchange="window._mFrom=this.value;renderMatch()"></div><div class="fld"><label>📅 إلى تاريخ</label><input type="date" value="'+esc(F.to)+'" onchange="window._mTo=this.value;renderMatch()"></div><div class="fld"><label>&nbsp;</label><label style="display:flex;align-items:center;gap:6px;font-weight:600;padding-top:8px"><input type="checkbox" '+(onlyDiff?'checked':'')+' onchange="window._mOnlyDiff=this.checked;renderMatch()"> الفروقات فقط</label></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._mFrom=\'\';window._mTo=\'\';window._mOnlyDiff=false;renderMatch()">مسح</button></div></div></div>'+
+    '<div class="panel"><h3 style="margin:0 0 10px">📊 ملخّص المطابقة حسب النوع</h3><div class="tbl-wrap"><table><thead><tr><th>النوع</th><th>فانسي</th><th>🔵 العز</th><th>الفرق</th></tr></thead><tbody>'+sumRows+'</tbody></table></div></div>'+
+    '<div class="panel"><h3>🔎 المطابقة التفصيلية — بالفرع ونوع الحركة لكل يوم</h3><div class="tbl-wrap bf-scroll" style="max-height:560px"><table>'+thead+'<tbody>'+(blocks.join('')||'<tr><td colspan="7" class="mut" style="text-align:center;padding:14px">لا بيانات</td></tr>')+'</tbody></table></div><div class="sub" style="margin-top:5px">لكل يوم: صف «فانسي» وصف «العز» وصف «الفرق». الأحمر = فرق حقيقي في فرع قابل للمطابقة (كيوسك/شوب) والجانبان لهما قيمة.</div></div>';
 }
 
 // ===== 💸 مصاريف يومية =====
