@@ -152,9 +152,9 @@ function renderDash(){
   const months=[...new Set(s.map(x=>String(x.sale_date||'').slice(0,7)).filter(Boolean))].sort().reverse();
   const selM=window._fsMonth||(months[0]||'');
   const rows=selM?s.filter(x=>String(x.sale_date||'').slice(0,7)===selM):s;
-  let tot=0,ret=0,byBranch={},byPM={machine:0,cash:0,atm_deposit:0,bank_transfer:0};
+  let tot=0,ret=0,byBranch={},byPM={machine:0,cash:0,credit_sales:0,bank_transfer:0};
   rows.forEach(x=>{ tot+=n(x.total); ret+=n(x.returns); byBranch[x.branch]=(byBranch[x.branch]||0)+n(x.total);
-    byPM.machine+=n(x.machine); byPM.cash+=n(x.cash); byPM.atm_deposit+=n(x.atm_deposit); byPM.bank_transfer+=n(x.bank_transfer); });
+    byPM.machine+=n(x.machine); byPM.cash+=n(x.cash); byPM.credit_sales+=n(x.credit_sales); byPM.bank_transfer+=n(x.bank_transfer); });
   const rate=taxRate()/100; const net=rate>0?tot/(1+rate):tot; const vat=tot-net; const afterRet=tot-ret;
   const C=cur();
   $('p-dash').innerHTML=
@@ -171,7 +171,7 @@ function renderDash(){
     '</div>'+
     '<div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">'+
       '<div><h3 style="font-size:13px;border-color:var(--accent2)">حسب الفرع</h3>'+miniTable(byBranch,C)+'</div>'+
-      '<div><h3 style="font-size:13px;border-color:var(--accent2)">حسب طريقة الدفع</h3>'+miniTable({'المكنة (البطاقة)':byPM.machine,'نقدي':byPM.cash,'إيداع ATM':byPM.atm_deposit,'تحويل بنكي':byPM.bank_transfer},C)+'</div>'+
+      '<div><h3 style="font-size:13px;border-color:var(--accent2)">حسب طريقة الدفع</h3>'+miniTable({'المكنة (البطاقة)':byPM.machine,'نقدي':byPM.cash,'آجل':byPM.credit_sales,'تحويل بنكي':byPM.bank_transfer},C)+'</div>'+
     '</div></div>';
 }
 function kpi(t,v,cls){ return '<div class="kpi"><div class="ttl">'+t+'</div><div class="val '+(cls||'')+'">'+v+'</div></div>'; }
@@ -187,28 +187,28 @@ function renderSales(){
       fsel('الفرع','sl-branch','branch')+
       fin('المكنة (البطاقة)','sl-machine','number','0','oninput="slTotal()"')+
       fin('نقدي','sl-cash','number','0','oninput="slTotal()"')+
-      fin('إيداع ATM','sl-atm','number','0','oninput="slTotal()"')+
+      fin('آجل','sl-credit','number','0','oninput="slTotal()"')+
       fin('تحويل بنكي','sl-transfer','number','0','oninput="slTotal()"')+
       fin('الإجمالي (شامل الضريبة)','sl-total','number','0')+
       fin('المرتجعات','sl-returns','number','0')+
       '<div class="fld full"><label>ملاحظة</label><input id="sl-note"></div>'+
     '</div>'+
-    '<div class="sub" style="margin-top:6px">الإجمالي يُحسب تلقائيّاً = المكنة + نقدي + إيداع ATM + تحويل بنكي (قابل للتعديل). نسبة الضريبة الحالية '+taxRate()+'% تُحفظ مع السطر.</div>'+
+    '<div class="sub" style="margin-top:6px">الإجمالي يُحسب تلقائيّاً = المكنة + نقدي + آجل + تحويل بنكي (قابل للتعديل). نسبة الضريبة الحالية '+taxRate()+'% تُحفظ مع السطر.</div>'+
     '<div id="sl-msg" class="msg"></div>'+
     '<button class="btn green" onclick="saveSale()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'sales-form\')">إلغاء</button></div>';
   const s=DATA.daily_sales||[];
   const rate=taxRate()/100;
   const rows=s.map(x=>{ const net=rate>0?n(x.total)/(1+(n(x.tax_rate)||taxRate())/100):n(x.total);
-    return '<tr><td>'+esc(x.sale_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td class="num">'+fmt(x.machine)+'</td><td class="num">'+fmt(x.cash)+'</td><td class="num">'+fmt(x.atm_deposit)+'</td><td class="num">'+fmt(x.bank_transfer)+'</td><td class="num" style="font-weight:800">'+fmt(x.total)+'</td><td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button></td></tr>'; }).join('');
+    return '<tr><td>'+esc(x.sale_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td class="num">'+fmt(x.machine)+'</td><td class="num">'+fmt(x.cash)+'</td><td class="num">'+fmt(x.credit_sales)+'</td><td class="num">'+fmt(x.bank_transfer)+'</td><td class="num" style="font-weight:800">'+fmt(x.total)+'</td><td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button></td></tr>'; }).join('');
   $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات</button></div></div>'+form+
-    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة</th><th>نقدي</th><th>إيداع ATM</th><th>تحويل بنكي</th><th>الإجمالي</th><th>المرتجعات</th><th>صافي بدون ضريبة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="11" class="mut" style="text-align:center;padding:14px">لا مبيعات مسجّلة بعد</td></tr>')+'</tbody></table></div></div>';
+    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة</th><th>نقدي</th><th>آجل</th><th>تحويل بنكي</th><th>الإجمالي</th><th>المرتجعات</th><th>صافي بدون ضريبة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="11" class="mut" style="text-align:center;padding:14px">لا مبيعات مسجّلة بعد</td></tr>')+'</tbody></table></div></div>';
 }
-function slTotal(){ const t=n($('sl-machine').value)+n($('sl-cash').value)+n($('sl-atm').value)+n($('sl-transfer').value); $('sl-total').value=+t.toFixed(3); }
+function slTotal(){ const t=n($('sl-machine').value)+n($('sl-cash').value)+n($('sl-credit').value)+n($('sl-transfer').value); $('sl-total').value=+t.toFixed(3); }
 async function saveSale(){
   const d=$('sl-date').value, b=$('sl-branch').value;
   if(!d){ $('sl-msg').innerHTML='<span class="neg">أدخلي التاريخ</span>'; return; }
   if(!b){ $('sl-msg').innerHTML='<span class="neg">اختاري الفرع</span>'; return; }
-  const data={sale_date:d,branch:b,machine:n($('sl-machine').value),cash:n($('sl-cash').value),atm_deposit:n($('sl-atm').value),bank_transfer:n($('sl-transfer').value),total:n($('sl-total').value),returns:n($('sl-returns').value),tax_rate:taxRate(),note:$('sl-note').value||null};
+  const data={sale_date:d,branch:b,machine:n($('sl-machine').value),cash:n($('sl-cash').value),credit_sales:n($('sl-credit').value),bank_transfer:n($('sl-transfer').value),total:n($('sl-total').value),returns:n($('sl-returns').value),tax_rate:taxRate(),note:$('sl-note').value||null};
   if(await crud('insert','daily_sales',data)){ formToggle('sales-form'); }
 }
 

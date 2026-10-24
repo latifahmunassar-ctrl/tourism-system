@@ -13,7 +13,7 @@ const TABLES: Record<string, string> = {
 };
 // الأعمدة المسموح كتابتها لكل جدول (حارس ضد الحقول الغريبة)
 const FIELDS: Record<string, string[]> = {
-  daily_sales: ['sale_date','branch','machine','cash','atm_deposit','bank_transfer','total','tax_rate','returns','note','created_by'],
+  daily_sales: ['sale_date','branch','machine','cash','credit_sales','bank_transfer','total','tax_rate','returns','note','created_by'],
   rewa_recon: ['recon_date','period','branch','payment_method','rewa_total','sheet_total','note','created_by'],
   credit_customers: ['name','phone','note'],
   credit_txn: ['customer_id','txn_date','doc_no','invoice_amount','paid_amount','returned_amount','note'],
