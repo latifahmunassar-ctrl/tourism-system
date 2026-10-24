@@ -148,7 +148,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v24';
+const FS_VER='v25';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -158,7 +158,7 @@ function render(){
 function renderMatch(){
   const C=cur();
   const F={from:window._mFrom||'',to:window._mTo||''};
-  const onlyDiff=!!window._mOnlyDiff;
+  const statusF=window._mStatus||'all';   // all | matched | unmatched
   const inr=(d)=>{ d=String(d||'').slice(0,10); if(F.from&&d<F.from)return false; if(F.to&&d>F.to)return false; return true; };
   // قوننة اسم الفرع (يوحّد مسمّيات فانسي والعز) → كيوسك / شوب / عمان / غير محدّد
   const brCanon=(s)=>{ s=String(s||''); if(/معرض|معارض/.test(s))return 'معارض'; if(/kiosk|كيوسك/i.test(s))return 'كيوسك'; if(/shop|شوب|store|محل/i.test(s))return 'شوب'; if(/salah|صلال/i.test(s)||/عمان(?![يى])/.test(s)||/(^|[^a-z])oman([^a-z]|$)/i.test(s))return 'عمان'; return 'غير محدّد'; };   /* معارض نشاط منفصل · «عمانى» جنسية ليست فرع عمان */
@@ -200,7 +200,7 @@ function renderMatch(){
     // فرق الوارد (بلا مصروفات) + الحالة
     let fsIn=0,azIn=0; brs.forEach(br=>INFLOW.forEach(t=>{fsIn+=get(fsM,d,br,t);azIn+=get(azM,d,br,t);}));
     const diffIn=fsIn-azIn, matched=Math.abs(diffIn)<0.5;
-    if(onlyDiff && matched) return;   // «غير المطابقة فقط»
+    if(statusF==='matched'&&!matched)return; if(statusF==='unmatched'&&matched)return;
     const pill = matched ? '<span class="pill" style="background:rgba(47,209,150,.15);color:#2fd196;border:1px solid #2fd196;padding:1px 9px">✓ مطابق</span>' : '<span class="pill" style="background:rgba(229,72,77,.15);color:#ff6b7a;border:1px solid #ff6b7a;padding:1px 9px">⚠ غير مطابق</span>';
     rows_html.push(
       '<tr onclick="fsToggleDate('+di+')" style="cursor:pointer"><td style="font-weight:800"><span id="arw-'+di+'" style="color:var(--accent)">▸</span> 📅 '+esc(d)+'</td>'+
@@ -214,9 +214,9 @@ function renderMatch(){
     '<tr style="font-weight:800;border-top:2px solid rgba(128,128,128,.4)"><td>الإجمالي</td><td class="num">'+fmt(gF)+'</td><td class="num" style="color:#3aa0ff">'+fmt(gA)+'</td><td class="num" style="color:'+(Math.abs(gF-gA)>=0.5?'#ff6b7a':'#2fd196')+'">'+fmt(gF-gA)+'</td></tr>';
   $('p-match').innerHTML=
     '<div class="panel" style="border:1px solid var(--amber);background:rgba(217,138,0,.07)"><div style="font-weight:700;color:#e0a83a">📌 للعرض والمطابقة فقط — لا إدخال ولا تأثير على بنوك العز</div><div class="sub" style="margin-top:3px">يطابق ما سجّلته الموظفة في فانسي سنس مع <b>تقرير البنك</b> (سجلات فانسي في كاش إن/آوت العز)، حسب <b>الفرع ونوع الحركة</b>. 📥 الصندوق مفصّل بالفرع فيُطابَق مباشرة. 🏧 المكنة (POS) في تقرير البنك <b>مجمّعة بلا فرع</b> → تحت «غير محدّد». 🎪 «معارض» نشاط منفصل.</div></div>'+
-    '<div class="panel"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));max-width:720px"><div class="fld"><label>📅 من تاريخ</label><input type="date" value="'+esc(F.from)+'" onchange="window._mFrom=this.value;renderMatch()"></div><div class="fld"><label>📅 إلى تاريخ</label><input type="date" value="'+esc(F.to)+'" onchange="window._mTo=this.value;renderMatch()"></div><div class="fld"><label>&nbsp;</label><label style="display:flex;align-items:center;gap:6px;font-weight:600;padding-top:8px"><input type="checkbox" '+(onlyDiff?'checked':'')+' onchange="window._mOnlyDiff=this.checked;renderMatch()"> غير المطابقة فقط</label></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._mFrom=\'\';window._mTo=\'\';window._mOnlyDiff=false;renderMatch()">مسح</button></div></div></div>'+
+    '<div class="panel"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));max-width:720px"><div class="fld"><label>📅 من تاريخ</label><input type="date" value="'+esc(F.from)+'" onchange="window._mFrom=this.value;renderMatch()"></div><div class="fld"><label>📅 إلى تاريخ</label><input type="date" value="'+esc(F.to)+'" onchange="window._mTo=this.value;renderMatch()"></div><div class="fld"><label>🔎 الحالة</label><select onchange="window._mStatus=this.value;renderMatch()"><option value="all"'+(statusF==='all'?' selected':'')+'>الكل</option><option value="matched"'+(statusF==='matched'?' selected':'')+'>✓ مطابق فقط</option><option value="unmatched"'+(statusF==='unmatched'?' selected':'')+'>⚠ غير مطابق فقط</option></select></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._mFrom=\'\';window._mTo=\'\';window._mStatus=\'all\';renderMatch()">مسح</button></div></div></div>'+
     '<div class="panel"><h3 style="margin:0 0 10px">📊 ملخّص المطابقة حسب النوع</h3><div class="tbl-wrap"><table><thead><tr><th>النوع</th><th>فانسي</th><th>🔵 تقرير البنك</th><th>الفرق</th></tr></thead><tbody>'+sumRows+'</tbody></table></div></div>'+
-    '<div class="panel"><h3>🔎 المطابقة اليومية — اضغطي اليوم للتفاصيل</h3><div class="tbl-wrap bf-scroll" style="max-height:560px"><table><thead><tr><th>التاريخ</th><th>الفرق (الوارد)</th><th>الحالة</th></tr></thead><tbody>'+(rows_html.join('')||'<tr><td colspan="3" class="mut" style="text-align:center;padding:14px">لا بيانات</td></tr>')+'</tbody></table></div><div class="sub" style="margin-top:5px">اضغطي اليوم لعرض التفاصيل (الفرع ونوع الحركة). «الفرق» = الوارد (مكنة+صندوق+تحويل+آجل) بلا مصروفات؛ «غير مطابق» إذا الفرق ≥ 0.5.</div></div>';
+    '<div class="panel"><h3>🔎 المطابقة اليومية — اضغطي اليوم للتفاصيل</h3><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرق (الوارد)</th><th>الحالة</th></tr></thead><tbody>'+(rows_html.join('')||'<tr><td colspan="3" class="mut" style="text-align:center;padding:14px">لا بيانات</td></tr>')+'</tbody></table></div><div class="sub" style="margin-top:5px">اضغطي اليوم لعرض التفاصيل (الفرع ونوع الحركة). «الفرق» = الوارد (مكنة+صندوق+تحويل+آجل) بلا مصروفات؛ «غير مطابق» إذا الفرق ≥ 0.5.</div></div>';
 }
 // توسيع/طيّ تفاصيل يوم في المطابقة
 function fsToggleDate(i){ const r=document.getElementById('mdet-'+i), a=document.getElementById('arw-'+i); if(r){ const sh=r.style.display==='none'; r.style.display=sh?'':'none'; if(a)a.textContent=sh?'▾':'▸'; } }
