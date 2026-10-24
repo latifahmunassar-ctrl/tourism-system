@@ -147,7 +147,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v13';
+const FS_VER='v14';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -277,7 +277,7 @@ function renderSales(){
     '<td><input id="sl-rtransfer" type="number" value="0" oninput="slDiff()" style="width:90px"></td>'+
     '<td class="num"><b id="d-transfer">0</b></td>'+
     '<td><input id="sl-ntransfer" placeholder="ملاحظة" style="width:150px;font-size:11px"></td></tr>';
-  const form='<div id="sales-form" class="panel hidden" style="border-color:var(--accent)"><h3>➕ تسجيل مبيعات يوم — مطابقة الموظفة ↔ REWA</h3>'+
+  const form='<div id="sales-form" class="panel hidden" style="border-color:var(--accent)"><div class="row-between"><h3 style="margin:0">➕ تسجيل مبيعات يوم — مطابقة الموظفة ↔ REWA</h3><button class="btn ghost sm" onclick="formToggle(\'sales-form\')" title="إغلاق النافذة">✕ إغلاق</button></div>'+
     '<div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));max-width:500px">'+
       fin('التاريخ','sl-date','date',today())+
       fsel('الفرع','sl-branch','branch')+
@@ -341,7 +341,7 @@ function renderSales(){
       '<td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button></td></tr>'; }).join('');
   const anyF=!!(F.from||F.to||F.branch||F.pm);
   // 🏧 فورم إيداع الصندوق (كاش) من الفرع إلى البنك
-  const cashDepForm='<div id="cashdep-form" class="panel hidden" style="border-color:#3aa0ff"><h3 style="border-color:#3aa0ff">🏧 إيداع صندوق (كاش) — من الفرع إلى البنك</h3><div class="fgrid" style="max-width:700px">'+
+  const cashDepForm='<div id="cashdep-form" class="panel hidden" style="border-color:#3aa0ff"><div class="row-between"><h3 style="margin:0;border-color:#3aa0ff">🏧 إيداع صندوق (كاش) — من الفرع إلى البنك</h3><button class="btn ghost sm" onclick="formToggle(\'cashdep-form\')" title="إغلاق النافذة">✕ إغلاق</button></div><div class="fgrid" style="max-width:700px">'+
     fin('التاريخ','cd-date','date',today())+
     '<div class="fld"><label>الفرع</label><select id="cd-branch" onchange="cdCashInfo()">'+opts('branch')+'</select></div>'+
     fin('مبلغ إيداع الصندوق','cd-amt','number','0','oninput="cdCashInfo()"')+
@@ -550,6 +550,7 @@ function renderBanks(){
   const bRows=(DATA.bank_txn||[]).map(x=>'<tr><td>'+esc(x.actual_date||'')+'</td><td>'+esc(x.close_date||'')+'</td><td>'+esc(x.bank_name||'')+'</td><td><span class="pill '+(x.direction==='out'?'r':'g')+'">'+(x.direction==='out'?'صادر':'وارد')+'</span></td><td class="num '+(x.direction==='out'?'neg':'pos')+'" style="font-weight:800">'+fmt(x.amount)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'bank_txn\','+x.id+')">حذف</button></td></tr>').join('');
   const aRows=(DATA.atm_deposit||[]).map(x=>'<tr><td>'+esc(x.dep_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td class="num pos" style="font-weight:800">'+fmt(x.amount)+'</td><td>'+esc(x.bank||'—')+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'atm_deposit\','+x.id+')">حذف</button></td></tr>').join('');
   $('p-banks').innerHTML=
+    '<div class="panel" style="border:1px solid var(--amber);background:rgba(217,138,0,.08)"><div style="font-size:12.5px;color:#e0a83a;font-weight:700">📌 كشف مراجعة لفانسي سنس فقط — للاطلاع</div><div class="sub" style="margin-top:4px">كل البنوك والإيداعات هنا <b>منفصلة تماماً عن بنوك نظام العز الدولية</b> ولا تنعكس عليها إطلاقاً. هذه بيانات فانسي سنس المستقلّة.</div></div>'+
     '<div class="panel"><div class="row-between"><h3 style="margin:0">🏦 حركات البنوك</h3><button class="btn" onclick="formToggle(\'bank-form\')">➕ حركة بنك</button></div></div>'+bForm+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ الفعلي</th><th>الإقفال</th><th>البنك</th><th>النوع</th><th>القيمة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(bRows||'<tr><td colspan="7" class="mut" style="text-align:center;padding:12px">لا حركات</td></tr>')+'</tbody></table></div></div>'+
     '<div class="panel"><div class="row-between"><h3 style="margin:0">🏧 إيداعات الصندوق (الكاش)</h3><button class="btn" onclick="formToggle(\'atm-form\')">➕ إيداع</button></div></div>'+aForm+
