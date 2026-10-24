@@ -148,7 +148,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v26';
+const FS_VER='v27';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -186,11 +186,18 @@ function renderMatch(){
   const rows_html=[], dailyExp=[];
   dates.forEach((d,di)=>{
     const brs=BR.filter(br=> (fsM[d]&&fsM[d][br]) || (azM[d]&&azM[d][br]) );
-    const brHtml=brs.map(br=>{
+    const cc=(v)=>'<td class="num">'+(Math.abs(v)>=0.005?fmt(v):'<span class="mut">·</span>')+'</td>';
+    // 📊 إجمالي الفروع (يُطابَق المكنة على مستوى الإجمالي لأن العز يسجّلها مجمّعة بلا فرع)
+    const tf=TYPES.map(t=>brs.reduce((a,br)=>a+get(fsM,d,br,t),0)), ta=TYPES.map(t=>brs.reduce((a,br)=>a+get(azM,d,br,t),0)), tdv=tf.map((v,i)=>v-ta[i]);
+    const tfT=tf.reduce((a,b)=>a+b,0), taT=ta.reduce((a,b)=>a+b,0);
+    const tdc=(v)=>{ const hd=Math.abs(v)>=0.005; return '<td class="num" style="font-weight:800;color:'+(hd?'#ff6b7a':'#2fd196')+(hd?';background:rgba(229,72,77,.08)':'')+'">'+(hd?fmt(v):'✓')+'</td>'; };
+    const totBlock='<tr style="background:rgba(58,160,255,.08)"><td style="font-weight:800">📊 إجمالي الفروع — فانسي</td>'+tf.map(cc).join('')+'<td class="num" style="font-weight:800">'+fmt(tfT)+'</td></tr>'+
+      '<tr style="background:rgba(58,160,255,.08)"><td style="font-weight:800;color:#3aa0ff">📊 إجمالي الفروع — تقرير البنك</td>'+ta.map(cc).join('')+'<td class="num" style="font-weight:800;color:#3aa0ff">'+fmt(taT)+'</td></tr>'+
+      '<tr style="background:rgba(58,160,255,.14);border-bottom:3px solid rgba(58,160,255,.45)"><td style="font-weight:800">⚖️ الفرق (الإجمالي)</td>'+tdv.map(tdc).join('')+tdc(tfT-taT)+'</tr>';
+    const brHtml=totBlock+brs.map(br=>{
       const fv=TYPES.map(t=>get(fsM,d,br,t)), av=TYPES.map(t=>get(azM,d,br,t)), dv=fv.map((v,i)=>v-av[i]);
       TYPES.forEach((t,i)=>{grandF[t]+=fv[i];grandA[t]+=av[i];});
       const fTot=fv.reduce((a,b)=>a+b,0),aTot=av.reduce((a,b)=>a+b,0);
-      const cc=(v)=>'<td class="num">'+(Math.abs(v)>=0.005?fmt(v):'<span class="mut">·</span>')+'</td>';
       // أحمر فقط عند فرق حقيقي: فرع قابل للمطابقة والجانبان لهما قيمة (يتجنّب إنذار POS المجمّع)
       const dc=(v,f,a)=>{ const hd=Math.abs(v)>=0.005; const red=hd&&matchable(br)&&f>0.005&&a>0.005; return '<td class="num" style="font-weight:700;color:'+(red?'#ff6b7a':(hd?'#e0a83a':'#2fd196'))+(red?';background:rgba(229,72,77,.08)':'')+'">'+(hd?fmt(v):'✓')+'</td>'; };
       return '<tr><td style="font-weight:700">🏪 '+esc(br)+' — فانسي</td>'+fv.map(cc).join('')+'<td class="num" style="font-weight:800">'+fmt(fTot)+'</td></tr>'+
