@@ -7523,8 +7523,10 @@ function renderPayForm(){
   const _cancFee=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code && (/cancel/i.test(String(s.status||''))||Number(s.refund||0)>0)).reduce((a,s)=>a+Number(s.cancel_charge||0)*(Number(s.currency_rate)||1),0);   // 🚫 رسوم الإلغاء بعملة العميل
   // القابل للإرجاع = مجموع «المرتجع المتوقّع» للخدمات الملغاة فقط (= لكلٍّ: سعر البيع − رسوم الإلغاء) − ما سبق إرجاعه، ومحدوداً بالمدفوع
   const refundableF = Math.min(Math.max(0, expRefTot - totalRefunded), _paidRemain);
-  const profDefault = Math.max(0, Math.min(profit, refundableF));        // 🏢 الافتراضي = الربح المتوقّع من البرنامج (قابل للتعديل)
-  const amtDefault  = Math.max(0, refundableF - profDefault);            // المسترجع النهائي = القابل للإرجاع − ربح الشركة
+  // 🏢 الربح المحتجَز الافتراضي = هامش الخدمات الملغاة فقط (سعر البيع − التكلفة الفعلية)، لا ربح البرنامج كاملاً الذي يشمل الخدمات غير الملغاة
+  const _cancCost=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code && (/cancel/i.test(String(s.status||''))||Number(s.refund||0)>0)).reduce((a,s)=>a+Number(s.final_rate_booked||0)*(Number(s.currency_rate)||1),0);
+  const amtDefault  = _cancCost>0 ? Math.min(refundableF, _cancCost) : refundableF;   // المسترجع الافتراضي = تكلفة الخدمات الملغاة (تحتفظ الشركة بهامشها فقط)؛ وإن غابت التكلفة = كامل القابل
+  const profDefault = Math.max(0, refundableF - amtDefault);             // 🏢 الربح المحتجَز = القابل للإرجاع − المسترجع (= هامش الملغاة فقط؛ قابل للتعديل)
   const bankOpts='<option value="">— اختاري البنك —</option>'+listValues('banks').map(b=>'<option>'+esc(b.value)+'</option>').join('');   // القائمة المُدارة فقط
   // تفصيل الخدمات
   const svc=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code);
