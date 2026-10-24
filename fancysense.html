@@ -148,7 +148,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v27';
+const FS_VER='v28';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -164,7 +164,7 @@ function renderMatch(){
   const brCanon=(s)=>{ s=String(s||''); if(/معرض|معارض/.test(s))return 'معارض'; if(/kiosk|كيوسك/i.test(s))return 'كيوسك'; if(/shop|شوب|store|محل/i.test(s))return 'شوب'; if(/salah|صلال/i.test(s)||/عمان(?![يى])/.test(s)||/(^|[^a-z])oman([^a-z]|$)/i.test(s))return 'عمان'; return 'غير محدّد'; };   /* معارض نشاط منفصل · «عمانى» جنسية ليست فرع عمان */
   // تصنيف حركة العز من حقل التفصيل → {الفرع, النوع, المبلغ}؛ تُستبعد صفوف التجربة
   const azClass=(x)=>{ if(/^\s*test\s*$/i.test(String(x.details||'')))return null; const t=[x.details,x.description,x.more_details].map(v=>String(v||'')).join(' '); const out=n(x.out_raw),inc=n(x.in_raw); let type; if(out>0)type='مصروفات'; else if(/اجل|آجل/.test(t))type='آجل'; else if(/صندوق/.test(t))type='صندوق'; else if(/تحويل/.test(t))type='تحويل'; else type='مكنة'; return {branch:brCanon(t),type:type,amount:out>0?out:inc}; };
-  const TYPES=['مكنة','صندوق','تحويل','آجل','مصروفات'];
+  const TYPES=['مكنة','صندوق','تحويل','آجل'];   // المصروفات محذوفة من المقارنة (لا داعي لمقارنتها)
   const TI={'مكنة':'🏧','صندوق':'📥','تحويل':'🔄','آجل':'📒','مصروفات':'💸'};
   const BR=['كيوسك','شوب','عمان','معارض','غير محدّد'];
   const matchable=(br)=>br==='كيوسك'||br==='شوب';
@@ -177,6 +177,12 @@ function renderMatch(){
   // 📒 الآجل = المُحصَّل الفعلي (credit_txn.paid) — حركة بنكية على مستوى الشركة (بلا فرع) → «غير محدّد»؛ البيع الآجل اليومي ليس حركة بنكية فلا يُدرَج
   (DATA.credit_txn||[]).forEach(x=>{ const d=String(x.txn_date||'').slice(0,10); if(!inr(d))return; add(fsM,d,'غير محدّد','آجل',x.paid_amount); });
   (DATA.acc_fancy||[]).forEach(x=>{ const d=String(x.tx_date||'').slice(0,10); if(!inr(d))return; const c=azClass(x); if(!c)return; add(azM,d,c.branch,c.type,c.amount); });
+  // 🔄 تفاصيل الحوالات البنكية لكل تاريخ (فانسي + تقرير البنك) — تظهر تحت إجمالي التحويل
+  const fsTr={},azTr={};
+  (DATA.daily_sales||[]).forEach(x=>{ const d=String(x.sale_date||'').slice(0,10); if(!inr(d))return; const br=brCanon(x.branch);
+    if(Array.isArray(x.transfers)&&x.transfers.length){ x.transfers.forEach(t=>{ const a=n(t&&t.amount); if(a)(fsTr[d]=fsTr[d]||[]).push({amount:a,bank:(t&&(t.bank||t.bank_name))||'',branch:br}); }); }
+    else { const a=n(x.bank_transfer); if(a)(fsTr[d]=fsTr[d]||[]).push({amount:a,bank:'',branch:br}); } });
+  (DATA.acc_fancy||[]).forEach(x=>{ const d=String(x.tx_date||'').slice(0,10); if(!inr(d))return; const c=azClass(x); if(!c||c.type!=='تحويل')return; (azTr[d]=azTr[d]||[]).push({amount:c.amount,bank:x.bank_name||'',ref:x.bank_ref||''}); });
   const get=(M,d,br,t)=>(((M[d]||{})[br]||{})[t])||0;
   const dates=[...new Set([...Object.keys(fsM),...Object.keys(azM)])].sort().reverse();
   const grandF={},grandA={}; TYPES.forEach(t=>{grandF[t]=0;grandA[t]=0;});
@@ -210,10 +216,15 @@ function renderMatch(){
     if(statusF==='matched'&&!matched)return; if(statusF==='unmatched'&&matched)return;
     dailyExp.push({d:d,diff:diffIn,matched:matched});
     const pill = matched ? '<span class="pill" style="background:rgba(47,209,150,.15);color:#2fd196;border:1px solid #2fd196;padding:1px 9px">✓ مطابق</span>' : '<span class="pill" style="background:rgba(229,72,77,.15);color:#ff6b7a;border:1px solid #ff6b7a;padding:1px 9px">⚠ غير مطابق</span>';
+    // 🔄 تفاصيل الحوالات البنكية تحت إجمالي التحويل
+    const trF=fsTr[d]||[], trA=azTr[d]||[]; let trHtml='';
+    if(trF.length||trA.length){ const fTr=trF.reduce((a,t)=>a+t.amount,0), aTr=trA.reduce((a,t)=>a+t.amount,0); const hd=Math.abs(fTr-aTr)>=0.005;
+      trHtml='<div style="margin-top:6px;padding:7px 9px;background:rgba(58,160,255,.05);border:1px solid rgba(58,160,255,.25);border-radius:8px"><div style="font-weight:700;font-size:11.5px;color:#3aa0ff;margin-bottom:4px">🔄 تفاصيل الحوالات البنكية — فانسي <b>'+fmt(fTr)+'</b> · تقرير البنك <b>'+fmt(aTr)+'</b> · '+(hd?('<span style="color:#ff6b7a">فرق '+fmt(fTr-aTr)+'</span>'):'<span style="color:#2fd196">✓ مطابق</span>')+'</div><div style="display:flex;gap:12px;flex-wrap:wrap"><div style="flex:1;min-width:190px"><div style="font-size:10px;color:var(--muted);font-weight:700">فانسي</div>'+(trF.length?trF.map(t=>'<div style="font-size:11px">• '+fmt(t.amount)+(t.bank?(' · '+esc(t.bank)):'')+(t.branch?(' <span style="color:var(--muted)">('+esc(t.branch)+')</span>'):'')+'</div>').join(''):'<div style="font-size:11px;color:var(--muted)">—</div>')+'</div><div style="flex:1;min-width:190px"><div style="font-size:10px;color:#3aa0ff;font-weight:700">تقرير البنك</div>'+(trA.length?trA.map(t=>'<div style="font-size:11px">• '+fmt(t.amount)+(t.bank?(' · '+esc(t.bank)):'')+(t.ref?(' <span style="color:var(--muted)">'+esc(t.ref)+'</span>'):'')+'</div>').join(''):'<div style="font-size:11px;color:var(--muted)">—</div>')+'</div></div></div>';
+    }
     rows_html.push(
       '<tr onclick="fsToggleDate('+di+')" style="cursor:pointer"><td style="font-weight:800"><span id="arw-'+di+'" style="color:var(--accent)">▸</span> 📅 '+esc(d)+'</td>'+
         '<td class="num" style="font-weight:800;color:'+(matched?'#2fd196':'#ff6b7a')+'">'+fmt(diffIn)+'</td><td>'+pill+'</td></tr>'+
-      '<tr id="mdet-'+di+'" style="display:none"><td colspan="3" style="padding:4px 2px"><div class="tbl-wrap"><table style="margin:0;font-size:12px">'+detHead+brHtml+'</table></div></td></tr>'
+      '<tr id="mdet-'+di+'" style="display:none"><td colspan="3" style="padding:4px 2px"><div class="tbl-wrap"><table style="margin:0;font-size:12px">'+detHead+brHtml+'</table></div>'+trHtml+'</td></tr>'
     );
   });
   // ملخّص حسب النوع
