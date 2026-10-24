@@ -50,6 +50,10 @@ verify_jwt = false
 [functions.acc-recon]
 verify_jwt = false
 
+# 🛍️ Fancy Sense — نظام محاسبي منفصل (مفتاح x-fs-key)
+[functions.fs-dashboard]
+verify_jwt = false
+
 # لوحة «واتساب شركات» (داشبورد التسويق) — بوابة داخلية بالسر B2B_ADMIN_SECRET
 # في ترويسة x-admin-secret (مغلقة إن لم يُضبط).
 [functions.b2b-admin]

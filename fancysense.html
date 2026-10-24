@@ -1,0 +1,337 @@
+<!doctype html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fancy Sense — المحاسبة</title>
+<style>
+:root{--bg:#0f1720;--panel:#16212e;--panel2:#1c2a3a;--line:#2a3a4d;--txt:#e7eef6;--muted:#93a3b5;--accent:#e0218a;--accent2:#ff5db1;--green:#0e9d6a;--red:#e5484d;--amber:#d98a00;--brand:#c9b037;--radius:12px}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",Tahoma,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+a{color:var(--accent2)}
+.hidden{display:none!important}
+.topbar{display:flex;align-items:center;gap:12px;padding:10px 16px;background:linear-gradient(90deg,#1b2a3a,#16212e);border-bottom:2px solid var(--accent);position:sticky;top:0;z-index:30;flex-wrap:wrap}
+.brand{font-weight:900;font-size:19px;letter-spacing:1px}
+.brand span{color:var(--accent2)}
+.brand small{display:block;font-size:10px;color:var(--muted);font-weight:600;letter-spacing:2px}
+.topbar .sp{flex:1}
+.btn{background:var(--accent);color:#fff;border:none;border-radius:9px;padding:8px 15px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent;color:var(--txt);border:1px solid var(--line)}
+.btn.green{background:var(--green)}
+.btn.red{background:var(--red)}
+.btn.sm{padding:3px 10px;font-size:11px;border-radius:7px}
+.tabs{display:flex;gap:4px;padding:8px 12px;background:var(--panel);overflow-x:auto;border-bottom:1px solid var(--line);position:sticky;top:51px;z-index:20}
+.tab{white-space:nowrap;padding:8px 14px;border-radius:9px 9px 0 0;cursor:pointer;color:var(--muted);font-weight:700;font-size:13px;border:1px solid transparent}
+.tab.on{color:#fff;background:var(--panel2);border-color:var(--line);border-bottom-color:var(--panel2)}
+.wrap{max-width:1300px;margin:0 auto;padding:16px}
+.page{display:none}
+.page.on{display:block}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px}
+.panel h3{margin:0 0 10px;font-size:15px;border-right:4px solid var(--accent);padding-right:9px}
+.row-between{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.fld{display:flex;flex-direction:column;gap:4px}
+.fld.full{grid-column:1/-1}
+.fld label{font-size:12px;color:var(--muted);font-weight:600}
+.fld input,.fld select,.fld textarea{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--txt);font-size:13px;font-family:inherit}
+.fld input:focus,.fld select:focus{outline:none;border-color:var(--accent)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+.kpi .ttl{font-size:11px;color:var(--muted);font-weight:600}
+.kpi .val{font-size:20px;font-weight:800;margin-top:4px}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap}
+th,td{border-bottom:1px solid var(--line);padding:7px 9px;text-align:right}
+th{background:var(--panel2);color:var(--muted);font-weight:700;position:sticky;top:0}
+tbody tr:hover{background:rgba(224,33,138,.06)}
+.num{font-variant-numeric:tabular-nums}
+.pos{color:#2fd196}.neg{color:#ff6b7a}.mut{color:var(--muted)}
+.pill{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px}
+.pill.g{background:rgba(14,157,106,.18);color:#2fd196}
+.pill.r{background:rgba(229,72,77,.18);color:#ff6b7a}
+.msg{font-size:12px;min-height:16px;margin:6px 0}
+.gate{min-height:100vh;display:flex;align-items:center;justify-content:center}
+.gate .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:28px 26px;width:320px;text-align:center}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:4px 11px;font-size:12px}
+.chip button{background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;padding:0;line-height:1}
+.sub{font-size:11.5px;color:var(--muted)}
+.mini{font-size:10px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<!-- بوابة بسيطة -->
+<div id="gate" class="gate">
+  <div class="card">
+    <div class="brand" style="font-size:24px">FANCY<span> SENSE</span><small>المحاسبة</small></div>
+    <p class="sub" style="margin:14px 0 10px">الدخول موحّد مع نظام العز الدولية — سجّلي الدخول هناك ثم افتحي فانسي سنس.</p>
+    <a href="accounting.html" class="btn" style="width:100%;display:block;text-decoration:none;box-sizing:border-box">🔑 الدخول عبر نظام العز</a>
+    <div id="gate-msg" class="msg" style="color:var(--amber);margin-top:10px"></div>
+  </div>
+</div>
+
+<!-- التطبيق -->
+<div id="app" class="hidden">
+<div class="topbar">
+  <div class="brand">FANCY<span> SENSE</span><small>نظام المحاسبة — اكسسوارات وعدسات</small></div>
+  <div class="sp"></div>
+  <span id="hdr-info" class="sub"></span>
+  <button class="btn ghost sm" onclick="loadAll()">🔄 تحديث</button>
+  <a href="accounting.html" class="btn ghost sm" style="text-decoration:none">← العز الدولية</a>
+</div>
+<div class="tabs" id="tabs"></div>
+<div class="wrap">
+  <div class="page on" id="p-dash"></div>
+  <div class="page" id="p-sales"></div>
+  <div class="page" id="p-rewa"></div>
+  <div class="page" id="p-credit"></div>
+  <div class="page" id="p-banks"></div>
+  <div class="page" id="p-inv"></div>
+  <div class="page" id="p-settings"></div>
+</div>
+</div>
+
+<script>
+// 🔐 نفس دخول نظام العز (نفس النطاق → localStorage مشترك): لا مفتاح مضمّن
+const FN='https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/fs-dashboard';
+let KEY=localStorage.getItem('acc_key')||'', TOKEN=localStorage.getItem('acc_token')||'', DATA=null;
+
+// ---- أدوات ----
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const n=v=>{const x=Number(v);return isNaN(x)?0:x;};
+const fmt=v=>n(v).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:3});
+const today=()=>new Date().toISOString().slice(0,10);
+const cur=()=>(DATA&&DATA.config&&DATA.config.currency)||'OMR';
+const taxRate=()=>n((DATA&&DATA.config&&DATA.config.tax_rate)||0);
+function listVals(cat){return (DATA&&DATA.lists||[]).filter(l=>l.category===cat).map(l=>l.value);}
+function opts(cat,sel){return '<option value="">—</option>'+listVals(cat).map(v=>'<option'+(v===sel?' selected':'')+'>'+esc(v)+'</option>').join('');}
+
+async function api(method,action,payload){
+  const opt={method,cache:'no-store',headers:{}};
+  if(KEY)opt.headers['x-acc-key']=KEY; if(TOKEN)opt.headers['x-acc-token']=TOKEN;
+  if(method==='POST'){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify({action,payload});}
+  const qs='?_t='+Date.now()+(KEY?('&key='+encodeURIComponent(KEY)):'')+(TOKEN?('&token='+encodeURIComponent(TOKEN)):'');
+  const r=await fetch(FN+qs,opt);
+  if(r.status===401){ needLogin(); throw new Error('انتهت الجلسة — سجّلي الدخول من نظام العز'); }
+  return r.json();
+}
+async function loadAll(){
+  try{ DATA=await api('GET'); if(DATA.error){alert('خطأ: '+DATA.error);return;} render(); }
+  catch(e){ /* 401 يعالَج في api */ }
+}
+function needLogin(){ $('app').classList.add('hidden'); $('gate').classList.remove('hidden'); $('gate-msg').innerHTML='لازم تسجّلي الدخول من <b>نظام العز</b> أولاً (نفس الجلسة).'; }
+async function crud(action,table,data,id){
+  const j=await api('POST',action,{table,data,id});
+  if(j.error){ alert('خطأ: '+j.error); return false; }
+  await loadAll(); return true;
+}
+
+// ---- البوابة (موحّدة مع نظام العز) ----
+function showApp(){ $('gate').classList.add('hidden'); $('app').classList.remove('hidden'); loadAll(); }
+
+// ---- التبويبات ----
+const TABS=[['dash','📊 لوحة'],['sales','🧾 المبيعات اليومية'],['rewa','🔄 مطابقة REWA'],['credit','👤 عملاء الآجل'],['banks','🏦 البنوك والإيداعات'],['inv','📦 منتجات ناقصة'],['settings','⚙️ إعدادات']];
+function buildTabs(){ $('tabs').innerHTML=TABS.map((t,i)=>'<div class="tab'+(i===0?' on':'')+'" data-p="'+t[0]+'" onclick="switchTab(this)">'+t[1]+'</div>').join(''); }
+function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on')); el.classList.add('on'); const p=el.dataset.p; document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('on')); $('p-'+p).classList.add('on'); }
+
+// ---- فورم قابل للطيّ ----
+function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
+
+function render(){
+  $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'%';
+  renderDash(); renderSales(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
+}
+
+// ===== 📊 لوحة =====
+function renderDash(){
+  const s=DATA.daily_sales||[];
+  // فلتر الشهر
+  const months=[...new Set(s.map(x=>String(x.sale_date||'').slice(0,7)).filter(Boolean))].sort().reverse();
+  const selM=window._fsMonth||(months[0]||'');
+  const rows=selM?s.filter(x=>String(x.sale_date||'').slice(0,7)===selM):s;
+  let tot=0,ret=0,byBranch={},byPM={machine:0,cash:0,atm_deposit:0,bank_transfer:0};
+  rows.forEach(x=>{ tot+=n(x.total); ret+=n(x.returns); byBranch[x.branch]=(byBranch[x.branch]||0)+n(x.total);
+    byPM.machine+=n(x.machine); byPM.cash+=n(x.cash); byPM.atm_deposit+=n(x.atm_deposit); byPM.bank_transfer+=n(x.bank_transfer); });
+  const rate=taxRate()/100; const net=rate>0?tot/(1+rate):tot; const vat=tot-net; const afterRet=tot-ret;
+  const C=cur();
+  $('p-dash').innerHTML=
+    '<div class="panel"><div class="row-between"><h3 style="margin:0">📊 ملخّص المبيعات</h3>'+
+      '<div class="fld" style="min-width:160px"><label>الشهر</label><select onchange="window._fsMonth=this.value;renderDash()">'+(months.length?months.map(m=>'<option'+(m===selM?' selected':'')+'>'+m+'</option>').join(''):'<option>—</option>')+'</select></div>'+
+    '</div>'+
+    '<div class="kpis" style="margin-top:12px">'+
+      kpi('إجمالي المبيعات (شامل الضريبة)',fmt(tot)+' '+C)+
+      kpi('الضريبة ('+taxRate()+'%)',fmt(vat)+' '+C)+
+      kpi('صافي المبيعات (بدون ضريبة)',fmt(net)+' '+C)+
+      kpi('المرتجعات',fmt(ret)+' '+C,'neg')+
+      kpi('صافي بعد المرتجعات',fmt(afterRet)+' '+C,'pos')+
+      kpi('عدد الأيام المسجّلة',fmt(rows.length))+
+    '</div>'+
+    '<div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">'+
+      '<div><h3 style="font-size:13px;border-color:var(--accent2)">حسب الفرع</h3>'+miniTable(byBranch,C)+'</div>'+
+      '<div><h3 style="font-size:13px;border-color:var(--accent2)">حسب طريقة الدفع</h3>'+miniTable({'المكنة (البطاقة)':byPM.machine,'نقدي':byPM.cash,'إيداع ATM':byPM.atm_deposit,'تحويل بنكي':byPM.bank_transfer},C)+'</div>'+
+    '</div></div>';
+}
+function kpi(t,v,cls){ return '<div class="kpi"><div class="ttl">'+t+'</div><div class="val '+(cls||'')+'">'+v+'</div></div>'; }
+function miniTable(obj,C){ const ks=Object.keys(obj).filter(k=>k); if(!ks.length)return '<div class="sub">لا بيانات</div>'; const tot=ks.reduce((a,k)=>a+n(obj[k]),0);
+  return '<div class="tbl-wrap"><table><tbody>'+ks.map(k=>'<tr><td>'+esc(k)+'</td><td class="num" style="text-align:left;font-weight:700">'+fmt(obj[k])+' '+C+'</td></tr>').join('')+'<tr style="font-weight:800"><td>الإجمالي</td><td class="num" style="text-align:left">'+fmt(tot)+' '+C+'</td></tr></tbody></table></div>'; }
+
+// ===== 🧾 المبيعات اليومية =====
+function renderSales(){
+  const C=cur();
+  const form='<div id="sales-form" class="panel hidden" style="border-color:var(--accent)"><h3>➕ تسجيل مبيعات يوم</h3>'+
+    '<div class="fgrid">'+
+      fin('التاريخ','sl-date','date',today())+
+      fsel('الفرع','sl-branch','branch')+
+      fin('المكنة (البطاقة)','sl-machine','number','0','oninput="slTotal()"')+
+      fin('نقدي','sl-cash','number','0','oninput="slTotal()"')+
+      fin('إيداع ATM','sl-atm','number','0','oninput="slTotal()"')+
+      fin('تحويل بنكي','sl-transfer','number','0','oninput="slTotal()"')+
+      fin('الإجمالي (شامل الضريبة)','sl-total','number','0')+
+      fin('المرتجعات','sl-returns','number','0')+
+      '<div class="fld full"><label>ملاحظة</label><input id="sl-note"></div>'+
+    '</div>'+
+    '<div class="sub" style="margin-top:6px">الإجمالي يُحسب تلقائيّاً = المكنة + نقدي + إيداع ATM + تحويل بنكي (قابل للتعديل). نسبة الضريبة الحالية '+taxRate()+'% تُحفظ مع السطر.</div>'+
+    '<div id="sl-msg" class="msg"></div>'+
+    '<button class="btn green" onclick="saveSale()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'sales-form\')">إلغاء</button></div>';
+  const s=DATA.daily_sales||[];
+  const rate=taxRate()/100;
+  const rows=s.map(x=>{ const net=rate>0?n(x.total)/(1+(n(x.tax_rate)||taxRate())/100):n(x.total);
+    return '<tr><td>'+esc(x.sale_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td class="num">'+fmt(x.machine)+'</td><td class="num">'+fmt(x.cash)+'</td><td class="num">'+fmt(x.atm_deposit)+'</td><td class="num">'+fmt(x.bank_transfer)+'</td><td class="num" style="font-weight:800">'+fmt(x.total)+'</td><td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button></td></tr>'; }).join('');
+  $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات</button></div></div>'+form+
+    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة</th><th>نقدي</th><th>إيداع ATM</th><th>تحويل بنكي</th><th>الإجمالي</th><th>المرتجعات</th><th>صافي بدون ضريبة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="11" class="mut" style="text-align:center;padding:14px">لا مبيعات مسجّلة بعد</td></tr>')+'</tbody></table></div></div>';
+}
+function slTotal(){ const t=n($('sl-machine').value)+n($('sl-cash').value)+n($('sl-atm').value)+n($('sl-transfer').value); $('sl-total').value=+t.toFixed(3); }
+async function saveSale(){
+  const d=$('sl-date').value, b=$('sl-branch').value;
+  if(!d){ $('sl-msg').innerHTML='<span class="neg">أدخلي التاريخ</span>'; return; }
+  if(!b){ $('sl-msg').innerHTML='<span class="neg">اختاري الفرع</span>'; return; }
+  const data={sale_date:d,branch:b,machine:n($('sl-machine').value),cash:n($('sl-cash').value),atm_deposit:n($('sl-atm').value),bank_transfer:n($('sl-transfer').value),total:n($('sl-total').value),returns:n($('sl-returns').value),tax_rate:taxRate(),note:$('sl-note').value||null};
+  if(await crud('insert','daily_sales',data)){ formToggle('sales-form'); }
+}
+
+// ===== 🔄 مطابقة REWA =====
+function renderRewa(){
+  const C=cur();
+  const form='<div id="rewa-form" class="panel hidden" style="border-color:var(--accent)"><h3>➕ تسجيل مطابقة</h3><div class="fgrid">'+
+    fin('التاريخ','rw-date','date',today())+
+    fin('الفترة (شهر)','rw-period','month','')+
+    fsel('الفرع/الموقع','rw-branch','branch')+
+    fsel('طريقة الدفع','rw-pm','payment_method')+
+    fin('مبلغ نظام REWA','rw-rewa','number','0')+
+    fin('المبلغ الفعلي (الشيت)','rw-sheet','number','0')+
+    '<div class="fld full"><label>ملاحظة</label><input id="rw-note"></div>'+
+    '</div><div id="rw-msg" class="msg"></div><button class="btn green" onclick="saveRewa()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'rewa-form\')">إلغاء</button></div>';
+  const rows=(DATA.rewa_recon||[]).map(x=>{ const diff=n(x.rewa_total)-n(x.sheet_total); const ok=Math.abs(diff)<0.005;
+    return '<tr><td>'+esc(x.recon_date||x.period||'')+'</td><td>'+esc(x.branch||'')+'</td><td>'+esc(x.payment_method||'')+'</td><td class="num">'+fmt(x.rewa_total)+'</td><td class="num">'+fmt(x.sheet_total)+'</td><td class="num '+(ok?'pos':'neg')+'" style="font-weight:800">'+(ok?'✅ 0':fmt(diff))+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'rewa_recon\','+x.id+')">حذف</button></td></tr>'; }).join('');
+  $('p-rewa').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🔄 مطابقة نظام REWA بالفعلي</h3><button class="btn" onclick="formToggle(\'rewa-form\')">➕ إضافة مطابقة</button></div></div>'+form+
+    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ/الفترة</th><th>الفرع</th><th>طريقة الدفع</th><th>REWA</th><th>الفعلي</th><th>الفرق</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="8" class="mut" style="text-align:center;padding:14px">لا مطابقات بعد</td></tr>')+'</tbody></table></div></div>';
+}
+async function saveRewa(){
+  const data={recon_date:$('rw-date').value||null,period:$('rw-period').value||null,branch:$('rw-branch').value||null,payment_method:$('rw-pm').value||null,rewa_total:n($('rw-rewa').value),sheet_total:n($('rw-sheet').value),note:$('rw-note').value||null};
+  if(await crud('insert','rewa_recon',data)){ formToggle('rewa-form'); }
+}
+
+// ===== 👤 عملاء الآجل =====
+function renderCredit(){
+  const C=cur();
+  const custForm='<div id="cust-form" class="panel hidden" style="border-color:var(--accent)"><h3>➕ عميل آجل جديد</h3><div class="fgrid">'+
+    fin('اسم العميل','cu-name','text','')+fin('الجوال','cu-phone','text','')+'<div class="fld full"><label>ملاحظة</label><input id="cu-note"></div>'+
+    '</div><div id="cu-msg" class="msg"></div><button class="btn green" onclick="saveCust()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'cust-form\')">إلغاء</button></div>';
+  const txForm='<div id="ctx-form" class="panel hidden" style="border-color:var(--accent2)"><h3>➕ حركة آجل (فاتورة/سداد/مرتجع)</h3><div class="fgrid">'+
+    '<div class="fld"><label>العميل</label><select id="ct-cust">'+(DATA.credit_customers||[]).map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join('')+'</select></div>'+
+    fin('التاريخ','ct-date','date',today())+fin('رقم المستند','ct-doc','text','')+
+    fin('قيمة الفاتورة','ct-inv','number','0')+fin('المسدّد','ct-paid','number','0')+fin('المرتجع','ct-ret','number','0')+
+    '<div class="fld full"><label>ملاحظة</label><input id="ct-note"></div>'+
+    '</div><div id="ct-msg" class="msg"></div><button class="btn green" onclick="saveCtx()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'ctx-form\')">إلغاء</button></div>';
+  // أرصدة العملاء
+  const bal={}; (DATA.credit_txn||[]).forEach(t=>{ bal[t.customer_id]=(bal[t.customer_id]||0)+n(t.invoice_amount)-n(t.paid_amount)-n(t.returned_amount); });
+  const custRows=(DATA.credit_customers||[]).map(c=>'<tr><td>'+esc(c.name)+'</td><td>'+esc(c.phone||'')+'</td><td class="num '+(n(bal[c.id])>0.005?'neg':'pos')+'" style="font-weight:800">'+fmt(bal[c.id]||0)+' '+C+'</td><td class="mini">'+esc(c.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'credit_customers\','+c.id+')">حذف</button></td></tr>').join('');
+  const custName={}; (DATA.credit_customers||[]).forEach(c=>custName[c.id]=c.name);
+  const txRows=(DATA.credit_txn||[]).map(t=>'<tr><td>'+esc(t.txn_date||'')+'</td><td>'+esc(custName[t.customer_id]||'')+'</td><td>'+esc(t.doc_no||'')+'</td><td class="num">'+fmt(t.invoice_amount)+'</td><td class="num pos">'+fmt(t.paid_amount)+'</td><td class="num neg">'+fmt(t.returned_amount)+'</td><td class="mini">'+esc(t.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'credit_txn\','+t.id+')">حذف</button></td></tr>').join('');
+  $('p-credit').innerHTML=
+    '<div class="panel"><div class="row-between"><h3 style="margin:0">👤 عملاء الآجل</h3><button class="btn" onclick="formToggle(\'cust-form\')">➕ عميل جديد</button></div></div>'+custForm+
+    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>العميل</th><th>الجوال</th><th>الرصيد المتبقّي</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(custRows||'<tr><td colspan="5" class="mut" style="text-align:center;padding:12px">لا عملاء</td></tr>')+'</tbody></table></div></div>'+
+    '<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 حركات الآجل</h3><button class="btn" onclick="formToggle(\'ctx-form\')">➕ حركة</button></div></div>'+txForm+
+    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>العميل</th><th>المستند</th><th>الفاتورة</th><th>المسدّد</th><th>المرتجع</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(txRows||'<tr><td colspan="8" class="mut" style="text-align:center;padding:12px">لا حركات</td></tr>')+'</tbody></table></div></div>';
+}
+async function saveCust(){ const nm=$('cu-name').value||''; if(!nm){$('cu-msg').innerHTML='<span class="neg">أدخلي الاسم</span>';return;} if(await crud('insert','credit_customers',{name:nm,phone:$('cu-phone').value||null,note:$('cu-note').value||null})){formToggle('cust-form');} }
+async function saveCtx(){ const cid=$('ct-cust').value; if(!cid){$('ct-msg').innerHTML='<span class="neg">اختاري العميل</span>';return;} const data={customer_id:Number(cid),txn_date:$('ct-date').value||null,doc_no:$('ct-doc').value||null,invoice_amount:n($('ct-inv').value),paid_amount:n($('ct-paid').value),returned_amount:n($('ct-ret').value),note:$('ct-note').value||null}; if(await crud('insert','credit_txn',data)){formToggle('ctx-form');} }
+
+// ===== 🏦 البنوك والإيداعات =====
+function renderBanks(){
+  const C=cur();
+  const bForm='<div id="bank-form" class="panel hidden" style="border-color:var(--accent)"><h3>➕ حركة بنك</h3><div class="fgrid">'+
+    fin('تاريخ الحركة الفعلي','bk-adate','date',today())+fin('تاريخ الإقفال','bk-cdate','date','')+
+    '<div class="fld"><label>النوع</label><select id="bk-dir"><option value="in">وارد (+)</option><option value="out">صادر (−)</option></select></div>'+
+    fin('القيمة','bk-amt','number','0')+fsel('البنك','bk-bank','bank')+
+    '<div class="fld full"><label>ملاحظة</label><input id="bk-note"></div>'+
+    '</div><div id="bk-msg" class="msg"></div><button class="btn green" onclick="saveBank()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'bank-form\')">إلغاء</button></div>';
+  const aForm='<div id="atm-form" class="panel hidden" style="border-color:var(--accent2)"><h3>➕ إيداع ATM</h3><div class="fgrid">'+
+    fin('التاريخ','at-date','date',today())+fsel('الفرع','at-branch','branch')+fin('المبلغ','at-amt','number','0')+
+    '<div class="fld full"><label>ملاحظة</label><input id="at-note"></div>'+
+    '</div><div id="at-msg" class="msg"></div><button class="btn green" onclick="saveAtm()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'atm-form\')">إلغاء</button></div>';
+  const bRows=(DATA.bank_txn||[]).map(x=>'<tr><td>'+esc(x.actual_date||'')+'</td><td>'+esc(x.close_date||'')+'</td><td>'+esc(x.bank_name||'')+'</td><td><span class="pill '+(x.direction==='out'?'r':'g')+'">'+(x.direction==='out'?'صادر':'وارد')+'</span></td><td class="num '+(x.direction==='out'?'neg':'pos')+'" style="font-weight:800">'+fmt(x.amount)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'bank_txn\','+x.id+')">حذف</button></td></tr>').join('');
+  const aRows=(DATA.atm_deposit||[]).map(x=>'<tr><td>'+esc(x.dep_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td class="num pos" style="font-weight:800">'+fmt(x.amount)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'atm_deposit\','+x.id+')">حذف</button></td></tr>').join('');
+  $('p-banks').innerHTML=
+    '<div class="panel"><div class="row-between"><h3 style="margin:0">🏦 حركات البنوك</h3><button class="btn" onclick="formToggle(\'bank-form\')">➕ حركة بنك</button></div></div>'+bForm+
+    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ الفعلي</th><th>الإقفال</th><th>البنك</th><th>النوع</th><th>القيمة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(bRows||'<tr><td colspan="7" class="mut" style="text-align:center;padding:12px">لا حركات</td></tr>')+'</tbody></table></div></div>'+
+    '<div class="panel"><div class="row-between"><h3 style="margin:0">🏧 إيداعات ATM</h3><button class="btn" onclick="formToggle(\'atm-form\')">➕ إيداع</button></div></div>'+aForm+
+    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المبلغ</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(aRows||'<tr><td colspan="5" class="mut" style="text-align:center;padding:12px">لا إيداعات</td></tr>')+'</tbody></table></div></div>';
+}
+async function saveBank(){ const data={actual_date:$('bk-adate').value||null,close_date:$('bk-cdate').value||null,direction:$('bk-dir').value,amount:n($('bk-amt').value),bank_name:$('bk-bank').value||null,note:$('bk-note').value||null}; if(await crud('insert','bank_txn',data)){formToggle('bank-form');} }
+async function saveAtm(){ const data={dep_date:$('at-date').value||null,branch:$('at-branch').value||null,amount:n($('at-amt').value),note:$('at-note').value||null}; if(await crud('insert','atm_deposit',data)){formToggle('atm-form');} }
+
+// ===== 📦 منتجات ناقصة =====
+function renderInv(){
+  const form='<div id="inv-form" class="panel hidden" style="border-color:var(--accent)"><h3>➕ فرق جرد</h3><div class="fgrid">'+
+    fin('الكود','iv-code','text','')+fin('الكمية بالفاتورة','iv-qi','number','0')+fin('السعر','iv-price','number','0')+fin('الكمية الفعلية','iv-qa','number','0')+
+    '<div class="fld full"><label>ملاحظة</label><input id="iv-note"></div>'+
+    '</div><div id="iv-msg" class="msg"></div><button class="btn green" onclick="saveInv()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'inv-form\')">إلغاء</button></div>';
+  const rows=(DATA.inventory_short||[]).map(x=>{ const diff=n(x.qty_invoice)-n(x.qty_actual);
+    return '<tr><td>'+esc(x.code||'')+'</td><td class="num">'+fmt(x.qty_invoice)+'</td><td class="num">'+fmt(x.qty_actual)+'</td><td class="num '+(diff!==0?'neg':'pos')+'" style="font-weight:800">'+fmt(diff)+'</td><td class="num">'+fmt(x.price)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'inventory_short\','+x.id+')">حذف</button></td></tr>'; }).join('');
+  $('p-inv').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">📦 منتجات ناقصة / فروقات الجرد</h3><button class="btn" onclick="formToggle(\'inv-form\')">➕ إضافة</button></div></div>'+form+
+    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>الكود</th><th>الكمية بالفاتورة</th><th>الكمية الفعلية</th><th>الفرق</th><th>السعر</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="7" class="mut" style="text-align:center;padding:12px">لا سجلات</td></tr>')+'</tbody></table></div></div>';
+}
+async function saveInv(){ const data={code:$('iv-code').value||null,qty_invoice:n($('iv-qi').value),price:n($('iv-price').value),qty_actual:n($('iv-qa').value),note:$('iv-note').value||null}; if(await crud('insert','inventory_short',data)){formToggle('inv-form');} }
+
+// ===== ⚙️ إعدادات =====
+function renderSettings(){
+  $('p-settings').innerHTML=
+    '<div class="panel"><h3>💵 نسبة الضريبة والعملة</h3><div class="fgrid">'+
+      '<div class="fld"><label>نسبة الضريبة %</label><input id="st-tax" type="number" value="'+taxRate()+'"></div>'+
+      '<div class="fld"><label>العملة</label><input id="st-cur" value="'+esc(cur())+'"></div>'+
+      '<div class="fld"><label>اسم النشاط</label><input id="st-comp" value="'+esc((DATA.config.company)||'Fancy Sense')+'"></div>'+
+    '</div><div id="st-msg" class="msg"></div><button class="btn green" onclick="saveSettings()">💾 حفظ الإعدادات</button></div>'+
+    listPanel('الفروع','branch','ادخلي اسم الفرع')+
+    listPanel('البنوك','bank','ادخلي اسم/رقم البنك')+
+    listPanel('طرق الدفع','payment_method','ادخلي طريقة الدفع');
+}
+function listPanel(title,cat,ph){
+  const items=(DATA.lists||[]).filter(l=>l.category===cat);
+  return '<div class="panel"><h3>'+esc(title)+'</h3><div class="chips" style="margin-bottom:10px">'+(items.length?items.map(l=>'<span class="chip">'+esc(l.value)+' <button onclick="delList('+l.id+')" title="حذف">✕</button></span>').join(''):'<span class="sub">لا عناصر</span>')+'</div>'+
+    '<div style="display:flex;gap:8px"><input id="lst-'+cat+'" placeholder="'+esc(ph)+'" style="flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--txt)"><button class="btn" onclick="addList(\''+cat+'\')">➕ إضافة</button></div></div>';
+}
+async function saveSettings(){
+  const tax=$('st-tax').value, c=$('st-cur').value, comp=$('st-comp').value;
+  await api('POST','set_config',{key:'tax_rate',value:tax});
+  await api('POST','set_config',{key:'currency',value:c});
+  await api('POST','set_config',{key:'company',value:comp});
+  $('st-msg').innerHTML='<span class="pos">✅ حُفظت</span>'; await loadAll();
+}
+async function addList(cat){ const el=$('lst-'+cat); const v=(el.value||'').trim(); if(!v)return; if(await crud('insert','lists',{category:cat,value:v})){} }
+async function delList(id){ if(confirm('حذف العنصر؟')) await crud('delete','lists',null,id); }
+async function delRow(table,id){ if(confirm('حذف السطر؟ لا يمكن التراجع.')) await crud('delete',table,null,id); }
+
+// ---- مولّدات حقول ----
+function fin(label,id,type,val,extra){ return '<div class="fld"><label>'+label+'</label><input id="'+id+'" type="'+type+'"'+(val!=null&&val!==''?' value="'+esc(val)+'"':(type==='number'?' value="0"':''))+' '+(extra||'')+'></div>'; }
+function fsel(label,id,cat){ return '<div class="fld"><label>'+label+'</label><select id="'+id+'">'+opts(cat)+'</select></div>'; }
+
+// ---- بدء ----
+buildTabs();
+if(KEY||TOKEN){ showApp(); } else { needLogin(); }
+</script>
+</body>
+</html>
