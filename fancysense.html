@@ -147,7 +147,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v10';
+const FS_VER='v11';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -176,13 +176,35 @@ function renderExpenses(){
   $('p-expenses').innerHTML=
     '<div class="panel"><div class="row-between"><h3 style="margin:0">💸 المصاريف اليومية <span class="sub">('+e.length+' سطر)</span></h3>'+
       '<div style="display:flex;gap:8px;align-items:end"><div class="fld" style="min-width:140px"><label>الشهر</label><select onchange="window._fsExpMonth=this.value;renderExpenses()">'+(months.length?months.map(m=>'<option'+(m===selM?' selected':'')+'>'+m+'</option>').join(''):'<option>—</option>')+'</select></div>'+
-      '<button class="btn" onclick="formToggle(\'exp-form\')">➕ إضافة مصروف</button></div></div>'+
+      '<button class="btn" onclick="formToggle(\'exp-form\')">➕ إضافة مصروف</button><button class="btn" style="background:#0e9d6a" onclick="exportExpensesPDF()">📄 تصدير PDF</button></div></div>'+
       '<div class="kpis" style="margin-top:12px">'+kpi('إجمالي المصاريف'+(selM?(' ('+selM+')'):''),fmt(totExp)+' '+C,'neg')+'</div>'+
       (Object.keys(byCat).length?('<div style="max-width:420px">'+miniTable(byCat,C)+'</div>'):'')+
     '</div>'+form+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>البند</th><th>المبلغ</th><th>طريقة الدفع</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(tr||'<tr><td colspan="7" class="mut" style="text-align:center;padding:14px">لا مصاريف مسجّلة بعد</td></tr>')+'</tbody></table></div></div>';
 }
 // حفظ مصروف من شاشة المبيعات (نفس جدول المصاريف)
+// 📄 تصدير تقرير المصاريف PDF (حسب الشهر المختار)
+function exportExpensesPDF(){
+  const e=(DATA&&DATA.expenses)||[]; const C=cur();
+  const selM=window._fsExpMonth||''; const rows=selM?e.filter(x=>String(x.exp_date||'').slice(0,7)===selM):e;
+  if(!rows.length){ toast('لا مصاريف للتصدير',true); return; }
+  const tot=rows.reduce((a,x)=>a+n(x.amount),0); const byCat={}; rows.forEach(x=>byCat[x.category||'—']=(byCat[x.category||'—']||0)+n(x.amount));
+  const today=new Date().toISOString().slice(0,10);
+  const catRows=Object.keys(byCat).map(k=>'<tr><td>'+esc(k)+'</td><td class="num">'+fmt(byCat[k])+' '+esc(C)+'</td></tr>').join('');
+  const detRows=rows.map(x=>'<tr><td>'+esc(x.exp_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td>'+esc(x.category||'')+'</td><td class="num">'+fmt(x.amount)+'</td><td>'+esc(x.pay_method||'')+'</td><td style="font-size:10px">'+esc(x.note||'')+'</td></tr>').join('');
+  const html='<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>تقرير مصاريف Fancy Sense</title><style>'+
+    '@page{size:A4;margin:10mm}body{font-family:Tahoma,Arial;color:#222;margin:0;font-size:12.5px}'+
+    '.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #b8860b;padding-bottom:8px;margin-bottom:8px}.logo{font-size:22px;font-weight:900;letter-spacing:2px;color:#e0218a}.logo span{color:#c9b037}.logo small{display:block;font-size:10px;color:#777}'+
+    '.ttl{text-align:left;font-size:14px;font-weight:800;color:#b8860b}.ttl small{display:block;font-size:10px;color:#777;font-weight:400}'+
+    'table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #ccc;padding:5px 7px;text-align:right}th{background:#b8860b;color:#fff;font-size:11px}.num{text-align:left;font-variant-numeric:tabular-nums}h3{margin:12px 0 4px;color:#b8860b;font-size:13px}.tot{background:#fdf6e3;font-weight:800}@media print{.noprint{display:none}}</style></head><body>'+
+    '<div class="noprint" style="text-align:left;margin-bottom:8px"><button onclick="window.print()" style="padding:7px 18px;background:#b8860b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">🖨️ طباعة / حفظ PDF</button></div>'+
+    '<div class="hd"><div class="logo">FANCY<span> SENSE</span><small>نظام المحاسبة</small></div><div class="ttl">تقرير المصاريف<small>'+(selM?('الشهر: '+selM+' · '):'')+'تاريخ الإصدار: '+today+'</small></div></div>'+
+    '<h3>الإجمالي: '+fmt(tot)+' '+esc(C)+' · عدد السجلات: '+fmt(rows.length)+'</h3>'+
+    '<h3>📊 حسب الفئة</h3><table><thead><tr><th>الفئة</th><th>المبلغ</th></tr></thead><tbody>'+catRows+'<tr class="tot"><td>الإجمالي</td><td class="num">'+fmt(tot)+' '+esc(C)+'</td></tr></tbody></table>'+
+    '<h3>🧾 التفصيل</h3><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>الفئة</th><th>المبلغ</th><th>طريقة الدفع</th><th>ملاحظة</th></tr></thead><tbody>'+detRows+'</tbody></table>'+
+    '<'+'script>window.onload=function(){setTimeout(function(){window.print();},350);};<'+'/script></body></html>';
+  const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close(); } else toast('اسمحي بالنوافذ المنبثقة',true);
+}
 async function saveExpFromSales(){
   const d=$('sx-date').value; if(!d){ $('sx-msg').innerHTML='<span class="neg">أدخلي التاريخ</span>'; return; }
   const amt=n($('sx-amt').value); if(amt<=0){ $('sx-msg').innerHTML='<span class="neg">أدخلي المبلغ</span>'; return; }
@@ -318,7 +340,7 @@ function renderSales(){
       '<td class="num" style="font-weight:800">'+fmt(x.total)+'</td><td class="num mut">'+fmt(x.rewa_total)+'</td><td class="num" style="font-weight:800;color:'+(Math.abs(gd)<0.005?'#2fd196':'#ff6b7a')+'">'+fmt(gd)+'</td>'+
       '<td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button></td></tr>'; }).join('');
   const anyF=!!(F.from||F.to||F.branch||F.pm);
-  $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات + مصاريف اليوم</button></div></div>'+form+filterBar+
+  $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><div style="display:flex;gap:8px"><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات + مصاريف اليوم</button><button class="btn" style="background:#0e9d6a" onclick="exportSalesPDF()">📄 تصدير PDF</button></div></div></div>'+form+filterBar+
     summ('📊 ملخّص الفترة'+(anyF?' المفلترة':''),fA,false)+
     summ('🗂️ ملخّص عام (كل السجلات)',gA,true)+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة<br><span class="mini">موظفة/REWA</span></th><th>نقدي<br><span class="mini">موظفة/REWA</span></th><th>آجل<br><span class="mini">موظفة/REWA</span></th><th>تحويل<br><span class="mini">موظفة/REWA</span></th><th>إجمالي الموظفة</th><th>إجمالي REWA</th><th>الفرق</th><th>المرتجعات</th><th>صافي بدون ضريبة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="13" class="mut" style="text-align:center;padding:14px">لا نتائج للفلتر المحدّد</td></tr>')+'</tbody></table></div></div>';
@@ -400,6 +422,40 @@ function slCreditRowHtml(i){ return '<div class="sl-cr-row" data-i="'+i+'" style
   '<input id="cr-note-'+i+'" placeholder="ملاحظة" style="padding:6px 8px">'+
   '<button class="btn red sm" onclick="this.closest(\'.sl-cr-row\').remove();slDiff()">✕</button></div>'; }
 function slAddCreditRow(){ const c=$('sl-credit-rows'); if(!c)return; c.insertAdjacentHTML('beforeend', slCreditRowHtml(_slCrIdx++)); }
+// 📄 تصدير تقرير المبيعات (حسب الفلتر الحالي) PDF
+function exportSalesPDF(){
+  const s=(DATA&&DATA.daily_sales)||[]; const C=cur(); const txr=taxRate();
+  const F={from:window._slFrom||'',to:window._slTo||'',branch:window._slBranch||'',pm:window._slPM||''};
+  const rows=s.filter(x=>{ const d=String(x.sale_date||'').slice(0,10); if(F.from&&d<F.from)return false; if(F.to&&d>F.to)return false; if(F.branch&&x.branch!==F.branch)return false; return true; });
+  if(!rows.length){ toast('لا سجلات للتصدير ضمن الفلتر',true); return; }
+  const chans=[['المكنة','machine','rewa_machine'],['نقدي','cash','rewa_cash'],['آجل','credit_sales','rewa_credit'],['تحويل','bank_transfer','rewa_transfer']];
+  let tEmp=0,tRewa=0,tRet=0,tNet=0; const ch={}; chans.forEach(c=>ch[c[1]]={e:0,r:0});
+  rows.forEach(x=>{ tEmp+=n(x.total);tRewa+=n(x.rewa_total);tRet+=n(x.returns); const rt=(n(x.tax_rate)||txr)/100; tNet+=rt>0?n(x.total)/(1+rt):n(x.total); chans.forEach(c=>{ ch[c[1]].e+=n(x[c[1]]); ch[c[1]].r+=n(x[c[2]]); }); });
+  const pmName={machine:'المكنة',cash:'نقدي',credit:'آجل',transfer:'تحويل'}[F.pm]||'';
+  const filt=[(F.from||F.to)?('الفترة: '+(F.from||'…')+' ← '+(F.to||'…')):'',F.branch?('الفرع: '+F.branch):'',F.pm?('نوع الدفع: '+pmName):''].filter(Boolean).join(' · ')||'كل السجلات';
+  const today=new Date().toISOString().slice(0,10);
+  const gd=tEmp-tRewa;
+  const sumRows=chans.map(c=>{ const e=ch[c[1]].e,r=ch[c[1]].r,d=e-r; return '<tr><td>'+c[0]+'</td><td class="num">'+fmt(e)+'</td><td class="num">'+fmt(r)+'</td><td class="num" style="color:'+(Math.abs(d)<0.005?'#0a7':'#c0392b')+'">'+fmt(d)+'</td></tr>'; }).join('');
+  const detRows=rows.map(x=>{ const rt=(n(x.tax_rate)||txr)/100; const net=rt>0?n(x.total)/(1+rt):n(x.total); const d=n(x.total)-n(x.rewa_total);
+    return '<tr><td>'+esc(x.sale_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td class="num">'+fmt(x.machine)+'</td><td class="num">'+fmt(x.cash)+'</td><td class="num">'+fmt(x.credit_sales)+'</td><td class="num">'+fmt(x.bank_transfer)+'</td><td class="num"><b>'+fmt(x.total)+'</b></td><td class="num">'+fmt(x.rewa_total)+'</td><td class="num" style="color:'+(Math.abs(d)<0.005?'#0a7':'#c0392b')+'">'+fmt(d)+'</td><td class="num">'+fmt(x.returns)+'</td><td class="num">'+fmt(net)+'</td><td style="font-size:10px">'+esc(x.note||'')+'</td></tr>'; }).join('');
+  const html='<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>تقرير مبيعات Fancy Sense</title><style>'+
+    '@page{size:A4 landscape;margin:9mm}body{font-family:Tahoma,Arial;color:#222;margin:0;font-size:12px}'+
+    '.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #e0218a;padding-bottom:8px;margin-bottom:8px}.logo{font-size:22px;font-weight:900;letter-spacing:2px;color:#e0218a}.logo span{color:#c9b037}.logo small{display:block;font-size:10px;color:#777;font-weight:600}'+
+    '.ttl{text-align:left;font-size:14px;font-weight:800;color:#0e9d6a}.ttl small{display:block;font-size:10px;color:#777;font-weight:400}'+
+    '.flt{background:#faf2f7;border:1px solid #ecd6e5;border-radius:7px;padding:6px 10px;margin:6px 0;font-size:12px;font-weight:700}'+
+    '.kp{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0}.kp div{background:#f1f8f4;border:1px solid #dcede6;border-radius:7px;padding:6px 11px;font-size:12px}.kp b{display:block;font-size:15px}'+
+    'table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #ccc;padding:4px 6px;text-align:right}th{background:#0e9d6a;color:#fff;font-size:10.5px}.num{text-align:left;font-variant-numeric:tabular-nums}h3{margin:12px 0 4px;color:#e0218a;font-size:13px}'+
+    '.ft{margin-top:10px;border-top:1px solid #eee;padding-top:5px;font-size:9px;color:#888;display:flex;justify-content:space-between}@media print{.noprint{display:none}}</style></head><body>'+
+    '<div class="noprint" style="text-align:left;margin-bottom:8px"><button onclick="window.print()" style="padding:7px 18px;background:#0e9d6a;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">🖨️ طباعة / حفظ PDF</button></div>'+
+    '<div class="hd"><div class="logo">FANCY<span> SENSE</span><small>نظام المحاسبة — اكسسوارات وعدسات</small></div><div class="ttl">تقرير المبيعات<small>تاريخ الإصدار: '+today+' · العملة '+esc(C)+'</small></div></div>'+
+    '<div class="flt">🔎 '+esc(filt)+' · عدد الأيام: '+fmt(rows.length)+'</div>'+
+    '<div class="kp"><div>إجمالي الموظفة<b>'+fmt(tEmp)+' '+esc(C)+'</b></div><div>إجمالي REWA<b>'+fmt(tRewa)+' '+esc(C)+'</b></div><div>الفرق<b style="color:'+(Math.abs(gd)<0.005?"#0a7":"#c0392b")+'">'+fmt(gd)+' '+esc(C)+'</b></div><div>المرتجعات<b>'+fmt(tRet)+' '+esc(C)+'</b></div><div>صافي بدون ضريبة<b>'+fmt(tNet)+' '+esc(C)+'</b></div></div>'+
+    '<h3>📊 الملخّص حسب البند</h3><table><thead><tr><th>البند</th><th>الموظفة</th><th>REWA</th><th>الفرق</th></tr></thead><tbody>'+sumRows+'</tbody></table>'+
+    '<h3>🧾 التفصيل اليومي</h3><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة</th><th>نقدي</th><th>آجل</th><th>تحويل</th><th>إجمالي الموظفة</th><th>إجمالي REWA</th><th>الفرق</th><th>المرتجعات</th><th>صافي</th><th>ملاحظة</th></tr></thead><tbody>'+detRows+'</tbody></table>'+
+    '<div class="ft"><span>Fancy Sense · تقرير آلي</span><span>'+today+'</span></div>'+
+    '<'+'script>window.onload=function(){setTimeout(function(){window.print();},350);};<'+'/script></body></html>';
+  const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close(); } else toast('اسمحي بالنوافذ المنبثقة',true);
+}
 
 // ===== 🔄 مطابقة REWA =====
 function renderRewa(){
