@@ -57,9 +57,18 @@ Deno.serve(async (req: Request) => {
       supabase.from('fs_expenses').select('*').order('exp_date', { ascending: false }).order('created_at', { ascending: false }),
     ]);
     const cfg: any = {}; (config.data || []).forEach((r: any) => cfg[r.key] = r.value);
+    // 🔗 سجلات فانسي سنس في نظام العز (الكاش إن/آوت) — للمطابقة فقط (قراءة): OMR فقط (استبعاد العملات الأجنبية المصنّفة خطأً)
+    let accFancy: any[] = [];
+    try {
+      const { data: af } = await supabase.from('acc_banks_cash')
+        .select('id,tx_date,in_raw,out_raw,bank_name,bank_ref,channel,description,details,more_details,currency')
+        .or('channel.ilike.%fancy%,description.ilike.%fancy sense%')
+        .order('tx_date', { ascending: false });
+      accFancy = (af || []).filter((r: any) => !r.currency || String(r.currency).toUpperCase() === 'OMR');
+    } catch (_) {}
     return J({ config: cfg, lists: lists.data || [], daily_sales: daily_sales.data || [], rewa_recon: rewa_recon.data || [],
       credit_customers: credit_customers.data || [], credit_txn: credit_txn.data || [], bank_txn: bank_txn.data || [],
-      atm_deposit: atm_deposit.data || [], inventory_short: inventory_short.data || [], expenses: expenses.data || [] });
+      atm_deposit: atm_deposit.data || [], inventory_short: inventory_short.data || [], expenses: expenses.data || [], acc_fancy: accFancy });
   }
 
   // ===== POST: عمليات =====
