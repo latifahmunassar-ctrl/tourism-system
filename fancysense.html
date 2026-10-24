@@ -147,7 +147,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v3';
+const FS_VER='v4';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -181,6 +181,13 @@ function renderExpenses(){
       (Object.keys(byCat).length?('<div style="max-width:420px">'+miniTable(byCat,C)+'</div>'):'')+
     '</div>'+form+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>البند</th><th>المبلغ</th><th>طريقة الدفع</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(tr||'<tr><td colspan="7" class="mut" style="text-align:center;padding:14px">لا مصاريف مسجّلة بعد</td></tr>')+'</tbody></table></div></div>';
+}
+// حفظ مصروف من شاشة المبيعات (نفس جدول المصاريف)
+async function saveExpFromSales(){
+  const d=$('sx-date').value; if(!d){ $('sx-msg').innerHTML='<span class="neg">أدخلي التاريخ</span>'; return; }
+  const amt=n($('sx-amt').value); if(amt<=0){ $('sx-msg').innerHTML='<span class="neg">أدخلي المبلغ</span>'; return; }
+  const data={exp_date:d,branch:$('sx-branch').value||null,category:$('sx-cat').value||null,amount:amt,pay_method:$('sx-pm').value||null,note:$('sx-note').value||null};
+  if(await crud('insert','expenses',data)){ formToggle('sales-exp-form'); }
 }
 async function saveExp(){
   const d=$('ex-date').value; if(!d){ $('ex-msg').innerHTML='<span class="neg">أدخلي التاريخ</span>'; return; }
@@ -244,11 +251,21 @@ function renderSales(){
     '<div class="sub" style="margin-top:6px">الإجمالي يُحسب تلقائيّاً = المكنة + نقدي + آجل + تحويل بنكي (قابل للتعديل). نسبة الضريبة الحالية '+taxRate()+'% تُحفظ مع السطر.</div>'+
     '<div id="sl-msg" class="msg"></div>'+
     '<button class="btn green" onclick="saveSale()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'sales-form\')">إلغاء</button></div>';
+  // 💸 فورم مصروف سريع من نفس شاشة المبيعات (ما يحتاج الموظف يفتح تبويب ثاني)
+  const expForm='<div id="sales-exp-form" class="panel hidden" style="border-color:#b8860b"><h3 style="border-color:#b8860b">💸 تسجيل مصروف سريع</h3><div class="fgrid">'+
+    fin('التاريخ','sx-date','date',today())+
+    fsel('الفرع','sx-branch','branch')+
+    fsel('البند (الفئة)','sx-cat','expense_cat')+
+    fin('المبلغ','sx-amt','number','0')+
+    fsel('طريقة الدفع','sx-pm','payment_method')+
+    '<div class="fld full"><label>ملاحظة</label><input id="sx-note"></div>'+
+    '</div><div class="sub" style="margin-top:6px">يُحفظ ضمن «💸 مصاريف يومية». الفئات تُدار من ⚙️ إعدادات.</div><div id="sx-msg" class="msg"></div>'+
+    '<button class="btn green" onclick="saveExpFromSales()">💾 حفظ المصروف</button> <button class="btn ghost" onclick="formToggle(\'sales-exp-form\')">إلغاء</button></div>';
   const s=DATA.daily_sales||[];
   const rate=taxRate()/100;
   const rows=s.map(x=>{ const net=rate>0?n(x.total)/(1+(n(x.tax_rate)||taxRate())/100):n(x.total);
     return '<tr><td>'+esc(x.sale_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td class="num">'+fmt(x.machine)+noteLine(x.note_machine)+'</td><td class="num">'+fmt(x.cash)+noteLine(x.note_cash)+'</td><td class="num">'+fmt(x.credit_sales)+noteLine(x.note_credit)+'</td><td class="num">'+fmt(x.bank_transfer)+noteLine(x.note_transfer)+'</td><td class="num" style="font-weight:800">'+fmt(x.total)+'</td><td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button></td></tr>'; }).join('');
-  $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات</button></div></div>'+form+
+  $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><div style="display:flex;gap:8px"><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات</button><button class="btn" style="background:#b8860b" onclick="formToggle(\'sales-exp-form\')">💸 إضافة مصروف</button></div></div></div>'+form+expForm+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة</th><th>نقدي</th><th>آجل</th><th>تحويل بنكي</th><th>الإجمالي</th><th>المرتجعات</th><th>صافي بدون ضريبة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="11" class="mut" style="text-align:center;padding:14px">لا مبيعات مسجّلة بعد</td></tr>')+'</tbody></table></div></div>';
 }
 function slTotal(){ const t=n($('sl-machine').value)+n($('sl-cash').value)+n($('sl-credit').value)+n($('sl-transfer').value); $('sl-total').value=+t.toFixed(3); }
