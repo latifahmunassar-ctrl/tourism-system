@@ -7536,7 +7536,7 @@ function renderPayForm(){
   // جدول موحّد: فنادق (تفصيل كامل) + باقي الخدمات
   // 🔄 المرتجع المتوقّع بعملة البيع = (الحجز الفعلي − رسوم الإلغاء) × سعر الصرف — قاعدة المالكة؛ وإن كان «السعر المحجوز» فارغاً نستخدم قيمة المرتجع المُدخلة (بعملة المورّد) × السعر
   // 🔄 المرتجع المتوقّع = قيمة الحجز (سعر البيع) − رسوم الإلغاء (بعملة المورّد × الصرف) — للخدمات الملغاة فقط؛ غير الملغاة = 0 (لا تُرجَع)
-  const _refExpSell=(frb,cx,rf,rt,status,sell)=>{ if(!/cancel/i.test(String(status||''))) return 0; return Math.max(0, (Number(sell)||0) - (Number(cx)||0)*(Number(rt)||1)); };
+  const _refExpSell=(frb,cx,rf,rt,status,sell)=>{ if(!(/cancel/i.test(String(status||''))||Number(rf)>0)) return 0; return Math.max(0, (Number(sell)||0) - (Number(cx)||0)*(Number(rt)||1)); };
   const det=[]; const _hotelKeys=new Set();
   for(const h of hotels){ const k=(h.client_code||'')+'|'+(h.check_in||''); _hotelKeys.add(String(h.conf_no||'').trim().toUpperCase()+'|'+(h.check_in||''));
     det.push({type:'🏨 فندق',name:hName[k]||(h.hotel_name==='TBO'?'فندق':h.hotel_name),detail:h.room_type,
