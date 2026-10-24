@@ -147,7 +147,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v15';
+const FS_VER='v16';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -316,11 +316,20 @@ function renderSales(){
       a.total+=n(x.total);a.rtotal+=n(x.rewa_total);a.returns+=n(x.returns); const rt=(n(x.tax_rate)||taxRate())/100; a.net+=rt>0?n(x.total)/(1+rt):n(x.total); }); return a; };
   const fA=agg(fRows), gA=agg(s);
   const chans=[['المكنة','machine'],['نقدي','cash'],['آجل','credit'],['تحويل','transfer']];
-  const summ=(title,a,ignorePm)=>{ const gd=a.total-a.rtotal; const show=(!ignorePm&&F.pm)?chans.filter(c=>c[1]===F.pm):chans;
+  // 💼 التحصيل والتحويل للشركة: استلامات الآجل (مدفوعات عملاء الآجل) + تحويل الصندوق (إيداعات الصندوق للبنك)
+  const fsColl=(cf)=>{ let dep=0,ajel=0; const inr=(d)=>{ d=String(d||'').slice(0,10); if(cf&&cf.from&&d<cf.from)return false; if(cf&&cf.to&&d>cf.to)return false; return true; };
+    (DATA.atm_deposit||[]).forEach(x=>{ if(cf&&cf.branch&&x.branch!==cf.branch)return; if(inr(x.dep_date))dep+=n(x.amount); });
+    (DATA.credit_txn||[]).forEach(x=>{ if(inr(x.txn_date))ajel+=n(x.paid_amount); });
+    return {dep,ajel}; };
+  const summ=(title,a,ignorePm,cf)=>{ const gd=a.total-a.rtotal; const show=(!ignorePm&&F.pm)?chans.filter(c=>c[1]===F.pm):chans;
     const br=show.map(c=>{ const e=a.em[c[1]],r=a.rw[c[1]],d=e-r; return '<tr><td>'+c[0]+'</td><td class="num">'+fmt(e)+'</td><td class="num mut">'+fmt(r)+'</td><td class="num" style="color:'+(Math.abs(d)<0.005?'#2fd196':'#ff6b7a')+'">'+fmt(d)+'</td></tr>'; }).join('');
+    const co=fsColl(cf);
+    const collBox='<div style="flex:1;min-width:230px"><h4 style="margin:0 0 8px;color:var(--accent2);font-size:13px">💼 التحصيل والتحويل للشركة</h4>'+
+      '<div class="kpi" style="margin-bottom:8px"><div class="ttl">🧾 استلامات الآجل</div><div class="val" style="font-size:17px;color:#2fd196">'+fmt(co.ajel)+' '+C+'</div></div>'+
+      '<div class="kpi"><div class="ttl">🏧 تحويل الصندوق لحسابات الشركة</div><div class="val" style="font-size:17px;color:#3aa0ff">'+fmt(co.dep)+' '+C+'</div></div></div>';
     return '<div class="panel"><h3 style="margin:0 0 10px">'+title+' <span class="sub">('+a.n+' يوم)</span></h3>'+
       '<div class="kpis">'+kpi('إجمالي الموظفة',fmt(a.total)+' '+C)+kpi('إجمالي REWA',fmt(a.rtotal)+' '+C)+kpi('الفرق',fmt(gd)+' '+C,Math.abs(gd)<0.005?'pos':'neg')+kpi('المرتجعات',fmt(a.returns)+' '+C,'neg')+kpi('صافي بدون ضريبة',fmt(a.net)+' '+C)+'</div>'+
-      '<div style="max-width:540px"><div class="tbl-wrap"><table><thead><tr><th>البند</th><th>الموظفة</th><th>REWA</th><th>الفرق</th></tr></thead><tbody>'+br+'</tbody></table></div></div></div>';
+      '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">'+collBox+'<div style="flex:1;min-width:300px;max-width:540px"><div class="tbl-wrap"><table><thead><tr><th>البند</th><th>الموظفة</th><th>REWA</th><th>الفرق</th></tr></thead><tbody>'+br+'</tbody></table></div></div></div></div>';
   };
   const brOpts='<option value="">كل الفروع</option>'+listVals('branch').map(b=>'<option'+(b===F.branch?' selected':'')+'>'+esc(b)+'</option>').join('');
   const pmOpts='<option value="">كل الأنواع</option>'+chans.map(p=>'<option value="'+p[1]+'"'+(p[1]===F.pm?' selected':'')+'>'+p[0]+'</option>').join('');
@@ -352,8 +361,8 @@ function renderSales(){
     '<div class="sub" style="margin-top:6px">يظهر ضمن «🏦 البنوك والإيداعات ← إيداعات الصندوق».</div><div id="cd-msg" class="msg"></div>'+
     '<button class="btn green" onclick="saveCashDep()">💾 حفظ الإيداع</button> <button class="btn ghost" onclick="formToggle(\'cashdep-form\')">إغلاق</button></div>';
   $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات + مصاريف اليوم</button><button class="btn" style="background:#3aa0ff" onclick="formToggle(\'cashdep-form\')">🏧 إيداع صندوق</button><button class="btn" style="background:#0e9d6a" onclick="exportSalesPDF()">📄 تصدير PDF</button></div></div></div>'+form+cashDepForm+filterBar+
-    summ('📊 ملخّص الفترة'+(anyF?' المفلترة':''),fA,false)+
-    summ('🗂️ ملخّص عام (كل السجلات)',gA,true)+
+    summ('📊 ملخّص الفترة'+(anyF?' المفلترة':''),fA,false,{from:F.from,to:F.to,branch:F.branch})+
+    summ('🗂️ ملخّص عام (كل السجلات)',gA,true,null)+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة<br><span class="mini">موظفة/REWA</span></th><th>نقدي<br><span class="mini">موظفة/REWA</span></th><th>آجل<br><span class="mini">موظفة/REWA</span></th><th>تحويل<br><span class="mini">موظفة/REWA</span></th><th>إجمالي الموظفة</th><th>إجمالي REWA</th><th>الفرق</th><th>المرتجعات</th><th>صافي بدون ضريبة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="13" class="mut" style="text-align:center;padding:14px">لا نتائج للفلتر المحدّد</td></tr>')+'</tbody></table></div></div>';
 }
 function slDiff(){
