@@ -7526,8 +7526,11 @@ function renderPayForm(){
   // 🏢 الربح المحتجَز الافتراضي = هامش الخدمات الملغاة فقط (سعر البيع − التكلفة الفعلية)، لا ربح البرنامج كاملاً الذي يشمل الخدمات غير الملغاة
   const _cancCost=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code && (/cancel/i.test(String(s.status||''))||Number(s.refund||0)>0)).reduce((a,s)=>a+Number(s.final_rate_booked||0)*(Number(s.currency_rate)||1),0);
   const _r2=x=>Math.round((Number(x)||0)*100)/100;   // تقريب لخانتين عشريتين (عرض نظيف)
-  const amtDefault  = _r2(_cancCost>0 ? Math.min(refundableF, _cancCost) : refundableF);   // المسترجع الافتراضي = تكلفة الخدمات الملغاة (تحتفظ الشركة بهامشها فقط)؛ وإن غابت التكلفة = كامل القابل
-  const profDefault = _r2(Math.max(0, refundableF - amtDefault));        // 🏢 الربح المحتجَز = القابل للإرجاع − المسترجع (= هامش الملغاة فقط؛ قابل للتعديل)
+  const amtDefault  = _r2(_cancCost>0 ? Math.min(refundableF, _cancCost) : refundableF);   // 💸 إجمالي المرتجع الافتراضي = تكلفة الخدمات الملغاة (تحتفظ الشركة بهامشها فقط)؛ وإن غابت التكلفة = كامل القابل
+  // 🤝 الربح المعتمد = ربح البرنامج (First Client Data) — مرجع ثابت؛ 🏢 الربح الفعلي يبدأ = المعتمد وقابل للتعديل، وتعديله يحرّك المرتجع عكسياً حول الثابت K
+  const _progProfit = _r2(Math.max(0, profit));                          // 🤝 الربح المعتمد (من First Client Data)
+  const profDefault = _progProfit;                                       // 🏢 الربح الفعلي الافتراضي = المعتمد
+  const _refundK    = _r2(amtDefault + profDefault);                     // ثابت الربط: الربح الفعلي + إجمالي المرتجع = K
   const bankOpts='<option value="">— اختاري البنك —</option>'+listValues('banks').map(b=>'<option>'+esc(b.value)+'</option>').join('');   // القائمة المُدارة فقط
   // تفصيل الخدمات
   const svc=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code);
@@ -7582,8 +7585,8 @@ function renderPayForm(){
      return '<div class="panel"><h3>💸 المرتجعات المدوّنة <span class="cnt">إجمالي: '+fmt(tot)+(totProfit>0?(' · 🏢 ربح الشركة: '+fmt(totProfit)):'')+'</span></h3><div class="tbl-wrap"><table><thead><tr><th>تاريخ المرتجع</th><th>المبلغ المرتجع</th><th>🏢 ربح الشركة (مستقطَع)</th><th>البنك</th><th>مرجع البنك</th><th>مرتجع لحساب الوكيل</th></tr></thead><tbody>'+
        refs.map(r=>{ const k=[Number(r.refund||0).toFixed(2),String(r.payment_date||'').slice(0,10),String(r.bank_ref||'')].join('|'); const cp=docMap[k]; return '<tr><td>'+esc(r.payment_date||'')+'</td><td class="num neg">'+fmt(r.refund)+'</td><td class="num" style="color:#b8860b">'+(cp!=null&&cp>0?fmt(cp):'<span style="color:#9aa">—</span>')+'</td><td>'+esc(r.bank_name||'')+'</td><td>'+esc(r.bank_ref||'')+(r.source==='dashboard'?' <button class="btn ghost" style="padding:1px 7px;font-size:10px" onclick="editRefundRef('+r.id+')" title="تعديل قيمة المرتجع + التاريخ + المرجع البنكي (المالكة مباشرة · المحاسب بموافقة المالكة)">✏️ تعديل</button>':'')+'</td><td>'+esc(r.note||'')+'</td></tr>'; }).join('')+'</tbody></table></div><div style="font-size:10.5px;color:var(--muted);margin-top:5px">«🏢 ربح الشركة (مستقطَع)» يظهر للمرتجعات المُدخَلة من الداشبورد بمستند معتمد. المرتجعات القديمة (من الشيت) بلا قيمة مفردة (—) — ربح الشركة منها يظهر إجمالاً في مؤشّر «لصالح الشركة» بالأعلى.</div></div>';})()+ (function(){ const docs=(REFUND_DOCS||[]).filter(x=>(x.client_code||'').toUpperCase()===code); if(!docs.length)return ''; return '<div class="panel" style="margin-bottom:12px"><h3>📄 مستندات المرتجعات المحفوظة <span class="cnt">'+docs.length+'</span></h3><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>المبلغ المرتجع</th><th>🏢 ربح الشركة</th><th>🏦 البنك</th><th>🔖 المرجع البنكي</th><th>تاريخ الحوالة</th><th>الحالة</th><th>المستند</th></tr></thead><tbody>'+docs.map(d=>'<tr><td>'+esc(String(d.created_at||"").slice(0,10))+'</td><td class="num neg">'+fmt(d.refund_amount||0)+' '+esc(d.currency||'')+'</td><td class="num" style="color:#b8860b">'+(Number(d.company_profit||0)>0?fmt(d.company_profit):'—')+'</td><td>'+esc(d.bank_name||'')+'</td><td style="font-weight:600">'+esc(d.bank_ref||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(d.payment_date||'—')+'</td><td>'+(d.status==='approved'?'<span class="pill active">✅ معتمد</span>':(d.status==='rejected'?'<span class="pill cancel">❌ مرفوض</span>':'<span class="pill" style="background:#b8860b;color:#fff">⏳ بانتظار</span>'))+'</td><td><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="openRefundDoc('+d.id+')">📄 عرض المستند</button>'+((isOwnerUser()&&d.status==='rejected')?' <button class="btn ghost" style="padding:2px 9px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="deleteRefundDoc('+d.id+')" title="حذف المستند المرفوض — المالكة فقط">🗑️ حذف</button>':'')+'</td></tr>').join('')+'</tbody></table></div><div style="font-size:10.5px;color:var(--muted);margin-top:5px">📌 المستندات المعتمدة محفوظة. المرفوضة فقط يمكن للمالكة حذفها.</div></div>';})()+
  '<div class="panel" style="border-color:var(--green)"><h3>➕ تسجيل إرجاع للعميل</h3>'+
-   (refundableF>0?('<div style="background:rgba(245,158,11,.08);border:1px solid var(--amber);border-radius:8px;padding:9px 11px;margin-bottom:10px;font-size:12.5px">🔄 القابل للإرجاع لهذا العميل: <b style="color:var(--amber)">'+fmt(refundableF)+' '+esc(cur)+'</b> <span style="font-size:11px;color:var(--muted)">(= مجموع «المرتجع المتوقّع» للخدمات الملغاة = سعر البيع − رسوم الإلغاء)</span><br><span style="color:var(--muted);font-size:11.5px">🏢 ربح الشركة مُعبّأ مبدئيّاً بالربح المتوقّع من البرنامج <b>وقابل للتعديل</b> — غيّريه كما تشائين (حتى احتفاظ الشركة بالمبلغ كاملاً). «المسترجع النهائي للعميل» = القابل للإرجاع − ربح الشركة. والربح الذي تُقرّينه يُعتمد في الربح الفعلي بقسم الأرباح والخسائر.</span></div>'):'')+
-   '<input type="hidden" id="rf-exp" value="'+_r2(refundableF)+'">'+
+   (refundableF>0?('<div style="background:rgba(245,158,11,.08);border:1px solid var(--amber);border-radius:8px;padding:9px 11px;margin-bottom:10px;font-size:12.5px">🔄 القابل للإرجاع لهذا العميل: <b style="color:var(--amber)">'+fmt(refundableF)+' '+esc(cur)+'</b> <span style="font-size:11px;color:var(--muted)">(= مجموع «المرتجع المتوقّع» للخدمات الملغاة = سعر البيع − رسوم الإلغاء)</span><br><span style="color:var(--muted);font-size:11.5px">🤝 <b>الربح المعتمد</b> = ربح البرنامج (من First Client Data) — ثابت للمقارنة. 🏢 <b>الربح الفعلي</b> يبدأ مساوياً له <b>وقابل للتعديل</b>، وهو الذي يُعتمد في الأرباح والخسائر وعمولة الموظف. تعديل الربح الفعلي يغيّر «إجمالي المرتجع» عكسياً: كل زيادة في الربح تُنقِص المرتجع والعكس (بحدّ أقصى = القابل للإرجاع).</span></div>'):'')+
+   '<input type="hidden" id="rf-exp" value="'+_r2(refundableF)+'"><input type="hidden" id="rf-k" value="'+_refundK+'">'+
    '<div style="background:rgba(220,38,38,.06);border:1px dashed var(--red);border-radius:8px;padding:9px 11px;margin-bottom:10px">'+
      '<label style="font-size:12.5px;font-weight:700;display:block;margin-bottom:5px">📎 طلب العميل بالإرجاع (PDF أو صورة) <span style="color:var(--red)">* إجباري</span></label>'+
      '<input type="file" id="rf-doc" accept="image/*,application/pdf" style="font-size:12px">'+
@@ -7595,8 +7598,9 @@ function renderPayForm(){
      '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">📌 ارفقي مستند طلب الإرجاع الصادر عن الشركة (PDF أو صورة) للتأكّد أنه طلب حقيقي — يُحفظ ويظهر في تقرير/مستند المرتجع بجانب طلب العميل.</div>'+
    '</div>'+
    '<div class="fgrid">'+
-   '<div class="fld"><label>🏢 ربح الشركة (تحتفظين به · يُعتمد في الربح الفعلي) <span style="font-size:10px;color:var(--muted)">✏️ قابل للتعديل</span></label><input type="number" id="rf-profit" value="'+profDefault+'" oninput="rfCalc()"></div>'+
-   '<div class="fld"><label>المبلغ المرتجع'+(refundableF>0?' (المسترجع النهائي للعميل)':'')+' <span style="color:var(--red)">*</span></label><input type="number" id="rf-amt" value="'+amtDefault+'" oninput="rfAmtEdit()"></div>'+
+   '<div class="fld"><label>🤝 الربح المعتمد <span style="font-size:10px;color:var(--muted)">(من First Client Data · مرجع)</span></label><input type="number" id="rf-adopted" value="'+_progProfit+'" readonly style="background:rgba(0,0,0,.04);color:var(--muted)"></div>'+
+   '<div class="fld"><label>🏢 الربح الفعلي <span style="font-size:10px;color:var(--muted)">(الناتج من الحجوزات · يُعتمد في الأرباح والخسائر وعمولة الموظف) ✏️</span></label><input type="number" id="rf-profit" value="'+profDefault+'" oninput="rfCalc()"></div>'+
+   '<div class="fld"><label>💸 إجمالي المرتجع'+(refundableF>0?' (المسترجع النهائي للعميل)':'')+' <span style="color:var(--red)">*</span></label><input type="number" id="rf-amt" value="'+amtDefault+'" oninput="rfAmtEdit()"></div>'+
    '<div class="fld"><label>البنك (طلعت منه الحوالة) <span style="color:var(--red)">*</span></label><select id="rf-bank">'+bankOpts+'</select></div>'+
    '<div class="fld"><label>تاريخ الحوالة (الدفعة) <span style="color:var(--red)">*</span></label><input type="date" id="rf-date"></div>'+
    '<div class="fld"><label>مرجع الحوالة</label><input id="rf-ref"></div>'+
@@ -7627,8 +7631,8 @@ function exportRefundReviewPDF(code){
   // مرتجعات سابقة
   const prevRef=(DATA.refunds||[]).filter(r=>(r.client_code||'').toUpperCase()===code).reduce((s,r)=>s+Number(r.refund||0),0);
   // 🔄 القابل للإرجاع = المبلغ المدفوع فعلاً − رسوم الإلغاء − ما سبق إرجاعه (لا يعتمد سعر بيع الخدمة)
-  const refundable = Math.max(0, totalPaid - prevRef - cancFeeTot);
-  if(!(amt>0)) amt = Math.max(0, refundable - profit);   // لم تُدخَل القيمة بعد → الافتراضي = القابل للإرجاع − ربح الشركة
+  const refundable = cancSvcs.length ? Math.max(0, cancExpTot - prevRef) : Math.max(0, totalPaid - prevRef - cancFeeTot);   // القابل = مجموع المرتجع المتوقّع للخدمات الملغاة (مطابق للفورم)؛ وإن لا خدمات ملغاة = المدفوع − الرسوم
+  if(!(amt>0)) amt = refundable;   // لم تُدخَل القيمة بعد → الافتراضي = كامل القابل للإرجاع (الربح الفعلي يُدخَل يدويّاً ويُنقِص المرتجع)
   if(!(amt>0) && !(refundable>0)){ const m=$('rf-msg'); if(m)m.innerHTML='<span style="color:var(--red)">⚠️ لا دفعات ولا مرتجع متوقّع لهذا العميل — لا يمكن إصدار التقرير</span>'; return; }
   const logoHtml=(typeof ALEZZ_LOGO!=='undefined'&&ALEZZ_LOGO)?('<img src="'+ALEZZ_LOGO+'" alt="ALEZZ" style="max-height:80px;margin-bottom:6px">'):'<div style="font-size:34px;font-weight:900;letter-spacing:3px;color:#0e7a5a">AL<span style="color:#d4a017">E</span>ZZ</div><div style="font-size:12px;color:#666;letter-spacing:2px">شركة العز للسياحة والسفر</div>';
   // قسم ١: معلومات العميل
@@ -7652,9 +7656,9 @@ function exportRefundReviewPDF(code){
   const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close(); } else { const m=$('rf-msg'); if(m)m.innerHTML='<span style="color:var(--red)">⚠️ اسمحي بالنوافذ المنبثقة لعرض التقرير</span>'; }
 }
 
-// مزامنة ربح الشركة ↔ المسترجع النهائي (المتوقّع − الربح = المسترجع)
-function rfCalc(){ const exp=+(($('rf-exp')||{}).value)||0; const pr=+(($('rf-profit')||{}).value)||0; if(exp>0){ const fin=Math.max(0,exp-pr); const a=$('rf-amt'); if(a)a.value=+fin.toFixed(3); rfHint(fin,pr,exp); } else { rfHint(+(($('rf-amt')||{}).value)||0,pr,exp); } }   /* exp=0: لا مرتجع متوقّع محسوب → المبلغ يُدخَل يدويّاً، وربح الشركة مستقلّ */
-function rfAmtEdit(){ const exp=+(($('rf-exp')||{}).value)||0; const a=+(($('rf-amt')||{}).value)||0; if(exp>0){ const pr=Math.max(0,exp-a); const pe=$('rf-profit'); if(pe)pe.value=+pr.toFixed(3); rfHint(a,pr,exp); } }
+// مزامنة الربح الفعلي ↔ إجمالي المرتجع حول الثابت K (الربح الفعلي + المرتجع = K)؛ المرتجع لا يتجاوز القابل للإرجاع (rf-exp)
+function rfCalc(){ const K=+(($('rf-k')||{}).value)||0; const cap=+(($('rf-exp')||{}).value)||0; let pr=+(($('rf-profit')||{}).value)||0; if(K>0){ let fin=K-pr; if(fin<0)fin=0; if(cap>0&&fin>cap){ fin=cap; pr=+(K-fin).toFixed(2); const pe=$('rf-profit'); if(pe)pe.value=pr; } const a=$('rf-amt'); if(a)a.value=+fin.toFixed(2); rfHint(fin,pr,cap); } else { rfHint(+(($('rf-amt')||{}).value)||0,pr,cap); } }   /* K=0: لا مرتجع متوقّع → المبلغ والربح مستقلّان */
+function rfAmtEdit(){ const K=+(($('rf-k')||{}).value)||0; const cap=+(($('rf-exp')||{}).value)||0; let a=+(($('rf-amt')||{}).value)||0; if(K>0){ if(cap>0&&a>cap){ a=cap; const ae=$('rf-amt'); if(ae)ae.value=+a.toFixed(2); } const pr=Math.max(0,K-a); const pe=$('rf-profit'); if(pe)pe.value=+pr.toFixed(2); rfHint(a,pr,cap); } }
 function rfHint(fin,pr,exp){ const h=$('rf-finhint'); if(h)h.innerHTML='💸 المسترجع النهائي للعميل: <b>'+fmt(fin)+'</b>'+(pr>0?(' · 🏢 لصالح الشركة: <b>'+fmt(pr)+'</b>'):''); }
 function fileToBase64(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result)); fr.onerror=()=>rej(new Error('تعذّر قراءة الملف')); fr.readAsDataURL(file); }); }
 // إضافة/تعديل المرجع البنكي لمسترجع مُدخَل من الداشبورد — تنعكس العملية كحركة صادرة في سجل البنك فور الحفظ
@@ -7699,7 +7703,7 @@ async function saveRefund(){
   const code=($('py-code').value||'').trim().toUpperCase();
   const amt=+$('rf-amt').value||0, bank=$('rf-bank').value, date=$('rf-date').value||new Date().toISOString().slice(0,10);
   const ref=($('rf-ref').value||'').trim(), note=($('rf-note').value||'').trim();
-  const expV=+(($('rf-exp')||{}).value)||0; const keptProfit=expV>0?Math.max(0,+(expV-amt).toFixed(3)):0;
+  const expV=+(($('rf-exp')||{}).value)||0; const keptProfit=Math.max(0,+(+(($('rf-profit')||{}).value)||0).toFixed(2));   // 🏢 الربح الفعلي المُدخَل = يُعتمد في الأرباح والخسائر وعمولة الموظف (وليس القابل − المرتجع)
   const m=$('rf-msg');
   if(!code){ m.innerHTML='<span style="color:var(--red)">استدعي عميل أول</span>'; return; }
   if(amt<=0){ m.innerHTML='<span style="color:var(--red)">أدخلي المبلغ</span>'; return; }
@@ -7726,7 +7730,7 @@ async function saveRefund(){
     '• العميل: '+(cname?cname+' · ':'')+code+'\n'+
     '• 📎 طلب العميل: '+(file.name||'مستند')+'\n'+
     (cFile?('• 🏢 طلب الشركة: '+(cFile.name||'مستند')+'\n'):'')+
-    (expV>0?('• 🔄 المرتجع المتوقّع المتبقّي: '+fmt(expV)+' '+cur+'\n• 🏢 ربح الشركة المحتفظ به: '+fmt(keptProfit)+' '+cur+'\n'):'')+
+    (expV>0?('• 🔄 المرتجع المتوقّع المتبقّي: '+fmt(expV)+' '+cur+'\n• 🏢 الربح الفعلي (يُعتمد في الأرباح والخسائر): '+fmt(keptProfit)+' '+cur+'\n'):'')+
     '• 💸 المسترجع النهائي للعميل: '+fmt(amt)+' '+cur+'\n'+
     '• البنك (طلعت منه الحوالة): '+bank+'\n'+
     '• تاريخ الحوالة: '+(date||'— غير محدّد —')+'\n'+
