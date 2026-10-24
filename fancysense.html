@@ -147,7 +147,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v4';
+const FS_VER='v5';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -236,19 +236,27 @@ function miniTable(obj,C){ const ks=Object.keys(obj).filter(k=>k); if(!ks.length
 // ===== 🧾 المبيعات اليومية =====
 function renderSales(){
   const C=cur();
-  const form='<div id="sales-form" class="panel hidden" style="border-color:var(--accent)"><h3>➕ تسجيل مبيعات يوم</h3>'+
-    '<div class="fgrid">'+
+  // جدول مطابقة لكل بند: تقرير الموظفة ↔ تقرير REWA ↔ الفرق ↔ ملاحظة (نفس الشيت)
+  const chDefs=[['المكنة (البطاقة)','sl-machine','sl-rmachine','d-machine','sl-nmachine'],['نقدي','sl-cash','sl-rcash','d-cash','sl-ncash'],['آجل','sl-credit','sl-rcredit','d-credit','sl-ncredit'],['تحويل بنكي','sl-transfer','sl-rtransfer','d-transfer','sl-ntransfer']];
+  const reconRows=chDefs.map(c=>'<tr><td style="font-weight:700">'+c[0]+'</td>'+
+    '<td><input id="'+c[1]+'" type="number" value="0" oninput="slDiff()" style="width:90px"></td>'+
+    '<td><input id="'+c[2]+'" type="number" value="0" oninput="slDiff()" style="width:90px"></td>'+
+    '<td class="num"><b id="'+c[3]+'">0</b></td>'+
+    '<td><input id="'+c[4]+'" placeholder="ملاحظة" style="width:150px;font-size:11px"></td></tr>').join('');
+  const form='<div id="sales-form" class="panel hidden" style="border-color:var(--accent)"><h3>➕ تسجيل مبيعات يوم — مطابقة الموظفة ↔ REWA</h3>'+
+    '<div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));max-width:500px">'+
       fin('التاريخ','sl-date','date',today())+
       fsel('الفرع','sl-branch','branch')+
-      fch('المكنة (البطاقة)','sl-machine','sl-nmachine')+
-      fch('نقدي','sl-cash','sl-ncash')+
-      fch('آجل','sl-credit','sl-ncredit')+
-      fch('تحويل بنكي','sl-transfer','sl-ntransfer')+
-      fin('الإجمالي (شامل الضريبة)','sl-total','number','0')+
-      fin('المرتجعات','sl-returns','number','0')+
-      '<div class="fld full"><label>ملاحظة عامة لليوم</label><input id="sl-note"></div>'+
     '</div>'+
-    '<div class="sub" style="margin-top:6px">الإجمالي يُحسب تلقائيّاً = المكنة + نقدي + آجل + تحويل بنكي (قابل للتعديل). نسبة الضريبة الحالية '+taxRate()+'% تُحفظ مع السطر.</div>'+
+    '<div class="tbl-wrap" style="margin-top:10px"><table><thead><tr><th>البند</th><th>📝 تقرير الموظفة</th><th>🏧 تقرير REWA</th><th>الفرق</th><th>ملاحظة</th></tr></thead><tbody>'+reconRows+
+      '<tr style="font-weight:800;background:var(--panel2)"><td>الإجمالي</td><td class="num"><span id="sl-total-d">0</span></td><td class="num"><span id="sl-rtotal-d">0</span></td><td class="num"><b id="sl-tdiff">0</b></td><td></td></tr>'+
+    '</tbody></table></div>'+
+    '<input type="hidden" id="sl-total" value="0"><input type="hidden" id="sl-rtotal" value="0">'+
+    '<div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));max-width:500px;margin-top:10px">'+
+      fin('المرتجعات','sl-returns','number','0')+
+    '</div>'+
+    '<div class="fld full" style="margin-top:8px"><label>ملاحظة عامة لليوم</label><input id="sl-note"></div>'+
+    '<div class="sub" style="margin-top:6px">«تقرير الموظفة» = المبيعات المسجّلة يدويّاً · «تقرير REWA» = من نظام نقاط البيع · الفرق تلقائي. الإجمالي = مجموع تقرير الموظفة. الضريبة '+taxRate()+'% تُحفظ مع السطر.</div>'+
     '<div id="sl-msg" class="msg"></div>'+
     '<button class="btn green" onclick="saveSale()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'sales-form\')">إلغاء</button></div>';
   // 💸 فورم مصروف سريع من نفس شاشة المبيعات (ما يحتاج الموظف يفتح تبويب ثاني)
@@ -263,17 +271,35 @@ function renderSales(){
     '<button class="btn green" onclick="saveExpFromSales()">💾 حفظ المصروف</button> <button class="btn ghost" onclick="formToggle(\'sales-exp-form\')">إلغاء</button></div>';
   const s=DATA.daily_sales||[];
   const rate=taxRate()/100;
-  const rows=s.map(x=>{ const net=rate>0?n(x.total)/(1+(n(x.tax_rate)||taxRate())/100):n(x.total);
-    return '<tr><td>'+esc(x.sale_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td class="num">'+fmt(x.machine)+noteLine(x.note_machine)+'</td><td class="num">'+fmt(x.cash)+noteLine(x.note_cash)+'</td><td class="num">'+fmt(x.credit_sales)+noteLine(x.note_credit)+'</td><td class="num">'+fmt(x.bank_transfer)+noteLine(x.note_transfer)+'</td><td class="num" style="font-weight:800">'+fmt(x.total)+'</td><td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button></td></tr>'; }).join('');
+  const cc=(emp,rewa,note)=>{ const d=n(emp)-n(rewa); const dl=(Math.abs(d)>=0.005)?'<div class="mini" style="color:#ff6b7a">Δ '+fmt(d)+'</div>':''; return '<td class="num">'+fmt(emp)+'<div class="mini" style="color:#9aa">REWA '+fmt(rewa)+'</div>'+dl+noteLine(note)+'</td>'; };
+  const rows=s.map(x=>{ const net=rate>0?n(x.total)/(1+(n(x.tax_rate)||taxRate())/100):n(x.total); const gd=n(x.total)-n(x.rewa_total);
+    return '<tr><td>'+esc(x.sale_date||'')+'</td><td>'+esc(x.branch||'')+'</td>'+
+      cc(x.machine,x.rewa_machine,x.note_machine)+cc(x.cash,x.rewa_cash,x.note_cash)+cc(x.credit_sales,x.rewa_credit,x.note_credit)+cc(x.bank_transfer,x.rewa_transfer,x.note_transfer)+
+      '<td class="num" style="font-weight:800">'+fmt(x.total)+'</td><td class="num mut">'+fmt(x.rewa_total)+'</td><td class="num" style="font-weight:800;color:'+(Math.abs(gd)<0.005?'#2fd196':'#ff6b7a')+'">'+fmt(gd)+'</td>'+
+      '<td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button></td></tr>'; }).join('');
   $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><div style="display:flex;gap:8px"><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات</button><button class="btn" style="background:#b8860b" onclick="formToggle(\'sales-exp-form\')">💸 إضافة مصروف</button></div></div></div>'+form+expForm+
-    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة</th><th>نقدي</th><th>آجل</th><th>تحويل بنكي</th><th>الإجمالي</th><th>المرتجعات</th><th>صافي بدون ضريبة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="11" class="mut" style="text-align:center;padding:14px">لا مبيعات مسجّلة بعد</td></tr>')+'</tbody></table></div></div>';
+    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة<br><span class="mini">موظفة/REWA</span></th><th>نقدي<br><span class="mini">موظفة/REWA</span></th><th>آجل<br><span class="mini">موظفة/REWA</span></th><th>تحويل<br><span class="mini">موظفة/REWA</span></th><th>إجمالي الموظفة</th><th>إجمالي REWA</th><th>الفرق</th><th>المرتجعات</th><th>صافي بدون ضريبة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="13" class="mut" style="text-align:center;padding:14px">لا مبيعات مسجّلة بعد</td></tr>')+'</tbody></table></div></div>';
 }
-function slTotal(){ const t=n($('sl-machine').value)+n($('sl-cash').value)+n($('sl-credit').value)+n($('sl-transfer').value); $('sl-total').value=+t.toFixed(3); }
+function slDiff(){
+  const ch=[['sl-machine','sl-rmachine','d-machine'],['sl-cash','sl-rcash','d-cash'],['sl-credit','sl-rcredit','d-credit'],['sl-transfer','sl-rtransfer','d-transfer']];
+  let te=0,tr=0;
+  ch.forEach(c=>{ const e=n(($(c[0])||{}).value), r=n(($(c[1])||{}).value); te+=e; tr+=r; const d=e-r; const el=$(c[2]); if(el){ el.textContent=fmt(d); el.style.color=Math.abs(d)<0.005?'#2fd196':'#ff6b7a'; } });
+  if($('sl-total'))$('sl-total').value=+te.toFixed(3);
+  if($('sl-rtotal'))$('sl-rtotal').value=+tr.toFixed(3);
+  if($('sl-total-d'))$('sl-total-d').textContent=fmt(te);
+  if($('sl-rtotal-d'))$('sl-rtotal-d').textContent=fmt(tr);
+  const gd=te-tr; const g=$('sl-tdiff'); if(g){ g.textContent=fmt(gd); g.style.color=Math.abs(gd)<0.005?'#2fd196':'#ff6b7a'; }
+}
 async function saveSale(){
   const d=$('sl-date').value, b=$('sl-branch').value;
   if(!d){ $('sl-msg').innerHTML='<span class="neg">أدخلي التاريخ</span>'; return; }
   if(!b){ $('sl-msg').innerHTML='<span class="neg">اختاري الفرع</span>'; return; }
-  const data={sale_date:d,branch:b,machine:n($('sl-machine').value),cash:n($('sl-cash').value),credit_sales:n($('sl-credit').value),bank_transfer:n($('sl-transfer').value),total:n($('sl-total').value),returns:n($('sl-returns').value),tax_rate:taxRate(),note:$('sl-note').value||null,note_machine:$('sl-nmachine').value||null,note_cash:$('sl-ncash').value||null,note_credit:$('sl-ncredit').value||null,note_transfer:$('sl-ntransfer').value||null};
+  slDiff();
+  const data={sale_date:d,branch:b,
+    machine:n($('sl-machine').value),cash:n($('sl-cash').value),credit_sales:n($('sl-credit').value),bank_transfer:n($('sl-transfer').value),total:n($('sl-total').value),
+    rewa_machine:n($('sl-rmachine').value),rewa_cash:n($('sl-rcash').value),rewa_credit:n($('sl-rcredit').value),rewa_transfer:n($('sl-rtransfer').value),rewa_total:n($('sl-rtotal').value),
+    returns:n($('sl-returns').value),tax_rate:taxRate(),note:$('sl-note').value||null,
+    note_machine:$('sl-nmachine').value||null,note_cash:$('sl-ncash').value||null,note_credit:$('sl-ncredit').value||null,note_transfer:$('sl-ntransfer').value||null};
   if(await crud('insert','daily_sales',data)){ formToggle('sales-form'); }
 }
 
