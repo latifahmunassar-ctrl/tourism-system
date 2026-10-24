@@ -20,7 +20,7 @@ const FIELDS: Record<string, string[]> = {
   credit_customers: ['name','phone','note'],
   credit_txn: ['customer_id','txn_date','doc_no','invoice_amount','paid_amount','returned_amount','note'],
   bank_txn: ['actual_date','close_date','amount','direction','bank_name','note'],
-  atm_deposit: ['dep_date','branch','amount','note'],
+  atm_deposit: ['dep_date','branch','amount','bank','note'],
   inventory_short: ['code','qty_invoice','price','qty_actual','note'],
   lists: ['category','value','sort'],
 };

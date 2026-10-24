@@ -147,7 +147,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v11';
+const FS_VER='v12';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -340,7 +340,16 @@ function renderSales(){
       '<td class="num" style="font-weight:800">'+fmt(x.total)+'</td><td class="num mut">'+fmt(x.rewa_total)+'</td><td class="num" style="font-weight:800;color:'+(Math.abs(gd)<0.005?'#2fd196':'#ff6b7a')+'">'+fmt(gd)+'</td>'+
       '<td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button></td></tr>'; }).join('');
   const anyF=!!(F.from||F.to||F.branch||F.pm);
-  $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><div style="display:flex;gap:8px"><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات + مصاريف اليوم</button><button class="btn" style="background:#0e9d6a" onclick="exportSalesPDF()">📄 تصدير PDF</button></div></div></div>'+form+filterBar+
+  // 🏧 فورم إيداع الصندوق (كاش) من الفرع إلى البنك
+  const cashDepForm='<div id="cashdep-form" class="panel hidden" style="border-color:#3aa0ff"><h3 style="border-color:#3aa0ff">🏧 إيداع صندوق (كاش) — من الفرع إلى البنك</h3><div class="fgrid" style="max-width:700px">'+
+    fin('التاريخ','cd-date','date',today())+
+    fsel('الفرع','cd-branch','branch')+
+    fin('مبلغ إيداع الصندوق','cd-amt','number','0')+
+    fsel('البنك المودَع فيه','cd-bank','bank')+
+    '<div class="fld full"><label>ملاحظة</label><input id="cd-note"></div>'+
+    '</div><div class="sub" style="margin-top:6px">يظهر ضمن «🏦 البنوك والإيداعات ← إيداعات الصندوق».</div><div id="cd-msg" class="msg"></div>'+
+    '<button class="btn green" onclick="saveCashDep()">💾 حفظ الإيداع</button> <button class="btn ghost" onclick="formToggle(\'cashdep-form\')">إغلاق</button></div>';
+  $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات + مصاريف اليوم</button><button class="btn" style="background:#3aa0ff" onclick="formToggle(\'cashdep-form\')">🏧 إيداع صندوق</button><button class="btn" style="background:#0e9d6a" onclick="exportSalesPDF()">📄 تصدير PDF</button></div></div></div>'+form+cashDepForm+filterBar+
     summ('📊 ملخّص الفترة'+(anyF?' المفلترة':''),fA,false)+
     summ('🗂️ ملخّص عام (كل السجلات)',gA,true)+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة<br><span class="mini">موظفة/REWA</span></th><th>نقدي<br><span class="mini">موظفة/REWA</span></th><th>آجل<br><span class="mini">موظفة/REWA</span></th><th>تحويل<br><span class="mini">موظفة/REWA</span></th><th>إجمالي الموظفة</th><th>إجمالي REWA</th><th>الفرق</th><th>المرتجعات</th><th>صافي بدون ضريبة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="13" class="mut" style="text-align:center;padding:14px">لا نتائج للفلتر المحدّد</td></tr>')+'</tbody></table></div></div>';
@@ -422,6 +431,14 @@ function slCreditRowHtml(i){ return '<div class="sl-cr-row" data-i="'+i+'" style
   '<input id="cr-note-'+i+'" placeholder="ملاحظة" style="padding:6px 8px">'+
   '<button class="btn red sm" onclick="this.closest(\'.sl-cr-row\').remove();slDiff()">✕</button></div>'; }
 function slAddCreditRow(){ const c=$('sl-credit-rows'); if(!c)return; c.insertAdjacentHTML('beforeend', slCreditRowHtml(_slCrIdx++)); }
+// 🏧 حفظ إيداع صندوق (كاش) من شاشة المبيعات → جدول إيداعات الصندوق
+async function saveCashDep(){
+  const d=$('cd-date').value, amt=n($('cd-amt').value);
+  if(!d){ $('cd-msg').innerHTML='<span class="neg">أدخلي التاريخ</span>'; return; }
+  if(amt<=0){ $('cd-msg').innerHTML='<span class="neg">أدخلي مبلغ الإيداع</span>'; return; }
+  const data={dep_date:d,branch:$('cd-branch').value||null,amount:amt,bank:$('cd-bank').value||null,note:$('cd-note').value||null};
+  if(await crud('insert','atm_deposit',data)){ formToggle('cashdep-form'); }
+}
 // 📄 تصدير تقرير المبيعات (حسب الفلتر الحالي) PDF
 function exportSalesPDF(){
   const s=(DATA&&DATA.daily_sales)||[]; const C=cur(); const txr=taxRate();
@@ -514,20 +531,20 @@ function renderBanks(){
     fin('القيمة','bk-amt','number','0')+fsel('البنك','bk-bank','bank')+
     '<div class="fld full"><label>ملاحظة</label><input id="bk-note"></div>'+
     '</div><div id="bk-msg" class="msg"></div><button class="btn green" onclick="saveBank()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'bank-form\')">إلغاء</button></div>';
-  const aForm='<div id="atm-form" class="panel hidden" style="border-color:var(--accent2)"><h3>➕ إيداع ATM</h3><div class="fgrid">'+
-    fin('التاريخ','at-date','date',today())+fsel('الفرع','at-branch','branch')+fin('المبلغ','at-amt','number','0')+
+  const aForm='<div id="atm-form" class="panel hidden" style="border-color:var(--accent2)"><h3>➕ إيداع صندوق (كاش)</h3><div class="fgrid">'+
+    fin('التاريخ','at-date','date',today())+fsel('الفرع','at-branch','branch')+fin('المبلغ','at-amt','number','0')+fsel('البنك المودَع فيه','at-bank','bank')+
     '<div class="fld full"><label>ملاحظة</label><input id="at-note"></div>'+
     '</div><div id="at-msg" class="msg"></div><button class="btn green" onclick="saveAtm()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'atm-form\')">إلغاء</button></div>';
   const bRows=(DATA.bank_txn||[]).map(x=>'<tr><td>'+esc(x.actual_date||'')+'</td><td>'+esc(x.close_date||'')+'</td><td>'+esc(x.bank_name||'')+'</td><td><span class="pill '+(x.direction==='out'?'r':'g')+'">'+(x.direction==='out'?'صادر':'وارد')+'</span></td><td class="num '+(x.direction==='out'?'neg':'pos')+'" style="font-weight:800">'+fmt(x.amount)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'bank_txn\','+x.id+')">حذف</button></td></tr>').join('');
-  const aRows=(DATA.atm_deposit||[]).map(x=>'<tr><td>'+esc(x.dep_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td class="num pos" style="font-weight:800">'+fmt(x.amount)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'atm_deposit\','+x.id+')">حذف</button></td></tr>').join('');
+  const aRows=(DATA.atm_deposit||[]).map(x=>'<tr><td>'+esc(x.dep_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td class="num pos" style="font-weight:800">'+fmt(x.amount)+'</td><td>'+esc(x.bank||'—')+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'atm_deposit\','+x.id+')">حذف</button></td></tr>').join('');
   $('p-banks').innerHTML=
     '<div class="panel"><div class="row-between"><h3 style="margin:0">🏦 حركات البنوك</h3><button class="btn" onclick="formToggle(\'bank-form\')">➕ حركة بنك</button></div></div>'+bForm+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ الفعلي</th><th>الإقفال</th><th>البنك</th><th>النوع</th><th>القيمة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(bRows||'<tr><td colspan="7" class="mut" style="text-align:center;padding:12px">لا حركات</td></tr>')+'</tbody></table></div></div>'+
-    '<div class="panel"><div class="row-between"><h3 style="margin:0">🏧 إيداعات ATM</h3><button class="btn" onclick="formToggle(\'atm-form\')">➕ إيداع</button></div></div>'+aForm+
-    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المبلغ</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(aRows||'<tr><td colspan="5" class="mut" style="text-align:center;padding:12px">لا إيداعات</td></tr>')+'</tbody></table></div></div>';
+    '<div class="panel"><div class="row-between"><h3 style="margin:0">🏧 إيداعات الصندوق (الكاش)</h3><button class="btn" onclick="formToggle(\'atm-form\')">➕ إيداع</button></div></div>'+aForm+
+    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المبلغ</th><th>البنك</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(aRows||'<tr><td colspan="6" class="mut" style="text-align:center;padding:12px">لا إيداعات</td></tr>')+'</tbody></table></div></div>';
 }
 async function saveBank(){ const data={actual_date:$('bk-adate').value||null,close_date:$('bk-cdate').value||null,direction:$('bk-dir').value,amount:n($('bk-amt').value),bank_name:$('bk-bank').value||null,note:$('bk-note').value||null}; if(await crud('insert','bank_txn',data)){formToggle('bank-form');} }
-async function saveAtm(){ const data={dep_date:$('at-date').value||null,branch:$('at-branch').value||null,amount:n($('at-amt').value),note:$('at-note').value||null}; if(await crud('insert','atm_deposit',data)){formToggle('atm-form');} }
+async function saveAtm(){ const data={dep_date:$('at-date').value||null,branch:$('at-branch').value||null,amount:n($('at-amt').value),bank:$('at-bank').value||null,note:$('at-note').value||null}; if(await crud('insert','atm_deposit',data)){formToggle('atm-form');} }
 
 // ===== 📦 منتجات ناقصة =====
 function renderInv(){
