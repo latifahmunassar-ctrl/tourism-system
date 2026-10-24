@@ -148,7 +148,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v25';
+const FS_VER='v26';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -183,7 +183,7 @@ function renderMatch(){
   // كشف مختصر لكل يوم (تاريخ · فرق الوارد · الحالة) يتوسّع للتفاصيل عند الضغط
   const INFLOW=['مكنة','صندوق','تحويل','آجل'];   // الوارد للبنك؛ المصروفات مستثناة من حساب الفرق والحالة
   const detHead='<tr style="font-size:11px;color:var(--muted)"><th style="text-align:right">الفرع</th>'+TYPES.map(t=>'<th>'+TI[t]+' '+t+'</th>').join('')+'<th>إجمالي</th></tr>';
-  const rows_html=[];
+  const rows_html=[], dailyExp=[];
   dates.forEach((d,di)=>{
     const brs=BR.filter(br=> (fsM[d]&&fsM[d][br]) || (azM[d]&&azM[d][br]) );
     const brHtml=brs.map(br=>{
@@ -201,6 +201,7 @@ function renderMatch(){
     let fsIn=0,azIn=0; brs.forEach(br=>INFLOW.forEach(t=>{fsIn+=get(fsM,d,br,t);azIn+=get(azM,d,br,t);}));
     const diffIn=fsIn-azIn, matched=Math.abs(diffIn)<0.5;
     if(statusF==='matched'&&!matched)return; if(statusF==='unmatched'&&matched)return;
+    dailyExp.push({d:d,diff:diffIn,matched:matched});
     const pill = matched ? '<span class="pill" style="background:rgba(47,209,150,.15);color:#2fd196;border:1px solid #2fd196;padding:1px 9px">✓ مطابق</span>' : '<span class="pill" style="background:rgba(229,72,77,.15);color:#ff6b7a;border:1px solid #ff6b7a;padding:1px 9px">⚠ غير مطابق</span>';
     rows_html.push(
       '<tr onclick="fsToggleDate('+di+')" style="cursor:pointer"><td style="font-weight:800"><span id="arw-'+di+'" style="color:var(--accent)">▸</span> 📅 '+esc(d)+'</td>'+
@@ -210,16 +211,40 @@ function renderMatch(){
   });
   // ملخّص حسب النوع
   const gF=TYPES.reduce((a,t)=>a+grandF[t],0),gA=TYPES.reduce((a,t)=>a+grandA[t],0);
+  window._mExport={from:F.from,to:F.to,status:statusF,cur:C,types:TYPES.map(t=>({name:t,icon:TI[t],fs:grandF[t],az:grandA[t]})),daily:dailyExp};   // بيانات تصدير PDF
   const sumRows=TYPES.map(t=>{ const dv=grandF[t]-grandA[t]; const hd=Math.abs(dv)>=0.5; return '<tr><td>'+TI[t]+' '+t+'</td><td class="num">'+fmt(grandF[t])+'</td><td class="num" style="color:#3aa0ff">'+fmt(grandA[t])+'</td><td class="num" style="font-weight:700;color:'+(hd?'#ff6b7a':'#2fd196')+'">'+(hd?fmt(dv):'✓')+'</td></tr>'; }).join('')+
     '<tr style="font-weight:800;border-top:2px solid rgba(128,128,128,.4)"><td>الإجمالي</td><td class="num">'+fmt(gF)+'</td><td class="num" style="color:#3aa0ff">'+fmt(gA)+'</td><td class="num" style="color:'+(Math.abs(gF-gA)>=0.5?'#ff6b7a':'#2fd196')+'">'+fmt(gF-gA)+'</td></tr>';
   $('p-match').innerHTML=
     '<div class="panel" style="border:1px solid var(--amber);background:rgba(217,138,0,.07)"><div style="font-weight:700;color:#e0a83a">📌 للعرض والمطابقة فقط — لا إدخال ولا تأثير على بنوك العز</div><div class="sub" style="margin-top:3px">يطابق ما سجّلته الموظفة في فانسي سنس مع <b>تقرير البنك</b> (سجلات فانسي في كاش إن/آوت العز)، حسب <b>الفرع ونوع الحركة</b>. 📥 الصندوق مفصّل بالفرع فيُطابَق مباشرة. 🏧 المكنة (POS) في تقرير البنك <b>مجمّعة بلا فرع</b> → تحت «غير محدّد». 🎪 «معارض» نشاط منفصل.</div></div>'+
-    '<div class="panel"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));max-width:720px"><div class="fld"><label>📅 من تاريخ</label><input type="date" value="'+esc(F.from)+'" onchange="window._mFrom=this.value;renderMatch()"></div><div class="fld"><label>📅 إلى تاريخ</label><input type="date" value="'+esc(F.to)+'" onchange="window._mTo=this.value;renderMatch()"></div><div class="fld"><label>🔎 الحالة</label><select onchange="window._mStatus=this.value;renderMatch()"><option value="all"'+(statusF==='all'?' selected':'')+'>الكل</option><option value="matched"'+(statusF==='matched'?' selected':'')+'>✓ مطابق فقط</option><option value="unmatched"'+(statusF==='unmatched'?' selected':'')+'>⚠ غير مطابق فقط</option></select></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._mFrom=\'\';window._mTo=\'\';window._mStatus=\'all\';renderMatch()">مسح</button></div></div></div>'+
+    '<div class="panel"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));max-width:720px"><div class="fld"><label>📅 من تاريخ</label><input type="date" value="'+esc(F.from)+'" onchange="window._mFrom=this.value;renderMatch()"></div><div class="fld"><label>📅 إلى تاريخ</label><input type="date" value="'+esc(F.to)+'" onchange="window._mTo=this.value;renderMatch()"></div><div class="fld"><label>🔎 الحالة</label><select onchange="window._mStatus=this.value;renderMatch()"><option value="all"'+(statusF==='all'?' selected':'')+'>الكل</option><option value="matched"'+(statusF==='matched'?' selected':'')+'>✓ مطابق فقط</option><option value="unmatched"'+(statusF==='unmatched'?' selected':'')+'>⚠ غير مطابق فقط</option></select></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._mFrom=\'\';window._mTo=\'\';window._mStatus=\'all\';renderMatch()">مسح</button></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn" style="background:#c41d88;color:#fff" onclick="fsExportMatchPDF()">📄 تصدير PDF</button></div></div></div>'+
     '<div class="panel"><h3 style="margin:0 0 10px">📊 ملخّص المطابقة حسب النوع</h3><div class="tbl-wrap"><table><thead><tr><th>النوع</th><th>فانسي</th><th>🔵 تقرير البنك</th><th>الفرق</th></tr></thead><tbody>'+sumRows+'</tbody></table></div></div>'+
     '<div class="panel"><h3>🔎 المطابقة اليومية — اضغطي اليوم للتفاصيل</h3><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرق (الوارد)</th><th>الحالة</th></tr></thead><tbody>'+(rows_html.join('')||'<tr><td colspan="3" class="mut" style="text-align:center;padding:14px">لا بيانات</td></tr>')+'</tbody></table></div><div class="sub" style="margin-top:5px">اضغطي اليوم لعرض التفاصيل (الفرع ونوع الحركة). «الفرق» = الوارد (مكنة+صندوق+تحويل+آجل) بلا مصروفات؛ «غير مطابق» إذا الفرق ≥ 0.5.</div></div>';
 }
 // توسيع/طيّ تفاصيل يوم في المطابقة
 function fsToggleDate(i){ const r=document.getElementById('mdet-'+i), a=document.getElementById('arw-'+i); if(r){ const sh=r.style.display==='none'; r.style.display=sh?'':'none'; if(a)a.textContent=sh?'▾':'▸'; } }
+// 📄 تصدير تقرير مطابقة البنوك PDF حسب الفترة والحالة المحدّدة
+function fsExportMatchPDF(){
+  const E=window._mExport; if(!E){ alert('افتحي المطابقة أولاً'); return; }
+  const C=E.cur||'OMR'; const today=new Date().toISOString().slice(0,10);
+  const statusLbl=E.status==='matched'?'المطابقة فقط':(E.status==='unmatched'?'غير المطابقة فقط':'الكل');
+  const period=(E.from||E.to)?((E.from||'البداية')+' ← '+(E.to||'النهاية')):'كل الفترات';
+  const gF=E.types.reduce((a,t)=>a+t.fs,0), gA=E.types.reduce((a,t)=>a+t.az,0);
+  const sumRows=E.types.map(t=>{ const d=t.fs-t.az; const hd=Math.abs(d)>=0.5; return '<tr><td>'+t.icon+' '+t.name+'</td><td class="num">'+fmt(t.fs)+'</td><td class="num">'+fmt(t.az)+'</td><td class="num" style="font-weight:700;color:'+(hd?'#c0392b':'#0e7a5a')+'">'+(hd?fmt(d):'✓')+'</td></tr>'; }).join('')+
+    '<tr style="font-weight:800;background:#f0f6f3"><td>الإجمالي</td><td class="num">'+fmt(gF)+'</td><td class="num">'+fmt(gA)+'</td><td class="num" style="color:'+(Math.abs(gF-gA)>=0.5?'#c0392b':'#0e7a5a')+'">'+fmt(gF-gA)+'</td></tr>';
+  const nMatch=E.daily.filter(x=>x.matched).length, nUn=E.daily.length-nMatch;
+  const dayRows=E.daily.map(x=>'<tr><td>'+esc(x.d)+'</td><td class="num" style="color:'+(x.matched?'#0e7a5a':'#c0392b')+'">'+fmt(x.diff)+'</td><td style="font-weight:700;color:'+(x.matched?'#0e7a5a':'#c0392b')+'">'+(x.matched?'✓ مطابق':'⚠ غير مطابق')+'</td></tr>').join('')||'<tr><td colspan="3" style="text-align:center;color:#888">لا بيانات</td></tr>';
+  const html='<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>تقرير مطابقة البنوك — فانسي سنس</title>'+
+    '<style>@page{margin:0}body{font-family:Tahoma,Arial;padding:14mm 12mm;color:#222;max-width:820px;margin:auto;font-size:14px}h1{font-size:21px;margin:6px 0;color:#c41d88}h2{font-size:16px;border-right:4px solid #0e7a5a;padding-right:8px;margin:16px 0 4px;color:#0e7a5a}table{border-collapse:collapse;width:100%;font-size:13.5px;margin-top:6px}th,td{border:1px solid #cbd2d9;padding:7px 10px;text-align:right}thead th{background:#0e7a5a;color:#fff}.num{font-variant-numeric:tabular-nums}.hd{text-align:center;border-bottom:2px solid #c41d88;padding-bottom:8px;margin-bottom:8px}.meta{background:#fafafa;border:1px solid #eee;border-radius:8px;padding:8px 12px;font-size:12.5px;margin:8px 0}@media print{.noprint{display:none}}</style></head><body>'+
+    '<div class="noprint" style="text-align:left;margin-bottom:10px"><button onclick="window.print()" style="padding:8px 20px;font-size:15px;cursor:pointer;background:#0e7a5a;color:#fff;border:none;border-radius:6px">🖨️ طباعة / حفظ PDF</button></div>'+
+    '<div class="hd"><div style="font-size:28px;font-weight:900;letter-spacing:2px;color:#c41d88">FANCY SENSE</div><div style="font-size:12px;color:#666">إكسسوارات وعدسات — مطابقة البنوك مع تقرير البنك</div><h1>↔️ تقرير مطابقة البنوك</h1><div style="font-size:12px;color:#666">تاريخ الإصدار: '+today+'</div></div>'+
+    '<div class="meta">📅 الفترة: <b>'+esc(period)+'</b> · 🔎 الحالة: <b>'+esc(statusLbl)+'</b> · العملة: <b>'+esc(C)+'</b><br>📊 أيام ضمن العرض: <b>'+E.daily.length+'</b> (✓ مطابق: '+nMatch+' · ⚠ غير مطابق: '+nUn+')</div>'+
+    '<h2>📊 ملخّص المطابقة حسب النوع</h2><table><thead><tr><th>النوع</th><th>فانسي</th><th>تقرير البنك</th><th>الفرق</th></tr></thead><tbody>'+sumRows+'</tbody></table>'+
+    '<div style="font-size:11.5px;color:#888;margin-top:3px">«الفرق» للعرض والمراجعة فقط. 🏧 المكنة في تقرير البنك مجمّعة بلا فرع.</div>'+
+    '<h2>🗓️ المطابقة اليومية (الوارد بلا مصروفات)</h2><table><thead><tr><th>التاريخ</th><th>الفرق (الوارد)</th><th>الحالة</th></tr></thead><tbody>'+dayRows+'</tbody></table>'+
+    '<div style="margin-top:30px;font-size:12px;color:#666">إعداد: نظام محاسبة فانسي سنس · للعرض والمراجعة فقط</div>'+
+    '<'+'script>window.onload=function(){setTimeout(function(){window.focus();window.print();},350);};<'+'/script></body></html>';
+  const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close(); } else { alert('اسمحي بالنوافذ المنبثقة لعرض التقرير'); }
+}
 
 // ===== 💸 مصاريف يومية =====
 function renderExpenses(){
