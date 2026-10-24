@@ -147,7 +147,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v7';
+const FS_VER='v8';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -245,7 +245,7 @@ function renderSales(){
     '<td><input id="'+c[4]+'" placeholder="ملاحظة" style="width:150px;font-size:11px"></td></tr>').join('');
   // صف التحويل البنكي: الموظفة = مجموع التحويلات (أسفل) · REWA يدوي
   const transferRow='<tr><td style="font-weight:700">تحويل بنكي</td>'+
-    '<td class="num"><b id="sl-transfer-d">0</b><div class="mini" style="color:#9aa">من التحويلات ↓</div><input type="hidden" id="sl-transfer" value="0"></td>'+
+    '<td class="num"><b id="sl-transfer-d">0</b><div class="mini" style="color:var(--accent2)">⬇️ أدخلي بالأسفل</div><input type="hidden" id="sl-transfer" value="0"></td>'+
     '<td><input id="sl-rtransfer" type="number" value="0" oninput="slDiff()" style="width:90px"></td>'+
     '<td class="num"><b id="d-transfer">0</b></td>'+
     '<td><input id="sl-ntransfer" placeholder="ملاحظة" style="width:150px;font-size:11px"></td></tr>';
@@ -257,9 +257,9 @@ function renderSales(){
     '<div class="tbl-wrap" style="margin-top:10px"><table><thead><tr><th>البند</th><th>📝 تقرير الموظفة</th><th>🏧 تقرير REWA</th><th>الفرق</th><th>ملاحظة</th></tr></thead><tbody>'+reconRows+transferRow+
       '<tr style="font-weight:800;background:var(--panel2)"><td>الإجمالي</td><td class="num"><span id="sl-total-d">0</span></td><td class="num"><span id="sl-rtotal-d">0</span></td><td class="num"><b id="sl-tdiff">0</b></td><td></td></tr>'+
     '</tbody></table></div>'+
-    '<div style="margin-top:12px;border:1px solid var(--line);border-radius:10px;padding:10px"><div class="row-between"><h4 style="margin:0;color:var(--accent2)">💳 تفاصيل التحويلات البنكية (الموظفة)</h4><button class="btn sm" onclick="slAddTransferRow()">➕ تحويل آخر</button></div>'+
-      '<div id="sl-transfer-rows" style="margin-top:8px"></div>'+
-      '<div class="sub">كل تحويل: المبلغ + البنك المحوَّل إليه (من القائمة). المجموع يظهر في «تحويل بنكي» بالأعلى ويُطابَق مع REWA.</div></div>'+
+    '<div style="margin-top:12px;border:1px solid var(--accent);border-radius:10px;padding:10px;background:rgba(224,33,138,.05)"><div class="row-between"><h4 style="margin:0;color:var(--accent2)">💳 تفاصيل التحويلات البنكية (الموظفة) — أدخلي المبلغ والبنك هنا 👇</h4><button class="btn sm" onclick="slAddTransferRow()">➕ تحويل آخر</button></div>'+
+      '<div id="sl-transfer-rows" style="margin-top:8px">'+slTransferRowHtml(_slTrIdx++)+'</div>'+
+      '<div class="sub">كل تحويل: المبلغ + البنك المحوَّل إليه (من القائمة). المجموع يظهر تلقائيّاً في «تحويل بنكي» بالأعلى ويُطابَق مع REWA. اضغطي «➕ تحويل آخر» لأكثر من تحويل.</div></div>'+
     '<input type="hidden" id="sl-total" value="0"><input type="hidden" id="sl-rtotal" value="0">'+
     '<div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));max-width:500px;margin-top:10px">'+
       fin('المرتجعات','sl-returns','number','0')+
