@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
 <title>Fancy Sense — المحاسبة</title>
 <style>
 :root{--bg:#0f1720;--panel:#16212e;--panel2:#1c2a3a;--line:#2a3a4d;--txt:#e7eef6;--muted:#93a3b5;--accent:#e0218a;--accent2:#ff5db1;--green:#0e9d6a;--red:#e5484d;--amber:#d98a00;--brand:#c9b037;--radius:12px}
@@ -125,10 +127,14 @@ async function loadAll(){
 }
 function needLogin(){ $('app').classList.add('hidden'); $('gate').classList.remove('hidden'); $('gate-msg').innerHTML='لازم تسجّلي الدخول من <b>نظام العز</b> أولاً (نفس الجلسة).'; }
 async function crud(action,table,data,id){
-  const j=await api('POST',action,{table,data,id});
-  if(j.error){ alert('خطأ: '+j.error); return false; }
-  await loadAll(); return true;
+  try{
+    const j=await api('POST',action,{table,data,id});
+    if(j&&j.error){ toast('⚠️ خطأ: '+j.error,true); return false; }
+    await loadAll(); toast('✅ تم الحفظ'); return true;
+  }catch(e){ toast('⚠️ تعذّر الحفظ: '+(e&&e.message||e),true); return false; }
 }
+function toast(msg,err){ let t=$('fs-toast'); if(!t){ t=document.createElement('div'); t.id='fs-toast'; t.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);padding:11px 20px;border-radius:10px;font-weight:700;font-size:14px;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.4)'; document.body.appendChild(t); }
+  t.style.background=err?'#e5484d':'#0e9d6a'; t.style.color='#fff'; t.textContent=msg; t.style.display='block'; clearTimeout(window._fsTT); window._fsTT=setTimeout(()=>{t.style.display='none';},err?5000:2200); }
 
 // ---- البوابة (موحّدة مع نظام العز) ----
 function showApp(){ $('gate').classList.add('hidden'); $('app').classList.remove('hidden'); loadAll(); }
@@ -141,8 +147,9 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
+const FS_VER='v3';
 function render(){
-  $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'%';
+  $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
 }
 
