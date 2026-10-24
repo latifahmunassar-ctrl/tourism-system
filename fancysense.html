@@ -147,7 +147,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v12';
+const FS_VER='v13';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -343,11 +343,13 @@ function renderSales(){
   // 🏧 فورم إيداع الصندوق (كاش) من الفرع إلى البنك
   const cashDepForm='<div id="cashdep-form" class="panel hidden" style="border-color:#3aa0ff"><h3 style="border-color:#3aa0ff">🏧 إيداع صندوق (كاش) — من الفرع إلى البنك</h3><div class="fgrid" style="max-width:700px">'+
     fin('التاريخ','cd-date','date',today())+
-    fsel('الفرع','cd-branch','branch')+
-    fin('مبلغ إيداع الصندوق','cd-amt','number','0')+
+    '<div class="fld"><label>الفرع</label><select id="cd-branch" onchange="cdCashInfo()">'+opts('branch')+'</select></div>'+
+    fin('مبلغ إيداع الصندوق','cd-amt','number','0','oninput="cdCashInfo()"')+
     fsel('البنك المودَع فيه','cd-bank','bank')+
     '<div class="fld full"><label>ملاحظة</label><input id="cd-note"></div>'+
-    '</div><div class="sub" style="margin-top:6px">يظهر ضمن «🏦 البنوك والإيداعات ← إيداعات الصندوق».</div><div id="cd-msg" class="msg"></div>'+
+    '</div>'+
+    '<div id="cd-cashinfo" style="margin-top:10px;padding:10px 12px;border:1px solid #3aa0ff;border-radius:8px;background:rgba(58,160,255,.08);font-size:13px"><span class="mut">اختاري الفرع لعرض النقد المتوفّر بالصندوق</span></div>'+
+    '<div class="sub" style="margin-top:6px">يظهر ضمن «🏦 البنوك والإيداعات ← إيداعات الصندوق».</div><div id="cd-msg" class="msg"></div>'+
     '<button class="btn green" onclick="saveCashDep()">💾 حفظ الإيداع</button> <button class="btn ghost" onclick="formToggle(\'cashdep-form\')">إغلاق</button></div>';
   $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات + مصاريف اليوم</button><button class="btn" style="background:#3aa0ff" onclick="formToggle(\'cashdep-form\')">🏧 إيداع صندوق</button><button class="btn" style="background:#0e9d6a" onclick="exportSalesPDF()">📄 تصدير PDF</button></div></div></div>'+form+cashDepForm+filterBar+
     summ('📊 ملخّص الفترة'+(anyF?' المفلترة':''),fA,false)+
@@ -431,6 +433,16 @@ function slCreditRowHtml(i){ return '<div class="sl-cr-row" data-i="'+i+'" style
   '<input id="cr-note-'+i+'" placeholder="ملاحظة" style="padding:6px 8px">'+
   '<button class="btn red sm" onclick="this.closest(\'.sl-cr-row\').remove();slDiff()">✕</button></div>'; }
 function slAddCreditRow(){ const c=$('sl-credit-rows'); if(!c)return; c.insertAdjacentHTML('beforeend', slCreditRowHtml(_slCrIdx++)); }
+// 💰 نقد الصندوق المتوفّر بالفرع = مبيعات نقدية − إيداعات صندوق سابقة
+function fsBranchCash(branch){ let sales=0,deposits=0;
+  ((DATA&&DATA.daily_sales)||[]).forEach(x=>{ if(x.branch===branch) sales+=n(x.cash); });
+  ((DATA&&DATA.atm_deposit)||[]).forEach(x=>{ if(x.branch===branch) deposits+=n(x.amount); });
+  return {sales,deposits,available:sales-deposits}; }
+function cdCashInfo(){ const box=$('cd-cashinfo'); if(!box)return; const b=($('cd-branch')||{}).value||'';
+  if(!b){ box.innerHTML='<span class="mut">اختاري الفرع لعرض النقد المتوفّر بالصندوق</span>'; return; }
+  const c=fsBranchCash(b); const amt=n(($('cd-amt')||{}).value); const after=c.available-amt; const C=cur();
+  box.innerHTML='💰 النقد المتوفّر بصندوق «<b>'+esc(b)+'</b>»: <b style="color:#3aa0ff;font-size:15px">'+fmt(c.available)+' '+C+'</b> <span class="mut">(مبيعات نقدية '+fmt(c.sales)+' − إيداعات سابقة '+fmt(c.deposits)+')</span>'+
+    (amt>0?('<br>↘️ المتبقّي بالصندوق بعد هذا الإيداع: <b style="color:'+(after>=0?'#2fd196':'#ff6b7a')+';font-size:15px">'+fmt(after)+' '+C+'</b>'+(after<-0.005?' ⚠️ الإيداع أكبر من النقد المتوفّر':'')):''); }
 // 🏧 حفظ إيداع صندوق (كاش) من شاشة المبيعات → جدول إيداعات الصندوق
 async function saveCashDep(){
   const d=$('cd-date').value, amt=n($('cd-amt').value);
