@@ -148,7 +148,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v22';
+const FS_VER='v23';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -171,9 +171,11 @@ function renderMatch(){
   // تجميع: fsM[date][branch][type] و azM[date][branch][type]
   const fsM={},azM={};
   const add=(M,d,br,t,v)=>{ if(!d)return; M[d]=M[d]||{}; M[d][br]=M[d][br]||{}; M[d][br][t]=(M[d][br][t]||0)+n(v); };
-  (DATA.daily_sales||[]).forEach(x=>{ const d=String(x.sale_date||'').slice(0,10); if(!inr(d))return; const br=brCanon(x.branch); add(fsM,d,br,'مكنة',x.machine); add(fsM,d,br,'آجل',x.credit_sales); let tr=n(x.bank_transfer); if(!tr&&Array.isArray(x.transfers))tr=x.transfers.reduce((a,t)=>a+n(t&&t.amount),0); add(fsM,d,br,'تحويل',tr); });
+  (DATA.daily_sales||[]).forEach(x=>{ const d=String(x.sale_date||'').slice(0,10); if(!inr(d))return; const br=brCanon(x.branch); add(fsM,d,br,'مكنة',x.machine); let tr=n(x.bank_transfer); if(!tr&&Array.isArray(x.transfers))tr=x.transfers.reduce((a,t)=>a+n(t&&t.amount),0); add(fsM,d,br,'تحويل',tr); });
   (DATA.atm_deposit||[]).forEach(x=>{ const d=String(x.dep_date||'').slice(0,10); if(!inr(d))return; add(fsM,d,brCanon(x.branch),'صندوق',x.amount); });
   (DATA.expenses||[]).forEach(x=>{ const d=String(x.exp_date||'').slice(0,10); if(!inr(d))return; add(fsM,d,brCanon(x.branch),'مصروفات',x.amount); });
+  // 📒 الآجل = المُحصَّل الفعلي (credit_txn.paid) — حركة بنكية على مستوى الشركة (بلا فرع) → «غير محدّد»؛ البيع الآجل اليومي ليس حركة بنكية فلا يُدرَج
+  (DATA.credit_txn||[]).forEach(x=>{ const d=String(x.txn_date||'').slice(0,10); if(!inr(d))return; add(fsM,d,'غير محدّد','آجل',x.paid_amount); });
   (DATA.acc_fancy||[]).forEach(x=>{ const d=String(x.tx_date||'').slice(0,10); if(!inr(d))return; const c=azClass(x); if(!c)return; add(azM,d,c.branch,c.type,c.amount); });
   const get=(M,d,br,t)=>(((M[d]||{})[br]||{})[t])||0;
   const dates=[...new Set([...Object.keys(fsM),...Object.keys(azM)])].sort().reverse();
