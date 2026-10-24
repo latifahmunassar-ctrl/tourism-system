@@ -147,7 +147,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v8';
+const FS_VER='v9';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -274,15 +274,44 @@ function renderSales(){
     '<button class="btn green" onclick="saveSale()">💾 حفظ (المبيعات + المصاريف)</button> <button class="btn ghost" onclick="formToggle(\'sales-form\')">إلغاء</button></div>';
   const s=DATA.daily_sales||[];
   const rate=taxRate()/100;
+  // 🔎 الفلاتر
+  const F={from:window._slFrom||'',to:window._slTo||'',branch:window._slBranch||'',pm:window._slPM||''};
+  const inR=x=>{ const d=String(x.sale_date||'').slice(0,10); if(F.from&&d<F.from)return false; if(F.to&&d>F.to)return false; if(F.branch&&x.branch!==F.branch)return false; return true; };
+  const fRows=s.filter(inR);
+  // تجميع
+  const agg=rs=>{ const a={em:{machine:0,cash:0,credit:0,transfer:0},rw:{machine:0,cash:0,credit:0,transfer:0},total:0,rtotal:0,returns:0,net:0,n:rs.length};
+    rs.forEach(x=>{ a.em.machine+=n(x.machine);a.em.cash+=n(x.cash);a.em.credit+=n(x.credit_sales);a.em.transfer+=n(x.bank_transfer);
+      a.rw.machine+=n(x.rewa_machine);a.rw.cash+=n(x.rewa_cash);a.rw.credit+=n(x.rewa_credit);a.rw.transfer+=n(x.rewa_transfer);
+      a.total+=n(x.total);a.rtotal+=n(x.rewa_total);a.returns+=n(x.returns); const rt=(n(x.tax_rate)||taxRate())/100; a.net+=rt>0?n(x.total)/(1+rt):n(x.total); }); return a; };
+  const fA=agg(fRows), gA=agg(s);
+  const chans=[['المكنة','machine'],['نقدي','cash'],['آجل','credit'],['تحويل','transfer']];
+  const summ=(title,a,ignorePm)=>{ const gd=a.total-a.rtotal; const show=(!ignorePm&&F.pm)?chans.filter(c=>c[1]===F.pm):chans;
+    const br=show.map(c=>{ const e=a.em[c[1]],r=a.rw[c[1]],d=e-r; return '<tr><td>'+c[0]+'</td><td class="num">'+fmt(e)+'</td><td class="num mut">'+fmt(r)+'</td><td class="num" style="color:'+(Math.abs(d)<0.005?'#2fd196':'#ff6b7a')+'">'+fmt(d)+'</td></tr>'; }).join('');
+    return '<div class="panel"><h3 style="margin:0 0 10px">'+title+' <span class="sub">('+a.n+' يوم)</span></h3>'+
+      '<div class="kpis">'+kpi('إجمالي الموظفة',fmt(a.total)+' '+C)+kpi('إجمالي REWA',fmt(a.rtotal)+' '+C)+kpi('الفرق',fmt(gd)+' '+C,Math.abs(gd)<0.005?'pos':'neg')+kpi('المرتجعات',fmt(a.returns)+' '+C,'neg')+kpi('صافي بدون ضريبة',fmt(a.net)+' '+C)+'</div>'+
+      '<div style="max-width:540px"><div class="tbl-wrap"><table><thead><tr><th>البند</th><th>الموظفة</th><th>REWA</th><th>الفرق</th></tr></thead><tbody>'+br+'</tbody></table></div></div></div>';
+  };
+  const brOpts='<option value="">كل الفروع</option>'+listVals('branch').map(b=>'<option'+(b===F.branch?' selected':'')+'>'+esc(b)+'</option>').join('');
+  const pmOpts='<option value="">كل الأنواع</option>'+chans.map(p=>'<option value="'+p[1]+'"'+(p[1]===F.pm?' selected':'')+'>'+p[0]+'</option>').join('');
+  const filterBar='<div class="panel"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">'+
+    '<div class="fld"><label>📅 من تاريخ</label><input type="date" value="'+esc(F.from)+'" onchange="window._slFrom=this.value;renderSales()"></div>'+
+    '<div class="fld"><label>📅 إلى تاريخ</label><input type="date" value="'+esc(F.to)+'" onchange="window._slTo=this.value;renderSales()"></div>'+
+    '<div class="fld"><label>🏬 الفرع</label><select onchange="window._slBranch=this.value;renderSales()">'+brOpts+'</select></div>'+
+    '<div class="fld"><label>💳 نوع الدفع</label><select onchange="window._slPM=this.value;renderSales()">'+pmOpts+'</select></div>'+
+    '<div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._slFrom=\'\';window._slTo=\'\';window._slBranch=\'\';window._slPM=\'\';renderSales()">مسح الفلاتر</button></div>'+
+  '</div></div>';
   const cc=(emp,rewa,note)=>{ const d=n(emp)-n(rewa); const dl=(Math.abs(d)>=0.005)?'<div class="mini" style="color:#ff6b7a">Δ '+fmt(d)+'</div>':''; return '<td class="num">'+fmt(emp)+'<div class="mini" style="color:#9aa">REWA '+fmt(rewa)+'</div>'+dl+noteLine(note)+'</td>'; };
   const tcell=(x)=>{ const trs=Array.isArray(x.transfers)?x.transfers:[]; const emp=n(x.bank_transfer),rewa=n(x.rewa_transfer),d=emp-rewa; const dl=(Math.abs(d)>=0.005)?'<div class="mini" style="color:#ff6b7a">Δ '+fmt(d)+'</div>':''; const list=trs.map(t=>'<div class="mini" style="color:#9aa">🏦 '+esc(t.bank||'—')+': '+fmt(t.amount)+'</div>').join(''); return '<td class="num">'+fmt(emp)+list+'<div class="mini" style="color:#9aa">REWA '+fmt(rewa)+'</div>'+dl+noteLine(x.note_transfer)+'</td>'; };
-  const rows=s.map(x=>{ const net=rate>0?n(x.total)/(1+(n(x.tax_rate)||taxRate())/100):n(x.total); const gd=n(x.total)-n(x.rewa_total);
+  const rows=fRows.map(x=>{ const net=rate>0?n(x.total)/(1+(n(x.tax_rate)||taxRate())/100):n(x.total); const gd=n(x.total)-n(x.rewa_total);
     return '<tr><td>'+esc(x.sale_date||'')+'</td><td>'+esc(x.branch||'')+'</td>'+
       cc(x.machine,x.rewa_machine,x.note_machine)+cc(x.cash,x.rewa_cash,x.note_cash)+cc(x.credit_sales,x.rewa_credit,x.note_credit)+tcell(x)+
       '<td class="num" style="font-weight:800">'+fmt(x.total)+'</td><td class="num mut">'+fmt(x.rewa_total)+'</td><td class="num" style="font-weight:800;color:'+(Math.abs(gd)<0.005?'#2fd196':'#ff6b7a')+'">'+fmt(gd)+'</td>'+
       '<td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button></td></tr>'; }).join('');
-  $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات + مصاريف اليوم</button></div></div>'+form+
-    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة<br><span class="mini">موظفة/REWA</span></th><th>نقدي<br><span class="mini">موظفة/REWA</span></th><th>آجل<br><span class="mini">موظفة/REWA</span></th><th>تحويل<br><span class="mini">موظفة/REWA</span></th><th>إجمالي الموظفة</th><th>إجمالي REWA</th><th>الفرق</th><th>المرتجعات</th><th>صافي بدون ضريبة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="13" class="mut" style="text-align:center;padding:14px">لا مبيعات مسجّلة بعد</td></tr>')+'</tbody></table></div></div>';
+  const anyF=!!(F.from||F.to||F.branch||F.pm);
+  $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات + مصاريف اليوم</button></div></div>'+form+filterBar+
+    summ('📊 ملخّص الفترة'+(anyF?' المفلترة':''),fA,false)+
+    summ('🗂️ ملخّص عام (كل السجلات)',gA,true)+
+    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة<br><span class="mini">موظفة/REWA</span></th><th>نقدي<br><span class="mini">موظفة/REWA</span></th><th>آجل<br><span class="mini">موظفة/REWA</span></th><th>تحويل<br><span class="mini">موظفة/REWA</span></th><th>إجمالي الموظفة</th><th>إجمالي REWA</th><th>الفرق</th><th>المرتجعات</th><th>صافي بدون ضريبة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="13" class="mut" style="text-align:center;padding:14px">لا نتائج للفلتر المحدّد</td></tr>')+'</tbody></table></div></div>';
 }
 function slDiff(){
   const ch=[['sl-machine','sl-rmachine','d-machine'],['sl-cash','sl-rcash','d-cash'],['sl-credit','sl-rcredit','d-credit']];
