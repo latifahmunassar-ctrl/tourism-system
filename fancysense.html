@@ -147,7 +147,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v5';
+const FS_VER='v6';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderExpenses(); renderRewa(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -257,18 +257,12 @@ function renderSales(){
     '</div>'+
     '<div class="fld full" style="margin-top:8px"><label>ملاحظة عامة لليوم</label><input id="sl-note"></div>'+
     '<div class="sub" style="margin-top:6px">«تقرير الموظفة» = المبيعات المسجّلة يدويّاً · «تقرير REWA» = من نظام نقاط البيع · الفرق تلقائي. الإجمالي = مجموع تقرير الموظفة. الضريبة '+taxRate()+'% تُحفظ مع السطر.</div>'+
+    // 💸 مصاريف هذا اليوم لهذا الفرع — داخل نفس الفورم (أكثر من سطر)
+    '<div style="margin-top:14px;border-top:1px dashed var(--line);padding-top:10px"><div class="row-between"><h4 style="margin:0;color:#b8860b">💸 مصاريف هذا اليوم — لهذا الفرع</h4><button class="btn sm" style="background:#b8860b" onclick="slAddExpRow()">➕ سطر مصروف</button></div>'+
+      '<div id="sl-exp-rows" style="margin-top:8px"></div>'+
+      '<div class="sub">تُسجَّل بتاريخ وفرع نفس المبيعات، وتظهر في تبويب «💸 مصاريف يومية».</div></div>'+
     '<div id="sl-msg" class="msg"></div>'+
-    '<button class="btn green" onclick="saveSale()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'sales-form\')">إلغاء</button></div>';
-  // 💸 فورم مصروف سريع من نفس شاشة المبيعات (ما يحتاج الموظف يفتح تبويب ثاني)
-  const expForm='<div id="sales-exp-form" class="panel hidden" style="border-color:#b8860b"><h3 style="border-color:#b8860b">💸 تسجيل مصروف سريع</h3><div class="fgrid">'+
-    fin('التاريخ','sx-date','date',today())+
-    fsel('الفرع','sx-branch','branch')+
-    fsel('البند (الفئة)','sx-cat','expense_cat')+
-    fin('المبلغ','sx-amt','number','0')+
-    fsel('طريقة الدفع','sx-pm','payment_method')+
-    '<div class="fld full"><label>ملاحظة</label><input id="sx-note"></div>'+
-    '</div><div class="sub" style="margin-top:6px">يُحفظ ضمن «💸 مصاريف يومية». الفئات تُدار من ⚙️ إعدادات.</div><div id="sx-msg" class="msg"></div>'+
-    '<button class="btn green" onclick="saveExpFromSales()">💾 حفظ المصروف</button> <button class="btn ghost" onclick="formToggle(\'sales-exp-form\')">إلغاء</button></div>';
+    '<button class="btn green" onclick="saveSale()">💾 حفظ (المبيعات + المصاريف)</button> <button class="btn ghost" onclick="formToggle(\'sales-form\')">إلغاء</button></div>';
   const s=DATA.daily_sales||[];
   const rate=taxRate()/100;
   const cc=(emp,rewa,note)=>{ const d=n(emp)-n(rewa); const dl=(Math.abs(d)>=0.005)?'<div class="mini" style="color:#ff6b7a">Δ '+fmt(d)+'</div>':''; return '<td class="num">'+fmt(emp)+'<div class="mini" style="color:#9aa">REWA '+fmt(rewa)+'</div>'+dl+noteLine(note)+'</td>'; };
@@ -277,7 +271,7 @@ function renderSales(){
       cc(x.machine,x.rewa_machine,x.note_machine)+cc(x.cash,x.rewa_cash,x.note_cash)+cc(x.credit_sales,x.rewa_credit,x.note_credit)+cc(x.bank_transfer,x.rewa_transfer,x.note_transfer)+
       '<td class="num" style="font-weight:800">'+fmt(x.total)+'</td><td class="num mut">'+fmt(x.rewa_total)+'</td><td class="num" style="font-weight:800;color:'+(Math.abs(gd)<0.005?'#2fd196':'#ff6b7a')+'">'+fmt(gd)+'</td>'+
       '<td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button></td></tr>'; }).join('');
-  $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><div style="display:flex;gap:8px"><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات</button><button class="btn" style="background:#b8860b" onclick="formToggle(\'sales-exp-form\')">💸 إضافة مصروف</button></div></div></div>'+form+expForm+
+  $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات + مصاريف اليوم</button></div></div>'+form+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة<br><span class="mini">موظفة/REWA</span></th><th>نقدي<br><span class="mini">موظفة/REWA</span></th><th>آجل<br><span class="mini">موظفة/REWA</span></th><th>تحويل<br><span class="mini">موظفة/REWA</span></th><th>إجمالي الموظفة</th><th>إجمالي REWA</th><th>الفرق</th><th>المرتجعات</th><th>صافي بدون ضريبة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="13" class="mut" style="text-align:center;padding:14px">لا مبيعات مسجّلة بعد</td></tr>')+'</tbody></table></div></div>';
 }
 function slDiff(){
@@ -300,8 +294,26 @@ async function saveSale(){
     rewa_machine:n($('sl-rmachine').value),rewa_cash:n($('sl-rcash').value),rewa_credit:n($('sl-rcredit').value),rewa_transfer:n($('sl-rtransfer').value),rewa_total:n($('sl-rtotal').value),
     returns:n($('sl-returns').value),tax_rate:taxRate(),note:$('sl-note').value||null,
     note_machine:$('sl-nmachine').value||null,note_cash:$('sl-ncash').value||null,note_credit:$('sl-ncredit').value||null,note_transfer:$('sl-ntransfer').value||null};
-  if(await crud('insert','daily_sales',data)){ formToggle('sales-form'); }
+  // اجمعي مصاريف هذا اليوم (قبل الحفظ لأن إعادة الرسم تمسح الصفوف)
+  const expRows=[]; document.querySelectorAll('#sl-exp-rows .sl-exp-row').forEach(r=>{ const i=r.dataset.i; const amt=n(($('se-amt-'+i)||{}).value); if(amt>0){ expRows.push({exp_date:d,branch:b,category:($('se-cat-'+i)||{}).value||null,amount:amt,pay_method:($('se-pm-'+i)||{}).value||null,note:($('se-note-'+i)||{}).value||null}); } });
+  try{
+    const j=await api('POST','insert',{table:'daily_sales',data});
+    if(j&&j.error){ toast('⚠️ خطأ بالمبيعات: '+j.error,true); return; }
+    let okN=0; for(const e of expRows){ const je=await api('POST','insert',{table:'expenses',data:e}); if(je&&je.error){ toast('⚠️ خطأ بمصروف: '+je.error,true); } else okN++; }
+    toast('✅ تم الحفظ'+(okN?(' + '+okN+' مصروف'):''));
+    formToggle('sales-form');
+    await loadAll();
+  }catch(e){ toast('⚠️ تعذّر الحفظ: '+(e&&e.message||e),true); }
 }
+// سطر مصروف داخل فورم المبيعات
+let _slExpIdx=0;
+function slExpRowHtml(i){ return '<div class="sl-exp-row" data-i="'+i+'" style="display:grid;grid-template-columns:1.3fr .9fr 1.1fr 1.6fr auto;gap:6px;margin-bottom:6px;align-items:center">'+
+  '<select id="se-cat-'+i+'" style="padding:6px 8px">'+opts('expense_cat')+'</select>'+
+  '<input id="se-amt-'+i+'" type="number" value="0" placeholder="المبلغ" style="padding:6px 8px">'+
+  '<select id="se-pm-'+i+'" style="padding:6px 8px">'+opts('payment_method')+'</select>'+
+  '<input id="se-note-'+i+'" placeholder="ملاحظة" style="padding:6px 8px">'+
+  '<button class="btn red sm" onclick="this.closest(\'.sl-exp-row\').remove()">✕</button></div>'; }
+function slAddExpRow(){ const c=$('sl-exp-rows'); if(!c)return; c.insertAdjacentHTML('beforeend', slExpRowHtml(_slExpIdx++)); }
 
 // ===== 🔄 مطابقة REWA =====
 function renderRewa(){
