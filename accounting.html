@@ -7541,16 +7541,18 @@ function renderPayForm(){
   for(const h of hotels){ const k=(h.client_code||'')+'|'+(h.check_in||''); _hotelKeys.add(String(h.conf_no||'').trim().toUpperCase()+'|'+(h.check_in||''));
     det.push({type:'🏨 فندق',name:hName[k]||(h.hotel_name==='TBO'?'فندق':h.hotel_name),detail:h.room_type,
       sell:h.selling_rate,cancel:h.cancel_charge,booked:h.final_rate_booked,rate:hRate[k],
+      canc:(/cancel/i.test(String(h.status||''))||Number(h.refund||0)>0),
       refund:h.refund,refundExp:_refExpSell(h.final_rate_booked,h.cancel_charge,h.refund,hRate[k],h.status,h.selling_rate)}); }
   for(const s of svc){
     if(s.kind==='hotel'){   // 🏨 فنادق الداشبورد (service_lines) — تُدرَج هنا لأنها قد لا تكون في hotelBookings (تشمل الملغاة بسعر حجز 0 ولها مرتجع)
       const key=String(s.conf_no||'').trim().toUpperCase()+'|'+(s.check_in||''); if(_hotelKeys.has(key))continue;   // مغطّى أصلاً من hotelBookings
-      det.push({type:'🏨 فندق',name:s.name,detail:s.detail,sell:s.amount,cancel:s.cancel_charge,booked:s.final_rate_booked,rate:s.currency_rate,refund:s.refund,refundExp:_refExpSell(s.final_rate_booked,s.cancel_charge,s.refund,s.currency_rate,s.status,s.amount)}); continue;
+      det.push({type:'🏨 فندق',name:s.name,detail:s.detail,sell:s.amount,cancel:s.cancel_charge,booked:s.final_rate_booked,rate:s.currency_rate,canc:(/cancel/i.test(String(s.status||''))||Number(s.refund||0)>0),refund:s.refund,refundExp:_refExpSell(s.final_rate_booked,s.cancel_charge,s.refund,s.currency_rate,s.status,s.amount)}); continue;
     }
     // 🔄 المرتجع المتوقّع = (الحجز الفعلي − رسوم الإلغاء) × سعر الصرف؛ المورّد (باكدج كامل) = يُحسب بمنطق آخر → —
     const rExp = s.kind==='supplier' ? null : _refExpSell(s.final_rate_booked,s.cancel_charge,s.refund,s.currency_rate,s.status,s.amount);
-    det.push({type:KN[s.kind]||esc(s.kind),name:s.name,detail:s.detail,sell:s.amount,cancel:s.cancel_charge,booked:s.final_rate_booked,rate:s.currency_rate,refund:s.refund,refundExp:rExp}); }
-  const detRows=det.map(d=>'<tr><td>'+d.type+'</td><td>'+esc(d.name||'')+'</td><td>'+esc(d.detail||'')+'</td><td class="num">'+fmt(d.sell)+'</td><td class="num">'+(d.cancel!=null?fmt(d.cancel):'')+'</td><td class="num">'+(d.booked!=null?fmt(d.booked):'')+'</td><td>'+esc(d.rate!=null?d.rate:'')+'</td><td class="num">'+(d.refund!=null?fmt(d.refund):'')+'</td><td class="num pos">'+(d.refundExp!=null?fmt(d.refundExp):'')+'</td></tr>').join('');
+    det.push({type:KN[s.kind]||esc(s.kind),name:s.name,detail:s.detail,sell:s.amount,cancel:s.cancel_charge,booked:s.final_rate_booked,rate:s.currency_rate,canc:(/cancel/i.test(String(s.status||''))||Number(s.refund||0)>0),refund:s.refund,refundExp:rExp}); }
+  // 🔎 يعرض الخدمات الملغاة/المرتجعة فقط (النشطة لا تُرجَع فلا تظهر)
+  const detRows=det.filter(d=>d.canc).map(d=>'<tr><td>'+d.type+'</td><td>'+esc(d.name||'')+'</td><td>'+esc(d.detail||'')+'</td><td class="num">'+fmt(d.sell)+'</td><td class="num">'+(d.cancel!=null?fmt(d.cancel):'')+'</td><td class="num">'+(d.booked!=null?fmt(d.booked):'')+'</td><td>'+esc(d.rate!=null?d.rate:'')+'</td><td class="num">'+(d.refund!=null?fmt(d.refund):'')+'</td><td class="num pos">'+(d.refundExp!=null?fmt(d.refundExp):'')+'</td></tr>').join('');
 
   box.innerHTML=
    '<div class="panel" style="margin-bottom:12px"><h3>👤 '+esc(pick('client_name'))+' <span class="cnt">'+esc(code)+'</span></h3>'+
