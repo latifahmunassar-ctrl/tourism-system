@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v34';
+const FS_VER='v35';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -287,34 +287,27 @@ function renderMachine(){
   const dates=[...new Set([...Object.keys(mByDate),...Object.keys(bankByDate)])].sort().reverse();
   const BR=['كيوسك','شوب','عمان','غير محدّد','معارض'];
   let gMac=0,gRewa=0,gBank=0;
-  const bankRecon=[];
   const blocks=dates.map(d=>{
     const brs=BR.filter(br=>mByDate[d]&&mByDate[d][br]);
     let totMac=0,totRewa=0;
-    const brRows=brs.map(br=>{ const o=mByDate[d][br], diff=o.machine-o.rewa, hd=Math.abs(diff)>=0.005; totMac+=o.machine; totRewa+=o.rewa;
-      return '<tr><td style="font-weight:700">🏪 '+esc(br)+'</td><td class="num">'+fmt(o.machine)+'</td><td class="num" style="color:#3aa0ff">'+fmt(o.rewa)+'</td><td class="num" style="font-weight:700;color:'+(hd?'#ff6b7a':'#2fd196')+'">'+(hd?fmt(diff):'✓')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(o.note||'')+'</td></tr>'; }).join('');
+    const brRows=brs.map((br,idx)=>{ const o=mByDate[d][br], diff=o.machine-o.rewa, hd=Math.abs(diff)>=0.005; totMac+=o.machine; totRewa+=o.rewa;
+      const dc = idx===0 ? '<td style="font-weight:800">📅 '+esc(d)+'</td>' : '<td></td>';
+      return '<tr>'+dc+'<td style="font-weight:700">🏪 '+esc(br)+'</td><td class="num">'+fmt(o.machine)+'</td><td class="num" style="color:#3aa0ff">'+fmt(o.rewa)+'</td><td class="num" style="font-weight:700;color:'+(hd?'#ff6b7a':'#2fd196')+'">'+(hd?fmt(diff):'✓')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(o.note||'')+'</td><td></td><td></td><td></td></tr>'; }).join('');
     const bank=bankByDate[d]||0, bankDiff=totMac-bank, pct=totMac>0.005?(bankDiff/totMac*100):null, td2=Math.abs(totMac-totRewa)>=0.005;
     gMac+=totMac; gRewa+=totRewa; gBank+=bank;
-    bankRecon.push({d:d,totMac:totMac,bank:bank,diff:bankDiff,pct:pct});
-    const totRow='<tr style="background:rgba(58,160,255,.08);font-weight:800"><td>📊 مجموع المكنة</td><td class="num">'+fmt(totMac)+'</td><td class="num" style="color:#3aa0ff">'+fmt(totRewa)+'</td><td class="num" style="color:'+(td2?'#ff6b7a':'#2fd196')+'">'+(td2?fmt(totMac-totRewa):'✓')+'</td><td></td></tr>';
-    return '<tr><td colspan="5" style="background:rgba(58,160,255,.12);font-weight:800;padding:6px 9px">📅 '+esc(d)+'</td></tr>'+brRows+totRow;
+    // 🎨 لون مطابقة البنك: أخضر=البنك أكثر/مطابق · أصفر=أقل حتى ٣٪ · أحمر=أقل بأكثر من ٣٪ (تنبيه)
+    const clr=(pct==null)?'#9aa':(pct<=0.005?'#2fd196':(pct<=3?'#e0a83a':'#ff6b7a')), alert=(pct!=null&&pct>3);
+    const pctTxt=(pct==null)?'—':((pct<=0.005&&pct>=-0.005)?'✓':pct.toFixed(2)+'%'), bankDiffTxt=Math.abs(bankDiff)>=0.005?fmt(bankDiff):'✓';
+    const dcT = brs.length? '<td></td>' : '<td style="font-weight:800">📅 '+esc(d)+'</td>';
+    const totRow='<tr style="font-weight:800;'+(alert?'background:rgba(229,72,77,.1)':'background:rgba(58,160,255,.08)')+'">'+dcT+'<td>📊 مجموع المكنة</td><td class="num">'+fmt(totMac)+'</td><td class="num" style="color:#3aa0ff">'+fmt(totRewa)+'</td><td class="num" style="color:'+(td2?'#ff6b7a':'#2fd196')+'">'+(td2?fmt(totMac-totRewa):'✓')+'</td><td></td><td class="num" style="color:#3aa0ff;font-weight:800">'+fmt(bank)+'</td><td class="num" style="color:'+clr+'">'+bankDiffTxt+'</td><td class="num" style="color:'+clr+'">'+pctTxt+(alert?' ⚠️':'')+'</td></tr>';
+    return brRows+totRow+'<tr><td colspan="9" style="border-bottom:2px solid rgba(128,128,128,.25);padding:0;height:3px"></td></tr>';
   }).join('');
   const gPct=gMac>0.005?((gMac-gBank)/gMac*100).toFixed(2)+'%':'—', gBankDiff=gMac-gBank;
-  // جدول مطابقة البنك: إجمالي المكنة · دخل البنك فعلياً · الفرق (أرقام) · الفرق (نسبة)
-  // 🎨 اللون: البنك أكثر أو مطابق = أخضر · أقل حتى ٣٪ = أصفر (عمولة عادية) · أقل بأكثر من ٣٪ = أحمر تنبيه
-  const bankRows=bankRecon.map(r=>{ const p=r.pct;
-    const clr = (p==null)?'#9aa' : (p<=0.005 ? '#2fd196' : (p<=3 ? '#e0a83a' : '#ff6b7a'));
-    const alert = (p!=null && p>3);
-    const bg = alert ? ';background:rgba(229,72,77,.1)' : (p!=null&&p<=0.005&&r.totMac>0.005?';background:rgba(47,209,150,.06)':'');
-    const pctTxt = (p==null)?'—':((p<=0.005&&p>=-0.005)?'✓':p.toFixed(2)+'%');
-    const diffTxt = Math.abs(r.diff)>=0.005?fmt(r.diff):'✓';
-    return '<tr'+(bg?' style="'+bg.slice(1)+'"':'')+'><td style="font-weight:700">📅 '+esc(r.d)+'</td><td class="num" style="font-weight:800">'+fmt(r.totMac)+'</td><td class="num" style="font-weight:800;color:#3aa0ff">'+fmt(r.bank)+'</td><td class="num" style="font-weight:700;color:'+clr+'">'+diffTxt+'</td><td class="num" style="font-weight:800;color:'+clr+'">'+pctTxt+(alert?' ⚠️':(p!=null&&p>0.005&&p<=3?' ✓':''))+'</td></tr>'; }).join('');
   $('p-machine').innerHTML=
-    '<div class="panel" style="border:1px solid var(--amber);background:rgba(217,138,0,.07)"><div style="font-weight:700;color:#e0a83a">🏧 متابعة المكنة (POS)</div><div class="sub" style="margin-top:3px"><b>جدول مطابقة البنك:</b> إجمالي المكنة (كل الفروع) مقابل ما دخل البنك فعلياً (اليوم التالي) والفرق والنسبة. <b>التفصيل بالفرع:</b> المكنة لكل فرع مقابل تقرير روا.<br>🎨 <b>لون الفرق:</b> <span style="color:#2fd196">أخضر</span> = البنك دخل أكثر/مطابق · <span style="color:#e0a83a">أصفر</span> = أقل حتى ٣٪ (عمولة عادية) · <span style="color:#ff6b7a">أحمر ⚠️</span> = أقل بأكثر من ٣٪ (تنبيه).</div></div>'+
+    '<div class="panel" style="border:1px solid var(--amber);background:rgba(217,138,0,.07)"><div style="font-weight:700;color:#e0a83a">🏧 متابعة المكنة (POS)</div><div class="sub" style="margin-top:3px">لكل يوم: المكنة لكل فرع (الموظفة) مقابل <b>تقرير روا</b> والفرق · ثم صفّ <b>مجموع المكنة</b> يكمل بـ<b>دخل البنك</b> (اليوم التالي) والفرق والنسبة.<br>🎨 <b>لون فرق البنك:</b> <span style="color:#2fd196">أخضر</span> = البنك أكثر/مطابق · <span style="color:#e0a83a">أصفر</span> = أقل حتى ٣٪ (عمولة عادية) · <span style="color:#ff6b7a">أحمر ⚠️</span> = أقل بأكثر من ٣٪ (تنبيه).</div></div>'+
     '<div class="panel"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));max-width:540px"><div class="fld"><label>📅 من</label><input type="date" value="'+esc(F.from)+'" onchange="window._mcFrom=this.value;renderMachine()"></div><div class="fld"><label>📅 إلى</label><input type="date" value="'+esc(F.to)+'" onchange="window._mcTo=this.value;renderMachine()"></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._mcFrom=\'\';window._mcTo=\'\';renderMachine()">مسح</button></div></div></div>'+
     '<div class="panel"><div class="kpis">'+kpi('🏧 إجمالي المكنة',fmt(gMac)+' '+C)+kpi('🏦 دخل البنك فعلياً',fmt(gBank)+' '+C)+kpi('الفرق',fmt(gBankDiff)+' '+C,Math.abs(gBankDiff)<0.5?'pos':'neg')+kpi('💳 نسبة العمولة',gPct)+'</div></div>'+
-    '<div class="panel"><h3>🏦 مطابقة البنك — إجمالي المكنة ↔ دخل البنك</h3><div class="tbl-wrap bf-scroll" style="max-height:420px"><table><thead><tr><th>التاريخ</th><th>🏧 إجمالي المكنة<br><span style="font-size:8.5px;color:var(--muted)">كل الفروع</span></th><th>🏦 دخل البنك فعلياً<br><span style="font-size:8.5px;color:var(--muted)">اليوم التالي</span></th><th>الفرق<br><span style="font-size:8.5px;color:var(--muted)">أرقام</span></th><th>💳 الفرق<br><span style="font-size:8.5px;color:var(--muted)">نسبة %</span></th></tr></thead><tbody>'+(bankRows||'<tr><td colspan="5" class="mut" style="text-align:center;padding:14px">لا بيانات</td></tr>')+'</tbody></table></div></div>'+
-    '<div class="panel"><h3>🗓️ التفصيل بالفرع — المكنة مقابل تقرير روا</h3><div class="tbl-wrap bf-scroll" style="max-height:520px"><table><thead><tr><th>الفرع / البند</th><th>🏧 المكنة (الموظفة)</th><th>🔄 تقرير روا</th><th>الفرق</th><th>📝 ملاحظة</th></tr></thead><tbody>'+(blocks||'<tr><td colspan="5" class="mut" style="text-align:center;padding:14px">لا بيانات</td></tr>')+'</tbody></table></div></div>';
+    '<div class="panel"><h3>🗓️ متابعة المكنة اليومية</h3><div class="tbl-wrap bf-scroll" style="max-height:620px"><table style="font-size:12px"><thead><tr><th>التاريخ</th><th>الفرع / البند</th><th>🏧 تقرير الموظفة</th><th>🔄 تقرير روا</th><th>الفرق<br><span style="font-size:8px;color:var(--muted)">موظفة−روا</span></th><th>📝 ملاحظة</th><th>🏦 دخل البنك<br><span style="font-size:8px;color:var(--muted)">ت+1</span></th><th>الفرق<br><span style="font-size:8px;color:var(--muted)">مكنة−بنك</span></th><th>💳 النسبة</th></tr></thead><tbody>'+(blocks||'<tr><td colspan="9" class="mut" style="text-align:center;padding:14px">لا بيانات</td></tr>')+'</tbody></table></div></div>';
 }
 
 // ===== 💸 مصاريف يومية =====
