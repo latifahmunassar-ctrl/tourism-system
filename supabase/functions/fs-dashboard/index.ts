@@ -10,7 +10,7 @@ const TABLES: Record<string, string> = {
   config: 'fs_config', lists: 'fs_lists', daily_sales: 'fs_daily_sales',
   rewa_recon: 'fs_rewa_recon', credit_customers: 'fs_credit_customers', credit_txn: 'fs_credit_txn',
   bank_txn: 'fs_bank_txn', atm_deposit: 'fs_atm_deposit', inventory_short: 'fs_inventory_short',
-  expenses: 'fs_expenses',
+  expenses: 'fs_expenses', machine_deposit: 'fs_machine_deposit',
 };
 // الأعمدة المسموح كتابتها لكل جدول (حارس ضد الحقول الغريبة)
 const FIELDS: Record<string, string[]> = {
@@ -22,6 +22,7 @@ const FIELDS: Record<string, string[]> = {
   bank_txn: ['actual_date','close_date','amount','direction','bank_name','note'],
   atm_deposit: ['dep_date','branch','amount','bank','note'],
   inventory_short: ['code','qty_invoice','price','qty_actual','note'],
+  machine_deposit: ['dep_date','actual_bank','bank_ref','note','created_by'],
   lists: ['category','value','sort'],
 };
 const pick = (obj: any, allowed: string[]) => { const o: any = {}; for (const k of allowed) if (k in (obj || {})) o[k] = obj[k] === '' ? null : obj[k]; return o; };
@@ -36,15 +37,19 @@ Deno.serve(async (req: Request) => {
   if (!authed) {
     const tok = req.headers.get('x-acc-token') || url.searchParams.get('token');
     if (tok) {
-      const { data: s } = await supabase.from('acc_sessions').select('expires_at,is_owner').eq('token', tok).maybeSingle();
-      if (s && s.is_owner && (!s.expires_at || new Date(s.expires_at).getTime() > Date.now())) authed = true;
+      // المالكة (is_owner) أو موظّف صلاحياته تشمل تبويب "fancy" (تُمنح من لوحة صلاحيات العز)
+      const { data: s } = await supabase.from('acc_sessions').select('expires_at,is_owner,allowed_tabs').eq('token', tok).maybeSingle();
+      if (s && (!s.expires_at || new Date(s.expires_at).getTime() > Date.now())) {
+        const tabs = Array.isArray(s.allowed_tabs) ? s.allowed_tabs : [];
+        if (s.is_owner || tabs.includes('fancy')) authed = true;
+      }
     }
   }
   if (!authed) return J({ error: 'unauthorized' }, 401);
 
   // ===== GET: كل البيانات =====
   if (req.method === 'GET') {
-    const [config, lists, daily_sales, rewa_recon, credit_customers, credit_txn, bank_txn, atm_deposit, inventory_short, expenses] = await Promise.all([
+    const [config, lists, daily_sales, rewa_recon, credit_customers, credit_txn, bank_txn, atm_deposit, inventory_short, expenses, machine_deposit] = await Promise.all([
       supabase.from('fs_config').select('*'),
       supabase.from('fs_lists').select('*').order('sort').order('value'),
       supabase.from('fs_daily_sales').select('*').order('sale_date', { ascending: false }).order('created_at', { ascending: false }),
@@ -55,6 +60,7 @@ Deno.serve(async (req: Request) => {
       supabase.from('fs_atm_deposit').select('*').order('dep_date', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('fs_inventory_short').select('*').order('created_at', { ascending: false }),
       supabase.from('fs_expenses').select('*').order('exp_date', { ascending: false }).order('created_at', { ascending: false }),
+      supabase.from('fs_machine_deposit').select('*').order('dep_date', { ascending: false }).order('created_at', { ascending: false }),
     ]);
     const cfg: any = {}; (config.data || []).forEach((r: any) => cfg[r.key] = r.value);
     // 🔗 سجلات فانسي سنس في نظام العز (الكاش إن/آوت) — للمطابقة فقط (قراءة): OMR فقط (استبعاد العملات الأجنبية المصنّفة خطأً)
@@ -68,7 +74,7 @@ Deno.serve(async (req: Request) => {
     } catch (_) {}
     return J({ config: cfg, lists: lists.data || [], daily_sales: daily_sales.data || [], rewa_recon: rewa_recon.data || [],
       credit_customers: credit_customers.data || [], credit_txn: credit_txn.data || [], bank_txn: bank_txn.data || [],
-      atm_deposit: atm_deposit.data || [], inventory_short: inventory_short.data || [], expenses: expenses.data || [], acc_fancy: accFancy });
+      atm_deposit: atm_deposit.data || [], inventory_short: inventory_short.data || [], expenses: expenses.data || [], machine_deposit: machine_deposit.data || [], acc_fancy: accFancy });
   }
 
   // ===== POST: عمليات =====

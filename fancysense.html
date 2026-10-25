@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v37';
+const FS_VER='v38';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -281,9 +281,10 @@ function renderMachine(){
   // المكنة (الموظفة) + روا لكل تاريخ/فرع
   const mByDate={};
   (DATA.daily_sales||[]).forEach(x=>{ const d=String(x.sale_date||'').slice(0,10); if(!inr(d))return; const br=brCanon(x.branch); mByDate[d]=mByDate[d]||{}; const o=mByDate[d][br]=mByDate[d][br]||{machine:0,rewa:0,note:''}; o.machine+=n(x.machine); o.rewa+=n(x.rewa_machine); const nt=x.note_machine||x.note; if(nt)o.note=(o.note?o.note+' · ':'')+String(nt); });
-  // دخل البنك باليوم التالي (مكنة البنك مُرحَّلة ليوم المبيعة)
-  const bankByDate={};
-  (DATA.acc_fancy||[]).forEach(x=>{ const c=azClass(x); if(!c||c.type!=='مكنة')return; const d=shiftDay(String(x.tx_date||'').slice(0,10),-1); if(!inr(d))return; bankByDate[d]=(bankByDate[d]||0)+c.amount; });
+  // دخل البنك: أولوية لإيداع المكنة الذي أدخلته الموظفة (fs_machine_deposit) ثم بيانات العز (مُرحَّلة يوماً)
+  const bankByDate={}, bankSrc={};
+  (DATA.machine_deposit||[]).forEach(x=>{ const d=String(x.dep_date||'').slice(0,10); if(!inr(d)||x.actual_bank==null)return; bankByDate[d]=(bankByDate[d]||0)+n(x.actual_bank); bankSrc[d]='fs'; });
+  (DATA.acc_fancy||[]).forEach(x=>{ const c=azClass(x); if(!c||c.type!=='مكنة')return; const d=shiftDay(String(x.tx_date||'').slice(0,10),-1); if(!inr(d)||bankSrc[d]==='fs')return; bankByDate[d]=(bankByDate[d]||0)+c.amount; });
   const dates=[...new Set([...Object.keys(mByDate),...Object.keys(bankByDate)])].sort().reverse();
   const BR=['كيوسك','شوب','عمان','غير محدّد','معارض'];
   let gMac=0,gRewa=0,gBank=0;
@@ -535,7 +536,17 @@ function renderSales(){
     '<div id="cd-cashinfo" style="margin-top:10px;padding:10px 12px;border:1px solid #3aa0ff;border-radius:8px;background:rgba(58,160,255,.08);font-size:13px"><span class="mut">اختاري الفرع لعرض النقد المتوفّر بالصندوق</span></div>'+
     '<div class="sub" style="margin-top:6px">يظهر ضمن «🏦 البنوك والإيداعات ← إيداعات الصندوق».</div><div id="cd-msg" class="msg"></div>'+
     '<button class="btn green" onclick="saveCashDep()">💾 حفظ الإيداع</button> <button class="btn ghost" onclick="formToggle(\'cashdep-form\')">إغلاق</button></div>';
-  $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات + مصاريف اليوم</button><button class="btn" style="background:#3aa0ff" onclick="formToggle(\'cashdep-form\')">🏧 إيداع صندوق</button><button class="btn" style="background:#0e9d6a" onclick="exportSalesPDF()">📄 تصدير PDF</button></div></div></div>'+form+cashDepForm+
+  // 📠 إيداع مكنة — الموظفة تدخل كم دخل البنك فعلياً + المرجع؛ يحسب عمولة البنك مقابل مكنة الفروع
+  const machineDepForm='<div id="machinedep-form" class="panel hidden" style="border-color:#e0218a"><div class="row-between"><h3 style="margin:0;border-color:#e0218a">📠 إيداع مكنة — ما دخل البنك من الشبكة (POS)</h3><button class="btn ghost sm" onclick="formToggle(\'machinedep-form\')" title="إغلاق النافذة">✕ إغلاق</button></div><div class="fgrid" style="max-width:720px">'+
+    fin('📅 تاريخ المبيعات','md-date','date',today(),'onchange="mdMachineInfo()"')+
+    '<div class="fld"><label>💰 كم دخل فعلياً بالبنك <span style="color:var(--amber);font-size:10px">(تدخلها الموظفة)</span></label><input id="md-actual" type="number" placeholder="المبلغ الواصل للبنك" oninput="mdMachineInfo()"></div>'+
+    '<div class="fld"><label>🔖 مرجع الفاتورة / الإيداع</label><input id="md-ref" placeholder="رقم مرجع البنك"></div>'+
+    '<div class="fld full"><label>ملاحظة</label><input id="md-note"></div>'+
+    '</div>'+
+    '<div id="md-info" style="margin-top:10px;padding:10px 12px;border:1px solid #e0218a;border-radius:8px;background:rgba(224,33,138,.07);font-size:13px"><span class="mut">اختاري التاريخ لعرض مكنة الفروع مقابل روا</span></div>'+
+    '<div class="sub" style="margin-top:6px">يظهر في تبويب «🏧 متابعة المكنة» كـ«دخل البنك».</div><div id="md-msg" class="msg"></div>'+
+    '<button class="btn green" onclick="saveMachineDep()">💾 حفظ إيداع المكنة</button> <button class="btn ghost" onclick="formToggle(\'machinedep-form\')">إغلاق</button></div>';
+  $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات + مصاريف اليوم</button><button class="btn" style="background:#3aa0ff" onclick="formToggle(\'cashdep-form\')">🏧 إيداع صندوق</button><button class="btn" style="background:#e0218a" onclick="formToggle(\'machinedep-form\');mdMachineInfo()">📠 إيداع مكنة</button><button class="btn" style="background:#0e9d6a" onclick="exportSalesPDF()">📄 تصدير PDF</button></div></div></div>'+form+cashDepForm+machineDepForm+
     summ('📊 ملخّص الفترة'+(anyF?' المفلترة':''),fA,false,{from:F.from,to:F.to,branch:F.branch})+
     summ('🗂️ ملخّص عام (كل السجلات)',gA,true,null)+
     filterBar+
@@ -635,6 +646,28 @@ async function saveCashDep(){
   if(amt<=0){ $('cd-msg').innerHTML='<span class="neg">أدخلي مبلغ الإيداع</span>'; return; }
   const data={dep_date:d,branch:$('cd-branch').value||null,amount:amt,bank:$('cd-bank').value||null,note:$('cd-note').value||null};
   if(await crud('insert','atm_deposit',data)){ formToggle('cashdep-form'); }
+}
+// 📠 إيداع مكنة — عرض مكنة الفروع مقابل روا + حساب عمولة البنك من المبلغ الذي أدخلته الموظفة
+function mdMachineInfo(){
+  const box=$('md-info'); if(!box)return; const d=(($('md-date')||{}).value||'').slice(0,10);
+  const rows=(DATA.daily_sales||[]).filter(x=>String(x.sale_date||'').slice(0,10)===d);
+  const C=cur();
+  if(!rows.length){ box.innerHTML='<span class="mut">لا مبيعات مسجّلة لهذا التاريخ — سجّلي المبيعات أولاً</span>'; return; }
+  const byBr={}; rows.forEach(x=>{ const b=x.branch||'—'; const o=byBr[b]=byBr[b]||{m:0,r:0}; o.m+=n(x.machine); o.r+=n(x.rewa_machine); });
+  let totM=0,totR=0; const trs=Object.keys(byBr).map(b=>{ const o=byBr[b]; totM+=o.m; totR+=o.r; const df=o.m-o.r, hd=Math.abs(df)>=0.005; return '<tr><td style="font-weight:700">🏪 '+esc(b)+'</td><td class="num">'+fmt(o.m)+'</td><td class="num" style="color:#3aa0ff">'+fmt(o.r)+'</td><td class="num" style="color:'+(hd?'#ff6b7a':'#2fd196')+'">'+(hd?fmt(df):'✓')+'</td></tr>'; }).join('');
+  const actualRaw=($('md-actual')||{}).value, hasActual=actualRaw!==''&&actualRaw!=null, actual=n(actualRaw);
+  const comm=totM-actual, pct=totM>0.005?(comm/totM*100):null;
+  const commClr=pct==null?'#9aa':(pct<=0.005?'#2fd196':(pct<=3?'#e0a83a':'#ff6b7a'));
+  box.innerHTML='<table style="width:100%;font-size:12px"><thead><tr style="color:var(--muted)"><th style="text-align:right">الفرع</th><th>🏧 الموظفة</th><th>🔄 روا</th><th>الفرق</th></tr></thead><tbody>'+trs+
+    '<tr style="font-weight:800;background:rgba(224,33,138,.08)"><td>📊 إجمالي المكنة</td><td class="num">'+fmt(totM)+'</td><td class="num" style="color:#3aa0ff">'+fmt(totR)+'</td><td class="num" style="color:'+(Math.abs(totM-totR)>=0.005?'#ff6b7a':'#2fd196')+'">'+(Math.abs(totM-totR)>=0.005?fmt(totM-totR):'✓')+'</td></tr></tbody></table>'+
+    '<div style="margin-top:9px;font-weight:700;font-size:13.5px">🏦 دخل البنك فعلياً: <b>'+(hasActual?fmt(actual):'—')+' '+esc(C)+'</b> · 💳 عمولة البنك (الفرق): <b style="color:'+commClr+'">'+(hasActual?(fmt(comm)+(pct!=null?(' · '+pct.toFixed(2)+'%'):'')):'—')+'</b></div>';
+}
+async function saveMachineDep(){
+  const d=(($('md-date')||{}).value||'').slice(0,10), actualRaw=($('md-actual')||{}).value;
+  if(!d){ $('md-msg').innerHTML='<span class="neg">اختاري التاريخ</span>'; return; }
+  if(actualRaw===''||actualRaw==null){ $('md-msg').innerHTML='<span class="neg">أدخلي كم دخل البنك فعلياً</span>'; return; }
+  const data={dep_date:d,actual_bank:n(actualRaw),bank_ref:($('md-ref')||{}).value||null,note:($('md-note')||{}).value||null,created_by:'fs'};
+  if(await crud('insert','machine_deposit',data)){ formToggle('machinedep-form'); }
 }
 // 📄 تصدير تقرير المبيعات (حسب الفلتر الحالي) PDF
 function exportSalesPDF(){
