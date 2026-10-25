@@ -7623,7 +7623,8 @@ function renderPayForm(){
    '</div>'+
    '<div class="fgrid">'+
    '<div class="fld"><label>🤝 الربح المعتمد <span style="font-size:10px;color:var(--muted)">(من First Client Data · مرجع)</span></label><input type="number" id="rf-adopted" value="'+_progProfit+'" readonly style="background:rgba(0,0,0,.04);color:var(--muted)"></div>'+
-   '<div class="fld"><label>🏢 الربح الفعلي <span style="font-size:10px;color:var(--muted)">(ربح البرنامج الفعلي · عدّليه فيتغيّر المرتجع عكسياً · يُعتمد في الأرباح والخسائر) ✏️</span></label><input type="number" id="rf-profit" value="'+_profitDefault+'" oninput="rfCalc()" style="border-color:var(--green)"></div>'+
+   '<div class="fld"><label>🏢 الربح الفعلي المحسوب <span style="font-size:10px;color:var(--muted)">(البيع − التكلفة المحجوزة · شامل التوفير · مرجع)</span></label><input type="number" id="rf-profitref" value="'+_actualProfitWhole+'" readonly style="background:rgba(0,0,0,.04);color:var(--muted)"></div>'+
+   '<div class="fld"><label>🏦 الربح الفعلي المعتمد <span style="font-size:10px;color:var(--muted)">(عدّليه فيتغيّر المرتجع عكسياً · يُعتمد في الأرباح والخسائر) ✏️</span></label><input type="number" id="rf-profit" value="'+_profitDefault+'" oninput="rfCalc()" style="border-color:var(--green)"></div>'+
    '<div class="fld"><label>💸 إجمالي المرتجع'+(refundableF>0?' (المسترجع النهائي للعميل)':'')+' <span style="font-size:10px;color:var(--muted)">(يزيد لما ينقص الربح الفعلي · قابل للتعديل) ✏️</span></label><input type="number" id="rf-amt" value="'+_refundDefault+'" oninput="rfAmtEdit()" style="border-color:var(--green)"></div>'+
    '<div class="fld"><label>البنك (طلعت منه الحوالة) <span style="color:var(--red)">*</span></label><select id="rf-bank">'+bankOpts+'</select></div>'+
    '<div class="fld"><label>تاريخ الحوالة (الدفعة) <span style="color:var(--red)">*</span></label><input type="date" id="rf-date"></div>'+
