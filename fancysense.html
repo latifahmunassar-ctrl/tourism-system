@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v36';
+const FS_VER='v37';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -299,10 +299,10 @@ function renderMachine(){
     const dateCell='<td'+sp+' style="font-weight:800;vertical-align:middle">📅 '+esc(d)+'</td>';
     // 📊 أعمدة ممتدة مقابل تفاصيل الفروع: مجموع المكنة · دخل البنك · الفرق · النسبة
     const spanCells='<td'+sp+' class="num" style="font-weight:800;'+bgT+'">'+fmt(totMac)+'</td><td'+sp+' class="num" style="font-weight:800;color:#3aa0ff;'+bgT+'">'+fmt(bank)+'</td><td'+sp+' class="num" style="font-weight:800;color:'+clr+';'+bgT+'">'+bankDiffTxt+'</td><td'+sp+' class="num" style="font-weight:800;color:'+clr+';'+bgT+'">'+pctTxt+(alert?' ⚠️':'')+'</td>';
-    if(!brs.length) return '<tr style="border-top:2px solid rgba(128,128,128,.3)">'+dateCell+'<td class="mut" colspan="5" style="text-align:center">لا مبيعات مكنة مسجّلة</td>'+spanCells+'</tr>';
+    if(!brs.length) return '<tr style="border-top:2px solid rgba(128,128,128,.3)">'+dateCell+spanCells+'<td class="mut" colspan="5" style="text-align:center">لا مبيعات مكنة مسجّلة</td></tr>';
     return brs.map((br,idx)=>{ const o=mByDate[d][br], diff=o.machine-o.rewa, hd=Math.abs(diff)>=0.005;
       const bc='<td style="font-weight:700">🏪 '+esc(br)+'</td><td class="num">'+fmt(o.machine)+'</td><td class="num" style="color:#3aa0ff">'+fmt(o.rewa)+'</td><td class="num" style="font-weight:700;color:'+(hd?'#ff6b7a':'#2fd196')+'">'+(hd?fmt(diff):'✓')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(o.note||'')+'</td>';
-      return idx===0 ? ('<tr style="border-top:2px solid rgba(128,128,128,.3)">'+dateCell+bc+spanCells+'</tr>') : ('<tr>'+bc+'</tr>');
+      return idx===0 ? ('<tr style="border-top:2px solid rgba(128,128,128,.3)">'+dateCell+spanCells+bc+'</tr>') : ('<tr>'+bc+'</tr>');
     }).join('');
   }).join('');
   const gPct=gMac>0.005?((gMac-gBank)/gMac*100).toFixed(2)+'%':'—', gBankDiff=gMac-gBank;
@@ -310,7 +310,7 @@ function renderMachine(){
     '<div class="panel" style="border:1px solid var(--amber);background:rgba(217,138,0,.07)"><div style="font-weight:700;color:#e0a83a">🏧 متابعة المكنة (POS)</div><div class="sub" style="margin-top:3px">لكل يوم: المكنة لكل فرع (الموظفة) مقابل <b>تقرير روا</b> والفرق · ويقابلها بأعمدة ممتدة <b>مجموع المكنة</b> و<b>دخل البنك</b> (اليوم التالي) والفرق والنسبة.<br>🎨 <b>لون فرق البنك:</b> <span style="color:#2fd196">أخضر</span> = البنك أكثر/مطابق · <span style="color:#e0a83a">أصفر</span> = أقل حتى ٣٪ (عمولة عادية) · <span style="color:#ff6b7a">أحمر ⚠️</span> = أقل بأكثر من ٣٪ (تنبيه).</div></div>'+
     '<div class="panel"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));max-width:540px"><div class="fld"><label>📅 من</label><input type="date" value="'+esc(F.from)+'" onchange="window._mcFrom=this.value;renderMachine()"></div><div class="fld"><label>📅 إلى</label><input type="date" value="'+esc(F.to)+'" onchange="window._mcTo=this.value;renderMachine()"></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._mcFrom=\'\';window._mcTo=\'\';renderMachine()">مسح</button></div></div></div>'+
     '<div class="panel"><div class="kpis">'+kpi('🏧 إجمالي المكنة',fmt(gMac)+' '+C)+kpi('🏦 دخل البنك فعلياً',fmt(gBank)+' '+C)+kpi('الفرق',fmt(gBankDiff)+' '+C,Math.abs(gBankDiff)<0.5?'pos':'neg')+kpi('💳 نسبة العمولة',gPct)+'</div></div>'+
-    '<div class="panel"><h3>🗓️ متابعة المكنة اليومية</h3><div class="tbl-wrap bf-scroll" style="max-height:620px"><table style="font-size:12px"><thead><tr><th>التاريخ</th><th>الفرع</th><th>🏧 تقرير الموظفة</th><th>🔄 تقرير روا</th><th>الفرق<br><span style="font-size:8px;color:var(--muted)">موظفة−روا</span></th><th>📝 ملاحظة</th><th style="background:#0e7a5a">📊 مجموع المكنة<br><span style="font-size:8px">كل الفروع</span></th><th>🏦 دخل البنك<br><span style="font-size:8px;color:var(--muted)">ت+1</span></th><th>الفرق<br><span style="font-size:8px;color:var(--muted)">مكنة−بنك</span></th><th>💳 النسبة</th></tr></thead><tbody>'+(blocks||'<tr><td colspan="10" class="mut" style="text-align:center;padding:14px">لا بيانات</td></tr>')+'</tbody></table></div></div>';
+    '<div class="panel"><h3>🗓️ متابعة المكنة اليومية</h3><div class="tbl-wrap bf-scroll" style="max-height:620px"><table style="font-size:12px"><thead><tr><th>التاريخ</th><th style="background:#0e7a5a">📊 مجموع المكنة<br><span style="font-size:8px">كل الفروع</span></th><th style="background:#0e7a5a">🏦 دخل البنك<br><span style="font-size:8px">ت+1</span></th><th style="background:#0e7a5a">الفرق<br><span style="font-size:8px">مكنة−بنك</span></th><th style="background:#0e7a5a">💳 النسبة</th><th>الفرع</th><th>🏧 تقرير الموظفة</th><th>🔄 تقرير روا</th><th>الفرق<br><span style="font-size:8px;color:var(--muted)">موظفة−روا</span></th><th>📝 ملاحظة</th></tr></thead><tbody>'+(blocks||'<tr><td colspan="10" class="mut" style="text-align:center;padding:14px">لا بيانات</td></tr>')+'</tbody></table></div></div>';
 }
 
 // ===== 💸 مصاريف يومية =====
