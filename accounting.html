@@ -7534,16 +7534,17 @@ function renderPayForm(){
   // 🏢 الربح الفعلي الافتراضي = الواقعي: لا يتجاوز ما يتبقّى فعلاً للشركة بعد المرتجع ورسوم الإلغاء (المدفوع − المرتجع − الرسوم)؛ محدود بالربح المعتمد
   const profDefault = _r2(Math.max(0, Math.min(_progProfit, _paidRemain - amtDefault - _cancFee)));
   const _refundK    = _r2(amtDefault + profDefault);                     // (قديم) ثابت الربط — لم يعد مستخدماً بعد تحديث منطق الربح المحتفَظ
-  // ===== منطق المرتجع المعتمد (المالكة 25 أكتوبر 2026) =====
-  // 🏢 الربح الفعلي = قيمة البيع − التكلفة الفعلية المحجوزة (شامل التوفير)؛ وإن غابت أسعار الحجز = الربح المعتمد
-  const _bookedCostAll=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code).reduce((a,s)=>a+Number(s.final_rate_booked||0)*(Number(s.currency_rate)||1),0);
-  const _actualProfit=_bookedCostAll>0 ? _r2(Math.max(0, rate - _bookedCostAll)) : _progProfit;
-  // 🏦 الربح الذي تحتفظ به الشركة (قابل للتعديل) — افتراضي = الربح الفعلي؛ هو الذي يحكم المسترجع
-  const _keepDefault=_actualProfit;
-  // 💸 المسترجع = المدفوع − الرسوم − الربح المحتفَظ (بحدّ أقصى القابل للإرجاع لحماية الإلغاء الجزئي)
-  const _refundDefault=_r2(Math.max(0, Math.min(_paidRemain - _cancFee - _keepDefault, refundableF)));
-  // 📣 المطالبة على العميل = (الرسوم + الربح المحتفَظ) − المدفوع
-  const _claimDefault=_r2(Math.max(0, (_cancFee + _keepDefault) - _paidRemain));
+  // ===== منطق المرتجع المعتمد (المالكة 25 أكتوبر 2026) — مُحتسَب على الخدمات الملغاة فقط =====
+  // 🏢 الربح الفعلي للخدمات الملغاة = بيعها − تكلفتها الفعلية المحجوزة (شامل التوفير)
+  const _cancSell=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code && (/cancel/i.test(String(s.status||''))||Number(s.refund||0)>0)).reduce((a,s)=>a+Number(s.amount||0),0);   // بعملة العميل
+  const _cancMargin=_r2(Math.max(0, _cancSell - _cancCost));
+  // 💰 المدفوع المتاح لمرتجع الملغاة = الأقل من (بيع الخدمات الملغاة) و(المدفوع المتبقّي)
+  const _cancPaidAvail=_r2(Math.max(0, Math.min(_cancSell, _paidRemain)));
+  const _actualProfit=_cancMargin;                                       // 🏢 الربح الفعلي (للملغاة) — للقراءة
+  const _keepDefault=_cancMargin;                                        // 🏦 الربح الذي تحتفظ به الشركة (قابل للتعديل) — افتراضي = الربح الفعلي للملغاة
+  // 💸 المسترجع = المدفوع المتاح − الرسوم − الربح المحتفَظ ؛ 📣 المطالبة = (الرسوم + المحتفَظ) − المدفوع المتاح
+  const _refundDefault=_r2(Math.max(0, _cancPaidAvail - _cancFee - _keepDefault));
+  const _claimDefault=_r2(Math.max(0, (_cancFee + _keepDefault) - _cancPaidAvail));
   const bankOpts='<option value="">— اختاري البنك —</option>'+listValues('banks').map(b=>'<option>'+esc(b.value)+'</option>').join('');   // القائمة المُدارة فقط
   // تفصيل الخدمات
   const svc=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code);
@@ -7602,7 +7603,7 @@ function renderPayForm(){
  '<div class="panel" style="border-color:var(--green)"><h3>➕ تسجيل إرجاع للعميل</h3>'+
    '<div id="rf-claim-banner" style="background:rgba(220,38,38,.1);border:1px solid var(--red);border-radius:8px;padding:9px 11px;margin-bottom:10px;font-size:12.5px;color:var(--red);display:'+(_claimDefault>0.005?'block':'none')+'">📣 <b>لا يوجد مرتجع للعميل</b> — المدفوع ('+fmt(_paidRemain)+' '+esc(cur)+') لا يغطي رسوم الإلغاء + الربح المحتفَظ. <b>مطالبة على العميل: '+fmt(_claimDefault)+' '+esc(cur)+'</b> = (الرسوم + الربح المحتفَظ) − المدفوع.</div>'+
    (refundableF>0?('<div style="background:rgba(245,158,11,.08);border:1px solid var(--amber);border-radius:8px;padding:9px 11px;margin-bottom:10px;font-size:12.5px">🔄 القابل للإرجاع لهذا العميل: <b style="color:var(--amber)">'+fmt(refundableF)+' '+esc(cur)+'</b> <span style="font-size:11px;color:var(--muted)">(= الأقل من: المرتجع المتوقّع والمدفوع − رسوم الإلغاء — لا يتعدّى ما دفعه العميل)</span>'+(_paidNet<(expRefTot-totalRefunded)-0.5?('<span style="color:#c47f00;font-size:11px"> · 💰 المدفوع من العميل: <b>'+fmt(_paidRemain)+'</b> (دفعة مقدمة؛ المرتجع المتوقّع '+fmt(expRefTot)+' أكبر — فالقابل محدود بالمدفوع − الرسوم)</span>'):'')+'<br><span style="color:var(--muted);font-size:11.5px">🤝 <b>الربح المعتمد</b> = ربح البرنامج (First Client Data) — مرجع ثابت. 🏢 <b>الربح الفعلي</b> = قيمة البيع − التكلفة الفعلية المحجوزة (شامل التوفير) — للقراءة. 🏦 <b>الربح الذي تحتفظ به الشركة</b> (قابل للتعديل) هو الذي يحكم المسترجع. <b>المسترجع = المدفوع − رسوم الإلغاء − الربح المحتفَظ</b> (بحدّ أقصى القابل للإرجاع)؛ ولو المدفوع لا يغطي (الرسوم + الربح المحتفَظ) تظهر <b>مطالبة على العميل</b> بالفرق. تقليل الربح المحتفَظ يزيد المسترجع، ورفعه يقلّله.</span></div>'):'')+
-   '<input type="hidden" id="rf-exp" value="'+_r2(refundableF)+'"><input type="hidden" id="rf-k" value="'+_refundK+'"><input type="hidden" id="rf-paidmax" value="'+_r2(_paidRemain)+'"><input type="hidden" id="rf-refmax" value="'+_r2(Math.max(0,_paidNet))+'"><input type="hidden" id="rf-fee" value="'+_r2(_cancFee)+'">'+
+   '<input type="hidden" id="rf-exp" value="'+_r2(refundableF)+'"><input type="hidden" id="rf-k" value="'+_refundK+'"><input type="hidden" id="rf-paidmax" value="'+_r2(_paidRemain)+'"><input type="hidden" id="rf-refmax" value="'+_r2(Math.max(0,_paidNet))+'"><input type="hidden" id="rf-fee" value="'+_r2(_cancFee)+'"><input type="hidden" id="rf-cancpaid" value="'+_r2(_cancPaidAvail)+'">'+
    '<div style="background:rgba(220,38,38,.06);border:1px dashed var(--red);border-radius:8px;padding:9px 11px;margin-bottom:10px">'+
      '<label style="font-size:12.5px;font-weight:700;display:block;margin-bottom:5px">📎 طلب العميل بالإرجاع (PDF أو صورة) <span style="color:var(--red)">* إجباري</span></label>'+
      '<input type="file" id="rf-doc" accept="image/*,application/pdf" style="font-size:12px">'+
@@ -7620,7 +7621,7 @@ function renderPayForm(){
    '</div>'+
    '<div class="fgrid">'+
    '<div class="fld"><label>🤝 الربح المعتمد <span style="font-size:10px;color:var(--muted)">(من First Client Data · مرجع)</span></label><input type="number" id="rf-adopted" value="'+_progProfit+'" readonly style="background:rgba(0,0,0,.04);color:var(--muted)"></div>'+
-   '<div class="fld"><label>🏢 الربح الفعلي <span style="font-size:10px;color:var(--muted)">(البيع − التكلفة الفعلية المحجوزة · شامل التوفير · قراءة)</span></label><input type="number" id="rf-profit" value="'+_actualProfit+'" readonly style="background:rgba(0,0,0,.04);color:var(--muted)"></div>'+
+   '<div class="fld"><label>🏢 الربح الفعلي للخدمات الملغاة <span style="font-size:10px;color:var(--muted)">(بيعها − تكلفتها المحجوزة · شامل التوفير · قراءة)</span></label><input type="number" id="rf-profit" value="'+_actualProfit+'" readonly style="background:rgba(0,0,0,.04);color:var(--muted)"></div>'+
    '<div class="fld"><label>🏦 الربح الذي تحتفظ به الشركة <span style="font-size:10px;color:var(--muted)">(يحكم المسترجع · يُعتمد في الأرباح والخسائر) ✏️</span></label><input type="number" id="rf-keep" value="'+_keepDefault+'" oninput="rfCalc()" style="border-color:var(--green)"></div>'+
    '<div class="fld"><label>💸 إجمالي المرتجع'+(refundableF>0?' (المسترجع النهائي للعميل)':'')+' <span style="font-size:10px;color:var(--muted)">(= المدفوع − الرسوم − الربح المحتفَظ · قراءة)</span></label><input type="number" id="rf-amt" value="'+_refundDefault+'" readonly style="background:rgba(0,0,0,.04)"></div>'+
    '<div class="fld"><label>البنك (طلعت منه الحوالة) <span style="color:var(--red)">*</span></label><select id="rf-bank">'+bankOpts+'</select></div>'+
@@ -7682,16 +7683,15 @@ function exportRefundReviewPDF(code){
 // مزامنة الربح الفعلي ↔ إجمالي المرتجع حول الثابت K (الربح الفعلي + المرتجع = K)؛ المرتجع لا يتجاوز القابل للإرجاع (rf-exp)
 // 💸 المسترجع = المدفوع − الرسوم − الربح المحتفَظ (بحدّ أقصى القابل للإرجاع)؛ المطالبة = (الرسوم + المحتفَظ) − المدفوع
 function rfCalc(){
-  const paidRem=+(($('rf-paidmax')||{}).value)||0;        // المدفوع المتبقّي
+  const paidAvail=+(($('rf-cancpaid')||{}).value)||0;     // المدفوع المتاح لمرتجع الخدمات الملغاة
   const fee=+(($('rf-fee')||{}).value)||0;                // رسوم الإلغاء
-  const cap=+(($('rf-exp')||{}).value)||0;                // القابل للإرجاع (حدّ أقصى)
   let keep=+(($('rf-keep')||{}).value); if(isNaN(keep))keep=0; if(keep<0){ keep=0; const k=$('rf-keep'); if(k)k.value=0; }
   const want=+(fee+keep).toFixed(2);                      // ما تحصّله الشركة = الرسوم + الربح المحتفَظ
-  const refund=Math.max(0, +Math.min(paidRem - fee - keep, cap).toFixed(2));
-  const claim=Math.max(0, +(want - paidRem).toFixed(2));
+  const refund=Math.max(0, +(paidAvail - fee - keep).toFixed(2));
+  const claim=Math.max(0, +(want - paidAvail).toFixed(2));
   const a=$('rf-amt'); if(a)a.value=+refund.toFixed(2);
   const cb=$('rf-claim-banner');
-  if(cb){ if(claim>0.005){ cb.style.display='block'; cb.innerHTML='📣 <b>لا يوجد مرتجع للعميل</b> — المدفوع ('+fmt(paidRem)+') لا يغطي رسوم الإلغاء + الربح المحتفَظ ('+fmt(want)+'). <b>مطالبة على العميل: '+fmt(claim)+'</b> = (الرسوم + الربح المحتفَظ) − المدفوع.'; } else { cb.style.display='none'; } }
+  if(cb){ if(claim>0.005){ cb.style.display='block'; cb.innerHTML='📣 <b>لا يوجد مرتجع للعميل</b> — المدفوع المتاح ('+fmt(paidAvail)+') لا يغطي رسوم الإلغاء + الربح المحتفَظ ('+fmt(want)+'). <b>مطالبة على العميل: '+fmt(claim)+'</b> = (الرسوم + الربح المحتفَظ) − المدفوع.'; } else { cb.style.display='none'; } }
   rfHint(refund,keep,claim);
 }
 function rfAmtEdit(){ rfCalc(); }   /* المرتجع للقراءة فقط الآن — أي استدعاء قديم يعيد الحساب */
@@ -7742,7 +7742,7 @@ async function saveRefund(){
   const expV=+(($('rf-exp')||{}).value)||0; const keptProfit=Math.max(0,+(+(($('rf-keep')||{}).value)||0).toFixed(2));   // 🏦 الربح الذي تحتفظ به الشركة = يُعتمد في الأرباح والخسائر وعمولة الموظف
   const m=$('rf-msg');
   if(!code){ m.innerHTML='<span style="color:var(--red)">استدعي عميل أول</span>'; return; }
-  if(amt<=0){ const _fee=+(($('rf-fee')||{}).value)||0, _pr=+(($('rf-paidmax')||{}).value)||0, _clm=Math.max(0,+((_fee+keptProfit)-_pr).toFixed(2)); m.innerHTML='<span style="color:var(--red)">'+(_clm>0.005?('لا يوجد مرتجع — المدفوع لا يغطي (الرسوم + الربح المحتفَظ). مطالبة على العميل: <b>'+fmt(_clm)+'</b>. لو تبين إرجاع، قلّلي الربح المحتفَظ.'):'المسترجع = صفر — راجعي الربح الذي تحتفظ به الشركة')+'</span>'; return; }
+  if(amt<=0){ const _fee=+(($('rf-fee')||{}).value)||0, _pa=+(($('rf-cancpaid')||{}).value)||0, _clm=Math.max(0,+((_fee+keptProfit)-_pa).toFixed(2)); m.innerHTML='<span style="color:var(--red)">'+(_clm>0.005?('لا يوجد مرتجع — المدفوع المتاح لا يغطي (الرسوم + الربح المحتفَظ). مطالبة على العميل: <b>'+fmt(_clm)+'</b>. لو تبين إرجاع، قلّلي الربح المحتفَظ.'):'المسترجع = صفر — راجعي الربح الذي تحتفظ به الشركة')+'</span>'; return; }
   if(!bank){ m.innerHTML='<span style="color:var(--red)">⚠️ حددي البنك اللي طلعت منه الحوالة</span>'; return; }
   const refMax=+(($('rf-refmax')||{}).value); const paidV=+(($('rf-paidmax')||{}).value)||0; const _cu=(clientInfo(code)||{}).cur||'';
   if(!isNaN(refMax) && amt>refMax+0.005){ m.innerHTML='<span style="color:var(--red)">⛔ لا يمكن إرجاع أكثر من (المدفوع − رسوم الإلغاء) = <b>'+fmt(refMax)+' '+esc(_cu)+'</b> — العميل دفع '+fmt(paidV)+' فقط. صحّحي المبلغ.</span>'; return; }
