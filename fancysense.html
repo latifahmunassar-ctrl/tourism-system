@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v38';
+const FS_VER='v39';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -302,7 +302,7 @@ function renderMachine(){
     const spanCells='<td'+sp+' class="num" style="font-weight:800;'+bgT+'">'+fmt(totMac)+'</td><td'+sp+' class="num" style="font-weight:800;color:#3aa0ff;'+bgT+'">'+fmt(bank)+'</td><td'+sp+' class="num" style="font-weight:800;color:'+clr+';'+bgT+'">'+bankDiffTxt+'</td><td'+sp+' class="num" style="font-weight:800;color:'+clr+';'+bgT+'">'+pctTxt+(alert?' ⚠️':'')+'</td>';
     if(!brs.length) return '<tr style="border-top:2px solid rgba(128,128,128,.3)">'+dateCell+spanCells+'<td class="mut" colspan="5" style="text-align:center">لا مبيعات مكنة مسجّلة</td></tr>';
     return brs.map((br,idx)=>{ const o=mByDate[d][br], diff=o.machine-o.rewa, hd=Math.abs(diff)>=0.005;
-      const bc='<td style="font-weight:700">🏪 '+esc(br)+'</td><td class="num">'+fmt(o.machine)+'</td><td class="num" style="color:#3aa0ff">'+fmt(o.rewa)+'</td><td class="num" style="font-weight:700;color:'+(hd?'#ff6b7a':'#2fd196')+'">'+(hd?fmt(diff):'✓')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(o.note||'')+'</td>';
+      const bc='<td style="font-weight:700">🏪 '+esc(br)+'</td><td class="num">'+fmt(o.machine)+'</td><td class="num" style="color:#3aa0ff">'+fmt(o.rewa)+'</td><td class="num" style="font-weight:700;color:'+(diff<-0.005?'#ff6b7a':'#2fd196')+'">'+(hd?fmt(diff):'✓')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(o.note||'')+'</td>';
       return idx===0 ? ('<tr style="border-top:2px solid rgba(128,128,128,.3)">'+dateCell+spanCells+bc+'</tr>') : ('<tr>'+bc+'</tr>');
     }).join('');
   }).join('');
@@ -654,12 +654,12 @@ function mdMachineInfo(){
   const C=cur();
   if(!rows.length){ box.innerHTML='<span class="mut">لا مبيعات مسجّلة لهذا التاريخ — سجّلي المبيعات أولاً</span>'; return; }
   const byBr={}; rows.forEach(x=>{ const b=x.branch||'—'; const o=byBr[b]=byBr[b]||{m:0,r:0}; o.m+=n(x.machine); o.r+=n(x.rewa_machine); });
-  let totM=0,totR=0; const trs=Object.keys(byBr).map(b=>{ const o=byBr[b]; totM+=o.m; totR+=o.r; const df=o.m-o.r, hd=Math.abs(df)>=0.005; return '<tr><td style="font-weight:700">🏪 '+esc(b)+'</td><td class="num">'+fmt(o.m)+'</td><td class="num" style="color:#3aa0ff">'+fmt(o.r)+'</td><td class="num" style="color:'+(hd?'#ff6b7a':'#2fd196')+'">'+(hd?fmt(df):'✓')+'</td></tr>'; }).join('');
+  let totM=0,totR=0; const trs=Object.keys(byBr).map(b=>{ const o=byBr[b]; totM+=o.m; totR+=o.r; const df=o.m-o.r, hd=Math.abs(df)>=0.005; return '<tr><td style="font-weight:700">🏪 '+esc(b)+'</td><td class="num">'+fmt(o.m)+'</td><td class="num" style="color:#3aa0ff">'+fmt(o.r)+'</td><td class="num" style="color:'+(df<-0.005?'#ff6b7a':'#2fd196')+'">'+(hd?fmt(df):'✓')+'</td></tr>'; }).join('');
   const actualRaw=($('md-actual')||{}).value, hasActual=actualRaw!==''&&actualRaw!=null, actual=n(actualRaw);
   const comm=totM-actual, pct=totM>0.005?(comm/totM*100):null;
   const commClr=pct==null?'#9aa':(pct<=0.005?'#2fd196':(pct<=3?'#e0a83a':'#ff6b7a'));
   box.innerHTML='<table style="width:100%;font-size:12px"><thead><tr style="color:var(--muted)"><th style="text-align:right">الفرع</th><th>🏧 الموظفة</th><th>🔄 روا</th><th>الفرق</th></tr></thead><tbody>'+trs+
-    '<tr style="font-weight:800;background:rgba(224,33,138,.08)"><td>📊 إجمالي المكنة</td><td class="num">'+fmt(totM)+'</td><td class="num" style="color:#3aa0ff">'+fmt(totR)+'</td><td class="num" style="color:'+(Math.abs(totM-totR)>=0.005?'#ff6b7a':'#2fd196')+'">'+(Math.abs(totM-totR)>=0.005?fmt(totM-totR):'✓')+'</td></tr></tbody></table>'+
+    '<tr style="font-weight:800;background:rgba(224,33,138,.08)"><td>📊 إجمالي المكنة</td><td class="num">'+fmt(totM)+'</td><td class="num" style="color:#3aa0ff">'+fmt(totR)+'</td><td class="num" style="color:'+((totM-totR)<-0.005?'#ff6b7a':'#2fd196')+'">'+(Math.abs(totM-totR)>=0.005?fmt(totM-totR):'✓')+'</td></tr></tbody></table>'+
     '<div style="margin-top:9px;font-weight:700;font-size:13.5px">🏦 دخل البنك فعلياً: <b>'+(hasActual?fmt(actual):'—')+' '+esc(C)+'</b> · 💳 عمولة البنك (الفرق): <b style="color:'+commClr+'">'+(hasActual?(fmt(comm)+(pct!=null?(' · '+pct.toFixed(2)+'%'):'')):'—')+'</b></div>';
 }
 async function saveMachineDep(){
