@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-19-bali-villa4'
+  var BUILD = '2026-10-25-spain'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -3100,6 +3100,7 @@ const BF_CITIES = {
   "الصين":["شنغهاي","بكين","هانغتشو","هونغ كونغ","جوانزو"],
   "مصر":["القاهرة"],
   "المغرب":["مراكش","الدار البيضاء","طنجة","فاس","أكادير","الصويرة","اغافاي"],
+  "إسبانيا":["مدريد","قرطبة","غرناطة","إشبيلية","مالقا","برشلونة","ماربيا"],
   "سيرلانكا":["كولومبو","نيجومبو","كاندي","نوارا ايليا","بنتوتا"],
 };
 // يحوّل أي تهجئة للوجهة (همزة/تشكيل/إنجليزي) إلى مفتاح BF_CITIES المطابق، حتى لا
@@ -3117,12 +3118,14 @@ function bfResolveDest(d){
     makkah:'العمرة', mecca:'العمرة', umrah:'العمرة', england:'إنجلترا', london:'إنجلترا', uk:'إنجلترا',
     china:'الصين', shanghai:'الصين', beijing:'الصين', suzhou:'الصين', hangzhou:'الصين', hongkong:'الصين',
     egypt:'مصر', cairo:'مصر',
-    morocco:'المغرب', marrakech:'المغرب', marrakesh:'المغرب', casablanca:'المغرب', tanger:'المغرب', tangier:'المغرب', agadir:'المغرب', agafay:'المغرب', essaouira:'المغرب', rabat:'المغرب' };
+    morocco:'المغرب', marrakech:'المغرب', marrakesh:'المغرب', casablanca:'المغرب', tanger:'المغرب', tangier:'المغرب', agadir:'المغرب', agafay:'المغرب', essaouira:'المغرب', rabat:'المغرب',
+    spain:'إسبانيا', madrid:'إسبانيا', barcelona:'إسبانيا', granada:'إسبانيا', cordoba:'إسبانيا', seville:'إسبانيا', sevilla:'إسبانيا', malaga:'إسبانيا', marbella:'إسبانيا' };
   if (EN[n]) return EN[n];
   if (/مكة|مكه|عمرة|المدينةالمنورة|المنورة/.test(n)) return 'العمرة';  // مكة/العمرة → مفتاح BF_CITIES
   if (/[إا]ن[جك]لترا|بريطانيا|لندن/.test(n)) return 'إنجلترا';         // إنجلترا/لندن → مفتاح BF_CITIES
   if (/الصين|صيني|شن?غهاي|شان[غج]هاي|بكين|سوجو|هان[غج]تشو|هون[غج]كون[غج]/.test(n)) return 'الصين';
   if (/مصر|القاهر[ةه]|الاهرامات|الأهرامات|الجيز[ةه]/.test(n)) return 'مصر';  // مصر/القاهرة → مفتاح BF_CITIES
+  if (/[إا]سباني[اة]|مدريد|برشلون[ةه]|غرناط[ةه]|قرطب[ةه]|[إا]شبيلي[ةه]|مالق[ةا]|ماربي/.test(n)) return 'إسبانيا';  // إسبانيا → مفتاح BF_CITIES
   return Object.keys(BF_CITIES).find(k => norm(k) === n) || raw;
 }
 const BF_INTAKE = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake";
@@ -3130,7 +3133,7 @@ let BF_SUGS = [];        // all ready suggestions for current destination
 let bfShownRows = [];    // suggestions currently rendered as cards
 let bfChosen = null;     // chosen distribution string (ready mode)
 function bfEsc(s){ return String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
-const BF_AIRPORT_AR = {Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي",Salalah:"صلالة",Shanghai:"شنغهاي",Beijing:"بكين",Hangzhou:"هانغتشو","Hong Kong":"هونغ كونغ",Guangzhou:"جوانزو",Marrakech:"مراكش",Casablanca:"الدار البيضاء",Tanger:"طنجة",Agadir:"أكادير",Agafay:"اغافاي",Essaouira:"الصويرة",Rabat:"الرباط",Colombo:"كولومبو",Negombo:"نيجومبو",Kandy:"كاندي","Nuwara Eliya":"نوارا ايليا",Bentota:"بنتوتا"};
+const BF_AIRPORT_AR = {Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي",Salalah:"صلالة",Shanghai:"شنغهاي",Beijing:"بكين",Hangzhou:"هانغتشو","Hong Kong":"هونغ كونغ",Guangzhou:"جوانزو",Marrakech:"مراكش",Casablanca:"الدار البيضاء",Tanger:"طنجة",Agadir:"أكادير",Agafay:"اغافاي",Essaouira:"الصويرة",Rabat:"الرباط",Madrid:"مدريد",Cordoba:"قرطبة",Granada:"غرناطة",Seville:"إشبيلية",Malaga:"مالقا",Barcelona:"برشلونة",Marbella:"ماربيا",Colombo:"كولومبو",Negombo:"نيجومبو",Kandy:"كاندي","Nuwara Eliya":"نوارا ايليا",Bentota:"بنتوتا"};
 function bfAirAr(a){ return BF_AIRPORT_AR[a] || a; }
 function bfPairOf(s){ return s.arrival_airport + '|' + s.departure_airport; }
 function bfCurPair(){
@@ -6902,7 +6905,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       const currency=(typeof currencyConversion!=='undefined'&&currencyConversion)?currencyConversion.name:'ريال';
       // اسم الملف إنجليزي نظيف (واتساب يلخبط الأسماء العربية في الملف نفسه)،
       // واسم الوجهة بالعربي يظهر سليم في نص الرسالة (caption) أسفل الملف.
-      const _DEST_EN={'عمان':'Oman','عُمان':'Oman','ماليزيا':'Malaysia','تايلند':'Thailand','تايلاند':'Thailand','فيتنام':'Vietnam','تركيا':'Turkey','روسيا':'Russia','جورجيا':'Georgia','اذربيجان':'Azerbaijan','أذربيجان':'Azerbaijan','مصر':'Egypt','المالديف':'Maldives','مالديف':'Maldives','اندونيسيا':'Indonesia','إندونيسيا':'Indonesia','بالي':'Bali','سريلانكا':'SriLanka','الامارات':'UAE','الإمارات':'UAE','دبي':'Dubai','البوسنة':'Bosnia','المغرب':'Morocco','جنوب أفريقيا':'SouthAfrica','جنوب افريقيا':'SouthAfrica','موريشيوس':'Mauritius','مكة المكرمة':'Makkah','مكة':'Makkah','العمرة':'Umrah','إنجلترا':'England','انجلترا':'England','بريطانيا':'England','لندن':'London','الصين':'China','الصّين':'China','صين':'China'};
+      const _DEST_EN={'عمان':'Oman','عُمان':'Oman','ماليزيا':'Malaysia','تايلند':'Thailand','تايلاند':'Thailand','فيتنام':'Vietnam','تركيا':'Turkey','روسيا':'Russia','جورجيا':'Georgia','اذربيجان':'Azerbaijan','أذربيجان':'Azerbaijan','مصر':'Egypt','المالديف':'Maldives','مالديف':'Maldives','اندونيسيا':'Indonesia','إندونيسيا':'Indonesia','بالي':'Bali','سريلانكا':'SriLanka','الامارات':'UAE','الإمارات':'UAE','دبي':'Dubai','البوسنة':'Bosnia','المغرب':'Morocco','إسبانيا':'Spain','اسبانيا':'Spain','جنوب أفريقيا':'SouthAfrica','جنوب افريقيا':'SouthAfrica','موريشيوس':'Mauritius','مكة المكرمة':'Makkah','مكة':'Makkah','العمرة':'Umrah','إنجلترا':'England','انجلترا':'England','بريطانيا':'England','لندن':'London','الصين':'China','الصّين':'China','صين':'China'};
       const _destAr=String(indivState.dest||'').trim();
       const _destEn=_DEST_EN[_destAr]||(/^[\x00-\x7F]+$/.test(_destAr)?_destAr:'Trip');
       const fname=('Alezz_Travel_'+_destEn+'_Offer').replace(/[^\x00-\x7F]/g,'').replace(/\s+/g,'_').replace(/_+/g,'_').slice(0,60)+'.pdf';

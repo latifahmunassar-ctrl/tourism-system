@@ -230,6 +230,8 @@ function parseDestination(text: string): string | null {
     [/مصر|egypt|القاهر[ةه]|cairo|[أا]هرامات|الجيز[ةه]|giza|الاقصر|الأقصر|luxor|[أا]سوان|aswan|شرم\s*الشيخ|sharm|الغردق[ةه]|hurghada/i, "Egypt"],
     // المغرب — مدن: مراكش/الدار البيضاء/طنجة/أكادير/اغافاي/الصويرة/الرباط.
     [/المغرب|مغرب|morocco|مراكش|marrakech|marrakesh|الدار\s*البيضاء?|الدارالبيضاء?|casablanca|طنج[ةه]|tanger|tangier|[أا][كغ]ادير|agadir|[أا]غافاي|agafay|الصوير[ةه]|essaouira|الرباط|rabat|فاس|fès|fes|fez/i, "Morroco"],
+    // إسبانيا — مدن: مدريد/قرطبة/غرناطة/إشبيلية/مالقا/برشلونة/ماربيا. (مطابق لـ index.ts:detectDestination)
+    [/[إا]سباني[اة]|spain|مدريد|madrid|برشلون[ةه]|barcelona|غرناط[ةه]|granada|قرطب[ةه]|cordoba|[إا]شبيلي[ةه]|sevill[ae]|seville|مالا?ق[ةا]|málaga|malaga|ماربي(?:لا|ا)|مربلة|marbella/i, "Spain"],
     [/سيرلانكا|سريلانكا|سري\s*لانكا|sri\s*lanka|srilanka|كولومبو|colombo|كاندي|kandy|ني[جغ]ومبو|negombo|نوارا|nuwara|بنتوتا|bentota/i, "Sri lanka"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
@@ -462,6 +464,8 @@ function parseSim(text: string): number | null {
   const t = arabicDigitsToLatin(text);
   // "بدون شرائح" / "ما أبغى شرائح"
   if (/بدون\s*شرا[ئي]ح|بدون\s*شريحة|بدون\s*sim|no\s*sim|ما\s*أبغى\s*شرا|ما\s*ابغى\s*شرا|بدون\s*هاتف/i.test(t)) return 0;
+  // صيغة المثنى بلا رقم: "شريحتين"/"شريحتان" اتصال = 2 (نفس منطق مسار التعديل)
+  if (/شريحت(?:ين|ان)/u.test(t)) return 2;
   // "4 شرائح" / "ضيف 3 شرائح" / "SIM:5"
   const m = t.match(/(\d{1,2})\s*(?:شرا[ئي]ح|شريحة|سيم|sim)/i)
         || t.match(/SIM\s*[:=]\s*(\d{1,2})/i);

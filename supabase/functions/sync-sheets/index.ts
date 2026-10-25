@@ -26,7 +26,7 @@ const CORS_HEADERS = {
   "Content-Type": "application/json",
 };
 
-const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "  Sri lanka"];
+const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "Spain", "  Sri lanka"];
 
 // Per-destination canonical-city patterns — MUST stay in sync with DEST_CITIES
 // in Tourism-AI/index.ts (same canonical names the builder groups by). Used
@@ -121,6 +121,18 @@ const SECTION_CITY_DEFS: Record<string, Array<{ canonical: string; pattern: RegE
     { canonical: "Agafay",     pattern: /[أا]غا?فاي|agafay/i },
     { canonical: "Essaouira",  pattern: /الصوير[ةه]|الصويرا|essaouira/i },
     { canonical: "Rabat",      pattern: /الرباط|rabat/i },
+  ],
+  // إسبانيا — الجولات أسماؤها عربية (استقبال/توديع مطار + انتقالات «الانتقال من X الى
+  // فندق في Y» + جولات معالم المدن ورحلات اليوم طليطلة/رندة/نيرخا…) بلا عمود City
+  // فتُطابَق بالاسم. ٧ مدن فنادق: مدريد/قرطبة/غرناطة/إشبيلية/مالقا/برشلونة/ماربيا.
+  Spain: [
+    { canonical: "Madrid",    pattern: /مدريد|madrid/i },
+    { canonical: "Cordoba",   pattern: /قرطب[ةه]|cordoba|córdoba/i },
+    { canonical: "Granada",   pattern: /غرناط[ةه]|granada/i },
+    { canonical: "Seville",   pattern: /[إا]شبيلي[ةه]|sevill[ae]|seville/i },
+    { canonical: "Malaga",    pattern: /مالا?ق[ةا]|málaga|malaga/i },
+    { canonical: "Barcelona", pattern: /برشلون[ةه]|barcelona/i },
+    { canonical: "Marbella",  pattern: /ماربي(?:لا|ا)|مربلة|marbella/i },
   ],
 };
 
@@ -420,6 +432,36 @@ function findHotelHeader(rows: string[][]): { rowIdx: number; cols: Record<strin
         if (cells[j] && HEADER_ALIASES.city.test(cells[j])) { map.area = j; break; }
       }
     }
+    // Headerless seasonal triplets (إسبانيا): بعض التبويبات لا تكتب عناوين From/To/Rate
+    // وتضع الأسعار كثلاثيات متكرّرة [تاريخ، تاريخ، سعر] تبدأ مباشرة بعد عمود نوع الغرفة
+    // (أو النجوم). حين لا يوجد عمود Rate معنون، نستكشف الثلاثيات من صفوف البيانات نفسها.
+    // يُفعَّل فقط عند غياب Rate (وإلا السلوك الحالي كما هو) فلا يمسّ الوجهات المعنونة.
+    if (map.rate === undefined && map.stars !== undefined && map.room !== undefined) {
+      const dataRows = rows.slice(i + 1, i + 60).map(r => (r || []).map(x => (x || "").trim()));
+      const isNum = (s: string) => parseFloat((s || "").replace(/[^\d.]/g, "")) > 0;
+      const isDateish = (s: string) => {
+        if (!s) return false;
+        return normalizeISODate(s) !== s || /^\d{4}-\d{1,2}-\d{1,2}$/.test(s);
+      };
+      const tripletStart = Math.max(map.room, map.stars) + 1;
+      // حدّ أعلى: أوّل عمود لاحق معروف (Include/Currency/Occupancy/Link) حتى لا نبتلع أعمدة ما بعد الأسعار.
+      const trailing = [map.include, map.currency, map.occupancy, map.link, map.area]
+        .filter((v): v is number => v !== undefined && v > tripletStart);
+      const limit = trailing.length ? Math.min(...trailing) : cells.length;
+      const synthRateCols: number[] = [];
+      for (let base = tripletStart; base + 2 < limit; base += 3) {
+        const ok = dataRows.some(r => isDateish(r[base]) && isDateish(r[base + 1]) && isNum(r[base + 2]));
+        if (!ok) break;
+        synthRateCols.push(base + 2);
+        if (synthRateCols.length > 20) break;
+      }
+      if (synthRateCols.length > 0) {
+        map.rate = synthRateCols[0];
+        if (map.dateFrom === undefined) map.dateFrom = tripletStart;
+        if (map.dateTo === undefined) map.dateTo = tripletStart + 1;
+        if (map.city !== undefined) return { rowIdx: i, cols: map, rateCols: synthRateCols };
+      }
+    }
     // Header row must have at least name + city + stars + rate
     if (map.city !== undefined && map.stars !== undefined && map.rate !== undefined) {
       // اجمع كل أعمدة السعر (نطاقات تواريخ متعددة From/To/Rate مكرّرة) — بعض التبويبات
@@ -638,6 +680,28 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
       if (!f || !t || isNaN(p) || p <= 0) continue;
       if (f === dateFromRaw && t === dateToRaw) continue;      // النطاق الأساسي مُضاف
       hotels.push({ ...baseRec, price_per_night: p, date_from: f, date_to: t });
+    }
+    // ── توسيع النطاقات بلا عناوين (إسبانيا) ───────────────────────────────
+    // لو صف الرأس بلا عناوين From/To/Rate (الحلقة أعلاه لم تلتقط شيئاً) لكن الكاشف
+    // استنبط عدّة أعمدة سعر (header.rateCols)، نُصدر سجلاً لكل نطاق: From=rc-2, To=rc-1.
+    // مقيّد بغياب العناوين فلا يُضاعف نطاقات الوجهات المعنونة.
+    const hdrHasFromToRate = (() => {
+      for (let j = 0; j + 2 < hdrRow.length; j++) {
+        if (/^from$/.test(String(hdrRow[j] || "").trim().toLowerCase())
+          && /^to$/.test(String(hdrRow[j + 1] || "").trim().toLowerCase())
+          && /^rate$/.test(String(hdrRow[j + 2] || "").trim().toLowerCase())) return true;
+      }
+      return false;
+    })();
+    if (!hdrHasFromToRate && header.rateCols && header.rateCols.length > 1) {
+      for (const rc of header.rateCols) {
+        const f = normalizeISODate(String(row[rc - 2] || "").trim());
+        const t = normalizeISODate(String(row[rc - 1] || "").trim());
+        const p = parsePrice(String(row[rc] || "").trim());
+        if (!f || !t || isNaN(p) || p <= 0) continue;
+        if (f === dateFromRaw && t === dateToRaw) continue;    // النطاق الأساسي مُضاف
+        hotels.push({ ...baseRec, price_per_night: p, date_from: f, date_to: t });
+      }
     }
   }
 
@@ -1078,6 +1142,11 @@ function extractSuggestions(
       "اكادير": "Agadir", "أكادير": "Agadir", "اغادير": "Agadir", "اغافاي": "Agafay", "أغافاي": "Agafay",
       "الصويرة": "Essaouira", "الصويره": "Essaouira", "الرباط": "Rabat",
     },
+    Spain: {
+      "مدريد": "Madrid", "مالقا": "Malaga", "مالاقا": "Malaga", "برشلونة": "Barcelona",
+      "برشلونه": "Barcelona", "اشبيلية": "Seville", "إشبيلية": "Seville", "غرناطة": "Granada",
+      "غرناطه": "Granada", "قرطبة": "Cordoba", "ماربيا": "Marbella",
+    },
     Oman: {
       // مطارات عُمان بالعربي مع توحيد الإملاء (صلاله/Salalah → صلالة)
       "صلالة": "صلالة", "صلاله": "صلالة", "salalah": "صلالة",
@@ -1142,6 +1211,7 @@ function extractSuggestions(
     Makkah:   "جدة",   // برامج العمرة تدخل/تخرج عبر جدة (بلا سطر مطار في عمود الاقتراحات)
     China:    "Shanghai",  // برامج الصين تبدأ/تنتهي غالباً بشنغهاي (عمود الاقتراحات بلا سطر مطار)
     Morroco:  "Marrakech", // المغرب متعدّد البوابات؛ الوصول/المغادرة يُشتقّان من أول/آخر مدينة بالتوزيع، وإلا مراكش
+    Spain:    "Madrid",    // إسبانيا — رؤوس النطاقات صريحة بعمود BU (الوصول/المغادرة مطار X)؛ هذا احتياطي فقط
     "Sri lanka": "Colombo", // سيرلانكا مطار واحد (كولومبو) — القدوم/المغادرة = كولومبو دائماً
   };
   for (let i = headerRow + 1; i < rows.length; i++) {

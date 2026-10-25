@@ -466,7 +466,10 @@ const CITY_NAME_RE: Record<string, RegExp> = {
   "Marrakech": /مراكش|marrakech|marrakesh/i, "Casablanca": /الدار\s*البيضاء?|الدارالبيضاء?|دار\s*البيضاء?|كازابلانكا|casablanca/i,
   "Tanger": /طنج[ةها]|tanger|tangier/i, "Agadir": /[أا][كغ]ادير|agadir/i, "Agafay": /[أا]غا?فاي|agafay/i,
   "Essaouira": /(?<!ت)(?:ال)?صوير[ةه]|صويرا|essaouira/i, "Rabat": /الرباط|rabat/i,
-  "Fes": /فاس|فآس|fès|fes|fez/i,
+  "Fes": /فاس|فآس|fès|fes|fez/i, "Chefchaouen": /شفش[اوآ]{1,3}ن|chefchaouen|chaouen/i,
+  "Madrid": /مدريد|madrid/i, "Cordoba": /قرطب[ةه]|cordoba|córdoba/i, "Granada": /غرناط[ةه]|granada/i,
+  "Seville": /[إا]شبيلي[ةه]|sevill[ae]|seville/i, "Malaga": /مالا?ق[ةا]|málaga|malaga/i,
+  "Barcelona": /برشلون[ةه]|barcelona/i, "Marbella": /ماربي(?:لا|ا)|مربلة|marbella/i,
 };
 
 /**
@@ -1479,6 +1482,7 @@ const DESTINATION_AR_NAMES: Record<string, string> = {
   Makkah: "العمرة",
   Egypt: "مصر",
   Morroco: "المغرب",
+  Spain: "إسبانيا",
 };
 
 function formatNumber(n: number): string {

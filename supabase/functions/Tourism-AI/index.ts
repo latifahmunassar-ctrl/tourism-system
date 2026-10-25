@@ -53,7 +53,7 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     [/[إا]ن[جك]لترا|بريطانيا|بريطاني|لندن|england|london|المملكة\s*المتحدة/i, "England"],
     // ⚠️ «صين» وحدها كانت تطابق داخل «شخصين» (شخص+ين) فتُلتقَط الصين خطأً لأي وجهة
     // بعدها بالقائمة (مصر/العمرة…). الحل: «صيني…» تتطلب ياءً، و«صين» المجرّدة محاطة بحدود.
-    [/الصين|صيني|(?<![ء-ي])صين(?![ء-ي])|china|شان[غج]هاي|شنغهاي|shanghai|بكين|beijing|سوجهو|سوجو|suzhou|هان[غج]تشو|hangzhou|هون[غج]\s*كون[غج]|hong\s*kong|[جق]وان?[غج]?زو|guangzhou|canton/i, "China"],
+    [/الصين|صيني|(?<![ء-ي])صين(?![ء-ي])|china|شان[غج]هاي|شنغهاي|shanghai|بكين|beijing|سوجهو|سوجو|suzhou|هان[غج]تشو|هان[غج]شو|hangzhou|هون[غج]\s*كون[غج]|hong\s*kong|[جق]وان?[غج]?زو|guangzhou|canton/i, "China"],
     [/هولندا|هولندي|netherlands?|holland|[اأإآ]مستردام|[اأإآ]مستردم|amsterdam/i, "Netherland"],
     // مكة/العمرة (برامج داخلية: مكة + المدينة المنورة + جدة + الطائف). «المدينة» وحدها
     // عامة فنطلب «المنورة»؛ وجدة/الطائف لا تُشغّل الوجهة وحدها (مدن سعودية عامة).
@@ -62,6 +62,8 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     [/مصر|egypt|القاهر[ةه]|cairo|[أا]هرامات|الجيز[ةه]|giza|الاقصر|الأقصر|luxor|[أا]سوان|aswan|شرم\s*الشيخ|sharm|الغردق[ةه]|hurghada/i, "Egypt"],
     // المغرب — مدن: مراكش/الدار البيضاء/طنجة/أكادير/اغافاي/الصويرة/الرباط.
     [/المغرب|مغرب|morocco|مراكش|marrakech|marrakesh|الدار\s*البيضاء?|الدارالبيضاء?|casablanca|طنج[ةه]|tanger|tangier|[أا][كغ]ادير|agadir|[أا]غافاي|agafay|الصوير[ةه]|essaouira|الرباط|rabat|فاس|fès|fes|fez/i, "Morroco"],
+    // إسبانيا — مدن: مدريد/قرطبة/غرناطة/إشبيلية/مالقا/برشلونة/ماربيا.
+    [/[إا]سباني[اة]|spain|مدريد|madrid|برشلون[ةه]|barcelona|غرناط[ةه]|granada|قرطب[ةه]|cordoba|[إا]شبيلي[ةه]|sevill[ae]|seville|مالا?ق[ةا]|málaga|malaga|ماربي(?:لا|ا)|مربلة|marbella/i, "Spain"],
     [/سيرلانكا|سريلانكا|سري\s*لانكا|sri\s*lanka|srilanka|كولومبو|colombo|كاندي|kandy|ني[جغ]ومبو|negombo|نوارا|nuwara|بنتوتا|bentota/i, "Sri lanka"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
@@ -188,7 +190,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     // سوجو (Suzhou) مدينة مستقلة للفنادق؛ جولاتها تظهر كرحلة يوم من شانغهاي عبر NEARBY_TOUR_CITIES (لا فنادقها).
     { canonical: "Suzhou",    pattern: /سوجهو|سوجو|سوزو|سوتشو|suzhou/i },
     { canonical: "Beijing",   pattern: /بكين|بيجين[غج]?|beijing/i },
-    { canonical: "Hangzhou",  pattern: /هان[غج]تشو|هان[غج]شتوا?|هان[غج]زو|hangzhou/i },
+    { canonical: "Hangzhou",  pattern: /هان[غج]تشو|هان[غج]شتوا?|هان[غج]شو|هان[غج]زو|hangzhou/i },
     { canonical: "Hong Kong", pattern: /هون[غجك]\s*كون[غجك]|hong\s*kong|hongkong/i },
     { canonical: "Guangzhou", pattern: /[جق]وان?[غج]?زو[اى]?|[جق]وانجو|guangzhou|canton|كانتون/i },
   ],
@@ -212,6 +214,18 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Essaouira",  pattern: /(?<!ت)(?:ال)?صوير[ةه]|صويرا|essaouira/i },
     { canonical: "Rabat",      pattern: /الرباط|rabat/i },
     { canonical: "Fes",        pattern: /فاس|فآس|fès|fes|fez/i },
+    { canonical: "Chefchaouen", pattern: /شفش[اوآ]{1,3}ن|chefchaouen|chaouen/i },
+  ],
+  // إسبانيا — canonical يطابق مدينة الفندق (hotels.location بالإنجليزي) + أسماء الجولات
+  // والانتقالات العربية. ٧ مدن فنادق؛ رحلات اليوم (طليطلة/رندة/نيرخا…) مُضمَّنة بأسماء الجولات.
+  Spain: [
+    { canonical: "Madrid",    pattern: /مدريد|madrid/i },
+    { canonical: "Cordoba",   pattern: /قرطب[ةه]|cordoba|córdoba/i },
+    { canonical: "Granada",   pattern: /غرناط[ةه]|granada/i },
+    { canonical: "Seville",   pattern: /[إا]شبيلي[ةه]|sevill[ae]|seville/i },
+    { canonical: "Malaga",    pattern: /مالا?ق[ةا]|málaga|malaga/i },
+    { canonical: "Barcelona", pattern: /برشلون[ةه]|barcelona/i },
+    { canonical: "Marbella",  pattern: /ماربي(?:لا|ا)|مربلة|marbella/i },
   ],
   "Sri lanka": [
     { canonical: "Colombo",      pattern: /كولومبو|colombo/i },
@@ -818,7 +832,8 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
     "Cairo": "القاهرة",
     "Cape Town": "كيب تاون", "Hermanus": "هارمانوس", "Garden Route": "جاردن روت", "Johannesburg": "جوهانسبرغ", "Pretoria": "بريتوريا", "Sun City": "سن سيتي", "Kruger": "كروجر",
-    "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط", "Fes": "فاس",
+    "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط", "Fes": "فاس", "Chefchaouen": "شفشاون",
+    "Madrid": "مدريد", "Cordoba": "قرطبة", "Granada": "غرناطة", "Seville": "إشبيلية", "Malaga": "مالقا", "Barcelona": "برشلونة", "Marbella": "ماربيا",
     "Colombo": "كولومبو", "Negombo": "نيجومبو", "Kandy": "كاندي", "Nuwara Eliya": "نوارا ايليا", "Bentota": "بنتوتا",
   };
   const formatBedScope = (cities: string[]): string => cities.flatMap(c => {
@@ -2808,7 +2823,7 @@ async function handleTourVariants(body: { dest?: string; name?: string }): Promi
 
 // ── profit_margins: جدول الأرباح الموسمي لوجهة — يُقرأ مباشرة من شيت الوجهة
 //    (بلا جدول قاعدة بيانات): شريحة تكلفة × موسم × شركات/أفراد. ──────────────────
-const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco"];
+const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "Spain"];
 
 async function pmGoogleToken(sa: { client_email: string; private_key: string }): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
@@ -3677,7 +3692,7 @@ Deno.serve(async (req) => {
         const destAr: Record<string, string> = {
           vietnam: "فيتنام", Malaysia: "ماليزيا", thailand: "تايلاند",
           Turky: "تركيا", russia: "روسيا", Bosnia: "البوسنة", indonesia: "إندونيسيا",
-          Oman: "عمان", Morroco: "المغرب",
+          Oman: "عمان", Morroco: "المغرب", Spain: "إسبانيا",
         };
         const cityAr: Record<string, string> = {
           "Ha Noi": "هانوي", "Ho Chi Minh": "هوتشي مينه",
@@ -3786,9 +3801,10 @@ Deno.serve(async (req) => {
         "Moscow": "موسكو", "St Petersburg": "سانت بطرسبرغ", "Sochi": "سوتشي",
         "Sarajevo": "سراييفو", "Mostar": "موستار", "Bihać": "بيهاتش",
         "Bali": "بالي", "Jakarta": "جاكرتا", "Bandung": "باندونغ", "Puncak": "بونشاك",
-        "Shanghai": "شنغهاي", "Beijing": "بكين", "Hangzhou": "هانغتشو", "Hong Kong": "هونغ كونغ", "London": "لندن", "Amsterdam": "أمستردام", "Guangzhou": "جوانزو", "Cairo": "القاهرة",
+        "Shanghai": "شنغهاي", "Beijing": "بكين", "Hangzhou": "هانغتشو", "Suzhou": "سوجو", "Hong Kong": "هونغ كونغ", "London": "لندن", "Amsterdam": "أمستردام", "Guangzhou": "جوانزو", "Cairo": "القاهرة",
         "Cape Town": "كيب تاون", "Hermanus": "هارمانوس", "Garden Route": "جاردن روت", "Johannesburg": "جوهانسبرغ", "Pretoria": "بريتوريا", "Sun City": "سن سيتي", "Kruger": "كروجر",
-        "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط", "Fes": "فاس",
+        "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط", "Fes": "فاس", "Chefchaouen": "شفشاون",
+        "Madrid": "مدريد", "Cordoba": "قرطبة", "Granada": "غرناطة", "Seville": "إشبيلية", "Malaga": "مالقا", "Barcelona": "برشلونة", "Marbella": "ماربيا",
         "Colombo": "كولومبو", "Negombo": "نيجومبو", "Kandy": "كاندي", "Nuwara Eliya": "نوارا ايليا", "Bentota": "بنتوتا",
       };
       // Distribution-change follow-up: employee typed a NEW city/nights split
@@ -3824,6 +3840,7 @@ Deno.serve(async (req) => {
         vietnam: "فيتنام", Malaysia: "ماليزيا", thailand: "تايلاند",
         Turky: "تركيا", russia: "روسيا", Bosnia: "البوسنة", indonesia: "إندونيسيا",
         Morroco: "المغرب",
+        Spain: "إسبانيا",
       };
 
       // CASE A: distribution missing → ask locally (no Claude, $0)
