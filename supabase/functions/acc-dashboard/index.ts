@@ -594,6 +594,9 @@ Deno.serve(async (req: Request) => {
           if (('out_raw' in ch) || ('currency_rate' in ch)) upd.out_sar = (nout != null && nrate != null) ? nout * nrate : nout;
           const { error: cue } = await supabase.from('acc_banks_cash').update(upd).eq('id', id);
           if (cue) return J({ error: cue.message }, 400); result = { cash_edited: id };
+        } else if (mv.kind === 'claim_adjust') {
+          // 🧾 اعتماد تغيير مطالبة/مستحق على العميل — بلا أثر جانبي؛ الحركة المعتمدة نفسها هي المرجع في قسم المستحقات
+          result = { claim_adjust: pl.client_code || null, new_amount: pl.new_amount ?? null, old_amount: pl.old_amount ?? null };
         } else {
           const sup = pl.supplier_name || 'TBO'; const tcur = pl.tcur || 'SAR';
           const bank = pl.bank || null; const ref = pl.ref || null; const date = pl.date || _today;   // 📅 لا دفعة/توزيع بلا تاريخ — افتراضياً اليوم

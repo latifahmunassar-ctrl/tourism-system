@@ -3764,6 +3764,7 @@ function renderAlerts(){
   const pendRefEdit=mvAll.filter(m=>m.kind==='refund_edit'&&m.status==='pending').sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
   const resolvedRefund=mvAll.filter(m=>m.kind==='refund'&&(m.status==='approved'||m.status==='rejected')).sort((a,b)=>String(b.decided_at||b.id).localeCompare(String(a.decided_at||a.id))).slice(0,15);
   const pendList=mvAll.filter(m=>m.kind==='list_item'&&m.status==='pending').sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
+  const pendClaim=mvAll.filter(m=>m.kind==='claim_adjust'&&m.status==='pending').sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
   const pendLoss=liveBookingLosses();   // خسائر الحجوزات تُحسب حيّاً (كل حجز فعلي يفوق البيع) — تظهر تلقائياً بلا حفظ
   const cg=(typeof costGapAlerts==='function')?costGapAlerts():[];   // ⚠️ التكلفة الفعلية أقل بكثير من المسجّلة
   const _owner=isOwnerUser();
@@ -3949,6 +3950,19 @@ function renderAlerts(){
             '</div></div>'; }).join('')+
         '<div style="font-size:11px;color:var(--muted);margin-top:6px">ℹ️ راجعي 📎 طلب العميل (والملف الكامل عبر «↪️ افتح ملف العميل») قبل الموافقة. الموافقة تسجّل المرتجع وتخصمه من حساب العميل وتحفظ المستند المعتمد. الرفض يلغي الطلب بلا أي أثر. <b style="color:var(--red)">لا أثر للإرجاع قبل اعتمادك.</b></div></div>';
     }
+    if(pendClaim.length){
+      n+='<div class="panel" style="border:1px solid #b8860b;background:rgba(184,134,11,.07);margin-bottom:14px"><h3 style="color:#b8860b;margin-top:0">🧾 تغيير مطالبات مستحقة للشركة بانتظار الموافقة ('+pendClaim.length+') — لا يتغيّر المستحق إلا بقرارك</h3>'+
+        pendClaim.map(m=>{ const c=m.payload||{}; const dirLbl=(c.direction==='we_owe')?'🟢 مسترد للعميل / إلغاء مطالبة':'🔴 مطالبة على العميل'; return '<div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--card)">'+
+          '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px"><div style="font-weight:800;font-size:14px">👤 '+esc(c.client_name||'')+' <span class="cnt">'+esc(c.client_code||'')+'</span></div><div style="font-size:11px;color:var(--muted)">مقدّم الطلب: <b>'+esc(c.by||'—')+'</b></div></div>'+
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:7px 12px;font-size:12.5px;margin-bottom:9px">'+
+            '<div>المستحق السابق: <b>'+fmt(c.old_amount||0)+'</b></div>'+
+            '<div>المستحق الجديد: <b style="color:#b8860b;font-size:13.5px">'+fmt(c.new_amount||0)+'</b></div>'+
+            '<div>الاتجاه: <b>'+dirLbl+'</b></div>'+
+          '</div>'+
+          '<div style="background:rgba(127,127,127,.07);border:1px solid var(--line);border-radius:8px;padding:7px 10px;margin-bottom:9px;font-size:12px"><b>السبب:</b> '+esc(c.reason||'—')+'</div>'+
+          '<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" style="background:#b8860b;padding:4px 12px;font-size:11.5px" onclick="resolveClaimMv('+m.id+',\'approve\')">✅ موافقة</button><button class="btn ghost" style="padding:4px 12px;font-size:11.5px" onclick="resolveClaimMv('+m.id+',\'reject\')">❌ رفض</button></div></div>'; }).join('')+
+        '<div style="font-size:11px;color:var(--muted);margin-top:6px">الموافقة تعتمد المستحق الجديد ويظهر في قسم ⏳ المستحقات (مع المستحق السابق كملاحظة والسبب). الرفض يلغي الطلب بلا أثر.</div></div>';
+    }
     if(pendCostOver.length){
       n+='<div class="panel" style="border:1px solid #d11;background:rgba(209,17,17,.07);margin-bottom:14px"><h3 style="color:#d11;margin-top:0">💸 التكلفة الفعلية أعلى من المعطاة للعميل ('+pendCostOver.length+')</h3>'+
         (_owner?'<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:9px;background:rgba(209,17,17,.06);border-radius:8px;padding:7px 11px"><button class="btn" style="background:#0e9d6a;padding:6px 15px;font-size:12px" onclick="resolveCostOverBulk()">✅ اطّلعت على المحدّد (<span class="costover-selcount">0</span>)</button><label style="font-size:11.5px;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:5px"><input type="checkbox" onchange="costoverToggleAll(this)" style="width:15px;height:15px;cursor:pointer"> تحديد الكل</label><span style="font-size:10.5px;color:var(--muted)">حدّدي عدة تنبيهات ثم «اطّلعت» دفعة واحدة — تختفي المحدّدة</span></div>':'')+
@@ -4093,7 +4107,7 @@ function renderAlerts(){
         resolvedProfit.map(a=>{ const rs=profitReason(a.message)||esc(a.message||''); return '<tr><td>'+esc(a.client_code||'')+'</td><td>'+esc(a.service_name||'')+'</td><td style="color:var(--muted)">'+esc(rs)+'</td><td>'+esc((a.resolved_at||'').slice(0,10))+'</td></tr>'; }).join('')+
         '</tbody></table></div></details>';
     }
-    const ntot=pendProfit.length+pendFreeze.length+pendCost.length+pendCancel.length+pendReactivate.length+pendLoss.length+pendPD.length+pendSupPay.length+pendSupEdit.length+pendCash.length+pendCashEdit.length+pendCashEditFull.length+pendCliEntry.length+pendCliEdit.length+pendRefund.length+pendRefEdit.length+pendList.length+pendCostOver.length;
+    const ntot=pendProfit.length+pendFreeze.length+pendCost.length+pendCancel.length+pendReactivate.length+pendLoss.length+pendPD.length+pendSupPay.length+pendSupEdit.length+pendCash.length+pendCashEdit.length+pendCashEditFull.length+pendCliEntry.length+pendCliEdit.length+pendRefund.length+pendRefEdit.length+pendList.length+pendClaim.length+pendCostOver.length;
     const nc=$('nt-cnt'); if(nc) nc.innerHTML = ntot? '<span style="background:var(--red);color:#fff;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700">'+ntot+'</span>':'';
     nbox.innerHTML = n || '<div class="panel"><div style="color:var(--muted);text-align:center;padding:24px">لا توجد إشعارات 🎉</div></div>';
   }
@@ -7547,6 +7561,10 @@ function renderPayForm(){
   const _refundDefault=_r2(Math.max(0, Math.min(_rfC - _profitDefault, Math.max(0,_paidNet))));
   const _claimDefault=_r2(Math.max(0, _profitDefault - _rfC));
   const _actualProfit=_actualProfitWhole;
+  // 🧾 المستحق الحالي على العميل (لنموذج «تغيير مطالبة مستحقة») = آخر تعديل معتمد، وإلا رصيد المستحقات، وإلا البيع − المدفوع
+  const _dueRow=(DATA.due||[]).find(d=>(d.client_code||'').toUpperCase()===code);
+  const _adjPrev=((DATA.pendingMovements||[]).filter(m=>m.kind==='claim_adjust'&&m.status==='approved'&&((m.payload||{}).client_code||'').toUpperCase()===code).sort((a,b)=>String(b.decided_at||b.created_at||b.id).localeCompare(String(a.decided_at||a.created_at||a.id)))[0]);
+  const _curDue=_r2(_adjPrev?Number((_adjPrev.payload||{}).new_amount||0):(_dueRow?Number(_dueRow.balance||0):(rate-paid)));
   const bankOpts='<option value="">— اختاري البنك —</option>'+listValues('banks').map(b=>'<option>'+esc(b.value)+'</option>').join('');   // القائمة المُدارة فقط
   // تفصيل الخدمات
   const svc=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code);
@@ -7633,7 +7651,43 @@ function renderPayForm(){
    '</div>'+
    '<div id="rf-finhint" style="font-size:12.5px;margin:4px 0;color:var(--green)">'+(_claimDefault>0.005?('📣 لا مرتجع — <b style="color:var(--red)">مطالبة على العميل: '+fmt(_claimDefault)+'</b>'):('💸 المسترجع النهائي للعميل: <b>'+fmt(_refundDefault)+'</b> · 🏢 ربح الشركة الفعلي: <b>'+fmt(_profitDefault)+'</b>'))+'</div>'+
    '<div id="rf-msg" style="font-size:12px;min-height:16px;margin:6px 0"></div>'+
-   '<button class="btn green" onclick="saveRefund()">💸 تنفيذ الإرجاع</button> <button class="btn" style="background:#c41d88" onclick="exportRefundReviewPDF(\''+esc(code)+'\')" title="تصدير ملخّص المرتجع المقترح PDF للمراجعة والموافقة قبل التنفيذ (بلا إرجاع فعلي)">📄 تصدير PDF للمراجعة (قبل الإرجاع)</button></div>';
+   '<button class="btn green" onclick="saveRefund()">💸 تنفيذ الإرجاع</button> <button class="btn" style="background:#c41d88" onclick="exportRefundReviewPDF(\''+esc(code)+'\')" title="تصدير ملخّص المرتجع المقترح PDF للمراجعة والموافقة قبل التنفيذ (بلا إرجاع فعلي)">📄 تصدير PDF للمراجعة (قبل الإرجاع)</button> <button class="btn" style="background:#b8860b" onclick="caToggle()" title="تغيير قيمة المطالبة/المستحق على العميل (يحتاج اعتماد المالكة) — يظهر في قسم المستحقات">🧾 تغيير مطالبة مستحقة على العميل</button>'+
+   // 🧾 نموذج تغيير المطالبة المستحقة (يُرسَل للمالكة للاعتماد — يظهر في قسم المستحقات بعد الموافقة)
+   '<div id="ca-box" style="display:none;margin-top:12px;background:rgba(184,134,11,.06);border:1px solid #b8860b;border-radius:10px;padding:12px 14px">'+
+     '<div style="font-weight:800;font-size:13.5px;color:#b8860b;margin-bottom:9px">🧾 تغيير مطالبة مستحقة للشركة — يُرسَل للمالكة للاعتماد</div>'+
+     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:9px 12px">'+
+       '<div class="fld"><label>المستحق الحالي على العميل <span style="font-size:10px;color:var(--muted)">(قراءة)</span></label><input type="number" id="ca-cur" value="'+_curDue+'" readonly style="background:rgba(0,0,0,.04);color:var(--muted)"></div>'+
+       '<div class="fld"><label>الاتجاه</label><select id="ca-dir"><option value="client_owes">🔴 مطالبة على العميل (يدفع لنا)</option><option value="we_owe">🟢 مسترد للعميل / إلغاء مطالبة</option></select></div>'+
+       '<div class="fld"><label>المستحق الجديد <span style="color:var(--red)">*</span></label><input type="number" id="ca-new" placeholder="القيمة بعد التغيير"></div>'+
+     '</div>'+
+     '<div class="fld" style="margin-top:9px"><label>السبب <span style="color:var(--red)">*</span></label><textarea id="ca-reason" rows="2" placeholder="سبب تغيير المستحق (إلزامي)" style="width:100%;font-family:inherit;font-size:12.5px;padding:7px 9px;border:1px solid var(--line);border-radius:8px"></textarea></div>'+
+     '<div id="ca-msg" style="font-size:12px;min-height:15px;margin:6px 0"></div>'+
+     '<button class="btn" style="background:#b8860b" onclick="saveClaimAdjust(\''+esc(code)+'\')">📤 إرسال للاعتماد</button> <button class="btn ghost" onclick="caToggle()">إلغاء</button>'+
+   '</div>'+
+   '</div>';
+}
+// 🧾 تغيير مطالبة مستحقة على العميل — إظهار/إخفاء النموذج
+function caToggle(){ const b=$('ca-box'); if(b)b.style.display=(b.style.display==='none'?'block':'none'); }
+async function saveClaimAdjust(code){
+  code=String(code||'').trim().toUpperCase();
+  const cur=+(($('ca-cur')||{}).value)||0, nv=$('ca-new').value, dir=($('ca-dir')||{}).value||'client_owes', reason=($('ca-reason').value||'').trim();
+  const m=$('ca-msg');
+  if(nv===''||isNaN(Number(nv))){ m.innerHTML='<span style="color:var(--red)">أدخلي المستحق الجديد</span>'; return; }
+  if(!reason){ m.innerHTML='<span style="color:var(--red)">السبب إلزامي</span>'; return; }
+  const newAmt=+Number(nv).toFixed(2);
+  const ci=clientInfo(code)||{}; const cname=ci.name||'';
+  const dirLbl=(dir==='we_owe')?'🟢 مسترد للعميل/إلغاء مطالبة':'🔴 مطالبة على العميل';
+  if(!confirm('📤 إرسال طلب تغيير مطالبة مستحقة للمالكة للاعتماد؟\n\n• العميل: '+(cname?cname+' · ':'')+code+'\n• المستحق الحالي: '+fmt(cur)+'\n• المستحق الجديد: '+fmt(newAmt)+'\n• الاتجاه: '+dirLbl+'\n• السبب: '+reason+'\n\n🔒 لن يتغيّر المستحق إلا بعد اعتماد المالكة.'))return;
+  m.style.color='var(--muted)'; m.textContent='⏳ جارٍ الإرسال...';
+  const summary='🧾 تغيير مطالبة مستحقة — '+(cname?cname+' · ':'')+code+' · من '+fmt(cur)+' إلى '+fmt(newAmt)+' · '+dirLbl;
+  const note='تغيير المستحق على العميل من '+fmt(cur)+' إلى '+fmt(newAmt)+' ('+dirLbl+') · السبب: '+reason+' · مقدّم الطلب: '+((CURRENT_USER&&CURRENT_USER.staff_name)||'—');
+  try{
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add_pending_movement',payload:{kind:'claim_adjust',scope:'client_claim',summary:summary,note:note,payload:{client_code:code,client_name:cname,old_amount:+cur.toFixed(2),new_amount:newAmt,direction:dir,reason:reason,by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}}})});
+    const j=await r.json(); if(j.error){ m.innerHTML='<span style="color:var(--red)">خطأ: '+esc(j.error)+'</span>'; return; }
+    m.innerHTML='<span style="color:var(--green)">✅ أُرسل الطلب للمالكة للاعتماد — يظهر في 🔔 الإشعارات. لن ينعكس على المستحقات حتى يُعتمد.</span>';
+    $('ca-new').value=''; $('ca-reason').value='';
+    setTimeout(load,1400);
+  }catch(e){ m.innerHTML='<span style="color:var(--red)">خطأ: '+esc(e.message)+'</span>'; }
 }
 // 📄 ملخّص مرتجع مقترح (PDF) للمراجعة والموافقة قبل التنفيذ — لا ينفّذ الإرجاع، لا يشترط إدخال المرتجع الفعلي
 function exportRefundReviewPDF(code){
@@ -7891,6 +7945,21 @@ async function resolveRefundMv(id,decision){
     alert(approve?'✅ اعتُمد الإرجاع وسُجّل فعلياً.':'❌ رُفض الطلب — بلا أي أثر.');
   }catch(e){ alert('خطأ: '+e.message); }
 }
+// 🧾 اعتماد/رفض تغيير مطالبة مستحقة على العميل — للمالكة فقط (set_movement_status)
+async function resolveClaimMv(id,decision){
+  const approve=(decision==='approve');
+  const mv=((DATA&&DATA.pendingMovements)||[]).find(m=>m.id===id)||{}; const c=mv.payload||{};
+  const dirLbl=(c.direction==='we_owe')?'🟢 مسترد للعميل/إلغاء مطالبة':'🔴 مطالبة على العميل';
+  if(approve){
+    if(!confirm('📋 اعتماد تغيير المستحق على العميل؟\n\n• العميل: '+(c.client_name?c.client_name+' · ':'')+(c.client_code||'')+'\n• من '+fmt(c.old_amount||0)+' إلى '+fmt(c.new_amount||0)+'\n• '+dirLbl+'\n• السبب: '+(c.reason||'—')+'\n\n🔒 بعد الاعتماد يظهر الرقم الجديد في قسم المستحقات.'))return;
+  } else { if(!confirm('رفض طلب تغيير المستحق؟ لن يتغيّر شي.'))return; }
+  try{
+    const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_movement_status',payload:{id:id,status:approve?'approved':'rejected',by:(CURRENT_USER&&CURRENT_USER.staff_name)||''}})});
+    const j=await r.json(); if(j.error){ alert('خطأ: '+j.error); return; }
+    await load();
+    alert(approve?'✅ اعتُمد تغيير المستحق — ظهر في قسم المستحقات.':'❌ رُفض الطلب — بلا أي أثر.');
+  }catch(e){ alert('خطأ: '+e.message); }
+}
 
 // ---- المستحقات: فلاتر + تنبيهات + تاريخ السداد ----
 function fillDueFilters(){
@@ -7907,6 +7976,9 @@ function renderDue(){
   const setl=settledByClient();
   const dset=(r)=>Number(setl[(r.client_code||'').toUpperCase()]||0);
   const effBal=(r)=>Number(r.balance||0)-dset(r);
+  // 🧾 تعديلات المطالبات المستحقة المعتمدة (من الإشعارات) — أحدث تعديل معتمد لكل عميل
+  const claimAdj={}; ((DATA&&DATA.pendingMovements)||[]).forEach(m=>{ if(m.kind!=='claim_adjust'||m.status!=='approved')return; const pl=m.payload||{}; const c=(pl.client_code||'').toUpperCase(); if(!c)return; const t=String(m.decided_at||m.created_at||m.id); if(!claimAdj[c]||t>claimAdj[c]._t) claimAdj[c]=Object.assign({},pl,{_t:t}); });
+  const _hasAdj=(r)=>!!claimAdj[(r.client_code||'').toUpperCase()];
   // تنبيهات السداد المستحقة الآن (عليه رصيد فعّال + حان تاريخ التنبيه الفعّال)
   const al=DATA.due.filter(r=>r.is_overdue && effBal(r)>1);
   // قاعدة صارمة: أي عميل عليه رصيد فعّال (>1) وما له تاريخ سداد محدّد = مستحق يجب تحديد تاريخه (غير المنبَّه عليهم أصلاً)
@@ -7943,6 +8015,7 @@ function renderDue(){
   const rows=DATA.due.filter(r=>{
     if(q && !((r.client_name||'').toLowerCase().includes(q)||(r.client_code||'').toLowerCase().includes(q))) return false;
     if(ag && r.agent_name!==ag) return false;
+    if(_hasAdj(r)) return true;   // 🧾 عميل له تعديل مطالبة معتمد يظهر دائماً (مهما كان الفلتر)
     const b=effBal(r);
     if(st==='owe' && !(b>1) && !(b< -1)) return false;   // العرض الافتراضي يشمل «عليه مستحق» + «دفع زيادة» (صفّه الأخضر ➕) ليظهر بالجدول لا بالبانر فقط
     if(st==='nodate' && !(b>1 && !r.due_date)) return false;
@@ -7969,6 +8042,11 @@ function renderDue(){
     esc(r.client_name||'')+clientNameWarn(r.client_code,_wmDue),esc(r.agent_name||''),
     '<span class="num">'+fmt(r.final_rate)+'</span>','<span class="num">'+fmt(r.amount_paid)+'</span>',
     (function(){ var s=dset(r), eb=effBal(r);
+      // 🧾 تعديل مطالبة مستحقة معتمد: يعرض الرقم الجديد + المستحق السابق كملاحظة + السبب
+      var _adj=claimAdj[(r.client_code||'').toUpperCase()];
+      if(_adj){ var _we=(_adj.direction==='we_owe'); return '<span class="num" style="font-weight:800;color:'+(_we?'#0e9d6a':'#b8860b')+'">'+(_we?'↩️ ':'🔴 ')+fmt(_adj.new_amount||0)+'</span>'
+        +'<br><span class="pill" style="background:#b8860b;color:#fff;font-size:9px">🧾 مطالبة مُعدّلة</span>'
+        +'<br><span style="font-size:9.5px;color:var(--muted)">المستحق السابق: '+fmt(_adj.old_amount||0)+' · '+(_we?'🟢 مسترد للعميل/إلغاء مطالبة':'🔴 على العميل')+(_adj.reason?('<br>السبب: '+esc(_adj.reason)):'')+'</span>'; }
       // ➕ دفع زيادة عن المطلوب: أخضر + إشارة زائد للمراجعة (بدل الرقم السالب)
       var out = (eb< -1)
         ? '<span class="num pos" style="font-weight:800" title="دفع أكثر من المطلوب — راجعي السبب">➕ '+fmt(Math.abs(eb))+'</span><br><span class="pill" style="background:#0e9d6a;color:#fff;font-size:9px;font-weight:700" title="دفع زيادة عن المطلوب — راجعي السبب">➕ دفع زيادة — راجعي</span>'
