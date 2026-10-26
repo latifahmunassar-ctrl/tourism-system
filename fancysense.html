@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v41';
+const FS_VER='v42';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -543,14 +543,22 @@ function renderSales(){
   // 🏧 إيداعات الصندوق لكل (تاريخ|فرع) لإظهارها في صف المبيعات
   const depMap={}; (DATA.atm_deposit||[]).forEach(dp=>{ const k=String(dp.dep_date||'').slice(0,10)+'|'+(dp.branch||''); (depMap[k]=depMap[k]||[]).push(dp); });
   const depcell=(x)=>{ const k=String(x.sale_date||'').slice(0,10)+'|'+(x.branch||''); const list=depMap[k]||[]; if(!list.length)return '<td class="mut">—</td>'; const tot=list.reduce((a,d)=>a+n(d.amount),0); return '<td class="num" style="color:#3aa0ff;font-weight:700">'+fmt(tot)+list.map(d=>'<div class="mini" style="color:#9aa">🏦 '+esc(d.bank||'—')+': '+fmt(d.amount)+'</div>').join('')+'</td>'; };
-  const rows=fRows.map(x=>{ const net=rate>0?n(x.total)/(1+(n(x.tax_rate)||taxRate())/100):n(x.total); const gd=n(x.total)-n(x.rewa_total);
+  // 🏬 عرض كل الفروع لكل يوم (حتى بصفر) — شبكة (تاريخ × فرع) من قائمة الفروع المُدارة
+  const _allBr=(DATA.lists||[]).filter(l=>l.category==='branch').map(l=>l.value);
+  const _recMap={}; s.forEach(x=>{ _recMap[String(x.sale_date||'').slice(0,10)+'|'+(x.branch||'')]=x; });
+  const _datesIR=[...new Set(s.filter(x=>{const d=String(x.sale_date||'').slice(0,10); if(F.from&&d<F.from)return false; if(F.to&&d>F.to)return false; return true;}).map(x=>String(x.sale_date||'').slice(0,10)))].sort().reverse();
+  const _grid=[]; _datesIR.forEach(d=>_allBr.forEach(br=>{ if(F.branch&&br!==F.branch)return; const x=_recMap[d+'|'+br]||{sale_date:d,branch:br,machine:0,cash:0,credit_sales:0,bank_transfer:0,rewa_machine:0,rewa_cash:0,rewa_credit:0,rewa_transfer:0,total:0,rewa_total:0,returns:0,transfers:[],credits:[],_empty:true};
+    if(F.onlyDep && !_depKeys.has(d+'|'+br))return;
+    if(F.onlyDiff && Math.abs(n(x.total)-n(x.rewa_total))<0.005)return;
+    _grid.push(x); }));
+  const rows=_grid.map(x=>{ const net=rate>0?n(x.total)/(1+(n(x.tax_rate)||taxRate())/100):n(x.total); const gd=n(x.total)-n(x.rewa_total);
     // أي بنود اختلفت عن REWA؟
     const diffs=[]; const _c=(e,r,nm)=>{ if(Math.abs(n(e)-n(r))>=0.005)diffs.push(nm); };
     _c(x.machine,x.rewa_machine,'المكنة'); _c(x.cash,x.rewa_cash,'نقدي'); _c(x.credit_sales,x.rewa_credit,'آجل'); _c(x.bank_transfer,x.rewa_transfer,'تحويل');
-    return '<tr>'+(diffs.length?' ':'')+'<td>'+esc(x.sale_date||'')+'</td><td>'+esc(x.branch||'')+'</td>'+
+    return '<tr'+(x._empty?' style="opacity:.6"':'')+'><td>'+esc(x.sale_date||'')+'</td><td>'+esc(x.branch||'')+(x._empty?' <span class="mini mut">(بلا مبيعات)</span>':'')+'</td>'+
       cc(x.machine,x.rewa_machine,x.note_machine)+cc(x.cash,x.rewa_cash,x.note_cash)+crcell(x)+tcell(x)+depcell(x)+
       '<td class="num" style="font-weight:800">'+fmt(x.total)+'</td><td class="num mut">'+fmt(x.rewa_total)+'</td><td class="num" style="font-weight:800;color:'+(Math.abs(gd)<0.005?'#2fd196':'#ff6b7a')+'">'+fmt(gd)+(diffs.length?'<div class="mini" style="color:#ff6b7a">🔴 '+diffs.join(' · ')+'</div>':'')+'</td>'+
-      '<td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button></td></tr>'; }).join('');
+      '<td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td>'+(x.id?'<button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button>':'<span class="mut mini">—</span>')+'</td></tr>'; }).join('');
   const anyF=!!(F.from||F.to||F.branch||F.pm);
   // 🏧 فورم إيداع الصندوق (كاش) من الفرع إلى البنك
   const cashDepForm='<div id="cashdep-form" class="panel hidden" style="border-color:#3aa0ff"><div class="row-between"><h3 style="margin:0;border-color:#3aa0ff">🏧 إيداع صندوق (كاش) — من الفرع إلى البنك</h3><button class="btn ghost sm" onclick="formToggle(\'cashdep-form\')" title="إغلاق النافذة">✕ إغلاق</button></div><div class="fgrid" style="max-width:700px">'+
