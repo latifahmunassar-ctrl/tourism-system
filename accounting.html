@@ -7556,7 +7556,8 @@ function renderPayForm(){
   const _bookedCostAll=(DATA.serviceLines||[]).filter(s=>(s.client_code||'').toUpperCase()===code).reduce((a,s)=>a+Number(s.final_rate_booked||0)*(Number(s.currency_rate)||1),0);
   const _actualProfitWhole=_bookedCostAll>0 ? _r2(Math.max(0, rate - _bookedCostAll)) : _progProfit;   // 🏢 الربح الفعلي للبرنامج
   // 💸 المرتجع = C − الربح الفعلي ؛ 📣 المطالبة = الربح الفعلي − C ؛ حيث C = (المدفوع المتاح − الرسوم) + هامش الخدمات المحتفَظ بها
-  const _rfC=_r2(_cancPaidAvail - _cancFee + _actualProfitWhole - _cancMargin);
+  // ⚠️ لا يتجاوز C أبداً (المدفوع − الرسوم): لا يُوزَّع (مرتجع + ربح محتفَظ) أكثر مما دفعه العميل فعلاً (مهم للدفع المقدّم مثل C26550)
+  const _rfC=_r2(Math.min(_cancPaidAvail - _cancFee + _actualProfitWhole - _cancMargin, _paidRemain - _cancFee));
   const _profitDefault=_actualProfitWhole;
   const _refundDefault=_r2(Math.max(0, Math.min(_rfC - _profitDefault, Math.max(0,_paidNet))));
   const _claimDefault=_r2(Math.max(0, _profitDefault - _rfC));
