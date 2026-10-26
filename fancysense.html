@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v42';
+const FS_VER='v43';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -272,6 +272,8 @@ function renderMatch(){
 function fsToggleDate(i){ const r=document.getElementById('mdet-'+i), a=document.getElementById('arw-'+i); if(r){ const sh=r.style.display==='none'; r.style.display=sh?'':'none'; if(a)a.textContent=sh?'▾':'▸'; } }
 // توسيع/طيّ تفاصيل بند في ملخّص المطابقة حسب النوع (تفاصيل الفروع)
 function fsToggleType(i){ const r=document.getElementById('tdet-'+i), a=document.getElementById('tarw-'+i); if(r){ const sh=r.style.display==='none'; r.style.display=sh?'':'none'; if(a)a.textContent=sh?'▾':'▸'; } }
+// توسيع/طيّ تفصيل الصندوق/الآجل بالفرع في «التحصيل والتحويل للشركة»
+function fsCollToggle(id){ const d=document.getElementById('cd-'+id), a=document.getElementById('ar-'+id); if(d){ const sh=d.style.display==='none'; d.style.display=sh?'':'none'; if(a)a.textContent=sh?'▾':'▸'; } }
 // 📄 تصدير تقرير مطابقة البنوك PDF حسب الفترة والحالة المحدّدة
 function fsExportMatchPDF(){
   const E=window._mExport; if(!E){ alert('افتحي المطابقة أولاً'); return; }
@@ -513,12 +515,26 @@ function renderSales(){
     (DATA.atm_deposit||[]).forEach(x=>{ if(cf&&cf.branch&&x.branch!==cf.branch)return; if(inr(x.dep_date))dep+=n(x.amount); });
     (DATA.credit_txn||[]).forEach(x=>{ if(inr(x.txn_date))ajel+=n(x.paid_amount); });
     return {dep,ajel}; };
-  const summ=(title,a,ignorePm,cf)=>{ const gd=a.total-a.rtotal; const show=(!ignorePm&&F.pm)?chans.filter(c=>c[1]===F.pm):chans;
+  const summ=(title,a,ignorePm,cf,idp)=>{ const gd=a.total-a.rtotal; const show=(!ignorePm&&F.pm)?chans.filter(c=>c[1]===F.pm):chans;
     const br=show.map(c=>{ const e=a.em[c[1]],r=a.rw[c[1]],d=e-r; return '<tr><td>'+c[0]+'</td><td class="num">'+fmt(e)+'</td><td class="num mut">'+fmt(r)+'</td><td class="num" style="color:'+(Math.abs(d)<0.005?'#2fd196':'#ff6b7a')+'">'+fmt(d)+'</td></tr>'; }).join('');
     const co=fsColl(cf);
-    const collBox='<div style="flex:1;min-width:230px"><h4 style="margin:0 0 8px;color:var(--accent2);font-size:13px">💼 التحصيل والتحويل للشركة</h4>'+
-      '<div class="kpi" style="margin-bottom:8px"><div class="ttl">🧾 استلامات الآجل</div><div class="val" style="font-size:17px;color:#2fd196">'+fmt(co.ajel)+' '+C+'</div></div>'+
-      '<div class="kpi"><div class="ttl">🏧 تحويل الصندوق لحسابات الشركة</div><div class="val" style="font-size:17px;color:#3aa0ff">'+fmt(co.dep)+' '+C+'</div></div></div>';
+    // 🏬 تفصيل الصندوق والآجل بالفرع (حسب نفس فلتر الفترة) — يظهر عند الضغط
+    const _inR2=(dd)=>{ dd=String(dd||'').slice(0,10); if(cf&&cf.from&&dd<cf.from)return false; if(cf&&cf.to&&dd>cf.to)return false; return true; };
+    const _cashBr={},_credBr={},_depBr={};
+    (DATA.daily_sales||[]).forEach(x=>{ if(!_inR2(x.sale_date))return; if(cf&&cf.branch&&x.branch!==cf.branch)return; const b=x.branch||'—'; _cashBr[b]=(_cashBr[b]||0)+n(x.cash); _credBr[b]=(_credBr[b]||0)+n(x.credit_sales); });
+    (DATA.atm_deposit||[]).forEach(x=>{ if(!_inR2(x.dep_date))return; if(cf&&cf.branch&&x.branch!==cf.branch)return; const b=x.branch||'—'; _depBr[b]=(_depBr[b]||0)+n(x.amount); });
+    const _brs2=[...new Set([...(DATA.lists||[]).filter(l=>l.category==='branch').map(l=>l.value), ...Object.keys(_cashBr), ...Object.keys(_depBr), ...Object.keys(_credBr)])].filter(b=> (cf&&cf.branch)? b===cf.branch : true);
+    const _cashRows=_brs2.map(b=>{ const c=_cashBr[b]||0,dp=_depBr[b]||0; if(c<0.005&&dp<0.005)return ''; return '<tr><td style="font-weight:700">🏪 '+esc(b)+'</td><td class="num">'+fmt(c)+'</td><td class="num" style="color:#3aa0ff">'+fmt(dp)+'</td><td class="num" style="color:'+((c-dp)>0.005?'#e0a83a':'#2fd196')+'">'+fmt(c-dp)+'</td></tr>'; }).filter(Boolean).join('');
+    const _credRows=_brs2.map(b=>{ const cr=_credBr[b]||0; if(cr<0.005)return ''; return '<tr><td style="font-weight:700">🏪 '+esc(b)+'</td><td class="num">'+fmt(cr)+'</td></tr>'; }).filter(Boolean).join('');
+    const ip=idp||'s';
+    const collBox='<div style="flex:1;min-width:260px"><h4 style="margin:0 0 8px;color:var(--accent2);font-size:13px">💼 التحصيل والتحويل للشركة <span style="font-size:10px;color:var(--muted);font-weight:500">— اضغطي للتفصيل بالفرع</span></h4>'+
+      // 📥 الصندوق
+      '<div class="kpi" style="margin-bottom:8px;cursor:pointer" onclick="fsCollToggle(\''+ip+'-cash\')"><div class="ttl">📥 إجمالي الصندوق <span id="ar-'+ip+'-cash" style="color:var(--accent)">▸</span></div><div class="val" style="font-size:17px">'+fmt(a.em.cash)+' '+C+'</div><div style="font-size:11px;color:var(--muted)">🏧 محوّل لبنوك الشركة: <b style="color:#3aa0ff">'+fmt(co.dep)+'</b> · المتبقّي: <b style="color:#e0a83a">'+fmt(a.em.cash-co.dep)+'</b></div>'+
+        '<div id="cd-'+ip+'-cash" style="display:none;margin-top:6px;border-top:1px solid rgba(128,128,128,.25);padding-top:5px"><table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted);font-size:10px"><th style="text-align:right">الفرع</th><th>الصندوق</th><th>محوّل للبنك</th><th>المتبقّي</th></tr></thead><tbody>'+(_cashRows||'<tr><td colspan="4" style="text-align:center;color:var(--muted)">—</td></tr>')+'</tbody></table></div></div>'+
+      // 📒 الآجل
+      '<div class="kpi" style="cursor:pointer" onclick="fsCollToggle(\''+ip+'-cr\')"><div class="ttl">📒 إجمالي الآجل (مبيعات آجلة) <span id="ar-'+ip+'-cr" style="color:var(--accent)">▸</span></div><div class="val" style="font-size:17px">'+fmt(a.em.credit)+' '+C+'</div><div style="font-size:11px;color:var(--muted)">🧾 المحصّل (تحصيلات): <b style="color:#2fd196">'+fmt(co.ajel)+'</b></div>'+
+        '<div id="cd-'+ip+'-cr" style="display:none;margin-top:6px;border-top:1px solid rgba(128,128,128,.25);padding-top:5px"><table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted);font-size:10px"><th style="text-align:right">الفرع</th><th>مبيعات آجلة</th></tr></thead><tbody>'+(_credRows||'<tr><td colspan="2" style="text-align:center;color:var(--muted)">—</td></tr>')+'</tbody></table><div style="font-size:10px;color:var(--muted);margin-top:4px">🧾 التحصيلات على مستوى الشركة (بلا فرع) = '+fmt(co.ajel)+' '+C+'</div></div></div>'+
+      '</div>';
     return '<div class="panel"><h3 style="margin:0 0 10px">'+title+' <span class="sub">('+a.n+' يوم)</span></h3>'+
       '<div class="kpis">'+kpi('إجمالي الموظفة',fmt(a.total)+' '+C)+kpi('إجمالي REWA',fmt(a.rtotal)+' '+C)+kpi('الفرق',fmt(gd)+' '+C,Math.abs(gd)<0.005?'pos':'neg')+kpi('المرتجعات',fmt(a.returns)+' '+C,'neg')+kpi('صافي بدون ضريبة',fmt(a.net)+' '+C)+'</div>'+
       '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">'+collBox+'<div style="flex:1;min-width:300px;max-width:540px"><div class="tbl-wrap"><table><thead><tr><th>البند</th><th>الموظفة</th><th>REWA</th><th>الفرق</th></tr></thead><tbody>'+br+'</tbody></table></div></div></div></div>';
@@ -582,8 +598,8 @@ function renderSales(){
     '<div class="sub" style="margin-top:6px">يظهر في تبويب «🏧 متابعة المكنة» كـ«دخل البنك».</div><div id="md-msg" class="msg"></div>'+
     '<button class="btn green" onclick="saveMachineDep()">💾 حفظ إيداع المكنة</button> <button class="btn ghost" onclick="formToggle(\'machinedep-form\')">إغلاق</button></div>';
   $('p-sales').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🧾 المبيعات اليومية <span class="sub">('+s.length+' سطر)</span></h3><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="formToggle(\'sales-form\')">➕ إضافة مبيعات + مصاريف اليوم</button><button class="btn" style="background:#3aa0ff" onclick="formToggle(\'cashdep-form\')">🏧 إيداع صندوق</button><button class="btn" style="background:#e0218a" onclick="formToggle(\'machinedep-form\');mdMachineInfo()">📠 إيداع مكنة</button><button class="btn" style="background:#0e9d6a" onclick="exportSalesPDF()">📄 تصدير PDF</button></div></div></div>'+form+cashDepForm+machineDepForm+
-    summ('📊 ملخّص الفترة'+(anyF?' المفلترة':''),fA,false,{from:F.from,to:F.to,branch:F.branch})+
-    summ('🗂️ ملخّص عام (كل السجلات)',gA,true,null)+
+    summ('📊 ملخّص الفترة'+(anyF?' المفلترة':''),fA,false,{from:F.from,to:F.to,branch:F.branch},'per')+
+    summ('🗂️ ملخّص عام (كل السجلات)',gA,true,null,'all')+
     filterBar+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المكنة<br><span class="mini">موظفة/REWA</span></th><th>نقدي<br><span class="mini">موظفة/REWA</span></th><th>آجل<br><span class="mini">موظفة/REWA</span></th><th>تحويل<br><span class="mini">موظفة/REWA</span></th><th>🏧 الإيداعات<br><span class="mini">+ البنك</span></th><th>إجمالي الموظفة</th><th>إجمالي REWA</th><th>الفرق</th><th>المرتجعات</th><th>صافي بدون ضريبة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="14" class="mut" style="text-align:center;padding:14px">لا نتائج للفلتر المحدّد</td></tr>')+'</tbody></table></div></div>';
 }
