@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v40';
+const FS_VER='v41';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -233,19 +233,45 @@ function renderMatch(){
       '<tr id="mdet-'+di+'" style="display:none"><td colspan="3" style="padding:8px 6px">'+brHtml+trHtml+'</td></tr>'
     );
   });
-  // ملخّص حسب النوع
+  // ملخّص حسب النوع + تفاصيل الفروع (موظفة/روا/بنك) القابلة للتمدّد
   const gF=TYPES.reduce((a,t)=>a+grandF[t],0),gA=TYPES.reduce((a,t)=>a+grandA[t],0);
   window._mExport={from:F.from,to:F.to,status:statusF,cur:C,types:TYPES.map(t=>({name:t,icon:TI[t],fs:grandF[t],az:grandA[t]})),daily:dailyExp};   // بيانات تصدير PDF
-  const sumRows=TYPES.map(t=>{ const dv=grandF[t]-grandA[t]; const hd=Math.abs(dv)>=0.5; return '<tr><td>'+TI[t]+' '+t+'</td><td class="num">'+fmt(grandF[t])+'</td><td class="num" style="color:#3aa0ff">'+fmt(grandA[t])+'</td><td class="num" style="font-weight:700;color:'+(hd?'#ff6b7a':'#2fd196')+'">'+(hd?fmt(dv):'✓')+'</td></tr>'; }).join('')+
+  // 🏬 تجميع بالفرع عبر الفترة: فانسي(موظفة) والبنك من fsM/azM، وروا من rewa_* في daily_sales
+  const brFs={},brAz={},brRewa={}; TYPES.forEach(t=>{brFs[t]={};brAz[t]={};brRewa[t]={};});
+  Object.keys(fsM).forEach(d=>Object.keys(fsM[d]).forEach(br=>TYPES.forEach(t=>{const v=get(fsM,d,br,t);if(v)brFs[t][br]=(brFs[t][br]||0)+v;})));
+  Object.keys(azM).forEach(d=>Object.keys(azM[d]).forEach(br=>TYPES.forEach(t=>{const v=get(azM,d,br,t);if(v)brAz[t][br]=(brAz[t][br]||0)+v;})));
+  const _addR=(t,br,v)=>{v=n(v);if(Math.abs(v)<0.0001)return;brRewa[t][br]=(brRewa[t][br]||0)+v;};
+  (DATA.daily_sales||[]).forEach(x=>{const d=String(x.sale_date||'').slice(0,10);if(!inr(d))return;const br=brCanon(x.branch);_addR('مكنة',br,x.rewa_machine);_addR('صندوق',br,x.rewa_cash);_addR('تحويل',br,x.rewa_transfer);_addR('آجل',br,x.rewa_credit);});
+  const _brL=['كيوسك','شوب','عمان'];
+  const _feeCell=(total,bank)=>{const diff=total-bank,pct=total>0.005?(diff/total*100):0;if(diff<=0.005)return '<span style="color:#2fd196;font-weight:700">🟢 لا رسوم</span>';const col=pct<=3?'#e0a83a':'#ff6b7a',warn=pct>3?' ⚠️':'';return '<span style="color:'+col+';font-weight:800">'+pct.toFixed(2)+'%'+warn+'</span> <span style="font-size:9px;color:var(--muted)">'+fmt(diff)+'</span>';};
+  const _TYM={'مكنة':{agg:1,fee:1,empL:'👩 المكنة (موظفة)',bankL:'🔵 دخل البنك',aggL:'إجمالي المكنة'},'آجل':{agg:1,fee:0,empL:'👩 الآجل (موظفة)',bankL:'🔵 المحصّل (البنك)',aggL:'إجمالي الآجل'},'صندوق':{agg:0},'تحويل':{agg:0}};
+  const _dc=(v,red)=>'<span style="font-weight:700;color:'+(Math.abs(v)<0.005?'#2fd196':(red?'#ff6b7a':'#e0a83a'))+'">'+(Math.abs(v)<0.005?'✓':fmt(v))+'</span>';
+  const fsTypeDetail=(t)=>{ const m=_TYM[t];
+    if(m.agg){ const brs=_brL.filter(b=>brFs[t][b]||brRewa[t][b]); const tEmp=brs.reduce((a,b)=>a+(brFs[t][b]||0),0),bank=grandA[t],N=brs.length||1; const bg='background:rgba(255,93,177,.06)';
+      let body=brs.map((b,i)=>{const emp=brFs[t][b]||0,rw=brRewa[t][b]||0;const agg=i===0?('<td class="num" rowspan="'+N+'" style="'+bg+';border-right:2px solid var(--accent)">'+fmt(tEmp)+'</td><td class="num" rowspan="'+N+'" style="'+bg+';color:#3aa0ff">'+fmt(bank)+'</td><td class="num" rowspan="'+N+'" style="'+bg+'">'+_dc(tEmp-bank,Math.abs(tEmp-bank)>=0.5)+'</td>'+(m.fee?('<td class="num" rowspan="'+N+'" style="'+bg+'">'+_feeCell(tEmp,bank)+'</td>'):'')):'';return '<tr><td style="font-weight:700">🏪 '+esc(b)+'</td><td class="num">'+fmt(emp)+'</td><td class="num" style="color:#c084fc">'+fmt(rw)+'</td><td class="num">'+_dc(emp-rw,0)+'</td>'+agg+'</tr>';}).join('');
+      if(!brs.length)body='<tr><td colspan="'+(m.fee?8:7)+'" class="mut" style="text-align:center">لا تفاصيل فروع</td></tr>';
+      return '<table style="font-size:11.5px;margin:0"><thead><tr style="font-size:10px;color:var(--muted)"><th style="text-align:right">الفرع</th><th>'+m.empL+'</th><th>🟣 روا</th><th>فرق(موظفة−روا)</th><th>'+m.aggL+'</th><th>'+m.bankL+'</th><th>الفرق</th>'+(m.fee?'<th>🏦 رسوم البنك</th>':'')+'</tr></thead><tbody>'+body+'</tbody></table>';
+    }
+    let brs=_brL.filter(b=>brFs[t][b]||brRewa[t][b]||brAz[t][b]); if(brFs[t]['غير محدّد']||brAz[t]['غير محدّد'])brs=brs.concat('غير محدّد');
+    let body=brs.map(b=>{const emp=brFs[t][b]||0,rw=brRewa[t][b]||0,bk=brAz[t][b]||0;return '<tr><td style="font-weight:700">🏪 '+esc(b)+'</td><td class="num">'+fmt(emp)+'</td><td class="num" style="color:#c084fc">'+fmt(rw)+'</td><td class="num" style="color:#3aa0ff">'+fmt(bk)+'</td><td class="num">'+_dc(emp-bk,Math.abs(emp-bk)>=0.5)+'</td></tr>';}).join('');
+    if(!brs.length)body='<tr><td colspan="5" class="mut" style="text-align:center">لا تفاصيل فروع</td></tr>';
+    const tE=brs.reduce((a,b)=>a+(brFs[t][b]||0),0),tR=brs.reduce((a,b)=>a+(brRewa[t][b]||0),0),tB=brs.reduce((a,b)=>a+(brAz[t][b]||0),0);
+    return '<table style="font-size:11.5px;margin:0"><thead><tr style="font-size:10px;color:var(--muted)"><th style="text-align:right">الفرع</th><th>👩 الموظفة</th><th>🟣 روا</th><th>🔵 البنك</th><th>الفرق(موظفة−بنك)</th></tr></thead><tbody>'+body+'<tr style="font-weight:800;border-top:1px solid rgba(128,128,128,.3)"><td>الإجمالي</td><td class="num">'+fmt(tE)+'</td><td class="num" style="color:#c084fc">'+fmt(tR)+'</td><td class="num" style="color:#3aa0ff">'+fmt(tB)+'</td><td class="num">'+_dc(tE-tB,Math.abs(tE-tB)>=0.5)+'</td></tr></tbody></table>';
+  };
+  const sumRows=TYPES.map((t,ti)=>{ const dv=grandF[t]-grandA[t]; const hd=Math.abs(dv)>=0.5;
+    return '<tr onclick="fsToggleType('+ti+')" style="cursor:pointer"><td style="font-weight:700"><span id="tarw-'+ti+'" style="color:var(--accent)">▸</span> '+TI[t]+' '+t+'</td><td class="num">'+fmt(grandF[t])+'</td><td class="num" style="color:#3aa0ff">'+fmt(grandA[t])+'</td><td class="num" style="font-weight:700;color:'+(hd?'#ff6b7a':'#2fd196')+'">'+(hd?fmt(dv):'✓')+'</td></tr>'
+      +'<tr id="tdet-'+ti+'" style="display:none"><td colspan="4" style="padding:5px 4px;background:rgba(128,128,128,.04)"><div class="tbl-wrap">'+fsTypeDetail(t)+'</div></td></tr>'; }).join('')+
     '<tr style="font-weight:800;border-top:2px solid rgba(128,128,128,.4)"><td>الإجمالي</td><td class="num">'+fmt(gF)+'</td><td class="num" style="color:#3aa0ff">'+fmt(gA)+'</td><td class="num" style="color:'+(Math.abs(gF-gA)>=0.5?'#ff6b7a':'#2fd196')+'">'+fmt(gF-gA)+'</td></tr>';
   $('p-match').innerHTML=
     '<div class="panel" style="border:1px solid var(--amber);background:rgba(217,138,0,.07)"><div style="font-weight:700;color:#e0a83a">📌 للعرض والمطابقة فقط — لا إدخال ولا تأثير على بنوك العز</div><div class="sub" style="margin-top:3px">يطابق ما سجّلته الموظفة في فانسي سنس مع <b>تقرير البنك</b> (سجلات فانسي في كاش إن/آوت العز)، حسب <b>الفرع ونوع الحركة</b>. 📥 الصندوق مفصّل بالفرع فيُطابَق مباشرة. 🏧 المكنة (POS) في تقرير البنك <b>مجمّعة بلا فرع</b> → تحت «غير محدّد». 🎪 «معارض» نشاط منفصل.</div></div>'+
     '<div class="panel"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));max-width:720px"><div class="fld"><label>📅 من تاريخ</label><input type="date" value="'+esc(F.from)+'" onchange="window._mFrom=this.value;renderMatch()"></div><div class="fld"><label>📅 إلى تاريخ</label><input type="date" value="'+esc(F.to)+'" onchange="window._mTo=this.value;renderMatch()"></div><div class="fld"><label>🔎 الحالة</label><select onchange="window._mStatus=this.value;renderMatch()"><option value="all"'+(statusF==='all'?' selected':'')+'>الكل</option><option value="matched"'+(statusF==='matched'?' selected':'')+'>✓ مطابق فقط</option><option value="unmatched"'+(statusF==='unmatched'?' selected':'')+'>⚠ غير مطابق فقط</option></select></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._mFrom=\'\';window._mTo=\'\';window._mStatus=\'all\';renderMatch()">مسح</button></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn" style="background:#c41d88;color:#fff" onclick="fsExportMatchPDF()">📄 تصدير PDF</button></div></div></div>'+
-    '<div class="panel"><h3 style="margin:0 0 10px">📊 ملخّص المطابقة حسب النوع</h3><div class="tbl-wrap"><table><thead><tr><th>النوع</th><th>فانسي</th><th>🔵 تقرير البنك</th><th>الفرق</th></tr></thead><tbody>'+sumRows+'</tbody></table></div></div>'+
+    '<div class="panel"><h3 style="margin:0 0 10px">📊 ملخّص المطابقة حسب النوع <span style="font-size:11px;color:var(--muted);font-weight:500">— اضغطي البند لتفاصيل الفروع (موظفة · روا · بنك)</span></h3><div class="tbl-wrap"><table><thead><tr><th>النوع</th><th>👩 فانسي</th><th>🔵 تقرير البنك</th><th>الفرق</th></tr></thead><tbody>'+sumRows+'</tbody></table></div></div>'+
     '<div class="panel"><h3>🔎 المطابقة اليومية — اضغطي اليوم للتفاصيل</h3><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرق (الوارد)</th><th>الحالة</th></tr></thead><tbody>'+(rows_html.join('')||'<tr><td colspan="3" class="mut" style="text-align:center;padding:14px">لا بيانات</td></tr>')+'</tbody></table></div><div class="sub" style="margin-top:5px">اضغطي اليوم لعرض التفاصيل (الفرع ونوع الحركة). «الفرق» = الوارد (مكنة+صندوق+تحويل+آجل) بلا مصروفات؛ «غير مطابق» إذا الفرق ≥ 0.5.</div></div>';
 }
 // توسيع/طيّ تفاصيل يوم في المطابقة
 function fsToggleDate(i){ const r=document.getElementById('mdet-'+i), a=document.getElementById('arw-'+i); if(r){ const sh=r.style.display==='none'; r.style.display=sh?'':'none'; if(a)a.textContent=sh?'▾':'▸'; } }
+// توسيع/طيّ تفاصيل بند في ملخّص المطابقة حسب النوع (تفاصيل الفروع)
+function fsToggleType(i){ const r=document.getElementById('tdet-'+i), a=document.getElementById('tarw-'+i); if(r){ const sh=r.style.display==='none'; r.style.display=sh?'':'none'; if(a)a.textContent=sh?'▾':'▸'; } }
 // 📄 تصدير تقرير مطابقة البنوك PDF حسب الفترة والحالة المحدّدة
 function fsExportMatchPDF(){
   const E=window._mExport; if(!E){ alert('افتحي المطابقة أولاً'); return; }
