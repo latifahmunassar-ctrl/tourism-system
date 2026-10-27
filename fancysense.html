@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v45';
+const FS_VER='v46';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -514,26 +514,29 @@ function renderSales(){
   const fA=agg(fRows), gA=agg(s);
   const chans=[['المكنة','machine'],['نقدي','cash'],['آجل','credit'],['تحويل','transfer']];
   // 💼 التحصيل والتحويل للشركة: استلامات الآجل (مدفوعات عملاء الآجل) + تحويل الصندوق (إيداعات الصندوق للبنك)
-  const fsColl=(cf)=>{ let dep=0,ajel=0; const inr=(d)=>{ d=String(d||'').slice(0,10); if(cf&&cf.from&&d<cf.from)return false; if(cf&&cf.to&&d>cf.to)return false; return true; };
+  const isCashPm=(p)=>{ p=String(p||'').trim(); return !p || /نقد|كاش|cash/i.test(p); };   // مصروف كاش يُخصم من الصندوق
+  const fsColl=(cf)=>{ let dep=0,ajel=0,exp=0; const inr=(d)=>{ d=String(d||'').slice(0,10); if(cf&&cf.from&&d<cf.from)return false; if(cf&&cf.to&&d>cf.to)return false; return true; };
     (DATA.atm_deposit||[]).forEach(x=>{ if(cf&&cf.branch&&x.branch!==cf.branch)return; if(inr(x.dep_date))dep+=n(x.amount); });
+    (DATA.expenses||[]).forEach(x=>{ if(cf&&cf.branch&&x.branch!==cf.branch)return; if(isCashPm(x.pay_method)&&inr(x.exp_date))exp+=n(x.amount); });
     (DATA.credit_txn||[]).forEach(x=>{ if(inr(x.txn_date))ajel+=n(x.paid_amount); });
-    return {dep,ajel}; };
+    return {dep,ajel,exp}; };
   const summ=(title,a,ignorePm,cf,idp)=>{ const gd=a.total-a.rtotal; const show=(!ignorePm&&F.pm)?chans.filter(c=>c[1]===F.pm):chans;
     const br=show.map(c=>{ const e=a.em[c[1]],r=a.rw[c[1]],d=e-r; return '<tr><td>'+c[0]+'</td><td class="num">'+fmt(e)+'</td><td class="num mut">'+fmt(r)+'</td><td class="num" style="color:'+(Math.abs(d)<0.005?'#2fd196':'#ff6b7a')+'">'+fmt(d)+'</td></tr>'; }).join('');
     const co=fsColl(cf);
     // 🏬 تفصيل الصندوق والآجل بالفرع (حسب نفس فلتر الفترة) — يظهر عند الضغط
     const _inR2=(dd)=>{ dd=String(dd||'').slice(0,10); if(cf&&cf.from&&dd<cf.from)return false; if(cf&&cf.to&&dd>cf.to)return false; return true; };
-    const _cashBr={},_credBr={},_depBr={};
+    const _cashBr={},_credBr={},_depBr={},_expBr={};
     (DATA.daily_sales||[]).forEach(x=>{ if(!_inR2(x.sale_date))return; if(cf&&cf.branch&&x.branch!==cf.branch)return; const b=x.branch||'—'; _cashBr[b]=(_cashBr[b]||0)+n(x.cash); _credBr[b]=(_credBr[b]||0)+n(x.credit_sales); });
     (DATA.atm_deposit||[]).forEach(x=>{ if(!_inR2(x.dep_date))return; if(cf&&cf.branch&&x.branch!==cf.branch)return; const b=x.branch||'—'; _depBr[b]=(_depBr[b]||0)+n(x.amount); });
-    const _brs2=[...new Set([...(DATA.lists||[]).filter(l=>l.category==='branch').map(l=>l.value), ...Object.keys(_cashBr), ...Object.keys(_depBr), ...Object.keys(_credBr)])].filter(b=> (cf&&cf.branch)? b===cf.branch : true);
-    const _cashRows=_brs2.map(b=>{ const c=_cashBr[b]||0,dp=_depBr[b]||0; if(c<0.005&&dp<0.005)return ''; return '<tr><td style="font-weight:700">🏪 '+esc(b)+'</td><td class="num">'+fmt(c)+'</td><td class="num" style="color:#3aa0ff">'+fmt(dp)+'</td><td class="num" style="color:'+((c-dp)>0.005?'#e0a83a':'#2fd196')+'">'+fmt(c-dp)+'</td></tr>'; }).filter(Boolean).join('');
+    (DATA.expenses||[]).forEach(x=>{ if(!_inR2(x.exp_date))return; if(cf&&cf.branch&&x.branch!==cf.branch)return; if(!isCashPm(x.pay_method))return; const b=x.branch||'—'; _expBr[b]=(_expBr[b]||0)+n(x.amount); });
+    const _brs2=[...new Set([...(DATA.lists||[]).filter(l=>l.category==='branch').map(l=>l.value), ...Object.keys(_cashBr), ...Object.keys(_depBr), ...Object.keys(_credBr), ...Object.keys(_expBr)])].filter(b=> (cf&&cf.branch)? b===cf.branch : true);
+    const _cashRows=_brs2.map(b=>{ const c=_cashBr[b]||0,ex=_expBr[b]||0,dp=_depBr[b]||0,net=c-ex,rem=net-dp; if(c<0.005&&dp<0.005&&ex<0.005)return ''; return '<tr><td style="font-weight:700">🏪 '+esc(b)+'</td><td class="num">'+fmt(c)+'</td><td class="num neg">'+fmt(ex)+'</td><td class="num">'+fmt(net)+'</td><td class="num" style="color:#3aa0ff">'+fmt(dp)+'</td><td class="num" style="font-weight:800;color:'+(rem>0.005?'#e0a83a':'#2fd196')+'">'+fmt(rem)+'</td></tr>'; }).filter(Boolean).join('');
     const _credRows=_brs2.map(b=>{ const cr=_credBr[b]||0; if(cr<0.005)return ''; return '<tr><td style="font-weight:700">🏪 '+esc(b)+'</td><td class="num">'+fmt(cr)+'</td></tr>'; }).filter(Boolean).join('');
     const ip=idp||'s';
     const collBox='<div style="flex:1;min-width:260px"><h4 style="margin:0 0 8px;color:var(--accent2);font-size:13px">💼 التحصيل والتحويل للشركة <span style="font-size:10px;color:var(--muted);font-weight:500">— اضغطي للتفصيل بالفرع</span></h4>'+
       // 📥 الصندوق
-      '<div class="kpi" style="margin-bottom:8px;cursor:pointer" onclick="fsCollToggle(\''+ip+'-cash\')"><div class="ttl">📥 إجمالي الصندوق <span id="ar-'+ip+'-cash" style="color:var(--accent)">▸</span></div><div class="val" style="font-size:17px">'+fmt(a.em.cash)+' '+C+'</div><div style="font-size:11px;color:var(--muted)">🏧 محوّل لبنوك الشركة: <b style="color:#3aa0ff">'+fmt(co.dep)+'</b> · المتبقّي: <b style="color:#e0a83a">'+fmt(a.em.cash-co.dep)+'</b></div>'+
-        '<div id="cd-'+ip+'-cash" style="display:none;margin-top:6px;border-top:1px solid rgba(128,128,128,.25);padding-top:5px"><table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted);font-size:10px"><th style="text-align:right">الفرع</th><th>الصندوق</th><th>محوّل للبنك</th><th>المتبقّي</th></tr></thead><tbody>'+(_cashRows||'<tr><td colspan="4" style="text-align:center;color:var(--muted)">—</td></tr>')+'</tbody></table></div></div>'+
+      '<div class="kpi" style="margin-bottom:8px;cursor:pointer" onclick="fsCollToggle(\''+ip+'-cash\')"><div class="ttl">📥 صندوق المبيعات (نقد) <span id="ar-'+ip+'-cash" style="color:var(--accent)">▸</span></div><div class="val" style="font-size:17px">'+fmt(a.em.cash)+' '+C+'</div><div style="font-size:11px;color:var(--muted);line-height:1.75">💸 − مصاريف الصندوق (كاش): <b style="color:#ff6b7a">'+fmt(co.exp)+'</b><br>💵 صافي الصندوق: <b>'+fmt(a.em.cash-co.exp)+'</b><br>🏧 − المحوّل لبنوك الشركة: <b style="color:#3aa0ff">'+fmt(co.dep)+'</b><br>💰 <b>المتبقّي بالصندوق الآن:</b> <b style="color:#e0a83a;font-size:13px">'+fmt(a.em.cash-co.exp-co.dep)+'</b></div>'+
+        '<div id="cd-'+ip+'-cash" style="display:none;margin-top:6px;border-top:1px solid rgba(128,128,128,.25);padding-top:5px"><table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted);font-size:10px"><th style="text-align:right">الفرع</th><th>الصندوق</th><th>− مصاريف</th><th>صافي</th><th>− محوّل</th><th>المتبقّي</th></tr></thead><tbody>'+(_cashRows||'<tr><td colspan="6" style="text-align:center;color:var(--muted)">—</td></tr>')+'</tbody></table></div></div>'+
       // 📒 الآجل
       '<div class="kpi" style="cursor:pointer" onclick="fsCollToggle(\''+ip+'-cr\')"><div class="ttl">📒 إجمالي الآجل (مبيعات آجلة) <span id="ar-'+ip+'-cr" style="color:var(--accent)">▸</span></div><div class="val" style="font-size:17px">'+fmt(a.em.credit)+' '+C+'</div><div style="font-size:11px;color:var(--muted)">🧾 المحصّل (تحصيلات): <b style="color:#2fd196">'+fmt(co.ajel)+'</b></div>'+
         '<div id="cd-'+ip+'-cr" style="display:none;margin-top:6px;border-top:1px solid rgba(128,128,128,.25);padding-top:5px"><table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted);font-size:10px"><th style="text-align:right">الفرع</th><th>مبيعات آجلة</th></tr></thead><tbody>'+(_credRows||'<tr><td colspan="2" style="text-align:center;color:var(--muted)">—</td></tr>')+'<tr style="font-weight:800;border-top:1px solid rgba(128,128,128,.3)"><td>الإجمالي</td><td class="num">'+fmt(a.em.credit)+'</td></tr></tbody></table>'+
