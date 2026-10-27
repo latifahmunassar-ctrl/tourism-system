@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v44';
+const FS_VER='v45';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -172,14 +172,14 @@ function renderMatch(){
   const BR=['كيوسك','شوب','عمان','معارض','غير محدّد'];
   const matchable=(br)=>br==='كيوسك'||br==='شوب'||br==='عمان';
   // تجميع: fsM[date][branch][type] و azM[date][branch][type]
-  const fsM={},azM={};
+  const fsM={},azM={},azMachDate={};   // azMachDate[يوم المبيعة] = {تاريخ دخول البنك الفعلي: المبلغ} — عرض فقط لتوثيق ترحيل المكنة
   const add=(M,d,br,t,v)=>{ if(!d)return; M[d]=M[d]||{}; M[d][br]=M[d][br]||{}; M[d][br][t]=(M[d][br][t]||0)+n(v); };
   (DATA.daily_sales||[]).forEach(x=>{ const d=String(x.sale_date||'').slice(0,10); if(!inr(d))return; const br=brCanon(x.branch); add(fsM,d,br,'مكنة',x.machine); let tr=n(x.bank_transfer); if(!tr&&Array.isArray(x.transfers))tr=x.transfers.reduce((a,t)=>a+n(t&&t.amount),0); add(fsM,d,br,'تحويل',tr); });
   (DATA.atm_deposit||[]).forEach(x=>{ const d=String(x.dep_date||'').slice(0,10); if(!inr(d))return; add(fsM,d,brCanon(x.branch),'صندوق',x.amount); });
   (DATA.expenses||[]).forEach(x=>{ const d=String(x.exp_date||'').slice(0,10); if(!inr(d))return; add(fsM,d,brCanon(x.branch),'مصروفات',x.amount); });
   // 📒 الآجل = المُحصَّل الفعلي (credit_txn.paid) — حركة بنكية على مستوى الشركة (بلا فرع) → «غير محدّد»؛ البيع الآجل اليومي ليس حركة بنكية فلا يُدرَج
   (DATA.credit_txn||[]).forEach(x=>{ const d=String(x.txn_date||'').slice(0,10); if(!inr(d))return; add(fsM,d,'غير محدّد','آجل',x.paid_amount); });
-  (DATA.acc_fancy||[]).forEach(x=>{ const c=azClass(x); if(!c)return; let d=String(x.tx_date||'').slice(0,10); if(c.type==='مكنة')d=shiftDay(d,-1);   /* مكنة البنك تنزل باليوم التالي → ترجيع يوم */ if(!inr(d))return; add(azM,d,c.branch,c.type,c.amount); });
+  (DATA.acc_fancy||[]).forEach(x=>{ const c=azClass(x); if(!c)return; const orig=String(x.tx_date||'').slice(0,10); let d=orig; if(c.type==='مكنة')d=shiftDay(d,-1);   /* مكنة البنك تنزل باليوم التالي → ترجيع يوم */ if(!inr(d))return; add(azM,d,c.branch,c.type,c.amount); if(c.type==='مكنة'){ azMachDate[d]=azMachDate[d]||{}; azMachDate[d][orig]=(azMachDate[d][orig]||0)+n(c.amount); } });
   // 🔄 تفاصيل الحوالات البنكية لكل تاريخ (فانسي + تقرير البنك) — تظهر تحت إجمالي التحويل
   const fsTr={},azTr={};
   (DATA.daily_sales||[]).forEach(x=>{ const d=String(x.sale_date||'').slice(0,10); if(!inr(d))return; const br=brCanon(x.branch);
@@ -204,7 +204,10 @@ function renderMatch(){
       // 💳 نسبة العمولة = ما أخذه البنك ÷ فانسي (المكنة تاخذ عمولة فيطلع البنك أقل)
       const pct = f>0.005 ? (dv/f*100) : null;
       const pctCell = (pct==null)?'<span class="mut">—</span>':('<span style="color:'+(pct>0?'#e0a83a':(pct<-0.01?'#ff6b7a':'#2fd196'))+';font-weight:700">'+pct.toFixed(2)+'%</span>');
-      return '<tr><td style="font-weight:700">'+TI[t]+' '+t+'</td><td class="num">'+cv(f)+'</td><td class="num" style="color:#3aa0ff">'+cv(a)+'</td><td class="num" style="font-weight:800;color:'+(hd?'#ff6b7a':'#2fd196')+(hd?';background:rgba(229,72,77,.08)':'')+'">'+(hd?fmt(dv):'✓')+'</td><td class="num">'+pctCell+'</td></tr>'; }).join('');
+      // 📅 تاريخ دخول المكنة الفعلي بالبنك (عرض فقط) — يُكتب تحت مبلغ البنك ليتأكّد أن مكنة اليوم طابقت دخول اليوم التالي
+      let bankCell=cv(a);
+      if(t==='مكنة'&&a>0.005&&azMachDate[d]){ const dm=(s)=>{const p=String(s).split('-');return p.length>=3?p[2]+'/'+p[1]:s;}; const lbl=Object.keys(azMachDate[d]).sort().map(dm).join('، '); bankCell+='<div style="font-size:9px;color:var(--muted);font-weight:600;margin-top:2px">📅 دخل البنك '+lbl+'</div>'; }
+      return '<tr><td style="font-weight:700">'+TI[t]+' '+t+'</td><td class="num">'+cv(f)+'</td><td class="num" style="color:#3aa0ff">'+bankCell+'</td><td class="num" style="font-weight:800;color:'+(hd?'#ff6b7a':'#2fd196')+(hd?';background:rgba(229,72,77,.08)':'')+'">'+(hd?fmt(dv):'✓')+'</td><td class="num">'+pctCell+'</td></tr>'; }).join('');
     const aggTable='<div style="font-weight:800;font-size:12px;color:var(--accent);margin:0 0 3px">📊 مجمّع — كل الفروع <span style="font-size:10px;color:var(--muted);font-weight:600">(المكنة والآجل — البنك يجمّعها بلا فرع · مكنة البنك مُرحَّلة ليوم المبيعة لأنها تنزل باليوم التالي)</span></div><div class="tbl-wrap"><table style="margin:0 0 12px;font-size:12px"><thead><tr style="font-size:11px;color:var(--muted)"><th style="text-align:right">النوع</th><th>فانسي</th><th>🔵 تقرير البنك</th><th>الفرق</th><th>💳 نسبة العمولة<br><span style="font-size:8.5px">ما أخذه البنك</span></th></tr></thead><tbody>'+aggRows+'</tbody></table></div>';
     // ===== قسم ب: مفصّل بالفرع (الصندوق + التحويل) =====
     const DET=['صندوق','تحويل'];
