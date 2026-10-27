@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v46';
+const FS_VER='v47';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -312,10 +312,12 @@ function renderMachine(){
   // المكنة (الموظفة) + روا لكل تاريخ/فرع
   const mByDate={};
   (DATA.daily_sales||[]).forEach(x=>{ const d=String(x.sale_date||'').slice(0,10); if(!inr(d))return; const br=(x.branch||'—'); mByDate[d]=mByDate[d]||{}; const o=mByDate[d][br]=mByDate[d][br]||{machine:0,rewa:0,note:''}; o.machine+=n(x.machine); o.rewa+=n(x.rewa_machine); const nt=x.note_machine||x.note; if(nt)o.note=(o.note?o.note+' · ':'')+String(nt); });
-  // دخل البنك: أولوية لإيداع المكنة الذي أدخلته الموظفة (fs_machine_deposit) ثم بيانات العز (مُرحَّلة يوماً)
-  const bankByDate={}, bankSrc={};
-  (DATA.machine_deposit||[]).forEach(x=>{ const d=String(x.dep_date||'').slice(0,10); if(!inr(d)||x.actual_bank==null)return; bankByDate[d]=(bankByDate[d]||0)+n(x.actual_bank); bankSrc[d]='fs'; });
-  (DATA.acc_fancy||[]).forEach(x=>{ const c=azClass(x); if(!c||c.type!=='مكنة')return; const d=shiftDay(String(x.tx_date||'').slice(0,10),-1); if(!inr(d)||bankSrc[d]==='fs')return; bankByDate[d]=(bankByDate[d]||0)+c.amount; });
+  // دخل البنك يدخل اليوم التالي للمبيعة → نرجّع تاريخ دخول البنك يوماً للخلف ليقابل يوم المبيعة (مبيعات D ↔ بنك D+1)
+  // الأولوية لإيداع المكنة من الشيت/الموظفة (fs_machine_deposit) ثم بيانات العز
+  const bankByDate={}, bankSrc={}, bankDates={};
+  const _addBD=(d,orig)=>{ (bankDates[d]=bankDates[d]||{})[orig]=1; };
+  (DATA.machine_deposit||[]).forEach(x=>{ if(x.actual_bank==null)return; const raw=String(x.dep_date||'').slice(0,10); const d=shiftDay(raw,-1); if(!inr(d))return; bankByDate[d]=(bankByDate[d]||0)+n(x.actual_bank); bankSrc[d]='fs'; _addBD(d,raw); });
+  (DATA.acc_fancy||[]).forEach(x=>{ const c=azClass(x); if(!c||c.type!=='مكنة')return; const raw=String(x.tx_date||'').slice(0,10); const d=shiftDay(raw,-1); if(!inr(d)||bankSrc[d]==='fs')return; bankByDate[d]=(bankByDate[d]||0)+c.amount; _addBD(d,raw); });
   const dates=[...new Set([...Object.keys(mByDate),...Object.keys(bankByDate)])].sort().reverse();
   // كل الفروع بمسمياتها الكاملة (كما في المبيعات) من قائمة الفروع المُدارة
   const BRANCHES=(DATA.lists||[]).filter(l=>l.category==='branch').map(l=>l.value);
@@ -324,6 +326,9 @@ function renderMachine(){
     const brs=[...new Set([...BRANCHES, ...Object.keys(mByDate[d]||{})])];   // جميع الفروع (حتى بلا بيانات لهذا اليوم)
     let totMac=0,totRewa=0; brs.forEach(br=>{ const o=mByDate[d]&&mByDate[d][br]; if(o){ totMac+=o.machine; totRewa+=o.rewa; } });
     const bank=bankByDate[d]||0, bankDiff=totMac-bank, pct=totMac>0.005?(bankDiff/totMac*100):null;
+    // 📅 تاريخ دخول البنك الفعلي (اليوم التالي) — عرض تحت المبلغ ليتأكّد أن مبيعات اليوم تقابل دخول اليوم التالي
+    const _dm=(s)=>{const p=String(s).split('-');return p.length>=3?p[2]+'/'+p[1]:s;};
+    const bkDays=bankDates[d]?Object.keys(bankDates[d]).sort().map(_dm).join('، '):'';
     gMac+=totMac; gRewa+=totRewa; gBank+=bank;
     // 🎨 لون مطابقة البنك: أخضر=البنك أكثر/مطابق · أصفر=أقل حتى ٣٪ · أحمر=أقل بأكثر من ٣٪ (تنبيه)
     const clr=(pct==null)?'#9aa':(pct<=0.005?'#2fd196':(pct<=3?'#e0a83a':'#ff6b7a')), alert=(pct!=null&&pct>3);
@@ -331,7 +336,7 @@ function renderMachine(){
     const N=Math.max(1,brs.length), sp=' rowspan="'+N+'"', bgT=(alert?'background:rgba(229,72,77,.09);':'background:rgba(58,160,255,.05);')+'vertical-align:middle;';
     const dateCell='<td'+sp+' style="font-weight:800;vertical-align:middle">📅 '+esc(d)+'</td>';
     // 📊 أعمدة ممتدة مقابل تفاصيل الفروع: مجموع المكنة · دخل البنك · الفرق · النسبة
-    const spanCells='<td'+sp+' class="num" style="font-weight:800;'+bgT+'">'+fmt(totMac)+'</td><td'+sp+' class="num" style="font-weight:800;color:#3aa0ff;'+bgT+'">'+fmt(bank)+'</td><td'+sp+' class="num" style="font-weight:800;color:'+clr+';'+bgT+'">'+bankDiffTxt+'</td><td'+sp+' class="num" style="font-weight:800;color:'+clr+';'+bgT+'">'+pctTxt+(alert?' ⚠️':'')+'</td>';
+    const spanCells='<td'+sp+' class="num" style="font-weight:800;'+bgT+'">'+fmt(totMac)+'</td><td'+sp+' class="num" style="font-weight:800;color:#3aa0ff;'+bgT+'">'+fmt(bank)+(bkDays?('<div style="font-size:9px;color:var(--muted);font-weight:600;margin-top:2px">📅 دخل '+bkDays+'</div>'):'')+'</td><td'+sp+' class="num" style="font-weight:800;color:'+clr+';'+bgT+'">'+bankDiffTxt+'</td><td'+sp+' class="num" style="font-weight:800;color:'+clr+';'+bgT+'">'+pctTxt+(alert?' ⚠️':'')+'</td>';
     if(!brs.length) return '<tr style="border-top:2px solid rgba(128,128,128,.3)">'+dateCell+spanCells+'<td class="mut" colspan="5" style="text-align:center">لا مبيعات مكنة مسجّلة</td></tr>';
     return brs.map((br,idx)=>{ const o=(mByDate[d]&&mByDate[d][br])||{machine:0,rewa:0,note:''}, diff=o.machine-o.rewa, hd=Math.abs(diff)>=0.005;
       const bc='<td style="font-weight:700">🏪 '+esc(br)+'</td><td class="num">'+fmt(o.machine)+'</td><td class="num" style="color:#3aa0ff">'+fmt(o.rewa)+'</td><td class="num" style="font-weight:700;color:'+(diff<-0.005?'#ff6b7a':'#2fd196')+'">'+(hd?fmt(diff):'✓')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(o.note||'')+'</td>';
