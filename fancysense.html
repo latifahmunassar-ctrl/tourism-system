@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v47';
+const FS_VER='v48';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -162,7 +162,7 @@ function renderMatch(){
   const statusF=window._mStatus||'all';   // all | matched | unmatched
   const inr=(d)=>{ d=String(d||'').slice(0,10); if(F.from&&d<F.from)return false; if(F.to&&d>F.to)return false; return true; };
   // المكنة تنزل البنك باليوم التالي → نرجّع تاريخ مكنة البنك يوماً للخلف ليطابق يوم المبيعة في فانسي
-  const shiftDay=(ds,k)=>{ const dt=new Date(ds+'T00:00:00'); if(isNaN(dt))return ds; dt.setDate(dt.getDate()+k); return dt.toISOString().slice(0,10); };
+  const shiftDay=(ds,k)=>{ ds=String(ds||'').slice(0,10); const p=ds.split('-'); if(p.length<3)return ds; const dt=new Date(Date.UTC(+p[0],+p[1]-1,+p[2])); if(isNaN(dt))return ds; dt.setUTCDate(dt.getUTCDate()+k); return dt.toISOString().slice(0,10); };
   // قوننة اسم الفرع (يوحّد مسمّيات فانسي والعز) → كيوسك / شوب / عمان / غير محدّد
   const brCanon=(s)=>{ s=String(s||''); if(/معرض|معارض/.test(s))return 'معارض'; if(/kiosk|كيوسك/i.test(s))return 'كيوسك'; if(/shop|شوب|store|محل/i.test(s))return 'شوب'; if(/salah|صلال/i.test(s)||/عمان(?![يى])/.test(s)||/(^|[^a-z])oman([^a-z]|$)/i.test(s))return 'عمان'; return 'غير محدّد'; };   /* معارض نشاط منفصل · «عمانى» جنسية ليست فرع عمان */
   // تصنيف حركة العز من حقل التفصيل → {الفرع, النوع, المبلغ}؛ تُستبعد صفوف التجربة
@@ -308,16 +308,16 @@ function renderMachine(){
   const inr=(d)=>{ d=String(d||'').slice(0,10); if(F.from&&d<F.from)return false; if(F.to&&d>F.to)return false; return true; };
   const brCanon=(s)=>{ s=String(s||''); if(/معرض|معارض/.test(s))return 'معارض'; if(/kiosk|كيوسك/i.test(s))return 'كيوسك'; if(/shop|شوب|store|محل/i.test(s))return 'شوب'; if(/salah|صلال/i.test(s)||/عمان(?![يى])/.test(s)||/(^|[^a-z])oman([^a-z]|$)/i.test(s))return 'عمان'; return 'غير محدّد'; };
   const azClass=(x)=>{ if(/^\s*test\s*$/i.test(String(x.details||'')))return null; const t=[x.details,x.description,x.more_details].map(v=>String(v||'')).join(' '); const out=n(x.out_raw),inc=n(x.in_raw); let type; if(out>0)type='مصروفات'; else if(/اجل|آجل/.test(t))type='آجل'; else if(/صندوق/.test(t))type='صندوق'; else if(/تحويل/.test(t))type='تحويل'; else type='مكنة'; return {branch:brCanon(t),type:type,amount:out>0?out:inc}; };
-  const shiftDay=(ds,k)=>{ const dt=new Date(ds+'T00:00:00'); if(isNaN(dt))return ds; dt.setDate(dt.getDate()+k); return dt.toISOString().slice(0,10); };
+  // ⚠️ حساب تواريخ آمن زمنياً (UTC بحت) — بلا new Date(local) حتى لا تزحلق المنطقة الزمنية (عُمان +4) يوماً إضافياً
+  const shiftDay=(ds,k)=>{ ds=String(ds||'').slice(0,10); const p=ds.split('-'); if(p.length<3)return ds; const dt=new Date(Date.UTC(+p[0],+p[1]-1,+p[2])); if(isNaN(dt))return ds; dt.setUTCDate(dt.getUTCDate()+k); return dt.toISOString().slice(0,10); };
   // المكنة (الموظفة) + روا لكل تاريخ/فرع
   const mByDate={};
   (DATA.daily_sales||[]).forEach(x=>{ const d=String(x.sale_date||'').slice(0,10); if(!inr(d))return; const br=(x.branch||'—'); mByDate[d]=mByDate[d]||{}; const o=mByDate[d][br]=mByDate[d][br]||{machine:0,rewa:0,note:''}; o.machine+=n(x.machine); o.rewa+=n(x.rewa_machine); const nt=x.note_machine||x.note; if(nt)o.note=(o.note?o.note+' · ':'')+String(nt); });
   // دخل البنك يدخل اليوم التالي للمبيعة → نرجّع تاريخ دخول البنك يوماً للخلف ليقابل يوم المبيعة (مبيعات D ↔ بنك D+1)
-  // الأولوية لإيداع المكنة من الشيت/الموظفة (fs_machine_deposit) ثم بيانات العز
+  // المصدر: شيت فانسي فقط (fs_machine_deposit = عمود «Deposted in Bank»). أُزيل مصدر العز لأنه غير موثوق (تصنيف خاطئ يضخّم الرقم فوق المبيعات)
   const bankByDate={}, bankSrc={}, bankDates={};
   const _addBD=(d,orig)=>{ (bankDates[d]=bankDates[d]||{})[orig]=1; };
   (DATA.machine_deposit||[]).forEach(x=>{ if(x.actual_bank==null)return; const raw=String(x.dep_date||'').slice(0,10); const d=shiftDay(raw,-1); if(!inr(d))return; bankByDate[d]=(bankByDate[d]||0)+n(x.actual_bank); bankSrc[d]='fs'; _addBD(d,raw); });
-  (DATA.acc_fancy||[]).forEach(x=>{ const c=azClass(x); if(!c||c.type!=='مكنة')return; const raw=String(x.tx_date||'').slice(0,10); const d=shiftDay(raw,-1); if(!inr(d)||bankSrc[d]==='fs')return; bankByDate[d]=(bankByDate[d]||0)+c.amount; _addBD(d,raw); });
   const dates=[...new Set([...Object.keys(mByDate),...Object.keys(bankByDate)])].sort().reverse();
   // كل الفروع بمسمياتها الكاملة (كما في المبيعات) من قائمة الفروع المُدارة
   const BRANCHES=(DATA.lists||[]).filter(l=>l.category==='branch').map(l=>l.value);
@@ -331,8 +331,10 @@ function renderMachine(){
     const bkDays=bankDates[d]?Object.keys(bankDates[d]).sort().map(_dm).join('، '):'';
     gMac+=totMac; gRewa+=totRewa; gBank+=bank;
     // 🎨 لون مطابقة البنك: أخضر=البنك أكثر/مطابق · أصفر=أقل حتى ٣٪ · أحمر=أقل بأكثر من ٣٪ (تنبيه)
-    const clr=(pct==null)?'#9aa':(pct<=0.005?'#2fd196':(pct<=3?'#e0a83a':'#ff6b7a')), alert=(pct!=null&&pct>3);
-    const pctTxt=(pct==null)?'—':((pct<=0.005&&pct>=-0.005)?'✓':pct.toFixed(2)+'%'), bankDiffTxt=Math.abs(bankDiff)>=0.005?fmt(bankDiff):'✓';
+    // 📌 «لم يُودع بعد» = فيه مبيعات مكنة ولا يوجد دخل بنك في اليوم التالي (الإيداع ما نزل بعد) — ليس خطأ عمولة، فلا تنبيه أحمر
+    const pending=(bank<0.005&&totMac>0.005);
+    const clr=pending?'#8aa0b5':((pct==null)?'#9aa':(pct<=0.005?'#2fd196':(pct<=3?'#e0a83a':'#ff6b7a'))), alert=(!pending&&pct!=null&&pct>3);
+    const pctTxt=pending?'⏳ لم يُودع':((pct==null)?'—':((pct<=0.005&&pct>=-0.005)?'✓':pct.toFixed(2)+'%')), bankDiffTxt=pending?'⏳':(Math.abs(bankDiff)>=0.005?fmt(bankDiff):'✓');
     const N=Math.max(1,brs.length), sp=' rowspan="'+N+'"', bgT=(alert?'background:rgba(229,72,77,.09);':'background:rgba(58,160,255,.05);')+'vertical-align:middle;';
     const dateCell='<td'+sp+' style="font-weight:800;vertical-align:middle">📅 '+esc(d)+'</td>';
     // 📊 أعمدة ممتدة مقابل تفاصيل الفروع: مجموع المكنة · دخل البنك · الفرق · النسبة
