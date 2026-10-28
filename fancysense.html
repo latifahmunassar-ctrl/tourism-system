@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v50';
+const FS_VER='v51';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -322,7 +322,7 @@ function renderMachine(){
   const dates=[...new Set([...Object.keys(mByDate),...Object.keys(bankByDate)])].sort().reverse();
   // كل الفروع بمسمياتها الكاملة (كما في المبيعات) من قائمة الفروع المُدارة
   const BRANCHES=(DATA.lists||[]).filter(l=>l.category==='branch').map(l=>l.value);
-  let gMac=0,gRewa=0,gBank=0;
+  let gMac=0,gRewa=0,gBank=0,gUndep=0,gUndepDays=0;
   const blocks=dates.map(d=>{
     const brs=[...new Set([...BRANCHES, ...Object.keys(mByDate[d]||{})])];   // جميع الفروع (حتى بلا بيانات لهذا اليوم)
     let totMac=0,totRewa=0; brs.forEach(br=>{ const o=mByDate[d]&&mByDate[d][br]; if(o){ totMac+=o.machine; totRewa+=o.rewa; } });
@@ -334,7 +334,7 @@ function renderMachine(){
     gMac+=totMac; gRewa+=totRewa; gBank+=bank;
     // 🎨 لون مطابقة البنك: أخضر=البنك أكثر/مطابق · أصفر=أقل حتى ٣٪ · أحمر=أقل بأكثر من ٣٪ (تنبيه)
     // 📌 «لم يُودع بعد» = فيه مبيعات مكنة ولا يوجد دخل بنك في اليوم التالي (الإيداع ما نزل بعد) — ليس خطأ عمولة، فلا تنبيه أحمر
-    const pending=(bank<0.005&&totMac>0.005);
+    const pending=(bank<0.005&&totMac>0.005); if(pending){gUndep+=totMac;gUndepDays++;}
     const clr=pending?'#8aa0b5':((pct==null)?'#9aa':(pct<=0.005?'#2fd196':(pct<=3?'#e0a83a':'#ff6b7a'))), alert=(!pending&&pct!=null&&pct>3);
     const pctTxt=pending?'⏳ لم يُودع':((pct==null)?'—':((pct<=0.005&&pct>=-0.005)?'✓':pct.toFixed(2)+'%')), bankDiffTxt=pending?'⏳':(Math.abs(bankDiff)>=0.005?fmt(bankDiff):'✓');
     const N=Math.max(1,brs.length), sp=' rowspan="'+N+'"', bgT=(alert?'background:rgba(229,72,77,.09);':'background:rgba(58,160,255,.05);')+'vertical-align:middle;';
@@ -347,11 +347,20 @@ function renderMachine(){
       return idx===0 ? ('<tr style="border-top:2px solid rgba(128,128,128,.3)">'+dateCell+spanCells+bc+'</tr>') : ('<tr>'+bc+'</tr>');
     }).join('');
   }).join('');
-  const gPct=gMac>0.005?((gMac-gBank)/gMac*100).toFixed(2)+'%':'—', gBankDiff=gMac-gBank;
+  const gBankDiff=gMac-gBank;
+  const gDepSales=Math.max(0,gMac-gUndep);                                   // مبيعات الأيام التي أُودعت فعلاً
+  const gComm=gDepSales-gBank;                                                // العمولة الحقيقية (على المُودع فقط)
+  const gCommPct=gDepSales>0.005?(gComm/gDepSales*100).toFixed(2)+'%':'—';
+  const _pr=(F.from||F.to)?('<span style="font-size:12px;color:var(--muted);font-weight:500">('+(F.from||'البداية')+' ← '+(F.to||'الآن')+')</span>'):'<span style="font-size:12px;color:var(--muted);font-weight:500">(كل الفترة)</span>';
   $('p-machine').innerHTML=
     '<div class="panel" style="border:1px solid var(--amber);background:rgba(217,138,0,.07)"><div style="font-weight:700;color:#e0a83a">🏧 متابعة المكنة (POS)</div><div class="sub" style="margin-top:3px">لكل يوم: المكنة لكل فرع (الموظفة) مقابل <b>تقرير روا</b> والفرق · ويقابلها بأعمدة ممتدة <b>مجموع المكنة</b> و<b>دخل البنك</b> (اليوم التالي) والفرق والنسبة.<br>🎨 <b>لون فرق البنك:</b> <span style="color:#2fd196">أخضر</span> = البنك أكثر/مطابق · <span style="color:#e0a83a">أصفر</span> = أقل حتى ٣٪ (عمولة عادية) · <span style="color:#ff6b7a">أحمر ⚠️</span> = أقل بأكثر من ٣٪ (تنبيه).</div></div>'+
     '<div class="panel"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));max-width:540px"><div class="fld"><label>📅 من</label><input type="date" value="'+esc(F.from)+'" onchange="window._mcFrom=this.value;renderMachine()"></div><div class="fld"><label>📅 إلى</label><input type="date" value="'+esc(F.to)+'" onchange="window._mcTo=this.value;renderMachine()"></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._mcFrom=\'\';window._mcTo=\'\';renderMachine()">مسح</button></div></div></div>'+
-    '<div class="panel"><div class="kpis">'+kpi('🏧 إجمالي المكنة',fmt(gMac)+' '+C)+kpi('🏦 دخل البنك فعلياً',fmt(gBank)+' '+C)+kpi('الفرق',fmt(gBankDiff)+' '+C,Math.abs(gBankDiff)<0.5?'pos':'neg')+kpi('💳 نسبة العمولة',gPct)+'</div></div>'+
+    '<div class="panel"><h3 style="margin:0 0 8px">📊 ملخّص الفترة '+_pr+'</h3><div class="kpis">'+
+      kpi('🏧 إجمالي مبيعات المكنة',fmt(gMac)+' '+C)+
+      kpi('🏦 المُودع بالبنك',fmt(gBank)+' '+C)+
+      kpi('⏳ لم يُودع بعد',fmt(gUndep)+' '+C+(gUndepDays?(' · '+gUndepDays+' يوم'):''),gUndep>0.005?'neg':'pos')+
+      kpi('💳 العمولة (على المُودع)',fmt(gComm)+' '+C+' · '+gCommPct)+
+      '</div><div class="sub" style="margin-top:7px">«العمولة» تُحسب على <b>الأيام المُودعة فقط</b> (مبيعاتها − ما دخل البنك)، فلا تتأثّر بأيام «لم يُودع». غيّري التاريخ فوق ليتحدّث الملخّص على الفترة.</div></div>'+
     '<div class="panel"><h3>🗓️ متابعة المكنة اليومية</h3><div class="tbl-wrap bf-scroll" style="max-height:620px"><table style="font-size:12px"><thead><tr><th>التاريخ</th><th style="background:#0e7a5a">📊 مجموع المكنة<br><span style="font-size:8px">كل الفروع</span></th><th style="background:#0e7a5a">🏦 دخل البنك<br><span style="font-size:8px">ت+1</span></th><th style="background:#0e7a5a">الفرق<br><span style="font-size:8px">مكنة−بنك</span></th><th style="background:#0e7a5a">💳 النسبة</th><th>الفرع</th><th>🏧 تقرير الموظفة</th><th>🔄 تقرير روا</th><th>الفرق<br><span style="font-size:8px;color:var(--muted)">موظفة−روا</span></th><th>📝 ملاحظة</th></tr></thead><tbody>'+(blocks||'<tr><td colspan="10" class="mut" style="text-align:center;padding:14px">لا بيانات</td></tr>')+'</tbody></table></div></div>';
 }
 
