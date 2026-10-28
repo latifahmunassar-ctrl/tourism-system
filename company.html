@@ -47,6 +47,30 @@
   .sug .lab{font-size:11.5px;color:#fff;background:var(--accent);border-radius:20px;padding:1px 9px;margin-right:6px}
   .sug .dist{font-size:13.5px;margin-top:4px}
   .gobtn{background:var(--brand);color:#fff;border:none;border-radius:11px;padding:12px;font-weight:700;cursor:pointer;width:100%}
+  /* ===== تبويب العروض ===== */
+  .of-filter{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 18px}
+  .of-chip{background:#fff;border:1px solid var(--line);color:var(--muted);border-radius:20px;padding:7px 14px;font-weight:700;font-size:12.5px;cursor:pointer}
+  .of-chip.on{background:var(--brand);border-color:var(--brand);color:#fff}
+  .of-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:18px}
+  .offer{border:1px solid var(--line);border-radius:18px;overflow:hidden;background:#fff;box-shadow:0 4px 18px rgba(14,157,106,.08);display:flex;flex-direction:column}
+  .of-head{padding:14px 16px;background:linear-gradient(135deg,rgba(14,157,106,.08),rgba(196,29,136,.07));border-bottom:1px solid var(--line)}
+  .of-dest{font-size:18px;font-weight:900;color:var(--brand)}
+  .of-price{font-size:15px;font-weight:800;color:var(--brand2);margin-top:4px}
+  .of-price small{font-weight:600;color:var(--muted);font-size:12px}
+  .of-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .of-mchip{font-size:11.5px;font-weight:700;border-radius:20px;padding:4px 11px}
+  .of-code{background:rgba(212,168,67,.18);color:#9a7520;border:1px solid rgba(212,168,67,.4)}
+  .of-exp{background:rgba(196,29,136,.1);color:var(--brand2);border:1px solid rgba(196,29,136,.25)}
+  .of-img{width:200px;max-width:80%;display:block;margin:16px auto 0;aspect-ratio:4/5;object-fit:cover;border-radius:13px;border:1px solid var(--line)}
+  .of-dl{display:flex;align-items:center;justify-content:center;gap:8px;margin:14px;padding:13px;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border-radius:13px;font-weight:800;font-size:14.5px;text-decoration:none;box-shadow:0 6px 16px rgba(14,157,106,.2)}
+  .of-empty{color:var(--muted);text-align:center;padding:30px 10px;font-size:13.5px}
+  /* ===== عروض عامة (قبل الدخول) ===== */
+  .offers-pub{text-align:center;margin:0 0 20px}
+  .offers-pill{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:24px;padding:12px 30px;font-weight:800;font-size:15.5px;cursor:pointer;box-shadow:0 6px 20px rgba(14,157,106,.25)}
+  .offers-pill:hover{filter:brightness(1.05)}
+  .offers-msg{max-width:460px;margin:14px auto 0;background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px 18px;box-shadow:0 4px 16px rgba(0,0,0,.05)}
+  .om-ttl{font-size:18px;font-weight:900;color:var(--brand)}
+  .om-sub{color:var(--muted);font-size:13.5px;margin:9px 0 15px;line-height:1.75}
   .nightsum{font-size:12.5px;color:var(--muted);margin-top:4px}.nightsum b{color:var(--brand)}
   .hintbox{background:#fff7e6;border:1px solid #f0dcae;color:#8a6d1f;border-radius:11px;padding:10px;font-size:12.5px;margin-top:6px;display:none}
   .cities .crow{display:grid;grid-template-columns:1fr 120px 40px;gap:10px;margin-bottom:10px;align-items:center}
@@ -131,6 +155,19 @@
 
 <div class="wrap">
 
+  <!-- ===== عروض عامة (قبل الدخول) ===== -->
+  <div class="offers-pub">
+    <button type="button" class="offers-pill" id="offersPill" onclick="toggleOffersPub()" data-i18n="of_pill">🎁 العروض / Offers</button>
+    <div class="offers-msg" id="offersMsg" style="display:none">
+      <div class="om-ttl" data-i18n="of_ready">🎁 عروضنا جاهزة 😊</div>
+      <div class="om-sub" data-i18n="of_contact">للاطّلاع على العروض الحالية وتحميلها، سجّل شركتك وتواصل مع الإدارة مباشرة.</div>
+      <a class="wa-btn" href="https://wa.me/601111136864" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01c-1.48 0-2.93-.4-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24 2.2 0 4.27.86 5.83 2.42a8.19 8.19 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.12-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.14.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.84-.2-.48-.41-.42-.56-.43-.14 0-.31-.01-.48-.01-.17 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z"/></svg>
+        <span data-i18n="of_wabtn">تواصل مع الإدارة للتسجيل</span>
+      </a>
+    </div>
+  </div>
+
   <div class="top-split">
 
   <!-- ===== DESTINATIONS ===== -->
@@ -204,6 +241,7 @@
       <div style="margin-inline-start:auto;display:flex;gap:8px;flex-wrap:wrap">
         <button class="out tab" id="btnHome" onclick="showRequest()">✈️ طلب برنامج / Request</button>
         <button class="out tab" id="btnRequests" onclick="showRequests()">📋 طلباتي / My requests</button>
+        <button class="out tab" id="btnOffers" onclick="showOffers()">🎁 العروض / Offers</button>
         <button class="out tab" id="btnStaff" onclick="showStaff()">👥 موظفيني / My Staff</button>
         <button class="out tab" id="btnProfile" onclick="showProfile()">🏢 معلوماتي / My info</button>
         <button class="out" onclick="logout()">خروج / Logout</button>
@@ -274,6 +312,15 @@
         <div><label class="rq-lbl">⏳ الحالة / Status</label><select id="fStatus" onchange="renderReqs()"><option value="">الكل / All</option><option value="working">جاري العمل / In progress</option><option value="sent">تم الرد / Ready</option></select></div>
       </div>
       <div id="reqsList"><div class="rq-empty">جارٍ التحميل…</div></div>
+    </div>
+
+    <!-- ===== العروض ===== -->
+    <div class="card" id="offersView" style="display:none">
+      <button type="button" class="pf-back" onclick="showRequest()">← رجوع لطلب البرنامج / Back to request</button>
+      <h2>🎁 العروض الحالية / Current Offers</h2>
+      <p class="sub">عروض جاهزة للشركاء — حمّل ملف العرض (PDF) وأعِد بيعه لعملائك. الملف محايد بدون أي بيانات عنّا.<br>Ready-made partner offers — download the PDF and resell to your clients.</p>
+      <div class="of-filter" id="ofFilter"></div>
+      <div class="of-grid" id="ofGrid"></div>
     </div>
 
     <form id="form">
@@ -442,8 +489,51 @@ function startEdit(){
   $('peErr').style.display='none';
 }
 function cancelEdit(){ $('profEdit').style.display='none'; $('profView').style.display='block'; }
-function hideViews(){ $('profileCard').style.display='none'; $('requestsView').style.display='none'; $('staffView').style.display='none'; $('form').style.display='none'; $('done').style.display='none'; }
-function setTab(id){ ['btnHome','btnRequests','btnStaff','btnProfile'].forEach(b=>{const e=$(b); if(e) e.classList.toggle('on', b===id);}); }
+function hideViews(){ $('profileCard').style.display='none'; $('requestsView').style.display='none'; $('staffView').style.display='none'; var ov=$('offersView'); if(ov) ov.style.display='none'; $('form').style.display='none'; $('done').style.display='none'; }
+function setTab(id){ ['btnHome','btnRequests','btnOffers','btnStaff','btnProfile'].forEach(b=>{const e=$(b); if(e) e.classList.toggle('on', b===id);}); }
+
+/* ===== العروض ===== */
+var OFFERS=[
+  { dest:'المغرب', flag:'🇲🇦', code:'XX-2026-139', expiry:'30 نوفمبر 2026',
+    price:'4,475', cur:'ريال سعودي', per:'للشخص',
+    img:'offers/morocco-XX-2026-139.jpg', pdf:'offers/morocco-XX-2026-139.pdf' }
+];
+function renderOffers(filter){
+  var grid=$('ofGrid'); if(!grid) return;
+  var list = filter ? OFFERS.filter(function(o){return o.dest===filter;}) : OFFERS;
+  if(!list.length){ grid.innerHTML='<div class="of-empty">لا توجد عروض حالياً لهذه الوجهة.</div>'; return; }
+  grid.innerHTML = list.map(function(o){
+    return '<div class="offer">'+
+      '<div class="of-head">'+
+        '<div class="of-dest">'+o.flag+' '+o.dest+'</div>'+
+        '<div class="of-price">'+o.price+' '+o.cur+' <small>'+o.per+'</small></div>'+
+        '<div class="of-meta">'+
+          '<span class="of-mchip of-code">🔖 كود العرض: '+o.code+'</span>'+
+          '<span class="of-mchip of-exp">⏳ صالح حتى: '+o.expiry+'</span>'+
+        '</div>'+
+      '</div>'+
+      '<img class="of-img" src="'+o.img+'" alt="عرض '+o.dest+'">'+
+      '<a class="of-dl" href="'+o.pdf+'" download>⬇️ تحميل العرض (PDF)</a>'+
+    '</div>';
+  }).join('');
+}
+function renderOffersFilter(){
+  var box=$('ofFilter'); if(!box) return;
+  var dests=[]; OFFERS.forEach(function(o){ if(dests.indexOf(o.dest)<0) dests.push(o.dest); });
+  var chips='<span class="of-chip on" data-d="" onclick="pickOfferFilter(this)">🌍 الكل</span>';
+  chips += dests.map(function(d){
+    var f=(OFFERS.find(function(o){return o.dest===d;})||{}).flag||'';
+    return '<span class="of-chip" data-d="'+d+'" onclick="pickOfferFilter(this)">'+f+' '+d+'</span>';
+  }).join('');
+  box.innerHTML=chips;
+}
+function pickOfferFilter(el){
+  document.querySelectorAll('#ofFilter .of-chip').forEach(function(c){c.classList.remove('on');});
+  el.classList.add('on');
+  renderOffers(el.getAttribute('data-d')||'');
+}
+function showOffers(){ hideViews(); $('offersView').style.display=''; setTab('btnOffers'); renderOffersFilter(); renderOffers(''); window.scrollTo({top:0,behavior:'smooth'}); }
+function toggleOffersPub(){ var m=document.getElementById('offersMsg'); if(m) m.style.display=(m.style.display==='none'?'':'none'); }
 function showProfile(){ cancelEdit(); hideViews(); $('profileCard').style.display=''; setTab('btnProfile'); window.scrollTo({top:0,behavior:'smooth'}); }
 function showRequest(){ hideViews(); $('form').style.display=''; setTab('btnHome'); populateReqStaff(); window.scrollTo({top:0,behavior:'smooth'}); }
 function showStaff(){ hideViews(); $('staffView').style.display=''; setTab('btnStaff'); loadCompanyStaff(true); window.scrollTo({top:0,behavior:'smooth'}); }
@@ -723,6 +813,10 @@ const I18N = {
   c_za:{ar:'جنوب أفريقيا',en:'South Africa'},c_om:{ar:'سلطنة عُمان',en:'Oman'},c_om_s:{ar:'مسقط • صلالة',en:'Muscat • Salalah'},
   d_branch:{ar:'📍 <b>فروعنا:</b> ماليزيا 🇲🇾 (كوالالمبور) &nbsp;·&nbsp; سلطنة عُمان 🇴🇲 🫰😌',en:'📍 <b>Our branches:</b> Malaysia 🇲🇾 (Kuala Lumpur) &nbsp;·&nbsp; Oman 🇴🇲 🫰😌'},
   d_wanum:{ar:'📞 للتواصل مع الإدارة: 00601111136864',en:'📞 Contact management: 00601111136864'},
+  of_pill:{ar:'🎁 العروض / Offers',en:'🎁 Offers'},
+  of_ready:{ar:'🎁 عروضنا جاهزة 😊',en:'🎁 Our offers are ready 😊'},
+  of_contact:{ar:'للاطّلاع على العروض الحالية وتحميلها، سجّل شركتك وتواصل مع الإدارة مباشرة.',en:'To view and download current offers, register your company and contact management directly.'},
+  of_wabtn:{ar:'تواصل مع الإدارة للتسجيل',en:'Contact management to register'},
   d_wabtn:{ar:'افتح محادثة واتساب',en:'Open WhatsApp Chat'},
   l_title:{ar:'دخول الشركات',en:'Company Login'},
   l_sub:{ar:'بالجوال وكلمة المرور اللي سجّلت فيها.',en:'Use your registered mobile & password.'},
