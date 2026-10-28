@@ -442,9 +442,10 @@ function showApp(){
   $('pMeta').textContent=[COMPANY.contact_name,COMPANY.contact_phone].filter(Boolean).join(' · ');
   if(COMPANY.logo_url) $('pLogo').innerHTML=`<img src="${esc(COMPANY.logo_url)}" alt="">`;
   else $('pLogo').textContent='🏢';
+  var ts=document.querySelector('.top-split'); if(ts) ts.style.display='none'; // الوجهات للزوّار فقط — تُخفى بعد الدخول
   renderProfile();
-  setTab('btnHome');
   loadCompanyStaff(false);   // حمّل أسماء الموظفين لتعبئة قائمة الطلب
+  showOffers();              // أول ما يدخل الشركة تفتح على تبويب العروض مباشرة
 }
 
 // ── company profile (view + edit → pending owner approval) ──
