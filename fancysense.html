@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v53';
+const FS_VER='v54';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -304,7 +304,7 @@ function fsExportMatchPDF(){
 // ===== 🏧 متابعة المكنة (POS) =====
 function renderMachine(){
   const C=cur();
-  const F={from:window._mcFrom||'',to:window._mcTo||''};
+  const F={from:window._mcFrom||'',to:window._mcTo||'',onlyPending:!!window._mcOnlyPending};
   const inr=(d)=>{ d=String(d||'').slice(0,10); if(F.from&&d<F.from)return false; if(F.to&&d>F.to)return false; return true; };
   const brCanon=(s)=>{ s=String(s||''); if(/معرض|معارض/.test(s))return 'معارض'; if(/kiosk|كيوسك/i.test(s))return 'كيوسك'; if(/shop|شوب|store|محل/i.test(s))return 'شوب'; if(/salah|صلال/i.test(s)||/عمان(?![يى])/.test(s)||/(^|[^a-z])oman([^a-z]|$)/i.test(s))return 'عمان'; return 'غير محدّد'; };
   const azClass=(x)=>{ if(/^\s*test\s*$/i.test(String(x.details||'')))return null; const t=[x.details,x.description,x.more_details].map(v=>String(v||'')).join(' '); const out=n(x.out_raw),inc=n(x.in_raw); let type; if(out>0)type='مصروفات'; else if(/اجل|آجل/.test(t))type='آجل'; else if(/صندوق/.test(t))type='صندوق'; else if(/تحويل/.test(t))type='تحويل'; else type='مكنة'; return {branch:brCanon(t),type:type,amount:out>0?out:inc}; };
@@ -335,6 +335,7 @@ function renderMachine(){
     // 🎨 لون مطابقة البنك: أخضر=البنك أكثر/مطابق · أصفر=أقل حتى ٣٪ · أحمر=أقل بأكثر من ٣٪ (تنبيه)
     // 📌 «لم يُودع بعد» = فيه مبيعات مكنة ولا يوجد دخل بنك في اليوم التالي (الإيداع ما نزل بعد) — ليس خطأ عمولة، فلا تنبيه أحمر
     const pending=(bank<0.005&&totMac>0.005); if(pending){gUndep+=totMac;gUndepDays++;}
+    if(F.onlyPending&&!pending)return '';   // فلتر: أيام بلا إيداع فقط (المجاميع تبقى على كل الفترة)
     const clr=pending?'#8aa0b5':((pct==null)?'#9aa':(pct<=0.005?'#2fd196':(pct<=3?'#e0a83a':'#ff6b7a'))), alert=(!pending&&pct!=null&&pct>3);
     const pctTxt=pending?'⏳ لم يُودع':((pct==null)?'—':((pct<=0.005&&pct>=-0.005)?'✓':pct.toFixed(2)+'%')), bankDiffTxt=pending?'⏳':(Math.abs(bankDiff)>=0.005?fmt(bankDiff):'✓');
     const N=Math.max(1,brs.length), sp=' rowspan="'+N+'"', bgT=(alert?'background:rgba(229,72,77,.09);':'background:rgba(58,160,255,.05);')+'vertical-align:middle;';
@@ -353,7 +354,7 @@ function renderMachine(){
   const _pr=(F.from||F.to)?('<span style="font-size:12px;color:var(--muted);font-weight:500">('+(F.from||'البداية')+' ← '+(F.to||'الآن')+')</span>'):'<span style="font-size:12px;color:var(--muted);font-weight:500">(كل الفترة)</span>';
   $('p-machine').innerHTML=
     '<div class="panel" style="border:1px solid var(--amber);background:rgba(217,138,0,.07)"><div style="font-weight:700;color:#e0a83a">🏧 متابعة المكنة (POS)</div><div class="sub" style="margin-top:3px">لكل يوم: المكنة لكل فرع (الموظفة) مقابل <b>تقرير روا</b> والفرق · ويقابلها بأعمدة ممتدة <b>مجموع المكنة</b> و<b>دخل البنك</b> (اليوم التالي) والفرق والنسبة.<br>🎨 <b>لون فرق البنك:</b> <span style="color:#2fd196">أخضر</span> = البنك أكثر/مطابق · <span style="color:#e0a83a">أصفر</span> = أقل حتى ٣٪ (عمولة عادية) · <span style="color:#ff6b7a">أحمر ⚠️</span> = أقل بأكثر من ٣٪ (تنبيه).</div></div>'+
-    '<div class="panel"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));max-width:540px"><div class="fld"><label>📅 من</label><input type="date" value="'+esc(F.from)+'" onchange="window._mcFrom=this.value;renderMachine()"></div><div class="fld"><label>📅 إلى</label><input type="date" value="'+esc(F.to)+'" onchange="window._mcTo=this.value;renderMachine()"></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._mcFrom=\'\';window._mcTo=\'\';renderMachine()">مسح</button></div></div></div>'+
+    '<div class="panel"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));max-width:540px"><div class="fld"><label>📅 من</label><input type="date" value="'+esc(F.from)+'" onchange="window._mcFrom=this.value;renderMachine()"></div><div class="fld"><label>📅 إلى</label><input type="date" value="'+esc(F.to)+'" onchange="window._mcTo=this.value;renderMachine()"></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._mcFrom=\'\';window._mcTo=\'\';renderMachine()">مسح</button></div><div class="fld" style="grid-column:1/-1"><label style="visibility:hidden">.</label><button class="btn '+(F.onlyPending?'red':'ghost')+'" style="width:100%" onclick="window._mcOnlyPending=!window._mcOnlyPending;renderMachine()">'+(F.onlyPending?'✅ عرض الكل':'⏳ أيام بلا إيداع فقط')+'</button></div></div></div>'+
     '<div class="panel"><h3 style="margin:0 0 8px">📊 ملخّص الفترة '+_pr+'</h3><div class="kpis">'+
       kpi('🏧 إجمالي مبيعات المكنة',fmt(gMac)+' '+C)+
       kpi('🏦 المُودع بالبنك',fmt(gBank)+' '+C)+
