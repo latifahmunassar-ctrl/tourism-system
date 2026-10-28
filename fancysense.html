@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v55';
+const FS_VER='v56';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -317,7 +317,7 @@ function renderMachine(){
   //           (2) احتياط = بنك العز (acc_fancy) للأيام التي لا إيداع لها في الشيت فقط — مزحلق يوماً (تاريخ البنك D+1 ↔ مبيعات D)، لأن العز يؤرّخ بيوم الدخول الفعلي
   const fsByDate={}, azByDate={}, azDates={};
   (DATA.machine_deposit||[]).forEach(x=>{ if(x.actual_bank==null)return; const d=String(x.dep_date||'').slice(0,10); if(!inr(d))return; fsByDate[d]=(fsByDate[d]||0)+n(x.actual_bank); });
-  (DATA.acc_fancy||[]).forEach(x=>{ const c=azClass(x); if(!c||c.type!=='مكنة')return; const raw=String(x.tx_date||'').slice(0,10); const d=shiftDay(raw,-1); if(!inr(d))return; azByDate[d]=(azByDate[d]||0)+c.amount; (azDates[d]=azDates[d]||{})[raw]=1; });
+  (DATA.acc_fancy||[]).forEach(x=>{ const c=azClass(x); if(!c||c.type!=='مكنة')return; const txt=[x.details,x.description,x.more_details,x.bank_name,x.bank_ref].map(v=>String(v||'')).join(' '); if(!/pos/i.test(txt))return;   /* 🏧 إيداعات المكنة في العز اسمها POS — نجيبها فقط ونتجاهل باقي الحركات */ const raw=String(x.tx_date||'').slice(0,10); const d=shiftDay(raw,-1); if(!inr(d))return; azByDate[d]=(azByDate[d]||0)+c.amount; (azDates[d]=azDates[d]||{})[raw]=1; });
   const dates=[...new Set([...Object.keys(mByDate),...Object.keys(fsByDate),...Object.keys(azByDate)])].sort().reverse();
   // كل الفروع بمسمياتها الكاملة (كما في المبيعات) من قائمة الفروع المُدارة
   const BRANCHES=(DATA.lists||[]).filter(l=>l.category==='branch').map(l=>l.value);
