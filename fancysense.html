@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v52';
+const FS_VER='v53';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -357,7 +357,7 @@ function renderMachine(){
     '<div class="panel"><h3 style="margin:0 0 8px">📊 ملخّص الفترة '+_pr+'</h3><div class="kpis">'+
       kpi('🏧 إجمالي مبيعات المكنة',fmt(gMac)+' '+C)+
       kpi('🏦 المُودع بالبنك',fmt(gBank)+' '+C)+
-      kpi('💳 الفرق (عمولة + فروقات توقيت)',fmt(gBankDiff)+' '+C+' · '+gDiffPct,(gMac>0.005&&Math.abs(gBankDiff)/gMac>0.05)?'neg':'pos')+
+      kpi('💳 الفرق (عمولة + فروقات توقيت)',fmt(gBankDiff)+' '+C+' · '+gDiffPct,'neg')+
       kpi('⏳ أيام بلا إيداع مسجّل',gUndepDays+' يوم'+(gUndep>0.005?(' · '+fmt(gUndep)+' '+C):''))+
       '</div><div class="sub" style="margin-top:7px"><b>الفرق</b> = إجمالي المبيعات − المُودع بالبنك (= العمولة + أي فروقات توقيت). «أيام بلا إيداع مسجّل» للمتابعة فقط — فلوسها قد تكون أُودعت ضمن دفعة يوم آخر، فلا تُطرح من الحساب. غيّري التاريخ فوق ليتحدّث الملخّص.</div></div>'+
     '<div class="panel"><h3>🗓️ متابعة المكنة اليومية</h3><div class="tbl-wrap bf-scroll" style="max-height:620px"><table style="font-size:12px"><thead><tr><th>التاريخ</th><th style="background:#0e7a5a">📊 مجموع المكنة<br><span style="font-size:8px">كل الفروع</span></th><th style="background:#0e7a5a">🏦 دخل البنك<br><span style="font-size:8px">ت+1</span></th><th style="background:#0e7a5a">الفرق<br><span style="font-size:8px">مكنة−بنك</span></th><th style="background:#0e7a5a">💳 النسبة</th><th>الفرع</th><th>🏧 تقرير الموظفة</th><th>🔄 تقرير روا</th><th>الفرق<br><span style="font-size:8px;color:var(--muted)">موظفة−روا</span></th><th>📝 ملاحظة</th></tr></thead><tbody>'+(blocks||'<tr><td colspan="10" class="mut" style="text-align:center;padding:14px">لا بيانات</td></tr>')+'</tbody></table></div></div>';
