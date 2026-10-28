@@ -91,6 +91,33 @@
   .pf-actions{display:flex;gap:10px;margin-top:8px}
   .pf-save{background:var(--brand);color:#fff;border:none;border-radius:11px;padding:12px;font-weight:700;cursor:pointer;flex:1}
   .pf-cancel{background:#f1f4f3;color:var(--muted);border:none;border-radius:11px;padding:12px 18px;font-weight:700;cursor:pointer}
+  /* ===== قسم الوجهات ===== */
+  .dest{background:linear-gradient(135deg,var(--brand),var(--brand2));border-radius:22px;padding:24px 18px;margin-top:22px;color:#fff;box-shadow:0 10px 30px rgba(14,157,106,.26);position:relative;overflow:hidden}
+  .dest::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 15% 15%,rgba(212,168,67,.22),transparent 45%),radial-gradient(circle at 85% 90%,rgba(255,255,255,.12),transparent 45%);pointer-events:none}
+  .dest h2{margin:0 0 4px;font-size:21px;text-align:center;position:relative;text-shadow:0 2px 10px rgba(0,0,0,.2)}
+  .dest .ds{text-align:center;opacity:.92;font-size:13px;margin-bottom:18px;position:relative}
+  .dest .ds b{color:var(--gold)}
+  .incl{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-bottom:18px;position:relative}
+  .incl .lbl{width:100%;text-align:center;font-weight:900;font-size:18px;color:#fff;margin-bottom:9px;letter-spacing:.4px;text-shadow:0 2px 8px rgba(0,0,0,.25)}
+  .incl .lbl span{color:var(--gold)}
+  .ichip{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);border-radius:20px;padding:7px 13px;font-size:12.5px;font-weight:700}
+  .dest-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:9px;position:relative}
+  .dchip{background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.22);border-radius:13px;padding:11px 7px;text-align:center;font-weight:700;font-size:12.5px;transition:transform .15s,background .15s}
+  .dchip:hover{transform:translateY(-2px);background:rgba(255,255,255,.22)}
+  .dchip .fl{font-size:22px;display:block;margin-bottom:4px;line-height:1}
+  .dchip small{display:block;font-weight:500;opacity:.82;font-size:10px;margin-top:2px}
+  .branches{margin-top:18px;background:rgba(212,168,67,.2);border:1px solid rgba(212,168,67,.55);border-radius:15px;padding:13px 15px;text-align:center;position:relative;font-size:13.5px}
+  .branches b{color:#ffe7ad}
+  .wa-wrap{text-align:center;position:relative;margin-top:16px}
+  .wa-btn{display:inline-flex;align-items:center;gap:9px;background:#25D366;color:#fff;font-weight:800;font-size:14.5px;padding:12px 22px;border-radius:30px;text-decoration:none;box-shadow:0 6px 20px rgba(37,211,102,.45);transition:transform .15s,box-shadow .15s}
+  .wa-btn:hover{transform:translateY(-2px);box-shadow:0 9px 26px rgba(37,211,102,.55)}
+  .wa-btn svg{width:23px;height:23px;fill:#fff;flex-shrink:0}
+  .wa-num{font-size:16px;font-weight:800;color:#fff;margin-bottom:10px;direction:ltr;letter-spacing:.6px;text-shadow:0 2px 8px rgba(0,0,0,.22)}
+  /* تقسيم جانبي: الدخول يمين · الوجهات يسار */
+  .top-split{display:flex;gap:18px;align-items:flex-start;margin-top:22px;flex-wrap:wrap}
+  .top-split > #loginForm{order:1;flex:1 1 320px;max-width:430px;margin:0 !important}
+  .top-split > .dest{order:2;flex:1.5 1 360px;margin:0 !important}
+  @media(max-width:780px){ .top-split{flex-direction:column} .top-split > #loginForm,.top-split > .dest{flex:none;width:100%;max-width:none} }
 </style>
 </head>
 <body>
@@ -101,8 +128,57 @@
 
 <div class="wrap">
 
+  <div class="top-split">
+
+  <!-- ===== DESTINATIONS ===== -->
+  <div class="dest">
+    <h2>🌍 وجهاتنا حول العالم</h2>
+    <div class="ds">نغطّي <b>٢٥+ وجهة عالمية</b> — تعاونوا معنا مباشرة لأفضل الأسعار والبرامج<br><span style="font-size:.86em;opacity:.85">We cover 25+ destinations — partner with us directly</span></div>
+    <div class="incl">
+      <span class="lbl">✨ بكجات شاملة ✨</span>
+      <span class="ichip">🏨 فنادق</span>
+      <span class="ichip">🗺️ جولات سياحية</span>
+      <span class="ichip">🚐 استقبال وتوصيل</span>
+      <span class="ichip">✈️ طيران داخلي</span>
+      <span class="ichip">🚆 قطار</span>
+    </div>
+    <div class="dest-grid">
+      <div class="dchip"><span class="fl">🇲🇾</span>ماليزيا</div>
+      <div class="dchip"><span class="fl">🇮🇩</span>إندونيسيا</div>
+      <div class="dchip"><span class="fl">🇹🇭</span>تايلاند</div>
+      <div class="dchip"><span class="fl">🇱🇰</span>سريلانكا</div>
+      <div class="dchip"><span class="fl">🇲🇻</span>المالديف</div>
+      <div class="dchip"><span class="fl">🇻🇳</span>فيتنام</div>
+      <div class="dchip"><span class="fl">🇸🇬</span>سنغافورة</div>
+      <div class="dchip"><span class="fl">🇹🇷</span>تركيا</div>
+      <div class="dchip"><span class="fl">🇬🇪</span>جورجيا</div>
+      <div class="dchip"><span class="fl">🇦🇿</span>أذربيجان</div>
+      <div class="dchip"><span class="fl">🇦🇲</span>أرمينيا</div>
+      <div class="dchip"><span class="fl">🇰🇿</span>كازاخستان</div>
+      <div class="dchip"><span class="fl">🇷🇺</span>روسيا</div>
+      <div class="dchip"><span class="fl">🇨🇳</span>الصين</div>
+      <div class="dchip"><span class="fl">🇦🇹</span>النمسا</div>
+      <div class="dchip"><span class="fl">🇵🇱</span>بولندا</div>
+      <div class="dchip"><span class="fl">🇧🇦</span>البوسنة</div>
+      <div class="dchip"><span class="fl">🇦🇱</span>ألبانيا</div>
+      <div class="dchip"><span class="fl">🇲🇦</span>المغرب</div>
+      <div class="dchip"><span class="fl">🇪🇬</span>مصر</div>
+      <div class="dchip"><span class="fl">🇲🇺</span>موريشيوس</div>
+      <div class="dchip"><span class="fl">🇿🇦</span>جنوب أفريقيا</div>
+      <div class="dchip"><span class="fl">🇴🇲</span>سلطنة عُمان<small>مسقط • صلالة</small></div>
+    </div>
+    <div class="branches">📍 <b>فروعنا:</b> ماليزيا 🇲🇾 (كوالالمبور) &nbsp;·&nbsp; سلطنة عُمان 🇴🇲 🫰😌</div>
+    <div class="wa-wrap">
+      <div class="wa-num">📞 للتواصل مع الإدارة: 00601111136864</div>
+      <a class="wa-btn" href="https://wa.me/601111136864" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01c-1.48 0-2.93-.4-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24 2.2 0 4.27.86 5.83 2.42a8.19 8.19 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.12-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.14.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.84-.2-.48-.41-.42-.56-.43-.14 0-.31-.01-.48-.01-.17 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z"/></svg>
+        افتح محادثة واتساب
+      </a>
+    </div>
+  </div>
+
   <!-- ===== LOGIN ===== -->
-  <form id="loginForm" class="card" style="max-width:420px;margin:22px auto 0">
+  <form id="loginForm" class="card">
     <h2>دخول الشركات / Company Login</h2>
     <div class="sub">بالجوال وكلمة المرور اللي سجّلت فيها. · Use your registered mobile & password.</div>
     <div class="field"><label>رقم الجوال / Mobile <span class="req">*</span></label><input id="lphone" inputmode="tel" placeholder="+9665..." required></div>
@@ -111,6 +187,8 @@
     <div class="err" id="loginErr"></div>
     <div class="note">شركة جديدة؟ <a href="company-register.html">سجّل حساب</a> · New company? <a href="company-register.html">Register</a></div>
   </form>
+
+  </div><!-- /top-split -->
 
   <!-- ===== APP (after login) ===== -->
   <div id="app" style="display:none">
