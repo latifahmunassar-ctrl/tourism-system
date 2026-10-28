@@ -118,12 +118,15 @@
   .top-split > #loginForm{order:1;flex:1 1 320px;max-width:430px;margin:0 !important}
   .top-split > .dest{order:2;flex:1.5 1 360px;margin:0 !important}
   @media(max-width:780px){ .top-split{flex-direction:column} .top-split > #loginForm,.top-split > .dest{flex:none;width:100%;max-width:none} }
+  .lang-tgl{position:fixed;top:12px;inset-inline-start:12px;z-index:60;background:rgba(255,255,255,.96);color:var(--brand);border:1px solid var(--line);border-radius:22px;padding:8px 15px;font-weight:800;font-size:13px;cursor:pointer;box-shadow:0 3px 14px rgba(0,0,0,.16)}
+  .lang-tgl:hover{background:#fff}
 </style>
 </head>
 <body>
+<button class="lang-tgl" id="langTgl" type="button" onclick="toggleLang()">🌐 English</button>
 <header>
   <div class="logo">MADAR <span>TRIP</span></div>
-  <p id="hsub">نمو أسرع يبدأ من عرض أسرع<br><span style="font-size:.82em;opacity:.85">Faster growth starts with a faster offer</span></p>
+  <p id="hsub" data-i18n="h_sub">نمو أسرع يبدأ من عرض أسرع</p>
 </header>
 
 <div class="wrap">
@@ -132,60 +135,63 @@
 
   <!-- ===== DESTINATIONS ===== -->
   <div class="dest">
-    <h2>🌍 وجهاتنا حول العالم</h2>
-    <div class="ds">نغطّي <b>٢٥+ وجهة عالمية</b> — تعاونوا معنا مباشرة لأفضل الأسعار والبرامج<br><span style="font-size:.86em;opacity:.85">We cover 25+ destinations — partner with us directly</span></div>
+    <h2 data-i18n="d_title">🌍 وجهاتنا حول العالم</h2>
+    <div class="ds" data-i18n="d_sub" data-html>نغطّي <b>٢٦+ وجهة عالمية</b> — تعاونوا معنا مباشرة لأفضل الأسعار والبرامج</div>
     <div class="incl">
-      <span class="lbl">✨ بكجات شاملة ✨</span>
-      <span class="ichip">🏨 فنادق</span>
-      <span class="ichip">🗺️ جولات سياحية</span>
-      <span class="ichip">🚐 استقبال وتوصيل</span>
-      <span class="ichip">✈️ طيران داخلي</span>
-      <span class="ichip">🚆 قطار</span>
+      <span class="lbl" data-i18n="d_pkg">✨ بكجات شاملة ✨</span>
+      <span class="ichip" data-i18n="p_hotel">🏨 فنادق</span>
+      <span class="ichip" data-i18n="p_tours">🗺️ جولات سياحية</span>
+      <span class="ichip" data-i18n="p_transfer">🚐 استقبال وتوصيل</span>
+      <span class="ichip" data-i18n="p_flight">✈️ طيران داخلي</span>
+      <span class="ichip" data-i18n="p_train">🚆 قطار</span>
     </div>
     <div class="dest-grid">
-      <div class="dchip"><span class="fl">🇲🇾</span>ماليزيا</div>
-      <div class="dchip"><span class="fl">🇮🇩</span>إندونيسيا</div>
-      <div class="dchip"><span class="fl">🇹🇭</span>تايلاند</div>
-      <div class="dchip"><span class="fl">🇱🇰</span>سريلانكا</div>
-      <div class="dchip"><span class="fl">🇲🇻</span>المالديف</div>
-      <div class="dchip"><span class="fl">🇻🇳</span>فيتنام</div>
-      <div class="dchip"><span class="fl">🇸🇬</span>سنغافورة</div>
-      <div class="dchip"><span class="fl">🇹🇷</span>تركيا</div>
-      <div class="dchip"><span class="fl">🇬🇪</span>جورجيا</div>
-      <div class="dchip"><span class="fl">🇦🇿</span>أذربيجان</div>
-      <div class="dchip"><span class="fl">🇦🇲</span>أرمينيا</div>
-      <div class="dchip"><span class="fl">🇰🇿</span>كازاخستان</div>
-      <div class="dchip"><span class="fl">🇷🇺</span>روسيا</div>
-      <div class="dchip"><span class="fl">🇨🇳</span>الصين</div>
-      <div class="dchip"><span class="fl">🇦🇹</span>النمسا</div>
-      <div class="dchip"><span class="fl">🇵🇱</span>بولندا</div>
-      <div class="dchip"><span class="fl">🇧🇦</span>البوسنة</div>
-      <div class="dchip"><span class="fl">🇦🇱</span>ألبانيا</div>
-      <div class="dchip"><span class="fl">🇲🇦</span>المغرب</div>
-      <div class="dchip"><span class="fl">🇪🇬</span>مصر</div>
-      <div class="dchip"><span class="fl">🇲🇺</span>موريشيوس</div>
-      <div class="dchip"><span class="fl">🇿🇦</span>جنوب أفريقيا</div>
-      <div class="dchip"><span class="fl">🇴🇲</span>سلطنة عُمان<small>مسقط • صلالة</small></div>
+      <div class="dchip"><span class="fl">🇲🇾</span><span data-i18n="c_my">ماليزيا</span></div>
+      <div class="dchip"><span class="fl">🇮🇩</span><span data-i18n="c_id">إندونيسيا</span></div>
+      <div class="dchip"><span class="fl">🇹🇭</span><span data-i18n="c_th">تايلاند</span></div>
+      <div class="dchip"><span class="fl">🇱🇰</span><span data-i18n="c_lk">سريلانكا</span></div>
+      <div class="dchip"><span class="fl">🇲🇻</span><span data-i18n="c_mv">المالديف</span></div>
+      <div class="dchip"><span class="fl">🇻🇳</span><span data-i18n="c_vn">فيتنام</span></div>
+      <div class="dchip"><span class="fl">🇸🇬</span><span data-i18n="c_sg">سنغافورة</span></div>
+      <div class="dchip"><span class="fl">🇹🇷</span><span data-i18n="c_tr">تركيا</span></div>
+      <div class="dchip"><span class="fl">🇬🇪</span><span data-i18n="c_ge">جورجيا</span></div>
+      <div class="dchip"><span class="fl">🇦🇿</span><span data-i18n="c_az">أذربيجان</span></div>
+      <div class="dchip"><span class="fl">🇦🇲</span><span data-i18n="c_am">أرمينيا</span></div>
+      <div class="dchip"><span class="fl">🇰🇿</span><span data-i18n="c_kz">كازاخستان</span></div>
+      <div class="dchip"><span class="fl">🇷🇺</span><span data-i18n="c_ru">روسيا</span></div>
+      <div class="dchip"><span class="fl">🇨🇳</span><span data-i18n="c_cn">الصين</span></div>
+      <div class="dchip"><span class="fl">🇦🇹</span><span data-i18n="c_at">النمسا</span></div>
+      <div class="dchip"><span class="fl">🇵🇱</span><span data-i18n="c_pl">بولندا</span></div>
+      <div class="dchip"><span class="fl">🇧🇦</span><span data-i18n="c_ba">البوسنة</span></div>
+      <div class="dchip"><span class="fl">🇦🇱</span><span data-i18n="c_al">ألبانيا</span></div>
+      <div class="dchip"><span class="fl">🇪🇸</span><span data-i18n="c_es">إسبانيا</span></div>
+      <div class="dchip"><span class="fl">🇳🇱</span><span data-i18n="c_nl">هولندا</span></div>
+      <div class="dchip"><span class="fl">🇬🇧</span><span data-i18n="c_gb">بريطانيا</span></div>
+      <div class="dchip"><span class="fl">🇲🇦</span><span data-i18n="c_ma">المغرب</span></div>
+      <div class="dchip"><span class="fl">🇪🇬</span><span data-i18n="c_eg">مصر</span></div>
+      <div class="dchip"><span class="fl">🇲🇺</span><span data-i18n="c_mu">موريشيوس</span></div>
+      <div class="dchip"><span class="fl">🇿🇦</span><span data-i18n="c_za">جنوب أفريقيا</span></div>
+      <div class="dchip"><span class="fl">🇴🇲</span><span data-i18n="c_om">سلطنة عُمان</span><small data-i18n="c_om_s">مسقط • صلالة</small></div>
     </div>
-    <div class="branches">📍 <b>فروعنا:</b> ماليزيا 🇲🇾 (كوالالمبور) &nbsp;·&nbsp; سلطنة عُمان 🇴🇲 🫰😌</div>
+    <div class="branches" data-i18n="d_branch" data-html>📍 <b>فروعنا:</b> ماليزيا 🇲🇾 (كوالالمبور) &nbsp;·&nbsp; سلطنة عُمان 🇴🇲 🫰😌</div>
     <div class="wa-wrap">
-      <div class="wa-num">📞 للتواصل مع الإدارة: 00601111136864</div>
+      <div class="wa-num" data-i18n="d_wanum">📞 للتواصل مع الإدارة: 00601111136864</div>
       <a class="wa-btn" href="https://wa.me/601111136864" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01c-1.48 0-2.93-.4-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24 2.2 0 4.27.86 5.83 2.42a8.19 8.19 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.12-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.14.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.84-.2-.48-.41-.42-.56-.43-.14 0-.31-.01-.48-.01-.17 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z"/></svg>
-        افتح محادثة واتساب
+        <span data-i18n="d_wabtn">افتح محادثة واتساب</span>
       </a>
     </div>
   </div>
 
   <!-- ===== LOGIN ===== -->
   <form id="loginForm" class="card">
-    <h2>دخول الشركات / Company Login</h2>
-    <div class="sub">بالجوال وكلمة المرور اللي سجّلت فيها. · Use your registered mobile & password.</div>
-    <div class="field"><label>رقم الجوال / Mobile <span class="req">*</span></label><input id="lphone" inputmode="tel" placeholder="+9665..." required></div>
-    <div class="field"><label>كلمة المرور / Password <span class="req">*</span></label><input id="lpass" type="password" required></div>
-    <button type="submit" class="submit" id="loginBtn">دخول / Log in</button>
+    <h2 data-i18n="l_title">دخول الشركات</h2>
+    <div class="sub" data-i18n="l_sub">بالجوال وكلمة المرور اللي سجّلت فيها.</div>
+    <div class="field"><label data-i18n="l_mobile" data-html>رقم الجوال <span class="req">*</span></label><input id="lphone" inputmode="tel" placeholder="+9665..." required></div>
+    <div class="field"><label data-i18n="l_pass" data-html>كلمة المرور <span class="req">*</span></label><input id="lpass" type="password" required></div>
+    <button type="submit" class="submit" id="loginBtn" data-i18n="l_btn">دخول</button>
     <div class="err" id="loginErr"></div>
-    <div class="note">شركة جديدة؟ <a href="company-register.html">سجّل حساب</a> · New company? <a href="company-register.html">Register</a></div>
+    <div class="note" data-i18n="l_new" data-html>شركة جديدة؟ <a href="company-register.html">سجّل حساب</a></div>
   </form>
 
   </div><!-- /top-split -->
@@ -696,6 +702,47 @@ $('form').addEventListener('submit', async e=>{
   }catch(ex){ err.textContent=ex.message; err.style.display='block'; btn.disabled=false; btn.textContent='إرسال الطلب'; }
 });
 function newRequest(){ $('done').style.display='none'; $('form').style.display='block'; $('form').reset(); chosen=null; $('sugList').innerHTML=''; }
+</script>
+<script>
+/* ===== تبديل اللغة (عربي افتراضي · English) للصفحة الرئيسية ===== */
+const I18N = {
+  h_sub:{ar:'نمو أسرع يبدأ من عرض أسرع',en:'Faster growth starts with a faster offer'},
+  d_title:{ar:'🌍 وجهاتنا حول العالم',en:'🌍 Our Destinations Worldwide'},
+  d_sub:{ar:'نغطّي <b>٢٦+ وجهة عالمية</b> — تعاونوا معنا مباشرة لأفضل الأسعار والبرامج',en:'We cover <b>26+ destinations</b> — partner with us directly for the best rates & programs'},
+  d_pkg:{ar:'✨ بكجات شاملة ✨',en:'✨ All-Inclusive Packages ✨'},
+  p_hotel:{ar:'🏨 فنادق',en:'🏨 Hotels'}, p_tours:{ar:'🗺️ جولات سياحية',en:'🗺️ Guided Tours'},
+  p_transfer:{ar:'🚐 استقبال وتوصيل',en:'🚐 Airport Transfers'}, p_flight:{ar:'✈️ طيران داخلي',en:'✈️ Domestic Flights'}, p_train:{ar:'🚆 قطار',en:'🚆 Trains'},
+  c_my:{ar:'ماليزيا',en:'Malaysia'},c_id:{ar:'إندونيسيا',en:'Indonesia'},c_th:{ar:'تايلاند',en:'Thailand'},
+  c_lk:{ar:'سريلانكا',en:'Sri Lanka'},c_mv:{ar:'المالديف',en:'Maldives'},c_vn:{ar:'فيتنام',en:'Vietnam'},
+  c_sg:{ar:'سنغافورة',en:'Singapore'},c_tr:{ar:'تركيا',en:'Turkey'},c_ge:{ar:'جورجيا',en:'Georgia'},
+  c_az:{ar:'أذربيجان',en:'Azerbaijan'},c_am:{ar:'أرمينيا',en:'Armenia'},c_kz:{ar:'كازاخستان',en:'Kazakhstan'},
+  c_ru:{ar:'روسيا',en:'Russia'},c_cn:{ar:'الصين',en:'China'},c_at:{ar:'النمسا',en:'Austria'},
+  c_pl:{ar:'بولندا',en:'Poland'},c_ba:{ar:'البوسنة',en:'Bosnia'},c_al:{ar:'ألبانيا',en:'Albania'},
+  c_es:{ar:'إسبانيا',en:'Spain'},c_nl:{ar:'هولندا',en:'Netherlands'},c_gb:{ar:'بريطانيا',en:'UK'},
+  c_ma:{ar:'المغرب',en:'Morocco'},c_eg:{ar:'مصر',en:'Egypt'},c_mu:{ar:'موريشيوس',en:'Mauritius'},
+  c_za:{ar:'جنوب أفريقيا',en:'South Africa'},c_om:{ar:'سلطنة عُمان',en:'Oman'},c_om_s:{ar:'مسقط • صلالة',en:'Muscat • Salalah'},
+  d_branch:{ar:'📍 <b>فروعنا:</b> ماليزيا 🇲🇾 (كوالالمبور) &nbsp;·&nbsp; سلطنة عُمان 🇴🇲 🫰😌',en:'📍 <b>Our branches:</b> Malaysia 🇲🇾 (Kuala Lumpur) &nbsp;·&nbsp; Oman 🇴🇲 🫰😌'},
+  d_wanum:{ar:'📞 للتواصل مع الإدارة: 00601111136864',en:'📞 Contact management: 00601111136864'},
+  d_wabtn:{ar:'افتح محادثة واتساب',en:'Open WhatsApp Chat'},
+  l_title:{ar:'دخول الشركات',en:'Company Login'},
+  l_sub:{ar:'بالجوال وكلمة المرور اللي سجّلت فيها.',en:'Use your registered mobile & password.'},
+  l_mobile:{ar:'رقم الجوال <span class="req">*</span>',en:'Mobile <span class="req">*</span>'},
+  l_pass:{ar:'كلمة المرور <span class="req">*</span>',en:'Password <span class="req">*</span>'},
+  l_btn:{ar:'دخول',en:'Log in'},
+  l_new:{ar:'شركة جديدة؟ <a href="company-register.html">سجّل حساب</a>',en:'New company? <a href="company-register.html">Register</a>'}
+};
+function applyLang(lang){
+  document.documentElement.lang=lang;
+  document.documentElement.dir=(lang==='ar')?'rtl':'ltr';
+  document.querySelectorAll('[data-i18n]').forEach(function(el){
+    var v=I18N[el.dataset.i18n]; if(!v||v[lang]==null) return;
+    if(el.hasAttribute('data-html')) el.innerHTML=v[lang]; else el.textContent=v[lang];
+  });
+  var b=document.getElementById('langTgl'); if(b) b.textContent=(lang==='ar')?'🌐 English':'🌐 العربية';
+  try{localStorage.setItem('mt_lang',lang);}catch(e){}
+}
+function toggleLang(){ applyLang((document.documentElement.lang==='en')?'ar':'en'); }
+(function(){ var l='ar'; try{l=localStorage.getItem('mt_lang')||'ar';}catch(e){} applyLang(l); })();
 </script>
 </body>
 </html>
