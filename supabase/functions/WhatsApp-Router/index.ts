@@ -776,17 +776,29 @@ function humanTypingDelayMs(text: string): number {
 // flag for the customer.
 // فلتر أمان: يشيل عبارات المدح/الحشو/المجاملة الممنوعة من رد طلال قبل الإرسال،
 // حتى لو انزلقت من الموديل رغم منعها في البرومبت. ثم ينظّف الفراغات والعلامات.
-function stripBannedPhrases(text: string): string {
+// keepRich=true: للعروض المنسّقة (برنامج العميل) — نُبقي الإيموجي والأسطر الفارغة
+// (تنسيق مقصود)، ونكتفي بتجريد التشكيل والعبارات الممنوعة. الوضع الافتراضي (ردود
+// طلال العادية) يجرّد الإيموجي ويضغط الفراغات كالسابق.
+function stripBannedPhrases(text: string, keepRich = false): string {
   if (!text) return text;
   // تجريد كل التشكيل (الحركات: فتحة/ضمة/كسرة/شدّة/تنوين/سكون + الألف الخنجرية)
   // ضمانًا لانطباع كتابة بشرية على واتساب — حتى لو أضاف الـLLM حركات رغم التعليمات.
   let t = text.replace(/[ً-ْٰ]/g, "");
+  // تجريد كل الإيموجي والرموز التصويرية (🌟🙏👍🌹🌙👶😊🕋👋…) — المالكة تبي
+  // ردوداً تبدو بشرية بلا إيموجي إطلاقاً، حتى لو أضافها الـLLM أو قالب ثابت.
+  // (يُستثنى العرض المنسّق keepRich — إيموجيّاته مقصودة.)
+  if (!keepRich) t = t.replace(/[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\u{1F1E6}-\u{1F1FF}‍️⃣]/gu, "");
+  // حذف مخاطبة «أستاذي/أستاذتي» المتكرّرة — لا تُستخدم في كل رسالة (تكرارها يبيّن
+  // إنه بوت). المالكة: «ما في داعي يقول أستاذي». نُبقي بقية الجملة طبيعية.
+  t = t.replace(/(^|[\s،.])(?:يا\s+)?أستاذ(?:تي|ي)?(?=$|[\s،.!؟…])/gu, "$1");
   const banned: RegExp[] = [
     /تمام\s+تمام/g, /تمام\s+التمام/g,
     /تمام\s+نمرة\s*واحدة/g, /نمرة\s+واحدة/g,
     /إن\s*شاء\s*الله\s+تمام(\s+التمام)?/g,
     /وش\s+(أخبارك|اخبارك)/g, /كيف\s+حالك/g, /كيف\s+الحال/g,
     /اختيار\s+(?:حلو|موفق|رائع|ممتاز|جميل)/g,
+    // مجاملة الوجهة/المدينة ممنوعة («ماليزيا وجهة حلوة»، «اختيار ممتاز»…).
+    /(?:وجه[ةه]|مدين[ةه]|بلد|اختيار)\s+(?:حلو[ةه]?|ممتاز[ةه]?|رائع[ةه]?|جميل[ةه]?|موفق[ةه]?|خراف[يه]?|مميز[ةه]?)/g,
     /(?:حلو|ممتاز|رائع|جميل|روعة)\s*!+/g,
     /(?:ما\s*شاء\s*الله|الله\s+يعطيك\s+العافية|الله\s+يسعدك|تسلم)\b/g,
     /أنا\s+هنا\s+لتجميع\s+معلوماتك/g, /أنا\s+هنا\s+لمساعدتك/g,
@@ -799,7 +811,15 @@ function stripBannedPhrases(text: string): string {
   // «أبشر بعمرتكم» → «أبشر» (نُبقي الأدب ونحذف الافتراض).
   t = t.replace(/(أبشر|ابشر)\s+ب?عمرت(?:كم|كن|كما|ك)?/g, "$1");
   for (const re of banned) t = t.replace(re, " ");
-  // تنظيف ما تبقّى من فراغات/علامات بعد الحذف.
+  if (keepRich) {
+    // تنظيف خفيف يحافظ على الأسطر الفارغة (التنسيق): فراغات مزدوجة فقط + أسطر فارغة متتالية ≤1.
+    t = t.replace(/[ \t]{2,}/g, " ")
+         .replace(/[ \t]+\n/g, "\n")
+         .replace(/\n{3,}/g, "\n\n")
+         .trim();
+    return t;
+  }
+  // تنظيف ما تبقّى من فراغات/علامات بعد الحذف (ردود عادية — يضغط كل الفراغات).
   t = t.replace(/[ \t]{2,}/g, " ")               // فراغات مزدوجة
        .replace(/\s+([،.!؟…])/g, "$1")           // فراغ قبل علامة
        .replace(/[،.!؟…]\s*(?=[،.!؟…])/g, "")    // علامتان متتاليتان → الأخيرة فقط
@@ -814,8 +834,9 @@ async function sendCustomerReply(
   to: string,
   body: string,
   mediaUrl?: string,
+  opts?: { keepRich?: boolean },
 ): Promise<string | null> {
-  body = stripBannedPhrases(body);
+  body = stripBannedPhrases(body, opts?.keepRich === true);
   // تأخير طبيعي بزمن «الكتابة» قبل إرسال رد البوت — حتى لا يبدو رداً آلياً فورياً.
   // خفيف ومتناسب مع طول الرسالة (يُضاف فوق زمن معالجة الذكاء)، بحد أقصى ٤.٥ ثانية
   // ليبقى الإجمالي طبيعياً (قراءة + كتابة) دون مبالغة.
@@ -840,10 +861,11 @@ async function sendCustomerReply(
   return sid;
 }
 
-// Twilio WhatsApp body limit = 1600 chars. Long admin messages (e.g.
-// detailed tour programs) used to fail silently. Split on natural
-// boundaries: paragraph → newline → sentence → space → hard cut.
-function splitForWhatsApp(text: string, maxLen = 1500): string[] {
+// Meta (Cloud API/Graph) WhatsApp text body limit = 4096 chars. نرسل العرض
+// المنسّق **رسالة واحدة** (كان الحدّ 1500 من عهد Twilio فينقسم البرنامج نصّين).
+// نقسّم فقط ما تجاوز ~4000 (حدّ Meta الآمن) على حدود طبيعية:
+// فقرة → سطر → جملة → مسافة → قصّ صلب.
+function splitForWhatsApp(text: string, maxLen = 4000): string[] {
   if (!text || text.length <= maxLen) return text ? [text] : [];
   const chunks: string[] = [];
   let remaining = text;
@@ -1317,6 +1339,55 @@ async function callTourismAI(messages: TaiTurn[]): Promise<TaiResult | null> {
   };
 }
 
+// يبني برنامجاً كاملاً تلقائياً عبر Tourism-AI action=auto_build (الأرخص بفنادق
+// مختلطة لو التوزيع فارغ، أو توزيع محدّد). يرجّع رسالة الواتساب المنسّقة (مع
+// الفنادق/المسار/يشمل-لا يشمل/السعر النهائي بعملة العميل)، و priceReady: هل
+// طُبِّق الربح فعلاً (false = خارج شرائح/مواسم الربح ⇒ لا نرسل سعراً تلقائياً).
+async function autoBuildProgram(p: {
+  dest: string; days: string; date: string; pax: string; ages: string; distribution: string; phone: string;
+}): Promise<{ text: string; priceReady: boolean; priceNote: string } | null> {
+  const jwt = Deno.env.get("LEGACY_ANON_JWT") || "";
+  try {
+    const res = await fetch(TOURISM_AI_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}`, apikey: jwt },
+      body: JSON.stringify({
+        action: "auto_build", dest: p.dest, days: p.days, date: p.date,
+        pax: p.pax, ages: p.ages, distribution: p.distribution,
+        phone: p.phone, customer_type: "individual",
+      }),
+    });
+    if (!res.ok) { console.error("auto_build http", res.status, await res.text()); return null; }
+    const data = await res.json();
+    if (!data?.ok || !data?.program) { console.error("auto_build no program", JSON.stringify(data).slice(0, 200)); return null; }
+    const text = String(data.formatted || "").trim() || formatTourismAIForWhatsApp(String(data.program));
+    return { text, priceReady: data.price_ready === true, priceNote: String(data.price_note || "") };
+  } catch (e) { console.error("autoBuildProgram error", (e as Error).message); return null; }
+}
+
+// يؤلّف ملخّص التأكيد الخادمي (لا نعتمد على الـLLM): يعرض ما جمعناه ويطلب تأكيداً
+// صريحاً بـ«نعم» قبل بناء العرض. deterministic فيظهر دائماً ويطلب التأكيد بوضوح.
+function buildIntakeSummary(d: Record<string, unknown>, isUmrah: boolean): string {
+  const clean = (s: unknown) => String(s ?? "").trim();
+  const dest = clean(d.destination).replace(/\s*\([^)]*\)\s*/g, " ").trim();
+  const pax = clean(d.pax);
+  const date = clean(d.date);
+  const days = clean(d.days);
+  const nights = clean(d.nights);
+  const ages = clean(d.ages);
+  const cities = clean(d.cities);
+  const L: string[] = ["خليني أتأكد من طلبك قبل ما أجهّز لك العرض:"];
+  if (dest) L.push(`- الوجهة: ${dest}`);
+  if (pax) L.push(`- عدد المسافرين: ${pax}${ages ? ` (${ages})` : ""}`);
+  if (date) L.push(`- تاريخ السفر: ${date}`);
+  if (isUmrah) { if (nights) L.push(`- عدد الليالي: ${nights}`); }
+  else { if (days) L.push(`- عدد الأيام: ${days}`); }
+  if (cities && !/حسب|الوكال|بكيفك|براحتك|رتبو|ترتيب|أي\s*مدن/.test(cities)) L.push(`- المدن: ${cities}`);
+  L.push("");
+  L.push("المعلومات صحيحة؟ أكّد لي بـ«نعم» وأجهّز لك العرض على طول.");
+  return L.join("\n");
+}
+
 // ── معالج الرسالة الرئيسي ────────────────────────────────────────────────
 // ── Password hashing (PBKDF2-SHA256, Web Crypto) ──────────────────────────
 // Hashes are stored as "salthex:hashhex" — 16-byte salt, 32-byte hash,
@@ -1547,7 +1618,27 @@ async function getAiMode(
   const v = (data as { value?: unknown } | null)?.value;
   const s = typeof v === "string" ? v.toUpperCase().trim() : "";
   if (s === "ON" || s === "PREVIEW" || s === "OFF") return s;
+  // «معاينة مع رد» (PREVIEW_REPLY): للرسائل العامة يسلك سلوك المعاينة تماماً
+  // (اقتراح للموظف، لا إرسال تلقائي). الفرق الوحيد عن المعاينة هو إرسال
+  // **البرنامج النهائي** للعميل تلقائياً، ويُقرَّر منفصلاً في بوابة الإرسال
+  // عبر getRawAiMode. فنُطبّعه هنا إلى PREVIEW حتى يبقى منطق المعاينة كما هو.
+  if (s === "PREVIEW_REPLY") return "PREVIEW";
   return "ON"; // legacy default
+}
+
+// يقرأ قيمة ai_mode **الخام** (قبل التطبيع) — نحتاجها فقط للتمييز بين
+// «معاينة» و«معاينة مع رد»، إذ الفرق الوحيد بينهما هو إرسال البرنامج
+// المتكامل للعميل تلقائياً بعد اكتمال المعلومات. [[project_wa_auto_program_offer]]
+async function getRawAiMode(
+  supabase: ReturnType<typeof createClient>,
+): Promise<string> {
+  const { data } = await supabase
+    .from("wa_settings")
+    .select("value")
+    .eq("key", "ai_mode")
+    .maybeSingle();
+  const v = (data as { value?: unknown } | null)?.value;
+  return typeof v === "string" ? v.toUpperCase().trim() : "";
 }
 
 async function isAiEnabledForSession(
@@ -1722,7 +1813,11 @@ async function handleNewLeadIntake(args: {
   //    handleMessage) — فنستخدم referral المُمرَّر مباشرةً كأولوية، وإلا المخزَّن.
   const _adRefU = args.referral
     || (sessRes.data as { ad_referral?: { body?: string; headline?: string } | null } | null)?.ad_referral;
-  const isUmrah = _umrahRe.test(transcript)
+  // ⚠️ نفحص **آخر رسائل العميل فقط** (لا كل السجل) — سجل محادثة ملوّث برسائل
+  //    عمرة قديمة كان يجعل isUmrah=true خطأً لوجهة جديدة غير عمرة (مثل البوسنة).
+  //    الوجهة المخزّنة بالجلسة تثبّت القصد لو ذُكرت العمرة سابقاً ثم لم تتكرّر.
+  const _recentCustUm = msgs.filter(m => m.who === "العميل").slice(-3).map(m => m.body).join("  ");
+  const isUmrah = _umrahRe.test(_recentCustUm)
     || _umrahRe.test(String((prev as { destination?: string })?.destination || ""))
     || _umrahRe.test(String(_adRefU?.body || "") + " " + String(_adRefU?.headline || ""));
   // العميل يسأل عن **عرض محدّد سبق أن أعلنّا عنه** (جاء من إعلان، أو يسأل «العرض/عرضكم/الباقة»)
@@ -1852,7 +1947,7 @@ async function handleNewLeadIntake(args: {
   • ❌ مثال فصحى ممنوع: «نحن متخصصون في العمرة والسياحة، فضلاً حدّد التاريخ». ✅ الصحيح: «احنا متخصصين بالعمرة والسياحة 🌟 حدّد لي التاريخ لو سمحت».
   • أي جملة تحس إنها رسمية/كتاب مدرسي = غلط. خلّها عفوية مثل رسايل الواتساب.
 ⚠️ الاحترام أساسي: تكلّم بلباقة واحترام دائماً. ابدأ أسئلتك بعبارة مؤدبة مثل «حاضر» أو «أبشر» أو «حياك الله» ثم اطرح السؤال بلطف. ممنوع الأسلوب الجاف أو المختصر بطريقة غير لائقة.
-⛔⛔ قاعدة صارمة: **ممنوع منعاً باتاً تذكر اسم العميل إطلاقاً** — حتى لو عرّف عن نفسه أو ظهر اسمه في المحادثة. نادِه **دائماً** بـ«أستاذي» (أو «أستاذ» / «أستاذتي» للأنثى) فقط. ❌ ممنوع «حاضر يا عباس» — الصحيح «حاضر أستاذي».
+⛔⛔ قاعدة صارمة: **ممنوع منعاً باتاً تذكر اسم العميل إطلاقاً** — حتى لو عرّف عن نفسه أو ظهر اسمه في المحادثة. ❌ ممنوع «حاضر يا عباس». خاطبه بشكل **طبيعي بشري بلا تكرار «أستاذي»** — لا تستخدمها في كل رسالة (نادراً جداً أو لا تستخدمها أصلاً). المهم تبدو المحادثة إنسانية لا قالباً.
 ⛔ اكتب **بدون أي تشكيل (حركات) إطلاقاً**: لا فتحة ولا ضمة ولا كسرة ولا شدّة ولا تنوين ولا سكون ولا مدّة. كتابة عادية مثل أي إنسان على واتساب، عشان يكون الانطباع بشري بحت.
 - مثال صحيح: «أبشر، وين حابين تسافرون؟» / «حاضر، أي وجهة في بالكم؟»
 - مثال خاطئ (ممنوع): «وين بتروح؟» / «وش تبي؟» / «كم عددكم؟» بدون مقدمة مؤدبة.
@@ -1876,8 +1971,8 @@ ${returning
     ? `- ⚠️⚠️ أنت **في منتصف المحادثة** وسبق أن عرّفت بنفسك ورحّبت. ❌ ممنوع منعاً باتاً تعرّف بنفسك («معك طلال») أو ترحّب («حياك الله / وعليكم السلام / حياك من جديد») مرة ثانية. أكمل **مباشرة** بسؤال أول معلومة ناقصة برسالة **واحدة** قصيرة.\n  • **استثناء وحيد**: لو سأل العميل صراحةً «مين أنت / إنت مين / مع مين أتكلم / إنت بوت؟» → ردّ فقط: «معك طلال من خدمة العملاء 🌟» ثم أكمل سؤالك.`
     : `- أول رد: رحّب وعرّف بنفسك واسأل أول معلومة ناقصة **في رسالة واحدة طبيعية** (لا رسالتين منفصلتين). التعريف **مرة واحدة فقط** طوال المحادثة. ${isUmrah ? "⚠️ **طلب عمرة** — الوجهة معروفة (مكة والمدينة)، ❌ ممنوع تسأل «وين حابين تسافرون»؛ رحّب واسأل أول ناقص غير الوجهة (مثل عدد المعتمرين)، مثال: «حياك الله 🌟 معك طلال من خدمة العملاء، كم عدد المعتمرين معكم؟». ❌❌ ممنوع تقول «أبشر بعمرتكم» أو «مبارك عمرتكم» أو أي عبارة تَعِد/تفترض — استخدم **«حاضر» أو «أبشر» أو «حياك الله»** فقط ثم السؤال مباشرة." : adRef ? "⚠️⚠️ **العميل جاء من إعلان.** • لو عرفت الوجهة (من **صورة عرض أرسلها**، أو **ذكرها بكلامه**، أو كان الإعلان عن **عرض/وجهة واحدة محددة**) → ❌❌ ممنوع تسأل «وين تسافرون»؛ استخدم الوجهة مباشرة واسأل أول ناقص (عدد المسافرين). • لو كان الإعلان **عدة عروض (كاروسيل)** ولم يحدّد العميل أيّها بعد → اسأله **أي عرض/وجهة يقصد** (لا «وين تسافرون» العامة)، مثال: «حياك الله 🌟 معك طلال — أي وجهة من عروضنا شدّت انتباهك؟». ❌ لا تفترض أبداً أن الإعلان عن مكة/عمرة ما لم يُذكر ذلك صراحة." : "مثال: «حياك الله 🌟 معك طلال من خدمة العملاء، وين حابين تسافرون؟»."}`}
 - ⚠️ ممنوع منعاً باتاً أي مدح أو تعليق أو عبارة حماس/تأكيد قبل سؤالك. لا تقل نهائياً: «حلو / ممتاز / جميل / رائع / اختيار موفق / تمام تمام / تمام نمرة واحدة / نمرة واحدة / حلو الاختيار / ما شاء الله». ❌ لا تبدأ ردك بأي مجاملة أو تأكيد — ابدأ مباشرة بـ«حياك الله/أبشر/حاضر» (للأدب فقط) ثم السؤال، أو بالسؤال مباشرة. كن مباشراً ومحترفاً.
-- ردودك قصيرة جداً: سؤال واحد مختصر، بلا ملخصات ولا علامات ✓ ولا كلام زائد.
-- ⚠️ نوّع صياغتك ولا تجعلها قالباً آلياً: ❌ لا تبدأ **كل** رسالة بنفس الكلمة (حاضر/أبشر)، ولا تختم **كل** رسالة بـ🌟، ولا تكرر «شكراً على المعلومة/التواصل» كل مرة. تكلّم طبيعي ومتنوّع مثل موظف بشري.
+- ردودك قصيرة جداً: سؤال واحد مختصر، بلا ملخصات ولا علامات ✓ ولا كلام زائد — **الاستثناء الوحيد** هو ملخّص التأكيد الأخير (القاعدة أدناه) عند اكتمال كل المعلومات.
+- ⚠️ نوّع صياغتك ولا تجعلها قالباً آلياً: ❌ لا تبدأ **كل** رسالة بنفس الكلمة (حاضر/أبشر)، ولا تكرر «شكراً على المعلومة/التواصل» كل مرة. تكلّم طبيعي ومتنوّع مثل موظف بشري. ❌❌ **ممنوع منعاً باتاً أي إيموجي أو رموز إطلاقاً** (لا 🌟 ولا 🙏 ولا غيرها)، ❌ ولا أي تشكيل/حركات، ❌ ولا تكرار «أستاذي». كتابة بشرية بسيطة فقط.
 - ⚠️ لو طلب العميل **التحدث مع شخص/موظف**، أو قال إنه ما يبي رد آلي/تلقائي، أو إنه هو نفسه مكتب/شركة سفر → لا تكمل أسئلة الاستقبال، اجعل complete=true وردّ رسالة واحدة فقط: «حاضر، بيتواصل معك زميلنا مباشرة 🌟».
 - مثال صحيح: «كم عدد المسافرين؟» — مثال خاطئ (ممنوع): «تايلند اختيار حلو! كم عدد المسافرين؟».
 - اسأل عن معلومة ناقصة واحدة فقط في كل رد (الأهم أولاً: الوجهة ثم العدد ثم التاريخ ثم الأعمار ثم مدينة الوصول/المغادرة).
@@ -1890,7 +1985,7 @@ ${returning
   • ⛔⛔ **هذه القاعدة للتذاكر (الطيران) فقط — لا تنطبق أبداً على الفنادق.**
 - 🏨🏨 **حجز الفندق فقط = خدمة نقدّمها (لا ترفضها إطلاقاً):** لو طلب العميل **حجز فندق فقط** (مثل «أريد فقط حجز فندق»، «ما أريد تذاكر أبي فندق»، «بس فندق في مكة/المدينة»، «بكم سعر الفندق»، «حجز فندق بس») → ❌❌ **ممنوع منعاً باتاً تعتذر أو تقول «ما نقدّمه»** — نحن **نحجز الفنادق** (خصوصاً فنادق مكة والمدينة للعمرة). عامله كطلب عادي واجمع **الناقص فقط**: ⚠️ **لو الوجهة/المدينة معروفة (من الإعلان أو عمرة أو سبق ذكرها) لا تسأل عنها إطلاقاً** — ❌ ممنوع «وين تبون الفندق/أي مدينة». اجمع (عدد الأشخاص + التواريخ + فئة/تفضيل الفندق) وأقفل بـ«تمام أستاذي 🌟 معلوماتك وصلت، زميلنا المختص راح يوافيك بأفضل خيارات الفنادق قريباً» (complete=true). لو كان **عمرة/إعلان مكة**، الفندق في مكة/المدينة معروف — اجمع عدد المعتمرين + التواريخ + توزيع الليالي مكة/المدينة، **بلا سؤال عن الوجهة**.
 - 💑 **شهر العسل = شخصان (٢):** لو ذكر العميل «شهر عسل / هني مون / honeymoon / عرسنا / متزوجين جدد» فالمسافرون **اثنان بالبداهة**. ❌ لا تسأل «كم عدد المسافرين» من الصفر — بل **أكّد**: «مبارك شهر العسل 🌟 أفهم إنكم شخصين (٢)، صح؟» وخزّن pax=2، وهما **بالغان** (لا تسأل عن أطفال).
-- 🔢 **سؤال واحد كل رد، والترتيب: الوجهة ← عدد المسافرين ← الأطفال/الأعمار ← التاريخ.** ❌❌ ممنوع تدمج سؤالين في رسالة واحدة (مثل «متى السفر وكم عددكم؟») — العميل يجيب عن واحد فقط فتضيع المعلومة الثانية. اسأل **عدد المسافرين قبل التاريخ**، وما تنتقل لسؤال تالٍ قبل ما تاخذ جواب الحالي. المعلومات اللازمة لتسليم الطلب للموظف: **الوجهة + ترتيب/مدن الوجهة + عدد المسافرين + التاريخ + هل فيهم أطفال (وأعمارهم)** — لا تقفل قبل اكتمالها.
+- 🔢 **سؤال واحد كل رد، والترتيب: الوجهة ← عدد المسافرين ← الأطفال/الأعمار ← التاريخ ← عدد الأيام.** (لغير العمرة: بعد التاريخ اسأل «كم يوم تبون الرحلة؟».) ❌❌ ممنوع تدمج سؤالين في رسالة واحدة (مثل «متى السفر وكم عددكم؟») — العميل يجيب عن واحد فقط فتضيع المعلومة الثانية. اسأل **عدد المسافرين قبل التاريخ**، وما تنتقل لسؤال تالٍ قبل ما تاخذ جواب الحالي. المعلومات اللازمة لتسليم الطلب للموظف: **الوجهة + ترتيب/مدن الوجهة + عدد المسافرين + التاريخ + هل فيهم أطفال (وأعمارهم)** — لا تقفل قبل اكتمالها.
 - ⚠️ قاعدة الأعمار الصارمة:
   • 👶👶 **بعد ما يعطيك عدد المسافرين، لازم تعرف: هل فيهم أطفال ولا كلهم بالغين؟** لو أعطاك **رقماً فقط** بلا توضيح (مثل «كلنا ٤»، «٤ أشخاص»، «خمسة») ولا فيه ذكر أطفال/عيال → اسأله صراحة **مرة واحدة**: «تمام، الأربعة كلهم بالغين ولا فيه أطفال؟ 👶» (أو «العدد كامل بالغين ولا معكم أطفال؟»). ❌ لا تتجاوز هذا افتراضاً أنهم بالغين.
   • لو ذكر العميل **أطفال/عيال/رضيع** (أو ردّ إن فيه أطفال) → اسأل عن **أعمار الأطفال فقط فوراً** (مثل: كم أعمار الأطفال؟) لأن السعر يعتمد على عمر الطفل. خزّن أعمار الأطفال في ages وعددهم في children.
@@ -1931,10 +2026,20 @@ ${returning
      ❌❌ ممنوع في العمرة تسأل عن: الوجهة، ولا المطار لغير العُماني. ⛔⛔ **إلزامي قبل الإقفال: عدد الليالي/الأيام في مكة (وفي المدينة إن أضافها).** ❌❌ ممنوع منعاً باتاً تقفل (complete=true) قبل ما تعرف **كم ليلة/يوم في مكة** — حتى لو العميل من إعلان أو قال «كامل البرنامج»؛ لازم تسأله «كم ليلة تبون في مكة؟» (وكم في المدينة إن اختارها). ⛔ **استثناءان لا تسأل فيهما عن الليالي:** (١) أعطى **مدى تاريخي** (من–إلى) أو عدد ليالٍ إجمالي **واختار مكة فقط** → كل الليالي بمكة تلقائياً، مكتمل. (٢) أعطى توزيعاً صريحاً. عند اكتمال (العدد + التاريخ + **عدد الليالي/التوزيع** + المطار إن عُماني) اشكره وأقفل.
 - لو كان كلام العميل شكوى أو سؤال عام (مو حجز)، لا تضغط بأسئلة الاستقبال — ردّ بلطف إن زميلنا بيتواصل معه، واجعل complete=true.
 - 📢📢 **العميل من إعلان ويطلب العرض — أرسل العرض فوراً (لا تجمع معلومات قبله):** لو طلب العميل العرض (عروض/العرض/شو متوفر/ابي اشوف) → استوثق «تقصد عرض [الوجهة] اللي شفته بالإعلان؟» ولمّا يؤكّد **يُرسَل ملف العرض مباشرة** (النظام يرسله). ❌❌ ممنوع تجمع منه تاريخ/عدد/ليالي **قبل** إرسال العرض؛ العرض جاهز ويُرسَل أولاً. **بعد إرسال الملف** ادعُه لإضافة تفاصيله: «إذا عندك تاريخ معيّن أو تفاصيل ثانية حاب تضيفها بلّغني عشان أرتّب لك برنامج بناءً عليه 👍». • إن أعطاك بعدها تاريخاً/عدداً/تفاصيل → اجمعها بهدوء (بلا فورمة إلزامية) وطمئنه أن زميلنا بيجهّز له البرنامج المخصّص. • ⚠️ لو **اعترض بشيء غامض ما فهمته** → «حاضر أستاذي 🌹 بحوّل ملاحظتك لزميلنا المختص وراح يرد عليك قريباً».
-- لمّا يؤكّد العميل صحة التلخيص: اشكره بالضبط "شكراً 🌟 معلوماتك وصلت، زميلنا بيجهّز لك أفضل عرض ويتواصل معك قريباً" واجعل complete=true.
+- ⚠️⚠️ **ملخّص التأكيد قبل الإقفال (إلزامي):** متى اكتملت كل الأساسيات (الوجهة + عدد المسافرين [+ أعمار الأطفال إن وُجدوا] + التاريخ [+ عدد الليالي/التوزيع للعمرة]) **لا تقفل فوراً**. أرسل رسالة واحدة فيها ملخّص المعلومات واطلب التأكيد. ❌❌ في رسالة الملخّص **ممنوع منعاً باتاً تعرّف بنفسك («معك طلال») أو ترحّب أو تحيّي** — ابدأ مباشرة بـ«خليني أتأكد...». بهذا الشكل:
+«خليني أتأكد من طلبك قبل ما أجهّز لك البرنامج:
+- الوجهة: [الوجهة]
+- عدد المسافرين: [العدد][، وأطفال أعمارهم كذا إن وُجدوا]
+- التاريخ: [التاريخ]
+- عدد الأيام: [عدد الأيام][، أو عدد الليالي/التوزيع للعمرة]
+المعلومات صحيحة؟ أكّد لي وأجهّز لك البرنامج.»
+❌ ممنوع تذكر أي سعر. اجعل **complete=false** في هذه الرسالة وانتظر رد العميل.
+  • **لو أكّد العميل** (ايوه/نعم/صح/تمام/أجل/زين): اقفل بـ **complete=true** ورسالة واحدة: «تمام، معلوماتك وصلت، زميلنا بيجهّز لك العرض ويتواصل معك قريباً».
+  • **لو صحّح معلومة**: حدّث الحقل وأعد إرسال الملخّص المحدّث (complete=false).
 اليوم: ${today}. المعلومات المجموعة سابقاً: ${JSON.stringify(prev)}.
-أعد JSON فقط: {"messages":["رسالة واحدة قصيرة"],"fields":{"destination":"","pax":null,"date":"","ages":"","cities":"","nights":""},"complete":false}
+أعد JSON فقط: {"messages":["رسالة واحدة قصيرة"],"fields":{"destination":"","pax":null,"date":"","ages":"","cities":"","nights":"","days":null},"complete":false}
 • nights = عدد الليالي/الأيام أو التوزيع (مثل «٤ ليالي» أو «٣ مكة ٢ المدينة»). للعمرة **إلزامي** لأن السعر بالليلة. لو أعطى العميل مدى تاريخي (من–إلى) احسب الليالي وضعها هنا. وإلا "".
+• days = **عدد أيام الرحلة** (رقم فقط). لغير العمرة **مطلوب لبناء البرنامج** — اسأله «كم يوم تبون الرحلة؟» بعد التاريخ. لو أعطى مدى تاريخي (من–إلى) احسب الأيام تلقائياً. العمرة تستخدم nights بدلها.
 حيث messages عادةً **رسالة واحدة فقط** — الإنسان الحقيقي يرسل رسالة وحدة لا رسالتين متتاليتين بنفس الثانية. ❌ لا تقسّم ردك إلى رسالتين.`;
   let out: { reply?: string; messages?: unknown; fields?: Record<string, unknown>; complete?: boolean } | null = null;
   try {
@@ -1982,6 +2087,36 @@ ${returning
     } else if (_detFromCities && _f && (!_claimed || _claimedDet !== _detFromCities)) {
       // شبكة أمان: المدن معروفة والوجهة المخزّنة فاضية/غامضة → اضبطها من المدن.
       _f.destination = `${_detFromCities} (${_citiesStr})`;
+    }
+  }
+
+  // ── حارس تغيير الوجهة (خادميّ): العميل قد يغيّر رأيه بالوجهة بنص المحادثة
+  //    (ماليزيا → البوسنة)، والنموذج قد يبقى على القديمة بسبب السجل. القاعدة:
+  //    **أحدث وجهة يذكرها العميل (آخر رسالتين) تفوز** — نصحّح الحقل والرسالة
+  //    الصادرة ونمسح المدن القديمة (خاصّة بالوجهة السابقة).
+  {
+    const _DEST_AR: Record<string, string> = {
+      Vietnam: "فيتنام", Malaysia: "ماليزيا", thailand: "تايلند", Turky: "تركيا",
+      russia: "روسيا", Bosnia: "البوسنة", indonesia: "إندونيسيا", Oman: "عُمان",
+      "South Africa": "جنوب أفريقيا", mauritius: "موريشيوس", England: "إنجلترا",
+      China: "الصين", Egypt: "مصر", Morroco: "المغرب", Spain: "إسبانيا", "Sri lanka": "سريلانكا",
+    };
+    const _lastCust2 = msgs.filter(m => m.who === "العميل").slice(-2).map(m => m.body).join("  ");
+    const _recentDest = extractDestination(_lastCust2);                 // وجهة من آخر رسالتين للعميل
+    const _f3 = (out.fields && typeof out.fields === "object") ? out.fields as Record<string, unknown> : null;
+    const _modelDestKey = _f3 && _f3.destination ? extractDestination(String(_f3.destination)) : null;
+    const _prevRec3 = (prev || {}) as Record<string, unknown>;
+    const _storedDestKey = _prevRec3.destination ? extractDestination(String(_prevRec3.destination)) : null;
+    // الوجهة المعتمدة = الأحدث من العميل، وإلا المخزّنة بالجلسة. (النموذج آخر مرجع.)
+    const _authKey = _recentDest || _storedDestKey;
+    if (_authKey && _modelDestKey && _authKey !== _modelDestKey) {
+      const _newAr = _DEST_AR[_authKey]
+        || (_recentDest ? _authKey : String(_prevRec3.destination || "").split("(")[0].trim());
+      const _oldAr = _DEST_AR[_modelDestKey] || String(_f3?.destination || "").split("(")[0].trim();
+      // امسح المدن القديمة فقط لو العميل **غيّر** الوجهة فعلاً (ذكر وجهة جديدة تخالف المخزّنة).
+      if (_f3) { _f3.destination = _newAr; if (_recentDest && _recentDest !== _storedDestKey) _f3.cities = ""; }
+      if (_oldAr && _newAr) outMsgs = outMsgs.map(m => m.split(_oldAr).join(_newAr));
+      console.log("dest guard:", _modelDestKey, "→", _authKey, _recentDest ? "(recent)" : "(stored)");
     }
   }
 
@@ -2107,13 +2242,8 @@ ${returning
       .replace(/المسافرين\s*معكم/g, "المعتمرين معكم")
       .replace(/كم\s*عدد\s*المسافرين/g, "كم عدد المعتمرين"));
   }
-  for (const raw of outMsgs.slice(0, 3)) {
-    const msg = stripBannedPhrases(raw);
-    if (!msg) continue; // لو الرسالة كانت كلها عبارات ممنوعة، تجاهلها
-    await sendCustomerReply(supabase, from, msg);
-    // نسجّل كل رسالة من طلال (بعد التنظيف) لتظهر بالداشبورد مطابقة للمُرسَل.
-    try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: msg, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* best-effort */ }
-  }
+  // ── نبني البيانات المدموجة ونفحص اكتمال الأساسيات **قبل الإرسال** — عشان
+  //    نقرّر هل نستبدل رسالة الـLLM بملخّص تأكيد خادميّ (deterministic) ──
   const upd: Record<string, unknown> = { last_message_at: new Date().toISOString() };
   let _mergedData = { ...(prev as Record<string, unknown>) };
   if (out.fields && typeof out.fields === "object") { _mergedData = { ..._mergedData, ...out.fields }; }
@@ -2127,16 +2257,112 @@ ${returning
   if (!String(_mergedData.destination || "").trim() && _destLabel) _mergedData.destination = _destLabel;
   // تثبيت عدد المسافرين المُستخرَج خادميّاً من كلام العميل («شخصين» إلخ) إن لم يملأه النموذج.
   if (_paxFromCust && !(Number.isFinite(Number(_mergedData.pax)) && Number(_mergedData.pax) > 0)) _mergedData.pax = _paxFromCust;
-  upd.intake_data = _mergedData;
-  // ❌ لا نقفل الاستقبال إذا الحارس لسّه يسأل عن العدد/الأطفال/الليالي/شهر العسل.
-  // ⚠️ ولا نقفله ما دامت **الأساسيات ناقصة** (وجهة + عدد + تاريخ [+ ليالي للعمرة]) —
-  //    حتى لو قفل النموذج مبكراً (complete=true). السبب: في وضع PREVIEW، الاستقبال
-  //    المُغلق يكبح كل الردود التالية (العميل يبقى بلا رد = «طلال يقف»). نبقيه مفتوحاً
-  //    فيكمل طلال جمع الناقص برسائل العميل القادمة.
   const _dateKnown = !!String(_mergedData.date || "").trim()
     || /\d{1,2}\s*[\/\-]\s*\d{1,2}|\d{1,2}\s*(?:يناير|فبراير|مارس|إبريل|أبريل|مايو|يونيو|يوليو|أغسطس|سبتمبر|أكتوبر|نوفمبر|ديسمبر)|شهر\s*\d{1,2}|نهاي[ةه]\s*\d{1,2}|بداي[ةه]\s*\d{1,2}/.test(transcript);
-  const _essentialsMissing = !_destKnown || !_paxKnown || !_dateKnown || (_isUmrahPax && !_nightsKnown);
-  if (out.complete === true && !_ageGateFired && !_nightsGateFired && !_hmPaxGateFired && !_paxGateFired && !_essentialsMissing) upd.intake_active = false;
+  const _daysKnown = !!String(_mergedData.days || "").trim();
+  const _essentialsMissing = !_destKnown || !_paxKnown || !_dateKnown
+    || (_isUmrahPax ? !_nightsKnown : !_daysKnown);
+  // الأساسيات كاملة ولا حارس يسأل شيئاً هذا الدور.
+  const _essentialsComplete = !_essentialsMissing
+    && !_ageGateFired && !_nightsGateFired && !_hmPaxGateFired && !_paxGateFired && !_destGateFired;
+
+  // ── بوابة التأكيد الخادمية (deterministic، لا تعتمد على نص الـLLM) ──
+  //    • أول اكتمال أو تصحيح → نستبدل رد الـLLM بملخّص تأكيد يطلب «نعم».
+  //    • العميل كان منتظَراً منه تأكيد وردّ بإيجاب → نقفل ونبني العرض.
+  //    هذا يمنع اعتماد الإقفال على «زميلنا بيجهز» التي يخترعها الـLLM. [[project_wa_auto_program_offer]]
+  let _doAutoBuild = false;
+  if (_essentialsComplete) {
+    const _wasAwaiting = (prev as Record<string, unknown>).awaiting_confirm === true;
+    const _lastCust = String(args.body || "").trim()
+      || (msgs.filter(m => m.who === "العميل").slice(-1)[0]?.body || "");
+    if (_wasAwaiting && isAffirmative(_lastCust)) {
+      _mergedData.summary_confirmed = true;
+      _mergedData.awaiting_confirm = false;
+      upd.intake_active = false;                 // العميل أكّد الملخّص
+      // غير العمرة: لا نرسل رسالة «ثبّتنا طلبك» هنا — الخلفية ترسل **العرض وحده**
+      //   (رسالة واحدة). العمرة: لا بناء تلقائي، فنرسل رسالة التسليم.
+      outMsgs = _isUmrahPax
+        ? ["تمام، معلوماتك وصلت وزميلنا المختص بيوافيك بتفاصيل العرض قريباً."]
+        : [];
+      _doAutoBuild = !_isUmrahPax;
+    } else {
+      // أول اكتمال أو تصحيح → اعرض ملخّص التأكيد الخادمي واطلب «نعم».
+      outMsgs = [buildIntakeSummary(_mergedData, _isUmrahPax)];
+      _mergedData.awaiting_confirm = true;
+    }
+  }
+  upd.intake_data = _mergedData;
+
+  // ── الإرسال (بعد ما حسمنا المحتوى: إمّا رسالة الحارس/الـLLM، أو ملخّص التأكيد) ──
+  for (const raw of outMsgs.slice(0, 3)) {
+    const msg = stripBannedPhrases(raw);
+    if (!msg) continue; // لو الرسالة كانت كلها عبارات ممنوعة، تجاهلها
+    await sendCustomerReply(supabase, from, msg);
+    // نسجّل كل رسالة من طلال (بعد التنظيف) لتظهر بالداشبورد مطابقة للمُرسَل.
+    try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: msg, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* best-effort */ }
+  }
+
+  // ── بناء العرض تلقائياً بالخلفية (بعد تأكيد العميل، غير العمرة) ──
+  // ⚠️ إرسال البرنامج للعميل معلّق على **البند** (ai_mode): يُرسَل عند بند
+  //    «معاينة مع رد» (PREVIEW_REPLY) أو لرقم في auto_program_test_numbers،
+  //    **و** السعر جاهز (priceReady). في بند «معاينة» (أو ON) يُخزَّن مسوّدةً
+  //    للموظف في intake_data.auto_program بلا إرسال، وتُرسَل رسالة تسليم فقط.
+  if (_doAutoBuild) {
+    const _dist0 = String(_mergedData.cities || "").trim();
+    const _deferred = !_dist0 || /حسب|الوكال|بكيفك|براحتك|رتبو|ترتيب|أي\s*مدن/.test(_dist0);
+    const _bg = (async () => {
+      try {
+        const prog = await autoBuildProgram({
+          dest: String(_mergedData.destination || ""),
+          days: String(_mergedData.days || ""),
+          date: String(_mergedData.date || ""),
+          pax: String(_mergedData.pax || ""),
+          ages: String(_mergedData.ages || ""),
+          distribution: _deferred ? "" : _dist0,
+          phone: from,
+        });
+        if (!prog) { console.error("auto_build: no program for", from); return; }
+        // خزّن المسوّدة دائماً (ليراها الموظف في الداشبورد) دون إرسال.
+        try {
+          const { data: sRow } = await supabase.from("whatsapp_sessions")
+            .select("intake_data").eq("phone", from).maybeSingle();
+          const idata = (sRow?.intake_data || {}) as Record<string, unknown>;
+          idata.auto_program = prog.text;
+          idata.auto_program_ready = prog.priceReady;
+          idata.auto_program_at = new Date().toISOString();
+          await supabase.from("whatsapp_sessions").update({ intake_data: idata }).eq("phone", from);
+        } catch (e) { console.error("auto_build draft save", (e as Error).message); }
+        // بوابة الإرسال معلّقة على **البند** (ai_mode):
+        //   • «معاينة مع رد» (PREVIEW_REPLY) → يُرسَل البرنامج لكل عميل جديد.
+        //   • «معاينة» (PREVIEW) → لا يُرسَل؛ فقط رسالة التسليم للموظف. (رقم
+        //     الاختبار يستقبله رغم ذلك لتعاينه المالكة قبل الاعتماد.)
+        // + شرط السعر جاهز (priceReady) في الحالتين.
+        const _rawMode = await getRawAiMode(supabase);
+        const _replyMode = _rawMode === "PREVIEW_REPLY";   // «معاينة مع رد»
+        const { data: settingRows } = await supabase.from("wa_settings")
+          .select("key,value").in("key", ["auto_program_test_numbers"]);
+        const _getSetting = (k: string) => String(((settingRows || []).find((r: Record<string, unknown>) => r.key === k)?.value) ?? "").replace(/["[\]]/g, "");
+        const _fromDigits = from.replace(/[^0-9]/g, "");
+        const _isTestNum = _getSetting("auto_program_test_numbers").split(/[,\s]+/)
+          .map(n => n.replace(/[^0-9]/g, "")).some(d => d.length >= 6 && _fromDigits.endsWith(d));
+        if ((_replyMode || _isTestNum) && prog.priceReady) {
+          // العرض المنسّق — نُبقي الإيموجي والتنسيق (keepRich). رسالة واحدة.
+          await sendCustomerReply(supabase, from, prog.text, undefined, { keepRich: true });
+          console.log("auto_build: SENT (" + (_replyMode ? "reply-mode" : "test") + ") to", from);
+        } else {
+          // بند «معاينة» (أو السعر غير جاهز) → رسالة تسليم واحدة للعميل،
+          //   والمسوّدة محفوظة للموظف ليبني العرض ويرسله بنفسه.
+          await sendCustomerReply(supabase, from, "تمام، معلوماتك وصلت، زميلنا المختص بيجهّز لك البرنامج ويتواصل معك قريباً.");
+          console.log("auto_build: not sent (mode=" + _rawMode + ", test=" + _isTestNum + ", priceReady=" + prog.priceReady + ", note=" + prog.priceNote + ") for", from);
+        }
+      } catch (e) { console.error("auto_build bg", (e as Error).message); }
+    })();
+    // @ts-ignore EdgeRuntime injected by Supabase
+    if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(_bg);
+    }
+  }
   await supabase.from("whatsapp_sessions").update(upd).eq("phone", from);
 }
 
@@ -3579,7 +3805,7 @@ function isAffirmative(text: string): boolean {
   const t = text.trim().toLowerCase();
   // "تم" is the new affirmative token used by step 4 ("save to suggested
   // category") in the admin correction flow — also keep all the old yeses.
-  return ["نعم","تم","ايوه","أيوه","ايوا","أيوا","موافق","تمام","صح","اي","yes","y","ok","اوكي","اوك"]
+  return ["نعم","تم","ايوه","أيوه","ايوا","أيوا","موافق","تمام","صح","صحيح","اي","أجل","اجل","زين","اكيد","أكيد","ماشي","yes","y","ok","اوكي","اوك"]
     .some(w => t === w || t.startsWith(w + " ") || t.startsWith(w + "."));
 }
 function isNegative(text: string): boolean {
@@ -7208,8 +7434,9 @@ Deno.serve(async (req) => {
       // New 3-state mode (canonical). Falls back to the legacy enabled
       // boolean when callers haven't updated yet.
       const rawMode = typeof payload.mode === "string" ? payload.mode.toUpperCase().trim() : "";
-      let mode: "ON" | "PREVIEW" | "OFF";
-      if (rawMode === "ON" || rawMode === "PREVIEW" || rawMode === "OFF") {
+      // البنود: ON=الذكاء الاصطناعي · PREVIEW=معاينة · PREVIEW_REPLY=معاينة مع رد · OFF=موقوف
+      let mode: "ON" | "PREVIEW" | "PREVIEW_REPLY" | "OFF";
+      if (rawMode === "ON" || rawMode === "PREVIEW" || rawMode === "PREVIEW_REPLY" || rawMode === "OFF") {
         mode = rawMode;
       } else {
         mode = payload.enabled ? "ON" : "OFF";

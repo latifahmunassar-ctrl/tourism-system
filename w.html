@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20261016a -->
+<!-- APPVER:20261030a -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -125,6 +125,7 @@
     /* «المعاينة» وتحكّم الذكاء — للمالكة فقط؛ تُخفى عمّن لا يملك إدارة الذكاء
        (لافتة وضع المعاينة + شارة/زر «👁️ معاينة» بكل محادثة). */
     body.perm-no-ai #preview-banner,
+    body.perm-no-ai #ai-toggle-card,
     body.perm-no-ai [data-action="toggle"] { display: none !important; }
 
     /* Per-staff conversation filter — admin only. Staff see their own
@@ -894,11 +895,12 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       <div class="ai-toggle-info">
         <h2 id="ai-toggle-label">⏳ تحميل…</h2>
         <p id="ai-toggle-sub">اختاري وضع الذكاء الاصطناعي.</p>
-        <!-- 3-mode AI control: ON / PREVIEW / OFF -->
+        <!-- بنود الذكاء: معاينة · معاينة مع رد · الذكاء الاصطناعي · موقوف -->
         <div class="ai-mode-row" style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
-          <button class="ai-mode-btn" data-ai-mode="ON" style="background:#22c55e;">🟢 AI شغال</button>
-          <button class="ai-mode-btn" data-ai-mode="PREVIEW" style="background:#f59e0b;">👁️ وضع المعاينة</button>
-          <button class="ai-mode-btn" data-ai-mode="OFF" style="background:#ef4444;">🔴 AI موقوف</button>
+          <button class="ai-mode-btn" data-ai-mode="PREVIEW" style="background:#f59e0b;">👁️ معاينة</button>
+          <button class="ai-mode-btn" data-ai-mode="PREVIEW_REPLY" style="background:#0ea5e9;">💬 معاينة مع رد</button>
+          <button class="ai-mode-btn" data-ai-mode="ON" style="background:#22c55e;">🧠 الذكاء الاصطناعي</button>
+          <button class="ai-mode-btn" data-ai-mode="OFF" style="background:#ef4444;">🔴 موقوف</button>
         </div>
         <!-- AI status filter — مرتبط بقسم AI -->
         <div class="filter-bar" style="margin-top:12px; gap:8px; flex-wrap:wrap;">
@@ -1871,7 +1873,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20261016a";
+    const APPVER = "20261030a";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -3099,7 +3101,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
 
     let aiForceOffAll = false;
     let aiForceOnAll = false;
-    let aiMode = "ON";   // ON | PREVIEW | OFF
+    let aiMode = "ON";   // ON=الذكاء الاصطناعي | PREVIEW=معاينة | PREVIEW_REPLY=معاينة مع رد | OFF=موقوف
     // معلومات الموظف الجاي مع الـ dashboard_data (null لو الادمن دخل
     // بـ legacy JWT). نستخدمها للفلترة حسب الوجهات في وضع المبيعات.
     let me = null;
@@ -3120,19 +3122,24 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       // العنوان + الوصف + إطار البطاقة + شريط المعاينة
       if (aiMode === "ON") {
         card.className = "ai-toggle-card on";
-        label.textContent = "🟢 AI شغال";
-        sub.textContent = "البوت يرد تلقائياً على المحادثات من قاعدة الـ FAQ، ويصعّد الأسئلة الجديدة لك.";
+        label.textContent = "🧠 الذكاء الاصطناعي";
+        sub.textContent = "البوت يرد تلقائياً على المحادثات من قاعدة الـ FAQ، ويصعّد الأسئلة الجديدة لك. (قيد التدريب)";
+      } else if (aiMode === "PREVIEW_REPLY") {
+        card.className = "ai-toggle-card on";
+        card.style.borderColor = "#7dd3fc";
+        label.textContent = "💬 معاينة مع رد";
+        sub.textContent = "طلال يستقبل العميل ويجمع المعلومات، وبعد اكتمالها يبني البرنامج السياحي الكامل ويرسله للعميل مباشرة.";
       } else if (aiMode === "PREVIEW") {
         card.className = "ai-toggle-card";
         card.style.borderColor = "#fde68a";
-        label.textContent = "👁️ وضع المعاينة";
-        sub.textContent = "البوت يحلّل ويقترح ردود، لكن لا يرسل للعميل — كل رسالة تحتاج موافقتك أولاً.";
+        label.textContent = "👁️ معاينة";
+        sub.textContent = "طلال يستقبل العميل ويجمع المعلومات، وبعد اكتمالها يقول «زميلنا المختص بيجهّز لك البرنامج» ويقف — البرنامج يُحفظ مسودة ويرسله الموظف بنفسه.";
       } else {
         card.className = "ai-toggle-card off";
-        label.textContent = "🔴 AI موقوف";
+        label.textContent = "🔴 موقوف";
         sub.textContent = "البوت معطّل بالكامل. الردود يدوية بالكامل من خلال نافذة المحادثة.";
       }
-      // شريط تنبيه وضع المعاينة
+      // شريط تنبيه وضع المعاينة (المعاينة فقط — «معاينة مع رد» يرسل للعميل)
       const banner = $("preview-banner");
       if (banner) banner.style.display = aiMode === "PREVIEW" ? "" : "none";
     }
@@ -3174,9 +3181,11 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     // force_off_all → الكل موقوف. force_on_all → الكل شغال. وإلا
     // override المحادثة يفوز، ثم العام.
     function effectiveAi(c) {
-      // PREVIEW + OFF لا يرسلان للعميل أبداً — يعتبر "موقوف" بصرياً.
+      // PREVIEW + PREVIEW_REPLY + OFF لا تُرسِل رداً عاماً تلقائياً — "موقوف" بصرياً.
+      // («معاينة مع رد» ترسل البرنامج فقط، لا الردود العامة.)
       if (aiMode === "OFF") return false;
       if (aiMode === "PREVIEW") return false;
+      if (aiMode === "PREVIEW_REPLY") return false;
       if (c.ai_enabled === true)  return true;
       if (c.ai_enabled === false) return false;
       return !!globalAiEnabled;
@@ -3616,6 +3625,10 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           effective = false;       // العميل لا يحصل رد تلقائي
           cls = "preview";
           txt = "👁️ معاينة";
+        } else if (aiMode === "PREVIEW_REPLY") {
+          effective = false;       // الرسائل العامة معاينة؛ لكن البرنامج يُرسَل تلقائياً
+          cls = "preview";
+          txt = "💬 معاينة مع رد";
         } else if (aiMode === "OFF") {
           effective = false;
           cls = "off";
@@ -3625,7 +3638,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           cls = effective ? "" : "off";
           txt = effective ? "🟢 شغال" : "🔴 موقوف";
         }
-        const dotCls = effective ? "ok" : (aiMode === "PREVIEW" ? "warn" : "err");
+        const dotCls = effective ? "ok" : ((aiMode === "PREVIEW" || aiMode === "PREVIEW_REPLY") ? "warn" : "err");
         const destBadge = c.destination ? ` · ${escapeHtml(c.destination)}` : "";
         const assignedBadge = c.assigned_staff_phone
           ? ` · 👤 ${escapeHtml(staffNameFor(c.assigned_staff_phone))}${c.assigned_by ? " (" + escapeHtml(c.assigned_by === "auto" ? "تلقائي" : "نقل") + ")" : ""}`
