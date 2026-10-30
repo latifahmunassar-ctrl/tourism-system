@@ -4030,8 +4030,9 @@ function renderAlerts(){
       const _L={tx_date:'📅 التاريخ',bank_name:'🏦 البنك',in_raw:'داخل(+)',out_raw:'خارج(−)',amount_in:'داخل(+)',amount_out:'خارج(−)',currency:'العملة',currency_rate:'سعر الصرف',bank_ref:'🔖 المرجع',channel:'القناة',description:'الوصف',details:'التفاصيل',more_details:'تفاصيل أكثر',note:'ملاحظة'};
       const _diff=(pl)=>{ const ch=pl.changes||pl.upd||{},old=pl.old||{}; const rows=Object.keys(ch).filter(k=>String(old[k]==null?'':old[k])!==String(ch[k]==null?'':ch[k])).map(k=>'<div>'+(_L[k]||k)+': <span style="color:#d11;text-decoration:line-through">'+esc(old[k]==null||old[k]===''?'—':String(old[k]))+'</span> ← <b style="color:#0e9d6a">'+esc(ch[k]==null||ch[k]===''?'—':String(ch[k]))+'</b></div>'); return rows.length?'<div style="font-size:10.5px;line-height:1.85;background:rgba(37,99,196,.06);border-radius:6px;padding:4px 7px">'+rows.join('')+'</div>':'<span style="color:var(--muted);font-size:10px">— لا تغييرات مرصودة —</span>'; };
       n+='<div class="panel" style="border:1px solid #2563c4;background:rgba(37,99,196,.07);margin-bottom:14px"><h3 style="color:#2563c4;margin-top:0">✏️ طلبات تعديل حركات كاش — كل الحقول ('+pendCashEditFull.length+') — تحتاج قرارك</h3>'+
-        '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th>الحركة</th><th>التغييرات (السابق ← الجديد)</th><th>📝 السبب</th><th>مقدّم الطلب</th><th>التاريخ</th><th>القرار</th></tr></thead><tbody>'+
-        pendCashEditFull.map(m=>{ const pl=m.payload||{}; return '<tr><td style="font-size:11px"><b>'+esc(pl.bank_name||'')+'</b></td><td>'+_diff(pl)+'</td><td style="font-size:12px;font-weight:700;color:#2563c4">'+esc(pl.reason||m.note||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(pl.by||'—')+'</td><td>'+esc(String(m.created_at||'').slice(0,10))+'</td><td style="white-space:nowrap"><button class="btn" style="background:#2563c4;padding:2px 9px;font-size:11px" onclick="resolveCashEditFull('+m.id+',\'approve\')">✅ موافقة وتعديل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="resolveCashEditFull('+m.id+',\'reject\')">❌ رفض</button></td></tr>'; }).join('')+
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:9px;background:rgba(37,99,196,.06);border-radius:8px;padding:7px 11px"><button class="btn" style="background:#2563c4;padding:6px 15px;font-size:12px" onclick="resolveCashEditFullBulk(\'approve\')">✅ موافقة على المحدّد (<span class="cefull-selcount">0</span>)</button><button class="btn ghost" style="padding:6px 13px;font-size:12px;color:var(--red);border-color:var(--red)" onclick="resolveCashEditFullBulk(\'reject\')">❌ رفض المحدّد</button><label style="font-size:11.5px;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:5px"><input type="checkbox" onchange="cefullToggleAll(this)" style="width:15px;height:15px;cursor:pointer"> تحديد الكل</label><span style="font-size:10.5px;color:var(--muted)">حدّدي عدة طلبات ثم وافقي/ارفضيها دفعة واحدة</span></div>'+
+        '<div class="tbl-wrap"><table style="font-size:12px"><thead><tr><th><input type="checkbox" onchange="cefullToggleAll(this)" style="width:15px;height:15px;cursor:pointer"></th><th>الحركة</th><th>التغييرات (السابق ← الجديد)</th><th>📝 السبب</th><th>مقدّم الطلب</th><th>التاريخ</th><th>القرار</th></tr></thead><tbody>'+
+        pendCashEditFull.map(m=>{ const pl=m.payload||{}; return '<tr><td><input type="checkbox" class="cefull-chk" value="'+m.id+'" onchange="cefullUpdCount()" style="width:15px;height:15px;cursor:pointer"></td><td style="font-size:11px"><b>'+esc(pl.bank_name||'')+'</b></td><td>'+_diff(pl)+'</td><td style="font-size:12px;font-weight:700;color:#2563c4">'+esc(pl.reason||m.note||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(pl.by||'—')+'</td><td>'+esc(String(m.created_at||'').slice(0,10))+'</td><td style="white-space:nowrap"><button class="btn" style="background:#2563c4;padding:2px 9px;font-size:11px" onclick="resolveCashEditFull('+m.id+',\'approve\')">✅ موافقة وتعديل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="resolveCashEditFull('+m.id+',\'reject\')">❌ رفض</button></td></tr>'; }).join('')+
         '</tbody></table></div><div style="font-size:11px;color:var(--muted);margin-top:6px">ℹ️ الموافقة تطبّق كل التغييرات على حركة الكاش (كل الحقول). الرفض يُبقيها كما هي. <b style="color:#2563c4">لا تتغيّر الحركة قبل اعتمادك.</b></div></div>';
     }
     if(pendSupEdit.length){
@@ -5975,6 +5976,22 @@ async function resolveCashEditFull(id,decision){
     await load();
     alert(approve?'✅ طُبّق تعديل حركة الكاش.':'❌ رُفض الطلب — بلا تغيير.');
   }catch(e){ alert('خطأ: '+e.message); }
+}
+// ☑️ تحديد متعدد لطلبات تعديل حركات الكاش (كل الحقول) + موافقة/رفض جماعي — بدل معالجة كل طلب على حدة
+function cefullUpdCount(){ const n=document.querySelectorAll('.cefull-chk:checked').length; document.querySelectorAll('.cefull-selcount').forEach(e=>e.textContent=n); }
+function cefullToggleAll(el){ document.querySelectorAll('.cefull-chk').forEach(c=>{ c.checked=el.checked; }); cefullUpdCount(); }
+async function resolveCashEditFullBulk(decision){
+  const approve=(decision==='approve');
+  const ids=[...document.querySelectorAll('.cefull-chk:checked')].map(c=>Number(c.value)).filter(Boolean);
+  if(!ids.length){ alert('اختاري طلباً واحداً على الأقل أولاً (ضعي ✔️ أمام الطلبات).'); return; }
+  if(!confirm((approve?'✅ اعتماد وتطبيق ':'❌ رفض ')+ids.length+' طلب تعديل حركة كاش دفعة واحدة؟'+(approve?'\n\n🔒 تُطبَّق كل التغييرات فعلياً على سجل الكاش.':'\n\nتبقى القيم كما هي بلا تغيير.')))return;
+  let ok=0,fail=0,lastErr='';
+  for(const id of ids){
+    try{ const r=await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_movement_status',payload:{id:id,status:approve?'approved':'rejected'}})}); const j=await r.json(); if(j.error){ fail++; lastErr=j.error; } else ok++; }
+    catch(e){ fail++; lastErr=e.message; }
+  }
+  await load();
+  alert('تمّت المعالجة: ✅ '+ok+(fail?(' · ❌ فشل '+fail+(lastErr?(' — '+lastErr):'')):''));
 }
 async function resolveCashMv(id,decision){
   const approve=(decision==='approve');
