@@ -31,7 +31,7 @@ const CORS_HEADERS = {
 // بالمحرك والواجهات، فنختصره إلى «Abu Dhabi». يجب أن يبقى مطابقاً لنظيره في
 // Tourism-AI/index.ts (pmTabForDest).
 const TAB_KEY_OVERRIDE: Record<string, string> = {
-  "Abu Dhabi (Yas Island)": "Abu Dhabi",
+  "Abu Dhabi (Yas Island )": "Abu Dhabi",   // ⚠️ المسافة داخل القوس لا في النهاية — trim لا يزيلها
 };
 
 const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "Spain", "  Sri lanka", "Poland", "Abu Dhabi (Yas Island )"];
