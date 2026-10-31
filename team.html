@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-31-abudhabi-b'
+  var BUILD = '2026-10-31-abudhabi-c'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -3390,12 +3390,18 @@ const AD_NIGHTS_OK = [2,3,4];
 const AD_ADULTS = 2, AD_MAX_CHILDREN = 2;
 function adIsAbuDhabi(d){ return /[أا]بو\s*ظبي|abu\s*dhabi|ياس|yas/i.test(String(d||'')); }
 /** يرجّع سبب المنع نصّاً، أو '' إذا الطلب مطابق. */
-function adBlockReason(dest, cities, adults, children){
+function adBlockReason(dest, cities, adults, children, days){
   if(!adIsAbuDhabi(dest)) return '';
+  // الأيام = الليالي + ١. خطأ شائع: كتابة «٢ أيام» مع «٢ ليالي» فيردّ الباني برسالة
+  // غامضة عن التوزيع. نمسكها هنا ونقول للموظف الرقم الصحيح مباشرة.
+  const totalN = (cities||[]).reduce((t,c)=>t+(+c.n||0),0);
+  if(days && totalN && (+days) !== totalN + 1){
+    return `عدد الأيام لا يطابق الليالي: ${totalN} ${totalN===1?'ليلة':'ليالٍ'} تحتاج ${totalN+1} أيام، وأنت كتبت ${days}. (الأيام = الليالي + ١)`;
+  }
   const bad = (cities||[]).filter(c => !AD_NIGHTS_OK.includes(+c.n));
   if(bad.length){
     const d = bad.map(c => `${c.city}: ${c.n} ${+c.n===1?'ليلة':'ليالٍ'}`).join('، ');
-    return `المدّة المطلوبة (${d}) غير مُسعّرة. باقات ياس آيلاند متاحة لليلتين أو ثلاث أو أربع ليالٍ فقط.`;
+    return `المدّة المطلوبة (${d}) غير مُسعّرة. باقات ياس آيلاند متاحة لليلتين أو ثلاث أو أربع ليالٍ فقط — أي ٣ أو ٤ أو ٥ أيام.`;
   }
   const ch = Math.max(0, +children||0);
   if((+adults||0) !== AD_ADULTS || ch > AD_MAX_CHILDREN){
@@ -3445,7 +3451,7 @@ function buildFromForm(){
   if(!cities.length){ alert('أضف مدينة واحدة على الأقل'); return; }
   // 🇦🇪 أبوظبي: امنع البناء فوراً لو المدّة أو عدد الأشخاص خارج المُسعّر بالشيت.
   adHideNoPrice();
-  const _adBlock = adBlockReason(dest, cities, adults, children);
+  const _adBlock = adBlockReason(dest, cities, adults, children, days);
   if(_adBlock){ adShowNoPrice(_adBlock); return; }
   const stars = (document.querySelector('input[name=bf-stars]:checked')||{}).value || '5';
   const tr    = (document.querySelector('input[name=bf-tr]:checked')||{}).value || 'private';
