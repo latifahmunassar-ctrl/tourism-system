@@ -912,6 +912,11 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           </select>
           <span style="font-size:12px; color:var(--muted);">📅 يشمل القديم والجديد</span>
         </div>
+        <!-- إعادة ربط إنستقرام — للمالكة فقط (تجديد توكن Meta المنتهي) -->
+        <div style="margin-top:14px; padding-top:12px; border-top:1px dashed rgba(148,163,184,.35);">
+          <button id="ig-reconnect-btn" type="button" style="background:#e1306c; color:#fff; border:none; border-radius:8px; padding:10px 16px; font-weight:800; cursor:pointer;">🔗 إعادة ربط إنستقرام</button>
+          <span style="font-size:12px; color:var(--muted); margin-right:8px;">لو ظهر «Session has expired» عند الرد على إنستقرام — اضغطي وسجّلي دخول الحساب. (كرّري لكل حساب.)</span>
+        </div>
       </div>
     </div>
     <!-- Preview banner — يظهر فقط لما الوضع = PREVIEW -->
@@ -3160,6 +3165,14 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     document.querySelectorAll(".ai-mode-btn").forEach(b => {
       b.addEventListener("click", () => setAiMode(b.dataset.aiMode));
     });
+    // إعادة ربط إنستقرام — يفتح تسجيل دخول Meta في نافذة جديدة؛ عند النجاح
+    // يخزّن النظام التوكن الجديد تلقائياً. (كل حساب يُربط على حدة.)
+    {
+      const igBtn = $("ig-reconnect-btn");
+      if (igBtn) igBtn.addEventListener("click", () => {
+        window.open(IG_URL + "?action=oauth_start", "_blank", "noopener");
+      });
+    }
 
     let conversationsCache = [];
     let filterAi = "";          // "" | "on" | "off"

@@ -21,6 +21,17 @@ const CORS = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
 
+// رابط الرجوع المسجَّل في Meta (نفس الدالة مع action=oauth_callback). يُفضَّل ضبطه
+// صراحةً بسرّ IG_OAUTH_REDIRECT ليطابق المسجَّل في لوحة Meta بالضبط.
+function oauthRedirectUri(url: URL): string {
+  return (Deno.env.get("IG_OAUTH_REDIRECT") || `${url.origin}${url.pathname}?action=oauth_callback`).trim();
+}
+// صفحة HTML بسيطة بالعربية تُعرَض للمالكة بعد (أو أثناء) إعادة الربط.
+function htmlPage(title: string, body: string): Response {
+  const h = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head><body style="font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;display:grid;place-items:center;min-height:100vh;margin:0"><div style="max-width:440px;padding:30px;background:#1e293b;border-radius:16px;text-align:center;line-height:1.8"><h2 style="margin:0 0 12px">${title}</h2><p style="color:#94a3b8;margin:0">${body}</p></div></body></html>`;
+  return new Response(h, { status: 200, headers: { ...CORS, "Content-Type": "text/html; charset=utf-8" } });
+}
+
 // بوابة القراءة الإدارية: نقبل مفتاح صندوق الطلبات (CLIENT_ADMIN_SECRET) أو كلمة
 // البوابة المشتركة (APP_PASSWORD) — نفس ما يخزّنه داشبورد الواتساب في alezz_admin_secret.
 function adminOk(req: Request): boolean {
@@ -115,6 +126,77 @@ Deno.serve(async (req) => {
       mid, message_text: text, direction: "outbound", sent_at: nowIso, raw: sendJson,
     });
     return json({ ok: true, message_id: mid, sent_at: nowIso });
+  }
+
+  // ── OAuth «إعادة ربط بنقرة»: بدء تسجيل الدخول في Meta ──────────────────────
+  // تفتحها المالكة من الداشبورد (نافذة جديدة). تحوّل المتصفح لصفحة موافقة إنستقرام.
+  // صلاحيات: أساسية + إدارة رسائل الأعمال (للرد على الـ DM).
+  if (action === "oauth_start") {
+    const appId = (Deno.env.get("IG_APP_ID") || "").trim();
+    if (!appId) return htmlPage("إعداد ناقص", "لم يُضبط IG_APP_ID في أسرار Supabase بعد.");
+    const redirect = oauthRedirectUri(url);
+    const scope = "instagram_business_basic,instagram_business_manage_messages";
+    const state = crypto.randomUUID();
+    const auth = `https://www.instagram.com/oauth/authorize?enable_fb_login=0&force_authentication=1`
+      + `&client_id=${encodeURIComponent(appId)}`
+      + `&redirect_uri=${encodeURIComponent(redirect)}`
+      + `&response_type=code&scope=${encodeURIComponent(scope)}&state=${state}`;
+    return new Response(null, { status: 302, headers: { ...CORS, Location: auth } });
+  }
+
+  // ── OAuth: رجوع Meta بعد الموافقة — نبدّل الكود بتوكن طويل (٦٠ يوم) ونخزّنه ──
+  if (action === "oauth_callback") {
+    const appId = (Deno.env.get("IG_APP_ID") || "").trim();
+    const appSecret = (Deno.env.get("IG_APP_SECRET") || "").trim();
+    const redirect = oauthRedirectUri(url);
+    const oErr = url.searchParams.get("error_description") || url.searchParams.get("error");
+    if (oErr) return htmlPage("تعذّر الربط", "رفض Meta الطلب: " + oErr);
+    const code = url.searchParams.get("code") || "";
+    if (!code) return htmlPage("تعذّر الربط", "لم يصل كود التفويض من Meta.");
+    if (!appId || !appSecret) return htmlPage("إعداد ناقص", "اضبطي IG_APP_ID و IG_APP_SECRET في أسرار Supabase.");
+    try {
+      // 1) الكود → توكن قصير المدى (+ user_id للحساب).
+      const shortRes = await fetch("https://api.instagram.com/oauth/access_token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: appId, client_secret: appSecret,
+          grant_type: "authorization_code", redirect_uri: redirect, code,
+        }),
+      });
+      const shortJ: any = await shortRes.json().catch(() => ({}));
+      if (!shortRes.ok || !shortJ.access_token) {
+        return htmlPage("تعذّر الربط", "فشل تبديل الكود: " + JSON.stringify(shortJ).slice(0, 300));
+      }
+      // 2) التوكن القصير → توكن طويل المدى (~٦٠ يوم).
+      const longRes = await fetch(
+        "https://graph.instagram.com/access_token?grant_type=ig_exchange_token"
+        + `&client_secret=${encodeURIComponent(appSecret)}`
+        + `&access_token=${encodeURIComponent(shortJ.access_token)}`);
+      const longJ: any = await longRes.json().catch(() => ({}));
+      if (!longRes.ok || !longJ.access_token) {
+        return htmlPage("تعذّر الربط", "فشل التوكن الطويل: " + JSON.stringify(longJ).slice(0, 300));
+      }
+      const longTok = String(longJ.access_token);
+      const days = longJ.expires_in ? Math.round(Number(longJ.expires_in) / 86400) : 60;
+      // 3) هوية الحساب (user_id + username) لمطابقة الصف الصحيح.
+      const meRes = await fetch(
+        `https://graph.instagram.com/me?fields=user_id,username&access_token=${encodeURIComponent(longTok)}`);
+      const meJ: any = await meRes.json().catch(() => ({}));
+      const igId = String(meJ.user_id || shortJ.user_id || "");
+      const uname = String(meJ.username || "");
+      if (!igId) return htmlPage("تعذّر الربط", "لم نتعرّف على معرّف الحساب من Meta.");
+      // 4) خزّن التوكن الجديد (upsert على ig_account_id).
+      const supabase = supaRead();
+      const row: Record<string, unknown> = { ig_account_id: igId, access_token: longTok };
+      if (uname) row.username = uname;
+      const { error } = await supabase.from("ig_accounts").upsert(row, { onConflict: "ig_account_id" });
+      if (error) return htmlPage("تعذّر الحفظ", error.message);
+      return htmlPage("تم الربط ✅",
+        `تم تحديث توكن حساب <b>${uname || igId}</b> — صالح ~${days} يوم.<br>تقدرين تقفلين هذه الصفحة وترجعين للداشبورد.`);
+    } catch (e) {
+      return htmlPage("خطأ", (e as Error).message);
+    }
   }
 
   // ── قراءة إدارية: قائمة المحادثات / سجل محادثة واحدة (لداشبورد الواتساب) ──
