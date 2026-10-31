@@ -1266,6 +1266,110 @@ async function checkInboundSilence(
   }
 }
 
+// ── قناة تنبيه مضمونة عبر البريد (Resend) ────────────────────────────────
+// مستقلة تماماً عن Meta/واتساب (فتعمل حتى لو الواتساب نفسه معطّل). from=
+// onboarding@resend.dev يرسل لإيميل صاحب حساب Resend فقط — وهو إيميل المالكة
+// نفسه، فيعمل بلا تحقق دومين. يقرأ المفتاح من سر RESEND_API_KEY.
+// إيميل حساب Resend نفسه — قناة onboarding@resend.dev ترسل له فقط بلا تحقق دومين.
+// لتحويله لـgmail: فعّلي تحويلاً من info@alezzgroup.net، أو تحقّقي من الدومين في Resend.
+const ALERT_EMAIL_TO = "info@alezzgroup.net";
+async function sendAlertEmail(subject: string, text: string): Promise<boolean> {
+  try {
+    const key = (Deno.env.get("RESEND_API_KEY") || "").trim();
+    if (!key) { console.warn("RESEND_API_KEY غير مضبوط — تنبيه الإيميل تخطّي"); return false; }
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + key, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: "onboarding@resend.dev", to: ALERT_EMAIL_TO, subject, text }),
+    });
+    if (!r.ok) { console.error("Resend alert email failed", r.status, (await r.text()).slice(0, 200)); return false; }
+    return true;
+  } catch (e) { console.error("sendAlertEmail error", e); return false; }
+}
+
+// ── فحص صحة الويبهوك الفعّال (الحل الجذري لانقطاع الاستقبال الصامت) ────────
+// يحاكي تحقّق Meta تماماً: GET بلا Authorization لنقطة التحقق. لو انقلب
+// verify_jwt إلى true، بوابة Supabase ترجع 401 (نفس ما يصير لرسائل Meta
+// الواردة) فنكتشف العطل **خلال دقيقة** (الكرون كل دقيقة) بدل انتظار ٣ ساعات
+// صمت — وننبّه عبر CallMeBot (قناة مستقلة عن Meta). بلا بوابة ساعات عمل:
+// انقطاع الاستقبال حرج دائماً. منع تكرار كل ٣٠ دقيقة.
+const WEBHOOK_HEALTH_REALERT_MS = 30 * 60 * 1000;
+async function checkWebhookHealth(
+  supabase: ReturnType<typeof createClient>,
+): Promise<{ healthy: boolean; status: number }> {
+  let status = 0;
+  try {
+    const verifyToken = (Deno.env.get("WHATSAPP_VERIFY_TOKEN") || "").trim();
+    const base = (Deno.env.get("SUPABASE_URL") || "").replace(/\/+$/, "");
+    if (!base || !verifyToken) return { healthy: true, status: 0 }; // لا نقدر نفحص → لا إنذار كاذب
+    const probe = base + "/functions/v1/WhatsApp-Router"
+      + "?hub.mode=subscribe&hub.verify_token=" + encodeURIComponent(verifyToken)
+      + "&hub.challenge=ping";
+    let body = "";
+    try {
+      const r = await fetch(probe, { method: "GET" }); // ⚠️ بلا Authorization (تماماً مثل Meta)
+      status = r.status;
+      body = (await r.text()).slice(0, 32);
+    } catch (e) {
+      status = -1; body = String(e).slice(0, 40);
+    }
+    const healthy = status === 200 && body.includes("ping");
+    if (healthy) return { healthy: true, status };
+
+    // ── شفاء ذاتي (المشكلة ما ترجع أبداً) ──────────────────────────────────
+    // لو السبب 401/403 (البوابة تطلب JWT = انقلب verify_jwt)، نعيده false
+    // تلقائياً عبر Management API — فيتصلّح العطل خلال دقيقة بلا تدخّل بشري.
+    // يحتاج سرّ SB_MGMT_TOKEN (توكن إدارة شخصي sbp_…). نجرّب كل مرة
+    // غير سليمة (قبل منع التكرار) لأن الشفاء أهم من كبح التنبيه.
+    let healed = false;
+    const mgmtToken = (Deno.env.get("SB_MGMT_TOKEN") || "").trim();
+    if (mgmtToken && (status === 401 || status === 403)) {
+      try {
+        const patch = await fetch(
+          "https://api.supabase.com/v1/projects/ofotvacszlmrqxzfjmtn/functions/WhatsApp-Router",
+          { method: "PATCH", headers: { "Authorization": "Bearer " + mgmtToken, "Content-Type": "application/json" },
+            body: JSON.stringify({ verify_jwt: false }) });
+        healed = patch.ok;
+        if (!patch.ok) console.error("self-heal PATCH failed", patch.status, (await patch.text()).slice(0, 200));
+      } catch (e) { console.error("self-heal error", e); }
+    }
+
+    // تنبيه فوري (مع منع تكرار ٣٠ دقيقة).
+    const { data: alertRow } = await supabase.from("wa_settings")
+      .select("value").eq("key", "webhook_health_alert_at").maybeSingle();
+    const lastAlertMs = alertRow?.value ? new Date(String(alertRow.value)).getTime() : 0;
+    if (Date.now() - lastAlertMs < WEBHOOK_HEALTH_REALERT_MS) return { healthy: false, status };
+
+    const { data: cfg } = await supabase.from("acc_config")
+      .select("key,value").in("key", ["callmebot_phone", "callmebot_apikey"]);
+    const m: Record<string, string> = {};
+    (cfg as Array<{ key: string; value: string }> | null || []).forEach((r) => { m[r.key] = r.value; });
+    // ملاحظة: لا نخرج مبكراً لو CallMeBot غير مضبوط — الإيميل قناة مستقلة تُرسَل دائماً.
+
+    const msg = healed
+      ? (`✅ عطل استقبال واتساب — تمّ إصلاحه تلقائياً.\n` +
+         `كان الويبهوك يرفض رسائل Meta (HTTP ${status}, انقلب verify_jwt)، والحارس أعاده تلقائياً.\n` +
+         `الاستقبال رجع. لا يلزم تدخّل، بس للعلم.`)
+      : (`🚨 عطل استقبال واتساب الآن!\n` +
+         `الويبهوك يرفض رسائل Meta (HTTP ${status}) — رسائل العملاء ما تصل.\n` +
+         `غالباً انقلب verify_jwt. أعيدي نشر WhatsApp-Router بـ«--no-verify-jwt» فوراً.`);
+    // قناتان مستقلتان عن Meta: الإيميل (مضمون) + CallMeBot.
+    await sendAlertEmail("🚨 عطل استقبال واتساب", msg);
+    if (m.callmebot_phone && m.callmebot_apikey) {
+      await fetch("https://api.callmebot.com/whatsapp.php?phone=" + encodeURIComponent(m.callmebot_phone) +
+        "&apikey=" + encodeURIComponent(m.callmebot_apikey) + "&text=" + encodeURIComponent(msg));
+    }
+
+    await supabase.from("wa_settings").upsert([{
+      key: "webhook_health_alert_at", value: new Date().toISOString(), updated_at: new Date().toISOString(),
+    }]);
+    return { healthy: false, status };
+  } catch (err) {
+    console.error("checkWebhookHealth error", err);
+    return { healthy: false, status };
+  }
+}
+
 // ── Tourism-AI invocation ────────────────────────────────────────────────
 // Tourism-AI returns Anthropic-style { content: [{type:"text", text:"..."}] }.
 // The text is structured with sectional anchors at line starts:
@@ -2231,6 +2335,27 @@ ${returning
     _nightsGateFired = true;
   }
 
+  // ── حارس تعارض المدة (خادميّ) ───────────────────────────────────────────
+  // لو ذكر العميل عدد أيام يناقض التواريخ/الليالي (مثل «10 days» مع «18-30
+  // December» = 12 ليلة ≈ 13 يوم)، طلال **ينبّه العميل** ويطلب يوضّح قبل ما يبني،
+  // بدل ما يعتمد رقماً متناقضاً بصمت أو يبني برنامجاً بمدة خاطئة. (طلب المالكة ٣١
+  // أكتوبر.) غير العمرة (الليالي وحدة التسعير فيها فلا يُقارَن بالأيام).
+  const _durDaysN   = parseInt(String(_gm.days   || "").replace(/[^\d]/g, ""), 10);
+  const _durNightsN = parseInt(String(_gm.nights || "").replace(/[^\d]/g, ""), 10);
+  const _askedDurConflict = _gm.asked_duration_conflict === true;
+  let _durGateFired = false;
+  if (!_isUmrahPax
+      && Number.isFinite(_durDaysN) && _durDaysN > 0
+      && Number.isFinite(_durNightsN) && _durNightsN > 0
+      && Math.abs(_durDaysN - (_durNightsN + 1)) >= 2
+      && !_askedDurConflict
+      && !_destGateFired && !_paxGateFired && !_hmPaxGateFired
+      && !_ageGateFired && !_nightsGateFired) {
+    const _expDays = _durNightsN + 1;
+    outMsgs = [`لاحظت تعارض بسيط في المدة: كتبت ${_durDaysN} أيام، لكن التواريخ اللي ذكرتها تقارب ${_expDays} يوم (${_durNightsN} ليلة). أيهما نعتمد: عدد الأيام ولا التواريخ؟`];
+    _durGateFired = true;
+  }
+
   // حماية صياغة: النموذج أحياناً يسأل العدد بصيغة ركيكة مثل «كم عدد الأشخاص اللي راح
   // تنومون في الفندق؟» — نستبدلها بصياغة طبيعية مهذّبة. (شكوى المالكة ١١ أكتوبر.)
   outMsgs = outMsgs.map(m => String(m)
@@ -2255,6 +2380,8 @@ ${returning
   if (_nightsGateFired || _outAsksNights) _mergedData.asked_nights = true;
   // تأكيد عدد مسافري شهر العسل — نثبّته فلا نكرّره.
   if (_hmPaxGateFired || _outConfirmsPax) _mergedData.asked_hm_pax = true;
+  // تنبيه تعارض المدة — نثبّته فلا نكرّره (نسأل مرة واحدة ثم نكمل بردّ العميل).
+  if (_durGateFired) _mergedData.asked_duration_conflict = true;
   // تثبيت الوجهة لو عُرفت من صورة العرض ولم يملأها النموذج (تظهر بالداشبورد + تمنع سؤالها).
   if (!String(_mergedData.destination || "").trim() && _destLabel) _mergedData.destination = _destLabel;
   // تثبيت عدد المسافرين المُستخرَج خادميّاً من كلام العميل («شخصين» إلخ) إن لم يملأه النموذج.
@@ -2266,7 +2393,8 @@ ${returning
     || (_isUmrahPax ? !_nightsKnown : !_daysKnown);
   // الأساسيات كاملة ولا حارس يسأل شيئاً هذا الدور.
   const _essentialsComplete = !_essentialsMissing
-    && !_ageGateFired && !_nightsGateFired && !_hmPaxGateFired && !_paxGateFired && !_destGateFired;
+    && !_ageGateFired && !_nightsGateFired && !_hmPaxGateFired && !_paxGateFired && !_destGateFired
+    && !_durGateFired;
 
   // ── بوابة التأكيد الخادمية (deterministic، لا تعتمد على نص الـLLM) ──
   //    • أول اكتمال أو تصحيح → نستبدل رد الـLLM بملخّص تأكيد يطلب «نعم».
@@ -6891,7 +7019,51 @@ Deno.serve(async (req) => {
       const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       await checkStalledMessages(supabase);
       await checkInboundSilence(supabase);
+      // فحص صحة الويبهوك الفعّال — يكتشف انقلاب verify_jwt/401 خلال دقيقة وينبّه.
+      await checkWebhookHealth(supabase);
       return new Response(JSON.stringify({ ok: true }), { headers: jsonCors });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
+    }
+  }
+
+  // تشخيص بوابة الـJWT للويبهوك يدوياً (يحاكي Meta بلا توكن). يرجّع healthy/status.
+  //   ?alert=1 → يُجري الفحص الكامل عبر checkWebhookHealth (ينبّه لو معطّل).
+  //   (منفصل عن webhook_health أعلاه الذي يفحص حالة Meta Graph.)
+  if (url.searchParams.get("admin_action") === "webhook_jwt_probe") {
+    if (!checkAuth(req)) return unauthorized();
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      // اختبار آمن للشفاء الذاتي: يجرّب Management API بضبط verify_jwt=false
+      //   (القيمة الحالية، بلا أي أثر) للتأكد أن SB_MGMT_TOKEN يعمل.
+      if (url.searchParams.get("heal_test") === "1") {
+        const mgmtToken = (Deno.env.get("SB_MGMT_TOKEN") || "").trim();
+        if (!mgmtToken) return new Response(JSON.stringify({ heal_ready: false, reason: "SB_MGMT_TOKEN غير مضبوط" }), { headers: jsonCors });
+        try {
+          const patch = await fetch("https://api.supabase.com/v1/projects/ofotvacszlmrqxzfjmtn/functions/WhatsApp-Router",
+            { method: "PATCH", headers: { "Authorization": "Bearer " + mgmtToken, "Content-Type": "application/json" }, body: JSON.stringify({ verify_jwt: false }) });
+          const ok = patch.ok;
+          return new Response(JSON.stringify({ heal_ready: ok, status: patch.status, detail: ok ? "توكن الإدارة يعمل — الشفاء الذاتي جاهز" : (await patch.text()).slice(0, 200) }), { headers: jsonCors });
+        } catch (e) { return new Response(JSON.stringify({ heal_ready: false, error: (e as Error).message }), { headers: jsonCors }); }
+      }
+      // اختبار قناة الإيميل مباشرةً (يرسل إيميل تجريبي للتأكد أن Resend مضبوط).
+      if (url.searchParams.get("email_test") === "1") {
+        const sent = await sendAlertEmail("🔔 اختبار تنبيه واتساب",
+          "هذا إيميل تجريبي من حارس استقبال الواتساب. لو وصلك، قناة الإيميل تعمل بنجاح ✅");
+        return new Response(JSON.stringify({ email_sent: sent, to: ALERT_EMAIL_TO, resend_key_set: !!(Deno.env.get("RESEND_API_KEY") || "").trim() }), { headers: jsonCors });
+      }
+      if (url.searchParams.get("alert") === "1") {
+        const res = await checkWebhookHealth(supabase);
+        return new Response(JSON.stringify({ ...res, note: "تنبيه الإيميل+CallMeBot أُرسل لو معطّل وغير مكرّر" }), { headers: jsonCors });
+      }
+      const verifyToken = (Deno.env.get("WHATSAPP_VERIFY_TOKEN") || "").trim();
+      const base = (Deno.env.get("SUPABASE_URL") || "").replace(/\/+$/, "");
+      const probe = base + "/functions/v1/WhatsApp-Router?hub.mode=subscribe&hub.verify_token=" +
+        encodeURIComponent(verifyToken) + "&hub.challenge=ping";
+      let status = 0, body = "";
+      try { const r = await fetch(probe, { method: "GET" }); status = r.status; body = (await r.text()).slice(0, 32); }
+      catch (e) { status = -1; body = String(e).slice(0, 40); }
+      return new Response(JSON.stringify({ healthy: status === 200 && body.includes("ping"), status, body }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }

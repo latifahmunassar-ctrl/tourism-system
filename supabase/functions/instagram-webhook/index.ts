@@ -21,10 +21,14 @@ const CORS = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
 
-// رابط الرجوع المسجَّل في Meta (نفس الدالة مع action=oauth_callback). يُفضَّل ضبطه
-// صراحةً بسرّ IG_OAUTH_REDIRECT ليطابق المسجَّل في لوحة Meta بالضبط.
-function oauthRedirectUri(url: URL): string {
-  return (Deno.env.get("IG_OAUTH_REDIRECT") || `${url.origin}${url.pathname}?action=oauth_callback`).trim();
+// رابط الرجوع العام المسجَّل في Meta. ⚠️ لا نبنيه من url.origin/url.pathname —
+//   داخل Supabase Edge يصل الطلب كـ http:// وبمسار مقصوص (/instagram-webhook بلا
+//   /functions/v1) فينتج رابط خاطئ يرفضه إنستقرام. نثبّت الرابط العام الصحيح
+//   (قابل للتجاوز بسرّ IG_OAUTH_REDIRECT). مسار نظيف بلا query لأن إنستقرام يرفض
+//   الـquery في redirect_uri.
+const PUBLIC_FN_BASE = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/instagram-webhook";
+function oauthRedirectUri(): string {
+  return (Deno.env.get("IG_OAUTH_REDIRECT") || `${PUBLIC_FN_BASE}/oauth-callback`).trim();
 }
 // صفحة HTML بسيطة بالعربية تُعرَض للمالكة بعد (أو أثناء) إعادة الربط.
 function htmlPage(title: string, body: string): Response {
@@ -51,7 +55,10 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  const action = url.searchParams.get("action");
+  // رابط رجوع OAuth بلا query (مسار نظيف) — إنستقرام يرفض redirect_uri فيه
+  //   باراميترات query، فنستخدم مقطع مسار «/oauth-callback» ونكتشفه من pathname.
+  const action = url.searchParams.get("action")
+    || (url.pathname.endsWith("/oauth-callback") ? "oauth_callback" : null);
 
   // ── إرسال رد إنستقرام (Send API) — نافذة الـ 24 ساعة يفرضها إنستقرام خادميّاً ──
   if (action === "send") {
@@ -134,7 +141,7 @@ Deno.serve(async (req) => {
   if (action === "oauth_start") {
     const appId = (Deno.env.get("IG_APP_ID") || "").trim();
     if (!appId) return htmlPage("إعداد ناقص", "لم يُضبط IG_APP_ID في أسرار Supabase بعد.");
-    const redirect = oauthRedirectUri(url);
+    const redirect = oauthRedirectUri();
     const scope = "instagram_business_basic,instagram_business_manage_messages";
     const state = crypto.randomUUID();
     const auth = `https://www.instagram.com/oauth/authorize?enable_fb_login=0&force_authentication=1`
@@ -148,7 +155,7 @@ Deno.serve(async (req) => {
   if (action === "oauth_callback") {
     const appId = (Deno.env.get("IG_APP_ID") || "").trim();
     const appSecret = (Deno.env.get("IG_APP_SECRET") || "").trim();
-    const redirect = oauthRedirectUri(url);
+    const redirect = oauthRedirectUri();
     const oErr = url.searchParams.get("error_description") || url.searchParams.get("error");
     if (oErr) return htmlPage("تعذّر الربط", "رفض Meta الطلب: " + oErr);
     const code = url.searchParams.get("code") || "";
