@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-31-abudhabi'
+  var BUILD = '2026-10-31-abudhabi-b'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -3163,8 +3163,22 @@ async function bfLoadSuggestions(){
   }catch(e){ BF_SUGS = []; }
   // أزواج المطارات المتاحة لهذه الوجهة — الخانة ظاهرة دائماً ليحدّد الموظف القدوم/المغادرة صراحةً
   bfRenderAirportOptions();
-  if(!BF_SUGS.length){ hint.innerHTML = 'لا توجد اقتراحات جاهزة لهذه الوجهة — استخدم «تخصيص».'; }
-  else { hint.textContent = 'اضغط «عرض الخيارات» لعرض التوزيع المطابق لعدد الأيام.'; }
+  if(!BF_SUGS.length){
+    // وجهة بلا توزيعات جاهزة بالشيت (أبوظبي مثلاً): لا معنى لخانة المطار ولا لوضع
+    // «اقتراحات جاهزة» — نخفي الخانة ونحوّل تلقائياً لـ«تخصيص» بدل ما يظهر للموظف
+    // أن النظام يطالبه بمطار لا يوجد. تعود للظهور تلقائياً عند اختيار وجهة لها اقتراحات.
+    const af = document.getElementById('bf-airportField'); if(af) af.style.display = 'none';
+    const seg = document.getElementById('bf-modeSeg');     if(seg) seg.style.display = 'none';
+    const mr = document.querySelector('input[name=bf-mode][value=manual]');
+    if(mr && !mr.checked){ mr.checked = true; bfSetMode('manual', mr.closest('label')); }
+    else bfSetMode('manual');
+    hint.innerHTML = 'لا توجد توزيعات جاهزة لهذه الوجهة — حدّد المدن وعدد الليالي بالأسفل مباشرة.';
+  }
+  else {
+    const af = document.getElementById('bf-airportField'); if(af) af.style.display = '';
+    const seg = document.getElementById('bf-modeSeg');     if(seg) seg.style.display = '';
+    hint.textContent = 'اضغط «عرض الخيارات» لعرض التوزيع المطابق لعدد الأيام.';
+  }
 }
 // يبني قائمة المطارات مع **عدد الاقتراحات الجاهزة** جنب كل خيار حسب عدد الأيام المختار:
 // «القدوم: كذا — المغادرة: كذا (٢)» — فالموظف يختار اللي قدامه رقم ويتجنّب (٠). يُعاد
