@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-31-sender-maryam'
+  var BUILD = '2026-10-31-grouprefresh'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -4616,7 +4616,7 @@ function waBridgeOpen() {
   waBridgeRenderOutbox();
   waBridgeUpdateExcludedCount();
   waBridgeLoadNew();
-  if (!waBridgeGroupsLoaded) waBridgeLoadGroups(); else waBridgeRenderList();
+  waBridgeLoadGroups(); // اسحب القائمة طازجة كل فتح (منع ظهور جروبات قديمة بعد مزامنة)
   clearInterval(waBridgeStatusTimer);
   waBridgeStatusTimer = setInterval(waBridgeRefreshStatus, 15000);
 }
