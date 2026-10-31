@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-31-rabat'
+  var BUILD = '2026-10-31-xsearch'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -4710,9 +4710,52 @@ function waBridgeRenderList() {
     const on = waBridgeSel.has(g.jid) ? ' on' : '';
     return `<div class="wab-check${on}" data-jid="${g.jid}" onclick="waBridgeToggle('${g.jid}')"><span class="wab-box">${on ? '✓' : ''}</span><span class="wab-name">${waEsc(g.name)}</span><span class="wab-size" title="عدد الأعضاء في الجروب">${g.size ? '👥 ' + g.size : ''}</span><button class="wab-x" title="حذف من قائمة الإعلان" onclick="event.stopPropagation();waBridgeExclude('${g.jid}')">🚫</button></div>`;
   }).join('');
-  list.innerHTML = html || '<div style="padding:12px;color:var(--muted);font-size:12px">لا نتائج مطابقة</div>';
+  // بطّل أي بحث عبر-الأرقام معلّق من ضغطة سابقة
+  waBridgeCrossToken++; clearTimeout(waBridgeXTimer);
+  if (html) {
+    list.innerHTML = html;
+  } else if (q && !(digits.length >= 8 && /^[0-9+\s]+$/.test(q))) {
+    // اسم بلا نتائج تحت المُرسِل الحالي → حارس: دوّر عنه في بقية الأرقام
+    list.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">لا نتائج تحت هذا المُرسِل — <span id="waBridgeXsearch">🔎 جارٍ البحث في بقية الأرقام…</span></div>';
+    waBridgeXTimer = setTimeout(() => waBridgeCrossSearch(q), 400);
+  } else {
+    list.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">لا نتائج مطابقة</div>';
+  }
   document.getElementById('waBridgeShownCount').textContent = matches.length;
   waBridgeUpdateCount();
+}
+
+// ── حارس: لو الجروب مو تحت المُرسِل الحالي، دوّر عنه في بقية الأرقام واقترح التبديل ──
+let waBridgeCrossToken = 0, waBridgeXTimer = null, waBridgeXQ = '';
+function waBridgeAcctAction(acct) {
+  if (acct === '601111136864') return ['groups-all', {}];
+  if (acct === '96898072933') return ['groups-new-all', {}];
+  return ['groups-acct-all', { account: acct }];
+}
+async function waBridgeCrossSearch(q) {
+  const token = waBridgeCrossToken;        // الرمز الحالي بعد آخر render
+  waBridgeXQ = q;
+  const sel = document.getElementById('waBridgeAccount');
+  const current = waBridgeAccount;
+  const others = [...sel.options].map(o => ({ value: o.value, label: o.text.trim() })).filter(o => o.value !== current);
+  const found = [];
+  for (const o of others) {
+    const [action, extra] = waBridgeAcctAction(o.value);
+    try { const r = await waBridgeCall(action, { ...extra, q }); const n = (r.groups || []).length; if (n) found.push({ ...o, n }); } catch (e) {}
+    if (token !== waBridgeCrossToken) return;   // render أحدث ألغى هذا البحث
+  }
+  const stillQ = (document.getElementById('waBridgeSearch').value || '').trim();
+  if (token !== waBridgeCrossToken || stillQ !== q || waBridgeAccount !== current) return;
+  const box = document.getElementById('waBridgeXsearch');
+  if (!box) return;
+  box.innerHTML = found.length
+    ? found.map(f => `<button onclick="waBridgeSwitchAndSearch('${f.value}')" style="display:inline-block;margin:5px 5px 0 0;background:#128C7E;color:#fff;border:none;border-radius:8px;padding:6px 10px;font-family:Tajawal;font-size:12px;font-weight:800;cursor:pointer">✅ تحت ${waEsc(f.label)} (${f.n}) — بدّلي</button>`).join('')
+    : 'غير موجود تحت أي رقم آخر.';
+}
+function waBridgeSwitchAndSearch(account) {
+  document.getElementById('waBridgeAccount').value = account;
+  document.getElementById('waBridgeSearch').value = waBridgeXQ;
+  waBridgeAccountChange();   // يعيد تحميل جروبات الرقم ثم يعرض مع تطبيق البحث
 }
 
 function waBridgeToggle(jid, name) {
