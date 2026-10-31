@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-25-spain'
+  var BUILD = '2026-10-31-abudhabi'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -3102,6 +3102,7 @@ const BF_CITIES = {
   "المغرب":["مراكش","الدار البيضاء","طنجة","فاس","أكادير","الصويرة","اغافاي"],
   "إسبانيا":["مدريد","قرطبة","غرناطة","إشبيلية","مالقا","برشلونة","ماربيا"],
   "سيرلانكا":["كولومبو","نيجومبو","كاندي","نوارا ايليا","بنتوتا"],
+  "أبوظبي":["جزيرة ياس","أبوظبي"],
 };
 // يحوّل أي تهجئة للوجهة (همزة/تشكيل/إنجليزي) إلى مفتاح BF_CITIES المطابق، حتى لا
 // تفشل تعبئة الفورم عند ضبط bf-dest من طلب محفوظ (مثال: "اندونيسيا" بلا همزة أو
@@ -3119,13 +3120,15 @@ function bfResolveDest(d){
     china:'الصين', shanghai:'الصين', beijing:'الصين', suzhou:'الصين', hangzhou:'الصين', hongkong:'الصين',
     egypt:'مصر', cairo:'مصر',
     morocco:'المغرب', marrakech:'المغرب', marrakesh:'المغرب', casablanca:'المغرب', tanger:'المغرب', tangier:'المغرب', agadir:'المغرب', agafay:'المغرب', essaouira:'المغرب', rabat:'المغرب',
-    spain:'إسبانيا', madrid:'إسبانيا', barcelona:'إسبانيا', granada:'إسبانيا', cordoba:'إسبانيا', seville:'إسبانيا', sevilla:'إسبانيا', malaga:'إسبانيا', marbella:'إسبانيا' };
+    spain:'إسبانيا', madrid:'إسبانيا', barcelona:'إسبانيا', granada:'إسبانيا', cordoba:'إسبانيا', seville:'إسبانيا', sevilla:'إسبانيا', malaga:'إسبانيا', marbella:'إسبانيا',
+    abudhabi:'أبوظبي', 'abu dhabi':'أبوظبي', yasisland:'أبوظبي', yas:'أبوظبي' };
   if (EN[n]) return EN[n];
   if (/مكة|مكه|عمرة|المدينةالمنورة|المنورة/.test(n)) return 'العمرة';  // مكة/العمرة → مفتاح BF_CITIES
   if (/[إا]ن[جك]لترا|بريطانيا|لندن/.test(n)) return 'إنجلترا';         // إنجلترا/لندن → مفتاح BF_CITIES
   if (/الصين|صيني|شن?غهاي|شان[غج]هاي|بكين|سوجو|هان[غج]تشو|هون[غج]كون[غج]/.test(n)) return 'الصين';
   if (/مصر|القاهر[ةه]|الاهرامات|الأهرامات|الجيز[ةه]/.test(n)) return 'مصر';  // مصر/القاهرة → مفتاح BF_CITIES
-  if (/[إا]سباني[اة]|مدريد|برشلون[ةه]|غرناط[ةه]|قرطب[ةه]|[إا]شبيلي[ةه]|مالق[ةا]|ماربي/.test(n)) return 'إسبانيا';  // إسبانيا → مفتاح BF_CITIES
+  if (/[إا]سباني[اة]|مدريد|برشلون[ةه]|غرناط[ةه]|قرطب[ةه]|[إا]شبيلي[ةه]|مالق[ةا]|ماربي/.test(n)) return 'إسبانيا';
+  if (/ابوظبي|ياسايلاند|جزيرةياس/.test(n)) return 'أبوظبي';   // أبوظبي/ياس آيلاند → مفتاح BF_CITIES  // إسبانيا → مفتاح BF_CITIES
   return Object.keys(BF_CITIES).find(k => norm(k) === n) || raw;
 }
 const BF_INTAKE = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake";
@@ -3133,7 +3136,7 @@ let BF_SUGS = [];        // all ready suggestions for current destination
 let bfShownRows = [];    // suggestions currently rendered as cards
 let bfChosen = null;     // chosen distribution string (ready mode)
 function bfEsc(s){ return String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
-const BF_AIRPORT_AR = {Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي",Salalah:"صلالة",Shanghai:"شنغهاي",Beijing:"بكين",Hangzhou:"هانغتشو","Hong Kong":"هونغ كونغ",Guangzhou:"جوانزو",Marrakech:"مراكش",Casablanca:"الدار البيضاء",Tanger:"طنجة",Agadir:"أكادير",Agafay:"اغافاي",Essaouira:"الصويرة",Rabat:"الرباط",Madrid:"مدريد",Cordoba:"قرطبة",Granada:"غرناطة",Seville:"إشبيلية",Malaga:"مالقا",Barcelona:"برشلونة",Marbella:"ماربيا",Colombo:"كولومبو",Negombo:"نيجومبو",Kandy:"كاندي","Nuwara Eliya":"نوارا ايليا",Bentota:"بنتوتا"};
+const BF_AIRPORT_AR = {Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي",Salalah:"صلالة",Shanghai:"شنغهاي",Beijing:"بكين",Hangzhou:"هانغتشو","Hong Kong":"هونغ كونغ",Guangzhou:"جوانزو",Marrakech:"مراكش",Casablanca:"الدار البيضاء",Tanger:"طنجة",Agadir:"أكادير",Agafay:"اغافاي",Essaouira:"الصويرة",Rabat:"الرباط",Madrid:"مدريد",Cordoba:"قرطبة",Granada:"غرناطة",Seville:"إشبيلية",Malaga:"مالقا",Barcelona:"برشلونة",Marbella:"ماربيا","Abu Dhabi":"أبوظبي","Yas Island":"جزيرة ياس",Colombo:"كولومبو",Negombo:"نيجومبو",Kandy:"كاندي","Nuwara Eliya":"نوارا ايليا",Bentota:"بنتوتا"};
 function bfAirAr(a){ return BF_AIRPORT_AR[a] || a; }
 function bfPairOf(s){ return s.arrival_airport + '|' + s.departure_airport; }
 function bfCurPair(){
@@ -3364,6 +3367,51 @@ function bfPick(el){
   seg.querySelectorAll('label').forEach(l=>l.classList.remove('on'));
   el.closest('label').classList.add('on');
 }
+// ── 🇦🇪 بوابة أبوظبي (ياس آيلاند) — لوحة على يمين الشاشة ────────────────────
+// باقات ياس مُسعّرة لمدّة محدّدة (٢/٣/٤ ليالٍ) ولتركيبة واحدة: شخصان بالغان مع
+// طفلين (١٢ سنة وأقل) كحدّ أعلى — والأطفال مجاناً فيُقبل ٠ أو ١ أو ٢ بنفس السعر.
+// أي شيء خارج ذلك لا سعر له في الشيت إطلاقاً، فنمنع البناء ونكتب السبب للموظف.
+// ⚠️ شاشة فقط — اللوحة عنصر مستقل (position:fixed) ولا يمرّ على buildPDF أبداً.
+const AD_NIGHTS_OK = [2,3,4];
+const AD_ADULTS = 2, AD_MAX_CHILDREN = 2;
+function adIsAbuDhabi(d){ return /[أا]بو\s*ظبي|abu\s*dhabi|ياس|yas/i.test(String(d||'')); }
+/** يرجّع سبب المنع نصّاً، أو '' إذا الطلب مطابق. */
+function adBlockReason(dest, cities, adults, children){
+  if(!adIsAbuDhabi(dest)) return '';
+  const bad = (cities||[]).filter(c => !AD_NIGHTS_OK.includes(+c.n));
+  if(bad.length){
+    const d = bad.map(c => `${c.city}: ${c.n} ${+c.n===1?'ليلة':'ليالٍ'}`).join('، ');
+    return `المدّة المطلوبة (${d}) غير مُسعّرة. باقات ياس آيلاند متاحة لليلتين أو ثلاث أو أربع ليالٍ فقط.`;
+  }
+  const ch = Math.max(0, +children||0);
+  if((+adults||0) !== AD_ADULTS || ch > AD_MAX_CHILDREN){
+    return `الباقة مُسعّرة لشخصين بالغين مع طفلين (١٢ سنة وأقل) كحدّ أعلى، والمطلوب ${adults} بالغ${ch?` و${ch} طفل`:''}.`;
+  }
+  return '';
+}
+function adHideNoPrice(){ const el=document.getElementById('ad-noprice'); if(el) el.remove(); }
+function adShowNoPrice(reason){
+  adHideNoPrice();
+  const el = document.createElement('div');
+  el.id = 'ad-noprice';
+  el.className = 'no-print';
+  el.setAttribute('style',
+    'position:fixed;top:88px;right:16px;z-index:9999;width:310px;max-width:calc(100vw - 32px);'+
+    'background:#fef2f2;border:2px solid #dc2626;border-radius:13px;padding:14px 16px;'+
+    'box-shadow:0 10px 28px rgba(0,0,0,.18);font-size:13.5px;line-height:1.9;color:#7f1d1d;'+
+    'font-weight:800;text-align:right;direction:rtl;');
+  el.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'+
+      '<div style="font-size:15px">⛔ لا توجد أسعار</div>'+
+      '<button type="button" onclick="adHideNoPrice()" aria-label="إغلاق" '+
+        'style="border:none;background:transparent;font-size:17px;cursor:pointer;color:#7f1d1d;line-height:1">×</button>'+
+    '</div>'+
+    '<div style="font-weight:700;margin:6px 0 8px">'+String(reason||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))+'</div>'+
+    '<div style="border-top:1px dashed #fca5a5;padding-top:8px;font-size:14px">📞 <b>راجع الإدارة.</b></div>'+
+    '<div style="font-weight:600;opacity:.75;font-size:11.5px;margin-top:6px">تظهر لك على الشاشة فقط ولا تُطبع في ملف العميل.</div>';
+  document.body.appendChild(el);
+}
+
 function buildFromForm(){
   const dest = document.getElementById('bf-dest').value;
   if(!dest){ alert('اختر الوجهة أولاً'); return; }
@@ -3381,6 +3429,10 @@ function buildFromForm(){
       .filter(c=>c.city && c.n);
   }
   if(!cities.length){ alert('أضف مدينة واحدة على الأقل'); return; }
+  // 🇦🇪 أبوظبي: امنع البناء فوراً لو المدّة أو عدد الأشخاص خارج المُسعّر بالشيت.
+  adHideNoPrice();
+  const _adBlock = adBlockReason(dest, cities, adults, children);
+  if(_adBlock){ adShowNoPrice(_adBlock); return; }
   const stars = (document.querySelector('input[name=bf-stars]:checked')||{}).value || '5';
   const tr    = (document.querySelector('input[name=bf-tr]:checked')||{}).value || 'private';
   const sims  = +document.getElementById('bf-sims').value||0;
@@ -6147,6 +6199,14 @@ function sanitizeFileName(s){
 }
 
 function addMessage(type, text) {
+// 🇦🇪 لو ردّ الخادم برفض أبوظبي («… راجع الإدارة.») أظهِر نفس اللوحة على اليمين
+// حتى لا يضيع التنبيه داخل سجلّ المحادثة. المطابقة على نصّ الباني حرفيّاً.
+try {
+  const _t = String(text||'');
+  if (/لا توجد أسعار لهذا الطلب في أبوظبي/.test(_t) && typeof adShowNoPrice === 'function') {
+    adShowNoPrice(_t.replace(/^.*?أبوظبي\s*—\s*/u,'').replace(/\s*راجع الإدارة\.?\s*$/u,'').trim());
+  }
+} catch(e){}
 const msgs=document.getElementById('messages');
 const div=document.createElement('div');
 div.className=`msg ${type}`;
@@ -6905,7 +6965,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       const currency=(typeof currencyConversion!=='undefined'&&currencyConversion)?currencyConversion.name:'ريال';
       // اسم الملف إنجليزي نظيف (واتساب يلخبط الأسماء العربية في الملف نفسه)،
       // واسم الوجهة بالعربي يظهر سليم في نص الرسالة (caption) أسفل الملف.
-      const _DEST_EN={'عمان':'Oman','عُمان':'Oman','ماليزيا':'Malaysia','تايلند':'Thailand','تايلاند':'Thailand','فيتنام':'Vietnam','تركيا':'Turkey','روسيا':'Russia','جورجيا':'Georgia','اذربيجان':'Azerbaijan','أذربيجان':'Azerbaijan','مصر':'Egypt','المالديف':'Maldives','مالديف':'Maldives','اندونيسيا':'Indonesia','إندونيسيا':'Indonesia','بالي':'Bali','سريلانكا':'SriLanka','الامارات':'UAE','الإمارات':'UAE','دبي':'Dubai','البوسنة':'Bosnia','المغرب':'Morocco','إسبانيا':'Spain','اسبانيا':'Spain','جنوب أفريقيا':'SouthAfrica','جنوب افريقيا':'SouthAfrica','موريشيوس':'Mauritius','مكة المكرمة':'Makkah','مكة':'Makkah','العمرة':'Umrah','إنجلترا':'England','انجلترا':'England','بريطانيا':'England','لندن':'London','الصين':'China','الصّين':'China','صين':'China'};
+      const _DEST_EN={'عمان':'Oman','عُمان':'Oman','ماليزيا':'Malaysia','تايلند':'Thailand','تايلاند':'Thailand','فيتنام':'Vietnam','تركيا':'Turkey','روسيا':'Russia','جورجيا':'Georgia','اذربيجان':'Azerbaijan','أذربيجان':'Azerbaijan','مصر':'Egypt','المالديف':'Maldives','مالديف':'Maldives','اندونيسيا':'Indonesia','إندونيسيا':'Indonesia','بالي':'Bali','سريلانكا':'SriLanka','الامارات':'UAE','الإمارات':'UAE','أبوظبي':'AbuDhabi','ابوظبي':'AbuDhabi','أبو ظبي':'AbuDhabi','دبي':'Dubai','البوسنة':'Bosnia','المغرب':'Morocco','إسبانيا':'Spain','اسبانيا':'Spain','جنوب أفريقيا':'SouthAfrica','جنوب افريقيا':'SouthAfrica','موريشيوس':'Mauritius','مكة المكرمة':'Makkah','مكة':'Makkah','العمرة':'Umrah','إنجلترا':'England','انجلترا':'England','بريطانيا':'England','لندن':'London','الصين':'China','الصّين':'China','صين':'China'};
       const _destAr=String(indivState.dest||'').trim();
       const _destEn=_DEST_EN[_destAr]||(/^[\x00-\x7F]+$/.test(_destAr)?_destAr:'Trip');
       const fname=('Alezz_Travel_'+_destEn+'_Offer').replace(/[^\x00-\x7F]/g,'').replace(/\s+/g,'_').replace(/_+/g,'_').slice(0,60)+'.pdf';

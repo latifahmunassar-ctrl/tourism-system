@@ -160,7 +160,7 @@ async function formatAdProgramMessage(
   const destRaw = String(prog.destination || line("DEST") || "").trim();
   const destMap: Record<string, string> = {
     "Oman": "عُمان", "South Africa": "جنوب أفريقيا", "Malaysia": "ماليزيا",
-    "mauritius": "موريشيوس", "Mauritius": "موريشيوس", "China": "الصين", "Egypt": "مصر", "Morroco": "المغرب",
+    "mauritius": "موريشيوس", "Mauritius": "موريشيوس", "China": "الصين", "Egypt": "مصر", "Morroco": "المغرب", "Abu Dhabi": "أبوظبي",
   };
   const dest = destMap[destRaw] || destRaw;
   const meta = line("META");                                   // "5 أيام | 4 ليالي | ..."
@@ -387,6 +387,8 @@ const DESTINATION_HINTS: Array<[RegExp, string]> = [
   [/فرنسا|france|باريس|paris/i, "فرنسا"],
   [/هولندا|netherland|أمستردام|امستردام|amsterdam/i, "هولندا"],
   [/بريطانيا|إنجلترا|انجلترا|england|britain|لندن|london|مانشستر|manchester/i, "إنجلترا"],
+  // أبوظبي وجهة مُسعّرة عندنا (باقات ياس آيلاند) فتسبق التصنيف العام «الإمارات».
+  [/[أا]بو\s*ظبي|abu\s*dhabi|abudhabi|ياس\s*آ?ايلاند|جزيرة\s*ياس|yas\s*island|عالم\s*فيراري|ferrari\s*world|وارنر\s*براذرز|warner\s*bros/i, "أبوظبي"],
   [/الإمارات|الامارات|uae|emirates|دبي|dubai|أبوظبي|ابوظبي|abu\s*dhabi|الشارقة|sharjah/i, "الإمارات"],
   [/عمرة|عُمرة|عمره|الحرمين|مكة|مكه|makkah|mecca|المدينة\s*المنورة|madinah|medina/i, "العمرة"],
   [/سلطنة\s*عمان|صلال[ةه]|salalah|مسقط|muscat|نزوى|صور\b/i, "عُمان"],
@@ -2099,7 +2101,7 @@ ${returning
       Vietnam: "فيتنام", Malaysia: "ماليزيا", thailand: "تايلند", Turky: "تركيا",
       russia: "روسيا", Bosnia: "البوسنة", indonesia: "إندونيسيا", Oman: "عُمان",
       "South Africa": "جنوب أفريقيا", mauritius: "موريشيوس", England: "إنجلترا",
-      China: "الصين", Egypt: "مصر", Morroco: "المغرب", Spain: "إسبانيا", "Sri lanka": "سريلانكا",
+      China: "الصين", Egypt: "مصر", Morroco: "المغرب", Spain: "إسبانيا", "Sri lanka": "سريلانكا", "Abu Dhabi": "أبوظبي",
     };
     const _lastCust2 = msgs.filter(m => m.who === "العميل").slice(-2).map(m => m.body).join("  ");
     const _recentDest = extractDestination(_lastCust2);                 // وجهة من آخر رسالتين للعميل
@@ -7309,7 +7311,7 @@ Deno.serve(async (req) => {
 أعد JSON فقط بلا أي شرح بهذا الشكل بالضبط:
 {"destination":"","destination2":"","date_from":"","pax":null,"children":null,"days":null,"sim_count":null,"hotel_stars":"","notes":""}
 القواعد:
-- destination: واحدة فقط من [فيتنام، ماليزيا، تايلاند، تركيا، روسيا، البوسنة، إندونيسيا، عُمان، جنوب أفريقيا، موريشيوس، إنجلترا، الصين، مصر، المغرب، العمرة] إن طابقت وجهة مذكورة، وإلا "". 🕋 مهم: أي طلب عمرة/عُمرة/حج/زيارة الحرم/مكة/مكه/المدينة المنورة/الحرمين → destination = "العمرة" (وجهة العمرة تشمل مكة والمدينة معاً). 🇪🇬 أي ذكر لمصر/القاهرة/الأهرامات/الجيزة/خان الخليلي → destination = "مصر". 🇲🇦 أي ذكر للمغرب/مراكش/الدار البيضاء/طنجة/أكادير/الصويرة/الرباط → destination = "المغرب".
+- destination: واحدة فقط من [فيتنام، ماليزيا، تايلاند، تركيا، روسيا، البوسنة، إندونيسيا، عُمان، جنوب أفريقيا، موريشيوس، إنجلترا، الصين، مصر، المغرب، العمرة، أبوظبي] إن طابقت وجهة مذكورة، وإلا "". 🕋 مهم: أي طلب عمرة/عُمرة/حج/زيارة الحرم/مكة/مكه/المدينة المنورة/الحرمين → destination = "العمرة" (وجهة العمرة تشمل مكة والمدينة معاً). 🇪🇬 أي ذكر لمصر/القاهرة/الأهرامات/الجيزة/خان الخليلي → destination = "مصر". 🇲🇦 أي ذكر للمغرب/مراكش/الدار البيضاء/طنجة/أكادير/الصويرة/الرباط → destination = "المغرب". 🇦🇪 أي ذكر لأبوظبي/ياس آيلاند/عالم فيراري/وارنر براذرز → destination = "أبوظبي".
 - ⚖️ destination2: **لو العميل يقارن أو متردّد بين وجهتين** (مثل «فيتنام أو تايلند»، «أيهما أرخص X ولا Y»، «قارن لي بين X وY») → ضع الوجهة الأولى في destination والثانية في destination2 (كلاهما من نفس القائمة أعلاه). لو وجهة واحدة فقط → destination2 = "". لا تضع نفس الوجهة في الحقلين.
 - date_from: تاريخ السفر YYYY-MM-DD إن أمكن استنتاجه (حوّل العبارات النسبية حسب تاريخ اليوم)، وإلا "".
 - pax بالغين، children أطفال، sim_count شرائح: أرقام أو null.

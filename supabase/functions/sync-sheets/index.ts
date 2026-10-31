@@ -26,7 +26,15 @@ const CORS_HEADERS = {
   "Content-Type": "application/json",
 };
 
-const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "Spain", "  Sri lanka"];
+// اسم التبويب في الشيت ≠ مفتاح الوجهة في القاعدة. تبويب أبوظبي اسمه الحرفي
+// «Abu Dhabi (Yas Island )» وهو مفتاح هشّ (أقواس ومسافات) يتكرّر في ٨ مواضع
+// بالمحرك والواجهات، فنختصره إلى «Abu Dhabi». يجب أن يبقى مطابقاً لنظيره في
+// Tourism-AI/index.ts (pmTabForDest).
+const TAB_KEY_OVERRIDE: Record<string, string> = {
+  "Abu Dhabi (Yas Island)": "Abu Dhabi",
+};
+
+const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "Spain", "  Sri lanka", "Poland", "Abu Dhabi (Yas Island )"];
 
 // Per-destination canonical-city patterns — MUST stay in sync with DEST_CITIES
 // in Tourism-AI/index.ts (same canonical names the builder groups by). Used
@@ -133,6 +141,19 @@ const SECTION_CITY_DEFS: Record<string, Array<{ canonical: string; pattern: RegE
     { canonical: "Malaga",    pattern: /مالا?ق[ةا]|málaga|malaga/i },
     { canonical: "Barcelona", pattern: /برشلون[ةه]|barcelona/i },
     { canonical: "Marbella",  pattern: /ماربي(?:لا|ا)|مربلة|marbella/i },
+  ],
+  "Abu Dhabi": [
+    { canonical: "Yas Island", pattern: /ياس\s*آ?ايلاند|جزيرة\s*ياس|yas\s*island|yas/i },
+    { canonical: "Abu Dhabi",  pattern: /[أا]بو\s*ظبي|abu\s*dhabi|abudhabi/i },
+  ],
+  Poland: [
+    { canonical: "Warsaw",   pattern: /وارسو|وارسوا|warsaw|warszawa/i },
+    { canonical: "Krakow",   pattern: /كراكوف|كراكو(?![ا-ي])|krakow|kraków|cracow/i },
+    { canonical: "Zakopane", pattern: /زاكوباني|زكوباني|zakopane/i },
+    { canonical: "Gdansk",   pattern: /[غج]دانسك|gdansk|gdańsk/i },
+    { canonical: "Sopot",    pattern: /سوبوت|sopot/i },
+    { canonical: "Gdynia",   pattern: /[غج]دينيا|gdynia/i },
+    { canonical: "Wroclaw",  pattern: /فروتسواف|فروتسلاف|wroclaw|wrocław/i },
   ],
 };
 
@@ -395,6 +416,34 @@ const HEADER_ALIASES: Record<string, RegExp> = {
   hotel_type: /^(hotel\s*type|نوع\s*السكن|نوع\s*الفندق|accommodation(\s*type)?)$/i,
 };
 
+// ── تسعير بالباقة حسب عدد الليالي (أبوظبي / ياس آيلاند) ────────────────────
+// بعض الوجهات لا تُسعّر بالليلة بل تبيع باقة كاملة لعدد ليالٍ محدّد، والسعر غير
+// خطّي فلا يُشتق بالقسمة. صف العناوين يكتب لكل فترة: From | To | 2N | 3N | 4N
+// بدل From | To | Rate. نلتقط كل عمود عنوانه «<رقم>N» ونُنتج صفّاً لكل مدّة،
+// فيه `nights` = عدد الليالي و`price_per_night` = إجمالي الباقة ÷ الليالي حتى
+// يبقى حساب الباني (price_per_night × nights) صحيحاً بلا أي تعديل.
+const NIGHTS_COL_RE = /^(\d+)\s*N$/i;
+
+/** يجمع فترات التسعير بالليالي من صف العناوين: [From, To, 2N, 3N, 4N] المتكرّرة. */
+function findNightsPeriods(hdrRow: string[]): Array<{ fromCol: number; toCol: number; nights: Array<{ col: number; n: number }> }> {
+  const periods: Array<{ fromCol: number; toCol: number; nights: Array<{ col: number; n: number }> }> = [];
+  const cell = (j: number) => String(hdrRow[j] ?? "").trim();
+  for (let j = 0; j + 2 < hdrRow.length; j++) {
+    if (!HEADER_ALIASES.dateFrom.test(cell(j))) continue;
+    if (!HEADER_ALIASES.dateTo.test(cell(j + 1))) continue;
+    const nights: Array<{ col: number; n: number }> = [];
+    for (let k = j + 2; k < hdrRow.length; k++) {
+      const m = cell(k).match(NIGHTS_COL_RE);
+      if (!m) break;
+      const n = parseInt(m[1], 10);
+      if (!(n > 0 && n < 60)) break;
+      nights.push({ col: k, n });
+    }
+    if (nights.length > 0) periods.push({ fromCol: j, toCol: j + 1, nights });
+  }
+  return periods;
+}
+
 function findHotelHeader(rows: string[][]): { rowIdx: number; cols: Record<string, number>; rateCols: number[] } | null {
   for (let i = 0; i < rows.length; i++) {
     const cells = rows[i].map(x => (x || "").trim());
@@ -430,6 +479,19 @@ function findHotelHeader(rows: string[][]): { rowIdx: number; cols: Record<strin
       const starLimit = map.stars !== undefined ? map.stars : cells.length;
       for (let j = map.city + 1; j < starLimit; j++) {
         if (cells[j] && HEADER_ALIASES.city.test(cells[j])) { map.area = j; break; }
+      }
+    }
+    // تسعير بالباقة حسب الليالي (أبوظبي): لا يوجد عمود Rate إطلاقاً، بل From/To/2N/3N/4N.
+    // نقبل صف العناوين ونضع `rate` على أوّل عمود ليالٍ حتى تمرّ بقيّة الفحوصات،
+    // والاستخراج الفعلي يتم في extractHotels عبر findNightsPeriods.
+    if (map.rate === undefined) {
+      const nightsPeriods = findNightsPeriods(cells);
+      if (nightsPeriods.length > 0 && map.city !== undefined && map.stars !== undefined) {
+        const p0 = nightsPeriods[0];
+        map.rate = p0.nights[0].col;
+        if (map.dateFrom === undefined) map.dateFrom = p0.fromCol;
+        if (map.dateTo === undefined) map.dateTo = p0.toCol;
+        return { rowIdx: i, cols: map, rateCols: nightsPeriods.flatMap(p => p.nights.map(n => n.col)) };
       }
     }
     // Headerless seasonal triplets (إسبانيا): بعض التبويبات لا تكتب عناوين From/To/Rate
@@ -662,6 +724,28 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
       occupancy:          occupancyStr,
       last_synced_at:     new Date().toISOString(),
     };
+    // ── تسعير بالباقة حسب عدد الليالي (أبوظبي) ────────────────────────
+    // صف لكل (فترة × مدّة). `nights` يحمل عدد الليالي، و`price_per_night` =
+    // إجمالي الباقة ÷ الليالي (بلا تقريب) فيُرجع الباني الإجمالي بالضبط حين
+    // يضربه في nights. الخانة الفاضية = لا توجد باقة بتلك المدّة ⇒ لا صف.
+    const nightsPeriods = findNightsPeriods((rows[header.rowIdx] || []).map(x => (x || "").trim()));
+    if (nightsPeriods.length > 0) {
+      let emitted = 0;
+      for (const per of nightsPeriods) {
+        const f = normalizeISODate(String(row[per.fromCol] || "").trim());
+        const t = normalizeISODate(String(row[per.toCol] || "").trim());
+        if (!f || !t) continue;
+        for (const { col, n } of per.nights) {
+          const total = parsePrice(String(row[col] || "").trim());
+          if (isNaN(total) || total <= 0) continue;   // لا باقة بهذه المدّة
+          hotels.push({ ...baseRec, price_per_night: total / n, nights: n, date_from: f, date_to: t });
+          emitted++;
+        }
+      }
+      if (emitted === 0) reject(i, `no nights-package price found`, row);
+      continue;   // لا تُطبَّق حلقات النطاقات العامة على هذا التخطيط
+    }
+
     hotels.push({ ...baseRec, price_per_night: price, date_from: dateFromRaw, date_to: dateToRaw });
 
     // ── نطاقات تسعير إضافية على نفس الصف ──────────────────────────────
@@ -840,7 +924,12 @@ function extractTours(rows: string[][], destination: string, debug?: { rejects: 
     const variants = header.priceCols
       .map(({ col, label }) => {
         const isPerPaxLabel = /per\s*pax/i.test(label);
-        if (isPerPaxLabel && !isSharedRow) return null; // skip per-pax for non-shared rows
+        // عمود عُمان «sharing car per pax» يحوي رقم اليوم (1؁2؁3) للسطور العاديّة،
+        // فيبقى محصوراً بالسطور المشتركة. أمّا عمود «Per Pax» الصِّرف فهو سعر حقيقي
+        // للشخص الواحد (سفاري بيلانسبرج في جنوب أفريقيا) فيُقرأ لكل السطور،
+        // ويضربه local-builder في عدد الأشخاص عند بناء البرنامج.
+        const isSharingCol = /shar|مشترك|ليموزين/i.test(label);
+        if (isPerPaxLabel && isSharingCol && !isSharedRow) return null;
         const raw = (row[col] || "").trim();
         if (!raw) return null;
         const p = parsePrice(raw);
@@ -1211,6 +1300,7 @@ function extractSuggestions(
     Makkah:   "جدة",   // برامج العمرة تدخل/تخرج عبر جدة (بلا سطر مطار في عمود الاقتراحات)
     China:    "Shanghai",  // برامج الصين تبدأ/تنتهي غالباً بشنغهاي (عمود الاقتراحات بلا سطر مطار)
     Morroco:  "Marrakech", // المغرب متعدّد البوابات؛ الوصول/المغادرة يُشتقّان من أول/آخر مدينة بالتوزيع، وإلا مراكش
+    "Abu Dhabi": "Abu Dhabi",  // وجهة بمطار واحد (مطار زايد الدولي) — كل الإقامات داخل الإمارة
     Spain:    "Madrid",    // إسبانيا — رؤوس النطاقات صريحة بعمود BU (الوصول/المغادرة مطار X)؛ هذا احتياطي فقط
     "Sri lanka": "Colombo", // سيرلانكا مطار واحد (كولومبو) — القدوم/المغادرة = كولومبو دائماً
   };
@@ -1739,7 +1829,7 @@ Deno.serve(async (req) => {
       // Tab in sheet may have trailing/leading whitespace (e.g. "thailand "),
       // but we want clean identifiers in DB ("thailand"). Use tabRaw to read
       // the sheet, tab (trimmed) for storage and grouping.
-      const tab = tabRaw.trim();
+      const tab = TAB_KEY_OVERRIDE[tabRaw.trim()] ?? tabRaw.trim();
       try {
         // Google Sheets requires single-quotes around tab names that contain
         // spaces or other special chars (e.g. 'Malaysia '!A1:Z500).
@@ -1788,9 +1878,10 @@ Deno.serve(async (req) => {
 
         // dedup داخل batch + full-replace per destination (يحذف القديم ويُعيد المحدّث)
         const dedupedMap = new Map<string, object>();
-        for (const h of hotels as Array<{ name: string; room_type: string; occupancy: string; location: string; date_from?: string }>) {
+        for (const h of hotels as Array<{ name: string; room_type: string; occupancy: string; location: string; date_from?: string; nights?: number }>) {
           // المفتاح يشمل date_from حتى لا تنطمس صفوف المواسم (نفس الفندق/الغرفة بسعرين)
-          const key = `${h.name}|${h.room_type}|${h.occupancy}|${h.date_from || ""}`;
+          // و`nights` حتى لا تنطمس صفوف المدد (٢/٣/٤ ليالٍ لنفس الفندق والفترة — أبوظبي)
+          const key = `${h.name}|${h.room_type}|${h.occupancy}|${h.date_from || ""}|${h.nights ?? ""}`;
           dedupedMap.set(key, h);
         }
         const dedupedHotels = Array.from(dedupedMap.values());

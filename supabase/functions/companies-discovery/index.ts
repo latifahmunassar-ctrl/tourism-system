@@ -596,7 +596,7 @@ Deno.serve(async (req) => {
       };
       // ترقيم صفحات لتجاوز حد 1000 لكل طلب (قائمة المعتمدة قد تتجاوزه).
       const all: any[] = []; const PAGE = 1000;
-      for (let from = 0, i = 0; i < 12; i++, from += PAGE) {
+      for (let from = 0, i = 0; i < 60; i++, from += PAGE) {
         const { data, error } = await build().range(from, from + PAGE - 1);
         if (error) return json({ ok: false, error: error.message }, 500);
         all.push(...(data || []));

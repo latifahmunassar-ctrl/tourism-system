@@ -32,6 +32,10 @@ export type HotelRow = {
   includes_breakfast?: boolean;
   date_from?: string;     // ISO or "1/6/2026"
   date_to?: string;
+  /** عدد ليالي الباقة (أبوظبي/ياس آيلاند). الشيت يبيع باقة لمدّة محدّدة والسعر غير
+   *  خطّي، فيُخزَّن صف لكل مدّة و`price_per_night` = الإجمالي ÷ الليالي. الصف صالح
+   *  لتلك المدّة فقط. NULL لكل الوجهات الأخرى = تسعير بالليلة كالمعتاد. */
+  nights?: number | null;
   /** علم داخلي: تاريخ السفر خارج فترات هذا الفندق المُسعّرة، فالسعر المعروض
    *  أقرب فترة متاحة (تقريبي). يُضاف في pickCheapestHotel ويُظهِر ملاحظة. */
   _approxDate?: boolean;
@@ -280,7 +284,7 @@ export function pickCheapestHotel(
   city: string,
   request: TripRequest,
   cityPattern?: RegExp,
-  options?: { excludeNames?: Set<string>; overrideAdults?: number; areaFilter?: string; overrideStars?: number; feature?: string; lockOccupancyAdults?: number },
+  options?: { excludeNames?: Set<string>; overrideAdults?: number; areaFilter?: string; overrideStars?: number; feature?: string; lockOccupancyAdults?: number; stayNights?: number },
 ): HotelRow | null {
   // overrideAdults is set when the employee explicitly asks for a different
   // occupancy on a single swap ("غير فندق هانوي لـ 4 أشخاص"). In that case
@@ -320,6 +324,11 @@ export function pickCheapestHotel(
     }
     // Amenity filter ("بمسبح خاص" / "فيلا"): require the room_type to mention
     // the requested feature. Pool villas/private-pool rooms match "pool".
+    // تسعير بالباقة (أبوظبي): الصف مُسعّر لمدّة بعينها فلا يصلح لغيرها.
+    // الصفوف بلا `nights` (كل الوجهات الأخرى) تمرّ كما هي.
+    if (h.nights != null) {
+      if (!options?.stayNights || h.nights !== options.stayNights) return false;
+    }
     if (options?.feature) {
       const rt = (h.room_type || "").toLowerCase();
       if (options.feature === "pool"  && !/pool|مسبح/iu.test(rt)) return false;
@@ -446,6 +455,8 @@ function monthNumber(monthName: string): number {
 // (لأن آيا صوفيا معلَم اسطنبولي في نمطها) وطرابزون معاً؛ فنفضّل المدينة المذكورة
 // اسمها صراحة (طرابزون). أي مدينة غير مدرجة هنا تعود للسلوك القديم (ترتيب cityDefs).
 const CITY_NAME_RE: Record<string, RegExp> = {
+  "Yas Island": /ياس\s*آ?ايلاند|جزيرة\s*ياس|yas\s*island/i,
+  "Abu Dhabi": /[أا]بو\s*ظبي|abu\s*dhabi|abudhabi/i,
   "Ha Noi": /هانوي|ha\s*noi|hanoi/i, "Sapa": /سابا|sapa/i, "Ha Long": /هالون[جغ]|ha\s*long|halong/i,
   "Da Nang": /دانان[جغ]|da\s*nang|danang/i, "Phu Quoc": /فوكوك|phu\s*quoc|phuquoc/i,
   "Ho Chi Minh": /هوتشي|هو\s*تشي|ho\s*chi|hochi|saigon|سايغون|سايجون/i,
@@ -832,8 +843,9 @@ export function pickToursForCity(
     const ao = namesOtherCity(a) ? 1 : 0;
     const bo = namesOtherCity(b) ? 1 : 0;
     if (ao !== bo) return ao - bo;
-    const pa = pickTourVariantPrice(a, paxCount, false, options?.month || 0);
-    const pb = pickTourVariantPrice(b, paxCount, false, options?.month || 0);
+    // المقارنة بالمبلغ النهائي لا سعر الوحدة، وإلاّ ظهرت جولة مسعّرة بالشخص أرخص زوراً.
+    const pa = tourLineTotal(a, paxCount, false, options?.month || 0);
+    const pb = tourLineTotal(b, paxCount, false, options?.month || 0);
     if (pa !== pb) return pa - pb;
     return a.name.localeCompare(b.name);
   });
@@ -1466,7 +1478,16 @@ export type ProgramData = {
   switchableLegs?: Array<{ day: number; fromCity: string; toCity: string; trainPrice: number; flightPrice: number; mode: "train" | "flight" }>;
 };
 
+// ── قيود باقات أبوظبي / ياس آيلاند ───────────────────────────────────────
+// المدد المُسعّرة في الشيت، والتركيبة الوحيدة المسموحة. أي شيء خارجها = لا سعر.
+export const ABU_DHABI_NIGHTS = new Set<number>([2, 3, 4]);
+export const ABU_DHABI_ADULTS = 2;
+export const ABU_DHABI_MAX_CHILDREN = 2;
+export const AD_NO_PRICE_PREFIX = "لا توجد أسعار لهذا الطلب في أبوظبي —";
+export const AD_NO_PRICE_SUFFIX = "راجع الإدارة.";
+
 const DESTINATION_AR_NAMES: Record<string, string> = {
+  "Abu Dhabi": "أبوظبي",
   vietnam: "فيتنام",
   Malaysia: "ماليزيا",
   thailand: "تايلاند",
@@ -1590,6 +1611,24 @@ export function pickTourVariantLabel(tour: TourRow, paxCount: number, isShared: 
     }
   }
   return cands.length ? String(cands[0].label || "") : String(variants[0].label || "");
+}
+
+/**
+ * المبلغ النهائي لسطر جولة/انتقال. الأصل أن أعمدة الشرائح («1-2 pax»،
+ * «3-4 pax») أسعار للمجموعة/السيارة فتُؤخذ كما هي. لكن بعض الخدمات يسعّرها
+ * المورّد بالشخص (سفاري بيلانسبرج: 1650 راند/شخص) وتُكتب في عمود «Per Pax»؛
+ * هذه تُضرب في عدد الأشخاص. الميزان هو label المتغيّر المختار فعلاً لا مجرّد وجود
+ * عمود per-pax في الصف، حتى لا يُضرب سعر شريحة مجموعة بالخطأ.
+ */
+export function tourLineTotal(tour: TourRow, paxCount: number, isShared: boolean, month = 0): number {
+  const unit  = pickTourVariantPrice(tour, paxCount, isShared, month);
+  const label = pickTourVariantLabel(tour, paxCount, isShared);
+  return isPerPaxLabel(label) ? unit * paxCount : unit;
+}
+
+/** هل العمود المختار مسعّر بالشخص؟ («Per Pax» وليس شريحة مجموعة) */
+export function isPerPaxLabel(label: string): boolean {
+  return /per\s*pax/i.test(String(label || ""));
 }
 
 // نوع السيارة بالعربي من label المتغيّر. صلالة فقط لها النوع بين قوسين عربي
@@ -1774,7 +1813,10 @@ export function formatProgram(data: ProgramData): string {
     const rowSaysShared = /مشترك[ةه]?|shared|ليموزين/iu.test(t.row.name || "");
     const treatAsShared = isShared && (hasPerPaxVariant || rowSaysShared);
     const price = pickTourVariantPrice(t.row, adults, treatAsShared, reqMonth);
-    const lineTotal = treatAsShared ? price * adults : price;
+    // الضرب في عدد الأشخاص إمّا لأنّ الطلب مشترك، أو لأنّ العمود المختار نفسه
+    // مسعّر بالشخص («Per Pax») ولو كانت الرحلة خاصة.
+    const perPaxCol = isPerPaxLabel(pickTourVariantLabel(t.row, adults, treatAsShared));
+    const lineTotal = (treatAsShared || perPaxCol) ? price * adults : price;
     transfersTotal += lineTotal;
     // سعة السيارة: لو المجموعة أكبر من أقصى شريحة ركاب (سيارة خاصة)، نختار أكبر
     // سيارة ونضيف "(سيارة تتسع N)" حتى تعرض الواجهة تنبيهاً للموظف ليضيف سيارة
@@ -1806,7 +1848,8 @@ export function formatProgram(data: ProgramData): string {
   const tourDays = new Set(tours.map(t => t.day));
   type TourOrFreeLine = { day: number; text: string };
   const tourLines: TourOrFreeLine[] = tours.map(tt => {
-    const price = pickTourVariantPrice(tt.tour, adults, false, reqMonth); // tours always private
+    // tours always private — لكن إن كان العمود المختار «Per Pax» ضُرب في عدد الأشخاص
+    const price = tourLineTotal(tt.tour, adults, false, reqMonth);
     toursTotal += price;
     const isFree = isFreeDayRow(tt.tour.name);
     const tourType = isFree ? "حر" : "ثقافية";
@@ -1956,6 +1999,30 @@ export async function buildLocalProgram(
   const stayOrder = request.cityStaysOrdered && request.cityStaysOrdered.length > 0
     ? request.cityStaysOrdered.filter(s => s.nights > 0)
     : request.cities.map(c => ({ city: c, nights: request.nightsByCity[c] || 0 })).filter(s => s.nights > 0);
+
+  // ── بوابتا أبوظبي (ياس آيلاند) ─────────────────────────────────────────
+  // الشيت يبيع باقة Stay & Play بمدّة محدّدة (٢/٣/٤ ليالٍ) لتركيبة واحدة
+  // (٢ كبار + حتى طفلين ١٢ سنة وأقل، والأطفال مجاناً). أي مدّة أو تركيبة
+  // خارج ذلك ليس لها سعر في الشيت إطلاقاً — نردّ صراحةً بدل اختلاق سعر.
+  // قرار المالكة (٣١ أكتوبر ٢٠٢٦): ٢ كبار + ٠/١/٢ طفل كلها مقبولة بنفس
+  // السعر؛ وليلة واحدة تُرفض مثل الخمس ليالٍ.
+  if (request.destination === "Abu Dhabi") {
+    const badStay = stayOrder.find(st => !ABU_DHABI_NIGHTS.has(st.nights));
+    if (badStay) {
+      return {
+        ok: false,
+        chatMessage: `${AD_NO_PRICE_PREFIX} المدّة المطلوبة ${badStay.nights} ${badStay.nights === 1 ? "ليلة" : "ليالٍ"}، وباقات ياس آيلاند مُسعّرة لليلتين أو ثلاث أو أربع ليالٍ فقط. ${AD_NO_PRICE_SUFFIX}`,
+      };
+    }
+    const ad = request.adults || 0;
+    const ch = Math.max(0, request.children || 0);
+    if (ad !== ABU_DHABI_ADULTS || ch > ABU_DHABI_MAX_CHILDREN) {
+      return {
+        ok: false,
+        chatMessage: `${AD_NO_PRICE_PREFIX} الباقة مُسعّرة لشخصين بالغين مع طفلين (١٢ سنة وأقل) كحدّ أعلى، والمطلوب ${ad} بالغ${ch ? ` و${ch} طفل` : ""}. ${AD_NO_PRICE_SUFFIX}`,
+      };
+    }
+  }
 
   // Resolve hotel modifications. Each one maps to a (city, stayIndex) pair
   // where stayIndex is 0-based within that city's occurrences. If the city
@@ -2187,6 +2254,8 @@ export async function buildLocalProgram(
         areaFilter: areaForThisStay || stay.area || inferredArea,
         feature: featureForThisStay,
         lockOccupancyAdults,
+        // تسعير بالباقة (أبوظبي): مدّة هذه الإقامة تحدّد أي صف سعر يصلح.
+        stayNights: stay.nights,
       };
       hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
         excludeNames: wantDifferentHotel ? new Set([...(excludeForThisStay || []), prevHotelName!.toLowerCase()]) : excludeForThisStay,
@@ -2476,8 +2545,8 @@ export async function buildLocalProgram(
           !isFreeDayName(t.name),
         );
         candidates.sort((a, b) =>
-          pickTourVariantPrice(a, request.adults || 2, false) -
-          pickTourVariantPrice(b, request.adults || 2, false),
+          tourLineTotal(a, request.adults || 2, false) -
+          tourLineTotal(b, request.adults || 2, false),
         );
         toTour = candidates[0] || null;
         if (!toTour) {

@@ -108,7 +108,13 @@ Deno.serve(async (req) => {
           const wa = normWa(rawFrom);
           const waMsgId = String(m?.id || "");
           const type = String(m?.type || "");
-          const body = type === "text" ? String(m?.text?.body || "") : `[${type || "مرفق"}]`;
+          // نص الرسالة من النص أو من ضغطة الأزرار:
+          //   قالب quick-reply → نوع «button» (m.button.text) · رسالة تفاعلية → «interactive» (button_reply.title)
+          let text = "";
+          if (type === "text") text = String(m?.text?.body || "");
+          else if (type === "button") text = String(m?.button?.text || m?.button?.payload || "");
+          else if (type === "interactive") text = String(m?.interactive?.button_reply?.title || m?.interactive?.list_reply?.title || "");
+          const body = text || `[${type || "مرفق"}]`;
           const profileName = nameByWaId.get(rawFrom) || "";
 
           // إنشاء/جلب المحادثة (+ربط شركة إن وُجدت بنفس الرقم)
@@ -143,12 +149,60 @@ Deno.serve(async (req) => {
             });
           } catch (_) { /* */ }
 
-          // 3) رد سارة التلقائي (إن كان مفعّلاً للمحادثة)
-          if (conv.auto_reply !== false && type === "text" && body) {
+          // 🔔 تنبيه الإدارة على الواتساب بأن شركة ردّت (اسم الشركة + نوع الرد).
+          //   مجرّد إشعار ليدخل المسؤول اللوحة ويرد — لا يُسجَّل كرسالة محادثة.
+          //   الرقم من b2b_settings.notify_whatsapp وإلا الرقم الافتراضي أدناه.
+          try {
+            const { data: nrow } = await supabase.from("b2b_settings")
+              .select("value").eq("key", "notify_whatsapp").maybeSingle();
+            const notifyTo = (nrow?.value || "").trim() || "96877428881"; // +968 7742 8881
+            // لا نرسل التنبيه لنفس الرقم الذي ردّ (يتجنّب الحلقة عند الاختبار)
+            if (notifyTo && normWa(notifyTo) !== wa) {
+              let companyName = profileName || "";
+              try {
+                if (conv.company_id) {
+                  const { data: comp } = await supabase.from("b2b_companies")
+                    .select("name").eq("id", conv.company_id).maybeSingle();
+                  if (comp?.name) companyName = comp.name;
+                }
+              } catch (_) { /* */ }
+              if (!companyName) companyName = wa;
+
+              let kind = "💬 رد نصي";
+              if (/مهتم|interested/i.test(text)) kind = (type === "button" || type === "interactive") ? "✅ مهتم (ضغط زر)" : "✅ مهتم";
+              else if (/ليس\s*الآن|لاحق|لا\s*شكر|not\s*now|no\s*thanks|later/i.test(text)) kind = "🕐 لاحقاً / ليس الآن";
+
+              const preview = body.length > 90 ? body.slice(0, 90) + "…" : body;
+              const alertMsg = `🔔 رد جديد من شركة\n🏢 ${companyName}\n📞 ${wa}\n📌 النوع: ${kind}\n💬 ${preview}\n\nافتحي لوحة الشركات للرد.`;
+              await sendText(notifyTo, alertMsg);
+            }
+          } catch (_) { /* التنبيه best-effort — لا يكسر الاستقبال */ }
+
+          // 3) رد سارة التلقائي (للنص ولضغطات الأزرار «مهتم»/«ليس الآن»)
+          //    مفتاح تشغيل عام: سارة متوقّفة افتراضياً، وتعمل فقط إذا b2b_settings.auto_reply_enabled = on/true/1/yes.
+          const { data: arGlobalRow } = await supabase.from("b2b_settings")
+            .select("value").eq("key", "auto_reply_enabled").maybeSingle();
+          const autoReplyGlobalOn = /^(on|true|1|yes)$/i.test(String(arGlobalRow?.value || "").trim());
+          if (autoReplyGlobalOn && conv.auto_reply !== false && text) {
             try {
               const { data: rows } = await supabase.from("b2b_settings")
                 .select("key, value").in("key", ["talal_system_prompt", "admin_whatsapp", "admin_whatsapp_link"]);
               const settings: Record<string, string> = Object.fromEntries((rows || []).map((r: any) => [r.key, r.value || ""]));
+
+              // «ليس الآن» → رد لطيف مختصر بلا ترحيب كامل ولا إلحاح.
+              if (/ليس\s*الآن|لاحق|لا\s*شكر|not\s*now|no\s*thanks|later/i.test(text)) {
+                const aw = settings.admin_whatsapp || "";
+                const awl = settings.admin_whatsapp_link || "";
+                const tail = aw ? ` وللتواصل مع الإدارة وقت ما ترغبون: واتساب ${aw}${awl ? ` أو عبر الرابط ${awl}` : ""}.` : "";
+                const niceReply = `شكراً لوقتكم الكريم 🌹 يسعدنا نكون في خدمتكم مستقبلاً، وأبواب العز الدولية مفتوحة وقت ما ترغبون بالتعاون.${tail}`;
+                const outId = await sendText(wa, niceReply);
+                await supabase.from("b2b_messages").insert({
+                  conversation_id: conv.id, direction: "out", body: niceReply,
+                  wa_message_id: outId, status: "sent",
+                });
+                continue; // لا نكمل لمسار الذكاء
+              }
+
               // متغيّرات الـ prompt: {admin_whatsapp} و {admin_whatsapp_link} من b2b_settings
               const systemPrompt = (settings.talal_system_prompt
                 || "أنتِ «سارة» مندوبة شراكات في العز الدولية للسفر والسياحة. رحّبي بالشركة واسألي عن اسمها واسم المسؤول، وأفيدي أن مسؤول الشراكات سيتواصل قريباً. لا تستخدمي Markdown ولا نجوم ولا عناوين — نص عادي فقط.")
@@ -165,7 +219,7 @@ Deno.serve(async (req) => {
               // Anthropic يشترط أن تبدأ المحادثة برسالة user
               while (history.length && history[0].role !== "user") history.shift();
               if (!history.length || history[history.length - 1].role !== "user") {
-                history.push({ role: "user", content: body });
+                history.push({ role: "user", content: text });
               }
 
               const reply = await talalReply(systemPrompt, history);

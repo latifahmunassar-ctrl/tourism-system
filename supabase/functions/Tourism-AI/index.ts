@@ -65,6 +65,10 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     // إسبانيا — مدن: مدريد/قرطبة/غرناطة/إشبيلية/مالقا/برشلونة/ماربيا.
     [/[إا]سباني[اة]|spain|مدريد|madrid|برشلون[ةه]|barcelona|غرناط[ةه]|granada|قرطب[ةه]|cordoba|[إا]شبيلي[ةه]|sevill[ae]|seville|مالا?ق[ةا]|málaga|malaga|ماربي(?:لا|ا)|مربلة|marbella/i, "Spain"],
     [/سيرلانكا|سريلانكا|سري\s*لانكا|sri\s*lanka|srilanka|كولومبو|colombo|كاندي|kandy|ني[جغ]ومبو|negombo|نوارا|nuwara|بنتوتا|bentota/i, "Sri lanka"],
+    // بولندا — «بولندا» تختلف عن «هولندا» بالحرف الأول فلا تتصادمان.
+    [/بولندا|بولندي|poland|polska|وارسو|warsaw|warszawa|كراكوف|krakow|cracow|زاكوباني|zakopane|[غج]دانسك|gdansk|سوبوت|sopot|[غج]دينيا|gdynia|فروتسواف|wroclaw/i, "Poland"],
+    // أبوظبي / ياس آيلاند — باقات Stay & Play (تسعير بالباقة لا بالليلة).
+    [/[أا]بو\s*ظبي|abu\s*dhabi|abudhabi|ياس\s*آ?ايلاند|جزيرة\s*ياس|yas\s*island|عالم\s*فيراري|ferrari\s*world|وارنر\s*براذرز|warner\s*bros|ياس\s*ووتروورلد|yas\s*waterworld/i, "Abu Dhabi"],
   ];
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;
@@ -226,6 +230,19 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Malaga",    pattern: /مالا?ق[ةا]|málaga|malaga/i },
     { canonical: "Barcelona", pattern: /برشلون[ةه]|barcelona/i },
     { canonical: "Marbella",  pattern: /ماربي(?:لا|ا)|مربلة|marbella/i },
+  ],
+  "Abu Dhabi": [
+    { canonical: "Yas Island", pattern: /ياس\s*آ?ايلاند|جزيرة\s*ياس|yas\s*island|yas/i },
+    { canonical: "Abu Dhabi",  pattern: /[أا]بو\s*ظبي|abu\s*dhabi|abudhabi/i },
+  ],
+  Poland: [
+    { canonical: "Warsaw",   pattern: /وارسو|وارسوا|warsaw|warszawa/i },
+    { canonical: "Krakow",   pattern: /كراكوف|كراكو(?![ا-ي])|krakow|kraków|cracow/i },
+    { canonical: "Zakopane", pattern: /زاكوباني|زكوباني|zakopane/i },
+    { canonical: "Gdansk",   pattern: /[غج]دانسك|gdansk|gdańsk/i },
+    { canonical: "Sopot",    pattern: /سوبوت|sopot/i },
+    { canonical: "Gdynia",   pattern: /[غج]دينيا|gdynia/i },
+    { canonical: "Wroclaw",  pattern: /فروتسواف|فروتسلاف|wroclaw|wrocław/i },
   ],
   "Sri lanka": [
     { canonical: "Colombo",      pattern: /كولومبو|colombo/i },
@@ -2823,7 +2840,9 @@ async function handleTourVariants(body: { dest?: string; name?: string }): Promi
 
 // ── profit_margins: جدول الأرباح الموسمي لوجهة — يُقرأ مباشرة من شيت الوجهة
 //    (بلا جدول قاعدة بيانات): شريحة تكلفة × موسم × شركات/أفراد. ──────────────────
-const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "Spain"];
+// مفتاح الوجهة ≠ اسم التبويب (أبوظبي). يجب أن يبقى مطابقاً لـTAB_KEY_OVERRIDE في sync-sheets.
+const PM_TAB_OVERRIDE: Record<string, string> = { "Abu Dhabi": "Abu Dhabi (Yas Island )" };
+const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "Spain", "Poland", "Abu Dhabi (Yas Island )"];
 
 async function pmGoogleToken(sa: { client_email: string; private_key: string }): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
@@ -2929,7 +2948,7 @@ async function handleProfitMargins(body: { dest?: string }): Promise<Response> {
     const destAr = String(body.dest || "").trim();
     const destKey = destAr ? detectDestination([{ role: "user", content: destAr }]) : null;
     if (!destKey) return new Response(JSON.stringify({ margins: [] }), { headers: CORS_HEADERS });
-    const tabRaw = PM_DEST_TABS.find(t => t.trim() === destKey) || destKey;
+    const tabRaw = PM_TAB_OVERRIDE[destKey] || PM_DEST_TABS.find(t => t.trim() === destKey) || destKey;
     const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
     const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
     const token = await pmGoogleToken(sa);
@@ -2958,6 +2977,317 @@ async function handleCurrencies(): Promise<Response> {
   } catch (e) {
     return new Response(JSON.stringify({ currencies: [], error: String((e as Error).message) }),
       { status: 200, headers: CORS_HEADERS });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── تسعير العرض النهائي للعميل (ربح + عملة + تنسيق واتساب محترف) ──
+//    يُستخدم في auto_build فقط لتوليد رسالة جاهزة للعميل. **لا يلمس الباني**:
+//    التكلفة (TOTAL_GROUP) تبقى كما هي؛ هنا فقط نضيف الربح ونحوّل العملة ونرتّب.
+//    منطق الربح والعملة منسوخ حرفياً من team.html (applyAutoProfit + onCurrencyPick)
+//    حتى يطابق ما تراه الموظفة في الداشبورد. [[project_seasonal_profit_margins]]
+// ═══════════════════════════════════════════════════════════════════════════
+type PmRow = { cost_min: number; cost_max: number; profit_company: number; profit_individual: number; season_from: string | null; season_to: string | null };
+
+// نفس قراءة handleProfitMargins لكن بمفتاح الوجهة مباشرةً (auto_build يملكه).
+async function pmGetMargins(destKey: string): Promise<PmRow[]> {
+  try {
+    const tabRaw = PM_TAB_OVERRIDE[destKey] || PM_DEST_TABS.find(t => t.trim() === destKey) || destKey;
+    const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
+    const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
+    const token = await pmGoogleToken(sa);
+    const quotedTab = /[\s'"]/.test(tabRaw) ? `'${tabRaw.replace(/'/g, "''")}'` : tabRaw;
+    const rows = await pmReadSheet(token, ssid, `${quotedTab}!A1:HZ500`);
+    return pmExtract(rows).sort((a, b) => a.cost_min - b.cost_min);
+  } catch { return []; }
+}
+
+const _AR_MONTHS: Record<string, number> = { "يناير": 1, "فبراير": 2, "مارس": 3, "ابريل": 4, "مايو": 5, "يونيو": 6, "يوليو": 7, "اغسطس": 8, "سبتمبر": 9, "اكتوبر": 10, "نوفمبر": 11, "ديسمبر": 12 };
+function _arMonthNum(s: string): number | null {
+  const t = String(s || "").replace(/[إأآ]/g, "ا");
+  for (const k in _AR_MONTHS) { if (t.indexOf(k) >= 0) return _AR_MONTHS[k]; }
+  return null;
+}
+function _seasonMMDD(ddmm: string | null): number | null {
+  const m = String(ddmm || "").match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+  if (!m) return null; const day = +m[1], mon = +m[2];
+  if (!day || !mon) return null; return mon * 100 + day;
+}
+// md من DATE_FROM (ISO أو يوم/شهر أو «١ ديسمبر ٢٠٢٦»).
+function _programMMDD(dateFrom: string): number | null {
+  const toL = (s: string) => String(s || "").replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)));
+  const s = toL(dateFrom || "");
+  let mm = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/); if (mm) return (+mm[2]) * 100 + (+mm[3]);
+  mm = s.match(/\b(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*\d{2,4})?/); if (mm) return (+mm[2]) * 100 + (+mm[1]);
+  const monD = _arMonthNum(s);
+  if (monD) { const dm = s.match(/\b(\d{1,2})\b/); return monD * 100 + (dm ? +dm[1] : 15); }
+  return null;
+}
+function _seasonMatches(m: PmRow, md: number | null): boolean {
+  if (md == null) return false;
+  const f = _seasonMMDD(m.season_from), t = _seasonMMDD(m.season_to);
+  if (f == null || t == null) return false;
+  return f <= t ? (md >= f && md <= t) : (md >= f || md <= t);
+}
+// يطابق شريحة التكلفة + الموسم + نوع العميل (نفس applyAutoProfit).
+// ok=false يعني «اكتب الربح يدوياً» → لا نرسل سعراً تلقائياً للعميل.
+function pmPickProfit(margins: PmRow[], cost: number, md: number | null, customerType: string): { profit: number; ok: boolean; note: string } {
+  if (!margins.length) return { profit: 0, ok: false, note: "no_margins" };
+  const tiers = margins.filter(m => cost >= +m.cost_min && cost <= +m.cost_max);
+  if (!tiers.length) return { profit: 0, ok: false, note: "cost_out_of_range" };
+  const seasonal = tiers.some(m => m.season_from);
+  let tier: PmRow | undefined;
+  if (seasonal) {
+    if (md != null) tier = tiers.find(m => _seasonMatches(m, md));
+    if (!tier) tier = tiers.find(m => !m.season_from);
+    if (!tier) return { profit: 0, ok: false, note: md == null ? "no_date" : "out_of_season" };
+  } else { tier = tiers[0]; }
+  const profit = customerType === "company" ? (+tier.profit_company || 0) : (+tier.profit_individual || 0);
+  if (profit === 0) return { profit: 0, ok: false, note: "profit_zero" };
+  return { profit, ok: true, note: "" };
+}
+// عملة العميل من رمز دولة الهاتف (نفس indivCurrencyCode في team.html).
+function _currencyCodeFromPhone(phone: string): string {
+  const d = String(phone || "").replace(/[^0-9]/g, "");
+  if (d.startsWith("968")) return "OMR";
+  if (d.startsWith("971")) return "AED";
+  if (d.startsWith("965")) return "KWD";
+  if (d.startsWith("974")) return "QAR";
+  if (d.startsWith("973")) return "BHD";
+  if (d.startsWith("966")) return "SAR";
+  if (d.startsWith("20")) return "EGP";
+  return "";
+}
+// سعر الصرف من جدول currencies (rate = كم ريال سعودي يساوي ١ من العملة). null=بلا تحويل.
+async function getCurrencyRate(supabase: ReturnType<typeof createClient>, code: string): Promise<{ name: string; rate: number } | null> {
+  if (!code || code === "SAR") return null;
+  try {
+    const { data } = await supabase.from("currencies").select("code,name_ar,rate");
+    const ALIAS: Record<string, string[]> = { AED: ["UAE", "AED"] };
+    const wanted = ALIAS[code] || [code];
+    const row = (data || []).find((c: Record<string, unknown>) => wanted.includes(String(c.code)));
+    const rate = row ? parseFloat(String(row.rate)) : 0;
+    if (!row || !(rate > 0)) return null;
+    return { name: String(row.name_ar || code), rate };
+  } catch { return null; }
+}
+
+// ── قارئ أقسام البرنامج الخام ──
+function _taiVal(raw: string, name: string): string {
+  const m = raw.match(new RegExp(`^${name}:\\s*(.*)$`, "m"));
+  return m ? m[1].trim() : "";
+}
+function _taiBlock(raw: string, name: string): string[] {
+  const lines = raw.split("\n");
+  const start = lines.findIndex(l => new RegExp(`^${name}:`).test(l));
+  if (start < 0) return [];
+  const out: string[] = [];
+  for (let j = start + 1; j < lines.length; j++) {
+    const ln = lines[j];
+    if (/^[A-Z_]+:/.test(ln)) break;                 // بداية قسم آخر
+    if (!ln.trim()) { if (out.length) break; else continue; } // سطر فارغ = نهاية القسم
+    if (ln.includes("|")) out.push(ln.trim());
+  }
+  return out;
+}
+function _fmtMoney(n: number, dec = 0): string {
+  return Number(n).toLocaleString("en-US", { maximumFractionDigits: dec, minimumFractionDigits: 0 });
+}
+
+// ── المنسّق المحترف: يبني رسالة واتساب جاهزة للعميل من البرنامج الخام ──
+//    opts: finalSar (تكلفة+ربح), priceReady, cur (عملة أو null), pax, childPart.
+// علم الدولة حسب اسم الوجهة العربي (افتتاحية جميلة). افتراضي ✨ لو ما عُرفت.
+function _destFlag(dest: string): string {
+  const d = String(dest || "");
+  const map: Array<[RegExp, string]> = [
+    [/ماليزيا/, "🇲🇾"], [/تايلند|تايلاند/, "🇹🇭"], [/إندونيسيا|اندونيسيا/, "🇮🇩"],
+    [/تركيا/, "🇹🇷"], [/فيتنام/, "🇻🇳"], [/روسيا/, "🇷🇺"], [/البوسنة|بوسنة/, "🇧🇦"],
+    [/جورجيا/, "🇬🇪"], [/مصر/, "🇪🇬"], [/المغرب|مغرب/, "🇲🇦"], [/إسبانيا|اسبانيا/, "🇪🇸"],
+    [/سريلانكا|سري\s*لانكا/, "🇱🇰"], [/موريشيوس/, "🇲🇺"], [/جنوب\s*أفريقيا|جنوب\s*افريقيا/, "🇿🇦"],
+    [/الصين|صين/, "🇨🇳"], [/إنجلترا|انجلترا|بريطانيا/, "🇬🇧"], [/عُمان|عمان/, "🇴🇲"],
+    [/بولندا/, "🇵🇱"], [/أذربيجان|اذربيجان/, "🇦🇿"], [/جزر\s*المالديف|المالديف/, "🇲🇻"],
+  ];
+  for (const [re, fl] of map) if (re.test(d)) return fl;
+  return "✨";
+}
+
+// المنسّق المحترف: رسالة واتساب واحدة مرتّبة — افتتاحية بإيموجي، أقسام متباعدة
+// (سطر فارغ بين كل كتلة)، فنادق بإيموجي وروابط، مسار يومي، يشمل/لا يشمل، ثم السعر
+// تحت بمسافة. كل «كتلة» تُجمع بـ"\n\n" فتظهر بينها مسافة مريحة في واتساب.
+function buildCustomerProgramMessage(
+  raw: string,
+  opts: { finalSar: number; priceReady: boolean; cur: { name: string; rate: number } | null; pax: number; childNote: string },
+): string {
+  const dest = _taiVal(raw, "DEST");
+  const meta = _taiVal(raw, "META");
+  const blocks: string[] = [];
+
+  // افتتاحية
+  blocks.push(`${_destFlag(dest)} تفضّل برنامجك إلى *${dest}* ${_destFlag(dest)}`);
+  if (meta) blocks.push(`🗓️ ${meta}`);
+
+  // الفنادق: name | region | X نجوم | roomtype | price | N ليالي (..) | ما يشمل | LINK:url
+  const hotels = _taiBlock(raw, "HOTELS");
+  if (hotels.length) {
+    blocks.push("🏨 *الفنادق*");
+    for (const h of hotels) {
+      const p = h.split("|").map(x => x.trim());
+      const name = p[0] || "";
+      const region = p[1] || "";
+      const starsN = parseInt((p[2] || "").replace(/[^\d]/g, ""), 10) || 0;
+      const stars = starsN > 0 ? "⭐".repeat(starsN) : "";
+      const nightsM = (p[5] || "").match(/(\d+)\s*ليال/);
+      const nights = nightsM ? `${nightsM[1]} ليالٍ` : "";
+      const linkM = h.match(/LINK:(\S+)/);
+      const breakfast = /إفطار/.test(p[6] || "") ? " · يشمل الإفطار" : "";
+      const lines = [`🏨 *${name}*${region ? ` – ${region}` : ""}`];
+      const sub = [stars, nights].filter(Boolean).join(" · ") + breakfast;
+      if (sub.trim()) lines.push(sub.trim());
+      if (linkM) lines.push(`🔗 ${linkM[1]}`);
+      blocks.push(lines.join("\n"));          // كل فندق كتلة → بينها مسافة
+    }
+  }
+
+  // المسار اليومي: ندمج TRANSFERS + TOURS + FLIGHTS حسب رقم اليوم.
+  const byDay: Record<number, string[]> = {};
+  const add = (n: number, s: string) => { if (s) (byDay[n] = byDay[n] || []).push(s); };
+  for (const f of _taiBlock(raw, "FLIGHTS")) {
+    const m = f.match(/اليوم\s*(\d+)\s*:\s*([^|]+)/);
+    if (m) add(+m[1], `✈️ رحلة داخلية (${m[2].trim()})`);
+  }
+  for (const t of _taiBlock(raw, "TRANSFERS")) {
+    const p = t.split("|").map(x => x.trim());
+    const dm = (p[0] || "").match(/(\d+)/);
+    if (dm) add(+dm[1], `🚐 ${p[1] || ""}`);
+  }
+  for (const t of _taiBlock(raw, "TOURS")) {
+    const p = t.split("|").map(x => x.trim());
+    const dm = (p[0] || "").match(/(\d+)/);
+    if (dm) add(+dm[1], `🎯 ${p[1] || ""}`);
+  }
+  const dayNums = Object.keys(byDay).map(Number).sort((a, b) => a - b);
+  if (dayNums.length) {
+    blocks.push("🗺️ *مسار الرحلة*");
+    for (const d of dayNums) {
+      blocks.push([`📍 *اليوم ${d}*`, ...byDay[d]].join("\n"));  // كل يوم كتلة
+    }
+  }
+
+  // يشمل / لا يشمل (لغة باقة قياسية — ليست أسعاراً).
+  const hasFlights = _taiBlock(raw, "FLIGHTS").length > 0;
+  const hasTours = _taiBlock(raw, "TOURS").length > 0;
+  const inc = ["✅ *يشمل البرنامج*", "• الإقامة في الفنادق المذكورة مع الإفطار", "• جميع التنقلات والاستقبال والتوديع بسيارة خاصة"];
+  if (hasTours) inc.push("• الجولات السياحية المذكورة");
+  if (hasFlights) inc.push("• الطيران الداخلي بين المدن");
+  blocks.push(inc.join("\n"));
+  blocks.push(["🚫 *لا يشمل*", "• تذاكر الطيران الدولي", "• رسوم التأشيرة (إن وُجدت)", "• الوجبات والمصاريف الشخصية غير المذكورة"].join("\n"));
+
+  // السعر النهائي (بعد الربح) بعملة العميل — تحت وبمسافة.
+  if (opts.priceReady) {
+    let priceStr: string;
+    if (opts.cur) {
+      priceStr = `${_fmtMoney(opts.finalSar / opts.cur.rate, 2)} ${opts.cur.name}`;
+    } else {
+      priceStr = `${_fmtMoney(opts.finalSar)} ريال سعودي`;
+    }
+    const paxWord = opts.pax === 1 ? "شخص" : "أشخاص";
+    blocks.push(`💰 *الإجمالي: ${priceStr}*\n👥 شامل لعدد ${opts.pax} ${paxWord}${opts.childNote}`);
+    blocks.push("جاهزين نكمل لك الحجز متى ما حبيت 🙏");
+  }
+  return blocks.join("\n\n");            // سطر فارغ بين كل كتلة = تنسيق مريح
+}
+
+// ── صياغة العرض بالذكاء الاصطناعي (تنسيق أنيق كامل) ──
+//    يحوّل البرنامج الخام إلى رسالة واتساب واحدة مرتّبة بعناوين أيام وإيموجي لكل
+//    معلم وفواصل وخاتمة باسم الشركة. **لا يغيّر الأسعار ولا الفنادق ولا الروابط**
+//    (نمرّرها حرفياً ونتحقّق بعدها). priceLine فارغ = لا تعرض سعراً. [[project_wa_auto_program_offer]]
+async function formatProgramWithLLM(
+  raw: string,
+  opts: { priceLine: string; pax: number; destAr: string; flag: string },
+): Promise<string | null> {
+  try {
+    const client = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
+    const paxWord = opts.pax === 1 ? "شخص" : "أشخاص";
+    const sys = `أنت منسّق عروض سفر لمجموعة العز الدولية للسفر والسياحة. حوّل بيانات البرنامج الخام إلى رسالة واتساب واحدة أنيقة بالعربية.
+
+قواعد صارمة (مهمّة):
+- اكتب الرسالة النهائية فقط، بلا أي مقدمة أو شرح.
+- ❌ ممنوع منعاً باتاً تغيّر أو تحسب أي رقم سعر. استخدم سطر السعر كما سأعطيك إياه حرفياً.
+- ❌ انسخ أسماء الفنادق وروابطها (🔗) حرفياً كما هي بدون أي تعديل.
+- ❌ ممنوع تخترع فنادق أو جولات أو خدمات غير موجودة. يمكنك فقط: إعادة صياغة وصف الجولة الموجود، تقسيم معالمها نقاطاً بإيموجي، وإعطاء كل يوم عنواناً قصيراً من نشاطه.
+- بلا تشكيل. عربي بسيط واضح. أرقام الأيام بالكلمات (الأول، الثاني...).
+- مسافات مريحة وفواصل ━━━━━━━━━━━━━━ بين الأقسام.
+
+اتبع هذا القالب بدقّة:
+
+${opts.flag}✨ برنامج ${opts.destAr} السياحي
+
+🌴 [عدد الأيام والليالي]
+📅 [الشهر والسنة]
+👨‍👩‍👧 عدد المسافرين: ${opts.pax} ${paxWord}
+
+━━━━━━━━━━━━━━
+
+🏨 الفنادق والإقامة
+
+[لكل فندق اكتب:]
+🏨 [المدينة] – [عدد الليالي]
+[اسم الفندق حرفياً]
+🍽️ يشمل الإفطار
+🔗 [الرابط حرفياً]
+
+━━━━━━━━━━━━━━
+
+✈️ مسار الرحلة والجولات السياحية
+
+[لكل يوم:]
+📍 اليوم [بالكلمات] | [عنوان قصير]
+
+[إيموجي مناسب] [وصف النشاط، وإن كانت جولة بعدة معالم قسّمها نقاطاً كل نقطة بإيموجي]
+
+━━━━━━━━━━━━━━
+
+✅ يشمل البرنامج
+• الإقامة في الفنادق المذكورة مع الإفطار.
+• جميع التنقلات والاستقبال والتوديع بسيارة خاصة.
+• الجولات السياحية المذكورة.
+• الطيران الداخلي بين المدن (إن وُجد).
+
+❌ لا يشمل البرنامج
+• تذاكر الطيران الدولي.
+• رسوم التأشيرة (إن وجدت).
+• الوجبات والمصاريف الشخصية غير المذكورة.
+
+━━━━━━━━━━━━━━
+
+💰 السعر الإجمالي للبرنامج
+
+[سطر السعر حرفياً]
+
+👨‍👩‍👧 شامل لعدد ${opts.pax} ${paxWord}.
+
+🌴 نتمنى لكم رحلة سعيدة مليئة بالمتعة والذكريات الجميلة مع مجموعة العز الدولية للسفر والسياحة ❤️`;
+    const priceInstruction = opts.priceLine
+      ? `سطر السعر (اكتبه حرفياً مكان [سطر السعر حرفياً]): ${opts.priceLine}`
+      : `لا يوجد سعر — احذف قسم «السعر الإجمالي» بالكامل.`;
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2500,
+      system: [{ type: "text", text: sys }],
+      messages: [{ role: "user", content: `بيانات البرنامج الخام:\n\n${raw}\n\n${priceInstruction}` }],
+    });
+    const block = Array.isArray(response.content) ? response.content[0] : null;
+    const text = block && (block as { type?: string }).type === "text" ? String((block as { text?: string }).text || "").trim() : "";
+    if (!text || text.length < 80) return null;
+    // حارس السعر: لو عندنا سعر لازم يظهر حرفياً، وإلا نرفض ونرجع للمنسّق الحتمي.
+    if (opts.priceLine && !text.includes(opts.priceLine)) {
+      console.error("formatProgramWithLLM: price line missing/altered — fallback");
+      return null;
+    }
+    return text;
+  } catch (e) {
+    console.error("formatProgramWithLLM error", (e as Error).message);
+    return null;
   }
 }
 
@@ -3446,6 +3776,97 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── auto_build: يبني برنامجاً كاملاً تلقائياً (للاستقبال التلقائي عبر طلال) ──
+    // لو مُرِّر distribution → يبنيه. وإلا يبني كل توزيعات (الوجهة+الأيام) ويختار
+    // **الأرخص**. الفنادق **مختلطة** (بلا شرط نجوم = الباني يختار الأرخص المتاح)،
+    // تنقل خاص، شاملة جولات وانتقالات. يرجّع البرنامج الكامل + الإجمالي + التوزيع.
+    if (reqBody && reqBody.action === "auto_build") {
+      try {
+        const destAr = String(reqBody.dest || "").trim();
+        const destKey = destAr ? detectDestination([{ role: "user", content: destAr }]) : null;
+        const days = parseInt(String(reqBody.days ?? ""), 10) || 0;
+        const date = String(reqBody.date || "").trim();
+        const pax = parseInt(String(reqBody.pax ?? ""), 10) || 2;
+        const ages = String(reqBody.ages || "").trim();           // أعمار الأطفال (اختياري)
+        const givenDist = String(reqBody.distribution || "").trim(); // فارغ = اختر الأرخص
+        const phone = String(reqBody.phone || "").trim();          // لتحديد عملة العميل
+        const customerType = String(reqBody.customer_type || "individual").trim();
+        if (!destKey || !days) return new Response(JSON.stringify({ ok: false, error: "missing dest/days" }), { headers: CORS_HEADERS });
+        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const cityDefs = DEST_CITIES[destKey] || [];
+        const [hotels, tours, flights, trains] = await Promise.all([
+          fetchAllRows<HotelRow>((() => supabase.from("hotels").select("*").ilike("location", `% - ${destKey}`)) as never),
+          fetchAllRows<TourRow>((() => supabase.from("tours").select("*").eq("type", destKey)) as never),
+          fetchAllRows<FlightRow>((() => supabase.from("flights").select("*").eq("destination", destKey)) as never),
+          fetchAllRows<FlightRow>((() => supabase.from("trains").select("*").eq("destination", destKey)) as never),
+        ]);
+        const fetchData = async () => ({ hotels, tours, flights, trains: trains as unknown as [] });
+        const childPart = ages ? ` وأطفال أعمارهم ${ages}` : "";
+        // ملاحظة: بلا «نجوم» في النص → stars=null → الباني يختار أرخص فندق متاح (مختلط).
+        const buildOne = async (dist: string): Promise<{ program: string; total: number; distribution: string } | null> => {
+          const text = `${destAr}، ${days} أيام، ${dist}، ${pax} ${pax === 1 ? "شخص" : "أشخاص"} بالغين${childPart}، تنقل خاص، مع جولات وانتقالات، بتاريخ ${date}`;
+          try {
+            const req = parseTripRequest([{ role: "user", content: text }], cityDefs);
+            (req as { adults: number }).adults = pax;
+            if (!canBuildLocally(req)) return null;
+            const r = await buildLocalProgram(req, cityDefs, fetchData as never, {});
+            if (!r.ok) return null;
+            const m = r.program.match(/TOTAL_GROUP:\s*([\d,٬]+)/);
+            const total = m ? parseInt(m[1].replace(/[,٬]/g, ""), 10) : 0;
+            if (total <= 0) return null;
+            return { program: r.program, total, distribution: dist };
+          } catch (_e) { return null; }
+        };
+        let chosen: { program: string; total: number; distribution: string } | null = null;
+        if (givenDist) {
+          chosen = await buildOne(givenDist);
+        } else {
+          const { data: sugs } = await supabase.from("package_suggestions")
+            .select("distribution").eq("destination", destKey).eq("days", days);
+          const built: Array<{ program: string; total: number; distribution: string }> = [];
+          for (const s of ((sugs || []) as Array<{ distribution: string }>)) {
+            const b = await buildOne(s.distribution);
+            if (b) built.push(b);
+          }
+          built.sort((a, b) => a.total - b.total);
+          chosen = built[0] || null;
+        }
+        if (!chosen) return new Response(JSON.stringify({ ok: false, error: "no buildable program" }), { headers: CORS_HEADERS });
+        // ── تسعير العرض النهائي للعميل: تكلفة + ربح موسمي + عملة الجنسية + تنسيق ──
+        const cost = chosen.total;                                        // TOTAL_GROUP = تكلفة بالريال
+        const dateFrom = _taiVal(chosen.program, "DATE_FROM") || date;
+        const md = _programMMDD(dateFrom);
+        const margins = await pmGetMargins(destKey);
+        const prof = pmPickProfit(margins, cost, md, customerType);       // ok=false ⇒ ربح يدوي
+        const finalSar = cost + prof.profit;
+        const cur = await getCurrencyRate(supabase, _currencyCodeFromPhone(phone));
+        const childNote = ages ? ` (+ أطفال: ${ages})` : "";
+        // سطر السعر النهائي (حرفيّ) — يُمرَّر للنموذج ويُتحقّق منه.
+        const priceLine = prof.ok
+          ? (cur ? `${_fmtMoney(finalSar / cur.rate, 2)} ${cur.name}` : `${_fmtMoney(finalSar)} ريال سعودي`)
+          : "";
+        // صياغة أنيقة بالذكاء؛ عند أي فشل/انحراف سعر → المنسّق الحتمي (سعر مضمون).
+        const llmFormatted = await formatProgramWithLLM(chosen.program, { priceLine, pax, destAr, flag: _destFlag(destAr) });
+        const formatted = llmFormatted || buildCustomerProgramMessage(chosen.program, {
+          finalSar, priceReady: prof.ok, cur, pax, childNote,
+        });
+        return new Response(JSON.stringify({
+          ok: true,
+          program: chosen.program,
+          total: cost,
+          distribution: chosen.distribution,
+          profit: prof.profit,
+          final_sar: finalSar,
+          price_ready: prof.ok,          // false = خارج شرائح/مواسم الربح ⇒ لا تُرسِل سعراً تلقائياً
+          price_note: prof.note,
+          currency: cur ? { name: cur.name, rate: cur.rate, converted: Math.round((finalSar / cur.rate) * 100) / 100 } : null,
+          formatted,                     // رسالة الواتساب الجاهزة للعميل
+        }), { headers: CORS_HEADERS });
+      } catch (e) {
+        return new Response(JSON.stringify({ ok: false, error: (e as Error).message }), { headers: CORS_HEADERS });
+      }
+    }
+
 
     // ── groups_raw: صفوف تبويب جروب خامّاً (تشخيص وتحديد الخلايا) ──
     if (reqBody && reqBody.action === "groups_raw") {
@@ -3692,7 +4113,7 @@ Deno.serve(async (req) => {
         const destAr: Record<string, string> = {
           vietnam: "فيتنام", Malaysia: "ماليزيا", thailand: "تايلاند",
           Turky: "تركيا", russia: "روسيا", Bosnia: "البوسنة", indonesia: "إندونيسيا",
-          Oman: "عمان", Morroco: "المغرب", Spain: "إسبانيا",
+          Oman: "عمان", Morroco: "المغرب", Spain: "إسبانيا", "Abu Dhabi": "أبوظبي",
         };
         const cityAr: Record<string, string> = {
           "Ha Noi": "هانوي", "Ho Chi Minh": "هوتشي مينه",
@@ -3789,6 +4210,7 @@ Deno.serve(async (req) => {
     if (detectedDest && DEST_CITIES[detectedDest]) {
       const cityDefs = DEST_CITIES[detectedDest];
       const cityArabicNames: Record<string, string> = {
+        "Yas Island": "جزيرة ياس", "Abu Dhabi": "أبوظبي",
         "Ha Noi": "هانوي", "Sapa": "سابا", "Ha Long": "هالونج",
         "Da Nang": "دانانج", "Phu Quoc": "فوكوك", "Ho Chi Minh": "هوتشي مينه",
         "Nha Trang": "نها ترانج", "Da Lat": "دالات",
@@ -3841,6 +4263,7 @@ Deno.serve(async (req) => {
         Turky: "تركيا", russia: "روسيا", Bosnia: "البوسنة", indonesia: "إندونيسيا",
         Morroco: "المغرب",
         Spain: "إسبانيا",
+        "Abu Dhabi": "أبوظبي",
       };
 
       // CASE A: distribution missing → ask locally (no Claude, $0)
