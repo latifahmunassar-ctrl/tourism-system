@@ -444,9 +444,21 @@ function findNightsPeriods(hdrRow: string[]): Array<{ fromCol: number; toCol: nu
   return periods;
 }
 
+// تطبيع خلية عنوان قبل المطابقة: `.trim()` وحده لا يشيل المسافة غير القابلة للكسر
+// (nbsp  ) ولا المحارف الصفرية (​-‍ ﻿) ولا يوحّد المسافات
+// الداخلية — فعنوان مثل «Include » (يبدو «Include» للعين) يفشل في `^include$`
+// فيُتجاهل العمود كاملاً (شوهد: عمود الوجبات في تركيا لم يُستورد رغم أنه مملوء).
+function normHeaderCell(x: unknown): string {
+  return String(x ?? "")
+    .replace(/[  ]/g, " ")        // nbsp / narrow nbsp → مسافة عادية
+    .replace(/[​-‍﻿]/g, "")  // محارف صفرية العرض
+    .replace(/\s+/g, " ")                    // توحيد المسافات الداخلية
+    .trim();
+}
+
 function findHotelHeader(rows: string[][]): { rowIdx: number; cols: Record<string, number>; rateCols: number[] } | null {
   for (let i = 0; i < rows.length; i++) {
-    const cells = rows[i].map(x => (x || "").trim());
+    const cells = rows[i].map(normHeaderCell);
     // Step 1: find the Hotel name column first.
     let nameCol = -1;
     for (let j = 0; j < cells.length; j++) {
