@@ -3982,6 +3982,74 @@ function syncFormPeopleFromProgram(raw){
   }catch(e){}
 }
 
+// توزيع المدن (مدينة + ليالي) من قسم HOTELS في برنامج محفوظ — لتعبئة نموذج اليسار
+// عند الاسترجاع بالكود. ندمج المدينة المتكرّرة **المتتالية** فقط (هانوي أول ≠ هانوي أخير).
+function parseCitiesNightsFromRaw(raw){
+  const sec = String(raw||'').split(/\nHOTELS:\s*/)[1];
+  if(!sec) return [];
+  const block = sec.split(/\n\s*\n/)[0];   // حتى أول سطر فارغ = نهاية قسم الفنادق
+  const out=[];
+  block.split('\n').forEach(line=>{
+    const p = line.split('|').map(s=>s.trim());
+    if(p.length < 3) return;
+    const city = p[1];
+    // ابحث عن مقطع «N ليالي» (رقم متبوع بليالي) — لا مقطع السعر «405 ريال/ليلة».
+    const nm = (p.find(x=>/(\d+)\s*(?:ليال|ليلة)/.test(x))||'').match(/(\d+)\s*(?:ليال|ليلة)/);
+    const nights = nm ? parseInt(nm[1],10) : 0;
+    if(city && nights){
+      const last = out[out.length-1];
+      if(last && last.city===city) last.nights += nights;   // دمج متتالٍ فقط
+      else out.push({ city, nights });
+    }
+  });
+  return out;
+}
+
+// يملأ نموذج «بناء تسعيرة» (يسار الشاشة) من برنامج مُسترجَع بالكود، حتى تقدر الموظفة
+// تعدّل (تبديل مدينة/إضافة جولة/تغيير التاريخ) دون إعادة إدخال كل شيء يدوياً.
+// يُستدعى بعد buildReview (الذي يضبط lastProgramRaw المستخدَم لقراءة التاريخ).
+function fillBuilderFromProgram(raw, dbDest){
+  try{
+    const getL = (k)=> String(getLine(raw,k)||'').trim();
+    const meta = getL('META');
+    const client = getL('CLIENT');
+    // 1) الوجهة → تفعّل تحميل واجهة المطار/المدن (bfOnDest يصفّر المدن والأطفال، فنملؤها بعده)
+    const destResolved = bfResolveDest(dbDest || getL('DEST'));
+    const destSel = document.getElementById('bf-dest');
+    if(destSel && destResolved){
+      if(![...destSel.options].some(o=>o.value===destResolved)){
+        const o=document.createElement('option'); o.value=destResolved; o.textContent=destResolved; destSel.appendChild(o);
+      }
+      destSel.value = destResolved;
+      if(typeof bfOnDest==='function') bfOnDest();
+    }
+    // 2) الأشخاص/الأيام/التاريخ/الشرائح (بعد bfOnDest لأنه يصفّر الأطفال)
+    const adults = (meta.match(/(\d+)\s*[أا]شخاص/)||[])[1] || (client.match(/(\d+)\s*بالغ/)||[])[1];
+    const kids   = (meta.match(/(\d+)\s*(?:طفل|أطفال)/)||[])[1];
+    const af=document.getElementById('bf-adults'); if(af && adults) af.value=parseInt(adults,10);
+    const cf=document.getElementById('bf-children'); if(cf) cf.value = kids ? parseInt(kids,10) : 0;
+    const daysM = meta.match(/(\d+)\s*(?:[أا]يام|يوم)/);
+    const df=document.getElementById('bf-days'); if(df && daysM) df.value=parseInt(daysM[1],10);
+    const dmy = (typeof _progDateDMY==='function') ? _progDateDMY('DATE_FROM') : null;
+    if(dmy){
+      const iso=`${dmy.y}-${String(dmy.mo).padStart(2,'0')}-${String(dmy.d).padStart(2,'0')}`;
+      const de=document.getElementById('bf-date'); if(de) de.value=iso;
+    }
+    const sims=(getL('SIM').match(/\d+/)||[])[0];
+    const sm=document.getElementById('bf-sims'); if(sm && sims!=null) sm.value=sims;
+    // 3) توزيع المدن في وضع «تخصيص» (قابل للتعديل) من قسم الفنادق
+    const cn = parseCitiesNightsFromRaw(raw);
+    if(cn.length){
+      const manual=document.querySelector('input[name=bf-mode][value=manual]');
+      if(manual){ manual.checked=true; if(typeof bfSetMode==='function') bfSetMode('manual', manual); }
+      const rows=document.getElementById('bf-cityRows'); if(rows) rows.innerHTML='';
+      cn.forEach(c=> { if(typeof bfAddCity==='function') bfAddCity(c.city, c.nights); });
+      if(typeof bfSum==='function') bfSum();
+    }
+    if(typeof bfExpected==='function') bfExpected();
+  }catch(e){ console.warn('fillBuilderFromProgram failed', e); }
+}
+
 function buildReview(raw) {
 lastProgramRaw = raw || '';
 lastSavedCode = '';
@@ -5517,6 +5585,9 @@ async function searchByCode() {
       }
       syncFormPeopleFromProgram(data.program.raw);
       buildReview(data.program.raw);
+      // عبّي نموذج «بناء تسعيرة» (اليسار) كاملاً: الوجهة + المدن + التاريخ + الأشخاص
+      // حتى تقدر الموظفة تعدّل مباشرةً دون إعادة إدخال يدوي.
+      fillBuilderFromProgram(data.program.raw, data.program.destination);
       lastSavedCode = data.program.code || code;
       const pill = document.getElementById('savedCodePill');
       const cc = data.program.client_code ? String(data.program.client_code).trim() : '';
