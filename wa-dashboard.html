@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- APPVER:20261031a -->
+<!-- APPVER:20261101a -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -1334,7 +1334,10 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           <h2 id="conv-title">المحادثة</h2>
           <p id="conv-sub" style="margin:4px 0 0; color:var(--muted); font-size:13px;">—</p>
         </div>
-        <button class="refresh-btn" id="conv-close">✕</button>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="refresh-btn" id="conv-reset" title="إعادة ضبط المحادثة — يبدأ طلال من جديد مع العميل" onclick="resetConversation()" style="background:#ede9fe; color:#6d28d9; border:1px solid #ddd6fe;">🔄 ضبط</button>
+          <button class="refresh-btn" id="conv-close">✕</button>
+        </div>
       </div>
       <div id="conv-labels" style="display:flex; gap:6px; flex-wrap:wrap; padding:8px 16px 0; align-items:center;">
         <span style="font-size:12px; color:var(--muted); font-weight:700;">🏷️ تصنيف:</span>
@@ -1878,7 +1881,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     //   عند كل فتح، الصفحة تجلب نسخة طازجة من نفسها (no-store) وتقارن رقم الإصدار.
     //   لو المخزّن أقدم، تعيد التحميل مرة واحدة بالنسخة الجديدة تلقائياً — فلا تحتاج
     //   المالكة أبداً تعمل Cmd+Shift+R أو تفتح رابطاً باسم جديد. آمن (لا حلقة تكرار).
-    const APPVER = "20261031a";
+    const APPVER = "20261101a";
     (function autoUpdate() {
       try {
         fetch(location.pathname + "?_v=" + Date.now(), { cache: "no-store" })
@@ -4199,6 +4202,26 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     }
     $("att-range") && $("att-range").addEventListener("change",()=>{ const c=$("att-range").value==="custom"; $("att-from").style.display=c?"":"none"; $("att-to").style.display=c?"":"none"; if(!c) loadAttendance(); });
     $("att-refresh") && $("att-refresh").addEventListener("click", loadAttendance);
+
+    // 🔄 إعادة ضبط المحادثة: يعيد العميل «عميلاً جديداً» فيبدأ طلال معه من الصفر
+    //    (للحالات العالقة النادرة). يتطلّب صلاحية إرسال.
+    async function resetConversation() {
+      if (!convPhone) { alert("افتحي محادثة أولاً."); return; }
+      if (!confirm("إعادة ضبط المحادثة مع هذا العميل؟ طلال راح يبدأ معه من جديد (يجمع المعلومات من الصفر). المحادثة السابقة تبقى محفوظة.")) return;
+      const btn = document.getElementById("conv-reset"); const old = btn ? btn.textContent : "";
+      if (btn) { btn.disabled = true; btn.textContent = "⏳…"; }
+      try {
+        const r = await fetch(BASE + "?admin_action=reset_conversation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+          body: JSON.stringify({ phone: convPhone }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (r.ok && d.ok) { alert("✅ أُعيد ضبط المحادثة — طلال يبدأ من جديد مع العميل."); }
+        else { alert((d && d.error) ? ("فشل: " + d.error) : ("فشل (HTTP " + r.status + ")")); }
+      } catch (e) { alert("تعذّر الاتصال: " + (e && e.message ? e.message : e)); }
+      finally { if (btn) { btn.disabled = false; btn.textContent = old; } }
+    }
 
     async function openConversation(phone, name) {
       igActiveThread = null;                          // نافذة واتساب حقيقية — أخرجي من وضع إنستقرام
