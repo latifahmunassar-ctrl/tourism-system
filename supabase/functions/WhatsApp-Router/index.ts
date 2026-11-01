@@ -2148,8 +2148,10 @@ async function handleNewLeadIntake(args: {
       // ⚖️ الإعلان قد يكون **كاروسيل فيه عدة عروض** مربوطاً بكود واحد. لا نفترض أن هذا
       //    الكود هو مقصود العميل: لو ذكر العميل (بكلامه أو صورته) وجهة **تختلف** عن وجهة
       //    البرنامج المربوط → نتجاهل البرنامج المربوط ونعتمد على كلام/صورة العميل.
-      const _custDest = detectDestination([{ role: "user", content: String(args.body || "") }]);
-      const _linkedDest = pr?.destination ? detectDestination([{ role: "user", content: String(pr.destination) }]) : null;
+      // ⚠️ كانت تستدعي detectDestination غير المعرّفة → ReferenceError يوقف الاستقبال بصمت
+      //    لكل عميل من إعلان مربوط بكود. extractDestination هي الدالة الموجودة.
+      const _custDest = extractDestination(String(args.body || ""));
+      const _linkedDest = pr?.destination ? extractDestination(String(pr.destination)) : null;
       const _mismatch = !!_custDest && !!_linkedDest && _custDest !== _linkedDest;
       if (pr && pr.raw && !_mismatch) {
         // ⚠️ لا نرسل الملف تلقائياً على أول رسالة — طلال يحيّي ويسأل بشكل طبيعي أولاً.
@@ -2334,6 +2336,7 @@ ${returning
   // ── خط أنابيب حُرّاس الرفض: نولّد الرد، نفحصه مقابل الحقائق، ولو خالف نرجّعه
   //    للنموذج مع سبب الرفض ونعيد التوليد (حتى محاولتين)، وبعدها → معاينة بشرية.
   let _guardForcePreview = false;
+  let _genFails = 0;   // فشل توليد (استثناء/بلا JSON/JSON تالف) — يُعاد مرة واحدة، ثم حارس «لا سكوت»
   const _guardRejects: Array<{ guard: string; reason: string; attempt: number; text: string }> = [];
   {
     const _model = (Deno.env.get("TALAL_MODEL_OVERRIDE") || "").trim()
@@ -2341,6 +2344,7 @@ ${returning
     let _sysTry = sys;
     for (let _att = 1; _att <= 3; _att++) {   // الأصل + محاولتان
       let _cand: typeof out = null;
+      let _failWhy = "";
       try {
         const anthropic = new Anthropic({ apiKey });
         const res = await anthropic.messages.create({
@@ -2348,9 +2352,19 @@ ${returning
           messages: [{ role: "user", content: transcript || "(أول رسالة من العميل)" }],
         });
         let txt = ""; for (const b of res.content) if ((b as { type?: string }).type === "text") txt += (b as { text?: string }).text || "";
-        const m = txt.match(/\{[\s\S]*\}/); if (m) _cand = JSON.parse(m[0]);
-      } catch (_e) { /* فشل AI */ }
-      if (!_cand) break;   // فشل التوليد → خروج (fallback الموجود تحت)
+        const m = txt.match(/\{[\s\S]*\}/);
+        if (!m) _failWhy = "no_json: " + txt.slice(0, 200);
+        else { try { _cand = JSON.parse(m[0]); } catch (pe) { _failWhy = "bad_json: " + (pe as Error).message + " | " + m[0].slice(0, 200); } }
+      } catch (e) { _failWhy = "api_error: " + String((e as Error)?.message || e).slice(0, 300); }
+      if (!_cand) {
+        // 🔴 كان: break صامت → لا رد للعميل ولا سجل. الآن: نسجّل السبب ونعيد مرة واحدة،
+        //    وبعدها يتولّى حارس «لا سكوت» تحت (سؤال حتميّ من البيانات المخزّنة).
+        _genFails++;
+        console.error("intake model fail", from, _model, _failWhy);
+        await logGuard(supabase, from, "model_fail", "retry", _failWhy, _att, "", "");
+        if (_genFails >= 2) break;
+        continue;
+      }
       const _cm = Array.isArray(_cand.messages) ? (_cand.messages as unknown[]).map(x => String(x || "")) : (_cand.reply ? [String(_cand.reply)] : []);
       const _candText = _cm.join("  ");
       const _cf = (_cand.fields && typeof _cand.fields === "object") ? _cand.fields as Record<string, unknown> : {};
@@ -2366,9 +2380,24 @@ ${returning
     const _isLast = r === _guardRejects[_guardRejects.length - 1];
     await logGuard(supabase, from, r.guard, (_guardForcePreview && _isLast) ? "reject_then_preview" : "reject", r.reason, r.attempt, r.text, "");
   }
+  // 🛡️ حارس «لا سكوت في الاستقبال» (طلب المالكة ١ نوفمبر ٢٠٢٦): سؤال حتميّ (بلا نموذج)
+  //    عن أول معلومة ناقصة من البيانات المخزّنة — يُستعمل لو فشل النموذج، أو انتهى
+  //    الاستقبال بلا أي رسالة للعميل.
+  const _intakeFallback = (d: Record<string, unknown>): string => {
+    const _h = (k: string) => d[k] !== undefined && d[k] !== null && String(d[k]).trim() !== "";
+    if (!_h("destination") && !isUmrah) return alreadyGreeted ? "حياك الله، وين حابين تسافرون؟" : "حياك الله، معك طلال من خدمة العملاء، وين حابين تسافرون؟";
+    if (!_h("pax")) return isUmrah ? "أبشر، عندنا برامج عمرة. كم عدد المعتمرين معكم؟" : "أبشر، كم عدد المسافرين معكم؟";
+    if (!_h("date")) return "متى موعد السفر؟";
+    if (isUmrah && !_h("nights")) return "كم ليلة تبون في مكة؟ وإذا حابين نضيف المدينة المنورة بلغني كم ليلة فيها";
+    if (!isUmrah && !_h("days")) return "كم يوم تبون الرحلة؟";
+    return "تمام، خليني أراجع تفاصيل طلبك وأرد عليك بأقرب وقت";
+  };
   if (!out) {
-    await supabase.from("whatsapp_sessions").update({ last_message_at: new Date().toISOString() }).eq("phone", from);
-    return;
+    // النموذج فشل مرتين → بدل الصمت نسأل سؤالاً حتمياً ونكمل بقية خط الأنابيب كالمعتاد
+    // (البوابات/ملخّص التأكيد تتجاوزه لو لزم).
+    const _fb = _intakeFallback((prev || {}) as Record<string, unknown>);
+    out = { messages: [_fb], fields: {}, complete: false };
+    await logGuard(supabase, from, "no_silence_fallback", "fallback_reply", "النموذج فشل مرتين", _genFails, "", _fb);
   }
   // رسائل قصيرة منفصلة (تُرسل بالتتابع للحفاظ على الترتيب) — تدعم messages مصفوفة أو reply نصّي.
   let outMsgs: string[] = [];
@@ -2744,6 +2773,12 @@ ${returning
   }
   upd.intake_data = _mergedData;
 
+  // شبكة أمان أخيرة: لا رسالة للعميل ولا بناء برنامج = صمت → سؤال حتميّ + تسجيل.
+  if (!outMsgs.some(m => String(m || "").trim()) && !_doAutoBuild) {
+    const _fb2 = _intakeFallback(_mergedData as Record<string, unknown>);
+    outMsgs = [_fb2];
+    await logGuard(supabase, from, "no_silence_fallback", "empty_reply", "الاستقبال انتهى بلا رسالة", 1, "", _fb2);
+  }
   // ── الإرسال (بعد ما حسمنا المحتوى: إمّا رسالة الحارس/الـLLM، أو ملخّص التأكيد) ──
   // سياق حُرّاس التصحيح: آخر رسالة من طلال (تكرار الافتتاح) وآخر رسالة من العميل (سؤال «مين أنت؟» / السلام).
   let _lastTalalBody = String(((outboundRes.data || []) as Row[]).find(m => !!m.body)?.body || "");
@@ -2979,6 +3014,31 @@ async function handleMessage(args: {
     return;
   }
 
+  // ── بعد الرد على التحية (awaiting_intent): الرسالة التالية تحدد هل هو طلب جديد أو متابعة.
+  //    طلب جديد (ذكر وجهة، أو عدد مسافرين، أو قال «طلب/حجز جديد») → نفتح الاستقبال من جديد
+  //    (حتى لو نفس الوجهة السابقة، مثل عمرة ثانية) ويجمع طلال المعلومات. غير ذلك = متابعة
+  //    على طلب قديم → يكمل على المسار المعتاد (الموظفة). طلب المالكة ١ نوفمبر ٢٠٢٦.
+  {
+    const _idata = ((session as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
+    if (s?.intake_active !== true && _idata.awaiting_intent === true) {
+      const _isNewReq = !!detectedDest
+        || /(?:طلب|حجز|برنامج|رحل[ةه]|عرض)\s*(?:جديد|ثاني|ثاني[ةه]|آخر|اخر)/.test(text)
+        || /(?:[0-9٠-٩]+\s*(?:أشخاص|اشخاص|شخص|نفر|أفراد|افراد|معتمر(?:ين)?|بالغ(?:ين)?))|شخصين|نفرين|معتمرين/.test(text);
+      const { awaiting_intent: _drop, ...rest } = _idata;
+      if (_isNewReq) {
+        const _seed: Record<string, unknown> = detectedDest ? { destination: detectedDest } : {};
+        await supabase.from("whatsapp_sessions")
+          .update({ intake_active: true, intake_data: _seed, stage: "new", ...(detectedDest ? { destination: detectedDest } : {}) })
+          .eq("phone", from);
+        await logGuard(supabase, from, "greeting_new_request", "reopen_intake", "", 1, text, "");
+        await handleNewLeadIntake({ supabase, from, body: text, referral: _referral });
+        return;
+      }
+      await supabase.from("whatsapp_sessions").update({ intake_data: rest }).eq("phone", from);
+      if (session) (session as { intake_data?: Record<string, unknown> }).intake_data = rest;
+    }
+  }
+
   // عميل قديم (سبق رددنا عليه أو اكتمل استقباله) عاد بطلب **وجهة جديدة** (مختلفة عن
   // وجهته السابقة) → نعيد تفعيل طلال لجمع معلومات الرحلة الجديدة.
   // ❌ بلا ترحيب أو تعريف من جديد («سعدنا بعودتك / معك طلال») مهما طالت المدة —
@@ -3080,6 +3140,18 @@ async function handleMessage(args: {
       .from("whatsapp_sessions")
       .update({ last_message_at: new Date().toISOString() })
       .eq("phone", from);
+    // 🟢 حارس «لا صمت على التحية» (طلب المالكة ١ نوفمبر ٢٠٢٦): التحية وحدها («مرحبا/السلام
+    //    عليكم/هلا») كانت تُصنَّف كلاماً عابراً فلا رد ولا اقتراح للموظفة = صمت تام. الآن طلال
+    //    يرد مباشرة، والرسالة التالية تحدد طلب جديد أو متابعة (awaiting_intent أعلاه).
+    if (isGreeting(text)) {
+      const _greet = "أهلاً وسهلاً، حياك الله، آمرني";   // صيغة تناسب الكل (قرار المالكة)
+      await sendCustomerReply(supabase, from, _greet);
+      try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: stripBannedPhrases(_greet), sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+      const _id0 = ((session as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
+      await supabase.from("whatsapp_sessions").update({ intake_data: { ..._id0, awaiting_intent: true } }).eq("phone", from);
+      await logGuard(supabase, from, "greeting_reply", "direct_reply", "", 1, text, _greet);
+      return;
+    }
     // Skip if a proposal is already pending for this customer (avoid
     // spamming the admin with duplicates while they're deciding).
     const { data: pending } = await supabase
