@@ -85,6 +85,11 @@ Deno.serve(async (req) => {
     const expected = Deno.env.get("APP_PASSWORD");
     if (!expected) return json({ ok: false, error: "النظام غير مهيّأ" }, 500);
     const passOk = safeEquals(password, expected);
+    // 🤖 حساب «مولّد البرامج» (طلال) — كلمة سر **منفصلة** بدور محدود (render فقط).
+    // ليست الباب الخلفي: دخول حقيقي مُسجَّل، والواجهة تقصر صلاحيته على فتح برنامج
+    // وطباعته (بلا تعديل/حذف/تصفّح). المفتاح سرّي في RENDER_PASSWORD.
+    const renderExpected = Deno.env.get("RENDER_PASSWORD") || "";
+    const isRender = renderExpected.length > 0 && safeEquals(password, renderExpected);
 
     // كشف الدولة + تحميل الإعدادات والقائمة + الجهاز الموثوق بالتوازي
     const [geo, settingsRes, allowedRes, deviceRes] = await Promise.all([
@@ -111,7 +116,7 @@ Deno.serve(async (req) => {
     const devNote = deviceTrusted ? "trusted_device" : geo.note;
 
     // القرار
-    if (!passOk) {
+    if (!passOk && !isRender) {
       await logAttempt({ event: "login_fail", ip, country: geo.code, country_allowed: countryAllowed, success: false, user_agent: ua, detail: devNote });
       return json({ ok: false, error: "كلمة سر غير صحيحة" }, 401);
     }
@@ -134,8 +139,8 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "🔒 جهازك غير معتمد بعد. أُرسل طلب توثيق للإدارة تلقائيًا — انتظري الموافقة ثم حاولي مجدداً.", device_pending: true }, 403);
     }
     // نجاح (في وضع المراقبة قد تكون الدولة غير مدرجة — نسجّلها لتظهر في اللوحة)
-    await logAttempt({ event: "login_ok", ip, country: geo.code, country_allowed: countryAllowed, success: true, user_agent: ua, detail: devNote });
-    return json({ ok: true, device_trusted: deviceTrusted }, 200);
+    await logAttempt({ event: isRender ? "login_render" : "login_ok", ip, country: geo.code, country_allowed: countryAllowed, success: true, user_agent: ua, detail: isRender ? "talal_pdf_generator" : devNote });
+    return json({ ok: true, device_trusted: deviceTrusted, role: isRender ? "render" : "staff" }, 200);
   } catch (e) {
     return json({ ok: false, error: (e as Error).message }, 500);
   }
