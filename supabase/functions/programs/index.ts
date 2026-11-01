@@ -41,11 +41,27 @@ function inferPrefix(destinationRaw: string): string {
   const map: Array<[RegExp, string]> = [
     [/فيتنام|vietnam/i, "VN"],
     [/ماليزيا|malaysia/i, "MY"],
-    [/اندونيسيا|إندونيسيا|indonesia/i, "ID"],
+    [/اندونيسيا|إندونيسيا|indonesia|بالي|bali/i, "ID"],
     [/تركيا|turky|turkey/i, "TR"],
     [/روسيا|russia/i, "RU"],
     [/البوسنة|bosnia/i, "BA"],
-    [/تايلاند|thailand/i, "TH"],
+    [/تايلند|تايلاند|thailand/i, "TH"],
+    [/سلطنة\s*عُ?مان|عُمان|عمان|\boman\b/i, "OM"],
+    [/جنوب\s*أ?فريقيا|south\s*africa/i, "ZA"],
+    [/موريشيوس|mauritius/i, "MU"],
+    [/مكة|العمرة|عمرة|الحرم|makkah|umrah/i, "MK"],
+    [/إنجلترا|انجلترا|بريطانيا|لندن|england|london|britain|\buk\b/i, "UK"],
+    [/الصين|الصّين|صين|china/i, "CN"],
+    [/هولندا|netherlands?|holland/i, "NL"],
+    [/مصر|egypt/i, "EG"],
+    [/المغرب|morocco|morroco/i, "MA"],
+    [/إسبانيا|اسبانيا|spain/i, "ES"],
+    [/سري\s*لانكا|سريلانكا|sri\s*lanka|srilanka/i, "LK"],
+    [/بولندا|poland/i, "PL"],
+    [/الإمارات|الامارات|أبوظبي|ابوظبي|أبو\s*ظبي|دبي|ياس|uae|abu\s*dhabi|dubai|yas/i, "AE"],
+    [/جورجيا|georgia/i, "GE"],
+    [/أذربيجان|اذربيجان|azerbaijan/i, "AZ"],
+    [/المالديف|مالديف|maldives/i, "MV"],
   ];
   for (const [re, pref] of map) if (re.test(d)) return pref;
   return (destinationRaw || "XX").replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase() || "XX";
@@ -65,6 +81,24 @@ Deno.serve(async (req) => {
     if (req.method === "GET") {
       const code = sanitizeCodeQuery(url.searchParams.get("code") || "");
       if (!code) return json(400, { error: "code مطلوب" });
+      // 🛡️ حدّ معدّل ضد تخمين الأكواد المتسلسلة: لا نسمح بأكثر من 60 استرجاعاً لكل
+      //    IP خلال 10 دقائق (الاستخدام العادي أقلّ بكثير — موظفة أو عامل الـPDF).
+      //    يفشل **مفتوحاً** عند أي خطأ حتى لا يتعطّل الاسترجاع الشرعي.
+      const _ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim()
+        || req.headers.get("x-real-ip") || "";
+      try {
+        if (_ip) {
+          const _since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+          const { count } = await supabase.from("program_code_lookups")
+            .select("id", { count: "exact", head: true })
+            .eq("ip", _ip).gte("looked_at", _since);
+          if ((count ?? 0) > 60) {
+            await supabase.from("program_code_lookups").insert({ ip: _ip, code: code.slice(0, 40), found: false }).then(() => {}, () => {});
+            return json(429, { error: "محاولات كثيرة — حاول بعد قليل" });
+          }
+          await supabase.from("program_code_lookups").insert({ ip: _ip, code: code.slice(0, 40) }).then(() => {}, () => {});
+        }
+      } catch (_e) { /* fail-open */ }
       const safeLike = code.replace(/[%_\\]/g, "");
 
       const fields =
