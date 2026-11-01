@@ -149,9 +149,38 @@ Deno.serve(async (req) => {
           sender_name: payload.sender_name ?? null,
           body: payload.body ?? null,
           matched: payload.matched ?? '⭐',
+          msg_id: payload.msg_id ?? null,            // مفتاح الرسالة الأصلية (للرد المقتبس)
+          participant: payload.participant ?? null,  // JID الكامل لصاحب الطلب
         });
         if (error) return json({ error: error.message }, 500);
         return json({ ok: true });
+      }
+      case "reply-group-request": {
+        // الداشبورد يرد على طلب جروب → يُدرَج في الطابور كرد مقتبس على الرسالة الأصلية
+        const reqId = payload.id;
+        const text = String(payload.text ?? "").trim();
+        if (!reqId || !text) return json({ error: "id و text مطلوبان" }, 400);
+        const { data: reqRow } = await db.from("wa_group_requests").select("*").eq("id", reqId).single();
+        if (!reqRow) return json({ error: "الطلب غير موجود" }, 404);
+        // الأرقام الحية للإرسال فقط (601 وعُمان مسجّلان خروج). لو الرقم المخزّن ميت،
+        // اختر رقماً حياً عضواً في نفس الجروب حتى يصل الرد.
+        const LIVE_SENDERS = ["201011346081", "201515616984"];
+        let account = String(payload.account ?? reqRow.account ?? "");
+        if (!LIVE_SENDERS.includes(account)) {
+          const { data: mem } = await db.from("wa_account_groups")
+            .select("account").eq("group_jid", reqRow.group_jid).in("account", LIVE_SENDERS).limit(1);
+          account = (mem && mem.length) ? String(mem[0].account) : LIVE_SENDERS[0];
+        }
+        const quoted = reqRow.msg_id
+          ? { id: reqRow.msg_id, participant: reqRow.participant ?? null, body: reqRow.body ?? "" }
+          : null;  // طلب قديم بلا مفتاح → رد عادي بلا اقتباس
+        const { error: insErr } = await db.from("outgoing_messages").insert({
+          to: reqRow.group_jid, body: text, source: "group-reply",
+          account, caption: null, send_after: new Date().toISOString(), quoted,
+        });
+        if (insErr) return json({ error: insErr.message }, 500);
+        await db.from("wa_group_requests").update({ status: "handled", replied_at: new Date().toISOString(), reply_text: text }).eq("id", reqId);
+        return json({ ok: true, quoted: !!quoted, account });
       }
       case "group-requests": {
         const { data } = await db.from("wa_group_requests")
@@ -277,6 +306,18 @@ Deno.serve(async (req) => {
         }
         if (!jids.length) return json({ error: "targets or to required" }, 400);
 
+        // رد مقتبس على طلب جروب: لو أُرسل quote_req_id، نربط الرسالة/الملف كاقتباس على الرسالة الأصلية
+        // داخل الجروب — فالـPDF يوصل كـ«Reply» على الطلب نفسه (مثل واتساب) ولا يتلخبط مع طلبات ثانية.
+        let quoted: Record<string, unknown> | null = null;
+        let quoteReq: Record<string, unknown> | null = null;
+        if (payload.quote_req_id) {
+          const { data: rq } = await db.from("wa_group_requests").select("*").eq("id", payload.quote_req_id).single();
+          if (rq && rq.msg_id) {
+            quoted = { id: rq.msg_id, participant: rq.participant ?? null, body: rq.body ?? "" };
+            quoteReq = rq;  // لو ما فيه msg_id (طلب قديم) → يُرسَل عادي بلا اقتباس
+          }
+        }
+
         const batchSize = Math.max(0, Number(payload.batch_size ?? 0));
         const intervalMin = Math.max(0, Number(payload.interval_minutes ?? 0));
         const now = Date.now();
@@ -286,7 +327,7 @@ Deno.serve(async (req) => {
             const batchIndex = Math.floor(i / batchSize);
             sendAfter = new Date(now + batchIndex * intervalMin * 60_000).toISOString();
           }
-          return { to: jid, body, source, account, caption: payload.caption ?? null, send_after: sendAfter };
+          return { to: jid, body, source, account, caption: payload.caption ?? null, send_after: sendAfter, quoted };
         });
 
         let queued = 0;
@@ -294,6 +335,13 @@ Deno.serve(async (req) => {
           const { data, error } = await db.from("outgoing_messages").insert(rows.slice(i, i + 500)).select("id");
           if (error) return json({ error: error.message, queued }, 500);
           queued += data?.length ?? 0;
+        }
+        // علّم الطلب «تم التعامل» تلقائياً عند الرد عليه ببرنامج/PDF
+        if (quoteReq) {
+          const summary = source === "pdf" ? "📄 برنامج PDF" : source === "image" ? "🖼️ صورة" : body.slice(0, 120);
+          await db.from("wa_group_requests").update({
+            status: "handled", replied_at: new Date().toISOString(), reply_text: summary,
+          }).eq("id", quoteReq.id);
         }
         const batches = batchSize > 0 ? Math.ceil(jids.length / batchSize) : 1;
         const etaMin = batchSize > 0 && intervalMin > 0 ? (batches - 1) * intervalMin : 0;

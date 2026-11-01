@@ -764,6 +764,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <button class="ebtn ebtn-nologo" style="font-size:12px" onclick="waBridgeSaveOffer()">💾 احفظ النص الحالي كعرض جاهز</button>
 </div>
 
+<div id="waBridgeQuoteHint" style="display:none;margin-bottom:10px;padding:8px 12px;border-radius:10px;background:rgba(18,140,126,.12);border:1px solid #128C7E;color:#128C7E;font-size:12px;font-weight:800;line-height:1.7"></div>
 <div style="margin-bottom:12px"><textarea id="waBridgeBody" rows="6" placeholder="نص الرسالة..."></textarea></div>
 
 <div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px">🎯 الوجهات — علّمي ✓ على اللي تبينها (القائمة كاملة، تقدرين تنزلين وتختارين)</div>
@@ -4598,6 +4599,7 @@ let waBridgeSel = new Set();        // jids المحددة
 let waBridgeNames = {};             // jid -> name (يشمل الأرقام اليدوية)
 let waBridgeStatusTimer = null;
 let waBridgeGroupsLoaded = false;
+let waBridgeQuoteReqId = null;      // رقم طلب الجروب لو الإرسال رد مقتبس على طلب
 
 async function waBridgeCall(action, extra = {}) {
   const r = await fetch(WA_BRIDGE_URL, {
@@ -4609,6 +4611,8 @@ async function waBridgeCall(action, extra = {}) {
 }
 
 function waBridgeOpen() {
+  waBridgeQuoteReqId = null;                    // الفتح العادي = بلا اقتباس؛ waReqReply يضبطه بعد الفتح
+  const _qh = document.getElementById('waBridgeQuoteHint'); if (_qh) _qh.style.display = 'none';
   document.getElementById('waBridgeOverlay').classList.add('open');
   const hasProgram = (typeof parsedData !== 'undefined' && parsedData && typeof lastProgramRaw !== 'undefined' && lastProgramRaw);
   waBridgeMode(hasProgram ? 'program' : 'news');
@@ -5016,6 +5020,7 @@ async function waBridgeSend() {
   }
   const payload = { targets, body: sendBody, kind: waBridgeCurMode, source: sendSource, created_by: createdBy, account: waBridgeAccount, caption: pdfCaption };
   if (throttle) { payload.batch_size = batch; payload.interval_minutes = interval; }
+  if (waBridgeQuoteReqId) { payload.quote_req_id = waBridgeQuoteReqId; }   // رد مقتبس على طلب الجروب
   try {
     const r = await waBridgeCall('enqueue', payload);
     if (r.ok) {
@@ -5023,6 +5028,9 @@ async function waBridgeSend() {
       if (r.eta_minutes > 0) m += ' — تخلص خلال ~' + r.eta_minutes + ' دقيقة'; else m += ' — تُرسل الآن';
       msg.textContent = m; msg.style.color = '#25D366';
       waBridgeSel.clear(); waBridgeClearImg(); waBridgeRenderList();
+      waBridgeQuoteReqId = null;
+      const _qh = document.getElementById('waBridgeQuoteHint'); if (_qh) _qh.style.display = 'none';
+      if (typeof waReqLoad === 'function') setTimeout(waReqLoad, 1800);   // حدّث بوكس الطلبات (صار «تم»)
       setTimeout(waBridgeRenderOutbox, 3500);
     } else { msg.textContent = '❌ ' + (r.error || 'فشل الإرسال'); msg.style.color = '#ef4444'; }
   } catch (e) { msg.textContent = '❌ ' + e.message; msg.style.color = '#ef4444'; }
@@ -5115,7 +5123,7 @@ async function waReqLoad() {
         + '<div style="font-size:13px;color:var(--text);white-space:pre-wrap;line-height:1.8">' + waEsc(q.body || '') + '</div>'
         + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'
         + '<button class="ebtn ebtn-nologo" style="font-size:11px;background:#128C7E;color:#fff" onclick="waReqToggleReply(' + q.id + ')">↩️ رد مقتبس</button>'
-        + '<button class="ebtn ebtn-nologo" style="font-size:11px" onclick="waReqReply(&#39;' + q.group_jid + '&#39;,&#39;' + waEsc(q.group_name||'').replace(/[&#39;"\\]/g,'') + '&#39;,&#39;' + (q.account||'601111136864') + '&#39;)">📤 برنامج/PDF</button>'
+        + '<button class="ebtn ebtn-nologo" style="font-size:11px" onclick="waReqReply(&#39;' + q.group_jid + '&#39;,&#39;' + waEsc(q.group_name||'').replace(/[&#39;"\\]/g,'') + '&#39;,&#39;' + (q.account||'601111136864') + '&#39;,' + q.id + ')">📤 برنامج/PDF (رد مقتبس)</button>'
         + btn
         + '</div>'
         + '<div id="waReqReply_' + q.id + '" style="display:none;margin-top:8px">'
@@ -5127,7 +5135,7 @@ async function waReqLoad() {
     }).join('');
   } catch (e) { box.innerHTML = '<div style="padding:14px;color:#ef4444">تعذّر التحميل: ' + e.message + '</div>'; }
 }
-function waReqReply(jid, name, account) {
+function waReqReply(jid, name, account, reqId) {
   waReqClose();
   waBridgeAccount = account || '601111136864';
   const sel = document.getElementById('waBridgeAccount');
@@ -5135,7 +5143,10 @@ function waReqReply(jid, name, account) {
   waBridgeSel = new Set([jid]);
   waBridgeNames[jid] = name || jid;
   waBridgeGroupsLoaded = false;       // reload the picker for this sender account
-  waBridgeOpen();                     // opens the send window; loads + renders the group list
+  waBridgeOpen();                     // opens the send window; loads + renders the group list (يصفّر الاقتباس)
+  waBridgeQuoteReqId = reqId || null; // بعد الفتح: البرنامج/الـPDF يروح كرد مقتبس على هذا الطلب
+  const _qh = document.getElementById('waBridgeQuoteHint');
+  if (_qh && reqId) { _qh.style.display = 'block'; _qh.textContent = '↩️ سيُرسَل البرنامج/الـPDF كرد مقتبس على طلب: ' + (name || 'الجروب'); }
   waBridgeUpdateCount();
 }
 
