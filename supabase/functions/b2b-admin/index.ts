@@ -465,7 +465,7 @@ Deno.serve(async (req) => {
       }
       case "settings.save": {
         const key = String(p.key || "");
-        if (!["talal_system_prompt", "admin_whatsapp", "admin_whatsapp_link", "template_intro"].includes(key)) {
+        if (!["talal_system_prompt", "admin_whatsapp", "admin_whatsapp_link", "template_intro", "auto_reply_enabled", "notify_whatsapp"].includes(key)) {
           return json({ ok: false, error: "مفتاح غير مسموح" }, 400);
         }
         const { error } = await sb.from("b2b_settings").upsert({ key, value: String(p.value ?? "") });
