@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-01-stars-mixed'
+  var BUILD = '2026-11-01-prog-code'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -3011,6 +3011,7 @@ function grpBuildPdfHtml(variant){
     <div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:10px 14px;margin-bottom:10px;color:#fff;font-size:13px;font-weight:700;">
       ⏱️ ${days.length} أيام · مسار ثابت غير قابل للتعديل
     </div>
+    ${GRP_SAVED_CODE?`<div style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.28);border-radius:10px;padding:8px 14px;margin-bottom:10px;color:#fff;font-size:14px;font-weight:800;">🔖 كود البرنامج: <span style="direction:ltr;unicode-bidi:plaintext;letter-spacing:1px;">${grpEsc(GRP_SAVED_CODE)}</span></div>`:''}
     <div class="pdf-disclaimer">⚠️ هذا عرض سعر ولا يعني بالضرورة توفّر المقاعد لحظتها</div>
     <img class="pdf-cover-suitcase" src="${SUITCASE_IMG}" alt=""/>
   </div>
@@ -7046,6 +7047,10 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       // اضمن عملة العميل (حسب رقم جواله) قبل توليد الملف مباشرةً — لا نعتمد على
       // توقيت البناء (كان أحياناً يُرسل بالريال قبل ما تنطبق عملة العميل).
       if(typeof indivApplyCurrency==='function'){ try{ await indivApplyCurrency(indivState.phone); }catch(_){} await new Promise(r=>setTimeout(r,500)); }
+      // احفظ البرنامج أولاً للحصول على كود الاسترجاع (Package Code) قبل توليد الـPDF،
+      // حتى يظهر الكود داخل الملف نفسه (buildPDF يقرأ lastSavedCode) وفي نص الرسالة.
+      let _pkgCode='';
+      try{ _pkgCode = (await saveCurrentProgramOnce('client', (typeof currentFinalGroup==='function'?currentFinalGroup():null))) || lastSavedCode || ''; }catch(_){}
       const blob=await generatePdfBlob('client');
       const b64=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(String(fr.result).split(',')[1]);fr.onerror=rej;fr.readAsDataURL(blob);});
       const price=(typeof currentFinalGroup==='function')?currentFinalGroup():null;
@@ -7057,7 +7062,7 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
       const _destEn=_DEST_EN[_destAr]||(/^[\x00-\x7F]+$/.test(_destAr)?_destAr:'Trip');
       const fname=('Alezz_Travel_'+_destEn+'_Offer').replace(/[^\x00-\x7F]/g,'').replace(/\s+/g,'_').replace(/_+/g,'_').slice(0,60)+'.pdf';
       // نضيف اسم الوجهة بالعربي في رأس الرسالة ليظهر سليمًا للعميل.
-      const caption=(_destAr?('🌴 برنامج '+_destAr+'\n'):'')+note;
+      const caption=(_destAr?('🌴 برنامج '+_destAr+'\n'):'')+note+(_pkgCode?('\n\n🔖 كود البرنامج: '+_pkgCode):'');
       const r=await fetch(IB_BASE+'?admin_action=send_individual',{method:'POST',headers:ibH(),body:JSON.stringify({
         id:indivState.id, phone:indivState.phone, pdf_base64:b64, filename:fname, note:caption,
         program:lastProgramRaw, price, currency, sent_by:(typeof ibStaffName==='function'?ibStaffName():'')
@@ -7084,12 +7089,14 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
     if(note===null) return;
     if(typeof grpMsg==='function') grpMsg('⏳ يُجهّز ويُرسل للعميل…');
     try{
+      // اضمن كود الاسترجاع قبل التوليد (يظهر داخل PDF الجروب وفي نص الرسالة).
+      if(!GRP_SAVED_CODE){ try{ await grpFinalizeCode(); }catch(_){} }
       const blob=await grpMakeBlob('individual');
       const b64=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(String(fr.result).split(',')[1]);fr.onerror=rej;fr.readAsDataURL(blob);});
       const s=grpState();
       const _prog=(GRP_CURRENT.program||'Trip'); const _progEn=/^[\x00-\x7F ]+$/.test(_prog)?_prog:'Group';
       const fname=('Alezz_Group_'+_progEn).replace(/[^\x00-\x7F]/g,'').replace(/\s+/g,'_').replace(/_+/g,'_').slice(0,50)+'.pdf';
-      const caption='🚌 '+(GRP_CURRENT.program||'')+(s.date?(' — '+s.date):'')+(note?('\n'+note):'');
+      const caption='🚌 '+(GRP_CURRENT.program||'')+(s.date?(' — '+s.date):'')+(note?('\n'+note):'')+(GRP_SAVED_CODE?('\n\n🔖 كود البرنامج: '+GRP_SAVED_CODE):'');
       const r=await fetch(IB_BASE+'?admin_action=send_individual',{method:'POST',headers:ibH(),body:JSON.stringify({
         id:indivState.id, phone:indivState.phone, pdf_base64:b64, filename:fname, note:caption,
         program:grpWhatsappText(), price:(s.c&&s.c.total)||null, currency:'ريال', sent_by:(typeof ibStaffName==='function'?ibStaffName():'')
