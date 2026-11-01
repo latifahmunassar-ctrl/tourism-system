@@ -3215,6 +3215,8 @@ async function formatProgramWithLLM(
 - ❌ ممنوع منعاً باتاً تغيّر أو تحسب أي رقم سعر. استخدم سطر السعر كما سأعطيك إياه حرفياً.
 - ❌ انسخ أسماء الفنادق وروابطها (🔗) حرفياً كما هي بدون أي تعديل.
 - ❌ ممنوع تخترع فنادق أو جولات أو خدمات غير موجودة. يمكنك فقط: إعادة صياغة وصف الجولة الموجود، تقسيم معالمها نقاطاً بإيموجي، وإعطاء كل يوم عنواناً قصيراً من نشاطه.
+- 🛏️ لكل فندق اكتب **نوع الغرفة وكم تتسع** مستخرَجاً من البيانات الخام (العمود الذي يحوي «(يتسع N أشخاص)»). انقل الاسم والعدد كما هما.
+- 🍽️ اكتب وجبات كل فندق **كما وردت حرفياً** في البيانات الخام (مثل «إفطار مشمول» أو «بدون وجبات»). ❌❌ ممنوع منعاً باتاً تفترض الإفطار أو تعمّمه على كل الفنادق — انقل ما في بيانات كل فندق فقط.
 - بلا تشكيل. عربي بسيط واضح. أرقام الأيام بالكلمات (الأول، الثاني...).
 - مسافات مريحة وفواصل ━━━━━━━━━━━━━━ بين الأقسام.
 
@@ -3839,6 +3841,24 @@ Deno.serve(async (req) => {
         const margins = await pmGetMargins(destKey);
         const prof = pmPickProfit(margins, cost, md, customerType);       // ok=false ⇒ ربح يدوي
         const finalSar = cost + prof.profit;
+        // احفظ البرنامج ليحصل على **كود استرجاع** (يظهر في رسالة العميل ويُستدعى
+        // لاحقاً للتعديل عبر الكود — طلب المالكة). نستدعي دالة programs نفسها حتى
+        // تتطابق صيغة الكود (TR-2026-0XX) مع team.html. أفضل جهد: فشله لا يُعطّل الإرسال.
+        let _progCode = "";
+        try {
+          const _srk = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+          const _pr = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/programs`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", apikey: _srk, Authorization: `Bearer ${_srk}` },
+            body: JSON.stringify({
+              raw: chosen.program, destination: destAr,
+              pdf_variant: customerType === "company" ? "company" : "client",
+              total_group: finalSar, persons: pax,
+            }),
+          });
+          const _pd = await _pr.json().catch(() => ({}));
+          if (_pr.ok && _pd?.ok && _pd?.code) _progCode = String(_pd.code).trim();
+        } catch (_e) { /* best-effort */ }
         const cur = await getCurrencyRate(supabase, _currencyCodeFromPhone(phone));
         const childNote = ages ? ` (+ أطفال: ${ages})` : "";
         // سطر السعر النهائي (حرفيّ) — يُمرَّر للنموذج ويُتحقّق منه.
@@ -3847,12 +3867,15 @@ Deno.serve(async (req) => {
           : "";
         // صياغة أنيقة بالذكاء؛ عند أي فشل/انحراف سعر → المنسّق الحتمي (سعر مضمون).
         const llmFormatted = await formatProgramWithLLM(chosen.program, { priceLine, pax, destAr, flag: _destFlag(destAr) });
-        const formatted = llmFormatted || buildCustomerProgramMessage(chosen.program, {
+        let formatted = llmFormatted || buildCustomerProgramMessage(chosen.program, {
           finalSar, priceReady: prof.ok, cur, pax, childNote,
         });
+        // كود البرنامج في رسالة العميل (يُستدعى به لاحقاً للتعديل).
+        if (_progCode && formatted) formatted += `\n\n🔖 كود البرنامج: ${_progCode}`;
         return new Response(JSON.stringify({
           ok: true,
           program: chosen.program,
+          program_code: _progCode,
           total: cost,
           distribution: chosen.distribution,
           profit: prof.profit,
