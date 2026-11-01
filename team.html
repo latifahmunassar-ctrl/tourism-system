@@ -4991,6 +4991,14 @@ async function waBridgeSend() {
     const _edited = prompt('راجعي السعر اللي بينرسل تحت الـPDF — عدّليه لو تبين، ثم موافق للإرسال:', ((body && body.trim()) ? body : _priceTxt));
     if (_edited === null) { msg.textContent = 'أُلغي الإرسال.'; msg.style.color = 'var(--muted)'; return; }
     pdfCaption = _edited;
+    // 🔖 كل برنامج يُرسَل لمجموعات الشركات لازم يحمل كوداً. نحفظه (أو نعيد استخدام
+    //    المحفوظ) قبل توليد الـPDF حتى يظهر الكود داخل الملف نفسه، ونُلحقه بالرسالة.
+    msg.textContent = '⏳ جاري حفظ كود البرنامج...';
+    let _pkgCode = '';
+    const _finalG = _sar || (basePrice + extraCostsTotal() + (parseInt((document.getElementById('profitInput')||{}).value) || 0));
+    try { _pkgCode = await saveCurrentProgramOnce('company', _finalG); } catch (_) {}
+    _pkgCode = (_pkgCode || lastSavedCode || '').trim();
+    if (_pkgCode) pdfCaption = (pdfCaption ? pdfCaption + '\n\n' : '') + '🔖 كود البرنامج: ' + _pkgCode;
     msg.textContent = '⏳ جاري تجهيز ملف الـPDF...';
     try {
       const blob = await generatePdfBlob('no_price');
@@ -5552,7 +5560,7 @@ if (/عمان|عُمان|oman/i.test(String(dest||''))) {
   transfersLines = (transfersLines||[]).map(_stripLine);
 }
 const simCountNum = parseInt((arabicDigitsToLatin(String(simText || '')).match(/\d+/) || ['0'])[0].replace(/[^\d]/g, '')) || 0;
-const systemCode = (lastSavedCode || '').trim();
+const systemCode = (lastSavedCode || ((document.getElementById('programCodeInput')||{}).value) || '').trim();
 // السعر النهائي الإجمالي = السعر الأساسي للمجموعة + الربح (إجمالي)
 const profitTotal = profit;
 const baseGroupPrice = basePrice + extraCostsTotal();
@@ -6064,6 +6072,7 @@ ${showTotalPrice ? `<div class="pdf-price-box"><div class="pdf-price-label">💰
 <div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:10px 14px;margin-bottom:10px;color:#fff;font-size:13px;font-weight:700;">
 ⏱️ ${duration} | ${nights} | ${metaParts[3]||''}
 </div>
+${systemCode ? `<div style="background:#fff;border-radius:12px;padding:12px 16px;margin:10px 0;color:#0b3d91;font-size:17px;font-weight:900;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.18);">🔖 كود البرنامج: <span style="direction:ltr;unicode-bidi:plaintext;letter-spacing:1.5px;">${systemCode}</span></div>` : ''}
 <div class="pdf-field"><span class="pdf-field-label">العميل :</span><span class="pdf-field-value">${client}</span></div>
 <div class="pdf-field"><span class="pdf-field-label">كود العميل :</span><span class="pdf-field-value">${clientCode}</span></div>
 <div class="pdf-field"><span class="pdf-field-label">Package Code</span><span class="pdf-field-value" style="font-weight:900;letter-spacing:1px;direction:ltr;unicode-bidi:plaintext;">${systemCode || '—'}</span></div>
