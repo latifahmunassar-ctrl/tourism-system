@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-10-31-groupreply'
+  var BUILD = '2026-11-01-stars-mixed'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -585,8 +585,8 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
       <div class="bf-seg" id="bf-starSeg">
         <label><input type="radio" name="bf-stars" value="3" onchange="bfPick(this)">3★</label>
         <label><input type="radio" name="bf-stars" value="4" onchange="bfPick(this)">4★</label>
-        <label class="on"><input type="radio" name="bf-stars" value="5" checked onchange="bfPick(this)">5★</label>
-        <label><input type="radio" name="bf-stars" value="mixed" onchange="bfPick(this)">مختلط</label>
+        <label><input type="radio" name="bf-stars" value="5" onchange="bfPick(this)">5★</label>
+        <label class="on"><input type="radio" name="bf-stars" value="mixed" checked onchange="bfPick(this)">مختلط</label>
       </div>
     </div>
     <div class="bf-row">
@@ -3453,7 +3453,7 @@ function buildFromForm(){
   adHideNoPrice();
   const _adBlock = adBlockReason(dest, cities, adults, children, days);
   if(_adBlock){ adShowNoPrice(_adBlock); return; }
-  const stars = (document.querySelector('input[name=bf-stars]:checked')||{}).value || '5';
+  const stars = (document.querySelector('input[name=bf-stars]:checked')||{}).value || 'mixed';
   const tr    = (document.querySelector('input[name=bf-tr]:checked')||{}).value || 'private';
   const sims  = +document.getElementById('bf-sims').value||0;
   const extraBedOn = document.getElementById('bf-extrabed-on').checked;
