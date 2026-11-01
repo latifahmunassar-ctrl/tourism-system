@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
                 companyId = comp?.id || null;
               } catch (_) { /* */ }
               const { data: created } = await supabase.from("b2b_conversations")
-                .insert({ whatsapp: wa, company_id: companyId, last_message_at: new Date().toISOString() })
+                .insert({ whatsapp: wa, company_id: companyId, auto_reply: true, last_message_at: new Date().toISOString() })
                 .select("*").single();
               conv = created;
             }
