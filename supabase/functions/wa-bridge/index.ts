@@ -164,12 +164,14 @@ Deno.serve(async (req) => {
         if (!reqRow) return json({ error: "الطلب غير موجود" }, 404);
         // الأرقام الحية للإرسال فقط (601 وعُمان مسجّلان خروج). لو الرقم المخزّن ميت،
         // اختر رقماً حياً عضواً في نفس الجروب حتى يصل الرد.
-        const LIVE_SENDERS = ["201011346081", "201515616984"];
+        const LIVE_SENDERS = ["201515616984", "201011346081"]; // مريم افتراضي أول
         let account = String(payload.account ?? reqRow.account ?? "");
-        if (!LIVE_SENDERS.includes(account)) {
-          const { data: mem } = await db.from("wa_account_groups")
-            .select("account").eq("group_jid", reqRow.group_jid).in("account", LIVE_SENDERS).limit(1);
-          account = (mem && mem.length) ? String(mem[0].account) : LIVE_SENDERS[0];
+        // مريم أولاً إن كانت عضواً؛ وإلا أوّل رقم حيّ عضو؛ وإلا مريم كحل أخير.
+        const { data: _memLive } = await db.from("wa_account_groups")
+          .select("account").eq("jid", reqRow.group_jid).in("account", LIVE_SENDERS);
+        const _liveMembers = (_memLive ?? []).map((r: Record<string, unknown>) => String(r.account));
+        if (!(LIVE_SENDERS.includes(account) && _liveMembers.includes(account))) {
+          account = LIVE_SENDERS.find((a) => _liveMembers.includes(a)) ?? LIVE_SENDERS[0];
         }
         const quoted = reqRow.msg_id
           ? { id: reqRow.msg_id, participant: reqRow.participant ?? null, body: reqRow.body ?? "" }
@@ -318,6 +320,31 @@ Deno.serve(async (req) => {
           }
         }
 
+        // 📱 اختيار مُرسِل حيّ لرسائل الجروبات (@g.us). المُرسِلون ذوو العمليات الحيّة
+        //    على جهاز البوت: مريم أولاً (افتراضي المالكة)، ثم مصر غروب. رقم 601 ميت
+        //    (مسجّل خروج) فأي رسالة تُجدوَل عليه تعلّق صامتاً. القاعدة:
+        //      • لو الرقم المطلوب حيّ وعضو في الجروب → نُبقيه (نحترم اختياراً صريحاً).
+        //      • وإلا → مريم إن كانت عضواً، ثم أوّل رقم حيّ عضو، وإلا مريم كحل أخير.
+        //    (الأفراد @s.whatsapp.net لا يُعاد توجيههم — يُرسَلون عبر مسار آخر.)
+        const LIVE_SENDERS = ["201515616984", "201011346081"]; // مريم افتراضي أول
+        const isGroupJid = (j: string) => j.endsWith("@g.us");
+        const senderCache = new Map<string, string>();
+        async function pickGroupSender(jid: string): Promise<string> {
+          if (senderCache.has(jid)) return senderCache.get(jid)!;
+          const { data: memRows } = await db.from("wa_account_groups")
+            .select("account").eq("jid", jid).in("account", LIVE_SENDERS);
+          const liveMembers = (memRows ?? []).map((r: Record<string, unknown>) => String(r.account));
+          let chosen: string;
+          if (LIVE_SENDERS.includes(account) && liveMembers.includes(account)) chosen = account;
+          else chosen = LIVE_SENDERS.find((a) => liveMembers.includes(a)) ?? LIVE_SENDERS[0];
+          senderCache.set(jid, chosen);
+          return chosen;
+        }
+        const accountByJid: Record<string, string> = {};
+        for (const jid of jids) {
+          accountByJid[jid] = isGroupJid(jid) ? await pickGroupSender(jid) : account;
+        }
+
         const batchSize = Math.max(0, Number(payload.batch_size ?? 0));
         const intervalMin = Math.max(0, Number(payload.interval_minutes ?? 0));
         const now = Date.now();
@@ -327,7 +354,7 @@ Deno.serve(async (req) => {
             const batchIndex = Math.floor(i / batchSize);
             sendAfter = new Date(now + batchIndex * intervalMin * 60_000).toISOString();
           }
-          return { to: jid, body, source, account, caption: payload.caption ?? null, send_after: sendAfter, quoted };
+          return { to: jid, body, source, account: accountByJid[jid], caption: payload.caption ?? null, send_after: sendAfter, quoted };
         });
 
         let queued = 0;
