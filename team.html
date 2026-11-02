@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-02-missingtab'
+  var BUILD = '2026-11-02-ota'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5275,15 +5275,14 @@ async function missingHotelsLoad(){
     const hotels=(r && r.hotels)||[];
     if(!hotels.length){ box.innerHTML='<div style="padding:18px;color:var(--muted);text-align:center;line-height:1.9">ما فيه فنادق مطلوبة بعد.<br>تظهر هنا الفنادق التي ذكرتها الشركات وهي غير موجودة بالنظام.</div>'; return; }
     box.innerHTML=hotels.map(function(h){
-      const link=waReqBookingLink(h.hotel_name, h.destination, '', 2);
       const loc=[h.city, h.destination].filter(Boolean).join(' · ');
       return '<div style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px">'
         +   '<b style="font-size:13.5px;color:var(--text)">'+waEsc(h.hotel_name)+'</b>'
         +   '<span style="background:#b91c1c;color:#fff;font-size:11px;font-weight:900;padding:2px 9px;border-radius:999px;white-space:nowrap">طلب = '+waReqArNum(h.count)+'</span>'
         + '</div>'
-        + '<div style="font-size:12px;color:var(--muted);margin-bottom:7px">'+(h.stars?('⭐ '+h.stars+' نجوم'):'النجوم غير مذكورة')+(loc?(' · 📍 '+waEsc(loc)):'')+'</div>'
-        + '<a href="'+waEsc(link)+'" target="_blank" style="display:inline-block;background:#2563eb;color:#fff;font-weight:800;font-size:12px;padding:6px 15px;border-radius:8px;text-decoration:none">🔗 فتح في Booking</a>'
+        + '<div style="font-size:12px;color:var(--muted);margin-bottom:5px">'+(h.stars?('⭐ '+h.stars+' نجوم'):'النجوم غير مذكورة')+(loc?(' · 📍 '+waEsc(loc)):'')+'</div>'
+        + waOtaLinksHtml(h.hotel_name, h.destination)
         + '</div>';
     }).join('');
   }catch(e){ box.innerHTML='<div style="padding:14px;color:#ef4444">تعذّر التحميل: '+e.message+'</div>'; }
@@ -5397,6 +5396,29 @@ function waReqBookingLink(name, destAr, dateISO, nights){
   if(dateISO){ qs+='&checkin='+dateISO; const d=new Date(dateISO); d.setDate(d.getDate()+Math.max(1,nights||1)); const p=n=>String(n).padStart(2,'0'); qs+='&checkout='+d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
   return 'https://www.booking.com/searchresults.html?'+qs;
 }
+// روابط عدّة مزوّدين لفندق غير موجود — Booking مباشر، والبقية بحث Google موجّه للموقع
+// (يفتح صفحة الفندق عندهم مباشرة؛ صيغ ZenHotels/Agoda الداخلية تحتاج معرّفات جغرافية).
+// 🇷🇺 روسيا: ZenHotels أولاً (فنادق روسيا غالباً عليه لا على Booking). «لا تتوقف» = نعطي بدائل دائماً.
+function waOtaLinks(name, destAr){
+  const country=WA_DEST_EN[destAr]||'';
+  const base=(String(name||'').trim()+(country?(' '+country):'')).trim();
+  const g=(site)=>'https://www.google.com/search?q='+encodeURIComponent(base+' '+site);
+  const booking='https://www.booking.com/searchresults.html?ss='+encodeURIComponent(base)+'&lang=ar';
+  let providers=[
+    {label:'Booking', url:booking},
+    {label:'ZenHotels', url:g('zenhotels.com')},
+    {label:'Trip.com', url:g('trip.com')},
+    {label:'Agoda', url:g('agoda.com')},
+  ];
+  if(/روسيا|روسي/.test(String(destAr||''))){ const z=providers.find(p=>p.label==='ZenHotels'); providers=[z].concat(providers.filter(p=>p.label!=='ZenHotels')); }
+  return providers;
+}
+function waOtaLinksHtml(name, destAr){
+  const ps=waOtaLinks(name, destAr); const main=ps[0], rest=ps.slice(1);
+  let h='<a href="'+waEsc(main.url)+'" target="_blank" style="display:inline-block;margin-top:6px;background:#2563eb;color:#fff;font-weight:800;font-size:12px;padding:6px 15px;border-radius:8px;text-decoration:none">🔗 شوفيه في '+main.label+'</a>';
+  if(rest.length){ h+='<div style="font-size:11px;color:var(--muted);margin-top:6px">أو جرّبي: '+rest.map(p=>'<a href="'+waEsc(p.url)+'" target="_blank" style="color:#2563eb;font-weight:700">'+p.label+'</a>').join(' · ')+'</div>'; }
+  return h;
+}
 async function waReqListHotels(dest, region, date){
   try{
     const r=await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},body:JSON.stringify({action:'list_hotels',dest,region,occupancy:2,date:date||''})});
@@ -5460,13 +5482,12 @@ async function waReqHotelCheck(body, parsed, reqId){
   }
   // الغير موجودة: صندوق أحمر بارز + عدّاد الطلب + زر Booking واضح لفتح الفندق
   const nfRows=notFound.map(e=>{
-    const link=waReqBookingLink(e.req, parsed.dest, parsed.dateISO, nEach);
     const c=counts[nfKey(e)];
     const badge=(c!=null)?'<span style="display:inline-block;background:#b91c1c;color:#fff;font-size:11px;font-weight:900;padding:2px 9px;border-radius:999px;margin-inline-start:6px">طلب = '+waReqArNum(c)+'</span>':'';
     return '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:9px 11px;margin-bottom:7px">'
       + '<div style="font-weight:800;color:#b91c1c;font-size:13px">❌ '+waEsc(e.req)+' — غير موجود في النظام'+badge+'</div>'
-      + '<a href="'+waEsc(link)+'" target="_blank" style="display:inline-block;margin-top:6px;background:#2563eb;color:#fff;font-weight:800;font-size:12px;padding:6px 15px;border-radius:8px;text-decoration:none">🔗 شوفيه في Booking</a>'
-      + '<span style="color:#889;font-size:11px"> · واجيبي له بديل من النظام</span></div>';
+      + waOtaLinksHtml(e.req, parsed.dest)
+      + '<div style="color:#889;font-size:11px;margin-top:4px">واجيبي له بديل من النظام</div></div>';
   }).join('');
   // الموجودة: سطر مختصر مرجعي تحت
   const fRows=found.map(e=>{ const h=e.h; const link=h.link||waReqBookingLink(h.name,parsed.dest,parsed.dateISO,nEach);
