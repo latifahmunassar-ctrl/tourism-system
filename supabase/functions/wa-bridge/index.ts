@@ -194,6 +194,30 @@ Deno.serve(async (req) => {
         await db.from("wa_group_requests").update({ status: String(payload.status ?? 'handled') }).eq("id", payload.id);
         return json({ ok: true });
       }
+      case "missing-hotel-bump": {
+        // عدّاد الطلب للفنادق غير الموجودة في النظام: يسجّل (اسم الفندق المُطبَّع + معرّف
+        // الطلب) مرة واحدة لكل طلب (unique)، فلا يتكرّر العدّ بإعادة فتح نفس الطلب،
+        // ويُرجِع عدد الطلبات المميّزة التي ذكرت هذا الفندق وهو غير موجود.
+        const reqId = String(payload.req_id ?? "").trim();
+        const dest = payload.destination ?? null;
+        const hotels = Array.isArray(payload.hotels) ? payload.hotels : [];
+        const counts: Record<string, number> = {};
+        for (const h of hotels) {
+          const norm = String((h as Record<string, unknown>).norm ?? "").trim();
+          if (!norm) continue;
+          const name = String((h as Record<string, unknown>).name ?? "");
+          if (reqId) {
+            await db.from("missing_hotel_requests").upsert(
+              { hotel_norm: norm, hotel_name: name, destination: dest, req_id: reqId },
+              { onConflict: "hotel_norm,req_id", ignoreDuplicates: true },
+            );
+          }
+          const { count } = await db.from("missing_hotel_requests")
+            .select("id", { count: "exact", head: true }).eq("hotel_norm", norm);
+          counts[norm] = count ?? 0;
+        }
+        return json({ counts });
+      }
       case "sync-groups-acct": {
         // per-account group sync for employee sender numbers
         const account = String(payload.account ?? "");

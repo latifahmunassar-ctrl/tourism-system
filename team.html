@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-02-hotelcheck4'
+  var BUILD = '2026-11-02-hotelcount'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5360,7 +5360,8 @@ function waReqHotelNoteBox(){
   if(!box){ const wrap=document.querySelector('.quote-wrap'); if(!wrap) return null; box=document.createElement('div'); box.id='waHotelNote'; box.style.cssText='margin-bottom:12px'; wrap.insertBefore(box, wrap.firstChild); }
   return box;
 }
-async function waReqHotelCheck(body, parsed){
+function waReqArNum(n){ return String(n==null?'':n).replace(/\d/g,d=>'٠١٢٣٤٥٦٧٨٩'[+d]); }
+async function waReqHotelCheck(body, parsed, reqId){
   const box=waReqHotelNoteBox(); if(!box) return;
   const reqHotels=waReqExtractHotels(body);
   if(!reqHotels.length || !parsed.dest){ box.style.display='none'; box.innerHTML=''; return; }
@@ -5377,11 +5378,22 @@ async function waReqHotelCheck(body, parsed){
   const entries=reqClean.map(req=>({ req, h:waReqMatchHotel(req, pool, common) }));
   const notFound=entries.filter(e=>!e.h);   // الأهم للمالكة → فوق
   const found=entries.filter(e=>e.h);
-  // الغير موجودة: صندوق أحمر بارز + زر Booking واضح لفتح الفندق
+  // عدّاد الطلب للفنادق غير الموجودة (كم طلب ذكرها وهي غير متوفّرة) — يزيد مرة لكل طلب
+  const nfKey=e=>waHotelNorm(e.req).replace(/\s/g,'');
+  let counts={};
+  if(notFound.length && reqId!=null){
+    try{
+      const resp=await waReqCall('missing-hotel-bump',{ req_id:String(reqId), destination:parsed.dest, hotels:notFound.map(e=>({norm:nfKey(e),name:e.req})) });
+      counts=(resp && resp.counts) || {};
+    }catch(e){ counts={}; }
+  }
+  // الغير موجودة: صندوق أحمر بارز + عدّاد الطلب + زر Booking واضح لفتح الفندق
   const nfRows=notFound.map(e=>{
     const link=waReqBookingLink(e.req, parsed.cities[0]||parsed.dest, parsed.dateISO, nEach);
+    const c=counts[nfKey(e)];
+    const badge=(c!=null)?'<span style="display:inline-block;background:#b91c1c;color:#fff;font-size:11px;font-weight:900;padding:2px 9px;border-radius:999px;margin-inline-start:6px">طلب = '+waReqArNum(c)+'</span>':'';
     return '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:9px 11px;margin-bottom:7px">'
-      + '<div style="font-weight:800;color:#b91c1c;font-size:13px">❌ '+waEsc(e.req)+' — غير موجود في النظام</div>'
+      + '<div style="font-weight:800;color:#b91c1c;font-size:13px">❌ '+waEsc(e.req)+' — غير موجود في النظام'+badge+'</div>'
       + '<a href="'+waEsc(link)+'" target="_blank" style="display:inline-block;margin-top:6px;background:#2563eb;color:#fff;font-weight:800;font-size:12px;padding:6px 15px;border-radius:8px;text-decoration:none">🔗 شوفيه في Booking</a>'
       + '<span style="color:#889;font-size:11px"> · واجيبي له بديل من النظام</span></div>';
   }).join('');
@@ -5408,8 +5420,8 @@ async function waReqUnderstand(id){
   if(typeof setCustomerType==='function') setCustomerType('company');   // طلب شركة → هامش الشركات
   let parsed=false; try { parsed = waReqFillForm(body); } catch(e){ console.warn('waReqFillForm failed', e); }
   if(parsed){
-    // تحقّق من الفنادق المذكورة مقابل النظام → ملاحظة يمين قبل التسعير
-    try { await waReqHotelCheck(body, parsed); } catch(e){ console.warn('waReqHotelCheck failed', e); }
+    // تحقّق من الفنادق المذكورة مقابل النظام → ملاحظة يمين قبل التسعير (+عدّاد الطلب للمفقودة)
+    try { await waReqHotelCheck(body, parsed, q.id); } catch(e){ console.warn('waReqHotelCheck failed', e); }
   } else {
     // تعذّر استخراج معطيات مفيدة → مرّر النص لشات المساعد ليقترح/يسأل
     const ci=document.getElementById('chatInput'); if(ci){ ci.value=body; if(typeof sendMessage==='function'){ try{ await sendMessage(); }catch(e){} } }
