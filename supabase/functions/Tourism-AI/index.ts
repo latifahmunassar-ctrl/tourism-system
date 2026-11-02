@@ -3803,13 +3803,22 @@ Deno.serve(async (req) => {
           fetchAllRows<FlightRow>((() => supabase.from("trains").select("*").eq("destination", destKey)) as never),
         ]);
         const fetchData = async () => ({ hotels, tours, flights, trains: trains as unknown as [] });
-        const childPart = ages ? ` وأطفال أعمارهم ${ages}` : "";
+        // قاعدة المالكة (٢ نوفمبر ٢٠٢٦): **١١ سنة وفوق = بالغ** (له سرير إلزامي ويُحسب
+        //   من البالغين)؛ **١٠ سنوات وتحت = طفل** بلا سرير ويُبلَّغ العميل بأدب.
+        const _ageNums = (ages.replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).match(/\d{1,2}/g) || []).map(Number);
+        const _kidAges = _ageNums.filter(a => a <= 10).slice(0, Math.max(0, pax - 1));
+        const _kidsN = _kidAges.length;
+        const childPart = _kidsN ? ` وأطفال أعمارهم ${_kidAges.join(" و")}` : "";
         // ملاحظة: بلا «نجوم» في النص → stars=null → الباني يختار أرخص فندق متاح (مختلط).
         const buildOne = async (dist: string): Promise<{ program: string; total: number; distribution: string } | null> => {
           const text = `${destAr}، ${days} أيام، ${dist}، ${pax} ${pax === 1 ? "شخص" : "أشخاص"} بالغين${childPart}، تنقل خاص، مع جولات وانتقالات، بتاريخ ${date}`;
           try {
             const req = parseTripRequest([{ role: "user", content: text }], cityDefs);
-            (req as { adults: number }).adults = pax;
+            // pax = الإجمالي (طلال يسأل «الإجمالي، الكبار والأطفال»)؛ الأطفال = عدد الأعمار.
+            //   البالغون فقط لهم سراير (autoBeds) — الطفل بلا سرير ويُبلَّغ العميل.
+            (req as { adults: number }).adults = Math.max(1, pax - _kidsN);
+            (req as { children: number }).children = _kidsN;
+            (req as { autoBeds?: boolean }).autoBeds = true;
             if (!canBuildLocally(req)) return null;
             const r = await buildLocalProgram(req, cityDefs, fetchData as never, {});
             if (!r.ok) return null;
@@ -3860,7 +3869,7 @@ Deno.serve(async (req) => {
           if (_pr.ok && _pd?.ok && _pd?.code) _progCode = String(_pd.code).trim();
         } catch (_e) { /* best-effort */ }
         const cur = await getCurrencyRate(supabase, _currencyCodeFromPhone(phone));
-        const childNote = ages ? ` (+ أطفال: ${ages})` : "";
+        const childNote = _kidsN ? ` (+ أطفال: ${_kidAges.join(" و")})` : "";
         // سطر السعر النهائي (حرفيّ) — يُمرَّر للنموذج ويُتحقّق منه.
         const priceLine = prof.ok
           ? (cur ? `${_fmtMoney(finalSar / cur.rate, 2)} ${cur.name}` : `${_fmtMoney(finalSar)} ريال سعودي`)
@@ -3876,6 +3885,7 @@ Deno.serve(async (req) => {
           ok: true,
           program: chosen.program,
           program_code: _progCode,
+          kid_ages: _kidAges,   // أعمار الأطفال (١٠ وتحت) بلا سرير — طلال يرسل ملاحظتها برسالة مستقلة
           total: cost,
           distribution: chosen.distribution,
           profit: prof.profit,

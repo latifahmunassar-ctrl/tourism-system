@@ -1701,6 +1701,32 @@ export function formatProgram(data: ProgramData): string {
 
   // ── HOTELS ───────────────────────────────────────────────────────────
   out += "HOTELS:\n";
+  // 🛏️ سراير البالغين تلقائياً (طلب المالكة ٢ نوفمبر ٢٠٢٦ — برامج طلال التلقائية فقط):
+  //    كل بالغ لازم له سرير؛ الطفل بلا سرير (يُبلَّغ العميل ليطلبه إن حب). الغرفة تتحمل
+  //    سريراً إضافياً **واحداً** فقط، فإن لم يكفِ → غرفة ثانية من نفس النوع (ADDROOM).
+  //    مثال: ٤ بالغين بغرفة تربل = تربل + سرير؛ ٥ بالغين = غرفتان تربل.
+  const _autoBeds = (request as { autoBeds?: boolean }).autoBeds === true;
+  const _capOf = (h: { occupancy?: string; room_type?: string }): number => {
+    const o = extractAdultsCount(h.occupancy || "");
+    if (o > 0) return o;
+    const rt = String(h.room_type || "").toLowerCase();
+    if (/single|سنجل|مفرد/.test(rt)) return 1;
+    if (/double|twin|king|queen|دبل|مزدوج|توين/.test(rt)) return 2;
+    if (/triple|تربل|ثلاث/.test(rt)) return 3;
+    if (/quad|quadruple|رباع/.test(rt)) return 4;
+    if (/quint|خماس/.test(rt)) return 5;
+    return 0;
+  };
+  const _alloc = new Map<SelectedHotel, { rooms: number; beds: number }>();
+  if (_autoBeds) {
+    for (const sh of hotels) {
+      const cap = _capOf(sh.hotel as { occupancy?: string; room_type?: string });
+      if (cap <= 0 || adults <= cap) continue;
+      const rooms = Math.ceil(adults / (cap + 1));
+      const beds = Math.max(0, adults - rooms * cap);
+      _alloc.set(sh, { rooms, beds });
+    }
+  }
   for (const sh of hotels) {
     // الوجبات: لو الخانة فيها قيمة → اعرضها؛ لو فيه علم إفطار → «إفطار مشمول».
     // ⚠️ لو البيانات **مجهولة تماماً** (خانة فارغة + بلا علم إفطار) → ❌ لا نَدّعي
@@ -1747,7 +1773,14 @@ export function formatProgram(data: ProgramData): string {
     const linkSeg = (sh.hotel.link && /^https?:\/\//i.test(String(sh.hotel.link).trim()))
       ? ` | LINK:${String(sh.hotel.link).trim()}`
       : "";
-    out += `${sh.hotel.name} | ${cityAr} | ${sh.hotel.stars} نجوم | ${roomTypeWithOcc} | ${formatNumber(sh.hotel.price_per_night)} ريال/ليلة | ${sh.nights} ${sh.nights === 1 ? "ليلة" : "ليالي"} (من ${formatArabicDate(sh.rangeFrom)} إلى ${formatArabicDate(sh.rangeTo)}) | ${meals}${areaSeg}${linkSeg}\n`;
+    // غرفة/غرف ثانية من نفس النوع (سراير البالغين) — بصيغة ADDROOM التي يقرأها team.html والـPDF.
+    const _al = _alloc.get(sh);
+    let addRoomSeg = "";
+    if (_al && _al.rooms > 1) {
+      const _occ = _capOf(sh.hotel as { occupancy?: string; room_type?: string });
+      for (let k = 1; k < _al.rooms; k++) addRoomSeg += ` | ADDROOM:${String(sh.hotel.room_type || "").replace(/[|~]/g, " ")}~${sh.hotel.price_per_night}~${_occ}~${meals.replace(/[|~]/g, " ")}`;
+    }
+    out += `${sh.hotel.name} | ${cityAr} | ${sh.hotel.stars} نجوم | ${roomTypeWithOcc} | ${formatNumber(sh.hotel.price_per_night)} ريال/ليلة | ${sh.nights} ${sh.nights === 1 ? "ليلة" : "ليالي"} (من ${formatArabicDate(sh.rangeFrom)} إلى ${formatArabicDate(sh.rangeTo)}) | ${meals}${areaSeg}${linkSeg}${addRoomSeg}\n`;
   }
   out += "\n";
 
@@ -1799,7 +1832,12 @@ export function formatProgram(data: ProgramData): string {
   }
 
   // ── EXTRA_BED_CITIES ─────────────────────────────────────────────────
-  if (data.extraBedScope === "all") {
+  const _autoBedCities = [...new Set([..._alloc.entries()].filter(([, a]) => a.beds > 0).map(([sh]) => sh.city))];
+  if (_autoBeds && _autoBedCities.length > 0) {
+    out += "EXTRA_BED_CITIES:" + _autoBedCities.map(c => `${c}=${[..._alloc.entries()].filter(([sh]) => sh.city === c).reduce((m, [, a]) => Math.max(m, a.beds), 0)}`).join(", ") + "\n\n";
+  } else if (_autoBeds) {
+    // لا سراير مطلوبة → لا سطر (نتجاهل أي نطاق مستنتج من النص).
+  } else if (data.extraBedScope === "all") {
     out += "EXTRA_BED_CITIES:ALL=1\n\n";
   } else if (Array.isArray(data.extraBedScope) && data.extraBedScope.length > 0) {
     out += "EXTRA_BED_CITIES:" + data.extraBedScope.map(c => `${c}=1`).join(", ") + "\n\n";
@@ -1899,12 +1937,18 @@ export function formatProgram(data: ProgramData): string {
   out += "\n";
 
   // ── SUMMARY ──────────────────────────────────────────────────────────
-  const hotelsBase = hotels.reduce((s, sh) => s + sh.hotel.price_per_night * sh.nights, 0);
+  const hotelsBase = hotels.reduce((s, sh) => s + sh.hotel.price_per_night * sh.nights * (_alloc.get(sh)?.rooms || 1), 0);
   // Extra-bed cost: 5★ → 120/night, 4★ → 100/night. Apply to every hotel
   // in scope (ALL, country marker, or specific city list).
   const isAllScope = data.extraBedScope === "all";
   const scopeList = Array.isArray(data.extraBedScope) ? data.extraBedScope : [];
-  const extraBedTotal = hotels.reduce((s, sh) => {
+  const extraBedTotal = _autoBeds ? hotels.reduce((s, sh) => {
+    // سراير البالغين التلقائية: نفس سعر شاشة التسعيرة (صلالة ١٧٠ · لندن ١٥٠ · ٥★=١٢٠ · غيرها ١٠٠).
+    const b = _alloc.get(sh)?.beds || 0;
+    if (b <= 0) return s;
+    const nightly = sh.city === "Salalah" ? 170 : (sh.city === "London" ? 150 : (sh.hotel.stars >= 5 ? 120 : 100));
+    return s + nightly * sh.nights * b;
+  }, 0) : hotels.reduce((s, sh) => {
     // صلالة: السرير الإضافي 170 ريال/ليلة لأي فندق (بأي تصنيف) — عمود «Exra bed /Sofa Bed»
     // في تبويب Oman بالشيت (4★=170 و5★=170، محدَّث 2026-08-08). غيرها: 4-5★ فقط (5★=120 / 4★=100).
     const isSalalah = sh.city === "Salalah";
