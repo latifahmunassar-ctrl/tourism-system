@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-02-reqfields'
+  var BUILD = '2026-11-02-reqsearch'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -820,6 +820,10 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div style="display:flex;gap:6px;margin-bottom:10px">
 <button id="waReqTabNew" onclick="waReqSwitchTab('new')" class="ebtn" style="flex:1;font-weight:800;font-size:12px;outline:2px solid #d4a843">📥 وارد (<span id="waReqNewCount">0</span>)</button>
 <button id="waReqTabSent" onclick="waReqSwitchTab('handled')" class="ebtn" style="flex:1;font-weight:800;font-size:12px">📤 صادر</button>
+</div>
+<div style="position:relative;margin-bottom:10px">
+<input id="waReqSearch" type="search" oninput="waReqLoad()" placeholder="🔍 ابحثي باسم الشركة — تطلع كل طلباتها (وارد + صادر)" autocomplete="off" style="width:100%;box-sizing:border-box;padding:8px 30px 8px 10px;border-radius:9px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-family:Tajawal;font-size:12.5px" />
+<button id="waReqSearchClear" onclick="document.getElementById('waReqSearch').value='';waReqLoad();" title="مسح البحث" style="display:none;position:absolute;left:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer">✕</button>
 </div>
 <div id="waReqList"></div>
 </div>
@@ -5197,12 +5201,26 @@ async function waReqLoad() {
     waReqBadge(r.new_count || 0);
     const _nc = document.getElementById('waReqNewCount'); if (_nc) _nc.textContent = r.new_count || 0;
     waReqItems = {}; all.forEach(function (x) { waReqItems[x.id] = x; });   // خزّن للبحث بالـid
-    const reqs = all.filter(function (q) { return waReqTab === 'handled' ? q.status !== 'new' : q.status === 'new'; });
+    // 🔍 بحث باسم الشركة: لو فيه نص بحث، نعرض كل طلبات الشركة (وارد + صادر معاً) بتجاهل التبويب.
+    const _si = document.getElementById('waReqSearch');
+    const query = _si ? String(_si.value || '').trim() : '';
+    const _clr = document.getElementById('waReqSearchClear'); if (_clr) _clr.style.display = query ? 'block' : 'none';
+    const norm = function (s) { return String(s || '').toLowerCase().replace(/[أإآ]/g, 'ا').replace(/\s+/g, ' ').trim(); };
+    let reqs;
+    if (query) {
+      const qn = norm(query);
+      reqs = all.filter(function (q) { return norm(q.group_name).indexOf(qn) !== -1 || norm(q.sender_name).indexOf(qn) !== -1; });
+    } else {
+      reqs = all.filter(function (q) { return waReqTab === 'handled' ? q.status !== 'new' : q.status === 'new'; });
+    }
     if (!reqs.length) {
-      box.innerHTML = '<div style="padding:18px;color:var(--muted);text-align:center;line-height:1.9">' + (waReqTab === 'handled' ? 'ما فيه طلبات صادرة بعد.' : 'ما فيه طلبات واردة جديدة.<br>ردّي على رسالة الطلب بعلامة ✅ في الجروب.') + '</div>';
+      box.innerHTML = '<div style="padding:18px;color:var(--muted);text-align:center;line-height:1.9">' + (query ? ('ما فيه طلبات لشركة فيها «' + waEsc(query) + '».<br>جرّبي اسماً أقصر أو جزءاً منه.') : (waReqTab === 'handled' ? 'ما فيه طلبات صادرة بعد.' : 'ما فيه طلبات واردة جديدة.<br>ردّي على رسالة الطلب بعلامة ✅ في الجروب.')) + '</div>';
       return;
     }
-    box.innerHTML = reqs.map(function (q) {
+    if (query) {
+      box.innerHTML = '<div style="font-size:11.5px;color:#128C7E;font-weight:800;margin-bottom:8px">🔍 ' + reqs.length + ' طلب للبحث «' + waEsc(query) + '» (وارد + صادر)</div>';
+    } else { box.innerHTML = ''; }
+    box.innerHTML += reqs.map(function (q) {
       const isNew = q.status === 'new';
       let when = q.created_at; try { when = new Date(q.created_at).toLocaleString('ar'); } catch (e) {}
       const btn = isNew
