@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-02-understand'
+  var BUILD = '2026-11-02-understand2'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5251,28 +5251,78 @@ async function waReqSendReply(id) {
 }
 async function waReqMark(id) { await waReqCall('mark-request', { id: id, status: 'handled' }); waReqLoad(); }
 
-// 🤖 «افهم الطلب واملأ النموذج»: يمرّر نص الطلب الحر لمحرّك الفهم (نفس شات المساعد
-//    السياحي → Tourism-AI)، فيبني برنامجاً مبدئياً ويملأ نموذج اليسار (وجهة/تواريخ/
-//    أيام/أشخاص/مدن) عبر fillBuilderFromProgram — جاهز للتعديل ثم الإرسال كرد مقتبس.
-//    لو الطلب ناقص معلومة، المحرّك يسأل في الشات (ما ينبني برنامج → نعرض السؤال فقط).
-async function waReqUnderstand(id) {
-  const q = waReqItems[id];
-  if (!q) { return; }
-  const body = String(q.body || '').trim();
-  if (!body) { return; }
-  waReqClose();
-  if (typeof setCustomerType === 'function') setCustomerType('company');  // طلب شركة → هامش الشركات
-  const ci = document.getElementById('chatInput');
-  if (!ci) { return; }
-  ci.value = body;
-  const before = (typeof lastProgramRaw !== 'undefined') ? lastProgramRaw : '';
-  try { if (typeof sendMessage === 'function') await sendMessage(); } catch (e) { console.warn('understand send failed', e); }
-  const built = (typeof lastProgramRaw !== 'undefined') && lastProgramRaw && lastProgramRaw !== before && /DEST:/.test(lastProgramRaw);
-  if (built) {
-    try { if (typeof fillBuilderFromProgram === 'function') fillBuilderFromProgram(lastProgramRaw, ''); } catch (e) { console.warn('fill after understand failed', e); }
-    if (typeof fpTab === 'function') fpTab('build');
+// 🤖 «افهم الطلب واملأ النموذج»: يحلّل نص طلب الشركة الحر محليّاً (وجهة/تواريخ/أيام/
+//    أشخاص/أطفال/نجوم/مدن) ويملأ نموذج اليسار مباشرةً — جاهز للموظفة تعدّل وتبني ثم
+//    ترسل كرد مقتبس. لا ينتظر بناء المحرّك (المحرّك يردّ باقتراحات توزيع لا ببرنامج
+//    جاهز). لو تعذّر استخراج أي معطى مفيد → يمرّر النص لشات المساعد ليقترح/يسأل (تدرّج).
+const WA_AR_MONTHS = {'يناير':1,'فبراير':2,'مارس':3,'ابريل':4,'نيسان':4,'مايو':5,'يونيو':6,'يوليو':7,'اغسطس':8,'غشت':8,'سبتمبر':9,'ايلول':9,'اكتوبر':10,'نوفمبر':11,'ديسمبر':12};
+function waReqNorm(s){ return String(s||'').toLowerCase().replace(/[ً-ْ]/g,'').replace(/[إأآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/غ/g,'ج').replace(/\s+/g,' ').trim(); }
+function waReqParse(body){
+  const lat = (typeof arabicDigitsToLatin==='function') ? arabicDigitsToLatin(String(body||'')) : String(body||'');
+  const nb = waReqNorm(lat);
+  const CITY = (typeof BF_CITIES!=='undefined') ? BF_CITIES : {};
+  // الوجهة: مفتاح مباشر، ثم استنتاج من أول مدينة مذكورة (طرابزون → تركيا)
+  let dest=''; for(const k of Object.keys(CITY)){ if(nb.includes(waReqNorm(k))){ dest=k; break; } }
+  if(!dest){ let best=1e9; for(const k of Object.keys(CITY)){ for(const c of (CITY[k]||[])){ const p=nb.indexOf(waReqNorm(c)); if(p>=0&&p<best){ best=p; dest=k; } } } }
+  // البالغون / الأطفال
+  let adults=null, m=lat.match(/(\d+)\s*(?:بالغ(?:ين|ون)?|كبار|كبير|اشخاص\s*كبار)/)||lat.match(/عدد\s*الا?شخاص\s*:?\s*(\d+)/)||lat.match(/(\d+)\s*(?:اشخاص|أشخاص|شخص)/); if(m) adults=parseInt(m[1],10);
+  let children=0, mc=lat.match(/(\d+)\s*(?:طفل|اطفال|أطفال|رضيع|رضع)/); if(mc) children=parseInt(mc[1],10); else if(/طفل/.test(lat)&&!/اطفال|أطفال/.test(lat)) children=1;
+  // النجوم (خمس+أربع معاً → mixed)
+  let stars='mixed'; const h5=/(?:خمس|خمسه|5|٥)\s*نجوم/.test(nb)||/5\s*star/i.test(lat), h4=/(?:اربع|اربعه|4|٤)\s*نجوم/.test(nb)||/4\s*star/i.test(lat); if(h5&&!h4)stars='5'; else if(h4&&!h5)stars='4';
+  // التواريخ والأيام
+  let dateISO='', days=null; const today=new Date();
+  const mk=(d,mo,y)=>{ if(!y){ y=today.getFullYear(); if(new Date(y,mo-1,d)<new Date(today.getFullYear(),today.getMonth(),today.getDate())) y++; } return new Date(y,mo-1,d); };
+  const slash=[...lat.matchAll(/(\d{1,2})\s*[\/]\s*(\d{1,2})(?:\s*[\/]\s*(\d{2,4}))?/g)];
+  const named=[...lat.matchAll(new RegExp('(\\d{1,2})\\s*('+Object.keys(WA_AR_MONTHS).join('|')+')','g'))];
+  const rng=lat.match(new RegExp('(\\d{1,2})\\s*[-–]\\s*(\\d{1,2})\\s*('+Object.keys(WA_AR_MONTHS).join('|')+')'));
+  let from=null,to=null;
+  if(rng){ const mo=WA_AR_MONTHS[rng[3]]; from=mk(+rng[1],mo); to=mk(+rng[2],mo); }
+  else if(named.length>=2){ from=mk(+named[0][1],WA_AR_MONTHS[named[0][2]]); to=mk(+named[1][1],WA_AR_MONTHS[named[1][2]]); }
+  else if(named.length===1){ from=mk(+named[0][1],WA_AR_MONTHS[named[0][2]]); }
+  else if(slash.length>=2){ from=mk(+slash[0][1],+slash[0][2],slash[0][3]?+slash[0][3]:0); to=mk(+slash[1][1],+slash[1][2],slash[1][3]?+slash[1][3]:0); }
+  else if(slash.length===1){ from=mk(+slash[0][1],+slash[0][2],slash[0][3]?+slash[0][3]:0); }
+  if(from){ const p=n=>String(n).padStart(2,'0'); dateISO=from.getFullYear()+'-'+p(from.getMonth()+1)+'-'+p(from.getDate()); }
+  if(from&&to){ days=Math.round((to-from)/86400000); if(days<0) days=null; }
+  if(!days){ const md=lat.match(/(\d+)\s*(?:ايام|أيام|يوم)/); if(md) days=parseInt(md[1],10); }
+  // المدن (مرتّبة حسب ظهورها في النص)
+  let cities=[]; if(dest&&Array.isArray(CITY[dest])){ cities=CITY[dest].map(c=>({c,n:waReqNorm(c)})).filter(x=>nb.includes(x.n)).sort((a,b)=>nb.indexOf(a.n)-nb.indexOf(b.n)).map(x=>x.c); }
+  return { dest, adults, children, days, dateISO, stars, cities };
+}
+function waReqFillForm(body){
+  const p = waReqParse(body);
+  if(!p.dest && p.adults==null && !p.dateISO && !p.cities.length) return false;
+  const set=(id,v)=>{ const e=document.getElementById(id); if(e && v!=null && v!=='') e.value=v; };
+  // الوجهة أولاً (bfOnDest تحمّل المدن وتصفّر الصفوف والأطفال)
+  if(p.dest){ const ds=document.getElementById('bf-dest'); if(ds){ if(![...ds.options].some(o=>o.value===p.dest)){ const o=document.createElement('option'); o.value=p.dest; o.textContent=p.dest; ds.appendChild(o); } ds.value=p.dest; if(typeof bfOnDest==='function') bfOnDest(); } }
+  if(p.adults!=null) set('bf-adults', p.adults);
+  const cf=document.getElementById('bf-children'); if(cf) cf.value=p.children||0;
+  if(p.days) set('bf-days', p.days);
+  if(p.dateISO) set('bf-date', p.dateISO);
+  const se=document.querySelector('input[name=bf-stars][value="'+p.stars+'"]'); if(se){ se.checked=true; if(typeof bfPick==='function') bfPick(se); }
+  // توزيع المدن في وضع «تخصيص» قابل للتعديل، الليالي موزّعة تقريبياً (قابلة للتعديل)
+  if(p.cities.length){
+    const mn=document.querySelector('input[name=bf-mode][value=manual]'); if(mn){ mn.checked=true; if(typeof bfSetMode==='function') bfSetMode('manual', mn); }
+    const rows=document.getElementById('bf-cityRows'); if(rows) rows.innerHTML='';
+    const n=p.cities.length, tot=p.days?Math.max(n,p.days-1):n*2; let base=Math.floor(tot/n), rem=tot-base*n;
+    p.cities.forEach(c=>{ const nn=base+(rem>0?1:0); if(rem>0) rem--; if(typeof bfAddCity==='function') bfAddCity(c, nn); });
+    if(typeof bfSum==='function') bfSum();
   }
-  try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
+  if(typeof bfExpected==='function') bfExpected();
+  return true;
+}
+async function waReqUnderstand(id){
+  const q = waReqItems[id];
+  if(!q) return;
+  const body = String(q.body||'').trim();
+  if(!body) return;
+  waReqClose();
+  if(typeof setCustomerType==='function') setCustomerType('company');   // طلب شركة → هامش الشركات
+  let ok=false; try { ok = waReqFillForm(body); } catch(e){ console.warn('waReqFillForm failed', e); }
+  if(!ok){
+    // تعذّر استخراج معطيات مفيدة → مرّر النص لشات المساعد ليقترح/يسأل
+    const ci=document.getElementById('chatInput'); if(ci){ ci.value=body; if(typeof sendMessage==='function'){ try{ await sendMessage(); }catch(e){} } }
+  }
+  try { window.scrollTo({ top:0, behavior:'smooth' }); } catch(e){}
 }
 
 // light badge refresh (every 5 min — keeps data usage low)
