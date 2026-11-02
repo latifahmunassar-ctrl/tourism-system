@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-02-booklink'
+  var BUILD = '2026-11-02-missingtab'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -459,9 +459,10 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
   <button class="logout-btn" type="button" onclick="inboxOpen()" style="position:relative;">📥 طلبات الشركات<span id="inboxBadge" style="display:none;position:absolute;top:-7px;left:-7px;background:#e0218a;color:#fff;border-radius:999px;font-size:10px;padding:1px 6px;font-weight:900;">0</span></button>
   <button class="logout-btn" type="button" onclick="indivOpen()" style="position:relative;">👤 طلبات الأفراد<span id="indivBadge" style="display:none;position:absolute;top:-7px;left:-7px;background:#e0218a;color:#fff;border-radius:999px;font-size:10px;padding:1px 6px;font-weight:900;">0</span></button>
   <a id="waDashLink" href="https://madartrip.com/wa-dashboard.html" target="_blank" rel="noopener" class="logout-btn" style="text-decoration:none;display:none;align-items:center;gap:6px;">💬 داشبورد الواتساب</a>
+  <button id="missingHotelsBtn" class="logout-btn" type="button" onclick="missingHotelsOpen()" title="فنادق مطلوبة غير موجودة بالنظام (للمالكة)" style="display:none;background:rgba(185,28,28,.08);border-color:#fca5a5;color:#b91c1c">🏨 فنادق مطلوبة</button>
 <button id="waBridgeFab" onclick="waBridgeOpen()" title="واتساب مباشر — إرسال للجروبات" style="position:fixed;bottom:22px;left:22px;z-index:950;background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;border:none;border-radius:999px;padding:12px 20px;font-family:Tajawal,sans-serif;font-size:14px;font-weight:800;box-shadow:0 4px 16px rgba(0,0,0,.35);cursor:pointer">📲 واتساب مباشر</button>
   <script>/* منفذ للأدمن فقط: يظهر إذا دور الواتساب (نفس الدومين madartrip) = admin */
-  (function(){ try{ var el=document.getElementById('waDashLink'); if(el && (localStorage.getItem('alezz_dashboard_role')||'')==='admin') el.style.display='inline-flex'; }catch(e){} })();</script>
+  (function(){ try{ var adm=(localStorage.getItem('alezz_dashboard_role')||'')==='admin'; var el=document.getElementById('waDashLink'); if(el && adm) el.style.display='inline-flex'; var mh=document.getElementById('missingHotelsBtn'); if(mh && adm) mh.style.display='inline-flex'; }catch(e){} })();</script>
   <button class="logout-btn" type="button" onclick="trustDevice()" title="اطلبي توثيق هذا الجهاز ليدخل من أي دولة">🔓 توثيق الجهاز</button>
   <button class="logout-btn" type="button" onclick="logout()">تسجيل خروج</button>
 </div>
@@ -821,6 +822,18 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <button id="waReqTabSent" onclick="waReqSwitchTab('handled')" class="ebtn" style="flex:1;font-weight:800;font-size:12px">📤 صادر</button>
 </div>
 <div id="waReqList"></div>
+</div>
+</div>
+
+<!-- لوحة «فنادق مطلوبة» (للمالكة فقط) — فنادق غير موجودة في النظام تكرّر طلبها -->
+<div id="missingHotelsPanel" style="position:fixed;top:80px;right:20px;width:400px;max-height:78vh;display:none;flex-direction:column;background:var(--s1);border:1px solid var(--border);border-radius:14px;box-shadow:0 12px 44px rgba(0,0,0,.55);z-index:966;overflow:hidden">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:var(--s2);border-bottom:1px solid var(--border)">
+<div style="font-size:14px;font-weight:900;color:#b91c1c">🏨 فنادق مطلوبة — غير موجودة بالنظام</div>
+<button onclick="missingHotelsClose()" style="background:none;border:none;color:var(--muted);font-size:17px;cursor:pointer">✕</button>
+</div>
+<div style="padding:12px;overflow-y:auto">
+<div style="font-size:11px;color:var(--muted);margin-bottom:10px">فنادق ذكرتها الشركات وغير متوفّرة بالنظام — مرتّبة بالأكثر طلباً. جيبيها وأضيفيها للنظام.</div>
+<div id="missingHotelsList"></div>
 </div>
 </div>
 
@@ -5251,6 +5264,31 @@ async function waReqSendReply(id) {
 }
 async function waReqMark(id) { await waReqCall('mark-request', { id: id, status: 'handled' }); waReqLoad(); }
 
+// ── 🏨 لوحة «فنادق مطلوبة» (للمالكة): فنادق غير موجودة بالنظام تكرّر طلبها ──
+function missingHotelsOpen(){ const p=document.getElementById('missingHotelsPanel'); if(p){ p.style.display='flex'; missingHotelsLoad(); } }
+function missingHotelsClose(){ const p=document.getElementById('missingHotelsPanel'); if(p) p.style.display='none'; }
+async function missingHotelsLoad(){
+  const box=document.getElementById('missingHotelsList'); if(!box) return;
+  box.innerHTML='<div style="padding:14px;color:var(--muted)">⏳ تحميل…</div>';
+  try{
+    const r=await waReqCall('missing-hotels-list');
+    const hotels=(r && r.hotels)||[];
+    if(!hotels.length){ box.innerHTML='<div style="padding:18px;color:var(--muted);text-align:center;line-height:1.9">ما فيه فنادق مطلوبة بعد.<br>تظهر هنا الفنادق التي ذكرتها الشركات وهي غير موجودة بالنظام.</div>'; return; }
+    box.innerHTML=hotels.map(function(h){
+      const link=waReqBookingLink(h.hotel_name, h.destination, '', 2);
+      const loc=[h.city, h.destination].filter(Boolean).join(' · ');
+      return '<div style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px">'
+        +   '<b style="font-size:13.5px;color:var(--text)">'+waEsc(h.hotel_name)+'</b>'
+        +   '<span style="background:#b91c1c;color:#fff;font-size:11px;font-weight:900;padding:2px 9px;border-radius:999px;white-space:nowrap">طلب = '+waReqArNum(h.count)+'</span>'
+        + '</div>'
+        + '<div style="font-size:12px;color:var(--muted);margin-bottom:7px">'+(h.stars?('⭐ '+h.stars+' نجوم'):'النجوم غير مذكورة')+(loc?(' · 📍 '+waEsc(loc)):'')+'</div>'
+        + '<a href="'+waEsc(link)+'" target="_blank" style="display:inline-block;background:#2563eb;color:#fff;font-weight:800;font-size:12px;padding:6px 15px;border-radius:8px;text-decoration:none">🔗 فتح في Booking</a>'
+        + '</div>';
+    }).join('');
+  }catch(e){ box.innerHTML='<div style="padding:14px;color:#ef4444">تعذّر التحميل: '+e.message+'</div>'; }
+}
+
 // 🤖 «افهم الطلب واملأ النموذج»: يحلّل نص طلب الشركة الحر محليّاً (وجهة/تواريخ/أيام/
 //    أشخاص/أطفال/نجوم/مدن) ويملأ نموذج اليسار مباشرةً — جاهز للموظفة تعدّل وتبني ثم
 //    ترسل كرد مقتبس. لا ينتظر بناء المحرّك (المحرّك يردّ باقتراحات توزيع لا ببرنامج
@@ -5371,6 +5409,28 @@ function waReqHotelNoteBox(){
   return box;
 }
 function waReqArNum(n){ return String(n==null?'':n).replace(/\d/g,d=>'٠١٢٣٤٥٦٧٨٩'[+d]); }
+// نجوم + مدينة فندق مذكور من سياق الطلب (سطر الفندق وما حوله) — لقائمة المالكة
+function waReqHotelMeta(body, hotelName, dest){
+  const lines=String(body||'').split(/\n/);
+  const cities=(typeof BF_CITIES!=='undefined' && BF_CITIES[dest])?BF_CITIES[dest]:[];
+  const idx=lines.findIndex(L=>L.indexOf(hotelName)>=0);
+  let stars=null, city=null;
+  if(idx>=0){
+    for(let d=0; d<=2 && stars==null; d++){
+      for(const j of [idx+d, idx-d]){
+        const L=lines[j]; if(L==null) continue;
+        const st=(L.match(/⭐|★|✮|🌟/g)||[]).length;
+        if(st>=1 && st<=7){ stars=st; break; }
+        const m=L.match(/(\d+)\s*نجوم/); if(m){ stars=parseInt(m[1],10); break; }
+      }
+    }
+    for(let j=idx; j>=0 && city==null; j--){
+      const Ln=waReqNorm(lines[j]||'');
+      for(const c of cities){ if(Ln.includes(waReqNorm(c))){ city=c; break; } }
+    }
+  }
+  return { city, stars };
+}
 async function waReqHotelCheck(body, parsed, reqId){
   const box=waReqHotelNoteBox(); if(!box) return;
   const reqHotels=waReqExtractHotels(body);
@@ -5393,7 +5453,8 @@ async function waReqHotelCheck(body, parsed, reqId){
   let counts={};
   if(notFound.length && reqId!=null){
     try{
-      const resp=await waReqCall('missing-hotel-bump',{ req_id:String(reqId), destination:parsed.dest, hotels:notFound.map(e=>({norm:nfKey(e),name:e.req})) });
+      const hotels=notFound.map(e=>{ const meta=waReqHotelMeta(body, e.req, parsed.dest); return { norm:nfKey(e), name:e.req, city: meta.city || parsed.cities[0] || null, stars: meta.stars || null }; });
+      const resp=await waReqCall('missing-hotel-bump',{ req_id:String(reqId), destination:parsed.dest, hotels });
       counts=(resp && resp.counts) || {};
     }catch(e){ counts={}; }
   }

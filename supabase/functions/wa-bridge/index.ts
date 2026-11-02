@@ -206,9 +206,11 @@ Deno.serve(async (req) => {
           const norm = String((h as Record<string, unknown>).norm ?? "").trim();
           if (!norm) continue;
           const name = String((h as Record<string, unknown>).name ?? "");
+          const city = (h as Record<string, unknown>).city ? String((h as Record<string, unknown>).city) : null;
+          const stars = Number((h as Record<string, unknown>).stars) || null;
           if (reqId) {
             await db.from("missing_hotel_requests").upsert(
-              { hotel_norm: norm, hotel_name: name, destination: dest, req_id: reqId },
+              { hotel_norm: norm, hotel_name: name, destination: dest, city, stars, req_id: reqId },
               { onConflict: "hotel_norm,req_id", ignoreDuplicates: true },
             );
           }
@@ -217,6 +219,26 @@ Deno.serve(async (req) => {
           counts[norm] = count ?? 0;
         }
         return json({ counts });
+      }
+      case "missing-hotels-list": {
+        // قائمة الفنادق المطلوبة وغير الموجودة في النظام (للمالكة) — مجمّعة حسب الفندق،
+        // مرتّبة بالأكثر طلباً. تُستبعَد صفوف الاختبار (zztest_).
+        const { data } = await db.from("missing_hotel_requests")
+          .select("hotel_norm,hotel_name,destination,city,stars,req_id,created_at")
+          .not("hotel_norm", "like", "zztest_%");
+        const map: Record<string, { hotel_name: string; destination: string | null; city: string | null; stars: number | null; reqs: Set<string>; last: string }> = {};
+        for (const r of (data ?? []) as Array<Record<string, unknown>>) {
+          const k = String(r.hotel_norm);
+          if (!map[k]) map[k] = { hotel_name: String(r.hotel_name ?? ""), destination: (r.destination as string) ?? null, city: (r.city as string) ?? null, stars: (r.stars as number) ?? null, reqs: new Set(), last: String(r.created_at ?? "") };
+          map[k].reqs.add(String(r.req_id));
+          if (!map[k].city && r.city) map[k].city = String(r.city);
+          if (!map[k].stars && r.stars) map[k].stars = Number(r.stars);
+          if (String(r.created_at ?? "") > map[k].last) map[k].last = String(r.created_at ?? "");
+        }
+        const hotels = Object.values(map)
+          .map((x) => ({ hotel_name: x.hotel_name, destination: x.destination, city: x.city, stars: x.stars, count: x.reqs.size, last: x.last }))
+          .sort((a, b) => b.count - a.count || (b.last > a.last ? 1 : -1));
+        return json({ hotels });
       }
       case "sync-groups-acct": {
         // per-account group sync for employee sender numbers
