@@ -311,12 +311,14 @@ Deno.serve(async (req) => {
         // رد مقتبس على طلب جروب: لو أُرسل quote_req_id، نربط الرسالة/الملف كاقتباس على الرسالة الأصلية
         // داخل الجروب — فالـPDF يوصل كـ«Reply» على الطلب نفسه (مثل واتساب) ولا يتلخبط مع طلبات ثانية.
         let quoted: Record<string, unknown> | null = null;
-        let quoteReq: Record<string, unknown> | null = null;
+        let markReqId: string | number | null = null;  // الطلب المُراد تعليمه «تم» (ينقله للصادر)
         if (payload.quote_req_id) {
           const { data: rq } = await db.from("wa_group_requests").select("*").eq("id", payload.quote_req_id).single();
-          if (rq && rq.msg_id) {
-            quoted = { id: rq.msg_id, participant: rq.participant ?? null, body: rq.body ?? "" };
-            quoteReq = rq;  // لو ما فيه msg_id (طلب قديم) → يُرسَل عادي بلا اقتباس
+          if (rq) {
+            markReqId = rq.id;  // رُدّ عليه فعلاً → يُعلَّم «تم» وينتقل للصادر حتى لو بلا msg_id
+            if (rq.msg_id) {    // msg_id موجود → اقتباس حقيقي؛ غيابه → إرسال عادي لكن يبقى «تم»
+              quoted = { id: rq.msg_id, participant: rq.participant ?? null, body: rq.body ?? "" };
+            }
           }
         }
 
@@ -363,12 +365,12 @@ Deno.serve(async (req) => {
           if (error) return json({ error: error.message, queued }, 500);
           queued += data?.length ?? 0;
         }
-        // علّم الطلب «تم التعامل» تلقائياً عند الرد عليه ببرنامج/PDF
-        if (quoteReq) {
+        // علّم الطلب «تم التعامل» تلقائياً عند الرد عليه ببرنامج/PDF → ينتقل لصندوق الصادر
+        if (markReqId) {
           const summary = source === "pdf" ? "📄 برنامج PDF" : source === "image" ? "🖼️ صورة" : body.slice(0, 120);
           await db.from("wa_group_requests").update({
             status: "handled", replied_at: new Date().toISOString(), reply_text: summary,
-          }).eq("id", quoteReq.id);
+          }).eq("id", markReqId);
         }
         const batches = batchSize > 0 ? Math.ceil(jids.length / batchSize) : 1;
         const etaMin = batchSize > 0 && intervalMin > 0 ? (batches - 1) * intervalMin : 0;

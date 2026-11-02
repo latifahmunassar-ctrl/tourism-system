@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-01-jburg'
+  var BUILD = '2026-11-02-reqbox'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5193,7 +5193,8 @@ async function waReqLoad() {
       const btn = isNew
         ? '<button class="ebtn ebtn-nologo" style="font-size:11px;margin-top:8px" onclick="waReqMark(' + q.id + ')">✅ تم التعامل</button>'
         : '<span style="font-size:11px;color:#25D366;font-weight:800">✓ تم</span>';
-      return '<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:' + (isNew ? 'rgba(212,168,67,.08)' : 'var(--s2)') + '">'
+      return '<div style="border:1px solid ' + (isNew ? '#e0218a' : 'var(--border)') + ';border-radius:10px;padding:10px 12px;margin-bottom:8px;background:' + (isNew ? 'rgba(224,33,138,.07)' : 'var(--s2)') + '">'
+        + (isNew ? '<div style="display:inline-block;background:#e0218a;color:#fff;font-size:10px;font-weight:900;padding:2px 10px;border-radius:999px;margin-bottom:7px;letter-spacing:.6px">🆕 جديد · NEW</div>' : '')
         + '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:4px"><b style="font-size:13px;color:#128C7E">👥 ' + waEsc(q.group_name || '') + '</b><span style="font-size:11px;color:var(--muted);white-space:nowrap">' + waEsc(when) + '</span></div>'
         + '<div style="font-size:11px;color:var(--muted);margin-bottom:5px">📱 ' + waEsc(q.sender_name || q.sender || '') + '</div>'
         + '<div style="font-size:13px;color:var(--text);white-space:pre-wrap;line-height:1.8">' + waEsc(q.body || '') + '</div>'
