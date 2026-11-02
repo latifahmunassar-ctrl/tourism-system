@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-02-reqbox2'
+  var BUILD = '2026-11-02-understand'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5161,6 +5161,7 @@ async function waReqCall(action, extra = {}) {
 })();
 
 let waReqTab = 'new';
+let waReqItems = {};   // id → كائن الطلب (لزر «افهم واملأ النموذج»)
 function waReqSwitchTab(t) {
   waReqTab = t;
   const nb = document.getElementById('waReqTabNew'), sb = document.getElementById('waReqTabSent');
@@ -5182,6 +5183,7 @@ async function waReqLoad() {
     const all = r.requests || [];
     waReqBadge(r.new_count || 0);
     const _nc = document.getElementById('waReqNewCount'); if (_nc) _nc.textContent = r.new_count || 0;
+    waReqItems = {}; all.forEach(function (x) { waReqItems[x.id] = x; });   // خزّن للبحث بالـid
     const reqs = all.filter(function (q) { return waReqTab === 'handled' ? q.status !== 'new' : q.status === 'new'; });
     if (!reqs.length) {
       box.innerHTML = '<div style="padding:18px;color:var(--muted);text-align:center;line-height:1.9">' + (waReqTab === 'handled' ? 'ما فيه طلبات صادرة بعد.' : 'ما فيه طلبات واردة جديدة.<br>ردّي على رسالة الطلب بعلامة ✅ في الجروب.') + '</div>';
@@ -5201,6 +5203,7 @@ async function waReqLoad() {
         + '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:4px"><b style="font-size:13px;color:#128C7E">👥 ' + waEsc(q.group_name || '') + '</b><span style="font-size:11px;color:var(--muted);white-space:nowrap">' + waEsc(when) + '</span></div>'
         + '<div style="font-size:11px;color:var(--muted);margin-bottom:5px">📱 ' + waEsc(q.sender_name || q.sender || '') + '</div>'
         + '<div style="font-size:13px;color:var(--text);white-space:pre-wrap;line-height:1.8">' + waEsc(q.body || '') + '</div>'
+        + '<button class="ebtn ebtn-nologo" style="font-size:12px;font-weight:800;background:#6d28d9;color:#fff;margin-top:8px;width:100%" onclick="waReqUnderstand(' + q.id + ')">🤖 افهم الطلب واملأ النموذج تلقائياً</button>'
         + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'
         + '<button class="ebtn ebtn-nologo" style="font-size:11px;background:#128C7E;color:#fff" onclick="waReqToggleReply(' + q.id + ')">' + txtLabel + '</button>'
         + '<button class="ebtn ebtn-nologo" style="font-size:11px" onclick="waReqReply(&#39;' + q.group_jid + '&#39;,&#39;' + waEsc(q.group_name||'').replace(/[&#39;"\\]/g,'') + '&#39;,&#39;' + (q.account||'601111136864') + '&#39;,' + q.id + ')">' + pdfLabel + '</button>'
@@ -5247,6 +5250,31 @@ async function waReqSendReply(id) {
   } catch (e) { msg.textContent = '❌ ' + e.message; msg.style.color = '#ef4444'; }
 }
 async function waReqMark(id) { await waReqCall('mark-request', { id: id, status: 'handled' }); waReqLoad(); }
+
+// 🤖 «افهم الطلب واملأ النموذج»: يمرّر نص الطلب الحر لمحرّك الفهم (نفس شات المساعد
+//    السياحي → Tourism-AI)، فيبني برنامجاً مبدئياً ويملأ نموذج اليسار (وجهة/تواريخ/
+//    أيام/أشخاص/مدن) عبر fillBuilderFromProgram — جاهز للتعديل ثم الإرسال كرد مقتبس.
+//    لو الطلب ناقص معلومة، المحرّك يسأل في الشات (ما ينبني برنامج → نعرض السؤال فقط).
+async function waReqUnderstand(id) {
+  const q = waReqItems[id];
+  if (!q) { return; }
+  const body = String(q.body || '').trim();
+  if (!body) { return; }
+  waReqClose();
+  if (typeof setCustomerType === 'function') setCustomerType('company');  // طلب شركة → هامش الشركات
+  const ci = document.getElementById('chatInput');
+  if (!ci) { return; }
+  ci.value = body;
+  const before = (typeof lastProgramRaw !== 'undefined') ? lastProgramRaw : '';
+  try { if (typeof sendMessage === 'function') await sendMessage(); } catch (e) { console.warn('understand send failed', e); }
+  const built = (typeof lastProgramRaw !== 'undefined') && lastProgramRaw && lastProgramRaw !== before && /DEST:/.test(lastProgramRaw);
+  if (built) {
+    try { if (typeof fillBuilderFromProgram === 'function') fillBuilderFromProgram(lastProgramRaw, ''); } catch (e) { console.warn('fill after understand failed', e); }
+    if (typeof fpTab === 'function') fpTab('build');
+  }
+  try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
+}
+
 // light badge refresh (every 5 min — keeps data usage low)
 setInterval(function () { waReqCall('group-requests').then(function (r) { waReqBadge(r.new_count || 0); }).catch(function () {}); }, 300000);
 setTimeout(function () { waReqCall('group-requests').then(function (r) { waReqBadge(r.new_count || 0); }).catch(function () {}); }, 4000);
