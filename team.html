@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-02-hotelread'
+  var BUILD = '2026-11-02-booklink'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5350,8 +5350,11 @@ function waReqMatchHotel(req, pool, common){
   }
   return null;
 }
-function waReqBookingLink(name, city, dateISO, nights){
-  const ss=encodeURIComponent(((name||'')+' '+(city||'')).trim());
+const WA_DEST_EN={'فيتنام':'Vietnam','ماليزيا':'Malaysia','تايلاند':'Thailand','تركيا':'Turkey','روسيا':'Russia','البوسنة':'Bosnia','إندونيسيا':'Indonesia','عُمان':'Oman','جنوب أفريقيا':'South Africa','موريشيوس':'Mauritius','العمرة':'Saudi Arabia','إنجلترا':'United Kingdom','الصين':'China','مصر':'Egypt','المغرب':'Morocco','إسبانيا':'Spain','سيرلانكا':'Sri Lanka','أبوظبي':'Abu Dhabi'};
+function waReqBookingLink(name, destAr, dateISO, nights){
+  // استعلام باسم الفندق + الدولة بالإنجليزي (بلا مدينة عربية تشوّش) → الفندق يطلع كأول نتيجة
+  const country=WA_DEST_EN[destAr]||'';
+  const ss=encodeURIComponent((String(name||'').trim()+(country?(' '+country):'')).trim());
   let qs='ss='+ss+'&lang=ar';
   if(dateISO){ qs+='&checkin='+dateISO; const d=new Date(dateISO); d.setDate(d.getDate()+Math.max(1,nights||1)); const p=n=>String(n).padStart(2,'0'); qs+='&checkout='+d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
   return 'https://www.booking.com/searchresults.html?'+qs;
@@ -5396,7 +5399,7 @@ async function waReqHotelCheck(body, parsed, reqId){
   }
   // الغير موجودة: صندوق أحمر بارز + عدّاد الطلب + زر Booking واضح لفتح الفندق
   const nfRows=notFound.map(e=>{
-    const link=waReqBookingLink(e.req, parsed.cities[0]||parsed.dest, parsed.dateISO, nEach);
+    const link=waReqBookingLink(e.req, parsed.dest, parsed.dateISO, nEach);
     const c=counts[nfKey(e)];
     const badge=(c!=null)?'<span style="display:inline-block;background:#b91c1c;color:#fff;font-size:11px;font-weight:900;padding:2px 9px;border-radius:999px;margin-inline-start:6px">طلب = '+waReqArNum(c)+'</span>':'';
     return '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:9px 11px;margin-bottom:7px">'
@@ -5405,7 +5408,7 @@ async function waReqHotelCheck(body, parsed, reqId){
       + '<span style="color:#889;font-size:11px"> · واجيبي له بديل من النظام</span></div>';
   }).join('');
   // الموجودة: سطر مختصر مرجعي تحت
-  const fRows=found.map(e=>{ const h=e.h; const link=h.link||waReqBookingLink(h.name,h.city,parsed.dateISO,nEach);
+  const fRows=found.map(e=>{ const h=e.h; const link=h.link||waReqBookingLink(h.name,parsed.dest,parsed.dateISO,nEach);
     return '<div style="display:flex;align-items:flex-start;gap:7px;padding:5px 0;border-bottom:1px dashed #eadfc2">'
       + '<span>✅</span><div style="flex:1"><b>'+waEsc(h.name)+'</b>'+(h.city?' <span style="color:#889">· '+waEsc(h.city)+'</span>':'')
       + ' <span style="color:#0e7a52;font-weight:700">'+(h.stars?('⭐'+h.stars+' '):'')+'موجود</span>'
