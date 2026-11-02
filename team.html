@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-02-understand3'
+  var BUILD = '2026-11-02-hotelcheck'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5308,7 +5308,84 @@ function waReqFillForm(body){
     if(typeof bfSum==='function') bfSum();
   }
   if(typeof bfExpected==='function') bfExpected();
-  return true;
+  return p;   // يرجّع المُحلَّل (للتحقق من الفنادق)
+}
+
+// ── 🏨 تحقّق الفنادق المذكورة في الطلب مقابل فنادق النظام (ملاحظة يمين قبل التسعير) ──
+const WA_HOTEL_GEN = new Set(['hotel','spa','resort','and','the','suites','suite','inn','by','de','la','le','palace','hotels','house']);
+function waHotelNorm(s){ return String(s||'').toLowerCase().replace(/[&\-_.,()']/g,' ').replace(/[ً-ْ]/g,'').replace(/\s+/g,' ').trim(); }
+function waHotelToks(s){ return waHotelNorm(s).split(' ').filter(t=>t.length>=4 && !WA_HOTEL_GEN.has(t)); }
+function waReqExtractHotels(body){
+  const out=[]; const MARK=/(?:الفنادق|فنادق|الفندق|فندق|نزل|منتجع|اقامه?\s+في|سكن\s+في|hotel|resort)\s*:?\s*/gi;
+  String(body||'').split(/\n/).forEach(L=>{
+    let m; MARK.lastIndex=0;
+    while((m=MARK.exec(L))){
+      let rest=L.slice(MARK.lastIndex);
+      rest=rest.split(/\s(?:و|او|أو)\s|[،,\/]|\s[-–]\s|\d/)[0].trim();
+      rest=rest.replace(/\s*(?:نجوم|نجمه|stars?|star).*$/i,'').trim();
+      if(rest && rest.length>=3 && !/^(?:كذا|معين|معيّن|كويس|جيد|فخم|راقي|خمس|اربع|اربعه|خمسه|ممتاز)/.test(rest)) out.push(rest);
+    }
+  });
+  return [...new Set(out)];
+}
+function waReqMatchHotel(req, pool){
+  const rn=waHotelNorm(req), rt=new Set(waHotelToks(req));
+  for(const h of pool){ const hnn=waHotelNorm(h.name); if(!hnn) continue;
+    if(hnn.includes(rn)||rn.includes(hnn)) return h;
+    const ht=waHotelToks(h.name); const ov=ht.filter(t=>rt.has(t)).length;
+    if(ov>=1 && (ov>=2 || ht.length<=2 || rt.size<=2)) return h;
+  }
+  return null;
+}
+function waReqBookingLink(name, city, dateISO, nights){
+  const ss=encodeURIComponent(((name||'')+' '+(city||'')).trim());
+  let qs='ss='+ss+'&lang=ar';
+  if(dateISO){ qs+='&checkin='+dateISO; const d=new Date(dateISO); d.setDate(d.getDate()+Math.max(1,nights||1)); const p=n=>String(n).padStart(2,'0'); qs+='&checkout='+d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
+  return 'https://www.booking.com/searchresults.html?'+qs;
+}
+async function waReqListHotels(dest, region, date){
+  try{
+    const r=await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},body:JSON.stringify({action:'list_hotels',dest,region,occupancy:2,date:date||''})});
+    const d=await r.json(); return (d.hotels||[]).map(h=>({name:h.name,stars:h.stars,link:h.link,city:region}));
+  }catch(e){ return []; }
+}
+function waReqHotelNoteBox(){
+  let box=document.getElementById('waHotelNote');
+  if(!box){ const wrap=document.querySelector('.quote-wrap'); if(!wrap) return null; box=document.createElement('div'); box.id='waHotelNote'; box.style.cssText='margin-bottom:12px'; wrap.insertBefore(box, wrap.firstChild); }
+  return box;
+}
+async function waReqHotelCheck(body, parsed){
+  const box=waReqHotelNoteBox(); if(!box) return;
+  const reqHotels=waReqExtractHotels(body);
+  if(!reqHotels.length || !parsed.dest){ box.style.display='none'; box.innerHTML=''; return; }
+  box.style.display='block';
+  box.innerHTML='<div style="background:#fff8e6;border:1px solid #f0c674;border-radius:12px;padding:11px 14px;font-size:12.5px;color:#7a5900">🏨 جارٍ التحقق من الفنادق المذكورة في الطلب…</div>';
+  const cities=parsed.cities.length?parsed.cities:[''];
+  let pool=[]; for(const c of cities){ pool=pool.concat(await waReqListHotels(parsed.dest, c, parsed.dateISO)); }
+  const nEach = parsed.days ? Math.max(1, Math.round((parsed.days-1)/Math.max(1,(cities.filter(Boolean).length||1)))) : 2;
+  const rows=reqHotels.map(req=>{
+    const h=waReqMatchHotel(req, pool);
+    if(h){
+      const link=h.link||waReqBookingLink(h.name,h.city,parsed.dateISO,nEach);
+      return '<div style="display:flex;align-items:flex-start;gap:7px;padding:6px 0;border-bottom:1px dashed #eadfc2">'
+        + '<span style="font-size:14px">✅</span>'
+        + '<div style="flex:1"><b>'+waEsc(h.name)+'</b>'+(h.city?' <span style="color:#889">· '+waEsc(h.city)+'</span>':'')+'<br>'
+        + '<span style="color:#0e7a52;font-weight:700">'+(h.stars?('⭐ '+h.stars+' نجوم'):'')+' · موجود في النظام</span>'
+        + (link?' · <a href="'+waEsc(link)+'" target="_blank" style="color:#2563eb;font-weight:700">فتح في Booking 🔗</a>':'')
+        + '</div></div>';
+    } else {
+      const link=waReqBookingLink(req, parsed.cities[0]||parsed.dest, parsed.dateISO, nEach);
+      return '<div style="display:flex;align-items:flex-start;gap:7px;padding:6px 0;border-bottom:1px dashed #eadfc2">'
+        + '<span style="font-size:14px">❌</span>'
+        + '<div style="flex:1"><b>'+waEsc(req)+'</b><br>'
+        + '<span style="color:#b91c1c;font-weight:700">غير موجود في النظام</span>'
+        + ' · <a href="'+waEsc(link)+'" target="_blank" style="color:#2563eb;font-weight:700">بحث في Booking 🔗</a>'
+        + ' <span style="color:#889">(شوفيه واجيبي بديل من النظام)</span></div></div>';
+    }
+  }).join('');
+  box.innerHTML='<div style="background:#fff8e6;border:1px solid #f0c674;border-radius:12px;padding:11px 14px">'
+    + '<div style="font-size:13px;font-weight:800;color:#7a5900;margin-bottom:6px">🏨 فنادق مذكورة في الطلب — تحقّق قبل التسعير:</div>'
+    + rows + '</div>';
 }
 async function waReqUnderstand(id){
   const q = waReqItems[id];
@@ -5317,8 +5394,11 @@ async function waReqUnderstand(id){
   if(!body) return;
   // لا نُغلق قائمة الطلبات — تبقى مفتوحة لتختار طلباً آخر؛ تُغلقها المالكة يدوياً (✕)
   if(typeof setCustomerType==='function') setCustomerType('company');   // طلب شركة → هامش الشركات
-  let ok=false; try { ok = waReqFillForm(body); } catch(e){ console.warn('waReqFillForm failed', e); }
-  if(!ok){
+  let parsed=false; try { parsed = waReqFillForm(body); } catch(e){ console.warn('waReqFillForm failed', e); }
+  if(parsed){
+    // تحقّق من الفنادق المذكورة مقابل النظام → ملاحظة يمين قبل التسعير
+    try { await waReqHotelCheck(body, parsed); } catch(e){ console.warn('waReqHotelCheck failed', e); }
+  } else {
     // تعذّر استخراج معطيات مفيدة → مرّر النص لشات المساعد ليقترح/يسأل
     const ci=document.getElementById('chatInput'); if(ci){ ci.value=body; if(typeof sendMessage==='function'){ try{ await sendMessage(); }catch(e){} } }
   }
