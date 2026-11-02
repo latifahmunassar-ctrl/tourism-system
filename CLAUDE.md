@@ -14,3 +14,8 @@
 - كل تدخّل يُسجَّل في جدول `guard_logs`.
 - الكود في `supabase/functions/WhatsApp-Router/index.ts` (دوال `guardAutofix`/`guardReject`/`logGuard`، وخط الأنابيب داخل `handleNewLeadIntake`).
 - اختبار المقارنة: `admin_action=guard_test` (Haiku مقابل Sonnet).
+
+## اختبارات انحدار طلال (قاعدة إلزامية قبل أي نشر لـ WhatsApp-Router)
+- قبل نشر `WhatsApp-Router` شغّل: `npx -y deno@2.5.6 run -A supabase/functions/WhatsApp-Router/tests/intake_replay.ts` — ❌ لا نشر إلا والكل ✅.
+- كل غلطة جديدة تشتكي منها المالكة → أضف سيناريو في `tests/scenarios.ts` (المحادثة الحقيقية + رد النموذج الخاطئ + الشرط) **قبل** الإصلاح، وتأكد إنه يفشل على الكود القديم وينجح بعد الإصلاح.
+- الاختبار محلي بالكامل (قاعدة بيانات وهمية، نموذج مُبرمَج، بلا واتساب ولا إنتاج).
