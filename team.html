@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-02-understand2'
+  var BUILD = '2026-11-02-understand3'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5315,7 +5315,7 @@ async function waReqUnderstand(id){
   if(!q) return;
   const body = String(q.body||'').trim();
   if(!body) return;
-  waReqClose();
+  // لا نُغلق قائمة الطلبات — تبقى مفتوحة لتختار طلباً آخر؛ تُغلقها المالكة يدوياً (✕)
   if(typeof setCustomerType==='function') setCustomerType('company');   // طلب شركة → هامش الشركات
   let ok=false; try { ok = waReqFillForm(body); } catch(e){ console.warn('waReqFillForm failed', e); }
   if(!ok){
