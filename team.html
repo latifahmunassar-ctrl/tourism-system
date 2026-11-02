@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-02-safetynet'
+  var BUILD = '2026-11-02-paxwords'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5397,7 +5397,14 @@ function waReqParse(body){
   if(!dest){ let best=1e9; for(const k of Object.keys(CITY)){ for(const c of (CITY[k]||[])){ const p=nb.indexOf(waReqNorm(c)); if(p>=0&&p<best){ best=p; dest=k; } } } }
   // البالغون / الأطفال
   let adults=null, m=lat.match(/(\d+)\s*(?:بالغ(?:ين|ون)?|كبار|كبير|اشخاص\s*كبار)/)||lat.match(/عدد\s*الا?شخاص\s*:?\s*(\d+)/)||lat.match(/(\d+)\s*(?:اشخاص|أشخاص|شخص)/); if(m) adults=parseInt(m[1],10);
-  let children=0, mc=lat.match(/(\d+)\s*(?:طفل|اطفال|أطفال|رضيع|رضع)/); if(mc) children=parseInt(mc[1],10); else if(/طفل/.test(lat)&&!/اطفال|أطفال/.test(lat)) children=1;
+  // الأرقام المكتوبة بالحروف («ثلاث اشخاص» → ٣) — تُطبَّق فقط إن لم يُوجَد رقم
+  if(adults==null){
+    if(/شخصين|نفرين|زوجين/.test(nb)) adults=2;
+    else if(/شخص\s*واحد|فرد\s*واحد/.test(nb)) adults=1;
+    else { const wm=nb.match(/(واحد|اثنين|اثنان|ثلاثه?|اربعه?|خمسه?|سته?|سبعه?|ثمانيه?|ثمان|تسعه?|عشره?)\s*(?:اشخاص|بالج|بالغ|افراد|نفر|كبار)/);
+      if(wm){ const BW={'واحد':1,'اثنين':2,'اثنان':2,'ثلاث':3,'اربع':4,'خمس':5,'ست':6,'سبع':7,'ثماني':8,'ثمان':8,'تسع':9,'عشر':10}; adults=BW[wm[1].replace(/ه$/,'')]||null; } }
+  }
+  let children=0, mc=lat.match(/(\d+)\s*(?:طفل|اطفال|أطفال|رضيع|رضع)/); if(mc) children=parseInt(mc[1],10); else if(/طفلين/.test(nb)) children=2; else if(/طفل/.test(lat)&&!/اطفال|أطفال/.test(lat)) children=1;
   // النجوم (خمس+أربع معاً → mixed)
   let stars='mixed'; const h5=/(?:خمس|خمسه|5|٥)\s*نجوم/.test(nb)||/5\s*star/i.test(lat), h4=/(?:اربع|اربعه|4|٤)\s*نجوم/.test(nb)||/4\s*star/i.test(lat); if(h5&&!h4)stars='5'; else if(h4&&!h5)stars='4';
   // التواريخ والأيام
