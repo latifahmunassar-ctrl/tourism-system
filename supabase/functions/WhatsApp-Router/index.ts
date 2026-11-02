@@ -1451,7 +1451,7 @@ async function callTourismAI(messages: TaiTurn[]): Promise<TaiResult | null> {
 // طُبِّق الربح فعلاً (false = خارج شرائح/مواسم الربح ⇒ لا نرسل سعراً تلقائياً).
 async function autoBuildProgram(p: {
   dest: string; days: string; date: string; pax: string; ages: string; distribution: string; phone: string;
-}): Promise<{ text: string; priceReady: boolean; priceNote: string; programCode: string } | null> {
+}): Promise<{ text: string; priceReady: boolean; priceNote: string; programCode: string; kidAges: number[] } | null> {
   const jwt = Deno.env.get("LEGACY_ANON_JWT") || "";
   try {
     const res = await fetch(TOURISM_AI_URL, {
@@ -1467,8 +1467,51 @@ async function autoBuildProgram(p: {
     const data = await res.json();
     if (!data?.ok || !data?.program) { console.error("auto_build no program", JSON.stringify(data).slice(0, 200)); return null; }
     const text = String(data.formatted || "").trim() || formatTourismAIForWhatsApp(String(data.program));
-    return { text, priceReady: data.price_ready === true, priceNote: String(data.price_note || ""), programCode: String(data.program_code || "") };
+    const kidAges = Array.isArray(data.kid_ages) ? (data.kid_ages as unknown[]).map(Number).filter(n => Number.isFinite(n)) : [];
+    return { text, priceReady: data.price_ready === true, priceNote: String(data.price_note || ""), programCode: String(data.program_code || ""), kidAges };
   } catch (e) { console.error("autoBuildProgram error", (e as Error).message); return null; }
+}
+
+// ليس «تبديل وجهة» حقيقياً → لا نسأل «تقصد X ولا Y؟» (حادثة ٢ نوفمبر: العميل جاوب مطار
+//   الإقلاع «مسقط» فأخرج النموذج وجهة «عمان» وسأل طلال «عمرة ولا عمان؟»):
+//   (أ) نفس الوجهة بصيغة أخرى (العمرة/عمرة/عمره)، (ب) العمرة مع مدن الحرمين، (ج) العمرة
+//   مع عُمان/مسقط/صلالة (بلد الإقلاع للعميل العُماني)، (د) ردّ على سؤال المطار/الإقلاع.
+// v464: العمرة تغلب عُمان/مسقط/صلالة دائماً (العميل العُماني يذكر بلده كمكان إقلاع).
+function _isUmrahDest(x: string): boolean { return /عمر[ةه]|مك[ةه]|المدين[ةه]|الحرم|مدين[ةه]\s*منور|umrah|makkah|mecca|madinah/i.test(String(x || "")); }
+function _isOmanDest(x: string): boolean { return /عُ?مان|مسقط|صلال[ةه]|oman|muscat|salalah/i.test(String(x || "")); }
+function _sameDestish(oldD: string, newD: string, msgs: Array<{ who: string; body: string }>): boolean {
+  const n = (x: string) => String(x || "").trim().replace(/^ال/, "").replace(/ه$/, "ة").replace(/[ًٌٍَُِّْ]/g, "");
+  if (n(oldD) === n(newD)) return true;
+  const umrah = (x: string) => /عمر[ةه]|مك[ةه]|المدين[ةه]|الحرم|مدين[ةه]\s*منور/.test(x);
+  const oman = (x: string) => /عُ?مان|مسقط|صلال[ةه]|oman|muscat|salalah/i.test(x);
+  if (umrah(oldD) && (umrah(newD) || oman(newD))) return true;
+  if (umrah(newD) && oman(oldD)) return true;   // v464: الاتجاه المعاكس (المخزّن عُمان غلطاً والعميل قال عمرة)
+  const lastT = (msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body || "");
+  if (/مطار|الإقلاع|الاقلاع|إقلاع|تطلعون\s*من|المغادر[ةه]\s*من/.test(lastT)) return true;
+  return false;
+}
+
+// 📨 رسائل ما بعد البرنامج (صيغة المالكة ٢ نوفمبر ٢٠٢٦): رسالة جاهزية دائماً، ورسالة
+//    سرير الطفل لو فيه أطفال (١٠ سنوات وتحت) — كلٌّ رسالة مستقلة بعد البرنامج/الـPDF.
+//    ⚠️ تُرسَل عبر sendWhatsapp مباشرة (بلا stripBannedPhrases) لأن «أستاذي» هنا صيغة المالكة الحرفية.
+function postProgramMessages(kidAges: number[]): string[] {
+  const out = ["تفضل أستاذي، برنامجك صار جاهز. أي تعديل في البرنامج أنا حاضر."];
+  const k = (kidAges || []).filter(a => Number.isFinite(a) && a <= 10);
+  if (k.length === 1) {
+    out.push(`علماً أن البرنامج ما فيه سرير إضافي للطفل اللي عمره ${k[0]} ${k[0] <= 1 ? "سنة" : "سنوات"}. إذا حاب أضيف سرير إضافي في البرنامج، عطني خبر عشان أضيف التكلفة تبعه.`);
+  } else if (k.length > 1) {
+    out.push(`علماً أن البرنامج ما فيه سرير إضافي للأطفال (أعمارهم ${k.join(" و")}). إذا حاب أضيف لهم سرير إضافي في البرنامج، عطني خبر عشان أضيف التكلفة تبعه.`);
+  }
+  return out;
+}
+async function sendPostProgramMessages(supabase: ReturnType<typeof createClient>, phone: string, msgs: string[]): Promise<void> {
+  for (const m of msgs) {
+    try {
+      await new Promise(r => setTimeout(r, 1200));
+      const sid = await sendWhatsapp(phone, m);
+      if (sid) await supabase.from("wa_admin_messages").insert({ twilio_sid: sid, customer_phone: phone, body: m, sent_by: "طلال", sent_at: new Date().toISOString() });
+    } catch (e) { console.error("post_program msg", (e as Error).message); }
+  }
 }
 
 // يؤلّف ملخّص التأكيد الخادمي (لا نعتمد على الـLLM): يعرض ما جمعناه ويطلب تأكيداً
@@ -1484,7 +1527,18 @@ function buildIntakeSummary(d: Record<string, unknown>, isUmrah: boolean): strin
   const cities = clean(d.cities);
   const L: string[] = ["خليني أتأكد من طلبك قبل ما أجهّز لك العرض:"];
   if (dest) L.push(`- الوجهة: ${dest}`);
-  if (pax) L.push(`- عدد المسافرين: ${pax}${ages ? ` (${ages})` : ""}`);
+  // قاعدة المالكة: ١١ سنة وفوق = بالغ، ١٠ وتحت = طفل (نفس قاعدة الباني في Tourism-AI).
+  const _an = (ages.replace(/[٠-٩]/g, (x: string) => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))).match(/\d{1,2}/g) || []).map(Number);
+  const _kids = _an.filter(a => a <= 10);
+  const _paxN = parseInt(String(pax).replace(/[٠-٩]/g, (x: string) => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))), 10);
+  let _split = ages ? ` (${ages})` : "";
+  if (_an.length && Number.isFinite(_paxN) && _paxN > _kids.length) {
+    const _ad = _paxN - _kids.length;
+    const _adTxt = _ad === 1 ? "بالغ واحد" : `${_ad} بالغين`;
+    _split = _kids.length === 0 ? ` (${_adTxt})`
+      : ` (${_adTxt} + ${_kids.length === 1 ? `طفل عمره ${_kids[0]}` : `${_kids.length} أطفال أعمارهم ${_kids.join(" و")}`})`;
+  }
+  if (pax) L.push(`- عدد المسافرين: ${pax}${_split}`);
   if (date) L.push(`- تاريخ السفر: ${date}`);
   if (isUmrah) { if (nights) L.push(`- عدد الليالي: ${nights}`); }
   else { if (days) L.push(`- عدد الأيام: ${days}`); }
@@ -1550,6 +1604,17 @@ function guardAutofix(text: string, ctx?: { alreadyGreeted?: boolean; lastCustom
   if (/[ؐ-ًؚ-ْٰ]/.test(t)) { t = t.replace(/[ؐ-ًؚ-ْٰ]/g, ""); hits.push("tashkeel"); }
   for (const [re, rep] of _FUS7A_FIX) { if (re.test(t)) { t = t.replace(re, rep); if (!hits.includes("fus7a")) hits.push("fus7a"); } }
   if (/كم\s*عدد[^؟]*تنوم/.test(t)) { t = t.replace(/كم\s*عدد[^؟]*تنوم[^؟]*؟?/g, "كم عدد المسافرين معكم؟"); hits.push("awkward"); }
+  // pax_total (طلب المالكة ٢ نوفمبر ٢٠٢٦): سؤال العدد لازم يوضّح إنه **الإجمالي مع الأطفال**
+  //   كي يجاوب العميل صح من أول مرة (كان يقول «٥» ثم «طفل واحد» فيلتبس هل الطفل ضمن الخمسة).
+  {
+    const _paxQ = /كم\s*(?:عدد\s*)?(?:ال)?(?:معتمرين|مسافرين|أشخاص|اشخاص|أفراد|افراد)(?:كم)?[^؟?\n]*[؟?]|كم\s*عدد(?:كم|هم)\s*[؟?]/;
+    const _m = t.match(_paxQ);
+    if (_m && !/إجمال|اجمال|كبار|أطفال|اطفال|بالغين|صغار/.test(_m[0])) {
+      const _noun = /معتمر/.test(_m[0]) ? "المعتمرين" : "المسافرين";
+      t = t.replace(_m[0], `كم عدد ${_noun} الإجمالي، الكبار والأطفال؟`);
+      hits.push("pax_total");
+    }
+  }
   t = t.replace(/[ \t]{2,}/g, " ").replace(/\s+([؟?.،])/g, "$1").trim();
   return { text: t, hits };
 }
@@ -2090,7 +2155,19 @@ async function handleNewLeadIntake(args: {
   for (const m of ((inboundRes.data || []) as Row[])) if (m.body && !String(m.body).startsWith("📎")) msgs.push({ ts: m.received_at || "", who: "العميل", body: String(m.body) });
   for (const m of ((outboundRes.data || []) as Row[])) if (m.body) msgs.push({ ts: m.sent_at || "", who: "طلال", body: String(m.body) });
   msgs.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+  // 🔄 إعادة الضبط (زر الداشبورد / reset_conversation) = بداية من الصفر فعلاً: نقصّ
+  //    كل ما قبل آخر رسالة «🔄 أُعيد ضبط المحادثة» — وإلا يقرأ طلال العدد/الأطفال القديمة
+  //    من السجل ويكمل عليها (كان الضبط شكلياً فقط).
+  { let _cut = -1; for (let i = msgs.length - 1; i >= 0; i--) { if (msgs[i].who === "طلال" && msgs[i].body.startsWith("🔄 أُعيد ضبط المحادثة")) { _cut = i; break; } }
+    if (_cut >= 0) msgs.splice(0, _cut + 1); }
+  // 🆕 طلب جديد بعد طلب مُقفَل (started_at) → نتجاهل رسائل الطلب السابق كلها.
+  { const _st = Date.parse(String(((sessRes.data as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}).started_at || ""));
+    if (Number.isFinite(_st)) { const _keep = msgs.filter(m => Date.parse(m.ts) >= _st); msgs.length = 0; msgs.push(..._keep); } }
   const transcript = msgs.slice(-24).map(m => m.who + ": " + m.body).join("\n").slice(-4000);
+  // v465 🔴 كلام العميل وحده — الحُرّاس اللي تكشف «إيش قال العميل» ❌ لا تقرأ كلام طلال نفسه
+  //   (حادثة ٢ نوفمبر: سؤال طلال «الـ5 كلهم بالغين ولا معكم أطفال؟» اعتُبر تأكيداً أنهم بالغين
+  //   فتخطّى سؤال عمر الطفلين؛ وملخّص طلال فيه تاريخ/ليالي يُعتبر كأن العميل قالها).
+  const custTranscript = msgs.filter(m => m.who === "العميل").slice(-24).map(m => m.body).join("\n").slice(-4000);
   const prev = (sessRes.data as { intake_data?: unknown } | null)?.intake_data || {};
   const today = new Date().toISOString().slice(0, 10);
   // رقم عُماني (+968)؟ — سؤال مطار المغادرة للعمرة (صلالة/مسقط) حصريّ لهم.
@@ -2395,8 +2472,14 @@ ${returning
   if (!out) {
     // النموذج فشل مرتين → بدل الصمت نسأل سؤالاً حتمياً ونكمل بقية خط الأنابيب كالمعتاد
     // (البوابات/ملخّص التأكيد تتجاوزه لو لزم).
-    const _fb = _intakeFallback((prev || {}) as Record<string, unknown>);
-    out = { messages: [_fb], fields: {}, complete: false };
+    // ردّ العميل برقم مجرّد على سؤال العدد → نلتقطه خادمياً (كان الاحتياطي يعيد سؤال العدد
+    //   فيضطر العميل يكرّر «٦» — حادثة ٢ نوفمبر).
+    const _fbFields: Record<string, unknown> = {};
+    const _lastT = (msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body || "");
+    const _bareN = String(args.body || "").trim().replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+    if (/^\d{1,2}$/.test(_bareN) && /كم\s*عدد/.test(_lastT) && !(Number((prev as Record<string, unknown>).pax) > 0)) _fbFields.pax = Number(_bareN);
+    const _fb = _intakeFallback({ ...((prev || {}) as Record<string, unknown>), ..._fbFields });
+    out = { messages: [_fb], fields: _fbFields, complete: false };
     await logGuard(supabase, from, "no_silence_fallback", "fallback_reply", "النموذج فشل مرتين", _genFails, "", _fb);
   }
   // رسائل قصيرة منفصلة (تُرسل بالتتابع للحفاظ على الترتيب) — تدعم messages مصفوفة أو reply نصّي.
@@ -2499,6 +2582,8 @@ ${returning
   let _destChangeApply = false;
   let _destChangeConfirmFired = false;
   let _pendingDestAsk = "";
+  let _keepOldDest = false;
+  let _destOverride = "";
   // الوجهة التي أخرجها النموذج هذا الدور (قد تكون مدموجة «X وY» أو مختلفة عن المخزّنة).
   const _modelDest = String((out.fields && (out.fields as Record<string, unknown>).destination) || "").trim();
   const _destParts = _modelDest.split(/\s+و\s+|،|,|\/|\s+أو\s+/).map(x => x.trim()).filter(Boolean);
@@ -2506,9 +2591,15 @@ ${returning
   if (_askedDestChange && _pendingDest0) {
     // الدور التالي: ردّ العميل على سؤال التأكيد. «نعم» → المعلّقة؛ سمّى وجهة → اعتمدها.
     const _respDest = extractDestination(_bodyNow);
-    if (isAffirmative(_bodyNow)) { _gm.destination = _pendingDest0; _gm.cities = ""; _gm.dest_changing = false; _destChangeApply = true; }
+    const _umrahPick = _isUmrahDest(_oldDest0) && _isOmanDest(_pendingDest0) ? _oldDest0
+      : (_isUmrahDest(_pendingDest0) && _isOmanDest(_oldDest0) ? _pendingDest0 : "");
+    if (_umrahPick) { _gm.destination = _umrahPick; _destOverride = _umrahPick; }   // v464: عمرة×عُمان → العمرة بلا سؤال
+    else if (isAffirmative(_bodyNow)) { _gm.destination = _pendingDest0; _gm.cities = ""; _gm.dest_changing = false; _destChangeApply = true; }
     else if (_respDest) { _gm.destination = _respDest; _gm.cities = ""; _gm.dest_changing = false; _destChangeApply = true; }
+    else if (_oldDest0) { _gm.destination = _oldDest0; _destOverride = _oldDest0; }   // v464: ردّ بلا حسم («وينكم») → تبقى القديمة
     _gm.asked_dest_change = false; _gm.pending_dest = "";
+  } else if (!_wantsDestChange && _oldDest0 && _modelDest && _modelDest !== _oldDest0 && _sameDestish(_oldDest0, _modelDest, msgs)) {
+    _gm.destination = (_isUmrahDest(_modelDest) && !_isUmrahDest(_oldDest0)) ? _modelDest : _oldDest0; _keepOldDest = true;   // ليس تبديلاً (مطار إقلاع/صيغة أخرى) → نُبقي الوجهة المخزّنة
   } else if (_oldDest0 && _modelDest && (_isMultiDest || _modelDest !== _oldDest0)) {
     // 🔴 تبديل/تناقض وجهة (أعمّ من صياغة «أغيّر الوجهة» — يمسك حتى الأخطاء الكتابية
     //    والدمج): النموذج أخرج وجهة تختلف عن المخزّنة أو وجهتين معاً → اسأل التأكيد بدل
@@ -2548,7 +2639,7 @@ ${returning
   const _destKnown = !!_destLabel || _sentOwnOfferImage;
   const _outAsksDest = /وين\s*(?:حابين\s*|ودكم\s*|ناوين\s*)?(?:ت?سافر(?:ون|وا|وين)?|ودك(?:م)?|تبون|رايحين|قاصدين)|أي[نّ]?\s*وجه[ةه]|اي\s*وجه[ةه]|وين\s*(?:الوجهة|بتروحون)|which\s+destination/i.test(outMsgs.join(" "));
   // رحلة شهر عسل → المسافرون شخصان (٢) بالبداهة؛ نؤكّد بدل ما نسأل من الصفر.
-  const _honeymoon = /شهر\s*ال?عسل|هني\s*مون|honeymoon|عرسنا|متزوجين\s*جدد/i.test(transcript);
+  const _honeymoon = /شهر\s*ال?عسل|هني\s*مون|honeymoon|عرسنا|متزوجين\s*جدد/i.test(custTranscript);
   // حارس تغيير الوجهة: طلب العميل التغيير بلا تسمية وجهة جديدة → نسأله عنها
   //   مباشرةً (يتقدّم على بقية الحُرّاس، ويمنع الإقفال حتى يعطي الوجهة الجديدة).
   let _destChangeGateFired = false;
@@ -2572,7 +2663,7 @@ ${returning
   const _askedHmPax = _gm.asked_hm_pax === true;
   const _outConfirmsPax = /شخصين|اثنين|٢|\b2\b|عدد\s*المسافر/.test(outMsgs.join(" "));
   // هل ذكر العميل عدداً صريحاً؟ (لو نعم لا نؤكّد — معروف أصلاً).
-  const _paxStated = /\d+\s*(?:شخص|أشخاص|اشخاص|نفر|بالغ|كبار|معتمر|راكب|فرد)|(?:ثلاث|أربع|اربع|خمس|ست|سبع|ثمان|تسع|عشر)[ةه]?\s*(?:أشخاص|اشخاص|نفر|بالغين|أفراد)/.test(transcript);
+  const _paxStated = /\d+\s*(?:شخص|أشخاص|اشخاص|نفر|بالغ|كبار|معتمر|راكب|فرد)|(?:ثلاث|أربع|اربع|خمس|ست|سبع|ثمان|تسع|عشر)[ةه]?\s*(?:أشخاص|اشخاص|نفر|بالغين|أفراد)/.test(custTranscript);
   let _hmPaxGateFired = false;
   // شهر عسل بلا عدد صريح → أكّد شخصين (٢) صراحةً، حتى لو استنتج النموذج العدد بصمت.
   if (_honeymoon && !_askedHmPax && !_destGateFired && !_outConfirmsPax && !_paxStated && (!_paxKnown || _paxNum === 2)) {
@@ -2600,7 +2691,7 @@ ${returning
 
   // تأكيد صريح إنهم بالغين (في نص المحادثة كاملاً) → لا داعي للسؤال.
   // شهر العسل = بالغَان، فلا نسأل عن الأطفال.
-  const _adultsConfirmed = _honeymoon || /كل(?:هم|نا)?\s*(?:كبار|بالغين)|جميعهم?\s*بالغين|بالغين\s*فقط|(?:ما|بدون|بلا|مافي|ما\s*في)\s*(?:فيه\s*)?(?:أطفال|اطفال|عيال|صغار)/.test(transcript);
+  const _adultsConfirmed = _honeymoon || /كل(?:هم|نا)?\s*(?:كبار|بالغين)|جميعهم?\s*بالغين|بالغين\s*فقط|(?:ما|بدون|بلا|مافي|ما\s*في)\s*(?:فيه\s*)?(?:أطفال|اطفال|عيال|صغار)/.test(custTranscript);
   // هل رد النموذج نفسه يسأل عن الأطفال/الكبار؟ (لا نكرّر فوقه)
   const _outAsksAges = /بالغين|كبار|أطفال|اطفال|عيال|صغار|أعمار|اعمار/.test(outMsgs.join(" "));
   let _ageGateFired = false;
@@ -2614,14 +2705,18 @@ ${returning
   //    (السعر يعتمد عليه). حدّ أقصى مرّتين (asked_ages_n) كي لا يعلق لو رفض العميل.
   const _kidsSaid = /(?:^|[^ء-ي])(?:[وف]?(?:ال)?(?:طفل(?:ين|ة|تين)?|أطفال|اطفال|عيال|رضيع(?:ة)?|بزر|بزورة|صغار|ياهل|يهال))(?![ء-ي])/.test(_custText);
   const _askedAgesN = Number(_gm.asked_ages_n) || 0;
-  // ⚠️ لا نطابق «عمر» وحدها — تلتقط «عمرة».
-  const _outAsksAgeStrict = /أعمار|اعمار|كم\s*عمر|عمر\s*(?:ال)?(?:طفل|ولد|بنت|رضيع)/.test(outMsgs.join(" "));
   // ردّ العميل على سؤال العمر برقم ولم يملأه النموذج → نلتقطه خادميّاً (لا نعيد السؤال).
-  const _kidAgeFromBody = (_askedAgesN > 0 && _agesEmpty && /[0-9٠-٩]/.test(_bodyNow)) ? _bodyNow.trim().slice(0, 60) : "";
+  // الأعمار «معروفة» فقط لو فيها رقم — النموذج أحياناً يكتب ages:«طفلين» فتبدو غير فاضية.
+  const _kidAgesUnknown = !/[0-9٠-٩]/.test(String(_gm.ages || ""));
+  const _kidAgeFromBody = (_askedAgesN > 0 && _kidAgesUnknown && /[0-9٠-٩]/.test(_bodyNow)) ? _bodyNow.trim().slice(0, 60) : "";
   let _kidAgeGateFired = false;
-  if (!_ageGateFired && _paxKnown && _agesEmpty && !_kidAgeFromBody && _kidsSaid && !_adultsConfirmed && _askedAgesN < 2 && !_outAsksAgeStrict) {
-    const _plural = /طفلين|طفلتين|أطفال|اطفال|عيال|صغار|يهال/.test(_custText);
-    outMsgs = [_plural ? "تمام، كم أعمار الأطفال؟ (أسأل لأن سعر الأطفال يختلف حسب العمر)" : "تمام، كم عمر الطفل؟ (أسأل لأن سعر الأطفال يختلف حسب العمر)"];
+  // ⚠️ نفرض صيغتنا دائماً (حتى لو النموذج سأل العمر) — وإلا يكتب حارس الليالي فوق سؤال
+  //    النموذج (حادثة ٢ نوفمبر: «طفل واحد» → قفز لليالي). عندنا الطفل = ٥ سنوات وأقل،
+  //    فلا نفترض عمره أبداً. صيغة المالكة: «ممكن أعرف كم عمره؟».
+  if (!_ageGateFired && _paxKnown && _kidAgesUnknown && !_kidAgeFromBody && _kidsSaid && !_adultsConfirmed && _askedAgesN < 2) {
+    const _plural = /طفلين|طفلتين|أطفال|اطفال|عيال|صغار|يهال|[2-9٢-٩]\s*(?:طفل|أطفال|اطفال)/.test(_custText);
+    const _girl = !_plural && /طفلة|بنت/.test(_custText);
+    outMsgs = [_plural ? "ممكن أعرف كم أعمارهم؟" : (_girl ? "ممكن أعرف كم عمرها؟" : "ممكن أعرف كم عمره؟")];
     _ageGateFired = true;
     _kidAgeGateFired = true;
   }
@@ -2634,8 +2729,8 @@ ${returning
   // (من–إلى) أو عدد ليالٍ/أيام صريح → المدة معروفة.
   const _nightsVal = String(_gm.nights || "").trim();
   const _nightsKnown = !!_nightsVal
-    || /\d+\s*(?:ليل|ليال|ايام|أيام|يوم)/.test(transcript)
-    || /(?:من|from)\s*\d{1,2}[^\d]{0,14}(?:إلى|الى|لـ|ل|-|–|to)\s*\d{1,2}/i.test(transcript);
+    || /\d+\s*(?:ليل|ليال|ايام|أيام|يوم)/.test(custTranscript)
+    || /(?:من|from)\s*\d{1,2}[^\d]{0,14}(?:إلى|الى|لـ|ل|-|–|to)\s*\d{1,2}/i.test(custTranscript);
   const _askedNights = _gm.asked_nights === true;
   const _outAsksNights = /كم\s*(?:ليل|يوم|ليال)|عدد\s*(?:الليال|الأيام|الايام)|كم\s*مدة|كم\s*تقضون/.test(outMsgs.join(" "));
   // نسأل الليالي فقط بعد حسم الأعمار (ما يفترض يفوت سؤالين بنفس الرد).
@@ -2718,8 +2813,8 @@ ${returning
   if (out.fields && typeof out.fields === "object") { _mergedData = { ..._mergedData, ...out.fields }; }
   // بمجرد ما نسأل عن الأطفال (سواء النموذج أو الحارس) نثبّت العلم فلا نكرّره.
   if (_ageGateFired || _outAsksAges || _adultsConfirmed) _mergedData.asked_children = true;
-  if (_kidAgeGateFired || (_kidsSaid && _outAsksAgeStrict)) _mergedData.asked_ages_n = _askedAgesN + 1;
-  if (_kidAgeFromBody && !String(_mergedData.ages || "").trim()) _mergedData.ages = _kidAgeFromBody;
+  if (_kidAgeGateFired) _mergedData.asked_ages_n = _askedAgesN + 1;
+  if (_kidAgeFromBody && !/[0-9٠-٩]/.test(String(_mergedData.ages || ""))) _mergedData.ages = _kidAgeFromBody;
   // وكذلك سؤال ليالي العمرة — نثبّته فلا نكرّره.
   if (_nightsGateFired || _outAsksNights) _mergedData.asked_nights = true;
   // تأكيد عدد مسافري شهر العسل — نثبّته فلا نكرّره.
@@ -2734,6 +2829,14 @@ ${returning
     upd.destination = String(_gm.destination || "") || null;
   }
   // حفظ حالة تأكيد تبديل الوجهة: عند السؤال نخزّن المعلّقة ونُبقي القديمة؛ وعند الحسم نمسحها.
+  if (_keepOldDest) _mergedData.destination = _gm.destination;
+  if (_destOverride) _mergedData.destination = _destOverride;
+  // v464: مدن/ليالي فيها مكة أو المدينة → الوجهة عمرة إجبارياً (لا «عُمان» من مطار الإقلاع).
+  if (_isUmrahDest(String(_mergedData.destination || "")) && !/عمر[ةه]/.test(String(_mergedData.destination || ""))) _mergedData.destination = "العمرة";   // v465: «مكة المدينة» → «العمرة»
+  if (_isUmrahDest(String(_mergedData.cities || "") + " " + String(_mergedData.nights || "")) && !_isUmrahDest(String(_mergedData.destination || ""))) {
+    _mergedData.destination = "العمرة";
+    if (_destChangeConfirmFired && _isOmanDest(_pendingDestAsk + " " + _oldDest0)) { _destChangeConfirmFired = false; outMsgs = []; }
+  }
   if (_destChangeConfirmFired) { _mergedData.asked_dest_change = true; _mergedData.pending_dest = _pendingDestAsk; _mergedData.destination = _oldDest0; }
   else if (_askedDestChange) { _mergedData.asked_dest_change = false; _mergedData.pending_dest = ""; }
   // تثبيت الوجهة لو عُرفت من صورة العرض ولم يملأها النموذج (تظهر بالداشبورد + تمنع سؤالها).
@@ -2749,7 +2852,7 @@ ${returning
   }
   _mergedData.asked_pax_confirm = _paxChangeGateFired;
   const _dateKnown = !!String(_mergedData.date || "").trim()
-    || /\d{1,2}\s*[\/\-]\s*\d{1,2}|\d{1,2}\s*(?:يناير|فبراير|مارس|إبريل|أبريل|مايو|يونيو|يوليو|أغسطس|سبتمبر|أكتوبر|نوفمبر|ديسمبر)|شهر\s*\d{1,2}|نهاي[ةه]\s*\d{1,2}|بداي[ةه]\s*\d{1,2}/.test(transcript);
+    || /\d{1,2}\s*[\/\-]\s*\d{1,2}|\d{1,2}\s*(?:يناير|فبراير|مارس|إبريل|أبريل|مايو|يونيو|يوليو|أغسطس|سبتمبر|أكتوبر|نوفمبر|ديسمبر)|شهر\s*\d{1,2}|نهاي[ةه]\s*\d{1,2}|بداي[ةه]\s*\d{1,2}/.test(custTranscript);
   const _daysKnown = !!String(_mergedData.days || "").trim();
   const _essentialsMissing = !_destKnown || !_paxKnown || !_dateKnown
     || (_isUmrahPax ? !_nightsKnown : !_daysKnown);
@@ -2868,10 +2971,17 @@ ${returning
           //    يطلّع الـPDF من team.html بحساب «مولّد البرامج» ويرسله للعميل. لو
           //    ما فيه كود (فشل الحفظ) → fallback: نرسل العرض المنسّق نصّاً.
           if (prog.programCode) {
+            // رسائل ما بعد البرنامج تُرسَل بعد وصول الـPDF (pdf_job_send) — نخزّنها على الجلسة.
+            try {
+              const { data: _s } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", from).maybeSingle();
+              const _d = ((_s as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
+              await supabase.from("whatsapp_sessions").update({ intake_data: { ..._d, post_program_msgs: postProgramMessages(prog.kidAges) } }).eq("phone", from);
+            } catch (_e) { /* */ }
             await supabase.from("program_pdf_jobs").insert({ phone: from, code: prog.programCode });
             console.log("auto_build: ENQUEUED PDF job for", from, prog.programCode);
           } else {
             await sendCustomerReply(supabase, from, prog.text, undefined, { keepRich: true });
+            await sendPostProgramMessages(supabase, from, postProgramMessages(prog.kidAges));
             console.log("auto_build: SENT text (no code) to", from);
           }
         } else {
@@ -3028,6 +3138,18 @@ async function handleMessage(args: {
   const isFreshLead = s?.intake_active === true
     || (s != null && s.intake_active == null && s.stage === "new" && !s.last_outbound_at && !s.last_outbound_body);
   if (isFreshLead) {
+    // 🟢 تحية بداية محادثة (طلب المالكة ٢ نوفمبر ٢٠٢٦): «مرحبا» وحدها والطلب فاضي (لا وجهة
+    //    ولا عدد ولا إعلان) → «أهلاً وسهلاً، حياك الله، آمرني» ثابتة؛ بدل ما يقفز النموذج
+    //    لسؤال العدد أو يخترع وجهة من سجل قديم.
+    const _fd = ((session as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
+    if (isGreeting(text) && !_referral && !String(_fd.destination || "").trim() && !(Number(_fd.pax) > 0)) {
+      const _greet = "أهلاً وسهلاً، حياك الله، آمرني";
+      await sendCustomerReply(supabase, from, _greet);
+      try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: stripBannedPhrases(_greet), sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+      await supabase.from("whatsapp_sessions").update({ last_message_at: new Date().toISOString() }).eq("phone", from);
+      await logGuard(supabase, from, "greeting_reply", "fresh_lead", "", 1, text, _greet);
+      return;
+    }
     await handleNewLeadIntake({ supabase, from, body: text, referral: _referral });
     return;
   }
@@ -3044,7 +3166,10 @@ async function handleMessage(args: {
         || /(?:[0-9٠-٩]+\s*(?:أشخاص|اشخاص|شخص|نفر|أفراد|افراد|معتمر(?:ين)?|بالغ(?:ين)?))|شخصين|نفرين|معتمرين/.test(text);
       const { awaiting_intent: _drop, ...rest } = _idata;
       if (_isNewReq) {
-        const _seed: Record<string, unknown> = detectedDest ? { destination: detectedDest } : {};
+        // started_at: الطلب الجديد يبدأ من لحظة التحية — طلال ما يقرأ عدد/أعمار الطلب القديم
+        //   (حادثة ٢ نوفمبر: طلب جديد فسأل «الـ4 كلهم بالغين؟» من رسائل الطلب السابق).
+        const _st = String(_idata.awaiting_intent_at || "") || new Date(Date.now() - 60_000).toISOString();
+        const _seed: Record<string, unknown> = { ...(detectedDest ? { destination: detectedDest } : {}), started_at: _st };
         await supabase.from("whatsapp_sessions")
           .update({ intake_active: true, intake_data: _seed, stage: "new", ...(detectedDest ? { destination: detectedDest } : {}) })
           .eq("phone", from);
@@ -3081,7 +3206,7 @@ async function handleMessage(args: {
     }
     // لا وجهة قديمة، أو العميل أعاد ذكر نفس الوجهة المعلّقة (تأكيد) → طبّق وأعد التفعيل.
     await supabase.from("whatsapp_sessions")
-      .update({ intake_active: true, intake_data: { destination: detectedDest }, destination: detectedDest })
+      .update({ intake_active: true, intake_data: { destination: detectedDest, started_at: new Date(Date.now() - 60_000).toISOString() }, destination: detectedDest })
       .eq("phone", from);
     await handleNewLeadIntake({ supabase, from, body: text, referral: _referral });
     return;
@@ -3166,7 +3291,7 @@ async function handleMessage(args: {
       await sendCustomerReply(supabase, from, _greet);
       try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: stripBannedPhrases(_greet), sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
       const _id0 = ((session as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
-      await supabase.from("whatsapp_sessions").update({ intake_data: { ..._id0, awaiting_intent: true } }).eq("phone", from);
+      await supabase.from("whatsapp_sessions").update({ intake_data: { ..._id0, awaiting_intent: true, awaiting_intent_at: new Date().toISOString() } }).eq("phone", from);
       await logGuard(supabase, from, "greeting_reply", "direct_reply", "", 1, text, _greet);
       return;
     }
@@ -7032,6 +7157,16 @@ Deno.serve(async (req) => {
       }
       await supabase.from("program_pdf_jobs").update({ status: "sent", sent_at: new Date().toISOString() }).eq("id", jobId);
       try { await supabase.from("wa_admin_messages").insert({ twilio_sid: sid, customer_phone: String(job.phone), body: "📄 برنامج PDF — " + job.code, sent_by: "طلال" }); } catch (_e) { /* */ }
+      // رسائل ما بعد البرنامج (جاهزية + سرير الطفل) — مرّة واحدة ثم تُمسح.
+      try {
+        const { data: _s } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", String(job.phone)).maybeSingle();
+        const _d = ((_s as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
+        const _pm = Array.isArray(_d.post_program_msgs) ? (_d.post_program_msgs as unknown[]).map(String) : [];
+        if (_pm.length) {
+          await supabase.from("whatsapp_sessions").update({ intake_data: { ..._d, post_program_msgs: [] } }).eq("phone", String(job.phone));
+          await sendPostProgramMessages(supabase, String(job.phone), _pm);
+        }
+      } catch (_e) { /* */ }
       return new Response(JSON.stringify({ ok: true, url: pub.publicUrl }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
