@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-02-hotelcheck'
+  var BUILD = '2026-11-02-hotelcheck2'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5328,12 +5328,18 @@ function waReqExtractHotels(body){
   });
   return [...new Set(out)];
 }
-function waReqMatchHotel(req, pool){
-  const rn=waHotelNorm(req), rt=new Set(waHotelToks(req));
+// الرموز المتكرّرة في ≥فندقين = مدن/كلمات عامة (هانوي/دانانج/beach) → تُتجاهل بالمطابقة
+function waReqBuildCommon(pool){
+  const df={}; pool.forEach(h=>{ new Set(waHotelToks(h.name)).forEach(t=>df[t]=(df[t]||0)+1); });
+  return new Set(Object.keys(df).filter(t=>df[t]>=2));
+}
+function waReqMatchHotel(req, pool, common){
+  common = common || new Set();
+  const rn=waHotelNorm(req), rt=new Set(waHotelToks(req).filter(t=>!common.has(t)));
   for(const h of pool){ const hnn=waHotelNorm(h.name); if(!hnn) continue;
-    if(hnn.includes(rn)||rn.includes(hnn)) return h;
-    const ht=waHotelToks(h.name); const ov=ht.filter(t=>rt.has(t)).length;
-    if(ov>=1 && (ov>=2 || ht.length<=2 || rt.size<=2)) return h;
+    if(hnn.includes(rn)||rn.includes(hnn)) return h;                       // اسم كامل مطابق
+    const ht=waHotelToks(h.name).filter(t=>!common.has(t));
+    if(ht.filter(t=>rt.has(t)).length>=1) return h;                        // رمز مميّز مشترك (نادر)
   }
   return null;
 }
@@ -5362,9 +5368,11 @@ async function waReqHotelCheck(body, parsed){
   box.innerHTML='<div style="background:#fff8e6;border:1px solid #f0c674;border-radius:12px;padding:11px 14px;font-size:12.5px;color:#7a5900">🏨 جارٍ التحقق من الفنادق المذكورة في الطلب…</div>';
   const cities=parsed.cities.length?parsed.cities:[''];
   let pool=[]; for(const c of cities){ pool=pool.concat(await waReqListHotels(parsed.dest, c, parsed.dateISO)); }
+  const seen=new Set(); pool=pool.filter(h=>{ const k=waHotelNorm(h.name); if(!k||seen.has(k)) return false; seen.add(k); return true; });  // إزالة التكرار
+  const common=waReqBuildCommon(pool);
   const nEach = parsed.days ? Math.max(1, Math.round((parsed.days-1)/Math.max(1,(cities.filter(Boolean).length||1)))) : 2;
   const rows=reqHotels.map(req=>{
-    const h=waReqMatchHotel(req, pool);
+    const h=waReqMatchHotel(req, pool, common);
     if(h){
       const link=h.link||waReqBookingLink(h.name,h.city,parsed.dateISO,nEach);
       return '<div style="display:flex;align-items:flex-start;gap:7px;padding:6px 0;border-bottom:1px dashed #eadfc2">'
