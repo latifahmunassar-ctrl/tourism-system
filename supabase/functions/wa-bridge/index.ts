@@ -234,13 +234,15 @@ Deno.serve(async (req) => {
         if (!reqRow) return json({ error: "الطلب غير موجود" }, 404);
         // الأرقام الحية للإرسال فقط (601 وعُمان مسجّلان خروج). لو الرقم المخزّن ميت،
         // اختر رقماً حياً عضواً في نفس الجروب حتى يصل الرد.
-        const LIVE_SENDERS = ["201515616984", "201011346081"]; // مريم افتراضي أول
+        const MARYAM = "201515616984";                          // 🔒 المُرسِلة الأساسية (طلب المالكة)
+        const LIVE_SENDERS = [MARYAM, "201011346081"]; // مريم أولاً
         let account = String(payload.account ?? reqRow.account ?? "");
-        // مريم أولاً إن كانت عضواً؛ وإلا أوّل رقم حيّ عضو؛ وإلا مريم كحل أخير.
         const { data: _memLive } = await db.from("wa_account_groups")
           .select("account").eq("jid", reqRow.group_jid).in("account", LIVE_SENDERS);
         const _liveMembers = (_memLive ?? []).map((r: Record<string, unknown>) => String(r.account));
-        if (!(LIVE_SENDERS.includes(account) && _liveMembers.includes(account))) {
+        // 🔒 تشديد: مريم دائماً حيثما هي عضو؛ وإلا احترم رقماً حياً عضواً؛ وإلا أوّل رقم حيّ عضو؛ وإلا مريم.
+        if (_liveMembers.includes(MARYAM)) account = MARYAM;
+        else if (!(LIVE_SENDERS.includes(account) && _liveMembers.includes(account))) {
           account = LIVE_SENDERS.find((a) => _liveMembers.includes(a)) ?? LIVE_SENDERS[0];
         }
         const quoted = reqRow.msg_id
@@ -455,7 +457,9 @@ Deno.serve(async (req) => {
             .select("account").eq("jid", jid).in("account", LIVE_SENDERS);
           const liveMembers = (memRows ?? []).map((r: Record<string, unknown>) => String(r.account));
           let chosen: string;
-          if (LIVE_SENDERS.includes(account) && liveMembers.includes(account)) chosen = account;
+          // 🔒 تشديد (طلب المالكة): مريم هي الأساسية — تُفرَض دائماً في أي جروب هي عضو فيه.
+          if (liveMembers.includes("201515616984")) chosen = "201515616984";
+          else if (LIVE_SENDERS.includes(account) && liveMembers.includes(account)) chosen = account;
           else chosen = LIVE_SENDERS.find((a) => liveMembers.includes(a)) ?? LIVE_SENDERS[0];
           senderCache.set(jid, chosen);
           return chosen;
