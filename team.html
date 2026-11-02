@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-02-hotelcheck3'
+  var BUILD = '2026-11-02-hotelcheck4'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5316,7 +5316,7 @@ const WA_HOTEL_GEN = new Set(['hotel','spa','resort','and','the','suites','suite
 function waHotelNorm(s){ return String(s||'').toLowerCase().replace(/[&\-_.,()']/g,' ').replace(/[ً-ْ]/g,'').replace(/\s+/g,' ').trim(); }
 function waHotelToks(s){ return waHotelNorm(s).split(' ').filter(t=>t.length>=4 && !WA_HOTEL_GEN.has(t)); }
 function waReqExtractHotels(body){
-  const out=[]; const MARK=/(?:الفنادق|فنادق|الفندق|فندق|نزل|منتجع|اقامه?\s+في|سكن\s+في|hotel|resort)\s*:?\s*/gi;
+  const out=[]; const MARK=/(?:الفنادق|فنادق|الفندق|فندق|نزل|منتجع|اقامه?\s+في|سكن\s+في)\s*:?\s*/gi;
   String(body||'').split(/\n/).forEach(L=>{
     let m; MARK.lastIndex=0;
     while((m=MARK.exec(L))){
@@ -5370,8 +5370,11 @@ async function waReqHotelCheck(body, parsed){
   let pool=[]; for(const c of cities){ pool=pool.concat(await waReqListHotels(parsed.dest, c, parsed.dateISO)); }
   const seen=new Set(); pool=pool.filter(h=>{ const k=waHotelNorm(h.name); if(!k||seen.has(k)) return false; seen.add(k); return true; });  // إزالة التكرار
   const common=waReqBuildCommon(pool);
+  // استبعد الأسماء التي كل رموزها مدن/عامة (مثل «Hanoi» وحدها) — ليست فنادق فعلية
+  const reqClean=reqHotels.filter(r=>{ const t=waHotelToks(r); return t.length===0 || t.some(x=>!common.has(x)); });
   const nEach = parsed.days ? Math.max(1, Math.round((parsed.days-1)/Math.max(1,(cities.filter(Boolean).length||1)))) : 2;
-  const entries=reqHotels.map(req=>({ req, h:waReqMatchHotel(req, pool, common) }));
+  if(!reqClean.length){ box.style.display='none'; box.innerHTML=''; return; }
+  const entries=reqClean.map(req=>({ req, h:waReqMatchHotel(req, pool, common) }));
   const notFound=entries.filter(e=>!e.h);   // الأهم للمالكة → فوق
   const found=entries.filter(e=>e.h);
   // الغير موجودة: صندوق أحمر بارز + زر Booking واضح لفتح الفندق
