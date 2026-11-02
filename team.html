@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-02-hotelcount'
+  var BUILD = '2026-11-02-hotelread'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5315,16 +5315,23 @@ function waReqFillForm(body){
 const WA_HOTEL_GEN = new Set(['hotel','spa','resort','and','the','suites','suite','inn','by','de','la','le','palace','hotels','house']);
 function waHotelNorm(s){ return String(s||'').toLowerCase().replace(/[&\-_.,()']/g,' ').replace(/[ً-ْ]/g,'').replace(/\s+/g,' ').trim(); }
 function waHotelToks(s){ return waHotelNorm(s).split(' ').filter(t=>t.length>=4 && !WA_HOTEL_GEN.has(t)); }
+// استخراج أسماء الفنادق: أسماء الفنادق في الطلبات تُكتب غالباً **إنجليزية** (سطر مستقل
+// «The Rockefeller Hotel» أو بعد «فندق» ضمن السطر). نلتقط المقاطع اللاتينية فقط —
+// فنتجنّب التقاط الأوصاف العربية («شامل وجبة الإفطار»، «للراحة»، «استلام الغرفة»).
+const WA_HOTEL_STOP=/^(?:the\s+)?(?:breakfast|standard|deluxe|superior|room|double|single|twin|triple|city|sea|pool|view|included|bed|night|nights|day|days|adult|adults|child|children|star|stars|wifi|internet|transfer|tour|tours|airport|hotel|resort|vip)$/i;
 function waReqExtractHotels(body){
-  const out=[]; const MARK=/(?:الفنادق|فنادق|الفندق|فندق|نزل|منتجع|اقامه?\s+في|سكن\s+في)\s*:?\s*/gi;
+  const out=[];
   String(body||'').split(/\n/).forEach(L=>{
-    let m; MARK.lastIndex=0;
-    while((m=MARK.exec(L))){
-      let rest=L.slice(MARK.lastIndex);
-      rest=rest.split(/\s(?:و|او|أو)\s|[،,\/]|\s[-–]\s|\d/)[0].trim();
-      rest=rest.replace(/\s*(?:نجوم|نجمه|stars?|star).*$/i,'').trim();
-      if(rest && rest.length>=3 && !/^(?:كذا|معين|معيّن|كويس|جيد|فخم|راقي|خمس|اربع|اربعه|خمسه|ممتاز)/.test(rest)) out.push(rest);
-    }
+    const line=L.trim();
+    if(!line || !/[A-Za-z]/.test(line)) return;              // لازم حروف لاتينية
+    if(/https?:|www\.|@|\.com/i.test(line)) return;           // تجاهل روابط/إيميلات
+    const segs=line.match(/[A-Za-z][A-Za-z0-9&'’.\- ]*[A-Za-z0-9]/g)||[];
+    segs.forEach(s=>{
+      const t=s.replace(/\s{2,}/g,' ').trim();
+      if(t.length<4 || t.length>70) return;
+      const w=t.split(/\s+/);
+      if((w.length>=2 || (w.length===1 && t.length>=6)) && !WA_HOTEL_STOP.test(t)) out.push(t);
+    });
   });
   return [...new Set(out)];
 }
