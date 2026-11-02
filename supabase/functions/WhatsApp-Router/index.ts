@@ -2609,6 +2609,22 @@ ${returning
     outMsgs = [`تمام 🌟 الـ${_paxNum} كلهم بالغين ولا معكم أطفال؟ 👶 (أسأل لأن سعر الأطفال يختلف حسب أعمارهم)`];
     _ageGateFired = true;
   }
+  // 🔴 حارس عمر الطفل (طلب المالكة ٢ نوفمبر ٢٠٢٦): العميل قال «فيه طفل» والأعمار
+  //    فاضية → ❌ لا ننتقل للسؤال التالي (الليالي/التاريخ) ولا نقفل؛ نسأل العمر أولاً
+  //    (السعر يعتمد عليه). حدّ أقصى مرّتين (asked_ages_n) كي لا يعلق لو رفض العميل.
+  const _kidsSaid = /(?:^|[^ء-ي])(?:[وف]?(?:ال)?(?:طفل(?:ين|ة|تين)?|أطفال|اطفال|عيال|رضيع(?:ة)?|بزر|بزورة|صغار|ياهل|يهال))(?![ء-ي])/.test(_custText);
+  const _askedAgesN = Number(_gm.asked_ages_n) || 0;
+  // ⚠️ لا نطابق «عمر» وحدها — تلتقط «عمرة».
+  const _outAsksAgeStrict = /أعمار|اعمار|كم\s*عمر|عمر\s*(?:ال)?(?:طفل|ولد|بنت|رضيع)/.test(outMsgs.join(" "));
+  // ردّ العميل على سؤال العمر برقم ولم يملأه النموذج → نلتقطه خادميّاً (لا نعيد السؤال).
+  const _kidAgeFromBody = (_askedAgesN > 0 && _agesEmpty && /[0-9٠-٩]/.test(_bodyNow)) ? _bodyNow.trim().slice(0, 60) : "";
+  let _kidAgeGateFired = false;
+  if (!_ageGateFired && _paxKnown && _agesEmpty && !_kidAgeFromBody && _kidsSaid && !_adultsConfirmed && _askedAgesN < 2 && !_outAsksAgeStrict) {
+    const _plural = /طفلين|طفلتين|أطفال|اطفال|عيال|صغار|يهال/.test(_custText);
+    outMsgs = [_plural ? "تمام، كم أعمار الأطفال؟ (أسأل لأن سعر الأطفال يختلف حسب العمر)" : "تمام، كم عمر الطفل؟ (أسأل لأن سعر الأطفال يختلف حسب العمر)"];
+    _ageGateFired = true;
+    _kidAgeGateFired = true;
+  }
 
   // ── حارس ليالي العمرة (خادميّ) ──────────────────────────────────────────
   // تسعير العمرة بالليلة، فلازم نعرف عدد الليالي (كم ليلة في مكة/المدينة).
@@ -2702,6 +2718,8 @@ ${returning
   if (out.fields && typeof out.fields === "object") { _mergedData = { ..._mergedData, ...out.fields }; }
   // بمجرد ما نسأل عن الأطفال (سواء النموذج أو الحارس) نثبّت العلم فلا نكرّره.
   if (_ageGateFired || _outAsksAges || _adultsConfirmed) _mergedData.asked_children = true;
+  if (_kidAgeGateFired || (_kidsSaid && _outAsksAgeStrict)) _mergedData.asked_ages_n = _askedAgesN + 1;
+  if (_kidAgeFromBody && !String(_mergedData.ages || "").trim()) _mergedData.ages = _kidAgeFromBody;
   // وكذلك سؤال ليالي العمرة — نثبّته فلا نكرّره.
   if (_nightsGateFired || _outAsksNights) _mergedData.asked_nights = true;
   // تأكيد عدد مسافري شهر العسل — نثبّته فلا نكرّره.
@@ -7428,7 +7446,7 @@ Deno.serve(async (req) => {
       const now = new Date().toISOString();
       await supabase.from("whatsapp_sessions").upsert({
         phone,
-        profile_name: name || null,
+        profile_name: name || "",
         stage: "new",
         last_message_at: now,
         last_outbound_at: now,
@@ -8726,7 +8744,7 @@ Deno.serve(async (req) => {
           // عميل جديد أول رسالة منه وسائط/ملصق → نضبط intake_active=true أيضاً حتى
           // يستقبله طلال عند أول رسالة نصية (وإلا تروح رسائله للمعاينة بدل الردّ).
           await supabase.from("whatsapp_sessions").insert({
-            phone: from, profile_name: profileName || null, stage: "new", last_message_at: nowIso, intake_active: true, ...refCols,
+            phone: from, profile_name: profileName || "", stage: "new", last_message_at: nowIso, intake_active: true, ...refCols,
           });
         }
         // 📷 صورة من العميل: نقرأها بالرؤية (غالباً صورة عرض سياحي)؛ لو طلعت عرضاً
