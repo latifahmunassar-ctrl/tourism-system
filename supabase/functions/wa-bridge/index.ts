@@ -38,7 +38,7 @@ function json(body: unknown, status = 200) {
   });
 }
 
-const BRIDGE_ACTIONS = new Set(["pull", "ack", "sync-groups", "heartbeat", "next-invite-targets", "save-invite", "mark-non-admin", "sync-groups-new", "save-inbound", "next-join-targets", "save-join", "sync-groups-acct"]);
+const BRIDGE_ACTIONS = new Set(["pull", "ack", "sync-groups", "heartbeat", "next-invite-targets", "save-invite", "mark-non-admin", "sync-groups-new", "save-inbound", "next-join-targets", "save-join", "sync-groups-acct", "append-modification", "save-raw"]);
 const ACCOUNT = "601111136864"; // the bridge account — groups it created (jid prefix) => admin
 
 Deno.serve(async (req) => {
@@ -155,6 +155,76 @@ Deno.serve(async (req) => {
         if (error) return json({ error: error.message }, 500);
         return json({ ok: true });
       }
+      case "save-raw": {
+        // 🛟 طبقة أمان: نخزّن كل رسالة شركة واردة (بغضّ النظر عن الفلتر) فلا يُفقد أي طلب أبداً.
+        const { error } = await db.from("wa_inbound_raw").upsert({
+          account: payload.account ?? null,
+          group_jid: payload.group_jid ?? null,
+          group_name: payload.group_name ?? null,
+          sender: payload.sender ?? null,
+          sender_name: payload.sender_name ?? null,
+          body: payload.body ?? null,
+          msg_id: payload.msg_id ?? null,
+          participant: payload.participant ?? null,
+          promoted: payload.promoted === true,
+        }, { onConflict: "group_jid,msg_id", ignoreDuplicates: true });
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true });
+      }
+      case "uncaptured-raw": {
+        // رسائل خام لم تُحوَّل لطلب بعد (أرشيف الأمان) — للمراجعة/الترقية اليدوية.
+        const days = Number(payload.days ?? 3);
+        const since = new Date(Date.now() - days * 86400000).toISOString();
+        const { data: rawRows } = await db.from("wa_inbound_raw")
+          .select("*").eq("promoted", false).gte("created_at", since)
+          .order("created_at", { ascending: false }).limit(200);
+        // استبعد ما صار له طلب فعلاً (طُوبِع بنفس msg_id عبر مسار آخر)
+        const ids = (rawRows ?? []).map((r: Record<string, unknown>) => r.msg_id).filter(Boolean);
+        let reqMsgIds = new Set<string>();
+        if (ids.length) {
+          const { data: reqs } = await db.from("wa_group_requests").select("msg_id").in("msg_id", ids as string[]);
+          reqMsgIds = new Set((reqs ?? []).map((r: Record<string, unknown>) => String(r.msg_id)));
+        }
+        const out = (rawRows ?? []).filter((r: Record<string, unknown>) => !r.msg_id || !reqMsgIds.has(String(r.msg_id)));
+        return json({ raw: out, count: out.length });
+      }
+      case "promote-raw": {
+        // ترقية رسالة خام إلى طلب في الصندوق (زر يدوي من الداشبورد).
+        const rawId = payload.raw_id;
+        if (!rawId) return json({ error: "raw_id مطلوب" }, 400);
+        const { data: row } = await db.from("wa_inbound_raw").select("*").eq("id", rawId).single();
+        if (!row) return json({ error: "الرسالة غير موجودة" }, 404);
+        const { data: ins, error } = await db.from("wa_group_requests").insert({
+          account: row.account, group_jid: row.group_jid, group_name: row.group_name,
+          sender: row.sender, sender_name: row.sender_name, body: row.body,
+          matched: "promoted", msg_id: row.msg_id, participant: row.participant, status: "new",
+        }).select("id").single();
+        if (error) return json({ error: error.message }, 500);
+        await db.from("wa_inbound_raw").update({ promoted: true }).eq("id", rawId);
+        return json({ ok: true, req_id: ins?.id });
+      }
+      case "append-modification": {
+        // تعديل عبر «ريبلاي»: موظف الشركة اقتبس طلبه الأصلي وعدّل عليه.
+        // نجد الطلب الأصلي بمفتاح الرسالة المقتبسة (msg_id) ونضيف التعديل تحت followups.
+        const origMsgId = String(payload.orig_msg_id ?? "").trim();
+        const modBody = String(payload.body ?? "").trim();
+        if (!origMsgId || !modBody) return json({ matched: false, reason: "orig_msg_id و body مطلوبان" });
+        let q = db.from("wa_group_requests").select("id, followups").eq("msg_id", origMsgId);
+        if (payload.group_jid) q = q.eq("group_jid", payload.group_jid);
+        const { data: origRow } = await q.order("created_at", { ascending: false }).limit(1).maybeSingle();
+        if (!origRow) return json({ matched: false });  // الطلب الأصلي غير معروف → يُقيَّم كطلب جديد
+        const prev = Array.isArray(origRow.followups) ? origRow.followups : [];
+        const item = {
+          ts: new Date().toISOString(),
+          sender_name: payload.sender_name ?? null,
+          body: modBody.slice(0, 1200),
+          msg_id: payload.msg_id ?? null,
+        };
+        const { error: upErr } = await db.from("wa_group_requests")
+          .update({ followups: [...prev, item] }).eq("id", origRow.id);
+        if (upErr) return json({ error: upErr.message }, 500);
+        return json({ matched: true, req_id: origRow.id, count: prev.length + 1 });
+      }
       case "reply-group-request": {
         // الداشبورد يرد على طلب جروب → يُدرَج في الطابور كرد مقتبس على الرسالة الأصلية
         const reqId = payload.id;
@@ -185,8 +255,10 @@ Deno.serve(async (req) => {
         return json({ ok: true, quoted: !!quoted, account });
       }
       case "group-requests": {
+        // نستثني المؤرشف كضجيج (محادثات جانبية/أسئلة لا تخص طلب بكج) فلا يظهر في الصندوق.
         const { data } = await db.from("wa_group_requests")
-          .select("*").order("created_at", { ascending: false }).limit(100);
+          .select("*").neq("status", "archived_noise")
+          .order("created_at", { ascending: false }).limit(100);
         const newCount = (data ?? []).filter((r: Record<string, unknown>) => r.status === 'new').length;
         return json({ requests: data ?? [], new_count: newCount });
       }

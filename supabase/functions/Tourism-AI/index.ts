@@ -2842,7 +2842,7 @@ async function handleTourVariants(body: { dest?: string; name?: string }): Promi
 //    (بلا جدول قاعدة بيانات): شريحة تكلفة × موسم × شركات/أفراد. ──────────────────
 // مفتاح الوجهة ≠ اسم التبويب (أبوظبي). يجب أن يبقى مطابقاً لـTAB_KEY_OVERRIDE في sync-sheets.
 const PM_TAB_OVERRIDE: Record<string, string> = { "Abu Dhabi": "Abu Dhabi (Yas Island )" };
-const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "Spain", "Poland", "Abu Dhabi (Yas Island )"];
+const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "Spain", "  Sri lanka", "Poland", "Abu Dhabi (Yas Island )"];
 
 async function pmGoogleToken(sa: { client_email: string; private_key: string }): Promise<string> {
   const now = Math.floor(Date.now() / 1000);

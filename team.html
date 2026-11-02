@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-02-reqsearch'
+  var BUILD = '2026-11-02-safetynet'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -826,6 +826,10 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <button id="waReqSearchClear" onclick="document.getElementById('waReqSearch').value='';waReqLoad();" title="مسح البحث" style="display:none;position:absolute;left:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer">✕</button>
 </div>
 <div id="waReqList"></div>
+<div style="margin-top:12px;border-top:1px dashed var(--border);padding-top:10px">
+<button id="waRawToggle" onclick="waRawToggle()" class="ebtn ebtn-nologo" style="width:100%;font-size:11.5px;font-weight:800;color:#b45309;background:rgba(245,158,11,.1)">🛟 أرشيف الأمان — رسائل الشركات غير المُصنّفة كطلب (لا يُفقَد شيء)</button>
+<div id="waRawBox" style="display:none;margin-top:8px"></div>
+</div>
 </div>
 </div>
 
@@ -5295,6 +5299,40 @@ function waReqToggleReply(id) {
 function waReqToggleMods(id) {
   const el = document.getElementById('waReqMods_' + id);
   if (el) el.style.display = (el.style.display === 'none') ? 'block' : 'none';
+}
+// 🛟 أرشيف الأمان: رسائل الشركات المحفوظة خاماً التي لم تُصنَّف كطلب — مراجعة وترقية يدوية.
+let waRawItems = {};
+async function waRawToggle() {
+  const box = document.getElementById('waRawBox');
+  if (!box) return;
+  if (box.style.display === 'none') { box.style.display = 'block'; await waRawLoad(); }
+  else { box.style.display = 'none'; }
+}
+async function waRawLoad() {
+  const box = document.getElementById('waRawBox');
+  box.innerHTML = '<div style="padding:10px;color:var(--muted);font-size:12px">⏳ تحميل الأرشيف...</div>';
+  try {
+    const r = await waReqCall('uncaptured-raw', { days: 3 });
+    const rows = r.raw || [];
+    waRawItems = {}; rows.forEach(function (x) { waRawItems[x.id] = x; });
+    if (!rows.length) { box.innerHTML = '<div style="padding:12px;color:#0e7a52;font-size:12px;text-align:center">✅ ما فيه رسائل غير مُصنّفة — كل شيء مُلتقَط.</div>'; return; }
+    box.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">' + rows.length + ' رسالة واردة لم تُصنّف كطلب (آخر ٣ أيام). لو فيها طلب فاتنا، حوّليها:</div>'
+      + rows.map(function (x) {
+        let w = x.created_at; try { w = new Date(x.created_at).toLocaleString('ar'); } catch (e) {}
+        return '<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;background:var(--s2)">'
+          + '<div style="display:flex;justify-content:space-between;gap:6px;margin-bottom:3px"><b style="font-size:11.5px;color:#128C7E">👥 ' + waEsc(x.group_name || '') + '</b><span style="font-size:10px;color:var(--muted);white-space:nowrap">' + waEsc(w) + '</span></div>'
+          + '<div style="font-size:12.5px;color:var(--text);white-space:pre-wrap;line-height:1.7;margin-bottom:5px">' + waEsc(x.body || '') + '</div>'
+          + '<button class="ebtn ebtn-nologo" style="font-size:11px;font-weight:800;background:#6d28d9;color:#fff" onclick="waRawPromote(' + x.id + ')">➕ حوّليها لطلب</button>'
+          + '</div>';
+      }).join('');
+  } catch (e) { box.innerHTML = '<div style="padding:10px;color:#ef4444;font-size:12px">تعذّر التحميل: ' + e.message + '</div>'; }
+}
+async function waRawPromote(id) {
+  try {
+    const r = await waReqCall('promote-raw', { raw_id: id });
+    if (r.ok) { await waRawLoad(); await waReqLoad(); }
+    else alert('تعذّرت الترقية: ' + (r.error || ''));
+  } catch (e) { alert('خطأ: ' + e.message); }
 }
 // الحقول الأساسية التي يحتاجها بناء البرنامج — تُحسب من نص الطلب + معلوماته المكمّلة.
 function waReqMissing(text) {
