@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-03-datefix'
+  var BUILD = '2026-11-03-captionclean'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5020,9 +5020,9 @@ function waBridgePdfToggle() {
     const sar = (typeof currentFinalGroup === 'function') ? (currentFinalGroup() || 0) : 0;
     let cap;
     if (typeof currencyConversion !== 'undefined' && currencyConversion && currencyConversion.name && currencyConversion.rate) {
-      cap = '💰 السعر: ' + Math.round(sar / currencyConversion.rate).toLocaleString() + ' ' + currencyConversion.name;
+      cap = 'السعر: ' + Math.round(sar / currencyConversion.rate).toLocaleString() + ' ' + currencyConversion.name;
     } else {
-      cap = '💰 السعر: ' + Number(sar).toLocaleString() + ' ريال';
+      cap = 'السعر: ' + Number(sar).toLocaleString() + ' ريال';
     }
     ta.value = cap;
     ta.placeholder = 'النص المرفق مع الـPDF (قابل للتعديل)';
@@ -5073,9 +5073,9 @@ async function waBridgeSend() {
     const _sar = (typeof currentFinalGroup === 'function') ? (currentFinalGroup() || 0) : 0;
     let _priceTxt;
     if (typeof currencyConversion !== 'undefined' && currencyConversion && currencyConversion.name && currencyConversion.rate) {
-      _priceTxt = '💰 السعر: ' + Math.round(_sar / currencyConversion.rate).toLocaleString() + ' ' + currencyConversion.name;
+      _priceTxt = 'السعر: ' + Math.round(_sar / currencyConversion.rate).toLocaleString() + ' ' + currencyConversion.name;
     } else {
-      _priceTxt = '💰 السعر: ' + Number(_sar).toLocaleString() + ' ريال';
+      _priceTxt = 'السعر: ' + Number(_sar).toLocaleString() + ' ريال';
     }
     const _edited = prompt('راجعي السعر اللي بينرسل تحت الـPDF — عدّليه لو تبين، ثم موافق للإرسال:', ((body && body.trim()) ? body : _priceTxt));
     if (_edited === null) { msg.textContent = 'أُلغي الإرسال.'; msg.style.color = 'var(--muted)'; return; }
@@ -5087,7 +5087,9 @@ async function waBridgeSend() {
     const _finalG = _sar || (basePrice + extraCostsTotal() + (parseInt((document.getElementById('profitInput')||{}).value) || 0));
     try { _pkgCode = await saveCurrentProgramOnce('company', _finalG); } catch (_) {}
     _pkgCode = (_pkgCode || lastSavedCode || '').trim();
-    if (_pkgCode) pdfCaption = (pdfCaption ? pdfCaption + '\n\n' : '') + '🔖 كود البرنامج: ' + _pkgCode;
+    if (_pkgCode) pdfCaption = (pdfCaption ? pdfCaption + '\n\n' : '') + 'كود البرنامج: ' + _pkgCode;
+    // سطر المجاملة الختامي (بلا إيموجي) — طلب المالكة
+    pdfCaption = (pdfCaption ? pdfCaption + '\n\n' : '') + 'اتفضل البرنامج واذا عندك اي استفسار انا حاضره';
     msg.textContent = '⏳ جاري تجهيز ملف الـPDF...';
     try {
       const blob = await generatePdfBlob('no_price');
