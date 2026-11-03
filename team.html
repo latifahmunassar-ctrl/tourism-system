@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-03-madinah-return'
+  var BUILD = '2026-11-03-blockco'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5309,6 +5309,9 @@ async function waReqLoad() {
         + '<button class="ebtn ebtn-nologo" style="font-size:11px" onclick="waReqReply(&#39;' + q.group_jid + '&#39;,&#39;' + waEsc(q.group_name||'').replace(/[&#39;"\\]/g,'') + '&#39;,&#39;' + (q.account||'601111136864') + '&#39;,' + q.id + ')">' + pdfLabel + '</button>'
         + btn
         + '</div>'
+        + (((localStorage.getItem('alezz_dashboard_role') || '') === 'admin')
+            ? '<button class="ebtn ebtn-nologo" style="font-size:10.5px;background:#7f1d1d;color:#fff;margin-top:6px;width:100%" onclick="waReqBlock(&#39;' + q.group_jid + '&#39;,&#39;' + waEsc(q.group_name || '').replace(/[&#39;"\\]/g, '') + '&#39;)">🚫 عدم اعتماد — إيقاف الاستقبال من هذه الشركة</button>'
+            : '')
         + '<div id="waReqReply_' + q.id + '" style="display:none;margin-top:8px">'
         +   '<textarea id="waReqReplyTxt_' + q.id + '" placeholder="اكتبي ردّك — يوصل كاقتباس على هذا الطلب داخل الجروب فلا يتلخبط..." style="width:100%;box-sizing:border-box;min-height:54px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-family:Tajawal;font-size:13px"></textarea>'
         +   '<div style="display:flex;gap:6px;margin-top:6px"><button class="ebtn ebtn-nologo" style="font-size:11px;background:#128C7E;color:#fff" onclick="waReqSendReply(' + q.id + ')">↩️ إرسال الرد المقتبس</button></div>'
@@ -5399,6 +5402,17 @@ async function waReqSendReply(id) {
   } catch (e) { msg.textContent = '❌ ' + e.message; msg.style.color = '#ef4444'; }
 }
 async function waReqMark(id) { await waReqCall('mark-request', { id: id, status: 'handled' }); waReqLoad(); }
+// 🚫 «عدم اعتماد» شركة (للمالكة فقط): نوقف استقبال أي طلب منها ونخفي طلباتها الحالية.
+async function waReqBlock(jid, name) {
+  if ((localStorage.getItem('alezz_dashboard_role') || '') !== 'admin') return;   // حارس إضافي
+  if (!jid) return;
+  if (!confirm('إيقاف استقبال الطلبات نهائياً من «' + (name || 'هذه الشركة') + '»؟\nما راح يوصلك أي طلب جديد منها، وطلباتها الحالية تختفي من الصندوق.')) return;
+  try {
+    const r = await waReqCall('block-group', { group_jid: jid, group_name: name, by: (localStorage.getItem('alezz_staff_name') || 'owner') });
+    if (r.ok) { waReqLoad(); }
+    else alert('تعذّر الإيقاف: ' + (r.error || ''));
+  } catch (e) { alert('خطأ: ' + e.message); }
+}
 
 // ── 🏨 لوحة «فنادق مطلوبة» (للمالكة): فنادق غير موجودة بالنظام تكرّر طلبها ──
 function missingHotelsOpen(){ const p=document.getElementById('missingHotelsPanel'); if(p){ p.style.display='flex'; missingHotelsLoad(); } }

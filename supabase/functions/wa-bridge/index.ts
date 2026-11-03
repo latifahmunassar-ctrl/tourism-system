@@ -155,6 +155,28 @@ Deno.serve(async (req) => {
         if (error) return json({ error: error.message }, 500);
         return json({ ok: true });
       }
+      case "block-group": {
+        // 🚫 «عدم اعتماد» شركة: لا نستقبل منها طلبات بعد الآن. (الزر للمالكة فقط في الواجهة.)
+        const gjid = String(payload.group_jid ?? "").trim();
+        if (!gjid) return json({ error: "group_jid مطلوب" }, 400);
+        const { error } = await db.from("wa_blocked_groups").upsert({
+          group_jid: gjid, group_name: payload.group_name ?? null, blocked_by: payload.by ?? "owner",
+        }, { onConflict: "group_jid" });
+        if (error) return json({ error: error.message }, 500);
+        // أخفِ طلباتها الحالية من الصندوق (أرشفة).
+        await db.from("wa_group_requests").update({ status: "archived_noise" }).eq("group_jid", gjid).eq("status", "new");
+        return json({ ok: true });
+      }
+      case "unblock-group": {
+        const gjid = String(payload.group_jid ?? "").trim();
+        if (!gjid) return json({ error: "group_jid مطلوب" }, 400);
+        await db.from("wa_blocked_groups").delete().eq("group_jid", gjid);
+        return json({ ok: true });
+      }
+      case "blocked-jids": {
+        const { data } = await db.from("wa_blocked_groups").select("group_jid, group_name");
+        return json({ jids: (data ?? []).map((r: Record<string, unknown>) => String(r.group_jid)), rows: data ?? [] });
+      }
       case "partner-jids": {
         // 🎯 معرّفات جروبات الشركاء (كل جروب عضو فيه أحد حسابات العز) — ليعرفها الحارس بالـJID
         // لا بالاسم، فيلتقط جروبات الشركاء المسمّاة بأسماء لا تحوي «العز» (مثل «رحله مسافر ksa»).
