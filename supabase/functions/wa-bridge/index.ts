@@ -38,7 +38,7 @@ function json(body: unknown, status = 200) {
   });
 }
 
-const BRIDGE_ACTIONS = new Set(["pull", "ack", "sync-groups", "heartbeat", "next-invite-targets", "save-invite", "mark-non-admin", "sync-groups-new", "save-inbound", "next-join-targets", "save-join", "sync-groups-acct", "append-modification", "save-raw"]);
+const BRIDGE_ACTIONS = new Set(["pull", "ack", "sync-groups", "heartbeat", "next-invite-targets", "save-invite", "mark-non-admin", "sync-groups-new", "save-inbound", "next-join-targets", "save-join", "sync-groups-acct", "append-modification", "save-raw", "partner-jids"]);
 const ACCOUNT = "601111136864"; // the bridge account — groups it created (jid prefix) => admin
 
 Deno.serve(async (req) => {
@@ -154,6 +154,22 @@ Deno.serve(async (req) => {
         });
         if (error) return json({ error: error.message }, 500);
         return json({ ok: true });
+      }
+      case "partner-jids": {
+        // 🎯 معرّفات جروبات الشركاء (كل جروب عضو فيه أحد حسابات العز) — ليعرفها الحارس بالـJID
+        // لا بالاسم، فيلتقط جروبات الشركاء المسمّاة بأسماء لا تحوي «العز» (مثل «رحله مسافر ksa»).
+        const set = new Set<string>();
+        for (const tbl of ["wa_bridge_groups", "wa_account_groups", "wa_new_groups"]) {
+          let from = 0;
+          while (true) {
+            const { data, error } = await db.from(tbl).select("jid").like("jid", "%@g.us").range(from, from + 999);
+            if (error) break;
+            for (const r of (data ?? [])) { if (r.jid) set.add(String(r.jid)); }
+            if (!data || data.length < 1000) break;
+            from += 1000;
+          }
+        }
+        return json({ jids: [...set], count: set.size });
       }
       case "save-raw": {
         // 🛟 طبقة أمان: نخزّن كل رسالة شركة واردة (بغضّ النظر عن الفلتر) فلا يُفقد أي طلب أبداً.
