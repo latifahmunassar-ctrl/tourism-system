@@ -3496,7 +3496,7 @@ async function handleGroups(): Promise<Response> {
 async function handleMakkahFlights(): Promise<Response> {
   const AR = { oman: "الطيران العماني", salam: "طيران السلام" };
   const shell = () => ({ airlines: AR, route: { out: "مسقط ✈️ جدة", ret: "جدة ✈️ مسقط" },
-    prices: { oman: { out: {} as Record<string, unknown>, ret: {} as Record<string, unknown> },
+    prices: { oman: { out: {} as Record<string, unknown>, ret: {} as Record<string, unknown>, ret_med: {} as Record<string, unknown> },
               salam: { out: {} as Record<string, unknown>, ret: {} as Record<string, unknown> } }, dates: [] as string[] });
   try {
     const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
@@ -3512,13 +3512,15 @@ async function handleMakkahFlights(): Promise<Response> {
     if (hdr < 0) return new Response(JSON.stringify(out), { headers: CORS_HEADERS });
     const routeRow = rows[hdr + 1] || [];
     const subRow = rows[hdr + 2] || [];   // عناوين فرعية: Date / Original price / Final Price / Final Price (SAR) / Timing
-    const heads: Array<{ airline: "oman" | "salam"; dir: "out" | "ret"; start: number }> = [];
+    const heads: Array<{ airline: "oman" | "salam"; dir: "out" | "ret" | "ret_med"; start: number }> = [];
     (rows[hdr] || []).forEach((c, j) => {
       const name = String(c || "");
       const airline = /oman|omar/i.test(name) ? "oman" : (/salam/i.test(name) ? "salam" : null);
       if (!airline) return;
       const route = String(routeRow[j] || "");
-      const dir = /jed\w*\s*-\s*mus/i.test(route) ? "ret" : (/mus\w*\s*-\s*jed/i.test(route) ? "out" : null);
+      // ٣ نوفمبر ٢٠٢٦: + بلوك العودة من المدينة (Madinah–Muscat، العماني) — للعودة من مطار المدينة.
+      const dir = /(?:mad|med)\w*\s*[-–]\s*mus/i.test(route) ? "ret_med"
+        : (/jed\w*\s*[-–]\s*mus/i.test(route) ? "ret" : (/mus\w*\s*[-–]\s*jed/i.test(route) ? "out" : null));
       if (!dir) return;
       heads.push({ airline, dir, start: j });
     });
@@ -3558,11 +3560,13 @@ async function handleMakkahFlights(): Promise<Response> {
         const price = (sarV > 0) ? sarV : finV;
         const timing = b.timingCol >= 0 ? String(r[b.timingCol] || "").trim() : "";
         if (!(price > 0)) continue;
-        (out.prices as Record<string, Record<string, Record<string, unknown>>>)[b.airline][b.dir][dk] = { final: price, original: null, timing };
+        const _ap = (out.prices as Record<string, Record<string, Record<string, unknown>>>)[b.airline];
+        (_ap[b.dir] ||= {})[dk] = { final: price, original: null, timing };
         dateSet.add(dk);
       }
     }
     out.dates = [...dateSet];
+    (out as Record<string, unknown>).blocks = blocks.map(b => `${b.airline}:${b.dir}`);   // تشخيص: البلوكات المكتشفة
     return new Response(JSON.stringify(out), { headers: CORS_HEADERS });
   } catch (e) {
     return new Response(JSON.stringify({ ...shell(), error: String((e as Error).message) }), { status: 200, headers: CORS_HEADERS });
@@ -3793,6 +3797,7 @@ Deno.serve(async (req) => {
         const givenDist = String(reqBody.distribution || "").trim(); // فارغ = اختر الأرخص
         const phone = String(reqBody.phone || "").trim();          // لتحديد عملة العميل
         const customerType = String(reqBody.customer_type || "individual").trim();
+        const returnAirport = String(reqBody.return_airport || "").trim().toLowerCase();   // "madinah" = العودة من مطار المدينة
         if (!destKey || !days) return new Response(JSON.stringify({ ok: false, error: "missing dest/days" }), { headers: CORS_HEADERS });
         const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
         const cityDefs = DEST_CITIES[destKey] || [];
@@ -3843,6 +3848,13 @@ Deno.serve(async (req) => {
           chosen = built[0] || null;
         }
         if (!chosen) return new Response(JSON.stringify({ ok: false, error: "no buildable program" }), { headers: CORS_HEADERS });
+        // ✈️ العودة من مطار المدينة (طلب العميل عبر طلال): نسجّلها بالبرنامج — team.html يقرأ RETURN_AIRPORT
+        //    فيضبط نقل الفندق ← مطار المدينة وطيران المدينة ← مسقط. فقط لو آخر مدينة = المدينة.
+        if (returnAirport === "madinah") {
+          const _hl = (chosen.program.split("HOTELS:")[1] || "").split(/\n\s*\n/)[0].split("\n").filter(l => l.includes("|"));
+          const _lastCity = String((_hl[_hl.length - 1] || "").split("|")[1] || "").trim();
+          if (/madinah|المدين/i.test(_lastCity)) chosen.program = chosen.program.replace(/^(DATE_TO:.*)$/m, "$1\nRETURN_AIRPORT:madinah");
+        }
         // ── تسعير العرض النهائي للعميل: تكلفة + ربح موسمي + عملة الجنسية + تنسيق ──
         const cost = chosen.total;                                        // TOTAL_GROUP = تكلفة بالريال
         const dateFrom = _taiVal(chosen.program, "DATE_FROM") || date;
