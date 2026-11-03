@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-03-closing16'
+  var BUILD = '2026-11-03-madinah-return'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -1104,6 +1104,18 @@ const HARAM_OPTIONS = ['بجانب الحرم','قريب من الحرم','إط�
 let MK_MODES = [];       // وسيلة كل مقطع تنقّل لبرنامج مكة ('train'|'car')
 let MK_LAST_SIG = '';    // بصمة آخر تركيب طُبّق (مدن+ليالي+وسائل) — يمنع التكرار
 let MK_DEP_AIR = 'jeddah';  // مطار المغادرة إن انتهى البرنامج بالمدينة: 'jeddah' | 'madinah'
+// ٣ نوفمبر ٢٠٢٦: البرنامج ممكن يحمل RETURN_AIRPORT:madinah (طلب العميل عبر طلال) → يصير الافتراضي
+// «مطار المدينة»، إلا لو الموظفة اختارت يدوياً لنفس البرنامج (MK_DEP_AIR_FP).
+let MK_DEP_AIR_FP = '';
+function mkDepFP(){ return (getLine(lastProgramRaw,'DATE_FROM')||'') + '|' + (getLine(lastProgramRaw,'DATE_TO')||'') + '|' + (getLine(lastProgramRaw,'CLIENT')||''); }
+function mkSyncDepAir(){
+  if (MK_DEP_AIR_FP && MK_DEP_AIR_FP === mkDepFP()) return;
+  MK_DEP_AIR_FP = '';
+  const r = String(getLine(lastProgramRaw,'RETURN_AIRPORT')||'').trim().toLowerCase();
+  MK_DEP_AIR = (r === 'madinah') ? 'madinah' : 'jeddah';
+  if (MK_DEP_AIR === 'madinah' && MK_MODES.length) MK_MODES[MK_MODES.length-1] = 'car';   // لا قطار لمطار المدينة
+}
+function mkEndsInMadinah(){ try { const c = mkCitiesFromProgram(); return c.length && c[c.length-1].key === 'Al Madinah'; } catch(_){ return false; } }
 // بصمة هوية البرنامج (تاريخ + أسماء الفنادق) — تُضمَّن في mkSig حتى لا يتخطّى
 // التطبيق التلقائي برنامجاً جديداً له نفس المدن/الوسيلة (كان يترك انتقالات قديمة).
 function mkProgFP(){
@@ -1673,6 +1685,7 @@ function renderMakkahTransportBar(){
     if(seq[i+1]==='airport') return (from==='Al Madinah') ? 'train' : 'car';  // المغادرة
     return 'train';                                           // بين مكة والمدينة
   });
+  mkSyncDepAir();
   const AR = { airport:'المطار', Makkah:'مكة', 'Al Madinah':'المدينة', Taif:'الطائف' };
   const btn = (i,mode,label)=>`<button onclick="mkSetMode(${i},'${mode}')" style="cursor:pointer;font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:16px;border:1.5px solid ${MK_MODES[i]===mode?'#1a5fb4':'#d7dee6'};background:${MK_MODES[i]===mode?'#1a5fb4':'#fff'};color:${MK_MODES[i]===mode?'#fff':'#445'}">${label}</button>`;
   const airBtn = (air,label)=>`<button onclick="mkSetDepAir('${air}')" style="cursor:pointer;font-size:11px;font-weight:700;padding:4px 9px;border-radius:14px;border:1.5px solid ${MK_DEP_AIR===air?'#0e9d6a':'#d7dee6'};background:${MK_DEP_AIR===air?'#0e9d6a':'#fff'};color:${MK_DEP_AIR===air?'#fff':'#445'}">${label}</button>`;
@@ -1694,9 +1707,10 @@ function renderMakkahTransportBar(){
   if(mkSig(cities) !== MK_LAST_SIG) setTimeout(()=>mkApplyTransport(), 0);
 }
 async function mkSetMode(i, mode){ MK_MODES[i] = mode; await mkApplyTransport(); }
-async function mkSetDepAir(air){ MK_DEP_AIR = air; await mkApplyTransport(); }
+async function mkSetDepAir(air){ MK_DEP_AIR = air; MK_DEP_AIR_FP = mkDepFP(); await mkApplyTransport(); MK_FLIGHT_SIG=''; await mkFlightApply(); renderMakkahFlightBar(); }
 async function mkApplyTransport(){
   const cities = mkCitiesFromProgram(); if(!cities.length) return;
+  mkSyncDepAir();
   // مطار المغادرة: لو انتهى البرنامج بالمدينة واختير «مطار المدينة» → madinah_airport، وإلا جدة.
   const lastKey = cities[cities.length-1].key;
   const depAirport = (MK_DEP_AIR==='madinah' && lastKey==='Al Madinah') ? 'madinah_airport' : 'airport';
@@ -1790,7 +1804,9 @@ function renderMakkahFlightBar(){
     + `<div style="display:flex;flex-wrap:wrap;gap:9px">${opt('cheapest','🏷️ الأرخص')}${opt('oman','🛫 الطيران العماني')}${opt('salam','🛫 طيران السلام')}${opt('none','🚫 بدون طيران')}</div>`;
   panel.insertBefore(bar, panel.firstChild);
   // تطبيق تلقائي مرة واحدة لكل (وضع+تواريخ+أشخاص) — عشان يُضاف الأرخص تلقائياً.
-  const sig = mkProgFP()+'|'+MK_FLIGHT_MODE+'|'+_dmyKey(_progDateDMY('DATE_FROM'))+'|'+_dmyKey(_progDateDMY('DATE_TO'))+'|'+mkPax();
+  mkSyncDepAir();
+  const _rm = MK_DEP_AIR==='madinah' && mkEndsInMadinah() && MK_FLIGHT_DATA && MK_FLIGHT_DATA.prices && MK_FLIGHT_DATA.prices.oman && MK_FLIGHT_DATA.prices.oman.ret_med && Object.keys(MK_FLIGHT_DATA.prices.oman.ret_med).length>0;
+  const sig = mkProgFP()+'|'+MK_FLIGHT_MODE+'|'+_dmyKey(_progDateDMY('DATE_FROM'))+'|'+_dmyKey(_progDateDMY('DATE_TO'))+'|'+mkPax()+'|'+(_rm?'med':'jed');
   if(sig !== MK_FLIGHT_SIG) setTimeout(()=>mkFlightApply(), 0);
 }
 async function mkFlightApply(){
@@ -1803,7 +1819,10 @@ async function mkFlightApply(){
   }
   const D = MK_FLIGHT_DATA; const pax = mkPax();
   const depD=_progDateDMY('DATE_FROM'), retD=_progDateDMY('DATE_TO');
-  MK_FLIGHT_SIG = mkProgFP()+'|'+MK_FLIGHT_MODE+'|'+_dmyKey(depD)+'|'+_dmyKey(retD)+'|'+pax;
+  mkSyncDepAir();
+  // العودة من مطار المدينة: بلوك «Madinah–Muscat» (العماني) لو له سعر، وإلا جدة كالمعتاد.
+  const retMed = MK_DEP_AIR==='madinah' && mkEndsInMadinah() && D && D.prices && D.prices.oman && D.prices.oman.ret_med && Object.keys(D.prices.oman.ret_med).length>0;
+  MK_FLIGHT_SIG = mkProgFP()+'|'+MK_FLIGHT_MODE+'|'+_dmyKey(depD)+'|'+_dmyKey(retD)+'|'+pax+'|'+(retMed?'med':'jed');
   // أبقِ كل سطور الطيران غير الدولية (قطار/داخلي) وأزل الدولي القديم (يحوي «مسقط»)
   const lines = (parseSection(lastProgramRaw,'FLIGHTS')||[]).filter(l=> l.includes('|') && !/مسقط/.test((l.split('|')[0]||'')));
   let note='';
@@ -1819,7 +1838,9 @@ async function mkFlightApply(){
       if(MK_FLIGHT_MODE==='salam') return cand.find(c=>c.airline==='salam')||null;
       return cand.sort((a,b)=>a.final-b.final)[0];   // الأرخص لهذا الاتجاه
     };
-    for(const lg of [{dir:'out',type:'ذهاب',want:depD,route:'مسقط ← جدة'},{dir:'ret',type:'عودة',want:retD,route:'جدة ← مسقط'}]){
+    if(MK_DEP_AIR==='madinah' && mkEndsInMadinah() && !retMed) note+='⚠️ ما فيه سعر طيران المدينة ← مسقط — العودة محسوبة من جدة. ';
+    const retLeg = retMed ? {dir:'ret_med',type:'عودة',want:retD,route:'المدينة ← مسقط'} : {dir:'ret',type:'عودة',want:retD,route:'جدة ← مسقط'};
+    for(const lg of [{dir:'out',type:'ذهاب',want:depD,route:'مسقط ← جدة'},retLeg]){
       const sel=pick(lg.dir,lg.want);
       if(!sel){ note+=`⚠️ لا سعر ${lg.type}. `; continue; }
       const per=Math.round(sel.final); const total=per*pax; const air=(D.airlines||{})[sel.airline]||sel.airline;
