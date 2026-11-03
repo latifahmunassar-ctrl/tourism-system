@@ -15,7 +15,7 @@ const TMP = new URL("../.index_under_test.ts", HERE);
 // ── 1) نسخة قابلة للاستيراد من index.ts: بلا Deno.serve، ومع تصدير الدوال ──
 let code = await Deno.readTextFile(SRC);
 code = code.replace(/^Deno\.serve\(/m, "(globalThis as any).__noServe(");
-code += "\nexport { handleNewLeadIntake };\n";
+code += "\nexport { handleNewLeadIntake, handleFollowupAI };\n";
 await Deno.writeTextFile(TMP, code);
 (globalThis as any).__noServe = () => {};
 
@@ -92,20 +92,26 @@ const fakeSupabase: any = { from: q, rpc: async () => ({ data: null, error: null
 let modelQueue: string[] = [];
 let modelCalls = 0;
 let buildCalls = 0;
+let proposalCalls = 0;
+let lastBuildBody: Record<string, any> | null = null;
+let injectOnModel: string | null = null;
+let lastModelSystem = "";
 (globalThis as any).fetch = async (input: any, init?: any) => {
   const url = String(input?.url || input);
   const json = (o: unknown) => new Response(JSON.stringify(o), { status: 200, headers: { "content-type": "application/json" } });
   if (url.includes("api.anthropic.com")) {
     modelCalls++;
+    try { lastModelSystem = String(JSON.parse(String(init?.body || "{}")).system || ""); } catch { lastModelSystem = ""; }
+    if (injectOnModel) { DB.wa_message_audit.push({ from_phone: "whatsapp:+96899621742", body: injectOnModel, received_at: new Date(Date.parse("2026-11-02T23:00:00Z")).toISOString(), status: "received" }); injectOnModel = null; }
     const txt = modelQueue.length ? modelQueue.shift()! : modelQueue.at(-1) ?? "{}";
     return json({ id: "m", type: "message", role: "assistant", model: "x", stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: txt }] });
   }
   if (url.includes("graph.facebook.com")) return json({ messages: [{ id: "wamid.test" + Math.random() }] });
-  if (url.includes("Tourism-AI")) { buildCalls++; return json({ ok: true, formatted: "برنامج اختبار", program_code: "MK-TEST", kid_ages: [], price_ready: true }); }
+  if (url.includes("Tourism-AI")) { buildCalls++; try { lastBuildBody = JSON.parse(String(init?.body || "{}")); } catch { lastBuildBody = null; } return json({ ok: true, formatted: "برنامج اختبار", program_code: "MK-TEST", kid_ages: [], price_ready: true }); }
   return json({});
 };
 
-const { handleNewLeadIntake } = await import(TMP.href);
+const { handleNewLeadIntake, handleFollowupAI } = await import(TMP.href);
 
 // ── 4) تشغيل السيناريوهات ──
 const PHONE = "whatsapp:+96899621742";
@@ -119,7 +125,8 @@ function seed(s: Scenario) {
     else DB.wa_admin_messages.push({ customer_phone: PHONE, body, sent_by: "طلال", sent_at: ts() });
   }
   DB.wa_message_audit.push({ from_phone: PHONE, body: s.customer, received_at: ts(), status: "received" });
-  DB.whatsapp_sessions.push({ phone: PHONE, profile_name: "اختبار", intake_active: true, stage: "new",
+  for (const j of (s.jobs || [])) DB.program_pdf_jobs.push({ phone: PHONE, created_at: ts(), attempts: 0, ...j });
+  DB.whatsapp_sessions.push({ phone: PHONE, profile_name: "اختبار", intake_active: s.entry !== "followup", stage: "new",
     destination: s.session?.destination ?? null, intake_data: structuredClone(s.intakeData || {}), ad_referral: null, last_message_at: ts() });
   return ts;
 }
@@ -131,16 +138,22 @@ for (const s of SCENARIOS) {
   if (only && !s.id.includes(only)) continue;
   const lastTs = seed(s);
   const before = DB.wa_admin_messages.length;
-  modelQueue = [...s.model]; modelCalls = 0; buildCalls = 0; _bg.length = 0;
+  modelQueue = [...s.model]; modelCalls = 0; buildCalls = 0; proposalCalls = 0; lastBuildBody = null; lastModelSystem = ""; injectOnModel = s.inboundDuringModel || null; _bg.length = 0;
   let crash = "";
   console.error = () => {}; console.warn = () => {}; console.log = () => {};
-  try { await handleNewLeadIntake({ supabase: fakeSupabase, from: PHONE, body: s.customer }); await Promise.all(_bg); }
+  try {
+    if (s.entry === "followup") await handleFollowupAI({ supabase: fakeSupabase, from: PHONE, profileName: "اختبار", body: s.customer });
+    else await handleNewLeadIntake({ supabase: fakeSupabase, from: PHONE, body: s.customer });
+    await Promise.all(_bg);
+  }
   catch (e) { crash = String((e as Error)?.stack || e); }
   finally { console.error = realErr; console.warn = realWarn; console.log = realLog; }
   void lastTs;
   const sent = DB.wa_admin_messages.slice(before).map(m => String(m.body || "")).join("\n");
   const sess = DB.whatsapp_sessions[0] || {};
-  const ctx = { reply: sent, session: sess, intake: sess.intake_data || {}, buildCalls, modelCalls };
+  const proposals = (DB.whatsapp_admin_proposals || []).length;
+  const jobs = DB.program_pdf_jobs || [];
+  const ctx = { jobs, modelSystem: lastModelSystem, buildBody: lastBuildBody, reply: sent, session: sess, intake: sess.intake_data || {}, buildCalls, modelCalls, proposals };
   const errs: string[] = [];
   if (crash) errs.push("انهار: " + crash.split("\n").slice(0, 3).join(" | "));
   for (const [label, check] of s.expect) { try { if (!check(ctx)) errs.push(label); } catch (e) { errs.push(label + " (" + (e as Error).message + ")"); } }

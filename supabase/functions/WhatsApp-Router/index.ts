@@ -1451,6 +1451,7 @@ async function callTourismAI(messages: TaiTurn[]): Promise<TaiResult | null> {
 // طُبِّق الربح فعلاً (false = خارج شرائح/مواسم الربح ⇒ لا نرسل سعراً تلقائياً).
 async function autoBuildProgram(p: {
   dest: string; days: string; date: string; pax: string; ages: string; distribution: string; phone: string;
+  return_airport?: string;   // "madinah" = العودة من مطار المدينة (العمرة)
 }): Promise<{ text: string; priceReady: boolean; priceNote: string; programCode: string; kidAges: number[] } | null> {
   const jwt = Deno.env.get("LEGACY_ANON_JWT") || "";
   try {
@@ -1461,6 +1462,7 @@ async function autoBuildProgram(p: {
         action: "auto_build", dest: p.dest, days: p.days, date: p.date,
         pax: p.pax, ages: p.ages, distribution: p.distribution,
         phone: p.phone, customer_type: "individual",
+        return_airport: p.return_airport || "",
       }),
     });
     if (!res.ok) { console.error("auto_build http", res.status, await res.text()); return null; }
@@ -1541,6 +1543,7 @@ function buildIntakeSummary(d: Record<string, unknown>, isUmrah: boolean): strin
   if (pax) L.push(`- عدد المسافرين: ${pax}${_split}`);
   if (date) L.push(`- تاريخ السفر: ${date}`);
   if (isUmrah) { if (nights) L.push(`- عدد الليالي: ${nights}`); }
+  if (isUmrah && clean(d.return_airport) === "madinah") L.push("- المطار: الذهاب إلى مطار جدة، والعودة من مطار المدينة");
   else { if (days) L.push(`- عدد الأيام: ${days}`); }
   if (cities && !/حسب|الوكال|بكيفك|براحتك|رتبو|ترتيب|أي\s*مدن/.test(cities)) L.push(`- المدن: ${cities}`);
   L.push("");
@@ -2941,6 +2944,7 @@ ${returning
           ages: String(_mergedData.ages || ""),
           distribution: _deferred ? "" : _dist0,
           phone: from,
+          return_airport: String(_mergedData.return_airport || ""),
         });
         if (!prog) { console.error("auto_build: no program for", from); return; }
         // خزّن المسوّدة دائماً (ليراها الموظف في الداشبورد) دون إرسال.
@@ -2999,6 +3003,179 @@ ${returning
     }
   }
   await supabase.from("whatsapp_sessions").update(upd).eq("phone", from);
+}
+
+// 🧪 تشغيل كامل لرقم المالكة (طلب ٣ نوفمبر ٢٠٢٦): أرقام auto_program_test_numbers يرد عليها
+//    طلال بالذكاء **بعد إقفال الطلب** أيضاً (بدل تحويل كل رسالة للموظفة)، ملتزماً بكل المعلومات
+//    المخزّنة (intake_data + البرنامج المرسل). باقي العملاء على «معاينة» كما هم.
+async function isFullAiNumber(supabase: ReturnType<typeof createClient>, from: string): Promise<boolean> {
+  try {
+    const { data } = await supabase.from("wa_settings").select("value").eq("key", "auto_program_test_numbers").maybeSingle();
+    const v = String((data as { value?: unknown } | null)?.value ?? "").replace(/["[\]]/g, "");
+    const d = from.replace(/[^0-9]/g, "");
+    return v.split(/[,\s]+/).map(n => n.replace(/[^0-9]/g, "")).some(n => n.length >= 6 && d.endsWith(n));
+  } catch (_e) { return false; }
+}
+
+async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient>; from: string; profileName: string; body: string }): Promise<void> {
+  const { supabase, from, profileName } = args;
+  const text = String(args.body || "").trim();
+  const [inRes, outRes, sRes] = await Promise.all([
+    supabase.from("wa_message_audit").select("body, received_at").eq("from_phone", from).not("body", "is", null).order("received_at", { ascending: false }).limit(20),
+    supabase.from("wa_admin_messages").select("body, sent_at").eq("customer_phone", from).order("sent_at", { ascending: false }).limit(20),
+    supabase.from("whatsapp_sessions").select("intake_data, destination").eq("phone", from).maybeSingle(),
+  ]);
+  type R = { body?: string | null; received_at?: string; sent_at?: string };
+  const msgs: Array<{ ts: string; who: string; body: string }> = [];
+  for (const m of ((inRes.data || []) as R[])) if (m.body && !String(m.body).startsWith("📎")) msgs.push({ ts: m.received_at || "", who: "العميل", body: String(m.body) });
+  for (const m of ((outRes.data || []) as R[])) if (m.body) msgs.push({ ts: m.sent_at || "", who: "طلال", body: String(m.body) });
+  msgs.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+  { let c = -1; for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i].who === "طلال" && msgs[i].body.startsWith("🔄 أُعيد ضبط المحادثة")) { c = i; break; }
+    if (c >= 0) msgs.splice(0, c + 1); }
+  const idata = (((sRes.data as { intake_data?: Record<string, unknown> } | null)?.intake_data) || {}) as Record<string, unknown>;
+  const facts: Record<string, unknown> = {};
+  for (const k of ["destination", "pax", "ages", "date", "nights", "days", "cities"]) {
+    const v = idata[k]; if (v !== undefined && v !== null && String(v).trim() !== "") facts[k] = v;
+  }
+  // ٣ نوفمبر ٢٠٢٦: طلال اخترع «وصول وانصراف من مطار المدينة» — المطارات حقيقة مخزّنة، مو تخمين.
+  const _retMed = String(idata.return_airport || "") === "madinah";
+  facts.airports = _retMed ? "الذهاب إلى مطار جدة، والعودة من مطار المدينة" : "الذهاب والعودة من مطار جدة";
+  // 🔁 دمج الرسائل المتلاحقة: لو وصلت رسالة أحدث أثناء المعالجة، معالجها يرد على الكل (حادثة ٣ نوفمبر: ردّين متناقضين).
+  const _latestIn = async () => { const { data } = await supabase.from("wa_message_audit").select("received_at").eq("from_phone", from).order("received_at", { ascending: false }).limit(1).maybeSingle(); return String((data as { received_at?: string } | null)?.received_at || ""); };
+  const _myLatest = await _latestIn();
+  const _superseded = async () => { const now = await _latestIn(); return !!now && !!_myLatest && now > _myLatest; };
+  const _say = async (reply: string, guard: string, action: string, reason = "") => {
+    if (await _superseded()) return false;
+    await sendCustomerReply(supabase, from, reply);
+    try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: stripBannedPhrases(reply), sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+    await logGuard(supabase, from, guard, action, reason, 1, text, reply);
+    return true;
+  };
+  const _isUmrahReq = _isUmrahDest(String(facts.destination || "") + " " + String(facts.cities || ""));
+  // ✋ تعديل معلّق ينتظر «نعم» (قرار المالكة: نقاش وتأكيد طبيعي أولاً، ثم الكرت النهائي).
+  const _pend = (idata.pending_modify && typeof idata.pending_modify === "object") ? idata.pending_modify as Record<string, unknown> : null;
+  const _applyModify = async (changed: Record<string, unknown>) => {
+    const nd: Record<string, unknown> = { ...idata, ...changed, awaiting_confirm: true, summary_confirmed: false };
+    if ("ages" in changed) nd.asked_children = true;
+    delete nd.auto_program; delete nd.post_program_msgs; delete nd.pending_modify; delete nd.program_final_raw; delete nd.program_final_code;
+    await supabase.from("whatsapp_sessions").update({ intake_active: true, intake_data: nd, stage: "new" }).eq("phone", from);
+    const card = buildIntakeSummary(nd, _isUmrahDest(String(nd.destination || "") + " " + String(nd.cities || "")));
+    await _say(card, "followup_ai", "modify_card", JSON.stringify(changed).slice(0, 200));
+  };
+  const _clearPend = async () => { const nd = { ...idata }; delete nd.pending_modify; await supabase.from("whatsapp_sessions").update({ intake_data: nd }).eq("phone", from); delete idata.pending_modify; };
+  if (_pend) {
+    if (isAffirmative(text)) { if (await _superseded()) return; await _applyModify(_pend); return; }
+    await _clearPend();
+    if (isNegative(text)) { await _say("تمام، وش التعديل اللي تبيه بالضبط؟", "followup_ai", "modify_declined"); return; }
+  }
+  const _modifyConfirmQ = (c: Record<string, unknown>): string => {
+    const parts: string[] = [];
+    if (c.return_airport === "madinah") parts.push("الذهاب إلى مطار جدة، وبعد ذلك العودة من مطار المدينة");
+    else if (c.return_airport === "jeddah") parts.push("الذهاب والعودة من مطار جدة");
+    if (c.nights) parts.push(`نخلي الليالي ${c.nights}`);
+    if (c.pax) parts.push(`نخلي العدد ${c.pax}`);
+    if (c.ages) parts.push(`أعمار الأطفال ${c.ages}`);
+    if (c.date) parts.push(`نغيّر تاريخ السفر إلى ${c.date}`);
+    if (c.days) parts.push(`نخلي الرحلة ${c.days} أيام`);
+    if (c.cities) parts.push(`المدن ${c.cities}`);
+    if (c.destination) parts.push(`الوجهة ${c.destination}`);
+    return `تمام، تقصد ${parts.join("، و")}؟`;
+  };
+  const _askModify = async (changed: Record<string, unknown>) => {
+    if (await _superseded()) return;
+    await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, pending_modify: changed } }).eq("phone", from);
+    await _say(_modifyConfirmQ(changed), "followup_ai", "modify_confirm_q", JSON.stringify(changed).slice(0, 200));
+  };
+  // ✈️ طلب مطار العودة (حتميّ، بلا نموذج) — العمرة فقط.
+  if (_isUmrahReq) {
+    const _wantMed = /(?:العود[ةه]|الرجوع|الرجع[ةه]|المغادر[ةه]|نرجع|نعود|ارجع|أرجع|نطلع|الطلع[ةه])\s*(?:\S+\s*){0,2}?(?:من\s*)?(?:مطار\s*)?(?:ال)?مدين[ةه]|(?:من|عن\s*طريق)\s*مطار\s*(?:ال)?مدين[ةه]/.test(text);
+    const _wantJed = /(?:العود[ةه]|الرجوع|الرجع[ةه]|المغادر[ةه]|نرجع|نعود)\s*(?:\S+\s*){0,2}?(?:من\s*)?(?:مطار\s*)?جد[ةه]/.test(text);
+    if (_wantMed && !_retMed) { await _askModify({ return_airport: "madinah" }); return; }
+    if (_wantJed && _retMed) { await _askModify({ return_airport: "jeddah" }); return; }
+  }
+  // المصدر المعتمد = نص الـPDF النهائي (program_final_raw). نسخة السيرفر الأولى (auto_program) تنقلاتها
+  //   قبل التصحيح (حادثة ٣ نوفمبر: فيها «مطار المدينة» والـPDF جدة) → نشيل سطور المطار/المحطة منها.
+  const _finalRaw = String(idata.program_final_raw || "").trim();
+  const program = (_finalRaw
+    ? _finalRaw.replace(/^(?:CHAT|CLIENT_CODE|EXTRA_BED_CITIES|META):.*$/gm, "")
+    : String(idata.auto_program || "").split("\n").filter(l => !/مطار|محط[ةه]/.test(l)).join("\n")).slice(0, 4000);
+  // 🔴 ٣ نوفمبر ٢٠٢٦: طلال قال «البرنامج فوق في المحادثة» وهو ما انرسل (فشل الـPDF). الحالة الحقيقية من طابور الـPDF.
+  const { data: _job } = await supabase.from("program_pdf_jobs").select("id, code, status").eq("phone", from).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const _jobSt = String((_job as { status?: string } | null)?.status || "");
+  const _textSent = msgs.some(m => m.who === "طلال" && /برنامج\s*العمر[ةه]|الفنادق\s*والإقام[ةه]/.test(m.body));
+  const progStatus: "sent" | "pending" | "failed" | "none" = (_jobSt === "sent" || _textSent || !!String(idata.program_final_raw || "").trim()) ? "sent" : (_jobSt === "pending" ? "pending" : (_jobSt === "failed" ? "failed" : "none"));
+  const _wantsProgram = /(?:ارسل|أرسل|رسل|ابي|أبي|ابغى|أبغى|وين|فين|عطني|ابعث)\S*\s*(?:لي\s*)?(?:ال)?(?:برنامج|برنانج|ملف|pdf|العرض)|(?:البرنامج|الملف|العرض)\s*(?:ما|مو|مش|مب)\s*(?:وصل|مبين|طالع|ظاهر)|(?:ما|مو|مش|مب)\s*(?:وصل|مبين|طالع|ظاهر)|مره\s*ثاني|مرة\s*ثاني/i.test(text);
+  if (_wantsProgram && progStatus !== "none" && _job) {
+    const _j = _job as { id: number; code: string; status: string };
+    let reply = "أبشر، ثواني ويوصلك البرنامج";
+    if (_j.status === "sent") await supabase.from("program_pdf_jobs").insert({ phone: from, code: _j.code });
+    else if (_j.status === "failed") await supabase.from("program_pdf_jobs").update({ status: "pending", attempts: 0, error: null }).eq("id", _j.id);
+    else reply = "البرنامج قيد التجهيز، ثواني ويوصلك";
+    await sendCustomerReply(supabase, from, reply);
+    try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: stripBannedPhrases(reply), sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+    await logGuard(supabase, from, "followup_ai", "resend_program", _j.status, 1, text, reply);
+    return;
+  }
+  const _progLine = progStatus === "sent" ? "البرنامج اللي **وصل** العميل:"
+    : progStatus === "pending" ? "⚠️ البرنامج **قيد التجهيز وما وصل العميل بعد** — لا تقل إنه أُرسل؛ قل «ثواني ويوصلك»:"
+    : progStatus === "failed" ? "⚠️ البرنامج **ما وصل العميل** (تعطّل الإرسال) — ❌ لا تقل إنه فوق/أُرسل؛ action=\"handoff\":"
+    : "";
+  const isUmrahF = _isUmrahDest(String(facts.destination || "") + " " + String(facts.cities || ""));
+  const transcript = msgs.slice(-16).map(m => m.who + ": " + m.body).join("\n").slice(-3500);
+  const sys = `أنت طلال من خدمة عملاء وكالة سفر عُمانية، تكلّم العميل بلهجة خليجية طبيعية مختصرة (رسالة وحدة، بلا إيموجي، بلا «أستاذي»).
+طلب العميل **مؤكّد ومخزّن** — هذي حقائق ثابتة، ❌ لا تسأل عنها أبداً ولا تغيّرها من عندك:
+${JSON.stringify(facts)}
+${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما انرسل له بعد — ❌ لا تقل إنه أُرسل أو موجود فوق)"}
+القواعد:
+• جاوب سؤاله من الحقائق والبرنامج فقط. ❌ لا تخترع فنادق/أسعار/مواعيد غير موجودة فيهم.
+• ❌ لا تذكر أي سعر رقمي إلا لو موجود حرفياً في البرنامج.
+• لو طلب **تعديل** معلومة (عدد/أعمار/تاريخ/ليالي/مدن/مطار العودة) → action="modify" وضع الحقول الجديدة **فقط** في fields (مطار العودة: return_airport="madinah" أو "jeddah").
+• المطارات = حقل airports بالضبط. ❌ لا تخترع مطار وصول/عودة غيره، ولو نص البرنامج يخالفه فالمعتمد airports.
+• لو طلب شي يحتاج موظف (حجز/دفع/تأكيد/فندق معيّن غير موجود/خصم/شكوى/سؤال ما تعرف جوابه من الحقائق) → action="handoff" ورسالة «أبشر، بحوّل طلبك لزميلي المختص ويرد عليك قريب».
+• غير ذلك action="reply".
+• الطفل عندنا ١٠ سنوات وتحت (بدون سرير إضافي)، و١١ وفوق بالغ.
+أعد JSON فقط: {"message":"...","action":"reply|modify|handoff","fields":{}}`;
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  const model = (Deno.env.get("TALAL_MODEL_OVERRIDE") || "").trim() || (isUmrahF ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001");
+  type FOut = { message?: string; action?: string; fields?: Record<string, unknown> };
+  let out: FOut | null = null;
+  let sysTry = sys;
+  for (let att = 1; att <= 3 && !out; att++) {
+    try {
+      const anthropic = new Anthropic({ apiKey });
+      const res = await anthropic.messages.create({ model, max_tokens: 400, system: sysTry, messages: [{ role: "user", content: transcript || text }] });
+      let txt = ""; for (const b of res.content) if ((b as { type?: string }).type === "text") txt += (b as { text?: string }).text || "";
+      const m = txt.match(/\{[\s\S]*\}/);
+      let cand: FOut | null = null;
+      if (m) { try { cand = JSON.parse(m[0]); } catch (_e) { cand = null; } }
+      if (!cand || !String(cand.message || "").trim()) { await logGuard(supabase, from, "followup_model_fail", "retry", (m ? "bad_json" : "no_json") + ": " + txt.slice(0, 150), att, "", ""); continue; }
+      const rej = cand.action === "handoff" ? null : guardReject(String(cand.message), facts, { isUmrah: isUmrahF, isOmani: /^whatsapp:\+?968/.test(from) });
+      if (rej) {
+        await logGuard(supabase, from, rej.guard, "reject", "followup: " + rej.reason, att, String(cand.message), "");
+        sysTry = sys + `\n\n⚠️ حارس رفض ردك السابق: «${rej.reason}». أعد الصياغة ملتزماً بهذا.`;
+        if (att >= 3) cand = { message: "أبشر، بحوّل طلبك لزميلي المختص ويرد عليك قريب", action: "handoff", fields: {} };
+        else continue;
+      }
+      out = cand;
+    } catch (e) { await logGuard(supabase, from, "followup_model_fail", "retry", "api_error: " + String((e as Error)?.message || e).slice(0, 150), att, "", ""); }
+  }
+  if (!out) out = { message: "أبشر، بحوّل طلبك لزميلي المختص ويرد عليك قريب", action: "handoff", fields: {} };
+  const action = String(out.action || "reply");
+  if (action === "modify" && out.fields && Object.keys(out.fields).length) {
+    // تعديل → سؤال تأكيد طبيعي أولاً (قرار المالكة ٣ نوفمبر)، و«نعم» → الكرت النهائي → «نعم» → إعادة البناء.
+    const changed: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(out.fields)) if (["pax", "ages", "date", "nights", "days", "cities", "destination", "return_airport"].includes(k) && v !== null && String(v).trim() !== "") changed[k] = v;
+    if (changed.destination && _isUmrahDest(String(facts.destination || "")) && _isOmanDest(String(changed.destination))) delete changed.destination;
+    if (changed.return_airport && !["madinah", "jeddah"].includes(String(changed.return_airport))) delete changed.return_airport;
+    if (changed.return_airport && (!_isUmrahReq || (changed.return_airport === "madinah") === _retMed)) delete changed.return_airport;
+    if (Object.keys(changed).length) { await _askModify(changed); return; }
+  }
+  let reply = String(out.message || "").trim();
+  try { reply = guardAutofix(reply, { alreadyGreeted: true, lastCustomer: text, lastTalal: msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body || "" }).text; } catch (_e) { /* */ }
+  if (!(await _say(reply, "followup_ai", action))) return;   // رسالة أحدث وصلت → معالجها يرد على الكل
+  if (action === "handoff") {
+    try { await createProposalAndNotifyAdmin({ supabase, customerPhone: from, profileName, question: text }); } catch (e) { console.error("followup handoff", (e as Error).message); }
+  }
 }
 
 async function handleMessage(args: {
@@ -3293,6 +3470,12 @@ async function handleMessage(args: {
       const _id0 = ((session as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
       await supabase.from("whatsapp_sessions").update({ intake_data: { ..._id0, awaiting_intent: true, awaiting_intent_at: new Date().toISOString() } }).eq("phone", from);
       await logGuard(supabase, from, "greeting_reply", "direct_reply", "", 1, text, _greet);
+      return;
+    }
+    // 🧪 رقم المالكة (تشغيل كامل): متابعة بعد إقفال الطلب → رد طلال بالذكاء ملتزماً بالمخزّن.
+    if (s?.intake_active !== true && await isFullAiNumber(supabase, from)) {
+      await handleFollowupAI({ supabase, from, profileName, body: text });
+      await supabase.from("whatsapp_sessions").update({ last_message_at: new Date().toISOString() }).eq("phone", from);
       return;
     }
     // Skip if a proposal is already pending for this customer (avoid
@@ -7143,6 +7326,14 @@ Deno.serve(async (req) => {
       const _att = (job.attempts || 0) + 1;
       if (!b64) {   // العامل فشل في الرسم
         await supabase.from("program_pdf_jobs").update({ attempts: _att, error: String(p.error || "render failed"), status: _att >= 5 ? "failed" : "pending" }).eq("id", jobId);
+        if (_att >= 5) {
+          // 🔴 ٣ نوفمبر ٢٠٢٦: فشل الـPDF نهائياً كان صامتاً — العميل ما يوصله شي ولا أحد يدري. الحين: سجل + تنبيه الموظفين.
+          try { await logGuard(supabase, String(job.phone), "pdf_failed", "final", String(p.error || "render failed").slice(0, 200), _att, String(job.code), ""); } catch (_e) { /* */ }
+          try {
+            const _n = `⚠️ برنامج ما انرسل للعميل (فشل الـPDF ٥ مرات)\nالعميل: ${String(job.phone).replace(/^whatsapp:/, "")}\nالكود: ${job.code}\nالسبب: ${String(p.error || "").slice(0, 120)}`;
+            await Promise.all(staffList("SALES_WHATSAPP_NUMBERS").map(num => sendStaffNotice(num, _n)));
+          } catch (_e) { /* */ }
+        }
         return new Response(JSON.stringify({ ok: false, note: "render_failed_marked" }), { headers: jsonCors });
       }
       const buf = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -7162,6 +7353,9 @@ Deno.serve(async (req) => {
         const { data: _s } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", String(job.phone)).maybeSingle();
         const _d = ((_s as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
         const _pm = Array.isArray(_d.post_program_msgs) ? (_d.post_program_msgs as unknown[]).map(String) : [];
+        // ٣ نوفمبر ٢٠٢٦: نص البرنامج **النهائي** كما في الـPDF (من العامل) — طلال يقرأه بدل نسخة السيرفر الأولى.
+        const _fr = String(p.program_raw || "").trim();
+        if (_fr) { _d.program_final_raw = _fr.slice(0, 12000); _d.program_final_code = String(job.code); await supabase.from("whatsapp_sessions").update({ intake_data: _d }).eq("phone", String(job.phone)); }
         if (_pm.length) {
           await supabase.from("whatsapp_sessions").update({ intake_data: { ..._d, post_program_msgs: [] } }).eq("phone", String(job.phone));
           await sendPostProgramMessages(supabase, String(job.phone), _pm);
