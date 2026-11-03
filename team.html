@@ -1717,7 +1717,7 @@ async function mkApplyTransport(){
   const seq = ['airport', ...cities.map(c=>c.key), depAirport];
   const nights = cities.map(c=>c.nights);
   MK_LAST_SIG = mkSig(cities);   // علّم البصمة فوراً (يمنع إعادة التطبيق التلقائي)
-  const pax = (typeof parsedData!=='undefined' && parsedData && parsedData.adults) || (typeof metaPersons==='function' && metaPersons()) || 2;
+  const pax = mkPax();   // كل المسافرين (بالغين + أطفال) — تذكرة القطار وسعة السيارة
   let rows = [];
   try{
     const res = await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},
@@ -1770,7 +1770,18 @@ function mkSetSection(raw, sec, lines){
 }
 
 // ── الطيران الدولي (مسقط↔جدة) لبرامج مكة: الأرخص لكل اتجاه، أو شركة مثبّتة، أو بدون ──
-function mkPax(){ return (typeof parsedData!=='undefined' && parsedData && parsedData.adults) || (typeof metaPersons==='function' && metaPersons()) || 2; }
+// ٣ نوفمبر ٢٠٢٦ (قرار المالكة): «أي شخص في الرحلة لازم تذكرة طيران» — العدد = البالغين + الأطفال + الرضّع
+//   (كان البالغين فقط → MK-2026-010 حسب الطيران لـ٤ من ٥). يُستعمل للطيران وتذكرة القطار وسعة السيارة.
+function mkPax(){
+  const p = (typeof parsedData!=='undefined' && parsedData) ? parsedData : null;
+  const a = (p && +p.adults) || (typeof metaPersons==='function' && metaPersons()) || 2;
+  let k = p ? ((+p.kids||0) + (+p.infants||0)) : 0;
+  if(!k){
+    const t = arabicDigitsToLatin((getLine(lastProgramRaw,'CLIENT')||'') + ' ' + (getLine(lastProgramRaw,'META')||''));
+    const m = t.match(/(\d+)\s*(?:طفل|أطفال|اطفال|رضيع)/); if(m) k = +m[1];
+  }
+  return a + k;
+}
 // تاريخ البرنامج (عربي «26 أغسطس 2026» / يوم/شهر/سنة / ISO) → {d,mo,y}
 function _progDateDMY(tag){
   const toL=s=>String(s||'').replace(/[٠-٩]/g,c=>'٠١٢٣٤٥٦٧٨٩'.indexOf(c));
