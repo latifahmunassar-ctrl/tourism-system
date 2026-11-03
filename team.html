@@ -4733,6 +4733,7 @@ async function waBridgeCall(action, extra = {}) {
 
 function waBridgeOpen() {
   waBridgeQuoteReqId = null;                    // الفتح العادي = بلا اقتباس؛ waReqReply يضبطه بعد الفتح
+  window._waOfferRepeat = false;                // الفتح العادي = عرض أول؛ waReqReply يضبطه لو «عرض آخر»
   const _qh = document.getElementById('waBridgeQuoteHint'); if (_qh) _qh.style.display = 'none';
   document.getElementById('waBridgeOverlay').classList.add('open');
   const hasProgram = (typeof parsedData !== 'undefined' && parsedData && typeof lastProgramRaw !== 'undefined' && lastProgramRaw);
@@ -5121,6 +5122,17 @@ async function waBridgeSend() {
     _pkgCode = (_pkgCode || lastSavedCode || '').trim();
     if (_pkgCode) pdfCaption = (pdfCaption ? pdfCaption + '\n\n' : '') + 'كود البرنامج: ' + _pkgCode;
     // سطر المجاملة الختامي — يتبدّل عشوائياً كل مرة فلا يبين أنه آلي (طلب المالكة)
+    // لو كان «عرض آخر» لنفس الطلب (طلب مُعالَج سابقاً) نستخدم صيغ «عرض آخر».
+    const _closingsRepeat = [
+      'تفضل عرض آخر واي شي تبي تعدله انا موجوده',
+      'تفضل عرض آخر واذا عندك اي تعديل انا حاضره',
+      'تفضل عرض ثاني واي ملاحظه او تعديل انا موجوده',
+      'هذا عرض آخر تفضل واذا تبي اي تعديل انا حاضره',
+      'تفضل عرض آخر واذا في اي شي تبي تعدله انا موجوده',
+      'تفضل عرض ثاني واي استفسار او تعديل انا حاضره',
+      'تفضل عرض آخر وان شاء الله يناسبك واي تعديل انا موجوده',
+      'جهزت لك عرض آخر تفضل واذا تبي تعديل انا حاضره'
+    ];
     const _closings = [
       'تفضل البرنامج واذا عندك اي استفسار انا حاضره',
       'تفضل البرنامج واذا عندك اي استفسار انا موجوده',
@@ -5139,7 +5151,8 @@ async function waBridgeSend() {
       'تفضل البرنامج واذا احتجت اي تعديل انا موجوده',
       'تفضل البرنامج واي استفسار او ملاحظه انا حاضره'
     ];
-    const _closing = _closings[Math.floor(Math.random() * _closings.length)];
+    const _pool = (window._waOfferRepeat ? _closingsRepeat : _closings);
+    const _closing = _pool[Math.floor(Math.random() * _pool.length)];
     pdfCaption = (pdfCaption ? pdfCaption + '\n\n' : '') + _closing;
     msg.textContent = '⏳ جاري تجهيز ملف الـPDF...';
     try {
@@ -5343,6 +5356,8 @@ function waReqReply(jid, name, account, reqId) {
   waBridgeGroupsLoaded = false;       // reload the picker for this sender account
   waBridgeOpen();                     // opens the send window; loads + renders the group list (يصفّر الاقتباس)
   waBridgeQuoteReqId = reqId || null; // بعد الفتح: البرنامج/الـPDF يروح كرد مقتبس على هذا الطلب
+  // طلب مُعالَج سابقاً (في الصادر) = «عرض آخر» → صيغة ختامية مختلفة
+  window._waOfferRepeat = !!(reqId && waReqItems[reqId] && waReqItems[reqId].status !== 'new');
   const _qh = document.getElementById('waBridgeQuoteHint');
   if (_qh && reqId) { _qh.style.display = 'block'; _qh.textContent = '↩️ سيُرسَل البرنامج/الـPDF كرد مقتبس على طلب: ' + (name || 'الجروب'); }
   waBridgeUpdateCount();
