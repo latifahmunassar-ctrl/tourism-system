@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-02-paxwords'
+  var BUILD = '2026-11-03-datefix'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5411,8 +5411,9 @@ function waReqParse(body){
   let dateISO='', days=null; const today=new Date();
   const mk=(d,mo,y)=>{ if(!y){ y=today.getFullYear(); if(new Date(y,mo-1,d)<new Date(today.getFullYear(),today.getMonth(),today.getDate())) y++; } return new Date(y,mo-1,d); };
   const slash=[...lat.matchAll(/(\d{1,2})\s*[\/]\s*(\d{1,2})(?:\s*[\/]\s*(\d{2,4}))?/g)];
-  const named=[...lat.matchAll(new RegExp('(\\d{1,2})\\s*('+Object.keys(WA_AR_MONTHS).join('|')+')','g'))];
-  const rng=lat.match(new RegExp('(\\d{1,2})\\s*[-–]\\s*(\\d{1,2})\\s*('+Object.keys(WA_AR_MONTHS).join('|')+')'));
+  // يسمح بفاصل «/» أو «.» أو مسافة بين اليوم واسم الشهر العربي (13/مارس = 13 مارس)
+  const named=[...lat.matchAll(new RegExp('(\\d{1,2})[\\s\\/.]*('+Object.keys(WA_AR_MONTHS).join('|')+')','g'))];
+  const rng=lat.match(new RegExp('(\\d{1,2})\\s*[-–]\\s*(\\d{1,2})[\\s\\/.]*('+Object.keys(WA_AR_MONTHS).join('|')+')'));
   let from=null,to=null;
   if(rng){ const mo=WA_AR_MONTHS[rng[3]]; from=mk(+rng[1],mo); to=mk(+rng[2],mo); }
   else if(named.length>=2){ from=mk(+named[0][1],WA_AR_MONTHS[named[0][2]]); to=mk(+named[1][1],WA_AR_MONTHS[named[1][2]]); }
@@ -5435,7 +5436,8 @@ function waReqFillForm(body){
   if(p.adults!=null) set('bf-adults', p.adults);
   const cf=document.getElementById('bf-children'); if(cf) cf.value=p.children||0;
   if(p.days) set('bf-days', p.days);
-  if(p.dateISO) set('bf-date', p.dateISO);
+  // التاريخ: نضبطه إن انقرأ، وإلا نمسح القديم (فلا يبقى تاريخ طلب سابق مضلّلاً)
+  const bd=document.getElementById('bf-date'); if(bd) bd.value = p.dateISO || '';
   const se=document.querySelector('input[name=bf-stars][value="'+p.stars+'"]'); if(se){ se.checked=true; if(typeof bfPick==='function') bfPick(se); }
   // توزيع المدن في وضع «تخصيص» قابل للتعديل، الليالي موزّعة تقريبياً (قابلة للتعديل)
   if(p.cities.length){
