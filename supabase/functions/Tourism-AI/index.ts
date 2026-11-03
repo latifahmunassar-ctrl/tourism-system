@@ -3865,6 +3865,10 @@ Deno.serve(async (req) => {
         // احفظ البرنامج ليحصل على **كود استرجاع** (يظهر في رسالة العميل ويُستدعى
         // لاحقاً للتعديل عبر الكود — طلب المالكة). نستدعي دالة programs نفسها حتى
         // تتطابق صيغة الكود (TR-2026-0XX) مع team.html. أفضل جهد: فشله لا يُعطّل الإرسال.
+        // 💱 ٣ نوفمبر ٢٠٢٦: عملة العميل (من رقم هاتفه) تُثبَّت في البرنامج المحفوظ (CURRENCY:اسم|سعر) —
+        //    team.html/الـPDF يقرأها؛ بدونها طلع الـPDF بالريال السعودي لرقم عُماني.
+        const cur = await getCurrencyRate(supabase, _currencyCodeFromPhone(phone));
+        if (cur && !/\nCURRENCY:/.test(chosen.program)) chosen.program = chosen.program.replace(/^(DEST:.*)$/m, `$1\nCURRENCY:${cur.name}|${cur.rate}`);
         let _progCode = "";
         try {
           const _srk = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -3880,7 +3884,6 @@ Deno.serve(async (req) => {
           const _pd = await _pr.json().catch(() => ({}));
           if (_pr.ok && _pd?.ok && _pd?.code) _progCode = String(_pd.code).trim();
         } catch (_e) { /* best-effort */ }
-        const cur = await getCurrencyRate(supabase, _currencyCodeFromPhone(phone));
         const childNote = _kidsN ? ` (+ أطفال: ${_kidAges.join(" و")})` : "";
         // سطر السعر النهائي (حرفيّ) — يُمرَّر للنموذج ويُتحقّق منه.
         const priceLine = prof.ok
