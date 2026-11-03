@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-03-captionclean'
+  var BUILD = '2026-11-03-closingvary'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5088,8 +5088,17 @@ async function waBridgeSend() {
     try { _pkgCode = await saveCurrentProgramOnce('company', _finalG); } catch (_) {}
     _pkgCode = (_pkgCode || lastSavedCode || '').trim();
     if (_pkgCode) pdfCaption = (pdfCaption ? pdfCaption + '\n\n' : '') + 'كود البرنامج: ' + _pkgCode;
-    // سطر المجاملة الختامي (بلا إيموجي) — طلب المالكة
-    pdfCaption = (pdfCaption ? pdfCaption + '\n\n' : '') + 'اتفضل البرنامج واذا عندك اي استفسار انا حاضره';
+    // سطر المجاملة الختامي — يتبدّل عشوائياً كل مرة فلا يبين أنه آلي (طلب المالكة)
+    const _closings = [
+      'تفضل البرنامج واذا عندك اي استفسار انا حاضره',
+      'تفضل البرنامج واذا عندك اي استفسار انا موجوده',
+      'تفضل البرنامج واذا عندك اي تعديل حاضرين',
+      'تفضل البرنامج واي استفسار انا موجوده',
+      'تفضل البرنامج واذا حاب اي تعديل احنا جاهزين',
+      'تفضل البرنامج واذا عندك ملاحظه او تعديل انا حاضره'
+    ];
+    const _closing = _closings[Math.floor(Math.random() * _closings.length)];
+    pdfCaption = (pdfCaption ? pdfCaption + '\n\n' : '') + _closing;
     msg.textContent = '⏳ جاري تجهيز ملف الـPDF...';
     try {
       const blob = await generatePdfBlob('no_price');
