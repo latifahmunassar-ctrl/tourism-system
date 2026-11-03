@@ -2,7 +2,7 @@
 // history = ما قبل الرسالة الحالية، customer = رسالة العميل الحالية، model = ما يرده النموذج
 // (نبرمجه بالخطأ اللي سواه فعلاً — الحارس الخادمي لازم يصحّحه)، expect = شروط النجاح.
 
-export type Ctx = { reply: string; session: Record<string, any>; intake: Record<string, any>; buildCalls: number; modelCalls: number; proposals: number; jobs: Array<Record<string, any>>; buildBody: Record<string, any> | null; modelSystem: string };
+export type Ctx = { reply: string; session: Record<string, any>; intake: Record<string, any>; buildCalls: number; modelCalls: number; proposals: number; jobs: Array<Record<string, any>>; buildBody: Record<string, any> | null; modelSystem: string; db: Record<string, Array<Record<string, any>>> };
 export type Scenario = {
   id: string; title: string;
   entry?: "intake" | "followup";   // followup = بعد إقفال الطلب (تشغيل كامل لرقم المالكة)
@@ -12,7 +12,10 @@ export type Scenario = {
   session?: { destination?: string | null };
   model: string[];
   jobs?: Array<Record<string, unknown>>;
-  inboundDuringModel?: string;   // رسالة عميل أحدث تصل أثناء تفكير النموذج (اختبار دمج الرسائل)   // طابور الـPDF (program_pdf_jobs) قبل الرسالة
+  inboundDuringModel?: string;
+  medFlights?: string[];
+  rejectTools?: boolean;   // الـAPI يرفض الأداة (400) — شبكة الأمان لازم تكمل بدونها   // تواريخ طيران المدينة ← مسقط المتوفرة (DD/MM/YYYY) — بدونها ما يُفحص
+  tables?: Record<string, Array<Record<string, unknown>>>;   // صفوف إضافية لجداول القاعدة الوهمية   // رسالة عميل أحدث تصل أثناء تفكير النموذج (اختبار دمج الرسائل)   // طابور الـPDF (program_pdf_jobs) قبل الرسالة
   expect: Array<[string, (c: Ctx) => boolean]>;
 };
 
@@ -59,6 +62,165 @@ export const SCENARIOS: Scenario[] = [
     intakeData: { ...DONE, program_final_raw: "HOTELS:\nPullman Zamzam Madina | Al Madinah | 5 نجوم\nFLIGHTS:\nجدة ← مسقط | عودة", auto_program: "نسخة قديمة فيها فندق ثاني XYZ" },
     model: [FU("بولمان زمزم")],
     expect: [["يقرأ النص النهائي", c => /Pullman Zamzam/.test(c.modelSystem) && !/XYZ/.test(c.modelSystem)]],
+  },
+  {
+    id: "fu-flight-from-medina-phrase", entry: "followup", title: "٣ نوفمبر: «يابن الحلال احتاج الطيران من المدينه» (متضايق) → اعتذار + الكرت المصحّح (مو تحويل)",
+    history: PROG_HIST, customer: "يابن الحلال احتاج الطيران من المدينه", intakeData: DONE,
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "11 و 6", date: "2026-11-11", nights: "3 مكة 2 المدينة" }, true)],
+    expect: [["يعتذر «حاضر، أعتذر منك. بعدّل البرنامج فوراً»", c => /حاضر، أعتذر منك\. بعدّ?ل البرنامج فورا/.test(c.reply)], ["أعاد البناء فوراً بالعودة من المدينة", c => c.buildCalls > 0 && c.buildBody?.return_airport === "madinah"], ["ما حوّل", c => c.proposals === 0]],
+  },
+  {
+    id: "fu-where-medina-airport", entry: "followup", title: "٣ نوفمبر: «وين مطار المدينه» → سؤال التأكيد (مو «الطيران من جدة» + تحويل)",
+    history: PROG_HIST, customer: "وين مطار المدينه", intakeData: DONE,
+    model: [FU("الرحلة الجوية ذهابا وإيابا من مطار جدة. لو تبي تغيير مطار العودة لمطار المدينة، بحول طلبك لزميلي")],
+    expect: [["سؤال تأكيد المطار", c => /العودة من مطار المدينة؟/.test(c.reply)], ["ما حوّل", c => c.proposals === 0]],
+  },
+  {
+    id: "fu-yes-after-medina-offer", entry: "followup", title: "٣ نوفمبر: طلال عرض تغيير المطار للمدينة والعميل «ايوه» → سؤال التأكيد (مو تحويل)",
+    history: [...PROG_HIST, ["C", "وين مطار المدينه"], ["T", "الرحلة الجوية ذهابا وإيابا من مطار جدة. لو تبي تغيير مطار العودة لمطار المدينة، أبشر بحول طلبك لزميلي المختص"]],
+    customer: "ايوه", intakeData: DONE,
+    model: [FU("أبشر، بحول طلبك لزميلي المختص ويرد عليك قريب", "handoff")],
+    expect: [["سؤال تأكيد المطار", c => /العودة من مطار المدينة؟/.test(c.reply)], ["ما حوّل", c => c.proposals === 0]],
+  },
+  {
+    id: "fu-resend-patches-currency", entry: "followup", title: "٣ نوفمبر: إعادة إرسال برنامج قديم بلا عملة لرقم عُماني → تثبيت الريال العُماني قبل الإرسال",
+    history: PROG_HIST, customer: "وين البرنامج", intakeData: DONE,
+    jobs: [{ id: 10, code: "MK-2026-009", status: "sent" }],
+    tables: { programs: [{ code: "MK-2026-009", raw: "DEST:العمرة\nDATE_FROM:11 نوفمبر 2026\nHOTELS:\nx" }], currencies: [{ code: "OMR", name_ar: "ريال عماني", rate: 10 }] },
+    model: [FU("x")],
+    expect: [["CURRENCY مثبّتة", c => /CURRENCY:ريال عماني\|10/.test(String((c.db.programs || [])[0]?.raw || ""))], ["انضافت مهمة PDF", c => c.jobs.some(j => j.code === "MK-2026-009" && j.status !== "sent")]],
+  },
+  {
+    id: "fu-program-where-reversed", entry: "followup", title: "٣ نوفمبر: «البرنامج فينهر» (الكلمة أول) → يعيد الإرسال، مو «وصلك فوق»",
+    history: PROG_HIST, customer: "البرنامج فينهر", intakeData: DONE,
+    jobs: [{ id: 10, code: "MK-2026-009", status: "sent" }],
+    model: [FU("البرنامج وصلك فوق، هو نفس الملف اللي أرسلته. تقدر تفتحه؟")],
+    expect: [["ما يقول «فوق»", c => !/فوق/.test(c.reply)], ["انضافت مهمة PDF", c => c.jobs.some(j => j.code === "MK-2026-009" && j.status !== "sent")]],
+  },
+  {
+    id: "fu-batch-airport-lost", entry: "followup", title: "٣ نوفمبر: «احتاح العوده من مطار المدينه / افهم / كم مره أخبرك» → الرد على الأخيرة لازم يشوف طلب المطار",
+    history: [...PROG_HIST, ["C", "احتاح العوده من مطار المدينه"], ["C", "افهم"]], customer: "كم مره أخبرك", intakeData: DONE,
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "11 و 6", date: "2026-11-11", nights: "3 مكة 2 المدينة" }, true)],
+    expect: [["يعتذر «حاضر، أعتذر منك. بعدّل البرنامج فوراً»", c => /حاضر، أعتذر منك\. بعدّ?ل البرنامج فورا/.test(c.reply)], ["أعاد البناء فوراً بالعودة من المدينة", c => c.buildCalls > 0 && c.buildBody?.return_airport === "madinah"], ["ما حوّل", c => c.proposals === 0]],
+  },
+  {
+    id: "fu-repeat-request-apology", entry: "followup", title: "العميل كرّر «العودة من المدينة» مرتين → اعتذار + الكرت المصحّح مباشرة",
+    history: [...PROG_HIST, ["C", "احتاج العوده من مطار المدينه"], ["T", "الرحلة ذهاباً وإياباً من مطار جدة"]], customer: "قلت العوده من مطار المدينه", intakeData: DONE,
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "11 و 6", date: "2026-11-11", nights: "3 مكة 2 المدينة" }, true)],
+    expect: [["يعتذر «حاضر، أعتذر منك. بعدّل البرنامج فوراً»", c => /حاضر، أعتذر منك\. بعدّ?ل البرنامج فورا/.test(c.reply)], ["أعاد البناء فوراً بالعودة من المدينة", c => c.buildCalls > 0 && c.buildBody?.return_airport === "madinah"], ["ما حوّل", c => c.proposals === 0]],
+  },
+  {
+    id: "fu-frustrated-no-handoff", entry: "followup", title: "العميل متضايق بلا تعديل واضح («ما تفهم») → يعتذر ويسأل وش التعديل، ❌ لا تحويل",
+    history: PROG_HIST, customer: "انت ما تفهم", intakeData: DONE,
+    model: [FU("معك حق، آسف. بحول طلبك لزميلي المختص ويرد عليك قريب.", "handoff")],
+    expect: [["(أ) «أعتذر منك أستاذي، بس فهمني»", c => /^أعتذر منك أستاذي، بس فهمني/.test(c.reply)], ["ما حوّل", c => c.proposals === 0]],
+  },
+  {
+    id: "fu-unmet-request-rebuild", entry: "followup", title: "٣ نوفمبر: طلب المدينة سبق وما تنفّذ + «وين البرنامج / كم لي انتظر» → يصحّح ويبني بالمدينة (مو إعادة إرسال القديم)",
+    history: [...PROG_HIST, ["C", "احتاح العوده من مطار المدينه"], ["T", "معك حق، آسف على التأخر. بحول طلبك لزميلي المختص"], ["C", "وين البرنامج"]],
+    customer: "كم لي انتظر", intakeData: DONE, medFlights: ["16/11/2026"],
+    jobs: [{ id: 10, code: "MK-2026-009", status: "sent" }],
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "11 و 6", date: "2026-11-11", nights: "3 مكة 2 المدينة" }, true)],
+    expect: [["يعتذر ويصحح", c => /حاضر، أعتذر منك/.test(c.reply)], ["بنى بالعودة من المدينة", c => c.buildCalls > 0 && c.buildBody?.return_airport === "madinah"],
+      ["ما أعاد إرسال القديم", c => !c.jobs.some(j => j.code === "MK-2026-009" && j.status === "pending")]],
+  },
+  {
+    id: "fu-no-medina-flight", entry: "followup", title: "٣ نوفمبر: ما فيه طيران المدينة ← مسقط يوم العودة (١٦ نوفمبر) → يقول ما فيه + أقرب تاريخين، بلا بناء",
+    history: PROG_HIST, customer: "احتاج العوده من مطار المدينه", intakeData: DONE, medFlights: ["13/11/2026", "17/11/2026", "24/11/2026"],
+    model: [FU("x")],
+    expect: [["«ما فيه طيران من المدينة إلى مسقط بتاريخ 16 نوفمبر»", c => /ما فيه طيران من المدينة إلى مسقط بتاريخ 16 نوفمبر/.test(c.reply)],
+      ["يقترح ١٣ أو ١٧", c => /13 نوفمبر أو 17 نوفمبر/.test(c.reply)], ["ما بنى ولا علّق تعديل", c => c.buildCalls === 0 && !c.intake.pending_modify]],
+  },
+  {
+    id: "fu-medina-flight-ok", entry: "followup", title: "فيه طيران المدينة ← مسقط يوم العودة → يكمل عادي (سؤال التأكيد)",
+    history: PROG_HIST, customer: "احتاج العوده من مطار المدينه", intakeData: DONE, medFlights: ["16/11/2026"],
+    model: [FU("x")],
+    expect: [["سؤال التأكيد", c => /العودة من مطار المدينة؟/.test(c.reply)]],
+  },
+  {
+    id: "fu-alt-yes-nearest", entry: "followup", title: "٣ نوفمبر: «طيب عدلها» بعد «ما فيه طيران… ١٧ أو ١٨» → أقرب تاريخ (١٧) = ليلة زيادة بالمدينة + العودة منها → الكرت",
+    history: [...PROG_HIST, ["C", "وين البرنامج"], ["T", "أعتذر منك، ما فيه طيران من المدينة إلى مسقط بتاريخ 16 نوفمبر. أقرب رحلة متوفرة 17 نوفمبر أو 18 نوفمبر، تحب نعدل تاريخ العودة؟ ولا نخلي العودة من جدة؟"]], customer: "طيب عدلها",
+    intakeData: { ...DONE, med_alt: { ret: "2026-11-16", dates: ["2026-11-17", "2026-11-18"], base: { return_airport: "madinah" } } }, medFlights: ["17/11/2026", "18/11/2026"],
+    model: [FU("أعتذر منك، بس أنا سبق ووضحت لك")],
+    expect: [["تأكيد بالكلام: العودة 17 نوفمبر من المدينة + 3 مكة 3 المدينة", c => /تقصد العودة 17 نوفمبر من مطار المدينة/.test(c.reply) && /3 مكة 3 المدينة/.test(c.reply)], ["❌ لا كرت مباشر", c => !/المعلومات صحيحة/.test(c.reply)], ["معلّق للتأكيد", c => c.intake.pending_modify?.return_airport === "madinah"]],
+  },
+  {
+    id: "fu-alt-pick-18", entry: "followup", title: "اختار «18» → ليلتين زيادة بالمدينة",
+    history: [...PROG_HIST, ["T", "أعتذر منك، ما فيه طيران من المدينة إلى مسقط بتاريخ 16 نوفمبر. أقرب رحلة متوفرة 17 نوفمبر أو 18 نوفمبر، تحب نعدل تاريخ العودة؟ ولا نخلي العودة من جدة؟"]], customer: "١٨",
+    intakeData: { ...DONE, med_alt: { ret: "2026-11-16", dates: ["2026-11-17", "2026-11-18"], base: { return_airport: "madinah" } } }, medFlights: ["17/11/2026", "18/11/2026"],
+    model: [FU("x")],
+    expect: [["3 مكة 4 المدينة", c => /3 مكة 4 المدينة/.test(c.reply)]],
+  },
+  {
+    id: "fu-alt-keep-jeddah", entry: "followup", title: "«خلها من جدة» → تبقى العودة من جدة",
+    history: [...PROG_HIST, ["T", "أعتذر منك، ما فيه طيران من المدينة إلى مسقط بتاريخ 16 نوفمبر. أقرب رحلة متوفرة 17 نوفمبر أو 18 نوفمبر، تحب نعدل تاريخ العودة؟ ولا نخلي العودة من جدة؟"]], customer: "خلها من جدة",
+    intakeData: { ...DONE, med_alt: { ret: "2026-11-16", dates: ["2026-11-17", "2026-11-18"], base: { return_airport: "madinah" } } },
+    model: [FU("x")],
+    expect: [["«تبقى العودة من جدة»", c => /تبقى العودة من جدة/.test(c.reply)], ["ما تغيّر شي", c => !c.intake.return_airport && c.intake.nights === "3 مكة 2 المدينة"]],
+  },
+  {
+    id: "fu-alt-from-text", entry: "followup", title: "جلسة بلا med_alt محفوظة + آخر رد طلال (نموذج) فيه «16 نوفمبر… (17 أو 18 نوفمبر)» → «17» يعدّل",
+    history: [...PROG_HIST, ["T", "أعتذر منك، بس أنا سبق ووضحت لك إن ما في طيران من المدينة بتاريخ 16 نوفمبر. بحتاج منك تحدد: تبي نعدل تاريخ العودة (17 أو 18 نوفمبر)، ولا نرجع العودة من جدة بنفس التاريخ 16؟"]],
+    customer: "17", intakeData: DONE, medFlights: ["17/11/2026", "18/11/2026"],
+    model: [FU("x")],
+    expect: [["تأكيد بالكلام", c => /تقصد العودة 17 نوفمبر/.test(c.reply) && /3 مكة 3 المدينة/.test(c.reply)], ["❌ لا كرت مباشر", c => !/المعلومات صحيحة/.test(c.reply)]],
+  },
+  {
+    id: "fu-no-apology-when-calm", entry: "followup", title: "٣ نوفمبر: عميل هادي والنموذج بدأ بـ«أعتذر منك، بس أنا سبق ووضحت لك» → تنشال الاعتذار",
+    history: PROG_HIST, customer: "طيب كم ليلة بالمدينة؟", intakeData: DONE,
+    model: [FU("أعتذر منك، بس أنا سبق ووضحت لك إن الليالي في المدينة ليلتين")],
+    expect: [["بلا اعتذار", c => !/أعتذر|آسف/.test(c.reply)], ["الجواب باقي", c => /ليلتين/.test(c.reply)]],
+  },
+  {
+    id: "fu-alt-from-text-reordered", entry: "followup", title: "٣ نوفمبر: «ايوه عدلها افهم» بعد «تبي العودة من المدينة بتاريخ 17 أو 18 نوفمبر، ولا… جدة بتاريخ 16» → ١٧ (ليلة زيادة)",
+    history: [...PROG_HIST, ["T", "أعتذر منك، بس محتاج تحدد لي: تبي العودة من المدينة بتاريخ 17 أو 18 نوفمبر، ولا نخلي العودة من جدة بتاريخ 16 نوفمبر؟"]],
+    customer: "ايوه عدلها افهم", intakeData: DONE, medFlights: ["17/11/2026", "18/11/2026"],
+    model: [FU("x")],
+    expect: [["تأكيد بالكلام (١٧)", c => /17 نوفمبر/.test(c.reply) && /3 مكة 3 المدينة/.test(c.reply)], ["❌ لا كرت مباشر", c => !/المعلومات صحيحة/.test(c.reply)]],
+  },
+  {
+    id: "fu-alt-change-departure-date", entry: "followup", title: "٣ نوفمبر: «إذا غيرنا تاريخ القدوم من مسقط» إلى ١٢ → يبقى طلب العودة من المدينة، والبوابة تفحص ١٧",
+    history: [...PROG_HIST, ["T", "أعتذر منك، ما فيه طيران من المدينة إلى مسقط بتاريخ 16 نوفمبر. أقرب رحلة متوفرة 17 نوفمبر أو 18 نوفمبر، تحب نعدل تاريخ العودة؟ ولا نخلي العودة من جدة؟"]],
+    customer: "إذا غيرنا تاريخ القدوم ل ١٢ نوفمبر من مسقط", intakeData: { ...DONE, med_alt: { ret: "2026-11-16", dates: ["2026-11-17", "2026-11-18"] } }, medFlights: ["17/11/2026"],
+    model: [FU("تمام", "modify", { date: "2026-11-12" })],
+    expect: [["سؤال تأكيد فيه التاريخ والمدينة", c => /2026-11-12/.test(c.reply) && /العودة من مطار المدينة/.test(c.reply)], ["المعلّق فيه المدينة", c => c.intake.pending_modify?.return_airport === "madinah"]],
+  },
+  {
+    id: "tool-use-followup", entry: "followup", title: "القاعدة ٣: ردّ المتابعة عبر الأداة يُقرأ صح",
+    history: PROG_HIST, customer: "وش اسم فندق مكة؟", intakeData: DONE,
+    model: ["TOOL:" + JSON.stringify({ message: "فندق مكة فوكو، ٣ ليال", action: "reply", fields: {} })],
+    expect: [["يرد من الأداة", c => /فوكو/.test(c.reply)]],
+  },
+  {
+    id: "fu-tools-rejected-fallback", entry: "followup", title: "شبكة أمان (متابعة): الـAPI رفض الأداة → يكمل بدونها",
+    history: PROG_HIST, customer: "وش اسم فندق مكة؟", intakeData: DONE, rejectTools: true,
+    model: [FU("فندق مكة فوكو")],
+    expect: [["يرد", c => /فوكو/.test(c.reply)]],
+  },
+  {
+    id: "r3-model-airport-unusual", entry: "followup", title: "القاعدة ٣: «خل الطيارة اللي ترجعنا تكون من المدينة» (الكاشف ما يمسكها) → Sonnet يفهم → سؤال التأكيد",
+    history: PROG_HIST, customer: "خل الطيارة اللي ترجعنا تكون من المدينة", intakeData: DONE, medFlights: ["16/11/2026"],
+    model: ["TOOL:" + JSON.stringify({ message: "تمام", action: "modify", frustration: "none", fields: { return_airport: "madinah" } })],
+    expect: [["سؤال تأكيد المطار", c => /العودة من مطار المدينة؟/.test(c.reply)]],
+  },
+  {
+    id: "r3-model-resend-unusual", entry: "followup", title: "القاعدة ٣: «ما شفت شي وصلني» → Sonnet: resend_program → يعيد الإرسال",
+    history: PROG_HIST, customer: "ما شفت شي وصلني", intakeData: DONE, jobs: [{ id: 10, code: "MK-2026-009", status: "sent" }],
+    model: ["TOOL:" + JSON.stringify({ message: "أبشر", action: "resend_program", frustration: "none", fields: {} })],
+    expect: [["انضافت مهمة PDF", c => c.jobs.some(j => j.code === "MK-2026-009" && j.status !== "sent")], ["ثواني ويوصلك", c => /ثواني/.test(c.reply)]],
+  },
+  {
+    id: "r3-model-talal-error", entry: "followup", title: "القاعدة ٣: «الله يهديك ثالث مرة اقولك المدينة» → Sonnet: talal_error → اعتذار + بناء فوري",
+    history: PROG_HIST, customer: "الله يهديك ثالث مرة اقولك المدينة", intakeData: DONE, medFlights: ["16/11/2026"],
+    model: ["TOOL:" + JSON.stringify({ message: "حاضر", action: "modify", frustration: "talal_error", fields: { return_airport: "madinah" } }), M("تمام", { destination: "العمرة", pax: 5, ages: "11 و 6", date: "2026-11-11", nights: "3 مكة 2 المدينة" }, true)],
+    expect: [["حاضر، أعتذر منك", c => /حاضر، أعتذر منك/.test(c.reply)], ["بنى بالمدينة", c => c.buildCalls > 0 && c.buildBody?.return_airport === "madinah"]],
+  },
+  {
+    id: "r3-unmet-via-model-resend", entry: "followup", title: "القاعدة ٣: طلب المدينة سبق + Sonnet فهم «ارسل» كإعادة إرسال → يصحّح بدل القديم",
+    history: [...PROG_HIST, ["C", "احتاج العوده من مطار المدينه"], ["T", "الرحلة من جدة"]], customer: "طيب ارسل", intakeData: DONE, medFlights: ["16/11/2026"],
+    jobs: [{ id: 10, code: "MK-2026-009", status: "sent" }],
+    model: ["TOOL:" + JSON.stringify({ message: "أبشر", action: "resend_program", frustration: "none", fields: {} }), M("تمام", { destination: "العمرة", pax: 5, ages: "11 و 6", date: "2026-11-11", nights: "3 مكة 2 المدينة" }, true)],
+    expect: [["بنى بالمدينة (مو القديم)", c => c.buildCalls > 0 && c.buildBody?.return_airport === "madinah"], ["ما أعاد القديم", c => !c.jobs.some(j => j.code === "MK-2026-009" && j.status === "pending")]],
   },
   {
     id: "fu-question-from-program", entry: "followup", title: "متابعة: سؤال جوابه في البرنامج → يرد بنفسه بلا تحويل",
@@ -195,6 +357,160 @@ export const SCENARIOS: Scenario[] = [
     intakeData: { destination: "العمرة", pax: 5, ages: "6", date: "2026-11-11", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true, return_airport: "madinah" },
     model: [M("تمام", { destination: "العمرة", pax: 5, ages: "6", date: "2026-11-11", nights: "3 مكة 2 المدينة" }, true)],
     expect: [["بنى البرنامج", c => c.buildCalls > 0], ["أرسل return_airport=madinah", c => c.buildBody?.return_airport === "madinah"]],
+  },
+  {
+    id: "intake-ret-med-captured", title: "أثناء الاستقبال: «ابي العوده من مطار المدينه» → محفوظ ويظهر بالكرت",
+    history: [["T", RESET], ["C", "عمره"], ["C", "٤"], ["C", "كلهم كبار"], ["C", "٣ مكه ٢ المدينه"]],
+    customer: "١١ هذا الشهر وابي العوده من مطار المدينه",
+    intakeData: { destination: "العمرة", pax: 4, nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true },
+    model: [M("تمام", { destination: "العمرة", pax: 4, date: "2026-11-11", nights: "3 مكة 2 المدينة" })],
+    expect: [["return_airport=madinah", c => c.intake.return_airport === "madinah"], ["تأكيد بالكلام فيه المطار (مو كرت)", c => /تمام، يعني عمرة/.test(c.reply) && /من مطار المدينة؟/.test(c.reply) && !/المعلومات صحيحة/.test(c.reply)]],
+  },
+  {
+    id: "omani-no-switch-to-oman", title: "٣ نوفمبر: قاعدة صارمة — رقم عُماني وجهته تركيا، النموذج طلّع «عمان» → لا سؤال تبديل، تبقى تركيا",
+    history: [["T", RESET], ["C", "ابي تركيا"], ["C", "شخصين"], ["C", "كلهم كبار"]],
+    customer: "الطلعة من مسقط شهر ١٢",
+    intakeData: { destination: "تركيا", pax: 2, asked_children: true },
+    model: [M("تمام، كم يوم تبون الرحلة؟", { destination: "عمان", pax: 2, date: "2026-12-01" })],
+    expect: [["ما يسأل تبديل الوجهة", c => !/تغي?ي?ر الوجه|لبس|ولا\s*عُ?مان/.test(c.reply)], ["الوجهة تركيا", c => c.intake.destination === "تركيا"]],
+  },
+  {
+    id: "intake-date-shift-on-card", title: "٣ نوفمبر: على الكرت «إذا في عوده تاريخ ١٧ من المدينه خلي السفر تاريخ ١٢» + النموذج نص بلا JSON → الكرت الجديد (١٢/١١، ٣ مكة ٢ المدينة)",
+    history: [["T", RESET], ["C", "عمره"], ["C", "٥"], ["C", "١٠، ١٢"], ["C", "عدلها تمام"],
+      ["T", "تمام، عدلت العودة إلى 17 نوفمبر من مطار المدينة:\nخليني أتأكد من طلبك قبل ما أجهز لك العرض:\n- تاريخ السفر: 11/11/2026\n- عدد الليالي: 3 مكة 3 المدينة\nالمعلومات صحيحة؟"]],
+    customer: "طيب إذا كان في عوده تاريخ ١٧ من المدينه خلي السفر تاريخ ١٢",
+    intakeData: { destination: "العمرة", pax: 5, ages: "طفلين (10 و12 سنة)", date: "11/11/2026", nights: "3 مكة 3 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true, return_airport: "madinah" },
+    medFlights: ["17/11/2026", "18/11/2026"],
+    model: ["حاضر، يعني تاريخ الذهاب يصير 12/11 والعودة 17/11 من المدينة، صح؟", "حاضر، يعني الذهاب 12/11 والعودة 17/11 من مطار المدينة، صح؟"],
+    expect: [["تأكيد بالكلام: السفر 12 والعودة 17 من المدينة", c => /السفر 12 نوفمبر/.test(c.reply) && /العودة 17 نوفمبر من مطار المدينة/.test(c.reply)], ["الليالي 3 مكة 2 المدينة", c => c.intake.nights === "3 مكة 2 المدينة"], ["❌ لا كرت مباشر", c => !/المعلومات صحيحة/.test(c.reply)], ["ما بنى", c => c.buildCalls === 0], ["ينتظر تأكيد الكلام", c => c.intake.pending_card === true]],
+  },
+  {
+    id: "intake-card-no-medina-flight", title: "كرت فيه العودة من المدينة بتاريخ ما فيه طيران → «ما فيه طيران… أقرب» بدل الكرت",
+    history: [["T", RESET], ["C", "عمره"], ["C", "٤"], ["C", "كلهم كبار"], ["C", "٣ مكه ٢ المدينه"]],
+    customer: "١١ هذا الشهر وابي العوده من مطار المدينه",
+    intakeData: { destination: "العمرة", pax: 4, nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true },
+    medFlights: ["17/11/2026", "18/11/2026"],
+    model: [M("تمام", { destination: "العمرة", pax: 4, date: "2026-11-11", nights: "3 مكة 2 المدينة" })],
+    expect: [["ما فيه طيران 16 نوفمبر", c => /ما فيه طيران من المدينة إلى مسقط بتاريخ 16 نوفمبر/.test(c.reply)], ["محفوظة البدائل", c => (c.intake.med_alt?.dates || []).length === 2]],
+  },
+  {
+    id: "phr-date-month-only", title: "صياغات: «ابيها ٢٠ نوفمبر بدل» والنموذج ما حدّث → سؤال توضيح (مو الكرت القديم ١١)",
+    history: [["T", RESET], ["C", "عمره"], ["C", "٥"], ["T", "خليني أتأكد من طلبك قبل ما أجهز لك العرض:\n- تاريخ السفر: 11/11/2026\n- عدد الليالي: 3 مكة 2 المدينة\nالمعلومات صحيحة؟"]], customer: "ابيها ٢٠ نوفمبر بدل", intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true },
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة" })],
+    expect: [["ما يرسل الكرت القديم", c => !/11\/11\/2026/.test(c.reply)], ["«عفوا إذا سمحت، تقصد… 20 نوفمبر»", c => /عفوا?ً? إذا سمحت، تقصد/.test(c.reply) && /20 نوفمبر/.test(c.reply)], ["ما ينتظر «نعم» على الكرت القديم", c => c.intake.awaiting_confirm !== true]],
+  },
+  {
+    id: "phr-date-nasafer", title: "صياغات: «نسافر ١٥» → الكرت ١٥/١١",
+    history: [["T", RESET], ["C", "عمره"], ["C", "٥"], ["T", "خليني أتأكد من طلبك قبل ما أجهز لك العرض:\n- تاريخ السفر: 11/11/2026\n- عدد الليالي: 3 مكة 2 المدينة\nالمعلومات صحيحة؟"]], customer: "نسافر ١٥", intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true },
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة" })],
+    expect: [["تأكيد: السفر 15 نوفمبر", c => /تقصد السفر 15 نوفمبر/.test(c.reply)], ["❌ لا كرت مباشر", c => !/المعلومات صحيحة/.test(c.reply)]],
+  },
+  {
+    id: "phr-date-nrooh-nerja", title: "صياغات: «خلنا نروح يوم ١٤ ونرجع يوم ١٩» → ١٤/١١ و٣ مكة ٢ المدينة",
+    history: [["T", RESET], ["C", "عمره"], ["C", "٥"], ["T", "خليني أتأكد من طلبك قبل ما أجهز لك العرض:\n- تاريخ السفر: 11/11/2026\n- عدد الليالي: 3 مكة 2 المدينة\nالمعلومات صحيحة؟"]], customer: "خلنا نروح يوم ١٤ ونرجع يوم ١٩", intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true },
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة" })],
+    expect: [["تأكيد: السفر 14 والعودة 19 + 3 مكة 2 المدينة محفوظة", c => /السفر 14 نوفمبر/.test(c.reply) && /العودة 19 نوفمبر/.test(c.reply) && c.intake.nights === "3 مكة 2 المدينة"], ["❌ لا كرت مباشر", c => !/المعلومات صحيحة/.test(c.reply)]],
+  },
+  {
+    id: "phr-date-return-only", title: "صياغات: «العودة تكون ١٨» → السفر ثابت ١١، ٧ ليالي (٣ مكة ٤ المدينة)",
+    history: [["T", RESET], ["C", "عمره"], ["C", "٥"], ["T", "خليني أتأكد من طلبك قبل ما أجهز لك العرض:\n- تاريخ السفر: 11/11/2026\n- عدد الليالي: 3 مكة 2 المدينة\nالمعلومات صحيحة؟"]], customer: "العودة تكون ١٨", intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true },
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة" })],
+    expect: [["تأكيد: العودة 18 + 3 مكة 4 المدينة", c => /العودة 18 نوفمبر/.test(c.reply) && /3 مكة 4 المدينة/.test(c.reply)], ["❌ لا كرت مباشر", c => !/المعلومات صحيحة/.test(c.reply)]],
+  },
+  {
+    id: "phr-pax-change", title: "صياغات: «صرنا ٦ اشخاص» والنموذج ما حدّث → ما يطلع كرت بـ٥",
+    history: [["T", RESET], ["C", "عمره"], ["C", "٥"], ["T", "خليني أتأكد من طلبك قبل ما أجهز لك العرض:\n- تاريخ السفر: 11/11/2026\n- عدد الليالي: 3 مكة 2 المدينة\nالمعلومات صحيحة؟"]], customer: "صرنا ٦ اشخاص", intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true },
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة" })],
+    expect: [["ما يرسل كرت بعدد ٥", c => !/عدد المسافرين: 5/.test(c.reply)], ["يذكر ٦", c => /6|٦/.test(c.reply)]],
+  },
+  {
+    id: "phr-ages-no-false-alarm", title: "صياغات: «اعمارهم ١٠ و ١٢» على الكرت → ما يعتبرها تاريخ",
+    history: [["T", RESET], ["C", "عمره"], ["C", "٥"], ["T", "خليني أتأكد من طلبك قبل ما أجهز لك العرض:\n- تاريخ السفر: 11/11/2026\n- عدد الليالي: 3 مكة 2 المدينة\nالمعلومات صحيحة؟"]], customer: "اعمارهم ١٠ و ١٢", intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true },
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة" })],
+    expect: [["ما فيه سؤال تاريخ", c => !/تقصد التاريخ/.test(c.reply)]],
+  },
+  {
+    id: "phr-consistent-yes", title: "صياغات: «ايوه صح السفر ١١» (مطابق) → يبني بلا سؤال",
+    history: [["T", RESET], ["C", "عمره"], ["C", "٥"], ["T", "خليني أتأكد من طلبك قبل ما أجهز لك العرض:\n- تاريخ السفر: 11/11/2026\n- عدد الليالي: 3 مكة 2 المدينة\nالمعلومات صحيحة؟"]], customer: "ايوه صح السفر ١١", intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true },
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة" })],
+    expect: [["بنى", c => c.buildCalls > 0], ["بلا سؤال توضيح", c => !/فهمني/.test(c.reply)]],
+  },
+  {
+    id: "tool-use-intake", title: "القاعدة ٣: ردّ النموذج عبر الأداة (tool_use) يُقرأ صح — الحقول تتحدّث (السفر ١٢)",
+    history: [["T", RESET], ["C", "عمره"], ["C", "٥"], ["T", "خليني أتأكد من طلبك:\n- تاريخ السفر: 11/11/2026\nالمعلومات صحيحة؟"]],
+    customer: "ابيها يوم الخميس اللي بعده",
+    intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true },
+    model: ["TOOL:" + JSON.stringify({ messages: ["تمام"], fields: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 2 المدينة" }, complete: false })],
+    expect: [["تأكيد بالكلام من فهم النموذج (السفر 12)", c => /تقصد السفر 12 نوفمبر/.test(c.reply)], ["❌ لا كرت مباشر", c => !/المعلومات صحيحة/.test(c.reply)]],
+  },
+  {
+    id: "tools-rejected-fallback", title: "شبكة أمان: الـAPI رفض الأداة → يكمل بدونها ويرد عادي (ما يسكت ولا يطيح لكل العملاء)",
+    history: [["T", RESET], ["C", "عندكم عروض عمره"], ["T", "حاضر، كم عدد المعتمرين الإجمالي، الكبار والأطفال؟"]],
+    customer: "٤", intakeData: { destination: "العمرة" }, rejectTools: true,
+    model: [M("تمام الـ4 كلهم بالغين ولا معكم أطفال؟", { destination: "العمرة", pax: 4 })],
+    expect: [["ردّ عادي من النموذج", c => /بالغين|أطفال/.test(c.reply)], ["العدد ٤", c => Number(c.intake.pax) === 4]],
+  },
+  {
+    id: "intake-request-before-last-reply", title: "٣ نوفمبر: «خلي السفر ١٢ والعوده ١٧» قبل آخر رد طلال، ثم «وبعدين معاك» → الكرت ١٢/١١ بـ٣ مكة ٢ المدينة + اعتذار",
+    history: [["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-009"], ["C", "وين البرنامج"], ["C", "عدلها تمام"],
+      ["C", "طيب إذا كان في عوده تاريخ ١٧ من المدينه خلي السفر تاريخ ١٢"],
+      ["T", "خليني أتأكد من طلبك قبل ما أجهز لك العرض:\n- تاريخ السفر: 11/11/2026\n- عدد الليالي: 3 مكة 3 المدينة\nالمعلومات صحيحة؟"]],
+    customer: "وبعدين معاك",
+    intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 3 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true, return_airport: "madinah" },
+    medFlights: ["17/11/2026", "18/11/2026"],
+    model: ["TOOL:" + JSON.stringify({ messages: ["تمام"], fields: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 3 المدينة" }, complete: false })],
+    expect: [["الكرت ١٢/١١", c => /12\/11\/2026/.test(c.reply)], ["3 مكة 2 المدينة (العودة ١٧)", c => /3 مكة 2 المدينة/.test(c.reply)], ["يعتذر", c => /أعتذر منك/.test(c.reply)], ["ما بنى", c => c.buildCalls === 0]],
+  },
+  {
+    id: "talk-then-card-yes", title: "قرار المالكة: بعد تأكيد الكلام («تقصد السفر 12…؟») و«نعم» → الكرت (بلا بناء بعد)",
+    history: [["T", RESET], ["C", "عمره"], ["C", "خلي السفر ١٢ والعوده ١٧"], ["T", "تمام، يعني تقصد السفر 12 نوفمبر، والعودة 17 نوفمبر؟"]],
+    customer: "نعم",
+    intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: false, pending_card: true },
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 2 المدينة" })],
+    expect: [["الكرت", c => /المعلومات صحيحة/.test(c.reply) && /12\/11\/2026/.test(c.reply)], ["ما بنى قبل تأكيد الكرت", c => c.buildCalls === 0], ["ينتظر تأكيد الكرت", c => c.intake.awaiting_confirm === true]],
+  },
+  {
+    id: "talk-frustrated-two-msgs", title: "قرار المالكة: متضايق → «أعتذر منك حالاً، خليني أرتب الطلب مرة ثانية.» رسالة، والكرت رسالة ثانية",
+    history: [["T", RESET], ["C", "عمره"], ["C", "خلي السفر ١٢ والعوده ١٧"], ["T", "خليني أتأكد من طلبك:\n- تاريخ السفر: 11/11/2026\nالمعلومات صحيحة؟"]],
+    customer: "وبعدين معاك",
+    intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true },
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة" })],
+    expect: [["رسالتين: الاعتذار أول ثم الكرت", c => /^أعتذر منك حالا?ً?، خليني أرتب الطلب مرة ثانية\.\n/.test(c.reply) && /المعلومات صحيحة/.test(c.reply)], ["الكرت فيه 12/11", c => /12\/11\/2026/.test(c.reply)]],
+  },
+  {
+    id: "nights-weird-format", title: "٣ نوفمبر: النموذج كتب الليالي «5 ليالٍ (3 مكة + 2 المدينة)» → العودة ١٧ (مو ٢٢) + «خبرتك» = متضايق",
+    history: [["T", RESET], ["C", "عمره"], ["T", "خليني أتأكد من طلبك:\n- تاريخ السفر: 12/11/2026\n- عدد الليالي: 3 مكة 3 المدينة\nالمعلومات صحيحة؟"]],
+    customer: "خبرتك السفر ١٢ بس العوده تاريخ ١٧",
+    intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 3 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true, return_airport: "madinah" },
+    medFlights: ["17/11/2026"],
+    model: ["TOOL:" + JSON.stringify({ messages: ["تمام"], fields: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "5 ليالٍ (3 مكة + 2 المدينة)", return_airport: "madinah" }, complete: false })],
+    expect: [["❌ لا «22 نوفمبر»", c => !/22 نوفمبر/.test(c.reply)], ["الليالي موحّدة 3 مكة 2 المدينة", c => c.intake.nights === "3 مكة 2 المدينة"],
+      ["اعتذار ثم الكرت (متضايق)", c => /^أعتذر منك حالا?ً?، خليني أرتب الطلب/.test(c.reply) && /المعلومات صحيحة/.test(c.reply)]],
+  },
+  {
+    id: "strict-waiting-qmark", title: "٣ نوفمبر (قاعدة صارمة): العميل كتب «؟» والطلب جاهز → اعتذار مستقل ثم الكرت (مو كرت فجأة)",
+    history: [["T", RESET], ["C", "عمره"], ["C", "خبرتك السفر ١٢ بس العوده تاريخ ١٧"], ["T", "أعتذر منك، ما فيه طيران من المدينة إلى مسقط بتاريخ 22 نوفمبر."]],
+    customer: "؟",
+    intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: false, return_airport: "madinah" },
+    medFlights: ["17/11/2026"],
+    model: ["TOOL:" + JSON.stringify({ messages: ["تمام"], fields: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 2 المدينة" }, complete: false })],
+    expect: [["الاعتذار رسالة أولى", c => /^أعتذر منك على التأخير، خليني أرتب الطلب مرة ثانية\.\n/.test(c.reply)], ["ثم الكرت", c => /المعلومات صحيحة/.test(c.reply) && /12\/11\/2026/.test(c.reply)]],
+  },
+  {
+    id: "strict-first-card-talk", title: "قاعدة صارمة: أول كرت بعد جمع المعلومات → تأكيد بالكلام أول (مو الكرت)",
+    history: [["T", RESET], ["C", "عمره"], ["C", "٤"], ["C", "كلهم كبار"], ["C", "٣ مكه ٢ المدينه"]],
+    customer: "١١ هذا الشهر",
+    intakeData: { destination: "العمرة", pax: 4, nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true },
+    model: [M("تمام", { destination: "العمرة", pax: 4, date: "2026-11-11", nights: "3 مكة 2 المدينة" })],
+    expect: [["جملة طبيعية", c => /^تمام، يعني عمرة لـ4 أشخاص، السفر 11 نوفمبر، 3 ليالي في مكة وليلتين في المدينة، والعودة 16 نوفمبر؟$/.test(c.reply.trim())], ["❌ لا كرت", c => !/المعلومات صحيحة/.test(c.reply)], ["pending_card", c => c.intake.pending_card === true]],
+  },
+  {
+    id: "card-yes-then-send", title: "٣ نوفمبر: على الكرت «تمام» ثم «ارسلي لي» → يبني (مو يعيد الكرت)",
+    history: [["T", RESET], ["C", "عمره"], ["T", "خليني أتأكد من طلبك:\n- تاريخ السفر: 12/11/2026\nالمعلومات صحيحة؟ أكد لي بـ«نعم»"], ["C", "تمام"]],
+    customer: "ارسلي لي",
+    intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true, return_airport: "madinah" },
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 2 المدينة" })],
+    expect: [["بنى", c => c.buildCalls > 0 && c.buildBody?.return_airport === "madinah"], ["ما أعاد الكرت", c => !/المعلومات صحيحة/.test(c.reply)]],
   },
   {
     id: "pending-dest-wenkom", title: "٢ نوفمبر: سؤال وجهة معلّق والعميل كتب «وينكم» → تبقى العمرة",

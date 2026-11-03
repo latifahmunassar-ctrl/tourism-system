@@ -15,7 +15,7 @@ const TMP = new URL("../.index_under_test.ts", HERE);
 // ── 1) نسخة قابلة للاستيراد من index.ts: بلا Deno.serve، ومع تصدير الدوال ──
 let code = await Deno.readTextFile(SRC);
 code = code.replace(/^Deno\.serve\(/m, "(globalThis as any).__noServe(");
-code += "\nexport { handleNewLeadIntake, handleFollowupAI };\n";
+code += "\nexport { handleNewLeadIntake, handleFollowupAI, extractDestination };\n";
 await Deno.writeTextFile(TMP, code);
 (globalThis as any).__noServe = () => {};
 
@@ -96,22 +96,31 @@ let proposalCalls = 0;
 let lastBuildBody: Record<string, any> | null = null;
 let injectOnModel: string | null = null;
 let lastModelSystem = "";
+let medFlights: string[] | null = null;
+let rejectTools = false;
 (globalThis as any).fetch = async (input: any, init?: any) => {
   const url = String(input?.url || input);
   const json = (o: unknown) => new Response(JSON.stringify(o), { status: 200, headers: { "content-type": "application/json" } });
   if (url.includes("api.anthropic.com")) {
     modelCalls++;
+    if (rejectTools && /"tools"/.test(String(init?.body || ""))) return new Response(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "tools: invalid schema" } }), { status: 400, headers: { "content-type": "application/json" } });
     try { lastModelSystem = String(JSON.parse(String(init?.body || "{}")).system || ""); } catch { lastModelSystem = ""; }
     if (injectOnModel) { DB.wa_message_audit.push({ from_phone: "whatsapp:+96899621742", body: injectOnModel, received_at: new Date(Date.parse("2026-11-02T23:00:00Z")).toISOString(), status: "received" }); injectOnModel = null; }
     const txt = modelQueue.length ? modelQueue.shift()! : modelQueue.at(-1) ?? "{}";
+    // «TOOL:{...}» = ردّ عبر الأداة الإلزامية (tool_use) كما في الإنتاج؛ غير ذلك نص عادي (للتوافق مع السيناريوهات القديمة).
+    if (txt.startsWith("TOOL:")) return json({ id: "m", type: "message", role: "assistant", model: "x", stop_reason: "tool_use", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "tool_use", id: "t1", name: "talal", input: JSON.parse(txt.slice(5)) }] });
     return json({ id: "m", type: "message", role: "assistant", model: "x", stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: txt }] });
   }
   if (url.includes("graph.facebook.com")) return json({ messages: [{ id: "wamid.test" + Math.random() }] });
+  if (url.includes("Tourism-AI") && /makkah_flights/.test(String(init?.body || ""))) {
+    const t: Record<string, unknown> = {}; for (const d of (medFlights || [])) t[d] = { final: 1342, timing: "17:40 - 21:30" };
+    return json({ prices: { oman: { out: {}, ret: {}, ret_med: t } } });
+  }
   if (url.includes("Tourism-AI")) { buildCalls++; try { lastBuildBody = JSON.parse(String(init?.body || "{}")); } catch { lastBuildBody = null; } return json({ ok: true, formatted: "برنامج اختبار", program_code: "MK-TEST", kid_ages: [], price_ready: true }); }
   return json({});
 };
 
-const { handleNewLeadIntake, handleFollowupAI } = await import(TMP.href);
+const { handleNewLeadIntake, handleFollowupAI, extractDestination } = await import(TMP.href);
 
 // ── 4) تشغيل السيناريوهات ──
 const PHONE = "whatsapp:+96899621742";
@@ -125,6 +134,7 @@ function seed(s: Scenario) {
     else DB.wa_admin_messages.push({ customer_phone: PHONE, body, sent_by: "طلال", sent_at: ts() });
   }
   DB.wa_message_audit.push({ from_phone: PHONE, body: s.customer, received_at: ts(), status: "received" });
+  for (const [tb, rows] of Object.entries(s.tables || {})) (DB[tb] ||= []).push(...structuredClone(rows as RowT[]));
   for (const j of (s.jobs || [])) DB.program_pdf_jobs.push({ phone: PHONE, created_at: ts(), attempts: 0, ...j });
   DB.whatsapp_sessions.push({ phone: PHONE, profile_name: "اختبار", intake_active: s.entry !== "followup", stage: "new",
     destination: s.session?.destination ?? null, intake_data: structuredClone(s.intakeData || {}), ad_referral: null, last_message_at: ts() });
@@ -138,7 +148,7 @@ for (const s of SCENARIOS) {
   if (only && !s.id.includes(only)) continue;
   const lastTs = seed(s);
   const before = DB.wa_admin_messages.length;
-  modelQueue = [...s.model]; modelCalls = 0; buildCalls = 0; proposalCalls = 0; lastBuildBody = null; lastModelSystem = ""; injectOnModel = s.inboundDuringModel || null; _bg.length = 0;
+  modelQueue = [...s.model]; modelCalls = 0; buildCalls = 0; proposalCalls = 0; lastBuildBody = null; medFlights = s.medFlights || null; rejectTools = !!s.rejectTools; lastModelSystem = ""; injectOnModel = s.inboundDuringModel || null; _bg.length = 0;
   let crash = "";
   console.error = () => {}; console.warn = () => {}; console.log = () => {};
   try {
@@ -153,7 +163,7 @@ for (const s of SCENARIOS) {
   const sess = DB.whatsapp_sessions[0] || {};
   const proposals = (DB.whatsapp_admin_proposals || []).length;
   const jobs = DB.program_pdf_jobs || [];
-  const ctx = { jobs, modelSystem: lastModelSystem, buildBody: lastBuildBody, reply: sent, session: sess, intake: sess.intake_data || {}, buildCalls, modelCalls, proposals };
+  const ctx = { db: DB, jobs, modelSystem: lastModelSystem, buildBody: lastBuildBody, reply: sent, session: sess, intake: sess.intake_data || {}, buildCalls, modelCalls, proposals };
   const errs: string[] = [];
   if (crash) errs.push("انهار: " + crash.split("\n").slice(0, 3).join(" | "));
   for (const [label, check] of s.expect) { try { if (!check(ctx)) errs.push(label); } catch (e) { errs.push(label + " (" + (e as Error).message + ")"); } }
@@ -163,7 +173,17 @@ for (const s of SCENARIOS) {
     for (const e of errs) realLog(`     ✗ ${e}`);
     realLog(`     ردّ طلال: ${sent.replace(/\n/g, " ⏎ ").slice(0, 300) || "(لا شيء)"}`);
     realLog(`     الوجهة المخزّنة: ${JSON.stringify((sess.intake_data || {}).destination)} | ages=${JSON.stringify((sess.intake_data || {}).ages)} | build=${buildCalls}`);
-  } else { pass++; realLog(`✅ ${s.id} — ${s.title}`); }
+  } else { pass++; realLog(`✅ ${s.id} — ${s.title}`); if (Deno.env.get("VERBOSE")) realLog(`     ردّ طلال: ${sent.replace(/\n/g, " ⏎ ").slice(0, 260)}`); }
+}
+// ── اختبارات وحدة: كشف الوجهة (كلمات عربية تشبه أسماء وجهات) ──
+const DEST_UNITS: Array<[string, string | null]> = [
+  ["مشرمن جده", null],            // ٣ نوفمبر: «مش من جدة» طابقت «شرم» → مصر
+  ["ابي مصر", "مصر"], ["شرم الشيخ", "مصر"], ["لمصر شهر ٢", "مصر"], ["المصروف كم", null],
+];
+for (const [t, want] of DEST_UNITS) {
+  const got = extractDestination(t);
+  if (got === want) { pass++; realLog(`✅ dest-unit «${t}» → ${want}`); }
+  else { fail++; realLog(`❌ dest-unit «${t}» → ${got} (المتوقع ${want})`); }
 }
 await Deno.remove(TMP).catch(() => {});
 realLog(`\nالنتيجة: ${pass} ناجح، ${fail} فاشل من ${pass + fail}`);
