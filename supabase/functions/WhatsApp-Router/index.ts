@@ -1583,23 +1583,35 @@ function _clarifyMsg(what: string, frustrated = false): string {
   return (frustrated ? `أعتذر منك أستاذي، بس فهمني: تقصد ${w}؟` : `عفواً إذا سمحت، تقصد ${w}؟`).replace(/\s+؟/g, "؟").replace(/؟؟/g, "؟");
 }
 // 🗣️ قرار المالكة ٣ نوفمبر: ❌ الكرت ما يجي بسرعة بعد تعديل — قبله كلام طبيعي (تأكيد بالكلام، أو اعتذار).
-const _FRUS_RE = /خبرتك|قلت\s*لك|قلتلك|وبعدين\s*معا?ك|كم\s*مر[ةه]|(?:^|\s)افهم|ما\s*(?:تفهم|فهمت)|مو\s*فاهم|غبي|قلت\s*لك|(?:أ|ا)خبرك|يابن\s*الحلال|يا\s*بن\s*الحلال|للمر[ةه]\s*ال/;
+const _FRUS_RE = /عيب\s*عليك|مو\s*كل\s*شوي|كل\s*شوي[هة]?\s*(?:اسأل|أسأل|اقول|أقول)|خبرتك|قلت\s*لك|قلتلك|وبعدين\s*معا?ك|كم\s*مر[ةه]|(?:^|\s)افهم|ما\s*(?:تفهم|فهمت)|مو\s*فاهم|غبي|قلت\s*لك|(?:أ|ا)خبرك|يابن\s*الحلال|يا\s*بن\s*الحلال|للمر[ةه]\s*ال/;
 // 🗣️ تأكيد بالكلام (جملة طبيعية) قبل أول كرت — بدل ما يطلع الكرت فجأة.
 function _talkSummary(d: Record<string, unknown>): string {
   const g = (k: string) => String(d[k] ?? "").trim();
   const parts: string[] = [];
   const dest = g("destination").replace(/\s*\([^)]*\)\s*/g, " ").trim();
   const pax = g("pax");
-  if (dest) parts.push(/عمر/.test(dest) ? `عمرة${pax ? ` لـ${pax} ${+pax === 1 ? "شخص" : +pax === 2 ? "شخصين" : "أشخاص"}` : ""}` : `رحلة ${dest}${pax ? ` لـ${pax} أشخاص` : ""}`);
+  const _pw = pax ? (+pax === 1 ? " لشخص واحد" : +pax === 2 ? " لشخصين" : ` لـ${pax} أشخاص`) : "";
+  if (dest) parts.push(/عمر/.test(dest) ? `عمرة${_pw}` : `رحلة ${dest}${_pw}`);
   const c = g("date"); const m = c.match(/(\d{4})-(\d{1,2})-(\d{1,2})/) || c.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (m) { const [y, mo, day] = m[1].length === 4 ? [+m[1], +m[2], +m[3]] : [+m[3], +m[2], +m[1]]; parts.push(`السفر ${_arDate(new Date(Date.UTC(y, mo - 1, day)))}`); }
+  else if (c) parts.push(`السفر ${c.replace(/\s*20\d{2}\s*$/, "")}`);   // صيغة حرّة («24-25 نوفمبر») كما قالها العميل
   const nn = _normNights(d.nights);
   const pm = [...nn.matchAll(/(\d{1,2})\s*(مكة|المدينة|الطائف)/g)].map(x => `${x[1]} ${+x[1] === 1 ? "ليلة" : +x[1] === 2 ? "ليلتين" : "ليالي"} في ${x[2]}`.replace(/^2 ليلتين/, "ليلتين").replace(/^1 ليلة/, "ليلة"));
-  if (pm.length) parts.push(pm.join(" و"));
+  if (!pm.length && /^\s*\d{1,2}\s*$/.test(nn) && /عمر/.test(dest)) {   // «3» بلا مدينة → المدن المذكورة (مثلاً مكة فقط)
+    const n = +nn.trim(); const city = /مدين/.test(g("cities")) && !/مك/.test(g("cities")) ? "المدينة" : "مكة";
+    pm.push(`${n === 1 ? "ليلة" : n === 2 ? "ليلتين" : n + " ليالي"} في ${city}`);
+  }
+  // العمرة: نوضّح الأيام والليالي معاً (العميل كثير يقول «٣ ايام» ويقصد ٣ ليالي) — صيغة المالكة: «٤ أيام ٣ ليالي».
+  const _totN = [...nn.matchAll(/(\d{1,2})/g)].map(x => +x[1]).reduce((a, b) => a + b, 0);
+  if (pm.length && /عمر/.test(dest) && _totN > 0) parts.push(`${_totN + 1} أيام ${_totN} ليالي${pm.length > 1 ? ` (${pm.join(" و")})` : pm[0].replace(/^.*?(في\s+\S+)$/, " $1")}`);
+  else if (pm.length) parts.push(pm.join(" و"));
   else if (g("days")) parts.push(`${g("days")} أيام`);
+  const _ct = g("cities");
+  if (!/عمر/.test(dest) && _ct && !/حسب|الوكال|بكيفك|براحتك|رتبو|ترتيب|أي\s*مدن/.test(_ct)) parts.push(`المدن ${_ct}`);
   const r = _tripReturnDate(d);
   if (r) parts.push(`والعودة ${_arDate(r)}${g("return_airport") === "madinah" ? " من مطار المدينة" : ""}`);
-  return `تمام، يعني ${parts.join("، ")}؟`.replace(/،\s*والعودة/, "، والعودة");
+  const _r = parts.join("، ").replace(/،\s*والعودة/, "، والعودة");
+  return /عمر/.test(dest) ? `فهمت عليك، يعني تقصد ${_r}، صحيح أخي الكريم؟` : `تمام، يعني ${_r}؟`;
 }
 function _describeChange(prev: Record<string, unknown>, next: Record<string, unknown>): string {
   const g = (d: Record<string, unknown>, k: string) => String(d[k] ?? "").trim();
@@ -2247,10 +2259,25 @@ async function handleNewLeadIntake(args: {
   const [inboundRes, outboundRes, sessRes] = await Promise.all([
     supabase.from("wa_message_audit").select("body, received_at").eq("from_phone", from)
       .not("body", "is", null).order("received_at", { ascending: false }).limit(30),
-    supabase.from("wa_admin_messages").select("body, sent_at").eq("customer_phone", from)
+    supabase.from("wa_admin_messages").select("body, sent_at, sent_by").eq("customer_phone", from)
       .order("sent_at", { ascending: false }).limit(30),
     supabase.from("whatsapp_sessions").select("intake_data, ad_referral").eq("phone", from).maybeSingle(),
   ]);
+  // 👤 ٤ نوفمبر ٢٠٢٦ (عميل حقيقي): موظف أرسل للعميل برنامج/رسالة وطلال كمّل يسأل «يعني عمرة لـ1 شخص؟».
+  //    أي رسالة من موظف (مو طلال/نظام) بعد بداية الطلب الحالي = الموظف استلم → طلال يسكت ويقفل الاستقبال.
+  {
+    const _st0 = Date.parse(String(((sessRes.data as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}).started_at || "")) || 0;
+    const _rows = ((outboundRes.data || []) as Array<{ body?: string | null; sent_at?: string; sent_by?: string | null }>);
+    let _resetAt = 0; for (const r of _rows) if (String(r.body || "").startsWith("🔄 أُعيد ضبط المحادثة")) { _resetAt = Math.max(_resetAt, Date.parse(String(r.sent_at || "")) || 0); }
+    const _from = Math.max(_st0, _resetAt, Date.now() - 48 * 3600e3);
+    const _staff = _rows.find(r => { const by = String(r.sent_by || "").trim(); return by && !/^(?:طلال|نظام|تأكيد تلقائي)$/.test(by) && (Date.parse(String(r.sent_at || "")) || 0) > _from; });
+    if (_staff) {
+      const _id = (((sessRes.data as { intake_data?: Record<string, unknown> } | null)?.intake_data) || {}) as Record<string, unknown>;
+      await supabase.from("whatsapp_sessions").update({ intake_active: false, intake_data: { ..._id, staff_takeover: true } }).eq("phone", from);
+      await logGuard(supabase, from, "staff_takeover", "talal_silent", String(_staff.sent_by || ""), 1, "", "");
+      return;
+    }
+  }
   type Row = { body?: string | null; received_at?: string; sent_at?: string };
   const msgs: Array<{ ts: string; who: string; body: string }> = [];
   for (const m of ((inboundRes.data || []) as Row[])) if (m.body && !String(m.body).startsWith("📎")) msgs.push({ ts: m.received_at || "", who: "العميل", body: String(m.body) });
@@ -2270,6 +2297,12 @@ async function handleNewLeadIntake(args: {
   //   فتخطّى سؤال عمر الطفلين؛ وملخّص طلال فيه تاريخ/ليالي يُعتبر كأن العميل قالها).
   const custTranscript = msgs.filter(m => m.who === "العميل").slice(-24).map(m => m.body).join("\n").slice(-4000);
   const prev = (sessRes.data as { intake_data?: unknown } | null)?.intake_data || {};
+  // 👀 قرار المالكة (٤ نوفمبر ٢٠٢٦): طلال يقرأ المحادثة كاملة — رسائل العميل «ما انرد عليها» = بعد آخر رسالة **شافها**
+  //    طلال فعلاً (last_seen_in_ts)، مو بعد آخر رد له. رسالة وصلت وهو يكتب ردّه = فاتته → «آه صحيح، الحين انتبهت…».
+  const _lastSeenIn = Date.parse(String((prev as Record<string, unknown>).last_seen_in_ts || "")) || 0;
+  const _lastTalalTs = Math.max(0, ...msgs.filter(m => m.who === "طلال").map(m => Date.parse(m.ts) || 0));
+  const _unseenCust = _lastSeenIn ? msgs.filter(m => m.who === "العميل" && (Date.parse(m.ts) || 0) > _lastSeenIn) : [];
+  const _missedCust = _unseenCust.filter(m => (Date.parse(m.ts) || 0) < _lastTalalTs);
   const today = new Date().toISOString().slice(0, 10);
   // رقم عُماني (+968)؟ — سؤال مطار المغادرة للعمرة (صلالة/مسقط) حصريّ لهم.
   const isOmani = /^whatsapp:\+?968/.test(String(from));
@@ -2518,7 +2551,7 @@ ${returning
   const _guardRejects: Array<{ guard: string; reason: string; attempt: number; text: string }> = [];
   {
     const _model = (Deno.env.get("TALAL_MODEL_OVERRIDE") || "").trim()
-      || (isUmrah ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001");
+      || "claude-sonnet-4-6";   // ٤ نوفمبر ٢٠٢٦ (قرار المالكة): نفس الاحترافية لكل الوجهات — Sonnet للجميع (كان Haiku لغير العمرة)
     let _sysTry = sys;
     let _toolsOff = false;   // شبكة أمان: لو الـAPI رفض الأداة → نكمل بدونها (النص كالسابق)
     for (let _att = 1; _att <= 3; _att++) {   // الأصل + محاولتان
@@ -3036,10 +3069,10 @@ ${returning
     const _lastCust = String(args.body || "").trim()
       || (msgs.filter(m => m.who === "العميل").slice(-1)[0]?.body || "");
     // ٣ نوفمبر ٢٠٢٦: «تمام» ثم «ارسلي لي» → الكرت رجع لأن الفحص قرأ الأخيرة بس. أي رسالة من العميل بعد الكرت تعني الموافقة تكفي.
-    const _afterCard: string[] = (() => { const o: string[] = []; for (let i = msgs.length - 1; i >= 0 && msgs[i].who !== "طلال"; i--) if (msgs[i].who === "العميل") o.unshift(msgs[i].body); if (_lastCust && !o.includes(_lastCust)) o.push(_lastCust); return o; })();
+    const _afterCard: string[] = (() => { const o: string[] = _unseenCust.length ? _unseenCust.map(m => m.body) : []; if (!o.length) for (let i = msgs.length - 1; i >= 0 && msgs[i].who !== "طلال"; i--) if (msgs[i].who === "العميل") o.unshift(msgs[i].body); if (_lastCust && !o.includes(_lastCust)) o.push(_lastCust); return o; })();
     const _yesAny = _afterCard.some(b => isAffirmative(b) || /^\s*(?:ارسل|أرسل|ارسلي|أرسلي|ارسله|ارسلها|جهز|جهّز|جهزه|اعتمد|كمل|كمّل|يلا|خلاص)(?:\s*\S+){0,3}\s*$/.test(String(b || "")));
     const _noChange = !_afterCard.some(b => /\d|غيّ?ر|عدّ?ل|بدّ?ل|لا\s|مو\s|مش\s/.test(String(b || "").replace(/[٠-٩]/g, "1")));
-    if (_wasAwaiting && (isAffirmative(_lastCust) || (_yesAny && _noChange))) {
+    if (_wasAwaiting && (isYesish(_lastCust) || (_yesAny && _noChange) || (_noChange && _afterCard.some(isYesish)))) {
       _mergedData.summary_confirmed = true;
       _mergedData.awaiting_confirm = false;
       upd.intake_active = false;                 // العميل أكّد الملخّص
@@ -3062,7 +3095,7 @@ ${returning
         //    الكرت يطلع فقط: (أ) بعد ما العميل وافق على تأكيد الكلام (pending_card + «نعم»)، أو (ب) بعد رسالة اعتذار مستقلة.
         const _bodyNow2 = String(args.body || "").trim();
         const _waiting = /^[؟?]+$|^\s*(?:وين(?:كم|ك)?|متى|هلا\s*وين|ها|هاه|ايش\s*صار|وش\s*صار)\s*[؟?]*\s*$/.test(_bodyNow2);
-        const _talkYes = _p0.pending_card === true && !_chg && isAffirmative(_bodyNow2);
+        const _talkYes = _p0.pending_card === true && !_chg && isYesish(_bodyNow2);
         if (!_bad && (_frusNow || _waiting)) {
           // متضايق/ينتظر → اعتذار برسالة مستقلة، وبعدها الكرت المرتّب.
           outMsgs = [_waiting && !_frusNow ? "أعتذر منك على التأخير، خليني أرتب الطلب مرة ثانية." : "أعتذر منك حالاً، خليني أرتب الطلب مرة ثانية.", outMsgs[0]];
@@ -3071,6 +3104,10 @@ ${returning
           _mergedData.pending_card = false;   // وافق على تأكيد الكلام → الكرت
         } else if (!_bad && _p0.pending_card === true && !_chg && isNegative(_bodyNow2)) {
           outMsgs = ["تمام، وش التعديل اللي تبيه بالضبط؟"]; _mergedData.pending_card = false;
+        } else if (!_bad && !_chg && _p0.awaiting_confirm === true) {
+          // الكرت انعرض والعميل ردّ بشي غير واضح (مو موافقة ولا تعديل) → ❌ لا نعيد سؤال التأكيد؛ نسأل مرة بصيغة مباشرة.
+          outMsgs = ["عفواً إذا سمحت، أجهّز لك البرنامج بهذي المعلومات؟"];
+          _mergedData.pending_card = false;
         } else if (!_bad) {
           // أي حالة ثانية → تأكيد بالكلام أول (جملة طبيعية)، والكرت بعد «نعم».
           outMsgs = [_chg ? `تمام، يعني تقصد ${_chg}؟` : _talkSummary(_mergedData)];
@@ -3105,6 +3142,7 @@ ${returning
     outMsgs = ["تمام، خليني أتأكد من تفاصيل طلبك وأرد عليك بأقرب وقت 🌟"];
     _mergedData.guard_preview = true;
   }
+  if (myLatest) _mergedData.last_seen_in_ts = myLatest;   // آخر رسالة شافها طلال قبل ما يرد
   upd.intake_data = _mergedData;
 
   // شبكة أمان أخيرة: لا رسالة للعميل ولا بناء برنامج = صمت → سؤال حتميّ + تسجيل.
@@ -3117,6 +3155,13 @@ ${returning
   // سياق حُرّاس التصحيح: آخر رسالة من طلال (تكرار الافتتاح) وآخر رسالة من العميل (سؤال «مين أنت؟» / السلام).
   let _lastTalalBody = String(((outboundRes.data || []) as Row[]).find(m => !!m.body)?.body || "");
   const _lastCustBody = String(args.body || "").trim() || (msgs.filter(m => m.who === "العميل").slice(-1)[0]?.body || "");
+  // 🔁 ٤ نوفمبر ٢٠٢٦: رسالتين ورا بعض → ردّين مكرّرين (الاعتذار + الكرت مرتين). وصلت رسالة أحدث أثناء المعالجة → معالجها يرد.
+  { const _nowLatest = await latestInboundTs(); if (myLatest && _nowLatest && new Date(_nowLatest).getTime() > new Date(myLatest).getTime()) return; }
+  // 👀 رسالة فاتت طلال (وصلت وهو يكتب ردّه السابق) → ينبّه إنه شافها قبل ما يكمل.
+  if (_missedCust.length && outMsgs.length) {
+    const _q = _missedCust.map(m => m.body.trim()).filter(Boolean).slice(-1)[0] || "";
+    if (_q) outMsgs = [`آه صحيح، الحين انتبهت إنك ذكرت «${_q.length > 60 ? _q.slice(0, 60) + "…" : _q}».`, ...outMsgs];
+  }
   for (const raw of outMsgs.slice(0, 3)) {
     // تصحيح تلقائي (أستاذي/تشكيل/فصحى/صياغة ركيكة/ترحيب مكرر/سؤال الحال/تكرار الافتتاح) قبل تنظيف العبارات الممنوعة.
     const _af = guardAutofix(String(raw), { alreadyGreeted, lastCustomer: _lastCustBody, lastTalal: _lastTalalBody });
@@ -3252,7 +3297,9 @@ function _tripReturnDate(d: Record<string, unknown>): Date | null {
   else return null;
   const _nn = _normNights(d.nights);
   const _pairs = _nn.match(/\d{1,2}(?=\s*(?:مكة|المدينة|الطائف))/g);
-  const nights = (_pairs || (_nn.replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))).match(/\d{1,2}/) || [])).map(Number).reduce((a, b) => a + b, 0);
+  let nights = (_pairs || (_nn.replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))).match(/\d{1,2}/) || [])).map(Number).reduce((a, b) => a + b, 0);
+  // غير العمرة: المدة بالأيام (٦ أيام = ٥ ليالي) — العودة = تاريخ السفر + (الأيام − ١).
+  if (!nights) { const dys = parseInt(String(d.days ?? "").replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))), 10); if (dys > 1) nights = dys - 1; }
   if (!nights) return null;
   return new Date(Date.UTC(y, m - 1, day + nights));
 }
@@ -3281,6 +3328,40 @@ function _noMedFlightMsg(c: { date?: Date; nearest?: Date[] }): string {
   const base = `أعتذر منك، ما فيه طيران من المدينة إلى مسقط بتاريخ ${c.date ? _arDate(c.date) : "العودة"}.`;
   const n = (c.nearest || []).map(_arDate);
   return n.length ? `${base} أقرب رحلة متوفرة ${n.join(" أو ")}، تحب نعدّل تاريخ العودة؟ ولا نخلي العودة من جدة؟` : `${base} تحب نخلي العودة من جدة؟`;
+}
+
+// 🔎 قرار المالكة (٣ نوفمبر ٢٠٢٦): طلال يكتشف غلطه بنفسه — كل برنامج ينرسل يُفحص مقابل الطلب المؤكد،
+//    ولو فيه خطأ يعتذر للعميل ويعيد الإرسال مصحّحاً (مرة وحدة) وينبّه الموظفين. العميل ما يحتاج يكتشفه.
+function _programIssues(raw: string, d: Record<string, unknown>, phone: string): string[] {
+  const issues: string[] = [];
+  const t = String(raw || "").replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x)));
+  const pax = Number(d.pax) || 0;   // pax = الإجمالي (طلال يسأل «الإجمالي، الكبار والأطفال»)
+  const fl = (t.split("FLIGHTS:")[1] || "").split(/\n\s*\n/)[0] || "";
+  for (const line of fl.split("\n")) { const m = line.match(/\|\s*(\d+)\s*(?:أشخاص|اشخاص|شخص)\s*\|/); if (m && pax && +m[1] < pax) { issues.push("الطيران ما انحسب لكل المسافرين"); break; } }
+  if (String(d.return_airport || "") === "madinah" && /جد[ةه]\s*←\s*مسقط/.test(fl) && !/المدين[ةه]\s*←\s*مسقط/.test(fl)) issues.push("العودة طلعت من جدة بدل المدينة");
+  const digits = phone.replace(/[^0-9]/g, "");
+  if (/^(968|971|965|974|973|20)/.test(digits) && !/(?:^|\n)CURRENCY:/.test(t)) issues.push("السعر طلع بالريال السعودي بدل عملتك");
+  const df = (t.match(/DATE_FROM:\s*(\d{1,2})/) || [])[1];
+  const cd = String(d.date || ""); const cm = cd.match(/(\d{4})-(\d{1,2})-(\d{1,2})/) || cd.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  const cday = cm ? (cm[1].length === 4 ? +cm[3] : +cm[1]) : 0;
+  if (df && cday && +df !== cday) issues.push("تاريخ السفر في البرنامج غير اللي اتفقنا عليه");
+  return issues;
+}
+async function _selfCorrectProgram(supabase: ReturnType<typeof createClient>, phone: string, code: string, raw: string, d: Record<string, unknown>, alreadyCorrected: boolean): Promise<string[]> {
+  const issues = _programIssues(raw, d, phone);
+  if (!issues.length) return [];
+  await logGuard(supabase, phone, "program_self_check", alreadyCorrected ? "still_wrong" : "issues", issues.join(" | "), 1, code, "");
+  if (alreadyCorrected) {
+    // التصحيح ما نفع (السبب أعمق) → ما نكرّر على العميل؛ تنبيه الموظفين فقط.
+    try { const n = `⚠️ برنامج ${code} للعميل ${phone.replace(/^whatsapp:/, "")} لسا فيه خطأ بعد التصحيح التلقائي: ${issues.join("، ")}`; await Promise.all(staffList("SALES_WHATSAPP_NUMBERS").map(x => sendStaffNotice(x, n))); } catch (_e) { /* */ }
+    return issues;
+  }
+  const msg = `أعتذر منك، لاحظت إن البرنامج اللي أرسلته لك فيه خطأ (${issues.join("، ")}). لو سمحت انتظرني شوي، بعدّله وأرسله لك.`;
+  const sid = await sendWhatsapp(phone, msg);
+  try { await supabase.from("wa_admin_messages").insert({ twilio_sid: sid, customer_phone: phone, body: msg, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+  await supabase.from("program_pdf_jobs").insert({ phone, code, caption: "برنامجك بعد التصحيح 🌟" });
+  try { const n = `🔎 طلال اكتشف خطأ في برنامج ${code} (${phone.replace(/^whatsapp:/, "")}): ${issues.join("، ")} — اعتذر للعميل وأعاد الإرسال تلقائياً.`; await Promise.all(staffList("SALES_WHATSAPP_NUMBERS").map(x => sendStaffNotice(x, n))); } catch (_e) { /* */ }
+  return issues;
 }
 
 async function isFullAiNumber(supabase: ReturnType<typeof createClient>, from: string): Promise<boolean> {
@@ -3319,10 +3400,21 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   // 🔁 دمج الرسائل المتلاحقة: لو وصلت رسالة أحدث أثناء المعالجة، معالجها يرد على الكل (حادثة ٣ نوفمبر: ردّين متناقضين).
   const _latestIn = async () => { const { data } = await supabase.from("wa_message_audit").select("received_at").eq("from_phone", from).order("received_at", { ascending: false }).limit(1).maybeSingle(); return String((data as { received_at?: string } | null)?.received_at || ""); };
   const _myLatest = await _latestIn();
+  const _lastSeenF = Date.parse(String(idata.last_seen_in_ts || "")) || 0;
+  const _lastTalalF = Math.max(0, ...msgs.filter(m => m.who === "طلال").map(m => Date.parse(m.ts) || 0));
+  const _unseenF = _lastSeenF ? msgs.filter(m => m.who === "العميل" && (Date.parse(m.ts) || 0) > _lastSeenF) : [];
+  const _missedF = _unseenF.filter(m => (Date.parse(m.ts) || 0) < _lastTalalF);
+  let _ackDone = false;
   const _superseded = async () => { const now = await _latestIn(); return !!now && !!_myLatest && now > _myLatest; };
   const _say = async (reply: string, guard: string, action: string, reason = "", raw = false) => {
     if (await _superseded()) return false;
+    if (_missedF.length && !_ackDone) {
+      _ackDone = true;
+      const _q = _missedF.map(m => m.body.trim()).filter(Boolean).slice(-1)[0] || "";
+      if (_q) { const _ack = `آه صحيح، الحين انتبهت إنك ذكرت «${_q.length > 60 ? _q.slice(0, 60) + "…" : _q}».`; await sendCustomerReply(supabase, from, _ack); try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: _ack, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ } }
+    }
     if (raw) await sendWhatsapp(from, reply); else await sendCustomerReply(supabase, from, reply);
+    try { if (_myLatest) { const { data: _ss } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", from).maybeSingle(); const _dd = ((_ss as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>; await supabase.from("whatsapp_sessions").update({ intake_data: { ..._dd, last_seen_in_ts: _myLatest } }).eq("phone", from); } } catch (_e) { /* */ }
     try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: raw ? reply : stripBannedPhrases(reply), sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
     await logGuard(supabase, from, guard, action, reason, 1, text, reply);
     return true;
@@ -3342,7 +3434,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   };
   // 🧩 ٣ نوفمبر ٢٠٢٦: الرسائل تُدمَج (يرد طلال مرة وحدة على آخرها) — فالكشف الحتمي لازم يقرأ **كل** رسائل
   //    العميل بعد آخر رد لطلال، مو الأخيرة بس («احتاج العوده من مطار المدينه / افهم / كم مره أخبرك» ضاع الطلب).
-  const _batch = (() => { let k = msgs.length - 1; const out: string[] = []; for (; k >= 0 && msgs[k].who !== "طلال"; k--) if (msgs[k].who === "العميل") out.unshift(msgs[k].body); const j = out.join("\n"); return j.includes(text) ? j : (j ? j + "\n" + text : text); })();
+  const _batch = (() => { const out: string[] = _unseenF.length ? _unseenF.map(m => m.body) : []; if (!out.length) { let k = msgs.length - 1; for (; k >= 0 && msgs[k].who !== "طلال"; k--) if (msgs[k].who === "العميل") out.unshift(msgs[k].body); } const j = out.join("\n"); return j.includes(text) ? j : (j ? j + "\n" + text : text); })();
   // ✋ تعديل معلّق ينتظر «نعم» (قرار المالكة: نقاش وتأكيد طبيعي أولاً، ثم الكرت النهائي).
   const _pend = (idata.pending_modify && typeof idata.pending_modify === "object") ? idata.pending_modify as Record<string, unknown> : null;
   const _applyModify = async (changed: Record<string, unknown>, prefix = "") => {
@@ -3444,7 +3536,15 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     await _say(_modifyConfirmQ(changed), "followup_ai", "modify_confirm_q", JSON.stringify(changed).slice(0, 200));
   };
   // ✈️ طلب مطار العودة (حتميّ، بلا نموذج) — العمرة فقط.
-  const _frustratedF = /خبرتك|قلتلك|وبعدين\s*معا?ك|كم\s*مر[ةه]|(?:^|\s)افهم|ما\s*(?:تفهم|فهمت)|مو\s*فاهم|غبي|قلت\s*لك|(?:أ|ا)خبرك|يا\s*بن\s*الحلال|يابن\s*الحلال|للمر[ةه]\s*ال/.test(_batch);
+  const _frustratedF = /عيب\s*عليك|مو\s*كل\s*شوي|كل\s*شوي[هة]?\s*(?:اسأل|أسأل|اقول|أقول)|خبرتك|قلتلك|وبعدين\s*معا?ك|كم\s*مر[ةه]|(?:^|\s)افهم|ما\s*(?:تفهم|فهمت)|مو\s*فاهم|غبي|قلت\s*لك|(?:أ|ا)خبرك|يا\s*بن\s*الحلال|يابن\s*الحلال|للمر[ةه]\s*ال/.test(_batch);
+  // 🔎 العميل يشتكي من البرنامج («شوف البرنامج اللي أرسلته»، «عيب عليك») → طلال يفحص برنامجه بنفسه:
+  //    فيه خطأ → اعتذار + تصحيح وإرسال؛ ما لقى → اعتذار (أ) ويسأل وش الغلط. ❌ أبداً «ما فيه خطأ» (قرار المالكة).
+  const _complainsProg = /(?:شوف|راجع|تأكد\s*من|افحص)\s*(?:\S+\s*){0,2}?(?:ال)?(?:برنامج|برنانج|ملف)|(?:ال)?برنامج\s*(?:\S+\s*){0,2}?(?:غلط|خطأ|خطا|فيه\s*غلط|مو\s*صح|ناقص)/.test(_batch);
+  if ((_complainsProg || _frustratedF) && String(idata.program_final_raw || "").trim() && String(idata.program_final_code || "")) {
+    const _iss = _programIssues(String(idata.program_final_raw), idata, from);
+    if (_iss.length) { if (await _superseded()) return; await _selfCorrectProgram(supabase, from, String(idata.program_final_code), String(idata.program_final_raw), idata, false); return; }
+    if (_complainsProg) { await _say("أعتذر منك أستاذي، بس فهمني وش الغلط اللي لاحظته في البرنامج عشان أصححه لك فوراً؟", "followup_ai", "complaint_no_issue_found", "", true); return; }
+  }
   // 🛟 احتياط (القاعدة ٣): كاشفات الكلمات لطلب مطار العودة — تشتغل **بعد** فهم النموذج، لو فاته أو فشل.
   const _medReqs = msgs.filter(m => m.who === "العميل" && (RE_RET_MED.test(m.body) || /مطار\s*(?:ال)?مدين/.test(m.body))).length;
   const _airportRegex = async (): Promise<boolean> => {
@@ -3524,7 +3624,9 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
 • ❌ لا تذكر أي سعر رقمي إلا لو موجود حرفياً في البرنامج.
 • لو طلب **تعديل** معلومة (عدد/أعمار/تاريخ/ليالي/مدن/مطار العودة) → action="modify" وضع الحقول الجديدة **فقط** في fields (مطار العودة: return_airport="madinah" أو "jeddah").
 • تغيير مطار العودة (جدة ↔ المدينة) = action="modify" مع return_airport — ❌ مو handoff ولا «بحوّل للزميل».
+• اقرأ المحادثة **كاملة** — لو فيه رسالة من العميل ما رديت عليها (وصلت وأنت ترد)، خذها بعين الاعتبار ولا تتجاهلها.
 • المطارات = حقل airports بالضبط. ❌ لا تخترع مطار وصول/عودة غيره، ولو نص البرنامج يخالفه فالمعتمد airports.
+• ❌ أبداً لا تقول «ما فيه خطأ» أو تحمّل العميل يدوّر الغلط — لو ما عرفت الغلط: «أعتذر منك أستاذي، بس فهمني وش الغلط اللي لاحظته عشان أصححه لك فوراً؟».
 • العميل متضايق → اعتذر بإحدى ثلاث (قرار المالكة):
   (أ) ما فهمت قصده → «أعتذر منك أستاذي، بس فهمني إيش تقصد بـ…؟» (اذكر الكلمة اللي ما فهمتها).
   (ب) فهمت والعميل غلطان (يخالف الحقائق/البرنامج) → «أعتذر منك، بس أنا سبق ووضحت لك …» واذكر الحقيقة من الحقائق.
@@ -3537,7 +3639,7 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
 • الطفل عندنا ١٠ سنوات وتحت (بدون سرير إضافي)، و١١ وفوق بالغ.
 أعد JSON فقط: {"message":"...","action":"reply|modify|resend_program|handoff","frustration":"none","fields":{}}`;
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-  const model = (Deno.env.get("TALAL_MODEL_OVERRIDE") || "").trim() || (isUmrahF ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001");
+  const model = (Deno.env.get("TALAL_MODEL_OVERRIDE") || "").trim() || "claude-sonnet-4-6";   // Sonnet لكل الوجهات (قرار المالكة)
   type FOut = { message?: string; action?: string; frustration?: string; fields?: Record<string, unknown> };
   let out: FOut | null = null;
   let sysTry = sys;
@@ -3602,6 +3704,7 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
     reply = reply.replace(/^\s*(?:أعتذر|اعتذر)\s*منك(?:\s*أستاذي)?[،,]?\s*(?:بس\s*)?(?:أنا\s*)?(?:سبق\s*و\s*?وضحت\s*لك\s*(?:إن|ان)?\s*)?/, "").replace(/^\s*(?:آسف|اسف)[،,]?\s*/, "").trim();
     if (reply) reply = reply.charAt(0) + reply.slice(1);
   }
+  if (_frus && reply && !/^\s*(?:أعتذر|اعتذر|حاضر، أعتذر)/.test(reply)) reply = "أعتذر منك أستاذي، " + reply.replace(/^\s*(?:ما\s*فيه?\s*(?:في\s*البرنامج\s*)?خطأ[^.،]*[.،]\s*)/, "");
   const _wasApolA = /^\s*أعتذر منك أستاذي/.test(reply);
   try { reply = guardAutofix(reply, { alreadyGreeted: true, lastCustomer: text, lastTalal: msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body || "" }).text; } catch (_e) { /* */ }
   if (_wasApolA && !/^أعتذر منك أستاذي/.test(reply)) reply = reply.replace(/^\s*أعتذر منك[،,]?\s*/, "أعتذر منك أستاذي، ");
@@ -5196,6 +5299,14 @@ function isAffirmative(text: string): boolean {
   // category") in the admin correction flow — also keep all the old yeses.
   return ["نعم","تم","ايوه","أيوه","ايوا","أيوا","موافق","تمام","صح","صحيح","اي","أجل","اجل","زين","اكيد","أكيد","ماشي","yes","y","ok","اوكي","اوك"]
     .some(w => t === w || t.startsWith(w + " ") || t.startsWith(w + "."));
+}
+// ٤ نوفمبر ٢٠٢٦ (عميل حقيقي): «كل شي صح» و«مليون مره قلت ايوا» ما انحسبت موافقة → طلال سأل نفس السؤال ٤ مرات.
+//    موافقة = كلمة إيجاب في أي مكان بالرسالة، بلا نفي ولا طلب تغيير.
+function isYesish(text: string): boolean {
+  const t = String(text || "").trim();
+  if (isAffirmative(t)) return true;
+  if (/(?:^|\s)(?:لا|مو|مش|مب|ما)\s|غيّ?ر|عدّ?ل|بدّ?ل|[0-9٠-٩]/.test(t)) return false;
+  return /(?:^|\s)(?:ايوا|ايوه|إيوه|أيوه|أيوا|ايه|إيه|نعم|صح|صحيح|مضبوط|تمام|اوكي|اوك|ok|yes|اكيد|أكيد|موافق|أجل|اجل|زين|ماشي|يب|يس)(?=\s|$|[!.،؟?])|كل\s*(?:شي|شيء)\s*(?:صح|تمام|مضبوط)|كله\s*(?:صح|تمام)|المعلومات\s*صح/i.test(t);
 }
 function isNegative(text: string): boolean {
   const t = text.trim().toLowerCase();
@@ -7799,15 +7910,36 @@ Deno.serve(async (req) => {
         // ٣ نوفمبر ٢٠٢٦: نص البرنامج **النهائي** كما في الـPDF (من العامل) — طلال يقرأه بدل نسخة السيرفر الأولى.
         const _fr = String(p.program_raw || "").trim();
         if (_fr) { _d.program_final_raw = _fr.slice(0, 12000); _d.program_final_code = String(job.code); await supabase.from("whatsapp_sessions").update({ intake_data: _d }).eq("phone", String(job.phone)); }
+        // 🔎 فحص ذاتي بعد الإرسال (رسائل ما بعد البرنامج أولاً، ثم الاعتذار لو فيه خطأ).
         if (_pm.length) {
           await supabase.from("whatsapp_sessions").update({ intake_data: { ..._d, post_program_msgs: [] } }).eq("phone", String(job.phone));
           await sendPostProgramMessages(supabase, String(job.phone), _pm);
+        }
+        // 🔎 فحص ذاتي بعد الإرسال ورسائل ما بعد البرنامج — لو فيه خطأ: اعتذار + إعادة إرسال مصحّح (مرة) + تنبيه.
+        if (_fr) {
+          await new Promise(r => setTimeout(r, 2500));
+          await _selfCorrectProgram(supabase, String(job.phone), String(job.code), _fr, _d, /بعد التصحيح/.test(String(job.caption || "")));
         }
       } catch (_e) { /* */ }
       return new Response(JSON.stringify({ ok: true, url: pub.publicUrl }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }
+  }
+
+  // 🔎 فحص ذاتي يدوي لآخر برنامج انرسل لرقم (نفس منطق ما بعد الإرسال): ?admin_action=program_self_check {phone}
+  if (url.searchParams.get("admin_action") === "program_self_check") {
+    if (!checkAuth(req)) return unauthorized();
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    try {
+      const p = await req.json(); const phone = String(p.phone || "");
+      const { data: _s } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", phone).maybeSingle();
+      const _d = ((_s as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
+      const raw = String(_d.program_final_raw || ""); const code = String(_d.program_final_code || "");
+      if (!raw || !code) return new Response(JSON.stringify({ ok: false, error: "no final program" }), { headers: jsonCors });
+      const issues = p.dry_run ? _programIssues(raw, _d, phone) : await _selfCorrectProgram(supabase, phone, code, raw, _d, false);
+      return new Response(JSON.stringify({ ok: true, code, issues, dry_run: !!p.dry_run }), { headers: jsonCors });
+    } catch (e) { return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors }); }
   }
 
   if (url.searchParams.get("admin_action") === "send_admin_message") {

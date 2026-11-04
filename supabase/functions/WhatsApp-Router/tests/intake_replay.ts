@@ -15,7 +15,7 @@ const TMP = new URL("../.index_under_test.ts", HERE);
 // ── 1) نسخة قابلة للاستيراد من index.ts: بلا Deno.serve، ومع تصدير الدوال ──
 let code = await Deno.readTextFile(SRC);
 code = code.replace(/^Deno\.serve\(/m, "(globalThis as any).__noServe(");
-code += "\nexport { handleNewLeadIntake, handleFollowupAI, extractDestination };\n";
+code += "\nexport { handleNewLeadIntake, handleFollowupAI, extractDestination, _programIssues };\n";
 await Deno.writeTextFile(TMP, code);
 (globalThis as any).__noServe = () => {};
 
@@ -96,6 +96,7 @@ let proposalCalls = 0;
 let lastBuildBody: Record<string, any> | null = null;
 let injectOnModel: string | null = null;
 let lastModelSystem = "";
+let lastModelName = "";
 let medFlights: string[] | null = null;
 let rejectTools = false;
 (globalThis as any).fetch = async (input: any, init?: any) => {
@@ -104,7 +105,7 @@ let rejectTools = false;
   if (url.includes("api.anthropic.com")) {
     modelCalls++;
     if (rejectTools && /"tools"/.test(String(init?.body || ""))) return new Response(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "tools: invalid schema" } }), { status: 400, headers: { "content-type": "application/json" } });
-    try { lastModelSystem = String(JSON.parse(String(init?.body || "{}")).system || ""); } catch { lastModelSystem = ""; }
+    try { const _jb = JSON.parse(String(init?.body || "{}")); lastModelSystem = String(_jb.system || ""); lastModelName = String(_jb.model || ""); } catch { lastModelSystem = ""; }
     if (injectOnModel) { DB.wa_message_audit.push({ from_phone: "whatsapp:+96899621742", body: injectOnModel, received_at: new Date(Date.parse("2026-11-02T23:00:00Z")).toISOString(), status: "received" }); injectOnModel = null; }
     const txt = modelQueue.length ? modelQueue.shift()! : modelQueue.at(-1) ?? "{}";
     // «TOOL:{...}» = ردّ عبر الأداة الإلزامية (tool_use) كما في الإنتاج؛ غير ذلك نص عادي (للتوافق مع السيناريوهات القديمة).
@@ -120,7 +121,7 @@ let rejectTools = false;
   return json({});
 };
 
-const { handleNewLeadIntake, handleFollowupAI, extractDestination } = await import(TMP.href);
+const { handleNewLeadIntake, handleFollowupAI, extractDestination, _programIssues } = await import(TMP.href);
 
 // ── 4) تشغيل السيناريوهات ──
 const PHONE = "whatsapp:+96899621742";
@@ -129,15 +130,17 @@ function seed(s: Scenario) {
     wa_settings: [{ key: "ai_mode", value: "PREVIEW" }, { key: "auto_program_test_numbers", value: "99621742" }] };
   let t = Date.parse("2026-11-02T10:00:00Z");
   const ts = () => new Date(t += 15_000).toISOString();
+  const _tsList: string[] = [];
   for (const [who, body] of s.history) {
+    _tsList.push(new Date(t + 15_000).toISOString());
     if (who === "C") DB.wa_message_audit.push({ from_phone: PHONE, body, received_at: ts(), status: "received" });
-    else DB.wa_admin_messages.push({ customer_phone: PHONE, body, sent_by: "طلال", sent_at: ts() });
+    else DB.wa_admin_messages.push({ customer_phone: PHONE, body, sent_by: who === "S" ? "غروب" : (body.startsWith("AUTO:") ? "تأكيد تلقائي" : "طلال"), sent_at: ts() });
   }
   DB.wa_message_audit.push({ from_phone: PHONE, body: s.customer, received_at: ts(), status: "received" });
   for (const [tb, rows] of Object.entries(s.tables || {})) (DB[tb] ||= []).push(...structuredClone(rows as RowT[]));
   for (const j of (s.jobs || [])) DB.program_pdf_jobs.push({ phone: PHONE, created_at: ts(), attempts: 0, ...j });
   DB.whatsapp_sessions.push({ phone: PHONE, profile_name: "اختبار", intake_active: s.entry !== "followup", stage: "new",
-    destination: s.session?.destination ?? null, intake_data: structuredClone(s.intakeData || {}), ad_referral: null, last_message_at: ts() });
+    destination: s.session?.destination ?? null, intake_data: { ...structuredClone(s.intakeData || {}), ...(s.seenAt !== undefined ? { last_seen_in_ts: _tsList[s.seenAt] } : {}) }, ad_referral: null, last_message_at: ts() });
   return ts;
 }
 
@@ -163,7 +166,7 @@ for (const s of SCENARIOS) {
   const sess = DB.whatsapp_sessions[0] || {};
   const proposals = (DB.whatsapp_admin_proposals || []).length;
   const jobs = DB.program_pdf_jobs || [];
-  const ctx = { db: DB, jobs, modelSystem: lastModelSystem, buildBody: lastBuildBody, reply: sent, session: sess, intake: sess.intake_data || {}, buildCalls, modelCalls, proposals };
+  const ctx = { db: DB, jobs, modelName: lastModelName, modelSystem: lastModelSystem, buildBody: lastBuildBody, reply: sent, session: sess, intake: sess.intake_data || {}, buildCalls, modelCalls, proposals };
   const errs: string[] = [];
   if (crash) errs.push("انهار: " + crash.split("\n").slice(0, 3).join(" | "));
   for (const [label, check] of s.expect) { try { if (!check(ctx)) errs.push(label); } catch (e) { errs.push(label + " (" + (e as Error).message + ")"); } }
@@ -184,6 +187,22 @@ for (const [t, want] of DEST_UNITS) {
   const got = extractDestination(t);
   if (got === want) { pass++; realLog(`✅ dest-unit «${t}» → ${want}`); }
   else { fail++; realLog(`❌ dest-unit «${t}» → ${got} (المتوقع ${want})`); }
+}
+// ── اختبارات وحدة: الفحص الذاتي للبرنامج المرسل (قرار المالكة: طلال يكتشف غلطه بنفسه) ──
+{
+  const D = { pax: 5, date: "12/11/2026", return_airport: "madinah" };
+  const RAW = (n: number, ret: string, cur = true) => `DEST:العمرة${cur ? "\nCURRENCY:ريال عماني|10" : ""}\nDATE_FROM:12 نوفمبر 2026\nFLIGHTS:\nمسقط ← جدة (السلام) | ذهاب | 940 ريال/شخص | ${n} أشخاص | x\n${ret} ← مسقط (العماني) | عودة | 826 ريال/شخص | ${n} أشخاص | y\n\nTOURS:\n`;
+  const U: Array<[string, string[], string]> = [
+    ["MK-2026-010 الحقيقي (طيران لـ٤ من ٥)", _programIssues(RAW(4, "المدينة"), D, "whatsapp:+96899621742"), "الطيران ما انحسب"],
+    ["بعد التصحيح (٥)", _programIssues(RAW(5, "المدينة"), D, "whatsapp:+96899621742"), ""],
+    ["طلب المدينة والعودة طلعت جدة", _programIssues(RAW(5, "جدة"), D, "whatsapp:+96899621742"), "العودة طلعت من جدة"],
+    ["رقم عماني بلا عملة", _programIssues(RAW(5, "المدينة", false), D, "whatsapp:+96899621742"), "بالريال السعودي"],
+    ["رقم سعودي بلا عملة = عادي", _programIssues(RAW(5, "المدينة", false), D, "whatsapp:+966500000000"), ""],
+  ];
+  for (const [name, issues, want] of U) {
+    const ok = want ? issues.some(i => i.includes(want)) && issues.length === 1 : issues.length === 0;
+    if (ok) { pass++; realLog(`✅ self-check «${name}» → ${issues.join(" | ") || "سليم"}`); } else { fail++; realLog(`❌ self-check «${name}» → ${issues.join(" | ") || "سليم"} (المتوقع ${want || "سليم"})`); }
+  }
 }
 await Deno.remove(TMP).catch(() => {});
 realLog(`\nالنتيجة: ${pass} ناجح، ${fail} فاشل من ${pass + fail}`);
