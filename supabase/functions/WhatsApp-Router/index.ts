@@ -3318,6 +3318,13 @@ ${returning
     const _first = String(outMsgs[0] || "").replace(/^\s*(?:تمام|حاضر|أبشر|ابشر)[،,]?\s*(?:🌟\s*)?/, "");
     outMsgs = /المعلومات صحيحة/.test(_first) ? ["أعتذر منك على التأخير، معك الحين.", ...outMsgs] : [`أعتذر منك على التأخير، معك الحين. ${_first}`, ...outMsgs.slice(1)];
   }
+  // 🗣️ قرار المالكة (٤ نوفمبر ٢٠٢٦): «أبشر، عندنا برامج عمرة…» جملة أول تواصل بس — لو المحادثة فيها نقاش سابق (قالها قبل / طلب سابق)
+  //    → «أكيد طبعاً، اتفضل.» بدلها.
+  {
+    const _openRe = /^\s*(?:أبشر|ابشر)،?\s*عندنا\s*برامج\s*[^.؟?!]*[.!]\s*/;
+    const _talked = msgs.some(m => m.who === "طلال" && /عندنا\s*برامج/.test(m.body)) || (Array.isArray((prev as Record<string, unknown>).prev_requests) && ((prev as Record<string, unknown>).prev_requests as unknown[]).length > 0);
+    if (outMsgs.length && _talked && _openRe.test(String(outMsgs[0]))) outMsgs[0] = String(outMsgs[0]).replace(_openRe, "أكيد طبعاً، اتفضل. ");
+  }
   // 👀 رسالة فاتت طلال (وصلت وهو يكتب ردّه السابق) → ينبّه إنه شافها قبل ما يكمل.
   if (_missedCust.length && outMsgs.length) {
     const _q = _missedCust.map(m => m.body.trim()).filter(Boolean).slice(-1)[0] || "";
@@ -4311,14 +4318,25 @@ async function handleMessage(args: {
   {
     const _sid = ((session as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
     const _sepReq = /عيل[ةه]\s*ثاني|عائل[ةه]\s*ثاني|ناس\s*ثاني|ربع\s*ثاني|(?:طلب|حجز|برنامج|رحل[ةه])\s*(?:ثاني|ثانية|جديد|آخر|اخر|ثاني[ةه])\s*(?:ل|غير|لناس|لعيل)|لشخص\s*ثاني|لأهلي|لاهلي|لربعي|لأخوي|لاخوي|لأختي|لاختي|لصديق|غير\s*هذا\s*الطلب|مو\s*(?:بدل|تغيير)/.test(text);
+    // 🆕 ٤ نوفمبر ٢٠٢٦ (حي): «احتاج برنامج عمره ثاني» → «تقصد تغير الوجهة…؟» → «لا مش حغير / طلب ثاني هذا» = طلب **مستقل**
+    //    (كان يبقى على تايلاند ثم يخلط: ٦ أشخاص + توزيعة تايلاند + حارس «العدد معروف» ٣ مرات).
+    const _noChangeSep = _sid.asked_dest_change === true && !!String(_sid.pending_dest || "").trim()
+      && /(?:^|\s)(?:لا|لأ|مش|مو|ما|مب)\s*(?:\S+\s*)?(?:ح|ب|ن)?[اأ]?غيّ?ر|مو\s*تغيير|(?:طلب|برنامج|حجز)\s*(?:ثاني|ثانية|جديد|آخر|اخر|ثاني[ةه])|غير\s*هذا|بالإضاف[ةه]|زياد[ةه]\s*على/.test(text);
+    const _sepReq2 = _sepReq || _noChangeSep || /(?:طلب|برنامج)\s*(?:ثاني|جديد|آخر|اخر)\s*(?:هذا|هذي)?\s*$/.test(text);
     const _guessYes = !!String(_sid.pending_dest_guess || "") && isYesish(text);
-    const _newD = detectedDest || (_guessYes ? String(_sid.pending_dest_guess) : "") || (_sepReq ? String(_sid.pending_dest || "") : "");
-    if (_sepReq && _newD && _newD !== String(_sid.destination || "")) {
+    const _newD = detectedDest || (_guessYes ? String(_sid.pending_dest_guess) : "") || (_sepReq2 ? String(_sid.pending_dest || "") : "");
+    if (_sepReq2 && _newD && _newD !== String(_sid.destination || "")) {
       const _prevReq = { destination: _sid.destination, pax: _sid.pax, date: _sid.date, nights: _sid.nights, days: _sid.days, program_code: _sid.program_final_code, at: new Date().toISOString() };
       const _hist = Array.isArray(_sid.prev_requests) ? (_sid.prev_requests as unknown[]) : [];
       await supabase.from("whatsapp_sessions").update({ intake_active: true, stage: "new", destination: _newD,
-        intake_data: { destination: _newD, started_at: new Date(Date.now() - 60_000).toISOString(), prev_requests: [..._hist, _prevReq].slice(-5) } }).eq("phone", from);
+        intake_data: { destination: _newD, started_at: new Date(Date.now() - 60_000).toISOString(), last_seen_in_ts: new Date().toISOString(), prev_requests: [..._hist, _prevReq].slice(-5) } }).eq("phone", from);
       await logGuard(supabase, from, "separate_request", "fresh_intake", `${String(_sid.destination || "")} → ${_newD}`, 1, text, "");
+      // قرار المالكة: محادثة قائمة + طلب جديد بلا تفاصيل بالرسالة → «أكيد طبعا، اتفضل، إيش هو طلبك؟» (مو «أبشر، عندنا برامج…» من جديد).
+      if (!detectedDest && !/\d|[٠-٩]|شخص|اشخاص|أشخاص|نفر|كبار|بالغ|اطفال|أطفال|ليال|ليالي|يوم|ايام|أيام|شهر/.test(text)) {
+        await sendCustomerReply(supabase, from, "أكيد طبعا، اتفضل، إيش هو طلبك؟");
+        try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: "أكيد طبعا، اتفضل، إيش هو طلبك؟", sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+        return;
+      }
       await handleNewLeadIntake({ supabase, from, body: text, referral: _referral });
       return;
     }
