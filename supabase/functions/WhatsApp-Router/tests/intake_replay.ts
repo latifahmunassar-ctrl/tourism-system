@@ -107,7 +107,7 @@ let buildFail = false;
     modelCalls++;
     if (rejectTools && /"tools"/.test(String(init?.body || ""))) return new Response(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "tools: invalid schema" } }), { status: 400, headers: { "content-type": "application/json" } });
     try { const _jb = JSON.parse(String(init?.body || "{}")); lastModelSystem = String(_jb.system || ""); lastModelName = String(_jb.model || ""); } catch { lastModelSystem = ""; }
-    if (injectOnModel) { DB.wa_message_audit.push({ from_phone: "whatsapp:+96899621742", body: injectOnModel, received_at: new Date(Date.parse("2026-11-02T23:00:00Z")).toISOString(), status: "received" }); injectOnModel = null; }
+    if (injectOnModel) { DB.wa_message_audit.push({ from_phone: "whatsapp:+96899621742", body: injectOnModel, received_at: new Date(Date.now() + 60_000).toISOString(), status: "received" }); injectOnModel = null; }
     const txt = modelQueue.length ? modelQueue.shift()! : modelQueue.at(-1) ?? "{}";
     // «TOOL:{...}» = ردّ عبر الأداة الإلزامية (tool_use) كما في الإنتاج؛ غير ذلك نص عادي (للتوافق مع السيناريوهات القديمة).
     if (txt.startsWith("TOOL:")) return json({ id: "m", type: "message", role: "assistant", model: "x", stop_reason: "tool_use", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "tool_use", id: "t1", name: "talal", input: JSON.parse(txt.slice(5)) }] });
@@ -130,7 +130,7 @@ const PHONE = "whatsapp:+96899621742";
 function seed(s: Scenario) {
   DB = { wa_message_audit: [], wa_admin_messages: [], whatsapp_sessions: [], guard_logs: [], program_pdf_jobs: [],
     wa_settings: [{ key: "ai_mode", value: "PREVIEW" }, { key: "auto_program_test_numbers", value: "99621742" }] };
-  let t = Date.parse("2026-11-02T10:00:00Z");
+  let t = Date.now() - 3 * 3600e3;   // أوقات حديثة دائماً (قاعدة «الموظف استلم» تنظر آخر ٤٨ ساعة)
   const ts = () => new Date(t += 15_000).toISOString();
   const _tsList: string[] = [];
   for (const [who, body] of s.history) {
