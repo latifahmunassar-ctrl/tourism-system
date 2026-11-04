@@ -312,10 +312,10 @@ export const SCENARIOS: Scenario[] = [
     expect: [["طمأنة", c => /^طلبك عند زميلي المختص وبيرد عليك قريب إن شاء الله\.$/.test(c.reply.trim())], ["❌ لا تراجع", c => !/ما احتاج أحولك|أنا أقدر/.test(c.reply)]],
   },
   {
-    id: "fu-capabilities-in-prompt", entry: "followup", title: "النموذج يعرف قدراته (الفندق = زميل، التاريخ = بنفسه)",
+    id: "fu-capabilities-in-prompt", entry: "followup", title: "قرار المالكة: طلب فندق داخل البرنامج → ❌ لا تحويل للزميل",
     history: PROG_HIST, customer: "ابي فندق ثاني في مكة", intakeData: DONE,
     model: [FU("أبشر، تغيير الفندق يحتاج زميلي المختص، حوّلت له طلبك وبيرد عليك قريب", "handoff")],
-    expect: [["ردّ صادق بلا وعد", c => /زميلي المختص/.test(c.reply) && !/أنا أقدر/.test(c.reply)], ["تحويل صادق", c => c.proposals > 0]],
+    expect: [["قرار المالكة: الفندق لطلال (مو زميل)", c => !/زميلي/.test(c.reply) && c.proposals === 0]],
   },
   {
     id: "fu-hotel-change-repeat-visit", entry: "followup", title: "٤ نوفمبر: «غير لنا الفندق في بوكيت لمن نرجع من كرابي مو نفس الاول» → تأكيد بالكلام بصيغة المالكة (بلا تفاصيل داخلية ولا تحويل)",
@@ -411,6 +411,25 @@ export const SCENARIOS: Scenario[] = [
     intakeData: { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 12, cities: "بوكيت، كرابي، بانكوك", summary_confirmed: true, pending_modify: { distribution: "2 بوكيت - 4 بانكوك - 3 كرابي - 2 بوكيت", order_asked: true } },
     model: [FU("أبشر، بحول طلبك لزميلي المختص لترتيب الطيران الدولي", "handoff"), M("تمام", { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 12, cities: "بوكيت، كرابي، بانكوك" }, true)],
     expect: [["بنى بالترتيب", c => c.buildBody?.distribution === "2 بوكيت - 4 بانكوك - 3 كرابي - 2 بوكيت"], ["ما حوّل", c => c.proposals === 0]],
+  },
+  {
+    id: "fu-wait-while-building", entry: "followup", title: "٤ نوفمبر: بعد «تمام، أبشر، شوية والبرنامج عندك» والعميل «في انتظارك» → «البرنامج قيد التجهيز…» (مو «زميلي المختص»)",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "أبشر، بحول طلبك لزميلي المختص لترتيب الطيران الدولي"], ["C", "تماما"], ["T", "تمام، أبشر، شوية والبرنامج عندك."]],
+    customer: "في انتظار كً", intakeData: { destination: "تايلاند", pax: 6, date: "17/11/2026", days: 12, summary_confirmed: true },
+    model: [FU("طلبك عند زميلي المختص وبيرد عليك قريب إن شاء الله.")],
+    expect: [["قيد التجهيز", c => /^البرنامج قيد التجهيز، ثواني ويوصلك إن شاء الله\.$/.test(c.reply.trim())]],
+  },
+  {
+    id: "fu-handoff-blocked-non-topic", entry: "followup", title: "قرار المالكة: النموذج حاول يحوّل طلب داخل البرنامج للزميل → ممنوع، طلال يسأل ويتولاه",
+    history: PROG_HIST, customer: "ممكن تغير لنا شي في البرنامج", intakeData: DONE,
+    model: [FU("أبشر، بحول طلبك لزميلي المختص", "handoff")],
+    expect: [["❌ لا زميل", c => !/زميلي/.test(c.reply)], ["ما انفتح طلب للموظف", c => c.proposals === 0]],
+  },
+  {
+    id: "fu-handoff-allowed-flights", entry: "followup", title: "طلب طيران دولي (غير العمرة) → التحويل للزميل مسموح",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-070"]], customer: "ابي تضيف لنا الطيران من مسقط", intakeData: { destination: "تايلاند", pax: 6, date: "17/11/2026", days: 12, summary_confirmed: true },
+    model: [FU("أبشر، الطيران الدولي يحتاج زميلي المختص، حوّلت له طلبك وبيرد عليك قريب", "handoff")],
+    expect: [["تحويل", c => c.proposals > 0 && /زميلي/.test(c.reply)]],
   },
   {
     id: "fu-question-from-program", entry: "followup", title: "متابعة: سؤال جوابه في البرنامج → يرد بنفسه بلا تحويل",
