@@ -432,6 +432,31 @@ export const SCENARIOS: Scenario[] = [
     expect: [["تحويل", c => c.proposals > 0 && /زميلي/.test(c.reply)]],
   },
   {
+    id: "fu-no-jeddah-for-thailand", entry: "followup", title: "٤ نوفمبر: طلب تايلاند → النموذج ما يشوف «مطار جدة» بالحقائق (كان يكتب «الطيران الدولي (جدة بوكيت)»)",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-072"]], customer: "شامل الطيران؟",
+    intakeData: { destination: "تايلاند", pax: 6, date: "17/11/2026", days: 12, cities: "بوكيت، كرابي، بانكوك", summary_confirmed: true },
+    model: [FU("لا، البرنامج ما يشمل الطيران الدولي.")],
+    expect: [["❌ لا جدة بالحقائق", c => !/مطار جدة/.test(c.modelSystem.split("القواعد:")[0])]],
+  },
+  {
+    id: "fu-flights-domestic-only", entry: "followup", title: "قرار المالكة: «شامل الطيران الدولي؟» والبرنامج فيه داخلي بس → الجواب من البرنامج (بلا جدة)",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-072"]], customer: "شامل الطيران الدولي ؟", intakeData: { destination: "تايلاند", pax: 6, date: "17/11/2026", days: 12, summary_confirmed: true, program_final_raw: "DEST:تايلاند\nFLIGHTS:\nاليوم 3: phuket - bangkok | داخلي | 300 ريال/شخص | 6 أشخاص | 1,800 ريال\nاليوم 7: bangkok - krabi | داخلي | 300 ريال/شخص | 6 أشخاص | 1,800 ريال\n\nTRANSFERS:\n" },
+    model: [FU("لا، البرنامج ما يشمل الطيران الدولي (جدة بوكيت)")],
+    expect: [["الجواب", c => /^لا أستاذي، البرنامج ما يشمل الطيران الدولي، بس يشمل الطيران الداخلي بين المدن \(بوكيت ← بانكوك، وبانكوك ← كرابي\) مع الاستقبال والتوديع\./.test(c.reply)], ["❌ لا جدة", c => !/جدة/.test(c.reply)], ["ما استدعى النموذج", c => c.modelCalls === 0]],
+  },
+  {
+    id: "fu-flights-international-included", entry: "followup", title: "العمرة: «شامل الطيران؟» والبرنامج فيه دولي → «إيه أستاذي، البرنامج شامل الطيران الدولي (…)»",
+    history: PROG_HIST, customer: "البرنامج شامل الطيران؟", intakeData: { ...DONE, program_final_raw: "DEST:العمرة\nFLIGHTS:\nمسقط ← جدة (طيران السلام · 12/11/2026) | ذهاب | 940 ريال/شخص | 5 أشخاص | x\nالمدينة ← مسقط (الطيران العماني · 17/11/2026) | عودة | 826 ريال/شخص | 5 أشخاص | y\n\nTOURS:\n" },
+    model: [FU("x")],
+    expect: [["تأكيد", c => /^إيه أستاذي، البرنامج شامل الطيران الدولي \(مسقط ← جدة، والمدينة ← مسقط\)\.$/.test(c.reply.trim())]],
+  },
+  {
+    id: "fu-flights-none", entry: "followup", title: "«فيه طيران؟» والبرنامج بلا طيران → «لا أستاذي…»",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-066"]], customer: "فيه طيران؟", intakeData: { destination: "تايلاند", pax: 6, date: "17/11/2026", days: 12, summary_confirmed: true, program_final_raw: "DEST:تايلاند\nFLIGHTS:\n\nTOURS:\n" },
+    model: [FU("x")],
+    expect: [["لا", c => /^لا أستاذي، البرنامج ما يشمل الطيران، بس يشمل الفنادق/.test(c.reply)]],
+  },
+  {
     id: "fu-question-from-program", entry: "followup", title: "متابعة: سؤال جوابه في البرنامج → يرد بنفسه بلا تحويل",
     history: PROG_HIST, customer: "وش اسم الفندق في مكة؟", intakeData: DONE,
     model: [FU("الفندق في مكة فوكو، ٣ ليال")],

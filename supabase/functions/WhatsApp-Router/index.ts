@@ -3560,7 +3560,8 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   }
   // ٣ نوفمبر ٢٠٢٦: طلال اخترع «وصول وانصراف من مطار المدينة» — المطارات حقيقة مخزّنة، مو تخمين.
   const _retMed = String(idata.return_airport || "") === "madinah";
-  facts.airports = _retMed ? "الذهاب إلى مطار جدة، والعودة من مطار المدينة" : "الذهاب والعودة من مطار جدة";
+  // ٤ نوفمبر ٢٠٢٦: «الطيران الدولي (جدة بوكيت)» — كانت تنضاف «مطار جدة» لكل الوجهات. المطارات حقيقة **للعمرة فقط**.
+  if (_isUmrahDest(String(facts.destination || "") + " " + String(facts.cities || ""))) facts.airports = _retMed ? "الذهاب إلى مطار جدة، والعودة من مطار المدينة" : "الذهاب والعودة من مطار جدة";
   // 🔁 دمج الرسائل المتلاحقة: لو وصلت رسالة أحدث أثناء المعالجة، معالجها يرد على الكل (حادثة ٣ نوفمبر: ردّين متناقضين).
   const _latestIn = async () => { const { data } = await supabase.from("wa_message_audit").select("received_at").eq("from_phone", from).order("received_at", { ascending: false }).limit(1).maybeSingle(); return String((data as { received_at?: string } | null)?.received_at || ""); };
   const _myLatest = await _latestIn();
@@ -3848,6 +3849,26 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
       return;
     }
   }
+  // ✈️ ٤ نوفمبر ٢٠٢٦ (قرار المالكة): سؤال «شامل الطيران؟» → الجواب من البرنامج نفسه (قسم FLIGHTS)، مو تخمين النموذج.
+  {
+    const _asksFlight = /(?:شامل|يشمل|فيه|في|مشمول|داخل|تشمل)\s*(?:\S+\s*){0,2}?(?:ال)?(?:طيران|تذاكر|تذكر[ةه])|(?:ال)?(?:طيران|تذاكر)\s*(?:\S+\s*){0,1}?(?:مشمول|داخل|شامل|موجود)/.test(_batch) && /[؟?]|هل|شامل|مشمول/.test(_batch);
+    const _raw = String(idata.program_final_raw || "");
+    if (_asksFlight && _raw) {
+      const _fl = (_raw.split("FLIGHTS:")[1] || "").split(/\n\s*\n/)[0].split("\n").filter(l => l.includes("|"));
+      const _route = (l: string) => String(l.split("|")[0] || "").replace(/^\s*اليوم\s*\d+\s*:\s*/, "").replace(/\s*\(.*$/, "").replace(/\s*-\s*/g, " ← ").replace(/\b([a-z])/g, (m) => m.toUpperCase()).trim();
+      const _arCity = (x: string) => x.replace(/[A-Za-z][A-Za-z ]*[A-Za-z]|[A-Za-z]/g, w => CITY_AR[w] || CITY_AR[w.replace(/\b\w/g, c => c.toUpperCase())] || w).replace(/\s*←\s*/g, " ← ");
+      const _intl = _fl.filter(l => /\|\s*(?:ذهاب|عودة|عوده)\s*\|/.test(l) || /مسقط|muscat/i.test(l));
+      const _dom = _fl.filter(l => /\|\s*داخلي\s*\|/.test(l));
+      const _list = (ls: string[]) => ls.map(l => _arCity(_route(l))).filter(Boolean).join("، و");
+      let _ans: string;
+      if (_intl.length) _ans = `إيه أستاذي، البرنامج شامل الطيران الدولي (${_list(_intl)})${_dom.length ? `، والطيران الداخلي بين المدن (${_list(_dom)})` : ""}.`;
+      else if (_dom.length) _ans = `لا أستاذي، البرنامج ما يشمل الطيران الدولي، بس يشمل الطيران الداخلي بين المدن (${_list(_dom)}) مع الاستقبال والتوديع. ولو حاب نضيف لك الطيران الدولي، بحوّل طلبك لزميلي المختص يسعّره لك.`;
+      else _ans = "لا أستاذي، البرنامج ما يشمل الطيران، بس يشمل الفنادق والتنقلات المذكورة. ولو حاب نضيف لك الطيران الدولي، بحوّل طلبك لزميلي المختص يسعّره لك.";
+      if (await _superseded()) return;
+      await _say(_ans, "followup_ai", "flight_inclusion_answer", `intl=${_intl.length} dom=${_dom.length}`, true);
+      return;
+    }
+  }
   // ⏳ ٤ نوفمبر ٢٠٢٦: البرنامج قيد التجهيز («تمام، أبشر، شوية والبرنامج عندك») والعميل ينتظر → كان النموذج يقول «طلبك عند زميلي».
   {
     const _lt0 = msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body || "";
@@ -3962,7 +3983,7 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
   المطر أحياناً» قل «الجو معتدل ودرجات الحرارة بين 25 و32، ومناسب جداً للشواطئ والجولات». ❌ لا تخترع. لو سأل العميل **تحديداً**
   عن عيب («فيه مطر؟») جاوب بصدق وبلطف مع الجانب الإيجابي.
 • ❌ لا تذكر للعميل تفاصيل داخلية («أحولك/ما احتاج أحولك»، «أنا أقدر/ما أقدر»، «النظام») — كلّمه عن طلبه بس.
-• المطارات = حقل airports بالضبط. ❌ لا تخترع مطار وصول/عودة غيره، ولو نص البرنامج يخالفه فالمعتمد airports.
+• المطارات: للعمرة = حقل airports بالضبط. لغير العمرة ❌ لا تذكر أي مطار أو مدينة إقلاع (جدة/مسقط…) إلا لو مكتوبة في البرنامج أو قالها العميل.
 • ❌ أبداً لا تقول «ما فيه خطأ» أو تحمّل العميل يدوّر الغلط — لو ما عرفت الغلط: «أعتذر منك أستاذي، بس فهمني وش الغلط اللي لاحظته عشان أصححه لك فوراً؟».
 • العميل متضايق → اعتذر بإحدى ثلاث (قرار المالكة):
   (أ) ما فهمت قصده → «أعتذر منك أستاذي، بس فهمني إيش تقصد بـ…؟» (اذكر الكلمة اللي ما فهمتها).
