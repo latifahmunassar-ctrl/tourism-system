@@ -15,7 +15,7 @@ const TMP = new URL("../.index_under_test.ts", HERE);
 // ── 1) نسخة قابلة للاستيراد من index.ts: بلا Deno.serve، ومع تصدير الدوال ──
 let code = await Deno.readTextFile(SRC);
 code = code.replace(/^Deno\.serve\(/m, "(globalThis as any).__noServe(");
-code += "\nexport { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish };\n";
+code += "\nexport { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish, sendPostProgramMessages };\n";
 await Deno.writeTextFile(TMP, code);
 (globalThis as any).__noServe = () => {};
 
@@ -131,7 +131,7 @@ let buildFail = false;
   return json({});
 };
 
-const { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish } = await import(TMP.href);
+const { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish, sendPostProgramMessages } = await import(TMP.href);
 
 // ── 4) تشغيل السيناريوهات ──
 const PHONE = "whatsapp:+96899621742";
@@ -232,6 +232,19 @@ for (const [t, want] of [["يعني الي عمره ١٢ سنه يعتر بال�
     ["الجاهزية تكرار = «بعد التعديل»", _varyPostMsg(RDY, 1), x => /البرنامج بعد التعديل صار جاهز/.test(x)],
   ];
   for (const [n, got, ok] of U) { if (ok(got)) { pass++; realLog(`✅ post-msg «${n}»`); } else { fail++; realLog(`❌ post-msg «${n}» → ${got}`); } }
+}
+// ── ٤ نوفمبر ٢٠٢٦ (حي): طلب جديد بعد برنامج سابق → «برنامجك صار جاهز» (مو «بعد التعديل») ──
+{
+  const RDY = "تفضل أستاذي، برنامجك صار جاهز. أي تعديل في البرنامج أنا حاضر.";
+  const old = new Date(Date.now() - 3600e3).toISOString(), start = new Date(Date.now() - 600e3).toISOString();
+  for (const [n, sessStart, ok] of [["طلب جديد (الجاهزية السابقة قبل بدايته)", start, (x: string) => /برنامجك صار جاهز/.test(x)], ["نفس الطلب (تعديل)", new Date(Date.now() - 7200e3).toISOString(), (x: string) => /بعد التعديل/.test(x)]] as Array<[string, string, (x: string) => boolean]>) {
+    DB = { wa_admin_messages: [{ customer_phone: PHONE, body: RDY, sent_by: "طلال", sent_at: old }], whatsapp_sessions: [{ phone: PHONE, intake_data: { started_at: sessStart } }], wa_message_audit: [], guard_logs: [], program_pdf_jobs: [], wa_settings: [] };
+    console.log = () => {}; console.error = () => {};
+    try { await sendPostProgramMessages(fakeSupabase, PHONE, [RDY]); } catch (_e) { /* */ }
+    console.log = realLog; console.error = realErr;
+    const got = String(DB.wa_admin_messages.at(-1)?.body || "");
+    if (ok(got)) { pass++; realLog(`✅ post-ready «${n}»`); } else { fail++; realLog(`❌ post-ready «${n}» → ${got}`); }
+  }
 }
 // ── وحدة: صيغ الموافقة (٤ نوفمبر: «تماما» ما انحسبت) ──
 for (const [t, want] of [["تماما", true], ["تمامم", true], ["تمام", true], ["اوكيه", true], ["طيب", true], ["👍", true], ["✅", true], ["ايوه", true], ["okk", true], ["كل شي صح", true], ["لا", false], ["تمام بس غير التاريخ ١٥", false], ["متى", false]] as Array<[string, boolean]>) {

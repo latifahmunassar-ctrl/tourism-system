@@ -1631,10 +1631,15 @@ function _varyPostMsg(m: string, timesBefore: number): string {
 async function sendPostProgramMessages(supabase: ReturnType<typeof createClient>, phone: string, msgs0: string[]): Promise<void> {
   let msgs = msgs0;
   try {
-    const { data: _prev } = await supabase.from("wa_admin_messages").select("body").eq("customer_phone", phone).eq("sent_by", "طلال").order("sent_at", { ascending: false }).limit(60);
+    const { data: _prev } = await supabase.from("wa_admin_messages").select("body, sent_at").eq("customer_phone", phone).eq("sent_by", "طلال").order("sent_at", { ascending: false }).limit(60);
     const _bodies = ((_prev || []) as Array<{ body?: string }>).map(r => String(r.body || ""));
     const _cnt = (re: RegExp) => _bodies.filter(b => re.test(b)).length;
-    const nReady = _cnt(/^تفضل أستاذي، (?:برنامجك صار جاهز|البرنامج بعد التعديل|هذا البرنامج المعدّل)/);
+    // ٤ نوفمبر ٢٠٢٦ (حي): طلب عمرة **جديد** بعد برنامج تايلاند → «البرنامج بعد التعديل صار جاهز». «بعد التعديل» = نفس الطلب فقط
+    //    (رسائل الجاهزية من بداية الطلب الحالي started_at).
+    let _reqStartP = 0;
+    try { const { data: _ss } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", phone).maybeSingle(); _reqStartP = Date.parse(String(((_ss as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}).started_at || "")) || 0; } catch (_e) { /* */ }
+    const _readyRe = /^تفضل أستاذي، (?:برنامجك صار جاهز|البرنامج بعد التعديل|هذا البرنامج المعدّل)/;
+    const nReady = ((_prev || []) as Array<{ body?: string; sent_at?: string }>).filter(r => _readyRe.test(String(r.body || "")) && (Date.parse(String(r.sent_at || "")) || 0) >= _reqStartP).length;
     // ملاحظة السرير: «سابقاً» فقط لو انذكرت **نفس الأطفال** (نفس الأعمار) قبل — مو أطفال طلب ثاني.
     const _kidKey = (m: string) => (m.match(/(?:عمره|أعمارهم)\s*([^).،]+)/) || [])[1]?.trim() || "";
     msgs = msgs0.map(m => {
