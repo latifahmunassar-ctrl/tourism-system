@@ -1532,6 +1532,15 @@ const FOLLOWUP_TOOL = {
       return_airport: { type: "string", enum: ["", "madinah", "jeddah"] } } } } },
 };
 // نص الرد: من أداة tool_use (المضمونة) وإلا من النص.
+// أسماء المدن (كما في سطور الفنادق بالإنجليزي) → عربي للتوزيعة والرسائل.
+const CITY_AR: Record<string, string> = { Phuket: "بوكيت", Krabi: "كرابي", Bangkok: "بانكوك", Pattaya: "باتايا", "Koh Samui": "ساموي", "Chiang Mai": "شيانغ ماي",
+  Makkah: "مكة", "Al Madinah": "المدينة", Madinah: "المدينة", Istanbul: "إسطنبول", Trabzon: "طرابزون", Bursa: "بورصة", "Kuala Lumpur": "كوالالمبور", Langkawi: "لنكاوي", Penang: "بينانغ" };
+// ٤ نوفمبر ٢٠٢٦: «ضيف لنا بانكوك ٣ ايام» → البناء اختار توزيعة جديدة من الصفر (بانكوك ٤ أولاً، وضاعت إقامة بوكيت الثانية).
+//    التوزيعة السابقة من سطور الفنادق بالبرنامج المرسل: «2 بوكيت - 3 كرابي - 3 بوكيت».
+function prevDistribution(raw: string): Array<{ city: string; nights: number }> {
+  const lines = (String(raw || "").split("HOTELS:")[1] || "").split(/\n\s*\n/)[0].split("\n").filter(l => l.includes("|"));
+  return lines.map(l => { const p = l.split("|").map(x => x.trim()); const n = +((l.replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))).match(/\|\s*(\d+)\s*(?:ليال[يٍ]?|ليلة|ليلتين)\s*(?:\(|\|)/) || [])[1] || 0); return { city: CITY_AR[p[1]] || p[1], nights: n }; }).filter(x => x.nights > 0);
+}
 function _modelText(res: { content: unknown[] }): string {
   for (const b of res.content as Array<{ type?: string; input?: unknown; text?: string }>) if (b.type === "tool_use" && b.input) return JSON.stringify(b.input);
   let t = ""; for (const b of res.content as Array<{ type?: string; text?: string }>) if (b.type === "text") t += b.text || "";
@@ -3301,7 +3310,7 @@ ${returning
   if (_doAutoBuild) {
     // 🕋 العمرة: التوزيع مخزّن في حقل nights («٣ مكة ٢ المدينة»)، والأيام تُشتق من
     //    مجموع الليالي + ١. غير العمرة: التوزيع في cities والأيام كما هي.
-    let _dist0 = _isUmrahPax ? String(_mergedData.nights || "").trim() : String(_mergedData.cities || "").trim();
+    let _dist0 = _isUmrahPax ? String(_mergedData.nights || "").trim() : (String(_mergedData.distribution || "").trim() || String(_mergedData.cities || "").trim());
     // ٤ نوفمبر ٢٠٢٦: «بوكيت» (مدينة بلا ليالي) → «no buildable program» وما وصل العميل شي. مدينة وحدة بلا أرقام + أيام
     //    معروفة → «N ليالي المدينة» (N = الأيام − ١)؛ أكثر من مدينة بلا أرقام → نخلي المحرك يختار التوزيع.
     if (!_isUmrahPax && _dist0 && !/[0-9٠-٩]/.test(_dist0)) {
@@ -3606,6 +3615,34 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   };
   const _clearPend = async () => { const nd = { ...idata }; delete nd.pending_modify; await supabase.from("whatsapp_sessions").update({ intake_data: nd }).eq("phone", from); delete idata.pending_modify; };
   if (_pend) {
+    // 🧭 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): إضافة مدينة لبرنامج متعدد المدن → بعد «نعم» نسأل عن الترتيب ومطار القدوم/المغادرة مع اقتراح.
+    const _segs = String(_pend.distribution || "").split(/\s*-\s*/).map(x => x.trim()).filter(Boolean);
+    const _segCity = (x: string) => x.replace(/^\d+\s*/, "").trim();
+    if (_segs.length >= 2 && _pend.order_asked === true) {
+      // ردّ العميل على سؤال الترتيب: موافقة → نبني؛ ذكر مدينة قدوم/مغادرة → نرتّب ثم نبني.
+      const _t = _batch;
+      const _arr = (_t.match(/(?:القدوم|الوصول|نوصل|نبدأ|نبدا|البداية|أول)\s*(?:على|في|إلى|الى|ب|من)?\s*(\S+)/) || [])[1] || "";
+      const _dep = (_t.match(/(?:المغادر[ةه]|نغادر|العود[ةه]|نرجع|الرجوع|آخر|اخر|ننهي|النهاية)\s*(?:على|في|إلى|الى|ب|من)?\s*(\S+)/) || [])[1] || "";
+      const _findIdx = (w: string, fromEnd = false) => { const nw = w.replace(/^ال/, ""); const idxs = _segs.map((x, i) => (_segCity(x).includes(nw) || nw.includes(_segCity(x)) ? i : -1)).filter(i => i >= 0); return idxs.length ? (fromEnd ? idxs[idxs.length - 1] : idxs[0]) : -1; };
+      let segs = [..._segs];
+      if (_arr) { const i = _findIdx(_arr); if (i > 0) { const [x] = segs.splice(i, 1); segs.unshift(x); } }
+      if (_dep) { const i = segs.findIndex((x, k) => k === segs.length - 1 ? false : (_segCity(x).includes(_dep.replace(/^ال/, "")) || _dep.includes(_segCity(x)))); if (i >= 0 && i < segs.length - 1) { const [x] = segs.splice(i, 1); segs.push(x); } }
+      if ((_arr || _dep) || isYesish(text)) {
+        if (await _superseded()) return;
+        const _final = { ..._pend, distribution: segs.join(" - ") }; delete (_final as Record<string, unknown>).order_asked;
+        if (!(await _medGate(_final))) { await _clearPend(); return; }
+        await _applyModify(_final); return;
+      }
+    }
+    if (isAffirmative(text) && _segs.length >= 2 && _pend.order_asked !== true && !_isUmrahReq) {
+      if (await _superseded()) return;
+      const _cs = _segs.map(_segCity);
+      const _mid = [...new Set(_cs.slice(1, -1))].filter(c => c !== _cs[0] && c !== _cs[_cs.length - 1]);
+      const _q = `تمام، وبالنسبة للترتيب: تحب يكون القدوم على ${_cs[0]}${_mid.length ? `، وبعدها ${_mid.join(" و")}` : ""}، والمغادرة من ${_cs[_cs.length - 1]}؟ ولا حاب ترتيب ثاني؟`;
+      await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, pending_modify: { ..._pend, order_asked: true } } }).eq("phone", from);
+      await _say(_q, "followup_ai", "order_question", _pend.distribution as string);
+      return;
+    }
     if (isAffirmative(text)) { if (await _superseded()) return; if (!(await _medGate(_pend))) { await _clearPend(); return; } await _applyModify(_pend); return; }
     await _clearPend();
     if (isNegative(text)) { await _say("تمام، وش التعديل اللي تبيه بالضبط؟", "followup_ai", "modify_declined"); return; }
@@ -3662,18 +3699,37 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     }
     await _clearAlt();   // ردّ ثاني → نكمل عادي
   }
-  const _modifyConfirmQ = (c: Record<string, unknown>): string => {
+  // 🗣️ ٤ نوفمبر ٢٠٢٦: «تقصد نخلي الليالي 11 ليالي، ونخلي الرحلة 12 أيام، والمدن…، والوجهة تايلاند (…)» — آلي ومكرّر وغلط نحوياً.
+  //    الحين: نذكر **اللي تغيّر بس**، بجملة طبيعية، بأعداد صحيحة، ومع تاريخ العودة الجديد.
+  const _numWord = (n: number, one: string, two: string, few: string, many: string) => n === 1 ? one : n === 2 ? two : (n >= 3 && n <= 10) ? `${n} ${few}` : `${n} ${many}`;
+  const _modifyConfirmQ = (c0: Record<string, unknown>): string => {
+    const same = (k: string) => String(c0[k] ?? "").trim() === String(idata[k] ?? "").trim();
+    const c: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(c0)) if (!same(k) || k === "return_airport" || k === "hotel_prefs") c[k] = v;
+    if (c.destination && (extractDestination(String(c.destination)) === extractDestination(String(idata.destination || "")))) delete c.destination;
+    const nd = { ...idata, ...c };
     const parts: string[] = [];
     if (c.return_airport === "madinah") parts.push("الذهاب إلى مطار جدة، وبعد ذلك العودة من مطار المدينة");
     else if (c.return_airport === "jeddah") parts.push("الذهاب والعودة من مطار جدة");
-    if (c.nights) parts.push(`نخلي الليالي ${c.nights}`);
-    if (c.pax) parts.push(`نخلي العدد ${c.pax}`);
+    const newCities = c.cities ? String(c.cities).split(/\s*(?:،|,|\s+و\s*)\s*/).filter(x => x && !String(idata.cities || "").includes(x)) : [];
+    const dys = parseInt(String(c.days ?? "").replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))), 10);
+    if (newCities.length && dys) parts.push(`نضيف ${newCities.join(" و")} وتصير الرحلة ${_numWord(dys, "يوم واحد", "يومين", "أيام", "يوم")} (${String(c.cities)})`);
+    else {
+      if (newCities.length) parts.push(`نضيف ${newCities.join(" و")} للبرنامج`);
+      else if (c.cities) parts.push(`المدن تصير ${c.cities}`);
+      if (dys) parts.push(`تصير الرحلة ${_numWord(dys, "يوم واحد", "يومين", "أيام", "يوم")}`);
+      else if (c.nights && _isUmrahReq) parts.push(`الليالي تصير ${c.nights}`);
+    }
+    if (c.pax) parts.push(`العدد يصير ${c.pax}`);
     if (c.ages) parts.push(`أعمار الأطفال ${c.ages}`);
-    if (c.date) parts.push(`نغيّر تاريخ السفر إلى ${c.date}`);
-    if (c.days) parts.push(`نخلي الرحلة ${c.days} أيام`);
-    if (c.cities) parts.push(`المدن ${c.cities}`);
-    if (c.destination) parts.push(`الوجهة ${c.destination}`);
-    return `تمام، تقصد ${parts.join("، و")}؟`;
+    if (c.date) parts.push(`السفر يكون ${c.date}`);
+    if (c.destination) parts.push(`الوجهة تصير ${c.destination}`);
+    const r = (c.date || c.days || c.nights) ? _tripReturnDate(nd) : null;
+    if (r && !c.return_airport) parts.push(`والعودة ${_arDate(r)}`);
+    if (!parts.length) return "تمام، تقصد نعدّل البرنامج كذا؟";
+    // صيغة المالكة الحرفية لسؤال المطار وحده.
+    if (parts.length === 1 && c.return_airport === "madinah") return "تمام، تقصد الذهاب إلى مطار جدة، وبعد ذلك العودة من مطار المدينة؟";
+    return `تمام، تقصد ${parts.join("، ").replace(/،\s*والعودة/, "، والعودة")}؟`;
   };
   const _askModify = async (changed: Record<string, unknown>) => {
     if (await _superseded()) return;
@@ -3897,6 +3953,17 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
     if (changed.destination && _isUmrahDest(String(facts.destination || "")) && _isOmanDest(String(changed.destination))) delete changed.destination;
     if (changed.return_airport && !["madinah", "jeddah"].includes(String(changed.return_airport))) delete changed.return_airport;
     if (changed.return_airport && (!_isUmrahReq || (changed.return_airport === "madinah") === _retMed)) delete changed.return_airport;
+    // إضافة مدينة لبرنامج موجود → نحافظ على التوزيعة السابقة ونضيف المدينة الجديدة بالليالي المطلوبة (مو توزيعة جديدة من الصفر).
+    if (!_isUmrahReq && changed.cities && String(idata.program_final_raw || "")) {
+      const _pd = prevDistribution(String(idata.program_final_raw));
+      const _added = String(changed.cities).split(/\s*(?:،|,|\s+و\s*)\s*/).filter(x => x && !_pd.some(p => p.city === x) && !String(idata.cities || "").includes(x));
+      const _oldDays = parseInt(String(idata.days ?? ""), 10) || (_pd.reduce((a, b) => a + b.nights, 0) + 1);
+      const _newDays = parseInt(String(changed.days ?? ""), 10) || 0;
+      const _addN = _newDays > _oldDays ? _newDays - _oldDays : 0;
+      if (_pd.length && _added.length === 1 && _addN > 0) {
+        changed.distribution = [..._pd.map(p => `${p.nights} ${p.city}`), `${_addN} ${_added[0]}`].join(" - ");
+      }
+    }
     // تغيير التاريخ أثناء نقاش «ما فيه طيران من المدينة» = العميل يبي يوافق يوم فيه طيران → نُبقي طلب العودة من المدينة (والبوابة تفحص التاريخ الجديد).
     if ((changed.date || changed.nights) && _hadAlt && !_retMed && _isUmrahReq) changed.return_airport = "madinah";
     if (Object.keys(changed).length) { await _askModify(changed); return; }
