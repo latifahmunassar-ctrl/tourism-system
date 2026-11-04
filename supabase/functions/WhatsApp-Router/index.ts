@@ -1569,7 +1569,37 @@ function postProgramMessages(kidAges: number[]): string[] {
   }
   return out;
 }
-async function sendPostProgramMessages(supabase: ReturnType<typeof createClient>, phone: string, msgs: string[]): Promise<void> {
+// ٤ نوفمبر ٢٠٢٦ (قرار المالكة): رسائل ما بعد البرنامج انرسلت قبل لنفس العميل → نفس المحتوى بصياغة ثانية
+//    («مثل ما ذكرت لك سابقاً…» / «البرنامج بعد التعديل…») بدل تكرارها حرفياً.
+function _varyPostMsg(m: string, timesBefore: number): string {
+  if (timesBefore <= 0) return m;
+  if (/^تفضل أستاذي، برنامجك صار جاهز/.test(m)) {
+    const v = ["تفضل أستاذي، البرنامج بعد التعديل صار جاهز. أي تعديل ثاني أنا حاضر.", "تفضل أستاذي، هذا البرنامج المعدّل. لو تحب أي تعديل ثاني أنا حاضر."];
+    return v[(timesBefore - 1) % v.length];
+  }
+  const k = m.match(/^علماً أن البرنامج ما فيه سرير إضافي (للطفل اللي عمره [^.]+|للأطفال \([^)]*\))\./);
+  if (k) {
+    const v = [`مثل ما ذكرت لك سابقاً، البرنامج ما فيه سرير إضافي ${k[1]}، ولو حاب أضيف سرير إضافي عطني خبر وأضيف التكلفة تبعه.`,
+      `وللتذكير، ما فيه سرير إضافي ${k[1]} في البرنامج، ولو حاب نضيفه بلغني وأضيف تكلفته.`];
+    return v[(timesBefore - 1) % v.length];
+  }
+  return m;
+}
+async function sendPostProgramMessages(supabase: ReturnType<typeof createClient>, phone: string, msgs0: string[]): Promise<void> {
+  let msgs = msgs0;
+  try {
+    const { data: _prev } = await supabase.from("wa_admin_messages").select("body").eq("customer_phone", phone).eq("sent_by", "طلال").order("sent_at", { ascending: false }).limit(60);
+    const _bodies = ((_prev || []) as Array<{ body?: string }>).map(r => String(r.body || ""));
+    const _cnt = (re: RegExp) => _bodies.filter(b => re.test(b)).length;
+    const nReady = _cnt(/^تفضل أستاذي، (?:برنامجك صار جاهز|البرنامج بعد التعديل|هذا البرنامج المعدّل)/);
+    // ملاحظة السرير: «سابقاً» فقط لو انذكرت **نفس الأطفال** (نفس الأعمار) قبل — مو أطفال طلب ثاني.
+    const _kidKey = (m: string) => (m.match(/(?:عمره|أعمارهم)\s*([^).،]+)/) || [])[1]?.trim() || "";
+    msgs = msgs0.map(m => {
+      if (/^تفضل أستاذي/.test(m)) return _varyPostMsg(m, nReady);
+      if (/^علماً أن البرنامج ما فيه سرير/.test(m)) { const key = _kidKey(m); return _varyPostMsg(m, key ? _bodies.filter(b => /سرير إضافي (?:للطفل|للأطفال)/.test(b) && _kidKey(b) === key).length : 0); }
+      return m;
+    });
+  } catch (_e) { /* أفضل جهد */ }
   for (const m of msgs) {
     try {
       await new Promise(r => setTimeout(r, 1200));

@@ -15,7 +15,7 @@ const TMP = new URL("../.index_under_test.ts", HERE);
 // ── 1) نسخة قابلة للاستيراد من index.ts: بلا Deno.serve، ومع تصدير الدوال ──
 let code = await Deno.readTextFile(SRC);
 code = code.replace(/^Deno\.serve\(/m, "(globalThis as any).__noServe(");
-code += "\nexport { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues };\n";
+code += "\nexport { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg };\n";
 await Deno.writeTextFile(TMP, code);
 (globalThis as any).__noServe = () => {};
 
@@ -123,7 +123,7 @@ let buildFail = false;
   return json({});
 };
 
-const { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues } = await import(TMP.href);
+const { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg } = await import(TMP.href);
 
 // ── 4) تشغيل السيناريوهات ──
 const PHONE = "whatsapp:+96899621742";
@@ -212,6 +212,18 @@ for (const [t, want] of DEST_UNITS) {
 for (const [t, want] of [["يعني الي عمره ١٢ سنه يعتر بالغ ؟", null], ["كم عمرها ٧", null], ["ابي عمره", "العمرة"], ["طيب جيب لي برنامج تلاتد", "تايلاند"], ["ابي ماليزبا", "ماليزيا"], ["وين مطار المدينه", null], ["ابي اغير رحله العوده", null]] as Array<[string, string | null]>) {
   const got = fuzzyDestination(t) ?? (want === "العمرة" || want === null ? extractDestination(t) : null);
   if (got === want) { pass++; realLog(`✅ fuzzy «${t}» → ${want}`); } else { fail++; realLog(`❌ fuzzy «${t}» → ${got} (المتوقع ${want})`); }
+}
+// ── وحدة: تنويع رسائل ما بعد البرنامج لو تكررت (قرار المالكة) ──
+{
+  const KID = "علماً أن البرنامج ما فيه سرير إضافي للأطفال (أعمارهم 10 و9). إذا حاب أضيف لهم سرير إضافي في البرنامج، عطني خبر عشان أضيف التكلفة تبعه.";
+  const RDY = "تفضل أستاذي، برنامجك صار جاهز. أي تعديل في البرنامج أنا حاضر.";
+  const U: Array<[string, string, (x: string) => boolean]> = [
+    ["أول مرة = نفس الصيغة", _varyPostMsg(KID, 0), x => x === KID],
+    ["تكرار ١ = «مثل ما ذكرت لك سابقاً» ونفس الأعمار", _varyPostMsg(KID, 1), x => /^مثل ما ذكرت لك سابقا?ً?، البرنامج ما فيه سرير إضافي للأطفال \(أعمارهم 10 و9\)/.test(x)],
+    ["تكرار ٢ = صياغة ثالثة", _varyPostMsg(KID, 2), x => /^وللتذكير/.test(x) && /10 و9/.test(x)],
+    ["الجاهزية تكرار = «بعد التعديل»", _varyPostMsg(RDY, 1), x => /البرنامج بعد التعديل صار جاهز/.test(x)],
+  ];
+  for (const [n, got, ok] of U) { if (ok(got)) { pass++; realLog(`✅ post-msg «${n}»`); } else { fail++; realLog(`❌ post-msg «${n}» → ${got}`); } }
 }
 await Deno.remove(TMP).catch(() => {});
 realLog(`\nالنتيجة: ${pass} ناجح، ${fail} فاشل من ${pass + fail}`);
