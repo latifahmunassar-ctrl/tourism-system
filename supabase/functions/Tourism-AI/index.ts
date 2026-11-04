@@ -3807,7 +3807,7 @@ Deno.serve(async (req) => {
         const _kidsN = _kidAges.length;
         const childPart = _kidsN ? ` وأطفال أعمارهم ${_kidAges.join(" و")}` : "";
         // ملاحظة: بلا «نجوم» في النص → stars=null → الباني يختار أرخص فندق متاح (مختلط).
-        const buildOne = async (dist: string): Promise<{ program: string; total: number; distribution: string } | null> => {
+        const buildOne = async (dist: string): Promise<{ program: string; total: number; distribution: string; misses?: string[] } | null> => {
           const text = `${destAr}، ${days} أيام، ${dist}، ${pax} ${pax === 1 ? "شخص" : "أشخاص"} بالغين${childPart}، تنقل خاص، مع جولات وانتقالات، بتاريخ ${date}`;
           try {
             const req = parseTripRequest([{ role: "user", content: text }], cityDefs);
@@ -3818,16 +3818,22 @@ Deno.serve(async (req) => {
             (req as { autoBeds?: boolean }).autoBeds = true;
             if (reqBody.unique_hotel_per_visit === true) (req as { uniqueHotelPerVisit?: boolean }).uniqueHotelPerVisit = true;
             if (Array.isArray(reqBody.exclude_hotels) && reqBody.exclude_hotels.length) (req as { excludeHotelNames?: string[] }).excludeHotelNames = (reqBody.exclude_hotels as unknown[]).map(String);
+            // تفضيلات العميل (طلال): إفطار، فندق باسمه، نوع غرفة (suite/villa/pool)، إطلالة بحر — ناعمة.
+            const _hp = (reqBody.hotel_prefs && typeof reqBody.hotel_prefs === "object") ? reqBody.hotel_prefs as Record<string, unknown> : {};
+            if (_hp.breakfast === true) (req as { prefBreakfast?: boolean }).prefBreakfast = true;
+            if (_hp.name) { (req as { preferHotelName?: string }).preferHotelName = String(_hp.name); if (_hp.city) (req as { preferHotelCity?: string }).preferHotelCity = String(_hp.city); }
+            if (_hp.feature) (req as { prefFeature?: string }).prefFeature = String(_hp.feature);
+            if (_hp.sea_view === true) (req as { prefSeaView?: boolean }).prefSeaView = true;
             if (!canBuildLocally(req)) return null;
             const r = await buildLocalProgram(req, cityDefs, fetchData as never, {});
             if (!r.ok) return null;
             const m = r.program.match(/TOTAL_GROUP:\s*([\d,٬]+)/);
             const total = m ? parseInt(m[1].replace(/[,٬]/g, ""), 10) : 0;
             if (total <= 0) return null;
-            return { program: r.program, total, distribution: dist };
+            return { program: r.program, total, distribution: dist, misses: (req as { _prefMisses?: string[] })._prefMisses || [] };
           } catch (_e) { return null; }
         };
-        let chosen: { program: string; total: number; distribution: string } | null = null;
+        let chosen: { program: string; total: number; distribution: string; misses?: string[] } | null = null;
         if (givenDist) {
           chosen = await buildOne(givenDist);
         } else {
@@ -3894,7 +3900,8 @@ Deno.serve(async (req) => {
           ok: true,
           program: chosen.program,
           program_code: _progCode,
-          kid_ages: _kidAges,   // أعمار الأطفال (١٠ وتحت) بلا سرير — طلال يرسل ملاحظتها برسالة مستقلة
+          kid_ages: _kidAges,
+          pref_misses: chosen.misses || [],   // مدن ما تحقق فيها تفضيل العميل (فندق/إفطار/غرفة) — طلال يبلغه بصدق   // أعمار الأطفال (١٠ وتحت) بلا سرير — طلال يرسل ملاحظتها برسالة مستقلة
           total: cost,
           distribution: chosen.distribution,
           profit: prof.profit,
