@@ -1535,6 +1535,9 @@ const FOLLOWUP_TOOL = {
       return_airport: { type: "string", enum: ["", "madinah", "jeddah"] } } } } },
 };
 // نص الرد: من أداة tool_use (المضمونة) وإلا من النص.
+// ✈️ ٤ نوفمبر ٢٠٢٦: «هذا شامل الطريان» (حرفين مقلوبين) ما انمسكت → النموذج حاول يحوّل، والحارس منعه، وطلع «وضح لي وش تعدل».
+//    كلمة الطيران بأخطائها الشائعة.
+const FLIGHT_WORD = "(?:ال)?(?:طيران|طريان|طيرن|طياران|تيران|طياره|طيارة|طيارات|رحل[ةه]\\s*جوي[ةه]|تذاكر|تذكر[ةه]|flights?|flight)";
 // أسماء المدن (كما في سطور الفنادق بالإنجليزي) → عربي للتوزيعة والرسائل.
 const CITY_AR: Record<string, string> = { Phuket: "بوكيت", Krabi: "كرابي", Bangkok: "بانكوك", Pattaya: "باتايا", "Koh Samui": "ساموي", "Chiang Mai": "شيانغ ماي",
   Makkah: "مكة", "Al Madinah": "المدينة", Madinah: "المدينة", Istanbul: "إسطنبول", Trabzon: "طرابزون", Bursa: "بورصة", "Kuala Lumpur": "كوالالمبور", Langkawi: "لنكاوي", Penang: "بينانغ" };
@@ -3851,7 +3854,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   }
   // ✈️ ٤ نوفمبر ٢٠٢٦ (قرار المالكة): سؤال «شامل الطيران؟» → الجواب من البرنامج نفسه (قسم FLIGHTS)، مو تخمين النموذج.
   {
-    const _asksFlight = /(?:شامل|يشمل|فيه|في|مشمول|داخل|تشمل)\s*(?:\S+\s*){0,2}?(?:ال)?(?:طيران|تذاكر|تذكر[ةه])|(?:ال)?(?:طيران|تذاكر)\s*(?:\S+\s*){0,1}?(?:مشمول|داخل|شامل|موجود)/.test(_batch) && /[؟?]|هل|شامل|مشمول/.test(_batch);
+    const _asksFlight = new RegExp(`(?:شامل|يشمل|فيه|في|مشمول|داخل|تشمل)\\s*(?:\\S+\\s*){0,2}?${FLIGHT_WORD}|${FLIGHT_WORD}\\s*(?:\\S+\\s*){0,1}?(?:مشمول|داخل|شامل|موجود)`, "i").test(_batch);
     const _raw = String(idata.program_final_raw || "");
     if (_asksFlight && _raw) {
       const _fl = (_raw.split("FLIGHTS:")[1] || "").split(/\n\s*\n/)[0].split("\n").filter(l => l.includes("|"));
@@ -4074,7 +4077,7 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
     action = "reply";
   }
   // 🚫 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): التحويل للزميل **فقط** للطيران الدولي/الحجز/الدفع/الخصم — غير كذا طلال يتولاه.
-  const _handoffTopic = /طيران|تذكر[ةه]|تذاكر|رحل[ةه]\s*جوي|حجز|احجز|أحجز|دفع|ادفع|أدفع|تحويل\s*بنكي|فاتور|خصم|تخفيض|عربون/.test(_batch);
+  const _handoffTopic = new RegExp(`${FLIGHT_WORD}|حجز|احجز|أحجز|دفع|ادفع|أدفع|تحويل\\s*بنكي|فاتور|خصم|تخفيض|عربون`, "i").test(_batch);
   if (action === "handoff" && !_handoffTopic) {
     out = { message: "عفواً إذا سمحت، وضّح لي وش تحب نعدّل في البرنامج وأجهّزه لك على طول؟", action: "reply", fields: {} };
     action = "reply";

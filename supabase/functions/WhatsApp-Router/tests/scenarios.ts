@@ -457,6 +457,13 @@ export const SCENARIOS: Scenario[] = [
     expect: [["لا", c => /^لا أستاذي، البرنامج ما يشمل الطيران، بس يشمل الفنادق/.test(c.reply)]],
   },
   {
+    id: "fu-flights-typo", entry: "followup", title: "٤ نوفمبر: «هذا شامل الطريان» (خطأ إملائي) → جواب الطيران من البرنامج (مو «وضح لي وش تعدل»)",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-072"]], customer: "هذا شامل الطريان",
+    intakeData: { destination: "تايلاند", pax: 6, date: "17/11/2026", days: 12, summary_confirmed: true, program_final_raw: "DEST:تايلاند\nFLIGHTS:\nاليوم 3: phuket - bangkok | داخلي | 300 ريال/شخص | 6 أشخاص | 1,800 ريال\nاليوم 7: bangkok - krabi | داخلي | 300 ريال/شخص | 6 أشخاص | 1,800 ريال\n\nTRANSFERS:\n" },
+    model: [FU("x", "handoff")],
+    expect: [["جواب الطيران", c => /^لا أستاذي، البرنامج ما يشمل الطيران الدولي، بس يشمل الطيران الداخلي/.test(c.reply)], ["❌ لا «وضح لي»", c => !/وضح لي/.test(c.reply)]],
+  },
+  {
     id: "fu-question-from-program", entry: "followup", title: "متابعة: سؤال جوابه في البرنامج → يرد بنفسه بلا تحويل",
     history: PROG_HIST, customer: "وش اسم الفندق في مكة؟", intakeData: DONE,
     model: [FU("الفندق في مكة فوكو، ٣ ليال")],
