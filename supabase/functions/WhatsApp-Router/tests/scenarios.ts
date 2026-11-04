@@ -310,9 +310,8 @@ export const SCENARIOS: Scenario[] = [
     id: "fu-modify-nights-yes", entry: "followup", title: "متابعة: «نعم» على سؤال التأكيد → الكرت النهائي بالليالي الجديدة",
     history: [...PROG_HIST, ["C", "زيدها ليلة في المدينة"], ["T", "تمام، تقصد نخلي الليالي 3 مكة 3 المدينة؟"]], customer: "نعم",
     intakeData: { ...DONE, pending_modify: { nights: "3 مكة 3 المدينة" } },
-    model: [FU("ما المفروض يوصل للنموذج")],
-    expect: [["الكرت فيه الليالي الجديدة", c => /3 مكة 3 المدينة/.test(c.reply) && /المعلومات صحيحة/.test(c.reply)], ["العدد والتاريخ ثابتين", c => Number(c.intake.pax) === 5 && c.intake.date === "2026-11-11"],
-      ["رجع للاستقبال بانتظار التأكيد", c => c.session.intake_active === true && c.intake.awaiting_confirm === true], ["ما استدعى النموذج", c => c.modelCalls === 0]],
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "11 و 6", date: "2026-11-11", nights: "3 مكة 3 المدينة" }, true)],
+    expect: [["بنى بالليالي الجديدة", c => c.buildCalls > 0 && c.buildBody?.distribution === "3 مكة 3 المدينة"], ["«تمام، أبشر، شوية والبرنامج عندك.»", c => /تمام، أبشر، شوية والبرنامج عندك\./.test(c.reply)], ["❌ لا كرت", c => !/المعلومات صحيحة/.test(c.reply)]],
   },
   {
     id: "fu-airport-ask", entry: "followup", title: "٣ نوفمبر: «احتاج العوده من مطار المدينه» → «تقصد الذهاب إلى مطار جدة، وبعد ذلك العودة من مطار المدينة؟»",
@@ -325,9 +324,8 @@ export const SCENARIOS: Scenario[] = [
     id: "fu-airport-yes", entry: "followup", title: "«نعم» على سؤال المطار → الكرت فيه «العودة من مطار المدينة»",
     history: [...PROG_HIST, ["C", "احتاج العوده من مطار المدينه"], ["T", "تمام، تقصد الذهاب إلى مطار جدة، وبعد ذلك العودة من مطار المدينة؟"]], customer: "ايوه",
     intakeData: { ...DONE, pending_modify: { return_airport: "madinah" } },
-    model: [FU("x")],
-    expect: [["الكرت فيه المطار", c => /العودة من مطار المدينة/.test(c.reply) && /المعلومات صحيحة/.test(c.reply)], ["محفوظ return_airport", c => c.intake.return_airport === "madinah"],
-      ["بانتظار التأكيد النهائي", c => c.session.intake_active === true && c.intake.awaiting_confirm === true]],
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "11 و 6", date: "2026-11-11", nights: "3 مكة 2 المدينة" }, true)],
+    expect: [["بنى بالعودة من المدينة", c => c.buildCalls > 0 && c.buildBody?.return_airport === "madinah"], ["«تمام، أبشر، شوية والبرنامج عندك.»", c => /تمام، أبشر، شوية والبرنامج عندك\./.test(c.reply)], ["❌ لا كرت", c => !/المعلومات صحيحة/.test(c.reply)]],
   },
   {
     id: "fu-airport-no", entry: "followup", title: "«لا» على سؤال المطار → ما يتغيّر شي ويسأل وش التعديل",
@@ -524,7 +522,7 @@ export const SCENARIOS: Scenario[] = [
     intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 3 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true, return_airport: "madinah" },
     medFlights: ["17/11/2026", "18/11/2026"],
     model: ["TOOL:" + JSON.stringify({ messages: ["تمام"], fields: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 3 المدينة" }, complete: false })],
-    expect: [["الكرت ١٢/١١", c => /12\/11\/2026/.test(c.reply)], ["3 مكة 2 المدينة (العودة ١٧)", c => /3 مكة 2 المدينة/.test(c.reply)], ["يعتذر", c => /أعتذر منك/.test(c.reply)], ["ما بنى", c => c.buildCalls === 0]],
+    expect: [["اعتذار مستقل ثم تأكيد بالكلام (مو كرت)", c => /^أعتذر منك (?:على التأخير|حالا?ً?)، خليني أرتب الطلب مرة ثانية\.\n/.test(c.reply) && /(?:فهمت عليك، يعني تقصد|تمام، يعني)/.test(c.reply) && !/المعلومات صحيحة/.test(c.reply)], ["السفر 12 والعودة 17", c => /12 نوفمبر/.test(c.reply) && /العودة 17 نوفمبر/.test(c.reply)], ["ما بنى", c => c.buildCalls === 0]],
   },
   {
     id: "talk-then-card-yes", title: "قرار المالكة: بعد تأكيد الكلام («تقصد السفر 12…؟») و«نعم» → الكرت (بلا بناء بعد)",
@@ -532,7 +530,7 @@ export const SCENARIOS: Scenario[] = [
     customer: "نعم",
     intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: false, pending_card: true },
     model: [M("تمام", { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 2 المدينة" })],
-    expect: [["الكرت", c => /المعلومات صحيحة/.test(c.reply) && /12\/11\/2026/.test(c.reply)], ["ما بنى قبل تأكيد الكرت", c => c.buildCalls === 0], ["ينتظر تأكيد الكرت", c => c.intake.awaiting_confirm === true]],
+    expect: [["بنى على طول", c => c.buildCalls > 0], ["«تمام، أبشر، شوية والبرنامج عندك.»", c => /تمام، أبشر، شوية والبرنامج عندك\./.test(c.reply)], ["❌ لا كرت", c => !/المعلومات صحيحة/.test(c.reply)]],
   },
   {
     id: "talk-frustrated-two-msgs", title: "قرار المالكة: متضايق → «أعتذر منك حالاً، خليني أرتب الطلب مرة ثانية.» رسالة، والكرت رسالة ثانية",
@@ -540,7 +538,7 @@ export const SCENARIOS: Scenario[] = [
     customer: "وبعدين معاك",
     intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true },
     model: [M("تمام", { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة" })],
-    expect: [["رسالتين: الاعتذار أول ثم الكرت", c => /^أعتذر منك حالا?ً?، خليني أرتب الطلب مرة ثانية\.\n/.test(c.reply) && /المعلومات صحيحة/.test(c.reply)], ["الكرت فيه 12/11", c => /12\/11\/2026/.test(c.reply)]],
+    expect: [["اعتذار مستقل ثم تأكيد بالكلام (مو كرت)", c => /^أعتذر منك (?:على التأخير|حالا?ً?)، خليني أرتب الطلب مرة ثانية\.\n/.test(c.reply) && /(?:فهمت عليك، يعني تقصد|تمام، يعني)/.test(c.reply) && !/المعلومات صحيحة/.test(c.reply)], ["فيه 12 نوفمبر", c => /12 نوفمبر/.test(c.reply)]],
   },
   {
     id: "nights-weird-format", title: "٣ نوفمبر: النموذج كتب الليالي «5 ليالٍ (3 مكة + 2 المدينة)» → العودة ١٧ (مو ٢٢) + «خبرتك» = متضايق",
@@ -549,8 +547,7 @@ export const SCENARIOS: Scenario[] = [
     intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 3 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true, return_airport: "madinah" },
     medFlights: ["17/11/2026"],
     model: ["TOOL:" + JSON.stringify({ messages: ["تمام"], fields: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "5 ليالٍ (3 مكة + 2 المدينة)", return_airport: "madinah" }, complete: false })],
-    expect: [["❌ لا «22 نوفمبر»", c => !/22 نوفمبر/.test(c.reply)], ["الليالي موحّدة 3 مكة 2 المدينة", c => c.intake.nights === "3 مكة 2 المدينة"],
-      ["اعتذار ثم الكرت (متضايق)", c => /^أعتذر منك حالا?ً?، خليني أرتب الطلب/.test(c.reply) && /المعلومات صحيحة/.test(c.reply)]],
+    expect: [["❌ لا «22 نوفمبر»", c => !/22 نوفمبر/.test(c.reply)], ["الليالي موحّدة 3 مكة 2 المدينة", c => c.intake.nights === "3 مكة 2 المدينة"], ["اعتذار مستقل ثم تأكيد بالكلام (مو كرت)", c => /^أعتذر منك (?:على التأخير|حالا?ً?)، خليني أرتب الطلب مرة ثانية\.\n/.test(c.reply) && /(?:فهمت عليك، يعني تقصد|تمام، يعني)/.test(c.reply) && !/المعلومات صحيحة/.test(c.reply)]],
   },
   {
     id: "strict-waiting-qmark", title: "٣ نوفمبر (قاعدة صارمة): العميل كتب «؟» والطلب جاهز → اعتذار مستقل ثم الكرت (مو كرت فجأة)",
@@ -559,7 +556,7 @@ export const SCENARIOS: Scenario[] = [
     intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: false, return_airport: "madinah" },
     medFlights: ["17/11/2026"],
     model: ["TOOL:" + JSON.stringify({ messages: ["تمام"], fields: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "12/11/2026", nights: "3 مكة 2 المدينة" }, complete: false })],
-    expect: [["الاعتذار رسالة أولى", c => /^أعتذر منك على التأخير، خليني أرتب الطلب مرة ثانية\.\n/.test(c.reply)], ["ثم الكرت", c => /المعلومات صحيحة/.test(c.reply) && /12\/11\/2026/.test(c.reply)]],
+    expect: [["اعتذار مستقل ثم تأكيد بالكلام (مو كرت)", c => /^أعتذر منك (?:على التأخير|حالا?ً?)، خليني أرتب الطلب مرة ثانية\.\n/.test(c.reply) && /(?:فهمت عليك، يعني تقصد|تمام، يعني)/.test(c.reply) && !/المعلومات صحيحة/.test(c.reply)], ["فيه 12 نوفمبر", c => /12 نوفمبر/.test(c.reply)]],
   },
   {
     id: "strict-first-card-talk", title: "قاعدة صارمة: أول كرت بعد جمع المعلومات → تأكيد بالكلام أول (مو الكرت)",
@@ -589,7 +586,7 @@ export const SCENARIOS: Scenario[] = [
     history: [["T", RESET], ["C", "ابي تركيا"], ["T", "خليني أتأكد من طلبك:\n- الوجهة: تركيا\nالمعلومات صحيحة؟"]],
     customer: "كم مره اقولك", intakeData: { ...{ destination: "تركيا", pax: 2, date: "01/12/2026", days: 6, cities: "إسطنبول وطرابزون", asked_children: true }, awaiting_confirm: true },
     model: [M("تمام", { destination: "تركيا", pax: 2, date: "01/12/2026", days: 6, cities: "إسطنبول وطرابزون" })],
-    expect: [["اعتذار أول", c => /^أعتذر منك حالا?ً?، خليني أرتب الطلب مرة ثانية\.\n/.test(c.reply)], ["ثم الكرت", c => /المعلومات صحيحة/.test(c.reply)]],
+    expect: [["اعتذار مستقل ثم تأكيد بالكلام (مو كرت)", c => /^أعتذر منك (?:على التأخير|حالا?ً?)، خليني أرتب الطلب مرة ثانية\.\n/.test(c.reply) && /(?:فهمت عليك، يعني تقصد|تمام، يعني)/.test(c.reply) && !/المعلومات صحيحة/.test(c.reply)]],
   },
   {
     id: "tr-date-shift-talk", title: "كل الوجهات (تركيا): «خلي السفر ٣ ديسمبر» على الكرت → تأكيد بالكلام (السفر 3 ديسمبر والعودة 8)",
@@ -665,6 +662,23 @@ export const SCENARIOS: Scenario[] = [
     customer: "نريد نروح بوكيت", intakeData: { destination: "تايلاند", date: "17/11/2026", pax: 6, ages: "12 و 10 و 9", asked_children: true },
     model: [M("خليني أتأكد من طلبك قبل ما أجهز لك البرنامج:\n- الوجهة: تايلاند (بوكيت)\n- عدد المسافرين: ٦ أشخاص (٣ بالغين + ٣ أطفال أعمارهم ١٢، ١٠، ٩ سنوات)\n- التاريخ: ١٧/١١/٢٠٢٦\nالمعلومات صحيحة؟ وكم يوم تبون الرحلة؟", { destination: "تايلاند", pax: 6, ages: "12 و 10 و 9", date: "17/11/2026", cities: "بوكيت" })],
     expect: [["سؤال الأيام بس", c => /^كم يوم تبون الرحلة؟$/.test(c.reply.trim())], ["❌ لا كرت", c => !/خليني أتأكد|المعلومات صحيحة/.test(c.reply)]],
+  },
+  {
+    id: "talk-yes-model-added-nights", title: "٤ نوفمبر: «صحيح» على تأكيد الكلام والنموذج أضاف «8 ليالي» → الكرت (مو سؤال ثاني)",
+    history: [["T", RESET], ["C", "تايلاند"], ["C", "9"], ["T", "تمام، يعني رحلة تايلاند لـ6 أشخاص، السفر 17 نوفمبر، 9 أيام، المدن بوكيت، والعودة 25 نوفمبر؟"]],
+    customer: "صحيح",
+    intakeData: { destination: "تايلاند", date: "17/11/2026", pax: 6, ages: "12 و 10 و 9", days: 9, cities: "بوكيت", asked_children: true, pending_card: true },
+    model: [M("تمام", { destination: "تايلاند", pax: 6, ages: "12 و 10 و 9", date: "17/11/2026", days: 9, nights: "8 ليالي", cities: "بوكيت" })],
+    expect: [["بنى على طول", c => c.buildCalls > 0], ["«تمام، أبشر، شوية والبرنامج عندك.»", c => /تمام، أبشر، شوية والبرنامج عندك\./.test(c.reply)], ["❌ لا سؤال ثاني", c => !/تقصد/.test(c.reply)]],
+  },
+  {
+    id: "kids-claim-age-rule", title: "٤ نوفمبر: «الأطفال ٣ خبرتكً» (ابن ١٢ عندهم طفل) → اعتذار (ب) + شرح قاعدة ١١ سنة + تأكيد (مو نفس الكرت)",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "خليني أتأكد من طلبك قبل ما أجهز لك العرض:\n- عدد المسافرين: 6 (4 بالغين + 2 أطفال أعمارهم 10 و9)\nالمعلومات صحيحة؟"]],
+    customer: "الأطفال ٣ خبرتكً",
+    intakeData: { destination: "تايلاند", date: "17/11/2026", pax: 6, ages: "12 و 10 و 9", days: 9, cities: "بوكيت", asked_children: true, awaiting_confirm: true },
+    model: [M("تمام", { destination: "تايلاند", pax: 6, ages: "12 و 10 و 9", date: "17/11/2026", days: 9, cities: "بوكيت" })],
+    expect: [["صيغة المالكة", c => /^أعتذر منك أستاذي، أنت خبرتني إن أعمار الأطفال 12 و10 و9، والطفل اللي عمره 12 سنة يُعتبر عندنا بالغ \(من 11 سنة وفوق\) وله سرير خاص، للتوضيح بس\. يعني عندكم 4 بالغين وطفلين \(10 و9\)، صح؟$/.test(c.reply.trim())],
+      ["❌ لا كرت", c => !/المعلومات صحيحة/.test(c.reply)], ["ما بنى", c => c.buildCalls === 0]],
   },
   {
     id: "pending-dest-wenkom", title: "٢ نوفمبر: سؤال وجهة معلّق والعميل كتب «وينكم» → تبقى العمرة",

@@ -3087,7 +3087,8 @@ ${returning
   //    هذا يمنع اعتماد الإقفال على «زميلنا بيجهز» التي يخترعها الـLLM. [[project_wa_auto_program_offer]]
   let _doAutoBuild = false;
   if (_essentialsComplete) {
-    const _wasAwaiting = (prev as Record<string, unknown>).awaiting_confirm === true;
+    // ٤ نوفمبر ٢٠٢٦ (قرار المالكة): تأكيد واحد بس — موافقة العميل على تأكيد الكلام (pending_card) = بناء البرنامج مباشرة، بلا كرت.
+    const _wasAwaiting = (prev as Record<string, unknown>).awaiting_confirm === true || (prev as Record<string, unknown>).pending_card === true;
     const _lastCust = String(args.body || "").trim()
       || (msgs.filter(m => m.who === "العميل").slice(-1)[0]?.body || "");
     // ٣ نوفمبر ٢٠٢٦: «تمام» ثم «ارسلي لي» → الكرت رجع لأن الفحص قرأ الأخيرة بس. أي رسالة من العميل بعد الكرت تعني الموافقة تكفي.
@@ -3100,7 +3101,9 @@ ${returning
       upd.intake_active = false;                 // العميل أكّد الملخّص
       // غير العمرة: لا نرسل رسالة «ثبّتنا طلبك» هنا — الخلفية ترسل **العرض وحده**
       //   (رسالة واحدة). العمرة: لا بناء تلقائي، فنرسل رسالة التسليم.
-      outMsgs = [];
+      _mergedData.pending_card = false;
+      // رقم اختبار/تشغيل كامل: «تمام، أبشر، شوية والبرنامج عندك.» ثم الـPDF. غيره: الخلفية ترسل رسالة التسليم للموظف.
+      outMsgs = (await isFullAiNumber(supabase, from)) ? ["تمام، أبشر، شوية والبرنامج عندك."] : [];
       _doAutoBuild = true;   // 🕋 العمرة أيضاً تُبنى تلقائياً (البيانات تدعمها — مكة/المدينة)
     } else {
       // أول اكتمال أو تصحيح → اعرض ملخّص التأكيد الخادمي واطلب «نعم».
@@ -3117,11 +3120,29 @@ ${returning
         //    الكرت يطلع فقط: (أ) بعد ما العميل وافق على تأكيد الكلام (pending_card + «نعم»)، أو (ب) بعد رسالة اعتذار مستقلة.
         const _bodyNow2 = String(args.body || "").trim();
         const _waiting = /^[؟?]+$|^\s*(?:وين(?:كم|ك)?|متى|هلا\s*وين|ها|هاه|ايش\s*صار|وش\s*صار)\s*[؟?]*\s*$/.test(_bodyNow2);
-        const _talkYes = _p0.pending_card === true && !_chg && isYesish(_bodyNow2);
-        if (!_bad && (_frusNow || _waiting)) {
+        // ٤ نوفمبر: «صحيح» على تأكيد الكلام والنموذج أضاف «8 ليالي» محسوبة من «9 أيام» → انحسبت تغيير وأعاد السؤال.
+        //    موافقة العميل على تأكيد الكلام = الكرت (التغيير لازم يجي من كلام العميل نفسه، مو من حقل حسبه النموذج).
+        const _talkYes = _p0.pending_card === true && isYesish(_bodyNow2);
+        // 👶 ٤ نوفمبر ٢٠٢٦: «الأطفال ٣ خبرتك» (ابن الـ١٢ عندهم طفل) → طلال أعاد نفس الكرت بلا شرح. القاعدة: ١١ وفوق بالغ.
+        //    العميل يصرّ على عدد أطفال أكبر من القاعدة → اعتذار (ب) + شرح القاعدة بأدب + تأكيد (موافقته = البناء).
+        const _kc = _bodyNow2.replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))).match(/(?:ال)?(?:أطفال|اطفال|طفل|عيال|صغار)\s*(?:هم\s*|عددهم\s*)?(\d{1,2})|(\d{1,2})\s*(?:أطفال|اطفال|طفل|عيال)/);
+        const _ageNs = (String(_mergedData.ages || "").replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))).match(/\d{1,2}/g) || []).map(Number);
+        const _kidsRule = _ageNs.filter(a => a <= 10), _teenAd = _ageNs.filter(a => a >= 11 && a <= 17);
+        const _claimK = _kc ? +(_kc[1] || _kc[2]) : 0;
+        if (!_bad && _claimK && _ageNs.length && _claimK > _kidsRule.length && _teenAd.length) {
+          const _pax = Number(_mergedData.pax) || _ageNs.length;
+          const _ad = _pax - _kidsRule.length;
+          const _teenTxt = _teenAd.length === 1 ? `والطفل اللي عمره ${_teenAd[0]} سنة يُعتبر عندنا بالغ` : `والأطفال اللي أعمارهم ${_teenAd.join(" و")} يُعتبرون عندنا بالغين`;
+          const _kidTxt = _kidsRule.length === 0 ? "بدون أطفال" : _kidsRule.length === 1 ? `وطفل واحد (${_kidsRule[0]})` : _kidsRule.length === 2 ? `وطفلين (${_kidsRule.join(" و")})` : `و${_kidsRule.length} أطفال (${_kidsRule.join(" و")})`;
+          // صيغة المالكة: يذكّره باللي قاله هو («أنت خبرتني…») ويوضّح بأدب.
+          outMsgs = [`أعتذر منك أستاذي، أنت خبرتني إن أعمار الأطفال ${_ageNs.join(" و")}، ${_teenTxt} (من 11 سنة وفوق) وله سرير خاص، للتوضيح بس. يعني عندكم ${_ad} بالغين ${_kidTxt}، صح؟`];
+          _mergedData.pending_card = true; _mergedData.awaiting_confirm = false;
+          await logGuard(supabase, from, "age_rule_explained", "apology_b", `claim=${_claimK} rule=${_kidsRule.length}`, 1, _bodyNow2, outMsgs[0]);
+        } else if (!_bad && (_frusNow || _waiting)) {
           // متضايق/ينتظر → اعتذار برسالة مستقلة، وبعدها الكرت المرتّب.
-          outMsgs = [_waiting && !_frusNow ? "أعتذر منك على التأخير، خليني أرتب الطلب مرة ثانية." : "أعتذر منك حالاً، خليني أرتب الطلب مرة ثانية.", outMsgs[0]];
-          _mergedData.pending_card = false;
+          // اعتذار مستقل ثم تأكيد بالكلام (مو كرت) — الموافقة عليه = البناء.
+          outMsgs = [_waiting && !_frusNow ? "أعتذر منك على التأخير، خليني أرتب الطلب مرة ثانية." : "أعتذر منك حالاً، خليني أرتب الطلب مرة ثانية.", _talkSummary(_mergedData)];
+          _mergedData.pending_card = true;
         } else if (!_bad && _talkYes) {
           _mergedData.pending_card = false;   // وافق على تأكيد الكلام → الكرت
         } else if (!_bad && _p0.pending_card === true && !_chg && isNegative(_bodyNow2)) {
@@ -3211,7 +3232,7 @@ ${returning
   for (const raw of outMsgs.slice(0, 3)) {
     // تصحيح تلقائي (أستاذي/تشكيل/فصحى/صياغة ركيكة/ترحيب مكرر/سؤال الحال/تكرار الافتتاح) قبل تنظيف العبارات الممنوعة.
     const _af = guardAutofix(String(raw), { alreadyGreeted, lastCustomer: _lastCustBody, lastTalal: _lastTalalBody });
-    const _apolA = /^أعتذر منك أستاذي/.test(String(raw));   // صيغة المالكة الحرفية — بلا حذف «أستاذي»
+    const _apolA = /^أعتذر منك أستاذي|^تمام، أبشر، شوية والبرنامج عندك\.$/.test(String(raw));   // صيغ المالكة الحرفية — بلا تنظيف
     const msg = _apolA ? String(raw) : stripBannedPhrases(_af.text);
     if (!msg) continue; // لو الرسالة كانت كلها عبارات ممنوعة، تجاهلها
     if (_af.hits.length && !_apolA) await logGuard(supabase, from, "autofix:" + _af.hits.join("+"), "autofix", "", 1, String(raw), msg);
@@ -3495,7 +3516,11 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     if (_bad) { await supabase.from("whatsapp_sessions").update({ intake_active: false, intake_data: { ...idata } }).eq("phone", from); await _say(_clarifyMsg(_bad), "card_contradicts_customer", "clarify", _bad, true); return; }
     const card = buildIntakeSummary(nd, _isUmrahDest(String(nd.destination || "") + " " + String(nd.cities || "")));
     if (prefix) await _say(prefix, "followup_ai", "pre_card_talk", JSON.stringify(changed).slice(0, 200));
-    await _say(card, "followup_ai", "modify_card", JSON.stringify(changed).slice(0, 200));
+    // قرار المالكة: العميل أكّد التعديل بالكلام → ❌ لا كرت؛ بناء وإرسال مباشرة («تمام، أبشر، شوية والبرنامج عندك.» من مسار البناء).
+    void card;
+    await supabase.from("whatsapp_sessions").update({ intake_data: { ...nd, awaiting_confirm: true } }).eq("phone", from);
+    await logGuard(supabase, from, "followup_ai", "modify_confirmed_build", JSON.stringify(changed).slice(0, 200), 1, text, "");
+    await handleNewLeadIntake({ supabase, from, body: "نعم" });
   };
   // (ج) طلال غلط (أرسل برنامج غير اللي طلبه العميل) → اعتذار + إعادة البناء والإرسال فوراً، بلا كرت (قرار المالكة ٣ نوفمبر).
   const _rebuildNow = async (changed: Record<string, unknown>) => {
