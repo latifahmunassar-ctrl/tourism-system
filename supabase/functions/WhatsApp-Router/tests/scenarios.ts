@@ -332,6 +332,12 @@ export const SCENARIOS: Scenario[] = [
     expect: [["بنى بفندق مختلف", c => c.buildCalls > 0 && c.buildBody?.unique_hotel_per_visit === true], ["«تمام، أبشر…»", c => /تمام، أبشر، شوية والبرنامج عندك/.test(c.reply)]],
   },
   {
+    id: "fu-positive-destination-tone", entry: "followup", title: "٤ نوفمبر (قرار المالكة): سؤال الطقس → قاعدة الأسلوب الإيجابي بالبرومبت",
+    history: PROG_HIST, customer: "اخي عندك علم كيف الطقس هناك", intakeData: DONE,
+    model: [FU("الجو معتدل ودرجات الحرارة بين 25 و32، ومناسب جداً للشواطئ والجولات.")],
+    expect: [["القاعدة بالبرومبت", c => /بصياغة إيجابية/.test(c.modelSystem) && /لا كلمات منفّرة/.test(c.modelSystem)], ["يرد", c => /معتدل/.test(c.reply)]],
+  },
+  {
     id: "fu-question-from-program", entry: "followup", title: "متابعة: سؤال جوابه في البرنامج → يرد بنفسه بلا تحويل",
     history: PROG_HIST, customer: "وش اسم الفندق في مكة؟", intakeData: DONE,
     model: [FU("الفندق في مكة فوكو، ٣ ليال")],
