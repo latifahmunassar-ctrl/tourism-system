@@ -3929,7 +3929,9 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   }
   // ✈️ ٤ نوفمبر ٢٠٢٦ (أول تجربة حية للمصنّف): «انتظر الطيران» → Sonnet فهمها want_intl_flight صح، لكن حارس «متضايق بلا حجز/دفع»
   //    منع التحويل وطلع «فهمني إيش تقصد». الحين: طلب الطيران الدولي (غير العمرة) = تحويل مباشر؛ ولو سبق وتحوّل → طمأنة بلا تحويل ثاني.
-  if (_is("want_intl_flight") && !_isUmrahReq) {
+  // ⚠️ ٤ نوفمبر ٢٠٢٦ (حي، ثاني مرة): «انتظر الطيران» صنّفها Sonnet «waiting» (ينتظر تسعيرة الطيران) وطلال وعد «زميلي بيرد عليك»
+  //    والطلب **ما تحوّل أصلاً** (التحويل الأول انمنع). ينتظر الطيران + ما سبق تحويل → نحوّل فعلاً.
+  if ((_is("want_intl_flight") || (_is("waiting") && new RegExp(FLIGHT_WORD, "i").test(_batch))) && !_isUmrahReq) {
     if (await _superseded()) return;
     const _already = msgs.some(m => m.who === "طلال" && /حوّ?لت طلب الطيران الدولي/.test(m.body));
     if (_already) { await _say("طلب الطيران الدولي عند زميلي المختص، وبيرد عليك بالسعر قريب إن شاء الله.", "followup_ai", "flight_handoff_reassure"); return; }
