@@ -99,10 +99,18 @@ let lastModelSystem = "";
 let lastModelName = "";
 let medFlights: string[] | null = null;
 let rejectTools = false;
+let curIntent: Record<string, unknown> | null = null;
+let intentCalls = 0;
 let buildFail = false;
 (globalThis as any).fetch = async (input: any, init?: any) => {
   const url = String(input?.url || input);
   const json = (o: unknown) => new Response(JSON.stringify(o), { status: 200, headers: { "content-type": "application/json" } });
+  if (url.includes("api.anthropic.com") && /"talal_intent"/.test(String(init?.body || ""))) {
+    // مصنّف النية: السيناريو يحدده بـ intent؛ غير محدد = فشل → كاشفات الكلمات (سلوك السيناريوهات القديمة).
+    intentCalls++;
+    if (!curIntent) return new Response(JSON.stringify({ type: "error", error: { type: "api_error", message: "no intent in scenario" } }), { status: 400, headers: { "content-type": "application/json" } });
+    return json({ id: "m", type: "message", role: "assistant", model: "x", stop_reason: "tool_use", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "tool_use", id: "ti", name: "talal_intent", input: { yes_no: "none", frustrated: false, meaning: "", ...curIntent } }] });
+  }
   if (url.includes("api.anthropic.com")) {
     modelCalls++;
     if (rejectTools && /"tools"/.test(String(init?.body || ""))) return new Response(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "tools: invalid schema" } }), { status: 400, headers: { "content-type": "application/json" } });
@@ -153,7 +161,7 @@ for (const s of SCENARIOS) {
   if (only && !s.id.includes(only)) continue;
   const lastTs = seed(s);
   const before = DB.wa_admin_messages.length;
-  modelQueue = [...s.model]; modelCalls = 0; buildCalls = 0; proposalCalls = 0; lastBuildBody = null; medFlights = s.medFlights || null; rejectTools = !!s.rejectTools; buildFail = !!s.buildFail; lastModelSystem = ""; injectOnModel = s.inboundDuringModel || null; _bg.length = 0;
+  modelQueue = [...s.model]; modelCalls = 0; buildCalls = 0; proposalCalls = 0; lastBuildBody = null; medFlights = s.medFlights || null; rejectTools = !!s.rejectTools; curIntent = (s as any).intent || null; intentCalls = 0; buildFail = !!s.buildFail; lastModelSystem = ""; injectOnModel = s.inboundDuringModel || null; _bg.length = 0;
   let crash = "";
   console.error = () => {}; console.warn = () => {}; console.log = () => {};
   try {

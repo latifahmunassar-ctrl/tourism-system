@@ -1534,6 +1534,34 @@ const FOLLOWUP_TOOL = {
     fields: { type: "object", properties: { pax: { type: ["number", "null"] }, ages: _S, date: _S, nights: _S, days: { type: ["number", "null"] }, cities: _S, destination: _S,
       return_airport: { type: "string", enum: ["", "madinah", "jeddah"] } } } } },
 };
+// 🧠 ٤ نوفمبر ٢٠٢٦ (قرار المالكة: «ليش طلال ما يفهم اللغة الخليجية مثل ما تفهمها أنت؟»):
+//    نية كل رسالة بعد البرنامج يقررها Sonnet أولاً (يفهم اللهجة والأخطاء الإملائية)؛ كاشفات الكلمات احتياط فقط لو فشل النموذج.
+const INTENT_TOOL = {
+  name: "talal_intent", description: "صنّف رسالة العميل الأخيرة (مع سياق المحادثة) — بدون كتابة رد.",
+  input_schema: { type: "object", required: ["intent", "yes_no", "frustrated", "meaning"], properties: {
+    intent: { type: "string", enum: ["agree", "decline", "ask_flights", "want_intl_flight", "booking_payment", "resend_program", "waiting", "complaint_program", "modify", "new_request", "question", "thanks_smalltalk", "other"],
+      description: "agree=يوافق/يأكد على آخر سؤال لطلال · decline=يرفض · ask_flights=يسأل هل البرنامج شامل الطيران · want_intl_flight=يبي يضيف/يحجز طيران دولي · booking_payment=حجز/دفع/خصم/تأكيد نهائي · resend_program=يطلب البرنامج أو يقول ما وصله · waiting=ينتظر فقط (في انتظارك، وينك، ؟) · complaint_program=يقول البرنامج فيه غلط/راجعه · modify=أي تعديل بالرحلة (تواريخ، أشخاص، ليالي، مدن، فندق، ترتيب، إفطار، غرفة، مطار) · new_request=رحلة مختلفة كلياً · question=سؤال عن البرنامج/الوجهة · thanks_smalltalk=شكر/سلام" },
+    yes_no: { type: "string", enum: ["yes", "no", "yes_but_change", "none"], description: "جوابه على آخر سؤال لطلال: yes (ايوه، اكيد، صح، تمام، اوكي، زين، ماشي، يب، عدلها…) · no · yes_but_change (موافق مع تعديل) · none (ما هو جواب نعم/لا)" },
+    frustrated: { type: "boolean", description: "متضايق/معصب/يشتكي من التكرار أو عدم الفهم أو التأخير" },
+    meaning: { type: "string", description: "وش يقصد العميل بجملة عربية واضحة قصيرة (ترجمة اللهجة والأخطاء)" } } },
+};
+type FIntent = { intent: string; yes_no: string; frustrated: boolean; meaning: string };
+async function _classifyFollowupIntent(transcript: string, lastTalal: string, batch: string): Promise<FIntent | null> {
+  try {
+    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+    const model = (Deno.env.get("TALAL_MODEL_OVERRIDE") || "").trim() || "claude-sonnet-4-6";
+    const anthropic = new Anthropic({ apiKey, maxRetries: 1, timeout: 12000 });
+    const sys = "أنت تصنّف رسائل عملاء شركة سياحة عمانية بعد ما أرسل لهم الموظف (طلال) برنامج الرحلة. العملاء يكتبون باللهجة الخليجية/العمانية وبأخطاء إملائية (الطريان=الطيران، برنانج=برنامج، ايوه/ايوا/اي=نعم). افهم القصد مثل إنسان خليجي، واعتمد على آخر سؤال لطلال لتحديد نعم/لا.";
+    const res = await anthropic.messages.create({ model, max_tokens: 200, system: sys,
+      messages: [{ role: "user", content: `المحادثة:\n${transcript.slice(-3500)}\n\nآخر رسالة لطلال: «${lastTalal.slice(0, 600)}»\n\nرسالة/رسائل العميل الأخيرة المطلوب تصنيفها: «${batch.slice(0, 800)}»` }],
+      tools: [INTENT_TOOL as never], tool_choice: { type: "tool", name: INTENT_TOOL.name } as never });
+    const blk = ((res as unknown as { content: Array<{ type: string; input?: Record<string, unknown> }> }).content || []).find(b => b.type === "tool_use");
+    const i = blk?.input; if (!i) return null;
+    const intent = String(i.intent || ""), yes_no = String(i.yes_no || "none");
+    if (!(INTENT_TOOL.input_schema.properties.intent.enum as string[]).includes(intent)) return null;
+    return { intent, yes_no: ["yes", "no", "yes_but_change", "none"].includes(yes_no) ? yes_no : "none", frustrated: i.frustrated === true, meaning: String(i.meaning || "").slice(0, 300) };
+  } catch (_e) { return null; }
+}
 // نص الرد: من أداة tool_use (المضمونة) وإلا من النص.
 // ✈️ ٤ نوفمبر ٢٠٢٦: «هذا شامل الطريان» (حرفين مقلوبين) ما انمسكت → النموذج حاول يحوّل، والحارس منعه، وطلع «وضح لي وش تعدل».
 //    كلمة الطيران بأخطائها الشائعة.
@@ -3603,6 +3631,17 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   // 🧩 ٣ نوفمبر ٢٠٢٦: الرسائل تُدمَج (يرد طلال مرة وحدة على آخرها) — فالكشف الحتمي لازم يقرأ **كل** رسائل
   //    العميل بعد آخر رد لطلال، مو الأخيرة بس («احتاج العوده من مطار المدينه / افهم / كم مره أخبرك» ضاع الطلب).
   const _batch = (() => { const out: string[] = _unseenF.length ? _unseenF.map(m => m.body) : []; if (!out.length) { let k = msgs.length - 1; for (; k >= 0 && msgs[k].who !== "طلال"; k--) if (msgs[k].who === "العميل") out.unshift(msgs[k].body); } const j = out.join("\n"); return j.includes(text) ? j : (j ? j + "\n" + text : text); })();
+  // 🧠 نية الرسالة من Sonnet أولاً (null = فشل → كاشفات الكلمات).
+  const _lastTalalBody = msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body || "";
+  // 💰 قرار المالكة: الكلام الواضح جداً (شكر/سلام/إيموجي فقط) ما يحتاج Sonnet — النموذج للأمور المبهمة بس.
+  //    ❌ «ايوه/تمام/لا» مو منها: معناها يتغيّر حسب سؤال طلال.
+  const _plainCourtesy = /^(?:\s*(?:شكرا|شكراً|شكرًا|مشكور|مشكورين|تسلم|تسلمون|تسلمين|يعطيك\s*العافي[ةه]|الله\s*يعطيك\s*العافي[ةه]|جزاك\s*الله\s*خير|الله\s*يجزاك\s*خير|ما\s*قصرت|ماقصرت|السلام\s*عليكم(?:\s*ورحم[ةه]\s*الله(?:\s*وبركاته)?)?|وعليكم\s*السلام(?:\s*ورحم[ةه]\s*الله(?:\s*وبركاته)?)?|هلا|مرحبا|صباح\s*الخير|مساء\s*الخير|thanks?|thank\s*you|[👍🙏❤️🌹😊🤍💐✨]+)\s*[.!،,]*)+\s*$/i.test(_batch.replace(/[\u064B-\u0652\uFE0F]/g, ""));
+  const _cls = _plainCourtesy ? null : await _classifyFollowupIntent(msgs.slice(-14).map(m => `${m.who}: ${m.body}`).join("\n"), _lastTalalBody, _batch);
+  if (_cls) await logGuard(supabase, from, "intent", _cls.intent, `${_cls.yes_no}${_cls.frustrated ? " frustrated" : ""} · ${_cls.meaning}`.slice(0, 300), 1, text, "");
+  const _Y = (t = text) => _cls ? _cls.yes_no === "yes" : isAffirmative(t);
+  const _YY = (t = text) => _cls ? _cls.yes_no === "yes" : isYesish(t);
+  const _N = (t = text) => _cls ? _cls.yes_no === "no" : isNegative(t);
+  const _is = (...k: string[]) => !!_cls && k.includes(_cls.intent);
   // ✋ تعديل معلّق ينتظر «نعم» (قرار المالكة: نقاش وتأكيد طبيعي أولاً، ثم الكرت النهائي).
   const _pend = (idata.pending_modify && typeof idata.pending_modify === "object") ? idata.pending_modify as Record<string, unknown> : null;
   const _applyModify = async (changed: Record<string, unknown>, prefix = "") => {
@@ -3644,14 +3683,14 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
       let segs = [..._segs];
       if (_arr) { const i = _findIdx(_arr); if (i > 0) { const [x] = segs.splice(i, 1); segs.unshift(x); } }
       if (_dep) { const i = segs.findIndex((x, k) => k === segs.length - 1 ? false : (_segCity(x).includes(_dep.replace(/^ال/, "")) || _dep.includes(_segCity(x)))); if (i >= 0 && i < segs.length - 1) { const [x] = segs.splice(i, 1); segs.push(x); } }
-      if ((_arr || _dep) || isYesish(text)) {
+      if ((_arr || _dep) || _YY()) {
         if (await _superseded()) return;
         const _final = { ..._pend, distribution: segs.join(" - ") }; delete (_final as Record<string, unknown>).order_asked;
         if (!(await _medGate(_final))) { await _clearPend(); return; }
         await _applyModify(_final); return;
       }
     }
-    if (isAffirmative(text) && _segs.length >= 2 && _pend.order_asked !== true && !_isUmrahReq) {
+    if (_Y() && _segs.length >= 2 && _pend.order_asked !== true && !_isUmrahReq) {
       if (await _superseded()) return;
       const _cs = _segs.map(_segCity);
       const _mid = [...new Set(_cs.slice(1, -1))].filter(c => c !== _cs[0] && c !== _cs[_cs.length - 1]);
@@ -3660,9 +3699,9 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
       await _say(_q, "followup_ai", "order_question", _pend.distribution as string);
       return;
     }
-    if (isAffirmative(text)) { if (await _superseded()) return; if (!(await _medGate(_pend))) { await _clearPend(); return; } await _applyModify(_pend); return; }
+    if (_Y()) { if (await _superseded()) return; if (!(await _medGate(_pend))) { await _clearPend(); return; } await _applyModify(_pend); return; }
     await _clearPend();
-    if (isNegative(text)) { await _say("تمام، وش التعديل اللي تبيه بالضبط؟", "followup_ai", "modify_declined"); return; }
+    if (_N()) { await _say("تمام، وش التعديل اللي تبيه بالضبط؟", "followup_ai", "modify_declined"); return; }
   }
   // ✈️ ردّ العميل على «ما فيه طيران… أقرب رحلة X أو Y»: اختار تاريخ → نعدّل ليالي آخر مدينة (المدينة) + العودة منها → الكرت.
   //    «جدة/خلها» → تبقى العودة من جدة.
@@ -3694,7 +3733,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     // «طيب عدّلها / ايوه / تمام» بلا تاريخ → أقرب تاريخ لموعد العودة الأصلي.
     // ❌ «إذا غيرنا تاريخ القدوم ل ١٢» = تغيير تاريخ السفر، مو موافقة على البديل.
     const _otherDate = /القدوم|الذهاب|السفر|الوصول|الطلع[ةه]|المغادر[ةه]\s*من\s*مسقط/.test(_t) || _days.some(d => !(_alt.dates || []).some(x => new Date(x + "T00:00:00Z").getUTCDate() === d));
-    if (!_pick && !_otherDate && (_alt.dates || []).length && (isAffirmative(_t) || /^\s*(?:\S+\s+)?(?:عدّ?لها|عدّ?ل|غيّ?رها|زين|اوكي|ok)/i.test(_t))) {
+    if (!_pick && !_otherDate && (_alt.dates || []).length && (_Y(_t) || /^\s*(?:\S+\s+)?(?:عدّ?لها|عدّ?ل|غيّ?رها|زين|اوكي|ok)/i.test(_t))) {
       _pick = [..._alt.dates].sort((a, b) => Math.abs(Date.parse(a) - Date.parse(_alt.ret)) - Math.abs(Date.parse(b) - Date.parse(_alt.ret)))[0];
     }
     if (_pick) {
@@ -3755,7 +3794,8 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     await _say(_modifyConfirmQ(changed), "followup_ai", "modify_confirm_q", JSON.stringify(changed).slice(0, 200));
   };
   // ✈️ طلب مطار العودة (حتميّ، بلا نموذج) — العمرة فقط.
-  const _frustratedF = /ليش\s*ما\s*(?:ترد|تردون)|ما\s*تردون|بطي[ءئ]?|بطيئين|متأخر|تعبان|سي[ءئ]|زفت|عيب\s*عليك|مو\s*كل\s*شوي|كل\s*شوي[هة]?\s*(?:اسأل|أسأل|اقول|أقول)|خبرتك|قلتلك|وبعدين\s*معا?ك|كم\s*مر[ةه]|(?:^|\s)افهم|ما\s*(?:تفهم|فهمت)|مو\s*فاهم|غبي|قلت\s*لك|(?:أ|ا)خبرك|يا\s*بن\s*الحلال|يابن\s*الحلال|للمر[ةه]\s*ال/.test(_batch);
+  const _frustratedRe = /ليش\s*ما\s*(?:ترد|تردون)|ما\s*تردون|بطي[ءئ]?|بطيئين|متأخر|تعبان|سي[ءئ]|زفت|عيب\s*عليك|مو\s*كل\s*شوي|كل\s*شوي[هة]?\s*(?:اسأل|أسأل|اقول|أقول)|خبرتك|قلتلك|وبعدين\s*معا?ك|كم\s*مر[ةه]|(?:^|\s)افهم|ما\s*(?:تفهم|فهمت)|مو\s*فاهم|غبي|قلت\s*لك|(?:أ|ا)خبرك|يا\s*بن\s*الحلال|يابن\s*الحلال|للمر[ةه]\s*ال/.test(_batch);
+  const _frustratedF = _cls ? _cls.frustrated : _frustratedRe;
   // 🧭 ٤ نوفمبر ٢٠٢٦: «خلي القدوم والمغادرة بوكيت» → حوّلها للزميل. ترتيب المدن/القدوم والمغادرة من قدرات طلال (أي وجهة غير العمرة):
   //    نعيد ترتيب توزيعة البرنامج المرسل (ولو القدوم والمغادرة نفس المدينة → نقسم لياليها بين البداية والنهاية) → تأكيد → بناء.
   if (!_isUmrahReq && String(idata.program_final_raw || "")) {
@@ -3854,7 +3894,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   }
   // ✈️ ٤ نوفمبر ٢٠٢٦ (قرار المالكة): سؤال «شامل الطيران؟» → الجواب من البرنامج نفسه (قسم FLIGHTS)، مو تخمين النموذج.
   {
-    const _asksFlight = new RegExp(`(?:شامل|يشمل|فيه|في|مشمول|داخل|تشمل)\\s*(?:\\S+\\s*){0,2}?${FLIGHT_WORD}|${FLIGHT_WORD}\\s*(?:\\S+\\s*){0,1}?(?:مشمول|داخل|شامل|موجود)`, "i").test(_batch);
+    const _asksFlight = _cls ? _is("ask_flights") : new RegExp(`(?:شامل|يشمل|فيه|في|مشمول|داخل|تشمل)\\s*(?:\\S+\\s*){0,2}?${FLIGHT_WORD}|${FLIGHT_WORD}\\s*(?:\\S+\\s*){0,1}?(?:مشمول|داخل|شامل|موجود)`, "i").test(_batch);
     const _raw = String(idata.program_final_raw || "");
     if (_asksFlight && _raw) {
       const _fl = (_raw.split("FLIGHTS:")[1] || "").split(/\n\s*\n/)[0].split("\n").filter(l => l.includes("|"));
@@ -3879,12 +3919,12 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
       const _t = text.trim().replace(/[\u064B-\u0652]/g, "");
       const _clearYes = /^(?:ايوه|ايوا|إيوه|أيوه|نعم|اكيد|أكيد|ضيفه|ضيفها|أضفه|اضفه|حوله|حوّله|ابي|أبي|نبي|يب|يس|yes)(?=\s|$|[!.،])/.test(_t) || new RegExp(`(?:ضيف|أضف|اضف|ابي|أبي|نبي)\\S*\\s*${FLIGHT_WORD}`, "i").test(_t);
       const _ambig = /^(?:طيب|تمام|اوكي|ok|زين|ماشي)\s*[.!]?$/i.test(_t);
-      if (_clearYes) {
+      if (_cls ? (_cls.yes_no === "yes" || _is("want_intl_flight")) : _clearYes) {
         await _say("أبشر، حوّلت طلب الطيران الدولي لزميلي المختص يسعّره لك وبيرد عليك قريب إن شاء الله.", "followup_ai", "flight_handoff");
         try { await createProposalAndNotifyAdmin({ supabase, customerPhone: from, profileName, question: "العميل يبي يضيف الطيران الدولي للبرنامج " + String(idata.program_final_code || "") }); } catch (_e) { /* */ }
         return;
       }
-      if (_ambig) { await _say("تحب نضيف الطيران الدولي للبرنامج؟ أحوّل طلبك لزميلي المختص يسعّره لك.", "followup_ai", "flight_offer_confirm"); return; }
+      if (_cls ? (_cls.yes_no === "none" && _ambig) : _ambig) { await _say("تحب نضيف الطيران الدولي للبرنامج؟ أحوّل طلبك لزميلي المختص يسعّره لك.", "followup_ai", "flight_offer_confirm"); return; }
     }
   }
   // ⏳ ٤ نوفمبر ٢٠٢٦: البرنامج قيد التجهيز («تمام، أبشر، شوية والبرنامج عندك») والعميل ينتظر → كان النموذج يقول «طلبك عند زميلي».
@@ -3892,18 +3932,18 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     const _lt0 = msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body || "";
     const _building = /شوية والبرنامج عندك|بجهّ?ز لك برنامج|بعدّ?ل البرنامج فورا/.test(_lt0);
     const _waiting0 = /^\s*(?:في\s*(?:ال)?انتظار\s*\S*|بانتظارك|منتظر|ننتظر|وينك|وينكم|وين\s*البرنامج|متى\s*يوصل|[؟?]+)\s*[؟?]*\s*$/.test(text.replace(/[\u064B-\u0652]/g, ""));
-    if (_building && _waiting0) { await _say("البرنامج قيد التجهيز، ثواني ويوصلك إن شاء الله.", "followup_ai", "building_wait"); return; }
+    if (_building && (_cls ? _is("waiting", "resend_program") : _waiting0)) { await _say("البرنامج قيد التجهيز، ثواني ويوصلك إن شاء الله.", "followup_ai", "building_wait"); return; }
   }
   // 🤝 آخر رد لطلال حوّل الطلب للزميل (تعديل خارج قدراته) والعميل ينتظر («في انتظارك») → طمأنة ثابتة، ❌ بلا تراجع ولا وعود.
   {
     const _lt = msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body || "";
     const _handedOff = /حوّ?لت?\s*(?:لك\s*)?طلبك|بحوّ?ل\s*طلبك|عن\s*طريق\s*زميلي|زميلي\s*المختص/.test(_lt);
     const _waitingF = /^\s*(?:في\s*الانتظار|في\s*انتظارك|بانتظارك|منتظر|ننتظر|وينك|وينكم|[؟?]+)\s*[؟?]*\s*$/.test(text);
-    if (_handedOff && _waitingF) { await _say("طلبك عند زميلي المختص وبيرد عليك قريب إن شاء الله.", "followup_ai", "handoff_reassure"); return; }
+    if (_handedOff && (_cls ? _is("waiting") : _waitingF)) { await _say("طلبك عند زميلي المختص وبيرد عليك قريب إن شاء الله.", "followup_ai", "handoff_reassure"); return; }
   }
   // 🔎 العميل يشتكي من البرنامج («شوف البرنامج اللي أرسلته»، «عيب عليك») → طلال يفحص برنامجه بنفسه:
   //    فيه خطأ → اعتذار + تصحيح وإرسال؛ ما لقى → اعتذار (أ) ويسأل وش الغلط. ❌ أبداً «ما فيه خطأ» (قرار المالكة).
-  const _complainsProg = /(?:شوف|راجع|تأكد\s*من|افحص)\s*(?:\S+\s*){0,2}?(?:ال)?(?:برنامج|برنانج|ملف)|(?:ال)?برنامج\s*(?:\S+\s*){0,2}?(?:غلط|خطأ|خطا|فيه\s*غلط|مو\s*صح|ناقص)/.test(_batch);
+  const _complainsProg = _cls ? _is("complaint_program") : /(?:شوف|راجع|تأكد\s*من|افحص)\s*(?:\S+\s*){0,2}?(?:ال)?(?:برنامج|برنانج|ملف)|(?:ال)?برنامج\s*(?:\S+\s*){0,2}?(?:غلط|خطأ|خطا|فيه\s*غلط|مو\s*صح|ناقص)/.test(_batch);
   if ((_complainsProg || _frustratedF) && String(idata.program_final_raw || "").trim() && String(idata.program_final_code || "")) {
     const _iss = _programIssues(String(idata.program_final_raw), idata, from);
     if (_iss.length) { if (await _superseded()) return; await _selfCorrectProgram(supabase, from, String(idata.program_final_code), String(idata.program_final_raw), idata, false); return; }
@@ -3919,7 +3959,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     const _mentionsMedAirport = /مطار\s*(?:ال)?مدين[ةه]/.test(_batch) && !/(?:مش|مو|مب|ما|لا)\s*(?:من\s*)?مطار\s*(?:ال)?مدين/.test(_batch);
     const _lastT = msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body || "";
     const _offeredMed = /مطار\s*(?:ال)?مدين/.test(_lastT) && /(?:تبي|تبغى|تحتاج|حاب)\s*(?:\S+\s*){0,3}(?:تغيير|تغير|تعديل|تبديل)/.test(_lastT);
-    const _yesOrChange = isAffirmative(text) || /^\s*(?:غيّ?ر|غيره|غيرها|بدّ?ل|عدّ?ل)\s*$/.test(text);
+    const _yesOrChange = _Y() || /^\s*(?:غيّ?ر|غيره|غيرها|بدّ?ل|عدّ?ل)\s*$/.test(text);
     // 🧠 طلب سابق ما تنفّذ: العميل طلب العودة من المدينة قبل، والبرنامج ما فيه → «وين البرنامج/كم لي انتظر» = (ج) تصحيح فوري.
     const _lastNoFlight = msgs.map(m => m.who === "طلال" && /ما فيه طيران من المدينة إلى مسقط/.test(m.body)).lastIndexOf(true);
     const _medAsks = msgs.map((m, i) => ({ m, i })).filter(({ m, i }) => i > _lastNoFlight && m.who === "العميل" && (RE_RET_MED.test(m.body) || /مطار\s*(?:ال)?مدين/.test(m.body)) && !/(?:مش|مو|مب|ما|لا)\s*(?:من\s*)?(?:مطار\s*)?(?:ال)?مدين/.test(m.body));
@@ -3952,7 +3992,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   const _textSent = msgs.some(m => m.who === "طلال" && /برنامج\s*العمر[ةه]|الفنادق\s*والإقام[ةه]/.test(m.body));
   const _curFinal = !!String(idata.program_final_raw || "").trim() && (!_reqStart || !!_job);
   const progStatus: "sent" | "pending" | "failed" | "none" = (_jobSt === "sent" || (_textSent && !_reqStart) || _curFinal) ? "sent" : (_jobSt === "pending" ? "pending" : (_jobSt === "failed" ? "failed" : "none"));
-  const _wantsProgram = /(?:ارسل|أرسل|رسل|ابي|أبي|ابغى|أبغى|وين|فين|عطني|ابعث)\S*\s*(?:لي\s*)?(?:ال)?(?:برنامج|برنانج|ملف|pdf|العرض)|(?:البرنامج|الملف|العرض)\s*(?:ما|مو|مش|مب)\s*(?:وصل|مبين|طالع|ظاهر)|(?:ما|مو|مش|مب)\s*(?:وصل|مبين|طالع|ظاهر)|مره\s*ثاني|مرة\s*ثاني|(?:ال)?(?:برنامج|برنانج|ملف|عرض)\s*(?:\S+\s*)?(?:وين|فين|وينه|فينه|فينهر|وينه?و)/i.test(_batch);
+  const _wantsProgram = _cls ? _is("resend_program") : /(?:ارسل|أرسل|رسل|ابي|أبي|ابغى|أبغى|وين|فين|عطني|ابعث)\S*\s*(?:لي\s*)?(?:ال)?(?:برنامج|برنانج|ملف|pdf|العرض)|(?:البرنامج|الملف|العرض)\s*(?:ما|مو|مش|مب)\s*(?:وصل|مبين|طالع|ظاهر)|(?:ما|مو|مش|مب)\s*(?:وصل|مبين|طالع|ظاهر)|مره\s*ثاني|مرة\s*ثاني|(?:ال)?(?:برنامج|برنانج|ملف|عرض)\s*(?:\S+\s*)?(?:وين|فين|وينه|فينه|فينهر|وينه?و)/i.test(_batch);
   const _resendProgram = async (): Promise<boolean> => {
     if (progStatus === "none" || !_job) return false;
     const _j = _job as { id: number; code: string; status: string };
@@ -4019,7 +4059,7 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
 • frustration: none (هادي) | misunderstood (أنت ما فهمت) | customer_wrong (العميل يخالف الحقائق) | talal_error (البرنامج ما فيه شي سبق وطلبه).
 • غير ذلك action="reply".
 • الطفل عندنا ١٠ سنوات وتحت (بدون سرير إضافي)، و١١ وفوق بالغ.
-أعد JSON فقط: {"message":"...","action":"reply|modify|resend_program|handoff","frustration":"none","fields":{}}`;
+أعد JSON فقط: {"message":"...","action":"reply|modify|resend_program|handoff","frustration":"none","fields":{}}${_cls ? `\n\n🧠 فهم رسالة العميل الأخيرة (موثوق): «${_cls.meaning}» — النية: ${_cls.intent}${_cls.yes_no !== "none" ? `، جوابه: ${_cls.yes_no}` : ""}. ابنِ ردك على هذا الفهم.` : ""}`;
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   const model = (Deno.env.get("TALAL_MODEL_OVERRIDE") || "").trim() || "claude-sonnet-4-6";   // Sonnet لكل الوجهات (قرار المالكة)
   type FOut = { message?: string; action?: string; frustration?: string; fields?: Record<string, unknown> };
@@ -4092,7 +4132,7 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
     action = "reply";
   }
   // 🚫 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): التحويل للزميل **فقط** للطيران الدولي/الحجز/الدفع/الخصم — غير كذا طلال يتولاه.
-  const _handoffTopic = new RegExp(`${FLIGHT_WORD}|حجز|احجز|أحجز|دفع|ادفع|أدفع|تحويل\\s*بنكي|فاتور|خصم|تخفيض|عربون`, "i").test(_batch);
+  const _handoffTopic = _cls ? _is("want_intl_flight", "booking_payment") : new RegExp(`${FLIGHT_WORD}|حجز|احجز|أحجز|دفع|ادفع|أدفع|تحويل\\s*بنكي|فاتور|خصم|تخفيض|عربون`, "i").test(_batch);
   if (action === "handoff" && !_handoffTopic) {
     out = { message: "عفواً إذا سمحت، وضّح لي وش تحب نعدّل في البرنامج وأجهّزه لك على طول؟", action: "reply", fields: {} };
     action = "reply";

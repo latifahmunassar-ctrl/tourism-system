@@ -17,6 +17,7 @@ export type Scenario = {
   medFlights?: string[];
   seenAt?: number;   // فهرس رسالة بالتاريخ = آخر رسالة شافها طلال (last_seen_in_ts)
   rejectTools?: boolean;
+  intent?: { intent: string; yes_no?: string; frustrated?: boolean; meaning?: string };
   buildFail?: boolean;   // Tourism-AI يرجّع «no buildable program»   // الـAPI يرفض الأداة (400) — شبكة الأمان لازم تكمل بدونها   // تواريخ طيران المدينة ← مسقط المتوفرة (DD/MM/YYYY) — بدونها ما يُفحص
   tables?: Record<string, Array<Record<string, unknown>>>;   // صفوف إضافية لجداول القاعدة الوهمية   // رسالة عميل أحدث تصل أثناء تفكير النموذج (اختبار دمج الرسائل)   // طابور الـPDF (program_pdf_jobs) قبل الرسالة
   expect: Array<[string, (c: Ctx) => boolean]>;
@@ -930,5 +931,50 @@ export const SCENARIOS: Scenario[] = [
     intakeData: { destination: "العمرة", pax: 2, nights: "3 مكة 2 المدينة", asked_children: true, asked_nights: true },
     model: [M("تمام، خليني أتأكد من طلبك", { destination: "العمرة", pax: 2, nights: "3 مكة 2 المدينة" })],
     expect: [["ما يرسل كرت التأكيد بلا تاريخ", c => !/أكد لي|المعلومات صحيحة/.test(c.reply)], ["ما يبني", c => c.buildCalls === 0]],
+  },
+  // ── 🧠 ٤ نوفمبر ٢٠٢٦: النية من Sonnet أولاً (اللهجة الخليجية اللي فاتت كاشفات الكلمات) ──
+  {
+    id: "intent-gulf-ticket-question", entry: "followup", title: "النية: «التكت علينا ولا عليكم؟» (ما فيها كلمة طيران) → Sonnet: ask_flights → الجواب من قسم FLIGHTS",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-072"]], customer: "التكت علينا ولا عليكم؟",
+    intakeData: { ...{ destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 12, cities: "بوكيت، كرابي، بانكوك", summary_confirmed: true }, program_final_raw: "DEST:تايلاند\nFLIGHTS:\nاليوم 3: phuket - bangkok | داخلي | 300 ريال/شخص | 6 أشخاص | 1,800 ريال\n\nTRANSFERS:\n" }, intent: { intent: "ask_flights", meaning: "هل تذاكر الطيران داخلة في البرنامج؟" },
+    model: [FU("أبشر، بحوّل طلبك لزميلي المختص ويرد عليك قريب", "handoff")],
+    expect: [["جواب الطيران من البرنامج", c => /ما يشمل الطيران الدولي/.test(c.reply) && /بوكيت ← بانكوك/.test(c.reply)], ["ما حوّل", c => c.proposals === 0]],
+  },
+  {
+    id: "intent-gulf-yes-mashiha", entry: "followup", title: "النية: «ماعليه مشّيها» على سؤال تأكيد التعديل → Sonnet: yes → بناء (الكلمات ما تعرفها)",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "يعني نخلي الرحلة ١٠ أيام بدل ١٢، صحيح؟"]], customer: "ماعليه مشّيها",
+    intakeData: { ...{ destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 12, cities: "بوكيت، كرابي، بانكوك", summary_confirmed: true }, pending_modify: { days: 10 } }, intent: { intent: "agree", yes_no: "yes", meaning: "موافق على التعديل" },
+    model: [M("تمام", { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 10, cities: "بوكيت، كرابي، بانكوك" }, true)],
+    expect: [["بنى", c => c.buildCalls > 0]],
+  },
+  {
+    id: "intent-gulf-waiting-hah", entry: "followup", title: "النية: «هاه بشّر؟» أثناء التجهيز → Sonnet: waiting → «البرنامج قيد التجهيز…»",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "تمام، أبشر، شوية والبرنامج عندك."]], customer: "هاه بشّر؟",
+    intakeData: { ...{ destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 12, cities: "بوكيت، كرابي، بانكوك", summary_confirmed: true } }, intent: { intent: "waiting", meaning: "يسأل هل البرنامج جاهز" },
+    model: [FU("طلبك عند زميلي المختص وبيرد عليك قريب إن شاء الله.")],
+    expect: [["قيد التجهيز", c => /^البرنامج قيد التجهيز/.test(c.reply.trim())]],
+  },
+  {
+    id: "intent-meaning-to-model", entry: "followup", title: "النية: فهم Sonnet للرسالة يوصل للنموذج اللي يكتب الرد",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-072"]], customer: "الفندق اللي في كرابي قريب من البحر ولا بعيد شوي؟",
+    intakeData: { ...{ destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 12, cities: "بوكيت، كرابي، بانكوك", summary_confirmed: true } }, intent: { intent: "question", meaning: "يسأل هل فندق كرابي قريب من البحر" },
+    model: [FU("إيه أستاذي، الفندق قريب من البحر.")],
+    expect: [["الفهم بالبرومبت", c => /يسأل هل فندق كرابي قريب من البحر/.test(c.modelSystem)], notSilent],
+  },
+  {
+    id: "intent-model-overrides-word-detector", entry: "followup", title: "النية: «قبل لا ترسل البرنامج مره ثانيه غير فندق كرابي» → Sonnet: modify → ما يعيد إرسال نفس البرنامج",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-072"]], customer: "قبل لا ترسل البرنامج مره ثانيه غير فندق كرابي",
+    intakeData: { ...{ destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 12, cities: "بوكيت، كرابي، بانكوك", summary_confirmed: true }, program_final_raw: "DEST:تايلاند\nFLIGHTS:\nاليوم 3: phuket - bangkok | داخلي | 300 ريال/شخص | 6 أشخاص | 1,800 ريال\n\nTRANSFERS:\n", program_final_code: "TH-2026-072" }, jobs: [{ id: 5, code: "TH-2026-072", status: "sent" }],
+    intent: { intent: "modify", meaning: "يبي يغيّر فندق كرابي قبل إعادة الإرسال" },
+    model: [FU("أبشر، يعني أغيّر لك فندق كرابي لفندق ثاني، صحيح؟")],
+    expect: [["ما أعاد نفس البرنامج", c => !c.jobs.some(j => j.code === "TH-2026-072" && j.status === "pending")], notSilent],
+  },
+  {
+    id: "intent-skip-plain-thanks", entry: "followup", title: "قرار المالكة: «شكراً يعطيك العافية 🌹» واضح جداً → بدون Sonnet (التصنيف المبرمج الغلط ما ينطبق)",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-072"]], customer: "شكراً يعطيك العافية 🌹",
+    intakeData: { destination: "تايلاند", pax: 6, date: "17/11/2026", days: 12, summary_confirmed: true, program_final_raw: "DEST:تايلاند\nFLIGHTS:\nاليوم 3: phuket - bangkok | داخلي | 300 ريال/شخص | 6 أشخاص | 1,800 ريال\n\nTRANSFERS:\n" },
+    intent: { intent: "ask_flights", meaning: "خطأ متعمّد" },
+    model: [FU("العفو أستاذي، أي شي تحتاجه أنا موجود.")],
+    expect: [["ما جاوب عن الطيران (ما استدعى المصنّف)", c => !/الطيران/.test(c.reply)], notSilent],
   },
 ];
