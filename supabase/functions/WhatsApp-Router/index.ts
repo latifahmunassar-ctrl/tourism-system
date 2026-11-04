@@ -395,6 +395,28 @@ const DESTINATION_HINTS: Array<[RegExp, string]> = [
   [/سلطنة\s*عمان|صلال[ةه]|salalah|مسقط|muscat|نزوى|صور\b/i, "عُمان"],
 ];
 
+// ✍️ ٤ نوفمبر ٢٠٢٦: «جيب لي برنامج تلاتد» → طلال قال «ما فهمت». أقرب اسم وجهة لكلمة فيها غلط إملائي (نفس أول حرف،
+//    مسافة تعديل صغيرة) → يسأل «تقصد تايلاند؟» بدل «ما فهمت». ❌ ما يفترض — يسأل بس.
+function _lev(a: string, b: string): number {
+  const m = a.length, n = b.length; const d = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 1; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[m][n];
+}
+function fuzzyDestination(text: string): string | null {
+  const norm = (x: string) => x.replace(/[إأآا]/g, "ا").replace(/[ةه]/g, "ه").replace(/ى/g, "ي").replace(/^ال/, "");
+  const names = [...new Set(DESTINATION_HINTS.map(([, n]) => n))].filter(n => !/عمر/.test(n));
+  let best: { n: string; d: number } | null = null;
+  for (const tok of String(text || "").split(/[^\u0621-\u064A]+/).filter(t => t.length >= 5)) {
+    const t = norm(tok);
+    for (const n of names) {
+      const nn = norm(n); if (nn[0] !== t[0]) continue;
+      const dd = _lev(t, nn); const lim = Math.max(nn.length, t.length) >= 6 ? 3 : 2;
+      if (dd > 0 && dd <= lim && (!best || dd < best.d)) best = { n, d: dd };
+    }
+  }
+  return best ? best.n : null;
+}
 function extractDestination(text: string): string | null {
   for (const [re, name] of DESTINATION_HINTS) if (re.test(text)) return name;
   return null;
@@ -3209,6 +3231,8 @@ ${returning
             .select("intake_data").eq("phone", from).maybeSingle();
           const idata = (sRow?.intake_data || {}) as Record<string, unknown>;
           idata.auto_program = prog.text;
+          // 🔎 نسخة من الطلب اللي انبنى عليه البرنامج — الفحص الذاتي يقارن بها (مو بالبيانات الحالية اللي ممكن تتغيّر بطلب جديد).
+          idata.program_spec = { destination: _mergedData.destination, pax: _mergedData.pax, ages: _mergedData.ages, date: _mergedData.date, nights: _mergedData.nights, days: _mergedData.days, return_airport: _mergedData.return_airport || "" };
           idata.auto_program_ready = prog.priceReady;
           idata.auto_program_at = new Date().toISOString();
           await supabase.from("whatsapp_sessions").update({ intake_data: idata }).eq("phone", from);
@@ -3332,8 +3356,9 @@ function _noMedFlightMsg(c: { date?: Date; nearest?: Date[] }): string {
 
 // 🔎 قرار المالكة (٣ نوفمبر ٢٠٢٦): طلال يكتشف غلطه بنفسه — كل برنامج ينرسل يُفحص مقابل الطلب المؤكد،
 //    ولو فيه خطأ يعتذر للعميل ويعيد الإرسال مصحّحاً (مرة وحدة) وينبّه الموظفين. العميل ما يحتاج يكتشفه.
-function _programIssues(raw: string, d: Record<string, unknown>, phone: string): string[] {
+function _programIssues(raw: string, d0: Record<string, unknown>, phone: string): string[] {
   const issues: string[] = [];
+  const d = (d0 && typeof d0.program_spec === "object" && d0.program_spec) ? d0.program_spec as Record<string, unknown> : d0;
   const t = String(raw || "").replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x)));
   const pax = Number(d.pax) || 0;   // pax = الإجمالي (طلال يسأل «الإجمالي، الكبار والأطفال»)
   const fl = (t.split("FLIGHTS:")[1] || "").split(/\n\s*\n/)[0] || "";
@@ -3625,6 +3650,8 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
 • لو طلب **تعديل** معلومة (عدد/أعمار/تاريخ/ليالي/مدن/مطار العودة) → action="modify" وضع الحقول الجديدة **فقط** في fields (مطار العودة: return_airport="madinah" أو "jeddah").
 • تغيير مطار العودة (جدة ↔ المدينة) = action="modify" مع return_airport — ❌ مو handoff ولا «بحوّل للزميل».
 • اقرأ المحادثة **كاملة** — لو فيه رسالة من العميل ما رديت عليها (وصلت وأنت ترد)، خذها بعين الاعتبار ولا تتجاهلها.
+• كلمة فيها غلط إملائي وتشبه اسم وجهة (مثل «تلاتد» = تايلاند) → ❌ لا تقول «ما فهمت»؛ اسأل «عفواً إذا سمحت، تقصد تايلاند؟».
+• العميل يبي رحلة **لناس ثانيين** (عيلة ثانية/أهله/ربعه) = طلب جديد مستقل، مو تعديل البرنامج الحالي.
 • المطارات = حقل airports بالضبط. ❌ لا تخترع مطار وصول/عودة غيره، ولو نص البرنامج يخالفه فالمعتمد airports.
 • ❌ أبداً لا تقول «ما فيه خطأ» أو تحمّل العميل يدوّر الغلط — لو ما عرفت الغلط: «أعتذر منك أستاذي، بس فهمني وش الغلط اللي لاحظته عشان أصححه لك فوراً؟».
 • العميل متضايق → اعتذر بإحدى ثلاث (قرار المالكة):
@@ -3704,6 +3731,11 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
     reply = reply.replace(/^\s*(?:أعتذر|اعتذر)\s*منك(?:\s*أستاذي)?[،,]?\s*(?:بس\s*)?(?:أنا\s*)?(?:سبق\s*و\s*?وضحت\s*لك\s*(?:إن|ان)?\s*)?/, "").replace(/^\s*(?:آسف|اسف)[،,]?\s*/, "").trim();
     if (reply) reply = reply.charAt(0) + reply.slice(1);
   }
+  { const _fz = /ما\s*(?:فهمت|أفهم|افهم)|وضح\s*لي/.test(reply) ? fuzzyDestination(_batch) : null;
+    if (_fz && !extractDestination(_batch)) {
+      reply = `عفواً إذا سمحت، تقصد ${_fz}؟`;
+      try { await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, pending_dest_guess: _fz } }).eq("phone", from); } catch (_e) { /* */ }
+    } }
   if (_frus && reply && !/^\s*(?:أعتذر|اعتذر|حاضر، أعتذر)/.test(reply)) reply = "أعتذر منك أستاذي، " + reply.replace(/^\s*(?:ما\s*فيه?\s*(?:في\s*البرنامج\s*)?خطأ[^.،]*[.،]\s*)/, "");
   const _wasApolA = /^\s*أعتذر منك أستاذي/.test(reply);
   try { reply = guardAutofix(reply, { alreadyGreeted: true, lastCustomer: text, lastTalal: msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body || "" }).text; } catch (_e) { /* */ }
@@ -3847,6 +3879,28 @@ async function handleMessage(args: {
       .update({ last_message_at: new Date().toISOString() })
       .eq("phone", from);
     return;
+  }
+
+  // 👨‍👩‍👧 ٤ نوفمبر ٢٠٢٦: «في عندي عيله ثانيه تبي تروح تايلند» = **طلب جديد مستقل** (مو تبديل وجهة) — كان يخلط
+  //    بيانات العمرة (٥ أشخاص) بطلب تايلاند ويرفض الأسئلة ٣ مرات ثم «أرد عليك بأقرب وقت». الحين: طلب جديد نظيف.
+  {
+    const _sid = ((session as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
+    const _sepReq = /عيل[ةه]\s*ثاني|عائل[ةه]\s*ثاني|ناس\s*ثاني|ربع\s*ثاني|(?:طلب|حجز|برنامج|رحل[ةه])\s*(?:ثاني|ثانية|جديد|آخر|اخر|ثاني[ةه])\s*(?:ل|غير|لناس|لعيل)|لشخص\s*ثاني|لأهلي|لاهلي|لربعي|لأخوي|لاخوي|لأختي|لاختي|لصديق|غير\s*هذا\s*الطلب|مو\s*(?:بدل|تغيير)/.test(text);
+    const _guessYes = !!String(_sid.pending_dest_guess || "") && isYesish(text);
+    const _newD = detectedDest || (_guessYes ? String(_sid.pending_dest_guess) : "") || (_sepReq ? String(_sid.pending_dest || "") : "");
+    if (_sepReq && _newD && _newD !== String(_sid.destination || "")) {
+      const _prevReq = { destination: _sid.destination, pax: _sid.pax, date: _sid.date, nights: _sid.nights, days: _sid.days, program_code: _sid.program_final_code, at: new Date().toISOString() };
+      const _hist = Array.isArray(_sid.prev_requests) ? (_sid.prev_requests as unknown[]) : [];
+      await supabase.from("whatsapp_sessions").update({ intake_active: true, stage: "new", destination: _newD,
+        intake_data: { destination: _newD, started_at: new Date(Date.now() - 60_000).toISOString(), prev_requests: [..._hist, _prevReq].slice(-5) } }).eq("phone", from);
+      await logGuard(supabase, from, "separate_request", "fresh_intake", `${String(_sid.destination || "")} → ${_newD}`, 1, text, "");
+      await handleNewLeadIntake({ supabase, from, body: text, referral: _referral });
+      return;
+    }
+    if (_guessYes && s0IntakeInactive(session)) {
+      // «ايوه» على «تقصد تايلاند؟» → نكمل كأنه ذكر الوجهة (مسار الوجهة الجديدة/التأكيد المعتاد تحت).
+      (session as { intake_data?: Record<string, unknown> }).intake_data = { ..._sid, pending_dest_guess: "" };
+    }
   }
 
   // ── استقبال طلال للعملاء الجدد فقط ──────────────────────────────────────
@@ -5308,6 +5362,7 @@ function isYesish(text: string): boolean {
   if (/(?:^|\s)(?:لا|مو|مش|مب|ما)\s|غيّ?ر|عدّ?ل|بدّ?ل|[0-9٠-٩]/.test(t)) return false;
   return /(?:^|\s)(?:ايوا|ايوه|إيوه|أيوه|أيوا|ايه|إيه|نعم|صح|صحيح|مضبوط|تمام|اوكي|اوك|ok|yes|اكيد|أكيد|موافق|أجل|اجل|زين|ماشي|يب|يس)(?=\s|$|[!.،؟?])|كل\s*(?:شي|شيء)\s*(?:صح|تمام|مضبوط)|كله\s*(?:صح|تمام)|المعلومات\s*صح/i.test(t);
 }
+function s0IntakeInactive(session: unknown): boolean { return !!session && (session as { intake_active?: boolean | null }).intake_active !== true; }
 function isNegative(text: string): boolean {
   const t = text.trim().toLowerCase();
   return ["لا","كلا","مرفوض","ارفض","أرفض","no","n"]

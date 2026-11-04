@@ -15,7 +15,7 @@ const TMP = new URL("../.index_under_test.ts", HERE);
 // ── 1) نسخة قابلة للاستيراد من index.ts: بلا Deno.serve، ومع تصدير الدوال ──
 let code = await Deno.readTextFile(SRC);
 code = code.replace(/^Deno\.serve\(/m, "(globalThis as any).__noServe(");
-code += "\nexport { handleNewLeadIntake, handleFollowupAI, extractDestination, _programIssues };\n";
+code += "\nexport { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues };\n";
 await Deno.writeTextFile(TMP, code);
 (globalThis as any).__noServe = () => {};
 
@@ -121,7 +121,7 @@ let rejectTools = false;
   return json({});
 };
 
-const { handleNewLeadIntake, handleFollowupAI, extractDestination, _programIssues } = await import(TMP.href);
+const { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues } = await import(TMP.href);
 
 // ── 4) تشغيل السيناريوهات ──
 const PHONE = "whatsapp:+96899621742";
@@ -139,7 +139,7 @@ function seed(s: Scenario) {
   DB.wa_message_audit.push({ from_phone: PHONE, body: s.customer, received_at: ts(), status: "received" });
   for (const [tb, rows] of Object.entries(s.tables || {})) (DB[tb] ||= []).push(...structuredClone(rows as RowT[]));
   for (const j of (s.jobs || [])) DB.program_pdf_jobs.push({ phone: PHONE, created_at: ts(), attempts: 0, ...j });
-  DB.whatsapp_sessions.push({ phone: PHONE, profile_name: "اختبار", intake_active: s.entry !== "followup", stage: "new",
+  DB.whatsapp_sessions.push({ phone: PHONE, profile_name: "اختبار", intake_active: s.sessionIntakeActive ?? (s.entry !== "followup"), stage: "new",
     destination: s.session?.destination ?? null, intake_data: { ...structuredClone(s.intakeData || {}), ...(s.seenAt !== undefined ? { last_seen_in_ts: _tsList[s.seenAt] } : {}) }, ad_referral: null, last_message_at: ts() });
   return ts;
 }
@@ -155,7 +155,8 @@ for (const s of SCENARIOS) {
   let crash = "";
   console.error = () => {}; console.warn = () => {}; console.log = () => {};
   try {
-    if (s.entry === "followup") await handleFollowupAI({ supabase: fakeSupabase, from: PHONE, profileName: "اختبار", body: s.customer });
+    if (s.entry === "message") await handleMessage({ supabase: fakeSupabase, from: PHONE, profileName: "اختبار", body: s.customer });
+    else if (s.entry === "followup") await handleFollowupAI({ supabase: fakeSupabase, from: PHONE, profileName: "اختبار", body: s.customer });
     else await handleNewLeadIntake({ supabase: fakeSupabase, from: PHONE, body: s.customer });
     await Promise.all(_bg);
   }
@@ -198,11 +199,17 @@ for (const [t, want] of DEST_UNITS) {
     ["طلب المدينة والعودة طلعت جدة", _programIssues(RAW(5, "جدة"), D, "whatsapp:+96899621742"), "العودة طلعت من جدة"],
     ["رقم عماني بلا عملة", _programIssues(RAW(5, "المدينة", false), D, "whatsapp:+96899621742"), "بالريال السعودي"],
     ["رقم سعودي بلا عملة = عادي", _programIssues(RAW(5, "المدينة", false), D, "whatsapp:+966500000000"), ""],
+    ["٤ نوفمبر: طلب تايلاند غيّر التاريخ لـ١٧ بعد البناء — المقارنة بنسخة الطلب (١٢) → سليم", _programIssues(RAW(5, "جدة"), { date: "17/11/2026", pax: 5, program_spec: { pax: 5, date: "12/11/2026", return_airport: "jeddah" } }, "whatsapp:+96899621742"), ""],
   ];
   for (const [name, issues, want] of U) {
     const ok = want ? issues.some(i => i.includes(want)) && issues.length === 1 : issues.length === 0;
     if (ok) { pass++; realLog(`✅ self-check «${name}» → ${issues.join(" | ") || "سليم"}`); } else { fail++; realLog(`❌ self-check «${name}» → ${issues.join(" | ") || "سليم"} (المتوقع ${want || "سليم"})`); }
   }
+}
+// ── وحدة: الأخطاء الإملائية في اسم الوجهة ──
+for (const [t, want] of [["طيب جيب لي برنامج تلاتد", "تايلاند"], ["ابي ماليزبا", "ماليزيا"], ["وين مطار المدينه", null], ["ابي اغير رحله العوده", null]] as Array<[string, string | null]>) {
+  const got = fuzzyDestination(t);
+  if (got === want) { pass++; realLog(`✅ fuzzy «${t}» → ${want}`); } else { fail++; realLog(`❌ fuzzy «${t}» → ${got} (المتوقع ${want})`); }
 }
 await Deno.remove(TMP).catch(() => {});
 realLog(`\nالنتيجة: ${pass} ناجح، ${fail} فاشل من ${pass + fail}`);

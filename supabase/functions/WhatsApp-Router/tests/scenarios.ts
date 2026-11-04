@@ -5,7 +5,8 @@
 export type Ctx = { reply: string; session: Record<string, any>; intake: Record<string, any>; buildCalls: number; modelCalls: number; proposals: number; jobs: Array<Record<string, any>>; buildBody: Record<string, any> | null; modelSystem: string; modelName: string; db: Record<string, Array<Record<string, any>>> };
 export type Scenario = {
   id: string; title: string;
-  entry?: "intake" | "followup";   // followup = بعد إقفال الطلب (تشغيل كامل لرقم المالكة)
+  entry?: "intake" | "followup" | "message";
+  sessionIntakeActive?: boolean;   // followup = بعد إقفال الطلب (تشغيل كامل لرقم المالكة)
   history: Array<["C" | "T" | "S", string]>;   // S = موظف (مو طلال)
   customer: string;
   intakeData?: Record<string, unknown>;
@@ -270,6 +271,21 @@ export const SCENARIOS: Scenario[] = [
     customer: "؟", intakeData: DONE, medFlights: ["16/11/2026"],
     model: [FU("أبشر")],
     expect: [["ينبّه إنه شافها", c => /^آه صحيح، الحين انتبهت إنك ذكرت «ابي العوده من مطار المدينه»/.test(c.reply)], ["يتعامل مع طلب المطار", c => /العودة من مطار المدينة/.test(c.reply)]],
+  },
+  {
+    id: "fu-typo-destination", entry: "followup", title: "٤ نوفمبر: «جيب لي برنامج تلاتد» → «عفواً إذا سمحت، تقصد تايلاند؟» (مو «ما فهمت»)",
+    history: PROG_HIST, customer: "طيب جيب لي برنامج تلاتد", intakeData: DONE,
+    model: [FU("ما فهمت قصدك بـ«تلاتد»، وضح لي وش اللي تبيه.")],
+    expect: [["يسأل تايلاند", c => /^عفوا?ً? إذا سمحت، تقصد تايلاند؟$/.test(c.reply.trim())], ["يتذكر التخمين", c => c.intake.pending_dest_guess === "تايلاند"]],
+  },
+  {
+    id: "msg-separate-request", entry: "message", sessionIntakeActive: true, title: "٤ نوفمبر: «لا في عندي عيله ثانيه تبي تروح تايلند» → طلب جديد مستقل (بلا ٥ أشخاص العمرة)",
+    history: [...PROG_HIST, ["C", "تايلاند"], ["T", "تمام تقصد تبي تغير الوجهة من العمرة إلى تايلاند؟"]],
+    customer: "لا في عندي عيله ثانيه \nتبي تروح تايلند",
+    intakeData: { ...DONE, asked_dest_change: true, pending_dest: "تايلاند", program_final_code: "MK-2026-011" },
+    model: [M("حياك الله، كم عدد المسافرين؟", { destination: "تايلاند" })],
+    expect: [["الطلب الجديد تايلاند", c => c.intake.destination === "تايلاند"], ["❌ بلا عدد العمرة القديم", c => !c.intake.pax], ["العمرة محفوظة بالسجل", c => (c.intake.prev_requests || []).some((r: any) => r.program_code === "MK-2026-011")],
+      ["يسأل المسافرين (مو المعتمرين)", c => /المسافرين/.test(c.reply) && !/المعتمرين/.test(c.reply)]],
   },
   {
     id: "fu-question-from-program", entry: "followup", title: "متابعة: سؤال جوابه في البرنامج → يرد بنفسه بلا تحويل",
