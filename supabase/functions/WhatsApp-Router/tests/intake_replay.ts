@@ -15,7 +15,7 @@ const TMP = new URL("../.index_under_test.ts", HERE);
 // ── 1) نسخة قابلة للاستيراد من index.ts: بلا Deno.serve، ومع تصدير الدوال ──
 let code = await Deno.readTextFile(SRC);
 code = code.replace(/^Deno\.serve\(/m, "(globalThis as any).__noServe(");
-code += "\nexport { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg };\n";
+code += "\nexport { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish };\n";
 await Deno.writeTextFile(TMP, code);
 (globalThis as any).__noServe = () => {};
 
@@ -123,7 +123,7 @@ let buildFail = false;
   return json({});
 };
 
-const { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg } = await import(TMP.href);
+const { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish } = await import(TMP.href);
 
 // ── 4) تشغيل السيناريوهات ──
 const PHONE = "whatsapp:+96899621742";
@@ -224,6 +224,11 @@ for (const [t, want] of [["يعني الي عمره ١٢ سنه يعتر بال�
     ["الجاهزية تكرار = «بعد التعديل»", _varyPostMsg(RDY, 1), x => /البرنامج بعد التعديل صار جاهز/.test(x)],
   ];
   for (const [n, got, ok] of U) { if (ok(got)) { pass++; realLog(`✅ post-msg «${n}»`); } else { fail++; realLog(`❌ post-msg «${n}» → ${got}`); } }
+}
+// ── وحدة: صيغ الموافقة (٤ نوفمبر: «تماما» ما انحسبت) ──
+for (const [t, want] of [["تماما", true], ["تمامم", true], ["تمام", true], ["اوكيه", true], ["طيب", true], ["👍", true], ["✅", true], ["ايوه", true], ["okk", true], ["كل شي صح", true], ["لا", false], ["تمام بس غير التاريخ ١٥", false], ["متى", false]] as Array<[string, boolean]>) {
+  const got = isYesish(t);
+  if (got === want) { pass++; realLog(`✅ yes «${t}» → ${want}`); } else { fail++; realLog(`❌ yes «${t}» → ${got} (المتوقع ${want})`); }
 }
 await Deno.remove(TMP).catch(() => {});
 realLog(`\nالنتيجة: ${pass} ناجح، ${fail} فاشل من ${pass + fail}`);

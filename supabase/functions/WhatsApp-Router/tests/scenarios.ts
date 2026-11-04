@@ -406,6 +406,13 @@ export const SCENARIOS: Scenario[] = [
     expect: [["أرسل التفضيل للبناء", c => c.buildBody?.hotel_prefs?.breakfast === true], ["«تمام، أبشر…»", c => /تمام، أبشر/.test(c.reply)]],
   },
   {
+    id: "fu-reorder-tamaman", entry: "followup", title: "٤ نوفمبر: «تماما» على تأكيد الترتيب → بناء (مو «بحول طلبك لزميلي… الطيران الدولي»)",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "تمام، تقصد يكون القدوم والمغادرة من بوكيت: ليلتين بوكيت، … وليلتين بوكيت في الآخر؟"]], customer: "تماما",
+    intakeData: { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 12, cities: "بوكيت، كرابي، بانكوك", summary_confirmed: true, pending_modify: { distribution: "2 بوكيت - 4 بانكوك - 3 كرابي - 2 بوكيت", order_asked: true } },
+    model: [FU("أبشر، بحول طلبك لزميلي المختص لترتيب الطيران الدولي", "handoff"), M("تمام", { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 12, cities: "بوكيت، كرابي، بانكوك" }, true)],
+    expect: [["بنى بالترتيب", c => c.buildBody?.distribution === "2 بوكيت - 4 بانكوك - 3 كرابي - 2 بوكيت"], ["ما حوّل", c => c.proposals === 0]],
+  },
+  {
     id: "fu-question-from-program", entry: "followup", title: "متابعة: سؤال جوابه في البرنامج → يرد بنفسه بلا تحويل",
     history: PROG_HIST, customer: "وش اسم الفندق في مكة؟", intakeData: DONE,
     model: [FU("الفندق في مكة فوكو، ٣ ليال")],

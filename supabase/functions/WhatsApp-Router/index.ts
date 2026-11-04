@@ -5668,7 +5668,16 @@ async function getOldestPendingProposal(
 }
 
 function isAffirmative(text: string): boolean {
-  const t = text.trim().toLowerCase();
+  // ٤ نوفمبر ٢٠٢٦: «تماما» ما انحسبت موافقة → ضاع تعديل الترتيب وانحوّل للزميل. نطبّع الصيغ الشائعة قبل المقارنة:
+  //    تنوين/ألف آخر الكلمة («تماما»)، تكرار الحرف الأخير («تمامم»، «اوكيي»)، التشكيل، الإيموجي (👍 ✅ 👌).
+  if (/^\s*(?:👍|✅|👌|🙏|✔️?)+\s*$/u.test(String(text || ""))) return true;
+  const t = String(text || "").trim().toLowerCase()
+    .replace(/[\u064B-\u0652]/g, "")
+    .replace(/[!.،,؟?]+$/g, "")
+    .replace(/(.)\1+$/u, "$1")
+    .replace(/^(تمام|اوكي|اوك|زين|اكيد|أكيد|طيب|ماشي|صح)ا$/u, "$1")
+    .replace(/^اوكيه$/u, "اوكي").replace(/^(?:ok+|okay|okey)$/u, "ok").replace(/^(?:yes+|yep|ya)$/u, "yes");
+  if (["طيب","تمم","ايه","إيه","يب","يس","موافقين","تمام تمام"].includes(t)) return true;
   // "تم" is the new affirmative token used by step 4 ("save to suggested
   // category") in the admin correction flow — also keep all the old yeses.
   return ["نعم","تم","ايوه","أيوه","ايوا","أيوا","موافق","تمام","صح","صحيح","اي","أجل","اجل","زين","اكيد","أكيد","ماشي","yes","y","ok","اوكي","اوك"]
@@ -5678,8 +5687,10 @@ function isAffirmative(text: string): boolean {
 //    موافقة = كلمة إيجاب في أي مكان بالرسالة، بلا نفي ولا طلب تغيير.
 function isYesish(text: string): boolean {
   const t = String(text || "").trim();
-  if (isAffirmative(t)) return true;
-  if (/(?:^|\s)(?:لا|مو|مش|مب|ما)\s|غيّ?ر|عدّ?ل|بدّ?ل|[0-9٠-٩]/.test(t)) return false;
+  // «تمام بس غير التاريخ ١٥» = موافقة + تعديل → مو موافقة صافية (التعديل يتعالج).
+  if (/(?:^|\s)(?:لا|مو|مش|مب|ما)\s|غيّ?ر|عدّ?ل|بدّ?ل|بس\s/.test(t)) return false;
+  if (isAffirmative(t)) return true;   // «ايوه صح السفر ١١» = موافقة (التناقض مع البيانات يمسكه فحص الكرت)
+  if (/[0-9٠-٩]/.test(t)) return false;
   return /(?:^|\s)(?:ايوا|ايوه|إيوه|أيوه|أيوا|ايه|إيه|نعم|صح|صحيح|مضبوط|تمام|اوكي|اوك|ok|yes|اكيد|أكيد|موافق|أجل|اجل|زين|ماشي|يب|يس)(?=\s|$|[!.،؟?])|كل\s*(?:شي|شيء)\s*(?:صح|تمام|مضبوط)|كله\s*(?:صح|تمام)|المعلومات\s*صح/i.test(t);
 }
 function s0IntakeInactive(session: unknown): boolean { return !!session && (session as { intake_active?: boolean | null }).intake_active !== true; }
