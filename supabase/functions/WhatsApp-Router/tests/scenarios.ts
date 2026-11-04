@@ -305,6 +305,33 @@ export const SCENARIOS: Scenario[] = [
       ["بنى تايلاند بـ8 ليالي بوكيت", c => c.buildCalls > 0 && c.buildBody?.dest === "تايلاند" && c.buildBody?.distribution === "8 ليالي بوكيت"]],
   },
   {
+    id: "fu-handoff-no-reversal", entry: "followup", title: "٤ نوفمبر: بعد «بحول طلبك لزميلي» (تغيير فندق) والعميل «في انتظارك» → طمأنة، ❌ لا «ما احتاج أحولك، أنا أقدر»",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-067"], ["C", "غير لنا الفندق في بوكيت لمن نرجع من كرابي"], ["T", "تغيير الفندق يحتاج أشوف الخيارات المتاحة ويصير التعديل عن طريق زميلي المختص، بحول طلبك له ويرد عليك قريب."]],
+    customer: "في انتظارك", intakeData: { destination: "تايلاند", pax: 6, date: "17/11/2026", days: 9, cities: "بوكيت، كرابي", summary_confirmed: true },
+    model: [FU("أعتذر منك أستاذي، ما احتاج أحولك لزميلي، أنا أقدر أشوف لك خيار ثاني لفندق بوكيت")],
+    expect: [["طمأنة", c => /^طلبك عند زميلي المختص وبيرد عليك قريب إن شاء الله\.$/.test(c.reply.trim())], ["❌ لا تراجع", c => !/ما احتاج أحولك|أنا أقدر/.test(c.reply)]],
+  },
+  {
+    id: "fu-capabilities-in-prompt", entry: "followup", title: "النموذج يعرف قدراته (الفندق = زميل، التاريخ = بنفسه)",
+    history: PROG_HIST, customer: "ابي فندق ثاني في مكة", intakeData: DONE,
+    model: [FU("أبشر، تغيير الفندق يحتاج زميلي المختص، حوّلت له طلبك وبيرد عليك قريب", "handoff")],
+    expect: [["ردّ صادق بلا وعد", c => /زميلي المختص/.test(c.reply) && !/أنا أقدر/.test(c.reply)], ["تحويل صادق", c => c.proposals > 0]],
+  },
+  {
+    id: "fu-hotel-change-repeat-visit", entry: "followup", title: "٤ نوفمبر: «غير لنا الفندق في بوكيت لمن نرجع من كرابي مو نفس الاول» → تأكيد بالكلام بصيغة المالكة (بلا تفاصيل داخلية ولا تحويل)",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-067"]], customer: "غير لنا الفندق في بوكيت لمن نرجع من كرابي \nمو نفس الاول", intakeData: { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 9, cities: "بوكيت، كرابي", summary_confirmed: true, program_final_raw: "DEST:تايلاند\nHOTELS:\nDiamond Resort Phuket Official Account | Phuket | 4 نجوم | x\nHoliday Ao Nang Beach Resort | Krabi | 5 نجوم | x\nDiamond Resort Phuket Official Account | Phuket | 4 نجوم | x\n\nTOURS:\n", program_final_code: "TH-2026-067" },
+    model: [FU("تغيير الفندق يحتاج زميلي المختص", "handoff")],
+    expect: [["صيغة المالكة", c => /^يعني أغيّ?ر لك فندق بوكيت عند الرجوع من كرابي لفندق ثاني غير Diamond Resort Phuket Official Account، صحيح؟$/.test(c.reply.trim())],
+      ["❌ بلا تفاصيل داخلية", c => !/أحولك|زميلي|أقدر/.test(c.reply)], ["معلّق", c => c.intake.pending_modify?.hotel_prefs?.unique_visit === true]],
+  },
+  {
+    id: "fu-hotel-change-yes-build", entry: "followup", title: "«صحيح» على تغيير الفندق → «تمام، أبشر…» + بناء بفندق مختلف لكل زيارة",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-067"], ["C", "غير لنا الفندق في بوكيت لمن نرجع من كرابي"], ["T", "يعني أغيّر لك فندق بوكيت عند الرجوع من كرابي لفندق ثاني غير Diamond Resort Phuket Official Account، صحيح؟"]],
+    customer: "صحيح", intakeData: { ...{ destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 9, cities: "بوكيت، كرابي", summary_confirmed: true, program_final_raw: "DEST:تايلاند\nHOTELS:\nDiamond Resort Phuket Official Account | Phuket | 4 نجوم | x\nHoliday Ao Nang Beach Resort | Krabi | 5 نجوم | x\nDiamond Resort Phuket Official Account | Phuket | 4 نجوم | x\n\nTOURS:\n", program_final_code: "TH-2026-067" }, pending_modify: { hotel_prefs: { unique_visit: true } } },
+    model: [M("تمام", { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 9, cities: "بوكيت، كرابي" }, true)],
+    expect: [["بنى بفندق مختلف", c => c.buildCalls > 0 && c.buildBody?.unique_hotel_per_visit === true], ["«تمام، أبشر…»", c => /تمام، أبشر، شوية والبرنامج عندك/.test(c.reply)]],
+  },
+  {
     id: "fu-question-from-program", entry: "followup", title: "متابعة: سؤال جوابه في البرنامج → يرد بنفسه بلا تحويل",
     history: PROG_HIST, customer: "وش اسم الفندق في مكة؟", intakeData: DONE,
     model: [FU("الفندق في مكة فوكو، ٣ ليال")],

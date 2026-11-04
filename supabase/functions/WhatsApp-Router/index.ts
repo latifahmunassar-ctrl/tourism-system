@@ -1481,6 +1481,8 @@ async function callTourismAI(messages: TaiTurn[]): Promise<TaiResult | null> {
 async function autoBuildProgram(p: {
   dest: string; days: string; date: string; pax: string; ages: string; distribution: string; phone: string;
   return_airport?: string;   // "madinah" = العودة من مطار المدينة (العمرة)
+  unique_hotel_per_visit?: boolean;   // كل زيارة لنفس المدينة بفندق مختلف
+  exclude_hotels?: string[];          // فنادق طلب العميل تغييرها
 }): Promise<{ text: string; priceReady: boolean; priceNote: string; programCode: string; kidAges: number[] } | null> {
   const jwt = Deno.env.get("LEGACY_ANON_JWT") || "";
   try {
@@ -1492,6 +1494,8 @@ async function autoBuildProgram(p: {
         pax: p.pax, ages: p.ages, distribution: p.distribution,
         phone: p.phone, customer_type: "individual",
         return_airport: p.return_airport || "",
+        unique_hotel_per_visit: p.unique_hotel_per_visit === true,
+        exclude_hotels: p.exclude_hotels || [],
       }),
     });
     if (!res.ok) { console.error("auto_build http", res.status, await res.text()); return null; }
@@ -3292,6 +3296,8 @@ ${returning
           distribution: _deferred ? "" : _dist0,
           phone: from,
           return_airport: String(_mergedData.return_airport || ""),
+          unique_hotel_per_visit: (_mergedData.hotel_prefs as { unique_visit?: boolean } | undefined)?.unique_visit === true,
+          exclude_hotels: ((_mergedData.hotel_prefs as { exclude?: string[] } | undefined)?.exclude) || [],
         });
         if (!prog) {
           // ❌ كان صامت: العميل وصله «شوية والبرنامج عندك» وما جاه شي. الحين: نبلغه بصدق + تنبيه الموظف + نمسح «جاري البناء».
@@ -3647,6 +3653,31 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   };
   // ✈️ طلب مطار العودة (حتميّ، بلا نموذج) — العمرة فقط.
   const _frustratedF = /ليش\s*ما\s*(?:ترد|تردون)|ما\s*تردون|بطي[ءئ]?|بطيئين|متأخر|تعبان|سي[ءئ]|زفت|عيب\s*عليك|مو\s*كل\s*شوي|كل\s*شوي[هة]?\s*(?:اسأل|أسأل|اقول|أقول)|خبرتك|قلتلك|وبعدين\s*معا?ك|كم\s*مر[ةه]|(?:^|\s)افهم|ما\s*(?:تفهم|فهمت)|مو\s*فاهم|غبي|قلت\s*لك|(?:أ|ا)خبرك|يا\s*بن\s*الحلال|يابن\s*الحلال|للمر[ةه]\s*ال/.test(_batch);
+  // 🏨 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): «غير لنا الفندق في بوكيت لمن نرجع من كرابي — مو نفس الأول» → طلال يغيّره بنفسه:
+  //    تأكيد بالكلام («يعني أغيّر لك فندق بوكيت عند الرجوع من كرابي لفندق ثاني غير Diamond Resort، صحيح؟») → «صحيح» → بناء.
+  {
+    const _wantHotel = /(?:غيّ?ر|بدّ?ل|نغيّ?ر|تغيّ?ر|ابي|أبي|ابغى|نبي|نبغى)\S*\s*(?:\S+\s*){0,3}?(?:ال)?فندق|فندق\s*(?:ثاني|غير|آخر|اخر|ثانيه|ثانية)|مو\s*نفس\s*(?:ال)?(?:أول|اول|فندق)/.test(_batch) && !/سعر|كم\s*سعر/.test(_batch);
+    const _hl = (String(idata.program_final_raw || "").split("HOTELS:")[1] || "").split(/\n\s*\n/)[0].split("\n").filter(l => l.includes("|")).map(l => { const p = l.split("|").map(x => x.trim()); return { name: p[0], city: p[1] }; });
+    if (_wantHotel && _hl.length) {
+      const _cityAr: Record<string, string> = { Phuket: "بوكيت", Krabi: "كرابي", Bangkok: "بانكوك", Pattaya: "باتايا", Makkah: "مكة", "Al Madinah": "المدينة", Madinah: "المدينة", Istanbul: "إسطنبول", Trabzon: "طرابزون" };
+      const _ar = (c: string) => _cityAr[c] || c;
+      const _named = _hl.find(h => _batch.includes(_ar(h.city)) || new RegExp(h.city, "i").test(_batch));
+      const _target = _named || (_hl.length === 1 ? _hl[0] : null);
+      if (_target) {
+        const _visits = _hl.filter(h => h.city === _target.city);
+        const _repeat = _visits.length > 1 && /(?:ل|لما|لمن|بعد|عند)\s*(?:ما\s*)?(?:نرجع|نعود|الرجوع|العودة|رجوعنا)|مو\s*نفس|الثاني|الثانية|المرة\s*الثانية/.test(_batch);
+        const _otherCity = _hl.map(h => h.city).find(c => c !== _target.city);
+        const _q = _repeat
+          ? `يعني أغيّر لك فندق ${_ar(_target.city)} عند الرجوع${_otherCity ? ` من ${_ar(_otherCity)}` : ""} لفندق ثاني غير ${_target.name}، صحيح؟`
+          : `يعني أغيّر لك فندق ${_ar(_target.city)} (${_target.name}) لفندق ثاني، صحيح؟`;
+        const _pref = _repeat ? { unique_visit: true } : { exclude: [_target.name] };
+        if (await _superseded()) return;
+        await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, pending_modify: { hotel_prefs: _pref } } }).eq("phone", from);
+        await _say(_q, "followup_ai", "hotel_change_confirm_q", JSON.stringify(_pref));
+        return;
+      }
+    }
+  }
   // 🚨 ٤ نوفمبر ٢٠٢٦: طلال أرسل برنامج العمرة لطلب تايلاند، والعميل «ايش هذا أنا طالب تايلند» → ردّ بسؤال تأكيد طويل بلا اعتذار.
   //    آخر برنامج انرسل وجهته ≠ وجهة الطلب الحالي + اعتراض → غلطة طلال (ج): اعتذار يسمّي الغلط + بناء الصحيح فوراً.
   {
@@ -3659,6 +3690,13 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
       await _rebuildNow({}, `حاضر، أعتذر منك، أرسلت لك برنامج ${_sd} بالغلط. بجهّز لك برنامج ${_curDest} فوراً وأرسله لك.`);
       return;
     }
+  }
+  // 🤝 آخر رد لطلال حوّل الطلب للزميل (تعديل خارج قدراته) والعميل ينتظر («في انتظارك») → طمأنة ثابتة، ❌ بلا تراجع ولا وعود.
+  {
+    const _lt = msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body || "";
+    const _handedOff = /حوّ?لت?\s*(?:لك\s*)?طلبك|بحوّ?ل\s*طلبك|عن\s*طريق\s*زميلي|زميلي\s*المختص/.test(_lt);
+    const _waitingF = /^\s*(?:في\s*الانتظار|في\s*انتظارك|بانتظارك|منتظر|ننتظر|وينك|وينكم|[؟?]+)\s*[؟?]*\s*$/.test(text);
+    if (_handedOff && _waitingF) { await _say("طلبك عند زميلي المختص وبيرد عليك قريب إن شاء الله.", "followup_ai", "handoff_reassure"); return; }
   }
   // 🔎 العميل يشتكي من البرنامج («شوف البرنامج اللي أرسلته»، «عيب عليك») → طلال يفحص برنامجه بنفسه:
   //    فيه خطأ → اعتذار + تصحيح وإرسال؛ ما لقى → اعتذار (أ) ويسأل وش الغلط. ❌ أبداً «ما فيه خطأ» (قرار المالكة).
@@ -3754,13 +3792,19 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
 • اقرأ المحادثة **كاملة** — لو فيه رسالة من العميل ما رديت عليها (وصلت وأنت ترد)، خذها بعين الاعتبار ولا تتجاهلها.
 • كلمة فيها غلط إملائي وتشبه اسم وجهة (مثل «تلاتد» = تايلاند) → ❌ لا تقول «ما فهمت»؛ اسأل «عفواً إذا سمحت، تقصد تايلاند؟».
 • العميل يبي رحلة **لناس ثانيين** (عيلة ثانية/أهله/ربعه) = طلب جديد مستقل، مو تعديل البرنامج الحالي.
+• ❌ لا تذكر للعميل تفاصيل داخلية («أحولك/ما احتاج أحولك»، «أنا أقدر/ما أقدر»، «النظام») — كلّمه عن طلبه بس.
 • المطارات = حقل airports بالضبط. ❌ لا تخترع مطار وصول/عودة غيره، ولو نص البرنامج يخالفه فالمعتمد airports.
 • ❌ أبداً لا تقول «ما فيه خطأ» أو تحمّل العميل يدوّر الغلط — لو ما عرفت الغلط: «أعتذر منك أستاذي، بس فهمني وش الغلط اللي لاحظته عشان أصححه لك فوراً؟».
 • العميل متضايق → اعتذر بإحدى ثلاث (قرار المالكة):
   (أ) ما فهمت قصده → «أعتذر منك أستاذي، بس فهمني إيش تقصد بـ…؟» (اذكر الكلمة اللي ما فهمتها).
   (ب) فهمت والعميل غلطان (يخالف الحقائق/البرنامج) → «أعتذر منك، بس أنا سبق ووضحت لك …» واذكر الحقيقة من الحقائق.
   (ج) أنت غلطت (البرنامج ما فيه شي طلبه) → action="modify" بالحقل الصحيح.
-• ❌ تعديل البرنامج أو تضايق العميل من فهمك = **مو** handoff: اعتذر («أعتذر منك») وحدّد التعديل (action="modify")، أو اسأله وش التعديل بالضبط.
+• 🧰 قدراتك الفعلية (٤ نوفمبر ٢٠٢٦ — ❌ لا تعِد بشي خارجها):
+  ✅ تقدر تعدّل بنفسك: التاريخ، الليالي/الأيام، العدد، الأعمار، المدن، مطار العودة (العمرة)، **تغيير فندق لفندق ثاني** → action="modify".
+  ❌ ما تقدر: اختيار فندق باسم معيّن يطلبه العميل، نوع الغرفة، الوجبات، إضافة طيران لغير العمرة، الأسعار والخصومات
+     → action="handoff" برسالة صادقة: «أبشر، [الطلب] يحتاج زميلي المختص، حوّلت له طلبك وبيرد عليك قريب».
+  • بعد ما تحوّل طلب للزميل ❌ لا ترجع تقول «ما احتاج أحولك» أو «أنا أقدر» — لو العميل ينتظر: «طلبك عند زميلي المختص وبيرد عليك قريب إن شاء الله».
+• ❌ تعديل البرنامج (من قدراتك) أو تضايق العميل من فهمك = **مو** handoff: اعتذر («أعتذر منك») وحدّد التعديل (action="modify")، أو اسأله وش التعديل بالضبط.
 • handoff فقط للحجز/الدفع/التأكيد النهائي/خصم/شكوى على الخدمة نفسها → action="handoff" ورسالة «أبشر، بحوّل طلبك لزميلي المختص ويرد عليك قريب».
 • العميل يطلب البرنامج/الملف أو يقول ما وصله/مو مبين («وين البرنامج»، «ارسله مره ثانيه»، «البرنامج فينه») → action="resend_program".
 • frustration: none (هادي) | misunderstood (أنت ما فهمت) | customer_wrong (العميل يخالف الحقائق) | talal_error (البرنامج ما فيه شي سبق وطلبه).
