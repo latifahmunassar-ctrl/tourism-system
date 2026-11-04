@@ -1483,7 +1483,8 @@ async function autoBuildProgram(p: {
   return_airport?: string;   // "madinah" = العودة من مطار المدينة (العمرة)
   unique_hotel_per_visit?: boolean;   // كل زيارة لنفس المدينة بفندق مختلف
   exclude_hotels?: string[];          // فنادق طلب العميل تغييرها
-}): Promise<{ text: string; priceReady: boolean; priceNote: string; programCode: string; kidAges: number[] } | null> {
+  hotel_prefs?: Record<string, unknown>;   // إفطار/اسم فندق/نوع غرفة/إطلالة بحر
+}): Promise<{ text: string; priceReady: boolean; priceNote: string; programCode: string; kidAges: number[]; prefMisses?: string[] } | null> {
   const jwt = Deno.env.get("LEGACY_ANON_JWT") || "";
   try {
     const res = await fetch(TOURISM_AI_URL, {
@@ -1496,6 +1497,7 @@ async function autoBuildProgram(p: {
         return_airport: p.return_airport || "",
         unique_hotel_per_visit: p.unique_hotel_per_visit === true,
         exclude_hotels: p.exclude_hotels || [],
+        hotel_prefs: p.hotel_prefs || {},
       }),
     });
     if (!res.ok) { console.error("auto_build http", res.status, await res.text()); return null; }
@@ -1503,7 +1505,8 @@ async function autoBuildProgram(p: {
     if (!data?.ok || !data?.program) { console.error("auto_build no program", JSON.stringify(data).slice(0, 200)); return null; }
     const text = String(data.formatted || "").trim() || formatTourismAIForWhatsApp(String(data.program));
     const kidAges = Array.isArray(data.kid_ages) ? (data.kid_ages as unknown[]).map(Number).filter(n => Number.isFinite(n)) : [];
-    return { text, priceReady: data.price_ready === true, priceNote: String(data.price_note || ""), programCode: String(data.program_code || ""), kidAges };
+    const prefMisses = Array.isArray(data.pref_misses) ? (data.pref_misses as unknown[]).map(String) : [];
+    return { text, priceReady: data.price_ready === true, priceNote: String(data.price_note || ""), programCode: String(data.program_code || ""), kidAges, prefMisses };
   } catch (e) { console.error("autoBuildProgram error", (e as Error).message); return null; }
 }
 
@@ -3337,6 +3340,7 @@ ${returning
           return_airport: String(_mergedData.return_airport || ""),
           unique_hotel_per_visit: (_mergedData.hotel_prefs as { unique_visit?: boolean } | undefined)?.unique_visit === true,
           exclude_hotels: ((_mergedData.hotel_prefs as { exclude?: string[] } | undefined)?.exclude) || [],
+          hotel_prefs: (_mergedData.hotel_prefs as Record<string, unknown> | undefined) || {},
         });
         if (!prog) {
           // ❌ كان صامت: العميل وصله «شوية والبرنامج عندك» وما جاه شي. الحين: نبلغه بصدق + تنبيه الموظف + نمسح «جاري البناء».
@@ -3383,7 +3387,16 @@ ${returning
             try {
               const { data: _s } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", from).maybeSingle();
               const _d = ((_s as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
-              await supabase.from("whatsapp_sessions").update({ intake_data: { ..._d, post_program_msgs: postProgramMessages(prog.kidAges) } }).eq("phone", from);
+              const _pm0 = postProgramMessages(prog.kidAges);
+              const _hp0 = (_mergedData.hotel_prefs || {}) as Record<string, unknown>;
+              if ((prog.prefMisses || []).length && (_hp0.name || _hp0.breakfast || _hp0.feature || _hp0.sea_view)) {
+                const _what = _hp0.name ? `فندق ${_hp0.name}` : _hp0.breakfast ? "فندق فيه إفطار" : _hp0.sea_view ? "غرفة بإطلالة بحر" : (_hp0.feature === "villa" ? "فيلا" : _hp0.feature === "pool" ? "غرفة بمسبح خاص" : "جناح");
+                const _cs = [...new Set((prog.prefMisses || []).map(c => CITY_AR[c] || c))].join(" و");
+                // قرار المالكة (٤ نوفمبر): ❌ لا نقول للعميل «غير متوفر» — قسم الحجوزات يراجع عند التأكيد ويبلغه الموظف. ملاحظة داخلية فقط.
+                try { const _n = `ℹ️ ${from.replace(/^whatsapp:/, "")} طلب ${_what} في ${_cs} وما لقيناه بالبيانات — البرنامج ${prog.programCode} انبنى بأقرب خيار. راجعوه عند الحجز.`; await Promise.all(staffList("SALES_WHATSAPP_NUMBERS").map(x => sendStaffNotice(x, _n))); } catch (_e) { /* */ }
+                await logGuard(supabase, from, "hotel_pref_unmet", "staff_note", `${_what} | ${_cs}`, 1, String(prog.programCode || ""), "");
+              }
+              await supabase.from("whatsapp_sessions").update({ intake_data: { ..._d, post_program_msgs: _pm0 } }).eq("phone", from);
             } catch (_e) { /* */ }
             await supabase.from("program_pdf_jobs").insert({ phone: from, code: prog.programCode });
             console.log("auto_build: ENQUEUED PDF job for", from, prog.programCode);
@@ -3739,6 +3752,64 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   };
   // ✈️ طلب مطار العودة (حتميّ، بلا نموذج) — العمرة فقط.
   const _frustratedF = /ليش\s*ما\s*(?:ترد|تردون)|ما\s*تردون|بطي[ءئ]?|بطيئين|متأخر|تعبان|سي[ءئ]|زفت|عيب\s*عليك|مو\s*كل\s*شوي|كل\s*شوي[هة]?\s*(?:اسأل|أسأل|اقول|أقول)|خبرتك|قلتلك|وبعدين\s*معا?ك|كم\s*مر[ةه]|(?:^|\s)افهم|ما\s*(?:تفهم|فهمت)|مو\s*فاهم|غبي|قلت\s*لك|(?:أ|ا)خبرك|يا\s*بن\s*الحلال|يابن\s*الحلال|للمر[ةه]\s*ال/.test(_batch);
+  // 🧭 ٤ نوفمبر ٢٠٢٦: «خلي القدوم والمغادرة بوكيت» → حوّلها للزميل. ترتيب المدن/القدوم والمغادرة من قدرات طلال (أي وجهة غير العمرة):
+  //    نعيد ترتيب توزيعة البرنامج المرسل (ولو القدوم والمغادرة نفس المدينة → نقسم لياليها بين البداية والنهاية) → تأكيد → بناء.
+  if (!_isUmrahReq && String(idata.program_final_raw || "")) {
+    const _pd = prevDistribution(String(idata.program_final_raw));
+    const _t = _batch.replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x)));
+    const _cityIn = (frag: string) => { const f = frag.replace(/^ال/, ""); const hit = _pd.find(p => f.includes(p.city) || p.city.includes(f.split(/\s+/)[0] || "§")); return hit ? hit.city : ""; };
+    const _both = (_t.match(/(?:القدوم|الوصول)\s*و\s*(?:المغادر[ةه]|العود[ةه])\s*(?:من|على|في|ب)?\s*(\S+)/) || [])[1];
+    const _arrW = _both || (_t.match(/(?:القدوم|الوصول|نوصل|نبدأ|نبدا)\s*(?:على|في|إلى|الى|ب|من)?\s*(\S+)/) || [])[1] || "";
+    const _depW = _both || (_t.match(/(?:المغادر[ةه]|نغادر|العود[ةه]\s*من|الرجوع\s*من|ننهي)\s*(?:على|في|إلى|الى|ب|من)?\s*(\S+)/) || [])[1] || "";
+    const _arrC = _arrW ? _cityIn(_arrW) : "", _depC = _depW ? _cityIn(_depW) : "";
+    if (_pd.length >= 2 && (_arrC || _depC) && /القدوم|الوصول|المغادر|العود|الرجوع|نبدأ|نبدا|ننهي|نوصل|نغادر/.test(_t)) {
+      let segs = _pd.map(p => ({ ...p }));
+      if (_arrC && _depC && _arrC === _depC && segs.filter(s0 => s0.city === _arrC).length === 1) {
+        const i = segs.findIndex(s0 => s0.city === _arrC); const n = segs[i].nights; const a = Math.ceil(n / 2), b = n - a;
+        segs.splice(i, 1);
+        if (b >= 1) segs = [{ city: _arrC, nights: a }, ...segs, { city: _arrC, nights: b }]; else segs = [{ city: _arrC, nights: n }, ...segs];
+      } else {
+        if (_arrC) { const i = segs.findIndex(s0 => s0.city === _arrC); if (i > 0) { const [x] = segs.splice(i, 1); segs.unshift(x); } }
+        if (_depC) { let i = -1; segs.forEach((s0, k) => { if (s0.city === _depC && k > 0) i = k; }); if (i >= 0 && i < segs.length - 1) { const [x] = segs.splice(i, 1); segs.push(x); } }
+      }
+      const _dist = segs.map(s0 => `${s0.nights} ${s0.city}`).join(" - ");
+      if (_dist !== _pd.map(p => `${p.nights} ${p.city}`).join(" - ")) {
+        const _nw = (n: number) => n === 1 ? "ليلة" : n === 2 ? "ليلتين" : `${n} ليالي`;
+        const _desc = segs.map((s0, k) => k === 0 ? `${_nw(s0.nights)} ${s0.city}` : (k === segs.length - 1 ? `و${_nw(s0.nights)} ${s0.city} في الآخر` : `بعدها ${_nw(s0.nights)} ${s0.city}`)).join("، ");
+        const _hdr = _arrC && _depC ? (_arrC === _depC ? `يكون القدوم والمغادرة من ${_arrC}` : `يكون القدوم على ${_arrC} والمغادرة من ${_depC}`) : (_arrC ? `يكون القدوم على ${_arrC}` : `تكون المغادرة من ${_depC}`);
+        if (await _superseded()) return;
+        await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, pending_modify: { distribution: _dist, order_asked: true } } }).eq("phone", from);   // الترتيب محسوم — «نعم» = بناء
+        await _say(`تمام، تقصد ${_hdr}: ${_desc}؟`, "followup_ai", "reorder_confirm_q", _dist);
+        return;
+      }
+    }
+  }
+  // 🍳 ٤ نوفمبر ٢٠٢٦ (قرار المالكة: «أي شي داخل البرنامج يتولاه طلال»): إفطار / فندق باسمه / جناح·فيلا·مسبح / إطلالة بحر.
+  {
+    const _t = _batch;
+    const _hp: Record<string, unknown> = {};
+    const _desc: string[] = [];
+    if (/(?:فطور|إفطار|افطار|breakfast)/i.test(_t) && !/(?:بدون|بلا|ما\s*نبي|مو\s*لازم)\s*(?:ال)?(?:فطور|إفطار|افطار)/.test(_t)) { _hp.breakfast = true; _desc.push("الفنادق فيها إفطار"); }
+    if (/(?:جناح|اجنحة|أجنحة|سويت|suite)/i.test(_t)) { _hp.feature = "suite"; _desc.push("الغرف أجنحة"); }
+    else if (/(?:فيلا|فلل|villa)/i.test(_t)) { _hp.feature = /مسبح|pool/i.test(_t) ? "pool" : "villa"; _desc.push(_hp.feature === "pool" ? "فيلا بمسبح خاص" : "فيلا"); }
+    else if (/مسبح\s*خاص|private\s*pool/i.test(_t)) { _hp.feature = "pool"; _desc.push("غرفة بمسبح خاص"); }
+    if (/(?:إطلال[ةه]|اطلال[ةه]|مطل|على)\s*(?:ال)?(?:بحر|شاطئ)|sea\s*view/i.test(_t)) { _hp.sea_view = true; _desc.push("الغرف بإطلالة بحر"); }
+    const _brandAr: Record<string, string> = { "هيلتون": "Hilton", "ماريوت": "Marriott", "شيراتون": "Sheraton", "نوفوتيل": "Novotel", "حياة": "Hyatt", "انتركونتيننتال": "InterContinental", "إنتركونتيننتال": "InterContinental", "راديسون": "Radisson", "موفنبيك": "Movenpick", "فورسيزنز": "Four Seasons", "فور سيزنز": "Four Seasons", "ريتز": "Ritz", "سوفيتيل": "Sofitel", "أماري": "Amari", "اماري": "Amari", "سنتارا": "Centara", "هوليداي ان": "Holiday Inn", "كراون بلازا": "Crowne Plaza", "دوسيت": "Dusit", "بولمان": "Pullman", "فوكو": "voco", "سويس": "Swiss" };
+    const _arBrand = Object.keys(_brandAr).find(k => new RegExp(`فندق\\s+${k}|${k}\\s+(?:فندق|اوتيل|أوتيل)`).test(_t));
+    const _nm = (_t.match(/فندق\s+([A-Za-z][A-Za-z0-9&' .-]{2,40})/) || [])[1]?.trim() || (_arBrand ? _brandAr[_arBrand] : undefined);
+    if (_nm) { _hp.name = _nm; _desc.push(`فندق ${_nm}`); }
+    if (Object.keys(_hp).length && /(?:ابي|أبي|ابغى|نبي|نبغى|خل|خلي|حط|حطو|ضيف|غير|بدل|ممكن|اريد|أريد)/.test(_t)) {
+      const _hl0 = prevDistribution(String(idata.program_final_raw || ""));
+      const _cityHit = _hl0.find(p => _t.includes(p.city));
+      if (_hp.name && _cityHit) _hp.city = Object.keys(CITY_AR).find(k => CITY_AR[k] === _cityHit.city) || _cityHit.city;
+      const _merged = { ...((idata.hotel_prefs as Record<string, unknown>) || {}), ..._hp };
+      const _q = `تمام، تقصد ${_desc.join("، و")}${_cityHit && _hp.name ? ` في ${_cityHit.city}` : ""}؟`;
+      if (await _superseded()) return;
+      await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, pending_modify: { hotel_prefs: _merged } } }).eq("phone", from);
+      await _say(_q, "followup_ai", "hotel_pref_confirm_q", JSON.stringify(_hp));
+      return;
+    }
+  }
   // 🏨 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): «غير لنا الفندق في بوكيت لمن نرجع من كرابي — مو نفس الأول» → طلال يغيّره بنفسه:
   //    تأكيد بالكلام («يعني أغيّر لك فندق بوكيت عند الرجوع من كرابي لفندق ثاني غير Diamond Resort، صحيح؟») → «صحيح» → بناء.
   {
@@ -3878,6 +3949,7 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
 • اقرأ المحادثة **كاملة** — لو فيه رسالة من العميل ما رديت عليها (وصلت وأنت ترد)، خذها بعين الاعتبار ولا تتجاهلها.
 • كلمة فيها غلط إملائي وتشبه اسم وجهة (مثل «تلاتد» = تايلاند) → ❌ لا تقول «ما فهمت»؛ اسأل «عفواً إذا سمحت، تقصد تايلاند؟».
 • العميل يبي رحلة **لناس ثانيين** (عيلة ثانية/أهله/ربعه) = طلب جديد مستقل، مو تعديل البرنامج الحالي.
+• ❌ لا تقول للعميل إن شي «غير متوفر» أو «ما لقيناه» (فندق/غرفة/تاريخ) — قسم الحجوزات يراجع عند التأكيد والموظف يبلغه (قرار المالكة).
 • 🌴 أسلوب مبيعات (قرار المالكة ٤ نوفمبر ٢٠٢٦): أي كلام عن الوجهة (الطقس، الأماكن، المسافات، الزحمة) = الحقائق **بصياغة إيجابية**
   تشجّع على الرحلة. ❌ لا كلمات منفّرة («حار»، «رطوبة»، «مطر أحياناً»، «زحمة»، «بعيد»، «غالي») — مثال: بدل «الجو حار ورطوبة معتدلة،
   المطر أحياناً» قل «الجو معتدل ودرجات الحرارة بين 25 و32، ومناسب جداً للشواطئ والجولات». ❌ لا تخترع. لو سأل العميل **تحديداً**
@@ -3890,8 +3962,9 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
   (ب) فهمت والعميل غلطان (يخالف الحقائق/البرنامج) → «أعتذر منك، بس أنا سبق ووضحت لك …» واذكر الحقيقة من الحقائق.
   (ج) أنت غلطت (البرنامج ما فيه شي طلبه) → action="modify" بالحقل الصحيح.
 • 🧰 قدراتك الفعلية (٤ نوفمبر ٢٠٢٦ — ❌ لا تعِد بشي خارجها):
-  ✅ تقدر تعدّل بنفسك: التاريخ، الليالي/الأيام، العدد، الأعمار، المدن، مطار العودة (العمرة)، **تغيير فندق لفندق ثاني** → action="modify".
-  ❌ ما تقدر: اختيار فندق باسم معيّن يطلبه العميل، نوع الغرفة، الوجبات، إضافة طيران لغير العمرة، الأسعار والخصومات
+  ✅ **أي شي داخل البرنامج تتولاه بنفسك** (قرار المالكة): التاريخ، الليالي/الأيام، العدد، الأعمار، المدن، ترتيب المدن والقدوم/المغادرة،
+     مطار العودة (العمرة)، تغيير الفندق، فندق باسمه، الإفطار، نوع الغرفة (جناح/فيلا/مسبح/إطلالة بحر) → action="modify".
+  ❌ الزميل المختص **فقط** لـ: الطيران الدولي (لغير العمرة)، الحجز والدفع، الخصومات وتغيير الأسعار
      → action="handoff" برسالة صادقة: «أبشر، [الطلب] يحتاج زميلي المختص، حوّلت له طلبك وبيرد عليك قريب».
   • بعد ما تحوّل طلب للزميل ❌ لا ترجع تقول «ما احتاج أحولك» أو «أنا أقدر» — لو العميل ينتظر: «طلبك عند زميلي المختص وبيرد عليك قريب إن شاء الله».
 • ❌ تعديل البرنامج (من قدراتك) أو تضايق العميل من فهمك = **مو** handoff: اعتذر («أعتذر منك») وحدّد التعديل (action="modify")، أو اسأله وش التعديل بالضبط.
