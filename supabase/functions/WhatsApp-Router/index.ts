@@ -3179,9 +3179,27 @@ ${returning
   const _lastCustBody = String(args.body || "").trim() || (msgs.filter(m => m.who === "العميل").slice(-1)[0]?.body || "");
   // 🔁 ٤ نوفمبر ٢٠٢٦: رسالتين ورا بعض → ردّين مكرّرين (الاعتذار + الكرت مرتين). وصلت رسالة أحدث أثناء المعالجة → معالجها يرد.
   { const _nowLatest = await latestInboundTs(); if (myLatest && _nowLatest && new Date(_nowLatest).getTime() > new Date(myLatest).getTime()) return; }
+  // 🧾 ٤ نوفمبر ٢٠٢٦: النموذج كتب كرت من عنده («خليني أتأكد… المعلومات صحيحة؟ وكم يوم؟») والمعلومات ناقصة —
+  //    بلا حوار قبله، وسؤالين، وتقسيم أعمار غلط (١٢ = بالغ). ❌ كرت النموذج ما ينرسل أبداً؛ الكرت الوحيد = كرت الخادم
+  //    (buildIntakeSummary) بعد التأكيد بالكلام. بداله: سؤال واحد عن أول معلومة ناقصة.
+  {
+    const _serverCard = buildIntakeSummary(_mergedData, _isUmrahPax);
+    const _isModelCard = (m: string) => /خليني\s*أتأكد|المعلومات\s*صحيحة|أكّ?د\s*لي\s*ب/.test(m) && m.trim() !== _serverCard.trim() && !_essentialsComplete;
+    if (outMsgs.some(m => _isModelCard(String(m || "")))) {
+      const _fbq = _intakeFallback(_mergedData as Record<string, unknown>);
+      await logGuard(supabase, from, "model_card_blocked", "ask_missing", "", 1, outMsgs.join(" | ").slice(0, 200), _fbq);
+      outMsgs = [_fbq];
+    }
+  }
   // 🙏 ٤ نوفمبر ٢٠٢٦: العميل اشتكى («ليش ما تردون بسرعه وليش ردكم تعبان») وطلال عاد السؤال بـ«تمام» كأن ما صار شي.
   //    أي تضايق بأي مرحلة → الرد يبدأ باعتذار (لو ما بدأ فيه أصلاً)، وبلا «تمام» قبله.
-  if (_FRUS_RE.test(String(args.body || "")) && outMsgs.length && !/^\s*(?:أعتذر|اعتذر|آسف)/.test(String(outMsgs[0] || ""))) {
+  // النموذج اعتذر بنفسه بأي مكان («عذرا على التأخير») → ❌ لا اعتذار ثاني؛ نوحّد صيغته ونقدّمه أول الرسالة.
+  if (_FRUS_RE.test(String(args.body || "")) && outMsgs.length && /عذرا|عذراً|معذر[ةه]|آسف|اسف|اعتذر|أعتذر/.test(String(outMsgs[0] || "")) && !/^\s*أعتذر/.test(String(outMsgs[0] || ""))) {
+    const _m0 = String(outMsgs[0]);
+    const _apol = _m0.match(/(?:عذرا|عذراً|معذر[ةه]|آسفين|آسف|اسف|أعتذر|اعتذر)[^،.!؟]*[،.!]?\s*/);
+    if (_apol) outMsgs[0] = "أعتذر منك على التأخير، " + _m0.replace(_apol[0], "").replace(/^\s*(?:تمام|حاضر|أبشر)[،,]?\s*/, "").trim();
+  }
+  if (_FRUS_RE.test(String(args.body || "")) && outMsgs.length && !/عذرا|عذراً|معذر[ةه]|آسف|اسف|اعتذر|أعتذر/.test(String(outMsgs[0] || ""))) {
     const _first = String(outMsgs[0] || "").replace(/^\s*(?:تمام|حاضر|أبشر|ابشر)[،,]?\s*(?:🌟\s*)?/, "");
     outMsgs = /المعلومات صحيحة/.test(_first) ? ["أعتذر منك على التأخير، معك الحين.", ...outMsgs] : [`أعتذر منك على التأخير، معك الحين. ${_first}`, ...outMsgs.slice(1)];
   }
