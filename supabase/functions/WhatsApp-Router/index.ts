@@ -2817,7 +2817,16 @@ ${returning
   // ثبّت العدد المُستخرَج خادميّاً في البيانات ليُحفظ ويُستخدَم لاحقاً.
   if (_paxFromCust && !(Number.isFinite(_paxNumModel) && _paxNumModel > 0)) _gm.pax = _paxFromCust;
   const _agesEmpty = !String(_gm.ages || "").trim();
-  const _askedChildren = _gm.asked_children === true;
+  // 🔴 ٤ نوفمبر ٢٠٢٦ (حي، المالكة: «كل مره نفس الموال»): «سألنا عن الأطفال» ≠ «العميل جاوب». «الخمسة كلهم بالغين ولا فيه أطفال؟»
+  //    → «عفو ٣» (تصحيح عدد، مو جواب) → طلال اعتبرهم بالغين ووصل لتأكيد «عمرة لـ3 أشخاص» بلا سؤال الأعمار.
+  //    الحين: السؤال يُعتبر مُجاب فقط لو رد العميل بعده فيه جواب فعلي (أطفال/بالغين/لا/كلهم…)؛ حد أقصى سؤالين.
+  const _startedTs = Date.parse(String(_gm.started_at || "")) || 0;
+  const _kidQRe = /بالغين\s*ولا|معكم\s*أطفال|(?:فيه|في|فيهم)\s*أطفال/;
+  const _kidQIdx = msgs.map(m => m.who === "طلال" && _kidQRe.test(m.body)).lastIndexOf(true);
+  const _kidQCount = msgs.filter(m => m.who === "طلال" && _kidQRe.test(m.body) && (Date.parse(m.ts) || 0) >= _startedTs).length;
+  const _afterKidQ = _kidQIdx >= 0 ? msgs.slice(_kidQIdx + 1).filter(m => m.who === "العميل").map(m => m.body).join(" ") + " " + String(args.body || "") : "";
+  const _kidAnsweredRe = /طفل|اطفال|أطفال|عيال|صغار|بالغ|كبار|كلهم|كلنا|جميع|رضيع|بزر|ياهل|يهال|ولد|بنت|عمر|سن[ةه]|(?:^|\s)(?:لا|لأ|ابد|أبد|أبداً|ما\s*في|مافي|مافيه|ما\s*فيه|ولا\s*واحد|نعم|ايوه|إيوه|أيوه|إيه|ايه|اي|فيه|في)(?=\s|$|[!.،؟?])/;
+  const _askedChildren = _gm.asked_children === true && (_kidQIdx < 0 || _kidQCount >= 2 || !(Number(_gm.pax) >= 2) || _kidAnsweredRe.test(_afterKidQ));
 
   // ── حارس تغيير الوجهة (خادميّ) ───────────────────────────────────────────
   // لو طلب العميل تغيير الوجهة («أبي أغير الوجهة»)، ❌ لا نتمسّك بالمخزّنة من
@@ -3053,6 +3062,18 @@ ${returning
     }
   }
 
+  // 👥 ٤ نوفمبر ٢٠٢٦ (حي): «٥» → «الخمسة كلهم بالغين ولا فيه أطفال؟» → «عفو ٣» → طلال خزّن ٣ واعتبرهم بالغين وراح لليالي.
+  //    تصحيح العدد وسؤال الأطفال معلّق → تأكيد العدد الجديد + نفس سؤال الأطفال.
+  {
+    const _ltI = msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body || "";
+    const _newPaxI = Number((out.fields as Record<string, unknown> | undefined)?.pax);
+    if (!_paxChangeGateFired && _prevPaxKnown && /بالغين\s*ولا\s*(?:فيه|في)\s*أطفال|فيهم\s*أطفال/.test(_ltI) && Number.isFinite(_newPaxI) && _newPaxI > 0 && _newPaxI !== _prevPaxN
+        && !/طفل|اطفال|أطفال|عيال|بالغ|كبار|صغار|ولد|بنت|سن[ةه]|عمر|رضيع/.test(_bodyNow)) {
+      const _pw = (n: number) => n === 1 ? "شخص واحد" : n === 2 ? "شخصين" : `${n} أشخاص`;
+      outMsgs = [_newPaxI === 1 ? `تمام، يعني شخص واحد بدل ${_prevPaxN}، صحيح؟` : `تمام، يعني ${_pw(_newPaxI)} بدل ${_prevPaxN}. كلهم بالغين ولا فيه أطفال بينهم؟`];
+      await logGuard(supabase, from, "pax_corrected_reask_children", "rewrite", `${_prevPaxN} → ${_newPaxI}`, 1, _bodyNow, outMsgs[0]);
+    }
+  }
   // حماية صياغة: النموذج أحياناً يسأل العدد بصيغة ركيكة مثل «كم عدد الأشخاص اللي راح
   // تنومون في الفندق؟» — نستبدلها بصياغة طبيعية مهذّبة. (شكوى المالكة ١١ أكتوبر.)
   outMsgs = outMsgs.map(m => String(m)
