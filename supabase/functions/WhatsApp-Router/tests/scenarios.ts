@@ -297,6 +297,14 @@ export const SCENARIOS: Scenario[] = [
     expect: [["ما أعاد القديم", c => !c.jobs.some(j => j.code === "MK-2026-011" && j.status === "pending")], ["❌ لا «وصلك»", c => !/وصلك هل|وصلك فوق/.test(c.reply)]],
   },
   {
+    id: "fu-wrong-dest-program-sent", entry: "followup", title: "٤ نوفمبر: انرسل برنامج العمرة لطلب تايلاند + «ايش هذا أنا طالب تايلند» → اعتذار يسمّي الغلط + بناء تايلاند فوراً",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — MK-2026-011"]], customer: "ايش هذا أنا طالب تايلند",
+    intakeData: { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 9, cities: "بوكيت", summary_confirmed: true, program_final_raw: "DEST:العمرة\nHOTELS:\nx", program_final_code: "MK-2026-011" },
+    model: [FU("تمام، تقصد نخلي الليالي 8 ليالي…؟"), M("تمام", { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 9, cities: "بوكيت" }, true)],
+    expect: [["الاعتذار يسمّي الغلط", c => /^حاضر، أعتذر منك، أرسلت لك برنامج العمرة بالغلط\. بجه.?ز لك برنامج تايلاند فورا?ً? وأرسله لك\./.test(c.reply)],
+      ["بنى تايلاند بـ8 ليالي بوكيت", c => c.buildCalls > 0 && c.buildBody?.dest === "تايلاند" && c.buildBody?.distribution === "8 ليالي بوكيت"]],
+  },
+  {
     id: "fu-question-from-program", entry: "followup", title: "متابعة: سؤال جوابه في البرنامج → يرد بنفسه بلا تحويل",
     history: PROG_HIST, customer: "وش اسم الفندق في مكة؟", intakeData: DONE,
     model: [FU("الفندق في مكة فوكو، ٣ ليال")],

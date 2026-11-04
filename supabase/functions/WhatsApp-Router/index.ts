@@ -3559,13 +3559,13 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     await handleNewLeadIntake({ supabase, from, body: "نعم" });
   };
   // (ج) طلال غلط (أرسل برنامج غير اللي طلبه العميل) → اعتذار + إعادة البناء والإرسال فوراً، بلا كرت (قرار المالكة ٣ نوفمبر).
-  const _rebuildNow = async (changed: Record<string, unknown>) => {
+  const _rebuildNow = async (changed: Record<string, unknown>, apologyMsg = "حاضر، أعتذر منك. بعدّل البرنامج فوراً وأرسله لك.") => {
     if (await _superseded()) return;
     if (!(await _medGate(changed))) return;
     const nd: Record<string, unknown> = { ...idata, ...changed, awaiting_confirm: true, summary_confirmed: false };
     delete nd.auto_program; delete nd.post_program_msgs; delete nd.pending_modify; delete nd.program_final_raw; delete nd.program_final_code;
     await supabase.from("whatsapp_sessions").update({ intake_active: true, intake_data: nd, stage: "new" }).eq("phone", from);
-    await _say("حاضر، أعتذر منك. بعدّل البرنامج فوراً وأرسله لك.", "followup_ai", "rebuild_apology", JSON.stringify(changed).slice(0, 200));
+    await _say(apologyMsg, "followup_ai", "rebuild_apology", JSON.stringify(changed).slice(0, 200));
     await handleNewLeadIntake({ supabase, from, body: "نعم" });   // نفس مسار «نعم» على الكرت → بناء + PDF
   };
   const _clearPend = async () => { const nd = { ...idata }; delete nd.pending_modify; await supabase.from("whatsapp_sessions").update({ intake_data: nd }).eq("phone", from); delete idata.pending_modify; };
@@ -3647,6 +3647,19 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   };
   // ✈️ طلب مطار العودة (حتميّ، بلا نموذج) — العمرة فقط.
   const _frustratedF = /ليش\s*ما\s*(?:ترد|تردون)|ما\s*تردون|بطي[ءئ]?|بطيئين|متأخر|تعبان|سي[ءئ]|زفت|عيب\s*عليك|مو\s*كل\s*شوي|كل\s*شوي[هة]?\s*(?:اسأل|أسأل|اقول|أقول)|خبرتك|قلتلك|وبعدين\s*معا?ك|كم\s*مر[ةه]|(?:^|\s)افهم|ما\s*(?:تفهم|فهمت)|مو\s*فاهم|غبي|قلت\s*لك|(?:أ|ا)خبرك|يا\s*بن\s*الحلال|يابن\s*الحلال|للمر[ةه]\s*ال/.test(_batch);
+  // 🚨 ٤ نوفمبر ٢٠٢٦: طلال أرسل برنامج العمرة لطلب تايلاند، والعميل «ايش هذا أنا طالب تايلند» → ردّ بسؤال تأكيد طويل بلا اعتذار.
+  //    آخر برنامج انرسل وجهته ≠ وجهة الطلب الحالي + اعتراض → غلطة طلال (ج): اعتذار يسمّي الغلط + بناء الصحيح فوراً.
+  {
+    const _sentDest = (String(idata.program_final_raw || "").match(/^DEST:\s*(.+)$/m) || [])[1] || "";
+    const _curDest = String(idata.destination || "").trim();
+    const _sameD = (a: string, b: string) => !!a && !!b && (a === b || (_isUmrahDest(a) && _isUmrahDest(b)) || extractDestination(a) === extractDestination(b));
+    const _objects = /ايش\s*هذا|وش\s*هذا|ش\s*هذا|مو\s*هذا|غلط|خطأ|خطا|(?:أنا|انا)?\s*(?:طالب|طلبت|ابي|أبي|اريد|أريد|ابغى)\s*\S+/.test(_batch);
+    if (_sentDest && _curDest && !_sameD(_sentDest, _curDest) && _objects) {
+      const _sd = _isUmrahDest(_sentDest) ? "العمرة" : _sentDest.trim();
+      await _rebuildNow({}, `حاضر، أعتذر منك، أرسلت لك برنامج ${_sd} بالغلط. بجهّز لك برنامج ${_curDest} فوراً وأرسله لك.`);
+      return;
+    }
+  }
   // 🔎 العميل يشتكي من البرنامج («شوف البرنامج اللي أرسلته»، «عيب عليك») → طلال يفحص برنامجه بنفسه:
   //    فيه خطأ → اعتذار + تصحيح وإرسال؛ ما لقى → اعتذار (أ) ويسأل وش الغلط. ❌ أبداً «ما فيه خطأ» (قرار المالكة).
   const _complainsProg = /(?:شوف|راجع|تأكد\s*من|افحص)\s*(?:\S+\s*){0,2}?(?:ال)?(?:برنامج|برنانج|ملف)|(?:ال)?برنامج\s*(?:\S+\s*){0,2}?(?:غلط|خطأ|خطا|فيه\s*غلط|مو\s*صح|ناقص)/.test(_batch);
@@ -8034,6 +8047,23 @@ Deno.serve(async (req) => {
         }
         return new Response(JSON.stringify({ ok: false, note: "render_failed_marked" }), { headers: jsonCors });
       }
+      // 🛑 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): فحص **قبل** الإرسال — برنامج وجهته غير وجهة الطلب الحالي ما يوصل العميل أبداً
+      //    (انرسل برنامج العمرة لطلب تايلاند). نوقف المهمة وننبّه الموظفين.
+      try {
+        const _raw0 = String(p.program_raw || "");
+        const _sentDest = (_raw0.match(/^DEST:\s*(.+)$/m) || [])[1] || "";
+        const { data: _ss } = await supabase.from("whatsapp_sessions").select("intake_data, destination").eq("phone", String(job.phone)).maybeSingle();
+        const _sd = ((_ss as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
+        const _spec = (_sd.program_spec && typeof _sd.program_spec === "object") ? _sd.program_spec as Record<string, unknown> : null;
+        const _curDest = String((_spec?.destination ?? _sd.destination ?? (_ss as { destination?: string } | null)?.destination) || "").trim();
+        const _same = (a: string, b: string) => a === b || (_isUmrahDest(a) && _isUmrahDest(b)) || (!!extractDestination(a) && extractDestination(a) === extractDestination(b));
+        if (_sentDest && _curDest && !_same(_sentDest.trim(), _curDest)) {
+          await supabase.from("program_pdf_jobs").update({ status: "failed", error: `blocked: dest mismatch (${_sentDest} ≠ ${_curDest})` }).eq("id", jobId);
+          await logGuard(supabase, String(job.phone), "presend_block", "dest_mismatch", `${_sentDest} ≠ ${_curDest}`, 1, String(job.code), "");
+          try { const n = `🛑 منعت إرسال برنامج ${job.code} (${_sentDest}) للعميل ${String(job.phone).replace(/^whatsapp:/, "")} — طلبه الحالي ${_curDest}.`; await Promise.all(staffList("SALES_WHATSAPP_NUMBERS").map(x => sendStaffNotice(x, n))); } catch (_e) { /* */ }
+          return new Response(JSON.stringify({ ok: false, note: "blocked_dest_mismatch" }), { headers: jsonCors });
+        }
+      } catch (_e) { /* الفحص أفضل جهد — لا يعطّل الإرسال الصحيح */ }
       const buf = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
       const key = `program-pdf/${String(job.code).replace(/[^\w.-]/g, "_")}_${Date.now()}.pdf`;
       const { error: upErr } = await supabase.storage.from(MEDIA_BUCKET).upload(key, buf, { contentType: "application/pdf", upsert: true });
