@@ -110,20 +110,16 @@ function hotelCoversDate(hotel: HotelRow, travelDateISO: string | null): boolean
   if (!travel) return true;
   const from = hotel.date_from ? parseAnyDate(hotel.date_from) : null;
   const to = hotel.date_to ? parseAnyDate(hotel.date_to) : null;
-  // موسم متكرّر (سنة بديلة) → طابق باليوم/الشهر فقط، مع دعم المواسم العابرة
-  // لرأس السنة (٢٦ ديسمبر → ٤ يناير): from > to يعني أن الفترة تلتفّ حول نهاية السنة.
-  if (isRecurringSeasonDate(from) || isRecurringSeasonDate(to)) {
-    const t = monthDayIndex(travel);
-    const f = from ? monthDayIndex(from) : null;
-    const tt = to ? monthDayIndex(to) : null;
-    if (f == null && tt == null) return true;
-    if (f != null && tt != null) return f <= tt ? (t >= f && t <= tt) : (t >= f || t <= tt);
-    if (f != null) return t >= f;
-    return t <= (tt as number);
-  }
-  if (from && travel < from) return false;
-  if (to && travel > to) return false;
-  return true;
+  // 🔴 الأسعار موسمية وغير مرتبطة بسنة (قرار المالكة ٤ نوفمبر ٢٠٢٦): نطابق **باليوم/الشهر
+  // فقط** مهما كانت سنة الصف أو سنة السفر. فعميل يطلب ٢١ يناير ٢٠٢٧ يُطابَق موسم «يناير»
+  // في الشيت وإن كانت أرقامه مكتوبة بسنة ٢٠٢٦. دعم المواسم العابرة لرأس السنة (from>to = التفاف).
+  const t = monthDayIndex(travel);
+  const f = from ? monthDayIndex(from) : null;
+  const tt = to ? monthDayIndex(to) : null;
+  if (f == null && tt == null) return true;
+  if (f != null && tt != null) return f <= tt ? (t >= f && t <= tt) : (t >= f || t <= tt);
+  if (f != null) return t >= f;
+  return t <= (tt as number);
 }
 
 // يختار صف نفس الفندق من **أقرب فترة سابقة** للتاريخ (وإلا أقرب فترة لاحقة) — يُستخدم
@@ -2231,6 +2227,12 @@ export async function buildLocalProgram(
   // «فندق آخر»: لتتبّع الإقامة السابقة — إقامة متتالية بنفس المدينة تختار فندقاً مختلفاً.
   let prevStayCity: string | null = null;
   let prevHotelName: string | null = null;
+  // ٤ نوفمبر ٢٠٢٦: «غير لنا الفندق في بوكيت لمن نرجع من كرابي — مو نفس الأول» → كل زيارة لنفس المدينة بفندق مختلف
+  //    (حتى لو مو متتالية: بوكيت ← كرابي ← بوكيت). يُفعَّل بـ request.uniqueHotelPerVisit (من طلال).
+  const _uniqueVisit = (request as { uniqueHotelPerVisit?: boolean }).uniqueHotelPerVisit === true;
+  const _usedByCity: Record<string, string[]> = {};
+  // فنادق طلب العميل استبعادها («غير فندق مكة») — من طلال (exclude_hotels).
+  const _globalEx = ((request as { excludeHotelNames?: string[] }).excludeHotelNames || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
   // Transport-only mode: employee wants only transfers + tours, no hotels.
   // Skip the entire hotel-pick loop; the rest of the pipeline (transfers,
   // tours, day arrangement) keeps working off the city distribution.
@@ -2293,7 +2295,8 @@ export async function buildLocalProgram(
       // «فندق آخر»: لو هذي إقامة متتالية بنفس المدينة (توزيعة مثل «٣ صلالة - ٣ صلالة
       // فندق آخر»)، استبعد فندق الإقامة السابقة فيختار فندقاً مختلفاً. لا نطبّقها مع
       // تعديلات صريحة (excludeForThisStay) حتى لا نتعارض معها.
-      const wantDifferentHotel = prevStayCity === stay.city && !!prevHotelName && !excludeForThisStay;
+      const _usedHere = [...(_uniqueVisit ? (_usedByCity[stay.city] || []) : []), ..._globalEx];
+      const wantDifferentHotel = ((prevStayCity === stay.city && !!prevHotelName) || _usedHere.length > 0) && !excludeForThisStay;
       // منطقة فرعية مُستنتَجة من نص الطلب (صلالة: هوانا/وسط). تفضيل ناعم: نفلتر
       // الفندق على المنطقة، فتتبعها الجولات والانتقالات تلقائياً (تُختار حسب موقع
       // الفندق). لا نطبّقها لو فيه منطقة صريحة من تعديل (areaForThisStay/stay.area)
@@ -2311,7 +2314,7 @@ export async function buildLocalProgram(
         stayNights: stay.nights,
       };
       hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
-        excludeNames: wantDifferentHotel ? new Set([...(excludeForThisStay || []), prevHotelName!.toLowerCase()]) : excludeForThisStay,
+        excludeNames: wantDifferentHotel ? new Set([...(excludeForThisStay || []), ...(prevStayCity === stay.city && prevHotelName ? [prevHotelName.toLowerCase()] : []), ..._usedHere.map(x => x.toLowerCase())]) : excludeForThisStay,
         ...pickOpts,
       });
       // المدينة فيها فندق واحد فقط → الاستبعاد يُفرغ الخيارات؛ ارجع لنفس الفندق بدل فشل البناء.
@@ -2323,7 +2326,7 @@ export async function buildLocalProgram(
       // الصريحة من تعديل (تبقى شرطاً).
       if (!hotel && inferredArea) {
         hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
-          excludeNames: wantDifferentHotel ? new Set([...(excludeForThisStay || []), prevHotelName!.toLowerCase()]) : excludeForThisStay,
+          excludeNames: wantDifferentHotel ? new Set([...(excludeForThisStay || []), ...(prevStayCity === stay.city && prevHotelName ? [prevHotelName.toLowerCase()] : []), ..._usedHere.map(x => x.toLowerCase())]) : excludeForThisStay,
           ...pickOpts,
           areaFilter: undefined,
         });
@@ -2457,6 +2460,7 @@ export async function buildLocalProgram(
     hotelsList.push({ city: stay.city, hotel, nights: stay.nights, rangeFrom, rangeTo });
     prevStayCity = stay.city;
     prevHotelName = hotel.name.trim();
+    (_usedByCity[stay.city] ||= []).push(hotel.name.trim());
   }
 
   // 2. Resolve follow-up tour modifications (remove / swap) against the

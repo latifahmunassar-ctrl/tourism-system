@@ -2575,20 +2575,16 @@ async function handleListHotels(body: {
       // باليوم/الشهر فقط (MM-DD)، مع دعم الموسم العابر لرأس السنة. الوجهات
       // بسنوات حقيقية تبقى بالمقارنة النصية الكاملة (ISO = ترتيب زمني).
       const mmdd = (iso: string) => iso.slice(5);               // "MM-DD"
-      const isRecur = (iso: string) => { const y = parseInt(iso.slice(0, 4), 10); return y > 0 && y <= 2000; };
       const tmd = mmdd(travelISO);
+      // 🔴 الأسعار موسمية (أي سنة) لكل الوجهات بلا استثناء: نطابق باليوم/الشهر فقط مهما
+      // كانت سنة الصف أو سنة السفر (قرار المالكة ٤ نوفمبر ٢٠٢٦).
       const dated = rows.filter(h => {
         const df = String(h.date_from || ""), dt = String(h.date_to || "");
         if (!df && !dt) return true;
-        if (isRecur(df) || isRecur(dt)) {
-          const f = df ? mmdd(df) : null, t2 = dt ? mmdd(dt) : null;
-          if (f && t2) return f <= t2 ? (tmd >= f && tmd <= t2) : (tmd >= f || tmd <= t2);
-          if (f) return tmd >= f;
-          return t2 ? tmd <= t2 : true;
-        }
-        if (df && travelISO < df) return false;
-        if (dt && travelISO > dt) return false;
-        return true;
+        const f = df ? mmdd(df) : null, t2 = dt ? mmdd(dt) : null;
+        if (f && t2) return f <= t2 ? (tmd >= f && tmd <= t2) : (tmd >= f || tmd <= t2);
+        if (f) return tmd >= f;
+        return t2 ? tmd <= t2 : true;
       });
       // لو التاريخ خارج كل المواسم المُسعّرة (مثل صلالة خارج الخريف) لا نُفرّغ
       // القائمة — نُبقي كل فنادق المدينة (أقرب موسم) حتى يبقى عند الموظف بدائل
@@ -2687,20 +2683,16 @@ async function handleListRoomTypes(body: {
       // باليوم/الشهر فقط (MM-DD)، مع دعم الموسم العابر لرأس السنة. الوجهات
       // بسنوات حقيقية تبقى بالمقارنة النصية الكاملة (ISO = ترتيب زمني).
       const mmdd = (iso: string) => iso.slice(5);               // "MM-DD"
-      const isRecur = (iso: string) => { const y = parseInt(iso.slice(0, 4), 10); return y > 0 && y <= 2000; };
       const tmd = mmdd(travelISO);
+      // 🔴 الأسعار موسمية (أي سنة) لكل الوجهات بلا استثناء: نطابق باليوم/الشهر فقط مهما
+      // كانت سنة الصف أو سنة السفر (قرار المالكة ٤ نوفمبر ٢٠٢٦).
       const dated = rows.filter(h => {
         const df = String(h.date_from || ""), dt = String(h.date_to || "");
         if (!df && !dt) return true;
-        if (isRecur(df) || isRecur(dt)) {
-          const f = df ? mmdd(df) : null, t2 = dt ? mmdd(dt) : null;
-          if (f && t2) return f <= t2 ? (tmd >= f && tmd <= t2) : (tmd >= f || tmd <= t2);
-          if (f) return tmd >= f;
-          return t2 ? tmd <= t2 : true;
-        }
-        if (df && travelISO < df) return false;
-        if (dt && travelISO > dt) return false;
-        return true;
+        const f = df ? mmdd(df) : null, t2 = dt ? mmdd(dt) : null;
+        if (f && t2) return f <= t2 ? (tmd >= f && tmd <= t2) : (tmd >= f || tmd <= t2);
+        if (f) return tmd >= f;
+        return t2 ? tmd <= t2 : true;
       });
       // خارج كل المواسم المُسعّرة → لا نُفرّغ القائمة، نرجع لكل أنواع غرف الفندق
       // (أقرب موسم) بدل ترك الموظف بلا خيارات. (نفس fallback قائمة التبديل.)
@@ -3824,6 +3816,8 @@ Deno.serve(async (req) => {
             (req as { adults: number }).adults = Math.max(1, pax - _kidsN);
             (req as { children: number }).children = _kidsN;
             (req as { autoBeds?: boolean }).autoBeds = true;
+            if (reqBody.unique_hotel_per_visit === true) (req as { uniqueHotelPerVisit?: boolean }).uniqueHotelPerVisit = true;
+            if (Array.isArray(reqBody.exclude_hotels) && reqBody.exclude_hotels.length) (req as { excludeHotelNames?: string[] }).excludeHotelNames = (reqBody.exclude_hotels as unknown[]).map(String);
             if (!canBuildLocally(req)) return null;
             const r = await buildLocalProgram(req, cityDefs, fetchData as never, {});
             if (!r.ok) return null;
