@@ -3872,6 +3872,21 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
       return;
     }
   }
+  // ✈️ ردّ على عرض طلال «ولو حاب نضيف لك الطيران الدولي، بحوّل طلبك لزميلي…»: موافقة صريحة → تحويل؛ «طيب» (ملتبسة) → سؤال واضح.
+  {
+    const _ltF = msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body || "";
+    if (/نضيف لك الطيران الدولي|نضيف الطيران الدولي/.test(_ltF) && /زميلي/.test(_ltF)) {
+      const _t = text.trim().replace(/[\u064B-\u0652]/g, "");
+      const _clearYes = /^(?:ايوه|ايوا|إيوه|أيوه|نعم|اكيد|أكيد|ضيفه|ضيفها|أضفه|اضفه|حوله|حوّله|ابي|أبي|نبي|يب|يس|yes)(?=\s|$|[!.،])/.test(_t) || new RegExp(`(?:ضيف|أضف|اضف|ابي|أبي|نبي)\\S*\\s*${FLIGHT_WORD}`, "i").test(_t);
+      const _ambig = /^(?:طيب|تمام|اوكي|ok|زين|ماشي)\s*[.!]?$/i.test(_t);
+      if (_clearYes) {
+        await _say("أبشر، حوّلت طلب الطيران الدولي لزميلي المختص يسعّره لك وبيرد عليك قريب إن شاء الله.", "followup_ai", "flight_handoff");
+        try { await createProposalAndNotifyAdmin({ supabase, customerPhone: from, profileName, question: "العميل يبي يضيف الطيران الدولي للبرنامج " + String(idata.program_final_code || "") }); } catch (_e) { /* */ }
+        return;
+      }
+      if (_ambig) { await _say("تحب نضيف الطيران الدولي للبرنامج؟ أحوّل طلبك لزميلي المختص يسعّره لك.", "followup_ai", "flight_offer_confirm"); return; }
+    }
+  }
   // ⏳ ٤ نوفمبر ٢٠٢٦: البرنامج قيد التجهيز («تمام، أبشر، شوية والبرنامج عندك») والعميل ينتظر → كان النموذج يقول «طلبك عند زميلي».
   {
     const _lt0 = msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body || "";
