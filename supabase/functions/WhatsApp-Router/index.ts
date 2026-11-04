@@ -3267,7 +3267,14 @@ ${returning
   if (_doAutoBuild) {
     // 🕋 العمرة: التوزيع مخزّن في حقل nights («٣ مكة ٢ المدينة»)، والأيام تُشتق من
     //    مجموع الليالي + ١. غير العمرة: التوزيع في cities والأيام كما هي.
-    const _dist0 = _isUmrahPax ? String(_mergedData.nights || "").trim() : String(_mergedData.cities || "").trim();
+    let _dist0 = _isUmrahPax ? String(_mergedData.nights || "").trim() : String(_mergedData.cities || "").trim();
+    // ٤ نوفمبر ٢٠٢٦: «بوكيت» (مدينة بلا ليالي) → «no buildable program» وما وصل العميل شي. مدينة وحدة بلا أرقام + أيام
+    //    معروفة → «N ليالي المدينة» (N = الأيام − ١)؛ أكثر من مدينة بلا أرقام → نخلي المحرك يختار التوزيع.
+    if (!_isUmrahPax && _dist0 && !/[0-9٠-٩]/.test(_dist0)) {
+      const _cs = _dist0.split(/\s*(?:،|,|\s+و\s*|\s+ثم\s+)\s*/).map(x => x.trim()).filter(Boolean);
+      const _dy = parseInt(String(_mergedData.days || "").replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))), 10);
+      _dist0 = (_cs.length === 1 && _dy > 1) ? `${_dy - 1} ليالي ${_cs[0]}` : "";
+    }
     const _deferred = !_dist0 || /حسب|الوكال|بكيفك|براحتك|رتبو|ترتيب|أي\s*مدن/.test(_dist0);
     let _daysVal = String(_mergedData.days || "").trim();
     if (_isUmrahPax) {
@@ -3286,7 +3293,17 @@ ${returning
           phone: from,
           return_airport: String(_mergedData.return_airport || ""),
         });
-        if (!prog) { console.error("auto_build: no program for", from); return; }
+        if (!prog) {
+          // ❌ كان صامت: العميل وصله «شوية والبرنامج عندك» وما جاه شي. الحين: نبلغه بصدق + تنبيه الموظف + نمسح «جاري البناء».
+          console.error("auto_build: no program for", from);
+          const _fm = "أعتذر منك، البرنامج يحتاج ترتيب يدوي بسيط — زميلنا المختص بيجهّزه لك ويرسله قريب إن شاء الله.";
+          await sendCustomerReply(supabase, from, _fm);
+          try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: stripBannedPhrases(_fm), sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+          await logGuard(supabase, from, "auto_build_failed", "handoff", `${_mergedData.destination} | ${_daysVal} أيام | ${_dist0}`, 1, "", _fm);
+          try { const n = `⚠️ ما قدر طلال يبني البرنامج تلقائياً — جهّزوه يدوياً\nالعميل: ${from.replace(/^whatsapp:/, "")}\nالوجهة: ${_mergedData.destination} · ${_daysVal} أيام · ${_mergedData.pax} أشخاص · ${_mergedData.date}\nالمدن: ${_mergedData.cities || "-"}`; await Promise.all(staffList("SALES_WHATSAPP_NUMBERS").map(x => sendStaffNotice(x, n))); } catch (_e) { /* */ }
+          try { await createProposalAndNotifyAdmin({ supabase, customerPhone: from, profileName: "", question: "طلب برنامج ما انبنى تلقائياً: " + String(_mergedData.destination || "") }); } catch (_e) { /* */ }
+          return;
+        }
         // خزّن المسوّدة دائماً (ليراها الموظف في الداشبورد) دون إرسال.
         try {
           const { data: sRow } = await supabase.from("whatsapp_sessions")
@@ -3420,7 +3437,9 @@ function _noMedFlightMsg(c: { date?: Date; nearest?: Date[] }): string {
 //    ولو فيه خطأ يعتذر للعميل ويعيد الإرسال مصحّحاً (مرة وحدة) وينبّه الموظفين. العميل ما يحتاج يكتشفه.
 function _programIssues(raw: string, d0: Record<string, unknown>, phone: string): string[] {
   const issues: string[] = [];
-  const d = (d0 && typeof d0.program_spec === "object" && d0.program_spec) ? d0.program_spec as Record<string, unknown> : d0;
+  // بلا نسخة من الطلب وقت البناء (برامج قديمة) → ❌ لا نقارن بالبيانات الحالية (ممكن طلب ثاني) — نفحص العملة بس.
+  const _hasSpec = !!(d0 && typeof d0.program_spec === "object" && d0.program_spec);
+  const d = _hasSpec ? d0.program_spec as Record<string, unknown> : ({} as Record<string, unknown>);
   const t = String(raw || "").replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x)));
   const pax = Number(d.pax) || 0;   // pax = الإجمالي (طلال يسأل «الإجمالي، الكبار والأطفال»)
   const fl = (t.split("FLIGHTS:")[1] || "").split(/\n\s*\n/)[0] || "";
@@ -3671,10 +3690,14 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     ? _finalRaw.replace(/^(?:CHAT|CLIENT_CODE|EXTRA_BED_CITIES|META):.*$/gm, "")
     : String(idata.auto_program || "").split("\n").filter(l => !/مطار|محط[ةه]/.test(l)).join("\n")).slice(0, 4000);
   // 🔴 ٣ نوفمبر ٢٠٢٦: طلال قال «البرنامج فوق في المحادثة» وهو ما انرسل (فشل الـPDF). الحالة الحقيقية من طابور الـPDF.
-  const { data: _job } = await supabase.from("program_pdf_jobs").select("id, code, status").eq("phone", from).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const { data: _job0 } = await supabase.from("program_pdf_jobs").select("id, code, status, created_at").eq("phone", from).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  // ٤ نوفمبر ٢٠٢٦: «البرنامج وصلك هلأ؟» عن برنامج تايلاند اللي ما انبنى — طلال شاف برنامج العمرة القديم «sent». الطلب الحالي فقط.
+  const _reqStart = Date.parse(String(idata.started_at || "")) || 0;
+  const _job = (_job0 && (Date.parse(String((_job0 as { created_at?: string }).created_at || "")) || 0) >= _reqStart) ? _job0 : null;
   const _jobSt = String((_job as { status?: string } | null)?.status || "");
   const _textSent = msgs.some(m => m.who === "طلال" && /برنامج\s*العمر[ةه]|الفنادق\s*والإقام[ةه]/.test(m.body));
-  const progStatus: "sent" | "pending" | "failed" | "none" = (_jobSt === "sent" || _textSent || !!String(idata.program_final_raw || "").trim()) ? "sent" : (_jobSt === "pending" ? "pending" : (_jobSt === "failed" ? "failed" : "none"));
+  const _curFinal = !!String(idata.program_final_raw || "").trim() && (!_reqStart || !!_job);
+  const progStatus: "sent" | "pending" | "failed" | "none" = (_jobSt === "sent" || (_textSent && !_reqStart) || _curFinal) ? "sent" : (_jobSt === "pending" ? "pending" : (_jobSt === "failed" ? "failed" : "none"));
   const _wantsProgram = /(?:ارسل|أرسل|رسل|ابي|أبي|ابغى|أبغى|وين|فين|عطني|ابعث)\S*\s*(?:لي\s*)?(?:ال)?(?:برنامج|برنانج|ملف|pdf|العرض)|(?:البرنامج|الملف|العرض)\s*(?:ما|مو|مش|مب)\s*(?:وصل|مبين|طالع|ظاهر)|(?:ما|مو|مش|مب)\s*(?:وصل|مبين|طالع|ظاهر)|مره\s*ثاني|مرة\s*ثاني|(?:ال)?(?:برنامج|برنانج|ملف|عرض)\s*(?:\S+\s*)?(?:وين|فين|وينه|فينه|فينهر|وينه?و)/i.test(_batch);
   const _resendProgram = async (): Promise<boolean> => {
     if (progStatus === "none" || !_job) return false;

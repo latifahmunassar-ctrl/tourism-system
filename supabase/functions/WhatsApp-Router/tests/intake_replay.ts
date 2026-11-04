@@ -99,6 +99,7 @@ let lastModelSystem = "";
 let lastModelName = "";
 let medFlights: string[] | null = null;
 let rejectTools = false;
+let buildFail = false;
 (globalThis as any).fetch = async (input: any, init?: any) => {
   const url = String(input?.url || input);
   const json = (o: unknown) => new Response(JSON.stringify(o), { status: 200, headers: { "content-type": "application/json" } });
@@ -117,7 +118,8 @@ let rejectTools = false;
     const t: Record<string, unknown> = {}; for (const d of (medFlights || [])) t[d] = { final: 1342, timing: "17:40 - 21:30" };
     return json({ prices: { oman: { out: {}, ret: {}, ret_med: t } } });
   }
-  if (url.includes("Tourism-AI")) { buildCalls++; try { lastBuildBody = JSON.parse(String(init?.body || "{}")); } catch { lastBuildBody = null; } return json({ ok: true, formatted: "برنامج اختبار", program_code: "MK-TEST", kid_ages: [], price_ready: true }); }
+  if (url.includes("Tourism-AI")) { buildCalls++; try { lastBuildBody = JSON.parse(String(init?.body || "{}")); } catch { lastBuildBody = null; }
+    if (buildFail) return json({ ok: false, error: "no buildable program" }); return json({ ok: true, program: "DEST:اختبار\nTOTAL_GROUP:1000", formatted: "برنامج اختبار", program_code: "MK-TEST", kid_ages: [], price_ready: true }); }
   return json({});
 };
 
@@ -151,7 +153,7 @@ for (const s of SCENARIOS) {
   if (only && !s.id.includes(only)) continue;
   const lastTs = seed(s);
   const before = DB.wa_admin_messages.length;
-  modelQueue = [...s.model]; modelCalls = 0; buildCalls = 0; proposalCalls = 0; lastBuildBody = null; medFlights = s.medFlights || null; rejectTools = !!s.rejectTools; lastModelSystem = ""; injectOnModel = s.inboundDuringModel || null; _bg.length = 0;
+  modelQueue = [...s.model]; modelCalls = 0; buildCalls = 0; proposalCalls = 0; lastBuildBody = null; medFlights = s.medFlights || null; rejectTools = !!s.rejectTools; buildFail = !!s.buildFail; lastModelSystem = ""; injectOnModel = s.inboundDuringModel || null; _bg.length = 0;
   let crash = "";
   console.error = () => {}; console.warn = () => {}; console.log = () => {};
   try {
@@ -191,7 +193,7 @@ for (const [t, want] of DEST_UNITS) {
 }
 // ── اختبارات وحدة: الفحص الذاتي للبرنامج المرسل (قرار المالكة: طلال يكتشف غلطه بنفسه) ──
 {
-  const D = { pax: 5, date: "12/11/2026", return_airport: "madinah" };
+  const D = { program_spec: { pax: 5, date: "12/11/2026", return_airport: "madinah" } };
   const RAW = (n: number, ret: string, cur = true) => `DEST:العمرة${cur ? "\nCURRENCY:ريال عماني|10" : ""}\nDATE_FROM:12 نوفمبر 2026\nFLIGHTS:\nمسقط ← جدة (السلام) | ذهاب | 940 ريال/شخص | ${n} أشخاص | x\n${ret} ← مسقط (العماني) | عودة | 826 ريال/شخص | ${n} أشخاص | y\n\nTOURS:\n`;
   const U: Array<[string, string[], string]> = [
     ["MK-2026-010 الحقيقي (طيران لـ٤ من ٥)", _programIssues(RAW(4, "المدينة"), D, "whatsapp:+96899621742"), "الطيران ما انحسب"],

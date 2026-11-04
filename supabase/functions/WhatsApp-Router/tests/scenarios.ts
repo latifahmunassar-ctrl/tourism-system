@@ -16,7 +16,8 @@ export type Scenario = {
   inboundDuringModel?: string;
   medFlights?: string[];
   seenAt?: number;   // فهرس رسالة بالتاريخ = آخر رسالة شافها طلال (last_seen_in_ts)
-  rejectTools?: boolean;   // الـAPI يرفض الأداة (400) — شبكة الأمان لازم تكمل بدونها   // تواريخ طيران المدينة ← مسقط المتوفرة (DD/MM/YYYY) — بدونها ما يُفحص
+  rejectTools?: boolean;
+  buildFail?: boolean;   // Tourism-AI يرجّع «no buildable program»   // الـAPI يرفض الأداة (400) — شبكة الأمان لازم تكمل بدونها   // تواريخ طيران المدينة ← مسقط المتوفرة (DD/MM/YYYY) — بدونها ما يُفحص
   tables?: Record<string, Array<Record<string, unknown>>>;   // صفوف إضافية لجداول القاعدة الوهمية   // رسالة عميل أحدث تصل أثناء تفكير النموذج (اختبار دمج الرسائل)   // طابور الـPDF (program_pdf_jobs) قبل الرسالة
   expect: Array<[string, (c: Ctx) => boolean]>;
 };
@@ -227,7 +228,7 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "fu-complaint-self-check", entry: "followup", title: "٣ نوفمبر: «شوف الي البرنامج الي ارسلته / مو كل شويه اسألك / عيب عليك» → طلال يفحص ويلقى الخطأ (طيران ٤ من ٥) → اعتذار + إعادة إرسال",
     history: [...PROG_HIST, ["C", "شوف الي البرنامج الي ارسلته يااخي"], ["C", "مو كل شويه اسألك"]], customer: "عيب عليك",
-    intakeData: { ...DONE, pax: 5, date: "12/11/2026", return_airport: "madinah", program_final_raw: "DEST:العمرة\nCURRENCY:ريال عماني|10\nDATE_FROM:12 نوفمبر 2026\nFLIGHTS:\nمسقط ← جدة (السلام) | ذهاب | 940 ريال/شخص | 4 أشخاص | x\nالمدينة ← مسقط (العماني) | عودة | 826 ريال/شخص | 4 أشخاص | y\n\nTOURS:\n", program_final_code: "MK-2026-010" },
+    intakeData: { ...DONE, pax: 5, date: "12/11/2026", return_airport: "madinah", program_spec: { pax: 5, date: "12/11/2026", return_airport: "madinah" }, program_final_raw: "DEST:العمرة\nCURRENCY:ريال عماني|10\nDATE_FROM:12 نوفمبر 2026\nFLIGHTS:\nمسقط ← جدة (السلام) | ذهاب | 940 ريال/شخص | 4 أشخاص | x\nالمدينة ← مسقط (العماني) | عودة | 826 ريال/شخص | 4 أشخاص | y\n\nTOURS:\n", program_final_code: "MK-2026-010" },
     model: [FU("ما فيه في البرنامج خطأ واضح أقدر أعدله من عندي بدون ما تحدد لي وش اللي ما عجبك.")],
     expect: [["اعتذار + يذكر الخطأ", c => /أعتذر منك، لاحظت إن البرنامج اللي أرسلته لك فيه خطأ \(الطيران ما انحسب لكل المسافرين\)/.test(c.reply)], ["❌ لا «ما فيه خطأ»", c => !/ما فيه.*خطأ واضح/.test(c.reply)],
       ["إعادة إرسال مصحّح", c => c.jobs.some(j => j.code === "MK-2026-010" && /بعد التصحيح/.test(String(j.caption || "")))], ["ما استدعى النموذج", c => c.modelCalls === 0]],
@@ -235,7 +236,7 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "fu-complaint-nothing-found", entry: "followup", title: "اشتكى «شوف البرنامج فيه غلط» والفحص ما لقى شي → «أعتذر منك أستاذي، بس فهمني وش الغلط…»",
     history: PROG_HIST, customer: "شوف البرنامج فيه غلط",
-    intakeData: { ...DONE, pax: 4, date: "12/11/2026", return_airport: "madinah", program_final_raw: "DEST:العمرة\nCURRENCY:ريال عماني|10\nDATE_FROM:12 نوفمبر 2026\nFLIGHTS:\nمسقط ← جدة (السلام) | ذهاب | 940 ريال/شخص | 4 أشخاص | x\nالمدينة ← مسقط (العماني) | عودة | 826 ريال/شخص | 4 أشخاص | y\n\nTOURS:\n", program_final_code: "MK-2026-010" },
+    intakeData: { ...DONE, pax: 4, date: "12/11/2026", return_airport: "madinah", program_spec: { pax: 4, date: "12/11/2026", return_airport: "madinah" }, program_final_raw: "DEST:العمرة\nCURRENCY:ريال عماني|10\nDATE_FROM:12 نوفمبر 2026\nFLIGHTS:\nمسقط ← جدة (السلام) | ذهاب | 940 ريال/شخص | 4 أشخاص | x\nالمدينة ← مسقط (العماني) | عودة | 826 ريال/شخص | 4 أشخاص | y\n\nTOURS:\n", program_final_code: "MK-2026-010" },
     model: [FU("ما فيه خطأ")],
     expect: [["اعتذار (أ)", c => /^أعتذر منك أستاذي، بس فهمني وش الغلط/.test(c.reply)]],
   },
@@ -254,7 +255,7 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "tr-fu-complaint-self-check", entry: "followup", title: "كل الوجهات (تركيا): «عيب عليك شوف البرنامج» والطيران لشخص من ٢ → اعتذار + تصحيح",
     history: [["T", RESET], ["C", "ابي تركيا"], ["T", "📄 برنامج PDF — TR-2026-060"]], customer: "عيب عليك شوف البرنامج",
-    intakeData: { ...{ destination: "تركيا", pax: 2, date: "01/12/2026", days: 6, cities: "إسطنبول وطرابزون", summary_confirmed: true }, program_final_raw: "DEST:تركيا\nCURRENCY:ريال عماني|10\nDATE_FROM:1 ديسمبر 2026\nFLIGHTS:\nمسقط ← إسطنبول | ذهاب | 900 ريال/شخص | 1 أشخاص | x\n\nTOURS:\n", program_final_code: "TR-2026-060" },
+    intakeData: { ...{ destination: "تركيا", pax: 2, date: "01/12/2026", days: 6, cities: "إسطنبول وطرابزون", summary_confirmed: true }, program_spec: { pax: 2, date: "01/12/2026", days: 6 }, program_final_raw: "DEST:تركيا\nCURRENCY:ريال عماني|10\nDATE_FROM:1 ديسمبر 2026\nFLIGHTS:\nمسقط ← إسطنبول | ذهاب | 900 ريال/شخص | 1 أشخاص | x\n\nTOURS:\n", program_final_code: "TR-2026-060" },
     model: [FU("ما فيه خطأ")],
     expect: [["اعتذار + الخطأ", c => /أعتذر منك، لاحظت إن البرنامج اللي أرسلته لك فيه خطأ/.test(c.reply)], ["إعادة إرسال مصحّح", c => c.jobs.some(j => j.code === "TR-2026-060" && /بعد التصحيح/.test(String(j.caption || "")))]],
   },
@@ -286,6 +287,14 @@ export const SCENARIOS: Scenario[] = [
     model: [M("حياك الله، كم عدد المسافرين؟", { destination: "تايلاند" })],
     expect: [["الطلب الجديد تايلاند", c => c.intake.destination === "تايلاند"], ["❌ بلا عدد العمرة القديم", c => !c.intake.pax], ["العمرة محفوظة بالسجل", c => (c.intake.prev_requests || []).some((r: any) => r.program_code === "MK-2026-011")],
       ["يسأل المسافرين (مو المعتمرين)", c => /المسافرين/.test(c.reply) && !/المعتمرين/.test(c.reply)]],
+  },
+  {
+    id: "fu-old-program-not-resent", entry: "followup", title: "٤ نوفمبر: طلب تايلاند جديد ما انبنى + «وين البرنامج» → ❌ لا يعيد إرسال برنامج العمرة القديم",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "تمام، أبشر، شوية والبرنامج عندك."]], customer: "وين البرنامج",
+    intakeData: { destination: "تايلاند", pax: 6, date: "17/11/2026", days: 9, cities: "بوكيت", summary_confirmed: true, started_at: "2026-11-02T10:00:10Z", program_final_raw: "DEST:العمرة\n", program_final_code: "MK-2026-011" },
+    jobs: [{ id: 14, code: "MK-2026-011", status: "sent", created_at: "2026-11-01T04:34:44Z" }],
+    model: [FU("البرنامج تحت التجهيز، بيوصلك قريب.")],
+    expect: [["ما أعاد القديم", c => !c.jobs.some(j => j.code === "MK-2026-011" && j.status === "pending")], ["❌ لا «وصلك»", c => !/وصلك هل|وصلك فوق/.test(c.reply)]],
   },
   {
     id: "fu-question-from-program", entry: "followup", title: "متابعة: سؤال جوابه في البرنامج → يرد بنفسه بلا تحويل",
@@ -689,6 +698,20 @@ export const SCENARIOS: Scenario[] = [
     model: [M("تمام", { destination: "تايلاند", pax: 6, ages: "12 و 10 و 9", date: "17/11/2026", days: 9, cities: "بوكيت" })],
     expect: [["جواب مباشر", c => /^إيه نعم أستاذي، عندنا من عمر 11 سنة وفوق يُعتبر بالغ وله سرير خاص\. أجهّز لك البرنامج كذا؟$/.test(c.reply.trim())],
       ["❌ لا «تايلاند ولا العمرة»", c => !/ولا العمرة|لبس/.test(c.reply)], ["الوجهة تايلاند", c => c.intake.destination === "تايلاند"], ["النموذج ما شاف السجل", c => !/MK-2026-011|prev_requests/.test(c.modelSystem)]],
+  },
+  {
+    id: "th-build-single-city", title: "٤ نوفمبر: تايلاند «بوكيت» ٩ أيام → البناء يرسل «8 ليالي بوكيت» (مو «بوكيت» اللي يفشل)",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "إيه نعم أستاذي، عندنا من عمر 11 سنة وفوق يُعتبر بالغ وله سرير خاص. أجهّز لك البرنامج كذا؟"]],
+    customer: "ايوه", intakeData: { destination: "تايلاند", date: "17/11/2026", pax: 6, ages: "12، 10، 9", days: 9, cities: "بوكيت", asked_children: true, pending_card: true },
+    model: [M("تمام", { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 9, cities: "بوكيت" }, true)],
+    expect: [["التوزيع 8 ليالي بوكيت", c => c.buildBody?.distribution === "8 ليالي بوكيت"], ["«تمام، أبشر…»", c => /تمام، أبشر، شوية والبرنامج عندك/.test(c.reply)]],
+  },
+  {
+    id: "build-fail-not-silent", title: "٤ نوفمبر: البناء فشل → العميل يوصله اعتذار صادق + الموظف يتبلّغ (مو سكوت بعد «شوية والبرنامج عندك»)",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "أجهّز لك البرنامج كذا؟"]],
+    customer: "ايوه", intakeData: { destination: "تايلاند", date: "17/11/2026", pax: 6, ages: "12، 10، 9", days: 9, cities: "بوكيت", asked_children: true, pending_card: true }, buildFail: true,
+    model: [M("تمام", { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 9, cities: "بوكيت" }, true)],
+    expect: [["رسالة صادقة للعميل", c => /أعتذر منك، البرنامج يحتاج ترتيب يدوي بسيط/.test(c.reply)], ["انفتح طلب للموظف", c => c.proposals > 0]],
   },
   {
     id: "pending-dest-wenkom", title: "٢ نوفمبر: سؤال وجهة معلّق والعميل كتب «وينكم» → تبقى العمرة",
