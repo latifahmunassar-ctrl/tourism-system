@@ -3927,6 +3927,16 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
       if (_cls ? (_cls.yes_no === "none" && _ambig) : _ambig) { await _say("تحب نضيف الطيران الدولي للبرنامج؟ أحوّل طلبك لزميلي المختص يسعّره لك.", "followup_ai", "flight_offer_confirm"); return; }
     }
   }
+  // ✈️ ٤ نوفمبر ٢٠٢٦ (أول تجربة حية للمصنّف): «انتظر الطيران» → Sonnet فهمها want_intl_flight صح، لكن حارس «متضايق بلا حجز/دفع»
+  //    منع التحويل وطلع «فهمني إيش تقصد». الحين: طلب الطيران الدولي (غير العمرة) = تحويل مباشر؛ ولو سبق وتحوّل → طمأنة بلا تحويل ثاني.
+  if (_is("want_intl_flight") && !_isUmrahReq) {
+    if (await _superseded()) return;
+    const _already = msgs.some(m => m.who === "طلال" && /حوّ?لت طلب الطيران الدولي/.test(m.body));
+    if (_already) { await _say("طلب الطيران الدولي عند زميلي المختص، وبيرد عليك بالسعر قريب إن شاء الله.", "followup_ai", "flight_handoff_reassure"); return; }
+    await _say("أبشر، حوّلت طلب الطيران الدولي لزميلي المختص يسعّره لك وبيرد عليك قريب إن شاء الله.", "followup_ai", "flight_handoff");
+    try { await createProposalAndNotifyAdmin({ supabase, customerPhone: from, profileName, question: "العميل يبي يضيف الطيران الدولي للبرنامج " + String(idata.program_final_code || "") }); } catch (_e) { /* */ }
+    return;
+  }
   // ⏳ ٤ نوفمبر ٢٠٢٦: البرنامج قيد التجهيز («تمام، أبشر، شوية والبرنامج عندك») والعميل ينتظر → كان النموذج يقول «طلبك عند زميلي».
   {
     const _lt0 = msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body || "";
@@ -4127,7 +4137,7 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
     if ((changed.date || changed.nights) && _hadAlt && !_retMed && _isUmrahReq) changed.return_airport = "madinah";
     if (Object.keys(changed).length) { await _askModify(changed); return; }
   }
-  if (action === "handoff" && _frustratedF && !/حجز|احجز|أحجز|دفع|ادفع|أدفع|تحويل\s*بنكي|فاتور|خصم/.test(_batch)) {
+  if (action === "handoff" && _frustratedF && !(_cls ? _is("want_intl_flight", "booking_payment") : /حجز|احجز|أحجز|دفع|ادفع|أدفع|تحويل\s*بنكي|فاتور|خصم/.test(_batch))) {
     out = { message: "أعتذر منك أستاذي، بس فهمني إيش تقصد بالضبط عشان أصحّح لك البرنامج وأرسله على طول؟", action: "reply", fields: {} };
     action = "reply";
   }

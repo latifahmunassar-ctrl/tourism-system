@@ -977,4 +977,18 @@ export const SCENARIOS: Scenario[] = [
     model: [FU("العفو أستاذي، أي شي تحتاجه أنا موجود.")],
     expect: [["ما جاوب عن الطيران (ما استدعى المصنّف)", c => !/الطيران/.test(c.reply)], notSilent],
   },
+  {
+    id: "intent-live-wait-flight", entry: "followup", title: "٤ نوفمبر (حي): «انتظر الطيران» بعد عرض الطيران الدولي → Sonnet: want_intl_flight → تحويل الطيران (مو «فهمني إيش تقصد»)",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-072"], ["C", "هذا شامل الطريان"], ["T", "لا أستاذي، البرنامج ما يشمل الطيران الدولي… ولو حاب نضيف لك الطيران الدولي، بحوّل طلبك لزميلي المختص يسعّره لك."], ["C", "طيب"], ["T", "تمام، لو احتجت أي شي أنا حاضر."]],
+    customer: "انتظر الطيران", intakeData: { destination: "تايلاند", pax: 6, date: "17/11/2026", days: 12, cities: "بوكيت، كرابي، بانكوك", summary_confirmed: true, program_final_code: "TH-2026-072" }, intent: { intent: "want_intl_flight", frustrated: true, meaning: "العميل يطلب إضافة الطيران الدولي وينتظر تسعيره" },
+    model: [FU("أبشر، بحوّل طلبك لزميلي المختص ويرد عليك قريب", "handoff")],
+    expect: [["تحويل الطيران", c => /حوّ?لت طلب الطيران الدولي/.test(c.reply)], ["طلب للموظف", c => c.proposals === 1], ["❌ لا «فهمني»", c => !/فهمني/.test(c.reply)]],
+  },
+  {
+    id: "intent-flight-already-handed", entry: "followup", title: "طلب الطيران الدولي سبق تحوّل والعميل يعيد «وين الطيران» → طمأنة، ❌ بلا تحويل ثاني",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-072"], ["T", "أبشر، حوّلت طلب الطيران الدولي لزميلي المختص يسعّره لك وبيرد عليك قريب إن شاء الله."]],
+    customer: "وين سعر الطيران", intakeData: { destination: "تايلاند", pax: 6, date: "17/11/2026", days: 12, cities: "بوكيت، كرابي، بانكوك", summary_confirmed: true, program_final_code: "TH-2026-072" }, intent: { intent: "want_intl_flight", meaning: "يسأل عن سعر الطيران الدولي" },
+    model: [FU("أبشر")],
+    expect: [["طمأنة", c => /عند زميلي المختص/.test(c.reply)], ["ما تحوّل مرة ثانية", c => c.proposals === 0]],
+  },
 ];
