@@ -280,7 +280,7 @@ export function pickCheapestHotel(
   city: string,
   request: TripRequest,
   cityPattern?: RegExp,
-  options?: { excludeNames?: Set<string>; overrideAdults?: number; areaFilter?: string; overrideStars?: number; feature?: string; lockOccupancyAdults?: number; stayNights?: number; breakfast?: boolean; preferName?: string; seaView?: boolean },
+  options?: { excludeNames?: Set<string>; overrideAdults?: number; areaFilter?: string; overrideStars?: number; feature?: string; lockOccupancyAdults?: number; stayNights?: number; breakfast?: boolean; preferKeys?: string[]; preferName?: string; seaView?: boolean },
 ): HotelRow | null {
   // overrideAdults is set when the employee explicitly asks for a different
   // occupancy on a single swap ("غير فندق هانوي لـ 4 أشخاص"). In that case
@@ -327,6 +327,7 @@ export function pickCheapestHotel(
     }
     // ٤ نوفمبر ٢٠٢٦ (طلبات العميل عبر طلال): إفطار / اسم فندق معيّن / إطلالة بحر.
     if (options?.breakfast && !/إفطار|افطار|فطور|breakfast|bed\s*&?\s*breakfast|\bbb\b|half\s*board|full\s*board|all\s*inclusive/iu.test(String(h.meals || "") + " " + String(h.room_type || ""))) return false;
+    if (options?.preferKeys && options.preferKeys.length) { const nk = String(h.name || "").toLowerCase().replace(/[إأآا]/g, "ا").replace(/[ةه]/g, "ه").replace(/[^a-z0-9؀-ۿ]+/g, ""); if (!options.preferKeys.includes(nk)) return false; }
     if (options?.preferName) { const pn = options.preferName.toLowerCase().replace(/\s+/g, " ").trim(); if (!String(h.name || "").toLowerCase().includes(pn)) return false; }
     if (options?.seaView && !/sea\s*view|ocean\s*view|beach\s*front|بحر|شاطئ/iu.test(String(h.room_type || ""))) return false;
     if (options?.feature) {
@@ -2309,11 +2310,12 @@ export async function buildLocalProgram(
         ? request.subAreaByCity?.[stay.city]
         : undefined;
       // تفضيلات العميل العامة (طلال): ناعمة — لو ما فيه فندق يحققها نرجع للأفضل المتاح.
-      const _rp = request as { prefBreakfast?: boolean; preferHotelName?: string; preferHotelCity?: string; prefFeature?: string; prefSeaView?: boolean };
+      const _rp = request as { preferHotelKeys?: string[]; prefBreakfast?: boolean; preferHotelName?: string; preferHotelCity?: string; prefFeature?: string; prefSeaView?: boolean };
       const _prefNameHere = _rp.preferHotelName && (!_rp.preferHotelCity || String(stay.city).toLowerCase().includes(String(_rp.preferHotelCity).toLowerCase())) ? _rp.preferHotelName : undefined;
       const pickOpts = {
         breakfast: _rp.prefBreakfast === true ? true : undefined,
         preferName: _prefNameHere,
+        preferKeys: _rp.preferHotelKeys,
         seaView: _rp.prefSeaView === true ? true : undefined,
         overrideAdults: overrideForThisStay,
         overrideStars: overrideStarsForThisStay,
@@ -2327,8 +2329,8 @@ export async function buildLocalProgram(
         excludeNames: wantDifferentHotel ? new Set([...(excludeForThisStay || []), ...(prevStayCity === stay.city && prevHotelName ? [prevHotelName.toLowerCase()] : []), ..._usedHere.map(x => x.toLowerCase())]) : excludeForThisStay,
         ...pickOpts,
       });
-      if (!hotel && (pickOpts.breakfast || pickOpts.preferName || pickOpts.seaView || (!featureForThisStay && _rp.prefFeature))) {
-        const _soft = { ...pickOpts, breakfast: undefined, preferName: undefined, seaView: undefined, feature: featureForThisStay };
+      if (!hotel && (pickOpts.breakfast || pickOpts.preferName || pickOpts.preferKeys || pickOpts.seaView || (!featureForThisStay && _rp.prefFeature))) {
+        const _soft = { ...pickOpts, breakfast: undefined, preferName: undefined, preferKeys: undefined, seaView: undefined, feature: featureForThisStay };
         hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, { excludeNames: excludeForThisStay, ..._soft });
         if (hotel) ((request as { _prefMisses?: string[] })._prefMisses ||= []).push(String(stay.city));
       }

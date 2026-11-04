@@ -1038,4 +1038,33 @@ export const SCENARIOS: Scenario[] = [
     model: [M("تمام", { destination: "العمرة", pax: 3, date: "2026-11-06", nights: "4 مكة 2 المدينة" }, true)],
     expect: [["يسأل الأطفال", c => /أطفال/.test(c.reply)], ["❌ لا تأكيد ولا بناء", c => !/صحيح أخي|صحيح\؟/.test(c.reply) && c.buildCalls === 0]],
   },
+  // ── 🕋 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): فنادق مكة «موصى به» أولاً ──
+  {
+    id: "umrah-recommended-default", entry: "intake", title: "قرار المالكة: أي طلب عمرة → البناء يطلب فنادق «موصى به» (hotel_prefs.haram)",
+    history: [["T", RESET], ["C", "عمره"], ["C", "شخصين كبار"], ["C", "٣ مكه ٢ المدينه"], ["C", "٢٠ نوفمبر"], ["T", "فهمت عليك، يعني تقصد عمرة لشخصين…، صحيح أخي الكريم؟"]],
+    customer: "صحيح", intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, asked_nights: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", awaiting_confirm: true },
+    model: [M("تمام", { destination: "العمرة", pax: 2, date: "2026-11-20", nights: "3 مكة 2 المدينة" }, true)],
+    expect: [["بنى", c => c.buildCalls > 0], ["موصى به", c => c.buildBody?.hotel_prefs?.haram === "موصى به"], ["«تمام، أبشر…»", c => /شوية والبرنامج عندك/.test(c.reply)]],
+  },
+  {
+    id: "umrah-haram-wish-reply", entry: "intake", title: "قرار المالكة: العميل حدّد «بجانب الحرم» → «حاضر، برسل لك العرض اللي عندنا.» + «وإذا لك تعليق أو تعديل أنا حاضر.» (رسالتين) والعرض موصى به",
+    history: [["T", RESET], ["C", "عمره"], ["C", "شخصين كبار ابي فندق بجانب الحرم"], ["C", "٣ مكه ٢ المدينه"], ["C", "٢٠ نوفمبر"], ["T", "فهمت عليك، يعني تقصد عمرة لشخصين…، صحيح أخي الكريم؟"]],
+    customer: "صحيح", intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, asked_nights: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", awaiting_confirm: true },
+    model: [M("تمام", { destination: "العمرة", pax: 2, date: "2026-11-20", nights: "3 مكة 2 المدينة" }, true)],
+    expect: [["رسالتين", c => /حاضر، برسل لك العرض اللي عندنا\./.test(c.reply) && /وإذا لك تعليق أو تعديل أنا حاضر\./.test(c.reply)], ["موصى به", c => c.buildBody?.hotel_prefs?.haram === "موصى به"]],
+  },
+  {
+    id: "umrah-haram-complaint-explain", entry: "followup", title: "قرار المالكة: «ليش الفندق بعيد مو بجانب الحرم» على Address Jabal Omar → فكرة عن الفندق (٤ رسائل) بلا بناء",
+    history: [["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-020"]], customer: "ليش الفندق بعيد مو بجانب الحرم",
+    intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAddress Jabal Omar Makkah | مكة | 3 ليالي\nSofitel Shahd Al Madinah | المدينة | 2 ليالي\n" }, model: [FU("أبشر، بحوّل طلبك لزميلي المختص", "handoff")],
+    expect: [["فكرة عن الفندق", c => /بعطيك فكرة عن الفندق/.test(c.reply) && /مشي ٥ دقايق/.test(c.reply) && /٥ نجوم/.test(c.reply) && /في الأبراج أو بجانب الحرم بلغني/.test(c.reply)],
+      ["مجزّأة", c => c.db.wa_admin_messages.filter((m: any) => /فكرة عن الفندق|قريب جداً من الحرم|قريب جدا من الحرم|راقي جد|اطّلع عليه|اطلع عليه/.test(m.body)).length >= 4], ["ما بنى", c => c.buildCalls === 0], ["ما حوّل", c => c.proposals === 0]],
+  },
+  {
+    id: "umrah-haram-second-offer", entry: "followup", title: "قرار المالكة: بعد الشرح «ابي الأبراج» → العرض الثاني (بجانب الحرم) يُبنى",
+    history: [["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-020"], ["C", "ليش الفندق بعيد"], ["T", "على العموم اطّلع عليه، وإذا حبيت فندق في الأبراج أو بجانب الحرم بلغني وأرسل لك العرض الثاني."]],
+    customer: "ابي في الابراج", intakeData: { ...{ destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAddress Jabal Omar Makkah | مكة | 3 ليالي\nSofitel Shahd Al Madinah | المدينة | 2 ليالي\n" }, haram_explained: true },
+    model: [M("تمام", { destination: "العمرة", pax: 2, date: "2026-11-20", nights: "3 مكة 2 المدينة" }, true)],
+    expect: [["بنى", c => c.buildCalls > 0], ["بجانب الحرم", c => c.buildBody?.hotel_prefs?.haram === "بجانب الحرم"], ["❌ لا «حاضر، برسل لك العرض اللي عندنا» مرة ثانية", c => !/العرض اللي عندنا/.test(c.reply)]],
+  },
 ];

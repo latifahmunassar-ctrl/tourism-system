@@ -1566,6 +1566,9 @@ async function _classifyFollowupIntent(transcript: string, lastTalal: string, ba
 // ✈️ ٤ نوفمبر ٢٠٢٦: «هذا شامل الطريان» (حرفين مقلوبين) ما انمسكت → النموذج حاول يحوّل، والحارس منعه، وطلع «وضح لي وش تعدل».
 //    كلمة الطيران بأخطائها الشائعة.
 const FLIGHT_WORD = "(?:ال)?(?:طيران|طريان|طيرن|طياران|تيران|طياره|طيارة|طيارات|رحل[ةه]\\s*جوي[ةه]|تذاكر|تذكر[ةه]|flights?|flight)";
+// 🕋 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): العميل يطلب/يعترض على موقع فندق مكة (بجانب الحرم، الأبراج، بعيد).
+const HARAM_WISH_RE = /(?:بجانب|بجنب|جنب|جمب|قريب\s*من|قدام|مقابل|يطل\s*على|مطل\s*على|على)\s*(?:ال)?حرم|(?:ال)?[أا]براج|برج\s*(?:ال)?ساع[ةه]|بعيد\s*(?:عن|من)\s*(?:ال)?حرم/;
+const HARAM_COMPLAINT_RE = /(?:ال)?فندق\s*(?:\S+\s*){0,3}?بعيد|بعيد\s*(?:عن|من)\s*(?:ال)?حرم|(?:مو|مش|مب|ما\s*هو|ليس)\s*(?:\S+\s*){0,1}?(?:بجانب|جنب|قريب\s*من)\s*(?:ال)?حرم|(?:ال)?[أا]براج|برج\s*(?:ال)?ساع[ةه]|(?:بجانب|جنب|جمب)\s*(?:ال)?حرم/;
 // أسماء المدن (كما في سطور الفنادق بالإنجليزي) → عربي للتوزيعة والرسائل.
 const CITY_AR: Record<string, string> = { Phuket: "بوكيت", Krabi: "كرابي", Bangkok: "بانكوك", Pattaya: "باتايا", "Koh Samui": "ساموي", "Chiang Mai": "شيانغ ماي",
   Makkah: "مكة", "Al Madinah": "المدينة", Madinah: "المدينة", Istanbul: "إسطنبول", Trabzon: "طرابزون", Bursa: "بورصة", "Kuala Lumpur": "كوالالمبور", Langkawi: "لنكاوي", Penang: "بينانغ" };
@@ -3219,6 +3222,12 @@ ${returning
       _mergedData.pending_card = false;
       // رقم اختبار/تشغيل كامل: «تمام، أبشر، شوية والبرنامج عندك.» ثم الـPDF. غيره: الخلفية ترسل رسالة التسليم للموظف.
       outMsgs = (await isFullAiNumber(supabase, from)) ? ["تمام، أبشر، شوية والبرنامج عندك."] : [];
+      // 🕋 قرار المالكة: عمرة والعميل حدّد «بجانب الحرم/الأبراج» → «حاضر، برسل لك العرض اللي عندنا…» (رسالتين) — والعرض بفنادق «موصى به».
+      if (outMsgs.length && _isUmrahDest(String(_mergedData.destination || "") + " " + String(_mergedData.cities || ""))) {
+        const _reqStartI = Date.parse(String(_mergedData.started_at || "")) || 0;
+        const _reqCust = msgs.filter(m => m.who === "العميل" && (Date.parse(m.ts) || 0) >= _reqStartI).map(m => m.body).join(" ") + " " + String(args.body || "");
+        if (HARAM_WISH_RE.test(_reqCust) && !_mergedData.haram_explained && !String(((_mergedData.hotel_prefs || {}) as Record<string, unknown>).haram || "")) { outMsgs = ["حاضر، برسل لك العرض اللي عندنا.", "وإذا لك تعليق أو تعديل أنا حاضر."]; _mergedData.haram_wish = true; }
+      }
       _doAutoBuild = true;   // 🕋 العمرة أيضاً تُبنى تلقائياً (البيانات تدعمها — مكة/المدينة)
     } else {
       // أول اكتمال أو تصحيح → اعرض ملخّص التأكيد الخادمي واطلب «نعم».
@@ -3359,7 +3368,7 @@ ${returning
   for (const raw of outMsgs.slice(0, 3)) {
     // تصحيح تلقائي (أستاذي/تشكيل/فصحى/صياغة ركيكة/ترحيب مكرر/سؤال الحال/تكرار الافتتاح) قبل تنظيف العبارات الممنوعة.
     const _af = guardAutofix(String(raw), { alreadyGreeted, lastCustomer: _lastCustBody, lastTalal: _lastTalalBody });
-    const _apolA = /^أعتذر منك أستاذي|^إيه نعم أستاذي|^تمام، أبشر، شوية والبرنامج عندك\.$/.test(String(raw));   // صيغ المالكة الحرفية — بلا تنظيف
+    const _apolA = /^أعتذر منك أستاذي|^إيه نعم أستاذي|^تمام، أبشر، شوية والبرنامج عندك\.$|^حاضر، برسل لك العرض اللي عندنا\.$|^وإذا لك تعليق أو تعديل أنا حاضر\.$/.test(String(raw));   // صيغ المالكة الحرفية — بلا تنظيف
     const msg = _apolA ? String(raw) : stripBannedPhrases(_af.text);
     if (!msg) continue; // لو الرسالة كانت كلها عبارات ممنوعة، تجاهلها
     if (_af.hits.length && !_apolA) await logGuard(supabase, from, "autofix:" + _af.hits.join("+"), "autofix", "", 1, String(raw), msg);
@@ -3404,7 +3413,7 @@ ${returning
           return_airport: String(_mergedData.return_airport || ""),
           unique_hotel_per_visit: (_mergedData.hotel_prefs as { unique_visit?: boolean } | undefined)?.unique_visit === true,
           exclude_hotels: ((_mergedData.hotel_prefs as { exclude?: string[] } | undefined)?.exclude) || [],
-          hotel_prefs: (_mergedData.hotel_prefs as Record<string, unknown> | undefined) || {},
+          hotel_prefs: { ...(_isUmrahDest(String(_mergedData.destination || "") + " " + String(_mergedData.cities || "")) ? { haram: "موصى به" } : {}), ...((_mergedData.hotel_prefs as Record<string, unknown> | undefined) || {}) },
         });
         if (!prog) {
           // ❌ كان صامت: العميل وصله «شوية والبرنامج عندك» وما جاه شي. الحين: نبلغه بصدق + تنبيه الموظف + نمسح «جاري البناء».
@@ -3699,7 +3708,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     const nd: Record<string, unknown> = { ...idata, ...changed, awaiting_confirm: true, summary_confirmed: false };
     delete nd.auto_program; delete nd.post_program_msgs; delete nd.pending_modify; delete nd.program_final_raw; delete nd.program_final_code;
     await supabase.from("whatsapp_sessions").update({ intake_active: true, intake_data: nd, stage: "new" }).eq("phone", from);
-    await _say(apologyMsg, "followup_ai", "rebuild_apology", JSON.stringify(changed).slice(0, 200));
+    if (apologyMsg) await _say(apologyMsg, "followup_ai", "rebuild_apology", JSON.stringify(changed).slice(0, 200));
     await handleNewLeadIntake({ supabase, from, body: "نعم" });   // نفس مسار «نعم» على الكرت → بناء + PDF
   };
   const _clearPend = async () => { const nd = { ...idata }; delete nd.pending_modify; await supabase.from("whatsapp_sessions").update({ intake_data: nd }).eq("phone", from); delete idata.pending_modify; };
@@ -3970,6 +3979,26 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     if (_already) { await _say("طلب الطيران الدولي عند زميلي المختص، وبيرد عليك بالسعر قريب إن شاء الله.", "followup_ai", "flight_handoff_reassure"); return; }
     await _say("أبشر، حوّلت طلب الطيران الدولي لزميلي المختص يسعّره لك وبيرد عليك قريب إن شاء الله.", "followup_ai", "flight_handoff");
     try { await createProposalAndNotifyAdmin({ supabase, customerPhone: from, profileName, question: "العميل يبي يضيف الطيران الدولي للبرنامج " + String(idata.program_final_code || "") }); } catch (_e) { /* */ }
+    return;
+  }
+  // 🕋 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): «ليش الفندق بعيد / مو بجانب الحرم / ابي الأبراج» على عرض الفندق الموصى به →
+  //    أول مرة: فكرة عن الفندق (رسائل مجزّأة) + «إذا حبيت الأبراج أو بجانب الحرم بلغني». بعدها لو طلب → العرض الثاني (بجانب الحرم).
+  if (_isUmrahReq && String(idata.program_final_raw || "") && HARAM_COMPLAINT_RE.test(_batch)) {
+    if (await _superseded()) return;
+    const _hpH = ((idata.hotel_prefs && typeof idata.hotel_prefs === "object") ? idata.hotel_prefs : {}) as Record<string, unknown>;
+    const _recMakkah = /address\s*jabal\s*omar/i.test(String(idata.program_final_raw || ""));
+    if (!idata.haram_explained && _recMakkah && String(_hpH.haram || "") !== "بجانب الحرم") {
+      const _parts = [
+        "أستاذي، بعطيك فكرة عن الفندق أولاً وبعدين قرّر.",
+        "أولاً الفندق قريب جداً من الحرم، وتقدر تروح له مشي ٥ دقايق من الفندق، أو عبر الباصات المتوفرة على مدار الساعة دون توقف.",
+        "الشي الثاني، الفندق ٥ نجوم وراقي جداً، وأسعاره مميزة جداً مقارنة بالفنادق الثانية.",
+        "على العموم اطّلع عليه، وإذا حبيت فندق في الأبراج أو بجانب الحرم بلغني وأرسل لك العرض الثاني.",
+      ];
+      for (const p of _parts) { const ok = await _say(p, "followup_ai", "haram_hotel_explain", "", true); if (!ok) return; }
+      await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, haram_explained: true } }).eq("phone", from);
+      return;
+    }
+    await _rebuildNow({ hotel_prefs: { ..._hpH, haram: "بجانب الحرم" } }, "");   // رسالة البناء «تمام، أبشر، شوية والبرنامج عندك.» تكفي
     return;
   }
   // ⏳ ٤ نوفمبر ٢٠٢٦: البرنامج قيد التجهيز («تمام، أبشر، شوية والبرنامج عندك») والعميل ينتظر → كان النموذج يقول «طلبك عند زميلي».

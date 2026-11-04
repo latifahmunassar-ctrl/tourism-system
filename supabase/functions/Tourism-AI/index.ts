@@ -3824,6 +3824,12 @@ Deno.serve(async (req) => {
             if (_hp.name) { (req as { preferHotelName?: string }).preferHotelName = String(_hp.name); if (_hp.city) (req as { preferHotelCity?: string }).preferHotelCity = String(_hp.city); }
             if (_hp.feature) (req as { prefFeature?: string }).prefFeature = String(_hp.feature);
             if (_hp.sea_view === true) (req as { prefSeaView?: boolean }).prefSeaView = true;
+            // 🕋 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): العمرة → فنادق «موصى به» أولاً (أو تصنيف قرب الحرم المطلوب) من عمود التصنيف بشيت مكة. ناعم.
+            if (_hp.haram && destKey === "Makkah") {
+              const _hm = await loadHaramProximity();
+              const _keys = Object.entries(_hm).filter(([, tags]) => (tags || []).includes(String(_hp.haram))).map(([k]) => k);
+              if (_keys.length) (req as { preferHotelKeys?: string[] }).preferHotelKeys = _keys;
+            }
             if (!canBuildLocally(req)) return null;
             const r = await buildLocalProgram(req, cityDefs, fetchData as never, {});
             if (!r.ok) return null;
