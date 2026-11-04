@@ -11,7 +11,7 @@
 /* تحديث تلقائي للنسخة — يكسر كاش المتصفح فيُحمّل دائماً أحدث إصدار من الداشبورد.
    لو الرابط بلا ?v=الإصدار الحالي → نعيد التحميل برابط مكسور الكاش (مرة واحدة لكل إصدار). */
 (function () {
-  var BUILD = '2026-11-03-chefchaouen'
+  var BUILD = '2026-11-04-offer2live'
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('v') === BUILD) return;            // أحدث نسخة محمّلة
@@ -5157,7 +5157,11 @@ async function waBridgeSend() {
       'تفضل البرنامج واذا احتجت اي تعديل انا موجوده',
       'تفضل البرنامج واي استفسار او ملاحظه انا حاضره'
     ];
-    const _pool = (window._waOfferRepeat ? _closingsRepeat : _closings);
+    // «عرض آخر» = الطلب المقتبَس صار في الصادر (رُدّ عليه سابقاً). نحسبها لحظة الإرسال من
+    // الحالة الحيّة (أمتن من علم قد يكون قديماً): status != new أو له reply سابق.
+    const _qreq = (waBridgeQuoteReqId && typeof waReqItems !== 'undefined') ? waReqItems[waBridgeQuoteReqId] : null;
+    const _isRepeat = !!window._waOfferRepeat || !!(_qreq && (_qreq.status && _qreq.status !== 'new' || _qreq.reply_text || _qreq.replied_at));
+    const _pool = (_isRepeat ? _closingsRepeat : _closings);
     const _closing = _pool[Math.floor(Math.random() * _pool.length)];
     pdfCaption = (pdfCaption ? pdfCaption + '\n\n' : '') + _closing;
     msg.textContent = '⏳ جاري تجهيز ملف الـPDF...';
