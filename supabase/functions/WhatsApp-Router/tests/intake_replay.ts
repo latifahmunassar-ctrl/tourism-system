@@ -207,8 +207,8 @@ for (const [t, want] of DEST_UNITS) {
   }
 }
 // ── وحدة: الأخطاء الإملائية في اسم الوجهة ──
-for (const [t, want] of [["طيب جيب لي برنامج تلاتد", "تايلاند"], ["ابي ماليزبا", "ماليزيا"], ["وين مطار المدينه", null], ["ابي اغير رحله العوده", null]] as Array<[string, string | null]>) {
-  const got = fuzzyDestination(t);
+for (const [t, want] of [["يعني الي عمره ١٢ سنه يعتر بالغ ؟", null], ["كم عمرها ٧", null], ["ابي عمره", "العمرة"], ["طيب جيب لي برنامج تلاتد", "تايلاند"], ["ابي ماليزبا", "ماليزيا"], ["وين مطار المدينه", null], ["ابي اغير رحله العوده", null]] as Array<[string, string | null]>) {
+  const got = fuzzyDestination(t) ?? (want === "العمرة" || want === null ? extractDestination(t) : null);
   if (got === want) { pass++; realLog(`✅ fuzzy «${t}» → ${want}`); } else { fail++; realLog(`❌ fuzzy «${t}» → ${got} (المتوقع ${want})`); }
 }
 await Deno.remove(TMP).catch(() => {});

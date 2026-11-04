@@ -417,7 +417,13 @@ function fuzzyDestination(text: string): string | null {
   }
   return best ? best.n : null;
 }
+// ٤ نوفمبر ٢٠٢٦: «الي عمره ١٢ سنه» = سنّه، مو عمرة. عبارات العمر تنشال قبل كشف الوجهة.
+function stripAgeWords(t: string): string {
+  return String(t || "").replace(/(?:الي|اللي|كم|الطفل|طفل|ولد|بنت|الولد|البنت|ولدي|بنتي)\s*عمر(?:ه|ها|هم|ة)/g, " ")
+    .replace(/عمر(?:ه|ها|هم)\s*(?:[0-9٠-٩]{1,2}|سن|سنة|سنه|سنوات)/g, " ");
+}
 function extractDestination(text: string): string | null {
+  text = stripAgeWords(text);
   for (const [re, name] of DESTINATION_HINTS) if (re.test(text)) return name;
   return null;
 }
@@ -2319,6 +2325,8 @@ async function handleNewLeadIntake(args: {
   //   فتخطّى سؤال عمر الطفلين؛ وملخّص طلال فيه تاريخ/ليالي يُعتبر كأن العميل قالها).
   const custTranscript = msgs.filter(m => m.who === "العميل").slice(-24).map(m => m.body).join("\n").slice(-4000);
   const prev = (sessRes.data as { intake_data?: unknown } | null)?.intake_data || {};
+  // ٤ نوفمبر ٢٠٢٦: النموذج شاف «prev_requests» (عمرة سابقة) وطلّع «تقصد تايلاند ولا العمرة؟» — ❌ نخفي عنه السجل والحقول الداخلية.
+  const _promptPrev = (() => { const o: Record<string, unknown> = {}; for (const [k, v] of Object.entries(prev as Record<string, unknown>)) if (["destination", "pax", "date", "ages", "cities", "nights", "days", "return_airport"].includes(k)) o[k] = v; return o; })();
   // 👀 قرار المالكة (٤ نوفمبر ٢٠٢٦): طلال يقرأ المحادثة كاملة — رسائل العميل «ما انرد عليها» = بعد آخر رسالة **شافها**
   //    طلال فعلاً (last_seen_in_ts)، مو بعد آخر رد له. رسالة وصلت وهو يكتب ردّه = فاتته → «آه صحيح، الحين انتبهت…».
   const _lastSeenIn = Date.parse(String((prev as Record<string, unknown>).last_seen_in_ts || "")) || 0;
@@ -2337,7 +2345,8 @@ async function handleNewLeadIntake(args: {
   // ⚠️ نفحص **آخر رسائل العميل فقط** (لا كل السجل) — سجل محادثة ملوّث برسائل
   //    عمرة قديمة كان يجعل isUmrah=true خطأً لوجهة جديدة غير عمرة (مثل البوسنة).
   //    الوجهة المخزّنة بالجلسة تثبّت القصد لو ذُكرت العمرة سابقاً ثم لم تتكرّر.
-  const _recentCustUm = msgs.filter(m => m.who === "العميل").slice(-3).map(m => m.body).join("  ");
+  // ٤ نوفمبر ٢٠٢٦: «الي عمره ١٢ سنه» (عُمره = سنّه) انقرت «عمره» = عمرة → «تقصد تايلاند ولا العمرة؟». نشيل عبارات العمر قبل الفحص.
+  const _recentCustUm = stripAgeWords(msgs.filter(m => m.who === "العميل").slice(-3).map(m => m.body).join("  "));
   const isUmrah = _umrahRe.test(_recentCustUm)
     || _umrahRe.test(String((prev as { destination?: string })?.destination || ""))
     || _umrahRe.test(String(_adRefU?.body || "") + " " + String(_adRefU?.headline || ""));
@@ -2560,7 +2569,7 @@ ${returning
 ❌ ممنوع تذكر أي سعر. اجعل **complete=false** في هذه الرسالة وانتظر رد العميل.
   • **لو أكّد العميل** (ايوه/نعم/صح/تمام/أجل/زين): اقفل بـ **complete=true** ورسالة واحدة: «تمام، معلوماتك وصلت، زميلنا بيجهّز لك العرض ويتواصل معك قريباً».
   • **لو صحّح معلومة**: حدّث الحقل وأعد إرسال الملخّص المحدّث (complete=false).
-اليوم: ${today}. المعلومات المجموعة سابقاً: ${JSON.stringify(prev)}.
+اليوم: ${today}. المعلومات المجموعة سابقاً: ${JSON.stringify(_promptPrev)}.
 أعد JSON فقط: {"messages":["رسالة واحدة قصيرة"],"fields":{"destination":"","pax":null,"date":"","ages":"","cities":"","nights":"","days":null},"complete":false}
 • nights = عدد الليالي/الأيام أو التوزيع (مثل «٤ ليالي» أو «٣ مكة ٢ المدينة»). للعمرة **إلزامي** لأن السعر بالليلة. لو أعطى العميل مدى تاريخي (من–إلى) احسب الليالي وضعها هنا. وإلا "".
 • days = **عدد أيام الرحلة** (رقم فقط). لغير العمرة **مطلوب لبناء البرنامج** — اسأله «كم يوم تبون الرحلة؟» بعد التاريخ. لو أعطى مدى تاريخي (من–إلى) احسب الأيام تلقائياً. العمرة تستخدم nights بدلها.
@@ -2771,6 +2780,9 @@ ${returning
     _gm.destination = _oldDest0; _keepOldDest = true;
   } else if (!_wantsDestChange && _oldDest0 && _modelDest && _modelDest !== _oldDest0 && _sameDestish(_oldDest0, _modelDest, msgs)) {
     _gm.destination = (_isUmrahDest(_modelDest) && !_isUmrahDest(_oldDest0)) ? _modelDest : _oldDest0; _keepOldDest = true;   // ليس تبديلاً (مطار إقلاع/صيغة أخرى) → نُبقي الوجهة المخزّنة
+  } else if (_oldDest0 && _modelDest && (_isMultiDest || _modelDest !== _oldDest0) && !extractDestination(_bodyNow) && !fuzzyDestination(_bodyNow)) {
+    // النموذج طلّع وجهة ثانية والعميل ما ذكر أي وجهة برسالته → ❌ لا سؤال «تقصد X ولا Y؟»؛ تبقى المخزّنة.
+    _gm.destination = _oldDest0; _keepOldDest = true;
   } else if (_oldDest0 && _modelDest && (_isMultiDest || _modelDest !== _oldDest0)) {
     // 🔴 تبديل/تناقض وجهة (أعمّ من صياغة «أغيّر الوجهة» — يمسك حتى الأخطاء الكتابية
     //    والدمج): النموذج أخرج وجهة تختلف عن المخزّنة أو وجهتين معاً → اسأل التأكيد بدل
@@ -3129,7 +3141,12 @@ ${returning
         const _ageNs = (String(_mergedData.ages || "").replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))).match(/\d{1,2}/g) || []).map(Number);
         const _kidsRule = _ageNs.filter(a => a <= 10), _teenAd = _ageNs.filter(a => a >= 11 && a <= 17);
         const _claimK = _kc ? +(_kc[1] || _kc[2]) : 0;
-        if (!_bad && _claimK && _ageNs.length && _claimK > _kidsRule.length && _teenAd.length) {
+        const _askRule = /(?:يعتبر|يعتر|يُعتبر|يحسب|يُحسب|محسوب)\s*(?:\S+\s*)?(?:بالغ|كبير)|(?:بالغ|كبير)\s*[؟?]/.test(_bodyNow2) && _ageNs.some(a => a >= 11 && a <= 17);
+        if (!_bad && _askRule) {
+          outMsgs = ["إيه نعم أستاذي، عندنا من عمر 11 سنة وفوق يُعتبر بالغ وله سرير خاص. أجهّز لك البرنامج كذا؟"];
+          _mergedData.pending_card = true; _mergedData.awaiting_confirm = false;
+          await logGuard(supabase, from, "age_rule_explained", "answer_q", "", 1, _bodyNow2, outMsgs[0]);
+        } else if (!_bad && _claimK && _ageNs.length && _claimK > _kidsRule.length && _teenAd.length) {
           const _pax = Number(_mergedData.pax) || _ageNs.length;
           const _ad = _pax - _kidsRule.length;
           const _teenTxt = _teenAd.length === 1 ? `والطفل اللي عمره ${_teenAd[0]} سنة يُعتبر عندنا بالغ` : `والأطفال اللي أعمارهم ${_teenAd.join(" و")} يُعتبرون عندنا بالغين`;
@@ -3232,7 +3249,7 @@ ${returning
   for (const raw of outMsgs.slice(0, 3)) {
     // تصحيح تلقائي (أستاذي/تشكيل/فصحى/صياغة ركيكة/ترحيب مكرر/سؤال الحال/تكرار الافتتاح) قبل تنظيف العبارات الممنوعة.
     const _af = guardAutofix(String(raw), { alreadyGreeted, lastCustomer: _lastCustBody, lastTalal: _lastTalalBody });
-    const _apolA = /^أعتذر منك أستاذي|^تمام، أبشر، شوية والبرنامج عندك\.$/.test(String(raw));   // صيغ المالكة الحرفية — بلا تنظيف
+    const _apolA = /^أعتذر منك أستاذي|^إيه نعم أستاذي|^تمام، أبشر، شوية والبرنامج عندك\.$/.test(String(raw));   // صيغ المالكة الحرفية — بلا تنظيف
     const msg = _apolA ? String(raw) : stripBannedPhrases(_af.text);
     if (!msg) continue; // لو الرسالة كانت كلها عبارات ممنوعة، تجاهلها
     if (_af.hits.length && !_apolA) await logGuard(supabase, from, "autofix:" + _af.hits.join("+"), "autofix", "", 1, String(raw), msg);

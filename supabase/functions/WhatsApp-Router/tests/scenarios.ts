@@ -681,6 +681,16 @@ export const SCENARIOS: Scenario[] = [
       ["❌ لا كرت", c => !/المعلومات صحيحة/.test(c.reply)], ["ما بنى", c => c.buildCalls === 0]],
   },
   {
+    id: "age-rule-question", title: "٤ نوفمبر: «يعني الي عمره ١٢ سنه يعتر بالغ ؟» → «إيه نعم أستاذي…» (مو «تايلاند ولا العمرة؟»)",
+    history: [["T", RESET], ["C", "تايلاند"], ["C", "الأطفال ٣ خبرتكً"], ["T", "أعتذر منك أستاذي، أنت خبرتني إن أعمار الأطفال 12 و10 و9… صح؟"]],
+    customer: "يعني الي عمره ١٢ سنه يعتر بالغ ؟",
+    intakeData: { destination: "تايلاند", date: "17/11/2026", pax: 6, ages: "12 و 10 و 9", days: 9, cities: "بوكيت", asked_children: true, pending_card: true,
+      prev_requests: [{ destination: "العمرة", pax: 5, program_code: "MK-2026-011" }] },
+    model: [M("تمام", { destination: "تايلاند", pax: 6, ages: "12 و 10 و 9", date: "17/11/2026", days: 9, cities: "بوكيت" })],
+    expect: [["جواب مباشر", c => /^إيه نعم أستاذي، عندنا من عمر 11 سنة وفوق يُعتبر بالغ وله سرير خاص\. أجهّز لك البرنامج كذا؟$/.test(c.reply.trim())],
+      ["❌ لا «تايلاند ولا العمرة»", c => !/ولا العمرة|لبس/.test(c.reply)], ["الوجهة تايلاند", c => c.intake.destination === "تايلاند"], ["النموذج ما شاف السجل", c => !/MK-2026-011|prev_requests/.test(c.modelSystem)]],
+  },
+  {
     id: "pending-dest-wenkom", title: "٢ نوفمبر: سؤال وجهة معلّق والعميل كتب «وينكم» → تبقى العمرة",
     history: [["T", RESET], ["C", "عمره"], ["C", "مسقط"], ["T", "تمام عشان ما يصير لبس: تقصد وجهتك عمرة ولا عمان؟"]],
     customer: "وينكم",
