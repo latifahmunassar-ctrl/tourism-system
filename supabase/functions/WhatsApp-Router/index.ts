@@ -4470,6 +4470,20 @@ async function handleMessage(args: {
     const _idata = ((session as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
     const _oldDest = String(_idata.destination || hadDest || "").trim();
     const _reConfirmed = _idata.asked_dest_change === true && String(_idata.pending_dest || "").trim() === detectedDest;
+    // 🕋 ٤ نوفمبر ٢٠٢٦ (حي): «احتاج برامج مكه» وطلبه السابق عمرة → «تقصد تبي تغير الوجهة من العمرة إلى العمرة؟» (عمود الوجهة كان قديم).
+    //    نفس الوجهة (أو عمرة↔مكة) = طلب جديد لنفس الوجهة، مو تبديل → طلب نظيف + «أكيد طبعا، اتفضل، إيش هو طلبك؟».
+    if (_oldDest && (_oldDest === detectedDest || (_isUmrahDest(_oldDest) && _isUmrahDest(detectedDest)))) {
+      const _prevReq = { destination: _idata.destination, pax: _idata.pax, date: _idata.date, nights: _idata.nights, days: _idata.days, program_code: _idata.program_final_code, at: new Date().toISOString() };
+      const _hist = Array.isArray(_idata.prev_requests) ? (_idata.prev_requests as unknown[]) : [];
+      await supabase.from("whatsapp_sessions").update({ intake_active: true, stage: "new", destination: _oldDest,
+        intake_data: { destination: _oldDest, started_at: new Date(Date.now() - 60_000).toISOString(), last_seen_in_ts: new Date().toISOString(), prev_requests: _idata.program_final_code ? [..._hist, _prevReq].slice(-5) : _hist } }).eq("phone", from);
+      await logGuard(supabase, from, "same_dest_new_request", "fresh_intake", `${_oldDest} ← ${detectedDest}`, 1, text, "");
+      const _hasDetails = /\d|[٠-٩]|شخص|اشخاص|أشخاص|نفر|كبار|بالغ|اطفال|أطفال|ليال|ليالي|يوم|ايام|أيام|شهر/.test(text);
+      if (_hasDetails) { await handleNewLeadIntake({ supabase, from, body: text }); return; }
+      await sendCustomerReply(supabase, from, "أكيد طبعا، اتفضل، إيش هو طلبك؟");
+      try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: "أكيد طبعا، اتفضل، إيش هو طلبك؟", sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+      return;
+    }
     if (_oldDest && !_reConfirmed) {
       _idata.asked_dest_change = true; _idata.pending_dest = detectedDest;
       _idata.summary_confirmed = false; _idata.awaiting_confirm = false;

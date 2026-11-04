@@ -1067,4 +1067,13 @@ export const SCENARIOS: Scenario[] = [
     model: [M("تمام", { destination: "العمرة", pax: 2, date: "2026-11-20", nights: "3 مكة 2 المدينة" }, true)],
     expect: [["بنى", c => c.buildCalls > 0], ["بجانب الحرم", c => c.buildBody?.hotel_prefs?.haram === "بجانب الحرم"], ["❌ لا «حاضر، برسل لك العرض اللي عندنا» مرة ثانية", c => !/العرض اللي عندنا/.test(c.reply)]],
   },
+  {
+    id: "msg-same-dest-umrah-makkah", entry: "message", sessionIntakeActive: false, title: "٤ نوفمبر (حي): برنامج عمرة سابق + «احتاج برامج مكه» → ❌ لا «تغير الوجهة من العمرة إلى العمرة»؛ طلب جديد + «أكيد طبعا، اتفضل، إيش هو طلبك؟»",
+    history: [["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-013"], ["T", "تفضل أستاذي، برنامجك صار جاهز. أي تعديل في البرنامج أنا حاضر."]],
+    customer: "احتاج برامج مكه", session: { destination: "تايلاند" },
+    intakeData: { destination: "العمرة", pax: 3, date: "2026-11-06", nights: "4 مكة 2 المدينة", summary_confirmed: true, program_final_code: "MK-2026-013" },
+    model: [M("حياك الله", { destination: "العمرة" })],
+    expect: [["❌ لا سؤال تبديل", c => !/تغي?ّ?ر الوجهة/.test(c.reply)], ["الرد", c => /أكيد طبعا، اتفضل، إيش هو طلبك؟/.test(c.reply)], ["طلب نظيف", c => !c.intake.pax && /عمر/.test(String(c.intake.destination))],
+      ["السابق بالسجل", c => (c.intake.prev_requests || []).some((r: any) => r.program_code === "MK-2026-013")]],
+  },
 ];
