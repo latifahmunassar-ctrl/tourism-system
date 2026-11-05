@@ -3236,6 +3236,7 @@ ${returning
       // رقم اختبار/تشغيل كامل: «تمام، أبشر، شوية والبرنامج عندك.» ثم الـPDF. غيره: الخلفية ترسل رسالة التسليم للموظف.
       outMsgs = (await isFullAiNumber(supabase, from)) ? ["تمام، أبشر، شوية والبرنامج عندك."] : [];
       // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): بناء «أرخص العروض» → جملة المالكة بدل «تمام، أبشر، شوية والبرنامج عندك.»
+      if (outMsgs.length && _mergedData.abraj_ack === true && _mergedData.program_cheapest !== true) outMsgs = ["إلا فيه من الأبراج، الحين أرسل لك إياه."];   // ٥ نوفمبر ٢٠٢٦ (قرار المالكة)
       if (outMsgs.length && _mergedData.program_cheapest === true) outMsgs = ["حاضر، أبشر، برسل لك الحين خيار ثالث، وأتوقع هو الأرخص من بين الخيارات اللي أرسلتها لك سابقاً. اطّلع عليه وإن شاء الله يعجبك."];
       // 🕋 قرار المالكة: عمرة والعميل حدّد «بجانب الحرم/الأبراج» → «حاضر، برسل لك العرض اللي عندنا…» (رسالتين) — والعرض بفنادق «موصى به».
       if (outMsgs.length && _isUmrahDest(String(_mergedData.destination || "") + " " + String(_mergedData.cities || ""))) {
@@ -3383,7 +3384,7 @@ ${returning
   for (const raw of outMsgs.slice(0, 3)) {
     // تصحيح تلقائي (أستاذي/تشكيل/فصحى/صياغة ركيكة/ترحيب مكرر/سؤال الحال/تكرار الافتتاح) قبل تنظيف العبارات الممنوعة.
     const _af = guardAutofix(String(raw), { alreadyGreeted, lastCustomer: _lastCustBody, lastTalal: _lastTalalBody });
-    const _apolA = /^حاضر، أبشر، برسل لك الحين خيار ثالث|^أعتذر منك أستاذي|^إيه نعم أستاذي|^تمام، أبشر، شوية والبرنامج عندك\.$|^حاضر، برسل لك العرض اللي عندنا\.$|^وإذا لك تعليق أو تعديل أنا حاضر\.$/.test(String(raw));   // صيغ المالكة الحرفية — بلا تنظيف
+    const _apolA = /^إلا فيه من الأبراج، الحين أرسل لك إياه\.$|^حاضر، أبشر، برسل لك الحين خيار ثالث|^أعتذر منك أستاذي|^إيه نعم أستاذي|^تمام، أبشر، شوية والبرنامج عندك\.$|^حاضر، برسل لك العرض اللي عندنا\.$|^وإذا لك تعليق أو تعديل أنا حاضر\.$/.test(String(raw));   // صيغ المالكة الحرفية — بلا تنظيف
     const msg = _apolA ? String(raw) : stripBannedPhrases(_af.text);
     if (!msg) continue; // لو الرسالة كانت كلها عبارات ممنوعة، تجاهلها
     if (_af.hits.length && !_apolA) await logGuard(supabase, from, "autofix:" + _af.hits.join("+"), "autofix", "", 1, String(raw), msg);
@@ -3714,6 +3715,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     delete nd.auto_program; delete nd.post_program_msgs; delete nd.pending_modify; delete nd.program_final_raw; delete nd.program_final_code;
     nd.program_modified = true;   // ٥ نوفمبر ٢٠٢٦: البرنامج الجاي معدّل → رسالة الختام «هذا البرنامج المعدّل…» (مو «برنامجك صار جاهز»)
     nd.program_cheapest = changed.program_cheapest === true;   // ٥ نوفمبر ٢٠٢٦: «أرخص العروض» — رسالة ختام خاصة لهذا البناء بس
+    nd.abraj_ack = changed.abraj_ack === true;   // ٥ نوفمبر ٢٠٢٦: أول طلب الأبراج → «إلا فيه من الأبراج، الحين أرسل لك إياه.»
     await supabase.from("whatsapp_sessions").update({ intake_active: true, intake_data: nd, stage: "new" }).eq("phone", from);
     const _bad = _cardVsCustomer(nd, _batch);
     if (_bad) { await supabase.from("whatsapp_sessions").update({ intake_active: false, intake_data: { ...idata } }).eq("phone", from); await _say(_clarifyMsg(_bad), "card_contradicts_customer", "clarify", _bad, true); return; }
@@ -3733,6 +3735,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     delete nd.auto_program; delete nd.post_program_msgs; delete nd.pending_modify; delete nd.program_final_raw; delete nd.program_final_code;
     nd.program_modified = true;   // ٥ نوفمبر ٢٠٢٦: البرنامج الجاي معدّل → رسالة الختام «هذا البرنامج المعدّل…» (مو «برنامجك صار جاهز»)
     nd.program_cheapest = changed.program_cheapest === true;   // ٥ نوفمبر ٢٠٢٦: «أرخص العروض» — رسالة ختام خاصة لهذا البناء بس
+    nd.abraj_ack = changed.abraj_ack === true;   // ٥ نوفمبر ٢٠٢٦: أول طلب الأبراج → «إلا فيه من الأبراج، الحين أرسل لك إياه.»
     await supabase.from("whatsapp_sessions").update({ intake_active: true, intake_data: nd, stage: "new" }).eq("phone", from);
     if (apologyMsg) await _say(apologyMsg, "followup_ai", "rebuild_apology", JSON.stringify(changed).slice(0, 200));
     await handleNewLeadIntake({ supabase, from, body: "نعم" });   // نفس مسار «نعم» على الكرت → بناء + PDF
@@ -3748,9 +3751,10 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
       delete idata.haram_madinah_asked;
       const _mtQ = (idata.haram_abraj === true || ABRAJ_RE.test(_batch)) ? { makkah_tag: "الأبراج" } : {};
       const _tagQ = idata.haram_tag === "قريب من الحرم" ? "قريب من الحرم" : "بجانب الحرم";
-      if (_ans === "yes") { await _rebuildNow({ hotel_prefs: { ..._hpQ, haram: _tagQ, ..._mtQ }, haram_madinah_asked: null }, ""); return; }
+      const _ackQ = _mtQ.makkah_tag && _hpQ.makkah_tag !== "الأبراج" ? { abraj_ack: true } : {};
+      if (_ans === "yes") { await _rebuildNow({ hotel_prefs: { ..._hpQ, haram: _tagQ, ..._mtQ }, haram_madinah_asked: null, ..._ackQ }, ""); return; }
       const _keepM = madinahHotelFromRaw(String(idata.program_final_raw || ""));
-      await _rebuildNow({ hotel_prefs: { ..._hpQ, haram: _tagQ, ..._mtQ, ...(_keepM ? { haram_keep: [_keepM] } : {}) }, haram_madinah_asked: null }, "");
+      await _rebuildNow({ hotel_prefs: { ..._hpQ, haram: _tagQ, ..._mtQ, ...(_keepM ? { haram_keep: [_keepM] } : {}) }, haram_madinah_asked: null, ..._ackQ }, "");
       return;
     }
     // ردّ ما له علاقة بالسؤال → نشيل العلم ونكمل المسار العادي.
@@ -3762,6 +3766,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     const _hpH = ((idata.hotel_prefs && typeof idata.hotel_prefs === "object") ? idata.hotel_prefs : {}) as Record<string, unknown>;
     const _abraj = ABRAJ_RE.test(_batch) || idata.haram_abraj === true;
     const _mt = _abraj ? { makkah_tag: "الأبراج" } : {};
+    const _ack = _abraj && _hpH.makkah_tag !== "الأبراج" ? { abraj_ack: true } : {};
     // «قريب من الحرم» (وما ذكر بجانب/الأبراج) → تصنيف «قريب من الحرم»؛ غيره «بجانب الحرم».
     const _tag = (HARAM_NEAR_RE.test(_batch) && !HARAM_NEXT_RE.test(_batch)) || (idata.haram_tag === "قريب من الحرم" && !HARAM_NEXT_RE.test(_batch)) ? "قريب من الحرم" : "بجانب الحرم";
     let _madAns: "yes" | "no" | null = /المدين/.test(_batch) ? (haramMadinahAnswer(_batch) || "yes") : null;
@@ -3774,8 +3779,8 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
       await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, haram_madinah_asked: true, haram_tag: _tag, ...(_abraj ? { haram_abraj: true } : {}) } }).eq("phone", from);
       return;
     }
-    if (_madAns === "no") { const _keepM = madinahHotelFromRaw(String(idata.program_final_raw || "")); await _rebuildNow({ hotel_prefs: { ..._hpH, haram: _tag, ..._mt, ...(_keepM ? { haram_keep: [_keepM] } : {}) } }, ""); return; }
-    await _rebuildNow({ hotel_prefs: { ..._hpH, haram: _tag, ..._mt } }, "");   // رسالة البناء «تمام، أبشر، شوية والبرنامج عندك.» تكفي
+    if (_madAns === "no") { const _keepM = madinahHotelFromRaw(String(idata.program_final_raw || "")); await _rebuildNow({ hotel_prefs: { ..._hpH, haram: _tag, ..._mt, ...(_keepM ? { haram_keep: [_keepM] } : {}) }, ..._ack }, ""); return; }
+    await _rebuildNow({ hotel_prefs: { ..._hpH, haram: _tag, ..._mt }, ..._ack }, "");   // رسالة البناء «تمام، أبشر، شوية والبرنامج عندك.» تكفي
   };
   // 😁 ٥ نوفمبر ٢٠٢٦ (قرار المالكة): «غالي» على عرض الأبراج → «😁» ثم «إيوه، فنادق الأبراج غالية.» ثم عرض البديل الأرخص — ❌ لا اعتذار ولا «وش الغلط» ولا بناء.
   {
