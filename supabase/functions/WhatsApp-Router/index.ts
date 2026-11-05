@@ -3758,7 +3758,10 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     const _mt = _abraj ? { makkah_tag: "الأبراج" } : {};
     // «قريب من الحرم» (وما ذكر بجانب/الأبراج) → تصنيف «قريب من الحرم»؛ غيره «بجانب الحرم».
     const _tag = (HARAM_NEAR_RE.test(_batch) && !HARAM_NEXT_RE.test(_batch)) || (idata.haram_tag === "قريب من الحرم" && !HARAM_NEXT_RE.test(_batch)) ? "قريب من الحرم" : "بجانب الحرم";
-    const _madAns = /المدين/.test(_batch) ? (haramMadinahAnswer(_batch) || "yes") : null;
+    let _madAns: "yes" | "no" | null = /المدين/.test(_batch) ? (haramMadinahAnswer(_batch) || "yes") : null;
+    // ٥ نوفمبر ٢٠٢٦ (حي): سؤال المدينة **مرة وحدة بالطلب**. العرض الثاني انبنى (hotel_prefs.haram موجود) والعميل طلب تغيير ثاني
+    //    («مافي عندكم فنادق في الأبراج؟») → كان يعيد «وحتى فندق المدينة…؟». الحين: فندق المدينة الحالي يبقى، ونغيّر مكة بس.
+    if (!_madAns && String(_hpH.haram || "")) _madAns = "no";
     if (!_madAns && madinahHotelFromRaw(String(idata.program_final_raw || ""))) {
       const ok = await _say(`تمام أستاذي، وحتى فندق المدينة أغيّره لك ${_tag}؟`, "followup_ai", "haram_madinah_ask", "", true);
       if (!ok) return;
