@@ -3934,8 +3934,16 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   const _askModify = async (changed: Record<string, unknown>) => {
     if (await _superseded()) return;
     if (!(await _medGate(changed))) return;
+    const _q = _modifyConfirmQ(changed);
+    // 🛡️ حارس (٥ نوفمبر ٢٠٢٦، قرار المالكة — طلع ٤ مرات): «تمام، تقصد نعدّل البرنامج كذا؟» بلا أي تفاصيل = سؤال مبهم مزعج،
+    //    و«ايوه» عليه كانت تعيد بناء نفس البرنامج. الحين: ❌ لا يُرسل أبداً ولا يُحفظ pending_modify — نطلب التوضيح.
+    if (/^تمام، تقصد نعدّ?ل البرنامج كذا؟$/.test(_q)) {
+      await logGuard(supabase, from, "vague_modify_q", "reject", JSON.stringify(changed).slice(0, 200), 1, _q, "");
+      await _say("تمام أستاذي، وضّح لي وش تحب أغيّر في البرنامج؟", "followup_ai", "modify_clarify", "", true);
+      return;
+    }
     await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, pending_modify: changed } }).eq("phone", from);
-    await _say(_modifyConfirmQ(changed), "followup_ai", "modify_confirm_q", JSON.stringify(changed).slice(0, 200));
+    await _say(_q, "followup_ai", "modify_confirm_q", JSON.stringify(changed).slice(0, 200));
   };
   // ✈️ طلب مطار العودة (حتميّ، بلا نموذج) — العمرة فقط.
   const _frustratedRe = /ليش\s*ما\s*(?:ترد|تردون)|ما\s*تردون|بطي[ءئ]?|بطيئين|متأخر|تعبان|سي[ءئ]|زفت|عيب\s*عليك|مو\s*كل\s*شوي|كل\s*شوي[هة]?\s*(?:اسأل|أسأل|اقول|أقول)|خبرتك|قلتلك|وبعدين\s*معا?ك|كم\s*مر[ةه]|(?:^|\s)افهم|ما\s*(?:تفهم|فهمت)|مو\s*فاهم|غبي|قلت\s*لك|(?:أ|ا)خبرك|يا\s*بن\s*الحلال|يابن\s*الحلال|للمر[ةه]\s*ال/.test(_batch);

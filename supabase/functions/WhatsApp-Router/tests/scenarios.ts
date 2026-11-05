@@ -1058,6 +1058,13 @@ export const SCENARIOS: Scenario[] = [
     expect: [["بنى", c => c.buildCalls > 0], ["جملة المالكة", c => c.reply.trim().startsWith("حاضر، أبشر، برسل لك الحين خيار ثالث، وأتوقع هو الأرخص من بين الخيارات اللي أرسلتها لك سابقاً. اطّلع عليه وإن شاء الله يعجبك.")], ["❌ لا «شوية والبرنامج عندك»", c => !/شوية والبرنامج عندك/.test(c.reply)], ["بلا موصى به", c => !c.buildBody?.hotel_prefs?.haram]],
   },
   {
+    id: "guard-vague-modify-q", entry: "followup", title: "٥ نوفمبر (حارس، طلع ٤ مرات): تعديل بلا أي تفاصيل → ❌ لا «تمام، تقصد نعدّل البرنامج كذا؟»؛ «تمام أستاذي، وضّح لي وش تحب أغيّر في البرنامج؟» بلا pending_modify",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-001"]], customer: "عدل البرنامج",
+    intakeData: { destination: "تايلاند", pax: 2, ages: "", date: "2026-12-01", days: 7, cities: "بوكيت", summary_confirmed: true, program_final_code: "TH-2026-001", program_final_raw: "DEST:تايلاند\nHOTELS:\nX | Phuket | 4 نجوم | Deluxe | 300 ريال/ليلة | 6 ليالي\n" },
+    intent: { intent: "modify", yes_no: "none", frustrated: false, meaning: "يبي يعدل" }, model: [FU("تمام", "modify", { destination: "تايلاند" })],
+    expect: [["❌ لا السؤال المبهم", c => !/تقصد نعدّ?ل البرنامج كذا/.test(c.reply)], ["يطلب التوضيح", c => /وضّح لي وش تحب أغيّر في البرنامج/.test(c.reply)], ["بلا pending_modify", c => !c.intake.pending_modify], ["ما بنى", c => c.buildCalls === 0]],
+  },
+  {
     id: "umrah-recommended-default", entry: "intake", title: "قرار المالكة: أي طلب عمرة → البناء يطلب فنادق «موصى به» (hotel_prefs.haram)",
     history: [["T", RESET], ["C", "عمره"], ["C", "شخصين كبار"], ["C", "٣ مكه ٢ المدينه"], ["C", "٢٠ نوفمبر"], ["T", "فهمت عليك، يعني تقصد عمرة لشخصين…، صحيح أخي الكريم؟"]],
     customer: "صحيح", intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, asked_nights: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", awaiting_confirm: true },
