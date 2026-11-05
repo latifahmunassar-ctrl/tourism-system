@@ -3652,6 +3652,9 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
       if (_q) { const _ack = `آه صحيح، الحين انتبهت إنك ذكرت «${_q.length > 60 ? _q.slice(0, 60) + "…" : _q}».`; await sendCustomerReply(supabase, from, _ack); try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: _ack, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ } }
     }
     if (raw) await sendWhatsapp(from, reply); else await sendCustomerReply(supabase, from, reply);
+    // ٥ نوفمبر ٢٠٢٦: نحدّث idata أيضاً — أي حفظ لاحق بـ`{ ...idata, … }` (مثل haram_explained) كان يمسح last_seen_in_ts بقيمة قديمة
+    //    → الرسالة اللي انرد عليها تنحسب «فاتته» ويبدأ الرد التالي «آه صحيح، الحين انتبهت إنك ذكرت…».
+    if (_myLatest) idata.last_seen_in_ts = _myLatest;
     try { if (_myLatest) { const { data: _ss } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", from).maybeSingle(); const _dd = ((_ss as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>; await supabase.from("whatsapp_sessions").update({ intake_data: { ..._dd, last_seen_in_ts: _myLatest } }).eq("phone", from); } } catch (_e) { /* */ }
     try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: raw ? reply : stripBannedPhrases(reply), sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
     await logGuard(supabase, from, guard, action, reason, 1, text, reply);

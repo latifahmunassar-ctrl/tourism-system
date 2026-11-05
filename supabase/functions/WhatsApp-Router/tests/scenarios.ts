@@ -1070,6 +1070,13 @@ export const SCENARIOS: Scenario[] = [
       ["باقي التفاصيل", c => /مشي ٥ دقايق/.test(c.reply) && /في الأبراج أو بجانب الحرم بلغني/.test(c.reply)], ["ما بنى", c => c.buildCalls === 0], ["ما حوّل", c => c.proposals === 0]],
   },
   {
+    id: "umrah-haram-explain-keeps-seen", entry: "followup", seenAt: 1, title: "٥ نوفمبر (حي): بعد شرح فندق مكة انحفظ haram_explained بنسخة قديمة مسحت last_seen_in_ts → الرسالة اللي انرد عليها اعتُبرت «فاتته» والرد التالي بدأ «آه صحيح، الحين انتبهت إنك ذكرت…»",
+    history: [["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-020"]], customer: "لا احتاج فنادق بجانب الحرم",
+    intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAddress Jabal Omar Makkah | مكة | 3 ليالي\nSofitel Shahd Al Madinah | المدينة | 2 ليالي\n" }, model: [FU("أبشر، بحوّل طلبك لزميلي المختص", "handoff")],
+    expect: [["الشرح انرسل", c => /نبذة عنه/.test(c.reply)], ["haram_explained انحفظ", c => c.intake.haram_explained === true],
+      ["آخر رسالة شافها = رسالة العميل (ما انمسحت)", c => { const last = (c.db.wa_message_audit || []).map((m: any) => m.received_at).sort().at(-1); return !!c.intake.last_seen_in_ts && Date.parse(c.intake.last_seen_in_ts) >= Date.parse(last); }]],
+  },
+  {
     id: "umrah-haram-makkah-explicit", entry: "followup", title: "٥ نوفمبر: العميل ذكر مكة صراحة («فندق مكة بعيد عن الحرم») → بلا شرط «إذا كنت تقصد»؛ «أستاذي، بعطيك فكرة عن الفندق أولاً…»",
     history: [["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-020"]], customer: "فندق مكه بعيد عن الحرم",
     intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAddress Jabal Omar Makkah | مكة | 3 ليالي\nSofitel Shahd Al Madinah | المدينة | 2 ليالي\n" }, model: [FU("أبشر، بحوّل طلبك لزميلي المختص", "handoff")],
