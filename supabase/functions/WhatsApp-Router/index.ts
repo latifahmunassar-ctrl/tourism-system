@@ -3727,7 +3727,8 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   //    إيه → الفندقين بجانب الحرم. لا → فندق مكة بس، والمدينة يبقى نفس الفندق والغرفة (haram_keep).
   if (idata.haram_madinah_asked === true && _isUmrahReq && String(idata.program_final_raw || "")) {
     const _hpQ = ((idata.hotel_prefs && typeof idata.hotel_prefs === "object") ? idata.hotel_prefs : {}) as Record<string, unknown>;
-    const _ans = haramMadinahAnswer(_batch);
+    // ٥ نوفمبر ٢٠٢٦ (حي): «ياريت» ما انمسكت → طلع «تقصد نعدل البرنامج كذا؟». الكلمات أولاً، وإلا تصنيف النموذج (موافقة/رفض).
+    const _ans = haramMadinahAnswer(_batch) || (/^yes/.test(String(_cls?.yes_no || "")) ? "yes" : String(_cls?.yes_no || "") === "no" ? "no" : null);
     if (_ans) {
       delete idata.haram_madinah_asked;
       if (_ans === "yes") { await _rebuildNow({ hotel_prefs: { ..._hpQ, haram: "بجانب الحرم" }, haram_madinah_asked: null }, ""); return; }
@@ -5934,7 +5935,7 @@ function haramMadinahAnswer(text: string): "yes" | "no" | null {
     if (!/غيّ?ر|بدّ?ل/.test(t.replace(/(?:لا|ما)\s*(?:تغيّ?ر|تبدّ?ل)/g, ""))) return "no";
   }
   if (/(?:لا|ما)\s*(?:تغيّ?ر|تبدّ?ل)/.test(t)) return "no";
-  if (isYesish(t) || /^\s*(?:ايوه|إيوه|أيوه|ايوا|أيوا|ايه|إيه|اي|أي|نعم|اكيد|أكيد|يب|يس|اوكي|ok)\b/i.test(t) || /غيّ?ر|بدّ?ل|حتى\s*(?:فندق\s*)?المدين|المدين[ةه]?\s*(?:بعد|كمان|برضو|برضه)|الثنين|الاثنين|كلهم|كلها/.test(t)) return "yes";
+  if (isYesish(t) || /^\s*(?:ايوه|إيوه|أيوه|ايوا|أيوا|ايه|إيه|اي|أي|نعم|اكيد|أكيد|يب|يس|اوكي|ok)\b/i.test(t) || /يا\s*ريت|ياريت|ليت|ابي|أبي|ابغى|أبغى|ودي|طبعا|طبعاً|حلو|ممتاز|يكون\s*أحسن|يكون\s*احسن|غيّ?ر|بدّ?ل|حتى\s*(?:فندق\s*)?المدين|المدين[ةه]?\s*(?:بعد|كمان|برضو|برضه)|الثنين|الاثنين|كلهم|كلها/.test(t)) return "yes";
   return null;
 }
 // فندق المدينة (الاسم + نوع الغرفة) من سطور HOTELS في البرنامج المرسل.
