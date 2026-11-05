@@ -1874,14 +1874,15 @@ async function mkFlightApply(){
 //          مسبح خاص — لا نقبل Pool View/Pool Access/Poolside (إطلالة أو مسبح مشترك)
 //  sea   = إطلالة بحرية (Sea View/Seaview/Ocean/Beachfront/بحر)
 // غير ذلك ('' أو 'normal') → كل الفنادق.
-const ACC_KIND_LABEL = { villa:'فيلا', pool:'فيلا مع مسبح خاص', sea:'إطلالة بحرية' };
+const ACC_KIND_LABEL = { villa:'فيلا', pool:'فيلا مع مسبح خاص', ppool:'Private Pool (أي غرفة/جناح بمسبح خاص)', sea:'إطلالة بحرية' };
 function _accKindMatch(h, mode){
   const rt = String((h && h.room_type) || ''), nm = String((h && h.name) || '');
   const isVilla = /villa|فيلا/i.test(rt);
   if(mode === 'villa') return isVilla;
-  if(mode === 'pool'){
+  if(mode === 'pool' || mode === 'ppool'){
     const privPool = /private\s*pool|pool\s*villa|plunge\s*pool|مسبح\s*خاص/i.test(rt)
       || (/pool|مسبح/i.test(rt) && !/pool\s*-?\s*(?:view|access|side)|poolside/i.test(rt));
+    if(mode === 'ppool') return privPool;   // Private Pool: أي غرفة/جناح/فيلا فيها مسبح خاص (يشمل The Slate)
     return (isVilla || /villa|فيلا/i.test(nm)) && privPool;
   }
   if(mode === 'sea') return /sea\s*-?\s*view|seaview|ocean|sea\s*front|beach\s*front|بحر/i.test(rt);
@@ -4368,7 +4369,7 @@ const nameCell = `<td class="hsw-cell" data-hidx="${hidx}" data-region="${hswEsc
 const _vm = vMode(hidx);
 const _isTH = /تايلاند|تايلند|thailand/i.test(String(dest||''));
 // 🇹🇭 تايلاند: نفس قائمة بالي + «إطلالة بحرية» — الاختيار يجيب أرخص غرفة مطابقة وقائمة الفنادق تنحصر عليها من الأرخص.
-const villaSel = _isTH ? `<select class="villa-sel" title="نوع السكن → أرخص غرفة مطابقة بنفس المدينة، وقائمة الفنادق تنحصر عليها من الأرخص" onchange="changeHotelVilla(${hidx}, this.value)"><option value=""${_vm?'':' selected'}>🏡 نوع السكن…</option><option value="normal"${_vm==='normal'?' selected':''}>الكل</option><option value="pool"${_vm==='pool'?' selected':''}>فيلا مع مسبح خاص</option><option value="sea"${_vm==='sea'?' selected':''}>إطلالة بحرية</option></select>`
+const villaSel = _isTH ? `<select class="villa-sel" title="نوع السكن → أرخص غرفة مطابقة بنفس المدينة، وقائمة الفنادق تنحصر عليها من الأرخص" onchange="changeHotelVilla(${hidx}, this.value)"><option value=""${_vm?'':' selected'}>🏡 نوع السكن…</option><option value="normal"${_vm==='normal'?' selected':''}>الكل</option><option value="pool"${_vm==='pool'?' selected':''}>فيلا مع مسبح خاص</option><option value="ppool"${_vm==='ppool'?' selected':''}>Private Pool (أي غرفة بمسبح خاص)</option><option value="sea"${_vm==='sea'?' selected':''}>إطلالة بحرية</option></select>`
   : _regionIsBali(p[1]||'') ? `<select class="villa-sel" title="اختاري نوع السكن → أرخص فيلا بنفس المنطقة، وقائمة الفنادق تنحصر على الفلل" onchange="changeHotelVilla(${hidx}, this.value)"><option value=""${_vm?'':' selected'}>🏡 نوع السكن…</option><option value="normal"${_vm==='normal'?' selected':''}>عادي (كل الفنادق)</option><option value="villa"${_vm==='villa'?' selected':''}>فيلا</option><option value="pool"${_vm==='pool'?' selected':''}>فيلا مع مسبح خاص</option></select>` : '';
 // 🇿🇦 جنوب أفريقيا: قائمة «نوع السكن» تحت نوع الغرفة — تحصر قائمة تبديل الفندق على فندق/محمية.
 const _isSA = /جنوب\s*أفريقيا|south\s*africa/i.test(String(dest||''));
