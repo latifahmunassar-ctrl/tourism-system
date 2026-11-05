@@ -3715,6 +3715,22 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     await handleNewLeadIntake({ supabase, from, body: "نعم" });   // نفس مسار «نعم» على الكرت → بناء + PDF
   };
   const _clearPend = async () => { const nd = { ...idata }; delete nd.pending_modify; await supabase.from("whatsapp_sessions").update({ intake_data: nd }).eq("phone", from); delete idata.pending_modify; };
+  // 🕋 ٥ نوفمبر ٢٠٢٦ (قرار المالكة): ردّ العميل على «وحتى فندق المدينة أغيّره لك بجانب الحرم؟»
+  //    إيه → الفندقين بجانب الحرم. لا → فندق مكة بس، والمدينة يبقى نفس الفندق والغرفة (haram_keep).
+  if (idata.haram_madinah_asked === true && _isUmrahReq && String(idata.program_final_raw || "")) {
+    const _hpQ = ((idata.hotel_prefs && typeof idata.hotel_prefs === "object") ? idata.hotel_prefs : {}) as Record<string, unknown>;
+    const _ans = haramMadinahAnswer(_batch);
+    if (_ans) {
+      delete idata.haram_madinah_asked;
+      if (_ans === "yes") { await _rebuildNow({ hotel_prefs: { ..._hpQ, haram: "بجانب الحرم" }, haram_madinah_asked: null }, ""); return; }
+      const _keepM = madinahHotelFromRaw(String(idata.program_final_raw || ""));
+      await _rebuildNow({ hotel_prefs: { ..._hpQ, haram: "بجانب الحرم", ...(_keepM ? { haram_keep: [_keepM] } : {}) }, haram_madinah_asked: null }, "");
+      return;
+    }
+    // ردّ ما له علاقة بالسؤال → نشيل العلم ونكمل المسار العادي.
+    delete idata.haram_madinah_asked;
+    await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata } }).eq("phone", from);
+  }
   if (_pend) {
     // 🧭 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): إضافة مدينة لبرنامج متعدد المدن → بعد «نعم» نسأل عن الترتيب ومطار القدوم/المغادرة مع اقتراح.
     const _segs = String(_pend.distribution || "").split(/\s*-\s*/).map(x => x.trim()).filter(Boolean);
@@ -4004,6 +4020,15 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
       await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, haram_explained: true } }).eq("phone", from);
       return;
     }
+    // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): قبل ما نغيّر نسأل عن فندق المدينة — إلا لو العميل حدّدها بنفسه.
+    const _madAns = /المدين/.test(_batch) ? (haramMadinahAnswer(_batch) || "yes") : null;
+    if (!_madAns && madinahHotelFromRaw(String(idata.program_final_raw || ""))) {
+      const ok = await _say("تمام أستاذي، وحتى فندق المدينة أغيّره لك بجانب الحرم؟", "followup_ai", "haram_madinah_ask", "", true);
+      if (!ok) return;
+      await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, haram_madinah_asked: true } }).eq("phone", from);
+      return;
+    }
+    if (_madAns === "no") { const _keepM = madinahHotelFromRaw(String(idata.program_final_raw || "")); await _rebuildNow({ hotel_prefs: { ..._hpH, haram: "بجانب الحرم", ...(_keepM ? { haram_keep: [_keepM] } : {}) } }, ""); return; }
     await _rebuildNow({ hotel_prefs: { ..._hpH, haram: "بجانب الحرم" } }, "");   // رسالة البناء «تمام، أبشر، شوية والبرنامج عندك.» تكفي
     return;
   }
@@ -5890,6 +5915,29 @@ function isYesish(text: string): boolean {
   if (isAffirmative(t)) return true;   // «ايوه صح السفر ١١» = موافقة (التناقض مع البيانات يمسكه فحص الكرت)
   if (/[0-9٠-٩]/.test(t)) return false;
   return /(?:^|\s)(?:ايوا|ايوه|إيوه|أيوه|أيوا|ايه|إيه|نعم|صح|صحيح|مضبوط|تمام|اوكي|اوك|ok|yes|اكيد|أكيد|موافق|أجل|اجل|زين|ماشي|يب|يس)(?=\s|$|[!.،؟?])|كل\s*(?:شي|شيء)\s*(?:صح|تمام|مضبوط)|كله\s*(?:صح|تمام)|المعلومات\s*صح/i.test(t);
+}
+// 🕋 ٥ نوفمبر ٢٠٢٦: جواب سؤال «وحتى فندق المدينة أغيّره لك بجانب الحرم؟» → yes / no / null (ما له علاقة).
+function haramMadinahAnswer(text: string): "yes" | "no" | null {
+  const t = String(text || "").trim();
+  // «خليه جنب الحرم / بجانب الحرم» = إيه (حادثة ٥ نوفمبر: «حتى فندق المدينه خليه جنب الحرم» انحسبت «لا»).
+  if (/(?:جنب|بجنب|بجانب|جمب|قريب\s*من)\s*(?:ال)?حرم/.test(t) && !/(?:لا|ما|مو|مش)\s*(?:احتاج|أحتاج|ابي|أبي|ابغى|أبغى|يحتاج)?\s*(?:فندق\s*)?(?:ال)?مدين/.test(t)) return "yes";
+  // رفض: «لا خله/خليه/عادي/ما يحتاج/ما ابي/مو لازم/زين كذا» أو «لا» لحالها.
+  if (/^\s*(?:لا|لأ|لاء|no)\s*[.!،]*\s*$/i.test(t) || /(?:خل(?:ي)?ه|خلها|خليها)\s*(?:زي\s*ما\s*هو|كذا|نفسه|مثل\s*ما\s*هو|[.!،]*\s*$)|عادي|ما\s*(?:يحتاج|احتاج|أحتاج|ابي|أبي|يبي)|مو\s*لازم|مب\s*لازم|مش\s*لازم|زين\s*كذا|كويس\s*كذا|بس\s*مك[ةه]/.test(t)) {
+    if (!/غيّ?ر|بدّ?ل/.test(t.replace(/(?:لا|ما)\s*(?:تغيّ?ر|تبدّ?ل)/g, ""))) return "no";
+  }
+  if (/(?:لا|ما)\s*(?:تغيّ?ر|تبدّ?ل)/.test(t)) return "no";
+  if (isYesish(t) || /^\s*(?:ايوه|إيوه|أيوه|ايوا|أيوا|ايه|إيه|اي|أي|نعم|اكيد|أكيد|يب|يس|اوكي|ok)\b/i.test(t) || /غيّ?ر|بدّ?ل|حتى\s*(?:فندق\s*)?المدين|المدين[ةه]?\s*(?:بعد|كمان|برضو|برضه)|الثنين|الاثنين|كلهم|كلها/.test(t)) return "yes";
+  return null;
+}
+// فندق المدينة (الاسم + نوع الغرفة) من سطور HOTELS في البرنامج المرسل.
+function madinahHotelFromRaw(raw: string): { name: string; room: string } | null {
+  const sec = String(raw || "").split(/\nHOTELS:\s*\n/)[1] || "";
+  for (const line of sec.split("\n")) {
+    if (!line.trim()) break;
+    const p = line.split("|").map(x => x.trim());
+    if (p.length >= 4 && /madin|المدين/i.test(p[1] || "")) return { name: p[0], room: String(p[3] || "").replace(/\s*\(يتسع[^)]*\)\s*$/, "").trim() };
+  }
+  return null;
 }
 function s0IntakeInactive(session: unknown): boolean { return !!session && (session as { intake_active?: boolean | null }).intake_active !== true; }
 function isNegative(text: string): boolean {

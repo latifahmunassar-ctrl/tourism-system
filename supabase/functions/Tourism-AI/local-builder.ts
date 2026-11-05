@@ -327,7 +327,7 @@ export function pickCheapestHotel(
     }
     // ٤ نوفمبر ٢٠٢٦ (طلبات العميل عبر طلال): إفطار / اسم فندق معيّن / إطلالة بحر.
     if (options?.breakfast && !/إفطار|افطار|فطور|breakfast|bed\s*&?\s*breakfast|\bbb\b|half\s*board|full\s*board|all\s*inclusive/iu.test(String(h.meals || "") + " " + String(h.room_type || ""))) return false;
-    if (options?.preferKeys && options.preferKeys.length) { const nk = String(h.name || "").toLowerCase().replace(/[إأآا]/g, "ا").replace(/[ةه]/g, "ه").replace(/[^a-z0-9؀-ۿ]+/g, ""); if (!options.preferKeys.includes(nk)) return false; }
+    if (options?.preferKeys && options.preferKeys.length) { const nk = String(h.name || "").toLowerCase().replace(/[إأآا]/g, "ا").replace(/[ةه]/g, "ه").replace(/[^a-z0-9؀-ۿ]+/g, ""); const rk = nk + "|" + String(h.room_type || "").toLowerCase().replace(/[^a-z0-9؀-ۿ]+/g, ""); if (!options.preferKeys.includes(nk) && !options.preferKeys.includes(rk)) return false; }
     if (options?.preferName) { const pn = options.preferName.toLowerCase().replace(/\s+/g, " ").trim(); if (!String(h.name || "").toLowerCase().includes(pn)) return false; }
     if (options?.seaView && !/sea\s*view|ocean\s*view|beach\s*front|بحر|شاطئ/iu.test(String(h.room_type || ""))) return false;
     if (options?.feature) {

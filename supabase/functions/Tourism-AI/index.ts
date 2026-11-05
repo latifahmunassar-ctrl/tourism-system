@@ -2397,6 +2397,11 @@ function parseHaramTags(text: string): string[] {
   return out;
 }
 let _haramCache: { at: number; map: Record<string, string[]> } | null = null;
+// ٤ نوفمبر ٢٠٢٦ (المالكة): التصنيف «موصى به» على **نوع غرفة معيّن** مو الفندق كله → خريطة على مستوى الغرفة «اسم|غرفة».
+let _haramRoomMap: Record<string, string[]> = {};
+// ٥ نوفمبر ٢٠٢٦: فنادق المدينة في تبويب مكة (عمود City) — عشان «غيّر فندق مكة بس وخلّ المدينة» (hotel_prefs.haram_keep).
+let _haramMadinahNames: Set<string> = new Set();
+function normRoomType(s: string): string { return String(s || "").toLowerCase().replace(/[^a-z0-9؀-ۿ]+/g, ""); }
 async function loadHaramProximity(): Promise<Record<string, string[]>> {
   if (_haramCache && (Date.now() - _haramCache.at) < 300000) return _haramCache.map; // كاش 5 دقائق
   const map: Record<string, string[]> = {};
@@ -2414,6 +2419,21 @@ async function loadHaramProximity(): Promise<Record<string, string[]>> {
     for (const r of rows) (r || []).forEach((c, j) => { if (tagRe.test(String(c || ""))) counts[j] = (counts[j] || 0) + 1; });
     let proxCol = -1, best = 0;
     for (const j in counts) if (counts[j] > best) { best = counts[j]; proxCol = +j; }
+    let roomCol = -1;
+    for (let i = 0; i < Math.min(rows.length, 15) && roomCol < 0; i++) {
+      (rows[i] || []).forEach((c, j) => { if (roomCol < 0 && /^room\s*type$|^نوع\s*الغرف[ةه]$/i.test(String(c || "").trim())) roomCol = j; });
+    }
+    let cityCol = -1;
+    for (let i = 0; i < Math.min(rows.length, 15) && cityCol < 0; i++) {
+      (rows[i] || []).forEach((c, j) => { if (cityCol < 0 && /^city$|^المدين[ةه]$/i.test(String(c || "").trim())) cityCol = j; });
+    }
+    const madNames: Set<string> = new Set();
+    for (const r of rows) {
+      const nm = String((r || [])[nameCol] || "").trim();
+      if (nm && (/madin|المدين/i.test(cityCol >= 0 ? String((r || [])[cityCol] || "") : "") || /madin/i.test(nm))) madNames.add(normHotelName(nm));
+    }
+    _haramMadinahNames = madNames;
+    const roomMap: Record<string, string[]> = {};
     if (nameCol < 0 || proxCol < 0) { _haramCache = { at: Date.now(), map }; return map; }
     for (const r of rows) {
       const nm = String((r || [])[nameCol] || "").trim();
@@ -2423,7 +2443,9 @@ async function loadHaramProximity(): Promise<Record<string, string[]>> {
       if (!tags.length) continue;
       const k = normHotelName(nm);
       map[k] = Array.from(new Set([...(map[k] || []), ...tags]));
+      if (roomCol >= 0) { const rk = k + "|" + normRoomType(String((r || [])[roomCol] || "")); roomMap[rk] = Array.from(new Set([...(roomMap[rk] || []), ...tags])); }
     }
+    _haramRoomMap = roomMap;
   } catch (_) { /* بلا فلتر عند التعذّر */ }
   _haramCache = { at: Date.now(), map };
   return map;
@@ -2626,7 +2648,7 @@ async function handleListHotels(body: {
         hotel_type: h.hotel_type || "",           // القيمة الخام من عمود Hotel Type
         capacity: cap || capFromRoomType(String(h.room_type || "")),  // أقصى عدد تتسعه الغرفة (رقم)
         fits: !cap || !threshold || cap >= threshold,  // مطابق للعدد المطلوب؟
-        haram_tags: (destKey === "Makkah") ? (haramMap[normHotelName(String(h.name || ""))] || []) : undefined,
+        haram_tags: (destKey === "Makkah") ? (_haramRoomMap[normHotelName(String(h.name || "")) + "|" + normRoomType(String(h.room_type || ""))] || haramMap[normHotelName(String(h.name || ""))] || []) : undefined,
       };
     });
     // المطابق للعدد أولاً (يُعرض بلون فاتح)، ثم الأعلى نجوماً، ثم الأرخص.
@@ -3827,7 +3849,16 @@ Deno.serve(async (req) => {
             // 🕋 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): العمرة → فنادق «موصى به» أولاً (أو تصنيف قرب الحرم المطلوب) من عمود التصنيف بشيت مكة. ناعم.
             if (_hp.haram && destKey === "Makkah") {
               const _hm = await loadHaramProximity();
-              const _keys = Object.entries(_hm).filter(([, tags]) => (tags || []).includes(String(_hp.haram))).map(([k]) => k);
+              // غرفة بعينها موسومة → نفضّل الغرفة نفسها («اسم|غرفة»)؛ وإلا الفندق كله.
+              const _roomKeys = Object.entries(_haramRoomMap).filter(([, tags]) => (tags || []).includes(String(_hp.haram))).map(([k]) => k);
+              const _keys = _roomKeys.length ? _roomKeys : Object.entries(_hm).filter(([, tags]) => (tags || []).includes(String(_hp.haram))).map(([k]) => k);
+              // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): العميل قال «لا» لتغيير فندق المدينة → نشيل فنادق المدينة من التفضيل ونثبّت فندقه الحالي (اسم|غرفة).
+              const _keep = Array.isArray(_hp.haram_keep) ? (_hp.haram_keep as Array<{ name?: string; room?: string }>) : [];
+              if (_keep.length) {
+                const _kk = _keep.filter(x => x && x.name).map(x => normHotelName(String(x.name)) + (x.room ? "|" + normRoomType(String(x.room)) : ""));
+                const _base = _keys.filter(k => !_haramMadinahNames.has(k.split("|")[0]));
+                _keys.length = 0; _keys.push(..._base, ..._kk);
+              }
               if (_keys.length) (req as { preferHotelKeys?: string[] }).preferHotelKeys = _keys;
             }
             if (!canBuildLocally(req)) return null;
