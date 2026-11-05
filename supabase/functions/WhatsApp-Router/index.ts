@@ -1570,7 +1570,10 @@ const FLIGHT_WORD = "(?:ال)?(?:طيران|طريان|طيرن|طياران|ت�
 const HARAM_WISH_RE = /(?:بجانب|بجنب|جنب|جمب|قريب\s*من|قدام|مقابل|يطل\s*على|مطل\s*على|على)\s*(?:ال)?حرم|(?:ال)?[أا]براج|برج\s*(?:ال)?ساع[ةه]|بعيد\s*(?:عن|من)\s*(?:ال)?حرم/;
 // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): «الأبراج» تصنيف خاص بالشيت (مو أي فندق بجانب الحرم) → hotel_prefs.makkah_tag.
 const ABRAJ_RE = /(?:ال)?[أا]براج|برج\s*(?:ال)?ساع[ةه]/;
-const HARAM_COMPLAINT_RE = /(?:ال)?فندق\s*(?:\S+\s*){0,3}?بعيد|بعيد\s*(?:عن|من)\s*(?:ال)?حرم|(?:مو|مش|مب|ما\s*هو|ليس)\s*(?:\S+\s*){0,1}?(?:بجانب|جنب|قريب\s*من)\s*(?:ال)?حرم|(?:ال)?[أا]براج|برج\s*(?:ال)?ساع[ةه]|(?:بجانب|جنب|جمب)\s*(?:ال)?حرم/;
+// ٥ نوفمبر ٢٠٢٦ (قرار المالكة): «قريب من الحرم» تصنيف مستقل → الأرخص من «قريب من الحرم» (مو «بجانب الحرم»).
+const HARAM_NEAR_RE = /قريب[ةه]?\s*(?:من|لل|ل)?\s*(?:ال)?حرم/;
+const HARAM_NEXT_RE = /(?:بجانب|بجنب|جنب|جمب|قدام|مقابل)\s*(?:ال)?حرم|(?:ال)?[أا]براج|برج\s*(?:ال)?ساع[ةه]/;
+const HARAM_COMPLAINT_RE = /قريب[ةه]?\s*(?:من|لل|ل)?\s*(?:ال)?حرم|(?:ال)?فندق\s*(?:\S+\s*){0,3}?بعيد|بعيد\s*(?:عن|من)\s*(?:ال)?حرم|(?:مو|مش|مب|ما\s*هو|ليس)\s*(?:\S+\s*){0,1}?(?:بجانب|جنب|قريب\s*من)\s*(?:ال)?حرم|(?:ال)?[أا]براج|برج\s*(?:ال)?ساع[ةه]|(?:بجانب|جنب|جمب)\s*(?:ال)?حرم/;
 // أسماء المدن (كما في سطور الفنادق بالإنجليزي) → عربي للتوزيعة والرسائل.
 const CITY_AR: Record<string, string> = { Phuket: "بوكيت", Krabi: "كرابي", Bangkok: "بانكوك", Pattaya: "باتايا", "Koh Samui": "ساموي", "Chiang Mai": "شيانغ ماي",
   Makkah: "مكة", "Al Madinah": "المدينة", Madinah: "المدينة", Istanbul: "إسطنبول", Trabzon: "طرابزون", Bursa: "بورصة", "Kuala Lumpur": "كوالالمبور", Langkawi: "لنكاوي", Penang: "بينانغ" };
@@ -3734,9 +3737,10 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     if (_ans) {
       delete idata.haram_madinah_asked;
       const _mtQ = (idata.haram_abraj === true || ABRAJ_RE.test(_batch)) ? { makkah_tag: "الأبراج" } : {};
-      if (_ans === "yes") { await _rebuildNow({ hotel_prefs: { ..._hpQ, haram: "بجانب الحرم", ..._mtQ }, haram_madinah_asked: null }, ""); return; }
+      const _tagQ = idata.haram_tag === "قريب من الحرم" ? "قريب من الحرم" : "بجانب الحرم";
+      if (_ans === "yes") { await _rebuildNow({ hotel_prefs: { ..._hpQ, haram: _tagQ, ..._mtQ }, haram_madinah_asked: null }, ""); return; }
       const _keepM = madinahHotelFromRaw(String(idata.program_final_raw || ""));
-      await _rebuildNow({ hotel_prefs: { ..._hpQ, haram: "بجانب الحرم", ..._mtQ, ...(_keepM ? { haram_keep: [_keepM] } : {}) }, haram_madinah_asked: null }, "");
+      await _rebuildNow({ hotel_prefs: { ..._hpQ, haram: _tagQ, ..._mtQ, ...(_keepM ? { haram_keep: [_keepM] } : {}) }, haram_madinah_asked: null }, "");
       return;
     }
     // ردّ ما له علاقة بالسؤال → نشيل العلم ونكمل المسار العادي.
@@ -3748,15 +3752,17 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     const _hpH = ((idata.hotel_prefs && typeof idata.hotel_prefs === "object") ? idata.hotel_prefs : {}) as Record<string, unknown>;
     const _abraj = ABRAJ_RE.test(_batch) || idata.haram_abraj === true;
     const _mt = _abraj ? { makkah_tag: "الأبراج" } : {};
+    // «قريب من الحرم» (وما ذكر بجانب/الأبراج) → تصنيف «قريب من الحرم»؛ غيره «بجانب الحرم».
+    const _tag = (HARAM_NEAR_RE.test(_batch) && !HARAM_NEXT_RE.test(_batch)) || (idata.haram_tag === "قريب من الحرم" && !HARAM_NEXT_RE.test(_batch)) ? "قريب من الحرم" : "بجانب الحرم";
     const _madAns = /المدين/.test(_batch) ? (haramMadinahAnswer(_batch) || "yes") : null;
     if (!_madAns && madinahHotelFromRaw(String(idata.program_final_raw || ""))) {
-      const ok = await _say("تمام أستاذي، وحتى فندق المدينة أغيّره لك بجانب الحرم؟", "followup_ai", "haram_madinah_ask", "", true);
+      const ok = await _say(`تمام أستاذي، وحتى فندق المدينة أغيّره لك ${_tag}؟`, "followup_ai", "haram_madinah_ask", "", true);
       if (!ok) return;
-      await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, haram_madinah_asked: true, ...(_abraj ? { haram_abraj: true } : {}) } }).eq("phone", from);
+      await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, haram_madinah_asked: true, haram_tag: _tag, ...(_abraj ? { haram_abraj: true } : {}) } }).eq("phone", from);
       return;
     }
-    if (_madAns === "no") { const _keepM = madinahHotelFromRaw(String(idata.program_final_raw || "")); await _rebuildNow({ hotel_prefs: { ..._hpH, haram: "بجانب الحرم", ..._mt, ...(_keepM ? { haram_keep: [_keepM] } : {}) } }, ""); return; }
-    await _rebuildNow({ hotel_prefs: { ..._hpH, haram: "بجانب الحرم", ..._mt } }, "");   // رسالة البناء «تمام، أبشر، شوية والبرنامج عندك.» تكفي
+    if (_madAns === "no") { const _keepM = madinahHotelFromRaw(String(idata.program_final_raw || "")); await _rebuildNow({ hotel_prefs: { ..._hpH, haram: _tag, ..._mt, ...(_keepM ? { haram_keep: [_keepM] } : {}) } }, ""); return; }
+    await _rebuildNow({ hotel_prefs: { ..._hpH, haram: _tag, ..._mt } }, "");   // رسالة البناء «تمام، أبشر، شوية والبرنامج عندك.» تكفي
   };
   // 🛡️ حارس (تكرر مرتين ٥ نوفمبر: «أيوه غيره…للخرم» و«ايوه غبره» → «تقصد نعدل البرنامج كذا؟»): بعد شرح الفندق،
   //    أي موافقة/طلب تغيير = رفض ثاني → سؤال المدينة. الكلمات أولاً، وإلا تصنيف النموذج. «لا خله/عادي» = قبول الفندق → المسار العادي.
