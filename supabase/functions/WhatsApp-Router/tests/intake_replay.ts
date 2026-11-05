@@ -259,7 +259,7 @@ for (const [t, want] of [["يعني الي عمره ١٢ سنه يعتر بال�
   if (/بعد التعديل|المعدّل/.test(got)) { pass++; realLog("✅ post-ready «برنامج معدّل (program_modified)»"); } else { fail++; realLog(`❌ post-ready «برنامج معدّل (program_modified)» → ${got}`); }
 }
 // ── وحدة: صيغ الموافقة (٤ نوفمبر: «تماما» ما انحسبت) ──
-for (const [t, want] of [["تماما", true], ["تمامم", true], ["تمام", true], ["اوكيه", true], ["طيب", true], ["👍", true], ["✅", true], ["ايوه", true], ["okk", true], ["كل شي صح", true], ["لا", false], ["تمام بس غير التاريخ ١٥", false], ["متى", false]] as Array<[string, boolean]>) {
+for (const [t, want] of [["تماما", true], ["تمامم", true], ["تمام", true], ["اوكيه", true], ["طيب", true], ["👍", true], ["✅", true], ["ايوه", true], ["okk", true], ["كل شي صح", true], ["ياريت", true], ["يا ريت", true], ["ياليت والله", true], ["لا", false], ["تمام بس غير التاريخ ١٥", false], ["متى", false]] as Array<[string, boolean]>) {
   const got = isYesish(t);
   if (got === want) { pass++; realLog(`✅ yes «${t}» → ${want}`); } else { fail++; realLog(`❌ yes «${t}» → ${got} (المتوقع ${want})`); }
 }
