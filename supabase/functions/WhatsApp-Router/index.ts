@@ -3233,6 +3233,8 @@ ${returning
       _mergedData.pending_card = false;
       // رقم اختبار/تشغيل كامل: «تمام، أبشر، شوية والبرنامج عندك.» ثم الـPDF. غيره: الخلفية ترسل رسالة التسليم للموظف.
       outMsgs = (await isFullAiNumber(supabase, from)) ? ["تمام، أبشر، شوية والبرنامج عندك."] : [];
+      // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): بناء «أرخص العروض» → جملة المالكة بدل «تمام، أبشر، شوية والبرنامج عندك.»
+      if (outMsgs.length && _mergedData.program_cheapest === true) outMsgs = ["حاضر، أبشر، برسل لك الحين خيار ثالث، وأتوقع هو الأرخص من بين الخيارات اللي أرسلتها لك سابقاً. اطّلع عليه وإن شاء الله يعجبك."];
       // 🕋 قرار المالكة: عمرة والعميل حدّد «بجانب الحرم/الأبراج» → «حاضر، برسل لك العرض اللي عندنا…» (رسالتين) — والعرض بفنادق «موصى به».
       if (outMsgs.length && _isUmrahDest(String(_mergedData.destination || "") + " " + String(_mergedData.cities || ""))) {
         const _reqStartI = Date.parse(String(_mergedData.started_at || "")) || 0;
@@ -3379,7 +3381,7 @@ ${returning
   for (const raw of outMsgs.slice(0, 3)) {
     // تصحيح تلقائي (أستاذي/تشكيل/فصحى/صياغة ركيكة/ترحيب مكرر/سؤال الحال/تكرار الافتتاح) قبل تنظيف العبارات الممنوعة.
     const _af = guardAutofix(String(raw), { alreadyGreeted, lastCustomer: _lastCustBody, lastTalal: _lastTalalBody });
-    const _apolA = /^أعتذر منك أستاذي|^إيه نعم أستاذي|^تمام، أبشر، شوية والبرنامج عندك\.$|^حاضر، برسل لك العرض اللي عندنا\.$|^وإذا لك تعليق أو تعديل أنا حاضر\.$/.test(String(raw));   // صيغ المالكة الحرفية — بلا تنظيف
+    const _apolA = /^حاضر، أبشر، برسل لك الحين خيار ثالث|^أعتذر منك أستاذي|^إيه نعم أستاذي|^تمام، أبشر، شوية والبرنامج عندك\.$|^حاضر، برسل لك العرض اللي عندنا\.$|^وإذا لك تعليق أو تعديل أنا حاضر\.$/.test(String(raw));   // صيغ المالكة الحرفية — بلا تنظيف
     const msg = _apolA ? String(raw) : stripBannedPhrases(_af.text);
     if (!msg) continue; // لو الرسالة كانت كلها عبارات ممنوعة، تجاهلها
     if (_af.hits.length && !_apolA) await logGuard(supabase, from, "autofix:" + _af.hits.join("+"), "autofix", "", 1, String(raw), msg);
