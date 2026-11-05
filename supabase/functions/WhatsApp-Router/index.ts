@@ -3220,7 +3220,11 @@ ${returning
     const _afterCard: string[] = (() => { const o: string[] = _unseenCust.length ? _unseenCust.map(m => m.body) : []; if (!o.length) for (let i = msgs.length - 1; i >= 0 && msgs[i].who !== "طلال"; i--) if (msgs[i].who === "العميل") o.unshift(msgs[i].body); if (_lastCust && !o.includes(_lastCust)) o.push(_lastCust); return o; })();
     const _yesAny = _afterCard.some(b => isAffirmative(b) || /^\s*(?:ارسل|أرسل|ارسلي|أرسلي|ارسله|ارسلها|جهز|جهّز|جهزه|اعتمد|كمل|كمّل|يلا|خلاص)(?:\s*\S+){0,3}\s*$/.test(String(b || "")));
     const _noChange = !_afterCard.some(b => /\d|غيّ?ر|عدّ?ل|بدّ?ل|لا\s|مو\s|مش\s/.test(String(b || "").replace(/[٠-٩]/g, "1")));
-    if (_wasAwaiting && (isYesish(_lastCust) || (_yesAny && _noChange) || (_noChange && _afterCard.some(isYesish)))) {
+    // 🛡️ ٥ نوفمبر ٢٠٢٦ (حي): بناء العرض المعدّل انقطع برسالة أحدث («ياريت») → المحادثة علقت بالاستقبال وطلع «أجهز لك البرنامج…؟»
+    //    ثم ملخّص الطلب كامل. تعديل قيد البناء (program_modified) + موافقة/طلب صفة بلا تغيير بيانات = نكمل البناء مباشرة.
+    const _rebuildPend = (prev as Record<string, unknown>).program_modified === true && (prev as Record<string, unknown>).summary_confirmed !== true;
+    const _rebuildOk = _rebuildPend && _noChange && _afterCard.some(b => isYesish(b) || isAffirmative(b) || /(?:بجانب|بجنب|جنب|جمب|قريب\s*من)\s*(?:ال)?حرم|[أا]براج|برج\s*(?:ال)?ساع/.test(String(b || "")));
+    if ((_wasAwaiting && (isYesish(_lastCust) || (_yesAny && _noChange) || (_noChange && _afterCard.some(isYesish)))) || _rebuildOk) {
       _mergedData.summary_confirmed = true;
       _mergedData.awaiting_confirm = false;
       upd.intake_active = false;                 // العميل أكّد الملخّص

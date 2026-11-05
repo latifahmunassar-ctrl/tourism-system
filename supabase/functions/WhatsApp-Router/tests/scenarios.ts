@@ -1041,6 +1041,16 @@ export const SCENARIOS: Scenario[] = [
   },
   // ── 🕋 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): فنادق مكة «موصى به» أولاً ──
   {
+    id: "rebuild-interrupted-resume", entry: "intake", title: "٥ نوفمبر (حي): بناء العرض المعدّل انقطع بـ«ياريت» → «أجهز لك البرنامج…؟» ثم «واريد بجانب الحرم» → ملخّص الطلب كامل؛ الحين يكمل البناء مباشرة",
+    history: [["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-015"], ["C", "لا شوف لي شي بجانب الحرم"], ["T", "تمام أستاذي، وحتى فندق المدينة أغيّره لك بجانب الحرم؟"], ["C", "واريد بجانب الحرم إذا سمحت"], ["C", "ياريت"], ["T", "عفوا إذا سمحت، أجهز لك البرنامج بهذي المعلومات؟"]], customer: "واريد بجانب الحرم إذا سمحت", intakeData: { destination: "العمرة", pax: 3, ages: "", asked_children: true, asked_nights: true, date: "2026-11-06", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: false, awaiting_confirm: false, program_modified: true, hotel_prefs: { haram: "بجانب الحرم" } }, model: [M("فهمت عليك، يعني تقصد عمرة لـ3 أشخاص…، صحيح أخي الكريم؟", { destination: "العمرة", pax: 3, date: "2026-11-06", nights: "3 مكة 2 المدينة" }, true)],
+    expect: [["بنى", c => c.buildCalls > 0], ["❌ لا ملخّص الطلب من البداية", c => !/فهمت عليك|صحيح أخي الكريم/.test(c.reply)], ["التصنيف باقي", c => c.buildBody?.hotel_prefs?.haram === "بجانب الحرم"]],
+  },
+  {
+    id: "rebuild-interrupted-change", entry: "intake", title: "٥ نوفمبر: تعديل قيد البناء + العميل غيّر التاريخ («غير التاريخ ١٠ نوفمبر») → ❌ لا بناء مباشر (المسار العادي يتعامل مع التغيير)",
+    history: [["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-015"], ["C", "لا شوف لي شي بجانب الحرم"], ["T", "تمام أستاذي، وحتى فندق المدينة أغيّره لك بجانب الحرم؟"], ["C", "واريد بجانب الحرم إذا سمحت"], ["C", "ياريت"], ["T", "عفوا إذا سمحت، أجهز لك البرنامج بهذي المعلومات؟"]], customer: "غير التاريخ ١٠ نوفمبر", intakeData: { destination: "العمرة", pax: 3, ages: "", asked_children: true, asked_nights: true, date: "2026-11-06", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: false, awaiting_confirm: false, program_modified: true, hotel_prefs: { haram: "بجانب الحرم" } }, model: [M("تمام", { destination: "العمرة", pax: 3, date: "2026-11-10", nights: "3 مكة 2 المدينة" }, true)],
+    expect: [["ما بنى مباشرة", c => c.buildCalls === 0]],
+  },
+  {
     id: "umrah-recommended-default", entry: "intake", title: "قرار المالكة: أي طلب عمرة → البناء يطلب فنادق «موصى به» (hotel_prefs.haram)",
     history: [["T", RESET], ["C", "عمره"], ["C", "شخصين كبار"], ["C", "٣ مكه ٢ المدينه"], ["C", "٢٠ نوفمبر"], ["T", "فهمت عليك، يعني تقصد عمرة لشخصين…، صحيح أخي الكريم؟"]],
     customer: "صحيح", intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, asked_nights: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", awaiting_confirm: true },
