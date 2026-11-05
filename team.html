@@ -1868,12 +1868,29 @@ async function mkFlightApply(){
       addMessage('sys',`✈️ الطيران الدولي (${mkFlightModeLabel()}): ${Number(t).toLocaleString()} ريال (${pax} أشخاص).${note?' '+note:''}`); }
   } else if(note) addMessage('sys',note);
 }
-// فلتر «نوع السكن» لقائمة أسماء الفنادق: فيلا → الغرف فيها villa/فيلا؛ فيلا بمسبح →
-// villa + pool/مسبح؛ غير ذلك ('' أو 'normal') → كل الفنادق.
+// فلتر «نوع السكن» (بالي + تايلاند) — يُطبَّق على نوع الغرفة:
+//  villa = الغرفة فيها villa/فيلا
+//  pool  = فيلا مع مسبح خاص: «فيلا» في الغرفة أو اسم الفندق (Malisa Villa Suites)، والغرفة فيها
+//          مسبح خاص — لا نقبل Pool View/Pool Access/Poolside (إطلالة أو مسبح مشترك)
+//  sea   = إطلالة بحرية (Sea View/Seaview/Ocean/Beachfront/بحر)
+// غير ذلك ('' أو 'normal') → كل الفنادق.
+const ACC_KIND_LABEL = { villa:'فيلا', pool:'فيلا مع مسبح خاص', sea:'إطلالة بحرية' };
+function _accKindMatch(h, mode){
+  const rt = String((h && h.room_type) || ''), nm = String((h && h.name) || '');
+  const isVilla = /villa|فيلا/i.test(rt);
+  if(mode === 'villa') return isVilla;
+  if(mode === 'pool'){
+    const privPool = /private\s*pool|pool\s*villa|plunge\s*pool|مسبح\s*خاص/i.test(rt)
+      || (/pool|مسبح/i.test(rt) && !/pool\s*-?\s*(?:view|access|side)|poolside/i.test(rt));
+    return (isVilla || /villa|فيلا/i.test(nm)) && privPool;
+  }
+  if(mode === 'sea') return /sea\s*-?\s*view|seaview|ocean|sea\s*front|beach\s*front|بحر/i.test(rt);
+  return true;
+}
 function _villaFilter(hotels, mode){
-  if(mode === 'villa') return hotels.filter(h => /villa|فيلا/i.test(String(h.room_type||'')));
-  if(mode === 'pool')  return hotels.filter(h => /villa|فيلا/i.test(String(h.room_type||'')) && /pool|مسبح/i.test(String(h.room_type||'')));
-  return hotels;
+  if(!ACC_KIND_LABEL[mode]) return hotels;
+  // المطابق فقط، من الأرخص للأغلى (طلب المالكة)
+  return hotels.filter(h => _accKindMatch(h, mode)).sort((a,b)=>(a.price_per_night||0)-(b.price_per_night||0));
 }
 function hswRender(cell, hotels){
   cell._allHotels = hotels;   // القائمة الكاملة (للرجوع لوضع عادي بلا إعادة جلب)
@@ -1885,8 +1902,8 @@ function hswRender(cell, hotels){
   const curName = cell.dataset.name;
   const curNightly = +cell.dataset.nightly || 0;
   const bar = cell._isMakkah ? hswHaramBar(cell) : '';
-  const vlabel = mode==='pool' ? 'فيلا مع مسبح خاص' : (mode==='villa' ? 'فيلا' : '');
-  const vbar = vlabel ? `<div class="hsw-title" style="background:#fff6fb;color:#C41D88;border-bottom:1px solid #f0d6e6">🏡 معروض فقط: ${vlabel} — اختاري بحرية · رجوع من «نوع السكن ← عادي»</div>` : '';
+  const vlabel = ACC_KIND_LABEL[mode] || '';
+  const vbar = vlabel ? `<div class="hsw-title" style="background:#fff6fb;color:#C41D88;border-bottom:1px solid #f0d6e6">🏡 معروض فقط: ${vlabel} — من الأرخص · رجوع من «نوع السكن ← الكل»</div>` : '';
   if(!hotels.length){ menu.innerHTML = bar + vbar + `<div class="hsw-loading">${vlabel?('ما فيه '+vlabel+' بهذه المنطقة'):'ما فيه فنادق بهذه المنطقة'}</div>`; return; }
   const title = `<div class="hsw-title">فنادق ${hswEsc(cell.dataset.region)} — المطابق للعدد أولاً (مظلّل) ثم الباقي · السعة واضحة</div>`;
   let sepShown = false;
@@ -2206,18 +2223,14 @@ async function changeHotelVilla(hidx, kind){
     const dest = getLine(lastProgramRaw,'DEST')||'';
     const date = getLine(lastProgramRaw,'DATE_FROM')||'';
     const occReq = occN || metaPersons() || 2;
-    const label = kind==='pool' ? 'فيلا مع مسبح خاص' : 'فيلا';
+    const label = ACC_KIND_LABEL[kind] || 'فيلا';
     addMessage('sys', `🔎 أبحث عن أرخص ${label} في ${region}…`);
     const res = await fetch(SUPABASE_URL, { method:'POST',
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
       body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: occReq, current:p[0]||'', date }) });
     const data = await res.json();
-    const isVilla = rt => /villa|فيلا/i.test(String(rt||''));
-    const hasPool = rt => /pool|مسبح/i.test(String(rt||''));
-    // فيلا = أي فيلا · فيلا بمسبح = فيلا + مسبح معاً (لا نقبل Pool Suite/Pool View بلا فيلا).
-    let cand = (data.hotels || []).filter(h => kind==='pool'
-      ? (isVilla(h.room_type) && hasPool(h.room_type))
-      : isVilla(h.room_type));
+    // فيلا / فيلا مع مسبح خاص / إطلالة بحرية — نفس قاعدة فلتر قائمة الفنادق (_accKindMatch)
+    let cand = (data.hotels || []).filter(h => _accKindMatch(h, kind));
     if(!cand.length){ addMessage('sys',`ما فيه ${label} في ${region}. جرّبي منطقة ثانية أو تبديل الفندق يدوياً.`); resetSel(); return; }
     villaMode[hidx] = kind;   // فعّل فلتر قائمة الفنادق على هذا النوع (يبقى بعد إعادة الرسم)
     // تطابق الإشغال بالضبط أولاً (طلب المالكة): لا نجيب فيلا سعتها لعدد أكبر لمجرّد
@@ -2247,7 +2260,7 @@ async function changeHotelVilla(hidx, kind){
       if(typeof lastProgramRaw==='string' && lastProgramRaw) buildReview(lastProgramRaw);
       return;
     }
-    applyHotelRawChange(newRaw, `🏡 ${region}: أرخص ${label} لـ${target} ${target>2?'أشخاص':'شخصين'} = «${h.name}» ${(h.stars?h.stars+'★ ':'')}(${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxed?` ⚠️ ما فيه فيلا سعتها ${target} بالضبط، فاخترتُ الأقرب (سعة ${hCap||'؟'}).`:''} · قائمة الفنادق محصورة الآن على ${label} (غيّري بحرية، وللرجوع: «نوع السكن ← عادي»).`);
+    applyHotelRawChange(newRaw, `🏡 ${region}: أرخص ${label} لـ${target} ${target>2?'أشخاص':'شخصين'} = «${h.name}» ${(h.stars?h.stars+'★ ':'')}(${(h.price_per_night||0).toLocaleString()} ريال/ليلة).${relaxed?` ⚠️ ما فيه ${label} سعتها ${target} بالضبط، فاخترتُ الأقرب (سعة ${hCap||'؟'}).`:''} · قائمة الفنادق محصورة الآن على ${label} (غيّري بحرية، وللرجوع: «نوع السكن ← عادي»).`);
     // بعد إعادة الرسم، الـ select يعكس villaMode، وقائمة أسماء الفنادق تنفلتر على النوع.
   }catch(e){ addMessage('sys','خطأ أثناء جلب الفيلا: ' + (e && e.message ? e.message : e)); resetSel(); }
 }
@@ -4353,7 +4366,10 @@ const nameCell = `<td class="hsw-cell" data-hidx="${hidx}" data-region="${hswEsc
 // خلية نوع الغرفة — قابلة للاستبدال/الإضافة من نفس الفندق
 // 🇮🇩 بالي: دروب ليست «نوع السكن» تحت نوع الغرفة — يجيب أرخص فيلا/فيلا بمسبح خاص بنفس المنطقة.
 const _vm = vMode(hidx);
-const villaSel = _regionIsBali(p[1]||'') ? `<select class="villa-sel" title="اختاري نوع السكن → أرخص فيلا بنفس المنطقة، وقائمة الفنادق تنحصر على الفلل" onchange="changeHotelVilla(${hidx}, this.value)"><option value=""${_vm?'':' selected'}>🏡 نوع السكن…</option><option value="normal"${_vm==='normal'?' selected':''}>عادي (كل الفنادق)</option><option value="villa"${_vm==='villa'?' selected':''}>فيلا</option><option value="pool"${_vm==='pool'?' selected':''}>فيلا مع مسبح خاص</option></select>` : '';
+const _isTH = /تايلاند|تايلند|thailand/i.test(String(dest||''));
+// 🇹🇭 تايلاند: نفس قائمة بالي + «إطلالة بحرية» — الاختيار يجيب أرخص غرفة مطابقة وقائمة الفنادق تنحصر عليها من الأرخص.
+const villaSel = _isTH ? `<select class="villa-sel" title="نوع السكن → أرخص غرفة مطابقة بنفس المدينة، وقائمة الفنادق تنحصر عليها من الأرخص" onchange="changeHotelVilla(${hidx}, this.value)"><option value=""${_vm?'':' selected'}>🏡 نوع السكن…</option><option value="normal"${_vm==='normal'?' selected':''}>الكل</option><option value="pool"${_vm==='pool'?' selected':''}>فيلا مع مسبح خاص</option><option value="sea"${_vm==='sea'?' selected':''}>إطلالة بحرية</option></select>`
+  : _regionIsBali(p[1]||'') ? `<select class="villa-sel" title="اختاري نوع السكن → أرخص فيلا بنفس المنطقة، وقائمة الفنادق تنحصر على الفلل" onchange="changeHotelVilla(${hidx}, this.value)"><option value=""${_vm?'':' selected'}>🏡 نوع السكن…</option><option value="normal"${_vm==='normal'?' selected':''}>عادي (كل الفنادق)</option><option value="villa"${_vm==='villa'?' selected':''}>فيلا</option><option value="pool"${_vm==='pool'?' selected':''}>فيلا مع مسبح خاص</option></select>` : '';
 // 🇿🇦 جنوب أفريقيا: قائمة «نوع السكن» تحت نوع الغرفة — تحصر قائمة تبديل الفندق على فندق/محمية.
 const _isSA = /جنوب\s*أفريقيا|south\s*africa/i.test(String(dest||''));
 const _am = aMode(hidx);
