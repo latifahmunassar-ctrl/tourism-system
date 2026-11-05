@@ -265,7 +265,9 @@ for (const [t, want] of [["يعني الي عمره ١٢ سنه يعتر بال�
   console.log = () => {}; console.error = () => {};
   try { await sendPostProgramMessages(fakeSupabase, PHONE, [RDY]); } catch (_e) { /* */ }
   console.log = realLog; console.error = realErr;
-  const got = String(DB.wa_admin_messages.at(-1)?.body || "");
+  const got = String(DB.wa_admin_messages.at(-2)?.body || "");
+  const bud = String(DB.wa_admin_messages.at(-1)?.body || "");
+  if (!/ميزانية معيّنة بلغني.*حابين نخدمك طبعاً/.test(bud)) { fail++; realLog(`❌ post-ready «رسالة الميزانية» → ${bud}`); } else { pass++; realLog("✅ post-ready «رسالة الميزانية»"); }
   if (got === "تفضل أستاذي، هذا العرض الثالث، ياريت تطّلع عليه، وأنتظر تأكيدك أو التعديل عليه إذا حبيت.") { pass++; realLog("✅ post-ready «أرخص العروض»"); } else { fail++; realLog(`❌ post-ready «أرخص العروض» → ${got}`); }
 }
 // ── وحدة: صيغ الموافقة (٤ نوفمبر: «تماما» ما انحسبت) ──

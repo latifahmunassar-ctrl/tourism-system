@@ -1657,6 +1657,8 @@ async function sendPostProgramMessages(supabase: ReturnType<typeof createClient>
       if (/^علماً أن البرنامج ما فيه سرير/.test(m)) { const key = _kidKey(m); return _varyPostMsg(m, key ? _bodies.filter(b => /سرير إضافي (?:للطفل|للأطفال)/.test(b) && _kidKey(b) === key).length : 0); }
       return m;
     });
+    // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): بعد «أرخص العروض» رسالة الميزانية.
+    if (_cheapP && msgs.some(m => /^تفضل أستاذي/.test(m))) msgs = [...msgs, "وإذا عندك ميزانية معيّنة بلغني، أشوف إذا فيه فنادق من اللي نتعاون معها ضمن ميزانيتك. حابين نخدمك طبعاً ونشوف إيش اللي يرضيك."];
   } catch (_e) { /* أفضل جهد */ }
   for (const m of msgs) {
     try {
