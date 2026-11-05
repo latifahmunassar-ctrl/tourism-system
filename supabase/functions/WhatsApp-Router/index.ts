@@ -3771,6 +3771,16 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     if (_madAns === "no") { const _keepM = madinahHotelFromRaw(String(idata.program_final_raw || "")); await _rebuildNow({ hotel_prefs: { ..._hpH, haram: _tag, ..._mt, ...(_keepM ? { haram_keep: [_keepM] } : {}) } }, ""); return; }
     await _rebuildNow({ hotel_prefs: { ..._hpH, haram: _tag, ..._mt } }, "");   // رسالة البناء «تمام، أبشر، شوية والبرنامج عندك.» تكفي
   };
+  // 😁 ٥ نوفمبر ٢٠٢٦ (قرار المالكة): «غالي» على عرض الأبراج → «😁» ثم «إيوه، فنادق الأبراج غالية.» — ❌ لا اعتذار ولا «وش الغلط» ولا بناء.
+  {
+    const _hpP = ((idata.hotel_prefs && typeof idata.hotel_prefs === "object") ? idata.hotel_prefs : {}) as Record<string, unknown>;
+    const _pricey = /غال[يى]|غالي[ةه]|غاليين|مكلف|السعر\s*(?:عالي|مرتفع|كثير|غالي)|(?:ال)?[أا]سعار(?:ها|كم)?\s*(?:عالي[ةه]?|مرتفع[ةه]?|غالي[ةه]?)/.test(_batch);
+    if (_isUmrahReq && String(idata.program_final_raw || "") && _hpP.makkah_tag === "الأبراج" && _pricey && !/غيّ?ر|بدّ?ل|ارخص|أرخص/.test(_batch)) {
+      if (await _superseded()) return;
+      for (const p of ["😁", "إيوه، فنادق الأبراج غالية."]) { const ok = await _say(p, "followup_ai", "abraj_pricey", "", true); if (!ok) return; }
+      return;
+    }
+  }
   // 🛡️ حارس (تكرر مرتين ٥ نوفمبر: «أيوه غيره…للخرم» و«ايوه غبره» → «تقصد نعدل البرنامج كذا؟»): بعد شرح الفندق،
   //    أي موافقة/طلب تغيير = رفض ثاني → سؤال المدينة. الكلمات أولاً، وإلا تصنيف النموذج. «لا خله/عادي» = قبول الفندق → المسار العادي.
   if (_isUmrahReq && String(idata.program_final_raw || "") && idata.haram_explained === true && /بلغني وأرسل لك العرض الثاني/.test(_lastTalalBody) && !HARAM_COMPLAINT_RE.test(_batch)) {
