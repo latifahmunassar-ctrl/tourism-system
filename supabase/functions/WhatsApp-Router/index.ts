@@ -1644,8 +1644,8 @@ async function sendPostProgramMessages(supabase: ReturnType<typeof createClient>
     const _cnt = (re: RegExp) => _bodies.filter(b => re.test(b)).length;
     // ٤ نوفمبر ٢٠٢٦ (حي): طلب عمرة **جديد** بعد برنامج تايلاند → «البرنامج بعد التعديل صار جاهز». «بعد التعديل» = نفس الطلب فقط
     //    (رسائل الجاهزية من بداية الطلب الحالي started_at).
-    let _reqStartP = 0; let _modP = false;
-    try { const { data: _ss } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", phone).maybeSingle(); const _idP = ((_ss as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>; _modP = _idP.program_modified === true; _reqStartP = Date.parse(String(_idP.started_at || "")) || 0; } catch (_e) { /* */ }
+    let _reqStartP = 0; let _modP = false; let _cheapP = false;
+    try { const { data: _ss } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", phone).maybeSingle(); const _idP = ((_ss as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>; _modP = _idP.program_modified === true; _cheapP = _idP.program_cheapest === true; _reqStartP = Date.parse(String(_idP.started_at || "")) || 0; } catch (_e) { /* */ }
     const _readyRe = /^تفضل أستاذي، (?:برنامجك صار جاهز|البرنامج بعد التعديل|هذا البرنامج المعدّل)/;
     const _nReady0 = ((_prev || []) as Array<{ body?: string; sent_at?: string }>).filter(r => _readyRe.test(String(r.body || "")) && (Date.parse(String(r.sent_at || "")) || 0) >= _reqStartP).length;
     // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): البرنامج انبنى من طلب تعديل → دايماً صيغة «المعدّل»، حتى لو رسائل الجاهزية السابقة ما انعدّت.
@@ -1653,7 +1653,7 @@ async function sendPostProgramMessages(supabase: ReturnType<typeof createClient>
     // ملاحظة السرير: «سابقاً» فقط لو انذكرت **نفس الأطفال** (نفس الأعمار) قبل — مو أطفال طلب ثاني.
     const _kidKey = (m: string) => (m.match(/(?:عمره|أعمارهم)\s*([^).،]+)/) || [])[1]?.trim() || "";
     msgs = msgs0.map(m => {
-      if (/^تفضل أستاذي/.test(m)) return _varyPostMsg(m, nReady);
+      if (/^تفضل أستاذي/.test(m)) return _cheapP ? "تفضل أستاذي، هذي أرخص العروض عندنا، بإمكانك الاطلاع عليها." : _varyPostMsg(m, nReady);   // ٥ نوفمبر ٢٠٢٦ (قرار المالكة)
       if (/^علماً أن البرنامج ما فيه سرير/.test(m)) { const key = _kidKey(m); return _varyPostMsg(m, key ? _bodies.filter(b => /سرير إضافي (?:للطفل|للأطفال)/.test(b) && _kidKey(b) === key).length : 0); }
       return m;
     });
@@ -3709,6 +3709,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     if ("ages" in changed) nd.asked_children = true;
     delete nd.auto_program; delete nd.post_program_msgs; delete nd.pending_modify; delete nd.program_final_raw; delete nd.program_final_code;
     nd.program_modified = true;   // ٥ نوفمبر ٢٠٢٦: البرنامج الجاي معدّل → رسالة الختام «هذا البرنامج المعدّل…» (مو «برنامجك صار جاهز»)
+    nd.program_cheapest = changed.program_cheapest === true;   // ٥ نوفمبر ٢٠٢٦: «أرخص العروض» — رسالة ختام خاصة لهذا البناء بس
     await supabase.from("whatsapp_sessions").update({ intake_active: true, intake_data: nd, stage: "new" }).eq("phone", from);
     const _bad = _cardVsCustomer(nd, _batch);
     if (_bad) { await supabase.from("whatsapp_sessions").update({ intake_active: false, intake_data: { ...idata } }).eq("phone", from); await _say(_clarifyMsg(_bad), "card_contradicts_customer", "clarify", _bad, true); return; }
@@ -3727,6 +3728,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     const nd: Record<string, unknown> = { ...idata, ...changed, awaiting_confirm: true, summary_confirmed: false };
     delete nd.auto_program; delete nd.post_program_msgs; delete nd.pending_modify; delete nd.program_final_raw; delete nd.program_final_code;
     nd.program_modified = true;   // ٥ نوفمبر ٢٠٢٦: البرنامج الجاي معدّل → رسالة الختام «هذا البرنامج المعدّل…» (مو «برنامجك صار جاهز»)
+    nd.program_cheapest = changed.program_cheapest === true;   // ٥ نوفمبر ٢٠٢٦: «أرخص العروض» — رسالة ختام خاصة لهذا البناء بس
     await supabase.from("whatsapp_sessions").update({ intake_active: true, intake_data: nd, stage: "new" }).eq("phone", from);
     if (apologyMsg) await _say(apologyMsg, "followup_ai", "rebuild_apology", JSON.stringify(changed).slice(0, 200));
     await handleNewLeadIntake({ supabase, from, body: "نعم" });   // نفس مسار «نعم» على الكرت → بناء + PDF
@@ -3778,6 +3780,19 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     if (_isUmrahReq && String(idata.program_final_raw || "") && _hpP.makkah_tag === "الأبراج" && _pricey && !/غيّ?ر|بدّ?ل|ارخص|أرخص/.test(_batch)) {
       if (await _superseded()) return;
       for (const p of ["😁", "إيوه، فنادق الأبراج غالية.", "إذا حاب، بإمكانك تعتمد البرنامج اللي أرسلته لك أول لأنه أرخص، أو أشوف لك فنادق ثانية أرخص كمان."]) { const ok = await _say(p, "followup_ai", "abraj_pricey", "", true); if (!ok) return; }
+      return;
+    }
+  }
+  // 💸 ٥ نوفمبر ٢٠٢٦ (قرار المالكة): العميل شاف العروض (الأول/بجانب الحرم/الأبراج) وقال «غالي» ثم «شوف لي فنادق ثانية» / «أرخص»
+  //    → ❌ لا أسئلة: أرخص فندق بمكة وأرخص فندق بالمدينة (بلا تصنيف حرم)، والختام «هذي أرخص العروض عندنا…».
+  {
+    const _afterPricey = msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body?.includes("بإمكانك تعتمد البرنامج اللي أرسلته لك أول") === true;
+    const _wantOther = /شوف|ثاني[ةه]?|ثانيين|غيره?ا?|غيّر|بدّ?ل|بدائل|خيارات|ارخص|أرخص|رخيص/.test(_batch) || /^yes/.test(String(_cls?.yes_no || ""));
+    const _keepFirst = /(?:اعتمد|أعتمد|نعتمد|ابي|أبي)\s*(?:ال)?(?:برنامج\s*)?(?:ال)?[أا]ول/.test(_batch);
+    const _cheapAsk = idata.haram_explained === true && /(?:ابي|أبي|ابغى|أبغى|عطني|شوف(?:\s*لي)?|في|فيه)?\s*(?:شي|فندق|فنادق)?\s*(?:ارخص|أرخص|رخيص[ةه]?)/.test(_batch) && /ارخص|أرخص|رخيص/.test(_batch);
+    if (_isUmrahReq && String(idata.program_final_raw || "") && ((_afterPricey && _wantOther && !_keepFirst) || _cheapAsk)) {
+      if (await _superseded()) return;
+      await _rebuildNow({ hotel_prefs: { haram: "" }, program_cheapest: true }, "");
       return;
     }
   }

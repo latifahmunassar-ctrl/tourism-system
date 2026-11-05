@@ -258,6 +258,16 @@ for (const [t, want] of [["يعني الي عمره ١٢ سنه يعتر بال�
   const got = String(DB.wa_admin_messages.at(-1)?.body || "");
   if (/بعد التعديل|المعدّل/.test(got)) { pass++; realLog("✅ post-ready «برنامج معدّل (program_modified)»"); } else { fail++; realLog(`❌ post-ready «برنامج معدّل (program_modified)» → ${got}`); }
 }
+// ── ٥ نوفمبر ٢٠٢٦ (قرار المالكة): بناء «أرخص العروض» (program_cheapest) → ختام «هذي أرخص العروض عندنا، بإمكانك الاطلاع عليها.» ──
+{
+  const RDY = "تفضل أستاذي، برنامجك صار جاهز. أي تعديل في البرنامج أنا حاضر.";
+  DB = { wa_admin_messages: [], whatsapp_sessions: [{ phone: PHONE, intake_data: { started_at: new Date(Date.now() - 600e3).toISOString(), program_modified: true, program_cheapest: true } }], wa_message_audit: [], guard_logs: [], program_pdf_jobs: [], wa_settings: [] };
+  console.log = () => {}; console.error = () => {};
+  try { await sendPostProgramMessages(fakeSupabase, PHONE, [RDY]); } catch (_e) { /* */ }
+  console.log = realLog; console.error = realErr;
+  const got = String(DB.wa_admin_messages.at(-1)?.body || "");
+  if (got === "تفضل أستاذي، هذي أرخص العروض عندنا، بإمكانك الاطلاع عليها.") { pass++; realLog("✅ post-ready «أرخص العروض»"); } else { fail++; realLog(`❌ post-ready «أرخص العروض» → ${got}`); }
+}
 // ── وحدة: صيغ الموافقة (٤ نوفمبر: «تماما» ما انحسبت) ──
 for (const [t, want] of [["تماما", true], ["تمامم", true], ["تمام", true], ["اوكيه", true], ["طيب", true], ["👍", true], ["✅", true], ["ايوه", true], ["okk", true], ["كل شي صح", true], ["ياريت", true], ["يا ريت", true], ["ياليت والله", true], ["لا", false], ["تمام بس غير التاريخ ١٥", false], ["متى", false]] as Array<[string, boolean]>) {
   const got = isYesish(t);
