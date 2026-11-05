@@ -3786,8 +3786,10 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   // 💸 ٥ نوفمبر ٢٠٢٦ (قرار المالكة): العميل شاف العروض (الأول/بجانب الحرم/الأبراج) وقال «غالي» ثم «شوف لي فنادق ثانية» / «أرخص»
   //    → ❌ لا أسئلة: أرخص فندق بمكة وأرخص فندق بالمدينة (بلا تصنيف حرم)، والختام «هذي أرخص العروض عندنا…».
   {
-    const _afterPricey = msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body?.includes("بإمكانك تعتمد البرنامج اللي أرسلته لك أول") === true;
-    const _wantOther = /شوف|ثاني[ةه]?|ثانيين|غيره?ا?|غيّر|بدّ?ل|بدائل|خيارات|ارخص|أرخص|رخيص/.test(_batch) || /^yes/.test(String(_cls?.yes_no || ""));
+    // ٥ نوفمبر ٢٠٢٦ (حي): بين عرض البديل والطلب جا «تقصد نعدل البرنامج كذا؟» → «ايوه» بنى نفس الأبراج. الحين: عرض البديل **بأي مكان بالطلب الحالي**
+    //    (msgs مقصوصة من started_at) + طلب فنادق ثانية/أرخص (كلمات أو معنى المصنّف) = أرخص العروض.
+    const _afterPricey = msgs.some(m => m.who === "طلال" && m.body.includes("بإمكانك تعتمد البرنامج اللي أرسلته لك أول")) && idata.program_cheapest !== true;
+    const _wantOther = /شوف|ثاني[ةه]?|ثانيين|غيره?ا?|غيّر|بدّ?ل|بدائل|خيارات|ارخص|أرخص|رخيص/.test(_batch) || /ارخص|أرخص|رخيص|أقل\s*سعر|اقل\s*سعر/.test(String(_cls?.meaning || ""));
     const _keepFirst = /(?:اعتمد|أعتمد|نعتمد|ابي|أبي)\s*(?:ال)?(?:برنامج\s*)?(?:ال)?[أا]ول/.test(_batch);
     const _cheapAsk = idata.haram_explained === true && /(?:ابي|أبي|ابغى|أبغى|عطني|شوف(?:\s*لي)?|في|فيه)?\s*(?:شي|فندق|فنادق)?\s*(?:ارخص|أرخص|رخيص[ةه]?)/.test(_batch) && /ارخص|أرخص|رخيص/.test(_batch);
     if (_isUmrahReq && String(idata.program_final_raw || "") && ((_afterPricey && _wantOther && !_keepFirst) || _cheapAsk)) {
