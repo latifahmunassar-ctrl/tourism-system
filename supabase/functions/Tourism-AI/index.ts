@@ -3862,13 +3862,8 @@ Deno.serve(async (req) => {
                 const _tagK = Object.entries(_haramRoomMap).filter(([k, tags]) => !_haramMadinahNames.has(k.split("|")[0]) && (tags || []).includes(String(_hp.makkah_tag))).map(([k]) => k);
                 if (_tagK.length) { const _madK = _keys.filter(k => _haramMadinahNames.has(k.split("|")[0])); _keys.length = 0; _keys.push(..._madK, ..._tagK); }
               }
-              // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): فندق فيه غرفة «موصى به» بنفس التصنيف المطلوب → نختار الغرفة الموصى بها،
-              //    مو أرخص غرفة بالفندق (حادثة: Sofitel Classic ١٢٥٠ بدل Superior الموصى بها ١٣٠٥).
-              if (_roomKeys.length && String(_hp.haram) !== "موصى به") {
-                const _recHotels = new Set(_keys.filter(k => (_haramRoomMap[k] || []).includes("موصى به")).map(k => k.split("|")[0]));
-                const _pruned = _keys.filter(k => !_recHotels.has(k.split("|")[0]) || (_haramRoomMap[k] || []).includes("موصى به"));
-                _keys.length = 0; _keys.push(..._pruned);
-              }
+              // ٥ نوفمبر ٢٠٢٦ (قرار المالكة — القاعدة): أول عرض = «موصى به» (حسب عدد الأشخاص ونوع الغرفة). بعدها لما العميل يطلب صفة
+              //    (قريب من الحرم / بجانب الحرم / الأبراج) ولا حدّد نوع غرفة → **الأرخص** داخل التصنيف (البنّاء يختار الأرخص من المفضّلة).
               // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): العميل قال «لا» لتغيير فندق المدينة → نشيل فنادق المدينة من التفضيل ونثبّت فندقه الحالي (اسم|غرفة).
               const _keep = Array.isArray(_hp.haram_keep) ? (_hp.haram_keep as Array<{ name?: string; room?: string }>) : [];
               if (_keep.length) {
