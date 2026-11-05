@@ -1639,10 +1639,12 @@ async function sendPostProgramMessages(supabase: ReturnType<typeof createClient>
     const _cnt = (re: RegExp) => _bodies.filter(b => re.test(b)).length;
     // ٤ نوفمبر ٢٠٢٦ (حي): طلب عمرة **جديد** بعد برنامج تايلاند → «البرنامج بعد التعديل صار جاهز». «بعد التعديل» = نفس الطلب فقط
     //    (رسائل الجاهزية من بداية الطلب الحالي started_at).
-    let _reqStartP = 0;
-    try { const { data: _ss } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", phone).maybeSingle(); _reqStartP = Date.parse(String(((_ss as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}).started_at || "")) || 0; } catch (_e) { /* */ }
+    let _reqStartP = 0; let _modP = false;
+    try { const { data: _ss } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", phone).maybeSingle(); const _idP = ((_ss as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>; _modP = _idP.program_modified === true; _reqStartP = Date.parse(String(_idP.started_at || "")) || 0; } catch (_e) { /* */ }
     const _readyRe = /^تفضل أستاذي، (?:برنامجك صار جاهز|البرنامج بعد التعديل|هذا البرنامج المعدّل)/;
-    const nReady = ((_prev || []) as Array<{ body?: string; sent_at?: string }>).filter(r => _readyRe.test(String(r.body || "")) && (Date.parse(String(r.sent_at || "")) || 0) >= _reqStartP).length;
+    const _nReady0 = ((_prev || []) as Array<{ body?: string; sent_at?: string }>).filter(r => _readyRe.test(String(r.body || "")) && (Date.parse(String(r.sent_at || "")) || 0) >= _reqStartP).length;
+    // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): البرنامج انبنى من طلب تعديل → دايماً صيغة «المعدّل»، حتى لو رسائل الجاهزية السابقة ما انعدّت.
+    const nReady = _modP ? Math.max(1, _nReady0) : _nReady0;
     // ملاحظة السرير: «سابقاً» فقط لو انذكرت **نفس الأطفال** (نفس الأعمار) قبل — مو أطفال طلب ثاني.
     const _kidKey = (m: string) => (m.match(/(?:عمره|أعمارهم)\s*([^).،]+)/) || [])[1]?.trim() || "";
     msgs = msgs0.map(m => {
@@ -3693,6 +3695,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     const nd: Record<string, unknown> = { ...idata, ...changed, awaiting_confirm: true, summary_confirmed: false };
     if ("ages" in changed) nd.asked_children = true;
     delete nd.auto_program; delete nd.post_program_msgs; delete nd.pending_modify; delete nd.program_final_raw; delete nd.program_final_code;
+    nd.program_modified = true;   // ٥ نوفمبر ٢٠٢٦: البرنامج الجاي معدّل → رسالة الختام «هذا البرنامج المعدّل…» (مو «برنامجك صار جاهز»)
     await supabase.from("whatsapp_sessions").update({ intake_active: true, intake_data: nd, stage: "new" }).eq("phone", from);
     const _bad = _cardVsCustomer(nd, _batch);
     if (_bad) { await supabase.from("whatsapp_sessions").update({ intake_active: false, intake_data: { ...idata } }).eq("phone", from); await _say(_clarifyMsg(_bad), "card_contradicts_customer", "clarify", _bad, true); return; }
@@ -3710,6 +3713,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     if (!(await _medGate(changed))) return;
     const nd: Record<string, unknown> = { ...idata, ...changed, awaiting_confirm: true, summary_confirmed: false };
     delete nd.auto_program; delete nd.post_program_msgs; delete nd.pending_modify; delete nd.program_final_raw; delete nd.program_final_code;
+    nd.program_modified = true;   // ٥ نوفمبر ٢٠٢٦: البرنامج الجاي معدّل → رسالة الختام «هذا البرنامج المعدّل…» (مو «برنامجك صار جاهز»)
     await supabase.from("whatsapp_sessions").update({ intake_active: true, intake_data: nd, stage: "new" }).eq("phone", from);
     if (apologyMsg) await _say(apologyMsg, "followup_ai", "rebuild_apology", JSON.stringify(changed).slice(0, 200));
     await handleNewLeadIntake({ supabase, from, body: "نعم" });   // نفس مسار «نعم» على الكرت → بناء + PDF

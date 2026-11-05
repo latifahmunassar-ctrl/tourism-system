@@ -246,6 +246,17 @@ for (const [t, want] of [["يعني الي عمره ١٢ سنه يعتر بال�
     if (ok(got)) { pass++; realLog(`✅ post-ready «${n}»`); } else { fail++; realLog(`❌ post-ready «${n}» → ${got}`); }
   }
 }
+// ── ٥ نوفمبر ٢٠٢٦ (قرار المالكة): برنامج انبنى من تعديل (program_modified) → «المعدّل/بعد التعديل» حتى لو رسالة الجاهزية الأولى قبل started_at ──
+{
+  const RDY = "تفضل أستاذي، برنامجك صار جاهز. أي تعديل في البرنامج أنا حاضر.";
+  const old = new Date(Date.now() - 3600e3).toISOString(), start = new Date(Date.now() - 600e3).toISOString();
+  DB = { wa_admin_messages: [{ customer_phone: PHONE, body: RDY, sent_by: "طلال", sent_at: old }], whatsapp_sessions: [{ phone: PHONE, intake_data: { started_at: start, program_modified: true } }], wa_message_audit: [], guard_logs: [], program_pdf_jobs: [], wa_settings: [] };
+  console.log = () => {}; console.error = () => {};
+  try { await sendPostProgramMessages(fakeSupabase, PHONE, [RDY]); } catch (_e) { /* */ }
+  console.log = realLog; console.error = realErr;
+  const got = String(DB.wa_admin_messages.at(-1)?.body || "");
+  if (/بعد التعديل|المعدّل/.test(got)) { pass++; realLog("✅ post-ready «برنامج معدّل (program_modified)»"); } else { fail++; realLog(`❌ post-ready «برنامج معدّل (program_modified)» → ${got}`); }
+}
 // ── وحدة: صيغ الموافقة (٤ نوفمبر: «تماما» ما انحسبت) ──
 for (const [t, want] of [["تماما", true], ["تمامم", true], ["تمام", true], ["اوكيه", true], ["طيب", true], ["👍", true], ["✅", true], ["ايوه", true], ["okk", true], ["كل شي صح", true], ["لا", false], ["تمام بس غير التاريخ ١٥", false], ["متى", false]] as Array<[string, boolean]>) {
   const got = isYesish(t);
