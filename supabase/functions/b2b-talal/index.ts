@@ -178,12 +178,12 @@ Deno.serve(async (req) => {
             }
           } catch (_) { /* التنبيه best-effort — لا يكسر الاستقبال */ }
 
-          // 3) رد سارة التلقائي (للنص ولضغطات الأزرار «مهتم»/«ليس الآن»)
+          // 3) رد سارة التلقائي على أي نوع رسالة (نص/صورة/ملف/أزرار…) عدا التفاعلات (reactions) — بنفس النص المعتمد
           //    مفتاح تشغيل عام: سارة متوقّفة افتراضياً، وتعمل فقط إذا b2b_settings.auto_reply_enabled = on/true/1/yes.
           const { data: arGlobalRow } = await supabase.from("b2b_settings")
             .select("value").eq("key", "auto_reply_enabled").maybeSingle();
           const autoReplyGlobalOn = /^(on|true|1|yes)$/i.test(String(arGlobalRow?.value || "").trim());
-          if (autoReplyGlobalOn && conv.auto_reply !== false && text) {
+          if (autoReplyGlobalOn && conv.auto_reply !== false && type !== "reaction") {
             try {
               const { data: rows } = await supabase.from("b2b_settings")
                 .select("key, value").in("key", ["talal_system_prompt", "admin_whatsapp", "admin_whatsapp_link"]);
@@ -219,7 +219,7 @@ Deno.serve(async (req) => {
               // Anthropic يشترط أن تبدأ المحادثة برسالة user
               while (history.length && history[0].role !== "user") history.shift();
               if (!history.length || history[history.length - 1].role !== "user") {
-                history.push({ role: "user", content: text });
+                history.push({ role: "user", content: text || body });
               }
 
               const reply = await talalReply(systemPrompt, history);
