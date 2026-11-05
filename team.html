@@ -5480,9 +5480,30 @@ async function missingHotelsLoad(){
 //    جاهز). لو تعذّر استخراج أي معطى مفيد → يمرّر النص لشات المساعد ليقترح/يسأل (تدرّج).
 const WA_AR_MONTHS = {'يناير':1,'فبراير':2,'مارس':3,'ابريل':4,'نيسان':4,'مايو':5,'يونيو':6,'يوليو':7,'اغسطس':8,'غشت':8,'سبتمبر':9,'ايلول':9,'اكتوبر':10,'نوفمبر':11,'ديسمبر':12};
 function waReqNorm(s){ return String(s||'').toLowerCase().replace(/[ً-ْ]/g,'').replace(/[إأآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/غ/g,'ج').replace(/\s+/g,' ').trim(); }
+// أخطاء إملائية شائعة في اسم الشهر («ديسبمر»، «ديسبمبر»، «أبريل» بهمزة) → الاسم الصحيح.
+// نصحّح فقط الكلمة اللي بعد رقم مباشرة (6 ديسبمر)، فلا تتأثر كلمات عادية تشبه شهراً («مدارس»).
+function waEditDist(a,b){ const d=[]; for(let i=0;i<=a.length;i++){ d[i]=[i]; for(let j=1;j<=b.length;j++) d[i][j]= i===0 ? j : Math.min(d[i-1][j]+1, d[i][j-1]+1, d[i-1][j-1]+(a[i-1]===b[j-1]?0:1), (i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1]) ? d[i-2][j-2]+1 : 1e9); } return d[a.length][b.length]; }
+function waFixMonthTypos(s){
+  const keys=Object.keys(WA_AR_MONTHS);
+  return String(s||'').replace(/(\d{1,2})([\s\/.]*)([ء-ي]{3,})/g, (all,num,sep,w)=>{
+    if(WA_AR_MONTHS[w]) return all;
+    const wn=waReqNorm(w); let best='', bd=9;
+    for(const k of keys){ const dd=waEditDist(wn,waReqNorm(k)); if(dd<bd){ bd=dd; best=k; } }
+    // كلمة قصيرة (≤٥ حروف) ما تُصحَّح أبداً — «مدارس» قريبة من «مارس» بحرف واحد
+    const lim = (wn.length>=6 && best.length>=5) ? (wn.length>=8 ? 2 : 1) : 0;
+    return (best && bd<=lim && wn[0]===waReqNorm(best)[0]) ? num+sep+best : all;
+  });
+}
+// أسماء بديلة للمدن (كتابة مختلفة لنفس المدينة) → اسمها في BF_CITIES
+const WA_CITY_ALIAS = {'فوكيت':'بوكيت','phuket':'بوكيت','كوه ساموي':'كوساموي','كو ساموي':'كوساموي','ساموي':'كوساموي','samui':'كوساموي','تشيانغ ماي':'شيانغ ماي','شنغماي':'شيانغ ماي','شيانج ماي':'شيانغ ماي','بتايا':'باتايا','pattaya':'باتايا','krabi':'كرابي','bangkok':'بانكوك'};
+function waApplyCityAlias(nb){
+  let out=nb;
+  for(const [a,c] of Object.entries(WA_CITY_ALIAS)){ const an=waReqNorm(a); if(out.includes(an) && !out.includes(waReqNorm(c))) out=out.split(an).join(waReqNorm(c)); }
+  return out;
+}
 function waReqParse(body){
-  const lat = (typeof arabicDigitsToLatin==='function') ? arabicDigitsToLatin(String(body||'')) : String(body||'');
-  const nb = waReqNorm(lat);
+  const lat = waFixMonthTypos((typeof arabicDigitsToLatin==='function') ? arabicDigitsToLatin(String(body||'')) : String(body||''));
+  const nb = waApplyCityAlias(waReqNorm(lat));
   const CITY = (typeof BF_CITIES!=='undefined') ? BF_CITIES : {};
   // الوجهة: مفتاح مباشر، ثم استنتاج من أول مدينة مذكورة (طرابزون → تركيا)
   let dest=''; for(const k of Object.keys(CITY)){ if(nb.includes(waReqNorm(k))){ dest=k; break; } }
@@ -5496,7 +5517,7 @@ function waReqParse(body){
     else { const wm=nb.match(/(واحد|اثنين|اثنان|ثلاثه?|اربعه?|خمسه?|سته?|سبعه?|ثمانيه?|ثمان|تسعه?|عشره?)\s*(?:اشخاص|بالج|بالغ|افراد|نفر|كبار)/);
       if(wm){ const BW={'واحد':1,'اثنين':2,'اثنان':2,'ثلاث':3,'اربع':4,'خمس':5,'ست':6,'سبع':7,'ثماني':8,'ثمان':8,'تسع':9,'عشر':10}; adults=BW[wm[1].replace(/ه$/,'')]||null; } }
   }
-  let children=0, mc=lat.match(/(\d+)\s*(?:طفل|اطفال|أطفال|رضيع|رضع)/); if(mc) children=parseInt(mc[1],10); else if(/طفلين/.test(nb)) children=2; else if(/طفل/.test(lat)&&!/اطفال|أطفال/.test(lat)) children=1;
+  let children=0, mc=lat.match(/(\d+)\s*(?:طفل|اطفال|أطفال|رضيع|رضع)/); if(mc) children=parseInt(mc[1],10); else { if(/طفلين/.test(nb)) children=2; else if(/طفل/.test(lat)&&!/اطفال|أطفال/.test(lat)) children=1; if(/رضيع(?!ين)/.test(lat)) children+=1; else if(/رضيعين/.test(lat)) children+=2; }   // «+طفل … +رضيع» = ٢
   // النجوم (خمس+أربع معاً → mixed)
   let stars='mixed'; const h5=/(?:خمس|خمسه|5|٥)\s*نجوم/.test(nb)||/5\s*star/i.test(lat), h4=/(?:اربع|اربعه|4|٤)\s*نجوم/.test(nb)||/4\s*star/i.test(lat); if(h5&&!h4)stars='5'; else if(h4&&!h5)stars='4';
   // التواريخ والأيام
