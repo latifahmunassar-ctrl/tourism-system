@@ -266,7 +266,7 @@ for (const [t, want] of [["يعني الي عمره ١٢ سنه يعتر بال�
   try { await sendPostProgramMessages(fakeSupabase, PHONE, [RDY]); } catch (_e) { /* */ }
   console.log = realLog; console.error = realErr;
   const got = String(DB.wa_admin_messages.at(-1)?.body || "");
-  if (got === "تفضل أستاذي، هذي أرخص العروض عندنا، بإمكانك الاطلاع عليها.") { pass++; realLog("✅ post-ready «أرخص العروض»"); } else { fail++; realLog(`❌ post-ready «أرخص العروض» → ${got}`); }
+  if (got === "تفضل أستاذي، هذا العرض الثالث، ياريت تطّلع عليه، وأنتظر تأكيدك أو التعديل عليه إذا حبيت.") { pass++; realLog("✅ post-ready «أرخص العروض»"); } else { fail++; realLog(`❌ post-ready «أرخص العروض» → ${got}`); }
 }
 // ── وحدة: صيغ الموافقة (٤ نوفمبر: «تماما» ما انحسبت) ──
 for (const [t, want] of [["تماما", true], ["تمامم", true], ["تمام", true], ["اوكيه", true], ["طيب", true], ["👍", true], ["✅", true], ["ايوه", true], ["okk", true], ["كل شي صح", true], ["ياريت", true], ["يا ريت", true], ["ياليت والله", true], ["لا", false], ["تمام بس غير التاريخ ١٥", false], ["متى", false]] as Array<[string, boolean]>) {

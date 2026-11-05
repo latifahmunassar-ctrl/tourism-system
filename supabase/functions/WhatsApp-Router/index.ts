@@ -1653,7 +1653,7 @@ async function sendPostProgramMessages(supabase: ReturnType<typeof createClient>
     // ملاحظة السرير: «سابقاً» فقط لو انذكرت **نفس الأطفال** (نفس الأعمار) قبل — مو أطفال طلب ثاني.
     const _kidKey = (m: string) => (m.match(/(?:عمره|أعمارهم)\s*([^).،]+)/) || [])[1]?.trim() || "";
     msgs = msgs0.map(m => {
-      if (/^تفضل أستاذي/.test(m)) return _cheapP ? "تفضل أستاذي، هذي أرخص العروض عندنا، بإمكانك الاطلاع عليها." : _varyPostMsg(m, nReady);   // ٥ نوفمبر ٢٠٢٦ (قرار المالكة)
+      if (/^تفضل أستاذي/.test(m)) return _cheapP ? "تفضل أستاذي، هذا العرض الثالث، ياريت تطّلع عليه، وأنتظر تأكيدك أو التعديل عليه إذا حبيت." : _varyPostMsg(m, nReady);   // ٥ نوفمبر ٢٠٢٦ (قرار المالكة)
       if (/^علماً أن البرنامج ما فيه سرير/.test(m)) { const key = _kidKey(m); return _varyPostMsg(m, key ? _bodies.filter(b => /سرير إضافي (?:للطفل|للأطفال)/.test(b) && _kidKey(b) === key).length : 0); }
       return m;
     });
