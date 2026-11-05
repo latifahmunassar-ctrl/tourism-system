@@ -2394,6 +2394,8 @@ function parseHaramTags(text: string): string[] {
   // «إطلالة على الحرم» أو صيغة الفعل «مطلّة/مطله على الحرم» (الغرفة تطل على الحرم).
   if (new RegExp(viewRe.source + "الحرم").test(t)) out.push("إطلالة على الحرم");
   if (/موص[يى]\s*به/.test(t)) out.push("موصى به");
+  // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): تصنيف «الأبراج» (أبراج البيت/برج الساعة) — العميل يطلبه بالاسم.
+  if (/(?:ال)?[أا]براج|برج\s*(?:ال)?ساع[ةه]/.test(t)) out.push("الأبراج");
   return out;
 }
 let _haramCache: { at: number; map: Record<string, string[]> } | null = null;
@@ -2438,8 +2440,10 @@ async function loadHaramProximity(): Promise<Record<string, string[]>> {
     for (const r of rows) {
       const nm = String((r || [])[nameCol] || "").trim();
       const px = String((r || [])[proxCol] || "").trim();
-      if (!nm || !px) continue;
-      const tags = parseHaramTags(px);
+      if (!nm) continue;
+      // ٥ نوفمبر ٢٠٢٦: «الأبراج»/«مطل على الكعبة» ممكن تنكتب بعمود ثاني بنفس السطر → نضيفها من باقي الخلايا (هذي التصنيفات بس).
+      const _extra = parseHaramTags((r || []).filter((_, j) => j !== proxCol && j !== nameCol).map(c => String(c || "")).join(" ")).filter(x => x === "الأبراج" || x === "إطلالة على الكعبة");
+      const tags = Array.from(new Set([...parseHaramTags(px), ..._extra]));
       if (!tags.length) continue;
       const k = normHotelName(nm);
       map[k] = Array.from(new Set([...(map[k] || []), ...tags]));
@@ -3852,6 +3856,12 @@ Deno.serve(async (req) => {
               // غرفة بعينها موسومة → نفضّل الغرفة نفسها («اسم|غرفة»)؛ وإلا الفندق كله.
               const _roomKeys = Object.entries(_haramRoomMap).filter(([, tags]) => (tags || []).includes(String(_hp.haram))).map(([k]) => k);
               const _keys = _roomKeys.length ? _roomKeys : Object.entries(_hm).filter(([, tags]) => (tags || []).includes(String(_hp.haram))).map(([k]) => k);
+              // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): العميل طلب «الأبراج» → فندق مكة من المصنّفة «الأبراج» بس (المدينة تبقى على haram).
+              //    ما فيه ولا فندق مصنّف → نبقى على «بجانب الحرم» (أفضل من لا شي).
+              if (_hp.makkah_tag) {
+                const _tagK = Object.entries(_haramRoomMap).filter(([k, tags]) => !_haramMadinahNames.has(k.split("|")[0]) && (tags || []).includes(String(_hp.makkah_tag))).map(([k]) => k);
+                if (_tagK.length) { const _madK = _keys.filter(k => _haramMadinahNames.has(k.split("|")[0])); _keys.length = 0; _keys.push(..._madK, ..._tagK); }
+              }
               // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): فندق فيه غرفة «موصى به» بنفس التصنيف المطلوب → نختار الغرفة الموصى بها،
               //    مو أرخص غرفة بالفندق (حادثة: Sofitel Classic ١٢٥٠ بدل Superior الموصى بها ١٣٠٥).
               if (_roomKeys.length && String(_hp.haram) !== "موصى به") {

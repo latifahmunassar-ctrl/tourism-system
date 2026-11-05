@@ -1568,6 +1568,8 @@ async function _classifyFollowupIntent(transcript: string, lastTalal: string, ba
 const FLIGHT_WORD = "(?:ال)?(?:طيران|طريان|طيرن|طياران|تيران|طياره|طيارة|طيارات|رحل[ةه]\\s*جوي[ةه]|تذاكر|تذكر[ةه]|flights?|flight)";
 // 🕋 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): العميل يطلب/يعترض على موقع فندق مكة (بجانب الحرم، الأبراج، بعيد).
 const HARAM_WISH_RE = /(?:بجانب|بجنب|جنب|جمب|قريب\s*من|قدام|مقابل|يطل\s*على|مطل\s*على|على)\s*(?:ال)?حرم|(?:ال)?[أا]براج|برج\s*(?:ال)?ساع[ةه]|بعيد\s*(?:عن|من)\s*(?:ال)?حرم/;
+// ٥ نوفمبر ٢٠٢٦ (قرار المالكة): «الأبراج» تصنيف خاص بالشيت (مو أي فندق بجانب الحرم) → hotel_prefs.makkah_tag.
+const ABRAJ_RE = /(?:ال)?[أا]براج|برج\s*(?:ال)?ساع[ةه]/;
 const HARAM_COMPLAINT_RE = /(?:ال)?فندق\s*(?:\S+\s*){0,3}?بعيد|بعيد\s*(?:عن|من)\s*(?:ال)?حرم|(?:مو|مش|مب|ما\s*هو|ليس)\s*(?:\S+\s*){0,1}?(?:بجانب|جنب|قريب\s*من)\s*(?:ال)?حرم|(?:ال)?[أا]براج|برج\s*(?:ال)?ساع[ةه]|(?:بجانب|جنب|جمب)\s*(?:ال)?حرم/;
 // أسماء المدن (كما في سطور الفنادق بالإنجليزي) → عربي للتوزيعة والرسائل.
 const CITY_AR: Record<string, string> = { Phuket: "بوكيت", Krabi: "كرابي", Bangkok: "بانكوك", Pattaya: "باتايا", "Koh Samui": "ساموي", "Chiang Mai": "شيانغ ماي",
@@ -3731,9 +3733,10 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     const _ans = haramMadinahAnswer(_batch) || (/^yes/.test(String(_cls?.yes_no || "")) ? "yes" : String(_cls?.yes_no || "") === "no" ? "no" : null);
     if (_ans) {
       delete idata.haram_madinah_asked;
-      if (_ans === "yes") { await _rebuildNow({ hotel_prefs: { ..._hpQ, haram: "بجانب الحرم" }, haram_madinah_asked: null }, ""); return; }
+      const _mtQ = (idata.haram_abraj === true || ABRAJ_RE.test(_batch)) ? { makkah_tag: "الأبراج" } : {};
+      if (_ans === "yes") { await _rebuildNow({ hotel_prefs: { ..._hpQ, haram: "بجانب الحرم", ..._mtQ }, haram_madinah_asked: null }, ""); return; }
       const _keepM = madinahHotelFromRaw(String(idata.program_final_raw || ""));
-      await _rebuildNow({ hotel_prefs: { ..._hpQ, haram: "بجانب الحرم", ...(_keepM ? { haram_keep: [_keepM] } : {}) }, haram_madinah_asked: null }, "");
+      await _rebuildNow({ hotel_prefs: { ..._hpQ, haram: "بجانب الحرم", ..._mtQ, ...(_keepM ? { haram_keep: [_keepM] } : {}) }, haram_madinah_asked: null }, "");
       return;
     }
     // ردّ ما له علاقة بالسؤال → نشيل العلم ونكمل المسار العادي.
@@ -3743,15 +3746,17 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   // 🕋 ٥ نوفمبر ٢٠٢٦ (قرار المالكة): الرفض الثاني (بعد شرح فندق مكة) → قبل ما نغيّر نسأل عن فندق المدينة — إلا لو العميل حدّدها بنفسه.
   const _haramSecond = async () => {
     const _hpH = ((idata.hotel_prefs && typeof idata.hotel_prefs === "object") ? idata.hotel_prefs : {}) as Record<string, unknown>;
+    const _abraj = ABRAJ_RE.test(_batch) || idata.haram_abraj === true;
+    const _mt = _abraj ? { makkah_tag: "الأبراج" } : {};
     const _madAns = /المدين/.test(_batch) ? (haramMadinahAnswer(_batch) || "yes") : null;
     if (!_madAns && madinahHotelFromRaw(String(idata.program_final_raw || ""))) {
       const ok = await _say("تمام أستاذي، وحتى فندق المدينة أغيّره لك بجانب الحرم؟", "followup_ai", "haram_madinah_ask", "", true);
       if (!ok) return;
-      await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, haram_madinah_asked: true } }).eq("phone", from);
+      await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, haram_madinah_asked: true, ...(_abraj ? { haram_abraj: true } : {}) } }).eq("phone", from);
       return;
     }
-    if (_madAns === "no") { const _keepM = madinahHotelFromRaw(String(idata.program_final_raw || "")); await _rebuildNow({ hotel_prefs: { ..._hpH, haram: "بجانب الحرم", ...(_keepM ? { haram_keep: [_keepM] } : {}) } }, ""); return; }
-    await _rebuildNow({ hotel_prefs: { ..._hpH, haram: "بجانب الحرم" } }, "");   // رسالة البناء «تمام، أبشر، شوية والبرنامج عندك.» تكفي
+    if (_madAns === "no") { const _keepM = madinahHotelFromRaw(String(idata.program_final_raw || "")); await _rebuildNow({ hotel_prefs: { ..._hpH, haram: "بجانب الحرم", ..._mt, ...(_keepM ? { haram_keep: [_keepM] } : {}) } }, ""); return; }
+    await _rebuildNow({ hotel_prefs: { ..._hpH, haram: "بجانب الحرم", ..._mt } }, "");   // رسالة البناء «تمام، أبشر، شوية والبرنامج عندك.» تكفي
   };
   // 🛡️ حارس (تكرر مرتين ٥ نوفمبر: «أيوه غيره…للخرم» و«ايوه غبره» → «تقصد نعدل البرنامج كذا؟»): بعد شرح الفندق،
   //    أي موافقة/طلب تغيير = رفض ثاني → سؤال المدينة. الكلمات أولاً، وإلا تصنيف النموذج. «لا خله/عادي» = قبول الفندق → المسار العادي.
