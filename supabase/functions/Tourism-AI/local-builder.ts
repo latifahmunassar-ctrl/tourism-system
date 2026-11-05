@@ -358,6 +358,12 @@ export function pickCheapestHotel(
       const strict = allHotels.filter(h => baseFilter(h) && extractAdultsCount(h.occupancy || "") === adults);
       return strict.length > 0 ? strict : noOccCandidates();
     }
+    // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): «أرخص العروض» → أي غرفة تتسع للعدد أو أكثر (أو بلا عمود إشغال)، والأرخص يفوز
+    //    (Voco رباعية ٤٤٥ لـ٣ أشخاص بدل Anjum ثلاثية ١٠٦٢). ❌ لا غرفة أصغر من العدد.
+    if ((request as { cheapestAnyRoom?: boolean }).cheapestAnyRoom === true) {
+      const fit = allHotels.filter(h => baseFilter(h) && (!hasOcc(h) || extractAdultsCount(h.occupancy || "") >= adults));
+      if (fit.length) return fit;
+    }
     const adultsByCap = (cap: number) => allHotels.filter(h => {
       if (!baseFilter(h)) return false;
       return extractAdultsCount(h.occupancy || "") === cap;

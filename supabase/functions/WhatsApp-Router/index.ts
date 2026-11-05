@@ -3801,9 +3801,16 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     const _wantOther = /شوف|ثاني[ةه]?|ثانيين|غيره?ا?|غيّر|بدّ?ل|بدائل|خيارات|ارخص|أرخص|رخيص/.test(_batch) || /ارخص|أرخص|رخيص|أقل\s*سعر|اقل\s*سعر/.test(String(_cls?.meaning || ""));
     const _keepFirst = /(?:اعتمد|أعتمد|نعتمد|ابي|أبي)\s*(?:ال)?(?:برنامج\s*)?(?:ال)?[أا]ول/.test(_batch);
     const _cheapAsk = idata.haram_explained === true && /(?:ابي|أبي|ابغى|أبغى|عطني|شوف(?:\s*لي)?|في|فيه)?\s*(?:شي|فندق|فنادق)?\s*(?:ارخص|أرخص|رخيص[ةه]?)/.test(_batch) && /ارخص|أرخص|رخيص/.test(_batch);
+    // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): وصله «أرخص العروض» ولساته رافض/يبي فنادق ثانية → رسالة الميزانية (بلا بناء ولا «وش الغلط»).
+    const _rejectsCheap = idata.program_cheapest === true && (_wantOther || /ما\s*عجب|مو\s*عاجب|ما\s*ناسب|مو\s*مناسب|غالي|مكلف/.test(_batch) || /^(?:complaint|modify)/.test(String(_cls?.intent || ""))) && !/[0-9٠-٩]/.test(_batch) && !_keepFirst;
+    if (_isUmrahReq && String(idata.program_final_raw || "") && _rejectsCheap) {
+      if (await _superseded()) return;
+      await _say("أستاذي، إذا عندك ميزانية معيّنة بلغني، وأنا أشوف إذا فيه عندنا فنادق تتوافق مع ميزانيتك، لأننا حابين نخدمك ونشوف إيش اللي ممكن نسويه عشان نرضيك.", "followup_ai", "cheapest_budget_ask", "", true);
+      return;
+    }
     if (_isUmrahReq && String(idata.program_final_raw || "") && ((_afterPricey && _wantOther && !_keepFirst) || _cheapAsk)) {
       if (await _superseded()) return;
-      await _rebuildNow({ hotel_prefs: { haram: "" }, program_cheapest: true }, "");
+      await _rebuildNow({ hotel_prefs: { haram: "", cheapest: true }, program_cheapest: true }, "");
       return;
     }
   }

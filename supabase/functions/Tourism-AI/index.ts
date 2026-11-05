@@ -3850,6 +3850,7 @@ Deno.serve(async (req) => {
             if (_hp.name) { (req as { preferHotelName?: string }).preferHotelName = String(_hp.name); if (_hp.city) (req as { preferHotelCity?: string }).preferHotelCity = String(_hp.city); }
             if (_hp.feature) (req as { prefFeature?: string }).prefFeature = String(_hp.feature);
             if (_hp.sea_view === true) (req as { prefSeaView?: boolean }).prefSeaView = true;
+            if (_hp.cheapest === true) (req as { cheapestAnyRoom?: boolean }).cheapestAnyRoom = true;   // ٥ نوفمبر ٢٠٢٦: «أرخص العروض»
             // 🕋 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): العمرة → فنادق «موصى به» أولاً (أو تصنيف قرب الحرم المطلوب) من عمود التصنيف بشيت مكة. ناعم.
             if (_hp.haram && destKey === "Makkah") {
               const _hm = await loadHaramProximity();
