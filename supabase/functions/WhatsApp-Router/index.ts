@@ -3681,6 +3681,8 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     return true;
   };
   const _isUmrahReq = _isUmrahDest(String(facts.destination || "") + " " + String(facts.cities || ""));
+  // 📒 ٥ نوفمبر ٢٠٢٦: سجل العروض للنموذج — يعرف وش انقدّم بالطلب ووش باقي.
+  { const _os = offersSummary(idata); if (_os) facts.offers_sent = _os; }
   // ✈️ قبل أي تعديل للعودة من المدينة: نتأكد إن فيه طيران المدينة ← مسقط بتاريخ العودة.
   const _medGate = async (changed: Record<string, unknown>): Promise<boolean> => {
     if (changed.return_airport !== "madinah") return true;
@@ -3797,7 +3799,9 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   {
     // ٥ نوفمبر ٢٠٢٦ (حي): بين عرض البديل والطلب جا «تقصد نعدل البرنامج كذا؟» → «ايوه» بنى نفس الأبراج. الحين: عرض البديل **بأي مكان بالطلب الحالي**
     //    (msgs مقصوصة من started_at) + طلب فنادق ثانية/أرخص (كلمات أو معنى المصنّف) = أرخص العروض.
-    const _afterPricey = msgs.some(m => m.who === "طلال" && m.body.includes("بإمكانك تعتمد البرنامج اللي أرسلته لك أول")) && idata.program_cheapest !== true;
+    // 📒 سجل العروض: قدّمنا الأبراج (أغلى تصنيف) بهذا الطلب وما عجبه → الخطوة الجاية أرخص العروض.
+    const _offK = (Array.isArray(idata.offers) ? (idata.offers as Array<Record<string, unknown>>) : []).map(o => String(o.kind || ""));
+    const _afterPricey = (msgs.some(m => m.who === "طلال" && m.body.includes("بإمكانك تعتمد البرنامج اللي أرسلته لك أول")) || _offK.includes("الأبراج")) && idata.program_cheapest !== true;
     const _wantOther = /شوف|ثاني[ةه]?|ثانيين|غيره?ا?|غيّر|بدّ?ل|بدائل|خيارات|ارخص|أرخص|رخيص/.test(_batch) || /ارخص|أرخص|رخيص|أقل\s*سعر|اقل\s*سعر/.test(String(_cls?.meaning || ""));
     const _keepFirst = /(?:اعتمد|أعتمد|نعتمد|ابي|أبي)\s*(?:ال)?(?:برنامج\s*)?(?:ال)?[أا]ول/.test(_batch);
     const _cheapAsk = idata.haram_explained === true && /(?:ابي|أبي|ابغى|أبغى|عطني|شوف(?:\s*لي)?|في|فيه)?\s*(?:شي|فندق|فنادق)?\s*(?:ارخص|أرخص|رخيص[ةه]?)/.test(_batch) && /ارخص|أرخص|رخيص/.test(_batch);
@@ -3808,7 +3812,8 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
       await _say("أستاذي، إذا عندك ميزانية معيّنة بلغني، وأنا أشوف إذا فيه عندنا فنادق تتوافق مع ميزانيتك، لأننا حابين نخدمك ونشوف إيش اللي ممكن نسويه عشان نرضيك.", "followup_ai", "cheapest_budget_ask", "", true);
       return;
     }
-    if (_isUmrahReq && String(idata.program_final_raw || "") && ((_afterPricey && _wantOther && !_keepFirst) || _cheapAsk)) {
+    const _namesCat = HARAM_NEAR_RE.test(_batch) || HARAM_NEXT_RE.test(_batch);   // حدّد تصنيف بنفسه → مسار الحرم
+    if (_isUmrahReq && String(idata.program_final_raw || "") && ((_afterPricey && _wantOther && !_keepFirst && !_namesCat) || _cheapAsk)) {
       if (await _superseded()) return;
       await _rebuildNow({ hotel_prefs: { haram: "", cheapest: true }, program_cheapest: true }, "");
       return;
@@ -6027,6 +6032,25 @@ function madinahHotelFromRaw(raw: string): { name: string; room: string } | null
     if (p.length >= 4 && /madin|المدين/i.test(p[1] || "")) return { name: p[0], room: String(p[3] || "").replace(/\s*\(يتسع[^)]*\)\s*$/, "").trim() };
   }
   return null;
+}
+// 📒 نوع العرض من تفضيلات البناء (سجل العروض).
+function offerKind(d: Record<string, unknown>): string {
+  const hp = ((d.hotel_prefs && typeof d.hotel_prefs === "object") ? d.hotel_prefs : {}) as Record<string, unknown>;
+  if (d.program_cheapest === true || hp.cheapest === true) return "أرخص العروض";
+  if (hp.makkah_tag === "الأبراج") return "الأبراج";
+  if (hp.haram === "قريب من الحرم") return "قريب من الحرم";
+  if (hp.haram === "بجانب الحرم") return "بجانب الحرم";
+  return "الموصى به";
+}
+function hotelNamesFromRaw(raw: string): string[] {
+  const sec = String(raw || "").split(/\nHOTELS:\s*\n/)[1] || "";
+  const out: string[] = [];
+  for (const line of sec.split("\n")) { if (!line.trim()) break; const n = line.split("|")[0].trim(); if (n) out.push(n); }
+  return out;
+}
+function offersSummary(d: Record<string, unknown>): string {
+  const o = Array.isArray(d.offers) ? (d.offers as Array<Record<string, unknown>>) : [];
+  return o.map((x, i) => `${i + 1}) ${x.kind}: ${(Array.isArray(x.hotels) ? x.hotels : []).join(" + ")}`).join(" | ");
 }
 function s0IntakeInactive(session: unknown): boolean { return !!session && (session as { intake_active?: boolean | null }).intake_active !== true; }
 function isNegative(text: string): boolean {
@@ -8647,7 +8671,13 @@ Deno.serve(async (req) => {
         const _pm = Array.isArray(_d.post_program_msgs) ? (_d.post_program_msgs as unknown[]).map(String) : [];
         // ٣ نوفمبر ٢٠٢٦: نص البرنامج **النهائي** كما في الـPDF (من العامل) — طلال يقرأه بدل نسخة السيرفر الأولى.
         const _fr = String(p.program_raw || "").trim();
-        if (_fr) { _d.program_final_raw = _fr.slice(0, 12000); _d.program_final_code = String(job.code); await supabase.from("whatsapp_sessions").update({ intake_data: _d }).eq("phone", String(job.phone)); }
+        if (_fr) {
+          _d.program_final_raw = _fr.slice(0, 12000); _d.program_final_code = String(job.code);
+          // 📒 ٥ نوفمبر ٢٠٢٦ (قرار المالكة): سجل العروض — طلال يعرف وش قدّم بالطلب (الموصى به / قريب / بجانب / الأبراج / أرخص العروض).
+          const _offers = Array.isArray(_d.offers) ? (_d.offers as Array<Record<string, unknown>>) : [];
+          if (!_offers.some(o => o.code === String(job.code))) _d.offers = [..._offers, { code: String(job.code), kind: offerKind(_d), hotels: hotelNamesFromRaw(_fr) }].slice(-8);
+          await supabase.from("whatsapp_sessions").update({ intake_data: _d }).eq("phone", String(job.phone));
+        }
         // 🔎 فحص ذاتي بعد الإرسال (رسائل ما بعد البرنامج أولاً، ثم الاعتذار لو فيه خطأ).
         if (_pm.length) {
           await supabase.from("whatsapp_sessions").update({ intake_data: { ..._d, post_program_msgs: [] } }).eq("phone", String(job.phone));
