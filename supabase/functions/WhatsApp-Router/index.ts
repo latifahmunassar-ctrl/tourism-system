@@ -3740,6 +3740,26 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     delete idata.haram_madinah_asked;
     await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata } }).eq("phone", from);
   }
+  // 🕋 ٥ نوفمبر ٢٠٢٦ (قرار المالكة): الرفض الثاني (بعد شرح فندق مكة) → قبل ما نغيّر نسأل عن فندق المدينة — إلا لو العميل حدّدها بنفسه.
+  const _haramSecond = async () => {
+    const _hpH = ((idata.hotel_prefs && typeof idata.hotel_prefs === "object") ? idata.hotel_prefs : {}) as Record<string, unknown>;
+    const _madAns = /المدين/.test(_batch) ? (haramMadinahAnswer(_batch) || "yes") : null;
+    if (!_madAns && madinahHotelFromRaw(String(idata.program_final_raw || ""))) {
+      const ok = await _say("تمام أستاذي، وحتى فندق المدينة أغيّره لك بجانب الحرم؟", "followup_ai", "haram_madinah_ask", "", true);
+      if (!ok) return;
+      await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, haram_madinah_asked: true } }).eq("phone", from);
+      return;
+    }
+    if (_madAns === "no") { const _keepM = madinahHotelFromRaw(String(idata.program_final_raw || "")); await _rebuildNow({ hotel_prefs: { ..._hpH, haram: "بجانب الحرم", ...(_keepM ? { haram_keep: [_keepM] } : {}) } }, ""); return; }
+    await _rebuildNow({ hotel_prefs: { ..._hpH, haram: "بجانب الحرم" } }, "");   // رسالة البناء «تمام، أبشر، شوية والبرنامج عندك.» تكفي
+  };
+  // 🛡️ حارس (تكرر مرتين ٥ نوفمبر: «أيوه غيره…للخرم» و«ايوه غبره» → «تقصد نعدل البرنامج كذا؟»): بعد شرح الفندق،
+  //    أي موافقة/طلب تغيير = رفض ثاني → سؤال المدينة. الكلمات أولاً، وإلا تصنيف النموذج. «لا خله/عادي» = قبول الفندق → المسار العادي.
+  if (_isUmrahReq && String(idata.program_final_raw || "") && idata.haram_explained === true && /بلغني وأرسل لك العرض الثاني/.test(_lastTalalBody) && !HARAM_COMPLAINT_RE.test(_batch)) {
+    const _w = haramMadinahAnswer(_batch);
+    const _wantChange = _w === "yes" || /غيّ?ر|غبر|غير[هة]|بدّ?ل/.test(_batch) || (_w === null && /^yes/.test(String(_cls?.yes_no || "")));
+    if (_wantChange && _w !== "no") { if (await _superseded()) return; await _haramSecond(); return; }
+  }
   if (_pend) {
     // 🧭 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): إضافة مدينة لبرنامج متعدد المدن → بعد «نعم» نسأل عن الترتيب ومطار القدوم/المغادرة مع اقتراح.
     const _segs = String(_pend.distribution || "").split(/\s*-\s*/).map(x => x.trim()).filter(Boolean);
@@ -4029,16 +4049,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
       await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, haram_explained: true } }).eq("phone", from);
       return;
     }
-    // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): قبل ما نغيّر نسأل عن فندق المدينة — إلا لو العميل حدّدها بنفسه.
-    const _madAns = /المدين/.test(_batch) ? (haramMadinahAnswer(_batch) || "yes") : null;
-    if (!_madAns && madinahHotelFromRaw(String(idata.program_final_raw || ""))) {
-      const ok = await _say("تمام أستاذي، وحتى فندق المدينة أغيّره لك بجانب الحرم؟", "followup_ai", "haram_madinah_ask", "", true);
-      if (!ok) return;
-      await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, haram_madinah_asked: true } }).eq("phone", from);
-      return;
-    }
-    if (_madAns === "no") { const _keepM = madinahHotelFromRaw(String(idata.program_final_raw || "")); await _rebuildNow({ hotel_prefs: { ..._hpH, haram: "بجانب الحرم", ...(_keepM ? { haram_keep: [_keepM] } : {}) } }, ""); return; }
-    await _rebuildNow({ hotel_prefs: { ..._hpH, haram: "بجانب الحرم" } }, "");   // رسالة البناء «تمام، أبشر، شوية والبرنامج عندك.» تكفي
+    await _haramSecond();
     return;
   }
   // ⏳ ٤ نوفمبر ٢٠٢٦: البرنامج قيد التجهيز («تمام، أبشر، شوية والبرنامج عندك») والعميل ينتظر → كان النموذج يقول «طلبك عند زميلي».
