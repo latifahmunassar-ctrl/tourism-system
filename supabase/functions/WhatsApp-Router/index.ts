@@ -3629,6 +3629,10 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     if (c >= 0) msgs.splice(0, c + 1); }
   const idata = (((sRes.data as { intake_data?: Record<string, unknown> } | null)?.intake_data) || {}) as Record<string, unknown>;
   if (idata.nights) idata.nights = _normNights(idata.nights);
+  // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): المتابعة تقرأ **الطلب الحالي فقط** (من started_at) — زي الاستقبال. كان المصنّف يشوف رسائل
+  //    طلبات سابقة ويقول «العميل يكرر للمرة الرابعة» على أول رسالة بالطلب الجديد.
+  { const _stF = Date.parse(String(idata.started_at || ""));
+    if (Number.isFinite(_stF)) { const _keepF = msgs.filter(m => (Date.parse(m.ts) || 0) >= _stF); msgs.length = 0; msgs.push(..._keepF); } }
   const facts: Record<string, unknown> = {};
   for (const k of ["destination", "pax", "ages", "date", "nights", "days", "cities"]) {
     const v = idata[k]; if (v !== undefined && v !== null && String(v).trim() !== "") facts[k] = v;

@@ -101,13 +101,14 @@ let medFlights: string[] | null = null;
 let rejectTools = false;
 let curIntent: Record<string, unknown> | null = null;
 let intentCalls = 0;
+let intentInput = "";   // ٥ نوفمبر: نص المحادثة اللي وصل لمصنّف النية
 let buildFail = false;
 (globalThis as any).fetch = async (input: any, init?: any) => {
   const url = String(input?.url || input);
   const json = (o: unknown) => new Response(JSON.stringify(o), { status: 200, headers: { "content-type": "application/json" } });
   if (url.includes("api.anthropic.com") && /"talal_intent"/.test(String(init?.body || ""))) {
     // مصنّف النية: السيناريو يحدده بـ intent؛ غير محدد = فشل → كاشفات الكلمات (سلوك السيناريوهات القديمة).
-    intentCalls++;
+    intentCalls++; intentInput = String(init?.body || "");
     if (!curIntent) return new Response(JSON.stringify({ type: "error", error: { type: "api_error", message: "no intent in scenario" } }), { status: 400, headers: { "content-type": "application/json" } });
     return json({ id: "m", type: "message", role: "assistant", model: "x", stop_reason: "tool_use", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "tool_use", id: "ti", name: "talal_intent", input: { yes_no: "none", frustrated: false, meaning: "", ...curIntent } }] });
   }
@@ -150,7 +151,7 @@ function seed(s: Scenario) {
   for (const [tb, rows] of Object.entries(s.tables || {})) (DB[tb] ||= []).push(...structuredClone(rows as RowT[]));
   for (const j of (s.jobs || [])) DB.program_pdf_jobs.push({ phone: PHONE, created_at: ts(), attempts: 0, ...j });
   DB.whatsapp_sessions.push({ phone: PHONE, profile_name: "اختبار", intake_active: s.sessionIntakeActive ?? (s.entry !== "followup"), stage: "new",
-    destination: s.session?.destination ?? null, intake_data: { ...structuredClone(s.intakeData || {}), ...(s.seenAt !== undefined ? { last_seen_in_ts: _tsList[s.seenAt] } : {}) }, ad_referral: null, last_message_at: ts() });
+    destination: s.session?.destination ?? null, intake_data: { ...structuredClone(s.intakeData || {}), ...(s.seenAt !== undefined ? { last_seen_in_ts: _tsList[s.seenAt] } : {}), ...((s as any).startedAt !== undefined ? { started_at: _tsList[(s as any).startedAt] } : {}) }, ad_referral: null, last_message_at: ts() });
   return ts;
 }
 
@@ -161,7 +162,7 @@ for (const s of SCENARIOS) {
   if (only && !s.id.includes(only)) continue;
   const lastTs = seed(s);
   const before = DB.wa_admin_messages.length;
-  modelQueue = [...s.model]; modelCalls = 0; buildCalls = 0; proposalCalls = 0; lastBuildBody = null; medFlights = s.medFlights || null; rejectTools = !!s.rejectTools; curIntent = (s as any).intent || null; intentCalls = 0; buildFail = !!s.buildFail; lastModelSystem = ""; injectOnModel = s.inboundDuringModel || null; _bg.length = 0;
+  modelQueue = [...s.model]; modelCalls = 0; buildCalls = 0; proposalCalls = 0; lastBuildBody = null; medFlights = s.medFlights || null; rejectTools = !!s.rejectTools; curIntent = (s as any).intent || null; intentCalls = 0; intentInput = ""; buildFail = !!s.buildFail; lastModelSystem = ""; injectOnModel = s.inboundDuringModel || null; _bg.length = 0;
   let crash = "";
   console.error = () => {}; console.warn = () => {}; console.log = () => {};
   try {
@@ -177,7 +178,7 @@ for (const s of SCENARIOS) {
   const sess = DB.whatsapp_sessions[0] || {};
   const proposals = (DB.whatsapp_admin_proposals || []).length;
   const jobs = DB.program_pdf_jobs || [];
-  const ctx = { db: DB, jobs, modelName: lastModelName, modelSystem: lastModelSystem, buildBody: lastBuildBody, reply: sent, session: sess, intake: sess.intake_data || {}, buildCalls, modelCalls, proposals };
+  const ctx = { db: DB, jobs, modelName: lastModelName, modelSystem: lastModelSystem, intentInput, buildBody: lastBuildBody, reply: sent, session: sess, intake: sess.intake_data || {}, buildCalls, modelCalls, proposals };
   const errs: string[] = [];
   if (crash) errs.push("انهار: " + crash.split("\n").slice(0, 3).join(" | "));
   for (const [label, check] of s.expect) { try { if (!check(ctx)) errs.push(label); } catch (e) { errs.push(label + " (" + (e as Error).message + ")"); } }

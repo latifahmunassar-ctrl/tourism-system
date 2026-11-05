@@ -3852,6 +3852,13 @@ Deno.serve(async (req) => {
               // غرفة بعينها موسومة → نفضّل الغرفة نفسها («اسم|غرفة»)؛ وإلا الفندق كله.
               const _roomKeys = Object.entries(_haramRoomMap).filter(([, tags]) => (tags || []).includes(String(_hp.haram))).map(([k]) => k);
               const _keys = _roomKeys.length ? _roomKeys : Object.entries(_hm).filter(([, tags]) => (tags || []).includes(String(_hp.haram))).map(([k]) => k);
+              // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): فندق فيه غرفة «موصى به» بنفس التصنيف المطلوب → نختار الغرفة الموصى بها،
+              //    مو أرخص غرفة بالفندق (حادثة: Sofitel Classic ١٢٥٠ بدل Superior الموصى بها ١٣٠٥).
+              if (_roomKeys.length && String(_hp.haram) !== "موصى به") {
+                const _recHotels = new Set(_keys.filter(k => (_haramRoomMap[k] || []).includes("موصى به")).map(k => k.split("|")[0]));
+                const _pruned = _keys.filter(k => !_recHotels.has(k.split("|")[0]) || (_haramRoomMap[k] || []).includes("موصى به"));
+                _keys.length = 0; _keys.push(..._pruned);
+              }
               // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): العميل قال «لا» لتغيير فندق المدينة → نشيل فنادق المدينة من التفضيل ونثبّت فندقه الحالي (اسم|غرفة).
               const _keep = Array.isArray(_hp.haram_keep) ? (_hp.haram_keep as Array<{ name?: string; room?: string }>) : [];
               if (_keep.length) {

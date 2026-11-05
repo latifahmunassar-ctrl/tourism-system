@@ -2,7 +2,7 @@
 // history = ما قبل الرسالة الحالية، customer = رسالة العميل الحالية، model = ما يرده النموذج
 // (نبرمجه بالخطأ اللي سواه فعلاً — الحارس الخادمي لازم يصحّحه)، expect = شروط النجاح.
 
-export type Ctx = { reply: string; session: Record<string, any>; intake: Record<string, any>; buildCalls: number; modelCalls: number; proposals: number; jobs: Array<Record<string, any>>; buildBody: Record<string, any> | null; modelSystem: string; modelName: string; db: Record<string, Array<Record<string, any>>> };
+export type Ctx = { reply: string; session: Record<string, any>; intake: Record<string, any>; buildCalls: number; modelCalls: number; proposals: number; jobs: Array<Record<string, any>>; buildBody: Record<string, any> | null; modelSystem: string; modelName: string; intentInput?: string; db: Record<string, Array<Record<string, any>>> };
 export type Scenario = {
   id: string; title: string;
   entry?: "intake" | "followup" | "message";
@@ -15,7 +15,8 @@ export type Scenario = {
   jobs?: Array<Record<string, unknown>>;
   inboundDuringModel?: string;
   medFlights?: string[];
-  seenAt?: number;   // فهرس رسالة بالتاريخ = آخر رسالة شافها طلال (last_seen_in_ts)
+  seenAt?: number;
+  startedAt?: number;   // فهرس رسالة بالتاريخ = بداية الطلب الحالي (started_at)   // فهرس رسالة بالتاريخ = آخر رسالة شافها طلال (last_seen_in_ts)
   rejectTools?: boolean;
   intent?: { intent: string; yes_no?: string; frustrated?: boolean; meaning?: string };
   buildFail?: boolean;   // Tourism-AI يرجّع «no buildable program»   // الـAPI يرفض الأداة (400) — شبكة الأمان لازم تكمل بدونها   // تواريخ طيران المدينة ← مسقط المتوفرة (DD/MM/YYYY) — بدونها ما يُفحص
@@ -1075,6 +1076,12 @@ export const SCENARIOS: Scenario[] = [
     intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAddress Jabal Omar Makkah | مكة | 3 ليالي\nSofitel Shahd Al Madinah | المدينة | 2 ليالي\n" }, model: [FU("أبشر، بحوّل طلبك لزميلي المختص", "handoff")],
     expect: [["الشرح انرسل", c => /نبذة عنه/.test(c.reply)], ["haram_explained انحفظ", c => c.intake.haram_explained === true],
       ["آخر رسالة شافها = رسالة العميل (ما انمسحت)", c => { const last = (c.db.wa_message_audit || []).map((m: any) => m.received_at).sort().at(-1); return !!c.intake.last_seen_in_ts && Date.parse(c.intake.last_seen_in_ts) >= Date.parse(last); }]],
+  },
+  {
+    id: "fu-reads-current-request-only", entry: "followup", startedAt: 3, title: "٥ نوفمبر (حي): المصنّف قال «يكرر للمرة الرابعة» على أول رسالة بالطلب الجديد → المتابعة تقرأ الطلب الحالي فقط (من started_at)",
+    history: [["T", RESET], ["C", "طلب قديم: ابي تايلاند"], ["T", "رد قديم على تايلاند"], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-020"]], customer: "كم السعر؟",
+    intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAddress Jabal Omar Makkah | مكة | 3 ليالي\n" }, intent: { yes: "none", intent: "other", frustrated: false, reason: "سؤال" }, model: [FU("السعر موجود في البرنامج", "reply")],
+    expect: [["المصنّف انطلب", c => !!c.intentInput], ["❌ رسائل الطلب القديم ما توصل للمصنّف", c => !/طلب قديم|رد قديم/.test(c.intentInput || "")], ["الطلب الحالي يوصل", c => /عمره/.test(c.intentInput || "")]],
   },
   {
     id: "umrah-haram-makkah-explicit", entry: "followup", title: "٥ نوفمبر: العميل ذكر مكة صراحة («فندق مكة بعيد عن الحرم») → بلا شرط «إذا كنت تقصد»؛ «أستاذي، بعطيك فكرة عن الفندق أولاً…»",
