@@ -103,6 +103,8 @@ let curIntent: Record<string, unknown> | null = null;
 let intentCalls = 0;
 let intentInput = "";   // ٥ نوفمبر: نص المحادثة اللي وصل لمصنّف النية
 let buildFail = false;
+let buildTotals: number[] = [];   // ٦ نوفمبر: إجمالي كل بناء بالترتيب (ريال سعودي)
+const buildBodies: Array<Record<string, any>> = [];
 (globalThis as any).fetch = async (input: any, init?: any) => {
   const url = String(input?.url || input);
   const json = (o: unknown) => new Response(JSON.stringify(o), { status: 200, headers: { "content-type": "application/json" } });
@@ -127,8 +129,9 @@ let buildFail = false;
     const t: Record<string, unknown> = {}; for (const d of (medFlights || [])) t[d] = { final: 1342, timing: "17:40 - 21:30" };
     return json({ prices: { oman: { out: {}, ret: {}, ret_med: t } } });
   }
-  if (url.includes("Tourism-AI")) { buildCalls++; try { lastBuildBody = JSON.parse(String(init?.body || "{}")); } catch { lastBuildBody = null; }
-    if (buildFail) return json({ ok: false, error: "no buildable program" }); return json({ ok: true, program: "DEST:اختبار\nTOTAL_GROUP:1000", formatted: "برنامج اختبار", program_code: "MK-TEST", kid_ages: [], price_ready: true }); }
+  if (url.includes("Tourism-AI")) { buildCalls++; try { lastBuildBody = JSON.parse(String(init?.body || "{}")); } catch { lastBuildBody = null; } if (lastBuildBody) buildBodies.push(lastBuildBody);
+    const _tot = buildTotals.length ? buildTotals[Math.min(buildCalls - 1, buildTotals.length - 1)] : 1000;
+    if (buildFail) return json({ ok: false, error: "no buildable program" }); return json({ ok: true, program: "DEST:اختبار\nTOTAL_GROUP:" + _tot, formatted: "برنامج اختبار", program_code: buildTotals.length ? "MK-TEST-" + buildCalls : "MK-TEST", kid_ages: [], price_ready: true }); }
   return json({});
 };
 
@@ -151,7 +154,7 @@ function seed(s: Scenario) {
   for (const [tb, rows] of Object.entries(s.tables || {})) (DB[tb] ||= []).push(...structuredClone(rows as RowT[]));
   for (const j of (s.jobs || [])) DB.program_pdf_jobs.push({ phone: PHONE, created_at: ts(), attempts: 0, ...j });
   DB.whatsapp_sessions.push({ phone: PHONE, profile_name: "اختبار", intake_active: s.sessionIntakeActive ?? (s.entry !== "followup"), stage: "new",
-    destination: s.session?.destination ?? null, intake_data: { ...structuredClone(s.intakeData || {}), ...(s.seenAt !== undefined ? { last_seen_in_ts: _tsList[s.seenAt] } : {}), ...((s as any).startedAt !== undefined ? { started_at: _tsList[(s as any).startedAt] } : {}) }, ad_referral: null, last_message_at: ts() });
+    destination: s.session?.destination ?? null, intake_data: { ...structuredClone(s.intakeData || {}), ...(s.seenAt !== undefined ? { last_seen_in_ts: _tsList[s.seenAt] } : {}), ...((s as any).startedAt !== undefined ? { started_at: _tsList[(s as any).startedAt] } : {}) }, ad_referral: (s.session as any)?.ad_referral ?? null, last_message_at: ts() });
   return ts;
 }
 
@@ -162,7 +165,7 @@ for (const s of SCENARIOS) {
   if (only && !s.id.includes(only)) continue;
   const lastTs = seed(s);
   const before = DB.wa_admin_messages.length;
-  modelQueue = [...s.model]; modelCalls = 0; buildCalls = 0; proposalCalls = 0; lastBuildBody = null; medFlights = s.medFlights || null; rejectTools = !!s.rejectTools; curIntent = (s as any).intent || null; intentCalls = 0; intentInput = ""; buildFail = !!s.buildFail; lastModelSystem = ""; injectOnModel = s.inboundDuringModel || null; _bg.length = 0;
+  modelQueue = [...s.model]; modelCalls = 0; buildCalls = 0; proposalCalls = 0; lastBuildBody = null; medFlights = s.medFlights || null; rejectTools = !!s.rejectTools; curIntent = (s as any).intent || null; intentCalls = 0; intentInput = ""; buildFail = !!s.buildFail; buildTotals = (s as any).buildTotals || []; buildBodies.length = 0; lastModelSystem = ""; injectOnModel = s.inboundDuringModel || null; _bg.length = 0;
   let crash = "";
   console.error = () => {}; console.warn = () => {}; console.log = () => {};
   try {
@@ -178,7 +181,7 @@ for (const s of SCENARIOS) {
   const sess = DB.whatsapp_sessions[0] || {};
   const proposals = (DB.whatsapp_admin_proposals || []).length;
   const jobs = DB.program_pdf_jobs || [];
-  const ctx = { db: DB, jobs, modelName: lastModelName, modelSystem: lastModelSystem, intentInput, buildBody: lastBuildBody, reply: sent, session: sess, intake: sess.intake_data || {}, buildCalls, modelCalls, proposals };
+  const ctx = { buildBodies: [...buildBodies], db: DB, jobs, modelName: lastModelName, modelSystem: lastModelSystem, intentInput, buildBody: lastBuildBody, reply: sent, session: sess, intake: sess.intake_data || {}, buildCalls, modelCalls, proposals };
   const errs: string[] = [];
   if (crash) errs.push("انهار: " + crash.split("\n").slice(0, 3).join(" | "));
   for (const [label, check] of s.expect) { try { if (!check(ctx)) errs.push(label); } catch (e) { errs.push(label + " (" + (e as Error).message + ")"); } }

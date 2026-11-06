@@ -2,7 +2,7 @@
 // history = ما قبل الرسالة الحالية، customer = رسالة العميل الحالية، model = ما يرده النموذج
 // (نبرمجه بالخطأ اللي سواه فعلاً — الحارس الخادمي لازم يصحّحه)، expect = شروط النجاح.
 
-export type Ctx = { reply: string; session: Record<string, any>; intake: Record<string, any>; buildCalls: number; modelCalls: number; proposals: number; jobs: Array<Record<string, any>>; buildBody: Record<string, any> | null; modelSystem: string; modelName: string; intentInput?: string; db: Record<string, Array<Record<string, any>>> };
+export type Ctx = { buildBodies?: Array<Record<string, any>>; reply: string; session: Record<string, any>; intake: Record<string, any>; buildCalls: number; modelCalls: number; proposals: number; jobs: Array<Record<string, any>>; buildBody: Record<string, any> | null; modelSystem: string; modelName: string; intentInput?: string; db: Record<string, Array<Record<string, any>>> };
 export type Scenario = {
   id: string; title: string;
   entry?: "intake" | "followup" | "message";
@@ -10,7 +10,7 @@ export type Scenario = {
   history: Array<["C" | "T" | "S", string]>;   // S = موظف (مو طلال)
   customer: string;
   intakeData?: Record<string, unknown>;
-  session?: { destination?: string | null };
+  session?: { destination?: string | null; ad_referral?: Record<string, unknown> | null };   // ad_referral = العميل جاي من إعلان
   model: string[];
   jobs?: Array<Record<string, unknown>>;
   inboundDuringModel?: string;
@@ -19,6 +19,7 @@ export type Scenario = {
   startedAt?: number;   // فهرس رسالة بالتاريخ = بداية الطلب الحالي (started_at)   // فهرس رسالة بالتاريخ = آخر رسالة شافها طلال (last_seen_in_ts)
   rejectTools?: boolean;
   intent?: { intent: string; yes_no?: string; frustrated?: boolean; meaning?: string };
+  buildTotals?: number[];   // ٦ نوفمبر: إجمالي كل بناء بالترتيب (ريال سعودي) — كود مختلف لكل بناء
   buildFail?: boolean;   // Tourism-AI يرجّع «no buildable program»   // الـAPI يرفض الأداة (400) — شبكة الأمان لازم تكمل بدونها   // تواريخ طيران المدينة ← مسقط المتوفرة (DD/MM/YYYY) — بدونها ما يُفحص
   tables?: Record<string, Array<Record<string, unknown>>>;   // صفوف إضافية لجداول القاعدة الوهمية   // رسالة عميل أحدث تصل أثناء تفكير النموذج (اختبار دمج الرسائل)   // طابور الـPDF (program_pdf_jobs) قبل الرسالة
   expect: Array<[string, (c: Ctx) => boolean]>;
@@ -39,6 +40,25 @@ const DONE = { destination: "العمرة", pax: 5, ages: "11 و 6", date: "2026
 const PROG_HIST: Array<["C" | "T", string]> = [["T", RESET], ["C", "عمره"], ["C", "٥"], ["C", "٣ كبار وطفلين"], ["C", "١١ و ٦"], ["C", "صحيح"],
   ["T", "📄 برنامج PDF — MK-2026-008"], ["T", "تفضل أستاذي، برنامجك صار جاهز. أي تعديل في البرنامج أنا حاضر."]];
 
+// ── ٦ نوفمبر ٢٠٢٦ (قرار المالكة — السيناريو الأول): عميل يسأل عن عرض مكة من إعلان/صورة ──
+const AD_CODE = "MK-2026-500";
+const AD_RAW = "DEST:العمرة\nCURRENCY:ريال عماني|10\nMETA:6 أيام | 5 ليالي | ديسمبر 2026 | 2 شخص\nDATE_FROM:10 ديسمبر 2026\nCLIENT:شخصان بالغان\n\nHOTELS:\nAddress Jabal Omar Makkah | Makkah | 5 نجوم | Deluxe Room Twin (يتسع 2 أشخاص) | 944 ريال/ليلة | 3 ليالي (من 10 ديسمبر 2026 إلى 13 ديسمبر 2026) | ما يشمل: إفطار مشمول\nPullman Zamzam Madinah | Al Madinah | 5 نجوم | Superior Twin (يتسع 2 أشخاص) | 500 ريال/ليلة | 2 ليالي (من 13 ديسمبر 2026 إلى 15 ديسمبر 2026) | ما يشمل: إفطار مشمول\n\nFLIGHTS:\nمسقط ← جدة (طيران السلام) | ذهاب | 840 ريال/شخص | 2 أشخاص | 1,680 ريال\n\nTOTAL_GROUP:5,000 | 2 شخص";
+const AD_RAW_OTHER = AD_RAW.replace("Address Jabal Omar Makkah", "Hilton Suites Makkah");
+const AD_TABLES = { programs: [{ code: AD_CODE, destination: "العمرة", persons: 2, total_group: 5000, raw: AD_RAW }], wa_settings: [{ key: "ad_pdf:" + AD_CODE, value: { url: "https://x.test/ad.pdf" } }] };
+const AD_REF = { headline: "عرض مكة " + AD_CODE, body: "عمرة ٦ أيام" };
+const AD_CONFIRM_Q = "حاضر 🌟 تقصد عرض مكة اللي شفته بالإعلان؟ أكّد لي «ايوه» وأرسل لك التفاصيل كاملة 👍";
+const AD_SENT = "📎 ملف العرض (PDF) — حاضر 🌟 تفضّل ملف العرض اللي طلبته. وإذا عندك تاريخ معيّن أو تفاصيل ثانية حاب تضيفها بلّغني عشان أرتّب لك برنامج بناءً عليه. علماً أن الأسعار قد تختلف حسب التاريخ وعدد الأفراد 👍";
+const AD_HIST: Array<["C" | "T", string]> = [["C", "ابي تفاصيل العرض"], ["T", AD_CONFIRM_Q], ["C", "ايوه"], ["T", AD_SENT]];
+const AD_STATE = { destination: "العمرة", pax: 2, nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", days: 6, asked_children: true, ages: "",
+  ad_offer: true, ad_program_shown: true, ad_program_code: AD_CODE, program_final_raw: AD_RAW, program_final_code: AD_CODE,
+  ad_keep_hotels: ["Address Jabal Omar Makkah", "Pullman Zamzam Madinah"], offers: [{ code: AD_CODE, kind: "عرض الإعلان", hotels: ["Address Jabal Omar Makkah", "Pullman Zamzam Madinah"] }] };
+const AD_DATE_Q = "تمام، أكّد لي التاريخ اللي تبيه متى عشان أشوف لك العرض";
+const AD_PDF_SENT: [string, (c: Ctx) => boolean] = ["ملف العرض انرسل", c => /ملف العرض/.test(c.reply)];
+const NO_BUILD: [string, (c: Ctx) => boolean] = ["❌ ما انبنى برنامج", c => c.buildCalls === 0];
+
+const TH_CODE = "TH-2026-700";
+const TH_RAW = "DEST:تايلاند\nCURRENCY:ريال عماني|10\nMETA:8 أيام | 7 ليالي | ديسمبر 2026 | 2 شخص\n\nHOTELS:\nDiamond Resort | Phuket | 4 نجوم | Deluxe (يتسع 2 أشخاص) | 300 ريال/ليلة | 4 ليالي (من 1 ديسمبر 2026 إلى 5 ديسمبر 2026) | x\nAonang Villa | Krabi | 4 نجوم | Deluxe (يتسع 2 أشخاص) | 250 ريال/ليلة | 3 ليالي (من 5 ديسمبر 2026 إلى 8 ديسمبر 2026) | x\n\nTOTAL_GROUP:3,000 | 2 شخص";
+const TH_TABLES = { programs: [{ code: TH_CODE, destination: "تايلاند", persons: 2, total_group: 3000, raw: TH_RAW }], wa_settings: [{ key: "ad_pdf:" + TH_CODE, value: { url: "https://x.test/th.pdf" } }] };
 export const SCENARIOS: Scenario[] = [
   {
     id: "fu-resend-failed-pdf", entry: "followup", title: "٣ نوفمبر: الـPDF فشل و«ارسل البرنامج» → يعيده للطابور، ❌ لا «البرنامج فوق»",
@@ -1121,12 +1141,12 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "umrah-haram-third-abraj-no-reask", entry: "followup", title: "٥ نوفمبر (حي): بعد العرض الثاني (بجانب الحرم) «مافي عندكم فنادق في الأبراج؟» → ❌ لا إعادة سؤال المدينة؛ يبني الأبراج لمكة ويثبّت فندق المدينة الحالي",
     history: [["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-020"], ["C", "لا احتاج فنادق بجانب الحرم"], ["T", "على العموم اطّلع عليه، وإذا حبيت فندق في الأبراج أو بجانب الحرم بلغني وأرسل لك العرض الثاني."]], customer: "مافي عندكم فنادق في الأبراج ؟", intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAnjum Hotel Makkah | Makkah | 5 نجوم | Classic Room Twin City View (يتسع 3 أشخاص) | 1,062 ريال/ليلة | 3 ليالي\nSofitel Shahd Al Madinah | Al Madinah | 5 نجوم | Classic Room with King Bed (يتسع 2 أشخاص) | 1,250 ريال/ليلة | 2 ليالي\n", haram_explained: true, hotel_prefs: { haram: "بجانب الحرم" }, program_modified: true }, model: [M("تمام", { destination: "العمرة", pax: 2, date: "2026-11-20", nights: "3 مكة 2 المدينة" }, true)],
-    expect: [["«إلا فيه من الأبراج…»", c => c.reply.includes("إلا فيه من الأبراج، الحين أرسل لك إياه.")], ["❌ لا سؤال المدينة", c => !/فندق المدينة أغيّره/.test(c.reply)], ["بنى", c => c.buildCalls > 0], ["الأبراج", c => c.buildBody?.hotel_prefs?.makkah_tag === "الأبراج"], ["ثبّت Sofitel Classic", c => { const k = c.buildBody?.hotel_prefs?.haram_keep?.[0]; return k?.name === "Sofitel Shahd Al Madinah" && k?.room === "Classic Room with King Bed"; }]],
+    expect: [["الكرت: الأبراج", c => /في الأبراج/.test(c.reply)], ["❌ لا سؤال المدينة", c => !/فندق المدينة أغيّره/.test(c.reply)], ["٦ نوفمبر: الكرت قبل البناء", c => c.buildCalls === 0 && /تمام، تقصد: /.test(c.reply)], ["الأبراج", c => c.intake.pending_modify?.hotel_prefs?.makkah_tag === "الأبراج"], ["ثبّت Sofitel Classic", c => { const k = c.intake.pending_modify?.hotel_prefs?.haram_keep?.[0]; return k?.name === "Sofitel Shahd Al Madinah" && k?.room === "Classic Room with King Bed"; }]],
   },
   {
     id: "offers-log-cheapest", entry: "followup", title: "٥ نوفمبر (قرار المالكة): سجل العروض فيه الموصى به + القريب + الأبراج، والعميل «ايوه شوف لي فنادق ثانيه» → أرخص العروض مباشرة",
     history: [["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-023"], ["T", "تفضل أستاذي، هذا البرنامج المعدّل. لو تحب أي تعديل ثاني أنا حاضر."]], customer: "ايوه شوف لي فنادق ثانيه", intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAnjum Hotel Makkah | Makkah | 5 نجوم | Classic Room Twin City View (يتسع 3 أشخاص) | 1,062 ريال/ليلة | 3 ليالي\nSofitel Shahd Al Madinah | Al Madinah | 5 نجوم | Classic Room with King Bed (يتسع 2 أشخاص) | 1,250 ريال/ليلة | 2 ليالي\n", haram_explained: true, hotel_prefs: { haram: "بجانب الحرم", makkah_tag: "الأبراج" }, program_modified: true, offers: [{ code: "MK-2026-015", kind: "الموصى به", hotels: ["Address Jabal Omar Makkah", "Sofitel Shahd Al Madinah"] }, { code: "MK-2026-022", kind: "قريب من الحرم", hotels: ["Voco Makkah", "Pullman Zamzam Madina"] }, { code: "MK-2026-023", kind: "الأبراج", hotels: ["Swissôtel Al Maqam Makkah", "Sofitel Shahd Al Madinah"] }] }, model: [M("تمام", { destination: "العمرة", pax: 2, date: "2026-11-20", nights: "3 مكة 2 المدينة" }, true)],
-    expect: [["بنى", c => c.buildCalls > 0], ["أرخص", c => c.buildBody?.hotel_prefs?.cheapest === true && !c.buildBody?.hotel_prefs?.makkah_tag], ["جملة الخيار الثالث", c => /برسل لك الحين خيار ثالث/.test(c.reply)]],
+    expect: [["٦ نوفمبر: الكرت قبل البناء", c => c.buildCalls === 0 && /تمام، تقصد: /.test(c.reply)], ["أرخص", c => c.intake.pending_modify?.hotel_prefs?.cheapest === true && !c.intake.pending_modify?.hotel_prefs?.makkah_tag], ["الكرت: أرخص فندق", c => /أرخص فندق عندنا/.test(c.reply)]],
   },
   {
     id: "offers-log-named-category", entry: "followup", title: "٥ نوفمبر: سجل العروض فيه الأبراج، والعميل «غيره قريب من الحرم» (حدّد تصنيف) → ❌ لا أرخص العروض",
@@ -1141,7 +1161,7 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "umrah-cheapest-after-pricey", entry: "followup", title: "٥ نوفمبر (حي، قرار المالكة): بعد «غالي» على الأبراج و«ايوه شوف لي فنادق ثانيه» → كان «تقصد نعدل البرنامج كذا؟»؛ الحين أرخص فندق بكل مدينة بلا أسئلة",
     history: [["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-020"], ["C", "لا احتاج فنادق بجانب الحرم"], ["T", "على العموم اطّلع عليه، وإذا حبيت فندق في الأبراج أو بجانب الحرم بلغني وأرسل لك العرض الثاني."], ["C", "غالي والله"], ["T", "😁"], ["T", "إيوه، فنادق الأبراج غالية."], ["T", "إذا حاب، بإمكانك تعتمد البرنامج اللي أرسلته لك أول لأنه أرخص، أو أشوف لك فنادق ثانية أرخص كمان."]], customer: "ايوه شوف لي فنادق ثانيه", intent: { intent: "modify", yes_no: "yes_but_change", frustrated: false, meaning: "يبي أرخص" }, intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAnjum Hotel Makkah | Makkah | 5 نجوم | Classic Room Twin City View (يتسع 3 أشخاص) | 1,062 ريال/ليلة | 3 ليالي\nSofitel Shahd Al Madinah | Al Madinah | 5 نجوم | Classic Room with King Bed (يتسع 2 أشخاص) | 1,250 ريال/ليلة | 2 ليالي\n", haram_explained: true, hotel_prefs: { haram: "بجانب الحرم", makkah_tag: "الأبراج" }, program_modified: true }, model: [M("تمام", { destination: "العمرة", pax: 2, date: "2026-11-20", nights: "3 مكة 2 المدينة" }, true)],
-    expect: [["بنى", c => c.buildCalls > 0], ["بلا تصنيف حرم + أرخص غرفة", c => !c.buildBody?.hotel_prefs?.haram && !c.buildBody?.hotel_prefs?.makkah_tag && !c.buildBody?.hotel_prefs?.haram_keep && c.buildBody?.hotel_prefs?.cheapest === true], ["❌ لا سؤال مبهم", c => !/تقصد نعدل/.test(c.reply)], ["علم الأرخص", c => c.intake.program_cheapest === true]],
+    expect: [["٦ نوفمبر: الكرت قبل البناء", c => c.buildCalls === 0 && /تمام، تقصد: /.test(c.reply)], ["بلا تصنيف حرم + أرخص غرفة", c => !c.intake.pending_modify?.hotel_prefs?.haram && !c.intake.pending_modify?.hotel_prefs?.makkah_tag && !c.intake.pending_modify?.hotel_prefs?.haram_keep && c.intake.pending_modify?.hotel_prefs?.cheapest === true], ["❌ لا سؤال مبهم", c => !/تقصد نعدل/.test(c.reply)], ["علم الأرخص", c => c.intake.pending_modify?.program_cheapest === true]],
   },
   {
     id: "umrah-reject-after-cheapest", entry: "followup", title: "٥ نوفمبر (قرار المالكة): وصله «أرخص العروض» و«ايوه شوف لي فنادق ثانيه» مرة ثانية → رسالة الميزانية (كان «أعتذر… وش الغلط»)",
@@ -1151,7 +1171,7 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "umrah-cheapest-after-vague-q", entry: "followup", title: "٥ نوفمبر (حي): عرض البديل ← «شوف لي فنادق ثانيه» ← «تقصد نعدل البرنامج كذا؟» ← «ايوه شوف لي فنادق ثانيه» بنى نفس الأبراج؛ الحين أرخص العروض",
     history: [["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-020"], ["C", "لا احتاج فنادق بجانب الحرم"], ["T", "على العموم اطّلع عليه، وإذا حبيت فندق في الأبراج أو بجانب الحرم بلغني وأرسل لك العرض الثاني."], ["C", "غالي والله"], ["T", "😁"], ["T", "إيوه، فنادق الأبراج غالية."], ["T", "إذا حاب، بإمكانك تعتمد البرنامج اللي أرسلته لك أول لأنه أرخص، أو أشوف لك فنادق ثانية أرخص كمان."], ["C", "ايوه شوف لي فنادق ثانيه"], ["T", "تمام، تقصد نعدل البرنامج كذا؟"]], customer: "ايوه شوف لي فنادق ثانيه", intent: { intent: "agree", yes_no: "yes", frustrated: false, meaning: "يوافق على تعديل البرنامج ويطلب إيجاد فنادق أرخص بديلة" }, intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAnjum Hotel Makkah | Makkah | 5 نجوم | Classic Room Twin City View (يتسع 3 أشخاص) | 1,062 ريال/ليلة | 3 ليالي\nSofitel Shahd Al Madinah | Al Madinah | 5 نجوم | Classic Room with King Bed (يتسع 2 أشخاص) | 1,250 ريال/ليلة | 2 ليالي\n", haram_explained: true, hotel_prefs: { haram: "بجانب الحرم", makkah_tag: "الأبراج" }, program_modified: true , pending_modify: { destination: "العمرة" } }, model: [M("تمام", { destination: "العمرة", pax: 2, date: "2026-11-20", nights: "3 مكة 2 المدينة" }, true)],
-    expect: [["بنى", c => c.buildCalls > 0], ["بلا تصنيف حرم + أرخص غرفة", c => !c.buildBody?.hotel_prefs?.haram && !c.buildBody?.hotel_prefs?.makkah_tag && !c.buildBody?.hotel_prefs?.haram_keep && c.buildBody?.hotel_prefs?.cheapest === true], ["❌ لا سؤال مبهم", c => !/تقصد نعدل/.test(c.reply)], ["علم الأرخص", c => c.intake.program_cheapest === true]],
+    expect: [["٦ نوفمبر: الكرت قبل البناء", c => c.buildCalls === 0 && /تمام، تقصد: /.test(c.reply)], ["بلا تصنيف حرم + أرخص غرفة", c => !c.intake.pending_modify?.hotel_prefs?.haram && !c.intake.pending_modify?.hotel_prefs?.makkah_tag && !c.intake.pending_modify?.hotel_prefs?.haram_keep && c.intake.pending_modify?.hotel_prefs?.cheapest === true], ["❌ لا سؤال مبهم", c => !/تقصد نعدل/.test(c.reply)], ["علم الأرخص", c => c.intake.pending_modify?.program_cheapest === true]],
   },
   {
     id: "umrah-keep-first-after-pricey", entry: "followup", title: "٥ نوفمبر: بعد «غالي» على الأبراج «ابي اعتمد الاول» → ❌ لا بناء «أرخص العروض»",
@@ -1166,7 +1186,7 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "umrah-haram-near-yes", entry: "followup", title: "٥ نوفمبر: «ايوه» على سؤال المدينة بعد طلب «قريب من الحرم» → البناء بتصنيف «قريب من الحرم» (الأرخص فيه)",
     history: [...[["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-020"], ["C", "لا احتاج فنادق بجانب الحرم"], ["T", "على العموم اطّلع عليه، وإذا حبيت فندق في الأبراج أو بجانب الحرم بلغني وأرسل لك العرض الثاني."]], ["C", "ابي في الابراج"], ["T", "تمام أستاذي، وحتى فندق المدينة أغيّره لك بجانب الحرم؟"]], customer: "ايوه", intakeData: { ...{ destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAddress Jabal Omar Makkah | Makkah | 5 نجوم | Deluxe Room Twin Partial Haram View (يتسع 2 أشخاص) | 1,066 ريال/ليلة | 3 ليالي\nSofitel Shahd Al Madinah | Al Madinah | 5 نجوم | Superior Room, 1 King Bed (يتسع 2 أشخاص) | 1,305 ريال/ليلة | 2 ليالي\n", haram_explained: true }, haram_madinah_asked: true, haram_tag: "قريب من الحرم" }, model: [M("تمام", { destination: "العمرة", pax: 2, date: "2026-11-20", nights: "3 مكة 2 المدينة" }, true)],
-    expect: [["بنى", c => c.buildCalls > 0], ["بجانب الحرم", c => c.buildBody?.hotel_prefs?.haram === "قريب من الحرم"], ["بلا تثبيت المدينة", c => !c.buildBody?.hotel_prefs?.haram_keep]],
+    expect: [["٦ نوفمبر: الكرت قبل البناء", c => c.buildCalls === 0 && /تمام، تقصد: /.test(c.reply)], ["بجانب الحرم", c => c.intake.pending_modify?.hotel_prefs?.haram === "قريب من الحرم"], ["بلا تثبيت المدينة", c => !c.intake.pending_modify?.hotel_prefs?.haram_keep]],
   },
   {
     id: "umrah-haram-near-first", entry: "followup", title: "٥ نوفمبر: أول رفض «احتاج فندق قريب من الحرم» → شرح فندق مكة (مثل بجانب الحرم)",
@@ -1199,33 +1219,33 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "umrah-haram-madinah-yes", entry: "followup", title: "٥ نوفمبر: «ايوه» على سؤال المدينة → العرض الثاني والفندقين بجانب الحرم (بلا haram_keep)",
     history: [...[["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-020"], ["C", "لا احتاج فنادق بجانب الحرم"], ["T", "على العموم اطّلع عليه، وإذا حبيت فندق في الأبراج أو بجانب الحرم بلغني وأرسل لك العرض الثاني."]], ["C", "ابي في الابراج"], ["T", "تمام أستاذي، وحتى فندق المدينة أغيّره لك بجانب الحرم؟"]], customer: "ايوه", intakeData: { ...{ destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAddress Jabal Omar Makkah | Makkah | 5 نجوم | Deluxe Room Twin Partial Haram View (يتسع 2 أشخاص) | 1,066 ريال/ليلة | 3 ليالي\nSofitel Shahd Al Madinah | Al Madinah | 5 نجوم | Superior Room, 1 King Bed (يتسع 2 أشخاص) | 1,305 ريال/ليلة | 2 ليالي\n", haram_explained: true }, haram_madinah_asked: true }, model: [M("تمام", { destination: "العمرة", pax: 2, date: "2026-11-20", nights: "3 مكة 2 المدينة" }, true)],
-    expect: [["بنى", c => c.buildCalls > 0], ["بجانب الحرم", c => c.buildBody?.hotel_prefs?.haram === "بجانب الحرم"], ["بلا تثبيت المدينة", c => !c.buildBody?.hotel_prefs?.haram_keep]],
+    expect: [["٦ نوفمبر: الكرت قبل البناء", c => c.buildCalls === 0 && /تمام، تقصد: /.test(c.reply)], ["بجانب الحرم", c => c.intake.pending_modify?.hotel_prefs?.haram === "بجانب الحرم"], ["بلا تثبيت المدينة", c => !c.intake.pending_modify?.hotel_prefs?.haram_keep]],
   },
   {
     id: "umrah-haram-abraj-tag", entry: "followup", title: "٥ نوفمبر (قرار المالكة): طلب «الأبراج» ثم «صحيح» على سؤال المدينة → فندق مكة من تصنيف «الأبراج» (makkah_tag) مو أي فندق بجانب الحرم (Anjum)",
     history: [...[["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-020"], ["C", "لا احتاج فنادق بجانب الحرم"], ["T", "على العموم اطّلع عليه، وإذا حبيت فندق في الأبراج أو بجانب الحرم بلغني وأرسل لك العرض الثاني."]], ["C", "ابي في الابراج"], ["T", "تمام أستاذي، وحتى فندق المدينة أغيّره لك بجانب الحرم؟"]], customer: "صحيح", intakeData: { ...{ destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAddress Jabal Omar Makkah | Makkah | 5 نجوم | Deluxe Room Twin Partial Haram View (يتسع 2 أشخاص) | 1,066 ريال/ليلة | 3 ليالي\nSofitel Shahd Al Madinah | Al Madinah | 5 نجوم | Superior Room, 1 King Bed (يتسع 2 أشخاص) | 1,305 ريال/ليلة | 2 ليالي\n", haram_explained: true }, haram_madinah_asked: true, haram_abraj: true }, model: [M("تمام", { destination: "العمرة", pax: 2, date: "2026-11-20", nights: "3 مكة 2 المدينة" }, true)],
-    expect: [["بنى", c => c.buildCalls > 0], ["«إلا فيه من الأبراج…»", c => c.reply.includes("إلا فيه من الأبراج، الحين أرسل لك إياه.") && !/شوية والبرنامج عندك/.test(c.reply)], ["الأبراج", c => c.buildBody?.hotel_prefs?.makkah_tag === "الأبراج"], ["المدينة بجانب الحرم", c => c.buildBody?.hotel_prefs?.haram === "بجانب الحرم"]],
+    expect: [["٦ نوفمبر: الكرت قبل البناء", c => c.buildCalls === 0 && /تمام، تقصد: /.test(c.reply)], ["الكرت: الأبراج", c => /في الأبراج/.test(c.reply)], ["الأبراج", c => c.intake.pending_modify?.hotel_prefs?.makkah_tag === "الأبراج"], ["المدينة بجانب الحرم", c => c.intake.pending_modify?.hotel_prefs?.haram === "بجانب الحرم"]],
   },
   {
     id: "umrah-haram-madinah-yaret", entry: "followup", title: "٥ نوفمبر (حي): «ياريت» على سؤال المدينة ما انمسكت → «تقصد نعدل البرنامج كذا؟»؛ الحين = موافقة → العرض الثاني والفندقين بجانب الحرم (بلا haram_keep)",
     history: [...[["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-020"], ["C", "لا احتاج فنادق بجانب الحرم"], ["T", "على العموم اطّلع عليه، وإذا حبيت فندق في الأبراج أو بجانب الحرم بلغني وأرسل لك العرض الثاني."]], ["C", "ابي في الابراج"], ["T", "تمام أستاذي، وحتى فندق المدينة أغيّره لك بجانب الحرم؟"]], customer: "ياريت", intakeData: { ...{ destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAddress Jabal Omar Makkah | Makkah | 5 نجوم | Deluxe Room Twin Partial Haram View (يتسع 2 أشخاص) | 1,066 ريال/ليلة | 3 ليالي\nSofitel Shahd Al Madinah | Al Madinah | 5 نجوم | Superior Room, 1 King Bed (يتسع 2 أشخاص) | 1,305 ريال/ليلة | 2 ليالي\n", haram_explained: true }, haram_madinah_asked: true }, model: [M("تمام", { destination: "العمرة", pax: 2, date: "2026-11-20", nights: "3 مكة 2 المدينة" }, true)],
-    expect: [["بنى", c => c.buildCalls > 0], ["بجانب الحرم", c => c.buildBody?.hotel_prefs?.haram === "بجانب الحرم"], ["بلا تثبيت المدينة", c => !c.buildBody?.hotel_prefs?.haram_keep]],
+    expect: [["٦ نوفمبر: الكرت قبل البناء", c => c.buildCalls === 0 && /تمام، تقصد: /.test(c.reply)], ["بجانب الحرم", c => c.intake.pending_modify?.hotel_prefs?.haram === "بجانب الحرم"], ["بلا تثبيت المدينة", c => !c.intake.pending_modify?.hotel_prefs?.haram_keep]],
   },
   {
     id: "umrah-haram-madinah-intent-fallback", entry: "followup", title: "٥ نوفمبر: جواب ما تمسكه الكلمات («لو يصير زين») + المصنّف yes → موافقة (بلا سؤال مبهم) → العرض الثاني والفندقين بجانب الحرم (بلا haram_keep)",
     history: [...[["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-020"], ["C", "لا احتاج فنادق بجانب الحرم"], ["T", "على العموم اطّلع عليه، وإذا حبيت فندق في الأبراج أو بجانب الحرم بلغني وأرسل لك العرض الثاني."]], ["C", "ابي في الابراج"], ["T", "تمام أستاذي، وحتى فندق المدينة أغيّره لك بجانب الحرم؟"]], customer: "لو يصير زين", intakeData: { ...{ destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAddress Jabal Omar Makkah | Makkah | 5 نجوم | Deluxe Room Twin Partial Haram View (يتسع 2 أشخاص) | 1,066 ريال/ليلة | 3 ليالي\nSofitel Shahd Al Madinah | Al Madinah | 5 نجوم | Superior Room, 1 King Bed (يتسع 2 أشخاص) | 1,305 ريال/ليلة | 2 ليالي\n", haram_explained: true }, haram_madinah_asked: true }, intent: { intent: "modify", yes_no: "yes", frustrated: false, meaning: "يوافق" }, model: [M("تمام", { destination: "العمرة", pax: 2, date: "2026-11-20", nights: "3 مكة 2 المدينة" }, true)],
-    expect: [["بنى", c => c.buildCalls > 0], ["بجانب الحرم", c => c.buildBody?.hotel_prefs?.haram === "بجانب الحرم"], ["بلا تثبيت المدينة", c => !c.buildBody?.hotel_prefs?.haram_keep]],
+    expect: [["٦ نوفمبر: الكرت قبل البناء", c => c.buildCalls === 0 && /تمام، تقصد: /.test(c.reply)], ["بجانب الحرم", c => c.intake.pending_modify?.hotel_prefs?.haram === "بجانب الحرم"], ["بلا تثبيت المدينة", c => !c.intake.pending_modify?.hotel_prefs?.haram_keep]],
   },
   {
     id: "umrah-haram-madinah-no", entry: "followup", title: "٥ نوفمبر: «لا خله» على سؤال المدينة → فندق مكة بجانب الحرم، والمدينة نفس الفندق والغرفة (haram_keep)",
     history: [...[["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-020"], ["C", "لا احتاج فنادق بجانب الحرم"], ["T", "على العموم اطّلع عليه، وإذا حبيت فندق في الأبراج أو بجانب الحرم بلغني وأرسل لك العرض الثاني."]], ["C", "ابي في الابراج"], ["T", "تمام أستاذي، وحتى فندق المدينة أغيّره لك بجانب الحرم؟"]], customer: "لا خله زي ما هو", intakeData: { ...{ destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAddress Jabal Omar Makkah | Makkah | 5 نجوم | Deluxe Room Twin Partial Haram View (يتسع 2 أشخاص) | 1,066 ريال/ليلة | 3 ليالي\nSofitel Shahd Al Madinah | Al Madinah | 5 نجوم | Superior Room, 1 King Bed (يتسع 2 أشخاص) | 1,305 ريال/ليلة | 2 ليالي\n", haram_explained: true }, haram_madinah_asked: true }, model: [M("تمام", { destination: "العمرة", pax: 2, date: "2026-11-20", nights: "3 مكة 2 المدينة" }, true)],
-    expect: [["بنى", c => c.buildCalls > 0], ["بجانب الحرم", c => c.buildBody?.hotel_prefs?.haram === "بجانب الحرم"],
-      ["ثبّت فندق المدينة", c => { const k = c.buildBody?.hotel_prefs?.haram_keep?.[0]; return k?.name === "Sofitel Shahd Al Madinah" && k?.room === "Superior Room, 1 King Bed"; }]],
+    expect: [["٦ نوفمبر: الكرت قبل البناء", c => c.buildCalls === 0 && /تمام، تقصد: /.test(c.reply)], ["بجانب الحرم", c => c.intake.pending_modify?.hotel_prefs?.haram === "بجانب الحرم"],
+      ["ثبّت فندق المدينة", c => { const k = c.intake.pending_modify?.hotel_prefs?.haram_keep?.[0]; return k?.name === "Sofitel Shahd Al Madinah" && k?.room === "Superior Room, 1 King Bed"; }]],
   },
   {
     id: "umrah-haram-second-mentions-madinah", entry: "followup", title: "٥ نوفمبر (حي): بعد الشرح «نعم حتى فندق المدينه خليه جنب الحرم» → العميل حدّد المدينة → يبني على طول بلا سؤال",
     history: [["T", RESET], ["C", "عمره"], ["T", "📄 برنامج PDF — MK-2026-020"], ["C", "لا احتاج فنادق بجانب الحرم"], ["T", "على العموم اطّلع عليه، وإذا حبيت فندق في الأبراج أو بجانب الحرم بلغني وأرسل لك العرض الثاني."]], customer: "نعم ⏎ حتى فندق المدينه خليه جنب الحرم".replace(" ⏎ ", "\n"), intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, date: "2026-11-20", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", summary_confirmed: true, program_final_code: "MK-2026-020", program_final_raw: "DEST:العمرة\nHOTELS:\nAddress Jabal Omar Makkah | Makkah | 5 نجوم | Deluxe Room Twin Partial Haram View (يتسع 2 أشخاص) | 1,066 ريال/ليلة | 3 ليالي\nSofitel Shahd Al Madinah | Al Madinah | 5 نجوم | Superior Room, 1 King Bed (يتسع 2 أشخاص) | 1,305 ريال/ليلة | 2 ليالي\n", haram_explained: true }, model: [M("تمام", { destination: "العمرة", pax: 2, date: "2026-11-20", nights: "3 مكة 2 المدينة" }, true)],
-    expect: [["بنى", c => c.buildCalls > 0], ["بجانب الحرم", c => c.buildBody?.hotel_prefs?.haram === "بجانب الحرم"], ["بلا سؤال المدينة", c => !/وحتى فندق المدينة/.test(c.reply)], ["بلا تثبيت", c => !c.buildBody?.hotel_prefs?.haram_keep]],
+    expect: [["٦ نوفمبر: الكرت قبل البناء", c => c.buildCalls === 0 && /تمام، تقصد: /.test(c.reply)], ["بجانب الحرم", c => c.intake.pending_modify?.hotel_prefs?.haram === "بجانب الحرم"], ["بلا سؤال المدينة", c => !/وحتى فندق المدينة/.test(c.reply)], ["بلا تثبيت", c => !c.intake.pending_modify?.hotel_prefs?.haram_keep]],
   },
   {
     id: "msg-same-dest-umrah-makkah", entry: "message", sessionIntakeActive: false, title: "٤ نوفمبر (حي): برنامج عمرة سابق + «احتاج برامج مكه» → ❌ لا «تغير الوجهة من العمرة إلى العمرة»؛ طلب جديد + «أكيد طبعا، اتفضل، إيش هو طلبك؟»",
@@ -1235,5 +1255,191 @@ export const SCENARIOS: Scenario[] = [
     model: [M("حياك الله", { destination: "العمرة" })],
     expect: [["❌ لا سؤال تبديل", c => !/تغي?ّ?ر الوجهة/.test(c.reply)], ["الرد", c => /أكيد طبعا، اتفضل، إيش هو طلبك؟/.test(c.reply)], ["طلب نظيف", c => !c.intake.pax && /عمر/.test(String(c.intake.destination))],
       ["السابق بالسجل", c => (c.intake.prev_requests || []).some((r: any) => r.program_code === "MK-2026-013")]],
+  },
+  // ── ٦ نوفمبر ٢٠٢٦ (قرار المالكة — السيناريو الأول: عرض مكة من إعلان/صورة) ──
+  {
+    id: "ad1-confirm-makkah", title: "٦ نوفمبر: من إعلان عرض عمرة وطلب العرض → «تقصد عرض مكة اللي شفته بالإعلان؟» بلا إرسال",
+    history: [], customer: "ابي تفاصيل العرض", session: { ad_referral: AD_REF }, tables: AD_TABLES, model: [M("حياك الله")],
+    expect: [["سؤال الاستيثاق بصيغة المالكة", c => c.reply.includes("تقصد عرض مكة اللي شفته بالإعلان؟")], ["❌ ما انرسل الملف قبل التأكيد", c => !/ملف العرض/.test(c.reply)], NO_BUILD],
+  },
+  {
+    id: "ad1-confirmed-send-wait", title: "٦ نوفمبر: «ايوه» على الاستيثاق → الملف كما هو، وبعدها ينتظر (❌ أسئلة استقبال) — البرنامج يصير العرض الحالي",
+    history: [["C", "ابي تفاصيل العرض"], ["T", AD_CONFIRM_Q]], customer: "ايوه", session: { ad_referral: AD_REF }, tables: AD_TABLES,
+    intakeData: { ad_offer_pending: AD_CODE }, model: [M("كم عددكم؟ ومتى السفر؟")],
+    expect: [AD_PDF_SENT, ["صيغة الأسعار تختلف", c => c.reply.includes("الأسعار قد تختلف حسب التاريخ وعدد الأفراد")], ["❌ ما يسأل العدد/التاريخ", c => !/كم عدد|متى السفر/.test(c.reply)], NO_BUILD,
+      ["الاستقبال انقفل (ينتظر رد العميل)", c => c.session.intake_active === false], ["العرض الحالي = برنامج الإعلان", c => c.intake.program_final_code === AD_CODE && c.intake.program_final_raw === AD_RAW && c.intake.ad_offer === true],
+      ["العدد والليالي من العرض، والتاريخ فاضي", c => +c.intake.pax === 2 && c.intake.nights === "3 مكة 2 المدينة" && !c.intake.date],
+      ["فنادق العرض محفوظة", c => JSON.stringify(c.intake.ad_keep_hotels) === JSON.stringify(["Address Jabal Omar Makkah", "Pullman Zamzam Madinah"])]],
+  },
+  {
+    id: "ad1-image-code-direct", title: "٦ نوفمبر: العميل أرسل صورة الإعلان والكود واضح → «حاضر، برسل لك إياه حالاً» + الملف مباشرة (بلا استيثاق)",
+    history: [], customer: "أرسل العميل صورة هذا العرض: عرض: العمرة (مكة والمدينة) — 6 أيام | الكود: " + AD_CODE, tables: AD_TABLES, model: [M("حياك الله، كم عددكم؟")],
+    expect: [["«حاضر، برسل لك إياه حالاً»", c => c.reply.includes("حاضر، برسل لك إياه حالاً")], AD_PDF_SENT, ["❌ لا استيثاق", c => !/تقصد عرض/.test(c.reply)], ["❌ لا أسئلة", c => !/كم عدد/.test(c.reply)],
+      ["العرض الحالي = برنامج الكود", c => c.intake.program_final_code === AD_CODE && c.session.intake_active === false]],
+  },
+  {
+    id: "ad1-image-unreadable", title: "٦ نوفمبر: صورة ما انقرأت → اعتذار المالكة «يمكن فيه خطأ تقني… لأي وجهة؟»",
+    history: [], customer: "أرسل العميل صورة ما انقرأت", session: { ad_referral: AD_REF }, tables: AD_TABLES, model: [M("حياك الله")],
+    expect: [["الاعتذار بالحرف", c => c.reply.includes("المعذرة أستاذي، يمكن فيه خطأ تقني والصورة ما وصلتني. ممكن تخبرني العرض كان لأي وجهة؟")], ["❌ ما انرسل ملف", c => !/ملف العرض/.test(c.reply)], ["علم الصورة", c => c.intake.img_unreadable === true]],
+  },
+  {
+    id: "ad1-image-unreadable-umrah", title: "٦ نوفمبر: بعد اعتذار الصورة العميل «عمرة» → «حالاً برسل لك العرض» + ملف الإعلان",
+    history: [["T", "المعذرة أستاذي، يمكن فيه خطأ تقني والصورة ما وصلتني. ممكن تخبرني العرض كان لأي وجهة؟"]], customer: "عمرة", session: { ad_referral: AD_REF }, tables: AD_TABLES,
+    intakeData: { img_unreadable: true }, model: [M("حياك الله، كم عددكم؟", { destination: "العمرة" })],
+    expect: [["«حالاً برسل لك العرض»", c => c.reply.includes("حالاً برسل لك العرض")], AD_PDF_SENT, ["❌ لا استيثاق", c => !/تقصد عرض/.test(c.reply)], ["❌ لا أسئلة", c => !/كم عدد/.test(c.reply)]],
+  },
+  {
+    id: "ad1-pax-change-asks-date", entry: "followup", title: "٦ نوفمبر: بعد العرض «احنا ٤» → «أكّد لي التاريخ اللي تبيه متى عشان أشوف لك العرض» (التغيير محفوظ، بلا بناء)",
+    history: AD_HIST, customer: "احنا ٤ اشخاص", intakeData: AD_STATE, intent: { intent: "modify", meaning: "العميل يبي العدد ٤" },
+    model: [FU("تمام، تقصد العدد يصير 4؟", "modify", { pax: 4 })],
+    expect: [["سؤال التاريخ بصيغة المالكة", c => c.reply.includes(AD_DATE_Q)], ["❌ لا كرت قبل التاريخ", c => !/تقصد/.test(c.reply)], NO_BUILD, ["التغيير محفوظ", c => +c.intake.ad_pending?.changed?.pax === 4]],
+  },
+  {
+    id: "ad1-date-then-card", entry: "followup", title: "٦ نوفمبر: بعد سؤال التاريخ العميل «١٥/١٢» → الكرت فيه الفندق + العدد + التاريخ (بلا بناء)",
+    history: [...AD_HIST, ["C", "احنا ٤ اشخاص"], ["T", AD_DATE_Q]], customer: "15/12/2026", intakeData: { ...AD_STATE, ad_pending: { changed: { pax: 4 } } },
+    model: [FU("تمام")],
+    expect: [["الكرت فيه الفنادق", c => /Address Jabal Omar/.test(c.reply) && /Pullman Zamzam/.test(c.reply)], ["الكرت فيه العدد ٤", c => /4/.test(c.reply)], ["الكرت فيه التاريخ", c => /15/.test(c.reply)], NO_BUILD,
+      ["تعديل معلّق = العدد + التاريخ", c => +c.intake.pending_modify?.pax === 4 && /15/.test(String(c.intake.pending_modify?.date || ""))], ["ad_pending انمسح", c => !c.intake.ad_pending]],
+  },
+  {
+    id: "ad1-card-yes-same-hotels", entry: "followup", title: "٦ نوفمبر: «صحيح» على الكرت → يبني بنفس فنادق العرض (haram_keep) والعدد الجديد",
+    history: [...AD_HIST, ["C", "احنا ٤ اشخاص"], ["T", AD_DATE_Q], ["C", "15/12/2026"], ["T", "تمام، تقصد: نفس فنادق العرض (Address Jabal Omar Makkah و Pullman Zamzam Madinah)، العدد 4، والسفر 15/12/2026؟"]],
+    customer: "صحيح", intakeData: { ...AD_STATE, pending_modify: { pax: 4, date: "15/12/2026" } }, intent: { intent: "agree", yes_no: "yes" }, model: [FU("تمام")],
+    expect: [["انبنى", c => c.buildCalls === 1], ["العدد ٤", c => String(c.buildBody?.pax || c.buildBody?.persons || JSON.stringify(c.buildBody)).includes("4")],
+      ["نفس فنادق العرض", c => { const k = JSON.stringify(c.buildBody?.hotel_prefs?.haram_keep || []); return /Address Jabal Omar Makkah/.test(k) && /Pullman Zamzam Madinah/.test(k); }]],
+  },
+  {
+    id: "ad1-accept-asks-date", entry: "followup", title: "٦ نوفمبر: بعد العرض «تمام ابي احجز» بلا تاريخ → سؤال التاريخ (مو تحويل)",
+    history: AD_HIST, customer: "تمام ابي احجز", intakeData: AD_STATE, intent: { intent: "booking_payment", yes_no: "yes" },
+    model: [FU("أبشر، بحوّل طلبك لزميلي المختص ويرد عليك قريب", "handoff")],
+    expect: [["سؤال التاريخ", c => c.reply.includes(AD_DATE_Q)], ["❌ لا تحويل", c => !/زميلي/.test(c.reply)], NO_BUILD, ["القبول محفوظ", c => !!c.intake.ad_pending]],
+  },
+  {
+    id: "ad1-cheaper-persuade", entry: "followup", title: "٦ نوفمبر: «غالي، ابي ارخص» على الموصى به → رسائل الإقناع + «وإذا حاب فندق أرخص، بلّغني وأرسل لك خيار أرخص 👍» (بلا بناء)",
+    history: AD_HIST, customer: "غالي، ابي فندق ارخص", intakeData: { ...AD_STATE, date: "15/12/2026" }, model: [FU("تمام")],
+    expect: [["الإقناع", c => c.reply.includes("الفندق قريب جداً من الحرم") && c.reply.includes("الفندق ٥ نجوم وراقي جداً")], ["جملة الاستعداد", c => c.reply.includes("وإذا حاب فندق أرخص، بلّغني وأرسل لك خيار أرخص 👍")],
+      ["❌ ما يعرض الأبراج/بجانب الحرم", c => !/الأبراج أو بجانب الحرم/.test(c.reply)], NO_BUILD, ["علم الإقناع", c => c.intake.cheap_offered === true]],
+  },
+  {
+    id: "ad1-cheaper-confirm", entry: "followup", title: "٦ نوفمبر: بعد جملة الاستعداد «ايوه» → أرخص العروض (cheapest) — العرض الثاني",
+    history: [...AD_HIST, ["C", "غالي، ابي فندق ارخص"], ["T", "على العموم اطّلع عليه، وإذا حاب فندق أرخص، بلّغني وأرسل لك خيار أرخص 👍"]], customer: "ايوه",
+    intakeData: { ...AD_STATE, date: "15/12/2026", haram_explained: true, cheap_offered: true }, model: [FU("تمام")],
+    expect: [["٦ نوفمبر: الكرت قبل البناء", c => c.buildCalls === 0 && /تمام، تقصد: /.test(c.reply)], ["❌ لا فنادق العرض", c => !c.intake.pending_modify?.hotel_prefs?.haram_keep], ["الكرت: أرخص فندق", c => /أرخص فندق عندنا/.test(c.reply)]],
+  },
+  {
+    id: "ad1-cheaper-not-recommended", entry: "followup", title: "٦ نوفمبر: «ابي ارخص» وفندق العرض مو الموصى به → أرخص العروض مباشرة (بلا إقناع)",
+    history: AD_HIST, customer: "ابي فندق ارخص", intakeData: { ...AD_STATE, date: "15/12/2026", program_final_raw: AD_RAW_OTHER }, model: [FU("تمام")],
+    expect: [["٦ نوفمبر: الكرت قبل البناء", c => c.buildCalls === 0 && /تمام، تقصد: /.test(c.reply)], ["❌ لا إقناع", c => !/قريب جداً من الحرم/.test(c.reply)]],
+  },
+  {
+    id: "ad1-cheaper-no-date", entry: "followup", title: "٦ نوفمبر: «ابي ارخص» (مو موصى به) بلا تاريخ → سؤال التاريخ قبل البناء",
+    history: AD_HIST, customer: "ابي فندق ارخص", intakeData: { ...AD_STATE, program_final_raw: AD_RAW_OTHER }, model: [FU("تمام")],
+    expect: [["سؤال التاريخ", c => c.reply.includes(AD_DATE_Q)], NO_BUILD, ["الأرخص محفوظ للكرت", c => c.intake.ad_pending?.changed?.hotel_prefs?.cheapest === true]],
+  },
+  {
+    id: "ad1-near-haram-drops-ad-hotels", entry: "followup", title: "٦ نوفمبر: عرض إعلان و«ايوه» على «وحتى فندق المدينة أغيّره لك بجانب الحرم؟» → البناء بتصنيف الحرم (❌ فنادق الإعلان)",
+    history: [...AD_HIST, ["C", "ابي فندق بجانب الحرم"], ["T", "تمام أستاذي، وحتى فندق المدينة أغيّره لك بجانب الحرم؟"]], customer: "ايوه",
+    intakeData: { ...AD_STATE, date: "15/12/2026", program_final_raw: AD_RAW_OTHER, haram_madinah_asked: true, haram_tag: "بجانب الحرم" }, model: [FU("تمام")],
+    expect: [["٦ نوفمبر: الكرت قبل البناء", c => c.buildCalls === 0 && /تمام، تقصد: /.test(c.reply)], ["تصنيف الحرم", c => c.intake.pending_modify?.hotel_prefs?.haram === "بجانب الحرم"], ["❌ لا فنادق الإعلان", c => !c.intake.pending_modify?.hotel_prefs?.haram_keep], ["+ عرض الموصى به", c => c.intake.pending_modify?.also_recommended === true]],
+  },
+  {
+    id: "ad1-thai-send-wait", title: "٦ نوفمبر (قرار المالكة: نفس العمرة لكل الوجهات): إعلان تايلاند «ايوه» → الملف وينتظر، والتوزيعة من العرض",
+    history: [["C", "ابي العرض"], ["T", "حاضر 🌟 تقصد عرض تايلاند اللي شفته بالإعلان؟ أكّد لي «ايوه» وأرسل لك التفاصيل كاملة 👍"]], customer: "ايوه",
+    session: { ad_referral: { headline: "عرض تايلاند " + TH_CODE } }, tables: TH_TABLES, intakeData: { ad_offer_pending: TH_CODE }, model: [M("كم عددكم؟")],
+    expect: [AD_PDF_SENT, ["❌ لا أسئلة", c => !/كم عدد/.test(c.reply)], NO_BUILD, ["الاستقبال انقفل", c => c.session.intake_active === false],
+      ["التوزيعة من العرض", c => /4 بوكيت - 3 كرابي/.test(String(c.intake.distribution || "")) && +c.intake.days === 8 && +c.intake.pax === 2], ["العرض الحالي", c => c.intake.program_final_code === TH_CODE]],
+  },
+  {
+    id: "ad1-thai-pax-asks-date", entry: "followup", title: "٦ نوفمبر: عرض إعلان تايلاند «احنا ٣» → سؤال التاريخ (مو الكرت مباشرة)",
+    history: [["C", "ابي العرض"], ["T", AD_SENT]], customer: "احنا ٣", intakeData: { destination: "تايلاند", pax: 2, days: 8, distribution: "4 بوكيت - 3 كرابي", cities: "بوكيت وكرابي", asked_children: true, ad_offer: true, program_final_raw: TH_RAW, program_final_code: TH_CODE, ad_keep_hotels: ["Diamond Resort", "Aonang Villa"] },
+    intent: { intent: "modify" }, model: [FU("تمام", "modify", { pax: 3 })],
+    expect: [["سؤال التاريخ", c => c.reply.includes(AD_DATE_Q)], NO_BUILD, ["التغيير محفوظ", c => +c.intake.ad_pending?.changed?.pax === 3]],
+  },
+  {
+    id: "card-yes-cheapest-second", entry: "followup", title: "٦ نوفمبر: «صحيح» على كرت «أرخص فندق» بعد عرض واحد → يبني الأرخص (❌ فنادق الإعلان) + «خيار ثاني»",
+    history: [...AD_HIST, ["C", "ايوه"], ["T", "تمام، تقصد: أرخص فندق عندنا، العدد 2، والسفر 15/12/2026؟"]], customer: "صحيح",
+    intakeData: { ...AD_STATE, date: "15/12/2026", pending_modify: { hotel_prefs: { haram: "", cheapest: true }, program_cheapest: true } }, intent: { intent: "agree", yes_no: "yes" }, model: [FU("تمام")],
+    expect: [["انبنى أرخص", c => c.buildCalls === 1 && c.buildBody?.hotel_prefs?.cheapest === true], ["❌ لا فنادق الإعلان", c => !c.buildBody?.hotel_prefs?.haram_keep], ["«خيار ثاني»", c => /برسل لك الحين خيار ثاني/.test(c.reply) && !/ثالث/.test(c.reply)]],
+  },
+  {
+    id: "card-yes-abraj-ack", entry: "followup", title: "٦ نوفمبر: «صحيح» على كرت الأبراج → «إلا فيه فنادق في الأبراج، الحين أرسل لك إياه.» + البناء بتصنيف الأبراج",
+    history: [...PROG_HIST, ["C", "ابي الابراج"], ["T", "تمام، تقصد: فندق مكة في الأبراج، وفندق المدينة بجانب الحرم، العدد 5؟"]], customer: "صحيح",
+    intakeData: { ...DONE, program_final_raw: "DEST:العمرة\n\nHOTELS:\nAddress Jabal Omar Makkah | Makkah | 5 | Deluxe | 1 | 3 ليالي (x) | x\nSofitel Shahd Al Madinah | Al Madinah | 5 | Classic Room with King Bed | 1 | 2 ليالي (x) | x\n", program_final_code: "MK-2026-008",
+      pending_modify: { hotel_prefs: { haram: "بجانب الحرم", makkah_tag: "الأبراج" }, abraj_ack: true } }, intent: { intent: "agree", yes_no: "yes" }, model: [FU("تمام")],
+    expect: [["انبنى", c => c.buildCalls === 1], ["«إلا فيه من الأبراج…»", c => c.reply.includes("إلا فيه فنادق في الأبراج، الحين أرسل لك إياه.")], ["الأبراج", c => c.buildBody?.hotel_prefs?.makkah_tag === "الأبراج"]],
+  },
+  {
+    id: "card-near-no-madinah-in-program", entry: "followup", title: "٦ نوفمبر (قرار المالكة): برنامج مكة بس و«ابي بجانب الحرم» (بعد الشرح) → ❌ لا سؤال المدينة ولا ذكرها بالكرت",
+    history: [...AD_HIST, ["C", "ابي فندق بجانب الحرم"], ["T", "على العموم اطّلع عليه، وإذا حبيت فندق في الأبراج أو بجانب الحرم بلغني وأرسل لك العرض الثاني."]], customer: "ايوه غيره",
+    intakeData: { ...AD_STATE, date: "15/12/2026", haram_explained: true, program_final_raw: AD_RAW.replace(/\nPullman Zamzam Madinah[^\n]*/, "") }, model: [FU("تمام")],
+    expect: [["❌ لا سؤال المدينة", c => !/فندق المدينة أغيّره/.test(c.reply)], ["الكرت بلا المدينة", c => /تمام، تقصد: فندق بجانب الحرم/.test(c.reply) && !/المدينة/.test(c.reply)], NO_BUILD],
+  },
+  {
+    id: "ad1-other-hotel-recommended-card", entry: "followup", title: "٦ نوفمبر (قرار المالكة ج): عرض إعلان بفندق مو الموصى به و«ابي فندق غيره» → كرت «الفنادق الموصى بها» (بلا بناء)",
+    history: AD_HIST, customer: "ابي فندق غيره", intakeData: { ...AD_STATE, date: "15/12/2026", program_final_raw: AD_RAW_OTHER }, model: [FU("تمام")],
+    expect: [["كرت الموصى به", c => /تمام، تقصد: الفنادق الموصى بها/.test(c.reply)], NO_BUILD, ["معلّق: الموصى به", c => c.intake.pending_modify?.hotel_prefs?.recommended === true]],
+  },
+  {
+    id: "ad1-other-hotel-recommended-yes", entry: "followup", title: "٦ نوفمبر: «صحيح» على كرت الموصى به → يبني بالموصى به (❌ فنادق الإعلان)",
+    history: [...AD_HIST, ["C", "ابي فندق غيره"], ["T", "تمام، تقصد: الفنادق الموصى بها، العدد 2، والسفر 15 ديسمبر؟"]], customer: "صحيح",
+    intakeData: { ...AD_STATE, date: "15/12/2026", program_final_raw: AD_RAW_OTHER, pending_modify: { hotel_prefs: { haram: "موصى به", recommended: true } } }, intent: { intent: "agree", yes_no: "yes" }, model: [FU("تمام")],
+    expect: [["انبنى", c => c.buildCalls === 1], ["الموصى به", c => c.buildBody?.hotel_prefs?.haram === "موصى به"], ["❌ لا فنادق الإعلان", c => !c.buildBody?.hotel_prefs?.haram_keep]],
+  },
+  {
+    id: "ad1-near-two-offers", entry: "followup", title: "٦ نوفمبر (قرار المالكة ب): «صحيح» على كرت بجانب الحرم (عرض إعلان مو الموصى به) → عرضين: المطلوب + الموصى به، والإقناع بعد الثاني",
+    history: [...AD_HIST, ["C", "ابي فندق بجانب الحرم"], ["T", "تمام، تقصد: فندق مكة بجانب الحرم، وفندق المدينة بجانب الحرم، العدد 2، والسفر 15 ديسمبر؟"]], customer: "صحيح",
+    intakeData: { ...AD_STATE, date: "15/12/2026", program_final_raw: AD_RAW_OTHER, pending_modify: { hotel_prefs: { haram: "بجانب الحرم" }, also_recommended: true } }, intent: { intent: "agree", yes_no: "yes" }, model: [FU("تمام")],
+    expect: [["رسالة العرضين", c => c.reply.includes("حاضر، برسل لك عرضين: العرض اللي طلبته، وعرض ثاني بالفندق الموصى به.")], ["انبنى برنامجين", c => c.buildCalls === 2],
+      ["الثاني = الموصى به", c => c.buildBody?.hotel_prefs?.haram === "موصى به" && c.buildBody?.hotel_prefs?.recommended === true], ["ملفين بالطابور", c => c.jobs.length === 2],
+      ["الإقناع + الختام بعد الثاني", c => { const m = Object.values(c.intake.post_msgs_by_code || {}).flat() as string[]; return m.some(x => x.includes("الفندق قريب جداً من الحرم")) && m.at(-1) === "الخيارين أمامك، وأنا في خدمتك وفي انتظار تأكيدك."; }]],
+  },
+  {
+    id: "ad1-abraj-two-offers-ack", entry: "followup", title: "٦ نوفمبر: «صحيح» على كرت الأبراج (عرض إعلان مو الموصى به) → «إلا فيه فنادق في الأبراج…» + «وبرسل لك كمان عرض ثاني بالفندق الموصى به.»",
+    history: [...AD_HIST, ["C", "ابي الابراج"], ["T", "تمام، تقصد: فندق مكة في الأبراج، العدد 2، والسفر 15 ديسمبر؟"]], customer: "صحيح",
+    intakeData: { ...AD_STATE, date: "15/12/2026", program_final_raw: AD_RAW_OTHER, pending_modify: { hotel_prefs: { haram: "بجانب الحرم", makkah_tag: "الأبراج" }, abraj_ack: true, also_recommended: true } }, intent: { intent: "agree", yes_no: "yes" }, model: [FU("تمام")],
+    expect: [["الأبراج", c => c.reply.includes("إلا فيه فنادق في الأبراج، الحين أرسل لك إياه.")], ["+ الموصى به", c => c.reply.includes("وبرسل لك كمان عرض ثاني بالفندق الموصى به.")], ["انبنى برنامجين", c => c.buildCalls === 2]],
+  },
+  {
+    id: "ad1-near-recommended-ad-single", entry: "followup", title: "٦ نوفمبر: عرض إعلان فندقه الموصى به و«ايوه» على سؤال المدينة → عرض واحد (بلا عرض موصى به إضافي)",
+    history: [...AD_HIST, ["C", "ابي فندق بجانب الحرم"], ["T", "تمام أستاذي، وحتى فندق المدينة أغيّره لك بجانب الحرم؟"]], customer: "ايوه",
+    intakeData: { ...AD_STATE, date: "15/12/2026", haram_explained: true, haram_madinah_asked: true, haram_tag: "بجانب الحرم" }, model: [FU("تمام")],
+    expect: [["الكرت", c => /تمام، تقصد: /.test(c.reply)], ["❌ لا عرض إضافي", c => c.intake.pending_modify?.also_recommended !== true]],
+  },
+  // ── ٦ نوفمبر ٢٠٢٦ (قرار المالكة): الموصى به > ١٥٠٠ ر.ع إجمالي → + أرخص العروض «هذا عرض ثاني أرخص للاطلاع.» ──
+  {
+    id: "pricey-rec-adds-cheapest", entry: "followup", title: "٦ نوفمبر: الموصى به ٢٠٬٠٠٠ ر.س (> ١٥٠٠ ر.ع) → يبني أرخص العروض كمان (ملفين) + الجملة بعد الثاني",
+    history: [...PROG_HIST, ["C", "خله ١٢ نوفمبر"], ["T", "تمام، تقصد السفر يكون 2026-11-12؟"]], customer: "صحيح", intent: { intent: "agree", yes_no: "yes" },
+    intakeData: { ...DONE, program_final_raw: "DEST:العمرة\n\nHOTELS:\nAddress Jabal Omar Makkah | Makkah | 5 | Deluxe | 1 | 3 ليالي (x) | x\n", program_final_code: "MK-2026-008", pending_modify: { date: "2026-11-12" } },
+    buildTotals: [20000, 9000], model: [FU("تمام")],
+    expect: [["بنى مرتين", c => c.buildCalls === 2], ["الأول الموصى به", c => c.buildBodies?.[0]?.hotel_prefs?.haram === "موصى به"], ["الثاني أرخص العروض", c => c.buildBodies?.[1]?.hotel_prefs?.cheapest === true],
+      ["ملفين", c => c.jobs.length === 2], ["الجملة بعد الثاني", c => JSON.stringify(c.intake.post_msgs_by_code?.["MK-TEST-2"]) === JSON.stringify(["هذا عرض ثاني أرخص للاطلاع."])],
+      ["رسائل الأول المعتادة", c => (c.intake.post_msgs_by_code?.["MK-TEST-1"] || []).some((m: string) => /^تفضل أستاذي/.test(m))], ["الأرخص ثانوي", c => (c.intake.secondary_codes || []).includes("MK-TEST-2")]],
+  },
+  {
+    id: "rec-under-limit-single", entry: "followup", title: "٦ نوفمبر: الموصى به ١٢٬٠٠٠ ر.س (< ١٥٠٠ ر.ع) → برنامج واحد بس",
+    history: [...PROG_HIST, ["C", "خله ١٢ نوفمبر"], ["T", "تمام، تقصد السفر يكون 2026-11-12؟"]], customer: "صحيح", intent: { intent: "agree", yes_no: "yes" },
+    intakeData: { ...DONE, program_final_raw: "DEST:العمرة\n\nHOTELS:\nAddress Jabal Omar Makkah | Makkah | 5 | Deluxe | 1 | 3 ليالي (x) | x\n", program_final_code: "MK-2026-008", pending_modify: { date: "2026-11-12" } },
+    buildTotals: [12000, 9000], model: [FU("تمام")],
+    expect: [["بنى مرة", c => c.buildCalls === 1], ["ملف واحد", c => c.jobs.length === 1]],
+  },
+  {
+    id: "pricey-cheapest-not-cheaper", entry: "followup", title: "٦ نوفمبر: الموصى به غالي بس أرخص العروض نفس السعر تقريباً → ما يرسل الثاني",
+    history: [...PROG_HIST, ["C", "خله ١٢ نوفمبر"], ["T", "تمام، تقصد السفر يكون 2026-11-12؟"]], customer: "صحيح", intent: { intent: "agree", yes_no: "yes" },
+    intakeData: { ...DONE, program_final_raw: "DEST:العمرة\n\nHOTELS:\nAddress Jabal Omar Makkah | Makkah | 5 | Deluxe | 1 | 3 ليالي (x) | x\n", program_final_code: "MK-2026-008", pending_modify: { date: "2026-11-12" } },
+    buildTotals: [20000, 19500], model: [FU("تمام")],
+    expect: [["ملف واحد", c => c.jobs.length === 1], ["رسائله عادية", c => !c.intake.post_msgs_by_code]],
+  },
+  {
+    id: "pricey-ad-offer-no-cheapest", entry: "followup", title: "٦ نوفمبر: تغيير العدد على عرض الإعلان (فنادق الإعلان) وطلع غالي → ❌ لا أرخص تلقائي (مو الموصى به)",
+    history: [...AD_HIST, ["C", "احنا ٤"], ["T", "تمام، تقصد: نفس الفنادق، العدد 4، والسفر 15 ديسمبر؟"]], customer: "صحيح",
+    intakeData: { ...AD_STATE, date: "15/12/2026", pending_modify: { pax: 4 } }, intent: { intent: "agree", yes_no: "yes" }, buildTotals: [20000, 9000], model: [FU("تمام")],
+    expect: [["بنى مرة", c => c.buildCalls === 1], ["ملف واحد", c => c.jobs.length === 1]],
+  },
+  {
+    id: "after-auto-cheapest-budget", entry: "followup", title: "٦ نوفمبر: شاف الموصى به + أرخص العروض التلقائي وقال «ابي ارخص» → رسالة الميزانية",
+    history: [...PROG_HIST, ["T", "هذا عرض ثاني أرخص للاطلاع."]], customer: "ابي ارخص",
+    intakeData: { ...DONE, program_final_raw: "DEST:العمرة\n\nHOTELS:\nAddress Jabal Omar Makkah | Makkah | 5 | Deluxe | 1 | 3 ليالي (x) | x\n", program_final_code: "MK-2026-008",
+      offers: [{ code: "MK-2026-008", kind: "الموصى به", hotels: [] }, { code: "MK-2026-009", kind: "أرخص العروض", hotels: [] }] }, model: [FU("تمام")],
+    expect: [["الميزانية", c => /إذا عندك ميزانية معيّنة بلغني/.test(c.reply)], NO_BUILD, ["❌ لا إقناع", c => !/قريب جداً من الحرم/.test(c.reply)]],
   },
 ];
