@@ -3653,9 +3653,15 @@ async function _medReturnFlightCheck(d: Record<string, unknown>): Promise<{ ok: 
     const table = (((data || {}).prices || {}).oman || {}).ret_med || {};
     const keys = Object.keys(table);
     if (!keys.length) return null;   // ما نقدر نقرأ الأسعار → لا نمنع (الـPDF يرجع لجدة مع تنبيه للموظفة)
-    const k = (dt: Date) => `${String(dt.getUTCDate()).padStart(2, "0")}/${String(dt.getUTCMonth() + 1).padStart(2, "0")}/${dt.getUTCFullYear()}`;
-    if (table[k(ret)]) return { ok: true, date: ret };
-    const toD = (s: string) => { const [dd, mo, yy] = s.split("/").map(Number); return new Date(Date.UTC(yy, mo - 1, dd)); };
+    // 🔴 قرار المالكة (٧ نوفمبر ٢٠٢٦): السنة لا تهم — نطابق باليوم/الشهر فقط، ونحسب الأقرب
+    //    بنقل كل تاريخ من الشيت لأقرب سنة لتاريخ العودة (٣٠ ديسمبر قريب من ٢ يناير).
+    const ddmm = (dt: Date) => `${String(dt.getUTCDate()).padStart(2, "0")}/${String(dt.getUTCMonth() + 1).padStart(2, "0")}/`;
+    if (keys.some(s => s.startsWith(ddmm(ret)) && table[s])) return { ok: true, date: ret };
+    const toD = (s: string) => {
+      const [dd, mo] = s.split("/").map(Number);
+      const cands = [-1, 0, 1].map(o => new Date(Date.UTC(ret.getUTCFullYear() + o, mo - 1, dd)));
+      return cands.sort((a, b) => Math.abs(a.getTime() - ret.getTime()) - Math.abs(b.getTime() - ret.getTime()))[0];
+    };
     const nearest = keys.map(toD).filter(x => Math.abs(x.getTime() - ret.getTime()) <= 7 * 864e5)
       .sort((a, b) => Math.abs(a.getTime() - ret.getTime()) - Math.abs(b.getTime() - ret.getTime())).slice(0, 2)
       .sort((a, b) => a.getTime() - b.getTime());

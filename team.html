@@ -1794,12 +1794,18 @@ function _progDateDMY(tag){
 function _dmyKey(o){ return o ? `${String(o.d).padStart(2,'0')}/${String(o.mo).padStart(2,'0')}/${o.y}` : ''; }
 function _dmyNum(k){ const m=String(k).match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? (+m[3])*10000+(+m[2])*100+(+m[1]) : 0; }
 // أقرب تاريخ متاح في الشيت لتاريخ البرنامج (لو غير موجود بالضبط)
+// 🔴 قرار المالكة (٧ نوفمبر ٢٠٢٦): السنة لا تهم — نطابق باليوم/الشهر فقط (أي سنة)،
+// والأقرب يُحسب بأيام السنة دائرياً (٣٠ ديسمبر قريب من ٢ يناير).
+function _ddmm(k){ const m=String(k).match(/(\d{2})\/(\d{2})\//); return m ? m[1]+'/'+m[2] : ''; }
+function _doy(k){ const m=String(k).match(/(\d{2})\/(\d{2})\//); return m ? Math.round((Date.UTC(2001,+m[2]-1,+m[1])-Date.UTC(2001,0,1))/864e5) : -1; }
 function _nearestDate(keys, want){
   if(!keys.length) return '';
-  const wk=_dmyKey(want); if(wk && keys.indexOf(wk)>=0) return wk;
-  const wn = want ? _dmyNum(_dmyKey(want)) : 0;
-  if(!wn) return keys[0];
-  return keys.slice().sort((a,b)=> Math.abs(_dmyNum(a)-wn) - Math.abs(_dmyNum(b)-wn))[0];
+  const wk=_dmyKey(want); if(!wk) return keys[0];
+  if(keys.indexOf(wk)>=0) return wk;
+  const same=keys.find(k=>_ddmm(k)===_ddmm(wk)); if(same) return same;
+  const wd=_doy(wk);
+  const dist=k=>{ const d=Math.abs(_doy(k)-wd); return Math.min(d,365-d); };
+  return keys.slice().sort((a,b)=> dist(a)-dist(b))[0];
 }
 function mkFlightModeLabel(){ return {cheapest:'الأرخص',oman:'الطيران العماني',salam:'طيران السلام',none:'بدون طيران'}[MK_FLIGHT_MODE]; }
 async function mkSetFlight(mode){ MK_FLIGHT_MODE = mode; MK_FLIGHT_SIG=''; await mkFlightApply(); renderMakkahFlightBar(); }
