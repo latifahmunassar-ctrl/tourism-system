@@ -3609,7 +3609,7 @@ const m = raw.match(new RegExp(key + ':(.+)'));
 return m ? m[1].trim() : '';
 }
 
-const DOC_SECTION_HEAD_RE = 'DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|CURRENCY|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|SUMMARY|CHAT';
+const DOC_SECTION_HEAD_RE = 'DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|CURRENCY|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|SUMMARY|CHAT|INCLUDES|EXCLUDES';
 
 /** تسعيرة شريحة الاتصال من الشيت (Sim card) — موحّدة لكل الوجهات: 50 ريال لكل شريحة (Per Pax في الشيت). */
 const SIM_CARD_UNIT_PRICE_SAR = 50;
@@ -3869,7 +3869,7 @@ function parseHotelLinesFromRaw(raw) {
 }
 
 function parseSection(raw, tag) {
-const m = raw.match(new RegExp(tag + ':([\\s\\S]+?)(?=\\n(?:DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|CURRENCY|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|TRANSPORT_OPTIONS|SUMMARY|CHAT):)'));
+const m = raw.match(new RegExp(tag + ':([\\s\\S]+?)(?=\\n(?:DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|CURRENCY|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|TRANSPORT_OPTIONS|SUMMARY|CHAT|INCLUDES|EXCLUDES):)'));
 return m ? m[1].trim().split('\n').filter(l => l.includes('|')) : [];
 }
 
@@ -5973,6 +5973,46 @@ async function waGroupSend(i){
   addMessage('sys', `✅ نُزّل ملف «${fname}»${g.link ? ` وفُتح «${g.label}»` : ''} — أرفقي الملف (📎) داخل الجروب وأرسلي.`);
 }
 
+const PDF_EXCLUDES_ITEMS = ["💳 المصاريف الشخصية.", "🎟️ تذاكر دخول الأماكن السياحية والفعاليات.", "🛡️ تأمين السفر.", "🍽️ الوجبات غير المذكورة في البرنامج.", "🛂 التأشيرات إن وجدت.", "➕ أي رسوم أو خدمات إضافية غير مذكورة ضمن تفاصيل البرنامج.", "🏨 ضريبة السائح (Tourism Tax) التي تتطلب بعض الفنادق أو المدن دفعها مباشرة من قبل السائح عند الوصول أو تسجيل الدخول."];
+// «يشمل البرنامج» — مصدر واحد: PDF العميل + النص المحفوظ مع الكود (INCLUDES) اللي يقرأه داشبورد التسويق.
+function pdfIncludesItems(dest, hotelsLines, flightsLines, transfersLines, toursLines, simText) {
+      // العمرة: لا جولات سياحية ولا طيران داخلي (التنقّل مكة↔المدينة بالقطار/السيارة ضمن
+      // التنقّلات). «يشمل» يعكس الخدمات الفعلية فقط — بلا أي إضافة غير موجودة بالبرنامج.
+      // كشف العمرة قوي: الوجهة أو مدن الفنادق (مكة/المدينة/جدة) أو مسار الطيران الدولي (مسقط↔جدة).
+      const _umRe = /عمرة|عمره|مكة|مكه|المدين[ةه]|جد[ةه]|الحرم|makkah|madinah|mecca|jeddah/i;
+      const _isUmrah = _umRe.test(String(dest||''))
+        || hotelsLines.some(l => _umRe.test(String(l.split('|')[1]||'')))
+        || flightsLines.some(l => /مسقط/.test(String(l.split('|')[0]||'')) && /جد[ةه]/.test(String(l.split('|')[0]||'')));
+      const _hasFlight = flightsLines.some(l=>{const k=String(l.split('|')[1]||'');return k && !k.includes('قطار');});
+      const _hasTrain  = flightsLines.some(l=>String(l.split('|')[1]||'').includes('قطار'));
+      const _hasSim = (parseInt((arabicDigitsToLatin(String(simText||'')).match(/\d+/)||['0'])[0])||0) > 0;
+      // ملاحظة: بلا نقطة ختامية — html2canvas يخطئ بموضع النقطة في سطر RTL (تظهر
+      // «بين.المدن») فنحذفها من بنود التعداد.
+      const li = [];
+      if (hotelsLines.length) li.push('🏨 الإقامة في الفنادق الموضّحة أعلاه (حسب الفئة والإفطار المذكور)');
+      // للعمرة: الطيران دولي (مسقط↔جدة) لا داخلي بين المدن — نعرضه كـ«الطيران الدولي».
+      if (_hasFlight) li.push(_isUmrah ? '✈️ الطيران الدولي (مسقط ↔ جدة)' : '✈️ الطيران الداخلي بين المدن');
+      if (_hasTrain) li.push('🚆 القطار بين المدن');
+      // ٧ نوفمبر ٢٠٢٦ (المالكة): «يشمل» يذكر التنقّلات الفعلية. العمرة تكتب نقلاتها في TOURS
+      // (خطة التنقّل) لا TRANSFERS، فكان بند المواصلات يختفي. نجمع سطور النقل من القسمين.
+      const _trNames = [...transfersLines, ...toursLines]
+        .map(l => String(l.split('|')[1]||'')).filter(n => /نقل|استقبال|توديع/.test(n));
+      if (_isUmrah && _trNames.length) {
+        const _nz = s => String(s||'').replace(/[إأآ]/g,'ا').replace(/[ةه]/g,'ه').replace(/ى/g,'ي');
+        const _t = _trNames.map(_nz);
+        const _shared = _t.some(n => /مشترك/.test(n)) && !_t.some(n => /خاص/.test(n));
+        const _car = _shared ? 'بسيارة مكيّفة حديثة مشتركة' : 'بسيارة مكيّفة حديثة خاصة';
+        const _parts = [];
+        if (_t.some(n => /من\s*مطار/.test(n))) _parts.push('الاستقبال من المطار إلى الفندق');
+        if (_t.some(n => /الي\s*مطار/.test(n))) _parts.push('التوديع من الفندق إلى المطار');
+        if (_t.some(n => !/مطار|محطه/.test(n) && /(مكه|المدينه|الطايف)[\s\S]*الي[\s\S]*(مكه|المدينه|الطايف)/.test(n))) _parts.push('التنقّل بين المدن');
+        if (_t.some(n => /محطه/.test(n))) _parts.push('التوصيل بين الفندق ومحطة القطار');
+        if (_parts.length) li.push('🚗 ' + _parts.join('، و') + ' ' + _car + '');
+      } else if (transfersLines.length) li.push('🚗 المواصلات بسيارة مكيّفة حديثة خاصة — الاستقبال والتوديع وجميع التنقّلات بين المدن');
+      if (toursLines.length && !_isUmrah) li.push('🗺️ الجولات السياحية الموضّحة بالبرنامج');
+      if (_hasSim) li.push('📶 شرائح اتصال (إنترنت)');
+  return li;
+}
 async function saveCurrentProgramOnce(pdfVariant, finalGroupPrice) {
   if (!parsedData || !lastProgramRaw) return '';
   if (lastSavedCode) return lastSavedCode;
@@ -5990,6 +6030,16 @@ async function saveCurrentProgramOnce(pdfVariant, finalGroupPrice) {
       if (_pp > 0) rawToSave = rawToSave.replace(/^TOTAL_PER_PERSON:\s*[\d.,]+/m, 'TOTAL_PER_PERSON:' + Math.round(_bp / _pp));
     }
   } catch (_) { rawToSave = lastProgramRaw; }
+  // «يشمل / لا يشمل» نفس PDF العميل حرفياً — داشبورد التسويق يقرأها من هنا بدل ما يخمّن.
+  try {
+    const _r = rawToSave;
+    const _sm = _r.match(/SIM:(.+)/);
+    const _inc = pdfIncludesItems(getLine(_r,'DEST') || parsedData.dest || '', parseHotelLinesFromRaw(_r), parseSection(_r,'FLIGHTS'),
+      parseSection(_r,'TRANSFERS'), parseSection(_r,'TOURS'), _sm ? _sm[1].trim() : '');
+    rawToSave = rawToSave.replace(/\n?INCLUDES:\n[\s\S]*?(?=\n[A-Z_]+:|$)/, '').replace(/\n?EXCLUDES:\n[\s\S]*?(?=\n[A-Z_]+:|$)/, '');
+    if (_inc.length) rawToSave += '\n\nINCLUDES:\n' + _inc.join('\n');
+    rawToSave += '\n\nEXCLUDES:\n' + PDF_EXCLUDES_ITEMS.join('\n');
+  } catch (_) {}
   try {
     const res = await fetch(PROGRAMS_URL, {
       method: 'POST',
@@ -6810,57 +6860,14 @@ ${itineraryHTML}
 <div class="pdf-includes" style="background:#eafaf1;border:1px solid #bfe8d0;border-radius:14px;padding:16px 20px;margin-bottom:18px;">
   <div style="font-size:20px;font-weight:900;color:#0e7c4a;margin-bottom:8px;">✅ يشمل البرنامج</div>
   <ul style="margin:0;padding:0;line-height:2;font-weight:800;color:#13433a;font-size:16px;list-style:none;">
-    ${(()=>{
-      // العمرة: لا جولات سياحية ولا طيران داخلي (التنقّل مكة↔المدينة بالقطار/السيارة ضمن
-      // التنقّلات). «يشمل» يعكس الخدمات الفعلية فقط — بلا أي إضافة غير موجودة بالبرنامج.
-      // كشف العمرة قوي: الوجهة أو مدن الفنادق (مكة/المدينة/جدة) أو مسار الطيران الدولي (مسقط↔جدة).
-      const _umRe = /عمرة|عمره|مكة|مكه|المدين[ةه]|جد[ةه]|الحرم|makkah|madinah|mecca|jeddah/i;
-      const _isUmrah = _umRe.test(String(dest||''))
-        || hotelsLines.some(l => _umRe.test(String(l.split('|')[1]||'')))
-        || flightsLines.some(l => /مسقط/.test(String(l.split('|')[0]||'')) && /جد[ةه]/.test(String(l.split('|')[0]||'')));
-      const _hasFlight = flightsLines.some(l=>{const k=String(l.split('|')[1]||'');return k && !k.includes('قطار');});
-      const _hasTrain  = flightsLines.some(l=>String(l.split('|')[1]||'').includes('قطار'));
-      const _hasSim = (parseInt((arabicDigitsToLatin(String(simText||'')).match(/\d+/)||['0'])[0])||0) > 0;
-      // ملاحظة: بلا نقطة ختامية — html2canvas يخطئ بموضع النقطة في سطر RTL (تظهر
-      // «بين.المدن») فنحذفها من بنود التعداد.
-      const li = [];
-      if (hotelsLines.length) li.push('<li>🏨 الإقامة في الفنادق الموضّحة أعلاه (حسب الفئة والإفطار المذكور)</li>');
-      // للعمرة: الطيران دولي (مسقط↔جدة) لا داخلي بين المدن — نعرضه كـ«الطيران الدولي».
-      if (_hasFlight) li.push(_isUmrah ? '<li>✈️ الطيران الدولي (مسقط ↔ جدة)</li>' : '<li>✈️ الطيران الداخلي بين المدن</li>');
-      if (_hasTrain) li.push('<li>🚆 القطار بين المدن</li>');
-      // ٧ نوفمبر ٢٠٢٦ (المالكة): «يشمل» يذكر التنقّلات الفعلية. العمرة تكتب نقلاتها في TOURS
-      // (خطة التنقّل) لا TRANSFERS، فكان بند المواصلات يختفي. نجمع سطور النقل من القسمين.
-      const _trNames = [...transfersLines, ...toursLines]
-        .map(l => String(l.split('|')[1]||'')).filter(n => /نقل|استقبال|توديع/.test(n));
-      if (_isUmrah && _trNames.length) {
-        const _nz = s => String(s||'').replace(/[إأآ]/g,'ا').replace(/[ةه]/g,'ه').replace(/ى/g,'ي');
-        const _t = _trNames.map(_nz);
-        const _shared = _t.some(n => /مشترك/.test(n)) && !_t.some(n => /خاص/.test(n));
-        const _car = _shared ? 'بسيارة مكيّفة حديثة مشتركة' : 'بسيارة مكيّفة حديثة خاصة';
-        const _parts = [];
-        if (_t.some(n => /من\s*مطار/.test(n))) _parts.push('الاستقبال من المطار إلى الفندق');
-        if (_t.some(n => /الي\s*مطار/.test(n))) _parts.push('التوديع من الفندق إلى المطار');
-        if (_t.some(n => !/مطار|محطه/.test(n) && /(مكه|المدينه|الطايف)[\s\S]*الي[\s\S]*(مكه|المدينه|الطايف)/.test(n))) _parts.push('التنقّل بين المدن');
-        if (_t.some(n => /محطه/.test(n))) _parts.push('التوصيل بين الفندق ومحطة القطار');
-        if (_parts.length) li.push('<li>🚗 ' + _parts.join('، و') + ' ' + _car + '</li>');
-      } else if (transfersLines.length) li.push('<li>🚗 المواصلات بسيارة مكيّفة حديثة خاصة — الاستقبال والتوديع وجميع التنقّلات بين المدن</li>');
-      if (toursLines.length && !_isUmrah) li.push('<li>🗺️ الجولات السياحية الموضّحة بالبرنامج</li>');
-      if (_hasSim) li.push('<li>📶 شرائح اتصال (إنترنت)</li>');
-      return li.join('');
-    })()}
+    ${pdfIncludesItems(dest, hotelsLines, flightsLines, transfersLines, toursLines, simText).map(x=>'<li>'+x+'</li>').join('')}
   </ul>
 </div>
 <div class="pdf-excludes">
   <div class="pdf-excludes-title">🚫 البرنامج لا يشمل</div>
   <div class="pdf-excludes-sub">يرجى الاطلاع على البنود التالية</div>
   <ul class="pdf-excludes-list">
-    <li>💳 المصاريف الشخصية.</li>
-    <li>🎟️ تذاكر دخول الأماكن السياحية والفعاليات.</li>
-    <li>🛡️ تأمين السفر.</li>
-    <li>🍽️ الوجبات غير المذكورة في البرنامج.</li>
-    <li>🛂 التأشيرات إن وجدت.</li>
-    <li>➕ أي رسوم أو خدمات إضافية غير مذكورة ضمن تفاصيل البرنامج.</li>
-    <li>🏨 ضريبة السائح (Tourism Tax) التي تتطلب بعض الفنادق أو المدن دفعها مباشرة من قبل السائح عند الوصول أو تسجيل الدخول.</li>
+    ${PDF_EXCLUDES_ITEMS.map(x=>'<li>'+x+'</li>').join('')}
   </ul>
 </div>
 <div class="pdf-section-title">📋 السياسة العامة</div>
