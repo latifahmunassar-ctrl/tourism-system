@@ -3517,7 +3517,7 @@ function buildFromForm(){
   if(!days){ alert('اكتب عدد الأيام'); return; }
   const adults = +document.getElementById('bf-adults').value||0;
   const children = +document.getElementById('bf-children').value||0;
-  let cities;
+  let cities, _fromChosen = bfMode()==='ready';
   if(bfMode()==='ready'){
     if(!bfChosen){ alert('اضغط «عرض الخيارات» واختر توزيعاً جاهزاً، أو بدّل لـ«تخصيص».'); return; }
     cities = bfParseDist(bfChosen);
@@ -3525,6 +3525,9 @@ function buildFromForm(){
     cities = [...document.querySelectorAll('#bf-cityRows .bf-crow')]
       .map(r=>({ city:r.querySelector('.bf-city').value, n:+r.querySelector('.bf-n').value||0 }))
       .filter(c=>c.city && c.n);
+    // ٧ نوفمبر ٢٠٢٦: الوضع انقلب «تخصيص» بصمت (فتح طلب/ملف) والموظفة اختارت اقتراحاً جاهزاً
+    // → كان يطلع «أضف مدينة واحدة على الأقل». لو فيه اقتراح مختار وقائمة المدن فاضية نعتمده.
+    if(!cities.length && bfChosen){ cities = bfParseDist(bfChosen); _fromChosen = true; }
   }
   if(!cities.length){ alert('أضف مدينة واحدة على الأقل'); return; }
   // 🇦🇪 أبوظبي: امنع البناء فوراً لو المدّة أو عدد الأشخاص خارج المُسعّر بالشيت.
@@ -3555,7 +3558,7 @@ function buildFromForm(){
   if(date)  parts.push('بتاريخ ' + date);
   // ✈️ ٧ نوفمبر ٢٠٢٦: خيار «القدوم: جدة — المغادرة: المدينة» → العودة من مطار المدينة
   // (يُطبَّق فقط لو آخر مدينة بالبرنامج هي المدينة). mkSyncDepAir يقرأ MK_FORM_RET_MED.
-  const _depSel = bfMode()==='ready' ? BF_CHOSEN_DEP : String((document.getElementById('bf-airport')||{}).value||'').split('|')[1]||'';
+  const _depSel = _fromChosen ? BF_CHOSEN_DEP : String((document.getElementById('bf-airport')||{}).value||'').split('|')[1]||'';
   const _lastC = String((cities[cities.length-1]||{}).city||'');
   MK_FORM_RET_MED = /مدين|madinah/i.test(_depSel) && /مدين|madinah/i.test(_lastC);
   if(MK_FORM_RET_MED) parts.push('العودة من مطار المدينة');
