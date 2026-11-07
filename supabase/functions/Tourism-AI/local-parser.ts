@@ -627,8 +627,8 @@ function parseCityStaysOrdered(text: string, cityDefs: CityDef[]): CityStay[] {
   // Build a single combined regex matching either "N city" or "city N",
   // capturing the city name + number. Use named-group alternation by
   // running per-city regex and merging results sorted by position.
-  type Hit = { city: string; nights: number; pos: number; area?: string };
-  const hits: Hit[] = [];
+  type Hit = { city: string; nights: number; pos: number; area?: string; numPos?: number; form?: "nc" | "cn" };
+  let hits: Hit[] = [];
   for (const { canonical, pattern } of cityDefs) {
     const cityPat = pattern.source;
     // "city N" REQUIRES a trailing nights-word; otherwise a header like
@@ -642,11 +642,30 @@ function parseCityStaysOrdered(text: string, cityDefs: CityDef[]): CityStay[] {
     while ((m = re.exec(t)) !== null) {
       const n = parseInt(m[1] || m[2] || "0", 10);
       if (n > 0 && n <= 30) {
-        hits.push({ city: canonical, nights: n, pos: m.index });
+        const form = m[1] ? "nc" : "cn";
+        const numPos = form === "nc" ? m.index : m.index + m[0].search(/\d/);
+        hits.push({ city: canonical, nights: n, pos: m.index, numPos, form });
       }
       if (m.index === re.lastIndex) re.lastIndex++;
     }
   }
+  // نفس الرقم انقرأ لمدينتين (٧ نوفمبر ٢٠٢٦): «3 ليال المدينه المنوره - 3 ليال مكه» —
+  // «المنوره - 3 ليال» (مدينة ثم رقم) و«3 ليال مكه» (رقم ثم مدينة) يتشاركان الـ3 الثانية،
+  // فتصير المدينة ٦ ليالي ويُرفض البناء. نعطي الرقم للمدينة اللي ما لها رقم ثاني؛
+  // ولو للاثنتين أرقام أخرى نبقي «رقم ثم مدينة» (الصيغة الأشيع بالتوزيعات).
+  const byNum = new Map<number, Hit[]>();
+  for (const h of hits) { const k = h.numPos ?? -1; byNum.set(k, [...(byNum.get(k) || []), h]); }
+  const drop = new Set<Hit>();
+  for (const [k, group] of byNum) {
+    if (k < 0 || group.length < 2) continue;
+    const others = (h: Hit) => hits.some(x => x !== h && x.city === h.city && x.numPos !== k);
+    const nc = group.find(h => h.form === "nc"), cn = group.find(h => h.form === "cn");
+    if (!nc || !cn || nc.city === cn.city) continue;
+    if (!others(nc)) drop.add(cn);
+    else if (!others(cn)) drop.add(nc);
+    else drop.add(cn);
+  }
+  if (drop.size) hits = hits.filter(h => !drop.has(h));
   // Sort by position so we get the order the employee wrote them
   hits.sort((a, b) => a.pos - b.pos);
 
