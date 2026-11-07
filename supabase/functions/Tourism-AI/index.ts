@@ -3591,6 +3591,138 @@ async function handleMakkahFlights(): Promise<Response> {
   }
 }
 
+// ── 🕋 applyMakkahExtras: تنقّلات العمرة + طيران مسقط↔جدة على البرنامج **في السيرفر** ──
+// قرار المالكة (٧ نوفمبر ٢٠٢٦): المساعد السياحي هو المرجع، وطلال ياخذ منه. كان team.html وحده
+// يطبّق خطة التنقّل (mkApplyTransport) والطيران (mkFlightApply)، فبرامج طلال (auto_build) تُسعَّر
+// بنقل «محطة قطار الحرمين ↔ الفندق» بدل المطار وبلا طيران. هنا نفس منطق الصفحة حرفياً:
+//   • المقاطع: الوصول سيارة · بين مكة والمدينة قطار · المغادرة قطار لو من المدينة لجدة، وإلا سيارة؛
+//     مطار المدينة (return_airport=madinah وآخر مدينة المدينة) = سيارة.
+//   • النقلات → TOURS (يوم حر للعبادة في الأيام الفاضية) · تذاكر القطار → FLIGHTS · TRANSFERS بلا نقلات.
+//   • الطيران: الأرخص (العماني/السلام) لكل اتجاه، تاريخ أقرب يوم/شهر (أي سنة).
+// team.html يعيد تطبيق نفس الشي فوقه (نتيجة مطابقة)، فيبقى سعر طلال = سعر الـPDF.
+async function applyMakkahExtras(raw: string, opts: { pax: number; returnAirport?: string; flightsData?: Record<string, unknown> | null }): Promise<string> {
+  if (!/مكة|مكه|عمرة/.test(_taiVal(raw, "DEST"))) return raw;
+  const pax = Math.max(1, opts.pax || 2);
+  const hotelLines = _taiBlock(raw, "HOTELS").filter(l => l.includes("|"));
+  const cities = hotelLines.map(l => {
+    const p = l.split("|").map(x => x.trim());
+    const city = p[1] || "";
+    const nm = (p[5] || "").match(/\d+/);
+    const nights = Math.min(60, nm ? (parseInt(nm[0]) || 1) : 1);
+    const key = /مكة|مكه|makkah/i.test(city) ? "Makkah" : (/مدين|madinah/i.test(city) ? "Al Madinah" : (/الطائف|الطايف|taif/i.test(city) ? "Taif" : city));
+    return { key, nights };
+  });
+  if (!cities.length) return raw;
+  const lastKey = cities[cities.length - 1].key;
+  const retMedWanted = String(opts.returnAirport || "").toLowerCase() === "madinah" && lastKey === "Al Madinah";
+  const seq = ["airport", ...cities.map(c => c.key), retMedWanted ? "madinah_airport" : "airport"];
+  const nights = cities.map(c => c.nights);
+  const modes = seq.slice(0, -1).map((from, i) => {
+    if (i === 0) return "car";
+    if (seq[i + 1] === "madinah_airport") return "car";
+    if (seq[i + 1] === "airport") return from === "Al Madinah" ? "train" : "car";
+    return "train";
+  });
+  const setSec = (text: string, sec: string, lines: string[]): string => {
+    const re = new RegExp(`(^${sec}:)([\\s\\S]*?)(?=\\n(?:DEST|META|DATE_FROM|DATE_TO|CLIENT|CLIENT_CODE|CURRENCY|RETURN_AIRPORT|EXTRA_BED_CITIES|HOTELS|FLIGHTS|TRANSFERS|TOURS|SIM|SUMMARY|CHAT):)`, "m");
+    const body = lines.join("\n");
+    if (re.test(text)) return text.replace(re, `${sec}:\n${body}\n`);
+    return text.replace(/\n(TRANSFERS:|TOURS:|SUMMARY:)/, `\n${sec}:\n${body}\n\n$1`);
+  };
+  const money = (l: string) => { const p = l.split("|"); const m = String(p[p.length - 1] || "").replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c))).match(/(\d[\d,]*)/); return m ? parseInt(m[1].replace(/,/g, ""), 10) || 0 : 0; };
+  let out = raw;
+
+  // (١) التنقّلات
+  let planRows: Array<{ day: number; name: string; kind: string; price: number }> = [];
+  try {
+    const pr = await (await handleMakkahTransportPlan({ pax, sequence: seq, nights, modes })).json();
+    planRows = Array.isArray(pr?.rows) ? pr.rows : [];
+  } catch (_) { planRows = []; }
+  if (planRows.length) {
+    const totalDays = Math.min(90, nights.reduce((a, b) => a + b, 0) + 1);
+    const isTransfer = (n: string) => /نقل|تذكرة قطار|يوم حر|يوم تنقّل|استرخاء/.test(String(n || ""));
+    const keep: Record<number, string[]> = {};
+    for (const l of _taiBlock(out, "TOURS")) {
+      if (!l.includes("|")) continue;
+      const p = l.split("|").map(x => x.trim()); const dm = (p[0] || "").match(/(\d+)/);
+      if (dm && !isTransfer(p[1])) (keep[+dm[1]] ||= []).push(l.trim());
+    }
+    const plan: Record<number, string[]> = {};
+    planRows.filter(r => r.kind !== "قطار").forEach(r => { (plan[r.day] ||= []).push(`اليوم ${r.day} | ${r.name} | نقل | ${Number(r.price).toLocaleString("en-US")} ريال`); });
+    const body: string[] = [];
+    for (let d = 1; d <= totalDays; d++) {
+      if (plan[d]) body.push(...plan[d]);
+      else if (keep[d]) body.push(...keep[d]);
+      else body.push(`اليوم ${d} | يوم حر في الحرم للعبادة | حر | 0 ريال`);
+    }
+    out = setSec(out, "TOURS", body);
+    out = setSec(out, "TRANSFERS", _taiBlock(out, "TRANSFERS").filter(l => l.includes("|") && !/نقل|محط|مطار|قطار/.test(l)).map(l => l.trim()));
+    const fl = _taiBlock(out, "FLIGHTS").filter(l => l.includes("|") && !/قطار/.test(l.split("|")[1] || "")).map(l => l.trim());
+    planRows.filter(r => r.kind === "قطار").forEach(r => {
+      const per = Math.round(r.price / pax);
+      const route = ((r.name.match(/\(([^)]+)\)/) || [])[1] || r.name.replace(/تذكرة قطار الحرمين/, "").trim()).trim().replace(/[→]/g, "←");
+      fl.push(`${route} | قطار | ${per} ريال/شخص | ${pax} أشخاص | ${Number(r.price).toLocaleString("en-US")} ريال`);
+    });
+    out = setSec(out, "FLIGHTS", fl);
+  }
+
+  // (٢) الطيران الدولي (الأرخص لكل اتجاه)
+  let D = opts.flightsData || null;
+  if (!D) { try { D = await (await handleMakkahFlights()).json(); } catch (_) { D = null; } }
+  const prices = (D?.prices || {}) as Record<string, Record<string, Record<string, { final: number; timing?: string }>>>;
+  const airlines = (D?.airlines || {}) as Record<string, string>;
+  const doy = (mmdd: number) => Math.round((Date.UTC(2001, Math.floor(mmdd / 100) - 1, mmdd % 100) - Date.UTC(2001, 0, 1)) / 864e5);
+  const keyMMDD = (k: string) => { const m = k.match(/^(\d{2})\/(\d{2})\//); return m ? (+m[2]) * 100 + (+m[1]) : 0; };
+  const nearest = (keys: string[], want: number | null): string => {
+    if (!keys.length || want == null) return "";
+    const same = keys.find(k => keyMMDD(k) === want); if (same) return same;
+    const wd = doy(want); const dist = (k: string) => { const d = Math.abs(doy(keyMMDD(k)) - wd); return Math.min(d, 365 - d); };
+    return keys.slice().sort((a, b) => dist(a) - dist(b))[0];
+  };
+  const pick = (dir: string, want: number | null) => {
+    const cand = ["oman", "salam"].map(a => {
+      const table = (prices[a] || {})[dir] || {}; const nd = nearest(Object.keys(table), want);
+      return nd && table[nd] ? { airline: a, date: nd, final: table[nd].final, timing: table[nd].timing || "" } : null;
+    }).filter(Boolean) as Array<{ airline: string; date: string; final: number; timing: string }>;
+    return cand.sort((a, b) => a.final - b.final)[0] || null;
+  };
+  const retMed = retMedWanted && Object.keys((prices.oman || {}).ret_med || {}).length > 0;
+  const fl2 = _taiBlock(out, "FLIGHTS").filter(l => l.includes("|") && !/مسقط/.test(l.split("|")[0] || "")).map(l => l.trim());
+  const legs = [
+    { dir: "out", type: "ذهاب", want: _programMMDD(_taiVal(out, "DATE_FROM")), route: "مسقط ← جدة" },
+    retMed ? { dir: "ret_med", type: "عودة", want: _programMMDD(_taiVal(out, "DATE_TO")), route: "المدينة ← مسقط" }
+           : { dir: "ret", type: "عودة", want: _programMMDD(_taiVal(out, "DATE_TO")), route: "جدة ← مسقط" },
+  ];
+  for (const lg of legs) {
+    const sel = pick(lg.dir, lg.want); if (!sel) continue;
+    const per = Math.round(sel.final); const total = per * pax; const air = airlines[sel.airline] || sel.airline;
+    const tim = sel.timing ? " · ⏰ " + sel.timing : "";
+    fl2.push(`${lg.route} (${air} · ${sel.date}${tim}) | ${lg.type} | ${per} ريال/شخص | ${pax} أشخاص | ${Number(total).toLocaleString("en-US")} ريال`);
+  }
+  out = setSec(out, "FLIGHTS", fl2);
+
+  // (٣) إعادة الملخص: الفنادق (+ شرائح) كما هي، والباقي من الأقسام الجديدة.
+  const sumLines = _taiBlock(out, "SUMMARY").map(l => l.trim()).filter(Boolean);
+  const sumVal = (re: RegExp) => { const l = sumLines.find(x => re.test(x.split("|")[0] || "")); return l ? money(l) : 0; };
+  const hotels = sumVal(/^الفنادق/), sims = sumVal(/شرائح/);
+  const flightsT = _taiBlock(out, "FLIGHTS").filter(l => l.includes("|")).reduce((s, l) => s + money(l), 0);
+  const transfersT = _taiBlock(out, "TRANSFERS").filter(l => l.includes("|")).reduce((s, l) => s + money(l), 0);
+  const toursT = _taiBlock(out, "TOURS").filter(l => l.includes("|")).reduce((s, l) => s + money(l), 0);
+  const group = hotels + flightsT + transfersT + toursT + sims;
+  const fmt = (n: number) => n.toLocaleString("en-US");
+  const newSum: string[] = [];
+  if (hotels > 0) newSum.push(`الفنادق | ${fmt(hotels)} ريال`);
+  if (flightsT > 0) newSum.push(`الطيران والقطار | ${fmt(flightsT)} ريال`);
+  if (transfersT > 0) newSum.push(`الانتقالات | ${fmt(transfersT)} ريال`);
+  if (toursT > 0) newSum.push(`الجولات السياحية | ${fmt(toursT)} ريال`);
+  if (sims > 0) newSum.push(`شرائح الاتصال | ${fmt(sims)} ريال`);
+  newSum.push(`TOTAL_PER_PERSON:${fmt(Math.round(group / pax))}`);
+  newSum.push(`TOTAL_GROUP:${fmt(group)} | ${pax} ${(pax === 1 || pax === 2) ? "شخص" : "أشخاص"}`);
+  out = setSec(out, "SUMMARY", newSum);
+  out = out.replace(/^CHAT:.*$/m, `CHAT:برنامجك جاهز! بمبلغ ${fmt(group)} ريال للمجموعة.`);
+  return out;
+}
+
 // ── makkah_transport_plan: يولّد صفوف تنقّل مكة الصحيحة حسب التسلسل + الوسيلة + الأشخاص.
 //    sequence: ["airport","Makkah","Al Madinah","airport"] · nights:[3,3] · modes: وسيلة كل مقطع.
 //    train = تذكرة (54×الأشخاص) + نقلات السيارة حول المحطة · car = نقل مباشر واحد.
@@ -3778,6 +3910,7 @@ Deno.serve(async (req) => {
         const { data: sugs } = await supabase.from("package_suggestions")
           .select("distribution,arrival_airport,departure_airport").eq("destination", destKey).eq("days", days);
         const results: Array<{ distribution: string; arrival_airport: string; departure_airport: string; total: number }> = [];
+        let _rkFlights: Record<string, unknown> | null | undefined = undefined;
         for (const s of (sugs || []) as Array<{ distribution: string; arrival_airport: string; departure_airport: string }>) {
           const text = `${destAr}، ${days} أيام، ${s.distribution}، ${pax} ${pax === 1 ? "شخص" : "أشخاص"}، فنادق 5 نجوم، مع جولات وانتقالات، ${pax} شرائح اتصال، بتاريخ ${date}`;
           try {
@@ -3786,7 +3919,12 @@ Deno.serve(async (req) => {
             if (!canBuildLocally(req)) continue;
             const r = await buildLocalProgram(req, cityDefs, fetchData as never, {});
             if (!r.ok) continue;
-            const m = r.program.match(/TOTAL_GROUP:\s*([\d,٬]+)/);
+            let prog = r.program;   // 🕋 العمرة: نفس تنقّلات/طيران team.html (المغادرة من المدينة لاقتراحات «المغادرة: المدينة»)
+            if (destKey === "Makkah") {
+              if (_rkFlights === undefined) { try { _rkFlights = await (await handleMakkahFlights()).json(); } catch (_) { _rkFlights = null; } }
+              prog = await applyMakkahExtras(prog, { pax, returnAirport: /مدين/.test(s.departure_airport || "") ? "madinah" : "", flightsData: _rkFlights });
+            }
+            const m = prog.match(/TOTAL_GROUP:\s*([\d,٬]+)/);
             const total = m ? parseInt(m[1].replace(/[,٬]/g, ""), 10) : 0;
             if (total > 0) results.push({ distribution: s.distribution, arrival_airport: s.arrival_airport, departure_airport: s.departure_airport, total });
           } catch (_e) { /* تخطَّ التوزيع الذي يفشل بناؤه */ }
@@ -3833,6 +3971,7 @@ Deno.serve(async (req) => {
         const _kidsN = _kidAges.length;
         const childPart = _kidsN ? ` وأطفال أعمارهم ${_kidAges.join(" و")}` : "";
         // ملاحظة: بلا «نجوم» في النص → stars=null → الباني يختار أرخص فندق متاح (مختلط).
+        let _mkFlights: Record<string, unknown> | null | undefined = undefined;   // أسعار طيران مكة — تُجلب مرة لكل طلب
         const buildOne = async (dist: string): Promise<{ program: string; total: number; distribution: string; misses?: string[] } | null> => {
           const text = `${destAr}، ${days} أيام، ${dist}، ${pax} ${pax === 1 ? "شخص" : "أشخاص"} بالغين${childPart}، تنقل خاص، مع جولات وانتقالات، بتاريخ ${date}`;
           try {
@@ -3877,10 +4016,16 @@ Deno.serve(async (req) => {
             if (!canBuildLocally(req)) return null;
             const r = await buildLocalProgram(req, cityDefs, fetchData as never, {});
             if (!r.ok) return null;
-            const m = r.program.match(/TOTAL_GROUP:\s*([\d,٬]+)/);
+            // 🕋 ٧ نوفمبر ٢٠٢٦: العمرة → تنقّلات + طيران مسقط↔جدة بنفس منطق team.html (المساعد السياحي هو المرجع).
+            let prog = r.program;
+            if (destKey === "Makkah") {
+              if (_mkFlights === undefined) { try { _mkFlights = await (await handleMakkahFlights()).json(); } catch (_) { _mkFlights = null; } }
+              prog = await applyMakkahExtras(prog, { pax, returnAirport, flightsData: _mkFlights });
+            }
+            const m = prog.match(/TOTAL_GROUP:\s*([\d,٬]+)/);
             const total = m ? parseInt(m[1].replace(/[,٬]/g, ""), 10) : 0;
             if (total <= 0) return null;
-            return { program: r.program, total, distribution: dist, misses: (req as { _prefMisses?: string[] })._prefMisses || [] };
+            return { program: prog, total, distribution: dist, misses: (req as { _prefMisses?: string[] })._prefMisses || [] };
           } catch (_e) { return null; }
         };
         let chosen: { program: string; total: number; distribution: string; misses?: string[] } | null = null;
