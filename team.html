@@ -1107,12 +1107,13 @@ let MK_DEP_AIR = 'jeddah';  // مطار المغادرة إن انتهى الب�
 // ٣ نوفمبر ٢٠٢٦: البرنامج ممكن يحمل RETURN_AIRPORT:madinah (طلب العميل عبر طلال) → يصير الافتراضي
 // «مطار المدينة»، إلا لو الموظفة اختارت يدوياً لنفس البرنامج (MK_DEP_AIR_FP).
 let MK_DEP_AIR_FP = '';
+let MK_FORM_RET_MED = false;   // الفورم: اختير اقتراح «المغادرة: المدينة» → الافتراضي مطار المدينة
 function mkDepFP(){ return (getLine(lastProgramRaw,'DATE_FROM')||'') + '|' + (getLine(lastProgramRaw,'DATE_TO')||'') + '|' + (getLine(lastProgramRaw,'CLIENT')||''); }
 function mkSyncDepAir(){
   if (MK_DEP_AIR_FP && MK_DEP_AIR_FP === mkDepFP()) return;
   MK_DEP_AIR_FP = '';
   const r = String(getLine(lastProgramRaw,'RETURN_AIRPORT')||'').trim().toLowerCase();
-  MK_DEP_AIR = (r === 'madinah') ? 'madinah' : 'jeddah';
+  MK_DEP_AIR = (r === 'madinah' || MK_FORM_RET_MED) ? 'madinah' : 'jeddah';
   if (MK_DEP_AIR === 'madinah' && MK_MODES.length) MK_MODES[MK_MODES.length-1] = 'car';   // لا قطار لمطار المدينة
 }
 function mkEndsInMadinah(){ try { const c = mkCitiesFromProgram(); return c.length && c[c.length-1].key === 'Al Madinah'; } catch(_){ return false; } }
@@ -3210,6 +3211,7 @@ const BF_INTAKE = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-
 let BF_SUGS = [];        // all ready suggestions for current destination
 let bfShownRows = [];    // suggestions currently rendered as cards
 let bfChosen = null;     // chosen distribution string (ready mode)
+let BF_CHOSEN_DEP = '';  // مطار مغادرة الاقتراح المختار (مكة: «المدينة» = العودة من مطار المدينة)
 function bfEsc(s){ return String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
 const BF_AIRPORT_AR = {Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي",Salalah:"صلالة",Shanghai:"شنغهاي",Beijing:"بكين",Hangzhou:"هانغتشو","Hong Kong":"هونغ كونغ",Guangzhou:"جوانزو",Marrakech:"مراكش",Casablanca:"الدار البيضاء",Tanger:"طنجة",Agadir:"أكادير",Agafay:"اغافاي",Essaouira:"الصويرة",Rabat:"الرباط",Madrid:"مدريد",Cordoba:"قرطبة",Granada:"غرناطة",Seville:"إشبيلية",Malaga:"مالقا",Barcelona:"برشلونة",Marbella:"ماربيا","Abu Dhabi":"أبوظبي","Yas Island":"جزيرة ياس",Colombo:"كولومبو",Negombo:"نيجومبو",Kandy:"كاندي","Nuwara Eliya":"نوارا ايليا",Bentota:"بنتوتا"};
 function bfAirAr(a){ return BF_AIRPORT_AR[a] || a; }
@@ -3380,6 +3382,7 @@ function bfShowOptions(){
     els.forEach(x=>x.classList.remove('sel')); el.classList.add('sel');
     const s = bfShownRows[+el.dataset.i];
     bfChosen = s.distribution;
+    BF_CHOSEN_DEP = s.departure_airport || '';
     // اضبط عدد الأيام على الاقتراح المختار (مهم عند «كل المطارات» بأيام مختلفة)
     const dEl = document.getElementById('bf-days');
     if(dEl && +dEl.value !== +s.days){ dEl.value = s.days; bfExpected(); }
@@ -3550,6 +3553,12 @@ function buildFromForm(){
   if(sims)  parts.push(sims + ' شرائح اتصال');
   if(extraBedOn && !noHotels) parts.push('سرير إضافي لكل الفنادق');
   if(date)  parts.push('بتاريخ ' + date);
+  // ✈️ ٧ نوفمبر ٢٠٢٦: خيار «القدوم: جدة — المغادرة: المدينة» → العودة من مطار المدينة
+  // (يُطبَّق فقط لو آخر مدينة بالبرنامج هي المدينة). mkSyncDepAir يقرأ MK_FORM_RET_MED.
+  const _depSel = bfMode()==='ready' ? BF_CHOSEN_DEP : String((document.getElementById('bf-airport')||{}).value||'').split('|')[1]||'';
+  const _lastC = String((cities[cities.length-1]||{}).city||'');
+  MK_FORM_RET_MED = /مدين|madinah/i.test(_depSel) && /مدين|madinah/i.test(_lastC);
+  if(MK_FORM_RET_MED) parts.push('العودة من مطار المدينة');
   if(notes) parts.push(notes);
 
   // الفورم = تسعيرة جديدة دائماً. نبدأ محادثة نظيفة حتى لا يُفسَّر البناء كتعديل
@@ -6126,6 +6135,7 @@ async function searchByCode() {
       // prior turns first so leftover state from earlier in this session
       // doesn't bleed in.
       history.length = 0;
+      MK_FORM_RET_MED = false;   // برنامج مسترجع: مطار العودة من سطر RETURN_AIRPORT فقط
       history.push({ role: 'user', content: '(تم استرجاع برنامج محفوظ — استخدمه كسياق للتعديلات التالية)' });
       history.push({ role: 'assistant', content: data.program.raw });
       addMessage('sys', summarizeRetrievedProgram(data.program.raw));
