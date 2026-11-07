@@ -360,7 +360,11 @@ export function pickCheapestHotel(
     }
     // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): «أرخص العروض» → أي غرفة تتسع للعدد أو أكثر (أو بلا عمود إشغال)، والأرخص يفوز
     //    (Voco رباعية ٤٤٥ لـ٣ أشخاص بدل Anjum ثلاثية ١٠٦٢). ❌ لا غرفة أصغر من العدد.
-    if ((request as { cheapestAnyRoom?: boolean }).cheapestAnyRoom === true) {
+    // ٧ نوفمبر ٢٠٢٦ (قرار المالكة): العمرة (مكة/المدينة) دائماً «الأرخص» — مختلط = الأرخص مطلقاً،
+    //    ٥★/٤★ = الأرخص داخل الفئة (فلتر النجوم في baseFilter). غرفة أكبر من العدد مقبولة لو أرخص
+    //    (Voco رباعية ٤١٥ لزوجين بدل الشهداء الثنائية ٦٠٣). كل المرشّحين غرفة واحدة تتسع للكل، فالمقارنة عادلة.
+    const _isUmrah = /\s-\s*makkah\s*$/i.test(String((allHotels.find(h => hotelCityMatches(h.location, city, cityPattern)) || {}).location || ""));
+    if ((request as { cheapestAnyRoom?: boolean }).cheapestAnyRoom === true || _isUmrah) {
       const fit = allHotels.filter(h => baseFilter(h) && (!hasOcc(h) || extractAdultsCount(h.occupancy || "") >= adults));
       if (fit.length) return fit;
     }
