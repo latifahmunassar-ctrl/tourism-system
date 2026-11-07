@@ -1752,6 +1752,13 @@ async function mkApplyTransport(){
   });
   let newRaw = mkSetSection(lastProgramRaw, 'TOURS', body);
   newRaw = mkSetSection(newRaw, 'FLIGHTS', flightLines);
+  // ٧ نوفمبر ٢٠٢٦ (المالكة): خطة التنقّل أعلاه هي المرجع الوحيد لنقلات مكة. النموذج كان يضيف
+  // بقسم TRANSFERS «نقل من محطة قطار الحرمين الى الفندق» مع إن الوصول بالسيارة من المطار
+  // → يُحسب مرتين. نقل المحطة↔الفندق يأتي من الخطة فقط لما يكون المقطع بالقطار.
+  if(/\nTRANSFERS:/.test(newRaw)){
+    const trKeep = (parseSection(newRaw,'TRANSFERS')||[]).filter(l=> l.includes('|') && !/نقل|محط|مطار|قطار/.test(l)).map(l=>l.trim());
+    newRaw = mkSetSection(newRaw, 'TRANSFERS', trKeep);
+  }
   if(newRaw !== lastProgramRaw){
     for(let i=history.length-1;i>=0;i--){ if(history[i].role==='assistant'){ history[i].content=newRaw; break; } }
     try{ buildReview(newRaw); }catch(e){ addMessage('sys','خطأ في عرض الانتقالات: '+(e&&e.message||e)); }
