@@ -6814,7 +6814,22 @@ ${itineraryHTML}
       // للعمرة: الطيران دولي (مسقط↔جدة) لا داخلي بين المدن — نعرضه كـ«الطيران الدولي».
       if (_hasFlight) li.push(_isUmrah ? '<li>✈️ الطيران الدولي (مسقط ↔ جدة)</li>' : '<li>✈️ الطيران الداخلي بين المدن</li>');
       if (_hasTrain) li.push('<li>🚆 القطار بين المدن</li>');
-      if (transfersLines.length) li.push('<li>🚗 المواصلات بسيارة مكيّفة حديثة خاصة — الاستقبال والتوديع وجميع التنقّلات بين المدن</li>');
+      // ٧ نوفمبر ٢٠٢٦ (المالكة): «يشمل» يذكر التنقّلات الفعلية. العمرة تكتب نقلاتها في TOURS
+      // (خطة التنقّل) لا TRANSFERS، فكان بند المواصلات يختفي. نجمع سطور النقل من القسمين.
+      const _trNames = [...transfersLines, ...toursLines]
+        .map(l => String(l.split('|')[1]||'')).filter(n => /نقل|استقبال|توديع/.test(n));
+      if (_isUmrah && _trNames.length) {
+        const _nz = s => String(s||'').replace(/[إأآ]/g,'ا').replace(/[ةه]/g,'ه').replace(/ى/g,'ي');
+        const _t = _trNames.map(_nz);
+        const _shared = _t.some(n => /مشترك/.test(n)) && !_t.some(n => /خاص/.test(n));
+        const _car = _shared ? 'بسيارة مكيّفة حديثة مشتركة' : 'بسيارة مكيّفة حديثة خاصة';
+        const _parts = [];
+        if (_t.some(n => /من\s*مطار/.test(n))) _parts.push('الاستقبال من المطار إلى الفندق');
+        if (_t.some(n => /الي\s*مطار/.test(n))) _parts.push('التوديع من الفندق إلى المطار');
+        if (_t.some(n => !/مطار|محطه/.test(n) && /(مكه|المدينه|الطايف)[\s\S]*الي[\s\S]*(مكه|المدينه|الطايف)/.test(n))) _parts.push('التنقّل بين المدن');
+        if (_t.some(n => /محطه/.test(n))) _parts.push('التوصيل بين الفندق ومحطة القطار');
+        if (_parts.length) li.push('<li>🚗 ' + _parts.join('، و') + ' ' + _car + '</li>');
+      } else if (transfersLines.length) li.push('<li>🚗 المواصلات بسيارة مكيّفة حديثة خاصة — الاستقبال والتوديع وجميع التنقّلات بين المدن</li>');
       if (toursLines.length && !_isUmrah) li.push('<li>🗺️ الجولات السياحية الموضّحة بالبرنامج</li>');
       if (_hasSim) li.push('<li>📶 شرائح اتصال (إنترنت)</li>');
       return li.join('');
