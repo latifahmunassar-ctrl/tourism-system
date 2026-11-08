@@ -150,7 +150,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v71';
+const FS_VER='v72';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderAjel(); renderBanks(); renderInv(); renderSettings();
@@ -905,11 +905,10 @@ function _cbAzRows(){
   (DATA.acc_fancy||[]).forEach(x=>{ const a=n(x.in_raw); if(!(a>0)||n(x.out_raw)>0)return; const t=txt(x), bk=String(x.bank_name||''); if(/^\s*test\s*$/i.test(String(x.details||'')))return;
     if(/dhofar|ظفار/i.test(bk)&&!/صندوق|تحويل/.test(t))return;   // مكنة
     if(/آجل|اجل/.test(t))return;                                   // تحصيل عملاء آجل
-    if(/تحويل/.test(t))return;                                      // v69: مبيعات بالتحويل البنكي (حساب منفصل) — ليست صندوقاً
     const lbl=(String(x.more_details||'').trim()||String(x.details||'').trim());
     out.push({d:String(x.tx_date||'').slice(0,10),a,bank:bk,label:lbl,ref:String(x.bank_ref||'').trim(),br:_cbBranch(lbl+' '+t),kind:/تحويل/.test(t)?'تحويل بنكي':'صندوق',src:'الصندوق والبنوك'}); });
   (DATA.acc_fancy_btx||[]).forEach(x=>{ const a=n(x.amount_in), d=String(x.tx_date||'').slice(0,10), t=String(x.note||''), bk=String(x.bank_name||''); if(!(a>0)||!d)return;
-    if(/dhofar|ظفار/i.test(bk)&&!/صندوق|تحويل/.test(t))return; if(/آجل|اجل/.test(t))return; if(/تحويل/.test(t))return;
+    if(/dhofar|ظفار/i.test(bk)&&!/صندوق|تحويل/.test(t))return; if(/آجل|اجل/.test(t))return;
     if(out.some(o=>Math.abs(o.a-a)<0.011&&Math.abs(Date.parse(o.d)-Date.parse(d))<=2*864e5))return;   // نفس الإيداع بالجدولين
     const lbl=t.replace(/^🏷️\s*/,'').split('←').map(z=>z.trim()).filter(Boolean).pop()||t;
     out.push({d,a,bank:bk,label:lbl,ref:String(x.bank_ref||'').trim(),br:_cbBranch(t),kind:/تحويل/.test(t)?'تحويل بنكي':'صندوق',src:'كشف البنك'}); });
@@ -925,13 +924,13 @@ function _cbCompare(){
   const A=(DATA.atm_deposit||[]).map(x=>({id:x.id,d:String(x.dep_date||'').slice(0,10),a:n(x.amount),br:x.branch||'—',bank:x.bank||'',note:x.note||''})).sort((p,q)=>p.d<q.d?-1:1);
   const M=A.map(()=>null);
   A.forEach((x,k)=>{ let best=-1,score=1e9; Z.forEach((z,i)=>{ if(used.has(i)||Math.abs(z.a-x.a)>0.011)return; const g=gap(x.d,z.d); if(g<-3||g>7)return; const sc=Math.abs(g)*10+(z.br===x.br?0:5); if(sc<score){score=sc;best=i;} }); if(best>=0){used.add(best);M[k]=[best];} });
-  A.forEach((x,k)=>{ if(M[k])return; const C=Z.map((z,i)=>i).filter(i=>!used.has(i)&&Z[i].br===x.br&&Z[i].a<x.a+0.011&&gap(x.d,Z[i].d)>=-3&&gap(x.d,Z[i].d)<=7).sort((p,q)=>Math.abs(gap(x.d,Z[p].d))-Math.abs(gap(x.d,Z[q].d))).slice(0,14);
+  A.forEach((x,k)=>{ if(M[k])return; const C=Z.map((z,i)=>i).filter(i=>!used.has(i)&&Z[i].kind==='صندوق'&&Z[i].br===x.br&&Z[i].a<x.a+0.011&&gap(x.d,Z[i].d)>=-3&&gap(x.d,Z[i].d)<=7).sort((p,q)=>Math.abs(gap(x.d,Z[p].d))-Math.abs(gap(x.d,Z[q].d))).slice(0,14);
     let best=null,bs=1e9; const rec=(st,pick,sum)=>{ if(pick.length>=2&&Math.abs(sum-x.a)<0.011){ const ds=pick.map(i=>Z[i].d), sc=new Set(ds).size*100+ds.reduce((s,d)=>s+Math.abs(gap(x.d,d)),0)*10+pick.length; if(sc<bs){bs=sc;best=pick.slice();} return; } if(pick.length>=4||sum>x.a+0.011)return; for(let q=st;q<C.length;q++){ pick.push(C[q]); rec(q+1,pick,sum+Z[C[q]].a); pick.pop(); } };
     rec(0,[],0); if(best){ best.forEach(i=>used.add(i)); M[k]=best; } });
-  A.forEach((x,k)=>{ if(M[k])return; let bd=null; Z.forEach((z,i)=>{ if(used.has(i)||z.br!==x.br)return; const g=gap(x.d,z.d); if(g<0||g>3)return; if(bd===null||g<gap(x.d,bd))bd=z.d; }); if(bd===null)return; const pk=Z.map((z,i)=>i).filter(i=>!used.has(i)&&Z[i].br===x.br&&Z[i].d===bd); pk.forEach(i=>used.add(i)); M[k]=pk; });
+  A.forEach((x,k)=>{ if(M[k])return; let bd=null; Z.forEach((z,i)=>{ if(used.has(i)||z.kind!=='صندوق'||z.br!==x.br)return; const g=gap(x.d,z.d); if(g<0||g>3)return; if(bd===null||g<gap(x.d,bd))bd=z.d; }); if(bd===null)return; const pk=Z.map((z,i)=>i).filter(i=>!used.has(i)&&Z[i].kind==='صندوق'&&Z[i].br===x.br&&Z[i].d===bd); pk.forEach(i=>used.add(i)); M[k]=pk; });
   const mk=(acc,azs)=>({d:acc?acc.d:azs[0].d,br:acc?acc.br:azs[0].br,acc,azs,azT:azs.reduce((s,z)=>s+z.a,0),id:acc?acc.id:null});
   const rows=A.map((x,k)=>mk(x,(M[k]||[]).map(i=>Z[i])));
-  Z.forEach((z,i)=>{ if(!used.has(i))rows.push(mk(null,[z])); });
+  Z.forEach((z,i)=>{ if(!used.has(i)&&z.kind==='صندوق')rows.push(mk(null,[z])); });   // التحويل البنكي غير المطابق = حساب التحويلات (لا يظهر هنا)
   rows.forEach(r=>{ r.diff=r.azT-(r.acc?r.acc.a:0); r.st=_cbStOf(r); });
   return rows.sort((p,q)=>p.d<q.d?1:(p.d>q.d?-1:0));
 }
@@ -1037,7 +1036,7 @@ function renderBanks(){
   const _bkN=b=>String(b||'').replace(/\s*[\(\-].*$/,'').trim();   // اسم البنك بدون رقم الحساب
   const aRows=_rows.map(r=>{ const x=r.acc, zs=r.azs, st=r.st;
     const pill=st==='ok'?'<span class="pill g">✓ مطابق</span>':(st==='part'?'<span class="pill" style="background:rgba(217,138,0,.15);color:#e0a83a">≠ فرق بالمبلغ</span>':(st==='acc'?'<span class="pill r">⚠️ مو موجود بالبنك (العز)</span>':'<span class="pill" style="background:rgba(58,160,255,.15);color:#3aa0ff">🏦 مو موجود بالمحاسبة</span>'));
-    const part=z=>{ const g=x?Math.round((Date.parse(z.d)-Date.parse(x.d))/864e5):0; return '<div style="font-weight:800;color:#3aa0ff">'+fmt(z.a)+'<div style="font-size:9px;color:var(--muted);font-weight:600">📅 دخل '+_dm(z.d)+(g?' ('+(g>0?'+':'')+g+' يوم)':'')+' · '+esc(z.kind)+(zs.length>1&&z.ref?' · '+esc(z.ref):'')+'</div></div>'; };
+    const part=z=>{ const g=x?Math.round((Date.parse(z.d)-Date.parse(x.d))/864e5):0; return '<div style="font-weight:800;color:#3aa0ff">'+fmt(z.a)+'<div style="font-size:9px;color:var(--muted);font-weight:600">📅 دخل '+_dm(z.d)+(g?' ('+(g>0?'+':'')+g+' يوم)':'')+' · '+(z.kind==='صندوق'?esc(z.kind):'<span style="color:#e0a83a">⚠️ مسجّل بالعز «'+esc(z.kind)+'»</span>')+(zs.length>1&&z.ref?' · '+esc(z.ref):'')+'</div></div>'; };
     const azCell=zs.length?('<td class="num">'+zs.map(part).join('<div style="border-top:1px dashed var(--line);margin:3px 0"></div>')+'</td>'):'<td class="num mut">—</td>';
     const totCell=zs.length?'<td class="num" style="font-weight:800;color:#3aa0ff">'+fmt(r.azT)+(zs.length>1?'<div style="font-size:9px;color:var(--muted)">'+zs.length+' أجزاء</div>':'')+'</td>':'<td class="num mut">—</td>';
     const dfCell=x&&zs.length?'<td class="num" style="font-weight:800;color:'+(Math.abs(r.diff)<0.011?'#2fd196':'#e05a5a')+'">'+(Math.abs(r.diff)<0.011?'0':fmt(r.diff))+'</td>':(x?'<td class="num" style="color:#e05a5a;font-weight:800">'+fmt(-x.a)+'</td>':'<td class="num" style="color:#3aa0ff;font-weight:800">+'+fmt(r.azT)+'</td>');
