@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v59';
+const FS_VER='v60';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -351,8 +351,8 @@ function renderMachine(){
   // مرجع البنك أحياناً يذكر يوم المبيعات صراحةً: «IHPOS-… settlement for 17-08-2026» → نستخدمه مباشرة
   const _settle=(ref)=>{ const m=String(ref||'').match(/settlement\s+for\s+(\d{2})-(\d{2})-(\d{4})/i); return m?(m[3]+'-'+m[2]+'-'+m[1]):null; };
   (DATA.acc_fancy||[]).forEach(x=>{ const raw=String(x.tx_date||'').slice(0,10); if(raw>maxBank)maxBank=raw; const c=azClass(x); if(!c||c.type!=='مكنة')return; const txt=[x.details,x.description,x.more_details,x.bank_name,x.bank_ref].map(v=>String(v||'')).join(' '); if(!(/pos/i.test(txt)||(/dhofar|ظفار/i.test(txt)&&/ايراد\s*فانسي|fancy\s*sense\s*revenue/i.test(txt))))return; txns.push({date:raw,amt:c.amount,sale:_settle(x.bank_ref)}); });
-  // 🏧 + «كشف البنك» بنظام العز (acc_bank_txn، بنك ظفار، موسومة Fancy) — أيام كثيرة (يونيو–أغسطس) مسجّلة هنا فقط. نفس التاريخ+المبلغ = مكرّرة فلا تُضاف.
-  (DATA.acc_fancy_btx||[]).forEach(x=>{ const raw=String(x.tx_date||'').slice(0,10), a=n(x.amount_in); if(!(a>0)||!raw)return; if(raw>maxBank)maxBank=raw; if(/صندوق|تحويل|آجل|اجل/.test(String(x.note||'')))return; if(txns.some(t=>t.date===raw&&Math.abs(t.amt-a)<0.011))return; txns.push({date:raw,amt:a,sale:_settle(x.bank_ref)}); });
+  // 🏧 + «كشف البنك» بنظام العز (acc_bank_txn، بنك ظفار، موسومة Fancy) — أيام كثيرة (يونيو–أغسطس) مسجّلة هنا فقط. نفس المبلغ خلال يومين = نفس الإيداع مسجّل بالجدولين فلا يُضاف مرتين.
+  (DATA.acc_fancy_btx||[]).forEach(x=>{ const raw=String(x.tx_date||'').slice(0,10), a=n(x.amount_in); if(!(a>0)||!raw)return; if(raw>maxBank)maxBank=raw; if(/صندوق|تحويل|آجل|اجل/.test(String(x.note||'')))return; if(txns.some(t=>Math.abs(Date.parse(t.date)-Date.parse(raw))<=2*864e5&&Math.abs(t.amt-a)<0.011))return;   /* نفس الإيداع بالجدولين بتاريخ مختلف بيوم/يومين */ txns.push({date:raw,amt:a,sale:_settle(x.bank_ref)}); });
   Object.keys(M).forEach(d=>{ const t=shiftDay(d,1); if(t>maxBank)maxBank=t; });
   txns.sort((a,b)=>a.date<b.date?-1:(a.date>b.date?1:0));
   const R=mcRecon(S,M,txns,maxBank,shiftDay);
