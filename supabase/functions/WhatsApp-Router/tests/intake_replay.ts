@@ -15,7 +15,7 @@ const TMP = new URL("../.index_under_test.ts", HERE);
 // ── 1) نسخة قابلة للاستيراد من index.ts: بلا Deno.serve، ومع تصدير الدوال ──
 let code = await Deno.readTextFile(SRC);
 code = code.replace(/^Deno\.serve\(/m, "(globalThis as any).__noServe(");
-code += "\nexport { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish, sendPostProgramMessages };\n";
+code += "\nexport { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish, sendPostProgramMessages, replyUnsupportedAttachment, handleVoiceNote };\n";
 await Deno.writeTextFile(TMP, code);
 (globalThis as any).__noServe = () => {};
 
@@ -25,6 +25,7 @@ Deno.env.set("WHATSAPP_ACCESS_TOKEN", "test-token");
 Deno.env.set("WHATSAPP_PHONE_NUMBER_ID", "test-id");
 Deno.env.set("SUPABASE_URL", "http://fake.local");
 Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "test");
+Deno.env.set("RESEND_API_KEY", "test");
 
 // تسريع: تأخيرات «الكتابة» لا داعي لها بالاختبار
 const _st = globalThis.setTimeout;
@@ -105,6 +106,9 @@ let intentInput = "";   // ٥ نوفمبر: نص المحادثة اللي وص�
 let buildFail = false;
 let buildTotals: number[] = [];   // ٦ نوفمبر: إجمالي كل بناء بالترتيب (ريال سعودي)
 const buildBodies: Array<Record<string, any>> = [];
+const wire: string[] = [];
+const emails: Array<Record<string, any>> = [];   // ٨ نوفمبر: إيميلات التنبيه (Resend)   // ٨ نوفمبر: النصوص اللي طلعت فعلاً لواتساب (بعد الترجمة)
+let translateCalls = 0; let curTranslate: string | null = null;
 (globalThis as any).fetch = async (input: any, init?: any) => {
   const url = String(input?.url || input);
   const json = (o: unknown) => new Response(JSON.stringify(o), { status: 200, headers: { "content-type": "application/json" } });
@@ -113,6 +117,11 @@ const buildBodies: Array<Record<string, any>> = [];
     intentCalls++; intentInput = String(init?.body || "");
     if (!curIntent) return new Response(JSON.stringify({ type: "error", error: { type: "api_error", message: "no intent in scenario" } }), { status: 400, headers: { "content-type": "application/json" } });
     return json({ id: "m", type: "message", role: "assistant", model: "x", stop_reason: "tool_use", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "tool_use", id: "ti", name: "talal_intent", input: { yes_no: "none", frustrated: false, meaning: "", ...curIntent } }] });
+  }
+  if (url.includes("api.anthropic.com") && /TALAL_TRANSLATE_EN/.test(String(init?.body || ""))) {
+    // ٨ نوفمبر: ترجمة رد طلال للإنجليزي (العميل يكتب إنجليزي) — السيناريو يحدد الناتج بـ translate.
+    translateCalls++;
+    return json({ id: "m", type: "message", role: "assistant", model: "x", stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: curTranslate ?? "Translated reply." }] });
   }
   if (url.includes("api.anthropic.com")) {
     modelCalls++;
@@ -124,7 +133,9 @@ const buildBodies: Array<Record<string, any>> = [];
     if (txt.startsWith("TOOL:")) return json({ id: "m", type: "message", role: "assistant", model: "x", stop_reason: "tool_use", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "tool_use", id: "t1", name: "talal", input: JSON.parse(txt.slice(5)) }] });
     return json({ id: "m", type: "message", role: "assistant", model: "x", stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: txt }] });
   }
-  if (url.includes("graph.facebook.com")) return json({ messages: [{ id: "wamid.test" + Math.random() }] });
+  if (url.includes("api.resend.com")) { try { emails.push(JSON.parse(String(init?.body || "{}"))); } catch { /* */ } return json({ id: "email-test" }); }
+  if (url.includes("graph.facebook.com") && /display_phone_number/.test(url)) return json({ id: "test-id", display_phone_number: "+968 9117 1630" });
+  if (url.includes("graph.facebook.com")) { try { const _b = JSON.parse(String(init?.body || "{}")); const _t = _b?.text?.body ?? _b?.document?.caption ?? _b?.image?.caption; if (typeof _t === "string") wire.push(_t); } catch { /* */ } return json({ messages: [{ id: "wamid.test" + Math.random() }] }); }
   if (url.includes("Tourism-AI") && /makkah_flights/.test(String(init?.body || ""))) {
     const t: Record<string, unknown> = {}; for (const d of (medFlights || [])) t[d] = { final: 1342, timing: "17:40 - 21:30" };
     return json({ prices: { oman: { out: {}, ret: {}, ret_med: t } } });
@@ -135,7 +146,7 @@ const buildBodies: Array<Record<string, any>> = [];
   return json({});
 };
 
-const { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish, sendPostProgramMessages } = await import(TMP.href);
+const { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish, sendPostProgramMessages, replyUnsupportedAttachment, handleVoiceNote } = await import(TMP.href);
 
 // ── 4) تشغيل السيناريوهات ──
 const PHONE = "whatsapp:+96899621742";
@@ -151,9 +162,10 @@ function seed(s: Scenario) {
     else DB.wa_admin_messages.push({ customer_phone: PHONE, body, sent_by: who === "S" ? "غروب" : (body.startsWith("AUTO:") ? "تأكيد تلقائي" : "طلال"), sent_at: ts() });
   }
   DB.wa_message_audit.push({ from_phone: PHONE, body: s.customer, received_at: ts(), status: "received" });
+  if ((s as any).settings) DB.wa_settings = structuredClone((s as any).settings);   // ٨ نوفمبر: إعدادات بديلة (مثلاً بند ON بلا أرقام اختبار)
   for (const [tb, rows] of Object.entries(s.tables || {})) (DB[tb] ||= []).push(...structuredClone(rows as RowT[]));
   for (const j of (s.jobs || [])) DB.program_pdf_jobs.push({ phone: PHONE, created_at: ts(), attempts: 0, ...j });
-  DB.whatsapp_sessions.push({ phone: PHONE, profile_name: "اختبار", intake_active: s.sessionIntakeActive ?? (s.entry !== "followup"), stage: "new",
+  DB.whatsapp_sessions.push({ phone: PHONE, profile_name: "اختبار", ...((s as any).aiEnabled !== undefined ? { ai_enabled: (s as any).aiEnabled } : {}), intake_active: s.sessionIntakeActive ?? (s.entry !== "followup"), stage: "new",
     destination: s.session?.destination ?? null, intake_data: { ...structuredClone(s.intakeData || {}), ...(s.seenAt !== undefined ? { last_seen_in_ts: _tsList[s.seenAt] } : {}), ...((s as any).startedAt !== undefined ? { started_at: _tsList[(s as any).startedAt] } : {}) }, ad_referral: (s.session as any)?.ad_referral ?? null, last_message_at: ts() });
   return ts;
 }
@@ -165,11 +177,13 @@ for (const s of SCENARIOS) {
   if (only && !s.id.includes(only)) continue;
   const lastTs = seed(s);
   const before = DB.wa_admin_messages.length;
-  modelQueue = [...s.model]; modelCalls = 0; buildCalls = 0; proposalCalls = 0; lastBuildBody = null; medFlights = s.medFlights || null; rejectTools = !!s.rejectTools; curIntent = (s as any).intent || null; intentCalls = 0; intentInput = ""; buildFail = !!s.buildFail; buildTotals = (s as any).buildTotals || []; buildBodies.length = 0; lastModelSystem = ""; injectOnModel = s.inboundDuringModel || null; _bg.length = 0;
+  modelQueue = [...s.model]; modelCalls = 0; buildCalls = 0; proposalCalls = 0; lastBuildBody = null; medFlights = s.medFlights || null; rejectTools = !!s.rejectTools; curIntent = (s as any).intent || null; intentCalls = 0; intentInput = ""; buildFail = !!s.buildFail; buildTotals = (s as any).buildTotals || []; buildBodies.length = 0; wire.length = 0; emails.length = 0; translateCalls = 0; curTranslate = (s as any).translate ?? null; lastModelSystem = ""; injectOnModel = s.inboundDuringModel || null; _bg.length = 0;
   let crash = "";
   console.error = () => {}; console.warn = () => {}; console.log = () => {};
   try {
-    if (s.entry === "message") await handleMessage({ supabase: fakeSupabase, from: PHONE, profileName: "اختبار", body: s.customer });
+    (globalThis as any).__omanHourForTests = (s as any).omanHour ?? 12;   // ٨ نوفمبر: نهار افتراضياً (رسائل الليل لها سيناريوهاتها)
+    if ((s as any).entry === "voice") await handleVoiceNote({ supabase: fakeSupabase, from: (s as any).from || PHONE, profileName: "اختبار", transcript: s.customer });   // ٨ نوفمبر: customer = نص الصوت بعد التحويل
+    else if (s.entry === "message") await handleMessage({ supabase: fakeSupabase, from: (s as any).from || PHONE, profileName: "اختبار", body: s.customer });
     else if (s.entry === "followup") await handleFollowupAI({ supabase: fakeSupabase, from: PHONE, profileName: "اختبار", body: s.customer });
     else await handleNewLeadIntake({ supabase: fakeSupabase, from: PHONE, body: s.customer });
     await Promise.all(_bg);
@@ -181,7 +195,7 @@ for (const s of SCENARIOS) {
   const sess = DB.whatsapp_sessions[0] || {};
   const proposals = (DB.whatsapp_admin_proposals || []).length;
   const jobs = DB.program_pdf_jobs || [];
-  const ctx = { buildBodies: [...buildBodies], db: DB, jobs, modelName: lastModelName, modelSystem: lastModelSystem, intentInput, buildBody: lastBuildBody, reply: sent, session: sess, intake: sess.intake_data || {}, buildCalls, modelCalls, proposals };
+  const ctx = { emails: [...emails], wire: wire.join("\n"), translateCalls, buildBodies: [...buildBodies], db: DB, jobs, modelName: lastModelName, modelSystem: lastModelSystem, intentInput, buildBody: lastBuildBody, reply: sent, session: sess, intake: sess.intake_data || {}, buildCalls, modelCalls, proposals };
   const errs: string[] = [];
   if (crash) errs.push("انهار: " + crash.split("\n").slice(0, 3).join(" | "));
   for (const [label, check] of s.expect) { try { if (!check(ctx)) errs.push(label); } catch (e) { errs.push(label + " (" + (e as Error).message + ")"); } }
@@ -190,8 +204,9 @@ for (const s of SCENARIOS) {
     realLog(`❌ ${s.id} — ${s.title}`);
     for (const e of errs) realLog(`     ✗ ${e}`);
     realLog(`     ردّ طلال: ${sent.replace(/\n/g, " ⏎ ").slice(0, 300) || "(لا شيء)"}`);
+    if (wire.length) realLog(`     واتساب فعلياً: ${wire.join(" ⏎ ").slice(0, 300)}`);
     realLog(`     الوجهة المخزّنة: ${JSON.stringify((sess.intake_data || {}).destination)} | ages=${JSON.stringify((sess.intake_data || {}).ages)} | build=${buildCalls}`);
-  } else { pass++; realLog(`✅ ${s.id} — ${s.title}`); if (Deno.env.get("VERBOSE")) realLog(`     ردّ طلال: ${sent.replace(/\n/g, " ⏎ ").slice(0, 260)}`); }
+  } else { pass++; realLog(`✅ ${s.id} — ${s.title}`); if (Deno.env.get("VERBOSE")) { realLog(`     ردّ طلال: ${sent.replace(/\n/g, " ⏎ ").slice(0, 260)}`); for (const e of emails) realLog(`     📧 إلى ${JSON.stringify(e.to)} | ${e.subject}\n${e.text}`); } }
 }
 // ── اختبارات وحدة: كشف الوجهة (كلمات عربية تشبه أسماء وجهات) ──
 const DEST_UNITS: Array<[string, string | null]> = [
@@ -272,6 +287,16 @@ for (const [t, want] of [["يعني الي عمره ١٢ سنه يعتر بال�
   const bud = String(DB.wa_admin_messages.at(-1)?.body || "");
   if (!/ميزانية معيّنة بلغني.*حابين نخدمك طبعاً/.test(bud)) { fail++; realLog(`❌ post-ready «رسالة الميزانية» → ${bud}`); } else { pass++; realLog("✅ post-ready «رسالة الميزانية»"); }
   if (got === "تفضل أستاذي، هذا العرض الثالث، ياريت تطّلع عليه، وأنتظر تأكيدك أو التعديل عليه إذا حبيت.") { pass++; realLog("✅ post-ready «أرخص العروض»"); } else { fail++; realLog(`❌ post-ready «أرخص العروض» → ${got}`); }
+}
+// ── ٧ نوفمبر ٢٠٢٦ (المالكة): مرفق ما يسلّمه واتساب (عرض مرة واحدة) → طلال يطلب إعادة الإرسال مرة وحدة كل ١٠ دقائق ──
+{
+  DB = { wa_admin_messages: [], whatsapp_sessions: [{ phone: PHONE }], wa_message_audit: [], guard_logs: [], program_pdf_jobs: [], wa_settings: [] };
+  console.log = () => {}; console.error = () => {};
+  let r1 = false, r2 = false;
+  try { r1 = await replyUnsupportedAttachment(fakeSupabase, PHONE); r2 = await replyUnsupportedAttachment(fakeSupabase, PHONE); } catch (_e) { /* */ }
+  console.log = realLog; console.error = realErr;
+  const sent = DB.wa_admin_messages.filter((m: any) => /ما وصلنا/.test(String(m.body)) && /عرض مرة واحدة/.test(String(m.body)));
+  if (r1 && !r2 && sent.length === 1) { pass++; realLog("✅ unsupported-attach «رد واحد يطلب إعادة الإرسال»"); } else { fail++; realLog(`❌ unsupported-attach r1=${r1} r2=${r2} sent=${sent.length}`); }
 }
 // ── وحدة: صيغ الموافقة (٤ نوفمبر: «تماما» ما انحسبت) ──
 for (const [t, want] of [["تماما", true], ["تمامم", true], ["تمام", true], ["اوكيه", true], ["طيب", true], ["👍", true], ["✅", true], ["ايوه", true], ["okk", true], ["كل شي صح", true], ["ياريت", true], ["يا ريت", true], ["ياليت والله", true], ["لا", false], ["تمام بس غير التاريخ ١٥", false], ["متى", false]] as Array<[string, boolean]>) {

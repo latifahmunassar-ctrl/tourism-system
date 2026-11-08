@@ -2,7 +2,7 @@
 // history = ما قبل الرسالة الحالية، customer = رسالة العميل الحالية، model = ما يرده النموذج
 // (نبرمجه بالخطأ اللي سواه فعلاً — الحارس الخادمي لازم يصحّحه)، expect = شروط النجاح.
 
-export type Ctx = { buildBodies?: Array<Record<string, any>>; reply: string; session: Record<string, any>; intake: Record<string, any>; buildCalls: number; modelCalls: number; proposals: number; jobs: Array<Record<string, any>>; buildBody: Record<string, any> | null; modelSystem: string; modelName: string; intentInput?: string; db: Record<string, Array<Record<string, any>>> };
+export type Ctx = { emails?: Array<Record<string, any>>; wire?: string; translateCalls?: number; buildBodies?: Array<Record<string, any>>; reply: string; session: Record<string, any>; intake: Record<string, any>; buildCalls: number; modelCalls: number; proposals: number; jobs: Array<Record<string, any>>; buildBody: Record<string, any> | null; modelSystem: string; modelName: string; intentInput?: string; db: Record<string, Array<Record<string, any>>> };
 export type Scenario = {
   id: string; title: string;
   entry?: "intake" | "followup" | "message";
@@ -34,6 +34,8 @@ const destUmrah: [string, (c: Ctx) => boolean] = ["الوجهة المخزّنة
 
 const RESET = "🔄 أُعيد ضبط المحادثة — يبدأ طلال من جديد. (الإدارة)";
 
+// ٨ نوفمبر ٢٠٢٦: عدد أسئلة «ما عرف يرد» المسجّلة للمالكة (wa_settings owner_q:*).
+const OWNER_QS = (c: Ctx) => ((c.db.wa_settings || []) as Array<{ key: string }>).filter(r => String(r.key).startsWith("owner_q:")).length;
 const FU = (message: string, action = "reply", fields: Record<string, unknown> = {}) => JSON.stringify({ message, action, fields });
 const DONE = { destination: "العمرة", pax: 5, ages: "11 و 6", date: "2026-11-11", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة",
   summary_confirmed: true, auto_program: "برنامج عمرة MK-2026-008\nمكة: فندق فوكو 3 ليال\nالمدينة: بولمان 2 ليال" };
@@ -451,7 +453,7 @@ export const SCENARIOS: Scenario[] = [
     id: "fu-handoff-allowed-flights", entry: "followup", title: "طلب طيران دولي (غير العمرة) → التحويل للزميل مسموح",
     history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-070"]], customer: "ابي تضيف لنا الطيران من مسقط", intakeData: { destination: "تايلاند", pax: 6, date: "17/11/2026", days: 12, summary_confirmed: true },
     model: [FU("أبشر، الطيران الدولي يحتاج زميلي المختص، حوّلت له طلبك وبيرد عليك قريب", "handoff")],
-    expect: [["تحويل", c => c.proposals > 0 && /زميلي/.test(c.reply)]],
+    expect: [["٨ نوفمبر: لحظات أستاذي + تنبيه المالكة", c => /^لحظات أستاذي$/m.test(c.reply) && OWNER_QS(c) === 1 && !/زميلي/.test(c.reply)]],
   },
   {
     id: "fu-no-jeddah-for-thailand", entry: "followup", title: "٤ نوفمبر: طلب تايلاند → النموذج ما يشوف «مطار جدة» بالحقائق (كان يكتب «الطيران الدولي (جدة بوكيت)»)",
@@ -488,12 +490,12 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "fu-flight-offer-ambiguous", entry: "followup", title: "٤ نوفمبر: «طيب» على عرض الطيران الدولي → «تحب نضيف الطيران الدولي…؟» (مو «وضح لي وش تعدل»)",
     history: [["T", RESET], ["C", "تايلاند"], ["C", "هذا شامل الطريان"], ["T", "لا أستاذي، البرنامج ما يشمل الطيران الدولي، بس يشمل الطيران الداخلي بين المدن (بوكيت ← بانكوك) مع الاستقبال والتوديع. ولو حاب نضيف لك الطيران الدولي، بحوّل طلبك لزميلي المختص يسعّره لك."]], customer: "طيب", intakeData: { destination: "تايلاند", pax: 6, date: "17/11/2026", days: 12, summary_confirmed: true }, model: [FU("x", "handoff")],
-    expect: [["سؤال واضح", c => /^تحب نضيف الطيران الدولي للبرنامج؟ أحوّ?ل طلبك لزميلي المختص يسعّ?ره لك\.$/.test(c.reply.trim())], ["❌ لا «وضح لي»", c => !/وضح لي/.test(c.reply)]],
+    expect: [["سؤال واضح", c => /^تحب نضيف الطيران الدولي للبرنامج؟$/.test(c.reply.trim())], ["❌ لا «وضح لي»", c => !/وضح لي/.test(c.reply)]],
   },
   {
     id: "fu-flight-offer-yes", entry: "followup", title: "«ايوه» على عرض الطيران الدولي → تحويل للزميل",
     history: [["T", RESET], ["C", "تايلاند"], ["C", "هذا شامل الطريان"], ["T", "لا أستاذي، البرنامج ما يشمل الطيران الدولي، بس يشمل الطيران الداخلي بين المدن (بوكيت ← بانكوك) مع الاستقبال والتوديع. ولو حاب نضيف لك الطيران الدولي، بحوّل طلبك لزميلي المختص يسعّره لك."]], customer: "ايوه", intakeData: { destination: "تايلاند", pax: 6, date: "17/11/2026", days: 12, summary_confirmed: true }, model: [FU("x")],
-    expect: [["تحويل", c => /حوّ?لت طلب الطيران الدولي لزميلي/.test(c.reply) && c.proposals > 0]],
+    expect: [["٨ نوفمبر: لحظات أستاذي + تنبيه المالكة", c => /^لحظات أستاذي$/m.test(c.reply) && OWNER_QS(c) === 1 && !/زميلي/.test(c.reply)]],
   },
   {
     id: "fu-question-from-program", entry: "followup", title: "متابعة: سؤال جوابه في البرنامج → يرد بنفسه بلا تحويل",
@@ -559,7 +561,7 @@ export const SCENARIOS: Scenario[] = [
     id: "fu-handoff-booking", entry: "followup", title: "متابعة: «ابي احجز» → يحوّل للموظفة مع رد",
     history: PROG_HIST, customer: "تمام ابي احجز كيف ادفع؟", intakeData: DONE,
     model: [FU("أبشر، بحوّل طلبك لزميلي المختص ويرد عليك قريب", "handoff")],
-    expect: [notSilent, ["انفتح طلب للموظفة", c => c.proposals > 0]],
+    expect: [notSilent, ["٨ نوفمبر: لحظات أستاذي + تنبيه المالكة", c => /^لحظات أستاذي$/m.test(c.reply) && OWNER_QS(c) === 1 && !/زميلي/.test(c.reply)]],
   },
   {
     id: "fu-model-fail", entry: "followup", title: "متابعة: النموذج فشل → ما يسكت (يحوّل)",
@@ -1003,7 +1005,7 @@ export const SCENARIOS: Scenario[] = [
     history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-072"], ["C", "هذا شامل الطريان"], ["T", "لا أستاذي، البرنامج ما يشمل الطيران الدولي… ولو حاب نضيف لك الطيران الدولي، بحوّل طلبك لزميلي المختص يسعّره لك."], ["C", "طيب"], ["T", "تمام، لو احتجت أي شي أنا حاضر."]],
     customer: "انتظر الطيران", intakeData: { destination: "تايلاند", pax: 6, date: "17/11/2026", days: 12, cities: "بوكيت، كرابي، بانكوك", summary_confirmed: true, program_final_code: "TH-2026-072" }, intent: { intent: "want_intl_flight", frustrated: true, meaning: "العميل يطلب إضافة الطيران الدولي وينتظر تسعيره" },
     model: [FU("أبشر، بحوّل طلبك لزميلي المختص ويرد عليك قريب", "handoff")],
-    expect: [["تحويل الطيران", c => /حوّ?لت طلب الطيران الدولي/.test(c.reply)], ["طلب للموظف", c => c.proposals === 1], ["❌ لا «فهمني»", c => !/فهمني/.test(c.reply)]],
+    expect: [["٨ نوفمبر: لحظات أستاذي + تنبيه المالكة", c => /^لحظات أستاذي$/m.test(c.reply) && OWNER_QS(c) === 1 && !/زميلي/.test(c.reply)], ["❌ لا «فهمني»", c => !/فهمني/.test(c.reply)]],
   },
   {
     id: "intent-flight-already-handed", entry: "followup", title: "طلب الطيران الدولي سبق تحوّل والعميل يعيد «وين الطيران» → طمأنة، ❌ بلا تحويل ثاني",
@@ -1017,7 +1019,7 @@ export const SCENARIOS: Scenario[] = [
     history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-072"], ["T", "لا أستاذي، البرنامج ما يشمل الطيران الدولي… ولو حاب نضيف لك الطيران الدولي، بحوّل طلبك لزميلي المختص يسعّره لك."], ["C", "انتظر الطيران"], ["T", "أعتذر منك أستاذي، بس فهمني إيش تقصد بالضبط عشان أصحح لك البرنامج وأرسله على طول؟"]],
     customer: "انتظر الطيران", intakeData: { destination: "تايلاند", pax: 6, date: "17/11/2026", days: 12, cities: "بوكيت، كرابي، بانكوك", summary_confirmed: true, program_final_code: "TH-2026-072" }, intent: { intent: "waiting", frustrated: true, meaning: "ينتظر تسعيرة الطيران الدولي من الزميل" },
     model: [FU("أعتذر منك أستاذي، تمام، زميلي المختص بيرد عليك بتسعيرة الطيران الدولي قريبا.")],
-    expect: [["تحويل فعلي", c => c.proposals === 1 && /حوّ?لت طلب الطيران الدولي/.test(c.reply)]],
+    expect: [["٨ نوفمبر: لحظات أستاذي + تنبيه المالكة", c => /^لحظات أستاذي$/m.test(c.reply) && OWNER_QS(c) === 1 && !/زميلي/.test(c.reply)]],
   },
   {
     id: "msg-separate-request-no-change", entry: "message", sessionIntakeActive: true, title: "٤ نوفمبر (حي): «احتاج برنامج عمره ثاني» → «تقصد تغير الوجهة…؟» → «لا مش حغير» = طلب جديد مستقل (بلا ٦ أشخاص وتوزيعة تايلاند)",
@@ -1441,5 +1443,384 @@ export const SCENARIOS: Scenario[] = [
     intakeData: { ...DONE, program_final_raw: "DEST:العمرة\n\nHOTELS:\nAddress Jabal Omar Makkah | Makkah | 5 | Deluxe | 1 | 3 ليالي (x) | x\n", program_final_code: "MK-2026-008",
       offers: [{ code: "MK-2026-008", kind: "الموصى به", hotels: [] }, { code: "MK-2026-009", kind: "أرخص العروض", hotels: [] }] }, model: [FU("تمام")],
     expect: [["الميزانية", c => /إذا عندك ميزانية معيّنة بلغني/.test(c.reply)], NO_BUILD, ["❌ لا إقناع", c => !/قريب جداً من الحرم/.test(c.reply)]],
+  },
+
+  // ── ٨ نوفمبر ٢٠٢٦ (قرار المالكة): بند «🧠 الذكاء الاصطناعي» = طلال كامل لكل العملاء، وسؤال ما يعرفه → «لحظات أستاذي» + تنبيه المالكة ──
+  {
+    id: "aion-followup-all", entry: "message", sessionIntakeActive: false, title: "٨ نوفمبر: بند ON بلا أرقام اختبار → متابعة طلال الكاملة (مو اقتراح للموظفة)",
+    settings: [{ key: "ai_mode", value: "ON" }],
+    history: PROG_HIST, customer: "الفندق الأول وش اسمه؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("٣ ليالي في مكة بفندق فوكو")],
+    expect: [["رد طلال", c => /٣ ليالي في مكة/.test(c.reply)], ["❌ ما راح للموظفة", c => c.proposals === 0]],
+  } as any,
+  {
+    id: "aion-preview-unchanged", entry: "message", sessionIntakeActive: false, title: "٨ نوفمبر: بند «معاينة» بلا أرقام اختبار → كما هو (❌ لا متابعة طلال)",
+    settings: [{ key: "ai_mode", value: "PREVIEW" }],
+    history: PROG_HIST, customer: "الفندق الأول وش اسمه؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("٣ ليالي في مكة بفندق فوكو")],
+    expect: [["❌ ما رد طلال بالمتابعة", c => !/٣ ليالي في مكة/.test(c.reply)]],
+  } as any,
+  {
+    id: "aion-conv-off", entry: "message", sessionIntakeActive: false, aiEnabled: false, title: "٨ نوفمبر: بند ON لكن المحادثة موقوفة يدوياً → ❌ طلال ما يرد",
+    settings: [{ key: "ai_mode", value: "ON" }],
+    history: PROG_HIST, customer: "الفندق الأول وش اسمه؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("٣ ليالي في مكة بفندق فوكو")],
+    expect: [["سكوت", c => !/٣ ليالي في مكة/.test(c.reply)]],
+  } as any,
+  {
+    id: "owner-ask-day", entry: "followup", title: "٨ نوفمبر: سؤال فيزا (ما عنده جوابه) → «لحظات أستاذي» فقط + تنبيه المالكة",
+    history: PROG_HIST, customer: "نحتاج فيزا للسعودية؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("لازم فيزا سياحية", "ask_owner")],
+    expect: [["لحظات أستاذي بالضبط", c => c.reply.trim() === "لحظات أستاذي"], ["تنبيه المالكة", c => OWNER_QS(c) === 1], ["حالة الانتظار", c => c.intake.owner_hold?.count === 1],
+      ["السؤال والوجهة", c => { const r = c.db.wa_settings.find((x: any) => String(x.key).startsWith("owner_q:")); return r?.value?.question === "نحتاج فيزا للسعودية؟" && r?.value?.dest === "العمرة" && r?.value?.status === "pending"; }]],
+  },
+  {
+    id: "owner-ask-day-again", entry: "followup", title: "٨ نوفمبر: رسالة ثانية والأول لسه معلّق → «المعذرة على التأخير أستاذي…» مرة وحدة + تنبيه",
+    history: [...PROG_HIST, ["C", "نحتاج فيزا؟"], ["T", "لحظات أستاذي"]], customer: "وكم سعر التطعيم؟",
+    intakeData: { ...DONE, program_final_code: "MK-2026-008", owner_hold: { at: new Date().toISOString(), night: false, count: 1 } }, model: [FU("x", "ask_owner")],
+    expect: [["المعذرة على التأخير", c => c.reply.trim() === "المعذرة على التأخير أستاذي، استفسارك عند الإدارة وبنرد عليك في أقرب وقت"], ["تنبيه", c => OWNER_QS(c) === 1]],
+  },
+  {
+    id: "owner-ask-day-third-silent", entry: "followup", title: "٨ نوفمبر: سؤال ثالث وهو ينتظر → سكوت (بس تنبيه المالكة)",
+    history: [...PROG_HIST, ["C", "نحتاج فيزا؟"], ["T", "لحظات أستاذي"], ["C", "والتطعيم؟"], ["T", "المعذرة على التأخير أستاذي، استفسارك عند الإدارة وبنرد عليك في أقرب وقت"]], customer: "والتأمين؟",
+    intakeData: { ...DONE, program_final_code: "MK-2026-008", owner_hold: { at: new Date().toISOString(), night: false, count: 2 } }, model: [FU("x", "ask_owner")],
+    expect: [["سكوت", c => c.reply.trim() === ""], ["تنبيه", c => OWNER_QS(c) === 1]],
+  },
+  {
+    id: "owner-ask-night", entry: "followup", omanHour: 2, title: "٨ نوفمبر: سؤال بالليل → «زميلي في الشيفت النهاري…»",
+    history: PROG_HIST, customer: "نحتاج فيزا؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("x", "ask_owner")],
+    expect: [["رسالة الليل", c => c.reply.trim() === "زميلي في الشيفت النهاري راح يرد على استفساراتك هذه، هل عندك أي استفسارات أخرى؟"], ["تنبيه", c => OWNER_QS(c) === 1]],
+  } as any,
+  {
+    id: "owner-ask-night-second", entry: "followup", omanHour: 3, title: "٨ نوفمبر: بالليل سؤال ثاني ما يعرفه → ختام «حوّلت جميع استفساراتك…»",
+    history: [...PROG_HIST, ["C", "نحتاج فيزا؟"], ["T", "زميلي في الشيفت النهاري راح يرد على استفساراتك هذه، هل عندك أي استفسارات أخرى؟"]], customer: "والتأمين؟",
+    intakeData: { ...DONE, program_final_code: "MK-2026-008", owner_hold: { at: new Date().toISOString(), night: true, count: 1 } }, model: [FU("x", "ask_owner")],
+    expect: [["الختام", c => /^خلاص حوّلت جميع استفساراتك لزملائي، وبإذن الله أول ما يبدأون الدوام يردون على جميع استفساراتك\. تحياتي لك، وفي أمان الله\.$/.test(c.reply.trim())], ["تنبيه", c => OWNER_QS(c) === 1]],
+  } as any,
+  {
+    id: "owner-ask-night-no-more", entry: "followup", omanHour: 3, title: "٨ نوفمبر: بالليل «لا شكرا» بعد «عندك استفسارات أخرى؟» → الختام",
+    history: [...PROG_HIST, ["C", "نحتاج فيزا؟"], ["T", "زميلي في الشيفت النهاري راح يرد على استفساراتك هذه، هل عندك أي استفسارات أخرى؟"]], customer: "لا شكرا",
+    intakeData: { ...DONE, program_final_code: "MK-2026-008", owner_hold: { at: new Date().toISOString(), night: true, count: 1 } }, model: [FU("العفو")],
+    expect: [["الختام", c => /^خلاص حوّلت جميع استفساراتك/.test(c.reply.trim())], ["❌ بلا تنبيه جديد", c => OWNER_QS(c) === 0]],
+  } as any,
+  {
+    id: "owner-known-answer", entry: "followup", title: "٨ نوفمبر: سؤال يعرفه (من البرنامج) → يرد عادي بلا تنبيه",
+    history: PROG_HIST, customer: "الفندق في مكة وش اسمه؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("فندق فوكو في مكة")],
+    expect: [["يرد", c => /فوكو/.test(c.reply)], ["❌ بلا تنبيه", c => OWNER_QS(c) === 0]],
+  },
+  {
+    id: "owner-guard-fail-no-colleague", entry: "followup", title: "٨ نوفمبر: النموذج فشل ٣ مرات → «لحظات أستاذي» + تنبيه (❌ لا «زميلي المختص»)",
+    history: PROG_HIST, customer: "سؤال غريب", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: ["نص بلا جيسون", "نص بلا جيسون", "نص بلا جيسون"],
+    expect: [["لحظات", c => c.reply.trim() === "لحظات أستاذي"], ["تنبيه", c => OWNER_QS(c) === 1], ["❌ لا زميلي", c => !/زميلي/.test(c.reply)]],
+  },
+  {
+    id: "owner-reply-verbatim", entry: "message", from: "whatsapp:+96877428881", title: "٨ نوفمبر: ردّ المالكة على التنبيه → يوصل للعميل حرفياً ويرفع الانتظار",
+    history: [], customer: "لا أستاذي، العمانيين يدخلون السعودية بالبطاقة بدون فيزا",
+    tables: { wa_settings: [{ key: "owner_q:1-1", value: { n: 1, phone: "whatsapp:+96899621742", dest: "العمرة", question: "نحتاج فيزا؟", status: "pending", at: new Date().toISOString() } }] },
+    intakeData: { ...DONE, owner_hold: { at: new Date().toISOString(), night: false, count: 1 } }, sessionIntakeActive: false, model: [FU("x")],
+    expect: [["وصل للعميل حرفياً", c => c.db.wa_admin_messages.some((m: any) => m.customer_phone === "whatsapp:+96899621742" && m.body === "لا أستاذي، العمانيين يدخلون السعودية بالبطاقة بدون فيزا")],
+      ["انرد", c => c.db.wa_settings.find((x: any) => x.key === "owner_q:1-1")?.value?.status === "answered"], ["الانتظار ارتفع", c => !c.intake.owner_hold],
+      ["❌ ما انحفظ بدون «احفظها»", c => !c.db.wa_settings.some((x: any) => String(x.key).startsWith("owner_kb:"))]],
+  } as any,
+  {
+    id: "owner-reply-with-save", entry: "message", from: "whatsapp:+96877428881", title: "٨ نوفمبر: «… احفظها» بنفس الرسالة → يوصل بدون «احفظها» وينحفظ لنفس الوجهة",
+    history: [], customer: "الفيزا تأخذها من مكتبنا في مسقط احفظها",
+    tables: { wa_settings: [{ key: "owner_q:1-1", value: { n: 1, phone: "whatsapp:+96899621742", dest: "العمرة", question: "كيف أطلع الفيزا؟", status: "pending", at: new Date().toISOString() } }] },
+    intakeData: { ...DONE }, sessionIntakeActive: false, model: [FU("x")],
+    expect: [["وصل بدون احفظها", c => c.db.wa_admin_messages.some((m: any) => m.customer_phone === "whatsapp:+96899621742" && m.body === "الفيزا تأخذها من مكتبنا في مسقط")],
+      ["انحفظ للعمرة", c => c.db.wa_settings.some((x: any) => String(x.key).startsWith("owner_kb:") && x.value?.dest === "العمرة" && x.value?.answer === "الفيزا تأخذها من مكتبنا في مسقط")]],
+  } as any,
+  {
+    id: "owner-save-after", entry: "message", from: "whatsapp:+96877428881", title: "٨ نوفمبر: «احفظها» بعد الرد → يحفظ آخر جواب لنفس الوجهة",
+    history: [], customer: "احفظها",
+    tables: { wa_settings: [{ key: "owner_q:1-1", value: { n: 1, phone: "whatsapp:+96899621742", dest: "تايلاند", question: "نحتاج فيزا؟", status: "answered", answer: "لا، فيزا عند الوصول", answered_at: new Date().toISOString(), at: new Date().toISOString() } }] },
+    intakeData: {}, sessionIntakeActive: false, model: [FU("x")],
+    expect: [["انحفظ", c => c.db.wa_settings.some((x: any) => String(x.key).startsWith("owner_kb:") && x.value?.dest === "تايلاند" && x.value?.answer === "لا، فيزا عند الوصول")],
+      ["❌ ما انرسل شي للعميل", c => !c.db.wa_admin_messages.some((m: any) => m.customer_phone === "whatsapp:+96899621742")]],
+  } as any,
+  {
+    id: "owner-kb-same-dest", entry: "followup", title: "٨ نوفمبر: جواب محفوظ لنفس الوجهة → يوصل للنموذج",
+    history: PROG_HIST, customer: "نحتاج فيزا؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" },
+    tables: { wa_settings: [{ key: "owner_kb:1", value: { dest: "العمرة", question: "نحتاج فيزا؟", answer: "العمانيين بدون فيزا بالبطاقة", note: "" } }] }, model: [FU("العمانيين بدون فيزا بالبطاقة")],
+    expect: [["الجواب بالتعليمات", c => /العمانيين بدون فيزا بالبطاقة/.test(c.modelSystem)], ["❌ بلا تنبيه", c => OWNER_QS(c) === 0]],
+  },
+  {
+    id: "owner-kb-other-dest", entry: "followup", title: "٨ نوفمبر: جواب محفوظ لوجهة ثانية → ❌ ما يوصل للنموذج (يسأل المالكة)",
+    history: PROG_HIST, customer: "نحتاج فيزا؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" },
+    tables: { wa_settings: [{ key: "owner_kb:1", value: { dest: "تايلاند", question: "نحتاج فيزا؟", answer: "فيزا عند الوصول", note: "" } }] }, model: [FU("x", "ask_owner")],
+    expect: [["❌ جواب تايلاند ما وصل", c => !/فيزا عند الوصول/.test(c.modelSystem)], ["تنبيه", c => OWNER_QS(c) === 1]],
+  },
+  {
+    id: "owner-intake-defer", entry: "intake", title: "٨ نوفمبر: أثناء جمع المعلومات سؤال ما يعرفه → جملة التأجيل + يكمل الأسئلة + تنبيه",
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "حياك الله معك طلال من خدمة العملاء، كم عدد المسافرين؟"]], customer: "٢ وهل نحتاج فيزا؟",
+    intakeData: { destination: "تايلاند", started_at: new Date(Date.now() - 600e3).toISOString() },
+    model: [JSON.stringify({ messages: ["متى موعد السفر تقريباً؟"], fields: { destination: "تايلاند", pax: 2, date: "", ages: "", cities: "", nights: "", days: null }, complete: false, owner_question: "هل نحتاج فيزا لتايلاند؟" })],
+    expect: [["جملة التأجيل أول", c => c.reply.startsWith("أي استفسارات أخرى برد فيها عليك، بس خليني أضبط لك البرنامج بالأول")], ["يكمل بسؤال", c => /؟/.test(c.reply.split("\n").slice(1).join(" "))],
+      ["تنبيه", c => OWNER_QS(c) === 1], ["❌ ما جاوب الفيزا", c => !/فيزا/.test(c.reply)], ["الاستقبال مستمر", c => c.session.intake_active !== false]],
+  },
+  {
+    id: "owner-intake-no-trip", entry: "intake", title: "٨ نوفمبر: أول رسالة سؤال بلا طلب رحلة وما يعرف جوابه → «لحظات أستاذي» + تنبيه",
+    history: [["T", RESET]], customer: "عندكم تأشيرات شنغن؟", intakeData: {},
+    model: [JSON.stringify({ messages: ["حياك الله"], fields: { destination: "", pax: null, date: "", ages: "", cities: "", nights: "", days: null }, complete: false, owner_question: "عندكم تأشيرات شنغن؟" })],
+    expect: [["لحظات", c => /لحظات أستاذي/.test(c.reply)], ["تنبيه", c => OWNER_QS(c) === 1]],
+  },
+
+  // ── ٨ نوفمبر ٢٠٢٦ (المالكة — حي، أوريدو): أول تحية من عميل جديد → طلال يعرّف بنفسه ──
+  {
+    id: "greet-first-salam", entry: "message", sessionIntakeActive: true, title: "٨ نوفمبر: «السلام عليكم» أول مرة → «وعليكم السلام، حياك الله، معك طلال من خدمة العملاء، آمرني»",
+    history: [], customer: "السلام عليكم", model: [M("x")],
+    expect: [["تعريف", c => c.reply.trim() === "وعليكم السلام، حياك الله، معك طلال من خدمة العملاء، آمرني"]],
+  },
+  {
+    id: "greet-first-marhaba", entry: "message", sessionIntakeActive: true, title: "٨ نوفمبر: «مرحبا» أول مرة → «أهلاً وسهلاً، حياك الله، معك طلال من خدمة العملاء، آمرني»",
+    history: [], customer: "مرحبا", model: [M("x")],
+    expect: [["تعريف", c => c.reply.trim().replace(/ً/g, "") === "أهلا وسهلا، حياك الله، معك طلال من خدمة العملاء، آمرني"]],
+  },
+  {
+    id: "greet-returning", entry: "message", sessionIntakeActive: true, title: "٨ نوفمبر: عميل سبق وكلّمنا يسلّم → «أهلاً وسهلاً، حياك الله، آمرني» (بلا تعريف)",
+    history: [["T", RESET]], customer: "السلام عليكم", model: [M("x")],
+    expect: [["بلا تعريف", c => c.reply.trim().replace(/ً/g, "") === "أهلا وسهلا، حياك الله، آمرني"]],
+  },
+  {
+    id: "greet-keep-intro-if-never", entry: "intake", title: "٨ نوفمبر (حي، أوريدو): طلال رحّب بلا تعريف → حارس الترحيب المكرر ❌ ما يحذف «معك طلال»",
+    history: [["C", "السلام عليكم"], ["T", "أهلاً وسهلاً، حياك الله، آمرني"]], customer: "معاكم بدر الرواحي",
+    model: [M("حياك الله معك طلال من خدمة العملاء، بأي وجهة أقدر أساعدك؟")],
+    expect: [["التعريف باقي", c => /معك طلال من خدمة العملاء/.test(c.reply)]],
+  },
+
+  // ── ٨ نوفمبر ٢٠٢٦ (قرار المالكة): محادثة ردّت فيها الموظفة بعد البرنامج ──
+  {
+    id: "staff-day-first-wait", entry: "followup", title: "٨ نوفمبر: الموظفة ردّت والعميل كتب (نهار) → «لحظات أستاذي» مرة وحدة بس",
+    history: [...PROG_HIST, ["S", "تفضل أستاذي هذا العرض المعدّل"]] as any, customer: "طيب الفندق وش اسمه؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("فندق فوكو")],
+    expect: [["لحظات فقط", c => c.reply.trim() === "لحظات أستاذي"], ["❌ ما جاوب", c => !/فوكو/.test(c.reply)], ["❌ بلا تنبيه", c => OWNER_QS(c) === 0]],
+  },
+  {
+    id: "staff-day-second-known", entry: "followup", title: "٨ نوفمبر: بعد «لحظات» والموظفة ما ردّت → طلال يرد لو عنده الجواب",
+    history: [...PROG_HIST, ["S", "تفضل أستاذي هذا العرض المعدّل"], ["C", "طيب الفندق وش اسمه؟"], ["T", "لحظات أستاذي"]] as any, customer: "؟",
+    intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("فندق فوكو")],
+    expect: [["يرد", c => /فوكو/.test(c.reply)], ["❌ بلا تنبيه", c => OWNER_QS(c) === 0]],
+  },
+  {
+    id: "staff-day-second-unknown", entry: "followup", title: "٨ نوفمبر: بعد «لحظات» والموظفة ما ردّت وما عنده الجواب → «لحظات أستاذي» + تنبيه المالكة",
+    history: [...PROG_HIST, ["S", "تفضل أستاذي هذا العرض المعدّل"], ["C", "نحتاج فيزا؟"], ["T", "لحظات أستاذي"]] as any, customer: "؟؟",
+    intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("x", "ask_owner")],
+    expect: [["لحظات", c => c.reply.trim() === "لحظات أستاذي"], ["تنبيه", c => OWNER_QS(c) === 1]],
+  },
+  {
+    id: "staff-replied-again-cycle", entry: "followup", title: "٨ نوفمبر: الموظفة ردّت مرة ثانية → الدورة من جديد («لحظات أستاذي» مرة)",
+    history: [...PROG_HIST, ["S", "تفضل"], ["C", "سؤال"], ["T", "لحظات أستاذي"], ["S", "أبشر الحين أرتب لك"]] as any, customer: "طيب الفندق وش اسمه؟",
+    intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("فندق فوكو")],
+    expect: [["لحظات فقط", c => c.reply.trim() === "لحظات أستاذي"]],
+  },
+  {
+    id: "staff-night-known", entry: "followup", omanHour: 0, title: "٨ نوفمبر: محادثة موظفة بعد ١٢ الليل وعنده الجواب → يرد فوراً (بلا «لحظات»)",
+    history: [...PROG_HIST, ["S", "تفضل أستاذي هذا العرض المعدّل"]] as any, customer: "الفندق وش اسمه؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("فندق فوكو")],
+    expect: [["يرد فوراً", c => /فوكو/.test(c.reply) && !/لحظات/.test(c.reply)]],
+  } as any,
+  {
+    id: "staff-night-unknown", entry: "followup", omanHour: 7, title: "٨ نوفمبر: محادثة موظفة بالليل وما عنده الجواب → «أخي الكريم، إن شاء الله الزملاء…» + تنبيه",
+    history: [...PROG_HIST, ["S", "تفضل أستاذي هذا العرض المعدّل"]] as any, customer: "نحتاج فيزا؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("x", "ask_owner")],
+    expect: [["رسالة الزملاء", c => c.reply.trim() === "أخي الكريم، إن شاء الله الزملاء في النهار أول ما يبدأون الدوام راح يردون على جميع استفساراتك."], ["تنبيه", c => OWNER_QS(c) === 1]],
+  } as any,
+  {
+    id: "staff-8am-is-day", entry: "followup", omanHour: 8, title: "٨ نوفمبر: الساعة ٨ الصبح = نهار → «لحظات أستاذي» أول",
+    history: [...PROG_HIST, ["S", "تفضل أستاذي هذا العرض المعدّل"]] as any, customer: "الفندق وش اسمه؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("فندق فوكو")],
+    expect: [["لحظات فقط", c => c.reply.trim() === "لحظات أستاذي"]],
+  } as any,
+
+  // ── ٨ نوفمبر ٢٠٢٦ (قرار المالكة): مرسل مو عميل ──
+  {
+    id: "sender-partnership", entry: "intake", title: "٨ نوفمبر: تعاون تسويقي/شراكة → الرقم الماليزي (بلا تنبيه)",
+    history: [["C", "السلام عليكم"], ["T", "وعليكم السلام، حياك الله، معك طلال من خدمة العملاء، آمرني"]], customer: "عندي شركة تسويق ونبي نتعاون معكم",
+    model: [JSON.stringify({ messages: [], fields: {}, complete: false, sender_type: "partnership" })],
+    expect: [["الرقم الماليزي", c => c.reply.trim() === "حياك الله، بخصوص التعاون والشراكات تقدر تتواصل مع الإدارة مباشرة على الرقم ‎+601111136864 وبيخدمونك إن شاء الله."], ["❌ بلا تنبيه", c => OWNER_QS(c) === 0], ["الاستقبال انقفل", c => c.session.intake_active === false]],
+  },
+  {
+    id: "sender-travel-agency", entry: "intake", title: "٨ نوفمبر: مكتب سفر يبي يحجز لعملائه → الرقم الماليزي",
+    history: [["C", "السلام عليكم"], ["T", "وعليكم السلام، حياك الله، معك طلال من خدمة العملاء، آمرني"]], customer: "معك مكتب النخبة للسفر عندنا عملاء نبي نحجز لهم عمرة",
+    model: [JSON.stringify({ messages: ["كم عدد المعتمرين؟"], fields: { destination: "العمرة" }, complete: false, sender_type: "partnership" })],
+    expect: [["الرقم الماليزي", c => /\+601111136864/.test(c.reply) && !/كم عدد/.test(c.reply)]],
+  },
+  {
+    id: "sender-asks-management", entry: "intake", title: "٨ نوفمبر: يطلب الإدارة بلا سبب → «ممكن أعرف بخصوص إيش…» (❌ لا رقم)",
+    history: [["C", "السلام عليكم"], ["T", "وعليكم السلام، حياك الله، معك طلال من خدمة العملاء، آمرني"]], customer: "ابي رقم المديرة",
+    model: [JSON.stringify({ messages: [], fields: {}, complete: false, sender_type: "asks_management" })],
+    expect: [["يسأل السبب", c => c.reply.trim() === "حياك الله، ممكن أعرف بخصوص إيش عشان أخدمك؟"], ["❌ لا رقم", c => !/\+60/.test(c.reply)], ["❌ بلا تنبيه", c => OWNER_QS(c) === 0], ["الاستقبال مستمر", c => c.session.intake_active !== false]],
+  },
+  {
+    id: "sender-asks-management-no-reason", entry: "intake", title: "٨ نوفمبر: سألناه السبب وما ذكره → «لحظات أستاذي» + تنبيه (❌ لا رقم)",
+    history: [["C", "ابي رقم المديرة"], ["T", "حياك الله، ممكن أعرف بخصوص إيش عشان أخدمك؟"]], customer: "موضوع خاص ابي اكلمها",
+    model: [JSON.stringify({ messages: [], fields: {}, complete: false, sender_type: "asks_management" })],
+    expect: [["لحظات", c => c.reply.trim() === "لحظات أستاذي"], ["تنبيه", c => OWNER_QS(c) === 1], ["❌ لا رقم", c => !/\+60/.test(c.reply)]],
+  },
+  {
+    id: "sender-asks-management-then-partner", entry: "intake", title: "٨ نوفمبر: سألناه السبب وقال تعاون → الرقم الماليزي",
+    history: [["C", "ابي رقم المديرة"], ["T", "حياك الله، ممكن أعرف بخصوص إيش عشان أخدمك؟"]], customer: "نبي نتعاون معكم في الإعلانات",
+    model: [JSON.stringify({ messages: [], fields: {}, complete: false, sender_type: "partnership" })],
+    expect: [["الرقم الماليزي", c => /\+601111136864/.test(c.reply)]],
+  },
+  {
+    id: "sender-non-customer", entry: "intake", title: "٨ نوفمبر (حي، أوريدو): رسالة مو من عميل → «حياك الله، بنوصل رسالتك للإدارة» + تنبيه «رسالة مو من عميل»",
+    history: [["C", "السلام عليكم"], ["T", "وعليكم السلام، حياك الله، معك طلال من خدمة العملاء، آمرني"], ["C", "معاكم بدر الرواحي من شركة أوريدو"]], customer: "كنتو طالبين من عندنا خدمة SIP trunk باغيين الخدمة أو نلغي الطلب ?",
+    model: [JSON.stringify({ messages: [], fields: {}, complete: false, sender_type: "non_customer" })],
+    expect: [["للإدارة", c => c.reply.trim() === "حياك الله، بنوصل رسالتك للإدارة"], ["تنبيه", c => OWNER_QS(c) === 1],
+      ["نوعه مو عميل", c => c.db.wa_settings.find((x: any) => String(x.key).startsWith("owner_q:"))?.value?.stage === "non_customer"]],
+  },
+  {
+    id: "sender-followup-partnership", entry: "followup", title: "٨ نوفمبر: بعد البرنامج يقول نبي نتعاون → الرقم الماليزي",
+    history: PROG_HIST, customer: "بالمناسبة عندي مكتب سياحي ونبي نتعاون", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("x", "partnership")],
+    expect: [["الرقم الماليزي", c => /\+601111136864/.test(c.reply)], ["❌ بلا تنبيه", c => OWNER_QS(c) === 0]],
+  },
+  {
+    id: "sender-followup-mgmt-no-reason", entry: "followup", title: "٨ نوفمبر: متابعة — سألناه السبب وما ذكره → «لحظات أستاذي» + تنبيه",
+    history: [...PROG_HIST, ["C", "ابي اكلم المسؤول"], ["T", "حياك الله، ممكن أعرف بخصوص إيش عشان أخدمك؟"]], customer: "ابي اكلمه بس",
+    intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("x", "asks_management")],
+    expect: [["لحظات", c => c.reply.trim() === "لحظات أستاذي"], ["تنبيه", c => OWNER_QS(c) === 1], ["❌ لا رقم", c => !/\+60/.test(c.reply)]],
+  },
+
+  {
+    id: "sender-first-contact-intro", entry: "intake", title: "٨ نوفمبر: أول تواصل وطلال ما عرّف بنفسه + تعاون برامج سياحية → التعريف أول ثم الرقم",
+    history: [["C", "السلام عليكم"], ["T", "أهلاً وسهلاً، حياك الله، آمرني"]], customer: "معك شركة الريم نقدم برامج سياحية ونبي نتعاون معكم",
+    model: [JSON.stringify({ messages: [], fields: {}, complete: false, sender_type: "partnership" })],
+    expect: [["تعريف + رقم", c => c.reply.trim() === "حياك الله، معك طلال من خدمة العملاء، بخصوص التعاون والشراكات تقدر تتواصل مع الإدارة مباشرة على الرقم ‎+601111136864 وبيخدمونك إن شاء الله."]],
+  },
+  {
+    id: "sender-partner-vague", entry: "intake", title: "٨ نوفمبر: «نبي نتعاون معكم» بلا طبيعة → تعريف + «ممكن أعرف طبيعة التعاون…؟» (❌ لا رقم)",
+    history: [["C", "السلام عليكم"], ["T", "أهلاً وسهلاً، حياك الله، آمرني"]], customer: "نبي نتعاون معكم",
+    model: [JSON.stringify({ messages: [], fields: {}, complete: false, sender_type: "partnership_vague" })],
+    expect: [["يسأل الطبيعة", c => c.reply.trim() === "حياك الله، معك طلال من خدمة العملاء، ممكن أعرف طبيعة التعاون اللي حاب تقدمه؟"], ["❌ لا رقم", c => !/\+60/.test(c.reply)], ["❌ بلا تنبيه", c => OWNER_QS(c) === 0], ["الاستقبال مستمر", c => c.session.intake_active !== false]],
+  },
+  {
+    id: "sender-partner-vague-then-clear", entry: "intake", title: "٨ نوفمبر: بعد سؤال الطبيعة قال «تعاون شركات وبرامج سياحية» → الرقم مباشرة",
+    history: [["C", "نبي نتعاون معكم"], ["T", "حياك الله، معك طلال من خدمة العملاء، ممكن أعرف طبيعة التعاون اللي حاب تقدمه؟"]], customer: "تعاون شركات ونقدم برامج سياحية",
+    model: [JSON.stringify({ messages: [], fields: {}, complete: false, sender_type: "partnership" })],
+    expect: [["الرقم", c => c.reply.trim() === "حياك الله، بخصوص التعاون والشراكات تقدر تتواصل مع الإدارة مباشرة على الرقم ‎+601111136864 وبيخدمونك إن شاء الله."]],
+  },
+  {
+    id: "sender-partner-vague-twice", entry: "intake", title: "٨ نوفمبر: بعد سؤال الطبيعة ما وضّح → «لحظات أستاذي» + تنبيه (❌ لا رقم)",
+    history: [["C", "نبي نتعاون معكم"], ["T", "حياك الله، معك طلال من خدمة العملاء، ممكن أعرف طبيعة التعاون اللي حاب تقدمه؟"]], customer: "اتواصل مع المسؤول وافهمه",
+    model: [JSON.stringify({ messages: [], fields: {}, complete: false, sender_type: "partnership_vague" })],
+    expect: [["لحظات", c => c.reply.trim() === "لحظات أستاذي"], ["تنبيه", c => OWNER_QS(c) === 1], ["❌ لا رقم", c => !/\+60/.test(c.reply)]],
+  },
+  // ── ٨ نوفمبر ٢٠٢٦ (قرار المالكة — سؤال ٦): العميل يطلب يكلم موظف / اتصال → «أبشر…» + تنبيه المالكة ──
+  {
+    id: "human-followup-day", entry: "followup", title: "٨ نوفمبر: «ابي اكلم موظف» بعد البرنامج → «أبشر أستاذي، بيتواصل معك زميلنا…» + تنبيه",
+    history: PROG_HIST, customer: "ابي اكلم موظف", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("تفضل أنا طلال وش تحتاج؟")],
+    expect: [["الرد", c => c.reply.trim() === "أبشر أستاذي، بيتواصل معك زميلنا في أقرب وقت"], ["تنبيه", c => OWNER_QS(c) === 1], ["نوع التنبيه", c => c.db.wa_settings.some((x: any) => String(x.key).startsWith("owner_q:") && x.value?.stage === "human")], ["حالة الانتظار", c => c.intake.owner_hold?.count === 1]],
+  },
+  {
+    id: "human-followup-night", entry: "followup", omanHour: 1, title: "٨ نوفمبر: «اتصلوا علي» بالليل → «أبشر أستاذي، أول ما يبدأ الدوام…» + تنبيه",
+    history: PROG_HIST, customer: "ممكن تتصلون علي", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("x")],
+    expect: [["رد الليل", c => c.reply.trim() === "أبشر أستاذي، أول ما يبدأ الدوام بيتواصل معك زميلنا"], ["تنبيه", c => OWNER_QS(c) === 1]],
+  } as any,
+  {
+    id: "human-intake", entry: "intake", title: "٨ نوفمبر: أثناء جمع المعلومات «ابغى مكالمة» → «أبشر…» + تنبيه (بلا سؤال استقبال)",
+    history: [["C", "السلام عليكم"], ["T", "وعليكم السلام، حياك الله، معك طلال من خدمة العملاء، آمرني"], ["C", "عمره"], ["T", "كم عددكم؟"]], customer: "ابغى مكالمة لو سمحت",
+    model: [M("كم عددكم؟")],
+    expect: [["الرد", c => c.reply.trim() === "أبشر أستاذي، بيتواصل معك زميلنا في أقرب وقت"], ["تنبيه", c => OWNER_QS(c) === 1]],
+  },
+  {
+    id: "human-repeat", entry: "followup", title: "٨ نوفمبر: كرر الطلب والموظف ما تواصل → «المعذرة على التأخير…» مرة وحدة",
+    history: [...PROG_HIST, ["C", "ابي اكلم موظف"], ["T", "أبشر أستاذي، بيتواصل معك زميلنا في أقرب وقت"]], customer: "وينكم ابي احد يكلمني",
+    intakeData: { ...DONE, program_final_code: "MK-2026-008", owner_hold: { at: new Date().toISOString(), night: false, count: 1 } }, model: [FU("x")],
+    expect: [["المعذرة", c => c.reply.trim() === "المعذرة على التأخير أستاذي، استفسارك عند الإدارة وبنرد عليك في أقرب وقت"]],
+  },
+  {
+    id: "human-not-management", entry: "followup", title: "٨ نوفمبر: سؤال عادي فيه «موظف» (مو طلب تواصل) → ما يتحول",
+    history: PROG_HIST, customer: "الموظف في الفندق يتكلم عربي؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("أغلب موظفي فنادق مكة يتكلمون عربي")],
+    expect: [["رد عادي", c => /يتكلمون عربي/.test(c.reply)], ["بلا تنبيه", c => OWNER_QS(c) === 0]],
+  },
+  // ── ٨ نوفمبر ٢٠٢٦ (قرار المالكة — سؤال ٧): رسالة صوتية → تتحول لكتابة (داخلي) → طلال يتأكد من فهمه → «ايوه» يكمّل ──
+  {
+    id: "voice-confirm-ask", entry: "voice", title: "٨ نوفمبر: رسالة صوتية واضحة → «فهمت من رسالتك إنك…، صحيح؟» + تُحفظ معلّقة (❌ لا يكمّل قبل التأكيد)",
+    history: [["C", "السلام عليكم"], ["T", "وعليكم السلام، حياك الله، معك طلال من خدمة العملاء، آمرني"]], customer: "السلام عليكم ابي عمره لاربعه اشخاص",
+    model: [JSON.stringify({ clear: true, greeting_only: false, summary: "إنك تبي عمرة لـ٤ أشخاص" })],
+    expect: [["سؤال التأكيد", c => c.reply.trim() === "فهمت من رسالتك إنك تبي عمرة لـ٤ أشخاص، صحيح؟"], ["معلّقة", c => c.intake.pending_voice?.text === "السلام عليكم ابي عمره لاربعه اشخاص"], ["❌ ما انبنى ولا سؤال استقبال", c => c.buildCalls === 0 && c.modelCalls === 1]],
+  } as any,
+  {
+    id: "voice-first-contact-intro", entry: "voice", title: "٨ نوفمبر: أول تواصل برسالة صوتية → التعريف قبل سؤال التأكيد",
+    history: [], customer: "ابي عمره لاربعه اشخاص",
+    model: [JSON.stringify({ clear: true, greeting_only: false, summary: "إنك تبي عمرة لـ٤ أشخاص" })],
+    expect: [["تعريف + تأكيد", c => c.reply.trim() === "حياك الله، معك طلال من خدمة العملاء، فهمت من رسالتك إنك تبي عمرة لـ٤ أشخاص، صحيح؟"]],
+  } as any,
+  {
+    id: "voice-unclear", entry: "voice", title: "٨ نوفمبر: الصوت ما انفهم/التحويل فشل → «ما وضح لي الصوت، ممكن تكتب لي طلبك كتابة؟»",
+    history: [["C", "مرحبا"], ["T", "أهلاً وسهلاً، حياك الله، معك طلال من خدمة العملاء، آمرني"]], customer: "",
+    model: [JSON.stringify({ clear: false })],
+    expect: [["طلب الكتابة", c => c.reply.trim() === "المعذرة أستاذي، ما وضح لي الصوت، ممكن تكتب لي طلبك كتابة؟"], ["بلا معلّق", c => !c.intake.pending_voice]],
+  } as any,
+  {
+    id: "voice-not-active", entry: "voice", sessionIntakeActive: false, settings: [{ key: "ai_mode", value: "PREVIEW" }], title: "٨ نوفمبر: محادثة مو عند طلال (معاينة/موظفين) → ❌ ما يرد (الكتابة تظهر للموظفات بس)",
+    history: [["C", "مرحبا"], ["S", "هلا"]], customer: "ابي عمره", intakeData: { destination: "العمرة" },
+    model: [JSON.stringify({ clear: true, summary: "إنك تبي عمرة" })],
+    expect: [["سكوت", c => c.reply.trim() === ""]],
+  } as any,
+  {
+    id: "voice-yes-continues", entry: "message", title: "٨ نوفمبر: «صحيح» على تأكيد الصوت → يكمّل بنص الصوت كأنه مكتوب",
+    history: [["C", "السلام عليكم"], ["T", "وعليكم السلام، حياك الله، معك طلال من خدمة العملاء، آمرني"], ["C", "🎤 رسالة صوتية — «ابي عمره لاربعه اشخاص»"], ["T", "فهمت من رسالتك إنك تبي عمرة لـ٤ أشخاص، صحيح؟"]], customer: "صحيح",
+    intakeData: { pending_voice: { text: "ابي عمره لاربعه اشخاص", at: new Date().toISOString() } },
+    model: [M("تمام، كلهم بالغين ولا معكم أطفال؟", { destination: "العمرة", pax: 4 })],
+    expect: [["كمّل الاستقبال", c => /بالغين/.test(c.reply)], ["العدد والوجهة", c => Number(c.intake.pax) === 4 && /عمر/.test(String(c.intake.destination || ""))], ["انمسح المعلّق", c => !c.intake.pending_voice]],
+  },
+  {
+    id: "voice-no-clarify", entry: "message", title: "٨ نوفمبر: «لا» على تأكيد الصوت → «المعذرة أستاذي، ممكن توضح لي طلبك أكثر؟»",
+    history: [["C", "🎤 رسالة صوتية — «ابي عمره لاربعه اشخاص»"], ["T", "فهمت من رسالتك إنك تبي عمرة لـ٤ أشخاص، صحيح؟"]], customer: "لا",
+    intakeData: { pending_voice: { text: "ابي عمره لاربعه اشخاص", at: new Date().toISOString() } },
+    model: [M("x")],
+    expect: [["طلب التوضيح", c => c.reply.trim() === "المعذرة أستاذي، ممكن توضح لي طلبك أكثر؟"], ["انمسح المعلّق", c => !c.intake.pending_voice], ["❌ بلا نموذج", c => c.modelCalls === 0]],
+  },
+  {
+    id: "voice-yes-followup", entry: "message", sessionIntakeActive: false, title: "٨ نوفمبر: بعد البرنامج — «ايوه» على تأكيد الصوت → متابعة طلال تجاوب على سؤال الصوت",
+    history: [...PROG_HIST, ["C", "🎤 رسالة صوتية — «وش اسم فندق المدينه»"], ["T", "فهمت من رسالتك إنك تسأل عن اسم فندق المدينة، صحيح؟"]], customer: "ايوه",
+    intakeData: { ...DONE, program_final_code: "MK-2026-008", pending_voice: { text: "وش اسم فندق المدينه", at: new Date().toISOString() } },
+    model: [FU("فندق المدينة في برنامجك هو بولمان")],
+    expect: [["جاوب", c => /بولمان/.test(c.reply)], ["انمسح المعلّق", c => !c.intake.pending_voice]],
+  },
+  // ── ٨ نوفمبر ٢٠٢٦ (قرار المالكة — سؤال ٨): العميل يكتب إنجليزي → طلال يرد إنجليزي (الرسائل الثابتة بترجمتها المعتمدة) ──
+  {
+    id: "lang-en-intake", entry: "message", title: "٨ نوفمبر: عميل يكتب إنجليزي أثناء الاستقبال → الرد يطلع له إنجليزي (والسجل عربي)",
+    history: [["C", "Hello"], ["T", "أهلاً وسهلاً، حياك الله، معك طلال من خدمة العملاء، آمرني"]], customer: "I want a trip to Thailand for 2 people",
+    model: [M("تمام، متى تاريخ السفر؟", { destination: "تايلاند", pax: 2 })], translate: "Great, when would you like to travel?",
+    expect: [["إنجليزي للعميل", c => /when would you like to travel/i.test(c.wire || "") && !/[\u0600-\u06FF]/.test(c.wire || "")], ["اللغة محفوظة", c => c.intake.lang === "en"], ["السجل عربي", c => /[\u0600-\u06FF]/.test(c.reply)]],
+  } as any,
+  {
+    id: "lang-en-owner-wait", entry: "message", sessionIntakeActive: false, title: "٨ نوفمبر: إنجليزي + سؤال ما يعرفه → «One moment, please.» (الترجمة المعتمدة، بلا نموذج ترجمة)",
+    history: PROG_HIST, customer: "Do we need a visa for Saudi Arabia?", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("x", "ask_owner")],
+    expect: [["One moment", c => ((c.wire || "").split("\n")[0] || "").trim() === "One moment, please."], ["بلا ترجمة آلية", c => c.translateCalls === 0], ["تنبيه", c => OWNER_QS(c) === 1], ["تنبيه المالكة يبقى عربي", c => /سؤال ما عرف طلال يرد عليه/.test(c.wire || "")], ["التنبيه يقول إنه إنجليزي", c => /العميل يكتب إنجليزي/.test(c.wire || "")]],
+  } as any,
+  {
+    id: "lang-en-partner-intro", entry: "message", title: "٨ نوفمبر: إنجليزي، أول تواصل، تعاون واضح → التعريف + الرقم بالإنجليزي المعتمد",
+    history: [["C", "Hello"], ["T", "أهلاً وسهلاً، حياك الله، آمرني"]], customer: "We are a travel agency and want to cooperate with you",
+    model: [JSON.stringify({ messages: [], fields: {}, complete: false, sender_type: "partnership" })],
+    expect: [["الترجمة المعتمدة", c => (c.wire || "").includes("Welcome! This is Talal from customer service. For cooperation and partnerships, please contact our management directly at +601111136864, and they'll be happy to assist you.")]],
+  } as any,
+  {
+    id: "lang-back-to-ar", entry: "message", sessionIntakeActive: false, title: "٨ نوفمبر: كان إنجليزي ورجع كتب عربي → يرد عربي",
+    history: PROG_HIST, customer: "نحتاج فيزا؟", intakeData: { ...DONE, program_final_code: "MK-2026-008", lang: "en" }, model: [FU("x", "ask_owner")],
+    expect: [["عربي", c => ((c.wire || "").split("\n")[0] || "").trim() === "لحظات أستاذي"], ["تنبيه المالكة يبقى عربي", c => /سؤال ما عرف طلال/.test(c.wire || "")], ["اللغة رجعت عربي", c => c.intake.lang === "ar"]],
+  } as any,
+  {
+    id: "lang-short-keeps", entry: "message", sessionIntakeActive: false, title: "٨ نوفمبر: كان إنجليزي وكتب «ok?» بس → يبقى إنجليزي",
+    history: PROG_HIST, customer: "visa?", intakeData: { ...DONE, program_final_code: "MK-2026-008", lang: "en" }, model: [FU("x", "ask_owner")],
+    expect: [["إنجليزي", c => ((c.wire || "").split("\n")[0] || "").trim() === "One moment, please."]],
+  } as any,
+  {
+    id: "lang-hello-stays-ar", entry: "message", title: "٨ نوفمبر: «Hello» بس (كثير من العرب يبدون فيها) → يبقى عربي",
+    history: [], customer: "Hello", model: [M("x")],
+    expect: [["عربي", c => /[\u0600-\u06FF]/.test(c.wire || "")], ["ما انحفظ إنجليزي", c => c.intake.lang !== "en"]],
+  } as any,
+  {
+    id: "owner-alert-email", entry: "followup", title: "٨ نوفمبر (المالكة): تنبيه السؤال يوصل كمان على إيميلها + رابط واتساب جاهز للرد",
+    history: PROG_HIST, customer: "نحتاج فيزا للسعودية؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("x", "ask_owner")],
+    expect: [["إيميل لـ gmail", c => (c.emails || []).some(e => JSON.stringify(e.to).includes("latifahmunassar@gmail.com") && /#1/.test(String(e.subject)))],
+      ["فيه السؤال", c => (c.emails || []).some(e => /نحتاج فيزا للسعودية/.test(String(e.text)))],
+      ["رابط الرد", c => (c.emails || []).some(e => String(e.text).includes("https://wa.me/96891171630?text=%231%20"))]],
+  },
+  {
+    id: "owner-alert-group", entry: "followup", title: "٨ نوفمبر (المالكة): قروب التنبيهات الخاص مضبوط → التنبيه ينحط في طابور الجسر للقروب (مع رابط الرد)",
+    history: PROG_HIST, customer: "نحتاج فيزا للسعودية؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("x", "ask_owner")],
+    tables: { wa_settings: [{ key: "owner_alert_group_jid", value: "120363000000000001@g.us" }] },
+    expect: [["❌ ما يرسل لرقم المالكة (القروب يكفي)", c => !/سؤال ما عرف طلال/.test(c.wire || "")], ["في طابور الجسر للقروب", c => (c.db.outgoing_messages || []).some((r: any) => r.to === "120363000000000001@g.us" && r.account === "bank-notice" && r.status !== "sent" && /#1/.test(r.body) && /نحتاج فيزا/.test(r.body) && r.body.includes("https://wa.me/96891171630?text=%231%20"))]],
+  },
+  {
+    id: "owner-alert-no-group", entry: "followup", title: "٨ نوفمبر: القروب مو مضبوط → ❌ لا شي في طابور الجسر",
+    history: PROG_HIST, customer: "نحتاج فيزا للسعودية؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("x", "ask_owner")],
+    expect: [["بلا طابور", c => !(c.db.outgoing_messages || []).length], ["يرسل لرقم المالكة (ما فيه قروب)", c => /سؤال ما عرف طلال/.test(c.wire || "")]],
   },
 ];

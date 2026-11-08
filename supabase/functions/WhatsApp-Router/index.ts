@@ -110,6 +110,88 @@ async function describeCustomerImage(mediaId: string): Promise<string> {
   } catch (_e) { return IMG_UNREADABLE; }
 }
 
+// 🎤 ٨ نوفمبر ٢٠٢٦ (قرار المالكة — سؤال ٧): رسالة صوتية → تتحول لكتابة (داخلي: تظهر للموظفات بالداشبورد، ❌ لا تنرسل للعميل)
+//    → طلال يفهمها ويتأكد من العميل: «فهمت من رسالتك إنك…، صحيح؟» → «ايوه/صحيح» = يكمّل بنص الصوت كأنه مكتوب؛
+//    «لا» → «المعذرة أستاذي، ممكن توضح لي طلبك أكثر؟». الصوت مو واضح/التحويل فشل → يطلب منه يكتب.
+//    التحويل عبر OpenAI (OPENAI_API_KEY)؛ بدون المفتاح = «ما وضح لي الصوت…».
+const VOICE_UNCLEAR_MSG = "المعذرة أستاذي، ما وضح لي الصوت، ممكن تكتب لي طلبك كتابة؟";
+const VOICE_CLARIFY_MSG = "المعذرة أستاذي، ممكن توضح لي طلبك أكثر؟";
+async function transcribeVoice(mediaId: string, lang: "ar" | "en" = "ar"): Promise<string> {
+  const key = (Deno.env.get("OPENAI_API_KEY") || "").trim();
+  if (!key || !mediaId) return "";
+  try {
+    const got = await fetchMetaMedia(mediaId);
+    if (!got || !got.bytes.length) return "";
+    const mime = String(got.mime || "audio/ogg").split(";")[0].trim() || "audio/ogg";
+    const ext = /mpeg|mp3/.test(mime) ? "mp3" : /mp4|m4a|aac/.test(mime) ? "m4a" : /wav/.test(mime) ? "wav" : /webm/.test(mime) ? "webm" : "ogg";
+    // gpt-4o-transcribe أدق باللهجة (تجربة ٨ نوفمبر: «عمرة» صح)؛ موقوف ٢٦ فبراير ٢٠٢٧ → احتياط gpt-transcribe. محاولتين لكل نموذج (أخطاء 5xx متقطعة).
+    for (const model of ["gpt-4o-transcribe", "gpt-transcribe"]) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const fd = new FormData();
+        fd.append("file", new Blob([got.bytes as unknown as BlobPart], { type: mime }), "voice." + ext);
+        fd.append("model", model);
+        fd.append("language", lang);   // 🌐 عميل إنجليزي → en
+        fd.append("prompt", "رسالة صوتية من عميل لوكالة سفر عمانية، باللهجة الخليجية/العمانية: عمرة، مكة، المدينة، الحرم، فندق، طيران، تايلاند، ماليزيا، أشخاص، أطفال، ليالي، تاريخ السفر.");
+        try {
+          const ac = new AbortController(); const tm = setTimeout(() => ac.abort(), 40_000);
+          const r = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: fd, signal: ac.signal });
+          clearTimeout(tm);
+          if (r.ok) { const j = await r.json(); const t = String(j?.text || "").trim(); if (t) return t.slice(0, 2000); break; }
+          console.error("transcribe failed", model, r.status, (await r.text()).slice(0, 200));
+          if (r.status < 500 && r.status !== 429) break;   // خطأ دائم (نموذج موقوف/طلب خاطئ) → النموذج التالي
+        } catch (e) { console.error("transcribe error", model, (e as Error).message); }
+      }
+    }
+    return "";
+  } catch (e) { console.error("transcribe error", (e as Error).message); return ""; }
+}
+async function handleVoiceNote(a: { supabase: ReturnType<typeof createClient>; from: string; profileName: string; transcript: string }): Promise<void> {
+  const { supabase, from, profileName } = a;
+  const transcript = String(a.transcript || "").trim();
+  const { data: _s } = await supabase.from("whatsapp_sessions").select("intake_active, stage, intake_data, last_outbound_at, last_outbound_body").eq("phone", from).maybeSingle();
+  const sess = _s as { intake_active?: boolean | null; stage?: string; intake_data?: Record<string, unknown>; last_outbound_at?: string | null; last_outbound_body?: string | null } | null;
+  const idata = (sess?.intake_data || {}) as Record<string, unknown>;
+  // نفس شروط رد طلال على الرسائل المكتوبة: عميل جديد/جمع معلومات، أو محادثة على وضع الذكاء الكامل.
+  const fresh = sess?.intake_active === true || (sess != null && sess.intake_active == null && sess.stage === "new" && !sess.last_outbound_at && !sess.last_outbound_body);
+  if (idata.staff_takeover === true) return;
+  if (!fresh && !(await isFullAiNumber(supabase, from))) return;
+  const _send = async (msg: string, action: string) => {
+    await sendWhatsapp(from, msg);
+    try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: msg, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+    await logGuard(supabase, from, "voice_note", action, "", 1, transcript.slice(0, 300), msg);
+  };
+  let clear = false, greetingOnly = false, summary = "";
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (transcript && apiKey) {
+    try {
+      const anthropic = new Anthropic({ apiKey });
+      const res = await anthropic.messages.create({
+        model: "claude-haiku-4-5-20251001", max_tokens: 200,
+        system: "أنت طلال من خدمة عملاء وكالة سفر عمانية. هذا نص رسالة صوتية من عميل بعد تحويلها لكتابة آلياً (ممكن فيها أخطاء تحويل). " +
+          "أعد JSON فقط بهذا الشكل: {\"clear\": true|false, \"greeting_only\": true|false, \"summary\": \"...\"}. " +
+          "clear=false لو النص فاضي أو مو مفهوم أو ما فيه طلب/سؤال واضح. greeting_only=true لو مجرد سلام/تحية بلا أي طلب. " +
+          "summary = اللي فهمته من طلبه بجملة قصيرة جداً بلهجة خليجية مهذبة تبدأ بـ«إنك» (مثل: «إنك تبي عمرة لـ٤ أشخاص بتاريخ ١٠ ديسمبر» أو «إنك تسأل هل البرنامج شامل الطيران»). " +
+          "اكتب فقط اللي قاله فعلاً، ❌ لا تضيف معلومة من عندك، وبلا «أستاذي» وبلا «صحيح؟».",
+        messages: [{ role: "user", content: "نص الرسالة الصوتية: «" + transcript + "»" }],
+      });
+      let txt = ""; for (const blk of res.content) if ((blk as { type?: string }).type === "text") txt += (blk as { text?: string }).text || "";
+      const m = txt.match(/\{[\s\S]*\}/);
+      const j = m ? JSON.parse(m[0]) : {};
+      clear = j.clear === true; greetingOnly = j.greeting_only === true;
+      summary = String(j.summary || "").trim().replace(/^فهمت\s*من\s*رسالتك\s*/, "").replace(/[،,.\s]*(?:صحيح|صح)?\s*[؟?.!]*\s*$/, "").trim();
+    } catch (e) { console.error("voice summarize", (e as Error).message); }
+  }
+  // سلام/تحية بس → نعاملها كأنها مكتوبة مباشرة (ما تحتاج تأكيد).
+  if (transcript && greetingOnly) { await handleMessage({ supabase, from, profileName, body: transcript }); return; }
+  if (!transcript || !clear || !summary) { await _send(VOICE_UNCLEAR_MSG, "unclear"); return; }
+  if (!/^إن/.test(summary)) summary = "إنك " + summary;
+  let introduced = true;
+  try { const { data: _po } = await supabase.from("wa_admin_messages").select("id").eq("customer_phone", from).limit(1); introduced = ((_po || []) as unknown[]).length > 0; } catch (_e) { /* */ }
+  const msg = (introduced ? "" : "حياك الله، معك طلال من خدمة العملاء، ") + `فهمت من رسالتك ${summary}، صحيح؟`;
+  try { await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, pending_voice: { text: transcript, at: new Date().toISOString() } } }).eq("phone", from); } catch (_e) { /* */ }
+  await _send(msg, "confirm");
+}
+
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 // نرد على ويبهوك Meta بـ 200 سريع (الرسائل الصادرة نرسلها عبر Graph REST
@@ -120,9 +202,26 @@ const OK_RESPONSE = () => new Response("OK", { status: 200, headers: { "Content-
 // حتى 9 صباحاً. خلالها لا موظفين متاحين، فلا يرسل طلال رداً يوحي بردّ بشري خلال
 // دقائق («أكون معك»)؛ بدلاً منه رسالة صادقة أن الرد سيصل أول الصباح.
 function isOmanQuietHours(): boolean {
-  const omanHour = (new Date().getUTCHours() + 4) % 24;   // عُمان = UTC+4
+  const _fakeH = (globalThis as { __omanHourForTests?: number }).__omanHourForTests;   // للاختبارات فقط
+  const omanHour = typeof _fakeH === "number" ? _fakeH : (new Date().getUTCHours() + 4) % 24;   // عُمان = UTC+4
   return omanHour >= 1 && omanHour < 9;                   // [1:00 , 9:00)
 }
+// 🌙 ٨ نوفمبر ٢٠٢٦ (قرار المالكة): «ليل طلال» لقواعد الأسئلة والموظفة = من ١٢ منتصف الليل حتى ٨ الصبح بتوقيت عُمان.
+function isTalalNight(): boolean {
+  const _fakeH = (globalThis as { __omanHourForTests?: number }).__omanHourForTests;
+  const h = typeof _fakeH === "number" ? _fakeH : (new Date().getUTCHours() + 4) % 24;
+  return h >= 0 && h < 8;
+}
+// 🤝 ٨ نوفمبر ٢٠٢٦ (قرار المالكة): تعاون/شراكات/تسويق/مكاتب سفر → رقم الإدارة الماليزي؛ سؤال عن الإدارة بلا سبب → نسأل السبب أول.
+const PARTNER_MSG = "حياك الله، بخصوص التعاون والشراكات تقدر تتواصل مع الإدارة مباشرة على الرقم ‎+601111136864 وبيخدمونك إن شاء الله.";
+const ASK_REASON_MSG = "حياك الله، ممكن أعرف بخصوص إيش عشان أخدمك؟";
+const NON_CUSTOMER_MSG = "حياك الله، بنوصل رسالتك للإدارة";
+const PARTNER_NATURE_MSG = "حياك الله، ممكن أعرف طبيعة التعاون اللي حاب تقدمه؟";
+// أول تواصل (طلال ما عرّف بنفسه بالمحادثة) → التعريف أول الرسالة (قرار المالكة).
+function _withIntro(m: string, introduced: boolean): string {
+  return introduced ? m : m.replace(/^حياك الله،\s*/, "حياك الله، معك طلال من خدمة العملاء، ");
+}
+const SENDER_TYPE_DESC = "customer=عميل/طلب رحلة أو سؤال عن رحلة · partnership=تعاون **طبيعته واضحة**: تعاون شركات/تقديم برامج سياحية/تسويق/إعلان/مؤثر، أو المرسل مكتب سفر/شركة سياحة/وكالة (يبي يحجز لعملائه أو يتعاون) · partnership_vague=يبي تعاون/شراكة بس **ما وضّح طبيعته** («نبي نتعاون معكم»، «عندي عرض تعاون») · asks_management=يطلب يكلّم المدير/المديرة/الإدارة/المسؤول/صاحب الشركة أو يطلب رقمهم **بدون ما يذكر السبب** · non_customer=رسالة مو عن رحلة ومو من اللي فوق (شركة اتصالات، مورّد يسأل عن طلب، توظيف، دعاية، فواتير…)";
 const OMAN_OFF_HOURS_MSG =
   "أهلاً أستاذي 🌙 فريقنا خارج ساعات العمل حالياً، ونرد على استفسارك أول الصباح بإذن الله 🙏";
 
@@ -929,8 +1028,98 @@ function splitForWhatsApp(text: string, maxLen = 4000): string[] {
 // للموظفة سبب عدم وصول الرسالة/الملف بدل «تم» الكاذبة. أفضل-جهد (قد يُداس عند
 // إرسالين متزامنين) لكنه كافٍ للتشخيص؛ نجاح/فشل الإرسال نفسه يُحدَّد من القيمة المُعادة.
 let lastWhatsappError = "";
+// 🌐 ٨ نوفمبر ٢٠٢٦ (قرار المالكة — سؤال ٨): العميل يكتب إنجليزي → طلال يرد إنجليزي.
+//    المنطق كله يبقى بالعربي (السجل wa_admin_messages عربي، والحرّاس تقارن نصوص عربية)، والترجمة عند حدّ الإرسال فقط
+//    (sendWhatsapp) ولرسائل طلال فقط: _custLang يتفعّل للعميل أثناء معالجة رسالته / إرسال برنامجه، ❌ مو لرسائل الموظفات
+//    أو ردّ المالكة الحرفي. الرسائل الثابتة لها ترجمة معتمدة من المالكة (_enFixed)؛ غيرها → Haiku بنفس الأسلوب.
+const _custLang = new Map<string, number>();   // phone → عدد المعالجات الشغالة بالإنجليزي
+function detectMsgLang(text: string): "ar" | "en" | null {
+  const t = String(text || "").replace(/https?:\/\/\S+/g, "").replace(/[A-Z]{2,3}-\d{4}-\d+/g, "");
+  const ar = (t.match(/[؀-ۿ]/g) || []).length;
+  if (ar >= 2) return "ar";
+  const la = (t.match(/[A-Za-z]/g) || []).length;
+  const words = (t.match(/[A-Za-z]{2,}/g) || []).length;
+  if (ar === 0 && la >= 8 && words >= 2) return "en";   // «Hello»/«ok» وحدها ما تكفي (كثير من العرب يبدون فيها)
+  return null;
+}
+async function updateCustLang(supabase: ReturnType<typeof createClient>, phone: string, text: string): Promise<"ar" | "en"> {
+  let stored = "";
+  let idata: Record<string, unknown> = {};
+  try { const { data } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", phone).maybeSingle(); idata = (((data as { intake_data?: Record<string, unknown> } | null)?.intake_data) || {}) as Record<string, unknown>; stored = String(idata.lang || ""); } catch (_e) { /* */ }
+  const d = detectMsgLang(text);
+  if (d && d !== (stored || "ar")) { try { await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata, lang: d } }).eq("phone", phone); } catch (_e) { /* */ } }
+  return (d || (stored === "en" ? "en" : "ar"));
+}
+async function withCustLang<T>(supabase: ReturnType<typeof createClient>, phone: string, text: string | null, fn: () => Promise<T>): Promise<T> {
+  let on = false;
+  try {
+    const lang = text === null
+      ? await (async () => { const { data } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", phone).maybeSingle(); return String((((data as { intake_data?: Record<string, unknown> } | null)?.intake_data) || {}).lang || ""); })()
+      : await updateCustLang(supabase, phone, text);
+    if (lang === "en") { _custLang.set(phone, (_custLang.get(phone) || 0) + 1); on = true; }
+  } catch (_e) { /* */ }
+  try { return await fn(); }
+  finally { if (on) { const n = (_custLang.get(phone) || 1) - 1; if (n > 0) _custLang.set(phone, n); else _custLang.delete(phone); } }
+}
+const TALAL_INTRO_AR = "حياك الله، معك طلال من خدمة العملاء، ";
+function _enFixed(): Record<string, string> {
+  return {
+    "وعليكم السلام، حياك الله، معك طلال من خدمة العملاء، آمرني": "Wa alaikum assalam, welcome! This is Talal from customer service. How can I help you?",
+    "أهلاً وسهلاً، حياك الله، معك طلال من خدمة العملاء، آمرني": "Hello and welcome! This is Talal from customer service. How can I help you?",
+    "أهلاً وسهلاً، حياك الله، آمرني": "Hello and welcome back! How can I help you?",
+    [OWNER_WAIT_MSG]: "One moment, please.",
+    [OWNER_WAIT_AGAIN]: "Sorry for the delay. Your question is with our management team, and we'll get back to you as soon as possible.",
+    [INTAKE_DEFER_MSG]: "I'll answer any other questions you have, but let me set up your program first. Anything you'd like to ask later, I'm here for you.",
+    [OWNER_NIGHT_MSG]: "My colleague on the day shift will answer these questions for you. Do you have any other questions?",
+    [OWNER_NIGHT_CLOSE]: "I've passed all your questions to my colleagues, and they'll answer them as soon as they start their shift. Best regards, and take care.",
+    [STAFF_NIGHT_MSG]: "Our day team will answer all your questions as soon as they start their shift, God willing.",
+    [HUMAN_DAY_MSG]: "Certainly! One of our colleagues will contact you as soon as possible.",
+    [HUMAN_NIGHT_MSG]: "Certainly! One of our colleagues will contact you as soon as our working hours begin.",
+    [PARTNER_MSG]: "Welcome! For cooperation and partnerships, please contact our management directly at +601111136864, and they'll be happy to assist you.",
+    [PARTNER_NATURE_MSG]: "Welcome! May I know what kind of cooperation you'd like to offer?",
+    [ASK_REASON_MSG]: "Welcome! May I know what this is regarding, so I can help you?",
+    [NON_CUSTOMER_MSG]: "Welcome! We'll pass your message on to our management.",
+    [VOICE_CLARIFY_MSG]: "Sorry, could you explain your request a bit more?",
+    [VOICE_UNCLEAR_MSG]: "Sorry, the voice message wasn't clear. Could you please type your request?",
+    "تفضل أستاذي، برنامجك صار جاهز. أي تعديل في البرنامج أنا حاضر.": "Here you go, your program is ready. If you'd like any changes, I'm here for you.",
+  };
+}
+async function toEnglish(body: string): Promise<string> {
+  const src = String(body || "").trim();
+  if (!src || !/[؀-ۿ]/.test(src)) return body;
+  const fx = _enFixed();
+  const norm = (x: string) => x.replace(/‎/g, "").trim();
+  for (const [ar, en] of Object.entries(fx)) if (norm(ar) === norm(src)) return en;
+  // التعريف بأول تواصل («حياك الله، معك طلال من خدمة العملاء، …») + رسالة ثابتة
+  if (src.startsWith(TALAL_INTRO_AR)) {
+    const rest = src.slice(TALAL_INTRO_AR.length).trim();
+    for (const [ar, en] of Object.entries(fx)) {
+      const arRest = ar.replace(/^حياك الله،\s*/, "");
+      if (norm(arRest) === norm(rest)) return "Welcome! This is Talal from customer service. " + en.replace(/^Welcome!\s*/, "");
+    }
+  }
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey) return body;
+  try {
+    const glossary = Object.entries(fx).map(([a, e]) => `«${a}» → «${e}»`).join("\n");
+    const anthropic = new Anthropic({ apiKey });
+    const res = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001", max_tokens: 1500,
+      system: "TALAL_TRANSLATE_EN — Translate this WhatsApp message from Talal (customer service at an Omani travel agency) into natural, warm, polite, concise English. " +
+        "Keep numbers, prices, currencies, dates, program codes, hotel names, phone numbers, links and emojis exactly. Don't add sir/madam (translate «أستاذي» by just being polite). " +
+        "«حياك الله» → «Welcome!» only at the start of a first message, otherwise omit. Keep line breaks. Output ONLY the translation.\nApproved translations to reuse:\n" + glossary,
+      messages: [{ role: "user", content: src }],
+    });
+    let txt = ""; for (const blk of res.content) if ((blk as { type?: string }).type === "text") txt += (blk as { text?: string }).text || "";
+    txt = txt.trim();
+    return txt || body;
+  } catch (e) { console.error("translate en", (e as Error).message); return body; }
+}
+
 async function sendWhatsapp(to: string, body: string, mediaUrl?: string): Promise<string | null> {
   lastWhatsappError = "";
+  // 🌐 عميل إنجليزي (أثناء معالجة طلال له فقط) → ترجمة عند الإرسال.
+  if (body && (_custLang.get(to) || 0) > 0 && /[\u0600-\u06FF]/.test(body)) { try { body = await toEnglish(body); } catch (_e) { /* يرسل العربي */ } }
   const token = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
   const phoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
   if (!token || !phoneNumberId) {
@@ -1306,18 +1495,38 @@ async function checkInboundSilence(
 // إيميل حساب Resend نفسه — قناة onboarding@resend.dev ترسل له فقط بلا تحقق دومين.
 // لتحويله لـgmail: فعّلي تحويلاً من info@alezzgroup.net، أو تحقّقي من الدومين في Resend.
 const ALERT_EMAIL_TO = "info@alezzgroup.net";
-async function sendAlertEmail(subject: string, text: string): Promise<boolean> {
+async function sendAlertEmail(subject: string, text: string, to: string = ALERT_EMAIL_TO): Promise<boolean> {
   try {
     const key = (Deno.env.get("RESEND_API_KEY") || "").trim();
     if (!key) { console.warn("RESEND_API_KEY غير مضبوط — تنبيه الإيميل تخطّي"); return false; }
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Authorization": "Bearer " + key, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: "onboarding@resend.dev", to: ALERT_EMAIL_TO, subject, text }),
+      body: JSON.stringify({ from: "onboarding@resend.dev", to, subject, text }),
     });
-    if (!r.ok) { console.error("Resend alert email failed", r.status, (await r.text()).slice(0, 200)); return false; }
+    if (!r.ok) {
+      console.error("Resend alert email failed", to, r.status, (await r.text()).slice(0, 200));
+      // قناة onboarding@resend.dev ترسل لإيميل صاحب الحساب فقط → لو رفض العنوان الثاني، نرسل لإيميل الحساب بدله.
+      if (to !== ALERT_EMAIL_TO) return await sendAlertEmail(subject, `(ما قدرنا نرسله لـ ${to} — Resend يحتاج تحقق الدومين)\n\n` + text, ALERT_EMAIL_TO);
+      return false;
+    }
     return true;
   } catch (e) { console.error("sendAlertEmail error", e); return false; }
+}
+// ❓ ٨ نوفمبر ٢٠٢٦ (المالكة): تنبيهات طلال للمالكة تروح كمان على إيميلها (نافذة الـ٢٤ ساعة تمنع واتساب أحياناً).
+const OWNER_ALERT_EMAIL = "latifahmunassar@gmail.com";
+let _talalNumberCache = "";
+async function talalWaNumber(): Promise<string> {
+  if (_talalNumberCache) return _talalNumberCache;
+  try {
+    const token = (Deno.env.get("WHATSAPP_ACCESS_TOKEN") || "").trim(); const id = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
+    if (!token || !id) return "";
+    const r = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${id}?fields=display_phone_number`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) return "";
+    const j = await r.json();
+    _talalNumberCache = String(j?.display_phone_number || "").replace(/[^0-9]/g, "");
+  } catch (_e) { /* */ }
+  return _talalNumberCache;
 }
 
 // ── فحص صحة الويبهوك الفعّال (الحل الجذري لانقطاع الاستقبال الصامت) ────────
@@ -1529,12 +1738,14 @@ const INTAKE_TOOL = {
     fields: { type: "object", properties: {
       destination: _S, pax: { type: ["number", "null"] }, date: _S, ages: _S, cities: _S, nights: _S, days: { type: ["number", "null"] },
       return_airport: { type: "string", enum: ["", "madinah", "jeddah"], description: "العمرة: مطار العودة لو العميل حدّده" } } },
+    sender_type: { type: "string", enum: ["customer", "partnership", "partnership_vague", "asks_management", "non_customer"], description: SENDER_TYPE_DESC },
+    owner_question: { type: "string", description: "سؤال العميل اللي ما عندك جوابه (فيزا/أوراق رسمية/حجز/دفع/خصم/طيران دولي/أي معلومة مو عندك) — اكتبه هنا و❌ لا تجاوب عليه في messages. فاضي لو ما فيه." },
     complete: { type: "boolean" } } },
 };
 const FOLLOWUP_TOOL = {
   name: "talal_followup", description: "ردّ طلال بعد إرسال البرنامج + نوع الإجراء + الحقول المعدّلة فقط.",
   input_schema: { type: "object", required: ["message", "action"], properties: {
-    message: _S, action: { type: "string", enum: ["reply", "modify", "resend_program", "handoff"] },
+    message: _S, action: { type: "string", enum: ["reply", "modify", "resend_program", "handoff", "ask_owner", "partnership", "partnership_vague", "asks_management", "non_customer"] },
     frustration: { type: "string", enum: ["none", "misunderstood", "customer_wrong", "talal_error"], description: "العميل متضايق؟ وليش" },
     fields: { type: "object", properties: { pax: { type: ["number", "null"] }, ages: _S, date: _S, nights: _S, days: { type: ["number", "null"] }, cities: _S, destination: _S,
       return_airport: { type: "string", enum: ["", "madinah", "jeddah"] } } } } },
@@ -1641,6 +1852,22 @@ function _varyPostMsg(m: string, timesBefore: number): string {
   }
   return m;
 }
+// ٧ نوفمبر ٢٠٢٦ (المالكة): مرفق لا يسلّمه واتساب للـAPI (عرض مرة واحدة / مُعاد توجيه /
+// type=unsupported) — ما في وسيط ننزّله إطلاقاً، فكان العميل يحسب صورته وصلت وينتظر.
+// طلال يرد فوراً ويطلب إعادة الإرسال، مرة وحدة كل ١٠ دقائق للعميل (لو أرسل عدة مرفقات دفعة).
+const UNSUPPORTED_ATTACH_REPLY = "عذراً، المرفق اللي أرسلته ما وصلنا بسبب إعدادات واتساب 🙏\nفضلاً أعد إرساله كصورة عادية (بدون خاصية «عرض مرة واحدة»)، أو كملف PDF.";
+async function replyUnsupportedAttachment(supabase: ReturnType<typeof createClient>, phone: string): Promise<boolean> {
+  try {
+    const since = new Date(Date.now() - 10 * 60e3).toISOString();
+    const { data: prev } = await supabase.from("wa_admin_messages").select("body, sent_at")
+      .eq("customer_phone", phone).eq("sent_by", "طلال").gte("sent_at", since).limit(20);
+    if (((prev || []) as Array<{ body?: string }>).some(r => String(r.body || "") === UNSUPPORTED_ATTACH_REPLY)) return false;
+    const sid = await sendCustomerReply(supabase, phone, UNSUPPORTED_ATTACH_REPLY);
+    if (sid) await supabase.from("wa_admin_messages").insert({ twilio_sid: sid, customer_phone: phone, body: UNSUPPORTED_ATTACH_REPLY, sent_by: "طلال", sent_at: new Date().toISOString() });
+    return !!sid;
+  } catch (e) { console.error("unsupported-attach reply", (e as Error).message); return false; }
+}
+
 async function sendPostProgramMessages(supabase: ReturnType<typeof createClient>, phone: string, msgs0: string[]): Promise<void> {
   let msgs = msgs0;
   try {
@@ -1814,7 +2041,7 @@ const _HOW_ARE_YOU = /(?:^|[\s،,—-])(?:(?:وش|شنو|شو|ايش|إيش)\s*(
 const _OPENER = /^(حاضر|[أا]بشر|تمام|[أا]كيد|طيب|زين|ولا\s+يهمك)(?![ء-ي])[\s،,.!—-]*/;
 const _normOpener = (w: string) => w.replace(/[أإآ]/g, "ا").replace(/\s+/g, " ");
 const _ASKED_WHO = /مين\s*(?:[أا]نت|انت|معي)|(?:[إا]نت|[أا]نت)\s*مين|مع\s*مين\s*[أا]تكلم|(?:[إا]نت|[أا]نت)\s*(?:بوت|روبوت|آلي)|منو\s*(?:[أا]نت|معي)/;
-function guardAutofix(text: string, ctx?: { alreadyGreeted?: boolean; lastCustomer?: string; lastTalal?: string }): { text: string; hits: string[] } {
+function guardAutofix(text: string, ctx?: { alreadyGreeted?: boolean; lastCustomer?: string; lastTalal?: string; introduced?: boolean }): { text: string; hits: string[] } {
   const hits: string[] = [];
   // الإيموجي يُجرَّد قبل الحُرّاس (كان يُجرَّد لاحقاً في stripBannedPhrases) حتى لا يعيق
   // مطابقة بداية الرسالة («حياك الله 🌟 معك طلال»). لا يُسجَّل كتدخّل — سلوك قائم.
@@ -1823,7 +2050,8 @@ function guardAutofix(text: string, ctx?: { alreadyGreeted?: boolean; lastCustom
     const before = t;
     const custSalam = /السلام\s+عليكم|سلام\s+عليكم/.test(String(ctx.lastCustomer || ""));
     if (!(custSalam && /^وعليكم\s+السلام/.test(t))) t = t.replace(_GREET_LEAD, "");
-    t = t.replace(/[\s،,—-]*معك\s+طلال(?:\s+من\s+خدمة\s+العملاء)?[\s،,.!—-]*/g, "، ");
+    // ٨ نوفمبر ٢٠٢٦ (المالكة): طلال ما عرّف بنفسه قبل بالمحادثة (introduced=false) → نُبقي «معك طلال».
+    if (ctx.introduced !== false) t = t.replace(/[\s،,—-]*معك\s+طلال(?:\s+من\s+خدمة\s+العملاء)?[\s،,.!—-]*/g, "، ");
     t = t.replace(/^[\s،,.!—-]+/, "").replace(/([،,])\s*[،,—-]+/g, "$1").replace(/[\s،,—-]+$/, "").trim();
     if (t !== before && t) hits.push("regreet"); else if (!t) t = before;
   }
@@ -2432,6 +2660,23 @@ async function handleNewLeadIntake(args: {
   const _lastTalalTs = Math.max(0, ...msgs.filter(m => m.who === "طلال").map(m => Date.parse(m.ts) || 0));
   const _unseenCust = _lastSeenIn ? msgs.filter(m => m.who === "العميل" && (Date.parse(m.ts) || 0) > _lastSeenIn) : [];
   const _missedCust = _unseenCust.filter(m => (Date.parse(m.ts) || 0) < _lastTalalTs);
+  // 📞 ٨ نوفمبر ٢٠٢٦ (قرار المالكة): يطلب يكلم موظف/اتصال أثناء الاستقبال → «أبشر…» + تنبيه المالكة (بلا سؤال استقبال).
+  {
+    const _tail: string[] = []; for (let k = msgs.length - 1; k >= 0 && msgs[k].who !== "طلال"; k--) _tail.unshift(msgs[k].body);
+    const _hb = (_tail.length ? _tail.join("\n") : String(args.body || "")).trim();
+    if (wantsHuman(_hb)) {
+      const _pd = { ...(prev as Record<string, unknown>) };
+      const step = humanReqStep(_pd);
+      try { await supabase.from("whatsapp_sessions").update({ intake_data: { ..._pd, owner_hold: step.hold } }).eq("phone", from); } catch (_e) { /* */ }
+      if (step.msg) {
+        await sendWhatsapp(from, step.msg);
+        try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: step.msg, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+      }
+      await logGuard(supabase, from, "human_request", "ack", "intake", 1, _hb, step.msg || "");
+      await askOwner(supabase, { from, question: _hb, dest: String((_pd as Record<string, unknown>).destination || ""), stage: "human", recent: transcript.slice(-900) });
+      return;
+    }
+  }
   const today = new Date().toISOString().slice(0, 10);
   // رقم عُماني (+968)؟ — سؤال مطار المغادرة للعمرة (صلالة/مسقط) حصريّ لهم.
   const isOmani = /^whatsapp:\+?968/.test(String(from));
@@ -2455,6 +2700,7 @@ async function handleNewLeadIntake(args: {
     || /العرض|عرضكم|عرض[كم]|الباق[ةه]|الباكج|package|وش\s*في(?:ه)?\s*العرض|شو\s*(?:في(?:ه)?|متوفر)/i.test(transcript);
   // هل سبق أن ردّ طلال في هذه المحادثة؟ (لتفادي تكرار التعريف/الترحيب كل رسالة)
   let alreadyGreeted = ((outboundRes.data || []) as Row[]).some(m => !!m.body);
+  const _introduced = ((outboundRes.data || []) as Row[]).some(m => /معك\s+طلال/.test(String(m.body || "")));
 
   // ── إعلان فيه كود برنامج جاهز: نعرض البرنامج نفسه (بعملة العميل) بدل أسئلة الاستقبال ──
   // يشتغل مرة واحدة أول ما يجي العميل من إعلان يحمل كوداً في الكابشن/العنوان.
@@ -2601,6 +2847,8 @@ async function handleNewLeadIntake(args: {
       .update({ greeted: true }).eq("phone", from).eq("greeted", false).select("phone");
     if (!claim || (claim as unknown[]).length === 0) return; // خسرنا السباق — معالجة أخرى ترحّب الآن
   }
+  const _kbDest = String((prev as Record<string, unknown>).destination || "") || String(extractDestination(String(args.body || "")) || "");
+  const _kbIntake = ownerKbBlock(await ownerKbFor(supabase, _kbDest), _kbDest);
   const sys = `أنت «طلال»، موظف خدمة عملاء لوكالة سفر، تتكلم بلهجة خليجية ودودة ومختصرة (لا فصحى).
 ⛔⛔⛔ **ممنوع منعاً باتاً الفصحى إطلاقاً** — تكلّم لهجة خليجية عُمانية بحتة مثل أي إنسان على واتساب. أمثلة على كلمات فصحى **محرّمة** وبديلها الخليجي (لا تستخدم اليسار أبداً):
   • «نحن» → «احنا» · «أنتم» → «انتو» · «متخصصون/مختصون» → «متخصصين» · «فضلاً/تفضّل بـ» → «لو سمحت» أو احذفها · «سوف» → «راح/بـ» · «قد» احذفها · «يرجى» → «لو تكرمت» · «كي/لكي» → «عشان» · «الذي/التي» → «اللي» · «أريد أن» → «أبي» · «هل تريد» → «تبي؟» · «يمكنك» → «تقدر» · «سعركم يعتمد على» → «السعر يعتمد على».
@@ -2633,7 +2881,8 @@ ${returning
 - ⚠️ ممنوع منعاً باتاً أي مدح أو تعليق أو عبارة حماس/تأكيد قبل سؤالك. لا تقل نهائياً: «حلو / ممتاز / جميل / رائع / اختيار موفق / تمام تمام / تمام نمرة واحدة / نمرة واحدة / حلو الاختيار / ما شاء الله». ❌ لا تبدأ ردك بأي مجاملة أو تأكيد — ابدأ مباشرة بـ«حياك الله/أبشر/حاضر» (للأدب فقط) ثم السؤال، أو بالسؤال مباشرة. كن مباشراً ومحترفاً.
 - ردودك قصيرة جداً: سؤال واحد مختصر، بلا ملخصات ولا علامات ✓ ولا كلام زائد — **الاستثناء الوحيد** هو ملخّص التأكيد الأخير (القاعدة أدناه) عند اكتمال كل المعلومات.
 - ⚠️ نوّع صياغتك ولا تجعلها قالباً آلياً: ❌ لا تبدأ **كل** رسالة بنفس الكلمة (حاضر/أبشر)، ولا تكرر «شكراً على المعلومة/التواصل» كل مرة. تكلّم طبيعي ومتنوّع مثل موظف بشري. ❌❌ **ممنوع منعاً باتاً أي إيموجي أو رموز إطلاقاً** (لا 🌟 ولا 🙏 ولا غيرها)، ❌ ولا أي تشكيل/حركات، ❌ ولا تكرار «أستاذي». كتابة بشرية بسيطة فقط.
-- ⚠️ لو طلب العميل **التحدث مع شخص/موظف**، أو قال إنه ما يبي رد آلي/تلقائي، أو إنه هو نفسه مكتب/شركة سفر → لا تكمل أسئلة الاستقبال، اجعل complete=true وردّ رسالة واحدة فقط: «حاضر، بيتواصل معك زميلنا مباشرة».
+- ⚠️ لو طلب العميل **التحدث مع شخص/موظف**، أو قال إنه ما يبي رد آلي/تلقائي → لا تكمل أسئلة الاستقبال، اجعل complete=true وردّ رسالة واحدة فقط: «حاضر، بيتواصل معك زميلنا مباشرة».
+- 🤝 **sender_type (إلزامي)**: ${SENDER_TYPE_DESC}. لو مو customer → اترك messages فاضية (النظام يرد بالصيغة المعتمدة). مكتب/شركة سفر = partnership.
 - مثال صحيح: «كم عدد المسافرين؟» — مثال خاطئ (ممنوع): «تايلند اختيار حلو! كم عدد المسافرين؟».
 - اسأل عن معلومة ناقصة واحدة فقط في كل رد (الأهم أولاً: الوجهة ثم العدد ثم التاريخ ثم الأعمار ثم مدينة الوصول/المغادرة).
 - 📷📷 **العميل أرسل صورة عرض (يظهر بالسجل كـ«أرسل العميل صورة هذا العرض: …»):** الوجهة والمدن وعدد الأيام **معروفة من الصورة** → ❌❌ ممنوع تسأل «وين تسافرون» أو عن الوجهة؛ استخدمها مباشرة. رحّب واسأل **فقط الناقص**: «حياك الله حاضر بخصوص عرض [الوجهة] — كم عدد المسافرين؟ ومتى تاريخ السفر؟». لو العرض فيه عدد أيام محدّد اعتبره المدة (لا تسأل عنها).
@@ -2684,7 +2933,10 @@ ${returning
     : "🕋 **مكة لحالها ولا مع المدينة؟ اسأل هذا (إن لم يحدّد العميل):** «تبي مكة لحالها ولا حاب أضيف لك المدينة المنورة؟». • لو **مكة فقط**: ⛔⛔ لو العميل **أعطى مدى تاريخي (من–إلى) أو عدد ليالٍ إجمالي** فالمدة معروفة، و«مكة فقط» يعني **كل الليالي في مكة تلقائياً** → ❌❌❌ ممنوع تسأل «كم ليلة في مكة» (الجواب = كل المدة)؛ اعتبر التوزيع مكتملاً. اسأل «كم ليلة في مكة؟» **فقط** لو المدة غير معروفة. • لو **الاثنتين** → اسأل التوزيع «كم ليلة في مكة وكم في المدينة؟». ولو أعطى التوزيع من البداية (مثل «3 مكة 2 المدينة») فمكتمل ولا تسأل. ⚠️ المدة بـ«الليالي/الأيام» فقط — ❌❌ ممنوع كلمة «سنة» أو «سنوات» إطلاقاً."}
      (هـ) **أعمار الأطفال** فقط لو ذكر أطفالاً.
      ❌❌ ممنوع في العمرة تسأل عن: الوجهة، ولا المطار لغير العُماني. ⛔⛔ **إلزامي قبل الإقفال: عدد الليالي/الأيام في مكة (وفي المدينة إن أضافها).** ❌❌ ممنوع منعاً باتاً تقفل (complete=true) قبل ما تعرف **كم ليلة/يوم في مكة** — حتى لو العميل من إعلان أو قال «كامل البرنامج»؛ لازم تسأله «كم ليلة تبون في مكة؟» (وكم في المدينة إن اختارها). ⛔ **استثناءان لا تسأل فيهما عن الليالي:** (١) أعطى **مدى تاريخي** (من–إلى) أو عدد ليالٍ إجمالي **واختار مكة فقط** → كل الليالي بمكة تلقائياً، مكتمل. (٢) أعطى توزيعاً صريحاً. عند اكتمال (العدد + التاريخ + **عدد الليالي/التوزيع** + المطار إن عُماني) اشكره وأقفل.
-- لو كان كلام العميل شكوى أو سؤال عام (مو حجز)، لا تضغط بأسئلة الاستقبال — ردّ بلطف إن زميلنا بيتواصل معه، واجعل complete=true.
+- لو كان كلام العميل شكوى، لا تضغط بأسئلة الاستقبال — ردّ بلطف إن زميلنا بيتواصل معه، واجعل complete=true.
+- ❓ **سؤال من العميل أثناء جمع المعلومات** (قرار المالكة ٨ نوفمبر ٢٠٢٦): لو جوابه عندك (من «أجوبة الإدارة المعتمدة» لنفس الوجهة، أو الطقس/الأماكن العامة) → جاوبه باختصار وكمّل بسؤالك التالي عادي.
+  لو **ما عندك جوابه** (فيزا/تأشيرة/أوراق رسمية/حجز/دفع/خصم/طيران دولي/أسعار/أي معلومة مو عندك) → ❌❌ لا تجاوب من عندك أبداً ولا تخمّن؛ اكتب سؤاله في owner_question،
+  وmessages = سؤالك التالي من أسئلة الاستقبال **فقط** (النظام يضيف قبله جملة التأجيل). ❌ لا تقفل (complete) بسببه.${_kbIntake}
 - 📢📢 **العميل من إعلان ويطلب العرض — أرسل العرض فوراً (لا تجمع معلومات قبله):** لو طلب العميل العرض (عروض/العرض/شو متوفر/ابي اشوف) → استوثق «تقصد عرض [الوجهة] اللي شفته بالإعلان؟» ولمّا يؤكّد **يُرسَل ملف العرض مباشرة** (النظام يرسله). ❌❌ ممنوع تجمع منه تاريخ/عدد/ليالي **قبل** إرسال العرض؛ العرض جاهز ويُرسَل أولاً. **بعد إرسال الملف** ادعُه لإضافة تفاصيله: «إذا عندك تاريخ معيّن أو تفاصيل ثانية حاب تضيفها بلّغني عشان أرتّب لك برنامج بناءً عليه». • إن أعطاك بعدها تاريخاً/عدداً/تفاصيل → اجمعها بهدوء (بلا فورمة إلزامية) وطمئنه أن زميلنا بيجهّز له البرنامج المخصّص. • ⚠️ لو **اعترض بشيء غامض ما فهمته** → «حاضر أستاذي بحوّل ملاحظتك لزميلنا المختص وراح يرد عليك قريباً».
 - 🤔🤔 **استوثِق قبل الملخّص عند أي التباس (إلزامي):** لو كانت المعلومات **متناقضة** (مثل تاريخين مختلفين، أو عدد يتعارض، أو وجهة تتعارض مع المدن)، أو **الكتابة غير واضحة/مبهمة**، أو العميل **طلب أشياء كثيرة ولم يحسم** ما يريده بالضبط — ❌ **لا ترسل الكرت/الملخّص**؛ اسأله سؤال استيضاح واحد مباشر **«تقصد كذا؟ ولا كذا؟»** حتى يتّضح، وبعد ما **يؤكّد** انتقل للملخّص. ومتى **بدّل معلومة سبق أعطاها** (وجهة/عدد/تاريخ) أكّد التبديل صراحةً «تقصد تبي تغيّره إلى كذا بدل كذا؟» قبل ما تعتمده. (الوجهة والعدد لهما حارسان خادميّان يفرضان ذلك.)
 - ⚠️⚠️ **ملخّص التأكيد قبل الإقفال (إلزامي):** متى اكتملت كل الأساسيات (الوجهة + عدد المسافرين [+ أعمار الأطفال إن وُجدوا] + التاريخ [+ عدد الليالي/التوزيع للعمرة]) **ولا التباس معلّق** **لا تقفل فوراً**. أرسل رسالة واحدة فيها ملخّص المعلومات واطلب التأكيد. ❌❌ في رسالة الملخّص **ممنوع منعاً باتاً تعرّف بنفسك («معك طلال») أو ترحّب أو تحيّي** — ابدأ مباشرة بـ«خليني أتأكد...». بهذا الشكل:
@@ -2702,7 +2954,7 @@ ${returning
 • nights = عدد الليالي/الأيام أو التوزيع (مثل «٤ ليالي» أو «٣ مكة ٢ المدينة»). للعمرة **إلزامي** لأن السعر بالليلة. لو أعطى العميل مدى تاريخي (من–إلى) احسب الليالي وضعها هنا. وإلا "".
 • days = **عدد أيام الرحلة** (رقم فقط). لغير العمرة **مطلوب لبناء البرنامج** — اسأله «كم يوم تبون الرحلة؟» بعد التاريخ. لو أعطى مدى تاريخي (من–إلى) احسب الأيام تلقائياً. العمرة تستخدم nights بدلها.
 حيث messages عادةً **رسالة واحدة فقط** — الإنسان الحقيقي يرسل رسالة وحدة لا رسالتين متتاليتين بنفس الثانية. ❌ لا تقسّم ردك إلى رسالتين.`;
-  let out: { reply?: string; messages?: unknown; fields?: Record<string, unknown>; complete?: boolean } | null = null;
+  let out: { reply?: string; messages?: unknown; fields?: Record<string, unknown>; complete?: boolean; owner_question?: string } | null = null;
   // ── خط أنابيب حُرّاس الرفض: نولّد الرد، نفحصه مقابل الحقائق، ولو خالف نرجّعه
   //    للنموذج مع سبب الرفض ونعيد التوليد (حتى محاولتين)، وبعدها → معاينة بشرية.
   let _guardForcePreview = false;
@@ -2791,6 +3043,29 @@ ${returning
   let outMsgs: string[] = [];
   if (Array.isArray(out.messages)) outMsgs = (out.messages as unknown[]).map(x => String(x || "").trim()).filter(Boolean);
   else if (out.reply) outMsgs = [String(out.reply).trim()];
+  // 🤝 ٨ نوفمبر ٢٠٢٦ (قرار المالكة): مرسل مو عميل → صيغ ثابتة (تعاون/مكاتب → الرقم الماليزي، الإدارة بلا سبب → نسأل، غيرها → للإدارة + تنبيه).
+  {
+    const _stp = String((out as { sender_type?: unknown }).sender_type || "customer");
+    // سألناه «بخصوص إيش؟» / «طبيعة التعاون؟» وما وضّح → «لحظات أستاذي» + تنبيه المالكة (❌ لا رقم).
+    const _askedReason = msgs.some(m => m.who === "طلال" && (m.body.trim().endsWith(ASK_REASON_MSG.replace(/^حياك الله،\s*/, "")) || m.body.trim().endsWith(PARTNER_NATURE_MSG.replace(/^حياك الله،\s*/, ""))));
+    if ((_stp === "asks_management" || _stp === "partnership_vague") && _askedReason) {
+      const _st = ownerHoldStep(prev as Record<string, unknown>);
+      if (_st.msg) { await sendWhatsapp(from, _st.msg); try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: _st.msg, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ } }
+      await supabase.from("whatsapp_sessions").update({ intake_data: { ...((prev || {}) as Record<string, unknown>), owner_hold: _st.hold, sender_type: _stp, last_seen_in_ts: new Date().toISOString() }, last_message_at: new Date().toISOString() }).eq("phone", from);
+      await askOwner(supabase, { from, question: "يطلب يكلّم الإدارة وما ذكر السبب: «" + String(args.body || "") + "»", dest: "", stage: "non_customer", recent: msgs.slice(-6).map(m => m.who + ": " + String(m.body || "").slice(0, 200)).join("\n") + "\nالمرسل: " + String(args.body || "").slice(0, 300) });
+      return;
+    }
+    if (_stp === "partnership" || _stp === "partnership_vague" || _stp === "asks_management" || _stp === "non_customer") {
+      const _m = _withIntro(_stp === "partnership" ? PARTNER_MSG : _stp === "partnership_vague" ? PARTNER_NATURE_MSG : _stp === "asks_management" ? ASK_REASON_MSG : NON_CUSTOMER_MSG, msgs.some(m => m.who === "طلال" && /معك\s+طلال/.test(m.body)));
+      await sendWhatsapp(from, _m);
+      try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: _m, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+      await logGuard(supabase, from, "sender_type", _stp, "", 1, String(args.body || ""), _m);
+      const _pd = { ...((prev || {}) as Record<string, unknown>), sender_type: _stp, last_seen_in_ts: new Date().toISOString() };
+      await supabase.from("whatsapp_sessions").update({ intake_data: _pd, ...(_stp === "asks_management" || _stp === "partnership_vague" ? {} : { intake_active: false }), last_message_at: new Date().toISOString() }).eq("phone", from);
+      if (_stp === "non_customer") await askOwner(supabase, { from, question: String(args.body || ""), dest: "", stage: "non_customer", recent: msgs.slice(-6).map(m => m.who + ": " + String(m.body || "").slice(0, 200)).join("\n") + "\nالمرسل: " + String(args.body || "").slice(0, 300) });
+      return;
+    }
+  }
 
   // ── تصحيح الوجهة (خادميّ — منع مطلق للاختلاق): النموذج قد يخترع اسم دولة
   // خاطئ رغم أن المدن تدل على وجهة أخرى (مثال حقيقي: «الإمارات» بينما المدن
@@ -3417,10 +3692,22 @@ ${returning
     const _q = _missedCust.map(m => m.body.trim()).filter(Boolean).slice(-1)[0] || "";
     if (_q) outMsgs = [`آه صحيح، الحين انتبهت إنك ذكرت «${_q.length > 60 ? _q.slice(0, 60) + "…" : _q}».`, ...outMsgs];
   }
+  // ❓ ٨ نوفمبر ٢٠٢٦ (قرار المالكة): سؤال ما يعرف جوابه أثناء جمع المعلومات → جملة التأجيل + نكمل الأسئلة، وتنبيه المالكة.
+  //    ما فيه طلب رحلة أصلاً (لا وجهة ولا عدد) → «لحظات أستاذي» بدل التأجيل.
+  {
+    const _oq = String((out as { owner_question?: unknown } | null)?.owner_question || "").trim();
+    if (_oq && upd.intake_active !== false) {
+      const _hasTrip = !!String(_mergedData.destination || "").trim() || Number(_mergedData.pax) > 0;
+      const _alreadyDeferred = msgs.some(m => m.who === "طلال" && m.body.includes(INTAKE_DEFER_MSG.slice(0, 30)));
+      if (_hasTrip) { if (!_alreadyDeferred) outMsgs = [INTAKE_DEFER_MSG, ...outMsgs.filter(m => String(m).trim() !== INTAKE_DEFER_MSG)]; }
+      else { const _st = ownerHoldStep(_mergedData as Record<string, unknown>); _mergedData.owner_hold = _st.hold; outMsgs = _st.msg ? [_st.msg] : []; try { await supabase.from("whatsapp_sessions").update({ intake_data: _mergedData }).eq("phone", from); } catch (_e) { /* */ } }
+      await askOwner(supabase, { from, question: _oq, dest: String(_mergedData.destination || ""), stage: "intake", recent: msgs.slice(-6).map(m => m.who + ": " + String(m.body || "").slice(0, 200)).join("\n") + "\nالعميل: " + String(args.body || "").slice(0, 300) });
+    }
+  }
   for (const raw of outMsgs.slice(0, 3)) {
     // تصحيح تلقائي (أستاذي/تشكيل/فصحى/صياغة ركيكة/ترحيب مكرر/سؤال الحال/تكرار الافتتاح) قبل تنظيف العبارات الممنوعة.
-    const _af = guardAutofix(String(raw), { alreadyGreeted, lastCustomer: _lastCustBody, lastTalal: _lastTalalBody });
-    const _apolA = /^إلا فيه فنادق في الأبراج، الحين أرسل لك إياه\.$|^حاضر، أبشر، برسل لك الحين خيار (?:ثاني|ثالث)|^أعتذر منك أستاذي|^إيه نعم أستاذي|^تمام، أبشر، شوية والبرنامج عندك\.$|^حاضر، برسل لك العرض اللي عندنا\.$|^وبرسل لك كمان عرض ثاني بالفندق الموصى به\.$|^حاضر، برسل لك عرضين|^وإذا لك تعليق أو تعديل أنا حاضر\.$/.test(String(raw));   // صيغ المالكة الحرفية — بلا تنظيف
+    const _af = guardAutofix(String(raw), { alreadyGreeted, lastCustomer: _lastCustBody, lastTalal: _lastTalalBody, introduced: _introduced });
+    const _apolA = /^إلا فيه فنادق في الأبراج، الحين أرسل لك إياه\.$|^حاضر، أبشر، برسل لك الحين خيار (?:ثاني|ثالث)|^أعتذر منك أستاذي|^إيه نعم أستاذي|^تمام، أبشر، شوية والبرنامج عندك\.$|^حاضر، برسل لك العرض اللي عندنا\.$|^وبرسل لك كمان عرض ثاني بالفندق الموصى به\.$|^حاضر، برسل لك عرضين|^وإذا لك تعليق أو تعديل أنا حاضر\.$|^لحظات أستاذي$|^المعذرة على التأخير أستاذي، استفسارك عند الإدارة وبنرد عليك في أقرب وقت$/.test(String(raw));   // صيغ المالكة الحرفية — بلا تنظيف
     const msg = _apolA ? String(raw) : stripBannedPhrases(_af.text);
     if (!msg) continue; // لو الرسالة كانت كلها عبارات ممنوعة، تجاهلها
     if (_af.hits.length && !_apolA) await logGuard(supabase, from, "autofix:" + _af.hits.join("+"), "autofix", "", 1, String(raw), msg);
@@ -3504,7 +3791,8 @@ ${returning
         const _fromDigits = from.replace(/[^0-9]/g, "");
         const _isTestNum = _getSetting("auto_program_test_numbers").split(/[,\s]+/)
           .map(n => n.replace(/[^0-9]/g, "")).some(d => d.length >= 6 && _fromDigits.endsWith(d));
-        if ((_replyMode || _isTestNum) && prog.priceReady) {
+        const _fullAi = _isTestNum || await isFullAiNumber(supabase, from);   // ٨ نوفمبر: بند «الذكاء الاصطناعي» = إرسال لكل العملاء
+        if ((_replyMode || _fullAi) && prog.priceReady) {
           // 📄 «معاينة مع رد» → نُدرِج مهمة PDF: عامل المتصفح الخفي (على جهاز البوت)
           //    يطلّع الـPDF من team.html بحساب «مولّد البرامج» ويرسله للعميل. لو
           //    ما فيه كود (فشل الحفظ) → fallback: نرسل العرض المنسّق نصّاً.
@@ -3711,12 +3999,181 @@ async function _selfCorrectProgram(supabase: ReturnType<typeof createClient>, ph
   return issues;
 }
 
+// ❓ ٨ نوفمبر ٢٠٢٦ (قرار المالكة): سؤال ما يعرف طلال جوابه (مو في البرنامج/معلومات العميل/أجوبة الإدارة المحفوظة)
+//    → ❌ لا يرد من عنده أبداً؛ «لحظات أستاذي» للعميل + تنبيه واتساب لرقم المالكة. ردّها يوصل للعميل **حرفياً**،
+//    و«احفظها» تحفظ الجواب **لنفس الوجهة فقط** (نفس السؤال لوجهة ثانية → يسألها من جديد).
+//    التخزين في wa_settings: owner_q:<ms> (الأسئلة) و owner_kb:<ms> (الأجوبة المحفوظة) و owner_alert_phone.
+const OWNER_ALERT_DEFAULT = "96877428881";
+const OWNER_WAIT_MSG = "لحظات أستاذي";
+const OWNER_WAIT_AGAIN = "المعذرة على التأخير أستاذي، استفسارك عند الإدارة وبنرد عليك في أقرب وقت";   // ٨ نوفمبر (المالكة): الرسالة الثانية؛ الثالثة → سكوت
+const OWNER_NIGHT_MSG = "زميلي في الشيفت النهاري راح يرد على استفساراتك هذه، هل عندك أي استفسارات أخرى؟";
+const OWNER_NIGHT_CLOSE = "خلاص حوّلت جميع استفساراتك لزملائي، وبإذن الله أول ما يبدأون الدوام يردون على جميع استفساراتك. تحياتي لك، وفي أمان الله.";
+const INTAKE_DEFER_MSG = "أي استفسارات أخرى برد فيها عليك، بس خليني أضبط لك البرنامج بالأول، وأي شي راح تستفسر عنه لاحقاً أنا حاضر.";
+const OWNER_RAW_RE = /^لحظات أستاذي$|^المعذرة على التأخير أستاذي، استفسارك عند الإدارة وبنرد عليك في أقرب وقت$/;
+const STAFF_NIGHT_MSG = "أخي الكريم، إن شاء الله الزملاء في النهار أول ما يبدأون الدوام راح يردون على جميع استفساراتك.";
+
+function _ownerDestKey(d: string): string {
+  const s = String(d || "").trim();
+  if (!s) return "";
+  if (_isUmrahDest(s)) return "العمرة";
+  return extractDestination(s) || s;
+}
+async function ownerAlertPhone(supabase: ReturnType<typeof createClient>): Promise<string> {
+  let v = OWNER_ALERT_DEFAULT;
+  try { const { data } = await supabase.from("wa_settings").select("value").eq("key", "owner_alert_phone").maybeSingle(); const x = String((data as { value?: unknown } | null)?.value ?? "").replace(/[^0-9]/g, ""); if (x.length >= 8) v = x; } catch (_e) { /* */ }
+  return "whatsapp:+" + (v.length === 8 ? "968" + v : v);
+}
+async function _isOwnerPhone(supabase: ReturnType<typeof createClient>, from: string): Promise<boolean> {
+  const o = (await ownerAlertPhone(supabase)).replace(/[^0-9]/g, "");
+  return from.replace(/[^0-9]/g, "") === o;
+}
+type OwnerQ = { key: string; n: number; phone: string; name?: string; dest: string; code?: string; question: string; status: string; at: string; answer?: string; answered_at?: string; saved?: boolean; stage?: string };
+async function _ownerRows(supabase: ReturnType<typeof createClient>, prefix: "owner_q:" | "owner_kb:"): Promise<Array<{ key: string; value: Record<string, unknown> }>> {
+  try {
+    const { data } = await supabase.from("wa_settings").select("key, value").like("key", prefix + "%");
+    return ((data || []) as Array<{ key: string; value: unknown }>).filter(r => String(r.key).startsWith(prefix))
+      .map(r => ({ key: r.key, value: (typeof r.value === "string" ? (() => { try { return JSON.parse(r.value as string); } catch { return {}; } })() : (r.value || {})) as Record<string, unknown> }));
+  } catch (_e) { return []; }
+}
+async function ownerKbFor(supabase: ReturnType<typeof createClient>, dest: string): Promise<Array<{ question: string; answer: string; note: string }>> {
+  const k = _ownerDestKey(dest);
+  if (!k) return [];
+  return (await _ownerRows(supabase, "owner_kb:")).map(r => r.value).filter(v => String(v.dest || "") === k)
+    .map(v => ({ question: String(v.question || ""), answer: String(v.answer || ""), note: String(v.note || "") }));
+}
+function ownerKbBlock(rows: Array<{ question: string; answer: string; note: string }>, dest: string): string {
+  if (!rows.length) return "";
+  return `\n📚 أجوبة الإدارة المعتمدة لوجهة ${_ownerDestKey(dest)} (لو سأل العميل نفس السؤال **لنفس الوجهة** → جاوب بها بالضبط، بلا تحويل):\n` +
+    rows.map(r => `• س: ${r.question}\n  ج: ${r.answer}${r.note && r.note !== r.answer ? `\n  (ملاحظة الإدارة: ${r.note})` : ""}`).join("\n") + "\n";
+}
+// يسجّل السؤال وينبّه المالكة. يرجّع رقم السؤال (#n).
+async function askOwner(supabase: ReturnType<typeof createClient>, a: { from: string; profileName?: string; question: string; dest: string; code?: string; stage: string; recent?: string }): Promise<number> {
+  const rows = await _ownerRows(supabase, "owner_q:");
+  const n = rows.reduce((m, r) => Math.max(m, Number(r.value.n) || 0), 0) + 1;
+  const at = new Date().toISOString();
+  const dk = _ownerDestKey(a.dest);
+  try { await supabase.from("wa_settings").insert({ key: "owner_q:" + Date.now() + "-" + n, value: { n, phone: a.from, name: a.profileName || "", dest: dk, code: a.code || "", question: a.question, status: "pending", at, stage: a.stage }, updated_at: at }); } catch (_e) { /* */ }
+  let _enCust = false;
+  try { const { data: _ls } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", a.from).maybeSingle(); _enCust = String((((_ls as { intake_data?: Record<string, unknown> } | null)?.intake_data) || {}).lang || "") === "en"; } catch (_e) { /* */ }
+  const body = (a.stage === "non_customer" ? `📨 رسالة مو من عميل — #${n}\n` : a.stage === "human" ? `📞 العميل يطلب يكلم موظف/اتصال — #${n}\n` : `❓ سؤال ما عرف طلال يرد عليه — #${n}\n`) +
+    `العميل: ${a.from.replace(/^whatsapp:\+?/, "")}${a.profileName ? ` (${a.profileName})` : ""}\n` +
+    `الوجهة: ${dk || "غير محددة"}${a.code ? ` · البرنامج: ${a.code}` : ""}${a.stage === "intake" ? " · (أثناء جمع المعلومات)" : ""}\n` +
+    `سؤاله: «${a.question.slice(0, 500)}»\n` +
+    (a.recent ? `\nآخر الرسائل:\n${a.recent.slice(-900)}\n` : "") +
+    (_enCust ? `\n🌐 العميل يكتب إنجليزي — ردّك يوصله حرفياً، فاكتبيه بالإنجليزي.\n` : "") +
+    `\n✍️ اكتبي الرد وأرسله للعميل حرفياً${n > 1 ? ` (لو تردين على سؤال غير الأخير ابدئي بـ #${n})` : ""}.\n` +
+    `ولو تبين طلال يحفظ الجواب لوجهة ${dk || "هذي"}، أضيفي «احفظها».`;
+  // 👥 ٨ نوفمبر ٢٠٢٦ (المالكة): قروب التنبيهات مضبوط → يكفي (بلا تكرار على رقمها). بدون قروب → رقمها كالسابق.
+  let _groupJid = "";
+  try { const { data: _g0 } = await supabase.from("wa_settings").select("value").eq("key", "owner_alert_group_jid").maybeSingle(); const gj0 = String((_g0 as { value?: unknown } | null)?.value ?? "").trim(); if (/^\d+@g\.us$/.test(gj0)) _groupJid = gj0; } catch (_e) { /* */ }
+  if (!_groupJid) { try { await sendWhatsapp(await ownerAlertPhone(supabase), body); } catch (_e) { /* */ } }
+  try {
+    let to = OWNER_ALERT_EMAIL;
+    try { const { data } = await supabase.from("wa_settings").select("value").eq("key", "owner_alert_email").maybeSingle(); const x = String((data as { value?: unknown } | null)?.value ?? "").trim(); if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)) to = x; } catch (_e) { /* */ }
+    const num = await talalWaNumber();
+    const link = num ? `\n\n↩️ للرد على العميل اضغطي هنا (ينفتح واتساب على رقم طلال وفيه #${n} جاهزة، اكتبي ردك وأرسليه):\nhttps://wa.me/${num}?text=%23${n}%20\n\nولو تبين طلال يحفظ الجواب لنفس الوجهة، أضيفي «احفظها» في آخر ردك.` : `\n\n↩️ للرد: أرسلي لرقم طلال من واتسابك «#${n} ردك».`;
+    const full = body.replace(/\n✍️[\s\S]*$/, "").trim() + link;
+    await sendAlertEmail(body.split("\n")[0], full, to);
+    // 👥 ٨ نوفمبر ٢٠٢٦ (المالكة): قروب واتساب خاص للتنبيهات عبر الجسر (الرقم الماليزي، بلا نافذة ٢٤ ساعة).
+    //    نفس طابور إشعارات البنك (account='bank-notice') اللي يسحبه حارس 601 كل ٩٠ث → بلا تعديل/إعادة تشغيل للجسر.
+    //    رقم القروب إعداد: wa_settings.owner_alert_group_jid (فاضي = بلا قروب).
+    if (_groupJid) { try { await supabase.from("outgoing_messages").insert({ to: _groupJid, body: full, source: "text", account: "bank-notice", status: "pending", send_after: new Date().toISOString() }); } catch (_e) { /* */ } }
+  } catch (_e) { /* */ }
+  await logGuard(supabase, a.from, "owner_question", "alert", `#${n} ${dk} | ${a.stage}`, 1, a.question, "");
+  return n;
+}
+// حالة الانتظار عند العميل (intake_data.owner_hold) → أي رسالة تنرسل له الحين (أو null = سكوت).
+function ownerHoldStep(idata: Record<string, unknown>): { msg: string | null; hold: Record<string, unknown> } {
+  const now = new Date().toISOString();
+  const st = (idata.owner_hold && typeof idata.owner_hold === "object") ? idata.owner_hold as Record<string, unknown> : null;
+  const fresh = st && (Date.now() - (Date.parse(String(st.at || "")) || 0)) < 12 * 3600e3;
+  const night = isTalalNight();
+  if (!st || !fresh) return { msg: night ? OWNER_NIGHT_MSG : OWNER_WAIT_MSG, hold: { at: now, night, count: 1 } };
+  const count = (Number(st.count) || 1) + 1;
+  if (st.night === true || night) {
+    if (st.closed === true) return { msg: null, hold: { ...st, count } };
+    return { msg: OWNER_NIGHT_CLOSE, hold: { ...st, night: true, closed: true, count } };
+  }
+  return { msg: count === 2 ? OWNER_WAIT_AGAIN : null, hold: { ...st, count } };
+}
+// 📞 ٨ نوفمبر ٢٠٢٦ (قرار المالكة — مؤقت، بتغيّر الرد لاحقاً): العميل يطلب يكلم موظف/إنسان أو اتصال
+//    → «أبشر أستاذي، بيتواصل معك زميلنا في أقرب وقت» (بالليل: «…أول ما يبدأ الدوام…») + تنبيه المالكة.
+//    تكرار الطلب وهو ينتظر → نفس تسلسل الانتظار (ownerHoldStep: «المعذرة على التأخير…» مرة، بعدها سكوت).
+const HUMAN_DAY_MSG = "أبشر أستاذي، بيتواصل معك زميلنا في أقرب وقت";
+const HUMAN_NIGHT_MSG = "أبشر أستاذي، أول ما يبدأ الدوام بيتواصل معك زميلنا";
+const HUMAN_REQ_RE = new RegExp([
+  "(?:ابي|أبي|ابغى|أبغى|ابغا|أبغا|بغيت|اريد|أريد|ودي|حاب|ممكن|أقدر|اقدر|نبي|نبغى)\\s*(?:ا|أ|ن)?(?:كلم|تكلم|حكي|تواصل)\\s*(?:مع\\s*)?(?:ال)?(?:موظف[ةه]?|شخص|انسان|إنسان|بشر|بشري|احد|أحد|حد|مسؤول|خدم[ةه]\\s*العملاء)",
+  "(?:ابي|أبي|ابغى|أبغى|ابغا|أبغا|اريد|أريد|ممكن|نبي|نبغى|ودي)\\s*(?:\\S+\\s*)?(?:مكالم[ةه]|اتصال)",
+  "(?:اتصلوا|اتصلو|اتصل|تتصلون|تتصلوا|تتصل|كلموني|كلمني|تكلموني|دقوا|دقو|دق)\\s*(?:علي|عليّ|عليه|فيني|لي|بي)(?:\\s|$|[.!؟?،,])",
+  "(?:ابي|أبي|ابغى|أبغى|ودي|نبي)\\s*(?:احد|أحد|حد|موظف[ةه]?)\\s*(?:ي|ت)?(?:كلمني|تصل\\s*(?:علي|عليّ|بي)|يتواصل\\s*معي)",
+  "\\b(?:talk|speak)\\s+(?:to|with)\\s+(?:a\\s+)?(?:human|agent|person|someone|staff|representative)",
+  "\\bcall\\s+me\\b",
+].join("|"), "i");
+function wantsHuman(text: string): boolean {
+  return HUMAN_REQ_RE.test(String(text || "").replace(/[\u064B-\u0652]/g, ""));
+}
+// يرجّع الرسالة اللي تنرسل للعميل (أو null = سكوت) وحالة الانتظار الجديدة.
+function humanReqStep(idata: Record<string, unknown>): { msg: string | null; hold: Record<string, unknown> } {
+  const st = (idata.owner_hold && typeof idata.owner_hold === "object") ? idata.owner_hold as Record<string, unknown> : null;
+  const fresh = st && (Date.now() - (Date.parse(String(st.at || "")) || 0)) < 12 * 3600e3;
+  if (fresh) return ownerHoldStep(idata);
+  const night = isTalalNight();
+  return { msg: night ? HUMAN_NIGHT_MSG : HUMAN_DAY_MSG, hold: { at: new Date().toISOString(), night, count: 1, human: true, ...(night ? { closed: true } : {}) } };
+}
+// ردّ المالكة على التنبيه (من رقمها). يرجّع false لو ما فيه سؤال معلّق/حفظ → تُعامل رسالتها كالمعتاد.
+async function handleOwnerReply(supabase: ReturnType<typeof createClient>, from: string, text0: string): Promise<boolean> {
+  const t = String(text0 || "").trim();
+  if (!t) return false;
+  const saveRe = /(?:^|[\s،,.\-])احفظ(?:ها|ه|يها|يه)?\s*[.!]*$/;
+  const save = saveRe.test(t) || /^احفظ(?:ها|ه|يها|يه)?(?:\s|$|[:،,])/.test(t);
+  let body = t.replace(/^احفظ(?:ها|ه|يها|يه)?\s*[:،,\-]?\s*/, "").replace(saveRe, "").trim();
+  const rows = (await _ownerRows(supabase, "owner_q:")).map(r => ({ ...(r.value as unknown as OwnerQ), key: r.key }));
+  const pending = rows.filter(r => r.status === "pending").sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  const mN = body.match(/^#\s*([0-9٠-٩]+)\s*[:،,\-]?\s*/);
+  let target: OwnerQ | undefined = pending[0];
+  if (mN) { const nn = parseInt(arabicToAsciiDigits(mN[1]), 10); target = pending.find(r => Number(r.n) === nn); body = body.slice(mN[0].length).trim(); if (!target) { await sendWhatsapp(from, `ما لقيت سؤال معلّق برقم #${nn}`); return true; } }
+  const _saveKb = async (q: OwnerQ, answer: string, note: string) => {
+    const at = new Date().toISOString();
+    try { await supabase.from("wa_settings").insert({ key: "owner_kb:" + Date.now(), value: { dest: q.dest, question: q.question, answer, note, at, from_q: q.n }, updated_at: at }); } catch (_e) { /* */ }
+    try { await supabase.from("wa_settings").update({ value: { ...q, key: undefined, saved: true } }).eq("key", q.key); } catch (_e) { /* */ }
+    await logGuard(supabase, q.phone, "owner_kb_saved", "save", `#${q.n} ${q.dest}`, 1, q.question, answer);
+  };
+  if (target && body) {
+    await sendWhatsapp(target.phone, body);   // حرفياً (قرار المالكة)
+    try { await supabase.from("wa_admin_messages").insert({ customer_phone: target.phone, body, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+    const upd = { ...target, key: undefined, status: "answered", answer: body, answered_at: new Date().toISOString() };
+    try { await supabase.from("wa_settings").update({ value: upd }).eq("key", target.key); } catch (_e) { /* */ }
+    // آخر سؤال معلّق لهذا العميل انرد عليه → نرفع حالة الانتظار عنه.
+    if (!pending.some(r => r.key !== target!.key && r.phone === target!.phone)) {
+      try { const { data: s } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", target.phone).maybeSingle(); const d = { ...(((s as { intake_data?: Record<string, unknown> } | null)?.intake_data) || {}) }; delete d.owner_hold; await supabase.from("whatsapp_sessions").update({ intake_data: d }).eq("phone", target.phone); } catch (_e) { /* */ }
+    }
+    await logGuard(supabase, target.phone, "owner_answer", "sent", `#${target.n}`, 1, target.question, body);
+    if (save) { await _saveKb({ ...target, ...{ status: "answered", answer: body } }, body, ""); await sendWhatsapp(from, `✅ وصل الرد للعميل، وحفظته لوجهة ${target.dest || "العميل"} — نفس السؤال لنفس الوجهة يرد عليه طلال بنفسه.`); }
+    else await sendWhatsapp(from, `✅ وصل الرد للعميل (#${target.n}).\nلو تبين طلال يحفظ هذا الجواب لوجهة ${target.dest || "العميل"}، اكتبي «احفظها» (وتقدرين تضيفين معها تعليمات).`);
+    return true;
+  }
+  if (save) {
+    const last = rows.filter(r => r.status === "answered" && !r.saved && (Date.now() - (Date.parse(String(r.answered_at || "")) || 0)) < 24 * 3600e3)
+      .sort((a, b) => String(b.answered_at).localeCompare(String(a.answered_at)))[0];
+    if (!last) { await sendWhatsapp(from, "ما فيه جواب أخير أحفظه. ردّي على سؤال العميل أول، وبعدها اكتبي «احفظها»."); return true; }
+    await _saveKb(last, body || String(last.answer || ""), body);
+    await sendWhatsapp(from, `✅ حفظتها لوجهة ${last.dest || "العميل"}:\nس: ${last.question.slice(0, 200)}\nج: ${(body || String(last.answer || "")).slice(0, 300)}`);
+    return true;
+  }
+  return false;
+}
+
+// 🧠 ٨ نوفمبر ٢٠٢٦ (قرار المالكة): بند «🧠 الذكاء الاصطناعي» (ai_mode=ON) = كل العملاء يتعاملون مع طلال كامل
+//    مثل أرقام الاختبار (متابعة/تفاوض/إرسال البرنامج). محادثة موقوفة يدوياً (ai_enabled=false) → تبقى للموظف.
 async function isFullAiNumber(supabase: ReturnType<typeof createClient>, from: string): Promise<boolean> {
   try {
     const { data } = await supabase.from("wa_settings").select("value").eq("key", "auto_program_test_numbers").maybeSingle();
     const v = String((data as { value?: unknown } | null)?.value ?? "").replace(/["[\]]/g, "");
     const d = from.replace(/[^0-9]/g, "");
-    return v.split(/[,\s]+/).map(n => n.replace(/[^0-9]/g, "")).some(n => n.length >= 6 && d.endsWith(n));
+    if (v.split(/[,\s]+/).map(n => n.replace(/[^0-9]/g, "")).some(n => n.length >= 6 && d.endsWith(n))) return true;
+    if ((await getRawAiMode(supabase)) !== "ON") return false;
+    const { data: s } = await supabase.from("whatsapp_sessions").select("ai_enabled").eq("phone", from).maybeSingle();
+    return (s as { ai_enabled?: boolean | null } | null)?.ai_enabled !== false;
   } catch (_e) { return false; }
 }
 
@@ -3725,10 +4182,10 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   const text = String(args.body || "").trim();
   const [inRes, outRes, sRes] = await Promise.all([
     supabase.from("wa_message_audit").select("body, received_at").eq("from_phone", from).not("body", "is", null).order("received_at", { ascending: false }).limit(20),
-    supabase.from("wa_admin_messages").select("body, sent_at").eq("customer_phone", from).order("sent_at", { ascending: false }).limit(20),
+    supabase.from("wa_admin_messages").select("body, sent_at, sent_by").eq("customer_phone", from).order("sent_at", { ascending: false }).limit(20),
     supabase.from("whatsapp_sessions").select("intake_data, destination").eq("phone", from).maybeSingle(),
   ]);
-  type R = { body?: string | null; received_at?: string; sent_at?: string };
+  type R = { body?: string | null; received_at?: string; sent_at?: string; sent_by?: string | null };
   const msgs: Array<{ ts: string; who: string; body: string }> = [];
   for (const m of ((inRes.data || []) as R[])) if (m.body && !String(m.body).startsWith("📎")) msgs.push({ ts: m.received_at || "", who: "العميل", body: String(m.body) });
   for (const m of ((outRes.data || []) as R[])) if (m.body) msgs.push({ ts: m.sent_at || "", who: "طلال", body: String(m.body) });
@@ -3737,6 +4194,27 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     if (c >= 0) msgs.splice(0, c + 1); }
   const idata = (((sRes.data as { intake_data?: Record<string, unknown> } | null)?.intake_data) || {}) as Record<string, unknown>;
   if (idata.nights) idata.nights = _normNights(idata.nights);
+  // 👩‍💼 ٨ نوفمبر ٢٠٢٦ (قرار المالكة): محادثة ردّت فيها موظفة (بعد آخر ضبط) → بروتوكول الموظفة:
+  //    نهاراً: أول رسالة من العميل بعد آخر رد للموظفة → «لحظات أستاذي» مرة وحدة بس (الموظفة تلحق ترد)؛
+  //    الرسالة اللي بعدها والموظفة ما ردّت → طلال يرد لو عنده الجواب، وإلا «لحظات أستاذي» + تنبيه المالكة.
+  //    ليلاً: طلال يرد فوراً لو عنده الجواب؛ وإلا «أخي الكريم، إن شاء الله الزملاء…» (مرة) + تنبيه المالكة.
+  let _staffConv = false;
+  let _staffLastAt = 0;
+  {
+    const _rowsS = ((outRes.data || []) as R[]);
+    let _rst = 0; for (const r of _rowsS) if (String(r.body || "").startsWith("🔄 أُعيد ضبط المحادثة")) _rst = Math.max(_rst, Date.parse(String(r.sent_at || "")) || 0);
+    for (const r of _rowsS) { const by = String(r.sent_by || "").trim(); const at = Date.parse(String(r.sent_at || "")) || 0; if (by && !/^(?:طلال|نظام|تأكيد تلقائي)$/.test(by) && at > _rst && at > _staffLastAt) _staffLastAt = at; }
+    _staffConv = _staffLastAt > 0;
+    if (_staffConv && !isTalalNight()) {
+      const _talalAfter = _rowsS.filter(r => (Date.parse(String(r.sent_at || "")) || 0) > _staffLastAt && /^(?:طلال)$/.test(String(r.sent_by || "").trim()));
+      if (!_talalAfter.some(r => String(r.body || "").trim() === OWNER_WAIT_MSG)) {
+        await sendWhatsapp(from, OWNER_WAIT_MSG);
+        try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: OWNER_WAIT_MSG, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+        await logGuard(supabase, from, "staff_conv", "wait_once", "", 1, text, OWNER_WAIT_MSG);
+        return;
+      }
+    }
+  }
   // ٥ نوفمبر ٢٠٢٦ (قرار المالكة): المتابعة تقرأ **الطلب الحالي فقط** (من started_at) — زي الاستقبال. كان المصنّف يشوف رسائل
   //    طلبات سابقة ويقول «العميل يكرر للمرة الرابعة» على أول رسالة بالطلب الجديد.
   { const _stF = Date.parse(String(idata.started_at || ""));
@@ -3803,6 +4281,39 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   const _YY = (t = text) => _cls ? _cls.yes_no === "yes" : isYesish(t);
   const _N = (t = text) => _cls ? _cls.yes_no === "no" : isNegative(t);
   const _is = (...k: string[]) => !!_cls && k.includes(_cls.intent);
+  // ❓ ٨ نوفمبر ٢٠٢٦ (قرار المالكة): سؤال ما يعرف جوابه → «لحظات أستاذي» (أو رسائل الليل) + تنبيه المالكة. ❌ لا رد من عنده.
+  const _ownerAsk = async (question: string, why: string): Promise<void> => {
+    const step = ownerHoldStep(idata);
+    if (_staffConv && isTalalNight()) {   // ٨ نوفمبر: محادثة موظفة بالليل → رسالة الزملاء مرة وحدة بعد آخر رد للموظفة
+      const _sentNight = msgs.some(m => m.who === "طلال" && (Date.parse(m.ts) || 0) > _staffLastAt && m.body.trim() === STAFF_NIGHT_MSG);
+      step.msg = _sentNight ? null : STAFF_NIGHT_MSG;
+    }
+    idata.owner_hold = step.hold;
+    try { const { data: _ss } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", from).maybeSingle(); const _dd = ((_ss as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>; await supabase.from("whatsapp_sessions").update({ intake_data: { ..._dd, owner_hold: step.hold } }).eq("phone", from); } catch (_e) { /* */ }
+    if (step.msg) { if (!(await _say(step.msg, "owner_question", why, "", true))) return; }
+    else if (await _superseded()) return;
+    const recent = msgs.slice(-6).map(m => m.who + ": " + String(m.body || "").slice(0, 200)).join("\n");
+    await askOwner(supabase, { from, profileName, question, dest: String(facts.destination || idata.destination || ""), code: String(idata.program_final_code || ""), stage: "followup", recent });
+  };
+  // 🌙 بعد «زميلي في الشيفت النهاري… هل عندك أي استفسارات أخرى؟» والعميل قال لا/شكراً → ختام بالسلام والتحية.
+  if (_lastTalalBody.trim() === OWNER_NIGHT_MSG && (_cls ? (_is("decline", "thanks_smalltalk") || _cls.yes_no === "no") : /^\s*(?:لا|لاء|لا\s*شكرا|ما\s*عندي|بس\s*كذا|شكرا|شكراً|مشكور|تسلم|يعطيك\s*العافي)/.test(_batch))) {
+    const _h = { ...((idata.owner_hold || {}) as Record<string, unknown>), night: true, closed: true };
+    idata.owner_hold = _h;
+    try { await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata } }).eq("phone", from); } catch (_e) { /* */ }
+    await _say(OWNER_NIGHT_CLOSE, "owner_question", "night_close", "", true);
+    return;
+  }
+  // 📞 ٨ نوفمبر ٢٠٢٦ (قرار المالكة): يطلب يكلم موظف/اتصال → «أبشر…» + تنبيه المالكة.
+  if (wantsHuman(_batch)) {
+    const step = humanReqStep(idata);
+    idata.owner_hold = step.hold;
+    try { const { data: _ss } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", from).maybeSingle(); const _dd = ((_ss as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>; await supabase.from("whatsapp_sessions").update({ intake_data: { ..._dd, owner_hold: step.hold } }).eq("phone", from); } catch (_e) { /* */ }
+    if (step.msg) { if (!(await _say(step.msg, "human_request", "ack", "", true))) return; }
+    else if (await _superseded()) return;
+    const recent = msgs.slice(-6).map(m => m.who + ": " + String(m.body || "").slice(0, 200)).join("\n");
+    await askOwner(supabase, { from, profileName, question: _batch, dest: String(facts.destination || idata.destination || ""), code: String(idata.program_final_code || ""), stage: "human", recent });
+    return;
+  }
   // ✋ تعديل معلّق ينتظر «نعم» (قرار المالكة: نقاش وتأكيد طبيعي أولاً، ثم الكرت النهائي).
   const _pend = (idata.pending_modify && typeof idata.pending_modify === "object") ? idata.pending_modify as Record<string, unknown> : null;
   // 🕋 ٦ نوفمبر ٢٠٢٦ (قرار المالكة — السيناريو الأول): عرض الإعلان ما له تاريخ → أي تغيير/قبول قبل البناء: «أكّد لي التاريخ…»
@@ -4273,8 +4784,8 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
       const _list = (ls: string[]) => ls.map(l => _arCity(_route(l))).filter(Boolean).join("، و");
       let _ans: string;
       if (_intl.length) _ans = `إيه أستاذي، البرنامج شامل الطيران الدولي (${_list(_intl)})${_dom.length ? `، والطيران الداخلي بين المدن (${_list(_dom)})` : ""}.`;
-      else if (_dom.length) _ans = `لا أستاذي، البرنامج ما يشمل الطيران الدولي، بس يشمل الطيران الداخلي بين المدن (${_list(_dom)}) مع الاستقبال والتوديع. ولو حاب نضيف لك الطيران الدولي، بحوّل طلبك لزميلي المختص يسعّره لك.`;
-      else _ans = "لا أستاذي، البرنامج ما يشمل الطيران، بس يشمل الفنادق والتنقلات المذكورة. ولو حاب نضيف لك الطيران الدولي، بحوّل طلبك لزميلي المختص يسعّره لك.";
+      else if (_dom.length) _ans = `لا أستاذي، البرنامج ما يشمل الطيران الدولي، بس يشمل الطيران الداخلي بين المدن (${_list(_dom)}) مع الاستقبال والتوديع. ولو حاب نضيف لك الطيران الدولي، بلّغني.`;
+      else _ans = "لا أستاذي، البرنامج ما يشمل الطيران، بس يشمل الفنادق والتنقلات المذكورة. ولو حاب نضيف لك الطيران الدولي، بلّغني.";
       if (await _superseded()) return;
       await _say(_ans, "followup_ai", "flight_inclusion_answer", `intl=${_intl.length} dom=${_dom.length}`, true);
       return;
@@ -4283,16 +4794,16 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   // ✈️ ردّ على عرض طلال «ولو حاب نضيف لك الطيران الدولي، بحوّل طلبك لزميلي…»: موافقة صريحة → تحويل؛ «طيب» (ملتبسة) → سؤال واضح.
   {
     const _ltF = msgs.filter(m => m.who === "طلال").slice(-1)[0]?.body || "";
-    if (/نضيف لك الطيران الدولي|نضيف الطيران الدولي/.test(_ltF) && /زميلي/.test(_ltF)) {
+    if (/نضيف لك الطيران الدولي|نضيف الطيران الدولي/.test(_ltF) && /زميلي|بلّغني|بلغني/.test(_ltF)) {
       const _t = text.trim().replace(/[\u064B-\u0652]/g, "");
       const _clearYes = /^(?:ايوه|ايوا|إيوه|أيوه|نعم|اكيد|أكيد|ضيفه|ضيفها|أضفه|اضفه|حوله|حوّله|ابي|أبي|نبي|يب|يس|yes)(?=\s|$|[!.،])/.test(_t) || new RegExp(`(?:ضيف|أضف|اضف|ابي|أبي|نبي)\\S*\\s*${FLIGHT_WORD}`, "i").test(_t);
       const _ambig = /^(?:طيب|تمام|اوكي|ok|زين|ماشي)\s*[.!]?$/i.test(_t);
       if (_cls ? (_cls.yes_no === "yes" || _is("want_intl_flight")) : _clearYes) {
-        await _say("أبشر، حوّلت طلب الطيران الدولي لزميلي المختص يسعّره لك وبيرد عليك قريب إن شاء الله.", "followup_ai", "flight_handoff");
-        try { await createProposalAndNotifyAdmin({ supabase, customerPhone: from, profileName, question: "العميل يبي يضيف الطيران الدولي للبرنامج " + String(idata.program_final_code || "") }); } catch (_e) { /* */ }
+        // ٨ نوفمبر ٢٠٢٦ (قرار المالكة): الطيران الدولي → «لحظات أستاذي» + تنبيه المالكة (لين تحدد مصادر الأسعار لكل وجهة).
+        await _ownerAsk("العميل يبي يضيف الطيران الدولي للبرنامج: «" + text + "»", "intl_flight");
         return;
       }
-      if (_cls ? (_cls.yes_no === "none" && _ambig) : _ambig) { await _say("تحب نضيف الطيران الدولي للبرنامج؟ أحوّل طلبك لزميلي المختص يسعّره لك.", "followup_ai", "flight_offer_confirm"); return; }
+      if (_cls ? (_cls.yes_no === "none" && _ambig) : _ambig) { await _say("تحب نضيف الطيران الدولي للبرنامج؟", "followup_ai", "flight_offer_confirm"); return; }
     }
   }
   // ✈️ ٤ نوفمبر ٢٠٢٦ (أول تجربة حية للمصنّف): «انتظر الطيران» → Sonnet فهمها want_intl_flight صح، لكن حارس «متضايق بلا حجز/دفع»
@@ -4303,8 +4814,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     if (await _superseded()) return;
     const _already = msgs.some(m => m.who === "طلال" && /حوّ?لت طلب الطيران الدولي/.test(m.body));
     if (_already) { await _say("طلب الطيران الدولي عند زميلي المختص، وبيرد عليك بالسعر قريب إن شاء الله.", "followup_ai", "flight_handoff_reassure"); return; }
-    await _say("أبشر، حوّلت طلب الطيران الدولي لزميلي المختص يسعّره لك وبيرد عليك قريب إن شاء الله.", "followup_ai", "flight_handoff");
-    try { await createProposalAndNotifyAdmin({ supabase, customerPhone: from, profileName, question: "العميل يبي يضيف الطيران الدولي للبرنامج " + String(idata.program_final_code || "") }); } catch (_e) { /* */ }
+    await _ownerAsk("العميل يبي يضيف الطيران الدولي للبرنامج: «" + text + "»", "intl_flight");
     return;
   }
   // 🕋 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): «ليش الفندق بعيد / مو بجانب الحرم / ابي الأبراج» على عرض الفندق الموصى به →
@@ -4426,6 +4936,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     : "";
   const isUmrahF = _isUmrahDest(String(facts.destination || "") + " " + String(facts.cities || ""));
   const transcript = msgs.slice(-16).map(m => m.who + ": " + m.body).join("\n").slice(-3500);
+  const _kbF = ownerKbBlock(await ownerKbFor(supabase, String(facts.destination || idata.destination || "")), String(facts.destination || idata.destination || ""));
   const sys = `أنت طلال من خدمة عملاء وكالة سفر عُمانية، تكلّم العميل بلهجة خليجية طبيعية مختصرة (رسالة وحدة، بلا إيموجي، بلا «أستاذي»).
 طلب العميل **مؤكّد ومخزّن** — هذي حقائق ثابتة، ❌ لا تسأل عنها أبداً ولا تغيّرها من عندك:
 ${JSON.stringify(facts)}
@@ -4453,16 +4964,21 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
 • 🧰 قدراتك الفعلية (٤ نوفمبر ٢٠٢٦ — ❌ لا تعِد بشي خارجها):
   ✅ **أي شي داخل البرنامج تتولاه بنفسك** (قرار المالكة): التاريخ، الليالي/الأيام، العدد، الأعمار، المدن، ترتيب المدن والقدوم/المغادرة،
      مطار العودة (العمرة)، تغيير الفندق، فندق باسمه، الإفطار، نوع الغرفة (جناح/فيلا/مسبح/إطلالة بحر) → action="modify".
-  ❌ الزميل المختص **فقط** لـ: الطيران الدولي (لغير العمرة)، الحجز والدفع، الخصومات وتغيير الأسعار
-     → action="handoff" برسالة صادقة: «أبشر، [الطلب] يحتاج زميلي المختص، حوّلت له طلبك وبيرد عليك قريب».
-  • ❌ لا تذكر «زميلي المختص» إلا لو العميل طلب طيران دولي (لغير العمرة) أو حجز/دفع/خصم بنفسه — غير كذا تتولاه أنت.
+  ❓ **ما تعرف الجواب = action="ask_owner"** (قرار المالكة ٨ نوفمبر ٢٠٢٦): أي سؤال جوابه **مو موجود** في الحقائق أو البرنامج أو «أجوبة الإدارة المعتمدة» لنفس الوجهة
+     → ❌❌ لا تجاوب من عندك أبداً ولا تخمّن ولا تقول «بحوّل لزميلي»؛ action="ask_owner" (النظام يرد «لحظات أستاذي» ويسأل الإدارة).
+  • الفيزا/التأشيرة/الجوازات/الأوراق الرسمية/التطعيمات/الشروط والأحكام → ask_owner دائماً، إلا لو جوابها في أجوبة الإدارة **لنفس الوجهة**.
+  • الحجز والدفع والخصومات وتغيير الأسعار والتأكيد النهائي، والطيران الدولي (لغير العمرة) → ask_owner.
+  • الطقس والأماكن السياحية والمعلومات العامة عن الوجهة → جاوب بنفسك (أسلوب المبيعات أعلاه).
+  • ❌ لا تذكر «زميلي المختص» أبداً.
+  • 🤝 المرسل مو عميل (قرار المالكة): تعاون واضح الطبيعة (شركات/برامج سياحية/تسويق) أو مكتب/شركة سفر → action="partnership"؛ تعاون ما وضّح طبيعته → action="partnership_vague"؛ يطلب الإدارة/المدير/رقمهم بلا سبب → action="asks_management"؛
+    رسالة مو عن رحلة (اتصالات/مورّد/توظيف/دعاية) → action="non_customer". (النظام يرد بالصيغة المعتمدة.)
 • ❌ تعديل البرنامج (من قدراتك) أو تضايق العميل من فهمك = **مو** handoff: اعتذر («أعتذر منك») وحدّد التعديل (action="modify")، أو اسأله وش التعديل بالضبط.
-• handoff فقط للحجز/الدفع/التأكيد النهائي/خصم/شكوى على الخدمة نفسها → action="handoff" ورسالة «أبشر، بحوّل طلبك لزميلي المختص ويرد عليك قريب».
+• شكوى على الخدمة نفسها → action="ask_owner".
 • العميل يطلب البرنامج/الملف أو يقول ما وصله/مو مبين («وين البرنامج»، «ارسله مره ثانيه»، «البرنامج فينه») → action="resend_program".
 • frustration: none (هادي) | misunderstood (أنت ما فهمت) | customer_wrong (العميل يخالف الحقائق) | talal_error (البرنامج ما فيه شي سبق وطلبه).
 • غير ذلك action="reply".
 • الطفل عندنا ١٠ سنوات وتحت (بدون سرير إضافي)، و١١ وفوق بالغ.
-أعد JSON فقط: {"message":"...","action":"reply|modify|resend_program|handoff","frustration":"none","fields":{}}${_cls ? `\n\n🧠 فهم رسالة العميل الأخيرة (موثوق): «${_cls.meaning}» — النية: ${_cls.intent}${_cls.yes_no !== "none" ? `، جوابه: ${_cls.yes_no}` : ""}. ابنِ ردك على هذا الفهم.` : ""}`;
+${_kbF}أعد JSON فقط: {"message":"...","action":"reply|modify|resend_program|ask_owner","frustration":"none","fields":{}}${_cls ? `\n\n🧠 فهم رسالة العميل الأخيرة (موثوق): «${_cls.meaning}» — النية: ${_cls.intent}${_cls.yes_no !== "none" ? `، جوابه: ${_cls.yes_no}` : ""}. ابنِ ردك على هذا الفهم.` : ""}`;
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   const model = (Deno.env.get("TALAL_MODEL_OVERRIDE") || "").trim() || "claude-sonnet-4-6";   // Sonnet لكل الوجهات (قرار المالكة)
   type FOut = { message?: string; action?: string; frustration?: string; fields?: Record<string, unknown> };
@@ -4479,17 +4995,17 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
       let cand: FOut | null = null;
       if (m) { try { cand = JSON.parse(m[0]); } catch (_e) { cand = null; } }
       if (!cand || !String(cand.message || "").trim()) { await logGuard(supabase, from, "followup_model_fail", "retry", (m ? "bad_json" : "no_json") + ": " + txt.slice(0, 150), att, "", ""); continue; }
-      const rej = cand.action === "handoff" ? null : guardReject(String(cand.message), facts, { isUmrah: isUmrahF, isOmani: /^whatsapp:\+?968/.test(from) });
+      const rej = ["handoff", "ask_owner", "partnership", "partnership_vague", "asks_management", "non_customer"].includes(String(cand.action)) ? null : guardReject(String(cand.message), facts, { isUmrah: isUmrahF, isOmani: /^whatsapp:\+?968/.test(from) });
       if (rej) {
         await logGuard(supabase, from, rej.guard, "reject", "followup: " + rej.reason, att, String(cand.message), "");
         sysTry = sys + `\n\n⚠️ حارس رفض ردك السابق: «${rej.reason}». أعد الصياغة ملتزماً بهذا.`;
-        if (att >= 3) cand = { message: "أبشر، بحوّل طلبك لزميلي المختص ويرد عليك قريب", action: "handoff", fields: {} };
+        if (att >= 3) cand = { message: OWNER_WAIT_MSG, action: "ask_owner", fields: {} };   // ٨ نوفمبر: ❌ لا رد من عنده
         else continue;
       }
       out = cand;
     } catch (e) { _fToolsOff = true; await logGuard(supabase, from, "followup_model_fail", "retry", "api_error: " + String((e as Error)?.message || e).slice(0, 150) + " [tools→off]", att, "", ""); }
   }
-  if (!out) out = { message: "أبشر، بحوّل طلبك لزميلي المختص ويرد عليك قريب", action: "handoff", fields: {} };
+  if (!out) out = { message: OWNER_WAIT_MSG, action: "ask_owner", fields: {} };   // ٨ نوفمبر: النموذج فشل → الإدارة
   let action = String(out.action || "reply");
   const _modelFrus = String(out.frustration || "none");
   const _frus = _frustratedF || (_modelFrus !== "none" && _modelFrus !== "");
@@ -4536,6 +5052,16 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
   }
   // 🚫 ٤ نوفمبر ٢٠٢٦ (قرار المالكة): التحويل للزميل **فقط** للطيران الدولي/الحجز/الدفع/الخصم — غير كذا طلال يتولاه.
   const _handoffTopic = _cls ? _is("want_intl_flight", "booking_payment") : new RegExp(`${FLIGHT_WORD}|حجز|احجز|أحجز|دفع|ادفع|أدفع|تحويل\\s*بنكي|فاتور|خصم|تخفيض|عربون`, "i").test(_batch);
+  // ٨ نوفمبر ٢٠٢٦ (قرار المالكة): الحجز/الدفع/الخصم/الطيران الدولي → تنبيه المالكة + «لحظات أستاذي» (بدل الزميل).
+  if (action === "handoff" && _handoffTopic) action = "ask_owner";
+  if (action === "ask_owner") { await _ownerAsk(text, _handoffTopic ? "booking_payment" : "unknown_question"); return; }
+  if ((action === "asks_management" || action === "partnership_vague") && msgs.some(m => m.who === "طلال" && (m.body.trim() === ASK_REASON_MSG || m.body.trim() === PARTNER_NATURE_MSG))) { await _ownerAsk("يطلب يكلّم الإدارة وما ذكر السبب: «" + text + "»", "asks_management_no_reason"); return; }
+  if (action === "partnership" || action === "partnership_vague" || action === "asks_management" || action === "non_customer") {
+    const _m = action === "partnership" ? PARTNER_MSG : action === "partnership_vague" ? PARTNER_NATURE_MSG : action === "asks_management" ? ASK_REASON_MSG : NON_CUSTOMER_MSG;
+    if (!(await _say(_m, "sender_type", action, "", true))) return;
+    if (action === "non_customer") await askOwner(supabase, { from, profileName, question: text, dest: "", stage: "non_customer", recent: msgs.slice(-6).map(m => m.who + ": " + String(m.body || "").slice(0, 200)).join("\n") });
+    return;
+  }
   if (action === "handoff" && !_handoffTopic) {
     out = { message: "عفواً إذا سمحت، وضّح لي وش تحب نعدّل في البرنامج وأجهّزه لك على طول؟", action: "reply", fields: {} };
     action = "reply";
@@ -4564,14 +5090,23 @@ ${program && _progLine ? _progLine + "\n" + program : "(البرنامج ما ا
   }
 }
 
-async function handleMessage(args: {
+type HandleMessageArgs = {
   supabase: ReturnType<typeof createClient>;
   from: string;
   profileName: string;
   body: string;
   msgReceivedAt?: string;
   referral?: { body?: string; headline?: string; source_id?: string } | null;
-}): Promise<void> {
+};
+// 🌐 ٨ نوفمبر ٢٠٢٦: لغة العميل (إنجليزي/عربي) تتحدد من رسالته وتسري على ردود طلال أثناء معالجتها. ❌ لا للمالكة/الموظفات.
+async function handleMessage(args: HandleMessageArgs): Promise<void> {
+  const { supabase, from } = args;
+  let isInternal = false;
+  try { isInternal = (await _isOwnerPhone(supabase, from)) || (await isRegisteredStaff(supabase, from)); } catch (_e) { /* */ }
+  if (isInternal) return await _handleMessageInner(args);
+  return await withCustLang(supabase, from, String(args.body || ""), () => _handleMessageInner(args));
+}
+async function _handleMessageInner(args: HandleMessageArgs): Promise<void> {
   const { supabase, from, profileName, body, msgReceivedAt } = args;
   const _referral = args.referral || null;
   const text = body.trim();
@@ -4581,6 +5116,10 @@ async function handleMessage(args: {
   //    we either route it to the 4-state admin handler (if it's a valid
   //    admin action) or block it with the "use the dashboard" warning so
   //    it doesn't get treated as a customer message.
+  // ❓ ٨ نوفمبر ٢٠٢٦: ردّ المالكة على «سؤال ما عرف طلال يرد عليه» (من رقمها) → يوصل للعميل حرفياً / «احفظها».
+  if (await _isOwnerPhone(supabase, from)) {
+    if (await handleOwnerReply(supabase, from, text)) return;
+  }
   const fromIsStaff = await isRegisteredStaff(supabase, from);
   if (fromIsStaff) {
     const proposal = await getOldestPendingProposal(supabase);
@@ -4601,6 +5140,33 @@ async function handleMessage(args: {
     // dashboard instead.
     await sendWhatsapp(from, STAFF_WARNING_MESSAGE);
     return;
+  }
+  // 🎤 ٨ نوفمبر ٢٠٢٦ (قرار المالكة): ردّ العميل على «فهمت من رسالتك…، صحيح؟» (تأكيد الرسالة الصوتية).
+  {
+    const { data: _vs } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", from).maybeSingle();
+    const _vd = (((_vs as { intake_data?: Record<string, unknown> } | null)?.intake_data) || {}) as Record<string, unknown>;
+    const _pv = (_vd.pending_voice && typeof _vd.pending_voice === "object") ? _vd.pending_voice as Record<string, unknown> : null;
+    if (_pv) {
+      const _rest = { ..._vd }; delete _rest.pending_voice;
+      try { await supabase.from("whatsapp_sessions").update({ intake_data: _rest }).eq("phone", from); } catch (_e) { /* */ }
+      const _pvText = String(_pv.text || "").trim();
+      const _fresh = (Date.now() - (Date.parse(String(_pv.at || "")) || 0)) < 6 * 3600e3;
+      const _t0 = text.replace(/[\u064B-\u0652]/g, "").trim();
+      if (_fresh && _pvText) {
+        if (/^(?:صح|صحيح|بالضبط|مضبوط|تمام|ايوه|ايوا|أيوه|إيوه|اي|إي|نعم|اكيد|أكيد|yes)\s*[.!،,👍]*$/i.test(_t0) || isAffirmative(text)) {
+          await logGuard(supabase, from, "voice_note", "confirmed", "", 1, text, _pvText.slice(0, 300));
+          await handleMessage({ ...args, body: _pvText });
+          return;
+        }
+        if (/^(?:لا|لاء|لأ|مو\s*صح|مب\s*صح|غلط|خطأ|no)\s*[.!،,]*$/i.test(_t0) || isNegative(text)) {
+          await sendWhatsapp(from, VOICE_CLARIFY_MSG);
+          try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: VOICE_CLARIFY_MSG, sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+          await logGuard(supabase, from, "voice_note", "rejected", "", 1, text, VOICE_CLARIFY_MSG);
+          return;
+        }
+      }
+      // أي رد ثاني (تصحيح/كلام جديد) → يكمّل كالمعتاد (النموذج يشوف نص الصوت بالسجل).
+    }
   }
 
   // 0.5) دمج الرسائل المتلاحقة (debounce) ─────────────────────────────────
@@ -4747,7 +5313,11 @@ async function handleMessage(args: {
     //    لسؤال العدد أو يخترع وجهة من سجل قديم.
     const _fd = ((session as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
     if (isGreeting(text) && !_referral && !String(_fd.destination || "").trim() && !(Number(_fd.pax) > 0)) {
-      const _greet = "أهلاً وسهلاً، حياك الله، آمرني";
+      // ٨ نوفمبر ٢٠٢٦ (المالكة): عميل يكلّمنا **أول مرة** → طلال يعرّف بنفسه؛ «أهلاً وسهلاً، حياك الله، آمرني» لمن سبق وكلّمنا.
+      let _firstTime = true;
+      try { const { data: _po } = await supabase.from("wa_admin_messages").select("id").eq("customer_phone", from).limit(1); _firstTime = !((_po || []) as unknown[]).length; } catch (_e) { /* */ }
+      const _greet = !_firstTime ? "أهلاً وسهلاً، حياك الله، آمرني"
+        : (/السلام\s*عليكم|سلام\s*عليكم/.test(text) ? "وعليكم السلام، حياك الله، معك طلال من خدمة العملاء، آمرني" : "أهلاً وسهلاً، حياك الله، معك طلال من خدمة العملاء، آمرني");
       await sendCustomerReply(supabase, from, _greet);
       try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: stripBannedPhrases(_greet), sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
       await supabase.from("whatsapp_sessions").update({ last_message_at: new Date().toISOString() }).eq("phone", from);
@@ -4896,7 +5466,9 @@ async function handleMessage(args: {
   // Side effect: customers in preview mode get NO acknowledgment until
   // admin acts, by design.
   const aiMode = await getAiMode(supabase);
-  if (aiMode === "PREVIEW") {
+  // ٨ نوفمبر ٢٠٢٦ (قرار المالكة): بند «🧠 الذكاء الاصطناعي» → نفس مسار أرقام الاختبار بالضبط (متابعة طلال الكاملة).
+  const _fullAiOn = aiMode === "ON" && await isFullAiNumber(supabase, from);
+  if (aiMode === "PREVIEW" || _fullAiOn) {
     await supabase
       .from("whatsapp_sessions")
       .update({ last_message_at: new Date().toISOString() })
@@ -8921,46 +9493,49 @@ Deno.serve(async (req) => {
       const { error: upErr } = await supabase.storage.from(MEDIA_BUCKET).upload(key, buf, { contentType: "application/pdf", upsert: true });
       if (upErr) throw new Error("storage: " + upErr.message);
       const { data: pub } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(key);
-      const sid = await sendWhatsapp(String(job.phone), String(job.caption || "برنامجك جاهز 🌟"), pub.publicUrl);
-      if (!sid) {
-        await supabase.from("program_pdf_jobs").update({ attempts: _att, error: lastWhatsappError || "send failed", status: _att >= 5 ? "failed" : "pending" }).eq("id", jobId);
-        return new Response(JSON.stringify({ ok: false, error: lastWhatsappError || "send failed" }), { status: 502, headers: jsonCors });
-      }
-      await supabase.from("program_pdf_jobs").update({ status: "sent", sent_at: new Date().toISOString() }).eq("id", jobId);
-      try { await supabase.from("wa_admin_messages").insert({ twilio_sid: sid, customer_phone: String(job.phone), body: "📄 برنامج PDF — " + job.code, sent_by: "طلال" }); } catch (_e) { /* */ }
-      // رسائل ما بعد البرنامج (جاهزية + سرير الطفل) — مرّة واحدة ثم تُمسح.
-      try {
-        const { data: _s } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", String(job.phone)).maybeSingle();
-        const _d = ((_s as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
-        // ٦ نوفمبر ٢٠٢٦: عرضين بطلب واحد → رسائل الختام لكل برنامج بكوده (post_msgs_by_code)، وإلا الرسائل العامة.
-        const _byCode = (_d.post_msgs_by_code && typeof _d.post_msgs_by_code === "object") ? _d.post_msgs_by_code as Record<string, unknown> : {};
-        const _hasByCode = Array.isArray(_byCode[String(job.code)]);
-        const _pm = _hasByCode ? (_byCode[String(job.code)] as unknown[]).map(String) : (Array.isArray(_d.post_program_msgs) ? (_d.post_program_msgs as unknown[]).map(String) : []);
-        if (_hasByCode) { const _rest = { ..._byCode }; delete _rest[String(job.code)]; _d.post_msgs_by_code = _rest; if (!Object.keys(_rest).length) _d.post_program_msgs = []; }
-        // ٣ نوفمبر ٢٠٢٦: نص البرنامج **النهائي** كما في الـPDF (من العامل) — طلال يقرأه بدل نسخة السيرفر الأولى.
-        const _fr = String(p.program_raw || "").trim();
-        if (_fr) {
-          // ٦ نوفمبر ٢٠٢٦: «أرخص العروض» التلقائي ثانوي — يدخل سجل العروض بس، والبرنامج الحالي يبقى الموصى به.
-          const _secondary = Array.isArray(_d.secondary_codes) && (_d.secondary_codes as unknown[]).map(String).includes(String(job.code));
-          if (!_secondary) { _d.program_final_raw = _fr.slice(0, 12000); _d.program_final_code = String(job.code); }
-          // 📒 ٥ نوفمبر ٢٠٢٦ (قرار المالكة): سجل العروض — طلال يعرف وش قدّم بالطلب (الموصى به / قريب / بجانب / الأبراج / أرخص العروض).
-          const _offers = Array.isArray(_d.offers) ? (_d.offers as Array<Record<string, unknown>>) : [];
-          if (!_offers.some(o => o.code === String(job.code))) _d.offers = [..._offers, { code: String(job.code), kind: String(((_d.offer_kind_by_code || {}) as Record<string, unknown>)[String(job.code)] || "") || offerKind(_d), hotels: hotelNamesFromRaw(_fr) }].slice(-8);
-          await supabase.from("whatsapp_sessions").update({ intake_data: _d }).eq("phone", String(job.phone));
+      // 🌐 ٨ نوفمبر: عميل إنجليزي → الكابشن ورسائل ما بعد البرنامج تطلع إنجليزي (الملف نفسه عربي).
+      return await withCustLang(supabase, String(job.phone), null, async () => {
+        const sid = await sendWhatsapp(String(job.phone), String(job.caption || "برنامجك جاهز 🌟"), pub.publicUrl);
+        if (!sid) {
+          await supabase.from("program_pdf_jobs").update({ attempts: _att, error: lastWhatsappError || "send failed", status: _att >= 5 ? "failed" : "pending" }).eq("id", jobId);
+          return new Response(JSON.stringify({ ok: false, error: lastWhatsappError || "send failed" }), { status: 502, headers: jsonCors });
         }
-        // 🔎 فحص ذاتي بعد الإرسال (رسائل ما بعد البرنامج أولاً، ثم الاعتذار لو فيه خطأ).
-        if (_hasByCode && !_pm.length) await supabase.from("whatsapp_sessions").update({ intake_data: _d }).eq("phone", String(job.phone));
-        if (_pm.length) {
-          await supabase.from("whatsapp_sessions").update({ intake_data: { ..._d, ...(_hasByCode ? {} : { post_program_msgs: [] }) } }).eq("phone", String(job.phone));
-          await sendPostProgramMessages(supabase, String(job.phone), _pm);
-        }
-        // 🔎 فحص ذاتي بعد الإرسال ورسائل ما بعد البرنامج — لو فيه خطأ: اعتذار + إعادة إرسال مصحّح (مرة) + تنبيه.
-        if (_fr) {
-          await new Promise(r => setTimeout(r, 2500));
-          await _selfCorrectProgram(supabase, String(job.phone), String(job.code), _fr, _d, /بعد التصحيح/.test(String(job.caption || "")));
-        }
-      } catch (_e) { /* */ }
-      return new Response(JSON.stringify({ ok: true, url: pub.publicUrl }), { headers: jsonCors });
+        await supabase.from("program_pdf_jobs").update({ status: "sent", sent_at: new Date().toISOString() }).eq("id", jobId);
+        try { await supabase.from("wa_admin_messages").insert({ twilio_sid: sid, customer_phone: String(job.phone), body: "📄 برنامج PDF — " + job.code, sent_by: "طلال" }); } catch (_e) { /* */ }
+        // رسائل ما بعد البرنامج (جاهزية + سرير الطفل) — مرّة واحدة ثم تُمسح.
+        try {
+          const { data: _s } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", String(job.phone)).maybeSingle();
+          const _d = ((_s as { intake_data?: Record<string, unknown> } | null)?.intake_data || {}) as Record<string, unknown>;
+          // ٦ نوفمبر ٢٠٢٦: عرضين بطلب واحد → رسائل الختام لكل برنامج بكوده (post_msgs_by_code)، وإلا الرسائل العامة.
+          const _byCode = (_d.post_msgs_by_code && typeof _d.post_msgs_by_code === "object") ? _d.post_msgs_by_code as Record<string, unknown> : {};
+          const _hasByCode = Array.isArray(_byCode[String(job.code)]);
+          const _pm = _hasByCode ? (_byCode[String(job.code)] as unknown[]).map(String) : (Array.isArray(_d.post_program_msgs) ? (_d.post_program_msgs as unknown[]).map(String) : []);
+          if (_hasByCode) { const _rest = { ..._byCode }; delete _rest[String(job.code)]; _d.post_msgs_by_code = _rest; if (!Object.keys(_rest).length) _d.post_program_msgs = []; }
+          // ٣ نوفمبر ٢٠٢٦: نص البرنامج **النهائي** كما في الـPDF (من العامل) — طلال يقرأه بدل نسخة السيرفر الأولى.
+          const _fr = String(p.program_raw || "").trim();
+          if (_fr) {
+            // ٦ نوفمبر ٢٠٢٦: «أرخص العروض» التلقائي ثانوي — يدخل سجل العروض بس، والبرنامج الحالي يبقى الموصى به.
+            const _secondary = Array.isArray(_d.secondary_codes) && (_d.secondary_codes as unknown[]).map(String).includes(String(job.code));
+            if (!_secondary) { _d.program_final_raw = _fr.slice(0, 12000); _d.program_final_code = String(job.code); }
+            // 📒 ٥ نوفمبر ٢٠٢٦ (قرار المالكة): سجل العروض — طلال يعرف وش قدّم بالطلب (الموصى به / قريب / بجانب / الأبراج / أرخص العروض).
+            const _offers = Array.isArray(_d.offers) ? (_d.offers as Array<Record<string, unknown>>) : [];
+            if (!_offers.some(o => o.code === String(job.code))) _d.offers = [..._offers, { code: String(job.code), kind: String(((_d.offer_kind_by_code || {}) as Record<string, unknown>)[String(job.code)] || "") || offerKind(_d), hotels: hotelNamesFromRaw(_fr) }].slice(-8);
+            await supabase.from("whatsapp_sessions").update({ intake_data: _d }).eq("phone", String(job.phone));
+          }
+          // 🔎 فحص ذاتي بعد الإرسال (رسائل ما بعد البرنامج أولاً، ثم الاعتذار لو فيه خطأ).
+          if (_hasByCode && !_pm.length) await supabase.from("whatsapp_sessions").update({ intake_data: _d }).eq("phone", String(job.phone));
+          if (_pm.length) {
+            await supabase.from("whatsapp_sessions").update({ intake_data: { ..._d, ...(_hasByCode ? {} : { post_program_msgs: [] }) } }).eq("phone", String(job.phone));
+            await sendPostProgramMessages(supabase, String(job.phone), _pm);
+          }
+          // 🔎 فحص ذاتي بعد الإرسال ورسائل ما بعد البرنامج — لو فيه خطأ: اعتذار + إعادة إرسال مصحّح (مرة) + تنبيه.
+          if (_fr) {
+            await new Promise(r => setTimeout(r, 2500));
+            await _selfCorrectProgram(supabase, String(job.phone), String(job.code), _fr, _d, /بعد التصحيح/.test(String(job.caption || "")));
+          }
+        } catch (_e) { /* */ }
+        return new Response(JSON.stringify({ ok: true, url: pub.publicUrl }), { headers: jsonCors });
+      });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
     }
@@ -10696,11 +11271,28 @@ Deno.serve(async (req) => {
         let offerDesc = "";
         if (isImage && media_id) { try { offerDesc = await describeCustomerImage(media_id); } catch (_e) { /* */ } }
         const _imgBad = offerDesc === IMG_UNREADABLE;
+        // 🎤 ٨ نوفمبر ٢٠٢٦: رسالة صوتية → كتابة (للموظفات بالداشبورد) + تأكيد طلال مع العميل.
+        const isAudio = !isImage && (/^audio\//i.test(String(media_mime || "")) || /🎤/.test(String(media_label || "")));
+        if (isAudio && media_id) {
+          let _tr = "";
+          let _vLang: "ar" | "en" = "ar";
+          try { const { data: _ls } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", from).maybeSingle(); if (String((((_ls as { intake_data?: Record<string, unknown> } | null)?.intake_data) || {}).lang || "") === "en") _vLang = "en"; } catch (_e) { /* */ }
+          try { _tr = await transcribeVoice(media_id, _vLang); } catch (_e) { /* */ }
+          await supabase.from("wa_message_audit").insert({ from_phone: from, body: _tr ? `🎤 رسالة صوتية — «${_tr}»` : "🎤 رسالة صوتية (ما تحوّلت لكتابة)", status: "completed", completed_at: nowIso, ...mediaCols });
+          try { await withCustLang(supabase, from, _tr || null, () => handleVoiceNote({ supabase, from, profileName, transcript: _tr })); } catch (e) { console.error("voice-note error", e); }
+          if (referral) { try { await supabase.from("whatsapp_sessions").update({ ad_referral: referral }).eq("phone", from); } catch (_e) { /* */ } }
+          return;
+        }
         const auditBody = _imgBad ? "📷 صورة من العميل (ما انقرأت)" : offerDesc ? ("📷 صورة عرض من العميل — " + offerDesc) : (media_label || "📎 مرفق من العميل");
         await supabase.from("wa_message_audit").insert({
           from_phone: from, body: auditBody,
           status: "completed", completed_at: nowIso, ...mediaCols,
         });
+        // مرفق ما سلّمه واتساب (بلا وسيط) → نطلب من العميل إعادة إرساله فوراً.
+        if (!media_id && String(media_label || "").startsWith("⚠️")) {
+          await replyUnsupportedAttachment(supabase, from);
+          return;
+        }
         // لو الصورة عرض سفر واضح → مرّرها للاستقبال كنص ليرد طلال (بلا سؤال الوجهة).
         if (offerDesc) {
           try { await handleMessage({ supabase, from, profileName, body: _imgBad ? "أرسل العميل صورة ما انقرأت" : "أرسل العميل صورة هذا العرض: " + offerDesc, referral: (referral as { body?: string; headline?: string; source_id?: string } | null) }); } catch (e) { console.error("image-intake error", e); }
