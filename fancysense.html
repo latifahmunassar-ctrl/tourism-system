@@ -150,7 +150,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v70';
+const FS_VER='v71';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderAjel(); renderBanks(); renderInv(); renderSettings();
@@ -915,41 +915,53 @@ function _cbAzRows(){
     out.push({d,a,bank:bk,label:lbl,ref:String(x.bank_ref||'').trim(),br:_cbBranch(t),kind:/تحويل/.test(t)?'تحويل بنكي':'صندوق',src:'كشف البنك'}); });
   return out.sort((p,q)=>p.d<q.d?-1:1);
 }
-// مقارنة: إيداعات المحاسبة (atm_deposit) ↔ إيداعات العز الفعلية — نفس المبلغ، تاريخ العز من −٣ إلى +٧ أيام، يفضّل نفس الفرع
+// مقارنة: إيداعات المحاسبة (atm_deposit) ↔ إيداعات العز الفعلية (v71):
+//  ١) مبلغ واحد مطابق (تاريخ العز −٣..+٧، يفضّل نفس الفرع)
+//  ٢) المبلغ دخل البنك على أكثر من جزء (٢–٤ حركات لنفس الفرع مجموعها = مبلغ المحاسبة)
+//  ٣) وإلا: حركات نفس الفرع بأقرب يوم (٠..+٣) تظهر كأجزاء مع الفرق
+function _cbStOf(r){ if(!r.acc)return 'az'; if(!r.azs.length)return 'acc'; return Math.abs(r.azT-r.acc.a)<0.011?'ok':'part'; }
 function _cbCompare(){
   const Z=_cbAzRows(), used=new Set(), gap=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/864e5);
   const A=(DATA.atm_deposit||[]).map(x=>({id:x.id,d:String(x.dep_date||'').slice(0,10),a:n(x.amount),br:x.branch||'—',bank:x.bank||'',note:x.note||''})).sort((p,q)=>p.d<q.d?-1:1);
-  const rows=A.map(x=>{ let best=-1,score=1e9; Z.forEach((z,i)=>{ if(used.has(i)||Math.abs(z.a-x.a)>0.011)return; const g=gap(x.d,z.d); if(g<-3||g>7)return; const sc=Math.abs(g)*10+(z.br===x.br?0:5); if(sc<score){score=sc;best=i;} }); if(best>=0)used.add(best); return {d:x.d,br:x.br,acc:x,az:best>=0?Z[best]:null,id:x.id}; });
-  Z.forEach((z,i)=>{ if(!used.has(i))rows.push({d:z.d,br:z.br,acc:null,az:z}); });
+  const M=A.map(()=>null);
+  A.forEach((x,k)=>{ let best=-1,score=1e9; Z.forEach((z,i)=>{ if(used.has(i)||Math.abs(z.a-x.a)>0.011)return; const g=gap(x.d,z.d); if(g<-3||g>7)return; const sc=Math.abs(g)*10+(z.br===x.br?0:5); if(sc<score){score=sc;best=i;} }); if(best>=0){used.add(best);M[k]=[best];} });
+  A.forEach((x,k)=>{ if(M[k])return; const C=Z.map((z,i)=>i).filter(i=>!used.has(i)&&Z[i].br===x.br&&Z[i].a<x.a+0.011&&gap(x.d,Z[i].d)>=-3&&gap(x.d,Z[i].d)<=7).sort((p,q)=>Math.abs(gap(x.d,Z[p].d))-Math.abs(gap(x.d,Z[q].d))).slice(0,14);
+    let best=null,bs=1e9; const rec=(st,pick,sum)=>{ if(pick.length>=2&&Math.abs(sum-x.a)<0.011){ const ds=pick.map(i=>Z[i].d), sc=new Set(ds).size*100+ds.reduce((s,d)=>s+Math.abs(gap(x.d,d)),0)*10+pick.length; if(sc<bs){bs=sc;best=pick.slice();} return; } if(pick.length>=4||sum>x.a+0.011)return; for(let q=st;q<C.length;q++){ pick.push(C[q]); rec(q+1,pick,sum+Z[C[q]].a); pick.pop(); } };
+    rec(0,[],0); if(best){ best.forEach(i=>used.add(i)); M[k]=best; } });
+  A.forEach((x,k)=>{ if(M[k])return; let bd=null; Z.forEach((z,i)=>{ if(used.has(i)||z.br!==x.br)return; const g=gap(x.d,z.d); if(g<0||g>3)return; if(bd===null||g<gap(x.d,bd))bd=z.d; }); if(bd===null)return; const pk=Z.map((z,i)=>i).filter(i=>!used.has(i)&&Z[i].br===x.br&&Z[i].d===bd); pk.forEach(i=>used.add(i)); M[k]=pk; });
+  const mk=(acc,azs)=>({d:acc?acc.d:azs[0].d,br:acc?acc.br:azs[0].br,acc,azs,azT:azs.reduce((s,z)=>s+z.a,0),id:acc?acc.id:null});
+  const rows=A.map((x,k)=>mk(x,(M[k]||[]).map(i=>Z[i])));
+  Z.forEach((z,i)=>{ if(!used.has(i))rows.push(mk(null,[z])); });
+  rows.forEach(r=>{ r.diff=r.azT-(r.acc?r.acc.a:0); r.st=_cbStOf(r); });
   return rows.sort((p,q)=>p.d<q.d?1:(p.d>q.d?-1:0));
 }
+const _CB_ST={ok:'مطابق',part:'فرق بالمبلغ',acc:'مو موجود بالبنك (العز)',az:'مو موجود بالمحاسبة'};
 function renderCashCompare(all){
-  const C=cur(); const tot={}; let tAcc=0,tAz=0,nOk=0,nAcc=0,nAz=0;
-  all.forEach(r=>{ const t=tot[r.br]=tot[r.br]||{acc:0,az:0}; if(r.acc){t.acc+=r.acc.a;tAcc+=r.acc.a;} if(r.az){t.az+=r.az.a;tAz+=r.az.a;} if(r.acc&&r.az)nOk++; else if(r.acc)nAcc++; else nAz++; });
+  const C=cur(); const tot={}; let tAcc=0,tAz=0; const cnt={ok:0,part:0,acc:0,az:0};
+  all.forEach(r=>{ const t=tot[r.br]=tot[r.br]||{acc:0,az:0}; if(r.acc){t.acc+=r.acc.a;tAcc+=r.acc.a;} t.az+=r.azT; tAz+=r.azT; cnt[r.st]++; });
   const cards=Object.keys(tot).sort().map(b=>{ const t=tot[b], df=t.az-t.acc; return '<div class="kpi"><div class="ttl">🏪 '+esc(b)+'</div><div class="val" style="font-size:14px">المحاسبة '+fmt(t.acc)+' · العز <span style="color:#3aa0ff">'+fmt(t.az)+'</span></div><div class="sub" style="color:'+(Math.abs(df)<0.01?'#2fd196':'#e0a83a')+'">'+(Math.abs(df)<0.01?'✓ مطابق':'الفرق (العز − المحاسبة): '+fmt(df)+' '+C)+'</div></div>'; }).join('');
-  return '<div class="panel" style="border:1px solid #3aa0ff"><h3 style="margin:0 0 6px">🔗 ملخص المقارنة (حسب الفلتر)</h3><div class="sub"><b>نظام العز</b> = كل إيداع «فانسي» دخل البنك ما عدا المكنة (بنك ظفار) وتحصيل الآجل، والفرع من بيانه. المطابقة بنفس المبلغ وتاريخ العز قريب من تاريخ المحاسبة (−٣ إلى +٧ أيام).</div>'+
-    '<div class="kpis" style="margin-top:10px">'+kpi('🧾 المحاسبة',fmt(tAcc)+' '+C)+kpi('🏦 نظام العز',fmt(tAz)+' '+C)+kpi('الفرق (العز − المحاسبة)',fmt(tAz-tAcc)+' '+C,Math.abs(tAz-tAcc)<0.01?'':'neg')+kpi('الحالة','✓ '+nOk+' · ⚠️ مو بالبنك '+nAcc+' · 🏦 مو بالمحاسبة '+nAz)+'</div>'+
+  return '<div class="panel" style="border:1px solid #3aa0ff"><h3 style="margin:0 0 6px">🔗 ملخص المقارنة (حسب الفلتر)</h3><div class="sub"><b>نظام العز</b> = كل إيداع «فانسي» دخل البنك ما عدا المكنة (بنك ظفار) وتحصيل الآجل والتحويل البنكي، والفرع من بيانه. المطابقة بنفس المبلغ وتاريخ العز قريب (−٣ إلى +٧ أيام). <b>إذا المبلغ دخل البنك على أكثر من جزء</b> تظهر الأجزاء كلها في نفس السطر مع «إجمالي ما دخل» و«الفرق».</div>'+
+    '<div class="kpis" style="margin-top:10px">'+kpi('🧾 المحاسبة',fmt(tAcc)+' '+C)+kpi('🏦 نظام العز',fmt(tAz)+' '+C)+kpi('الفرق (العز − المحاسبة)',fmt(tAz-tAcc)+' '+C,Math.abs(tAz-tAcc)<0.01?'':'neg')+kpi('الحالة','✓ '+cnt.ok+' · ≠ فرق '+cnt.part+' · ⚠️ مو بالبنك '+cnt.acc+' · 🏦 مو بالمحاسبة '+cnt.az)+'</div>'+
     (cards?'<div class="kpis" style="margin-top:8px">'+cards+'</div>':'')+'</div>';
 }
-// 📥 تصدير جدول الصندوق (حسب الفلاتر الحالية) — ملخص + الإيداعات مع مجاميع SUM
 async function cbExportXlsx(){
   const R=window._cbRows; if(!R){ toast('افتحي تبويب البنوك أولاً',true); return; }
   try{ await _loadXlsx(); }catch(e){ toast('⚠️ '+e.message,true); return; }
-  const r3=v=>Math.round((+v||0)*1000)/1000, C=cur();
-  const stL={ok:'مطابق',acc:'مو موجود بالبنك (العز)',az:'مو موجود بالمحاسبة'}, stOf=r=>r.acc&&r.az?'ok':(r.acc?'acc':'az');
+  const r3=v=>Math.round((+v||0)*1000)/1000, C=cur(), stL=_CB_ST;
   const F={from:window._cbFrom||'',to:window._cbTo||'',br:window._cbBr||'',st:window._cbSt||''};
-  let tA=0,tZ=0; const br={}, cnt={ok:0,acc:0,az:0};
-  R.forEach(r=>{ const b=br[r.br]=br[r.br]||{a:0,z:0}; if(r.acc){tA+=r.acc.a;b.a+=r.acc.a;} if(r.az){tZ+=r.az.a;b.z+=r.az.a;} cnt[stOf(r)]++; });
+  let tA=0,tZ=0; const br={}, cnt={ok:0,part:0,acc:0,az:0};
+  R.forEach(r=>{ const b=br[r.br]=br[r.br]||{a:0,z:0}; if(r.acc){tA+=r.acc.a;b.a+=r.acc.a;} tZ+=r.azT; b.z+=r.azT; cnt[r.st]++; });
   const wb=XLSX.utils.book_new(); wb.Workbook={Views:[{RTL:true}]};
   const sum=[['مقارنة إيداعات الصندوق — Fancy Sense'],[],['الفترة',(F.from||'البداية')+' ← '+(F.to||'الآن')],['الفرع',F.br||'الكل'],['الحالة',F.st?stL[F.st]:'الكل'],[],
-    ['مجموع المحاسبة',r3(tA),C],['مجموع نظام العز',r3(tZ),C],['الفرق (العز − المحاسبة)',r3(tZ-tA),C],[],['مطابق',cnt.ok],['مو موجود بالبنك (العز)',cnt.acc],['مو موجود بالمحاسبة',cnt.az],[],['الفرع','المحاسبة','نظام العز','الفرق'],
+    ['مجموع المحاسبة',r3(tA),C],['مجموع نظام العز',r3(tZ),C],['الفرق (العز − المحاسبة)',r3(tZ-tA),C],[],['مطابق',cnt.ok],['فرق بالمبلغ',cnt.part],['مو موجود بالبنك (العز)',cnt.acc],['مو موجود بالمحاسبة',cnt.az],[],['الفرع','المحاسبة','نظام العز','الفرق'],
     ...Object.keys(br).sort().map(b=>[b,r3(br[b].a),r3(br[b].z),r3(br[b].z-br[b].a)])];
   const ws1=XLSX.utils.aoa_to_sheet(sum); ws1['!cols']=[{wch:28},{wch:16},{wch:16},{wch:14}]; XLSX.utils.book_append_sheet(wb,ws1,'ملخص');
-  const h=['التاريخ','الفرع','المحاسبة','نظام العز','تاريخ دخول البنك (العز)','فرق الأيام','النوع بالعز','الحالة','البنك','المرجع / البيان','ملاحظة المحاسبة'];
-  const rows=R.slice().sort((a,b)=>a.d<b.d?-1:1).map(r=>{ const x=r.acc, z=r.az; return [r.d,r.br,x?r3(x.a):'',z?r3(z.a):'',z?z.d:'',x&&z?Math.round((Date.parse(z.d)-Date.parse(x.d))/864e5):'',z?z.kind:'',stL[stOf(r)],x?(x.bank||''):(z.bank||''),z?((z.ref?z.ref+' · ':'')+z.label):'',x?(x.note||''):'']; });
+  const h=['التاريخ','الفرع','المحاسبة','جزء العز','تاريخ دخول البنك (العز)','النوع بالعز','المرجع / البيان','إجمالي ما دخل (العز)','الفرق (العز − المحاسبة)','الحالة','البنك (المحاسبة)','ملاحظة المحاسبة'];
+  const rows=[]; R.slice().sort((a,b)=>a.d<b.d?-1:1).forEach(r=>{ const x=r.acc, zs=r.azs.length?r.azs:[null];
+    zs.forEach((z,k)=>rows.push([k?'':r.d,k?'':r.br,!k&&x?r3(x.a):'',z?r3(z.a):'',z?z.d:'',z?z.kind:'',z?((z.ref?z.ref+' · ':'')+z.label):'',k?'':r3(r.azT),k?'':r3(r.diff),k?'':stL[r.st],!k&&x?(x.bank||''):'',!k&&x?(x.note||''):''])); });
   const ws2=XLSX.utils.aoa_to_sheet([h,...rows]); const N=rows.length;
-  XLSX.utils.sheet_add_aoa(ws2,[['المجموع','',{t:'n',f:'SUM(C2:C'+(N+1)+')',v:r3(tA)},{t:'n',f:'SUM(D2:D'+(N+1)+')',v:r3(tZ)}]],{origin:'A'+(N+3)});
-  ws2['!cols']=[{wch:12},{wch:20},{wch:12},{wch:12},{wch:18},{wch:10},{wch:12},{wch:22},{wch:30},{wch:44},{wch:30}]; XLSX.utils.book_append_sheet(wb,ws2,'الإيداعات');
+  XLSX.utils.sheet_add_aoa(ws2,[['المجموع','',{t:'n',f:'SUM(C2:C'+(N+1)+')',v:r3(tA)},{t:'n',f:'SUM(D2:D'+(N+1)+')',v:r3(tZ)},'','','',{t:'n',f:'SUM(H2:H'+(N+1)+')',v:r3(tZ)},{t:'n',f:'SUM(I2:I'+(N+1)+')',v:r3(tZ-tA)}]],{origin:'A'+(N+3)});
+  ws2['!cols']=[{wch:12},{wch:20},{wch:12},{wch:12},{wch:18},{wch:12},{wch:44},{wch:16},{wch:16},{wch:22},{wch:26},{wch:30}]; XLSX.utils.book_append_sheet(wb,ws2,'الإيداعات');
   XLSX.writeFile(wb,'fancy-cash_'+(F.from||'all')+'_'+(F.to||today())+(F.st?'_'+F.st:'')+'.xlsx');
   toast('✅ تم تصدير الملف');
 }
@@ -985,7 +997,7 @@ function renderAjel(){
     '<div class="panel" style="border:1px solid #3aa0ff"><h3 style="margin:0 0 6px">📒 إيداعات الآجل: المحاسبة ↔ نظام العز (الفعلي بالبنك)</h3><div class="sub"><b>المحاسبة</b> = المبالغ المحصّلة من عملاء الآجل (تبويب «عملاء الآجل»). <b>نظام العز</b> = إيداعات «فانسي» بالبنك بيانها فيه «آجل». المطابقة بنفس المبلغ وأقرب تاريخ، وفرق الأيام يظهر بكل سطر.</div>'+
     '<div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:10px"><div class="fld"><label>📅 من</label><input type="date" value="'+esc(F.from)+'" onchange="window._ajFrom=this.value;renderAjel()"></div><div class="fld"><label>📅 إلى</label><input type="date" value="'+esc(F.to)+'" onchange="window._ajTo=this.value;renderAjel()"></div><div class="fld"><label>🔎 الحالة</label><select onchange="window._ajSt=this.value;renderAjel()">'+[['','الكل'],['ok','✓ مطابق'],['acc','⚠️ مو موجود بالبنك (العز)'],['az','🏦 مو موجود بالمحاسبة']].map(o=>'<option value="'+o[0]+'"'+(o[0]===F.st?' selected':'')+'>'+o[1]+'</option>').join('')+'</select></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._ajFrom=\'\';window._ajTo=\'\';window._ajSt=\'\';renderAjel()">مسح الفلاتر</button></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn" onclick="ajExportXlsx()">📥 تصدير Excel</button></div></div>'+
     '<div class="kpis" style="margin-top:10px">'+kpi('🧾 المحاسبة (المحصّل)',fmt(tA)+' '+C)+kpi('🏦 نظام العز',fmt(tZ)+' '+C)+kpi('الفرق (العز − المحاسبة)',fmt(tZ-tA)+' '+C,Math.abs(tZ-tA)<0.01?'':'neg')+kpi('الحالة','✓ '+cnt.ok+' · ⚠️ مو بالبنك '+cnt.acc+' · 🏦 مو بالمحاسبة '+cnt.az)+'</div></div>'+
-    '<div class="panel"><div class="tbl-wrap bf-scroll" style="max-height:620px"><table style="font-size:12px"><thead><tr><th>التاريخ</th><th>العميل</th><th>المستند</th><th>🧾 المحاسبة</th><th style="background:#1a5fb4">🏦 نظام العز (الفعلي)</th><th>الحالة</th><th>البنك · المرجع · البيان</th><th>ملاحظة</th></tr></thead><tbody>'+(body||'<tr><td colspan="8" class="mut" style="text-align:center;padding:12px">لا إيداعات بهذا الفلتر</td></tr>')+'</tbody></table></div></div>';
+    '<div class="panel"><div class="tbl-wrap bf-scroll" style="max-height:620px"><table style="font-size:12px"><thead><tr><th>التاريخ</th><th>العميل</th><th>المستند</th><th>🧾 المحاسبة</th><th style="background:#1a5fb4">🏦 نظام العز (الفعلي)</th><th>الحالة</th><th>البنك · المرجع · البيان</th><th>ملاحظة</th></tr></thead><tbody>'+(body||'<tr><td colspan="10" class="mut" style="text-align:center;padding:12px">لا إيداعات بهذا الفلتر</td></tr>')+'</tbody></table></div></div>';
 }
 async function ajExportXlsx(){
   const R=window._ajRows; if(!R){ toast('افتحي تبويب إيداعات الآجل أولاً',true); return; }
@@ -1018,23 +1030,27 @@ function renderBanks(){
   // 🏦 جدول الصندوق = المحاسبة ↔ نظام العز (الطرفين) + فلاتر: التاريخ · الفرع · الحالة
   const CF={from:window._cbFrom||'',to:window._cbTo||'',br:window._cbBr||'',st:window._cbSt||''};
   const _cmpAll=_cbCompare(), _brs=[...new Set(_cmpAll.map(r=>r.br))].sort();
-  const _stOf=r=>r.acc&&r.az?'ok':(r.acc?'acc':'az');
+  const _stOf=r=>r.st;
   const _rows=_cmpAll.filter(r=>(!CF.from||r.d>=CF.from)&&(!CF.to||r.d<=CF.to)&&(!CF.br||r.br===CF.br)&&(!CF.st||_stOf(r)===CF.st));
   window._cbRows=_rows;
   const _dm=d=>d?d.slice(8,10)+'/'+d.slice(5,7):'';
   const _bkN=b=>String(b||'').replace(/\s*[\(\-].*$/,'').trim();   // اسم البنك بدون رقم الحساب
-  const aRows=_rows.map(r=>{ const x=r.acc, z=r.az, g=x&&z?Math.round((Date.parse(z.d)-Date.parse(x.d))/864e5):0, st=_stOf(r);
-    const pill=st==='ok'?'<span class="pill g">✓ مطابق</span>':(st==='acc'?'<span class="pill r">⚠️ مو موجود بالبنك (العز)</span>':'<span class="pill" style="background:rgba(58,160,255,.15);color:#3aa0ff">🏦 مو موجود بالمحاسبة</span>');
-    const azCell=z?('<td class="num" style="font-weight:800;color:#3aa0ff">'+fmt(z.a)+'<div style="font-size:9px;color:var(--muted);font-weight:600">📅 دخل '+_dm(z.d)+(g?' ('+(g>0?'+':'')+g+' يوم)':'')+' · '+esc(z.kind)+'</div></td>'):'<td class="num mut">—</td>';
-    return '<tr><td>'+esc(r.d)+'</td><td>'+esc(r.br)+'</td><td class="num pos" style="font-weight:800">'+(x?fmt(x.a):'<span class="mut">—</span>')+'</td>'+azCell+'<td>'+pill+'</td><td style="font-size:11px;line-height:1.5">'+(x?'<div>📝 <span class="mut">اختيار المحاسبة:</span> '+esc(_bkN(x.bank)||'—')+'</div>':'')+(z?'<div style="color:#3aa0ff">🏦 <span class="mut">العز:</span> '+esc(_bkN(z.bank)||'—')+'</div>':'')+'</td><td class="mini">'+esc(x?(x.note||''):(z.label+(z.ref?' · '+z.ref:'')))+'</td><td>'+(x?'<button class="btn red sm" onclick="delRow(\'atm_deposit\','+x.id+')">حذف</button>':'')+'</td></tr>'; }).join('');
-  const _cbFilt='<div class="panel"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"><div class="fld"><label>📅 من</label><input type="date" value="'+esc(CF.from)+'" onchange="window._cbFrom=this.value;renderBanks()"></div><div class="fld"><label>📅 إلى</label><input type="date" value="'+esc(CF.to)+'" onchange="window._cbTo=this.value;renderBanks()"></div><div class="fld"><label>🏪 الفرع</label><select onchange="window._cbBr=this.value;renderBanks()"><option value="">الكل</option>'+_brs.map(b=>'<option'+(b===CF.br?' selected':'')+'>'+esc(b)+'</option>').join('')+'</select></div><div class="fld"><label>🔎 الحالة</label><select onchange="window._cbSt=this.value;renderBanks()">'+[['','الكل'],['ok','✓ مطابق'],['acc','⚠️ مو موجود بالبنك (العز)'],['az','🏦 مو موجود بالمحاسبة']].map(o=>'<option value="'+o[0]+'"'+(o[0]===CF.st?' selected':'')+'>'+o[1]+'</option>').join('')+'</select></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._cbFrom=\'\';window._cbTo=\'\';window._cbBr=\'\';window._cbSt=\'\';renderBanks()">مسح الفلاتر</button></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn" onclick="cbExportXlsx()">📥 تصدير Excel</button></div></div></div>';
+  const aRows=_rows.map(r=>{ const x=r.acc, zs=r.azs, st=r.st;
+    const pill=st==='ok'?'<span class="pill g">✓ مطابق</span>':(st==='part'?'<span class="pill" style="background:rgba(217,138,0,.15);color:#e0a83a">≠ فرق بالمبلغ</span>':(st==='acc'?'<span class="pill r">⚠️ مو موجود بالبنك (العز)</span>':'<span class="pill" style="background:rgba(58,160,255,.15);color:#3aa0ff">🏦 مو موجود بالمحاسبة</span>'));
+    const part=z=>{ const g=x?Math.round((Date.parse(z.d)-Date.parse(x.d))/864e5):0; return '<div style="font-weight:800;color:#3aa0ff">'+fmt(z.a)+'<div style="font-size:9px;color:var(--muted);font-weight:600">📅 دخل '+_dm(z.d)+(g?' ('+(g>0?'+':'')+g+' يوم)':'')+' · '+esc(z.kind)+(zs.length>1&&z.ref?' · '+esc(z.ref):'')+'</div></div>'; };
+    const azCell=zs.length?('<td class="num">'+zs.map(part).join('<div style="border-top:1px dashed var(--line);margin:3px 0"></div>')+'</td>'):'<td class="num mut">—</td>';
+    const totCell=zs.length?'<td class="num" style="font-weight:800;color:#3aa0ff">'+fmt(r.azT)+(zs.length>1?'<div style="font-size:9px;color:var(--muted)">'+zs.length+' أجزاء</div>':'')+'</td>':'<td class="num mut">—</td>';
+    const dfCell=x&&zs.length?'<td class="num" style="font-weight:800;color:'+(Math.abs(r.diff)<0.011?'#2fd196':'#e05a5a')+'">'+(Math.abs(r.diff)<0.011?'0':fmt(r.diff))+'</td>':(x?'<td class="num" style="color:#e05a5a;font-weight:800">'+fmt(-x.a)+'</td>':'<td class="num" style="color:#3aa0ff;font-weight:800">+'+fmt(r.azT)+'</td>');
+    const z0=zs[0];
+    return '<tr><td>'+esc(r.d)+'</td><td>'+esc(r.br)+'</td><td class="num pos" style="font-weight:800">'+(x?fmt(x.a):'<span class="mut">—</span>')+'</td>'+azCell+totCell+dfCell+'<td>'+pill+'</td><td style="font-size:11px;line-height:1.5">'+(x?'<div>📝 <span class="mut">اختيار المحاسبة:</span> '+esc(_bkN(x.bank)||'—')+'</div>':'')+(z0?'<div style="color:#3aa0ff">🏦 <span class="mut">العز:</span> '+esc(_bkN(z0.bank)||'—')+'</div>':'')+'</td><td class="mini">'+esc(x?(x.note||''):(z0.label+(z0.ref?' · '+z0.ref:'')))+'</td><td>'+(x?'<button class="btn red sm" onclick="delRow(\'atm_deposit\','+x.id+')">حذف</button>':'')+'</td></tr>'; }).join('');
+  const _cbFilt='<div class="panel"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"><div class="fld"><label>📅 من</label><input type="date" value="'+esc(CF.from)+'" onchange="window._cbFrom=this.value;renderBanks()"></div><div class="fld"><label>📅 إلى</label><input type="date" value="'+esc(CF.to)+'" onchange="window._cbTo=this.value;renderBanks()"></div><div class="fld"><label>🏪 الفرع</label><select onchange="window._cbBr=this.value;renderBanks()"><option value="">الكل</option>'+_brs.map(b=>'<option'+(b===CF.br?' selected':'')+'>'+esc(b)+'</option>').join('')+'</select></div><div class="fld"><label>🔎 الحالة</label><select onchange="window._cbSt=this.value;renderBanks()">'+[['','الكل'],['ok','✓ مطابق'],['part','≠ فرق بالمبلغ'],['acc','⚠️ مو موجود بالبنك (العز)'],['az','🏦 مو موجود بالمحاسبة']].map(o=>'<option value="'+o[0]+'"'+(o[0]===CF.st?' selected':'')+'>'+o[1]+'</option>').join('')+'</select></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._cbFrom=\'\';window._cbTo=\'\';window._cbBr=\'\';window._cbSt=\'\';renderBanks()">مسح الفلاتر</button></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn" onclick="cbExportXlsx()">📥 تصدير Excel</button></div></div></div>';
   $('p-banks').innerHTML=
     '<div class="panel" style="border:1px solid var(--amber);background:rgba(217,138,0,.08)"><div style="font-size:12.5px;color:#e0a83a;font-weight:700">📌 كشف مراجعة لفانسي سنس فقط — للاطلاع</div><div class="sub" style="margin-top:4px">كل البنوك والإيداعات هنا <b>منفصلة تماماً عن بنوك نظام العز الدولية</b> ولا تنعكس عليها إطلاقاً. هذه بيانات فانسي سنس المستقلّة.</div></div>'+
     '<div class="panel"><div class="row-between"><h3 style="margin:0">🏦 حركات البنوك</h3><button class="btn" onclick="formToggle(\'bank-form\')">➕ حركة بنك</button></div></div>'+bForm+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ الفعلي</th><th>الإقفال</th><th>البنك</th><th>النوع</th><th>القيمة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(bRows||'<tr><td colspan="7" class="mut" style="text-align:center;padding:12px">لا حركات</td></tr>')+'</tbody></table></div></div>'+
     '<div class="panel"><div class="row-between"><h3 style="margin:0">🏧 إيداعات الصندوق (الكاش)</h3><button class="btn" onclick="formToggle(\'atm-form\')">➕ إيداع</button></div></div>'+aForm+
     _cbFilt+renderCashCompare(_rows)+
-    '<div class="panel"><div class="tbl-wrap bf-scroll" style="max-height:620px"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المبلغ (المحاسبة)</th><th style="background:#1a5fb4">🏦 نظام العز (الفعلي)</th><th>المقارنة</th><th>البنك <span style="font-size:9px;font-weight:500">(📝 المحاسبة / 🏦 العز)</span></th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(aRows||'<tr><td colspan="8" class="mut" style="text-align:center;padding:12px">لا إيداعات بهذا الفلتر</td></tr>')+'</tbody></table></div></div>';
+    '<div class="panel"><div class="tbl-wrap bf-scroll" style="max-height:620px"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المبلغ (المحاسبة)</th><th style="background:#1a5fb4">🏦 نظام العز (الفعلي)</th><th style="background:#1a5fb4">إجمالي ما دخل</th><th>الفرق</th><th>المقارنة</th><th>البنك <span style="font-size:9px;font-weight:500">(📝 المحاسبة / 🏦 العز)</span></th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(aRows||'<tr><td colspan="10" class="mut" style="text-align:center;padding:12px">لا إيداعات بهذا الفلتر</td></tr>')+'</tbody></table></div></div>';
 }
 async function saveBank(){ const data={actual_date:$('bk-adate').value||null,close_date:$('bk-cdate').value||null,direction:$('bk-dir').value,amount:n($('bk-amt').value),bank_name:$('bk-bank').value||null,note:$('bk-note').value||null}; if(await crud('insert','bank_txn',data)){formToggle('bank-form');} }
 async function saveAtm(){ const data={dep_date:$('at-date').value||null,branch:$('at-branch').value||null,amount:n($('at-amt').value),bank:$('at-bank').value||null,note:$('at-note').value||null}; if(await crud('insert','atm_deposit',data)){formToggle('atm-form');} }
