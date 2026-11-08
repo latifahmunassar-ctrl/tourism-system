@@ -150,7 +150,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v68';
+const FS_VER='v69';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderAjel(); renderBanks(); renderInv(); renderSettings();
@@ -898,17 +898,18 @@ async function saveCust(){ const nm=$('cu-name').value||''; if(!nm){$('cu-msg').
 async function saveCtx(){ const cid=$('ct-cust').value; if(!cid){$('ct-msg').innerHTML='<span class="neg">اختاري العميل</span>';return;} const data={customer_id:Number(cid),txn_date:$('ct-date').value||null,doc_no:$('ct-doc').value||null,invoice_amount:n($('ct-inv').value),paid_amount:n($('ct-paid').value),returned_amount:n($('ct-ret').value),note:$('ct-note').value||null}; if(await crud('insert','credit_txn',data)){formToggle('ctx-form');} }
 
 // ===== 🏦 البنوك والإيداعات =====
-// 🏦 إيداعات الصناديق الفعلية من نظام العز (كل إيداع لحاله، مثل ما هو بالبنك) — كل شي «فانسي» داخل للبنك ما عدا المكنة (بنك ظفار) والآجل
+// 🏦 إيداعات الصناديق الفعلية من نظام العز (كل إيداع لحاله، مثل ما هو بالبنك) — كل شي «فانسي» داخل للبنك ما عدا المكنة (بنك ظفار) والآجل والتحويل البنكي (مبيعات بالتحويل = حساب منفصل)
 function _cbBranch(t){ t=String(t||''); if(/كيوسك|kiosk/i.test(t))return 'Kiosk (Gardens mall)'; if(/محل|شوب|shop|store/i.test(t))return 'Shop (Gardens mall)'; if(/معرض|معارض/.test(t))return 'معارض'; if(/عمان|oman|صلال|salalah/i.test(t))return 'OMAN'; return 'غير محدّد'; }
 function _cbAzRows(){
   const out=[], txt=x=>[x.details,x.description,x.more_details].map(v=>String(v||'')).join(' ');
   (DATA.acc_fancy||[]).forEach(x=>{ const a=n(x.in_raw); if(!(a>0)||n(x.out_raw)>0)return; const t=txt(x), bk=String(x.bank_name||''); if(/^\s*test\s*$/i.test(String(x.details||'')))return;
     if(/dhofar|ظفار/i.test(bk)&&!/صندوق|تحويل/.test(t))return;   // مكنة
     if(/آجل|اجل/.test(t))return;                                   // تحصيل عملاء آجل
+    if(/تحويل/.test(t))return;                                      // v69: مبيعات بالتحويل البنكي (حساب منفصل) — ليست صندوقاً
     const lbl=(String(x.more_details||'').trim()||String(x.details||'').trim());
     out.push({d:String(x.tx_date||'').slice(0,10),a,bank:bk,label:lbl,ref:String(x.bank_ref||'').trim(),br:_cbBranch(lbl+' '+t),kind:/تحويل/.test(t)?'تحويل بنكي':'صندوق',src:'الصندوق والبنوك'}); });
   (DATA.acc_fancy_btx||[]).forEach(x=>{ const a=n(x.amount_in), d=String(x.tx_date||'').slice(0,10), t=String(x.note||''), bk=String(x.bank_name||''); if(!(a>0)||!d)return;
-    if(/dhofar|ظفار/i.test(bk)&&!/صندوق|تحويل/.test(t))return; if(/آجل|اجل/.test(t))return;
+    if(/dhofar|ظفار/i.test(bk)&&!/صندوق|تحويل/.test(t))return; if(/آجل|اجل/.test(t))return; if(/تحويل/.test(t))return;
     if(out.some(o=>Math.abs(o.a-a)<0.011&&Math.abs(Date.parse(o.d)-Date.parse(d))<=2*864e5))return;   // نفس الإيداع بالجدولين
     const lbl=t.replace(/^🏷️\s*/,'').split('←').map(z=>z.trim()).filter(Boolean).pop()||t;
     out.push({d,a,bank:bk,label:lbl,ref:String(x.bank_ref||'').trim(),br:_cbBranch(t),kind:/تحويل/.test(t)?'تحويل بنكي':'صندوق',src:'كشف البنك'}); });
