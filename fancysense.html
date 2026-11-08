@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v64';
+const FS_VER='v65';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -917,7 +917,7 @@ function _cbAzRows(){
 function _cbCompare(){
   const Z=_cbAzRows(), used=new Set(), gap=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/864e5);
   const A=(DATA.atm_deposit||[]).map(x=>({id:x.id,d:String(x.dep_date||'').slice(0,10),a:n(x.amount),br:x.branch||'—',bank:x.bank||'',note:x.note||''})).sort((p,q)=>p.d<q.d?-1:1);
-  const rows=A.map(x=>{ let best=-1,score=1e9; Z.forEach((z,i)=>{ if(used.has(i)||Math.abs(z.a-x.a)>0.011)return; const g=gap(x.d,z.d); if(g<-3||g>7)return; const sc=Math.abs(g)*10+(z.br===x.br?0:5); if(sc<score){score=sc;best=i;} }); if(best>=0)used.add(best); return {d:x.d,br:x.br,acc:x,az:best>=0?Z[best]:null}; });
+  const rows=A.map(x=>{ let best=-1,score=1e9; Z.forEach((z,i)=>{ if(used.has(i)||Math.abs(z.a-x.a)>0.011)return; const g=gap(x.d,z.d); if(g<-3||g>7)return; const sc=Math.abs(g)*10+(z.br===x.br?0:5); if(sc<score){score=sc;best=i;} }); if(best>=0)used.add(best); return {d:x.d,br:x.br,acc:x,az:best>=0?Z[best]:null,id:x.id}; });
   Z.forEach((z,i)=>{ if(!used.has(i))rows.push({d:z.d,br:z.br,acc:null,az:z}); });
   return rows.sort((p,q)=>p.d<q.d?1:(p.d>q.d?-1:0));
 }
@@ -952,13 +952,18 @@ function renderBanks(){
     '<div class="fld full"><label>ملاحظة</label><input id="at-note"></div>'+
     '</div><div id="at-msg" class="msg"></div><button class="btn green" onclick="saveAtm()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'atm-form\')">إلغاء</button></div>';
   const bRows=(DATA.bank_txn||[]).map(x=>'<tr><td>'+esc(x.actual_date||'')+'</td><td>'+esc(x.close_date||'')+'</td><td>'+esc(x.bank_name||'')+'</td><td><span class="pill '+(x.direction==='out'?'r':'g')+'">'+(x.direction==='out'?'صادر':'وارد')+'</span></td><td class="num '+(x.direction==='out'?'neg':'pos')+'" style="font-weight:800">'+fmt(x.amount)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'bank_txn\','+x.id+')">حذف</button></td></tr>').join('');
-  const aRows=(DATA.atm_deposit||[]).map(x=>'<tr><td>'+esc(x.dep_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td class="num pos" style="font-weight:800">'+fmt(x.amount)+'</td><td>'+esc(x.bank||'—')+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'atm_deposit\','+x.id+')">حذف</button></td></tr>').join('');
+  // 🏦 قدّام كل إيداع: الإيداع الفعلي من نظام العز (نفس المبلغ، تاريخ قريب) + الحالة
+  const _cmpMap={}; _cbCompare().forEach(r=>{ if(r.acc)_cmpMap[r.id]=r.az; });
+  const _dm=d=>d?d.slice(8,10)+'/'+d.slice(5,7):'';
+  const aRows=(DATA.atm_deposit||[]).map(x=>{ const z=_cmpMap[x.id], g=z?Math.round((Date.parse(z.d)-Date.parse(String(x.dep_date||'').slice(0,10)))/864e5):0;
+    const azCell=z?('<td class="num" style="font-weight:800;color:#3aa0ff">'+fmt(z.a)+'<div style="font-size:9px;color:var(--muted);font-weight:600">📅 دخل '+_dm(z.d)+(g?' ('+(g>0?'+':'')+g+' يوم)':'')+' · '+esc(z.kind)+'</div></td><td><span class="pill g">✓ مطابق</span></td>'):'<td class="num mut">—</td><td><span class="pill r">⚠️ مو موجود بالعز</span></td>';
+    return '<tr><td>'+esc(x.dep_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td class="num pos" style="font-weight:800">'+fmt(x.amount)+'</td>'+azCell+'<td>'+esc(x.bank||'—')+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'atm_deposit\','+x.id+')">حذف</button></td></tr>'; }).join('');
   $('p-banks').innerHTML=
     '<div class="panel" style="border:1px solid var(--amber);background:rgba(217,138,0,.08)"><div style="font-size:12.5px;color:#e0a83a;font-weight:700">📌 كشف مراجعة لفانسي سنس فقط — للاطلاع</div><div class="sub" style="margin-top:4px">كل البنوك والإيداعات هنا <b>منفصلة تماماً عن بنوك نظام العز الدولية</b> ولا تنعكس عليها إطلاقاً. هذه بيانات فانسي سنس المستقلّة.</div></div>'+
     '<div class="panel"><div class="row-between"><h3 style="margin:0">🏦 حركات البنوك</h3><button class="btn" onclick="formToggle(\'bank-form\')">➕ حركة بنك</button></div></div>'+bForm+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ الفعلي</th><th>الإقفال</th><th>البنك</th><th>النوع</th><th>القيمة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(bRows||'<tr><td colspan="7" class="mut" style="text-align:center;padding:12px">لا حركات</td></tr>')+'</tbody></table></div></div>'+
     '<div class="panel"><div class="row-between"><h3 style="margin:0">🏧 إيداعات الصندوق (الكاش)</h3><button class="btn" onclick="formToggle(\'atm-form\')">➕ إيداع</button></div></div>'+aForm+
-    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المبلغ</th><th>البنك</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(aRows||'<tr><td colspan="6" class="mut" style="text-align:center;padding:12px">لا إيداعات</td></tr>')+'</tbody></table></div></div>'+
+    '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المبلغ (المحاسبة)</th><th style="background:#1a5fb4">🏦 نظام العز (الفعلي)</th><th>المقارنة</th><th>البنك</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(aRows||'<tr><td colspan="8" class="mut" style="text-align:center;padding:12px">لا إيداعات</td></tr>')+'</tbody></table></div></div>'+
     renderCashCompare();
 }
 async function saveBank(){ const data={actual_date:$('bk-adate').value||null,close_date:$('bk-cdate').value||null,direction:$('bk-dir').value,amount:n($('bk-amt').value),bank_name:$('bk-bank').value||null,note:$('bk-note').value||null}; if(await crud('insert','bank_txn',data)){formToggle('bank-form');} }
