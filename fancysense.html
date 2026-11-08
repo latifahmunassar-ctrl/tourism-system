@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v60';
+const FS_VER='v61';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -302,31 +302,31 @@ function fsExportMatchPDF(){
 }
 
 // ===== 🏧 متابعة المكنة (POS) =====
-// مطابقة المكنة مع البنك (قرار المالكة ٨ نوفمبر ٢٠٢٦ — بلا مطابقة مبالغ عبر التواريخ):
-// ١) الشيت أولاً (Deposted in Bank). حركات البنك اللي تساوي قيمة بالشيت = مسجّلة أصلاً فلا تُكرَّر.
-// ٢) يوم بلا إيداع بالشيت → **أول حركة إيداع مكنة بالبنك بعد تاريخه** (ثاني يوم عادةً، أو ثالث/رابع… لو البنك تأخّر)،
-//    كل حركة تُحسب ليوم واحد فقط (الأيام بالترتيب من الأقدم)، وتاريخ الدخول يظهر تحت القيمة.
-//    لو نزلت أكثر من حركة بنفس اليوم، كل يوم ياخذ الأقرب لمبلغه منها (ترتيب الحركات داخل اليوم عشوائي).
-//    سقف ١٠ أيام حتى لا يسحب يوم قديم بلا إيداع حركة أيام لاحقة.
-// الحالة: ok / pending (آخر ٧ أيام قبل آخر كشف) / lost (لا حركة بعده)
+// مطابقة المكنة مع البنك (قرار المالكة ٨ نوفمبر ٢٠٢٦ — بسيطة وواضحة):
+// • مبيعات اليوم D تُقارَن بإيداع البنك في اليوم الثاني مباشرة D+1 — لا بحث قدّام ولا ورا ولا توزيع.
+// • أي إيداع مكنة فعلي في البنك يظهر: لو دخل يوم X وما فيه مبيعات يوم X−1 → سطر لحاله (مبيعات 0) مع تاريخ دخوله.
+// • يوم مسجّل بالشيت (Deposted in Bank) → قيمة الشيت؛ وحركة بنك تساوي قيمة الشيت (خلال ١٠ أيام قبلها) = نفس الإيداع.
+//   لو دخل يوم D+1 إيداع زيادة غير قيمة الشيت (مثلاً إيداع يوم قبله تأخّر) → يُضاف ويُكتب «+ إيداع إضافي».
+//   (فقط من يونيو ٢٠٢٦ — قبلها إيداعات نظام العز مؤرّخة بطريقة مختلفة وما تطابق الشيت، فالشيت وحده المرجع.)
+// • حركات البنك قبل أول يوم مبيعات بالنظام تُتجاهل.
+// الحالة: ok / pending (كشف اليوم التالي ما وصل) / lost (ما دخل شي باليوم التالي)
 function mcRecon(S,M,txns,maxBank,sh){
-  const MAXGAP=10;
+  const EXTRA_FROM='2026-06-01';
   const days=Object.keys(S).filter(d=>S[d]>0.005).sort();
-  const B={},src={},note={},bdate={},used=new Set();
-  const gap=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/864e5);
+  const B={},src={},note={},bdate={},used=new Set(),extra={};
+  const dm=(d)=>d.slice(8,10)+'/'+d.slice(5,7);
   days.forEach(d=>{ if(d in M){B[d]=M[d];src[d]='fs';} });
   const mDays=Object.keys(M).sort();
-  txns.forEach((t,i)=>{ const lo=sh(t.date,-MAXGAP); if(mDays.some(dd=>dd>=lo&&dd<=t.date&&Math.abs(M[dd]-t.amt)<0.011)) used.add(i); });
-  // تسوية بنكية تذكر يومها صراحةً → لذاك اليوم مباشرة
-  txns.forEach((t,j)=>{ if(used.has(j)||!t.sale||!(S[t.sale]>0.005)||(t.sale in M)||(B[t.sale]>0.005))return; used.add(j); B[t.sale]=t.amt; src[t.sale]='az'; bdate[t.sale]=t.date; const g=gap(t.sale,t.date); note[t.sale]=g>1?('تأخّر '+g+' أيام'):''; });
-  days.forEach(d=>{ if((d in M)||(B[d]>0.005))return;
-    let first=null; txns.forEach((t,j)=>{ if(!used.has(j)&&t.date>d&&gap(d,t.date)<=MAXGAP&&(first==null||t.date<first))first=t.date; });
-    if(first==null)return;
-    let i=-1; txns.forEach((t,j)=>{ if(!used.has(j)&&t.date===first&&(i<0||Math.abs(t.amt-S[d])<Math.abs(txns[i].amt-S[d])))i=j; });
-    const t=txns[i]; used.add(i); B[d]=t.amt; src[d]='az'; bdate[d]=t.date;
-    const g=gap(d,t.date); note[d]=g>1?('تأخّر '+g+' أيام'):'';
+  txns.forEach((t,i)=>{ const lo=sh(t.date,-10); if(mDays.some(dd=>dd>=lo&&dd<=t.date&&Math.abs(M[dd]-t.amt)<0.011)) used.add(i); });
+  const first=days[0]||'';
+  txns.forEach((t,i)=>{ if(used.has(i))return; used.add(i); if(!(t.amt>0.005)||t.date<=first)return; const d=sh(t.date,-1);
+    if(d in M){ if(t.date<EXTRA_FROM)return; (extra[d]=extra[d]||{sum:0,dates:{}}); extra[d].sum+=t.amt; extra[d].dates[t.date]=1; return; }
+    B[d]=(B[d]||0)+t.amt; src[d]='az'; bdate[d]=t.date;
+    if(!(S[d]>0.005)) note[d]='إيداع بلا مبيعات باليوم السابق';
   });
-  const status={}; days.forEach(d=>{ status[d]=(B[d]>0.005)?'ok':(d>sh(maxBank,-7)?'pending':'lost'); });
+  Object.keys(extra).forEach(d=>{ const e=extra[d]; if(Math.abs(e.sum-M[d])<0.011)return;
+    B[d]=M[d]+e.sum; note[d]='+ إيداع إضافي '+(+e.sum.toFixed(3))+' دخل '+Object.keys(e.dates).map(dm).join('، '); });
+  const status={}; Object.keys({...S,...B}).forEach(d=>{ if(!(S[d]>0.005)){status[d]='ok';return;} status[d]=(B[d]>0.005)?'ok':(sh(d,1)>maxBank?'pending':'lost'); });
   return {B,src,note,status,bdate};
 }
 function renderMachine(){
@@ -356,7 +356,7 @@ function renderMachine(){
   Object.keys(M).forEach(d=>{ const t=shiftDay(d,1); if(t>maxBank)maxBank=t; });
   txns.sort((a,b)=>a.date<b.date?-1:(a.date>b.date?1:0));
   const R=mcRecon(S,M,txns,maxBank,shiftDay);
-  const dates=[...new Set([...Object.keys(mByDate),...Object.keys(M).filter(inr)])].sort().reverse();
+  const dates=[...new Set([...Object.keys(mByDate),...Object.keys(M).filter(inr),...Object.keys(R.B).filter(inr)])].sort().reverse();   // + أيام إيداع بنك بلا مبيعات
   // كل الفروع بمسمياتها الكاملة (كما في المبيعات) من قائمة الفروع المُدارة
   const BRANCHES=(DATA.lists||[]).filter(l=>l.category==='branch').map(l=>l.value);
   let gMac=0,gRewa=0,gBank=0,gUndep=0,gUndepDays=0,gLost=0,gLostDays=0;
@@ -403,7 +403,7 @@ function renderMachine(){
       kpi('💳 الفرق (عمولة + فروقات توقيت)',fmt(gBankDiff)+' '+C+' · '+gDiffPct,'neg')+
       kpi('❌ أيام بلا إيداع (خسارة)',gLostDays+' يوم'+(gLost>0.005?(' · '+fmt(gLost)+' '+C):''),gLostDays?'neg':'')+
       kpi('⏳ لم يُودع بعد',gUndepDays+' يوم'+(gUndep>0.005?(' · '+fmt(gUndep)+' '+C):''))+
-      '</div><div class="sub" style="margin-top:7px"><b>الفرق</b> = إجمالي المبيعات − المُودع بالبنك (= العمولة + أي فروقات توقيت). «خسارة» = يوم فيه مبيعات مكنة وما لقينا إيداعه لا بالشيت ولا ببنك العز (ولا أي حركة إيداع مكنة بالبنك بعده) — يُحسب فرقه كاملاً ١٠٠٪. «لم يُودع بعد» = آخر ٧ أيام (ممكن البنك متأخر). اليوم بلا إيداع بالشيت ياخذ أول حركة إيداع مكنة بالبنك بعد تاريخه (ثاني يوم أو بعده لو البنك تأخّر)، وتحت القيمة «دخل يوم كذا». غيّري التاريخ فوق ليتحدّث الملخّص.</div></div>'+
+      '</div><div class="sub" style="margin-top:7px"><b>الفرق</b> = إجمالي المبيعات − المُودع بالبنك (= العمولة + أي فروقات توقيت). «خسارة» = يوم فيه مبيعات مكنة وما لقينا إيداعه لا بالشيت ولا ببنك العز (ولا دخل البنك أي إيداع مكنة في اليوم التالي) — يُحسب فرقه كاملاً ١٠٠٪. «لم يُودع بعد» = اليوم التالي ما وصل كشفه بعد. المبيعات تُقارَن بكل إيداعات المكنة اللي دخلت البنك في اليوم التالي مباشرة (حتى لو بعضها لمبيعات يوم قبله)، وتحت القيمة «دخل يوم كذا». الإيداع اللي دخل في يوم ما قبله مبيعات يظهر لحاله. غيّري التاريخ فوق ليتحدّث الملخّص.</div></div>'+
     '<div class="panel"><h3>🗓️ متابعة المكنة اليومية</h3><div class="tbl-wrap bf-scroll" style="max-height:620px"><table style="font-size:12px"><thead><tr><th>التاريخ</th><th style="background:#0e7a5a">📊 مجموع المكنة<br><span style="font-size:8px">كل الفروع</span></th><th style="background:#0e7a5a">🏦 دخل البنك<br><span style="font-size:8px">ت+1</span></th><th style="background:#0e7a5a">الفرق<br><span style="font-size:8px">مكنة−بنك</span></th><th style="background:#0e7a5a">💳 النسبة</th><th>الفرع</th><th>🏧 تقرير الموظفة</th><th>🔄 تقرير روا</th><th>الفرق<br><span style="font-size:8px;color:var(--muted)">موظفة−روا</span></th><th>📝 ملاحظة</th></tr></thead><tbody>'+(blocks||'<tr><td colspan="10" class="mut" style="text-align:center;padding:14px">لا بيانات</td></tr>')+'</tbody></table></div></div>';
 }
 
