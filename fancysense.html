@@ -302,6 +302,23 @@ function fsExportMatchPDF(){
 }
 
 // ===== 🏧 متابعة المكنة (POS) =====
+// مطابقة المكنة مع البنك لكل يوم مبيعات: S=مبيعات/يوم، M=الشيت (Deposted in Bank، بيوم المبيعة)، txns=بنك العز {date: يوم الدخول، amt}
+// ١) الشيت أولاً ٢) بنك العز اليوم التالي ٣) إيداع متأخر D+2..D+4 بمبلغ مطابق ٤) إيداع مدموج مع يوم لاحق (يتوزّع بالتناسب)
+// الحالة: ok / pending (كشف البنك ما وصل) / lost (لا إيداع إطلاقاً)
+function mcRecon(S,M,txns,maxBank,sh){
+  const days=Object.keys(S).filter(d=>S[d]>0.005).sort();
+  const B={},src={},note={},used=new Set();
+  days.forEach(d=>{ if(d in M){B[d]=M[d];src[d]='fs';} });
+  txns.forEach((t,i)=>{ const d=sh(t.date,-1); if([-3,-2,-1,0,1,2].some(k=>{const dd=sh(d,k);return (dd in M)&&Math.abs(M[dd]-t.amt)<0.011;})) used.add(i); });   // مسجّلة أصلاً بالشيت
+  txns.forEach((t,i)=>{ if(used.has(i))return; const d=sh(t.date,-1); if(!(S[d]>0.005)||(d in M))return; B[d]=(B[d]||0)+t.amt; src[d]='az'; used.add(i); });
+  days.forEach(d=>{ if(B[d]>0.005)return; for(let k=2;k<=4;k++){ const dt=sh(d,k); const i=txns.findIndex((t,j)=>!used.has(j)&&t.date===dt&&t.amt>=S[d]*0.95&&t.amt<=S[d]*1.005); if(i>=0){ B[d]=txns[i].amt; src[d]='az'; note[d]='دخل '+dt.slice(8,10)+'/'+dt.slice(5,7); used.add(i); return; } } });
+  days.forEach((d,i)=>{ const ex=(B[d]||0)-S[d]; if(ex<=0.01)return;
+    for(let j=i-1;j>=0;j--){ const p=days[j]; if(p<sh(d,-7))break; if(B[p]>0.005)continue;
+      if(ex>=S[p]*0.95&&ex<=S[p]*1.01+0.01){ const X=B[d],T=S[d]+S[p]; B[d]=X*S[d]/T; B[p]=X*S[p]/T; src[p]=src[d]; note[p]='مُودع مع '+d.slice(8,10)+'/'+d.slice(5,7); note[d]=(note[d]?note[d]+' · ':'')+'يشمل '+p.slice(8,10)+'/'+p.slice(5,7); }
+      break; } });
+  const status={}; days.forEach(d=>{ status[d]=(B[d]>0.005)?'ok':(sh(d,1)>=maxBank?'pending':'lost'); });
+  return {B,src,note,status};
+}
 function renderMachine(){
   const C=cur();
   const F={from:window._mcFrom||'',to:window._mcTo||'',onlyPending:!!window._mcOnlyPending};
@@ -315,37 +332,44 @@ function renderMachine(){
   (DATA.daily_sales||[]).forEach(x=>{ const d=String(x.sale_date||'').slice(0,10); if(!inr(d))return; const br=(x.branch||'—'); mByDate[d]=mByDate[d]||{}; const o=mByDate[d][br]=mByDate[d][br]||{machine:0,rewa:0,note:''}; o.machine+=n(x.machine); o.rewa+=n(x.rewa_machine); const nt=x.note_machine||x.note; if(nt)o.note=(o.note?o.note+' · ':'')+String(nt); });
   // دخل البنك: (1) الأساس = عمود «Deposted in Bank» من الشيت (fs_machine_deposit) — مسجَّل بيوم المبيعة (لا زحلقة)، وتاريخ الدخول الفعلي = اليوم التالي
   //           (2) احتياط = بنك العز (acc_fancy) للأيام التي لا إيداع لها في الشيت فقط — مزحلق يوماً (تاريخ البنك D+1 ↔ مبيعات D)، لأن العز يؤرّخ بيوم الدخول الفعلي
-  const fsByDate={}, azByDate={}, azDates={};
-  (DATA.machine_deposit||[]).forEach(x=>{ if(x.actual_bank==null)return; const d=String(x.dep_date||'').slice(0,10); if(!inr(d))return; fsByDate[d]=(fsByDate[d]||0)+n(x.actual_bank); });
-  (DATA.acc_fancy||[]).forEach(x=>{ const c=azClass(x); if(!c||c.type!=='مكنة')return; const txt=[x.details,x.description,x.more_details,x.bank_name,x.bank_ref].map(v=>String(v||'')).join(' '); if(!/pos/i.test(txt))return;   /* 🏧 إيداعات المكنة في العز اسمها POS — نجيبها فقط ونتجاهل باقي الحركات */ const raw=String(x.tx_date||'').slice(0,10); const d=shiftDay(raw,-1); if(!inr(d))return; azByDate[d]=(azByDate[d]||0)+c.amount; (azDates[d]=azDates[d]||{})[raw]=1; });
-  const dates=[...new Set([...Object.keys(mByDate),...Object.keys(fsByDate),...Object.keys(azByDate)])].sort().reverse();
+  // ٨ نوفمبر ٢٠٢٦: إيداعات المكنة ببنك ظفار صار اسمها «ايراد فانسي / Fancy Sense Revenue» (بلا POS) من يونيو ٢٠٢٦ → نقبل الاسمين.
+  //   المطابقة على كل الأيام (بلا فلتر الفترة) ثم نعرض الفترة فقط — عشان الإيداع المدموج/المتأخر يلقى يومه حتى لو على حدود الفترة.
+  const S={}, M={};
+  (DATA.daily_sales||[]).forEach(x=>{ const d=String(x.sale_date||'').slice(0,10); S[d]=(S[d]||0)+n(x.machine); });
+  (DATA.machine_deposit||[]).forEach(x=>{ if(x.actual_bank==null)return; const d=String(x.dep_date||'').slice(0,10); M[d]=(M[d]||0)+n(x.actual_bank); });
+  const txns=[]; let maxBank='';
+  (DATA.acc_fancy||[]).forEach(x=>{ const raw=String(x.tx_date||'').slice(0,10); if(raw>maxBank)maxBank=raw; const c=azClass(x); if(!c||c.type!=='مكنة')return; const txt=[x.details,x.description,x.more_details,x.bank_name,x.bank_ref].map(v=>String(v||'')).join(' '); if(!(/pos/i.test(txt)||(/dhofar|ظفار/i.test(txt)&&/ايراد\s*فانسي|fancy\s*sense\s*revenue/i.test(txt))))return; txns.push({date:raw,amt:c.amount}); });
+  Object.keys(M).forEach(d=>{ const t=shiftDay(d,1); if(t>maxBank)maxBank=t; });
+  txns.sort((a,b)=>a.date<b.date?-1:(a.date>b.date?1:0));
+  const R=mcRecon(S,M,txns,maxBank,shiftDay);
+  const dates=[...new Set([...Object.keys(mByDate),...Object.keys(M).filter(inr)])].sort().reverse();
   // كل الفروع بمسمياتها الكاملة (كما في المبيعات) من قائمة الفروع المُدارة
   const BRANCHES=(DATA.lists||[]).filter(l=>l.category==='branch').map(l=>l.value);
-  let gMac=0,gRewa=0,gBank=0,gUndep=0,gUndepDays=0;
+  let gMac=0,gRewa=0,gBank=0,gUndep=0,gUndepDays=0,gLost=0,gLostDays=0;
   const blocks=dates.map(d=>{
     const brs=[...new Set([...BRANCHES, ...Object.keys(mByDate[d]||{})])];   // جميع الفروع (حتى بلا بيانات لهذا اليوم)
     let totMac=0,totRewa=0; brs.forEach(br=>{ const o=mByDate[d]&&mByDate[d][br]; if(o){ totMac+=o.machine; totRewa+=o.rewa; } });
     // دخل البنك لهذا اليوم: الأساس شيتك (بلا حدّ)؛ وإلا بنك العز محدوداً بمبيعات اليوم (العز قد يخلط حركات غير المكنة فلا يُسمح أن يتجاوز المبيعات)
-    let bank, _bsrc, _bdatesObj;
-    if(d in fsByDate){ bank=fsByDate[d]; _bsrc='fs'; _bdatesObj={[shiftDay(d,1)]:1}; }
-    else if(d in azByDate){ bank=azByDate[d]; _bsrc='az'; _bdatesObj=azDates[d]||null; }
-    else { bank=0; _bsrc=null; _bdatesObj=null; }
+    const bank=R.B[d]||0, _bsrc=R.src[d]||null, _st=R.status[d]||'ok';
+    const _bdatesObj=_bsrc==='fs'?{[shiftDay(d,1)]:1}:null;
     const bankDiff=totMac-bank, pct=totMac>0.005?(bankDiff/totMac*100):null;
     // 📅 تاريخ دخول البنك الفعلي (اليوم التالي) — عرض تحت المبلغ ليتأكّد أن مبيعات اليوم تقابل دخول اليوم التالي
     const _dm=(s)=>{const p=String(s).split('-');return p.length>=3?p[2]+'/'+p[1]:s;};
     const bkDays=_bdatesObj?Object.keys(_bdatesObj).sort().map(_dm).join('، '):'';
-    const bkSrcTag=(_bsrc==='az'?' <span style="color:#3aa0ff">🏦 بنك العز</span>':'');   // مصدر احتياطي (ليس من الشيت)
+    const bkSrcTag=(_bsrc==='az'?' <span style="color:#3aa0ff">🏦 بنك العز</span>':'')+(R.note[d]?' <span style="color:#e0a83a">'+esc(R.note[d])+'</span>':'');   // مصدر احتياطي + دمج/تأخير
     gMac+=totMac; gRewa+=totRewa; gBank+=bank;
     // 🎨 لون مطابقة البنك: أخضر=البنك أكثر/مطابق · أصفر=أقل حتى ٣٪ · أحمر=أقل بأكثر من ٣٪ (تنبيه)
     // 📌 «لم يُودع بعد» = فيه مبيعات مكنة ولا يوجد دخل بنك في اليوم التالي (الإيداع ما نزل بعد) — ليس خطأ عمولة، فلا تنبيه أحمر
-    const pending=(bank<0.005&&totMac>0.005); if(pending){gUndep+=totMac;gUndepDays++;}
-    if(F.onlyPending&&!pending)return '';   // فلتر: أيام بلا إيداع فقط (المجاميع تبقى على كل الفترة)
-    const clr=pending?'#8aa0b5':((pct==null)?'#9aa':(pct<=0.005?'#2fd196':(pct<=3?'#e0a83a':'#ff6b7a'))), alert=(!pending&&pct!=null&&pct>3);
-    const pctTxt=pending?'⏳ لم يُودع':((pct==null)?'—':((pct<=0.005&&pct>=-0.005)?'✓':pct.toFixed(2)+'%')), bankDiffTxt=pending?'⏳':(Math.abs(bankDiff)>=0.005?fmt(bankDiff):'✓');
+    // ⏳ لم يُودع بعد = آخر يوم/يومين ما وصل كشف بنكهم · ❌ خسارة = مرّ يومه ولا فيه إيداع لا بالشيت ولا ببنك العز (ولا مدموج/متأخر)
+    const pending=(_st==='pending'&&totMac>0.005), lost=(_st==='lost'&&totMac>0.005);
+    if(pending){gUndep+=totMac;gUndepDays++;} if(lost){gLost+=totMac;gLostDays++;}
+    if(F.onlyPending&&!pending&&!lost)return '';   // فلتر: أيام بلا إيداع فقط (المجاميع تبقى على كل الفترة)
+    const clr=pending?'#8aa0b5':((pct==null)?'#9aa':(pct<=0.005?'#2fd196':(pct<=3?'#e0a83a':'#ff6b7a'))), alert=(lost||(!pending&&pct!=null&&pct>3));
+    const pctTxt=pending?'⏳ لم يُودع بعد':lost?'100% ❌ لم يُودع':((pct==null)?'—':((pct<=0.005&&pct>=-0.005)?'✓':pct.toFixed(2)+'%')), bankDiffTxt=pending?'⏳':(Math.abs(bankDiff)>=0.005?fmt(bankDiff):'✓');
     const N=Math.max(1,brs.length), sp=' rowspan="'+N+'"', bgT=(alert?'background:rgba(229,72,77,.09);':'background:rgba(58,160,255,.05);')+'vertical-align:middle;';
     const dateCell='<td'+sp+' style="font-weight:800;vertical-align:middle">📅 '+esc(d)+'</td>';
     // 📊 أعمدة ممتدة مقابل تفاصيل الفروع: مجموع المكنة · دخل البنك · الفرق · النسبة
-    const spanCells='<td'+sp+' class="num" style="font-weight:800;'+bgT+'">'+fmt(totMac)+'</td><td'+sp+' class="num" style="font-weight:800;color:#3aa0ff;'+bgT+'">'+fmt(bank)+(bkDays?('<div style="font-size:9px;color:var(--muted);font-weight:600;margin-top:2px">📅 دخل '+bkDays+bkSrcTag+'</div>'):'')+'</td><td'+sp+' class="num" style="font-weight:800;color:'+clr+';'+bgT+'">'+bankDiffTxt+'</td><td'+sp+' class="num" style="font-weight:800;color:'+clr+';'+bgT+'">'+pctTxt+(alert?' ⚠️':'')+'</td>';
+    const spanCells='<td'+sp+' class="num" style="font-weight:800;'+bgT+'">'+fmt(totMac)+'</td><td'+sp+' class="num" style="font-weight:800;color:#3aa0ff;'+bgT+'">'+fmt(bank)+((bkDays||bkSrcTag)?('<div style="font-size:9px;color:var(--muted);font-weight:600;margin-top:2px">'+(bkDays?'📅 دخل '+bkDays:'')+bkSrcTag+'</div>'):'')+'</td><td'+sp+' class="num" style="font-weight:800;color:'+clr+';'+bgT+'">'+bankDiffTxt+'</td><td'+sp+' class="num" style="font-weight:800;color:'+clr+';'+bgT+'">'+pctTxt+(alert?' ⚠️':'')+'</td>';
     if(!brs.length) return '<tr style="border-top:2px solid rgba(128,128,128,.3)">'+dateCell+spanCells+'<td class="mut" colspan="5" style="text-align:center">لا مبيعات مكنة مسجّلة</td></tr>';
     return brs.map((br,idx)=>{ const o=(mByDate[d]&&mByDate[d][br])||{machine:0,rewa:0,note:''}, diff=o.machine-o.rewa, hd=Math.abs(diff)>=0.005;
       const bc='<td style="font-weight:700">🏪 '+esc(br)+'</td><td class="num">'+fmt(o.machine)+'</td><td class="num" style="color:#3aa0ff">'+fmt(o.rewa)+'</td><td class="num" style="font-weight:700;color:'+(diff<-0.005?'#ff6b7a':'#2fd196')+'">'+(hd?fmt(diff):'✓')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(o.note||'')+'</td>';
@@ -363,8 +387,9 @@ function renderMachine(){
       kpi('🏧 إجمالي مبيعات المكنة',fmt(gMac)+' '+C)+
       kpi('🏦 المُودع بالبنك',fmt(gBank)+' '+C)+
       kpi('💳 الفرق (عمولة + فروقات توقيت)',fmt(gBankDiff)+' '+C+' · '+gDiffPct,'neg')+
-      kpi('⏳ أيام بلا إيداع مسجّل',gUndepDays+' يوم'+(gUndep>0.005?(' · '+fmt(gUndep)+' '+C):''))+
-      '</div><div class="sub" style="margin-top:7px"><b>الفرق</b> = إجمالي المبيعات − المُودع بالبنك (= العمولة + أي فروقات توقيت). «أيام بلا إيداع مسجّل» للمتابعة فقط — فلوسها قد تكون أُودعت ضمن دفعة يوم آخر، فلا تُطرح من الحساب. غيّري التاريخ فوق ليتحدّث الملخّص.</div></div>'+
+      kpi('❌ أيام بلا إيداع (خسارة)',gLostDays+' يوم'+(gLost>0.005?(' · '+fmt(gLost)+' '+C):''),gLostDays?'neg':'')+
+      kpi('⏳ لم يُودع بعد',gUndepDays+' يوم'+(gUndep>0.005?(' · '+fmt(gUndep)+' '+C):''))+
+      '</div><div class="sub" style="margin-top:7px"><b>الفرق</b> = إجمالي المبيعات − المُودع بالبنك (= العمولة + أي فروقات توقيت). «خسارة» = يوم فيه مبيعات مكنة وما لقينا إيداعه لا بالشيت ولا ببنك العز (ولا مدموجاً مع يوم ثاني ولا متأخراً حتى ٤ أيام) — يُحسب فرقه كاملاً ١٠٠٪. «لم يُودع بعد» = أيام كشف بنكها ما وصل. غيّري التاريخ فوق ليتحدّث الملخّص.</div></div>'+
     '<div class="panel"><h3>🗓️ متابعة المكنة اليومية</h3><div class="tbl-wrap bf-scroll" style="max-height:620px"><table style="font-size:12px"><thead><tr><th>التاريخ</th><th style="background:#0e7a5a">📊 مجموع المكنة<br><span style="font-size:8px">كل الفروع</span></th><th style="background:#0e7a5a">🏦 دخل البنك<br><span style="font-size:8px">ت+1</span></th><th style="background:#0e7a5a">الفرق<br><span style="font-size:8px">مكنة−بنك</span></th><th style="background:#0e7a5a">💳 النسبة</th><th>الفرع</th><th>🏧 تقرير الموظفة</th><th>🔄 تقرير روا</th><th>الفرق<br><span style="font-size:8px;color:var(--muted)">موظفة−روا</span></th><th>📝 ملاحظة</th></tr></thead><tbody>'+(blocks||'<tr><td colspan="10" class="mut" style="text-align:center;padding:14px">لا بيانات</td></tr>')+'</tbody></table></div></div>';
 }
 
