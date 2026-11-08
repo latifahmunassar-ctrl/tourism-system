@@ -72,13 +72,13 @@ Deno.serve(async (req: Request) => {
         .order('tx_date', { ascending: false });
       accFancy = (af || []).filter((r: any) => !r.currency || String(r.currency).toUpperCase() === 'OMR');
     } catch (_) {}
-    // 🏧 ٨ نوفمبر ٢٠٢٦: إيداعات مكنة فانسي في «كشف البنك» بنظام العز (acc_bank_txn) — بنك ظفار، موسومة Fancy بالملاحظة.
+    // 🏧 ٨ نوفمبر ٢٠٢٦: إيداعات فانسي في «كشف البنك» بنظام العز (acc_bank_txn) — موسومة Fancy بالملاحظة (ظفار = المكنة، مسقط = الصناديق).
     //   بعض الأيام (يونيو–أغسطس ٢٠٢٦) موجودة هنا فقط وليست في الكاش إن/آوت → لمتابعة المكنة فقط (لا تدخل باقي المطابقات).
     let accFancyBtx: any[] = [];
     try {
       const { data: bt } = await supabase.from('acc_bank_txn')
         .select('id,tx_date,amount_in,bank_name,bank_ref,note,currency')
-        .ilike('bank_name', '%dhofar%').ilike('note', '%fancy%').gt('amount_in', 0)
+        .ilike('note', '%fancy%').gt('amount_in', 0)   // كل البنوك: ظفار (المكنة) + مسقط (إيداعات الصناديق)
         .order('tx_date', { ascending: false });
       accFancyBtx = (bt || []).filter((r: any) => !r.currency || String(r.currency).toUpperCase() === 'OMR');
     } catch (_) {}
