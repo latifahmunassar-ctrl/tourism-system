@@ -72,7 +72,17 @@ Deno.serve(async (req: Request) => {
         .order('tx_date', { ascending: false });
       accFancy = (af || []).filter((r: any) => !r.currency || String(r.currency).toUpperCase() === 'OMR');
     } catch (_) {}
-    return J({ config: cfg, lists: lists.data || [], daily_sales: daily_sales.data || [], rewa_recon: rewa_recon.data || [],
+    // 🏧 ٨ نوفمبر ٢٠٢٦: إيداعات مكنة فانسي في «كشف البنك» بنظام العز (acc_bank_txn) — بنك ظفار، موسومة Fancy بالملاحظة.
+    //   بعض الأيام (يونيو–أغسطس ٢٠٢٦) موجودة هنا فقط وليست في الكاش إن/آوت → لمتابعة المكنة فقط (لا تدخل باقي المطابقات).
+    let accFancyBtx: any[] = [];
+    try {
+      const { data: bt } = await supabase.from('acc_bank_txn')
+        .select('id,tx_date,amount_in,bank_name,bank_ref,note,currency')
+        .ilike('bank_name', '%dhofar%').ilike('note', '%fancy%').gt('amount_in', 0)
+        .order('tx_date', { ascending: false });
+      accFancyBtx = (bt || []).filter((r: any) => !r.currency || String(r.currency).toUpperCase() === 'OMR');
+    } catch (_) {}
+    return J({ acc_fancy_btx: accFancyBtx, config: cfg, lists: lists.data || [], daily_sales: daily_sales.data || [], rewa_recon: rewa_recon.data || [],
       credit_customers: credit_customers.data || [], credit_txn: credit_txn.data || [], bank_txn: bank_txn.data || [],
       atm_deposit: atm_deposit.data || [], inventory_short: inventory_short.data || [], expenses: expenses.data || [], machine_deposit: machine_deposit.data || [], acc_fancy: accFancy });
   }

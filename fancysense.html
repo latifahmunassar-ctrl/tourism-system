@@ -149,7 +149,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v58';
+const FS_VER='v59';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderBanks(); renderInv(); renderSettings();
@@ -316,8 +316,10 @@ function mcRecon(S,M,txns,maxBank,sh){
   const gap=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/864e5);
   days.forEach(d=>{ if(d in M){B[d]=M[d];src[d]='fs';} });
   const mDays=Object.keys(M).sort();
-  txns.forEach((t,i)=>{ const lo=sh(t.date,-45); if(mDays.some(dd=>dd>=lo&&dd<=t.date&&Math.abs(M[dd]-t.amt)<0.011)) used.add(i); });
-  days.forEach(d=>{ if(d in M)return;
+  txns.forEach((t,i)=>{ const lo=sh(t.date,-MAXGAP); if(mDays.some(dd=>dd>=lo&&dd<=t.date&&Math.abs(M[dd]-t.amt)<0.011)) used.add(i); });
+  // تسوية بنكية تذكر يومها صراحةً → لذاك اليوم مباشرة
+  txns.forEach((t,j)=>{ if(used.has(j)||!t.sale||!(S[t.sale]>0.005)||(t.sale in M)||(B[t.sale]>0.005))return; used.add(j); B[t.sale]=t.amt; src[t.sale]='az'; bdate[t.sale]=t.date; const g=gap(t.sale,t.date); note[t.sale]=g>1?('تأخّر '+g+' أيام'):''; });
+  days.forEach(d=>{ if((d in M)||(B[d]>0.005))return;
     let first=null; txns.forEach((t,j)=>{ if(!used.has(j)&&t.date>d&&gap(d,t.date)<=MAXGAP&&(first==null||t.date<first))first=t.date; });
     if(first==null)return;
     let i=-1; txns.forEach((t,j)=>{ if(!used.has(j)&&t.date===first&&(i<0||Math.abs(t.amt-S[d])<Math.abs(txns[i].amt-S[d])))i=j; });
@@ -346,7 +348,11 @@ function renderMachine(){
   (DATA.daily_sales||[]).forEach(x=>{ const d=String(x.sale_date||'').slice(0,10); S[d]=(S[d]||0)+n(x.machine); });
   (DATA.machine_deposit||[]).forEach(x=>{ if(x.actual_bank==null)return; const d=String(x.dep_date||'').slice(0,10); M[d]=(M[d]||0)+n(x.actual_bank); });
   const txns=[]; let maxBank='';
-  (DATA.acc_fancy||[]).forEach(x=>{ const raw=String(x.tx_date||'').slice(0,10); if(raw>maxBank)maxBank=raw; const c=azClass(x); if(!c||c.type!=='مكنة')return; const txt=[x.details,x.description,x.more_details,x.bank_name,x.bank_ref].map(v=>String(v||'')).join(' '); if(!(/pos/i.test(txt)||(/dhofar|ظفار/i.test(txt)&&/ايراد\s*فانسي|fancy\s*sense\s*revenue/i.test(txt))))return; txns.push({date:raw,amt:c.amount}); });
+  // مرجع البنك أحياناً يذكر يوم المبيعات صراحةً: «IHPOS-… settlement for 17-08-2026» → نستخدمه مباشرة
+  const _settle=(ref)=>{ const m=String(ref||'').match(/settlement\s+for\s+(\d{2})-(\d{2})-(\d{4})/i); return m?(m[3]+'-'+m[2]+'-'+m[1]):null; };
+  (DATA.acc_fancy||[]).forEach(x=>{ const raw=String(x.tx_date||'').slice(0,10); if(raw>maxBank)maxBank=raw; const c=azClass(x); if(!c||c.type!=='مكنة')return; const txt=[x.details,x.description,x.more_details,x.bank_name,x.bank_ref].map(v=>String(v||'')).join(' '); if(!(/pos/i.test(txt)||(/dhofar|ظفار/i.test(txt)&&/ايراد\s*فانسي|fancy\s*sense\s*revenue/i.test(txt))))return; txns.push({date:raw,amt:c.amount,sale:_settle(x.bank_ref)}); });
+  // 🏧 + «كشف البنك» بنظام العز (acc_bank_txn، بنك ظفار، موسومة Fancy) — أيام كثيرة (يونيو–أغسطس) مسجّلة هنا فقط. نفس التاريخ+المبلغ = مكرّرة فلا تُضاف.
+  (DATA.acc_fancy_btx||[]).forEach(x=>{ const raw=String(x.tx_date||'').slice(0,10), a=n(x.amount_in); if(!(a>0)||!raw)return; if(raw>maxBank)maxBank=raw; if(/صندوق|تحويل|آجل|اجل/.test(String(x.note||'')))return; if(txns.some(t=>t.date===raw&&Math.abs(t.amt-a)<0.011))return; txns.push({date:raw,amt:a,sale:_settle(x.bank_ref)}); });
   Object.keys(M).forEach(d=>{ const t=shiftDay(d,1); if(t>maxBank)maxBank=t; });
   txns.sort((a,b)=>a.date<b.date?-1:(a.date>b.date?1:0));
   const R=mcRecon(S,M,txns,maxBank,shiftDay);
