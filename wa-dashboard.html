@@ -1336,6 +1336,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
           <button class="refresh-btn" id="conv-reset" title="إعادة ضبط المحادثة — يبدأ طلال من جديد مع العميل" onclick="resetConversation()" style="background:#ede9fe; color:#6d28d9; border:1px solid #ddd6fe;">🔄 ضبط</button>
+          <button class="refresh-btn" id="conv-block" title="حظر الرقم — طلال ما يرد عليه أبداً (تقدرين تلغين الحظر بنفس الزر)" onclick="toggleBlockNumber()" style="background:#fee2e2; color:#b91c1c; border:1px solid #fecaca;">🚫 حظر</button>
           <button class="refresh-btn" id="conv-close">✕</button>
         </div>
       </div>
@@ -4223,6 +4224,38 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       finally { if (btn) { btn.disabled = false; btn.textContent = old; } }
     }
 
+    // 🚫 ٩ نوفمبر ٢٠٢٦ (المالكة: «خلي لي خيار اني ابلك الرقم من عندي»): حظر/إلغاء حظر رقم المحادثة المفتوحة.
+    let convBlocked = false;
+    function paintBlockBtn() {
+      const b = document.getElementById("conv-block"); if (!b) return;
+      b.textContent = convBlocked ? "✅ إلغاء الحظر" : "🚫 حظر";
+      b.style.background = convBlocked ? "#dcfce7" : "#fee2e2";
+      b.style.color = convBlocked ? "#166534" : "#b91c1c";
+    }
+    async function refreshBlockBtn() {
+      const b = document.getElementById("conv-block"); if (!b || !convPhone) return;
+      const ph = convPhone;
+      try {
+        const r = await fetch(BASE + "?admin_action=block_number&phone=" + encodeURIComponent(ph), { headers: { Authorization: "Bearer " + token } });
+        if (r.status === 401 || r.status === 403) { b.style.display = "none"; return; }   // بلا صلاحية → الزر مخفي
+        const d = await r.json().catch(() => ({}));
+        if (ph !== convPhone) return;
+        b.style.display = ""; convBlocked = !!d.blocked; paintBlockBtn();
+      } catch (_e) { /* */ }
+    }
+    async function toggleBlockNumber() {
+      if (!convPhone) { alert("افتحي محادثة أولاً."); return; }
+      const want = !convBlocked;
+      if (want && !confirm("حظر هذا الرقم؟ طلال ما راح يرد عليه أبداً (كتابة/صور/صوت)، وما يوصلك منه تنبيه. تقدرين تلغين الحظر بنفس الزر.")) return;
+      const b = document.getElementById("conv-block"); if (b) { b.disabled = true; b.textContent = "⏳…"; }
+      try {
+        const d = await callApi("block_number", { phone: convPhone, block: want });
+        if (d && d.ok) { convBlocked = !!d.blocked; alert(convBlocked ? "🚫 تم حظر الرقم." : "✅ أُلغي حظر الرقم."); }
+        else alert("فشل: " + ((d && d.error) || ""));
+      } catch (e) { alert("فشل: " + (e && e.message ? e.message : e)); }
+      finally { if (b) b.disabled = false; paintBlockBtn(); }
+    }
+
     async function openConversation(phone, name) {
       igActiveThread = null;                          // نافذة واتساب حقيقية — أخرجي من وضع إنستقرام
       igStopThreadPoll();
@@ -4235,6 +4268,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         return;
       }
       convPhone = phone;
+      convBlocked = false; paintBlockBtn(); refreshBlockBtn();
       trackActivity("open_conversation");
       $("conv-title").textContent = name;
       // ترويسة: رقم الهاتف + بادج مصدر قدوم العميل (واضح داخل المحادثة أيضاً)
