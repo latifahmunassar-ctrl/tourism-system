@@ -4147,6 +4147,95 @@ function fillBuilderFromProgram(raw, dbDest){
   }catch(e){ console.warn('fillBuilderFromProgram failed', e); }
 }
 
+// ══ 🚨 تنبيه «خدمة بدون تسعيرة» (طلب المالكة ٩ نوفمبر ٢٠٢٦ — لكل الوجهات) ══════════════
+// أي فندق/طيران/قطار/تنقّل/جولة داخل البرنامج بلا سعر → شريط أحمر بارز أعلى الشاشة يسمّي
+// الخدمة. مستثنى: الأيام الحرة، والجولة/الخدمة المكتوب قدامها «0» صراحةً في الشيت.
+// (الجولة اللي خانة سعرها فاضية في الشيت ما تنسحب أصلاً للنظام → تنعدّ «مش موجودة في الشيت».)
+let _paSheetTours = null, _paSheetToursP = null, _paSeq = 0, _paDismissKey = '';
+function _paNorm(s){
+  return String(s||'').replace(/\([^)]*\)/g,' ').replace(/[ً-ْـ]/g,'').replace(/[إأآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه')
+    .replace(/[٠-٩]/g,c=>'٠١٢٣٤٥٦٧٨٩'.indexOf(c)).toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+}
+function _paLoadSheetTours(){
+  if(_paSheetTours) return Promise.resolve(_paSheetTours);
+  if(_paSheetToursP) return _paSheetToursP;
+  const base = SUPABASE_URL.replace(/\/functions\/v1\/.*$/,'');
+  _paSheetToursP = fetch(base+'/rest/v1/tours?select=name,price,variants&limit=5000', { headers:{ apikey:SUPABASE_KEY, Authorization:'Bearer '+SUPABASE_KEY } })
+    .then(r=>r.ok?r.json():[]).then(rows=>{
+      _paSheetTours = (rows||[]).map(t=>{ const vs=Array.isArray(t.variants)?t.variants:[]; const n=_paNorm(t.name);
+        return { n, toks:n.split(' ').filter(x=>x.length>=3), zero: (Number(t.price)===0) || vs.some(v=>Number(v&&v.price)===0) }; });
+      return _paSheetTours;
+    }).catch(()=>{ _paSheetToursP=null; return null; });
+  return _paSheetToursP;
+}
+// يرجّع صف الشيت المطابق لاسم السطر (أو null)
+function _paFindSheetTour(name, rows){
+  const n=_paNorm(name); if(!n) return null;
+  let hit=rows.find(r=>r.n===n); if(hit) return hit;
+  hit=rows.find(r=>r.n.length>=6 && (r.n.includes(n)||n.includes(r.n))); if(hit) return hit;
+  const toks=n.split(' ').filter(x=>x.length>=3); if(toks.length<2) return null;
+  let best=null, bs=0; rows.forEach(r=>{ if(!r.toks.length) return; const c=toks.filter(t=>r.toks.includes(t)).length; const sc=c/Math.max(toks.length,r.toks.length); if(sc>bs){bs=sc;best=r;} });
+  return bs>=0.7 ? best : null;
+}
+function _paRender(items){
+  let bar=document.getElementById('priceAlertBar');
+  if(!bar){
+    bar=document.createElement('div'); bar.id='priceAlertBar';
+    bar.style.cssText='display:none;position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;width:min(920px,calc(100vw - 32px));max-height:45vh;overflow:auto;background:#b91c1c;color:#fff;border:3px solid #fde047;border-top:none;border-radius:0 0 14px 14px;box-shadow:0 10px 30px rgba(0,0,0,.45);padding:12px 16px 12px 44px;font-family:Tajawal,sans-serif;direction:rtl;text-align:right';
+    document.body.appendChild(bar);
+  }
+  const key=items.join('§');
+  if(!items.length || key===_paDismissKey){ bar.style.display='none'; return; }
+  const esc=t=>String(t).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+  bar.innerHTML='<button type="button" title="إخفاء" onclick="_paDismissKey=this.parentNode.dataset.k;this.parentNode.style.display=\'none\'" style="position:absolute;left:10px;top:8px;background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:8px;width:28px;height:28px;font-size:16px;cursor:pointer">✕</button>'
+    + '<div style="font-size:16px;font-weight:900;margin-bottom:6px">🚨 تنبيه: خدمات داخل البرنامج بدون تسعيرة ('+items.length+') — لا ترسلي البرنامج قبل تسعيرها</div>'
+    + '<ul style="margin:0;padding-inline-start:20px;font-size:14px;font-weight:700;line-height:1.9">'+items.map(i=>'<li>'+esc(i)+'</li>').join('')+'</ul>';
+  bar.dataset.k=key; bar.style.display='block';
+}
+function priceAlertsRun(o){
+  const seq=++_paSeq;
+  const items=[], pendingTours=[];
+  const dayOf=s=>{ const m=arabicDigitsToLatin(String(s||'')).match(/اليوم\s*(\d+)/); return m?+m[1]:null; };
+  const isFree=(p)=>/(^|\s)حر(\s|$)/.test(String(p[2]||'')) || /يوم\s*حر/.test(String(p[1]||'')) || /free\s*day/i.test(String(p[1]||''));
+  // 🏨 الفنادق
+  (o.hotelsLines||[]).forEach(l=>{ const t=hotelLineTotals(l); const p=String(l).split('|').map(x=>x.trim());
+    const _rate = parseHotelPerNightRate((t.p||p)[4]||'') || parseMoneyCellArabic((t.p||p)[4]||'');
+    if(!(_rate>0) || !(t.totalLine>0)) items.push('🏨 الفندق «'+(p[0]||'—')+'» في '+(p[1]||'—')+' بدون تسعيرة'); });
+  // ✈️ الطيران / 🚆 القطار (تذاكر القطار تُكتب بقسم الطيران)
+  const flightDays=new Set();
+  (o.flightsLines||[]).forEach(l=>{ const p=String(l).split('|').map(x=>x.trim()); const d=dayOf(p[0]); if(d!=null) flightDays.add(d);
+    if(!(parseMoneyCellArabic(p[2]||'')>0) && !(parseMoneyCellArabic(p[4]||'')>0)){
+      const route=String(p[0]||'').replace(/^اليوم\s*[\d٠-٩]+\s*:?\s*/,'');
+      const isTrain=/قطار|train/i.test(l);
+      items.push((isTrain?'🚆 القطار ':'✈️ الطيران ')+route+(d!=null?' (اليوم '+d+')':'')+' بدون تسعيرة');
+    } });
+  const meta={ persons:o.persons, adults:o.adults, kids:o.kids, infants:0 };
+  const xferDays=new Set();
+  const lineZero=(p)=>{ const r=computeTransferTourLineTotal(p, meta, ''); return !(r.total>0); };
+  // 🚗 التنقّلات
+  (o.transfersLines||[]).forEach(l=>{ const p=String(l).split('|').map(x=>String(x??'').trim()); const d=dayOf(p[0]); if(d!=null) xferDays.add(d);
+    if(lineZero(p)) pendingTours.push({ kind:'🚗 التنقّل', m:true, name:p[1]||'', day:d }); });
+  // 🗺️ الجولات + أيام التنقّل بلا وسيلة مسعّرة
+  (o.toursLines||[]).forEach(l=>{ const p=String(l).split('|').map(x=>String(x??'').trim()); const d=dayOf(p[0]);
+    const tr=String(p[1]||'').match(/يوم\s*تنق[ّ]?ل\s*من\s*(.+?)\s*(?:الى|إلى|الي)\s*(.+)$/);
+    if(tr){ if(!(d!=null && (flightDays.has(d)||xferDays.has(d)))) items.push('🚗 التنقّل من '+tr[1].trim()+' إلى '+tr[2].trim()+(d!=null?' (اليوم '+d+')':'')+' بدون تسعيرة — لا طيران ولا نقل مسعّر لهذا اليوم'); return; }
+    if(isFree(p)) return;
+    if(lineZero(p)) pendingTours.push({ kind:'🗺️ الجولة', name:p[1]||'', day:d }); });
+  const fmt=t=>t.kind+' «'+t.name+'»'+(t.day!=null?' (اليوم '+t.day+')':'');
+  _paRender(items.concat(pendingTours.map(t=>fmt(t)+' بدون تسعيرة')));
+  if(!pendingTours.length) return;
+  // المكتوب قدامه «0» في الشيت مقبول (مجاني صراحةً) — نتحقّق ثم نحدّث الشريط
+  _paLoadSheetTours().then(rows=>{
+    if(seq!==_paSeq || !rows) return;
+    const extra=[];
+    pendingTours.forEach(t=>{ const r=_paFindSheetTour(t.name, rows);
+      if(r && r.zero) return;
+      extra.push(fmt(t)+(r ? ' بدون تسعيرة' : (t.m ? ' غير موجود في الشيت وبدون تسعيرة' : ' غير موجودة في الشيت وبدون تسعيرة')));
+    });
+    _paRender(items.concat(extra));
+  });
+}
+
 function buildReview(raw) {
 lastProgramRaw = raw || '';
 lastSavedCode = '';
@@ -4266,6 +4355,7 @@ for (const l of toursLines) {
   for (const w of r.warns) addMessage('sys', w);
 }
 
+try { priceAlertsRun({ hotelsLines, flightsLines, transfersLines, toursLines, persons, adults, kids }); } catch(e){ console.warn('priceAlertsRun', e); }
 // ✅ الحساب المعتمد: من تفاصيل الشيت (فنادق + طيران + نقل + جولات + شرائح اتصال × 50)
 const computedGroup = Math.max(0, hotelsTotal + flightsTotal + transfersTotal + toursTotal + simTotal);
 basePrice = computedGroup || totalGroupFromText || (totalPerson * persons);
