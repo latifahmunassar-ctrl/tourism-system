@@ -606,6 +606,9 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
         <label style="display:flex;align-items:center;gap:7px;font-weight:600;cursor:pointer;font-size:12.5px">
           <input type="checkbox" id="bf-noflights" style="width:auto"> ✈️ بدون طيران
         </label>
+        <label style="display:flex;align-items:center;gap:7px;font-weight:600;cursor:pointer;font-size:12.5px" title="فنادق + مواصلات بدون طيران — يُحسب ربح «فنادق + مواصلات» من جدول الأرباح (العمرة)">
+          <input type="checkbox" id="bf-hoteltr" style="width:auto" onchange="if(this.checked){document.getElementById('bf-nohotels').checked=false;document.getElementById('bf-noflights').checked=true;}"> 🏨🚗 فنادق مع مواصلات (بدون طيران)
+        </label>
       </div>
       <div class="bf-hint">فعّليها لبناء برنامج <b>جولات ومواصلات وشرائح فقط</b> (مثلاً وجهة أسعار فنادقها غير محدّثة).</div>
     </div>
@@ -1444,7 +1447,16 @@ function applyAutoProfit(){
   const inp = document.getElementById('profitInput');
   if(!inp || !profitMargins.length) return;
   const cost = (basePrice || 0) + extraCostsTotal();   // التكلفة الإجمالية قبل الربح
-  const tiers = profitMargins.filter(m => cost >= +m.cost_min && cost <= +m.cost_max);
+  // 📦 نوع الباقة (مكة ٩ نوفمبر ٢٠٢٦): جدول الأرباح فيه عمود «باقة كاملة» وعمود «فنادق + مواصلات».
+  //    البرنامج فيه طيران دولي (غير تذاكر القطار) → باقة كاملة، وإلا → فنادق + مواصلات.
+  let _pm = profitMargins;
+  if(_pm.some(m => m.package)){
+    const _intl = parseSection(lastProgramRaw||'', 'FLIGHTS').filter(l => !/قطار|train/i.test(l)).length > 0;
+    const _pkg = _intl ? 'full' : 'hotel_transfer';
+    const _by = _pm.filter(m => m.package === _pkg);
+    _pm = _by.length ? _by : _pm.filter(m => m.package === 'full' || !m.package);
+  }
+  const tiers = _pm.filter(m => cost >= +m.cost_min && cost <= +m.cost_max);
   if(!tiers.length){
     // خارج كل النطاقات → بدون ربح تلقائي + تنبيه (مرة واحدة لكل تكلفة)
     const msg = `⚠️ التكلفة الإجمالية (${cost.toLocaleString()} ريال) خارج نطاقات جدول الأرباح لهذه الوجهة — اكتب هامش الربح يدوياً.`;
@@ -3551,7 +3563,10 @@ function buildFromForm(){
   const sims  = +document.getElementById('bf-sims').value||0;
   const extraBedOn = document.getElementById('bf-extrabed-on').checked;
   const noHotels  = document.getElementById('bf-nohotels').checked;
-  const noFlights = document.getElementById('bf-noflights').checked;
+  const hotelTr   = !!(document.getElementById('bf-hoteltr')||{}).checked;   // فنادق مع مواصلات = بدون طيران
+  const noFlights = document.getElementById('bf-noflights').checked || hotelTr;
+  // العمرة: الطيران الدولي يضيفه شريط «طيران مكة» → «بدون طيران» لازم يصفّره (وإلا ينضاف ويُحسب ربح الباقة الكاملة)
+  if(/عمرة|عمره|مكة|مكه/.test(dest||'')){ if(noFlights) MK_FLIGHT_MODE='none'; else if(MK_FLIGHT_MODE==='none') MK_FLIGHT_MODE='cheapest'; MK_FLIGHT_SIG=''; }
   const notes = document.getElementById('bf-notes').value.trim();
   const date  = document.getElementById('bf-date').value;
 

@@ -2888,7 +2888,7 @@ async function pmReadSheet(token: string, ssid: string, range: string): Promise<
 function pmPrice(raw: string): number { return parseFloat((raw || "").replace(/,/g, "").replace(/[^\d.]/g, "")); }
 
 // نفس منطق القارئ الموسمي في sync-sheets (شركات×N مواسم + آفراد×N مواسم).
-function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number; profit_company: number; profit_individual: number; season_from: string | null; season_to: string | null }> {
+function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number; profit_company: number; profit_individual: number; season_from: string | null; season_to: string | null; package?: "full" | "hotel_transfer" | null }> {
   const toLatin = (s: string) => (s || "").replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)));
   const norm = (s: string) => (s || "").replace(/[إأآا]/g, "ا").replace(/[ةه]/g, "ه").replace(/\s+/g, "").toLowerCase().trim();
   const dateRe = /(\d{1,2})\s*\/\s*(\d{1,2})\s*[-–—]\s*(\d{1,2})\s*\/\s*(\d{1,2})/;
@@ -2916,7 +2916,27 @@ function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number
     if ((rows[r] || []).some((c, j) => typeByCol[j] && dateRe.test(toLatin(c || "")))) { dateRow = r; break; }
   }
   const labeledSet = new Set(["شركات", "الشركات", "افراد", "الافراد"]);
-  const cols: Array<{ j: number; type: "company" | "individual"; from: string | null; to: string | null; key: string }> = [];
+  // 📦 نوع الباقة (مكة ٩ نوفمبر ٢٠٢٦): صف تحت التواريخ فيه «full package (hotel + flight + transfer)»
+  //    أو «Hotel + transfer» لكل عمود → ربح مختلف للباقة الكاملة عن «فنادق + مواصلات».
+  const pkgOf = (c: string): "full" | "hotel_transfer" | null => {
+    const t = (c || "").toLowerCase();
+    if (/full|كامل|flight|طيران/.test(t)) return "full";
+    if (/hotel|فندق|فنادق/.test(t)) return "hotel_transfer";
+    return null;
+  };
+  // أعمدة الأرباح الفعلية فقط (لها مدى تاريخ لو موسمي، أو معنونة شركات/أفراد) — حتى لا نلتقط
+  // نصاً من جداول مجاورة (اقتراحات التوزيع…) يحوي «فندق/طيران».
+  const isMarginCol = (j: number) => !!typeByCol[j] && (dateRow >= 0
+    ? dateRe.test(toLatin((rows[dateRow] || [])[j] || ""))
+    : labeledSet.has(norm(hcells[j])));
+  let pkgRow = -1;
+  for (let r = headerRow + 1; r <= headerRow + 4 && r < rows.length; r++) {
+    if (r === dateRow) continue;
+    const rc = rows[r] || [];
+    if (rc.some(c => /\d+\s*-\s*\d+/.test(toLatin(c || "")) && !dateRe.test(toLatin(c || "")))) break;   // وصلنا صفوف الشرائح
+    if (rc.some((c, j) => isMarginCol(j) && pkgOf(c || ""))) { pkgRow = r; break; }
+  }
+  const cols: Array<{ j: number; type: "company" | "individual"; from: string | null; to: string | null; key: string; pkg: "full" | "hotel_transfer" | null }> = [];
   for (let j = firstTyped; j < typeByCol.length; j++) {
     const t = typeByCol[j]; if (!t) continue;
     let from: string | null = null, to: string | null = null;
@@ -2928,7 +2948,8 @@ function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number
     } else if (!labeledSet.has(norm(hcells[j]))) {
       continue;   // غير موسمي: فقط الأعمدة المعنونة مباشرة (شركات/آفراد)
     }
-    cols.push({ j, type: t, from, to, key: `${from || ""}|${to || ""}` });
+    const pkg = pkgRow >= 0 ? pkgOf((rows[pkgRow] || [])[j] || "") : null;
+    cols.push({ j, type: t, from, to, pkg, key: `${from || ""}|${to || ""}|${pkg || ""}` });
   }
   const companies = cols.filter(c => c.type === "company");
   const individuals = cols.filter(c => c.type === "individual");
@@ -2937,8 +2958,8 @@ function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number
   for (const r of [headerRow - 1, headerRow, headerRow + 1]) (rows[r] || []).forEach((c, j) => { if (norm(c).includes("التكلفه")) costCol = j; });
   if (costCol < 0) costCol = firstTyped - 1;
   if (costCol < 0) return [];
-  const out: Array<{ cost_min: number; cost_max: number; profit_company: number; profit_individual: number; season_from: string | null; season_to: string | null }> = [];
-  const startRow = (dateRow >= 0 ? dateRow : headerRow) + 1;
+  const out: Array<{ cost_min: number; cost_max: number; profit_company: number; profit_individual: number; season_from: string | null; season_to: string | null; package?: "full" | "hotel_transfer" | null }> = [];
+  const startRow = Math.max(dateRow >= 0 ? dateRow : headerRow, pkgRow) + 1;
   for (let i = startRow; i < rows.length; i++) {
     const cells = rows[i] || [];
     const cr = toLatin((cells[costCol] || "").trim()).match(/(\d+)\s*-\s*(\d+)/);
@@ -2955,7 +2976,7 @@ function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number
       const piRaw = ind ? pmPrice((cells[ind.j] || "").trim()) : NaN;
       const pc = isNaN(pcRaw) ? (isNaN(piRaw) ? 0 : piRaw) : pcRaw;
       const pi = isNaN(piRaw) ? (isNaN(pcRaw) ? 0 : pcRaw) : piRaw;
-      out.push({ cost_min: cmin, cost_max: cmax, profit_company: pc, profit_individual: pi, season_from: cc.from, season_to: cc.to });
+      out.push({ cost_min: cmin, cost_max: cmax, profit_company: pc, profit_individual: pi, season_from: cc.from, season_to: cc.to, package: cc.pkg });
     });
   }
   return out;
@@ -3005,7 +3026,7 @@ async function handleCurrencies(): Promise<Response> {
 //    منطق الربح والعملة منسوخ حرفياً من team.html (applyAutoProfit + onCurrencyPick)
 //    حتى يطابق ما تراه الموظفة في الداشبورد. [[project_seasonal_profit_margins]]
 // ═══════════════════════════════════════════════════════════════════════════
-type PmRow = { cost_min: number; cost_max: number; profit_company: number; profit_individual: number; season_from: string | null; season_to: string | null };
+type PmRow = { cost_min: number; cost_max: number; profit_company: number; profit_individual: number; season_from: string | null; season_to: string | null; package?: "full" | "hotel_transfer" | null };
 
 // نفس قراءة handleProfitMargins لكن بمفتاح الوجهة مباشرةً (auto_build يملكه).
 async function pmGetMargins(destKey: string): Promise<PmRow[]> {
@@ -3049,7 +3070,13 @@ function _seasonMatches(m: PmRow, md: number | null): boolean {
 }
 // يطابق شريحة التكلفة + الموسم + نوع العميل (نفس applyAutoProfit).
 // ok=false يعني «اكتب الربح يدوياً» → لا نرسل سعراً تلقائياً للعميل.
-function pmPickProfit(margins: PmRow[], cost: number, md: number | null, customerType: string): { profit: number; ok: boolean; note: string } {
+// pkg: «full» (فيه طيران دولي) أو «hotel_transfer» (فنادق + مواصلات بلا طيران). يُطبَّق فقط
+// لو جدول الوجهة فيه بُعد الباقة (مكة)؛ غير ذلك يُتجاهَل.
+function pmPickProfit(margins: PmRow[], cost: number, md: number | null, customerType: string, pkg: "full" | "hotel_transfer" = "full"): { profit: number; ok: boolean; note: string } {
+  if (margins.some(m => m.package)) {
+    const byPkg = margins.filter(m => m.package === pkg);
+    margins = byPkg.length ? byPkg : margins.filter(m => m.package === "full" || !m.package);
+  }
   if (!margins.length) return { profit: 0, ok: false, note: "no_margins" };
   const tiers = margins.filter(m => cost >= +m.cost_min && cost <= +m.cost_max);
   if (!tiers.length) return { profit: 0, ok: false, note: "cost_out_of_range" };
@@ -4055,7 +4082,10 @@ Deno.serve(async (req) => {
         const dateFrom = _taiVal(chosen.program, "DATE_FROM") || date;
         const md = _programMMDD(dateFrom);
         const margins = await pmGetMargins(destKey);
-        const prof = pmPickProfit(margins, cost, md, customerType);       // ok=false ⇒ ربح يدوي
+        // 📦 نوع الباقة: فيه طيران دولي (غير تذاكر القطار) → باقة كاملة، وإلا فنادق + مواصلات
+        const _fl = ((chosen.program.match(/FLIGHTS:([\s\S]*?)(?:\n[A-Z_]+:|$)/) || [])[1] || "").split("\n").filter(l => l.includes("|") && !/قطار|train/i.test(l));
+        const _pkg: "full" | "hotel_transfer" = _fl.length ? "full" : "hotel_transfer";
+        const prof = pmPickProfit(margins, cost, md, customerType, _pkg);       // ok=false ⇒ ربح يدوي
         const finalSar = cost + prof.profit;
         // احفظ البرنامج ليحصل على **كود استرجاع** (يظهر في رسالة العميل ويُستدعى
         // لاحقاً للتعديل عبر الكود — طلب المالكة). نستدعي دالة programs نفسها حتى
