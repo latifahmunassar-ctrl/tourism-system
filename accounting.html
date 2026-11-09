@@ -738,6 +738,7 @@ table{font-weight:600}
         <div class="fld"><label>إلى 📅</label><input type="date" id="bc-to" onchange="renderBanksCashDetail()" style="color-scheme:light;cursor:pointer"></div>
         <button class="btn ghost" id="bc-desc-btn" style="padding:7px 14px" onclick="bcToggleMulti('desc')">📝 الوصف ▾</button>
         <button class="btn ghost" id="bc-details-btn" style="padding:7px 14px" onclick="bcToggleMulti('details')">📋 التفاصيل ▾</button>
+        <button class="btn ghost" id="bc-type-btn" style="padding:7px 14px" onclick="bcToggleType()">🏷️ نوع الإيراد ▾</button>
         <button class="btn ghost" style="padding:7px 14px" onclick="bcClear()">🧹 مسح الكل</button>
       </div>
       <div class="panel" id="bc-desc-panel" style="display:none;margin-bottom:10px;border-color:var(--accent)">
@@ -757,6 +758,15 @@ table{font-weight:600}
           <button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="bcMultiAll('details',false)">مسح التحديد</button>
         </div>
         <div id="bc-details-list" style="max-height:200px;overflow:auto;display:flex;flex-wrap:wrap;gap:5px 18px"></div>
+      </div>
+      <div class="panel" id="bc-type-panel" style="display:none;margin-bottom:10px;border-color:var(--accent)">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+          <b style="font-size:13px">🏷️ اختاري نوع الإيراد (واحد أو أكثر — بدون اختيار = الكل)</b>
+          <button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="bcTypeAll(true)">تحديد الكل</button>
+          <button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="bcTypeAll(false)">مسح التحديد</button>
+        </div>
+        <div id="bc-type-list" style="display:flex;flex-wrap:wrap;gap:8px 22px"></div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:6px">النوع يُستخرج من نص الحركة (المرجع / التفاصيل / تفاصيل أكثر / الملاحظة): صندوق · تحويل أو حوالة بنكية · آجل · والباقي مكنة.</div>
       </div>
       <div class="panel" id="bc-exp-panel" style="display:none;margin-bottom:10px;border-color:var(--red)">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
@@ -5540,8 +5550,18 @@ function bcFillDescByChannel(){ const s=$('bca-desc'); if(s){ const chan=(($('bc
 function bcFillAddDetails(){ const s=$('bca-details'); if(s){ const desc=(($('bca-desc')||{}).value||'').trim(); const dets=desc?bclDets(desc):[]; const ph=!desc?'— اختاري الوصف أولاً —':(dets.length?'— اختاري التفاصيل (إجباري) —':'— لا يوجد —'); const cur=s.value; s.innerHTML='<option value="">'+ph+'</option>'+dets.map(t=>'<option>'+esc(t)+'</option>').join(''); s.value=cur; } bcFillAddMore(); }
 function bcFillAddMore(){ const s=$('bca-more'); if(!s)return; const desc=(($('bca-desc')||{}).value||'').trim(); const det=(($('bca-details')||{}).value||'').trim(); const subs=(desc&&det)?bclSubs(desc,det):[]; const ph=!(desc&&det)?'— اختاري التفاصيل أولاً —':(subs.length?'— اختاري (إجباري) —':'— لا يوجد تفاصيل أكثر —'); const cur=s.value; s.innerHTML='<option value="">'+ph+'</option>'+subs.map(t=>'<option>'+esc(t)+'</option>').join(''); s.value=cur; }
 let bcSelDesc=new Set(), bcSelDetails=new Set();
+// 🏷️ نوع الإيراد (المالكة ٩ نوفمبر ٢٠٢٦): تصنيف موحّد من نص الحركة — يتجاوز اختلاف الكتابة (اواد/فإنسي/حواله…)
+let bcSelType=new Set();
+const BC_TYPES=[['ajel','📒 آجل'],['box','📥 صندوق'],['xfer','🔄 تحويل / حوالة بنكية'],['pos','🏧 مكنة / بدون نوع محدد']];
+function bcTypeOf(x){ const t=[x.bank_ref,x.details,x.more_details,x.note].map(v=>String(v||'')).join(' ').toLowerCase(); if(/آجل|اجل/.test(t))return 'ajel'; if(/صندوق/.test(t))return 'box'; if(/تحويل|حوال|اون\s*لاين|أون\s*لاين|online|mobile payment/.test(t))return 'xfer'; return 'pos'; }
+function bcToggleType(){ const p=$('bc-type-panel'); if(!p)return; const show=p.style.display==='none'; ['desc','details'].forEach(o=>{const op=$('bc-'+o+'-panel'); if(op)op.style.display='none';}); p.style.display=show?'':'none'; if(show)bcRenderType(); }
+function bcRenderType(){ const box=$('bc-type-list'); if(!box)return; const cnt={}; bcApply({skip:'type'}).forEach(x=>{ const k=bcTypeOf(x); cnt[k]=(cnt[k]||0)+1; });
+  box.innerHTML=BC_TYPES.map(([k,l])=>'<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;white-space:nowrap;font-weight:600"><input type="checkbox" style="width:auto;margin:0" '+(bcSelType.has(k)?'checked':'')+' onchange="bcTypePick(\''+k+'\',this.checked)"> '+l+' <span style="color:var(--muted);font-size:10.5px;font-weight:500">('+(cnt[k]||0)+')</span></label>').join(''); }
+function bcTypePick(k,on){ if(on)bcSelType.add(k); else bcSelType.delete(k); bcUpdTypeBtn(); renderBanksCashDetail(); }
+function bcTypeAll(on){ bcSelType.clear(); if(on)BC_TYPES.forEach(([k])=>bcSelType.add(k)); bcUpdTypeBtn(); renderBanksCashDetail(); }
+function bcUpdTypeBtn(){ const b=$('bc-type-btn'); if(!b)return; b.innerHTML='🏷️ نوع الإيراد'+(bcSelType.size?' ('+bcSelType.size+')':'')+' ▾'; b.style.borderColor=bcSelType.size?'var(--accent)':''; }
 function bcMultiState(w){ return w==='desc'?{set:bcSelDesc,field:'description'}:{set:bcSelDetails,field:'details'}; }
-function bcToggleMulti(w){ const p=$('bc-'+w+'-panel'); if(!p)return; const show=p.style.display==='none'; ['desc','details'].forEach(o=>{ if(o!==w){const op=$('bc-'+o+'-panel'); if(op)op.style.display='none';} }); p.style.display=show?'':'none'; if(show)bcRenderMulti(w); }
+function bcToggleMulti(w){ const p=$('bc-'+w+'-panel'); if(!p)return; const show=p.style.display==='none'; { const tp=$('bc-type-panel'); if(tp)tp.style.display='none'; } ['desc','details'].forEach(o=>{ if(o!==w){const op=$('bc-'+o+'-panel'); if(op)op.style.display='none';} }); p.style.display=show?'':'none'; if(show)bcRenderMulti(w); }
 function bcChk(w,v,n,checked){ const av=esc(v).replace(/"/g,'&quot;'); return '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;white-space:nowrap"><input type="checkbox" style="width:auto;margin:0" '+(checked?'checked':'')+' data-val="'+av+'" onchange="bcMultiPick(\''+w+'\',this)"> '+esc(v)+' <span style="color:var(--muted);font-size:10px">('+n+')</span></label>'; }
 // تصنيف قيم التفاصيل لمجموعتين حسب اتجاه الحركة الغالب (داخل/خارج) ضمن السياق الحالي
 function bcDetailsGroups(){
@@ -5579,7 +5599,7 @@ function bcMultiAll(w,on){ const st=bcMultiState(w);
     rows.forEach(x=>{ const v=(x[st.field]||'').trim(); if(v&&(!q||v.toLowerCase().indexOf(q)>=0))st.set.add(v); }); }
   bcUpdMultiBtn(w); renderBanksCashDetail();
 }
-function bcRefreshOpenMulti(){ ['desc','details'].forEach(w=>{ const p=$('bc-'+w+'-panel'); if(p&&p.style.display!=='none')bcRenderMulti(w); }); const ep=$('bc-exp-panel'); if(ep&&ep.style.display!=='none')bcRenderExp(); }
+function bcRefreshOpenMulti(){ ['desc','details'].forEach(w=>{ const p=$('bc-'+w+'-panel'); if(p&&p.style.display!=='none')bcRenderMulti(w); }); const ep=$('bc-exp-panel'); if(ep&&ep.style.display!=='none')bcRenderExp(); const tp=$('bc-type-panel'); if(tp&&tp.style.display!=='none')bcRenderType(); }
 function bcUpdMultiBtn(w){ const st=bcMultiState(w); const btn=$('bc-'+w+'-btn'); if(!btn)return; const lbl=w==='desc'?'📝 الوصف':'📋 التفاصيل'; btn.innerHTML=lbl+(st.set.size?' ('+st.set.size+')':'')+' ▾'; btn.style.borderColor=st.set.size?'var(--accent)':''; }
 function renderBanksCash(){
   if(!DATA) return;
@@ -5687,6 +5707,7 @@ function bcApply(opts){
   if(q)a=a.filter(x=>((x.bank_name||'')+' '+(x.bank_ref||'')+' '+(x.channel||'')+' '+(x.description||'')+' '+(x.details||'')+' '+(x.more_details||'')+' '+(x.note||'')).toLowerCase().indexOf(q)>=0);
   if(opts.skip!=='desc' && bcSelDesc.size)a=a.filter(x=>bcSelDesc.has((x.description||'').trim()));
   if(opts.skip!=='details' && bcSelDetails.size)a=a.filter(x=>bcSelDetails.has((x.details||'').trim()));
+  if(opts.skip!=='type' && bcSelType.size)a=a.filter(x=>bcSelType.has(bcTypeOf(x)));
   // 📊 نوع العملية: الإيراد = داخل (+) · المصاريف = خارج (−)
   const kind=(($('bc-kind')||{}).value||'');
   if(kind==='in')a=a.filter(x=>Number(x.in_raw||0)>0);
@@ -5857,7 +5878,7 @@ function renderBanksCashDetail(){
   box.innerHTML=html;
   bcRefreshOpenMulti();
 }
-function bcClear(){ ['bc-bank','bc-q','bc-from','bc-to','bc-desc-search','bc-details-search'].forEach(id=>{const e=$(id);if(e)e.value='';}); const c=$('bc-cur');if(c)c.value=''; const k=$('bc-kind');if(k)k.value=''; const es=$('bc-exp-search');if(es)es.value=''; bcSelExp.clear(); const eb=$('bc-exp-btn');if(eb)eb.style.display='none'; const ep=$('bc-exp-panel');if(ep)ep.style.display='none'; bcSelDesc.clear(); bcSelDetails.clear(); bcUpdMultiBtn('desc'); bcUpdMultiBtn('details'); ['bc-desc-panel','bc-details-panel'].forEach(id=>{const p=$(id);if(p)p.style.display='none';}); renderBanksCashDetail(); }
+function bcClear(){ ['bc-bank','bc-q','bc-from','bc-to','bc-desc-search','bc-details-search'].forEach(id=>{const e=$(id);if(e)e.value='';}); const c=$('bc-cur');if(c)c.value=''; const k=$('bc-kind');if(k)k.value=''; const es=$('bc-exp-search');if(es)es.value=''; bcSelExp.clear(); const eb=$('bc-exp-btn');if(eb)eb.style.display='none'; const ep=$('bc-exp-panel');if(ep)ep.style.display='none'; bcSelDesc.clear(); bcSelDetails.clear(); bcSelType.clear(); bcUpdTypeBtn(); bcUpdMultiBtn('desc'); bcUpdMultiBtn('details'); ['bc-desc-panel','bc-details-panel','bc-type-panel'].forEach(id=>{const p=$(id);if(p)p.style.display='none';}); renderBanksCashDetail(); }
 // 💠 عرض سعر الصرف الفعلي عند إدخال القيمة العمانية للسحب الأجنبي (المبلغ الأجنبي ÷ العماني)
 function bcaOmrRate(){ const el=$('bca-omr-rate'); if(!el)return; const out=Number(($('bca-out')||{}).value||0), inn=Number(($('bca-in')||{}).value||0); const amt=out>0?out:inn; const omr=Number(($('bca-omr')||{}).value||0); const cur=((($('bca-cur')||{}).value||'').trim().toUpperCase())||'الأجنبية'; if(amt>0&&omr>0&&cur!=='OMR'){ el.textContent='سعر الصرف الفعلي: 1 OMR = '+(amt/omr).toFixed(4)+' '+cur+'  ·  1 '+cur+' = '+(omr/amt).toFixed(4)+' OMR'; el.style.color='var(--green)'; } else if(omr>0&&cur==='OMR'){ el.textContent='العملة عمانية — لا حاجة لقيمة إضافية'; el.style.color='var(--muted)'; } else { el.textContent=''; } }
 async function addBankCash(){
