@@ -1128,6 +1128,13 @@ function mkProgFP(){
 }
 function mkSig(cities){ return mkProgFP() + '|' + JSON.stringify((cities||[]).map(c=>c.key+'/'+c.nights)) + '|' + MK_MODES.join(',') + '|' + MK_DEP_AIR; }
 let MK_FLIGHT_MODE = 'cheapest';  // طيران مكة الدولي: cheapest|oman|salam|none
+// 🏨 ٩ نوفمبر ٢٠٢٦: برنامج طلال «فندق + توصيل» يحمل FLIGHT_MODE:none → بدون طيران افتراضياً (إلا لو الموظفة غيّرت يدوياً لنفس البرنامج).
+let MK_FLIGHT_FP = '';
+function mkSyncFlightMode(){
+  const fp = mkDepFP();
+  if (MK_FLIGHT_FP === fp) return;
+  if (String(getLine(lastProgramRaw||'','FLIGHT_MODE')||'').trim().toLowerCase() === 'none') { MK_FLIGHT_MODE = 'none'; MK_FLIGHT_FP = fp; }
+}
 let MK_FLIGHT_DATA = null;        // كاش أسعار الطيران (يُجلب مرة)
 let MK_FLIGHT_SIG = '';           // بصمة آخر تطبيق طيران (mode+تواريخ+أشخاص)
 let lastSavedCode = '';
@@ -1833,7 +1840,7 @@ function _nearestDate(keys, want){
   return keys.slice().sort((a,b)=> dist(a)-dist(b))[0];
 }
 function mkFlightModeLabel(){ return {cheapest:'الأرخص',oman:'الطيران العماني',salam:'طيران السلام',none:'بدون طيران'}[MK_FLIGHT_MODE]; }
-async function mkSetFlight(mode){ MK_FLIGHT_MODE = mode; MK_FLIGHT_SIG=''; await mkFlightApply(); renderMakkahFlightBar(); }
+async function mkSetFlight(mode){ MK_FLIGHT_MODE = mode; MK_FLIGHT_FP = mkDepFP(); MK_FLIGHT_SIG=''; await mkFlightApply(); renderMakkahFlightBar(); }
 function renderMakkahFlightBar(){
   const panel = document.getElementById('reviewPanel'); if(!panel) return;
   const old = document.getElementById('mkFlightBar'); if(old) old.remove();
@@ -1846,7 +1853,7 @@ function renderMakkahFlightBar(){
     + `<div style="display:flex;flex-wrap:wrap;gap:9px">${opt('cheapest','🏷️ الأرخص')}${opt('oman','🛫 الطيران العماني')}${opt('salam','🛫 طيران السلام')}${opt('none','🚫 بدون طيران')}</div>`;
   panel.insertBefore(bar, panel.firstChild);
   // تطبيق تلقائي مرة واحدة لكل (وضع+تواريخ+أشخاص) — عشان يُضاف الأرخص تلقائياً.
-  mkSyncDepAir();
+  mkSyncDepAir(); mkSyncFlightMode();
   const _rm = MK_DEP_AIR==='madinah' && mkEndsInMadinah() && MK_FLIGHT_DATA && MK_FLIGHT_DATA.prices && MK_FLIGHT_DATA.prices.oman && MK_FLIGHT_DATA.prices.oman.ret_med && Object.keys(MK_FLIGHT_DATA.prices.oman.ret_med).length>0;
   const sig = mkProgFP()+'|'+MK_FLIGHT_MODE+'|'+_dmyKey(_progDateDMY('DATE_FROM'))+'|'+_dmyKey(_progDateDMY('DATE_TO'))+'|'+mkPax()+'|'+(_rm?'med':'jed');
   if(sig !== MK_FLIGHT_SIG) setTimeout(()=>mkFlightApply(), 0);
@@ -1861,7 +1868,7 @@ async function mkFlightApply(){
   }
   const D = MK_FLIGHT_DATA; const pax = mkPax();
   const depD=_progDateDMY('DATE_FROM'), retD=_progDateDMY('DATE_TO');
-  mkSyncDepAir();
+  mkSyncDepAir(); mkSyncFlightMode();
   // العودة من مطار المدينة: بلوك «Madinah–Muscat» (العماني) لو له سعر، وإلا جدة كالمعتاد.
   const retMed = MK_DEP_AIR==='madinah' && mkEndsInMadinah() && D && D.prices && D.prices.oman && D.prices.oman.ret_med && Object.keys(D.prices.oman.ret_med).length>0;
   MK_FLIGHT_SIG = mkProgFP()+'|'+MK_FLIGHT_MODE+'|'+_dmyKey(depD)+'|'+_dmyKey(retD)+'|'+pax+'|'+(retMed?'med':'jed');
