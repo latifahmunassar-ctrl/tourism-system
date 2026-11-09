@@ -5714,7 +5714,7 @@ function bcRenderExp(){
 }
 function bcExpPick(el){ const v=el.dataset.val; if(el.checked)bcSelExp.add(v); else bcSelExp.delete(v); bcUpdExpBtn(); renderBanksCashDetail(); }
 function bcExpClear(){ bcSelExp.clear(); bcUpdExpBtn(); renderBanksCashDetail(); }
-function bcFiltered(){ const a=bcApply(); a.sort((x,y)=>{ const dx=x.source==='dashboard'?1:0, dy=y.source==='dashboard'?1:0; if(dx!==dy) return dy-dx; if(dx===1) return String(y.created_at||'').localeCompare(String(x.created_at||''))||(Number(y.id||0)-Number(x.id||0)); return String(y.tx_date||'').localeCompare(String(x.tx_date||'')); }); return a; }  // الإدخالات اليدوية الجديدة أولاً ثم الشيت بتاريخ الحركة
+function bcFiltered(){ const a=bcApply(); a.sort((x,y)=>String(y.tx_date||'').localeCompare(String(x.tx_date||''))||String(y.created_at||'').localeCompare(String(x.created_at||''))||(Number(y.id||0)-Number(x.id||0))); return a; }  // ترتيب تنازلي بتاريخ الحركة (الأحدث أولاً) — يدوي وشيت مع بعض (المالكة ٩ نوفمبر ٢٠٢٦)
 // 🔁 كاشف التحويلات الداخلية بين الحسابات — يمسك القناة الفعلية «transafare between account» + مرادفاتها (عربي/إنجليزي، وأخطاء إملائية شائعة)
 function _isXferRow(r){ const s=(String(r.channel||'')+' '+String(r.description||'')+' '+String(r.details||'')).toLowerCase(); return /between\s*accoun|trans[a-z]*f[a-z]*re?|transfer|تحويل\s*بين|حوال[ةه]\s*داخل|داخل[ية]*\s*بين|حساب\s*ل?\s*حساب/.test(s); }
 // 🌐 سعر صرف مباشر (أون لاين، بلا مفتاح) لتقدير المبلغ المتوقّع وصوله في التحويل بين عملتين — تخزين مؤقت + تدهور آمن؛ التقدير للاسترشاد فقط والمالكة تُدخِل الرقم الحقيقي
