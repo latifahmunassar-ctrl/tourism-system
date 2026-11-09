@@ -5775,7 +5775,9 @@ function renderBanksCashDetail(){
   const H=['📅 تاريخ الدفع','داخل (+)','خارج (−)','العملة','سعر الصرف','داخل (ر.س)','خارج (ر.س)','البنك / البطاقة','المرجع','📡 القناة','الوصف','التفاصيل','📝 تفاصيل أكثر','ملاحظة','المصدر',''];
   // 🔁 تنبيه: حوالات داخلية خرجت ولم يُسجَّل طرفها الداخل بعد — تنبيه فقط + زر تأكيد يدوي (لا إنشاء تلقائي)
   const _DISx=(typeof dismissedSet==='function'?dismissedSet():new Set());
-  const _pendXfer=xferPendingArrivals().filter(o=>!_DISx.has('xferin:'+o.id));
+  // 🔁 التنبيه يتبع الفلاتر (المالكة ٩ نوفمبر ٢٠٢٦): التاريخ · البنك · العملة · القناة · نوع العملية (الإيراد = يُخفى لأن الحوالة خارجة)
+  const _fB=(($('bc-bank')||{}).value||'').trim(), _fC=(($('bc-cur')||{}).value||'').trim(), _fCh=(($('bc-chan')||{}).value||'').trim(), _fK=(($('bc-kind')||{}).value||''), _fF=(($('bc-from')||{}).value)||'', _fT=(($('bc-to')||{}).value)||'';
+  const _pendXfer=xferPendingArrivals().filter(o=>!_DISx.has('xferin:'+o.id)).filter(o=>{ const d=String(o.tx_date||'').slice(0,10); if(_fK==='in')return false; if(_fF&&d<_fF)return false; if(_fT&&d>_fT)return false; if(_fB&&(o.bank_name||'')!==_fB)return false; if(_fC&&bankCur(o.bank_name)!==_fC)return false; if(_fCh&&(o.channel||'')!==_fCh)return false; return true; });
   const _allCurs=[...new Set(a.concat((DATA&&DATA.banksCash)||[]).map(x=>String(bankCur(x.bank_name)||'').toUpperCase()).filter(Boolean))];
   // 🌐 لو فيه حوالة بعملة تختلف عن عملة حساب آخر → نجلب سعر الصرف المباشر لعرض المتوقّع وصوله (تقديري)
   const _needFx=_pendXfer.some(o=>{ const sc=String(o.currency||bankCur(o.bank_name)||'').toUpperCase(); return _allCurs.some(c=>c&&c!==sc); });
