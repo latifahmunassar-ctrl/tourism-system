@@ -5834,7 +5834,7 @@ function renderBanksCashDetail(){
       const flagIn=xferInPending.has(x.id);
       const flagOut=isXfer(x) && Number(x.out_raw||0)>0 && xferPendKeys.has(String(x.details||'')+'|'+Number(x.out_raw||0));
       const flagged=flagIn||flagOut;
-      return '<tr'+(isDash?' style="background:rgba(47,217,138,.07)"':'')+'><td>'+esc(x.tx_date||'')+'</td>'+
+      return '<tr'+(isDash?' style="background:rgba(47,217,138,.07)"':'')+'><td>'+esc(x.tx_date||'')+(isDash&&x.created_at?'<div style="font-size:9.5px;color:#9aa3ad;font-weight:500;margin-top:2px" title="تاريخ إدخال الحركة في النظام">✏️ أُدخلت '+esc((function(c){ const d=new Date(c); return isNaN(d)?String(c).slice(0,10):(String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()); })(x.created_at))+'</div>':'')+'</td>'+
         '<td class="num" style="color:#0e9d6a">'+bcFmt(x.in_raw)+'</td>'+
         '<td class="num neg">'+bcFmt(x.out_raw)+'</td>'+
         '<td style="font-weight:700">'+esc(x.currency||bankCur(x.bank_name))+'</td>'+
