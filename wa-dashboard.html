@@ -4352,6 +4352,17 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if (b.sim_count != null) setv("bf-sim_count", b.sim_count);
         if (b.hotel_stars) setv("bf-hotel_stars", String(b.hotel_stars));
         if (b.notes) setv("bf-notes", b.notes);
+        // ١٠ نوفمبر ٢٠٢٦: التوزيع اللي أكّده طلال مع العميل يُعتمد كما هو — قبله يُختار توزيع الشيت الوحيد تلقائياً (غلط).
+        bfChosenDist = ""; bfChosenCN = null;
+        if (b.distribution) {
+          bfChosenDist = String(b.distribution);
+          bfChosenCN = Array.isArray(b.cities_nights) ? b.cities_nights : bfParseDist(bfChosenDist);
+          if ($("bf-chosen-wrap")) { $("bf-chosen-wrap").style.display = ""; $("bf-chosen-dist").textContent = bfChosenDist; }
+          if ($("bf-cityRows") && Array.isArray(bfChosenCN) && bfChosenCN.length) {
+            $("bf-cityRows").innerHTML = "";
+            bfChosenCN.forEach(c => bfAddCity(c.city, +c.nights || 1));
+          }
+        }
         if (b.destination && typeof bfLoadSugs === "function") {
           await bfLoadSugs(b.destination);
           // المطار: لو زوج واحد فقط نختاره تلقائيًا فتظهر اقتراحات التوزيع؛ وإلا نترك الموظف يختار.
