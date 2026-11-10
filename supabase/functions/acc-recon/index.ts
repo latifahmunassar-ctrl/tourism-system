@@ -239,6 +239,18 @@ Deno.serve(async (req: Request) => {
     if (action === 'request_cash_add') {
       if (!p.bank_name) return J({ error: 'لازم تحديد البنك' }, 400);
       if (!String(p.bank_ref || '').trim()) return J({ error: 'المرجع البنكي إجباري لحركة الكاش (داخل/خارج)' }, 400);   // 🏦 المرجع إجباري — قرار المالكة
+      // ⚠️ تكرار (المالكة ١٠ نوفمبر ٢٠٢٦): حركة بنفس البنك والمبلغ والاتجاه (±يوم) — معتمدة أو طلب معلّق (مثل قيد واتساب) → تنبيه للمحاسب والمالكة
+      try {
+        const dir = Number(p.in_raw || 0) > 0 ? 'in_raw' : 'out_raw', amt = Number(p[dir] || 0), td = String(p.tx_date || '').slice(0, 10);
+        if (amt > 0 && td) {
+          const d0 = new Date(td + 'T00:00:00Z').getTime(), dMin = new Date(d0 - 864e5).toISOString().slice(0, 10), dMax = new Date(d0 + 864e5).toISOString().slice(0, 10);
+          const { data: ex } = await supabase.from('acc_banks_cash').select('tx_date,bank_ref').eq('bank_name', p.bank_name).gte('tx_date', dMin).lte('tx_date', dMax).gte(dir, amt - 0.0005).lte(dir, amt + 0.0005).limit(3);
+          const { data: pd } = await supabase.from('acc_pending_movements').select('payload').eq('kind', 'cash').eq('scope', 'banks_cash').eq('status', 'pending').limit(500);
+          const bits: string[] = []; (ex || []).forEach((r: any) => bits.push('حركة معتمدة ' + r.tx_date + (r.bank_ref ? ' · مرجع ' + r.bank_ref : '')));
+          (pd || []).filter((m: any) => m.payload?.bank_name === p.bank_name && Math.abs(Number(m.payload?.[dir] || 0) - amt) < 0.0005 && String(m.payload?.tx_date || '') >= dMin && String(m.payload?.tx_date || '') <= dMax).forEach((m: any) => bits.push('طلب معلّق' + (m.payload?.by ? ' من ' + m.payload.by : '')));
+          if (bits.length) { p.dup_warning = '⚠️ ممكن مكرر: ' + bits.join(' / '); p.summary = p.dup_warning + ' — ' + (p.summary || ''); try { await supabase.from('acc_alerts').insert({ type: 'wa_dup', message: p.summary, status: 'pending' }); } catch (_) {} }
+        }
+      } catch (_) { /* التنبيه اختياري — لا يمنع الطلب */ }
       const { data, error } = await supabase.from('acc_pending_movements').insert({ kind: 'cash', scope: 'banks_cash', status: 'pending', summary: p.summary || null, note: p.note || null, payload: p }).select().single();
       if (error) return J({ error: error.message }, 400);
       return J({ ok: true, row: data });
