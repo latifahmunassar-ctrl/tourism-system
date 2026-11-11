@@ -5578,9 +5578,9 @@ async function waRawPromote(id) {
 function waReqMissing(text) {
   const t = String(text || '');
   const checks = [
-    { label: 'الوجهة', re: /(بوسن|ترك|ماليزي|تايل|اندونيس|اندونس|إندونيس|بالي|جورجيا|اذربيج|أذربيج|مالديف|سيرلانك|سريلانك|فيتنام|روسيا|موسكو|سنغافور|نمسا|سويسر|مصر|المغرب|صلال|عمان|مسقط|دبي|طرابزون|اسطنبول|كوالا|بوكيت|انطالي|أنطالي|شرم|الغردقة|البان|موريشيوس|زنجبار|سيشل|كازاخ|اوزبك|أوزبك|اوزباك|كيب تاون|لنكاوي|باكو|قوبا|قوانغ|هانوي|بانكوك|vietnam|turkey|bosnia|georgia|azerb|salalah|thailand|malaysia|indonesia|bali|russia|moscow|morocco|egypt|phuket|krabi|bangkok|istanbul|baku|mauritius|seychelles|sri ?lanka|cape town|langkawi|zanzibar|kazakh|uzbek)/i },
+    { label: 'الوجهة', re: /(بوسن|ترك|ماليزي|تايل|اندونيس|اندونس|إندونيس|بالي|جورجيا|اذربيج|أذربيج|مالديف|سيرلانك|سريلانك|فيتنام|روسيا|موسكو|سنغافور|نمسا|سويسر|مصر|المغرب|صلال|عمان|مسقط|دبي|طرابزون|اسطنبول|كوالا|بوكيت|انطالي|أنطالي|شرم|الغردقة|البان|موريش|موريت|مورشيوس|زنجبار|سيشل|كازاخ|اوزبك|أوزبك|اوزباك|كيب تاون|لنكاوي|باكو|قوبا|قوانغ|هانوي|بانكوك|vietnam|turkey|bosnia|georgia|azerb|salalah|thailand|malaysia|indonesia|bali|russia|moscow|morocco|egypt|phuket|krabi|bangkok|istanbul|baku|mauritius|seychelles|sri ?lanka|cape town|langkawi|zanzibar|kazakh|uzbek)/i },
     { label: 'التواريخ', re: /(\d{1,2}|[٠-٩]{1,2})\s*[\/\-.]\s*(\d{1,2}|[٠-٩]{1,2})|(\d{1,2}|[٠-٩]{1,2})\s*(يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر)|\d{1,2}\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i },
-    { label: 'عدد الأشخاص', re: /(شخص|أشخاص|اشخاص|بالغ|بالغين|نفر|فرد|افراد|أفراد|شخصين|نفرين|زوجين|عائل|عايل|كبار|adults?|\bpax\b|persons?|people)/i },
+    { label: 'عدد الأشخاص', re: /(شخص|أشخاص|اشخاص|بالغ|بالغين|نفر|فرد|افراد|أفراد|شخصين|نفرين|زوجين|شهر\s*عسل|عرسان|عريس|honeymoon|عائل|عايل|كبار|adults?|\bpax\b|persons?|people)/i },
     { label: 'مطار القدوم/المغادرة', re: /(مطار|airport|ذهاب\s*و\s*عود|الوصول\s*والمغادرة|قدوم\s*و\s*مغادر|وصول\s*و\s*مغادر|arrival|departure)/i },
   ];
   return checks.filter(function (c) { return !c.re.test(t); }).map(function (c) { return c.label; });
@@ -5656,7 +5656,7 @@ function waFixMonthTypos(s){
 // أسماء بديلة للمدن (كتابة مختلفة لنفس المدينة) → اسمها في BF_CITIES
 const WA_CITY_ALIAS = {'فوكيت':'بوكيت','phuket':'بوكيت','كوه ساموي':'كوساموي','كو ساموي':'كوساموي','ساموي':'كوساموي','samui':'كوساموي','تشيانغ ماي':'شيانغ ماي','شنغماي':'شيانغ ماي','شيانج ماي':'شيانغ ماي','بتايا':'باتايا','pattaya':'باتايا','krabi':'كرابي','bangkok':'بانكوك','نهاترانج':'نها ترانج','نها ترانغ':'نها ترانج','نهاترانغ':'نها ترانج','هوتشي منه':'هوتشي مينه','هو تشي منه':'هوتشي مينه','هوشي منه':'هوتشي مينه','هوشي مينه':'هوتشي مينه','هو شي منه':'هوتشي مينه','سايجون':'هوتشي مينه','دا نانج':'دانانج','دانانغ':'دانانج','هالونج':'ها لونج','هالونغ':'ها لونج','ها لونغ':'ها لونج','فو كوك':'فوكوك','لنكاوي':'لانكاوي','لنكاوى':'لانكاوي','لانكاوى':'لانكاوي','لنكاوي ':'لانكاوي','كوالا لمبور':'كوالالمبور','كوالالامبور':'كوالالمبور','كوالا لامبور':'كوالالمبور','كوالا':'كوالالمبور','سلانجور':'سيلانجور','سيلانقور':'سيلانجور','سلانقور':'سيلانجور','بينانق':'بينانج','بينانغ':'بينانج','بنانج':'بينانج','كاميرون':'كاميرون هايلاند','كامرون':'كاميرون هايلاند',
   // إملاءات الوجهات الشائعة (١١ نوفمبر ٢٠٢٦ — «سريلانكا» ما انفهمت لأن المفتاح «سيرلانكا»)
-  'سريلانكا':'سيرلانكا','سري لانكا':'سيرلانكا','سيريلانكا':'سيرلانكا','سيري لانكا':'سيرلانكا','سرلانكا':'سيرلانكا','سيرلنكا':'سيرلانكا','سير لانكا':'سيرلانكا','تايلند':'تايلاند','تركيه':'تركيا','بوسنه':'البوسنة','ابو ظبي':'أبوظبي','ابوظبى':'أبوظبي','جنوب افريقيه':'جنوب أفريقيا','موريشس':'موريشيوس','اندونيسيه':'إندونيسيا'};
+  'سريلانكا':'سيرلانكا','سري لانكا':'سيرلانكا','سيريلانكا':'سيرلانكا','سيري لانكا':'سيرلانكا','سرلانكا':'سيرلانكا','سيرلنكا':'سيرلانكا','سير لانكا':'سيرلانكا','تايلند':'تايلاند','تركيه':'تركيا','بوسنه':'البوسنة','ابو ظبي':'أبوظبي','ابوظبى':'أبوظبي','جنوب افريقيه':'جنوب أفريقيا','موريشس':'موريشيوس','موريشوس':'موريشيوس','مورشيوس':'موريشيوس','موريتيوس':'موريشيوس','موريشص':'موريشيوس','اندونيسيه':'إندونيسيا'};
 // 🇬🇧 طلبات الشركات بالإنجليزي (٩ نوفمبر ٢٠٢٦ — طلب «Moscow / adult 2 / 1dec to 9 dec» ما انفهم):
 //    أسماء الوجهات والمدن الإنجليزية → اسمها العربي في BF_CITIES (تُطابَق ككلمة كاملة).
 const WA_EN_ALIAS = {
@@ -5701,13 +5701,18 @@ function waReqParse(body){
   // الوجهة: مفتاح مباشر، ثم استنتاج من أول مدينة مذكورة (طرابزون → تركيا)
   let dest=''; for(const k of Object.keys(CITY)){ if(nb.includes(waReqNorm(k))){ dest=k; break; } }
   if(!dest){ const _nbS=nb.replace(/\s+/g,''); let best=1e9; for(const k of Object.keys(CITY)){ for(const c of (CITY[k]||[])){ const p=_nbS.indexOf(waReqNorm(c).replace(/\s+/g,'')); if(p>=0&&p<best){ best=p; dest=k; } } } }
+  // ✍️ خطأ إملائي في اسم الوجهة/المدينة (١١ نوفمبر ٢٠٢٦ — «موريشوس» ما انفهمت وبقيت فيتنام):
+  //    كلمة ≥٥ حروف تبعد حرفاً واحداً (حرفين للأسماء ≥٨) عن وجهة/مدينة، وبنفس الحرف الأول.
+  if(!dest){ const words=nb.split(/[^ء-يa-z]+/).map(w=>w.replace(/^ال(?=.{4})/,'')).filter(w=>w.length>=5); let bd=9;
+    for(const k of Object.keys(CITY)){ for(const c of [k, ...(CITY[k]||[])]){ const cn=waReqNorm(c).replace(/\s+/g,'').replace(/^ال(?=.{4})/,''); if(cn.length<5) continue; const lim=cn.length>=8?2:1;
+      for(const w of words){ if(w[0]!==cn[0]) continue; const d=waEditDist(w,cn); if(d<=lim && d<bd){ bd=d; dest=k; } } } } }
   // البالغون / الأطفال
   let adults=null, m=lat.match(/(\d+)\s*(?:بالغ(?:ين|ون)?|كبار|كبير|اشخاص\s*كبار)/)||lat.match(/عدد\s*الا?شخاص\s*:?\s*(\d+)/)||lat.match(/(\d+)\s*(?:اشخاص|أشخاص|شخص)/); if(m) adults=parseInt(m[1],10);
   // إنجليزي: «2 adults» / «adult 2» / «PAX: 2» / «2 persons»
   if(adults==null){ const me=lat.match(/(\d+)\s*(?:adults?|adt|pax|persons?|people|ppl)(?![a-z])/i)||lat.match(/(?<![a-z])(?:adults?|adt|pax|persons?)\s*[:=\-]?\s*(\d+)/i); if(me) adults=parseInt(me[1],10); }
   // الأرقام المكتوبة بالحروف («ثلاث اشخاص» → ٣) — تُطبَّق فقط إن لم يُوجَد رقم
   if(adults==null){
-    if(/شخصين|نفرين|زوجين/.test(nb)) adults=2;
+    if(/شخصين|نفرين|زوجين|شهر عسل|عرسان|عريس|honeymoon/.test(nb)) adults=2;   // شهر عسل = ٢ بالغين
     else if(/شخص\s*واحد|فرد\s*واحد/.test(nb)) adults=1;
     else { const wm=nb.match(/(واحد|اثنين|اثنان|ثلاثه?|ثالث|اربعه?|خمسه?|سته?|سبعه?|ثمانيه?|ثمان|تسعه?|عشره?)\s*(?:اشخاص|بالج|بالغ|افراد|نفر|كبار)/);
       if(wm){ const BW={'واحد':1,'اثنين':2,'اثنان':2,'ثلاث':3,'اربع':4,'خمس':5,'ست':6,'سبع':7,'ثماني':8,'ثمان':8,'تسع':9,'عشر':10}; adults=BW[wm[1].replace(/ه$/,'').replace(/^ثالث$/,'ثلاث')]||null; } }
@@ -5787,6 +5792,8 @@ function waReqFillForm(body){
   if(!p.dest && p.adults==null && !p.dateISO && !p.cities.length) return false;
   const set=(id,v)=>{ const e=document.getElementById(id); if(e && v!=null && v!=='') e.value=v; };
   // الوجهة أولاً (bfOnDest تحمّل المدن وتصفّر الصفوف والأطفال)
+  // ما انقرأت وجهة → نمسح وجهة الطلب السابق (لا تبقى «فيتنام» مضلّلة)
+  if(!p.dest){ const ds=document.getElementById('bf-dest'); if(ds && ds.value){ ds.value=''; try{ if(typeof bfOnDest==='function') bfOnDest(); }catch(e){} } }
   if(p.dest){ const ds=document.getElementById('bf-dest'); if(ds){ if(![...ds.options].some(o=>o.value===p.dest)){ const o=document.createElement('option'); o.value=p.dest; o.textContent=p.dest; ds.appendChild(o); } ds.value=p.dest; if(typeof bfOnDest==='function') bfOnDest(); } }
   if(p.adults!=null) set('bf-adults', p.adults);
   const cf=document.getElementById('bf-children'); if(cf) cf.value=p.children||0;

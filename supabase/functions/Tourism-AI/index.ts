@@ -49,7 +49,7 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     [/تايلاند|تايلند|thailand|بانكوك|bangkok|بوكيت|بوكت|phuket|كرابي|krabi|شيانغ|chiang|باتايا|بتايا|pattaya|ساموي|samui/i, "thailand"],
     [/عُمان(?!ي)|عمان(?!ي)|سلطنة\s*عمان|\boman\b|صلال[ةه]|salalah/i, "Oman"],
     [/جنوب\s*(?:ال)?[أا]فريقيا|south\s*africa|كيب\s*تاون|cape\s*town|جوهانسبر[جغ]|johannesburg|(?:هارمونس|هارمانوس|هيرمانوس|هرمانوس)|hermanus|بريتوريا|pretoria|سن\s*سيتي|sun\s*city|كروجر|kruger|جارد[نت]\s*رو[تط]|قارد[نت]\s*رو[تط]|garden\s*route/i, "South Africa"],
-    [/موريشيوس|موريش[سي]|mauritius|بورت\s*لويس|port\s*louis/i, "mauritius"],
+    [/موريشيوس|موريش[سيو]|mauritius|بورت\s*لويس|port\s*louis/i, "mauritius"],
     [/[إا]ن[جك]لترا|بريطانيا|بريطاني|لندن|england|london|المملكة\s*المتحدة/i, "England"],
     // ⚠️ «صين» وحدها كانت تطابق داخل «شخصين» (شخص+ين) فتُلتقَط الصين خطأً لأي وجهة
     // بعدها بالقائمة (مصر/العمرة…). الحل: «صيني…» تتطلب ياءً، و«صين» المجرّدة محاطة بحدود.
@@ -2933,7 +2933,9 @@ function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number
   for (let r = headerRow + 1; r <= headerRow + 4 && r < rows.length; r++) {
     if (r === dateRow) continue;
     const rc = rows[r] || [];
-    if (rc.some(c => /\d+\s*-\s*\d+/.test(toLatin(c || "")) && !dateRe.test(toLatin(c || "")))) break;   // وصلنا صفوف الشرائح
+    // وصلنا صفوف الشرائح — نفحص أعمدة الأرباح فقط (٩ نوفمبر: فحص الصف كله كان يلقط «x-y» من جداول
+    // مجاورة بنفس الصف فيوقف قبل صف «full package / Hotel + transfer» → ربح الباقة الكاملة للنوعين).
+    if (rc.some((c, j) => isMarginCol(j) && /\d+\s*-\s*\d+/.test(toLatin(c || "")) && !dateRe.test(toLatin(c || "")))) break;
     if (rc.some((c, j) => isMarginCol(j) && pkgOf(c || ""))) { pkgRow = r; break; }
   }
   const cols: Array<{ j: number; type: "company" | "individual"; from: string | null; to: string | null; key: string; pkg: "full" | "hotel_transfer" | null }> = [];
@@ -3627,7 +3629,7 @@ async function handleMakkahFlights(): Promise<Response> {
 //   • النقلات → TOURS (يوم حر للعبادة في الأيام الفاضية) · تذاكر القطار → FLIGHTS · TRANSFERS بلا نقلات.
 //   • الطيران: الأرخص (العماني/السلام) لكل اتجاه، تاريخ أقرب يوم/شهر (أي سنة).
 // team.html يعيد تطبيق نفس الشي فوقه (نتيجة مطابقة)، فيبقى سعر طلال = سعر الـPDF.
-async function applyMakkahExtras(raw: string, opts: { pax: number; returnAirport?: string; flightsData?: Record<string, unknown> | null }): Promise<string> {
+async function applyMakkahExtras(raw: string, opts: { pax: number; returnAirport?: string; flightsData?: Record<string, unknown> | null; noFlights?: boolean }): Promise<string> {
   if (!/مكة|مكه|عمرة/.test(_taiVal(raw, "DEST"))) return raw;
   const pax = Math.max(1, opts.pax || 2);
   const hotelLines = _taiBlock(raw, "HOTELS").filter(l => l.includes("|"));
@@ -3720,7 +3722,8 @@ async function applyMakkahExtras(raw: string, opts: { pax: number; returnAirport
     retMed ? { dir: "ret_med", type: "عودة", want: _programMMDD(_taiVal(out, "DATE_TO")), route: "المدينة ← مسقط" }
            : { dir: "ret", type: "عودة", want: _programMMDD(_taiVal(out, "DATE_TO")), route: "جدة ← مسقط" },
   ];
-  for (const lg of legs) {
+  // 🏨 ٩ نوفمبر ٢٠٢٦ (قرار المالكة): فندق + توصيل (العميل حاجز تذاكره) → بلا طيران دولي؛ ربح «Hotel + transfer» يطبّق تلقائياً.
+  for (const lg of (opts.noFlights ? [] : legs)) {
     const sel = pick(lg.dir, lg.want); if (!sel) continue;
     const per = Math.round(sel.final); const total = per * pax; const air = airlines[sel.airline] || sel.airline;
     const tim = sel.timing ? " · ⏰ " + sel.timing : "";
@@ -3981,6 +3984,7 @@ Deno.serve(async (req) => {
         const phone = String(reqBody.phone || "").trim();          // لتحديد عملة العميل
         const customerType = String(reqBody.customer_type || "individual").trim();
         const returnAirport = String(reqBody.return_airport || "").trim().toLowerCase();   // "madinah" = العودة من مطار المدينة
+        const noFlights = reqBody.no_flights === true;   // ٩ نوفمبر ٢٠٢٦: فندق + توصيل بلا طيران دولي (العمرة)
         if (!destKey || !days) return new Response(JSON.stringify({ ok: false, error: "missing dest/days" }), { headers: CORS_HEADERS });
         const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
         const cityDefs = DEST_CITIES[destKey] || [];
@@ -4047,7 +4051,7 @@ Deno.serve(async (req) => {
             let prog = r.program;
             if (destKey === "Makkah") {
               if (_mkFlights === undefined) { try { _mkFlights = await (await handleMakkahFlights()).json(); } catch (_) { _mkFlights = null; } }
-              prog = await applyMakkahExtras(prog, { pax, returnAirport, flightsData: _mkFlights });
+              prog = await applyMakkahExtras(prog, { pax, returnAirport, flightsData: _mkFlights, noFlights });
             }
             const m = prog.match(/TOTAL_GROUP:\s*([\d,٬]+)/);
             const total = m ? parseInt(m[1].replace(/[,٬]/g, ""), 10) : 0;
@@ -4077,6 +4081,9 @@ Deno.serve(async (req) => {
           const _lastCity = String((_hl[_hl.length - 1] || "").split("|")[1] || "").trim();
           if (/madinah|المدين/i.test(_lastCity)) chosen.program = chosen.program.replace(/^(DATE_TO:.*)$/m, "$1\nRETURN_AIRPORT:madinah");
         }
+        // 🏨 ٩ نوفمبر ٢٠٢٦ (حي، MK-2026-033): فندق + توصيل → علامة FLIGHT_MODE:none بالبرنامج — team.html (اللي يطلّع الـPDF)
+        //    كان يرجّع يضيف طيران مكة الأرخص من نفسه، فوصل العميل PDF فيه طيران السلام رغم إنه حاجز.
+        if (noFlights && destKey === "Makkah" && !/\nFLIGHT_MODE:/.test(chosen.program)) chosen.program = chosen.program.replace(/^(DATE_TO:.*)$/m, "$1\nFLIGHT_MODE:none");
         // ── تسعير العرض النهائي للعميل: تكلفة + ربح موسمي + عملة الجنسية + تنسيق ──
         const cost = chosen.total;                                        // TOTAL_GROUP = تكلفة بالريال
         const dateFrom = _taiVal(chosen.program, "DATE_FROM") || date;
