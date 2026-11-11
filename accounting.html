@@ -5960,15 +5960,25 @@ function cashEditModal(id){
     '<div style="display:flex;gap:8px;margin-bottom:9px"><div class="fld" style="flex:1;margin:0"><label>داخل (+)</label><input type="number" id="ce-in" step="any" value="'+esc(x.in_raw!=null?x.in_raw:'')+'" style="width:100%"></div><div class="fld" style="flex:1;margin:0"><label>خارج (−)</label><input type="number" id="ce-out" step="any" value="'+esc(x.out_raw!=null?x.out_raw:'')+'" style="width:100%"></div><div class="fld" style="flex:1;margin:0"><label>العملة</label><select id="ce-cur" style="width:100%">'+curOpts+'</select></div></div>'+
     '<div class="fld" style="margin-bottom:9px"><label>🔁 سعر الصرف <span style="font-size:9px;color:var(--muted)">(اختياري)</span></label><input type="number" id="ce-rate" step="any" value="'+esc(x.currency_rate!=null?x.currency_rate:'')+'" style="width:100%"></div>'+
     '<div class="fld" style="margin-bottom:9px"><label>🔖 المرجع البنكي</label><input id="ce-ref" value="'+esc(x.bank_ref||'')+'" style="width:100%"></div>'+
-    '<div style="display:flex;gap:8px;margin-bottom:9px"><div class="fld" style="flex:1;margin:0"><label>القناة</label><input id="ce-chan" value="'+esc(x.channel||'')+'" style="width:100%"></div><div class="fld" style="flex:1;margin:0"><label>الوصف</label><input id="ce-desc" value="'+esc(x.description||'')+'" style="width:100%"></div></div>'+
-    '<div style="display:flex;gap:8px;margin-bottom:9px"><div class="fld" style="flex:1;margin:0"><label>التفاصيل</label><input id="ce-det" value="'+esc(x.details||'')+'" style="width:100%"></div><div class="fld" style="flex:1;margin:0"><label>تفاصيل أكثر</label><input id="ce-more" value="'+esc(x.more_details||'')+'" style="width:100%"></div></div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:9px"><div class="fld" style="flex:1;margin:0"><label>القناة</label><select id="ce-chan" style="width:100%" onchange="ceCascade(1)"></select></div><div class="fld" style="flex:1;margin:0"><label>الوصف</label><select id="ce-desc" style="width:100%" onchange="ceCascade(2)"></select></div></div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:9px"><div class="fld" style="flex:1;margin:0"><label>التفاصيل</label><select id="ce-det" style="width:100%" onchange="ceCascade(3)"></select></div><div class="fld" style="flex:1;margin:0"><label>تفاصيل أكثر</label><select id="ce-more" style="width:100%"></select></div></div>'+
     '<div class="fld" style="margin-bottom:9px"><label>ملاحظة'+(x._fromBankTxn?' <span style="font-size:9px;color:var(--muted)">(التصنيف أعلاه؛ هنا ملاحظة حرة فقط)</span>':'')+'</label><input id="ce-note" value="'+(x._fromBankTxn?'':esc(x.note||''))+'" style="width:100%"></div>'+
     (owner?'':'<div class="fld" style="margin-bottom:9px"><label>📝 سبب التعديل <span style="color:#d11;font-size:9px">إجباري</span></label><input id="ce-reason" placeholder="سبب التعديل" style="width:100%"></div>')+
     '<div id="ce-msg" style="font-size:12px;margin-bottom:8px;min-height:16px"></div>'+
     '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost" onclick="var e=document.getElementById(\'cashedit-modal\');if(e)e.remove()">إلغاء</button><button class="btn green" id="ce-save" onclick="saveCashEdit(\''+id+'\')">💾 حفظ</button></div>'+
   '</div>';
   document.body.appendChild(m);
+  ceCascade(0,{chan:x.channel||'',desc:x.description||'',det:x.details||'',more:x.more_details||''});
 }
+// 🔽 ١١ نوفمبر ٢٠٢٦ (المالكة): خانات التصنيف في تعديل حركة الكاش = قوائم منسدلة متسلسلة من تصنيف Banks Cash الرسمي (بلا إدخال يدوي)
+//   القناة (bc_channel) ← الوصف المربوط بها (bc_ch_desc) ← التفاصيل (bc_det) ← التفاصيل الفرعية (bc_subdet). القيمة الحالية تبقى ظاهرة لو مو بالقائمة.
+function ceFill(id,list,cur){ const e=document.getElementById('ce-'+id); if(!e)return; const L=[...list]; if(cur&&!L.includes(cur))L.unshift(cur);
+  e.innerHTML='<option value="">— اختاري —</option>'+L.map(v=>'<option'+(v===cur?' selected':'')+' value="'+esc(v)+'">'+esc(v)+(cur===v&&!list.includes(v)?' (غير موجود بالتصنيف)':'')+'</option>').join(''); }
+function ceCascade(level,init){ const g=k=>init?init[k]:((document.getElementById('ce-'+k)||{}).value||'');
+  const chan=g('chan'); if(level<1) ceFill('chan',bclChannels(),chan);
+  const desc=level<2?(init?init.desc:''):g('desc'); let ds=bclChDescs(chan); if(!ds.length) ds=bclDescs(); if(level<2) ceFill('desc',ds,desc);
+  const det=level<3?(init?init.det:''):g('det'); if(level<3) ceFill('det',bclDets(desc),det);
+  const more=init?init.more:''; ceFill('more',bclSubs(desc,det),more); }
 async function saveCashEdit(id){
   id=String(id); const isBtx=id.indexOf('btc-')===0; const realId=isBtx?Number(id.slice(4)):(isNaN(Number(id))?id:Number(id));
   const g=k=>{ const e=document.getElementById('ce-'+k); return e?e.value:undefined; };
