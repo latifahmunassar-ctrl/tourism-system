@@ -1663,7 +1663,7 @@ function cashMoveDlg(rid){const r=byId(S.registers,rid),sh=byId(S.shifts,r.shift
 const PI={date:'',no:'',type:'sale',method:'',branch:'',cust:'',prod:'',sku:'',page:1};
 function posInvList(r){
   const f=PI;const L=S.sales.filter(s=>s.type===f.type&&(!f.date||isoL(new Date(s.date))===f.date)&&(!f.no||s.no.toLowerCase().includes(f.no.toLowerCase()))&&(!f.method||(s.payments||[]).some(p=>p.methodId===f.method))&&(!f.branch||s.branchId===f.branch)
-    &&(!f.cust||(byId(S.customers,s.customerId)?.name||'').toLowerCase().includes(f.cust.toLowerCase()))&&(!f.prod||s.items.some(i=>i.name.toLowerCase().includes(f.prod.toLowerCase())))&&(!f.sku||s.items.some(i=>(i.sku||'').includes(f.sku)))).sort((a,b)=>b.date.localeCompare(a.date));
+    &&(!f.cust||custName(s).toLowerCase().includes(f.cust.toLowerCase()))&&(!f.prod||s.items.some(i=>i.name.toLowerCase().includes(f.prod.toLowerCase())))&&(!f.sku||s.items.some(i=>(i.sku||'').includes(f.sku)))).sort((a,b)=>b.date.localeCompare(a.date));
   const pages=Math.max(1,Math.ceil(L.length/10));if(f.page>pages)f.page=pages;const rows=L.slice((f.page-1)*10,f.page*10);
   $('#posmain').innerHTML=`<div class="card" style="margin:16px;padding:14px"><div class="pifil">
    <input type="date" class="in" value="${f.date}" data-f="date"><div class="search"><input placeholder="رقم الفاتورة" value="${esc(f.no)}" data-f="no"></div><select class="in" data-f="type"><option value="sale" ${f.type==='sale'?'selected':''}>إيصالات البيع</option><option value="return" ${f.type==='return'?'selected':''}>إيصالات الإرجاع</option></select>
@@ -1718,7 +1718,7 @@ function receiptHTML(s){
   const sign=s.type==='return'?-1:1;
   const taxes={};s.items.forEach(it=>{taxes[it.taxRate]=(taxes[it.taxRate]||0)+it.tax});
   return`<div class="rcpt"><div class="rc-c">${s.type==='return'?'فاتورة إرجاع':'فاتورة'}<br><b>${esc(s.no)}</b></div>
-   <div class="rc-h">فانسي سنس<br>${esc(brName(s.branchId))}<br>${esc(s.registerName||'')} - ${esc(s.user||'')}<br>${new Date(s.date).toLocaleString('ar-EG-u-nu-latn',{hour:'2-digit',minute:'2-digit',second:'2-digit',year:'numeric',month:'2-digit',day:'2-digit'})}${s.customerId?`<br>العميل: ${esc(byId(S.customers,s.customerId)?.name||'')}`:''}${s.refNo?`<br>مرجع: ${esc(s.refNo)}`:''}</div>
+   <div class="rc-h">فانسي سنس<br>${esc(brName(s.branchId))}<br>${esc(s.registerName||'')} - ${esc(s.user||'')}<br>${new Date(s.date).toLocaleString('ar-EG-u-nu-latn',{hour:'2-digit',minute:'2-digit',second:'2-digit',year:'numeric',month:'2-digit',day:'2-digit'})}${custName(s)?`<br>العميل: ${esc(custName(s))}`:''}${s.refNo?`<br>مرجع: ${esc(s.refNo)}`:''}</div>
    <table class="rc-t"><thead><tr><th></th><th>اسم المنتج</th><th>السعر</th><th>الإجمالي</th></tr></thead><tbody>
    ${s.items.map(it=>`<tr><td>${it.qty}x</td><td>${esc(it.name)}${it.promoName?`<div class="rc-s">${esc(it.promoName)} : ${fmt(it.promoDisc)}</div>`:''}</td><td>${fmt(it.price)}</td><td>${fmt(it.total)}<div class="rc-s">غير شامل الضريبة ${fmt(it.net)}</div></td></tr>`).join('')}</tbody></table>
    <div class="rc-r"><span>إجمالي العناصر</span><span>${s.items.reduce((a,i)=>a+i.qty,0)}</span></div>
@@ -1728,9 +1728,10 @@ function receiptHTML(s){
    <div class="rc-r big"><span>الإجمالي</span><span>${fmt(sign*s.total)}</span></div>
    ${(s.payments||[]).map(p=>`<div class="rc-r"><span>${esc(mName(p.methodId))}</span><span>${fmt(sign*p.amount)}</span></div>`).join('')}
    ${(s.collections||[]).map(p=>`<div class="rc-r sm"><span>تحصيل ${dtFmt(p.date)} · ${esc(mName(p.methodId))}</span><span>${fmt(p.amount)}</span></div>`).join('')}
-   ${s.change?`<div class="rc-r"><span>الباقي</span><span>${fmt(s.change)}</span></div>`:''}${due(s)>0?`<div class="rc-r"><span>المتبقي (دين)</span><span>${fmt(due(s))}</span></div>`:''}</div>`;
+   ${s.credited?`<div class="rc-r sm"><span>خُصم من الدين بالإرجاع</span><span>${fmt(s.credited)}</span></div>`:''}${s.change?`<div class="rc-r"><span>الباقي</span><span>${fmt(s.change)}</span></div>`:''}${due(s)>0?`<div class="rc-r"><span>المتبقي (دين)</span><span>${fmt(due(s))}</span></div>`:''}</div>`;
 }
-const due=s=>s.type==='return'?0:r3(s.total-(s.paid||0)-(s.collections||[]).reduce((a,c)=>a+c.amount,0));
+const due=s=>{if(s.type==='return'||s.type==='quote')return 0;const d=r3(s.total-(s.paid||0)-(s.collections||[]).reduce((a,c)=>a+c.amount,0)-(s.credited||0));return d>=0.006?d:0};
+const custName=s=>byId(S.customers,s.customerId)?.name||s.customerName||'';
 function printReceipt(id){const s=byId(S.sales,id);const w=window.open('','_blank','width=420,height=700');if(!w){toast('اسمح بالنوافذ المنبثقة للطباعة');return}
   w.document.write(`<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>${esc(s.no)}</title><style>${RC_CSS}body{margin:0}@page{size:80mm auto;margin:4mm}</style></head><body>${receiptHTML(s)}<script>setTimeout(()=>print(),300)<\/script></body></html>`);w.document.close()}
 const RC_CSS=`.rcpt{width:300px;margin:0 auto;font-family:Arial,sans-serif;font-size:12px;color:#111}.rc-c{text-align:center;font-size:14px;margin-bottom:10px;line-height:1.7}.rc-h{border-bottom:1px solid #111;padding-bottom:10px;margin-bottom:6px;line-height:1.7}.rc-t{width:100%;border-collapse:collapse}.rc-t th{font-weight:normal;text-align:right;border-bottom:1px solid #111;padding:4px 2px}.rc-t td{vertical-align:top;padding:6px 2px;border-bottom:1px solid #111}.rc-s{font-size:9px;color:#555}.rc-r{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #ddd}.rc-r.dash{border-top:1px dashed #111}.rc-r.sm{font-size:10px}.rc-r.big{font-weight:bold;font-size:14px;border-top:1px dashed #111;border-bottom:1px dashed #111}`;
@@ -1739,7 +1740,7 @@ const RC_CSS=`.rcpt{width:300px;margin:0 auto;font-family:Arial,sans-serif;font-
 const SI={q:'',range:'24h',from:'',to:'',f:{branch:'',method:'',customer:'',type:''},page:1,size:25};
 const RANGES={'24h':'24 ساعة (الإعداد الافتراضي)',today:'اليوم',yday:'أمس','7d':'آخر 7 أيام','30d':'آخر 30 يوم',month:'هذا الشهر',all:'كل الفترات',custom:'فترة مخصصة'};
 function siRange(){const n=new Date(),d0=x=>{const y=new Date(x);y.setHours(0,0,0,0);return y};
-  switch(SI.range){case'24h':return[new Date(n-864e5),n];case'today':return[d0(n),n];case'yday':{const a=d0(new Date(n-864e5));return[a,d0(n)]}case'7d':return[new Date(n-7*864e5),n];case'30d':return[new Date(n-30*864e5),n];case'month':return[new Date(n.getFullYear(),n.getMonth(),1),n];case'custom':return[SI.from?new Date(SI.from+'T00:00:00'):new Date(0),SI.to?new Date(SI.to+'T23:59:59'):n];default:return[new Date(0),new Date(8.6e15)]}}
+  switch(SI.range){case'24h':return[new Date(n-864e5),n];case'today':return[d0(n),n];case'yday':{const a=d0(new Date(n-864e5));return[a,d0(n)]}case'7d':return[new Date(n-7*864e5),n];case'30d':return[new Date(n-30*864e5),n];case'month':return[new Date(n.getFullYear(),n.getMonth(),1),n];case'custom':return[SI.from?new Date(SI.from+'T00:00:00'):new Date(0),SI.to?new Date(SI.to+'T23:59:59'):n];default:return[new Date(0),new Date(253402300799000)]}}
 function siList(){const[a,b]=siRange(),A=a.toISOString(),B=b.toISOString(),q=SI.q.trim().toLowerCase(),f=SI.f;
   return S.sales.filter(s=>s.date>=A&&s.date<=B&&(!f.branch||s.branchId===f.branch)&&(!f.type||s.type===f.type)&&(!f.customer||s.customerId===f.customer)&&(!f.method||(s.payments||[]).some(p=>p.methodId===f.method))&&(!q||s.no.toLowerCase().includes(q))).sort((x,y)=>y.date.localeCompare(x.date))}
 function viewSales(){
@@ -1754,7 +1755,7 @@ function viewSales(){
     ${SI.range==='custom'?`<input type="date" class="in" style="width:160px;height:38px" value="${SI.from}" onchange="SI.from=this.value;viewSales()"><input type="date" class="in" style="width:160px;height:38px" value="${SI.to}" onchange="SI.to=this.value;viewSales()">`:''}</div>
     <span class="sub" style="margin:0">${list.length} فاتورة · الصافي ${money(net)}</span></div>
    <div class="card">${list.length?`<div class="tbl-wrap"><table><thead><tr><th>رقم الفاتورة</th><th>الموقع</th><th>طريقة الدفع</th><th>العميل</th><th>القناة</th><th>نوع البيع</th><th>قيمة الفاتورة</th><th>المبلغ المدفوع</th><th>تاريخ</th><th></th></tr></thead><tbody>
-    ${rows.map(s=>{const pd=r3((s.paid||0)+(s.collections||[]).reduce((a,c)=>a+c.amount,0));return`<tr><td class="no"><a href="#/sale/${s.id}">${esc(s.no)}</a></td><td>${esc(brName(s.branchId))}</td><td>${esc([...new Set((s.payments||[]).map(p=>mName(p.methodId)))].join('، ')||'—')}</td><td>${esc(byId(S.customers,s.customerId)?.name||'')}</td><td>نقاط البيع</td>
+    ${rows.map(s=>{const pd=r3((s.paid||0)+(s.collections||[]).reduce((a,c)=>a+c.amount,0));return`<tr><td class="no"><a href="#/sale/${s.id}">${esc(s.no)}</a></td><td>${esc(brName(s.branchId))}</td><td>${esc([...new Set((s.payments||[]).map(p=>mName(p.methodId)))].join('، ')||(due(s)>0||s.credited?'بيع آجل':'—'))}</td><td>${esc(custName(s))}</td><td>نقاط البيع</td>
      <td>${s.type==='return'?'<span class="pill p-bad">إرجاع</span>':'بيع'}</td><td class="num">${s.type==='return'?'−':''}${fmt(s.total)}</td><td class="num">${s.type==='return'?'−':''}${fmt(pd)}${due(s)>0?' <span class="pill p-warn">آجل</span>':''}</td><td>${new Date(s.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</td>
      <td class="act"><button class="ib" title="طباعة" onclick="printReceipt('${s.id}')">🖨</button><button class="ib" onclick="siRowMenu(event,'${s.id}')">⋯</button></td></tr>`}).join('')}</tbody></table></div>
     <div class="foot"><div>عدد النتائج <select class="in" style="height:32px;width:70px;display:inline-block;padding:0 6px" onchange="SI.size=+this.value;SI.page=1;viewSales()">${[10,25,50,100].map(n=>`<option ${n===SI.size?'selected':''}>${n}</option>`).join('')}</select> &nbsp; عرض ${(SI.page-1)*SI.size+1} - ${Math.min(SI.page*SI.size,list.length)} من ${list.length}</div><div class="pager">${genPager(SI.page,pages,'SI.page=%;viewSales()')}</div></div>`
@@ -1770,7 +1771,7 @@ function siFilters(){const f=SI.f;const o=overlay(`<div class="drawer"><div clas
   <div class="df"><button class="btn pri" data-ok>تطبيق</button><button class="btn" data-x>إلغاء</button></div></div>`);
   o.querySelector('[data-x]').onclick=()=>o.remove();o.querySelector('[data-ok]').onclick=()=>{SI.f={branch:sf1.value,method:sf2.value,customer:sf3.value,type:sf4.value};SI.page=1;o.remove();viewSales()}}
 function exportSales(){const list=siList();const head=['رقم الفاتورة','الموقع','الصندوق','الكاشير','طريقة الدفع','العميل','نوع البيع','الإجمالي الفرعي','الخصم','العروض','الضريبة','قيمة الفاتورة','المبلغ المدفوع','المتبقي','التاريخ'];
-  const rows=list.map(s=>[s.no,brName(s.branchId),s.registerName,s.user,[...new Set((s.payments||[]).map(p=>mName(p.methodId)))].join(' + '),byId(S.customers,s.customerId)?.name||'',s.type==='return'?'إرجاع':'بيع',s.subtotal,s.manual,s.promo,s.tax,(s.type==='return'?-1:1)*s.total,(s.type==='return'?-1:1)*s.paid,due(s),dtFmt(s.date)]);
+  const rows=list.map(s=>[s.no,brName(s.branchId),s.registerName,s.user,[...new Set((s.payments||[]).map(p=>mName(p.methodId)))].join(' + '),custName(s),s.type==='return'?'إرجاع':'بيع',s.subtotal,s.manual,s.promo,s.tax,(s.type==='return'?-1:1)*s.total,(s.type==='return'?-1:1)*s.paid,due(s),dtFmt(s.date)]);
   const csv='﻿'+[head,...rows].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=`sales-${today()}.csv`;a.click()}
 function viewSale(id){const s=byId(S.sales,id);if(!s){location.hash='#/sales';return}setTitle('تفاصيل الفاتورة');
   const rets=S.sales.filter(x=>x.refId===s.id);
@@ -1896,6 +1897,18 @@ function importSalesSeed(d){
   for(const p of d.promotions||[]){const id='rwpr'+p.rid;const o={id,rid:p.rid,name:p.name,type:p.type,discType:p.discType,amount:p.amount,start:p.start,end:p.end||'',allLocations:p.allLocations,locations:p.locationNames.map(bByName).filter(Boolean),x:sc(p.x),y:sc(p.y),paused:p.paused};
     const ex=byId(S.promotions,id);if(ex)Object.assign(ex,o);else{S.promotions.push(o);np++}}
   save();return[nr,np];
+}
+
+/* ---------- import Rewaa sales history ---------- */
+function importSalesHistory(d){
+  const bByName=n=>S.branches.find(b=>normS(b.name).toLowerCase()===normS(n).toLowerCase())?.id||'';
+  const mId=n=>{n=normS(n);let m=S.methods.find(x=>normS(x.name)===n);if(!m){m={id:uid(),name:n};S.methods.push(m)}return m.id};
+  let nc=0,ns=0,nu=0;
+  for(const c of d.customers||[]){const ex=byId(S.customers,c.id);if(ex)Object.assign(ex,c);else{S.customers.push(c);nc++}}
+  const idx=new Map(S.sales.map((x,i)=>[x.id,i]));
+  for(const o of d.sales||[]){const{branchName,...x}=o;x.branchId=bByName(branchName);x.payments=(o.payments||[]).map(p=>({methodId:mId(p.method),amount:p.amount}));x.collections=(o.collections||[]).map(c=>({amount:c.amount,methodId:mId(c.method),date:c.date,user:c.user||''}));
+    if(idx.has(x.id)){S.sales[idx.get(x.id)]=x;nu++}else{S.sales.push(x);ns++}}
+  save();return{customers:nc,sales:ns,updated:nu};
 }
 /* ===================== settings ===================== */
 function viewSettings(){
