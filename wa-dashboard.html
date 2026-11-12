@@ -4389,7 +4389,15 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           await bfLoadSugs(b.destination);
           // المطار: لو زوج واحد فقط نختاره تلقائيًا فتظهر اقتراحات التوزيع؛ وإلا نترك الموظف يختار.
           const aSel = $("bf-airport");
-          if (aSel) { const opts = [...aSel.options].filter(o => o.value); if (opts.length === 1) aSel.value = opts[0].value; }
+          if (aSel) {
+            const opts = [...aSel.options].filter(o => o.value);
+            // ✈️ ١٢ نوفمبر ٢٠٢٦ (المالكة): المطار من كرت/كلام طلال (العمرة: القدوم جدة، والمغادرة جدة أو المدينة).
+            const _ra = String(b.return_airport || "");
+            const _isJed = (x) => /jed|جد/i.test(x), _isMed = (x) => /med|mad|مدين/i.test(x);
+            const _hit = _ra ? opts.find(o => { const [a, d] = String(o.value).split("|"); return _isJed(a) && (_ra === "madinah" ? _isMed(d) : _isJed(d)); }) : null;
+            if (_hit) aSel.value = _hit.value;
+            else if (opts.length === 1) aSel.value = opts[0].value;
+          }
           if (typeof bfRenderSugs === "function") bfRenderSugs();
         }
         // مقارنة بين وجهتين: خزّن الوجهة الثانية، واعرض زر «طلب الوجهة الثانية» لحفظها كطلب منفصل.
