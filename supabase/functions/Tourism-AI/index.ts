@@ -70,6 +70,13 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     // أبوظبي / ياس آيلاند — باقات Stay & Play (تسعير بالباقة لا بالليلة).
     [/[أا]بو\s*ظبي|abu\s*dhabi|abudhabi|ياس\s*آ?ايلاند|جزيرة\s*ياس|yas\s*island|عالم\s*فيراري|ferrari\s*world|وارنر\s*براذرز|warner\s*bros|ياس\s*ووتروورلد|yas\s*waterworld/i, "Abu Dhabi"],
   ];
+  // 🛫 ١٢ نوفمبر ٢٠٢٦ (المالكة): «الإقلاع من صلالة ومسقط» = مدينة المغادرة، مو الوجهة. كانت عمان تُلتقَط قبل مكة
+  //    فيسأل «المدن المتاحة في Oman». نحذف عبارات المغادرة أولاً؛ لو طلعت وجهة ثانية نعتمدها،
+  //    وإلا نرجع للنص الأصلي (رحلة عمان الحقيقية تبقى تُكتشف).
+  const OM = "(?:صلال[ةه]|مسقط|عُ?مان|سلطنة\\s*عُ?مان|salalah|muscat|oman)";
+  const originRe = new RegExp(`(?:(?:ال)?[إا]قلاع|(?:ال)?مغادر[ةه]|(?:ال)?سفر|(?:ال)?انطلاق|(?:ال)?طيران|طالعين|مسافرين)?\\s*من\\s+(?:ال)?${OM}(?:\\s*(?:و|او|أو|،|,)\\s*(?:(?:ال)?[إا]قلاع\\s*من\\s*)?(?:ال)?${OM})*`, "gi");
+  const stripped = text.replace(originRe, " ");
+  if (stripped !== text) for (const [re, dest] of map) if (dest !== "Oman" && re.test(stripped)) return dest;
   for (const [re, dest] of map) if (re.test(text)) return dest;
   return null;
 }
