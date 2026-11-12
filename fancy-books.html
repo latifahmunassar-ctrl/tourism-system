@@ -239,6 +239,38 @@ td.ck,th.ck{width:36px;text-align:center}td.ck input,th.ck input{accent-color:va
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:0 14px}
 .pfoot{display:flex;gap:8px;align-items:center;margin-bottom:30px}
 @media (max-width:900px){.srcs,.grid3{grid-template-columns:1fr}.gmain{width:100%}}
+.chipbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.chipbar button{border:1px solid var(--bd);background:#fff;border-radius:8px;padding:8px 16px;cursor:pointer}.chipbar button.on{background:var(--pri-l);border-color:var(--pri);color:var(--pri-d)}
+.rgbox{padding:16px;margin-bottom:16px}.rghead{display:flex;justify-content:space-between;align-items:center;padding-bottom:14px;border-bottom:1px solid var(--bd);margin-bottom:14px}
+.rggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.rgcard{border:1px solid var(--bd);border-radius:10px;padding:16px;background:#fafbfb}.rgcard.off{opacity:.6}
+.rgtop{display:flex;justify-content:space-between;align-items:center}.rgst{background:var(--gray-l);border-radius:12px;padding:3px 10px;font-size:12px}.rgst.open{background:var(--ok-l);color:var(--ok)}
+.rgcard h3{margin:12px 0 4px;font-size:17px}.rgmeta{font-size:12px;color:var(--mut);padding-bottom:12px;border-bottom:1px solid var(--bd);margin-bottom:10px}.rgline{font-size:13px;margin:7px 0}
+.rgbtns{display:flex;gap:6px;justify-content:space-between;margin-top:12px}.rgbtns .btn{flex:1;justify-content:center}
+.mchips{display:flex;flex-wrap:wrap;gap:8px}.mchip{display:flex;gap:6px;align-items:center;background:var(--pri-l);border-radius:16px;padding:6px 12px;font-size:13px;cursor:pointer;margin:0;color:var(--tx)}
+.openreg{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:1000px}
+.qk{display:flex;gap:6px;flex-wrap:wrap;margin:-8px 0 6px}
+body.posmode .side,body.posmode .top{display:none}body.posmode .content{padding:0;max-width:none}
+.pos{height:100vh;display:flex;flex-direction:column;background:var(--bg)}
+.poshead{display:flex;align-items:center;gap:12px;padding:10px 16px;background:#fff;border-bottom:1px solid var(--bd);flex-wrap:wrap}
+.posbody{flex:1;display:grid;grid-template-columns:1fr 400px;min-height:0}
+.pospro{padding:14px;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.poscats{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;flex-shrink:0}.poscats button{white-space:nowrap;border:1px solid var(--bd);background:#fff;border-radius:16px;padding:6px 14px;cursor:pointer;font-size:13px}.poscats button.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+.posgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.pcard{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:8px;cursor:pointer;display:flex;flex-direction:column;gap:4px;text-align:right;font:inherit}.pcard:hover{border-color:var(--pri);box-shadow:0 2px 10px rgba(14,138,134,.15)}
+.pcard img,.pcard .noimg{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;background:var(--gray-l);display:grid;place-items:center;font-size:30px;color:#bbb}
+.pcard b{font-size:12px;font-weight:600;line-height:1.4;height:2.8em;overflow:hidden}.pcard .pp{color:var(--pri-d);font-weight:700}.pcard .pq{font-size:11px;color:var(--mut)}
+.poslist{display:flex;flex-direction:column;gap:6px}.poslist .pcard{flex-direction:row;align-items:center}.poslist .pcard img,.poslist .pcard .noimg{width:44px;height:44px;flex-shrink:0}.poslist .pcard b{flex:1;height:auto}
+.poscart{background:#fff;border-right:1px solid var(--bd);display:flex;flex-direction:column;min-height:0}
+.cust{display:flex;gap:6px;align-items:center;padding:10px;border-bottom:1px solid var(--bd)}.cust .in{height:40px}
+.clines{flex:1;overflow:auto;padding:4px 10px}.cline{padding:10px 0;border-bottom:1px solid var(--bd)}
+.cl1{display:flex;justify-content:space-between;gap:6px}.cl1 b{font-size:13px;cursor:pointer}.cl2{display:flex;align-items:center;gap:10px;margin-top:6px}.cl2 .num{margin-right:auto}
+.qst{display:inline-flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden}.qst button{border:0;background:var(--gray-l);width:30px;cursor:pointer;font-size:16px}.qst input{width:44px;border:0;text-align:center}
+.cpromo{font-size:11px;color:var(--ok);margin-top:4px}
+.ctot{padding:10px 14px;border-top:1px solid var(--bd)}.ctot>div{display:flex;justify-content:space-between;padding:3px 0;font-size:13px}.ctot .big{font-size:18px;font-weight:700;border-top:1px dashed var(--bd);margin-top:6px;padding-top:8px}
+.cbtns{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:0 10px}.cbtns .btn{padding:0 4px;justify-content:center;font-size:12px}
+.paybtn{margin:10px;height:54px;justify-content:center;font-size:18px}
+.mbtns{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}.mbtns .btn{height:48px;justify-content:center}
+@media (max-width:900px){.posbody{grid-template-columns:1fr;grid-template-rows:1fr auto}.poscart{max-height:55vh}.openreg{grid-template-columns:1fr}}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 18px;border-radius:8px;z-index:99;font-size:14px}
 @media (max-width:900px){
   .side{position:fixed;right:-280px;z-index:60;transition:.2s}.side.open{right:0}
@@ -266,6 +298,10 @@ td.ck,th.ck{width:36px;text-align:center}td.ck input,th.ck input{accent-color:va
     <div class="brand"><svg xmlns="http://www.w3.org/2000/svg" viewBox="98 258 416 276" class="fs-logo" role="img" aria-label="Fancy Sense"><path fill-rule="nonzero" fill="currentColor" fill-opacity="1" d="M 164.441406 516.296875 L 136.449219 516.296875 C 135.960938 519.164062 134.34375 521.414062 131.59375 523.039062 C 128.9375 524.601562 125.582031 525.382812 121.53125 525.382812 C 117.941406 525.382812 115.09375 524.574219 112.988281 522.953125 C 110.914062 521.371094 109.871094 519.273438 109.871094 516.65625 C 109.871094 515.164062 110.289062 514.015625 111.132812 513.207031 C 111.976562 512.410156 113.375 511.753906 115.332031 511.246094 C 115.410156 513.953125 115.6875 515.769531 116.171875 516.699219 C 117.085938 518.480469 119.042969 519.367188 122.039062 519.367188 C 123.835938 519.367188 125.34375 518.890625 126.5625 517.933594 C 127.945312 516.84375 128.628906 515.726562 128.628906 514.570312 L 128.628906 507.589844 C 129.015625 506.925781 130.226562 506.265625 132.269531 505.585938 C 134.175781 504.964844 135.703125 504.648438 136.84375 504.632812 L 136.84375 509.847656 L 140.238281 509.847656 L 140.238281 505.449219 C 140.605469 504.757812 141.65625 504.117188 143.394531 503.515625 C 144.984375 502.976562 146.351562 502.703125 147.503906 502.6875 L 147.503906 509.847656 L 150.957031 509.847656 L 150.957031 503.648438 C 150.957031 503.25 152.019531 502.644531 154.132812 501.820312 C 155.996094 501.085938 157.574219 500.71875 158.875 500.71875 L 158.875 509.847656 L 169.304688 509.847656 L 169.304688 506.242188 C 169.929688 505.40625 170.964844 504.527344 172.390625 503.601562 C 173.832031 502.6875 175.171875 502.03125 176.390625 501.632812 L 176.390625 509.847656 L 180.757812 509.847656 L 180.757812 509.804688 L 235.152344 509.804688 L 235.152344 509.847656 L 236.390625 509.847656 L 236.390625 507.339844 C 236.757812 506.695312 237.832031 506.078125 239.597656 505.464844 C 241.214844 504.910156 242.5625 504.632812 243.65625 504.632812 L 243.65625 509.847656 L 247.109375 509.847656 L 247.109375 505.449219 C 247.535156 504.785156 248.597656 504.152344 250.285156 503.539062 C 251.882812 502.976562 253.242188 502.6875 254.375 502.6875 L 254.375 509.847656 L 257.765625 509.847656 L 257.765625 503.648438 C 258.113281 503.011719 259.296875 502.363281 261.289062 501.691406 C 263.117188 501.070312 264.585938 500.746094 265.6875 500.71875 L 265.6875 514.304688 C 265.6875 515.632812 264.804688 516.296875 263.035156 516.296875 Z M 175.972656 496.441406 C 175.972656 497.207031 175.617188 497.847656 174.894531 498.375 C 174.167969 498.902344 173.296875 499.160156 172.253906 499.160156 C 171.191406 499.160156 170.308594 498.902344 169.605469 498.382812 C 168.890625 497.863281 168.53125 497.214844 168.53125 496.441406 C 168.53125 495.683594 168.890625 495.050781 169.613281 494.53125 C 170.335938 494.011719 171.210938 493.753906 172.253906 493.753906 C 173.296875 493.753906 174.167969 494.011719 174.894531 494.53125 C 175.617188 495.050781 175.972656 495.683594 175.972656 496.441406 Z M 325.773438 516.296875 L 313.09375 516.296875 L 313.09375 507.503906 C 309.640625 507.503906 307.914062 508.664062 307.914062 510.988281 L 307.914062 517.175781 C 307.914062 519.453125 306.832031 521.257812 304.65625 522.597656 C 302.601562 523.84375 299.984375 524.472656 296.777344 524.472656 C 288.410156 524.472656 284.007812 522.195312 283.558594 517.636719 C 283.480469 516.675781 283.441406 515.453125 283.441406 513.945312 C 284.027344 513.203125 285.078125 512.359375 286.585938 511.414062 C 288.105469 510.46875 289.433594 509.8125 290.585938 509.429688 L 290.585938 515.539062 C 290.585938 517.601562 292.558594 518.632812 296.507812 518.632812 C 296.757812 518.632812 297.164062 518.558594 297.71875 518.421875 C 299.875 517.902344 300.945312 516.9375 300.945312 515.507812 L 300.945312 509.847656 C 300.945312 508.152344 301.710938 506.582031 303.238281 505.125 C 304.816406 503.617188 306.722656 502.703125 308.972656 502.371094 C 309.925781 502.21875 312.082031 501.9375 315.453125 501.527344 C 316.445312 500.804688 317.0625 500.386719 317.320312 500.277344 C 317.867188 500.027344 318.679688 499.898438 319.761719 499.898438 L 319.761719 509.847656 L 322.769531 509.847656 L 322.769531 509.804688 L 377.160156 509.804688 L 377.160156 509.847656 L 378.34375 509.847656 L 378.34375 507.339844 C 378.710938 506.695312 379.78125 506.078125 381.546875 505.464844 C 383.164062 504.910156 384.515625 504.632812 385.605469 504.632812 L 385.605469 509.847656 L 389.058594 509.847656 L 389.058594 505.449219 C 389.488281 504.785156 390.546875 504.152344 392.234375 503.539062 C 393.832031 502.976562 395.191406 502.6875 396.324219 502.6875 L 396.324219 509.847656 L 399.71875 509.847656 L 399.71875 503.648438 C 400.066406 503.011719 401.246094 502.363281 403.242188 501.691406 C 405.066406 501.070312 406.535156 500.746094 407.636719 500.71875 L 407.636719 509.847656 L 416.417969 509.847656 L 416.417969 506.242188 C 417.003906 505.433594 418.046875 504.554688 419.535156 503.601562 C 420.957031 502.703125 422.285156 502.046875 423.503906 501.632812 L 423.503906 514.3125 C 423.503906 515.632812 422.613281 516.296875 420.835938 516.296875 Z M 423.207031 496.476562 C 423.207031 497.226562 422.839844 497.863281 422.117188 498.402344 C 421.382812 498.9375 420.507812 499.203125 419.484375 499.203125 C 418.445312 499.203125 417.570312 498.9375 416.847656 498.410156 C 416.121094 497.882812 415.765625 497.234375 415.765625 496.476562 C 415.765625 495.707031 416.121094 495.058594 416.835938 494.53125 C 417.539062 494.011719 418.425781 493.753906 419.484375 493.753906 C 420.546875 493.753906 421.429688 494.011719 422.136719 494.53125 C 422.851562 495.058594 423.207031 495.707031 423.207031 496.476562 Z M 443.480469 516.296875 L 433.199219 516.296875 C 431.445312 516.296875 430.5625 515.632812 430.5625 514.304688 L 430.5625 491.566406 C 431.148438 490.738281 432.179688 489.859375 433.648438 488.929688 C 435.035156 488.046875 436.367188 487.398438 437.648438 486.960938 L 437.648438 509.847656 L 441.25 509.847656 L 441.25 509.804688 L 482.730469 509.804688 L 482.730469 509.847656 L 494.988281 509.847656 L 494.988281 506.601562 L 487.683594 506.601562 C 485.886719 506.601562 484.695312 506.132812 484.140625 505.191406 C 483.792969 504.628906 483.613281 503.597656 483.613281 502.097656 C 483.613281 500.171875 484.210938 498.691406 485.390625 497.652344 C 486.800781 496.398438 488.507812 495.714844 490.5 495.585938 L 493.984375 495.398438 C 495.472656 495.308594 496.585938 495.222656 497.300781 495.136719 C 497.417969 495.085938 497.667969 494.957031 498.054688 494.753906 C 499.460938 494.046875 500.664062 493.6875 501.65625 493.6875 L 501.65625 514.226562 C 501.65625 515.011719 501.4375 515.550781 501 515.847656 C 500.5625 516.144531 499.800781 516.296875 498.71875 516.296875 Z M 497.25 487.21875 C 497.25 487.992188 496.890625 488.640625 496.179688 489.164062 C 495.472656 489.683594 494.589844 489.945312 493.527344 489.945312 C 492.527344 489.945312 491.664062 489.679688 490.917969 489.144531 C 490.171875 488.605469 489.804688 487.96875 489.804688 487.21875 C 489.804688 486.449219 490.164062 485.796875 490.878906 485.273438 C 491.582031 484.753906 492.464844 484.492188 493.527344 484.492188 C 494.589844 484.492188 495.472656 484.753906 496.179688 485.273438 C 496.890625 485.796875 497.25 486.449219 497.25 487.21875 Z M 494.988281 501.886719 L 494.988281 499.679688 L 493.636719 499.679688 C 491.167969 499.679688 489.925781 500.414062 489.925781 501.886719 Z M 100.941406 441.324219 L 255.441406 441.324219 L 255.441406 440.855469 L 100.941406 440.855469 Z M 470.988281 446.3125 L 470.988281 447.566406 C 475.015625 447.722656 476.113281 448.503906 476.238281 451.21875 L 476.238281 475.9375 C 476.113281 478.648438 475.261719 479.273438 470.988281 479.585938 L 470.988281 480.839844 L 505.953125 480.839844 L 508.332031 470.199219 L 506.683594 470.199219 C 504.792969 473.640625 503.574219 475.101562 501.4375 476.5625 C 498.691406 478.441406 495.457031 479.273438 490.882812 479.273438 C 487.039062 479.273438 485.9375 478.648438 485.9375 476.40625 L 485.9375 464.046875 C 492.46875 464.046875 494.90625 466.027344 495.640625 471.972656 L 497.164062 471.972656 L 497.164062 454.660156 L 495.640625 454.660156 C 494.726562 460.5 492.34375 462.378906 485.9375 462.324219 L 485.9375 450.433594 C 485.9375 448.503906 486.730469 448.035156 489.84375 448.035156 C 499.546875 448.035156 502.476562 449.808594 504 456.589844 L 505.464844 456.589844 L 505.464844 446.3125 Z M 393.003906 479.585938 L 393.003906 480.839844 L 406.550781 480.839844 L 406.550781 479.585938 C 402.035156 479.117188 400.9375 478.179688 400.875 474.527344 L 400.875 453.929688 L 427.664062 481.777344 L 429.3125 481.777344 L 429.3125 451.6875 C 429.3125 448.765625 430.105469 448.089844 433.949219 447.566406 L 433.949219 446.3125 L 421.136719 446.3125 L 421.136719 447.566406 C 425.46875 447.929688 426.6875 449.027344 426.6875 452.625 L 426.6875 468.269531 L 405.757812 446.3125 L 393.1875 446.3125 L 393.1875 447.566406 C 394.347656 447.566406 395.445312 448.347656 398.253906 451.269531 L 398.253906 475.46875 C 398.191406 478.492188 397.277344 479.167969 393.003906 479.585938 Z M 352.304688 446.3125 L 352.304688 447.566406 C 356.332031 447.722656 357.429688 448.503906 357.550781 451.21875 L 357.550781 475.9375 C 357.429688 478.648438 356.574219 479.273438 352.304688 479.585938 L 352.304688 480.839844 L 387.269531 480.839844 L 389.648438 470.199219 L 388 470.199219 C 386.109375 473.640625 384.890625 475.101562 382.753906 476.5625 C 380.007812 478.441406 376.773438 479.273438 372.195312 479.273438 C 368.351562 479.273438 367.253906 478.648438 367.253906 476.40625 L 367.253906 464.046875 C 373.785156 464.046875 376.222656 466.027344 376.957031 471.972656 L 378.480469 471.972656 L 378.480469 454.660156 L 376.957031 454.660156 C 376.042969 460.5 373.660156 462.378906 367.253906 462.324219 L 367.253906 450.433594 C 367.253906 448.503906 368.046875 448.035156 371.160156 448.035156 C 380.863281 448.035156 383.789062 449.808594 385.316406 456.589844 L 386.78125 456.589844 L 386.78125 446.3125 Z M 159.285156 468.792969 L 147.632812 468.792969 L 153.246094 456.378906 Z M 173.890625 480.839844 L 173.890625 479.585938 C 171.398438 479.585938 170.761719 478.855469 167.6875 472.441406 L 155.050781 445.585938 L 153.429688 445.585938 L 140.851562 473.589844 C 138.707031 478.386719 138.011719 479.117188 135.289062 479.585938 L 135.289062 480.839844 L 146.820312 480.839844 L 146.820312 479.585938 C 143.460938 479.378906 142.183594 478.804688 142.183594 477.449219 C 142.183594 476.769531 142.648438 475.363281 143.808594 472.808594 L 144.675781 470.773438 L 157.429688 470.773438 C 159.339844 474.738281 160.035156 476.613281 160.035156 477.761719 C 160.035156 478.804688 159.285156 479.273438 157.3125 479.429688 C 157.023438 479.429688 156.328125 479.480469 155.515625 479.585938 L 155.515625 480.839844 Z M 177.542969 479.585938 L 177.542969 480.839844 L 190.410156 480.839844 L 190.410156 479.585938 C 186.121094 479.117188 185.078125 478.179688 185.019531 474.527344 L 185.019531 453.929688 L 210.464844 481.777344 L 212.027344 481.777344 L 212.027344 451.6875 C 212.027344 448.765625 212.78125 448.089844 216.433594 447.566406 L 216.433594 446.3125 L 204.261719 446.3125 L 204.261719 447.566406 C 208.378906 447.929688 209.535156 449.027344 209.535156 452.625 L 209.535156 468.269531 L 189.65625 446.3125 L 177.714844 446.3125 L 177.714844 447.566406 C 178.816406 447.566406 179.859375 448.347656 182.527344 451.269531 L 182.527344 475.46875 C 182.46875 478.492188 181.597656 479.167969 177.542969 479.585938 Z M 256.488281 474.371094 L 254.746094 473.070312 C 251.445312 476.25 249.644531 477.449219 246.804688 478.492188 C 245.125 479.066406 243.328125 479.378906 241.707031 479.378906 C 237.9375 479.378906 234.402344 477.605469 232.722656 474.945312 C 231.039062 472.234375 230.289062 468.582031 230.289062 463.421875 C 230.289062 452.78125 233.878906 447.203125 240.71875 447.203125 C 243.386719 447.203125 245.820312 448.140625 248.253906 450.070312 C 250.746094 452.050781 252.082031 453.773438 254.050781 457.632812 L 255.441406 457.632812 L 255.441406 445.6875 L 253.9375 445.6875 C 253.066406 447.515625 252.542969 448.035156 251.386719 448.035156 C 250.863281 448.035156 250.054688 447.828125 248.777344 447.359375 C 245.53125 446.105469 242.75 445.53125 240.023438 445.53125 C 228.722656 445.53125 220.261719 453.355469 220.261719 463.890625 C 220.261719 474.425781 228.546875 481.828125 240.371094 481.828125 C 246.863281 481.828125 250.746094 480.003906 256.488281 474.371094 Z M 299.089844 447.566406 L 299.089844 446.3125 L 286.625 446.3125 L 286.625 447.566406 C 290.453125 447.828125 291.378906 448.246094 291.378906 449.757812 C 291.378906 450.75 290.566406 452.46875 289.175781 454.605469 L 282.859375 464.046875 L 276.019531 452.207031 L 275.671875 451.582031 C 274.917969 450.332031 274.6875 449.757812 274.6875 449.183594 C 274.6875 448.035156 275.554688 447.617188 277.816406 447.617188 C 278.046875 447.617188 278.628906 447.617188 279.265625 447.566406 L 279.265625 446.3125 L 260.253906 446.3125 L 260.253906 447.566406 C 262.167969 447.722656 263.671875 448.660156 264.773438 450.382812 L 275.207031 467.332031 L 275.207031 474.839844 C 275.09375 478.699219 274.453125 479.222656 269.933594 479.585938 L 269.933594 480.839844 L 289.640625 480.839844 L 289.640625 479.585938 C 285.0625 479.222656 284.480469 478.699219 284.421875 474.839844 L 284.421875 465.453125 L 295.261719 449.601562 C 296.074219 448.402344 297.117188 447.878906 299.089844 447.566406 Z M 438.097656 481.828125 L 439.808594 481.828125 C 440.234375 480.472656 440.660156 480.054688 441.636719 480.054688 C 442.125 480.054688 442.796875 480.210938 444.078125 480.578125 C 446.945312 481.464844 449.203125 481.828125 451.828125 481.828125 C 460.675781 481.828125 466.65625 477.5 466.65625 471.035156 C 466.65625 467.226562 463.972656 463.367188 460.128906 461.75 L 451.339844 457.996094 C 446.519531 455.964844 445.179688 454.710938 445.179688 452.207031 C 445.179688 449.027344 447.679688 447.097656 451.707031 447.097656 C 454.453125 447.097656 456.953125 448.089844 459.089844 449.964844 C 461.105469 451.738281 462.019531 453.25 463.300781 456.589844 L 464.949219 456.589844 L 464.949219 445.480469 L 463.179688 445.480469 C 462.691406 446.835938 462.324219 447.203125 461.226562 447.203125 C 460.675781 447.203125 460.003906 447.042969 458.722656 446.679688 C 455.976562 445.84375 454.085938 445.53125 451.707031 445.53125 C 443.589844 445.53125 438.648438 449.496094 438.648438 455.964844 C 438.648438 460.394531 441.761719 463.628906 448.839844 466.550781 L 452.867188 468.167969 C 458.054688 470.253906 459.515625 471.660156 459.515625 474.371094 C 459.515625 477.867188 456.589844 480.160156 452.011719 480.160156 C 448.472656 480.160156 445.542969 478.855469 443.347656 476.355469 C 441.636719 474.476562 440.84375 472.753906 439.808594 469.210938 L 438.097656 469.210938 Z M 319.414062 481.828125 L 321.121094 481.828125 C 321.550781 480.472656 321.976562 480.054688 322.953125 480.054688 C 323.441406 480.054688 324.113281 480.210938 325.394531 480.578125 C 328.261719 481.464844 330.519531 481.828125 333.144531 481.828125 C 341.992188 481.828125 347.972656 477.5 347.972656 471.035156 C 347.972656 467.226562 345.285156 463.367188 341.441406 461.75 L 332.65625 457.996094 C 327.835938 455.964844 326.492188 454.710938 326.492188 452.207031 C 326.492188 449.027344 328.996094 447.097656 333.023438 447.097656 C 335.769531 447.097656 338.269531 448.089844 340.40625 449.964844 C 342.417969 451.738281 343.335938 453.25 344.617188 456.589844 L 346.261719 456.589844 L 346.261719 445.480469 L 344.492188 445.480469 C 344.003906 446.835938 343.640625 447.203125 342.539062 447.203125 C 341.992188 447.203125 341.320312 447.042969 340.039062 446.679688 C 337.292969 445.84375 335.402344 445.53125 333.023438 445.53125 C 324.90625 445.53125 319.964844 449.496094 319.964844 455.964844 C 319.964844 460.394531 323.074219 463.628906 330.152344 466.550781 L 334.179688 468.167969 C 339.367188 470.253906 340.832031 471.660156 340.832031 474.371094 C 340.832031 477.867188 337.902344 480.160156 333.328125 480.160156 C 329.789062 480.160156 326.859375 478.855469 324.660156 476.355469 C 322.953125 474.476562 322.160156 472.753906 321.121094 469.210938 L 319.414062 469.210938 Z M 104.449219 446.3125 L 104.449219 447.566406 C 108.277344 447.722656 109.378906 448.503906 109.433594 451.21875 L 109.433594 475.9375 C 109.320312 478.648438 108.507812 479.222656 104.449219 479.585938 L 104.449219 480.839844 L 124.910156 480.839844 L 124.910156 479.585938 C 119.8125 479.429688 118.765625 478.804688 118.652344 475.9375 L 118.652344 464.046875 C 124.449219 464.097656 126.535156 466.078125 127.347656 471.972656 L 128.738281 471.972656 L 128.738281 454.660156 L 127.347656 454.660156 C 126.300781 460.5 124.332031 462.273438 118.652344 462.273438 L 118.652344 450.433594 C 118.652344 448.503906 119.40625 448.035156 122.304688 448.035156 C 127.519531 448.035156 130.882812 448.921875 132.621094 450.695312 C 133.839844 452 134.476562 453.304688 135.289062 456.589844 L 136.621094 456.589844 L 136.621094 446.3125 Z M 100.941406 529.441406 L 511.058594 529.441406 L 511.058594 528.96875 L 100.941406 528.96875 Z M 356.027344 441.324219 L 511.058594 441.324219 L 511.058594 440.855469 L 356.027344 440.855469 Z M 356.027344 441.324219 "/><path fill-rule="evenodd" fill="currentColor" fill-opacity="1" d="M 306 262.558594 C 352.679688 262.558594 390.523438 300.402344 390.523438 347.082031 C 390.523438 393.761719 352.679688 431.605469 306 431.605469 C 259.320312 431.605469 221.476562 393.761719 221.476562 347.082031 C 221.476562 300.402344 259.320312 262.558594 306 262.558594 Z M 306 268.683594 C 349.296875 268.683594 384.398438 303.785156 384.398438 347.082031 C 384.398438 390.378906 349.296875 425.480469 306 425.480469 C 262.703125 425.480469 227.601562 390.378906 227.601562 347.082031 C 227.601562 303.785156 262.703125 268.683594 306 268.683594 "/><path fill-rule="evenodd" fill="currentColor" fill-opacity="1" d="M 306 281.371094 C 342.289062 281.371094 371.710938 310.792969 371.710938 347.082031 C 371.710938 383.375 342.289062 412.792969 306 412.792969 C 269.710938 412.792969 240.289062 383.375 240.289062 347.082031 C 240.289062 310.792969 269.710938 281.371094 306 281.371094 Z M 306 286.132812 C 339.664062 286.132812 366.949219 313.421875 366.949219 347.082031 C 366.949219 380.746094 339.664062 408.03125 306 408.03125 C 272.335938 408.03125 245.050781 380.746094 245.050781 347.082031 C 245.050781 313.421875 272.335938 286.132812 306 286.132812 "/><path fill-rule="evenodd" fill="currentColor" fill-opacity="1" d="M 290.121094 339.738281 C 289.230469 339.132812 289.148438 338.941406 288.253906 338.199219 C 280.929688 332.121094 281.269531 314.894531 290.121094 308.613281 L 290.121094 303.535156 C 284.777344 304.914062 279.816406 307.5625 275.953125 311.972656 C 263.945312 325.691406 269 340.140625 280.542969 351.332031 C 284.660156 355.320312 285.140625 355.90625 290.121094 358.558594 Z M 290.121094 339.738281 "/><path fill-rule="evenodd" fill="currentColor" fill-opacity="1" d="M 331.550781 302.160156 L 328.285156 302.160156 C 327.792969 303.835938 327.085938 305.933594 325.65625 306.835938 C 324.851562 307.34375 323.925781 307.460938 323.007812 307.460938 C 322.144531 307.460938 321.28125 307.28125 320.445312 307.058594 C 319.167969 306.71875 317.890625 306.265625 316.640625 305.820312 L 316.628906 305.816406 C 313.390625 304.585938 310.144531 303.535156 306.769531 302.925781 L 306.769531 307.007812 C 311.085938 308.480469 314.90625 311.234375 318.199219 314.859375 C 319.636719 316.4375 320.972656 318.097656 322.15625 319.898438 C 325.140625 324.457031 326.960938 329.824219 328.578125 335.058594 L 331.550781 335.058594 Z M 331.550781 302.160156 "/><path fill-rule="evenodd" fill="currentColor" fill-opacity="1" d="M 267.933594 373.820312 L 264.847656 373.820312 L 264.847656 411.375 L 267.945312 411.375 C 268.414062 409.574219 269.144531 407.328125 270.730469 406.421875 C 271.414062 406.03125 272.171875 405.914062 272.9375 405.914062 C 273.75 405.914062 274.589844 406.101562 275.371094 406.316406 C 276.644531 406.664062 277.910156 407.113281 279.15625 407.554688 L 279.171875 407.5625 C 283.421875 409.203125 287.691406 410.472656 292.199219 411.027344 C 294.144531 411.269531 296.09375 411.375 298.050781 411.375 C 304.21875 411.375 310.46875 410.292969 316.125 407.644531 C 321.027344 405.34375 325.332031 401.921875 328.496094 397.34375 C 339.648438 375.902344 326.652344 359.597656 306.714844 348.945312 L 306.765625 367.179688 C 307.652344 367.664062 308.535156 368.167969 309.402344 368.691406 C 315.929688 372.644531 317.628906 381.589844 317.628906 389.0625 C 317.628906 393.390625 316.484375 397.578125 313.820312 400.941406 C 310.039062 405.710938 304.25 407.558594 298.503906 407.558594 C 289.351562 407.558594 282.082031 403.1875 276.644531 395.5625 C 275.675781 394.207031 274.773438 392.804688 273.957031 391.339844 C 270.976562 385.972656 269.347656 379.820312 267.933594 373.820312 "/><path fill-rule="evenodd" fill="currentColor" fill-opacity="1" d="M 350.816406 280.324219 L 279.808594 280.324219 L 279.808594 280.65625 C 288.222656 281.742188 291.945312 286.480469 292.066406 295.863281 L 292.066406 383.355469 C 291.96875 387.003906 290.335938 391.175781 287.835938 394.019531 C 285.851562 396.269531 282.726562 397.152344 279.808594 397.664062 L 279.808594 398.109375 L 317.644531 398.109375 L 317.644531 397.851562 C 308.863281 397.226562 305.03125 391.160156 304.828125 382.972656 L 304.824219 382.945312 L 304.824219 338.703125 L 315.925781 338.734375 C 317.757812 338.761719 319.585938 338.71875 321.417969 338.691406 C 326.96875 338.605469 329.097656 338.570312 334.09375 341.417969 C 338.363281 343.855469 340.695312 347.847656 341.921875 352.351562 L 342.140625 322.734375 C 340.761719 327.503906 338.191406 331.664062 333.582031 334.160156 C 327.125 337.652344 322.988281 336.75 315.898438 336.75 L 304.824219 336.75 L 304.824219 292.75 C 304.824219 284.902344 314.070312 282.125 321.714844 282.125 C 325.820312 282.125 330.082031 282.503906 334.035156 283.703125 C 338.898438 285.175781 344.003906 289.011719 347.242188 292.992188 C 348.695312 294.773438 349.933594 296.753906 350.816406 298.886719 Z M 350.816406 280.324219 "/></svg></div>
     <nav class="nav">
       <a href="#/summary" data-n="summary">🏠 الرئيسية</a>
+      <div class="grp">المبيعات والعملاء</div>
+      <a href="#/registers" data-n="registers" class="sub">🖥 نقاط البيع</a>
+      <a href="#/sales" data-n="sales" class="sub">🧾 فواتير المبيعات</a>
+      <a href="#/promos" data-n="promos" class="sub">🏷 العروض الترويجية</a>
       <div class="grp">المنتجات والمخزون</div>
       <a href="#/products" data-n="products" class="sub">📦 المنتجات</a>
       <a href="#/pcats" data-n="pcats" class="sub">🏷️ إدارة الفئات</a>
@@ -306,7 +342,7 @@ function fresh(){
     branches:DEF_BRANCHES.map(n=>({id:uid(),name:n})),
     suppliers:[],prepaidAccounts:[{id:uid(),name:'مصروفات مدفوعة مقدماً'}],
     wallet:[],settings:{currency:'ر.ع',decimals:3,vat:5},
-    products:[],pcats:[],brands:[],taxes:[{id:'tx1',name:'ضريبه عمان',rate:5},{id:'tx0',name:'معفى',rate:0}],customFields:[{id:'14113',name:'سعر البيع قبل الضرايب',type:'number'},{id:'15320',name:'فرع ثاني',type:'switch'}],
+    products:[],pcats:[],brands:[],sales:[],registers:[],shifts:[],promotions:[],customers:[],taxes:[{id:'tx1',name:'ضريبه عمان',rate:5},{id:'tx0',name:'معفى',rate:0}],customFields:[{id:'14113',name:'سعر البيع قبل الضرايب',type:'number'},{id:'15320',name:'فرع ثاني',type:'switch'}],
     cols:{name:1,type:1,cat:1,branch:1,method:0,amount:1,status:1,remaining:1,supplier:0,tax:0,date:0,taxable:0,freq:0,draft:0},
     pcols:{base:1,cat:1,sku:1,barcode:1,qty:1,cost:1,retail:1,wholesale:1,tax:1,brand:0,desc:0,buy:0,supplier:0,ptype:0}};
 }
@@ -314,8 +350,8 @@ function fresh(){
 const FN='https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/fs-books';
 const FN_LOGIN='https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/acc-dashboard';
 const LOCAL=new URLSearchParams(location.search).has('local'); // وضع تجربة محلي بدون خادم
-const ARR=['expenses','recurring','products'], LOCAL_ONLY=['cols','pcols'];
-let S=fresh(), SNAP={}, LAST='', ME='';
+const ARR=['expenses','recurring','products','sales','registers','shifts','promotions','customers'], LOCAL_ONLY=['cols','pcols'];
+let S=fresh(), SNAP={}, LAST='', ME='', OWNER=false;
 const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
 function prefsLoad(){try{const p=JSON.parse(ls.get('fsb_prefs')||'{}');if(p.cols)Object.assign(S.cols,p.cols);if(p.pcols)Object.assign(S.pcols,p.pcols)}catch(e){}}
 function authHeaders(){const h={};const t=ls.get('acc_token'),k=ls.get('acc_key');if(t)h['x-acc-token']=t;else if(k)h['x-acc-key']=k;return h}
@@ -367,7 +403,7 @@ async function flush(){
 }
 async function loadAll(){
   if(LOCAL){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&d.expenses)S=Object.assign(fresh(),d)}catch(e){}prefsLoad();setSync('off');ME='تجربة محلية';return}
-  const j=await api('GET');ME=j.user;LAST=j.now;applyDocs(j.docs,true);
+  const j=await api('GET');ME=j.user;OWNER=!!j.owner;LAST=j.now;applyDocs(j.docs,true);
   if(!SNAP['meta:main'])save(); // أول تشغيل: ارفع الإعدادات الافتراضية
   setSync('ok');
 }
@@ -375,7 +411,7 @@ async function poll(){
   if(LOCAL||document.hidden||flushing||!LAST)return;
   try{const j=await api('GET',null,'?since='+encodeURIComponent(LAST));LAST=j.now;
     const n=applyDocs(j.docs,false);
-    if(n&&!/^#\/(new|edit|pnew|pedit)/.test(location.hash)&&!document.querySelector('.ov'))route(true);
+    if(n&&!/^#\/(new|edit|pnew|pedit|pos|regopen|regclose|promo\/)/.test(location.hash)&&!document.querySelector('.ov'))route(true);
   }catch(e){if(e.code===401)showLogin('انتهت الجلسة')}
 }
 setInterval(poll,40000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll()});
@@ -443,12 +479,14 @@ function route(soft){
   if(!BOOTED)return;
   const h=location.hash.replace(/^#\/?/,'')||'products';
   const [p,id]=h.split('/');
-  const nav={new:'expenses',edit:'expenses',view:'expenses',pnew:'products',pedit:'products',pview:'products'}[p]||p;
+  const nav={new:'expenses',edit:'expenses',view:'expenses',pnew:'products',pedit:'products',pview:'products',regopen:'registers',regclose:'registers',pos:'registers',sale:'sales',promo:'promos'}[p]||p;
+  if(p!=='pos')document.body.classList.remove('posmode');
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.n===nav));
   side.classList.remove('open');closeMenu();
   const y=scrollY;
   ({expenses:viewList,recurring:viewRecurring,summary:viewSummary,new:()=>viewForm(),edit:()=>viewForm(id),view:()=>viewDetail(id),settings:viewSettings,
-    products:viewProducts,pnew:()=>viewPForm(),pedit:()=>viewPForm(id),pview:()=>viewProduct(id),pcats:viewPCats}[p]||viewProducts)();
+    products:viewProducts,pnew:()=>viewPForm(),pedit:()=>viewPForm(id),pview:()=>viewProduct(id),pcats:viewPCats,
+    registers:viewRegisters,regopen:()=>viewRegOpen(id),regclose:()=>viewRegClose(id),pos:()=>viewPOS(id),sales:viewSales,sale:()=>viewSale(id),promos:viewPromos,promo:()=>viewPromo(id)}[p]||viewProducts)();
   window.scrollTo(0,soft===true?y:0);
 }
 let BOOTED=false;
@@ -1246,6 +1284,471 @@ function importPCSV(){
     save();toast(`تم: ${n} جديد، ${u} محدّث`);viewProducts()};i.click();
 }
 
+/* ===================== sales: registers / POS / invoices / promotions ===================== */
+const DEVICE=(()=>{let d=ls.get('acc_device');if(!d){d='d'+Date.now()+Math.random().toString(36).slice(2);ls.set('acc_device',d)}return d})();
+const brName=id=>byId(S.branches,id)?.name||'—';
+const mName=id=>byId(S.methods,id)?.name||'—';
+const isCash=id=>/^cash$|نقد/i.test(mName(id));
+const taxRateOf=(p,b)=>{const t=byId(S.taxes,p?.locs?.[b]?.tax);return t?+t.rate||0:0};
+const dtFmt=iso=>{if(!iso)return'—';const d=new Date(iso);return d.toLocaleDateString('en-GB').replace(/\//g,'-')+' '+d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})};
+const ymd=d=>isoL(d).replace(/-/g,'');
+function flushNow(){clearTimeout(save.t);if(!LOCAL)return flush();save();return Promise.resolve()}
+
+/* ---------- registers list (نقاط البيع) ---------- */
+const RG={loc:'',q:''};
+function viewRegisters(){
+  setTitle('صناديق البيع');
+  const q=RG.q.trim().toLowerCase();
+  const brs=S.branches.filter(b=>!RG.loc||b.id===RG.loc);
+  $('#view').innerHTML=`<div class="search" style="width:520px;max-width:100%;margin-bottom:14px"><input id="rgq" placeholder="ابحث بإسم الموقع او اسم صندوق البيع" value="${esc(RG.q)}"></div>
+  <div class="chipbar"><button class="${RG.loc?'':'on'}" onclick="RG.loc='';viewRegisters()">كل المواقع</button>${S.branches.map(b=>`<button class="${RG.loc===b.id?'on':''}" onclick="RG.loc='${b.id}';viewRegisters()">${esc(b.name)}</button>`).join('')}</div>
+  ${brs.map(b=>{const regs=S.registers.filter(r=>r.branchId===b.id&&(!q||`${r.name} ${b.name}`.toLowerCase().includes(q)));if(q&&!regs.length&&!b.name.toLowerCase().includes(q))return'';
+   return`<div class="card rgbox"><div class="rghead"><b>📍 ${esc(b.name)}</b><button class="btn out sm" onclick="regSettings(null,'${b.id}')">＋ صندوق بيع جديد</button></div>
+   <div class="rggrid">${regs.map(regCard).join('')||'<p class="sub" style="padding:10px">لا توجد صناديق بيع في هذا الموقع.</p>'}</div></div>`}).join('')}`;
+  const i=$('#rgq');i.oninput=()=>{RG.q=i.value;clearTimeout(i.t);i.t=setTimeout(()=>{viewRegisters();const n=$('#rgq');n.focus();n.setSelectionRange(n.value.length,n.value.length)},250)};
+}
+function regCard(r){
+  const open=r.status==='open',methods=(r.methods||[]).map(mName);
+  const cash=methods.find(m=>/cash|نقد/i.test(m));const others=methods.length-(cash?1:0);
+  return`<div class="rgcard ${r.active===false?'off':''}">
+   <div class="rgtop"><span class="rgst ${open?'open':''}">${open?'🔓 مفتوح':'🔒 مغلق'}: ${esc((open?r.openedBy:r.closedBy)||'—')}</span><button class="btn sm" onclick="regSettings('${r.id}')">⚙ إعدادات</button></div>
+   <h3>${esc(r.name)}</h3>
+   <div class="rgmeta">${open?`🕓 تم الفتح في: ${dtFmt(r.openedAt)}`:(r.closedAt?`🔒 تم الاغلاق في: ${dtFmt(r.closedAt)}`:'لم يُفتح بعد')}</div>
+   <div class="rgline">👥 ${r.allUsers?'كل المستخدمين':esc((r.cashiers||[]).slice(0,2).join(', ')+((r.cashiers||[]).length>2?` و +${r.cashiers.length-2} مستخدمين`:'')||'—')}</div>
+   <div class="rgline">💵 ${cash?'نقدي':''}${others?` و +${others} طرق دفع أخرى`:''}</div>
+   <div class="rgline">🖨 ${r.printer==='thermal'?'حراري':'تلقائي'}</div>
+   ${r.active===false?'<div class="rgline" style="color:var(--bad)">غير مفعّل</div>':open?`<div class="rgbtns"><button class="btn out" onclick="continuePOS('${r.id}')">متابعة البيع</button><button class="btn lnk" onclick="location.hash='#/regclose/${r.id}'">🔒 إغلاق الصندوق</button></div>`
+     :`<button class="btn pri" style="width:100%;justify-content:center" onclick="location.hash='#/regopen/${r.id}'">🔑 فتح الصندوق</button>`}</div>`;
+}
+function continuePOS(id){
+  const r=byId(S.registers,id);
+  if(r.device&&r.device!==DEVICE){
+    const o=overlay(`<div class="modal"><div class="dh"><h3>صندوق مفتوح من جهاز آخر</h3></div><div class="db"><p>"${esc(r.name)}" يتم استخدامه الآن من قبل مستخدم آخر (${esc(r.openedBy||'')}).</p><div class="info">لتجنب تكرار أرقام الفواتير، يُفضّل إغلاق الصندوق من نفس الجهاز الذي فُتح منه.</div></div>
+     <div class="df"><button class="btn pri" data-x>الرجوع لصناديق البيع</button><button class="btn" data-go>المتابعة على هذا الجهاز</button></div></div>`);
+    o.querySelector('[data-x]').onclick=()=>o.remove();
+    o.querySelector('[data-go]').onclick=()=>{r.device=DEVICE;save();o.remove();location.hash='#/pos/'+id};return;
+  }
+  location.hash='#/pos/'+id;
+}
+function regSettings(id,branchId){
+  const r=id?byId(S.registers,id):{id:uid(),name:'',branchId,cashiers:[],allUsers:true,methods:S.methods.map(m=>m.id),cashMethod:S.methods.find(m=>/cash|نقد/i.test(m.name))?.id||S.methods[0]?.id,printer:'auto',layout:'grid',active:true,status:'closed'};
+  const T=structuredClone(r);
+  const o=overlay(`<div class="drawer" style="width:560px"><div class="dh"><h3>إعدادات الصندوق</h3><p>${esc(brName(T.branchId))}</p></div><div class="db">
+   <div class="fl"><label>اسم الصندوق <span class="r">*</span></label><input class="in" id="rsn" value="${esc(T.name)}"></div>
+   <h4 style="margin:6px 0 8px">👤 الكاشير</h4>
+   <label class="cbx"><input type="checkbox" id="rsall" ${T.allUsers?'checked':''}><b>متاح لكل المستخدمين</b></label>
+   <div class="fl"><label>أسماء الكاشير (افصل بفاصلة)</label><input class="in" id="rsc" value="${esc((T.cashiers||[]).join('، '))}"></div>
+   <h4 style="margin:6px 0 8px">💳 تحديد طرق الدفع</h4><p class="sub" style="margin-top:0">حدد طرق الدفع التي تود إضافتها للصندوق</p>
+   <div class="mchips">${S.methods.map(m=>`<label class="mchip"><input type="checkbox" value="${m.id}" ${T.methods.includes(m.id)?'checked':''}> ${esc(m.name)}</label>`).join('')}</div>
+   <div class="fl" style="margin-top:12px"><label>طريقة الدفع النقدي (لعمليات الصندوق مثل السحب والإضافة)</label><select class="in" id="rscm">${S.methods.map(m=>`<option value="${m.id}" ${m.id===T.cashMethod?'selected':''}>${esc(m.name)}</option>`).join('')}</select></div>
+   <div class="grid2"><div class="fl"><label>🖨 نوع الطابعة</label><select class="in" id="rsp"><option value="auto" ${T.printer==='auto'?'selected':''}>تلقائي</option><option value="thermal" ${T.printer==='thermal'?'selected':''}>حراري (80 مم)</option></select></div>
+   <div class="fl"><label>▦ واجهة البيع</label><select class="in" id="rsl"><option value="grid" ${T.layout!=='list'?'selected':''}>شبكة صور</option><option value="list" ${T.layout==='list'?'selected':''}>قائمة</option></select></div></div>
+   ${id?`<div style="display:flex;gap:14px;margin-top:6px"><button class="btn lnk" id="rsact">${T.active===false?'✓ تفعيل الصندوق':'🔒 إلغاء تفعيل الصندوق'}</button><button class="btn lnk" style="color:var(--bad)" id="rsdel">🗑 حذف الصندوق</button></div>`:''}
+  </div><div class="df"><button class="btn pri" data-ok>✓ حفظ التغييرات</button><button class="btn" data-x>✕ إلغاء</button></div></div>`);
+  o.querySelector('[data-x]').onclick=()=>o.remove();
+  o.querySelector('#rsact')?.addEventListener('click',()=>{r.active=r.active===false;save();o.remove();viewRegisters()});
+  o.querySelector('#rsdel')?.addEventListener('click',()=>{if(r.status==='open'){toast('أغلق الصندوق أولاً');return}if(S.sales.some(s=>s.registerId===r.id)){toast('لا يمكن الحذف: عليه فواتير. ألغِ تفعيله بدلاً من ذلك');return}confirmDlg('حذف الصندوق؟','',()=>{S.registers=S.registers.filter(x=>x.id!==r.id);save();o.remove();viewRegisters()})});
+  o.querySelector('[data-ok]').onclick=()=>{
+    const name=o.querySelector('#rsn').value.trim();if(!name){toast('اكتب اسم الصندوق');return}
+    const methods=[...o.querySelectorAll('.mchip input:checked')].map(x=>x.value);if(!methods.length){toast('اختر طريقة دفع واحدة على الأقل');return}
+    Object.assign(T,{name,allUsers:o.querySelector('#rsall').checked,cashiers:o.querySelector('#rsc').value.split(/[,،]/).map(s=>s.trim()).filter(Boolean),methods,cashMethod:o.querySelector('#rscm').value,printer:o.querySelector('#rsp').value,layout:o.querySelector('#rsl').value});
+    if(!T.code){const used=S.registers.filter(x=>x.id!==T.id).map(x=>x.code);T.code='ABCDEFGHJKLMNPQRSTUVWXYZ'.split('').find(c=>!used.includes(c))||'Z'}
+    if(id)Object.assign(r,T);else S.registers.push(T);save();o.remove();toast('تم الحفظ');viewRegisters();
+  };
+}
+/* ---------- open register ---------- */
+const DENOMS=[50,20,10,5,1,0.5,0.1,0.05,0.025];
+function viewRegOpen(id){
+  const r=byId(S.registers,id);if(!r){location.hash='#/registers';return}
+  if(r.status==='open'){location.hash='#/pos/'+id;return}
+  setTitle('افتح الصندوق');
+  $('#view').innerHTML=`<div class="openreg"><div><div class="card" style="padding:18px"><p style="margin:0 0 10px;font-weight:600">${esc(r.name)} <small class="sub">· ${esc(brName(r.branchId))}</small></p>
+    <div class="row" style="align-items:center"><b style="flex:1">مبلغ فتح الصندوق</b><input class="in" id="opam" type="number" step="any" min="0" value="0" style="width:180px"></div></div>
+    <button class="btn pri" style="width:100%;justify-content:center;height:46px;margin-top:14px" id="opbtn">فتح ${esc(r.name)}</button>
+    <button class="btn lnk" style="width:100%;justify-content:center;margin-top:6px" onclick="location.hash='#/registers'">رجوع</button></div>
+   <div class="card"><table><thead><tr><th>فئات المبالغ</th><th>العدد</th><th>مجموع الفئات النقدية</th></tr></thead><tbody>
+    ${DENOMS.map((d,i)=>`<tr><td>${d>=1?d+' '+S.settings.currency:(d*1000)+' بيسة'}</td><td><input class="in" type="number" min="0" step="1" data-den="${i}" style="height:36px;width:100px" value=""></td><td class="num" id="dsum${i}">0</td></tr>`).join('')}</tbody></table></div></div>`;
+  document.querySelectorAll('[data-den]').forEach(el=>el.oninput=()=>{let t=0;document.querySelectorAll('[data-den]').forEach(x=>{const v=(+x.value||0)*DENOMS[+x.dataset.den];$('#dsum'+x.dataset.den).textContent=fmt(v);t+=v});$('#opam').value=r3(t)});
+  $('#opbtn').onclick=async()=>{
+    const amt=r3($('#opam').value);if(amt<0||isNaN(amt)){toast('مبلغ غير صحيح');return}
+    const now=new Date().toISOString();const sh={id:uid(),registerId:r.id,branchId:r.branchId,openedAt:now,openedBy:ME,openingCash:amt,cashMoves:[],status:'open'};
+    S.shifts.push(sh);Object.assign(r,{status:'open',openedAt:now,openedBy:ME,openingCash:amt,shiftId:sh.id,device:DEVICE});
+    await flushNow();toast('تم فتح الصندوق');location.hash='#/pos/'+r.id;
+  };
+}
+/* ---------- shift summary / close ---------- */
+function shiftTotals(sh){
+  const inv=S.sales.filter(s=>s.shiftId===sh.id);const by={};let cashSales=0,cashRet=0;
+  inv.forEach(s=>(s.payments||[]).forEach(p=>{const v=(s.type==='return'?-1:1)*(+p.amount||0);by[p.methodId]=(by[p.methodId]||0)+v;if(isCash(p.methodId)){if(v>=0)cashSales+=v;else cashRet+=-v}}));
+  (sh.collections||[]).forEach(c=>{by[c.methodId]=(by[c.methodId]||0)+c.amount;if(isCash(c.methodId))cashSales+=c.amount});
+  const cin=(sh.cashMoves||[]).filter(m=>m.type==='in').reduce((a,m)=>a+m.amount,0),cout=(sh.cashMoves||[]).filter(m=>m.type==='out').reduce((a,m)=>a+m.amount,0);
+  const expectedCash=r3((+sh.openingCash||0)+cashSales-cashRet+cin-cout);
+  return{inv,by,cashSales:r3(cashSales),cashRet:r3(cashRet),cin:r3(cin),cout:r3(cout),expectedCash,count:inv.filter(s=>s.type!=='return').length,ret:inv.filter(s=>s.type==='return').length,total:r3(inv.reduce((a,s)=>a+(s.type==='return'?-1:1)*s.total,0))};
+}
+function viewRegClose(id){
+  const r=byId(S.registers,id);const sh=r&&byId(S.shifts,r.shiftId);if(!r||r.status!=='open'||!sh){location.hash='#/registers';return}
+  setTitle('إغلاق الصندوق');const t=shiftTotals(sh);
+  const methods=[...new Set([...(r.methods||[]),...Object.keys(t.by)])];
+  $('#view').innerHTML=`<div class="form"><div class="fcard"><h2>إغلاق ${esc(r.name)} <small class="sub" style="margin:0">· ${esc(brName(r.branchId))}</small></h2>
+   <div class="vgrid"><div><small>فُتح في</small><div>${dtFmt(sh.openedAt)}</div></div><div><small>بواسطة</small><div>${esc(sh.openedBy)}</div></div><div><small>عدد الفواتير · المرتجعات</small><div>${t.count} · ${t.ret}</div></div>
+   <div><small>صافي المبيعات</small><div style="font-weight:700">${money(t.total)}</div></div><div><small>مبلغ الفتح</small><div>${money(sh.openingCash)}</div></div><div><small>إيداع · سحب نقدي</small><div>${fmt(t.cin)} · ${fmt(t.cout)}</div></div></div></div>
+   <div class="fcard"><h2>جرد طرق الدفع</h2><table><thead><tr><th>طريقة الدفع</th><th>المتوقع</th><th>الفعلي</th><th>الفرق</th></tr></thead><tbody>
+    ${methods.map(m=>{const exp=isCash(m)?t.expectedCash:r3(t.by[m]||0);return`<tr><td>${esc(mName(m))}${isCash(m)?' <small class="sub">(يشمل مبلغ الفتح)</small>':''}</td><td class="num">${fmt(exp)}</td><td><input class="in" type="number" step="any" data-cnt="${m}" data-exp="${exp}" value="${exp}" style="height:36px;width:130px"></td><td class="num" id="df_${m}">0</td></tr>`}).join('')}</tbody></table>
+   <div class="fl" style="margin-top:14px"><label>ملاحظات</label><input class="in" id="clnote"></div></div>
+   <div class="fcard pfoot"><button class="btn pri" id="clbtn">🔒 إغلاق الصندوق</button><button class="btn lnk" onclick="history.back()">الغاء</button></div></div>`;
+  const upd=()=>document.querySelectorAll('[data-cnt]').forEach(i=>{const d=r3((+i.value||0)-(+i.dataset.exp));const el=$('#df_'+i.dataset.cnt);el.textContent=(d>0?'+':'')+fmt(d);el.style.color=d<0?'var(--bad)':d>0?'var(--ok)':''});
+  document.querySelectorAll('[data-cnt]').forEach(i=>i.oninput=upd);upd();
+  $('#clbtn').onclick=async()=>{
+    const counted={},expected={};document.querySelectorAll('[data-cnt]').forEach(i=>{counted[i.dataset.cnt]=r3(i.value);expected[i.dataset.cnt]=+i.dataset.exp});
+    const now=new Date().toISOString();Object.assign(sh,{closedAt:now,closedBy:ME,counted,expected,note:$('#clnote').value,status:'closed',summary:{count:t.count,ret:t.ret,total:t.total}});
+    Object.assign(r,{status:'closed',closedAt:now,closedBy:ME,shiftId:null,device:null});await flushNow();toast('تم إغلاق الصندوق');location.hash='#/registers';
+  };
+}
+
+/* ---------- promotions engine ---------- */
+function promoActive(pr,branch,at){const now=at||new Date().toISOString();return !pr.paused&&pr.start<=now&&(!pr.end||pr.end>=now)&&(pr.allLocations||(pr.locations||[]).includes(branch))}
+function inScope(sc,p){if(!sc||!p)return false;if(sc.all)return true;return sc.type==='category'?(sc.ids||[]).includes(p.catId):(sc.ids||[]).includes(p.id)}
+function applyPromos(lines,branch){
+  const act=S.promotions.filter(pr=>promoActive(pr,branch));
+  const units=[];lines.forEach((l,li)=>{const p=byId(S.products,l.pid);for(let k=0;k<l.qty;k++)units.push({li,p,price:Math.max(0,(+l.price||0)-(+l.disc||0)),used:false,disc:0,promo:null})});
+  for(const pr of act.filter(x=>x.type==='conditional')){
+    let guard=0;
+    while(guard++<500){
+      const xs=units.filter(u=>!u.used&&inScope(pr.x,u.p)).sort((a,b)=>b.price-a.price);if(xs.length<(pr.x.qty||1))break;
+      const xSel=xs.slice(0,pr.x.qty||1);
+      const ys=units.filter(u=>!u.used&&!xSel.includes(u)&&inScope(pr.y,u.p)).sort((a,b)=>a.price-b.price);if(ys.length<(pr.y.qty||1))break;
+      const ySel=ys.slice(0,pr.y.qty||1);
+      xSel.forEach(u=>u.used=true);
+      ySel.forEach(u=>{u.used=true;u.disc=pr.discType==='free'?u.price:pr.discType==='amount'?Math.min(+pr.amount,u.price):u.price*(+pr.amount)/100;u.promo=pr.name});
+    }
+  }
+  for(const u of units.filter(u=>!u.used)){let best=0,bn=null;for(const pr of act.filter(x=>x.type==='simple')){if(!inScope(pr.x,u.p))continue;const d=pr.discType==='amount'?Math.min(+pr.amount,u.price):u.price*(+pr.amount)/100;if(d>best){best=d;bn=pr.name}}if(best){u.disc=best;u.promo=bn}}
+  return lines.map((l,li)=>{const us=units.filter(u=>u.li===li&&u.disc>0);return{promoDisc:r3(us.reduce((a,u)=>a+u.disc,0)),promoName:[...new Set(us.map(u=>u.promo))].join('، ')}});
+}
+function calcCart(c){
+  const pr=applyPromos(c.lines,c.branchId);
+  const rows=c.lines.map((l,i)=>{const p=byId(S.products,l.pid);const gross=r3(l.qty*l.price),man=r3(l.qty*(+l.disc||0));const net0=Math.max(0,gross-man-pr[i].promoDisc);return{...l,name:p?.name||l.name,sku:p?.sku||'',taxRate:taxRateOf(p,c.branchId),gross,man,promoDisc:pr[i].promoDisc,promoName:pr[i].promoName,net0}});
+  const net0=rows.reduce((a,x)=>a+x.net0,0);
+  let inv=0;if(c.invDisc&&+c.invDisc.value>0)inv=c.invDisc.type==='pct'?net0*(+c.invDisc.value)/100:Math.min(+c.invDisc.value,net0);
+  rows.forEach(x=>{x.invShare=net0?inv*x.net0/net0:0;x.net=r3(x.net0-x.invShare);x.tax=r3(x.net*x.taxRate/100);x.total=r3(x.net+x.tax)});
+  const sum=k=>r3(rows.reduce((a,x)=>a+(+x[k]||0),0));
+  return{rows,subtotal:sum('gross'),manual:r3(sum('man')+inv),promo:sum('promoDisc'),tax:sum('tax'),total:sum('total'),count:rows.reduce((a,x)=>a+x.qty,0),taxRate:rows[0]?.taxRate??(S.taxes[0]?.rate||0)};
+}
+
+/* ---------- POS sell screen ---------- */
+let CART=null,POSF={q:'',cat:'',limit:60};
+function cartKey(id){return 'fsb_cart_'+id}
+function loadCart(r){try{const c=JSON.parse(ls.get(cartKey(r.id))||'null');if(c&&c.lines)return c}catch(e){}return{registerId:r.id,branchId:r.branchId,lines:[],customerId:'',invDisc:null,note:''}}
+function saveCart(){if(CART)ls.set(cartKey(CART.registerId),JSON.stringify(CART))}
+function parked(){try{return JSON.parse(ls.get('fsb_parked')||'[]')}catch(e){return[]}}
+function viewPOS(id){
+  const r=byId(S.registers,id);if(!r){location.hash='#/registers';return}
+  if(r.status!=='open'){location.hash='#/regopen/'+id;return}
+  document.body.classList.add('posmode');setTitle('نقطة البيع · '+r.name);
+  CART=loadCart(r);CART.branchId=r.branchId;
+  $('#view').innerHTML=`<div class="pos">
+   <div class="poshead"><button class="btn sm" onclick="leavePOS()">→ صناديق البيع</button><b>${esc(r.name)}</b><span class="sub" style="margin:0">${esc(brName(r.branchId))} · ${esc(ME)}</span>
+    <span style="margin-right:auto;display:flex;gap:6px"><button class="btn sm" onclick="cashMoveDlg('${r.id}')">⇅ إيداع / سحب نقدي</button><button class="btn sm" onclick="posInvoices('${r.id}')">🧾 فواتير الوردية</button><button class="btn sm" onclick="leavePOS();location.hash='#/regclose/${r.id}'">🔒 إغلاق الصندوق</button></span></div>
+   <div class="posbody"><div class="pospro"><div class="search" style="width:100%"><input id="posq" placeholder="ابحث بالاسم أو امسح الباركود ثم Enter" autocomplete="off" value="${esc(POSF.q)}"></div>
+     <div class="poscats" id="poscats"></div><div class="${r.layout==='list'?'poslist':'posgrid'}" id="posgrid"></div></div>
+    <div class="poscart" id="poscart"></div></div></div>`;
+  const cnt={};S.products.forEach(p=>{if(p.catId)cnt[p.catId]=(cnt[p.catId]||0)+1});
+  $('#poscats').innerHTML=`<button class="${POSF.cat?'':'on'}" data-c="">الكل</button>`+Object.entries(cnt).sort((a,b)=>b[1]-a[1]).map(([c])=>`<button class="${POSF.cat===c?'on':''}" data-c="${c}">${esc(pcat(c))}</button>`).join('');
+  $('#poscats').onclick=e=>{const b=e.target.closest('[data-c]');if(!b)return;POSF.cat=b.dataset.c;POSF.limit=60;$('#poscats').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));posGrid(r)};
+  const q=$('#posq');q.focus();
+  q.oninput=()=>{POSF.q=q.value;POSF.limit=60;clearTimeout(q.t);q.t=setTimeout(()=>posGrid(r),150)};
+  q.onkeydown=e=>{if(e.key==='Enter'){const v=q.value.trim();if(!v)return;const m=S.products.find(p=>p.barcode===v||p.sku===v);const list=posList(r);const hit=m||(list.length===1?list[0]:null);if(hit){addToCart(hit.id);q.value='';POSF.q='';posGrid(r)}else toast('لا يوجد منتج بهذا الرمز')}};
+  posGrid(r);renderCart();
+}
+function leavePOS(){document.body.classList.remove('posmode');location.hash='#/registers'}
+function posList(r){const q=POSF.q.trim().toLowerCase();return S.products.filter(p=>p.sellable!==false&&(!POSF.cat||p.catId===POSF.cat)&&(!q||`${p.name} ${p.sku} ${p.barcode}`.toLowerCase().includes(q)))}
+function posGrid(r){
+  const list=posList(r),shown=list.slice(0,POSF.limit);
+  $('#posgrid').innerHTML=shown.map(p=>{const q=+(p.locs?.[r.branchId]?.qty)||0,pr=+(p.locs?.[r.branchId]?.retail)||0;const inc=r3(pr*(1+taxRateOf(p,r.branchId)/100));
+    return`<button class="pcard" onclick="addToCart('${p.id}')">${p.images?.[0]?`<img src="${p.images[0]}" loading="lazy" alt="">`:'<span class="noimg">🖼</span>'}<b>${esc(p.name)}</b><span class="pp">${fmt(inc)}</span><span class="pq ${q<=0?'qneg':''}">${fmtQ(q)} متوفر</span></button>`}).join('')
+   +(list.length>shown.length?`<button class="btn" style="grid-column:1/-1" onclick="POSF.limit+=60;posGrid(byId(S.registers,'${r.id}'))">عرض المزيد (${list.length-shown.length})</button>`:'')
+   +(list.length?'':'<p class="sub" style="grid-column:1/-1;text-align:center;padding:30px">لا توجد منتجات</p>');
+}
+function addToCart(pid){const p=byId(S.products,pid);if(!p)return;const l=CART.lines.find(x=>x.pid===pid&&!x.custom);if(l)l.qty++;else CART.lines.push({pid,qty:1,price:+(p.locs?.[CART.branchId]?.retail)||0,disc:0});saveCart();renderCart()}
+function renderCart(){
+  const c=calcCart(CART);const cust=byId(S.customers,CART.customerId);
+  $('#poscart').innerHTML=`<div class="cust"><span>👤</span><select class="in" id="pcust"><option value="">عميل نقدي</option>${S.customers.map(x=>`<option value="${x.id}" ${x.id===CART.customerId?'selected':''}>${esc(x.name)}${x.phone?' · '+esc(x.phone):''}</option>`).join('')}</select><button class="btn icon" title="عميل جديد" onclick="newCustomer()">＋</button></div>
+   <div class="clines">${c.rows.map((x,i)=>`<div class="cline"><div class="cl1"><b onclick="lineDlg(${i})">${esc(x.name)}</b><button class="ib" onclick="CART.lines.splice(${i},1);saveCart();renderCart()">✕</button></div>
+     <div class="cl2"><span class="qst"><button onclick="chgQty(${i},-1)">−</button><input value="${x.qty}" onchange="setQty(${i},this.value)"><button onclick="chgQty(${i},1)">＋</button></span><span class="sub" style="margin:0">× ${fmt(x.price)}</span><b class="num">${fmt(x.total)}</b></div>
+     ${x.man?`<div class="cpromo">خصم يدوي: −${fmt(x.man)}</div>`:''}${x.promoDisc?`<div class="cpromo">🏷 ${esc(x.promoName)}: −${fmt(x.promoDisc)}</div>`:''}</div>`).join('')||'<div class="empty" style="padding:50px 10px"><div class="ico">🛒</div><p>أضف منتجات للبدء</p></div>'}</div>
+   <div class="ctot"><div><span>إجمالي العناصر</span><b>${c.count}</b></div><div><span>الإجمالي الفرعي</span><b>${fmt(c.subtotal)}</b></div>
+    ${c.promo?`<div><span>عروض ترويجية</span><b style="color:var(--ok)">−${fmt(c.promo)}</b></div>`:''}${c.manual?`<div><span>الخصم</span><b style="color:var(--ok)">−${fmt(c.manual)}</b></div>`:''}
+    <div><span>الضريبة</span><b>${fmt(c.tax)}</b></div><div class="big"><span>الإجمالي</span><b>${money(c.total)}</b></div></div>
+   <div class="cbtns"><button class="btn" onclick="invDiscDlg()">٪ خصم</button><button class="btn" onclick="parkCart()" ${CART.lines.length?'':'disabled'}>⏸ تعليق</button><button class="btn" onclick="parkedDlg()">📋 المعلقة (${parked().filter(p=>p.registerId===CART.registerId).length})</button><button class="btn danger" onclick="clearCart()" ${CART.lines.length?'':'disabled'}>مسح</button></div>
+   <button class="btn pri paybtn" onclick="payDlg()" ${CART.lines.length?'':'disabled'}>دفع ${money(c.total)}</button>`;
+  $('#pcust').onchange=e=>{CART.customerId=e.target.value;saveCart()};
+}
+function chgQty(i,d){const l=CART.lines[i];l.qty=Math.max(1,l.qty+d);saveCart();renderCart()}
+function setQty(i,v){const n=Math.max(1,Math.round(+v||1));CART.lines[i].qty=n;saveCart();renderCart()}
+function clearCart(){confirmDlg('مسح السلة؟','',()=>{CART.lines=[];CART.invDisc=null;CART.customerId='';saveCart();renderCart()})}
+function lineDlg(i){const l=CART.lines[i],p=byId(S.products,l.pid);
+  const o=overlay(`<div class="modal"><div class="dh"><h3>${esc(p?.name||'')}</h3><p>${esc(p?.sku||'')}</p></div><div class="db">
+   <div class="grid2"><div class="fl"><label>الكمية</label><input class="in" type="number" min="1" id="lq" value="${l.qty}"></div><div class="fl"><label>السعر (غير شامل الضريبة)</label><input class="in" type="number" step="any" id="lp" value="${l.price}"></div></div>
+   <div class="fl"><label>خصم على القطعة الواحدة</label><input class="in" type="number" step="any" min="0" id="ld" value="${l.disc||0}"></div></div>
+   <div class="df"><button class="btn" data-x>إلغاء</button><button class="btn pri" data-ok>تطبيق</button></div></div>`);
+  o.querySelector('[data-x]').onclick=()=>o.remove();
+  o.querySelector('[data-ok]').onclick=()=>{l.qty=Math.max(1,Math.round(+o.querySelector('#lq').value||1));l.price=Math.max(0,+o.querySelector('#lp').value||0);l.disc=Math.min(l.price,Math.max(0,+o.querySelector('#ld').value||0));saveCart();o.remove();renderCart()};
+}
+function invDiscDlg(){const d=CART.invDisc||{type:'pct',value:''};
+  const o=overlay(`<div class="modal"><div class="dh"><h3>خصم على الفاتورة</h3></div><div class="db"><div class="seg" style="display:flex"><button class="${d.type==='pct'?'on':''}" data-t="pct" style="flex:1">نسبة %</button><button class="${d.type==='amt'?'on':''}" data-t="amt" style="flex:1">مبلغ ثابت</button></div>
+   <div class="fl"><label>القيمة</label><input class="in" type="number" step="any" min="0" id="idv" value="${d.value}"></div></div><div class="df"><button class="btn" data-rm>إزالة الخصم</button><button class="btn pri" data-ok>تطبيق</button></div></div>`);
+  let t=d.type;o.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{t=b.dataset.t;o.querySelectorAll('[data-t]').forEach(x=>x.classList.toggle('on',x===b))});
+  o.querySelector('[data-rm]').onclick=()=>{CART.invDisc=null;saveCart();o.remove();renderCart()};
+  o.querySelector('[data-ok]').onclick=()=>{const v=+o.querySelector('#idv').value||0;if(t==='pct'&&v>100){toast('النسبة أكبر من 100');return}CART.invDisc=v>0?{type:t,value:v}:null;saveCart();o.remove();renderCart()};
+}
+function parkCart(){const p=parked();p.push({...structuredClone(CART),parkedAt:new Date().toISOString(),pid:uid()});ls.set('fsb_parked',JSON.stringify(p));CART.lines=[];CART.invDisc=null;CART.customerId='';saveCart();renderCart();toast('تم تعليق الفاتورة')}
+function parkedDlg(){const p=parked().filter(x=>x.registerId===CART.registerId);
+  const o=overlay(`<div class="modal"><div class="dh"><h3>الفواتير المعلقة</h3></div><div class="db">${p.map(x=>`<div class="tx"><div><b>${calcCart(x).count} عنصر · ${money(calcCart(x).total)}</b><small>${dtFmt(x.parkedAt)}${x.customerId?' · '+esc(byId(S.customers,x.customerId)?.name||''):''}</small></div><span><button class="btn sm pri" data-r="${x.pid}">استرجاع</button> <button class="btn sm" data-d="${x.pid}">حذف</button></span></div>`).join('')||'<p class="sub">لا توجد فواتير معلقة.</p>'}</div><div class="df"><button class="btn" data-x>إغلاق</button></div></div>`);
+  o.querySelector('[data-x]').onclick=()=>o.remove();
+  o.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{if(CART.lines.length){toast('السلة الحالية غير فارغة، علّقها أو امسحها أولاً');return}const all=parked(),x=all.find(y=>y.pid===b.dataset.r);ls.set('fsb_parked',JSON.stringify(all.filter(y=>y.pid!==x.pid)));CART={registerId:x.registerId,branchId:x.branchId,lines:x.lines,customerId:x.customerId,invDisc:x.invDisc,note:x.note||''};saveCart();o.remove();renderCart()});
+  o.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{ls.set('fsb_parked',JSON.stringify(parked().filter(y=>y.pid!==b.dataset.d)));o.remove();parkedDlg();renderCart()});
+}
+function newCustomer(cb){const o=overlay(`<div class="modal"><div class="dh"><h3>عميل جديد</h3></div><div class="db"><div class="fl"><label>الاسم <span class="r">*</span></label><input class="in" id="cn"></div><div class="fl"><label>رقم الجوال</label><input class="in" id="cp" inputmode="tel"></div></div><div class="df"><button class="btn" data-x>إلغاء</button><button class="btn pri" data-ok>حفظ</button></div></div>`);
+  o.querySelector('#cn').focus();o.querySelector('[data-x]').onclick=()=>o.remove();
+  o.querySelector('[data-ok]').onclick=()=>{const n=o.querySelector('#cn').value.trim();if(!n){toast('اكتب الاسم');return}const c={id:uid(),name:n,phone:o.querySelector('#cp').value.trim(),createdAt:new Date().toISOString(),createdBy:ME};S.customers.push(c);save();o.remove();if(cb)cb(c);else{CART.customerId=c.id;saveCart();renderCart()}}}
+function payDlg(){
+  const r=byId(S.registers,CART.registerId),c=calcCart(CART);const methods=(r.methods||[]).filter(m=>byId(S.methods,m));
+  let pays=[];
+  const o=overlay(`<div class="modal" style="width:520px"><div class="dh"><h3>الدفع</h3><p>الإجمالي: <b style="font-size:20px;color:var(--tx)">${money(c.total)}</b></p></div><div class="db">
+   <div class="mbtns">${methods.map(m=>`<button class="btn" data-m="${m}">${esc(mName(m))}</button>`).join('')}</div>
+   <div class="fl" style="margin-top:12px"><label>المبلغ</label><input class="in" type="number" step="any" id="pyam" style="font-size:20px;height:52px"></div>
+   <div id="pylist"></div><div id="pyinfo" class="info" style="margin-top:10px"></div></div>
+   <div class="df"><button class="btn" data-x>إلغاء</button><button class="btn pri" data-ok disabled>إتمام البيع</button></div></div>`);
+  const am=o.querySelector('#pyam'),ok=o.querySelector('[data-ok]');
+  const paid=()=>r3(pays.reduce((a,p)=>a+p.amount,0));
+  const refresh=()=>{const p=paid(),rem=r3(c.total-p);am.value=rem>0?rem:'';
+    o.querySelector('#pylist').innerHTML=pays.map((p,i)=>`<div class="tx"><span>${esc(mName(p.methodId))}</span><span><b class="num">${fmt(p.amount)}</b> <button class="ib" data-rm="${i}">✕</button></span></div>`).join('');
+    o.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{pays.splice(+b.dataset.rm,1);refresh()});
+    const cashGiven=pays.filter(p=>isCash(p.methodId)).reduce((a,p)=>a+p.amount,0);const change=p>c.total?r3(Math.min(p-c.total,cashGiven)):0;
+    o.querySelector('#pyinfo').innerHTML=`المدفوع: <b>${fmt(p)}</b> · المتبقي: <b>${fmt(Math.max(0,rem))}</b>${change?` · الباقي للعميل: <b style="color:var(--ok)">${fmt(change)}</b>`:''}${rem>0&&CART.customerId?'<br>يمكنك إتمام البيع والمتبقي يُسجَّل ديناً على العميل.':''}${rem>0&&!CART.customerId?'<br>لتسجيل المتبقي كدين اختر عميلاً أولاً.':''}`;
+    ok.disabled=!(rem<=0||(CART.customerId&&pays.length>=0));ok.textContent=rem>0&&CART.customerId?'إتمام (المتبقي دين)':'إتمام البيع';
+  };
+  o.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{const v=r3(am.value||0);if(!(v>0)){toast('أدخل المبلغ');return}const rem=r3(c.total-paid());if(!isCash(b.dataset.m)&&v>rem+1e-9){toast('المبلغ أكبر من المتبقي');return}pays.push({methodId:b.dataset.m,amount:v});refresh()});
+  am.onkeydown=e=>{if(e.key==='Enter'){const cash=methods.find(isCash)||methods[0];o.querySelector(`[data-m="${cash}"]`)?.click()}};
+  o.querySelector('[data-x]').onclick=()=>o.remove();
+  ok.onclick=async()=>{ok.disabled=true;
+    const p=paid(),change=p>c.total?r3(p-c.total):0;const payments=pays.map(x=>({...x}));
+    if(change){const ci=payments.findIndex(x=>isCash(x.methodId));if(ci>=0)payments[ci].amount=r3(payments[ci].amount-change)}
+    const inv=await commitSale(r,c,payments,change);o.remove();doneDlg(inv)};
+  refresh();am.focus();am.select();
+}
+async function commitSale(r,c,payments,change){
+  const now=new Date(),seq=S.sales.filter(s=>s.registerId===r.id&&s.type!=='return').reduce((m,s)=>Math.max(m,s.seq||0),0)+1;
+  const inv={id:uid(),type:'sale',seq,no:`S${ymd(now)}-${r.code||'A'}${String(seq).padStart(4,'0')}`,date:now.toISOString(),branchId:r.branchId,registerId:r.id,registerName:r.name,shiftId:r.shiftId,user:ME,channel:'pos',
+    customerId:CART.customerId||'',items:c.rows.map(x=>({productId:x.pid,name:x.name,sku:x.sku,qty:x.qty,price:x.price,manual:x.man,promoDisc:x.promoDisc,promoName:x.promoName,invShare:r3(x.invShare),taxRate:x.taxRate,net:x.net,tax:x.tax,total:x.total})),
+    subtotal:c.subtotal,manual:c.manual,promo:c.promo,tax:c.tax,total:c.total,payments,paid:r3(payments.reduce((a,p)=>a+p.amount,0)),change,returned:{}};
+  S.sales.push(inv);
+  inv.items.forEach(it=>{const p=byId(S.products,it.productId);if(!p)return;p.locs=p.locs||{};const L=p.locs[r.branchId]=p.locs[r.branchId]||{qty:0};const from=+L.qty||0;L.qty=r3(from-it.qty);p.log=p.log||[];p.log.push({date:inv.date,user:ME,branch:r.branchId,from,to:L.qty,reason:'بيع '+inv.no});if(p.log.length>300)p.log=p.log.slice(-300)});
+  CART.lines=[];CART.invDisc=null;CART.customerId='';saveCart();
+  await flushNow();renderCart();return inv;
+}
+function doneDlg(inv){const o=overlay(`<div class="modal"><div class="dh" style="text-align:center"><div style="font-size:44px">✅</div><h3>تمت عملية البيع</h3><p>${esc(inv.no)} · ${money(inv.total)}${inv.change?` · الباقي: <b>${fmt(inv.change)}</b>`:''}${inv.paid<inv.total?` · دين: <b>${fmt(inv.total-inv.paid)}</b>`:''}</p></div>
+  <div class="df"><button class="btn" data-p>🖨 طباعة الفاتورة</button><button class="btn pri" data-n>عملية بيع جديدة</button></div></div>`);
+  o.querySelector('[data-p]').onclick=()=>printReceipt(inv.id);o.querySelector('[data-n]').onclick=()=>{o.remove();$('#posq')?.focus()};
+  if(byId(S.registers,inv.registerId)?.printer==='thermal')printReceipt(inv.id);
+}
+function cashMoveDlg(rid){const r=byId(S.registers,rid),sh=byId(S.shifts,r.shiftId);
+  const o=overlay(`<div class="modal"><div class="dh"><h3>إيداع / سحب نقدي</h3><p>${esc(r.name)}</p></div><div class="db"><div class="seg" style="display:flex"><button class="on" data-t="in" style="flex:1">إيداع</button><button data-t="out" style="flex:1">سحب</button></div>
+   <div class="fl"><label>المبلغ</label><input class="in" type="number" step="any" id="cmv"></div><div class="fl"><label>السبب</label><input class="in" id="cmn"></div>
+   ${(sh.cashMoves||[]).length?`<h4>حركات الوردية</h4>${sh.cashMoves.map(m=>`<div class="tx"><span>${m.type==='in'?'إيداع':'سحب'} · ${esc(m.note||'')}<small>${dtFmt(m.at)} · ${esc(m.user)}</small></span><b class="amt ${m.type==='in'?'pos':'neg'}">${fmt(m.amount)}</b></div>`).join('')}`:''}</div>
+   <div class="df"><button class="btn" data-x>إلغاء</button><button class="btn pri" data-ok>حفظ</button></div></div>`);
+  let t='in';o.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{t=b.dataset.t;o.querySelectorAll('[data-t]').forEach(x=>x.classList.toggle('on',x===b))});
+  o.querySelector('[data-x]').onclick=()=>o.remove();
+  o.querySelector('[data-ok]').onclick=()=>{const v=r3(o.querySelector('#cmv').value);if(!(v>0)){toast('أدخل المبلغ');return}sh.cashMoves=sh.cashMoves||[];sh.cashMoves.push({type:t,amount:v,note:o.querySelector('#cmn').value,at:new Date().toISOString(),user:ME});save();o.remove();toast('تم الحفظ')};
+}
+function posInvoices(rid){const r=byId(S.registers,rid);const list=S.sales.filter(s=>s.shiftId===r.shiftId).sort((a,b)=>b.date.localeCompare(a.date));
+  const o=overlay(`<div class="drawer"><div class="dh"><h3>فواتير الوردية</h3><p>${list.length} فاتورة · ${money(shiftTotals(byId(S.shifts,r.shiftId)).total)}</p></div><div class="db">${list.map(s=>`<div class="tx"><div><b>${esc(s.no)}</b> ${s.type==='return'?'<span class="pill p-bad">إرجاع</span>':''}<small>${dtFmt(s.date)} · ${s.items.length} صنف</small></div><span><b class="num">${s.type==='return'?'−':''}${fmt(s.total)}</b> <button class="ib" title="طباعة" data-p="${s.id}">🖨</button></span></div>`).join('')||'<p class="sub">لا توجد فواتير بعد.</p>'}</div></div>`,'left');
+  o.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>printReceipt(b.dataset.p));
+}
+
+/* ---------- receipt ---------- */
+function receiptHTML(s){
+  const sign=s.type==='return'?-1:1;
+  const taxes={};s.items.forEach(it=>{taxes[it.taxRate]=(taxes[it.taxRate]||0)+it.tax});
+  return`<div class="rcpt"><div class="rc-c">${s.type==='return'?'فاتورة إرجاع':'فاتورة'}<br><b>${esc(s.no)}</b></div>
+   <div class="rc-h">فانسي سنس<br>${esc(brName(s.branchId))}<br>${esc(s.registerName||'')} - ${esc(s.user||'')}<br>${new Date(s.date).toLocaleString('ar-EG-u-nu-latn',{hour:'2-digit',minute:'2-digit',second:'2-digit',year:'numeric',month:'2-digit',day:'2-digit'})}${s.customerId?`<br>العميل: ${esc(byId(S.customers,s.customerId)?.name||'')}`:''}${s.refNo?`<br>مرجع: ${esc(s.refNo)}`:''}</div>
+   <table class="rc-t"><thead><tr><th></th><th>اسم المنتج</th><th>السعر</th><th>الإجمالي</th></tr></thead><tbody>
+   ${s.items.map(it=>`<tr><td>${it.qty}x</td><td>${esc(it.name)}${it.promoName?`<div class="rc-s">${esc(it.promoName)} : ${fmt(it.promoDisc)}</div>`:''}</td><td>${fmt(it.price)}</td><td>${fmt(it.total)}<div class="rc-s">غير شامل الضريبة ${fmt(it.net)}</div></td></tr>`).join('')}</tbody></table>
+   <div class="rc-r"><span>إجمالي العناصر</span><span>${s.items.reduce((a,i)=>a+i.qty,0)}</span></div>
+   <div class="rc-r"><span>الإجمالي الفرعي</span><span>${fmt(s.subtotal)}</span></div>
+   ${(s.promo||s.manual)?`<div class="rc-r dash"><span>إجمالي الخصم</span><span>${fmt((s.promo||0)+(s.manual||0))}</span></div>${s.promo?`<div class="rc-r sm"><span>عروض ترويجية</span><span>${fmt(s.promo)}</span></div>`:''}${s.manual?`<div class="rc-r sm"><span>خصم</span><span>${fmt(s.manual)}</span></div>`:''}`:''}
+   ${Object.entries(taxes).map(([r,v])=>`<div class="rc-r"><span>${esc(S.taxes.find(t=>+t.rate===+r)?.name||'ضريبة')} (${r}%)</span><span>${fmt(v)}</span></div>`).join('')}
+   <div class="rc-r big"><span>الإجمالي</span><span>${fmt(sign*s.total)}</span></div>
+   ${(s.payments||[]).map(p=>`<div class="rc-r"><span>${esc(mName(p.methodId))}</span><span>${fmt(sign*p.amount)}</span></div>`).join('')}
+   ${(s.collections||[]).map(p=>`<div class="rc-r sm"><span>تحصيل ${dtFmt(p.date)} · ${esc(mName(p.methodId))}</span><span>${fmt(p.amount)}</span></div>`).join('')}
+   ${s.change?`<div class="rc-r"><span>الباقي</span><span>${fmt(s.change)}</span></div>`:''}${due(s)>0?`<div class="rc-r"><span>المتبقي (دين)</span><span>${fmt(due(s))}</span></div>`:''}</div>`;
+}
+const due=s=>s.type==='return'?0:r3(s.total-(s.paid||0)-(s.collections||[]).reduce((a,c)=>a+c.amount,0));
+function printReceipt(id){const s=byId(S.sales,id);const w=window.open('','_blank','width=420,height=700');if(!w){toast('اسمح بالنوافذ المنبثقة للطباعة');return}
+  w.document.write(`<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>${esc(s.no)}</title><style>${RC_CSS}body{margin:0}@page{size:80mm auto;margin:4mm}</style></head><body>${receiptHTML(s)}<script>setTimeout(()=>print(),300)<\/script></body></html>`);w.document.close()}
+const RC_CSS=`.rcpt{width:300px;margin:0 auto;font-family:Arial,sans-serif;font-size:12px;color:#111}.rc-c{text-align:center;font-size:14px;margin-bottom:10px;line-height:1.7}.rc-h{border-bottom:1px solid #111;padding-bottom:10px;margin-bottom:6px;line-height:1.7}.rc-t{width:100%;border-collapse:collapse}.rc-t th{font-weight:normal;text-align:right;border-bottom:1px solid #111;padding:4px 2px}.rc-t td{vertical-align:top;padding:6px 2px;border-bottom:1px solid #111}.rc-s{font-size:9px;color:#555}.rc-r{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #ddd}.rc-r.dash{border-top:1px dashed #111}.rc-r.sm{font-size:10px}.rc-r.big{font-weight:bold;font-size:14px;border-top:1px dashed #111;border-bottom:1px dashed #111}`;
+
+/* ---------- sales invoices list ---------- */
+const SI={q:'',range:'24h',from:'',to:'',f:{branch:'',method:'',customer:'',type:''},page:1,size:25};
+const RANGES={'24h':'24 ساعة (الإعداد الافتراضي)',today:'اليوم',yday:'أمس','7d':'آخر 7 أيام','30d':'آخر 30 يوم',month:'هذا الشهر',all:'كل الفترات',custom:'فترة مخصصة'};
+function siRange(){const n=new Date(),d0=x=>{const y=new Date(x);y.setHours(0,0,0,0);return y};
+  switch(SI.range){case'24h':return[new Date(n-864e5),n];case'today':return[d0(n),n];case'yday':{const a=d0(new Date(n-864e5));return[a,d0(n)]}case'7d':return[new Date(n-7*864e5),n];case'30d':return[new Date(n-30*864e5),n];case'month':return[new Date(n.getFullYear(),n.getMonth(),1),n];case'custom':return[SI.from?new Date(SI.from+'T00:00:00'):new Date(0),SI.to?new Date(SI.to+'T23:59:59'):n];default:return[new Date(0),new Date(8.6e15)]}}
+function siList(){const[a,b]=siRange(),A=a.toISOString(),B=b.toISOString(),q=SI.q.trim().toLowerCase(),f=SI.f;
+  return S.sales.filter(s=>s.date>=A&&s.date<=B&&(!f.branch||s.branchId===f.branch)&&(!f.type||s.type===f.type)&&(!f.customer||s.customerId===f.customer)&&(!f.method||(s.payments||[]).some(p=>p.methodId===f.method))&&(!q||s.no.toLowerCase().includes(q))).sort((x,y)=>y.date.localeCompare(x.date))}
+function viewSales(){
+  setTitle('فواتير المبيعات');
+  const list=siList(),pages=Math.max(1,Math.ceil(list.length/SI.size));if(SI.page>pages)SI.page=pages;const rows=list.slice((SI.page-1)*SI.size,SI.page*SI.size);
+  const af=Object.entries(SI.f).filter(([,v])=>v);
+  const net=r3(list.reduce((a,s)=>a+(s.type==='return'?-1:1)*s.total,0));
+  $('#view').innerHTML=`<div class="bar"><div style="display:flex;gap:8px;flex-wrap:wrap;flex:1"><div class="search" style="width:340px"><input id="siq" placeholder="البحث بواسطة رقم الفاتورة" value="${esc(SI.q)}"></div>
+    <button class="btn ${af.length?'soft':'out'}" onclick="siFilters()">⚲ تصفية ${af.length?`<span class="badge-n">${af.length}</span>`:''}</button>${af.length?`<button class="btn soft" onclick="SI.f={branch:'',method:'',customer:'',type:''};viewSales()">مسح</button>`:''}</div>
+    <button class="btn pri" onclick="exportSales()">⬇ تصدير</button></div>
+   <div class="bar"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span>🕓</span><select class="in" style="width:230px;height:38px" onchange="SI.range=this.value;SI.page=1;viewSales()">${Object.entries(RANGES).map(([k,l])=>`<option value="${k}" ${SI.range===k?'selected':''}>${l}</option>`).join('')}</select>
+    ${SI.range==='custom'?`<input type="date" class="in" style="width:160px;height:38px" value="${SI.from}" onchange="SI.from=this.value;viewSales()"><input type="date" class="in" style="width:160px;height:38px" value="${SI.to}" onchange="SI.to=this.value;viewSales()">`:''}</div>
+    <span class="sub" style="margin:0">${list.length} فاتورة · الصافي ${money(net)}</span></div>
+   <div class="card">${list.length?`<div class="tbl-wrap"><table><thead><tr><th>رقم الفاتورة</th><th>الموقع</th><th>طريقة الدفع</th><th>العميل</th><th>القناة</th><th>نوع البيع</th><th>قيمة الفاتورة</th><th>المبلغ المدفوع</th><th>تاريخ</th><th></th></tr></thead><tbody>
+    ${rows.map(s=>{const pd=r3((s.paid||0)+(s.collections||[]).reduce((a,c)=>a+c.amount,0));return`<tr><td class="no"><a href="#/sale/${s.id}">${esc(s.no)}</a></td><td>${esc(brName(s.branchId))}</td><td>${esc([...new Set((s.payments||[]).map(p=>mName(p.methodId)))].join('، ')||'—')}</td><td>${esc(byId(S.customers,s.customerId)?.name||'')}</td><td>نقاط البيع</td>
+     <td>${s.type==='return'?'<span class="pill p-bad">إرجاع</span>':'بيع'}</td><td class="num">${s.type==='return'?'−':''}${fmt(s.total)}</td><td class="num">${s.type==='return'?'−':''}${fmt(pd)}${due(s)>0?' <span class="pill p-warn">آجل</span>':''}</td><td>${new Date(s.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</td>
+     <td class="act"><button class="ib" title="طباعة" onclick="printReceipt('${s.id}')">🖨</button><button class="ib" onclick="siRowMenu(event,'${s.id}')">⋯</button></td></tr>`}).join('')}</tbody></table></div>
+    <div class="foot"><div>عدد النتائج <select class="in" style="height:32px;width:70px;display:inline-block;padding:0 6px" onchange="SI.size=+this.value;SI.page=1;viewSales()">${[10,25,50,100].map(n=>`<option ${n===SI.size?'selected':''}>${n}</option>`).join('')}</select> &nbsp; عرض ${(SI.page-1)*SI.size+1} - ${Math.min(SI.page*SI.size,list.length)} من ${list.length}</div><div class="pager">${genPager(SI.page,pages,'SI.page=%;viewSales()')}</div></div>`
+    :`<div class="empty"><div class="ico">🧾</div><h3>لا توجد فواتير في هذه الفترة</h3><p>غيّر الفترة أو ابدأ البيع من نقاط البيع.</p><a class="btn pri" href="#/registers">نقاط البيع</a></div>`}</div>`;
+  const q=$('#siq');q.oninput=()=>{SI.q=q.value;SI.page=1;clearTimeout(q.t);q.t=setTimeout(()=>{viewSales();const n=$('#siq');n.focus();n.setSelectionRange(n.value.length,n.value.length)},250)};
+}
+function genPager(p,pages,cb){const b=(n,l,dis)=>`<button ${dis?'disabled':''} class="${n===p&&!l?'on':''}" onclick="${cb.replace('%',n)}">${l||n}</button>`;let h=b(1,'«',p===1)+b(Math.max(1,p-1),'‹',p===1);const set=[...new Set([1,pages,p-1,p,p+1].filter(n=>n>=1&&n<=pages))].sort((a,b)=>a-b);let last=0;set.forEach(n=>{if(n-last>1)h+='<button disabled>…</button>';h+=b(n);last=n});return h+b(Math.min(pages,p+1),'›',p===pages)+b(pages,'»',p===pages)}
+function siRowMenu(ev,id){const s=byId(S.sales,id);const it=[['👁 عرض',`location.hash='#/sale/${id}'`],['🖨 طباعة',`printReceipt('${id}')`]];if(due(s)>0)it.push(['💵 تحصيل مدين',`collectDlg('${id}')`]);if(s.type==='sale'&&canReturn(s))it.push(['↩ إرجاع',`returnDlg('${id}')`]);openMenu(ev,it)}
+function siFilters(){const f=SI.f;const o=overlay(`<div class="drawer"><div class="dh"><h3>تصفية</h3></div><div class="db">
+  <div class="fl"><label>الموقع</label><select class="in" id="sf1">${opts(S.branches,f.branch)}</select></div><div class="fl"><label>طريقة الدفع</label><select class="in" id="sf2">${opts(S.methods,f.method)}</select></div>
+  <div class="fl"><label>العميل</label><select class="in" id="sf3">${opts(S.customers,f.customer)}</select></div><div class="fl"><label>القناة</label><select class="in" disabled><option>نقاط البيع</option></select></div>
+  <div class="fl"><label>نوع البيع</label><select class="in" id="sf4"><option value="">الكل</option><option value="sale" ${f.type==='sale'?'selected':''}>بيع</option><option value="return" ${f.type==='return'?'selected':''}>إرجاع</option></select></div></div>
+  <div class="df"><button class="btn pri" data-ok>تطبيق</button><button class="btn" data-x>إلغاء</button></div></div>`);
+  o.querySelector('[data-x]').onclick=()=>o.remove();o.querySelector('[data-ok]').onclick=()=>{SI.f={branch:sf1.value,method:sf2.value,customer:sf3.value,type:sf4.value};SI.page=1;o.remove();viewSales()}}
+function exportSales(){const list=siList();const head=['رقم الفاتورة','الموقع','الصندوق','الكاشير','طريقة الدفع','العميل','نوع البيع','الإجمالي الفرعي','الخصم','العروض','الضريبة','قيمة الفاتورة','المبلغ المدفوع','المتبقي','التاريخ'];
+  const rows=list.map(s=>[s.no,brName(s.branchId),s.registerName,s.user,[...new Set((s.payments||[]).map(p=>mName(p.methodId)))].join(' + '),byId(S.customers,s.customerId)?.name||'',s.type==='return'?'إرجاع':'بيع',s.subtotal,s.manual,s.promo,s.tax,(s.type==='return'?-1:1)*s.total,(s.type==='return'?-1:1)*s.paid,due(s),dtFmt(s.date)]);
+  const csv='﻿'+[head,...rows].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=`sales-${today()}.csv`;a.click()}
+function viewSale(id){const s=byId(S.sales,id);if(!s){location.hash='#/sales';return}setTitle('تفاصيل الفاتورة');
+  const rets=S.sales.filter(x=>x.refId===s.id);
+  $('#view').innerHTML=`<div class="bar no-print"><a class="btn" href="#/sales">→ فواتير المبيعات</a><div style="display:flex;gap:8px;flex-wrap:wrap">${due(s)>0?`<button class="btn soft" onclick="collectDlg('${s.id}')">💵 تحصيل مدين (${fmt(due(s))})</button>`:''}${s.type==='sale'&&canReturn(s)?`<button class="btn" onclick="returnDlg('${s.id}')">↩ إرجاع</button>`:''}<button class="btn pri" onclick="printReceipt('${s.id}')">معاينة الفاتورة</button></div></div>
+   ${rets.length?`<div class="info">مرتجعات على هذه الفاتورة: ${rets.map(x=>`<a href="#/sale/${x.id}">${esc(x.no)}</a>`).join('، ')}</div>`:''}${s.refId?`<div class="info">فاتورة إرجاع من <a href="#/sale/${s.refId}">${esc(s.refNo)}</a></div>`:''}
+   <div class="card" style="padding:26px 10px"><style>${RC_CSS}</style>${receiptHTML(s)}</div>`}
+function collectDlg(id){const s=byId(S.sales,id),d=due(s);
+  const o=overlay(`<div class="modal"><div class="dh"><h3>تحصيل مدين — ${esc(s.no)}</h3><p>المتبقي: ${money(d)}</p></div><div class="db"><div class="fl"><label>المبلغ</label><input class="in" type="number" step="any" id="ca" value="${d}"></div>
+   <div class="fl"><label>طريقة الدفع</label><select class="in" id="cm">${S.methods.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select></div></div><div class="df"><button class="btn" data-x>إلغاء</button><button class="btn pri" data-ok>حفظ</button></div></div>`);
+  o.querySelector('[data-x]').onclick=()=>o.remove();
+  o.querySelector('[data-ok]').onclick=async()=>{const v=r3(o.querySelector('#ca').value);if(!(v>0)||v>d+1e-9){toast('مبلغ غير صحيح');return}const c={amount:v,methodId:o.querySelector('#cm').value,date:new Date().toISOString(),user:ME};s.collections=s.collections||[];s.collections.push(c);
+    const reg=S.registers.find(r=>r.status==='open'&&r.branchId===s.branchId&&r.device===DEVICE);if(reg){const sh=byId(S.shifts,reg.shiftId);if(sh){sh.collections=sh.collections||[];sh.collections.push({...c,saleId:s.id})}}
+    await flushNow();o.remove();toast('تم التحصيل');route(true)};
+}
+const canReturn=s=>s.items.some(it=>it.qty-((s.returned||{})[it.productId]||0)>0);
+function returnDlg(id){const s=byId(S.sales,id);
+  const o=overlay(`<div class="modal" style="width:560px"><div class="dh"><h3>إرجاع — ${esc(s.no)}</h3><p>حدد الكميات المرتجعة</p></div><div class="db"><table><thead><tr><th>المنتج</th><th>المباع</th><th>مرتجع سابقاً</th><th>الإرجاع</th></tr></thead><tbody>
+   ${s.items.map((it,i)=>{const done=(s.returned||{})[it.productId]||0;return`<tr><td>${esc(it.name)}</td><td>${it.qty}</td><td>${done}</td><td><input class="in" type="number" min="0" max="${it.qty-done}" value="0" data-ri="${i}" style="height:34px;width:80px" ${it.qty-done<=0?'disabled':''}></td></tr>`}).join('')}</tbody></table>
+   <div class="fl" style="margin-top:12px"><label>طريقة رد المبلغ</label><select class="in" id="rm">${S.methods.map(m=>`<option value="${m.id}" ${(s.payments?.[0]?.methodId===m.id)?'selected':''}>${esc(m.name)}</option>`).join('')}</select></div>
+   <div class="fl"><label>السبب</label><input class="in" id="rn"></div><div class="info" id="rinfo">قيمة الإرجاع: 0</div></div>
+   <div class="df"><button class="btn" data-x>إلغاء</button><button class="btn pri" data-ok>تأكيد الإرجاع</button></div></div>`);
+  const sel=()=>[...o.querySelectorAll('[data-ri]')].map(x=>{const it=s.items[+x.dataset.ri];const q=Math.max(0,Math.min(+x.value||0,it.qty-((s.returned||{})[it.productId]||0)));return{it,q}}).filter(x=>x.q>0);
+  const val=()=>r3(sel().reduce((a,{it,q})=>a+it.total*q/it.qty,0));
+  o.querySelectorAll('[data-ri]').forEach(x=>x.oninput=()=>o.querySelector('#rinfo').textContent='قيمة الإرجاع: '+money(val()));
+  o.querySelector('[data-x]').onclick=()=>o.remove();
+  o.querySelector('[data-ok]').onclick=async()=>{const L=sel();if(!L.length){toast('حدد كمية للإرجاع');return}
+    const now=new Date();const regId=s.registerId;const reg=byId(S.registers,regId);const rseq=S.sales.filter(x=>x.type==='return').reduce((m,x)=>Math.max(m,x.seq||0),0)+1;
+    const items=L.map(({it,q})=>{const k=q/it.qty;return{productId:it.productId,name:it.name,sku:it.sku,qty:q,price:it.price,manual:r3(it.manual*k),promoDisc:r3(it.promoDisc*k),promoName:it.promoName,taxRate:it.taxRate,net:r3(it.net*k),tax:r3(it.tax*k),total:r3(it.total*k)}});
+    const sum=k=>r3(items.reduce((a,x)=>a+(+x[k]||0),0));
+    const myReg=S.registers.find(r=>r.status==='open'&&r.branchId===s.branchId&&r.device===DEVICE);
+    const ret={id:uid(),type:'return',seq:rseq,no:`R${ymd(now)}-${String(rseq).padStart(4,'0')}`,date:now.toISOString(),branchId:s.branchId,registerId:myReg?.id||regId,registerName:myReg?.name||reg?.name||'',shiftId:myReg?.shiftId||null,user:ME,channel:'pos',customerId:s.customerId,refId:s.id,refNo:s.no,note:o.querySelector('#rn').value,
+      items,subtotal:r3(items.reduce((a,x)=>a+x.qty*x.price,0)),manual:sum('manual'),promo:sum('promoDisc'),tax:sum('tax'),total:sum('total'),payments:[{methodId:o.querySelector('#rm').value,amount:sum('total')}],paid:sum('total')};
+    S.sales.push(ret);s.returned=s.returned||{};
+    items.forEach(it=>{s.returned[it.productId]=(s.returned[it.productId]||0)+it.qty;const p=byId(S.products,it.productId);if(!p)return;const L2=p.locs[s.branchId]=p.locs[s.branchId]||{qty:0};const from=+L2.qty||0;L2.qty=r3(from+it.qty);p.log=p.log||[];p.log.push({date:ret.date,user:ME,branch:s.branchId,from,to:L2.qty,reason:'إرجاع '+ret.no})});
+    await flushNow();o.remove();toast('تم الإرجاع '+ret.no);location.hash='#/sale/'+ret.id};
+}
+
+/* ---------- promotions ---------- */
+const PR={q:'',sel:new Set()};
+const PTYPE_L={simple:'خصم على سعر المنتجات',conditional:'إذا اشترى العميل X يحصل على Y'};
+function promoState(p){const now=new Date().toISOString();if(p.paused)return['متوقف','p-gray'];if(p.start>now)return['مجدول','p-warn'];if(p.end&&p.end<now)return['منتهي','p-bad'];return['نشط','p-ok']}
+function viewPromos(){
+  setTitle('العروض الترويجية');const q=PR.q.trim().toLowerCase();const list=S.promotions.filter(p=>!q||p.name.toLowerCase().includes(q)).sort((a,b)=>(b.start||'').localeCompare(a.start||''));
+  $('#view').innerHTML=`<div class="bar"><div class="search" style="width:480px"><input id="prq" placeholder="ابحث عن اسم العرض الترويجي" value="${esc(PR.q)}"></div><button class="btn pri" onclick="promoTypeDlg()">＋ إضافة عرض جديد</button></div>
+  <div class="card"><div class="bar" style="padding:10px 14px;margin:0;border-bottom:1px solid var(--bd)"><button class="btn sm" ${PR.sel.size?'':'disabled'} onclick="openMenu(event,[['⏸ إيقاف المحدد','promoBulk(\\'pause\\')'],['▶ تفعيل المحدد','promoBulk(\\'resume\\')'],['🗑 حذف المحدد','promoBulk(\\'del\\')',1]])">⚙ إجراءات ⌄</button><span class="sub" style="margin:0">${list.length} عرض</span></div>
+   ${list.length?`<div class="tbl-wrap"><table><thead><tr><th class="ck"><input type="checkbox" onchange="list_sel(this.checked)" ${list.length&&list.every(p=>PR.sel.has(p.id))?'checked':''}></th><th>اسم العرض الترويجي</th><th>نوع العرض</th><th>حالة العرض</th><th>تاريخ البدء</th><th>تاريخ الانتهاء</th><th></th></tr></thead><tbody>
+   ${list.map(p=>{const[st,sc]=promoState(p);const d=x=>x?new Date(x).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—';return`<tr><td class="ck"><input type="checkbox" ${PR.sel.has(p.id)?'checked':''} onchange="this.checked?PR.sel.add('${p.id}'):PR.sel.delete('${p.id}');viewPromos()"></td><td><a href="#/promo/${p.id}">${esc(p.name)}</a></td><td>${PTYPE_L[p.type]}</td><td><span class="pill ${sc}">${st}</span></td><td>${d(p.start)}</td><td>${d(p.end)}</td>
+    <td class="act"><button class="ib" title="تعديل" onclick="location.hash='#/promo/${p.id}'">✏️</button><button class="ib" title="حذف" onclick="promoDel('${p.id}')">🗑</button></td></tr>`}).join('')}</tbody></table></div>`:`<div class="empty"><div class="ico">🏷</div><h3>لا توجد عروض</h3><button class="btn pri" onclick="promoTypeDlg()">＋ إضافة عرض جديد</button></div>`}</div>`;
+  const i=$('#prq');i.oninput=()=>{PR.q=i.value;clearTimeout(i.t);i.t=setTimeout(()=>{viewPromos();const n=$('#prq');n.focus();n.setSelectionRange(n.value.length,n.value.length)},250)};
+}
+function list_sel(on){S.promotions.forEach(p=>on?PR.sel.add(p.id):PR.sel.delete(p.id));viewPromos()}
+function promoBulk(a){const ids=[...PR.sel];if(a==='del'){confirmDlg(`حذف ${ids.length} عرض؟`,'',()=>{S.promotions=S.promotions.filter(p=>!PR.sel.has(p.id));PR.sel.clear();save();viewPromos()});return}S.promotions.forEach(p=>{if(PR.sel.has(p.id))p.paused=a==='pause'});save();viewPromos()}
+function promoDel(id){const p=byId(S.promotions,id);confirmDlg(`حذف «${p.name}»؟`,'',()=>{S.promotions=S.promotions.filter(x=>x.id!==id);save();if(location.hash.startsWith('#/promo/'))location.hash='#/promos';else viewPromos()})}
+function promoTypeDlg(){const o=overlay(`<div class="modal" style="width:620px"><div class="dh"><h3>اختر نوع العرض</h3><p>اختر نوع العرض الترويجي الذي ترغب في تطبيقه من الأسفل</p></div><div class="db"><div class="srcs">
+  <div class="src" data-t="simple"><span class="ic">🏷</span><div><b>خصم على سعر المنتجات</b><span>يمكنك إجراء خصم بنسبة أو مبلغ ثابت على اسعار منتجاتك</span></div></div>
+  <div class="src" data-t="conditional"><span class="ic">🎁</span><div><b>إذا اشترى العميل X يحصل على Y</b><span>يمكنك اجراء خصم على منتجات عند شراء منتجات أخرى</span></div></div></div></div></div>`);
+  o.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{o.remove();location.hash='#/promo/new-'+b.dataset.t})}
+let PF=null;
+function viewPromo(id){
+  if(id&&id.startsWith('new-')){const t=id.slice(4);PF={id:null,type:t,name:'',start:new Date().toISOString(),end:'',allLocations:true,locations:[],discType:t==='simple'?'percentage':'free',amount:'',x:{all:false,type:'product',ids:[],qty:1},y:t==='conditional'?{all:false,type:'product',ids:[],qty:1}:null,paused:false}}
+  else{const p=byId(S.promotions,id);if(!p){location.hash='#/promos';return}PF=structuredClone(p)}
+  setTitle(PF.id?'تحرير الترويج':'عرض ترويجي جديد');renderPromo();
+}
+const isoDate=x=>x?isoL(new Date(x)):'';const isoTime=x=>{if(!x)return'';const d=new Date(x);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
+function scopeBlock(k,title,hint,qtyLabel){const sc=PF[k];return`<div class="fcard"><h2>${title}</h2><p class="sub">${hint}</p>
+  ${qtyLabel?`<div class="fl" style="max-width:260px"><label>${qtyLabel} <span class="r">*</span></label><input class="in" type="number" min="1" value="${sc.qty||1}" onchange="PF.${k}.qty=Math.max(1,+this.value||1)"></div>`:''}
+  <label style="font-weight:500;display:block;margin-bottom:8px">${k==='y'?'المنتجات التي سيحصل عليها العميل':k==='x'&&PF.type==='conditional'?'المنتجات التي يجب شراؤها لتفعيل العرض':'المنتجات المختارة'}</label>
+  <div class="seg">${[['all','كل المنتجات'],['product','منتجات محددة'],['category','فئات محددة']].map(([v,l])=>`<button class="${(sc.all?'all':sc.type)===v?'on':''}" onclick="setScope('${k}','${v}')">${l}</button>`).join('')}</div>
+  ${sc.all?'':`<div class="row" style="align-items:center"><span>قمت باختيار <b>${sc.ids.length}</b> ${sc.type==='category'?'فئة':'منتج'}</span><button class="btn sm out" onclick="pickItems('${k}')">${sc.type==='category'?'اختيار الفئات':'عرض / اختيار المنتجات'}</button></div>`}</div>`}
+function setScope(k,v){const sc=PF[k];if(v==='all'){sc.all=true}else{if(sc.type!==v)sc.ids=[];sc.all=false;sc.type=v}renderPromo()}
+function renderPromo(){const p=PF,[st,sc]=p.id?promoState(p):['',''];
+  $('#view').innerHTML=`<div class="form pform"><div class="crumb"><a href="#/promos">العروض الترويجية</a> <span>›</span> <b>${p.id?'تحرير الترويج':'عرض ترويجي جديد'}</b></div>
+  <div class="fcard"><div class="fhead"><h2>تفاصيل العرض الترويجي - ${PTYPE_L[p.type]}</h2>${st?`<span class="pill ${sc}">${st}</span>`:''}</div>
+   <div class="fl"><label>اسم العرض الترويجي <span class="r">*</span></label><input class="in" id="pfn" value="${esc(p.name)}"></div>
+   <div class="grid2"><div class="fl"><label>تاريخ البدء <span class="r">*</span></label><input type="date" class="in" id="pfsd" value="${isoDate(p.start)}"></div><div class="fl"><label>وقت البدء <span class="r">*</span></label><input type="time" class="in" id="pfst" value="${isoTime(p.start)||'00:00'}"></div></div>
+   <div class="qk">${[['اليوم',0],['غداً',1],['الأسبوع القادم',7],['الشهر القادم',30]].map(([l,d])=>`<button class="btn sm" onclick="qStart(${d})">${l}</button>`).join('')}</div><p class="hint">أدخل تاريخ بدأ العرض الترويجي، يمكنك جدولة عرض للمستقبل من هنا</p>
+   <div class="grid2"><div class="fl"><label>تاريخ الانتهاء</label><input type="date" class="in" id="pfed" value="${isoDate(p.end)}"></div><div class="fl"><label>وقت الانتهاء</label><input type="time" class="in" id="pfet" value="${isoTime(p.end)}"></div></div>
+   <div class="qk">${[['يوم',1],['يومين',2],['اسبوع',7],['شهر',30]].map(([l,d])=>`<button class="btn sm" onclick="qEnd(${d})">${l}</button>`).join('')}<button class="btn sm lnk" onclick="pfed.value='';pfet.value=''">بدون انتهاء</button></div><p class="hint">يمكنك اختيار مدة العرض الترويجي من هنا، في حالة عدم الاختيار سيظل العرض نشط لحين إلغاءه.</p></div>
+  <div class="fcard"><h2>المواقع المختارة</h2><label class="cbx"><input type="checkbox" ${p.allLocations?'checked':''} onchange="PF.allLocations=this.checked;renderPromo()"><b>كل المواقع</b></label>
+   ${p.allLocations?'':`<div class="mchips">${S.branches.map(b=>`<label class="mchip"><input type="checkbox" ${p.locations.includes(b.id)?'checked':''} onchange="this.checked?PF.locations.push('${b.id}'):PF.locations=PF.locations.filter(x=>x!=='${b.id}')"> ${esc(b.name)}</label>`).join('')}</div>`}<p class="hint">هذا العرض الترويجي سيتم تطبيقه على المواقع التي يتم اختيارها فقط</p></div>
+  ${p.type==='simple'?`<div class="fcard"><h2>نوع التخفيض</h2><p class="sub">حدد نوع الخصم الذي تريد تطبيقه على سعر المنتجات</p>
+    <div class="seg">${[['amount','مبلغ ثابت من سعر المنتج'],['percentage','نسبة مئوية من سعر المنتج']].map(([v,l])=>`<button class="${p.discType===v?'on':''}" onclick="PF.discType='${v}';renderPromo()">${l}</button>`).join('')}</div>
+    <div class="fl" style="max-width:260px"><label>إضافة خصم ${p.discType==='percentage'?'(%)':''} <span class="r">*</span></label><input class="in" type="number" step="any" min="0" value="${p.amount}" onchange="PF.amount=this.value"></div></div>${scopeBlock('x','المنتجات','اختر المنتجات التي يطبق عليها الخصم')}`
+  :`${scopeBlock('x','إذا اشترى العميل المنتج X','اختر المنتجات التي يجب شراؤها من قبل العميل لتفعيل العرض','كمية المنتجات اللازمة لتفعيل العرض الترويجي')}
+    ${scopeBlock('y','يحصل العميل على المنتج Y','اختر المنتجات المخفضة التي يحصل عليها العميل اذا استحق العرض','كمية المنتجات التي يطبق عليها الخصم')}
+    <div class="fcard"><h2>بتخفيض قيمته:</h2><div class="seg">${[['free','منتج مجاني'],['amount','مبلغ ثابت'],['percentage','نسبة مئوية']].map(([v,l])=>`<button class="${p.discType===v?'on':''}" onclick="PF.discType='${v}';renderPromo()">${l}</button>`).join('')}</div>
+    ${p.discType==='free'?'':`<div class="fl" style="max-width:260px"><label>${p.discType==='amount'?'مبلغ ثابت':'نسبة مئوية'} <span class="r">*</span></label><input class="in" type="number" step="any" min="0" value="${p.amount}" onchange="PF.amount=this.value"></div>`}</div>`}
+  <div class="fcard pfoot"><button class="btn pri" onclick="savePromo()">${p.id?'حفظ التغييرات':'إضافة عرض جديد'}</button><button class="btn lnk" onclick="location.hash='#/promos'">إلغاء</button>${p.id?`<button class="btn lnk" style="margin-right:auto" onclick="PF.paused=!PF.paused;savePromo()">${p.paused?'▶ تفعيل العرض':'⏸ إيقاف العرض'}</button>`:''}</div></div>`;
+}
+function qStart(d){const x=new Date();x.setDate(x.getDate()+d);pfsd.value=isoL(x);if(!pfst.value)pfst.value='00:00'}
+function qEnd(d){const base=pfsd.value?new Date(pfsd.value+'T12:00:00'):new Date();base.setDate(base.getDate()+d);pfed.value=isoL(base);if(!pfet.value)pfet.value='23:59'}
+function pickItems(k){const sc=PF[k],isCat=sc.type==='category';const sel=new Set(sc.ids);
+  const o=overlay(`<div class="drawer" style="width:560px"><div class="dh"><h3>${isCat?'اختيار الفئات':'اختيار المنتجات'}</h3><p id="pkc">${sel.size} محدد</p></div><div class="db"><div class="search" style="width:100%;margin-bottom:8px"><input id="pkq" placeholder="ابحث…"></div><div id="pkl"></div></div>
+   <div class="df"><button class="btn pri" data-ok>تم</button><button class="btn" data-all>تحديد الظاهر</button><button class="btn" data-none>إلغاء الكل</button></div></div>`,'left');
+  const src=isCat?S.pcats.map(c=>({id:c.id,name:c.name,sub:S.products.filter(p=>p.catId===c.id).length+' منتج'})):S.products.map(p=>({id:p.id,name:p.name,sub:p.sku}));
+  const draw=()=>{const q=o.querySelector('#pkq').value.trim().toLowerCase();const L=src.filter(x=>!q||`${x.name} ${x.sub}`.toLowerCase().includes(q));const sorted=[...L.filter(x=>sel.has(x.id)),...L.filter(x=>!sel.has(x.id))].slice(0,300);
+    o.querySelector('#pkl').innerHTML=sorted.map(x=>`<label class="ck"><input type="checkbox" value="${x.id}" ${sel.has(x.id)?'checked':''}> ${esc(x.name)} <small class="sub" style="margin:0 6px 0 0">${esc(x.sub)}</small></label>`).join('')+(L.length>300?`<p class="sub">يظهر أول 300 — ابحث لتضييق النتائج</p>`:'');o.querySelector('#pkc').textContent=sel.size+' محدد'};
+  o.querySelector('#pkl').onchange=e=>{const v=e.target.value;e.target.checked?sel.add(v):sel.delete(v);o.querySelector('#pkc').textContent=sel.size+' محدد'};
+  o.querySelector('#pkq').oninput=draw;o.querySelector('[data-all]').onclick=()=>{o.querySelectorAll('#pkl input').forEach(i=>sel.add(i.value));draw()};o.querySelector('[data-none]').onclick=()=>{sel.clear();draw()};
+  o.querySelector('[data-ok]').onclick=()=>{sc.ids=[...sel];o.remove();renderPromo()};draw();
+}
+function savePromo(){const p=PF;p.name=$('#pfn').value.trim();if(!p.name){toast('اكتب اسم العرض');return}
+  if(!pfsd.value){toast('حدد تاريخ البدء');return}p.start=new Date(`${pfsd.value}T${pfst.value||'00:00'}:00`).toISOString();p.end=pfed.value?new Date(`${pfed.value}T${pfet.value||'23:59'}:00`).toISOString():'';
+  if(p.end&&p.end<=p.start){toast('تاريخ الانتهاء يجب أن يكون بعد البدء');return}
+  if(!p.allLocations&&!p.locations.length){toast('اختر موقعاً واحداً على الأقل');return}
+  if(p.discType!=='free'&&!(+p.amount>0)){toast('أدخل قيمة الخصم');return}if(p.discType==='percentage'&&+p.amount>100){toast('النسبة أكبر من 100');return}
+  for(const k of ['x','y'])if(p[k]&&!p[k].all&&!p[k].ids.length){toast(k==='x'&&p.type==='conditional'?'اختر منتجات X':k==='y'?'اختر منتجات Y':'اختر المنتجات');return}
+  p.amount=p.discType==='free'?100:+p.amount;
+  if(p.id){Object.assign(byId(S.promotions,p.id),p)}else{p.id=uid();p.createdAt=new Date().toISOString();p.createdBy=ME;S.promotions.push(p)}
+  save();toast('تم الحفظ');location.hash='#/promos';
+}
+
+/* ---------- import from Rewaa (registers + promotions) ---------- */
+function importSalesSeed(d){
+  const bByName=n=>S.branches.find(b=>normS(b.name).toLowerCase()===normS(n).toLowerCase())?.id;
+  const mByName=n=>S.methods.find(m=>normS(m.name)===normS(n))?.id;
+  let nr=0,np=0;
+  for(const g of d.registers||[]){const id='rwreg'+g.rid;if(byId(S.registers,id))continue;const used=S.registers.map(x=>x.code);
+    S.registers.push({id,rid:g.rid,name:g.name,branchId:bByName(g.branchName),cashiers:g.cashiers,allUsers:g.allUsers,methods:g.methodNames.map(mByName).filter(Boolean),cashMethod:mByName(g.cashMethodName),printer:g.printer,layout:'grid',active:true,status:'closed',code:'ABCDEFGHJKLMNPQRSTUVWXYZ'.split('').find(c=>!used.includes(c))});nr++}
+  const cByName=n=>{let c=S.pcats.find(c=>normS(c.name)===normS(n));if(!c&&normS(n)){c={id:uid(),name:normS(n)};S.pcats.push(c)}return c?.id};
+  const sc=s=>s&&({all:s.all,type:s.type,qty:s.qty,ids:s.type==='category'?s.categoryNames.map(cByName).filter(Boolean):s.productIds.filter(i=>byId(S.products,i))});
+  for(const p of d.promotions||[]){const id='rwpr'+p.rid;const o={id,rid:p.rid,name:p.name,type:p.type,discType:p.discType,amount:p.amount,start:p.start,end:p.end||'',allLocations:p.allLocations,locations:p.locationNames.map(bByName).filter(Boolean),x:sc(p.x),y:sc(p.y),paused:p.paused};
+    const ex=byId(S.promotions,id);if(ex)Object.assign(ex,o);else{S.promotions.push(o);np++}}
+  save();return[nr,np];
+}
 /* ===================== settings ===================== */
 function viewSettings(){
   setTitle('الإعدادات');
@@ -1256,7 +1759,7 @@ function viewSettings(){
    <div class="fl"><label>عدد المنازل العشرية</label><select class="in" onchange="S.settings.decimals=+this.value;save()">${[0,2,3].map(n=>`<option ${n===S.settings.decimals?'selected':''}>${n}</option>`).join('')}</select></div>
    <div class="fl"><label>نسبة الضريبة الافتراضية %</label><input class="in" type="number" value="${S.settings.vat}" onchange="S.settings.vat=+this.value;save()"></div></div></div>
    ${list('categories','فئات المصروفات')}${list('branches','الفروع')}${list('methods','وسائل الدفع')}${list('suppliers','الموردون')}${list('prepaidAccounts','حسابات المصروفات المدفوعة مسبقاً')}
-   <div class="fcard"><h2>النسخ الاحتياطي</h2><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="backup()">⬇ تنزيل نسخة احتياطية (JSON)</button><button class="btn" onclick="restore()">⬆ استعادة نسخة</button>${ME==='المالكة'||LOCAL?'':'<!--'}<button class="btn danger" onclick="confirmDlg('مسح كل البيانات؟','سيتم حذف جميع المصروفات والإعدادات من هذا المتصفح نهائياً. نزّل نسخة احتياطية أولاً.',()=>{S=fresh();save();toast('تم المسح');route()})">مسح كل البيانات</button>${ME==='المالكة'||LOCAL?'':'-->'}</div>
+   <div class="fcard"><h2>النسخ الاحتياطي</h2><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="backup()">⬇ تنزيل نسخة احتياطية (JSON)</button><button class="btn" onclick="restore()">⬆ استعادة نسخة</button>${OWNER||LOCAL?'':'<!--'}<button class="btn danger" onclick="confirmDlg('مسح كل البيانات؟','سيتم حذف جميع المصروفات والإعدادات من هذا المتصفح نهائياً. نزّل نسخة احتياطية أولاً.',()=>{S=fresh();save();toast('تم المسح');route()})">مسح كل البيانات</button>${OWNER||LOCAL?'':'-->'}</div>
    <p style="color:var(--mut);font-size:13px;margin-bottom:0">البيانات محفوظة في قاعدة البيانات المشتركة ويراها كل من لديه صلاحية.</p></div></div>`;
 }
 const used=(key,id)=>({categories:e=>e.categoryId===id,branches:e=>(e.branches||[]).includes(id),methods:e=>(e.payments||[]).some(p=>p.methodId===id),suppliers:e=>e.supplierId===id,prepaidAccounts:e=>e.prepaid?.accountId===id})[key];

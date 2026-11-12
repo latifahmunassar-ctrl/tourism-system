@@ -11,7 +11,7 @@ const cors = {
 };
 const J = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...cors, 'Content-Type': 'application/json' } });
 
-const COLLS = new Set(['expenses', 'recurring', 'products', 'meta', 'stock_log']);
+const COLLS = new Set(['expenses', 'recurring', 'products', 'meta', 'stock_log', 'sales', 'registers', 'shifts', 'promotions', 'customers']);
 const MAX_DOC = 3_000_000;   // حد حجم المستند الواحد (مرفقات/صور مضغوطة)
 const MAX_BATCH = 1500;
 
@@ -22,15 +22,16 @@ Deno.serve(async (req: Request) => {
 
   // ===== المصادقة =====
   let who = '';
+  let owner = false;
   const key = req.headers.get('x-acc-key') || '';
-  if (ACCESS_KEY && key === ACCESS_KEY) who = 'المالكة';
+  if (ACCESS_KEY && key === ACCESS_KEY) { who = 'المالكة'; owner = true; }
   if (!who) {
     const tok = req.headers.get('x-acc-token') || '';
     if (tok) {
       const { data: s } = await db.from('acc_sessions').select('expires_at,is_owner,allowed_tabs,staff_name').eq('token', tok).maybeSingle();
       if (s && (!s.expires_at || new Date(s.expires_at).getTime() > Date.now())) {
         const tabs = Array.isArray(s.allowed_tabs) ? s.allowed_tabs : [];
-        if (s.is_owner || tabs.includes('fancy')) who = s.staff_name || (s.is_owner ? 'المالكة' : 'موظف');
+        if (s.is_owner || tabs.includes('fancy')) { who = s.staff_name || (s.is_owner ? 'المالكة' : 'موظف'); owner = !!s.is_owner; }
       }
     }
   }
@@ -49,7 +50,7 @@ Deno.serve(async (req: Request) => {
       out.push(...(data || []));
       if (!data || data.length < page) break;
     }
-    return J({ user: who, now: new Date().toISOString(), docs: out });
+    return J({ user: who, owner, now: new Date().toISOString(), docs: out });
   }
 
   // ===== POST: حفظ / حذف =====
