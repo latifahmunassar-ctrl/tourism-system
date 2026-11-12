@@ -11,7 +11,7 @@ const cors = {
 };
 const J = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...cors, 'Content-Type': 'application/json' } });
 
-const COLLS = new Set(['expenses', 'recurring', 'products', 'meta', 'stock_log', 'sales', 'registers', 'shifts', 'promotions', 'customers']);
+const COLLS = new Set(['expenses', 'recurring', 'products', 'meta', 'stock_log', 'sales', 'registers', 'shifts', 'promotions', 'customers', 'quotes']);
 const MAX_DOC = 3_000_000;   // حد حجم المستند الواحد (مرفقات/صور مضغوطة)
 const MAX_BATCH = 1500;
 
