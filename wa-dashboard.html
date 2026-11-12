@@ -3459,6 +3459,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
 
     function renderConversations(arr) {
       conversationsCache = arr;
+      loadBlockedList();
       checkForNewMessages(arr);
       applyConversationsFilter();
       maybeShowInboxNotification();
@@ -3736,7 +3737,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
             <div class="label conv-clickable" data-action="open-conv" data-phone="${escapeHtml(c.phone)}" data-name="${escapeHtml(c.profile_name || ph)}">
               <span class="dot ${dotCls}"></span>
               <div class="label-text">
-                <span class="primary">${escapeHtml(c.profile_name || ph)}${c.profile_name ? ` <span style="font-size:12px; font-weight:700; color:#0b5d4e; direction:ltr; unicode-bidi:isolate; white-space:nowrap;">📱 ${escapeHtml(ph)}</span>` : ""}</span>
+                <span class="primary">${escapeHtml(c.profile_name || ph)}${c.profile_name ? ` <span style="font-size:12px; font-weight:700; color:#0b5d4e; direction:ltr; unicode-bidi:isolate; white-space:nowrap;">📱 ${escapeHtml(ph)}</span>` : ""}${isBlockedPhone(c.phone) ? ` <span title="رقم محظور — طلال ما يرد عليه" style="background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; border-radius:20px; padding:1px 8px; font-size:11px; font-weight:800; white-space:nowrap;">🚫 محظور</span>` : ""}</span>
                 ${previewLine}
                 ${assignedLine}
                 <span class="secondary">🕐 آخر نشاط ${escapeHtml(fmtTime(c.last_message_at))}${destBadge}${assignedBadge}</span>
@@ -4226,6 +4227,27 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
 
     // 🚫 ٩ نوفمبر ٢٠٢٦ (المالكة: «خلي لي خيار اني ابلك الرقم من عندي»): حظر/إلغاء حظر رقم المحادثة المفتوحة.
     let convBlocked = false;
+    // 🚫 ١٢ نوفمبر ٢٠٢٦ (المالكة): شارة «محظور» في قائمة المحادثات (من برّا المحادثة).
+    let blockedDigits = [], blockedLoadedAt = 0;
+    const _bdig = (p) => String(p || "").replace(/^whatsapp:/, "").replace(/[^0-9]/g, "");
+    function isBlockedPhone(p) {
+      const d = _bdig(p); if (!d) return false;
+      return blockedDigits.some(b => b === d || d.endsWith(b) || b.endsWith(d));
+    }
+    async function loadBlockedList(force) {
+      if (!token || (!force && Date.now() - blockedLoadedAt < 60000)) return;
+      blockedLoadedAt = Date.now();
+      try {
+        const r = await fetch(BASE + "?admin_action=block_number", { headers: { Authorization: "Bearer " + token } });
+        if (!r.ok) return;
+        const d = await r.json().catch(() => ({}));
+        if (Array.isArray(d.list)) {
+          const before = blockedDigits.join(",");
+          blockedDigits = d.list.map(_bdig).filter(x => x.length >= 6);
+          if (before !== blockedDigits.join(",") && conversationsCache.length) applyConversationsFilter();
+        }
+      } catch (_e) { /* */ }
+    }
     function paintBlockBtn() {
       const b = document.getElementById("conv-block"); if (!b) return;
       b.textContent = convBlocked ? "✅ إلغاء الحظر" : "🚫 حظر";
@@ -4250,7 +4272,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       const b = document.getElementById("conv-block"); if (b) { b.disabled = true; b.textContent = "⏳…"; }
       try {
         const d = await callApi("block_number", { phone: convPhone, block: want });
-        if (d && d.ok) { convBlocked = !!d.blocked; alert(convBlocked ? "🚫 تم حظر الرقم." : "✅ أُلغي حظر الرقم."); }
+        if (d && d.ok) { convBlocked = !!d.blocked; loadBlockedList(true); alert(convBlocked ? "🚫 تم حظر الرقم." : "✅ أُلغي حظر الرقم."); }
         else alert("فشل: " + ((d && d.error) || ""));
       } catch (e) { alert("فشل: " + (e && e.message ? e.message : e)); }
       finally { if (b) b.disabled = false; paintBlockBtn(); }
