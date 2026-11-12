@@ -306,6 +306,19 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 .pifil{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.pifil .in,.pifil .search input{height:40px}.pifil .search{width:auto}
 .pivgrid{display:grid;grid-template-columns:1fr 1.1fr;gap:16px;align-items:start}
 @media (max-width:1000px){.posbody{grid-template-columns:1fr}.paymodal{width:100%}.paygrid{grid-template-columns:1fr}.pifil{grid-template-columns:1fr 1fr}.pivgrid{grid-template-columns:1fr}}
+.fbtn{border:0;background:none;cursor:pointer;color:#9aa1a8;font-size:12px;padding:0 2px}.fbtn.on{color:var(--pri)}
+.trtbl td{white-space:nowrap}
+.trdet{display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start}.trhead{padding:16px;margin-bottom:14px}
+.trroute{display:flex;align-items:center;gap:14px;margin-top:12px}.trroute>div{flex:1}.trarrow{color:var(--pri);font-size:26px}
+.trbody{padding:16px}.trdh{display:flex;align-items:center;gap:8px;font-size:17px}
+.trit td{white-space:normal;vertical-align:middle}.trit tfoot td{background:#f9fafb;border-bottom:0}
+.trform{display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start;margin-bottom:80px}.trmain{display:flex;flex-direction:column;gap:12px}
+.trside{display:flex;flex-direction:column;gap:12px}.trbox{padding:16px}.trcard{padding:14px}.trch{display:flex;align-items:center;gap:10px}
+.trtot{display:flex;gap:30px;justify-content:flex-end;padding:10px 14px;background:#f9fafb;border:1px solid var(--bd);border-top:0;border-radius:0 0 8px 8px}.trtot span,.trtot{align-items:center}.trtot small{margin-left:6px!important}
+.trsum{margin-top:10px}.trsum th,.trsum td{padding:8px 6px;font-size:13px;white-space:normal}
+.fsearch2{position:relative}.fsearch2 input{width:100%;height:42px;border:1px solid var(--bd);border-radius:8px;padding:0 12px}
+.msd{position:relative}.msd summary{list-style:none;cursor:pointer;display:flex;align-items:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.msd>div{position:absolute;top:100%;right:0;left:0;background:#fff;border:1px solid var(--bd);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.1);z-index:20;padding:6px;margin-top:4px}.msd label{display:flex;gap:8px;padding:8px;cursor:pointer;margin:0;color:var(--tx);font-size:14px}
+@media (max-width:1000px){.trdet,.trform{grid-template-columns:1fr}}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 18px;border-radius:8px;z-index:99;font-size:14px}
 @media (max-width:900px){
   .side{position:fixed;right:-280px;z-index:60;transition:.2s}.side.open{right:0}
@@ -340,6 +353,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
       <div class="grp">المنتجات والمخزون</div>
       <a href="#/products" data-n="products" class="sub">📦 المنتجات</a>
       <a href="#/pcats" data-n="pcats" class="sub">🏷️ إدارة الفئات</a>
+      <a href="#/transfers" data-n="transfers" class="sub">🚚 تحويل مخزون</a>
       <div class="grp">المحاسبة</div>
       <a href="#/expenses" data-n="expenses" class="sub">🧾 المصروفات</a>
       <a href="#/recurring" data-n="recurring" class="sub">🔁 المصروفات المتكررة</a>
@@ -377,7 +391,7 @@ function fresh(){
     branches:DEF_BRANCHES.map(n=>({id:uid(),name:n})),
     suppliers:[],prepaidAccounts:[{id:uid(),name:'مصروفات مدفوعة مقدماً'}],
     wallet:[],settings:{currency:'ر.ع',decimals:3,vat:5},
-    products:[],pcats:[],brands:[],sales:[],registers:[],shifts:[],promotions:[],customers:[],quotes:[],taxes:[{id:'tx1',name:'ضريبه عمان',rate:5},{id:'tx0',name:'معفى',rate:0}],customFields:[{id:'14113',name:'سعر البيع قبل الضرايب',type:'number'},{id:'15320',name:'فرع ثاني',type:'switch'}],
+    products:[],pcats:[],brands:[],sales:[],registers:[],shifts:[],promotions:[],customers:[],quotes:[],transfers:[],taxes:[{id:'tx1',name:'ضريبه عمان',rate:5},{id:'tx0',name:'معفى',rate:0}],customFields:[{id:'14113',name:'سعر البيع قبل الضرايب',type:'number'},{id:'15320',name:'فرع ثاني',type:'switch'}],
     cols:{name:1,type:1,cat:1,branch:1,method:0,amount:1,status:1,remaining:1,supplier:0,tax:0,date:0,taxable:0,freq:0,draft:0},
     pcols:{base:1,cat:1,sku:1,barcode:1,qty:1,cost:1,retail:1,wholesale:1,tax:1,brand:0,desc:0,buy:0,supplier:0,ptype:0}};
 }
@@ -385,7 +399,7 @@ function fresh(){
 const FN='https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/fs-books';
 const FN_LOGIN='https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/acc-dashboard';
 const LOCAL=new URLSearchParams(location.search).has('local'); // وضع تجربة محلي بدون خادم
-const ARR=['expenses','recurring','products','sales','registers','shifts','promotions','customers','quotes'], LOCAL_ONLY=['cols','pcols'];
+const ARR=['expenses','recurring','products','sales','registers','shifts','promotions','customers','quotes','transfers'], LOCAL_ONLY=['cols','pcols'];
 let S=fresh(), SNAP={}, LAST='', ME='', OWNER=false;
 const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
 function prefsLoad(){try{const p=JSON.parse(ls.get('fsb_prefs')||'{}');if(p.cols)Object.assign(S.cols,p.cols);if(p.pcols)Object.assign(S.pcols,p.pcols)}catch(e){}}
@@ -446,7 +460,7 @@ async function poll(){
   if(LOCAL||document.hidden||flushing||!LAST)return;
   try{const j=await api('GET',null,'?since='+encodeURIComponent(LAST));LAST=j.now;
     const n=applyDocs(j.docs,false);
-    if(n&&!/^#\/(new|edit|pnew|pedit|pos|regopen|regclose|promo\/)/.test(location.hash)&&!document.querySelector('.ov'))route(true);
+    if(n&&!/^#\/(new|edit|pnew|pedit|pos|regopen|regclose|promo\/|trnnew|trnreq|trnedit)/.test(location.hash)&&!document.querySelector('.ov'))route(true);
   }catch(e){if(e.code===401)showLogin('انتهت الجلسة')}
 }
 setInterval(poll,40000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll()});
@@ -514,14 +528,15 @@ function route(soft){
   if(!BOOTED)return;
   const h=location.hash.replace(/^#\/?/,'')||'products';
   const [p,id]=h.split('/');
-  const nav={new:'expenses',edit:'expenses',view:'expenses',pnew:'products',pedit:'products',pview:'products',regopen:'registers',regclose:'registers',pos:'registers',sale:'sales',promo:'promos'}[p]||p;
+  const nav={new:'expenses',edit:'expenses',view:'expenses',pnew:'products',pedit:'products',pview:'products',regopen:'registers',regclose:'registers',pos:'registers',sale:'sales',promo:'promos',trn:'transfers',trnnew:'transfers',trnreq:'transfers',trnedit:'transfers'}[p]||p;
   if(p!=='pos')document.body.classList.remove('posmode');
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.n===nav));
   side.classList.remove('open');closeMenu();
   const y=scrollY;
   ({expenses:viewList,recurring:viewRecurring,summary:viewSummary,new:()=>viewForm(),edit:()=>viewForm(id),view:()=>viewDetail(id),settings:viewSettings,
     products:viewProducts,pnew:()=>viewPForm(),pedit:()=>viewPForm(id),pview:()=>viewProduct(id),pcats:viewPCats,
-    registers:viewRegisters,regopen:()=>viewRegOpen(id),regclose:()=>viewRegClose(id),pos:()=>viewPOS(id),sales:viewSales,sale:()=>viewSale(id),promos:viewPromos,promo:()=>viewPromo(id)}[p]||viewProducts)();
+    registers:viewRegisters,regopen:()=>viewRegOpen(id),regclose:()=>viewRegClose(id),pos:()=>viewPOS(id),sales:viewSales,sale:()=>viewSale(id),promos:viewPromos,promo:()=>viewPromo(id),
+    transfers:viewTransfers,trn:()=>viewTransfer(id),trnnew:()=>viewTrForm('new'),trnreq:()=>viewTrForm('req'),trnedit:()=>viewTrForm('edit',id)}[p]||viewProducts)();
   window.scrollTo(0,soft===true?y:0);
 }
 let BOOTED=false;
@@ -1910,6 +1925,194 @@ function importSalesHistory(d){
     if(idx.has(x.id)){S.sales[idx.get(x.id)]=x;nu++}else{S.sales.push(x);ns++}}
   save();return{customers:nc,sales:ns,updated:nu};
 }
+/* ===================== stock transfers (تحويل مخزون) ===================== */
+const TR_ST={draft:['مسوده','p-gray'],requested:['طلب مبدئي','p-warn'],accepted:['قبلت','p-ok'],rejected:['مرفوضة','p-bad']};
+const TRC=[['no','رقم الفاتورة'],['status','حالة النقل'],['from','من'],['to','إلى'],['created','تاريخ الإنشاء'],['updated','آخر تحديث'],['user','المستخدم'],['processed','تمت المعالجة بواسطة']];
+const TS={q:'',page:1,size:10,sel:new Set(),f:{no:'',status:'',from:'',to:'',user:'',processed:'',created:'',updated:''},cols:null};
+function trCols(){if(!TS.cols){try{TS.cols=JSON.parse(ls.get('fsb_trcols')||'null')}catch(e){}if(!TS.cols)TS.cols={no:1,status:1,from:1,to:1,created:1,updated:1,user:1,processed:0}}return TS.cols}
+const trDate=iso=>iso?`<div dir="ltr" style="text-align:right">${new Date(iso).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</div><small class="sub" style="margin:0">${new Date(iso).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</small>`:'—';
+function trList(){const f=TS.f,q=TS.q.trim().toLowerCase();
+  return S.transfers.filter(t=>(!q||t.no.toLowerCase().includes(q))&&(!f.no||t.no.toLowerCase().includes(f.no.toLowerCase()))&&(!f.status||t.status===f.status)&&(!f.from||t.sourceId===f.from)&&(!f.to||t.destId===f.to)&&(!f.user||t.createdBy===f.user)&&(!f.processed||t.processedBy===f.processed)
+   &&(!f.created||isoL(new Date(t.createdAt))===f.created)&&(!f.updated||isoL(new Date(t.updatedAt||t.createdAt))===f.updated)).sort((a,b)=>(b.seq||0)-(a.seq||0)||b.createdAt.localeCompare(a.createdAt))}
+function viewTransfers(){
+  setTitle('تحويل مخزون');const cols=trCols();const list=trList();const pages=Math.max(1,Math.ceil(list.length/TS.size));if(TS.page>pages)TS.page=pages;const rows=list.slice((TS.page-1)*TS.size,TS.page*TS.size);
+  const users=[...new Set(S.transfers.map(t=>t.createdBy).filter(Boolean))],procs=[...new Set(S.transfers.map(t=>t.processedBy).filter(Boolean))];
+  const fil=(k)=>{const on=!!TS.f[k];return`<button class="fbtn ${on?'on':''}" onclick="trFilter(event,'${k}')" title="تصفية">⏷</button>`};
+  const cell={no:t=>`<a href="#/trn/${t.id}"><b>${esc(t.no)}</b></a>`,status:t=>{const[s,c]=TR_ST[t.status]||[t.status,'p-gray'];return`<span class="pill ${c}">${s}</span>`},from:t=>esc(brName(t.sourceId)==='—'?'—':brName(t.sourceId)),to:t=>esc(brName(t.destId)),created:t=>trDate(t.createdAt),updated:t=>trDate(t.updatedAt||t.createdAt),user:t=>esc(t.createdBy||'—'),processed:t=>esc(t.processedBy||'—')};
+  const allSel=rows.length&&rows.every(t=>TS.sel.has(t.id));
+  $('#view').innerHTML=`<div class="bar"><div class="search" style="width:420px"><input id="tsq" placeholder="ابحث عن طلبات النقل عن طريق رقم الفاتورة" value="${esc(TS.q)}"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn pri" href="#/trnnew">نقل مخزون جديد</a><a class="btn out" href="#/trnreq">طلب مبدئي للمخزون</a><button class="btn lnk" onclick="trExport(trList())">⇪ تصدير الكل</button></div></div>
+   <div class="card"><div class="bar" style="padding:10px 14px;margin:0;border-bottom:1px solid var(--bd)">
+     <button class="btn sm" ${TS.sel.size?'':'disabled'} onclick="openMenu(event,[['🖨 طباعة المحدد','trPrintMany([...TS.sel])'],['⇪ تصدير المحدد','trExport(S.transfers.filter(t=>TS.sel.has(t.id)))'],['🗑 حذف المسودات المحددة','trDelDrafts()',1]])">⚙ إجراءات ⌄</button>
+     <span style="display:flex;gap:10px;align-items:center">${TS.sel.size?`<span class="sub" style="margin:0">${TS.sel.size} محدد</span>`:''}<button class="btn sm lnk" onclick="trColsDlg(event)">▥ تخصيص الأعمدة ⌄</button></span></div>
+   <div class="tbl-wrap"><table class="trtbl"><thead><tr><th class="ck"><input type="checkbox" ${allSel?'checked':''} onchange="trSelPage(this.checked)"></th>${TRC.filter(([k])=>cols[k]).map(([k,l])=>`<th>${l} ${fil(k)}</th>`).join('')}<th>تصفية ${Object.values(TS.f).some(Boolean)?`<button class="fbtn on" title="مسح التصفية" onclick="TS.f={no:'',status:'',from:'',to:'',user:'',processed:'',created:'',updated:''};viewTransfers()">✕</button>`:''}</th></tr></thead><tbody>
+   ${rows.map(t=>`<tr><td class="ck"><input type="checkbox" ${TS.sel.has(t.id)?'checked':''} onchange="this.checked?TS.sel.add('${t.id}'):TS.sel.delete('${t.id}');viewTransfers()"></td>${TRC.filter(([k])=>cols[k]).map(([k])=>`<td>${cell[k](t)}</td>`).join('')}<td class="act"><button class="ib" title="طباعة" onclick="trPrint('${t.id}')">🖨</button><button class="ib" title="عرض" onclick="location.hash='#/trn/${t.id}'">👁</button></td></tr>`).join('')||`<tr><td colspan="10"><div class="empty"><div class="ico">🚚</div><h3>لا توجد طلبات نقل</h3></div></td></tr>`}</tbody></table></div>
+   <div class="foot"><div>صف لكل صفحة <select class="in" style="height:32px;width:70px;display:inline-block;padding:0 6px" onchange="TS.size=+this.value;TS.page=1;viewTransfers()">${[10,25,50,100].map(n=>`<option ${n===TS.size?'selected':''}>${n}</option>`).join('')}</select> &nbsp; ${TS.size} من ${list.length}</div><div class="pager">${genPager(TS.page,pages,'TS.page=%;viewTransfers()')}</div></div></div>`;
+  const i=$('#tsq');i.oninput=()=>{TS.q=i.value;TS.page=1;clearTimeout(i.t);i.t=setTimeout(()=>{viewTransfers();const n=$('#tsq');n.focus();n.setSelectionRange(n.value.length,n.value.length)},250)};
+}
+function trSelPage(on){trList().slice((TS.page-1)*TS.size,TS.page*TS.size).forEach(t=>on?TS.sel.add(t.id):TS.sel.delete(t.id));viewTransfers()}
+function trFilter(ev,k){ev.stopPropagation();closeMenu();const r=ev.currentTarget.getBoundingClientRect();const users=[...new Set(S.transfers.map(t=>k==='processed'?t.processedBy:t.createdBy).filter(Boolean))];
+  const inp=k==='status'?`<select class="in" id="tfv"><option value="">الكل</option>${Object.entries(TR_ST).map(([v,[l]])=>`<option value="${v}" ${TS.f[k]===v?'selected':''}>${l}</option>`).join('')}</select>`
+   :(k==='from'||k==='to')?`<select class="in" id="tfv"><option value="">الكل</option>${S.branches.map(b=>`<option value="${b.id}" ${TS.f[k]===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select>`
+   :(k==='user'||k==='processed')?`<select class="in" id="tfv"><option value="">الكل</option>${users.map(u=>`<option ${TS.f[k]===u?'selected':''}>${esc(u)}</option>`).join('')}</select>`
+   :(k==='created'||k==='updated')?`<input type="date" class="in" id="tfv" value="${TS.f[k]}">`:`<input class="in" id="tfv" value="${esc(TS.f[k])}" placeholder="ابحث…">`;
+  menuEl=document.createElement('div');menuEl.className='menu';menuEl.style.padding='10px';menuEl.style.width='240px';menuEl.onclick=e=>e.stopPropagation();
+  menuEl.innerHTML=`${inp}<div style="display:flex;gap:6px;margin-top:8px"><button class="btn sm pri" id="tfa" style="flex:1;justify-content:center">تطبيق</button><button class="btn sm" id="tfc" style="flex:1;justify-content:center">مسح</button></div>`;
+  document.body.appendChild(menuEl);menuEl.style.top=(r.bottom+4)+'px';menuEl.style.left=Math.max(8,Math.min(r.left-100,innerWidth-250))+'px';
+  const v=menuEl.querySelector('#tfv');v.focus();const apply=()=>{TS.f[k]=v.value;TS.page=1;closeMenu();viewTransfers()};
+  menuEl.querySelector('#tfa').onclick=apply;menuEl.querySelector('#tfc').onclick=()=>{v.value='';apply()};v.onkeydown=e=>{if(e.key==='Enter')apply()};
+}
+function trColsDlg(ev){ev.stopPropagation();closeMenu();const r=ev.currentTarget.getBoundingClientRect();const cols=trCols();
+  menuEl=document.createElement('div');menuEl.className='menu';menuEl.style.width='240px';menuEl.onclick=e=>e.stopPropagation();
+  menuEl.innerHTML=TRC.map(([k,l])=>`<label class="ck" style="padding:8px 10px;border:0"><input type="checkbox" value="${k}" ${cols[k]?'checked':''} ${k==='no'?'disabled':''}> ${l}</label>`).join('');
+  document.body.appendChild(menuEl);menuEl.style.top=(r.bottom+4)+'px';menuEl.style.left=Math.max(8,r.left)+'px';
+  menuEl.onchange=e=>{cols[e.target.value]=e.target.checked?1:0;ls.set('fsb_trcols',JSON.stringify(cols));const keep=menuEl;viewTransfers();document.body.appendChild(keep);menuEl=keep};
+}
+function trDelDrafts(){const ids=[...TS.sel].filter(id=>byId(S.transfers,id)?.status==='draft');if(!ids.length){toast('لا توجد مسودات ضمن المحدد');return}confirmDlg(`حذف ${ids.length} مسودة؟`,'',()=>{S.transfers=S.transfers.filter(t=>!ids.includes(t.id));ids.forEach(i=>TS.sel.delete(i));save();viewTransfers()})}
+function trExport(list){const head=['رقم الفاتورة','حالة النقل','من','إلى','تاريخ الإنشاء','آخر تحديث','المستخدم','تمت المعالجة بواسطة','المنتج','SKU','الكمية المطلوبة','الكمية المرسلة','الكمية المستلمة','تكلفة المنتج','سعر المنتج'];
+  const rows=[];list.forEach(t=>(t.items.length?t.items:[{}]).forEach(it=>rows.push([t.no,TR_ST[t.status]?.[0]||t.status,brName(t.sourceId),brName(t.destId),dtFmt(t.createdAt),dtFmt(t.updatedAt||t.createdAt),t.createdBy||'',t.processedBy||'',it.name||'',it.sku||'',it.requested??'',it.transferred??'',it.received??'',it.cost??'',it.price??''])));
+  const csv='﻿'+[head,...rows].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=`transfers-${today()}.csv`;a.click()}
+
+/* ---- detail ---- */
+function viewTransfer(id){const t=byId(S.transfers,id);if(!t){location.hash='#/transfers';return}
+  setTitle('تفاصيل نقل المخزون');const[st,sc]=TR_ST[t.status]||[t.status,'p-gray'];const isReq=t.items.some(i=>i.requested!=null);
+  const crumb=t.status==='rejected'?'طلب مخزون مرفوض':t.status==='requested'?'طلب مبدئي للمخزون':'استلام المخزون';
+  const sent=t.items.reduce((a,i)=>a+(+i.transferred||0),0),rec=t.items.reduce((a,i)=>a+(+i.received||0),0);
+  const groups=t.items.length?[['المنتجات غير المتتبعة',t.items]]:[];
+  $('#view').innerHTML=`<div class="crumb"><a href="#/transfers">نقل المخزون</a> <span>›</span> <b>${crumb}</b></div>
+   <div class="bar no-print"><div style="display:flex;gap:8px;flex-wrap:wrap">
+    ${t.status==='draft'?`<a class="btn pri" href="#/trnedit/${t.id}">✏️ تعديل ونقل</a><button class="btn danger" onclick="confirmDlg('حذف المسودة؟','',()=>{S.transfers=S.transfers.filter(x=>x.id!=='${t.id}');save();location.hash='#/transfers'})">🗑 حذف</button>`:''}
+    ${t.status==='requested'?`<button class="btn pri" onclick="trFulfill('${t.id}')">🚚 تنفيذ الطلب ونقل المخزون</button><button class="btn danger" onclick="trReject('${t.id}')">✕ رفض الطلب</button>`:''}</div>
+    <button class="btn lnk" onclick="trPrint('${t.id}')">🖨 طباعة</button></div>
+   <div class="trdet"><div><div class="card trhead"><div class="row" style="justify-content:space-between"><div><small class="sub" style="margin:0">رقم الفاتورة</small><div><b>${esc(t.no)}</b></div></div><span class="pill ${sc}">${st}</span></div>
+     <small class="sub" style="margin:10px 0 0">تاريخ الإنشاء</small><div dir="ltr" style="text-align:right">${new Date(t.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}).replace(',','').replace(/, /,' - ')}</div>
+     <div class="trroute"><div><small class="sub" style="margin:0">مصدر المخزون</small><div>${esc(t.sourceId?brName(t.sourceId):'')}</div></div><span class="trarrow">⟵</span><div><small class="sub" style="margin:0">وجهة المخزون</small><div>${esc(brName(t.destId))}</div></div></div></div>
+    <div class="card trhead"><b>تاريخ الاستلام</b><div>${t.receivingDate?new Date(t.receivingDate).toLocaleDateString('en-GB'):''}</div>
+     <small class="sub" style="margin:12px 0 0">ملاحظات</small><div>${esc(t.notes||'')}</div>
+     <small class="sub" style="margin:12px 0 0">تم بواسطة</small><div>${esc(t.createdBy||'')}</div>
+     ${t.sentBy?`<small class="sub" style="margin:12px 0 0">تم الإرسال بواسطة</small><div>${esc(t.sentBy)}</div>`:''}${t.status==='accepted'&&t.processedBy?`<small class="sub" style="margin:12px 0 0">تم الاستلام بواسطة</small><div>${esc(t.processedBy)}</div>`:''}
+     ${t.status==='rejected'?`<small class="sub" style="margin:12px 0 0">ملاحظات مدير</small><div>${esc(t.managerNotes||'')}</div><small class="sub" style="margin:12px 0 0">${esc(brName(t.destId))} ملاحظات مدير</small><div>${esc(t.processedBy||'')}</div>`:''}</div></div>
+    <div class="card trbody"><div class="trdh"><b>${esc(brName(t.destId))}</b></div>
+     ${groups.map(([l,items])=>`<h3 style="margin:14px 0 10px">${l}</h3><div class="card"><table class="trit"><thead><tr><th>اسم المنتج / SKU</th>${isReq?'<th>الكمية المطلوبة</th>':''}<th>الكمية المرسلة</th>${isReq?'<th>مصدر المخزون</th>':''}<th>الكمية المستلمة</th>${isReq?'<th>وجهة المخزون</th>':''}<th></th></tr></thead><tbody>
+      ${items.map((it,i)=>{const k='tr'+i+l.length;return`<tr><td><b>${esc(it.name)}</b><div class="sub" style="margin:0">${esc(it.sku||'')}</div>${it.rejectionReason?`<div style="color:var(--bad);font-size:12px">${esc(it.rejectionReason)}</div>`:''}</td>${isReq?`<td>${it.requested??''}</td>`:''}<td>${it.transferred??''}</td>${isReq?`<td>${it.srcQty??''}</td>`:''}<td>${it.received??''}</td>${isReq?`<td>${it.dstQty??''}</td>`:''}<td><button class="ib" onclick="const r=document.getElementById('${k}${it.productId||it.name}');r.style.display=r.style.display==='none'?'':'none'">‹</button></td></tr>
+       <tr id="${k}${it.productId||it.name}" style="display:none" class="opened"><td colspan="7"><div class="cexp"><div><small>تكلفة المنتج</small><div>${fmt(it.cost)}</div></div><div><small>إجمالي تكلفة الكميات</small><div>${fmt((+it.cost||0)*(+(it.transferred??it.requested)||0))}</div></div><div><small>سعر المنتج</small><div>${fmt(it.price)}</div></div><div><small>إجمالي سعر الكميات</small><div>${fmt((+it.price||0)*(+(it.transferred??it.requested)||0))}</div></div></div></td></tr>`}).join('')}</tbody>
+      <tfoot><tr><td colspan="${isReq?2:1}"></td><td><small class="sub" style="margin:0">Total Sent:</small><div><b>${sent}</b></div></td><td colspan="${isReq?3:2}"><small class="sub" style="margin:0">إجمالي الكمية المستلمة:</small><div><b>${rec}</b></div></td></tr></tfoot></table></div>`).join('')||'<p class="sub" style="padding:14px">لا توجد منتجات.</p>'}
+    </div></div>`;
+}
+function trPrintHTML(t){const[st]=TR_ST[t.status]||[t.status];const isReq=t.items.some(i=>i.requested!=null);
+  return`<div class="tp"><div class="tph"><div><h2>نقل مخزون</h2><div>${esc(t.no)} · ${st}</div></div><div style="text-align:left">فانسي سنس<br>${dtFmt(t.createdAt)}</div></div>
+   <table class="tpm"><tr><td><b>مصدر المخزون</b><br>${esc(t.sourceId?brName(t.sourceId):'—')}</td><td><b>وجهة المخزون</b><br>${esc(brName(t.destId))}</td><td><b>تاريخ الاستلام</b><br>${t.receivingDate?new Date(t.receivingDate).toLocaleDateString('en-GB'):'—'}</td><td><b>تم بواسطة</b><br>${esc(t.createdBy||'')}</td></tr></table>
+   <table class="tpt"><thead><tr><th>#</th><th>اسم المنتج</th><th>SKU</th>${isReq?'<th>المطلوبة</th>':''}<th>المرسلة</th><th>المستلمة</th><th>التكلفة</th><th>إجمالي التكلفة</th></tr></thead><tbody>
+   ${t.items.map((it,i)=>`<tr><td>${i+1}</td><td>${esc(it.name)}</td><td>${esc(it.sku||'')}</td>${isReq?`<td>${it.requested??''}</td>`:''}<td>${it.transferred??''}</td><td>${it.received??''}</td><td>${fmt(it.cost)}</td><td>${fmt((+it.cost||0)*(+(it.transferred??0)))}</td></tr>`).join('')}</tbody>
+   <tfoot><tr><td colspan="${isReq?4:3}"><b>الإجمالي</b></td><td><b>${t.items.reduce((a,i)=>a+(+i.transferred||0),0)}</b></td><td><b>${t.items.reduce((a,i)=>a+(+i.received||0),0)}</b></td><td></td><td><b>${fmt(t.items.reduce((a,i)=>a+(+i.cost||0)*(+i.transferred||0),0))}</b></td></tr></tfoot></table>
+   ${t.notes?`<p><b>ملاحظات:</b> ${esc(t.notes)}</p>`:''}<div class="tps"><div>توقيع المرسل: ____________</div><div>توقيع المستلم: ____________</div></div></div>`}
+const TP_CSS=`body{font-family:Arial,sans-serif;margin:16px;color:#111}.tp{page-break-after:always}.tph{display:flex;justify-content:space-between;border-bottom:2px solid #111;padding-bottom:10px;margin-bottom:12px}.tph h2{margin:0 0 4px}.tpm,.tpt{width:100%;border-collapse:collapse;margin-bottom:14px}.tpm td{border:1px solid #ccc;padding:8px;vertical-align:top}.tpt th,.tpt td{border:1px solid #ccc;padding:6px 8px;text-align:right;font-size:12px}.tpt th{background:#f2f2f2}.tps{display:flex;justify-content:space-between;margin-top:40px}`;
+function trPrintMany(ids){const ts=ids.map(i=>byId(S.transfers,i)).filter(Boolean);if(!ts.length)return;const w=window.open('','_blank');if(!w){toast('اسمح بالنوافذ المنبثقة للطباعة');return}
+  w.document.write(`<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>نقل مخزون</title><style>${TP_CSS}</style></head><body>${ts.map(trPrintHTML).join('')}<script>setTimeout(()=>print(),300)<\/script></body></html>`);w.document.close()}
+function trPrint(id){trPrintMany([id])}
+
+/* ---- stock movement ---- */
+function trMove(t){const now=new Date().toISOString();
+  t.items.forEach(it=>{const p=byId(S.products,it.productId);if(!p)return;p.locs=p.locs||{};const mv=(b,d,reason)=>{const L=p.locs[b]=p.locs[b]||{qty:0,retail:'',wholesale:'',buy:'',tax:S.taxes[0]?.id};const from=+L.qty||0;L.qty=r3(from+d);p.log=p.log||[];p.log.push({date:now,user:ME,branch:b,from,to:L.qty,reason});if(p.log.length>300)p.log=p.log.slice(-300)};
+    const q=+it.transferred||0;if(!q)return;it.srcQty=+(p.locs[t.sourceId]?.qty)||0;it.dstQty=+(p.locs[t.destId]?.qty)||0;mv(t.sourceId,-q,`تحويل ${t.no} إلى ${brName(t.destId)}`);mv(t.destId,q,`تحويل ${t.no} من ${brName(t.sourceId)}`);it.received=q});
+  Object.assign(t,{status:'accepted',receivingDate:now,updatedAt:now,sentBy:ME,processedBy:ME});
+}
+const trNextNo=()=>{const n=S.transfers.reduce((m,t)=>Math.max(m,t.seq||0),0)+1;return{seq:n,no:'TRN-'+n}};
+
+/* ---- new transfer / request / edit draft ---- */
+let TF=null;
+function viewTrForm(mode,id){ // mode: new | req | edit
+  if(mode==='edit'){const t=byId(S.transfers,id);if(!t||t.status!=='draft'){location.hash='#/transfers';return}TF={mode,editId:id,source:t.sourceId,dests:[t.destId],lines:{[t.destId]:t.items.map(i=>({pid:i.productId,qty:i.transferred??''}))},notes:t.notes||'',open:new Set([t.destId])}}
+  else TF={mode,source:'',dests:[],lines:{},notes:'',open:new Set()};
+  setTitle(mode==='req'?'طلب مبدئي للمخزون':mode==='edit'?'تعديل نقل مخزون':'نقل مخزون جديد');renderTrForm();
+}
+function trFormDirty(){return Object.values(TF.lines).some(l=>l.length)||TF.notes}
+function renderTrForm(){
+  const req=TF.mode==='req',src=TF.source;
+  const destOpts=S.branches.filter(b=>req||b.id!==src);TF.dests=TF.dests.filter(d=>destOpts.some(b=>b.id===d));
+  const allLines=TF.dests.flatMap(d=>(TF.lines[d]||[]).map(l=>({...l,d})));
+  const sum={};allLines.forEach(l=>{sum[l.pid]=(sum[l.pid]||0)+(+l.qty||0)});
+  const totalCost=r3(allLines.reduce((a,l)=>a+(+l.qty||0)*(+(byId(S.products,l.pid)?.cost)||0),0));
+  $('#view').innerHTML=`<div class="crumb"><a href="#/transfers">نقل المخزون</a> <span>›</span> <b>${req?'طلب مبدئي للمخزون':TF.mode==='edit'?'تعديل نقل مخزون':'نقل مخزون جديد'}</b></div>
+   <div class="trform"><div class="trmain">${TF.dests.length?TF.dests.map(d=>trDestCard(d)).join(''):`<div class="card empty" style="padding:60px 20px"><div class="ico">📍</div><p>قم بتحديد وجهة المخزون لتتمكن من اختيار المنتجات التي تود طلبها</p></div>`}</div>
+    <div class="trside">${req?'':`<div class="card trbox"><b>مصدر المخزون</b><small class="sub" style="margin:0 0 10px;display:block">(الفرع المرسل للمخزون)</small><select class="in" id="trsrc"><option value="">اختيار الموقع</option>${S.branches.map(b=>`<option value="${b.id}" ${src===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>`}
+     <div class="card trbox"><b>وجهة المخزون</b><small class="sub" style="margin:0 0 10px;display:block">(الفرع المتلقي للمخزون)</small>
+      ${!req&&!src?'<div class="in" style="display:flex;align-items:center;color:var(--mut)">اختر المصدر أولاً</div>':`<details class="msd"><summary class="in">${TF.dests.length?esc(TF.dests.map(brName).join(', ')):'اختر الوجهة'}</summary><div>${destOpts.map(b=>`<label><input type="checkbox" value="${b.id}" ${TF.dests.includes(b.id)?'checked':''} ${TF.mode==='edit'?'disabled':''}> ${esc(b.name)}</label>`).join('')}</div></details>`}</div>
+     <div class="card trbox"><b>ملخص</b>${Object.keys(sum).length?`<table class="trsum"><thead><tr><th>اسم المنتج</th><th>إجمالة الكمية</th>${req?'':'<th>التكلفة الكلية</th>'}</tr></thead><tbody>${Object.entries(sum).map(([pid,q])=>{const p=byId(S.products,pid);return`<tr><td>${esc(p?.name||'')}</td><td>${q}</td>${req?'':`<td>${fmt(q*(+p?.cost||0))}</td>`}</tr>`}).join('')}</tbody></table>${req?'':`<div class="tr" style="display:flex;justify-content:space-between;border-top:1px solid var(--bd);padding-top:8px"><span>التكلفة الكلية</span><b>${fmt(totalCost)}</b></div>`}
+       <div class="fl" style="margin:12px 0 0"><textarea class="in" id="trnotes" maxlength="100" placeholder="ملاحظات">${esc(TF.notes)}</textarea><small class="sub" style="margin:0" id="trnc">${TF.notes.length}/100</small></div>`:'<div class="empty" style="padding:24px 0"><div class="ico" style="font-size:40px">📦</div><p>سيظهر هنا ملخص المنتجات التي يتم إختيارها</p></div>'}</div></div></div>
+   <div class="savebar"><div class="in-w">${req?`<button class="btn pri" onclick="trSubmit('request')">إرسال الطلب</button>`:`<button class="btn pri" onclick="trSubmit('send')">نقل</button><button class="btn out" onclick="trSubmit('draft')">حفظ كمسودة</button>`}<button class="btn" style="border:0" onclick="trCancel()">رجوع</button></div></div>`;
+  $('#trsrc')?.addEventListener('change',e=>{TF.source=e.target.value;renderTrForm()});
+  const md=document.querySelector('.msd');if(md)md.querySelector('div').onchange=e=>{const v=e.target.value;if(e.target.checked){TF.dests.push(v);TF.open.add(v)}else TF.dests=TF.dests.filter(x=>x!==v);const open=md.open;renderTrForm();if(open)document.querySelector('.msd').open=true};
+  const nt=$('#trnotes');if(nt)nt.oninput=()=>{TF.notes=nt.value;$('#trnc').textContent=nt.value.length+'/100'};
+  document.querySelectorAll('[data-trq]').forEach(i=>i.oninput=()=>{const[d,k]=i.dataset.trq.split('|');TF.lines[d][+k].qty=i.value;trTotals(d)});
+  TF.dests.forEach(d=>trBindSearch(d));
+}
+function trTotals(d){const L=TF.lines[d]||[];const el=document.getElementById('trt_'+d);if(!el)return;const q=L.reduce((a,l)=>a+(+l.qty||0),0),c=L.reduce((a,l)=>a+(+l.qty||0)*(+(byId(S.products,l.pid)?.cost)||0),0);el.innerHTML=TF.mode==='req'?`<small class="sub" style="margin:0">إجمالي المرسل:</small><b>${q}</b>`:`<span><small class="sub" style="margin:0">إجمالي الكمية:</small><b>${q}</b></span><span><small class="sub" style="margin:0">التكلفة الكلية:</small><b>${fmt(c)}</b></span>`}
+function trDestCard(d){const req=TF.mode==='req',open=TF.open.has(d)||TF.dests.length===1;const L=TF.lines[d]=TF.lines[d]||[];
+  const grp=[['simple','منتجات من نوع واحد'],['composite','منتجات مجمعة']].map(([k,l])=>[l,L.map((x,i)=>({...x,i})).filter(x=>{const p=byId(S.products,x.pid);return k==='composite'?p?.type==='composite':p?.type!=='composite'})]).filter(g=>g[1].length);
+  return`<div class="card trcard"><div class="trch"><button class="chev" onclick="TF.open.has('${d}')?TF.open.delete('${d}'):TF.open.add('${d}');renderTrForm()">${open?'⌃':'⌄'}</button><b>${esc(brName(d))}</b>${L.length&&TF.dests.length>1?`<button class="lnk" style="margin-right:auto" onclick="trCopyAll('${d}')">نسخ إلى كافة المواقع</button>`:''}</div>
+   ${open?`<div class="row" style="margin:10px 0"><div class="fsearch2 grow"><input placeholder="بحث بإسم المنتج أو SKU" data-trs="${d}"><div class="sdrop" id="trd_${d}"></div></div><button class="btn soft" onclick="trImport('${d}')">⇪ استيراد المنتجات</button></div>
+    ${grp.map(([l,items])=>`<b style="display:block;margin:12px 0 8px">${l}</b><div class="card"><table class="trit"><thead><tr><th>اسم المنتج / SKU</th>${req?'':'<th>مصدر المخزون</th>'}<th>وجهة المخزون</th><th>${req?'الكمية المطلوبة':'الكمية المنقولة'}</th><th></th><th></th></tr></thead><tbody>
+     ${items.map(x=>{const p=byId(S.products,x.pid);return`<tr><td><b>${esc(p?.name||'محذوف')}</b><div class="sub" style="margin:0">${esc(p?.sku||'')}</div></td>${req?'':`<td>${fmtQ(p?.locs?.[TF.source]?.qty)}</td>`}<td>${fmtQ(p?.locs?.[d]?.qty)}</td>
+      <td><input class="in sm" type="number" min="0" step="any" data-trq="${d}|${x.i}" value="${x.qty}" style="width:110px"></td><td><button class="ib" onclick="TF.lines['${d}'].splice(${x.i},1);renderTrForm()">🗑</button></td><td><button class="ib" onclick="const r=this.closest('tr').nextElementSibling;r.style.display=r.style.display==='none'?'':'none'">‹</button></td></tr>
+      <tr style="display:none" class="opened"><td colspan="6"><div class="cexp"><div><small>تكلفة المنتج</small><div>${fmt(p?.cost)}</div></div><div><small>إجمالي تكلفة الكميات</small><div>${fmt((+x.qty||0)*(+p?.cost||0))}</div></div><div><small>سعر المنتج</small><div>${fmt(locVal(p||{},'retail',TF.source||d))}</div></div><div><small>إجمالي سعر الكميات</small><div>${fmt((+x.qty||0)*(+locVal(p||{},'retail',TF.source||d)||0))}</div></div></div></td></tr>`}).join('')}</tbody></table></div>`).join('')}
+    ${L.length?`<div class="trtot" id="trt_${d}"></div>`:''}`:''}</div>`;
+}
+function trBindSearch(d){const i=document.querySelector(`[data-trs="${d}"]`);if(!i)return;const dd=document.getElementById('trd_'+d);trTotals(d);
+  const show=()=>{const v=i.value.trim().toLowerCase();if(!v){dd.style.display='none';return}const L=S.products.filter(p=>`${p.name} ${p.sku} ${p.barcode}`.toLowerCase().includes(v)).slice(0,25);
+    dd.innerHTML=L.map(p=>`<div class="sitem" data-p="${p.id}"><div class="sn"><b>${esc(p.name)}</b> <small style="display:inline">${esc(p.sku)}</small></div></div>`).join('')||'<div class="sub" style="padding:12px">لا توجد نتائج</div>';dd.style.display='block'};
+  i.oninput=()=>{clearTimeout(i.t);i.t=setTimeout(show,120)};
+  i.onkeydown=e=>{if(e.key==='Enter'){const v=i.value.trim();const m=S.products.find(p=>p.sku===v||p.barcode===v)||(dd.querySelectorAll('[data-p]').length===1?byId(S.products,dd.querySelector('[data-p]').dataset.p):null);if(m)trAdd(d,m.id);else toast('لا يوجد منتج بهذا الرمز')}};
+  dd.onclick=e=>{const it=e.target.closest('[data-p]');if(it)trAdd(d,it.dataset.p)};
+  document.addEventListener('click',function c(e){if(!document.body.contains(dd)){document.removeEventListener('click',c);return}if(!e.target.closest('.fsearch2'))dd.style.display='none'});
+}
+function trAdd(d,pid){const L=TF.lines[d]=TF.lines[d]||[];if(L.some(l=>l.pid===pid)){toast('المنتج مضاف مسبقاً');return}L.push({pid,qty:''});TF.open.add(d);renderTrForm();const n=document.querySelector(`[data-trq="${d}|${L.length-1}"]`);n?.focus()}
+function trCopyAll(d){TF.dests.forEach(x=>{if(x!==d)TF.lines[x]=structuredClone(TF.lines[d])});TF.dests.forEach(x=>TF.open.add(x));renderTrForm();toast('تم النسخ إلى كافة المواقع')}
+function trImport(d){const o=overlay(`<div class="modal" style="width:620px"><div class="dh"><h3>استيراد المنتجات</h3><p>يمكنك تحميل ملفك مباشرة لاستيراد منتجاتك، أو تحميل القالب واتباع الإرشادات: <a href="#" id="trtpl">تحميل القالب</a></p></div><div class="db">
+   <div class="drop" id="trdrop">📎 قم بسحب و إفلات المرفقات هنا أو <u>تصفح الملفات</u><br><small>صيغ الملفات المدعومة: csv.</small></div>
+   <details style="margin-top:12px"><summary>تعليمات الاستيراد</summary><ul class="sub" style="margin:8px 0"><li>الأعمدة: SKU، الكمية</li><li>اقصى عدد من المنتجات في الملف: 1000</li><li>يجب عدم تكرار رمز SKU</li></ul></details></div><div class="df"><button class="btn" data-x>إغلاق</button></div></div>`);
+  o.querySelector('[data-x]').onclick=()=>o.remove();
+  o.querySelector('#trtpl').onclick=e=>{e.preventDefault();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿SKU,الكمية\n952613062571,1\n'],{type:'text/csv'}));a.download='transfer-template.csv';a.click()};
+  const pick=()=>{const i=document.createElement('input');i.type='file';i.accept='.csv';i.onchange=async()=>{const rows=parseCSV((await i.files[0].text()).replace(/^﻿/,'')).slice(1).filter(r=>r[0]&&r[0].trim()).slice(0,1000);let ok=0,bad=[];
+    rows.forEach(r=>{const sku=r[0].trim(),q=+r[1]||0;const p=S.products.find(x=>x.sku===sku||x.barcode===sku);if(!p){bad.push(sku);return}const L=TF.lines[d];const ex=L.find(l=>l.pid===p.id);if(ex)ex.qty=q;else L.push({pid:p.id,qty:q});ok++});
+    o.remove();renderTrForm();toast(`تم استيراد ${ok} منتج`+(bad.length?` · غير موجود: ${bad.slice(0,5).join('، ')}`:''))};i.click()};
+  const dz=o.querySelector('#trdrop');dz.onclick=pick;
+}
+function trCancel(){if(!trFormDirty()){history.length>1?history.back():location.hash='#/transfers';return}
+  const req=TF.mode==='req';const o=overlay(`<div class="modal" style="width:420px"><div class="dh"><h3>إلغاء طلب نقل المخزون</h3><p>هل تود إلغاء طلب نقل المخزون؟<br><small>(في حالة إلغاء الطلب لا يتم حفظ التعديلات التي قمت بها)</small></p></div><div class="df"><button class="btn lnk" style="color:var(--bad)" data-c>إلغاء الطلب</button>${req?'':'<button class="btn lnk" data-d>حفظ كمسودة</button>'}</div></div>`);
+  o.querySelector('[data-c]').onclick=()=>{o.remove();location.hash='#/transfers'};o.querySelector('[data-d]')?.addEventListener('click',()=>{o.remove();trSubmit('draft')});
+}
+async function trSubmit(kind){
+  const req=kind==='request';
+  if(!req&&!TF.source){toast('اختر مصدر المخزون');return}
+  if(!TF.dests.length){toast('اختر وجهة المخزون');return}
+  for(const d of TF.dests){const L=(TF.lines[d]||[]);if(!L.length){toast('الرجاء إضافة منتجات إلى فرع '+brName(d));return}if(kind!=='draft'&&L.some(l=>!(+l.qty>0))){toast('أدخل كمية أكبر من صفر لكل منتج في '+brName(d));return}}
+  if(kind==='send'){const over=[];TF.dests.forEach(d=>TF.lines[d].forEach(l=>{const p=byId(S.products,l.pid);if((+p?.locs?.[TF.source]?.qty||0)<+l.qty)over.push(p?.name)}));
+    if(over.length&&!await new Promise(res=>{const o=overlay(`<div class="modal"><div class="dh"><h3>الكمية غير كافية</h3><p>الكمية المنقولة أكبر من المتوفر في ${esc(brName(TF.source))} لـ: ${esc([...new Set(over)].slice(0,6).join('، '))}</p></div><div class="df"><button class="btn" data-n>رجوع</button><button class="btn pri" data-y>متابعة النقل</button></div></div>`);o.querySelector('[data-n]').onclick=()=>{o.remove();res(false)};o.querySelector('[data-y]').onclick=()=>{o.remove();res(true)}}))return}
+  const now=new Date().toISOString();const made=[];
+  for(const d of TF.dests){
+    const items=TF.lines[d].map(l=>{const p=byId(S.products,l.pid);return{productId:l.pid,name:p?.name||'',sku:p?.sku||'',type:p?.type==='composite'?'composite':'simple',requested:req?+l.qty:null,transferred:req?null:(l.qty===''?null:+l.qty),received:null,cost:+p?.cost||0,price:+locVal(p||{},'retail',TF.source||d)||0,srcQty:+(p?.locs?.[TF.source]?.qty)||0,dstQty:+(p?.locs?.[d]?.qty)||0}});
+    let t;if(TF.mode==='edit'){t=byId(S.transfers,TF.editId);Object.assign(t,{sourceId:TF.source,items,notes:TF.notes,updatedAt:now})}
+    else{const{seq,no}=trNextNo();t={id:uid(),seq,no,status:req?'requested':'draft',type:req?'request':'transfer',sourceId:req?'':TF.source,destId:d,createdAt:now,updatedAt:now,createdBy:ME,notes:TF.notes,items};S.transfers.push(t)}
+    if(kind==='send')trMove(t);made.push(t);
+  }
+  await flushNow();toast(kind==='send'?`تم نقل المخزون (${made.map(t=>t.no).join('، ')})`:kind==='draft'?'تم الحفظ كمسودة':'تم إرسال الطلب');location.hash=made.length===1?'#/trn/'+made[0].id:'#/transfers';
+}
+function trFulfill(id){const t=byId(S.transfers,id);
+  const o=overlay(`<div class="modal" style="width:620px"><div class="dh"><h3>تنفيذ الطلب ${esc(t.no)}</h3><p>إلى ${esc(brName(t.destId))}</p></div><div class="db">
+   <div class="fl"><label>مصدر المخزون (الفرع المرسل)</label><select class="in" id="ffs">${S.branches.filter(b=>b.id!==t.destId).map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('')}</select></div>
+   <table><thead><tr><th>المنتج</th><th>المطلوبة</th><th>المتوفر بالمصدر</th><th>المرسلة</th></tr></thead><tbody id="ffb"></tbody></table></div>
+   <div class="df"><button class="btn" data-x>إلغاء</button><button class="btn pri" data-ok>نقل</button></div></div>`);
+  const draw=()=>{const s=o.querySelector('#ffs').value;o.querySelector('#ffb').innerHTML=t.items.map((it,i)=>{const p=byId(S.products,it.productId);return`<tr><td>${esc(it.name)}</td><td>${it.requested}</td><td>${fmtQ(p?.locs?.[s]?.qty)}</td><td><input class="in sm" type="number" min="0" step="any" data-ff="${i}" value="${it.requested}" style="width:90px"></td></tr>`}).join('')};
+  o.querySelector('#ffs').onchange=draw;draw();o.querySelector('[data-x]').onclick=()=>o.remove();
+  o.querySelector('[data-ok]').onclick=async()=>{t.sourceId=o.querySelector('#ffs').value;o.querySelectorAll('[data-ff]').forEach(i=>{t.items[+i.dataset.ff].transferred=+i.value||0});trMove(t);await flushNow();o.remove();toast('تم تنفيذ الطلب ونقل المخزون');route(true)};
+}
+function trReject(id){const t=byId(S.transfers,id);promptDlg('رفض الطلب '+t.no,'ملاحظات المدير (سبب الرفض)',async v=>{const now=new Date().toISOString();Object.assign(t,{status:'rejected',managerNotes:v,processedBy:ME,updatedAt:now});t.items.forEach(i=>{i.rejectionReason='Request Rejected';i.received=0});await flushNow();toast('تم رفض الطلب');route(true)})}
+
+/* ---- import Rewaa transfers ---- */
+function importTransfers(d){const bBy=n=>n?S.branches.find(b=>normS(b.name).toLowerCase()===normS(n).toLowerCase())?.id||'':'';let n=0,u=0;
+  for(const x of d.transfers||[]){const o={...x,sourceId:bBy(x.sourceName),destId:bBy(x.destName)};delete o.sourceName;delete o.destName;const ex=byId(S.transfers,o.id);if(ex){Object.assign(ex,o);u++}else{S.transfers.push(o);n++}}
+  save();return{added:n,updated:u}}
 /* ===================== settings ===================== */
 function viewSettings(){
   setTitle('الإعدادات');
