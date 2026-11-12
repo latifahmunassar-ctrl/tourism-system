@@ -97,7 +97,7 @@ async function logOutbound(
     let { data: conv } = await sb.from("b2b_conversations").select("id").eq("whatsapp", wa).maybeSingle();
     if (!conv) {
       const { data: created } = await sb.from("b2b_conversations")
-        .insert({ whatsapp: wa, company_id: companyId || null, auto_reply: false, last_message_at: new Date().toISOString() })
+        .insert({ whatsapp: wa, company_id: companyId || null, auto_reply: true, last_message_at: new Date().toISOString() })
         .select("id").single();
       conv = created;
     } else {
@@ -122,6 +122,8 @@ async function allCompanies(sb: SupabaseClient, filters: any) {
     let q = sb.from("b2b_companies").select("id, whatsapp").not("whatsapp", "is", null);
     if (filters.country) q = q.eq("country", filters.country);
     if (filters.category) q = q.eq("category", filters.category);
+    // المؤثرون لا يدخلون حملات الشركات — فقط حملة مفلترة صراحةً بتصنيف «مؤثرين»
+    else q = q.or("category.is.null,category.neq.مؤثرين");
     if (Array.isArray(filters.destinations) && filters.destinations.length) q = q.overlaps("destinations", filters.destinations);
     const { data, error } = await q.range(from, from + PAGE - 1);
     if (error) throw error;

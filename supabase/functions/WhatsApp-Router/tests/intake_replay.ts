@@ -15,7 +15,7 @@ const TMP = new URL("../.index_under_test.ts", HERE);
 // ── 1) نسخة قابلة للاستيراد من index.ts: بلا Deno.serve، ومع تصدير الدوال ──
 let code = await Deno.readTextFile(SRC);
 code = code.replace(/^Deno\.serve\(/m, "(globalThis as any).__noServe(");
-code += "\nexport { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish, sendPostProgramMessages, replyUnsupportedAttachment, handleVoiceNote };\n";
+code += "\nexport { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish, sendPostProgramMessages, replyUnsupportedAttachment, handleVoiceNote, checkMissedReplies, recordTalalPdf, statusAiMode, setBlocked, isBlockedNumber, _briefFromIntake };\n";
 await Deno.writeTextFile(TMP, code);
 (globalThis as any).__noServe = () => {};
 
@@ -97,7 +97,7 @@ let proposalCalls = 0;
 let lastBuildBody: Record<string, any> | null = null;
 let injectOnModel: string | null = null;
 let lastModelSystem = "";
-let lastModelName = "";
+let lastModelName = ""; let lastToolChoice = ""; let lastModelParams = "";
 let medFlights: string[] | null = null;
 let rejectTools = false;
 let curIntent: Record<string, unknown> | null = null;
@@ -109,6 +109,9 @@ const buildBodies: Array<Record<string, any>> = [];
 const wire: string[] = [];
 const emails: Array<Record<string, any>> = [];   // ٨ نوفمبر: إيميلات التنبيه (Resend)   // ٨ نوفمبر: النصوص اللي طلعت فعلاً لواتساب (بعد الترجمة)
 let translateCalls = 0; let curTranslate: string | null = null;
+let judgeCalls = 0; let curJudge: string | null = null; let judgeInput = "";
+let reviewCalls = 0; let curReview: string | null = null; let reviewInput = "";
+let curHotels: Array<Record<string, unknown>> | null = null; let curHotelMatch: string | null = null; let hotelMatchCalls = 0;   // ٩ نوفمبر: فنادق مكة
 (globalThis as any).fetch = async (input: any, init?: any) => {
   const url = String(input?.url || input);
   const json = (o: unknown) => new Response(JSON.stringify(o), { status: 200, headers: { "content-type": "application/json" } });
@@ -118,6 +121,18 @@ let translateCalls = 0; let curTranslate: string | null = null;
     if (!curIntent) return new Response(JSON.stringify({ type: "error", error: { type: "api_error", message: "no intent in scenario" } }), { status: 400, headers: { "content-type": "application/json" } });
     return json({ id: "m", type: "message", role: "assistant", model: "x", stop_reason: "tool_use", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "tool_use", id: "ti", name: "talal_intent", input: { yes_no: "none", frustrated: false, meaning: "", ...curIntent } }] });
   }
+  if (url.includes("api.anthropic.com") && /TALAL_GATE_REVIEW/.test(String(init?.body || ""))) {   // ٩ نوفمبر: مراجعة الحارس
+    reviewCalls++; reviewInput = String(init?.body || "");
+    return json({ id: "m", type: "message", role: "assistant", model: "x", stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: curReview ?? "" }] });
+  }
+  if (url.includes("api.anthropic.com") && /TALAL_CONTEXT_JUDGE/.test(String(init?.body || ""))) {   // ٩ نوفمبر: فاحص السياق
+    judgeCalls++; judgeInput = String(init?.body || "");
+    return json({ id: "m", type: "message", role: "assistant", model: "x", stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: curJudge ?? "" }] });
+  }
+  if (url.includes("api.anthropic.com") && /TALAL_HOTEL_MATCH/.test(String(init?.body || ""))) {   // ٩ نوفمبر: مطابقة اسم الفندق
+    hotelMatchCalls++;
+    return json({ id: "m", type: "message", role: "assistant", model: "x", stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: curHotelMatch ?? '{"match": ""}' }] });
+  }
   if (url.includes("api.anthropic.com") && /TALAL_TRANSLATE_EN/.test(String(init?.body || ""))) {
     // ٨ نوفمبر: ترجمة رد طلال للإنجليزي (العميل يكتب إنجليزي) — السيناريو يحدد الناتج بـ translate.
     translateCalls++;
@@ -126,7 +141,7 @@ let translateCalls = 0; let curTranslate: string | null = null;
   if (url.includes("api.anthropic.com")) {
     modelCalls++;
     if (rejectTools && /"tools"/.test(String(init?.body || ""))) return new Response(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "tools: invalid schema" } }), { status: 400, headers: { "content-type": "application/json" } });
-    try { const _jb = JSON.parse(String(init?.body || "{}")); lastModelSystem = String(_jb.system || ""); lastModelName = String(_jb.model || ""); } catch { lastModelSystem = ""; }
+    try { const _jb = JSON.parse(String(init?.body || "{}")); lastModelSystem = Array.isArray(_jb.system) ? _jb.system.map((b: any) => String(b?.text || "")).join("\n\n") : String(_jb.system || ""); (globalThis as any).__lastSystemRaw = _jb.system; lastModelName = String(_jb.model || ""); lastToolChoice = JSON.stringify(_jb.tool_choice ?? null); lastModelParams = JSON.stringify({ thinking: _jb.thinking ?? null, output_config: _jb.output_config ?? null, max_tokens: _jb.max_tokens }); } catch { lastModelSystem = ""; }
     if (injectOnModel) { DB.wa_message_audit.push({ from_phone: "whatsapp:+96899621742", body: injectOnModel, received_at: new Date(Date.now() + 60_000).toISOString(), status: "received" }); injectOnModel = null; }
     const txt = modelQueue.length ? modelQueue.shift()! : modelQueue.at(-1) ?? "{}";
     // «TOOL:{...}» = ردّ عبر الأداة الإلزامية (tool_use) كما في الإنتاج؛ غير ذلك نص عادي (للتوافق مع السيناريوهات القديمة).
@@ -135,18 +150,21 @@ let translateCalls = 0; let curTranslate: string | null = null;
   }
   if (url.includes("api.resend.com")) { try { emails.push(JSON.parse(String(init?.body || "{}"))); } catch { /* */ } return json({ id: "email-test" }); }
   if (url.includes("graph.facebook.com") && /display_phone_number/.test(url)) return json({ id: "test-id", display_phone_number: "+968 9117 1630" });
+  if (url.includes("graph.facebook.com") && /\/media$/.test(url) && String(init?.method || "").toUpperCase() === "POST") return json({ id: "media-test-id" });   // ٩ نوفمبر: رفع ملف PDF لواتساب
   if (url.includes("graph.facebook.com")) { try { const _b = JSON.parse(String(init?.body || "{}")); const _t = _b?.text?.body ?? _b?.document?.caption ?? _b?.image?.caption; if (typeof _t === "string") wire.push(_t); } catch { /* */ } return json({ messages: [{ id: "wamid.test" + Math.random() }] }); }
   if (url.includes("Tourism-AI") && /makkah_flights/.test(String(init?.body || ""))) {
     const t: Record<string, unknown> = {}; for (const d of (medFlights || [])) t[d] = { final: 1342, timing: "17:40 - 21:30" };
     return json({ prices: { oman: { out: {}, ret: {}, ret_med: t } } });
   }
+  if (url.includes("Tourism-AI") && /"list_hotels"/.test(String(init?.body || ""))) return json({ hotels: /"region"/.test(String(init?.body || "")) ? (curHotels || []) : [] });   // مثل الإنتاج: بلا region = قائمة فاضية
   if (url.includes("Tourism-AI")) { buildCalls++; try { lastBuildBody = JSON.parse(String(init?.body || "{}")); } catch { lastBuildBody = null; } if (lastBuildBody) buildBodies.push(lastBuildBody);
     const _tot = buildTotals.length ? buildTotals[Math.min(buildCalls - 1, buildTotals.length - 1)] : 1000;
     if (buildFail) return json({ ok: false, error: "no buildable program" }); return json({ ok: true, program: "DEST:اختبار\nTOTAL_GROUP:" + _tot, formatted: "برنامج اختبار", program_code: buildTotals.length ? "MK-TEST-" + buildCalls : "MK-TEST", kid_ages: [], price_ready: true }); }
   return json({});
 };
 
-const { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish, sendPostProgramMessages, replyUnsupportedAttachment, handleVoiceNote } = await import(TMP.href);
+const mod = await import(TMP.href);
+const { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish, sendPostProgramMessages, replyUnsupportedAttachment, handleVoiceNote, checkMissedReplies, _briefFromIntake } = mod;
 
 // ── 4) تشغيل السيناريوهات ──
 const PHONE = "whatsapp:+96899621742";
@@ -165,8 +183,9 @@ function seed(s: Scenario) {
   if ((s as any).settings) DB.wa_settings = structuredClone((s as any).settings);   // ٨ نوفمبر: إعدادات بديلة (مثلاً بند ON بلا أرقام اختبار)
   for (const [tb, rows] of Object.entries(s.tables || {})) (DB[tb] ||= []).push(...structuredClone(rows as RowT[]));
   for (const j of (s.jobs || [])) DB.program_pdf_jobs.push({ phone: PHONE, created_at: ts(), attempts: 0, ...j });
-  DB.whatsapp_sessions.push({ phone: PHONE, profile_name: "اختبار", ...((s as any).aiEnabled !== undefined ? { ai_enabled: (s as any).aiEnabled } : {}), intake_active: s.sessionIntakeActive ?? (s.entry !== "followup"), stage: "new",
+  DB.whatsapp_sessions.push({ phone: PHONE, profile_name: "اختبار", ...((s as any).sessionExtra || {}), ...((s as any).aiEnabled !== undefined ? { ai_enabled: (s as any).aiEnabled } : {}), intake_active: s.sessionIntakeActive ?? (s.entry !== "followup"), stage: "new",
     destination: s.session?.destination ?? null, intake_data: { ...structuredClone(s.intakeData || {}), ...(s.seenAt !== undefined ? { last_seen_in_ts: _tsList[s.seenAt] } : {}), ...((s as any).startedAt !== undefined ? { started_at: _tsList[(s as any).startedAt] } : {}) }, ad_referral: (s.session as any)?.ad_referral ?? null, last_message_at: ts() });
+  { const _id = DB.whatsapp_sessions[0]?.intake_data; if (_id && _id.missed_rescue_at === "__LAST__") _id.missed_rescue_at = DB.wa_message_audit[DB.wa_message_audit.length - 1].received_at; }   // ٨ نوفمبر
   return ts;
 }
 
@@ -177,25 +196,27 @@ for (const s of SCENARIOS) {
   if (only && !s.id.includes(only)) continue;
   const lastTs = seed(s);
   const before = DB.wa_admin_messages.length;
-  modelQueue = [...s.model]; modelCalls = 0; buildCalls = 0; proposalCalls = 0; lastBuildBody = null; medFlights = s.medFlights || null; rejectTools = !!s.rejectTools; curIntent = (s as any).intent || null; intentCalls = 0; intentInput = ""; buildFail = !!s.buildFail; buildTotals = (s as any).buildTotals || []; buildBodies.length = 0; wire.length = 0; emails.length = 0; translateCalls = 0; curTranslate = (s as any).translate ?? null; lastModelSystem = ""; injectOnModel = s.inboundDuringModel || null; _bg.length = 0;
+  modelQueue = [...s.model]; modelCalls = 0; buildCalls = 0; proposalCalls = 0; lastBuildBody = null; medFlights = s.medFlights || null; rejectTools = !!s.rejectTools; curIntent = (s as any).intent || null; intentCalls = 0; intentInput = ""; buildFail = !!s.buildFail; buildTotals = (s as any).buildTotals || []; buildBodies.length = 0; wire.length = 0; emails.length = 0; translateCalls = 0; curTranslate = (s as any).translate ?? null; judgeCalls = 0; curJudge = (s as any).judge ?? null; judgeInput = ""; reviewCalls = 0; curReview = (s as any).gateReview ?? null; reviewInput = ""; (globalThis as any).__talalTestHook = (s as any).inboundBeforeSend ? (k: string) => { if (k === "intake_before_send") { DB.wa_message_audit.push({ from_phone: PHONE, body: (s as any).inboundBeforeSend, received_at: new Date(Date.now() + 60_000).toISOString(), status: "received" }); (globalThis as any).__talalTestHook = null; } } : null; curHotels = (s as any).hotels ?? null; curHotelMatch = (s as any).hotelMatch ?? null; hotelMatchCalls = 0; lastModelSystem = ""; (globalThis as any).__lastSystemRaw = null; lastToolChoice = ""; lastModelParams = ""; injectOnModel = s.inboundDuringModel || null; _bg.length = 0;
   let crash = "";
+  const _envSet = Object.entries(((s as any).env || {}) as Record<string, string>); for (const [k, v] of _envSet) Deno.env.set(k, v);   // ٩ نوفمبر: متغيرات بيئة لكل سيناريو (مثلاً أرقام الموظفين)
   console.error = () => {}; console.warn = () => {}; console.log = () => {};
   try {
     (globalThis as any).__omanHourForTests = (s as any).omanHour ?? 12;   // ٨ نوفمبر: نهار افتراضياً (رسائل الليل لها سيناريوهاتها)
-    if ((s as any).entry === "voice") await handleVoiceNote({ supabase: fakeSupabase, from: (s as any).from || PHONE, profileName: "اختبار", transcript: s.customer });   // ٨ نوفمبر: customer = نص الصوت بعد التحويل
-    else if (s.entry === "message") await handleMessage({ supabase: fakeSupabase, from: (s as any).from || PHONE, profileName: "اختبار", body: s.customer });
+    if ((s as any).entry === "missed") { (globalThis as any).__missedOut = await checkMissedReplies(fakeSupabase); }   // ٨ نوفمبر: الحارس الاحتياطي
+    else if ((s as any).entry === "voice") await handleVoiceNote({ supabase: fakeSupabase, from: (s as any).from || PHONE, profileName: "اختبار", transcript: s.customer });   // ٨ نوفمبر: customer = نص الصوت بعد التحويل
+    else if (s.entry === "message") await handleMessage({ supabase: fakeSupabase, from: (s as any).from || PHONE, profileName: "اختبار", body: s.customer, ...((s as any).msgAt === "prev" ? { msgReceivedAt: new Date(Date.parse(DB.wa_message_audit[DB.wa_message_audit.length - 1].received_at) - 2000).toISOString() } : {}) });   // ٩ نوفمبر: msgAt=prev → رسالة أقدم من آخر وارد (دفعة صور)
     else if (s.entry === "followup") await handleFollowupAI({ supabase: fakeSupabase, from: PHONE, profileName: "اختبار", body: s.customer });
     else await handleNewLeadIntake({ supabase: fakeSupabase, from: PHONE, body: s.customer });
     await Promise.all(_bg);
   }
   catch (e) { crash = String((e as Error)?.stack || e); }
-  finally { console.error = realErr; console.warn = realWarn; console.log = realLog; }
+  finally { console.error = realErr; console.warn = realWarn; console.log = realLog; for (const [k] of _envSet) Deno.env.delete(k); }
   void lastTs;
   const sent = DB.wa_admin_messages.slice(before).map(m => String(m.body || "")).join("\n");
   const sess = DB.whatsapp_sessions[0] || {};
   const proposals = (DB.whatsapp_admin_proposals || []).length;
   const jobs = DB.program_pdf_jobs || [];
-  const ctx = { emails: [...emails], wire: wire.join("\n"), translateCalls, buildBodies: [...buildBodies], db: DB, jobs, modelName: lastModelName, modelSystem: lastModelSystem, intentInput, buildBody: lastBuildBody, reply: sent, session: sess, intake: sess.intake_data || {}, buildCalls, modelCalls, proposals };
+  const ctx = { emails: [...emails], wire: wire.join("\n"), translateCalls, judgeCalls, judgeInput, reviewCalls, reviewInput, buildBodies: [...buildBodies], db: DB, jobs, modelName: lastModelName, systemRaw: (globalThis as any).__lastSystemRaw, toolChoice: lastToolChoice, modelParams: lastModelParams, modelSystem: lastModelSystem, intentInput, buildBody: lastBuildBody, reply: sent, session: sess, intake: sess.intake_data || {}, buildCalls, modelCalls, proposals };
   const errs: string[] = [];
   if (crash) errs.push("انهار: " + crash.split("\n").slice(0, 3).join(" | "));
   for (const [label, check] of s.expect) { try { if (!check(ctx)) errs.push(label); } catch (e) { errs.push(label + " (" + (e as Error).message + ")"); } }
@@ -297,6 +318,40 @@ for (const [t, want] of [["يعني الي عمره ١٢ سنه يعتر بال�
   console.log = realLog; console.error = realErr;
   const sent = DB.wa_admin_messages.filter((m: any) => /ما وصلنا/.test(String(m.body)) && /عرض مرة واحدة/.test(String(m.body)));
   if (r1 && !r2 && sent.length === 1) { pass++; realLog("✅ unsupported-attach «رد واحد يطلب إعادة الإرسال»"); } else { fail++; realLog(`❌ unsupported-attach r1=${r1} r2=${r2} sent=${sent.length}`); }
+}
+// ── ٩ نوفمبر ٢٠٢٦ (المالكة: «أحتاج لما أضغط عليه ملف PDF يطلع لي»): برنامج طلال بالداشبورد = ملف PDF ينفتح (media_id) مو سطر نص بس ──
+{
+  DB = { wa_admin_messages: [], whatsapp_sessions: [{ phone: PHONE }], wa_message_audit: [], guard_logs: [], program_pdf_jobs: [], wa_settings: [] };
+  console.log = () => {}; console.error = () => {};
+  try { await (mod as any).recordTalalPdf(fakeSupabase, PHONE, "MK-2026-032", "wamid.test", "program-pdf/MK-2026-032_1794217438804.pdf"); } catch (_e) { /* */ }
+  console.log = realLog; console.error = realErr;
+  const row = DB.wa_admin_messages.find((m: any) => /برنامج PDF — MK-2026-032/.test(String(m.body))) as any;
+  if (row && row.media_id === "program-pdf/MK-2026-032_1794217438804.pdf" && row.media_mime === "application/pdf" && /\.pdf$/.test(String(row.media_filename || "")) && row.sent_by === "طلال") { pass++; realLog("✅ talal-pdf-clickable «سطر البرنامج فيه الملف (media_id) — ينفتح بالداشبورد»"); }
+  else { fail++; realLog(`❌ talal-pdf-clickable «سطر البرنامج فيه الملف» → ${JSON.stringify(row || null)}`); }
+}
+// ── ٩ نوفمبر ٢٠٢٦ (المالكة: «غيرت الحالة لمعاينة مع رد بس ما خلاني»): الداشبورد يعرض البند المحفوظ — «معاينة مع رد» ما تنقلب «الذكاء الاصطناعي» ──
+for (const [raw, en, want] of [["PREVIEW_REPLY", true, "PREVIEW_REPLY"], ["ON", true, "ON"], ["PREVIEW", true, "PREVIEW"], ["OFF", false, "OFF"], ["", true, "ON"], ["", false, "OFF"]] as Array<[string, boolean, string]>) {
+  const got = typeof (mod as any).statusAiMode === "function" ? (mod as any).statusAiMode(raw, en) : "(missing)";
+  if (got === want) { pass++; realLog(`✅ status-ai-mode «${raw || "فاضي"}» → ${want}`); } else { fail++; realLog(`❌ status-ai-mode «${raw || "فاضي"}» → ${got} (المتوقع ${want})`); }
+}
+// ── ٩ نوفمبر ٢٠٢٦ (المالكة: «خلي لي خيار اني ابلك الرقم من عندي»): زر الحظر بالداشبورد → يضيف/يشيل الرقم من blocked_numbers ──
+{
+  DB = { wa_admin_messages: [], whatsapp_sessions: [{ phone: PHONE }], wa_message_audit: [], guard_logs: [], program_pdf_jobs: [], wa_settings: [{ key: "blocked_numbers", value: "96892088213" }] };
+  console.log = () => {}; console.error = () => {};
+  let a: any = null, b: any = null, c: any = null;
+  try { a = await (mod as any).setBlocked(fakeSupabase, "+968 9962 1742", true, "المالكة"); b = await (mod as any).isBlockedNumber(fakeSupabase, PHONE); c = await (mod as any).setBlocked(fakeSupabase, PHONE, false, "المالكة"); } catch (_e) { /* */ }
+  console.log = realLog; console.error = realErr;
+  const v = String((DB.wa_settings.find((r: any) => r.key === "blocked_numbers") || {}).value || "");
+  const note = DB.wa_admin_messages.some((m: any) => /حظر/.test(String(m.body)) && m.sent_by === "نظام");
+  if (a?.blocked === true && b === true && c?.blocked === false && v === "96892088213" && note) { pass++; realLog("✅ block-button «حظر ثم إلغاء — القائمة ترجع كما كانت + سطر بالمحادثة»"); }
+  else { fail++; realLog(`❌ block-button a=${JSON.stringify(a)} b=${b} c=${JSON.stringify(c)} v=${v} note=${note}`); }
+}
+// ── ١٠ نوفمبر ٢٠٢٦ (المالكة، +96895309470): «مكة ٣ أيام والمدينة يومين» وأكّد طلال «3 مكة + 2 المدينة» → التعبئة = 6 أيام + «3 ليال مكه - 2 ليال المدينه المنوره» ──
+{
+  const b = _briefFromIntake({ summary_confirmed: true, destination: "العمرة", pax: 3, nights: "3 مكة 2 المدينة" });
+  const ok = b.days === 6 && b.distribution === "3 ليال مكه - 2 ليال المدينه المنوره" && b.pax === 3;
+  const none = Object.keys(_briefFromIntake({ summary_confirmed: false, nights: "3 مكة 2 المدينة" })).length === 0;
+  if (ok && none) { pass++; realLog("✅ brief-from-intake «التوزيع المؤكَّد من طلال»"); } else { fail++; realLog(`❌ brief-from-intake ${JSON.stringify(b)} none=${none}`); }
 }
 // ── وحدة: صيغ الموافقة (٤ نوفمبر: «تماما» ما انحسبت) ──
 for (const [t, want] of [["تماما", true], ["تمامم", true], ["تمام", true], ["اوكيه", true], ["طيب", true], ["👍", true], ["✅", true], ["ايوه", true], ["okk", true], ["كل شي صح", true], ["ياريت", true], ["يا ريت", true], ["ياليت والله", true], ["لا", false], ["تمام بس غير التاريخ ١٥", false], ["متى", false]] as Array<[string, boolean]>) {

@@ -2,7 +2,7 @@
 // history = ما قبل الرسالة الحالية، customer = رسالة العميل الحالية، model = ما يرده النموذج
 // (نبرمجه بالخطأ اللي سواه فعلاً — الحارس الخادمي لازم يصحّحه)، expect = شروط النجاح.
 
-export type Ctx = { emails?: Array<Record<string, any>>; wire?: string; translateCalls?: number; buildBodies?: Array<Record<string, any>>; reply: string; session: Record<string, any>; intake: Record<string, any>; buildCalls: number; modelCalls: number; proposals: number; jobs: Array<Record<string, any>>; buildBody: Record<string, any> | null; modelSystem: string; modelName: string; intentInput?: string; db: Record<string, Array<Record<string, any>>> };
+export type Ctx = { emails?: Array<Record<string, any>>; wire?: string; translateCalls?: number; judgeCalls?: number; judgeInput?: string; reviewCalls?: number; reviewInput?: string; buildBodies?: Array<Record<string, any>>; reply: string; session: Record<string, any>; intake: Record<string, any>; buildCalls: number; modelCalls: number; proposals: number; jobs: Array<Record<string, any>>; buildBody: Record<string, any> | null; modelSystem: string; modelName: string; toolChoice?: string; modelParams?: string; systemRaw?: any; intentInput?: string; db: Record<string, Array<Record<string, any>>> };
 export type Scenario = {
   id: string; title: string;
   entry?: "intake" | "followup" | "message";
@@ -27,6 +27,15 @@ export type Scenario = {
 
 const M = (msg: string, fields: Record<string, unknown> = {}, complete = false) =>
   JSON.stringify({ messages: [msg], fields: { destination: "", pax: null, date: "", ages: "", cities: "", nights: "", days: null, ...fields }, complete });
+const NAIMA_HIST: Array<[string, string]> = [
+  ["C", "Hello! Can I get more info on this?"], ["C", "جدول رمضان إذا متوفر معكم"],
+  ["T", "حياك الله معك طلال، كم عدد المعتمرين الإجمالي، الكبار والأطفال؟"],
+  ["C", "صبحك الله  بالخير الوقت الحالي نحن 2لكن احتمال يزيد ل 6 أشخاص  نحن نريد الشخصين ف غرفة. لكن إذا دخلوا غير بفيدكم"],
+  ["T", "حاضر، ما يخالف، إذا تأكد العدد بلغني وعدلنا. الحين بخصوص الشخصين، هل فيه أطفال بينهم أو كلهم بالغين؟"],
+  ["C", "بدون أطفال من تاريخ 22/2 5 ايام مكة فقط"], ["T", "عفوا إذا سمحت، تقصد العدد 6؟"],
+];
+const NAIMA_DATA = { destination: "عمرة رمضان", pax: 2, ages: "", asked_children: true, asked_hm_pax: true, asked_nights: true, cities: "مكة", date: "22/2", days: 5, nights: "4 مكة" };
+const NAIMA_FIELDS = { destination: "عمرة رمضان", pax: 2, ages: "", date: "22/2", nights: "4 مكة", cities: "مكة", days: 5 };
 
 const noLabs: [string, (c: Ctx) => boolean] = ["ما يسأل «عمرة ولا عمان؟» / لبس", c => !/لبس|ولا\s*عُ?مان|عُ?مان\s*ولا/.test(c.reply)];
 const notSilent: [string, (c: Ctx) => boolean] = ["طلال ردّ (ما سكت)", c => c.reply.trim().length > 0 || c.buildCalls > 0];
@@ -287,7 +296,7 @@ export const SCENARIOS: Scenario[] = [
     id: "tr-fu-uses-sonnet", entry: "followup", title: "كل الوجهات: المتابعة لتركيا تستخدم Sonnet (مو Haiku)",
     history: [["T", RESET], ["C", "ابي تركيا"], ["T", "📄 برنامج PDF — TR-2026-060"]], customer: "وش الفندق في اسطنبول؟", intakeData: { destination: "تركيا", pax: 2, date: "01/12/2026", days: 6, cities: "إسطنبول وطرابزون", summary_confirmed: true },
     model: [FU("فندق اختبار")],
-    expect: [["Sonnet", c => c.modelName === "claude-sonnet-4-6"]],
+    expect: [["Sonnet 5.5", c => c.modelName === "claude-sonnet-5-5"]],
   },
   {
     id: "missed-msg-followup", entry: "followup", title: "٤ نوفمبر (قرار المالكة): رسالة وصلت وطلال يكتب ردّه («ابي العوده من مطار المدينه») → «آه صحيح، الحين انتبهت…» + يتعامل معها",
@@ -295,7 +304,7 @@ export const SCENARIOS: Scenario[] = [
     seenAt: 8,
     customer: "؟", intakeData: DONE, medFlights: ["16/11/2026"],
     model: [FU("أبشر")],
-    expect: [["ينبّه إنه شافها", c => /^آه صحيح، الحين انتبهت إنك ذكرت «ابي العوده من مطار المدينه»/.test(c.reply)], ["يتعامل مع طلب المطار", c => /العودة من مطار المدينة/.test(c.reply)]],
+    expect: [["❌ بلا «آه صحيح، الحين انتبهت…» (قرار المالكة ٩ نوفمبر: يبين إنه آلي)", c => !/انتبهت/.test(c.reply)], ["يتعامل مع طلب المطار", c => /العودة من مطار المدينة/.test(c.reply)]],
   },
   {
     id: "fu-typo-destination", entry: "followup", title: "٤ نوفمبر: «جيب لي برنامج تلاتد» → «عفواً إذا سمحت، تقصد تايلاند؟» (مو «ما فهمت»)",
@@ -850,7 +859,7 @@ export const SCENARIOS: Scenario[] = [
     seenAt: 2,
     customer: "؟", intakeData: { destination: "العمرة", pax: 5, asked_children: true },
     model: [M("كم ليلة؟", { destination: "العمرة", pax: 5 })],
-    expect: [["ينبّه إنه شافها", c => /^آه صحيح، الحين انتبهت إنك ذكرت «فيهم ٣ اطفال»/.test(c.reply)], ["يسأل أعمار الأطفال", c => /أعمارهم/.test(c.reply)]],
+    expect: [["❌ بلا «آه صحيح، الحين انتبهت…» (قرار المالكة ٩ نوفمبر)", c => !/انتبهت/.test(c.reply)], ["يسأل أعمار الأطفال", c => /أعمارهم/.test(c.reply)]],
   },
   {
     id: "intake-complaint-speed", title: "٤ نوفمبر: «ليش ما تردون بسرعه وليش ردكم تعبان» أثناء الاستقبال → اعتذار ثم السؤال (مو «تمام كم عدد…»)",
@@ -1274,6 +1283,21 @@ export const SCENARIOS: Scenario[] = [
       ["فنادق العرض محفوظة", c => JSON.stringify(c.intake.ad_keep_hotels) === JSON.stringify(["Address Jabal Omar Makkah", "Pullman Zamzam Madinah"])]],
   },
   {
+    id: "ad1-no-pdf-builds-from-code", title: "٩ نوفمبر (رمضان يوسف): إعلان كوده بالكابشن بلا ملف مربوط + «نعم» → طلال يطلّع الملف من الكود (طابور PDF)، ❌ رسالة «زميلنا المختص»",
+    history: [["C", "ابي تفاصيل العرض"], ["T", AD_CONFIRM_Q]], customer: "نعم", session: { ad_referral: AD_REF }, tables: { programs: AD_TABLES.programs, wa_settings: [] },
+    intakeData: { ad_offer_pending: AD_CODE }, model: [M("كم عددكم؟")],
+    expect: [["مهمة PDF بكود الإعلان", c => c.jobs.filter((j: any) => j.code === AD_CODE).length === 1],
+      ["كابشن الملف (الأسعار تختلف)", c => /الأسعار قد تختلف/.test(String(c.jobs.find((j: any) => j.code === AD_CODE)?.caption || ""))],
+      ["❌ لا رسالة انتظار آلية", c => !/زميلنا المختص|عرضك بيوصلك/.test(c.reply)], ["❌ لا أسئلة", c => !/كم عدد/.test(c.reply)], NO_BUILD,
+      ["العرض الحالي = برنامج الإعلان", c => c.intake.program_final_code === AD_CODE]],
+  },
+  {
+    id: "ad1-image-no-pdf-builds", title: "٩ نوفمبر: صورة إعلان بكود واضح بلا ملف مربوط → «حاضر، برسل لك إياه حالاً» + الملف من الكود",
+    history: [], customer: "أرسل العميل صورة هذا العرض: عرض: العمرة (مكة والمدينة) — 6 أيام | الكود: " + AD_CODE, tables: { programs: AD_TABLES.programs, wa_settings: [] }, model: [M("حياك الله، كم عددكم؟")],
+    expect: [["«حاضر، برسل لك إياه حالاً»", c => c.reply.includes("حاضر، برسل لك إياه حالاً")], ["مهمة PDF بكود الإعلان", c => c.jobs.filter((j: any) => j.code === AD_CODE).length === 1],
+      ["❌ لا رسالة انتظار آلية", c => !/زميلنا المختص|عرضك بيوصلك/.test(c.reply)]],
+  },
+  {
     id: "ad1-image-code-direct", title: "٦ نوفمبر: العميل أرسل صورة الإعلان والكود واضح → «حاضر، برسل لك إياه حالاً» + الملف مباشرة (بلا استيثاق)",
     history: [], customer: "أرسل العميل صورة هذا العرض: عرض: العمرة (مكة والمدينة) — 6 أيام | الكود: " + AD_CODE, tables: AD_TABLES, model: [M("حياك الله، كم عددكم؟")],
     expect: [["«حاضر، برسل لك إياه حالاً»", c => c.reply.includes("حاضر، برسل لك إياه حالاً")], AD_PDF_SENT, ["❌ لا استيثاق", c => !/تقصد عرض/.test(c.reply)], ["❌ لا أسئلة", c => !/كم عدد/.test(c.reply)],
@@ -1452,11 +1476,55 @@ export const SCENARIOS: Scenario[] = [
     history: PROG_HIST, customer: "الفندق الأول وش اسمه؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("٣ ليالي في مكة بفندق فوكو")],
     expect: [["رد طلال", c => /٣ ليالي في مكة/.test(c.reply)], ["❌ ما راح للموظفة", c => c.proposals === 0]],
   } as any,
+  // ── ٩ نوفمبر ٢٠٢٦ (قرار المالكة): «معاينة» و«معاينة مع رد» → طلال يكمل مع العميل بعد العرض (أسئلة/تعديل → تأكيد).
+  //    الفرق الوحيد: بعد التأكيد «معاينة» = «زميلنا المختص بيتواصل معك» + تنبيه الموظفين بالطلبات (❌ إرسال برنامج)؛
+  //    «معاينة مع رد» = يبني البرنامج ويرسله PDF. موظف رد يدوياً → طلال يسكت.
   {
-    id: "aion-preview-unchanged", entry: "message", sessionIntakeActive: false, title: "٨ نوفمبر: بند «معاينة» بلا أرقام اختبار → كما هو (❌ لا متابعة طلال)",
+    id: "preview-followup-answers", entry: "message", sessionIntakeActive: false, title: "٩ نوفمبر: بند «معاينة» بعد العرض → طلال يكمل ويجاوب (❌ اقتراح للموظفة)",
     settings: [{ key: "ai_mode", value: "PREVIEW" }],
     history: PROG_HIST, customer: "الفندق الأول وش اسمه؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("٣ ليالي في مكة بفندق فوكو")],
-    expect: [["❌ ما رد طلال بالمتابعة", c => !/٣ ليالي في مكة/.test(c.reply)]],
+    expect: [["رد طلال", c => /٣ ليالي في مكة/.test(c.reply)], ["❌ ما راح للموظفة", c => c.proposals === 0]],
+  } as any,
+  {
+    id: "preview-reply-followup-answers", entry: "message", sessionIntakeActive: false, title: "٩ نوفمبر: بند «معاينة مع رد» بعد البرنامج → طلال يكمل ويجاوب",
+    settings: [{ key: "ai_mode", value: "PREVIEW_REPLY" }],
+    history: PROG_HIST, customer: "الفندق الأول وش اسمه؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("٣ ليالي في مكة بفندق فوكو")],
+    expect: [["رد طلال", c => /٣ ليالي في مكة/.test(c.reply)], ["❌ ما راح للموظفة", c => c.proposals === 0]],
+  } as any,
+  {
+    id: "preview-modify-yes-handoff", entry: "message", sessionIntakeActive: false, env: { SALES_WHATSAPP_NUMBERS: "whatsapp:+96890000001" }, title: "٩ نوفمبر: «معاينة» + «صحيح» على التعديل → «زميلنا المختص بيتواصل معك» + تنبيه الموظفين، ❌ برنامج للعميل",
+    settings: [{ key: "ai_mode", value: "PREVIEW" }],
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-067"], ["C", "غير لنا الفندق في بوكيت لمن نرجع من كرابي"], ["T", "يعني أغيّر لك فندق بوكيت عند الرجوع من كرابي لفندق ثاني غير Diamond Resort Phuket Official Account، صحيح؟"]], customer: "صحيح", intakeData: { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 9, cities: "بوكيت، كرابي", summary_confirmed: true, program_final_raw: "DEST:تايلاند\nHOTELS:\nDiamond Resort Phuket Official Account | Phuket | 4 نجوم | x\nHoliday Ao Nang Beach Resort | Krabi | 5 نجوم | x\nDiamond Resort Phuket Official Account | Phuket | 4 نجوم | x\n\nTOURS:\n", program_final_code: "TH-2026-067", pending_modify: { hotel_prefs: { unique_visit: true } } }, model: [M("تمام", { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 9, cities: "بوكيت، كرابي" }, true)],
+    expect: [["«زميلنا المختص»", c => /زميلنا المختص/.test(c.reply)], ["❌ لا وعد بالبرنامج", c => !/شوية والبرنامج عندك|أرسله لك/.test(c.reply)],
+      ["❌ ما انرسل PDF", c => c.jobs.length === 0], ["تنبيه الموظفين بالطلب", c => /طلب جاهز/.test(c.wire) && /تايلاند/.test(c.wire)]],
+  } as any,
+  {
+    id: "preview-reply-modify-yes-builds", entry: "message", sessionIntakeActive: false, title: "٩ نوفمبر: «معاينة مع رد» + «صحيح» على التعديل → يبني ويرسل PDF",
+    settings: [{ key: "ai_mode", value: "PREVIEW_REPLY" }],
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-067"], ["C", "غير لنا الفندق في بوكيت لمن نرجع من كرابي"], ["T", "يعني أغيّر لك فندق بوكيت عند الرجوع من كرابي لفندق ثاني غير Diamond Resort Phuket Official Account، صحيح؟"]], customer: "صحيح", intakeData: { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 9, cities: "بوكيت، كرابي", summary_confirmed: true, program_final_raw: "DEST:تايلاند\nHOTELS:\nDiamond Resort Phuket Official Account | Phuket | 4 نجوم | x\nHoliday Ao Nang Beach Resort | Krabi | 5 نجوم | x\nDiamond Resort Phuket Official Account | Phuket | 4 نجوم | x\n\nTOURS:\n", program_final_code: "TH-2026-067", pending_modify: { hotel_prefs: { unique_visit: true } } }, model: [M("تمام", { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 9, cities: "بوكيت، كرابي" }, true)],
+    expect: [["بنى", c => c.buildCalls > 0], ["مهمة PDF", c => c.jobs.length >= 1], ["❌ لا «زميلنا بيجهّز»", c => !/زميلنا المختص بيجهّز/.test(c.reply)]],
+  } as any,
+  {
+    id: "preview-modify-sends-card", entry: "followup", title: "٩ نوفمبر (قرار المالكة): «معاينة» + طلب تعديل → الكرت كامل (الوجهة/العدد/التاريخ + التعديل) بدل جملة التأكيد",
+    settings: [{ key: "ai_mode", value: "PREVIEW" }],
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-067"]], customer: "غير لنا الفندق في بوكيت لمن نرجع من كرابي \nمو نفس الاول", intakeData: { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 9, cities: "بوكيت، كرابي", summary_confirmed: true, program_final_raw: "DEST:تايلاند\nHOTELS:\nDiamond Resort Phuket Official Account | Phuket | 4 نجوم | x\nHoliday Ao Nang Beach Resort | Krabi | 5 نجوم | x\nDiamond Resort Phuket Official Account | Phuket | 4 نجوم | x\n\nTOURS:\n", program_final_code: "TH-2026-067" },
+    model: [FU("تغيير الفندق يحتاج زميلي المختص", "handoff")],
+    expect: [["كرت", c => /المعلومات صحيحة/.test(c.reply) && /- الوجهة: تايلاند/.test(c.reply) && /- عدد المسافرين: 6/.test(c.reply) && /- تاريخ السفر: 17\/11\/2026/.test(c.reply)],
+      ["التعديل بالكرت", c => /- التعديل: .*فندق بوكيت/.test(c.reply)], ["❌ «أجهّز لك العرض»", c => !/أجهّز لك العرض على طول/.test(c.reply)],
+      ["معلّق", c => c.intake.pending_modify?.hotel_prefs?.unique_visit === true]],
+  } as any,
+  {
+    id: "preview-reply-modify-sentence", entry: "followup", title: "٩ نوفمبر: «معاينة مع رد» + طلب تعديل → جملة التأكيد كما هي (❌ كرت)",
+    settings: [{ key: "ai_mode", value: "PREVIEW_REPLY" }],
+    history: [["T", RESET], ["C", "تايلاند"], ["T", "📄 برنامج PDF — TH-2026-067"]], customer: "غير لنا الفندق في بوكيت لمن نرجع من كرابي \nمو نفس الاول", intakeData: { destination: "تايلاند", pax: 6, ages: "12، 10، 9", date: "17/11/2026", days: 9, cities: "بوكيت، كرابي", summary_confirmed: true, program_final_raw: "DEST:تايلاند\nHOTELS:\nDiamond Resort Phuket Official Account | Phuket | 4 نجوم | x\nHoliday Ao Nang Beach Resort | Krabi | 5 نجوم | x\nDiamond Resort Phuket Official Account | Phuket | 4 نجوم | x\n\nTOURS:\n", program_final_code: "TH-2026-067" },
+    model: [FU("تغيير الفندق يحتاج زميلي المختص", "handoff")],
+    expect: [["جملة التأكيد", c => /^يعني أغيّ?ر لك فندق بوكيت عند الرجوع من كرابي لفندق ثاني غير Diamond Resort Phuket Official Account، صحيح؟$/.test(c.reply.trim())]],
+  } as any,
+  {
+    id: "preview-staff-replied-silent", entry: "message", sessionIntakeActive: false, title: "٩ نوفمبر: «معاينة» وموظفة ردّت يدوياً بعد العرض → طلال يسكت",
+    settings: [{ key: "ai_mode", value: "PREVIEW" }],
+    history: [...PROG_HIST, ["S", "هلا أستاذي، أنا معك وبرتب لك الحجز"]], customer: "الفندق الأول وش اسمه؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("٣ ليالي في مكة بفندق فوكو")],
+    expect: [["سكوت", c => !/٣ ليالي في مكة/.test(c.reply)]],
   } as any,
   {
     id: "aion-conv-off", entry: "message", sessionIntakeActive: false, aiEnabled: false, title: "٨ نوفمبر: بند ON لكن المحادثة موقوفة يدوياً → ❌ طلال ما يرد",
@@ -1822,5 +1890,368 @@ export const SCENARIOS: Scenario[] = [
     id: "owner-alert-no-group", entry: "followup", title: "٨ نوفمبر: القروب مو مضبوط → ❌ لا شي في طابور الجسر",
     history: PROG_HIST, customer: "نحتاج فيزا للسعودية؟", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("x", "ask_owner")],
     expect: [["بلا طابور", c => !(c.db.outgoing_messages || []).length], ["يرسل لرقم المالكة (ما فيه قروب)", c => /سؤال ما عرف طلال/.test(c.wire || "")]],
+  },
+  // ── ٨ نوفمبر ٢٠٢٦ (حي، نعيمة سيف ٩:٠٤م): عميلة من إعلان العمرة — «Hello! Can I get more info on this?» ثم بعد ١١ ثانية
+  //    «جدول رمضان إذا متوفر معكم» → صمت تام: المعالج الأول حجز الترحيب (greeted=true) وانسحب لما وصلت الرسالة الثانية،
+  //    والمعالج الثاني لقى الترحيب محجوز فوقف. ──
+  {
+    id: "live-greet-claim-race-silent", entry: "intake", title: "٨ نوفمبر (حي): رسالتين ورا بعض بأول تواصل وصاحب حجز الترحيب انسحب → لازم يرد مرة وحدة على الكل (❌ صمت)",
+    sessionExtra: { greeted: false }, history: [], customer: "Hello! Can I get more info on this?", inboundDuringModel: "جدول رمضان إذا متوفر معكم",
+    model: [M("حياك الله، معك طلال من خدمة العملاء، آمرني"), M("حياك الله، معك طلال من خدمة العملاء، تقصد عمرة رمضان؟", { destination: "العمرة" })],
+    expect: [["رد مرة وحدة (❌ صمت، ❌ ردّين)", c => c.reply.trim().length > 0 && (c.db.wa_admin_messages || []).filter((m: any) => m.sent_by === "طلال").length === 1], ["الترحيب محجوز", c => c.session.greeted === true]],
+  } as any,
+  // ── ٨ نوفمبر ٢٠٢٦ (المالكة: «لا تتكرر هذه المشكلة نهائياً»): حارس احتياطي — عميل عند طلال ورسالته بلا أي رد ٣ دقايق+ → طلال يرد + تنبيه القروب ──
+  {
+    id: "missed-rescue-stuck-greet", entry: "missed", title: "٨ نوفمبر: عميلة إعلان بلا رد (الترحيب عالق greeted=true) → الحارس يخلي طلال يرد + تنبيه «كان بيضيع»",
+    settings: [{ key: "ai_mode", value: "ON" }, { key: "auto_program_test_numbers", value: "" }, { key: "owner_alert_group_jid", value: "120363000000000001@g.us" }], sessionExtra: { greeted: true },
+    history: [], customer: "جدول رمضان إذا متوفر معكم", model: [M("حياك الله، معك طلال من خدمة العملاء، تقصد عمرة رمضان؟", { destination: "العمرة" })],
+    expect: [["طلال رد", c => c.reply.trim().length > 0], ["تنبيه القروب", c => (c.db.outgoing_messages || []).some((r: any) => /كان بيضيع/.test(r.body) && /طلال رد عليه/.test(r.body))], ["ما يتكرر", c => !!c.intake.missed_rescue_at]],
+  } as any,
+  {
+    id: "missed-skip-replied", entry: "missed", title: "٨ نوفمبر: الحارس — فيه رد بعد رسالة العميل → ❌ ما يسوي شي",
+    settings: [{ key: "ai_mode", value: "ON" }, { key: "auto_program_test_numbers", value: "" }, { key: "owner_alert_group_jid", value: "120363000000000001@g.us" }], history: [["C", "ابي عمره"]], customer: "لشخصين", model: [M("x")],
+    tables: { wa_admin_messages: [{ customer_phone: "whatsapp:+96899621742", body: "حاضر، متى التاريخ؟", sent_by: "طلال", sent_at: new Date().toISOString() }] },
+    expect: [["بلا رد جديد", c => c.modelCalls === 0], ["بلا تنبيه", c => !(c.db.outgoing_messages || []).length]],
+  } as any,
+  {
+    id: "missed-skip-deliberate", entry: "missed", title: "٨ نوفمبر: الحارس — طلال سكت عن قصد (مسجّل بالحرّاس) → ❌ ما يسوي شي",
+    settings: [{ key: "ai_mode", value: "ON" }, { key: "auto_program_test_numbers", value: "" }, { key: "owner_alert_group_jid", value: "120363000000000001@g.us" }], history: [["C", "ابي عمره"]], customer: "لشخصين", model: [M("x")],
+    tables: { guard_logs: [{ customer_phone: "whatsapp:+96899621742", guard_name: "staff_takeover", action: "talal_silent", created_at: new Date().toISOString() }] },
+    expect: [["بلا رد", c => c.modelCalls === 0 && c.reply.trim() === ""], ["بلا تنبيه", c => !(c.db.outgoing_messages || []).length]],
+  } as any,
+  {
+    id: "missed-skip-courtesy", entry: "missed", sessionIntakeActive: false, title: "٨ نوفمبر: الحارس — آخر رسالة «شكراً» بس → ❌ ما يجبر رد",
+    settings: [{ key: "ai_mode", value: "ON" }, { key: "auto_program_test_numbers", value: "" }, { key: "owner_alert_group_jid", value: "120363000000000001@g.us" }], history: PROG_HIST, customer: "شكرا", intakeData: { ...DONE, program_final_code: "MK-2026-008" }, model: [FU("العفو")],
+    expect: [["بلا رد", c => c.reply.trim() === ""], ["بلا تنبيه", c => !(c.db.outgoing_messages || []).length]],
+  } as any,
+  {
+    id: "missed-skip-not-talal", entry: "missed", sessionIntakeActive: false, title: "٨ نوفمبر: الحارس — محادثة مو عند طلال (معاينة + موظفة استلمت) → ❌ ما يسوي شي",
+    settings: [{ key: "ai_mode", value: "PREVIEW" }, { key: "auto_program_test_numbers", value: "" }, { key: "owner_alert_group_jid", value: "120363000000000001@g.us" }],
+    history: [...PROG_HIST, ["S", "هلا أستاذي، أنا معك وبرتب لك الحجز"]], customer: "كم سعر الفندق؟", intakeData: { ...DONE }, model: [FU("x")],
+    expect: [["بلا رد", c => c.reply.trim() === ""], ["بلا تنبيه", c => !(c.db.outgoing_messages || []).length]],
+  } as any,
+  {
+    id: "missed-once-only", entry: "missed", title: "٨ نوفمبر: الحارس — سبق وأنقذ نفس الرسالة → ❌ ما يكررها",
+    settings: [{ key: "ai_mode", value: "ON" }, { key: "auto_program_test_numbers", value: "" }, { key: "owner_alert_group_jid", value: "120363000000000001@g.us" }], sessionExtra: { greeted: true }, history: [], customer: "جدول رمضان", model: [M("x")],
+    intakeData: { missed_rescue_at: "__LAST__" },
+    expect: [["بلا رد", c => c.modelCalls === 0], ["بلا تنبيه", c => !(c.db.outgoing_messages || []).length]],
+  } as any,
+  // ── ٨ نوفمبر ٢٠٢٦ (المالكة، بعد نعيمة): العميل يذكر رمضان وطلال يقفز لسؤال العدد بدون ما يعلّق → «حاضر، نرتب لك عمرة رمضان إن شاء الله.» + السؤال (بلا إيموجي) ──
+  // 🔁 ٩ نوفمبر ٢٠٢٦ (نعيمة سيف، عميلة حقيقية): «نحن 2 لكن احتمال يزيد ل 6 أشخاص» → حارس الكرت سأل «تقصد العدد 6؟» ٣ مرات ورا بعض رغم «ل شخصين فقط».
+  {
+    id: "naima-pax-maybe-not-contradiction", entry: "intake", title: "٩ نوفمبر: «احتمال يزيد ل 6 أشخاص» مو عدد مؤكد → ❌ لا «تقصد العدد 6؟»",
+    history: NAIMA_HIST.slice(0, 5), customer: "بدون أطفال من تاريخ 22/2 5 ايام مكة فقط", intakeData: NAIMA_DATA,
+    model: [M("تمام", NAIMA_FIELDS)],
+    expect: [["❌ لا سؤال عن 6", c => !/تقصد العدد 6/.test(c.reply)], ["تأكيد لشخصين", c => /شخصين|عدد المسافرين: 2/.test(c.reply)]],
+  },
+  {
+    id: "naima-pax-answer-accepted", entry: "intake", title: "٩ نوفمبر: سأل «تقصد العدد 6؟» والعميلة «ل شخصين فقط» → يعتمد 2 ويكمل (❌ لا يعيد السؤال)",
+    history: NAIMA_HIST, customer: "ل شخصين فقط", intakeData: NAIMA_DATA,
+    model: [M("تمام", NAIMA_FIELDS)],
+    expect: [["❌ لا يعيد السؤال", c => !/تقصد العدد 6/.test(c.reply)], ["يكمل لشخصين", c => /شخصين|عدد المسافرين: 2/.test(c.reply)]],
+  },
+  {
+    id: "clarify-never-repeats", entry: "intake", title: "٩ نوفمبر: سؤال التوضيح انسأل مرة → ❌ ما يتكرر أبداً حتى لو الرد مو واضح",
+    history: [...NAIMA_HIST, ["C", "ل شخصين"], ["T", "عفوا إذا سمحت، تقصد العدد 6؟"]], customer: "البقية من نشوف السعر نبلغهم", intakeData: NAIMA_DATA,
+    model: [M("تمام", NAIMA_FIELDS)],
+    expect: [["❌ لا يعيد السؤال", c => !/تقصد العدد 6/.test(c.reply)], ["يرد بشي", c => c.reply.trim().length > 0]],
+  },
+  // 🛑 ٩ نوفمبر ٢٠٢٦ (المالكة): شبكة أمان أخيرة — أي سؤال انسأل قبل والعميل ردّ بعده ❌ ما ينرسل مرة ثانية (ذكاء أو كود) + تنبيه المالكة.
+  {
+    id: "anti-repeat-model", entry: "message", sessionIntakeActive: false, title: "٩ نوفمبر: النموذج يعيد نفس سؤال سابق بعد رد العميل → ❌ ما ينرسل + حارس + تنبيه المالكة",
+    history: [...PROG_HIST, ["C", "ابي اضيف شي"], ["T", "تمام، حاب تضيف زيارة الطائف للبرنامج؟"]], customer: "مدري والله", intakeData: DONE,
+    model: [FU("تمام، حاب تضيف زيارة الطائف للبرنامج؟"), FU("تمام، حاب تضيف زيارة الطائف للبرنامج؟"), FU("تمام، حاب تضيف زيارة الطائف للبرنامج؟")],
+    expect: [["❌ ما وصل للعميل", c => !/زيارة الطائف/.test(c.reply) && !c.wire.split("\n").some((l: string) => /زيارة الطائف/.test(l) && !/طلال كان بيكرر|السؤال المكرر|الرسالة المكررة/.test(l))],
+      ["حارس anti_repeat", c => (c.db.guard_logs || []).some((g: any) => g.guard_name === "anti_repeat")],
+      ["تنبيه المالكة", c => c.emails.some((e: any) => /طلال كان بيكرر (?:سؤال|رسالة)/.test(String(e.subject)))]],
+  },
+  {
+    id: "anti-repeat-code", entry: "message", sessionIntakeActive: true, title: "٩ نوفمبر: سؤال من الكود نفسه («أجهّز لك البرنامج بهذي المعلومات؟») انسأل قبل → ❌ ما يتكرر",
+    history: [["T", RESET], ["C", "عمره"], ["C", "٥"], ["T", "خليني أتأكد من طلبك قبل ما أجهز لك العرض:\n- تاريخ السفر: 11/11/2026\n- عدد الليالي: 3 مكة 2 المدينة\nالمعلومات صحيحة؟"], ["C", "همم"], ["T", "عفواً إذا سمحت، أجهّز لك البرنامج بهذي المعلومات؟"]], customer: "همم",
+    intakeData: { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة", cities: "مكة والمدينة", asked_children: true, asked_nights: true, awaiting_confirm: true },
+    model: [M("تمام", { destination: "العمرة", pax: 5, ages: "10 و 12", date: "11/11/2026", nights: "3 مكة 2 المدينة" })],
+    expect: [["❌ ما يتكرر", c => !/أجه?ّ?ز لك البرنامج بهذي المعلومات/.test(c.reply)]],
+  },
+  {
+    id: "anti-repeat-after-reset-ok", entry: "message", sessionIntakeActive: false, title: "٩ نوفمبر: نفس السؤال قبل «إعادة الضبط» → طلب جديد، ينرسل عادي",
+    history: [["C", "ابي اضيف شي"], ["T", "تمام، حاب تضيف زيارة الطائف للبرنامج؟"], ["C", "لا"], ...PROG_HIST], customer: "ابي اضيف شي", intakeData: DONE,
+    model: [FU("تمام، حاب تضيف زيارة الطائف للبرنامج؟")],
+    expect: [["ينرسل", c => /زيارة الطائف/.test(c.reply)], ["بلا حارس", c => !(c.db.guard_logs || []).some((g: any) => g.guard_name === "anti_repeat")]],
+  },
+  // 🏨 ٩ نوفمبر ٢٠٢٦ (حي، +96893302970): «انا حاجز تذاكر اريد فقط فندق» + «مثلا الصفوة» → طلال بنى عمرة كاملة بالطيران على فندق ثاني.
+  //    قرار المالكة (فنادق مكة): الفندق لحاله = الموصى به بس (فندق + توصيل)؛ فندق مو موصى به → «لازم يكون في الباكيج»؛ مو موجود → «عندنا فندق مميز».
+  {
+    id: "hotel-only-safwa-not-recommended", entry: "intake", title: "٩ نوفمبر (حي): فندق بس + «الصفوة» (موجود مو موصى به) → «لازم يكون في الباكيج… عندنا عرض الفندق لحاله» + الموصى به فندق وتوصيل بدون طيران (❌ لا «عمرة لشخصين»)",
+    history: [["T", RESET], ["C", "اريد فندق في مكة"], ["T", "حياك الله معك طلال من خدمة العملاء، كم عدد المعتمرين الإجمالي، الكبار والأطفال؟"], ["C", "شخصين كبار"], ["C", "من تاريخ 11/11 الى 14/11"], ["C", "انا حاجز تذاكر اريد فقط فندق"]],
+    customer: "مثلا الصفوة", intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, asked_nights: true, cities: "مكة", date: "11/11/2026", nights: "3 مكة" },
+    model: [M("تمام", { destination: "العمرة", pax: 2, ages: "", date: "11/11/2026", nights: "3 مكة", cities: "مكة", hotel_only: true, hotel_name: "الصفوة" }, true)],
+    hotels: [{ name: "Address Jabal Omar Makkah", haram_tags: ["موصى به"] }, { name: "Al Safwah Royale Orchid", haram_tags: ["بجانب الحرم"] }], hotelMatch: '{"match": "Al Safwah Royale Orchid"}',
+    expect: [["«لازم يكون في الباكيج»", c => /لازم يكون في الباكيج/.test(c.reply) && /عرض الفندق لحاله/.test(c.reply)], ["يقنعه بالموصى به", c => /قريب جدا?ً? من الحرم/.test(c.reply)],
+      ["التأكيد: فندق مع التوصيل بدون طيران", c => /حجز فندق مع التوصيل بدون طيران/.test(c.reply)], ["❌ لا «عمرة لشخصين»", c => !/عمرة لشخصين/.test(c.reply)], ["❌ لا اسم الصفوة بالتأكيد", c => !/في فندق Al Safwah/.test(c.reply)], ["❌ بلا بناء", c => c.buildCalls === 0]],
+  },
+  {
+    id: "hotel-only-yes-builds-no-flights", entry: "intake", title: "٩ نوفمبر: «نعم» على تأكيد «فندق مع التوصيل بدون طيران» → يبني بلا طيران دولي وبالموصى به (❌ لا اسم الصفوة)",
+    history: [["T", RESET], ["C", "انا حاجز تذاكر اريد فقط فندق"], ["T", "فهمت عليك، يعني تقصد حجز فندق مع التوصيل بدون طيران لشخصين، السفر 11 نوفمبر، 4 أيام 3 ليالي في مكة، والعودة 14 نوفمبر، صحيح أخي الكريم؟"]],
+    customer: "نعم", intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, asked_nights: true, cities: "مكة", date: "11/11/2026", nights: "3 مكة", hotel_only: true, hotel_name: "الصفوة", hotel_check: { asked: "الصفوة", found: true, recommended: false, match: "Al Safwah Royale Orchid", shown: true }, pending_card: true },
+    model: [M("تمام", { destination: "العمرة", pax: 2, ages: "", date: "11/11/2026", nights: "3 مكة", cities: "مكة", hotel_only: true, hotel_name: "الصفوة" }, true)],
+    expect: [["بنى", c => c.buildCalls > 0], ["بلا طيران", c => c.buildBody?.no_flights === true], ["بالموصى به (مو الصفوة)", c => !c.buildBody?.hotel_prefs?.name && c.buildBody?.hotel_prefs?.haram === "موصى به"]],
+  },
+  {
+    id: "hotel-only-not-found", entry: "intake", title: "٩ نوفمبر (قرار المالكة): فندق بس + فندق مو موجود عندنا → «مش موجود عندنا، لكن عندنا فندق مميز» + الموصى به فندق وتوصيل",
+    history: [["T", RESET], ["C", "ابي فندق بس في مكة عندي تذاكر"], ["T", "حياك الله معك طلال من خدمة العملاء، كم عدد المعتمرين الإجمالي، الكبار والأطفال؟"], ["C", "شخصين"], ["C", "من 11/11 الى 14/11"]],
+    customer: "ابي هيلتون كونفرنس", intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, asked_nights: true, cities: "مكة", date: "11/11/2026", nights: "3 مكة" },
+    model: [M("تمام", { destination: "العمرة", pax: 2, ages: "", date: "11/11/2026", nights: "3 مكة", cities: "مكة", hotel_only: true, hotel_name: "هيلتون كونفرنس" }, true)],
+    hotels: [{ name: "Address Jabal Omar Makkah", haram_tags: ["موصى به"] }, { name: "Al Safwah Royale Orchid", haram_tags: ["بجانب الحرم"] }], hotelMatch: '{"match": ""}',
+    expect: [["«مش موجود عندنا… فندق مميز»", c => /مش موجود عندنا/.test(c.reply) && /فندق مميز/.test(c.reply)], ["فندق مع التوصيل بدون طيران", c => /حجز فندق مع التوصيل بدون طيران/.test(c.reply)], ["❌ بلا بناء", c => c.buildCalls === 0]],
+  },
+  {
+    id: "hotel-named-full-package", entry: "intake", title: "٩ نوفمبر (قرار المالكة): فندق بالاسم موجود عندنا (بدون «فندق بس») → باكيج كامل بنفس الفندق، والتأكيد يذكره",
+    history: [["T", RESET], ["C", "ابي عمرة"], ["T", "حياك الله معك طلال من خدمة العملاء، كم عدد المعتمرين الإجمالي، الكبار والأطفال؟"], ["C", "شخصين"], ["C", "من 11/11 الى 14/11"]],
+    customer: "ابي فندق الصفوة", intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, asked_nights: true, cities: "مكة", date: "11/11/2026", nights: "3 مكة" },
+    model: [M("تمام", { destination: "العمرة", pax: 2, ages: "", date: "11/11/2026", nights: "3 مكة", cities: "مكة", hotel_name: "الصفوة" }, true)],
+    hotels: [{ name: "Address Jabal Omar Makkah", haram_tags: ["موصى به"] }, { name: "Al Safwah Royale Orchid", haram_tags: ["بجانب الحرم"] }], hotelMatch: '{"match": "Al Safwah Royale Orchid"}',
+    expect: [["عمرة (باكيج)", c => /عمرة لشخصين/.test(c.reply)], ["يذكر الفندق", c => /في فندق Al Safwah Royale Orchid/.test(c.reply)], ["❌ لا «لازم يكون في الباكيج»", c => !/لازم يكون في الباكيج|مش موجود/.test(c.reply)]],
+  },
+  {
+    id: "hotel-named-full-package-builds", entry: "intake", title: "٩ نوفمبر: «نعم» على باكيج بفندق الصفوة → يبني بنفس الفندق ومع الطيران",
+    history: [["T", RESET], ["C", "ابي فندق الصفوة"], ["T", "فهمت عليك، يعني تقصد عمرة لشخصين، في فندق Al Safwah Royale Orchid، السفر 11 نوفمبر، صحيح أخي الكريم؟"]],
+    customer: "نعم", intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, asked_nights: true, cities: "مكة", date: "11/11/2026", nights: "3 مكة", hotel_name: "الصفوة", hotel_check: { asked: "الصفوة", found: true, recommended: false, match: "Al Safwah Royale Orchid", shown: true }, pending_card: true },
+    model: [M("تمام", { destination: "العمرة", pax: 2, ages: "", date: "11/11/2026", nights: "3 مكة", cities: "مكة", hotel_name: "الصفوة" }, true)],
+    expect: [["بنى", c => c.buildCalls > 0], ["بالفندق اللي طلبه", c => c.buildBody?.hotel_prefs?.name === "Al Safwah Royale Orchid"], ["مع الطيران", c => c.buildBody?.no_flights !== true]],
+  },
+  {
+    id: "hotel-only-no-name", entry: "intake", title: "٩ نوفمبر (قرار المالكة): فندق بس بلا اسم → التأكيد «فندق مع التوصيل بدون طيران» بلا رسائل إقناع",
+    history: [["T", RESET], ["C", "عندي تذاكر ابي فندق بس في مكة"], ["T", "حياك الله معك طلال من خدمة العملاء، كم عدد المعتمرين الإجمالي، الكبار والأطفال؟"], ["C", "شخصين"]],
+    customer: "من 11/11 الى 14/11", intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, asked_nights: true, cities: "مكة" },
+    model: [M("تمام", { destination: "العمرة", pax: 2, ages: "", date: "11/11/2026", nights: "3 مكة", cities: "مكة", hotel_only: true }, true)],
+    expect: [["فندق مع التوصيل بدون طيران", c => /حجز فندق مع التوصيل بدون طيران/.test(c.reply)], ["❌ بلا «لازم يكون في الباكيج»", c => !/لازم يكون في الباكيج|مش موجود/.test(c.reply)]],
+  },
+  {
+    id: "hotel-only-prompt-rule", entry: "intake", title: "٩ نوفمبر: تعليمات الفندق لحاله الجديدة (❌ «زميلنا المختص» القديمة)",
+    history: [["T", RESET], ["C", "ابي عمرة"]], customer: "شخصين", intakeData: { destination: "العمرة" },
+    model: [M("تمام، الـ2 كلهم بالغين؟", { destination: "العمرة", pax: 2 })],
+    expect: [["القاعدة الجديدة بالتعليمات", c => /hotel_only=true/.test(c.modelSystem) && !/زميلنا المختص راح يوافيك بأفضل خيارات الفنادق/.test(c.modelSystem)]],
+  },
+  // 🚫 ٩ نوفمبر ٢٠٢٦ (المالكة: «+96892088213 اعمل بلوك لهذا الرقم فوراً احتيال، ولا تخلي طلال يفتح أي رابط مهما كان»).
+  {
+    id: "blocked-number-silent", entry: "message", title: "٩ نوفمبر: رقم بقائمة الحظر (wa_settings blocked_numbers) يرسل → ❌ لا رد ولا تنبيه",
+    history: [["T", RESET]], customer: "السلام عليكم ابي عمرة", intakeData: {}, sessionIntakeActive: true,
+    tables: { wa_settings: [{ key: "blocked_numbers", value: "96892088213, 96899621742" }] },
+    model: [M("حياك الله، معك طلال من خدمة العملاء، كم عدد المعتمرين؟", { destination: "العمرة" })],
+    expect: [["❌ لا رد", c => c.reply.trim() === "" && c.wire.trim() === ""], ["❌ ما سأل الذكاء", c => c.modelCalls === 0]],
+  },
+  {
+    id: "blocked-number-voice-silent", entry: "voice", title: "٩ نوفمبر: رقم محظور يرسل صوتية → ❌ لا رد",
+    history: [], customer: "ابي عمرة لشخصين", intakeData: {}, sessionIntakeActive: true,
+    tables: { wa_settings: [{ key: "blocked_numbers", value: "96899621742" }] },
+    model: [JSON.stringify({ clear: true, greeting_only: false, summary: "إنك تبي عمرة لشخصين" })],
+    expect: [["❌ لا رد", c => c.reply.trim() === "" && c.wire.trim() === ""]],
+  },
+  {
+    id: "scam-link-silent-blocked", entry: "message", sessionIntakeActive: true, title: "٩ نوفمبر (حي، +96892088213): رسالة احتيال «اكسب المال» + رابط → ❌ لا رد («بنوصل رسالتك للإدارة») + حظر تلقائي + تنبيه المالكة",
+    history: [], customer: "يمكن للجميع كسب المال من موقعنا الإلكتروني، دون استثمار أو متطلبات — يمكنك بسهولة كسب ر.ع192.5 يوميًا من المنزل.\nhttps://clickqegspark.buzz/ref/om-ar?1109591087703208715&s=fx001", intakeData: {},
+    model: [JSON.stringify({ messages: [], fields: {}, complete: false, sender_type: "non_customer" })],
+    expect: [["❌ لا رد", c => c.reply.trim() === "" && !/بنوصل رسالتك/.test(c.wire)], ["❌ ما سأل الذكاء", c => c.modelCalls === 0],
+      ["انحظر", c => /96899621742/.test(String((c.db.wa_settings || []).find((r: any) => r.key === "blocked_numbers")?.value || ""))],
+      ["تنبيه المالكة", c => c.emails.some((e: any) => /احتيال/.test(String(e.subject)))]],
+  },
+  {
+    id: "normal-link-not-scam", entry: "message", sessionIntakeActive: true, title: "٩ نوفمبر: عميل يرسل رابط عادي (فندق/إنستقرام) → طلال يرد عادي (❌ مو احتيال)",
+    history: [["T", RESET]], customer: "ابي عمرة بهذا الفندق https://www.booking.com/hotel/sa/address-jabal-omar.html", intakeData: {},
+    model: [M("حياك الله، معك طلال من خدمة العملاء، كم عدد المعتمرين الإجمالي، الكبار والأطفال؟", { destination: "العمرة" })],
+    expect: [["رد", c => /كم عدد المعتمرين/.test(c.reply)], ["❌ ما انحظر", c => !(c.db.wa_settings || []).some((r: any) => r.key === "blocked_numbers")]],
+  },
+  // 🔁 ٩ نوفمبر ٢٠٢٦ (حي، +96893302970): «قريب» ثم «مثلا الصفوة» بعد ١٢ ثانية → التأكيد انرسل مرتين. الفحص كان قبل الإرسال بثواني
+  //    (حرّاس/مراجعات بعده)، والرسالة الأحدث وصلت بينهم. الحين: فحص أخير لحظة الإرسال.
+  {
+    id: "burst-recheck-at-send", entry: "intake", title: "٩ نوفمبر (حي): رسالة أحدث وصلت بعد ما طلال جهّز ردّه وقبل الإرسال → ❌ ما يرسل (معالج الأحدث يرد مرة وحدة)",
+    history: [["T", RESET], ["C", "اريد فندق في مكة"], ["T", "حياك الله معك طلال من خدمة العملاء، كم عدد المعتمرين الإجمالي، الكبار والأطفال؟"], ["C", "شخصين كبار"]],
+    customer: "من تاريخ 11/11 الى 14/11", intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, asked_nights: true, cities: "مكة" },
+    model: [M("تمام", { destination: "العمرة", pax: 2, ages: "", date: "11/11/2026", nights: "3 مكة", cities: "مكة" }, true)],
+    inboundBeforeSend: "مثلا الصفوة",
+    expect: [["❌ ما رد", c => c.reply.trim() === ""], ["❌ ما حفظ تأكيد ما انرسل", c => c.intake.pending_card !== true]],
+  },
+  // 🦜 ٩ نوفمبر ٢٠٢٦ (حي، +96893302970، المالكة: «ما أبي العميل يحس إن ذكاء صناعي يكلمه… ما في داعي يردد مثل الببغاء»):
+  //    «نعم» وصلت وطلال يكتب → «آه صحيح، الحين انتبهت إنك ذكرت «نعم».» ثم «تمام، أبشر، شوية والبرنامج عندك.» → ❌ بلا الترديد.
+  {
+    id: "no-parrot-missed-yes", title: "٩ نوفمبر (حي): «نعم» فاتت طلال وهو يكتب → يرد عادي («تمام، أبشر…») ❌ بلا «آه صحيح، الحين انتبهت إنك ذكرت «نعم»»",
+    history: [["T", RESET], ["C", "عمره"], ["C", "شخصين"], ["T", "فهمت عليك، يعني تقصد عمرة لشخصين، السفر 11 نوفمبر، 4 أيام 3 ليالي في مكة، والعودة 14 نوفمبر، صحيح أخي الكريم؟"], ["C", "نعم"], ["T", "فهمت عليك، يعني تقصد عمرة لشخصين، السفر 11 نوفمبر، 4 أيام 3 ليالي في مكة، والعودة 14 نوفمبر، صحيح أخي الكريم؟"]],
+    seenAt: 2, customer: "نعم",
+    intakeData: { destination: "العمرة", pax: 2, ages: "", asked_children: true, asked_nights: true, cities: "مكة", date: "11/11/2026", nights: "3 مكة", pending_card: true },
+    model: [M("تمام", { destination: "العمرة", pax: 2, ages: "", date: "11/11/2026", nights: "3 مكة", cities: "مكة" }, true)],
+    expect: [["❌ لا ترديد", c => !/انتبهت|ذكرت «نعم»/.test(c.reply)], ["يكمل", c => /تمام، أبشر، شوية والبرنامج عندك/.test(c.reply)]],
+  },
+  // 🚌 ٩ نوفمبر ٢٠٢٦ (حي، صاحب باصات +96895282182): وصلته رسالة الشراكات ٦ مرات + «آه صحيح، الحين انتبهت إنك ذكرت «⚠️ أرسل العميل مرفقاً…»» ٥ مرات.
+  {
+    id: "bus-vendor-silent-after-partner", entry: "message", sessionIntakeActive: false, title: "٩ نوفمبر (حي): صاحب باصات أخذ رقم الشراكات وأرسل صور → ❌ لا يعيد الرقم؛ طلال يسكت + تنبيه المالكة",
+    history: [["C", "I have 50-passenger buses for rent"], ["T", "حياك الله، بخصوص التعاون والشراكات تقدر تتواصل مع الإدارة مباشرة على الرقم ‎+601111136864 وبيخدمونك إن شاء الله."]],
+    customer: "أرسل العميل صورة هذا العرض: صورة داخلية لحافلة سياحية فارغة بمقاعد جلدية", intakeData: DONE,
+    model: [FU("حياك الله، بخصوص التعاون والشراكات تقدر تتواصل مع الإدارة مباشرة على الرقم ‎+601111136864 وبيخدمونك إن شاء الله.", "partnership")],
+    expect: [["❌ ما وصله شي", c => c.reply.trim() === "" && !/التعاون والشراكات/.test(c.wire.split("\n").filter((l: string) => !/مرسل مو عميل|أخذ رقم الإدارة/.test(l)).join("\n"))],
+      ["حارس السكوت", c => (c.db.guard_logs || []).some((g: any) => g.guard_name === "sender_type" && g.action === "silent")],
+      ["تنبيه المالكة", c => c.emails.some((e: any) => /مرسل مو عميل/.test(String(e.subject)))]],
+  },
+  {
+    id: "bus-vendor-voice-silent", entry: "voice", sessionIntakeActive: false, title: "٩ نوفمبر (حي): نفس المرسل يرسل صوتية بعد رقم الشراكات → ❌ لا «فهمت من رسالتك…»",
+    history: [["C", "I have 50-passenger buses for rent"], ["T", "حياك الله، بخصوص التعاون والشراكات تقدر تتواصل مع الإدارة مباشرة على الرقم ‎+601111136864 وبيخدمونك إن شاء الله."]],
+    customer: "The high specification high class. It's very very good bus.", intakeData: DONE,
+    model: [JSON.stringify({ clear: true, greeting_only: false, summary: "إنك تعرض باص ٥٠ راكب" })],
+    expect: [["❌ ما وصله شي", c => c.reply.trim() === ""], ["حارس السكوت", c => (c.db.guard_logs || []).some((g: any) => g.guard_name === "sender_type" && g.action === "silent")]],
+  },
+  {
+    id: "missed-ack-no-internal-label", entry: "followup", title: "٩ نوفمبر (حي): سطر داخلي «⚠️ أرسل العميل مرفقاً لا يصل…» ❌ ما ينقتبس للعميل في «آه صحيح، الحين انتبهت…»",
+    history: [...PROG_HIST, ["C", "وش الفندق في مكة؟"], ["C", "⚠️ أرسل العميل مرفقاً لا يصل عبر واتساب (غالباً «عرض مرة واحدة» أو مُعاد توجيه). اطلبي منه إعادة إرساله كصورة عادية"], ["T", "فندق مكة فوكو"]],
+    seenAt: 8, customer: "طيب", intakeData: DONE,
+    model: [FU("أبشر، أي خدمة ثانية؟")],
+    expect: [["❌ لا اقتباس داخلي", c => !/انتبهت|⚠️|أرسل العميل مرفق/.test(c.reply)]],
+  },
+  {
+    id: "anti-repeat-non-question", entry: "message", sessionIntakeActive: false, title: "٩ نوفمبر (حي): رسالة مو سؤال انرسلت نفسها قبل دقايق → ❌ ما تنرسل مرة ثانية + حارس",
+    history: [...PROG_HIST], customer: "طيب",
+    tables: { wa_admin_messages: [{ customer_phone: "whatsapp:+96899621742", body: "أبشر، بجهز لك البرنامج المعدّل وأرسله لك خلال دقايق إن شاء الله.", sent_by: "طلال", sent_at: new Date(Date.now() - 5 * 60e3).toISOString() }] },
+    intakeData: DONE,
+    model: [FU("أبشر، بجهز لك البرنامج المعدّل وأرسله لك خلال دقايق إن شاء الله."), FU("أبشر، بجهز لك البرنامج المعدّل وأرسله لك خلال دقايق إن شاء الله."), FU("أبشر، بجهز لك البرنامج المعدّل وأرسله لك خلال دقايق إن شاء الله.")],
+    expect: [["❌ ما تكررت", c => !/بجهز لك البرنامج المعدّل/.test(c.reply)], ["حارس anti_repeat", c => (c.db.guard_logs || []).some((g: any) => g.guard_name === "anti_repeat")]],
+  },
+  {
+    id: "burst-older-image-yields", entry: "message", sessionIntakeActive: false, msgAt: "prev", title: "٩ نوفمبر (حي): ٥ صور ورا بعض → معالجة الصورة الأقدم تنسحب (الأحدث ترد مرة وحدة)",
+    history: [...PROG_HIST, ["C", "📷 صورة عرض من العميل — حافلة"]], customer: "أرسل العميل صورة هذا العرض: حافلة من الداخل", intakeData: DONE,
+    model: [FU("حياك الله، بخصوص التعاون والشراكات تقدر تتواصل مع الإدارة مباشرة على الرقم ‎+601111136864 وبيخدمونك إن شاء الله.", "partnership")],
+    expect: [["❌ ما رد", c => c.reply.trim() === ""]],
+  },
+  {
+    id: "anti-repeat-new-question-ok", entry: "message", sessionIntakeActive: false, title: "٩ نوفمبر: سؤال جديد (مو مكرر) → ينرسل عادي",
+    history: [...PROG_HIST, ["C", "ابي اضيف شي"], ["T", "تمام، حاب تضيف زيارة الطائف للبرنامج؟"]], customer: "لا", intakeData: DONE,
+    model: [FU("تمام، حاب نغير فندق المدينة؟")],
+    expect: [["ينرسل", c => /فندق المدينة/.test(c.reply)], ["بلا حارس", c => !(c.db.guard_logs || []).some((g: any) => g.guard_name === "anti_repeat")]],
+  },
+  // 🧠 ٩ نوفمبر ٢٠٢٦ (المالكة: «خلي طلال يفهم سياق المحادثة كلها ولا يجزّئها، العميل يمكن يغير رأيه»):
+  //    القاعدة اللي تدور على أرقام/كلمات ما تقرر لحالها — تسأل الذكاء يقرا المحادثة كلها (TALAL_CONTEXT_JUDGE).
+  {
+    id: "ctx-judge-false-alarm", entry: "intake", title: "٩ نوفمبر: «اخوي 4 اشخاص بيسافرون بعدنا، احنا بس 2» → الذكاء يقرا السياق: ما فيه تغيير → يكمل لشخصين (❌ لا «تقصد العدد 4؟»)",
+    history: [["T", RESET], ["C", "ابي عمره"], ["T", "حياك الله معك طلال، كم عدد المعتمرين الإجمالي، الكبار والأطفال؟"], ["C", "اخوي 4 اشخاص بيسافرون بعدنا بشهر، احنا بس 2 كبار"]],
+    customer: "من تاريخ 22/2 5 ايام مكة فقط", intakeData: NAIMA_DATA, model: [M("تمام", NAIMA_FIELDS)],
+    judge: JSON.stringify({ real_change: false, understood: "" }),
+    expect: [["سأل الذكاء", c => (c.judgeCalls || 0) > 0], ["أعطاه المحادثة كلها", c => /اخوي 4 اشخاص/.test(c.judgeInput || "") && /ابي عمره/.test(c.judgeInput || "")],
+      ["❌ لا «تقصد العدد 4»", c => !/تقصد العدد 4/.test(c.reply)], ["يكمل لشخصين", c => /شخصين|عدد المسافرين: 2/.test(c.reply)]],
+  },
+  {
+    id: "ctx-judge-real-change", entry: "intake", title: "٩ نوفمبر: العميل غيّر العدد فعلاً → طلال يقول اللي فهمه من التغيير بكلامه («فهمت إن… بدل…، صحيح؟»)",
+    history: [["T", RESET], ["C", "ابي عمره"], ["T", "حياك الله معك طلال، كم عدد المعتمرين الإجمالي، الكبار والأطفال؟"], ["C", "2 كبار"], ["C", "من تاريخ 22/2 5 ايام مكة فقط"]],
+    customer: "لا خلاص قررنا نروح 6 اشخاص كلنا", intakeData: NAIMA_DATA, model: [M("تمام", NAIMA_FIELDS)],
+    judge: JSON.stringify({ real_change: true, understood: "فهمت إنكم قررتوا تروحون 6 أشخاص بدل شخصين" }),
+    expect: [["يقول اللي فهمه", c => /فهمت إنكم قررتوا تروحون 6 أشخاص بدل شخصين/.test(c.reply)], ["ينتهي بسؤال", c => /؟\s*$/.test(c.reply.trim())], ["❌ لا كرت بعدد 2", c => !/عدد المسافرين: 2/.test(c.reply)]],
+  },
+  {
+    id: "ctx-judge-fail-safe", entry: "intake", title: "٩ نوفمبر: فاحص السياق ما رد (عطل) → يرجع للسؤال الآمن القديم (❌ لا كرت غلط)",
+    history: [["T", RESET], ["C", "ابي عمره"], ["T", "حياك الله معك طلال، كم عدد المعتمرين الإجمالي، الكبار والأطفال؟"], ["C", "2 كبار"], ["C", "من تاريخ 22/2 5 ايام مكة فقط"]],
+    customer: "لا خلاص قررنا نروح 6 اشخاص كلنا", intakeData: NAIMA_DATA, model: [M("تمام", NAIMA_FIELDS)],
+    expect: [["سؤال توضيح العدد", c => /تقصد العدد 6/.test(c.reply)], ["❌ لا كرت بعدد 2", c => !/عدد المسافرين: 2/.test(c.reply)]],
+  },
+  {
+    id: "ctx-change-mind-twice", entry: "intake", title: "٩ نوفمبر: العميل غيّر رأيه مرتين (2 ← 4 ← رجع 2) → يعتمد آخر كلام (2) بلا سؤال توضيح",
+    history: [["T", RESET], ["C", "ابي عمره"], ["T", "حياك الله معك طلال، كم عدد المعتمرين الإجمالي، الكبار والأطفال؟"], ["C", "2 كبار"], ["C", "لا احنا 4 اشخاص"], ["C", "من تاريخ 22/2 5 ايام مكة فقط"]],
+    customer: "لا خلاص رجعنا 2 اشخاص بس", intakeData: NAIMA_DATA, model: [M("تمام", NAIMA_FIELDS)],
+    expect: [["❌ لا «تقصد العدد 4»", c => !/تقصد العدد 4/.test(c.reply)], ["يكمل لشخصين", c => /شخصين|عدد المسافرين: 2/.test(c.reply)]],
+  },
+  // ✅ ٩ نوفمبر ٢٠٢٦ (قرار المالكة): بعد الملخّص، الرد اللي ما فيه رفض ولا تعديل ولا سؤال = موافقة → يجهّز البرنامج.
+  {
+    id: "card-non-refusal-builds", entry: "intake", title: "٩ نوفمبر: على الملخّص «البقية من نشوف السعر نبلغهم» (نعيمة) → موافقة → يبني (❌ لا «أجهّز لك البرنامج؟»)",
+    history: [["T", RESET], ["C", "ابي عمره"], ["C", "2 كبار"], ["C", "من تاريخ 22/2 5 ايام مكة فقط"], ["T", "فهمت عليك، يعني تقصد عمرة لشخصين، السفر 22/2، 5 أيام 4 ليالي في مكة، صحيح أخي الكريم؟"]],
+    customer: "البقية من نشوف السعر نبلغهم", intakeData: { ...NAIMA_DATA, pending_card: true }, model: [M("تمام", NAIMA_FIELDS)],
+    expect: [["بنى", c => c.buildCalls > 0 || c.intake.summary_confirmed === true], ["❌ لا سؤال ثاني", c => !/أجه?ّ?ز لك البرنامج بهذي/.test(c.reply)]],
+  },
+  {
+    id: "card-refusal-no-build", entry: "intake", title: "٩ نوفمبر: على الملخّص «لا ما أبي الحين» → ❌ لا بناء",
+    history: [["T", RESET], ["C", "ابي عمره"], ["C", "2 كبار"], ["C", "من تاريخ 22/2 5 ايام مكة فقط"], ["T", "فهمت عليك، يعني تقصد عمرة لشخصين، السفر 22/2، 5 أيام 4 ليالي في مكة، صحيح أخي الكريم؟"]],
+    customer: "لا ما ابي الحين", intakeData: { ...NAIMA_DATA, pending_card: true }, model: [M("حاضر، على راحتك، ومتى ما حبيت بلغني.", NAIMA_FIELDS)],
+    expect: [["❌ ما بنى", c => c.buildCalls === 0 && c.intake.summary_confirmed !== true], ["رد الذكاء (مو «وش التعديل»)", c => /على راحتك/.test(c.reply) && !/وش التعديل/.test(c.reply)]],
+  },
+  {
+    id: "card-postpone-no-build", entry: "intake", title: "٩ نوفمبر: على الملخّص «بعدين ابلغك» → ❌ لا بناء",
+    history: [["T", RESET], ["C", "ابي عمره"], ["C", "2 كبار"], ["C", "من تاريخ 22/2 5 ايام مكة فقط"], ["T", "فهمت عليك، يعني تقصد عمرة لشخصين، السفر 22/2، 5 أيام 4 ليالي في مكة، صحيح أخي الكريم؟"]],
+    customer: "بعدين ابلغك", intakeData: { ...NAIMA_DATA, pending_card: true }, model: [M("حاضر، بانتظارك.", NAIMA_FIELDS)],
+    expect: [["❌ ما بنى", c => c.buildCalls === 0 && c.intake.summary_confirmed !== true], ["❌ ما يعيد الملخّص", c => !/صحيح أخي الكريم/.test(c.reply)]],
+  },
+  {
+    id: "card-question-answered", entry: "intake", title: "٩ نوفمبر: على الملخّص سؤال «الفندق قريب من الحرم؟» → يرد الذكاء على السؤال، ❌ لا بناء ولا إعادة الملخّص",
+    history: [["T", RESET], ["C", "ابي عمره"], ["C", "2 كبار"], ["C", "من تاريخ 22/2 5 ايام مكة فقط"], ["T", "فهمت عليك، يعني تقصد عمرة لشخصين، السفر 22/2، 5 أيام 4 ليالي في مكة، صحيح أخي الكريم؟"]],
+    customer: "الفندق يكون قريب من الحرم؟", intakeData: { ...NAIMA_DATA, pending_card: true },
+    model: [M("إيه نعم، نختار لك فندق قريب من الحرم. أجهّز لك البرنامج كذا؟", NAIMA_FIELDS)],
+    expect: [["رد الذكاء على السؤال", c => /قريب من الحرم/.test(c.reply)], ["❌ ما بنى", c => c.buildCalls === 0 && c.intake.summary_confirmed !== true]],
+  },
+  // 🆙 ٩ نوفمبر ٢٠٢٦ (قرار المالكة): الترقية لـ Sonnet 5.5 — ❌ إجبار الأداة (يرفضه النموذج الجديد)، ✅ auto + تعليمة + مساحة للتفكير.
+  {
+    id: "upgrade-intake-sonnet55", entry: "intake", title: "٩ نوفمبر: الاستقبال على Sonnet 5.5 — الأداة auto (مو إجبار) + تعليمة باستدعائها + مساحة تفكير",
+    history: [["T", RESET]], customer: "ابي عمره", model: [M("حياك الله معك طلال، كم عدد المعتمرين الإجمالي، الكبار والأطفال؟", { destination: "العمرة" })],
+    expect: [["Sonnet 5.5", c => c.modelName === "claude-sonnet-5-5"], ["❌ إجبار الأداة", c => !/"type":"tool"/.test(c.toolChoice || "") && /"auto"/.test(c.toolChoice || "")],
+      ["تعليمة الأداة", c => /استدعاء الأداة/.test(c.modelSystem)], ["مساحة تفكير + جهد", c => /"effort":"medium"/.test(c.modelParams || "") && /"max_tokens":3700/.test(c.modelParams || "")]],
+  },
+  {
+    id: "upgrade-followup-sonnet55", entry: "followup", title: "٩ نوفمبر: المتابعة على Sonnet 5.5 — الأداة auto (مو إجبار)",
+    history: PROG_HIST, customer: "شكرا", intakeData: DONE, model: [FU("العفو، أي خدمة ثانية أنا حاضر.")],
+    expect: [["Sonnet 5.5", c => c.modelName === "claude-sonnet-5-5"], ["❌ إجبار الأداة", c => !/"type":"tool"/.test(c.toolChoice || "")]],
+  },
+  // 🧠 ٩ نوفمبر ٢٠٢٦ (قرار المالكة: «الحراس بعد النموذج مو قبله»): حارس يبي يستبدل رد الذكاء → الذكاء يراجع بالمحادثة كاملة.
+  {
+    id: "gate-review-keeps-model", entry: "intake", title: "٩ نوفمبر: العميل سأل عن السعر والذكاء جاوب + سأل عن المسافرين بصيغته → المراجعة تخلي رد الذكاء (❌ لا يتجاهل سؤال العميل)",
+    history: [["T", RESET]], customer: "كم سعر عمرة رمضان؟", intakeData: { destination: "عمرة رمضان" },
+    model: [M("أسعار عمرة رمضان تختلف حسب الفندق والتاريخ، وعشان أجهز لك عرض دقيق: مين بيكون معك في العمرة؟", { destination: "عمرة رمضان" })], gateReview: JSON.stringify({ keep: "A", why: "يرد على سؤال السعر ويسأل عن المسافرين" }),
+    expect: [["راجع", c => (c.reviewCalls || 0) > 0], ["أعطاه المحادثة والردين", c => /كم سعر عمرة رمضان/.test(c.reviewInput || "") && /مين بيكون معك/.test(c.reviewInput || "")],
+      ["رد الذكاء", c => /تختلف حسب الفندق/.test(c.reply)], ["❌ لا رد الحارس", c => !/كم عدد المعتمرين معكم/.test(c.reply)]],
+  },
+  {
+    id: "gate-review-keeps-gate", entry: "intake", title: "٩ نوفمبر: المراجعة شافت الحارس صح → رد الحارس",
+    history: [["T", RESET]], customer: "كم سعر عمرة رمضان؟", intakeData: { destination: "عمرة رمضان" },
+    model: [M("أسعار عمرة رمضان تختلف حسب الفندق والتاريخ، وعشان أجهز لك عرض دقيق: مين بيكون معك في العمرة؟", { destination: "عمرة رمضان" })], gateReview: JSON.stringify({ keep: "B", why: "" }),
+    expect: [["رد الحارس", c => /كم عدد المعتمرين/.test(c.reply)]],
+  },
+  {
+    id: "gate-review-fail-safe", entry: "intake", title: "٩ نوفمبر: المراجعة تعطلت → الحارس يكسب (مثل قبل)",
+    history: [["T", RESET]], customer: "كم سعر عمرة رمضان؟", intakeData: { destination: "عمرة رمضان" },
+    model: [M("أسعار عمرة رمضان تختلف حسب الفندق والتاريخ، وعشان أجهز لك عرض دقيق: مين بيكون معك في العمرة؟", { destination: "عمرة رمضان" })],
+    expect: [["رد الحارس", c => /كم عدد المعتمرين/.test(c.reply)]],
+  },
+  {
+    id: "gate-review-false-pax-change", entry: "intake", title: "٩ نوفمبر: «نضيف شخص ثاني؟ لا خلاص احنا 2» ملتبس للقاعدة → المراجعة: ما فيه تغيير → رد الذكاء والعدد يبقى",
+    history: [["T", RESET], ["C", "ابي عمره"], ["C", "احنا 2 كبار"]], customer: "كنت بضيف شخص رابع بس خلاص احنا 2 بس", intakeData: { ...NAIMA_DATA, nights: "", days: "" },
+    model: [M("تمام، شخصين. كم ليلة تنوون تقضون في مكة؟", { destination: "عمرة رمضان", pax: 2, ages: "", date: "22/2", cities: "مكة" })], gateReview: JSON.stringify({ keep: "A", why: "العميل أكد 2" }),
+    expect: [["❌ لا «تقصد يبقون 2 ولا يصيرون 3»", c => !/يبقون|يصيرون/.test(c.reply)], ["العدد 2", c => Number(c.intake.pax) === 2]],
+  },
+  // 💾 ٩ نوفمبر ٢٠٢٦ (قرار المالكة: prompt caching): التعليمات الثابتة بلوك محفوظ (ساعة) — ❌ ولا شي خاص بالعميل داخله
+  //    (لو دخل تاريخ اليوم/بيانات العميل/صيغة الترحيب فيه، الكاش يخرب بصمت والفاتورة تزيد).
+  {
+    id: "cache-intake-static-block", entry: "intake", title: "٩ نوفمبر: الاستقبال — بلوك ثابت عليه cache_control (ساعة) بلا أي شي خاص بالعميل، والسياق بعده",
+    history: [["T", RESET], ["C", "ابي عمره"], ["T", "حياك الله معك طلال، كم عدد المعتمرين الإجمالي، الكبار والأطفال؟"]], customer: "2 كبار", intakeData: { destination: "العمرة" },
+    model: [M("تمام، متى موعد السفر؟", { destination: "العمرة", pax: 2 })],
+    expect: [["بلوكين", c => Array.isArray(c.systemRaw) && c.systemRaw.length === 2],
+      ["الأول محفوظ ساعة", c => c.systemRaw?.[0]?.cache_control?.type === "ephemeral" && c.systemRaw?.[0]?.cache_control?.ttl === "1h"],
+      ["❌ تاريخ/بيانات/ترحيب بالثابت", c => !/اليوم: |المعلومات المجموعة سابقاً|في منتصف المحادثة|أول رد: رحّب|رقم هذا العميل/.test(String(c.systemRaw?.[0]?.text || ""))],
+      ["السياق بالثاني", c => /سياق هذا العميل/.test(String(c.systemRaw?.[1]?.text || "")) && /اليوم: /.test(String(c.systemRaw?.[1]?.text || "")) && /في منتصف المحادثة/.test(String(c.systemRaw?.[1]?.text || ""))]],
+  },
+  {
+    id: "cache-followup-static-block", entry: "followup", title: "٩ نوفمبر: المتابعة — بلوك ثابت محفوظ بلا حقائق العميل/البرنامج",
+    history: PROG_HIST, customer: "شكرا", intakeData: DONE, model: [FU("العفو، أي خدمة ثانية أنا حاضر.")],
+    expect: [["الأول محفوظ ساعة", c => Array.isArray(c.systemRaw) && c.systemRaw[0]?.cache_control?.ttl === "1h"],
+      ["❌ حقائق/برنامج بالثابت", c => !/MK-2026-008|فوكو|"pax"/.test(String(c.systemRaw?.[0]?.text || ""))],
+      ["الحقائق بالثاني", c => /حقائق الطلب/.test(String(c.systemRaw?.[1]?.text || ""))]],
+  },
+  {
+    id: "ramadan-ack-first-contact", entry: "intake", title: "٨ نوفمبر: أول تواصل «جدول رمضان إذا متوفر معكم» → تعريف + «نرتب لك عمرة رمضان» + سؤال العدد",
+    sessionExtra: { greeted: false }, history: [["C", "Hello! Can I get more info on this?"]], customer: "جدول رمضان إذا متوفر معكم",
+    model: [M("حياك الله، معك طلال من خدمة العملاء، آمرني", { destination: "العمرة" })],
+    expect: [["يعلّق على رمضان", c => /نرتب لك عمرة رمضان/.test(c.reply)], ["يسأل العدد", c => /كم عدد المعتمرين/.test(c.reply)], ["تعريف", c => /معك طلال/.test(c.reply)], ["بلا إيموجي", c => !/[\p{Extended_Pictographic}]/u.test(c.reply)]],
+  } as any,
+  {
+    id: "ramadan-ack-greeted", entry: "intake", title: "٨ نوفمبر: بعد الترحيب «ابي عمره في رمضان» → «حاضر، نرتب لك عمرة رمضان إن شاء الله.» + سؤال العدد",
+    history: [["C", "السلام عليكم"], ["T", "وعليكم السلام، حياك الله، معك طلال من خدمة العملاء، آمرني"]], customer: "ابي عمره في رمضان",
+    model: [M("تمام، كم عدد المعتمرين معكم؟", { destination: "العمرة" })],
+    expect: [["الصيغة", c => /^حاضر، نرتب لك عمرة رمضان إن شاء الله\. كم عدد المعتمرين/.test(c.reply.trim())], ["بلا تعريف ثاني", c => !/معك طلال/.test(c.reply)]],
+  },
+  {
+    id: "ramadan-ack-once", entry: "intake", title: "٨ نوفمبر: سبق وعلّق على رمضان → ❌ ما يكرر",
+    history: [["C", "ابي عمره في رمضان"], ["T", "حاضر، نرتب لك عمرة رمضان إن شاء الله. كم عدد المعتمرين الإجمالي، الكبار والأطفال؟"]], customer: "رمضان الجاي",
+    model: [M("كم عدد المعتمرين معكم؟", { destination: "العمرة" })],
+    expect: [["ما يكرر", c => !/نرتب لك عمرة رمضان/.test(c.reply)]],
   },
 ];

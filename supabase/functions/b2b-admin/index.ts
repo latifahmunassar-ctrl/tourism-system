@@ -215,6 +215,7 @@ Deno.serve(async (req) => {
         let q = sb.from("b2b_companies").select("id", { count: "exact", head: true }).not("whatsapp", "is", null);
         if (f.country) q = q.eq("country", f.country);
         if (f.category) q = q.eq("category", f.category);
+        else q = q.or("category.is.null,category.neq.مؤثرين");
         if (Array.isArray(f.destinations) && f.destinations.length) q = q.overlaps("destinations", f.destinations);
         const { count, error } = await q;
         if (error) throw error;
@@ -437,6 +438,33 @@ Deno.serve(async (req) => {
         }
         const { data: msg } = await sb.from("b2b_messages").insert({
           conversation_id: conv.id, direction: "out", body: caption || "[صورة]", wa_message_id: waId, status: "sent",
+        }).select("*").single();
+        await sb.from("b2b_conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conv.id);
+        return json({ ok: true, message: msg });
+      }
+      case "inbox.send_document": {
+        // إرسال ملف (PDF) برابط عام — مثل السجل التجاري — داخل نافذة ٢٤ ساعة.
+        const link = String(p.link || "").trim();
+        if (!/^https:\/\//.test(link)) return json({ ok: false, error: "رابط الملف مطلوب (https)" }, 400);
+        const filename = String(p.filename || "document.pdf").trim().slice(0, 120);
+        const caption = String(p.caption || "").trim().slice(0, 1024);
+        const label = String(p.label || filename).trim();
+        const { data: conv } = await sb.from("b2b_conversations").select("*").eq("id", String(p.conversation_id || "")).maybeSingle();
+        if (!conv) return json({ ok: false, error: "محادثة غير موجودة" }, 404);
+        const document: Record<string, unknown> = { link, filename };
+        if (caption) document.caption = caption;
+        const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${B2B_PHONE_NUMBER_ID}/messages`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ messaging_product: "whatsapp", to: conv.whatsapp.replace(/^\+/, ""), type: "document", document }),
+        });
+        const data = await res.json().catch(() => ({}));
+        const waId = data?.messages?.[0]?.id || "";
+        if (!waId) {
+          return json({ ok: false, error: data?.error?.error_user_msg || data?.error?.message || `HTTP ${res.status}` }, 502);
+        }
+        const { data: msg } = await sb.from("b2b_messages").insert({
+          conversation_id: conv.id, direction: "out", body: `📎 ${label}${caption ? "\n" + caption : ""}`, wa_message_id: waId, status: "sent",
         }).select("*").single();
         await sb.from("b2b_conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conv.id);
         return json({ ok: true, message: msg });
