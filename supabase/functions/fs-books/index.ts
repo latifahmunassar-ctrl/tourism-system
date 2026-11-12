@@ -83,6 +83,32 @@ Deno.serve(async (req: Request) => {
       }
       return J({ ok: true, n: items.length, now });
     }
+    // 🖼 نسخ صور المنتجات من رابط خارجي (رواء) إلى تخزين Supabase الخاص بنا — bucket عام للقراءة fs-products
+    if (body.action === 'mirror_images') {
+      const items = Array.isArray(body.items) ? body.items.slice(0, 30) : [];
+      const BUCKET = 'fs-products';
+      const { data: b } = await db.storage.getBucket(BUCKET);
+      if (!b) { const { error } = await db.storage.createBucket(BUCKET, { public: true, fileSizeLimit: 5 * 1024 * 1024 }); if (error && !/exist/i.test(error.message)) return J({ error: 'bucket: ' + error.message }, 500); }
+      const out: any[] = [];
+      for (const it of items) {
+        try {
+          const src = String(it?.url || '');
+          if (!/^https:\/\/s3\.[a-z0-9-]+\.amazonaws\.com\/prod-mims-service-any-item-image\./.test(src)) { out.push({ id: it?.id, error: 'source not allowed' }); continue; }
+          const id = String(it.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+          const r = await fetch(src);
+          if (!r.ok) { out.push({ id, error: 'fetch ' + r.status }); continue; }
+          const type = r.headers.get('content-type') || 'image/jpeg';
+          if (!type.startsWith('image/')) { out.push({ id, error: 'not image' }); continue; }
+          const ext = type.includes('png') ? 'png' : type.includes('webp') ? 'webp' : 'jpg';
+          const path = `products/${id}.${ext}`;
+          const buf = new Uint8Array(await r.arrayBuffer());
+          const { error } = await db.storage.from(BUCKET).upload(path, buf, { contentType: type, upsert: true });
+          if (error) { out.push({ id, error: error.message }); continue; }
+          out.push({ id, url: db.storage.from(BUCKET).getPublicUrl(path).data.publicUrl, bytes: buf.length });
+        } catch (e) { out.push({ id: it?.id, error: String(e) }); }
+      }
+      return J({ ok: true, results: out });
+    }
     return J({ error: 'unknown action' }, 400);
   }
   return J({ error: 'method' }, 405);
