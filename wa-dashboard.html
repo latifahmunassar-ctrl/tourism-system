@@ -4511,7 +4511,11 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         return show("لا يوجد توزيع لـ " + days + " أيام عبر هذا المطار. الأيام المتاحة لهذا المطار: <b>"+(avail||"—")+"</b>"+otherTxt, true);
       }
       hint.style.display = "none";
-      list.innerHTML = rows.map((s,i)=>`
+      // 🗣️ ١٢ نوفمبر ٢٠٢٦ (المالكة): توزيع طلال مع العميل يطلع أول كرت واضح (مو سطر صغير تحت اقتراحات الشيت).
+      const _talalCard = (bfChosenDist && !rows.some(s => s.distribution === bfChosenDist))
+        ? `<div style="border:2px solid #0e7c66; border-radius:8px; padding:7px 9px; background:#eaf5f1;"><div style="font-size:11px; color:#0b5d4e; font-weight:800;">🗣️ من كلام طلال مع العميل (مختار)</div><div style="font-size:13px; font-weight:700;">${bfChosenDist}</div></div>`
+        : "";
+      list.innerHTML = _talalCard + rows.map((s,i)=>`
         <div class="bf-sugcard" data-i="${i}" style="border:1px solid #d7dee6; border-radius:8px; padding:7px 9px; cursor:pointer; background:${s.distribution===bfChosenDist?'#eaf5f1':'#fff'};">
           <div style="font-size:11px; color:#0b5d4e; font-weight:700;">${s.days} أيام</div>
           <div style="font-size:13px;">${s.distribution||""}</div>
