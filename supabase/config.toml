@@ -58,3 +58,6 @@ verify_jwt = false
 # في ترويسة x-admin-secret (مغلقة إن لم يُضبط).
 [functions.b2b-admin]
 verify_jwt = false
+
+[functions.fs-books]
+verify_jwt = false
