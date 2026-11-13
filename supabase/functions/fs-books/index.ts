@@ -227,7 +227,7 @@ Deno.serve(async (req: Request) => {
       return J({ ok: true, n: items.length, now });
     }
     // 👥 مستخدمو فانسي (المالكة فقط): نفس جدول دخول نظام العز acc_staff_access — نضيف/نزيل تبويب "fancy" فقط ولا نلمس صلاحيات العز الأخرى
-    if (body.action === 'staff_list' || body.action === 'staff_set' || body.action === 'device_list' || body.action === 'device_set') {
+    if (body.action === 'staff_list' || body.action === 'staff_set' || body.action === 'device_list' || body.action === 'device_set' || body.action === 'staff_pin') {
       if (!owner) return J({ error: 'إدارة المستخدمين للمالكة فقط' }, 403);
       if (body.action === 'staff_list') {
         const { data, error } = await db.from('acc_staff_access').select('id,staff_name,is_owner,active,allowed_tabs,role');
@@ -264,6 +264,13 @@ Deno.serve(async (req: Request) => {
         if (typeof p.active === 'boolean' && fancyOnly) upd.active = p.active;
         if (Object.keys(upd).length) { const { error } = await db.from('acc_staff_access').update(upd).eq('id', ex.id); if (error) return J({ error: error.message }, 500); }
         return J({ ok: true, updated: Object.keys(upd) });
+      }
+      if (body.action === 'staff_pin') {
+        // 🔑 المالكة فقط: عرض رمز موظف فانسي (حسابات فانسي فقط — لا نعرض رموز موظفي نظام العز)
+        const { data: u } = await db.from('acc_staff_access').select('pin,allowed_tabs,is_owner').eq('staff_name', String(body.staff_name || '')).maybeSingle();
+        const tabs: string[] = Array.isArray(u?.allowed_tabs) ? u!.allowed_tabs : [];
+        if (!u || u.is_owner || !(tabs.length === 1 && tabs[0] === 'fancy')) return J({ error: 'هذا الحساب يستخدم نظام العز — رمزه يُدار من هناك' }, 400);
+        return J({ ok: true, pin: String(u.pin || '') });
       }
       if (body.action === 'device_list') {
         const { data: st } = await db.from('acc_staff_access').select('staff_name,allowed_tabs');
