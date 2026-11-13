@@ -84,6 +84,62 @@ Deno.serve(async (req: Request) => {
       }
       return J({ ok: true, n: items.length, now });
     }
+    // 👥 مستخدمو فانسي (المالكة فقط): نفس جدول دخول نظام العز acc_staff_access — نضيف/نزيل تبويب "fancy" فقط ولا نلمس صلاحيات العز الأخرى
+    if (body.action === 'staff_list' || body.action === 'staff_set' || body.action === 'device_list' || body.action === 'device_set') {
+      if (!owner) return J({ error: 'إدارة المستخدمين للمالكة فقط' }, 403);
+      if (body.action === 'staff_list') {
+        const { data, error } = await db.from('acc_staff_access').select('id,staff_name,is_owner,active,allowed_tabs,role');
+        if (error) return J({ error: error.message }, 500);
+        const { data: devs } = await db.from('acc_devices').select('staff_name,status,last_seen');
+        const rows = (data || []).map((u: any) => {
+          const tabs = Array.isArray(u.allowed_tabs) ? u.allowed_tabs : [];
+          const d = (devs || []).filter((x: any) => x.staff_name === u.staff_name);
+          return { id: u.id, staff_name: u.staff_name, is_owner: !!u.is_owner, active: u.active !== false, fancy: !!u.is_owner || tabs.includes('fancy'), fancy_only: tabs.length === 1 && tabs[0] === 'fancy', other_tabs: tabs.filter((t: string) => t !== 'fancy').length, devices: { approved: d.filter((x: any) => x.status === 'approved').length, pending: d.filter((x: any) => x.status === 'pending').length }, last_seen: d.map((x: any) => x.last_seen).filter(Boolean).sort().pop() || null };
+        });
+        return J({ ok: true, staff: rows });
+      }
+      if (body.action === 'staff_set') {
+        const p = body.payload || {};
+        const name = String(p.staff_name || '').trim().slice(0, 60);
+        if (!name) return J({ error: 'الاسم مطلوب' }, 400);
+        const { data: ex } = await db.from('acc_staff_access').select('id,allowed_tabs,is_owner,pin').eq('staff_name', name).maybeSingle();
+        const pin = p.pin != null ? String(p.pin).trim() : '';
+        if (pin && !/^\d{4,8}$/.test(pin)) return J({ error: 'الرمز (PIN) من 4 إلى 8 أرقام' }, 400);
+        if (!ex) {
+          if (p.fancy === false) return J({ ok: true });
+          if (!pin) return J({ error: 'حدد رمز الدخول (PIN) للمستخدم الجديد' }, 400);
+          const { error } = await db.from('acc_staff_access').insert({ staff_name: name, pin, is_owner: false, active: true, allowed_tabs: ['fancy'], role: 'fancy' });
+          if (error) return J({ error: error.message }, 500);
+          return J({ ok: true, created: true });
+        }
+        if (ex.is_owner) return J({ error: 'لا يمكن تعديل حساب المالكة من هنا' }, 400);
+        const tabs: string[] = Array.isArray(ex.allowed_tabs) ? ex.allowed_tabs : [];
+        const fancyOnly = tabs.length === 0 || (tabs.length === 1 && tabs[0] === 'fancy');
+        const upd: any = {};
+        if (p.fancy === true && !tabs.includes('fancy')) upd.allowed_tabs = [...tabs, 'fancy'];
+        if (p.fancy === false && tabs.includes('fancy')) upd.allowed_tabs = tabs.filter(t => t !== 'fancy');
+        if (pin) { if (!fancyOnly) return J({ error: 'هذا الموظف يستخدم نظام العز أيضاً — يُغيَّر رمزه من نظام العز' }, 400); upd.pin = pin; }
+        if (typeof p.active === 'boolean' && fancyOnly) upd.active = p.active;
+        if (Object.keys(upd).length) { const { error } = await db.from('acc_staff_access').update(upd).eq('id', ex.id); if (error) return J({ error: error.message }, 500); }
+        return J({ ok: true, updated: Object.keys(upd) });
+      }
+      if (body.action === 'device_list') {
+        const { data: st } = await db.from('acc_staff_access').select('staff_name,allowed_tabs');
+        const names = new Set((st || []).filter((u: any) => Array.isArray(u.allowed_tabs) && u.allowed_tabs.includes('fancy')).map((u: any) => u.staff_name));
+        const { data, error } = await db.from('acc_devices').select('device_token,staff_name,status,user_agent,requested_at,last_seen').order('requested_at', { ascending: false }).limit(300);
+        if (error) return J({ error: error.message }, 500);
+        return J({ ok: true, devices: (data || []).filter((d: any) => names.has(d.staff_name)).map((d: any) => ({ ...d, device_token: String(d.device_token).slice(0, 8) + '…', key: d.device_token })) });
+      }
+      if (body.action === 'device_set') {
+        const p = body.payload || {};
+        if (!['approved', 'rejected'].includes(p.status)) return J({ error: 'bad status' }, 400);
+        const { data: st } = await db.from('acc_staff_access').select('allowed_tabs').eq('staff_name', String(p.staff_name || '')).maybeSingle();
+        if (!st || !Array.isArray(st.allowed_tabs) || !st.allowed_tabs.includes('fancy')) return J({ error: 'ليس من مستخدمي فانسي' }, 400);
+        const { error } = await db.from('acc_devices').update({ status: p.status }).eq('device_token', String(p.key || '')).eq('staff_name', String(p.staff_name));
+        if (error) return J({ error: error.message }, 500);
+        return J({ ok: true });
+      }
+    }
     // 🖼 نسخ صور المنتجات من رابط خارجي (رواء) إلى تخزين Supabase الخاص بنا — bucket عام للقراءة fs-products
     if (body.action === 'mirror_images') {
       const items = Array.isArray(body.items) ? body.items.slice(0, 30) : [];
