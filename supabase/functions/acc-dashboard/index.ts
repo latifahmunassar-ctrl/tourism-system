@@ -42,7 +42,8 @@ Deno.serve(async (req: Request) => {
     if (action === 'staff_login') {
       const name = String(p.name || '').trim(); const pin = String(p.pin || '').trim();
       if (!name) return J({ error: 'الاسم مطلوب' }, 400);
-      const { data: u, error } = await supabase.from('acc_staff_access').select('*').eq('staff_name', name).maybeSingle();
+      let { data: u, error } = await supabase.from('acc_staff_access').select('*').eq('staff_name', name).maybeSingle();
+      if (!u && !error && name) { const { data: cand } = await supabase.from('acc_staff_access').select('*').ilike('staff_name', name.replace(/[\\%_]/g, (c: string) => '\\' + c)); const L = (cand || []).filter((x: any) => String(x.staff_name).trim().toLowerCase() === name.trim().toLowerCase()); if (L.length === 1) u = L[0]; } // اسم الدخول بدون حساسية للأحرف الكبيرة/الصغيرة
       if (error) return J({ error: error.message }, 400);
       if (!u || u.active === false) { const rc = await recentCount('failed_login', 15); await audit({ event_type: 'failed_login', severity: rc >= 2 ? 'critical' : 'warning', staff_name: name, detail: (u ? 'حساب موقوف' : 'اسم غير موجود') + (rc >= 2 ? ' — متكرر ×' + (rc + 1) : ''), ok: false }); return J({ error: 'مستخدم غير موجود أو موقوف' }, 400); }
       if (String(u.pin || '') !== pin) { const rc = await recentCount('failed_login', 15); await audit({ event_type: 'failed_login', severity: rc >= 2 ? 'critical' : 'warning', staff_name: name, detail: 'رمز دخول خاطئ' + (rc >= 2 ? ' — متكرر ×' + (rc + 1) : ''), ok: false }); return J({ error: 'رمز الدخول غير صحيح' }, 400); }
