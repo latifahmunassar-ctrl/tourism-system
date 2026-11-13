@@ -455,7 +455,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794557052';
+const BUILD='1794557523';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -1668,15 +1668,31 @@ function parkedDlg(){const p=parked().filter(x=>x.registerId===CART.registerId);
   o.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{ls.set('fsb_parked',JSON.stringify(parked().filter(y=>y.pid!==b.dataset.d)));o.remove();renderCart()});
 }
 function custDlg(onPick){
-  const o=overlay(`<div class="modal" style="width:620px"><div class="dh"><h3>إضافة العميل</h3></div><div class="db"><div class="row"><div class="search grow"><input id="cq" placeholder="اسم العميل أو رقم هاتفه أو رمزه"></div><button class="btn soft icon" data-n title="عميل جديد">＋</button></div>
-   <div class="card" style="margin-top:10px"><table><thead><tr><th>الإسم/الكود</th><th>رقم الهاتف</th></tr></thead><tbody id="cl"></tbody></table></div></div>
+  const digits=s=>{let d=String(s||'').replace(/\D/g,'');if(d.startsWith('00'))d=d.slice(2);return d};
+  const pick=id=>{o.remove();if(onPick)onPick(id);else{CART.customerId=id;saveCart();renderCart()}};
+  const o=overlay(`<div class="modal" style="width:560px"><div class="dh"><h3>العميل</h3><p>اكتبي رقم جوال العميلة — إذا كانت مسجلة تطلع تحت، وإذا ما طلعت أضيفيها</p></div><div class="db">
+   <div class="row" style="gap:6px"><select class="in" id="ccc" style="width:120px;height:48px"><option value="968">🇴🇲 +968</option><option value="966">🇸🇦 +966</option><option value="971">🇦🇪 +971</option><option value="965">🇰🇼 +965</option><option value="974">🇶🇦 +974</option><option value="973">🇧🇭 +973</option></select>
+    <input class="in" id="cq" inputmode="tel" dir="ltr" placeholder="رقم الجوال" style="flex:1;height:48px;font-size:18px;letter-spacing:1px"></div>
+   <div id="cres" style="margin-top:12px"></div></div>
    <div class="df">${CART&&CART.customerId&&!onPick?'<button class="btn lnk" style="color:var(--bad)" data-rm>إزالة العميل</button>':'<span></span>'}<button class="btn" data-x>إغلاق</button></div></div>`);
-  const draw=()=>{const q=o.querySelector('#cq').value.trim().toLowerCase();const L=S.customers.filter(c=>!q||`${c.name} ${c.phone} ${c.code}`.toLowerCase().includes(q)).slice(0,100);
-    o.querySelector('#cl').innerHTML=L.map(c=>`<tr data-c="${c.id}" style="cursor:pointer"><td><b>${esc(c.name)}</b><div class="sub" style="margin:0">${esc(c.code||'')}</div></td><td>${esc(c.phone||'')}</td></tr>`).join('')||'<tr><td colspan="2" class="sub">لا يوجد عملاء</td></tr>'};
-  o.querySelector('#cq').oninput=draw;draw();o.querySelector('#cq').focus();
-  o.querySelector('#cl').onclick=e=>{const t=e.target.closest('[data-c]');if(!t)return;o.remove();if(onPick)onPick(t.dataset.c);else{CART.customerId=t.dataset.c;saveCart();renderCart()}};
+  const q=o.querySelector('#cq'),cc=o.querySelector('#ccc'),res=o.querySelector('#cres');
+  const draw=()=>{let v=digits(q.value);const local=v.replace(/^0+/,'');
+    if(!local){res.innerHTML='<p class="sub" style="margin:0">ابدئي بكتابة الرقم…</p>';return}
+    const full=(local.length<=9&&!local.startsWith(cc.value))?cc.value+local:local;
+    const L=S.customers.filter(c=>{const d=digits(c.phone);return d&&local.length>=3&&(d===full||d.includes(local))}).slice(0,8);
+    const exact=L.find(c=>digits(c.phone)===full);
+    const okLen=cc.value==='968'?local.length===8:local.length>=8;
+    res.innerHTML=(L.length?`<div class="card">${L.map(c=>`<div class="tx" data-c="${c.id}" style="cursor:pointer;padding:12px"><div><b>${esc(c.name)}</b><div class="sub" style="margin:0" dir="ltr">${esc(c.phone)}</div></div><button class="btn sm pri">اختيار</button></div>`).join('')}</div>`:'')
+     +(!exact&&okLen?`<div class="card" style="padding:14px;margin-top:10px;border-color:var(--pri)"><b>${L.length?'لا يوجد عميل بهذا الرقم بالضبط':'عميلة جديدة'}</b> <span class="sub" style="display:inline" dir="ltr">+${full}</span>
+       <div class="row" style="gap:6px;margin-top:10px"><input class="in" id="cnn" placeholder="اسم العميلة" style="flex:1;height:44px"><button class="btn pri" id="cadd" style="height:44px">＋ إضافة واختيار</button></div></div>`
+     :(!L.length?`<p class="sub" style="margin:0">${okLen?'':'أكملي الرقم'+(cc.value==='968'?' (8 أرقام)':'')}</p>`:''));
+    res.querySelectorAll('[data-c]').forEach(r=>r.onclick=()=>pick(r.dataset.c));
+    const add=res.querySelector('#cadd');if(add){const nn=res.querySelector('#cnn');nn.onkeydown=e=>{if(e.key==='Enter')add.click()};
+      add.onclick=()=>{const name=normS(nn.value);if(!name){toast('اكتبي اسم العميلة');nn.focus();return}if(!can('add-new-customers')){toast('لا تملكين صلاحية إضافة عملاء');return}
+        const phone='00'+full;if(S.customers.some(c=>digits(c.phone)===full)){toast('الرقم مسجل لعميلة أخرى');return}
+        const c={id:uid(),name,phone,code:genCode(),email:'',address:{},note:'',createdAt:new Date().toISOString(),createdBy:ME};S.customers.push(c);save();toast('تمت إضافة العميلة');pick(c.id)}}};
+  q.oninput=draw;cc.onchange=draw;q.onkeydown=e=>{if(e.key==='Enter'){const f=res.querySelector('[data-c]');const v=digits(q.value).replace(/^0+/,'');if(f&&res.querySelectorAll('[data-c]').length===1)pick(f.dataset.c);else res.querySelector('#cnn')?.focus()}};draw();q.focus();
   o.querySelector('[data-x]').onclick=()=>o.remove();o.querySelector('[data-rm]')?.addEventListener('click',()=>{CART.customerId='';saveCart();o.remove();renderCart()});
-  o.querySelector('[data-n]').onclick=()=>{o.remove();newCustomer(c=>{if(onPick)onPick(c.id);else{CART.customerId=c.id;saveCart();renderCart()}})};
 }
 function genCode(){let c;do{c=String(Math.floor(1e6+Math.random()*9e6))}while(S.customers.some(x=>x.code===c));return c}
 function newCustomer(cb){
