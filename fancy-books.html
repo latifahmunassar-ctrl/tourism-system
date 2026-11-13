@@ -455,7 +455,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794564367';
+const BUILD='1794564487';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -3759,7 +3759,7 @@ function showLogin(msg=''){
         let dev=ls.get('acc_device');if(!dev){dev=(crypto.randomUUID?crypto.randomUUID():'d'+Date.now()+Math.random())+'-'+(crypto.randomUUID?crypto.randomUUID():Math.random());ls.set('acc_device',dev)}
         const r=await fetch(FN_LOGIN+'?_t='+Date.now(),{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'staff_login',payload:{name,pin,device_token:dev}})});
         const j=await r.json();
-        if(j.device_pending)throw new Error('جهازك بانتظار موافقة المالكة. اطلب منها اعتماده من نظام العز ثم حاول مرة ثانية.');
+        if(j.device_pending)throw new Error('✓ الاسم والرمز صحيحين — جهازك بانتظار اعتماد المالكة. بعد ما تعتمده اضغطي «دخول» مرة ثانية.');
         if(j.device_rejected)throw new Error('تم رفض هذا الجهاز.');
         if(j.error||!j.token)throw new Error(j.error||'تعذّر الدخول');
         ls.set('acc_token',j.token);ls.del('acc_key');if(j.user)ls.set('acc_user',JSON.stringify(j.user));
