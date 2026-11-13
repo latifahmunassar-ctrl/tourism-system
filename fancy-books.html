@@ -455,7 +455,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794550381';
+const BUILD='1794550522';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -2517,10 +2517,10 @@ function viewPO2(p){setTitle('تفاصيل فاتورة الشراء');const st=
    <div class="card trbody"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><div><h3 style="margin:0">المنتجات</h3><small class="sub" style="margin:0">ⓘ يتم تحديث كمية المنتجات ومتوسط تكلفة المنتج وآخر سعر شراء بعد إتمام طلب الشراء</small></div>
      <div class="no-print" style="display:flex;gap:8px"><button class="btn sm out" onclick="poPrices('${p.id}')">✏️ تعديل الأسعار</button><button class="btn sm out" onclick='printBarcodes(${bc})'>▥ طباعة الباركود</button></div></div>
     <table class="trit poit" style="margin-top:12px"><thead><tr><th>اسم المنتج / SKU</th><th>الكمية الجديدة</th><th>تكلفة جديدة<div class="sub" style="margin:0;font-weight:400">(غير شامل الضريبة)</div></th><th>رمز الضريبة</th><th>الإجمالي<div class="sub" style="margin:0;font-weight:400">(غير شامل الضريبة)</div></th><th></th></tr></thead><tbody>
-    ${p.items.map(i=>{const pr=i.productId&&byId(S.products,i.productId);const av=cur(i.productId);return`<tr><td><b>${pr?`<a href="#/pview/${i.productId}">${esc(i.name)}</a>`:esc(i.name)}</b><div class="sub" style="margin:0">${esc(i.sku)}</div></td><td>${f2(i.qty)}</td><td>${f2(i.cost)}</td><td>${esc(i.taxName||'—')}</td><td>${f2(i.sub)}</td><td><button class="ib poexp" onclick="const r=this.closest('tr').nextElementSibling;const o=r.style.display==='none';r.style.display=o?'':'none';this.classList.toggle('on',o)">‹</button></td></tr>
+    ${p.items.map(i=>{const pr=i.productId&&byId(S.products,i.productId);const av=i.avail!=null?+i.avail:cur(i.productId);return`<tr><td><b>${pr?`<a href="#/pview/${i.productId}">${esc(i.name)}</a>`:esc(i.name)}</b><div class="sub" style="margin:0">${esc(i.sku)}</div></td><td>${f2(i.qty)}</td><td>${f2(i.cost)}</td><td>${esc(i.taxName||'—')}</td><td>${f2(i.sub)}</td><td><button class="ib poexp" onclick="const r=this.closest('tr').nextElementSibling;const o=r.style.display==='none';r.style.display=o?'':'none';this.classList.toggle('on',o)">‹</button></td></tr>
      <tr style="display:none" class="opened"><td colspan="6"><div class="poxg"><div><small>الكمية المتوفرة<br><span>(المتوفر الآن بالمخزون)</span></small><b>${fmtQ(av)}</b></div><div><small>متوسط سعر التكلفة<br><span>(غير شامل الضريبة)</span></small><b>${f2(i.avgCost||pr?.cost||i.cost)}</b></div><div><small>التكلفة الكلية<br><span>(غير شامل الضريبة)</span></small><b>${f2(i.sub)}</b></div>
-      <div><small>الكمية المتوقعة<br><span>(إجمالي ما سيتوفر بالمخزون)</span></small><b>${fmtQ(av+(+i.qty||0))}</b></div><div><small>آخر سعر شراء</small><b>${f2(lv(i.productId,'buy'))}</b></div><div><small>قيمة الضريبة</small><b>${f2(i.tax)}</b></div>
-      <div></div><div><small>سعر التجزئة</small><b>${f2(lv(i.productId,'retail'))}</b></div><div><small>التكلفة الكلية<br><span>(شامل الضريبة)</span></small><b>${f2(i.total)}</b></div></div></td></tr>`}).join('')}</tbody></table>
+      <div><small>الكمية المتوقعة<br><span>(إجمالي ما سيتوفر بالمخزون)</span></small><b>${fmtQ(av+(+i.qty||0))}</b></div><div><small>آخر سعر شراء</small><b>${f2(i.buyAt!=null?i.buyAt:lv(i.productId,'buy'))}</b></div><div><small>قيمة الضريبة</small><b>${f2(i.tax)}</b></div>
+      <div></div><div><small>سعر التجزئة</small><b>${f2(i.retailAt!=null?i.retailAt:lv(i.productId,'retail'))}</b></div><div><small>التكلفة الكلية<br><span>(شامل الضريبة)</span></small><b>${f2(i.total)}</b></div></div></td></tr>`}).join('')}</tbody></table>
     <div class="potot"><div class="potrow" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none';this.classList.toggle('on')"><span>‹ الإجمالي (شامل الضريبة)</span><b>${f2(p.total)}</b></div>
      <div style="display:none" class="potbrk"><div><span>الإجمالي (غير شامل الضريبة)</span><b>${f2(p.subtotal)}</b></div>${+p.discount?`<div><span>الخصم</span><b>- ${f2(p.discount)}</b></div>`:''}</div>
      <div class="potrow2"><span>قيمة الضريبة</span><b>+ ${r3(p.tax)}</b></div><div class="potrow2 big"><span>الإجمالي (شامل الضريبة)</span><b>${f2(p.total)}</b></div>
@@ -2597,7 +2597,7 @@ async function poSubmit(done){const isPO=POF.kind==='po';if(!POF.sup){toast('ا�
   const head={supplierId:POF.sup,locId:POF.loc,supInvNo:POF.supInv,issueDate:iso(POF.issue),dueDate:isPO?iso(POF.due):null,deliveryDate:iso(POF.issue),taxType:POF.taxType,notes:POF.notes,subtotal:r3(T.sub),discount:r3(T.disc),discInput:+POF.disc||0,discType:POF.discType,tax:r3(T.tax),total:r3(T.total),items,updatedAt:now};
   let p;if(POF.editId){p=byId(S.purchases,POF.editId);Object.assign(p,head)}
   else{const seq=nextSeq(S.purchases,x=>x.kind===POF.kind);p={id:uid(),kind:POF.kind,seq,no:(isPO?'PO-':'RTN-')+seq,status:'draft',payStatus:'not-paid',paid:0,createdAt:now,createdBy:ME,...head};if(POF.fromPo){const po=byId(S.purchases,POF.fromPo);p.fromPoId=po.id;p.fromPoNo=po.no}S.purchases.push(p)}
-  if(done){p.items.forEach(i=>{const pr=byId(S.products,i.productId);if(!pr)return;if(isPO){i.oldCost=avgIn(pr,i.qty,i.netUnit);i.avgCost=pr.cost;pr.locs=pr.locs||{};stockMove(pr,p.locId,i.qty,`فاتورة شراء ${p.no}`,now);pr.locs[p.locId].buy=r3(i.netUnit);if(!pr.supplierId)pr.supplierId=p.supplierId}else stockMove(pr,p.locId,-i.qty,`مردود مشتريات ${p.no}`,now)});p.status='completed';p.completedAt=now;p.payStatus=poPayStatus(p)}
+  if(done){p.items.forEach(i=>{const pr=byId(S.products,i.productId);if(!pr)return;if(isPO){const L0=pr.locs?.[p.locId]||{};i.avail=+L0.qty||0;i.buyAt=+L0.buy||0;i.retailAt=+L0.retail||0;i.oldCost=avgIn(pr,i.qty,i.netUnit);i.avgCost=pr.cost;pr.locs=pr.locs||{};stockMove(pr,p.locId,i.qty,`فاتورة شراء ${p.no}`,now);pr.locs[p.locId].buy=r3(i.netUnit);if(!pr.supplierId)pr.supplierId=p.supplierId}else stockMove(pr,p.locId,-i.qty,`مردود مشتريات ${p.no}`,now)});p.status='completed';p.completedAt=now;p.payStatus=poPayStatus(p)}
   await flushNow();toast(done?(isPO?'تم إتمام فاتورة الشراء ':'تم إتمام المرتجع ')+p.no:'تم الحفظ كمسودة');location.hash='#/po/'+p.id}
 
 /* ===================== مدفوعات الموردين ===================== */
