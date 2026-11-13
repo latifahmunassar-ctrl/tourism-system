@@ -393,6 +393,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 .rolegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}.rolecard{margin:0}.permgrid{display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:start}.pmod{display:flex;justify-content:space-between;align-items:center;width:100%;padding:12px;border:0;background:none;border-radius:8px;cursor:pointer;font:inherit;color:inherit;text-align:right}.pmod.on{background:var(--soft,#e9f5f3)}.pst{font-size:12px;color:var(--mut);background:var(--soft,#f3f4f6);padding:2px 8px;border-radius:12px}.pst.ok{color:var(--ok)}
 .finrow{display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:1px solid var(--bd);color:inherit;text-decoration:none}.finrow p{margin:4px 0;color:var(--mut)}.finrow small{color:var(--pri)}.finrow:last-child{border-bottom:0}
 @media(max-width:800px){.permgrid{grid-template-columns:1fr}}
+.updbar{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--pri);box-shadow:0 6px 24px rgba(0,0,0,.15);border-radius:12px;padding:10px 16px;z-index:9999;display:flex;gap:12px;align-items:center;font-weight:600}
 @media print{
   .side,.top,.tabs,.savebar,.no-print{display:none!important}
   .print-head{display:block!important;width:180px;margin:0 auto 18px;color:#222}
@@ -447,6 +448,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
+const BUILD='1794548588';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -620,6 +622,8 @@ function route(soft){
   window.scrollTo(0,soft===true?y:0);
 }
 let BOOTED=false;
+async function checkUpdate(){if(LOCAL)return;try{const t=await fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(r=>r.text());const m=t.match(/const BUILD='(\d+)'/);if(m&&m[1]!==BUILD&&!document.querySelector('.updbar')){const d=document.createElement('div');d.className='updbar';d.innerHTML='🔄 يوجد تحديث جديد للنظام <button class="btn sm pri" onclick="location.reload()">تحديث الآن</button>';document.body.appendChild(d)}}catch(e){}}
+setInterval(checkUpdate,120000);setTimeout(checkUpdate,8000);
 window.addEventListener('hashchange',()=>route());
 function setTitle(t){$('#title').textContent=t;document.title=t+' · فانسي سنس'}
 function tabs(on){return `<div class="tabs no-print"><a href="#/expenses" class="${on==='e'?'on':''}">المصروفات</a><a href="#/recurring" class="${on==='r'?'on':''}">المصروفات المتكررة</a><a href="#/summary" class="${on==='s'?'on':''}">ملخص</a></div>`}
@@ -1839,15 +1843,15 @@ const RANGES={all:'كل الفترات (الإعداد الافتراضي)','24h
 function siRange(){const n=new Date(),d0=x=>{const y=new Date(x);y.setHours(0,0,0,0);return y};
   switch(SI.range){case'24h':return[new Date(n-864e5),n];case'today':return[d0(n),n];case'yday':{const a=d0(new Date(n-864e5));return[a,d0(n)]}case'7d':return[new Date(n-7*864e5),n];case'30d':return[new Date(n-30*864e5),n];case'month':return[new Date(n.getFullYear(),n.getMonth(),1),n];case'custom':return[SI.from?new Date(SI.from+'T00:00:00'):new Date(0),SI.to?new Date(SI.to+'T23:59:59'):n];default:return[new Date(0),new Date(253402300799000)]}}
 function siList(){if(SI.shift){const sh=byId(S.shifts,SI.shift);if(sh)return shiftSales(sh).sort((x,y)=>y.date.localeCompare(x.date))}const[a,b]=siRange(),A=a.toISOString(),B=b.toISOString(),q=SI.q.trim().toLowerCase(),f=SI.f;
-  const allL=can('view-sale-invoices-of-all-locations');return S.sales.filter(s=>s.date>=A&&s.date<=B&&(allL||locOK(s.branchId))&&(!f.branch||s.branchId===f.branch)&&(!f.type||s.type===f.type)&&(!f.customer||s.customerId===f.customer)&&(!f.method||(s.payments||[]).some(p=>p.methodId===f.method))&&(!q||s.no.toLowerCase().includes(q))).sort((x,y)=>y.date.localeCompare(x.date))}
+  const allL=can('view-sale-invoices-of-all-locations');const tOK=s=>{if(!SI.t1&&!SI.t2)return true;const d=new Date(s.date),hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');return(!SI.t1||hm>=SI.t1)&&(!SI.t2||hm<=SI.t2)};return S.sales.filter(s=>s.date>=A&&s.date<=B&&tOK(s)&&(allL||locOK(s.branchId))&&(!f.branch||s.branchId===f.branch)&&(!f.type||s.type===f.type)&&(!f.customer||s.customerId===f.customer)&&(!f.method||(s.payments||[]).some(p=>p.methodId===f.method))&&(!q||s.no.toLowerCase().includes(q))).sort((x,y)=>y.date.localeCompare(x.date))}
 function viewSales(){
   setTitle('فواتير المبيعات');
   const list=siList(),pages=Math.max(1,Math.ceil(list.length/SI.size));if(SI.page>pages)SI.page=pages;const rows=list.slice((SI.page-1)*SI.size,SI.page*SI.size);
-  const af=Object.entries(SI.f).filter(([,v])=>v);
+  const af=[...Object.entries(SI.f).filter(([,v])=>v),...(SI.range!=='all'?[['range',1]]:[]),...(SI.t1||SI.t2?[['time',1]]:[])];
   const net=r3(list.reduce((a,s)=>a+(s.type==='return'?-1:1)*s.total,0));
   const shB=SI.shift&&byId(S.shifts,SI.shift);
   $('#view').innerHTML=`${shB?`<div class="info" style="display:flex;justify-content:space-between;align-items:center"><span>فواتير جلسة <b>${esc(shReg(shB))} · ${esc(shBr(shB))}</b> (${dtFmt(shB.openedAt)} – ${shB.closedAt?dtFmt(shB.closedAt):'مفتوحة'})</span><button class="btn sm" onclick="SI.shift='';viewSales()">✕ إلغاء</button></div>`:''}<div class="bar"><div style="display:flex;gap:8px;flex-wrap:wrap;flex:1"><div class="search" style="width:340px"><input id="siq" placeholder="البحث بواسطة رقم الفاتورة" value="${esc(SI.q)}"></div>
-    <button class="btn ${af.length?'soft':'out'}" onclick="siFilters()">⚲ تصفية ${af.length?`<span class="badge-n">${af.length}</span>`:''}</button>${af.length?`<button class="btn soft" onclick="SI.f={branch:'',method:'',customer:'',type:''};viewSales()">مسح</button>`:''}</div>
+    <button class="btn ${af.length?'soft':'out'}" onclick="siFilters()">⚲ تصفية ${af.length?`<span class="badge-n">${af.length}</span>`:''}</button>${af.length?`<button class="btn soft" onclick="SI.f={branch:'',method:'',customer:'',type:''};SI.range='all';SI.t1='';SI.t2='';viewSales()">مسح</button>`:''}</div>
     <button class="btn pri" onclick="exportSales()">⬇ تصدير</button></div>
    <div class="bar"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span>🕓</span><select class="in" style="width:230px;height:38px" onchange="SI.range=this.value;SI.page=1;viewSales()">${Object.entries(RANGES).map(([k,l])=>`<option value="${k}" ${SI.range===k?'selected':''}>${l}</option>`).join('')}</select>
     ${SI.range==='custom'?`<input type="date" class="in" style="width:160px;height:38px" value="${SI.from}" onchange="SI.from=this.value;viewSales()"><input type="date" class="in" style="width:160px;height:38px" value="${SI.to}" onchange="SI.to=this.value;viewSales()">`:''}</div>
@@ -1862,12 +1866,18 @@ function viewSales(){
 }
 function genPager(p,pages,cb){const b=(n,l,dis)=>`<button ${dis?'disabled':''} class="${n===p&&!l?'on':''}" onclick="${cb.replace('%',n)}">${l||n}</button>`;let h=b(1,'«',p===1)+b(Math.max(1,p-1),'‹',p===1);const set=[...new Set([1,pages,p-1,p,p+1].filter(n=>n>=1&&n<=pages))].sort((a,b)=>a-b);let last=0;set.forEach(n=>{if(n-last>1)h+='<button disabled>…</button>';h+=b(n);last=n});return h+b(Math.min(pages,p+1),'›',p===pages)+b(pages,'»',p===pages)}
 function siRowMenu(ev,id){const s=byId(S.sales,id);const it=[['👁 عرض',`location.hash='#/sale/${id}'`],['🖨 طباعة',`printReceipt('${id}')`]];if(due(s)>0)it.push(['💵 تحصيل مدين',`collectDlg('${id}')`]);if(s.type==='sale'&&canReturn(s))it.push(['↩ إرجاع',`returnDlg('${id}')`]);openMenu(ev,it)}
-function siFilters(){const f=SI.f;const o=overlay(`<div class="drawer"><div class="dh"><h3>تصفية</h3></div><div class="db">
+function siFilters(){const f=SI.f;const[ra,rb]=siRange();const dA=SI.range==='all'?'':isoL(ra),dB=SI.range==='all'?'':isoL(new Date(Math.min(rb.getTime(),Date.now())));const o=overlay(`<div class="drawer"><div class="dh"><h3>تصفية</h3></div><div class="db">
+  <div class="fl"><label>تاريخ الفاتورة</label><div class="row" style="gap:8px"><label style="flex:1;font-size:12px;color:var(--mut)">من<input type="date" class="in" id="sfa" value="${dA}"></label><label style="flex:1;font-size:12px;color:var(--mut)">إلى<input type="date" class="in" id="sfb" value="${dB}"></label></div>
+   <div class="qk" style="margin-top:6px">${[['today','اليوم'],['yday','أمس'],['7d','آخر 7 أيام'],['month','هذا الشهر'],['all','كل الفترات']].map(([k,l])=>`<button class="btn sm out" data-rg="${k}">${l}</button>`).join('')}</div></div>
+  <div class="fl"><label>الوقت (اختياري)</label><div class="row" style="gap:8px"><label style="flex:1;font-size:12px;color:var(--mut)">من<input type="time" class="in" id="sfta" value="${SI.t1||''}"></label><label style="flex:1;font-size:12px;color:var(--mut)">إلى<input type="time" class="in" id="sftb" value="${SI.t2||''}"></label></div></div>
   <div class="fl"><label>الموقع</label><select class="in" id="sf1">${opts(S.branches,f.branch)}</select></div><div class="fl"><label>طريقة الدفع</label><select class="in" id="sf2">${opts(S.methods,f.method)}</select></div>
   <div class="fl"><label>العميل</label><select class="in" id="sf3">${opts(S.customers,f.customer)}</select></div><div class="fl"><label>القناة</label><select class="in" disabled><option>نقاط البيع</option></select></div>
   <div class="fl"><label>نوع البيع</label><select class="in" id="sf4"><option value="">الكل</option><option value="sale" ${f.type==='sale'?'selected':''}>بيع</option><option value="return" ${f.type==='return'?'selected':''}>إرجاع</option></select></div></div>
   <div class="df"><button class="btn pri" data-ok>تطبيق</button><button class="btn" data-x>إلغاء</button></div></div>`);
-  o.querySelector('[data-x]').onclick=()=>o.remove();o.querySelector('[data-ok]').onclick=()=>{SI.f={branch:sf1.value,method:sf2.value,customer:sf3.value,type:sf4.value};SI.page=1;o.remove();viewSales()}}
+  o.querySelectorAll('[data-rg]').forEach(b=>b.onclick=()=>{SI.range=b.dataset.rg;const[a,c]=siRange();o.querySelector('#sfa').value=SI.range==='all'?'':isoL(a);o.querySelector('#sfb').value=SI.range==='all'?'':isoL(new Date(Math.min(c.getTime(),Date.now())))});
+  o.querySelector('[data-x]').onclick=()=>o.remove();o.querySelector('[data-ok]').onclick=()=>{const a=o.querySelector('#sfa').value,b=o.querySelector('#sfb').value;if(a&&b&&b<a){toast('تاريخ النهاية قبل البداية');return}
+    if(a||b){SI.range='custom';SI.from=a;SI.to=b}else SI.range='all';SI.t1=o.querySelector('#sfta').value;SI.t2=o.querySelector('#sftb').value;SI.shift='';
+    SI.f={branch:sf1.value,method:sf2.value,customer:sf3.value,type:sf4.value};SI.page=1;o.remove();viewSales()}}
 function exportSales(){const list=siList();const head=['رقم الفاتورة','الموقع','الصندوق','الكاشير','طريقة الدفع','العميل','نوع البيع','الإجمالي الفرعي','الخصم','العروض','الضريبة','قيمة الفاتورة','المبلغ المدفوع','المتبقي','التاريخ'];
   const rows=list.map(s=>[s.no,brName(s.branchId),s.registerName,s.user,[...new Set((s.payments||[]).map(p=>mName(p.methodId)))].join(' + '),custName(s),s.type==='return'?'إرجاع':'بيع',s.subtotal,s.manual,s.promo,s.tax,(s.type==='return'?-1:1)*s.total,(s.type==='return'?-1:1)*s.paid,due(s),dtFmt(s.date)]);
   const csv='﻿'+[head,...rows].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=`sales-${today()}.csv`;a.click()}
