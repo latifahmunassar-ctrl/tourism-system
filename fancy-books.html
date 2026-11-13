@@ -455,7 +455,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794564530';
+const BUILD='1794565198';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -3742,7 +3742,7 @@ function showLogin(msg=''){
   const o=document.createElement('div');o.className='login';
   o.innerHTML=`<div class="box"><div class="lg">${document.querySelector('.brand').innerHTML}</div>
    <div class="seg"><button class="on" data-m="staff">موظف</button><button data-m="owner">المالكة</button></div>
-   <div data-p="staff"><div class="fl"><label>الاسم</label><input class="in" id="lgn" autocomplete="username"></div><div class="fl"><label>الرمز (PIN)</label><input class="in" id="lgp" type="password" inputmode="numeric" autocomplete="current-password"></div></div>
+   <div data-p="staff"><div class="fl"><label>اسم الدخول</label><input class="in" id="lgn" autocomplete="username" placeholder="مثل: Rayan — وليس الإيميل"></div><div class="fl"><label>الرمز (PIN)</label><input class="in" id="lgp" type="password" inputmode="numeric" autocomplete="current-password"></div></div>
    <div data-p="owner" style="display:none"><div class="fl"><label>كلمة مرور النظام</label><input class="in" id="lgk" type="password" autocomplete="current-password"></div></div>
    <div class="msg" id="lgm">${esc(msg)}</div>
    <button class="btn pri" style="width:100%;justify-content:center;height:46px" id="lgb">دخول</button>
@@ -3756,7 +3756,7 @@ function showLogin(msg=''){
     try{
       if(mode==='owner'){const k=o.querySelector('#lgk').value.trim();if(!k)throw new Error('اكتبي كلمة المرور');ls.del('acc_token');ls.set('acc_key',k)}
       else{
-        const name=o.querySelector('#lgn').value.trim(),pin=o.querySelector('#lgp').value.trim();if(!name)throw new Error('اكتب اسمك');
+        const name=o.querySelector('#lgn').value.trim(),pin=o.querySelector('#lgp').value.trim();if(!name)throw new Error('اكتبي اسم الدخول');if(name.includes('@'))throw new Error('اكتبي «اسم الدخول» اللي أعطتك إياه المالكة، مو الإيميل (مثل: Rayan)');
         let dev=ls.get('acc_device');if(!dev){dev=(crypto.randomUUID?crypto.randomUUID():'d'+Date.now()+Math.random())+'-'+(crypto.randomUUID?crypto.randomUUID():Math.random());ls.set('acc_device',dev)}
         const r=await fetch(FN_LOGIN+'?_t='+Date.now(),{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'staff_login',payload:{name,pin,device_token:dev}})});
         const j=await r.json();
