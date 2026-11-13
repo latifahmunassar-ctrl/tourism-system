@@ -527,6 +527,7 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 <div class="fp-tab active" data-tab="build" onclick="fpTab('build')">📋 بناء تسعيرة</div>
 <div class="fp-tab" data-tab="mods" onclick="fpTab('mods')">💬 تعديلات <span class="badge">شات</span></div>
 <div class="fp-tab" data-tab="groups" onclick="fpTab('groups')">🚌 برامج الجروبات</div>
+<div class="fp-tab" data-tab="tickets" onclick="fpTab('tickets')">🎫 التيكتات <span class="badge" id="tkBadge" style="display:none"></span></div>
 </div>
 
 <div id="tab-build" style="display:flex">
@@ -645,6 +646,15 @@ body:not(.is-authed) .topbar, body:not(.is-authed) .layout { display:none !impor
 </div>
 
 <!-- ═══ تبويب برامج الجروبات (معزول: مصدره تبويب Groups بالشيت، مسار ثابت غير قابل للتعديل) ═══ -->
+<div id="tab-tickets" style="display:none;padding:14px;overflow:auto">
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+    <b style="font-size:15px">🎫 تيكتات المشاكل</b>
+    <span style="font-size:12px;color:var(--muted,#888)">تنفتح تلقائياً من منال (قسم الشركات) لما ما تقدر تلبّي طلب</span>
+    <select id="tkFilter" onchange="tkLoad()" style="margin-inline-start:auto;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--text);font-family:'Tajawal',sans-serif"><option value="open">المفتوحة</option><option value="resolved">المحلولة</option><option value="">الكل</option></select>
+    <button class="ebtn ebtn-nologo" onclick="tkLoad()">🔄 تحديث</button>
+  </div>
+  <div id="tkList" style="display:flex;flex-direction:column;gap:10px"></div>
+</div>
 <div id="tab-groups" style="display:none">
   <div class="bf-sec">
     <h3>🚌 برامج الجروبات</h3>
@@ -2663,7 +2673,56 @@ function fpTab(t){
   document.getElementById('tab-mods').style.display  = t==='mods'  ? 'flex' : 'none';
   const g = document.getElementById('tab-groups'); if(g) g.style.display = t==='groups' ? 'block' : 'none';
   if(t==='groups' && !GRP_LOADED) grpLoad();
+  const tk = document.getElementById('tab-tickets'); if(tk) tk.style.display = t==='tickets' ? 'block' : 'none';
+  if(t==='tickets') tkLoad();
 }
+
+// ═══════════ تيكتات المشاكل (منال تفتحها — المالكة ١٣ نوفمبر ٢٠٢٦) ═══════════
+async function tkCall(body){
+  const r = await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY},body:JSON.stringify(body)});
+  return r.json();
+}
+function tkEsc(s){ return String(s||'').replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+async function tkLoad(){
+  const box=document.getElementById('tkList'); if(!box) return;
+  box.innerHTML='<div style="color:#888">جاري التحميل…</div>';
+  try{
+    const st=(document.getElementById('tkFilter')||{}).value||'';
+    const d=await tkCall(st?{action:'ticket_list',status:st}:{action:'ticket_list'});
+    if(!d.ok) throw new Error(d.error||'خطأ');
+    const L=d.tickets||[];
+    if(st==='open') tkSetBadge(L.length);
+    if(!L.length){ box.innerHTML='<div style="color:#888;padding:20px;text-align:center">ما فيه تيكتات '+(st==='open'?'مفتوحة ✅':'')+'</div>'; return; }
+    box.innerHTML=L.map(t=>{
+      const open=t.status!=='resolved';
+      const dt=new Date(t.created_at).toLocaleString('ar-EG',{dateStyle:'medium',timeStyle:'short'});
+      return `<div style="border:1px solid var(--border);border-inline-start:4px solid ${open?'#e5484d':'#30a46c'};border-radius:10px;padding:12px;background:var(--s2)">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <b dir="ltr">${tkEsc(t.ticket_no||('#'+t.id))}</b>
+          <span style="font-size:12px;padding:2px 8px;border-radius:20px;background:${open?'#fde8e8':'#e6f6ec'};color:${open?'#b42318':'#1a7f45'}">${open?'مفتوحة':'محلولة'}</span>
+          ${t.hits>1?`<span style="font-size:12px;color:#b45309">تكررت ${t.hits} مرات</span>`:''}
+          <span style="font-size:12px;color:#888;margin-inline-start:auto">${tkEsc(dt)}${t.employee?' · '+tkEsc(t.employee):''}</span>
+        </div>
+        <div style="margin-top:8px;font-weight:700;line-height:1.7">${tkEsc(t.problem)}</div>
+        ${t.dest||t.area?`<div style="font-size:12.5px;color:#666;margin-top:4px">${tkEsc([t.dest,t.area].filter(Boolean).join(' — '))}${t.program_code?' · كود البرنامج: <span dir=ltr>'+tkEsc(t.program_code)+'</span>':''}</div>`:''}
+        ${t.request_text?`<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12.5px;color:#1a5fb4">نص طلب الموظفة</summary><pre style="white-space:pre-wrap;font-family:inherit;font-size:12.5px;margin:6px 0 0">${tkEsc(t.request_text)}</pre></details>`:''}
+        ${t.resolution?`<div style="margin-top:6px;font-size:12.5px;color:#1a7f45">الحل: ${tkEsc(t.resolution)}</div>`:''}
+        <div style="margin-top:8px;display:flex;gap:6px">
+          ${open?`<button class="ebtn ebtn-nologo" onclick="tkResolve(${t.id})">✅ تم الحل</button>`:`<button class="ebtn ebtn-nologo" onclick="tkReopen(${t.id})">↩️ إعادة فتح</button>`}
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){ box.innerHTML='<div style="color:#b42318">تعذّر التحميل: '+tkEsc(e.message)+'</div>'; }
+}
+function tkSetBadge(n){ const b=document.getElementById('tkBadge'); if(b){ b.textContent=n; b.style.display=n?'':'none'; } }
+async function tkResolve(id){
+  const note=window.prompt('وش الحل؟ (اختياري)','');
+  if(note===null) return;
+  await tkCall({action:'ticket_update',id,status:'resolved',resolution:note}); tkLoad();
+}
+async function tkReopen(id){ await tkCall({action:'ticket_update',id,status:'open'}); tkLoad(); }
+// عدّاد التيكتات المفتوحة على التبويب عند فتح الصفحة
+setTimeout(()=>{ tkCall({action:'ticket_list',status:'open'}).then(d=>{ if(d&&d.ok) tkSetBadge((d.tickets||[]).length); }).catch(()=>{}); }, 4000);
 
 // ═══════════ برامج الجروبات (معزول تماماً — كل برنامج = تبويب «(Group)» بالشيت) ═══════════
 let GRP_LOADED = false;     // حُمِّلت بيانات الجروبات؟

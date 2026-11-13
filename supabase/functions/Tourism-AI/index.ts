@@ -3927,6 +3927,60 @@ Deno.serve(async (req) => {
     // يبني كل توزيع محليّاً (بيانات الوجهة تُجلب مرة وحدة وتُمرّر للبناء) ويقرأ TOTAL_GROUP،
     // فالوسم «الأرخص -N» **ديناميكي حسب التاريخ** (أسعار الفنادق موسمية). cityArabicNames={}
     // لأن الإجمالي لا يعتمد على أسماء العرض. حاليّاً يُستدعى لإندونيسيا من الواجهة.
+    // ── تيكتات المشاكل (المالكة ١٣ نوفمبر ٢٠٢٦) ── منال تفتح تيكت لما ما تقدر تلبّي طلب بسبب
+    // نقص بالبيانات (مثل: ما فيه غرف لـ ٤ أشخاص في أبود إلا فلل). تظهر برقمها بالواتساب وفي
+    // تبويب «🎫 التيكتات» بـ team.html. نفس المشكلة المفتوحة (dedupe_key) ما تنفتح مرتين — تزيد hits.
+    if (reqBody && /^ticket_(create|list|update)$/.test(String(reqBody.action || ""))) {
+      const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const J = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: CORS_HEADERS });
+      try {
+        const a = String(reqBody.action);
+        const S = (v: unknown, n = 4000) => String(v ?? "").slice(0, n);
+        if (a === "ticket_create") {
+          const problem = S(reqBody.problem).trim();
+          if (!problem) return J({ ok: false, error: "problem مطلوب" }, 400);
+          const key = S(reqBody.dedupe_key, 300).trim() || null;
+          if (key) {
+            const { data: ex } = await sb.from("support_tickets").select("id,ticket_no,hits").eq("dedupe_key", key).eq("status", "open").limit(1);
+            if (ex && ex.length) {
+              await sb.from("support_tickets").update({ hits: (ex[0].hits || 1) + 1 }).eq("id", ex[0].id);
+              return J({ ok: true, ticket_no: ex[0].ticket_no, id: ex[0].id, existing: true });
+            }
+          }
+          const row = {
+            source: S(reqBody.source, 40) || "manal", kind: S(reqBody.kind, 60) || null, dedupe_key: key,
+            dest: S(reqBody.dest, 80) || null, area: S(reqBody.area, 120) || null, problem,
+            request_text: S(reqBody.request_text) || null, employee: S(reqBody.employee, 120) || null,
+            group_jid: S(reqBody.group_jid, 80) || null, program_code: S(reqBody.program_code, 40) || null,
+          };
+          const { data, error } = await sb.from("support_tickets").insert(row).select("id").single();
+          if (error) return J({ ok: false, error: error.message }, 500);
+          const no = "TK-" + String(data.id).padStart(4, "0");
+          await sb.from("support_tickets").update({ ticket_no: no }).eq("id", data.id);
+          return J({ ok: true, ticket_no: no, id: data.id });
+        }
+        if (a === "ticket_list") {
+          let q = sb.from("support_tickets").select("*").order("created_at", { ascending: false }).limit(300);
+          if (reqBody.status) q = q.eq("status", S(reqBody.status, 20));
+          const { data, error } = await q;
+          if (error) return J({ ok: false, error: error.message }, 500);
+          return J({ ok: true, tickets: data || [] });
+        }
+        // ticket_update
+        const id = Number(reqBody.id) || 0;
+        if (!id) return J({ ok: false, error: "id مطلوب" }, 400);
+        const st = S(reqBody.status, 20);
+        const upd: Record<string, unknown> = {};
+        if (st === "open" || st === "resolved") { upd.status = st; upd.resolved_at = st === "resolved" ? new Date().toISOString() : null; }
+        if (reqBody.resolution != null) upd.resolution = S(reqBody.resolution);
+        const { error } = await sb.from("support_tickets").update(upd).eq("id", id);
+        if (error) return J({ ok: false, error: error.message }, 500);
+        return J({ ok: true });
+      } catch (e) {
+        return J({ ok: false, error: String((e as Error).message || e) }, 500);
+      }
+    }
+
     if (reqBody && reqBody.action === "rank_suggestions") {
       try {
         const destAr = String(reqBody.dest || "").trim();
