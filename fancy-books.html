@@ -455,7 +455,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794565198';
+const BUILD='1794566028';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -3503,11 +3503,12 @@ async function setUsers(){if(STAFF==null){SB('<p class="sub" style="padding:30px
    <div class="card"><table><thead><tr><th>المستخدم</th><th>رقم المعرّف</th><th>صلاحية الدخول</th><th>الحالة ⓘ</th><th></th></tr></thead><tbody>
     <tr><td><b>المالكة</b><div class="sub" style="margin:0">حساب المالكة (نظام العز)</div></td><td>—</td><td><span class="pill p-ok">⭐ المشرف الأعلى</span></td><td><span style="color:#16a34a">● نشط</span></td><td></td></tr>
     ${rows.map(u=>{const r=roleOf(u),st=uStatus(u);return`<tr><td><b>${esc(u.name)}</b><div class="sub" style="margin:0" dir="ltr">${esc(u.email||'')}</div></td><td>${esc(u.rid||'—')}</td><td>${r?`<span class="pill p-pri">${ROLE_ICO[r.key]||'🛡'} ${esc(r.name)}</span>`:'<span class="pill p-gray">بدون دور (كل الصلاحيات)</span>'}</td>
-     <td><span style="color:${U_ST[st][1]}">● ${U_ST[st][0]}</span>${!u.login?'<div class="sub" style="margin:0;color:var(--warn)">لا يوجد رمز دخول بعد</div>':`<div class="sub" style="margin:0;color:var(--ok)">✓ رمز الدخول محفوظ</div>${u.login.devices?.pending?'<div class="sub" style="margin:0">جهاز بانتظار الاعتماد</div>':''}`}</td>
+     <td><span style="color:${U_ST[st][1]}">● ${U_ST[st][0]}</span>${!u.login?'<div class="sub" style="margin:0;color:var(--warn)">لا يوجد رمز دخول بعد</div>':`<div class="sub" style="margin:0;color:var(--ok)">✓ رمز الدخول محفوظ</div>${u.login.devices?.pending?`<div style="margin-top:4px"><button class="btn sm pri" onclick="devApproveUser('${esc(u.login.staff_name)}')">✓ اعتماد الجهاز</button></div>`:''}`}</td>
      <td class="act">${OWNER||LOCAL?`<button class="ib" onclick="userMenu(event,'${esc(u.id)}')">⋯</button>`:''}</td></tr>`}).join('')}</tbody></table></div>`);
   const q=$('#usq');q.oninput=()=>{USF.q=q.value;clearTimeout(q.t);q.t=setTimeout(()=>{setUsers();const n=$('#usq');n.focus();n.setSelectionRange(n.value.length,n.value.length)},250)}}
 function userMenu(ev,id){const u=userRows().find(x=>x.id===id);const st=uStatus(u);openMenu(ev,[['✏️ عرض الملف',`userForm('${id}')`],[st==='stopped'?'✓ تفعيل المستخدم':'⦸ إيقاف المستخدم',`userStop('${id}',${st!=='stopped'})`]])}
 async function pinShow(btn,name){const v=document.getElementById('pinv');if(v.textContent){v.textContent='';btn.textContent='🔑 عرض الرمز الحالي';return}try{const r=await api('POST',{action:'staff_pin',staff_name:name});v.textContent=r.pin||'—';btn.textContent='🙈 إخفاء';setTimeout(()=>{v.textContent='';btn.textContent='🔑 عرض الرمز الحالي'},20000)}catch(e){toast(e.message)}}
+async function devApproveUser(name){try{const d=await api('POST',{action:'device_list'});const L=(d.devices||[]).filter(x=>x.status==='pending'&&x.staff_name===name);for(const x of L)await api('POST',{action:'device_set',payload:{key:x.key,staff_name:name,status:'approved'}});toast(L.length?'تم اعتماد الجهاز — خليها تضغط «دخول» مرة ثانية':'لا يوجد جهاز بانتظار الاعتماد');STAFF=null;setUsers()}catch(e){toast(e.message)}}
 async function devSet(key,name,status){try{await api('POST',{action:'device_set',payload:{key,staff_name:name,status}});toast(status==='approved'?'تم اعتماد الجهاز':'تم رفض الجهاز');STAFF=null;setUsers()}catch(e){toast(e.message)}}
 async function userStop(id,stop){const rows=userRows();const u=rows.find(x=>x.id===id);if(!(await confirmAsync(stop?'إيقاف المستخدم؟':'تفعيل المستخدم؟',stop?`لن يتمكن ${esc(u.name)} من دخول فانسي سنس.`:`سيتمكن ${esc(u.name)} من الدخول مجدداً.`,stop?'إيقاف':'تفعيل')))return;
   try{if(u.login&&!LOCAL){if(u.login.fancy_only)await api('POST',{action:'staff_set',payload:{staff_name:u.login.staff_name,active:!stop,fancy:true}});else await api('POST',{action:'staff_set',payload:{staff_name:u.login.staff_name,fancy:!stop}})}
