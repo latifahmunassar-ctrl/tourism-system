@@ -4072,13 +4072,22 @@ Deno.serve(async (req) => {
         } else {
           const { data: sugs } = await supabase.from("package_suggestions")
             .select("distribution").eq("destination", destKey).eq("days", days);
+          // 🏢 ١٣ نوفمبر ٢٠٢٦ (منال — قسم الشركات): candidates = حصر التوزيعات (مطارات/مدن الموظفة)،
+          //    pick_rank = «الأرخص - N» محسوب بنفس شروط الطلب الحقيقية (الأطفال/السراير/الفنادق)،
+          //    list_only = ترتيب الخيارات بالسعر الحقيقي بدون حفظ برنامج. بدونها السلوك كما هو (طلال/المساعد).
+          const _cand = Array.isArray(reqBody.candidates) ? (reqBody.candidates as unknown[]).map(String) : null;
+          const _dists = ((sugs || []) as Array<{ distribution: string }>).map(x => x.distribution).filter(d => !_cand || _cand.includes(d));
           const built: Array<{ program: string; total: number; distribution: string }> = [];
-          for (const s of ((sugs || []) as Array<{ distribution: string }>)) {
-            const b = await buildOne(s.distribution);
+          for (const d of _dists) {
+            const b = await buildOne(d);
             if (b) built.push(b);
           }
           built.sort((a, b) => a.total - b.total);
-          chosen = built[0] || null;
+          if (reqBody.list_only === true) {
+            return new Response(JSON.stringify({ ok: true, ranked: built.map(b => ({ distribution: b.distribution, total: b.total })) }), { headers: CORS_HEADERS });
+          }
+          const _rank = Math.max(1, parseInt(String(reqBody.pick_rank ?? "1"), 10) || 1);
+          chosen = built[Math.min(_rank, built.length) - 1] || null;
         }
         if (!chosen) return new Response(JSON.stringify({ ok: false, error: "no buildable program" }), { headers: CORS_HEADERS });
         // ✈️ العودة من مطار المدينة (طلب العميل عبر طلال): نسجّلها بالبرنامج — team.html يقرأ RETURN_AIRPORT
