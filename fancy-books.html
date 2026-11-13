@@ -607,7 +607,7 @@ function route(soft){
   if(p!=='pos')document.body.classList.remove('posmode');
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.n===nav));
   side.classList.remove('open');closeMenu();
-  if(typeof navPerms==='function'){navPerms();if(!routeOK(p)){if(p==='home'){const f=[...document.querySelectorAll('.nav a[href^="#/"]')].find(a=>a.style.display!=='none');if(f&&f.getAttribute('href')!=='#/home'){location.hash=f.getAttribute('href');return}}viewDenied();return}}
+  if(typeof navPerms==='function'){navPerms();if(p==='pedit'&&id&&!can('edit-products')&&can('products-base')){location.hash='#/pview/'+id;return}if(!routeOK(p)){if(p==='home'){const f=[...document.querySelectorAll('.nav a[href^="#/"]')].find(a=>a.style.display!=='none');if(f&&f.getAttribute('href')!=='#/home'){location.hash=f.getAttribute('href');return}}viewDenied();return}}
   const y=scrollY;
   ({expenses:viewList,recurring:viewRecurring,summary:viewSummary,new:()=>viewForm(),edit:()=>viewForm(id),view:()=>viewDetail(id),settings:viewSettings,
     products:viewProducts,pnew:()=>viewPForm(),pedit:()=>viewPForm(id),pview:()=>viewProduct(id),pcats:viewPCats,
@@ -1115,7 +1115,7 @@ function viewProducts(){
   const af=pActiveF(),list=pfiltered().sort(PSORT[PS.sort][1]);
   const pages=Math.max(1,Math.ceil(list.length/PS.size));if(PS.page>pages)PS.page=pages;
   const rows=list.slice((PS.page-1)*PS.size,PS.page*PS.size);
-  const cols=PCOLS.filter(c=>S.pcols[c[0]]);
+  const cols=PCOLS.filter(c=>S.pcols[c[0]]&&(can('view-product-cost')||!['cost','buy'].includes(c[0])));
   let tq=0,tc=0,tr=0,neg=0,out=0;list.forEach(p=>{const q=qtyOf(p,PS.loc);tq+=q;if(q>0){tc+=q*(+p.cost||0);tr+=q*(+locVal(p,'retail',PS.loc)||0)}if(q<0)neg++;if(q===0)out++});
   const allSel=rows.length&&rows.every(p=>PS.sel.has(p.id));
   $('#view').innerHTML=`
@@ -1128,7 +1128,7 @@ function viewProducts(){
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn icon" onclick="openMenu(event,[['📥 استيراد المنتجات من رواء (JSON)','importRewaaFile()'],['📥 استيراد CSV','importPCSV()'],['⬇ تصدير قائمة المنتجات (CSV)','exportPCSV()'],['☰ تخصيص الأعمدة','openPCols()']])">⋯</button>
-      <a class="btn pri" href="#/pnew">＋ منتج جديد</a>
+      ${can('add-products')?'<a class="btn pri" href="#/pnew">＋ منتج جديد</a>':''}
     </div>
   </div>
   <div class="bar" style="justify-content:flex-end">
@@ -1136,7 +1136,7 @@ function viewProducts(){
     <button class="btn sm" ${PS.sel.size?'':'disabled'} onclick="printBarcodes([...PS.sel])">▥ طباعة الباركود</button></div>
   </div>
   <div class="chips">${af.map(([k,l])=>`<span class="chip">${esc(l)} <b onclick="PS.f.${k}='';viewProducts()">×</b></span>`).join('')}</div>
-  <div class="kpis" style="margin-top:0"><div class="kpi"><small>عدد المنتجات</small><div>${list.length.toLocaleString('en')}</div></div><div class="kpi"><small>إجمالي الكمية</small><div>${fmtQ(tq)}</div></div><div class="kpi"><small>قيمة المخزون (بالتكلفة · بالتجزئة)</small><div style="font-size:18px">${fmt(tc)} · ${fmt(tr)}</div></div><div class="kpi"><small>نافد · سالب</small><div><span style="color:var(--warn)">${out}</span> · <span style="color:var(--bad)">${neg}</span></div></div></div>
+  <div class="kpis" style="margin-top:0"><div class="kpi"><small>عدد المنتجات</small><div>${list.length.toLocaleString('en')}</div></div><div class="kpi"><small>إجمالي الكمية</small><div>${fmtQ(tq)}</div></div><div class="kpi"><small>${can('view-product-cost')?'قيمة المخزون (بالتكلفة · بالتجزئة)':'قيمة المخزون (بالتجزئة)'}</small><div style="font-size:18px">${can('view-product-cost')?fmt(tc)+' · ':''}${fmt(tr)}</div></div><div class="kpi"><small>نافد · سالب</small><div><span style="color:var(--warn)">${out}</span> · <span style="color:var(--bad)">${neg}</span></div></div></div>
   ${PS.sel.size?`<div class="bulkbar">تم تحديد ${PS.sel.size} منتج <button class="btn sm" onclick="printBarcodes([...PS.sel])">▥ طباعة الباركود</button><button class="btn sm danger" onclick="bulkDelP()">🗑 حذف</button><button class="btn sm" onclick="PS.sel.clear();viewProducts()">إلغاء التحديد</button></div>`:''}
   <div class="card">${list.length?`<div class="tbl-wrap"><table><thead><tr><th class="ck"><input type="checkbox" ${allSel?'checked':''} onchange="pSelPage(this.checked)"></th><th>اسم المنتج</th>${cols.map(c=>`<th>${c[1]}</th>`).join('')}<th></th></tr></thead>
    <tbody>${rows.map(p=>`<tr><td class="ck"><input type="checkbox" ${PS.sel.has(p.id)?'checked':''} onchange="pSel('${p.id}',this.checked)"></td><td><div class="pname">${thumb(p)}<a href="#/pedit/${p.id}">${esc(p.name)}</a></div></td>${cols.map(c=>`<td class="${c[4]||''}">${c[2](p)}</td>`).join('')}
@@ -1316,7 +1316,7 @@ function viewProduct(id){
     <div class="vgrid" style="margin-top:16px">
      <div><small>الرمز التعريفي</small><div>${esc(p.sku)}</div></div><div><small>الباركود</small><div>${esc(p.barcode||'—')}</div></div><div><small>المنتج الأساسي</small><div>${esc(p.baseName||p.name)}</div></div>
      <div><small>فئة</small><div>${esc(pcat(p.catId)||'—')}</div></div><div><small>العلامة التجارية</small><div>${esc(brandN(p.brandId)||'—')}</div></div><div><small>المورد</small><div>${esc(supN(p.supplierId)||'—')}</div></div>
-     <div><small>التكلفة</small><div>${money(p.cost)}</div></div><div><small>الحد الأدنى</small><div>${p.minQty===''||p.minQty==null?'—':fmtQ(p.minQty)}</div></div><div><small>إجمالي الكمية</small><div style="font-size:20px;font-weight:700">${fmtQ(qtyOf(p))}</div></div>
+     ${can('view-product-cost')?`<div><small>التكلفة</small><div>${money(p.cost)}</div></div>`:''}<div><small>الحد الأدنى</small><div>${p.minQty===''||p.minQty==null?'—':fmtQ(p.minQty)}</div></div><div><small>إجمالي الكمية</small><div style="font-size:20px;font-weight:700">${fmtQ(qtyOf(p))}</div></div>
      ${p.desc?`<div style="grid-column:1/-1"><small>الوصف</small><div>${esc(p.desc)}</div></div>`:''}
     </div></div></div></div>
   <div class="fcard"><h2>الكميات والأسعار حسب الموقع</h2><div class="tbl-wrap"><table><thead><tr><th>الموقع</th><th>الكمية</th><th>سعر التجزئة</th><th>سعر الجملة</th><th>آخر سعر شراء</th><th>نوع الضريبة</th></tr></thead><tbody>
@@ -1609,7 +1609,7 @@ function posTab(r){
 }
 function prodInfoDlg(pid){const p=byId(S.products,pid);
   const o=overlay(`<div class="modal" style="width:760px"><div class="dh"><h3>بيانات المنتج</h3></div><div class="db">
-   <div class="pinfo">${p.images?.[0]?`<img src="${p.images[0]}" alt="">`:'<span class="thumb" style="width:110px;height:110px">🖼</span>'}<div><b>${esc(p.name)}</b><div class="vgrid" style="margin-top:10px"><div><small>الرمز التعريفي</small><div>${esc(p.sku)}</div></div><div><small>الباركود</small><div>${esc(p.barcode||'—')}</div></div><div><small>فئة</small><div>${esc(pcat(p.catId)||'—')}</div></div><div><small>العلامة التجارية</small><div>${esc(brandN(p.brandId)||'—')}</div></div><div><small>التكلفة</small><div>${money(p.cost)}</div></div></div></div></div>
+   <div class="pinfo">${p.images?.[0]?`<img src="${p.images[0]}" alt="">`:'<span class="thumb" style="width:110px;height:110px">🖼</span>'}<div><b>${esc(p.name)}</b><div class="vgrid" style="margin-top:10px"><div><small>الرمز التعريفي</small><div>${esc(p.sku)}</div></div><div><small>الباركود</small><div>${esc(p.barcode||'—')}</div></div><div><small>فئة</small><div>${esc(pcat(p.catId)||'—')}</div></div><div><small>العلامة التجارية</small><div>${esc(brandN(p.brandId)||'—')}</div></div>${can('view-product-cost')?`<div><small>التكلفة</small><div>${money(p.cost)}</div></div>`:''}</div></div></div>
    <table style="margin-top:14px"><thead><tr><th>الموقع</th><th>الكمية المتوفرة</th><th>سعر التجزئة</th><th>سعر الجملة</th></tr></thead><tbody>${S.branches.map(b=>`<tr><td>${esc(b.name)}</td><td>${fmtQ(p.locs?.[b.id]?.qty)}</td><td>${fmt(p.locs?.[b.id]?.retail)}</td><td>${fmt(p.locs?.[b.id]?.wholesale)}</td></tr>`).join('')}</tbody></table></div>
    <div class="df"><button class="btn pri" data-a>إضافة للسلة</button><button class="btn out" data-e>تحرير المنتج</button><button class="btn lnk" data-x>إلغاء</button></div></div>`);
   o.querySelector('[data-x]').onclick=()=>o.remove();o.querySelector('[data-a]').onclick=()=>{addToCart(pid);o.remove()};o.querySelector('[data-e]').onclick=()=>{o.remove();leavePOS();location.hash='#/pedit/'+pid};
@@ -1647,7 +1647,7 @@ function invDiscDlg(){const d=CART.invDisc||{type:'amt',value:''};
    <div class="fl"><label>القيمة</label><input class="in" type="number" step="any" min="0" id="idv" value="${d.value}"></div></div><div class="df"><button class="btn" data-rm>إزالة الخصم</button><button class="btn pri" data-ok>تطبيق</button></div></div>`);
   let t=d.type;o.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{t=b.dataset.t;o.querySelectorAll('[data-t]').forEach(x=>x.classList.toggle('on',x===b))});
   o.querySelector('[data-rm]').onclick=()=>{CART.invDisc=null;saveCart();o.remove();renderCart()};
-  o.querySelector('[data-ok]').onclick=()=>{const v=+o.querySelector('#idv').value||0;if(t==='pct'&&v>100){toast('النسبة أكبر من 100');return}CART.invDisc=v>0?{type:t,value:v}:null;saveCart();o.remove();renderCart()};
+  o.querySelector('[data-ok]').onclick=()=>{const v=+o.querySelector('#idv').value||0;if(t==='pct'&&v>100){toast('النسبة أكبر من 100');return}{const c0=calcCart({...CART,invDisc:null});const pct=t==='pct'?v:(c0.total?v/c0.total*100:0);if(pct>maxDisc()+1e-9){toast(`الحد الأقصى للخصم المسموح لك ${maxDisc()}%`);return}}CART.invDisc=v>0?{type:t,value:v}:null;saveCart();o.remove();renderCart()};
 }
 function parkCart(){const p=parked();p.push({...structuredClone(CART),parkedAt:new Date().toISOString(),pid:uid()});ls.set('fsb_parked',JSON.stringify(p));const r=byId(S.registers,CART.registerId);CART={...blankCart(r),priceMode:CART.priceMode};saveCart();renderCart();toast('تم تعليق عملية البيع')}
 function parkedDlg(){const p=parked().filter(x=>x.registerId===CART.registerId);if(!p.length){toast('لا توجد عمليات معلقة');return}
@@ -2977,7 +2977,7 @@ function viewCustomer(id){SSET();const isNew=!id;const c0=id?byId(S.customers,id
    </div><div><div class="fcard custside"><div class="cmr"><span>المبلغ المستحق من العميل</span><b>${nf2(st.due)}</b></div><div class="cmr"><span>اجمالي المبلغ المحصل</span><b>${nf2(st.paid)}</b></div>${+c.balance?`<div class="cmr"><span>رصيد العميل</span><b>${nf2(c.balance)}</b></div>`:''}<div class="cmr"><span>عدد الفواتير</span><b>${st.n}</b></div></div></div></div>
    <div class="fcard pfoot"><button class="btn pri" id="csave">حفظ</button><a class="btn lnk" href="#/customers">إلغاء</a></div>`;
   $('#cob').onchange=e=>$('#cobw').style.display=e.target.checked?'':'none';
-  $('#csave').onclick=()=>{const v=k=>document.querySelector(`[data-k="${k}"]`)?.value.trim()||'';
+  $('#csave').onclick=()=>{if(!isNew&&!can('edit-customers')){toast('لا تملك صلاحية تعديل العملاء');return}const v=k=>document.querySelector(`[data-k="${k}"]`)?.value.trim()||'';
     const name=v('name'),code=v('code'),phone=v('phone').replace(/[\s+]/g,m=>m==='+'?'00':'');
     if(!name){toast('اسم العميل مطلوب');return}if(!code){toast('رمز العميل مطلوب');return}if(phone.replace(/\D/g,'').length<7){toast('رقم الهاتف مطلوب');return}
     if(S.customers.some(x=>x.id!==c.id&&x.phone===phone)){toast('رقم الجوال مسجل لعميل آخر');return}if(S.customers.some(x=>x.id!==c.id&&x.code===code)){toast('رمز العميل مستخدم');return}
@@ -3313,7 +3313,8 @@ function routeOK(p){const k=ROUTE_PERM[p];if(!k)return true;if(k==='__reports')r
 function navPerms(){document.querySelectorAll('.nav a[href^="#/"]').forEach(a=>{const p=a.getAttribute('href').slice(2).split('/')[0];a.style.display=routeOK(p)?'':'none'});document.querySelectorAll('.nav .grp').forEach(g=>{let n=g.nextElementSibling,any=false;while(n&&!n.classList.contains('grp')){if(n.tagName==='A'&&n.style.display!=='none')any=true;n=n.nextElementSibling}g.style.display=any?'':'none'})}
 function viewDenied(){setTitle('لا توجد صلاحية');$('#view').innerHTML=`<div class="empty" style="padding:80px 0"><div class="ico">🔒</div><h3>لا تملك صلاحية الوصول لهذه الصفحة</h3><p>تواصل مع مشرف الحساب لتعديل صلاحيات دورك.</p></div>`}
 function permWrap(name,perm,msg){const f=window[name];if(typeof f!=='function'||f.__pw)return;const w=function(...a){if(!can(perm)){toast(msg||'لا تملك صلاحية لهذا الإجراء');return}return f.apply(this,a)};w.__pw=1;window[name]=w}
-function installPerms(){[['cashMoveDlg','add-and-withdraw-cash'],['parkCart','park-sales'],['clearCart','remove-cart-items'],['invDiscDlg','edit-prices-and-add-discounts'],['setPrice','edit-prices-and-add-discounts'],['returnDlg','process-sale-returns'],['collectDlg','manage-customer-settlements'],['custDel','delete-customers'],['custExport','export-customer-data'],['multiExpDlg','add-expenses'],['cntNew','manage-stock-counts'],['cntComplete','manage-stock-counts']].forEach(([n,p])=>permWrap(n,p));
+function installPerms(){[['cashMoveDlg','add-and-withdraw-cash'],['parkCart','park-sales'],['clearCart','remove-cart-items'],['invDiscDlg','edit-prices-and-add-discounts'],['setPrice','edit-prices-and-add-discounts'],['returnDlg','process-sale-returns'],['collectDlg','manage-customer-settlements'],['custDel','delete-customers'],['custExport','export-customer-data'],['multiExpDlg','add-expenses'],['cntNew','manage-stock-counts'],['cntComplete','manage-stock-counts'],['delProduct','delete-products'],['bulkDelP','delete-products'],['printBarcodes','print-barcode-labels'],['exportPCSV','export-product-data'],['importPCSV','add-products'],['importRewaaFile','add-products'],['trFulfill','approve-or-reject-transfer-requests'],['trReject','approve-or-reject-transfer-requests'],['regSettings','manage-registers-and-sales-settings'],['cpPrint','view-customers-balances-and-transactions']].forEach(([n,p])=>permWrap(n,p));
+  ['viewPOS','viewRegOpen','viewRegClose','continuePOS'].forEach(n=>{const f=window[n];if(typeof f!=='function'||f.__lc)return;const w=function(id,...a){const r=byId(S.registers,id);if(r&&!locOK(r.branchId)){toast('هذا الصندوق في موقع غير مسموح لك');location.hash='#/registers';return}return f.call(this,id,...a)};w.__lc=1;window[n]=w});
   const sd=window.setDisc;if(typeof sd==='function'&&!sd.__md){const w=function(i,v){if(!can('edit-prices-and-add-discounts')){toast('لا تملك صلاحية لهذا الإجراء');renderCart();return}if(+v>maxDisc()){toast(`الحد الأقصى للخصم المسموح لك ${maxDisc()}%`);v=maxDisc()}return sd(i,v)};w.__md=1;window.setDisc=w}}
 
 /* ---------- page shell ---------- */
