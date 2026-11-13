@@ -455,7 +455,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794551505';
+const BUILD='1794552774';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -475,7 +475,7 @@ function fresh(){
     branches:DEF_BRANCHES.map(n=>({id:uid(),name:n})),
     suppliers:[],prepaidAccounts:[{id:uid(),name:'مصروفات مدفوعة مقدماً'}],
     wallet:[],settings:{currency:'ر.ع',decimals:3,vat:5},
-    products:[],pcats:[],brands:[],sales:[],registers:[],shifts:[],promotions:[],customers:[],quotes:[],transfers:[],purchases:[],suppayments:[],stockcounts:[],vouchers:[],stock_log:[],taxes:[{id:'tx1',name:'ضريبه عمان',rate:5},{id:'tx0',name:'معفى',rate:0}],customFields:[{id:'14113',name:'سعر البيع قبل الضرايب',type:'number'},{id:'15320',name:'فرع ثاني',type:'switch'}],
+    products:[],pcats:[],brands:[],sales:[],registers:[],shifts:[],promotions:[],customers:[],quotes:[],transfers:[],purchases:[],suppayments:[],stockcounts:[],vouchers:[],stock_log:[],wa_out:[],taxes:[{id:'tx1',name:'ضريبه عمان',rate:5},{id:'tx0',name:'معفى',rate:0}],customFields:[{id:'14113',name:'سعر البيع قبل الضرايب',type:'number'},{id:'15320',name:'فرع ثاني',type:'switch'}],
     cols:{name:1,type:1,cat:1,branch:1,method:0,amount:1,status:1,remaining:1,supplier:0,tax:0,date:0,taxable:0,freq:0,draft:0},
     pcols:{base:1,cat:1,sku:1,barcode:1,qty:1,cost:1,retail:1,wholesale:1,tax:1,brand:0,desc:0,buy:0,supplier:0,ptype:0}};
 }
@@ -483,7 +483,7 @@ function fresh(){
 const FN='https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/fs-books';
 const FN_LOGIN='https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/acc-dashboard';
 const LOCAL=new URLSearchParams(location.search).has('local'); // وضع تجربة محلي بدون خادم
-const ARR=['expenses','recurring','products','sales','registers','shifts','promotions','customers','quotes','transfers','purchases','suppayments','stockcounts','vouchers','stock_log'], LOCAL_ONLY=['cols','pcols'];
+const ARR=['expenses','recurring','products','sales','registers','shifts','promotions','customers','quotes','transfers','purchases','suppayments','stockcounts','vouchers','stock_log','wa_out'], LOCAL_ONLY=['cols','pcols'];
 let S=fresh(), SNAP={}, LAST='', ME='', OWNER=false;
 const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
 function prefsLoad(){try{const p=JSON.parse(ls.get('fsb_prefs')||'{}');if(p.cols)Object.assign(S.cols,p.cols);if(p.pcols)Object.assign(S.pcols,p.pcols)}catch(e){}}
@@ -612,7 +612,7 @@ function route(soft){
   if(!BOOTED)return;
   const h=location.hash.replace(/^#\/?/,'')||'home';
   const [p,id]=h.split('/');
-  const nav={cntnew:'counts',activity:'home',cust:'customers',custnew:'customers',custrecv:'customers',custcredit:'custpays',new:'expenses',edit:'expenses',view:'expenses',pnew:'products',pedit:'products',pview:'products',regopen:'registers',regclose:'registers',pos:'registers',sale:'sales',promo:'promos',trn:'transfers',trnnew:'transfers',trnreq:'transfers',trnedit:'transfers',vou:'vouchers',vounew:'vouchers',vouedit:'vouchers',cnt:'counts',po:'purchases',poedit:'purchases',ponew:'purchases',rtnnew:'returns',rtnedit:'returns',sup:'suppliers',supnew:'suppliers',supst:'suppliers',spay:'spayments',spaynew:'spayments',rpt:'reports'}[p]||p;
+  const nav={walog:'salesettings',cntnew:'counts',activity:'home',cust:'customers',custnew:'customers',custrecv:'customers',custcredit:'custpays',new:'expenses',edit:'expenses',view:'expenses',pnew:'products',pedit:'products',pview:'products',regopen:'registers',regclose:'registers',pos:'registers',sale:'sales',promo:'promos',trn:'transfers',trnnew:'transfers',trnreq:'transfers',trnedit:'transfers',vou:'vouchers',vounew:'vouchers',vouedit:'vouchers',cnt:'counts',po:'purchases',poedit:'purchases',ponew:'purchases',rtnnew:'returns',rtnedit:'returns',sup:'suppliers',supnew:'suppliers',supst:'suppliers',spay:'spayments',spaynew:'spayments',rpt:'reports'}[p]||p;
   if(p!=='pos')document.body.classList.remove('posmode');
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.n===nav));
   side.classList.remove('open');closeMenu();
@@ -624,7 +624,7 @@ function route(soft){
     transfers:viewTransfers,trn:()=>viewTransfer(id),trnnew:()=>viewTrForm('new'),trnreq:()=>viewTrForm('req'),trnedit:()=>viewTrForm('edit',id),
     vouchers:viewVouchers,vou:()=>viewVoucher(id),vounew:()=>viewVouForm(id),vouedit:()=>viewVouForm('',id),counts:viewCounts,cnt:()=>viewCount(id),cntnew:()=>{if(CE&&CE.id!=='new')CE=null;viewCntEdit(null)},
     purchases:viewPurchases,returns:viewReturns,po:()=>{const x=byId(S.purchases,id);if(x?.kind==='rtn')document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.n==='returns'));viewPO(id)},ponew:()=>viewPOForm('po'),poedit:()=>viewPOForm('po',id),rtnnew:()=>viewPOForm('rtn',id),rtnedit:()=>viewPOForm('rtn',id),
-    home:viewHome,activity:viewActivity,cashmgmt:viewCashMgmt,customers:viewCustomers,cust:()=>viewCustomer(id),custnew:()=>viewCustomer(),custrecv:()=>viewCustRecv(id),custpays:viewCustPays,custcredit:()=>viewCustCredit(id),salesettings:()=>viewSaleSettings(),eorders:viewEOrders,
+    home:viewHome,activity:viewActivity,walog:viewWaLog,cashmgmt:viewCashMgmt,customers:viewCustomers,cust:()=>viewCustomer(id),custnew:()=>viewCustomer(),custrecv:()=>viewCustRecv(id),custpays:viewCustPays,custcredit:()=>viewCustCredit(id),salesettings:()=>viewSaleSettings(),eorders:viewEOrders,
     suppliers:viewSuppliers,settings:()=>viewSettings2(),sup:()=>viewSupplier(id),supnew:()=>viewSupplier(),supst:()=>viewSupStatement(id),spayments:viewSupPayments,reports:viewReports,rpt:()=>viewReport(id),spay:()=>viewSupPayment(id),spaynew:()=>{const a=location.hash.split('/');viewSPayForm(a[2],a[3],a[4])}}[p]||viewProducts)();
   window.scrollTo(0,soft===true?y:0);
 }
@@ -3198,7 +3198,7 @@ function viewSaleSettings(tab){const s=SSET();if(tab)SST=tab;setTitle('إعدا�
   let body='';
   if(SST==='sales')body=`<div class="setcard"><h3>اعدادات مبيعات نقاط البيع</h3>${sw('sales','salesman','البائع','حدد هذا الخيار إذا كنت تريد إضافة بائع (ممثل مبيعات) إلى مبيعاتك يمكنك ايضا اضافته لإيصال البيع من خلال إعدادات الايصال')}${sw('sales','quotation','عرض سعر','حدد هذا الخيار إذا كنت تريد إنشاء عروض أسعار في شاشة البيع')}
     ${sw('sales','negQty','حدد هذا الخيار للسماح ببيع المنتجات ≥ 0','تحقق لبيع العناصر التي تكون كميتها أقل من أو تساوي 0')}${sw('sales','belowCost','البيع عند السعر < التكلفة','تحقق لبيع العناصر حتى لو كان سعرها أقل من التكلفة')}
-    ${sw('sales','b2b','فواتير ضريبية (من منشأة لمنشأة)','حدد هذا الخيار اذا كنت تنشئ فواتير الى منشآت أخرى')}${sw('sales','numPad','قائمة الأرقام','حدد هذا الخيار لتظهر لك قائمة تسمح لك بكتابة الأرقام عند بيع المنتجات<br>ينصح به لشاشات اللمس')}${sw('sales','whatsapp','تفعيل رسائل الواتس اب','فعّل خيار إرسال رسائل واتساب للمبيعات')}${foot}</div>`;
+    ${sw('sales','b2b','فواتير ضريبية (من منشأة لمنشأة)','حدد هذا الخيار اذا كنت تنشئ فواتير الى منشآت أخرى')}${sw('sales','numPad','قائمة الأرقام','حدد هذا الخيار لتظهر لك قائمة تسمح لك بكتابة الأرقام عند بيع المنتجات<br>ينصح به لشاشات اللمس')}${sw('sales','whatsapp','تفعيل رسائل الواتس اب','فعّل خيار إرسال رسائل واتساب للمبيعات')}${foot}</div>${waSettingsCard()}`;
   else if(SST==='receipt'){const R=SSD.receipt;const ck=(k,l)=>`<label class="ck"><input type="checkbox" data-g="receipt" data-k="${k}" ${R[k]?'checked':''}> ${l}</label>`;
     const sample=S.sales.filter(x=>x.type==='sale'&&x.items?.length).sort((a,b)=>b.date.localeCompare(a.date))[0];
     body=`<div class="rcset"><div class="setcard rced"><h3>محرر محتوى الإيصال</h3><p class="sub">A و B و C رموز للأقسام الرئيسية، لن تتم طباعتها</p>
@@ -3435,7 +3435,7 @@ const isAdminRole=r=>r&&(r.key==='admin'||r.key==='super-admin');
 function can(p){if(OWNER||LOCAL)return true;const u=myProfile();if(!u||!u.roleId)return true;if(u.status==='stopped')return false;const r=(S.roles||[]).find(x=>x.id===u.roleId);if(!r||isAdminRole(r))return true;return!!r.perms?.[p]}
 function locOK(bid){if(OWNER||LOCAL)return true;const u=myProfile();return!u||u.allLocs!==false||(u.locs||[]).includes(bid)}
 const maxDisc=()=>{if(OWNER||LOCAL)return 100;const u=myProfile();return u?(+u.maxDiscount>=0?+u.maxDiscount:100):100};
-const ROUTE_PERM={home:'dashboard-base',activity:'dashboard-base',registers:'sale-checkout',regopen:'sale-checkout',regclose:'sale-checkout',pos:'sale-checkout',sales:'view-sale-invoices',sale:'view-sale-invoices',cashmgmt:'review-all-registers-sessions-cash-management',promos:'promotions-app-access',promo:'promotions-app-access',eorders:'ecommerce-orders-base',customers:'customers-base',cust:'customers-base',custnew:'add-new-customers',custrecv:'manage-customer-settlements',custpays:'view-customers-balances-and-transactions',custcredit:'manage-customer-settlements',salesettings:'manage-registers-and-sales-settings',
+const ROUTE_PERM={home:'dashboard-base',activity:'dashboard-base',registers:'sale-checkout',regopen:'sale-checkout',regclose:'sale-checkout',pos:'sale-checkout',sales:'view-sale-invoices',sale:'view-sale-invoices',cashmgmt:'review-all-registers-sessions-cash-management',promos:'promotions-app-access',promo:'promotions-app-access',eorders:'ecommerce-orders-base',customers:'customers-base',cust:'customers-base',custnew:'add-new-customers',custrecv:'manage-customer-settlements',custpays:'view-customers-balances-and-transactions',custcredit:'manage-customer-settlements',salesettings:'manage-registers-and-sales-settings',walog:'manage-registers-and-sales-settings',
   products:'products-base',pnew:'add-products',pedit:'products-base',pview:'products-base',pcats:'products-base',vouchers:'stock-base',vou:'stock-base',vounew:'record-draft-stock-operations',vouedit:'record-draft-stock-operations',counts:'manage-stock-counts',cnt:'manage-stock-counts',cntnew:'manage-stock-counts',transfers:'stock-base',trn:'stock-base',trnnew:'request-stock-transfer',trnreq:'request-stock-transfer',trnedit:'request-stock-transfer',
   purchases:'suppliers-base',returns:'suppliers-base',po:'suppliers-base',ponew:'record-draft-purchase-orders',poedit:'record-draft-purchase-orders',rtnnew:'record-purchase-returns',rtnedit:'record-purchase-returns',suppliers:'view-suppliers-credit-balance',sup:'view-suppliers-credit-balance',supnew:'manage-suppliers-and-payables',supst:'view-suppliers-credit-balance',spayments:'view-suppliers-credit-balance',spay:'view-suppliers-credit-balance',spaynew:'manage-suppliers-and-payables',
   expenses:'expenses-base',recurring:'expenses-base',summary:'view-cashflow-summary',new:'add-expenses',edit:'edit-expenses',view:'expenses-base',reports:'__reports',rpt:'__reports',settings:'__settings'};
@@ -3665,6 +3665,37 @@ function importSettings(d){SET2();const bBy=n=>S.branches.find(b=>normS(b.name).
   save();return{roles:S.roles.length,users:S.users.length,taxes:S.taxes.length,methods:S.methods.length}}
 
 installPerms();wrapImports();
+
+/* ===================== WhatsApp thank-you messages (رسائل واتساب للعملاء) ===================== */
+const WA_DEF={first:'شكراً لشرائك من فانسي سنس 🤍\nهذا رقمنا الرسمي، احفظيه عشان توصلك آخر عروضنا ومنتجاتنا الجديدة.',repeat:'سعداء بزيارتك مرة ثانية لفانسي سنس 🤍\nشكراً لثقتك، وننتظرك دايماً.'};
+function WASET(){const s=S.settings;s.wa=Object.assign({first:WA_DEF.first,repeat:WA_DEF.repeat},s.wa||{});if(!S.wa_out)S.wa_out=[];return s.wa}
+function waJid(phone){let d=String(phone||'').replace(/\D/g,'');if(!d)return'';if(d.startsWith('00'))d=d.slice(2);if(d.length===8&&/^[79]/.test(d))d='968'+d;if(d.length<10)return'';return d+'@s.whatsapp.net'}
+function waFill(t,inv,c){return String(t||'').replace(/\{الاسم\}/g,c?.name||'').replace(/\{رقم_الفاتورة\}/g,inv?.no||'').replace(/\{المبلغ\}/g,inv?fmt(inv.total)+' '+S.settings.currency:'').replace(/\{الفرع\}/g,inv?brName(inv.branchId):'')}
+function waQueue(o){WASET();const m={id:uid(),status:'pending',createdAt:new Date().toISOString(),by:ME,...o};S.wa_out.push(m);return m}
+function waAfterSale(inv){try{if(!inv||inv.type!=='sale'||!SSET().sales.whatsapp)return;const c=byId(S.customers,inv.customerId);if(!c)return;const to=waJid(c.phone);if(!to)return;const w=WASET();
+  const prev=S.sales.some(s=>s.id!==inv.id&&s.type==='sale'&&s.customerId===inv.customerId);if(S.wa_out.some(m=>m.saleId===inv.id))return;
+  waQueue({to,phone:c.phone,customerId:c.id,customerName:c.name,saleId:inv.id,saleNo:inv.no,kind:prev?'repeat':'first',text:waFill(prev?w.repeat:w.first,inv,c)});save()}catch(e){console.warn('wa',e)}}
+(function(){const f=window.commitSale;if(typeof f!=='function'||f.__wa)return;const w=async function(...a){const inv=await f.apply(this,a);waAfterSale(inv);try{await flushNow()}catch(e){}return inv};w.__wa=1;window.commitSale=w})();
+const WA_K={first:'أول شراء',repeat:'شراء متكرر',test:'رسالة تجربة'},WA_ST={pending:['بانتظار الإرسال','p-warn'],processing:['جاري الإرسال','p-pri'],sent:['أُرسلت','p-ok'],failed:['لم تُرسل','p-bad']};
+function waSettingsCard(){const w=WASET(),on=SSET().sales.whatsapp;const last=[...S.wa_out].sort((a,b)=>b.createdAt.localeCompare(a.createdAt))[0];
+  return`<div class="setcard"><div class="bar" style="margin:0 0 6px"><h3 style="margin:0">📲 رسائل واتساب للعملاء</h3><a class="btn lnk" href="#/walog">سجل الرسائل (${S.wa_out.length}) ‹</a></div>
+   <p class="sub" style="margin:0 0 10px">تُرسل تلقائياً من رقم فانسي سنس <b dir="ltr">+968 9962 1742</b> بعد حفظ أي فاتورة بيع فيها عميلة مسجّل رقمها. ${on?'<span class="pill p-ok">مفعّل</span>':'<span class="pill p-gray">متوقف — فعّلي «تفعيل رسائل الواتس اب» فوق</span>'}</p>
+   <div class="grid2"><div class="fl"><label>الرسالة الأولى (أول شراء للعميلة)</label><textarea class="in" id="waf" rows="5">${esc(w.first)}</textarea></div><div class="fl"><label>الرسالة الثانية (كل شراء بعد ذلك)</label><textarea class="in" id="war" rows="5">${esc(w.repeat)}</textarea></div></div>
+   <p class="sub" style="margin:4px 0 10px">تقدرين تستخدمين: <code>{الاسم}</code> <code>{رقم_الفاتورة}</code> <code>{المبلغ}</code> <code>{الفرع}</code></p>
+   <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn pri" onclick="waSaveTexts()">حفظ نص الرسائل</button><span style="flex:1"></span><input class="in" id="wat" placeholder="رقم للتجربة مثل 96877428881" dir="ltr" style="width:240px;height:40px"><select class="in" id="watk" style="width:150px;height:40px"><option value="first">الرسالة الأولى</option><option value="repeat">الرسالة الثانية</option></select><button class="btn out" onclick="waTest()">إرسال تجربة</button></div>
+   ${last?`<p class="sub" style="margin:10px 0 0">آخر رسالة: ${esc(last.customerName||last.phone||'')} · ${WA_ST[last.status]?.[0]||last.status} · ${relAgo(last.createdAt)}</p>`:''}</div>`}
+function waSaveTexts(){const w=WASET();w.first=$('#waf').value.trim()||WA_DEF.first;w.repeat=$('#war').value.trim()||WA_DEF.repeat;save();toast('تم حفظ نص الرسائل')}
+async function waTest(){const to=waJid($('#wat').value);if(!to){toast('اكتبي رقم صحيح مع رمز الدولة');return}const w=WASET(),k=$('#watk').value;const t=(k==='repeat'?$('#war').value:$('#waf').value).trim()||w[k];
+  if(!await confirmAsync('إرسال رسالة تجربة',`سيتم إرسال ${k==='repeat'?'الرسالة الثانية':'الرسالة الأولى'} من رقم فانسي سنس إلى <b dir="ltr">${esc(to.split('@')[0])}</b>.`,'إرسال'))return;
+  waQueue({to,phone:to.split('@')[0],customerName:'تجربة',kind:'test',text:waFill(t,{no:'S-TEST',total:7.35,branchId:S.branches[0]?.id},{name:'عميلة'})});await flushNow();toast('تمت إضافة رسالة التجربة للطابور — تصل خلال دقيقة')}
+function viewWaLog(){WASET();glView({key:'walog',title:'سجل رسائل واتساب',ico:'📲',empty:'لا توجد رسائل بعد',size:25,rows:()=>[...S.wa_out].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)),searchPh:'ابحث بالاسم أو الرقم أو رقم الفاتورة',search:m=>`${m.customerName||''} ${m.phone||''} ${m.saleNo||''}`,
+  btns:`<a class="btn out" href="#/salesettings">⚙ إعدادات الرسائل</a>`,
+  cols:[{k:'at',l:'التاريخ',cell:m=>dtFmt(m.createdAt),fv:m=>m.createdAt,ft:'date',sv:m=>m.createdAt},{k:'cust',l:'العميلة',cell:m=>esc(m.customerName||'—'),fv:m=>m.customerName||'',ft:'text'},{k:'phone',l:'الرقم',cell:m=>`<span dir="ltr">${esc(m.to?.split('@')[0]||m.phone||'')}</span>`,fv:m=>m.phone||''},
+    {k:'kind',l:'نوع الرسالة',cell:m=>WA_K[m.kind]||m.kind,fv:m=>m.kind,ft:'select',optL:v=>WA_K[v]||v},{k:'inv',l:'الفاتورة',cell:m=>m.saleId?`<a href="#/sale/${m.saleId}">${esc(m.saleNo||'')}</a>`:'—',fv:m=>m.saleNo||''},
+    {k:'st',l:'الحالة',cell:m=>pill(WA_ST[m.status]||[m.status,'p-gray'])+(m.error?`<div class="sub" style="margin:0">${esc(m.error)}</div>`:''),fv:m=>m.status,ft:'select',optL:v=>WA_ST[v]?.[0]||v},{k:'sent',l:'وقت الإرسال',cell:m=>m.sentAt?dtFmt(m.sentAt):'—',fv:m=>m.sentAt||''},
+    {k:'text',l:'النص',cell:m=>`<span class="ell" style="max-width:260px" title="${esc(m.text)}">${esc(m.text)}</span>`,fv:m=>m.text,off:1}],
+  act:m=>m.status==='failed'?`<button class="btn sm out" onclick="waRetry('${m.id}')">إعادة الإرسال</button>`:''})}
+function waRetry(id){const m=byId(S.wa_out,id);if(!m)return;m.status='pending';m.error='';save();toast('أُعيدت للطابور');viewWaLog()}
 
 /* ===================== settings ===================== */
 function viewSettings(){viewSettings2('other')}

@@ -11,7 +11,7 @@ const cors = {
 };
 const J = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...cors, 'Content-Type': 'application/json' } });
 
-const COLLS = new Set(['expenses', 'recurring', 'products', 'meta', 'stock_log', 'sales', 'registers', 'shifts', 'promotions', 'customers', 'quotes', 'transfers', 'purchases', 'suppayments', 'stockcounts', 'vouchers']);
+const COLLS = new Set(['expenses', 'recurring', 'products', 'meta', 'stock_log', 'sales', 'registers', 'shifts', 'promotions', 'customers', 'quotes', 'transfers', 'purchases', 'suppayments', 'stockcounts', 'vouchers', 'wa_out']);
 const MAX_DOC = 3_000_000;   // حد حجم المستند الواحد (مرفقات/صور مضغوطة)
 const MAX_BATCH = 1500;
 
@@ -19,6 +19,36 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   const url = new URL(req.url);
   const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
+  // ===== 📲 طابور رسائل واتساب فانسي (للجسر فقط، بمفتاح FS_WA_TOKEN السري) =====
+  const waTok = req.headers.get('x-wa-token') || '';
+  const WA_TOKEN = Deno.env.get('FS_WA_TOKEN') || '';
+  if (req.method === 'POST' && waTok) {
+    if (!WA_TOKEN || waTok !== WA_TOKEN) return J({ error: 'unauthorized' }, 401);
+    let b: any; try { b = await req.json(); } catch { return J({ error: 'bad json' }, 400); }
+    const now = new Date().toISOString();
+    if (b.action === 'wa_pull') {
+      const lim = Math.min(10, Math.max(1, +b.limit || 5));
+      const { data, error } = await db.from('fs_app_docs').select('id,data').eq('coll', 'wa_out').eq('deleted', false).eq('data->>status', 'pending').order('updated_at', { ascending: true }).limit(lim);
+      if (error) return J({ error: error.message }, 500);
+      const out: any[] = [];
+      for (const r of data || []) {
+        const d = { ...(r.data || {}), status: 'processing', pulledAt: now };
+        const { error: e2 } = await db.from('fs_app_docs').update({ data: d, updated_at: now, updated_by: 'wa-bridge' }).eq('coll', 'wa_out').eq('id', r.id).eq('data->>status', 'pending');
+        if (!e2) out.push({ id: r.id, to: d.to, text: d.text });
+      }
+      return J({ ok: true, messages: out });
+    }
+    if (b.action === 'wa_ack') {
+      const { data: r } = await db.from('fs_app_docs').select('data').eq('coll', 'wa_out').eq('id', String(b.id || '')).maybeSingle();
+      if (!r) return J({ error: 'not found' }, 404);
+      const d = { ...(r.data || {}), status: b.ok ? 'sent' : 'failed', sentAt: b.ok ? now : null, error: b.ok ? '' : String(b.error || '').slice(0, 200) };
+      const { error } = await db.from('fs_app_docs').update({ data: d, updated_at: now, updated_by: 'wa-bridge' }).eq('coll', 'wa_out').eq('id', String(b.id));
+      if (error) return J({ error: error.message }, 500);
+      return J({ ok: true });
+    }
+    return J({ error: 'unknown action' }, 400);
+  }
 
   // ===== المصادقة =====
   let who = '';
