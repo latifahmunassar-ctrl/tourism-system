@@ -455,7 +455,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794552774';
+const BUILD='1794557052';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -3500,7 +3500,7 @@ function userForm(id){SET2();const ex=id?userRows().find(x=>x.id===id):null;cons
   const o=overlay(`<div class="mxwrap"><div class="mxhead"><h3>${ex?'ملف المستخدم':'إضافة مستخدم جديد'}</h3><span style="margin-inline-start:auto;display:flex;gap:8px"><button class="btn" data-x>✕ إلغاء</button><button class="btn pri" data-ok>${ex?'✓ حفظ التغييرات':'➤ إضافة المستخدم'}</button></span></div><div class="mxbody"><div class="uform">
    <h3>معلومات المستخدم</h3><div class="fl"><label>الاسم (اسم الدخول) <span class="r">*</span></label><input class="in" id="ufn" value="${esc(u.name)}" ${login?'readonly':''}></div>
    <div class="grid2"><div class="fl"><label>البريد الإلكتروني</label><input class="in" id="ufe" dir="ltr" value="${esc(u.email||'')}"></div><div class="fl"><label>رقم الجوال</label><input class="in" id="ufp" dir="ltr" value="${esc(u.phone||'')}" placeholder="+968"></div></div>
-   ${canPin?`<div class="fl"><label>رمز الدخول (PIN) ${login?'— اتركه فارغاً لعدم التغيير':'<span class="r">*</span>'}</label><input class="in" id="ufpin" inputmode="numeric" maxlength="8" placeholder="4 إلى 8 أرقام"></div><p class="sub">ⓘ يدخل المستخدم بالاسم والرمز من صفحة فانسي سنس، وأول دخول من جهاز جديد يحتاج اعتمادك من هنا.</p>`:`<div class="info">هذا الموظف يستخدم نظام العز أيضاً، فيدخل بنفس اسمه ورمزه هناك. تغيير الرمز يكون من نظام العز.</div>`}
+   ${canPin?`<div class="fl"><label>رمز الدخول (PIN) ${login?'— اتركه فارغاً لعدم التغيير':'<span class="r">*</span>'}</label><div class="row" style="gap:6px"><input class="in" id="ufpin" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password" placeholder="4 إلى 8 أرقام" style="flex:1"><button type="button" class="btn out" style="height:46px;white-space:nowrap" onclick="const i=document.getElementById('ufpin');const s=i.type==='password';i.type=s?'text':'password';this.textContent=s?'🙈 إخفاء':'👁 إظهار'">👁 إظهار</button></div></div><p class="sub">ⓘ يدخل المستخدم بالاسم والرمز من صفحة فانسي سنس، وأول دخول من جهاز جديد يحتاج اعتمادك من هنا.</p>`:`<div class="info">هذا الموظف يستخدم نظام العز أيضاً، فيدخل بنفس اسمه ورمزه هناك. تغيير الرمز يكون من نظام العز.</div>`}
    <h3 style="margin-top:20px">الصلاحيات</h3><p class="sub">إدارة ما يمكن لهذا المستخدم رؤيته أو القيام به في فانسي سنس. <a href="#/settings/roles" onclick="this.closest('.ov').remove()">إدارة الصلاحيات ↗</a></p>
    <div class="rolepick">${S.roles.map(r=>`<label class="rcard ${u.roleId===r.id?'on':''}"><input type="radio" name="ufr" value="${r.id}" ${u.roleId===r.id?'checked':''}><div><b>${ROLE_ICO[r.key]||'🛡'} ${esc(r.name)}</b><small>${esc(r.desc||'')}</small></div></label>`).join('')}</div>
    <h3 style="margin-top:20px">صلاحيات المواقع</h3><p class="sub">قم بتحديد المواقع التي يمكن لهذا المستخدم ممارسة صلاحياته فيها.</p>
