@@ -455,7 +455,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794557523';
+const BUILD='1794561730';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -527,7 +527,7 @@ async function flush(){
     const cur=docsOf(),put=[],del=[];
     for(const k in cur){const j=JSON.stringify(cur[k].data);if(SNAP[k]!==j)put.push([k,cur[k],j])}
     for(const k in SNAP)if(!(k in cur)&&!k.startsWith('meta:')){const i=k.indexOf(':');del.push([k,{coll:k.slice(0,i),id:k.slice(i+1)}])}
-    for(let i=0;i<put.length;i+=200){const ch=put.slice(i,i+200);await api('POST',{action:'put',docs:ch.map(x=>x[1])});ch.forEach(([k,,j])=>SNAP[k]=j)}
+    for(let i=0;i<put.length;i+=200){const ch=put.slice(i,i+200);const rr=await api('POST',{action:'put',docs:ch.map(x=>x[1])});ch.forEach(([k,,j])=>SNAP[k]=j);const sk=(rr?.skipped||[]).filter(x=>!x.startsWith('meta:'));if(sk.length)toast('بعض التعديلات لم تُحفظ لأنها خارج صلاحياتك')}
     for(let i=0;i<del.length;i+=200){const ch=del.slice(i,i+200);await api('POST',{action:'del',items:ch.map(x=>x[1])});ch.forEach(([k])=>delete SNAP[k])}
     setSync('ok');
   }catch(e){

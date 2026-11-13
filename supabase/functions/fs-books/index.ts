@@ -15,6 +15,36 @@ const COLLS = new Set(['expenses', 'recurring', 'products', 'meta', 'stock_log',
 const MAX_DOC = 3_000_000;   // حد حجم المستند الواحد (مرفقات/صور مضغوطة)
 const MAX_BATCH = 1500;
 
+
+// ===== 🔐 صلاحيات الخادم (١٣ نوفمبر ٢٠٢٦): الدور من ملف المستخدم في meta:main (users/roles) — نفس صلاحيات رواء =====
+const normS = (s: unknown) => String(s ?? '').replace(/\s+/g, ' ').trim();
+const ANY = (...ps: string[]) => (can: (p: string) => boolean) => ps.some(can);
+const REPORTS = ['view-sales-reports', 'view-products-and-stock-reports', 'view-financial-reports-in-reports', 'view-tax-reports', 'dashboard-base'];
+const READ: Record<string, (can: (p: string) => boolean) => boolean> = {
+  expenses: ANY('expenses-base', ...REPORTS), recurring: ANY('expenses-base'), products: ANY('products-base', 'sale-checkout', 'stock-base', 'suppliers-base', ...REPORTS),
+  stock_log: ANY('products-base', ...REPORTS), sales: ANY('view-sale-invoices', 'sale-checkout', 'customers-base', ...REPORTS), registers: ANY('sale-checkout', 'review-all-registers-sessions-cash-management', 'dashboard-base'),
+  shifts: ANY('sale-checkout', 'review-all-registers-sessions-cash-management', 'dashboard-base'), promotions: ANY('sale-checkout', 'promotions-app-access'), customers: ANY('customers-base', 'sale-checkout'),
+  quotes: ANY('sale-checkout'), transfers: ANY('stock-base', ...REPORTS), vouchers: ANY('stock-base', ...REPORTS), stockcounts: ANY('manage-stock-counts', 'stock-base', ...REPORTS),
+  purchases: ANY('suppliers-base', ...REPORTS), suppayments: ANY('suppliers-base', ...REPORTS), wa_out: ANY('manage-registers-and-sales-settings'), meta: () => true,
+};
+const WRITE: Record<string, (can: (p: string) => boolean) => boolean> = {
+  expenses: ANY('add-expenses', 'edit-expenses'), recurring: ANY('add-expenses'), products: ANY('add-products', 'edit-products'), stock_log: ANY('edit-products', 'manage-stock-counts'),
+  sales: ANY('sale-checkout', 'manage-customer-settlements', 'process-sale-returns'), registers: ANY('sale-checkout', 'manage-registers-and-sales-settings'), shifts: ANY('sale-checkout'),
+  promotions: ANY('promotions-app-access'), customers: ANY('add-new-customers', 'edit-customers'), quotes: ANY('sale-checkout'),
+  transfers: ANY('request-stock-transfer', 'approve-or-reject-transfer-requests', 'record-draft-stock-operations'), vouchers: ANY('record-draft-stock-operations', 'manage-and-confirm-stock-movements'),
+  stockcounts: ANY('manage-stock-counts'), purchases: ANY('record-draft-purchase-orders', 'manage-and-confirm-purchase-invoices', 'record-purchase-returns'), suppayments: ANY('manage-suppliers-and-payables'),
+  wa_out: ANY('sale-checkout', 'manage-registers-and-sales-settings'),
+  meta: ANY('general-account-setup', 'financial-settings', 'manage-locations', 'manage-users-and-permissions', 'manage-registers-and-sales-settings', 'promotions-app-access', 'add-expenses', 'edit-products', 'manage-customer-settlements'),
+};
+// يحذف التكلفة من المستندات لمن لا يملك «عرض تكلفة المنتج»
+function stripCost(coll: string, d: any) {
+  if (!d || typeof d !== 'object') return d;
+  const x = structuredClone(d);
+  if (coll === 'products') { delete x.cost; delete x.avgCost; if (x.locs) for (const b in x.locs) if (x.locs[b]) delete x.locs[b].buy; }
+  if ((coll === 'sales' || coll === 'transfers' || coll === 'vouchers' || coll === 'quotes') && Array.isArray(x.items)) x.items.forEach((i: any) => { delete i.cost; delete i.oldCost; delete i.totalCost; });
+  return x;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   const url = new URL(req.url);
@@ -67,6 +97,25 @@ Deno.serve(async (req: Request) => {
   }
   if (!who) return J({ error: 'unauthorized' }, 401);
 
+  // ===== 🔐 الدور =====
+  let full = owner;  // المالكة أو مفتاح النظام = كل الصلاحيات
+  let perms: Record<string, boolean> = {};
+  let profile: any = null;
+  let metaRow: any = null;
+  if (!full) {
+    const { data: m } = await db.from('fs_app_docs').select('data').eq('coll', 'meta').eq('id', 'main').maybeSingle();
+    metaRow = m?.data || {};
+    profile = (metaRow.users || []).find((u: any) => normS(u.name) === normS(who)) || null;
+    if (profile?.status === 'stopped') return J({ error: 'unauthorized' }, 401);
+    const role = profile?.roleId ? (metaRow.roles || []).find((r: any) => r.id === profile.roleId) : null;
+    if (!profile || !profile.roleId || !role || role.key === 'admin' || role.key === 'super-admin') full = true;   // بلا دور محدد = كما كان (كل الصلاحيات)
+    else perms = role.perms || {};
+  }
+  const can = (p: string) => full || !!perms[p];
+  const canRead = (c: string) => full || (READ[c] ? READ[c](can) : false);
+  const canWrite = (c: string) => full || (WRITE[c] ? WRITE[c](can) : false);
+  const seeCost = can('view-product-cost');
+
   // ===== GET: كل المستندات (أو المتغيّرة منذ since) =====
   if (req.method === 'GET') {
     const since = url.searchParams.get('since');
@@ -77,7 +126,7 @@ Deno.serve(async (req: Request) => {
       q = since ? q.gt('updated_at', since) : q.eq('deleted', false);
       const { data, error } = await q;
       if (error) return J({ error: error.message }, 500);
-      out.push(...(data || []));
+      for (const r of data || []) { if (!canRead(r.coll)) continue; out.push(seeCost ? r : { ...r, data: stripCost(r.coll, r.data) }); }
       if (!data || data.length < page) break;
     }
     return J({ user: who, owner, now: new Date().toISOString(), docs: out });
@@ -93,22 +142,85 @@ Deno.serve(async (req: Request) => {
       const docs = Array.isArray(body.docs) ? body.docs : [];
       if (docs.length > MAX_BATCH) return J({ error: 'too many docs' }, 400);
       const rows = [];
+      const skipped: string[] = [];
       for (const d of docs) {
         if (!COLLS.has(d?.coll) || typeof d?.id !== 'string' || !d.id || d.id.length > 80) return J({ error: 'bad doc' }, 400);
         if (JSON.stringify(d.data ?? null).length > MAX_DOC) return J({ error: 'doc too large: ' + d.id }, 413);
-        rows.push({ coll: d.coll, id: d.id, data: d.data, deleted: false, updated_at: now, updated_by: who });
+      }
+      // المستندات الحالية لمن صلاحياته محدودة (للدمج الآمن)
+      const stored = new Map<string, any>();
+      if (!full) {
+        const byColl: Record<string, string[]> = {};
+        docs.forEach((d: any) => { (byColl[d.coll] = byColl[d.coll] || []).push(d.id); });
+        const pidSet = new Set<string>();
+        docs.filter((d: any) => d.coll === 'sales').forEach((d: any) => (d.data?.items || []).forEach((i: any) => i.productId && pidSet.add(i.productId)));
+        if (pidSet.size) (byColl.products = byColl.products || []).push(...pidSet);
+        for (const [c, ids] of Object.entries(byColl)) {
+          for (let i = 0; i < ids.length; i += 300) {
+            const { data } = await db.from('fs_app_docs').select('coll,id,data,deleted').eq('coll', c).in('id', ids.slice(i, i + 300));
+            (data || []).forEach((r: any) => stored.set(r.coll + ':' + r.id, r.deleted ? null : r.data));
+          }
+        }
+      }
+      for (const d of docs) {
+        let data = d.data;
+        const old = stored.get(d.coll + ':' + d.id);
+        if (!full) {
+          if (d.coll === 'products' && !canWrite('products')) {
+            // البيع/الجرد/التحويل يغيّر الكمية فقط: نأخذ المخزّن ونطبّق الكميات وسجل الحركة فقط
+            if (!old || !(can('sale-checkout') || can('stock-base') || can('manage-stock-counts'))) { skipped.push(d.coll + ':' + d.id); continue; }
+            const m = structuredClone(old); m.locs = m.locs || {};
+            for (const b in (data?.locs || {})) { m.locs[b] = m.locs[b] || {}; if (data.locs[b] && data.locs[b].qty != null) m.locs[b].qty = data.locs[b].qty; }
+            if (Array.isArray(data?.log)) m.log = data.log.slice(-300);
+            data = m;
+          } else if (d.coll === 'meta') {
+            if (!canWrite('meta')) { skipped.push('meta:' + d.id); continue; }
+            if (!can('manage-users-and-permissions')) { const cur = metaRow || {}; data = { ...data, users: cur.users || [], roles: cur.roles || [] }; }
+          } else if (d.coll === 'customers' && old && !can('edit-customers') && !can('manage-customer-settlements')) {
+            skipped.push(d.coll + ':' + d.id); continue;
+          } else if (!canWrite(d.coll)) { skipped.push(d.coll + ':' + d.id); continue; }
+          if (!seeCost) {
+            if (d.coll === 'products' && old) { data = { ...data, cost: old.cost, avgCost: old.avgCost }; if (data.locs && old.locs) for (const b in data.locs) if (old.locs[b]) data.locs[b] = { ...data.locs[b], buy: old.locs[b].buy }; }
+            if (d.coll === 'sales' && Array.isArray(data?.items)) {
+              const oldItems = Array.isArray(old?.items) ? old.items : [];
+              data = { ...data, items: data.items.map((i: any, k: number) => { const prev = oldItems[k]; const pr = stored.get('products:' + i.productId); const cost = prev && prev.productId === i.productId && prev.cost != null ? prev.cost : (pr ? +pr.cost || 0 : 0); return { ...i, cost }; }) };
+            }
+            if ((d.coll === 'transfers' || d.coll === 'vouchers' || d.coll === 'quotes') && Array.isArray(data?.items) && Array.isArray(old?.items)) {
+              data = { ...data, items: data.items.map((i: any, k: number) => { const prev = old.items[k]; return prev && prev.productId === i.productId ? { ...i, cost: prev.cost, oldCost: prev.oldCost, totalCost: prev.totalCost } : i; }) };
+            }
+          }
+          if (d.coll === 'wa_out' && !can('manage-registers-and-sales-settings')) {
+            // الكاشير: الرسالة تُبنى من نص الإعدادات ورقم عميل الفاتورة فقط (منع إرسال نص أو رقم عشوائي)
+            const sid = String(data?.saleId || '');
+            const { data: sr } = await db.from('fs_app_docs').select('data').eq('coll', 'sales').eq('id', sid).maybeSingle();
+            const inv = sr?.data || docs.find((x: any) => x.coll === 'sales' && x.id === sid)?.data;
+            if (!inv || !inv.customerId || old) { skipped.push('wa_out:' + d.id); continue; }
+            const { data: cr } = await db.from('fs_app_docs').select('data').eq('coll', 'customers').eq('id', inv.customerId).maybeSingle();
+            const cust = cr?.data || docs.find((x: any) => x.coll === 'customers' && x.id === inv.customerId)?.data;
+            let ph = String(cust?.phone || '').replace(/\D/g, ''); if (ph.startsWith('00')) ph = ph.slice(2); if (ph.length === 8) ph = '968' + ph;
+            if (ph.length < 10) { skipped.push('wa_out:' + d.id); continue; }
+            const w = (metaRow?.settings?.wa) || {}; const kind = data.kind === 'repeat' ? 'repeat' : 'first';
+            const br = (metaRow?.branches || []).find((b: any) => b.id === inv.branchId);
+            const txt = String(w[kind] || '').replace(/\{الاسم\}/g, cust?.name || '').replace(/\{رقم_الفاتورة\}/g, inv.no || '').replace(/\{المبلغ\}/g, String(inv.total ?? '')).replace(/\{الفرع\}/g, br?.name || '');
+            if (!txt.trim()) { skipped.push('wa_out:' + d.id); continue; }
+            data = { ...data, to: ph + '@s.whatsapp.net', phone: cust.phone, text: txt, kind, status: 'pending' };
+          }
+        }
+        rows.push({ coll: d.coll, id: d.id, data, deleted: false, updated_at: now, updated_by: who });
       }
       for (let i = 0; i < rows.length; i += 500) {
         const { error } = await db.from('fs_app_docs').upsert(rows.slice(i, i + 500), { onConflict: 'coll,id' });
         if (error) return J({ error: error.message }, 500);
       }
-      return J({ ok: true, n: rows.length, now });
+      return J({ ok: true, n: rows.length, now, skipped });
     }
     if (body.action === 'del') {
       const items = Array.isArray(body.items) ? body.items : [];
       if (items.length > MAX_BATCH) return J({ error: 'too many' }, 400);
+      const delPerm: Record<string, string> = { products: 'delete-products', customers: 'delete-customers', expenses: 'delete-expenses' };
       for (const it of items) {
         if (!COLLS.has(it?.coll) || typeof it?.id !== 'string') return J({ error: 'bad item' }, 400);
+        if (!full && (it.coll === 'meta' || !canWrite(it.coll) || (delPerm[it.coll] && !can(delPerm[it.coll])))) continue;
         const { error } = await db.from('fs_app_docs').update({ deleted: true, data: {}, updated_at: now, updated_by: who }).eq('coll', it.coll).eq('id', it.id);
         if (error) return J({ error: error.message }, 500);
       }
@@ -172,6 +284,7 @@ Deno.serve(async (req: Request) => {
     }
     // 🖼 نسخ صور المنتجات من رابط خارجي (رواء) إلى تخزين Supabase الخاص بنا — bucket عام للقراءة fs-products
     if (body.action === 'mirror_images') {
+      if (!full && !can('edit-products') && !can('add-products')) return J({ error: 'forbidden' }, 403);
       const items = Array.isArray(body.items) ? body.items.slice(0, 30) : [];
       const BUCKET = 'fs-products';
       const { data: b } = await db.storage.getBucket(BUCKET);
