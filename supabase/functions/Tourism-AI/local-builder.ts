@@ -332,7 +332,12 @@ export function pickCheapestHotel(
     if (options?.seaView && !/sea\s*view|ocean\s*view|beach\s*front|بحر|شاطئ/iu.test(String(h.room_type || ""))) return false;
     if (options?.feature) {
       const rt = (h.room_type || "").toLowerCase();
-      if (options.feature === "pool"  && !/pool|مسبح/iu.test(rt)) return false;
+      // ١٣ نوفمبر ٢٠٢٦: نفس تعريف team.html (_accKindMatch) — «مسبح خاص» مو Pool View/Pool Access/Poolside (إطلالة أو مسبح مشترك).
+      const _privPool = /private\s*pool|pool\s*villa|plunge\s*pool|مسبح\s*خاص/iu.test(rt)
+        || (/pool|مسبح/iu.test(rt) && !/pool\s*-?\s*(?:view|access|side)|poolside/iu.test(rt));
+      if (options.feature === "pool"  && !_privPool) return false;
+      // villa_pool = فيلا مع مسبح خاص (بالي — منال): «فيلا» في الغرفة أو اسم الفندق + مسبح خاص.
+      if (options.feature === "villa_pool" && !(_privPool && (/villa|فيلا/iu.test(rt) || /villa|فيلا/iu.test(String(h.name || ""))))) return false;
       if (options.feature === "villa" && !/villa|فيلا/iu.test(rt)) return false;
       if (options.feature === "suite" && !/suite|سويت|جناح/iu.test(rt)) return false;
     }
@@ -2248,6 +2253,38 @@ export async function buildLocalProgram(
   const _usedByCity: Record<string, string[]> = {};
   // فنادق طلب العميل استبعادها («غير فندق مكة») — من طلال (exclude_hotels).
   const _globalEx = ((request as { excludeHotelNames?: string[] }).excludeHotelNames || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
+  // 🏢 ١٣ نوفمبر ٢٠٢٦ (المالكة — منال): «فله مع مسبح خاص في مدينة واحدة» → نوع الغرفة (prefFeature) لإقامة وحدة بس:
+  //    prefFeatureStay = "most" → الإقامة الأكثر ليالي؛ أو اسم مدينة/منطقة («ابود») → تلك الإقامة (لو ما لقيناها → الأكثر ليالي).
+  //    بدون prefFeatureStay → السلوك القديم (النوع لكل الإقامات).
+  const _rpF = request as { prefFeature?: string; prefFeatureStay?: string };
+  let _featStayIdx = -1;
+  if (_rpF.prefFeature && _rpF.prefFeatureStay) {
+    const want = String(_rpF.prefFeatureStay).trim();
+    const AREA_RE: Record<string, RegExp> = { Ubud: /[أا]و?بود|ubud/i, Seminyak: /سمينياك|سيمنياك|سيمينياك|seminyak/i, Kuta: /كوتا|kuta/i, Jimbaran: /جيمب?ا?ران|jimbaran/i, "Nusa Dua": /نوسا\s*دوا|nusa\s*dua/i };
+    const all = stayOrder.map((_, i) => i);
+    let cand: number[] = [];
+    if (want !== "most") {
+      cand = all.filter(i => { const a = (stayOrder[i] as { area?: string }).area; return !!a && (AREA_RE[a]?.test(want) || want.toLowerCase().includes(a.toLowerCase())); });
+      if (!cand.length) cand = all.filter(i => { const def = cityDefs.find(c => c.canonical === stayOrder[i].city); return (!!def?.pattern && def.pattern.test(want)) || want.toLowerCase().includes(String(stayOrder[i].city).toLowerCase()); });
+    }
+    if (!cand.length) cand = all;
+    // «مدينة وحدة» (most) أو تعادل الليالي: نفضّل إقامة فيها فعلاً غرفة بهالنوع (كوتا ما فيها فلل بمسبح → أبود/جيمباران)
+    if (want === "most") {
+      const f = String(_rpF.prefFeature);
+      const featRe = f === "villa_pool" ? /villa|فيلا/i : f === "villa" ? /villa|فيلا/i : f === "suite" ? /suite|سويت|جناح/i : /pool|مسبح/i;
+      const hasFeat = (i: number) => {
+        const st = stayOrder[i] as { city: string; area?: string };
+        const def = cityDefs.find(c => c.canonical === st.city);
+        return allHotels.some(h => hotelCityMatches(h.location, st.city, def?.pattern)
+          && (!st.area || String(h.location || "").toLowerCase().replace(/\s+/g, " ").includes(String(st.area).toLowerCase()))
+          && featRe.test(String(h.room_type || "") + " " + (f === "villa_pool" || f === "villa" ? String(h.name || "") : ""))
+          && (f !== "villa_pool" || /pool|مسبح/i.test(String(h.room_type || ""))));
+      };
+      const withFeat = cand.filter(hasFeat);
+      if (withFeat.length) cand = withFeat;
+    }
+    _featStayIdx = cand.reduce((b, i) => (b < 0 || stayOrder[i].nights > stayOrder[b].nights) ? i : b, -1);
+  }
   // Transport-only mode: employee wants only transfers + tours, no hotels.
   // Skip the entire hotel-pick loop; the rest of the pipeline (transfers,
   // tours, day arrangement) keeps working off the city distribution.
@@ -2321,6 +2358,7 @@ export async function buildLocalProgram(
         : undefined;
       // تفضيلات العميل العامة (طلال): ناعمة — لو ما فيه فندق يحققها نرجع للأفضل المتاح.
       const _rp = request as { preferHotelKeys?: string[]; prefBreakfast?: boolean; preferHotelName?: string; preferHotelCity?: string; prefFeature?: string; prefSeaView?: boolean };
+      const _featHere = _featStayIdx < 0 ? _rp.prefFeature : (stayOrder.indexOf(stay) === _featStayIdx ? _rp.prefFeature : undefined);
       const _prefNameHere = _rp.preferHotelName && (!_rp.preferHotelCity || String(stay.city).toLowerCase().includes(String(_rp.preferHotelCity).toLowerCase())) ? _rp.preferHotelName : undefined;
       const pickOpts = {
         breakfast: _rp.prefBreakfast === true ? true : undefined,
@@ -2330,7 +2368,7 @@ export async function buildLocalProgram(
         overrideAdults: overrideForThisStay,
         overrideStars: overrideStarsForThisStay,
         areaFilter: areaForThisStay || stay.area || inferredArea,
-        feature: featureForThisStay || _rp.prefFeature,
+        feature: featureForThisStay || _featHere,
         lockOccupancyAdults,
         // تسعير بالباقة (أبوظبي): مدّة هذه الإقامة تحدّد أي صف سعر يصلح.
         stayNights: stay.nights,
@@ -2339,7 +2377,7 @@ export async function buildLocalProgram(
         excludeNames: wantDifferentHotel ? new Set([...(excludeForThisStay || []), ...(prevStayCity === stay.city && prevHotelName ? [prevHotelName.toLowerCase()] : []), ..._usedHere.map(x => x.toLowerCase())]) : excludeForThisStay,
         ...pickOpts,
       });
-      if (!hotel && (pickOpts.breakfast || pickOpts.preferName || pickOpts.preferKeys || pickOpts.seaView || (!featureForThisStay && _rp.prefFeature))) {
+      if (!hotel && (pickOpts.breakfast || pickOpts.preferName || pickOpts.preferKeys || pickOpts.seaView || (!featureForThisStay && _featHere))) {
         const _soft = { ...pickOpts, breakfast: undefined, preferName: undefined, preferKeys: undefined, seaView: undefined, feature: featureForThisStay };
         hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, { excludeNames: excludeForThisStay, ..._soft });
         if (hotel) ((request as { _prefMisses?: string[] })._prefMisses ||= []).push(String(stay.city));
