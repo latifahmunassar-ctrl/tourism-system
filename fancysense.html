@@ -151,7 +151,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v73';
+const FS_VER='v74';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderAjel(); renderXfer(); renderBanks(); renderInv(); renderSettings();
@@ -1027,7 +1027,7 @@ function _xfCompare(){
 }
 const _XF_ST={ok:'مطابق',part:'فرق بالمبلغ',acc:'مو موجود بالبنك (العز)',az:'مو موجود بفانسي'};
 function renderXfer(){
-  const C=cur(), F={from:window._xfFrom||'',to:window._xfTo||'',br:window._xfBr||'',st:window._xfSt||''};
+  const C=cur(), F={from:window._xfFrom||'',to:window._xfTo||'',br:window._xfBrF||'',st:window._xfSt||''};
   const all=_xfCompare(); const brs=[...new Set(all.map(r=>r.br))].sort();
   const rows=all.filter(r=>(!F.from||r.d>=F.from)&&(!F.to||r.d<=F.to)&&(!F.br||r.br===F.br)&&(!F.st||r.st===F.st)); window._xfRows=rows;
   let tA=0,tZ=0; const cnt={ok:0,part:0,acc:0,az:0}, tot={};
@@ -1043,8 +1043,8 @@ function renderXfer(){
   $('p-xfer').innerHTML=
     '<div class="panel" style="border:1px solid #3aa0ff"><h3 style="margin:0 0 6px">🔄 التحويلات البنكية: فانسي ↔ نظام العز (الفعلي بالبنك)</h3><div class="sub"><b>فانسي</b> = خانة «تحويل» في المبيعات اليومية (كل حوالة لحالها إذا مسجّلة بالتفصيل). <b>نظام العز</b> = إيرادات «فانسي» بالبنك بيانها «تحويل» أو «اون لاين» (بدون الآجل وتحويل الصندوق — لهم أقسامهم). المطابقة بنفس المبلغ وتاريخ العز قريب (−١ إلى +٤ أيام). <b>إذا المبلغ دخل على أكثر من حوالة</b> تظهر الحوالات كلها بنفس السطر مع «إجمالي ما دخل» و«الفرق».</div>'+
     '<div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:10px"><div class="fld"><label>📅 من</label><input type="date" value="'+esc(F.from)+'" onchange="window._xfFrom=this.value;renderXfer()"></div><div class="fld"><label>📅 إلى</label><input type="date" value="'+esc(F.to)+'" onchange="window._xfTo=this.value;renderXfer()"></div>'+
-      sel('🏪 الفرع','_xfBr',[['','الكل'],...brs.map(b=>[b,b])],F.br)+sel('🔎 الحالة','_xfSt',[['','الكل'],['ok','✓ مطابق'],['part','≠ فرق بالمبلغ'],['acc','⚠️ مو موجود بالبنك (العز)'],['az','🏦 مو موجود بفانسي']],F.st)+
-      '<div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._xfFrom=\'\';window._xfTo=\'\';window._xfBr=\'\';window._xfSt=\'\';renderXfer()">مسح الفلاتر</button></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn" onclick="xfExportXlsx()">📥 تصدير Excel</button></div></div>'+
+      sel('🏪 الفرع','_xfBrF',[['','الكل'],...brs.map(b=>[b,b])],F.br)+sel('🔎 الحالة','_xfSt',[['','الكل'],['ok','✓ مطابق'],['part','≠ فرق بالمبلغ'],['acc','⚠️ مو موجود بالبنك (العز)'],['az','🏦 مو موجود بفانسي']],F.st)+
+      '<div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._xfFrom=\'\';window._xfTo=\'\';window._xfBrF=\'\';window._xfSt=\'\';renderXfer()">مسح الفلاتر</button></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn" onclick="xfExportXlsx()">📥 تصدير Excel</button></div></div>'+
     '<div class="kpis" style="margin-top:10px">'+kpi('🧾 فانسي',fmt(tA)+' '+C)+kpi('🏦 نظام العز',fmt(tZ)+' '+C)+kpi('الفرق (العز − فانسي)',fmt(tZ-tA)+' '+C,Math.abs(tZ-tA)<0.01?'':'neg')+kpi('الحالة','✓ '+cnt.ok+' · ≠ فرق '+cnt.part+' · ⚠️ مو بالبنك '+cnt.acc+' · 🏦 مو بفانسي '+cnt.az)+'</div>'+
     (cards?'<div class="kpis" style="margin-top:8px">'+cards+'</div>':'')+'</div>'+
     '<div class="panel"><div class="tbl-wrap bf-scroll" style="max-height:620px"><table style="font-size:12px"><thead><tr><th>التاريخ</th><th>الفرع</th><th>🧾 فانسي</th><th style="background:#1a5fb4">🏦 حوالات العز</th><th>إجمالي ما دخل</th><th>الفرق</th><th>المقارنة</th><th>البنك · المرجع · البيان (العز)</th><th>ملاحظة فانسي</th></tr></thead><tbody>'+(body||'<tr><td colspan="9" class="mut" style="text-align:center;padding:12px">لا تحويلات بهذا الفلتر</td></tr>')+'</tbody></table></div></div>';
