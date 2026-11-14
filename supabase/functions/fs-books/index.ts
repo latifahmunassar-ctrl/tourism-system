@@ -2,6 +2,7 @@
 // 🔐 نفس دخول نظام العز: مفتاح النظام (متغيّر بيئة سرّي) أو جلسة من acc_sessions (المالكة أو موظف عنده تبويب "fancy")
 // 💾 التخزين: جدول fs_app_docs (coll, id, data jsonb) — مستند لكل مصروف/منتج + مستند meta للإعدادات والقوائم
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import Anthropic from 'npm:@anthropic-ai/sdk';
 
 const ACCESS_KEY = Deno.env.get('FS_ACCESS_KEY') || Deno.env.get('ACC_ACCESS_KEY') || '';
 const cors = {
@@ -146,7 +147,7 @@ Deno.serve(async (req: Request) => {
       q = since ? q.gt('updated_at', since) : q.eq('deleted', false);
       const { data, error } = await q;
       if (error) return J({ error: error.message }, 500);
-      for (const r of data || []) { if (r.coll === 'login_link' || !canRead(r.coll)) continue; out.push(seeCost ? r : { ...r, data: stripCost(r.coll, r.data) }); }
+      for (const r of data || []) { if (r.coll === 'login_link' || r.coll === 'img_log' || !canRead(r.coll)) continue; out.push(seeCost ? r : { ...r, data: stripCost(r.coll, r.data) }); }
       if (!data || data.length < page) break;
     }
     return J({ user: who, owner, now: new Date().toISOString(), docs: out });
@@ -157,6 +158,27 @@ Deno.serve(async (req: Request) => {
     let body: any;
     try { body = await req.json(); } catch { return J({ error: 'bad json' }, 400); }
     if (body.action === 'whoami') return J({ user: who });
+    if (body.action === 'img_identify') {
+      // 📷 قراءة اسم المنتج من صورة (Claude Opus 5.5) — يرجع وصف المنتج فقط، والمطابقة مع المنتجات تتم في المتصفح
+      const img = String(body.image || ''); const mt = ['image/jpeg', 'image/png', 'image/webp'].includes(body.media_type) ? body.media_type : 'image/jpeg';
+      if (!img || img.length > 4_000_000) return J({ error: 'صورة غير صالحة' }, 400);
+      try {
+        const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
+        const res: any = await client.beta.messages.create({
+          model: 'claude-opus-5-5', max_tokens: 2000,
+          betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
+          output_config: { effort: 'low' },
+          system: 'You identify retail products (perfumes, incense, cosmetics, gifts) from a shop photo taken by a cashier. Read every visible label. Reply with ONLY a JSON object, no prose: {"brand":"","name":"","variant":"","size":"","category":"","barcode":"","texts":["every distinct word/phrase visible on the product, Arabic and English"],"confidence":"high|medium|low"}. barcode = digits under a barcode if readable, else "". Use "" for unknown fields.',
+          messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: mt, data: img } }, { type: 'text', text: 'What product is this? JSON only.' }] }],
+        } as any);
+        if (res.stop_reason === 'refusal') return J({ error: 'تعذّر التعرف على الصورة' }, 422);
+        const txt = (res.content || []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('');
+        const m = txt.match(/\{[\s\S]*\}/); if (!m) return J({ error: 'لم أتعرف على المنتج — جرّبي صورة أوضح للاسم' }, 422);
+        let info: any; try { info = JSON.parse(m[0]); } catch { return J({ error: 'لم أتعرف على المنتج — جرّبي صورة أوضح' }, 422); }
+        try { await db.from('fs_app_docs').upsert({ coll: 'img_log', id: crypto.randomUUID(), data: { at: new Date().toISOString(), by: who, info, in: res.usage?.input_tokens, out: res.usage?.output_tokens }, deleted: true, updated_at: new Date().toISOString(), updated_by: who }, { onConflict: 'coll,id' }); } catch (_) {}
+        return J({ ok: true, info });
+      } catch (e: any) { return J({ error: 'خطأ في خدمة التعرف: ' + String(e?.message || e).slice(0, 160) }, 502); }
+    }
     if (body.action === 'link_create') {
       if (!owner) return J({ error: 'للمالكة فقط' }, 403);
       const { data: sa } = await db.from('acc_staff_access').select('allowed_tabs').eq('staff_name', who).maybeSingle();

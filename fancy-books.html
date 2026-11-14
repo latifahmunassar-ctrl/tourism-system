@@ -457,7 +457,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794645451';
+const BUILD='1794677496';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -1604,7 +1604,7 @@ function posTab(r){
   if(POST==='quotes')return posQuotes(r);
   $('#posmain').innerHTML=`<div class="posbody">
    <div class="pospro">
-    <div class="srow"><div class="fsearch"><label>استخدم الماسح الضوئي أو أدخل اسم المنتج</label><input id="posq" autocomplete="off"><span>⌕</span><div class="sdrop" id="sdrop"></div></div>
+    <div class="srow"><div class="fsearch"><label>استخدم الماسح الضوئي أو أدخل اسم المنتج</label><input id="posq" autocomplete="off"><span>⌕</span><div class="sdrop" id="sdrop"></div></div><button class="btn out" title="صوّري المنتج لمعرفة سعره" style="height:46px;align-self:flex-end;font-size:20px;padding:0 14px" onclick="camPick()">📷</button>
      <div class="pmode"><span>بيع بسعر الـ</span><button data-pm="retail">التجزئة</button><button data-pm="wholesale">الجملة</button></div></div>
     ${posTiles(r)}<div id="carttbl"></div></div>
    <div class="posside" id="posside"></div></div>`;
@@ -3693,6 +3693,24 @@ function importSettings(d){SET2();const bBy=n=>S.branches.find(b=>normS(b.name).
 
 installPerms();wrapImports();
 
+/* ===================== 📷 التعرف على المنتج من الصورة ===================== */
+function camPick(){const i=document.createElement('input');i.type='file';i.accept='image/*';i.capture='environment';i.onchange=()=>{if(i.files[0])camRun(i.files[0])};i.click()}
+function camShrink(file,max=1280){return new Promise((ok,no)=>{const u=URL.createObjectURL(file),im=new Image();im.onload=()=>{const k=Math.min(1,max/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);ok(c.toDataURL('image/jpeg',0.85))};im.onerror=()=>no(new Error('تعذّر قراءة الصورة'));im.src=u})}
+const camN=s=>String(s||'').toLowerCase().replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').replace(/[ًٌٍَُِّْـ]/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+function camMatch(info){const words=new Set();[info.brand,info.name,info.variant,info.size,info.category,...(info.texts||[])].forEach(t=>camN(t).split(' ').forEach(w=>{if(w.length>=2)words.add(w)}));
+  const bc=String(info.barcode||'').replace(/\D/g,''),full=camN([info.brand,info.name,info.variant].join(' '));
+  return S.products.filter(p=>!p.deleted).map(p=>{const pn=camN(p.name+' '+(p.brand||'')+' '+(p.category||''));const pw=new Set(pn.split(' '));let s=0;
+    if(bc&&bc.length>=6&&(String(p.barcode||'').replace(/\D/g,'')===bc||String(p.sku||'')===bc))s+=100;
+    for(const w of words){if(pw.has(w))s+=w.length>=4?3:1.5;else if(w.length>=4&&pn.includes(w))s+=1.5}
+    const nm=camN(info.name);if(nm&&nm.length>=3&&pn.includes(nm))s+=6;if(full.length>=5&&pn.includes(full))s+=8;
+    return{p,s:s/Math.sqrt(Math.max(3,pw.size))}}).filter(x=>x.s>0.4).sort((a,b)=>b.s-a.s).slice(0,5)}
+async function camRun(file){const o=overlay(`<div class="modal" style="width:560px"><div class="dh"><h3>📷 التعرف على المنتج</h3></div><div class="db" id="camb" style="text-align:center"><div class="loading">⏳ جاري قراءة الصورة…</div></div><div class="df"><button class="btn out" data-again>📷 صورة ثانية</button><button class="btn" data-x>إغلاق</button></div></div>`);
+  o.querySelector('[data-x]').onclick=()=>o.remove();o.querySelector('[data-again]').onclick=()=>{o.remove();camPick()};const b=o.querySelector('#camb');
+  try{const d=await camShrink(file);const r=await api('POST',{action:'img_identify',image:d.split(',')[1],media_type:'image/jpeg'});const info=r.info||{};const L=camMatch(info);
+    const br=CART?.branchId,mode=CART?.priceMode;const what=[info.brand,info.name,info.variant,info.size].filter(Boolean).join(' · ');
+    b.style.textAlign='';b.innerHTML=`<p class="sub" style="margin:0 0 10px">قرأت من الصورة: <b>${esc(what||'—')}</b></p>`+(L.length?`<div class="card">${L.map((x,i)=>{const p=x.p,q=p.locs?.[br]?.qty;return`<div class="tx" style="padding:10px;gap:10px;align-items:center">${p.images?.[0]?`<img src="${p.images[0]}" style="width:64px;height:64px;object-fit:cover;border-radius:8px">`:'<span style="width:64px;text-align:center;font-size:28px">🖼</span>'}<div style="flex:1;min-width:0"><b>${esc(p.name)}</b>${i===0?' <span class="pill p-ok">الأقرب</span>':''}<div class="sub" style="margin:0">${q!=null?'المتوفر: '+fmt(q):''}</div></div><div style="text-align:center"><div style="font-size:20px;font-weight:800;color:var(--pri)">${fmt(lp(p,br,mode))}</div><small class="sub">${esc(S.settings.currency||'')}</small></div><button class="btn sm pri" data-add="${p.id}">＋ للفاتورة</button></div>`}).join('')}</div>`:`<div class="empty" style="padding:18px"><div class="ico">🤔</div><p>ما لقيت منتج مطابق. جرّبي صورة أقرب لاسم المنتج، أو ابحثي بالاسم.</p></div>`);
+    b.querySelectorAll('[data-add]').forEach(x=>x.onclick=()=>{addToCart(x.dataset.add);o.remove();toast('تمت الإضافة للفاتورة')})}
+  catch(e){b.innerHTML=`<div class="empty" style="padding:18px"><div class="ico">⚠️</div><p>${esc(e.message)}</p></div>`}}
 /* ===================== WhatsApp thank-you messages (رسائل واتساب للعملاء) ===================== */
 const WA_DEF={first:'شكراً لشرائك من فانسي سنس 🤍\nهذا رقمنا الرسمي، احفظيه عشان توصلك آخر عروضنا ومنتجاتنا الجديدة.',repeat:'سعداء بزيارتك مرة ثانية لفانسي سنس 🤍\nشكراً لثقتك، وننتظرك دايماً.'};
 function WASET(){const s=S.settings;s.wa=Object.assign({first:WA_DEF.first,repeat:WA_DEF.repeat},s.wa||{});if(!S.wa_out)S.wa_out=[];return s.wa}
