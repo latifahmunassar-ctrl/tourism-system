@@ -25,6 +25,8 @@ const FIELDS: Record<string, string[]> = {
   machine_deposit: ['dep_date','actual_bank','bank_ref','note','created_by'],
   lists: ['category','value','sort'],
 };
+// 👥 المحاسبون المسموح لهم بطلب تعديل/حذف (المالكة ١٤ نوفمبر ٢٠٢٦): محمد وآية
+const canEdit = (name: string) => /mohamed|mohammed|muhammad|محمد|ayah|\baya\b|آية|اية|ايه/i.test(String(name || ''));
 const pick = (obj: any, allowed: string[]) => { const o: any = {}; for (const k of allowed) if (k in (obj || {})) o[k] = obj[k] === '' ? null : obj[k]; return o; };
 
 Deno.serve(async (req: Request) => {
@@ -34,14 +36,17 @@ Deno.serve(async (req: Request) => {
   // 🔐 مصادقة نظام العز: مفتاح النظام (المالكة) أو جلسة مالكة صالحة من acc_sessions
   const key = req.headers.get('x-acc-key') || req.headers.get('x-fs-key') || url.searchParams.get('key');
   let authed = (!!ACCESS_KEY && key === ACCESS_KEY);
+  // 👑 مفتاح النظام = المالكة. الجلسة: is_owner → مالكة، غيرها موظّف (اسمه من الجلسة)
+  let isOwner = authed; let staffName = authed ? 'المالكة' : '';
   if (!authed) {
     const tok = req.headers.get('x-acc-token') || url.searchParams.get('token');
     if (tok) {
       // المالكة (is_owner) أو موظّف صلاحياته تشمل تبويب "fancy" (تُمنح من لوحة صلاحيات العز)
-      const { data: s } = await supabase.from('acc_sessions').select('expires_at,is_owner,allowed_tabs').eq('token', tok).maybeSingle();
+      const { data: s } = await supabase.from('acc_sessions').select('expires_at,is_owner,allowed_tabs,staff_name').eq('token', tok).maybeSingle();
       if (s && (!s.expires_at || new Date(s.expires_at).getTime() > Date.now())) {
         const tabs = Array.isArray(s.allowed_tabs) ? s.allowed_tabs : [];
         if (s.is_owner || tabs.includes('fancy')) authed = true;
+        isOwner = !!s.is_owner; staffName = isOwner ? 'المالكة' : String((s as any).staff_name || '');
       }
     }
   }
@@ -82,7 +87,10 @@ Deno.serve(async (req: Request) => {
         .order('tx_date', { ascending: false });
       accFancyBtx = (bt || []).filter((r: any) => !r.currency || String(r.currency).toUpperCase() === 'OMR');
     } catch (_) {}
-    return J({ acc_fancy_btx: accFancyBtx, config: cfg, lists: lists.data || [], daily_sales: daily_sales.data || [], rewa_recon: rewa_recon.data || [],
+    // 🔔 طلبات التعديل/الحذف — تظهر للمالكة فقط
+    let fsRequests: any[] = [];
+    if (isOwner) { try { const { data: rq } = await supabase.from('fs_change_requests').select('*').order('created_at', { ascending: false }).limit(200); fsRequests = rq || []; } catch (_) {} }
+    return J({ me: { owner: isOwner, name: staffName, can_edit: isOwner || canEdit(staffName) }, fs_requests: fsRequests, acc_fancy_btx: accFancyBtx, config: cfg, lists: lists.data || [], daily_sales: daily_sales.data || [], rewa_recon: rewa_recon.data || [],
       credit_customers: credit_customers.data || [], credit_txn: credit_txn.data || [], bank_txn: bank_txn.data || [],
       atm_deposit: atm_deposit.data || [], inventory_short: inventory_short.data || [], expenses: expenses.data || [], machine_deposit: machine_deposit.data || [], acc_fancy: accFancy });
   }
@@ -98,6 +106,38 @@ Deno.serve(async (req: Request) => {
       const { error } = await supabase.from('fs_config').upsert({ key: String(p.key), value: p.value == null ? null : String(p.value), updated_at: new Date().toISOString() });
       if (error) return J({ error: error.message }, 400);
       return J({ ok: true });
+    }
+    // ✅/❌ المالكة تعتمد أو ترفض طلب تعديل/حذف — الأثر ينطبق هنا فقط
+    if (action === 'resolve_request') {
+      if (!isOwner) return J({ error: 'للمالكة فقط' }, 403);
+      const { data: rq } = await supabase.from('fs_change_requests').select('*').eq('id', p.id).maybeSingle();
+      if (!rq) return J({ error: 'الطلب غير موجود' }, 404);
+      if (rq.status !== 'pending') return J({ error: 'الطلب محسوم مسبقاً' }, 400);
+      const tbl = TABLES[String(rq.tbl)]; if (!tbl) return J({ error: 'table not allowed' }, 400);
+      let result = 'رُفض — بلا تغيير';
+      if (p.decision === 'approve') {
+        if (rq.action === 'delete') { const { error } = await supabase.from(tbl).delete().eq('id', rq.row_id); if (error) return J({ error: error.message }, 400); result = 'حُذف السطر'; }
+        else { const row = pick(rq.new || {}, FIELDS[String(rq.tbl)] || []); const { error } = await supabase.from(tbl).update(row).eq('id', rq.row_id); if (error) return J({ error: error.message }, 400); result = 'طُبّق التعديل'; }
+      }
+      await supabase.from('fs_change_requests').update({ status: p.decision === 'approve' ? 'approved' : 'rejected', decided_at: new Date().toISOString(), result }).eq('id', rq.id);
+      return J({ ok: true, result });
+    }
+    // ✏️🗑️ المحاسب (محمد/آية): التعديل والحذف = طلب ينتظر موافقة المالكة، بلا أي أثر قبلها
+    if ((action === 'update' || action === 'delete') && !isOwner) {
+      if (!canEdit(staffName)) return J({ error: 'التعديل والحذف مسموح للمحاسبين محمد وآية فقط' }, 403);
+      const tblKey = String(p.table || ''); const tbl = TABLES[tblKey];
+      if (!tbl) return J({ error: 'table not allowed' }, 400);
+      if (p.id == null) return J({ error: 'no id' }, 400);
+      const reason = String(p.reason || '').trim(); if (!reason) return J({ error: 'سبب التعديل إجباري' }, 400);
+      const { data: old } = await supabase.from(tbl).select('*').eq('id', p.id).maybeSingle();
+      if (!old) return J({ error: 'السطر غير موجود' }, 404);
+      const { data: dup } = await supabase.from('fs_change_requests').select('id').eq('tbl', tblKey).eq('row_id', p.id).eq('status', 'pending').limit(1);
+      if (dup && dup.length) return J({ ok: true, pending: true, dup: true });
+      let nw: any = null;
+      if (action === 'update') { const row = pick(p.data, FIELDS[tblKey] || []); nw = {}; for (const k of Object.keys(row)) if (JSON.stringify(row[k] ?? null) !== JSON.stringify((old as any)[k] ?? null)) nw[k] = row[k]; if (!Object.keys(nw).length) return J({ error: 'ما فيه أي تغيير' }, 400); }
+      const { error } = await supabase.from('fs_change_requests').insert({ tbl: tblKey, row_id: p.id, action, old, new: nw, reason, requested_by: staffName || 'موظّف' });
+      if (error) return J({ error: error.message }, 400);
+      return J({ ok: true, pending: true });
     }
     // CRUD عام على الجداول المسموح بها فقط
     if (action === 'insert' || action === 'update' || action === 'delete') {

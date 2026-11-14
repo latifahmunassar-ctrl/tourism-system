@@ -97,6 +97,7 @@ tbody tr:hover{background:rgba(224,33,138,.06)}
   <div class="page" id="p-banks"></div>
   <div class="page" id="p-inv"></div>
   <div class="page" id="p-settings"></div>
+  <div class="page" id="p-reqs"></div>
 </div>
 </div>
 
@@ -130,10 +131,11 @@ async function loadAll(){
   catch(e){ /* 401 يعالَج في api */ }
 }
 function needLogin(){ $('app').classList.add('hidden'); $('gate').classList.remove('hidden'); $('gate-msg').innerHTML='لازم تسجّلي الدخول من <b>نظام العز</b> أولاً (نفس الجلسة).'; }
-async function crud(action,table,data,id){
+async function crud(action,table,data,id,reason){
   try{
-    const j=await api('POST',action,{table,data,id});
+    const j=await api('POST',action,{table,data,id,reason});
     if(j&&j.error){ toast('⚠️ خطأ: '+j.error,true); return false; }
+    if(j&&j.pending){ toast(j.dup?'ℹ️ فيه طلب معلّق لنفس السطر — بانتظار موافقة المالكة':'📨 أُرسل الطلب للمالكة — ما يتغيّر شي قبل موافقتها'); return true; }
     await loadAll(); toast('✅ تم الحفظ'); return true;
   }catch(e){ toast('⚠️ تعذّر الحفظ: '+(e&&e.message||e),true); return false; }
 }
@@ -144,17 +146,17 @@ function toast(msg,err){ let t=$('fs-toast'); if(!t){ t=document.createElement('
 function showApp(){ $('gate').classList.add('hidden'); $('app').classList.remove('hidden'); loadAll(); }
 
 // ---- التبويبات ----
-const TABS=[['dash','📊 لوحة'],['sales','🧾 المبيعات اليومية'],['machine','🏧 متابعة المكنة'],['expenses','💸 مصاريف يومية'],['rewa','🔄 مطابقة REWA'],['match','🔗 مطابقة بنوك العز'],['credit','👤 عملاء الآجل'],['ajel','📒 إيداعات الآجل'],['xfer','🔄 التحويلات البنكية'],['banks','🏦 البنوك والإيداعات'],['inv','📦 منتجات ناقصة'],['settings','⚙️ إعدادات']];
-function buildTabs(){ $('tabs').innerHTML=TABS.map((t,i)=>'<div class="tab'+(i===0?' on':'')+'" data-p="'+t[0]+'" onclick="switchTab(this)">'+t[1]+'</div>').join(''); }
+const TABS=[['dash','📊 لوحة'],['sales','🧾 المبيعات اليومية'],['machine','🏧 متابعة المكنة'],['expenses','💸 مصاريف يومية'],['rewa','🔄 مطابقة REWA'],['match','🔗 مطابقة بنوك العز'],['credit','👤 عملاء الآجل'],['ajel','📒 إيداعات الآجل'],['xfer','🔄 التحويلات البنكية'],['banks','🏦 البنوك والإيداعات'],['inv','📦 منتجات ناقصة'],['settings','⚙️ إعدادات'],['reqs','🔔 طلبات الموافقة']];
+function buildTabs(){ $('tabs').innerHTML=TABS.map((t,i)=>'<div class="tab'+(i===0?' on':'')+'" data-p="'+t[0]+'"'+(t[0]==='reqs'?' style="display:none"':'')+' onclick="switchTab(this)">'+t[1]+'</div>').join(''); }
 function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on')); el.classList.add('on'); const p=el.dataset.p; document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('on')); $('p-'+p).classList.add('on'); }
 
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v74';
+const FS_VER='v75';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
-  renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderAjel(); renderXfer(); renderBanks(); renderInv(); renderSettings();
+  renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderAjel(); renderXfer(); renderBanks(); renderInv(); renderSettings(); renderReqs();
 }
 
 // ===== 🔗 مطابقة بنوك العز (للعرض فقط) =====
@@ -453,7 +455,7 @@ function renderExpenses(){
   const rows=selM?e.filter(x=>String(x.exp_date||'').slice(0,7)===selM):e;
   const totExp=rows.reduce((a,x)=>a+n(x.amount),0);
   const byCat={}; rows.forEach(x=>{ byCat[x.category||'—']=(byCat[x.category||'—']||0)+n(x.amount); });
-  const tr=e.map(x=>'<tr><td>'+esc(x.exp_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td><span class="pill" style="background:rgba(224,33,138,.15);color:var(--accent2)">'+esc(x.category||'—')+'</span></td><td class="num neg" style="font-weight:800">'+fmt(x.amount)+'</td><td>'+esc(x.pay_method||'')+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'expenses\','+x.id+')">حذف</button></td></tr>').join('');
+  const tr=e.map(x=>'<tr><td>'+esc(x.exp_date||'')+'</td><td>'+esc(x.branch||'')+'</td><td><span class="pill" style="background:rgba(224,33,138,.15);color:var(--accent2)">'+esc(x.category||'—')+'</span></td><td class="num neg" style="font-weight:800">'+fmt(x.amount)+'</td><td>'+esc(x.pay_method||'')+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn ghost sm" onclick="editRow(\'expenses\','+x.id+')" title="تعديل">✏️</button> <button class="btn red sm" onclick="delRow(\'expenses\','+x.id+')">حذف</button></td></tr>').join('');
   $('p-expenses').innerHTML=
     '<div class="panel"><div class="row-between"><h3 style="margin:0">💸 المصاريف اليومية <span class="sub">('+e.length+' سطر)</span></h3>'+
       '<div style="display:flex;gap:8px;align-items:end"><div class="fld" style="min-width:140px"><label>الشهر</label><select onchange="window._fsExpMonth=this.value;renderExpenses()">'+(months.length?months.map(m=>'<option'+(m===selM?' selected':'')+'>'+m+'</option>').join(''):'<option>—</option>')+'</select></div>'+
@@ -669,7 +671,7 @@ function renderSales(){
     return '<tr'+(x._empty?' style="opacity:.6"':'')+'><td>'+esc(x.sale_date||'')+'</td><td>'+esc(x.branch||'')+(x._empty?' <span class="mini mut">(بلا مبيعات)</span>':'')+'</td>'+
       cc(x.machine,x.rewa_machine,x.note_machine)+cc(x.cash,x.rewa_cash,x.note_cash)+crcell(x)+tcell(x)+depcell(x)+
       '<td class="num" style="font-weight:800">'+fmt(x.total)+'</td><td class="num mut">'+fmt(x.rewa_total)+'</td><td class="num" style="font-weight:800;color:'+(Math.abs(gd)<0.005?'#2fd196':'#ff6b7a')+'">'+fmt(gd)+(diffs.length?'<div class="mini" style="color:#ff6b7a">🔴 '+diffs.join(' · ')+'</div>':'')+'</td>'+
-      '<td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td>'+(x.id?'<button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button>':'<span class="mut mini">—</span>')+'</td></tr>'; }).join('');
+      '<td class="num neg">'+fmt(x.returns)+'</td><td class="num mut">'+fmt(net)+'</td><td class="mini">'+esc(x.note||'')+'</td><td>'+(x.id?'<button class="btn ghost sm" onclick="editRow(\'daily_sales\','+x.id+')" title="تعديل">✏️</button> <button class="btn red sm" onclick="delRow(\'daily_sales\','+x.id+')">حذف</button>':'<span class="mut mini">—</span>')+'</td></tr>'; }).join('');
   const anyF=!!(F.from||F.to||F.branch||F.pm);
   // 🏧 فورم إيداع الصندوق (كاش) من الفرع إلى البنك
   const cashDepForm='<div id="cashdep-form" class="panel hidden" style="border-color:#3aa0ff"><div class="row-between"><h3 style="margin:0;border-color:#3aa0ff">🏧 إيداع صندوق (كاش) — من الفرع إلى البنك</h3><button class="btn ghost sm" onclick="formToggle(\'cashdep-form\')" title="إغلاق النافذة">✕ إغلاق</button></div><div class="fgrid" style="max-width:700px">'+
@@ -863,7 +865,7 @@ function renderRewa(){
     '<div class="fld full"><label>ملاحظة</label><input id="rw-note"></div>'+
     '</div><div id="rw-msg" class="msg"></div><button class="btn green" onclick="saveRewa()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'rewa-form\')">إلغاء</button></div>';
   const rows=(DATA.rewa_recon||[]).map(x=>{ const diff=n(x.rewa_total)-n(x.sheet_total); const ok=Math.abs(diff)<0.005;
-    return '<tr><td>'+esc(x.recon_date||x.period||'')+'</td><td>'+esc(x.branch||'')+'</td><td>'+esc(x.payment_method||'')+'</td><td class="num">'+fmt(x.rewa_total)+'</td><td class="num">'+fmt(x.sheet_total)+'</td><td class="num '+(ok?'pos':'neg')+'" style="font-weight:800">'+(ok?'✅ 0':fmt(diff))+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'rewa_recon\','+x.id+')">حذف</button></td></tr>'; }).join('');
+    return '<tr><td>'+esc(x.recon_date||x.period||'')+'</td><td>'+esc(x.branch||'')+'</td><td>'+esc(x.payment_method||'')+'</td><td class="num">'+fmt(x.rewa_total)+'</td><td class="num">'+fmt(x.sheet_total)+'</td><td class="num '+(ok?'pos':'neg')+'" style="font-weight:800">'+(ok?'✅ 0':fmt(diff))+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn ghost sm" onclick="editRow(\'rewa_recon\','+x.id+')" title="تعديل">✏️</button> <button class="btn red sm" onclick="delRow(\'rewa_recon\','+x.id+')">حذف</button></td></tr>'; }).join('');
   $('p-rewa').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">🔄 مطابقة نظام REWA بالفعلي</h3><button class="btn" onclick="formToggle(\'rewa-form\')">➕ إضافة مطابقة</button></div></div>'+form+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ/الفترة</th><th>الفرع</th><th>طريقة الدفع</th><th>REWA</th><th>الفعلي</th><th>الفرق</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="8" class="mut" style="text-align:center;padding:14px">لا مطابقات بعد</td></tr>')+'</tbody></table></div></div>';
 }
@@ -886,9 +888,9 @@ function renderCredit(){
     '</div><div id="ct-msg" class="msg"></div><button class="btn green" onclick="saveCtx()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'ctx-form\')">إلغاء</button></div>';
   // أرصدة العملاء
   const bal={}; (DATA.credit_txn||[]).forEach(t=>{ bal[t.customer_id]=(bal[t.customer_id]||0)+n(t.invoice_amount)-n(t.paid_amount)-n(t.returned_amount); });
-  const custRows=(DATA.credit_customers||[]).map(c=>'<tr><td>'+esc(c.name)+'</td><td>'+esc(c.phone||'')+'</td><td class="num '+(n(bal[c.id])>0.005?'neg':'pos')+'" style="font-weight:800">'+fmt(bal[c.id]||0)+' '+C+'</td><td class="mini">'+esc(c.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'credit_customers\','+c.id+')">حذف</button></td></tr>').join('');
+  const custRows=(DATA.credit_customers||[]).map(c=>'<tr><td>'+esc(c.name)+'</td><td>'+esc(c.phone||'')+'</td><td class="num '+(n(bal[c.id])>0.005?'neg':'pos')+'" style="font-weight:800">'+fmt(bal[c.id]||0)+' '+C+'</td><td class="mini">'+esc(c.note||'')+'</td><td><button class="btn ghost sm" onclick="editRow(\'credit_customers\','+c.id+')" title="تعديل">✏️</button> <button class="btn red sm" onclick="delRow(\'credit_customers\','+c.id+')">حذف</button></td></tr>').join('');
   const custName={}; (DATA.credit_customers||[]).forEach(c=>custName[c.id]=c.name);
-  const txRows=(DATA.credit_txn||[]).map(t=>'<tr><td>'+esc(t.txn_date||'')+'</td><td>'+esc(custName[t.customer_id]||'')+'</td><td>'+esc(t.doc_no||'')+'</td><td class="num">'+fmt(t.invoice_amount)+'</td><td class="num pos">'+fmt(t.paid_amount)+'</td><td class="num neg">'+fmt(t.returned_amount)+'</td><td class="mini">'+esc(t.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'credit_txn\','+t.id+')">حذف</button></td></tr>').join('');
+  const txRows=(DATA.credit_txn||[]).map(t=>'<tr><td>'+esc(t.txn_date||'')+'</td><td>'+esc(custName[t.customer_id]||'')+'</td><td>'+esc(t.doc_no||'')+'</td><td class="num">'+fmt(t.invoice_amount)+'</td><td class="num pos">'+fmt(t.paid_amount)+'</td><td class="num neg">'+fmt(t.returned_amount)+'</td><td class="mini">'+esc(t.note||'')+'</td><td><button class="btn ghost sm" onclick="editRow(\'credit_txn\','+t.id+')" title="تعديل">✏️</button> <button class="btn red sm" onclick="delRow(\'credit_txn\','+t.id+')">حذف</button></td></tr>').join('');
   $('p-credit').innerHTML=
     '<div class="panel"><div class="row-between"><h3 style="margin:0">👤 عملاء الآجل</h3><button class="btn" onclick="formToggle(\'cust-form\')">➕ عميل جديد</button></div></div>'+custForm+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>العميل</th><th>الجوال</th><th>الرصيد المتبقّي</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(custRows||'<tr><td colspan="5" class="mut" style="text-align:center;padding:12px">لا عملاء</td></tr>')+'</tbody></table></div></div>'+
@@ -1104,7 +1106,7 @@ function renderBanks(){
     fin('التاريخ','at-date','date',today())+fsel('الفرع','at-branch','branch')+fin('المبلغ','at-amt','number','0')+fsel('البنك المودَع فيه','at-bank','bank')+
     '<div class="fld full"><label>ملاحظة</label><input id="at-note"></div>'+
     '</div><div id="at-msg" class="msg"></div><button class="btn green" onclick="saveAtm()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'atm-form\')">إلغاء</button></div>';
-  const bRows=(DATA.bank_txn||[]).map(x=>'<tr><td>'+esc(x.actual_date||'')+'</td><td>'+esc(x.close_date||'')+'</td><td>'+esc(x.bank_name||'')+'</td><td><span class="pill '+(x.direction==='out'?'r':'g')+'">'+(x.direction==='out'?'صادر':'وارد')+'</span></td><td class="num '+(x.direction==='out'?'neg':'pos')+'" style="font-weight:800">'+fmt(x.amount)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'bank_txn\','+x.id+')">حذف</button></td></tr>').join('');
+  const bRows=(DATA.bank_txn||[]).map(x=>'<tr><td>'+esc(x.actual_date||'')+'</td><td>'+esc(x.close_date||'')+'</td><td>'+esc(x.bank_name||'')+'</td><td><span class="pill '+(x.direction==='out'?'r':'g')+'">'+(x.direction==='out'?'صادر':'وارد')+'</span></td><td class="num '+(x.direction==='out'?'neg':'pos')+'" style="font-weight:800">'+fmt(x.amount)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn ghost sm" onclick="editRow(\'bank_txn\','+x.id+')" title="تعديل">✏️</button> <button class="btn red sm" onclick="delRow(\'bank_txn\','+x.id+')">حذف</button></td></tr>').join('');
   // 🏦 جدول الصندوق = المحاسبة ↔ نظام العز (الطرفين) + فلاتر: التاريخ · الفرع · الحالة
   const CF={from:window._cbFrom||'',to:window._cbTo||'',br:window._cbBr||'',st:window._cbSt||''};
   const _cmpAll=_cbCompare(), _brs=[...new Set(_cmpAll.map(r=>r.br))].sort();
@@ -1120,7 +1122,7 @@ function renderBanks(){
     const totCell=zs.length?'<td class="num" style="font-weight:800;color:#3aa0ff">'+fmt(r.azT)+(zs.length>1?'<div style="font-size:9px;color:var(--muted)">'+zs.length+' أجزاء</div>':'')+'</td>':'<td class="num mut">—</td>';
     const dfCell=x&&zs.length?'<td class="num" style="font-weight:800;color:'+(Math.abs(r.diff)<0.011?'#2fd196':'#e05a5a')+'">'+(Math.abs(r.diff)<0.011?'0':fmt(r.diff))+'</td>':(x?'<td class="num" style="color:#e05a5a;font-weight:800">'+fmt(-x.a)+'</td>':'<td class="num" style="color:#3aa0ff;font-weight:800">+'+fmt(r.azT)+'</td>');
     const z0=zs[0];
-    return '<tr><td>'+esc(r.d)+'</td><td>'+esc(r.br)+'</td><td class="num pos" style="font-weight:800">'+(x?fmt(x.a):'<span class="mut">—</span>')+'</td>'+azCell+totCell+dfCell+'<td>'+pill+'</td><td style="font-size:11px;line-height:1.5">'+(x?'<div>📝 <span class="mut">اختيار المحاسبة:</span> '+esc(_bkN(x.bank)||'—')+'</div>':'')+(z0?'<div style="color:#3aa0ff">🏦 <span class="mut">العز:</span> '+esc(_bkN(z0.bank)||'—')+'</div>':'')+'</td><td class="mini">'+esc(x?(x.note||''):(z0.label+(z0.ref?' · '+z0.ref:'')))+'</td><td>'+(x?'<button class="btn red sm" onclick="delRow(\'atm_deposit\','+x.id+')">حذف</button>':'')+'</td></tr>'; }).join('');
+    return '<tr><td>'+esc(r.d)+'</td><td>'+esc(r.br)+'</td><td class="num pos" style="font-weight:800">'+(x?fmt(x.a):'<span class="mut">—</span>')+'</td>'+azCell+totCell+dfCell+'<td>'+pill+'</td><td style="font-size:11px;line-height:1.5">'+(x?'<div>📝 <span class="mut">اختيار المحاسبة:</span> '+esc(_bkN(x.bank)||'—')+'</div>':'')+(z0?'<div style="color:#3aa0ff">🏦 <span class="mut">العز:</span> '+esc(_bkN(z0.bank)||'—')+'</div>':'')+'</td><td class="mini">'+esc(x?(x.note||''):(z0.label+(z0.ref?' · '+z0.ref:'')))+'</td><td>'+(x?'<button class="btn ghost sm" onclick="editRow(\'atm_deposit\','+x.id+')" title="تعديل">✏️</button> <button class="btn red sm" onclick="delRow(\'atm_deposit\','+x.id+')">حذف</button>':'')+'</td></tr>'; }).join('');
   const _cbFilt='<div class="panel"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"><div class="fld"><label>📅 من</label><input type="date" value="'+esc(CF.from)+'" onchange="window._cbFrom=this.value;renderBanks()"></div><div class="fld"><label>📅 إلى</label><input type="date" value="'+esc(CF.to)+'" onchange="window._cbTo=this.value;renderBanks()"></div><div class="fld"><label>🏪 الفرع</label><select onchange="window._cbBr=this.value;renderBanks()"><option value="">الكل</option>'+_brs.map(b=>'<option'+(b===CF.br?' selected':'')+'>'+esc(b)+'</option>').join('')+'</select></div><div class="fld"><label>🔎 الحالة</label><select onchange="window._cbSt=this.value;renderBanks()">'+[['','الكل'],['ok','✓ مطابق'],['part','≠ فرق بالمبلغ'],['acc','⚠️ مو موجود بالبنك (العز)'],['az','🏦 مو موجود بالمحاسبة']].map(o=>'<option value="'+o[0]+'"'+(o[0]===CF.st?' selected':'')+'>'+o[1]+'</option>').join('')+'</select></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._cbFrom=\'\';window._cbTo=\'\';window._cbBr=\'\';window._cbSt=\'\';renderBanks()">مسح الفلاتر</button></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn" onclick="cbExportXlsx()">📥 تصدير Excel</button></div></div></div>';
   $('p-banks').innerHTML=
     '<div class="panel" style="border:1px solid var(--amber);background:rgba(217,138,0,.08)"><div style="font-size:12.5px;color:#e0a83a;font-weight:700">📌 كشف مراجعة لفانسي سنس فقط — للاطلاع</div><div class="sub" style="margin-top:4px">كل البنوك والإيداعات هنا <b>منفصلة تماماً عن بنوك نظام العز الدولية</b> ولا تنعكس عليها إطلاقاً. هذه بيانات فانسي سنس المستقلّة.</div></div>'+
@@ -1140,7 +1142,7 @@ function renderInv(){
     '<div class="fld full"><label>ملاحظة</label><input id="iv-note"></div>'+
     '</div><div id="iv-msg" class="msg"></div><button class="btn green" onclick="saveInv()">💾 حفظ</button> <button class="btn ghost" onclick="formToggle(\'inv-form\')">إلغاء</button></div>';
   const rows=(DATA.inventory_short||[]).map(x=>{ const diff=n(x.qty_invoice)-n(x.qty_actual);
-    return '<tr><td>'+esc(x.code||'')+'</td><td class="num">'+fmt(x.qty_invoice)+'</td><td class="num">'+fmt(x.qty_actual)+'</td><td class="num '+(diff!==0?'neg':'pos')+'" style="font-weight:800">'+fmt(diff)+'</td><td class="num">'+fmt(x.price)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn red sm" onclick="delRow(\'inventory_short\','+x.id+')">حذف</button></td></tr>'; }).join('');
+    return '<tr><td>'+esc(x.code||'')+'</td><td class="num">'+fmt(x.qty_invoice)+'</td><td class="num">'+fmt(x.qty_actual)+'</td><td class="num '+(diff!==0?'neg':'pos')+'" style="font-weight:800">'+fmt(diff)+'</td><td class="num">'+fmt(x.price)+'</td><td class="mini">'+esc(x.note||'')+'</td><td><button class="btn ghost sm" onclick="editRow(\'inventory_short\','+x.id+')" title="تعديل">✏️</button> <button class="btn red sm" onclick="delRow(\'inventory_short\','+x.id+')">حذف</button></td></tr>'; }).join('');
   $('p-inv').innerHTML='<div class="panel"><div class="row-between"><h3 style="margin:0">📦 منتجات ناقصة / فروقات الجرد</h3><button class="btn" onclick="formToggle(\'inv-form\')">➕ إضافة</button></div></div>'+form+
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>الكود</th><th>الكمية بالفاتورة</th><th>الكمية الفعلية</th><th>الفرق</th><th>السعر</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="7" class="mut" style="text-align:center;padding:12px">لا سجلات</td></tr>')+'</tbody></table></div></div>';
 }
@@ -1173,7 +1175,73 @@ async function saveSettings(){
 }
 async function addList(cat){ const el=$('lst-'+cat); const v=(el.value||'').trim(); if(!v)return; if(await crud('insert','lists',{category:cat,value:v})){} }
 async function delList(id){ if(confirm('حذف العنصر؟')) await crud('delete','lists',null,id); }
-async function delRow(table,id){ if(confirm('حذف السطر؟ لا يمكن التراجع.')) await crud('delete',table,null,id); }
+async function delRow(table,id){ if(fsIsOwner()){ if(confirm('حذف السطر؟ لا يمكن التراجع.')) await crud('delete',table,null,id); return; } const reason=(prompt('🗑️ طلب حذف السطر — يُرسَل لموافقة المالكة.\n📝 سبب الحذف (إجباري):')||'').trim(); if(!reason){ toast('⚠️ سبب الحذف إجباري — أُلغي الطلب',true); return; } await crud('delete',table,null,id,reason); }
+// ===== ✏️🗑️ تعديل/حذف بموافقة المالكة (١٤ نوفمبر ٢٠٢٦) =====
+//   المحاسب (محمد/آية): التعديل والحذف = طلب ← تبويب «🔔 طلبات الموافقة» عند المالكة فقط ← ما ينطبق شي إلا بموافقتها.
+const FS_TBL_AR={daily_sales:'المبيعات اليومية',expenses:'المصاريف اليومية',rewa_recon:'مطابقة REWA',credit_customers:'عملاء الآجل',credit_txn:'حركات الآجل',bank_txn:'حركات البنوك',atm_deposit:'إيداعات الصندوق',inventory_short:'منتجات ناقصة',machine_deposit:'إيداع المكنة'};
+const FS_EDIT={
+  daily_sales:[['sale_date','التاريخ','date'],['branch','الفرع','branch'],['machine','المكنة','num'],['cash','نقدي','num'],['credit_sales','آجل','num'],['bank_transfer','تحويل','num'],['total','الإجمالي','num'],['rewa_machine','REWA مكنة','num'],['rewa_cash','REWA نقدي','num'],['rewa_credit','REWA آجل','num'],['rewa_transfer','REWA تحويل','num'],['rewa_total','REWA إجمالي','num'],['returns','المرتجعات','num'],['note','ملاحظة','text'],['note_machine','ملاحظة المكنة','text'],['note_cash','ملاحظة النقدي','text'],['note_credit','ملاحظة الآجل','text'],['note_transfer','ملاحظة التحويل','text']],
+  expenses:[['exp_date','التاريخ','date'],['branch','الفرع','branch'],['category','التصنيف','text'],['amount','المبلغ','num'],['pay_method','طريقة الدفع','text'],['note','ملاحظة','text']],
+  rewa_recon:[['recon_date','التاريخ','date'],['period','الفترة','text'],['branch','الفرع','branch'],['payment_method','طريقة الدفع','text'],['rewa_total','REWA','num'],['sheet_total','الشيت','num'],['note','ملاحظة','text']],
+  credit_customers:[['name','الاسم','text'],['phone','الجوال','text'],['note','ملاحظة','text']],
+  credit_txn:[['customer_id','العميل','cust'],['txn_date','التاريخ','date'],['doc_no','رقم المستند','text'],['invoice_amount','قيمة الفاتورة','num'],['paid_amount','المسدّد','num'],['returned_amount','المرتجع','num'],['note','ملاحظة','text']],
+  bank_txn:[['actual_date','التاريخ الفعلي','date'],['close_date','تاريخ الإقفال','date'],['amount','المبلغ','num'],['direction','الاتجاه','text'],['bank_name','البنك','text'],['note','ملاحظة','text']],
+  atm_deposit:[['dep_date','التاريخ','date'],['branch','الفرع','branch'],['amount','المبلغ','num'],['bank','البنك','text'],['note','ملاحظة','text']],
+  inventory_short:[['code','الكود','text'],['qty_invoice','كمية الفاتورة','num'],['price','السعر','num'],['qty_actual','الكمية الفعلية','num'],['note','ملاحظة','text']],
+};
+const fsIsOwner=()=>!!(DATA&&DATA.me&&DATA.me.owner);
+function fsFldLabel(tbl,k){ const f=(FS_EDIT[tbl]||[]).find(x=>x[0]===k); return f?f[1]:k; }
+function fsValTxt(tbl,k,v){ if(v==null||v==='')return '—'; if(k==='customer_id'){ const c=(DATA.credit_customers||[]).find(c=>String(c.id)===String(v)); return c?c.name:String(v); } return String(v); }
+function editRow(tbl,id){
+  const x=(DATA[tbl]||[]).find(r=>String(r.id)===String(id)); if(!x){ toast('السطر غير موجود',true); return; }
+  const owner=fsIsOwner(), F=FS_EDIT[tbl]||[];
+  const brs=[...new Set([...(DATA.daily_sales||[]).map(r=>r.branch),...listVals('branch')].filter(Boolean))];
+  const inp=f=>{ const [k,l,t]=f, v=x[k]==null?'':x[k], id='fe-'+k;
+    if(t==='branch') return '<select id="'+id+'">'+[...new Set([v,...brs])].filter(z=>z!==undefined).map(b=>'<option'+(String(b)===String(v)?' selected':'')+'>'+esc(b)+'</option>').join('')+'</select>';
+    if(t==='cust') return '<select id="'+id+'">'+(DATA.credit_customers||[]).map(c=>'<option value="'+c.id+'"'+(String(c.id)===String(v)?' selected':'')+'>'+esc(c.name)+'</option>').join('')+'</select>';
+    return '<input id="'+id+'" type="'+(t==='date'?'date':(t==='num'?'number':'text'))+'"'+(t==='num'?' step="any"':'')+' value="'+esc(t==='date'?String(v).slice(0,10):v)+'">'; };
+  let m=$('fe-modal'); if(m)m.remove(); m=document.createElement('div'); m.id='fe-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+  m.innerHTML='<div class="panel" style="width:min(620px,94vw);max-height:90vh;overflow:auto;margin:0"><h3 style="margin:0 0 4px">✏️ تعديل — '+esc(FS_TBL_AR[tbl]||tbl)+'</h3><div class="sub" style="margin-bottom:10px">'+(owner?'<b style="color:#2fd196">يُطبَّق مباشرة</b>':'<b style="color:#e0a83a">يُرسَل لموافقة المالكة — ما يتغيّر شي قبل موافقتها</b>')+'</div><div class="fgrid">'+
+    F.map(f=>'<div class="fld'+(f[2]==='text'&&/note/.test(f[0])?' full':'')+'"><label>'+esc(f[1])+'</label>'+inp(f)+'</div>').join('')+
+    (owner?'':'<div class="fld full"><label>📝 سبب التعديل <span style="color:#ff6b7a">إجباري</span></label><input id="fe-reason"></div>')+
+    '</div><div id="fe-msg" class="msg"></div><button class="btn green" onclick="saveEditRow(\''+tbl+'\','+JSON.stringify(id)+')">💾 '+(owner?'حفظ':'إرسال للموافقة')+'</button> <button class="btn ghost" onclick="$(\'fe-modal\').remove()">إلغاء</button></div>';
+  document.body.appendChild(m);
+}
+async function saveEditRow(tbl,id){
+  const x=(DATA[tbl]||[]).find(r=>String(r.id)===String(id))||{}, data={};
+  (FS_EDIT[tbl]||[]).forEach(([k,,t])=>{ const e=$('fe-'+k); if(!e)return; let v=e.value; if(t==='num')v=(v===''?null:Number(v)); if(t==='cust')v=Number(v); if(v==='')v=null; const ov=x[k]==null?null:(t==='date'?String(x[k]).slice(0,10):x[k]); if(String(v==null?'':v)!==String(ov==null?'':ov))data[k]=v; });
+  if(!Object.keys(data).length){ $('fe-msg').innerHTML='<span class="neg">ما فيه أي تغيير</span>'; return; }
+  const reason=fsIsOwner()?'':(($('fe-reason')||{}).value||'').trim();
+  if(!fsIsOwner()&&!reason){ $('fe-msg').innerHTML='<span class="neg">سبب التعديل إجباري</span>'; return; }
+  if(await crud('update',tbl,data,id,reason)) { const mm=$('fe-modal'); if(mm)mm.remove(); }
+}
+function fsReqCount(){ return ((DATA&&DATA.fs_requests)||[]).filter(r=>r.status==='pending').length; }
+function fsSyncReqTab(){ const t=document.querySelector('.tab[data-p="reqs"]'); if(!t)return; const own=fsIsOwner(); t.style.display=own?'':'none'; const c=fsReqCount(); t.innerHTML='🔔 طلبات الموافقة'+(c?' <span style="background:#e5484d;color:#fff;border-radius:10px;padding:0 7px;font-size:11px">'+c+'</span>':''); if(!own&&t.classList.contains('on')){ const d=document.querySelector('.tab[data-p="dash"]'); if(d)switchTab(d); } }
+function renderReqs(){
+  fsSyncReqTab(); const el=$('p-reqs'); if(!el)return; if(!fsIsOwner()){ el.innerHTML=''; return; }
+  const R=(DATA.fs_requests||[]), pend=R.filter(r=>r.status==='pending'), done=R.filter(r=>r.status!=='pending').slice(0,40);
+  const when=s=>{ try{ return new Date(s).toLocaleString('ar-OM',{dateStyle:'medium',timeStyle:'short'}); }catch(_){ return s||''; } };
+  const ident=r=>{ const o=r.old||{}, keys=['sale_date','exp_date','txn_date','dep_date','recon_date','actual_date','branch','name','doc_no','amount','paid_amount','total','code']; return keys.filter(k=>o[k]!=null&&o[k]!=='').slice(0,4).map(k=>'<b>'+esc(fsFldLabel(r.tbl,k))+':</b> '+esc(fsValTxt(r.tbl,k,o[k]))).join(' · '); };
+  const card=r=>{ const isDel=r.action==='delete', o=r.old||{}, nw=r.new||{};
+    const diff=isDel?(FS_EDIT[r.tbl]||[]).filter(f=>o[f[0]]!=null&&o[f[0]]!=='').map(f=>'<tr><td>'+esc(f[1])+'</td><td class="num neg" style="text-decoration:line-through">'+esc(fsValTxt(r.tbl,f[0],o[f[0]]))+'</td><td class="mut">سيُحذف</td></tr>').join('')
+      :Object.keys(nw).map(k=>'<tr><td>'+esc(fsFldLabel(r.tbl,k))+'</td><td class="num" style="color:#ff6b7a">'+esc(fsValTxt(r.tbl,k,o[k]))+'</td><td class="num" style="color:#2fd196;font-weight:800">'+esc(fsValTxt(r.tbl,k,nw[k]))+'</td></tr>').join('');
+    const st=r.status==='pending'?'':(r.status==='approved'?'<span class="pill g">✅ اعتُمد</span>':'<span class="pill r">❌ رُفض</span>')+' <span class="mini mut">'+esc(when(r.decided_at))+'</span>';
+    return '<div class="panel" style="border:1px solid '+(isDel?'#e5484d':'#e0a83a')+';margin-bottom:10px"><div class="row-between"><h3 style="margin:0;font-size:14px">'+(isDel?'🗑️ طلب حذف':'✏️ طلب تعديل')+' — '+esc(FS_TBL_AR[r.tbl]||r.tbl)+' <span class="mini mut">#'+r.id+'</span></h3><div>'+st+'</div></div>'+
+      '<div class="sub" style="margin:4px 0">👤 <b>'+esc(r.requested_by||'—')+'</b> · 🕐 '+esc(when(r.created_at))+'</div>'+
+      '<div class="sub" style="margin:4px 0">📌 السطر: '+(ident(r)||'—')+'</div>'+
+      '<div class="sub" style="margin:4px 0">📝 السبب: <b>'+esc(r.reason||'—')+'</b></div>'+
+      '<div class="tbl-wrap"><table style="font-size:12px;margin:6px 0"><thead><tr><th>الخانة</th><th>القيمة الحالية</th><th>'+(isDel?'':'القيمة الجديدة')+'</th></tr></thead><tbody>'+(diff||'<tr><td colspan="3" class="mut">—</td></tr>')+'</tbody></table></div>'+
+      (r.status==='pending'?'<button class="btn green" onclick="fsResolve('+r.id+',\'approve\')">✅ موافقة وتطبيق</button> <button class="btn red" onclick="fsResolve('+r.id+',\'reject\')">❌ رفض</button>':'<div class="mini mut">'+esc(r.result||'')+'</div>')+'</div>'; };
+  el.innerHTML='<div class="panel" style="border:1px solid #e0a83a"><h3 style="margin:0 0 6px">🔔 طلبات الموافقة</h3><div class="sub">تعديلات وحذوفات المحاسبين (محمد وآية). <b>ما ينطبق أي شي على البيانات إلا بعد موافقتك.</b> هذا التبويب يظهر لك فقط.</div></div>'+
+    (pend.length?pend.map(card).join(''):'<div class="panel mut" style="text-align:center">✓ لا توجد طلبات معلّقة</div>')+
+    (done.length?'<div class="panel"><h3 style="margin:0">🗂️ آخر الطلبات المحسومة</h3></div>'+done.map(card).join(''):'');
+}
+async function fsResolve(id,decision){
+  if(!confirm(decision==='approve'?'اعتماد الطلب وتطبيقه على البيانات؟':'رفض الطلب؟ تبقى البيانات كما هي.'))return;
+  try{ const j=await api('POST','resolve_request',{id,decision}); if(j&&j.error){ toast('⚠️ '+j.error,true); return; } await loadAll(); toast(decision==='approve'?'✅ '+(j.result||'طُبّق'):'❌ رُفض الطلب — بلا تغيير'); }catch(e){ toast('⚠️ '+(e&&e.message||e),true); }
+}
+
 
 // ---- مولّدات حقول ----
 function fin(label,id,type,val,extra){ return '<div class="fld"><label>'+label+'</label><input id="'+id+'" type="'+type+'"'+(val!=null&&val!==''?' value="'+esc(val)+'"':(type==='number'?' value="0"':''))+' '+(extra||'')+'></div>'; }
