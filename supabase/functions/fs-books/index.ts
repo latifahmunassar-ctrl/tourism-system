@@ -50,6 +50,26 @@ Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
   const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
+  // ===== 📱 رمز ربط جهاز جديد للمالكة (عام — يُستبدل برمز من 6 أرقام صالح 5 دقائق ولمرة واحدة) =====
+  if (req.method === 'POST' && url.searchParams.get('link') === 'redeem') {
+    let b: any; try { b = await req.json(); } catch { return J({ error: 'bad json' }, 400); }
+    const { data: r } = await db.from('fs_app_docs').select('data').eq('coll', 'login_link').eq('id', 'cur').maybeSingle();
+    const d: any = r?.data || null;
+    if (!d || !d.code || Date.parse(d.exp) < Date.now()) return J({ error: 'الرمز منتهي — اطلبي رمز جديد من جهازك الثاني' }, 400);
+    const code = String(b.code || '').replace(/[٠-٩]/g, (c: string) => String(c.charCodeAt(0) - 0x660)).replace(/\D/g, '');
+    if (code !== d.code) {
+      const fails = (+d.fails || 0) + 1;
+      if (fails >= 5) await db.from('fs_app_docs').delete().eq('coll', 'login_link').eq('id', 'cur');
+      else await db.from('fs_app_docs').update({ data: { ...d, fails } }).eq('coll', 'login_link').eq('id', 'cur');
+      return J({ error: fails >= 5 ? 'محاولات كثيرة — اطلبي رمز جديد' : 'الرمز غير صحيح' }, 400);
+    }
+    await db.from('fs_app_docs').delete().eq('coll', 'login_link').eq('id', 'cur');
+    const token = crypto.randomUUID() + '-' + crypto.randomUUID();
+    const { error } = await db.from('acc_sessions').insert({ token, staff_name: d.staff_name, is_owner: !!d.is_owner, allowed_tabs: d.allowed_tabs || [], ip: req.headers.get('x-forwarded-for') || null, user_agent: req.headers.get('user-agent') || null, expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString() });
+    if (error) return J({ error: error.message }, 500);
+    return J({ ok: true, token, user: { staff_name: d.staff_name, is_owner: !!d.is_owner } });
+  }
+
   // ===== 📲 طابور رسائل واتساب فانسي (للجسر فقط، بمفتاح FS_WA_TOKEN السري) =====
   const waTok = req.headers.get('x-wa-token') || '';
   const WA_TOKEN = Deno.env.get('FS_WA_TOKEN') || '';
@@ -126,7 +146,7 @@ Deno.serve(async (req: Request) => {
       q = since ? q.gt('updated_at', since) : q.eq('deleted', false);
       const { data, error } = await q;
       if (error) return J({ error: error.message }, 500);
-      for (const r of data || []) { if (!canRead(r.coll)) continue; out.push(seeCost ? r : { ...r, data: stripCost(r.coll, r.data) }); }
+      for (const r of data || []) { if (r.coll === 'login_link' || !canRead(r.coll)) continue; out.push(seeCost ? r : { ...r, data: stripCost(r.coll, r.data) }); }
       if (!data || data.length < page) break;
     }
     return J({ user: who, owner, now: new Date().toISOString(), docs: out });
@@ -137,6 +157,15 @@ Deno.serve(async (req: Request) => {
     let body: any;
     try { body = await req.json(); } catch { return J({ error: 'bad json' }, 400); }
     if (body.action === 'whoami') return J({ user: who });
+    if (body.action === 'link_create') {
+      if (!owner) return J({ error: 'للمالكة فقط' }, 403);
+      const { data: sa } = await db.from('acc_staff_access').select('allowed_tabs').eq('staff_name', who).maybeSingle();
+      const n = new Uint32Array(1); crypto.getRandomValues(n); const code = String(100000 + (n[0] % 900000));
+      const exp = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+      const { error } = await db.from('fs_app_docs').upsert({ coll: 'login_link', id: 'cur', data: { code, exp, fails: 0, staff_name: who, is_owner: true, allowed_tabs: sa?.allowed_tabs || [] }, deleted: true, updated_at: new Date().toISOString(), updated_by: who }, { onConflict: 'coll,id' });
+      if (error) return J({ error: error.message }, 500);
+      return J({ ok: true, code, exp });
+    }
     const now = new Date().toISOString();
     if (body.action === 'put') {
       const docs = Array.isArray(body.docs) ? body.docs : [];

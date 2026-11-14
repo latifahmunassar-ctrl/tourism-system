@@ -457,7 +457,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794644961';
+const BUILD='1794645451';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -3501,7 +3501,7 @@ async function setUsers(){if(STAFF==null){SB('<p class="sub" style="padding:30px
    <div class="bar"><div style="display:flex;gap:8px;flex-wrap:wrap;flex:1"><div class="search" style="width:300px"><input id="usq" placeholder="بحث" value="${esc(USF.q)}"></div>
     <select class="in" style="width:200px;height:42px" onchange="USF.role=this.value;setUsers()"><option value="">جميع الأدوار</option>${S.roles.map(r=>`<option value="${r.id}" ${USF.role===r.id?'selected':''}>${esc(r.name)}</option>`).join('')}</select>
     <select class="in" style="width:180px;height:42px" onchange="USF.st=this.value;setUsers()"><option value="">جميع الحالات</option>${Object.entries(U_ST).map(([k,[l]])=>`<option value="${k}" ${USF.st===k?'selected':''}>${l}</option>`).join('')}</select></div>
-    ${OWNER||LOCAL?`<button class="btn pri" onclick="userForm()">＋ إضافة مستخدم</button>`:''}</div>
+    ${OWNER?`<button class="btn out" onclick="linkDlg()">📱 ربط جوالي</button> `:''}${OWNER||LOCAL?`<button class="btn pri" onclick="userForm()">＋ إضافة مستخدم</button>`:''}</div>
    <div class="card"><table><thead><tr><th>المستخدم</th><th>رقم المعرّف</th><th>صلاحية الدخول</th><th>الحالة ⓘ</th><th></th></tr></thead><tbody>
     <tr><td><b>المالكة</b><div class="sub" style="margin:0">حساب المالكة (نظام العز)</div></td><td>—</td><td><span class="pill p-ok">⭐ المشرف الأعلى</span></td><td><span style="color:#16a34a">● نشط</span></td><td></td></tr>
     ${rows.map(u=>{const r=roleOf(u),st=uStatus(u);return`<tr><td><b>${esc(u.name)}</b><div class="sub" style="margin:0" dir="ltr">${esc(u.email||'')}</div></td><td>${esc(u.rid||'—')}</td><td>${r?`<span class="pill p-pri">${ROLE_ICO[r.key]||'🛡'} ${esc(r.name)}</span>`:'<span class="pill p-gray">بدون دور (كل الصلاحيات)</span>'}</td>
@@ -3509,6 +3509,13 @@ async function setUsers(){if(STAFF==null){SB('<p class="sub" style="padding:30px
      <td class="act">${OWNER||LOCAL?`<button class="ib" onclick="userMenu(event,'${esc(u.id)}')">⋯</button>`:''}</td></tr>`}).join('')}</tbody></table></div>`);
   const q=$('#usq');q.oninput=()=>{USF.q=q.value;clearTimeout(q.t);q.t=setTimeout(()=>{setUsers();const n=$('#usq');n.focus();n.setSelectionRange(n.value.length,n.value.length)},250)}}
 function userMenu(ev,id){const u=userRows().find(x=>x.id===id);const st=uStatus(u);openMenu(ev,[['✏️ عرض الملف',`userForm('${id}')`],[st==='stopped'?'✓ تفعيل المستخدم':'⦸ إيقاف المستخدم',`userStop('${id}',${st!=='stopped'})`]])}
+async function linkDlg(){let r;try{r=await api('POST',{action:'link_create'})}catch(e){toast(e.message);return}
+  const o=overlay(`<div class="modal" style="width:440px;text-align:center"><div class="dh"><h3>📱 ربط جوالك</h3></div><div class="db">
+   <p style="margin:0 0 10px">في جوالك: افتحي التطبيق ← اضغطي <b>«رمز ربط»</b> ← اكتبي هذا الرمز:</p>
+   <div dir="ltr" style="font-size:44px;font-weight:800;letter-spacing:10px;color:var(--pri);margin:8px 0">${r.code.slice(0,3)} ${r.code.slice(3)}</div>
+   <p class="sub" id="lkt" style="margin:0">صالح لمدة 5 دقائق ولمرة واحدة</p></div><div class="df"><span></span><button class="btn" data-x>إغلاق</button></div></div>`);
+  const end=Date.parse(r.exp),t=o.querySelector('#lkt');const iv=setInterval(()=>{const s=Math.max(0,Math.round((end-Date.now())/1000));if(!document.body.contains(o)){clearInterval(iv);return}t.textContent=s?`صالح لمدة ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')} ولمرة واحدة`:'انتهى الرمز — اضغطي «📱 ربط جوالي» من جديد';if(!s)clearInterval(iv)},1000);
+  o.querySelector('[data-x]').onclick=()=>{clearInterval(iv);o.remove()}}
 async function pinShow(btn,name,vid){const v=document.getElementById(vid||'pinv');if(v.textContent){v.textContent='';btn.textContent='🔑 عرض الرمز الحالي';return}try{const r=await api('POST',{action:'staff_pin',staff_name:name});v.textContent=r.pin||'—';btn.textContent='🙈 إخفاء';setTimeout(()=>{v.textContent='';btn.textContent='🔑 عرض الرمز الحالي'},20000)}catch(e){toast(e.message)}}
 async function devApproveUser(name){try{const d=await api('POST',{action:'device_list'});const L=(d.devices||[]).filter(x=>x.status==='pending'&&x.staff_name===name);for(const x of L)await api('POST',{action:'device_set',payload:{key:x.key,staff_name:name,status:'approved'}});toast(L.length?'تم اعتماد الجهاز — خليها تضغط «دخول» مرة ثانية':'لا يوجد جهاز بانتظار الاعتماد');STAFF=null;setUsers()}catch(e){toast(e.message)}}
 async function devSet(key,name,status){try{await api('POST',{action:'device_set',payload:{key,staff_name:name,status}});toast(status==='approved'?'تم اعتماد الجهاز':'تم رفض الجهاز');STAFF=null;setUsers()}catch(e){toast(e.message)}}
@@ -3744,8 +3751,9 @@ function showLogin(msg=''){
   BOOTED=false;document.querySelector('.login')?.remove();
   const o=document.createElement('div');o.className='login';
   o.innerHTML=`<div class="box"><div class="lg">${document.querySelector('.brand').innerHTML}</div>
-   <div class="seg"><button class="on" data-m="staff">موظف</button><button data-m="owner">المالكة</button></div>
+   <div class="seg"><button class="on" data-m="staff">موظف</button><button data-m="owner">المالكة</button><button data-m="link">رمز ربط</button></div>
    <div data-p="staff"><div class="fl"><label>اسم الدخول</label><input class="in" id="lgn" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="مثل: Rayan — وليس الإيميل"></div><div class="fl"><label>الرمز (PIN)</label><input class="in" id="lgp" type="password" inputmode="numeric" autocomplete="current-password" autocapitalize="off" autocorrect="off" dir="ltr"></div></div>
+   <div data-p="link" style="display:none"><div class="fl"><label>رمز الربط (6 أرقام)</label><input class="in" id="lgc" inputmode="numeric" maxlength="7" autocomplete="one-time-code" dir="ltr" style="font-size:22px;letter-spacing:6px;text-align:center"></div><p class="sub" style="margin:-4px 0 8px">من جهاز مسجّل دخوله: الإعدادات ← المستخدمين ← «📱 ربط جوالي»</p></div>
    <div data-p="owner" style="display:none"><div class="fl"><label>كلمة مرور النظام</label><input class="in" id="lgk" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" dir="ltr"></div></div>
    <div class="msg" id="lgm">${esc(msg)}</div>
    <button class="btn pri" style="width:100%;justify-content:center;height:46px" id="lgb">دخول</button>
@@ -3758,7 +3766,10 @@ function showLogin(msg=''){
   const go=async()=>{
     m.textContent='';btn.disabled=true;btn.textContent='جاري الدخول…';
     try{
-      if(mode==='owner'){const k=enD(o.querySelector('#lgk').value.trim());if(!k)throw new Error('اكتبي كلمة المرور');ls.del('acc_token');ls.set('acc_key',k)}
+      if(mode==='link'){const c=enD(o.querySelector('#lgc').value).replace(/\D/g,'');if(c.length!==6)throw new Error('اكتبي الرمز (6 أرقام)');
+        const r=await fetch(FN+'?link=redeem',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:c})});const j=await r.json();if(j.error||!j.token)throw new Error(j.error||'تعذّر الدخول');
+        ls.set('acc_token',j.token);ls.del('acc_key');if(j.user)ls.set('acc_user',JSON.stringify(j.user))}
+      else if(mode==='owner'){const k=enD(o.querySelector('#lgk').value.trim());if(!k)throw new Error('اكتبي كلمة المرور');ls.del('acc_token');ls.set('acc_key',k)}
       else{
         const name=o.querySelector('#lgn').value.trim(),pin=enD(o.querySelector('#lgp').value.trim());if(!name)throw new Error('اكتبي اسم الدخول');if(name.includes('@'))throw new Error('اكتبي «اسم الدخول» اللي أعطتك إياه المالكة، مو الإيميل (مثل: Rayan)');
         let dev=ls.get('acc_device');if(!dev){dev=(crypto.randomUUID?crypto.randomUUID():'d'+Date.now()+Math.random())+'-'+(crypto.randomUUID?crypto.randomUUID():Math.random());ls.set('acc_device',dev)}
