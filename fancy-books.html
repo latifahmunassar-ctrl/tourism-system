@@ -457,7 +457,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794677706';
+const BUILD='1794677773';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -3700,7 +3700,7 @@ const camN=s=>String(s||'').toLowerCase().replace(/[أإآ]/g,'ا').replace(/ة/
 const CAM_T={ring:['ring','rings','خاتم'],bracelet:['bracelet','breclate','braclet','bangle','اسواره'],necklace:['necklace','neckles','قلاده','سلسله'],earrings:['earrings','earings','erring','earring','حلق'],set:['set','طقم'],watch:['watch','rolex','ساعه'],lenses:['lenses','lens','عدسات'],box:['box','بوكس'],perfume:['perfume','عطر','بخور']};
 const CAM_C={gold:['gold','golden','ذهبي'],silver:['silver','فضي'],'rose gold':['rose'],'multi color':['multi','color','colors'],black:['black'],white:['white'],brown:['brown'],green:['green'],red:['red'],blue:['blue'],pink:['pink']};
 function camVocab(){const w={};S.products.forEach(p=>camN(p.name).split(' ').forEach(x=>{if(x.length>1&&!/^\d+$/.test(x))w[x]=(w[x]||0)+1}));return Object.entries(w).sort((a,b)=>b[1]-a[1]).slice(0,220).map(x=>x[0]).join(', ')}
-function camCands(info,max=40){const P=S.products.filter(p=>!p.deleted&&p.images?.[0]);const tw=CAM_T[info.type]||[],cw=CAM_C[String(info.color||'').toLowerCase()]||[];const brand=camN(info.brand_style);
+function camCands(info,max=60){const P=S.products.filter(p=>!p.deleted&&p.images?.[0]);const tw=CAM_T[info.type]||[],cw=CAM_C[String(info.color||'').toLowerCase()]||[];const brand=camN(info.brand_style);
   const bc=String(info.barcode||'').replace(/\D/g,'');const txt=new Set();(info.texts||[]).forEach(t=>camN(t).split(' ').forEach(w=>{if(w.length>=3)txt.add(w)}));
   const has=(pn,arr)=>arr.some(w=>pn.split(' ').includes(w));const anyType=P.some(p=>has(camN(p.name),tw));
   return P.map(p=>{const pn=camN(p.name);let s=0;if(bc.length>=6&&String(p.barcode||'').replace(/\D/g,'')===bc)s+=1000;
