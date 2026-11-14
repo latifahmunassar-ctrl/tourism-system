@@ -1041,6 +1041,14 @@ function vMode(i){ return villaMode[i] || ''; }
 // يحصر قائمة أسماء الفنادق (hswFetch→list_hotels kind) على النوع المختار. يُقرأ من عمود Hotel Type.
 let accMode = [];
 function aMode(i){ return accMode[i] || ''; }
+// 🇪🇬 مصر (المالكة ١٤ نوفمبر ٢٠٢٦): «نوع السكن» = فندق / شقة سكنية. الشقة = الاسم أو عمود Hotel Type
+// فيه Apartment/شقة. فلتر محلي (يشتغل حتى قبل نشر Tourism-AI) — بقية الأنواع (محمية) يفلترها السيرفر.
+function _hIsApt(h){ return /apartment|شق[ةه]/i.test(String((h&&h.name)||'')+' '+String((h&&h.hotel_type)||'')); }
+function _kindFilter(list, kind){
+  if(kind==='شقة سكنية') return (list||[]).filter(_hIsApt);
+  if(kind==='فندق') return (list||[]).filter(h=>!_hIsApt(h));
+  return list||[];
+}
 let _lastHotelCities = [];
 function hRooms(i){ const n = parseInt(hotelRooms[i], 10); return (n >= 1 && n <= 10) ? n : 1; }
 function setHotelRooms(i, n){ hotelRooms[i] = Math.max(1, Math.min(10, parseInt(n,10)||1)); if (typeof lastProgramRaw === 'string' && lastProgramRaw) buildReview(lastProgramRaw); }
@@ -1557,7 +1565,7 @@ async function hswFetch(cell){
     cell.dataset.loaded = '1';
     cell._isMakkah = isMakkah;
     cell._haramNote = data.haram_note || '';
-    hswRender(cell, data.hotels || []);
+    hswRender(cell, _kindFilter(data.hotels || [], aMode(+cell.dataset.hidx)));
   }catch(e){ menu.innerHTML = '<div class="hsw-loading">تعذّر جلب الفنادق</div>'; }
 }
 // شرائح فلتر قرب الحرم أعلى قائمة الفندق (مكة/المدينة فقط)
@@ -1971,7 +1979,7 @@ function hswRender(cell, hotels){
     const total = (h.price_per_night||0) * nights;
     const diff = (h.price_per_night||0) - curNightly;
     const dCls = diff>0?'up':(diff<0?'down':'');
-    const dTxt = diff===0?'':((diff>0?'+':'−')+Math.abs(diff));
+    const dTxt = diff===0?'':((diff>0?'+':'−')+Math.round(Math.abs(diff)).toLocaleString());
     const cap = h.capacity ? `<span class="hsw-cap">👥 يتسع ${h.capacity}</span>` : (h.occupancy?`<span class="hsw-cap">👥 ${hswEsc(String(h.occupancy))}</span>`:'');
     const cls = isCur ? 'sel' : (h.fits ? 'hsw-fit' : 'hsw-nofit');
     let sep = '';
@@ -2232,7 +2240,7 @@ async function changeAccKind(hidx, kind){
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
       body: JSON.stringify({ action:'list_hotels', dest, region, occupancy: occReq, current:p[0]||'', date, kind }) });
     const data = await res.json();
-    const cand = data.hotels || [];
+    const cand = _kindFilter(data.hotels || [], kind);
     if(!cand.length){ addMessage('sys',`ما فيه «${kind}» في ${region}. جرّبي مدينة ثانية أو «نوع السكن: الكل».`); if(sel) sel.value=''; accMode[hidx]=''; return; }
     accMode[hidx] = kind;                                  // احصر قائمة التبديل على النوع
     const target = metaPersons() || occN || 2;
@@ -4585,7 +4593,8 @@ const villaSel = _isTH ? `<select class="villa-sel" title="نوع السكن →
 // 🇿🇦 جنوب أفريقيا: قائمة «نوع السكن» تحت نوع الغرفة — تحصر قائمة تبديل الفندق على فندق/محمية.
 const _isSA = /جنوب\s*أفريقيا|south\s*africa/i.test(String(dest||''));
 const _am = aMode(hidx);
-const accSel = _isSA ? `<select class="villa-sel" title="نوع السكن → قائمة تبديل الفندق تنحصر على النوع المختار" onchange="changeAccKind(${hidx}, this.value)"><option value=""${_am===''?' selected':''}>🏨 نوع السكن: الكل</option><option value="فندق"${_am==='فندق'?' selected':''}>فندق فقط</option><option value="محمية"${_am==='محمية'?' selected':''}>محمية فقط</option></select>` : '';
+const accSel = _destIsEgypt(dest) ? `<select class="villa-sel" title="نوع السكن → أرخص فندق/شقة يتّسع للعدد، وقائمة الفنادق تنحصر على النوع المختار" onchange="changeAccKind(${hidx}, this.value)"><option value=""${_am===''?' selected':''}>🏨 نوع السكن: الكل</option><option value="فندق"${_am==='فندق'?' selected':''}>🏨 فندق</option><option value="شقة سكنية"${_am==='شقة سكنية'?' selected':''}>🏠 شقة سكنية</option></select>`
+  : _isSA ? `<select class="villa-sel" title="نوع السكن → قائمة تبديل الفندق تنحصر على النوع المختار" onchange="changeAccKind(${hidx}, this.value)"><option value=""${_am===''?' selected':''}>🏨 نوع السكن: الكل</option><option value="فندق"${_am==='فندق'?' selected':''}>فندق فقط</option><option value="محمية"${_am==='محمية'?' selected':''}>محمية فقط</option></select>` : '';
 const roomCell = `<td class="rtw-cell" data-hidx="${hidx}" data-name="${hswEsc(p[0]||'')}" data-region="${hswEsc(p[1]||'')}" data-room="${hswEsc(p[3]||'')}" data-nights="${nights}" data-date="${hswEsc(_df)}">`
   + `<div class="hsw-cur" onclick="rtwToggle(this)"><span class="hsw-name">${p[3]||''}</span><span class="hsw-chev">▼</span></div>`
   + `<div class="hsw-menu"></div>${villaSel}${accSel}</td>`;
