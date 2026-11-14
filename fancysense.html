@@ -93,6 +93,7 @@ tbody tr:hover{background:rgba(224,33,138,.06)}
   <div class="page" id="p-match"></div>
   <div class="page" id="p-credit"></div>
   <div class="page" id="p-ajel"></div>
+  <div class="page" id="p-xfer"></div>
   <div class="page" id="p-banks"></div>
   <div class="page" id="p-inv"></div>
   <div class="page" id="p-settings"></div>
@@ -143,17 +144,17 @@ function toast(msg,err){ let t=$('fs-toast'); if(!t){ t=document.createElement('
 function showApp(){ $('gate').classList.add('hidden'); $('app').classList.remove('hidden'); loadAll(); }
 
 // ---- التبويبات ----
-const TABS=[['dash','📊 لوحة'],['sales','🧾 المبيعات اليومية'],['machine','🏧 متابعة المكنة'],['expenses','💸 مصاريف يومية'],['rewa','🔄 مطابقة REWA'],['match','🔗 مطابقة بنوك العز'],['credit','👤 عملاء الآجل'],['ajel','📒 إيداعات الآجل'],['banks','🏦 البنوك والإيداعات'],['inv','📦 منتجات ناقصة'],['settings','⚙️ إعدادات']];
+const TABS=[['dash','📊 لوحة'],['sales','🧾 المبيعات اليومية'],['machine','🏧 متابعة المكنة'],['expenses','💸 مصاريف يومية'],['rewa','🔄 مطابقة REWA'],['match','🔗 مطابقة بنوك العز'],['credit','👤 عملاء الآجل'],['ajel','📒 إيداعات الآجل'],['xfer','🔄 التحويلات البنكية'],['banks','🏦 البنوك والإيداعات'],['inv','📦 منتجات ناقصة'],['settings','⚙️ إعدادات']];
 function buildTabs(){ $('tabs').innerHTML=TABS.map((t,i)=>'<div class="tab'+(i===0?' on':'')+'" data-p="'+t[0]+'" onclick="switchTab(this)">'+t[1]+'</div>').join(''); }
 function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on')); el.classList.add('on'); const p=el.dataset.p; document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('on')); $('p-'+p).classList.add('on'); }
 
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v72';
+const FS_VER='v73';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
-  renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderAjel(); renderBanks(); renderInv(); renderSettings();
+  renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderAjel(); renderXfer(); renderBanks(); renderInv(); renderSettings();
 }
 
 // ===== 🔗 مطابقة بنوك العز (للعرض فقط) =====
@@ -982,6 +983,84 @@ function _ajCompare(){
   const rows=A.map(x=>{ let best=-1,bg=1e9; Z.forEach((z,i)=>{ if(used.has(i)||Math.abs(z.a-x.a)>0.011)return; const g=Math.abs(gap(x.d,z.d)); if(g>180)return; if(g<bg){bg=g;best=i;} }); if(best>=0)used.add(best); return {d:x.d,acc:x,az:best>=0?Z[best]:null}; });
   Z.forEach((z,i)=>{ if(!used.has(i))rows.push({d:z.d,acc:null,az:z}); });
   return rows.sort((p,q)=>p.d<q.d?1:(p.d>q.d?-1:0));
+}
+// 🔄 ١٤ نوفمبر ٢٠٢٦ (المالكة): قسم التحويلات البنكية — تحويلات المبيعات اليومية بفانسي ↔ تحويلات «فانسي» الفعلية ببنوك العز
+//   فانسي = daily_sales.transfers (كل حوالة لحالها) أو bank_transfer (الإجمالي). العز = إيرادات «فانسي» بيانها «تحويل» (ما عدا آجل وتحويل صندوق).
+//   المطابقة مثل النقدية: ١) مبلغ واحد مطابق (−١..+٤ أيام، يفضّل نفس الفرع) ٢) المبلغ دخل على أكثر من حوالة (٢–٦ حوالات مجموعها = المبلغ) ٣) أقرب يوم بنفس الفرع مع الفرق.
+function _xfBr(t){ t=String(t||''); if(/كيوسك|kiosk/i.test(t))return 'Kiosk (Gardens mall)'; if(/اون\s*لاين|أون\s*لاين|online|shopify|shopfy/i.test(t))return 'اونلاين'; if(/محل|شوب|shop|store/i.test(t))return 'Shop (Gardens mall)'; if(/معرض|معارض/.test(t))return 'معارض'; if(/عمان|oman|صلال|salalah/i.test(t))return 'OMAN'; return 'غير محدّد'; }
+function _xfAzRows(){
+  const out=[], txt=x=>[x.details,x.description,x.more_details].map(v=>String(v||'')).join(' ');
+  const ok=t=>/تحويل|حوال|wallet|اون\s*لاين|online/i.test(t)&&!/آجل|اجل/.test(t)&&!/صندوق/.test(t);
+  (DATA.acc_fancy||[]).forEach(x=>{ const a=n(x.in_raw); if(!(a>0)||n(x.out_raw)>0)return; const t=txt(x); if(!/تحويل|اون\s*لاين/.test(t)||!ok(t))return; if(/^\s*test\s*$/i.test(String(x.details||'')))return;
+    const lbl=(String(x.more_details||'').trim()||String(x.details||'').trim());
+    out.push({d:String(x.tx_date||'').slice(0,10),a,bank:String(x.bank_name||''),label:lbl,ref:String(x.bank_ref||'').trim(),br:_xfBr(lbl+' '+String(x.bank_ref||'')),src:'الصندوق والبنوك'}); });
+  (DATA.acc_fancy_btx||[]).forEach(x=>{ const a=n(x.amount_in), d=String(x.tx_date||'').slice(0,10), t=String(x.note||''); if(!(a>0)||!d||!/تحويل|اون\s*لاين/.test(t)||!ok(t))return;
+    if(out.some(o=>Math.abs(o.a-a)<0.011&&Math.abs(Date.parse(o.d)-Date.parse(d))<=2*864e5))return;
+    const lbl=t.replace(/^🏷️\s*/,'').split('←').map(z=>z.trim()).filter(Boolean).pop()||t;
+    out.push({d,a,bank:String(x.bank_name||''),label:lbl,ref:String(x.bank_ref||'').trim(),br:_xfBr(t),src:'كشف البنك'}); });
+  return out.sort((p,q)=>p.d<q.d?-1:1);
+}
+function _xfFsRows(){
+  const out=[];
+  (DATA.daily_sales||[]).forEach(x=>{ const d=String(x.sale_date||'').slice(0,10); if(!d)return; const br0=String(x.branch||'—');
+    const online=/اون\s*لاين|أون\s*لاين|online|shopify/i.test(String(x.note_transfer||''));
+    const trs=Array.isArray(x.transfers)?x.transfers.filter(t=>n(t&&t.amount)>0):[];
+    if(trs.length) trs.forEach(t=>out.push({id:x.id,d,a:n(t.amount),br:(online||/اون\s*لاين|online/i.test(String(t.note||'')))?'اونلاين':br0,bank:String(t.bank||t.bank_name||''),note:String(t.note||x.note_transfer||''),rewa:n(x.rewa_transfer)}));
+    else if(n(x.bank_transfer)>0) out.push({id:x.id,d,a:n(x.bank_transfer),br:online?'اونلاين':br0,bank:'',note:String(x.note_transfer||''),rewa:n(x.rewa_transfer)}); });
+  return out.sort((p,q)=>p.d<q.d?-1:1);
+}
+function _xfCompare(){
+  // حوالات «تحويل» اللي طابقت إيداع صندوق بقسم النقدية = نقدية فعلاً → ما تتكرر هنا
+  const cashUsed=new Set(); try{ _cbCompare().forEach(r=>{ if(r.acc) r.azs.forEach(z=>{ if(z.kind==='تحويل بنكي') cashUsed.add(z.d+'|'+z.a.toFixed(3)); }); }); }catch(_){}
+  const Z=_xfAzRows().filter(z=>!cashUsed.has(z.d+'|'+z.a.toFixed(3))), A=_xfFsRows(), used=new Set(), gap=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/864e5), M=A.map(()=>null);
+  const near=(x,z)=>{ const g=gap(x.d,z.d); return g>=-1&&g<=4; };
+  A.forEach((x,k)=>{ let best=-1,score=1e9; Z.forEach((z,i)=>{ if(used.has(i)||Math.abs(z.a-x.a)>0.011||!near(x,z))return; const sc=Math.abs(gap(x.d,z.d))*10+(z.br===x.br?0:5); if(sc<score){score=sc;best=i;} }); if(best>=0){used.add(best);M[k]=[best];} });
+  [[0,1],[-1,4]].forEach(([lo,hi])=>A.forEach((x,k)=>{ if(M[k])return; const C=Z.map((z,i)=>i).filter(i=>{ if(used.has(i)||Z[i].a>=x.a+0.011||!(Z[i].br===x.br||Z[i].br==='غير محدّد'))return false; const g=gap(x.d,Z[i].d); return g>=lo&&g<=hi; }).sort((p,q)=>Math.abs(gap(x.d,Z[p].d))-Math.abs(gap(x.d,Z[q].d))).slice(0,16);
+    let best=null,bs=1e9,steps=0; const rec=(st,pick,sum)=>{ if(++steps>60000)return; if(pick.length>=2&&Math.abs(sum-x.a)<0.011){ const ds=pick.map(i=>Z[i].d), sc=new Set(ds).size*100+ds.reduce((s,d)=>s+Math.abs(gap(x.d,d)),0)*10+pick.length; if(sc<bs){bs=sc;best=pick.slice();} return; } if(pick.length>=6||sum>x.a+0.011)return; for(let q=st;q<C.length;q++){ pick.push(C[q]); rec(q+1,pick,sum+Z[C[q]].a); pick.pop(); } };
+    rec(0,[],0); if(best){ best.forEach(i=>used.add(i)); M[k]=best; } }));
+  A.forEach((x,k)=>{ if(M[k])return; let bd=null; Z.forEach((z,i)=>{ if(used.has(i)||z.br!==x.br)return; const g=gap(x.d,z.d); if(g<0||g>2)return; if(bd===null||g<gap(x.d,bd))bd=z.d; }); if(bd===null)return; const pk=Z.map((z,i)=>i).filter(i=>!used.has(i)&&Z[i].br===x.br&&Z[i].d===bd); pk.forEach(i=>used.add(i)); M[k]=pk; });
+  const mk=(acc,azs)=>({d:acc?acc.d:azs[0].d,br:acc?acc.br:azs[0].br,acc,azs,azT:azs.reduce((s,z)=>s+z.a,0)});
+  const rows=A.map((x,k)=>mk(x,(M[k]||[]).map(i=>Z[i])));
+  Z.forEach((z,i)=>{ if(!used.has(i))rows.push(mk(null,[z])); });
+  rows.forEach(r=>{ r.diff=r.azT-(r.acc?r.acc.a:0); r.st=_cbStOf(r); });
+  return rows.sort((p,q)=>p.d<q.d?1:(p.d>q.d?-1:0));
+}
+const _XF_ST={ok:'مطابق',part:'فرق بالمبلغ',acc:'مو موجود بالبنك (العز)',az:'مو موجود بفانسي'};
+function renderXfer(){
+  const C=cur(), F={from:window._xfFrom||'',to:window._xfTo||'',br:window._xfBr||'',st:window._xfSt||''};
+  const all=_xfCompare(); const brs=[...new Set(all.map(r=>r.br))].sort();
+  const rows=all.filter(r=>(!F.from||r.d>=F.from)&&(!F.to||r.d<=F.to)&&(!F.br||r.br===F.br)&&(!F.st||r.st===F.st)); window._xfRows=rows;
+  let tA=0,tZ=0; const cnt={ok:0,part:0,acc:0,az:0}, tot={};
+  rows.forEach(r=>{ const t=tot[r.br]=tot[r.br]||{a:0,z:0}; if(r.acc){tA+=r.acc.a;t.a+=r.acc.a;} tZ+=r.azT; t.z+=r.azT; cnt[r.st]++; });
+  const dm=d=>d?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(2,4):'';
+  const pill=st=>st==='ok'?'<span class="pill g">✓ مطابق</span>':st==='part'?'<span class="pill" style="background:rgba(224,168,58,.18);color:#e0a83a">≠ فرق بالمبلغ</span>':st==='acc'?'<span class="pill r">⚠️ مو موجود بالبنك (العز)</span>':'<span class="pill" style="background:rgba(58,160,255,.15);color:#3aa0ff">🏦 مو موجود بفانسي</span>';
+  const body=rows.map(r=>{ const x=r.acc;
+    const parts=r.azs.map(z=>{ const g=x?gap2(x.d,z.d):0; return '<div style="white-space:nowrap"><b style="color:#3aa0ff">'+fmt(z.a)+'</b> <span style="font-size:9px;color:var(--muted)">📅 '+dm(z.d)+(g?' ('+(g>0?'+':'')+g+')':'')+'</span></div>'; }).join('')||'<span class="mut">—</span>';
+    const refs=r.azs.map(z=>'<div>'+esc(z.bank.replace(/\s*\(.*$/,''))+(z.ref?' · '+esc(z.ref):'')+' <span class="mut">'+esc(z.label)+'</span></div>').join('');
+    return '<tr><td>'+esc(r.d)+'</td><td>'+esc(r.br)+'</td><td class="num pos" style="font-weight:800">'+(x?fmt(x.a):'<span class="mut">—</span>')+'</td><td class="num">'+parts+'</td><td class="num" style="font-weight:800;color:#3aa0ff">'+(r.azs.length>1?fmt(r.azT):(r.azs.length?fmt(r.azT):'<span class="mut">—</span>'))+'</td><td class="num" style="font-weight:800;color:'+(Math.abs(r.diff)<0.011?'#2fd196':'#ff6b7a')+'">'+(Math.abs(r.diff)<0.011?'✓':fmt(r.diff))+'</td><td>'+pill(r.st)+(r.azs.length>1?' <span style="font-size:10px;color:var(--muted)">('+r.azs.length+' حوالات)</span>':'')+'</td><td class="mini">'+refs+'</td><td class="mini">'+(x?esc(x.note||'')+(x.bank?'<div class="mut">📝 '+esc(x.bank.replace(/\s*[\-\(].*$/,''))+'</div>':''):'')+'</td></tr>'; }).join('');
+  const cards=Object.keys(tot).sort().map(b=>{ const t=tot[b], df=t.z-t.a; return '<div class="kpi"><div class="ttl">🏪 '+esc(b)+'</div><div class="val" style="font-size:14px">فانسي '+fmt(t.a)+' · العز <span style="color:#3aa0ff">'+fmt(t.z)+'</span></div><div class="sub" style="color:'+(Math.abs(df)<0.01?'#2fd196':'#e0a83a')+'">'+(Math.abs(df)<0.01?'✓ مطابق':'الفرق (العز − فانسي): '+fmt(df)+' '+C)+'</div></div>'; }).join('');
+  const sel=(lbl,key,opts,val)=>'<div class="fld"><label>'+lbl+'</label><select onchange="window.'+key+'=this.value;renderXfer()">'+opts.map(o=>'<option value="'+esc(o[0])+'"'+(o[0]===val?' selected':'')+'>'+esc(o[1])+'</option>').join('')+'</select></div>';
+  $('p-xfer').innerHTML=
+    '<div class="panel" style="border:1px solid #3aa0ff"><h3 style="margin:0 0 6px">🔄 التحويلات البنكية: فانسي ↔ نظام العز (الفعلي بالبنك)</h3><div class="sub"><b>فانسي</b> = خانة «تحويل» في المبيعات اليومية (كل حوالة لحالها إذا مسجّلة بالتفصيل). <b>نظام العز</b> = إيرادات «فانسي» بالبنك بيانها «تحويل» أو «اون لاين» (بدون الآجل وتحويل الصندوق — لهم أقسامهم). المطابقة بنفس المبلغ وتاريخ العز قريب (−١ إلى +٤ أيام). <b>إذا المبلغ دخل على أكثر من حوالة</b> تظهر الحوالات كلها بنفس السطر مع «إجمالي ما دخل» و«الفرق».</div>'+
+    '<div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:10px"><div class="fld"><label>📅 من</label><input type="date" value="'+esc(F.from)+'" onchange="window._xfFrom=this.value;renderXfer()"></div><div class="fld"><label>📅 إلى</label><input type="date" value="'+esc(F.to)+'" onchange="window._xfTo=this.value;renderXfer()"></div>'+
+      sel('🏪 الفرع','_xfBr',[['','الكل'],...brs.map(b=>[b,b])],F.br)+sel('🔎 الحالة','_xfSt',[['','الكل'],['ok','✓ مطابق'],['part','≠ فرق بالمبلغ'],['acc','⚠️ مو موجود بالبنك (العز)'],['az','🏦 مو موجود بفانسي']],F.st)+
+      '<div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._xfFrom=\'\';window._xfTo=\'\';window._xfBr=\'\';window._xfSt=\'\';renderXfer()">مسح الفلاتر</button></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn" onclick="xfExportXlsx()">📥 تصدير Excel</button></div></div>'+
+    '<div class="kpis" style="margin-top:10px">'+kpi('🧾 فانسي',fmt(tA)+' '+C)+kpi('🏦 نظام العز',fmt(tZ)+' '+C)+kpi('الفرق (العز − فانسي)',fmt(tZ-tA)+' '+C,Math.abs(tZ-tA)<0.01?'':'neg')+kpi('الحالة','✓ '+cnt.ok+' · ≠ فرق '+cnt.part+' · ⚠️ مو بالبنك '+cnt.acc+' · 🏦 مو بفانسي '+cnt.az)+'</div>'+
+    (cards?'<div class="kpis" style="margin-top:8px">'+cards+'</div>':'')+'</div>'+
+    '<div class="panel"><div class="tbl-wrap bf-scroll" style="max-height:620px"><table style="font-size:12px"><thead><tr><th>التاريخ</th><th>الفرع</th><th>🧾 فانسي</th><th style="background:#1a5fb4">🏦 حوالات العز</th><th>إجمالي ما دخل</th><th>الفرق</th><th>المقارنة</th><th>البنك · المرجع · البيان (العز)</th><th>ملاحظة فانسي</th></tr></thead><tbody>'+(body||'<tr><td colspan="9" class="mut" style="text-align:center;padding:12px">لا تحويلات بهذا الفلتر</td></tr>')+'</tbody></table></div></div>';
+}
+function gap2(a,b){ return Math.round((Date.parse(b)-Date.parse(a))/864e5); }
+async function xfExportXlsx(){
+  const R=window._xfRows; if(!R){ toast('افتحي تبويب التحويلات أولاً',true); return; }
+  try{ await _loadXlsx(); }catch(e){ toast('⚠️ '+e.message,true); return; }
+  const r3=v=>Math.round((+v||0)*1000)/1000, C=cur();
+  let tA=0,tZ=0; R.forEach(r=>{ if(r.acc)tA+=r.acc.a; tZ+=r.azT; });
+  const wb=XLSX.utils.book_new(); wb.Workbook={Views:[{RTL:true}]};
+  const ws1=XLSX.utils.aoa_to_sheet([['مقارنة التحويلات البنكية — Fancy Sense'],[],['الفترة',(window._xfFrom||'البداية')+' ← '+(window._xfTo||'الآن')],['مجموع فانسي',r3(tA),C],['مجموع نظام العز',r3(tZ),C],['الفرق (العز − فانسي)',r3(tZ-tA),C]]); ws1['!cols']=[{wch:26},{wch:16},{wch:8}]; XLSX.utils.book_append_sheet(wb,ws1,'ملخص');
+  const h=['التاريخ','الفرع','فانسي','حوالة العز','تاريخ دخول البنك','المرجع / البيان','إجمالي ما دخل (العز)','الفرق (العز − فانسي)','الحالة','ملاحظة فانسي']; const rows=[];
+  R.slice().sort((a,b)=>a.d<b.d?-1:1).forEach(r=>{ const x=r.acc, zs=r.azs.length?r.azs:[null]; zs.forEach((z,k)=>rows.push([k?'':r.d,k?'':r.br,!k&&x?r3(x.a):'',z?r3(z.a):'',z?z.d:'',z?((z.ref?z.ref+' · ':'')+z.label):'',k?'':r3(r.azT),k?'':r3(r.diff),k?'':_XF_ST[r.st],!k&&x?(x.note||''):''])); });
+  const ws2=XLSX.utils.aoa_to_sheet([h,...rows]); ws2['!cols']=[{wch:12},{wch:20},{wch:10},{wch:10},{wch:14},{wch:44},{wch:16},{wch:16},{wch:22},{wch:30}]; XLSX.utils.book_append_sheet(wb,ws2,'التحويلات');
+  XLSX.writeFile(wb,'fancy-transfers_'+(window._xfFrom||'all')+'_'+(window._xfTo||today())+'.xlsx'); toast('✅ تم تصدير الملف');
 }
 function renderAjel(){
   const C=cur(), F={from:window._ajFrom||'',to:window._ajTo||'',st:window._ajSt||''};
