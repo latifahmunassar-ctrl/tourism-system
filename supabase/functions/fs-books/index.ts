@@ -159,24 +159,34 @@ Deno.serve(async (req: Request) => {
     try { body = await req.json(); } catch { return J({ error: 'bad json' }, 400); }
     if (body.action === 'whoami') return J({ user: who });
     if (body.action === 'img_identify') {
-      // 📷 قراءة اسم المنتج من صورة (Claude Opus 5.5) — يرجع وصف المنتج فقط، والمطابقة مع المنتجات تتم في المتصفح
-      const img = String(body.image || ''); const mt = ['image/jpeg', 'image/png', 'image/webp'].includes(body.media_type) ? body.media_type : 'image/jpeg';
-      if (!img || img.length > 4_000_000) return J({ error: 'صورة غير صالحة' }, 400);
+      // 📷 التعرف على المنتج من صورة (Claude Opus 5.5) — مرحلتين: وصف القطعة، ثم اختيارها من لوحة صور المنتجات المرشحة
+      const mode = body.mode === 'pick' ? 'pick' : 'describe';
+      const img = String(body.image || '');
+      const sheets: string[] = Array.isArray(body.sheets) ? body.sheets.slice(0, 3).map(String) : [];
+      if (!img || img.length > 3_000_000 || sheets.some(s => s.length > 3_000_000)) return J({ error: 'صورة غير صالحة' }, 400);
+      if (mode === 'pick' && !sheets.length) return J({ error: 'لا توجد صور مرشحة' }, 400);
+      const vocab = String(body.vocab || '').slice(0, 3000);
+      const pic = (d: string) => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: d } });
+      const sys = mode === 'describe'
+        ? 'You identify items in a fashion-accessories and gifts shop (rings, bracelets, necklaces, earrings, sets, watches, lenses, boxes, perfumes) from a cashier photo. Reply with ONLY a JSON object, no prose: {"type":"ring|bracelet|necklace|earrings|set|watch|lenses|box|perfume|other","color":"gold|silver|rose gold|multi color|black|white|brown|green|red|blue|pink|other","brand_style":"","desc":"short visual description: shape, motif, stones","texts":["any visible written words"],"barcode":"digits if a barcode is readable else empty"}. brand_style = the luxury design the piece imitates (e.g. cartier, van cleef, tiffany, bulgari, chanel, lv, dior, gucci, messika, boucheron, rolex) if clearly recognisable, else "". Shop vocabulary: ' + vocab
+        : 'A cashier photographed one item. The following contact sheet(s) show candidate shop products, each tile labelled with a number in its corner. Find the tiles showing the SAME product (same design, shape, motif and colour; ignore background, angle and lighting). Reply with ONLY a JSON object: {"picks":[tile numbers, best match first, at most 5, only plausible matches],"confidence":"high|medium|low"}. If none match, {"picks":[],"confidence":"low"}.';
+      const content: any[] = [{ type: 'text', text: 'Cashier photo:' }, pic(img)];
+      sheets.forEach((s, k) => { content.push({ type: 'text', text: `Contact sheet ${k + 1}:` }); content.push(pic(s)); });
+      content.push({ type: 'text', text: 'JSON only.' });
       try {
         const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
         const res: any = await client.beta.messages.create({
-          model: 'claude-opus-5-5', max_tokens: 2000,
+          model: 'claude-opus-5-5', max_tokens: 4000,
           betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
-          output_config: { effort: 'low' },
-          system: 'You identify retail products (perfumes, incense, cosmetics, gifts) from a shop photo taken by a cashier. Read every visible label. Reply with ONLY a JSON object, no prose: {"brand":"","name":"","variant":"","size":"","category":"","barcode":"","texts":["every distinct word/phrase visible on the product, Arabic and English"],"confidence":"high|medium|low"}. barcode = digits under a barcode if readable, else "". Use "" for unknown fields.',
-          messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: mt, data: img } }, { type: 'text', text: 'What product is this? JSON only.' }] }],
+          output_config: { effort: 'low' }, system: sys,
+          messages: [{ role: 'user', content }],
         } as any);
         if (res.stop_reason === 'refusal') return J({ error: 'تعذّر التعرف على الصورة' }, 422);
         const txt = (res.content || []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('');
-        const m = txt.match(/\{[\s\S]*\}/); if (!m) return J({ error: 'لم أتعرف على المنتج — جرّبي صورة أوضح للاسم' }, 422);
+        const m = txt.match(/\{[\s\S]*\}/); if (!m) return J({ error: 'لم أتعرف على المنتج — جرّبي صورة أوضح' }, 422);
         let info: any; try { info = JSON.parse(m[0]); } catch { return J({ error: 'لم أتعرف على المنتج — جرّبي صورة أوضح' }, 422); }
-        try { await db.from('fs_app_docs').upsert({ coll: 'img_log', id: crypto.randomUUID(), data: { at: new Date().toISOString(), by: who, info, in: res.usage?.input_tokens, out: res.usage?.output_tokens }, deleted: true, updated_at: new Date().toISOString(), updated_by: who }, { onConflict: 'coll,id' }); } catch (_) {}
-        return J({ ok: true, info });
+        try { const at = new Date().toISOString(); await db.from('fs_app_docs').upsert({ coll: 'img_log', id: crypto.randomUUID(), data: { at, by: who, mode, info, in: res.usage?.input_tokens, out: res.usage?.output_tokens }, deleted: true, updated_at: at, updated_by: who }, { onConflict: 'coll,id' }); } catch (_) {}
+        return J({ ok: true, info, usage: { in: res.usage?.input_tokens, out: res.usage?.output_tokens } });
       } catch (e: any) { return J({ error: 'خطأ في خدمة التعرف: ' + String(e?.message || e).slice(0, 160) }, 502); }
     }
     if (body.action === 'link_create') {
