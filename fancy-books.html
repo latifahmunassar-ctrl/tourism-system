@@ -457,7 +457,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794678118';
+const BUILD='1794679908';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -3700,12 +3700,12 @@ const camN=s=>String(s||'').toLowerCase().replace(/[أإآ]/g,'ا').replace(/ة/
 const CAM_T={ring:['ring','rings','خاتم'],bracelet:['bracelet','breclate','braclet','bangle','اسواره'],necklace:['necklace','neckles','قلاده','سلسله'],earrings:['earrings','earings','erring','earring','حلق'],set:['set','طقم'],watch:['watch','rolex','ساعه'],lenses:['lenses','lens','عدسات'],box:['box','بوكس'],perfume:['perfume','عطر','بخور']};
 const CAM_C={gold:['gold','golden','ذهبي'],silver:['silver','فضي'],'rose gold':['rose'],'multi color':['multi','color','colors'],black:['black'],white:['white'],brown:['brown'],green:['green'],red:['red'],blue:['blue'],pink:['pink']};
 function camVocab(){const w={};S.products.forEach(p=>camN(p.name).split(' ').forEach(x=>{if(x.length>1&&!/^\d+$/.test(x))w[x]=(w[x]||0)+1}));return Object.entries(w).sort((a,b)=>b[1]-a[1]).slice(0,220).map(x=>x[0]).join(', ')}
-function camCands(info,max=100){const P=S.products.filter(p=>!p.deleted&&p.images?.[0]);const tw=[...new Set([info.type,...(info.types||[])])].flatMap(t=>CAM_T[t]||[]),cw=CAM_C[String(info.color||'').toLowerCase()]||[];const brand=camN(info.brand_style);
+function camCands(info,max=120){const P=S.products.filter(p=>!p.deleted&&p.images?.[0]);const tw=[...new Set([info.type,...(info.types||[])])].flatMap(t=>CAM_T[t]||[]),cw=CAM_C[String(info.color||'').toLowerCase()]||[];const brand=camN(info.brand_style);
   const bc=String(info.barcode||'').replace(/\D/g,'');const txt=new Set();(info.texts||[]).forEach(t=>camN(t).split(' ').forEach(w=>{if(w.length>=3)txt.add(w)}));
   const has=(pn,arr)=>arr.some(w=>pn.split(' ').includes(w));const anyType=P.some(p=>has(camN(p.name),tw));
-  const it=new Set([info.type,...(info.types||[])].filter(Boolean)),ic=String(info.color||'').toLowerCase();
+  const it=new Set([info.type,...(info.types||[])].filter(Boolean)),ic=String(info.color||'').toLowerCase();const STOP=new Set(['with','and','the','matching','design','style','motif','small','large','gold','silver','tone','set']);const dw=new Set(camN(info.desc).split(' ').filter(w=>w.length>=4&&!STOP.has(w)));
   return P.map(p=>{const pn=camN(p.name);let s=0;if(bc.length>=6&&String(p.barcode||'').replace(/\D/g,'')===bc)s+=1000;
-    if(p.vis){const v=p.vis;if((v.types||[]).some(t=>it.has(t)))s+=10;if(ic&&String(v.color||'').toLowerCase()===ic)s+=5;if(brand&&camN(v.brand_style)===brand)s+=6;for(const w of txt)if(pn.split(' ').includes(w))s+=2;return{p,s}}
+    if(p.vis){const v=p.vis;const vt=v.types||[];const ov=vt.filter(t=>it.has(t)).length;if(ov)s+=6+2*ov/Math.max(vt.length,it.size);if(ic&&String(v.color||'').toLowerCase()===ic)s+=4;const vb=camN(v.brand_style);if(brand&&(vb===brand||pn.includes(brand)))s+=6;else if(brand&&vb)s-=3;const vw=new Set(camN(v.desc+' '+p.name).split(' '));for(const w of dw)if(vw.has(w))s+=1.5;for(const w of txt)if(pn.split(' ').includes(w))s+=2;return{p,s}}
     if(tw.length&&has(pn,tw))s+=10;else if(anyType)s-=6;if(cw.length&&has(pn,cw))s+=4;if(brand&&brand.split(' ').every(w=>pn.includes(w)))s+=5;
     for(const w of txt)if(pn.split(' ').includes(w))s+=2;return{p,s}}).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).slice(0,max).map(x=>x.p)}
 async function camIndex(btn){const P=S.products.filter(p=>!p.deleted&&p.images?.[0]&&!p.vis);if(!P.length){toast('كل صور المنتجات مفهرسة ✓');return}
