@@ -160,7 +160,29 @@ Deno.serve(async (req: Request) => {
     if (body.action === 'whoami') return J({ user: who });
     if (body.action === 'img_identify') {
       // 📷 التعرف على المنتج من صورة (Claude Opus 5.5) — مرحلتين: وصف القطعة، ثم اختيارها من لوحة صور المنتجات المرشحة
-      const mode = body.mode === 'pick' ? 'pick' : 'describe';
+      const mode = body.mode === 'pick' ? 'pick' : body.mode === 'index' ? 'index' : 'describe';
+      if (mode === 'index') {
+        // فهرسة صور المنتجات (للمالكة): وصف بصري لكل صورة منتج مرة واحدة
+        if (!owner) return J({ error: 'للمالكة فقط' }, 403);
+        const items: any[] = Array.isArray(body.items) ? body.items.slice(0, 12) : [];
+        if (!items.length) return J({ error: 'لا توجد صور' }, 400);
+        const content: any[] = [];
+        items.forEach((it: any) => { content.push({ type: 'text', text: 'Image id ' + String(it.id).slice(0, 40) + ':' }); content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: String(it.image || '').slice(0, 1_000_000) } }); });
+        content.push({ type: 'text', text: 'JSON only.' });
+        try {
+          const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
+          const res: any = await client.beta.messages.create({
+            model: 'claude-opus-5-5', max_tokens: 8000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', output_config: { effort: 'low' },
+            system: 'Each image is a product photo from a fashion-accessories shop catalogue. For EVERY image return its visual attributes. Reply with ONLY JSON: {"items":[{"id":"<image id>","types":["every item type visible: ring|bracelet|necklace|earrings|set|watch|lenses|box|perfume|bag|other"],"color":"gold|silver|rose gold|multi color|black|white|brown|green|red|blue|pink|other","brand_style":"luxury design imitated if recognisable (cartier, van cleef, tiffany, bulgari, chanel, lv, dior, gucci, messika, boucheron, rolex) else empty","desc":"max 15 words: shape, motif, stones"}]}',
+            messages: [{ role: 'user', content }],
+          } as any);
+          if (res.stop_reason === 'refusal') return J({ error: 'refusal' }, 422);
+          const txt = (res.content || []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('');
+          const m = txt.match(/\{[\s\S]*\}/); if (!m) return J({ error: 'no json' }, 422);
+          const out = JSON.parse(m[0]);
+          return J({ ok: true, items: out.items || [], usage: { in: res.usage?.input_tokens, out: res.usage?.output_tokens } });
+        } catch (e: any) { return J({ error: 'خطأ في خدمة التعرف: ' + String(e?.message || e).slice(0, 160) }, 502); }
+      }
       const img = String(body.image || '');
       const sheets: string[] = Array.isArray(body.sheets) ? body.sheets.slice(0, 5).map(String) : [];
       if (!img || img.length > 3_000_000 || sheets.some(s => s.length > 3_000_000)) return J({ error: 'صورة غير صالحة' }, 400);

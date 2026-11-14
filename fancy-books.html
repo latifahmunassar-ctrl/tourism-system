@@ -457,7 +457,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794677992';
+const BUILD='1794678118';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -3216,7 +3216,7 @@ function viewSaleSettings(tab){const s=SSET();if(tab)SST=tab;setTitle('إعدا�
   let body='';
   if(SST==='sales')body=`<div class="setcard"><h3>اعدادات مبيعات نقاط البيع</h3>${sw('sales','salesman','البائع','حدد هذا الخيار إذا كنت تريد إضافة بائع (ممثل مبيعات) إلى مبيعاتك يمكنك ايضا اضافته لإيصال البيع من خلال إعدادات الايصال')}${sw('sales','quotation','عرض سعر','حدد هذا الخيار إذا كنت تريد إنشاء عروض أسعار في شاشة البيع')}
     ${sw('sales','negQty','حدد هذا الخيار للسماح ببيع المنتجات ≥ 0','تحقق لبيع العناصر التي تكون كميتها أقل من أو تساوي 0')}${sw('sales','belowCost','البيع عند السعر < التكلفة','تحقق لبيع العناصر حتى لو كان سعرها أقل من التكلفة')}
-    ${sw('sales','b2b','فواتير ضريبية (من منشأة لمنشأة)','حدد هذا الخيار اذا كنت تنشئ فواتير الى منشآت أخرى')}${sw('sales','numPad','قائمة الأرقام','حدد هذا الخيار لتظهر لك قائمة تسمح لك بكتابة الأرقام عند بيع المنتجات<br>ينصح به لشاشات اللمس')}${sw('sales','whatsapp','تفعيل رسائل الواتس اب','فعّل خيار إرسال رسائل واتساب للمبيعات')}${foot}</div>${waSettingsCard()}`;
+    ${sw('sales','b2b','فواتير ضريبية (من منشأة لمنشأة)','حدد هذا الخيار اذا كنت تنشئ فواتير الى منشآت أخرى')}${sw('sales','numPad','قائمة الأرقام','حدد هذا الخيار لتظهر لك قائمة تسمح لك بكتابة الأرقام عند بيع المنتجات<br>ينصح به لشاشات اللمس')}${sw('sales','whatsapp','تفعيل رسائل الواتس اب','فعّل خيار إرسال رسائل واتساب للمبيعات')}${foot}</div>${waSettingsCard()}${OWNER?`<div class="setcard"><h3 style="margin:0 0 6px">📷 التعرف على المنتج بالكاميرا</h3><p class="sub" style="margin:0 0 10px">مفهرس: <b>${S.products.filter(p=>p.vis).length}</b> من ${S.products.filter(p=>!p.deleted&&p.images?.[0]).length} صورة منتج. اضغطي الزر بعد إضافة منتجات جديدة بصور.</p><button class="btn out" onclick="camIndex(this)">📷 فهرسة صور المنتجات</button></div>`:''}`;
   else if(SST==='receipt'){const R=SSD.receipt;const ck=(k,l)=>`<label class="ck"><input type="checkbox" data-g="receipt" data-k="${k}" ${R[k]?'checked':''}> ${l}</label>`;
     const sample=S.sales.filter(x=>x.type==='sale'&&x.items?.length).sort((a,b)=>b.date.localeCompare(a.date))[0];
     body=`<div class="rcset"><div class="setcard rced"><h3>محرر محتوى الإيصال</h3><p class="sub">A و B و C رموز للأقسام الرئيسية، لن تتم طباعتها</p>
@@ -3703,9 +3703,17 @@ function camVocab(){const w={};S.products.forEach(p=>camN(p.name).split(' ').for
 function camCands(info,max=100){const P=S.products.filter(p=>!p.deleted&&p.images?.[0]);const tw=[...new Set([info.type,...(info.types||[])])].flatMap(t=>CAM_T[t]||[]),cw=CAM_C[String(info.color||'').toLowerCase()]||[];const brand=camN(info.brand_style);
   const bc=String(info.barcode||'').replace(/\D/g,'');const txt=new Set();(info.texts||[]).forEach(t=>camN(t).split(' ').forEach(w=>{if(w.length>=3)txt.add(w)}));
   const has=(pn,arr)=>arr.some(w=>pn.split(' ').includes(w));const anyType=P.some(p=>has(camN(p.name),tw));
+  const it=new Set([info.type,...(info.types||[])].filter(Boolean)),ic=String(info.color||'').toLowerCase();
   return P.map(p=>{const pn=camN(p.name);let s=0;if(bc.length>=6&&String(p.barcode||'').replace(/\D/g,'')===bc)s+=1000;
+    if(p.vis){const v=p.vis;if((v.types||[]).some(t=>it.has(t)))s+=10;if(ic&&String(v.color||'').toLowerCase()===ic)s+=5;if(brand&&camN(v.brand_style)===brand)s+=6;for(const w of txt)if(pn.split(' ').includes(w))s+=2;return{p,s}}
     if(tw.length&&has(pn,tw))s+=10;else if(anyType)s-=6;if(cw.length&&has(pn,cw))s+=4;if(brand&&brand.split(' ').every(w=>pn.includes(w)))s+=5;
     for(const w of txt)if(pn.split(' ').includes(w))s+=2;return{p,s}}).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).slice(0,max).map(x=>x.p)}
+async function camIndex(btn){const P=S.products.filter(p=>!p.deleted&&p.images?.[0]&&!p.vis);if(!P.length){toast('كل صور المنتجات مفهرسة ✓');return}
+  if(btn)btn.disabled=true;let done=0,tin=0,tout=0;const shr=async u=>{const im=await camLoad(u);if(!im)return null;const k=Math.min(1,400/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);return c.toDataURL('image/jpeg',0.8).split(',')[1]};
+  for(let i=0;i<P.length;i+=10){const grp=P.slice(i,i+10);const items=(await Promise.all(grp.map(async p=>({id:p.id,image:await shr(p.images[0])})))).filter(x=>x.image);
+    try{const r=await api('POST',{action:'img_identify',mode:'index',items});tin+=r.usage?.in||0;tout+=r.usage?.out||0;for(const x of r.items||[]){const p=byId(S.products,x.id);if(p){p.vis={types:x.types||[],color:x.color||'',brand_style:x.brand_style||'',desc:x.desc||''};done++}}save()}catch(e){console.warn('camIndex',e)}
+    if(btn)btn.textContent=`⏳ ${Math.min(i+10,P.length)} / ${P.length}`}
+  try{await flushNow()}catch(e){}if(btn){btn.disabled=false;btn.textContent='📷 فهرسة صور المنتجات'}toast(`تمت فهرسة ${done} صورة`);return{done,tin,tout}}
 function camLoad(u){return new Promise(ok=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>ok(im);im.onerror=()=>ok(null);im.src=u})}
 async function camSheets(ps){const per=24,cols=6,cell=170,out=[];for(let k=0;k<ps.length;k+=per){const grp=ps.slice(k,k+per),rows=Math.ceil(grp.length/cols);
     const c=document.createElement('canvas');c.width=cols*cell;c.height=rows*cell;const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);
