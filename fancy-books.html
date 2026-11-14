@@ -457,7 +457,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794677773';
+const BUILD='1794677992';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -3700,14 +3700,14 @@ const camN=s=>String(s||'').toLowerCase().replace(/[أإآ]/g,'ا').replace(/ة/
 const CAM_T={ring:['ring','rings','خاتم'],bracelet:['bracelet','breclate','braclet','bangle','اسواره'],necklace:['necklace','neckles','قلاده','سلسله'],earrings:['earrings','earings','erring','earring','حلق'],set:['set','طقم'],watch:['watch','rolex','ساعه'],lenses:['lenses','lens','عدسات'],box:['box','بوكس'],perfume:['perfume','عطر','بخور']};
 const CAM_C={gold:['gold','golden','ذهبي'],silver:['silver','فضي'],'rose gold':['rose'],'multi color':['multi','color','colors'],black:['black'],white:['white'],brown:['brown'],green:['green'],red:['red'],blue:['blue'],pink:['pink']};
 function camVocab(){const w={};S.products.forEach(p=>camN(p.name).split(' ').forEach(x=>{if(x.length>1&&!/^\d+$/.test(x))w[x]=(w[x]||0)+1}));return Object.entries(w).sort((a,b)=>b[1]-a[1]).slice(0,220).map(x=>x[0]).join(', ')}
-function camCands(info,max=60){const P=S.products.filter(p=>!p.deleted&&p.images?.[0]);const tw=CAM_T[info.type]||[],cw=CAM_C[String(info.color||'').toLowerCase()]||[];const brand=camN(info.brand_style);
+function camCands(info,max=100){const P=S.products.filter(p=>!p.deleted&&p.images?.[0]);const tw=[...new Set([info.type,...(info.types||[])])].flatMap(t=>CAM_T[t]||[]),cw=CAM_C[String(info.color||'').toLowerCase()]||[];const brand=camN(info.brand_style);
   const bc=String(info.barcode||'').replace(/\D/g,'');const txt=new Set();(info.texts||[]).forEach(t=>camN(t).split(' ').forEach(w=>{if(w.length>=3)txt.add(w)}));
   const has=(pn,arr)=>arr.some(w=>pn.split(' ').includes(w));const anyType=P.some(p=>has(camN(p.name),tw));
   return P.map(p=>{const pn=camN(p.name);let s=0;if(bc.length>=6&&String(p.barcode||'').replace(/\D/g,'')===bc)s+=1000;
-    if(tw.length&&has(pn,tw))s+=10;else if(anyType)s-=20;if(cw.length&&has(pn,cw))s+=4;if(brand&&brand.split(' ').every(w=>pn.includes(w)))s+=5;
+    if(tw.length&&has(pn,tw))s+=10;else if(anyType)s-=6;if(cw.length&&has(pn,cw))s+=4;if(brand&&brand.split(' ').every(w=>pn.includes(w)))s+=5;
     for(const w of txt)if(pn.split(' ').includes(w))s+=2;return{p,s}}).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).slice(0,max).map(x=>x.p)}
 function camLoad(u){return new Promise(ok=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>ok(im);im.onerror=()=>ok(null);im.src=u})}
-async function camSheets(ps){const per=20,cols=5,cell=190,out=[];for(let k=0;k<ps.length;k+=per){const grp=ps.slice(k,k+per),rows=Math.ceil(grp.length/cols);
+async function camSheets(ps){const per=24,cols=6,cell=170,out=[];for(let k=0;k<ps.length;k+=per){const grp=ps.slice(k,k+per),rows=Math.ceil(grp.length/cols);
     const c=document.createElement('canvas');c.width=cols*cell;c.height=rows*cell;const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);
     const ims=await Promise.all(grp.map(p=>camLoad(p.images[0])));ims.forEach((im,i)=>{const x=(i%cols)*cell,y=Math.floor(i/cols)*cell;
       if(im){const s=Math.min((cell-6)/im.width,(cell-6)/im.height),w=im.width*s,hh=im.height*s;g.drawImage(im,x+(cell-w)/2,y+(cell-hh)/2,w,hh)}
