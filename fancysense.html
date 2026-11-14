@@ -153,7 +153,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v75';
+const FS_VER='v76';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderAjel(); renderXfer(); renderBanks(); renderInv(); renderSettings(); renderReqs();
@@ -1015,7 +1015,7 @@ function _xfCompare(){
   // حوالات «تحويل» اللي طابقت إيداع صندوق بقسم النقدية = نقدية فعلاً → ما تتكرر هنا
   const cashUsed=new Set(); try{ _cbCompare().forEach(r=>{ if(r.acc) r.azs.forEach(z=>{ if(z.kind==='تحويل بنكي') cashUsed.add(z.d+'|'+z.a.toFixed(3)); }); }); }catch(_){}
   const Z=_xfAzRows().filter(z=>!cashUsed.has(z.d+'|'+z.a.toFixed(3))), A=_xfFsRows(), used=new Set(), gap=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/864e5), M=A.map(()=>null);
-  const near=(x,z)=>{ const g=gap(x.d,z.d); return g>=-1&&g<=4; };
+  const near=(x,z)=>{ const g=gap(x.d,z.d); return g>=-3&&g<=4; };   // −٣: أحياناً الحوالة توصل قبل تسجيل المبيعة
   A.forEach((x,k)=>{ let best=-1,score=1e9; Z.forEach((z,i)=>{ if(used.has(i)||Math.abs(z.a-x.a)>0.011||!near(x,z))return; const sc=Math.abs(gap(x.d,z.d))*10+(z.br===x.br?0:5); if(sc<score){score=sc;best=i;} }); if(best>=0){used.add(best);M[k]=[best];} });
   [[0,1],[-1,4]].forEach(([lo,hi])=>A.forEach((x,k)=>{ if(M[k])return; const C=Z.map((z,i)=>i).filter(i=>{ if(used.has(i)||Z[i].a>=x.a+0.011||!(Z[i].br===x.br||Z[i].br==='غير محدّد'))return false; const g=gap(x.d,Z[i].d); return g>=lo&&g<=hi; }).sort((p,q)=>Math.abs(gap(x.d,Z[p].d))-Math.abs(gap(x.d,Z[q].d))).slice(0,16);
     let best=null,bs=1e9,steps=0; const rec=(st,pick,sum)=>{ if(++steps>60000)return; if(pick.length>=2&&Math.abs(sum-x.a)<0.011){ const ds=pick.map(i=>Z[i].d), sc=new Set(ds).size*100+ds.reduce((s,d)=>s+Math.abs(gap(x.d,d)),0)*10+pick.length; if(sc<bs){bs=sc;best=pick.slice();} return; } if(pick.length>=6||sum>x.a+0.011)return; for(let q=st;q<C.length;q++){ pick.push(C[q]); rec(q+1,pick,sum+Z[C[q]].a); pick.pop(); } };
@@ -1043,7 +1043,7 @@ function renderXfer(){
   const cards=Object.keys(tot).sort().map(b=>{ const t=tot[b], df=t.z-t.a; return '<div class="kpi"><div class="ttl">🏪 '+esc(b)+'</div><div class="val" style="font-size:14px">فانسي '+fmt(t.a)+' · العز <span style="color:#3aa0ff">'+fmt(t.z)+'</span></div><div class="sub" style="color:'+(Math.abs(df)<0.01?'#2fd196':'#e0a83a')+'">'+(Math.abs(df)<0.01?'✓ مطابق':'الفرق (العز − فانسي): '+fmt(df)+' '+C)+'</div></div>'; }).join('');
   const sel=(lbl,key,opts,val)=>'<div class="fld"><label>'+lbl+'</label><select onchange="window.'+key+'=this.value;renderXfer()">'+opts.map(o=>'<option value="'+esc(o[0])+'"'+(o[0]===val?' selected':'')+'>'+esc(o[1])+'</option>').join('')+'</select></div>';
   $('p-xfer').innerHTML=
-    '<div class="panel" style="border:1px solid #3aa0ff"><h3 style="margin:0 0 6px">🔄 التحويلات البنكية: فانسي ↔ نظام العز (الفعلي بالبنك)</h3><div class="sub"><b>فانسي</b> = خانة «تحويل» في المبيعات اليومية (كل حوالة لحالها إذا مسجّلة بالتفصيل). <b>نظام العز</b> = إيرادات «فانسي» بالبنك بيانها «تحويل» أو «اون لاين» (بدون الآجل وتحويل الصندوق — لهم أقسامهم). المطابقة بنفس المبلغ وتاريخ العز قريب (−١ إلى +٤ أيام). <b>إذا المبلغ دخل على أكثر من حوالة</b> تظهر الحوالات كلها بنفس السطر مع «إجمالي ما دخل» و«الفرق».</div>'+
+    '<div class="panel" style="border:1px solid #3aa0ff"><h3 style="margin:0 0 6px">🔄 التحويلات البنكية: فانسي ↔ نظام العز (الفعلي بالبنك)</h3><div class="sub"><b>فانسي</b> = خانة «تحويل» في المبيعات اليومية (كل حوالة لحالها إذا مسجّلة بالتفصيل). <b>نظام العز</b> = إيرادات «فانسي» بالبنك بيانها «تحويل» أو «اون لاين» (بدون الآجل وتحويل الصندوق — لهم أقسامهم). المطابقة بنفس المبلغ وتاريخ العز قريب (−٣ إلى +٤ أيام). <b>إذا المبلغ دخل على أكثر من حوالة</b> تظهر الحوالات كلها بنفس السطر مع «إجمالي ما دخل» و«الفرق».</div>'+
     '<div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:10px"><div class="fld"><label>📅 من</label><input type="date" value="'+esc(F.from)+'" onchange="window._xfFrom=this.value;renderXfer()"></div><div class="fld"><label>📅 إلى</label><input type="date" value="'+esc(F.to)+'" onchange="window._xfTo=this.value;renderXfer()"></div>'+
       sel('🏪 الفرع','_xfBrF',[['','الكل'],...brs.map(b=>[b,b])],F.br)+sel('🔎 الحالة','_xfSt',[['','الكل'],['ok','✓ مطابق'],['part','≠ فرق بالمبلغ'],['acc','⚠️ مو موجود بالبنك (العز)'],['az','🏦 مو موجود بفانسي']],F.st)+
       '<div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._xfFrom=\'\';window._xfTo=\'\';window._xfBrF=\'\';window._xfSt=\'\';renderXfer()">مسح الفلاتر</button></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn" onclick="xfExportXlsx()">📥 تصدير Excel</button></div></div>'+
