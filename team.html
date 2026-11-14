@@ -1739,7 +1739,17 @@ function renderMakkahTransportBar(){
   bar.innerHTML = `<div style="font-size:12.5px;font-weight:800;color:#1a5fb4;margin-bottom:8px">🚆 وسيلة التنقّل (تذكرة القطار تُحسب × عدد الأشخاص):</div><div style="display:flex;flex-wrap:wrap;gap:9px">${legs}</div>`;
   panel.insertBefore(bar, panel.firstChild);
   // تطبيق تلقائي مرة واحدة لكل (مدن+وسائل) — عشان تظهر تذكرة القطار والانتقالات الصحيحة بلا ضغط.
-  if(mkSig(cities) !== MK_LAST_SIG) setTimeout(()=>mkApplyTransport(), 0);
+  // ١٢ نوفمبر ٢٠٢٦ (المالكة): اختارت سيارة وطلع «نقل من محطة قطار الحرمين» — البرنامج رجع من
+  // الذكاء بنفس البصمة (نفس التاريخ/الفنادق/المدن) فتخطّى التطبيق. نعيد التطبيق أيضاً لو فيه
+  // نقلات ما جت من الخطة: أي نقل بقسم TRANSFERS، أو نقل بالمسار بلا وسم «سيارة سيدان خاصة».
+  if(mkSig(cities) !== MK_LAST_SIG || mkHasStaleTransfers()) setTimeout(()=>mkApplyTransport(), 0);
+}
+function mkHasStaleTransfers(){
+  try{
+    const tr = (parseSection(lastProgramRaw,'TRANSFERS')||[]).some(l=> l.includes('|') && /نقل|محط|مطار|قطار/.test(l));
+    const to = (parseSection(lastProgramRaw,'TOURS')||[]).some(l=>{ if(!l.includes('|')) return false; const n=String(l.split('|')[1]||''); return /نقل|محط/.test(n) && !/سيارة سيدان خاصة/.test(n); });
+    return tr || to;
+  }catch(_){ return false; }
 }
 async function mkSetMode(i, mode){ MK_MODES[i] = mode; await mkApplyTransport(); }
 async function mkSetDepAir(air){ MK_DEP_AIR = air; MK_DEP_AIR_FP = mkDepFP(); await mkApplyTransport(); MK_FLIGHT_SIG=''; await mkFlightApply(); renderMakkahFlightBar(); }
@@ -5782,7 +5792,16 @@ function waReqParse(body){
   // التواريخ والأيام
   let dateISO='', days=null; const today=new Date();
   const mk=(d,mo,y)=>{ if(!y){ y=today.getFullYear(); if(new Date(y,mo-1,d)<new Date(today.getFullYear(),today.getMonth(),today.getDate())) y++; } return new Date(y,mo-1,d); };
-  const slash=[...lat.matchAll(/(\d{1,2})\s*[\/]\s*(\d{1,2})(?:\s*[\/]\s*(\d{2,4}))?/g)];
+  // ١٤ نوفمبر ٢٠٢٦: طلب «20-11-2026 / 27-11-2026» ما انفهم (الشرطة ما كانت مقبولة) → نقبل d-m-yyyy و d.m.yyyy
+  //   (بالسنة فقط، عشان «19-22 نوفمبر» تبقى نطاق أيام) و yyyy-mm-dd. نرتّبها حسب موقعها في النص.
+  const slash=[
+    ...[...lat.matchAll(/(\d{1,2})\s*[\/]\s*(\d{1,2})(?:\s*[\/]\s*(\d{2,4}))?/g)],
+    ...[...lat.matchAll(/(?<![\d\/])(\d{1,2})\s*[-.]\s*(\d{1,2})\s*[-.]\s*(\d{4}|\d{2})(?![\d\/])/g)],
+    ...[...lat.matchAll(/(?<!\d)(\d{4})\s*[-\/.]\s*(\d{1,2})\s*[-\/.]\s*(\d{1,2})(?!\d)/g)].map(x=>{ const r=[x[0],x[3],x[2],x[1]]; r.index=x.index; return r; })
+  ].filter(x=>+x[2]>=1 && +x[2]<=12 && +x[1]>=1 && +x[1]<=31)
+   .map(x=>{ if(x[3] && +x[3]<100){ const r=[x[0],x[1],x[2],String(2000 + +x[3])]; r.index=x.index; return r; } return x; })
+   .sort((x,y)=>x.index-y.index)
+   .filter((x,i,arr)=>!arr.some((o,j)=>j<i && o.index<=x.index && o.index+o[0].length>x.index));
   // يسمح بفاصل «/» أو «.» أو مسافة بين اليوم واسم الشهر العربي (13/مارس = 13 مارس)
   const named=[...lat.matchAll(new RegExp('(\\d{1,2})[\\s\\/.]*('+Object.keys(WA_AR_MONTHS).join('|')+')','g'))];
   // نطاق بيوم-ويوم: يقبل الشرطة أو كلمة الربط (إلى/الى/الي/لين/حتى/ل/لغاية) — «21 إلى 27 نوفمبر»
