@@ -457,7 +457,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794679908';
+const BUILD='1794680530';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -1134,7 +1134,7 @@ function viewProducts(){
   $('#view').innerHTML=`
   <div class="bar">
     <div style="display:flex;gap:8px;flex-wrap:wrap;flex:1">
-      <div class="search" style="width:340px"><input id="pq" placeholder="البحث بواسطة رقم أو اسم المنتج" value="${esc(PS.q)}"></div>
+      <div class="search" style="width:340px"><input id="pq" placeholder="البحث بواسطة رقم أو اسم المنتج" value="${esc(PS.q)}"></div><button class="btn pri" style="height:40px" onclick="camPick(0)">📷 صوّري منتج</button>
       <select class="in" style="width:220px;height:40px" onchange="PS.loc=this.value;PS.page=1;viewProducts()"><option value="">كل المواقع</option>${S.branches.map(b=>`<option value="${b.id}" ${PS.loc===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select>
       ${af.length?`<button class="btn soft" onclick="PS.f={cat:'',brand:'',supplier:'',ptype:'',stock:''};viewProducts()">مسح</button>`:''}
       <button class="btn ${af.length?'soft':'out'}" onclick="openPFilters()">⚲ تصفية ${af.length?`<span class="badge-n">${af.length}</span>`:''}</button>
@@ -1604,7 +1604,7 @@ function posTab(r){
   if(POST==='quotes')return posQuotes(r);
   $('#posmain').innerHTML=`<div class="posbody">
    <div class="pospro">
-    <div class="srow"><div class="fsearch"><label>استخدم الماسح الضوئي أو أدخل اسم المنتج</label><input id="posq" autocomplete="off"><span>⌕</span><div class="sdrop" id="sdrop"></div></div><button class="btn out" title="صوّري المنتج لمعرفة سعره" style="height:46px;align-self:flex-end;font-size:20px;padding:0 14px" onclick="camPick()">📷</button>
+    <div class="srow"><div class="fsearch"><label>استخدم الماسح الضوئي أو أدخل اسم المنتج</label><input id="posq" autocomplete="off"><span>⌕</span><div class="sdrop" id="sdrop"></div></div><button class="btn out" title="صوّري المنتج لمعرفة سعره" style="height:46px;align-self:flex-end;font-size:20px;padding:0 14px" onclick="camPick(1)">📷</button>
      <div class="pmode"><span>بيع بسعر الـ</span><button data-pm="retail">التجزئة</button><button data-pm="wholesale">الجملة</button></div></div>
     ${posTiles(r)}<div id="carttbl"></div></div>
    <div class="posside" id="posside"></div></div>`;
@@ -3694,7 +3694,7 @@ function importSettings(d){SET2();const bBy=n=>S.branches.find(b=>normS(b.name).
 installPerms();wrapImports();
 
 /* ===================== 📷 التعرف على المنتج من الصورة ===================== */
-function camPick(){const i=document.createElement('input');i.type='file';i.accept='image/*';i.capture='environment';i.onchange=()=>{if(i.files[0])camRun(i.files[0])};i.click()}
+let CAM_POS=0;function camPick(pos){if(pos!==undefined)CAM_POS=pos?1:0;const i=document.createElement('input');i.type='file';i.accept='image/*';i.capture='environment';i.onchange=()=>{if(i.files[0])camRun(i.files[0])};i.click()}
 function camShrink(file,max=900){return new Promise((ok,no)=>{const u=URL.createObjectURL(file),im=new Image();im.onload=()=>{const k=Math.min(1,max/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);ok(c.toDataURL('image/jpeg',0.85).split(',')[1])};im.onerror=()=>no(new Error('تعذّر قراءة الصورة'));im.src=u})}
 const camN=s=>String(s||'').toLowerCase().replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').replace(/[ًٌٍَُِّْـ]/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 const CAM_T={ring:['ring','rings','خاتم'],bracelet:['bracelet','breclate','braclet','bangle','اسواره'],necklace:['necklace','neckles','قلاده','سلسله'],earrings:['earrings','earings','erring','earring','حلق'],set:['set','طقم'],watch:['watch','rolex','ساعه'],lenses:['lenses','lens','عدسات'],box:['box','بوكس'],perfume:['perfume','عطر','بخور']};
@@ -3727,8 +3727,8 @@ async function camRun(file){const o=overlay(`<div class="modal" style="width:580
     const C=camCands(info);let L=[];const bc=String(info.barcode||'').replace(/\D/g,'');
     if(C.length&&bc.length>=6&&String(C[0].barcode||'').replace(/\D/g,'')===bc)L=[C[0]];
     else if(C.length){st('⏳ أقارن مع صور المنتجات ('+C.length+')…');const sh=await camSheets(C);const r2=await api('POST',{action:'img_identify',mode:'pick',image:img,sheets:sh});L=(r2.info?.picks||[]).map(n=>C[(+n)-1]).filter(Boolean)}
-    const br=CART?.branchId,mode=CART?.priceMode;const what=[info.brand_style,info.type,info.color].filter(Boolean).join(' · ');
-    b.style.textAlign='';b.innerHTML=`<p class="sub" style="margin:0 0 10px">شفت في الصورة: <b>${esc(what||'—')}</b>${info.desc?` — <span>${esc(info.desc)}</span>`:''}</p>`+(L.length?`<div class="card">${L.map((p,i)=>{const q=p.locs?.[br]?.qty;return`<div class="tx" style="padding:10px;gap:10px;align-items:center"><img src="${p.images[0]}" style="width:72px;height:72px;object-fit:cover;border-radius:8px"><div style="flex:1;min-width:0"><b>${esc(p.name)}</b>${i===0?' <span class="pill p-ok">الأقرب</span>':''}<div class="sub" style="margin:0" dir="ltr">${esc(p.sku||'')}</div><div class="sub" style="margin:0">${q!=null?'المتوفر: '+fmt(q):''}</div></div><div style="text-align:center"><div style="font-size:22px;font-weight:800;color:var(--pri)">${fmt(lp(p,br,mode))}</div><small class="sub">${esc(S.settings.currency||'')}</small></div><button class="btn sm pri" data-add="${p.id}">＋ للفاتورة</button></div>`}).join('')}</div>`:`<div class="empty" style="padding:18px"><div class="ico">🤔</div><p>ما لقيت منتج مطابق. جرّبي صورة أوضح وأقرب للقطعة على خلفية سادة، أو ابحثي بالاسم.</p></div>`);
+    const br=CAM_POS?CART?.branchId:(PS.loc||CART?.branchId||S.branches[0]?.id),mode=CAM_POS?CART?.priceMode:'retail';const what=[info.brand_style,info.type,info.color].filter(Boolean).join(' · ');
+    b.style.textAlign='';b.innerHTML=`<p class="sub" style="margin:0 0 10px">شفت في الصورة: <b>${esc(what||'—')}</b>${info.desc?` — <span>${esc(info.desc)}</span>`:''}</p>`+(L.length?`<div class="card">${L.map((p,i)=>{const q=p.locs?.[br]?.qty;return`<div class="tx" style="padding:10px;gap:10px;align-items:center"><img src="${p.images[0]}" style="width:72px;height:72px;object-fit:cover;border-radius:8px"><div style="flex:1;min-width:0"><b>${esc(p.name)}</b>${i===0?' <span class="pill p-ok">الأقرب</span>':''}<div class="sub" style="margin:0" dir="ltr">${esc(p.sku||'')}</div><div class="sub" style="margin:0">${q!=null?'المتوفر: '+fmt(q):''}</div></div><div style="text-align:center"><div style="font-size:22px;font-weight:800;color:var(--pri)">${fmt(lp(p,br,mode))}</div><small class="sub">${esc(S.settings.currency||'')}</small></div>${CAM_POS?`<button class="btn sm pri" data-add="${p.id}">＋ للفاتورة</button>`:`<a class="btn sm out" href="#/pview/${p.id}" onclick="this.closest('.ov')?.remove()">التفاصيل</a>`}</div>`}).join('')}</div>`:`<div class="empty" style="padding:18px"><div class="ico">🤔</div><p>ما لقيت منتج مطابق. جرّبي صورة أوضح وأقرب للقطعة على خلفية سادة، أو ابحثي بالاسم.</p></div>`);
     b.querySelectorAll('[data-add]').forEach(x=>x.onclick=()=>{addToCart(x.dataset.add);o.remove();toast('تمت الإضافة للفاتورة')})}
   catch(e){b.innerHTML=`<div class="empty" style="padding:18px"><div class="ico">⚠️</div><p>${esc(e.message)}</p></div>`}}
 /* ===================== WhatsApp thank-you messages (رسائل واتساب للعملاء) ===================== */
