@@ -28,6 +28,15 @@ const CORS_HEADERS = {
 // ── بناء سياق البيانات من قاعدة البيانات ──────────────────────────────────
 // Detect destination from messages so we only ship that destination's data
 // to the model (cuts input tokens dramatically). If we can't tell, ship all.
+// ١٥ نوفمبر ٢٠٢٦: نفس احتياط client-intake (صفحة المساعد السياحي) — وجهة بلا توزيعات بالشيت
+// وكل فنادقها بمدينة وحدة (مصر = القاهرة، موريشيوس) → توزيع افتراضي «N ليال [الوجهة]».
+// كانت منال/طلال يقولون «ما فيه توزيعات جاهزة لمصر» والصفحة تبنيها عادي.
+function singleCityFallback<T>(sugs: T[] | null, hotels: Array<{ location?: string }>, destAr: string, days: number, mk: (d: string, city: string) => T): T[] {
+  if (sugs && sugs.length) return sugs;
+  const cities = new Set(hotels.map(h => String(h.location || "").split(" - ")[0].trim()).filter(Boolean));
+  if (cities.size !== 1 || days < 2) return sugs || [];
+  return [mk(`${days - 1} ليال ${destAr}`, [...cities][0])];   // city = مطار القدوم/المغادرة (مثل Cairo)
+}
 function detectDestination(messages: Array<{ role: string; content: unknown }>): string | null {
   const text = messages
     .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content))
@@ -2636,10 +2645,12 @@ async function handleListHotels(body: {
 
     // نوع السكن: «محمية» لو عمود Hotel Type يذكر Reserve/Lodge/Game/Safari/Camp أو
     // «محمية» عربيّاً، وإلا «فندق» (الافتراضي، ويشمل الفارغ لبقية الوجهات).
-    const hotelKind = (ht: string) =>
-      /reserve|lodge|game|safari|camp|محمي[ةه]|نُزُل|نزل|معسكر|سفاري/i.test(String(ht || "")) ? "محمية" : "فندق";
-    if (kindSel === "فندق" || kindSel === "محمية") {
-      rows = rows.filter(h => hotelKind(String(h.hotel_type || "")) === kindSel);
+    // مصر (١٤ نوفمبر ٢٠٢٦): «شقة سكنية» لو عمود Hotel Type أو الاسم فيه Apartment/شقة.
+    const hotelKind = (ht: string, nm = "") =>
+      /apartment|شق[ةه]/i.test(String(ht || "") + " " + String(nm || "")) ? "شقة سكنية"
+      : /reserve|lodge|game|safari|camp|محمي[ةه]|نُزُل|نزل|معسكر|سفاري/i.test(String(ht || "")) ? "محمية" : "فندق";
+    if (kindSel === "فندق" || kindSel === "محمية" || kindSel === "شقة سكنية") {
+      rows = rows.filter(h => hotelKind(String(h.hotel_type || ""), String(h.name || "")) === kindSel);
     }
 
     // تصنيف قرب الحرم (مكة/المدينة فقط) — يُقرأ من شيت مكة مباشرة.
@@ -2655,7 +2666,7 @@ async function handleListHotels(body: {
         occupancy: h.occupancy || "",            // نص الإشغال كما في الشيت
         area: (String(h.area || "").trim()) || _baliSubArea(String(h.location || "")),  // الحي/المنطقة (القاهرة…)؛ لبالي نشتقّها من location
         link: h.link || "",                       // رابط صفحة الفندق (يُعرض في ملف العميل)
-        kind: hotelKind(String(h.hotel_type || "")),  // نوع السكن: فندق/محمية
+        kind: hotelKind(String(h.hotel_type || ""), String(h.name || "")),  // نوع السكن: فندق/محمية
         hotel_type: h.hotel_type || "",           // القيمة الخام من عمود Hotel Type
         capacity: cap || capFromRoomType(String(h.room_type || "")),  // أقصى عدد تتسعه الغرفة (رقم)
         fits: !cap || !threshold || cap >= threshold,  // مطابق للعدد المطلوب؟
@@ -3981,6 +3992,146 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── modify_program (المالكة ١٥ نوفمبر ٢٠٢٦، منال/الشركات) ── تعديل برنامج محفوظ بالكود:
+    // «إضافة جولة اليوم السادس [اسم/كلمة من الجولة]» → نحدد مدينة اليوم من HOTELS، نجيب جولات
+    // المدينة (نفس list_tours بسعر عدد الأشخاص)، نختار جولة غير موجودة بالبرنامج (أو اللي سمّتها
+    // الموظفة حتى لو تكرار)، نحطها مكان اليوم الحر، نعيد حساب SUMMARY + سعر الشركات ونحفظ بكود جديد.
+    // حتمي بالكامل (بلا ذكاء) — مسار الشات كان يعيد بناء البرنامج ويضيّع الأطفال.
+    if (reqBody && reqBody.action === "modify_program") {
+      const J = (o: unknown) => new Response(JSON.stringify(o), { headers: CORS_HEADERS });
+      try {
+        const code = String(reqBody.code || "").trim().toUpperCase();
+        const change = String(reqBody.change || "").trim();
+        const customerType = String(reqBody.customer_type || "company");
+        if (!code || !change) return J({ ok: false, error: "code و change مطلوبة" });
+        const _srk = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const _base = Deno.env.get("SUPABASE_URL")!;
+        const pr = await fetch(`${_base}/functions/v1/programs?code=${encodeURIComponent(code)}`, { headers: { apikey: _srk, Authorization: `Bearer ${_srk}` } });
+        const pd = await pr.json().catch(() => ({}));
+        let raw = String(pd?.program?.raw || "");
+        if (!raw) return J({ ok: false, reason: "not_found", error: `ما لقيت البرنامج ${code}` });
+        const destAr = String(pd.program.destination || _taiVal(raw, "DEST") || "");
+        const destKey = detectDestination([{ role: "user", content: destAr }]);
+        // نوع التعديل: إضافة جولة يوم N / يوم حر — وأكثر من تعديل بنفس الطلب
+        // («اليوم الخامس جوله + اليوم السادس جوله» → كل جزء يتطبّق بالترتيب ونحفظ برنامج واحد — المالكة ١٥ نوفمبر ٢٠٢٦)
+        const nzAll = change.replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
+        const ORD: Record<string, number> = { "الاول": 1, "الثاني": 2, "الثالث": 3, "الرابع": 4, "الخامس": 5, "السادس": 6, "السابع": 7, "الثامن": 8, "التاسع": 9, "العاشر": 10, "الحادي عشر": 11, "الثاني عشر": 12, "الثالث عشر": 13, "الرابع عشر": 14 };
+        const ORD_RE = Object.keys(ORD).sort((a, b) => b.length - a.length).join("|");
+        const DAY_RE = new RegExp(`(?:اليوم|يوم)\\s*(?:رقم\\s*)?(?:\\d{1,2}|${ORD_RE})`);
+        let parts = nzAll.split(/\s*\+\s*|\s*[،,;\n]\s*|\s+و\s*(?=(?:ال)?يوم\s*(?:رقم\s*)?(?:\d|ال))/).map(x => x.trim()).filter(Boolean);
+        parts = parts.filter(x => DAY_RE.test(x));
+        if (!parts.length) parts = [nzAll];
+        const paxM = raw.match(/TOTAL_GROUP:[^|\n]*\|\s*(\d+)\s*(?:أشخاص|شخص|بالغ)/);
+        const adults = paxM ? +paxM[1] : (parseInt(String(pd.program.persons || "2"), 10) || 2);
+        const kidsM = raw.match(/TOTAL_GROUP:[^\n]*\+\s*(\d+)\s*أطفال/);
+        const paxAll = adults + (kidsM ? +kidsM[1] : 0);
+        const num = (s: string) => parseFloat(String(s || "0").replace(/[^\d.]/g, "")) || 0;
+        const norm2 = (s: string) => s.replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+        const toursByCity: Record<string, Array<{ name: string; price: number }>> = {};
+        const changes: Array<{ day: number; city: string; name: string; price: number; removed?: string }> = [];
+        let newTotal = num((raw.match(/TOTAL_GROUP:([^|\n]*)/) || [])[1]);
+        const failed: Array<Record<string, unknown>> = [];
+        for (const nz of parts) {
+          const isFree = /(?:^|[\s.،,:])حر(?:$|[\s.،,])|الغاء|الغي|احذف|حذف|شيل|بدون\s*جول|فاضي/.test(nz);
+          if (!isFree && !/(اضاف|اضيف|ضيف|زود|حط).{0,12}جول|جول.{0,15}(اليوم|يوم)|(اليوم|يوم).{0,20}جول/.test(nz)) { failed.push({ reason: "unsupported", error: "نوع التعديل غير مدعوم" }); continue; }
+          let day = 0;
+          const dm = nz.match(/(?:اليوم|يوم)\s*(?:رقم\s*)?(\d{1,2})/); if (dm) day = +dm[1];
+          if (!day) for (const [w, n] of Object.entries(ORD).sort((a, b) => b[0].length - a[0].length)) if (nz.includes("اليوم " + w) || nz.includes("يوم " + w) || nz.includes(w)) { day = n; break; }
+          if (!day) { failed.push({ reason: "no_day", error: "ما حددت اليوم" }); continue; }
+          // مدينة اليوم من HOTELS (بالترتيب، كل فندق N ليالي)
+          const hsec = (raw.split(/\nHOTELS:\n/)[1] || "").split(/\n\s*\n/)[0].split("\n").filter(l => l.includes("|"));
+          let acc = 0, city = "";
+          for (const l of hsec) { const p = l.split("|").map(x => x.trim()); const n = parseInt((l.match(/\|\s*(\d+)\s*ليال/) || [])[1] || "0", 10); if (day > acc && day <= acc + n) { city = p[1]; break; } acc += n; }
+          if (!city) { failed.push({ reason: "day_out_of_range", day, error: `اليوم ${day} خارج أيام البرنامج` }); continue; }
+          const tsec = (raw.split(/\nTOURS:\n/)[1] || "").split(/\n\s*\n/)[0];
+          const tlines = tsec.split("\n").filter(l => l.includes("|"));
+          const dayLine = tlines.find(l => new RegExp(`^اليوم\\s*${day}\\s*\\|`).test(l.trim()));
+          const _dayFree = !dayLine || /\|\s*حر\s*\||يوم حر/.test(dayLine);
+          if (isFree && _dayFree) { failed.push({ reason: "day_already_free", day, city, error: `اليوم ${day} حر أصلاً` }); continue; }
+          if (!isFree && !_dayFree) { failed.push({ reason: "day_has_tour", day, city, error: `اليوم ${day} فيه جولة أصلاً` }); continue; }
+          let pick: { name: string; price: number } | undefined;
+          if (isFree) pick = { name: "يوم حر — استرخاء في الفندق", price: 0 };
+          else {
+            if (!toursByCity[city]) {
+              const lt = await handleListTours({ dest: destAr, city, pax: paxAll, date: _taiVal(raw, "DATE_FROM") });
+              toursByCity[city] = ((await lt.json())?.tours || []) as Array<{ name: string; price: number }>;
+            }
+            const tours = toursByCity[city];
+            if (!tours.length) { failed.push({ reason: "no_tours", day, city, error: `ما فيه جولات في ${city}` }); continue; }
+            const used = new Set(tlines.map(l => (l.split("|")[1] || "").trim()));
+            // كلمات عامة («جوله ٨ ساعات») ما تعتبر اسم جولة — بس الكلمات المميزة تسمح بالتكرار
+            const hintWords = nz.replace(DAY_RE, " ").split(/[\s،,:.]+/).filter(w => w.length >= 3 && !/^(جول|اضاف|في|مع|السياح|ساع|اليوم|يوم|كامل|نص|ثاني|اخر|زياده|اضافي)/.test(w));
+            const hits = hintWords.length ? tours.filter(t => hintWords.some(w => norm2(t.name).includes(w))) : [];
+            pick = hits.find(t => !used.has(t.name.trim())) || hits[0];
+            if (!pick) pick = tours.find(t => !used.has(t.name.trim()));
+            if (!pick) { failed.push({ reason: "no_more_tours", day, city, tours: tours.map(t => t.name), error: `${city} ما فيها جولات غير اللي بالبرنامج` }); continue; }
+          }
+          const newLine = isFree ? `اليوم ${day} | ${pick.name} | حر | 0 ريال` : `اليوم ${day} | ${pick.name} | ثقافية | ${_fmtMoney(pick.price)} ريال`;
+          let newT: string[];
+          if (dayLine) newT = tlines.map(l => l === dayLine ? newLine : l);
+          else { newT = [...tlines, newLine].sort((a, b) => (+(a.match(/اليوم\s*(\d+)/) || [])[1] || 0) - (+(b.match(/اليوم\s*(\d+)/) || [])[1] || 0)); }
+          raw = raw.replace(tsec, tsec.replace(tlines.join("\n"), newT.join("\n")));
+          // إعادة الحساب: الجولات + TOTAL_GROUP + TOTAL_PER_PERSON (على البالغين — نفس الباني)
+          const oldDayPrice = dayLine ? num(dayLine.split("|")[3]) : 0;
+          const delta = pick.price - oldDayPrice;
+          raw = raw.replace(/^(الجولات السياحية\s*\|\s*)([\d,\.]+)(\s*ريال)/m, (_m, a, v, c) => a + _fmtMoney(num(v) + delta) + c);
+          newTotal += delta;
+          changes.push({ day, city, name: pick.name, price: pick.price, removed: isFree ? (dayLine?.split("|")[1] || "").trim() : undefined });
+        }
+        // كل الأجزاء فشلت → نرجّع أول سبب (بدون حفظ)؛ بعضها نجح → نحفظ وننبّه على الباقي
+        if (!changes.length) return J({ ok: false, ...(failed[0] || { error: "ما تطبّق شي" }), failed });
+        raw = raw.replace(/TOTAL_GROUP:[^|\n]*/, `TOTAL_GROUP:${_fmtMoney(newTotal)} `).replace(/TOTAL_PER_PERSON:[^\n]*/, `TOTAL_PER_PERSON:${_fmtMoney(Math.round(newTotal / Math.max(1, adults)))}`);
+        // سعر الشركات (نفس auto_build)
+        const md = _programMMDD(_taiVal(raw, "DATE_FROM"));
+        const margins = await pmGetMargins(destKey || "");
+        const _fl = ((raw.match(/FLIGHTS:([\s\S]*?)(?:\n[A-Z_]+:|$)/) || [])[1] || "").split("\n").filter(l => l.includes("|") && !/قطار|train/i.test(l));
+        const prof = pmPickProfit(margins, newTotal, md, customerType, _fl.length ? "full" : "hotel_transfer");
+        const finalSar = newTotal + prof.profit;
+        let newCode = "";
+        const sv = await fetch(`${_base}/functions/v1/programs`, { method: "POST", headers: { "Content-Type": "application/json", apikey: _srk, Authorization: `Bearer ${_srk}` },
+          body: JSON.stringify({ raw, destination: destAr, pdf_variant: customerType === "company" ? "company" : "client", total_group: finalSar, persons: pd.program.persons || paxAll }) });
+        const sd = await sv.json().catch(() => ({}));
+        if (sv.ok && sd?.ok && sd?.code) newCode = String(sd.code).trim();
+        if (!newCode) return J({ ok: false, error: "ما انحفظ البرنامج المعدل" });
+        return J({ ok: true, program_code: newCode, from_code: code, final_sar: finalSar, price_ready: prof.ok, total: newTotal, changes, failed, added: changes[0], removed: changes[0]?.removed ? { day: changes[0].day, name: changes[0].removed } : undefined });
+      } catch (e) {
+        return J({ ok: false, error: String((e as Error).message || e) });
+      }
+    }
+
+    // ── read_ticket: قراءة تذكرة طيران (صورة/PDF) من جروب شركة (١٥ نوفمبر ٢٠٢٦ — نور الرضا) ──
+    // يرجّع الوجهة وتواريخ الذهاب والعودة والمطارات فقط. عدد الأفراد ❌ (قرار المالكة: من كلام الشركة).
+    if (reqBody && reqBody.action === "read_ticket") {
+      try {
+        const data = String(reqBody.data || "");
+        const mime = String(reqBody.mime || "image/jpeg").toLowerCase();
+        if (!data || data.length > 14_000_000) return new Response(JSON.stringify({ ok: false, error: "no data / too large" }), { headers: CORS_HEADERS });
+        const isPdf = mime.includes("pdf");
+        if (!isPdf && !/^image\/(jpeg|png|gif|webp)$/.test(mime)) return new Response(JSON.stringify({ ok: false, error: "unsupported mime" }), { headers: CORS_HEADERS });
+        const media = isPdf
+          ? { type: "document", source: { type: "base64", media_type: "application/pdf", data } }
+          : { type: "image", source: { type: "base64", media_type: mime, data } };
+        const client = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
+        const resp = await client.messages.create({
+          model: "claude-sonnet-5-5",
+          max_tokens: 500,
+          messages: [{ role: "user", content: [media, { type: "text", text:
+`هل هذا تذكرة طيران أو حجز طيران (e-ticket / itinerary)؟ لو لا → {"is_ticket":false}.
+لو نعم استخرج فقط (بدون عدد المسافرين):
+{"is_ticket":true,"depart_date":"DD/MM/YYYY","return_date":"DD/MM/YYYY أو null لو ذهاب فقط","from_city":"مدينة الإقلاع بالعربي","to_city":"مدينة الوصول (الوجهة) بالعربي","destination_country":"الدولة بالعربي","return_from_city":"مدينة إقلاع العودة بالعربي أو null","depart_time":"HH:MM وصول الوجهة أو null","return_time":"HH:MM إقلاع العودة أو null"}
+ردّ بـJSON فقط.` }] }] as never,
+        });
+        const txt = ((resp.content || []) as Array<{ type: string; text?: string }>).filter(b => b.type === "text").map(b => b.text || "").join("");
+        const m = txt.match(/\{[\s\S]*\}/);
+        let out: Record<string, unknown> = { is_ticket: false };
+        try { if (m) out = JSON.parse(m[0]); } catch (_) { /* keep default */ }
+        delete (out as Record<string, unknown>).pax;
+        return new Response(JSON.stringify({ ok: true, ...out }), { headers: CORS_HEADERS });
+      } catch (e) {
+        return new Response(JSON.stringify({ ok: false, error: (e as Error).message }), { headers: CORS_HEADERS });
+      }
+    }
+
     if (reqBody && reqBody.action === "rank_suggestions") {
       try {
         const destAr = String(reqBody.dest || "").trim();
@@ -3998,8 +4149,9 @@ Deno.serve(async (req) => {
           fetchAllRows<FlightRow>((() => supabase.from("trains").select("*").eq("destination", destKey)) as never),
         ]);
         const fetchData = async () => ({ hotels, tours, flights, trains: trains as unknown as [] });
-        const { data: sugs } = await supabase.from("package_suggestions")
+        const { data: _sugs0 } = await supabase.from("package_suggestions")
           .select("distribution,arrival_airport,departure_airport").eq("destination", destKey).eq("days", days);
+        const sugs = singleCityFallback(_sugs0 as Array<{ distribution: string; arrival_airport: string; departure_airport: string }> | null, hotels as Array<{ location?: string }>, destAr, days, (d, city) => ({ distribution: d, arrival_airport: city, departure_airport: city }));
         const results: Array<{ distribution: string; arrival_airport: string; departure_airport: string; total: number }> = [];
         let _rkFlights: Record<string, unknown> | null | undefined = undefined;
         for (const s of (sugs || []) as Array<{ distribution: string; arrival_airport: string; departure_airport: string }>) {
@@ -4073,6 +4225,10 @@ Deno.serve(async (req) => {
             (req as { adults: number }).adults = Math.max(1, pax - _kidsN);
             (req as { children: number }).children = _kidsN;
             (req as { autoBeds?: boolean }).autoBeds = true;
+            // 🏢 ١٥ نوفمبر ٢٠٢٦ (منال): «مستوى الفنادق: 5 نجوم» → stars=[5] (الباني ينزل للأقرب لو ما فيه بالمدينة). بدونها = مختلط/الأرخص.
+            const _stIn = Array.isArray(reqBody.stars) ? reqBody.stars as unknown[] : (reqBody.stars != null && reqBody.stars !== "" ? [reqBody.stars] : []);
+            const _stN = _stIn.map(Number).filter(n => n >= 1 && n <= 5);
+            if (_stN.length) (req as { stars: number[] | null }).stars = _stN;
             if (reqBody.unique_hotel_per_visit === true) (req as { uniqueHotelPerVisit?: boolean }).uniqueHotelPerVisit = true;
             if (Array.isArray(reqBody.exclude_hotels) && reqBody.exclude_hotels.length) (req as { excludeHotelNames?: string[] }).excludeHotelNames = (reqBody.exclude_hotels as unknown[]).map(String);
             // تفضيلات العميل (طلال): إفطار، فندق باسمه، نوع غرفة (suite/villa/pool)، إطلالة بحر — ناعمة.
@@ -4127,9 +4283,11 @@ Deno.serve(async (req) => {
         let chosen: { program: string; total: number; distribution: string; misses?: string[] } | null = null;
         if (givenDist) {
           chosen = await buildOne(givenDist);
+          if (reqBody.list_only === true) return new Response(JSON.stringify({ ok: true, ranked: chosen ? [{ distribution: chosen.distribution, total: chosen.total, hotels: (chosen.program.split("HOTELS:")[1] || "").split(/\n\s*\n/)[0].split("\n").filter(l => l.includes("|")).map(l => l.split("|").slice(0, 3).map(x => x.trim()).join(" | ")) }] : [] }), { headers: CORS_HEADERS });
         } else {
-          const { data: sugs } = await supabase.from("package_suggestions")
+          const { data: _sugs0 } = await supabase.from("package_suggestions")
             .select("distribution").eq("destination", destKey).eq("days", days);
+          const sugs = singleCityFallback(_sugs0 as Array<{ distribution: string }> | null, hotels as Array<{ location?: string }>, destAr, days, d => ({ distribution: d }));
           // 🏢 ١٣ نوفمبر ٢٠٢٦ (منال — قسم الشركات): candidates = حصر التوزيعات (مطارات/مدن الموظفة)،
           //    pick_rank = «الأرخص - N» محسوب بنفس شروط الطلب الحقيقية (الأطفال/السراير/الفنادق)،
           //    list_only = ترتيب الخيارات بالسعر الحقيقي بدون حفظ برنامج. بدونها السلوك كما هو (طلال/المساعد).

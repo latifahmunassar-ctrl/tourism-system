@@ -246,8 +246,12 @@ Deno.serve(async (req) => {
         // نجد الطلب الأصلي بمفتاح الرسالة المقتبسة (msg_id) ونضيف التعديل تحت followups.
         const origMsgId = String(payload.orig_msg_id ?? "").trim();
         const modBody = String(payload.body ?? "").trim();
-        if (!origMsgId || !modBody) return json({ matched: false, reason: "orig_msg_id و body مطلوبان" });
-        let q = db.from("wa_group_requests").select("id, followups").eq("msg_id", origMsgId);
+        // ١٥ نوفمبر ٢٠٢٦: latest_in_group = أحدث طلب للجروب خلال ٧ أيام (تذكرة طيران بدون ريبلاي)
+        const latestInGroup = payload.latest_in_group === true && !!payload.group_jid;
+        if ((!origMsgId && !latestInGroup) || !modBody) return json({ matched: false, reason: "orig_msg_id و body مطلوبان" });
+        let q = db.from("wa_group_requests").select("id, followups");
+        if (latestInGroup && !origMsgId) q = q.gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString());
+        else q = q.eq("msg_id", origMsgId);
         if (payload.group_jid) q = q.eq("group_jid", payload.group_jid);
         const { data: origRow } = await q.order("created_at", { ascending: false }).limit(1).maybeSingle();
         if (!origRow) return json({ matched: false });  // الطلب الأصلي غير معروف → يُقيَّم كطلب جديد

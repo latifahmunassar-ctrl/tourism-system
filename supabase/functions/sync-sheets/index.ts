@@ -1837,7 +1837,17 @@ Deno.serve(async (req) => {
     let totalFlights = 0;
     let totalTrains  = 0;
 
-    for (const tabRaw of DESTINATION_TABS) {
+    // ?only=egypt → مزامنة وجهة واحدة فقط (أخف على القاعدة من المزامنة الكاملة — ١٢ نوفمبر ٢٠٢٦
+    // تعلّقت القاعدة من مزامنة كاملة). بدون only = كل التبويبات كما كان.
+    const onlyDest = (new URL(req.url).searchParams.get("only") || "").trim().toLowerCase();
+    const tabsToSync = onlyDest
+      ? DESTINATION_TABS.filter(t => (TAB_KEY_OVERRIDE[t.trim()] ?? t.trim()).toLowerCase() === onlyDest)
+      : DESTINATION_TABS;
+    if (onlyDest && tabsToSync.length === 0) {
+      return new Response(JSON.stringify({ success: false, error: `وجهة غير معروفة: ${onlyDest}` }), { status: 400, headers: CORS_HEADERS });
+    }
+
+    for (const tabRaw of tabsToSync) {
       // Tab in sheet may have trailing/leading whitespace (e.g. "thailand "),
       // but we want clean identifiers in DB ("thailand"). Use tabRaw to read
       // the sheet, tab (trimmed) for storage and grouping.
@@ -1890,10 +1900,18 @@ Deno.serve(async (req) => {
 
         // dedup داخل batch + full-replace per destination (يحذف القديم ويُعيد المحدّث)
         const dedupedMap = new Map<string, object>();
-        for (const h of hotels as Array<{ name: string; room_type: string; occupancy: string; location: string; date_from?: string; nights?: number }>) {
+        for (const h of hotels as Array<{ name: string; room_type: string; occupancy: string; location: string; date_from?: string; nights?: number; area?: string }>) {
           // المفتاح يشمل date_from حتى لا تنطمس صفوف المواسم (نفس الفندق/الغرفة بسعرين)
           // و`nights` حتى لا تنطمس صفوف المدد (٢/٣/٤ ليالٍ لنفس الفندق والفترة — أبوظبي)
-          const key = `${h.name}|${h.room_type}|${h.occupancy}|${h.date_from || ""}|${h.nights ?? ""}`;
+          // ١٥ نوفمبر ٢٠٢٦: شقق مصر بنفس الاسم «Apartment» ونفس الغرفة في أحياء مختلفة
+          //   (المهندسين/الدقي vs كورنيش النيل) كانت تنطمس وتبقى وحدة بس. القيد الفريد بالقاعدة
+          //   (name, room_type, occupancy, date_from, nights) ما فيه الحي → نميّز الاسم بالحي عند التصادم.
+          let key = `${h.name}|${h.room_type}|${h.occupancy}|${h.date_from || ""}|${h.nights ?? ""}`;
+          const prev = dedupedMap.get(key) as { area?: string } | undefined;
+          if (prev && (prev.area || "") !== (h.area || "") && h.area) {
+            h.name = `${h.name} - ${h.area}`;
+            key = `${h.name}|${h.room_type}|${h.occupancy}|${h.date_from || ""}|${h.nights ?? ""}`;
+          }
           dedupedMap.set(key, h);
         }
         const dedupedHotels = Array.from(dedupedMap.values());
@@ -1958,7 +1976,7 @@ Deno.serve(async (req) => {
     let chatAnswersSynced = 0;
     let chatAnswersDeleted = 0;
     let chatAnswersError: string | null = null;
-    try {
+    if (!onlyDest) try {
       const r = await syncChatAnswers(supabase, token);
       chatAnswersSynced = r.upserted;
       chatAnswersDeleted = r.deleted;
@@ -1968,7 +1986,7 @@ Deno.serve(async (req) => {
 
     // أسعار العملات (تبويب currency في نفس الـ spreadsheet)
     let currenciesSynced = 0;
-    try { currenciesSynced = await syncCurrencies(supabase, token, spreadsheetId); } catch (_e) { /* صامت */ }
+    if (!onlyDest) try { currenciesSynced = await syncCurrencies(supabase, token, spreadsheetId); } catch (_e) { /* صامت */ }
 
     const duration = Date.now() - startTime;
 
