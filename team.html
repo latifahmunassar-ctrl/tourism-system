@@ -7096,8 +7096,11 @@ ${hotelsLines.map((l, idx)=>{ const { p, nightly, nights, totalLine, extraBedPri
 ${_lineArea(l) ? `<span>🏙️ الحي / المنطقة: ${bidiText(_areaAr(_lineArea(l)))}</span>` : ``}
 <span>⭐ النجوم: ${safeText(p[2]||'')}</span>
 <span>🛏️ الغرفة: ${bidiText(_roomNameOnly(p[3]||''))}</span>
-${_lineCapN(p) ? `<span>👥 تتسع لـ: ${_lineCapN(p)} أشخاص</span>` : ``}
-<span>🏨 عدد الغرف: ${rooms + _arSame.length}</span>
+${(rooms + _arSame.length) > 1
+  ? `<span>🏨 عدد الغرف: ${rooms + _arSame.length}</span>
+<span style="grid-column:1/-1;">👥 ${[...Array(rooms).fill(_lineCapN(p)), ..._arSame.map(r => r.occ || _lineCapN(p))].map((c,i)=>`الغرفة ${i+1}${c ? ` (تتسع لـ ${c})` : ''}`).join(' · ')}</span>`
+  : `${_lineCapN(p) ? `<span>👥 تتسع لـ: ${_lineCapN(p)} أشخاص</span>` : ``}
+<span>🏨 عدد الغرف: ${rooms + _arSame.length}</span>`}
 <span>📅 الإقامة: ${stayText}</span>
 ${(sd.checkInText && sd.checkOutText) ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText} | 🔴 الخروج: ${sd.checkOutText}</span>` : (sd.checkInText ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText}</span>` : ``)}
 ${extraBedCount ? `<span>🛋️ سرير إضافي / Sofa Bed: <b>${extraBedCount}</b>${showDetailed ? ` — ${extraBedPricePerNight} ريال/ليلة × ${nights||'—'} ليالي × ${extraBedCount} = ${(extraBedTotal||0).toLocaleString()} ريال` : ''}</span>` : ``}
