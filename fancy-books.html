@@ -457,7 +457,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794681030';
+const BUILD='1794753076';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -1304,7 +1304,7 @@ function submitP(again){
   if(P._id){
     const old=byId(S.products,P._id);old.log=old.log||[];
     S.branches.forEach(b=>{const from=+(old.locs?.[b.id]?.qty)||0,to=locs[b.id].qty;if(from!==to)old.log.push({date:now,user:ME,branch:b.id,from,to,reason:'تعديل من صفحة المنتج'})});
-    Object.assign(old,base,{type:old.type,updatedAt:now,updatedBy:ME});save();toast('تم حفظ التعديلات');
+    Object.assign(old,base,{type:old.type,updatedAt:now,updatedBy:ME});compSyncAll();save();toast('تم حفظ التعديلات');
     if(again){location.hash='#/pnew'}else location.hash='#/products';return;
   }
   const mk=x=>({id:uid(),createdAt:now,createdBy:ME,log:[],...x});
@@ -1312,7 +1312,7 @@ function submitP(again){
   if(e.type==='variant'){const vals=e.values.split(/[,،]/).map(s=>s.trim()).filter(Boolean);created=vals.map(v=>mk({...structuredClone(base),type:'variant',baseName:base.name,name:`${base.name} - ${v}`,variant:{[e.attr.trim()]:v},sku:genSku(),barcode:''}))}
   else created=[mk({...base,baseName:base.name})];
   created.forEach(p=>{Object.entries(p.locs).forEach(([b,L])=>{if(L.qty)p.log.push({date:now,user:ME,branch:b,from:0,to:L.qty,reason:'كمية أولية'})});S.products.push(p)});
-  save();toast(created.length>1?`تم إنشاء ${created.length} منتجات`:'تم حفظ المنتج');
+  compSyncAll();save();toast(created.length>1?`تم إنشاء ${created.length} منتجات`:'تم حفظ المنتج');
   if(again){viewPForm();window.scrollTo(0,0)}else location.hash='#/products';
 }
 
@@ -1756,7 +1756,7 @@ async function commitSale(r,c,payments,change,extra={}){
     customerId:CART.customerId||'',note:CART.note||'',supplyDate:extra.supplyDate||'',received:extra.received,items:c.rows.map(x=>({productId:x.pid,name:x.name,sku:x.sku,qty:x.qty,price:x.price,cost:+(byId(S.products,x.pid)?.cost)||0,manual:x.man,promoDisc:x.promoDisc,promoName:x.promoName,invShare:r3(x.invShare),taxRate:x.taxRate,net:x.net,tax:x.tax,total:x.total})),
     subtotal:c.subtotal,manual:c.manual,promo:c.promo,tax:c.tax,total:c.total,payments,paid:r3(payments.reduce((a,p)=>a+p.amount,0)),change,returned:{}};
   S.sales.push(inv);
-  inv.items.forEach(it=>{const p=byId(S.products,it.productId);if(!p)return;p.locs=p.locs||{};const L=p.locs[r.branchId]=p.locs[r.branchId]||{qty:0};const from=+L.qty||0;L.qty=r3(from-it.qty);p.log=p.log||[];p.log.push({date:inv.date,user:ME,branch:r.branchId,from,to:L.qty,reason:'بيع '+inv.no});if(p.log.length>300)p.log=p.log.slice(-300)});
+  inv.items.forEach(it=>{const p=byId(S.products,it.productId);if(!p)return;stockMove(p,r.branchId,-it.qty,'بيع '+inv.no,inv.date)});
   if(CART.quoteId){const q=byId(S.quotes,CART.quoteId);if(q){q.status='converted';q.saleId=inv.id}}
   CART={...blankCart(r),priceMode:CART.priceMode};saveCart();
   await flushNow();renderCart();return inv;
@@ -1938,7 +1938,7 @@ function returnDlg(id,pre,cb){const s=byId(S.sales,id);pre=pre||{};
     const ret={id:uid(),type:'return',seq:rseq,no:`R${ymd(now)}-${String(rseq).padStart(4,'0')}`,date:now.toISOString(),branchId:s.branchId,registerId:myReg?.id||regId,registerName:myReg?.name||reg?.name||'',shiftId:myReg?.shiftId||null,user:ME,channel:'pos',customerId:s.customerId,refId:s.id,refNo:s.no,note:o.querySelector('#rn').value,
       items,subtotal:r3(items.reduce((a,x)=>a+x.qty*x.price,0)),manual:sum('manual'),promo:sum('promoDisc'),tax:sum('tax'),total:sum('total'),payments:[{methodId:o.querySelector('#rm').value,amount:sum('total')}],paid:sum('total')};
     S.sales.push(ret);s.returned=s.returned||{};
-    items.forEach(it=>{s.returned[it.productId]=(s.returned[it.productId]||0)+it.qty;const p=byId(S.products,it.productId);if(!p)return;const L2=p.locs[s.branchId]=p.locs[s.branchId]||{qty:0};const from=+L2.qty||0;L2.qty=r3(from+it.qty);p.log=p.log||[];p.log.push({date:ret.date,user:ME,branch:s.branchId,from,to:L2.qty,reason:'إرجاع '+ret.no})});
+    items.forEach(it=>{s.returned[it.productId]=(s.returned[it.productId]||0)+it.qty;const p=byId(S.products,it.productId);if(!p)return;stockMove(p,s.branchId,+it.qty,'إرجاع '+ret.no,ret.date)});
     await flushNow();o.remove();toast('تم الإرجاع '+ret.no);if(cb)cb(ret);else location.hash='#/sale/'+ret.id};
   setTimeout(()=>{const el=o.querySelector('#rinfo');if(el)el.textContent='قيمة الإرجاع: '+money(val())},0);
 }
@@ -2131,7 +2131,7 @@ function trPrint(id){trPrintMany([id])}
 
 /* ---- stock movement ---- */
 function trMove(t){const now=new Date().toISOString();
-  t.items.forEach(it=>{const p=byId(S.products,it.productId);if(!p)return;p.locs=p.locs||{};const mv=(b,d,reason)=>{const L=p.locs[b]=p.locs[b]||{qty:0,retail:'',wholesale:'',buy:'',tax:S.taxes[0]?.id};const from=+L.qty||0;L.qty=r3(from+d);p.log=p.log||[];p.log.push({date:now,user:ME,branch:b,from,to:L.qty,reason});if(p.log.length>300)p.log=p.log.slice(-300)};
+  t.items.forEach(it=>{const p=byId(S.products,it.productId);if(!p)return;p.locs=p.locs||{};const mv=(b,d,reason)=>stockMove(p,b,d,reason,now);
     const q=+it.transferred||0;if(!q)return;it.srcQty=+(p.locs[t.sourceId]?.qty)||0;it.dstQty=+(p.locs[t.destId]?.qty)||0;mv(t.sourceId,-q,`تحويل ${t.no} إلى ${brName(t.destId)}`);mv(t.destId,q,`تحويل ${t.no} من ${brName(t.sourceId)}`);it.received=q});
   Object.assign(t,{status:'accepted',receivingDate:now,updatedAt:now,sentBy:ME,processedBy:ME});
 }
@@ -2252,7 +2252,14 @@ const PAY_T={PayPurchaseOrder:'دفع لأمر شراء',AdvancePayment:'دفع�
 const METH_AR={'Credit Card':'بطاقة ائتمانية','Cash':'نقدي'};
 const pill=([l,c])=>`<span class="pill ${c}">${l}</span>`;
 const nextSeq=(arr,f=()=>true)=>arr.filter(f).reduce((m,x)=>Math.max(m,x.seq||0),0)+1;
-function stockMove(p,b,d,reason,when){if(!p||!b||!d)return;p.locs=p.locs||{};const L=p.locs[b]=p.locs[b]||{qty:0,retail:'',wholesale:'',buy:'',tax:S.taxes[0]?.id};const from=+L.qty||0;L.qty=r3(from+d);p.log=p.log||[];p.log.push({date:when||new Date().toISOString(),user:ME,branch:b,from,to:L.qty,reason});if(p.log.length>300)p.log=p.log.slice(-300)}
+/* Composite (مجمع) like Rewaa: a set has no own stock — its qty = min(floor(component qty / rate)); moving a set moves its components */
+function compQty(p,b){let m=Infinity;for(const c of p.components||[]){const x=byId(S.products,c.productId);m=Math.min(m,Math.floor((+x?.locs?.[b]?.qty||0)/(+c.qty||1)))}return m===Infinity?0:m}
+function compRefresh(p,b,reason,when){p.locs=p.locs||{};const L=p.locs[b]=p.locs[b]||{qty:0,retail:'',wholesale:'',buy:'',tax:S.taxes[0]?.id};const n=compQty(p,b),from=+L.qty||0;if(n===from)return;L.qty=n;p.log=p.log||[];p.log.push({date:when||new Date().toISOString(),user:ME,branch:b,from,to:n,reason});if(p.log.length>300)p.log=p.log.slice(-300)}
+function compSyncAll(){let n=0;S.products.forEach(p=>{if(p.type!=='composite'||!p.components?.length||p.deleted)return;S.branches.forEach(b=>{const o=+p.locs?.[b.id]?.qty||0;compRefresh(p,b.id,'تحديث كمية المجمع من مكوناته');if((+p.locs?.[b.id]?.qty||0)!==o)n++})});return n}
+function stockMove(p,b,d,reason,when){if(!p||!b||!d)return;
+  if(p.type==='composite'&&p.components?.length){p.components.forEach(c=>stockMove(byId(S.products,c.productId),b,r3(d*(+c.qty||1)),reason,when));return}
+  stockMove0(p,b,d,reason,when);S.products.forEach(cp=>{if(cp.type==='composite'&&!cp.deleted&&cp.components?.some(c=>c.productId===p.id))compRefresh(cp,b,reason,when)})}
+function stockMove0(p,b,d,reason,when){p.locs=p.locs||{};const L=p.locs[b]=p.locs[b]||{qty:0,retail:'',wholesale:'',buy:'',tax:S.taxes[0]?.id};const from=+L.qty||0;L.qty=r3(from+d);p.log=p.log||[];p.log.push({date:when||new Date().toISOString(),user:ME,branch:b,from,to:L.qty,reason});if(p.log.length>300)p.log=p.log.slice(-300)}
 function avgIn(p,q,c){const Q=Math.max(0,qtyOf(p,''));const old=+p.cost||0;p.cost=r3(Q>0&&old>0?(Q*old+q*c)/(Q+q):c);return old}
 function dlCSV(name,head,rows){const csv='\uFEFF'+[head,...rows].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=`${name}-${today()}.csv`;a.click()}
 function printDoc(title,body){const w=window.open('','_blank');if(!w){toast('اسمح بالنوافذ المنبثقة للطباعة');return}w.document.write(`<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${TP_CSS}</style></head><body>${body}<script>setTimeout(()=>print(),300)<\/script></body></html>`);w.document.close()}
