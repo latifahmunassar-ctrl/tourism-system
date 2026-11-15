@@ -2386,8 +2386,18 @@ function _lineCapN(p){
     const dest = getLine(lastProgramRaw,'DEST') || '';
     const rooms = _capCache.get(dest+'|'+((p&&p[1])||'')+'|'+((p&&p[0])||'')) || [];
     const hit = rooms.find(r => _stripCapR(r.room_type) === _stripCapR((p&&p[3])||''));
-    return (hit && hit.occupancy) ? (parseInt(hit.occupancy,10)||0) : 0;
-  }catch(e){ return 0; }
+    if(hit && hit.occupancy) return parseInt(hit.occupancy,10)||0;
+  }catch(e){}
+  return _capFromRoomName((p && p[3]) || '');
+}
+// تخمين السعة من اسم الغرفة لما ما تكون مسجلة (المالكة: كل غرفة لازم تطلع سعتها في الـPDF).
+function _capFromRoomName(name){
+  const t = String(name||'').toLowerCase();
+  if(/quad|quadruple|رباعي|family|عائلي|عائلية/.test(t)) return 4;
+  if(/triple|ثلاثي/.test(t)) return 3;
+  if(/single|مفرد|سنجل/.test(t)) return 1;
+  if(/double|twin|king|queen|مزدوج|دبل|توين|كينج|كوين|سريرين/.test(t)) return 2;
+  return 0;
 }
 
 async function _fillMissingCaps(){
@@ -7098,8 +7108,8 @@ ${_lineArea(l) ? `<span>🏙️ الحي / المنطقة: ${bidiText(_areaAr(_l
 <span>🛏️ الغرفة: ${bidiText(_roomNameOnly(p[3]||''))}</span>
 ${(rooms + _arSame.length) > 1
   ? `<span>🏨 عدد الغرف: ${rooms + _arSame.length}</span>
-<span style="grid-column:1/-1;">👥 ${[...Array(rooms).fill(_lineCapN(p)), ..._arSame.map(r => r.occ || _lineCapN(p))].map((c,i)=>`الغرفة ${i+1}${c ? ` (تتسع لـ ${c})` : ''}`).join(' · ')}</span>`
-  : `${_lineCapN(p) ? `<span>👥 تتسع لـ: ${_lineCapN(p)} أشخاص</span>` : ``}
+<span style="grid-column:1/-1;">👥 ${[...Array(rooms).fill(_lineCapN(p) || Math.max(1, Math.ceil((adults||0)/(rooms + _arSame.length)))), ..._arSame.map(r => r.occ || _lineCapN(p) || Math.max(1, Math.ceil((adults||0)/(rooms + _arSame.length))))].map((c,i)=>`الغرفة ${i+1}${c ? ` (تتسع لـ ${c})` : ''}`).join(' · ')}</span>`
+  : `<span>👥 تتسع لـ: ${_lineCapN(p) || Math.max(1, adults||0)} ${(_lineCapN(p) || Math.max(1, adults||0)) === 1 ? 'شخص' : 'أشخاص'}</span>
 <span>🏨 عدد الغرف: ${rooms + _arSame.length}</span>`}
 <span>📅 الإقامة: ${stayText}</span>
 ${(sd.checkInText && sd.checkOutText) ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText} | 🔴 الخروج: ${sd.checkOutText}</span>` : (sd.checkInText ? `<span style="font-size:16px;line-height:1.6;opacity:0.95;">🟢 الدخول: ${sd.checkInText}</span>` : ``)}
