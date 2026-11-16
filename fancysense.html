@@ -146,14 +146,14 @@ function toast(msg,err){ let t=$('fs-toast'); if(!t){ t=document.createElement('
 function showApp(){ $('gate').classList.add('hidden'); $('app').classList.remove('hidden'); loadAll(); }
 
 // ---- التبويبات ----
-const TABS=[['dash','📊 لوحة'],['sales','🧾 المبيعات اليومية'],['machine','🏧 متابعة المكنة'],['expenses','💸 مصاريف يومية'],['rewa','🔄 مطابقة REWA'],['match','🔗 مطابقة بنوك العز'],['credit','👤 عملاء الآجل'],['ajel','📒 إيداعات الآجل'],['xfer','🔄 التحويلات البنكية'],['banks','🏦 البنوك والإيداعات'],['inv','📦 منتجات ناقصة'],['settings','⚙️ إعدادات'],['reqs','🔔 طلبات الموافقة']];
+const TABS=[['dash','📊 لوحة'],['reqs','🔔 طلبات الموافقة'],['sales','🧾 المبيعات اليومية'],['machine','🏧 متابعة المكنة'],['expenses','💸 مصاريف يومية'],['rewa','🔄 مطابقة REWA'],['match','🔗 مطابقة بنوك العز'],['credit','👤 عملاء الآجل'],['ajel','📒 إيداعات الآجل'],['xfer','🔄 التحويلات البنكية'],['banks','🏦 البنوك والإيداعات'],['inv','📦 منتجات ناقصة'],['settings','⚙️ إعدادات']];
 function buildTabs(){ $('tabs').innerHTML=TABS.map((t,i)=>'<div class="tab'+(i===0?' on':'')+'" data-p="'+t[0]+'"'+(t[0]==='reqs'?' style="display:none"':'')+' onclick="switchTab(this)">'+t[1]+'</div>').join(''); }
 function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on')); el.classList.add('on'); const p=el.dataset.p; document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('on')); $('p-'+p).classList.add('on'); }
 
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v77';
+const FS_VER='v78';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderAjel(); renderXfer(); renderBanks(); renderInv(); renderSettings(); renderReqs();
@@ -1188,7 +1188,23 @@ async function saveSettings(){
 }
 async function addList(cat){ const el=$('lst-'+cat); const v=(el.value||'').trim(); if(!v)return; if(await crud('insert','lists',{category:cat,value:v})){} }
 async function delList(id){ if(confirm('حذف العنصر؟')) await crud('delete','lists',null,id); }
-async function delRow(table,id){ if(fsIsOwner()){ if(confirm('حذف السطر؟ لا يمكن التراجع.')) await crud('delete',table,null,id); return; } const reason=(prompt('🗑️ طلب حذف السطر — يُرسَل لموافقة المالكة.\n📝 سبب الحذف (إجباري):')||'').trim(); if(!reason){ toast('⚠️ سبب الحذف إجباري — أُلغي الطلب',true); return; } await crud('delete',table,null,id,reason); }
+// ١٦ نوفمبر: نافذة داخل الصفحة بدل prompt/confirm (ما تشتغل في متصفح واتساب/آيفون)
+function delRow(table,id){
+  const owner=fsIsOwner(), x=(DATA[table]||[]).find(r=>String(r.id)===String(id))||{};
+  const sum=(FS_EDIT[table]||[]).filter(f=>x[f[0]]!=null&&x[f[0]]!=='').slice(0,7).map(f=>'<div><span class="mut">'+esc(f[1])+':</span> <b>'+esc(fsValTxt(table,f[0],x[f[0]]))+'</b></div>').join('');
+  let m=$('fe-modal'); if(m)m.remove(); m=document.createElement('div'); m.id='fe-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+  m.innerHTML='<div class="panel" style="width:min(520px,94vw);max-height:90vh;overflow:auto;margin:0"><h3 style="margin:0 0 4px">🗑️ حذف — '+esc(FS_TBL_AR[table]||table)+'</h3><div class="sub" style="margin-bottom:10px">'+(owner?'<b style="color:#ff6b7a">يُحذف مباشرة — لا يمكن التراجع</b>':'<b style="color:#e0a83a">يُرسَل لموافقة المالكة — ما يُحذف شي قبل موافقتها</b>')+'</div>'+
+    '<div style="font-size:13px;line-height:1.9;margin-bottom:10px">'+(sum||'<span class="mut">#'+esc(id)+'</span>')+'</div>'+
+    (owner?'':'<div class="fld full"><label>📝 سبب الحذف <span style="color:#ff6b7a">إجباري</span></label><input id="fe-reason"></div>')+
+    '<div id="fe-msg" class="msg"></div><button class="btn" style="background:#e5484d" onclick="fsDoDel(\''+table+'\','+JSON.stringify(id)+')">🗑️ '+(owner?'حذف':'إرسال طلب الحذف')+'</button> <button class="btn ghost" onclick="$(\'fe-modal\').remove()">إلغاء</button></div>';
+  document.body.appendChild(m);
+}
+async function fsDoDel(table,id){
+  const reason=fsIsOwner()?'':(($('fe-reason')||{}).value||'').trim();
+  if(!fsIsOwner()&&!reason){ $('fe-msg').innerHTML='<span class="neg">سبب الحذف إجباري</span>'; return; }
+  if(await crud('delete',table,null,id,reason)){ const mm=$('fe-modal'); if(mm)mm.remove(); }
+}
 // ===== ✏️🗑️ تعديل/حذف بموافقة المالكة (١٤ نوفمبر ٢٠٢٦) =====
 //   المحاسب (محمد/آية): التعديل والحذف = طلب ← تبويب «🔔 طلبات الموافقة» عند المالكة فقط ← ما ينطبق شي إلا بموافقتها.
 const FS_TBL_AR={daily_sales:'المبيعات اليومية',expenses:'المصاريف اليومية',rewa_recon:'مطابقة REWA',credit_customers:'عملاء الآجل',credit_txn:'حركات الآجل',bank_txn:'حركات البنوك',atm_deposit:'إيداعات الصندوق',inventory_short:'منتجات ناقصة',machine_deposit:'إيداع المكنة'};
