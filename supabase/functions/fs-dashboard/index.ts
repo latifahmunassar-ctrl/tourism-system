@@ -87,10 +87,27 @@ Deno.serve(async (req: Request) => {
         .order('tx_date', { ascending: false });
       accFancyBtx = (bt || []).filter((r: any) => !r.currency || String(r.currency).toUpperCase() === 'OMR');
     } catch (_) {}
+    // 🔄 ١٦ نوفمبر (المالكة): تحويلات رواء/النظام الجديد = فواتير المبيعات (fs_app_docs.sales) المدفوعة «تحويل بنكي» — مجمّعة باليوم (توقيت عُمان) والفرع
+    let rewaXfer: any[] = [];
+    try {
+      const XM = ['vma045qzsslm', '7wi1bqmvsslm'];   // تحويل بنكي · تحويل بنكي روافي
+      const BRN: Record<string, string> = { '3x17mvvxsslm': 'OMAN', 'mjy0i5xdsslm': 'Shop (Gardens mall)', 'vakvzz1dsslm': 'Kiosk (Gardens mall)' };
+      const { data: sd } = await supabase.from('fs_app_docs').select('id,deleted,data->date,data->branchId,data->type,data->payments,data->no')
+        .eq('coll', 'sales').or(XM.map(m => 'data->>payments.like.*' + m + '*').join(',')).limit(5000);
+      const agg: Record<string, any> = {};
+      for (const r of (sd || []) as any[]) {
+        if (r.deleted) continue; const t = Date.parse(String(r.date || '')); if (isNaN(t)) continue;
+        const d = new Date(t + 4 * 3600e3).toISOString().slice(0, 10), br = BRN[String(r.branchId || '')] || String(r.branchId || '—');
+        const sign = String(r.type || 'sale') === 'return' ? -1 : 1;
+        const a = (Array.isArray(r.payments) ? r.payments : []).filter((p: any) => XM.includes(String(p && p.methodId))).reduce((x: number, p: any) => x + (Number(p.amount) || 0), 0) * sign;
+        if (!a) continue; const k = d + '|' + br; const o = agg[k] = agg[k] || { d, br, a: 0, n: 0, inv: [] as string[] }; o.a += a; o.n++; if (o.inv.length < 12) o.inv.push(String(r.no || r.id));
+      }
+      rewaXfer = Object.values(agg).map((o: any) => ({ ...o, a: Math.round(o.a * 1000) / 1000 }));
+    } catch (_) {}
     // 🔔 طلبات التعديل/الحذف — تظهر للمالكة فقط
     let fsRequests: any[] = [];
     if (isOwner) { try { const { data: rq } = await supabase.from('fs_change_requests').select('*').order('created_at', { ascending: false }).limit(200); fsRequests = rq || []; } catch (_) {} }
-    return J({ me: { owner: isOwner, name: staffName, can_edit: isOwner || canEdit(staffName) }, fs_requests: fsRequests, acc_fancy_btx: accFancyBtx, config: cfg, lists: lists.data || [], daily_sales: daily_sales.data || [], rewa_recon: rewa_recon.data || [],
+    return J({ me: { owner: isOwner, name: staffName, can_edit: isOwner || canEdit(staffName) }, fs_requests: fsRequests, rewa_xfer: rewaXfer, acc_fancy_btx: accFancyBtx, config: cfg, lists: lists.data || [], daily_sales: daily_sales.data || [], rewa_recon: rewa_recon.data || [],
       credit_customers: credit_customers.data || [], credit_txn: credit_txn.data || [], bank_txn: bank_txn.data || [],
       atm_deposit: atm_deposit.data || [], inventory_short: inventory_short.data || [], expenses: expenses.data || [], machine_deposit: machine_deposit.data || [], acc_fancy: accFancy });
   }
