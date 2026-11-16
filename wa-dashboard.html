@@ -4404,6 +4404,14 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
               const _m = (apt, c) => { const x = _nC(bfAirAr(apt)), y = _nC(apt); return !!c && (x === c || c.includes(x) || x.includes(c) || y === c); };
               _cnHit = opts.find(o => { const [a, d] = String(o.value).split("|"); return _m(a, _f) && _m(d, _l); }) || null;
             }
+            // ما فيه توزيع محفوظ (مثل عميل «اسطنبول فقط») → من نص المحادثة + الملاحظات: لو ذُكرت مدينة وحدة
+            //   بس من مدن الوجهة اللي لها مطار → نفس المطار ذهاب وعودة.
+            if (!_hit && !_cnHit) {
+              const _txt = _nC(((convHistoryCache.get(phone) || []).map(m => m && m.body || "").join(" ")) + " " + (b.notes || ""));
+              const _apts = [...new Set(opts.flatMap(o => String(o.value).split("|")))];
+              const _seen = _apts.filter(a => { const x = _nC(bfAirAr(a)); return x && _txt.includes(x); });
+              if (_seen.length === 1) _cnHit = opts.find(o => o.value === _seen[0] + "|" + _seen[0]) || null;
+            }
             if (_hit) aSel.value = _hit.value;
             else if (_cnHit) aSel.value = _cnHit.value;
             else if (opts.length === 1) aSel.value = opts[0].value;
