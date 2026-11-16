@@ -23,8 +23,8 @@ a{color:var(--accent2)}
 .btn.green{background:var(--green)}
 .btn.red{background:var(--red)}
 .btn.sm{padding:3px 10px;font-size:11px;border-radius:7px}
-.tabs{display:flex;gap:4px;padding:8px 12px;background:var(--panel);overflow-x:auto;border-bottom:1px solid var(--line);position:sticky;top:51px;z-index:20}
-.tab{white-space:nowrap;padding:8px 14px;border-radius:9px 9px 0 0;cursor:pointer;color:var(--muted);font-weight:700;font-size:13px;border:1px solid transparent}
+.tabs{display:flex;flex-wrap:wrap;gap:4px 6px;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:51px;z-index:20}
+.tab{white-space:nowrap;padding:7px 12px;border-radius:9px;cursor:pointer;color:var(--muted);font-weight:700;font-size:13px;border:1px solid transparent}
 .tab.on{color:#fff;background:var(--panel2);border-color:var(--line);border-bottom-color:var(--panel2)}
 .wrap{max-width:1300px;margin:0 auto;padding:16px}
 .page{display:none}
@@ -153,7 +153,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v80';
+const FS_VER='v81';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderAjel(); renderXfer(); renderBanks(); renderInv(); renderSettings(); renderReqs();
