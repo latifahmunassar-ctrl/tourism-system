@@ -153,7 +153,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v89';
+const FS_VER='v90';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderAjel(); renderXfer(); renderBanks(); renderInv(); renderSettings(); renderReqs();
@@ -1168,11 +1168,8 @@ function renderBanks(){
   window._cbRows=_rows;
   const _dm=d=>d?d.slice(8,10)+'/'+d.slice(5,7):'';
   const _bkN=b=>String(b||'').replace(/\s*[\(\-].*$/,'').trim();   // اسم البنك بدون رقم الحساب
-  // 🟣 نقدي LooKA من بعد آخر إيداع لنفس الفرع لين يوم هذا الإيداع = المفروض ينودع
-  const _depD={}; (DATA.atm_deposit||[]).forEach(x=>{ const b=_lkCan(x.branch), d=String(x.dep_date||'').slice(0,10); if(d)(_depD[b]=_depD[b]||[]).push(d); }); Object.values(_depD).forEach(a=>a.sort());
-  const _lkCash=(d,br)=>{ const b=_lkCan(br), L=_depD[b]||[]; let prev=''; for(const x of L){ if(x<d)prev=x; else break; } let s=0,f=null,cnt=0; Object.entries(_lkMap()).forEach(([k,o])=>{ const [dd,bb]=k.split('|'); if(bb!==b||dd>d||(prev&&dd<=prev))return; if(!prev&&Math.abs(Date.parse(d)-Date.parse(dd))>14*864e5)return; s+=o.cash; cnt++; if(!f||dd<f)f=dd; }); return cnt?{s,f,prev}:null; };
   const aRows=_rows.map(r=>{ const x=r.acc, zs=r.azs, st=r.st;
-    const _lc=x?_lkCash(r.d,r.br):null, lkCell=_lc?('<td class="num" title="من '+esc(_lc.f)+' إلى '+esc(r.d)+'" style="color:#c084fc;font-weight:700">'+fmt(_lc.s)+'<div style="font-size:9px;color:var(--muted);font-weight:600">'+_lc.f.slice(8,10)+'/'+_lc.f.slice(5,7)+' ← '+r.d.slice(8,10)+'/'+r.d.slice(5,7)+'</div>'+(Math.abs(_lc.s-x.a)>=0.011?'<div style="font-size:9px;color:#e0a83a">≠ الإيداع '+fmt(x.a-_lc.s)+'</div>':'')+'</td>'):'<td class="num mut">—</td>';
+    const lkCell='';
     const pill=st==='ok'?'<span class="pill g">✓ مطابق</span>':(st==='part'?'<span class="pill" style="background:rgba(217,138,0,.15);color:#e0a83a">≠ فرق بالمبلغ</span>':(st==='acc'?'<span class="pill r">⚠️ مو موجود بالبنك (العز)</span>':'<span class="pill" style="background:rgba(58,160,255,.15);color:#3aa0ff">🏦 مو موجود بالمحاسبة</span>'));
     const part=z=>{ const g=x?Math.round((Date.parse(z.d)-Date.parse(x.d))/864e5):0; return '<div style="font-weight:800;color:#3aa0ff">'+fmt(z.a)+'<div style="font-size:9px;color:var(--muted);font-weight:600">📅 دخل '+_dm(z.d)+(g?' ('+(g>0?'+':'')+g+' يوم)':'')+' · '+(z.kind==='صندوق'?esc(z.kind):'<span style="color:#e0a83a">⚠️ مسجّل بالعز «'+esc(z.kind)+'»</span>')+(zs.length>1&&z.ref?' · '+esc(z.ref):'')+'</div></div>'; };
     const azCell=zs.length?('<td class="num">'+zs.map(part).join('<div style="border-top:1px dashed var(--line);margin:3px 0"></div>')+'</td>'):'<td class="num mut">—</td>';
@@ -1187,7 +1184,7 @@ function renderBanks(){
     '<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>التاريخ الفعلي</th><th>الإقفال</th><th>البنك</th><th>النوع</th><th>القيمة</th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(bRows||'<tr><td colspan="7" class="mut" style="text-align:center;padding:12px">لا حركات</td></tr>')+'</tbody></table></div></div>'+
     '<div class="panel"><div class="row-between"><h3 style="margin:0">🏧 إيداعات الصندوق (الكاش)</h3><button class="btn" onclick="formToggle(\'atm-form\')">➕ إيداع</button></div></div>'+aForm+
     _cbFilt+renderCashCompare(_rows)+
-    '<div class="panel"><div class="tbl-wrap bf-scroll" style="max-height:620px"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th style="background:#6b3fa0">🟣 نقدي LooKA<br><span style="font-size:8px">من آخر إيداع</span></th><th>المبلغ (المحاسبة)</th><th style="background:#1a5fb4">🏦 نظام العز (الفعلي)</th><th style="background:#1a5fb4">إجمالي ما دخل</th><th>الفرق</th><th>المقارنة</th><th>البنك <span style="font-size:9px;font-weight:500">(📝 المحاسبة / 🏦 العز)</span></th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(aRows||'<tr><td colspan="11" class="mut" style="text-align:center;padding:12px">لا إيداعات بهذا الفلتر</td></tr>')+'</tbody></table></div></div>';
+    '<div class="panel"><div class="tbl-wrap bf-scroll" style="max-height:620px"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>المبلغ (المحاسبة)</th><th style="background:#1a5fb4">🏦 نظام العز (الفعلي)</th><th style="background:#1a5fb4">إجمالي ما دخل</th><th>الفرق</th><th>المقارنة</th><th>البنك <span style="font-size:9px;font-weight:500">(📝 المحاسبة / 🏦 العز)</span></th><th>ملاحظة</th><th></th></tr></thead><tbody>'+(aRows||'<tr><td colspan="10" class="mut" style="text-align:center;padding:12px">لا إيداعات بهذا الفلتر</td></tr>')+'</tbody></table></div></div>';
 }
 async function saveBank(){ const data={actual_date:$('bk-adate').value||null,close_date:$('bk-cdate').value||null,direction:$('bk-dir').value,amount:n($('bk-amt').value),bank_name:$('bk-bank').value||null,note:$('bk-note').value||null}; if(await crud('insert','bank_txn',data)){formToggle('bank-form');} }
 async function saveAtm(){ const data={dep_date:$('at-date').value||null,branch:$('at-branch').value||null,amount:n($('at-amt').value),bank:$('at-bank').value||null,note:$('at-note').value||null}; if(await crud('insert','atm_deposit',data)){formToggle('atm-form');} }
