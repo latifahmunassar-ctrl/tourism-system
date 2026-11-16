@@ -104,10 +104,30 @@ Deno.serve(async (req: Request) => {
       }
       rewaXfer = Object.values(agg).map((o: any) => ({ ...o, a: Math.round(o.a * 1000) / 1000 }));
     } catch (_) {}
+    // 🟣 LooKA يومي لكل فرع: مكنة (Credit Card) · نقدي (Cash) · تحويل — لتبويبات المكنة والصندوق
+    let lookaDaily: any[] = [];
+    try {
+      const MG: Record<string, string> = { '2cgga948sslm': 'card', 'azaznltksslm': 'cash', 'vma045qzsslm': 'xfer', '7wi1bqmvsslm': 'xfer' };
+      const BRN: Record<string, string> = { '3x17mvvxsslm': 'OMAN', 'mjy0i5xdsslm': 'Shop (Gardens mall)', 'vakvzz1dsslm': 'Kiosk (Gardens mall)' };
+      const agg: Record<string, any> = {};
+      for (let from = 0; from < 50000; from += 1000) {
+        const { data: sd, error } = await supabase.from('fs_app_docs').select('id,deleted,data->date,data->branchId,data->type,data->payments').eq('coll', 'sales').order('id').range(from, from + 999);
+        if (error || !sd || !sd.length) break;
+        for (const r of sd as any[]) {
+          if (r.deleted) continue; const t = Date.parse(String(r.date || '')); if (isNaN(t)) continue;
+          const d = new Date(t + 4 * 3600e3).toISOString().slice(0, 10), br = BRN[String(r.branchId || '')] || String(r.branchId || '—');
+          const sign = String(r.type || 'sale') === 'return' ? -1 : 1; const k = d + '|' + br;
+          for (const p of (Array.isArray(r.payments) ? r.payments : [])) { const g = MG[String(p && p.methodId)]; if (!g) continue; const o = agg[k] = agg[k] || { d, br, card: 0, cash: 0, xfer: 0 }; o[g] += (Number(p.amount) || 0) * sign; }
+        }
+        if (sd.length < 1000) break;
+      }
+      const r3 = (v: number) => Math.round(v * 1000) / 1000;
+      lookaDaily = Object.values(agg).map((o: any) => ({ d: o.d, br: o.br, card: r3(o.card), cash: r3(o.cash), xfer: r3(o.xfer) }));
+    } catch (_) {}
     // 🔔 طلبات التعديل/الحذف — تظهر للمالكة فقط
     let fsRequests: any[] = [];
     if (isOwner) { try { const { data: rq } = await supabase.from('fs_change_requests').select('*').order('created_at', { ascending: false }).limit(200); fsRequests = rq || []; } catch (_) {} }
-    return J({ me: { owner: isOwner, name: staffName, can_edit: isOwner || canEdit(staffName) }, fs_requests: fsRequests, rewa_xfer: rewaXfer, acc_fancy_btx: accFancyBtx, config: cfg, lists: lists.data || [], daily_sales: daily_sales.data || [], rewa_recon: rewa_recon.data || [],
+    return J({ me: { owner: isOwner, name: staffName, can_edit: isOwner || canEdit(staffName) }, fs_requests: fsRequests, rewa_xfer: rewaXfer, looka_daily: lookaDaily, acc_fancy_btx: accFancyBtx, config: cfg, lists: lists.data || [], daily_sales: daily_sales.data || [], rewa_recon: rewa_recon.data || [],
       credit_customers: credit_customers.data || [], credit_txn: credit_txn.data || [], bank_txn: bank_txn.data || [],
       atm_deposit: atm_deposit.data || [], inventory_short: inventory_short.data || [], expenses: expenses.data || [], machine_deposit: machine_deposit.data || [], acc_fancy: accFancy });
   }
