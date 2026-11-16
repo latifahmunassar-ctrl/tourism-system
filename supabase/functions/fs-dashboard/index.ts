@@ -114,22 +114,25 @@ Deno.serve(async (req: Request) => {
     // 🟣 LooKA يومي لكل فرع: مكنة (Credit Card) · نقدي (Cash) · تحويل — لتبويبات المكنة والصندوق
     let lookaDaily: any[] = [];
     try {
-      const MG: Record<string, string> = { '2cgga948sslm': 'card', 'azaznltksslm': 'cash', 'vma045qzsslm': 'xfer', '7wi1bqmvsslm': 'xfer' };
+      const MG: Record<string, string> = { '2cgga948sslm': 'card', 'azaznltksslm': 'cash', 'vma045qzsslm': 'xfer', '7wi1bqmvsslm': 'xfer', '8dgg74rcsslm': 'credit' };
       const BRN: Record<string, string> = { '3x17mvvxsslm': 'OMAN', 'mjy0i5xdsslm': 'Shop (Gardens mall)', 'vakvzz1dsslm': 'Kiosk (Gardens mall)' };
       const agg: Record<string, any> = {};
       for (let from = 0; from < 50000; from += 1000) {
-        const { data: sd, error } = await supabase.from('fs_app_docs').select('id,deleted,data->date,data->branchId,data->type,data->payments').eq('coll', 'sales').order('id').range(from, from + 999);
+        const { data: sd, error } = await supabase.from('fs_app_docs').select('id,deleted,data->date,data->branchId,data->type,data->payments,data->total').eq('coll', 'sales').order('id').range(from, from + 999);
         if (error || !sd || !sd.length) break;
         for (const r of sd as any[]) {
           if (r.deleted) continue; const t = Date.parse(String(r.date || '')); if (isNaN(t)) continue;
           const d = new Date(t + 4 * 3600e3).toISOString().slice(0, 10), br = BRN[String(r.branchId || '')] || String(r.branchId || '—');
           const sign = String(r.type || 'sale') === 'return' ? -1 : 1; const k = d + '|' + br;
-          for (const p of (Array.isArray(r.payments) ? r.payments : [])) { const g = MG[String(p && p.methodId)]; if (!g) continue; const o = agg[k] = agg[k] || { d, br, card: 0, cash: 0, xfer: 0 }; o[g] += (Number(p.amount) || 0) * sign; }
+          const o = agg[k] = agg[k] || { d, br, card: 0, cash: 0, xfer: 0, credit: 0, other: 0 }; let paid = 0;
+          for (const p of (Array.isArray(r.payments) ? r.payments : [])) { const a = Number(p && p.amount) || 0; paid += a; const g = MG[String(p && p.methodId)] || 'other'; o[g] += a * sign; }
+          // آجل = المتبقي من الفاتورة بدون دفع وقت البيع (Post Pay) — للبيع فقط
+          if (sign > 0) { const rest = (Number(r.total) || 0) - paid; if (rest > 0.004) o.credit += rest; }
         }
         if (sd.length < 1000) break;
       }
       const r3 = (v: number) => Math.round(v * 1000) / 1000;
-      lookaDaily = Object.values(agg).map((o: any) => ({ d: o.d, br: o.br, card: r3(o.card), cash: r3(o.cash), xfer: r3(o.xfer) }));
+      lookaDaily = Object.values(agg).map((o: any) => ({ d: o.d, br: o.br, card: r3(o.card), cash: r3(o.cash), xfer: r3(o.xfer), credit: r3(o.credit), other: r3(o.other) }));
     } catch (_) {}
     // 🔔 طلبات التعديل/الحذف — تظهر للمالكة فقط
     let fsRequests: any[] = [];
