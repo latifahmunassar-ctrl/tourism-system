@@ -153,7 +153,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v78';
+const FS_VER='v79';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderAjel(); renderXfer(); renderBanks(); renderInv(); renderSettings(); renderReqs();
@@ -183,13 +183,26 @@ function renderMatch(){
   (DATA.expenses||[]).forEach(x=>{ const d=String(x.exp_date||'').slice(0,10); if(!inr(d))return; add(fsM,d,brCanon(x.branch),'مصروفات',x.amount); });
   // 📒 الآجل = المُحصَّل الفعلي (credit_txn.paid) — حركة بنكية على مستوى الشركة (بلا فرع) → «غير محدّد»؛ البيع الآجل اليومي ليس حركة بنكية فلا يُدرَج
   (DATA.credit_txn||[]).forEach(x=>{ const d=String(x.txn_date||'').slice(0,10); if(!inr(d))return; add(fsM,d,'غير محدّد','آجل',x.paid_amount); });
-  (DATA.acc_fancy||[]).forEach(x=>{ const c=azClass(x); if(!c)return; const orig=String(x.tx_date||'').slice(0,10); let d=orig; if(c.type==='مكنة')d=shiftDay(d,-1);   /* مكنة البنك تنزل باليوم التالي → ترجيع يوم */ if(!inr(d))return; add(azM,d,c.branch,c.type,c.amount); if(c.type==='مكنة'){ azMachDate[d]=azMachDate[d]||{}; azMachDate[d][orig]=(azMachDate[d][orig]||0)+n(c.amount); } });
+  // ١٦ نوفمبر: «تقرير البنك» = نفس مصادر وتصنيف الأقسام المتخصصة (المكنة · النقدية · التحويلات · إيداعات الآجل) — الصندوق والبنوك + كشف البنك
+  //   قبلها: كل حركة ما فيها آجل/صندوق/تحويل كانت تنحسب «مكنة» (إيداعات صندوق مسقط غير موسومة تضخّم المكنة وتنقص الصندوق).
+  const _fref=(ref)=>{ const m=String(ref||'').match(/^\s*F\s*-\s*(\d{2})(\d{2})(\d{2})\b/i); return m?('20'+m[3]+'-'+m[2]+'-'+m[1]):null; };
+  const _mtx=[];
+  //   المكنة = بنك ظفار (كل إيراد فانسي فيه ما عدا صندوق/تحويل/آجل) — نفس قاعدة قسم النقدية؛ البداية = أول يوم مبيعات بفانسي (قبله ما فيه شيت للمقارنة)
+  const _fs0=(DATA.daily_sales||[]).reduce((m,x)=>{ const d=String(x.sale_date||'').slice(0,10); return d&&(!m||d<m)?d:m; },'');
+  const inrB=d=>inr(d)&&(!_fs0||d>=_fs0);
+  (DATA.acc_fancy||[]).forEach(x=>{ const c=azClass(x); if(!c||c.type!=='مكنة')return; if(!/dhofar|ظفار/i.test(String(x.bank_name||'')))return; _mtx.push({date:String(x.tx_date||'').slice(0,10),amt:c.amount,sale:_fref(x.bank_ref),br:c.branch}); });
+  (DATA.acc_fancy_btx||[]).forEach(x=>{ const raw=String(x.tx_date||'').slice(0,10), a=n(x.amount_in); if(!(a>0)||!raw)return; if(!/dhofar|ظفار/i.test(String(x.bank_name||'')))return; if(/صندوق|تحويل|آجل|اجل/.test(String(x.note||'')))return; if(_mtx.some(t=>Math.abs(Date.parse(t.sale?shiftDay(t.sale,1):t.date)-Date.parse(raw))<=2*864e5&&Math.abs(t.amt-a)<0.011))return; const m=String(x.bank_ref||'').match(/settlement for\s*(\d{2})-(\d{2})-(\d{4})/i); _mtx.push({date:raw,amt:a,sale:m?(m[3]+'-'+m[2]+'-'+m[1]):null,br:'غير محدّد'}); });
+  _mtx.forEach(t=>{ const d=t.sale||shiftDay(t.date,-1);   /* مكنة البنك تنزل باليوم التالي → يوم المبيعة */ if(!inrB(d))return; add(azM,d,t.br,'مكنة',t.amt); azMachDate[d]=azMachDate[d]||{}; azMachDate[d][t.date]=(azMachDate[d][t.date]||0)+n(t.amt); });
+  const _azBr=z=>brCanon(String(z.br||'')+' '+String(z.label||''));
+  try{ _cbCompare().forEach(r=>r.azs.forEach(z=>{ if(inrB(z.d))add(azM,z.d,_azBr(z),'صندوق',z.a); })); }catch(_){}
+  let _xfR=[]; try{ _xfR=_xfCompare(); _xfR.forEach(r=>r.azs.forEach(z=>{ if(inrB(z.d))add(azM,z.d,_azBr(z),'تحويل',z.a); })); }catch(_){}
+  try{ _ajAzRows().forEach(z=>{ if(inrB(z.d))add(azM,z.d,'غير محدّد','آجل',z.a); }); }catch(_){}
   // 🔄 تفاصيل الحوالات البنكية لكل تاريخ (فانسي + تقرير البنك) — تظهر تحت إجمالي التحويل
   const fsTr={},azTr={};
   (DATA.daily_sales||[]).forEach(x=>{ const d=String(x.sale_date||'').slice(0,10); if(!inr(d))return; const br=brCanon(x.branch);
     if(Array.isArray(x.transfers)&&x.transfers.length){ x.transfers.forEach(t=>{ const a=n(t&&t.amount); if(a)(fsTr[d]=fsTr[d]||[]).push({amount:a,bank:(t&&(t.bank||t.bank_name))||'',branch:br}); }); }
     else { const a=n(x.bank_transfer); if(a)(fsTr[d]=fsTr[d]||[]).push({amount:a,bank:'',branch:br}); } });
-  (DATA.acc_fancy||[]).forEach(x=>{ const d=String(x.tx_date||'').slice(0,10); if(!inr(d))return; const c=azClass(x); if(!c||c.type!=='تحويل')return; (azTr[d]=azTr[d]||[]).push({amount:c.amount,bank:x.bank_name||'',ref:x.bank_ref||''}); });
+  _xfR.forEach(r=>r.azs.forEach(z=>{ if(!inrB(z.d))return; (azTr[z.d]=azTr[z.d]||[]).push({amount:z.a,bank:z.bank||'',ref:z.ref||''}); }));
   const get=(M,d,br,t)=>(((M[d]||{})[br]||{})[t])||0;
   const dates=[...new Set([...Object.keys(fsM),...Object.keys(azM)])].sort().reverse();
   const grandF={},grandA={}; TYPES.forEach(t=>{grandF[t]=0;grandA[t]=0;});
