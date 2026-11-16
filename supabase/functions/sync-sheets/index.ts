@@ -708,7 +708,10 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
     // في عارضات الـPDF/واتساب فيرتدّ العميل لصفحة بوكينج العامة. نقبل: رابط h.html?u=
     // (مُشفّر)، أو رابط بوكينج مباشر — ونستخرج مسار الفندق فقط. أي رابط http آخر يبقى
     // كما هو، وأي رابط قصير مُختصَر مسبقاً يمرّ دون تغيير (idempotent).
-    const linkRaw = (get(row, "link") || "").trim();
+    // ١٦ نوفمبر ٢٠٢٦: تبويب مصر فيه عمودين «links» (الجديد + old_links_backup) والعنوان يشير للقديم،
+    // فروابط درايف للشقق (بالعمود الجديد) ما كانت توصل → لو عمود الرابط فاضي نأخذ أول رابط http في الصف.
+    let linkRaw = (get(row, "link") || "").trim();
+    if (!linkRaw) linkRaw = ((row || []).map(c => String(c || "").trim()).find(c => /^https?:\/\//i.test(c)) || "");
     let link = "";
     if (/^https?:\/\//i.test(linkRaw)) {
       let bookingUrl = "";

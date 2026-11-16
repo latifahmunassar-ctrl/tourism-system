@@ -7122,7 +7122,7 @@ ${extraBedCount ? `<span>🛋️ سرير إضافي / Sofa Bed: <b>${extraBedCo
 ${showDetailed ? `<span>💵 تفصيل السعر: ${nightly.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي × ${rooms} غرفة = ${(totalLine*rooms).toLocaleString()} ريال</span>` : ``}
 ${_arOther.map((ar,j)=>`<span style="grid-column:1/-1;color:#b45309;font-weight:900;">➕ غرفة إضافية ${j+1}: <span dir="ltr" style="unicode-bidi:isolate;white-space:pre-wrap;display:inline-block;overflow-wrap:break-word;max-width:100%;vertical-align:top;">${safeText(ar.room_type)}</span>${ar.occ?` (يتسع ${ar.occ})`:''}${showDetailed ? ` — ${ar.price.toLocaleString()} ريال/ليلة × ${nights||'—'} ليالي = ${(ar.price*(nights||0)).toLocaleString()} ريال` : ''}</span>`).join('')}
 <span style="grid-column:1/-1;">✅ يشمل: ${safeText(_lineMealsTxt(p).replace(/\s*·?\s*⚠️\s*سعر تقريبي[^|]*/u, '').trim())}</span>
-${_lineLink(l) ? `<span style="grid-column:1/-1;margin-top:6px;"><a href="${hswEsc(_lineLink(l))}" style="color:#1a56db;font-weight:900;text-decoration:underline;font-size:19px;">🔗 اضغط هنا لمشاهدة الفندق</a></span>` : ``}
+${_lineLink(l) ? `<span style="grid-column:1/-1;margin-top:6px;"><a href="${hswEsc(_lineLink(l))}" style="color:#1a56db;font-weight:900;text-decoration:underline;font-size:19px;">🔗 اضغط هنا لمشاهدة ${/apartment|شق[ةه]/i.test(p[0]||'') ? 'الشقة' : 'الفندق'}</a></span>` : ``}
 </div>
 </div>`; }).join('')}${extrasCards('hotels')}` : ''}
 
