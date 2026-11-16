@@ -153,7 +153,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v84';
+const FS_VER='v85';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderAjel(); renderXfer(); renderBanks(); renderInv(); renderSettings(); renderReqs();
@@ -1065,7 +1065,7 @@ function _xfCompare(){
     r.rw=r.rw||{a:0,n:0,inv:[]}; r.rw.a+=n(w.a); r.rw.n+=w.n||0; r.rw.inv=r.rw.inv.concat(w.inv||[]); });
   return rows.sort((p,q)=>p.d<q.d?1:(p.d>q.d?-1:0));
 }
-const _XF_ST={ok:'مطابق',part:'فرق بالمبلغ',acc:'مو موجود بالبنك (العز)',az:'مو موجود بفانسي',rw:'بس في رواء'};
+const _XF_ST={ok:'مطابق',part:'فرق بالمبلغ',acc:'مو موجود بالبنك (العز)',az:'مو موجود بفانسي',rw:'بس في روا'};
 function renderXfer(){
   const C=cur(), F={from:window._xfFrom||'',to:window._xfTo||'',br:window._xfBrF||'',st:window._xfSt||''};
   const all=_xfCompare(); const brs=[...new Set(all.map(r=>r.br))].sort();
@@ -1073,7 +1073,7 @@ function renderXfer(){
   let tA=0,tZ=0,tW=0; const cnt={ok:0,part:0,acc:0,az:0,rw:0}, tot={};
   rows.forEach(r=>{ const t=tot[r.br]=tot[r.br]||{a:0,z:0}; tA+=r.accT; t.a+=r.accT; tZ+=r.azT; t.z+=r.azT; cnt[r.st]++; if(r.rw)tW+=r.rw.a; });
   const dm=d=>d?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(2,4):'';
-  const pill=st=>st==='ok'?'<span class="pill g">✓ مطابق</span>':st==='part'?'<span class="pill" style="background:rgba(224,168,58,.18);color:#e0a83a">≠ فرق بالمبلغ</span>':st==='acc'?'<span class="pill r">⚠️ مو موجود بالبنك (العز)</span>':st==='rw'?'<span class="pill" style="background:rgba(192,132,252,.15);color:#c084fc">🟣 بس في رواء</span>':'<span class="pill" style="background:rgba(58,160,255,.15);color:#3aa0ff">🏦 مو موجود بفانسي</span>';
+  const pill=st=>st==='ok'?'<span class="pill g">✓ مطابق</span>':st==='part'?'<span class="pill" style="background:rgba(224,168,58,.18);color:#e0a83a">≠ فرق بالمبلغ</span>':st==='acc'?'<span class="pill r">⚠️ مو موجود بالبنك (العز)</span>':st==='rw'?'<span class="pill" style="background:rgba(192,132,252,.15);color:#c084fc">🟣 بس في روا</span>':'<span class="pill" style="background:rgba(58,160,255,.15);color:#3aa0ff">🏦 مو موجود بفانسي</span>';
   const body=rows.map(r=>{ const x=r.acc;
     const rwCell=r.rw?('<b style="color:#c084fc">'+fmt(r.rw.a)+'</b>'+(r.rw.n>1?'<div style="font-size:9px;color:var(--muted);font-weight:600">'+r.rw.n+' فواتير</div>':'')+(r.accs.length&&Math.abs(r.rw.a-r.accT)>=0.011?'<div style="font-size:9px;color:#e0a83a;font-weight:700">≠ فانسي '+fmt(r.accT-r.rw.a)+'</div>':'')):'<span class="mut">—</span>';
     const fsParts=r.accs.map(a=>'<div style="white-space:nowrap"><b class="pos">'+fmt(a.a)+'</b>'+(a.bank?' <span style="font-size:9px;color:var(--muted)">'+esc(a.bank.replace(/\s*[\-\(].*$/,''))+'</span>':'')+'</div>').join('')||'<span class="mut">—</span>';
@@ -1086,11 +1086,11 @@ function renderXfer(){
   $('p-xfer').innerHTML=
     '<div class="panel" style="border:1px solid #3aa0ff"><h3 style="margin:0 0 6px">🔄 التحويلات البنكية: فانسي ↔ نظام العز (الفعلي بالبنك)</h3><div class="sub"><b>فانسي</b> = خانة «تحويل» في المبيعات اليومية (كل حوالة لحالها إذا مسجّلة بالتفصيل). <b>نظام العز</b> = إيرادات «فانسي» بالبنك بيانها «تحويل» أو «اون لاين» (بدون الآجل وتحويل الصندوق — لهم أقسامهم). المطابقة بنفس المبلغ وتاريخ العز قريب (−٣ إلى +٤ أيام). <b>كل يوم بسطر واحد</b>: تفصيل كل حوالة بعمود، والإجمالي بعمود جنبه — لفانسي وللعز — ثم «الفرق». حوالة بالعز مصنّفة «ايراد فانسي» بدون تفصيل تظهر بعلامة ⚠️ تصنيف ناقص.</div>'+
     '<div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:10px"><div class="fld"><label>📅 من</label><input type="date" value="'+esc(F.from)+'" onchange="window._xfFrom=this.value;renderXfer()"></div><div class="fld"><label>📅 إلى</label><input type="date" value="'+esc(F.to)+'" onchange="window._xfTo=this.value;renderXfer()"></div>'+
-      sel('🏪 الفرع','_xfBrF',[['','الكل'],...brs.map(b=>[b,b])],F.br)+sel('🔎 الحالة','_xfSt',[['','الكل'],['ok','✓ مطابق'],['part','≠ فرق بالمبلغ'],['acc','⚠️ مو موجود بالبنك (العز)'],['az','🏦 مو موجود بفانسي'],['rw','🟣 بس في رواء']],F.st)+
+      sel('🏪 الفرع','_xfBrF',[['','الكل'],...brs.map(b=>[b,b])],F.br)+sel('🔎 الحالة','_xfSt',[['','الكل'],['ok','✓ مطابق'],['part','≠ فرق بالمبلغ'],['acc','⚠️ مو موجود بالبنك (العز)'],['az','🏦 مو موجود بفانسي'],['rw','🟣 بس في روا']],F.st)+
       '<div class="fld"><label style="visibility:hidden">.</label><button class="btn ghost" onclick="window._xfFrom=\'\';window._xfTo=\'\';window._xfBrF=\'\';window._xfSt=\'\';renderXfer()">مسح الفلاتر</button></div><div class="fld"><label style="visibility:hidden">.</label><button class="btn" onclick="xfExportXlsx()">📥 تصدير Excel</button></div></div>'+
-    '<div class="kpis" style="margin-top:10px">'+kpi('🟣 رواء (النظام)',fmt(tW)+' '+C)+kpi('🧾 فانسي',fmt(tA)+' '+C)+kpi('🏦 نظام العز',fmt(tZ)+' '+C)+kpi('الفرق (العز − فانسي)',fmt(tZ-tA)+' '+C,Math.abs(tZ-tA)<0.01?'':'neg')+kpi('الحالة','✓ '+cnt.ok+' · ≠ فرق '+cnt.part+' · ⚠️ مو بالبنك '+cnt.acc+' · 🏦 مو بفانسي '+cnt.az+(cnt.rw?' · 🟣 بس في رواء '+cnt.rw:''))+'</div>'+
+    '<div class="kpis" style="margin-top:10px">'+kpi('🟣 روا',fmt(tW)+' '+C)+kpi('🧾 فانسي',fmt(tA)+' '+C)+kpi('🏦 نظام العز',fmt(tZ)+' '+C)+kpi('الفرق (العز − فانسي)',fmt(tZ-tA)+' '+C,Math.abs(tZ-tA)<0.01?'':'neg')+kpi('الحالة','✓ '+cnt.ok+' · ≠ فرق '+cnt.part+' · ⚠️ مو بالبنك '+cnt.acc+' · 🏦 مو بفانسي '+cnt.az+(cnt.rw?' · 🟣 بس في روا '+cnt.rw:''))+'</div>'+
     (cards?'<div class="kpis" style="margin-top:8px">'+cards+'</div>':'')+'</div>'+
-    '<div class="panel"><div class="tbl-wrap bf-scroll" style="max-height:620px"><table style="font-size:12px"><thead><tr><th>التاريخ</th><th>الفرع</th><th style="background:#6b3fa0">🟣 تحويلات رواء (النظام)</th><th>🧾 حوالات فانسي (تفصيل)</th><th>إجمالي فانسي</th><th style="background:#1a5fb4">🏦 حوالات العز (تفصيل)</th><th style="background:#1a5fb4">إجمالي العز</th><th>الفرق</th><th>المقارنة</th><th>البنك · المرجع · البيان (العز)</th><th>ملاحظة فانسي</th></tr></thead><tbody>'+(body||'<tr><td colspan="11" class="mut" style="text-align:center;padding:12px">لا تحويلات بهذا الفلتر</td></tr>')+'</tbody></table></div></div>';
+    '<div class="panel"><div class="tbl-wrap bf-scroll" style="max-height:620px"><table style="font-size:12px"><thead><tr><th>التاريخ</th><th>الفرع</th><th style="background:#6b3fa0">🟣 تحويلات روا</th><th>🧾 حوالات فانسي (تفصيل)</th><th>إجمالي فانسي</th><th style="background:#1a5fb4">🏦 حوالات العز (تفصيل)</th><th style="background:#1a5fb4">إجمالي العز</th><th>الفرق</th><th>المقارنة</th><th>البنك · المرجع · البيان (العز)</th><th>ملاحظة فانسي</th></tr></thead><tbody>'+(body||'<tr><td colspan="11" class="mut" style="text-align:center;padding:12px">لا تحويلات بهذا الفلتر</td></tr>')+'</tbody></table></div></div>';
 }
 function gap2(a,b){ return Math.round((Date.parse(b)-Date.parse(a))/864e5); }
 async function xfExportXlsx(){
@@ -1099,8 +1099,8 @@ async function xfExportXlsx(){
   const r3=v=>Math.round((+v||0)*1000)/1000, C=cur();
   let tA=0,tZ=0,tW=0; R.forEach(r=>{ tA+=r.accT; tZ+=r.azT; if(r.rw)tW+=r.rw.a; });
   const wb=XLSX.utils.book_new(); wb.Workbook={Views:[{RTL:true}]};
-  const ws1=XLSX.utils.aoa_to_sheet([['مقارنة التحويلات البنكية — Fancy Sense'],[],['الفترة',(window._xfFrom||'البداية')+' ← '+(window._xfTo||'الآن')],['مجموع رواء (النظام)',r3(tW),C],['مجموع فانسي',r3(tA),C],['مجموع نظام العز',r3(tZ),C],['الفرق (العز − فانسي)',r3(tZ-tA),C]]); ws1['!cols']=[{wch:26},{wch:16},{wch:8}]; XLSX.utils.book_append_sheet(wb,ws1,'ملخص');
-  const h=['التاريخ','الفرع','تحويلات رواء (النظام)','حوالة فانسي','إجمالي فانسي','حوالة العز','تاريخ دخول البنك','المرجع / البيان','إجمالي العز','الفرق (العز − فانسي)','الحالة','ملاحظة فانسي']; const rows=[];
+  const ws1=XLSX.utils.aoa_to_sheet([['مقارنة التحويلات البنكية — Fancy Sense'],[],['الفترة',(window._xfFrom||'البداية')+' ← '+(window._xfTo||'الآن')],['مجموع روا',r3(tW),C],['مجموع فانسي',r3(tA),C],['مجموع نظام العز',r3(tZ),C],['الفرق (العز − فانسي)',r3(tZ-tA),C]]); ws1['!cols']=[{wch:26},{wch:16},{wch:8}]; XLSX.utils.book_append_sheet(wb,ws1,'ملخص');
+  const h=['التاريخ','الفرع','تحويلات روا','حوالة فانسي','إجمالي فانسي','حوالة العز','تاريخ دخول البنك','المرجع / البيان','إجمالي العز','الفرق (العز − فانسي)','الحالة','ملاحظة فانسي']; const rows=[];
   R.slice().sort((a,b)=>a.d<b.d?-1:1).forEach(r=>{ const L=Math.max(r.accs.length,r.azs.length,1); for(let k=0;k<L;k++){ const a=r.accs[k], z=r.azs[k]; rows.push([k?'':r.d,k?'':r.br,k||!r.rw?'':r3(r.rw.a),a?r3(a.a):'',k||!r.accs.length?'':r3(r.accT),z?r3(z.a):'',z?z.d:'',z?((z.ref?z.ref+' · ':'')+z.label):'',k||!r.azs.length?'':r3(r.azT),k?'':r3(r.diff),k?'':_XF_ST[r.st],k?'':[...new Set(r.accs.map(x=>x.note).filter(Boolean))].join(' / ')]); } });
   const ws2=XLSX.utils.aoa_to_sheet([h,...rows]); ws2['!cols']=[{wch:12},{wch:20},{wch:14},{wch:11},{wch:12},{wch:10},{wch:14},{wch:44},{wch:12},{wch:16},{wch:22},{wch:30}]; XLSX.utils.book_append_sheet(wb,ws2,'التحويلات');
   XLSX.writeFile(wb,'fancy-transfers_'+(window._xfFrom||'all')+'_'+(window._xfTo||today())+'.xlsx'); toast('✅ تم تصدير الملف');
