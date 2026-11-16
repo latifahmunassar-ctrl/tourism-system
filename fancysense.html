@@ -153,7 +153,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v86';
+const FS_VER='v87';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderAjel(); renderXfer(); renderBanks(); renderInv(); renderSettings(); renderReqs();
@@ -1060,7 +1060,8 @@ function _xfCompare(){
   Z.forEach((z,i)=>{ if(!used.has(i))rows.push({d:z.d,br:z.br,accs:[],acc:null,accT:0,azs:[z],azT:z.a}); });
   rows.forEach(r=>{ r.diff=r.azT-r.accT; r.st=!r.accs.length?'az':(!r.azs.length?'acc':(Math.abs(r.diff)<0.011?'ok':'part')); r.rw=null; });
   // 🟣 ١٦ نوفمبر: تحويلات LooKAء/النظام الجديد (فواتير «تحويل بنكي») باليوم والفرع — تُلصق بسطر نفس اليوم والفرع، وإلا نفس اليوم، وإلا سطر لحالها
-  (DATA.rewa_xfer||[]).forEach(w=>{ let r=rows.find(r=>r.d===w.d&&r.br===w.br&&r.accs.length)||rows.find(r=>r.d===w.d&&r.accs.length&&!r.rw)||rows.find(r=>r.d===w.d&&r.br===w.br);
+  const _g1=(x,y)=>Math.abs(Date.parse(x)-Date.parse(y))<=864e5;
+  (DATA.rewa_xfer||[]).filter(w=>Math.abs(n(w.a))>=0.005).forEach(w=>{ let r=rows.find(r=>r.d===w.d&&r.br===w.br&&r.accs.length)||rows.find(r=>r.d===w.d&&r.accs.length&&!r.rw)||rows.find(r=>_g1(r.d,w.d)&&r.br===w.br&&r.accs.length&&!r.rw&&Math.abs(r.accT-n(w.a))<=Math.max(0.5,r.accT*0.05))||rows.find(r=>r.d===w.d&&r.br===w.br);
     if(!r){ r={d:w.d,br:w.br,accs:[],acc:null,accT:0,azs:[],azT:0,diff:0,st:'rw',rw:null}; rows.push(r); }
     r.rw=r.rw||{a:0,n:0,inv:[]}; r.rw.a+=n(w.a); r.rw.n+=w.n||0; r.rw.inv=r.rw.inv.concat(w.inv||[]); });
   return rows.sort((p,q)=>p.d<q.d?1:(p.d>q.d?-1:0));
