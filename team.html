@@ -5797,7 +5797,8 @@ function waReqParse(body){
     for(const k of Object.keys(CITY)){ for(const c of [k, ...(CITY[k]||[])]){ const cn=waReqNorm(c).replace(/\s+/g,'').replace(/^ال(?=.{4})/,''); if(cn.length<5) continue; const lim=cn.length>=8?2:1;
       for(const w of words){ if(w[0]!==cn[0]) continue; const d=waEditDist(w,cn); if(d<=lim && d<bd){ bd=d; dest=k; } } } } }
   // البالغون / الأطفال
-  let adults=null, m=lat.match(/(\d+)\s*(?:بالغ(?:ين|ون)?|كبار|كبير|اشخاص\s*كبار)/)||lat.match(/عدد\s*الا?شخاص\s*:?\s*(\d+)/)||lat.match(/(\d+)\s*(?:اشخاص|أشخاص|شخص)/); if(m) adults=parseInt(m[1],10);
+  // ١٦ نوفمبر ٢٠٢٦: «04.01\nشخصين» كان يقرأ «01 شخص» = ١ (الرقم من سطر التاريخ) → الرقم والكلمة في نفس السطر، و«شخص» مو «شخصين»
+  let adults=null, m=lat.match(/(\d+)[ \t]*(?:بالغ(?:ين|ون)?|كبار|كبير|اشخاص[ \t]*كبار)/)||lat.match(/عدد[ \t]*الا?شخاص[ \t]*:?[ \t]*(\d+)/)||lat.match(/(\d+)[ \t]*(?:اشخاص|أشخاص|شخص(?!ين))/); if(m) adults=parseInt(m[1],10);
   // إنجليزي: «2 adults» / «adult 2» / «PAX: 2» / «2 persons»
   if(adults==null){ const me=lat.match(/(\d+)\s*(?:adults?|adt|pax|persons?|people|ppl)(?![a-z])/i)||lat.match(/(?<![a-z])(?:adults?|adt|pax|persons?)\s*[:=\-]?\s*(\d+)/i); if(me) adults=parseInt(me[1],10); }
   // الأرقام المكتوبة بالحروف («ثلاث اشخاص» → ٣) — تُطبَّق فقط إن لم يُوجَد رقم
@@ -5817,7 +5818,11 @@ function waReqParse(body){
   //   (بالسنة فقط، عشان «19-22 نوفمبر» تبقى نطاق أيام) و yyyy-mm-dd. نرتّبها حسب موقعها في النص.
   const slash=[
     ...[...lat.matchAll(/(\d{1,2})\s*[\/]\s*(\d{1,2})(?:\s*[\/]\s*(\d{2,4}))?/g)],
-    ...[...lat.matchAll(/(?<![\d\/])(\d{1,2})\s*[-.]\s*(\d{1,2})\s*[-.]\s*(\d{4}|\d{2})(?![\d\/])/g)],
+    // نفس الفاصل مرتين (\2) — «10.01 - 04.01» ما تنقرأ كـ«10.01-04» = سنة
+    ...[...lat.matchAll(/(?<![\d\/])(\d{1,2})\s*([-.])\s*(\d{1,2})\s*\2\s*(\d{4}|\d{2})(?![\d\/])/g)].map(x=>{ const r=[x[0],x[1],x[3],x[4]]; r.index=x.index; return r; }),
+    // ١٦ نوفمبر ٢٠٢٦ (حفاوة المسافرون): «10.01 - 04.01» = يوم.شهر بدون سنة
+    //   فقط كنطاق «A.B - C.D» (فلا تنقرأ «ميزانية 2.5» كتاريخ)
+    ...[...lat.matchAll(/(?<![\d.\/])(\d{1,2})\.(\d{1,2})\s*(?:[-–—]|الى|إلى|الي|لين|حتى|to)\s*(\d{1,2})\.(\d{1,2})(?![\d.\/])/g)].flatMap(x=>{ const r1=[x[1]+'.'+x[2],x[1],x[2],undefined]; r1.index=x.index; const r2=[x[3]+'.'+x[4],x[3],x[4],undefined]; r2.index=x.index+x[0].length-r2[0].length; return [r1,r2]; }),
     ...[...lat.matchAll(/(?<!\d)(\d{4})\s*[-\/.]\s*(\d{1,2})\s*[-\/.]\s*(\d{1,2})(?!\d)/g)].map(x=>{ const r=[x[0],x[3],x[2],x[1]]; r.index=x.index; return r; })
   ].filter(x=>+x[2]>=1 && +x[2]<=12 && +x[1]>=1 && +x[1]<=31)
    .map(x=>{ if(x[3] && +x[3]<100){ const r=[x[0],x[1],x[2],String(2000 + +x[3])]; r.index=x.index; return r; } return x; })
@@ -5831,7 +5836,7 @@ function waReqParse(body){
   if(rng){ const mo=WA_AR_MONTHS[rng[3]]; from=mk(+rng[1],mo); to=mk(+rng[2],mo); }
   else if(named.length>=2){ from=mk(+named[0][1],WA_AR_MONTHS[named[0][2]]); to=mk(+named[1][1],WA_AR_MONTHS[named[1][2]]); }
   else if(named.length===1){ from=mk(+named[0][1],WA_AR_MONTHS[named[0][2]]); }
-  else if(slash.length>=2){ from=mk(+slash[0][1],+slash[0][2],slash[0][3]?+slash[0][3]:0); to=mk(+slash[1][1],+slash[1][2],slash[1][3]?+slash[1][3]:0); }
+  else if(slash.length>=2){ from=mk(+slash[0][1],+slash[0][2],slash[0][3]?+slash[0][3]:0); to=mk(+slash[1][1],+slash[1][2],slash[1][3]?+slash[1][3]:0); if(to<from){ const t=from; from=to; to=t; } }   // مكتوبة بالعكس (من اليمين لليسار)
   else if(slash.length===1){ from=mk(+slash[0][1],+slash[0][2],slash[0][3]?+slash[0][3]:0); }
   if(from){ const p=n=>String(n).padStart(2,'0'); dateISO=from.getFullYear()+'-'+p(from.getMonth()+1)+'-'+p(from.getDate()); }
   if(from&&to){ days=Math.round((to-from)/86400000)+1; if(days<2) days=null; }   // ١٩←٢٩ = ١٠ ليالي = ١١ يوم (النموذج: الليالي المتوقّعة = الأيام − ١)
@@ -5864,7 +5869,7 @@ function waReqParse(body){
         const mn=preForm?null:seg.match(/^\D{0,12}?(\d+)(?:ليالي|ليال|ليله|ليلة|nights?)/); if(mn){ n=parseInt(mn[1],10); usedPost=true; }
         else if(!preForm && /^\D{0,6}ليلتين/.test(seg)){ n=2; usedPost=true; }
         if(n==null){
-          const mr=seg.match(new RegExp('(\\d{1,2})(?:[-–—]|الي|لين|حتي|to|till|until)(\\d{1,2})'+_MON+'?'));
+          const mr=seg.match(new RegExp('(?<![\\d\\/.])(\\d{1,2})(?:[-–—]|الي|لين|حتي|to|till|until)(\\d{1,2})(?![\\d\\/.])'+_MON+'?'));   // «28/12-05/01» تواريخ كاملة مو مدى أيام
           if(mr){ usedPost=true; const d1=+mr[1], d2=+mr[2]; const mo=mr[3]?WA_AR_MONTHS[Object.keys(WA_AR_MONTHS).find(k=>waReqNorm(k)===mr[3])]:null;
             n = d2>d1 ? d2-d1 : (d2 + (mo ? new Date(2026, mo-1, 0).getDate() : 30) - d1);   // 28-3 = عبور شهر
             if(mo){ const f=mk(d1, d2>d1?mo:(mo===1?12:mo-1)), t=mk(d2,mo); if(t<f) f.setFullYear(f.getFullYear()-1); if(!stayFrom||f<stayFrom) stayFrom=f; if(!stayTo||t>stayTo) stayTo=t; } }
