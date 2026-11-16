@@ -153,7 +153,7 @@ function switchTab(el){ document.querySelectorAll('.tab').forEach(t=>t.classList
 // ---- فورم قابل للطيّ ----
 function formToggle(id){ const f=$(id); if(f)f.classList.toggle('hidden'); }
 
-const FS_VER='v82';
+const FS_VER='v83';
 function render(){
   $('hdr-info').textContent=(DATA.config.company||'Fancy Sense')+' · '+cur()+' · ضريبة '+taxRate()+'% · '+FS_VER;
   renderDash(); renderSales(); renderMachine(); renderExpenses(); renderRewa(); renderMatch(); renderCredit(); renderAjel(); renderXfer(); renderBanks(); renderInv(); renderSettings(); renderReqs();
@@ -335,6 +335,14 @@ function mcRecon(S,M,txns,maxBank,sh){
   txns.forEach(t=>{ if(!(t.amt>0.005))return; const d=t.sale||sh(t.date,-1); if(d<AZ_FROM)return;
     B[d]=(B[d]||0)+t.amt; src[d]='az'; items.push({d,amt:t.amt,date:t.date,ref:t.ref||'',tbl:t.tbl||'',bank:t.bank||'',label:t.label||''}); if(!t.sale)bdate[d]=t.date; else note[d]=note[d]||('قيد العز '+t.ref);
     if(!(S[d]>0.005)) note[d]='إيداع بلا مبيعات باليوم السابق';
+  });
+  // ١٦ نوفمبر (المالكة): البنك ما ينزّل الجمعة/العطل → مكنة الخميس (أو يوم قبل عطلة) تدخل مع إيداع اليوم اللي بعده بمبلغ واحد.
+  //   يوم مبيعات بلا إيداع + أول إيداع خلال ٣ أيام يساوي مجموع مبيعات الأيام كلها (بعد عمولة ≤١٠٪) → يتوزّع الإيداع على الأيام بنسبة مبيعاتها، مو «خسارة».
+  days.forEach(d=>{ if(d<AZ_FROM||B[d]>0.005)return; const G=[d]; let tgt=null;
+    for(let k=1;k<=3;k++){ const x=sh(d,k); if(B[x]>0.005){ tgt=x; break; } if(S[x]>0.005&&!(B[x]>0.005))G.push(x); }
+    if(!tgt)return; const all=G.concat(tgt), tot=all.reduce((a,x)=>a+(S[x]||0),0), dep=B[tgt]; if(!(tot>0.005))return; const r=dep/tot; if(r<0.9||r>1.01)return;
+    if(Math.abs(dep-(S[tgt]||0))<=Math.abs(dep-tot)) return;   // الإيداع يطابق يومه لحاله أكثر → لا دمج
+    all.forEach(x=>{ B[x]=(S[x]||0)*r; src[x]='az'; bdate[x]=bdate[tgt]||sh(tgt,1); note[x]='دخل مع إيداع '+tgt.slice(8,10)+'/'+tgt.slice(5,7)+' (مجموع '+all.length+' أيام: '+(Math.round(dep*1000)/1000)+')'; });
   });
   const status={}; Object.keys({...S,...B}).forEach(d=>{ if(!(S[d]>0.005)){status[d]='ok';return;} status[d]=(B[d]>0.005)?'ok':(sh(d,1)>maxBank?'pending':'lost'); });
   return {B,src,note,status,bdate,items};
