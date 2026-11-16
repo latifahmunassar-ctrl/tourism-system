@@ -104,6 +104,13 @@ Deno.serve(async (req: Request) => {
       }
       rewaXfer = Object.values(agg).map((o: any) => ({ ...o, a: Math.round(o.a * 1000) / 1000 }));
     } catch (_) {}
+    // 📒 LooKA: تحصيلات الآجل (sale.collections) — كل تحصيل بتاريخه وفاتورته وطريقة الدفع
+    let lookaColl: any[] = [];
+    try {
+      const MN: Record<string, string> = { '2cgga948sslm': 'مكنة', 'azaznltksslm': 'نقدي', 'vma045qzsslm': 'تحويل', '7wi1bqmvsslm': 'تحويل' };
+      const { data: cd } = await supabase.from('fs_app_docs').select('id,deleted,data->no,data->collections,data->customerName').eq('coll', 'sales').like('data->>collections', '%amount%').limit(3000);
+      for (const r of (cd || []) as any[]) { if (r.deleted) continue; for (const c of (Array.isArray(r.collections) ? r.collections : [])) { const t = Date.parse(String(c && c.date || '')); const a = Number(c && c.amount) || 0; if (isNaN(t) || !a) continue; lookaColl.push({ d: new Date(t + 4 * 3600e3).toISOString().slice(0, 10), a: Math.round(a * 1000) / 1000, inv: String(r.no || r.id), m: MN[String(c.methodId)] || String(c.methodId || ''), cust: String(r.customerName || '') }); } }
+    } catch (_) {}
     // 🟣 LooKA يومي لكل فرع: مكنة (Credit Card) · نقدي (Cash) · تحويل — لتبويبات المكنة والصندوق
     let lookaDaily: any[] = [];
     try {
@@ -127,7 +134,7 @@ Deno.serve(async (req: Request) => {
     // 🔔 طلبات التعديل/الحذف — تظهر للمالكة فقط
     let fsRequests: any[] = [];
     if (isOwner) { try { const { data: rq } = await supabase.from('fs_change_requests').select('*').order('created_at', { ascending: false }).limit(200); fsRequests = rq || []; } catch (_) {} }
-    return J({ me: { owner: isOwner, name: staffName, can_edit: isOwner || canEdit(staffName) }, fs_requests: fsRequests, rewa_xfer: rewaXfer, looka_daily: lookaDaily, acc_fancy_btx: accFancyBtx, config: cfg, lists: lists.data || [], daily_sales: daily_sales.data || [], rewa_recon: rewa_recon.data || [],
+    return J({ me: { owner: isOwner, name: staffName, can_edit: isOwner || canEdit(staffName) }, fs_requests: fsRequests, rewa_xfer: rewaXfer, looka_daily: lookaDaily, looka_coll: lookaColl, acc_fancy_btx: accFancyBtx, config: cfg, lists: lists.data || [], daily_sales: daily_sales.data || [], rewa_recon: rewa_recon.data || [],
       credit_customers: credit_customers.data || [], credit_txn: credit_txn.data || [], bank_txn: bank_txn.data || [],
       atm_deposit: atm_deposit.data || [], inventory_short: inventory_short.data || [], expenses: expenses.data || [], machine_deposit: machine_deposit.data || [], acc_fancy: accFancy });
   }
