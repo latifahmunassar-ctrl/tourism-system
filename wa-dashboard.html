@@ -4395,7 +4395,17 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
             const _ra = String(b.return_airport || "");
             const _isJed = (x) => /jed|جد/i.test(x), _isMed = (x) => /med|mad|مدين/i.test(x);
             const _hit = _ra ? opts.find(o => { const [a, d] = String(o.value).split("|"); return _isJed(a) && (_ra === "madinah" ? _isMed(d) : _isJed(d)); }) : null;
+            // ✈️ ١٦ نوفمبر ٢٠٢٦ (المالكة): العميل طلب «اسطنبول فقط» والمطار ما انختار → من التوزيع المؤكَّد:
+            //    القدوم = مطار أول مدينة، والمغادرة = مطار آخر مدينة (مدينة وحدة = نفس المطار ذهاب وعودة).
+            const _nC = (x) => String(x || "").replace(/[إأآ]/g, "ا").replace(/ة/g, "ه").replace(/\s+/g, "").toLowerCase();
+            let _cnHit = null;
+            if (!_hit && Array.isArray(bfChosenCN) && bfChosenCN.length) {
+              const _f = _nC(bfChosenCN[0].city), _l = _nC(bfChosenCN[bfChosenCN.length - 1].city);
+              const _m = (apt, c) => { const x = _nC(bfAirAr(apt)), y = _nC(apt); return !!c && (x === c || c.includes(x) || x.includes(c) || y === c); };
+              _cnHit = opts.find(o => { const [a, d] = String(o.value).split("|"); return _m(a, _f) && _m(d, _l); }) || null;
+            }
             if (_hit) aSel.value = _hit.value;
+            else if (_cnHit) aSel.value = _cnHit.value;
             else if (opts.length === 1) aSel.value = opts[0].value;
           }
           if (typeof bfRenderSugs === "function") bfRenderSugs();
@@ -4591,7 +4601,10 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         <div class="bfx-nights"><button type="button">−</button><input class="bfx-n" type="number" min="1" max="30" value="${nights}"><button type="button">+</button></div>
         <button type="button" class="bfx-delc">×</button>`;
       $("bf-cityRows").appendChild(div);
-      if (city){ const sel = div.querySelector(".bfx-city"); sel.value = city; }
+      // «إسطنبول» (بهمزة من كلام طلال) = «اسطنبول» في القائمة — نطابق بلا همزات/تاء مربوطة
+      if (city){ const sel = div.querySelector(".bfx-city"); sel.value = city;
+        if (!sel.value) { const _n = (x) => String(x || "").replace(/[إأآ]/g, "ا").replace(/ة/g, "ه").replace(/\s+/g, "");
+          const o = [...sel.options].find(o => o.value && _n(o.value) === _n(city)); if (o) sel.value = o.value; } }
       const inp = div.querySelector(".bfx-n");
       const btns = div.querySelectorAll(".bfx-nights button");
       btns[0].onclick = () => { inp.value = Math.max(1,(+inp.value||0)-1); bfSum(); };
