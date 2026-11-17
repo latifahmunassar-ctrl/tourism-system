@@ -460,7 +460,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794917927';
+const BUILD='1794933820';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -1087,7 +1087,7 @@ function allTx(){
 
 /* ===================== products ===================== */
 const PT_L={simple:'منتج من نوع واحد',variant:'منتج متعدد الأنواع',composite:'منتج مجمع'};
-const PS={q:'',loc:'',sort:'new',page:1,size:25,f:{cat:'',brand:'',supplier:'',ptype:'',stock:''},sel:new Set()};
+const PS={q:'',act:'',loc:'',sort:'new',page:1,size:25,f:{cat:'',brand:'',supplier:'',ptype:'',stock:''},sel:new Set()};
 const pcat=id=>byId(S.pcats,id)?.name||'';
 const brandN=id=>byId(S.brands,id)?.name||'';
 const supN=id=>byId(S.suppliers,id)?.name||'';
@@ -1116,6 +1116,7 @@ const PCOLS=[
 function pfiltered(){
   const q=PS.q.trim().toLowerCase(),f=PS.f;
   return S.products.filter(p=>{
+    if(PS.act==='on'&&p.inactive)return false;if(PS.act==='off'&&!p.inactive)return false;
     if(f.cat&&p.catId!==f.cat)return false;if(f.brand&&p.brandId!==f.brand)return false;if(f.supplier&&p.supplierId!==f.supplier)return false;if(f.ptype&&p.type!==f.ptype)return false;
     if(f.stock){const v=qtyOf(p,PS.loc);if(f.stock==='in'&&!(v>0))return false;if(f.stock==='out'&&v!==0)return false;if(f.stock==='neg'&&!(v<0))return false;if(f.stock==='low'&&!(p.minQty!==''&&p.minQty!=null&&v<=+p.minQty))return false}
     if(q&&!(`${p.name} ${p.baseName||''} ${p.sku} ${p.barcode} ${pcat(p.catId)} ${brandN(p.brandId)}`.toLowerCase().includes(q)))return false;
@@ -1139,6 +1140,7 @@ function viewProducts(){
     <div style="display:flex;gap:8px;flex-wrap:wrap;flex:1">
       <div class="search" style="width:340px"><input id="pq" placeholder="البحث بواسطة رقم أو اسم المنتج" value="${esc(PS.q)}"></div><button class="btn pri" style="height:40px" onclick="camPick(0)">📷 صوّري منتج</button>
       <select class="in" style="width:220px;height:40px" onchange="PS.loc=this.value;PS.page=1;viewProducts()"><option value="">كل المواقع</option>${S.branches.map(b=>`<option value="${b.id}" ${PS.loc===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select>
+      <select class="in" style="width:170px;height:40px" onchange="PS.act=this.value;PS.page=1;viewProducts()"><option value="">كل المنتجات</option><option value="on" ${PS.act==='on'?'selected':''}>النشطة فقط</option><option value="off" ${PS.act==='off'?'selected':''}>غير النشطة (${S.products.filter(p=>p.inactive).length})</option></select>
       ${af.length?`<button class="btn soft" onclick="PS.f={cat:'',brand:'',supplier:'',ptype:'',stock:''};viewProducts()">مسح</button>`:''}
       <button class="btn ${af.length?'soft':'out'}" onclick="openPFilters()">⚲ تصفية ${af.length?`<span class="badge-n">${af.length}</span>`:''}</button>
     </div>
@@ -1155,7 +1157,7 @@ function viewProducts(){
   <div class="kpis" style="margin-top:0"><div class="kpi"><small>عدد المنتجات</small><div>${list.length.toLocaleString('en')}</div></div><div class="kpi"><small>إجمالي الكمية</small><div>${fmtQ(tq)}</div></div><div class="kpi"><small>${can('view-product-cost')?'قيمة المخزون (بالتكلفة · بالتجزئة)':'قيمة المخزون (بالتجزئة)'}</small><div style="font-size:18px">${can('view-product-cost')?fmt(tc)+' · ':''}${fmt(tr)}</div></div><div class="kpi"><small>نافد · سالب</small><div><span style="color:var(--warn)">${out}</span> · <span style="color:var(--bad)">${neg}</span></div></div></div>
   ${PS.sel.size?`<div class="bulkbar">تم تحديد ${PS.sel.size} منتج <button class="btn sm" onclick="printBarcodes([...PS.sel])">▥ طباعة الباركود</button><button class="btn sm danger" onclick="bulkDelP()">🗑 حذف</button><button class="btn sm" onclick="PS.sel.clear();viewProducts()">إلغاء التحديد</button></div>`:''}
   <div class="card">${list.length?`<div class="tbl-wrap"><table><thead><tr><th class="ck"><input type="checkbox" ${allSel?'checked':''} onchange="pSelPage(this.checked)"></th><th>اسم المنتج</th>${cols.map(c=>`<th>${c[1]}</th>`).join('')}<th></th></tr></thead>
-   <tbody>${rows.map(p=>`<tr><td class="ck"><input type="checkbox" ${PS.sel.has(p.id)?'checked':''} onchange="pSel('${p.id}',this.checked)"></td><td><div class="pname">${thumb(p)}<a href="#/pedit/${p.id}">${esc(p.name)}</a></div></td>${cols.map(c=>`<td class="${c[4]||''}">${c[2](p)}</td>`).join('')}
+   <tbody>${rows.map(p=>`<tr><td class="ck"><input type="checkbox" ${PS.sel.has(p.id)?'checked':''} onchange="pSel('${p.id}',this.checked)"></td><td><div class="pname" ${p.inactive?'style="opacity:.55"':''}>${thumb(p)}<a href="#/pedit/${p.id}">${esc(p.name)}</a>${p.inactive?' <span class="pill p-gray">غير نشط</span>':''}</div></td>${cols.map(c=>`<td class="${c[4]||''}">${c[2](p)}</td>`).join('')}
    <td class="act" style="width:110px"><button class="ib" title="عرض" onclick="location.hash='#/pview/${p.id}'">👁</button><button class="ib" title="تعديل" onclick="location.hash='#/pedit/${p.id}'">✏️</button><button class="ib" onclick="pRowMenu(event,'${p.id}')">⋯</button></td></tr>`).join('')}</tbody></table></div>
    <div class="foot"><div>عدد النتائج <select class="in" style="height:32px;width:70px;display:inline-block;padding:0 6px" onchange="PS.size=+this.value;PS.page=1;viewProducts()">${[10,25,50,100].map(n=>`<option ${n===PS.size?'selected':''}>${n}</option>`).join('')}</select> &nbsp; عرض ${(PS.page-1)*PS.size+1} - ${Math.min(PS.page*PS.size,list.length)} من ${list.length}</div><div class="pager">${ppager(pages)}</div></div>`
    :`<div class="empty"><div class="ico">📦</div><h3>${S.products.length?'لا توجد نتائج مطابقة':'لا توجد منتجات بعد'}</h3><p>${S.products.length?'جرّب تغيير البحث أو التصفية.':'أضف منتجاً أو استورد منتجاتك من رواء.'}</p>${S.products.length?'':'<a class="btn pri" href="#/pnew">＋ منتج جديد</a> <button class="btn" onclick="importRewaaFile()">📥 استيراد من رواء</button>'}</div>`}</div>`;
@@ -1166,7 +1168,9 @@ function ppager(pages){const p=PS.page,b=(n,l,dis)=>`<button ${dis?'disabled':''
   set.forEach(n=>{if(n-last>1)h+='<button disabled>…</button>';h+=b(n);last=n});return h+b(Math.min(pages,p+1),'›',p===pages)+b(pages,'»',p===pages)}
 function pSel(id,on){on?PS.sel.add(id):PS.sel.delete(id);viewProducts()}
 function pSelPage(on){const list=pfiltered().sort(PSORT[PS.sort][1]).slice((PS.page-1)*PS.size,PS.page*PS.size);list.forEach(p=>on?PS.sel.add(p.id):PS.sel.delete(p.id));viewProducts()}
-function pRowMenu(ev,id){openMenu(ev,[['👁 عرض',`location.hash='#/pview/${id}'`],['✏️ تعديل',`location.hash='#/pedit/${id}'`],['⧉ نسخ المنتج',`dupProduct('${id}')`],['⚖ تسوية المخزون',`adjustDlg('${id}')`],['▥ طباعة الباركود',`printBarcodes(['${id}'])`],['🗑 حذف',`delProduct('${id}')`,1]])}
+function pRowMenu(ev,id){openMenu(ev,[['👁 عرض',`location.hash='#/pview/${id}'`],['✏️ تعديل',`location.hash='#/pedit/${id}'`],['⧉ نسخ المنتج',`dupProduct('${id}')`],['⚖ تسوية المخزون',`adjustDlg('${id}')`],['▥ طباعة الباركود',`printBarcodes(['${id}'])`],byId(S.products,id)?.inactive?['✅ إعادة التنشيط',`pSetActive('${id}',true)`]:['⛔ إلغاء التنشيط',`pSetActive('${id}',false)`],['🗑 حذف',`delProduct('${id}')`,1]])}
+function pSetActive(id,on){const p=byId(S.products,id);if(!p)return;const go=()=>{if(on){delete p.inactive;delete p.inactiveAt;delete p.inactiveBy}else{p.inactive=true;p.inactiveAt=new Date().toISOString();p.inactiveBy=ME}save();toast(on?'تم تنشيط المنتج — يقدرون يبيعونه الحين':'تم إلغاء تنشيط المنتج — ما يقدرون يبيعونه، وفواتيره القديمة باقية');route(true)};
+  if(on)go();else confirmDlg(`إلغاء تنشيط «${p.name}»؟`,'المنتج ما راح ينحذف، وفواتيره القديمة والتقارير تبقى مثل ما هي. بس ما راح يطلع في نقطة البيع ولا يقدرون يبيعونه، لين ترجعين تنشطينه.',go)}
 function delProduct(id){const p=byId(S.products,id);confirmDlg(`حذف «${p.name}»؟`,'سيتم حذف المنتج نهائياً.',()=>{S.products=S.products.filter(x=>x.id!==id);PS.sel.delete(id);save();toast('تم الحذف');if(location.hash.startsWith('#/pview'))location.hash='#/products';else viewProducts()})}
 function bulkDelP(){const n=PS.sel.size;confirmDlg(`حذف ${n} منتج؟`,'سيتم حذف المنتجات المحددة نهائياً.',()=>{S.products=S.products.filter(x=>!PS.sel.has(x.id));PS.sel.clear();save();toast(`تم حذف ${n} منتج`);viewProducts()})}
 function genSku(){let s;do{s=String(Math.floor(1e11+Math.random()*9e11))}while(S.products.some(p=>p.sku===s));return s}
@@ -1325,10 +1329,10 @@ function viewProduct(id){
   setTitle(p.name);
   const comps=(p.components||[]).map(c=>({...c,x:byId(S.products,c.productId)}));
   $('#view').innerHTML=`<div style="max-width:1000px;margin:0 auto">
-  <div class="bar no-print"><a href="#/products" class="btn">→ المنتجات</a><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn soft" onclick="adjustDlg('${p.id}')">⚖ تسوية المخزون</button><button class="btn" onclick="trByProduct('${p.id}')">🚚 سجل التحويلات (${S.transfers.filter(t=>(t.items||[]).some(i=>i.productId===p.id)).length})</button><button class="btn" onclick="printBarcodes(['${p.id}'])">▥ طباعة الباركود</button><a class="btn" href="#/pedit/${p.id}">✏️ تعديل</a><button class="btn" onclick="dupProduct('${p.id}')">⧉ نسخ</button><button class="btn danger" onclick="delProduct('${p.id}')">🗑 حذف</button></div></div>
+  <div class="bar no-print"><a href="#/products" class="btn">→ المنتجات</a><div style="display:flex;gap:8px;flex-wrap:wrap">${p.inactive?`<button class="btn pri" onclick="pSetActive('${p.id}',true)">✅ إعادة التنشيط</button>`:`<button class="btn" onclick="pSetActive('${p.id}',false)">⛔ إلغاء التنشيط</button>`}<button class="btn soft" onclick="adjustDlg('${p.id}')">⚖ تسوية المخزون</button><button class="btn" onclick="trByProduct('${p.id}')">🚚 سجل التحويلات (${S.transfers.filter(t=>(t.items||[]).some(i=>i.productId===p.id)).length})</button><button class="btn" onclick="printBarcodes(['${p.id}'])">▥ طباعة الباركود</button><a class="btn" href="#/pedit/${p.id}">✏️ تعديل</a><button class="btn" onclick="dupProduct('${p.id}')">⧉ نسخ</button><button class="btn danger" onclick="delProduct('${p.id}')">🗑 حذف</button></div></div>
   <div class="fcard"><div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">
    ${p.images?.length?`<img src="${p.images[0]}" style="width:140px;height:140px;object-fit:cover;border-radius:10px;border:1px solid var(--bd)">`:'<span class="thumb" style="width:140px;height:140px;font-size:44px">🖼</span>'}
-   <div style="flex:1;min-width:240px"><h2 style="margin:0 0 6px">${esc(p.name)}</h2><span class="pill p-pri">${PT_L[p.type]}</span> ${p.sellable?'<span class="pill p-ok">قابل للبيع</span>':'<span class="pill p-gray">غير قابل للبيع</span>'} ${p.purchasable?'<span class="pill p-ok">قابل للشراء</span>':''}
+   <div style="flex:1;min-width:240px"><h2 style="margin:0 0 6px">${esc(p.name)}</h2>${p.inactive?`<div class="card" style="padding:8px 12px;margin:0 0 8px;border-color:var(--bad);color:var(--bad)">⛔ المنتج غير نشط — ما يقدرون يبيعونه${p.inactiveBy?' · أوقفته '+esc(p.inactiveBy):''}${p.inactiveAt?' · '+dmy(p.inactiveAt.slice(0,10)):''}</div>`:''}<span class="pill p-pri">${PT_L[p.type]}</span> ${p.sellable?'<span class="pill p-ok">قابل للبيع</span>':'<span class="pill p-gray">غير قابل للبيع</span>'} ${p.purchasable?'<span class="pill p-ok">قابل للشراء</span>':''}
     <div class="vgrid" style="margin-top:16px">
      <div><small>الرمز التعريفي</small><div>${esc(p.sku)}</div></div><div><small>الباركود</small><div>${esc(p.barcode||'—')}</div></div><div><small>المنتج الأساسي</small><div>${esc(p.baseName||p.name)}</div></div>
      <div><small>فئة</small><div>${esc(pcat(p.catId)||'—')}</div></div><div><small>العلامة التجارية</small><div>${esc(brandN(p.brandId)||'—')}</div></div><div><small>المورد</small><div>${esc(supN(p.supplierId)||'—')}</div></div>
@@ -1614,7 +1618,7 @@ function posTab(r){
   document.querySelectorAll('[data-pm]').forEach(b=>{b.classList.toggle('on',b.dataset.pm===CART.priceMode);b.onclick=()=>{CART.priceMode=b.dataset.pm;CART.lines.forEach(l=>{if(!l.priceEdited)l.price=lp(byId(S.products,l.pid),CART.branchId,CART.priceMode)});saveCart();posTab(r)}});
   const q=$('#posq'),dd=$('#sdrop');q.focus();
   const show=()=>{const v=q.value.trim().toLowerCase();if(!v){dd.style.display='none';return}
-    const list=S.products.filter(p=>p.sellable!==false&&`${p.name} ${p.sku} ${p.barcode}`.toLowerCase().includes(v)).slice(0,30);
+    const list=S.products.filter(p=>p.sellable!==false&&!p.inactive&&!p.deleted&&`${p.name} ${p.sku} ${p.barcode}`.toLowerCase().includes(v)).slice(0,30);
     dd.innerHTML=list.map(p=>`<div class="sitem" data-p="${p.id}">${p.images?.[0]?`<img src="${p.images[0]}" alt="">`:'<span class="noimg">🖼</span>'}<div class="sn"><b>${esc(p.name)}</b><small>${esc(p.sku)}</small></div><span class="sp">${fmt(lp(p,CART.branchId,CART.priceMode))} ${esc(S.settings.currency)}</span><button class="lnk" data-d="${p.id}">عرض التفاصيل ‹</button></div>`).join('')||'<div class="sub" style="padding:14px">لا توجد نتائج</div>';
     dd.style.display='block'};
   q.oninput=()=>{clearTimeout(q.t);q.t=setTimeout(show,120)};
@@ -1631,7 +1635,7 @@ function prodInfoDlg(pid){const p=byId(S.products,pid);
   o.querySelector('[data-x]').onclick=()=>o.remove();o.querySelector('[data-a]').onclick=()=>{addToCart(pid);o.remove()};o.querySelector('[data-e]').onclick=()=>{o.remove();leavePOS();location.hash='#/pedit/'+pid};
 }
 function stockOK(p,q){if(SSET().sales.negQty||p.type==='service')return true;const av=+(p.locs?.[CART.branchId]?.qty)||0;if(q>av){toast(`الكمية المتوفرة من «${p.name}» ${fmtQ(av)} فقط`);return false}return true}
-function addToCart(pid){const p=byId(S.products,pid);if(!p)return;const l=CART.lines.find(x=>x.pid===pid);if(!stockOK(p,(l?.qty||0)+1))return;if(l)l.qty++;else CART.lines.unshift({pid,qty:1,price:lp(p,CART.branchId,CART.priceMode),discPct:0});saveCart();renderCart()}
+function addToCart(pid){const p=byId(S.products,pid);if(!p)return;if(p.inactive){toast('⛔ هذا المنتج غير نشط — ما ينفع يتباع');return}const l=CART.lines.find(x=>x.pid===pid);if(!stockOK(p,(l?.qty||0)+1))return;if(l)l.qty++;else CART.lines.unshift({pid,qty:1,price:lp(p,CART.branchId,CART.priceMode),discPct:0});saveCart();renderCart()}
 function renderCart(){
   const c=calcCart(CART),r=byId(S.registers,CART.registerId),cust=byId(S.customers,CART.customerId);
   const tb=$('#carttbl');if(!tb)return;
@@ -3269,7 +3273,7 @@ function suiDlg(id){const s=SSET();const u=id?structuredClone(s.saleUIs.find(x=>
   o.querySelector('[data-ok]').onclick=()=>{u.name=o.querySelector('#sun').value.trim();if(!u.name){toast('اكتب اسم الواجهة');return}u.registers=[...o.querySelectorAll('.mchip input:checked')].map(x=>x.value);
     const i=s.saleUIs.findIndex(x=>x.id===u.id);if(i>=0)s.saleUIs[i]=u;else s.saleUIs.push(u);save();o.remove();viewSaleSettings('ui')}}
 function suiDel(id){confirmDlg('حذف واجهة البيع؟','',()=>{const s=SSET();s.saleUIs=s.saleUIs.filter(x=>x.id!==id);save();viewSaleSettings('ui')})}
-function posTiles(r){const u=SSET().saleUIs.find(x=>(x.registers||[]).includes(r.id));if(!u)return'';const ps=u.products.map(id=>byId(S.products,id)).filter(Boolean);if(!ps.length)return'';
+function posTiles(r){const u=SSET().saleUIs.find(x=>(x.registers||[]).includes(r.id));if(!u)return'';const ps=u.products.map(id=>byId(S.products,id)).filter(p=>p&&!p.inactive);if(!ps.length)return'';
   return`<div class="ptiles">${ps.map(p=>`<button onclick="addToCart('${p.id}')">${p.images?.[0]?`<img src="${p.images[0]}" alt="">`:'<span>🖼</span>'}<b>${esc(p.name)}</b><small>${fmt(lp(p,CART.branchId,CART.priceMode))}</small></button>`).join('')}</div>`}
 
 /* ---------- e-store orders (طلبات المتجر الإلكتروني) ---------- */
@@ -3720,7 +3724,7 @@ const camN=s=>String(s||'').toLowerCase().replace(/[أإآ]/g,'ا').replace(/ة/
 const CAM_T={ring:['ring','rings','خاتم'],bracelet:['bracelet','breclate','braclet','bangle','اسواره'],necklace:['necklace','neckles','قلاده','سلسله'],earrings:['earrings','earings','erring','earring','حلق'],set:['set','طقم'],watch:['watch','rolex','ساعه'],lenses:['lenses','lens','عدسات'],box:['box','بوكس'],perfume:['perfume','عطر','بخور']};
 const CAM_C={gold:['gold','golden','ذهبي'],silver:['silver','فضي'],'rose gold':['rose'],'multi color':['multi','color','colors'],black:['black'],white:['white'],brown:['brown'],green:['green'],red:['red'],blue:['blue'],pink:['pink']};
 function camVocab(){const w={};S.products.forEach(p=>camN(p.name).split(' ').forEach(x=>{if(x.length>1&&!/^\d+$/.test(x))w[x]=(w[x]||0)+1}));return Object.entries(w).sort((a,b)=>b[1]-a[1]).slice(0,220).map(x=>x[0]).join(', ')}
-function camCands(info,max=120){const P=S.products.filter(p=>!p.deleted&&p.images?.[0]);const tw=[...new Set([info.type,...(info.types||[])])].flatMap(t=>CAM_T[t]||[]),cw=CAM_C[String(info.color||'').toLowerCase()]||[];const brand=camN(info.brand_style);
+function camCands(info,max=120){const P=S.products.filter(p=>!p.deleted&&!p.inactive&&p.images?.[0]);const tw=[...new Set([info.type,...(info.types||[])])].flatMap(t=>CAM_T[t]||[]),cw=CAM_C[String(info.color||'').toLowerCase()]||[];const brand=camN(info.brand_style);
   const bc=String(info.barcode||'').replace(/\D/g,'');const txt=new Set();(info.texts||[]).forEach(t=>camN(t).split(' ').forEach(w=>{if(w.length>=3)txt.add(w)}));
   const has=(pn,arr)=>arr.some(w=>pn.split(' ').includes(w));const anyType=P.some(p=>has(camN(p.name),tw));
   const it=new Set([info.type,...(info.types||[])].filter(Boolean)),ic=String(info.color||'').toLowerCase();const STOP=new Set(['with','and','the','matching','design','style','motif','small','large','gold','silver','tone','set']);const dw=new Set(camN(info.desc).split(' ').filter(w=>w.length>=4&&!STOP.has(w)));
