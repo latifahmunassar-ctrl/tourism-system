@@ -5642,15 +5642,17 @@ async function withdrawPending(id){
 function renderBankCashPending(){
   const box=$('bc-pending'); if(!box)return;
   const me=(CURRENT_USER&&CURRENT_USER.staff_name)||'';
-  const mine=((DATA&&DATA.pendingMovements)||[]).filter(m=>m.kind==='cash'&&m.scope==='banks_cash'&&m.status==='pending'&&(!me||String((m.payload||{}).by||'')===me)).sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
+  // ١٧ نوفمبر (المالكة): القيود التلقائية (تقرير POS / واتساب) تظهر للمحاسب كمعلّقة بانتظار موافقة المالكة — عرض فقط
+  const _isAuto=m=>/^(تلقائي|واتساب)/.test(String((m.payload||{}).by||''));
+  const mine=((DATA&&DATA.pendingMovements)||[]).filter(m=>m.kind==='cash'&&m.scope==='banks_cash'&&m.status==='pending'&&(!me||String((m.payload||{}).by||'')===me||_isAuto(m))).sort((a,b)=>String(b.created_at||b.id).localeCompare(String(a.created_at||a.id)));
   if(!mine.length){ box.innerHTML=''; return; }
   window._bcPend=mine;
-  box.innerHTML='<div class="panel" style="border:1px solid #d98a00;background:rgba(217,138,0,.07);margin:12px 0"><h3 style="color:#b8860b;margin-top:0">🕒 عملياتي المعلّقة ('+mine.length+') — بانتظار موافقة المالكة</h3>'+
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">هذه الحركات أرسلتِها ولم تُعتمد بعد — يمكنك <b>تعديلها</b> أو <b>سحبها</b> قبل الاعتماد. تختفي تلقائيّاً فور موافقة المالكة.</div>'+
+  box.innerHTML='<div class="panel" style="border:1px solid #d98a00;background:rgba(217,138,0,.07);margin:12px 0"><h3 style="color:#b8860b;margin-top:0">🕒 العمليات المعلّقة ('+mine.length+') — بانتظار موافقة المالكة</h3>'+
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">حركاتك اللي أرسلتِها (تقدرين <b>تعديلها</b> أو <b>سحبها</b>) + القيود <b>التلقائية 🤖</b> (تقرير POS / واتساب) — كلها تنتظر موافقة المالكة وتختفي تلقائيّاً فور الاعتماد.</div>'+
     '<div class="tbl-wrap"><table style="font-size:12px;white-space:nowrap"><thead><tr><th>التاريخ</th><th>البنك</th><th>داخل (+)</th><th>خارج (−)</th><th>العملة</th><th>المرجع</th><th>الوصف</th><th>إجراء</th></tr></thead><tbody>'+
     mine.map((m,i)=>{ const c=m.payload||{}; const inV=Number(c.in_raw||0),outV=Number(c.out_raw||0);
       return '<tr><td>'+esc(String(c.tx_date||'').slice(0,10)||'—')+'</td><td><b>'+esc(c.bank_name||'')+'</b></td><td class="num" style="color:#0e9d6a">'+(inV>0?fmt(inV):'')+'</td><td class="num neg">'+(outV>0?fmt(outV):'')+'</td><td>'+esc(c.currency||'')+'</td><td>'+esc(c.bank_ref||'—')+'</td><td style="font-size:10px;color:var(--muted);white-space:normal;max-width:220px">'+esc([c.description,c.details,c.more_details,c.note].filter(Boolean).join(' · '))+'</td>'+
-      '<td style="white-space:nowrap"><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="editBankCashPending('+i+')">✏️ تعديل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="withdrawBankCashPending('+m.id+')">🗑️ سحب</button></td></tr>'; }).join('')+
+      (_isAuto(m)?'<td style="white-space:nowrap"><span style="font-size:11px;font-weight:700;color:#b8860b;background:rgba(217,138,0,.12);border-radius:8px;padding:2px 8px">🤖 '+esc(String(c.by||'تلقائي'))+'</span></td></tr>':'<td style="white-space:nowrap"><button class="btn ghost" style="padding:2px 9px;font-size:11px" onclick="editBankCashPending('+i+')">✏️ تعديل</button> <button class="btn ghost" style="padding:2px 9px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="withdrawBankCashPending('+m.id+')">🗑️ سحب</button></td></tr>'); }).join('')+
     '</tbody></table></div></div>';
 }
 // ✏️ تعديل معلّقة: نعبّئ النموذج بقيمها ونسحب الطلب القديم — تعدّلين وتعيدين الإرسال (يُنشئ طلباً جديداً بانتظار الموافقة)
