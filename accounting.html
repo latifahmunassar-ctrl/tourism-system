@@ -8434,11 +8434,28 @@ async function save(){
     { const dueCode = isNew ? ((j.row&&j.row.client_code)||'') : (p.client_code||'').trim(); if(p.due_date && dueCode){ try{ await api({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'set_client_due',payload:{client_code:dueCode,due_date:p.due_date}})}); }catch(e){} } }
     const prevBal=selectedClient?selectedClient.balance:0; const newBal = isNew ? Number((j.row&&j.row.balance)||0) : (svc ? (prevBal+rateV-paid) : (prevBal-paid));
     $('msg').innerHTML='<span style="color:var(--green)">✓ '+(isNew?'عميل جديد':(svc?'خدمة مضافة':'دفعة جديدة'))+' — الكود: <b>'+esc((j.row&&j.row.payment_code)||'')+'</b> · المتبقي الآن: '+fmt(newBal)+'</span>';
+    // ➕ ١٧ نوفمبر (المالكة): بعد حفظ «إضافة خدمة» تطلع شاشة صغيرة بتفاصيل الخدمة لتصويرها أو نسخها
+    if(svc) svcDonePopup({company:p.agent_name||'', client:(selectedClient&&(selectedClient.name||selectedClient.client_name))||p.client_name||'', code:p.client_code||'', cost:(+$('f-cost').value||0), profit:(+$('f-profit').value||0), cur:p.currency||'', costCode:(j.row&&j.row.payment_code)||''});
   }
   setTimeout(()=>{ closeForm(); selectedClient=null; $('client-info').style.display='none';
     ['f-name','f-phone','f-pax','f-agent','f-to','f-ref','f-code','f-duedate','f-paydate'].forEach(i=>{const e=$(i);if(e)e.value='';}); const _fd=$('fld-duedate'); if(_fd)_fd.style.display='none';
     ['f-cost','f-profit','f-paid'].forEach(i=>$(i).value=0); setMode('new'); SAVING=false; $('save-btn').disabled=false; load(); }, 1600);
 }
+// ➕ شاشة تفاصيل الخدمة المضافة (تصوير/نسخ)
+function svcDonePopup(o){
+  let m=document.getElementById('svc-done'); if(m)m.remove(); m=document.createElement('div'); m.id='svc-done';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10050;display:flex;align-items:center;justify-content:center';
+  const row=(k,v,big)=>'<tr><td style="padding:7px 10px;color:#667;font-weight:700;white-space:nowrap;border-bottom:1px solid #eee">'+k+'</td><td style="padding:7px 10px;border-bottom:1px solid #eee;font-weight:800;'+(big?'font-size:20px;color:#0e7a5a;letter-spacing:.5px':'')+'">'+esc(v||'—')+'</td></tr>';
+  const txt='تفاصيل إضافة خدمة\nاسم الشركة: '+(o.company||'—')+'\nاسم العميل: '+(o.client||'—')+'\nكود العميل: '+(o.code||'—')+'\nالتكلفة الجديدة: '+fmt(o.cost)+' '+o.cur+'\nكود التكلفة الجديدة: '+(o.costCode||'—');
+  window._svcDoneTxt=txt;
+  m.innerHTML='<div style="background:#fff;color:#222;border-radius:14px;width:min(420px,94vw);padding:18px 18px 14px;box-shadow:0 10px 40px rgba(0,0,0,.35);direction:rtl">'+
+    '<div style="font-size:17px;font-weight:900;margin-bottom:10px;color:#0e7a5a">✅ تفاصيل إضافة الخدمة</div>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:14px">'+row('اسم الشركة',o.company)+row('اسم العميل',o.client)+row('كود العميل',o.code)+row('التكلفة الجديدة',fmt(o.cost)+' '+o.cur)+row('كود التكلفة الجديدة',o.costCode,true)+'</table>'+
+    '<div style="margin:12px 0 10px;font-size:13px;color:#b8860b;font-weight:700;text-align:center">📸 صوّري الشاشة أو انسخي المعلومات</div>'+
+    '<div style="display:flex;gap:8px;justify-content:center"><button class="btn" onclick="svcDoneCopy(this)">📋 نسخ المعلومات</button><button class="btn ghost" onclick="document.getElementById(\'svc-done\').remove()">إغلاق</button></div></div>';
+  document.body.appendChild(m);
+}
+async function svcDoneCopy(b){ const t=window._svcDoneTxt||''; try{ await navigator.clipboard.writeText(t); b.textContent='✓ تم النسخ'; }catch(_){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy'); b.textContent='✓ تم النسخ';}catch(e){} ta.remove(); } }
 // ---- مدخل البيانات ----
 // قوائم منسدلة يديرها المستخدم: ربط id الحقل ← التصنيف
 const LISTCATS={'e-to':'travel_to','e-from':'country_from','e-bank':'banks','e-cby':'confirmed_by','e-by':'booked_by','e-supplier':'suppliers','e-cur':'currency','e-agent':'agents','e-kind':'kinds','e-bfrom':'hotels_system','e-flightbf':'flight_booked_from','e-cfrom':'charged_from','e-stype':'sales_service_type'};
