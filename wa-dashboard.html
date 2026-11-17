@@ -4505,6 +4505,54 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         ? '<option value="">— اختر مطار القدوم/المغادرة —</option>' + pairs.map(p => `<option value="${p}">${bfPairLabel(p)}</option>`).join("")
         : '<option value="">لا مطارات جاهزة لهذه الوجهة</option>';
     }
+    // 💰 ١٧ نوفمبر ٢٠٢٦ (المالكة): نفس المساعد السياحي — «الأرخص -١ … الأغلى» على كل توزيع بالسعر النهائي
+    //    (فنادق التاريخ + جولات + تنقلات + ربح الأفراد حسب الشريحة/الموسم). المصدر: Tourism-AI rank_suggestions + profit_margins.
+    let bfRankSeq = 0;
+    const bfPM = { dest: "", rows: [] };
+    function bfSeasonMMDD(ddmm){ const m = String(ddmm||"").match(/(\d{1,2})\s*\/\s*(\d{1,2})/); if (!m) return null; const d=+m[1], mo=+m[2]; return (d && mo) ? mo*100+d : null; }
+    function bfSeasonOk(m, md){ if (md==null) return false; const f=bfSeasonMMDD(m.season_from), t=bfSeasonMMDD(m.season_to); if (f==null||t==null) return false; return f<=t ? (md>=f && md<=t) : (md>=f || md<=t); }
+    function bfProfitFor(cost, md){
+      const tiers = bfPM.rows.filter(m => cost >= +m.cost_min && cost <= +m.cost_max);
+      if (!tiers.length) return null;
+      let tier;
+      if (tiers.some(m => m.season_from)) { if (md!=null) tier = tiers.find(m => bfSeasonOk(m, md)); if (!tier) tier = tiers.find(m => !m.season_from); if (!tier) return null; }
+      else tier = tiers[0];
+      return +tier.profit_individual || 0;
+    }
+    async function bfFetchRanking(){
+      const list = $("bf-sug-list"); if (!list) return;
+      const ranks = [...list.querySelectorAll(".bf-rank")]; if (!ranks.length) return;
+      const dest = $("bf-destination") ? $("bf-destination").value : "";
+      const days = +($("bf-days") ? $("bf-days").value : 0) || 0;
+      const date = $("bf-date_from") ? $("bf-date_from").value : "";
+      const pax = +($("bf-pax") ? $("bf-pax").value : 0) || 2;
+      if (!dest || !days) return;
+      if (!date) { ranks.forEach(s => s.innerHTML = `<span style="font-size:11px;color:#b45309;margin-inline-start:6px">⚠️ أدخلي تاريخ السفر لحساب الأرخص</span>`); return; }
+      const seq = ++bfRankSeq;
+      ranks.forEach(s => s.innerHTML = `<span style="font-size:10.5px;color:#8a97a5;margin-inline-start:6px">⏳ أحسب التكلفة…</span>`);
+      const tai = (body) => fetch(BF_TAI, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + BF_TAI_KEY, apikey: BF_TAI_KEY }, body: JSON.stringify(body) }).then(r => r.json());
+      try {
+        if (bfPM.dest !== dest) { try { const pm = await tai({ action: "profit_margins", dest }); bfPM.rows = pm.margins || []; bfPM.dest = dest; } catch (_) { bfPM.rows = []; } }
+        const data = await tai({ action: "rank_suggestions", dest, days, date, pax });
+        if (seq !== bfRankSeq) return;   // تغيّرت المدخلات أثناء الحساب
+        const norm = x => String(x||"").replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/\s+/g, "").trim();
+        const map = {}; (data.suggestions || []).forEach(x => { map[norm(x.distribution)] = x; });
+        const m = String(date).match(/^(\d{4})-(\d{2})-(\d{2})/); const md = m ? (+m[2])*100 + (+m[3]) : null;
+        const cells = [];
+        ranks.forEach(sp => {
+          const info = map[norm(sp.dataset.dist)];
+          if (!info) { sp.innerHTML = ""; return; }
+          const total = Number(info.total), p = bfProfitFor(total, md);
+          cells.push({ sp, total, final: p == null ? total : total + p, hasProfit: p != null });
+        });
+        cells.sort((a, b) => a.total - b.total);
+        const N = cells.length, arNum = n => String(n).replace(/[0-9]/g, d => "٠١٢٣٤٥٦٧٨٩"[+d]);
+        cells.forEach((c, i) => {
+          const label = N <= 1 ? "السعر" : (i === N - 1 ? "الأغلى" : "الأرخص -" + arNum(i + 1));
+          c.sp.innerHTML = `<span style="font-weight:800;font-size:11.5px;color:#15803d;background:#dcfce7;border-radius:7px;padding:2px 8px;margin-inline-start:6px;white-space:nowrap">💰 ${label} · ${Math.round(c.final).toLocaleString()} ريال${c.hasProfit ? "" : ' <span style="font-weight:600;opacity:.8">(تكلفة)</span>'}</span>`;
+        });
+      } catch (_) { if (seq === bfRankSeq) ranks.forEach(s => s.innerHTML = ""); }
+    }
     function bfRenderSugs(){
       const list = $("bf-sug-list"); const hint = $("bf-sug-hint");
       if (!list || !hint) return;
@@ -4535,9 +4583,10 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         : "";
       list.innerHTML = _talalCard + rows.map((s,i)=>`
         <div class="bf-sugcard" data-i="${i}" style="border:1px solid #d7dee6; border-radius:8px; padding:7px 9px; cursor:pointer; background:${s.distribution===bfChosenDist?'#eaf5f1':'#fff'};">
-          <div style="font-size:11px; color:#0b5d4e; font-weight:700;">${s.days} أيام</div>
+          <div style="font-size:11px; color:#0b5d4e; font-weight:700;">${s.days} أيام <span class="bf-rank" data-dist="${String(s.distribution||"").replace(/"/g,"&quot;")}"></span></div>
           <div style="font-size:13px;">${s.distribution||""}</div>
         </div>`).join("");
+      bfFetchRanking();
       [...list.querySelectorAll(".bf-sugcard")].forEach(el => el.onclick = () => {
         list.querySelectorAll(".bf-sugcard").forEach(x => x.style.background = "#fff");
         el.style.background = "#eaf5f1";
@@ -4965,6 +5014,8 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       await bfLoadSugs(v); bfRenderSugs();
     });
     if ($("bf-airport")) $("bf-airport").addEventListener("change", bfRenderSugs);
+    if ($("bf-date_from")) $("bf-date_from").addEventListener("change", bfFetchRanking);
+    if ($("bf-pax")) $("bf-pax").addEventListener("change", bfFetchRanking);
     if ($("bf-days")) $("bf-days").addEventListener("input", () => { bfRenderSugs(); bfExpected(); bfSum(); });
     if ($("bf-save")) $("bf-save").addEventListener("click", saveBrief);
     if ($("bf-transfer")) $("bf-transfer").addEventListener("click", transferBrief);
