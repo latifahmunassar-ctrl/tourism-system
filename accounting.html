@@ -8436,7 +8436,7 @@ async function save(){
     $('msg').innerHTML='<span style="color:var(--green)">✓ '+(isNew?'عميل جديد':(svc?'خدمة مضافة':'دفعة جديدة'))+' — الكود: <b>'+esc((j.row&&j.row.payment_code)||'')+'</b> · المتبقي الآن: '+fmt(newBal)+'</span>';
     // ➕ ١٧ نوفمبر (المالكة): بعد حفظ «إضافة خدمة» تطلع شاشة صغيرة بتفاصيل الخدمة لتصويرها أو نسخها
     if(svc) svcDonePopup({company:p.agent_name||'', client:(selectedClient&&(selectedClient.name||selectedClient.client_name))||p.client_name||'', code:p.client_code||'', cost:(+$('f-cost').value||0), profit:(+$('f-profit').value||0), cur:p.currency||'', costCode:(j.row&&j.row.payment_code)||''});
-    else if(isNew) svcDonePopup({nw:true, company:p.agent_name||'', client:p.client_name||'', code:(j.row&&j.row.client_code)||'', cost:(+$('f-cost').value||0), paid:paid, cur:p.currency||'', costCode:(j.row&&j.row.payment_code)||''});
+    else if(isNew) svcDonePopup({nw:true, company:p.agent_name||'', client:p.client_name||'', code:(j.row&&j.row.client_code)||'', from:p.travel_from||'', to:p.travel_to||'', adate:p.arrival_date||'', pax:p.pax||'', cost:(+$('f-cost').value||0), profit:(+$('f-profit').value||0), paid:paid, cur:p.currency||'', costCode:(j.row&&j.row.payment_code)||''});
     else svcDonePopup({pay:true, company:p.agent_name||(selectedClient&&selectedClient.agent)||'', client:(selectedClient&&selectedClient.name)||p.client_name||'', code:p.client_code||'', cost:paid, cur:p.currency||'', costCode:(j.row&&j.row.payment_code)||'', bal:newBal});
   }
   setTimeout(()=>{ closeForm(); selectedClient=null; $('client-info').style.display='none';
@@ -8448,12 +8448,15 @@ function svcDonePopup(o){
   let m=document.getElementById('svc-done'); if(m)m.remove(); m=document.createElement('div'); m.id='svc-done';
   m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10050;display:flex;align-items:center;justify-content:center';
   const row=(k,v,big)=>'<tr><td style="padding:7px 10px;color:#667;font-weight:700;white-space:nowrap;border-bottom:1px solid #eee">'+k+'</td><td style="padding:7px 10px;border-bottom:1px solid #eee;font-weight:800;'+(big?'font-size:20px;color:#0e7a5a;letter-spacing:.5px':'')+'">'+esc(v||'—')+'</td></tr>';
-  const T=o.pay?{h:'تفاصيل الدفعة',v:'المبلغ المدفوع',c:'كود الدفعة'}:o.nw?{h:'تفاصيل العميل الجديد',v:'التكلفة',c:'كود التكلفة'}:{h:'تفاصيل إضافة الخدمة',v:'التكلفة الجديدة',c:'كود التكلفة الجديدة'};
-  const txt=T.h+'\nاسم الشركة: '+(o.company||'—')+'\nاسم العميل: '+(o.client||'—')+'\nكود العميل: '+(o.code||'—')+'\n'+T.v+': '+fmt(o.cost)+' '+o.cur+'\n'+T.c+': '+(o.costCode||'—')+(o.pay&&o.bal!=null?'\nالمتبقي: '+fmt(o.bal)+' '+o.cur:'')+(o.nw?'\nالمدفوع: '+fmt(o.paid||0)+' '+o.cur:'');
+  const T=o.pay?{h:'تفاصيل الدفعة',v:'المبلغ المدفوع',c:'كود الدفعة'}:o.nw?{h:'تفاصيل العميل الجديد',v:'التكلفة',c:'كود الدفعة'}:{h:'تفاصيل إضافة الخدمة',v:'التكلفة الجديدة',c:'كود التكلفة الجديدة'};
+  // العميل الجديد: شركة · عميل · كود · من · إلى · تاريخ السفر · عدد الأشخاص · التكلفة · الربح · الإجمالي · المدفوع · كود الدفعة
+  const F=o.nw?[['اسم الشركة',o.company],['اسم العميل',o.client],['كود العميل',o.code],['من',o.from],['إلى (الوجهة)',o.to],['تاريخ السفر',o.adate],['عدد الأشخاص',o.pax],['التكلفة',fmt(o.cost)+' '+o.cur],['الربح',fmt(o.profit||0)+' '+o.cur],['المبلغ الإجمالي',fmt((o.cost||0)+(o.profit||0))+' '+o.cur],['المدفوع الآن',fmt(o.paid||0)+' '+o.cur]]
+    :[['اسم الشركة',o.company],['اسم العميل',o.client],['كود العميل',o.code],[T.v,fmt(o.cost)+' '+o.cur]].concat(o.pay&&o.bal!=null?[['المتبقي',fmt(o.bal)+' '+o.cur]]:[]);
+  const txt=T.h+'\n'+F.map(f=>f[0]+': '+(f[1]===''||f[1]==null?'—':f[1])).join('\n')+'\n'+T.c+': '+(o.costCode||'—');
   window._svcDoneTxt=txt;
   m.innerHTML='<div style="background:#fff;color:#222;border-radius:14px;width:min(420px,94vw);padding:18px 18px 14px;box-shadow:0 10px 40px rgba(0,0,0,.35);direction:rtl">'+
     '<div style="font-size:17px;font-weight:900;margin-bottom:10px;color:#0e7a5a">✅ '+T.h+'</div>'+
-    '<table style="width:100%;border-collapse:collapse;font-size:14px">'+row('اسم الشركة',o.company)+row('اسم العميل',o.client)+row('كود العميل',o.code)+row(T.v,fmt(o.cost)+' '+o.cur)+(o.pay&&o.bal!=null?row('المتبقي',fmt(o.bal)+' '+o.cur):'')+(o.nw?row('المدفوع',fmt(o.paid||0)+' '+o.cur):'')+row(T.c,o.costCode,true)+'</table>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:14px">'+F.map(f=>row(f[0],String(f[1]==null?'':f[1]))).join('')+row(T.c,o.costCode,true)+'</table>'+
     '<div style="margin:12px 0 10px;font-size:13px;color:#b8860b;font-weight:700;text-align:center">📸 صوّري الشاشة أو انسخي المعلومات</div>'+
     '<div style="display:flex;gap:8px;justify-content:center"><button class="btn" onclick="svcDoneCopy(this)">📋 نسخ المعلومات</button><button class="btn ghost" onclick="document.getElementById(\'svc-done\').remove()">إغلاق</button></div></div>';
   document.body.appendChild(m);
