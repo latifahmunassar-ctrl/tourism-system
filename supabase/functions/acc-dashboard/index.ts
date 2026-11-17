@@ -595,6 +595,14 @@ Deno.serve(async (req: Request) => {
           if (('out_raw' in ch) || ('currency_rate' in ch)) upd.out_sar = (nout != null && nrate != null) ? nout * nrate : nout;
           const { error: cue } = await supabase.from('acc_banks_cash').update(upd).eq('id', id);
           if (cue) return J({ error: cue.message }, 400); result = { cash_edited: id };
+        } else if (mv.kind === 'sp_edit') {
+          // ✏️ ١٧ نوفمبر (المالكة): تعديل دفعة مورّد محفوظة (المبلغ/المصدر/الوصف) + حذف حركتها البنكية لو كانت تسوية بلا حركة نقدية فعلية
+          const sid = pl.sp_id; const su = pl.sp_upd || {}; if (!sid || !Object.keys(su).length) return J({ error: 'طلب تعديل دفعة غير صالح' }, 400);
+          const { error: se1 } = await supabase.from('acc_supplier_payments').update(su).eq('id', sid);
+          if (se1) return J({ error: se1.message }, 400);
+          if (pl.btx_id && pl.btx_delete) { const { error: be1 } = await supabase.from('acc_bank_txn').delete().eq('id', pl.btx_id); if (be1) return J({ error: be1.message }, 400); }
+          else if (pl.btx_id && pl.btx_upd) { const { error: be2 } = await supabase.from('acc_bank_txn').update(pl.btx_upd).eq('id', pl.btx_id); if (be2) return J({ error: be2.message }, 400); }
+          result = { sp_edited: sid, btx: pl.btx_id || null, btx_deleted: !!pl.btx_delete };
         } else if (mv.kind === 'claim_adjust') {
           // 🧾 اعتماد تغيير مطالبة/مستحق على العميل — بلا أثر جانبي؛ الحركة المعتمدة نفسها هي المرجع في قسم المستحقات
           result = { claim_adjust: pl.client_code || null, new_amount: pl.new_amount ?? null, old_amount: pl.old_amount ?? null };
