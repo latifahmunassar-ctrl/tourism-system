@@ -460,7 +460,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794933820';
+const BUILD='1794933964';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -1209,7 +1209,7 @@ function viewPForm(id){
   P._id=id||null;P._err={};P._open=new Set([S.branches[0]?.id]);P._copy={};
   setTitle(p?'تحرير المنتج':'منتج جديد');renderPForm();
 }
-const COPYF=[['buy','آخر سعر شراء'],['qty','الكمية'],['retail','سعر التجزئة'],['tax','نوع الضريبة'],['wholesale','سعر الجملة']];
+const COPYF=[['buy','آخر سعر شراء'],['retail','سعر التجزئة'],['tax','نوع الضريبة'],['wholesale','سعر الجملة']];
 function renderPForm(){
   const e=P,er=P._err,edit=!!P._id;
   const tsel=sel=>S.taxes.map(t=>`<option value="${t.id}" ${t.id===sel?'selected':''}>${esc(t.name)}</option>`).join('');
@@ -1259,7 +1259,7 @@ function renderPForm(){
    <p class="hint" style="margin:-8px 0 14px">ⓘ ستتلقى تنبيهاً يُفيد بأن مخزون هذا الصنف منخفض عندما تصل الكمية في أي موقع إلى الحد الأدنى.</p>
    ${ck('track','تتبّع كميّات هذا المنتج','قم بتعطيل هذا الخيار إن كنت لا ترغب في تتبّع كميات هذا المنتج.')}
    ${ck('weighted','منتج موزون')}
-   <div class="locs">${S.branches.map(b=>{const L=e.locs[b.id],open=P._open.has(b.id),sel=P._copy[b.id]||['buy','qty','retail','tax','wholesale'];return`<div class="lacc ${open?'open':''}">
+   <div class="locs">${S.branches.map(b=>{const L=e.locs[b.id],open=P._open.has(b.id),sel=P._copy[b.id]||['buy','retail','tax','wholesale'];return`<div class="lacc ${open?'open':''}">
      <div class="lhead"><button class="chev" onclick="togLoc('${b.id}')">${open?'⌃':'⌄'}</button><b onclick="togLoc('${b.id}')">${esc(b.name)}</b>
       ${open?`<span class="lcopy"><button class="lnk" onclick="copyLoc('${b.id}')">⧉ نسخ</button><details class="fsel"><summary>${sel.map(k=>COPYF.find(f=>f[0]===k)[1]).join(' , ')||'حدد الحقول'}</summary><div>${COPYF.map(([k,l])=>`<label><input type="checkbox" ${sel.includes(k)?'checked':''} onchange="copySel('${b.id}','${k}',this.checked)"> ${l}</label>`).join('')}</div></details><span class="sub">إلى كافة المواقع</span></span>`:''}</div>
      ${open?`<div class="tbl-wrap"><table class="ltbl"><thead><tr><th></th><th>الكمية</th><th>سعر التجزئة<small>غير شامل الضريبة</small></th><th>سعر الجملة<small>غير شامل الضريبة</small></th><th>آخر سعر شراء</th><th>نوع الضريبة</th></tr></thead>
@@ -1289,8 +1289,8 @@ function renderPForm(){
    d.onclick=pick;d.ondragover=ev=>{ev.preventDefault();d.classList.add('hov')};d.ondragleave=()=>d.classList.remove('hov');d.ondrop=ev=>{ev.preventDefault();d.classList.remove('hov');addPImgs(ev.dataTransfer.files)}}
 }
 function togLoc(id){P._open.has(id)?P._open.delete(id):P._open.add(id);renderPForm()}
-function copySel(b,k,on){const s=new Set(P._copy[b]||['buy','qty','retail','tax','wholesale']);on?s.add(k):s.delete(k);P._copy[b]=[...s]}
-function copyLoc(src){const s=P.locs[src],f=P._copy[src]||['buy','qty','retail','tax','wholesale'];if(!f.length){toast('حدد الحقول أولاً');return}S.branches.forEach(b=>{if(b.id!==src){const L=P.locs[b.id];f.forEach(k=>L[k]=s[k])}});S.branches.forEach(b=>P._open.add(b.id));renderPForm();toast('تم النسخ إلى كافة المواقع')}
+function copySel(b,k,on){const s=new Set(P._copy[b]||['buy','retail','tax','wholesale']);on?s.add(k):s.delete(k);P._copy[b]=[...s]}
+function copyLoc(src){const s=P.locs[src],f=(P._copy[src]||['buy','retail','tax','wholesale']).filter(k=>k!=='qty');if(!f.length){toast('حدد الحقول أولاً');return}S.branches.forEach(b=>{if(b.id!==src){const L=P.locs[b.id];f.forEach(k=>L[k]=s[k])}});S.branches.forEach(b=>P._open.add(b.id));renderPForm();toast('تم النسخ إلى كافة المواقع')}
 function addCustomField(){promptDlg('حقل مخصص جديد','اسم الحقل',(n,o)=>{S.customFields=S.customFields||[];S.customFields.push({id:uid(),name:n,type:o.querySelector('[data-t]').value,section:'inventory'});save();renderPForm()},
   '<div class="fl"><label>النوع</label><select class="in" data-t><option value="text">نص</option><option value="number">رقم</option><option value="switch">مفتاح (نعم/لا)</option></select></div>')}
 function quickAdd(arr,key,label){promptDlg(label+' جديد','الاسم',n=>{const x={id:uid(),name:n};S[arr].push(x);P[key]=x.id;save();renderPForm()})}
