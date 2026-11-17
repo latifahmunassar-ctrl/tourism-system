@@ -8436,7 +8436,7 @@ async function save(){
     $('msg').innerHTML='<span style="color:var(--green)">✓ '+(isNew?'عميل جديد':(svc?'خدمة مضافة':'دفعة جديدة'))+' — الكود: <b>'+esc((j.row&&j.row.payment_code)||'')+'</b> · المتبقي الآن: '+fmt(newBal)+'</span>';
     // ➕ ١٧ نوفمبر (المالكة): بعد حفظ «إضافة خدمة» تطلع شاشة صغيرة بتفاصيل الخدمة لتصويرها أو نسخها
     if(svc) svcDonePopup({company:p.agent_name||'', client:(selectedClient&&(selectedClient.name||selectedClient.client_name))||p.client_name||'', code:p.client_code||'', cost:(+$('f-cost').value||0), profit:(+$('f-profit').value||0), cur:p.currency||'', costCode:(j.row&&j.row.payment_code)||''});
-    else if(isNew) svcDonePopup({nw:true, company:p.agent_name||'', client:p.client_name||'', code:(j.row&&j.row.client_code)||'', from:p.travel_from||'', to:p.travel_to||'', adate:p.arrival_date||'', pax:p.pax||'', cost:(+$('f-cost').value||0), profit:(+$('f-profit').value||0), paid:paid, cur:p.currency||'', costCode:(j.row&&j.row.payment_code)||''});
+    else if(isNew) svcDonePopup({nw:true, company:p.agent_name||'', client:p.client_name||'', code:(j.row&&j.row.client_code)||'', ptype:p.package_type||'', from:p.travel_from||'', to:p.travel_to||'', adate:p.arrival_date||'', pax:p.pax||'', cost:(+$('f-cost').value||0), profit:(+$('f-profit').value||0), paid:paid, cur:p.currency||'', costCode:(j.row&&j.row.payment_code)||''});
     else svcDonePopup({pay:true, company:p.agent_name||(selectedClient&&selectedClient.agent)||'', client:(selectedClient&&selectedClient.name)||p.client_name||'', code:p.client_code||'', cost:paid, cur:p.currency||'', costCode:(j.row&&j.row.payment_code)||'', bal:newBal});
   }
   setTimeout(()=>{ closeForm(); selectedClient=null; $('client-info').style.display='none';
@@ -8450,7 +8450,7 @@ function svcDonePopup(o){
   const row=(k,v,big)=>'<tr><td style="padding:7px 10px;color:#667;font-weight:700;white-space:nowrap;border-bottom:1px solid #eee">'+k+'</td><td style="padding:7px 10px;border-bottom:1px solid #eee;font-weight:800;'+(big?'font-size:20px;color:#0e7a5a;letter-spacing:.5px':'')+'">'+esc(v||'—')+'</td></tr>';
   const T=o.pay?{h:'تفاصيل الدفعة',v:'المبلغ المدفوع',c:'كود الدفعة'}:o.nw?{h:'تفاصيل العميل الجديد',v:'التكلفة',c:'كود الدفعة'}:{h:'تفاصيل إضافة الخدمة',v:'التكلفة الجديدة',c:'كود التكلفة الجديدة'};
   // العميل الجديد: شركة · عميل · كود · من · إلى · تاريخ السفر · عدد الأشخاص · التكلفة · الربح · الإجمالي · المدفوع · كود الدفعة
-  const F=o.nw?[['اسم الشركة',o.company],['اسم العميل',o.client],['كود العميل',o.code],['من',o.from],['إلى (الوجهة)',o.to],['تاريخ السفر',o.adate],['عدد الأشخاص',o.pax],['التكلفة',fmt(o.cost)+' '+o.cur],['الربح',fmt(o.profit||0)+' '+o.cur],['المبلغ الإجمالي',fmt((o.cost||0)+(o.profit||0))+' '+o.cur],['المدفوع الآن',fmt(o.paid||0)+' '+o.cur]]
+  const F=o.nw?[['اسم الشركة',o.company],['اسم العميل',o.client],['نوع العمل',o.ptype],['كود العميل',o.code],['من',o.from],['إلى (الوجهة)',o.to],['تاريخ السفر',o.adate],['عدد الأشخاص',o.pax],['التكلفة',fmt(o.cost)+' '+o.cur],['الربح',fmt(o.profit||0)+' '+o.cur],['المبلغ الإجمالي',fmt((o.cost||0)+(o.profit||0))+' '+o.cur],['المدفوع الآن',fmt(o.paid||0)+' '+o.cur]]
     :[['اسم الشركة',o.company],['اسم العميل',o.client],['كود العميل',o.code],[T.v,fmt(o.cost)+' '+o.cur]].concat(o.pay&&o.bal!=null?[['المتبقي',fmt(o.bal)+' '+o.cur]]:[]);
   const txt=T.h+'\n'+F.map(f=>f[0]+': '+(f[1]===''||f[1]==null?'—':f[1])).join('\n')+'\n'+T.c+': '+(o.costCode||'—');
   window._svcDoneTxt=txt;
