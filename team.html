@@ -1492,8 +1492,15 @@ function applyAutoProfit(){
   const seasonal = tiers.some(m => m.season_from);
   let tier = null;
   if(seasonal){
-    const md = _programMMDD();
+    let md = _programMMDD();
+    // بلا تاريخ بداية → موسم تاريخ اليوم (طلب المالكة ١٨ نوفمبر ٢٠٢٦) حتى لا يبقى الربح فاضياً
+    let _mdToday = false;
+    if(md == null){ const _t = new Date(); md = (_t.getMonth()+1)*100 + _t.getDate(); _mdToday = true; }
     if(md != null) tier = tiers.find(m => _seasonMatches(m, md));
+    if(tier && _mdToday){
+      const msg0 = `ℹ️ البرنامج بلا تاريخ بداية — حُسب هامش الربح على موسم تاريخ اليوم (${tier.season_from}–${tier.season_to}). لو السفر في موسم آخر حدّدي التاريخ.`;
+      if(msg0 !== lastAutoProfitMsg){ addMessage('sys', msg0); lastAutoProfitMsg = msg0; }
+    }
     if(!tier) tier = tiers.find(m => !m.season_from);   // صف بلا موسم = طوال السنة (احتياط)
     if(!tier){
       const msg = (md == null)

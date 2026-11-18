@@ -3091,6 +3091,8 @@ function _programMMDD(dateFrom: string): number | null {
   if (monD) { const dm = s.match(/\b(\d{1,2})\b/); return monD * 100 + (dm ? +dm[1] : 15); }
   return null;
 }
+// تاريخ اليوم (توقيت عُمان) بصيغة شهر*100+يوم — احتياط لما البرنامج بلا تاريخ بداية
+function _todayMMDD(): number { const t = new Date(Date.now() + 4 * 3600e3); return (t.getUTCMonth() + 1) * 100 + t.getUTCDate(); }
 function _seasonMatches(m: PmRow, md: number | null): boolean {
   if (md == null) return false;
   const f = _seasonMMDD(m.season_from), t = _seasonMMDD(m.season_to);
@@ -4091,7 +4093,7 @@ Deno.serve(async (req) => {
         if (!changes.length) return J({ ok: false, ...(failed[0] || { error: "ما تطبّق شي" }), failed });
         raw = raw.replace(/TOTAL_GROUP:[^|\n]*/, `TOTAL_GROUP:${_fmtMoney(newTotal)} `).replace(/TOTAL_PER_PERSON:[^\n]*/, `TOTAL_PER_PERSON:${_fmtMoney(Math.round(newTotal / Math.max(1, adults)))}`);
         // سعر الشركات (نفس auto_build)
-        const md = _programMMDD(_taiVal(raw, "DATE_FROM"));
+        const md = _programMMDD(_taiVal(raw, "DATE_FROM")) ?? _todayMMDD();   // بلا تاريخ → موسم اليوم
         const margins = await pmGetMargins(destKey || "");
         const _fl = ((raw.match(/FLIGHTS:([\s\S]*?)(?:\n[A-Z_]+:|$)/) || [])[1] || "").split("\n").filter(l => l.includes("|") && !/قطار|train/i.test(l));
         const prof = pmPickProfit(margins, newTotal, md, customerType, _fl.length ? "full" : "hotel_transfer");
@@ -4328,7 +4330,7 @@ Deno.serve(async (req) => {
         // ── تسعير العرض النهائي للعميل: تكلفة + ربح موسمي + عملة الجنسية + تنسيق ──
         const cost = chosen.total;                                        // TOTAL_GROUP = تكلفة بالريال
         const dateFrom = _taiVal(chosen.program, "DATE_FROM") || date;
-        const md = _programMMDD(dateFrom);
+        const md = _programMMDD(dateFrom) ?? _todayMMDD();   // بلا تاريخ → موسم اليوم (المالكة ١٨ نوفمبر ٢٠٢٦، نفس team.html)
         const margins = await pmGetMargins(destKey);
         // 📦 نوع الباقة: فيه طيران دولي (غير تذاكر القطار) → باقة كاملة، وإلا فنادق + مواصلات
         const _fl = ((chosen.program.match(/FLIGHTS:([\s\S]*?)(?:\n[A-Z_]+:|$)/) || [])[1] || "").split("\n").filter(l => l.includes("|") && !/قطار|train/i.test(l));
