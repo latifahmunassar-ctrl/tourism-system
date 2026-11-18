@@ -5842,7 +5842,7 @@ function waReqParse(body){
     ...[...lat.matchAll(/(?<![\d\/])(\d{1,2})\s*([-.])\s*(\d{1,2})\s*\2\s*(\d{4}|\d{2})(?![\d\/])/g)].map(x=>{ const r=[x[0],x[1],x[3],x[4]]; r.index=x.index; return r; }),
     // ١٦ نوفمبر ٢٠٢٦ (حفاوة المسافرون): «10.01 - 04.01» = يوم.شهر بدون سنة
     //   فقط كنطاق «A.B - C.D» (فلا تنقرأ «ميزانية 2.5» كتاريخ)
-    ...[...lat.matchAll(/(?<![\d.\/])(\d{1,2})\.(\d{1,2})\s*(?:[-–—]|الى|إلى|الي|لين|حتى|to)\s*(\d{1,2})\.(\d{1,2})(?![\d.\/])/g)].flatMap(x=>{ const r1=[x[1]+'.'+x[2],x[1],x[2],undefined]; r1.index=x.index; const r2=[x[3]+'.'+x[4],x[3],x[4],undefined]; r2.index=x.index+x[0].length-r2[0].length; return [r1,r2]; }),
+    ...[...lat.matchAll(/(?<![\d.\/])(\d{1,2})\.(\d{1,2})\s*(?:[-–—]|الى|إلى|الي|لين|لي|لى|حتى|to)\s*(\d{1,2})\.(\d{1,2})(?![\d.\/])/g)].flatMap(x=>{ const r1=[x[1]+'.'+x[2],x[1],x[2],undefined]; r1.index=x.index; const r2=[x[3]+'.'+x[4],x[3],x[4],undefined]; r2.index=x.index+x[0].length-r2[0].length; return [r1,r2]; }),
     ...[...lat.matchAll(/(?<!\d)(\d{4})\s*[-\/.]\s*(\d{1,2})\s*[-\/.]\s*(\d{1,2})(?!\d)/g)].map(x=>{ const r=[x[0],x[3],x[2],x[1]]; r.index=x.index; return r; })
   ].filter(x=>+x[2]>=1 && +x[2]<=12 && +x[1]>=1 && +x[1]<=31)
    .map(x=>{ if(x[3] && +x[3]<100){ const r=[x[0],x[1],x[2],String(2000 + +x[3])]; r.index=x.index; return r; } return x; })
@@ -5851,7 +5851,7 @@ function waReqParse(body){
   // يسمح بفاصل «/» أو «.» أو مسافة بين اليوم واسم الشهر العربي (13/مارس = 13 مارس)
   const named=[...lat.matchAll(new RegExp('(\\d{1,2})[\\s\\/.]*('+Object.keys(WA_AR_MONTHS).join('|')+')','g'))];
   // نطاق بيوم-ويوم: يقبل الشرطة أو كلمة الربط (إلى/الى/الي/لين/حتى/ل/لغاية) — «21 إلى 27 نوفمبر»
-  const rng=lat.match(new RegExp('(\\d{1,2})\\s*(?:[-–—]|الى|إلى|الي|لين|لغايه|لغاية|ولغاية|حتى|till|until|to|ل)\\s*(\\d{1,2})[\\s\\/.]*('+Object.keys(WA_AR_MONTHS).join('|')+')'));
+  const rng=lat.match(new RegExp('(\\d{1,2})\\s*(?:[-–—]|الى|إلى|الي|لين|لغايه|لغاية|ولغاية|حتى|till|until|to|لي|لى|ل)\\s*(\\d{1,2})[\\s\\/.]*('+Object.keys(WA_AR_MONTHS).join('|')+')'));
   let from=null,to=null;
   if(rng){ const mo=WA_AR_MONTHS[rng[3]]; from=mk(+rng[1],mo); to=mk(+rng[2],mo); }
   else if(named.length>=2){ from=mk(+named[0][1],WA_AR_MONTHS[named[0][2]]); to=mk(+named[1][1],WA_AR_MONTHS[named[1][2]]); }
@@ -5889,7 +5889,7 @@ function waReqParse(body){
         const mn=preForm?null:seg.match(/^\D{0,12}?(\d+)(?:ليالي|ليال|ليله|ليلة|nights?)/); if(mn){ n=parseInt(mn[1],10); usedPost=true; }
         else if(!preForm && /^\D{0,6}ليلتين/.test(seg)){ n=2; usedPost=true; }
         if(n==null){
-          const mr=seg.match(new RegExp('(?<![\\d\\/.])(\\d{1,2})(?:[-–—]|الي|لين|حتي|to|till|until)(\\d{1,2})(?![\\d\\/.])'+_MON+'?'));   // «28/12-05/01» تواريخ كاملة مو مدى أيام
+          const mr=seg.match(new RegExp('(?<![\\d\\/.])(\\d{1,2})(?:[-–—]|الي|لين|لي|حتي|to|till|until)(\\d{1,2})(?![\\d\\/.])'+_MON+'?'));   // «28/12-05/01» تواريخ كاملة مو مدى أيام
           if(mr){ usedPost=true; const d1=+mr[1], d2=+mr[2]; const mo=mr[3]?WA_AR_MONTHS[Object.keys(WA_AR_MONTHS).find(k=>waReqNorm(k)===mr[3])]:null;
             n = d2>d1 ? d2-d1 : (d2 + (mo ? new Date(2026, mo-1, 0).getDate() : 30) - d1);   // 28-3 = عبور شهر
             if(mo){ const f=mk(d1, d2>d1?mo:(mo===1?12:mo-1)), t=mk(d2,mo); if(t<f) f.setFullYear(f.getFullYear()-1); if(!stayFrom||f<stayFrom) stayFrom=f; if(!stayTo||t>stayTo) stayTo=t; } }
