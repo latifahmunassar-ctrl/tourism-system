@@ -273,7 +273,7 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Yerevan",     pattern: /يريفان|yerevan/i },
     { canonical: "Dilijan",     pattern: /دي?ليجان|dilijan/i },
     { canonical: "Tsaghkadzor", pattern: /تساغ?كادزور|tsaghkadzor/i },
-    { canonical: "Sevan",       pattern: /سيفان(?!افانك)|sevan(?!avank)/i },
+    { canonical: "Sevan",       pattern: /(?<!مرورا ببحيرة )(?<!بنفق )(?<!بممر سليم وبحيرة )سيفان(?!افانك)|sevan(?!avank)/i },  // «مرورا ببحيرة سيفان» بنص الانتقال = طريق، مو مدينة ثالثة
     { canonical: "Jermuk",      pattern: /جيرموك|jermuk/i },
   ],
 };
