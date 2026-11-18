@@ -34,7 +34,7 @@ const TAB_KEY_OVERRIDE: Record<string, string> = {
   "Abu Dhabi (Yas Island )": "Abu Dhabi",   // ⚠️ المسافة داخل القوس لا في النهاية — trim لا يزيلها
 };
 
-const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "Spain", "  Sri lanka", "Poland", "Abu Dhabi (Yas Island )"];
+const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "Spain", "  Sri lanka", "Poland", "Abu Dhabi (Yas Island )", " Arminia "];
 
 // Per-destination canonical-city patterns — MUST stay in sync with DEST_CITIES
 // in Tourism-AI/index.ts (same canonical names the builder groups by). Used
@@ -42,6 +42,14 @@ const DESTINATION_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "
 // city's tour block (e.g. "جولات وانتقالات اسطنبول" → Istanbul), so every tour
 // under that header inherits the city even when its own name never mentions it.
 const SECTION_CITY_DEFS: Record<string, Array<{ canonical: string; pattern: RegExp }>> = {
+  // أرمينيا (تبويب «Arminia» — ١٨ نوفمبر ٢٠٢٦). سيفان: «سيفان» بدون «سيفانافانك» (اسم دير).
+  Arminia: [
+    { canonical: "Yerevan",     pattern: /يريفان|yerevan/i },
+    { canonical: "Dilijan",     pattern: /دي?ليجان|dilijan/i },
+    { canonical: "Tsaghkadzor", pattern: /تساغ?كادزور|tsaghkadzor/i },
+    { canonical: "Sevan",       pattern: /سيفان(?!افانك)|sevan(?!avank)/i },
+    { canonical: "Jermuk",      pattern: /جيرموك|jermuk/i },
+  ],
   "Sri lanka": [
     { canonical: "Colombo",      pattern: /كولومبو|colombo/i },
     { canonical: "Negombo",      pattern: /ني[جغ]ومبو|negombo/i },
@@ -1251,6 +1259,7 @@ function extractSuggestions(
       "برشلونه": "Barcelona", "اشبيلية": "Seville", "إشبيلية": "Seville", "غرناطة": "Granada",
       "غرناطه": "Granada", "قرطبة": "Cordoba", "ماربيا": "Marbella",
     },
+    Arminia: { "يريفان": "Yerevan", "زفارتنوتس": "Yerevan" },
     Oman: {
       // مطارات عُمان بالعربي مع توحيد الإملاء (صلاله/Salalah → صلالة)
       "صلالة": "صلالة", "صلاله": "صلالة", "salalah": "صلالة",
@@ -1287,7 +1296,7 @@ function extractSuggestions(
   // Match either "<N> ايام/يوم" OR "ايام/يوم <N>", strip the country word
   // and any non-paren cruft (dots, dashes) from the label. Dots between the
   // digit and 'ايام' are absorbed by the \s*[.\s]* allowance.
-  const COUNTRY_WORDS = /(?:تايلاند|تيلاند|فيتنام|ماليزيا|البوسنه|البوسنة|تركيا|اندونيسيا|روسيا|ع[ُّ]?مان|سلطن[هة]|دبي|الإمارات|الامارات)/u;
+  const COUNTRY_WORDS = /(?:تايلاند|تيلاند|فيتنام|ماليزيا|البوسنه|البوسنة|تركيا|اندونيسيا|روسيا|ع[ُّ]?مان|سلطن[هة]|دبي|الإمارات|الامارات|[أا]رميني[اة])/u;
   // "أيام" متسامح: يقبل ألف ممدودة (آ) ومسافة داخل الكلمة ("آيا م" — إملاء شيت
   // فيتنام لترويسات 12 يوم) و"ايام/أيام" و"يوم".
   const DAY_WORD = "(?:[أاآ]\\s?ي\\s?ا\\s?م|يوم)";
@@ -1317,6 +1326,7 @@ function extractSuggestions(
     Morroco:  "Marrakech", // المغرب متعدّد البوابات؛ الوصول/المغادرة يُشتقّان من أول/آخر مدينة بالتوزيع، وإلا مراكش
     "Abu Dhabi": "Abu Dhabi",  // وجهة بمطار واحد (مطار زايد الدولي) — كل الإقامات داخل الإمارة
     Spain:    "Madrid",    // إسبانيا — رؤوس النطاقات صريحة بعمود BU (الوصول/المغادرة مطار X)؛ هذا احتياطي فقط
+    Arminia:  "Yerevan",   // أرمينيا مطار واحد (زفارتنوتس/يريفان)
     "Sri lanka": "Colombo", // سيرلانكا مطار واحد (كولومبو) — القدوم/المغادرة = كولومبو دائماً
   };
   for (let i = headerRow + 1; i < rows.length; i++) {

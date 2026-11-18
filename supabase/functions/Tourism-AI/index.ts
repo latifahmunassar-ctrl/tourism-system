@@ -74,6 +74,7 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     // إسبانيا — مدن: مدريد/قرطبة/غرناطة/إشبيلية/مالقا/برشلونة/ماربيا.
     [/[إا]سباني[اة]|spain|مدريد|madrid|برشلون[ةه]|barcelona|غرناط[ةه]|granada|قرطب[ةه]|cordoba|[إا]شبيلي[ةه]|sevill[ae]|seville|مالا?ق[ةا]|málaga|malaga|ماربي(?:لا|ا)|مربلة|marbella/i, "Spain"],
     [/سيرلانكا|سريلانكا|سري\s*لانكا|sri\s*lanka|srilanka|كولومبو|colombo|كاندي|kandy|ني[جغ]ومبو|negombo|نوارا|nuwara|بنتوتا|bentota/i, "Sri lanka"],
+    [/[أا]رميني[اة]|armenia|يريفان|yerevan|دي?ليجان|dilijan|تساغ?كادزور|tsaghkadzor|جيرموك|jermuk/i, "Arminia"],
     // بولندا — «بولندا» تختلف عن «هولندا» بالحرف الأول فلا تتصادمان.
     [/بولندا|بولندي|poland|polska|وارسو|warsaw|warszawa|كراكوف|krakow|cracow|زاكوباني|zakopane|[غج]دانسك|gdansk|سوبوت|sopot|[غج]دينيا|gdynia|فروتسواف|wroclaw/i, "Poland"],
     // أبوظبي / ياس آيلاند — باقات Stay & Play (تسعير بالباقة لا بالليلة).
@@ -266,6 +267,14 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Kandy",        pattern: /كاندي|kandy/i },
     { canonical: "Nuwara Eliya", pattern: /نوارا\s*ا?يليا|نوارا|nuwara/i },
     { canonical: "Bentota",      pattern: /بنتوتا|bentota/i },
+  ],
+  // أرمينيا (تبويب «Arminia») — يطابق SECTION_CITY_DEFS في sync-sheets. «سيفانافانك» دير لا مدينة.
+  Arminia: [
+    { canonical: "Yerevan",     pattern: /يريفان|yerevan/i },
+    { canonical: "Dilijan",     pattern: /دي?ليجان|dilijan/i },
+    { canonical: "Tsaghkadzor", pattern: /تساغ?كادزور|tsaghkadzor/i },
+    { canonical: "Sevan",       pattern: /سيفان(?!افانك)|sevan(?!avank)/i },
+    { canonical: "Jermuk",      pattern: /جيرموك|jermuk/i },
   ],
 };
 
@@ -867,7 +876,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     "Cape Town": "كيب تاون", "Hermanus": "هارمانوس", "Garden Route": "جاردن روت", "Johannesburg": "جوهانسبرغ", "Pretoria": "بريتوريا", "Sun City": "سن سيتي", "Kruger": "كروجر",
     "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط", "Fes": "فاس", "Chefchaouen": "شفشاون",
     "Madrid": "مدريد", "Cordoba": "قرطبة", "Granada": "غرناطة", "Seville": "إشبيلية", "Malaga": "مالقا", "Barcelona": "برشلونة", "Marbella": "ماربيا",
-    "Colombo": "كولومبو", "Negombo": "نيجومبو", "Kandy": "كاندي", "Nuwara Eliya": "نوارا ايليا", "Bentota": "بنتوتا",
+    "Colombo": "كولومبو", "Negombo": "نيجومبو", "Kandy": "كاندي", "Nuwara Eliya": "نوارا ايليا", "Bentota": "بنتوتا", "Yerevan": "يريفان", "Dilijan": "دليجان", "Tsaghkadzor": "تساغكادزور", "Sevan": "سيفان", "Jermuk": "جيرموك",
   };
   const formatBedScope = (cities: string[]): string => cities.flatMap(c => {
     const ar = CITY_AR[c];
@@ -2878,7 +2887,7 @@ async function handleTourVariants(body: { dest?: string; name?: string }): Promi
 //    (بلا جدول قاعدة بيانات): شريحة تكلفة × موسم × شركات/أفراد. ──────────────────
 // مفتاح الوجهة ≠ اسم التبويب (أبوظبي). يجب أن يبقى مطابقاً لـTAB_KEY_OVERRIDE في sync-sheets.
 const PM_TAB_OVERRIDE: Record<string, string> = { "Abu Dhabi": "Abu Dhabi (Yas Island )" };
-const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "Spain", "  Sri lanka", "Poland", "Abu Dhabi (Yas Island )"];
+const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "Spain", "  Sri lanka", "Poland", "Abu Dhabi (Yas Island )", " Arminia "];
 
 async function pmGoogleToken(sa: { client_email: string; private_key: string }): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
@@ -4740,7 +4749,7 @@ Deno.serve(async (req) => {
         "Cape Town": "كيب تاون", "Hermanus": "هارمانوس", "Garden Route": "جاردن روت", "Johannesburg": "جوهانسبرغ", "Pretoria": "بريتوريا", "Sun City": "سن سيتي", "Kruger": "كروجر",
         "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط", "Fes": "فاس", "Chefchaouen": "شفشاون",
         "Madrid": "مدريد", "Cordoba": "قرطبة", "Granada": "غرناطة", "Seville": "إشبيلية", "Malaga": "مالقا", "Barcelona": "برشلونة", "Marbella": "ماربيا",
-        "Colombo": "كولومبو", "Negombo": "نيجومبو", "Kandy": "كاندي", "Nuwara Eliya": "نوارا ايليا", "Bentota": "بنتوتا",
+        "Colombo": "كولومبو", "Negombo": "نيجومبو", "Kandy": "كاندي", "Nuwara Eliya": "نوارا ايليا", "Bentota": "بنتوتا", "Yerevan": "يريفان", "Dilijan": "دليجان", "Tsaghkadzor": "تساغكادزور", "Sevan": "سيفان", "Jermuk": "جيرموك",
       };
       // Distribution-change follow-up: employee typed a NEW city/nights split
       // in chat to reshape an existing program (e.g. "٢ بانكوك ٤ كوساموي").
