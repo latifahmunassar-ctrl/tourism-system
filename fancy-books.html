@@ -460,7 +460,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794933964';
+const BUILD='1794972864';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -2192,14 +2192,14 @@ function trDestCard(d){const req=TF.mode==='req',open=TF.open.has(d)||TF.dests.l
   return`<div class="card trcard"><div class="trch"><button class="chev" onclick="TF.open.has('${d}')?TF.open.delete('${d}'):TF.open.add('${d}');renderTrForm()">${open?'⌃':'⌄'}</button><b>${esc(brName(d))}</b>${L.length?`<button class="lnk" style="margin-right:auto" onclick="trCopyAll('${d}')">نسخ إلى كافة المواقع</button>`:''}</div>
    ${open?`<div class="row" style="margin:10px 0"><div class="fsearch2 grow"><input placeholder="بحث بإسم المنتج أو SKU" data-trs="${d}"><div class="sdrop" id="trd_${d}"></div></div><button class="btn soft" onclick="trImport('${d}')">⇪ استيراد المنتجات</button></div>
     ${grp.map(([l,items])=>`<b style="display:block;margin:12px 0 8px">${l}</b><div class="card"><table class="trit"><thead><tr>${req?'':'<th style="width:34px"></th>'}<th>اسم المنتج / SKU</th>${req?'':'<th>مصدر<br>المخزون</th>'}<th>وجهة<br>المخزون</th><th>${req?'الكمية المطلوبة':'الكمية المنقولة'}</th><th style="width:44px"></th></tr></thead><tbody>
-     ${items.map(x=>{const p=byId(S.products,x.pid);const pr=+locVal(p||{},'retail',TF.source||d)||0,ex=TF.exp?.has(d+'|'+x.pid);return`<tr>${req?'':`<td><button class="ib chv" onclick="trExp('${d}','${x.pid}',this)">${ex?'⌄':'›'}</button></td>`}<td><b>${esc(p?.name||'محذوف')}</b><div class="sub" style="margin:0">${esc(p?.sku||'')}</div></td>${req?'':`<td>${fmtQ(p?.locs?.[TF.source]?.qty)}</td>`}<td>${fmtQ(p?.locs?.[d]?.qty)}</td>
+     ${items.map(x=>{const p=byId(S.products,x.pid);const pr=+locVal(p||{},'retail',TF.source||d)||0,ex=TF.exp?.has(d+'|'+x.pid);return`<tr>${req?'':`<td><button class="ib chv" onclick="trExp('${d}','${x.pid}',this)">${ex?'⌄':'›'}</button></td>`}<td><div style="display:flex;gap:10px;align-items:center">${p?.images?.[0]?`<img src="${p.images[0]}" class="trpimg" onclick="imgZoom('${p.images[0]}')">`:'<span class="trpimg trnoimg">🖼</span>'}<div><b>${esc(p?.name||'محذوف')}</b><div class="sub" style="margin:0">${esc(p?.sku||'')}</div></div></div></td>${req?'':`<td>${fmtQ(p?.locs?.[TF.source]?.qty)}</td>`}<td>${fmtQ(p?.locs?.[d]?.qty)}</td>
       <td><input class="in sm trqi" type="number" min="0" step="any" data-trq="${d}|${x.i}" value="${x.qty}"></td><td><button class="ib" title="حذف" onclick="TF.lines['${d}'].splice(${x.i},1);renderTrForm()">🗑</button></td></tr>
-      ${req?'':`<tr style="${ex?'':'display:none'}" class="trxr"><td></td><td colspan="5"><div class="trx"><div><small>تكلفة المنتج <span>ⓘ</span></small><b>${f2(p?.cost)}</b></div><div><small>إجمالي تكلفة الكميات</small><b data-xc>${f2((+x.qty||0)*(+p?.cost||0))}</b></div><div><small>سعر المنتج <span>ⓘ</span></small><b>${f2(pr)}</b></div><div><small>إجمالي سعر الكميات</small><b data-xp>${f2((+x.qty||0)*pr)}</b></div></div></td></tr>`}`}).join('')}</tbody></table></div>`).join('')}
+      ${req?'':`<tr style="${ex?'':'display:none'}" class="trxr"><td></td><td colspan="5"><div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">${p?.images?.[0]?`<img src="${p.images[0]}" onclick="imgZoom('${p.images[0]}')" style="width:130px;height:130px;object-fit:cover;border-radius:10px;border:1px solid var(--bd);cursor:zoom-in">`:''}<div class="trx"><div><small>تكلفة المنتج <span>ⓘ</span></small><b>${f2(p?.cost)}</b></div><div><small>إجمالي تكلفة الكميات</small><b data-xc>${f2((+x.qty||0)*(+p?.cost||0))}</b></div><div><small>سعر المنتج <span>ⓘ</span></small><b>${f2(pr)}</b></div><div><small>إجمالي سعر الكميات</small><b data-xp>${f2((+x.qty||0)*pr)}</b></div></div></div></td></tr>`}`}).join('')}</tbody></table></div>`).join('')}
     ${L.length?`<div class="trtot" id="trt_${d}"></div>`:''}`:''}</div>`;
 }
 function trBindSearch(d){const i=document.querySelector(`[data-trs="${d}"]`);if(!i)return;const dd=document.getElementById('trd_'+d);trTotals(d);
   const show=()=>{const v=i.value.trim().toLowerCase();if(!v){dd.style.display='none';return}const L=S.products.filter(p=>`${p.name} ${p.sku} ${p.barcode}`.toLowerCase().includes(v)).slice(0,25);
-    dd.innerHTML=L.map(p=>`<div class="sitem" data-p="${p.id}"><div class="sn"><b>${esc(p.name)}</b> <small style="display:inline">${esc(p.sku)}</small></div></div>`).join('')||'<div class="sub" style="padding:12px">لا توجد نتائج</div>';dd.style.display='block'};
+    dd.innerHTML=L.map(p=>`<div class="sitem" data-p="${p.id}">${p.images?.[0]?`<img src="${p.images[0]}" alt="">`:'<span class="noimg">🖼</span>'}<div class="sn"><b>${esc(p.name)}</b> <small style="display:inline">${esc(p.sku)}</small></div></div>`).join('')||'<div class="sub" style="padding:12px">لا توجد نتائج</div>';dd.style.display='block'};
   i.oninput=()=>{clearTimeout(i.t);i.t=setTimeout(show,120)};
   i.onkeydown=e=>{if(e.key==='Enter'){const v=i.value.trim();const m=S.products.find(p=>p.sku===v||p.barcode===v)||(dd.querySelectorAll('[data-p]').length===1?byId(S.products,dd.querySelector('[data-p]').dataset.p):null);if(m)trAdd(d,m.id);else toast('لا يوجد منتج بهذا الرمز')}};
   dd.onclick=e=>{const it=e.target.closest('[data-p]');if(it)trAdd(d,it.dataset.p)};
@@ -2332,7 +2332,7 @@ function glColsDlg(ev,key){ev.stopPropagation();closeMenu();const c=GLC[key],st=
 /* ---------- product picker (shared by forms) ---------- */
 function bindProdSearch(inp,dd,pick){if(!inp)return;
   const show=()=>{const v=inp.value.trim().toLowerCase();if(!v){dd.style.display='none';return}const L=S.products.filter(p=>`${p.name} ${p.sku} ${p.barcode}`.toLowerCase().includes(v)).slice(0,25);
-    dd.innerHTML=L.map(p=>`<div class="sitem" data-p="${p.id}"><div class="sn"><b>${esc(p.name)}</b> <small style="display:inline">${esc(p.sku)}</small></div></div>`).join('')||'<div class="sub" style="padding:12px">لا توجد نتائج</div>';dd.style.display='block'};
+    dd.innerHTML=L.map(p=>`<div class="sitem" data-p="${p.id}">${p.images?.[0]?`<img src="${p.images[0]}" alt="">`:'<span class="noimg">🖼</span>'}<div class="sn"><b>${esc(p.name)}</b> <small style="display:inline">${esc(p.sku)}</small></div></div>`).join('')||'<div class="sub" style="padding:12px">لا توجد نتائج</div>';dd.style.display='block'};
   inp.oninput=()=>{clearTimeout(inp.t);inp.t=setTimeout(show,120)};
   inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();const v=inp.value.trim();const m=S.products.find(p=>p.sku===v||p.barcode===v)||(dd.querySelectorAll('[data-p]').length===1?byId(S.products,dd.querySelector('[data-p]').dataset.p):null);if(m)pick(m);else toast('لا يوجد منتج بهذا الرمز')}};
   dd.onclick=e=>{const it=e.target.closest('[data-p]');if(it)pick(byId(S.products,it.dataset.p))};
