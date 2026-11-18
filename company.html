@@ -157,6 +157,7 @@
   @media(max-width:780px){ .top-split{flex-direction:column} .top-split > #loginForm,.top-split > .dest{flex:none;width:100%;max-width:none} }
   .lang-tgl{position:fixed;top:12px;inset-inline-start:12px;z-index:60;background:rgba(255,255,255,.96);color:var(--brand);border:1px solid var(--line);border-radius:22px;padding:8px 15px;font-weight:800;font-size:13px;cursor:pointer;box-shadow:0 3px 14px rgba(0,0,0,.16)}
   .lang-tgl:hover{background:#fff}
+.phone-hint{margin-top:6px;font-size:12px;line-height:1.8;color:#555;background:#f4f8f6;border:1px solid #d8e6df;border-radius:8px;padding:7px 10px}.phone-hint b{color:#1b6b4a}.phone-hint .bad{color:#b33;text-decoration:line-through}
 </style>
 </head>
 <body>
@@ -237,7 +238,8 @@
   <form id="loginForm" class="card">
     <h2 data-i18n="l_title">دخول الشركات</h2>
     <div class="sub" data-i18n="l_sub">بالجوال وكلمة المرور اللي سجّلت فيها.</div>
-    <div class="field"><label data-i18n="l_mobile" data-html>رقم الجوال <span class="req">*</span></label><input id="lphone" inputmode="tel" placeholder="+9665..." required></div>
+    <div class="field"><label data-i18n="l_mobile" data-html>رقم الجوال <span class="req">*</span></label><input id="lphone" inputmode="tel" placeholder="+9665XXXXXXXX" dir="ltr" required>
+      <div class="phone-hint" data-i18n="l_phone_hint" data-html>📌 اكتب الرقم <b>بعلامة +</b> ثم رمز الدولة ثم الرقم بدون الصفر الأول، بنفس الصيغة اللي سجّلت فيها.<br>مثال السعودية: <b dir="ltr">+966551234567</b> ✅ &nbsp;·&nbsp; <span class="bad" dir="ltr">966551234567</span> ❌ &nbsp;·&nbsp; <span class="bad" dir="ltr">0551234567</span> ❌</div></div>
     <div class="field"><label data-i18n="l_pass" data-html>كلمة المرور <span class="req">*</span></label><input id="lpass" type="password" required></div>
     <button type="submit" class="submit" id="loginBtn" data-i18n="l_btn">دخول</button>
     <div class="err" id="loginErr"></div>
@@ -443,7 +445,13 @@ $('loginForm').addEventListener('submit', async e=>{
     if(!res.ok||!d.ok) throw new Error(d.error||'تعذّر الدخول');
     TOKEN=d.token; localStorage.setItem('alezz_company_token',TOKEN);
     COMPANY=d.company; showApp();
-  }catch(ex){ err.textContent=ex.message; err.style.display='block'; }
+  }catch(ex){
+    // ١٨ نوفمبر ٢٠٢٦: الرقم بلا + → نوضّح السبب بمثال من رقمه نفسه
+    const _ph=$('lphone').value.trim().replace(/[^\d+]/g,'');
+    let _m=ex.message;
+    if(/لا يوجد حساب/.test(_m) && _ph && !_ph.startsWith('+')) _m+=' — اكتب الرقم بعلامة + في البداية، مثال: '+(/^0/.test(_ph)?'+9665XXXXXXXX':'+'+_ph.replace(/^00/,''));
+    err.textContent=_m; err.style.display='block';
+  }
   finally{ btn.disabled=false; btn.textContent='دخول'; }
 });
 function logout(){ localStorage.removeItem('alezz_company_token'); TOKEN=''; COMPANY=null; location.reload(); }
@@ -838,6 +846,7 @@ const I18N = {
   l_mobile:{ar:'رقم الجوال <span class="req">*</span>',en:'Mobile <span class="req">*</span>'},
   l_pass:{ar:'كلمة المرور <span class="req">*</span>',en:'Password <span class="req">*</span>'},
   l_btn:{ar:'دخول',en:'Log in'},
+  l_phone_hint:{ar:'📌 اكتب الرقم <b>بعلامة +</b> ثم رمز الدولة ثم الرقم بدون الصفر الأول، بنفس الصيغة اللي سجّلت فيها.<br>مثال السعودية: <b dir="ltr">+966551234567</b> ✅ &nbsp;·&nbsp; <span class="bad" dir="ltr">966551234567</span> ❌ &nbsp;·&nbsp; <span class="bad" dir="ltr">0551234567</span> ❌',en:'📌 Enter the number <b>starting with +</b>, then the country code, then the number without the leading zero — same as when you registered.<br>Saudi example: <b dir="ltr">+966551234567</b> ✅ &nbsp;·&nbsp; <span class="bad" dir="ltr">966551234567</span> ❌ &nbsp;·&nbsp; <span class="bad" dir="ltr">0551234567</span> ❌'},
   l_new:{ar:'شركة جديدة؟ <a href="company-register.html">سجّل حساب</a>',en:'New company? <a href="company-register.html">Register</a>'}
 };
 function applyLang(lang){
