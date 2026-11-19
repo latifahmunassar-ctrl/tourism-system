@@ -8250,7 +8250,10 @@ ${airplane ? `<div style="page-break-before:always;padding:0;margin:0;width:210m
         if (!GRP_LOADED && typeof grpLoad === 'function') { try { await grpLoad(); } catch(_){} }
         const _destB = String(b.destination||'').trim();
         const _gi = (GRP_PROGRAMS||[]).findIndex(g => (g.programAr || (typeof grpArabicName==='function'?grpArabicName(g.program||''):'')) === _destB);
-        if (_gi >= 0) {
+        // 🇪🇸 ١٩ نوفمبر ٢٠٢٦ (المالكة): وجهة لها «خاص» و«جروب» بنفس الاسم (إسبانيا/إنجلترا) — الطلب الخاص
+        //    يُحفظ بتوزيع مدن ومطارات، والجروب بدونها (مسار ثابت). لو فيه توزيع/مطار → خاص، لا يروح للجروبات.
+        const _privPlan = (Array.isArray(b.cities_nights) && b.cities_nights.length) || String(b.distribution||'').trim() || String(b.arrival_airport||'').trim() || String(b.departure_airport||'').trim();
+        if (_gi >= 0 && !_privPlan) {
           if (typeof fpTab === 'function') fpTab('groups');
           const dSel=document.getElementById('grp-dest'); if(dSel){ dSel.value=String(_gi); if(typeof grpOnDest==='function') grpOnDest(); }
           const dtSel=document.getElementById('grp-date'); if(dtSel && b.date_from){ const o=[...dtSel.options].find(x=>x.value===b.date_from); if(o) dtSel.value=o.value; }
