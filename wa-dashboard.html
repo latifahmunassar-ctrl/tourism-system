@@ -1384,6 +1384,10 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
                 <option>إندونيسيا</option><option>عُمان</option><option>جنوب أفريقيا</option><option>موريشيوس</option><option value="العمرة">العمرة (مكة + المدينة)</option><option>إنجلترا</option><option>الصين</option><option>مصر</option><option>المغرب</option><option>إسبانيا</option><option>أبوظبي</option>
                 <optgroup id="bf-grp-optgroup" label="🚌 برامج الجروبات"></optgroup>
               </select>
+              <div id="bf-kind" style="display:none; gap:6px; margin-top:4px;">
+                <button type="button" data-k="private" onclick="bfSetKind('private')" style="flex:1; padding:6px; border-radius:7px; border:1px solid #d7dee6; font-weight:700; cursor:pointer;">✈️ خاص</button>
+                <button type="button" data-k="group" onclick="bfSetKind('group')" style="flex:1; padding:6px; border-radius:7px; border:1px solid #d7dee6; font-weight:700; cursor:pointer;">🚌 جروب</button>
+              </div>
             </label>
             <label style="display:flex; flex-direction:column; gap:3px;">تاريخ السفر
               <input type="date" id="bf-date_from" style="padding:7px; border:1px solid #d7dee6; border-radius:7px;">
@@ -4978,6 +4982,25 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     }
     // يبدّل حقل التاريخ: برنامج جروب → قائمة تواريخ جاهزة؛ غيره → تاريخ حر.
     // وللجروب (مسار ثابت) نخفي المطار وتوزيع المدن (لا يلزمان للحفظ).
+    // 🇪🇸 ١٩ نوفمبر ٢٠٢٦ (المالكة): وجهة لها خاص + جروب بنفس الاسم → زرّين «خاص / جروب» تحت الوجهة للاختيار اليدوي.
+    function bfKindPair(v){
+      const sel = $("bf-destination"); if (!sel || !v) return null;
+      const privOpt = n => [...sel.options].find(o => !(o.parentElement && o.parentElement.id === "bf-grp-optgroup") && (o.value || o.textContent).trim() === n);
+      if (bfIsGroup(v)) { const ar = BF_GROUPS[v].ar; const po = privOpt(ar); return po ? { priv: po.value || po.textContent.trim(), grp: v, cur: "group" } : null; }
+      const g = bfGrpFromAr(v); return (g && BF_GROUPS[g]) ? { priv: v, grp: g, cur: "private" } : null;
+    }
+    function bfUpdateKind(){
+      const box = $("bf-kind"); if (!box) return;
+      const p = bfKindPair($("bf-destination") ? $("bf-destination").value : "");
+      box.style.display = p ? "flex" : "none"; if (!p) return;
+      box.querySelectorAll("button").forEach(b => { const on = b.dataset.k === p.cur; b.style.background = on ? "#0e7c66" : "#fff"; b.style.color = on ? "#fff" : "#334155"; b.style.borderColor = on ? "#0e7c66" : "#d7dee6"; });
+    }
+    function bfSetKind(k){
+      const sel = $("bf-destination"); const p = bfKindPair(sel ? sel.value : ""); if (!p || p.cur === k) return;
+      sel.value = k === "group" ? p.grp : p.priv;
+      sel.dispatchEvent(new Event("change"));
+    }
+    window.bfSetKind = bfSetKind;
     function bfApplyGroupDates(val){
       const inp = $("bf-date_from"), sel = $("bf-date-group");
       if (!inp || !sel) return;
@@ -5002,6 +5025,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if (isGrp && g.days > 0) { dInp.value = g.days; dInp.readOnly = true; dInp.style.background = "#f1f5f9"; }
         else { dInp.readOnly = false; dInp.style.background = ""; }
       }
+      bfUpdateKind();
     }
     if ($("bf-date-group")) $("bf-date-group").addEventListener("change", e => { const inp = $("bf-date_from"); if (inp) inp.value = e.target.value; });
     bfLoadGroups();
