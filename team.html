@@ -3435,9 +3435,12 @@ async function bfRankAirports(){
   const reset=()=>opts.forEach(o=>{ if(o.dataset.base) o.textContent=o.dataset.base; });
   const dest=(document.getElementById('bf-dest')||{}).value||'';
   const days=+(document.getElementById('bf-days')||{}).value||0;
-  const date=(document.getElementById('bf-date')||{}).value||'';
+  // بدون تاريخ سفر → نحسب بتاريخ افتراضي (بعد ٣٠ يوماً) ونوسم السعر «تقريبي» (طلب المالكة ١٩ نوفمبر ٢٠٢٦).
+  const _realDate=(document.getElementById('bf-date')||{}).value||'';
+  const date=_realDate || new Date(Date.now()+30*864e5).toISOString().slice(0,10);
+  const approx=!_realDate;
   const pax=+(document.getElementById('bf-adults')||{}).value||2;
-  if(!opts.length||!dest||!days||!date){ reset(); return; }
+  if(!opts.length||!dest||!days){ reset(); return; }
   const seq=++_bfAirSeq;
   try{
     try{ await loadProfitMargins(dest); }catch(_){}
@@ -3450,7 +3453,7 @@ async function bfRankAirports(){
     const fmt=t=>{ const pr=_rankProfit(t,mmdd); return Math.round(pr==null?t:t+pr).toLocaleString('en-US'); };
     opts.forEach(o=>{
       const base=o.dataset.base||o.textContent, t=best[o.value];
-      o.textContent = t==null ? `${base} · لا يوجد ${_bfArNum(days)} أيام` : `${base} · من ${fmt(t)} ريال${o.value===minPair&&pairs.length>1?' ⭐ الأرخص':''}`;
+      o.textContent = t==null ? `${base} · لا يوجد ${_bfArNum(days)} أيام` : `${base} · من ${fmt(t)} ريال${approx?' (تقريبي)':''}${o.value===minPair&&pairs.length>1?' ⭐ الأرخص':''}`;
     });
   }catch(_){ if(seq===_bfAirSeq) reset(); }
 }
