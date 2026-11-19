@@ -4365,7 +4365,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if (!r.ok || d.error) throw new Error(d.error || ("HTTP " + r.status));
         if (phone !== convPhone) return;
         const b = d.brief || {};
-        if (b.destination) { const _d0 = bfCanonDest(b.destination); setv("bf-destination", (typeof bfGrpFromAr === "function" && bfGrpFromAr(_d0)) || _d0); bfRefreshCityRows(); }
+        if (b.destination) { const _d0 = bfCanonDest(b.destination); setv("bf-destination", bfPickDestVal(_d0, ((convHistoryCache.get(phone) || []).filter(m => m && m.sender === "customer").map(m => m.body || "").join(" ")) + " " + (b.notes || ""))); bfRefreshCityRows(); }
         if (b.date_from) setv("bf-date_from", b.date_from);
         if (typeof bfApplyGroupDates === "function") bfApplyGroupDates($("bf-destination") ? $("bf-destination").value : "");
         if (b.pax != null) setv("bf-pax", b.pax);
@@ -4740,7 +4740,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if (!r.ok) return;
         const b = (await r.json()).brief;
         if (!b || phone !== convPhone) return;   // تجاهل لو بدّل المستخدم المحادثة
-        { const _d0 = bfCanonDest(b.destination); setv("bf-destination", (typeof bfGrpFromAr === "function" && bfGrpFromAr(_d0)) || _d0); }
+        { const _d0 = bfCanonDest(b.destination); setv("bf-destination", bfPickDestVal(_d0, b.notes || "")); }
         setv("bf-date_from", b.date_from); setv("bf-pax", b.pax); setv("bf-children", b.children);
         if (typeof bfApplyGroupDates === "function") bfApplyGroupDates($("bf-destination") ? $("bf-destination").value : "");
         setv("bf-days", b.days); setv("bf-sim_count", b.sim_count); bfExpected(); bfSum();
@@ -4921,6 +4921,16 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     function bfIsGroup(v){ return !!(v && BF_GROUPS[v]); }
     function bfGrpFromAr(ar){ return BF_GROUPS_AR[String(ar||"").trim()] || null; }
     // الاسم الذي يُحفَظ في الطلب = العربي للجروب (وإلا القيمة كما هي).
+    // 🇪🇸 ١٩ نوفمبر ٢٠٢٦ (المالكة): وجهة لها «خاص» و«جروب» بنفس الاسم (إسبانيا/إنجلترا) → الافتراضي الخاص،
+    //    والجروب فقط لو المحادثة/الملاحظات تذكر جروب/قروب/مجموعة — أو ما فيه خيار خاص بنفس الاسم.
+    function bfPickDestVal(d0, ctx){
+      const g = (typeof bfGrpFromAr === "function") ? bfGrpFromAr(d0) : null;
+      if (!g) return d0;
+      const sel = $("bf-destination");
+      const hasPrivate = !!(sel && [...sel.options].some(o => !(o.parentElement && o.parentElement.id === "bf-grp-optgroup") && (o.value || o.textContent).trim() === d0));
+      if (!hasPrivate) return g;
+      return /جروب|قروب|مجموع[ةه]|رحل[ةه] جماعي|group/i.test(String(ctx || "")) ? g : d0;
+    }
     function bfDestForSave(v){ return bfIsGroup(v) ? (BF_GROUPS[v].ar || v) : v; }
     function bfFmtDate(iso){
       try { const [y,m,dd]=String(iso).split("-"); const mn=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"]; return (+dd)+" "+mn[(+m)-1]+" "+y; } catch(_){ return iso; }
@@ -4961,7 +4971,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
           BF_GROUPS[name] = { dates: Array.isArray(g.dates) ? g.dates.slice() : [], ar, days };
           BF_GROUPS_AR[ar] = name;
           const opt = document.createElement("option");
-          opt.value = name; opt.textContent = ar;
+          opt.value = name; opt.textContent = ar + " — جروب";
           og.appendChild(opt);
         });
       } catch(_) { /* أفضل جهد */ }
