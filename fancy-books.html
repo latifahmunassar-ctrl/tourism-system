@@ -460,7 +460,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1795059957';
+const BUILD='1795060299';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -3100,6 +3100,7 @@ function viewCashMgmt(){
   glView({key:'cm',title:'إدارة صناديق البيع',rows:cmRows,search:sh=>'',top:cmTop,btns:`<button class="btn lnk" onclick="cmExport()">⇪ تصدير</button>`,ico:'🖥',empty:'لا توجد جلسات صناديق بيع في هذا الفلتر',
     cols:[{k:'loc',l:'الموقع',cell:sh=>esc(shBr(sh)),fv:shBr,ft:'select'},{k:'reg',l:'اسم الصندوق',cell:sh=>esc(shReg(sh)),fv:shReg,ft:'select'},{k:'by',l:'فتح بواسطة',cell:sh=>esc(sh.openedBy||'—'),fv:sh=>sh.openedBy||'',ft:'select'},
       {k:'od',l:'تاريخ فتح الصندوق',cell:sh=>rwDT(sh.openedAt),fv:sh=>sh.openedAt,ft:'date'},{k:'cb',l:'أغلق بواسطة',cell:sh=>esc(sh.closedBy||'—'),fv:sh=>sh.closedBy||'',ft:'select'},{k:'cd',l:'تاريخ إغلاق الصندوق',cell:sh=>sh.closedAt?rwDT(sh.closedAt):'—',fv:sh=>sh.closedAt||'',ft:'date'},
+      {k:'du',l:'مدة الجلسة',cell:sh=>{const m=Math.round(((sh.closedAt?new Date(sh.closedAt):new Date())-new Date(sh.openedAt))/60000);if(!(m>=0))return'—';const h=Math.floor(m/60),r=m%60;return(h?h+' س ':'')+r+' د'+(sh.closedAt?'':' <span class="sub" style="display:inline;margin:0">(لسه مفتوح)</span>')}},
       {k:'sl',l:'إجمالي المبيعات',cell:sh=>nfR(shView(sh).sales)},
       {k:'st',l:'الحالة',cell:sh=>pill(SH_ST[st(sh)]),fv:st,ft:'select',optL:v=>SH_ST[v]?.[0]||v}],
     act:sh=>`<button class="ib" title="عرض" onclick="cmOpen('${sh.id}')">👁</button>`});
