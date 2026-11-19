@@ -75,6 +75,7 @@
   .of-country-h .nm{font-size:38px;font-weight:900;letter-spacing:.5px;background:linear-gradient(135deg,var(--brand),#b8860b,var(--brand2));-webkit-background-clip:text;background-clip:text;color:transparent}
   .of-country-h .cnt{font-size:12px;font-weight:800;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:20px;padding:3px 10px}
   .of-days{background:rgba(14,157,106,.1);color:var(--brand);border:1px solid rgba(14,157,106,.25)}
+  .of-kind{background:#1a3a8f;color:#fff;border:1px solid #1a3a8f}
   .of-route{font-size:13px;color:var(--muted);margin-top:6px;font-weight:700}
   @media(max-width:520px){ .of-country-h .nm{font-size:30px} .of-country-h .fl{font-size:32px} }
   /* ===== عروض عامة (قبل الدخول) ===== */
@@ -535,10 +536,27 @@ var OFFERS=[
   { dest:'فيتنام', flag:'🇻🇳', code:'VN-2026-622', expiry:'20 ديسمبر 2026', days:'8 أيام / 7 ليالي',
     route:'2 هانوي + 3 سابا + 2 هانوي · فنادق 4 نجوم مع الإفطار · 4 جولات سياحية',
     price:'2,376', cur:'ريال سعودي', per:'للشخص (على أساس شخصين)',
-    img:'offers/vietnam-VN-2026-622.jpg?v=2', pdf:'offers/vietnam-VN-2026-622.pdf?v=2' },
-  { dest:'المغرب', flag:'🇲🇦', code:'XX-2026-139', expiry:'30 نوفمبر 2026',
-    price:'4,475', cur:'ريال سعودي', per:'للشخص',
-    img:'offers/morocco-XX-2026-139.jpg', pdf:'offers/morocco-XX-2026-139.pdf' }
+    kind:'خاص', img:'offers/vietnam-VN-2026-622.jpg?v=2', pdf:'offers/vietnam-VN-2026-622.pdf?v=2' },
+  { dest:'ماليزيا', flag:'🇲🇾', code:'MY-2026-114', expiry:'20 ديسمبر 2026', days:'8 أيام / 7 ليالي', kind:'خاص',
+    route:'2 سيلانجور + 3 بينانج + 2 كوالالمبور · فنادق 4–5 نجوم مع الإفطار · 3 جولات',
+    price:'2,834', cur:'ريال سعودي', per:'للشخص (على أساس شخصين)',
+    img:'offers/malaysia-MY-2026-114.jpg', pdf:'offers/malaysia-MY-2026-114.pdf' },
+  { dest:'إندونيسيا', flag:'🇮🇩', code:'ID-2026-057', expiry:'20 ديسمبر 2026', days:'8 أيام / 7 ليالي', kind:'خاص',
+    route:'بالي: 3 سيمينياك + 2 أوبود + 2 جيمباران · فنادق 4–5 نجوم مع الإفطار · 4 جولات',
+    price:'1,675', cur:'ريال سعودي', per:'للشخص (على أساس شخصين)',
+    img:'offers/indonesia-ID-2026-057.jpg', pdf:'offers/indonesia-ID-2026-057.pdf' },
+  { dest:'الصين', flag:'🇨🇳', code:'CN-2026-006', expiry:'20 ديسمبر 2026', days:'8 أيام / 7 ليالي', kind:'خاص',
+    route:'2 شنغهاي + 2 سوجو + 3 بكين · فنادق 4 نجوم مع الإفطار · 3 جولات',
+    price:'2,647', cur:'ريال سعودي', per:'للشخص (على أساس شخصين)',
+    img:'offers/china-CN-2026-006.jpg', pdf:'offers/china-CN-2026-006.pdf' },
+  { dest:'المغرب', flag:'🇲🇦', code:'MA-2026-016', expiry:'20 ديسمبر 2026', days:'8 أيام / 7 ليالي', kind:'خاص',
+    route:'2 مراكش + 2 مخيم أغافاي + 3 مراكش · فنادق 4–5 نجوم مع الإفطار · 3 جولات',
+    price:'3,908', cur:'ريال سعودي', per:'للشخص (على أساس شخصين)',
+    img:'offers/morocco-MA-2026-016.jpg', pdf:'offers/morocco-MA-2026-016.pdf' },
+  { dest:'أرمينيا', flag:'🇦🇲', code:'XX-2026-158', expiry:'20 ديسمبر 2026', days:'8 أيام / 7 ليالي', kind:'خاص',
+    route:'3 يريفان + 2 سيفان + 2 يريفان · فنادق 4–5 نجوم مع الإفطار · 4 جولات',
+    price:'2,363', cur:'ريال سعودي', per:'للشخص (على أساس شخصين)',
+    img:'offers/armenia-XX-2026-158.jpg', pdf:'offers/armenia-XX-2026-158.pdf' }
 ];
 function renderOffers(filter){
   var grid=$('ofGrid'); if(!grid) return;
@@ -551,6 +569,7 @@ function renderOffers(filter){
         '<div class="of-price">'+o.price+' '+o.cur+' <small>'+o.per+'</small></div>'+
         (o.route?'<div class="of-route">🗺️ '+o.route+'</div>':'')+
         '<div class="of-meta">'+
+          (o.kind?'<span class="of-mchip of-kind">'+(o.kind==='جروب'?'👥 برنامج جروب':'👤 برنامج خاص')+'</span>':'')+
           (o.days?'<span class="of-mchip of-days">🗓️ '+o.days+'</span>':'')+
           '<span class="of-mchip of-code">🔖 كود العرض: '+o.code+'</span>'+
           '<span class="of-mchip of-exp">⏳ صالح حتى: '+o.expiry+'</span>'+
