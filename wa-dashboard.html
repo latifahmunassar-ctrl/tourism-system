@@ -4416,7 +4416,9 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
               const _seen = _apts.filter(a => { const x = _nC(bfAirAr(a)); return x && _txt.includes(x); });
               if (_seen.length === 1) _cnHit = opts.find(o => o.value === _seen[0] + "|" + _seen[0]) || null;
             }
-            if (_hit) aSel.value = _hit.value;
+            const _pd = bfPairForDist(bfChosenDist);
+            if (_pd && opts.some(o => o.value === _pd)) aSel.value = _pd;
+            else if (_hit) aSel.value = _hit.value;
             else if (_cnHit) aSel.value = _cnHit.value;
             else if (opts.length === 1) aSel.value = opts[0].value;
           }
@@ -4765,7 +4767,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
         if (b.destination) {
           await bfLoadSugs(b.destination);
           if (phone !== convPhone) return;
-          const pv = (b.arrival_airport || "") + "|" + (b.departure_airport || "");
+          const pv = bfPairForDist(bfChosenDist) || ((b.arrival_airport || "") + "|" + (b.departure_airport || ""));
           if ($("bf-airport") && pv !== "|") {
             if (![...$("bf-airport").options].some(o => o.value === pv))
               $("bf-airport").insertAdjacentHTML("beforeend", `<option value="${pv}">${bfPairLabel(pv)}</option>`);
@@ -4927,6 +4929,14 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     // الاسم الذي يُحفَظ في الطلب = العربي للجروب (وإلا القيمة كما هي).
     // 🇪🇸 ١٩ نوفمبر ٢٠٢٦ (المالكة): وجهة لها «خاص» و«جروب» بنفس الاسم (إسبانيا/إنجلترا) → الافتراضي الخاص،
     //    والجروب فقط لو المحادثة/الملاحظات تذكر جروب/قروب/مجموعة — أو ما فيه خيار خاص بنفس الاسم.
+    // ✈️ ١٩ نوفمبر ٢٠٢٦ (المالكة): التوزيع المختار موجود حرفياً باقتراح جاهز → المطار = مطار ذاك الاقتراح
+    //    (كان يأخذ مطار الطلب المحفوظ «مدريد → مالقا» والتوزيع «… - 1 مدريد» فما يطلع ولا توزيع).
+    function bfPairForDist(dist){
+      if (!dist || typeof BF_SUGS === "undefined" || !BF_SUGS.length) return "";
+      const n = x => String(x||"").replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/ليال[يي]?|ليلة/g, "").replace(/[إأآ]/g, "ا").replace(/\s+/g, "");
+      const w = n(dist); const s = BF_SUGS.find(x => n(x.distribution) === w);
+      return s ? bfPairOf(s) : "";
+    }
     function bfPickDestVal(d0, ctx){
       const g = (typeof bfGrpFromAr === "function") ? bfGrpFromAr(d0) : null;
       if (!g) return d0;
