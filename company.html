@@ -64,6 +64,19 @@
   .of-img{width:200px;max-width:80%;display:block;margin:16px auto 0;aspect-ratio:4/5;object-fit:cover;border-radius:13px;border:1px solid var(--line)}
   .of-dl{display:flex;align-items:center;justify-content:center;gap:8px;margin:14px;padding:13px;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border-radius:13px;font-weight:800;font-size:14.5px;text-decoration:none;box-shadow:0 6px 16px rgba(14,157,106,.2)}
   .of-empty{color:var(--muted);text-align:center;padding:30px 10px;font-size:13.5px}
+  /* قسم لكل دولة: اسمها كبير وتحته عروضها */
+  .of-filter:has(.of-tab){gap:10px;justify-content:center;padding:10px;background:#f6faf8;border:1px solid var(--line);border-radius:18px}
+  .of-tab{display:inline-flex;align-items:center;gap:8px;font-size:15px;padding:10px 18px;border-radius:14px}
+  .of-tab .tf{font-size:24px;line-height:1}
+  .of-tab.on{box-shadow:0 6px 16px rgba(14,157,106,.25)}
+  .of-country{margin:6px 0 26px}
+  .of-country-h{display:flex;align-items:center;justify-content:center;gap:12px;margin:8px 0 16px;padding:18px 12px;border-radius:20px;background:linear-gradient(135deg,rgba(14,157,106,.10),rgba(212,168,67,.16),rgba(196,29,136,.10));border:1px solid rgba(212,168,67,.35)}
+  .of-country-h .fl{font-size:40px;line-height:1}
+  .of-country-h .nm{font-size:38px;font-weight:900;letter-spacing:.5px;background:linear-gradient(135deg,var(--brand),#b8860b,var(--brand2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .of-country-h .cnt{font-size:12px;font-weight:800;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:20px;padding:3px 10px}
+  .of-days{background:rgba(14,157,106,.1);color:var(--brand);border:1px solid rgba(14,157,106,.25)}
+  .of-route{font-size:13px;color:var(--muted);margin-top:6px;font-weight:700}
+  @media(max-width:520px){ .of-country-h .nm{font-size:30px} .of-country-h .fl{font-size:32px} }
   /* ===== عروض عامة (قبل الدخول) ===== */
   .offers-pub{text-align:center;margin:0 0 20px}
   .offers-pill{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:24px;padding:12px 30px;font-weight:800;font-size:15.5px;cursor:pointer;box-shadow:0 6px 20px rgba(14,157,106,.25);animation:offerGlow 1.5s ease-in-out infinite}
@@ -516,7 +529,13 @@ function hideViews(){ $('profileCard').style.display='none'; $('requestsView').s
 function setTab(id){ ['btnHome','btnRequests','btnOffers','btnStaff','btnProfile'].forEach(b=>{const e=$(b); if(e) e.classList.toggle('on', b===id);}); }
 
 /* ===== العروض ===== */
+// كل دولة تظهر كقسم: اسمها كبير وتحته عروضها (بترتيب ظهور أول عرض لها هنا)
 var OFFERS=[
+  // ⏳ قاعدة المالكة (١٩ نوفمبر ٢٠٢٦): العروض الحالية صالحة حتى ٢٠ ديسمبر فقط (أسعار رأس السنة مختلفة)
+  { dest:'فيتنام', flag:'🇻🇳', code:'VN-2026-622', expiry:'20 ديسمبر 2026', days:'8 أيام / 7 ليالي',
+    route:'2 هانوي + 3 سابا + 2 هانوي · فنادق 4 نجوم مع الإفطار · 4 جولات سياحية',
+    price:'2,376', cur:'ريال سعودي', per:'للشخص (على أساس شخصين)',
+    img:'offers/vietnam-VN-2026-622.jpg', pdf:'offers/vietnam-VN-2026-622.pdf' },
   { dest:'المغرب', flag:'🇲🇦', code:'XX-2026-139', expiry:'30 نوفمبر 2026',
     price:'4,475', cur:'ريال سعودي', per:'للشخص',
     img:'offers/morocco-XX-2026-139.jpg', pdf:'offers/morocco-XX-2026-139.pdf' }
@@ -524,13 +543,15 @@ var OFFERS=[
 function renderOffers(filter){
   var grid=$('ofGrid'); if(!grid) return;
   var list = filter ? OFFERS.filter(function(o){return o.dest===filter;}) : OFFERS;
-  if(!list.length){ grid.innerHTML='<div class="of-empty">لا توجد عروض حالياً لهذه الوجهة.</div>'; return; }
-  grid.innerHTML = list.map(function(o){
+  if(!list.length){ grid.innerHTML='<div class="of-empty">لا توجد عروض حالياً لهذه الوجهة.</div>'; grid.style.display=''; return; }
+  var card = function(o){
     return '<div class="offer">'+
       '<div class="of-head">'+
         '<div class="of-dest">'+o.flag+' '+o.dest+'</div>'+
         '<div class="of-price">'+o.price+' '+o.cur+' <small>'+o.per+'</small></div>'+
+        (o.route?'<div class="of-route">🗺️ '+o.route+'</div>':'')+
         '<div class="of-meta">'+
+          (o.days?'<span class="of-mchip of-days">🗓️ '+o.days+'</span>':'')+
           '<span class="of-mchip of-code">🔖 كود العرض: '+o.code+'</span>'+
           '<span class="of-mchip of-exp">⏳ صالح حتى: '+o.expiry+'</span>'+
         '</div>'+
@@ -538,15 +559,24 @@ function renderOffers(filter){
       '<img class="of-img" src="'+o.img+'" alt="عرض '+o.dest+'">'+
       '<a class="of-dl" href="'+o.pdf+'" download>⬇️ تحميل العرض (PDF)</a>'+
     '</div>';
+  };
+  var dests=[]; list.forEach(function(o){ if(dests.indexOf(o.dest)<0) dests.push(o.dest); });
+  grid.style.display='block';
+  grid.innerHTML = dests.map(function(d){
+    var its=list.filter(function(o){return o.dest===d;});
+    return '<section class="of-country">'+
+      '<div class="of-country-h"><span class="fl">'+(its[0].flag||'')+'</span><span class="nm">'+d+'</span><span class="cnt">'+its.length+' '+(its.length===1?'عرض':'عروض')+'</span></div>'+
+      '<div class="of-grid">'+its.map(card).join('')+'</div>'+
+    '</section>';
   }).join('');
 }
 function renderOffersFilter(){
   var box=$('ofFilter'); if(!box) return;
   var dests=[]; OFFERS.forEach(function(o){ if(dests.indexOf(o.dest)<0) dests.push(o.dest); });
-  var chips='<span class="of-chip on" data-d="" onclick="pickOfferFilter(this)">🌍 الكل</span>';
-  chips += dests.map(function(d){
+  // تبويب لكل دولة بعلمها — أول دولة مفتوحة افتراضياً
+  var chips = dests.map(function(d,i){
     var f=(OFFERS.find(function(o){return o.dest===d;})||{}).flag||'';
-    return '<span class="of-chip" data-d="'+d+'" onclick="pickOfferFilter(this)">'+f+' '+d+'</span>';
+    return '<span class="of-chip of-tab'+(i===0?' on':'')+'" data-d="'+d+'" onclick="pickOfferFilter(this)"><span class="tf">'+f+'</span>'+d+'</span>';
   }).join('');
   box.innerHTML=chips;
 }
@@ -555,7 +585,7 @@ function pickOfferFilter(el){
   el.classList.add('on');
   renderOffers(el.getAttribute('data-d')||'');
 }
-function showOffers(){ hideViews(); $('offersView').style.display=''; setTab('btnOffers'); renderOffersFilter(); renderOffers(''); window.scrollTo({top:0,behavior:'smooth'}); }
+function showOffers(){ hideViews(); $('offersView').style.display=''; setTab('btnOffers'); renderOffersFilter(); var _f=document.querySelector('#ofFilter .of-chip.on'); renderOffers(_f?_f.getAttribute('data-d'):''); window.scrollTo({top:0,behavior:'smooth'}); }
 function toggleOffersPub(){ var m=document.getElementById('offersMsg'); if(m) m.style.display=(m.style.display==='none'?'':'none'); }
 function showProfile(){ cancelEdit(); hideViews(); $('profileCard').style.display=''; setTab('btnProfile'); window.scrollTo({top:0,behavior:'smooth'}); }
 function showRequest(){ hideViews(); $('form').style.display=''; setTab('btnHome'); populateReqStaff(); window.scrollTo({top:0,behavior:'smooth'}); }
