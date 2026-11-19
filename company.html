@@ -73,6 +73,10 @@
   .of-country-h{display:flex;align-items:center;justify-content:center;gap:12px;margin:8px 0 16px;padding:18px 12px;border-radius:20px;background:linear-gradient(135deg,rgba(14,157,106,.10),rgba(212,168,67,.16),rgba(196,29,136,.10));border:1px solid rgba(212,168,67,.35)}
   .of-country-h .fl{font-size:40px;line-height:1}
   .of-country-h .nm{font-size:38px;font-weight:900;letter-spacing:.5px;background:linear-gradient(135deg,var(--brand),#b8860b,var(--brand2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .of-country-h .nmw{display:flex;flex-direction:column;align-items:center;line-height:1.1}
+  .of-country-h .nsub{font-size:20px;font-weight:800;color:var(--brand2);margin-top:2px}
+  .of-tab .tnw{display:flex;flex-direction:column;align-items:center;line-height:1.15}
+  .of-tab .tnw small{font-size:11px;font-weight:800;opacity:.85}
   .of-country-h .cnt{font-size:12px;font-weight:800;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:20px;padding:3px 10px}
   .of-days{background:rgba(14,157,106,.1);color:var(--brand);border:1px solid rgba(14,157,106,.25)}
   .of-kind{background:#1a3a8f;color:#fff;border:1px solid #1a3a8f}
@@ -597,31 +601,31 @@ var OFFERS=[
     route:'7 ليالي القاهرة (الزمالك) · فندق 4 نجوم مع الإفطار · 3 جولات',
     price:'2,473', cur:'ريال سعودي', per:'للشخص (على أساس شخصين)',
     img:'offers/egypt-EG-2026-020.jpg', pdf:'offers/egypt-EG-2026-020.pdf' },
-  { dest:'أوروبا', flag:'🇪🇺', code:'GR-2026-027', expiry:'20 ديسمبر 2026', days:'6 أيام / 5 ليالي', kind:'جروب',
+  { dest:'أوروبا', sub:'(جروب)', flag:'🇪🇺', code:'GR-2026-027', expiry:'20 ديسمبر 2026', days:'6 أيام / 5 ليالي', kind:'جروب',
     route:'أمستردام وباريس: أمستردام – باريس · فنادق 4 نجوم · باص ومرشد سياحي · مواعيد المغادرة: 26 نوفمبر · 3 ديسمبر · 10 ديسمبر · 17 ديسمبر',
     price:'4,240', cur:'ريال سعودي', per:'للشخص (على أساس شخصين)',
     img:'offers/amsterdam-paris-GR-2026-027.jpg', pdf:'offers/amsterdam-paris-GR-2026-027.pdf' },
-  { dest:'أوروبا', flag:'🇪🇺', code:'GR-2026-028', expiry:'20 ديسمبر 2026', days:'7 أيام / 6 ليالي', kind:'جروب',
+  { dest:'أوروبا', sub:'(جروب)', flag:'🇪🇺', code:'GR-2026-028', expiry:'20 ديسمبر 2026', days:'7 أيام / 6 ليالي', kind:'جروب',
     route:'إيطاليا الكلاسيكية وسويسرا: روما – فلورنسا – البندقية – زيورخ · فنادق 4 نجوم · باص ومرشد سياحي · مواعيد المغادرة: 22 نوفمبر · 29 نوفمبر · 6 ديسمبر · 13 ديسمبر · 20 ديسمبر',
     price:'5,800', cur:'ريال سعودي', per:'للشخص (على أساس شخصين)',
     img:'offers/italy-switzerland-GR-2026-028.jpg', pdf:'offers/italy-switzerland-GR-2026-028.pdf' },
-  { dest:'أوروبا', flag:'🇪🇺', code:'GR-2026-029', expiry:'20 ديسمبر 2026', days:'8 أيام / 7 ليالي', kind:'جروب',
+  { dest:'أوروبا', sub:'(جروب)', flag:'🇪🇺', code:'GR-2026-029', expiry:'20 ديسمبر 2026', days:'8 أيام / 7 ليالي', kind:'جروب',
     route:'السيمفونية الكلاسيكية — إيطاليا والنمسا: روما – فلورنسا – البندقية – سالزبورغ – فيينا · فنادق 4 نجوم · باص ومرشد سياحي · مواعيد المغادرة: 22 نوفمبر · 29 نوفمبر · 6 ديسمبر · 13 ديسمبر · 20 ديسمبر',
     price:'5,950', cur:'ريال سعودي', per:'للشخص (على أساس شخصين)',
     img:'offers/italy-austria-GR-2026-029.jpg', pdf:'offers/italy-austria-GR-2026-029.pdf' },
-  { dest:'أوروبا', flag:'🇪🇺', code:'GR-2026-030', expiry:'20 ديسمبر 2026', days:'10 أيام / 9 ليالي', kind:'جروب',
+  { dest:'أوروبا', sub:'(جروب)', flag:'🇪🇺', code:'GR-2026-030', expiry:'20 ديسمبر 2026', days:'10 أيام / 9 ليالي', kind:'جروب',
     route:'إيطاليا والنمسا وسويسرا وفرنسا: روما – فلورنسا – البندقية – زيورخ – باريس · فنادق 4 نجوم · باص ومرشد سياحي · مواعيد المغادرة: 22 نوفمبر · 29 نوفمبر · 6 ديسمبر · 13 ديسمبر · 20 ديسمبر',
     price:'8,250', cur:'ريال سعودي', per:'للشخص (على أساس شخصين)',
     img:'offers/italy-austria-swiss-france-GR-2026-030.jpg', pdf:'offers/italy-austria-swiss-france-GR-2026-030.pdf' },
-  { dest:'أوروبا', flag:'🇪🇺', code:'GR-2026-031', expiry:'20 ديسمبر 2026', days:'6 أيام / 5 ليالي', kind:'جروب',
+  { dest:'أوروبا', sub:'(جروب)', flag:'🇪🇺', code:'GR-2026-031', expiry:'20 ديسمبر 2026', days:'6 أيام / 5 ليالي', kind:'جروب',
     route:'النمسا والمجر وسلوفاكيا والتشيك: فيينا – بودابست – براغ · فنادق 4 نجوم · باص ومرشد سياحي · مواعيد المغادرة: 20 نوفمبر · 27 نوفمبر · 4 ديسمبر · 11 ديسمبر · 18 ديسمبر',
     price:'3,530', cur:'ريال سعودي', per:'للشخص (على أساس شخصين)',
     img:'offers/austria-hungary-czech-GR-2026-031.jpg', pdf:'offers/austria-hungary-czech-GR-2026-031.pdf' },
-  { dest:'أوروبا', flag:'🇪🇺', code:'GR-2026-032', expiry:'20 ديسمبر 2026', days:'8 أيام / 7 ليالي', kind:'جروب',
+  { dest:'أوروبا', sub:'(جروب)', flag:'🇪🇺', code:'GR-2026-032', expiry:'20 ديسمبر 2026', days:'8 أيام / 7 ليالي', kind:'جروب',
     route:'الروح الفرنسية والسويسرية: باريس – ليون – زيورخ · فنادق 4 نجوم · باص ومرشد سياحي · مواعيد المغادرة: 21 نوفمبر · 28 نوفمبر · 5 ديسمبر · 12 ديسمبر · 19 ديسمبر',
     price:'6,650', cur:'ريال سعودي', per:'للشخص (على أساس شخصين)',
     img:'offers/french-swiss-GR-2026-032.jpg', pdf:'offers/french-swiss-GR-2026-032.pdf' },
-  { dest:'أوروبا', flag:'🇪🇺', code:'GR-2026-033', expiry:'20 ديسمبر 2026', days:'7 أيام / 6 ليالي', kind:'جروب',
+  { dest:'أوروبا', sub:'(جروب)', flag:'🇪🇺', code:'GR-2026-033', expiry:'20 ديسمبر 2026', days:'7 أيام / 6 ليالي', kind:'جروب',
     route:'العطلات الإيطالية: ميلانو – فيرونا – البندقية – بيروجيا – روما · فنادق 4 نجوم · باص ومرشد سياحي · مواعيد المغادرة: 25 نوفمبر · 2 ديسمبر · 9 ديسمبر · 16 ديسمبر',
     price:'4,850', cur:'ريال سعودي', per:'للشخص (على أساس شخصين)',
     img:'offers/italian-holidays-GR-2026-033.jpg', pdf:'offers/italian-holidays-GR-2026-033.pdf' },
@@ -660,7 +664,7 @@ function renderOffers(filter){
   grid.innerHTML = dests.map(function(d){
     var its=list.filter(function(o){return o.dest===d;});
     return '<section class="of-country">'+
-      '<div class="of-country-h"><span class="fl">'+(its[0].flag||'')+'</span><span class="nm">'+d+'</span><span class="cnt">'+its.length+' '+(its.length===1?'عرض':'عروض')+'</span></div>'+
+      '<div class="of-country-h"><span class="fl">'+(its[0].flag||'')+'</span><span class="nmw"><span class="nm">'+d+'</span>'+(its[0].sub?'<span class="nsub">'+its[0].sub+'</span>':'')+'</span><span class="cnt">'+its.length+' '+(its.length===1?'عرض':'عروض')+'</span></div>'+
       '<div class="of-grid">'+its.map(card).join('')+'</div>'+
     '</section>';
   }).join('');
@@ -671,7 +675,8 @@ function renderOffersFilter(){
   // تبويب لكل دولة بعلمها — أول دولة مفتوحة افتراضياً
   var chips = dests.map(function(d,i){
     var f=(OFFERS.find(function(o){return o.dest===d;})||{}).flag||'';
-    return '<span class="of-chip of-tab'+(i===0?' on':'')+'" data-d="'+d+'" onclick="pickOfferFilter(this)"><span class="tf">'+f+'</span>'+d+'</span>';
+    var sb=(OFFERS.find(function(o){return o.dest===d;})||{}).sub||'';
+    return '<span class="of-chip of-tab'+(i===0?' on':'')+'" data-d="'+d+'" onclick="pickOfferFilter(this)"><span class="tf">'+f+'</span>'+(sb?'<span class="tnw">'+d+'<small>'+sb+'</small></span>':d)+'</span>';
   }).join('');
   box.innerHTML=chips;
 }
