@@ -460,7 +460,7 @@ tr.opened td{background:#eef8f7!important}.cexp{display:flex;gap:28px;align-item
 </div>
 
 <script>
-const BUILD='1794972864';
+const BUILD='1795059957';
 /* ===================== storage ===================== */
 const KEY='exp_app_v1';
 const DEF_CATS=[
@@ -1495,7 +1495,7 @@ function regSettings(id,branchId){
   </div><div class="df"><button class="btn pri" data-ok>✓ حفظ التغييرات</button><button class="btn" data-x>✕ إلغاء</button></div></div>`);
   o.querySelector('[data-x]').onclick=()=>o.remove();
   o.querySelector('#rsact')?.addEventListener('click',()=>{r.active=r.active===false;save();o.remove();viewRegisters()});
-  o.querySelector('#rsdel')?.addEventListener('click',()=>{if(r.status==='open'){toast('أغلق الصندوق أولاً');return}if(S.sales.some(s=>s.registerId===r.id)){toast('لا يمكن الحذف: عليه فواتير. ألغِ تفعيله بدلاً من ذلك');return}confirmDlg('حذف الصندوق؟','',()=>{S.registers=S.registers.filter(x=>x.id!==r.id);save();o.remove();viewRegisters()})});
+  o.querySelector('#rsdel')?.addEventListener('click',()=>{if(r.status==='open'){toast('أغلق الصندوق أولاً');return}if(S.sales.some(s=>s.registerId===r.id)){toast('لا يمكن الحذف: عليه فواتير. ألغِ تفعيله بدلاً من ذلك');return}confirmDlg('حذف الصندوق؟','',()=>{S.shifts.forEach(x=>{if(x.registerId===r.id){x.registerName=r.name;x.branchId=x.branchId||r.branchId}});S.registers=S.registers.filter(x=>x.id!==r.id);save();o.remove();viewRegisters()})});
   o.querySelector('[data-ok]').onclick=()=>{
     const name=o.querySelector('#rsn').value.trim();if(!name){toast('اكتب اسم الصندوق');return}
     const methods=[...o.querySelectorAll('.mchip input:checked')].map(x=>x.value);if(!methods.length){toast('اختر طريقة دفع واحدة على الأقل');return}
@@ -2283,18 +2283,19 @@ function printDoc(title,body){const w=window.open('','_blank');if(!w){toast('ا�
 
 /* ---------- generic Rewaa-style list ---------- */
 const GLS={},GLC={};
+function glApplyF(c,st,list){for(const[k,v]of Object.entries(st.f)){if(!v||(Array.isArray(v)&&!v.length))continue;const col=c.cols.find(x=>x.k===k);if(!col)continue;list=list.filter(r=>{const val=col.fv(r);if(col.ft==='date'){if(!val)return false;const d=isoL(new Date(val));return typeof v==='string'?d===v:(!v.a||d>=v.a)&&(!v.b||d<=v.b)}if(col.ft==='select')return Array.isArray(v)?v.includes(String(val??'')):String(val)===v;return String(val??'').toLowerCase().includes(String(v).toLowerCase())})}return list}
 function glView(c){GLC[c.key]=c;const st=GLS[c.key]=GLS[c.key]||{q:'',page:1,size:c.size||10,f:{},tab:'',sort:null,cols:null};
-  if(!st.cols){try{st.cols=JSON.parse(ls.get('fsb_gl_'+c.key)||'null')}catch(e){}if(!st.cols){st.cols={};c.cols.forEach(x=>st.cols[x.k]=x.off?0:1)}}
+  if(!st.cols){try{st.cols=JSON.parse(ls.get('fsb_gl_'+c.key)||'null')}catch(e){}if(!st.cols){st.cols={};c.cols.forEach(x=>st.cols[x.k]=x.off?0:1)}}c.cols.forEach(x=>{if(!(x.k in st.cols))st.cols[x.k]=x.off?0:1});
   setTitle(c.title);let list=c.rows();
   if(c.tabs&&st.tab)list=list.filter(r=>c.tabFn(r,st.tab));
   const q=st.q.trim().toLowerCase();if(q)list=list.filter(r=>c.search(r).toLowerCase().includes(q));
-  for(const[k,v]of Object.entries(st.f)){if(!v||(Array.isArray(v)&&!v.length))continue;const col=c.cols.find(x=>x.k===k);if(!col)continue;list=list.filter(r=>{const val=col.fv(r);if(col.ft==='date'){if(!val)return false;const d=isoL(new Date(val));return typeof v==='string'?d===v:(!v.a||d>=v.a)&&(!v.b||d<=v.b)}if(col.ft==='select')return Array.isArray(v)?v.includes(String(val??'')):String(val)===v;return String(val??'').toLowerCase().includes(String(v).toLowerCase())})}
+  list=glApplyF(c,st,list);
   if(st.sort){const col=c.cols.find(x=>x.k===st.sort.k);const sv=col.sv||col.fv;list=[...list].sort((a,b)=>{const x=sv(a),y=sv(b);return(x>y?1:x<y?-1:0)*(st.sort.d==='asc'?1:-1)})}
   const pages=Math.max(1,Math.ceil(list.length/st.size));if(st.page>pages)st.page=pages;const rows=list.slice((st.page-1)*st.size,st.page*st.size);
   const cols=c.cols.filter(x=>st.cols[x.k]);const K=`'${c.key}'`;
   const head=x=>`<th>${x.l}${x.sub?`<div class="sub" style="margin:0;font-weight:400">${x.sub}</div>`:''} ${x.sv||x.sort?`<button class="fbtn ${st.sort?.k===x.k?'on':''}" title="ترتيب" onclick="glSort(${K},'${x.k}')">${st.sort?.k===x.k?(st.sort.d==='asc'?'↑':'↓'):'⇅'}</button>`:''}${x.ft?`<button class="fbtn ${(Array.isArray(st.f[x.k])?st.f[x.k].length:st.f[x.k])?'on':''}" title="تصفية" onclick="glFilter(event,${K},'${x.k}')">⏷</button>`:''}</th>`;
   $('#view').innerHTML=`${c.tabs?`<div class="tabs no-print">${c.tabs.map(([v,l])=>`<a href="javascript:void 0" class="${st.tab===v?'on':''}" onclick="GLS[${K}].tab='${v}';GLS[${K}].page=1;glView(GLC[${K}])">${l}</a>`).join('')}</div>`:''}
-   <div class="bar">${c.searchPh?`<div class="search" style="width:420px"><input id="glq" placeholder="${c.searchPh}" value="${esc(st.q)}"></div>`:'<div></div>'}<div style="display:flex;gap:8px;flex-wrap:wrap">${c.btns||''}</div></div>
+   <div class="bar">${c.searchPh?`<div class="search" style="width:420px"><input id="glq" placeholder="${c.searchPh}" value="${esc(st.q)}"></div>`:'<div></div>'}<div style="display:flex;gap:8px;flex-wrap:wrap">${c.btns||''}</div></div>${c.top?c.top(st,list):''}
    <div class="card"><div class="bar" style="padding:10px 14px;margin:0;border-bottom:1px solid var(--bd)"><span class="sub" style="margin:0">${c.summary?c.summary(list):''}</span><span style="display:flex;gap:10px">${Object.values(st.f).some(v=>Array.isArray(v)?v.length:v)?`<button class="btn sm lnk" onclick="GLS[${K}].f={};glView(GLC[${K}])">✕ مسح التصفية</button>`:''}<button class="btn sm lnk" onclick="glColsDlg(event,${K})">▥ تخصيص الأعمدة ⌄</button></span></div>
    <div class="tbl-wrap"><table class="trtbl"><thead><tr>${cols.map(head).join('')}${c.act?'<th></th>':''}</tr></thead><tbody>
    ${rows.map(r=>`<tr>${cols.map(x=>`<td>${x.cell(r)}</td>`).join('')}${c.act?`<td class="act">${c.act(r)}</td>`:''}</tr>`).join('')||`<tr><td colspan="${cols.length+1}"><div class="empty"><div class="ico">${c.ico||'📄'}</div><h3>${c.empty||'لا توجد بيانات'}</h3></div></td></tr>`}</tbody></table></div>
@@ -3079,15 +3080,31 @@ function shView(sh){
     recv:r3((sh.collections||[]).reduce((a,c)=>a+c.amount,0)),post:r3(sl.reduce((a,s)=>a+Math.max(0,s.total-(s.paid||0)),0)),disc:r3(sl.reduce((a,s)=>a+(+s.manual||0)+(+s.promo||0),0)),moves:sh.cashMoves||[]};
 }
 const cmRows=()=>[...S.shifts].filter(s=>s.openedAt).sort((a,b)=>b.openedAt.localeCompare(a.openedAt));
+function cmTop(st,list){const all=cmRows(),f=st.f,one=v=>Array.isArray(v)?v[0]||'':v||'';const br=one(f.loc),rg=one(f.reg),od=f.od&&typeof f.od==='object'?f.od:{a:typeof f.od==='string'?f.od:'',b:typeof f.od==='string'?f.od:''};
+  const brs=[...new Set(all.map(shBr))].sort(),rgs=[...new Set(all.filter(x=>!br||shBr(x)===br).map(shReg))].sort();const t=today();
+  const P=[['اليوم',t,t],['هذا الأسبوع',ymdAdd(t,-6),t],['هذا الشهر',t.slice(0,8)+'01',t],['هذه السنة',t.slice(0,5)+'01-01',t],['آخر 4 سنوات',ymdAdd(t,-1460),t]];
+  const old=all.length?isoL(new Date(all[all.length-1].openedAt)):'';
+  return`<div class="card no-print" style="padding:12px 14px;margin-bottom:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+   <label style="min-width:150px;flex:1"><small class="sub" style="margin:0">الفرع</small><select class="in" id="cmfbr" onchange="cmSetF()"><option value="">كل الفروع</option>${brs.map(b=>`<option ${b===br?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
+   <label style="min-width:150px;flex:1"><small class="sub" style="margin:0">الصندوق</small><select class="in" id="cmfrg" onchange="cmSetF()"><option value="">كل الصناديق</option>${rgs.map(b=>`<option ${b===rg?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
+   <label><small class="sub" style="margin:0">من تاريخ</small><input type="date" class="in" id="cmfa" onchange="cmSetF()" value="${od.a||''}"></label>
+   <label><small class="sub" style="margin:0">إلى تاريخ</small><input type="date" class="in" id="cmfb" onchange="cmSetF()" value="${od.b||''}"></label>
+   <div style="display:flex;gap:6px;flex-wrap:wrap">${P.map(([l,a,b],i)=>`<button class="btn sm ${od.a===a&&od.b===b?'pri':'out'}" onclick="cmSetP('${a}','${b}')">${l}</button>`).join('')}</div>
+   <div style="flex-basis:100%;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px"><span class="sub" style="margin:0">📚 السجل محفوظ لكل الفروع ولا ينحذف (٤ سنوات وأكثر)${old?' — أقدم جلسة: '+old:''}</span><b class="sub" style="margin:0">${list.length} جلسة</b></div></div>`}
+function cmSetF(){const st=GLS.cm,f=st.f,br=$('#cmfbr').value,rg=$('#cmfrg').value,a=$('#cmfa').value,b=$('#cmfb').value;if(a&&b&&b<a){toast('تاريخ النهاية قبل البداية');return}
+  if(br!==(Array.isArray(f.loc)?f.loc[0]||'':f.loc||'')&&rg&&!cmRows().some(x=>shBr(x)===br&&shReg(x)===rg))f.reg='';else f.reg=rg?[rg]:'';
+  f.loc=br?[br]:'';f.od=a||b?{a,b}:'';st.page=1;glView(GLC.cm)}
+function cmSetP(a,b){GLS.cm.f.od={a,b};GLS.cm.page=1;glView(GLC.cm)}
 function viewCashMgmt(){
   const ST=new Map();const st=sh=>{let v=ST.get(sh.id);if(!v){v=shView(sh).st;ST.set(sh.id,v)}return v};
-  glView({key:'cm',title:'إدارة صناديق البيع',rows:cmRows,search:sh=>'',btns:`<button class="btn lnk" onclick="cmExport()">⇪ تصدير</button>`,ico:'🖥',empty:'لا توجد جلسات صناديق بيع',
+  glView({key:'cm',title:'إدارة صناديق البيع',rows:cmRows,search:sh=>'',top:cmTop,btns:`<button class="btn lnk" onclick="cmExport()">⇪ تصدير</button>`,ico:'🖥',empty:'لا توجد جلسات صناديق بيع في هذا الفلتر',
     cols:[{k:'loc',l:'الموقع',cell:sh=>esc(shBr(sh)),fv:shBr,ft:'select'},{k:'reg',l:'اسم الصندوق',cell:sh=>esc(shReg(sh)),fv:shReg,ft:'select'},{k:'by',l:'فتح بواسطة',cell:sh=>esc(sh.openedBy||'—'),fv:sh=>sh.openedBy||'',ft:'select'},
-      {k:'od',l:'تاريخ فتح الصندوق',cell:sh=>ymdL(sh.openedAt),fv:sh=>sh.openedAt,ft:'date'},{k:'cd',l:'تاريخ إغلاق الصندوق',cell:sh=>sh.closedAt?ymdL(sh.closedAt):'—',fv:sh=>sh.closedAt||'',ft:'date'},
+      {k:'od',l:'تاريخ فتح الصندوق',cell:sh=>rwDT(sh.openedAt),fv:sh=>sh.openedAt,ft:'date'},{k:'cb',l:'أغلق بواسطة',cell:sh=>esc(sh.closedBy||'—'),fv:sh=>sh.closedBy||'',ft:'select'},{k:'cd',l:'تاريخ إغلاق الصندوق',cell:sh=>sh.closedAt?rwDT(sh.closedAt):'—',fv:sh=>sh.closedAt||'',ft:'date'},
+      {k:'sl',l:'إجمالي المبيعات',cell:sh=>nfR(shView(sh).sales)},
       {k:'st',l:'الحالة',cell:sh=>pill(SH_ST[st(sh)]),fv:st,ft:'select',optL:v=>SH_ST[v]?.[0]||v}],
     act:sh=>`<button class="ib" title="عرض" onclick="cmOpen('${sh.id}')">👁</button>`});
 }
-function cmExport(){const st=GLS.cm;let L=cmRows();const c=GLC.cm;for(const[k,v]of Object.entries(st?.f||{})){if(!v)continue;const col=c.cols.find(x=>x.k===k);L=L.filter(r=>{const val=col.fv(r);return col.ft==='date'?(val&&isoL(new Date(val))===v):String(val)===v})}
+function cmExport(){const L=glApplyF(GLC.cm,GLS.cm,cmRows());
   dlCSV('cash-management',['الموقع','اسم الصندوق','فتح بواسطة','تاريخ فتح الصندوق','تاريخ إغلاق الصندوق','أغلق بواسطة','الحالة','إجمالي المبيعات (شامل الضريبة)','إجمالي المرتجعات','الضريبة'],L.map(sh=>{const v=shView(sh);return[shBr(sh),shReg(sh),sh.openedBy,dtFmt(sh.openedAt),sh.closedAt?dtFmt(sh.closedAt):'',sh.closedBy||'',SH_ST[v.st][0],nfR(v.sales),nfR(v.ret),nfR(v.tax)]}))}
 let CMT='pay';
 function cmOpen(id,tab){CMT=tab||CMT;document.querySelector('.ov.cmd')?.remove();const sh=byId(S.shifts,id);if(!sh)return;const v=shView(sh);const L=cmRows();const i=L.findIndex(x=>x.id===id);const prev=L[i-1],next=L[i+1];
