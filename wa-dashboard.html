@@ -4525,7 +4525,47 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       else tier = tiers[0];
       return +tier.profit_individual || 0;
     }
+    // ✈️ ١٩ نوفمبر ٢٠٢٦ (المالكة): بجانب كل مطار بالمنسدلة «من X ريال» = أرخص بكج لهذا المطار
+    //    (نفس الأيام/التاريخ/العدد)، و«⭐ الأرخص» على أرخص مطار — لتنصح الموظفة العميل بالقدوم والمغادرة منه.
+    const bfRankMemo = new Map();
+    function bfRankCached(dest, days, date, pax){
+      const k = [dest, days, date, pax].join("|");
+      if (!bfRankMemo.has(k)) {
+        const p = fetch(BF_TAI, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + BF_TAI_KEY, apikey: BF_TAI_KEY }, body: JSON.stringify({ action: "rank_suggestions", dest, days, date, pax }) })
+          .then(r => r.json()).catch(e => { bfRankMemo.delete(k); throw e; });
+        bfRankMemo.set(k, p);
+      }
+      return bfRankMemo.get(k);
+    }
+    let bfAirSeq = 0;
+    async function bfRankAirports(){
+      const aSel = $("bf-airport"); if (!aSel) return;
+      const opts = [...aSel.options].filter(o => o.value && o.value.includes("|"));
+      const reset = () => opts.forEach(o => { o.textContent = bfPairLabel(o.value); });
+      const dest = $("bf-destination") ? $("bf-destination").value : "";
+      const days = +($("bf-days") ? $("bf-days").value : 0) || 0;
+      const date = $("bf-date_from") ? $("bf-date_from").value : "";
+      const pax = +($("bf-pax") ? $("bf-pax").value : 0) || 2;
+      if (!opts.length || !dest || !days || !date || bfIsGroup(dest)) { reset(); return; }
+      const seq = ++bfAirSeq;
+      try {
+        if (bfPM.dest !== dest) { try { const pm = await fetch(BF_TAI, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + BF_TAI_KEY, apikey: BF_TAI_KEY }, body: JSON.stringify({ action: "profit_margins", dest }) }).then(r => r.json()); bfPM.rows = pm.margins || []; bfPM.dest = dest; } catch (_) { bfPM.rows = []; } }
+        const data = await bfRankCached(dest, days, date, pax);
+        if (seq !== bfAirSeq) return;
+        const m = String(date).match(/^(\d{4})-(\d{2})-(\d{2})/); const md = m ? (+m[2])*100 + (+m[3]) : null;
+        const best = {};   // pair → أرخص تكلفة
+        (data.suggestions || []).forEach(x => { const p = bfPairOf(x), t = Number(x.total); if (t > 0 && (best[p] == null || t < best[p])) best[p] = t; });
+        const pairs = Object.keys(best); const minPair = pairs.sort((a, b) => best[a] - best[b])[0];
+        const fmt = t => { const pr = bfProfitFor(t, md); return Math.round(pr == null ? t : t + pr).toLocaleString("en-US"); };
+        const arD = String(days).replace(/[0-9]/g, d => "٠١٢٣٤٥٦٧٨٩"[+d]);
+        opts.forEach(o => {
+          const base = bfPairLabel(o.value), t = best[o.value];
+          o.textContent = t == null ? `${base} · لا يوجد ${arD} أيام` : `${base} · من ${fmt(t)} ريال${o.value === minPair && pairs.length > 1 ? " ⭐ الأرخص" : ""}`;
+        });
+      } catch (_) { if (seq === bfAirSeq) reset(); }
+    }
     async function bfFetchRanking(){
+      bfRankAirports();
       const list = $("bf-sug-list"); if (!list) return;
       const ranks = [...list.querySelectorAll(".bf-rank")]; if (!ranks.length) return;
       const dest = $("bf-destination") ? $("bf-destination").value : "";
@@ -4539,7 +4579,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       const tai = (body) => fetch(BF_TAI, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + BF_TAI_KEY, apikey: BF_TAI_KEY }, body: JSON.stringify(body) }).then(r => r.json());
       try {
         if (bfPM.dest !== dest) { try { const pm = await tai({ action: "profit_margins", dest }); bfPM.rows = pm.margins || []; bfPM.dest = dest; } catch (_) { bfPM.rows = []; } }
-        const data = await tai({ action: "rank_suggestions", dest, days, date, pax });
+        const data = await bfRankCached(dest, days, date, pax);
         if (seq !== bfRankSeq) return;   // تغيّرت المدخلات أثناء الحساب
         const norm = x => String(x||"").replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/\s+/g, "").trim();
         const map = {}; (data.suggestions || []).forEach(x => { map[norm(x.distribution)] = x; });
@@ -4560,6 +4600,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
       } catch (_) { if (seq === bfRankSeq) ranks.forEach(s => s.innerHTML = ""); }
     }
     function bfRenderSugs(){
+      bfRankAirports();
       const list = $("bf-sug-list"); const hint = $("bf-sug-hint");
       if (!list || !hint) return;
       list.innerHTML = "";
