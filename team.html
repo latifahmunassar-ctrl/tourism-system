@@ -1531,6 +1531,7 @@ function setCustomerType(t){
   if(cBtn) cBtn.classList.toggle('on', t === 'company');
   if(iBtn) iBtn.classList.toggle('on', t === 'individual');
   applyAutoProfit();
+  if(typeof bfRankAirports==='function') bfRankAirports();
   if(typeof bfFetchRanking==='function' && document.querySelectorAll('#bf-sugList .bf-sug').length) bfFetchRanking();  // الربح يعتمد على نوع العميل → أعِد الترتيب
 }
 async function autoProfitForProgram(dest){
@@ -3409,10 +3410,49 @@ function bfRenderAirportOptions(){
     const lbl = a===b ? `القدوم والمغادرة: ${bfAirAr(a)}` : `القدوم: ${bfAirAr(a)} — المغادرة: ${bfAirAr(b)}`;
     const n = days ? BF_SUGS.filter(s=>bfPairOf(s)===p && +s.days===days).length
                    : BF_SUGS.filter(s=>bfPairOf(s)===p).length;
-    return `<option value="${bfEsc(p)}">${bfEsc(lbl)} (${_bfArNum(n)})</option>`;
+    return `<option value="${bfEsc(p)}" data-base="${bfEsc(lbl)} (${_bfArNum(n)})">${bfEsc(lbl)} (${_bfArNum(n)})</option>`;
   }).join('');
   aSel.innerHTML = html;
   if(prev && [...aSel.options].some(o=>o.value===prev)) aSel.value = prev;   // حافظ على الاختيار
+  bfRankAirports();
+}
+// ✈️ ١٩ نوفمبر ٢٠٢٦ (المالكة): بجانب كل مطار «من X ريال» = أرخص بكج لهذا المطار (نفس الأيام/التاريخ/العدد،
+//    بالسعر النهائي بعد الربح حسب نوع العميل)، و«⭐ الأرخص» على أرخص مطار — لتنصح العميل بالقدوم والمغادرة منه.
+const _bfRankMemo = new Map();
+function bfRankCached(dest,days,date,pax){
+  const k=[dest,days,date,pax].join('|');
+  if(!_bfRankMemo.has(k)){
+    const p=fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},body:JSON.stringify({action:'rank_suggestions',dest,days,date,pax})})
+      .then(r=>r.json()).catch(e=>{ _bfRankMemo.delete(k); throw e; });
+    _bfRankMemo.set(k,p);
+  }
+  return _bfRankMemo.get(k);
+}
+let _bfAirSeq = 0;
+async function bfRankAirports(){
+  const aSel=document.getElementById('bf-airport'); if(!aSel) return;
+  const opts=[...aSel.options].filter(o=>o.value && o.value.includes('|'));
+  const reset=()=>opts.forEach(o=>{ if(o.dataset.base) o.textContent=o.dataset.base; });
+  const dest=(document.getElementById('bf-dest')||{}).value||'';
+  const days=+(document.getElementById('bf-days')||{}).value||0;
+  const date=(document.getElementById('bf-date')||{}).value||'';
+  const pax=+(document.getElementById('bf-adults')||{}).value||2;
+  if(!opts.length||!dest||!days||!date){ reset(); return; }
+  const seq=++_bfAirSeq;
+  try{
+    try{ await loadProfitMargins(dest); }catch(_){}
+    const data=await bfRankCached(dest,days,date,pax);
+    if(seq!==_bfAirSeq) return;
+    const mmdd=_bfDateMMDD();
+    const best={};
+    (data.suggestions||[]).forEach(x=>{ const p=bfPairOf(x), t=Number(x.total); if(t>0 && (best[p]==null||t<best[p])) best[p]=t; });
+    const pairs=Object.keys(best); const minPair=pairs.sort((a,b)=>best[a]-best[b])[0];
+    const fmt=t=>{ const pr=_rankProfit(t,mmdd); return Math.round(pr==null?t:t+pr).toLocaleString('en-US'); };
+    opts.forEach(o=>{
+      const base=o.dataset.base||o.textContent, t=best[o.value];
+      o.textContent = t==null ? `${base} · لا يوجد ${_bfArNum(days)} أيام` : `${base} · من ${fmt(t)} ريال${o.value===minPair&&pairs.length>1?' ⭐ الأرخص':''}`;
+    });
+  }catch(_){ if(seq===_bfAirSeq) reset(); }
 }
 function bfDaysAvail(){ const p=bfCurPair(); return [...new Set(BF_SUGS.filter(s=>bfPairOf(s)===p).map(s=>+s.days))].sort((a,b)=>a-b).join('، '); }
 // وسم «الأرخص -N» بالتكلفة الإجمالية (فنادق التاريخ + جولات + تنقلات) — ديناميكي حسب
@@ -3429,8 +3469,7 @@ async function bfFetchRanking(){
   ranks.forEach(s=>s.innerHTML=`<span style="font-size:10.5px;color:#8a97a5;margin-inline-start:6px">⏳ أحسب التكلفة…</span>`);
   try{
     try{ await loadProfitMargins(dest); }catch(_){}        // جدول الأرباح لهذه الوجهة (لحساب السعر النهائي)
-    const res = await fetch(SUPABASE_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},body:JSON.stringify({action:'rank_suggestions',dest,days,date,pax})});
-    const data = await res.json();
+    const data = await bfRankCached(dest,days,date,pax);
     const norm = s => String(s||'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\s+/g,'').trim();
     // السعر النهائي = التكلفة (فنادق+جولات+تنقلات+شرائح) + هامش الربح (حسب الشريحة/الموسم/نوع العميل)
     // فيطابق السعر الظاهر بالشاشة. لو لا جدول أرباح/خارج النطاق → نعرض التكلفة ونوضّح.
@@ -3723,7 +3762,7 @@ function bfInit(){
     h.textContent = 'اضغط «عرض الخيارات» لعرض التوزيع المطابق لعدد الأيام.'; h.style.display='';
   });
   // تغيير التاريخ/الأشخاص → أعِد حساب وسم «الأرخص» (ديناميكي حسب الفترة) لو الخيارات معروضة
-  ['bf-date','bf-adults'].forEach(id=>{ const e=document.getElementById(id); if(e) e.addEventListener('change', ()=>{ if(document.querySelectorAll('#bf-sugList .bf-sug').length) bfFetchRanking(); }); });
+  ['bf-date','bf-adults'].forEach(id=>{ const e=document.getElementById(id); if(e) e.addEventListener('change', ()=>{ bfRankAirports(); if(document.querySelectorAll('#bf-sugList .bf-sug').length) bfFetchRanking(); }); });
   bfExpected(); bfAddCity();
 }
 if(document.readyState!=='loading') bfInit();
