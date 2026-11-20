@@ -5917,6 +5917,9 @@ function waReqParse(body){
   if(from&&to){ days=Math.round((to-from)/86400000)+1; if(days<2) days=null; }   // ١٩←٢٩ = ١٠ ليالي = ١١ يوم (النموذج: الليالي المتوقّعة = الأيام − ١)
   if(!days){ const md=lat.match(/(\d+)\s*(?:ايام|أيام|يوم)/)||lat.match(/(\d+)\s*days?(?![a-z])/i); if(md) days=parseInt(md[1],10); }
   if(!days){ const mn=lat.match(/(\d+)\s*nights?(?![a-z])/i); if(mn) days=parseInt(mn[1],10)+1; }
+  // ٢٠ نوفمبر ٢٠٢٦ (أريج العاصمة): «13 ليلة» بالعربي ما كانت تنقرأ → خانة الأيام فاضية فما تطلع الاقتراحات.
+  //   ذكر واحد فقط لعدد الليالي = إجمالي الرحلة (أكثر من ذكر = توزيع مدن، يُحسب من المدن).
+  if(!days){ const an=[...lat.matchAll(/(\d{1,2})\s*(?:ليلة|ليله|ليالي|ليال)(?![ء-ي])/g)]; if(an.length===1 && +an[0][1]>0) days=parseInt(an[0][1],10)+1; }
   // المدن (مرتّبة حسب ظهورها في النص)
   // المطابقة بلا مسافات («نهاترانج» = «نها ترانج»)
   const nbS=nb.replace(/\s+/g,''), _ns=c=>waReqNorm(c).replace(/\s+/g,'');
