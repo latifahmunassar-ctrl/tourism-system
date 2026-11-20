@@ -75,6 +75,7 @@ function detectDestination(messages: Array<{ role: string; content: unknown }>):
     [/[إا]سباني[اة]|spain|مدريد|madrid|برشلون[ةه]|barcelona|غرناط[ةه]|granada|قرطب[ةه]|cordoba|[إا]شبيلي[ةه]|sevill[ae]|seville|مالا?ق[ةا]|málaga|malaga|ماربي(?:لا|ا)|مربلة|marbella/i, "Spain"],
     [/سيرلانكا|سريلانكا|سري\s*لانكا|sri\s*lanka|srilanka|كولومبو|colombo|كاندي|kandy|ني[جغ]ومبو|negombo|نوارا|nuwara|بنتوتا|bentota/i, "Sri lanka"],
     [/[أا]رميني[اة]|armenia|يريفان|yerevan|دي?ليجان|dilijan|تساغ?كادزور|tsaghkadzor|جيرموك|jermuk/i, "Arminia"],
+    [/جورجيا|georgia|تبليسي|tbilisi|باتومي|batumi|كازبيجي|kazbegi|بورجومي|borjomi|كوتايسي|kutaisi|باكورياني|bakuriani/i, "Georgia"],
     // بولندا — «بولندا» تختلف عن «هولندا» بالحرف الأول فلا تتصادمان.
     [/بولندا|بولندي|poland|polska|وارسو|warsaw|warszawa|كراكوف|krakow|cracow|زاكوباني|zakopane|[غج]دانسك|gdansk|سوبوت|sopot|[غج]دينيا|gdynia|فروتسواف|wroclaw/i, "Poland"],
     // أبوظبي / ياس آيلاند — باقات Stay & Play (تسعير بالباقة لا بالليلة).
@@ -267,6 +268,15 @@ const DEST_CITIES: Record<string, Array<{ canonical: string; pattern: RegExp }>>
     { canonical: "Kandy",        pattern: /كاندي|kandy/i },
     { canonical: "Nuwara Eliya", pattern: /نوارا\s*ا?يليا|نوارا|nuwara/i },
     { canonical: "Bentota",      pattern: /بنتوتا|bentota/i },
+  ],
+  // جورجيا (تبويب «Georgia» — ٢٠ نوفمبر ٢٠٢٦) — يطابق SECTION_CITY_DEFS في sync-sheets.
+  Georgia: [
+    { canonical: "Tbilisi",   pattern: /تبليسي|tbilisi/i },
+    { canonical: "Batumi",    pattern: /باتومي|batumi/i },
+    { canonical: "Borjomi",   pattern: /بورجومي|borjomi/i },
+    { canonical: "Kazbegi",   pattern: /كازبيجي|kazbegi|stepantsminda/i },
+    { canonical: "Kutaisi",   pattern: /كوتايسي|kutaisi/i },
+    { canonical: "Bakuriani", pattern: /باكورياني|bakuriani/i },
   ],
   // أرمينيا (تبويب «Arminia») — يطابق SECTION_CITY_DEFS في sync-sheets. «سيفانافانك» دير لا مدينة.
   Arminia: [
@@ -876,7 +886,7 @@ function tryLocalEdit(userMsg: string, prevProgram: string): string | null {
     "Cape Town": "كيب تاون", "Hermanus": "هارمانوس", "Garden Route": "جاردن روت", "Johannesburg": "جوهانسبرغ", "Pretoria": "بريتوريا", "Sun City": "سن سيتي", "Kruger": "كروجر",
     "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط", "Fes": "فاس", "Chefchaouen": "شفشاون",
     "Madrid": "مدريد", "Cordoba": "قرطبة", "Granada": "غرناطة", "Seville": "إشبيلية", "Malaga": "مالقا", "Barcelona": "برشلونة", "Marbella": "ماربيا",
-    "Colombo": "كولومبو", "Negombo": "نيجومبو", "Kandy": "كاندي", "Nuwara Eliya": "نوارا ايليا", "Bentota": "بنتوتا", "Yerevan": "يريفان", "Dilijan": "دليجان", "Tsaghkadzor": "تساغكادزور", "Sevan": "سيفان", "Jermuk": "جيرموك",
+    "Colombo": "كولومبو", "Negombo": "نيجومبو", "Kandy": "كاندي", "Nuwara Eliya": "نوارا ايليا", "Bentota": "بنتوتا", "Yerevan": "يريفان", "Dilijan": "دليجان", "Tsaghkadzor": "تساغكادزور", "Sevan": "سيفان", "Jermuk": "جيرموك", "Tbilisi": "تبليسي", "Batumi": "باتومي", "Borjomi": "بورجومي", "Kazbegi": "كازبيجي", "Kutaisi": "كوتايسي", "Bakuriani": "باكورياني",
   };
   const formatBedScope = (cities: string[]): string => cities.flatMap(c => {
     const ar = CITY_AR[c];
@@ -4751,7 +4761,7 @@ Deno.serve(async (req) => {
         "Cape Town": "كيب تاون", "Hermanus": "هارمانوس", "Garden Route": "جاردن روت", "Johannesburg": "جوهانسبرغ", "Pretoria": "بريتوريا", "Sun City": "سن سيتي", "Kruger": "كروجر",
         "Marrakech": "مراكش", "Casablanca": "الدار البيضاء", "Tanger": "طنجة", "Agadir": "أكادير", "Agafay": "اغافاي", "Essaouira": "الصويرة", "Rabat": "الرباط", "Fes": "فاس", "Chefchaouen": "شفشاون",
         "Madrid": "مدريد", "Cordoba": "قرطبة", "Granada": "غرناطة", "Seville": "إشبيلية", "Malaga": "مالقا", "Barcelona": "برشلونة", "Marbella": "ماربيا",
-        "Colombo": "كولومبو", "Negombo": "نيجومبو", "Kandy": "كاندي", "Nuwara Eliya": "نوارا ايليا", "Bentota": "بنتوتا", "Yerevan": "يريفان", "Dilijan": "دليجان", "Tsaghkadzor": "تساغكادزور", "Sevan": "سيفان", "Jermuk": "جيرموك",
+        "Colombo": "كولومبو", "Negombo": "نيجومبو", "Kandy": "كاندي", "Nuwara Eliya": "نوارا ايليا", "Bentota": "بنتوتا", "Yerevan": "يريفان", "Dilijan": "دليجان", "Tsaghkadzor": "تساغكادزور", "Sevan": "سيفان", "Jermuk": "جيرموك", "Tbilisi": "تبليسي", "Batumi": "باتومي", "Borjomi": "بورجومي", "Kazbegi": "كازبيجي", "Kutaisi": "كوتايسي", "Bakuriani": "باكورياني",
       };
       // Distribution-change follow-up: employee typed a NEW city/nights split
       // in chat to reshape an existing program (e.g. "٢ بانكوك ٤ كوساموي").

@@ -3310,6 +3310,7 @@ const BF_CITIES = {
   "سيرلانكا":["كولومبو","نيجومبو","كاندي","نوارا ايليا","بنتوتا"],
   "أبوظبي":["جزيرة ياس","أبوظبي"],
   "أرمينيا":["يريفان","دليجان","تساغكادزور","سيفان","جيرموك"],
+  "جورجيا":["تبليسي","باتومي","بورجومي","كازبيجي","كوتايسي","باكورياني"],
 };
 // يحوّل أي تهجئة للوجهة (همزة/تشكيل/إنجليزي) إلى مفتاح BF_CITIES المطابق، حتى لا
 // تفشل تعبئة الفورم عند ضبط bf-dest من طلب محفوظ (مثال: "اندونيسيا" بلا همزة أو
@@ -3329,7 +3330,7 @@ function bfResolveDest(d){
     morocco:'المغرب', marrakech:'المغرب', marrakesh:'المغرب', casablanca:'المغرب', tanger:'المغرب', tangier:'المغرب', agadir:'المغرب', agafay:'المغرب', essaouira:'المغرب', rabat:'المغرب',
     spain:'إسبانيا', madrid:'إسبانيا', barcelona:'إسبانيا', granada:'إسبانيا', cordoba:'إسبانيا', seville:'إسبانيا', sevilla:'إسبانيا', malaga:'إسبانيا', marbella:'إسبانيا',
     abudhabi:'أبوظبي', 'abu dhabi':'أبوظبي', yasisland:'أبوظبي', yas:'أبوظبي',
-    armenia:'أرمينيا', arminia:'أرمينيا', yerevan:'أرمينيا' };
+    armenia:'أرمينيا', arminia:'أرمينيا', yerevan:'أرمينيا', georgia:'جورجيا', tbilisi:'جورجيا', batumi:'جورجيا' };
   if (EN[n]) return EN[n];
   if (/مكة|مكه|عمرة|المدينةالمنورة|المنورة/.test(n)) return 'العمرة';  // مكة/العمرة → مفتاح BF_CITIES
   if (/[إا]ن[جك]لترا|بريطانيا|لندن/.test(n)) return 'إنجلترا';         // إنجلترا/لندن → مفتاح BF_CITIES
@@ -3338,6 +3339,7 @@ function bfResolveDest(d){
   if (/[إا]سباني[اة]|مدريد|برشلون[ةه]|غرناط[ةه]|قرطب[ةه]|[إا]شبيلي[ةه]|مالق[ةا]|ماربي/.test(n)) return 'إسبانيا';
   if (/ابوظبي|ياسايلاند|جزيرةياس/.test(n)) return 'أبوظبي';   // أبوظبي/ياس آيلاند → مفتاح BF_CITIES  // إسبانيا → مفتاح BF_CITIES
   if (/ارميني|يريفان|دليجان|تساغكادزور|جيرموك/.test(n)) return 'أرمينيا';   // أرمينيا → مفتاح BF_CITIES
+  if (/جورجيا|تبليسي|باتومي|بورجومي|كازبيجي|كوتايسي|باكورياني/.test(n)) return 'جورجيا';   // جورجيا (٢٠ نوفمبر ٢٠٢٦)
   return Object.keys(BF_CITIES).find(k => norm(k) === n) || raw;
 }
 const BF_INTAKE = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake";
@@ -3346,7 +3348,7 @@ let bfShownRows = [];    // suggestions currently rendered as cards
 let bfChosen = null;     // chosen distribution string (ready mode)
 let BF_CHOSEN_DEP = '';  // مطار مغادرة الاقتراح المختار (مكة: «المدينة» = العودة من مطار المدينة)
 function bfEsc(s){ return String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
-const BF_AIRPORT_AR = {Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي",Salalah:"صلالة",Shanghai:"شنغهاي",Beijing:"بكين",Hangzhou:"هانغتشو","Hong Kong":"هونغ كونغ",Guangzhou:"جوانزو",Marrakech:"مراكش",Casablanca:"الدار البيضاء",Tanger:"طنجة",Agadir:"أكادير",Agafay:"اغافاي",Essaouira:"الصويرة",Rabat:"الرباط",Madrid:"مدريد",Cordoba:"قرطبة",Granada:"غرناطة",Seville:"إشبيلية",Malaga:"مالقا",Barcelona:"برشلونة",Marbella:"ماربيا","Abu Dhabi":"أبوظبي","Yas Island":"جزيرة ياس",Colombo:"كولومبو",Negombo:"نيجومبو",Kandy:"كاندي","Nuwara Eliya":"نوارا ايليا",Bentota:"بنتوتا",Yerevan:"يريفان"};
+const BF_AIRPORT_AR = {Istanbul:"اسطنبول",Trabzon:"طرابزون","Kuala Lumpur":"كوالالمبور",Penang:"بينانج",Langkawi:"لانكاوي",Sarajevo:"سراييفو",Mostar:"موستار",Bangkok:"بانكوك","Ha Noi":"هانوي",Moscow:"موسكو",Jakarta:"جاكرتا","Phu Quoc":"فوكوك","Ho Chi Minh":"هوتشي مينه","Da Nang":"دانانج",Bali:"بالي",Salalah:"صلالة",Shanghai:"شنغهاي",Beijing:"بكين",Hangzhou:"هانغتشو","Hong Kong":"هونغ كونغ",Guangzhou:"جوانزو",Marrakech:"مراكش",Casablanca:"الدار البيضاء",Tanger:"طنجة",Agadir:"أكادير",Agafay:"اغافاي",Essaouira:"الصويرة",Rabat:"الرباط",Madrid:"مدريد",Cordoba:"قرطبة",Granada:"غرناطة",Seville:"إشبيلية",Malaga:"مالقا",Barcelona:"برشلونة",Marbella:"ماربيا","Abu Dhabi":"أبوظبي","Yas Island":"جزيرة ياس",Colombo:"كولومبو",Negombo:"نيجومبو",Kandy:"كاندي","Nuwara Eliya":"نوارا ايليا",Bentota:"بنتوتا",Yerevan:"يريفان",Tbilisi:"تبليسي",Batumi:"باتومي",Kutaisi:"كوتايسي"};
 function bfAirAr(a){ return BF_AIRPORT_AR[a] || a; }
 function bfPairOf(s){ return s.arrival_airport + '|' + s.departure_airport; }
 function bfCurPair(){
@@ -3369,7 +3371,7 @@ async function bfLoadSuggestions(){
   try{
     // rank=transfers: شاشة التسعير تطلب وسم تكلفة التنقلات (المغرب) — نموذج العميل لا يطلبه
     // أرمينيا (١٨ نوفمبر ٢٠٢٦): client-intake لا يعرف الاسم العربي → نرسل مفتاح التبويب مباشرة.
-    const sugKey = ({'أرمينيا':'Arminia'})[dest] || dest;
+    const sugKey = ({'أرمينيا':'Arminia','جورجيا':'Georgia'})[dest] || dest;
     const res = await fetch(BF_INTAKE + '?suggestions=' + encodeURIComponent(sugKey) + '&rank=transfers');
     const d = await res.json(); BF_SUGS = d.suggestions || [];
   }catch(e){ BF_SUGS = []; }
