@@ -2897,7 +2897,7 @@ async function handleTourVariants(body: { dest?: string; name?: string }): Promi
 //    (بلا جدول قاعدة بيانات): شريحة تكلفة × موسم × شركات/أفراد. ──────────────────
 // مفتاح الوجهة ≠ اسم التبويب (أبوظبي). يجب أن يبقى مطابقاً لـTAB_KEY_OVERRIDE في sync-sheets.
 const PM_TAB_OVERRIDE: Record<string, string> = { "Abu Dhabi": "Abu Dhabi (Yas Island )" };
-const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "Spain", "  Sri lanka", "Poland", "Abu Dhabi (Yas Island )", " Arminia "];
+const PM_DEST_TABS = ["russia", "Bosnia", "Turky", "vietnam", "indonesia", "thailand", "Malaysia", "Oman ", "South Africa ", "mauritius ", "Makkah ", "England ", "China ", "Netherland", "Egypt", "Morroco", "Spain", "  Sri lanka", "Poland", "Abu Dhabi (Yas Island )", " Arminia ", "Georgia", "Azerbaijan"];
 
 async function pmGoogleToken(sa: { client_email: string; private_key: string }): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
@@ -2925,7 +2925,7 @@ async function pmReadSheet(token: string, ssid: string, range: string): Promise<
 function pmPrice(raw: string): number { return parseFloat((raw || "").replace(/,/g, "").replace(/[^\d.]/g, "")); }
 
 // نفس منطق القارئ الموسمي في sync-sheets (شركات×N مواسم + آفراد×N مواسم).
-function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number; profit_company: number; profit_individual: number; season_from: string | null; season_to: string | null; package?: "full" | "hotel_transfer" | null }> {
+function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number; profit_company: number; profit_individual: number; season_from: string | null; season_to: string | null; package?: "full" | "hotel_transfer" | "tour" | null }> {
   const toLatin = (s: string) => (s || "").replace(/[٠-٩]/g, c => String("٠١٢٣٤٥٦٧٨٩".indexOf(c)));
   const norm = (s: string) => (s || "").replace(/[إأآا]/g, "ا").replace(/[ةه]/g, "ه").replace(/\s+/g, "").toLowerCase().trim();
   const dateRe = /(\d{1,2})\s*\/\s*(\d{1,2})\s*[-–—]\s*(\d{1,2})\s*\/\s*(\d{1,2})/;
@@ -2948,6 +2948,11 @@ function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number
   }
   const firstTyped = typeByCol.findIndex(t => t !== null);
   if (firstTyped < 0) return [];
+  // 🚐 ١٩ نوفمبر ٢٠٢٦ (المالكة): قسم «الربح Tour / Tour + flight» جنب جدول الأرباح (صف العناوين فوق شركات/أفراد)
+  //    = ربح طلبات «مواصلات/جولات فقط» أو «مواصلات + طيران داخلي» (بلا فنادق). بلا مواسم.
+  const tourCol: boolean[] = [];
+  { let lab = ""; const up = rows[headerRow - 1] || [];
+    for (let j = 0; j < Math.max(up.length, hcells.length); j++) { const t = String(up[j] || "").trim(); if (t) lab = t; tourCol[j] = /tour/i.test(lab); } }
   let dateRow = -1;
   for (let r = headerRow + 1; r <= headerRow + 4 && r < rows.length; r++) {
     if ((rows[r] || []).some((c, j) => typeByCol[j] && dateRe.test(toLatin(c || "")))) { dateRow = r; break; }
@@ -2975,10 +2980,15 @@ function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number
     if (rc.some((c, j) => isMarginCol(j) && /\d+\s*-\s*\d+/.test(toLatin(c || "")) && !dateRe.test(toLatin(c || "")))) break;
     if (rc.some((c, j) => isMarginCol(j) && pkgOf(c || ""))) { pkgRow = r; break; }
   }
-  const cols: Array<{ j: number; type: "company" | "individual"; from: string | null; to: string | null; key: string; pkg: "full" | "hotel_transfer" | null }> = [];
+  const cols: Array<{ j: number; type: "company" | "individual"; from: string | null; to: string | null; key: string; pkg: "full" | "hotel_transfer" | "tour" | null }> = [];
   for (let j = firstTyped; j < typeByCol.length; j++) {
     const t = typeByCol[j]; if (!t) continue;
     let from: string | null = null, to: string | null = null;
+    if (tourCol[j]) {
+      if (!labeledSet.has(norm(hcells[j]))) continue;
+      cols.push({ j, type: t, from: null, to: null, pkg: "tour", key: "||tour" });
+      continue;
+    }
     if (dateRow >= 0) {
       // موسمي: العمود صالح فقط لو له مدى تاريخ (يحدّ «التعبئة لليمين» عند نهاية البلوك).
       const m = toLatin((rows[dateRow] || [])[j] || "").match(dateRe);
@@ -2997,7 +3007,7 @@ function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number
   for (const r of [headerRow - 1, headerRow, headerRow + 1]) (rows[r] || []).forEach((c, j) => { if (norm(c).includes("التكلفه")) costCol = j; });
   if (costCol < 0) costCol = firstTyped - 1;
   if (costCol < 0) return [];
-  const out: Array<{ cost_min: number; cost_max: number; profit_company: number; profit_individual: number; season_from: string | null; season_to: string | null; package?: "full" | "hotel_transfer" | null }> = [];
+  const out: Array<{ cost_min: number; cost_max: number; profit_company: number; profit_individual: number; season_from: string | null; season_to: string | null; package?: "full" | "hotel_transfer" | "tour" | null }> = [];
   const startRow = Math.max(dateRow >= 0 ? dateRow : headerRow, pkgRow) + 1;
   for (let i = startRow; i < rows.length; i++) {
     const cells = rows[i] || [];
@@ -3024,7 +3034,11 @@ function pmExtract(rows: string[][]): Array<{ cost_min: number; cost_max: number
 async function handleProfitMargins(body: { dest?: string }): Promise<Response> {
   try {
     const destAr = String(body.dest || "").trim();
-    const destKey = destAr ? detectDestination([{ role: "user", content: destAr }]) : null;
+    // جورجيا/أذربيجان: غير معروفتين لـdetectDestination (بناؤهما بمسار آخر) — نطابقهما هنا للأرباح فقط
+    //    حتى لا يتغيّر توجيه بناء برامجهما (١٩ نوفمبر ٢٠٢٦).
+    const pmExtraKey = /جورجيا|georgia|تبليسي|tbilisi|باتومي|batumi/i.test(destAr) ? "Georgia"
+      : /[أا]ذربيجان|azerbaijan|باكو|baku/i.test(destAr) ? "Azerbaijan" : null;
+    const destKey = destAr ? (pmExtraKey || detectDestination([{ role: "user", content: destAr }])) : null;
     if (!destKey) return new Response(JSON.stringify({ margins: [] }), { headers: CORS_HEADERS });
     const tabRaw = PM_TAB_OVERRIDE[destKey] || PM_DEST_TABS.find(t => t.trim() === destKey) || destKey;
     const sa = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT")!);
@@ -3065,7 +3079,7 @@ async function handleCurrencies(): Promise<Response> {
 //    منطق الربح والعملة منسوخ حرفياً من team.html (applyAutoProfit + onCurrencyPick)
 //    حتى يطابق ما تراه الموظفة في الداشبورد. [[project_seasonal_profit_margins]]
 // ═══════════════════════════════════════════════════════════════════════════
-type PmRow = { cost_min: number; cost_max: number; profit_company: number; profit_individual: number; season_from: string | null; season_to: string | null; package?: "full" | "hotel_transfer" | null };
+type PmRow = { cost_min: number; cost_max: number; profit_company: number; profit_individual: number; season_from: string | null; season_to: string | null; package?: "full" | "hotel_transfer" | "tour" | null };
 
 // نفس قراءة handleProfitMargins لكن بمفتاح الوجهة مباشرةً (auto_build يملكه).
 async function pmGetMargins(destKey: string): Promise<PmRow[]> {
@@ -3101,6 +3115,13 @@ function _programMMDD(dateFrom: string): number | null {
   if (monD) { const dm = s.match(/\b(\d{1,2})\b/); return monD * 100 + (dm ? +dm[1] : 15); }
   return null;
 }
+// 🚐 نوع الباقة للربح: بلا أسطر فنادق → «tour»؛ فيه طيران دولي (غير القطار) → «full»؛ وإلا «hotel_transfer».
+function pmPkgOf(raw: string): "full" | "hotel_transfer" | "tour" {
+  const hb = ((raw.match(/HOTELS:([\s\S]*?)(?:\n[A-Z_]+:|$)/) || [])[1] || "").split("\n").filter(l => l.includes("|"));
+  if (!hb.length) return "tour";
+  const fl = ((raw.match(/FLIGHTS:([\s\S]*?)(?:\n[A-Z_]+:|$)/) || [])[1] || "").split("\n").filter(l => l.includes("|") && !/قطار|train/i.test(l));
+  return fl.length ? "full" : "hotel_transfer";
+}
 // تاريخ اليوم (توقيت عُمان) بصيغة شهر*100+يوم — احتياط لما البرنامج بلا تاريخ بداية
 function _todayMMDD(): number { const t = new Date(Date.now() + 4 * 3600e3); return (t.getUTCMonth() + 1) * 100 + t.getUTCDate(); }
 function _seasonMatches(m: PmRow, md: number | null): boolean {
@@ -3113,7 +3134,11 @@ function _seasonMatches(m: PmRow, md: number | null): boolean {
 // ok=false يعني «اكتب الربح يدوياً» → لا نرسل سعراً تلقائياً للعميل.
 // pkg: «full» (فيه طيران دولي) أو «hotel_transfer» (فنادق + مواصلات بلا طيران). يُطبَّق فقط
 // لو جدول الوجهة فيه بُعد الباقة (مكة)؛ غير ذلك يُتجاهَل.
-function pmPickProfit(margins: PmRow[], cost: number, md: number | null, customerType: string, pkg: "full" | "hotel_transfer" = "full"): { profit: number; ok: boolean; note: string } {
+// pkg «tour»: برنامج بلا فنادق (مواصلات/جولات ± طيران داخلي) → قسم «الربح Tour» لو موجود بالشيت، وإلا الباقة الكاملة.
+function pmPickProfit(margins: PmRow[], cost: number, md: number | null, customerType: string, pkg: "full" | "hotel_transfer" | "tour" = "full"): { profit: number; ok: boolean; note: string } {
+  const _tour = margins.filter(m => m.package === "tour");
+  if (pkg === "tour" && _tour.length) margins = _tour;
+  else { margins = margins.filter(m => m.package !== "tour"); if (pkg === "tour") pkg = "full"; }
   if (margins.some(m => m.package)) {
     const byPkg = margins.filter(m => m.package === pkg);
     margins = byPkg.length ? byPkg : margins.filter(m => m.package === "full" || !m.package);
@@ -4106,7 +4131,8 @@ Deno.serve(async (req) => {
         const md = _programMMDD(_taiVal(raw, "DATE_FROM")) ?? _todayMMDD();   // بلا تاريخ → موسم اليوم
         const margins = await pmGetMargins(destKey || "");
         const _fl = ((raw.match(/FLIGHTS:([\s\S]*?)(?:\n[A-Z_]+:|$)/) || [])[1] || "").split("\n").filter(l => l.includes("|") && !/قطار|train/i.test(l));
-        const prof = pmPickProfit(margins, newTotal, md, customerType, _fl.length ? "full" : "hotel_transfer");
+        void _fl;
+        const prof = pmPickProfit(margins, newTotal, md, customerType, pmPkgOf(raw));
         const finalSar = newTotal + prof.profit;
         let newCode = "";
         const sv = await fetch(`${_base}/functions/v1/programs`, { method: "POST", headers: { "Content-Type": "application/json", apikey: _srk, Authorization: `Bearer ${_srk}` },
@@ -4344,7 +4370,8 @@ Deno.serve(async (req) => {
         const margins = await pmGetMargins(destKey);
         // 📦 نوع الباقة: فيه طيران دولي (غير تذاكر القطار) → باقة كاملة، وإلا فنادق + مواصلات
         const _fl = ((chosen.program.match(/FLIGHTS:([\s\S]*?)(?:\n[A-Z_]+:|$)/) || [])[1] || "").split("\n").filter(l => l.includes("|") && !/قطار|train/i.test(l));
-        const _pkg: "full" | "hotel_transfer" = _fl.length ? "full" : "hotel_transfer";
+        void _fl;
+        const _pkg = pmPkgOf(chosen.program);
         const prof = pmPickProfit(margins, cost, md, customerType, _pkg);       // ok=false ⇒ ربح يدوي
         const finalSar = cost + prof.profit;
         // احفظ البرنامج ليحصل على **كود استرجاع** (يظهر في رسالة العميل ويُستدعى

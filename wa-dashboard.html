@@ -4518,7 +4518,7 @@ window.WA_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAocAAAFICAYAAAAi
     function bfSeasonMMDD(ddmm){ const m = String(ddmm||"").match(/(\d{1,2})\s*\/\s*(\d{1,2})/); if (!m) return null; const d=+m[1], mo=+m[2]; return (d && mo) ? mo*100+d : null; }
     function bfSeasonOk(m, md){ if (md==null) return false; const f=bfSeasonMMDD(m.season_from), t=bfSeasonMMDD(m.season_to); if (f==null||t==null) return false; return f<=t ? (md>=f && md<=t) : (md>=f || md<=t); }
     function bfProfitFor(cost, md){
-      const tiers = bfPM.rows.filter(m => cost >= +m.cost_min && cost <= +m.cost_max);
+      const tiers = bfPM.rows.filter(m => m.package !== "tour" && cost >= +m.cost_min && cost <= +m.cost_max);   // بكجات بفنادق — لا ربح Tour
       if (!tiers.length) return null;
       let tier;
       if (tiers.some(m => m.season_from)) { if (md!=null) tier = tiers.find(m => bfSeasonOk(m, md)); if (!tier) tier = tiers.find(m => !m.season_from); if (!tier) return null; }

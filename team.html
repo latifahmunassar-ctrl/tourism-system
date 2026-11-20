@@ -1475,7 +1475,13 @@ function applyAutoProfit(){
   // 📦 نوع الباقة (مكة ٩ نوفمبر ٢٠٢٦): جدول الأرباح فيه عمود «باقة كاملة» وعمود «فنادق + مواصلات».
   //    البرنامج فيه طيران دولي (غير تذاكر القطار) → باقة كاملة، وإلا → فنادق + مواصلات.
   let _pm = profitMargins;
-  if(_pm.some(m => m.package)){
+  // 🚐 ١٩ نوفمبر ٢٠٢٦ (المالكة): برنامج بلا فنادق (مواصلات/جولات ± طيران داخلي) → قسم «الربح Tour» بالشيت.
+  //    غير ذلك نستبعد صفوف Tour حتى لا تُلتقط كربح «طوال السنة» للباقات العادية.
+  const _tourPm = _pm.filter(m => m.package === 'tour');
+  const _noHotels = parseSection(lastProgramRaw||'', 'HOTELS').length === 0;
+  if(_noHotels && _tourPm.length) _pm = _tourPm;
+  else _pm = _pm.filter(m => m.package !== 'tour');
+  if(!(_noHotels && _tourPm.length) && _pm.some(m => m.package)){
     const _intl = parseSection(lastProgramRaw||'', 'FLIGHTS').filter(l => !/قطار|train/i.test(l)).length > 0;
     const _pkg = _intl ? 'full' : 'hotel_transfer';
     const _by = _pm.filter(m => m.package === _pkg);
@@ -3303,7 +3309,7 @@ const BF_CITIES = {
   "موريشيوس":["موريشيوس"],
   "العمرة":["مكة المكرمة","المدينة المنورة","جدة","الطائف"],
   "إنجلترا":["لندن"],
-  "الصين":["شنغهاي","بكين","هانغتشو","هونغ كونغ","جوانزو"],
+  "الصين":["شنغهاي","بكين","سوجو","هانغتشو","هونغ كونغ","جوانزو"],
   "مصر":["القاهرة"],
   "المغرب":["مراكش","الدار البيضاء","الرباط","طنجة","شفشاون","فاس","أكادير","الصويرة","اغافاي"],
   "إسبانيا":["مدريد","قرطبة","غرناطة","إشبيلية","مالقا","برشلونة","ماربيا"],
@@ -3510,7 +3516,7 @@ function _bfDateMMDD(){ const s=String((document.getElementById('bf-date')||{}).
 // يرجّع null لو لا جدول أرباح أو التكلفة/التاريخ خارج النطاق (فنعرض التكلفة الخام).
 function _rankProfit(cost, mmdd){
   if(!profitMargins.length) return null;
-  const tiers = profitMargins.filter(m => cost >= +m.cost_min && cost <= +m.cost_max);
+  const tiers = profitMargins.filter(m => m.package !== 'tour' && cost >= +m.cost_min && cost <= +m.cost_max);   // بكجات كاملة (فيها فنادق) — لا ربح Tour
   if(!tiers.length) return null;
   const seasonal = tiers.some(m => m.season_from);
   let tier;
@@ -5822,7 +5828,7 @@ const WA_EN_ALIAS = {
   'oman':'عُمان','salalah':'صلالة - وسط المدينة',
   'south africa':'جنوب أفريقيا','cape town':'كيب تاون','johannesburg':'جوهانسبرغ','garden route':'جاردن روت','hermanus':'هارمانوس','sun city':'سن سيتي',
   'mauritius':'موريشيوس','england':'إنجلترا','london':'لندن',
-  'china':'الصين','shanghai':'شنغهاي','beijing':'بكين','hangzhou':'هانغتشو','hong kong':'هونغ كونغ','guangzhou':'جوانزو',
+  'china':'الصين','shanghai':'شنغهاي','beijing':'بكين','hangzhou':'هانغتشو','hong kong':'هونغ كونغ','guangzhou':'جوانزو','suzhou':'سوجو',
   'egypt':'مصر','cairo':'القاهرة','morocco':'المغرب','marrakech':'مراكش','marrakesh':'مراكش','casablanca':'الدار البيضاء','rabat':'الرباط','tangier':'طنجة','chefchaouen':'شفشاون','fes':'فاس','fez':'فاس','agadir':'أكادير','essaouira':'الصويرة',
   'spain':'إسبانيا','madrid':'مدريد','cordoba':'قرطبة','granada':'غرناطة','seville':'إشبيلية','sevilla':'إشبيلية','malaga':'مالقا','barcelona':'برشلونة','marbella':'ماربيا',
   'sri lanka':'سيرلانكا','colombo':'كولومبو','negombo':'نيجومبو','kandy':'كاندي','nuwara eliya':'نوارا ايليا','bentota':'بنتوتا',
