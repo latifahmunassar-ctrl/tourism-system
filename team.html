@@ -5905,7 +5905,10 @@ function waReqParse(body){
   // نطاق بيوم-ويوم: يقبل الشرطة أو كلمة الربط (إلى/الى/الي/لين/حتى/ل/لغاية) — «21 إلى 27 نوفمبر»
   const rng=lat.match(new RegExp('(\\d{1,2})\\s*(?:[-–—]|الى|إلى|الي|لين|لغايه|لغاية|ولغاية|حتى|till|until|to|لي|لى|ل)\\s*(\\d{1,2})[\\s\\/.]*('+Object.keys(WA_AR_MONTHS).join('|')+')'));
   let from=null,to=null;
-  if(rng){ const mo=WA_AR_MONTHS[rng[3]]; from=mk(+rng[1],mo); to=mk(+rng[2],mo); }
+  // ٢٠ نوفمبر ٢٠٢٦ (نسك ترافل): «29 ل 3 فبراير» = من ٢٩ يناير إلى ٣ فبراير (عبور شهر) — كانت تنقرأ ٢٩ فبراير → ١ مارس وأيام فاضية
+  if(rng){ const mo=WA_AR_MONTHS[rng[3]], d1=+rng[1], d2=+rng[2]; to=mk(d2,mo);
+    if(d1>d2){ const pm=to.getMonth()-1, py=to.getFullYear(); const last=new Date(py, pm+1, 0).getDate(); from=new Date(py, pm, Math.min(d1,last)); }
+    else from=mk(d1,mo); }
   else if(named.length>=2){ from=mk(+named[0][1],WA_AR_MONTHS[named[0][2]]); to=mk(+named[1][1],WA_AR_MONTHS[named[1][2]]); }
   else if(named.length===1){ from=mk(+named[0][1],WA_AR_MONTHS[named[0][2]]); }
   else if(slash.length>=2){ from=mk(+slash[0][1],+slash[0][2],slash[0][3]?+slash[0][3]:0); to=mk(+slash[1][1],+slash[1][2],slash[1][3]?+slash[1][3]:0); if(to<from){ const t=from; from=to; to=t; } }   // مكتوبة بالعكس (من اليمين لليسار)
