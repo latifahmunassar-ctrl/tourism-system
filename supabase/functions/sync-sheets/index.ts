@@ -1885,7 +1885,8 @@ Deno.serve(async (req) => {
         // unformatted=true ضروري: أسعار مكة مُنسَّقة كتواريخ («21 Jan» = 5500).
         // نطاق الصفوف 1500: عمود «توزيع المدن» للمغرب يطول مع تعدّد الاقتراحات/الأيام
         // (يتجاوز 500). الـAPI يقصّ للبيانات الفعلية فلا يؤثّر على بقية التبويبات.
-        const rows = await readSheetRange(token, spreadsheetId, `${quotedTab}!A1:GZ1500`, true);
+        // ٢٠ نوفمبر ٢٠٢٦: حتى ZZ — المالكة تضيف أعمدة فترات لتبويب مكة (Include/تتسع والطيران تنزاح يمين)؛ الـAPI يقصّ للبيانات الفعلية.
+        const rows = await readSheetRange(token, spreadsheetId, `${quotedTab}!A1:ZZ1500`, true);
 
         // Optional dump for diagnostic — show ALL columns so we can see flight cols if present
         if (dumpTab && tab.toLowerCase() === dumpTab.toLowerCase() && debugInfo) {

@@ -3033,7 +3033,7 @@ async function handleProfitMargins(body: { dest?: string }): Promise<Response> {
     const quotedTab = /[\s'"]/.test(tabRaw) ? `'${tabRaw.replace(/'/g, "''")}'` : tabRaw;
     // نطاق واسع (حتى العمود HZ): جدول أرباح بعض الوجهات (مثل مكة) يقع في أعمدة بعيدة
     // (GK-GP) بعد CZ، فلا يُقرأ لو حصرنا المدى.
-    const rows = await pmReadSheet(token, ssid, `${quotedTab}!A1:HZ500`);
+    const rows = await pmReadSheet(token, ssid, `${quotedTab}!A1:ZZ500`);   // ٢٠ نوفمبر ٢٠٢٦: كان HZ — أعمدة فترات مكة الجديدة تزيح جدول الأرباح يمين
     const margins = pmExtract(rows).sort((a, b) => a.cost_min - b.cost_min);
     return new Response(JSON.stringify({ margins }), { headers: CORS_HEADERS });
   } catch (e) {
@@ -3075,7 +3075,7 @@ async function pmGetMargins(destKey: string): Promise<PmRow[]> {
     const ssid = Deno.env.get("GOOGLE_SPREADSHEET_ID")!;
     const token = await pmGoogleToken(sa);
     const quotedTab = /[\s'"]/.test(tabRaw) ? `'${tabRaw.replace(/'/g, "''")}'` : tabRaw;
-    const rows = await pmReadSheet(token, ssid, `${quotedTab}!A1:HZ500`);
+    const rows = await pmReadSheet(token, ssid, `${quotedTab}!A1:ZZ500`);   // ٢٠ نوفمبر ٢٠٢٦: كان HZ — أعمدة فترات مكة الجديدة تزيح جدول الأرباح يمين
     return pmExtract(rows).sort((a, b) => a.cost_min - b.cost_min);
   } catch { return []; }
 }
