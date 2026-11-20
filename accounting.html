@@ -5697,12 +5697,19 @@ function _reconCashRows(){
   const spRefs=new Set((DATA.supplierPaymentsRaw||DATA.supplierPayments||[]).filter(x=>x.source==='dashboard').map(x=>up(x.bank_ref)).filter(Boolean));
   const fcdRefs=new Set((DATA.fcd||[]).filter(x=>x.source==='dashboard').map(x=>up(x.bank_ref)).filter(Boolean));
   const out=[];
-  (DATA.bankTx||[]).forEach(x=>{
+  // 🔁 منع الازدواج (المالكة ٢٠ نوفمبر ٢٠٢٦): حركة «مطابقة البنوك» اللي لها نفس الحركة أصلاً في جدول الكاش (نفس رقم الحساب + العملة + المبلغ والاتجاه، فرق ≤٣ أيام) ما تنعرض مرتين — مطابقة واحد لواحد، الأقرب تاريخاً. عرض فقط، لا حذف بيانات.
+  const _acct=b=>String(b||'').replace(/\D/g,''), _cur=b=>{ const m=String(b||'').toUpperCase().match(/\b(OMR|USD|SAR|MYR|AED|EUR|GBP|TRY|EGP)\b/); return m?m[1]:''; }, _r3=v=>Math.round(Number(v||0)*1000);
+  const _bcIdx={}; (DATA.banksCash||[]).forEach(y=>{ const a=_acct(y.bank_name); if(!a)return; const k=a+'|'+_cur(y.bank_name)+'|'+_r3(y.in_raw)+'|'+_r3(y.out_raw); (_bcIdx[k]=_bcIdx[k]||[]).push(y); });
+  const _bcUsed=new Set();
+  const _dupOfCash=x=>{ const a=_acct(x.bank_name); if(!a)return false; const L=_bcIdx[a+'|'+_cur(x.bank_name)+'|'+_r3(x.amount_in)+'|'+_r3(x.amount_out)]; if(!L)return false; const t=Date.parse(x.tx_date||''); if(isNaN(t))return false;
+    let best=null,bd=99; L.forEach(y=>{ if(_bcUsed.has(y.id))return; const d=Math.abs((Date.parse(y.tx_date||'')-t)/864e5); if(d<=3&&d<bd){bd=d;best=y;} }); if(best){ _bcUsed.add(best.id); return true; } return false; };
+  [...(DATA.bankTx||[])].sort((p,q)=>String(p.tx_date||'').localeCompare(String(q.tx_date||''))).forEach(x=>{
     if(x.source!=='dashboard')return;
     const note=String(x.note||''); const ref=up(x.bank_ref);
     const isRecon = note.trim().indexOf('🏷️')===0 || note.indexOf('من مطابقة كشف البنك')>=0;
     if(!isRecon)return;
     if((ref&&(spRefs.has(ref)||fcdRefs.has(ref))) || /دفعة|💰|↩️|💸|مرتجع/.test(note))return;   // دفعة مرتبطة — ليست حركة كاش مستقلة
+    if(_dupOfCash(x))return;   // 🔁 موجودة أصلاً في جدول الكاش
     let chan='',desc='',det='',sub='';
     if(note.trim().indexOf('🏷️')===0){ const parts=note.replace(/^🏷️\s*/,'').split('←').map(s=>s.trim()); chan=parts[0]||''; desc=parts[1]||''; det=parts[2]||''; sub=parts[3]||''; }
     out.push({ id:'btc-'+x.id, _fromBankTxn:true, _btId:x.id, tx_date:x.tx_date||'', in_raw:(Number(x.amount_in||0)||null), out_raw:(Number(x.amount_out||0)||null), bank_name:x.bank_name||'', bank_ref:x.bank_ref||'', channel:chan, description:desc, details:det, more_details:sub, note:note, currency:(typeof bankCur==='function'?bankCur(x.bank_name):'')||'', currency_rate:1, in_sar:null, out_sar:null, source:'dashboard', created_at:x.created_at||'' });
