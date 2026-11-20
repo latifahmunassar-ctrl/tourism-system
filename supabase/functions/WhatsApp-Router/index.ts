@@ -575,7 +575,9 @@ const DESTINATION_HINTS: Array<[RegExp, string]> = [
   [/موريش[يو]س|mauritius/i, "موريشيوس"],
   [/المالديف|maldives|مالديف/i, "المالديف"],
   [/[أا]ذربيجان|azerbaijan|باكو|baku|قابالا|gabala/i, "أذربيجان"],
-  [/جورجيا|georgia|تبليسي|tbilisi|باتومي|batumi/i, "جورجيا"],
+  [/جورجيا|georgia|تبليسي|tbilisi|باتومي|batumi|بورجومي|borjomi|كازبيجي|kazbegi|كوتايسي|kutaisi|باكورياني|bakuriani/i, "جورجيا"],
+  // ٢٠ نوفمبر ٢٠٢٦: أرمينيا مربوطة بالمساعد السياحي (تبويب Arminia) — المدن نفس DEST_CITIES في Tourism-AI.
+  [/[أا]رميني[اة]|armenia|يريفان|yerevan|دي?ليجان|dilijan|تساغ?كادزور|tsaghkadzor|جيرموك|jermuk|بحيرة\s*سيفان|sevan/i, "أرمينيا"],
   [/سريلانكا|sri\s*lanka|كولومبو|colombo/i, "سريلانكا"],
   // ٣ نوفمبر ٢٠٢٦: «مشرمن جده» (= مش من جدة) طابقت «شرم» → «تقصد تغيّر الوجهة إلى مصر؟». حدود كلمة عربية لمصر/شرم.
   [/(?<![ء-ي])[وبلف]?مصر(?![ء-ي])|egypt|القاهرة|cairo|(?<![ء-ي])شرم(?![ء-ي])|sharm|الغردقة|hurghada/i, "مصر"],
