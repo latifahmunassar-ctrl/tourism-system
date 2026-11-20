@@ -602,6 +602,65 @@ function normalizeISODate(s: string): string {
   return t;
 }
 
+// ── فحص المزامنة (٢٠ نوفمبر ٢٠٢٦، قرار المالكة) ─────────────────────────────
+// (١) كل سجل فندق يُفحص: تاريخ نهاية قبل البداية أو سنة غير منطقية → يُرفض ويُكتب بالتقرير (مو بصمت).
+// (٢) سعر فوق 20,000/ليلة → ما يُرفض (رمضان مكة ممكن)، يُعلَّم للمراجعة بالتقرير.
+// (٣) قبل أي كتابة: عناوين From/To/Rate لازم تطابق بيانات الأعمدة (التواريخ تحت From/To)،
+//     وإلا تتوقف المزامنة كلها. سبب الإضافة: انزياح عمود واحد بتبويب مكة ولّد ٣٨ سجل سعره ~46,000 وتاريخه 1903.
+type SyncIssue = { tab: string; row: number; col: string; value: string; reason: string };
+let _syncReport: { rejected: SyncIssue[]; review: SyncIssue[] } = { rejected: [], review: [] };
+function colLetter(n: number): string { let s = ""; n++; while (n) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
+function plausibleSheetDate(v: unknown): boolean {
+  const iso = normalizeISODate(String(v ?? "").trim());
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+  const y = +iso.slice(0, 4);
+  return (y >= 2015 && y <= 2040) || y === 2000;   // 2000 = سنة بديلة للمواسم المتكرّرة
+}
+// يرجّع true لو السجل مقبول (ويضيفه للتقرير إن كان للمراجعة)، false لو مرفوض.
+function vetHotelRecord(tab: string, sheetRow: number, col: number, rec: { price_per_night?: number; date_from?: string | null; date_to?: string | null }): boolean {
+  const f = String(rec.date_from || ""), t = String(rec.date_to || "");
+  const bad = (reason: string, value: string) => { _syncReport.rejected.push({ tab, row: sheetRow, col: col >= 0 ? colLetter(col) : "", value, reason }); return false; };
+  const yr = (d: string) => +d.slice(0, 4);
+  if (f && /^\d{4}-/.test(f) && yr(f) < 2015 && yr(f) !== 2000) return bad("تاريخ البداية غير منطقي", f);
+  if (t && /^\d{4}-/.test(t) && yr(t) < 2015 && yr(t) !== 2000) return bad("تاريخ النهاية غير منطقي", t);
+  // ❌ لا نرفض «النهاية قبل البداية»: التواريخ تُطابق باليوم/الشهر بدون سنة، وفترات مثل «31 Dec – 1 Jan» تبان كذا وهي صحيحة.
+  const p = Number(rec.price_per_night);
+  if (p > 20000) _syncReport.review.push({ tab, row: sheetRow, col: col >= 0 ? colLetter(col) : "", value: String(p), reason: "سعر فوق 20,000 بالليلة — للمراجعة (ما انرفض)" });
+  return true;
+}
+// فحص تطابق عناوين From/To/Rate مع البيانات.
+// mismatch = عمود كامل تحت From/To أغلب قيمه مو تواريخ (انزياح عناوين) → توقف المزامنة كلها.
+// isolated = خانة وحدة غلط وسط عمود سليم (غلط كتابة مثل «16 Jan → 1») → ما توقف، تنكتب بالتقرير.
+function checkTripletAlignment(rows: string[][], tab: string): { mismatch: SyncIssue[]; isolated: SyncIssue[] } {
+  const mismatch: SyncIssue[] = [], isolated: SyncIssue[] = [];
+  const isHeaderWord = (v: string) => /^(from|to|rate)$/i.test(v);
+  for (let h = 0; h < Math.min(rows.length, 15); h++) {
+    const hr = rows[h] || [];
+    const trip: number[] = [];
+    for (let j = 0; j + 2 < hr.length; j++) {
+      if (/^from$/i.test(String(hr[j] || "").trim()) && /^to$/i.test(String(hr[j + 1] || "").trim()) && /^rate$/i.test(String(hr[j + 2] || "").trim())) trip.push(j);
+    }
+    if (!trip.length) continue;
+    for (const j of trip) {
+      for (const k of [j, j + 1]) {
+        let nonEmpty = 0; const bad: SyncIssue[] = [];
+        for (let i = h + 1; i < rows.length; i++) {
+          const v = String((rows[i] || [])[k] ?? "").trim();
+          if (!v || isHeaderWord(v)) continue;
+          nonEmpty++;
+          if (!plausibleSheetDate(v)) bad.push({ tab, row: i + 1, col: colLetter(k), value: v.slice(0, 40), reason: `القيمة تحت عنوان «${k === j ? "From" : "To"}» مو تاريخ` });
+        }
+        if (bad.length >= 2 && bad.length / Math.max(1, nonEmpty) >= 0.5) {
+          for (const b of bad) mismatch.push({ ...b, reason: b.reason + " — العنوان ما يطابق عمود البيانات" });
+        } else {
+          for (const b of bad) isolated.push({ ...b, reason: b.reason + " — خانة غلط، فترتها ما تنقرأ" });
+        }
+      }
+    }
+  }
+  return { mismatch, isolated };
+}
+
 function extractHotels(rows: string[][], destination: string, debug?: { rejects: string[] }): object[] {
   const hotels: object[] = [];
   const reject = (i: number, reason: string, row: string[]) =>
@@ -770,7 +829,7 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
         for (const { col, n } of per.nights) {
           const total = parsePrice(String(row[col] || "").trim());
           if (isNaN(total) || total <= 0) continue;   // لا باقة بهذه المدّة
-          hotels.push({ ...baseRec, price_per_night: total / n, nights: n, date_from: f, date_to: t });
+          { const rec = { ...baseRec, price_per_night: total / n, nights: n, date_from: f, date_to: t }; if (vetHotelRecord(destination, i + 1, col, rec)) hotels.push(rec); }
           emitted++;
         }
       }
@@ -778,7 +837,7 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
       continue;   // لا تُطبَّق حلقات النطاقات العامة على هذا التخطيط
     }
 
-    hotels.push({ ...baseRec, price_per_night: price, date_from: dateFromRaw, date_to: dateToRaw });
+    { const rec = { ...baseRec, price_per_night: price, date_from: dateFromRaw, date_to: dateToRaw }; if (vetHotelRecord(destination, i + 1, header.cols.rate ?? -1, rec)) hotels.push(rec); }
 
     // ── نطاقات تسعير إضافية على نفس الصف ──────────────────────────────
     // شيت مكة يكرّر ثلاثية From/To/Rate عشرات المرات أفقياً (حتى العمود DZ).
@@ -795,7 +854,7 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
       const p = parsePrice(String(row[j + 2] || "").trim());
       if (!f || !t || isNaN(p) || p <= 0) continue;
       if (f === dateFromRaw && t === dateToRaw) continue;      // النطاق الأساسي مُضاف
-      hotels.push({ ...baseRec, price_per_night: p, date_from: f, date_to: t });
+      { const rec = { ...baseRec, price_per_night: p, date_from: f, date_to: t }; if (vetHotelRecord(destination, i + 1, j + 2, rec)) hotels.push(rec); }
     }
     // ── توسيع النطاقات بلا عناوين (إسبانيا) ───────────────────────────────
     // لو صف الرأس بلا عناوين From/To/Rate (الحلقة أعلاه لم تلتقط شيئاً) لكن الكاشف
@@ -816,7 +875,7 @@ function extractHotels(rows: string[][], destination: string, debug?: { rejects:
         const p = parsePrice(String(row[rc] || "").trim());
         if (!f || !t || isNaN(p) || p <= 0) continue;
         if (f === dateFromRaw && t === dateToRaw) continue;    // النطاق الأساسي مُضاف
-        hotels.push({ ...baseRec, price_per_night: p, date_from: f, date_to: t });
+        { const rec = { ...baseRec, price_per_night: p, date_from: f, date_to: t }; if (vetHotelRecord(destination, i + 1, rc, rec)) hotels.push(rec); }
       }
     }
   }
@@ -1871,6 +1930,36 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ success: false, error: `وجهة غير معروفة: ${onlyDest}` }), { status: 400, headers: CORS_HEADERS });
     }
 
+    // ── فحص تطابق العناوين قبل أي كتابة (قرار المالكة ٢٠ نوفمبر ٢٠٢٦) ──
+    // نقرأ كل التبويبات أولاً؛ لو أي تبويب عناوين From/To/Rate فيه ما تطابق البيانات → توقف المزامنة كلها
+    // (بدون حذف أو كتابة أي شي). ?check_only=1 → الفحص بس بدون مزامنة.
+    _syncReport = { rejected: [], review: [] };
+    const checkOnly = new URL(req.url).searchParams.get("check_only") === "1";
+    const _preRows = new Map<string, string[][]>();
+    const _align: SyncIssue[] = [];
+    for (const tabRaw of tabsToSync) {
+      const qt = /[\s'"]/.test(tabRaw) ? `'${tabRaw.replace(/'/g, "''")}'` : tabRaw;
+      try {
+        const rows = await readSheetRange(token, spreadsheetId, `${qt}!A1:ZZ1500`, true);
+        _preRows.set(tabRaw, rows);
+        const chk = checkTripletAlignment(rows, tabRaw.trim());
+        _align.push(...chk.mismatch);
+        _syncReport.rejected.push(...chk.isolated);
+      } catch (_e) { /* الخطأ يظهر في الحلقة الأساسية كالعادة */ }
+    }
+    if (_align.length || checkOnly) {
+      return new Response(JSON.stringify({
+        success: _align.length === 0,
+        aborted: _align.length > 0,
+        check_only: checkOnly,
+        message: _align.length ? "🛑 المزامنة توقفت كلها: عناوين From/To/Rate ما تطابق أعمدة البيانات. ما انكتب ولا انحذف شي." : "✅ العناوين مطابقة للبيانات (فحص فقط، بدون مزامنة).",
+        alignment_issue_count: _align.length,
+        alignment_issues: _align.slice(0, 100),
+        isolated_cells: _syncReport.rejected.slice(0, 100),
+        tabs_checked: tabsToSync.map(t => t.trim()),
+      }), { status: _align.length ? 409 : 200, headers: CORS_HEADERS });
+    }
+
     for (const tabRaw of tabsToSync) {
       // Tab in sheet may have trailing/leading whitespace (e.g. "thailand "),
       // but we want clean identifiers in DB ("thailand"). Use tabRaw to read
@@ -1886,7 +1975,7 @@ Deno.serve(async (req) => {
         // نطاق الصفوف 1500: عمود «توزيع المدن» للمغرب يطول مع تعدّد الاقتراحات/الأيام
         // (يتجاوز 500). الـAPI يقصّ للبيانات الفعلية فلا يؤثّر على بقية التبويبات.
         // ٢٠ نوفمبر ٢٠٢٦: حتى ZZ — المالكة تضيف أعمدة فترات لتبويب مكة (Include/تتسع والطيران تنزاح يمين)؛ الـAPI يقصّ للبيانات الفعلية.
-        const rows = await readSheetRange(token, spreadsheetId, `${quotedTab}!A1:ZZ1500`, true);
+        const rows = _preRows.get(tabRaw) ?? await readSheetRange(token, spreadsheetId, `${quotedTab}!A1:ZZ1500`, true);
 
         // Optional dump for diagnostic — show ALL columns so we can see flight cols if present
         if (dumpTab && tab.toLowerCase() === dumpTab.toLowerCase() && debugInfo) {
@@ -2035,6 +2124,13 @@ Deno.serve(async (req) => {
         currencies: currenciesSynced,
         details,
         duration_ms: duration,
+        // تقرير الفحص: المرفوض (ما دخل القاعدة) + للمراجعة (دخل، بس سعره فوق 20,000)
+        validation: {
+          rejected_count: _syncReport.rejected.length,
+          review_count: _syncReport.review.length,
+          rejected: _syncReport.rejected.slice(0, 200),
+          review: _syncReport.review.slice(0, 200),
+        },
         debug: debugInfo?.rejects,
       }),
       { headers: CORS_HEADERS }
