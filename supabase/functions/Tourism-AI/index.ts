@@ -2786,6 +2786,85 @@ async function handleVerifyPrices(body: { dest?: string; program?: string; adult
   }
 }
 
+// ── أسعار TBO الحيّة للتوزيعات والبناء (المالكة ٢١ نوفمبر ٢٠٢٦) ──
+// لكل إقامة (إزاحة يوم الدخول + الليالي) طلب Search واحد يغطي **كل فنادق الوجهة** (كل المدن)
+// عبر خدمة السيرفر (tbo_gate: طلب واحد كل مرة + ثانيتين، والنتيجة محفوظة 30 دقيقة). الصفوف
+// المُركّبة = غرفة TBO الأرخص مع إفطار لكل فندق (لشخصين: King/Double/Queen، لا Twin فقط).
+const _liveCache = new Map<string, Promise<Record<string, { rooms: Array<{ name: string; meal: string; inc: string; total: number; per_night: number }> }> | null>>();
+async function _liveQuote(destKey: string, names: string[], checkin: string, checkout: string, adults: number) {
+  const url = Deno.env.get("TBO_QUOTE_URL"), secret = Deno.env.get("TBO_QUOTE_SECRET");
+  if (!url || !secret) return null;
+  const k = [destKey, checkin, checkout, adults].join("|");
+  if (!_liveCache.has(k)) {
+    _liveCache.set(k, (async () => {
+      const reqBody = JSON.stringify({ dest: destKey, hotels: names, checkin, checkout, adults, nationality: "OM" });
+      const ts = String(Math.floor(Date.now() / 1000));
+      try {
+        const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "X-Ts": ts, "X-Sig": await _vpSign(secret, ts, reqBody) }, body: reqBody, signal: AbortSignal.timeout(70000) });
+        const q = await r.json();
+        if (!q.ok || q.note === "no codes") return null;
+        return q.hotels || {};
+      } catch (_e) { return null; }
+    })());
+    setTimeout(() => _liveCache.delete(k), 20 * 60 * 1000);
+  }
+  return await _liveCache.get(k)!;
+}
+function _liveBedOk(name: string, adults: number): boolean {
+  if (adults !== 2) return true;
+  const n = name.toLowerCase();
+  if (/\btwin\b/.test(n) && !/\b(king|queen|double)\b/.test(n)) return false;
+  return true;
+}
+function _isoStart(s: string | null | undefined): Date | null {
+  const t = String(s || "");
+  let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  m = t.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/);
+  if (m) return new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));
+  return null;
+}
+// يجهّز request.liveStays لكل إقامة. لا يرمي أخطاء: أي فشل = يرجع للشيت (والباني ينبّه).
+async function attachLiveStays(req: Record<string, unknown>, destKey: string | null, hotels: HotelRow[]): Promise<void> {
+  try {
+    if (!destKey || !Deno.env.get("TBO_QUOTE_URL")) return;
+    if ((req as { transportOnly?: boolean }).transportOnly) return;
+    const start = _isoStart(req.startDate as string);
+    if (!start) return;
+    const adults = Math.max(1, Math.min(8, Number(req.adults) || 2));
+    const cso = (req.cityStaysOrdered as Array<{ city: string; nights: number }>) || [];
+    const stays = cso.length ? cso.filter(s => s.nights > 0)
+      : ((req.cities as string[]) || []).map(c => ({ city: c, nights: ((req.nightsByCity as Record<string, number>) || {})[c] || 0 })).filter(s => s.nights > 0);
+    if (!stays.length) return;
+    const names = [...new Set(hotels.map(h => String(h.name || "").trim()).filter(Boolean))].sort();
+    const info: Record<string, HotelRow> = {};
+    for (const h of hotels) { const n = String(h.name || "").trim(); if (!info[n]) info[n] = h; }
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    const windows: Array<{ key: string; ci: string; co: string; nights: number }> = [];
+    let off = 0;
+    for (const s of stays) {
+      const ci = new Date(start.getTime() + off * 86400000), co = new Date(ci.getTime() + s.nights * 86400000);
+      windows.push({ key: `${off}|${s.nights}`, ci: iso(ci), co: iso(co), nights: s.nights });
+      off += s.nights;
+    }
+    const live: Record<string, HotelRow[]> = {};
+    await Promise.all(windows.map(async w => {
+      const q = await _liveQuote(destKey, names, w.ci, w.co, adults);
+      if (!q) return;
+      const rows: HotelRow[] = [];
+      for (const [n, h] of Object.entries(q)) {
+        const base = info[n]; if (!base) continue;
+        const rs = (h.rooms || []).filter(r => _vpBreakfast(r) && _liveBedOk(r.name, adults)).sort((a, b) => a.total - b.total).slice(0, 3);
+        for (const r of rs) rows.push({ name: base.name, location: base.location, stars: base.stars, area: base.area, link: base.link,
+          room_type: r.name, price_per_night: Math.round(r.per_night * 100) / 100, currency: "MYR",
+          occupancy: `${adults} adults`, meals: "إفطار مشمول", includes_breakfast: true, date_from: undefined, date_to: undefined, nights: null } as HotelRow);
+      }
+      live[w.key] = rows;
+    }));
+    if (Object.keys(live).length) (req as { liveStays?: Record<string, HotelRow[]> }).liveStays = live;
+  } catch (_e) { /* fallback to sheet */ }
+}
+
 // ── verify_alternative: زر «🔄 خيار آخر» أمام كل فندق في نتيجة التحقق (المالكة ٢١ نوفمبر ٢٠٢٦) ──
 // يبحث (Search فقط) كل فنادق نفس المدينة ونفس النجوم في طلب واحد (والنتيجة تنحفظ 30 دقيقة
 // في السيرفر، فالضغطات التالية بلا طلبات جديدة)، ويرجّع أرخص فندق مع إفطار يسع العدد،
@@ -4337,6 +4416,7 @@ Deno.serve(async (req) => {
             const req = parseTripRequest([{ role: "user", content: text }], cityDefs);
             (req as { adults: number }).adults = pax;
             if (!canBuildLocally(req)) continue;
+            await attachLiveStays(req as unknown as Record<string, unknown>, destKey, hotels as HotelRow[]);   // 🔴 أسعار TBO حيّة
             const r = await buildLocalProgram(req, cityDefs, fetchData as never, {});
             if (!r.ok) continue;
             let prog = r.program;   // 🕋 العمرة: نفس تنقّلات/طيران team.html (المغادرة من المدينة لاقتراحات «المغادرة: المدينة»)
@@ -4443,6 +4523,7 @@ Deno.serve(async (req) => {
               if (_keys.length) (req as { preferHotelKeys?: string[] }).preferHotelKeys = _keys;
             }
             if (!canBuildLocally(req)) return null;
+            await attachLiveStays(req as unknown as Record<string, unknown>, destKey, hotels as HotelRow[]);   // 🔴 أسعار TBO حيّة (طلال)
             const r = await buildLocalProgram(req, cityDefs, fetchData as never, {});
             if (!r.ok) return null;
             // 🕋 ٧ نوفمبر ٢٠٢٦: العمرة → تنقّلات + طيران مسقط↔جدة بنفس منطق team.html (المساعد السياحي هو المرجع).
@@ -5196,6 +5277,7 @@ Deno.serve(async (req) => {
                 fetchAllRows<FlightRow>((() => supabase.from("flights").select("*").eq("destination", dest)) as never),
                 fetchAllRows<FlightRow>((() => supabase.from("trains").select("*").eq("destination", dest)) as never),
               ]);
+              await attachLiveStays(tripRequest as unknown as Record<string, unknown>, dest, h as HotelRow[]);   // 🔴 أسعار TBO حيّة
               return { hotels: h, tours: t, flights: f, trains: tr };
             },
             cityArabicNames,

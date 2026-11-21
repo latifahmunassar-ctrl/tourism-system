@@ -2241,6 +2241,8 @@ export async function buildLocalProgram(
   // room (e.g., 3 pax in a 4-occupancy room because no 3-pax room exists).
   // Surfaced to the employee in CHAT so they aren't blindsided by the upsize.
   const occupancyUpsizeNotes: string[] = [];
+  const _liveUsedCities: string[] = [];
+  const _liveMissCities: string[] = [];
   // Walk days in order, grouping consecutive same-city days into stays.
   let consumedDays = 0;
   const stayIdxPerCity: Record<string, number> = {};
@@ -2310,18 +2312,32 @@ export async function buildLocalProgram(
       !!excludeForThisStay || overrideForThisStay != null || overrideStarsForThisStay != null || !!featureForThisStay;
     const lastForThisStay = hotelHistoryByCity?.[stay.city]?.[stayIdx]?.last || null;
     const lastRoomTypeForThisStay = hotelHistoryByCity?.[stay.city]?.[stayIdx]?.lastRoomType || null;
+    // 🔴 ٢١ نوفمبر ٢٠٢٦ (المالكة): أسعار TBO حيّة لهذه الإقامة (نفس تاريخ الدخول وعدد الليالي والعدد).
+    //    request.liveStays["<إزاحة اليوم>|<الليالي>"] = صفوف مُركّبة من بحث TBO (Search فقط). لو فيها فنادق
+    //    لهذه المدينة → الاختيار منها فقط (السعر الحقيقي)؛ وإلا نرجع للشيت مع تنبيه.
+    const _liveMap = (request as { liveStays?: Record<string, HotelRow[]> }).liveStays;
+    let stayHotels: HotelRow[] = allHotels;
+    if (_liveMap && _liveMap[`${consumedDays}|${stay.nights}`]) {
+      const _cityLive = _liveMap[`${consumedDays}|${stay.nights}`].filter(h => hotelCityMatches(h.location, stay.city, cityPattern));
+      if (_cityLive.length) {
+        stayHotels = [..._cityLive, ...allHotels.filter(h => !hotelCityMatches(h.location, stay.city, cityPattern))];
+        _liveUsedCities.push(cityArabicNames[stay.city] || stay.city);
+      } else {
+        _liveMissCities.push(cityArabicNames[stay.city] || stay.city);
+      }
+    }
     let hotel: HotelRow | null = null;
     if (lastForThisStay && !hasModForThisStay) {
       // Match BOTH name and room_type so a hotel with multiple room rows
       // (Deluxe Double for 2 pax vs Two-Bedroom for 4 pax) pins back to
       // the exact row, not just the first row whose name matches.
       if (lastRoomTypeForThisStay) {
-        hotel = allHotels.find(h =>
+        hotel = stayHotels.find(h =>
           h.name.trim() === lastForThisStay &&
           (h.room_type || "").trim() === lastRoomTypeForThisStay,
         ) || null;
       }
-      if (!hotel) hotel = allHotels.find(h => h.name.trim() === lastForThisStay) || null;
+      if (!hotel) hotel = stayHotels.find(h => h.name.trim() === lastForThisStay) || null;
     }
     if (!hotel) {
       // On a plain swap (excluding the current hotel, no explicit occupancy
@@ -2335,11 +2351,11 @@ export async function buildLocalProgram(
         let prevHotel: HotelRow | null = null;
         if (lastForThisStay) {
           if (lastRoomTypeForThisStay) {
-            prevHotel = allHotels.find(h =>
+            prevHotel = stayHotels.find(h =>
               h.name.trim() === lastForThisStay &&
               (h.room_type || "").trim() === lastRoomTypeForThisStay) || null;
           }
-          if (!prevHotel) prevHotel = allHotels.find(h => h.name.trim() === lastForThisStay) || null;
+          if (!prevHotel) prevHotel = stayHotels.find(h => h.name.trim() === lastForThisStay) || null;
         }
         const occ = prevHotel ? extractAdultsCount(prevHotel.occupancy || "") : 0;
         if (occ > 0) lockOccupancyAdults = occ;
@@ -2373,24 +2389,24 @@ export async function buildLocalProgram(
         // تسعير بالباقة (أبوظبي): مدّة هذه الإقامة تحدّد أي صف سعر يصلح.
         stayNights: stay.nights,
       };
-      hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
+      hotel = pickCheapestHotel(stayHotels, stay.city, request, cityPattern, {
         excludeNames: wantDifferentHotel ? new Set([...(excludeForThisStay || []), ...(prevStayCity === stay.city && prevHotelName ? [prevHotelName.toLowerCase()] : []), ..._usedHere.map(x => x.toLowerCase())]) : excludeForThisStay,
         ...pickOpts,
       });
       if (!hotel && (pickOpts.breakfast || pickOpts.preferName || pickOpts.preferKeys || pickOpts.seaView || (!featureForThisStay && _featHere))) {
         const _soft = { ...pickOpts, breakfast: undefined, preferName: undefined, preferKeys: undefined, seaView: undefined, feature: featureForThisStay };
-        hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, { excludeNames: excludeForThisStay, ..._soft });
+        hotel = pickCheapestHotel(stayHotels, stay.city, request, cityPattern, { excludeNames: excludeForThisStay, ..._soft });
         if (hotel) ((request as { _prefMisses?: string[] })._prefMisses ||= []).push(String(stay.city));
       }
       // المدينة فيها فندق واحد فقط → الاستبعاد يُفرغ الخيارات؛ ارجع لنفس الفندق بدل فشل البناء.
       if (!hotel && wantDifferentHotel) {
-        hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, { excludeNames: excludeForThisStay, ...pickOpts });
+        hotel = pickCheapestHotel(stayHotels, stay.city, request, cityPattern, { excludeNames: excludeForThisStay, ...pickOpts });
       }
       // تدرّج آمن: المنطقة المُستنتَجة تفضيل لا شرط — لو ما فيه فندق بها لا نُفشل
       // البرنامج، نعيد الاختيار بلا فلتر المنطقة (أفضل متاح). لا ينطبق على المنطقة
       // الصريحة من تعديل (تبقى شرطاً).
       if (!hotel && inferredArea) {
-        hotel = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {
+        hotel = pickCheapestHotel(stayHotels, stay.city, request, cityPattern, {
           excludeNames: wantDifferentHotel ? new Set([...(excludeForThisStay || []), ...(prevStayCity === stay.city && prevHotelName ? [prevHotelName.toLowerCase()] : []), ..._usedHere.map(x => x.toLowerCase())]) : excludeForThisStay,
           ...pickOpts,
           areaFilter: undefined,
@@ -2422,7 +2438,7 @@ export async function buildLocalProgram(
       // employee knows they've hit the bottom of the price ladder.
       if (excludeForThisStay && excludeForThisStay.size > 0) {
         const where = areaForThisStay || cityArabicNames[stay.city] || stay.city;
-        const fallback = pickCheapestHotel(allHotels, stay.city, request, cityPattern, { areaFilter: areaForThisStay });
+        const fallback = pickCheapestHotel(stayHotels, stay.city, request, cityPattern, { areaFilter: areaForThisStay });
         if (fallback) {
           return { ok: false, chatMessage: `وصلت لآخر فندق متاح في ${where} لـ ${request.adults} أشخاص بنفس المعايير. ما عندنا خيار ثاني في نفس المنطقة.` };
         }
@@ -2431,7 +2447,7 @@ export async function buildLocalProgram(
       // the city (ignoring pax/stars/date) so the employee can see what's
       // close — and decide whether to adjust pax, change dates, or accept
       // a stars filter relaxation.
-      const cityHotels = allHotels.filter(h => hotelCityMatches(h.location, stay.city, cityPattern));
+      const cityHotels = stayHotels.filter(h => hotelCityMatches(h.location, stay.city, cityPattern));
       let diag = "";
       if (cityHotels.length === 0) {
         diag = `لا توجد أيّ فنادق في ${stay.city} في قاعدة البيانات.`;
@@ -3228,6 +3244,8 @@ export async function buildLocalProgram(
   // تنبيه «خارج المواسم المُسعّرة» المفصّل موجود أصلاً ضمن occupancyUpsizeNotes
   // (يُدفَع في منطق اختيار الفندق)، والملاحظة المختصرة «سعر تقريبي» تظهر على سطر
   // الفندق في الـPDF ضمن «يشمل». فلا نكرّر ملاحظة CHAT إضافية هنا.
+  if (_liveUsedCities.length > 0) chatParts.push(`✅ أسعار فنادق ${[...new Set(_liveUsedCities)].join("، ")} من TBO مباشرة (نفس التواريخ والعدد).`);
+  if (_liveMissCities.length > 0) chatParts.push(`⚠️ ما لقيت غرفة في TBO لـ ${[...new Set(_liveMissCities)].join("، ")} بهالتواريخ والعدد — السعر من الشيت وغير مؤكد.`);
   if (occupancyUpsizeNotes.length > 0) chatParts.push(occupancyUpsizeNotes.join(" "));
   if (tourMessages.length > 0) {
     chatParts.push(`${tourMessages.join(" | ")} حابب تكرّر جولة معيّنة؟ بلّغني الرقم.`);
