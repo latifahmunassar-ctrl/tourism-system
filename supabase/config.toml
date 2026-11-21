@@ -61,3 +61,6 @@ verify_jwt = false
 
 [functions.fs-books]
 verify_jwt = false
+
+[functions.staff-monitor]
+verify_jwt = false

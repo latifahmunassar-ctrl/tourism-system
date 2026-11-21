@@ -248,6 +248,7 @@ table{font-weight:600}
     <button class="tab" data-p="banks" onclick="tab(this)">🏦 البنوك والبطاقات</button>
     <button class="tab" data-p="bankscash" onclick="tab(this)">💵 Banks Cash in/Out</button>
     <button class="tab" data-p="visacard" onclick="tab(this)">💳 Visa Card</button>
+    <button class="tab" data-p="smon" onclick="tab(this);smLoad()">🕘 الحضور والمخالفات</button>
     <button class="tab" data-p="control" onclick="tab(this)" style="display:none">🔐 لوحة التحكم</button>
   </div>
 
@@ -782,6 +783,7 @@ table{font-weight:600}
 
     <div class="page" id="p-control"></div>
     <div class="page" id="p-visacard"></div>
+    <div class="page" id="p-smon"><div id="sm-box" style="padding:6px"><div style="color:var(--muted);padding:20px">جاري التحميل…</div></div></div>
 
     <div class="foot" id="foot"></div>
   </div>
@@ -1015,7 +1017,7 @@ function tab(el){
 }
 
 // ===== الصلاحيات / لوحة التحكم =====
-const TABS=[{k:'overview',l:'📊 لوحة المعلومات'},{k:'notifs',l:'🔔 إشعارات'},{k:'tickets',l:'🎫 Tickets'},{k:'entry',l:'📝 مدخل البيانات'},{k:'clients',l:'👤 العملاء'},{k:'sales',l:'🧳 Sales Form'},{k:'booking',l:'🏷️ Booking Form'},{k:'bookings',l:'🧾 كل الحجوزات'},{k:'detail',l:'🔎 تفصيل الحجز'},{k:'hotels',l:'🏨 Hotels Overview'},{k:'pnl',l:'💹 الأرباح والخسائر'},{k:'due',l:'⏳ المستحقات'},{k:'payments',l:'💳 الدفعات/المرتجعات'},{k:'staff',l:'👥 الموظفين'},{k:'agents',l:'🏢 الوكلاء'},{k:'suppliers',l:'🧾 الموردين'},{k:'supaudit',l:'🔎 تدقيق suppliers/Hotels'},{k:'banks',l:'🏦 البنوك والبطاقات'},{k:'bankscash',l:'💵 Banks Cash in/Out'},{k:'visacard',l:'💳 Visa Card'},{k:'curaudit',l:'🔍 تدقيق العملة'}];
+const TABS=[{k:'overview',l:'📊 لوحة المعلومات'},{k:'notifs',l:'🔔 إشعارات'},{k:'tickets',l:'🎫 Tickets'},{k:'entry',l:'📝 مدخل البيانات'},{k:'clients',l:'👤 العملاء'},{k:'sales',l:'🧳 Sales Form'},{k:'booking',l:'🏷️ Booking Form'},{k:'bookings',l:'🧾 كل الحجوزات'},{k:'detail',l:'🔎 تفصيل الحجز'},{k:'hotels',l:'🏨 Hotels Overview'},{k:'pnl',l:'💹 الأرباح والخسائر'},{k:'due',l:'⏳ المستحقات'},{k:'payments',l:'💳 الدفعات/المرتجعات'},{k:'staff',l:'👥 الموظفين'},{k:'agents',l:'🏢 الوكلاء'},{k:'suppliers',l:'🧾 الموردين'},{k:'supaudit',l:'🔎 تدقيق suppliers/Hotels'},{k:'banks',l:'🏦 البنوك والبطاقات'},{k:'bankscash',l:'💵 Banks Cash in/Out'},{k:'visacard',l:'💳 Visa Card'},{k:'curaudit',l:'🔍 تدقيق العملة'},{k:'smon',l:'🕘 الحضور والمخالفات'}];
 let CURRENT_USER=null; try{ CURRENT_USER=JSON.parse(localStorage.getItem('acc_user')||'null'); }catch(e){}
 function staffList(){ return (DATA&&DATA.staffAccess)||[]; }
 function applyPermissions(){
@@ -8666,6 +8668,81 @@ async function eSave(){
   ['e-agentcode','e-cby','e-by','e-bfrom','e-cfrom'].forEach(i=>$(i).value='');
   await load(); eRecall();
 }
+
+// ══════════ 🕘 الحضور والمخالفات (المالكة ٢١ نوفمبر ٢٠٢٦) ══════════
+// جدول دوام الموظفات بتوقيت عُمان + الإجازات/الأذونات + المخالفات (10 ريال عند التذكير العاشر بلا رد).
+const FN_SM='https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/staff-monitor';
+var SMD=null, SM_MONTH='';
+async function smApi(action,payload){ const h={'Content-Type':'application/json'}; if(TOKEN)h['x-acc-token']=TOKEN; const r=await fetch(FN_SM+'?key='+encodeURIComponent(KEY||'')+'&_t='+Date.now(),{method:'POST',cache:'no-store',headers:h,body:JSON.stringify({action,payload:payload||{}})}); const j=await r.json().catch(()=>({error:'رد غير صالح'})); if(j.error)throw new Error(j.error); return j; }
+async function smLoad(){ const box=$('sm-box'); try{ SMD=await smApi('list'); smRender(); }catch(e){ box.innerHTML='<div style="color:var(--red);padding:16px">⛔ '+esc(e.message)+(String(e.message).includes('unauthorized')?' — هذا القسم للمالكة والمحاسب فقط.':'')+'</div>'; } }
+const SM_DAYS=['ح','ن','ث','ر','خ','ج','س'], SM_DAYS_FULL=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+const SM_ST={applied:['✅ مطبّقة','#e5484d'],not_applied_leave:['⏸️ غير مطبّقة — إذن','#d98a00'],under_review:['🔎 اعتراض قيد المراجعة','#7c3aed'],cancelled:['❌ ملغاة','#8a94a6']};
+const SM_LV={pending:['⏳ بانتظار الموافقة','#d98a00'],approved:['✅ معتمد','#0e9d6a'],rejected:['🚫 مرفوض','#e5484d']};
+function smOm(ts){ if(!ts)return '—'; const d=new Date(new Date(ts).getTime()+4*3600e3); return String(d.getUTCDate()).padStart(2,'0')+'/'+String(d.getUTCMonth()+1).padStart(2,'0')+' '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0'); }
+function smOmMonth(ts){ const d=new Date(new Date(ts).getTime()+4*3600e3); return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0'); }
+function smToUtc(v){ return v? new Date(v+':00+04:00').toISOString() : ''; }   // حقل datetime-local بتوقيت عُمان → UTC
+function smName(id){ const s=(SMD.staff||[]).find(x=>x.id===id); return s?s.name:'—'; }
+function smRender(){
+  const box=$('sm-box'); const c=SMD.config||{}; const staff=SMD.staff||[]; const V=SMD.violations||[]; const L=SMD.leaves||[];
+  if(!SM_MONTH) SM_MONTH=smOmMonth(new Date());
+  const months=[...new Set([SM_MONTH,...V.map(v=>smOmMonth(v.occurred_at))])].sort().reverse();
+  const VM=V.filter(v=>smOmMonth(v.occurred_at)===SM_MONTH);
+  let h='';
+  // ── الإعدادات ──
+  h+='<div class="kpi" style="margin-bottom:12px"><b>⚙️ الإعدادات</b> <span style="font-size:12px;color:var(--muted)">(المستخدم: '+esc(SMD.me||'')+')</span><div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px;font-size:13px">'+
+    '<label><input type="checkbox" id="sm-en" '+(c.enabled?'checked':'')+'> تفعيل المخالفات</label>'+
+    '<label>القيمة <input id="sm-amt" type="number" value="'+(c.amount||10)+'" style="width:70px"></label>'+
+    '<label>العملة <select id="sm-cur">'+['SAR','OMR'].map(x=>'<option'+(x===c.currency?' selected':'')+'>'+x+'</option>').join('')+'</select></label>'+
+    '<label>قروب التعديلات <input id="sm-eg" value="'+esc(c.edit_group||'')+'" placeholder="اسم القروب بالضبط" style="width:200px"></label>'+
+    '<button class="btn" onclick="smSaveCfg()">💾 حفظ</button></div>'+
+    (c.enabled?'':'<div style="margin-top:6px;font-size:12px;color:#d98a00">⚠️ المخالفات موقوفة — الحارس يسجّل في السجل بس، ما يكتب مخالفات.</div>')+'</div>';
+  // ── ملخص الشهر ──
+  const per={}; VM.forEach(v=>{ const k=v.staff_name; per[k]=per[k]||{ap:0,apAmt:0,lv:0,rv:0,cx:0,cur:v.currency}; if(v.status==='applied'){per[k].ap++;per[k].apAmt+=Number(v.amount||0);} else if(v.status==='not_applied_leave')per[k].lv++; else if(v.status==='under_review')per[k].rv++; else per[k].cx++; });
+  h+='<div class="kpi" style="margin-bottom:12px"><b>📊 ملخص المخالفات</b> <select onchange="SM_MONTH=this.value;smRender()" style="margin-inline-start:8px">'+months.map(m=>'<option'+(m===SM_MONTH?' selected':'')+'>'+m+'</option>').join('')+'</select>'+
+    '<div class="tbl-wrap" style="margin-top:8px"><table style="font-size:12.5px"><thead><tr><th>الموظفة</th><th>✅ مطبّقة</th><th>💰 المبلغ المستحق</th><th>🔎 قيد المراجعة</th><th>⏸️ غير مطبّقة (إذن)</th><th>❌ ملغاة</th></tr></thead><tbody>'+
+    (Object.keys(per).length?Object.keys(per).map(k=>{const o=per[k];return '<tr><td><b>'+esc(k)+'</b></td><td class="num">'+o.ap+'</td><td class="num" style="color:#e5484d;font-weight:800">'+o.apAmt+' '+esc(o.cur)+'</td><td class="num">'+o.rv+'</td><td class="num">'+o.lv+'</td><td class="num">'+o.cx+'</td></tr>';}).join(''):'<tr><td colspan="6" style="color:var(--muted)">لا مخالفات في هذا الشهر</td></tr>')+'</tbody></table></div></div>';
+  // ── جدول الدوام ──
+  h+='<div class="kpi" style="margin-bottom:12px"><b>👩‍💼 الموظفات وساعات الدوام</b> <span style="font-size:12px;color:var(--muted)">(بتوقيت عُمان)</span>'+
+    '<div class="tbl-wrap" style="margin-top:8px"><table style="font-size:12px"><thead><tr><th>الاسم</th><th>رقم الواتساب</th><th>الفترة ١</th><th>الفترة ٢</th><th>أيام العمل <span style="font-weight:400;font-size:10px">(ح ن ث ر خ ج س)</span></th><th>قروب المخالفات</th><th>فعّالة</th><th></th></tr></thead><tbody>'+
+    staff.map(s=>smStaffRow(s)).join('')+smStaffRow({id:0,name:'',work_days:[0,1,2,3,4,5,6],active:true})+'</tbody></table></div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:4px">الفترة اللي تعدّي منتصف الليل (مثلاً 22:00 ← 02:00) تنحسب ليوم بدايتها. قروب المخالفات: قروب خاص لكل موظفة فيه هي + المالكة + المحاسب، من رقم 601.</div></div>';
+  // ── الإجازات والأذونات ──
+  h+='<div class="kpi" style="margin-bottom:12px"><b>🗓️ الإجازات والأذونات</b>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;font-size:12.5px">'+
+    '<select id="lv-st">'+staff.filter(s=>s.active).map(s=>'<option value="'+s.id+'">'+esc(s.name)+'</option>').join('')+'</select>'+
+    '<select id="lv-kind"><option>إجازة</option><option>إذن انصراف</option><option>تفرّغ</option></select>'+
+    '<label>من <input type="datetime-local" id="lv-from"></label><label>إلى <input type="datetime-local" id="lv-to"></label>'+
+    '<input id="lv-note" placeholder="ملاحظة" style="width:150px"><button class="btn" onclick="smAddLeave()">➕ إضافة (معتمد)</button></div>'+
+    '<div class="tbl-wrap" style="max-height:340px"><table style="font-size:12px"><thead><tr><th>#</th><th>الموظفة</th><th>النوع</th><th>من</th><th>إلى</th><th>الحالة</th><th>المصدر / نص الطلب</th><th>القرار</th><th></th></tr></thead><tbody>'+
+    (L.length?L.map(l=>{ const st=SM_LV[l.status]||[l.status,'']; return '<tr><td>'+l.id+'</td><td><b>'+esc(smName(l.staff_id))+'</b></td><td>'+esc(l.kind)+'</td>'+
+      (l.status==='pending'?'<td><input type="datetime-local" id="lvf-'+l.id+'" value="'+smLocal(l.from_ts)+'"></td><td><input type="datetime-local" id="lvt-'+l.id+'" value="'+smLocal(l.to_ts)+'"></td>':'<td>'+smOm(l.from_ts)+'</td><td>'+smOm(l.to_ts)+'</td>')+
+      '<td style="color:'+st[1]+';font-weight:700">'+st[0]+'</td><td style="font-size:11px">'+(l.source==='whatsapp'?'📱 واتساب: ':'🖥️ ')+esc(l.request_text||l.note||'')+'</td><td style="font-size:11px">'+esc(l.decided_by||'')+'</td><td style="white-space:nowrap">'+
+      (l.status==='pending'?'<button class="btn" style="padding:3px 9px;font-size:11px;background:#0e9d6a" onclick="smDecideLeave('+l.id+',\'approved\')">✅ اعتماد</button> <button class="btn" style="padding:3px 9px;font-size:11px;background:var(--red)" onclick="smDecideLeave('+l.id+',\'rejected\')">🚫 رفض</button>':'<button class="btn" style="padding:3px 9px;font-size:11px;background:#8a94a6" onclick="smDelLeave('+l.id+')">🗑️</button>')+'</td></tr>'; }).join(''):'<tr><td colspan="9" style="color:var(--muted)">لا يوجد</td></tr>')+'</tbody></table></div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:4px">اعتماد إذن يغطي وقت مخالفة (حتى لو اعتُمد متأخر) يلغيها تلقائياً ويوصل للموظفة إشعار بالإلغاء.</div></div>';
+  // ── سجل المخالفات ──
+  h+='<div class="kpi"><b>🧾 سجل المخالفات — '+esc(SM_MONTH)+'</b><div class="tbl-wrap" style="margin-top:8px;max-height:520px"><table style="font-size:11.5px"><thead><tr><th>#</th><th>الوقت (عُمان)</th><th>الموظفة</th><th>النوع</th><th>الشركة</th><th>الطلب</th><th>السبب</th><th>المبلغ</th><th>الحالة / القرار</th><th>الاعتراض</th><th>بواسطة</th></tr></thead><tbody>'+
+    (VM.length?VM.map(v=>{ const st=SM_ST[v.status]||[v.status,'']; return '<tr><td>'+v.id+'</td><td style="white-space:nowrap">'+smOm(v.occurred_at)+'<div style="font-size:10px;color:var(--muted)">وصل '+smOm(v.received_at)+'</div></td><td><b>'+esc(v.staff_name)+'</b></td><td>'+(v.kind==='تعديل'?'✏️ تعديل':'📥 طلب')+'</td><td>'+esc(v.company||'')+'</td><td style="max-width:220px">'+esc(v.request_summary||'')+'</td><td style="font-size:10.5px;max-width:180px">'+esc(v.reason||'')+'</td><td class="num">'+v.amount+' '+esc(v.currency)+'</td><td style="white-space:nowrap"><div style="color:'+st[1]+';font-weight:700">'+st[0]+'</div><div style="margin-top:3px">'+(v.status!=='cancelled'?'<button class="btn" style="padding:2px 8px;font-size:10.5px;background:#8a94a6" onclick="smDecideV('+v.id+',\'cancelled\')">❌ إلغاء</button> ':'')+(v.status!=='applied'?'<button class="btn" style="padding:2px 8px;font-size:10.5px;background:var(--red)" onclick="smDecideV('+v.id+',\'applied\')">✅ تثبيت</button>':'')+'</div></td><td style="font-size:10.5px;max-width:200px">'+(v.objection_text?esc(v.objection_text)+(v.objection_media?' 📎':''):'—')+'</td><td style="font-size:10.5px">'+esc(v.decided_by||'')+(v.decision_note?'<div style="color:var(--muted)">'+esc(v.decision_note)+'</div>':'')+'</td></tr>'; }).join(''):'<tr><td colspan="11" style="color:var(--muted)">لا مخالفات</td></tr>')+'</tbody></table></div></div>';
+  box.innerHTML=h;
+}
+function smLocal(ts){ if(!ts)return ''; const d=new Date(new Date(ts).getTime()+4*3600e3); return d.toISOString().slice(0,16); }
+function smStaffRow(s){ const id=s.id; const days=s.work_days||[]; const inp=(f,v,w,ph)=>'<input id="ss-'+f+'-'+id+'" value="'+esc(v||'')+'" placeholder="'+(ph||'')+'" style="width:'+w+'px">';
+  return '<tr'+(id?'':' style="background:rgba(14,157,106,.06)"')+'><td>'+inp('name',s.name,90,id?'':'➕ اسم جديد')+'</td><td>'+inp('phone',s.phone,115,'2010…')+'</td>'+
+    '<td>'+inp('s1s',s.shift1_start,52,'09:30')+' ← '+inp('s1e',s.shift1_end,52,'13:30')+'</td><td>'+inp('s2s',s.shift2_start,52,'16:30')+' ← '+inp('s2e',s.shift2_end,52,'22:00')+'</td>'+
+    '<td style="white-space:nowrap;font-size:10.5px">'+SM_DAYS.map((d,i)=>'<label title="'+SM_DAYS_FULL[i]+'" style="margin-inline-end:4px;display:inline-flex;flex-direction:column;align-items:center"><span>'+d+'</span><input type="checkbox" class="ss-day-'+id+'" value="'+i+'"'+(days.includes(i)?' checked':'')+' style="margin:0"></label>').join('')+'</td>'+
+    '<td>'+inp('grp',s.violation_group,140,'مخالفات '+(s.name||''))+'</td><td><input type="checkbox" id="ss-act-'+id+'"'+(s.active!==false?' checked':'')+'></td>'+
+    '<td><button class="btn" style="padding:3px 10px;font-size:11px" onclick="smSaveStaff('+id+')">💾</button></td></tr>'; }
+async function smSaveStaff(id){ const g=f=>(($('ss-'+f+'-'+id)||{}).value||'').trim(); const okT=v=>!v||/^\d{1,2}:\d{2}$/.test(v);
+  const p={name:g('name'),phone:g('phone'),shift1_start:g('s1s'),shift1_end:g('s1e'),shift2_start:g('s2s'),shift2_end:g('s2e'),violation_group:g('grp'),active:$('ss-act-'+id).checked,work_days:[...document.querySelectorAll('.ss-day-'+id+':checked')].map(x=>+x.value)};
+  if(!p.name){ alert('اكتبي الاسم'); return; } if(![p.shift1_start,p.shift1_end,p.shift2_start,p.shift2_end].every(okT)){ alert('الوقت بصيغة 09:30'); return; }
+  if((p.shift1_start&&!p.shift1_end)||(p.shift2_start&&!p.shift2_end)){ alert('كل فترة لازم لها بداية ونهاية'); return; }
+  if(id)p.id=id; try{ await smApi('save_staff',p); await smLoad(); toast&&toast('✅ حُفظ'); }catch(e){ alert('خطأ: '+e.message); } }
+async function smSaveCfg(){ try{ await smApi('save_config',{enabled:$('sm-en').checked,amount:$('sm-amt').value,currency:$('sm-cur').value,edit_group:$('sm-eg').value}); await smLoad(); }catch(e){ alert('خطأ: '+e.message); } }
+async function smAddLeave(){ const f=smToUtc($('lv-from').value), t=smToUtc($('lv-to').value); if(!f||!t){ alert('حدّدي من/إلى'); return; }
+  try{ const r=await smApi('add_leave',{staff_id:+$('lv-st').value,kind:$('lv-kind').value,from_ts:f,to_ts:t,note:$('lv-note').value}); await smLoad(); if(r.voided)alert('✅ سُجّل — وأُلغيت '+r.voided+' مخالفة يغطيها هذا الإذن.'); }catch(e){ alert('خطأ: '+e.message); } }
+async function smDecideLeave(id,status){ const p={id,status}; if(status==='approved'){ const f=smToUtc(($('lvf-'+id)||{}).value), t=smToUtc(($('lvt-'+id)||{}).value); if(!f||!t){ alert('حدّدي من/إلى قبل الاعتماد'); return; } p.from_ts=f; p.to_ts=t; }
+  try{ const r=await smApi('decide_leave',p); await smLoad(); if(r.voided)alert('✅ اعتُمد — وأُلغيت '+r.voided+' مخالفة يغطيها هذا الإذن.'); }catch(e){ alert('خطأ: '+e.message); } }
+async function smDelLeave(id){ if(!confirm('حذف هذا السجل؟ (المخالفات الملغاة بسببه تبقى ملغاة)'))return; try{ await smApi('delete_leave',{id}); await smLoad(); }catch(e){ alert('خطأ: '+e.message); } }
+async function smDecideV(id,status){ const note=prompt(status==='cancelled'?'سبب الإلغاء (يوصل للموظفة):':'ملاحظة التثبيت (اختياري):',''); if(note===null)return; try{ await smApi('decide_violation',{id,status,note}); await smLoad(); }catch(e){ alert('خطأ: '+e.message); } }
 if(KEY||TOKEN){ $('login').style.display='none'; $('app').style.display='block'; load(); }
 </script>
 </body>
