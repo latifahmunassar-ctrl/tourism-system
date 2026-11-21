@@ -2760,6 +2760,8 @@ async function handleVerifyPrices(body: { dest?: string; program?: string; adult
       const d0 = new Date(Date.UTC(parseInt(dm[3], 10), mon - 1, parseInt(dm[1], 10)));
       const d1 = new Date(d0.getTime() + nights * 86400000);
       const iso = (d: Date) => d.toISOString().slice(0, 10);
+      (base as Record<string, unknown>).checkin = iso(d0);
+      (base as Record<string, unknown>).breakfast = /إفطار|فطور|breakfast/i.test(lines[i]);
       const reqBody = JSON.stringify({ dest: destKey, hotels: [name], checkin: iso(d0), checkout: iso(d1), adults: per, nationality: "OM" });
       const ts = String(Math.floor(Date.now() / 1000));
       let q: { ok?: boolean; error?: string; note?: string; hotels?: Record<string, { rooms: Array<{ name: string; meal: string; inc: string; total: number; per_night: number }> }> } = {};
@@ -2779,6 +2781,60 @@ async function handleVerifyPrices(body: { dest?: string; program?: string; adult
         cheapest_room: cheapest.name, cheapest_per_night: cheapest.per_night });
     }
     return out({ ok: true, results });
+  } catch (e) {
+    return out({ ok: false, error: String((e as Error).message) });
+  }
+}
+
+// ── verify_alternative: زر «🔄 خيار آخر» أمام كل فندق في نتيجة التحقق (المالكة ٢١ نوفمبر ٢٠٢٦) ──
+// يبحث (Search فقط) كل فنادق نفس المدينة ونفس النجوم في طلب واحد (والنتيجة تنحفظ 30 دقيقة
+// في السيرفر، فالضغطات التالية بلا طلبات جديدة)، ويرجّع أرخص فندق مع إفطار يسع العدد،
+// غير الفندق الحالي وغير اللي انعرضت قبل (exclude). لا يغيّر البرنامج بنفسه.
+// المدخل: { action:"verify_alternative", dest, hotel, checkin, nights, adults_per_room, breakfast, exclude:[names] }
+async function handleVerifyAlternative(body: { dest?: string; hotel?: string; checkin?: string; nights?: number; adults_per_room?: number; breakfast?: boolean; exclude?: string[] }): Promise<Response> {
+  const out = (o: unknown) => new Response(JSON.stringify(o), { headers: CORS_HEADERS });
+  try {
+    const url = Deno.env.get("TBO_QUOTE_URL"), secret = Deno.env.get("TBO_QUOTE_SECRET");
+    if (!url || !secret) return out({ ok: false, error: "خدمة الأسعار الحية غير مفعّلة" });
+    const destKey = detectDestination([{ role: "user", content: String(body.dest || "") }]);
+    const hotelName = String(body.hotel || "").trim();
+    const checkin = String(body.checkin || "");
+    const nights = Math.max(1, Math.min(30, Number(body.nights) || 1));
+    const per = Math.max(1, Math.min(8, Number(body.adults_per_room) || 2));
+    if (!destKey || !hotelName || !/^\d{4}-\d{2}-\d{2}$/.test(checkin)) return out({ ok: false, error: "بيانات ناقصة" });
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const rows = await fetchAllRows<Record<string, unknown>>((() => supabase.from("hotels")
+      .select("name,stars,location,link,area").ilike("location", `% - ${destKey}`)) as never);
+    const cur = rows.find(h => String(h.name || "").trim() === hotelName);
+    if (!cur) return out({ ok: false, error: "ما لقيت الفندق الحالي في البيانات" });
+    const loc = String(cur.location || ""), stars = Number(cur.stars) || 0;
+    const ex = new Set([hotelName, ...(body.exclude || []).map(x => String(x).trim())]);
+    const info: Record<string, { stars: number; link: string; area: string }> = {};
+    for (const h of rows) {
+      const n = String(h.name || "").trim();
+      if (String(h.location || "") === loc && Number(h.stars) === stars && !info[n]) info[n] = { stars, link: String(h.link || ""), area: String(h.area || "") };
+    }
+    const names = Object.keys(info).filter(n => n !== hotelName);
+    if (!names.length) return out({ ok: true, found: false, note: "ما فيه فنادق ثانية بنفس النجوم في المدينة" });
+    const d0 = new Date(`${checkin}T00:00:00Z`), d1 = new Date(d0.getTime() + nights * 86400000);
+    const reqBody = JSON.stringify({ dest: destKey, hotels: names.sort(), checkin, checkout: d1.toISOString().slice(0, 10), adults: per, nationality: "OM" });
+    const ts = String(Math.floor(Date.now() / 1000));
+    let q: { ok?: boolean; error?: string; note?: string; hotels?: Record<string, { rooms: Array<{ name: string; meal: string; inc: string; total: number; per_night: number }> }> } = {};
+    try {
+      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "X-Ts": ts, "X-Sig": await _vpSign(secret, ts, reqBody) }, body: reqBody, signal: AbortSignal.timeout(60000) });
+      q = await r.json();
+    } catch (_e) { q = { ok: false, error: "السيرفر ما رد" }; }
+    if (!q.ok) return out({ ok: false, error: q.error || "خطأ" });
+    const cands: Array<{ hotel: string; room: string; per_night: number; total: number }> = [];
+    for (const [n, h] of Object.entries(q.hotels || {})) {
+      if (ex.has(n)) continue;
+      const rs = (h.rooms || []).filter(r => body.breakfast === false || _vpBreakfast(r)).sort((a, b) => a.total - b.total);
+      if (rs.length) cands.push({ hotel: n, room: rs[0].name, per_night: rs[0].per_night, total: rs[0].total });
+    }
+    cands.sort((a, b) => a.total - b.total);
+    if (!cands.length) return out({ ok: true, found: false, note: "ما فيه خيار ثاني متاح في TBO بنفس المواصفات" });
+    const c = cands[0];
+    return out({ ok: true, found: true, ...c, stars, link: info[c.hotel]?.link || "", area: info[c.hotel]?.area || "", remaining: cands.length - 1, adults_per_room: per });
   } catch (e) {
     return out({ ok: false, error: String((e as Error).message) });
   }
@@ -4046,6 +4102,7 @@ Deno.serve(async (req) => {
     if (reqBody && reqBody.action === "list_hotels") return await handleListHotels(reqBody);
     if (reqBody && reqBody.action === "list_room_types") return await handleListRoomTypes(reqBody);
     if (reqBody && reqBody.action === "verify_prices") return await handleVerifyPrices(reqBody);
+    if (reqBody && reqBody.action === "verify_alternative") return await handleVerifyAlternative(reqBody);
     if (reqBody && reqBody.action === "list_tours") return await handleListTours(reqBody);
     if (reqBody && reqBody.action === "tour_variants") return await handleTourVariants(reqBody);
     if (reqBody && reqBody.action === "profit_margins") return await handleProfitMargins(reqBody);

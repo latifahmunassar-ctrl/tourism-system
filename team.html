@@ -2063,7 +2063,7 @@ function metaPersons(){
 }
 // 🔍 زر «تحقق» (المالكة ٢١ نوفمبر ٢٠٢٦): يسأل TBO الحين (بحث فقط — بدون حجز) عن فنادق البرنامج
 // بنفس التواريخ ونفس العدد، ويعرض قبل/بعد. «اعتمد» يحدّث سعر الليلة للغرف المطابقة فقط.
-let _vpLast = null;
+let _vpLast = null; let _vpLastAll = null;
 async function verifyHotelPrices(){
   const box = document.getElementById('vpBox'); if(!box) return;
   const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -2077,7 +2077,7 @@ async function verifyHotelPrices(){
       body: JSON.stringify({ action:'verify_prices', dest:getLine(lastProgramRaw,'DEST'), program:lastProgramRaw, adults, rooms }) });
     const d = await r.json();
     if(!d.ok){ box.innerHTML = `<div class="cap-warn">⚠️ ما قدرت أتحقق: ${esc(d.error||'خطأ')}</div>`; return; }
-    _vpLast = d.results;
+    _vpLast = d.results; _vpLastAll = d.results;
     const fmt = n => (Math.round(n*100)/100).toLocaleString();
     let sumB = 0, sumA = 0, canApply = 0;
     const rows = d.results.map(x => {
@@ -2092,14 +2092,57 @@ async function verifyHotelPrices(){
         if(x.status === 'same'){ st = '✅ نفس الغرفة'; canApply++; }
         else st = `⚠️ غرفتك ما طلعت — الأرخص: ${esc(x.live_room)}`;
       } else st = '❌ ' + esc(x.note||'');
-      return `<tr><td>${esc(x.city)}</td><td>${esc(x.hotel)}<br><small>${esc(x.room)}</small></td><td>${fmt(x.sheet_per_night)} × ${x.nights} = ${fmt(before)}</td><td>${after}</td><td>${diff}</td><td>${st}</td></tr>`;
+      return `<tr><td>${esc(x.city)}</td><td>${esc(x.hotel)}<br><small>${esc(x.room)}</small></td><td>${fmt(x.sheet_per_night)} × ${x.nights} = ${fmt(before)}</td><td>${after}</td><td>${diff}</td><td>${st}</td><td>${x.checkin?`<button type="button" class="ebtn ebtn-nologo" style="padding:3px 10px;font-size:12px;white-space:nowrap" onclick="verifyAlt(${x.idx})">🔄 خيار آخر</button>`:''}</td></tr><tr id="vpAlt${x.idx}" style="display:none"><td colspan="7"></td></tr>`;
     }).join('');
     box.innerHTML = `<div style="margin:8px 0 12px;padding:10px;border:1px solid #93c5fd;border-radius:10px;background:#f8fbff">
       <div style="font-weight:900;margin-bottom:6px">🔍 التحقق من TBO (الحين، نفس التواريخ والعدد — بحث فقط بدون حجز)</div>
-      <table class="pricing-table"><thead><tr><th>المدينة</th><th>الفندق / الغرفة</th><th>قبل (الشيت)</th><th>بعد (TBO)</th><th>الفرق</th><th>الحالة</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="pricing-table"><thead><tr><th>المدينة</th><th>الفندق / الغرفة</th><th>قبل (الشيت)</th><th>بعد (TBO)</th><th>الفرق</th><th>الحالة</th><th></th></tr></thead><tbody>${rows}</tbody></table>
       ${sumB?`<div style="margin-top:6px">المجموع للفنادق اللي انلقت: قبل <b>${fmt(sumB)}</b> ← بعد <b>${fmt(sumA)}</b></div>`:''}
       <div style="margin-top:8px;display:flex;gap:8px">${canApply?`<button type="button" class="ebtn" onclick="verifyApply()">✅ اعتمد أسعار TBO (${canApply})</button>`:''}<button type="button" class="ebtn ebtn-nologo" onclick="document.getElementById('vpBox').innerHTML=''">خلّه مثل ما هو</button></div></div>`;
   } catch(e){ box.innerHTML = `<div class="cap-warn">⚠️ خطأ أثناء التحقق: ${esc(e && e.message ? e.message : e)}</div>`; }
+}
+// 🔄 «خيار آخر» أمام كل فندق: أرخص فندق ثاني بنفس المدينة/النجوم مع إفطار يسع العدد (سعر TBO حي).
+// الفندق الحالي يبقى كما هو؛ «بدّل لهذا» = تغيير يدوي من الموظفة.
+const _vpAltSeen = {};
+let _vpAltCur = {};
+async function verifyAlt(idx){
+  const x = (_vpLast || _vpLastAll || []).find(r => r.idx === idx); if(!x) return;
+  const row = document.getElementById('vpAlt'+idx); if(!row) return;
+  const cell = row.firstElementChild; row.style.display = '';
+  const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const fmt = n => (Math.round(n*100)/100).toLocaleString();
+  const seen = (_vpAltSeen[idx] ||= []);
+  cell.innerHTML = '⏳ أدور خيار آخر في TBO (بحث فقط)…';
+  try {
+    const r = await fetch(SUPABASE_URL, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
+      body: JSON.stringify({ action:'verify_alternative', dest:getLine(lastProgramRaw,'DEST'), hotel:x.hotel, checkin:x.checkin, nights:x.nights, adults_per_room:x.adults_per_room, breakfast:x.breakfast!==false, exclude:seen }) });
+    const d = await r.json();
+    if(!d.ok){ cell.innerHTML = `⚠️ ${esc(d.error||'خطأ')}`; return; }
+    if(!d.found){ cell.innerHTML = `ℹ️ ${esc(d.note||'ما فيه خيار ثاني')}` + (seen.length?` <button type="button" class="ebtn ebtn-nologo" style="padding:2px 8px;font-size:12px" onclick="_vpAltSeen[${idx}]=[];verifyAlt(${idx})">ابدأ من الأول</button>`:''); return; }
+    seen.push(d.hotel);
+    _vpAltCur[idx] = d;
+    const rooms = x.rooms || 1;
+    const altTotal = d.per_night * x.nights * rooms;
+    const curPN = (x.status==='same'||x.status==='alt') ? x.live_per_night : x.sheet_per_night;
+    const curTotal = curPN * x.nights * rooms;
+    const dd = altTotal - curTotal;
+    cell.innerHTML = `<div style="padding:6px 8px;background:#f0fdf4;border:1px dashed #22c55e;border-radius:8px">
+      🔄 <b>${esc(d.hotel)}</b> ${d.stars?`(${d.stars}★)`:''} — <small>${esc(d.room)}</small><br>
+      ${fmt(d.per_night)} × ${x.nights}${rooms>1?` × ${rooms}`:''} = <b>${fmt(altTotal)}</b> &nbsp; <b style="color:${dd>0?'#b91c1c':'#15803d'}">${dd>0?'▲':'▼'} ${fmt(Math.abs(dd))}</b> مقارنة بالفندق الحالي
+      ${d.remaining>0?` · باقي ${d.remaining} خيار`:' · آخر خيار'}
+      <div style="margin-top:6px;display:flex;gap:6px"><button type="button" class="ebtn" style="padding:3px 10px;font-size:12px" onclick="verifyAltSwap(${idx})">بدّل لهذا</button>${d.remaining>0?`<button type="button" class="ebtn ebtn-nologo" style="padding:3px 10px;font-size:12px" onclick="verifyAlt(${idx})">🔄 الخيار اللي بعده</button>`:''}</div></div>`;
+  } catch(e){ cell.innerHTML = `⚠️ ${esc(e && e.message ? e.message : e)}`; }
+}
+function verifyAltSwap(idx){
+  const d = _vpAltCur[idx]; if(!d) return;
+  const line = parseHotelLinesFromRaw(lastProgramRaw)[idx]; if(!line) return;
+  const p = line.split('|').map(s=>s.trim());
+  const newLine = [ d.hotel, p[1]||'', (d.stars||'') + ' نجوم', `${d.room} (يتسع ${d.adults_per_room} أشخاص)`,
+    (Math.round(d.per_night*100)/100) + ' ريال/ليلة', p[5]||'', 'ما يشمل: إفطار مشمول' ].join(' | ')
+    + (typeof _areaSeg==='function' ? _areaSeg(d.area) : '') + (typeof _linkSeg==='function' ? _linkSeg(d.link) : '');
+  const newRaw = hswSwapRaw(lastProgramRaw, idx, newLine);
+  _vpLast = null; _vpAltCur = {};
+  applyHotelRawChange(newRaw, `✅ بدّلت فندق ${p[1]||''} إلى «${d.hotel}» بسعر TBO — أُعيد احتساب الإجمالي.`);
 }
 function verifyApply(){
   if(!_vpLast) return;
