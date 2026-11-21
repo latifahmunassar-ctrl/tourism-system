@@ -2896,6 +2896,16 @@ async function attachLiveStays(req: Record<string, unknown>, destKey: string | n
         if (bedR) { const r = mk(bedR, adults - 1, 1, { _liveBed: true, ...(one ? { _oneUnit: one.per_night } : {}) }); (r as unknown as { _cmp: number })._cmp = Math.round((bedR.per_night + bedN) * 100) / 100; opts.push({ cost: bedR.per_night + bedN, row: r }); }
         opts.sort((x, y) => x.cost - y.cost);
         if (opts.length) rows.push(opts[0].row);
+        // المالكة ٢١ نوفمبر ٢٠٢٦: «فيلا مع مسبح خاص» / سويت — نضيف أرخص غرفة من كل نوع (غرفة وحدة للكل)
+        // عشان فلتر نوع السكن يلقاها؛ ما تأثر على الاختيار العادي لأن سعرها أعلى.
+        if (q?.[n]) {
+          const pool = (q[n].rooms || []).filter(r => _vpBreakfast(r) && _liveBedOk(r.name, adults)).sort((x, y) => x.total - y.total);
+          const seenR = new Set(rows.filter(r => r.name === base.name).map(r => r.room_type));
+          for (const re of [/pool\s*villa|villa.*pool/i, /villa/i, /pool/i, /suite/i]) {
+            const r = pool.find(x => re.test(x.name));
+            if (r && !seenR.has(r.name)) { seenR.add(r.name); rows.push(mk(r, adults, 1, {})); }
+          }
+        }
       }
       live[w.key] = rows;
     }));

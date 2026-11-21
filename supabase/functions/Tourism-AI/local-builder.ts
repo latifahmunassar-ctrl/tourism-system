@@ -2328,6 +2328,12 @@ export async function buildLocalProgram(
     let _liveSheetAvail = false;
     if (_liveMap && _liveMap[`${consumedDays}|${stay.nights}`]) {
       const _cityLive = _liveMap[`${consumedDays}|${stay.nights}`].filter(h => hotelCityMatches(h.location, stay.city, cityPattern));
+      // نوع سكن مطلوب (فيلا/مسبح/سويت) وما فيه ولا غرفة منه في TBO → نخلي الشيت (ما نشيل الشرط) مع تنبيه.
+      const _fWant = featureForThisStay || (_featStayIdx < 0 ? _rpF.prefFeature : (stayOrder.indexOf(stay) === _featStayIdx ? _rpF.prefFeature : undefined));
+      const _fRe = !_fWant ? null : _fWant === "villa_pool" ? /villa|pool/i : _fWant === "villa" ? /villa/i : _fWant === "suite" ? /suite/i : /pool/i;
+      if (_fRe && !_cityLive.some(h => _fRe.test(String(h.room_type || "")))) {
+        occupancyUpsizeNotes.push(`⚠️ ${cityArabicNames[stay.city] || stay.city}: ما لقيت ${_fWant === "suite" ? "سويت" : _fWant === "villa" ? "فيلا" : _fWant === "villa_pool" ? "فيلا مع مسبح" : "غرفة مع مسبح"} متوفرة في TBO بهالتواريخ — السعر من الشيت وغير مؤكد.`);
+      } else
       if (_cityLive.length) {
         // المالكة: الفندق اللي يختاره الشيت (الأرخص) يبقى لو متوفر في TBO (بسعره الحي)؛ لو مو متوفر
         // → الأرخص المتوفر تلقائياً مع ملاحظة «تم تغيير الفندق لعدم توفره».
