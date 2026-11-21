@@ -2090,7 +2090,7 @@ async function verifyHotelPrices(){
         after = `${fmt(x.live_per_night)} × ${x.nights} = <b>${fmt(a)}</b>`;
         diff = `<b style="color:${dd>0?'#b91c1c':'#15803d'}">${dd>0?'▲':'▼'} ${fmt(Math.abs(dd))}</b>`;
         if(x.status === 'same'){ st = '✅ نفس الغرفة'; canApply++; }
-        else st = `⚠️ غرفتك ما طلعت — الأرخص: ${esc(x.live_room)}`;
+        else { st = `⚠️ غرفتك ما طلعت — الأرخص: ${esc(x.live_room)} (الاعتماد يبدّل الغرفة)`; canApply++; }
       } else st = '❌ ' + esc(x.note||'');
       return `<tr><td>${esc(x.city)}</td><td>${esc(x.hotel)}<br><small>${esc(x.room)}</small></td><td>${fmt(x.sheet_per_night)} × ${x.nights} = ${fmt(before)}</td><td>${after}</td><td>${diff}</td><td>${st}</td><td>${x.checkin?`<button type="button" class="ebtn ebtn-nologo" style="padding:3px 10px;font-size:12px;white-space:nowrap" onclick="verifyAlt(${x.idx})">🔄 خيار آخر</button>`:''}</td></tr><tr id="vpAlt${x.idx}" style="display:none"><td colspan="7"></td></tr>`;
     }).join('');
@@ -2181,11 +2181,14 @@ function verifyApply(){
   if(!_vpLast) return;
   let raw = lastProgramRaw, n = 0;
   for(const x of _vpLast){
-    if(x.status !== 'same') continue;
+    if(x.status !== 'same' && x.status !== 'alt') continue;
     const line = parseHotelLinesFromRaw(raw)[x.idx]; if(!line) continue;
     const p = line.split('|');
     if(p.length < 5) continue;
-    p[4] = ' ' + (Math.round(x.live_per_night*100)/100) + ' ريال/ليلة ';
+    if(x.status === 'alt' && x.live_room) p[3] = ` ${x.live_room} (يتسع ${x.adults_per_room} أشخاص) `;   // غرفة TBO المتوفرة بدل غرفة الشيت
+    const _pn = Math.round(x.live_per_night*100)/100;
+    p[4] = ' ' + _pn + ' ريال/ليلة ';
+    for(let k=7;k<p.length;k++){ if(/^\s*ADDROOM:/.test(p[k])){ const f=p[k].replace(/^\s*ADDROOM:/,'').split('~'); if(f.length>=4){ if(x.status==='alt' && x.live_room) f[0]=x.live_room; f[1]=String(_pn); p[k]=' ADDROOM:'+f.join('~')+' '; } } }
     raw = hswSwapRaw(raw, x.idx, p.join('|').trim());
     n++;
   }
