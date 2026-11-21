@@ -1734,6 +1734,11 @@ export function formatProgram(data: ProgramData): string {
     return 0;
   };
   const _alloc = new Map<SelectedHotel, { rooms: number; beds: number }>();
+  // أسعار TBO الحيّة: ما فيه غرفة وحدة تسع العدد → غرفتان من نفس النوع (ADDROOM) بسعر TBO للغرفة.
+  for (const sh of hotels) {
+    const lr = (sh.hotel as { _liveRooms?: number })._liveRooms;
+    if (lr && lr > 1) _alloc.set(sh, { rooms: lr, beds: 0 });
+  }
   if (_autoBeds) {
     for (const sh of hotels) {
       const cap = _capOf(sh.hotel as { occupancy?: string; room_type?: string });
@@ -2503,6 +2508,10 @@ export async function buildLocalProgram(
     const picked = extractAdultsCount(hotel.occupancy || "");
     const reqAdults = request.adults || 2;
     const cityAr = cityArabicNames[stay.city] || stay.city;
+    const _lrooms = (hotel as { _liveRooms?: number })._liveRooms || 0;
+    if (_lrooms > 1) {
+      occupancyUpsizeNotes.push(`🛏️ ${cityAr}: ما فيه غرفة وحدة تسع ${reqAdults} أشخاص في TBO بهالتواريخ — حسبتها ${_lrooms} غرف (كل غرفة ${picked} أشخاص) بسعر TBO.`);
+    } else
     if (overrideForThisStay == null && picked > 0
         && !occupancyUpsizeNotes.some(n => n.includes(stay.city))) {
       if (picked > reqAdults) {

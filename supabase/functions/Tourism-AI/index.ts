@@ -2848,16 +2848,38 @@ async function attachLiveStays(req: Record<string, unknown>, destKey: string | n
       off += s.nights;
     }
     const live: Record<string, HotelRow[]> = {};
-    await Promise.all(windows.map(async w => {
-      const q = await _liveQuote(destKey, names, w.ci, w.co, adults);
-      if (!q) return;
+    const cityOf = (loc: string) => String(loc || "").split(" - ")[0].trim().toLowerCase();
+    const toRows = (q: Record<string, { rooms: Array<{ name: string; meal: string; inc: string; total: number; per_night: number }> }>, per: number, rooms: number, onlyCities?: Set<string>) => {
       const rows: HotelRow[] = [];
       for (const [n, h] of Object.entries(q)) {
         const base = info[n]; if (!base) continue;
-        const rs = (h.rooms || []).filter(r => _vpBreakfast(r) && _liveBedOk(r.name, adults)).sort((a, b) => a.total - b.total).slice(0, 3);
+        if (onlyCities && !onlyCities.has(cityOf(base.location))) continue;
+        const rs = (h.rooms || []).filter(r => _vpBreakfast(r) && _liveBedOk(r.name, per)).sort((a, b) => a.total - b.total).slice(0, 3);
         for (const r of rs) rows.push({ name: base.name, location: base.location, stars: base.stars, area: base.area, link: base.link,
           room_type: r.name, price_per_night: Math.round(r.per_night * 100) / 100, currency: "MYR",
-          occupancy: `${adults} adults`, meals: "إفطار مشمول", includes_breakfast: true, date_from: undefined, date_to: undefined, nights: null } as HotelRow);
+          occupancy: `${per} adults`, meals: "إفطار مشمول", includes_breakfast: true, date_from: undefined, date_to: undefined, nights: null,
+          ...(rooms > 1 ? { _liveRooms: rooms } : {}) } as HotelRow);
+      }
+      return rows;
+    };
+    const stayCityByKey: Record<string, string[]> = {};
+    { let o = 0; for (const s of stays) { (stayCityByKey[`${o}|${s.nights}`] ||= []).push(String(s.city).toLowerCase()); o += s.nights; } }
+    await Promise.all(windows.map(async w => {
+      const q = await _liveQuote(destKey, names, w.ci, w.co, adults);
+      if (!q) return;
+      const rows = toRows(q, adults, 1);
+      // المالكة ٢١ نوفمبر ٢٠٢٦: ما فيه غرفة وحدة تسع العدد في مدينة → جرّب غرفتين (مثلاً ٥ = ٣+٢ → غرفتان لـ٣)
+      if (adults >= 3) {
+        const have = new Set(rows.map(r => cityOf(r.location)));
+        const missing = new Set((stayCityByKey[w.key] || []).filter(c => ![...have].some(h => h.startsWith(c.split(" ")[0]) || c.startsWith(h.split(" ")[0]))));
+        if (missing.size) {
+          const per2 = Math.ceil(adults / 2);
+          const q2 = await _liveQuote(destKey, names, w.ci, w.co, per2);
+          if (q2) {
+            const cityNames = new Set(Object.values(info).map(h => cityOf(h.location)).filter(c => [...missing].some(m => c.startsWith(m.split(" ")[0]) || m.startsWith(c.split(" ")[0]))));
+            rows.push(...toRows(q2, per2, 2, cityNames));
+          }
+        }
       }
       live[w.key] = rows;
     }));
