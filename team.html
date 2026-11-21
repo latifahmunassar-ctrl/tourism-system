@@ -2061,6 +2061,61 @@ function metaPersons(){
   const m = meta.match(/(\d+)\s*(?:اشخاص|أشخاص|شخص|بالغين|افراد|أفراد)/);
   return m ? Math.max(1, parseInt(m[1],10)) : 0;
 }
+// 🔍 زر «تحقق» (المالكة ٢١ نوفمبر ٢٠٢٦): يسأل TBO الحين (بحث فقط — بدون حجز) عن فنادق البرنامج
+// بنفس التواريخ ونفس العدد، ويعرض قبل/بعد. «اعتمد» يحدّث سعر الليلة للغرف المطابقة فقط.
+let _vpLast = null;
+async function verifyHotelPrices(){
+  const box = document.getElementById('vpBox'); if(!box) return;
+  const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  box.innerHTML = '<div class="cap-warn" style="background:#eef6ff;border-color:#93c5fd">⏳ أتحقق من الأسعار في TBO (بحث فقط)…</div>';
+  try {
+    const lines = parseHotelLinesFromRaw(lastProgramRaw);
+    const rooms = lines.map((_, i) => hRooms(i));
+    const _bfA = document.getElementById('bf-adults');
+    const adults = (parseInt(_bfA && _bfA.value) || 0) || metaPersons() || 2;
+    const r = await fetch(SUPABASE_URL, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
+      body: JSON.stringify({ action:'verify_prices', dest:getLine(lastProgramRaw,'DEST'), program:lastProgramRaw, adults, rooms }) });
+    const d = await r.json();
+    if(!d.ok){ box.innerHTML = `<div class="cap-warn">⚠️ ما قدرت أتحقق: ${esc(d.error||'خطأ')}</div>`; return; }
+    _vpLast = d.results;
+    const fmt = n => (Math.round(n*100)/100).toLocaleString();
+    let sumB = 0, sumA = 0, canApply = 0;
+    const rows = d.results.map(x => {
+      const before = (x.sheet_per_night||0) * (x.nights||0) * (x.rooms||1);
+      let after = '', diff = '', st = '';
+      if(x.status === 'same' || x.status === 'alt'){
+        const a = (x.live_per_night||0) * (x.nights||0) * (x.rooms||1);
+        sumB += before; sumA += a;
+        const dd = a - before;
+        after = `${fmt(x.live_per_night)} × ${x.nights} = <b>${fmt(a)}</b>`;
+        diff = `<b style="color:${dd>0?'#b91c1c':'#15803d'}">${dd>0?'▲':'▼'} ${fmt(Math.abs(dd))}</b>`;
+        if(x.status === 'same'){ st = '✅ نفس الغرفة'; canApply++; }
+        else st = `⚠️ غرفتك ما طلعت — الأرخص: ${esc(x.live_room)}`;
+      } else st = '❌ ' + esc(x.note||'');
+      return `<tr><td>${esc(x.city)}</td><td>${esc(x.hotel)}<br><small>${esc(x.room)}</small></td><td>${fmt(x.sheet_per_night)} × ${x.nights} = ${fmt(before)}</td><td>${after}</td><td>${diff}</td><td>${st}</td></tr>`;
+    }).join('');
+    box.innerHTML = `<div style="margin:8px 0 12px;padding:10px;border:1px solid #93c5fd;border-radius:10px;background:#f8fbff">
+      <div style="font-weight:900;margin-bottom:6px">🔍 التحقق من TBO (الحين، نفس التواريخ والعدد — بحث فقط بدون حجز)</div>
+      <table class="pricing-table"><thead><tr><th>المدينة</th><th>الفندق / الغرفة</th><th>قبل (الشيت)</th><th>بعد (TBO)</th><th>الفرق</th><th>الحالة</th></tr></thead><tbody>${rows}</tbody></table>
+      ${sumB?`<div style="margin-top:6px">المجموع للفنادق اللي انلقت: قبل <b>${fmt(sumB)}</b> ← بعد <b>${fmt(sumA)}</b></div>`:''}
+      <div style="margin-top:8px;display:flex;gap:8px">${canApply?`<button type="button" class="ebtn" onclick="verifyApply()">✅ اعتمد أسعار TBO (${canApply})</button>`:''}<button type="button" class="ebtn ebtn-nologo" onclick="document.getElementById('vpBox').innerHTML=''">خلّه مثل ما هو</button></div></div>`;
+  } catch(e){ box.innerHTML = `<div class="cap-warn">⚠️ خطأ أثناء التحقق: ${esc(e && e.message ? e.message : e)}</div>`; }
+}
+function verifyApply(){
+  if(!_vpLast) return;
+  let raw = lastProgramRaw, n = 0;
+  for(const x of _vpLast){
+    if(x.status !== 'same') continue;
+    const line = parseHotelLinesFromRaw(raw)[x.idx]; if(!line) continue;
+    const p = line.split('|');
+    if(p.length < 5) continue;
+    p[4] = ' ' + (Math.round(x.live_per_night*100)/100) + ' ريال/ليلة ';
+    raw = hswSwapRaw(raw, x.idx, p.join('|').trim());
+    n++;
+  }
+  _vpLast = null;
+  applyHotelRawChange(raw, `✅ اعتمدت أسعار TBO لـ ${n} فندق — أُعيد احتساب الإجمالي.`);
+}
 // زر «غرفتين لشخصين (أرخص)» — يستبدل غرفة المجموعة بأرخص فندق بالمدينة فيه غرفة إشغال 2
 // بنفس فئة النجوم، ويضبط عدد الغرف تلقائياً = ceil(العدد÷2) (قابل للتعديل بالعدّاد).
 async function pickCheapestDouble(hidx){
@@ -4639,7 +4694,8 @@ if (_shortCaps.length) {
 
 if (hotelsLines.length) {
 html += `<div class="section-card hsw-host">
-<div class="section-card-header"><div class="section-card-title">🏨 الفنادق</div><div class="section-total">${hotelsTotal.toLocaleString()} ريال</div></div>
+<div class="section-card-header"><div class="section-card-title">🏨 الفنادق <button type="button" class="ebtn ebtn-nologo" style="margin-inline-start:10px;padding:4px 12px;font-size:13px" onclick="verifyHotelPrices()" title="يبحث في TBO الحين عن نفس التواريخ ونفس العدد — بحث فقط بدون حجز">🔍 تحقق</button></div><div class="section-total">${hotelsTotal.toLocaleString()} ريال</div></div>
+<div id="vpBox"></div>
 <table class="pricing-table">
 <thead><tr><th>المدينة</th><th>الفندق</th><th>النجوم</th><th>الغرفة</th><th>السعر/ليلة</th><th>الليالي</th><th>🏨 عدد الغرف</th><th>الإجمالي</th><th>Extra Bed</th></tr></thead>
 <tbody>${hotelsLines.map((l, hidx) => {

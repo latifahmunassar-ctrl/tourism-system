@@ -2717,6 +2717,73 @@ async function handleListHotels(body: {
   }
 }
 
+// ── verify_prices: زر «🔍 تحقق» (طلب المالكة ٢١ نوفمبر ٢٠٢٦) ──
+// يأخذ نص البرنامج، ولكل سطر فندق يسأل خدمة الأسعار الحية على سيرفر TBO (Search فقط —
+// لا حجز) عن نفس التواريخ ونفس العدد، ويرجّع «قبل/بعد». لا يغيّر شيئاً بنفسه.
+// المدخل: { action:"verify_prices", dest, program, adults, rooms:[n per hotel line] }
+const _VP_MONTHS: Record<string, number> = { "يناير": 1, "فبراير": 2, "مارس": 3, "أبريل": 4, "ابريل": 4, "مايو": 5, "يونيو": 6,
+  "يوليو": 7, "أغسطس": 8, "اغسطس": 8, "سبتمبر": 9, "أكتوبر": 10, "اكتوبر": 10, "نوفمبر": 11, "ديسمبر": 12 };
+function _vpDigits(s: string): string { return String(s || "").replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))); }
+function _vpNorm(s: string): string { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
+function _vpBreakfast(r: { meal?: string; inc?: string }): boolean {
+  return /breakfast|board/i.test(`${r.meal || ""} ${r.inc || ""}`) && !/room.?only/i.test(r.meal || "");
+}
+async function _vpSign(secret: string, ts: string, body: string): Promise<string> {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${ts}.${body}`));
+  return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+async function handleVerifyPrices(body: { dest?: string; program?: string; adults?: number; rooms?: number[] }): Promise<Response> {
+  const out = (o: unknown) => new Response(JSON.stringify(o), { headers: CORS_HEADERS });
+  try {
+    const url = Deno.env.get("TBO_QUOTE_URL"), secret = Deno.env.get("TBO_QUOTE_SECRET");
+    if (!url || !secret) return out({ ok: false, error: "خدمة الأسعار الحية غير مفعّلة" });
+    const destKey = detectDestination([{ role: "user", content: String(body.dest || "") }]);
+    if (!destKey) return out({ ok: false, error: "الوجهة غير معروفة" });
+    const program = String(body.program || "");
+    const m = program.match(/HOTELS:\n?([\s\S]+?)(?=\n[A-Z_]+:)/);
+    const lines = m ? m[1].split("\n").map(l => l.trim()).filter(l => l.includes("|")) : [];
+    const adults = Math.max(1, Math.min(20, Number(body.adults) || 2));
+    const results: unknown[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const p = lines[i].split("|").map(x => x.trim());
+      const name = p[0] || "", room = (p[3] || "").replace(/\s*\(يتسع[^)]*\)\s*$/, "").trim();
+      const sheet = parseFloat(_vpDigits(p[4] || "").replace(/,/g, "").match(/[\d.]+/)?.[0] || "0") || 0;
+      const nm = _vpDigits(p[5] || "").match(/(\d+)\s*ليال/);
+      const dm = _vpDigits(p[5] || "").match(/من\s+(\d{1,2})\s+(\S+)\s+(\d{4})/);
+      const nights = nm ? parseInt(nm[1], 10) : 0;
+      const mon = dm ? _VP_MONTHS[dm[2]] : 0;
+      const rooms = Math.max(1, Number(body.rooms?.[i]) || 1);
+      const per = Math.ceil(adults / rooms);
+      const base = { idx: i, hotel: name, city: p[1] || "", room, nights, rooms, adults_per_room: per, sheet_per_night: sheet };
+      if (!nights || !mon || !dm) { results.push({ ...base, status: "error", note: "ما قدرت أقرأ التواريخ" }); continue; }
+      const d0 = new Date(Date.UTC(parseInt(dm[3], 10), mon - 1, parseInt(dm[1], 10)));
+      const d1 = new Date(d0.getTime() + nights * 86400000);
+      const iso = (d: Date) => d.toISOString().slice(0, 10);
+      const reqBody = JSON.stringify({ dest: destKey, hotels: [name], checkin: iso(d0), checkout: iso(d1), adults: per, nationality: "OM" });
+      const ts = String(Math.floor(Date.now() / 1000));
+      let q: { ok?: boolean; error?: string; note?: string; hotels?: Record<string, { rooms: Array<{ name: string; meal: string; inc: string; total: number; per_night: number }> }> } = {};
+      try {
+        const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "X-Ts": ts, "X-Sig": await _vpSign(secret, ts, reqBody) }, body: reqBody, signal: AbortSignal.timeout(60000) });
+        q = await r.json();
+      } catch (_e) { q = { ok: false, error: "السيرفر ما رد" }; }
+      if (!q.ok) { results.push({ ...base, status: "error", note: q.error || "خطأ" }); continue; }
+      if (q.note === "no codes") { results.push({ ...base, status: "no_code", note: "الفندق ما له كود TBO مربوط" }); continue; }
+      const hr = q.hotels?.[name];
+      const bbRooms = (hr?.rooms || []).filter(_vpBreakfast).sort((a, b) => a.total - b.total);
+      if (!bbRooms.length) { results.push({ ...base, status: "none", note: "ما فيه غرفة مع إفطار في TBO لهالتواريخ وهالعدد" }); continue; }
+      const same = bbRooms.find(r => _vpNorm(r.name) === _vpNorm(room));
+      const cheapest = bbRooms[0];
+      results.push({ ...base, status: same ? "same" : "alt",
+        live_per_night: (same || cheapest).per_night, live_total: (same || cheapest).total, live_room: (same || cheapest).name,
+        cheapest_room: cheapest.name, cheapest_per_night: cheapest.per_night });
+    }
+    return out({ ok: true, results });
+  } catch (e) {
+    return out({ ok: false, error: String((e as Error).message) });
+  }
+}
+
 // ── list_room_types: أنواع الغرف المتاحة لنفس الفندق (لإضافة/استبدال نوع غرفة) ──
 // المدخل: { action:"list_room_types", dest, region:"<المدينة>", hotel:"<اسم الفندق>", date }
 async function handleListRoomTypes(body: {
@@ -3978,6 +4045,7 @@ Deno.serve(async (req) => {
     // قائمة فنادق مدينة (لقائمة التبديل في الداشبورد) — قبل التحقق من messages.
     if (reqBody && reqBody.action === "list_hotels") return await handleListHotels(reqBody);
     if (reqBody && reqBody.action === "list_room_types") return await handleListRoomTypes(reqBody);
+    if (reqBody && reqBody.action === "verify_prices") return await handleVerifyPrices(reqBody);
     if (reqBody && reqBody.action === "list_tours") return await handleListTours(reqBody);
     if (reqBody && reqBody.action === "tour_variants") return await handleTourVariants(reqBody);
     if (reqBody && reqBody.action === "profit_margins") return await handleProfitMargins(reqBody);

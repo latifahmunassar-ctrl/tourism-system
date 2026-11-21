@@ -2522,6 +2522,25 @@ export async function buildLocalProgram(
     if (stayDays.length === 0) continue;
     const rangeFrom = stayDays[0].date;
     const rangeTo = addDays(stayDays[stayDays.length - 1].date, 1);
+    // ٢١ نوفمبر ٢٠٢٦ (طلب المالكة): تنبيه لو أي ليلة من الإقامة ما لها سعر في الشيت
+    // لنفس الفندق/الغرفة/الإشغال — بدل سعر صامت. تنبيه فقط، لا يغيّر الاختيار.
+    if (request.startDate) {
+      const sameRoom = allHotels.filter(h => h.name === hotel.name && h.room_type === hotel.room_type
+        && (h.occupancy || "") === (hotel.occupancy || ""));
+      if (sameRoom.some(h => h.date_from || h.date_to)) {
+        const miss: string[] = [];
+        for (let k = 0; k < stay.nights; k++) {
+          const d = addDays(rangeFrom, k);
+          const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          if (!sameRoom.some(h => hotelCoversDate(h, iso))) miss.push(`${d.getDate()}/${d.getMonth() + 1}`);
+        }
+        if (miss.length > 0) {
+          occupancyUpsizeNotes.push(
+            `⚠️ الأسعار غير موجودة في الشيت لفندق ${hotel.name} (${hotel.room_type}) في ${cityAr} لليالي: ${miss.join("، ")} — السعر المعروض لهذه الليالي غير مؤكّد، تأكّدي منه قبل الإرسال.`,
+          );
+        }
+      }
+    }
     hotelsList.push({ city: stay.city, hotel, nights: stay.nights, rangeFrom, rangeTo });
     prevStayCity = stay.city;
     prevHotelName = hotel.name.trim();
