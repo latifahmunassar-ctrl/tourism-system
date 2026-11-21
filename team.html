@@ -4765,7 +4765,7 @@ html += (()=>{
 })();
 
 // تنبيه: سعة الغرف أقل من عدد الأشخاص المطلوب — عشان الموظف يضيف سريراً/غرفة إضافية
-const _roomCaps = hotelsLines.map(l => { const pp = String(l).split('|'); const base = parseInt((arabicDigitsToLatin(String(pp[3]||'')).match(/يتسع\s*(\d+)/)||[])[1]||'',10) || 0; if(!base) return 0; let extra = 0; String(l).replace(/ADDROOM:[^~|]*~[^~|]*~(\d+)/g, (_m, o) => { extra += (+o || base); return ''; }); return base + extra; }).filter(c => c > 0);   // السعة = الغرفة + الغرف الإضافية (ADDROOM)
+const _roomCaps = hotelsLines.map((l, _ci) => { const pp = String(l).split('|'); const base = parseInt((arabicDigitsToLatin(String(pp[3]||'')).match(/يتسع\s*(\d+)/)||[])[1]||'',10) || 0; if(!base) return 0; let extra = 0; String(l).replace(/ADDROOM:[^~|]*~[^~|]*~(\d+)/g, (_m, o) => { extra += (+o || base); return ''; }); const _st = parseInt(arabicDigitsToLatin(String(pp[2]||'')),10)||0; let _beds = 0; try { _beds = hBeds(_ci, extraBedCountForHotelLine(extraBedByCity, (pp[1]||'').trim(), _st, dest)); } catch(_){} return base + extra + _beds; }).filter(c => c > 0);   // السعة = الغرفة + الغرف الإضافية (ADDROOM) + السراير الإضافية
 const _minCap = _roomCaps.length ? Math.min(..._roomCaps) : 0;
 if (_minCap > 0 && adults > _minCap) {
   html += `<div class="cap-warn">⚠️ <b>تنبيه:</b> تم بناء البرنامج لغرف تتسع لـ <b>${_minCap} ${_minCap===1?'شخص':'أشخاص'}</b> فقط، بينما المطلوب <b>${adults} أشخاص</b>.<br>أضف <b>سريراً إضافياً</b> أو <b>غرفة إضافية</b> حسب الحاجة.</div>`;

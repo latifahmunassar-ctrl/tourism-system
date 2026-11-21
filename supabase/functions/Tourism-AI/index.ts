@@ -2754,7 +2754,10 @@ async function handleVerifyPrices(body: { dest?: string; program?: string; adult
       const nights = nm ? parseInt(nm[1], 10) : 0;
       const mon = dm ? _VP_MONTHS[dm[2]] : 0;
       const rooms = Math.max(1, Number(body.rooms?.[i]) || 1) + (lines[i].match(/ADDROOM:/g) || []).length;   // الغرف الإضافية (ADDROOM) جزء من نفس السطر
-      const per = Math.ceil(adults / rooms);
+      const _capM = (p[3] || "").match(/يتسع\s*(\d+)/) || _vpDigits(p[3] || "").match(/يتسع\s*(\d+)/);
+      const _cap = _capM ? parseInt(_capM[1], 10) : 0;
+      // غرفة أصغر من نصيبها + سرير إضافي (مثلاً ٥ = غرفة لـ٤ + سرير) → نبحث بسعة الغرفة نفسها
+      const per = _cap > 0 && _cap < Math.ceil(adults / rooms) ? _cap : Math.ceil(adults / rooms);
       const base = { idx: i, hotel: name, city: p[1] || "", room, nights, rooms, adults_per_room: per, sheet_per_night: sheet };
       if (!nights || !mon || !dm) { results.push({ ...base, status: "error", note: "ما قدرت أقرأ التواريخ" }); continue; }
       const d0 = new Date(Date.UTC(parseInt(dm[3], 10), mon - 1, parseInt(dm[1], 10)));

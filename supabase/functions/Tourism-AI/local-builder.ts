@@ -2516,7 +2516,7 @@ export async function buildLocalProgram(
     if ((hotel as { _liveBed?: boolean })._liveBed) {
       // غرفة لـ(العدد-١) + سرير إضافي أرخص من الغرفتين ومن الغرفة الوحدة → نضيف المدينة لنطاق السرير الإضافي
       const sc = request.extraBed.scope;
-      if (sc !== "all") request.extraBed = { scope: [...(Array.isArray(sc) ? sc : []), stay.city].filter((c, i, a) => a.indexOf(c) === i) };
+      if (sc !== "all") request.extraBed = { scope: [...(Array.isArray(sc) ? sc : []), stay.city, cityAr].filter((c, i, a) => a.indexOf(c) === i) };   // الاسم العربي عشان team.html يطابقه
       const _one = (hotel as { _oneUnit?: number })._oneUnit;
       occupancyUpsizeNotes.push(`🛏️ ${cityAr}: اخترت غرفة لـ${picked} أشخاص + سرير إضافي لأنها الأرخص${_one ? ` (الغرفة الوحدة لـ${reqAdults}: ${Math.round(_one).toLocaleString()} لليلة)` : ""}. تقدرين تبدلينها من تحت نوع الغرفة.`);
     } else
