@@ -621,10 +621,32 @@ function stripAgeWords(t: string): string {
   return String(t || "").replace(/(?:الي|اللي|كم|الطفل|طفل|ولد|بنت|الولد|البنت|ولدي|بنتي)\s*عمر(?:ه|ها|هم|ة)/g, " ")
     .replace(/عمر(?:ه|ها|هم)\s*(?:[0-9٠-٩]{1,2}|سن|سنة|سنه|سنوات)/g, " ");
 }
+// ✍️ ١٤ نوفمبر ٢٠٢٦ (حي +96891106240، «Muscat eygpt»): اسم الدولة بالإنجليزي فيه غلط إملائي → أقرب اسم (نفس أول حرف، مسافة ≤٢).
+const _EN_DESTS: Array<[string, string]> = [["egypt", "مصر"], ["turkey", "تركيا"], ["thailand", "تايلاند"], ["malaysia", "ماليزيا"], ["vietnam", "فيتنام"],
+  ["indonesia", "إندونيسيا"], ["georgia", "جورجيا"], ["russia", "روسيا"], ["morocco", "المغرب"], ["bosnia", "البوسنة"], ["maldives", "المالديف"],
+  ["azerbaijan", "أذربيجان"], ["armenia", "أرمينيا"], ["mauritius", "موريشيوس"], ["china", "الصين"], ["england", "إنجلترا"], ["london", "إنجلترا"], ["istanbul", "تركيا"], ["bangkok", "تايلاند"], ["cairo", "مصر"]];
+function _latinFuzzyDest(text: string): string | null {
+  let best: { n: string; d: number } | null = null;
+  for (const tok of String(text || "").toLowerCase().match(/[a-z]{5,}/g) || []) {
+    for (const [en, ar] of _EN_DESTS) {
+      if (en[0] !== tok[0]) continue;
+      const dd = _lev(tok, en);
+      if (dd > 0 && dd <= 2 && (!best || dd < best.d)) best = { n: ar, d: dd };
+    }
+  }
+  return best ? best.n : null;
+}
 function extractDestination(text: string): string | null {
   text = stripAgeWords(text);
-  for (const [re, name] of DESTINATION_HINTS) if (re.test(text)) return name;
-  return null;
+  // ١٤ نوفمبر ٢٠٢٦: «من مسقط / from Muscat» = مدينة المغادرة، مو الوجهة.
+  //    و«من جدة ل مسقط» = رحلة العودة (مسقط هنا مو وجهة) — حي +96895360506.
+  const _noOrigin = text.replace(/(?:من|from)\s*(?:مطار\s*)?\S+\s*(?:ل|لـ|الى|إلى|to)\s*(?:مطار\s*)?(?:مسقط|muscat|صلال[ةه]|salalah)/gi, " ")
+    .replace(/(?:من|from)\s*(?:مطار\s*|airport\s*)?(?:مسقط|muscat|صلال[ةه]|salalah)/gi, " ");
+  for (const [re, name] of DESTINATION_HINTS) {
+    if (name === "عُمان") { const fz = _latinFuzzyDest(text); if (fz) return fz; if (re.test(_noOrigin)) return name; continue; }
+    if (re.test(text)) return name;
+  }
+  return _latinFuzzyDest(text);
 }
 
 // ── Greetings / acknowledgements that shouldn't burn a Claude call ───────
@@ -1998,6 +2020,43 @@ function _hotelRulePre(d: Record<string, unknown>): string[] {
   d.hotel_check = { ...c, shown: true };
   return pre;
 }
+// 📅 ١٧ نوفمبر ٢٠٢٦ (المالكة، +96892237771): «نهاية ديسمبر» كانت تنبني من ١ ديسمبر. نهاية/آخر الشهر → ٢٥، منتصفه → ١٥.
+const _AR_MON: Record<string, number> = { "يناير": 1, "فبراير": 2, "مارس": 3, "أبريل": 4, "ابريل": 4, "مايو": 5, "يونيو": 6, "يوليو": 7, "أغسطس": 8, "اغسطس": 8, "سبتمبر": 9, "أكتوبر": 10, "اكتوبر": 10, "نوفمبر": 11, "ديسمبر": 12 };
+function _approxTripDate(raw: string, now = new Date()): string {
+  const s = arabicToAsciiDigits(String(raw || "")).trim();
+  const m = s.match(new RegExp(`(نهاي[ةه]|آخر|اخر|أواخر|اواخر|منتصف|نص|وسط)\\s*(?:شهر\\s*)?(${Object.keys(_AR_MON).join("|")})\\s*(\\d{4})?`));
+  if (!m) {
+    // ١٨ نوفمبر ٢٠٢٦ (المالكة: «اي تاريخ غير الويكند»): شهر بس («يناير 2027» / «شهر 1») → أول يوم بالشهر مو جمعة ولا سبت.
+    //   الشهر الحالي → من بعد ٥ أيام؛ شهر راح → السنة الجاية.
+    const mo = s.match(new RegExp(`^(?:شهر\\s*)?(${Object.keys(_AR_MON).join("|")})\\s*(\\d{4})?$`));
+    const mn = s.match(/^شهر\s*(\d{1,2})\s*(\d{4})?$/);
+    const mon2 = mo ? _AR_MON[mo[1]] : (mn && +mn[1] >= 1 && +mn[1] <= 12 ? +mn[1] : 0);
+    if (!mon2) return s;
+    const y0 = (mo ? mo[2] : mn![2]) ? +((mo ? mo[2] : mn![2]) as string) : 0;
+    const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    let yr = y0 || now.getUTCFullYear();
+    if (!y0 && Date.UTC(yr, mon2, 0) < today) yr++;   // آخر يوم بالشهر راح → السنة الجاية
+    let t = Date.UTC(yr, mon2 - 1, 1);
+    if (t < today + 5 * 864e5 && new Date(today + 5 * 864e5).getUTCMonth() === mon2 - 1) t = today + 5 * 864e5;
+    while ([5, 6].includes(new Date(t).getUTCDay())) t += 864e5;   // ٥ جمعة، ٦ سبت
+    return new Date(t).toISOString().slice(0, 10);
+  }
+  const mon = _AR_MON[m[2]], day = /منتصف|نص|وسط/.test(m[1]) ? 15 : 25;
+  let yr = m[3] ? +m[3] : now.getUTCFullYear();
+  if (!m[3] && Date.UTC(yr, mon - 1, day) < Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())) yr++;
+  return `${yr}-${String(mon).padStart(2, "0")}-${day}`;
+}
+// 📍 ١٧ نوفمبر ٢٠٢٦ (المالكة): عناوين «📍 مواقع الشركة» (wa_locations) — طلال يجاوب منها لو سأل العميل عن مكتب/موقع.
+async function _officeLocations(supabase: ReturnType<typeof createClient>): Promise<Array<{ title: string; body: string }>> {
+  try {
+    const { data } = await supabase.from("wa_locations").select("title, body, sort_order").order("sort_order", { ascending: true });
+    return ((data || []) as Array<{ title?: string; body?: string }>).map(r => ({ title: String(r.title || "").trim(), body: String(r.body || "").trim() })).filter(r => r.body);
+  } catch (_e) { return []; }
+}
+function _officeBlock(offs: Array<{ title: string; body: string }>, followup: boolean): string {
+  if (!offs.length) return "";
+  return `📍 مكاتب الشركة (لو سأل العميل عن مكتب/فرع/موقع/عنوان الشركة → جاوبه بالعنوان المناسب حرفياً${followup ? " بـaction=\"reply\"" : " ثم كمّل سؤالك التالي"}، ❌ لا ${followup ? "ask_owner" : "owner_question"} ولا «لحظات أستاذي»؛ ولو سأل عن مدينة ما فيها مكتب قل له المكاتب الموجودة):\n` + offs.map(o => `• ${o.title}: ${o.body}`).join("\n");
+}
 // يبني برنامجاً كاملاً تلقائياً عبر Tourism-AI action=auto_build (الأرخص بفنادق
 // مختلطة لو التوزيع فارغ، أو توزيع محدّد). يرجّع رسالة الواتساب المنسّقة (مع
 // الفنادق/المسار/يشمل-لا يشمل/السعر النهائي بعملة العميل)، و priceReady: هل
@@ -2016,7 +2075,7 @@ async function autoBuildProgram(p: {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}`, apikey: jwt },
       body: JSON.stringify({
-        action: "auto_build", dest: p.dest, days: p.days, date: p.date,
+        action: "auto_build", dest: p.dest, days: p.days, date: _approxTripDate(p.date),
         pax: p.pax, ages: p.ages, distribution: p.distribution,
         phone: p.phone, customer_type: "individual",
         return_airport: p.return_airport || "",
@@ -2054,7 +2113,7 @@ const INTAKE_TOOL = {
       hotel_only: { type: "boolean", description: "true لو العميل يبي الفندق بس بدون طيران (حاجز تذاكره / «فقط فندق»). افهمها من المحادثة كلها" },
       hotel_name: { type: "string", description: "اسم فندق محدد طلبه العميل بالاسم (مثل «الصفوة»، «هيلتون»)، كما كتبه. فاضي لو ما ذكر اسم فندق" } } },
     sender_type: { type: "string", enum: ["customer", "partnership", "partnership_vague", "asks_management", "non_customer"], description: SENDER_TYPE_DESC },
-    owner_question: { type: "string", description: "سؤال العميل اللي ما عندك جوابه (فيزا/أوراق رسمية/حجز/دفع/خصم/طيران دولي/أي معلومة مو عندك) — اكتبه هنا و❌ لا تجاوب عليه في messages. فاضي لو ما فيه." },
+    owner_question: { type: "string", description: "سؤال العميل اللي ما عندك جوابه (فيزا/أوراق رسمية/حجز/دفع/خصم/طيران دولي/أي معلومة مو عندك) — اكتبه هنا و❌ لا تجاوب عليه في messages. فاضي لو ما فيه. ❌ تحديد نوع الباقة («مع التذاكر والفندق»، «فندق بس») مو سؤال — فاضي." },
     complete: { type: "boolean" } } },
 };
 const FOLLOWUP_TOOL = {
@@ -2472,6 +2531,13 @@ function guardAutofix(text: string, ctx?: { alreadyGreeted?: boolean; lastCustom
     t = t.replace(_HOW_ARE_YOU, " ").replace(/^[\s،,.!—-]+/, "").replace(/([،,])\s*[،,—-]+/g, "$1").replace(/[\s،,—-]+$/, "").trim();
     if (t) hits.push("how_are_you"); else t = before;
   }
+  // ١٨ نوفمبر ٢٠٢٦ (المالكة: «ليش قال طلال تم تسجيل مسقط» — تكررت): جملة آلية قصيرة «تم تسجيل/حفظ/اعتماد/تحديث X.» تنحذف
+  //   لو بعدها كلام (قبل حارس تكرار الافتتاح، عشان «حاضر، تم تسجيل مسقط. أي شهر…» → «أي شهر…» لو «حاضر» تكررت).
+  {
+    const _rb = /(^|[،,]\s*|[.!؟?]\s+)(?:تم|تمّ)\s+(?:تسجيل|حفظ|اعتماد|تحديث|استلام)(?:\s+[^\s.!؟?،,\n]+){1,3}\s*[.!]\s*/;
+    const _m = t.match(_rb);
+    if (_m) { const rest = t.replace(_rb, "$1").trim(); if (rest.replace(/[\s،,.!—-]/g, "").length >= 4) { t = rest; hits.push("robotic_tamm"); } }
+  }
   if (ctx?.lastTalal) {
     const prevOp = String(ctx.lastTalal).replace(/[\p{Extended_Pictographic}️]/gu, "").trim().match(_OPENER);
     const curOp = t.match(_OPENER);
@@ -2546,8 +2612,8 @@ function _placesIn(text: string): Array<{ tok: string; country: string; isCountr
 
 // G5–G8 رفض: يقارن رد طلال بالحقائق المخزّنة ويرجّع سبباً لو خالف.
 // opts.allowedPlacesText: نص إضافي مخزّن يُسمح بذكر أماكنه (مثل نص الإعلان الذي جاء منه العميل).
-function guardReject(text: string, facts: Record<string, unknown>, opts: { isUmrah: boolean; isOmani: boolean; allowedPlacesText?: string }): { guard: string; reason: string } | null {
-  const t = String(text || "");
+function guardReject(text: string, facts: Record<string, unknown>, opts: { isUmrah: boolean; isOmani: boolean; allowedPlacesText?: string; offices?: Array<{ title: string; body: string }> }): { guard: string; reason: string } | null {
+  let t = String(text || "");
   const has = (k: string) => { const v = facts[k]; return v !== undefined && v !== null && String(v).trim() !== ""; };
   const qs = _questionSegments(t);
   const qText = qs.join("\n");
@@ -2582,7 +2648,11 @@ function guardReject(text: string, facts: Record<string, unknown>, opts: { isUmr
   // G6 — تسريب سعر/موقع
   if (/[0-9٠-٩]{2,}\s*(?:ريال|درهم|دولار|ر\.?\s?س|ر\.?\s?ع)/.test(t))
     return { guard: "price_leak", reason: "ممنوع ذكر أي سعر إطلاقاً — قل «بيجاوبك الزميل المختص قريباً»" };
-  if (/مقرنا|موقعنا\s*(?:في|بـ|ب )|مكتبنا\s*(?:في|بـ|ب )|فرعنا\s*(?:في|بـ|ب )/.test(t))
+  // 📍 ١٧ نوفمبر ٢٠٢٦: عنوان من «مواقع الشركة» مسموح (حرفياً) — نشيله من النص قبل فحص الأماكن.
+  const _offs = opts.offices || [];
+  const _hasOffice = _offs.some(o => o.body && text.includes(o.body));
+  if (_hasOffice) { let _t2 = t; for (const o of _offs) { _t2 = _t2.split(o.body).join(" "); const _city = o.title.replace(/^موقع\s*/, "").replace(/^مكتب\s*/, "").trim(); if (_city) _t2 = _t2.split(_city).join(" "); } t = _t2.replace(/صلال[ةه]|ماليزيا|كوالالمبور/g, " "); }
+  if (!_hasOffice && /مقرنا|موقعنا\s*(?:في|بـ|ب )|مكتبنا\s*(?:في|بـ|ب )|فرعنا\s*(?:في|بـ|ب )/.test(t))
     return { guard: "location_leak", reason: "ممنوع ذكر موقع الشركة — حوّل للزميل المختص" };
   // موقع/مدينة غير موجودة في بيانات العميل المخزّنة (الحقائق + نص الإعلان).
   //   أي مدينة داخل دولة مذكورة في البيانات مسموحة. استثناءات: العمرة → مكة/المدينة، والعُماني في العمرة → صلالة/مسقط (سؤال مطار المغادرة).
@@ -3283,6 +3353,7 @@ async function handleNewLeadIntake(args: {
   }
   const _kbDest = String((prev as Record<string, unknown>).destination || "") || String(extractDestination(String(args.body || "")) || "");
   const _kbIntake = ownerKbBlock(await ownerKbFor(supabase, _kbDest), _kbDest);
+  const _offices = await _officeLocations(supabase);
   // 💾 ٩ نوفمبر ٢٠٢٦ (prompt caching): التعليمات الثابتة أول (نفسها لكل العملاء → تنحفظ في الكاش ساعة)، والخاص بالعميل
   //    (إعلان/ترحيب/عُماني/المطار/الأجوبة المعتمدة/اليوم والمعلومات المخزّنة) في الآخر تحت «سياق هذا العميل». نفس النص، بس مرتّب.
   const sysStatic = `أنت «طلال»، موظف خدمة عملاء لوكالة سفر، تتكلم بلهجة خليجية ودودة ومختصرة (لا فصحى).
@@ -3297,7 +3368,7 @@ async function handleNewLeadIntake(args: {
 - مثال خاطئ (ممنوع): «وين بتروح؟» / «وش تبي؟» / «كم عددكم؟» بدون مقدمة مؤدبة.
 - 👥 **سؤال العدد بصياغة طبيعية فقط:** «كم عدد المسافرين معكم؟» أو «معكم كم شخص بالرحلة؟». ❌❌ ممنوع صياغات ركيكة مثل «كم عدد الأشخاص اللي راح تنومون في الفندق؟» — لا تربط العدد بالنوم/الفندق إطلاقاً. وإذا **ذكر العميل العدد أصلاً** (مثل «شخصين»، «٣ أشخاص»، «إحنا ٤») → ❌ لا تسأل عنه ثانية؛ اعتبره معروفاً وانتقل للناقص التالي.
 ⛔⛔ القاعدة الأهم على الإطلاق — ممنوع منعاً باتاً أن تعطي أي معلومة من عندك:
-- أنت **تجمع** معلومات العميل فقط، ولا **تعطي** أي معلومة (موقع الشركة، الأسعار، تفاصيل البرامج، الفنادق، أي حقيقة).
+- أنت **تجمع** معلومات العميل فقط، ولا **تعطي** أي معلومة (الأسعار، تفاصيل البرامج، الفنادق، أي حقيقة) — ما عدا عناوين «📍 مكاتب الشركة» لو موجودة في سياق العميل (قرار المالكة ١٧ نوفمبر ٢٠٢٦).
 - ❌ ممنوع تخترع أو تخمّن أي شيء. لو سأل العميل عن أي معلومة (الموقع/السعر/التفاصيل/أي سؤال) → **لا تجاوب من عندك إطلاقاً**، قل بلطف: «بيجاوبك زميلنا المختص على هذا قريباً» وارجع لجمع المعلومات.
 - ❌❌ ممنوع منعاً باتاً تقول إن موقعنا في الرياض أو أي مدينة. لا تذكر أي موقع أو مدينة للشركة إطلاقاً — حتى لو ألحّ العميل، حوّله للزميل.
 - ✅ **استثناء وحيد — حقائق تأشيرات موثّقة تقولها مباشرة** (هذه فقط، لا تخترع غيرها): لو سأل عميل **عُماني** (رقمه +968) عن **تأشيرة/فيزا دخول الصين** → جاوب مباشرة: «ما يحتاج تأشيرة للعُمانيين للصين ولكم سماح دخول ٣٠ يوم من تاريخ الدخول» ثم أكمل جمع المعلومات.
@@ -3334,6 +3405,8 @@ async function handleNewLeadIntake(args: {
 - ⚠️⚠️ **الشهر يكفي تمامًا للتاريخ**: بمجرد ما يعطيك العميل شهرًا (مثل «سبتمبر» أو «شهر ٩») اعتبر حقل التاريخ **مكتملاً** وخزّنه وانتقل فورًا للمعلومة التالية. ❌ ممنوع منعاً باتاً تلحّ على «أي يوم بالضبط؟» أو تكرّر سؤال التاريخ — لا تسأل عن اليوم المحدّد إطلاقاً، الشهر كافٍ.
   • ⚠️ لو أعطى العميل يومًا وشهرًا (مثل «30/7» أو «بداية من 30/7») فالتاريخ **مكتمل** — ❌ ممنوع تسأل عنه مرة ثانية أو تطلب «التاريخ بالضبط».
   • ⚠️⚠️ لو أعطى العميل **مدى تاريخي** (من تاريخ إلى تاريخ، مثل «4/10 الى 9/10» أو «من ٤ أكتوبر لـ٩ أكتوبر» أو «10 لـ 15») → **المدة معروفة تلقائياً، احسبها بنفسك**: عدد الليالي = الفرق بين التاريخين (٤/١٠ → ٩/١٠ = **5 ليالٍ**)، وعدد الأيام = الليالي + 1. خزّن التاريخ والمدة معاً واعتبرهما **مكتملين**. ❌❌ ممنوع منعاً باتاً تسأل «كم يوم؟» أو «كم ليلة بالمجموع؟» أو «كم مدة الرحلة؟» بعد أن أعطاك مدى — العميل أعطاك البداية والنهاية فالمدة محسومة.
+  • 📅📅 **(قرار المالكة ١٢ نوفمبر ٢٠٢٦) المدى: يوم السفر = أول رقم، ويوم العودة = آخر رقم.** «25 to 28/11» = السفر 25/11 والعودة 28/11. ❌❌ ممنوع تاخذ يوم العودة على إنه يوم السفر (غلطة حية: «24 to 27 أو 25 to 28» صار «السفر 28 والعودة 1 ديسمبر»). خزّن date = يوم السفر (أول المدى) بالضبط.
+  • 📅📅 **العميل خيّر بين تاريخين ثم قال «أي واحد» / «ايوه» على سؤال «ولا» / «ياهذا او هذاك» / «اللي يناسبكم»** → خذ **الخيار الأول** وثبّته وقله بالكلام بجملة قصيرة («تمام، نثبّتها من 24 إلى 27 نوفمبر») ثم كمّل. ❌ لا تعيد نفس سؤال «ولا» مرة ثانية، ❌ ولا تخترع تاريخاً من الخيارين.
 - ⚠️⚠️ العميل الموجود **أصلاً في الوجهة**: لو ذكر أنه موجود/حالياً/واصل الوجهة (مثل «أنا في كوالالمبور»، «موجود بماليزيا»، «واصل دبي») → هو يريد ترتيبات **داخلية** (جولات/فنادق/تنقلات) وهو هناك بالفعل. ❌❌ ممنوع منعاً باتاً تسأل «متى السفر؟» (سؤال محيّر يجعله يرد «أي سفر؟»). بدّلها بسؤال منطقي مثل: «حاضر، متى تحبون نبدأ الترتيبات؟ وكم يوم باقي لكم هناك؟»، واعتبر مدة بقائه/تاريخ بدء الخدمات هو التاريخ (date).
 - افهم النص والأرقام المكتوبة بالحروف والكلام المجزّأ على عدة رسائل. لا تكرر سؤالاً أُجيب عنه.
 - ❌ ممنوع منعاً باتاً تسأل العميل عن حاله: لا «وش أخبارك» ولا «كيف الحال» ولا «إن شاء الله تمام التمام» ولا أي مجاملة فاضية. أنت **تخدمه** لا تسأله عن حاله. لو حيّاك أو سأل عنك، ردّ «أبشر» باختصار وانتقل **فوراً** للمعلومة الناقصة.
@@ -3363,6 +3436,11 @@ async function handleNewLeadIntake(args: {
 - ❓ **سؤال من العميل أثناء جمع المعلومات** (قرار المالكة ٨ نوفمبر ٢٠٢٦): لو جوابه عندك (من «أجوبة الإدارة المعتمدة» لنفس الوجهة، أو الطقس/الأماكن العامة) → جاوبه باختصار وكمّل بسؤالك التالي عادي.
   لو **ما عندك جوابه** (فيزا/تأشيرة/أوراق رسمية/حجز/دفع/خصم/طيران دولي/أسعار/أي معلومة مو عندك) → ❌❌ لا تجاوب من عندك أبداً ولا تخمّن؛ اكتب سؤاله في owner_question،
   وmessages = سؤالك التالي من أسئلة الاستقبال **فقط** (النظام يضيف قبله جملة التأجيل). ❌ لا تقفل (complete) بسببه.
+  📅 **(قرار المالكة ١٨ نوفمبر ٢٠٢٦) تاريخ مرن مو سؤال:** لو العميل جاوب على موعد السفر بـ«أقرب موعد» / «الأرخص» / «أي وقت» / «الوقت اللي تنزل فيه الأسعار» (حتى لو معه «وكم السعر؟») → هذا جواب على التاريخ (مرن)، ❌❌ لا owner_question ولا جملة التأجيل. قل له: «تمام، عطني على الأقل أي شهر تبيه؟» وانتظر الشهر.
+  🚌👥 **(قرار المالكة ١٣ نوفمبر ٢٠٢٦) حقائق ثابتة عن رحلاتنا — جاوبها بنفسك، ❌❌ لا owner_question ولا «لحظات أستاذي»:**
+  • باص/حافلة/بالبر (من مسقط أو غيرها): ما عندنا رحلات باص، كل رحلاتنا بالطيران. جاوب «لا والله، ما عندنا رحلات باص، كل رحلاتنا بالطيران.» ثم كمّل سؤالك التالي.
+  • رحلات جروب/مجموعات/قروب: ما عندنا رحلات جروب، كل رحلاتنا خاصة (برنامج خاص لك ولمن معك). جاوب «ما عندنا رحلات جروب، كل رحلاتنا خاصة.» ثم كمّل.
+  ⚠️⚠️ **(قرار المالكة ١٢ نوفمبر ٢٠٢٦) تحديد نوع الباقة مو سؤال:** «مع التذاكر والفندق» / «شامل الطيران» / «فندق بس» / «بدون طيران» = العميل يختار نوع الباقة → سجّله (فندق بس/بدون طيران → fields.hotel_only=true؛ مع التذاكر/الطيران → hotel_only=false) وكمّل عادي. ❌❌ لا تكتبه في owner_question.
 - 📢📢 **العميل من إعلان ويطلب العرض — أرسل العرض فوراً (لا تجمع معلومات قبله):** لو طلب العميل العرض (عروض/العرض/شو متوفر/ابي اشوف) → استوثق «تقصد عرض [الوجهة] اللي شفته بالإعلان؟» ولمّا يؤكّد **يُرسَل ملف العرض مباشرة** (النظام يرسله). ❌❌ ممنوع تجمع منه تاريخ/عدد/ليالي **قبل** إرسال العرض؛ العرض جاهز ويُرسَل أولاً. **بعد إرسال الملف** ادعُه لإضافة تفاصيله: «إذا عندك تاريخ معيّن أو تفاصيل ثانية حاب تضيفها بلّغني عشان أرتّب لك برنامج بناءً عليه». • إن أعطاك بعدها تاريخاً/عدداً/تفاصيل → اجمعها بهدوء (بلا فورمة إلزامية) وطمئنه أن زميلنا بيجهّز له البرنامج المخصّص. • ⚠️ لو **اعترض بشيء غامض ما فهمته** → «حاضر أستاذي بحوّل ملاحظتك لزميلنا المختص وراح يرد عليك قريباً».
 - 🤔🤔 **استوثِق قبل الملخّص عند أي التباس (إلزامي):** لو كانت المعلومات **متناقضة** (مثل تاريخين مختلفين، أو عدد يتعارض، أو وجهة تتعارض مع المدن)، أو **الكتابة غير واضحة/مبهمة**، أو العميل **طلب أشياء كثيرة ولم يحسم** ما يريده بالضبط — ❌ **لا ترسل الكرت/الملخّص**؛ اسأله سؤال استيضاح واحد مباشر **«تقصد كذا؟ ولا كذا؟»** حتى يتّضح، وبعد ما **يؤكّد** انتقل للملخّص. ومتى **بدّل معلومة سبق أعطاها** (وجهة/عدد/تاريخ) أكّد التبديل صراحةً «تقصد تبي تغيّره إلى كذا بدل كذا؟» قبل ما تعتمده. (الوجهة والعدد لهما حارسان خادميّان يفرضان ذلك.)
 - ⚠️⚠️ **ملخّص التأكيد قبل الإقفال (إلزامي):** متى اكتملت كل الأساسيات (الوجهة + عدد المسافرين [+ أعمار الأطفال إن وُجدوا] + التاريخ [+ عدد الليالي/التوزيع للعمرة]) **ولا التباس معلّق** **لا تقفل فوراً**. أرسل رسالة واحدة فيها ملخّص المعلومات واطلب التأكيد. ❌❌ في رسالة الملخّص **ممنوع منعاً باتاً تعرّف بنفسك («معك طلال») أو ترحّب أو تحيّي** — ابدأ مباشرة بـ«خليني أتأكد...». بهذا الشكل:
@@ -3396,6 +3474,7 @@ async function handleNewLeadIntake(args: {
     ? " **العميل جاء من إعلان مكة — الوجهة معروفة (عمرة) فلا تسأل عنها.** لكن إعلان مكة عرضٌ تعريفيّ وليس باقة بعدد ليالٍ ثابت: التسعير يحتاج المدة. اجمع: عدد المعتمرين + التاريخ" + (isOmani ? " + مطار المغادرة (صلالة/مسقط)" : "") + " + **عدد الليالي/الأيام** (⛔ إلزامي). اسأل **مرة واحدة** «كم ليلة تنوون في مكة؟ وإن حاب نضيف المدينة المنورة بلّغني كم ليلة فيها». ❌ لا تقفل قبل معرفة عدد الليالي (إلا إن أعطى مدى تاريخي من–إلى فالمدة محسومة). بعد اكتمالها طمئنه أن زميلنا بيجهّز له العرض."
     : "🕋 **مكة لحالها ولا مع المدينة؟ اسأل هذا (إن لم يحدّد العميل):** «تبي مكة لحالها ولا حاب أضيف لك المدينة المنورة؟». • لو **مكة فقط**: ⛔⛔ لو العميل **أعطى مدى تاريخي (من–إلى) أو عدد ليالٍ إجمالي** فالمدة معروفة، و«مكة فقط» يعني **كل الليالي في مكة تلقائياً** → ❌❌❌ ممنوع تسأل «كم ليلة في مكة» (الجواب = كل المدة)؛ اعتبر التوزيع مكتملاً. اسأل «كم ليلة في مكة؟» **فقط** لو المدة غير معروفة. • لو **الاثنتين** → اسأل التوزيع «كم ليلة في مكة وكم في المدينة؟». ولو أعطى التوزيع من البداية (مثل «3 مكة 2 المدينة») فمكتمل ولا تسأل. ⚠️ المدة بـ«الليالي/الأيام» فقط — ❌❌ ممنوع كلمة «سنة» أو «سنوات» إطلاقاً.")),
     (_kbIntake),
+    _officeBlock(_offices, false),
     `اليوم: ${today}. المعلومات المجموعة سابقاً: ${JSON.stringify(_promptPrev)}.`,
   ].map(x => String(x || "").trim()).filter(Boolean);
   const sys = sysStatic + "\n\n📌 سياق هذا العميل (خاص بهذي المحادثة — طبّقه مع القواعد فوق):\n" + _sysCtx.join("\n");
@@ -3405,6 +3484,8 @@ async function handleNewLeadIntake(args: {
   let _guardForcePreview = false;
   let _genFails = 0;   // فشل توليد (استثناء/بلا JSON/JSON تالف) — يُعاد مرة واحدة، ثم حارس «لا سكوت»
   const _guardRejects: Array<{ guard: string; reason: string; attempt: number; text: string }> = [];
+  // ١٤ نوفمبر ٢٠٢٦ (حي، مصر): العميل كتب «Muscat» وطلال قال «مسقط» → الحارس رفضه. أماكن ذكرها العميل نفسه (بأي لغة) مسموحة.
+  const _custWordsI = [...msgs.filter(m => m.who === "العميل").map(m => String(m.body || "")), String(args.body || "")].join(" ").slice(-3000);
   {
     const _model = _talalChatModel();   // ٩ نوفمبر ٢٠٢٦: Sonnet 5.5 (كان Sonnet 4.6) — نفس الاحترافية لكل الوجهات
     let _sysTry = sys;
@@ -3447,7 +3528,7 @@ async function handleNewLeadIntake(args: {
       const _candText = _cm.join("  ");
       const _cf = (_cand.fields && typeof _cand.fields === "object") ? _cand.fields as Record<string, unknown> : {};
       const _facts = { ...(prev as Record<string, unknown>), ...Object.fromEntries(Object.entries(_cf).filter(([_, v]) => v !== null && v !== undefined && String(v).trim() !== "")) };
-      const _rej = guardReject(_candText, _facts, { isUmrah, isOmani, allowedPlacesText: adRef ? JSON.stringify(adRef) : "" });
+      const _rej = guardReject(_candText, _facts, { isUmrah, isOmani, allowedPlacesText: (adRef ? JSON.stringify(adRef) : "") + " " + _custWordsI, offices: _offices });
       if (!_rej) { out = _cand; break; }   // نظيف
       _guardRejects.push({ guard: _rej.guard, reason: _rej.reason, attempt: _att, text: _candText });
       if (_att >= 3) { out = _cand; _guardForcePreview = true; break; }   // استنفدت → معاينة بشرية
@@ -3996,8 +4077,10 @@ async function handleNewLeadIntake(args: {
     _mergedData.summary_confirmed = false;
   }
   _mergedData.asked_pax_confirm = _paxChangeGateFired;
-  const _dateKnown = !!String(_mergedData.date || "").trim()
-    || /\d{1,2}\s*[\/\-]\s*\d{1,2}|\d{1,2}\s*(?:يناير|فبراير|مارس|إبريل|أبريل|مايو|يونيو|يوليو|أغسطس|سبتمبر|أكتوبر|نوفمبر|ديسمبر)|شهر\s*\d{1,2}|نهاي[ةه]\s*\d{1,2}|بداي[ةه]\s*\d{1,2}/.test(custTranscript);
+  // 📅 ١٢ نوفمبر ٢٠٢٦ (المالكة: «ليش طلال ما ساله التاريخ بالظبط متى»): التاريخ معروف فقط لو الذكاء خزّنه.
+  //    كان فيه فحص كلمات على كلام العميل كله («3-4»، «شهر 2») يعتبر التاريخ معروف وهو فاضي →
+  //    الملخّص طلع بلا تاريخ وطلال ما سأل. فهم التاريخ للذكاء (قرار ٩ نوفمبر)، وتكرار السؤال يمنعه anti_repeat.
+  const _dateKnown = !!String(_mergedData.date || "").trim();
   const _daysKnown = !!String(_mergedData.days || "").trim();
   const _essentialsMissing = !_destKnown || !_paxKnown || !_dateKnown
     || (_isUmrahPax ? !_nightsKnown : !_daysKnown);
@@ -4164,6 +4247,16 @@ async function handleNewLeadIntake(args: {
     outMsgs = ["تمام، خليني أتأكد من تفاصيل طلبك وأرد عليك بأقرب وقت 🌟"];
     _mergedData.guard_preview = true;
   }
+  // ✈️ ١٤ نوفمبر ٢٠٢٦ (حي +96891106240، مصر): طلال سأل «قصدك تذاكر سفر لحالها؟» (أو اعتذر عنها) — قاعدة العدد بدّلته بـ«كم عدد المسافرين؟»
+  //    وبعدها طلع كرت «رحلة… لشخص واحد؟». سؤال/اعتذار التذاكر لحالها = قاعدة المالكة، يمشي كما هو: بلا حرّاس ولا كرت ولا بناء ولا جملة التأجيل.
+  let _ticketsOnly = false;
+  if (!_guardForcePreview && /تذاكر\s*(?:ال)?(?:سفر|طيران)\s*(?:لحالها|بس|فقط|بدون\s*برنامج|من\s*غير\s*برنامج)/.test(_modelOut.join("\n"))) {
+    _ticketsOnly = true;
+    outMsgs = [..._modelOut];
+    _doAutoBuild = false;
+    _mergedData.awaiting_confirm = false; _mergedData.pending_card = false; _mergedData.tickets_only = true;
+    await logGuard(supabase, from, "tickets_only", "model_reply", "", 1, String(args.body || "").slice(0, 200), outMsgs.join(" ").slice(0, 300));
+  }
   if (myLatest) _mergedData.last_seen_in_ts = myLatest;   // آخر رسالة شافها طلال قبل ما يرد
   upd.intake_data = _mergedData;
 
@@ -4226,7 +4319,7 @@ async function handleNewLeadIntake(args: {
   //    ما فيه طلب رحلة أصلاً (لا وجهة ولا عدد) → «لحظات أستاذي» بدل التأجيل.
   {
     const _oq = String((out as { owner_question?: unknown } | null)?.owner_question || "").trim();
-    if (_oq && upd.intake_active !== false) {
+    if (_oq && upd.intake_active !== false && !_ticketsOnly) {
       const _hasTrip = !!String(_mergedData.destination || "").trim() || Number(_mergedData.pax) > 0;
       const _alreadyDeferred = msgs.some(m => m.who === "طلال" && m.body.includes(INTAKE_DEFER_MSG.slice(0, 30)));
       if (_hasTrip) { if (!_alreadyDeferred) outMsgs = [INTAKE_DEFER_MSG, ...outMsgs.filter(m => String(m).trim() !== INTAKE_DEFER_MSG)]; }
@@ -4272,6 +4365,13 @@ async function handleNewLeadIntake(args: {
       const _dy = parseInt(String(_mergedData.days || "").replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))), 10);
       _dist0 = (_cs.length === 1 && _dy > 1) ? `${_dy - 1} ليالي ${_cs[0]}` : "";
     }
+    // 🕋 ١٧ نوفمبر ٢٠٢٦ (حي +96895360506): عمرة «4 ليالي» بلا مدينة → المحرك ما بنى («يحتاج ترتيب يدوي»). بلا مدينة = مكة
+    //    (إلا لو المدن المدينة بس) — نفس منطق الكرت و«طلب فرد».
+    if (_isUmrahPax && _dist0 && !/مك|مدين|طائف/.test(_dist0)) {
+      const _bn = parseInt(arabicToAsciiDigits(_dist0).match(/\d{1,2}/)?.[0] || "", 10);
+      const _ct = String(_mergedData.cities || "");
+      if (_bn > 0) _dist0 = `${_bn} ${/مدين/.test(_ct) && !/مك/.test(_ct) ? "المدينة" : "مكة"}`;
+    }
     const _deferred = !_dist0 || /حسب|الوكال|بكيفك|براحتك|رتبو|ترتيب|أي\s*مدن/.test(_dist0);
     let _daysVal = String(_mergedData.days || "").trim();
     if (_isUmrahPax) {
@@ -4300,8 +4400,22 @@ async function handleNewLeadIntake(args: {
           // ❌ كان صامت: العميل وصله «شوية والبرنامج عندك» وما جاه شي. الحين: نبلغه بصدق + تنبيه الموظف + نمسح «جاري البناء».
           console.error("auto_build: no program for", from);
           const _fm = "أعتذر منك، البرنامج يحتاج ترتيب يدوي بسيط — زميلنا المختص بيجهّزه لك ويرسله قريب إن شاء الله.";
-          await sendCustomerReply(supabase, from, _fm);
-          try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: stripBannedPhrases(_fm), sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+          // 🤐 ١٢ نوفمبر ٢٠٢٦ (المالكة: «العميل قال طيب… ليش يكثر طلال بالكلام… يبين كذا إنه ذكاء صناعي»): طلال توّه
+          //    رد على العميل (تأكيد/«بنجهّز لك البرنامج») → ما نرسل اعتذار ثاني فوقه؛ التنبيه للموظف يكفي.
+          let _talalJustSpoke = false;
+          // ننتظر ثواني: رد طلال الثاني على نفس الرسالة (الذكاء/المتابعة) ممكن يطلع بنفس اللحظة.
+          await new Promise(r => setTimeout(r, 8000));
+          try {
+            const _since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+            const { data: _rt } = await supabase.from("wa_admin_messages").select("body").eq("customer_phone", from).eq("sent_by", "طلال").gte("sent_at", _since).order("sent_at", { ascending: false }).limit(1);
+            const _lb = String((_rt && _rt[0] && (_rt[0] as { body?: string }).body) || "");
+            // آخر رد يقول إن البرنامج «بيتجهّز ويوصل قريب» (مو «شوية والبرنامج عندك»/«الحين») → يكفي، بلا اعتذار ثاني.
+            _talalJustSpoke = !!_lb && /قريب|زميل|المختص|بجهز|بجهّز|بنجهز|نجهز|يجهز|يجهّز/.test(_lb) && !/شوي[ةه]\s*والبرنامج|الحين/.test(_lb);
+          } catch (_e) { /* */ }
+          if (!_talalJustSpoke) {
+            await sendCustomerReply(supabase, from, _fm);
+            try { await supabase.from("wa_admin_messages").insert({ customer_phone: from, body: stripBannedPhrases(_fm), sent_by: "طلال", sent_at: new Date().toISOString() }); } catch (_e) { /* */ }
+          }
           await logGuard(supabase, from, "auto_build_failed", "handoff", `${_mergedData.destination} | ${_daysVal} أيام | ${_dist0}`, 1, "", _fm);
           try { const n = `⚠️ ما قدر طلال يبني البرنامج تلقائياً — جهّزوه يدوياً\nالعميل: ${from.replace(/^whatsapp:/, "")}\nالوجهة: ${_mergedData.destination} · ${_daysVal} أيام · ${_mergedData.pax} أشخاص · ${_mergedData.date}\nالمدن: ${_mergedData.cities || "-"}`; await Promise.all(staffList("SALES_WHATSAPP_NUMBERS").map(x => sendStaffNotice(x, n))); } catch (_e) { /* */ }
           try { await createProposalAndNotifyAdmin({ supabase, customerPhone: from, profileName: "", question: "طلب برنامج ما انبنى تلقائياً: " + String(_mergedData.destination || "") }); } catch (_e) { /* */ }
@@ -4459,19 +4573,67 @@ async function _currencyForPhone(supabase: ReturnType<typeof createClient>, from
 //    نوحّد أي صيغة إلى «3 مكة 2 المدينة» (أزواج رقم+مدينة)؛ بدون مدن نبقيها كما هي.
 // 📋 تعبئة «طلب فرد» من بيانات طلال المؤكَّدة مع العميل (summary_confirmed): الوجهة/العدد/التوزيع/الأيام.
 //    العمرة: nights «3 مكة 2 المدينة» → توزيع بصيغة الشيت «3 ليال مكه - 2 ليال المدينه المنوره»، والأيام = مجموع الليالي + ١.
+function _briefRowsSince<T extends { received_at?: string }>(rows: T[], startedAt: string): T[] {
+  const st = Date.parse(String(startedAt || "")) || 0;
+  if (!st) return rows;
+  const cur = rows.filter(r => (Date.parse(String(r.received_at || "")) || 0) >= st - 10 * 60e3);   // هامش ١٠ دقايق (أول رسالة قبل الترحيب)
+  return cur.length ? cur : rows;
+}
 function _briefFromIntake(d: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  if (!d || d.summary_confirmed !== true) return out;
+  // ١٢ نوفمبر ٢٠٢٦ (المالكة: «توزيع المدن والمطارات تتعبى من كرت طلال وكلام طلال مع العميل»): ما ننتظر التأكيد النهائي —
+  //    اللي خزّنه طلال من كلامه مع العميل (الليالي/مطار العودة) يعبّي «طلب فرد».
+  if (!d || typeof d !== "object") return out;
+  const _ra = String(d.return_airport || "").trim();
+  if (_ra === "madinah" || _ra === "jeddah") out.return_airport = _ra;
   const pax = parseInt(String(d.pax ?? "").replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))), 10);
   if (pax > 0) out.pax = pax;
+  // ١٧ نوفمبر ٢٠٢٦ (المالكة، +96892237771): pax عند طلال = **الإجمالي**، وخانة «طلب فرد» = **البالغين** →
+  //   كان ٥ (إجمالي) + ٣ أطفال = ٨. الأطفال = عدد الأعمار، والبالغين = الإجمالي − الأطفال.
+  // ١٨ نوفمبر ٢٠٢٦ (المالكة، +96896426198): نفس قاعدة المساعد السياحي — **١١ سنة وفوق = بالغ**، ١٠ وتحت = طفل،
+  //   والرضيع (عمر بالشهور) = طفل. كانت كل الأعمار تنحسب أطفال (٢ كبار + ٦ أطفال بدل ٥ + ٣).
+  const _kids = String(d.ages ?? "").replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x)))
+    .match(/\d{1,2}\s*(?:شهور|شهر|اشهر|أشهر|months?)?/gi)?.filter(a => /شه|month/i.test(a) || parseInt(a, 10) <= 10).length || 0;
+  if (pax > 0 && _kids > 0 && _kids < pax) { out.pax = pax - _kids; out.children = _kids; }
   const nn = _normNights(d.nights);
   const pairs = [...nn.matchAll(/(\d{1,2})\s*(مكة|المدينة|الطائف)/g)].map(m => ({ n: +m[1], c: m[2] }));
+  // «4» بلا مدينة (طلال قال «4 ليالي في مكة») → نفس منطق كرت طلال (_talkSummary): مكة إلا لو المدن المدينة بس.
+  const _destU = String(d.destination || "") + " " + String(d.cities || "");
+  const _isU = _isUmrahDest(_destU) || /عمر|مك/.test(_destU);
+  if (!pairs.length && _isU) {
+    // «4» / «4 ليالي» / «٤ ليال» بلا مدينة؛ ولو فاضي → من عدد الأيام (الليالي = الأيام − ١).
+    // ١٨ نوفمبر ٢٠٢٦ (+96879351519): «٤ ليالي (من السبت 21 إلى الأربعاء 25 نوفمبر)» — رقم + «ليالي» ثم شرح → ناخذ الرقم.
+    const _nn = nn.replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x)));
+    const _m = _nn.match(/^\s*(\d{1,2})\s*(?:ليال\S*|ليالي|ليلة|ليل|nights?)?\s*$/i) || _nn.match(/^\s*(\d{1,2})\s*(?:ليال\S*|ليالي|ليلة|nights?)(?=[\s(،,-])/i);
+    const _dy = parseInt(String(d.days ?? "").replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))), 10);
+    const _n = _m ? +_m[1] : (!nn.trim() && _dy > 1 ? _dy - 1 : 0);
+    const _ct = String(d.cities || "");
+    if (_n > 0) pairs.push({ n: _n, c: /مدين/.test(_ct) && !/مك/.test(_ct) ? "المدينة" : "مكة" });
+  }
+  if (_isU && !out.return_airport) out.return_airport = "jeddah";
+  // 📅 تاريخ السفر اللي ثبّته طلال مع العميل (مو قراءة جديدة للمحادثة).
+  // ١٨ نوفمبر ٢٠٢٦ (+96879351519): «السبت 21 نوفمبر 2026» — اسم اليوم قبل التاريخ يتشال.
+  { const raw = String(d.date || "").replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))).trim()
+      .replace(/^(?:يوم\s*)?(?:ال)?(?:سبت|أحد|احد|[إا]ثنين|ثلاثاء|[أا]ربعاء|خميس|جمع[ةه])[\s،,]*/, ""); let mm;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    if ((mm = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) out.date_from = `${mm[1]}-${pad(+mm[2])}-${pad(+mm[3])}`;
+    else if ((mm = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))) out.date_from = `${mm[3]}-${pad(+mm[2])}-${pad(+mm[1])}`;
+    // ١٧ نوفمبر ٢٠٢٦ (المالكة، +96892237771): «17 نوفمبر 2026» و«نهاية ديسمبر 2026» (→ ٢٥) كانت تنترك لقراءة الرسايل.
+    else if ((mm = raw.match(new RegExp(`^(\\d{1,2})\\s*(${Object.keys(_AR_MON).join("|")})\\s*(\\d{4})?`)))) {
+      const _mo = _AR_MON[mm[2]]; let _yr = mm[3] ? +mm[3] : new Date().getUTCFullYear();
+      if (!mm[3] && Date.UTC(_yr, _mo - 1, +mm[1]) < Date.now() - 864e5) _yr++;
+      out.date_from = `${_yr}-${pad(_mo)}-${pad(+mm[1])}`;
+    } else { const _ap = _approxTripDate(raw); if ((mm = _ap.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) out.date_from = `${mm[1]}-${pad(+mm[2])}-${pad(+mm[3])}`; } }
+  // الوجهة والأيام اللي ثبّتها طلال مع العميل (غير العمرة؛ العمرة تنحسب من التوزيع تحت).
+  { const _dn = String(d.destination || "").split("(")[0].trim(); if (_dn) out.destination = _dn;
+    const _dy = parseInt(String(d.days ?? "").replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))), 10); if (_dy > 0) out.days = _dy; }
   if (pairs.length) {
     const SHEET: Record<string, string> = { "مكة": "مكه", "المدينة": "المدينه المنوره", "الطائف": "الطائف" };
     out.distribution = pairs.map(p => `${p.n} ليال ${SHEET[p.c]}`).join(" - ");
     out.cities_nights = pairs.map(p => ({ city: SHEET[p.c], nights: p.n }));
     out.days = pairs.reduce((s, p) => s + p.n, 0) + 1;
     out.destination = "العمرة";
+    if (!out.return_airport) out.return_airport = "jeddah";   // العمرة: الافتراضي ذهاب وعودة من جدة (نفس حقل airports عند طلال)
   }
   return out;
 }
@@ -4730,8 +4892,10 @@ async function checkMissedReplies(supabase: ReturnType<typeof createClient>): Pr
       if (String(idata.missed_rescue_at || "") === last.received_at) continue;
       const { data: outAfter } = await supabase.from("wa_admin_messages").select("sent_at").eq("customer_phone", phone).gt("sent_at", last.received_at).limit(1);
       if (((outAfter || []) as unknown[]).length) continue;
-      const { data: glAfter } = await supabase.from("guard_logs").select("guard_name").eq("customer_phone", phone).gt("created_at", last.received_at).neq("guard_name", "intent").limit(1);
-      if (((glAfter || []) as unknown[]).length) continue;
+      const { data: glAfter } = await supabase.from("guard_logs").select("guard_name").eq("customer_phone", phone).gt("created_at", last.received_at).neq("guard_name", "intent").limit(50);
+      // ١٤ نوفمبر ٢٠٢٦ (حي، مصر): حارس التكرار وقف آخر رد وما راح شي → مو سكوت مقصود، ننقذ.
+      const _glA = ((glAfter || []) as Array<{ guard_name?: string }>);
+      if (_glA.length && !_glA.some(g => g.guard_name === "anti_repeat")) continue;
       const { data: pj } = await supabase.from("program_pdf_jobs").select("id").eq("phone", phone).in("status", ["pending", "processing"]).limit(1);
       if (((pj || []) as unknown[]).length) continue;
       const body = String(last.body || "").trim();
@@ -4965,6 +5129,17 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   const _YY = (t = text) => _cls ? _cls.yes_no === "yes" : isYesish(t);
   const _N = (t = text) => _cls ? _cls.yes_no === "no" : isNegative(t);
   const _is = (...k: string[]) => !!_cls && k.includes(_cls.intent);
+  // ⏰ ١٧ نوفمبر ٢٠٢٦ (المالكة، +96892237771 انتظر ساعتين بعد «زميلنا المختص» وطلال يكرر «قيد التجهيز»): العميل ينتظر ومتضايق
+  //    من التأخير → تنبيه للإدارة (مرة كل ساعة) عشان أحد يرد عليه.
+  if (_cls && _cls.intent === "waiting" && _cls.frustrated) {
+    const _la = Date.parse(String(idata.delay_alert_at || "")) || 0;
+    if (Date.now() - _la > 3600e3) {
+      idata.delay_alert_at = new Date().toISOString();
+      try { await supabase.from("whatsapp_sessions").update({ intake_data: { ...idata } }).eq("phone", from); } catch (_e) { /* */ }
+      await ownerBroadcast(supabase, "⏰ عميل متضايق من التأخير",
+        `⏰ عميل ينتظر ومتضايق من التأخير\nالعميل: ${from.replace(/^whatsapp:/, "")}\nالوجهة: ${String(idata.destination || "—")}\nآخر رسالة: «${String(text || "").slice(0, 200)}»\nردّوا عليه بأسرع وقت.`);
+    }
+  }
   // ❓ ٨ نوفمبر ٢٠٢٦ (قرار المالكة): سؤال ما يعرف جوابه → «لحظات أستاذي» (أو رسائل الليل) + تنبيه المالكة. ❌ لا رد من عنده.
   const _ownerAsk = async (question: string, why: string): Promise<void> => {
     const step = ownerHoldStep(idata);
@@ -5080,10 +5255,19 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     }
     if (c.pax) parts.push(`العدد يصير ${c.pax}`);
     if (c.ages) parts.push(`أعمار الأطفال ${c.ages}`);
-    if (c.date) parts.push(`السفر يكون ${c.date}`);
+    // ١٥ نوفمبر ٢٠٢٦ (حي +96896100666، قرار المالكة): التاريخ بصيغة مقروءة (مو 2026-12-15).
+    const _fmtD = (v: unknown): string => {
+      const _ds = arabicToAsciiDigits(String(v ?? "")).trim();
+      const _m1 = _ds.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/), _m2 = _ds.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+      const _dd = _m1 ? new Date(Date.UTC(+_m1[1], +_m1[2] - 1, +_m1[3])) : _m2 ? new Date(Date.UTC(+_m2[3], +_m2[2] - 1, +_m2[1])) : null;
+      return _dd && !isNaN(_dd.getTime()) ? _arDate(_dd) : String(v ?? "");
+    };
+    if (c.date) parts.push(`السفر يكون ${_fmtD(c.date)}`);
     if (c.destination) parts.push(`الوجهة تصير ${c.destination}`);
     const r = (c.date || c.days || c.nights) ? _tripReturnDate(nd) : null;
     if (r && !c.return_airport) parts.push(`والعودة ${_arDate(r)}`);
+    // قرار المالكة ١٥ نوفمبر: العميل غيّر التاريخ بس → نفس البرنامج بنفس التفاصيل، يتغيّر التاريخ فقط، ونتأكد منه.
+    if (c.date && Object.keys(c).every(k => k === "date")) return `تمام، يعني نفس البرنامج بنفس التفاصيل، بس ${parts.join(" ")}، صحيح؟`;
     if (!parts.length) return "تمام، تقصد نعدّل البرنامج كذا؟";
     // صيغة المالكة الحرفية لسؤال المطار وحده.
     if (parts.length === 1 && c.return_airport === "madinah") return "تمام، تقصد الذهاب إلى مطار جدة، وبعد ذلك العودة من مطار المدينة؟";
@@ -5631,6 +5815,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   const isUmrahF = _isUmrahDest(String(facts.destination || "") + " " + String(facts.cities || ""));
   const transcript = msgs.slice(-16).map(m => m.who + ": " + m.body).join("\n").slice(-3500);
   const _kbF = ownerKbBlock(await ownerKbFor(supabase, String(facts.destination || idata.destination || "")), String(facts.destination || idata.destination || ""));
+  const _officesF = await _officeLocations(supabase);
   const sysStaticF = `أنت طلال من خدمة عملاء وكالة سفر عُمانية، تكلّم العميل بلهجة خليجية طبيعية مختصرة (رسالة وحدة، بلا إيموجي، بلا «أستاذي»).
 طلب العميل **مؤكّد ومخزّن** — حقائقه والبرنامج مكتوبة في «سياق هذا العميل» آخر التعليمات: حقائق ثابتة، ❌ لا تسأل عنها أبداً ولا تغيّرها من عندك.
 القواعد:
@@ -5661,6 +5846,10 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
   • الفيزا/التأشيرة/الجوازات/الأوراق الرسمية/التطعيمات/الشروط والأحكام → ask_owner دائماً، إلا لو جوابها في أجوبة الإدارة **لنفس الوجهة**.
   • الحجز والدفع والخصومات وتغيير الأسعار والتأكيد النهائي، والطيران الدولي (لغير العمرة) → ask_owner.
   • الطقس والأماكن السياحية والمعلومات العامة عن الوجهة → جاوب بنفسك (أسلوب المبيعات أعلاه).
+  • 🚌👥 **(قرار المالكة ١٣ نوفمبر ٢٠٢٦) حقائق ثابتة — action="reply"، ❌❌ لا ask_owner ولا «لحظات أستاذي»:** باص/حافلة/بالبر (من مسقط أو غيرها) → «لا والله، ما عندنا رحلات باص، كل رحلاتنا بالطيران.»؛ رحلات جروب/مجموعات/قروب → «ما عندنا رحلات جروب، كل رحلاتنا خاصة.»
+  • 🎫 **(قرار المالكة ١٢ نوفمبر ٢٠٢٦) العميل يحدّد نوع الباقة** («مع التذاكر والفندق»، «شامل الطيران»، «فندق بس»): هذا **مو سؤال** ❌ لا ask_owner ولا «لحظات أستاذي».
+     العمرة: البرنامج أصلاً شامل التذاكر والفندق والتنقلات (حقل airports) → action="reply" بجملة قصيرة تأكّد له («إيه نعم، البرنامج شامل التذاكر والفندق»)؛ «فندق بس/بدون طيران» → action="modify".
+     غير العمرة: «مع التذاكر» = يبي الطيران الدولي → نفس قاعدة الطيران الدولي أعلاه.
   • ❌ لا تذكر «زميلي المختص» أبداً.
   • 🤝 المرسل مو عميل (قرار المالكة): تعاون واضح الطبيعة (شركات/برامج سياحية/تسويق) أو مكتب/شركة سفر → action="partnership"؛ تعاون ما وضّح طبيعته → action="partnership_vague"؛ يطلب الإدارة/المدير/رقمهم بلا سبب → action="asks_management"؛
     رسالة مو عن رحلة (اتصالات/مورّد/توظيف/دعاية) → action="non_customer". (النظام يرد بالصيغة المعتمدة.)
@@ -5676,6 +5865,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
     `حقائق الطلب (مؤكّدة ومخزّنة): ${JSON.stringify(facts)}`,
     program && _progLine ? _progLine + "\n" + program : "(البرنامج ما انرسل له بعد — ❌ لا تقل إنه أُرسل أو موجود فوق)",
     _kbF,
+    _officeBlock(_officesF, true),
     _cls ? `🧠 فهم رسالة العميل الأخيرة (موثوق): «${_cls.meaning}» — النية: ${_cls.intent}${_cls.yes_no !== "none" ? `، جوابه: ${_cls.yes_no}` : ""}. ابنِ ردك على هذا الفهم.` : "",
   ].map(x => String(x || "").trim()).filter(Boolean);
   const sys = sysStaticF + "\n\n📌 سياق هذا العميل (خاص بهذي المحادثة):\n" + _sysCtxF.join("\n");
@@ -5695,7 +5885,7 @@ async function handleFollowupAI(args: { supabase: ReturnType<typeof createClient
       let cand: FOut | null = null;
       if (m) { try { cand = JSON.parse(m[0]); } catch (_e) { cand = null; } }
       if (!cand || !String(cand.message || "").trim()) { await logGuard(supabase, from, "followup_model_fail", "retry", (m ? "bad_json" : "no_json") + ": " + txt.slice(0, 150), att, "", ""); continue; }
-      const rej = ["handoff", "ask_owner", "partnership", "partnership_vague", "asks_management", "non_customer"].includes(String(cand.action)) ? null : guardReject(String(cand.message), facts, { isUmrah: isUmrahF, isOmani: /^whatsapp:\+?968/.test(from) });
+      const rej = ["handoff", "ask_owner", "partnership", "partnership_vague", "asks_management", "non_customer"].includes(String(cand.action)) ? null : guardReject(String(cand.message), facts, { isUmrah: isUmrahF, isOmani: /^whatsapp:\+?968/.test(from), offices: _officesF });
       if (rej) {
         await logGuard(supabase, from, rej.guard, "reject", "followup: " + rej.reason, att, String(cand.message), "");
         sysTry = sys + `\n\n⚠️ حارس رفض ردك السابق: «${rej.reason}». أعد الصياغة ملتزماً بهذا.`;
@@ -11389,7 +11579,11 @@ Deno.serve(async (req) => {
         .select("body, received_at").eq("from_phone", contact_phone)
         .not("body", "is", null)
         .order("received_at", { ascending: false }).limit(60);
-      const rows = (((msgs || []) as Array<{ body?: string }>)).reverse();
+      // ١٧ نوفمبر ٢٠٢٦ (المالكة، +96892237771): الملاحظات خلطت محادثة سبتمبر القديمة (إندونيسيا/بالي/الأردن) مع طلب فيتنام
+      //    و«العميل يقارن وجهتين». نقرا رسائل **الطلب الحالي** بس (من started_at).
+      let _startedAtB = "";
+      try { const { data: _sb } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", contact_phone).maybeSingle(); _startedAtB = String((((_sb as { intake_data?: Record<string, unknown> } | null)?.intake_data) || {}).started_at || ""); } catch (_e) { /* */ }
+      const rows = _briefRowsSince((((msgs || []) as Array<{ body?: string; received_at?: string }>)).reverse(), _startedAtB);
       const transcript = rows.map(m => String(m.body || "").trim())
         .filter(t => t && !t.startsWith("📎")).join("\n").slice(-6000);
       if (!transcript) return new Response(JSON.stringify({ error: "لا توجد رسائل نصية من العميل لقراءتها" }), { status: 404, headers: jsonCors });
@@ -11415,17 +11609,25 @@ Deno.serve(async (req) => {
       });
       let txt = "";
       for (const blk of res.content) if ((blk as { type?: string }).type === "text") txt += (blk as { text?: string }).text || "";
+      // ١٨ نوفمبر ٢٠٢٦ (المالكة، +96879351519: الفورمة طلعت فاضية): Haiku رجّع رد بلا JSON → كان الطلب كله يفشل (502)
+      //    مع إن بيانات طلال (الوجهة/العدد/التاريخ/الليالي) موجودة. الحين نكمل ببيانات طلال، ونفشل بس لو ما فيه شي أبداً.
       const mm = txt.match(/\{[\s\S]*\}/);
-      if (!mm) return new Response(JSON.stringify({ error: "تعذّر استخراج البيانات" }), { status: 502, headers: jsonCors });
-      const brief = JSON.parse(mm[0]) as Record<string, unknown>;
+      let brief: Record<string, unknown> = {};
+      if (mm) { try { brief = JSON.parse(mm[0]) as Record<string, unknown>; } catch (_e) { brief = {}; } }
+      if (!mm || !Object.keys(brief).length) console.warn("extract_brief: Haiku بلا JSON — نكمل ببيانات طلال", txt.slice(0, 200));
       // ١٠ نوفمبر ٢٠٢٦ (المالكة، +96895309470): العميل «مكة ٣ أيام والمدينة يومين» وطلال أكّد معه «6 أيام 5 ليالي
       //   (3 مكة + 2 المدينة)» والعميل «ايوا» — والتعبئة طلّعت 5 أيام + توزيع الشيت الوحيد «2 مكه - 2 المدينه».
       //   السبب: القراءة من رسائل العميل فقط (بلا تأكيد طلال) وبلا توزيع. الحين: اللي أكّده طلال مع العميل هو المرجع.
       try {
         const { data: _ss } = await supabase.from("whatsapp_sessions").select("intake_data").eq("phone", contact_phone).maybeSingle();
-        const _brief = _briefFromIntake(((_ss as { intake_data?: Record<string, unknown> } | null)?.intake_data) || {});
+        const _idt = { ...((((_ss as { intake_data?: Record<string, unknown> } | null)?.intake_data) || {}) as Record<string, unknown>) };
+        // الليالي ما انحفظت عند طلال → عدد الأيام من قراءة المحادثة (مثلاً من ٢٩/١١ إلى ٣/١٢ = ٥ أيام) يعطي الليالي.
+        if (!String(_idt.nights ?? "").trim() && !String(_idt.days ?? "").trim() && brief.days) _idt.days = brief.days;
+        if (!String(_idt.destination ?? "").trim() && brief.destination) _idt.destination = brief.destination;
+        const _brief = _briefFromIntake(_idt);
         for (const [k, v] of Object.entries(_brief)) if (v != null && v !== "") brief[k] = v;
       } catch (_e) { /* نكمل بقراءة المحادثة */ }
+      if (!Object.values(brief).some(v => v != null && v !== "")) return new Response(JSON.stringify({ error: "تعذّر استخراج البيانات" }), { status: 502, headers: jsonCors });
       return new Response(JSON.stringify({ ok: true, brief }), { headers: jsonCors });
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: jsonCors });
@@ -11494,9 +11696,12 @@ Deno.serve(async (req) => {
         .maybeSingle();
       const so = sess as { last_outbound_at: string | null; last_outbound_body: string | null; ad_referral?: Record<string, unknown> | null } | null;
       if (so?.last_outbound_at && so.last_outbound_body) {
+        // ١٣ نوفمبر ٢٠٢٦ (حي +96897161658): sendCustomerReply ينظّف النص قبل الإرسال (يشيل الإيموجي/التنوين/السطر الجديد)
+        //   فالمحفوظ هنا يختلف حرفياً عن المسجّل في wa_admin_messages → الداش كانت تعرض الرد مرتين. نقارن الحروف فقط.
+        const _nb = (t: string) => String(t || "").replace(/[\u064B-\u0652\u0640]/g, "").replace(/[^\p{L}\p{N}]+/gu, "").slice(0, 80);
         const dupe = items.some(it =>
           it.sender !== "customer" &&
-          it.body.slice(0, 100) === (so.last_outbound_body || "").slice(0, 100) &&
+          _nb(it.body) === _nb(so.last_outbound_body || "") &&
           Math.abs(new Date(it.ts).getTime() - new Date(so.last_outbound_at!).getTime()) < 60_000);
         if (!dupe) {
           items.push({ ts: so.last_outbound_at, body: so.last_outbound_body, sender: "ai" });

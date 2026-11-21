@@ -15,7 +15,7 @@ const TMP = new URL("../.index_under_test.ts", HERE);
 // ── 1) نسخة قابلة للاستيراد من index.ts: بلا Deno.serve، ومع تصدير الدوال ──
 let code = await Deno.readTextFile(SRC);
 code = code.replace(/^Deno\.serve\(/m, "(globalThis as any).__noServe(");
-code += "\nexport { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish, sendPostProgramMessages, replyUnsupportedAttachment, handleVoiceNote, checkMissedReplies, recordTalalPdf, statusAiMode, setBlocked, isBlockedNumber, _briefFromIntake };\n";
+code += "\nexport { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish, sendPostProgramMessages, replyUnsupportedAttachment, handleVoiceNote, checkMissedReplies, recordTalalPdf, statusAiMode, setBlocked, isBlockedNumber, _briefFromIntake, _approxTripDate, _briefRowsSince, guardAutofix };\n";
 await Deno.writeTextFile(TMP, code);
 (globalThis as any).__noServe = () => {};
 
@@ -164,13 +164,14 @@ let curHotels: Array<Record<string, unknown>> | null = null; let curHotelMatch: 
 };
 
 const mod = await import(TMP.href);
-const { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish, sendPostProgramMessages, replyUnsupportedAttachment, handleVoiceNote, checkMissedReplies, _briefFromIntake } = mod;
+const { handleNewLeadIntake, handleFollowupAI, handleMessage, extractDestination, fuzzyDestination, _programIssues, _varyPostMsg, isAffirmative, isYesish, sendPostProgramMessages, replyUnsupportedAttachment, handleVoiceNote, checkMissedReplies, _briefFromIntake, _approxTripDate, _briefRowsSince, guardAutofix } = mod;
 
 // ── 4) تشغيل السيناريوهات ──
 const PHONE = "whatsapp:+96899621742";
 function seed(s: Scenario) {
   DB = { wa_message_audit: [], wa_admin_messages: [], whatsapp_sessions: [], guard_logs: [], program_pdf_jobs: [],
     wa_settings: [{ key: "ai_mode", value: "PREVIEW" }, { key: "auto_program_test_numbers", value: "99621742" }] };
+  if ((s as any).db) for (const [k, v] of Object.entries((s as any).db as Record<string, unknown[]>)) (DB as any)[k] = [...((DB as any)[k] || []), ...v];
   let t = Date.now() - 3 * 3600e3;   // أوقات حديثة دائماً (قاعدة «الموظف استلم» تنظر آخر ٤٨ ساعة)
   const ts = () => new Date(t += 15_000).toISOString();
   const _tsList: string[] = [];
@@ -233,6 +234,10 @@ for (const s of SCENARIOS) {
 const DEST_UNITS: Array<[string, string | null]> = [
   ["مشرمن جده", null],            // ٣ نوفمبر: «مش من جدة» طابقت «شرم» → مصر
   ["ابي مصر", "مصر"], ["شرم الشيخ", "مصر"], ["لمصر شهر ٢", "مصر"], ["المصروف كم", null],
+  // ١٤ نوفمبر ٢٠٢٦ (حي +96891106240): «Muscat eygpt» → كانت «عُمان» (مدينة المغادرة + غلط إملائي بالإنجليزي)
+  ["Going 17 back 26 \nMuscat eygpt how much", "مصر"], ["ابي رحلة من مسقط الى تركيا", "تركيا"], ["from muscat", null], ["من مسقط", null], ["ابي برنامج في صلالة", "عُمان"], ["turky trip", "تركيا"], ["من مسقط ل جده", null], ["من مسقط ل جدة \nمن جده ل مسقط", null],
+  // ٢٠ نوفمبر ٢٠٢٦ (المالكة: «اربط طلال بجورجيا وأرمينيا») — أرمينيا ما كانت معروفة، وجورجيا تعرف تبليسي/باتومي بس.
+  ["ابي برنامج ارمينيا ٧ ايام", "أرمينيا"], ["أرمينيا", "أرمينيا"], ["يريفان ودليجان", "أرمينيا"], ["armenia trip", "أرمينيا"], ["رحلة كازبيجي وبورجومي", "جورجيا"], ["كوتايسي", "جورجيا"],
 ];
 for (const [t, want] of DEST_UNITS) {
   const got = extractDestination(t);
@@ -350,8 +355,75 @@ for (const [raw, en, want] of [["PREVIEW_REPLY", true, "PREVIEW_REPLY"], ["ON", 
 {
   const b = _briefFromIntake({ summary_confirmed: true, destination: "العمرة", pax: 3, nights: "3 مكة 2 المدينة" });
   const ok = b.days === 6 && b.distribution === "3 ليال مكه - 2 ليال المدينه المنوره" && b.pax === 3;
-  const none = Object.keys(_briefFromIntake({ summary_confirmed: false, nights: "3 مكة 2 المدينة" })).length === 0;
-  if (ok && none) { pass++; realLog("✅ brief-from-intake «التوزيع المؤكَّد من طلال»"); } else { fail++; realLog(`❌ brief-from-intake ${JSON.stringify(b)} none=${none}`); }
+  // ١٢ نوفمبر: كرت/كلام طلال قبل التأكيد يعبّي برضو + مطار العودة (المدينة) — والبيانات الفاضية ما تعبّي شي.
+  const pre = _briefFromIntake({ summary_confirmed: false, awaiting_confirm: true, nights: "2 مكة 2 المدينة", return_airport: "madinah" });
+  const none = pre.distribution === "2 ليال مكه - 2 ليال المدينه المنوره" && pre.days === 5 && pre.return_airport === "madinah"
+    && b.return_airport === "jeddah" && Object.keys(_briefFromIntake({})).length === 0;
+  // ١٢ نوفمبر (+96891212794): طلال «4 ليالي في مكة» + 29/11 → nights «4» بلا مدينة → «4 ليال مكه» + 5 أيام + التاريخ 2026-11-29 + جدة.
+  const bare = _briefFromIntake({ summary_confirmed: true, destination: "العمرة", pax: 2, nights: "4", date: "29/11/2026" });
+  const bareOk = bare.distribution === "4 ليال مكه" && bare.days === 5 && bare.date_from === "2026-11-29" && bare.return_airport === "jeddah";
+  const w = _briefFromIntake({ destination: "العمرة", pax: 2, nights: "4 ليالي", date: "29/11/2026" });
+  const w2 = _briefFromIntake({ destination: "العمرة", pax: 2, days: 5 });
+  const wOk = w.distribution === "4 ليال مكه" && w2.distribution === "4 ليال مكه" && w2.return_airport === "jeddah";
+  if (!bareOk || !wOk) realLog("❌ bare " + JSON.stringify({ bare, w, w2 }));
+  if (ok && none && bareOk && wOk) { pass++; realLog("✅ brief-from-intake «التوزيع المؤكَّد من طلال»"); } else { fail++; realLog(`❌ brief-from-intake ${JSON.stringify(b)} none=${none}`); }
+}
+// ── ١٧ نوفمبر ٢٠٢٦ (المالكة: «لسه الفورمه ماتبعت بشكل دقيق»، +96892237771): من بيانات طلال كان يطلع بالغين/أطفال بس —
+//    التاريخ «نهاية ديسمبر 2026» والأيام ١٠ والوجهة تتركها لقراءة الذكاء للرسايل («١٢ اخره»). الحين كلها من اللي ثبّته طلال.
+{
+  const v = _briefFromIntake({ ages: "9، 8، 5", date: "نهاية ديسمبر 2026", days: 10, destination: "فيتنام", pax: 5, cities: "", nights: "", summary_confirmed: true });
+  const e = _briefFromIntake({ destination: "مصر", pax: 1, date: "17 نوفمبر 2026", days: 10 });
+  if (v.pax === 2 && v.children === 3 && v.days === 10 && v.date_from === "2026-12-25" && v.destination === "فيتنام" && e.date_from === "2026-11-17" && e.days === 10) { pass++; realLog("✅ brief-full-from-talal «تاريخ/أيام/وجهة»"); }
+  else { fail++; realLog(`❌ brief-full-from-talal ${JSON.stringify({ v, e })}`); }
+}
+// ── ١٧ نوفمبر ٢٠٢٦ (+96892237771): ملاحظات «طلب فرد» خلطت محادثة سبتمبر (إندونيسيا) مع طلب فيتنام ──
+{
+  const rows = [{ body: "ابي اندونيسيا بالي", received_at: "2026-09-05T08:00:00Z" }, { body: "سلام", received_at: "2026-11-16T15:02:45Z" }, { body: "ابي أسافر فيتنام", received_at: "2026-11-16T15:03:18Z" }];
+  const r = _briefRowsSince(rows, "2026-11-16T15:02:56Z"), all = _briefRowsSince(rows, "");
+  if (r.length === 2 && !r.some((x: any) => /اندونيسيا/.test(x.body)) && all.length === 3) { pass++; realLog("✅ brief-current-request-only «بلا المحادثة القديمة»"); }
+  else { fail++; realLog(`❌ brief-current-request-only ${JSON.stringify(r)}`); }
+}
+// ── ١٧ نوفمبر ٢٠٢٦ (+96892237771): «نهاية ديسمبر 2026» كانت تنبني من ١ ديسمبر ──
+{
+  const now = new Date(Date.UTC(2026, 10, 17));
+  const a = _approxTripDate("نهاية ديسمبر 2026", now), b = _approxTripDate("منتصف يناير", now), c = _approxTripDate("آخر نوفمبر", now), d = _approxTripDate("2026-12-15", now), e = _approxTripDate("ديسمبر", now);
+  // ١٨ نوفمبر ٢٠٢٦ (المالكة: «اي تاريخ غير الويكند»): شهر بس → أول يوم بالشهر مو جمعة ولا سبت.
+  const f = _approxTripDate("يناير 2027", now), g = _approxTripDate("شهر 1", now), h = _approxTripDate("نوفمبر", now);
+  const bf = _briefFromIntake({ destination: "العمرة", pax: 2, date: "يناير 2027" });
+  if (a === "2026-12-25" && b === "2027-01-15" && c === "2026-11-25" && d === "2026-12-15" && e === "2026-12-01" && f === "2027-01-03" && g === "2027-01-03" && h === "2026-11-22" && bf.date_from === "2027-01-03") { pass++; realLog("✅ approx-date «نهاية/منتصف الشهر»"); }
+  else { fail++; realLog(`❌ approx-date ${JSON.stringify({ a, b, c, d, e, f, g, h, bf: bf.date_from })}`); }
+}
+// ── ١٧ نوفمبر ٢٠٢٦ (المالكة، +96892237771): طلال pax=5 (الإجمالي) + أعمار «9، 8، 5» → «طلب فرد» كان «بالغين 5» + «أطفال 3» = 8. الصح: بالغين 2 + أطفال 3 ──
+{
+  const k = _briefFromIntake({ destination: "فيتنام", pax: 5, ages: "9، 8، 5", days: 10 });
+  const k0 = _briefFromIntake({ destination: "فيتنام", pax: 4, ages: "" });
+  const k2 = _briefFromIntake({ destination: "العمرة", pax: 5, ages: "11 و 6" });   // ١٨ نوفمبر: ١١ سنة = بالغ (قاعدة المساعد السياحي)
+  if (k.pax === 2 && k.children === 3 && k0.pax === 4 && (k0.children == null || k0.children === 0) && k2.pax === 4 && k2.children === 1) { pass++; realLog("✅ brief-adults-children «الإجمالي ≠ البالغين»"); }
+  else { fail++; realLog(`❌ brief-adults-children ${JSON.stringify({ k, k0, k2 })}`); }
+}
+// ── ١٨ نوفمبر ٢٠٢٦ (المالكة، +96896426198): «١١ سنة وفوق = بالغ» (نفس المساعد السياحي) والرضيع (شهور) = طفل.
+//    الأب والأم + ١٤، ١٢، ١١، ٧، ٦ سنوات، ٦ شهور → الفورمة كانت ٢ كبار + ٦ أطفال؛ الصح ٥ كبار + ٣ أطفال (مطابق للعرض). ──
+{
+  const f = _briefFromIntake({ destination: "العمرة", pax: 8, ages: "14 سنة، 12 سنة، 11 سنة، 7 سنوات، 6 سنوات، 6 شهور", nights: "3 مكة 2 المدينة" });
+  const g = _briefFromIntake({ destination: "ماليزيا", pax: 3, ages: "8 شهور" });
+  if (f.pax === 5 && f.children === 3 && g.pax === 2 && g.children === 1) { pass++; realLog("✅ brief-adult-11-infant «١١+ بالغ، الرضيع طفل»"); }
+  else { fail++; realLog(`❌ brief-adult-11-infant ${JSON.stringify({ f: [f.pax, f.children], g: [g.pax, g.children] })}`); }
+}
+// ── ١٨ نوفمبر ٢٠٢٦ (المالكة، +96896426198: «ليش قال طلال تم تسجيل مسقط»): عبارة آلية «تم تسجيل/حفظ/اعتماد X.» تنحذف (تكررت مرتين). ──
+{
+  const a = guardAutofix("حاضر، تم تسجيل مسقط. أي شهر تنوون السفر فيه تقريبا؟").text;
+  const b = guardAutofix("حاضر، تم تسجيل مسقط. أي شهر تنوون السفر فيه تقريبا؟", { lastTalal: "حاضر، الإقلاع من مطار صلالة أو مطار مسقط؟" }).text;
+  const c = guardAutofix("تمام، تم اعتماد الطلب. نجهز لك البرنامج ونرسله لك في أقرب وقت بإذن الله.").text;
+  const d = guardAutofix("تم تسجيل مسقط.").text;   // ما يبقى شي → نخليها
+  if (a === "حاضر، أي شهر تنوون السفر فيه تقريبا؟" && b === "أي شهر تنوون السفر فيه تقريبا؟" && !/تم اعتماد/.test(c) && /نجهز لك البرنامج/.test(c) && d === "تم تسجيل مسقط.") { pass++; realLog("✅ autofix-robotic-tamm «تم تسجيل مسقط»"); }
+  else { fail++; realLog(`❌ autofix-robotic-tamm ${JSON.stringify({ a, b, c, d })}`); }
+}
+// ── ١٨ نوفمبر ٢٠٢٦ (المالكة، +96879351519: «ليش ماعرفت تعبي الفورمه»): التاريخ «السبت 21 نوفمبر 2026» (قبله اسم اليوم)
+//    والليالي «٤ ليالي (من السبت 21 إلى الأربعاء 25 نوفمبر)» (معها شرح) ما كانت تنقرا. ──
+{
+  const m = _briefFromIntake({ destination: "العمرة", pax: 3, ages: "", date: "السبت 21 نوفمبر 2026", days: 5, cities: "مكة والمدينة", nights: "٤ ليالي (من السبت 21 إلى الأربعاء 25 نوفمبر)" });
+  if (m.pax === 3 && m.date_from === "2026-11-21" && m.distribution === "4 ليال مكه" && m.days === 5) { pass++; realLog("✅ brief-weekday-date-nights-note «السبت 21 نوفمبر» + «٤ ليالي (…)»"); }
+  else { fail++; realLog(`❌ brief-weekday-date-nights-note ${JSON.stringify(m)}`); }
 }
 // ── وحدة: صيغ الموافقة (٤ نوفمبر: «تماما» ما انحسبت) ──
 for (const [t, want] of [["تماما", true], ["تمامم", true], ["تمام", true], ["اوكيه", true], ["طيب", true], ["👍", true], ["✅", true], ["ايوه", true], ["okk", true], ["كل شي صح", true], ["ياريت", true], ["يا ريت", true], ["ياليت والله", true], ["لا", false], ["تمام بس غير التاريخ ١٥", false], ["متى", false]] as Array<[string, boolean]>) {
