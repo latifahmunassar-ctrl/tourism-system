@@ -2865,26 +2865,65 @@ async function attachLiveStays(req: Record<string, unknown>, destKey: string | n
     const stayCityByKey: Record<string, string[]> = {};
     { let o = 0; for (const s of stays) { (stayCityByKey[`${o}|${s.nights}`] ||= []).push(String(s.city).toLowerCase()); o += s.nights; } }
     await Promise.all(windows.map(async w => {
+      // المالكة ٢١ نوفمبر ٢٠٢٦: للمجموعات (٣+) نقارن **غرفة وحدة تسع الكل** مع **غرفتين منفصلتين**
+      // (٤ = ٢+٢، ٥ = ٣+٢ → غرفتان لـ٣) لكل فندق، ونعتمد الأرخص للمجموعة كاملة (_cmp = تكلفة الليلة).
       const q = await _liveQuote(destKey, names, w.ci, w.co, adults);
-      if (!q) return;
-      const rows = toRows(q, adults, 1);
-      // المالكة ٢١ نوفمبر ٢٠٢٦: ما فيه غرفة وحدة تسع العدد في مدينة → جرّب غرفتين (مثلاً ٥ = ٣+٢ → غرفتان لـ٣)
-      if (adults >= 3) {
-        const have = new Set(rows.map(r => cityOf(r.location)));
-        const missing = new Set((stayCityByKey[w.key] || []).filter(c => ![...have].some(h => h.startsWith(c.split(" ")[0]) || c.startsWith(h.split(" ")[0]))));
-        if (missing.size) {
-          const per2 = Math.ceil(adults / 2);
-          const q2 = await _liveQuote(destKey, names, w.ci, w.co, per2);
-          if (q2) {
-            const cityNames = new Set(Object.values(info).map(h => cityOf(h.location)).filter(c => [...missing].some(m => c.startsWith(m.split(" ")[0]) || m.startsWith(c.split(" ")[0]))));
-            rows.push(...toRows(q2, per2, 2, cityNames));
-          }
-        }
+      const per2 = Math.ceil(adults / 2);
+      const q2 = adults >= 3 ? await _liveQuote(destKey, names, w.ci, w.co, per2) : null;
+      // ٥ أشخاص فأكثر: خيار ثالث = غرفة لـ(العدد-١) + سرير إضافي (نفس سعر شاشة التسعيرة: ٥★=١٢٠، غيرها ١٠٠).
+      const q3 = adults >= 5 ? await _liveQuote(destKey, names, w.ci, w.co, adults - 1) : null;
+      if (!q && !q2 && !q3) return;
+      const best = (rooms: Array<{ name: string; meal: string; inc: string; total: number; per_night: number }>, per: number) =>
+        (rooms || []).filter(r => _vpBreakfast(r) && _liveBedOk(r.name, per)).sort((x, y) => x.total - y.total)[0];
+      const rows: HotelRow[] = [];
+      for (const n of new Set([...Object.keys(q || {}), ...Object.keys(q2 || {})])) {
+        const base = info[n]; if (!base) continue;
+        const one = q?.[n] ? best(q[n].rooms, adults) : undefined;
+        const two = q2?.[n] ? best(q2[n].rooms, per2) : undefined;
+        const mk = (r: { name: string; per_night: number }, per: number, roomsN: number, extra: Record<string, unknown>) => ({
+          name: base.name, location: base.location, stars: base.stars, area: base.area, link: base.link,
+          room_type: r.name, price_per_night: Math.round(r.per_night * 100) / 100, currency: "MYR",
+          occupancy: `${adults} adults`, meals: "إفطار مشمول", includes_breakfast: true, date_from: undefined, date_to: undefined, nights: null,
+          _perRoomOcc: per, _cmp: Math.round(r.per_night * roomsN * 100) / 100, ...(roomsN > 1 ? { _liveRooms: roomsN } : {}), ...extra } as unknown as HotelRow);
+        const bedN = (base.stars >= 5 ? 120 : 100);
+        const bedR = q3?.[n] ? best(q3[n].rooms, adults - 1) : undefined;
+        const opts: Array<{ cost: number; row: HotelRow }> = [];
+        if (one) opts.push({ cost: one.per_night, row: mk(one, adults, 1, {}) });
+        if (two) opts.push({ cost: two.per_night * 2, row: mk(two, per2, 2, one ? { _oneUnit: one.per_night } : {}) });
+        if (bedR) { const r = mk(bedR, adults - 1, 1, { _liveBed: true, ...(one ? { _oneUnit: one.per_night } : {}) }); (r as unknown as { _cmp: number })._cmp = Math.round((bedR.per_night + bedN) * 100) / 100; opts.push({ cost: bedR.per_night + bedN, row: r }); }
+        opts.sort((x, y) => x.cost - y.cost);
+        if (opts.length) rows.push(opts[0].row);
       }
       live[w.key] = rows;
     }));
     if (Object.keys(live).length) (req as { liveStays?: Record<string, HotelRow[]> }).liveStays = live;
   } catch (_e) { /* fallback to sheet */ }
+}
+
+// ── verify_unit: زر تحت نوع الغرفة — «🏠 غرفة وحدة للكل» أو «🛏️ غرفتين» لنفس الفندق (المالكة ٢١ نوفمبر ٢٠٢٦) ──
+// المدخل: { action:"verify_unit", dest, hotel, checkin, nights, adults, mode:"one"|"two" } — Search فقط.
+async function handleVerifyUnit(body: { dest?: string; hotel?: string; checkin?: string; nights?: number; adults?: number; mode?: string }): Promise<Response> {
+  const out = (o: unknown) => new Response(JSON.stringify(o), { headers: CORS_HEADERS });
+  try {
+    const destKey = detectDestination([{ role: "user", content: String(body.dest || "") }]);
+    const hotelName = String(body.hotel || "").trim(), checkin = String(body.checkin || "");
+    const nights = Math.max(1, Math.min(30, Number(body.nights) || 1));
+    const adults = Math.max(1, Math.min(8, Number(body.adults) || 2));
+    if (!destKey || !hotelName || !/^\d{4}-\d{2}-\d{2}$/.test(checkin)) return out({ ok: false, error: "بيانات ناقصة" });
+    const two = body.mode === "two", bed = body.mode === "bed" && adults >= 3;
+    const per = two ? Math.ceil(adults / 2) : bed ? adults - 1 : adults;
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const rows = await fetchAllRows<Record<string, unknown>>((() => supabase.from("hotels").select("name").ilike("location", `% - ${destKey}`)) as never);
+    const names = [...new Set(rows.map(h => String(h.name || "").trim()).filter(Boolean))].sort();
+    const co = new Date(new Date(`${checkin}T00:00:00Z`).getTime() + nights * 86400000).toISOString().slice(0, 10);
+    const q = await _liveQuote(destKey, names, checkin, co, per);
+    if (!q) return out({ ok: false, error: "ما قدرت أوصل لـ TBO" });
+    const rs = (q[hotelName]?.rooms || []).filter(r => _vpBreakfast(r) && _liveBedOk(r.name, per)).sort((a, b) => a.total - b.total);
+    if (!rs.length) return out({ ok: true, found: false, note: two ? "ما فيه غرفتين متوفرة في هالفندق بهالتواريخ" : bed ? `ما فيه غرفة لـ${per} في هالفندق بهالتواريخ` : `ما فيه غرفة وحدة تسع ${adults} في هالفندق بهالتواريخ` });
+    return out({ ok: true, found: true, room: rs[0].name, per_night: rs[0].per_night, rooms: two ? 2 : 1, per_room: per, bed });
+  } catch (e) {
+    return out({ ok: false, error: String((e as Error).message) });
+  }
 }
 
 // ── verify_alternative: زر «🔄 خيار آخر» أمام كل فندق في نتيجة التحقق (المالكة ٢١ نوفمبر ٢٠٢٦) ──
@@ -4204,6 +4243,7 @@ Deno.serve(async (req) => {
     if (reqBody && reqBody.action === "list_room_types") return await handleListRoomTypes(reqBody);
     if (reqBody && reqBody.action === "verify_prices") return await handleVerifyPrices(reqBody);
     if (reqBody && reqBody.action === "verify_alternative") return await handleVerifyAlternative(reqBody);
+    if (reqBody && reqBody.action === "verify_unit") return await handleVerifyUnit(reqBody);
     if (reqBody && reqBody.action === "list_tours") return await handleListTours(reqBody);
     if (reqBody && reqBody.action === "tour_variants") return await handleTourVariants(reqBody);
     if (reqBody && reqBody.action === "profit_margins") return await handleProfitMargins(reqBody);

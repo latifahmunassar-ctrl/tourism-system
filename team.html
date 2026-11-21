@@ -2101,6 +2101,39 @@ async function verifyHotelPrices(){
       <div style="margin-top:8px;display:flex;gap:8px">${canApply?`<button type="button" class="ebtn" onclick="verifyApply()">✅ اعتمد أسعار TBO (${canApply})</button>`:''}<button type="button" class="ebtn ebtn-nologo" onclick="document.getElementById('vpBox').innerHTML=''">خلّه مثل ما هو</button></div></div>`;
   } catch(e){ box.innerHTML = `<div class="cap-warn">⚠️ خطأ أثناء التحقق: ${esc(e && e.message ? e.message : e)}</div>`; }
 }
+// 🛏️ «طريقة السكن» تحت نوع الغرفة (المالكة ٢١ نوفمبر ٢٠٢٦): نفس الفندق بسعر TBO الحين —
+// غرفة وحدة للكل / غرفتين منفصلتين / غرفة لـ(العدد-١) + سرير إضافي. اختيار الموظفة يدوياً.
+const _UM_AR = {'يناير':1,'فبراير':2,'مارس':3,'أبريل':4,'ابريل':4,'مايو':5,'يونيو':6,'يوليو':7,'أغسطس':8,'اغسطس':8,'سبتمبر':9,'أكتوبر':10,'اكتوبر':10,'نوفمبر':11,'ديسمبر':12};
+async function changeUnitMode(hidx, mode){
+  if(!mode) return;
+  try {
+    const line = parseHotelLinesFromRaw(lastProgramRaw)[hidx]; if(!line) return;
+    const p = line.split('|').map(s=>s.trim());
+    const t5 = arabicDigitsToLatin(p[5]||'');
+    const nm = t5.match(/(\d+)\s*ليال/); const dm = t5.match(/من\s+(\d{1,2})\s+(\S+)\s+(\d{4})/);
+    const mon = dm ? _UM_AR[dm[2]] : 0;
+    if(!nm || !dm || !mon){ addMessage('sys','ما قدرت أقرأ تواريخ هالفندق.'); return; }
+    const checkin = `${dm[3]}-${String(mon).padStart(2,'0')}-${String(dm[1]).padStart(2,'0')}`;
+    const _bfA = document.getElementById('bf-adults');
+    const adults = (parseInt(_bfA && _bfA.value) || 0) || metaPersons() || 2;
+    addMessage('sys', '⏳ أدور السعر في TBO (بحث فقط)…');
+    const r = await fetch(SUPABASE_URL, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_KEY, 'apikey':SUPABASE_KEY },
+      body: JSON.stringify({ action:'verify_unit', dest:getLine(lastProgramRaw,'DEST'), hotel:p[0], checkin, nights:+nm[1], adults, mode }) });
+    const d = await r.json();
+    if(!d.ok){ addMessage('sys','⚠️ '+(d.error||'خطأ')); return; }
+    if(!d.found){ addMessage('sys','ℹ️ '+(d.note||'غير متوفر')); return; }
+    const price = Math.round(d.per_night*100)/100;
+    const roomTxt = `${d.room} (يتسع ${d.per_room} أشخاص)`;
+    const meals = p[6] || 'ما يشمل: إفطار مشمول';
+    const tail = String(line).split('|').slice(7).map(s=>s.trim()).filter(s => s && !/^ADDROOM:/.test(s));
+    let newLine = [p[0], p[1]||'', p[2]||'', roomTxt, price + ' ريال/ليلة', p[5]||'', meals].concat(tail).join(' | ');
+    if(d.rooms > 1) newLine += ` | ADDROOM:${String(d.room).replace(/[|~]/g,' ')}~${price}~${d.per_room}~${meals.replace(/[|~]/g,' ')}`;
+    hotelBeds[hidx] = d.bed ? 1 : 0;
+    const newRaw = hswSwapRaw(lastProgramRaw, hidx, newLine);
+    const lbl = mode==='two' ? 'غرفتين منفصلتين' : mode==='bed' ? `غرفة لـ${d.per_room} + سرير إضافي` : `غرفة وحدة لـ${adults}`;
+    applyHotelRawChange(newRaw, `✅ ${p[0]}: صارت ${lbl} — ${d.room} بسعر TBO ${price.toLocaleString()} لليلة${d.rooms>1?' للغرفة':''}.`);
+  } catch(e){ addMessage('sys','⚠️ '+(e && e.message ? e.message : e)); }
+}
 // 🔄 «خيار آخر» أمام كل فندق: أرخص فندق ثاني بنفس المدينة/النجوم مع إفطار يسع العدد (سعر TBO حي).
 // الفندق الحالي يبقى كما هو؛ «بدّل لهذا» = تغيير يدوي من الموظفة.
 const _vpAltSeen = {};
@@ -4793,9 +4826,10 @@ const _isSA = /جنوب\s*أفريقيا|south\s*africa/i.test(String(dest||''))
 const _am = aMode(hidx);
 const accSel = _destIsEgypt(dest) ? `<select class="villa-sel" title="نوع السكن → أرخص فندق/شقة يتّسع للعدد، وقائمة الفنادق تنحصر على النوع المختار" onchange="changeAccKind(${hidx}, this.value)"><option value=""${_am===''?' selected':''}>🏨 نوع السكن: الكل</option><option value="فندق"${_am==='فندق'?' selected':''}>🏨 فندق</option><option value="شقة سكنية"${_am==='شقة سكنية'?' selected':''}>🏠 شقة سكنية</option></select>`
   : _isSA ? `<select class="villa-sel" title="نوع السكن → قائمة تبديل الفندق تنحصر على النوع المختار" onchange="changeAccKind(${hidx}, this.value)"><option value=""${_am===''?' selected':''}>🏨 نوع السكن: الكل</option><option value="فندق"${_am==='فندق'?' selected':''}>فندق فقط</option><option value="محمية"${_am==='محمية'?' selected':''}>محمية فقط</option></select>` : '';
+const unitSel = (adults >= 3) ? `<select class="villa-sel" title="طريقة السكن (سعر TBO الحين — بحث فقط): غرفة وحدة للكل، أو غرفتين، أو غرفة + سرير إضافي" onchange="changeUnitMode(${hidx}, this.value)"><option value="" selected>🛏️ طريقة السكن…</option><option value="one">🏠 غرفة وحدة لـ${adults}</option><option value="two">🛏️ غرفتين منفصلتين</option>${adults>=5?`<option value="bed">➕ غرفة لـ${adults-1} + سرير إضافي</option>`:''}</select>` : '';
 const roomCell = `<td class="rtw-cell" data-hidx="${hidx}" data-name="${hswEsc(p[0]||'')}" data-region="${hswEsc(p[1]||'')}" data-room="${hswEsc(p[3]||'')}" data-nights="${nights}" data-date="${hswEsc(_df)}">`
   + `<div class="hsw-cur" onclick="rtwToggle(this)"><span class="hsw-name">${p[3]||''}</span><span class="hsw-chev">▼</span></div>`
-  + `<div class="hsw-menu"></div>${villaSel}${accSel}</td>`;
+  + `<div class="hsw-menu"></div>${villaSel}${accSel}${unitSel}</td>`;
 const rooms = hRooms(hidx);
 const roomsCell = `<td><select class="rooms-sel" onchange="setHotelRooms(${hidx}, this.value)">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${n===rooms?' selected':''}>${n}</option>`).join('')}</select></td>`;
 // خلية النجوم — منسدلة: تغيير الفئة يجيب أرخص فندق بالمدينة بتلك الفئة حصراً

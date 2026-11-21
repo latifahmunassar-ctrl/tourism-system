@@ -427,7 +427,9 @@ export function pickCheapestHotel(
   // fallback path, then name. On the strict path all candidates share the
   // same occupancy so the second key is a no-op.
   candidates.sort((a, b) => {
-    if (a.price_per_night !== b.price_per_night) return a.price_per_night - b.price_per_night;
+    // أسعار TBO الحيّة: _cmp = تكلفة الليلة للمجموعة كاملة (غرفة وحدة أو غرفتين) — للمقارنة العادلة.
+    const ca = (a as { _cmp?: number })._cmp ?? a.price_per_night, cb = (b as { _cmp?: number })._cmp ?? b.price_per_night;
+    if (ca !== cb) return ca - cb;
     const ac_a = extractAdultsCount(a.occupancy || "");
     const ac_b = extractAdultsCount(b.occupancy || "");
     if (ac_a !== ac_b) return ac_a - ac_b;
@@ -1767,7 +1769,7 @@ export function formatProgram(data: ProgramData): string {
     // Append "(يتسع N أشخاص)" to the room_type field whenever the DB row
     // declares an occupancy — makes capacity legible at a glance instead of
     // hiding it inside cryptic room names like "SUITE STANDARD".
-    const occN = extractAdultsCount(sh.hotel.occupancy || "");
+    const occN = (sh.hotel as { _perRoomOcc?: number })._perRoomOcc || extractAdultsCount(sh.hotel.occupancy || "");
     const roomTypeWithOcc = occN > 0
       ? `${sh.hotel.room_type} (يتسع ${occN} أشخاص)`
       : sh.hotel.room_type;
@@ -1798,7 +1800,7 @@ export function formatProgram(data: ProgramData): string {
     const _al = _alloc.get(sh);
     let addRoomSeg = "";
     if (_al && _al.rooms > 1) {
-      const _occ = _capOf(sh.hotel as { occupancy?: string; room_type?: string });
+      const _occ = (sh.hotel as { _perRoomOcc?: number })._perRoomOcc || _capOf(sh.hotel as { occupancy?: string; room_type?: string });
       for (let k = 1; k < _al.rooms; k++) addRoomSeg += ` | ADDROOM:${String(sh.hotel.room_type || "").replace(/[|~]/g, " ")}~${sh.hotel.price_per_night}~${_occ}~${meals.replace(/[|~]/g, " ")}`;
     }
     out += `${sh.hotel.name} | ${cityAr} | ${sh.hotel.stars} نجوم | ${roomTypeWithOcc} | ${formatNumber(sh.hotel.price_per_night)} ريال/ليلة | ${sh.nights} ${sh.nights === 1 ? "ليلة" : "ليالي"} (من ${formatArabicDate(sh.rangeFrom)} إلى ${formatArabicDate(sh.rangeTo)}) | ${meals}${areaSeg}${linkSeg}${addRoomSeg}\n`;
@@ -2505,12 +2507,22 @@ export async function buildLocalProgram(
     // Detect occupancy upsize so we can tell the employee in CHAT. Only
     // emit once per city even if multiple stays of the same city all upsize.
     // Skip when the override fired — the employee already specified the size.
-    const picked = extractAdultsCount(hotel.occupancy || "");
+    const picked = (hotel as { _perRoomOcc?: number })._perRoomOcc || extractAdultsCount(hotel.occupancy || "");
     const reqAdults = request.adults || 2;
     const cityAr = cityArabicNames[stay.city] || stay.city;
     const _lrooms = (hotel as { _liveRooms?: number })._liveRooms || 0;
+    if ((hotel as { _liveBed?: boolean })._liveBed) {
+      // غرفة لـ(العدد-١) + سرير إضافي أرخص من الغرفتين ومن الغرفة الوحدة → نضيف المدينة لنطاق السرير الإضافي
+      const sc = request.extraBed.scope;
+      if (sc !== "all") request.extraBed = { scope: [...(Array.isArray(sc) ? sc : []), stay.city].filter((c, i, a) => a.indexOf(c) === i) };
+      const _one = (hotel as { _oneUnit?: number })._oneUnit;
+      occupancyUpsizeNotes.push(`🛏️ ${cityAr}: اخترت غرفة لـ${picked} أشخاص + سرير إضافي لأنها الأرخص${_one ? ` (الغرفة الوحدة لـ${reqAdults}: ${Math.round(_one).toLocaleString()} لليلة)` : ""}. تقدرين تبدلينها من تحت نوع الغرفة.`);
+    } else
     if (_lrooms > 1) {
-      occupancyUpsizeNotes.push(`🛏️ ${cityAr}: ما فيه غرفة وحدة تسع ${reqAdults} أشخاص في TBO بهالتواريخ — حسبتها ${_lrooms} غرف (كل غرفة ${picked} أشخاص) بسعر TBO.`);
+      const _one = (hotel as { _oneUnit?: number })._oneUnit;
+      occupancyUpsizeNotes.push(_one
+        ? `🛏️ ${cityAr}: اخترت ${_lrooms} غرف (كل غرفة ${picked} أشخاص) لأنها أرخص من غرفة وحدة لـ${reqAdults} (${Math.round(_one).toLocaleString()} لليلة) — تقدرين تبدلينها من تحت نوع الغرفة.`
+        : `🛏️ ${cityAr}: ما فيه غرفة وحدة تسع ${reqAdults} أشخاص في TBO بهالتواريخ — حسبتها ${_lrooms} غرف (كل غرفة ${picked} أشخاص) بسعر TBO.`);
     } else
     if (overrideForThisStay == null && picked > 0
         && !occupancyUpsizeNotes.some(n => n.includes(stay.city))) {
