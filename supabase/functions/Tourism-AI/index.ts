@@ -2775,7 +2775,7 @@ async function handleVerifyPrices(body: { dest?: string; program?: string; adult
       if (!q.ok) { results.push({ ...base, status: "error", note: q.error || "خطأ" }); continue; }
       if (q.note === "no codes") { results.push({ ...base, status: "no_code", note: "الفندق ما له كود TBO مربوط" }); continue; }
       const hr = q.hotels?.[name];
-      const bbRooms = (hr?.rooms || []).filter(_vpBreakfast).sort((a, b) => a.total - b.total);
+      const bbRooms = (hr?.rooms || []).filter(r => _vpBreakfast(r) && _liveBedOk(r.name, per)).sort((a, b) => a.total - b.total);
       if (!bbRooms.length) { results.push({ ...base, status: "none", note: "ما فيه غرفة مع إفطار في TBO لهالتواريخ وهالعدد" }); continue; }
       const same = bbRooms.find(r => _vpNorm(r.name) === _vpNorm(room));
       const cheapest = bbRooms[0];
