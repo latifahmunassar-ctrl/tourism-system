@@ -4416,7 +4416,6 @@ Deno.serve(async (req) => {
             const req = parseTripRequest([{ role: "user", content: text }], cityDefs);
             (req as { adults: number }).adults = pax;
             if (!canBuildLocally(req)) continue;
-            await attachLiveStays(req as unknown as Record<string, unknown>, destKey, hotels as HotelRow[]);   // 🔴 أسعار TBO حيّة
             const r = await buildLocalProgram(req, cityDefs, fetchData as never, {});
             if (!r.ok) continue;
             let prog = r.program;   // 🕋 العمرة: نفس تنقّلات/طيران team.html (المغادرة من المدينة لاقتراحات «المغادرة: المدينة»)

@@ -2317,10 +2317,17 @@ export async function buildLocalProgram(
     //    لهذه المدينة → الاختيار منها فقط (السعر الحقيقي)؛ وإلا نرجع للشيت مع تنبيه.
     const _liveMap = (request as { liveStays?: Record<string, HotelRow[]> }).liveStays;
     let stayHotels: HotelRow[] = allHotels;
+    let _liveSwapFrom: string | null = null;
     if (_liveMap && _liveMap[`${consumedDays}|${stay.nights}`]) {
       const _cityLive = _liveMap[`${consumedDays}|${stay.nights}`].filter(h => hotelCityMatches(h.location, stay.city, cityPattern));
       if (_cityLive.length) {
-        stayHotels = [..._cityLive, ...allHotels.filter(h => !hotelCityMatches(h.location, stay.city, cityPattern))];
+        // المالكة: الفندق اللي يختاره الشيت (الأرخص) يبقى لو متوفر في TBO (بسعره الحي)؛ لو مو متوفر
+        // → الأرخص المتوفر تلقائياً مع ملاحظة «تم تغيير الفندق لعدم توفره».
+        const _sheetPick = pickCheapestHotel(allHotels, stay.city, request, cityPattern, {});
+        const _sameLive = _sheetPick ? _cityLive.filter(h => h.name.trim() === _sheetPick.name.trim()) : [];
+        const _pool = _sameLive.length ? _sameLive : _cityLive;
+        if (_sheetPick && !_sameLive.length) _liveSwapFrom = _sheetPick.name.trim();
+        stayHotels = [..._pool, ...allHotels.filter(h => !hotelCityMatches(h.location, stay.city, cityPattern))];
         _liveUsedCities.push(cityArabicNames[stay.city] || stay.city);
       } else {
         _liveMissCities.push(cityArabicNames[stay.city] || stay.city);
@@ -2538,6 +2545,9 @@ export async function buildLocalProgram(
     if (stayDays.length === 0) continue;
     const rangeFrom = stayDays[0].date;
     const rangeTo = addDays(stayDays[stayDays.length - 1].date, 1);
+    if (_liveSwapFrom && hotel.name.trim() !== _liveSwapFrom) {
+      occupancyUpsizeNotes.push(`🔄 تم تغيير فندق ${cityArabicNames[stay.city] || stay.city} من «${_liveSwapFrom}» إلى «${hotel.name.trim()}» لعدم توفره في TBO بهالتواريخ والعدد (الأرخص المتوفر). تقدرين ترجعينه يدوياً.`);
+    }
     // ٢١ نوفمبر ٢٠٢٦ (طلب المالكة): تنبيه لو أي ليلة من الإقامة ما لها سعر في الشيت
     // لنفس الفندق/الغرفة/الإشغال — بدل سعر صامت. تنبيه فقط، لا يغيّر الاختيار.
     if (request.startDate) {

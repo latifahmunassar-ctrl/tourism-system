@@ -3449,6 +3449,7 @@ function bfResolveDest(d){
 const BF_INTAKE = "https://ofotvacszlmrqxzfjmtn.supabase.co/functions/v1/client-intake";
 let BF_SUGS = [];        // all ready suggestions for current destination
 let bfShownRows = [];    // suggestions currently rendered as cards
+let _bfListCheck = null;   // {total} سعر التوزيعة في القائمة — يُقارن بعد البناء
 let bfChosen = null;     // chosen distribution string (ready mode)
 let BF_CHOSEN_DEP = '';  // مطار مغادرة الاقتراح المختار (مكة: «المدينة» = العودة من مطار المدينة)
 function bfEsc(s){ return String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
@@ -3849,6 +3850,16 @@ function buildFromForm(){
   if(MK_FORM_RET_MED) parts.push('العودة من مطار المدينة');
   if(notes) parts.push(notes);
 
+  // 💰 سعر هذه التوزيعة في القائمة (تكلفة الشيت) — للمقارنة بعد البناء بأسعار TBO الحيّة.
+  _bfListCheck = null;
+  if(_fromChosen && bfChosen){
+    try{
+      const _k=[dest,days,date,adults].join('|');
+      const _p=_bfRankMemo.get(_k);
+      if(_p) _p.then(d=>{ const nz=s=>String(s||'').replace(/[٠-٩]/g,x=>'٠١٢٣٤٥٦٧٨٩'.indexOf(x)).replace(/\s+/g,'');
+        const hit=(d.suggestions||[]).find(x=>nz(x.distribution)===nz(bfChosen)); if(hit) _bfListCheck={ total:Number(hit.total)||0 }; }).catch(()=>{});
+    }catch(_){}
+  }
   // الفورم = تسعيرة جديدة دائماً. نبدأ محادثة نظيفة حتى لا يُفسَّر البناء كتعديل
   // على برنامج سابق (كان يُبقي الوجهة القديمة ويتجاهل طلبات مثل السرير الإضافي).
   history.length = 0;
@@ -4511,6 +4522,16 @@ function priceAlertsRun(o){
 
 function buildReview(raw) {
 lastProgramRaw = raw || '';
+// 💰 المالكة ٢١ نوفمبر ٢٠٢٦: بعد بناء توزيعة من القائمة — لو إجمالي البرنامج (بعد أسعار TBO الحيّة
+// وتبديل الفنادق غير المتوفرة) أعلى من سعر القائمة → ملاحظة لاختيار توزيعة ثانية. مرة وحدة لكل بناء.
+if (_bfListCheck && raw) {
+  const _lc = _bfListCheck; _bfListCheck = null;
+  const _m = String(raw).match(/TOTAL_GROUP:\s*([\d,٬]+)/);
+  const _now = _m ? parseInt(_m[1].replace(/[,٬]/g,''),10) : 0;
+  if (_now > 0 && _lc.total > 0 && _now > _lc.total) {
+    setTimeout(()=>addMessage('sys', `⚠️ إجمالي التكلفة بعد التحقق من TBO صار ${_now.toLocaleString()} بدل ${_lc.total.toLocaleString()} اللي في القائمة (+${(_now-_lc.total).toLocaleString()}). إذا العميل مو مصرّ على هالتوزيعة، اختاري توزيعة ثانية من القائمة.`), 0);
+  }
+}
 lastSavedCode = '';
 const pill = document.getElementById('savedCodePill');
 if (pill) pill.style.display = 'none';
