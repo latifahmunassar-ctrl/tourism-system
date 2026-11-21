@@ -2753,7 +2753,7 @@ async function handleVerifyPrices(body: { dest?: string; program?: string; adult
       const dm = _vpDigits(p[5] || "").match(/من\s+(\d{1,2})\s+(\S+)\s+(\d{4})/);
       const nights = nm ? parseInt(nm[1], 10) : 0;
       const mon = dm ? _VP_MONTHS[dm[2]] : 0;
-      const rooms = Math.max(1, Number(body.rooms?.[i]) || 1);
+      const rooms = Math.max(1, Number(body.rooms?.[i]) || 1) + (lines[i].match(/ADDROOM:/g) || []).length;   // الغرف الإضافية (ADDROOM) جزء من نفس السطر
       const per = Math.ceil(adults / rooms);
       const base = { idx: i, hotel: name, city: p[1] || "", room, nights, rooms, adults_per_room: per, sheet_per_night: sheet };
       if (!nights || !mon || !dm) { results.push({ ...base, status: "error", note: "ما قدرت أقرأ التواريخ" }); continue; }
